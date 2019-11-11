@@ -1,0 +1,36 @@
+language: go
+go_import_path: gopkg.in/olebedev/go-duktape.v3
+matrix:
+  include:
+    - os: linux
+      dist: trusty
+      sudo: required
+      go: 1.9.x
+      addons:
+        apt:
+          packages:
+            - gcc-multilib
+      script:
+        # Build and test on the native 64 bit architecture
+        - go get -t
+        - go install ./...
+        - go test ./...
+
+        # Switch over GCC to cross compilation (breaks 386, hence why do it here only)
+        - sudo -E apt-get -yq --no-install-suggests --no-install-recommends --force-yes install gcc-arm-linux-gnueabi libc6-dev-armel-cross gcc-arm-linux-gnueabihf libc6-dev-armhf-cross gcc-aarch64-linux-gnu libc6-dev-arm64-cross
+        - sudo ln -s /usr/include/asm-generic /usr/include/asm
+
+        # Build only on non-native 32 bit, ARM and MIPS architectures
+        - CGO_ENABLED=1 GOARCH=386 go install ./...
+        - CGO_ENABLED=1 GOARCH=arm GOARM=5 CC=arm-linux-gnueabi-gcc go install ./...
+        - CGO_ENABLED=1 GOARCH=arm GOARM=6 CC=arm-linux-gnueabi-gcc go install ./...
+        - CGO_ENABLED=1 GOARCH=arm GOARM=7 CC=arm-linux-gnueabihf-gcc go install ./...
+        - CGO_ENABLED=1 GOARCH=arm64 CC=aarch64-linux-gnu-gcc go install ./...
+
+    - os: osx
+      go: 1.9.x
+      script:
+        # Build and test on the native 64 bit architecture
+        - go get -t
+        - go install ./...
+        - go test ./...

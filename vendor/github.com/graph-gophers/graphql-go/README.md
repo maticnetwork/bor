@@ -16,6 +16,8 @@ safe for production use.
 - resolvers are matched to the schema based on method sets (can resolve a GraphQL schema with a Go interface or Go struct).
 - handles panics in resolvers
 - parallel execution of resolvers
+- subscriptions
+   - [sample WS transport](https://github.com/graph-gophers/graphql-transport-ws)
 
 ## Roadmap
 
@@ -43,9 +45,6 @@ func (_ *query) Hello() string { return "Hello, world!" }
 
 func main() {
         s := `
-                schema {
-                        query: Query
-                }
                 type Query {
                         hello: String!
                 }
@@ -63,7 +62,17 @@ $ curl -XPOST -d '{"query": "{ hello }"}' localhost:8080/query
 
 ### Resolvers
 
-A resolver must have one method for each field of the GraphQL type it resolves. The method name has to be [exported](https://golang.org/ref/spec#Exported_identifiers) and match the field's name in a non-case-sensitive way.
+A resolver must have one method or field for each field of the GraphQL type it resolves. The method or field name has to be [exported](https://golang.org/ref/spec#Exported_identifiers) and match the schema's field's name in a non-case-sensitive way.
+You can use struct fields as resolvers by using `SchemaOpt: UseFieldResolvers()`. For example,
+```
+opts := []graphql.SchemaOpt{graphql.UseFieldResolvers()}
+schema := graphql.MustParseSchema(s, &query{}, opts...)
+```   
+
+When using `UseFieldResolvers` schema option, a struct field will be used *only* when:
+- there is no method for a struct field
+- a struct field does not implement an interface method
+- a struct field does not have arguments
 
 The method has up to two arguments:
 
@@ -88,6 +97,57 @@ The following signature is also allowed:
 ```go
 func (r *helloWorldResolver) Hello(ctx context.Context) (string, error) {
 	return "Hello world!", nil
+}
+```
+
+### Custom Errors
+
+Errors returned by resolvers can include custom extensions by implementing the `ResolverError` interface:
+
+```
+type ResolverError interface {
+	error
+	Extensions() map[string]interface{}
+}
+```
+
+Example of a simple custom error:
+
+```
+type droidNotFoundError struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+func (e droidNotFoundError) Error() string {
+	return fmt.Sprintf("error [%s]: %s", e.Code, e.Message)
+}
+
+func (e droidNotFoundError) Extensions() map[string]interface{} {
+	return map[string]interface{}{
+		"code":    e.Code,
+		"message": e.Message,
+	}
+}
+```
+
+Which could produce a GraphQL error such as:
+
+```
+{
+  "errors": [
+    {
+      "message": "error [NotFound]: This is not the droid you are looking for",
+      "path": [
+        "droid"
+      ],
+      "extensions": {
+        "code": "NotFound",
+        "message": "This is not the droid you are looking for"
+      }
+    }
+  ],
+  "data": null
 }
 ```
 
