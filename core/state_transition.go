@@ -17,6 +17,7 @@
 package core
 
 import (
+	"bytes"
 	"errors"
 	"math"
 	"math/big"
@@ -116,11 +117,23 @@ func IntrinsicGas(data []byte, contractCreation, homestead bool) (uint64, error)
 
 // NewStateTransition initialises and returns a new state transition object.
 func NewStateTransition(evm *vm.EVM, msg Message, gp *GasPool) *StateTransition {
+	gasPrice := msg.GasPrice()
+	if msg.To() != nil {
+		validatorContract := evm.ChainConfig().Bor.ValidatorContract
+		stateReceiverContract := evm.ChainConfig().Bor.StateReceiverContract
+		to := msg.To().Bytes()
+
+		// check if to address is validator contract or state receiver contract
+		if bytes.Equal(to, common.Hex2Bytes(validatorContract)) || bytes.Equal(to, common.Hex2Bytes(stateReceiverContract)) {
+			gasPrice = big.NewInt(0)
+		}
+	}
+
 	return &StateTransition{
 		gp:       gp,
 		evm:      evm,
 		msg:      msg,
-		gasPrice: msg.GasPrice(),
+		gasPrice: gasPrice,
 		value:    msg.Value(),
 		data:     msg.Data(),
 		state:    evm.StateDB,
