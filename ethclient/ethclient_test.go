@@ -25,7 +25,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/maticnetwork/bor"
+	ethereum "github.com/maticnetwork/bor"
 	"github.com/maticnetwork/bor/common"
 	"github.com/maticnetwork/bor/consensus/ethash"
 	"github.com/maticnetwork/bor/core"
@@ -333,5 +333,23 @@ func TestChainID(t *testing.T) {
 	}
 	if id == nil || id.Cmp(params.AllEthashProtocolChanges.ChainID) != 0 {
 		t.Fatalf("ChainID returned wrong number: %+v", id)
+	}
+}
+
+func TestDepositData(t *testing.T) {
+	backend, _ := newTestBackend(t)
+	client, _ := backend.Attach()
+	defer backend.Stop()
+	defer client.Close()
+	ec := NewClient(client)
+	toAddress := common.HexToAddress("0x2188FBac4A9044bB07eDE86f81344873262ABc18")
+	depositID := big.NewInt(12312321)
+
+	isExist, err := ec.DepositByID(context.Background(), toAddress, depositID)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if isExist {
+		t.Fatalf("Deposit data returned wrong number: %+v", isExist)
 	}
 }
