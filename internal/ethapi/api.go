@@ -27,6 +27,7 @@ import (
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/maticnetwork/bor/accounts"
+	"github.com/maticnetwork/bor/accounts/abi"
 	"github.com/maticnetwork/bor/accounts/keystore"
 	"github.com/maticnetwork/bor/accounts/scwallet"
 	"github.com/maticnetwork/bor/common"
@@ -51,6 +52,8 @@ import (
 const (
 	defaultGasPrice = params.GWei
 )
+
+const childChainABI = `[{"constant":true,"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"withdraws","outputs":[{"internalType":"bool","name":"","type":"bool"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[],"name":"isOnlyStateSyncerContract","outputs":[{"internalType":"bool","name":"","type":"bool"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":false,"inputs":[],"name":"renounceOwnership","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":true,"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[],"name":"isOwner","outputs":[{"internalType":"bool","name":"","type":"bool"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"deposits","outputs":[{"internalType":"bool","name":"","type":"bool"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":true,"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"isERC721","outputs":[{"internalType":"bool","name":"","type":"bool"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":false,"inputs":[{"internalType":"address","name":"newAddress","type":"address"}],"name":"changeStateSyncerAddress","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":true,"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"tokens","outputs":[{"internalType":"address","name":"","type":"address"}],"payable":false,"stateMutability":"view","type":"function"},{"constant":false,"inputs":[{"internalType":"address","name":"newOwner","type":"address"}],"name":"transferOwnership","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":true,"inputs":[],"name":"stateSyncer","outputs":[{"internalType":"address","name":"","type":"address"}],"payable":false,"stateMutability":"view","type":"function"},{"inputs":[],"payable":false,"stateMutability":"nonpayable","type":"constructor"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"rootToken","type":"address"},{"indexed":true,"internalType":"address","name":"token","type":"address"},{"indexed":false,"internalType":"uint8","name":"_decimals","type":"uint8"}],"name":"NewToken","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"rootToken","type":"address"},{"indexed":true,"internalType":"address","name":"childToken","type":"address"},{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"depositCount","type":"uint256"}],"name":"TokenDeposited","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"rootToken","type":"address"},{"indexed":true,"internalType":"address","name":"childToken","type":"address"},{"indexed":true,"internalType":"address","name":"user","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"withrawCount","type":"uint256"}],"name":"TokenWithdrawn","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"previousAddress","type":"address"},{"indexed":true,"internalType":"address","name":"newAddress","type":"address"}],"name":"StateSyncerAddressChanged","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"previousOwner","type":"address"},{"indexed":true,"internalType":"address","name":"newOwner","type":"address"}],"name":"OwnershipTransferred","type":"event"},{"constant":false,"inputs":[{"internalType":"address","name":"_owner","type":"address"},{"internalType":"address","name":"_rootToken","type":"address"},{"internalType":"string","name":"_name","type":"string"},{"internalType":"string","name":"_symbol","type":"string"},{"internalType":"uint8","name":"_decimals","type":"uint8"},{"internalType":"bool","name":"_isERC721","type":"bool"}],"name":"addToken","outputs":[{"internalType":"address","name":"token","type":"address"}],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":false,"inputs":[{"internalType":"address","name":"rootToken","type":"address"},{"internalType":"address","name":"token","type":"address"},{"internalType":"bool","name":"isErc721","type":"bool"}],"name":"mapToken","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":false,"inputs":[{"internalType":"uint256","name":"","type":"uint256"},{"internalType":"bytes","name":"data","type":"bytes"}],"name":"onStateReceive","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"},{"constant":false,"inputs":[{"internalType":"address","name":"rootToken","type":"address"},{"internalType":"address","name":"user","type":"address"},{"internalType":"uint256","name":"amountOrTokenId","type":"uint256"},{"internalType":"uint256","name":"withdrawCount","type":"uint256"}],"name":"withdrawTokens","outputs":[],"payable":false,"stateMutability":"nonpayable","type":"function"}]`
 
 // PublicEthereumAPI provides an API to access Ethereum related information.
 // It offers only methods that operate on public data that is freely available to anyone.
@@ -532,6 +535,40 @@ func NewPublicBlockChainAPI(b Backend) *PublicBlockChainAPI {
 // ChainId returns the chainID value for transaction replay protection.
 func (s *PublicBlockChainAPI) ChainId() *hexutil.Big {
 	return (*hexutil.Big)(s.b.ChainConfig().ChainID)
+}
+
+// DepositById returns the Deposit data of the chain head.
+func (s *PublicBlockChainAPI) DepositById(contractAddress common.Address, depositID *big.Int) (bool, error) {
+	method := "deposits"
+
+	ccABI, _ := abi.JSON(strings.NewReader(childChainABI))
+	data, err := ccABI.Pack(method, depositID)
+	if err != nil {
+		fmt.Println("Unable to pack tx from deposits", "error", err)
+		return false, err
+	}
+	blockNum := s.BlockNumber()
+	blockNr := rpc.BlockNumber(blockNum)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel() // cancel when we are finished consuming integers
+
+	// call
+	msgData := (hexutil.Bytes)(data)
+	toAddress := contractAddress
+	result, err := s.Call(ctx, CallArgs{
+		To:   &toAddress,
+		Data: &msgData,
+	}, blockNr)
+	if err != nil {
+		return false, err
+	}
+
+	var ret0 = new(bool)
+	if err := ccABI.Unpack(ret0, method, result); err != nil {
+		return false, err
+	}
+	return *ret0, nil
 }
 
 // BlockNumber returns the block number of the chain head.

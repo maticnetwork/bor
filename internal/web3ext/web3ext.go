@@ -460,6 +460,12 @@ web3._extend({
 			params: 0
 		}),
 		new web3._extend.Method({
+			name: 'DepositById',
+			call: 'eth_depositById',
+			params: 2,
+			inputFormatter: [web3._extend.formatters.inputAddressFormatter, null]
+		}),
+		new web3._extend.Method({
 			name: 'sign',
 			call: 'eth_sign',
 			params: 2,
