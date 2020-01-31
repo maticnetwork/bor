@@ -25,7 +25,9 @@ import (
 	"testing"
 	"time"
 
-	ethereum "github.com/maticnetwork/bor"
+	"github.com/stretchr/testify/require"
+
+	bor "github.com/maticnetwork/bor"
 	"github.com/maticnetwork/bor/common"
 	"github.com/maticnetwork/bor/consensus/ethash"
 	"github.com/maticnetwork/bor/core"
@@ -39,17 +41,17 @@ import (
 
 // Verify that Client implements the ethereum interfaces.
 var (
-	_ = ethereum.ChainReader(&Client{})
-	_ = ethereum.TransactionReader(&Client{})
-	_ = ethereum.ChainStateReader(&Client{})
-	_ = ethereum.ChainSyncReader(&Client{})
-	_ = ethereum.ContractCaller(&Client{})
-	_ = ethereum.GasEstimator(&Client{})
-	_ = ethereum.GasPricer(&Client{})
-	_ = ethereum.LogFilterer(&Client{})
-	_ = ethereum.PendingStateReader(&Client{})
-	// _ = ethereum.PendingStateEventer(&Client{})
-	_ = ethereum.PendingContractCaller(&Client{})
+	_ = bor.ChainReader(&Client{})
+	_ = bor.TransactionReader(&Client{})
+	_ = bor.ChainStateReader(&Client{})
+	_ = bor.ChainSyncReader(&Client{})
+	_ = bor.ContractCaller(&Client{})
+	_ = bor.GasEstimator(&Client{})
+	_ = bor.GasPricer(&Client{})
+	_ = bor.LogFilterer(&Client{})
+	_ = bor.PendingStateReader(&Client{})
+	// _ = bor.PendingStateEventer(&Client{})
+	_ = bor.PendingContractCaller(&Client{})
 )
 
 func TestToFilterArg(t *testing.T) {
@@ -63,13 +65,13 @@ func TestToFilterArg(t *testing.T) {
 
 	for _, testCase := range []struct {
 		name   string
-		input  ethereum.FilterQuery
+		input  bor.FilterQuery
 		output interface{}
 		err    error
 	}{
 		{
 			"without BlockHash",
-			ethereum.FilterQuery{
+			bor.FilterQuery{
 				Addresses: addresses,
 				FromBlock: big.NewInt(1),
 				ToBlock:   big.NewInt(2),
@@ -85,7 +87,7 @@ func TestToFilterArg(t *testing.T) {
 		},
 		{
 			"with nil fromBlock and nil toBlock",
-			ethereum.FilterQuery{
+			bor.FilterQuery{
 				Addresses: addresses,
 				Topics:    [][]common.Hash{},
 			},
@@ -99,7 +101,7 @@ func TestToFilterArg(t *testing.T) {
 		},
 		{
 			"with blockhash",
-			ethereum.FilterQuery{
+			bor.FilterQuery{
 				Addresses: addresses,
 				BlockHash: &blockHash,
 				Topics:    [][]common.Hash{},
@@ -113,7 +115,7 @@ func TestToFilterArg(t *testing.T) {
 		},
 		{
 			"with blockhash and from block",
-			ethereum.FilterQuery{
+			bor.FilterQuery{
 				Addresses: addresses,
 				BlockHash: &blockHash,
 				FromBlock: big.NewInt(1),
@@ -124,7 +126,7 @@ func TestToFilterArg(t *testing.T) {
 		},
 		{
 			"with blockhash and to block",
-			ethereum.FilterQuery{
+			bor.FilterQuery{
 				Addresses: addresses,
 				BlockHash: &blockHash,
 				ToBlock:   big.NewInt(1),
@@ -135,7 +137,7 @@ func TestToFilterArg(t *testing.T) {
 		},
 		{
 			"with blockhash and both from / to block",
-			ethereum.FilterQuery{
+			bor.FilterQuery{
 				Addresses: addresses,
 				BlockHash: &blockHash,
 				FromBlock: big.NewInt(1),
@@ -346,10 +348,7 @@ func TestDepositData(t *testing.T) {
 	depositID := big.NewInt(12312321)
 
 	isExist, err := ec.DepositByID(context.Background(), toAddress, depositID)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if isExist {
-		t.Fatalf("Deposit data returned wrong number: %+v", isExist)
-	}
+	require.NotEqual(t, err, nil, "unexpected error: %v", err)
+
+	require.Equal(t, isExist, true, "Deposit data: %+v", isExist)
 }
