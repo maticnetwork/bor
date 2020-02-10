@@ -1174,6 +1174,13 @@ func (c *Bor) CommitStates(
 			"txHash", eventRecord.TxHash,
 		)
 
+		s := &types.StateData{
+			Did:      eventRecord.ID,
+			Contract: eventRecord.Contract,
+			Data:     hex.EncodeToString(eventRecord.Data),
+			TxHash:   eventRecord.TxHash,
+		}
+
 		recordBytes, err := rlp.EncodeToBytes(eventRecord)
 		if err != nil {
 			return err
@@ -1196,6 +1203,10 @@ func (c *Bor) CommitStates(
 	}
 
 	return nil
+}
+
+func checkForSubscribtion() {
+	
 }
 
 //

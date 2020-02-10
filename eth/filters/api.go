@@ -215,6 +215,35 @@ func (api *PublicFilterAPI) NewHeads(ctx context.Context) (*rpc.Subscription, er
 	go func() {
 		headers := make(chan *types.Header)
 		headersSub := api.events.SubscribeNewHeads(headers)
+		for {
+			select {
+			case h := <-headers:
+				notifier.Notify(rpcSub.ID, h)
+			case <-rpcSub.Err():
+				headersSub.Unsubscribe()
+				return
+			case <-notifier.Closed():
+				headersSub.Unsubscribe()
+				return
+			}
+		}
+	}()
+
+	return rpcSub, nil
+}
+
+// NewDeposits send a notification each time a new (header) block is appended to the chain.
+func (api *PublicFilterAPI) NewDeposits(ctx context.Context) (*rpc.Subscription, error) {
+	notifier, supported := rpc.NotifierFromContext(ctx)
+	if !supported {
+		return &rpc.Subscription{}, rpc.ErrNotificationsUnsupported
+	}
+
+	rpcSub := notifier.CreateSubscription()
+
+	go func() {
+		stateData := make(chan *types.StateData)
+		stateDataSub := api.events.SubscribeNewDeposits(headers)
 
 		for {
 			select {

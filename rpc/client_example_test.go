@@ -40,19 +40,20 @@ type Block struct {
 
 func ExampleClientSubscription() {
 	// Connect the client.
-	client, _ := rpc.Dial("ws://127.0.0.1:8485")
+	client, _ := rpc.Dial("ws://127.0.0.1:8546")
 	subch := make(chan Block)
-
+	fmt.Println("Print this")
 	// Ensure that subch receives the latest block.
 	go func() {
 		for i := 0; ; i++ {
 			if i > 0 {
 				time.Sleep(2 * time.Second)
 			}
-			subscribeBlocks(client, subch)
+			// subscribeBlocks(client, subch)
+			subscribeDeposits(client, subch)
 		}
 	}()
-
+	fmt.Println("I am here")
 	// Print events from the subscription as they arrive.
 	for block := range subch {
 		fmt.Println("latest block:", block.Number)
@@ -80,6 +81,25 @@ func subscribeBlocks(client *rpc.Client, subch chan Block) {
 		return
 	}
 	subch <- lastBlock
+
+	// The subscription will deliver events to the channel. Wait for the
+	// subscription to end for any reason, then loop around to re-establish
+	// the connection.
+	fmt.Println("connection lost: ", <-sub.Err())
+}
+
+// subscribeBlocks runs in its own goroutine and maintains
+// a subscription for new blocks.
+func subscribeDeposits(client *rpc.Client, subch chan Block) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Subscribe to new blocks.
+	sub, err := client.EthSubscribe(ctx, subch, "newDeposits")
+	if err != nil {
+		fmt.Println("subscribe error:", err)
+		return
+	}
 
 	// The subscription will deliver events to the channel. Wait for the
 	// subscription to end for any reason, then loop around to re-establish
