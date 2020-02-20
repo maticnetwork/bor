@@ -232,7 +232,7 @@ func (api *PublicFilterAPI) NewHeads(ctx context.Context) (*rpc.Subscription, er
 	return rpcSub, nil
 }
 
-// NewDeposits send a notification each time a new (header) block is appended to the chain.
+// NewDeposits send a notification each time a new deposit received from bridge.
 func (api *PublicFilterAPI) NewDeposits(ctx context.Context) (*rpc.Subscription, error) {
 	notifier, supported := rpc.NotifierFromContext(ctx)
 	if !supported {
@@ -243,17 +243,17 @@ func (api *PublicFilterAPI) NewDeposits(ctx context.Context) (*rpc.Subscription,
 
 	go func() {
 		stateData := make(chan *types.StateData)
-		stateDataSub := api.events.SubscribeNewDeposits(headers)
+		stateDataSub := api.events.SubscribeNewDeposits(stateData)
 
 		for {
 			select {
-			case h := <-headers:
+			case h := <-stateData:
 				notifier.Notify(rpcSub.ID, h)
 			case <-rpcSub.Err():
-				headersSub.Unsubscribe()
+				stateDataSub.Unsubscribe()
 				return
 			case <-notifier.Closed():
-				headersSub.Unsubscribe()
+				stateDataSub.Unsubscribe()
 				return
 			}
 		}
