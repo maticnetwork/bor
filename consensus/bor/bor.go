@@ -30,6 +30,7 @@ import (
 	"github.com/maticnetwork/bor/core/vm"
 	"github.com/maticnetwork/bor/crypto"
 	"github.com/maticnetwork/bor/ethdb"
+	"github.com/maticnetwork/bor/event"
 	"github.com/maticnetwork/bor/internal/ethapi"
 	"github.com/maticnetwork/bor/log"
 	"github.com/maticnetwork/bor/params"
@@ -65,6 +66,8 @@ var (
 
 	validatorHeaderBytesLength = common.AddressLength + 20 // address + power
 	systemAddress              = common.HexToAddress("0xffffFFFfFFffffffffffffffFfFFFfffFFFfFFfE")
+
+	stateChanSize = 10
 )
 
 // Various error messages to mark blocks invalid. These should be private to
@@ -245,6 +248,8 @@ type Bor struct {
 	stateReceiverABI abi.ABI
 	httpClient       http.Client
 
+	stateDataFeed event.Feed
+	scope         event.SubscriptionScope
 	// The fields below are for testing only
 	fakeDiff bool // Skip difficulty verifications
 }
@@ -1174,12 +1179,15 @@ func (c *Bor) CommitStates(
 			"txHash", eventRecord.TxHash,
 		)
 
-		s := &types.StateData{
-			Did:      eventRecord.ID,
-			Contract: eventRecord.Contract,
-			Data:     hex.EncodeToString(eventRecord.Data),
-			TxHash:   eventRecord.TxHash,
-		}
+		go func() {
+			stateData := types.StateData{
+				Did:      eventRecord.ID,
+				Contract: eventRecord.Contract,
+				Data:     hex.EncodeToString(eventRecord.Data),
+				TxHash:   eventRecord.TxHash,
+			}
+			c.stateDataFeed.Send(core.NewStateChangeEvent{StateData: &stateData})
+		}()
 
 		recordBytes, err := rlp.EncodeToBytes(eventRecord)
 		if err != nil {
@@ -1205,8 +1213,9 @@ func (c *Bor) CommitStates(
 	return nil
 }
 
-func checkForSubscribtion() {
-	
+// SubscribeStateEvent registers a subscription of ChainSideEvent.
+func (c *Bor) SubscribeStateEvent(ch chan<- core.NewStateChangeEvent) event.Subscription {
+	return c.scope.Track(c.stateDataFeed.Subscribe(ch))
 }
 
 //

@@ -19,11 +19,13 @@ package eth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math/big"
 
 	"github.com/maticnetwork/bor/accounts"
 	"github.com/maticnetwork/bor/common"
 	"github.com/maticnetwork/bor/common/math"
+	"github.com/maticnetwork/bor/consensus/bor"
 	"github.com/maticnetwork/bor/core"
 	"github.com/maticnetwork/bor/core/bloombits"
 	"github.com/maticnetwork/bor/core/rawdb"
@@ -145,6 +147,15 @@ func (b *EthAPIBackend) SubscribeRemovedLogsEvent(ch chan<- core.RemovedLogsEven
 
 func (b *EthAPIBackend) SubscribeChainEvent(ch chan<- core.ChainEvent) event.Subscription {
 	return b.eth.BlockChain().SubscribeChainEvent(ch)
+}
+
+func (b *EthAPIBackend) SubscribeStateEvent(ch chan<- core.NewStateChangeEvent) event.Subscription {
+	// somehow call from bor
+	fmt.Println("subcscribe state event inside backend")
+	engine := b.eth.Engine()
+	var d *bor.Bor
+	return engine.(*bor.Bor).SubscribeStateEvent(ch)
+	return d.SubscribeStateEvent(ch)
 }
 
 func (b *EthAPIBackend) SubscribeChainHeadEvent(ch chan<- core.ChainHeadEvent) event.Subscription {

@@ -49,8 +49,7 @@ func ExampleClientSubscription() {
 			if i > 0 {
 				time.Sleep(2 * time.Second)
 			}
-			// subscribeBlocks(client, subch)
-			subscribeDeposits(client, subch)
+			subscribeBlocks(client, subch)
 		}
 	}()
 	fmt.Println("I am here")
