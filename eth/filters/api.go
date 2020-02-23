@@ -233,22 +233,23 @@ func (api *PublicFilterAPI) NewHeads(ctx context.Context) (*rpc.Subscription, er
 }
 
 // NewDeposits send a notification each time a new deposit received from bridge.
-func (api *PublicFilterAPI) NewDeposits(ctx context.Context) (*rpc.Subscription, error) {
+func (api *PublicFilterAPI) NewDeposits(ctx context.Context, crit ethereum.FilterState) (*rpc.Subscription, error) {
 	notifier, supported := rpc.NotifierFromContext(ctx)
 	if !supported {
 		return &rpc.Subscription{}, rpc.ErrNotificationsUnsupported
 	}
 
 	rpcSub := notifier.CreateSubscription()
-
 	go func() {
 		stateData := make(chan *types.StateData)
 		stateDataSub := api.events.SubscribeNewDeposits(stateData)
-
 		for {
 			select {
 			case h := <-stateData:
-				notifier.Notify(rpcSub.ID, h)
+				if crit.Did == h.Did || crit.Contract == h.Contract ||
+					(crit.Did == h.Did && crit.Contract == h.Contract) {
+					notifier.Notify(rpcSub.ID, h)
+				}
 			case <-rpcSub.Err():
 				stateDataSub.Unsubscribe()
 				return
