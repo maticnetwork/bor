@@ -40,7 +40,7 @@ type Block struct {
 
 func ExampleClientSubscription() {
 	// Connect the client.
-	client, _ := rpc.Dial("ws://127.0.0.1:8546")
+	client, _ := rpc.Dial("ws://127.0.0.1:8485")
 	subch := make(chan Block)
 
 	// Ensure that subch receives the latest block.
