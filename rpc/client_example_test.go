@@ -84,22 +84,3 @@ func subscribeBlocks(client *rpc.Client, subch chan Block) {
 	// the connection.
 	fmt.Println("connection lost: ", <-sub.Err())
 }
-
-// subscribeBlocks runs in its own goroutine and maintains
-// a subscription for new blocks.
-func subscribeDeposits(client *rpc.Client, subch chan Block) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	// Subscribe to new blocks.
-	sub, err := client.EthSubscribe(ctx, subch, "newDeposits")
-	if err != nil {
-		fmt.Println("subscribe error:", err)
-		return
-	}
-
-	// The subscription will deliver events to the channel. Wait for the
-	// subscription to end for any reason, then loop around to re-establish
-	// the connection.
-	fmt.Println("connection lost: ", <-sub.Err())
-}
