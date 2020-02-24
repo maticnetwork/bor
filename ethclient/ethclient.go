@@ -71,16 +71,6 @@ func (ec *Client) ChainID(ctx context.Context) (*big.Int, error) {
 	return (*big.Int)(&result), err
 }
 
-// DepositByID retrieves status of deposit
-func (ec *Client) DepositByID(ctx context.Context, contractAddress common.Address, depositID *big.Int) (bool, error) {
-	var result bool
-	err := ec.c.CallContext(ctx, result, "eth_depositById", contractAddress, depositID)
-	if err != nil {
-		return false, err
-	}
-	return result, err
-}
-
 // BlockByHash returns the given full block.
 //
 // Note that loading full blocks requires two requests. Use HeaderByHash
