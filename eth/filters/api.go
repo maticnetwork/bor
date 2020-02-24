@@ -243,11 +243,12 @@ func (api *PublicFilterAPI) NewDeposits(ctx context.Context, crit ethereum.Filte
 	go func() {
 		stateData := make(chan *types.StateData)
 		stateDataSub := api.events.SubscribeNewDeposits(stateData)
+
 		for {
 			select {
 			case h := <-stateData:
 				if crit.Did == h.Did || crit.Contract == h.Contract ||
-					(crit.Did == h.Did && crit.Contract == h.Contract) {
+					(crit.Did == 0 && crit.Contract == common.Address{}) {
 					notifier.Notify(rpcSub.ID, h)
 				}
 			case <-rpcSub.Err():
