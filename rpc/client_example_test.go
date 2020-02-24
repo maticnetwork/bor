@@ -42,6 +42,7 @@ func ExampleClientSubscription() {
 	// Connect the client.
 	client, _ := rpc.Dial("ws://127.0.0.1:8546")
 	subch := make(chan Block)
+
 	// Ensure that subch receives the latest block.
 	go func() {
 		for i := 0; ; i++ {
@@ -51,6 +52,7 @@ func ExampleClientSubscription() {
 			subscribeBlocks(client, subch)
 		}
 	}()
+
 	// Print events from the subscription as they arrive.
 	for block := range subch {
 		fmt.Println("latest block:", block.Number)

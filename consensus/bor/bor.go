@@ -66,8 +66,6 @@ var (
 
 	validatorHeaderBytesLength = common.AddressLength + 20 // address + power
 	systemAddress              = common.HexToAddress("0xffffFFFfFFffffffffffffffFfFFFfffFFFfFFfE")
-
-	stateChanSize = 10
 )
 
 // Various error messages to mark blocks invalid. These should be private to
