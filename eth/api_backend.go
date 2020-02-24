@@ -19,7 +19,6 @@ package eth
 import (
 	"context"
 	"errors"
-	"fmt"
 	"math/big"
 
 	"github.com/maticnetwork/bor/accounts"
