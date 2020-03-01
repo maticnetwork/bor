@@ -1144,6 +1144,7 @@ func (c *Bor) CommitStates(
 	header *types.Header,
 	chain core.ChainContext,
 ) error {
+	fmt.Println("comminting state")
 	// get pending state proposals
 	stateIds, err := c.GetPendingStateProposals(header.Number.Uint64() - 1)
 	if err != nil {
@@ -1176,14 +1177,14 @@ func (c *Bor) CommitStates(
 			"data", hex.EncodeToString(eventRecord.Data),
 			"txHash", eventRecord.TxHash,
 		)
+		stateData := types.StateData{
+			Did:      eventRecord.ID,
+			Contract: eventRecord.Contract,
+			Data:     hex.EncodeToString(eventRecord.Data),
+			TxHash:   eventRecord.TxHash,
+		}
 
 		go func() {
-			stateData := types.StateData{
-				Did:      eventRecord.ID,
-				Contract: eventRecord.Contract,
-				Data:     hex.EncodeToString(eventRecord.Data),
-				TxHash:   eventRecord.TxHash,
-			}
 			c.stateDataFeed.Send(core.NewStateChangeEvent{StateData: &stateData})
 		}()
 
