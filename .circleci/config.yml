@@ -1,0 +1,13 @@
+# Golang CircleCI 2.0 configuration file
+# Check https://circleci.com/docs/2.0/language-go/ for more details
+
+version: 2.1
+jobs:
+  build:
+    docker:
+      # CircleCI Go images available at: https://hub.docker.com/r/circleci/golang/
+      - image: circleci/golang:1.13
+    steps:
+      - checkout # check out source code to working directory
+      - run:
+          command: make all
