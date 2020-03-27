@@ -1169,6 +1169,25 @@ func (c *Bor) CommitStates(
 		log.Debug("Found new proposed states", "numberOfStates", len(stateIds))
 	}
 
+	// commit all states
+	if err := c._commitStates(state, header, chain, stateIds); err != nil {
+		return err
+	}
+
+	// finalize all states
+	if err := c._finalizeStates(state, header, chain, stateIds); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *Bor) _commitStates(
+	state *state.StateDB,
+	header *types.Header,
+	chain core.ChainContext,
+	stateIds []*big.Int, // state ids
+) error {
 	method := "commitState"
 
 	// itereate through state ids
@@ -1211,6 +1230,39 @@ func (c *Bor) CommitStates(
 		data, err := c.stateReceiverABI.Pack(method, recordBytes)
 		if err != nil {
 			log.Error("Unable to pack tx for commitState", "error", err)
+			return err
+		}
+
+		// get system message
+		msg := getSystemMessage(common.HexToAddress(c.config.StateReceiverContract), data)
+
+		// apply message
+		if err := applyMessage(msg, state, header, c.chainConfig, chain); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (c *Bor) _finalizeStates(
+	state *state.StateDB,
+	header *types.Header,
+	chain core.ChainContext,
+	stateIds []*big.Int, // list of state ids
+) error {
+	method := "finalizeState"
+
+	// itereate through state ids
+	for _, stateID := range stateIds {
+		log.Debug("→ finalizing new state",
+			"id", stateID.String(),
+		)
+
+		// get packed data for commit state
+		data, err := c.stateReceiverABI.Pack(method, stateID)
+		if err != nil {
+			log.Error("Unable to pack tx for finalizeState", "error", err)
 			return err
 		}
 
