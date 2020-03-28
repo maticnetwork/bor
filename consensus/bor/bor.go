@@ -1255,7 +1255,7 @@ func (c *Bor) _finalizeStates(
 
 	// itereate through state ids
 	for _, stateID := range stateIds {
-		log.Debug("→ finalizing new state",
+		log.Info("→ finalizing new state",
 			"id", stateID.String(),
 		)
 

@@ -536,21 +536,9 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	}
 	// Drop non-local transactions under our own minimal accepted gas price
 	local = local || pool.locals.contains(from) // account may be local even if the transaction arrived from the network
-	fmt.Println("pool.gasPrice", pool.gasPrice.String())
-	fmt.Println("local", local)
-	fmt.Println("pool.locals.contains(from)", pool.locals.contains(from))
-	fmt.Println("pool.chain.Engine().(bor).IsValidatorAction(pool.chain.(consensus.ChainReader), from, tx)", pool.chain.Engine().(bor).IsValidatorAction(pool.chain.(consensus.ChainReader), from, tx))
-	fmt.Println("tx.GasPrice()", tx.GasPrice().String())
-	fmt.Println("from", from.String())
-	d, _ := tx.MarshalJSON()
-	fmt.Println("tx", string(d))
-	fmt.Println("==>", !local &&
-		!pool.chain.Engine().(bor).IsValidatorAction(pool.chain.(consensus.ChainReader), from, tx) &&
-		pool.gasPrice.Cmp(tx.GasPrice()) > 0)
 	if !local &&
 		!pool.chain.Engine().(bor).IsValidatorAction(pool.chain.(consensus.ChainReader), from, tx) &&
 		pool.gasPrice.Cmp(tx.GasPrice()) > 0 {
-		fmt.Println("Sent back")
 		return ErrUnderpriced
 	}
 	// Ensure the transaction adheres to nonce ordering
