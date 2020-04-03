@@ -1,0 +1,12 @@
+global:
+  scrape_interval:     15s
+  evaluation_interval: 15s
+# A scrape configuration containing exactly one endpoint to scrape.
+scrape_configs:
+  - job_name: bor
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    metrics_path: /debug/metrics/prometheus
+    scheme: http
+    static_configs:
+      - targets: ['127.0.0.1:7071']

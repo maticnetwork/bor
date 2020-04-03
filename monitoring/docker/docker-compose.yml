@@ -1,0 +1,32 @@
+version: "3.3"
+volumes:
+  grafana_data: {}
+
+services:
+
+  prometheus:
+    image: prom/prometheus
+    container_name: bor-prometheus
+    network_mode: host
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    ports:
+      - 9090:9090
+        # environment:
+            # - HEIMDALL_HOST
+  grafana:
+    image: grafana/grafana
+    container_name: bor-grafana
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./provisioning:/etc/grafana/provisioning
+      - ./dashboards:/var/lib/grafana/dashboards
+     # - datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml
+     # - dashboard.json:/var/lib/grafana/dashboards/dashboard.json
+    ports:
+      - 3000:3000
