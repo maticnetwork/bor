@@ -10,7 +10,7 @@ import (
 	"io"
 	"math"
 	"math/big"
-	"net/http"
+
 	"sort"
 	"strconv"
 	"strings"
@@ -244,7 +244,7 @@ type Bor struct {
 	ethAPI           *ethapi.PublicBlockChainAPI
 	validatorSetABI  abi.ABI
 	stateReceiverABI abi.ABI
-	httpClient       http.Client
+	HeimdallClient   IHeimdallClient
 
 	stateDataFeed event.Feed
 	scope         event.SubscriptionScope
@@ -271,6 +271,8 @@ func New(
 	signatures, _ := lru.NewARC(inmemorySignatures)
 	vABI, _ := abi.JSON(strings.NewReader(validatorsetABI))
 	sABI, _ := abi.JSON(strings.NewReader(stateReceiverABI))
+	heimdallClient, _ := NewHeimdallClient(chainConfig.Bor.Heimdall)
+
 	c := &Bor{
 		chainConfig:      chainConfig,
 		config:           borConfig,
@@ -280,9 +282,7 @@ func New(
 		signatures:       signatures,
 		validatorSetABI:  vABI,
 		stateReceiverABI: sABI,
-		httpClient: http.Client{
-			Timeout: time.Duration(5 * time.Second),
-		},
+		HeimdallClient:   heimdallClient,
 	}
 
 	return c
@@ -566,7 +566,6 @@ func (c *Bor) verifySeal(chain consensus.ChainReader, header *types.Header, pare
 	if err != nil {
 		return err
 	}
-
 	if !snap.ValidatorSet.HasAddress(signer.Bytes()) {
 		return errUnauthorizedSigner
 	}
@@ -665,15 +664,15 @@ func (c *Bor) Prepare(chain consensus.ChainReader, header *types.Header) error {
 // rewards given.
 func (c *Bor) Finalize(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header) {
 	// commit span
-	if header.Number.Uint64()%c.config.Sprint == 0 {
-		cx := chainContext{Chain: chain, Bor: c}
+	headerNumber := header.Number.Uint64()
 
+	if headerNumber%c.config.Sprint == 0 {
+		cx := chainContext{Chain: chain, Bor: c}
 		// check and commit span
 		if err := c.checkAndCommitSpan(state, header, cx); err != nil {
 			log.Error("Error while committing span", "error", err)
 			return
 		}
-
 		// commit statees
 		if err := c.CommitStates(state, header, cx); err != nil {
 			log.Error("Error while committing states", "error", err)
@@ -989,33 +988,42 @@ func (c *Bor) checkAndCommitSpan(
 	header *types.Header,
 	chain core.ChainContext,
 ) error {
+	headerNumber := header.Number.Uint64()
 	pending := false
 	var span *Span = nil
-	var wg sync.WaitGroup
-	wg.Add(1)
+	errors := make(chan error)
 	go func() {
-		pending, _ = c.isSpanPending(header.Number.Uint64())
-		wg.Done()
+		var err error
+		pending, err = c.isSpanPending(headerNumber - 1)
+		errors <- err
 	}()
 
-	wg.Add(1)
 	go func() {
-		span, _ = c.GetCurrentSpan(header.Number.Uint64() - 1)
-		wg.Done()
+		var err error
+		span, err = c.GetCurrentSpan(headerNumber - 1)
+		errors <- err
 	}()
 
-	wg.Wait()
+	var err error
+	for i := 0; i < 2; i++ {
+		err = <-errors
+		if err != nil {
+			close(errors)
+			return err
+		}
+	}
+	close(errors)
 
 	// commit span if there is new span pending or span is ending or end block is not set
-	if pending || c.needToCommitSpan(span, header) {
-		err := c.commitSpan(span, state, header, chain)
+	if pending || c.needToCommitSpan(span, headerNumber) {
+		err := c.fetchAndCommitSpan(span.ID+1, state, header, chain)
 		return err
 	}
 
 	return nil
 }
 
-func (c *Bor) needToCommitSpan(span *Span, header *types.Header) bool {
+func (c *Bor) needToCommitSpan(span *Span, headerNumber uint64) bool {
 	// if span is nil
 	if span == nil {
 		return false
@@ -1027,21 +1035,21 @@ func (c *Bor) needToCommitSpan(span *Span, header *types.Header) bool {
 	}
 
 	// if current block is first block of last sprint in current span
-	h := header.Number.Uint64()
-	if span.EndBlock > c.config.Sprint && span.EndBlock-c.config.Sprint+1 == h {
+	if span.EndBlock > c.config.Sprint && span.EndBlock-c.config.Sprint+1 == headerNumber {
 		return true
 	}
 
 	return false
 }
 
-func (c *Bor) commitSpan(
-	span *Span,
+func (c *Bor) fetchAndCommitSpan(
+	newSpanID uint64,
 	state *state.StateDB,
 	header *types.Header,
 	chain core.ChainContext,
 ) error {
-	response, err := FetchFromHeimdallWithRetry(c.httpClient, c.chainConfig.Bor.Heimdall, "bor", "span", strconv.FormatUint(span.ID+1, 10))
+	response, err := c.HeimdallClient.FetchWithRetry("bor", "span", strconv.FormatUint(newSpanID, 10))
+
 	if err != nil {
 		return err
 	}
@@ -1049,6 +1057,15 @@ func (c *Bor) commitSpan(
 	var heimdallSpan HeimdallSpan
 	if err := json.Unmarshal(response.Result, &heimdallSpan); err != nil {
 		return err
+	}
+
+	// check if chain id matches with heimdall span
+	if heimdallSpan.ChainID != c.chainConfig.ChainID.String() {
+		return fmt.Errorf(
+			"Chain id proposed span, %s, and bor chain id, %s, doesn't match",
+			heimdallSpan.ChainID,
+			c.chainConfig.ChainID,
+		)
 	}
 
 	// get validators bytes
@@ -1161,7 +1178,7 @@ func (c *Bor) CommitStates(
 	// itereate through state ids
 	for _, stateID := range stateIds {
 		// fetch from heimdall
-		response, err := FetchFromHeimdallWithRetry(c.httpClient, c.chainConfig.Bor.Heimdall, "clerk", "event-record", strconv.FormatUint(stateID.Uint64(), 10))
+		response, err := c.HeimdallClient.FetchWithRetry("clerk", "event-record", strconv.FormatUint(stateID.Uint64(), 10))
 		if err != nil {
 			return err
 		}
@@ -1171,11 +1188,22 @@ func (c *Bor) CommitStates(
 		if err := json.Unmarshal(response.Result, &eventRecord); err != nil {
 			return err
 		}
+
+		// check if chain id matches with event record
+		if eventRecord.ChainID != "" && eventRecord.ChainID != c.chainConfig.ChainID.String() {
+			return fmt.Errorf(
+				"Chain id proposed state in span, %s, and bor chain id, %s, doesn't match",
+				eventRecord.ChainID,
+				c.chainConfig.ChainID,
+			)
+		}
+
 		log.Info("→ committing new state",
 			"id", eventRecord.ID,
 			"contract", eventRecord.Contract,
 			"data", hex.EncodeToString(eventRecord.Data),
 			"txHash", eventRecord.TxHash,
+			"chainID", eventRecord.ChainID,
 		)
 		stateData := types.StateData{
 			Did:      eventRecord.ID,
@@ -1212,9 +1240,56 @@ func (c *Bor) CommitStates(
 	return nil
 }
 
+
 // SubscribeStateEvent registers a subscription of ChainSideEvent.
 func (c *Bor) SubscribeStateEvent(ch chan<- core.NewStateChangeEvent) event.Subscription {
 	return c.scope.Track(c.stateDataFeed.Subscribe(ch))
+}
+
+func (c *Bor) SetHeimdallClient(h IHeimdallClient) {
+	c.HeimdallClient = h
+}
+
+func (c *Bor) IsValidatorAction(chain consensus.ChainReader, from common.Address, tx *types.Transaction) bool {
+	header := chain.CurrentHeader()
+	validators, err := c.GetCurrentValidators(header.Number.Uint64(), header.Number.Uint64()+1)
+	if err != nil {
+		log.Error("Failed fetching snapshot", err)
+		return false
+	}
+
+	isValidator := false
+	for _, validator := range validators {
+		if bytes.Compare(validator.Address.Bytes(), from.Bytes()) == 0 {
+			isValidator = true
+			break
+		}
+	}
+
+	return isValidator && (isProposeSpanAction(tx, chain.Config().Bor.ValidatorContract) ||
+		isProposeStateAction(tx, chain.Config().Bor.StateReceiverContract))
+}
+
+func isProposeSpanAction(tx *types.Transaction, validatorContract string) bool {
+	// keccak256('proposeSpan()').slice(0, 4)
+	proposeSpanSig, _ := hex.DecodeString("4b0e4d17")
+	if tx.Data() == nil || len(tx.Data()) < 4 {
+		return false
+	}
+
+	return bytes.Compare(proposeSpanSig, tx.Data()[:4]) == 0 &&
+		tx.To().String() == validatorContract
+}
+
+func isProposeStateAction(tx *types.Transaction, stateReceiverContract string) bool {
+	// keccak256('proposeState(uint256)').slice(0, 4)
+	proposeStateSig, _ := hex.DecodeString("ede01f17")
+	if tx.Data() == nil || len(tx.Data()) < 4 {
+		return false
+	}
+
+	return bytes.Compare(proposeStateSig, tx.Data()[:4]) == 0 &&
+		tx.To().String() == stateReceiverContract
 }
 
 //

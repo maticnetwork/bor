@@ -19,9 +19,67 @@ type ResponseWithHeight struct {
 	Result json.RawMessage `json:"result"`
 }
 
+type IHeimdallClient interface {
+	Fetch(paths ...string) (*ResponseWithHeight, error)
+	FetchWithRetry(paths ...string) (*ResponseWithHeight, error)
+}
+
+type HeimdallClient struct {
+	urlString string
+	client    http.Client
+}
+
+func NewHeimdallClient(urlString string) (*HeimdallClient, error) {
+	h := &HeimdallClient{
+		urlString: urlString,
+		client: http.Client{
+			Timeout: time.Duration(5 * time.Second),
+		},
+	}
+	return h, nil
+}
+
+func (h *HeimdallClient) Fetch(paths ...string) (*ResponseWithHeight, error) {
+	u, err := url.Parse(h.urlString)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, e := range paths {
+		if e != "" {
+			u.Path = path.Join(u.Path, e)
+		}
+	}
+
+	return h.internalFetch(u)
+}
+
+// FetchWithRetry returns data from heimdall with retry
+func (h *HeimdallClient) FetchWithRetry(paths ...string) (*ResponseWithHeight, error) {
+	u, err := url.Parse(h.urlString)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, e := range paths {
+		if e != "" {
+			u.Path = path.Join(u.Path, e)
+		}
+	}
+
+	for {
+		res, err := h.internalFetch(u)
+		if err == nil && res != nil {
+			return res, nil
+		}
+		log.Info("Retrying again in 5 seconds for next Heimdall span", "path", u.Path)
+		time.Sleep(5 * time.Second)
+	}
+}
+
 // internal fetch method
-func internalFetch(client http.Client, u *url.URL) (*ResponseWithHeight, error) {
-	res, err := client.Get(u.String())
+func (h *HeimdallClient) internalFetch(u *url.URL) (*ResponseWithHeight, error) {
+	res, err := h.client.Get(u.String())
 	if err != nil {
 		return nil, err
 	}
@@ -45,43 +103,4 @@ func internalFetch(client http.Client, u *url.URL) (*ResponseWithHeight, error) 
 	}
 
 	return &response, nil
-}
-
-// FetchFromHeimdallWithRetry returns data from heimdall with retry
-func FetchFromHeimdallWithRetry(client http.Client, urlString string, paths ...string) (*ResponseWithHeight, error) {
-	u, err := url.Parse(urlString)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, e := range paths {
-		if e != "" {
-			u.Path = path.Join(u.Path, e)
-		}
-	}
-
-	for {
-		res, err := internalFetch(client, u)
-		if err == nil && res != nil {
-			return res, nil
-		}
-		log.Info("Retrying again in 5 seconds", u.String())
-		time.Sleep(5 * time.Second)
-	}
-}
-
-// FetchFromHeimdall returns data from heimdall
-func FetchFromHeimdall(client http.Client, urlString string, paths ...string) (*ResponseWithHeight, error) {
-	u, err := url.Parse(urlString)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, e := range paths {
-		if e != "" {
-			u.Path = path.Join(u.Path, e)
-		}
-	}
-
-	return internalFetch(client, u)
 }
