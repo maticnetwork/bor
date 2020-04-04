@@ -1,6 +1,6 @@
 apiVersion: 1
 providers:
-  - name: 'a unique provider name'
+  - name: 'Bor Dashboard'
     orgId: 1
     folder: ''
     folderUid: ''
