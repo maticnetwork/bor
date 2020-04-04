@@ -16,7 +16,7 @@ services:
       - '--web.console.libraries=/usr/share/prometheus/console_libraries'
       - '--web.console.templates=/usr/share/prometheus/consoles'
     ports:
-      - 127.0.0.1:9091:9090
+      - 9091:9090
   grafana:
     image: grafana/grafana
     network_mode: host
@@ -26,4 +26,4 @@ services:
       - ./provisioning:/etc/grafana/provisioning
       - ./dashboards:/var/lib/grafana/dashboards
     ports:
-      - 127.0.0.1:3001:3000
+      - 3001:3000
