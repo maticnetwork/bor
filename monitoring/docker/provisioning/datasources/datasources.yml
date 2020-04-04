@@ -2,7 +2,7 @@ datasources:
   - name: prometheus
     type: prometheus
     orgId: 1
-    url: http://127.0.0.1:9090
+    url: http://127.0.0.1:9091
     access: Browser
     basicAuth: false
     database: prometheus
