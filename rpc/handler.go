@@ -19,6 +19,7 @@ package rpc
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"strconv"
 	"strings"
@@ -333,7 +334,9 @@ func (h *handler) handleCall(cp *callProc, msg *jsonrpcMessage) *jsonrpcMessage 
 
 // handleSubscribe processes *_subscribe method calls.
 func (h *handler) handleSubscribe(cp *callProc, msg *jsonrpcMessage) *jsonrpcMessage {
+	fmt.Println("in handleSubscribe")
 	if !h.allowSubscribe {
+		fmt.Println("in handleSubscribe 2")
 		return msg.errorResponse(ErrNotificationsUnsupported)
 	}
 

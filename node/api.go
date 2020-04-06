@@ -115,7 +115,9 @@ func (api *PrivateAdminAPI) PeerEvents(ctx context.Context) (*rpc.Subscription, 
 
 	// Create the subscription
 	notifier, supported := rpc.NotifierFromContext(ctx)
+	fmt.Println("in PeerEvents")
 	if !supported {
+		fmt.Println("in PeerEvents 2")
 		return nil, rpc.ErrNotificationsUnsupported
 	}
 	rpcSub := notifier.CreateSubscription()

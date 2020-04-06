@@ -425,12 +425,16 @@ func (c *Client) Subscribe(ctx context.Context, namespace string, channel interf
 	if chanVal.IsNil() {
 		panic("channel given to Subscribe must not be nil")
 	}
+	fmt.Println("in Subscribe")
 	if c.isHTTP {
+		fmt.Println("in Subscribe 2")
 		return nil, ErrNotificationsUnsupported
 	}
 
 	msg, err := c.newMessage(namespace+subscribeMethodSuffix, args...)
+	fmt.Println("msg", msg)
 	if err != nil {
+		fmt.Println("in Subscribe 3")
 		return nil, err
 	}
 	op := &requestOp{
@@ -442,9 +446,11 @@ func (c *Client) Subscribe(ctx context.Context, namespace string, channel interf
 	// Send the subscription request.
 	// The arrival and validity of the response is signaled on sub.quit.
 	if err := c.send(ctx, op, msg); err != nil {
+		fmt.Println("in Subscribe 4")
 		return nil, err
 	}
 	if _, err := op.wait(ctx, c); err != nil {
+		fmt.Println("in Subscribe 5")
 		return nil, err
 	}
 	return op.sub, nil
@@ -466,14 +472,19 @@ func (c *Client) newMessage(method string, paramsIn ...interface{}) (*jsonrpcMes
 func (c *Client) send(ctx context.Context, op *requestOp, msg interface{}) error {
 	select {
 	case c.reqInit <- op:
+		fmt.Println("in send")
 		err := c.write(ctx, msg)
+		fmt.Println("in send 2")
 		c.reqSent <- err
+		fmt.Println("in send 3")
 		return err
 	case <-ctx.Done():
+		fmt.Println("in send 4")
 		// This can happen if the client is overloaded or unable to keep up with
 		// subscription notifications.
 		return ctx.Err()
 	case <-c.closing:
+		fmt.Println("in send 5")
 		return ErrClientQuit
 	}
 }
@@ -481,12 +492,15 @@ func (c *Client) send(ctx context.Context, op *requestOp, msg interface{}) error
 func (c *Client) write(ctx context.Context, msg interface{}) error {
 	// The previous write failed. Try to establish a new connection.
 	if c.writeConn == nil {
+		fmt.Println("in write 1")
 		if err := c.reconnect(ctx); err != nil {
+			fmt.Println("in write 1.1")
 			return err
 		}
 	}
 	err := c.writeConn.Write(ctx, msg)
 	if err != nil {
+		fmt.Println("in write 2")
 		c.writeConn = nil
 	}
 	return err
