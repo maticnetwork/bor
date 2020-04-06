@@ -674,6 +674,7 @@ func (c *Bor) Finalize(chain consensus.ChainReader, header *types.Header, state 
 			return
 		}
 		// commit statees
+		fmt.Println("trying commit states")
 		if err := c.CommitStates(state, header, cx); err != nil {
 			log.Error("Error while committing states", "error", err)
 			return
@@ -1161,7 +1162,6 @@ func (c *Bor) CommitStates(
 	header *types.Header,
 	chain core.ChainContext,
 ) error {
-	fmt.Println("comminting state")
 	// get pending state proposals
 	stateIds, err := c.GetPendingStateProposals(header.Number.Uint64() - 1)
 	if err != nil {
@@ -1239,7 +1239,6 @@ func (c *Bor) CommitStates(
 
 	return nil
 }
-
 
 // SubscribeStateEvent registers a subscription of ChainSideEvent.
 func (c *Bor) SubscribeStateEvent(ch chan<- core.NewStateChangeEvent) event.Subscription {
