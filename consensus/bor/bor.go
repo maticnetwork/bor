@@ -674,7 +674,6 @@ func (c *Bor) Finalize(chain consensus.ChainReader, header *types.Header, state 
 			return
 		}
 		// commit statees
-		fmt.Println("trying commit states")
 		if err := c.CommitStates(state, header, cx); err != nil {
 			log.Error("Error while committing states", "error", err)
 			return
