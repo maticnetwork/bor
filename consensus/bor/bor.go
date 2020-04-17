@@ -1201,7 +1201,7 @@ func (c *Bor) CommitStates(
 		}
 
 		// check if chain id matches with event record
-		if eventRecord.ChainID != "" && eventRecord.ChainID != c.chainConfig.ChainID.String() {
+		if eventRecord.ChainID != c.chainConfig.ChainID.String() {
 			return fmt.Errorf(
 				"Chain id proposed state in span, %s, and bor chain id, %s, doesn't match",
 				eventRecord.ChainID,
