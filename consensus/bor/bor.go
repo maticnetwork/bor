@@ -336,9 +336,10 @@ func (c *Bor) verifyHeader(chain consensus.ChainReader, header *types.Header, pa
 		parent = parents[len(parents)-1]
 	} else if number > 0 {
 		parent = chain.GetHeader(header.ParentHash, number-1)
-		if header.Time < parent.Time+CalcProducerDelay(number, c.config.Period, c.config.Sprint, c.config.ProducerDelay) {
-			return consensus.ErrBlockTooSoon
-		}
+	}
+
+	if parent != nil && header.Time < parent.Time+CalcProducerDelay(number, c.config.Period, c.config.Sprint, c.config.ProducerDelay) {
+		return consensus.ErrBlockTooSoon
 	}
 
 	// Don't waste time checking blocks from the future
