@@ -866,8 +866,7 @@ func (c *Bor) isSpanPending(snapshotNumber uint64) (bool, error) {
 		return false, err
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel() // cancel when we are finished consuming integers
+	ctx := context.Background()
 
 	// call
 	msgData := (hexutil.Bytes)(data)
@@ -904,8 +903,7 @@ func (c *Bor) GetCurrentSpan(snapshotNumber uint64) (*Span, error) {
 		return nil, err
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel() // cancel when we are finished consuming integers
+	ctx := context.Background()
 
 	// call
 	msgData := (hexutil.Bytes)(data)
@@ -954,8 +952,7 @@ func (c *Bor) GetCurrentValidators(snapshotNumber uint64, blockNumber uint64) ([
 		return nil, err
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel() // cancel when we are finished consuming integers
+	ctx := context.Background()
 
 	// call
 	msgData := (hexutil.Bytes)(data)
@@ -995,11 +992,7 @@ func (c *Bor) GetCurrentValidators(snapshotNumber uint64, blockNumber uint64) ([
 	return valz, nil
 }
 
-func (c *Bor) checkAndCommitSpan(
-	state *state.StateDB,
-	header *types.Header,
-	chain core.ChainContext,
-) error {
+func (c *Bor) checkAndCommitSpan(state *state.StateDB, header *types.Header, chain core.ChainContext) error {
 	headerNumber := header.Number.Uint64()
 	pending := false
 	var span *Span = nil
@@ -1144,8 +1137,7 @@ func (c *Bor) GetPendingStateProposals(snapshotNumber uint64) ([]*big.Int, error
 		return nil, err
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel() // cancel when we are finished consuming integers
+	ctx := context.Background()
 
 	msgData := (hexutil.Bytes)(data)
 	toAddress := common.HexToAddress(c.config.StateReceiverContract)
