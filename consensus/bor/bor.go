@@ -762,9 +762,6 @@ func (c *Bor) Seal(chain consensus.ChainReader, block *types.Block, results chan
 	wiggle := time.Duration(2*c.config.Period) * time.Second * time.Duration(successionNumber)
 	delay += wiggle
 
-	log.Info("Out-of-turn signing requested", "wiggle", common.PrettyDuration(wiggle))
-	log.Info("Sealing block with", "number", number, "delay", delay, "headerDifficulty", header.Difficulty, "signer", signer.Hex(), "proposer", snap.ValidatorSet.GetProposer().Address.Hex())
-
 	// Sign all the things!
 	sighash, err := signFn(accounts.Account{Address: signer}, accounts.MimetypeBor, BorRLP(header))
 	if err != nil {
@@ -777,14 +774,25 @@ func (c *Bor) Seal(chain consensus.ChainReader, block *types.Block, results chan
 	go func() {
 		select {
 		case <-stop:
+			// "pessimistically" - because we signed the seal in the off-chance that the in-turn validator doesn't
+			// and we might need to step in as backup
+			log.Debug("Discarding the pessimistically signed seal for block", "number", number)
 			return
 		case <-time.After(delay):
+			log.Info(
+				"signing out-of-turn",
+				"number", number,
+				"wiggle", common.PrettyDuration(wiggle),
+				"delay", delay,
+				"headerDifficulty", header.Difficulty,
+				"in-turn-signer", snap.ValidatorSet.GetProposer().Address.Hex(),
+			)
 		}
 
 		select {
 		case results <- block.WithSeal(header):
 		default:
-			log.Warn("Sealing result is not read by miner", "sealhash", SealHash(header))
+			log.Warn("Sealing result was not read by miner", "sealhash", SealHash(header))
 		}
 	}()
 
