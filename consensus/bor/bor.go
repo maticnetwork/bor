@@ -138,9 +138,10 @@ var (
 	errRecentlySigned = errors.New("recently signed")
 )
 
+// ActiveSealingOp keeps the context of the active sealing operation
 type ActiveSealingOp struct {
-	ctx    context.Context
-	cancel context.CancelFunc
+	blockNumber uint64
+	shouldSeal  chan bool
 }
 
 var activeSealingOp *ActiveSealingOp
@@ -729,11 +730,6 @@ func (c *Bor) Authorize(signer common.Address, signFn SignerFn) {
 	c.signFn = signFn
 }
 
-type key string
-
-const blockNumberKey key = "block_number"
-const listenerKey key = "listener"
-
 // Seal implements consensus.Engine, attempting to create a sealed block using
 // the local signing credentials.
 func (c *Bor) Seal(chain consensus.ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
@@ -786,6 +782,7 @@ func (c *Bor) Seal(chain consensus.ChainReader, block *types.Block, results chan
 	shouldSeal := make(chan bool)
 	go c.WaitForSealingOp(stop, shouldSeal, number, delay)
 	go func() {
+		defer close(shouldSeal)
 		switch <-shouldSeal {
 		case false:
 			return
@@ -817,10 +814,7 @@ func (c *Bor) Seal(chain consensus.ChainReader, block *types.Block, results chan
 
 // WaitForSealingOp blocks until delay elapses or stop signal is received
 func (c *Bor) WaitForSealingOp(stop <-chan struct{}, shouldSeal chan bool, number uint64, delay time.Duration) {
-	ctx, cancel := context.WithCancel(context.Background())
-	ctx = context.WithValue(ctx, blockNumberKey, number)
-	ctx = context.WithValue(ctx, listenerKey, shouldSeal)
-	activeSealingOp = &ActiveSealingOp{ctx, cancel}
+	activeSealingOp = &ActiveSealingOp{number, shouldSeal}
 	select {
 	case <-stop:
 		c.CancelActiveSealingOp()
@@ -832,9 +826,8 @@ func (c *Bor) WaitForSealingOp(stop <-chan struct{}, shouldSeal chan bool, numbe
 // CancelActiveSealingOp cancels in-flight sealing process
 func (c *Bor) CancelActiveSealingOp() {
 	if activeSealingOp != nil {
-		log.Info("Discarding active sealing operation", "number", activeSealingOp.ctx.Value(blockNumberKey))
-		activeSealingOp.cancel()
-		activeSealingOp.ctx.Value(listenerKey).(chan bool) <- false
+		log.Info("Discarding active sealing operation", "number", activeSealingOp.blockNumber)
+		activeSealingOp.shouldSeal <- false
 		activeSealingOp = nil
 	}
 }
