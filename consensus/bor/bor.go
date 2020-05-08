@@ -741,7 +741,6 @@ func (c *Bor) Seal(chain consensus.ChainReader, block *types.Block, results chan
 
 	// Sealing the genesis block is not supported
 	number := header.Number.Uint64()
-	log.Info("Sealing ... ", "number", number)
 	if number == 0 {
 		return errUnknownBlock
 	}
@@ -817,7 +816,7 @@ func (c *Bor) Seal(chain consensus.ChainReader, block *types.Block, results chan
 }
 
 // WaitForSealingOp blocks until delay elapses or stop signal is received
-func (c *Bor) WaitForSealingOp(stop <-chan struct{}, shouldSeal chan bool, number uint64, delay time.Duration) <-chan bool {
+func (c *Bor) WaitForSealingOp(stop <-chan struct{}, shouldSeal chan bool, number uint64, delay time.Duration) {
 	ctx, cancel := context.WithCancel(context.Background())
 	ctx = context.WithValue(ctx, blockNumberKey, number)
 	ctx = context.WithValue(ctx, listenerKey, shouldSeal)
@@ -828,7 +827,6 @@ func (c *Bor) WaitForSealingOp(stop <-chan struct{}, shouldSeal chan bool, numbe
 	case <-time.After(delay):
 		shouldSeal <- true
 	}
-	return shouldSeal
 }
 
 // CancelActiveSealingOp cancels in-flight sealing process
