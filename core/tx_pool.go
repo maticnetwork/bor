@@ -117,12 +117,6 @@ const (
 	TxStatusIncluded
 )
 
-// bor acts as a way to be able to type cast consensus.Engine;
-// since importing "github.com/maticnetwork/bor/consensus/bor" results in a cyclic dependency
-type bor interface {
-	IsValidatorAction(chain consensus.ChainReader, from common.Address, tx *types.Transaction) bool
-}
-
 // blockChain provides the state of blockchain and current gas limit to do
 // some pre checks in tx pool and event subscribers.
 type blockChain interface {

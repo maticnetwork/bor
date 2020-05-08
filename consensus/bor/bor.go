@@ -138,6 +138,13 @@ var (
 	errRecentlySigned = errors.New("recently signed")
 )
 
+type ActiveSealingOp struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+}
+
+var activeSealingOp *ActiveSealingOp
+
 // SignerFn is a signer callback function to request a header to be signed by a
 // backing account.
 type SignerFn func(accounts.Account, string, []byte) ([]byte, error)
@@ -722,6 +729,11 @@ func (c *Bor) Authorize(signer common.Address, signFn SignerFn) {
 	c.signFn = signFn
 }
 
+type key string
+
+const blockNumberKey key = "block_number"
+const listenerKey key = "listener"
+
 // Seal implements consensus.Engine, attempting to create a sealed block using
 // the local signing credentials.
 func (c *Bor) Seal(chain consensus.ChainReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
@@ -729,6 +741,7 @@ func (c *Bor) Seal(chain consensus.ChainReader, block *types.Block, results chan
 
 	// Sealing the genesis block is not supported
 	number := header.Number.Uint64()
+	log.Info("Sealing ... ", "number", number)
 	if number == 0 {
 		return errUnknownBlock
 	}
@@ -771,21 +784,26 @@ func (c *Bor) Seal(chain consensus.ChainReader, block *types.Block, results chan
 
 	// Wait until sealing is terminated or delay timeout.
 	log.Trace("Waiting for slot to sign and propagate", "delay", common.PrettyDuration(delay))
+	shouldSeal := make(chan bool)
+	go c.WaitForSealingOp(stop, shouldSeal, number, delay)
 	go func() {
-		select {
-		case <-stop:
-			// "pessimistically" - because we signed the seal in the off-chance that the in-turn validator doesn't
-			// and we might need to step in as backup
-			log.Debug("Discarding the pessimistically signed seal for block", "number", number)
+		switch <-shouldSeal {
+		case false:
 			return
-		case <-time.After(delay):
+		case true:
+			if wiggle > 0 {
+				log.Info(
+					"Sealing out-of-turn",
+					"number", number,
+					"wiggle", common.PrettyDuration(wiggle),
+					"in-turn-signer", snap.ValidatorSet.GetProposer().Address.Hex(),
+				)
+			}
 			log.Info(
-				"signing out-of-turn",
+				"Sealing successful",
 				"number", number,
-				"wiggle", common.PrettyDuration(wiggle),
 				"delay", delay,
 				"headerDifficulty", header.Difficulty,
-				"in-turn-signer", snap.ValidatorSet.GetProposer().Address.Hex(),
 			)
 		}
 
@@ -795,8 +813,32 @@ func (c *Bor) Seal(chain consensus.ChainReader, block *types.Block, results chan
 			log.Warn("Sealing result was not read by miner", "sealhash", SealHash(header))
 		}
 	}()
-
 	return nil
+}
+
+// WaitForSealingOp blocks until delay elapses or stop signal is received
+func (c *Bor) WaitForSealingOp(stop <-chan struct{}, shouldSeal chan bool, number uint64, delay time.Duration) <-chan bool {
+	ctx, cancel := context.WithCancel(context.Background())
+	ctx = context.WithValue(ctx, blockNumberKey, number)
+	ctx = context.WithValue(ctx, listenerKey, shouldSeal)
+	activeSealingOp = &ActiveSealingOp{ctx, cancel}
+	select {
+	case <-stop:
+		c.CancelActiveSealingOp()
+	case <-time.After(delay):
+		shouldSeal <- true
+	}
+	return shouldSeal
+}
+
+// CancelActiveSealingOp cancels in-flight sealing process
+func (c *Bor) CancelActiveSealingOp() {
+	if activeSealingOp != nil {
+		log.Info("Discarding active sealing operation", "number", activeSealingOp.ctx.Value(blockNumberKey))
+		activeSealingOp.cancel()
+		activeSealingOp.ctx.Value(listenerKey).(chan bool) <- false
+		activeSealingOp = nil
+	}
 }
 
 // CalcDifficulty is the difficulty adjustment algorithm. It returns the difficulty
