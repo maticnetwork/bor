@@ -834,7 +834,7 @@ func (c *Bor) WaitForSealingOp(number uint64, shouldSeal chan bool, delay time.D
 // CancelActiveSealingOp cancels in-flight sealing process
 func (c *Bor) CancelActiveSealingOp() {
 	if c.activeSealingOp != nil {
-		log.Info("Discarding active sealing operation", "number", c.activeSealingOp.number)
+		log.Debug("Discarding active sealing operation", "number", c.activeSealingOp.number)
 		c.activeSealingOp.cancel()
 	}
 }
