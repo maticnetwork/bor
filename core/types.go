@@ -17,8 +17,6 @@
 package core
 
 import (
-	"github.com/maticnetwork/bor/common"
-	"github.com/maticnetwork/bor/consensus"
 	"github.com/maticnetwork/bor/core/state"
 	"github.com/maticnetwork/bor/core/types"
 	"github.com/maticnetwork/bor/core/vm"
@@ -50,11 +48,4 @@ type Processor interface {
 	// the transaction messages using the statedb and applying any rewards to both
 	// the processor (coinbase) and any included uncles.
 	Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (types.Receipts, []*types.Log, uint64, error)
-}
-
-// bor acts as a way to be able to type cast consensus.Engine;
-// since importing "github.com/maticnetwork/bor/consensus/bor" results in a cyclic dependency
-type bor interface {
-	IsValidatorAction(chain consensus.ChainReader, from common.Address, tx *types.Transaction) bool
-	CancelActiveSealingOp()
 }
