@@ -56,5 +56,5 @@ type Processor interface {
 // since importing "github.com/maticnetwork/bor/consensus/bor" results in a cyclic dependency
 type bor interface {
 	IsValidatorAction(chain consensus.ChainReader, from common.Address, tx *types.Transaction) bool
-	CancelActiveSealingOp()
+	// CancelActiveSealingOp(number uint64)
 }

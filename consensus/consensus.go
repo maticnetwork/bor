@@ -116,6 +116,11 @@ type Engine interface {
 	Close() error
 }
 
+type BorEngine interface {
+	Engine
+	CancelObsoleteSealingOps(number uint64)
+}
+
 // PoW is a consensus engine based on proof-of-work.
 type PoW interface {
 	Engine

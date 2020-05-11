@@ -139,12 +139,13 @@ var (
 )
 
 // ActiveSealingOp keeps the context of the active sealing operation
-type ActiveSealingOp struct {
-	blockNumber uint64
-	shouldSeal  chan bool
-}
+// type ActiveSealingOp struct {
+// 	// blockNumber uint64
+// 	shouldSeal  chan bool
+// 	isActive bool
+// }
 
-var activeSealingOp *ActiveSealingOp
+// var activeSealingOp *ActiveSealingOp
 
 // SignerFn is a signer callback function to request a header to be signed by a
 // backing account.
@@ -257,7 +258,8 @@ type Bor struct {
 	stateDataFeed event.Feed
 	scope         event.SubscriptionScope
 	// The fields below are for testing only
-	fakeDiff bool // Skip difficulty verifications
+	fakeDiff         bool // Skip difficulty verifications
+	ActiveSealingOps map[uint64]context.CancelFunc
 }
 
 // New creates a Matic Bor consensus engine.
@@ -292,6 +294,7 @@ func New(
 		validatorSetABI:  vABI,
 		stateReceiverABI: sABI,
 		HeimdallClient:   heimdallClient,
+		ActiveSealingOps: make(map[uint64]context.CancelFunc),
 	}
 
 	return c
@@ -780,9 +783,8 @@ func (c *Bor) Seal(chain consensus.ChainReader, block *types.Block, results chan
 	// Wait until sealing is terminated or delay timeout.
 	log.Trace("Waiting for slot to sign and propagate", "delay", common.PrettyDuration(delay))
 	shouldSeal := make(chan bool)
-	go c.WaitForSealingOp(stop, shouldSeal, number, delay)
+	go c.WaitForSealingOp(number, shouldSeal, delay)
 	go func() {
-		defer close(shouldSeal)
 		switch <-shouldSeal {
 		case false:
 			return
@@ -808,28 +810,42 @@ func (c *Bor) Seal(chain consensus.ChainReader, block *types.Block, results chan
 		default:
 			log.Warn("Sealing result was not read by miner", "sealhash", SealHash(header))
 		}
+		close(shouldSeal)
+		delete(c.ActiveSealingOps, number)
 	}()
 	return nil
 }
 
-// WaitForSealingOp blocks until delay elapses or stop signal is received
-func (c *Bor) WaitForSealingOp(stop <-chan struct{}, shouldSeal chan bool, number uint64, delay time.Duration) {
-	activeSealingOp = &ActiveSealingOp{number, shouldSeal}
+func (c *Bor) WaitForSealingOp(number uint64, shouldSeal chan bool, delay time.Duration) {
+	ctx, cancel := context.WithCancel(context.Background())
+	c.ActiveSealingOps[number] = cancel
 	select {
-	case <-stop:
-		c.CancelActiveSealingOp()
+	case <-ctx.Done():
+		shouldSeal <- false
 	case <-time.After(delay):
 		shouldSeal <- true
 	}
 }
 
-// CancelActiveSealingOp cancels in-flight sealing process
-func (c *Bor) CancelActiveSealingOp() {
-	if activeSealingOp != nil {
-		log.Info("Discarding active sealing operation", "number", activeSealingOp.blockNumber)
-		activeSealingOp.shouldSeal <- false
-		activeSealingOp = nil
+func (c *Bor) CancelObsoleteSealingOps(number uint64) {
+	for blocknumber := range c.ActiveSealingOps {
+		if blocknumber <= number {
+			c.CancelSealingOp(blocknumber)
+		}
 	}
+}
+
+func (c *Bor) CancelAllActiveSealingOps() {
+	for number := range c.ActiveSealingOps {
+		c.CancelSealingOp(number)
+	}
+}
+
+func (c *Bor) CancelSealingOp(number uint64) {
+	cancel := c.ActiveSealingOps[number]
+	log.Info("Discarding active sealing operation", "number", number)
+	cancel()
+	delete(c.ActiveSealingOps, number)
 }
 
 // CalcDifficulty is the difficulty adjustment algorithm. It returns the difficulty
@@ -1026,10 +1042,10 @@ func (c *Bor) checkAndCommitSpan(
 	close(errors)
 
 	// commit span if there is new span pending or span is ending or end block is not set
-	if pending || c.needToCommitSpan(span, headerNumber) {
-		err := c.fetchAndCommitSpan(span.ID+1, state, header, chain)
-		return err
-	}
+	// if pending || c.needToCommitSpan(span, headerNumber) {
+	// 	err := c.fetchAndCommitSpan(span.ID+1, state, header, chain)
+	// 	return err
+	// }
 
 	return nil
 }

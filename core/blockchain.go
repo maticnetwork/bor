@@ -27,7 +27,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/hashicorp/golang-lru"
+	lru "github.com/hashicorp/golang-lru"
 	"github.com/maticnetwork/bor/common"
 	"github.com/maticnetwork/bor/common/mclock"
 	"github.com/maticnetwork/bor/common/prque"
@@ -1718,7 +1718,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals bool) (int, []
 	if lastCanon != nil && bc.CurrentBlock().Hash() == lastCanon.Hash() {
 		events = append(events, ChainHeadEvent{lastCanon})
 	}
-	bc.engine.(bor).CancelActiveSealingOp()
+	bc.engine.(consensus.BorEngine).CancelObsoleteSealingOps(bc.CurrentBlock().Header().Number.Uint64())
 	return it.index, events, coalescedLogs, err
 }
 

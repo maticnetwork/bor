@@ -27,6 +27,7 @@ import (
 	mapset "github.com/deckarep/golang-set"
 	"github.com/maticnetwork/bor/common"
 	"github.com/maticnetwork/bor/consensus"
+	"github.com/maticnetwork/bor/consensus/bor"
 	"github.com/maticnetwork/bor/consensus/misc"
 	"github.com/maticnetwork/bor/core"
 	"github.com/maticnetwork/bor/core/state"
@@ -506,10 +507,11 @@ func (w *worker) taskLoop() {
 
 	// interrupt aborts the in-flight sealing task.
 	interrupt := func() {
-		if stopCh != nil {
-			close(stopCh)
-			stopCh = nil
-		}
+		w.engine.(*bor.Bor).CancelAllActiveSealingOps()
+		// if stopCh != nil {
+		// 	close(stopCh)
+		// 	stopCh = nil
+		// }
 	}
 	for {
 		select {
