@@ -82,7 +82,7 @@ func buildEthereumInstance(t *testing.T, db ethdb.Database) *initializeData {
 	}
 }
 
-func insertNewBlock(t *testing.T, _bor *bor.Bor, chain *core.BlockChain, header *types.Header, statedb *state.StateDB, privKey []byte) {
+func insertNewBlock(t *testing.T, _bor *bor.Bor, chain *core.BlockChain, header *types.Header, statedb *state.StateDB, privKey []byte) *types.Block {
 	_, err := _bor.FinalizeAndAssemble(chain, header, statedb, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("%s", err)
@@ -98,6 +98,7 @@ func insertNewBlock(t *testing.T, _bor *bor.Bor, chain *core.BlockChain, header 
 	if _, err := chain.InsertChain([]*types.Block{block}); err != nil {
 		t.Fatalf("%s", err)
 	}
+	return block
 }
 
 func buildMinimalNextHeader(t *testing.T, block *types.Block, borConfig *params.BorConfig) *types.Header {
