@@ -16,8 +16,10 @@ import (
 )
 
 // The genesis for tests was generated with relaxed parameters
-const sprintSize = 4
-const spanSize = 8
+var (
+	sprintSize uint64 = 4
+	spanSize   uint64 = 8
+)
 
 func TestCommitSpan(t *testing.T) {
 	init := buildEthereumInstance(t, rawdb.NewMemoryDatabase())
@@ -44,7 +46,7 @@ func TestCommitSpan(t *testing.T) {
 
 	block := init.genesis.ToBlock(db)
 	// Insert sprintSize # of blocks so that span is fetched at the start of a new sprint
-	for i := int64(1); i <= sprintSize; i++ {
+	for i := uint64(1); i <= sprintSize; i++ {
 		header := buildMinimalNextHeader(t, block, init.genesis.Config.Bor)
 		block = insertNewBlock(t, _bor, chain, header, statedb, _key)
 	}
@@ -100,7 +102,7 @@ func TestIsValidatorAction(t *testing.T) {
 	_key, _ := hex.DecodeString(privKey)
 
 	block := init.genesis.ToBlock(db)
-	for i := int64(1); i <= spanSize; i++ {
+	for i := uint64(1); i <= spanSize; i++ {
 		header := buildMinimalNextHeader(t, block, init.genesis.Config.Bor)
 		block = insertNewBlock(t, _bor, chain, header, statedb, _key)
 	}
