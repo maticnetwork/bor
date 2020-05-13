@@ -15,12 +15,6 @@ import (
 	"github.com/maticnetwork/bor/mocks"
 )
 
-// The genesis for tests was generated with relaxed parameters
-var (
-	sprintSize uint64 = 4
-	spanSize   uint64 = 8
-)
-
 func TestCommitSpan(t *testing.T) {
 	init := buildEthereumInstance(t, rawdb.NewMemoryDatabase())
 	chain := init.ethereum.BlockChain()

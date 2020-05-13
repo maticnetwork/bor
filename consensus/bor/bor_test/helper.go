@@ -22,11 +22,14 @@ import (
 )
 
 var (
-	extraSeal                  = 65 // Fixed number of extra-data suffix bytes reserved for signer seal
-	privKey                    = "b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291"
-	key, _                     = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
-	addr                       = crypto.PubkeyToAddress(key.PublicKey) // 0x71562b71999873DB5b286dF957af199Ec94617F7
-	validatorHeaderBytesLength = common.AddressLength + 20             // address + power
+	// The genesis for tests was generated with following parameters
+	extraSeal                         = 65 // Fixed number of extra-data suffix bytes reserved for signer seal
+	privKey                           = "b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291"
+	key, _                            = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+	addr                              = crypto.PubkeyToAddress(key.PublicKey) // 0x71562b71999873DB5b286dF957af199Ec94617F7
+	validatorHeaderBytesLength        = common.AddressLength + 20             // address + power
+	sprintSize                 uint64 = 4
+	spanSize                   uint64 = 8
 )
 
 type initializeData struct {
