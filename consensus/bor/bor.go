@@ -434,8 +434,7 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainReader, header *types.H
 
 	// verify the validator list in the last sprint block
 	if isSprintStart(number, c.config.Sprint) {
-		parentHeader := chain.GetHeaderByNumber(number - 1)
-		parentValidatorBytes := parentHeader.Extra[extraVanity : len(parentHeader.Extra)-extraSeal]
+		parentValidatorBytes := parent.Extra[extraVanity : len(parent.Extra)-extraSeal]
 		validatorsBytes := make([]byte, len(snap.ValidatorSet.Validators)*validatorHeaderBytesLength)
 
 		currentValidators := snap.ValidatorSet.Copy().Validators
