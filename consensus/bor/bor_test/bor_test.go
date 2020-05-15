@@ -2,8 +2,10 @@ package bortest
 
 import (
 	"encoding/hex"
+	"fmt"
 	"math/big"
 	"testing"
+	// "time"
 
 	"github.com/maticnetwork/bor/common"
 	"github.com/maticnetwork/bor/consensus/bor"
@@ -23,23 +25,34 @@ func TestCommitSpan(t *testing.T) {
 	_bor := engine.(*bor.Bor)
 
 	// Mock HeimdallClient.FetchWithRetry to return span data from span.json
-	res, heimdallSpan := loadSpanFromFile(t)
 	h := &mocks.IHeimdallClient{}
-	h.On("FetchWithRetry", "bor", "span", "1").Return(res, nil)
 	_bor.SetHeimdallClient(h)
 
 	db := init.ethereum.ChainDb()
 	block := init.genesis.ToBlock(db)
+	// block.Header().Time = uint64(time.Now().Unix())
+	fmt.Println(block.Header().Time)
+	from := block.Header().Time
+
 	// Insert sprintSize # of blocks so that span is fetched at the start of a new sprint
-	for i := uint64(1); i <= sprintSize; i++ {
+	for i := uint64(1); i < sprintSize; i++ {
 		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor)
 		insertNewBlock(t, chain, block)
 	}
 
-	// FetchWithRetry is invoked 2 times
-	// 1. bor.FinalizeAndAssemble to prepare a new block when calling buildNextBlock
-	// 2. bor.Finalize via(bc.insertChain => bc.processor.Process)
+	to := block.Header().Time
+
+	res, heimdallSpan := loadSpanFromFile(t)
+	h.On("FetchWithRetry", "bor", "span", "1").Return(res, nil)
+	eventRes := loadEventRecordsFromFile(t)
+	query := fmt.Sprintf("clerk/event-record/list?from-time=%d&to-time=%d", from, to)
+	h.On("FetchWithRetry", query).Return(eventRes, nil)
+
+	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor)
+	insertNewBlock(t, chain, block)
+
 	assert.True(t, h.AssertCalled(t, "FetchWithRetry", "bor", "span", "1"))
+	assert.True(t, h.AssertCalled(t, "FetchWithRetry", query))
 	validators, err := _bor.GetCurrentValidators(sprintSize, 256) // new span starts at 256
 	if err != nil {
 		t.Fatalf("%s", err)

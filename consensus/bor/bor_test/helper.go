@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/maticnetwork/bor/common"
 	"github.com/maticnetwork/bor/consensus/bor"
@@ -89,6 +90,7 @@ func buildEthereumInstance(t *testing.T, db ethdb.Database) *initializeData {
 	var ethereum *eth.Ethereum
 	stack.Service(&ethereum)
 	ethConf.Genesis.MustCommit(ethereum.ChainDb())
+	gen.Timestamp = uint64(time.Now().Unix())
 	return &initializeData{
 		genesis:  gen,
 		ethereum: ethereum,
@@ -171,6 +173,24 @@ func loadSpanFromFile(t *testing.T) (*bor.ResponseWithHeight, *bor.HeimdallSpan)
 		t.Fatalf("%s", err)
 	}
 	return res, heimdallSpan
+}
+
+func loadEventRecordsFromFile(t *testing.T) *bor.ResponseWithHeight {
+	eventsData, err := ioutil.ReadFile("events.json")
+	if err != nil {
+		t.Fatalf("%s", err)
+	}
+	res := &bor.ResponseWithHeight{}
+	if err := json.Unmarshal(eventsData, res); err != nil {
+		t.Fatalf("%s", err)
+	}
+
+	// eventRecords := &bor.EventRecords{}
+	var eventRecords []bor.EventRecord
+	if err := json.Unmarshal(res.Result, &eventRecords); err != nil {
+		t.Fatalf("%s", err)
+	}
+	return res
 }
 
 func getSignerKey(number uint64) []byte {

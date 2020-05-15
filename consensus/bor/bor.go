@@ -1175,7 +1175,7 @@ func (c *Bor) CommitStates(
 	for true {
 		page++
 		query := fmt.Sprintf("clerk/event-record/list?from-time=%d&to-time=%d&page=%d&limit=%d", from, to, page, stateFetchLimit)
-		log.Info("State events fetch query", "query", query)
+		log.Info("Fetchging state events", "query", query)
 		response, err := c.HeimdallClient.FetchWithRetry(query)
 		if err != nil {
 			return err
@@ -1190,7 +1190,7 @@ func (c *Bor) CommitStates(
 		}
 	}
 	sort.SliceStable(eventRecords, func(i, j int) bool {
-		return eventRecords[i].ID < eventRecords[i].ID
+		return eventRecords[i].ID < eventRecords[j].ID
 	})
 
 	for _, eventRecord := range eventRecords {
