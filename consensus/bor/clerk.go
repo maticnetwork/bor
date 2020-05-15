@@ -14,3 +14,7 @@ type EventRecord struct {
 	LogIndex uint64         `json:"log_index" yaml:"log_index"`
 	ChainID  string         `json:"bor_chain_id" yaml:"bor_chain_id"`
 }
+
+type EventRecords struct {
+	records []EventRecord
+}

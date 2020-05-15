@@ -703,7 +703,7 @@ func (c *Bor) FinalizeAndAssemble(chain consensus.ChainReader, header *types.Hea
 		// commit statees
 		if err := c.CommitStates(state, header, cx); err != nil {
 			log.Error("Error while committing states", "error", err)
-			// return nil, err
+			return nil, err
 		}
 	}
 
@@ -1170,7 +1170,7 @@ func (c *Bor) GetPendingStateProposals(snapshotNumber uint64) ([]*big.Int, error
 func (c *Bor) CommitStates(
 	state *state.StateDB,
 	header *types.Header,
-	chain core.ChainContext,
+	chCtx chainContext,
 ) error {
 	// get pending state proposals
 	stateIds, err := c.GetPendingStateProposals(header.Number.Uint64() - 1)
@@ -1183,22 +1183,28 @@ func (c *Bor) CommitStates(
 		log.Debug("Found new proposed states", "numberOfStates", len(stateIds))
 	}
 
-	method := "commitState"
+	number := header.Number.Uint64()
+	if number < c.config.Sprint {
+		return errors.New("Too soon")
+	}
+	from := chCtx.Chain.GetHeaderByNumber(number - c.config.Sprint).Time
+	to := chCtx.Chain.GetHeaderByNumber(number - 1).Time
+
+	// fetch from heimdall
+	response, err := c.HeimdallClient.FetchWithRetry(
+		fmt.Sprintf("clerk/event-record/list?from-time=%d&to-time=%d", from, to),
+	)
+	if err != nil {
+		return err
+	}
+
+	var eventRecords EventRecords
+	if err := json.Unmarshal(response.Result, &eventRecords); err != nil {
+		return err
+	}
 
 	// itereate through state ids
-	for _, stateID := range stateIds {
-		// fetch from heimdall
-		response, err := c.HeimdallClient.FetchWithRetry("clerk", "event-record", strconv.FormatUint(stateID.Uint64(), 10))
-		if err != nil {
-			return err
-		}
-
-		// get event record
-		var eventRecord EventRecord
-		if err := json.Unmarshal(response.Result, &eventRecord); err != nil {
-			return err
-		}
-
+	for _, eventRecord := range eventRecords.records {
 		// check if chain id matches with event record
 		if eventRecord.ChainID != c.chainConfig.ChainID.String() {
 			return fmt.Errorf(
@@ -1231,6 +1237,7 @@ func (c *Bor) CommitStates(
 			return err
 		}
 
+		method := "commitState"
 		// get packed data for commit state
 		data, err := c.stateReceiverABI.Pack(method, recordBytes)
 		if err != nil {
@@ -1242,7 +1249,7 @@ func (c *Bor) CommitStates(
 		msg := getSystemMessage(common.HexToAddress(c.config.StateReceiverContract), data)
 
 		// apply message
-		if err := applyMessage(msg, state, header, c.chainConfig, chain); err != nil {
+		if err := applyMessage(msg, state, header, c.chainConfig, chCtx); err != nil {
 			return err
 		}
 	}
