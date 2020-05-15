@@ -142,3 +142,20 @@ func (e *WrongDifficultyError) Error() string {
 		e.Signer,
 	)
 }
+
+type InvalidStateReceivedError struct {
+	Number uint64
+	From   string
+	To     string
+	Event  *EventRecord
+}
+
+func (e *InvalidStateReceivedError) Error() string {
+	return fmt.Sprintf(
+		"Received event with invalid timestamp at block %d. Requested events from %s to %s. Received %s\n",
+		e.Number,
+		e.From,
+		e.To,
+		e.Event,
+	)
+}

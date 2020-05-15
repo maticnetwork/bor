@@ -1,6 +1,8 @@
 package bor
 
 import (
+	"fmt"
+
 	"github.com/maticnetwork/bor/common"
 	"github.com/maticnetwork/bor/common/hexutil"
 )
@@ -13,8 +15,19 @@ type EventRecord struct {
 	TxHash   common.Hash    `json:"tx_hash" yaml:"tx_hash"`
 	LogIndex uint64         `json:"log_index" yaml:"log_index"`
 	ChainID  string         `json:"bor_chain_id" yaml:"bor_chain_id"`
+	Time     string         `json:"record_time" yaml:"record_time"`
 }
 
-type EventRecords struct {
-	records []EventRecord
+// String returns the string representatin of span
+func (s *EventRecord) String() string {
+	return fmt.Sprintf(
+		"EventRecord: id %v, contract %v, data: %v, txHash: %v, logIndex: %v, chainId: %v, time %s",
+		s.ID,
+		s.Contract.String(),
+		s.Data.String(),
+		s.TxHash.Hex(),
+		s.LogIndex,
+		s.ChainID,
+		s.Time,
+	)
 }

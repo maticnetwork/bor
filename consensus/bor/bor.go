@@ -66,6 +66,7 @@ var (
 
 	validatorHeaderBytesLength = common.AddressLength + 20 // address + power
 	systemAddress              = common.HexToAddress("0xffffFFFfFFffffffffffffffFfFFFfffFFFfFFfE")
+	stateFetchLimit            = 50
 )
 
 // Various error messages to mark blocks invalid. These should be private to
@@ -238,9 +239,10 @@ type Bor struct {
 	stateReceiverABI abi.ABI
 	HeimdallClient   IHeimdallClient
 
-	stateDataFeed   event.Feed
-	scope           event.SubscriptionScope
-	activeSealingOp *ActiveSealingOp
+	stateDataFeed         event.Feed
+	scope                 event.SubscriptionScope
+	activeSealingOp       *ActiveSealingOp
+	EventsLastFetchededAt int64
 	// The fields below are for testing only
 	fakeDiff bool // Skip difficulty verifications
 }
@@ -1003,30 +1005,14 @@ func (c *Bor) checkAndCommitSpan(
 	chain core.ChainContext,
 ) error {
 	headerNumber := header.Number.Uint64()
-	pending := false
-	var span *Span = nil
-	errors := make(chan error)
-	go func() {
-		var err error
-		pending, err = c.isSpanPending(headerNumber - 1)
-		errors <- err
-	}()
-
-	go func() {
-		var err error
-		span, err = c.GetCurrentSpan(headerNumber - 1)
-		errors <- err
-	}()
-
-	var err error
-	for i := 0; i < 2; i++ {
-		err = <-errors
-		if err != nil {
-			close(errors)
-			return err
-		}
+	pending, err := c.isSpanPending(headerNumber - 1)
+	if err != nil {
+		return err
 	}
-	close(errors)
+	span, err := c.GetCurrentSpan(headerNumber - 1)
+	if err != nil {
+		return err
+	}
 
 	// commit span if there is new span pending or span is ending or end block is not set
 	if pending || c.needToCommitSpan(span, headerNumber) {
@@ -1172,48 +1158,48 @@ func (c *Bor) CommitStates(
 	header *types.Header,
 	chCtx chainContext,
 ) error {
-	// get pending state proposals
-	stateIds, err := c.GetPendingStateProposals(header.Number.Uint64() - 1)
-	if err != nil {
-		return err
-	}
-
-	// state ids
-	if len(stateIds) > 0 {
-		log.Debug("Found new proposed states", "numberOfStates", len(stateIds))
-	}
-
 	number := header.Number.Uint64()
 	if number < c.config.Sprint {
-		return errors.New("Too soon")
-	}
-	from := chCtx.Chain.GetHeaderByNumber(number - c.config.Sprint).Time
-	to := chCtx.Chain.GetHeaderByNumber(number - 1).Time
-
-	// fetch from heimdall
-	response, err := c.HeimdallClient.FetchWithRetry(
-		fmt.Sprintf("clerk/event-record/list?from-time=%d&to-time=%d", from, to),
-	)
-	if err != nil {
-		return err
+		return errors.New("Requested to commit states too soon")
 	}
 
-	var eventRecords EventRecords
-	if err := json.Unmarshal(response.Result, &eventRecords); err != nil {
-		return err
-	}
+	from := c.EventsLastFetchededAt
+	to := time.Now().Unix()
+	log.Info(
+		"Fetching state updates from Heimdall",
+		"from", time.Unix(from, 0).Format(time.RFC3339),
+		"to", time.Unix(to, 0).Format(time.RFC3339))
 
-	// itereate through state ids
-	for _, eventRecord := range eventRecords.records {
-		// check if chain id matches with event record
-		if eventRecord.ChainID != c.chainConfig.ChainID.String() {
-			return fmt.Errorf(
-				"Chain id proposed state in span, %s, and bor chain id, %s, doesn't match",
-				eventRecord.ChainID,
-				c.chainConfig.ChainID,
-			)
+	page := 1
+	var eventRecords []EventRecord
+	for true {
+		page++
+		query := fmt.Sprintf("clerk/event-record/list?from-time=%d&to-time=%d&page=%d&limit=%d", from, to, page, stateFetchLimit)
+		log.Info("State events fetch query", "query", query)
+		response, err := c.HeimdallClient.FetchWithRetry(query)
+		if err != nil {
+			return err
 		}
+		var _eventRecords []EventRecord
+		if err := json.Unmarshal(response.Result, &eventRecords); err != nil {
+			return err
+		}
+		eventRecords = append(eventRecords, _eventRecords...)
+		if len(_eventRecords) < stateFetchLimit {
+			break
+		}
+	}
+	sort.SliceStable(eventRecords, func(i, j int) bool {
+		return eventRecords[i].ID < eventRecords[i].ID
+	})
 
+	for _, eventRecord := range eventRecords {
+		// validateEventRecord checks whether an event lies in the specified time range
+		// since the events are sorted by id and if it turns out that event i lies outside the time range,
+		// there is a possibility that all subsequent events lie outside of the time range. Hence we return the err and don't probe any further
+		if err := validateEventRecord(eventRecord, number, from, to, c.chainConfig.ChainID.String()); err != nil {
+			return err
+		}
 		log.Info("→ committing new state",
 			"id", eventRecord.ID,
 			"contract", eventRecord.Contract,
@@ -1254,6 +1240,31 @@ func (c *Bor) CommitStates(
 		}
 	}
 
+	return nil
+}
+
+func validateEventRecord(eventRecord EventRecord, number uint64, from, to int64, chainID string) error {
+	_time, err := time.Parse(time.RFC3339, eventRecord.Time)
+	if err != nil {
+		return err
+	}
+	eventTime := _time.Unix()
+	if eventTime < from || eventTime > to {
+		return &InvalidStateReceivedError{
+			number,
+			time.Unix(int64(from), 0).Format(time.RFC3339),
+			time.Unix(int64(to), 0).Format(time.RFC3339),
+			&eventRecord}
+	}
+
+	// check if chain id matches with event record
+	if eventRecord.ChainID != chainID {
+		return fmt.Errorf(
+			"Chain id proposed state in span, %s, and bor chain id, %s, doesn't match",
+			eventRecord.ChainID,
+			chainID,
+		)
+	}
 	return nil
 }
 
