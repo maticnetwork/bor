@@ -2,6 +2,7 @@ package bor
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/maticnetwork/bor/common"
 )
@@ -145,17 +146,17 @@ func (e *WrongDifficultyError) Error() string {
 
 type InvalidStateReceivedError struct {
 	Number uint64
-	From   string
-	To     string
-	Event  *EventRecord
+	From   *time.Time
+	To     *time.Time
+	Event  *EventRecordWithTime
 }
 
 func (e *InvalidStateReceivedError) Error() string {
 	return fmt.Sprintf(
 		"Received event with invalid timestamp at block %d. Requested events from %s to %s. Received %s\n",
 		e.Number,
-		e.From,
-		e.To,
+		e.From.Format(time.RFC3339),
+		e.To.Format(time.RFC3339),
 		e.Event,
 	)
 }
