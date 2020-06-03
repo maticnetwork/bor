@@ -25,7 +25,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/maticnetwork/bor/internal/build"
+	"github.com/cespare/cp"
 )
 
 // androidTestClass is a Java class to do some lightweight tests against the Android
@@ -207,12 +207,12 @@ func TestAndroid(t *testing.T) {
 		}
 	}
 	// Generate the mobile bindings for Geth and add the tester class
-	gobind := exec.Command("gomobile", "bind", "-javapkg", "org.ethereum", "github.com/maticnetwork/bor/mobile")
+	gobind := exec.Command("gomobile", "bind", "-javapkg", "org.ethereum", "github.com/ethereum/go-ethereum/mobile")
 	if output, err := gobind.CombinedOutput(); err != nil {
 		t.Logf("%s", output)
 		t.Fatalf("failed to run gomobile bind: %v", err)
 	}
-	build.CopyFile(filepath.Join("libs", "geth.aar"), "geth.aar", os.ModePerm)
+	cp.CopyFile(filepath.Join("libs", "geth.aar"), "geth.aar")
 
 	if err = ioutil.WriteFile(filepath.Join("src", "androidTest", "java", "org", "ethereum", "gethtest", "AndroidTest.java"), []byte(androidTestClass), os.ModePerm); err != nil {
 		t.Fatalf("failed to write Android test class: %v", err)

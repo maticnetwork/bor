@@ -1,4 +1,4 @@
-// Copyright 2018 The go-ethereum Authors
+// Copyright 2019 The go-ethereum Authors
 // This file is part of go-ethereum.
 //
 // go-ethereum is free software: you can redistribute it and/or modify
@@ -19,8 +19,8 @@ package main
 import (
 	"fmt"
 
-	"github.com/maticnetwork/bor/cmd/utils"
-	"github.com/maticnetwork/bor/common"
+	"github.com/ethereum/go-ethereum/cmd/utils"
+	"github.com/ethereum/go-ethereum/common"
 	"gopkg.in/urfave/cli.v1"
 )
 

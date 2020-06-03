@@ -1,4 +1,4 @@
-// Copyright 2018 The go-ethereum Authors
+// Copyright 2019 The go-ethereum Authors
 // This file is part of the go-ethereum library.
 //
 // The go-ethereum library is free software: you can redistribute it and/or modify
@@ -23,14 +23,15 @@ import (
 	"errors"
 	"math/big"
 
-	"github.com/maticnetwork/bor/accounts/abi/bind"
-	"github.com/maticnetwork/bor/common"
-	"github.com/maticnetwork/bor/contracts/checkpointoracle/contract"
-	"github.com/maticnetwork/bor/core/types"
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/contracts/checkpointoracle/contract"
+	"github.com/ethereum/go-ethereum/core/types"
 )
 
-// CheckpointOracle is a Go wrapper around an on-chain light client checkpoint oracle.
+// CheckpointOracle is a Go wrapper around an on-chain checkpoint oracle contract.
 type CheckpointOracle struct {
+	address  common.Address
 	contract *contract.CheckpointOracle
 }
 
@@ -40,7 +41,12 @@ func NewCheckpointOracle(contractAddr common.Address, backend bind.ContractBacke
 	if err != nil {
 		return nil, err
 	}
-	return &CheckpointOracle{contract: c}, nil
+	return &CheckpointOracle{address: contractAddr, contract: c}, nil
+}
+
+// ContractAddr returns the address of contract.
+func (oracle *CheckpointOracle) ContractAddr() common.Address {
+	return oracle.address
 }
 
 // Contract returns the underlying contract instance.

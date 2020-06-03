@@ -1,4 +1,4 @@
-// Copyright 2017 The go-ethereum Authors
+// Copyright 2018 The go-ethereum Authors
 // This file is part of the go-ethereum library.
 //
 // The go-ethereum library is free software: you can redistribute it and/or modify
@@ -22,10 +22,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/maticnetwork/bor/log"
-	"github.com/maticnetwork/bor/p2p"
-	"github.com/maticnetwork/bor/p2p/enode"
-	"github.com/maticnetwork/bor/p2p/simulations/adapters"
+	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/p2p"
+	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/ethereum/go-ethereum/p2p/simulations/adapters"
 )
 
 var errTimedOut = errors.New("timed out")
@@ -242,6 +242,7 @@ func (s *ProtocolSession) testExchange(e Exchange) error {
 		t = 2000 * time.Millisecond
 	}
 	alarm := time.NewTimer(t)
+	defer alarm.Stop()
 	select {
 	case err := <-errc:
 		return err

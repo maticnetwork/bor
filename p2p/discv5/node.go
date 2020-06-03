@@ -30,8 +30,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/maticnetwork/bor/common"
-	"github.com/maticnetwork/bor/crypto"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 )
 
 // Node represents a host on the network.
@@ -64,23 +64,6 @@ func NewNode(id NodeID, ip net.IP, udpPort, tcpPort uint16) *Node {
 
 func (n *Node) addr() *net.UDPAddr {
 	return &net.UDPAddr{IP: n.IP, Port: int(n.UDP)}
-}
-
-func (n *Node) setAddr(a *net.UDPAddr) {
-	n.IP = a.IP
-	if ipv4 := a.IP.To4(); ipv4 != nil {
-		n.IP = ipv4
-	}
-	n.UDP = uint16(a.Port)
-}
-
-// compares the given address against the stored values.
-func (n *Node) addrEqual(a *net.UDPAddr) bool {
-	ip := a.IP
-	if ipv4 := a.IP.To4(); ipv4 != nil {
-		ip = ipv4
-	}
-	return n.UDP == uint16(a.Port) && n.IP.Equal(ip)
 }
 
 // Incomplete returns true for nodes with no IP address.
@@ -324,14 +307,6 @@ func (n NodeID) Pubkey() (*ecdsa.PublicKey, error) {
 		return nil, errors.New("id is invalid secp256k1 curve point")
 	}
 	return p, nil
-}
-
-func (id NodeID) mustPubkey() ecdsa.PublicKey {
-	pk, err := id.Pubkey()
-	if err != nil {
-		panic(err)
-	}
-	return *pk
 }
 
 // recoverNodeID computes the public key used to sign the

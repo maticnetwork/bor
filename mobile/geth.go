@@ -24,18 +24,18 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/maticnetwork/bor/core"
-	"github.com/maticnetwork/bor/eth"
-	"github.com/maticnetwork/bor/eth/downloader"
-	"github.com/maticnetwork/bor/ethclient"
-	"github.com/maticnetwork/bor/ethstats"
-	"github.com/maticnetwork/bor/internal/debug"
-	"github.com/maticnetwork/bor/les"
-	"github.com/maticnetwork/bor/node"
-	"github.com/maticnetwork/bor/p2p"
-	"github.com/maticnetwork/bor/p2p/nat"
-	"github.com/maticnetwork/bor/params"
-	whisper "github.com/maticnetwork/bor/whisper/whisperv6"
+	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/eth"
+	"github.com/ethereum/go-ethereum/eth/downloader"
+	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/ethstats"
+	"github.com/ethereum/go-ethereum/internal/debug"
+	"github.com/ethereum/go-ethereum/les"
+	"github.com/ethereum/go-ethereum/node"
+	"github.com/ethereum/go-ethereum/p2p"
+	"github.com/ethereum/go-ethereum/p2p/nat"
+	"github.com/ethereum/go-ethereum/params"
+	whisper "github.com/ethereum/go-ethereum/whisper/whisperv6"
 )
 
 // NodeConfig represents the collection of configuration values to fine tune the Geth
@@ -146,11 +146,25 @@ func NewNode(datadir string, config *NodeConfig) (stack *Node, _ error) {
 		if err := json.Unmarshal([]byte(config.EthereumGenesis), genesis); err != nil {
 			return nil, fmt.Errorf("invalid genesis spec: %v", err)
 		}
-		// If we have the testnet, hard code the chain configs too
-		if config.EthereumGenesis == TestnetGenesis() {
-			genesis.Config = params.TestnetChainConfig
+		// If we have the Ropsten testnet, hard code the chain configs too
+		if config.EthereumGenesis == RopstenGenesis() {
+			genesis.Config = params.RopstenChainConfig
 			if config.EthereumNetworkID == 1 {
 				config.EthereumNetworkID = 3
+			}
+		}
+		// If we have the Rinkeby testnet, hard code the chain configs too
+		if config.EthereumGenesis == RinkebyGenesis() {
+			genesis.Config = params.RinkebyChainConfig
+			if config.EthereumNetworkID == 1 {
+				config.EthereumNetworkID = 4
+			}
+		}
+		// If we have the Goerli testnet, hard code the chain configs too
+		if config.EthereumGenesis == GoerliGenesis() {
+			genesis.Config = params.GoerliChainConfig
+			if config.EthereumNetworkID == 1 {
+				config.EthereumNetworkID = 5
 			}
 		}
 	}

@@ -19,8 +19,8 @@ package les
 import (
 	"time"
 
-	"github.com/maticnetwork/bor/common/bitutil"
-	"github.com/maticnetwork/bor/light"
+	"github.com/ethereum/go-ethereum/common/bitutil"
+	"github.com/ethereum/go-ethereum/light"
 )
 
 const (
@@ -46,9 +46,10 @@ const (
 func (eth *LightEthereum) startBloomHandlers(sectionSize uint64) {
 	for i := 0; i < bloomServiceThreads; i++ {
 		go func() {
+			defer eth.wg.Done()
 			for {
 				select {
-				case <-eth.shutdownChan:
+				case <-eth.closeCh:
 					return
 
 				case request := <-eth.bloomRequests:

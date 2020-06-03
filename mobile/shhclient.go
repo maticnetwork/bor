@@ -1,4 +1,4 @@
-// Copyright 2017 The go-ethereum Authors
+// Copyright 2018 The go-ethereum Authors
 // This file is part of the go-ethereum library.
 //
 // The go-ethereum library is free software: you can redistribute it and/or modify
@@ -19,8 +19,8 @@
 package geth
 
 import (
-	"github.com/maticnetwork/bor/whisper/shhclient"
-	whisper "github.com/maticnetwork/bor/whisper/whisperv6"
+	"github.com/ethereum/go-ethereum/whisper/shhclient"
+	whisper "github.com/ethereum/go-ethereum/whisper/whisperv6"
 )
 
 // WhisperClient provides access to the Ethereum APIs.

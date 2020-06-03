@@ -1,4 +1,4 @@
-// Copyright 2018 The go-ethereum Authors
+// Copyright 2016 The go-ethereum Authors
 // This file is part of the go-ethereum library.
 //
 // The go-ethereum library is free software: you can redistribute it and/or modify
@@ -22,8 +22,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/maticnetwork/bor/common/mclock"
-	"github.com/maticnetwork/bor/common/prque"
+	"github.com/ethereum/go-ethereum/common/mclock"
+	"github.com/ethereum/go-ethereum/common/prque"
 )
 
 // cmNodeFields are ClientNode fields used by the client manager

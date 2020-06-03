@@ -25,9 +25,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/maticnetwork/bor/event"
-	"github.com/maticnetwork/bor/p2p/enode"
-	"github.com/maticnetwork/bor/rlp"
+	"github.com/ethereum/go-ethereum/event"
+	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/ethereum/go-ethereum/rlp"
 )
 
 // Msg defines the structure of a p2p message.
@@ -39,9 +39,13 @@ import (
 // separate Msg with a bytes.Reader as Payload for each send.
 type Msg struct {
 	Code       uint64
-	Size       uint32 // size of the paylod
+	Size       uint32 // Size of the raw payload
 	Payload    io.Reader
 	ReceivedAt time.Time
+
+	meterCap  Cap    // Protocol name and version for egress metering
+	meterCode uint64 // Message within protocol for egress metering
+	meterSize uint32 // Compressed message size for ingress metering
 }
 
 // Decode parses the RLP content of a message into

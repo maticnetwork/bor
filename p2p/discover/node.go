@@ -18,14 +18,15 @@ package discover
 
 import (
 	"crypto/ecdsa"
+	"crypto/elliptic"
 	"errors"
 	"math/big"
 	"net"
 	"time"
 
-	"github.com/maticnetwork/bor/common/math"
-	"github.com/maticnetwork/bor/crypto"
-	"github.com/maticnetwork/bor/p2p/enode"
+	"github.com/ethereum/go-ethereum/common/math"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/p2p/enode"
 )
 
 // node represents a host on the network.
@@ -45,13 +46,13 @@ func encodePubkey(key *ecdsa.PublicKey) encPubkey {
 	return e
 }
 
-func decodePubkey(e encPubkey) (*ecdsa.PublicKey, error) {
-	p := &ecdsa.PublicKey{Curve: crypto.S256(), X: new(big.Int), Y: new(big.Int)}
+func decodePubkey(curve elliptic.Curve, e encPubkey) (*ecdsa.PublicKey, error) {
+	p := &ecdsa.PublicKey{Curve: curve, X: new(big.Int), Y: new(big.Int)}
 	half := len(e) / 2
 	p.X.SetBytes(e[:half])
 	p.Y.SetBytes(e[half:])
 	if !p.Curve.IsOnCurve(p.X, p.Y) {
-		return nil, errors.New("invalid secp256k1 curve point")
+		return nil, errors.New("invalid curve point")
 	}
 	return p, nil
 }

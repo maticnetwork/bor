@@ -32,10 +32,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/maticnetwork/bor/common"
-	"github.com/maticnetwork/bor/log"
-	"github.com/maticnetwork/bor/p2p/enode"
-	"github.com/maticnetwork/bor/p2p/netutil"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/ethereum/go-ethereum/p2p/netutil"
 )
 
 const (
@@ -424,6 +424,10 @@ func (tab *Table) len() (n int) {
 // bucket returns the bucket for the given node ID hash.
 func (tab *Table) bucket(id enode.ID) *bucket {
 	d := enode.LogDist(tab.self().ID(), id)
+	return tab.bucketAtDistance(d)
+}
+
+func (tab *Table) bucketAtDistance(d int) *bucket {
 	if d <= bucketMinDistance {
 		return tab.buckets[0]
 	}

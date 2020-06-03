@@ -1,4 +1,4 @@
-// Copyright 2018 The go-ethereum Authors
+// Copyright 2019 The go-ethereum Authors
 // This file is part of the go-ethereum library.
 //
 // The go-ethereum library is free software: you can redistribute it and/or modify
@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/maticnetwork/bor/common/mclock"
+	"github.com/ethereum/go-ethereum/common/mclock"
 )
 
 // logger collects events in string format and discards events older than the
