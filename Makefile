@@ -11,19 +11,13 @@
 GOBIN = ./build/bin
 GO ?= latest
 
-GORUN = go run
+GORUN = env GO111MODULE=on go run
 GOPATH = $(shell go env GOPATH)
 
 bor:
 	$(GORUN) build/ci.go install ./cmd/bor
 	mkdir -p $(GOPATH)/bin/
 	cp $(GOBIN)/bor $(GOPATH)/bin/
-GORUN = env GO111MODULE=on go run
-
-bor:
-	$(GORUN) build/ci.go install ./cmd/bor
-	@echo "Done building."
-	@echo "Run \"$(GOBIN)/bor\" to launch bor."
 
 all:
 	$(GORUN) build/ci.go install
@@ -44,8 +38,8 @@ test: bor
 	go test github.com/maticnetwork/bor/consensus/bor
 	go test github.com/maticnetwork/bor/tests/bor
 
-test: all
-	$(GORUN) build/ci.go test
+# test: all
+# 	$(GORUN) build/ci.go test
 
 lint: ## Run linters.
 	$(GORUN) build/ci.go lint

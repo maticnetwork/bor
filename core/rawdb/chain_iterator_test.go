@@ -22,8 +22,8 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/maticnetwork/bor/common"
+	"github.com/maticnetwork/bor/core/types"
 )
 
 func TestChainIterator(t *testing.T) {

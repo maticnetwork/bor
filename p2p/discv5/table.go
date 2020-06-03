@@ -25,7 +25,7 @@ import (
 	"net"
 	"sort"
 
-	"github.com/ethereum/go-ethereum/common"
+	"github.com/maticnetwork/bor/common"
 )
 
 const (

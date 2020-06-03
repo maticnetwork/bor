@@ -25,9 +25,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common/mclock"
-	"github.com/ethereum/go-ethereum/core/rawdb"
-	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/maticnetwork/bor/common/mclock"
+	"github.com/maticnetwork/bor/core/rawdb"
+	"github.com/maticnetwork/bor/p2p/enode"
 )
 
 func TestClientPoolL10C100Free(t *testing.T) {

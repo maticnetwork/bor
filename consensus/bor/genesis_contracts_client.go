@@ -89,7 +89,7 @@ func (gc *GenesisContractsClient) LastStateId(snapshotNumber uint64) (*big.Int, 
 		Gas:  &gas,
 		To:   &toAddress,
 		Data: &msgData,
-	}, rpc.BlockNumber(snapshotNumber))
+	}, rpc.BlockNumber(snapshotNumber), nil)
 	if err != nil {
 		return nil, err
 	}
