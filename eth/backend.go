@@ -261,7 +261,6 @@ func makeExtraData(extra []byte) []byte {
 	return extra
 }
 
-// func CreateConsensusEngine(ctx *node.ServiceContext, chainConfig *params.ChainConfig, config *ethash.Config, notify []string, noverify bool, db ethdb.Database, ee *ethapi.PublicBlockChainAPI) consensus.Engine {
 func CreateConsensusEngine(ctx *node.ServiceContext, chainConfig *params.ChainConfig, ethConfig *Config, db ethdb.Database, ee *ethapi.PublicBlockChainAPI) consensus.Engine {
 	config := &ethConfig.Ethash
 	notify := ethConfig.Miner.Notify

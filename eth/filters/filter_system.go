@@ -54,6 +54,8 @@ const (
 	BlocksSubscription
 	// LastSubscription keeps track of the last index
 	LastIndexSubscription
+	//StateSubscription to listen main chain state
+	StateSubscription
 )
 
 const (
@@ -76,6 +78,7 @@ type subscription struct {
 	logs      chan []*types.Log
 	hashes    chan []common.Hash
 	headers   chan *types.Header
+	stateData chan *types.StateData
 	installed chan struct{} // closed when the filter is installed
 	err       chan error    // closed when the filter is uninstalled
 }
@@ -499,4 +502,20 @@ func (es *EventSystem) eventLoop() {
 			return
 		}
 	}
+}
+
+// SubscribeNewDeposits creates a subscription that writes details about the new state sync events (from mainchain to Bor)
+func (es *EventSystem) SubscribeNewDeposits(stateData chan *types.StateData) *Subscription {
+	sub := &subscription{
+		id:        rpc.NewID(),
+		typ:       StateSubscription,
+		created:   time.Now(),
+		logs:      make(chan []*types.Log),
+		hashes:    make(chan []common.Hash),
+		headers:   make(chan *types.Header),
+		stateData: stateData,
+		installed: make(chan struct{}),
+		err:       make(chan error),
+	}
+	return es.subscribe(sub)
 }

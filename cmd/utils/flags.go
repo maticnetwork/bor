@@ -240,19 +240,9 @@ var (
 		Name:  "lightkdf",
 		Usage: "Reduce key-derivation RAM & CPU usage at some expense of KDF strength",
 	}
-	UltraLightServersFlag = cli.StringFlag{
-		Name:  "ulc.servers",
-		Usage: "List of trusted ultra-light servers",
-		Value: strings.Join(eth.DefaultConfig.UltraLightServers, ","),
-	}
-	UltraLightFractionFlag = cli.IntFlag{
-		Name:  "ulc.fraction",
-		Usage: "Minimum % of trusted ultra-light servers required to announce a new head",
-		Value: eth.DefaultConfig.UltraLightFraction,
-	}
-	UltraLightOnlyAnnounceFlag = cli.BoolFlag{
-		Name:  "ulc.onlyannounce",
-		Usage: "Ultra light server sends announcements only",
+	WhitelistFlag = cli.StringFlag{
+		Name:  "whitelist",
+		Usage: "Comma separated block number-to-hash mappings to enforce (<number>=<hash>)",
 	}
 	// Light server and client settings
 	LightServeFlag = cli.IntFlag{
@@ -1158,7 +1148,7 @@ func SetP2PConfig(ctx *cli.Context, cfg *p2p.Config) {
 		lightPeers /= 10
 	}
 
-	lightPeers := ctx.GlobalInt(LightLegacyPeersFlag.Name)
+	lightPeers = ctx.GlobalInt(LegacyLightPeersFlag.Name)
 	if ctx.GlobalIsSet(LightMaxPeersFlag.Name) {
 		lightPeers = ctx.GlobalInt(LightMaxPeersFlag.Name)
 	}

@@ -23,6 +23,7 @@ import (
 
 	"github.com/maticnetwork/bor/accounts"
 	"github.com/maticnetwork/bor/common"
+	"github.com/maticnetwork/bor/consensus/bor"
 	"github.com/maticnetwork/bor/core"
 	"github.com/maticnetwork/bor/core/bloombits"
 	"github.com/maticnetwork/bor/core/rawdb"
@@ -274,4 +275,13 @@ func (b *LesApiBackend) ServiceFilter(ctx context.Context, session *bloombits.Ma
 	for i := 0; i < bloomFilterThreads; i++ {
 		go session.Multiplex(bloomRetrievalBatch, bloomRetrievalWait, b.eth.bloomRequests)
 	}
+}
+
+func (b *LesApiBackend) SubscribeStateEvent(ch chan<- core.NewStateChangeEvent) event.Subscription {
+	engine := b.eth.Engine()
+	return engine.(*bor.Bor).SubscribeStateEvent(ch)
+}
+
+func (b *LesApiBackend) GetRootHash(ctx context.Context, starBlockNr uint64, endBlockNr uint64) (string, error) {
+	return "", errors.New("Not implemented")
 }

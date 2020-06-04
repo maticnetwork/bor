@@ -28,7 +28,6 @@ import (
 	"github.com/maticnetwork/bor/signer/core"
 	"github.com/maticnetwork/bor/signer/rules/deps"
 	"github.com/maticnetwork/bor/signer/storage"
-	"github.com/robertkrimen/otto"
 )
 
 var (
@@ -99,22 +98,6 @@ func (r *rulesetUI) execute(jsfunc string, jsarg interface{}) (goja.Value, error
 	})
 	vm.Set("storage", storageObj)
 
-	vm.Set("storage", struct{}{})
-	storageObj, _ := vm.Get("storage")
-	storageObj.Object().Set("put", func(call otto.FunctionCall) otto.Value {
-		key, val := call.Argument(0).String(), call.Argument(1).String()
-		if val == "" {
-			r.storage.Del(key)
-		} else {
-			r.storage.Put(key, val)
-		}
-		return otto.NullValue()
-	})
-	storageObj.Object().Set("get", func(call otto.FunctionCall) otto.Value {
-		goval, _ := r.storage.Get(call.Argument(0).String())
-		jsval, _ := otto.ToValue(goval)
-		return jsval
-	})
 	// Load bootstrap libraries
 	script, err := goja.Compile("bignumber.js", string(BigNumber_JS), true)
 	if err != nil {

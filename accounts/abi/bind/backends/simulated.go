@@ -744,6 +744,10 @@ func (fb *filterBackend) ServiceFilter(ctx context.Context, ms *bloombits.Matche
 	panic("not supported")
 }
 
+func (fb *filterBackend) SubscribeStateEvent(ch chan<- core.NewStateChangeEvent) event.Subscription {
+	return fb.bc.SubscribeStateEvent(ch)
+}
+
 func nullSubscription() event.Subscription {
 	return event.NewSubscription(func(quit <-chan struct{}) error {
 		<-quit
