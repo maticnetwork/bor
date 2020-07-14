@@ -557,9 +557,9 @@ func (lc *LightChain) SubscribeRemovedLogsEvent(ch chan<- core.RemovedLogsEvent)
 	return lc.scope.Track(new(event.Feed).Subscribe(ch))
 }
 
-// SubscribeStateEvent implements the interface of filters.Backend
-// LightChain does not send core.NewStateChangeEvent, so return an empty subscription.
-func (lc *LightChain) SubscribeStateEvent(ch chan<- core.NewStateChangeEvent) event.Subscription {
+// SubscribeStateSyncEvent implements the interface of filters.Backend
+// LightChain does not send core.NewStateChangeSyncEvent, so return an empty subscription.
+func (lc *LightChain) SubscribeStateSyncEvent(ch chan<- core.StateSyncEvent) event.Subscription {
 	return lc.scope.Track(new(event.Feed).Subscribe(ch))
 }
 

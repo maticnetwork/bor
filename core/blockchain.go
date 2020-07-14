@@ -162,9 +162,10 @@ type BlockChain struct {
 	chainHeadFeed event.Feed
 	logsFeed      event.Feed
 	blockProcFeed event.Feed
-	stateDataFeed event.Feed
-	scope         event.SubscriptionScope
-	genesisBlock  *types.Block
+	stateSyncFeed event.Feed
+
+	scope        event.SubscriptionScope
+	genesisBlock *types.Block
 
 	chainmu sync.RWMutex // blockchain insertion lock
 
@@ -2453,9 +2454,9 @@ func (bc *BlockChain) SubscribeLogsEvent(ch chan<- []*types.Log) event.Subscript
 	return bc.scope.Track(bc.logsFeed.Subscribe(ch))
 }
 
-// SubscribeStateEvent registers a subscription of ChainSideEvent.
-func (bc *BlockChain) SubscribeStateEvent(ch chan<- NewStateChangeEvent) event.Subscription {
-	return bc.scope.Track(bc.stateDataFeed.Subscribe(ch))
+// SubscribeStateSyncEvent registers a subscription of StateSyncEvent.
+func (bc *BlockChain) SubscribeStateSyncEvent(ch chan<- StateSyncEvent) event.Subscription {
+	return bc.scope.Track(bc.stateSyncFeed.Subscribe(ch))
 }
 
 // SubscribeBlockProcessingEvent registers a subscription of bool where true means
