@@ -10,6 +10,7 @@
 
 GOBIN = ./build/bin
 GO ?= latest
+GORUN = env GO111MODULE=on go run
 
 GORUN = env GO111MODULE=on go run
 GOPATH = $(shell go env GOPATH)
