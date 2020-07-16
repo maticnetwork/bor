@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
-    - name: Build the Bor Docker image
+    - name: Build docker image
       env:
         DOCKERHUB: ${{ secrets.DOCKERHUB }}
         DOCKERHUB_KEY: ${{ secrets.DOCKERHUB_KEY }}
