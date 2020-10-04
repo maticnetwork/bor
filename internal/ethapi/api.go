@@ -823,7 +823,7 @@ func DoCall(ctx context.Context, b Backend, args CallArgs, blockNrOrHash rpc.Blo
 	defer func(start time.Time) { log.Debug("Executing EVM call finished", "runtime", time.Since(start)) }(time.Now())
 
 	// intercept eth_call for graph protocol
-	if bytes.Equal(args.To.Bytes(), GraphProtocolAddress.Bytes()) {
+	if bytes.Equal(args.To.Bytes(), graphProtocolAddress.Bytes()) {
 		return interceptForGraphProtocol(*args.Data)
 	}
 

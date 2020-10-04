@@ -2,7 +2,6 @@ package ethapi
 
 import (
 	"bytes"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,43 +16,35 @@ import (
 	"github.com/maticnetwork/bor/core"
 )
 
-const fetchStatesABI = `[{"constant":true,"inputs":[{"internalType":"uint256","name":"id","type":"uint256"},{"internalType":"string","name":"url","type":"string"}],"name":"fetchStates","outputs":[{"internalType":"string","name":"","type":"string"}],"payable":false,"stateMutability":"view","type":"function"}]`
+const fetchStatesABI = `[{"constant":true,"inputs":[{"internalType":"uint256","name":"id","type":"uint256"},{"internalType":"address","name":"receiver","type":"address"},{"internalType":"string","name":"url","type":"string"}],"name":"fetchStates","outputs":[{"internalType":"string","name":"","type":"string"}],"payable":false,"stateMutability":"view","type":"function"}]`
 
-var GraphProtocolAddress = common.HexToAddress("0x0000000000000000000000000000000000000420")
+var graphProtocolAddress = common.HexToAddress("0x0000000000000000000000000000000000000420")
+var zeroAddress = common.HexToAddress("0x0000000000000000000000000000000000000000")
 
 func interceptForGraphProtocol(args []byte) (*core.ExecutionResult, error) {
-	fABI, err1 := abi.JSON(strings.NewReader(fetchStatesABI))
-	if err1 != nil {
-		return nil, err1
+	fABI, err := abi.JSON(strings.NewReader(fetchStatesABI))
+	if err != nil {
+		return nil, err
 	}
 
 	// decode txInput method signature
-	decodedSig, err := hex.DecodeString("32dfeba3")
-	if err != nil {
-		return nil, err
-	}
-
-	if !bytes.Equal(decodedSig, args[:4]) {
+	method := fABI.Methods["fetchStates"]
+	if !bytes.Equal(method.ID, args[:4]) {
 		return nil, errors.New("eth_call not supported for other methods for this address")
 	}
 
-	// recover Method from signature and ABI
-	method, err := fABI.MethodById(decodedSig)
-	if err != nil {
-		return nil, err
-	}
-
 	fetchResult := make(map[string]interface{})
+
 	// unpack method inputs
-	err = method.Inputs.UnpackIntoMap(fetchResult, args[4:])
-	if err != nil {
+	if err := method.Inputs.UnpackIntoMap(fetchResult, args[4:]); err != nil {
 		return nil, err
 	}
 
 	// fetch data
 	url := fetchResult["url"].(string)
 	lastID := fetchResult["id"].(*big.Int)
-	body, err := getRemoteData(lastID.Int64(), url)
+	receiver := fetchResult["receiver"].(common.Address)
+	body, err := getRemoteData(lastID.Int64(), receiver, url)
 	if err != nil {
 		return nil, err
 	}
@@ -72,26 +63,37 @@ func interceptForGraphProtocol(args []byte) (*core.ExecutionResult, error) {
 	}, nil
 }
 
-func getRemoteData(id int64, url string) ([]byte, error) {
+func getRemoteData(id int64, receiver common.Address, url string) ([]byte, error) {
 	var netClient = &http.Client{
 		Timeout: time.Second * 10,
+	}
+
+	// conditions
+	conditions := []string{
+		fmt.Sprintf("stateId_gt: %v", id),
+	}
+
+	// if receiver is not null or zero address, filter by receiver
+	if !bytes.Equal(receiver.Bytes(), zeroAddress.Bytes()) {
+		conditions = append(conditions, fmt.Sprintf(`contract: "%v"`, receiver.Hex()))
 	}
 
 	requestBody, err := json.Marshal(map[string]string{
 		"query": fmt.Sprintf(`
 		{
-			stateSyncs(first: 10, orderBy: stateId, orderDirection: asc, where: { stateId_gt: %v } ) {
+			stateSyncs(first: 10, orderBy: stateId, orderDirection: asc, where: { %v } ) {
 				id
 				stateId
 				contract
 				data
 			}
 		}				
-		`, id),
+		`, strings.Join(conditions, ",")),
 	})
 	if err != nil {
 		return nil, err
 	}
+
 	resp, err := netClient.Post(url, "application/json", bytes.NewBuffer(requestBody))
 	if err != nil {
 		return nil, err
