@@ -822,15 +822,16 @@ type account struct {
 func DoCall(ctx context.Context, b Backend, args CallArgs, blockNrOrHash rpc.BlockNumberOrHash, overrides map[common.Address]account, vmCfg vm.Config, timeout time.Duration, globalGasCap uint64) (*core.ExecutionResult, error) {
 	defer func(start time.Time) { log.Debug("Executing EVM call finished", "runtime", time.Since(start)) }(time.Now())
 
-	// intercept eth_call for graph protocol
-	if bytes.Equal(args.To.Bytes(), graphProtocolAddress.Bytes()) {
-		return interceptForGraphProtocol(*args.Data)
-	}
-
 	state, header, err := b.StateAndHeaderByNumberOrHash(ctx, blockNrOrHash)
 	if state == nil || err != nil {
 		return nil, err
 	}
+
+	// intercept eth_call for graph protocol
+	if bytes.Equal(args.To.Bytes(), stateFetcherAddress.Bytes()) {
+		return interceptForStateSyncFetcher(header, *args.Data)
+	}
+
 	// Override the fields of specified contracts before execution.
 	for addr, account := range overrides {
 		// Override account nonce.
