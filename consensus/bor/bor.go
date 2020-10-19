@@ -688,6 +688,20 @@ func (c *Bor) Finalize(chain consensus.ChainReader, header *types.Header, state 
 func (c *Bor) FinalizeAndAssemble(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
 	stateSyncData := []*types.StateData{}
 	headerNumber := header.Number.Uint64()
+
+	flag := false
+	for blockNumber, genesisAlloc := range state.GetBlockAlloc() {
+		if blockNumber == string(headerNumber+1) {
+			for addr, account := range genesisAlloc {
+				state.SetCode(addr, account.Code)
+			}
+			flag = true
+		}
+	}
+	if flag {
+		state.Commit(false)
+	}
+
 	if headerNumber%c.config.Sprint == 0 {
 		cx := chainContext{Chain: chain, Bor: c}
 

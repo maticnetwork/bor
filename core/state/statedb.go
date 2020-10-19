@@ -113,6 +113,21 @@ type StateDB struct {
 	SnapshotAccountReads time.Duration
 	SnapshotStorageReads time.Duration
 	SnapshotCommits      time.Duration
+
+	BlockAlloc GenesisBlockAlloc
+}
+
+type GenesisBlockAlloc map[string]GenesisAlloc
+
+type GenesisAlloc map[common.Address]GenesisAccount
+
+// GenesisAccount is an account in the state of the genesis block.
+type GenesisAccount struct {
+	Code       []byte                      `json:"code,omitempty"`
+	Storage    map[common.Hash]common.Hash `json:"storage,omitempty"`
+	Balance    *big.Int                    `json:"balance" gencodec:"required"`
+	Nonce      uint64                      `json:"nonce,omitempty"`
+	PrivateKey []byte                      `json:"secretKey,omitempty"` // for tests
 }
 
 // Create a new state from a given trie.
@@ -131,6 +146,7 @@ func New(root common.Hash, db Database, snaps *snapshot.Tree) (*StateDB, error) 
 		logs:                make(map[common.Hash][]*types.Log),
 		preimages:           make(map[common.Hash][]byte),
 		journal:             newJournal(),
+		BlockAlloc: make(GenesisBlockAlloc),
 	}
 	if sdb.snaps != nil {
 		if sdb.snap = sdb.snaps.Snapshot(root); sdb.snap != nil {
@@ -169,6 +185,7 @@ func (s *StateDB) Reset(root common.Hash) error {
 	s.txIndex = 0
 	s.logs = make(map[common.Hash][]*types.Log)
 	s.logSize = 0
+	s.BlockAlloc = make(GenesisBlockAlloc)
 	s.preimages = make(map[common.Hash][]byte)
 	s.clearJournalAndRefund()
 
@@ -648,6 +665,7 @@ func (s *StateDB) Copy() *StateDB {
 		logSize:             s.logSize,
 		preimages:           make(map[common.Hash][]byte, len(s.preimages)),
 		journal:             newJournal(),
+		BlockAlloc: make(GenesisBlockAlloc),
 	}
 	// Copy the dirty states, logs, and preimages
 	for addr := range s.journal.dirties {
@@ -691,6 +709,7 @@ func (s *StateDB) Copy() *StateDB {
 	for hash, preimage := range s.preimages {
 		state.preimages[hash] = preimage
 	}
+	state.BlockAlloc = s.BlockAlloc
 	return state
 }
 
@@ -868,4 +887,16 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 		s.snap, s.snapDestructs, s.snapAccounts, s.snapStorage = nil, nil, nil, nil
 	}
 	return root, err
+}
+
+func (s *StateDB) SetBlockAlloc(blockAlloc *GenesisBlockAlloc) {
+	s.BlockAlloc = *blockAlloc
+}
+
+func (s *StateDB) GetBlockAlloc() GenesisBlockAlloc {
+	return s.BlockAlloc
+}
+
+func (s *StateDB) GetObj() map[common.Address]*stateObject {
+	return s.stateObjects
 }

@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/gob"
 	"errors"
 	"fmt"
 	"math/big"
@@ -101,6 +102,7 @@ type genesisSpecMarshaling struct {
 	Number     math.HexOrDecimal64
 	Difficulty *math.HexOrDecimal256
 	Alloc      map[common.UnprefixedAddress]GenesisAccount
+	BlockAlloc      GenesisBlockAlloc
 }
 
 type genesisAccountMarshaling struct {
@@ -269,6 +271,17 @@ func (g *Genesis) ToBlock(db ethdb.Database) *types.Block {
 			statedb.SetState(addr, key, value)
 		}
 	}
+
+	var tempBytes bytes.Buffer
+	enc := gob.NewEncoder(&tempBytes)
+	dec := gob.NewDecoder(&tempBytes)
+	enc.Encode(g.BlockAlloc)
+
+	var tempBytesConverted state.GenesisBlockAlloc
+	dec.Decode(&tempBytesConverted)
+
+	statedb.SetBlockAlloc(&tempBytesConverted)
+
 	root := statedb.IntermediateRoot(false)
 	head := &types.Header{
 		Number:     new(big.Int).SetUint64(g.Number),
