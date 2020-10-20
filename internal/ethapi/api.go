@@ -820,8 +820,11 @@ func DoCall(ctx context.Context, b Backend, args CallArgs, blockNrOrHash rpc.Blo
 	}
 
 	// intercept eth_call for graph protocol
-	if bytes.Equal(args.To.Bytes(), stateFetcherAddress.Bytes()) {
-		return interceptForStateSyncFetcher(header, *args.Data)
+	if strings.EqualFold(args.To.Hex(), b.ChainConfig().Bor.StateReceiverContract) {
+		// if there is no result and no error, continue with remaining function (to execute other eth_call methods)
+		if res, err := interceptForStateSyncFetcher(ctx, b, *args.Data); res != nil || err != nil {
+			return res, err
+		}
 	}
 
 	// Override the fields of specified contracts before execution.
