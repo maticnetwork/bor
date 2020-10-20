@@ -20,7 +20,6 @@ import (
 	"bytes"
 	"encoding/hex"
 	"encoding/json"
-	"encoding/gob"
 	"errors"
 	"fmt"
 	"math/big"
@@ -56,7 +55,6 @@ type Genesis struct {
 	Mixhash    common.Hash         `json:"mixHash"`
 	Coinbase   common.Address      `json:"coinbase"`
 	Alloc      GenesisAlloc        `json:"alloc"      gencodec:"required"`
-	BlockAlloc     GenesisBlockAlloc        `json:"block_alloc"`
 
 	// These fields are used for consensus tests. Please don't use them
 	// in actual genesis blocks.
@@ -67,9 +65,6 @@ type Genesis struct {
 
 // GenesisAlloc specifies the initial state that is part of the genesis block.
 type GenesisAlloc map[common.Address]GenesisAccount
-
-// GenesisBlockAlloc specifies the genesis code change for an account
-type GenesisBlockAlloc map[string]GenesisAlloc
 
 func (ga *GenesisAlloc) UnmarshalJSON(data []byte) error {
 	m := make(map[common.UnprefixedAddress]GenesisAccount)
@@ -102,7 +97,6 @@ type genesisSpecMarshaling struct {
 	Number     math.HexOrDecimal64
 	Difficulty *math.HexOrDecimal256
 	Alloc      map[common.UnprefixedAddress]GenesisAccount
-	BlockAlloc      GenesisBlockAlloc
 }
 
 type genesisAccountMarshaling struct {
@@ -271,16 +265,6 @@ func (g *Genesis) ToBlock(db ethdb.Database) *types.Block {
 			statedb.SetState(addr, key, value)
 		}
 	}
-
-	var tempBytes bytes.Buffer
-	enc := gob.NewEncoder(&tempBytes)
-	dec := gob.NewDecoder(&tempBytes)
-	enc.Encode(g.BlockAlloc)
-
-	var tempBytesConverted state.GenesisBlockAlloc
-	dec.Decode(&tempBytesConverted)
-
-	statedb.SetBlockAlloc(&tempBytesConverted)
 
 	root := statedb.IntermediateRoot(false)
 	head := &types.Header{

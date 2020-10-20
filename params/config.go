@@ -356,6 +356,7 @@ type BorConfig struct {
 	BackupMultiplier      uint64 `json:"backupMultiplier"`      // Backup multiplier to determine the wiggle time
 	ValidatorContract     string `json:"validatorContract"`     // Validator set contract
 	StateReceiverContract string `json:"stateReceiverContract"` // State receiver contract
+	BlockAlloc            map[string]interface{} `json:"block_alloc"`
 }
 
 // String implements the stringer interface, returning the consensus engine details.

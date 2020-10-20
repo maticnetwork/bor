@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"strconv"
 	"math/big"
 
 	"sort"
@@ -690,9 +691,12 @@ func (c *Bor) FinalizeAndAssemble(chain consensus.ChainReader, header *types.Hea
 	headerNumber := header.Number.Uint64()
 
 	flag := false
-	for blockNumber, genesisAlloc := range state.GetBlockAlloc() {
-		if blockNumber == string(headerNumber+1) {
-			for addr, account := range genesisAlloc {
+	for blockNumber, genesisAlloc := range c.config.BlockAlloc {
+		if blockNumber == strconv.FormatUint(headerNumber+1, 10) {
+			var tempBytesConverted core.GenesisAlloc
+			b, _ := json.Marshal(genesisAlloc)
+			json.Unmarshal(b, &tempBytesConverted)
+			for addr, account := range tempBytesConverted {
 				state.SetCode(addr, account.Code)
 			}
 			flag = true
@@ -701,6 +705,7 @@ func (c *Bor) FinalizeAndAssemble(chain consensus.ChainReader, header *types.Hea
 	if flag {
 		state.Commit(false)
 	}
+
 
 	if headerNumber%c.config.Sprint == 0 {
 		cx := chainContext{Chain: chain, Bor: c}
