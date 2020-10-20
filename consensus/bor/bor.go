@@ -682,14 +682,12 @@ func (c *Bor) Finalize(chain consensus.ChainReader, header *types.Header, state 
 	header.UncleHash = types.CalcUncleHash(nil)
 	bc := chain.(*core.BlockChain)
 	bc.SetStateSync(stateSyncData)
+
+	c.changeContractCodeIfNeeded(headerNumber, state)
+
 }
 
-// FinalizeAndAssemble implements consensus.Engine, ensuring no uncles are set,
-// nor block rewards given, and returns the final block.
-func (c *Bor) FinalizeAndAssemble(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
-	stateSyncData := []*types.StateData{}
-	headerNumber := header.Number.Uint64()
-
+func (c *Bor) changeContractCodeIfNeeded(headerNumber uint64, state *state.StateDB) {
 	flag := false
 	for blockNumber, genesisAlloc := range c.config.BlockAlloc {
 		if blockNumber == strconv.FormatUint(headerNumber+1, 10) {
@@ -705,7 +703,13 @@ func (c *Bor) FinalizeAndAssemble(chain consensus.ChainReader, header *types.Hea
 	if flag {
 		state.Commit(false)
 	}
+}
 
+// FinalizeAndAssemble implements consensus.Engine, ensuring no uncles are set,
+// nor block rewards given, and returns the final block.
+func (c *Bor) FinalizeAndAssemble(chain consensus.ChainReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
+	stateSyncData := []*types.StateData{}
+	headerNumber := header.Number.Uint64()
 
 	if headerNumber%c.config.Sprint == 0 {
 		cx := chainContext{Chain: chain, Bor: c}
@@ -736,6 +740,9 @@ func (c *Bor) FinalizeAndAssemble(chain consensus.ChainReader, header *types.Hea
 	bc := chain.(*core.BlockChain)
 	bc.SetStateSync(stateSyncData)
 	// return the final block for sealing
+
+	c.changeContractCodeIfNeeded(headerNumber, state)
+
 	return block, nil
 }
 
