@@ -820,7 +820,7 @@ func DoCall(ctx context.Context, b Backend, args CallArgs, blockNrOrHash rpc.Blo
 	}
 
 	// intercept eth_call for graph protocol
-	if strings.EqualFold(args.To.Hex(), b.ChainConfig().Bor.StateReceiverContract) {
+	if args.To != nil && strings.EqualFold(args.To.Hex(), b.ChainConfig().Bor.StateReceiverContract) {
 		// if there is no result and no error, continue with remaining function (to execute other eth_call methods)
 		if res, err := interceptForStateSyncFetcher(ctx, b, *args.Data); res != nil || err != nil {
 			return res, err

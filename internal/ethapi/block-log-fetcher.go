@@ -55,10 +55,12 @@ func interceptForStateSyncFetcher(ctx context.Context, backend Backend, args []b
 				return nil, err
 			}
 
-			// convert to json data
-			result, err := json.Marshal(logs)
-			if err != nil {
-				return nil, err
+			result := []byte("")
+			if logs != nil {
+				result, err = json.Marshal(logs)
+				if err != nil {
+					return nil, err
+				}
 			}
 
 			// output
