@@ -846,9 +846,9 @@ func (c *Bor) Close() error {
 }
 
 // GetCurrentSpan get current span from contract
-func (c *Bor) GetCurrentSpan(snapshotNumber uint64) (*Span, error) {
+func (c *Bor) GetCurrentSpan() (*Span, error) {
 	// block
-	blockNr := rpc.BlockNumber(snapshotNumber)
+	blockNr := rpc.LatestBlockNumber
 
 	// method
 	method := "getCurrentSpan"
@@ -949,10 +949,35 @@ func (c *Bor) checkAndCommitSpan(
 	chain core.ChainContext,
 ) error {
 	headerNumber := header.Number.Uint64()
-	span, err := c.GetCurrentSpan(headerNumber - 32)
+	span, err := c.GetCurrentSpan()
 	if err != nil {
 		return err
 	}
+
+	if !c.WithoutHeimdall {
+		if span.EndBlock < headerNumber {
+			var heimdallSpan HeimdallSpan
+			response, err := c.HeimdallClient.FetchWithRetry(fmt.Sprintf("bor/span/%d", span.ID+1), "")
+			if err != nil {
+				return err
+			}
+
+			if err := json.Unmarshal(response.Result, &heimdallSpan); err != nil {
+				return err
+			}
+
+			span = &Span{
+				ID:         heimdallSpan.ID,
+				StartBlock: heimdallSpan.StartBlock,
+				EndBlock:   heimdallSpan.EndBlock,
+			}
+		}
+	}
+
+	if span.EndBlock < headerNumber || span.StartBlock > headerNumber {
+		return errors.New("No span found")
+	}
+
 	if c.needToCommitSpan(span, headerNumber) {
 		err := c.fetchAndCommitSpan(span.ID+1, state, header, chain)
 		return err
@@ -1167,7 +1192,7 @@ func (c *Bor) getNextHeimdallSpanForTest(
 	chain core.ChainContext,
 ) (*HeimdallSpan, error) {
 	headerNumber := header.Number.Uint64()
-	span, err := c.GetCurrentSpan(headerNumber - 1)
+	span, err := c.GetCurrentSpan()
 	if err != nil {
 		return nil, err
 	}
