@@ -949,7 +949,7 @@ func (c *Bor) checkAndCommitSpan(
 	chain core.ChainContext,
 ) error {
 	headerNumber := header.Number.Uint64()
-	span, err := c.GetCurrentSpan(headerNumber - 1)
+	span, err := c.GetCurrentSpan(headerNumber - 32)
 	if err != nil {
 		return err
 	}
