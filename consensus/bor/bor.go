@@ -949,13 +949,17 @@ func (c *Bor) checkAndCommitSpan(
 	chain core.ChainContext,
 ) error {
 	headerNumber := header.Number.Uint64()
+	log.Debug("Fetching current span", "headerNumber", headerNumber)
 	span, err := c.GetCurrentSpan()
 	if err != nil {
 		return err
 	}
+	log.Debug("Current span available in the state", "headerNumber", headerNumber, "span", span.ID, "spanStartBlock", span.StartBlock, "spanEndBlock", span.EndBlock)
 
 	if !c.WithoutHeimdall {
-		if span.EndBlock < headerNumber {
+		maxCheckSpanInFuture := 10
+		for i := 0; i < maxCheckSpanInFuture && span.EndBlock != 0 && span.EndBlock < headerNumber; i++ {
+			log.Info("Current span is not sufficient, fetching next span", "headerNumber", headerNumber, "span", span.ID, "spanStartBlock", span.StartBlock, "spanEndBlock", span.EndBlock)
 			var heimdallSpan HeimdallSpan
 			response, err := c.HeimdallClient.FetchWithRetry(fmt.Sprintf("bor/span/%d", span.ID+1), "")
 			if err != nil {
@@ -971,11 +975,16 @@ func (c *Bor) checkAndCommitSpan(
 				StartBlock: heimdallSpan.StartBlock,
 				EndBlock:   heimdallSpan.EndBlock,
 			}
+
+			if span.EndBlock != 0 && span.StartBlock <= headerNumber && headerNumber <= span.EndBlock {
+				break
+			}
 		}
 	}
 
-	if span.EndBlock < headerNumber || span.StartBlock > headerNumber {
-		return errors.New("No span found")
+	log.Debug("Fetched current span", "headerNumber", headerNumber, "span", span.ID, "spanStartEnd", span.StartBlock, "spanEndBlock", span.EndBlock)
+	if span.EndBlock != 0 && (span.EndBlock < headerNumber || span.StartBlock > headerNumber) {
+		return errors.New("No valid span found")
 	}
 
 	if c.needToCommitSpan(span, headerNumber) {
