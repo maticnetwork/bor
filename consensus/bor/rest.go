@@ -48,11 +48,9 @@ func NewHeimdallClient(urlString string) (*HeimdallClient, error) {
 func (h *HeimdallClient) FetchStateSyncEvents(fromID uint64, to int64) ([]EventRecordWithTime, error) {
 	eventRecords := make([]EventRecordWithTime, 0)
 	for {
-		queryParams := fmt.Sprintf("from-id=%d&to-time=%d&limit=%d", fromID, to, stateFetchLimit)
+		queryParams := fmt.Sprintf("from_id=%d&to_time=%d&limit=%d", fromID, to, stateFetchLimit)
 		log.Info("Fetching state sync events", "queryParams", queryParams)
-		newPaginationQueryParams := fmt.Sprintf("pagination.page=%d&pagination.limit=%d", fromID, stateFetchLimit)
-		fmt.Println("newPaginationQueryParams ", newPaginationQueryParams)
-		response, err := h.FetchWithOutUnmarshal("clerk/v1beta1/records", newPaginationQueryParams)
+		response, err := h.FetchWithOutUnmarshal("clerk/v1beta1/records", queryParams)
 		if err != nil {
 			return nil, err
 		}
