@@ -9,18 +9,22 @@ import (
 )
 
 // EventRecord represents state record
-type EventRecord struct {
+type EventRecordWithTime struct {
 	ID       uint64         `json:"id" yaml:"id"`
 	Contract common.Address `json:"contract" yaml:"contract"`
 	Data     hexutil.Bytes  `json:"data" yaml:"data"`
 	TxHash   common.Hash    `json:"tx_hash" yaml:"tx_hash"`
 	LogIndex uint64         `json:"log_index" yaml:"log_index"`
 	ChainID  string         `json:"bor_chain_id" yaml:"bor_chain_id"`
+	Time     time.Time      `json:"record_time" yaml:"record_time"`
 }
 
-type EventRecordWithTime struct {
-	EventRecord
-	Time time.Time `json:"record_time" yaml:"record_time"`
+// type EventRecordWithTime struct {
+// 	EventRecord
+// }
+
+type EventRecordListResponse struct {
+	EventRecordList []EventRecordWithTime `json:"event_records`
 }
 
 // String returns the string representatin of span
@@ -37,8 +41,8 @@ func (e *EventRecordWithTime) String() string {
 	)
 }
 
-func (e *EventRecordWithTime) BuildEventRecord() *EventRecord {
-	return &EventRecord{
+func (e *EventRecordWithTime) BuildEventRecord() *EventRecordWithTime {
+	return &EventRecordWithTime{
 		ID:       e.ID,
 		Contract: e.Contract,
 		Data:     e.Data,

@@ -985,25 +985,26 @@ func (c *Bor) fetchAndCommitSpan(
 	header *types.Header,
 	chain core.ChainContext,
 ) error {
-	var heimdallSpan HeimdallSpan
+	var heimdallSpanResponse HeimdallSpanResponse
 
 	if c.WithoutHeimdall {
-		s, err := c.getNextHeimdallSpanForTest(newSpanID, state, header, chain)
+		s, err := c.getNextHeimdallSpanForTestWithOutUnMarshal(newSpanID, state, header, chain)
 		if err != nil {
 			return err
 		}
-		heimdallSpan = *s
+		heimdallSpanResponse = *s
 	} else {
-		response, err := c.HeimdallClient.FetchWithRetry(fmt.Sprintf("bor/span/%d", newSpanID), "")
+		response, err := c.HeimdallClient.FetchWithOutUnmarshal(fmt.Sprintf("heimdall/bor/v1beta1/span/%d", newSpanID), "")
 		if err != nil {
 			return err
 		}
 
-		if err := json.Unmarshal(response.Result, &heimdallSpan); err != nil {
+		if err := json.Unmarshal(response, &heimdallSpanResponse); err != nil {
 			return err
 		}
 	}
 
+	heimdallSpan := heimdallSpanResponse.Span
 	// check if chain id matches with heimdall span
 	if heimdallSpan.ChainID != c.chainConfig.ChainID.String() {
 		return fmt.Errorf(
@@ -1123,7 +1124,7 @@ func (c *Bor) CommitStates(
 		if eventRecord.ID <= lastStateID {
 			continue
 		}
-		if err := validateEventRecord(eventRecord, number, to, lastStateID, chainID); err != nil {
+		if err := validateEventRecord(&eventRecord, number, to, lastStateID, chainID); err != nil {
 			log.Error(err.Error())
 			break
 		}
@@ -1136,7 +1137,7 @@ func (c *Bor) CommitStates(
 		}
 		stateSyncs = append(stateSyncs, &stateData)
 
-		if err := c.GenesisContractsClient.CommitState(eventRecord, state, header, chain); err != nil {
+		if err := c.GenesisContractsClient.CommitState(&eventRecord, state, header, chain); err != nil {
 			return nil, err
 		}
 		lastStateID++
@@ -1201,6 +1202,51 @@ func (c *Bor) getNextHeimdallSpanForTest(
 	}
 
 	return heimdallSpan, nil
+}
+
+func (c *Bor) getNextHeimdallSpanForTestWithOutUnMarshal(
+	newSpanID uint64,
+	state *state.StateDB,
+	header *types.Header,
+	chain core.ChainContext,
+) (*HeimdallSpanResponse, error) {
+	headerNumber := header.Number.Uint64()
+	span, err := c.GetCurrentSpan(headerNumber - 1)
+	if err != nil {
+		return nil, err
+	}
+
+	// get local chain context object
+	localContext := chain.(chainContext)
+	// Retrieve the snapshot needed to verify this header and cache it
+	snap, err := c.snapshot(localContext.Chain, headerNumber-1, header.ParentHash, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// new span
+	span.ID = newSpanID
+	if span.EndBlock == 0 {
+		span.StartBlock = 256
+	} else {
+		span.StartBlock = span.EndBlock + 1
+	}
+	span.EndBlock = span.StartBlock + (100 * c.config.Sprint) - 1
+
+	selectedProducers := make([]Validator, len(snap.ValidatorSet.Validators))
+	for i, v := range snap.ValidatorSet.Validators {
+		selectedProducers[i] = *v
+	}
+	heimdallSpan := HeimdallSpan{
+		Span:              *span,
+		ValidatorSet:      *snap.ValidatorSet,
+		SelectedProducers: selectedProducers,
+		ChainID:           c.chainConfig.ChainID.String(),
+	}
+
+	return &HeimdallSpanResponse{
+		Span: heimdallSpan,
+	}, nil
 }
 
 //

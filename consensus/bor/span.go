@@ -14,3 +14,8 @@ type HeimdallSpan struct {
 	SelectedProducers []Validator  `json:"selected_producers" yaml:"selected_producers"`
 	ChainID           string       `json:"bor_chain_id" yaml:"bor_chain_id"`
 }
+
+// HeimdallSpan rest response
+type HeimdallSpanResponse struct {
+	Span HeimdallSpan `json:"span"`
+}
