@@ -50,7 +50,7 @@ func (h *HeimdallClient) FetchStateSyncEvents(fromID uint64, to int64) ([]EventR
 	for {
 		queryParams := fmt.Sprintf("from_id=%d&to_time=%d&limit=%d", fromID, to, stateFetchLimit)
 		log.Info("Fetching state sync events", "queryParams", queryParams)
-		response, err := h.FetchWithOutUnmarshal("clerk/v1beta1/records", queryParams)
+		response, err := h.FetchWithOutUnmarshal("heimdall/clerk/v1beta1/records", queryParams)
 		if err != nil {
 			return nil, err
 		}
