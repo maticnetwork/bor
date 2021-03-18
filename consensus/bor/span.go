@@ -12,7 +12,7 @@ type HeimdallSpan struct {
 	Span
 	ValidatorSet      ValidatorSet `json:"validator_set" yaml:"validator_set"`
 	SelectedProducers []Validator  `json:"selected_producers" yaml:"selected_producers"`
-	ChainID           string       `json:"chain_id" yaml:"chain_id"`
+	ChainID           string       `json:"bor_chain_id" yaml:"bor_chain_id"`
 }
 
 // HeimdallSpan rest response
