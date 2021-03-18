@@ -1,0 +1,28 @@
+
+
+
+name: Docker Image CI
+
+on:
+  push:
+    branches: for_latest_heimdall_develop
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Build the Bor Docker image
+      env:
+        DOCKERHUB: ${{ secrets.DOCKERHUB }}
+        DOCKERHUB_KEY: ${{ secrets.DOCKERHUB_KEY }}
+      run: |
+        ls -l
+        echo "Docker login"
+        docker login -u $DOCKERHUB -p $DOCKERHUB_KEY
+        echo "running build"
+        docker build -t maticnetwork/bor:for_latest_heimdall_develop .
+        echo "pushing image"
+        docker push maticnetwork/bor:for_latest_heimdall_develop
+        echo "DONE!"
+
