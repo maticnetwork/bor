@@ -1217,7 +1217,7 @@ func (c *Bor) getNextHeimdallSpanForTestWithOutUnMarshal(
 	chain core.ChainContext,
 ) (*HeimdallSpanResponse, error) {
 	headerNumber := header.Number.Uint64()
-	span, err := c.GetCurrentSpan(headerNumber - 1)
+	span, err := c.GetCurrentSpan(header.ParentHash)
 	if err != nil {
 		return nil, err
 	}
