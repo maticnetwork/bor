@@ -192,4 +192,7 @@ type Config struct {
 
 	// No heimdall service
 	WithoutHeimdall bool
+
+	// eth_getLogs ranged query block limit
+	LogsBlockLimit uint64
 }

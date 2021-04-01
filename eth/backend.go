@@ -299,7 +299,7 @@ func (s *Ethereum) APIs() []rpc.API {
 
 	// BOR change starts
 	// set genesis to public filter api
-	publicFilterAPI := filters.NewPublicFilterAPI(s.APIBackend, false)
+	publicFilterAPI := filters.NewPublicFilterAPI(s.APIBackend, false, s.config.LogsBlockLimit)
 	// avoiding constructor changed by introducing new method to set genesis
 	publicFilterAPI.SetChainConfig(s.blockchain.Config())
 	// BOR change ends

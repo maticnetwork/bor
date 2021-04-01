@@ -40,7 +40,7 @@ func (api *PublicFilterAPI) GetBorBlockLogs(ctx context.Context, crit FilterCrit
 			end = crit.ToBlock.Int64()
 		}
 		// Construct the range filter
-		filter = NewBorBlockLogsRangeFilter(api.backend, sprint, begin, end, crit.Addresses, crit.Topics)
+		filter = NewBorBlockLogsRangeFilter(api.backend, sprint, begin, end, crit.Addresses, crit.Topics, api.logsBlockLimit)
 	}
 
 	// Run the filter and return all the logs

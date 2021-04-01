@@ -63,11 +63,12 @@ type Filter struct {
 	begin, end int64       // Range interval if filtering multiple blocks
 
 	matcher *bloombits.Matcher
+	logsBlockLimit uint64
 }
 
 // NewRangeFilter creates a new filter which uses a bloom filter on blocks to
 // figure out whether a particular block is interesting or not.
-func NewRangeFilter(backend Backend, begin, end int64, addresses []common.Address, topics [][]common.Hash) *Filter {
+func NewRangeFilter(backend Backend, begin, end int64, addresses []common.Address, topics [][]common.Hash, logsBlockLimit uint64) *Filter {
 	// Flatten the address and topic filter clauses into a single bloombits filter
 	// system. Since the bloombits are not positional, nil topics are permitted,
 	// which get flattened into a nil byte slice.
@@ -91,6 +92,7 @@ func NewRangeFilter(backend Backend, begin, end int64, addresses []common.Addres
 	// Create a generic filter and convert it into a range filter
 	filter := newFilter(backend, addresses, topics)
 
+	filter.logsBlockLimit = logsBlockLimit
 	filter.matcher = bloombits.NewMatcher(size, filters)
 	filter.begin = begin
 	filter.end = end
@@ -146,6 +148,11 @@ func (f *Filter) Logs(ctx context.Context) ([]*types.Log, error) {
 	if f.end == -1 {
 		end = head
 	}
+
+	if f.logsBlockLimit > 0 && end - uint64(f.begin) > f.logsBlockLimit {
+		end = uint64(f.begin) + f.logsBlockLimit
+	}
+
 	// Gather all indexed logs, and finish with non indexed ones
 	var (
 		logs []*types.Log

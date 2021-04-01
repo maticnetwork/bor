@@ -344,6 +344,11 @@ var (
 		Value: eth.DefaultConfig.TxPool.Lifetime,
 	}
 	// Performance tuning settings
+	LogsRangeLimitFlag = cli.IntFlag{
+		Name:  "logs.limit",
+		Usage: "Maximum amount of blocks to scan for the ranged eth_getLogs query (default = 10000, 0 means no limit)",
+		Value: 10000,
+	}
 	CacheFlag = cli.IntFlag{
 		Name:  "cache",
 		Usage: "Megabytes of memory allocated to internal caching (default = 4096 mainnet full node, 128 light mode)",
@@ -1515,6 +1520,10 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *eth.Config) {
 	cfg.DatabaseHandles = makeDatabaseHandles()
 	if ctx.GlobalIsSet(AncientFlag.Name) {
 		cfg.DatabaseFreezer = ctx.GlobalString(AncientFlag.Name)
+	}
+
+	if ctx.GlobalIsSet(LogsRangeLimitFlag.Name) {
+		cfg.LogsBlockLimit = ctx.GlobalUint64(LogsRangeLimitFlag.Name)
 	}
 
 	if gcmode := ctx.GlobalString(GCModeFlag.Name); gcmode != "full" && gcmode != "archive" {

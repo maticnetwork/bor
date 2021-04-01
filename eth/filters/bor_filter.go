@@ -36,15 +36,17 @@ type BorBlockLogsFilter struct {
 
 	block      common.Hash // Block hash if filtering a single block
 	begin, end int64       // Range interval if filtering multiple blocks
+	logsBlockLimit uint64
 }
 
 // NewBorBlockLogsRangeFilter creates a new filter which uses a bloom filter on blocks to
 // figure out whether a particular block is interesting or not.
-func NewBorBlockLogsRangeFilter(backend Backend, sprint uint64, begin, end int64, addresses []common.Address, topics [][]common.Hash) *BorBlockLogsFilter {
+func NewBorBlockLogsRangeFilter(backend Backend, sprint uint64, begin, end int64, addresses []common.Address, topics [][]common.Hash, logsBlockLimit uint64) *BorBlockLogsFilter {
 	// Create a generic filter and convert it into a range filter
 	filter := newBorBlockLogsFilter(backend, sprint, addresses, topics)
 	filter.begin = begin
 	filter.end = end
+	filter.logsBlockLimit = logsBlockLimit
 
 	return filter
 }
@@ -99,6 +101,10 @@ func (f *BorBlockLogsFilter) Logs(ctx context.Context) ([]*types.Log, error) {
 	end := f.end
 	if f.end == -1 {
 		end = int64(head)
+	}
+
+	if f.logsBlockLimit > 0 && end - f.begin > int64(f.logsBlockLimit) {
+		end = f.begin + int64(f.logsBlockLimit)
 	}
 
 	// Gather all indexed logs, and finish with non indexed ones
