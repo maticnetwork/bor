@@ -22,12 +22,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common/mclock"
-	"github.com/ethereum/go-ethereum/core/rawdb"
-	lps "github.com/ethereum/go-ethereum/les/lespay/server"
-	"github.com/ethereum/go-ethereum/p2p/enode"
-	"github.com/ethereum/go-ethereum/p2p/enr"
-	"github.com/ethereum/go-ethereum/p2p/nodestate"
+	"github.com/maticnetwork/bor/common/mclock"
+	"github.com/maticnetwork/bor/core/rawdb"
+	lps "github.com/maticnetwork/bor/les/lespay/server"
+	"github.com/maticnetwork/bor/p2p/enode"
+	"github.com/maticnetwork/bor/p2p/enr"
+	"github.com/maticnetwork/bor/p2p/nodestate"
 )
 
 func TestClientPoolL10C100Free(t *testing.T) {

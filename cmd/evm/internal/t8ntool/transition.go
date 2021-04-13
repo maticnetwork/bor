@@ -24,14 +24,14 @@ import (
 	"os"
 	"path"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/core/state"
-	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/core/vm"
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/params"
-	"github.com/ethereum/go-ethereum/tests"
+	"github.com/maticnetwork/bor/common"
+	"github.com/maticnetwork/bor/core"
+	"github.com/maticnetwork/bor/core/state"
+	"github.com/maticnetwork/bor/core/types"
+	"github.com/maticnetwork/bor/core/vm"
+	"github.com/maticnetwork/bor/log"
+	"github.com/maticnetwork/bor/params"
+	"github.com/maticnetwork/bor/tests"
 	"gopkg.in/urfave/cli.v1"
 )
 

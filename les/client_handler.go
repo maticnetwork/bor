@@ -22,14 +22,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/mclock"
-	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/eth/downloader"
-	"github.com/ethereum/go-ethereum/light"
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/p2p"
-	"github.com/ethereum/go-ethereum/params"
+	"github.com/maticnetwork/bor/common"
+	"github.com/maticnetwork/bor/common/mclock"
+	"github.com/maticnetwork/bor/core/types"
+	"github.com/maticnetwork/bor/eth/downloader"
+	"github.com/maticnetwork/bor/light"
+	"github.com/maticnetwork/bor/log"
+	"github.com/maticnetwork/bor/p2p"
+	"github.com/maticnetwork/bor/params"
 )
 
 // clientHandler is responsible for receiving and processing all incoming server

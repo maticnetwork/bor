@@ -3,7 +3,7 @@
 package mocks
 
 import (
-	bor "github.com/ethereum/go-ethereum/consensus/bor"
+	bor "github.com/maticnetwork/bor/consensus/bor"
 	mock "github.com/stretchr/testify/mock"
 )
 

@@ -21,10 +21,10 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/ethdb"
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/maticnetwork/bor/common"
+	"github.com/maticnetwork/bor/ethdb"
+	"github.com/maticnetwork/bor/log"
+	"github.com/maticnetwork/bor/rlp"
 )
 
 var ErrCommitDisabled = errors.New("no database for committing")
