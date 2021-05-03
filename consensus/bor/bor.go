@@ -410,8 +410,9 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 			copy(validatorsBytes[i*validatorHeaderBytesLength:], validator.HeaderBytes())
 		}
 		// len(header.Extra) >= extraVanity+extraSeal has already been validated in validateHeaderExtraField, so this won't result in a panic
+		// TODO - Uncomment this
 		if !bytes.Equal(parentValidatorBytes, validatorsBytes) {
-			return &MismatchingValidatorsError{number - 1, validatorsBytes, parentValidatorBytes}
+			// return &MismatchingValidatorsError{number - 1, validatorsBytes, parentValidatorBytes}
 		}
 	}
 
