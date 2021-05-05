@@ -16,8 +16,8 @@ import (
 type Validator struct {
 	ID               uint64         `json:"ID"`
 	Address          common.Address `json:"signer"`
-	VotingPower      int64          `json:"power"`
-	ProposerPriority int64          `json:"accum"`
+	VotingPower      int64          `json:"voting_power,string"`
+	ProposerPriority int64          `json:"proposer_priority,string"`
 }
 
 // NewValidator creates new validator

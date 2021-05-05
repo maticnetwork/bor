@@ -2,7 +2,7 @@ package bor
 
 // Span represents a current bor span
 type Span struct {
-	ID         uint64 `json:"span_id,string" yaml:"span_id,string"`
+	ID         uint64 `json:"id,string" yaml:"id,string"`
 	StartBlock uint64 `json:"start_block,string" yaml:"start_block,string"`
 	EndBlock   uint64 `json:"end_block,string" yaml:"end_block,string"`
 }
