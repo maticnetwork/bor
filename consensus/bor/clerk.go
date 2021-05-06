@@ -11,7 +11,7 @@ import (
 type EventRecordWithTime struct {
 	ID       uint64         `json:"id,string" yaml:"id"`
 	Contract common.Address `json:"contract,string" yaml:"contract"`
-	Data     []byte  `json:"data" yaml:"data"`
+	Data     []byte         `json:"data" yaml:"data"`
 	TxHash   common.Hash    `json:"tx_hash,string" yaml:"tx_hash"`
 	LogIndex uint64         `json:"log_index,string" yaml:"log_index"`
 	ChainID  string         `json:"chain_id" yaml:"chain_id"`
