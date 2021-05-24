@@ -1829,7 +1829,7 @@ func MakeChain(ctx *cli.Context, stack *node.Node, readOnly bool) (chain *core.B
 		Fatalf("Valid genesis file is required as argument: {}", err)
 	}
 
-	chainDb = MakeChainDatabase(ctx, stack)
+	chainDb = MakeChainDatabase(ctx, stack, false)
 	config, _, err := core.SetupGenesisBlock(chainDb, genesis)
 	if err != nil {
 		Fatalf("%v", err)
