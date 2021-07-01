@@ -399,6 +399,22 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 		return err
 	}
 
+	if (number+1)%c.config.Sprint == 0 {
+		newValidators, err := c.GetCurrentValidators(header.ParentHash, number+1)
+		if err != nil {
+			return errors.New("unknown validators")
+		}
+
+		// sort validator by address
+		sort.Sort(ValidatorsByAddress(newValidators))
+		var validatorBytes []byte
+		for _, validator := range newValidators {
+			validatorBytes = append(validatorBytes, validator.HeaderBytes()...)
+		}
+		if !bytes.Equal(validatorBytes, header.Extra[extraVanity:len(parent.Extra)-extraSeal]) {
+			return errors.New("invalid validators")
+		}
+	}
 	// verify the validator list in the last sprint block
 	if isSprintStart(number, c.config.Sprint) {
 		parentValidatorBytes := parent.Extra[extraVanity : len(parent.Extra)-extraSeal]
