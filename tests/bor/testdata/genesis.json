@@ -9,7 +9,9 @@
     "byzantiumBlock": 0,
     "constantinopleBlock": 0,
     "bor": {
-      "period": 1,
+      "period": {
+        "0": 1
+      },
       "producerDelay": 4,
       "sprint": 4,
       "backupMultiplier": 1,
