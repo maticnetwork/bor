@@ -411,7 +411,7 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 		for _, validator := range newValidators {
 			validatorBytes = append(validatorBytes, validator.HeaderBytes()...)
 		}
-		if !bytes.Equal(validatorBytes, header.Extra[extraVanity:len(parent.Extra)-extraSeal]) {
+		if !bytes.Equal(validatorBytes, header.Extra[extraVanity:len(header.Extra)-extraSeal]) {
 			return errors.New("invalid validators")
 		}
 	}
