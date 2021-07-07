@@ -20,6 +20,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math/big"
+	"sort"
+	"strconv"
 
 	"github.com/ethereum/go-ethereum/common"
 	"golang.org/x/crypto/sha3"
@@ -365,19 +367,34 @@ func (c *CliqueConfig) String() string {
 
 // BorConfig is the consensus engine configs for Matic bor based sealing.
 type BorConfig struct {
-	Period                uint64 `json:"period"`                // Number of seconds between blocks to enforce
-	ProducerDelay         uint64 `json:"producerDelay"`         // Number of seconds delay between two producer interval
-	Sprint                uint64 `json:"sprint"`                // Epoch length to proposer
-	BackupMultiplier      uint64 `json:"backupMultiplier"`      // Backup multiplier to determine the wiggle time
-	ValidatorContract     string `json:"validatorContract"`     // Validator set contract
-	StateReceiverContract string `json:"stateReceiverContract"` // State receiver contract
-
-	OverrideStateSyncRecords map[string]int `json:"overrideStateSyncRecords"` // override state records count
+	Period                   map[string]uint64 `json:"period"`                   // Number of seconds between blocks to enforce
+	ProducerDelay            uint64            `json:"producerDelay"`            // Number of seconds delay between two producer interval
+	Sprint                   uint64            `json:"sprint"`                   // Epoch length to proposer
+	BackupMultiplier         uint64            `json:"backupMultiplier"`         // Backup multiplier to determine the wiggle time
+	ValidatorContract        string            `json:"validatorContract"`        // Validator set contract
+	StateReceiverContract    string            `json:"stateReceiverContract"`    // State receiver contract
+	OverrideStateSyncRecords map[string]int    `json:"overrideStateSyncRecords"` // override state records count
 }
 
 // String implements the stringer interface, returning the consensus engine details.
 func (b *BorConfig) String() string {
 	return "bor"
+}
+
+func (c *BorConfig) CalculateBlockTime(number uint64) uint64 {
+	keys := make([]string, 0, len(c.Period))
+	for k := range c.Period {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for i := 0; i < len(keys)-1; i++ {
+		valUint, _ := strconv.ParseUint(keys[i], 10, 64)
+		valUintNext, _ := strconv.ParseUint(keys[i+1], 10, 64)
+		if number > valUint && number < valUintNext {
+			return c.Period[keys[i]]
+		}
+	}
+	return c.Period[keys[len(keys)-1]]
 }
 
 // String implements the fmt.Stringer interface.

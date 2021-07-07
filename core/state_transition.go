@@ -333,10 +333,8 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	// add transfer log
 	AddFeeTransferLog(
 		st.state,
-
 		msg.From(),
 		st.evm.Context.Coinbase,
-
 		amount,
 		input1,
 		input2,
