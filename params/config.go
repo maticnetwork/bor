@@ -374,6 +374,7 @@ type BorConfig struct {
 	ValidatorContract        string            `json:"validatorContract"`        // Validator set contract
 	StateReceiverContract    string            `json:"stateReceiverContract"`    // State receiver contract
 	OverrideStateSyncRecords map[string]int    `json:"overrideStateSyncRecords"` // override state records count
+	GovernanceAddress        map[string]string `json:"governanceAddress"`        // override state records count
 }
 
 // String implements the stringer interface, returning the consensus engine details.
@@ -395,6 +396,22 @@ func (c *BorConfig) CalculateBlockTime(number uint64) uint64 {
 		}
 	}
 	return c.Period[keys[len(keys)-1]]
+}
+
+func (c *BorConfig) GetGovernanceAddress(number uint64) string {
+	keys := make([]string, 0, len(c.GovernanceAddress))
+	for k := range c.GovernanceAddress {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for i := 0; i < len(keys)-1; i++ {
+		valUint, _ := strconv.ParseUint(keys[i], 10, 64)
+		valUintNext, _ := strconv.ParseUint(keys[i+1], 10, 64)
+		if number > valUint && number < valUintNext {
+			return c.GovernanceAddress[keys[i]]
+		}
+	}
+	return c.GovernanceAddress[keys[len(keys)-1]]
 }
 
 // String implements the fmt.Stringer interface.
