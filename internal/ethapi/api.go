@@ -782,58 +782,6 @@ func (s *PublicBlockChainAPI) GetStorageAt(ctx context.Context, address common.A
 	return res[:], state.Error()
 }
 
-// CallArgs represents the arguments for a call.
-type CallArgs struct {
-	From       *common.Address   `json:"from"`
-	To         *common.Address   `json:"to"`
-	Gas        *hexutil.Uint64   `json:"gas"`
-	GasPrice   *hexutil.Big      `json:"gasPrice"`
-	Value      *hexutil.Big      `json:"value"`
-	Data       *hexutil.Bytes    `json:"data"`
-	AccessList *types.AccessList `json:"accessList"`
-}
-
-// ToMessage converts CallArgs to the Message type used by the core evm
-func (args *CallArgs) ToMessage(globalGasCap uint64) types.Message {
-	// Set sender address or use zero address if none specified.
-	var addr common.Address
-	if args.From != nil {
-		addr = *args.From
-	}
-
-	// Set default gas & gas price if none were set
-	gas := globalGasCap
-	if gas == 0 {
-		gas = uint64(math.MaxUint64 / 2)
-	}
-	if args.Gas != nil {
-		gas = uint64(*args.Gas)
-	}
-	if globalGasCap != 0 && globalGasCap < gas {
-		log.Debug("Caller gas above allowance, capping", "requested", gas, "cap", globalGasCap)
-		gas = globalGasCap
-	}
-	gasPrice := new(big.Int)
-	if args.GasPrice != nil {
-		gasPrice = args.GasPrice.ToInt()
-	}
-	value := new(big.Int)
-	if args.Value != nil {
-		value = args.Value.ToInt()
-	}
-	var data []byte
-	if args.Data != nil {
-		data = *args.Data
-	}
-	var accessList types.AccessList
-	if args.AccessList != nil {
-		accessList = *args.AccessList
-	}
-
-	msg := types.NewMessage(addr, args.To, 0, value, gas, gasPrice, data, accessList, false)
-	return msg
-}
-
 // OverrideAccount indicates the overriding fields of account during the execution
 // of a message call.
 // Note, state and stateDiff can't be specified at the same time. If state is
@@ -1571,21 +1519,17 @@ func (s *PublicTransactionPoolAPI) GetTransactionByHash(ctx context.Context, has
 	}
 
 	if tx != nil {
-<<<<<<< HEAD
-		resultTx := newRPCTransaction(tx, blockHash, blockNumber, index)
+		header, err := s.b.HeaderByHash(ctx, blockHash)
+		if err != nil {
+			return nil, err
+		}
+		resultTx := newRPCTransaction(tx, blockHash, blockNumber, index, header.BaseFee)
 		if borTx {
 			// newRPCTransaction calculates hash based on RLP of the transaction data.
 			// In case of bor block tx, we need simple derived tx hash (same as function argument) instead of RLP hash
 			resultTx.Hash = hash
 		}
 		return resultTx, nil
-=======
-		header, err := s.b.HeaderByHash(ctx, blockHash)
-		if err != nil {
-			return nil, err
-		}
-		return newRPCTransaction(tx, blockHash, blockNumber, index, header.BaseFee), nil
->>>>>>> aa637fd38a379db6da98df0d520fb1c5139a18ce
 	}
 
 	// No finalized transaction, try to retrieve it from the pool
