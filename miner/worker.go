@@ -591,6 +591,10 @@ func (w *worker) resultLoop() {
 			if w.chain.HasBlock(block.Hash(), block.NumberU64()) {
 				continue
 			}
+			if w.chain.GetBlockByNumber(block.NumberU64()) != nil {
+				log.Info("same block ", "height", block.NumberU64())
+				continue
+			}
 			var (
 				sealhash = w.engine.SealHash(block.Header())
 				hash     = block.Hash()
