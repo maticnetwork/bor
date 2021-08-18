@@ -370,10 +370,10 @@ type BorConfig struct {
 	Period                   map[string]uint64 `json:"period"`                   // Number of seconds between blocks to enforce
 	ProducerDelay            uint64            `json:"producerDelay"`            // Number of seconds delay between two producer interval
 	Sprint                   uint64            `json:"sprint"`                   // Epoch length to proposer
-	BackupMultiplier         uint64            `json:"backupMultiplier"`         // Backup multiplier to determine the wiggle time
+	BackupMultiplier         map[string]uint64 `json:"backupMultiplier"`         // Backup multiplier to determine the wiggle time
 	ValidatorContract        string            `json:"validatorContract"`        // Validator set contract
 	StateReceiverContract    string            `json:"stateReceiverContract"`    // State receiver contract
-	GovernanceAddress        map[string]string `json:"governanceAddress"`        // governance address for basefee addition
+	GovernanceWalletAddress  string            `json:"governanceWalletAddress"`  // governance address for basefee addition
 	OverrideStateSyncRecords map[string]int    `json:"overrideStateSyncRecords"` // override state records count
 }
 
@@ -398,9 +398,9 @@ func (c *BorConfig) CalculateBlockTime(number uint64) uint64 {
 	return c.Period[keys[len(keys)-1]]
 }
 
-func (c *BorConfig) GetGovernanceAddress(number uint64) string {
-	keys := make([]string, 0, len(c.GovernanceAddress))
-	for k := range c.GovernanceAddress {
+func (c *BorConfig) CalculateBackupMultiplier(number uint64) uint64 {
+	keys := make([]string, 0, len(c.BackupMultiplier))
+	for k := range c.BackupMultiplier {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
@@ -408,10 +408,10 @@ func (c *BorConfig) GetGovernanceAddress(number uint64) string {
 		valUint, _ := strconv.ParseUint(keys[i], 10, 64)
 		valUintNext, _ := strconv.ParseUint(keys[i+1], 10, 64)
 		if number > valUint && number < valUintNext {
-			return c.GovernanceAddress[keys[i]]
+			return c.BackupMultiplier[keys[i]]
 		}
 	}
-	return c.GovernanceAddress[keys[len(keys)-1]]
+	return c.BackupMultiplier[keys[len(keys)-1]]
 }
 
 // String implements the fmt.Stringer interface.

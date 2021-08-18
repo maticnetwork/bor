@@ -321,14 +321,31 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		// After EIP-3529: refunds are capped to gasUsed / 5
 		st.refundGas(params.RefundQuotientEIP3529)
 	}
+
 	effectiveTip := st.gasPrice
 	if st.evm.ChainConfig().IsLondon(st.evm.Context.BlockNumber) {
 		effectiveTip = cmath.BigMin(st.gasTipCap, new(big.Int).Sub(st.gasFeeCap, st.evm.Context.BaseFee))
-		st.state.AddBalance(common.HexToAddress(st.evm.ChainConfig().Bor.GetGovernanceAddress(st.evm.Context.BlockNumber.Uint64())), st.evm.Context.BaseFee)
-	}
-	st.state.AddBalance(st.evm.Context.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), effectiveTip))
 
-	amount := new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.gasPrice)
+		fmt.Println("gasFeeCap", st.gasFeeCap)
+		fmt.Println("gasTipCap", st.gasTipCap)
+		fmt.Println("gasPrice", st.gasPrice)
+		fmt.Println("baseFee", st.evm.Context.BaseFee)
+		fmt.Println("gasUsed", new(big.Int).SetUint64(st.gasUsed()))
+		fmt.Println("minerFee", new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), effectiveTip))
+
+		// Transfer collected base fee to governance wallet address
+		// collectedBaseFee = gasUsed * block.BaseFee
+		collectedBaseFee := new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.evm.Context.BaseFee)
+		st.state.AddBalance(common.HexToAddress(st.evm.ChainConfig().Bor.GovernanceWalletAddress), collectedBaseFee)
+	}
+
+	// Transfer miner fee to miner/coinbase account
+	// minerFee = gasUsed * effectiveTip
+	minerFee := new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), effectiveTip)
+	st.state.AddBalance(st.evm.Context.Coinbase, minerFee)
+
+	// Amount for miner should be same as minerFee
+	amount := minerFee
 	output1 := new(big.Int).SetBytes(input1.Bytes())
 	output2 := new(big.Int).SetBytes(input2.Bytes())
 

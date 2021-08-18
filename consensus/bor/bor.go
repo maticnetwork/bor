@@ -187,7 +187,7 @@ func CalcProducerDelay(number uint64, succession int, c *params.BorConfig) uint6
 		delay = c.ProducerDelay
 	}
 	if succession > 0 {
-		delay += uint64(succession) * c.BackupMultiplier
+		delay += uint64(succession) * c.CalculateBackupMultiplier(number)
 	}
 	return delay
 }
@@ -392,6 +392,21 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 	if parent.Time+c.config.CalculateBlockTime(number) > header.Time {
 		return ErrInvalidTimestamp
 	}
+
+	// TODO - check this
+	// Verify the block's gas usage and (if applicable) verify the base fee.
+	// if !chain.Config().IsLondon(header.Number) {
+	// 	// Verify BaseFee not present before EIP-1559 fork.
+	// 	if header.BaseFee != nil {
+	// 		return fmt.Errorf("invalid baseFee before fork: have %d, expected 'nil'", header.BaseFee)
+	// 	}
+	// 	if err := misc.VerifyGaslimit(parent.GasLimit, header.GasLimit); err != nil {
+	// 		return err
+	// 	}
+	// } else if err := misc.VerifyEip1559Header(chain.Config(), parent, header); err != nil {
+	// 	// Verify the header's EIP-1559 attributes.
+	// 	return err
+	// }
 
 	// Retrieve the snapshot needed to verify this header and cache it
 	snap, err := c.snapshot(chain, number-1, header.ParentHash, parents)
@@ -773,7 +788,7 @@ func (c *Bor) Seal(chain consensus.ChainHeaderReader, block *types.Block, result
 	// Sweet, the protocol permits us to sign the block, wait for our time
 	delay := time.Unix(int64(header.Time), 0).Sub(time.Now()) // nolint: gosimple
 	// wiggle was already accounted for in header.Time, this is just for logging
-	wiggle := time.Duration(successionNumber) * time.Duration(c.config.BackupMultiplier) * time.Second
+	wiggle := time.Duration(successionNumber) * time.Duration(c.config.CalculateBackupMultiplier(number)) * time.Second
 
 	// Sign all the things!
 	sighash, err := signFn(accounts.Account{Address: signer}, accounts.MimetypeBor, BorRLP(header))
