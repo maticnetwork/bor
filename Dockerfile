@@ -9,7 +9,8 @@ RUN cd /bor && make bor-all
 # Pull Bor into a second stage deploy alpine container
 FROM alpine:latest
 
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates && apk add --no-cache bash 
+
 COPY --from=builder /bor/build/bin/bor /usr/local/bin/
 COPY --from=builder /bor/build/bin/bootnode /usr/local/bin/
 
