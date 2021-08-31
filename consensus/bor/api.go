@@ -63,6 +63,18 @@ func (api *API) GetAuthor(number *rpc.BlockNumber) (*common.Address, error) {
 	return &author, err
 }
 
+// GetAuthorByHash retrieves the author a block by hash.
+func (api *API) GetAuthorByHash(hash common.Hash) (*common.Address, error) {
+	// Retrieve the requested block (or current if none requested)
+	header := api.chain.GetHeaderByHash(hash)
+	// Ensure we have an actually valid block and return its snapshot
+	if header == nil {
+		return nil, errUnknownBlock
+	}
+	author, err := api.bor.Author(header)
+	return &author, err
+}
+
 // GetSnapshotAtHash retrieves the state snapshot at a given block.
 func (api *API) GetSnapshotAtHash(hash common.Hash) (*Snapshot, error) {
 	header := api.chain.GetHeaderByHash(hash)
