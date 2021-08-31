@@ -182,7 +182,7 @@ func encodeSigHeader(w io.Writer, header *types.Header) {
 func CalcProducerDelay(number uint64, succession int, c *params.BorConfig) uint64 {
 	// When the block is the first block of the sprint, it is expected to be delayed by `producerDelay`.
 	// That is to allow time for block propagation in the last sprint
-	delay := c.CalculateBlockTime(number)
+	delay := c.CalculatePeriod(number)
 	if number%c.Sprint == 0 {
 		delay = c.ProducerDelay
 	}
@@ -389,7 +389,7 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 		return consensus.ErrUnknownAncestor
 	}
 
-	if parent.Time+c.config.CalculateBlockTime(number) > header.Time {
+	if parent.Time+c.config.CalculatePeriod(number) > header.Time {
 		return ErrInvalidTimestamp
 	}
 
@@ -745,7 +745,7 @@ func (c *Bor) Seal(chain consensus.ChainHeaderReader, block *types.Block, result
 		return errUnknownBlock
 	}
 	// For 0-period chains, refuse to seal empty blocks (no reward but would spin sealing)
-	if c.config.CalculateBlockTime(number) == 0 && len(block.Transactions()) == 0 {
+	if c.config.CalculatePeriod(number) == 0 && len(block.Transactions()) == 0 {
 		log.Info("Sealing paused, waiting for transactions")
 		return nil
 	}
