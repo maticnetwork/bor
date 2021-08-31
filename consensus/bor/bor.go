@@ -182,12 +182,12 @@ func encodeSigHeader(w io.Writer, header *types.Header) {
 func CalcProducerDelay(number uint64, succession int, c *params.BorConfig) uint64 {
 	// When the block is the first block of the sprint, it is expected to be delayed by `producerDelay`.
 	// That is to allow time for block propagation in the last sprint
-	delay := c.Period
+	delay := c.CalculateBlockTime(number)
 	if number%c.Sprint == 0 {
 		delay = c.ProducerDelay
 	}
 	if succession > 0 {
-		delay += uint64(succession) * c.BackupMultiplier
+		delay += uint64(succession) * c.CalculateBackupMultiplier(number)
 	}
 	return delay
 }
@@ -389,7 +389,7 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 		return consensus.ErrUnknownAncestor
 	}
 
-	if parent.Time+c.config.Period > header.Time {
+	if parent.Time+c.config.CalculateBlockTime(number) > header.Time {
 		return ErrInvalidTimestamp
 	}
 
@@ -745,7 +745,7 @@ func (c *Bor) Seal(chain consensus.ChainHeaderReader, block *types.Block, result
 		return errUnknownBlock
 	}
 	// For 0-period chains, refuse to seal empty blocks (no reward but would spin sealing)
-	if c.config.Period == 0 && len(block.Transactions()) == 0 {
+	if c.config.CalculateBlockTime(number) == 0 && len(block.Transactions()) == 0 {
 		log.Info("Sealing paused, waiting for transactions")
 		return nil
 	}
@@ -773,7 +773,7 @@ func (c *Bor) Seal(chain consensus.ChainHeaderReader, block *types.Block, result
 	// Sweet, the protocol permits us to sign the block, wait for our time
 	delay := time.Unix(int64(header.Time), 0).Sub(time.Now()) // nolint: gosimple
 	// wiggle was already accounted for in header.Time, this is just for logging
-	wiggle := time.Duration(successionNumber) * time.Duration(c.config.BackupMultiplier) * time.Second
+	wiggle := time.Duration(successionNumber) * time.Duration(c.config.CalculateBackupMultiplier(number)) * time.Second
 
 	// Sign all the things!
 	sighash, err := signFn(accounts.Account{Address: signer}, accounts.MimetypeBor, BorRLP(header))

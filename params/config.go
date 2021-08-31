@@ -20,6 +20,8 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math/big"
+	"sort"
+	"strconv"
 
 	"github.com/ethereum/go-ethereum/common"
 	"golang.org/x/crypto/sha3"
@@ -343,12 +345,12 @@ func (c *CliqueConfig) String() string {
 
 // BorConfig is the consensus engine configs for Matic bor based sealing.
 type BorConfig struct {
-	Period                uint64 `json:"period"`                // Number of seconds between blocks to enforce
-	ProducerDelay         uint64 `json:"producerDelay"`         // Number of seconds delay between two producer interval
-	Sprint                uint64 `json:"sprint"`                // Epoch length to proposer
-	BackupMultiplier      uint64 `json:"backupMultiplier"`      // Backup multiplier to determine the wiggle time
-	ValidatorContract     string `json:"validatorContract"`     // Validator set contract
-	StateReceiverContract string `json:"stateReceiverContract"` // State receiver contract
+	Period                map[string]uint64 `json:"period"`                // Number of seconds between blocks to enforce
+	ProducerDelay         uint64            `json:"producerDelay"`         // Number of seconds delay between two producer interval
+	Sprint                uint64            `json:"sprint"`                // Epoch length to proposer
+	BackupMultiplier      map[string]uint64 `json:"backupMultiplier"`      // Backup multiplier to determine the wiggle time
+	ValidatorContract     string            `json:"validatorContract"`     // Validator set contract
+	StateReceiverContract string            `json:"stateReceiverContract"` // State receiver contract
 
 	OverrideStateSyncRecords map[string]int `json:"overrideStateSyncRecords"` // override state records count
 }
@@ -388,6 +390,38 @@ func (c *ChainConfig) String() string {
 		c.LondonBlock,
 		engine,
 	)
+}
+
+func (c *BorConfig) CalculateBackupMultiplier(number uint64) uint64 {
+	keys := make([]string, 0, len(c.BackupMultiplier))
+	for k := range c.BackupMultiplier {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for i := 0; i < len(keys)-1; i++ {
+		valUint, _ := strconv.ParseUint(keys[i], 10, 64)
+		valUintNext, _ := strconv.ParseUint(keys[i+1], 10, 64)
+		if number > valUint && number < valUintNext {
+			return c.BackupMultiplier[keys[i]]
+		}
+	}
+	return c.BackupMultiplier[keys[len(keys)-1]]
+}
+
+func (c *BorConfig) CalculatePeriod(number uint64) uint64 {
+	keys := make([]string, 0, len(c.Period))
+	for k := range c.Period {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for i := 0; i < len(keys)-1; i++ {
+		valUint, _ := strconv.ParseUint(keys[i], 10, 64)
+		valUintNext, _ := strconv.ParseUint(keys[i+1], 10, 64)
+		if number > valUint && number < valUintNext {
+			return c.Period[keys[i]]
+		}
+	}
+	return c.Period[keys[len(keys)-1]]
 }
 
 // IsHomestead returns whether num is either equal to the homestead block or greater.

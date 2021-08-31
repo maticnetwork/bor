@@ -8,11 +8,20 @@
     "eip158Block": 0,
     "byzantiumBlock": 0,
     "constantinopleBlock": 0,
+    "petersburgBlock": 0,
+    "istanbulBlock": 0,
+    "muirGlacierBlock": 0,
+    "berlinBlock": 0,
+    "londonBlock": 0,
     "bor": {
-      "period": 1,
+      "period": {
+        "0": 1
+      },
       "producerDelay": 4,
       "sprint": 4,
-      "backupMultiplier": 1,
+      "backupMultiplier": {
+        "0": 1
+      },
       "validatorContract": "0x0000000000000000000000000000000000001000",
       "stateReceiverContract": "0x0000000000000000000000000000000000001001"
     }
