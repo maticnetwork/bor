@@ -607,11 +607,13 @@ func (w *worker) resultLoop() {
 				continue
 			}
 			oldBlock := w.chain.GetBlockByNumber(block.NumberU64())
-			oldBlockAuthor, _ := w.chain.Engine().Author(oldBlock.Header())
-			newBlockAuthor, _ := w.chain.Engine().Author(block.Header())
-			if oldBlock != nil && oldBlockAuthor == newBlockAuthor {
-				log.Info("same block ", "height", block.NumberU64())
-				continue
+			if oldBlock != nil {
+				oldBlockAuthor, _ := w.chain.Engine().Author(oldBlock.Header())
+				newBlockAuthor, _ := w.chain.Engine().Author(block.Header())
+				if oldBlockAuthor == newBlockAuthor {
+					log.Info("same block ", "height", block.NumberU64())
+					continue
+				}
 			}
 			var (
 				sealhash = w.engine.SealHash(block.Header())
