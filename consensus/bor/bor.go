@@ -652,7 +652,7 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 
 // Finalize implements consensus.Engine, ensuring no uncles are set, nor block
 // rewards given.
-func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header) {
+func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header) error {
 	stateSyncData := []*types.StateSyncData{}
 
 	var err error
@@ -662,7 +662,7 @@ func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, 
 		// check and commit span
 		if err := c.checkAndCommitSpan(state, header, cx); err != nil {
 			log.Error("Error while committing span", "error", err)
-			return
+			return nil
 		}
 
 		if !c.WithoutHeimdall {
@@ -670,7 +670,7 @@ func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, 
 			stateSyncData, err = c.CommitStates(state, header, cx)
 			if err != nil {
 				log.Error("Error while committing states", "error", err)
-				return
+				return nil
 			}
 		}
 	}
@@ -678,8 +678,7 @@ func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, 
 	if (headerNumber+1)%c.config.Sprint == 0 {
 		newValidators, err := c.GetCurrentValidators(header.ParentHash, headerNumber+1)
 		if err != nil {
-			log.Error("unknown validators")
-			return
+			return errors.New("unknown validators")
 		}
 
 		// sort validator by address
@@ -689,8 +688,7 @@ func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, 
 			validatorBytes = append(validatorBytes, validator.HeaderBytes()...)
 		}
 		if !bytes.Equal(validatorBytes, header.Extra[extraVanity:len(header.Extra)-extraSeal]) {
-			log.Error("invalid validators")
-			return
+			return errors.New("invalid validators")
 		}
 	}
 
@@ -701,6 +699,8 @@ func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, 
 	// Set state sync data to blockchain
 	bc := chain.(*core.BlockChain)
 	bc.SetStateSync(stateSyncData)
+
+	return nil
 }
 
 // FinalizeAndAssemble implements consensus.Engine, ensuring no uncles are set,
