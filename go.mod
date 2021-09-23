@@ -1,4 +1,4 @@
-module github.com/ethereum/go-ethereum
+module github.com/maticnetwork/bor
 
 go 1.15
 

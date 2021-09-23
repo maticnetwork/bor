@@ -8,16 +8,16 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/ethereum/go-ethereum/cmd/utils"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/consensus/bor"
-	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/crypto/secp256k1"
-	"github.com/ethereum/go-ethereum/eth"
-	"github.com/ethereum/go-ethereum/ethdb"
-	"github.com/ethereum/go-ethereum/params"
+	"github.com/maticnetwork/bor/cmd/utils"
+	"github.com/maticnetwork/bor/common"
+	"github.com/maticnetwork/bor/consensus/bor"
+	"github.com/maticnetwork/bor/core"
+	"github.com/maticnetwork/bor/core/types"
+	"github.com/maticnetwork/bor/crypto"
+	"github.com/maticnetwork/bor/crypto/secp256k1"
+	"github.com/maticnetwork/bor/eth"
+	"github.com/maticnetwork/bor/ethdb"
+	"github.com/maticnetwork/bor/params"
 )
 
 var (

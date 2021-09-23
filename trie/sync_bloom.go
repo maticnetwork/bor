@@ -23,12 +23,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/rawdb"
-	"github.com/ethereum/go-ethereum/ethdb"
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/metrics"
 	bloomfilter "github.com/holiman/bloomfilter/v2"
+	"github.com/maticnetwork/bor/common"
+	"github.com/maticnetwork/bor/core/rawdb"
+	"github.com/maticnetwork/bor/ethdb"
+	"github.com/maticnetwork/bor/log"
+	"github.com/maticnetwork/bor/metrics"
 )
 
 var (

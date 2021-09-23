@@ -26,11 +26,11 @@ import (
 	"sort"
 	"sync/atomic"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/consensus/misc"
-	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/maticnetwork/bor/common"
+	"github.com/maticnetwork/bor/consensus/misc"
+	"github.com/maticnetwork/bor/core/types"
+	"github.com/maticnetwork/bor/log"
+	"github.com/maticnetwork/bor/rpc"
 )
 
 var (

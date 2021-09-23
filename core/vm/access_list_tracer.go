@@ -20,8 +20,8 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/maticnetwork/bor/common"
+	"github.com/maticnetwork/bor/core/types"
 )
 
 // accessList is an accumulator for the set of accounts and storage slots an EVM

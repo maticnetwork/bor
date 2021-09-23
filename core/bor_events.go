@@ -1,7 +1,7 @@
 package core
 
 import (
-	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/maticnetwork/bor/core/types"
 )
 
 // StateSyncEvent represents state sync events

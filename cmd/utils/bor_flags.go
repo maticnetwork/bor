@@ -5,10 +5,10 @@ import (
 	"io/ioutil"
 	"os"
 
-	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/eth"
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/node"
+	"github.com/maticnetwork/bor/core"
+	"github.com/maticnetwork/bor/eth"
+	"github.com/maticnetwork/bor/log"
+	"github.com/maticnetwork/bor/node"
 	"gopkg.in/urfave/cli.v1"
 )
 

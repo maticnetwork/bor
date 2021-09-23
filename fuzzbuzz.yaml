@@ -8,37 +8,37 @@ targets:
     corpus: ./fuzzers/rlp/corpus
     harness:
       function: Fuzz
-      package: github.com/ethereum/go-ethereum/tests/fuzzers/rlp
-      checkout: github.com/ethereum/go-ethereum/
+      package: github.com/maticnetwork/bor/tests/fuzzers/rlp
+      checkout: github.com/maticnetwork/bor/
   - name: keystore
     language: go
     version: "1.13"
     corpus: ./fuzzers/keystore/corpus
     harness:
       function: Fuzz
-      package: github.com/ethereum/go-ethereum/tests/fuzzers/keystore
-      checkout: github.com/ethereum/go-ethereum/
+      package: github.com/maticnetwork/bor/tests/fuzzers/keystore
+      checkout: github.com/maticnetwork/bor/
   - name: trie
     language: go
     version: "1.13"
     corpus: ./fuzzers/trie/corpus
     harness:
       function: Fuzz
-      package: github.com/ethereum/go-ethereum/tests/fuzzers/trie
-      checkout: github.com/ethereum/go-ethereum/
+      package: github.com/maticnetwork/bor/tests/fuzzers/trie
+      checkout: github.com/maticnetwork/bor/
   - name: txfetcher
     language: go
     version: "1.13"
     corpus: ./fuzzers/txfetcher/corpus
     harness:
       function: Fuzz
-      package: github.com/ethereum/go-ethereum/tests/fuzzers/txfetcher
-      checkout: github.com/ethereum/go-ethereum/
+      package: github.com/maticnetwork/bor/tests/fuzzers/txfetcher
+      checkout: github.com/maticnetwork/bor/
   - name: whisperv6
     language: go
     version: "1.13"
     corpus: ./fuzzers/whisperv6/corpus
     harness:
       function: Fuzz
-      package: github.com/ethereum/go-ethereum/tests/fuzzers/whisperv6
-      checkout: github.com/ethereum/go-ethereum/
+      package: github.com/maticnetwork/bor/tests/fuzzers/whisperv6
+      checkout: github.com/maticnetwork/bor/

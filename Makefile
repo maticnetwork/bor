@@ -47,8 +47,8 @@ ios:
 
 test: all
 	# $(GORUN) build/ci.go test
-	go test github.com/ethereum/go-ethereum/consensus/bor
-	go test github.com/ethereum/go-ethereum/tests/bor
+	go test github.com/maticnetwork/bor/consensus/bor
+	go test github.com/maticnetwork/bor/tests/bor
 
 lint: ## Run linters.
 	$(GORUN) build/ci.go lint

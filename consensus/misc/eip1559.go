@@ -20,10 +20,10 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/math"
-	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/params"
+	"github.com/maticnetwork/bor/common"
+	"github.com/maticnetwork/bor/common/math"
+	"github.com/maticnetwork/bor/core/types"
+	"github.com/maticnetwork/bor/params"
 )
 
 // VerifyEip1559Header verifies some header attributes which were changed in EIP-1559,

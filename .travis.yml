@@ -1,5 +1,5 @@
 language: go
-go_import_path: github.com/ethereum/go-ethereum
+go_import_path: github.com/maticnetwork/bor
 sudo: false
 jobs:
   allow_failures:

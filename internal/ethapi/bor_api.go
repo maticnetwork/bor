@@ -3,8 +3,8 @@ package ethapi
 import (
 	"context"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/maticnetwork/bor/common"
+	"github.com/maticnetwork/bor/core/types"
 )
 
 // GetRootHash returns root hash for given start and end block

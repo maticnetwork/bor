@@ -25,12 +25,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ethereum/go-ethereum/accounts/abi/bind"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/contracts/checkpointoracle"
-	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/params"
+	"github.com/maticnetwork/bor/accounts/abi/bind"
+	"github.com/maticnetwork/bor/common"
+	"github.com/maticnetwork/bor/contracts/checkpointoracle"
+	"github.com/maticnetwork/bor/crypto"
+	"github.com/maticnetwork/bor/log"
+	"github.com/maticnetwork/bor/params"
 )
 
 // CheckpointOracle is responsible for offering the latest stable checkpoint
