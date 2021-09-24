@@ -420,6 +420,10 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 	return c.verifySeal(chain, header, parents)
 }
 
+func (c *Bor) GetSnapshot(chain consensus.ChainHeaderReader, number uint64, hash common.Hash) (*Snapshot, error) {
+	return c.snapshot(chain, number, hash, nil)
+}
+
 // snapshot retrieves the authorization snapshot at a given point in time.
 func (c *Bor) snapshot(chain consensus.ChainHeaderReader, number uint64, hash common.Hash, parents []*types.Header) (*Snapshot, error) {
 	// Search for a snapshot in memory or on disk for checkpoints

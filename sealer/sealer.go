@@ -6,6 +6,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/consensus/bor"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -13,7 +14,6 @@ import (
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/miner"
 	"github.com/ethereum/go-ethereum/params"
-	"github.com/ethereum/go-ethereum/sealer/bor"
 )
 
 // Backend wraps all methods required for mining.
@@ -81,7 +81,7 @@ SYNCING:
 	for {
 		block := s.chain.CurrentBlock()
 
-		snap, err := s.bor.GetSnapshot(block.NumberU64(), block.Hash())
+		snap, err := s.bor.GetSnapshot(s.chain, block.NumberU64(), block.Hash())
 		if err != nil {
 			// ??? Go back to syncing
 			panic(err)
