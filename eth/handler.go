@@ -112,7 +112,7 @@ type handler struct {
 	eventMux      *event.TypeMux
 	txsCh         chan core.NewTxsEvent
 	txsSub        event.Subscription
-	minedBlockSub *event.TypeMuxSubscription
+	minedBlockSub event.MuxSubscription
 
 	whitelist map[uint64]common.Hash
 
