@@ -352,7 +352,7 @@ type BorConfig struct {
 	ValidatorContract        string            `json:"validatorContract"`        // Validator set contract
 	StateReceiverContract    string            `json:"stateReceiverContract"`    // State receiver contract
 	OverrideStateSyncRecords map[string]int    `json:"overrideStateSyncRecords"` // override state records count
-	GovernanceContract       map[string]string `json:"governanceContract"`       // governance contract where the token will be sent to and burnt in london fork
+	BurntContract            map[string]string `json:"burntContract"`            // governance contract where the token will be sent to and burnt in london fork
 }
 
 // String implements the stringer interface, returning the consensus engine details.
@@ -424,9 +424,9 @@ func (c *BorConfig) CalculatePeriod(number uint64) uint64 {
 	return c.Period[keys[len(keys)-1]]
 }
 
-func (c *BorConfig) CalculateGovernanceContract(number uint64) string {
-	keys := make([]string, 0, len(c.GovernanceContract))
-	for k := range c.GovernanceContract {
+func (c *BorConfig) CalculateBurntContract(number uint64) string {
+	keys := make([]string, 0, len(c.BurntContract))
+	for k := range c.BurntContract {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
@@ -434,10 +434,10 @@ func (c *BorConfig) CalculateGovernanceContract(number uint64) string {
 		valUint, _ := strconv.ParseUint(keys[i], 10, 64)
 		valUintNext, _ := strconv.ParseUint(keys[i+1], 10, 64)
 		if number > valUint && number < valUintNext {
-			return c.GovernanceContract[keys[i]]
+			return c.BurntContract[keys[i]]
 		}
 	}
-	return c.GovernanceContract[keys[len(keys)-1]]
+	return c.BurntContract[keys[len(keys)-1]]
 }
 
 // IsHomestead returns whether num is either equal to the homestead block or greater.
