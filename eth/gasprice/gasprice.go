@@ -106,6 +106,17 @@ func NewOracle(backend OracleBackend, params Config) *Oracle {
 	}
 
 	cache, _ := lru.New(2048)
+	headEvent := make(chan core.ChainHeadEvent, 1)
+	backend.SubscribeChainHeadEvent(headEvent)
+	go func() {
+		var lastHead common.Hash
+		for ev := range headEvent {
+			if ev.Block.ParentHash() != lastHead {
+				cache.Purge()
+			}
+			lastHead = ev.Block.Hash()
+		}
+	}()
 
 	return &Oracle{
 		backend:          backend,
@@ -118,20 +129,6 @@ func NewOracle(backend OracleBackend, params Config) *Oracle {
 		maxBlockHistory:  params.MaxBlockHistory,
 		historyCache:     cache,
 	}
-}
-
-func (oracle *Oracle) ProcessCache() {
-	headEvent := make(chan core.ChainHeadEvent, 1)
-	oracle.backend.SubscribeChainHeadEvent(headEvent)
-	go func() {
-		var lastHead common.Hash
-		for ev := range headEvent {
-			if ev.Block.ParentHash() != lastHead {
-				oracle.historyCache.Purge()
-			}
-			lastHead = ev.Block.Hash()
-		}
-	}()
 }
 
 // SuggestTipCap returns a tip cap so that newly created transaction can have a

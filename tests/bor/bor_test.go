@@ -28,6 +28,7 @@ func TestInsertingSpanSizeBlocks(t *testing.T) {
 	chain := init.ethereum.BlockChain()
 	engine := init.ethereum.Engine()
 	_bor := engine.(*bor.Bor)
+	_bor.SetBlockChain(chain)
 	h, heimdallSpan := getMockedHeimdallClient(t)
 	_bor.SetHeimdallClient(h)
 
@@ -42,7 +43,7 @@ func TestInsertingSpanSizeBlocks(t *testing.T) {
 	}
 
 	assert.True(t, h.AssertCalled(t, "FetchWithRetry", spanPath, ""))
-	validators, err := _bor.GetCurrentValidators(block.Hash(), spanSize) // check validator set at the first block of new span
+	validators, err := _bor.GetCurrentValidators(spanSize, block.Header()) // check validator set at the first block of new span
 	if err != nil {
 		t.Fatalf("%s", err)
 	}
@@ -59,6 +60,7 @@ func TestFetchStateSyncEvents(t *testing.T) {
 	chain := init.ethereum.BlockChain()
 	engine := init.ethereum.Engine()
 	_bor := engine.(*bor.Bor)
+	_bor.SetBlockChain(chain)
 
 	// A. Insert blocks for 0th sprint
 	db := init.ethereum.ChainDb()
@@ -99,6 +101,7 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 	chain := init.ethereum.BlockChain()
 	engine := init.ethereum.Engine()
 	_bor := engine.(*bor.Bor)
+	_bor.SetBlockChain(chain)
 
 	// Mock /bor/span/1
 	res, _ := loadSpanFromFile(t)
@@ -133,7 +136,7 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 	}
 	assert.True(t, h.AssertCalled(t, "FetchWithRetry", spanPath, ""))
 	assert.True(t, h.AssertCalled(t, "FetchStateSyncEvents", fromID, to))
-	lastStateID, _ := _bor.GenesisContractsClient.LastStateId(sprintSize)
+	lastStateID, _ := _bor.GenesisContractsClient.LastStateId(block.Header(), _bor)
 	// state 6 was not written
 	assert.Equal(t, uint64(4), lastStateID.Uint64())
 
@@ -150,7 +153,7 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 		insertNewBlock(t, chain, block)
 	}
 	assert.True(t, h.AssertCalled(t, "FetchStateSyncEvents", fromID, to))
-	lastStateID, _ = _bor.GenesisContractsClient.LastStateId(spanSize)
+	lastStateID, _ = _bor.GenesisContractsClient.LastStateId(block.Header(), _bor)
 	assert.Equal(t, uint64(6), lastStateID.Uint64())
 }
 
@@ -207,6 +210,7 @@ func TestSignerNotFound(t *testing.T) {
 	chain := init.ethereum.BlockChain()
 	engine := init.ethereum.Engine()
 	_bor := engine.(*bor.Bor)
+	_bor.SetBlockChain(chain)
 	h, _ := getMockedHeimdallClient(t)
 	_bor.SetHeimdallClient(h)
 

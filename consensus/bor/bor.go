@@ -2,7 +2,6 @@ package bor
 
 import (
 	"bytes"
-	"context"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -23,7 +22,6 @@ import (
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/core"
@@ -33,7 +31,6 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
-	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -210,6 +207,7 @@ type Bor struct {
 	chainConfig *params.ChainConfig // Chain config
 	config      *params.BorConfig   // Consensus engine configuration parameters for bor consensus
 	db          ethdb.Database      // Database to store and retrieve snapshot checkpoints
+	bc          *core.BlockChain    // Blockchain to fetch state and chain config
 
 	recents    *lru.ARCCache // Snapshots for recent block to speed up reorgs
 	signatures *lru.ARCCache // Signatures of recent blocks to speed up mining
@@ -218,7 +216,6 @@ type Bor struct {
 	signFn SignerFn       // Signer function to authorize hashes with
 	lock   sync.RWMutex   // Protects the signer fields
 
-	ethAPI                 *ethapi.PublicBlockChainAPI
 	GenesisContractsClient *GenesisContractsClient
 	validatorSetABI        abi.ABI
 	stateReceiverABI       abi.ABI
@@ -234,7 +231,6 @@ type Bor struct {
 func New(
 	chainConfig *params.ChainConfig,
 	db ethdb.Database,
-	ethAPI *ethapi.PublicBlockChainAPI,
 	heimdallURL string,
 	withoutHeimdall bool,
 ) *Bor {
@@ -252,12 +248,11 @@ func New(
 	vABI, _ := abi.JSON(strings.NewReader(validatorsetABI))
 	sABI, _ := abi.JSON(strings.NewReader(stateReceiverABI))
 	heimdallClient, _ := NewHeimdallClient(heimdallURL)
-	genesisContractsClient := NewGenesisContractsClient(chainConfig, borConfig.ValidatorContract, borConfig.StateReceiverContract, ethAPI)
+	genesisContractsClient := NewGenesisContractsClient(chainConfig, borConfig.ValidatorContract, borConfig.StateReceiverContract)
 	c := &Bor{
 		chainConfig:            chainConfig,
 		config:                 borConfig,
 		db:                     db,
-		ethAPI:                 ethAPI,
 		recents:                recents,
 		signatures:             signatures,
 		validatorSetABI:        vABI,
@@ -268,6 +263,11 @@ func New(
 	}
 
 	return c
+}
+
+// SetBC will update the blockchain object for bor
+func (c *Bor) SetBlockChain(blockchain *core.BlockChain) {
+	c.bc = blockchain
 }
 
 // Author implements consensus.Engine, returning the Ethereum address recovered
@@ -437,7 +437,7 @@ func (c *Bor) snapshot(chain consensus.ChainHeaderReader, number uint64, hash co
 
 		// If an on-disk checkpoint snapshot can be found, use that
 		if number%checkpointInterval == 0 {
-			if s, err := loadSnapshot(c.config, c.signatures, c.db, hash, c.ethAPI); err == nil {
+			if s, err := loadSnapshot(c.config, c.signatures, c.db, hash); err == nil {
 				log.Trace("Loaded snapshot from disk", "number", number, "hash", hash)
 				snap = s
 				break
@@ -456,13 +456,13 @@ func (c *Bor) snapshot(chain consensus.ChainHeaderReader, number uint64, hash co
 				hash := checkpoint.Hash()
 
 				// get validators and current span
-				validators, err := c.GetCurrentValidators(hash, number+1)
+				validators, err := c.GetCurrentValidators(number+1, checkpoint)
 				if err != nil {
 					return nil, err
 				}
 
 				// new snap shot
-				snap = newSnapshot(c.config, c.signatures, number, hash, validators, c.ethAPI)
+				snap = newSnapshot(c.config, c.signatures, number, hash, validators)
 				if err := snap.store(c.db); err != nil {
 					return nil, err
 				}
@@ -610,7 +610,7 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 
 	// get validator set if number
 	if (number+1)%c.config.Sprint == 0 {
-		newValidators, err := c.GetCurrentValidators(header.ParentHash, number+1)
+		newValidators, err := c.GetCurrentValidators(number+1, header)
 		if err != nil {
 			return errors.New("unknown validators")
 		}
@@ -847,30 +847,18 @@ func (c *Bor) Close() error {
 }
 
 // GetCurrentSpan get current span from contract
-func (c *Bor) GetCurrentSpan(headerHash common.Hash) (*Span, error) {
-	// block
-	blockNr := rpc.BlockNumberOrHashWithHash(headerHash, false)
+func (c *Bor) GetCurrentSpan(header *types.Header) (*Span, error) {
 
 	// method
 	method := "getCurrentSpan"
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	data, err := c.validatorSetABI.Pack(method)
 	if err != nil {
 		log.Error("Unable to pack tx for getCurrentSpan", "error", err)
 		return nil, err
 	}
 
-	msgData := (hexutil.Bytes)(data)
-	toAddress := common.HexToAddress(c.config.ValidatorContract)
-	gas := (hexutil.Uint64)(uint64(math.MaxUint64 / 2))
-	result, err := c.ethAPI.Call(ctx, ethapi.TransactionArgs{
-		Gas:  &gas,
-		To:   &toAddress,
-		Data: &msgData,
-	}, blockNr, nil)
+	msg := getSystemMessage(common.HexToAddress(c.config.ValidatorContract), data)
+	result, err := c.fetchMessage(msg, header)
 	if err != nil {
 		return nil, err
 	}
@@ -896,15 +884,8 @@ func (c *Bor) GetCurrentSpan(headerHash common.Hash) (*Span, error) {
 }
 
 // GetCurrentValidators get current validators
-func (c *Bor) GetCurrentValidators(headerHash common.Hash, blockNumber uint64) ([]*Validator, error) {
-	// block
-	blockNr := rpc.BlockNumberOrHashWithHash(headerHash, false)
-
-	// method
+func (c *Bor) GetCurrentValidators(blockNumber uint64, header *types.Header) ([]*Validator, error) { // method
 	method := "getBorValidators"
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	data, err := c.validatorSetABI.Pack(method, big.NewInt(0).SetUint64(blockNumber))
 	if err != nil {
@@ -912,15 +893,8 @@ func (c *Bor) GetCurrentValidators(headerHash common.Hash, blockNumber uint64) (
 		return nil, err
 	}
 
-	// call
-	msgData := (hexutil.Bytes)(data)
-	toAddress := common.HexToAddress(c.config.ValidatorContract)
-	gas := (hexutil.Uint64)(uint64(math.MaxUint64 / 2))
-	result, err := c.ethAPI.Call(ctx, ethapi.TransactionArgs{
-		Gas:  &gas,
-		To:   &toAddress,
-		Data: &msgData,
-	}, blockNr, nil)
+	msg := getSystemMessage(common.HexToAddress(c.config.ValidatorContract), data)
+	result, err := c.fetchMessage(msg, header)
 	if err != nil {
 		panic(err)
 		// return nil, err
@@ -956,7 +930,7 @@ func (c *Bor) checkAndCommitSpan(
 	chain core.ChainContext,
 ) error {
 	headerNumber := header.Number.Uint64()
-	span, err := c.GetCurrentSpan(header.ParentHash)
+	span, err := c.GetCurrentSpan(header)
 	if err != nil {
 		return err
 	}
@@ -1078,7 +1052,7 @@ func (c *Bor) CommitStates(
 ) ([]*types.StateSyncData, error) {
 	stateSyncs := make([]*types.StateSyncData, 0)
 	number := header.Number.Uint64()
-	_lastStateID, err := c.GenesisContractsClient.LastStateId(number - 1)
+	_lastStateID, err := c.GenesisContractsClient.LastStateId(header, c)
 	if err != nil {
 		return nil, err
 	}
@@ -1145,7 +1119,7 @@ func (c *Bor) getNextHeimdallSpanForTest(
 	chain core.ChainContext,
 ) (*HeimdallSpan, error) {
 	headerNumber := header.Number.Uint64()
-	span, err := c.GetCurrentSpan(header.ParentHash)
+	span, err := c.GetCurrentSpan(header)
 	if err != nil {
 		return nil, err
 	}
@@ -1254,6 +1228,27 @@ func applyMessage(
 	}
 
 	return nil
+}
+
+// fetch message
+func (c *Bor) fetchMessage(msg callmsg, header *types.Header) ([]byte, error) {
+	state, err := c.bc.StateAt(header.Root)
+	if err != nil {
+		return nil, err
+	}
+	// Create a new context to be used in the EVM environment
+	blockContext := core.NewEVMBlockContext(header, chainContext{Chain: c.bc, Bor: c}, &header.Coinbase)
+	// Create a new environment which holds all relevant information
+	// about the calling mechanisms.
+	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, state, c.chainConfig, vm.Config{})
+	res, _, err := vmenv.StaticCall(
+		vm.AccountRef(msg.From()),
+		*msg.To(),
+		msg.Data(),
+		msg.Gas(),
+	)
+
+	return res, err
 }
 
 func validatorContains(a []*Validator, x *Validator) (*Validator, bool) {

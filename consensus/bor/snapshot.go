@@ -9,15 +9,13 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
-	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/params"
 )
 
 // Snapshot is the state of the authorization voting at a given point in time.
 type Snapshot struct {
 	config   *params.BorConfig // Consensus engine parameters to fine tune behavior
-	ethAPI   *ethapi.PublicBlockChainAPI
-	sigcache *lru.ARCCache // Cache of recent block signatures to speed up ecrecover
+	sigcache *lru.ARCCache     // Cache of recent block signatures to speed up ecrecover
 
 	Number       uint64                    `json:"number"`       // Block number where the snapshot was created
 	Hash         common.Hash               `json:"hash"`         // Block hash where the snapshot was created
@@ -41,11 +39,9 @@ func newSnapshot(
 	number uint64,
 	hash common.Hash,
 	validators []*Validator,
-	ethAPI *ethapi.PublicBlockChainAPI,
 ) *Snapshot {
 	snap := &Snapshot{
 		config:       config,
-		ethAPI:       ethAPI,
 		sigcache:     sigcache,
 		Number:       number,
 		Hash:         hash,
@@ -56,7 +52,7 @@ func newSnapshot(
 }
 
 // loadSnapshot loads an existing snapshot from the database.
-func loadSnapshot(config *params.BorConfig, sigcache *lru.ARCCache, db ethdb.Database, hash common.Hash, ethAPI *ethapi.PublicBlockChainAPI) (*Snapshot, error) {
+func loadSnapshot(config *params.BorConfig, sigcache *lru.ARCCache, db ethdb.Database, hash common.Hash) (*Snapshot, error) {
 	blob, err := db.Get(append([]byte("bor-"), hash[:]...))
 	if err != nil {
 		return nil, err
@@ -67,7 +63,6 @@ func loadSnapshot(config *params.BorConfig, sigcache *lru.ARCCache, db ethdb.Dat
 	}
 	snap.config = config
 	snap.sigcache = sigcache
-	snap.ethAPI = ethAPI
 
 	// update total voting power
 	if err := snap.ValidatorSet.updateTotalVotingPower(); err != nil {
@@ -90,7 +85,6 @@ func (s *Snapshot) store(db ethdb.Database) error {
 func (s *Snapshot) copy() *Snapshot {
 	cpy := &Snapshot{
 		config:       s.config,
-		ethAPI:       s.ethAPI,
 		sigcache:     s.sigcache,
 		Number:       s.Number,
 		Hash:         s.Hash,

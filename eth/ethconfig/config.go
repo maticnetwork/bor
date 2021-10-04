@@ -34,7 +34,6 @@ import (
 	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/eth/gasprice"
 	"github.com/ethereum/go-ethereum/ethdb"
-	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/miner"
 	"github.com/ethereum/go-ethereum/node"
@@ -215,7 +214,7 @@ type Config struct {
 }
 
 // CreateConsensusEngine creates a consensus engine for the given chain configuration.
-func CreateConsensusEngine(stack *node.Node, chainConfig *params.ChainConfig, ethConfig *Config, db ethdb.Database, blockchainAPI *ethapi.PublicBlockChainAPI) consensus.Engine {
+func CreateConsensusEngine(stack *node.Node, chainConfig *params.ChainConfig, ethConfig *Config, db ethdb.Database) consensus.Engine {
 	config := &ethConfig.Ethash
 	notify := ethConfig.Miner.Notify
 	noverify := ethConfig.Miner.Noverify
@@ -226,7 +225,7 @@ func CreateConsensusEngine(stack *node.Node, chainConfig *params.ChainConfig, et
 	}
 	// If Matic bor consensus is requested, set it up
 	if chainConfig.Bor != nil {
-		return bor.New(chainConfig, db, blockchainAPI, ethConfig.HeimdallURL, ethConfig.WithoutHeimdall)
+		return bor.New(chainConfig, db, ethConfig.HeimdallURL, ethConfig.WithoutHeimdall)
 	}
 	// Otherwise assume proof-of-work
 	switch config.PowMode {
