@@ -28,7 +28,6 @@ func TestInsertingSpanSizeBlocks(t *testing.T) {
 	chain := init.ethereum.BlockChain()
 	engine := init.ethereum.Engine()
 	_bor := engine.(*bor.Bor)
-	_bor.SetBlockChain(chain)
 	h, heimdallSpan := getMockedHeimdallClient(t)
 	_bor.SetHeimdallClient(h)
 
@@ -60,7 +59,6 @@ func TestFetchStateSyncEvents(t *testing.T) {
 	chain := init.ethereum.BlockChain()
 	engine := init.ethereum.Engine()
 	_bor := engine.(*bor.Bor)
-	_bor.SetBlockChain(chain)
 
 	// A. Insert blocks for 0th sprint
 	db := init.ethereum.ChainDb()
@@ -101,7 +99,6 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 	chain := init.ethereum.BlockChain()
 	engine := init.ethereum.Engine()
 	_bor := engine.(*bor.Bor)
-	_bor.SetBlockChain(chain)
 
 	// Mock /bor/span/1
 	res, _ := loadSpanFromFile(t)
@@ -210,7 +207,6 @@ func TestSignerNotFound(t *testing.T) {
 	chain := init.ethereum.BlockChain()
 	engine := init.ethereum.Engine()
 	_bor := engine.(*bor.Bor)
-	_bor.SetBlockChain(chain)
 	h, _ := getMockedHeimdallClient(t)
 	_bor.SetHeimdallClient(h)
 

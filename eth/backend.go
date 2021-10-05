@@ -227,6 +227,11 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		return nil, err
 	}
 
+	// Bor changes
+	if c, ok := eth.engine.(*bor.Bor); ok {
+		c.SetBlockChain(eth.blockchain)
+	}
+
 	eth.miner = miner.New(eth, &config.Miner, chainConfig, eth.EventMux(), eth.engine, eth.isLocalBlock)
 	eth.miner.SetExtra(makeExtraData(config.Miner.ExtraData))
 
@@ -270,11 +275,6 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			log.Warn("Unclean shutdown detected", "booted", t,
 				"age", common.PrettyAge(t))
 		}
-	}
-
-	// Bor changes
-	if c, ok := eth.engine.(*bor.Bor); ok {
-		c.SetBlockChain(eth.blockchain)
 	}
 
 	return eth, nil
