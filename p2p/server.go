@@ -197,6 +197,9 @@ type Server struct {
 
 	// State of run loop and listenLoop.
 	inboundHistory expHeap
+
+	// new
+	peers map[enode.ID]*Peer
 }
 
 type peerOpFunc func(map[enode.ID]*Peer)
@@ -690,8 +693,32 @@ func (srv *Server) doPeerOp(fn peerOpFunc) {
 	}
 }
 
+func (srv *Server) IsConnected(id enode.ID) bool {
+	_, ok := srv.getPeer(id)
+	return ok
+}
+
+func (srv *Server) NumConnected() int {
+	return len(srv.peers)
+}
+
+func (srv *Server) internalAddPeer(id enode.ID, peer *Peer) {
+	srv.peers[id] = peer
+}
+
+func (srv *Server) internalDelPeer(id enode.ID) {
+	delete(srv.peers, id)
+}
+
+func (srv *Server) getPeer(id enode.ID) (*Peer, bool) {
+	p, ok := srv.peers[id]
+	return p, ok
+}
+
 // run is the main loop of the server.
 func (srv *Server) run() {
+	srv.peers = map[enode.ID]*Peer{}
+
 	srv.log.Info("Started P2P networking", "self", srv.localnode.Node().URLv4())
 	defer srv.loopWG.Done()
 	defer srv.nodedb.Close()
@@ -699,7 +726,7 @@ func (srv *Server) run() {
 	defer srv.dialsched.stop()
 
 	var (
-		peers        = make(map[enode.ID]*Peer)
+		// peers        = make(map[enode.ID]*Peer)
 		inboundCount = 0
 		trusted      = make(map[enode.ID]bool, len(srv.TrustedNodes))
 	)
@@ -721,7 +748,7 @@ running:
 			// to the trusted node set.
 			srv.log.Trace("Adding trusted node", "node", n)
 			trusted[n.ID()] = true
-			if p, ok := peers[n.ID()]; ok {
+			if p, ok := srv.getPeer(n.ID()); ok {
 				p.rw.set(trustedConn, true)
 			}
 
@@ -730,13 +757,13 @@ running:
 			// from the trusted node set.
 			srv.log.Trace("Removing trusted node", "node", n)
 			delete(trusted, n.ID())
-			if p, ok := peers[n.ID()]; ok {
+			if p, ok := srv.getPeer(n.ID()); ok {
 				p.rw.set(trustedConn, false)
 			}
 
 		case op := <-srv.peerOp:
 			// This channel is used by Peers and PeerCount.
-			op(peers)
+			op(srv.peers)
 			srv.peerOpDone <- struct{}{}
 
 		case c := <-srv.checkpointPostHandshake:
@@ -747,17 +774,17 @@ running:
 				c.flags |= trustedConn
 			}
 			// TODO: track in-progress inbound node IDs (pre-Peer) to avoid dialing them.
-			c.cont <- srv.postHandshakeChecks(peers, inboundCount, c)
+			c.cont <- srv.postHandshakeChecks(inboundCount, c)
 
 		case c := <-srv.checkpointAddPeer:
 			// At this point the connection is past the protocol handshake.
 			// Its capabilities are known and the remote identity is verified.
-			err := srv.addPeerChecks(peers, inboundCount, c)
+			err := srv.addPeerChecks(inboundCount, c)
 			if err == nil {
 				// The handshakes are done and it passed all checks.
 				p := srv.launchPeer(c)
-				peers[c.node.ID()] = p
-				srv.log.Debug("Adding p2p peer", "peercount", len(peers), "id", p.ID(), "conn", c.flags, "addr", p.RemoteAddr(), "name", p.Name())
+				srv.internalAddPeer(c.node.ID(), p)
+				srv.log.Debug("Adding p2p peer", "peercount", srv.NumConnected(), "id", p.ID(), "conn", c.flags, "addr", p.RemoteAddr(), "name", p.Name())
 				srv.dialsched.peerAdded(c)
 				if p.Inbound() {
 					inboundCount++
@@ -768,8 +795,8 @@ running:
 		case pd := <-srv.delpeer:
 			// A peer disconnected.
 			d := common.PrettyDuration(mclock.Now() - pd.created)
-			delete(peers, pd.ID())
-			srv.log.Debug("Removing p2p peer", "peercount", len(peers), "id", pd.ID(), "duration", d, "req", pd.requested, "err", pd.err)
+			srv.internalDelPeer(pd.ID())
+			srv.log.Debug("Removing p2p peer", "peercount", srv.NumConnected(), "id", pd.ID(), "duration", d, "req", pd.requested, "err", pd.err)
 			srv.dialsched.peerRemoved(pd.rw)
 			if pd.Inbound() {
 				inboundCount--
@@ -787,26 +814,26 @@ running:
 		srv.DiscV5.Close()
 	}
 	// Disconnect all peers.
-	for _, p := range peers {
+	for _, p := range srv.peers {
 		p.Disconnect(DiscQuitting)
 	}
 	// Wait for peers to shut down. Pending connections and tasks are
 	// not handled here and will terminate soon-ish because srv.quit
 	// is closed.
-	for len(peers) > 0 {
+	for srv.NumConnected() > 0 {
 		p := <-srv.delpeer
 		p.log.Trace("<-delpeer (spindown)")
-		delete(peers, p.ID())
+		srv.internalDelPeer(p.ID())
 	}
 }
 
-func (srv *Server) postHandshakeChecks(peers map[enode.ID]*Peer, inboundCount int, c *conn) error {
+func (srv *Server) postHandshakeChecks(inboundCount int, c *conn) error {
 	switch {
-	case !c.is(trustedConn) && len(peers) >= srv.MaxPeers:
+	case !c.is(trustedConn) && srv.NumConnected() >= srv.MaxPeers:
 		return DiscTooManyPeers
 	case !c.is(trustedConn) && c.is(inboundConn) && inboundCount >= srv.maxInboundConns():
 		return DiscTooManyPeers
-	case peers[c.node.ID()] != nil:
+	case srv.IsConnected(c.node.ID()):
 		return DiscAlreadyConnected
 	case c.node.ID() == srv.localnode.ID():
 		return DiscSelf
@@ -815,14 +842,14 @@ func (srv *Server) postHandshakeChecks(peers map[enode.ID]*Peer, inboundCount in
 	}
 }
 
-func (srv *Server) addPeerChecks(peers map[enode.ID]*Peer, inboundCount int, c *conn) error {
+func (srv *Server) addPeerChecks(inboundCount int, c *conn) error {
 	// Drop connections with no matching protocols.
 	if len(srv.Protocols) > 0 && countMatchingProtocols(srv.Protocols, c.caps) == 0 {
 		return DiscUselessPeer
 	}
 	// Repeat the post-handshake checks because the
 	// peer set might have changed since those checks were performed.
-	return srv.postHandshakeChecks(peers, inboundCount, c)
+	return srv.postHandshakeChecks(inboundCount, c)
 }
 
 // listenLoop runs in its own goroutine and accepts
