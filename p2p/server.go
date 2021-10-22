@@ -409,6 +409,24 @@ func (srv *Server) Stop() {
 		srv.lock.Unlock()
 		return
 	}
+
+	srv.loopWG.Done()
+	srv.nodedb.Close()
+	srv.discmix.Close()
+	srv.dialsched.stop()
+
+	// Terminate discovery. If there is a running lookup it will terminate soon.
+	if srv.ntab != nil {
+		srv.ntab.Close()
+	}
+	if srv.DiscV5 != nil {
+		srv.DiscV5.Close()
+	}
+	// Disconnect all peers.
+	for _, p := range srv.peers {
+		p.Disconnect(DiscQuitting)
+	}
+
 	srv.running = false
 	if srv.listener != nil {
 		// this unblocks listener Accept
@@ -507,7 +525,7 @@ func (srv *Server) Start() (err error) {
 	}
 
 	srv.loopWG.Add(1)
-	go srv.run()
+	// go srv.run()
 	return nil
 }
 
@@ -764,6 +782,7 @@ func (srv *Server) getPeer(id enode.ID) (*Peer, bool) {
 	return p, ok
 }
 
+/*
 // run is the main loop of the server.
 func (srv *Server) run() {
 	srv.log.Info("Started P2P networking", "self", srv.localnode.Node().URLv4())
@@ -806,59 +825,60 @@ running:
 					if p, ok := srv.getPeer(n.ID()); ok {
 						p.rw.set(trustedConn, false)
 					}
-			*/
+*/
 
-			/*
-				case op := <-srv.peerOp:
-					// This channel is used by Peers and PeerCount.
-					op(srv.peers)
-					srv.peerOpDone <- struct{}{}
-			*/
+/*
+	case op := <-srv.peerOp:
+		// This channel is used by Peers and PeerCount.
+		op(srv.peers)
+		srv.peerOpDone <- struct{}{}
+*/
 
-			/*
-				case c := <-srv.checkpointPostHandshake:
-					// A connection has passed the encryption handshake so
-					// the remote identity is known (but hasn't been verified yet).
-					if srv.isTrusted(c.node.ID()) {
-						// Ensure that the trusted flag is set before checking against MaxPeers.
-						c.flags |= trustedConn
-					}
-					// TODO: track in-progress inbound node IDs (pre-Peer) to avoid dialing them.
-					c.cont <- srv.postHandshakeChecks(c)
-			*/
+/*
+	case c := <-srv.checkpointPostHandshake:
+		// A connection has passed the encryption handshake so
+		// the remote identity is known (but hasn't been verified yet).
+		if srv.isTrusted(c.node.ID()) {
+			// Ensure that the trusted flag is set before checking against MaxPeers.
+			c.flags |= trustedConn
+		}
+		// TODO: track in-progress inbound node IDs (pre-Peer) to avoid dialing them.
+		c.cont <- srv.postHandshakeChecks(c)
+*/
 
-			/*
-				case c := <-srv.checkpointAddPeer:
-					// At this point the connection is past the protocol handshake.
-					// Its capabilities are known and the remote identity is verified.
-					err := srv.addPeerChecks(c)
-					if err == nil {
-						// The handshakes are done and it passed all checks.
-						p := srv.launchPeer(c)
-						srv.internalAddPeer(c.node.ID(), p)
-						srv.log.Debug("Adding p2p peer", "peercount", srv.NumConnected(), "id", p.ID(), "conn", c.flags, "addr", p.RemoteAddr(), "name", p.Name())
-						srv.dialsched.peerAdded(c)
-						if p.Inbound() {
-							srv.inboundCount++
-						}
-					}
-					c.cont <- err
-			*/
+/*
+	case c := <-srv.checkpointAddPeer:
+		// At this point the connection is past the protocol handshake.
+		// Its capabilities are known and the remote identity is verified.
+		err := srv.addPeerChecks(c)
+		if err == nil {
+			// The handshakes are done and it passed all checks.
+			p := srv.launchPeer(c)
+			srv.internalAddPeer(c.node.ID(), p)
+			srv.log.Debug("Adding p2p peer", "peercount", srv.NumConnected(), "id", p.ID(), "conn", c.flags, "addr", p.RemoteAddr(), "name", p.Name())
+			srv.dialsched.peerAdded(c)
+			if p.Inbound() {
+				srv.inboundCount++
+			}
+		}
+		c.cont <- err
+*/
 
-			/*
-				case pd := <-srv.delpeer:
-					srv.delPeer(pd.Peer)
-			*/
-			/*
-				// A peer disconnected.
-				d := common.PrettyDuration(mclock.Now() - pd.created)
-				srv.internalDelPeer(pd.ID())
-				srv.log.Debug("Removing p2p peer", "peercount", srv.NumConnected(), "id", pd.ID(), "duration", d, "req", pd.requested, "err", pd.err)
-				srv.dialsched.peerRemoved(pd.rw)
-				if pd.Inbound() {
-					srv.inboundCount--
-				}
-			*/
+/*
+	case pd := <-srv.delpeer:
+		srv.delPeer(pd.Peer)
+*/
+/*
+	// A peer disconnected.
+	d := common.PrettyDuration(mclock.Now() - pd.created)
+	srv.internalDelPeer(pd.ID())
+	srv.log.Debug("Removing p2p peer", "peercount", srv.NumConnected(), "id", pd.ID(), "duration", d, "req", pd.requested, "err", pd.err)
+	srv.dialsched.peerRemoved(pd.rw)
+	if pd.Inbound() {
+		srv.inboundCount--
+	}
+*/
+/*
 		}
 	}
 
@@ -885,6 +905,7 @@ running:
 	//srv.internalDelPeer(p.ID())
 	//}
 }
+*/
 
 func (srv *Server) addPeer(c *conn) {
 	// The handshakes are done and it passed all checks.
@@ -1138,6 +1159,7 @@ func nodeFromConn(pubkey *ecdsa.PublicKey, conn net.Conn) *enode.Node {
 	return enode.NewV4(pubkey, ip, port, port)
 }
 
+/*
 // checkpoint sends the conn to run, which performs the
 // post-handshake checks for the stage (posthandshake, addpeer).
 func (srv *Server) checkpoint(c *conn, stage chan<- *conn) error {
@@ -1148,6 +1170,7 @@ func (srv *Server) checkpoint(c *conn, stage chan<- *conn) error {
 	}
 	return <-c.cont
 }
+*/
 
 func (srv *Server) launchPeer(c *conn) *Peer {
 	p := newPeer(srv.log, c, srv.Protocols)
