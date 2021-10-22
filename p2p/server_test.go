@@ -20,6 +20,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/sha256"
 	"errors"
+	"fmt"
 	"io"
 	"math/rand"
 	"net"
@@ -225,10 +226,13 @@ func TestServerRemovePeerDisconnect(t *testing.T) {
 	defer srv2.Stop()
 
 	if !syncAddPeer(srv1, srv2.Self()) {
+		fmt.Println("XXX")
 		t.Fatal("peer not connected")
 	}
 	srv1.RemovePeer(srv2.Self())
 	if srv1.PeerCount() > 0 {
+		fmt.Println("YYY")
+		fmt.Println(srv1.PeerCount())
 		t.Fatal("removed peer still connected")
 	}
 }

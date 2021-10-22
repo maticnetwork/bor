@@ -192,7 +192,7 @@ type Server struct {
 	//removetrusted           chan *enode.Node
 	//peerOp                  chan peerOpFunc
 	//peerOpDone              chan struct{}
-	delpeer chan peerDrop
+	//delpeer chan peerDrop
 	//checkpointPostHandshake chan *conn
 	checkpointAddPeer chan *conn
 
@@ -340,15 +340,14 @@ func (srv *Server) RemovePeer(node *enode.Node) {
 		ch  chan *PeerEvent
 		sub event.Subscription
 	)
-	// Disconnect the peer on the main loop.
-	srv.doPeerOp(func(peers map[enode.ID]*Peer) {
-		srv.dialsched.removeStatic(node)
-		if peer := peers[node.ID()]; peer != nil {
-			ch = make(chan *PeerEvent, 1)
-			sub = srv.peerFeed.Subscribe(ch)
-			peer.Disconnect(DiscRequested)
-		}
-	})
+
+	srv.dialsched.removeStatic(node)
+	if peer, ok := srv.getPeer(node.ID()); ok {
+		ch = make(chan *PeerEvent, 1)
+		sub = srv.peerFeed.Subscribe(ch)
+		peer.Disconnect(DiscRequested)
+	}
+
 	// Wait for the peer connection to end.
 	if ch != nil {
 		defer sub.Unsubscribe()
@@ -477,7 +476,7 @@ func (srv *Server) Start() (err error) {
 		srv.listenFunc = net.Listen
 	}
 	srv.quit = make(chan struct{})
-	srv.delpeer = make(chan peerDrop)
+	//srv.delpeer = make(chan peerDrop)
 	//srv.checkpointPostHandshake = make(chan *conn)
 	srv.checkpointAddPeer = make(chan *conn)
 	//srv.addtrusted = make(chan *enode.Node)
@@ -486,6 +485,9 @@ func (srv *Server) Start() (err error) {
 	//srv.peerOpDone = make(chan struct{})
 
 	srv.inboundHistory = delayheap.NewDelayHeap()
+
+	srv.peers = map[enode.ID]*Peer{}
+	srv.trusted = map[enode.ID]struct{}{}
 
 	if err := srv.setupLocalNode(); err != nil {
 		return err
@@ -760,9 +762,6 @@ func (srv *Server) getPeer(id enode.ID) (*Peer, bool) {
 
 // run is the main loop of the server.
 func (srv *Server) run() {
-	srv.peers = map[enode.ID]*Peer{}
-	srv.trusted = map[enode.ID]struct{}{}
-
 	srv.log.Info("Started P2P networking", "self", srv.localnode.Node().URLv4())
 	defer srv.loopWG.Done()
 	defer srv.nodedb.Close()
@@ -844,15 +843,20 @@ running:
 			}
 			c.cont <- err
 
-		case pd := <-srv.delpeer:
-			// A peer disconnected.
-			d := common.PrettyDuration(mclock.Now() - pd.created)
-			srv.internalDelPeer(pd.ID())
-			srv.log.Debug("Removing p2p peer", "peercount", srv.NumConnected(), "id", pd.ID(), "duration", d, "req", pd.requested, "err", pd.err)
-			srv.dialsched.peerRemoved(pd.rw)
-			if pd.Inbound() {
-				srv.inboundCount--
-			}
+			/*
+				case pd := <-srv.delpeer:
+					srv.delPeer(pd.Peer)
+			*/
+			/*
+				// A peer disconnected.
+				d := common.PrettyDuration(mclock.Now() - pd.created)
+				srv.internalDelPeer(pd.ID())
+				srv.log.Debug("Removing p2p peer", "peercount", srv.NumConnected(), "id", pd.ID(), "duration", d, "req", pd.requested, "err", pd.err)
+				srv.dialsched.peerRemoved(pd.rw)
+				if pd.Inbound() {
+					srv.inboundCount--
+				}
+			*/
 		}
 	}
 
@@ -872,11 +876,34 @@ running:
 	// Wait for peers to shut down. Pending connections and tasks are
 	// not handled here and will terminate soon-ish because srv.quit
 	// is closed.
-	for srv.NumConnected() > 0 {
-		p := <-srv.delpeer
-		p.log.Trace("<-delpeer (spindown)")
-		srv.internalDelPeer(p.ID())
+	//for srv.NumConnected() > 0 {
+	//srv.delPeer(p)
+	//p := <-srv.delpeer
+	//p.log.Trace("<-delpeer (spindown)")
+	//srv.internalDelPeer(p.ID())
+	//}
+}
+
+func (srv *Server) delPeer(p *Peer) {
+	// A peer disconnected.
+	d := common.PrettyDuration(mclock.Now() - p.created)
+	srv.internalDelPeer(p.ID())
+	srv.log.Debug("Removing p2p peer", "peercount", srv.NumConnected(), "id", p.ID(), "duration", d)
+	srv.dialsched.peerRemoved(p.rw)
+	if p.Inbound() {
+		srv.inboundCount--
 	}
+
+	// Broadcast peer drop to external subscribers. This needs to be
+	// after the send to delpeer so subscribers have a consistent view of
+	// the peer set (i.e. Server.Peers() doesn't include the peer when the
+	// event is received.
+	srv.peerFeed.Send(&PeerEvent{
+		Type:          PeerEventTypeDrop,
+		Peer:          p.ID(),
+		RemoteAddress: p.RemoteAddr().String(),
+		LocalAddress:  p.LocalAddr().String(),
+	})
 }
 
 func (srv *Server) checkpointPostHandshake(c *conn) error {
@@ -1132,24 +1159,10 @@ func (srv *Server) runPeer(p *Peer) {
 	})
 
 	// Run the per-peer main loop.
-	remoteRequested, err := p.run()
+	//remoteRequested, err := p.run()
+	p.run()
 
-	// Announce disconnect on the main loop to update the peer set.
-	// The main loop waits for existing peers to be sent on srv.delpeer
-	// before returning, so this send should not select on srv.quit.
-	srv.delpeer <- peerDrop{p, err, remoteRequested}
-
-	// Broadcast peer drop to external subscribers. This needs to be
-	// after the send to delpeer so subscribers have a consistent view of
-	// the peer set (i.e. Server.Peers() doesn't include the peer when the
-	// event is received.
-	srv.peerFeed.Send(&PeerEvent{
-		Type:          PeerEventTypeDrop,
-		Peer:          p.ID(),
-		Error:         err.Error(),
-		RemoteAddress: p.RemoteAddr().String(),
-		LocalAddress:  p.LocalAddr().String(),
-	})
+	srv.delPeer(p)
 }
 
 // NodeInfo represents a short summary of the information known about the host.
