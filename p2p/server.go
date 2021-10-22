@@ -199,7 +199,8 @@ type Server struct {
 	inboundHistory expHeap
 
 	// new
-	peers map[enode.ID]*Peer
+	peers   map[enode.ID]*Peer
+	trusted map[enode.ID]struct{}
 }
 
 type peerOpFunc func(map[enode.ID]*Peer)
@@ -693,6 +694,19 @@ func (srv *Server) doPeerOp(fn peerOpFunc) {
 	}
 }
 
+func (srv *Server) internalAddTrusted(id enode.ID) {
+	srv.trusted[id] = struct{}{}
+}
+
+func (srv *Server) internalDelTrusted(id enode.ID) {
+	delete(srv.trusted, id)
+}
+
+func (srv *Server) isTrusted(id enode.ID) bool {
+	_, ok := srv.trusted[id]
+	return ok
+}
+
 func (srv *Server) IsConnected(id enode.ID) bool {
 	_, ok := srv.getPeer(id)
 	return ok
@@ -718,6 +732,7 @@ func (srv *Server) getPeer(id enode.ID) (*Peer, bool) {
 // run is the main loop of the server.
 func (srv *Server) run() {
 	srv.peers = map[enode.ID]*Peer{}
+	srv.trusted = map[enode.ID]struct{}{}
 
 	srv.log.Info("Started P2P networking", "self", srv.localnode.Node().URLv4())
 	defer srv.loopWG.Done()
@@ -728,12 +743,13 @@ func (srv *Server) run() {
 	var (
 		// peers        = make(map[enode.ID]*Peer)
 		inboundCount = 0
-		trusted      = make(map[enode.ID]bool, len(srv.TrustedNodes))
+		// trusted      = make(map[enode.ID]bool, len(srv.TrustedNodes))
 	)
 	// Put trusted nodes into a map to speed up checks.
 	// Trusted peers are loaded on startup or added via AddTrustedPeer RPC.
 	for _, n := range srv.TrustedNodes {
-		trusted[n.ID()] = true
+		srv.internalAddTrusted(n.ID())
+		// trusted[n.ID()] = true
 	}
 
 running:
@@ -747,7 +763,9 @@ running:
 			// This channel is used by AddTrustedPeer to add a node
 			// to the trusted node set.
 			srv.log.Trace("Adding trusted node", "node", n)
-			trusted[n.ID()] = true
+			// trusted[n.ID()] = true
+
+			srv.internalAddTrusted(n.ID())
 			if p, ok := srv.getPeer(n.ID()); ok {
 				p.rw.set(trustedConn, true)
 			}
@@ -756,7 +774,9 @@ running:
 			// This channel is used by RemoveTrustedPeer to remove a node
 			// from the trusted node set.
 			srv.log.Trace("Removing trusted node", "node", n)
-			delete(trusted, n.ID())
+			// delete(trusted, n.ID())
+
+			srv.internalDelTrusted(n.ID())
 			if p, ok := srv.getPeer(n.ID()); ok {
 				p.rw.set(trustedConn, false)
 			}
@@ -769,7 +789,7 @@ running:
 		case c := <-srv.checkpointPostHandshake:
 			// A connection has passed the encryption handshake so
 			// the remote identity is known (but hasn't been verified yet).
-			if trusted[c.node.ID()] {
+			if srv.isTrusted(c.node.ID()) {
 				// Ensure that the trusted flag is set before checking against MaxPeers.
 				c.flags |= trustedConn
 			}
