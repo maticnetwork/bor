@@ -191,9 +191,11 @@ type Server struct {
 	//removetrusted           chan *enode.Node
 	//peerOp                  chan peerOpFunc
 	//peerOpDone              chan struct{}
-	delpeer                 chan peerDrop
-	checkpointPostHandshake chan *conn
-	checkpointAddPeer       chan *conn
+	delpeer chan peerDrop
+	//checkpointPostHandshake chan *conn
+	checkpointAddPeer chan *conn
+
+	inboundCount int
 
 	// State of run loop and listenLoop.
 	inboundHistory expHeap
@@ -475,7 +477,7 @@ func (srv *Server) Start() (err error) {
 	}
 	srv.quit = make(chan struct{})
 	srv.delpeer = make(chan peerDrop)
-	srv.checkpointPostHandshake = make(chan *conn)
+	//srv.checkpointPostHandshake = make(chan *conn)
 	srv.checkpointAddPeer = make(chan *conn)
 	//srv.addtrusted = make(chan *enode.Node)
 	//srv.removetrusted = make(chan *enode.Node)
@@ -765,9 +767,9 @@ func (srv *Server) run() {
 	defer srv.dialsched.stop()
 
 	var (
-		// peers        = make(map[enode.ID]*Peer)
-		inboundCount = 0
-		// trusted      = make(map[enode.ID]bool, len(srv.TrustedNodes))
+	// peers        = make(map[enode.ID]*Peer)
+	// inboundCount = 0
+	// trusted      = make(map[enode.ID]bool, len(srv.TrustedNodes))
 	)
 	// Put trusted nodes into a map to speed up checks.
 	// Trusted peers are loaded on startup or added via AddTrustedPeer RPC.
@@ -811,20 +813,22 @@ running:
 				srv.peerOpDone <- struct{}{}
 		*/
 
-		case c := <-srv.checkpointPostHandshake:
-			// A connection has passed the encryption handshake so
-			// the remote identity is known (but hasn't been verified yet).
-			if srv.isTrusted(c.node.ID()) {
-				// Ensure that the trusted flag is set before checking against MaxPeers.
-				c.flags |= trustedConn
-			}
-			// TODO: track in-progress inbound node IDs (pre-Peer) to avoid dialing them.
-			c.cont <- srv.postHandshakeChecks(inboundCount, c)
+		/*
+			case c := <-srv.checkpointPostHandshake:
+				// A connection has passed the encryption handshake so
+				// the remote identity is known (but hasn't been verified yet).
+				if srv.isTrusted(c.node.ID()) {
+					// Ensure that the trusted flag is set before checking against MaxPeers.
+					c.flags |= trustedConn
+				}
+				// TODO: track in-progress inbound node IDs (pre-Peer) to avoid dialing them.
+				c.cont <- srv.postHandshakeChecks(c)
+		*/
 
 		case c := <-srv.checkpointAddPeer:
 			// At this point the connection is past the protocol handshake.
 			// Its capabilities are known and the remote identity is verified.
-			err := srv.addPeerChecks(inboundCount, c)
+			err := srv.addPeerChecks(c)
 			if err == nil {
 				// The handshakes are done and it passed all checks.
 				p := srv.launchPeer(c)
@@ -832,7 +836,7 @@ running:
 				srv.log.Debug("Adding p2p peer", "peercount", srv.NumConnected(), "id", p.ID(), "conn", c.flags, "addr", p.RemoteAddr(), "name", p.Name())
 				srv.dialsched.peerAdded(c)
 				if p.Inbound() {
-					inboundCount++
+					srv.inboundCount++
 				}
 			}
 			c.cont <- err
@@ -844,7 +848,7 @@ running:
 			srv.log.Debug("Removing p2p peer", "peercount", srv.NumConnected(), "id", pd.ID(), "duration", d, "req", pd.requested, "err", pd.err)
 			srv.dialsched.peerRemoved(pd.rw)
 			if pd.Inbound() {
-				inboundCount--
+				srv.inboundCount--
 			}
 		}
 	}
@@ -872,11 +876,20 @@ running:
 	}
 }
 
-func (srv *Server) postHandshakeChecks(inboundCount int, c *conn) error {
+func (srv *Server) checkpointPostHandshake(c *conn) error {
+	if srv.isTrusted(c.node.ID()) {
+		// Ensure that the trusted flag is set before checking against MaxPeers.
+		c.flags |= trustedConn
+	}
+	// TODO: track in-progress inbound node IDs (pre-Peer) to avoid dialing them.
+	return srv.postHandshakeChecks(c)
+}
+
+func (srv *Server) postHandshakeChecks(c *conn) error {
 	switch {
 	case !c.is(trustedConn) && srv.NumConnected() >= srv.MaxPeers:
 		return DiscTooManyPeers
-	case !c.is(trustedConn) && c.is(inboundConn) && inboundCount >= srv.maxInboundConns():
+	case !c.is(trustedConn) && c.is(inboundConn) && srv.inboundCount >= srv.maxInboundConns():
 		return DiscTooManyPeers
 	case srv.IsConnected(c.node.ID()):
 		return DiscAlreadyConnected
@@ -887,14 +900,14 @@ func (srv *Server) postHandshakeChecks(inboundCount int, c *conn) error {
 	}
 }
 
-func (srv *Server) addPeerChecks(inboundCount int, c *conn) error {
+func (srv *Server) addPeerChecks(c *conn) error {
 	// Drop connections with no matching protocols.
 	if len(srv.Protocols) > 0 && countMatchingProtocols(srv.Protocols, c.caps) == 0 {
 		return DiscUselessPeer
 	}
 	// Repeat the post-handshake checks because the
 	// peer set might have changed since those checks were performed.
-	return srv.postHandshakeChecks(inboundCount, c)
+	return srv.postHandshakeChecks(c)
 }
 
 // listenLoop runs in its own goroutine and accepts
@@ -1037,7 +1050,8 @@ func (srv *Server) setupConn(c *conn, flags connFlag, dialDest *enode.Node) erro
 		c.node = nodeFromConn(remotePubkey, c.fd)
 	}
 	clog := srv.log.New("id", c.node.ID(), "addr", c.fd.RemoteAddr(), "conn", c.flags)
-	err = srv.checkpoint(c, srv.checkpointPostHandshake)
+
+	err = srv.checkpointPostHandshake(c)
 	if err != nil {
 		clog.Trace("Rejected peer", "err", err)
 		return err
