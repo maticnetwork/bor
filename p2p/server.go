@@ -186,9 +186,9 @@ type Server struct {
 	dialsched *dialScheduler
 
 	// Channels into the run loop.
-	quit                    chan struct{}
-	addtrusted              chan *enode.Node
-	removetrusted           chan *enode.Node
+	quit chan struct{}
+	//addtrusted              chan *enode.Node
+	//removetrusted           chan *enode.Node
 	peerOp                  chan peerOpFunc
 	peerOpDone              chan struct{}
 	delpeer                 chan peerDrop
@@ -360,18 +360,26 @@ func (srv *Server) RemovePeer(node *enode.Node) {
 // AddTrustedPeer adds the given node to a reserved trusted list which allows the
 // node to always connect, even if the slot are full.
 func (srv *Server) AddTrustedPeer(node *enode.Node) {
-	select {
-	case srv.addtrusted <- node:
-	case <-srv.quit:
-	}
+	srv.internalAddTrusted(node.ID())
+
+	/*
+		select {
+		case srv.addtrusted <- node:
+		case <-srv.quit:
+		}
+	*/
 }
 
 // RemoveTrustedPeer removes the given node from the trusted peer set.
 func (srv *Server) RemoveTrustedPeer(node *enode.Node) {
-	select {
-	case srv.removetrusted <- node:
-	case <-srv.quit:
-	}
+	srv.internalDelTrusted(node.ID())
+
+	/*
+		select {
+		case srv.removetrusted <- node:
+		case <-srv.quit:
+		}
+	*/
 }
 
 // SubscribeEvents subscribes the given channel to peer events
@@ -469,8 +477,8 @@ func (srv *Server) Start() (err error) {
 	srv.delpeer = make(chan peerDrop)
 	srv.checkpointPostHandshake = make(chan *conn)
 	srv.checkpointAddPeer = make(chan *conn)
-	srv.addtrusted = make(chan *enode.Node)
-	srv.removetrusted = make(chan *enode.Node)
+	//srv.addtrusted = make(chan *enode.Node)
+	//srv.removetrusted = make(chan *enode.Node)
 	srv.peerOp = make(chan peerOpFunc)
 	srv.peerOpDone = make(chan struct{})
 
@@ -695,11 +703,23 @@ func (srv *Server) doPeerOp(fn peerOpFunc) {
 }
 
 func (srv *Server) internalAddTrusted(id enode.ID) {
+	srv.log.Trace("Adding trusted node", "node", id)
+
 	srv.trusted[id] = struct{}{}
+
+	if p, ok := srv.getPeer(id); ok {
+		p.rw.set(trustedConn, true)
+	}
 }
 
 func (srv *Server) internalDelTrusted(id enode.ID) {
+	srv.log.Trace("Removing trusted node", "node", id)
+
 	delete(srv.trusted, id)
+
+	if p, ok := srv.getPeer(id); ok {
+		p.rw.set(trustedConn, false)
+	}
 }
 
 func (srv *Server) isTrusted(id enode.ID) bool {
@@ -759,27 +779,26 @@ running:
 			// The server was stopped. Run the cleanup logic.
 			break running
 
-		case n := <-srv.addtrusted:
-			// This channel is used by AddTrustedPeer to add a node
-			// to the trusted node set.
-			srv.log.Trace("Adding trusted node", "node", n)
-			// trusted[n.ID()] = true
+		/*
+			case n := <-srv.addtrusted:
+				// This channel is used by AddTrustedPeer to add a node
+				// to the trusted node set.
+				srv.log.Trace("Adding trusted node", "node", n)
+				// trusted[n.ID()] = true
 
-			srv.internalAddTrusted(n.ID())
-			if p, ok := srv.getPeer(n.ID()); ok {
-				p.rw.set(trustedConn, true)
-			}
+				srv.internalAddTrusted(n.ID())
 
-		case n := <-srv.removetrusted:
-			// This channel is used by RemoveTrustedPeer to remove a node
-			// from the trusted node set.
-			srv.log.Trace("Removing trusted node", "node", n)
-			// delete(trusted, n.ID())
+			case n := <-srv.removetrusted:
+				// This channel is used by RemoveTrustedPeer to remove a node
+				// from the trusted node set.
+				srv.log.Trace("Removing trusted node", "node", n)
+				// delete(trusted, n.ID())
 
-			srv.internalDelTrusted(n.ID())
-			if p, ok := srv.getPeer(n.ID()); ok {
-				p.rw.set(trustedConn, false)
-			}
+				srv.internalDelTrusted(n.ID())
+				if p, ok := srv.getPeer(n.ID()); ok {
+					p.rw.set(trustedConn, false)
+				}
+		*/
 
 		case op := <-srv.peerOp:
 			// This channel is used by Peers and PeerCount.
