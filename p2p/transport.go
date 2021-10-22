@@ -28,9 +28,38 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/bitutil"
 	"github.com/ethereum/go-ethereum/metrics"
+	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/rlpx"
 	"github.com/ethereum/go-ethereum/rlp"
 )
+
+type rlpxTransport2 struct {
+	lis net.Listener
+}
+
+func (r *rlpxTransport2) Run() {
+	for {
+		conn, err := r.lis.Accept()
+		if err != nil {
+			panic(err)
+		}
+		go r.handleConn(conn, nil)
+	}
+}
+
+func (r *rlpxTransport2) Dial(enode *enode.Node) {
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", enode.IP(), enode.TCP()), 5*time.Second)
+	if err != nil {
+		panic(err)
+	}
+	r.handleConn(conn, enode.Pubkey())
+}
+
+func (r *rlpxTransport2) handleConn(conn net.Conn, dialDest *ecdsa.PublicKey) {
+	tt := newRLPX2(conn, dialDest)
+
+	tt.doEncHandshake(nil)
+}
 
 const (
 	// total timeout for encryption handshake and protocol
@@ -49,6 +78,10 @@ type rlpxTransport struct {
 	rmu, wmu sync.Mutex
 	wbuf     bytes.Buffer
 	conn     *rlpx.Conn
+}
+
+func newRLPX2(conn net.Conn, dialDest *ecdsa.PublicKey) *rlpxTransport {
+	return &rlpxTransport{conn: rlpx.NewConn(conn, dialDest)}
 }
 
 func newRLPX(conn net.Conn, dialDest *ecdsa.PublicKey) transport {
