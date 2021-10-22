@@ -189,8 +189,8 @@ type Server struct {
 	quit chan struct{}
 	//addtrusted              chan *enode.Node
 	//removetrusted           chan *enode.Node
-	peerOp                  chan peerOpFunc
-	peerOpDone              chan struct{}
+	//peerOp                  chan peerOpFunc
+	//peerOpDone              chan struct{}
 	delpeer                 chan peerDrop
 	checkpointPostHandshake chan *conn
 	checkpointAddPeer       chan *conn
@@ -479,8 +479,8 @@ func (srv *Server) Start() (err error) {
 	srv.checkpointAddPeer = make(chan *conn)
 	//srv.addtrusted = make(chan *enode.Node)
 	//srv.removetrusted = make(chan *enode.Node)
-	srv.peerOp = make(chan peerOpFunc)
-	srv.peerOpDone = make(chan struct{})
+	//srv.peerOp = make(chan peerOpFunc)
+	//srv.peerOpDone = make(chan struct{})
 
 	if err := srv.setupLocalNode(); err != nil {
 		return err
@@ -695,11 +695,15 @@ func (srv *Server) setupListening() error {
 
 // doPeerOp runs fn on the main loop.
 func (srv *Server) doPeerOp(fn peerOpFunc) {
-	select {
-	case srv.peerOp <- fn:
-		<-srv.peerOpDone
-	case <-srv.quit:
-	}
+	fn(srv.peers)
+
+	/*
+		select {
+		case srv.peerOp <- fn:
+			<-srv.peerOpDone
+		case <-srv.quit:
+		}
+	*/
 }
 
 func (srv *Server) internalAddTrusted(id enode.ID) {
@@ -800,10 +804,12 @@ running:
 				}
 		*/
 
-		case op := <-srv.peerOp:
-			// This channel is used by Peers and PeerCount.
-			op(srv.peers)
-			srv.peerOpDone <- struct{}{}
+		/*
+			case op := <-srv.peerOp:
+				// This channel is used by Peers and PeerCount.
+				op(srv.peers)
+				srv.peerOpDone <- struct{}{}
+		*/
 
 		case c := <-srv.checkpointPostHandshake:
 			// A connection has passed the encryption handshake so
