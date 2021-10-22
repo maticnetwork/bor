@@ -33,6 +33,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/event"
+	"github.com/ethereum/go-ethereum/helper/delayheap"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -155,7 +156,7 @@ type Config struct {
 	// Logger is a custom logger to use with the p2p.Server.
 	Logger log.Logger `toml:",omitempty"`
 
-	clock mclock.Clock
+	// clock mclock.Clock
 }
 
 // Server manages all peer connections.
@@ -198,7 +199,7 @@ type Server struct {
 	inboundCount int
 
 	// State of run loop and listenLoop.
-	inboundHistory expHeap
+	inboundHistory *delayheap.DelayHeap
 
 	// new
 	peers   map[enode.ID]*Peer
@@ -458,9 +459,9 @@ func (srv *Server) Start() (err error) {
 	if srv.log == nil {
 		srv.log = log.Root()
 	}
-	if srv.clock == nil {
-		srv.clock = mclock.System{}
-	}
+	//if srv.clock == nil {
+	//	srv.clock = mclock.System{}
+	//}
 	if srv.NoDial && srv.ListenAddr == "" {
 		srv.log.Warn("P2P server will be useless, neither dialing nor listening")
 	}
@@ -483,6 +484,8 @@ func (srv *Server) Start() (err error) {
 	//srv.removetrusted = make(chan *enode.Node)
 	//srv.peerOp = make(chan peerOpFunc)
 	//srv.peerOpDone = make(chan struct{})
+
+	srv.inboundHistory = delayheap.NewDelayHeap()
 
 	if err := srv.setupLocalNode(); err != nil {
 		return err
@@ -636,7 +639,7 @@ func (srv *Server) setupDialScheduler() {
 		log:            srv.Logger,
 		netRestrict:    srv.NetRestrict,
 		dialer:         srv.Dialer,
-		clock:          srv.clock,
+		//clock:          srv.clock,
 	}
 	if srv.ntab != nil {
 		config.resolver = srv.ntab
@@ -991,12 +994,19 @@ func (srv *Server) checkInboundConn(remoteIP net.IP) error {
 		return fmt.Errorf("not in netrestrict list")
 	}
 	// Reject Internet peers that try too often.
-	now := srv.clock.Now()
-	srv.inboundHistory.expire(now, nil)
-	if !netutil.IsLAN(remoteIP) && srv.inboundHistory.contains(remoteIP.String()) {
+	now := time.Now()
+	for {
+		n := srv.inboundHistory.Peek()
+		if n != nil && n.WaitUntil.Before(now) {
+			srv.inboundHistory.Pop()
+		} else {
+			break
+		}
+	}
+	if !netutil.IsLAN(remoteIP) && srv.inboundHistory.ContainsID(remoteIP.String()) {
 		return fmt.Errorf("too many attempts")
 	}
-	srv.inboundHistory.add(remoteIP.String(), now.Add(inboundThrottleTime))
+	srv.inboundHistory.Push(delayheap.IDNode(remoteIP.String()), now.Add(inboundThrottleTime))
 	return nil
 }
 
