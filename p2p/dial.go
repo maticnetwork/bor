@@ -96,14 +96,16 @@ type dialScheduler struct {
 	config    *dialConfig
 	setupFunc dialSetupFunc
 	// wg        sync.WaitGroup
-	cancel context.CancelFunc
-	ctx    context.Context
+	//cancel context.CancelFunc
+	//ctx    context.Context
 	// nodesIn     chan *enode.Node
 	doneCh      chan *dialTask
 	addStaticCh chan *enode.Node
 	remStaticCh chan *enode.Node
 	addPeerCh   chan *conn
 	remPeerCh   chan *conn
+
+	closeCh chan struct{}
 
 	// Everything below here belongs to loop and
 	// should only be accessed by code on the loop goroutine.
@@ -176,9 +178,10 @@ func newDialScheduler(config dialConfig, it enode.Iterator, setupFunc dialSetupF
 		addPeerCh:   make(chan *conn),
 		remPeerCh:   make(chan *conn),
 		staticPool:  newDialQueue(),
+		closeCh:     make(chan struct{}),
 	}
 	d.lastStatsLog = d.config.clock.Now()
-	d.ctx, d.cancel = context.WithCancel(context.Background())
+	//d.ctx, d.cancel = context.WithCancel(context.Background())
 	//d.wg.Add(2)
 	//go d.readNodes(it)
 	go d.loop(it)
@@ -187,7 +190,8 @@ func newDialScheduler(config dialConfig, it enode.Iterator, setupFunc dialSetupF
 
 // stop shuts down the dialer, canceling all current dial tasks.
 func (d *dialScheduler) stop() {
-	d.cancel()
+	// d.cancel()
+	close(d.closeCh)
 	//d.wg.Wait()
 }
 
@@ -195,7 +199,7 @@ func (d *dialScheduler) stop() {
 func (d *dialScheduler) addStatic(n *enode.Node) {
 	select {
 	case d.addStaticCh <- n:
-	case <-d.ctx.Done():
+	case <-d.closeCh:
 	}
 }
 
@@ -203,7 +207,7 @@ func (d *dialScheduler) addStatic(n *enode.Node) {
 func (d *dialScheduler) removeStatic(n *enode.Node) {
 	select {
 	case d.remStaticCh <- n:
-	case <-d.ctx.Done():
+	case <-d.closeCh:
 	}
 }
 
@@ -211,7 +215,7 @@ func (d *dialScheduler) removeStatic(n *enode.Node) {
 func (d *dialScheduler) peerAdded(c *conn) {
 	select {
 	case d.addPeerCh <- c:
-	case <-d.ctx.Done():
+	case <-d.closeCh:
 	}
 }
 
@@ -219,7 +223,7 @@ func (d *dialScheduler) peerAdded(c *conn) {
 func (d *dialScheduler) peerRemoved(c *conn) {
 	select {
 	case d.remPeerCh <- c:
-	case <-d.ctx.Done():
+	case <-d.closeCh:
 	}
 }
 
@@ -327,7 +331,7 @@ loop:
 		case <-historyExp:
 			d.expireHistory()
 
-		case <-d.ctx.Done():
+		case <-d.closeCh:
 			it.Close()
 			break loop
 		}
@@ -616,7 +620,7 @@ func (d *dialScheduler) resolve(t *dialTask) bool {
 func (d *dialScheduler) dial(t *dialTask) error {
 	dest := t.dest
 
-	fd, err := d.config.dialer.Dial(d.ctx, t.dest)
+	fd, err := d.config.dialer.Dial(context.Background(), t.dest)
 	if err != nil {
 		d.config.log.Trace("Dial error", "id", t.dest.ID(), "addr", nodeAddr(t.dest), "conn", t.flags, "err", cleanupDialErr(err))
 		return &dialError{err}
