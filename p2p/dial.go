@@ -93,12 +93,12 @@ var (
 //    to create peer connections to nodes arriving through the iterator.
 //
 type dialScheduler struct {
-	config      *dialConfig
-	setupFunc   dialSetupFunc
-	wg          sync.WaitGroup
-	cancel      context.CancelFunc
-	ctx         context.Context
-	nodesIn     chan *enode.Node
+	config    *dialConfig
+	setupFunc dialSetupFunc
+	// wg        sync.WaitGroup
+	cancel context.CancelFunc
+	ctx    context.Context
+	// nodesIn     chan *enode.Node
 	doneCh      chan *dialTask
 	addStaticCh chan *enode.Node
 	remStaticCh chan *enode.Node
@@ -164,13 +164,13 @@ func (cfg dialConfig) withDefaults() *dialConfig {
 
 func newDialScheduler(config dialConfig, it enode.Iterator, setupFunc dialSetupFunc) *dialScheduler {
 	d := &dialScheduler{
-		config:      config.withDefaults(),
-		setupFunc:   setupFunc,
-		dialing:     make(map[enode.ID]*dialTask),
-		static:      make(map[enode.ID]*dialTask),
-		peers:       make(map[enode.ID]struct{}),
-		doneCh:      make(chan *dialTask),
-		nodesIn:     make(chan *enode.Node),
+		config:    config.withDefaults(),
+		setupFunc: setupFunc,
+		dialing:   make(map[enode.ID]*dialTask),
+		static:    make(map[enode.ID]*dialTask),
+		peers:     make(map[enode.ID]struct{}),
+		doneCh:    make(chan *dialTask),
+		// nodesIn:     make(chan *enode.Node),
 		addStaticCh: make(chan *enode.Node),
 		remStaticCh: make(chan *enode.Node),
 		addPeerCh:   make(chan *conn),
@@ -179,8 +179,8 @@ func newDialScheduler(config dialConfig, it enode.Iterator, setupFunc dialSetupF
 	}
 	d.lastStatsLog = d.config.clock.Now()
 	d.ctx, d.cancel = context.WithCancel(context.Background())
-	d.wg.Add(2)
-	go d.readNodes(it)
+	//d.wg.Add(2)
+	//go d.readNodes(it)
 	go d.loop(it)
 	return d
 }
@@ -188,7 +188,7 @@ func newDialScheduler(config dialConfig, it enode.Iterator, setupFunc dialSetupF
 // stop shuts down the dialer, canceling all current dial tasks.
 func (d *dialScheduler) stop() {
 	d.cancel()
-	d.wg.Wait()
+	//d.wg.Wait()
 }
 
 // addStatic adds a static dial candidate.
@@ -234,17 +234,18 @@ func (d *dialScheduler) loop(it enode.Iterator) {
 
 	go func() {
 		for {
-			select {
-			case node := <-d.nodesIn:
+			for it.Next() {
+				node := it.Node()
+				if node == nil {
+					return
+				}
+
 				d.staticPool.add(node, false, normalPriority)
 
 				select {
 				case notify <- struct{}{}:
 				default:
 				}
-
-			case <-d.ctx.Done():
-				return
 			}
 		}
 	}()
@@ -336,21 +337,23 @@ loop:
 	for range d.dialing {
 		<-d.doneCh
 	}
-	d.wg.Done()
+	// d.wg.Done()
 }
 
+/*
 // readNodes runs in its own goroutine and delivers nodes from
 // the input iterator to the nodesIn channel.
 func (d *dialScheduler) readNodes(it enode.Iterator) {
 	defer d.wg.Done()
 
-	for it.Next() {
-		select {
-		case d.nodesIn <- it.Node():
-		case <-d.ctx.Done():
+		for it.Next() {
+			select {
+			case d.nodesIn <- it.Node():
+			case <-d.ctx.Done():
+			}
 		}
-	}
 }
+*/
 
 // logStats prints dialer statistics to the log. The message is suppressed when enough
 // peers are connected because users should only see it while their client is starting up
