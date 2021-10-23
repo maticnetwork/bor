@@ -226,30 +226,52 @@ func (d *dialScheduler) peerRemoved(c *conn) {
 // loop is the main loop of the dialer.
 func (d *dialScheduler) loop(it enode.Iterator) {
 	var (
-		nodesCh    chan *enode.Node
+		//nodesCh    chan *enode.Node
 		historyExp = make(chan struct{}, 1)
 	)
+
+	notify := make(chan struct{})
+
+	go func() {
+		for {
+			select {
+			case node := <-d.nodesIn:
+				d.staticPool.add(node, false, normalPriority)
+
+				select {
+				case notify <- struct{}{}:
+				default:
+				}
+
+			case <-d.ctx.Done():
+				return
+			}
+		}
+	}()
 
 loop:
 	for {
 		// Launch new dials if slots are available.
 		slots := d.freeDialSlots()
-		slots -= d.startStaticDials(slots)
-		if slots > 0 {
-			nodesCh = d.nodesIn
-		} else {
-			nodesCh = nil
-		}
+		d.startStaticDials(slots)
+		//if slots > 0 {
+		//	nodesCh = d.nodesIn
+		//} else {
+		//	nodesCh = nil
+		//}
 		d.rearmHistoryTimer(historyExp)
 		d.logStats()
 
 		select {
-		case node := <-nodesCh:
-			if err := d.checkDial(node); err != nil {
-				d.log.Trace("Discarding dial candidate", "id", node.ID(), "ip", node.IP(), "reason", err)
-			} else {
-				d.startDial(newDialTask(node, dynDialedConn))
-			}
+		case <-notify:
+		/*
+			case node := <-nodesCh:
+				if err := d.checkDial(node); err != nil {
+					d.log.Trace("Discarding dial candidate", "id", node.ID(), "ip", node.IP(), "reason", err)
+				} else {
+					d.startDial(newDialTask(node, dynDialedConn))
+				}
+		*/
 
 		case task := <-d.doneCh:
 			id := task.dest.ID()
@@ -418,16 +440,30 @@ func (d *dialScheduler) startStaticDials(n int) (started int) {
 	for started = 0; started < n && d.staticPool.Len() > 0; {
 		task := d.staticPool.popImpl()
 
-		// make sure it is static, otherwise it is not connected here
-		if _, ok := d.static[task.addr.ID()]; !ok {
-			continue
+		if task.isStatic {
+			// make sure it is static, otherwise it is not connected here
+			if _, ok := d.static[task.addr.ID()]; !ok {
+				continue
+			}
 		}
+
 		// make sure we are not connected to the instance
 		if _, ok := d.peers[task.addr.ID()]; ok {
 			continue
 		}
 
-		ttt := newDialTask(task.addr, staticDialedConn)
+		if err := d.checkDial(task.addr); err != nil {
+			d.log.Trace("Discarding dial candidate", "id", task.addr.ID(), "ip", task.addr.IP(), "reason", err)
+			continue
+		}
+
+		var ttt *dialTask
+		if task.isStatic {
+			ttt = newDialTask(task.addr, staticDialedConn)
+		} else {
+			ttt = newDialTask(task.addr, dynDialedConn)
+		}
+
 		//idx := d.rand.Intn(len(d.staticPool))
 		//task := d.staticPool[idx]
 		d.startDial(ttt)
@@ -447,7 +483,7 @@ func (d *dialScheduler) updateStaticPool(id enode.ID) {
 }
 
 func (d *dialScheduler) addToStaticPool(task *dialTask) {
-	d.staticPool.add(task.dest, 0)
+	d.staticPool.add(task.dest, true, staticPriority)
 
 	/*
 		d.staticPool = append(d.staticPool, task)
@@ -655,7 +691,12 @@ func (d *dialQueue) Len() int {
 	return len(d.items)
 }
 
-func (d *dialQueue) add(addr *enode.Node, priority uint64) {
+const (
+	staticPriority = 5
+	normalPriority = 10
+)
+
+func (d *dialQueue) add(addr *enode.Node, isStatic bool, priority uint64) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
@@ -666,6 +707,7 @@ func (d *dialQueue) add(addr *enode.Node, priority uint64) {
 		addr:       addr,
 		priority:   priority,
 		insertTime: time.Now(),
+		isStatic:   isStatic,
 	}
 	d.items[addr] = task
 	heap.Push(&d.heap, task)
@@ -686,6 +728,8 @@ type dialTask2 struct {
 
 	// time when the item was inserted
 	insertTime time.Time
+
+	isStatic bool
 
 	// priority of the task (the higher the better)
 	priority uint64
