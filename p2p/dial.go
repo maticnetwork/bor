@@ -17,6 +17,7 @@
 package p2p
 
 import (
+	"container/heap"
 	"context"
 	crand "crypto/rand"
 	"encoding/binary"
@@ -114,8 +115,9 @@ type dialScheduler struct {
 	// (i.e. those passing checkDial) is kept in staticPool. The scheduler prefers
 	// launching random static tasks from the pool over launching dynamic dials from the
 	// iterator.
-	static     map[enode.ID]*dialTask
-	staticPool []*dialTask
+	static map[enode.ID]*dialTask
+	// staticPool []*dialTask
+	staticPool *dialQueue
 
 	// The dial history keeps recently dialed nodes. Members of history are not dialed.
 	history          expHeap
@@ -173,6 +175,7 @@ func newDialScheduler(config dialConfig, it enode.Iterator, setupFunc dialSetupF
 		remStaticCh: make(chan *enode.Node),
 		addPeerCh:   make(chan *conn),
 		remPeerCh:   make(chan *conn),
+		staticPool:  newDialQueue(),
 	}
 	d.lastStatsLog = d.clock.Now()
 	d.ctx, d.cancel = context.WithCancel(context.Background())
@@ -261,10 +264,10 @@ loop:
 			id := c.node.ID()
 			d.peers[id] = struct{}{}
 			// Remove from static pool because the node is now connected.
-			task := d.static[id]
-			if task != nil && task.staticPoolIndex >= 0 {
-				d.removeFromStaticPool(task.staticPoolIndex)
-			}
+			//task := d.static[id]
+			//if task != nil && task.staticPoolIndex >= 0 {
+			//d.removeFromStaticPool(task.staticPoolIndex)
+			//}
 			// TODO: cancel dials to connected peers
 
 		case c := <-d.remPeerCh:
@@ -293,9 +296,9 @@ loop:
 			d.log.Trace("Removing static node", "id", id, "ok", task != nil)
 			if task != nil {
 				delete(d.static, id)
-				if task.staticPoolIndex >= 0 {
-					d.removeFromStaticPool(task.staticPoolIndex)
-				}
+				//if task.staticPoolIndex >= 0 {
+				//d.removeFromStaticPool(task.staticPoolIndex)
+				//}
 			}
 
 		case <-historyExp:
@@ -412,11 +415,25 @@ func (d *dialScheduler) checkDial(n *enode.Node) error {
 
 // startStaticDials starts n static dial tasks.
 func (d *dialScheduler) startStaticDials(n int) (started int) {
-	for started = 0; started < n && len(d.staticPool) > 0; started++ {
-		idx := d.rand.Intn(len(d.staticPool))
-		task := d.staticPool[idx]
-		d.startDial(task)
-		d.removeFromStaticPool(idx)
+	for started = 0; started < n && d.staticPool.Len() > 0; {
+		task := d.staticPool.popImpl()
+
+		// make sure it is static, otherwise it is not connected here
+		if _, ok := d.static[task.addr.ID()]; !ok {
+			continue
+		}
+		// make sure we are not connected to the instance
+		if _, ok := d.peers[task.addr.ID()]; ok {
+			continue
+		}
+
+		ttt := newDialTask(task.addr, staticDialedConn)
+		//idx := d.rand.Intn(len(d.staticPool))
+		//task := d.staticPool[idx]
+		d.startDial(ttt)
+		// d.removeFromStaticPool(idx)
+
+		started++
 	}
 	return started
 }
@@ -424,19 +441,21 @@ func (d *dialScheduler) startStaticDials(n int) (started int) {
 // updateStaticPool attempts to move the given static dial back into staticPool.
 func (d *dialScheduler) updateStaticPool(id enode.ID) {
 	task, ok := d.static[id]
-	if ok && task.staticPoolIndex < 0 && d.checkDial(task.dest) == nil {
+	if ok && d.checkDial(task.dest) == nil {
 		d.addToStaticPool(task)
 	}
 }
 
 func (d *dialScheduler) addToStaticPool(task *dialTask) {
-	if task.staticPoolIndex >= 0 {
-		panic("attempt to add task to staticPool twice")
-	}
-	d.staticPool = append(d.staticPool, task)
-	task.staticPoolIndex = len(d.staticPool) - 1
+	d.staticPool.add(task.dest, 0)
+
+	/*
+		d.staticPool = append(d.staticPool, task)
+		task.staticPoolIndex = len(d.staticPool) - 1
+	*/
 }
 
+/*
 // removeFromStaticPool removes the task at idx from staticPool. It does that by moving the
 // current last element of the pool to idx and then shortening the pool by one.
 func (d *dialScheduler) removeFromStaticPool(idx int) {
@@ -448,6 +467,7 @@ func (d *dialScheduler) removeFromStaticPool(idx int) {
 	d.staticPool = d.staticPool[:end]
 	task.staticPoolIndex = -1
 }
+*/
 
 // startDial runs the given dial task in a separate goroutine.
 func (d *dialScheduler) startDial(task *dialTask) {
@@ -463,8 +483,8 @@ func (d *dialScheduler) startDial(task *dialTask) {
 
 // A dialTask generated for each node that is dialed.
 type dialTask struct {
-	staticPoolIndex int
-	flags           connFlag
+	// staticPoolIndex int
+	flags connFlag
 	// These fields are private to the task and should not be
 	// accessed by dialScheduler while the task is running.
 	dest         *enode.Node
@@ -473,7 +493,7 @@ type dialTask struct {
 }
 
 func newDialTask(dest *enode.Node, flags connFlag) *dialTask {
-	return &dialTask{dest: dest, flags: flags, staticPoolIndex: -1}
+	return &dialTask{dest: dest, flags: flags /*, staticPoolIndex: -1*/}
 }
 
 type dialError struct {
@@ -554,4 +574,163 @@ func cleanupDialErr(err error) error {
 		return netErr.Err
 	}
 	return err
+}
+
+// ----
+
+// dialQueue is a queue where we store all the possible peer targets that
+// we can connect to.
+type dialQueue struct {
+	heap  dialQueueImpl
+	lock  sync.Mutex
+	items map[*enode.Node]*dialTask2
+	//updateCh chan struct{}
+	//closeCh  chan struct{}
+}
+
+// newDialQueue creates a new DialQueue
+func newDialQueue() *dialQueue {
+	return &dialQueue{
+		heap:  dialQueueImpl{},
+		items: map[*enode.Node]*dialTask2{},
+		//updateCh: make(chan struct{}),
+		//closeCh:  make(chan struct{}),
+	}
+}
+
+func (d *dialQueue) Close() {
+	//close(d.closeCh)
+}
+
+/*
+// pop is a loop that handles update and close events
+func (d *dialQueue) pop() *dialTask2 {
+	for {
+		tt := d.popImpl() // Blocking pop
+		if tt != nil {
+			return tt
+		}
+
+		select {
+		case <-d.updateCh:
+		case <-d.closeCh:
+			return nil
+		}
+	}
+}
+*/
+
+func (d *dialQueue) popImpl() *dialTask2 {
+	d.lock.Lock()
+
+	if len(d.heap) != 0 {
+		// pop the first value and remove it from the heap
+		tt := heap.Pop(&d.heap).(*dialTask2)
+		delete(d.items, tt.addr)
+		d.lock.Unlock()
+		return tt
+	}
+
+	d.lock.Unlock()
+	return nil
+}
+
+/*
+func (d *dialQueue) del(peer peer.ID) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	item, ok := d.items[peer]
+	if ok {
+		heap.Remove(&d.heap, item.index)
+		delete(d.items, peer)
+	}
+}
+*/
+
+func (d *dialQueue) Len() int {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	return len(d.items)
+}
+
+func (d *dialQueue) add(addr *enode.Node, priority uint64) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	if _, ok := d.items[addr]; ok {
+		return
+	}
+	task := &dialTask2{
+		addr:       addr,
+		priority:   priority,
+		insertTime: time.Now(),
+	}
+	d.items[addr] = task
+	heap.Push(&d.heap, task)
+
+	/*
+		select {
+		case d.updateCh <- struct{}{}:
+		default:
+		}
+	*/
+}
+
+type dialTask2 struct {
+	index int
+
+	// info of the task
+	addr *enode.Node
+
+	// time when the item was inserted
+	insertTime time.Time
+
+	// priority of the task (the higher the better)
+	priority uint64
+}
+
+// The DialQueue is implemented as priority queue which utilizes a heap (standard Go implementation)
+// https://golang.org/src/container/heap/heap.go
+type dialQueueImpl []*dialTask2
+
+// GO HEAP EXTENSION //
+
+// Len returns the length of the queue
+func (t dialQueueImpl) Len() int { return len(t) }
+
+// Less compares the priorities of two items at the passed in indexes (A < B)
+func (t dialQueueImpl) Less(i, j int) bool {
+	if t[i].priority == t[j].priority {
+		return t[i].insertTime.Before(t[j].insertTime)
+	}
+	return t[i].priority < t[j].priority
+}
+
+// Swap swaps the places of the items at the passed-in indexes
+func (t dialQueueImpl) Swap(i, j int) {
+	t[i], t[j] = t[j], t[i]
+	t[i].index = i
+	t[j].index = j
+}
+
+// Push adds a new item to the queue
+func (t *dialQueueImpl) Push(x interface{}) {
+	n := len(*t)
+	item := x.(*dialTask2)
+	item.index = n
+	*t = append(*t, item)
+}
+
+// Pop removes an item from the queue
+func (t *dialQueueImpl) Pop() interface{} {
+	old := *t
+	n := len(old)
+	item := old[n-1]
+	old[n-1] = nil
+	item.index = -1
+	*t = old[0 : n-1]
+
+	return item
 }
