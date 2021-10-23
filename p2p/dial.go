@@ -109,9 +109,9 @@ type dialScheduler struct {
 
 	// Everything below here belongs to loop and
 	// should only be accessed by code on the loop goroutine.
-	dialing   map[enode.ID]*dialTask // active tasks
-	peers     map[enode.ID]struct{}  // all connected peers
-	dialPeers int                    // current number of dialed peers
+	dialing   map[enode.ID]struct{} // active tasks
+	peers     map[enode.ID]struct{} // all connected peers
+	dialPeers int                   // current number of dialed peers
 
 	// The static map tracks all static dial tasks. The subset of usable static dial tasks
 	// (i.e. those passing checkDial) is kept in staticPool. The scheduler prefers
@@ -168,7 +168,7 @@ func newDialScheduler(config dialConfig, it enode.Iterator, setupFunc dialSetupF
 	d := &dialScheduler{
 		config:    config.withDefaults(),
 		setupFunc: setupFunc,
-		dialing:   make(map[enode.ID]*dialTask),
+		dialing:   make(map[enode.ID]struct{}),
 		static:    make(map[enode.ID]*dialTask),
 		peers:     make(map[enode.ID]struct{}),
 		doneCh:    make(chan *dialTask),
@@ -517,7 +517,7 @@ func (d *dialScheduler) startDial(task *dialTask) {
 	d.config.log.Trace("Starting p2p dial", "id", task.dest.ID(), "ip", task.dest.IP(), "flag", task.flags)
 	hkey := string(task.dest.ID().Bytes())
 	d.history.add(hkey, d.config.clock.Now().Add(dialHistoryExpiration))
-	d.dialing[task.dest.ID()] = task
+	d.dialing[task.dest.ID()] = struct{}{}
 
 	if task.needResolve() && !d.resolve(task) {
 		// log it
