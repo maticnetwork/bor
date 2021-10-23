@@ -511,8 +511,26 @@ func (d *dialScheduler) startDial(task *dialTask) {
 	hkey := string(task.dest.ID().Bytes())
 	d.history.add(hkey, d.clock.Now().Add(dialHistoryExpiration))
 	d.dialing[task.dest.ID()] = task
+
+	if task.needResolve() && !d.resolve(task) {
+		// log it
+		return
+	}
+
+	dial := func() {
+		err := d.dial(task)
+		if err != nil {
+			// For static nodes, resolve one more time if dialing fails.
+			if _, ok := err.(*dialError); ok && task.flags&staticDialedConn != 0 {
+				if d.resolve(task) {
+					d.dial(task)
+				}
+			}
+		}
+	}
+
 	go func() {
-		task.run(d)
+		dial()
 		d.doneCh <- task
 	}()
 }
@@ -536,6 +554,7 @@ type dialError struct {
 	error
 }
 
+/*
 func (t *dialTask) run(d *dialScheduler) {
 	if t.needResolve() && !t.resolve(d) {
 		return
@@ -551,6 +570,7 @@ func (t *dialTask) run(d *dialScheduler) {
 		}
 	}
 }
+*/
 
 func (t *dialTask) needResolve() bool {
 	return t.flags&staticDialedConn != 0 && t.dest.IP() == nil
@@ -562,7 +582,7 @@ func (t *dialTask) needResolve() bool {
 // Resolve operations are throttled with backoff to avoid flooding the
 // discovery network with useless queries for nodes that don't exist.
 // The backoff delay resets when the node is found.
-func (t *dialTask) resolve(d *dialScheduler) bool {
+func (d *dialScheduler) resolve(t *dialTask) bool {
 	if d.resolver == nil {
 		return false
 	}
@@ -590,7 +610,9 @@ func (t *dialTask) resolve(d *dialScheduler) bool {
 }
 
 // dial performs the actual connection attempt.
-func (t *dialTask) dial(d *dialScheduler, dest *enode.Node) error {
+func (d *dialScheduler) dial(t *dialTask) error {
+	dest := t.dest
+
 	fd, err := d.dialer.Dial(d.ctx, t.dest)
 	if err != nil {
 		d.log.Trace("Dial error", "id", t.dest.ID(), "addr", nodeAddr(t.dest), "conn", t.flags, "err", cleanupDialErr(err))
