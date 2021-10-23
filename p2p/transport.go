@@ -27,38 +27,114 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/bitutil"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/rlpx"
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
+type transportBackend interface {
+	PrivateKey() *ecdsa.PrivateKey
+	Handshake() *protoHandshake
+}
+
 type rlpxTransport2 struct {
-	lis net.Listener
+	lis     net.Listener
+	backend transportBackend
+
+	closeCh chan struct{}
+	lisCh   chan *rlpxConn
+}
+
+func newRlpxTransport2(lis net.Listener, backend transportBackend) *rlpxTransport2 {
+	tt := &rlpxTransport2{
+		lis:     lis,
+		backend: backend,
+		closeCh: make(chan struct{}),
+		lisCh:   make(chan *rlpxConn),
+	}
+	return tt
+}
+
+func (r *rlpxTransport2) Close() {
+	close(r.closeCh)
+}
+
+func (r *rlpxTransport2) Accept() (*rlpxConn, error) {
+	select {
+	case conn := <-r.lisCh:
+		return conn, nil
+	case <-r.closeCh:
+		return nil, fmt.Errorf("closed")
+	}
 }
 
 func (r *rlpxTransport2) Run() {
 	for {
 		conn, err := r.lis.Accept()
 		if err != nil {
-			panic(err)
+			return
 		}
-		go r.handleConn(conn, nil)
+		go func() {
+			rlpxConn, err := r.handleConn(conn, nil)
+			if err != nil {
+				// log it
+				panic(err)
+			}
+			r.lisCh <- rlpxConn
+		}()
 	}
 }
 
-func (r *rlpxTransport2) Dial(enode *enode.Node) {
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", enode.IP(), enode.TCP()), 5*time.Second)
+func (r *rlpxTransport2) Dial(enode *enode.Node) (*rlpxConn, error) {
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", enode.IP(), enode.TCP()), defaultDialTimeout)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	r.handleConn(conn, enode.Pubkey())
+	return r.handleConn(conn, enode)
 }
 
-func (r *rlpxTransport2) handleConn(conn net.Conn, dialDest *ecdsa.PublicKey) {
-	tt := newRLPX2(conn, dialDest)
+type rlpxConn struct {
+	raw   net.Conn
+	enode *enode.Node
+	caps  []Cap
+	name  string
+}
 
-	tt.doEncHandshake(nil)
+func (r *rlpxTransport2) handleConn(conn net.Conn, enode *enode.Node) (*rlpxConn, error) {
+	tt := newRLPX2(conn, enode.Pubkey())
+
+	remotePubkey, err := tt.doEncHandshake(r.backend.PrivateKey())
+	if err != nil {
+		tt.close(err)
+		return nil, err
+	}
+	if enode != nil {
+		// inbound connection, resolve the public key of the remote peer.
+		enode = nodeFromConn(remotePubkey, conn)
+	}
+
+	// protocol handshake to exchange protocols.
+	phs, err := tt.doProtoHandshake(r.backend.Handshake())
+	if err != nil {
+		tt.close(err)
+		return nil, err
+	}
+	// make sure that the returned node ID in the protocol handshake matches
+	// the one from the enode address.
+	if id := enode.ID(); !bytes.Equal(crypto.Keccak256(phs.ID), id[:]) {
+		tt.close(DiscInvalidIdentity)
+		return nil, err
+	}
+
+	rlpxConn := &rlpxConn{
+		raw:   conn,
+		enode: enode,
+		caps:  phs.Caps,
+		name:  phs.Name,
+	}
+	return rlpxConn, nil
 }
 
 const (
