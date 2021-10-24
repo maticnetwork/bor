@@ -269,9 +269,9 @@ func (d *dialScheduler) addStatic(node *enode.Node) {
 	d.config.log.Trace("Adding static node", "id", id, "ip", node.IP(), "added", added)
 
 	if added {
-		if d.checkDial(node) == nil {
-			d.addToStaticPool(node)
-		}
+		//if d.checkDial(node) == nil {
+		d.addToStaticPool(node)
+		//}
 		d.notify()
 	}
 }
@@ -519,7 +519,15 @@ func (d *dialScheduler) freeDialSlots() int {
 }
 
 // checkDial returns an error if node n should not be dialed.
-func (d *dialScheduler) checkDial(n *enode.Node) error {
+func (d *dialScheduler) isValidTask(task *dialTask2) error {
+	if task.isStatic {
+		// make sure it is static, otherwise it is not connected here
+		if !d.static.contains(task.addr.ID()) {
+			return fmt.Errorf("is not static anymore")
+		}
+	}
+
+	n := task.addr
 	if n.ID() == d.config.self {
 		return errSelf
 	}
@@ -545,51 +553,32 @@ func (d *dialScheduler) checkDial(n *enode.Node) error {
 }
 
 // startStaticDials starts n static dial tasks.
-func (d *dialScheduler) startStaticDials() (started int, res []*dialTask) {
+func (d *dialScheduler) startStaticDials() (started int, res []*dialTask2) {
 	n := d.freeDialSlots()
 
-	res = []*dialTask{}
+	res = []*dialTask2{}
 
 	for started = 0; started < n && d.staticPool.Len() > 0; {
 		task := d.staticPool.popImpl()
 
-		if task.isStatic {
-			// make sure it is static, otherwise it is not connected here
-			if !d.static.contains(task.addr.ID()) {
-				continue
-			}
-		}
-
-		// make sure we are not connected to the instance
-		if d.peers.contains(task.addr.ID()) {
-			continue
-		}
-
-		if err := d.checkDial(task.addr); err != nil {
+		if err := d.isValidTask(task); err != nil {
 			d.config.log.Trace("Discarding dial candidate", "id", task.addr.ID(), "ip", task.addr.IP(), "reason", err)
-			continue
-		}
-
-		var ttt *dialTask
-		if task.isStatic {
-			ttt = newDialTask(task.addr, staticDialedConn)
+			// continue
 		} else {
-			ttt = newDialTask(task.addr, dynDialedConn)
+			//idx := d.rand.Intn(len(d.staticPool))
+			//task := d.staticPool[idx]
+			res = append(res, task)
+			// d.removeFromStaticPool(idx)
+
+			started++
 		}
-
-		//idx := d.rand.Intn(len(d.staticPool))
-		//task := d.staticPool[idx]
-		res = append(res, ttt)
-		// d.removeFromStaticPool(idx)
-
-		started++
 	}
 	return started, res
 }
 
 // updateStaticPool attempts to move the given static dial back into staticPool.
 func (d *dialScheduler) updateStaticPool(node *enode.Node) {
-	if d.static.contains(node.ID()) && d.checkDial(node) == nil {
+	if d.static.contains(node.ID()) /*&& d.checkDial(node) == nil*/ {
 		d.addToStaticPool(node)
 	}
 }
@@ -626,7 +615,14 @@ func (e *enodeWrapper) ID() string {
 }
 
 // startDial runs the given dial task in a separate goroutine.
-func (d *dialScheduler) startDial(task *dialTask) {
+func (d *dialScheduler) startDial(ttt *dialTask2) {
+	var task *dialTask
+	if ttt.isStatic {
+		task = newDialTask(ttt.addr, staticDialedConn)
+	} else {
+		task = newDialTask(ttt.addr, dynDialedConn)
+	}
+
 	d.config.log.Trace("Starting p2p dial", "id", task.dest.ID(), "ip", task.dest.IP(), "flag", task.flags)
 	// hkey := string(task.dest.ID().Bytes())
 
