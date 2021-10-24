@@ -112,13 +112,13 @@ type dialScheduler struct {
 	// should only be accessed by code on the loop goroutine.
 
 	// active dialing tasks
-	dialing map[enode.ID]struct{}
+	dialing peerList
 
 	// list of connected peers
-	peers map[enode.ID]struct{}
+	peers peerList
 
 	// list of static peers
-	static map[enode.ID]struct{}
+	static peerList
 
 	dialPeers int // current number of dialed peers
 
@@ -138,6 +138,33 @@ type dialScheduler struct {
 	// for logStats
 	lastStatsLog     mclock.AbsTime
 	doneSinceLastLog int
+}
+
+type peerList map[enode.ID]struct{}
+
+func (p peerList) len() int {
+	return len(p)
+}
+
+func (p peerList) contains(n enode.ID) bool {
+	_, ok := p[n]
+	return ok
+}
+
+func (p peerList) add(n enode.ID) bool {
+	_, ok := p[n]
+	if !ok {
+		p[n] = struct{}{}
+	}
+	return !ok
+}
+
+func (p peerList) del(n enode.ID) bool {
+	_, ok := p[n]
+	if ok {
+		delete(p, n)
+	}
+	return ok
 }
 
 type dialSetupFunc func(net.Conn, connFlag, *enode.Node) error
@@ -177,9 +204,9 @@ func newDialScheduler(config dialConfig, it enode.Iterator, setupFunc dialSetupF
 	d := &dialScheduler{
 		config:    config.withDefaults(),
 		setupFunc: setupFunc,
-		dialing:   make(map[enode.ID]struct{}),
-		static:    make(map[enode.ID]struct{}),
-		peers:     make(map[enode.ID]struct{}),
+		dialing:   peerList{},
+		static:    peerList{},
+		peers:     peerList{},
 		doneCh:    make(chan *dialTask),
 		// nodesIn:     make(chan *enode.Node),
 		addStaticCh: make(chan *enode.Node),
@@ -301,7 +328,8 @@ loop:
 
 		case task := <-d.doneCh:
 			id := task.dest.ID()
-			delete(d.dialing, id)
+			d.dialing.del(id)
+
 			d.updateStaticPool(task.dest)
 			d.doneSinceLastLog++
 
@@ -309,8 +337,9 @@ loop:
 			if c.is(dynDialedConn) || c.is(staticDialedConn) {
 				d.dialPeers++
 			}
-			id := c.node.ID()
-			d.peers[id] = struct{}{}
+			d.peers.add(c.node.ID())
+			//id := c.node.ID()
+			//d.peers[id] = struct{}{}
 			// Remove from static pool because the node is now connected.
 			//task := d.static[id]
 			//if task != nil && task.staticPoolIndex >= 0 {
@@ -322,32 +351,26 @@ loop:
 			if c.is(dynDialedConn) || c.is(staticDialedConn) {
 				d.dialPeers--
 			}
-			delete(d.peers, c.node.ID())
+			d.peers.del(c.node.ID())
 			d.updateStaticPool(c.node)
 
 		case node := <-d.addStaticCh:
 			id := node.ID()
-			_, exists := d.static[id]
-			d.config.log.Trace("Adding static node", "id", id, "ip", node.IP(), "added", !exists)
-			if exists {
-				continue loop
-			}
-			// task := newDialTask(node, staticDialedConn)
-			d.static[id] = struct{}{}
-			if d.checkDial(node) == nil {
-				d.addToStaticPool(node)
+
+			added := d.static.add(id)
+			d.config.log.Trace("Adding static node", "id", id, "ip", node.IP(), "added", added)
+
+			if added {
+				if d.checkDial(node) == nil {
+					d.addToStaticPool(node)
+				}
 			}
 
 		case node := <-d.remStaticCh:
 			id := node.ID()
-			_, exists := d.static[id]
-			d.config.log.Trace("Removing static node", "id", id, "ok", exists)
-			if exists {
-				delete(d.static, id)
-				//if task.staticPoolIndex >= 0 {
-				//d.removeFromStaticPool(task.staticPoolIndex)
-				//}
-			}
+
+			removed := d.static.del(id)
+			d.config.log.Trace("Removing static node", "id", id, "ok", removed)
 
 		//case <-historyExp:
 		//d.expireHistory()
@@ -435,7 +458,7 @@ func (d *dialScheduler) freeDialSlots() int {
 	if slots > d.config.maxActiveDials {
 		slots = d.config.maxActiveDials
 	}
-	free := slots - len(d.dialing)
+	free := slots - d.dialing.len()
 	return free
 }
 
@@ -450,10 +473,10 @@ func (d *dialScheduler) checkDial(n *enode.Node) error {
 		// node and the actual endpoint will be resolved later in dialTask.
 		return errNoPort
 	}
-	if _, ok := d.dialing[n.ID()]; ok {
+	if d.dialing.contains(n.ID()) {
 		return errAlreadyDialing
 	}
-	if _, ok := d.peers[n.ID()]; ok {
+	if d.peers.contains(n.ID()) {
 		return errAlreadyConnected
 	}
 	if d.config.netRestrict != nil && !d.config.netRestrict.Contains(n.IP()) {
@@ -476,13 +499,13 @@ func (d *dialScheduler) startStaticDials() (started int, res []*dialTask) {
 
 		if task.isStatic {
 			// make sure it is static, otherwise it is not connected here
-			if _, ok := d.static[task.addr.ID()]; !ok {
+			if !d.static.contains(task.addr.ID()) {
 				continue
 			}
 		}
 
 		// make sure we are not connected to the instance
-		if _, ok := d.peers[task.addr.ID()]; ok {
+		if d.peers.contains(task.addr.ID()) {
 			continue
 		}
 
@@ -510,8 +533,7 @@ func (d *dialScheduler) startStaticDials() (started int, res []*dialTask) {
 
 // updateStaticPool attempts to move the given static dial back into staticPool.
 func (d *dialScheduler) updateStaticPool(node *enode.Node) {
-	_, ok := d.static[node.ID()]
-	if ok && d.checkDial(node) == nil {
+	if d.static.contains(node.ID()) && d.checkDial(node) == nil {
 		d.addToStaticPool(node)
 	}
 }
@@ -555,7 +577,7 @@ func (d *dialScheduler) startDial(task *dialTask) {
 	d.history.Add(&enodeWrapper{enode: task.dest}, time.Now().Add(dialHistoryExpiration))
 
 	//d.history.add(hkey, d.config.clock.Now().Add(dialHistoryExpiration))
-	d.dialing[task.dest.ID()] = struct{}{}
+	d.dialing.add(task.dest.ID())
 
 	if task.needResolve() && !d.resolve(task) {
 		// log it
