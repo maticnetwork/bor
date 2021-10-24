@@ -124,6 +124,9 @@ type dialScheduler struct {
 
 	dialPeers int // current number of dialed peers
 
+	// iterator of discovery nodes
+	it enode.Iterator
+
 	// The static map tracks all static dial tasks. The subset of usable static dial tasks
 	// (i.e. those passing checkDial) is kept in staticPool. The scheduler prefers
 	// launching random static tasks from the pool over launching dynamic dials from the
@@ -218,6 +221,7 @@ func newDialScheduler(config dialConfig, it enode.Iterator, setupFunc dialSetupF
 		staticPool: newDialQueue(),
 		closeCh:    make(chan struct{}),
 		notifyCh:   make(chan struct{}),
+		it:         it,
 	}
 
 	d.history = delayheap.NewPeriodicDispatcher(d)
@@ -227,7 +231,7 @@ func newDialScheduler(config dialConfig, it enode.Iterator, setupFunc dialSetupF
 	//d.ctx, d.cancel = context.WithCancel(context.Background())
 	//d.wg.Add(2)
 	//go d.readNodes(it)
-	go d.loop(it)
+	go d.run()
 	return d
 }
 
@@ -245,6 +249,7 @@ func (d *dialScheduler) notify() {
 // stop shuts down the dialer, canceling all current dial tasks.
 func (d *dialScheduler) stop() {
 	// d.cancel()
+	d.it.Close()
 	close(d.closeCh)
 	//d.wg.Wait()
 }
@@ -319,7 +324,7 @@ func (d *dialScheduler) peerRemoved(c *conn) {
 }
 
 // loop is the main loop of the dialer.
-func (d *dialScheduler) loop(it enode.Iterator) {
+func (d *dialScheduler) run() {
 	var (
 	//nodesCh    chan *enode.Node
 	//historyExp = make(chan struct{}, 1)
@@ -327,8 +332,8 @@ func (d *dialScheduler) loop(it enode.Iterator) {
 
 	go func() {
 		for {
-			for it.Next() {
-				node := it.Node()
+			for d.it.Next() {
+				node := d.it.Node()
 				if node == nil {
 					return
 				}
@@ -339,7 +344,6 @@ func (d *dialScheduler) loop(it enode.Iterator) {
 		}
 	}()
 
-loop:
 	for {
 		// Launch new dials if slots are available.
 
@@ -423,16 +427,19 @@ loop:
 		//d.expireHistory()
 
 		case <-d.closeCh:
-			it.Close()
-			break loop
+			//it.Close()
+			//break loop
+			return
 		}
 	}
 
-	//d.stopHistoryTimer(historyExp)
-	for range d.dialing {
-		<-d.doneCh
-	}
-	// d.wg.Done()
+	/*
+		//d.stopHistoryTimer(historyExp)
+		for range d.dialing {
+			<-d.doneCh
+		}
+		// d.wg.Done()
+	*/
 }
 
 /*
