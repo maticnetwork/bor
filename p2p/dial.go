@@ -100,7 +100,7 @@ type dialScheduler struct {
 	//cancel context.CancelFunc
 	//ctx    context.Context
 	// nodesIn     chan *enode.Node
-	doneCh chan *dialTask
+	//doneCh chan *dialTask
 	//addStaticCh chan *enode.Node
 	//remStaticCh chan *enode.Node
 	//addPeerCh chan *conn
@@ -212,7 +212,7 @@ func newDialScheduler(config dialConfig, it enode.Iterator, setupFunc dialSetupF
 		dialing:   peerList{},
 		static:    peerList{},
 		peers:     peerList{},
-		doneCh:    make(chan *dialTask),
+		//doneCh:    make(chan *dialTask),
 		// nodesIn:     make(chan *enode.Node),
 		//addStaticCh: make(chan *enode.Node),
 		//remStaticCh: make(chan *enode.Node),
@@ -371,12 +371,14 @@ func (d *dialScheduler) run() {
 				}
 		*/
 
-		case task := <-d.doneCh:
-			id := task.dest.ID()
-			d.dialing.del(id)
+		/*
+			case task := <-d.doneCh:
+				//id := task.dest.ID()
+				//d.dialing.del(id)
 
-			d.updateStaticPool(task.dest)
-			d.doneSinceLastLog++
+				// d.updateStaticPool(task.dest)
+				d.doneSinceLastLog++
+		*/
 
 		/*
 			case c := <-d.addPeerCh:
@@ -652,7 +654,10 @@ func (d *dialScheduler) startDial(task *dialTask) {
 
 	go func() {
 		dial()
-		d.doneCh <- task
+		d.dialing.del(task.dest.ID())
+
+		d.doneSinceLastLog++
+		d.notify()
 	}()
 }
 
