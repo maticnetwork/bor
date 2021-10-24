@@ -100,11 +100,13 @@ type dialScheduler struct {
 	//cancel context.CancelFunc
 	//ctx    context.Context
 	// nodesIn     chan *enode.Node
-	doneCh      chan *dialTask
-	addStaticCh chan *enode.Node
-	remStaticCh chan *enode.Node
-	addPeerCh   chan *conn
-	remPeerCh   chan *conn
+	doneCh chan *dialTask
+	//addStaticCh chan *enode.Node
+	//remStaticCh chan *enode.Node
+	//addPeerCh chan *conn
+	//remPeerCh chan *conn
+
+	notifyCh chan struct{}
 
 	closeCh chan struct{}
 
@@ -209,12 +211,13 @@ func newDialScheduler(config dialConfig, it enode.Iterator, setupFunc dialSetupF
 		peers:     peerList{},
 		doneCh:    make(chan *dialTask),
 		// nodesIn:     make(chan *enode.Node),
-		addStaticCh: make(chan *enode.Node),
-		remStaticCh: make(chan *enode.Node),
-		addPeerCh:   make(chan *conn),
-		remPeerCh:   make(chan *conn),
-		staticPool:  newDialQueue(),
-		closeCh:     make(chan struct{}),
+		//addStaticCh: make(chan *enode.Node),
+		//remStaticCh: make(chan *enode.Node),
+		//addPeerCh:  make(chan *conn),
+		//remPeerCh:  make(chan *conn),
+		staticPool: newDialQueue(),
+		closeCh:    make(chan struct{}),
+		notifyCh:   make(chan struct{}),
 	}
 
 	d.history = delayheap.NewPeriodicDispatcher(d)
@@ -232,6 +235,13 @@ func (d *dialScheduler) Enqueue(h delayheap.HeapNode) {
 	panic("x")
 }
 
+func (d *dialScheduler) notify() {
+	select {
+	case d.notifyCh <- struct{}{}:
+	default:
+	}
+}
+
 // stop shuts down the dialer, canceling all current dial tasks.
 func (d *dialScheduler) stop() {
 	// d.cancel()
@@ -240,35 +250,72 @@ func (d *dialScheduler) stop() {
 }
 
 // addStatic adds a static dial candidate.
-func (d *dialScheduler) addStatic(n *enode.Node) {
-	select {
-	case d.addStaticCh <- n:
-	case <-d.closeCh:
+func (d *dialScheduler) addStatic(node *enode.Node) {
+	/*
+		select {
+		case d.addStaticCh <- n:
+		case <-d.closeCh:
+		}
+	*/
+
+	id := node.ID()
+
+	added := d.static.add(id)
+	d.config.log.Trace("Adding static node", "id", id, "ip", node.IP(), "added", added)
+
+	if added {
+		if d.checkDial(node) == nil {
+			d.addToStaticPool(node)
+		}
+		d.notify()
 	}
 }
 
 // removeStatic removes a static dial candidate.
-func (d *dialScheduler) removeStatic(n *enode.Node) {
-	select {
-	case d.remStaticCh <- n:
-	case <-d.closeCh:
-	}
+func (d *dialScheduler) removeStatic(node *enode.Node) {
+	/*
+		select {
+		case d.remStaticCh <- n:
+		case <-d.closeCh:
+		}
+	*/
+	id := node.ID()
+
+	removed := d.static.del(id)
+	d.config.log.Trace("Removing static node", "id", id, "ok", removed)
 }
 
 // peerAdded updates the peer set.
 func (d *dialScheduler) peerAdded(c *conn) {
-	select {
-	case d.addPeerCh <- c:
-	case <-d.closeCh:
+	if c.is(dynDialedConn) || c.is(staticDialedConn) {
+		d.dialPeers++
 	}
+	d.peers.add(c.node.ID())
+	d.notify()
+
+	/*
+		select {
+		case d.addPeerCh <- c:
+		case <-d.closeCh:
+		}
+	*/
 }
 
 // peerRemoved updates the peer set.
 func (d *dialScheduler) peerRemoved(c *conn) {
-	select {
-	case d.remPeerCh <- c:
-	case <-d.closeCh:
+	if c.is(dynDialedConn) || c.is(staticDialedConn) {
+		d.dialPeers--
 	}
+	d.peers.del(c.node.ID())
+	d.updateStaticPool(c.node)
+	d.notify()
+
+	/*
+		select {
+		case d.remPeerCh <- c:
+		case <-d.closeCh:
+		}
+	*/
 }
 
 // loop is the main loop of the dialer.
@@ -277,8 +324,6 @@ func (d *dialScheduler) loop(it enode.Iterator) {
 	//nodesCh    chan *enode.Node
 	//historyExp = make(chan struct{}, 1)
 	)
-
-	notify := make(chan struct{})
 
 	go func() {
 		for {
@@ -289,11 +334,7 @@ func (d *dialScheduler) loop(it enode.Iterator) {
 				}
 
 				d.staticPool.add(node, false, normalPriority)
-
-				select {
-				case notify <- struct{}{}:
-				default:
-				}
+				d.notify()
 			}
 		}
 	}()
@@ -316,7 +357,7 @@ loop:
 		d.logStats()
 
 		select {
-		case <-notify:
+		case <-d.notifyCh:
 		/*
 			case node := <-nodesCh:
 				if err := d.checkDial(node); err != nil {
@@ -333,44 +374,50 @@ loop:
 			d.updateStaticPool(task.dest)
 			d.doneSinceLastLog++
 
-		case c := <-d.addPeerCh:
-			if c.is(dynDialedConn) || c.is(staticDialedConn) {
-				d.dialPeers++
-			}
-			d.peers.add(c.node.ID())
-			//id := c.node.ID()
-			//d.peers[id] = struct{}{}
-			// Remove from static pool because the node is now connected.
-			//task := d.static[id]
-			//if task != nil && task.staticPoolIndex >= 0 {
-			//d.removeFromStaticPool(task.staticPoolIndex)
-			//}
-			// TODO: cancel dials to connected peers
-
-		case c := <-d.remPeerCh:
-			if c.is(dynDialedConn) || c.is(staticDialedConn) {
-				d.dialPeers--
-			}
-			d.peers.del(c.node.ID())
-			d.updateStaticPool(c.node)
-
-		case node := <-d.addStaticCh:
-			id := node.ID()
-
-			added := d.static.add(id)
-			d.config.log.Trace("Adding static node", "id", id, "ip", node.IP(), "added", added)
-
-			if added {
-				if d.checkDial(node) == nil {
-					d.addToStaticPool(node)
+		/*
+			case c := <-d.addPeerCh:
+				if c.is(dynDialedConn) || c.is(staticDialedConn) {
+					d.dialPeers++
 				}
-			}
+				d.peers.add(c.node.ID())
+				//id := c.node.ID()
+				//d.peers[id] = struct{}{}
+				// Remove from static pool because the node is now connected.
+				//task := d.static[id]
+				//if task != nil && task.staticPoolIndex >= 0 {
+				//d.removeFromStaticPool(task.staticPoolIndex)
+				//}
+				// TODO: cancel dials to connected peers
 
-		case node := <-d.remStaticCh:
-			id := node.ID()
+			case c := <-d.remPeerCh:
+				if c.is(dynDialedConn) || c.is(staticDialedConn) {
+					d.dialPeers--
+				}
+				d.peers.del(c.node.ID())
+				d.updateStaticPool(c.node)
+		*/
 
-			removed := d.static.del(id)
-			d.config.log.Trace("Removing static node", "id", id, "ok", removed)
+		/*
+			case node := <-d.addStaticCh:
+				id := node.ID()
+
+				added := d.static.add(id)
+				d.config.log.Trace("Adding static node", "id", id, "ip", node.IP(), "added", added)
+
+				if added {
+					if d.checkDial(node) == nil {
+						d.addToStaticPool(node)
+					}
+				}
+		*/
+
+		/*
+			case node := <-d.remStaticCh:
+				id := node.ID()
+
+				removed := d.static.del(id)
+				d.config.log.Trace("Removing static node", "id", id, "ok", removed)
+		*/
 
 		//case <-historyExp:
 		//d.expireHistory()
