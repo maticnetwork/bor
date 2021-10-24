@@ -13,21 +13,16 @@ type DelayHeap struct {
 	heap  delayedHeapImp
 }
 
-// IDNode is an implementation of the HeapNode that only stores an id
-type IDNode string
+// StringNode is an implementation of the HeapNode that uses an string as id
+type StringNode string
 
-func (i IDNode) Data() interface{} {
-	return nil
-}
-
-func (i IDNode) ID() string {
+func (i StringNode) ID() string {
 	return string(i)
 }
 
 // HeapNode is an interface type implemented by objects stored in the DelayHeap
 type HeapNode interface {
-	Data() interface{} // The data object
-	ID() string        // ID of the object, used in conjunction with namespace for deduplication
+	ID() string // ID of the object, used in conjunction with namespace for deduplication
 }
 
 // delayHeapNode encapsulates the node stored in DelayHeap

@@ -66,6 +66,10 @@ func (p *PeriodicDispatcher) nextDelayedEval() (HeapNode, time.Time) {
 // Run is a long-lived function that waits till a time deadline is met for
 // pending enqueued evaluations
 func (p *PeriodicDispatcher) Run() {
+	go p.run()
+}
+
+func (p *PeriodicDispatcher) run() {
 	var timerChannel <-chan time.Time
 	var delayTimer *time.Timer
 	for {

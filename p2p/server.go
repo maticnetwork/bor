@@ -1067,7 +1067,7 @@ func (srv *Server) checkInboundConn(remoteIP net.IP) error {
 	if !netutil.IsLAN(remoteIP) && srv.inboundHistory.ContainsID(remoteIP.String()) {
 		return fmt.Errorf("too many attempts")
 	}
-	srv.inboundHistory.Push(delayheap.IDNode(remoteIP.String()), now.Add(inboundThrottleTime))
+	srv.inboundHistory.Push(delayheap.StringNode(remoteIP.String()), now.Add(inboundThrottleTime))
 	return nil
 }
 
