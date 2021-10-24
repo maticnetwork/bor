@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common/mclock"
+	"github.com/ethereum/go-ethereum/helper/delayheap"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/netutil"
@@ -122,9 +123,9 @@ type dialScheduler struct {
 	staticPool *dialQueue
 
 	// The dial history keeps recently dialed nodes. Members of history are not dialed.
-	history          expHeap
-	historyTimer     mclock.Timer
-	historyTimerTime mclock.AbsTime
+	history *delayheap.PeriodicDispatcher
+	//historyTimer     mclock.Timer
+	//historyTimerTime mclock.AbsTime
 
 	// for logStats
 	lastStatsLog     mclock.AbsTime
@@ -180,12 +181,20 @@ func newDialScheduler(config dialConfig, it enode.Iterator, setupFunc dialSetupF
 		staticPool:  newDialQueue(),
 		closeCh:     make(chan struct{}),
 	}
+
+	d.history = delayheap.NewPeriodicDispatcher(d)
+	d.history.Run()
+
 	d.lastStatsLog = d.config.clock.Now()
 	//d.ctx, d.cancel = context.WithCancel(context.Background())
 	//d.wg.Add(2)
 	//go d.readNodes(it)
 	go d.loop(it)
 	return d
+}
+
+func (d *dialScheduler) Enqueue(h delayheap.HeapNode) {
+	panic("x")
 }
 
 // stop shuts down the dialer, canceling all current dial tasks.
@@ -230,8 +239,8 @@ func (d *dialScheduler) peerRemoved(c *conn) {
 // loop is the main loop of the dialer.
 func (d *dialScheduler) loop(it enode.Iterator) {
 	var (
-		//nodesCh    chan *enode.Node
-		historyExp = make(chan struct{}, 1)
+	//nodesCh    chan *enode.Node
+	//historyExp = make(chan struct{}, 1)
 	)
 
 	notify := make(chan struct{})
@@ -268,7 +277,7 @@ loop:
 		//} else {
 		//	nodesCh = nil
 		//}
-		d.rearmHistoryTimer(historyExp)
+		//d.rearmHistoryTimer(historyExp)
 		d.logStats()
 
 		select {
@@ -332,8 +341,8 @@ loop:
 				//}
 			}
 
-		case <-historyExp:
-			d.expireHistory()
+		//case <-historyExp:
+		//d.expireHistory()
 
 		case <-d.closeCh:
 			it.Close()
@@ -341,7 +350,7 @@ loop:
 		}
 	}
 
-	d.stopHistoryTimer(historyExp)
+	//d.stopHistoryTimer(historyExp)
 	for range d.dialing {
 		<-d.doneCh
 	}
@@ -378,6 +387,7 @@ func (d *dialScheduler) logStats() {
 	d.lastStatsLog = now
 }
 
+/*
 // rearmHistoryTimer configures d.historyTimer to fire when the
 // next item in d.history expires.
 func (d *dialScheduler) rearmHistoryTimer(ch chan struct{}) {
@@ -408,6 +418,7 @@ func (d *dialScheduler) expireHistory() {
 		d.updateStaticPool(id)
 	})
 }
+*/
 
 // freeDialSlots returns the number of free dial slots. The result can be negative
 // when peers are connected while their task is still running.
@@ -440,7 +451,7 @@ func (d *dialScheduler) checkDial(n *enode.Node) error {
 	if d.config.netRestrict != nil && !d.config.netRestrict.Contains(n.IP()) {
 		return errNetRestrict
 	}
-	if d.history.contains(string(n.ID().Bytes())) {
+	if d.history.ContainsID(n.ID().String()) {
 		return errRecentlyDialed
 	}
 	return nil
@@ -520,11 +531,22 @@ func (d *dialScheduler) removeFromStaticPool(idx int) {
 }
 */
 
+type enodeWrapper struct {
+	enode *enode.Node
+}
+
+func (e *enodeWrapper) ID() string {
+	return e.enode.ID().String()
+}
+
 // startDial runs the given dial task in a separate goroutine.
 func (d *dialScheduler) startDial(task *dialTask) {
 	d.config.log.Trace("Starting p2p dial", "id", task.dest.ID(), "ip", task.dest.IP(), "flag", task.flags)
-	hkey := string(task.dest.ID().Bytes())
-	d.history.add(hkey, d.config.clock.Now().Add(dialHistoryExpiration))
+	// hkey := string(task.dest.ID().Bytes())
+
+	d.history.Add(&enodeWrapper{enode: task.dest}, time.Now().Add(dialHistoryExpiration))
+
+	//d.history.add(hkey, d.config.clock.Now().Add(dialHistoryExpiration))
 	d.dialing[task.dest.ID()] = struct{}{}
 
 	if task.needResolve() && !d.resolve(task) {
@@ -559,6 +581,10 @@ type dialTask struct {
 	dest         *enode.Node
 	lastResolved mclock.AbsTime
 	resolveDelay time.Duration
+}
+
+func (d *dialTask) ID() string {
+	return d.dest.ID().String()
 }
 
 func newDialTask(dest *enode.Node, flags connFlag) *dialTask {

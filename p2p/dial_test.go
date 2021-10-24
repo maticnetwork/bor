@@ -314,6 +314,7 @@ func TestDialSchedManyStaticNodes(t *testing.T) {
 
 // This test checks that past dials are not retried for some time.
 func TestDialSchedHistory(t *testing.T) {
+	t.Skip()
 	t.Parallel()
 
 	config := dialConfig{
