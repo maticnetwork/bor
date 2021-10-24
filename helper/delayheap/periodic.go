@@ -27,6 +27,10 @@ func NewPeriodicDispatcher(dispatcher Dispatcher) *PeriodicDispatcher {
 	}
 }
 
+func (p *PeriodicDispatcher) Close() {
+	close(p.closeCh)
+}
+
 func (p *PeriodicDispatcher) ContainsID(id string) bool {
 	p.l.Lock()
 	defer p.l.Unlock()

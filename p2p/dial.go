@@ -122,9 +122,10 @@ type dialScheduler struct {
 	// list of static peers
 	static peerList
 
-	dialPeers int // current number of dialed peers
+	// dialPeers is the current number of dialed peers
+	dialPeers int
 
-	// iterator of discovery nodes
+	// iterator over the discovery nodes
 	it enode.Iterator
 
 	// The static map tracks all static dial tasks. The subset of usable static dial tasks
@@ -133,7 +134,7 @@ type dialScheduler struct {
 	// iterator.
 
 	// staticPool []*dialTask
-	staticPool *dialQueue
+	dialQueue *dialQueue
 
 	// The dial history keeps recently dialed nodes. Members of history are not dialed.
 	history *delayheap.PeriodicDispatcher
@@ -218,10 +219,10 @@ func newDialScheduler(config dialConfig, it enode.Iterator, setupFunc dialSetupF
 		//remStaticCh: make(chan *enode.Node),
 		//addPeerCh:  make(chan *conn),
 		//remPeerCh:  make(chan *conn),
-		staticPool: newDialQueue(),
-		closeCh:    make(chan struct{}),
-		notifyCh:   make(chan struct{}),
-		it:         it,
+		dialQueue: newDialQueue(),
+		closeCh:   make(chan struct{}),
+		notifyCh:  make(chan struct{}),
+		it:        it,
 	}
 
 	d.history = delayheap.NewPeriodicDispatcher(d)
@@ -250,6 +251,8 @@ func (d *dialScheduler) notify() {
 func (d *dialScheduler) stop() {
 	// d.cancel()
 	d.it.Close()
+	d.dialQueue.Close()
+	d.history.Close()
 	close(d.closeCh)
 	//d.wg.Wait()
 }
@@ -338,7 +341,7 @@ func (d *dialScheduler) run() {
 					return
 				}
 
-				d.staticPool.add(node, false, normalPriority)
+				d.dialQueue.add(node, false, normalPriority)
 				d.notify()
 			}
 		}
@@ -346,11 +349,28 @@ func (d *dialScheduler) run() {
 
 	for {
 		// Launch new dials if slots are available.
+		slots := d.freeDialSlots()
+		for slot := 0; slot < slots; {
+			task := d.dialQueue.pop()
+			if task == nil {
+				return
+			}
 
-		_, tasks := d.startStaticDials()
-		for _, task := range tasks {
-			d.startDial(task)
+			if err := d.isValidTask(task); err != nil {
+				d.config.log.Trace("Discarding dial candidate", "id", task.addr.ID(), "ip", task.addr.IP(), "reason", err)
+			} else {
+				// dial
+				d.startDial(task)
+				slot++
+			}
 		}
+
+		/*
+			_, tasks := d.startStaticDials()
+			for _, task := range tasks {
+				d.startDial(task)
+			}
+		*/
 
 		//if slots > 0 {
 		//	nodesCh = d.nodesIn
@@ -552,21 +572,24 @@ func (d *dialScheduler) isValidTask(task *dialTask2) error {
 	return nil
 }
 
+/*
 // startStaticDials starts n static dial tasks.
 func (d *dialScheduler) startStaticDials() (started int, res []*dialTask2) {
 	n := d.freeDialSlots()
 
 	res = []*dialTask2{}
 
-	for started = 0; started < n && d.staticPool.Len() > 0; {
-		task := d.staticPool.popImpl()
-
+	for started = 0; started < n && d.dialQueue.Len() > 0; {
+		task := d.dialQueue.pop()
+		if task == nil {
+			return
+		}
 		if err := d.isValidTask(task); err != nil {
 			d.config.log.Trace("Discarding dial candidate", "id", task.addr.ID(), "ip", task.addr.IP(), "reason", err)
 			// continue
 		} else {
-			//idx := d.rand.Intn(len(d.staticPool))
-			//task := d.staticPool[idx]
+			//idx := d.rand.Intn(len(d.dialQueue))
+			//task := d.dialQueue[idx]
 			res = append(res, task)
 			// d.removeFromStaticPool(idx)
 
@@ -575,6 +598,7 @@ func (d *dialScheduler) startStaticDials() (started int, res []*dialTask2) {
 	}
 	return started, res
 }
+*/
 
 // updateStaticPool attempts to move the given static dial back into staticPool.
 func (d *dialScheduler) updateStaticPool(node *enode.Node) {
@@ -584,11 +608,11 @@ func (d *dialScheduler) updateStaticPool(node *enode.Node) {
 }
 
 func (d *dialScheduler) addToStaticPool(node *enode.Node) {
-	d.staticPool.add(node, true, staticPriority)
+	d.dialQueue.add(node, true, staticPriority)
 
 	/*
-		d.staticPool = append(d.staticPool, task)
-		task.staticPoolIndex = len(d.staticPool) - 1
+		d.dialQueue = append(d.dialQueue, task)
+		task.staticPoolIndex = len(d.dialQueue) - 1
 	*/
 }
 
@@ -596,12 +620,12 @@ func (d *dialScheduler) addToStaticPool(node *enode.Node) {
 // removeFromStaticPool removes the task at idx from staticPool. It does that by moving the
 // current last element of the pool to idx and then shortening the pool by one.
 func (d *dialScheduler) removeFromStaticPool(idx int) {
-	task := d.staticPool[idx]
-	end := len(d.staticPool) - 1
-	d.staticPool[idx] = d.staticPool[end]
-	d.staticPool[idx].staticPoolIndex = idx
-	d.staticPool[end] = nil
-	d.staticPool = d.staticPool[:end]
+	task := d.dialQueue[idx]
+	end := len(d.dialQueue) - 1
+	d.dialQueue[idx] = d.dialQueue[end]
+	d.dialQueue[idx].staticPoolIndex = idx
+	d.dialQueue[end] = nil
+	d.dialQueue = d.dialQueue[:end]
 	task.staticPoolIndex = -1
 }
 */
@@ -765,28 +789,27 @@ func cleanupDialErr(err error) error {
 // dialQueue is a queue where we store all the possible peer targets that
 // we can connect to.
 type dialQueue struct {
-	heap  dialQueueImpl
-	lock  sync.Mutex
-	items map[*enode.Node]*dialTask2
-	//updateCh chan struct{}
-	//closeCh  chan struct{}
+	heap     dialQueueImpl
+	lock     sync.Mutex
+	items    map[*enode.Node]*dialTask2
+	updateCh chan struct{}
+	closeCh  chan struct{}
 }
 
 // newDialQueue creates a new DialQueue
 func newDialQueue() *dialQueue {
 	return &dialQueue{
-		heap:  dialQueueImpl{},
-		items: map[*enode.Node]*dialTask2{},
-		//updateCh: make(chan struct{}),
-		//closeCh:  make(chan struct{}),
+		heap:     dialQueueImpl{},
+		items:    map[*enode.Node]*dialTask2{},
+		updateCh: make(chan struct{}),
+		closeCh:  make(chan struct{}),
 	}
 }
 
 func (d *dialQueue) Close() {
-	//close(d.closeCh)
+	close(d.closeCh)
 }
 
-/*
 // pop is a loop that handles update and close events
 func (d *dialQueue) pop() *dialTask2 {
 	for {
@@ -802,7 +825,6 @@ func (d *dialQueue) pop() *dialTask2 {
 		}
 	}
 }
-*/
 
 func (d *dialQueue) popImpl() *dialTask2 {
 	d.lock.Lock()
@@ -860,12 +882,10 @@ func (d *dialQueue) add(addr *enode.Node, isStatic bool, priority uint64) {
 	d.items[addr] = task
 	heap.Push(&d.heap, task)
 
-	/*
-		select {
-		case d.updateCh <- struct{}{}:
-		default:
-		}
-	*/
+	select {
+	case d.updateCh <- struct{}{}:
+	default:
+	}
 }
 
 type dialTask2 struct {
