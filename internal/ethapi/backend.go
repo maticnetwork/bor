@@ -101,7 +101,7 @@ type Backend interface {
 }
 
 func GetAPIs(apiBackend Backend) []rpc.API {
-	nonceLock := new(AddrLocker)
+	// nonceLock := new(AddrLocker)
 	return []rpc.API{
 		{
 			Namespace: "eth",
@@ -113,12 +113,16 @@ func GetAPIs(apiBackend Backend) []rpc.API {
 			Version:   "1.0",
 			Service:   NewPublicBlockChainAPI(apiBackend),
 			Public:    true,
-		}, {
-			Namespace: "eth",
-			Version:   "1.0",
-			Service:   NewPublicTransactionPoolAPI(apiBackend, nonceLock),
-			Public:    true,
-		}, {
+		},
+		/*
+			{
+				Namespace: "eth",
+				Version:   "1.0",
+				Service:   NewPublicTransactionPoolAPI(apiBackend, nonceLock),
+				Public:    true,
+			},
+		*/
+		{
 			Namespace: "txpool",
 			Version:   "1.0",
 			Service:   NewPublicTxPoolAPI(apiBackend),
@@ -132,16 +136,22 @@ func GetAPIs(apiBackend Backend) []rpc.API {
 			Namespace: "debug",
 			Version:   "1.0",
 			Service:   NewPrivateDebugAPI(apiBackend),
-		}, {
-			Namespace: "eth",
-			Version:   "1.0",
-			Service:   NewPublicAccountAPI(apiBackend.AccountManager()),
-			Public:    true,
-		}, {
-			Namespace: "personal",
-			Version:   "1.0",
-			Service:   NewPrivateAccountAPI(apiBackend, nonceLock),
-			Public:    false,
 		},
+		/*
+			{
+				Namespace: "eth",
+				Version:   "1.0",
+				Service:   NewPublicAccountAPI(apiBackend.AccountManager()),
+				Public:    true,
+			},
+		*/
+		/*
+			{
+				Namespace: "personal",
+				Version:   "1.0",
+				Service:   NewPrivateAccountAPI(apiBackend, nonceLock),
+				Public:    false,
+			},
+		*/
 	}
 }
