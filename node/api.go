@@ -37,8 +37,7 @@ func (n *Node) apis() []rpc.API {
 			Namespace: "admin",
 			Version:   "1.0",
 			Service:   &privateAdminAPI{n},
-		},
-		{
+		}, {
 			Namespace: "admin",
 			Version:   "1.0",
 			Service:   &publicAdminAPI{n},
