@@ -5,9 +5,9 @@ The ```bor debug``` command takes a debug dump of the running client.
 
 ## Options
 
-- seconds: Number of seconds to trace cpu and traces.
+- ```seconds```: Number of seconds to trace cpu and traces.
 
-- output: Output directory for the data dump.
+- ```output```: Output directory for the data dump.
 
 ## Examples
 
