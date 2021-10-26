@@ -21,9 +21,9 @@ The ```bor server``` command runs the Bor client.
 
 - snapshot: Enables snapshot-database mode (default = enable).
 
-- bor.heimdall:
+- bor.heimdall: URL of Heimdall service.
 
-- bor.withoutheimdall:
+- bor.withoutheimdall: Run without Heimdall service (for testing purpose).
 
 - ethstats: Reporting URL of a ethstats service (nodename:secret@host:port).
 
@@ -122,6 +122,7 @@ The ```bor server``` command runs the Bor client.
 - ws: Enable the WS-RPC server.
 
 - ws.addr: WS-RPC server listening interface.
+
 - ws.port: WS-RPC server listening port.
 
 - ws.rpcprefix: HTTP path prefix on which JSON-RPC is served. Use '/' to serve on all paths.
@@ -187,5 +188,5 @@ lightkdf: Reduce key-derivation RAM & CPU usage at some expense of KDF strength.
 Use multiple files to configure the client:
 
 ```
-$ bor server --config ./config1.hcl --config ./config2.hcl
+$ bor server --config ./legacy-config.toml --config ./config2.hcl
 ```

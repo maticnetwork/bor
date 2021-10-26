@@ -3,7 +3,7 @@
 
 Toml files format used in geth are being deprecated.
 
-Now, we will use json and [hcl](https://github.com/hashicorp/hcl) formats to create configuration files. This is the format in Hcl alongside the default values:
+Bor uses uses JSON and [HCL](https://github.com/hashicorp/hcl) formats to create configuration files. This is the format in HCL alongside the default values:
 
 ```
 chain = "mainnet"
