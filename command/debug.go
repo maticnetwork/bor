@@ -22,7 +22,7 @@ import (
 )
 
 type DebugCommand struct {
-	*Meta2
+	*Meta
 
 	seconds uint64
 	output  string

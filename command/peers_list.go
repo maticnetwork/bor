@@ -11,7 +11,7 @@ import (
 
 // PeersListCommand is the command to group the peers commands
 type PeersListCommand struct {
-	*Meta2
+	*Meta
 }
 
 // Help implements the cli.Command interface

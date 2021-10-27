@@ -1,10 +1,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
 
-	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/command/flagset"
+	"github.com/ethereum/go-ethereum/command/server/proto"
 )
 
 type AccountListCommand struct {
@@ -37,16 +38,23 @@ func (a *AccountListCommand) Run(args []string) int {
 		return 1
 	}
 
-	keystore, err := a.GetKeystore()
+	borClt, err := a.BorConn()
 	if err != nil {
-		a.UI.Error(fmt.Sprintf("Failed to get keystore: %v", err))
+		a.UI.Error(err.Error())
 		return 1
 	}
-	a.UI.Output(formatAccounts(keystore.Accounts()))
+
+	resp, err := borClt.AccountsList(context.Background(), &proto.AccountsListRequest{})
+	if err != nil {
+		a.UI.Error(err.Error())
+		return 1
+	}
+
+	a.UI.Output(formatAccounts(resp.Accounts))
 	return 0
 }
 
-func formatAccounts(accts []accounts.Account) string {
+func formatAccounts(accts []*proto.Account) string {
 	if len(accts) == 0 {
 		return "No accounts found"
 	}
@@ -56,7 +64,7 @@ func formatAccounts(accts []accounts.Account) string {
 	for i, d := range accts {
 		rows[i+1] = fmt.Sprintf("%d|%s",
 			i,
-			d.Address.String())
+			d.Address)
 	}
 	return formatList(rows)
 }

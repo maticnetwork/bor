@@ -11,7 +11,7 @@ import (
 
 // PeersStatusCommand is the command to group the peers commands
 type PeersStatusCommand struct {
-	*Meta2
+	*Meta
 }
 
 // Help implements the cli.Command interface

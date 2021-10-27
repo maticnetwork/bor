@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/ethereum/go-ethereum/command/flagset"
+	"github.com/ethereum/go-ethereum/command/server/proto"
 )
 
 type AccountNewCommand struct {
@@ -36,9 +38,9 @@ func (a *AccountNewCommand) Run(args []string) int {
 		return 1
 	}
 
-	keystore, err := a.GetKeystore()
+	borClt, err := a.BorConn()
 	if err != nil {
-		a.UI.Error(fmt.Sprintf("Failed to get keystore: %v", err))
+		a.UI.Error(err.Error())
 		return 1
 	}
 
@@ -48,15 +50,18 @@ func (a *AccountNewCommand) Run(args []string) int {
 		return 1
 	}
 
-	account, err := keystore.NewAccount(password)
+	req := &proto.AccountsNewRequest{
+		Password: password,
+	}
+	resp, err := borClt.AccountsNew(context.Background(), req)
 	if err != nil {
-		a.UI.Error(fmt.Sprintf("Failed to create new account: %v", err))
+		a.UI.Error(err.Error())
 		return 1
 	}
 
 	a.UI.Output("\nYour new key was generated")
-	a.UI.Output(fmt.Sprintf("Public address of the key:   %s", account.Address.Hex()))
-	a.UI.Output(fmt.Sprintf("Path of the secret key file: %s", account.URL.Path))
+	a.UI.Output(fmt.Sprintf("Public address of the key:   %s", resp.Account.Address))
+	a.UI.Output(fmt.Sprintf("Path of the secret key file: %s", resp.Account.Url))
 
 	return 0
 }

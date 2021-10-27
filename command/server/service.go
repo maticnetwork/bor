@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/command/server/pprof"
 	"github.com/ethereum/go-ethereum/command/server/proto"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 )
@@ -100,5 +102,49 @@ func peerInfoToPeer(info *p2p.PeerInfo) *proto.Peer {
 		Name:    info.Name,
 		Trusted: info.Network.Trusted,
 		Static:  info.Network.Static,
+	}
+}
+
+func (s *Server) AccountsNew(ctx context.Context, req *proto.AccountsNewRequest) (*proto.AccountsNewResponse, error) {
+	account, err := s.keystore.NewAccount(req.Password)
+	if err != nil {
+		return nil, err
+	}
+	resp := &proto.AccountsNewResponse{
+		Account: accountToProtoAccount(account),
+	}
+	return resp, nil
+}
+
+func (s *Server) AccountsList(ctx context.Context, req *proto.AccountsListRequest) (*proto.AccountsListResponse, error) {
+	accounts := []*proto.Account{}
+	for _, a := range s.keystore.Accounts() {
+		accounts = append(accounts, accountToProtoAccount(a))
+	}
+	resp := &proto.AccountsListResponse{
+		Accounts: accounts,
+	}
+	return resp, nil
+}
+
+func (s *Server) AccountsImport(ctx context.Context, req *proto.AccountsImportRequest) (*proto.AccountsImportResponse, error) {
+	key, err := crypto.HexToECDSA(req.Key)
+	if err != nil {
+		return nil, err
+	}
+	account, err := s.keystore.ImportECDSA(key, req.Password)
+	if err != nil {
+		return nil, err
+	}
+	resp := &proto.AccountsImportResponse{
+		Account: accountToProtoAccount(account),
+	}
+	return resp, nil
+}
+
+func accountToProtoAccount(acc accounts.Account) *proto.Account {
+	return &proto.Account{
+		Address: acc.Address.String(),
+		Url:     acc.URL.String(),
 	}
 }

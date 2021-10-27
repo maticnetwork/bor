@@ -28,6 +28,7 @@ type Server struct {
 	proto.UnimplementedBorServer
 	node       *node.Node
 	grpcServer *grpc.Server
+	keystore   *keystore.KeyStore
 }
 
 func NewServer(config *Config) (*Server, error) {
@@ -90,7 +91,8 @@ func NewServer(config *Config) (*Server, error) {
 		if config.Accounts.UseLightweightKDF {
 			n, p = keystore.LightScryptN, keystore.LightScryptP
 		}
-		stack.AccountManager().AddBackend(keystore.NewKeyStore(keydir, n, p))
+		srv.keystore = keystore.NewKeyStore(keydir, n, p)
+		stack.AccountManager().AddBackend(srv.keystore)
 	}
 
 	// sealing (if enabled)

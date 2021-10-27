@@ -9,7 +9,7 @@ import (
 
 // PeersAddCommand is the command to group the peers commands
 type PeersAddCommand struct {
-	*Meta2
+	*Meta
 
 	trusted bool
 }

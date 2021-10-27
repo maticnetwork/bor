@@ -9,7 +9,7 @@ import (
 
 // PeersRemoveCommand is the command to group the peers commands
 type PeersRemoveCommand struct {
-	*Meta2
+	*Meta
 
 	trusted bool
 }

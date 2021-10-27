@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
+	"encoding/hex"
 	"fmt"
 
-	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/command/flagset"
+	"github.com/ethereum/go-ethereum/command/server/proto"
 	"github.com/ethereum/go-ethereum/crypto"
 )
 
@@ -47,28 +49,34 @@ func (a *AccountImportCommand) Run(args []string) int {
 		a.UI.Error("Expected one argument")
 		return 1
 	}
+	// make sure it is a valid ecdsa key
 	key, err := crypto.LoadECDSA(args[0])
 	if err != nil {
 		a.UI.Error(fmt.Sprintf("Failed to load the private key '%s': %v", args[0], err))
 		return 1
 	}
-
-	keystore, err := a.GetKeystore()
-	if err != nil {
-		a.UI.Error(fmt.Sprintf("Failed to get keystore: %v", err))
-		return 1
-	}
-
 	password, err := a.AskPassword()
 	if err != nil {
 		a.UI.Error(err.Error())
 		return 1
 	}
 
-	acct, err := keystore.ImportECDSA(key, password)
+	borClt, err := a.BorConn()
 	if err != nil {
-		utils.Fatalf("Could not create the account: %v", err)
+		a.UI.Error(err.Error())
+		return 1
 	}
-	a.UI.Output(fmt.Sprintf("Account created: %s", acct.Address.String()))
+
+	req := &proto.AccountsImportRequest{
+		Key:      hex.EncodeToString(crypto.FromECDSA(key)),
+		Password: password,
+	}
+	resp, err := borClt.AccountsImport(context.Background(), req)
+	if err != nil {
+		a.UI.Error(err.Error())
+		return 1
+	}
+
+	a.UI.Output(fmt.Sprintf("Account created: %s", resp.Account.Address))
 	return 0
 }

@@ -71,7 +71,7 @@ func (x PprofRequest_Type) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use PprofRequest_Type.Descriptor instead.
 func (PprofRequest_Type) EnumDescriptor() ([]byte, []int) {
-	return file_command_server_proto_server_proto_rawDescGZIP(), []int{9, 0}
+	return file_command_server_proto_server_proto_rawDescGZIP(), []int{16, 0}
 }
 
 type PeersAddRequest struct {
@@ -534,6 +534,342 @@ func (x *Peer) GetStatic() bool {
 	return false
 }
 
+type AccountsNewRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Password string `protobuf:"bytes,1,opt,name=password,proto3" json:"password,omitempty"`
+}
+
+func (x *AccountsNewRequest) Reset() {
+	*x = AccountsNewRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_command_server_proto_server_proto_msgTypes[9]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *AccountsNewRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AccountsNewRequest) ProtoMessage() {}
+
+func (x *AccountsNewRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_command_server_proto_server_proto_msgTypes[9]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AccountsNewRequest.ProtoReflect.Descriptor instead.
+func (*AccountsNewRequest) Descriptor() ([]byte, []int) {
+	return file_command_server_proto_server_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *AccountsNewRequest) GetPassword() string {
+	if x != nil {
+		return x.Password
+	}
+	return ""
+}
+
+type AccountsNewResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Account *Account `protobuf:"bytes,1,opt,name=account,proto3" json:"account,omitempty"`
+}
+
+func (x *AccountsNewResponse) Reset() {
+	*x = AccountsNewResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_command_server_proto_server_proto_msgTypes[10]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *AccountsNewResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AccountsNewResponse) ProtoMessage() {}
+
+func (x *AccountsNewResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_command_server_proto_server_proto_msgTypes[10]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AccountsNewResponse.ProtoReflect.Descriptor instead.
+func (*AccountsNewResponse) Descriptor() ([]byte, []int) {
+	return file_command_server_proto_server_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *AccountsNewResponse) GetAccount() *Account {
+	if x != nil {
+		return x.Account
+	}
+	return nil
+}
+
+type AccountsListRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *AccountsListRequest) Reset() {
+	*x = AccountsListRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_command_server_proto_server_proto_msgTypes[11]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *AccountsListRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AccountsListRequest) ProtoMessage() {}
+
+func (x *AccountsListRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_command_server_proto_server_proto_msgTypes[11]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AccountsListRequest.ProtoReflect.Descriptor instead.
+func (*AccountsListRequest) Descriptor() ([]byte, []int) {
+	return file_command_server_proto_server_proto_rawDescGZIP(), []int{11}
+}
+
+type AccountsListResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Accounts []*Account `protobuf:"bytes,1,rep,name=accounts,proto3" json:"accounts,omitempty"`
+}
+
+func (x *AccountsListResponse) Reset() {
+	*x = AccountsListResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_command_server_proto_server_proto_msgTypes[12]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *AccountsListResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AccountsListResponse) ProtoMessage() {}
+
+func (x *AccountsListResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_command_server_proto_server_proto_msgTypes[12]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AccountsListResponse.ProtoReflect.Descriptor instead.
+func (*AccountsListResponse) Descriptor() ([]byte, []int) {
+	return file_command_server_proto_server_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *AccountsListResponse) GetAccounts() []*Account {
+	if x != nil {
+		return x.Accounts
+	}
+	return nil
+}
+
+type Account struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Address string `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
+	Url     string `protobuf:"bytes,2,opt,name=url,proto3" json:"url,omitempty"`
+}
+
+func (x *Account) Reset() {
+	*x = Account{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_command_server_proto_server_proto_msgTypes[13]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *Account) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Account) ProtoMessage() {}
+
+func (x *Account) ProtoReflect() protoreflect.Message {
+	mi := &file_command_server_proto_server_proto_msgTypes[13]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Account.ProtoReflect.Descriptor instead.
+func (*Account) Descriptor() ([]byte, []int) {
+	return file_command_server_proto_server_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *Account) GetAddress() string {
+	if x != nil {
+		return x.Address
+	}
+	return ""
+}
+
+func (x *Account) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+type AccountsImportRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Key      string `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Password string `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
+}
+
+func (x *AccountsImportRequest) Reset() {
+	*x = AccountsImportRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_command_server_proto_server_proto_msgTypes[14]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *AccountsImportRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AccountsImportRequest) ProtoMessage() {}
+
+func (x *AccountsImportRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_command_server_proto_server_proto_msgTypes[14]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AccountsImportRequest.ProtoReflect.Descriptor instead.
+func (*AccountsImportRequest) Descriptor() ([]byte, []int) {
+	return file_command_server_proto_server_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *AccountsImportRequest) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *AccountsImportRequest) GetPassword() string {
+	if x != nil {
+		return x.Password
+	}
+	return ""
+}
+
+type AccountsImportResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Account *Account `protobuf:"bytes,1,opt,name=account,proto3" json:"account,omitempty"`
+}
+
+func (x *AccountsImportResponse) Reset() {
+	*x = AccountsImportResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_command_server_proto_server_proto_msgTypes[15]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *AccountsImportResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AccountsImportResponse) ProtoMessage() {}
+
+func (x *AccountsImportResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_command_server_proto_server_proto_msgTypes[15]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AccountsImportResponse.ProtoReflect.Descriptor instead.
+func (*AccountsImportResponse) Descriptor() ([]byte, []int) {
+	return file_command_server_proto_server_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *AccountsImportResponse) GetAccount() *Account {
+	if x != nil {
+		return x.Account
+	}
+	return nil
+}
+
 type PprofRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -547,7 +883,7 @@ type PprofRequest struct {
 func (x *PprofRequest) Reset() {
 	*x = PprofRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_command_server_proto_server_proto_msgTypes[9]
+		mi := &file_command_server_proto_server_proto_msgTypes[16]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -560,7 +896,7 @@ func (x *PprofRequest) String() string {
 func (*PprofRequest) ProtoMessage() {}
 
 func (x *PprofRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_command_server_proto_server_proto_msgTypes[9]
+	mi := &file_command_server_proto_server_proto_msgTypes[16]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -573,7 +909,7 @@ func (x *PprofRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PprofRequest.ProtoReflect.Descriptor instead.
 func (*PprofRequest) Descriptor() ([]byte, []int) {
-	return file_command_server_proto_server_proto_rawDescGZIP(), []int{9}
+	return file_command_server_proto_server_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *PprofRequest) GetType() PprofRequest_Type {
@@ -609,7 +945,7 @@ type PprofResponse struct {
 func (x *PprofResponse) Reset() {
 	*x = PprofResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_command_server_proto_server_proto_msgTypes[10]
+		mi := &file_command_server_proto_server_proto_msgTypes[17]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -622,7 +958,7 @@ func (x *PprofResponse) String() string {
 func (*PprofResponse) ProtoMessage() {}
 
 func (x *PprofResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_command_server_proto_server_proto_msgTypes[10]
+	mi := &file_command_server_proto_server_proto_msgTypes[17]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -635,7 +971,7 @@ func (x *PprofResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PprofResponse.ProtoReflect.Descriptor instead.
 func (*PprofResponse) Descriptor() ([]byte, []int) {
-	return file_command_server_proto_server_proto_rawDescGZIP(), []int{10}
+	return file_command_server_proto_server_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *PprofResponse) GetPayload() string {
@@ -689,7 +1025,32 @@ var file_command_server_proto_server_proto_rawDesc = []byte{
 	0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x12, 0x18, 0x0a, 0x07, 0x74, 0x72, 0x75, 0x73, 0x74,
 	0x65, 0x64, 0x18, 0x06, 0x20, 0x01, 0x28, 0x08, 0x52, 0x07, 0x74, 0x72, 0x75, 0x73, 0x74, 0x65,
 	0x64, 0x12, 0x16, 0x0a, 0x06, 0x73, 0x74, 0x61, 0x74, 0x69, 0x63, 0x18, 0x07, 0x20, 0x01, 0x28,
-	0x08, 0x52, 0x06, 0x73, 0x74, 0x61, 0x74, 0x69, 0x63, 0x22, 0x98, 0x01, 0x0a, 0x0c, 0x50, 0x70,
+	0x08, 0x52, 0x06, 0x73, 0x74, 0x61, 0x74, 0x69, 0x63, 0x22, 0x30, 0x0a, 0x12, 0x41, 0x63, 0x63,
+	0x6f, 0x75, 0x6e, 0x74, 0x73, 0x4e, 0x65, 0x77, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12,
+	0x1a, 0x0a, 0x08, 0x70, 0x61, 0x73, 0x73, 0x77, 0x6f, 0x72, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28,
+	0x09, 0x52, 0x08, 0x70, 0x61, 0x73, 0x73, 0x77, 0x6f, 0x72, 0x64, 0x22, 0x3f, 0x0a, 0x13, 0x41,
+	0x63, 0x63, 0x6f, 0x75, 0x6e, 0x74, 0x73, 0x4e, 0x65, 0x77, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
+	0x73, 0x65, 0x12, 0x28, 0x0a, 0x07, 0x61, 0x63, 0x63, 0x6f, 0x75, 0x6e, 0x74, 0x18, 0x01, 0x20,
+	0x01, 0x28, 0x0b, 0x32, 0x0e, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x41, 0x63, 0x63, 0x6f,
+	0x75, 0x6e, 0x74, 0x52, 0x07, 0x61, 0x63, 0x63, 0x6f, 0x75, 0x6e, 0x74, 0x22, 0x15, 0x0a, 0x13,
+	0x41, 0x63, 0x63, 0x6f, 0x75, 0x6e, 0x74, 0x73, 0x4c, 0x69, 0x73, 0x74, 0x52, 0x65, 0x71, 0x75,
+	0x65, 0x73, 0x74, 0x22, 0x42, 0x0a, 0x14, 0x41, 0x63, 0x63, 0x6f, 0x75, 0x6e, 0x74, 0x73, 0x4c,
+	0x69, 0x73, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x2a, 0x0a, 0x08, 0x61,
+	0x63, 0x63, 0x6f, 0x75, 0x6e, 0x74, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x0e, 0x2e,
+	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x41, 0x63, 0x63, 0x6f, 0x75, 0x6e, 0x74, 0x52, 0x08, 0x61,
+	0x63, 0x63, 0x6f, 0x75, 0x6e, 0x74, 0x73, 0x22, 0x35, 0x0a, 0x07, 0x41, 0x63, 0x63, 0x6f, 0x75,
+	0x6e, 0x74, 0x12, 0x18, 0x0a, 0x07, 0x61, 0x64, 0x64, 0x72, 0x65, 0x73, 0x73, 0x18, 0x01, 0x20,
+	0x01, 0x28, 0x09, 0x52, 0x07, 0x61, 0x64, 0x64, 0x72, 0x65, 0x73, 0x73, 0x12, 0x10, 0x0a, 0x03,
+	0x75, 0x72, 0x6c, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x75, 0x72, 0x6c, 0x22, 0x45,
+	0x0a, 0x15, 0x41, 0x63, 0x63, 0x6f, 0x75, 0x6e, 0x74, 0x73, 0x49, 0x6d, 0x70, 0x6f, 0x72, 0x74,
+	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x10, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18, 0x01,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x12, 0x1a, 0x0a, 0x08, 0x70, 0x61, 0x73,
+	0x73, 0x77, 0x6f, 0x72, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x08, 0x70, 0x61, 0x73,
+	0x73, 0x77, 0x6f, 0x72, 0x64, 0x22, 0x42, 0x0a, 0x16, 0x41, 0x63, 0x63, 0x6f, 0x75, 0x6e, 0x74,
+	0x73, 0x49, 0x6d, 0x70, 0x6f, 0x72, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12,
+	0x28, 0x0a, 0x07, 0x61, 0x63, 0x63, 0x6f, 0x75, 0x6e, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b,
+	0x32, 0x0e, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x41, 0x63, 0x63, 0x6f, 0x75, 0x6e, 0x74,
+	0x52, 0x07, 0x61, 0x63, 0x63, 0x6f, 0x75, 0x6e, 0x74, 0x22, 0x98, 0x01, 0x0a, 0x0c, 0x50, 0x70,
 	0x72, 0x6f, 0x66, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x2c, 0x0a, 0x04, 0x74, 0x79,
 	0x70, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x18, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f,
 	0x2e, 0x50, 0x70, 0x72, 0x6f, 0x66, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x2e, 0x54, 0x79,
@@ -709,7 +1070,7 @@ var file_command_server_proto_server_proto_rawDesc = []byte{
 	0x0c, 0x48, 0x65, 0x61, 0x64, 0x65, 0x72, 0x73, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x12, 0x10, 0x0a,
 	0x03, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x12,
 	0x14, 0x0a, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05,
-	0x76, 0x61, 0x6c, 0x75, 0x65, 0x3a, 0x02, 0x38, 0x01, 0x32, 0xc2, 0x02, 0x0a, 0x03, 0x42, 0x6f,
+	0x76, 0x61, 0x6c, 0x75, 0x65, 0x3a, 0x02, 0x38, 0x01, 0x32, 0xa0, 0x04, 0x0a, 0x03, 0x42, 0x6f,
 	0x72, 0x12, 0x32, 0x0a, 0x05, 0x50, 0x70, 0x72, 0x6f, 0x66, 0x12, 0x13, 0x2e, 0x70, 0x72, 0x6f,
 	0x74, 0x6f, 0x2e, 0x50, 0x70, 0x72, 0x6f, 0x66, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a,
 	0x14, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x50, 0x70, 0x72, 0x6f, 0x66, 0x52, 0x65, 0x73,
@@ -729,9 +1090,23 @@ var file_command_server_proto_server_proto_rawDesc = []byte{
 	0x73, 0x53, 0x74, 0x61, 0x74, 0x75, 0x73, 0x12, 0x19, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e,
 	0x50, 0x65, 0x65, 0x72, 0x73, 0x53, 0x74, 0x61, 0x74, 0x75, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65,
 	0x73, 0x74, 0x1a, 0x1a, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x50, 0x65, 0x65, 0x72, 0x73,
-	0x53, 0x74, 0x61, 0x74, 0x75, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x42, 0x17,
-	0x5a, 0x15, 0x2f, 0x63, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x2f, 0x73, 0x65, 0x72, 0x76, 0x65,
-	0x72, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x53, 0x74, 0x61, 0x74, 0x75, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x44,
+	0x0a, 0x0b, 0x41, 0x63, 0x63, 0x6f, 0x75, 0x6e, 0x74, 0x73, 0x4e, 0x65, 0x77, 0x12, 0x19, 0x2e,
+	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x41, 0x63, 0x63, 0x6f, 0x75, 0x6e, 0x74, 0x73, 0x4e, 0x65,
+	0x77, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1a, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f,
+	0x2e, 0x41, 0x63, 0x63, 0x6f, 0x75, 0x6e, 0x74, 0x73, 0x4e, 0x65, 0x77, 0x52, 0x65, 0x73, 0x70,
+	0x6f, 0x6e, 0x73, 0x65, 0x12, 0x47, 0x0a, 0x0c, 0x41, 0x63, 0x63, 0x6f, 0x75, 0x6e, 0x74, 0x73,
+	0x4c, 0x69, 0x73, 0x74, 0x12, 0x1a, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x41, 0x63, 0x63,
+	0x6f, 0x75, 0x6e, 0x74, 0x73, 0x4c, 0x69, 0x73, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
+	0x1a, 0x1b, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x41, 0x63, 0x63, 0x6f, 0x75, 0x6e, 0x74,
+	0x73, 0x4c, 0x69, 0x73, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x4d, 0x0a,
+	0x0e, 0x41, 0x63, 0x63, 0x6f, 0x75, 0x6e, 0x74, 0x73, 0x49, 0x6d, 0x70, 0x6f, 0x72, 0x74, 0x12,
+	0x1c, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x41, 0x63, 0x63, 0x6f, 0x75, 0x6e, 0x74, 0x73,
+	0x49, 0x6d, 0x70, 0x6f, 0x72, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x1d, 0x2e,
+	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x41, 0x63, 0x63, 0x6f, 0x75, 0x6e, 0x74, 0x73, 0x49, 0x6d,
+	0x70, 0x6f, 0x72, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x42, 0x17, 0x5a, 0x15,
+	0x2f, 0x63, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x2f, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x2f,
+	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -747,42 +1122,58 @@ func file_command_server_proto_server_proto_rawDescGZIP() []byte {
 }
 
 var file_command_server_proto_server_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_command_server_proto_server_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_command_server_proto_server_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_command_server_proto_server_proto_goTypes = []interface{}{
-	(PprofRequest_Type)(0),      // 0: proto.PprofRequest.Type
-	(*PeersAddRequest)(nil),     // 1: proto.PeersAddRequest
-	(*PeersAddResponse)(nil),    // 2: proto.PeersAddResponse
-	(*PeersRemoveRequest)(nil),  // 3: proto.PeersRemoveRequest
-	(*PeersRemoveResponse)(nil), // 4: proto.PeersRemoveResponse
-	(*PeersListRequest)(nil),    // 5: proto.PeersListRequest
-	(*PeersListResponse)(nil),   // 6: proto.PeersListResponse
-	(*PeersStatusRequest)(nil),  // 7: proto.PeersStatusRequest
-	(*PeersStatusResponse)(nil), // 8: proto.PeersStatusResponse
-	(*Peer)(nil),                // 9: proto.Peer
-	(*PprofRequest)(nil),        // 10: proto.PprofRequest
-	(*PprofResponse)(nil),       // 11: proto.PprofResponse
-	nil,                         // 12: proto.PprofResponse.HeadersEntry
+	(PprofRequest_Type)(0),         // 0: proto.PprofRequest.Type
+	(*PeersAddRequest)(nil),        // 1: proto.PeersAddRequest
+	(*PeersAddResponse)(nil),       // 2: proto.PeersAddResponse
+	(*PeersRemoveRequest)(nil),     // 3: proto.PeersRemoveRequest
+	(*PeersRemoveResponse)(nil),    // 4: proto.PeersRemoveResponse
+	(*PeersListRequest)(nil),       // 5: proto.PeersListRequest
+	(*PeersListResponse)(nil),      // 6: proto.PeersListResponse
+	(*PeersStatusRequest)(nil),     // 7: proto.PeersStatusRequest
+	(*PeersStatusResponse)(nil),    // 8: proto.PeersStatusResponse
+	(*Peer)(nil),                   // 9: proto.Peer
+	(*AccountsNewRequest)(nil),     // 10: proto.AccountsNewRequest
+	(*AccountsNewResponse)(nil),    // 11: proto.AccountsNewResponse
+	(*AccountsListRequest)(nil),    // 12: proto.AccountsListRequest
+	(*AccountsListResponse)(nil),   // 13: proto.AccountsListResponse
+	(*Account)(nil),                // 14: proto.Account
+	(*AccountsImportRequest)(nil),  // 15: proto.AccountsImportRequest
+	(*AccountsImportResponse)(nil), // 16: proto.AccountsImportResponse
+	(*PprofRequest)(nil),           // 17: proto.PprofRequest
+	(*PprofResponse)(nil),          // 18: proto.PprofResponse
+	nil,                            // 19: proto.PprofResponse.HeadersEntry
 }
 var file_command_server_proto_server_proto_depIdxs = []int32{
 	9,  // 0: proto.PeersListResponse.peers:type_name -> proto.Peer
 	9,  // 1: proto.PeersStatusResponse.peer:type_name -> proto.Peer
-	0,  // 2: proto.PprofRequest.type:type_name -> proto.PprofRequest.Type
-	12, // 3: proto.PprofResponse.headers:type_name -> proto.PprofResponse.HeadersEntry
-	10, // 4: proto.Bor.Pprof:input_type -> proto.PprofRequest
-	1,  // 5: proto.Bor.PeersAdd:input_type -> proto.PeersAddRequest
-	3,  // 6: proto.Bor.PeersRemove:input_type -> proto.PeersRemoveRequest
-	5,  // 7: proto.Bor.PeersList:input_type -> proto.PeersListRequest
-	7,  // 8: proto.Bor.PeersStatus:input_type -> proto.PeersStatusRequest
-	11, // 9: proto.Bor.Pprof:output_type -> proto.PprofResponse
-	2,  // 10: proto.Bor.PeersAdd:output_type -> proto.PeersAddResponse
-	4,  // 11: proto.Bor.PeersRemove:output_type -> proto.PeersRemoveResponse
-	6,  // 12: proto.Bor.PeersList:output_type -> proto.PeersListResponse
-	8,  // 13: proto.Bor.PeersStatus:output_type -> proto.PeersStatusResponse
-	9,  // [9:14] is the sub-list for method output_type
-	4,  // [4:9] is the sub-list for method input_type
-	4,  // [4:4] is the sub-list for extension type_name
-	4,  // [4:4] is the sub-list for extension extendee
-	0,  // [0:4] is the sub-list for field type_name
+	14, // 2: proto.AccountsNewResponse.account:type_name -> proto.Account
+	14, // 3: proto.AccountsListResponse.accounts:type_name -> proto.Account
+	14, // 4: proto.AccountsImportResponse.account:type_name -> proto.Account
+	0,  // 5: proto.PprofRequest.type:type_name -> proto.PprofRequest.Type
+	19, // 6: proto.PprofResponse.headers:type_name -> proto.PprofResponse.HeadersEntry
+	17, // 7: proto.Bor.Pprof:input_type -> proto.PprofRequest
+	1,  // 8: proto.Bor.PeersAdd:input_type -> proto.PeersAddRequest
+	3,  // 9: proto.Bor.PeersRemove:input_type -> proto.PeersRemoveRequest
+	5,  // 10: proto.Bor.PeersList:input_type -> proto.PeersListRequest
+	7,  // 11: proto.Bor.PeersStatus:input_type -> proto.PeersStatusRequest
+	10, // 12: proto.Bor.AccountsNew:input_type -> proto.AccountsNewRequest
+	12, // 13: proto.Bor.AccountsList:input_type -> proto.AccountsListRequest
+	15, // 14: proto.Bor.AccountsImport:input_type -> proto.AccountsImportRequest
+	18, // 15: proto.Bor.Pprof:output_type -> proto.PprofResponse
+	2,  // 16: proto.Bor.PeersAdd:output_type -> proto.PeersAddResponse
+	4,  // 17: proto.Bor.PeersRemove:output_type -> proto.PeersRemoveResponse
+	6,  // 18: proto.Bor.PeersList:output_type -> proto.PeersListResponse
+	8,  // 19: proto.Bor.PeersStatus:output_type -> proto.PeersStatusResponse
+	11, // 20: proto.Bor.AccountsNew:output_type -> proto.AccountsNewResponse
+	13, // 21: proto.Bor.AccountsList:output_type -> proto.AccountsListResponse
+	16, // 22: proto.Bor.AccountsImport:output_type -> proto.AccountsImportResponse
+	15, // [15:23] is the sub-list for method output_type
+	7,  // [7:15] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_command_server_proto_server_proto_init() }
@@ -900,7 +1291,7 @@ func file_command_server_proto_server_proto_init() {
 			}
 		}
 		file_command_server_proto_server_proto_msgTypes[9].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*PprofRequest); i {
+			switch v := v.(*AccountsNewRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -912,6 +1303,90 @@ func file_command_server_proto_server_proto_init() {
 			}
 		}
 		file_command_server_proto_server_proto_msgTypes[10].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*AccountsNewResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_command_server_proto_server_proto_msgTypes[11].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*AccountsListRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_command_server_proto_server_proto_msgTypes[12].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*AccountsListResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_command_server_proto_server_proto_msgTypes[13].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*Account); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_command_server_proto_server_proto_msgTypes[14].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*AccountsImportRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_command_server_proto_server_proto_msgTypes[15].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*AccountsImportResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_command_server_proto_server_proto_msgTypes[16].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*PprofRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_command_server_proto_server_proto_msgTypes[17].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*PprofResponse); i {
 			case 0:
 				return &v.state
@@ -930,7 +1405,7 @@ func file_command_server_proto_server_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_command_server_proto_server_proto_rawDesc,
 			NumEnums:      1,
-			NumMessages:   12,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -23,6 +23,9 @@ type BorClient interface {
 	PeersRemove(ctx context.Context, in *PeersRemoveRequest, opts ...grpc.CallOption) (*PeersRemoveResponse, error)
 	PeersList(ctx context.Context, in *PeersListRequest, opts ...grpc.CallOption) (*PeersListResponse, error)
 	PeersStatus(ctx context.Context, in *PeersStatusRequest, opts ...grpc.CallOption) (*PeersStatusResponse, error)
+	AccountsNew(ctx context.Context, in *AccountsNewRequest, opts ...grpc.CallOption) (*AccountsNewResponse, error)
+	AccountsList(ctx context.Context, in *AccountsListRequest, opts ...grpc.CallOption) (*AccountsListResponse, error)
+	AccountsImport(ctx context.Context, in *AccountsImportRequest, opts ...grpc.CallOption) (*AccountsImportResponse, error)
 }
 
 type borClient struct {
@@ -78,6 +81,33 @@ func (c *borClient) PeersStatus(ctx context.Context, in *PeersStatusRequest, opt
 	return out, nil
 }
 
+func (c *borClient) AccountsNew(ctx context.Context, in *AccountsNewRequest, opts ...grpc.CallOption) (*AccountsNewResponse, error) {
+	out := new(AccountsNewResponse)
+	err := c.cc.Invoke(ctx, "/proto.Bor/AccountsNew", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *borClient) AccountsList(ctx context.Context, in *AccountsListRequest, opts ...grpc.CallOption) (*AccountsListResponse, error) {
+	out := new(AccountsListResponse)
+	err := c.cc.Invoke(ctx, "/proto.Bor/AccountsList", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *borClient) AccountsImport(ctx context.Context, in *AccountsImportRequest, opts ...grpc.CallOption) (*AccountsImportResponse, error) {
+	out := new(AccountsImportResponse)
+	err := c.cc.Invoke(ctx, "/proto.Bor/AccountsImport", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // BorServer is the server API for Bor service.
 // All implementations must embed UnimplementedBorServer
 // for forward compatibility
@@ -87,6 +117,9 @@ type BorServer interface {
 	PeersRemove(context.Context, *PeersRemoveRequest) (*PeersRemoveResponse, error)
 	PeersList(context.Context, *PeersListRequest) (*PeersListResponse, error)
 	PeersStatus(context.Context, *PeersStatusRequest) (*PeersStatusResponse, error)
+	AccountsNew(context.Context, *AccountsNewRequest) (*AccountsNewResponse, error)
+	AccountsList(context.Context, *AccountsListRequest) (*AccountsListResponse, error)
+	AccountsImport(context.Context, *AccountsImportRequest) (*AccountsImportResponse, error)
 	mustEmbedUnimplementedBorServer()
 }
 
@@ -108,6 +141,15 @@ func (UnimplementedBorServer) PeersList(context.Context, *PeersListRequest) (*Pe
 }
 func (UnimplementedBorServer) PeersStatus(context.Context, *PeersStatusRequest) (*PeersStatusResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PeersStatus not implemented")
+}
+func (UnimplementedBorServer) AccountsNew(context.Context, *AccountsNewRequest) (*AccountsNewResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AccountsNew not implemented")
+}
+func (UnimplementedBorServer) AccountsList(context.Context, *AccountsListRequest) (*AccountsListResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AccountsList not implemented")
+}
+func (UnimplementedBorServer) AccountsImport(context.Context, *AccountsImportRequest) (*AccountsImportResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AccountsImport not implemented")
 }
 func (UnimplementedBorServer) mustEmbedUnimplementedBorServer() {}
 
@@ -212,6 +254,60 @@ func _Bor_PeersStatus_Handler(srv interface{}, ctx context.Context, dec func(int
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Bor_AccountsNew_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AccountsNewRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BorServer).AccountsNew(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/proto.Bor/AccountsNew",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BorServer).AccountsNew(ctx, req.(*AccountsNewRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Bor_AccountsList_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AccountsListRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BorServer).AccountsList(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/proto.Bor/AccountsList",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BorServer).AccountsList(ctx, req.(*AccountsListRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Bor_AccountsImport_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AccountsImportRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BorServer).AccountsImport(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/proto.Bor/AccountsImport",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BorServer).AccountsImport(ctx, req.(*AccountsImportRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Bor_ServiceDesc is the grpc.ServiceDesc for Bor service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -238,6 +334,18 @@ var Bor_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "PeersStatus",
 			Handler:    _Bor_PeersStatus_Handler,
+		},
+		{
+			MethodName: "AccountsNew",
+			Handler:    _Bor_AccountsNew_Handler,
+		},
+		{
+			MethodName: "AccountsList",
+			Handler:    _Bor_AccountsList_Handler,
+		},
+		{
+			MethodName: "AccountsImport",
+			Handler:    _Bor_AccountsImport_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
