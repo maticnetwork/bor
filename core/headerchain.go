@@ -34,6 +34,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	lru "github.com/hashicorp/golang-lru"
+	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"
 )
 
 const (
@@ -368,6 +369,10 @@ func (hc *HeaderChain) ValidateHeaderChain(chain []*types.Header, checkFreq int)
 // The returned 'write status' says if the inserted headers are part of the canonical chain
 // or a side chain.
 func (hc *HeaderChain) InsertHeaderChain(chain []*types.Header, start time.Time) (WriteStatus, error) {
+
+	span := tracer.StartSpan("web.request", tracer.ResourceName("parent"))
+	defer span.Finish()
+
 	if hc.procInterrupt() {
 		return 0, errors.New("aborted")
 	}

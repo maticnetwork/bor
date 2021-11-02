@@ -40,6 +40,9 @@ import (
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/node"
 	"gopkg.in/urfave/cli.v1"
+
+	"gopkg.in/DataDog/dd-trace-go.v1/ddtrace/tracer"
+	"gopkg.in/DataDog/dd-trace-go.v1/profiler"
 )
 
 const (
@@ -264,6 +267,33 @@ func init() {
 }
 
 func main() {
+
+	tracer.Start(
+		// tracer.WithSampling(rules),
+		tracer.WithService("test-service"),
+		tracer.WithEnv("test-env"),
+	)
+	defer tracer.Stop()
+
+	if err := profiler.Start(
+		profiler.WithService("test-service"),
+		profiler.WithEnv("test-env"),
+		profiler.WithProfileTypes(
+			profiler.CPUProfile,
+			profiler.HeapProfile,
+
+			// The profiles below are disabled by
+			// default to keep overhead low, but
+			// can be enabled as needed.
+			// profiler.BlockProfile,
+			// profiler.MutexProfile,
+			// profiler.GoroutineProfile,
+		),
+	); err != nil {
+		log.Error("%v", err)
+	}
+	defer profiler.Stop()
+
 	if err := app.Run(os.Args); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
