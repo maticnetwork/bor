@@ -616,6 +616,7 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 		// Remove all completed tasks and terminate sync if everything's done
 		s.cleanStorageTasks()
 		s.cleanAccountTasks()
+		log.Info("Custom:: Looping in sync", "length of sync tasks", len(s.tasks), "pending scheduler tasks", s.healer.scheduler.Pending())
 		if len(s.tasks) == 0 && s.healer.scheduler.Pending() == 0 {
 			return nil
 		}
@@ -626,6 +627,7 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 
 		if len(s.tasks) == 0 {
 			// Sync phase done, run heal phase
+			log.Info("Custom:: sync tasks completed, starting to heal", "pending scheduler tasks", s.healer.scheduler.Pending())
 			s.assignTrienodeHealTasks(trienodeHealResps, trienodeHealReqFails, cancel)
 			s.assignBytecodeHealTasks(bytecodeHealResps, bytecodeHealReqFails, cancel)
 		}
@@ -638,6 +640,7 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 		case id := <-peerDrop:
 			s.revertRequests(id)
 		case <-cancel:
+			log.Info("Custom:: Sync cycle canceled")
 			return ErrCancelled
 
 		case req := <-accountReqFails:
@@ -1231,6 +1234,7 @@ func (s *Syncer) assignTrienodeHealTasks(success chan *trienodeHealResponse, fai
 		return
 	}
 	sort.Sort(sort.Reverse(idlers))
+	log.Info("Custom:: Assigning trienode heal tasks", "length of healer trie tasks", len(s.healer.trieTasks), "pending scheduler tasks", s.healer.scheduler.Pending())
 
 	// Iterate over pending tasks and try to find a peer to retrieve with
 	for len(s.healer.trieTasks) > 0 || s.healer.scheduler.Pending() > 0 {
@@ -1322,7 +1326,7 @@ func (s *Syncer) assignTrienodeHealTasks(success chan *trienodeHealResponse, fai
 		s.pend.Add(1)
 		go func(root common.Hash) {
 			defer s.pend.Done()
-
+			log.Info("Custom:: Requesting peer for trie nodes", "pending healer trie tasks", len(s.healer.trieTasks), "pending scheduler tasks", s.healer.scheduler.Pending())
 			// Attempt to send the remote request and revert if it fails
 			if err := peer.RequestTrieNodes(reqid, root, pathsets, maxRequestSize); err != nil {
 				log.Debug("Failed to request trienode healers", "err", err)
@@ -1649,7 +1653,7 @@ func (s *Syncer) scheduleRevertTrienodeHealRequest(req *trienodeHealRequest) {
 // Note, this needs to run on the event runloop thread to reschedule to idle peers.
 // On peer threads, use scheduleRevertTrienodeHealRequest.
 func (s *Syncer) revertTrienodeHealRequest(req *trienodeHealRequest) {
-	log.Debug("Reverting trienode heal request", "peer", req.peer)
+	log.Info("Custom:: Reverting trienode heal request", "peer", req.peer, "reqId", req.id, "time", time.Now())
 	select {
 	case <-req.stale:
 		log.Trace("Trienode heal request already reverted", "peer", req.peer, "reqid", req.id)
@@ -2568,9 +2572,13 @@ func (s *Syncer) OnTrieNodes(peer SyncPeer, id uint64, trienodes [][]byte) error
 	}
 	// Ensure the response is for a valid request
 	req, ok := s.trienodeHealReqs[id]
+	if ok {
+		log.Info("Custom:: Got trienode heal response", "ok", ok, "id", id, "time", time.Now())
+	}
 	if !ok {
 		// Request stale, perhaps the peer timed out but came through in the end
-		logger.Warn("Unexpected trienode heal packet")
+		// logger.Warn("Unexpected trienode heal packet")
+		log.Info("Custom:: Got trienode heal response, Unexpected trienode heal packet", "id", id, "time", time.Now())
 		s.lock.Unlock()
 		return nil
 	}
@@ -2776,7 +2784,7 @@ func (s *Syncer) report(force bool) {
 // reportSyncProgress calculates various status reports and provides it to the user.
 func (s *Syncer) reportSyncProgress(force bool) {
 	// Don't report all the events, just occasionally
-	if !force && time.Since(s.logTime) < 8*time.Second {
+	if !force && time.Since(s.logTime) < 2*time.Second {
 		return
 	}
 	// Don't report anything until we have a meaningful progress
@@ -2803,32 +2811,36 @@ func (s *Syncer) reportSyncProgress(force bool) {
 
 	// Create a mega progress report
 	var (
-		progress = fmt.Sprintf("%.2f%%", float64(synced)*100/estBytes)
-		accounts = fmt.Sprintf("%v@%v", log.FormatLogfmtUint64(s.accountSynced), s.accountBytes.TerminalString())
-		storage  = fmt.Sprintf("%v@%v", log.FormatLogfmtUint64(s.storageSynced), s.storageBytes.TerminalString())
-		bytecode = fmt.Sprintf("%v@%v", log.FormatLogfmtUint64(s.bytecodeSynced), s.bytecodeBytes.TerminalString())
+		progress      = fmt.Sprintf("%.2f%%", float64(synced)*100/estBytes)
+		accounts      = fmt.Sprintf("%v@%v", log.FormatLogfmtUint64(s.accountSynced), s.accountBytes.TerminalString())
+		storage       = fmt.Sprintf("%v@%v", log.FormatLogfmtUint64(s.storageSynced), s.storageBytes.TerminalString())
+		bytecode      = fmt.Sprintf("%v@%v", log.FormatLogfmtUint64(s.bytecodeSynced), s.bytecodeBytes.TerminalString())
+		numberOfPeers = fmt.Sprintf("%v", len(s.peers))
 	)
 	log.Info("State sync in progress", "synced", progress, "state", synced,
-		"accounts", accounts, "slots", storage, "codes", bytecode, "eta", common.PrettyDuration(estTime-elapsed))
+		"accounts", accounts, "slots", storage, "codes", bytecode, "eta", common.PrettyDuration(estTime-elapsed), "numberOfPeers", numberOfPeers)
 }
 
 // reportHealProgress calculates various status reports and provides it to the user.
 func (s *Syncer) reportHealProgress(force bool) {
 	// Don't report all the events, just occasionally
-	if !force && time.Since(s.logTime) < 8*time.Second {
+	if !force && time.Since(s.logTime) < 2*time.Second {
 		return
 	}
 	s.logTime = time.Now()
 
 	// Create a mega progress report
 	var (
-		trienode = fmt.Sprintf("%v@%v", log.FormatLogfmtUint64(s.trienodeHealSynced), s.trienodeHealBytes.TerminalString())
-		bytecode = fmt.Sprintf("%v@%v", log.FormatLogfmtUint64(s.bytecodeHealSynced), s.bytecodeHealBytes.TerminalString())
-		accounts = fmt.Sprintf("%v@%v", log.FormatLogfmtUint64(s.accountHealed), s.accountHealedBytes.TerminalString())
-		storage  = fmt.Sprintf("%v@%v", log.FormatLogfmtUint64(s.storageHealed), s.storageHealedBytes.TerminalString())
+		trienode               = fmt.Sprintf("%v@%v", log.FormatLogfmtUint64(s.trienodeHealSynced), s.trienodeHealBytes.TerminalString())
+		bytecode               = fmt.Sprintf("%v@%v", log.FormatLogfmtUint64(s.bytecodeHealSynced), s.bytecodeHealBytes.TerminalString())
+		accounts               = fmt.Sprintf("%v@%v", log.FormatLogfmtUint64(s.accountHealed), s.accountHealedBytes.TerminalString())
+		storage                = fmt.Sprintf("%v@%v", log.FormatLogfmtUint64(s.storageHealed), s.storageHealedBytes.TerminalString())
+		numberOfPeers          = fmt.Sprintf("%v", len(s.peers))
+		pendingHealingRequests = fmt.Sprintf("%v", len(s.trienodeHealReqs))
+		trieTasks              = fmt.Sprintf("%v", len(s.healer.trieTasks))
 	)
 	log.Info("State heal in progress", "accounts", accounts, "slots", storage,
-		"codes", bytecode, "nodes", trienode, "pending", s.healer.scheduler.Pending())
+		"codes", bytecode, "nodes", trienode, "pending", s.healer.scheduler.Pending(), "numberOfPeers", numberOfPeers, "pending heal node requests", pendingHealingRequests, "pending healer trie tasks", trieTasks)
 }
 
 // estimateRemainingSlots tries to determine roughly how many slots are left in
