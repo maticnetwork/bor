@@ -677,6 +677,11 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 	}
 }
 
+// Pending returns the number of pending healing tasks
+func (s *Syncer) Pending() int {
+	return s.healer.scheduler.Pending()
+}
+
 /*
 func (s *Syncer) updateSyncStatus() {
 	// update the status every minute

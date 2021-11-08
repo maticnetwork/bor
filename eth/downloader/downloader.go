@@ -1812,15 +1812,20 @@ func (d *Downloader) processFastSyncContent() error {
 			// late and will drop peers due to unavailable state!!!
 			if height := latest.Number.Uint64(); height >= pivot.Number.Uint64()+2*uint64(fsMinFullBlocks)-uint64(reorgProtHeaderDelay) {
 				log.Warn("Pivot became stale, moving", "old", pivot.Number.Uint64(), "new", height-uint64(fsMinFullBlocks)+uint64(reorgProtHeaderDelay))
-				pivot = results[len(results)-1-fsMinFullBlocks+reorgProtHeaderDelay].Header // must exist as lower old pivot is uncommitted
 
-				d.pivotLock.Lock()
-				d.pivotHeader = pivot
-				d.pivotLock.Unlock()
+				// Only move pivot if there are no pending healing tasks else wait
+				// not sure what else will get affected by this
+				if d.SnapSyncer.Pending() == 0 {
+					pivot = results[len(results)-1-fsMinFullBlocks+reorgProtHeaderDelay].Header // must exist as lower old pivot is uncommitted
 
-				// Write out the pivot into the database so a rollback beyond it will
-				// reenable fast sync
-				rawdb.WriteLastPivotNumber(d.stateDB, pivot.Number.Uint64())
+					d.pivotLock.Lock()
+					d.pivotHeader = pivot
+					d.pivotLock.Unlock()
+
+					// Write out the pivot into the database so a rollback beyond it will
+					// reenable fast sync
+					rawdb.WriteLastPivotNumber(d.stateDB, pivot.Number.Uint64())
+				}
 			}
 		}
 		P, beforeP, afterP := splitAroundPivot(pivot.Number.Uint64(), results)
