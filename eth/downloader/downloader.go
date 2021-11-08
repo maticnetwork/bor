@@ -1815,6 +1815,7 @@ func (d *Downloader) processFastSyncContent() error {
 
 				// Only move pivot if there are no pending healing tasks else wait
 				// not sure what else will get affected by this
+				log.Info("Custom:: Pending Healing Tasks before updating pivot", "pending", d.SnapSyncer.Pending())
 				if d.SnapSyncer.Pending() == 0 {
 					pivot = results[len(results)-1-fsMinFullBlocks+reorgProtHeaderDelay].Header // must exist as lower old pivot is uncommitted
 
