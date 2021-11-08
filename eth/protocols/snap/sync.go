@@ -49,6 +49,12 @@ var (
 
 	// emptyCode is the known hash of the empty EVM bytecode.
 	emptyCode = crypto.Keccak256Hash(nil)
+
+	// current sync interval
+	interval time.Time = time.Now()
+
+	// syncing flag
+	syncing = true
 )
 
 const (
@@ -621,15 +627,26 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 			return nil
 		}
 		// Assign all the data retrieval tasks to any free peers
-		s.assignAccountTasks(accountResps, accountReqFails, cancel)
-		s.assignBytecodeTasks(bytecodeResps, bytecodeReqFails, cancel)
-		s.assignStorageTasks(storageResps, storageReqFails, cancel)
+		if syncing {
+			// syncing tasks
+			s.assignAccountTasks(accountResps, accountReqFails, cancel)
+			s.assignBytecodeTasks(bytecodeResps, bytecodeReqFails, cancel)
+			s.assignStorageTasks(storageResps, storageReqFails, cancel)
+		}
 
-		if len(s.tasks) == 0 {
+		if !syncing || len(s.tasks) == 0 {
 			// Sync phase done, run heal phase
-			log.Info("Custom:: sync tasks completed, starting to heal", "pending scheduler tasks", s.healer.scheduler.Pending())
+			if len(s.tasks) == 0 {
+				log.Info("Custom:: sync tasks completed, starting to heal", "pending scheduler tasks", s.healer.scheduler.Pending())
+			} else {
+				log.Info("Custom:: syncing paused, starting to heal", "pending scheduler tasks", s.healer.scheduler.Pending())
+			}
 			s.assignTrienodeHealTasks(trienodeHealResps, trienodeHealReqFails, cancel)
 			s.assignBytecodeHealTasks(bytecodeHealResps, bytecodeHealReqFails, cancel)
+		}
+		if !syncing && s.healer.scheduler.Pending() == 0 {
+			log.Info("Custom:: Healing tasks completed, resuming syncing")
+			syncing = true
 		}
 		// Wait for something to happen
 		select {
@@ -667,7 +684,28 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 		}
 		// Report stats if something meaningful happened
 		s.report(false)
+		s.updateSyncStatus()
 	}
+}
+
+func (s *Syncer) updateSyncStatus() {
+	// update the status every minute
+	if time.Since(interval) < time.Minute {
+		return
+	}
+
+	// Don't report anything until we have a meaningful progress
+	bytesSynced := s.accountBytes + s.bytecodeBytes + s.storageBytes
+	if bytesSynced == 0 {
+		return
+	}
+
+	// if we're syncing, mark the flag to false which states that we need to heal now
+	if syncing {
+		log.Info("Custom:: Pausing syncing")
+		syncing = false
+	}
+	interval = time.Now()
 }
 
 // loadSyncStatus retrieves a previously aborted sync status from the database,
