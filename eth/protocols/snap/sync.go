@@ -627,26 +627,15 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 			return nil
 		}
 		// Assign all the data retrieval tasks to any free peers
-		if syncing {
-			// syncing tasks
-			s.assignAccountTasks(accountResps, accountReqFails, cancel)
-			s.assignBytecodeTasks(bytecodeResps, bytecodeReqFails, cancel)
-			s.assignStorageTasks(storageResps, storageReqFails, cancel)
-		}
+		s.assignAccountTasks(accountResps, accountReqFails, cancel)
+		s.assignBytecodeTasks(bytecodeResps, bytecodeReqFails, cancel)
+		s.assignStorageTasks(storageResps, storageReqFails, cancel)
 
-		if !syncing || len(s.tasks) == 0 {
+		if len(s.tasks) == 0 {
 			// Sync phase done, run heal phase
-			if len(s.tasks) == 0 {
-				log.Info("Custom:: sync tasks completed, starting to heal", "pending scheduler tasks", s.healer.scheduler.Pending())
-			} else {
-				log.Info("Custom:: syncing paused, starting to heal", "pending scheduler tasks", s.healer.scheduler.Pending())
-			}
+			log.Info("Custom:: sync tasks completed, starting to heal", "pending scheduler tasks", s.healer.scheduler.Pending())
 			s.assignTrienodeHealTasks(trienodeHealResps, trienodeHealReqFails, cancel)
 			s.assignBytecodeHealTasks(bytecodeHealResps, bytecodeHealReqFails, cancel)
-		}
-		if !syncing && s.healer.scheduler.Pending() == 0 {
-			log.Info("Custom:: Healing tasks completed, resuming syncing")
-			syncing = true
 		}
 		// Wait for something to happen
 		select {
@@ -684,10 +673,11 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 		}
 		// Report stats if something meaningful happened
 		s.report(false)
-		s.updateSyncStatus()
+		// s.updateSyncStatus()
 	}
 }
 
+/*
 func (s *Syncer) updateSyncStatus() {
 	// update the status every minute
 	if time.Since(interval) < time.Minute {
@@ -707,6 +697,7 @@ func (s *Syncer) updateSyncStatus() {
 	}
 	interval = time.Now()
 }
+*/
 
 // loadSyncStatus retrieves a previously aborted sync status from the database,
 // or generates a fresh one if none is available.
