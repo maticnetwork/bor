@@ -631,6 +631,17 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 		s.assignBytecodeTasks(bytecodeResps, bytecodeReqFails, cancel)
 		s.assignStorageTasks(storageResps, storageReqFails, cancel)
 
+		if s.healer.scheduler.Pending() < 5 {
+			// iterate over s.healer.trieTasks and print
+			for k, v := range s.healer.trieTasks {
+				log.Info("Custom:: Trie Tasks", "key", k, "value", v)
+			}
+			// iterate over s.healer.codeTasks and print
+			for k, v := range s.healer.codeTasks {
+				log.Info("Custom:: Code Tasks", "key", k, "value", v)
+			}
+		}
+
 		if len(s.tasks) == 0 {
 			// Sync phase done, run heal phase
 			log.Info("Custom:: sync tasks completed, starting to heal", "pending scheduler tasks", s.healer.scheduler.Pending())
@@ -1363,7 +1374,7 @@ func (s *Syncer) assignTrienodeHealTasks(success chan *trienodeHealResponse, fai
 		s.pend.Add(1)
 		go func(root common.Hash) {
 			defer s.pend.Done()
-			log.Info("Custom:: Requesting peer for trie nodes", "pending healer trie tasks", len(s.healer.trieTasks), "pending scheduler tasks", s.healer.scheduler.Pending())
+			log.Info("Custom:: Requesting peer for trie nodes", "reqId", req.id, "pending healer trie tasks", len(s.healer.trieTasks), "pending scheduler tasks", s.healer.scheduler.Pending())
 			// Attempt to send the remote request and revert if it fails
 			if err := peer.RequestTrieNodes(reqid, root, pathsets, maxRequestSize); err != nil {
 				log.Debug("Failed to request trienode healers", "err", err)
