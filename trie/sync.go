@@ -333,6 +333,11 @@ func (s *Sync) Pending() int {
 	return len(s.nodeReqs) + len(s.codeReqs)
 }
 
+// Returns s.nodeReqs and s.codeReqs
+func (s *Sync) PendingRequests() (map[common.Hash]*request, map[common.Hash]*request) {
+	return s.nodeReqs, s.codeReqs
+}
+
 // schedule inserts a new state retrieval request into the fetch queue. If there
 // is already a pending request for this node, the new request will be discarded
 // and only a parent reference added to the old one.

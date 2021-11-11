@@ -41,7 +41,6 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/opentracing/opentracing-go"
-	"github.com/uber/jaeger-client-go"
 	"github.com/uber/jaeger-client-go/config"
 	"golang.org/x/crypto/sha3"
 )
@@ -58,6 +57,9 @@ var (
 
 	// syncing flag
 	syncing = true
+
+	// jaeger data
+	Parent opentracing.Span = nil
 )
 
 const (
@@ -466,14 +468,11 @@ func NewSyncer(db ethdb.KeyValueStore) *Syncer {
 			Param: 1,
 		},
 		Reporter: &config.ReporterConfig{
-			LogSpans:            true,
+			LogSpans:            false,
 			BufferFlushInterval: 1 * time.Second,
 		},
 	}
-	tracer, _, err := cfg.New(
-		"SnapSync",
-		config.Logger(jaeger.StdLogger),
-	)
+	tracer, _, err := cfg.New("SnapSync")
 
 	if err != nil {
 		log.Info("Custom:: Failed to start jaeger tracer", err)
@@ -481,6 +480,8 @@ func NewSyncer(db ethdb.KeyValueStore) *Syncer {
 		opentracing.SetGlobalTracer(tracer)
 		// defer closer.Close()
 	}
+
+	Parent = opentracing.GlobalTracer().StartSpan("SnapSync")
 
 	return &Syncer{
 		db: db,
@@ -644,11 +645,10 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 		trienodeHealResps    = make(chan *trienodeHealResponse)
 		bytecodeHealResps    = make(chan *bytecodeHealResponse)
 	)
-	parent := opentracing.GlobalTracer().StartSpan("SnapSync")
-	defer parent.Finish()
+	defer Parent.Finish()
 	for {
 		// Remove all completed tasks and terminate sync if everything's done
-		cleanTasks := opentracing.GlobalTracer().StartSpan("Clean Tasks", opentracing.ChildOf(parent.Context()))
+		cleanTasks := opentracing.GlobalTracer().StartSpan("Clean Tasks", opentracing.ChildOf(Parent.Context()))
 		s.cleanStorageTasks()
 		s.cleanAccountTasks()
 		cleanTasks.Finish()
@@ -659,26 +659,20 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 		}
 
 		// Assign all the data retrieval tasks to any free peers
-		accountTask := opentracing.GlobalTracer().StartSpan("Account Tasks", opentracing.ChildOf(parent.Context()))
+		dataRetreivalTask := opentracing.GlobalTracer().StartSpan("Data (Account, Storage, Bytecode) Retrieval Tasks", opentracing.ChildOf(Parent.Context()))
 		s.assignAccountTasks(accountResps, accountReqFails, cancel)
-		accountTask.Finish()
-
-		bytecodeTask := opentracing.GlobalTracer().StartSpan("Bytecode Tasks", opentracing.ChildOf(parent.Context()))
 		s.assignBytecodeTasks(bytecodeResps, bytecodeReqFails, cancel)
-		bytecodeTask.Finish()
-
-		storageTask := opentracing.GlobalTracer().StartSpan("Storage Tasks", opentracing.ChildOf(parent.Context()))
 		s.assignStorageTasks(storageResps, storageReqFails, cancel)
-		storageTask.Finish()
+		dataRetreivalTask.Finish()
 
 		if s.healer.scheduler.Pending() < 5 {
-			log.Info("Custom:: Data of Pending Healing Tasks")
-			// iterate over s.healer.trieTasks and print
-			for k, v := range s.healer.trieTasks {
+			trieTasks, codeTasks := s.healer.scheduler.PendingRequests()
+			log.Info("Custom:: Data of Pending Healing Tasks", "trie tasks", len(s.healer.trieTasks), "scheduled trie tasks", len(trieTasks), "code tasks", len(s.healer.codeTasks), "scheduled code tasks", len(codeTasks))
+			for k, v := range trieTasks {
 				log.Info("Custom:: Trie Tasks", "key", k, "value", v)
 			}
 			// iterate over s.healer.codeTasks and print
-			for k, v := range s.healer.codeTasks {
+			for k, v := range codeTasks {
 				log.Info("Custom:: Code Tasks", "key", k, "value", v)
 			}
 		}
@@ -687,11 +681,11 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 			// Sync phase done, run heal phase
 			log.Info("Custom:: sync tasks completed, starting to heal", "pending scheduler tasks", s.healer.scheduler.Pending())
 
-			trienodeHealTask := opentracing.GlobalTracer().StartSpan("Trie Node Healing Task", opentracing.ChildOf(parent.Context()))
+			trienodeHealTask := opentracing.GlobalTracer().StartSpan("Trie Node Healing Task", opentracing.ChildOf(Parent.Context()))
 			s.assignTrienodeHealTasks(trienodeHealResps, trienodeHealReqFails, cancel)
 			trienodeHealTask.Finish()
 
-			bytecodeHealTask := opentracing.GlobalTracer().StartSpan("Bytecode Healing Task", opentracing.ChildOf(parent.Context()))
+			bytecodeHealTask := opentracing.GlobalTracer().StartSpan("Bytecode Healing Task", opentracing.ChildOf(Parent.Context()))
 			s.assignBytecodeHealTasks(bytecodeHealResps, bytecodeHealReqFails, cancel)
 			bytecodeHealTask.Finish()
 		}
@@ -725,11 +719,11 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 		case res := <-storageResps:
 			s.processStorageResponse(res)
 		case res := <-trienodeHealResps:
-			trienodeHealResponse := opentracing.GlobalTracer().StartSpan("Trie Node Healing Response", opentracing.ChildOf(parent.Context()))
+			trienodeHealResponse := opentracing.GlobalTracer().StartSpan("Trie Node Healing Response", opentracing.ChildOf(Parent.Context()))
 			s.processTrienodeHealResponse(res)
 			trienodeHealResponse.Finish()
 		case res := <-bytecodeHealResps:
-			bytecodeHealResponse := opentracing.GlobalTracer().StartSpan("Bytecode Healing Response", opentracing.ChildOf(parent.Context()))
+			bytecodeHealResponse := opentracing.GlobalTracer().StartSpan("Bytecode Healing Response", opentracing.ChildOf(Parent.Context()))
 			s.processBytecodeHealResponse(res)
 			bytecodeHealResponse.Finish()
 		}
@@ -1333,7 +1327,7 @@ func (s *Syncer) assignTrienodeHealTasks(success chan *trienodeHealResponse, fai
 		return
 	}
 	sort.Sort(sort.Reverse(idlers))
-	log.Info("Custom:: Assigning trienode heal tasks", "length of healer trie tasks", len(s.healer.trieTasks), "pending scheduler tasks", s.healer.scheduler.Pending())
+	log.Info("Custom:: Pre Assigning trienode heal tasks", "length of healer trie tasks", len(s.healer.trieTasks), "pending scheduler tasks", s.healer.scheduler.Pending())
 
 	// Iterate over pending tasks and try to find a peer to retrieve with
 	for len(s.healer.trieTasks) > 0 || s.healer.scheduler.Pending() > 0 {
@@ -1357,6 +1351,7 @@ func (s *Syncer) assignTrienodeHealTasks(success chan *trienodeHealResponse, fai
 		if len(s.healer.trieTasks) == 0 {
 			return
 		}
+		log.Info("Custom:: Assigning trienode heal tasks", "length of healer trie tasks", len(s.healer.trieTasks), "pending scheduler tasks", s.healer.scheduler.Pending())
 		// Task pending retrieval, try to find an idle peer. If no such peer
 		// exists, we probably assigned tasks for all (or they are stateless).
 		// Abort the entire assignment mechanism.
@@ -1414,10 +1409,14 @@ func (s *Syncer) assignTrienodeHealTasks(success chan *trienodeHealResponse, fai
 			paths:   paths,
 			task:    s.healer,
 		}
+		request := opentracing.GlobalTracer().StartSpan("Requesting Trienodes", opentracing.ChildOf(Parent.Context()))
+		log.Info("Custom:: Timeout in trienode heal request", "timeout", s.rates.TargetTimeout())
 		req.timeout = time.AfterFunc(s.rates.TargetTimeout(), func() {
+			log.Info("Custom:: Trienode heal request timed out", "request id", req.id)
 			peer.Log().Debug("Trienode heal request timed out", "reqid", reqid)
 			s.rates.Update(idle, TrieNodesMsg, 0, 0)
 			s.scheduleRevertTrienodeHealRequest(req)
+			request.Finish()
 		})
 		s.trienodeHealReqs[reqid] = req
 		delete(s.trienodeHealIdlers, idle)
@@ -2185,6 +2184,7 @@ func (s *Syncer) processTrienodeHealResponse(res *trienodeHealResponse) {
 	if err := batch.Write(); err != nil {
 		log.Crit("Failed to persist healing data", "err", err)
 	}
+	log.Info("Persisted set of healing data", "type", "trienodes", "bytes", common.StorageSize(batch.ValueSize()))
 	log.Debug("Persisted set of healing data", "type", "trienodes", "bytes", common.StorageSize(batch.ValueSize()))
 }
 
