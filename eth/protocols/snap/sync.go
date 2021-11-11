@@ -253,6 +253,8 @@ type trienodeHealResponse struct {
 	hashes []common.Hash   // Hashes of the trie nodes to avoid double hashing
 	paths  []trie.SyncPath // Trie node paths requested for rescheduling missing ones
 	nodes  [][]byte        // Actual trie nodes to store into the database (nil = missing)
+
+	id uint64 // Request ID of this response
 }
 
 // bytecodeHealRequest tracks a pending bytecode request to ensure responses are to
@@ -2187,8 +2189,8 @@ func (s *Syncer) processTrienodeHealResponse(res *trienodeHealResponse) {
 	if err := batch.Write(); err != nil {
 		log.Crit("Failed to persist healing data", "err", err)
 	}
-	log.Info("Persisted set of healing data", "type", "trienodes", "bytes", common.StorageSize(batch.ValueSize()))
-	log.Debug("Persisted set of healing data", "type", "trienodes", "bytes", common.StorageSize(batch.ValueSize()))
+	log.Info("Persisted set of healing data", "type", "trienodes", "bytes", common.StorageSize(batch.ValueSize()), "reqid", res.id)
+	// log.Debug("Persisted set of healing data", "type", "trienodes", "bytes", common.StorageSize(batch.ValueSize()))
 }
 
 // processBytecodeHealResponse integrates an already validated bytecode response
@@ -2743,6 +2745,7 @@ func (s *Syncer) OnTrieNodes(peer SyncPeer, id uint64, trienodes [][]byte) error
 		hashes: req.hashes,
 		paths:  req.paths,
 		nodes:  nodes,
+		id:     id,
 	}
 	select {
 	case req.deliver <- response:
