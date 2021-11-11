@@ -1315,7 +1315,8 @@ func (s *Syncer) assignTrienodeHealTasks(success chan *trienodeHealResponse, fai
 		ids:  make([]string, 0, len(s.trienodeHealIdlers)),
 		caps: make([]int, 0, len(s.trienodeHealIdlers)),
 	}
-	targetTTL := s.rates.TargetTimeout()
+	// targetTTL := s.rates.TargetTimeout()
+	targetTTL := time.Minute // fix for now
 	for id := range s.trienodeHealIdlers {
 		if _, ok := s.statelessPeers[id]; ok {
 			continue
@@ -1410,8 +1411,9 @@ func (s *Syncer) assignTrienodeHealTasks(success chan *trienodeHealResponse, fai
 			task:    s.healer,
 		}
 		request := opentracing.GlobalTracer().StartSpan("Requesting Trienodes", opentracing.ChildOf(Parent.Context()))
-		log.Info("Custom:: Timeout in trienode heal request", "timeout", s.rates.TargetTimeout())
-		req.timeout = time.AfterFunc(s.rates.TargetTimeout(), func() {
+		log.Info("Custom:: Timeout in trienode heal request", "timeout", targetTTL)
+		// req.timeout = time.AfterFunc(s.rates.TargetTimeout(), func() {
+		req.timeout = time.AfterFunc(targetTTL, func() {
 			log.Info("Custom:: Trienode heal request timed out", "request id", req.id)
 			peer.Log().Debug("Trienode heal request timed out", "reqid", reqid)
 			s.rates.Update(idle, TrieNodesMsg, 0, 0)
@@ -1445,7 +1447,8 @@ func (s *Syncer) assignBytecodeHealTasks(success chan *bytecodeHealResponse, fai
 		ids:  make([]string, 0, len(s.bytecodeHealIdlers)),
 		caps: make([]int, 0, len(s.bytecodeHealIdlers)),
 	}
-	targetTTL := s.rates.TargetTimeout()
+	// targetTTL := s.rates.TargetTimeout()
+	targetTTL := time.Minute // fix for now
 	for id := range s.bytecodeHealIdlers {
 		if _, ok := s.statelessPeers[id]; ok {
 			continue
@@ -1529,7 +1532,7 @@ func (s *Syncer) assignBytecodeHealTasks(success chan *bytecodeHealResponse, fai
 			hashes:  hashes,
 			task:    s.healer,
 		}
-		req.timeout = time.AfterFunc(s.rates.TargetTimeout(), func() {
+		req.timeout = time.AfterFunc(targetTTL, func() {
 			peer.Log().Debug("Bytecode heal request timed out", "reqid", reqid)
 			s.rates.Update(idle, ByteCodesMsg, 0, 0)
 			s.scheduleRevertBytecodeHealRequest(req)
