@@ -40,6 +40,9 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/msgrate"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
+	"github.com/opentracing/opentracing-go"
+	"github.com/uber/jaeger-client-go"
+	"github.com/uber/jaeger-client-go/config"
 	"golang.org/x/crypto/sha3"
 )
 
@@ -456,6 +459,29 @@ type Syncer struct {
 // NewSyncer creates a new snapshot syncer to download the Ethereum state over the
 // snap protocol.
 func NewSyncer(db ethdb.KeyValueStore) *Syncer {
+	// jaeger configurations
+	cfg := config.Configuration{
+		Sampler: &config.SamplerConfig{
+			Type:  "const",
+			Param: 1,
+		},
+		Reporter: &config.ReporterConfig{
+			LogSpans:            true,
+			BufferFlushInterval: 1 * time.Second,
+		},
+	}
+	tracer, _, err := cfg.New(
+		"SnapSync",
+		config.Logger(jaeger.StdLogger),
+	)
+
+	if err != nil {
+		log.Info("Custom:: Failed to start jaeger tracer", err)
+	} else {
+		opentracing.SetGlobalTracer(tracer)
+		// defer closer.Close()
+	}
+
 	return &Syncer{
 		db: db,
 
@@ -618,20 +644,35 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 		trienodeHealResps    = make(chan *trienodeHealResponse)
 		bytecodeHealResps    = make(chan *bytecodeHealResponse)
 	)
+	parent := opentracing.GlobalTracer().StartSpan("SnapSync")
+	defer parent.Finish()
 	for {
 		// Remove all completed tasks and terminate sync if everything's done
+		cleanTasks := opentracing.GlobalTracer().StartSpan("Clean Tasks", opentracing.ChildOf(parent.Context()))
 		s.cleanStorageTasks()
 		s.cleanAccountTasks()
+		cleanTasks.Finish()
+
 		log.Info("Custom:: Looping in sync", "length of sync tasks", len(s.tasks), "pending scheduler tasks", s.healer.scheduler.Pending())
 		if len(s.tasks) == 0 && s.healer.scheduler.Pending() == 0 {
 			return nil
 		}
+
 		// Assign all the data retrieval tasks to any free peers
+		accountTask := opentracing.GlobalTracer().StartSpan("Account Tasks", opentracing.ChildOf(parent.Context()))
 		s.assignAccountTasks(accountResps, accountReqFails, cancel)
+		accountTask.Finish()
+
+		bytecodeTask := opentracing.GlobalTracer().StartSpan("Bytecode Tasks", opentracing.ChildOf(parent.Context()))
 		s.assignBytecodeTasks(bytecodeResps, bytecodeReqFails, cancel)
+		bytecodeTask.Finish()
+
+		storageTask := opentracing.GlobalTracer().StartSpan("Storage Tasks", opentracing.ChildOf(parent.Context()))
 		s.assignStorageTasks(storageResps, storageReqFails, cancel)
+		storageTask.Finish()
 
 		if s.healer.scheduler.Pending() < 5 {
+			log.Info("Custom:: Data of Pending Healing Tasks")
 			// iterate over s.healer.trieTasks and print
 			for k, v := range s.healer.trieTasks {
 				log.Info("Custom:: Trie Tasks", "key", k, "value", v)
@@ -645,8 +686,14 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 		if len(s.tasks) == 0 {
 			// Sync phase done, run heal phase
 			log.Info("Custom:: sync tasks completed, starting to heal", "pending scheduler tasks", s.healer.scheduler.Pending())
+
+			trienodeHealTask := opentracing.GlobalTracer().StartSpan("Trie Node Healing Task", opentracing.ChildOf(parent.Context()))
 			s.assignTrienodeHealTasks(trienodeHealResps, trienodeHealReqFails, cancel)
+			trienodeHealTask.Finish()
+
+			bytecodeHealTask := opentracing.GlobalTracer().StartSpan("Bytecode Healing Task", opentracing.ChildOf(parent.Context()))
 			s.assignBytecodeHealTasks(bytecodeHealResps, bytecodeHealReqFails, cancel)
+			bytecodeHealTask.Finish()
 		}
 		// Wait for something to happen
 		select {
@@ -678,9 +725,13 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 		case res := <-storageResps:
 			s.processStorageResponse(res)
 		case res := <-trienodeHealResps:
+			trienodeHealResponse := opentracing.GlobalTracer().StartSpan("Trie Node Healing Response", opentracing.ChildOf(parent.Context()))
 			s.processTrienodeHealResponse(res)
+			trienodeHealResponse.Finish()
 		case res := <-bytecodeHealResps:
+			bytecodeHealResponse := opentracing.GlobalTracer().StartSpan("Bytecode Healing Response", opentracing.ChildOf(parent.Context()))
 			s.processBytecodeHealResponse(res)
+			bytecodeHealResponse.Finish()
 		}
 		// Report stats if something meaningful happened
 		s.report(false)
