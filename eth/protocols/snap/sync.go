@@ -2651,6 +2651,8 @@ func (s *Syncer) OnStorage(peer SyncPeer, id uint64, hashes [][]common.Hash, slo
 // OnTrieNodes is a callback method to invoke when a batch of trie nodes
 // are received from a remote peer.
 func (s *Syncer) OnTrieNodes(peer SyncPeer, id uint64, trienodes [][]byte) error {
+	onTrienodesParent := opentracing.GlobalTracer().StartSpan("OnTrieNodes")
+	onTrienodeChild := opentracing.GlobalTracer().StartSpan("On Trie Nodes", opentracing.ChildOf(onTrienodesParent.Context()))
 	var size common.StorageSize
 	for _, node := range trienodes {
 		size += common.StorageSize(len(node))
@@ -2744,6 +2746,7 @@ func (s *Syncer) OnTrieNodes(peer SyncPeer, id uint64, trienodes [][]byte) error
 	case <-req.cancel:
 	case <-req.stale:
 	}
+	onTrienodeChild.Finish()
 	return nil
 }
 
