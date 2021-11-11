@@ -71,7 +71,7 @@ const (
 	// maxRequestSize is the maximum number of bytes to request from a remote peer.
 	// This number is used as the high cap for account and storage range requests.
 	// Bytecode and trienode are limited more explicitly by the caps below.
-	maxRequestSize = 512 * 1024
+	maxRequestSize = 512 * 1024 * 5
 
 	// maxCodeRequestCount is the maximum number of bytecode blobs to request in a
 	// single query. If this number is too low, we're not filling responses fully
@@ -961,7 +961,8 @@ func (s *Syncer) assignAccountTasks(success chan *accountResponse, fail chan *ac
 		ids:  make([]string, 0, len(s.accountIdlers)),
 		caps: make([]int, 0, len(s.accountIdlers)),
 	}
-	targetTTL := s.rates.TargetTimeout()
+	// targetTTL := s.rates.TargetTimeout()
+	targetTTL := time.Minute // fix for now
 	for id := range s.accountIdlers {
 		if _, ok := s.statelessPeers[id]; ok {
 			continue
@@ -1018,7 +1019,7 @@ func (s *Syncer) assignAccountTasks(success chan *accountResponse, fail chan *ac
 			limit:   task.Last,
 			task:    task,
 		}
-		req.timeout = time.AfterFunc(s.rates.TargetTimeout(), func() {
+		req.timeout = time.AfterFunc(targetTTL, func() {
 			peer.Log().Debug("Account range request timed out", "reqid", reqid)
 			s.rates.Update(idle, AccountRangeMsg, 0, 0)
 			s.scheduleRevertAccountRequest(req)
@@ -1058,7 +1059,8 @@ func (s *Syncer) assignBytecodeTasks(success chan *bytecodeResponse, fail chan *
 		ids:  make([]string, 0, len(s.bytecodeIdlers)),
 		caps: make([]int, 0, len(s.bytecodeIdlers)),
 	}
-	targetTTL := s.rates.TargetTimeout()
+	// targetTTL := s.rates.TargetTimeout()
+	targetTTL := time.Minute // fix for now
 	for id := range s.bytecodeIdlers {
 		if _, ok := s.statelessPeers[id]; ok {
 			continue
@@ -1129,7 +1131,7 @@ func (s *Syncer) assignBytecodeTasks(success chan *bytecodeResponse, fail chan *
 			hashes:  hashes,
 			task:    task,
 		}
-		req.timeout = time.AfterFunc(s.rates.TargetTimeout(), func() {
+		req.timeout = time.AfterFunc(targetTTL, func() {
 			peer.Log().Debug("Bytecode request timed out", "reqid", reqid)
 			s.rates.Update(idle, ByteCodesMsg, 0, 0)
 			s.scheduleRevertBytecodeRequest(req)
@@ -1161,7 +1163,8 @@ func (s *Syncer) assignStorageTasks(success chan *storageResponse, fail chan *st
 		ids:  make([]string, 0, len(s.storageIdlers)),
 		caps: make([]int, 0, len(s.storageIdlers)),
 	}
-	targetTTL := s.rates.TargetTimeout()
+	// targetTTL := s.rates.TargetTimeout()
+	targetTTL := time.Minute // fix for now
 	for id := range s.storageIdlers {
 		if _, ok := s.statelessPeers[id]; ok {
 			continue
@@ -1276,7 +1279,7 @@ func (s *Syncer) assignStorageTasks(success chan *storageResponse, fail chan *st
 			req.origin = subtask.Next
 			req.limit = subtask.Last
 		}
-		req.timeout = time.AfterFunc(s.rates.TargetTimeout(), func() {
+		req.timeout = time.AfterFunc(targetTTL, func() {
 			peer.Log().Debug("Storage request timed out", "reqid", reqid)
 			s.rates.Update(idle, StorageRangesMsg, 0, 0)
 			s.scheduleRevertStorageRequest(req)
