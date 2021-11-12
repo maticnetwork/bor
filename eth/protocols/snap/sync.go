@@ -2951,7 +2951,7 @@ func (s *Syncer) reportHealProgress(force bool) {
 		trieTasks              = fmt.Sprintf("%v", len(s.healer.trieTasks))
 	)
 	log.Info("State heal in progress", "accounts", accounts, "slots", storage,
-		"codes", bytecode, "nodes", trienode, "pending", s.healer.scheduler.Pending(), "numberOfPeers", numberOfPeers, "pending heal node requests", pendingHealingRequests, "pending healer trie tasks", trieTasks)
+		"codes", bytecode, "nodes", trienode, "pending", s.healer.scheduler.Pending(), "numberOfPeers", numberOfPeers, "pending heal node requests", pendingHealingRequests, "pending healer trie tasks", trieTasks, "processed", s.trienodeHealDups, "unprocessed", s.trienodeHealNops)
 }
 
 // estimateRemainingSlots tries to determine roughly how many slots are left in
