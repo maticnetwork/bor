@@ -2988,7 +2988,7 @@ func (s *Syncer) reportHealProgress(force bool) {
 
 func createHealRequestInDB(reqid uint64, peer string, taskType string, numberOfTasks int) {
 	// Add healing entry for level db
-	var healReq = &HealingRequest{
+	var healReq = HealingRequest{
 		reqid:         reqid,
 		peer:          peer,
 		start:         time.Now(),
@@ -2996,6 +2996,7 @@ func createHealRequestInDB(reqid uint64, peer string, taskType string, numberOfT
 		taskType:      taskType,
 		numberOfTasks: numberOfTasks,
 	}
+	log.Info("Custom:: Healing Request before posting to leveldb", "healReq", healReq)
 	var value, err = rlp.EncodeToBytes(healReq)
 	if err != nil {
 		log.Error("Custom:: Failed to encode bytes for posting " + taskType + " healing request to db")
