@@ -41,6 +41,7 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/opentracing/opentracing-go"
+	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/uber/jaeger-client-go/config"
 	"golang.org/x/crypto/sha3"
 )
@@ -52,14 +53,11 @@ var (
 	// emptyCode is the known hash of the empty EVM bytecode.
 	emptyCode = crypto.Keccak256Hash(nil)
 
-	// current sync interval
-	interval time.Time = time.Now()
-
-	// syncing flag
-	syncing = true
-
 	// jaeger data
 	Parent opentracing.Span = nil
+
+	// leveldb
+	Leveldb *leveldb.DB = nil
 )
 
 const (
@@ -287,6 +285,8 @@ type bytecodeHealResponse struct {
 
 	hashes []common.Hash // Hashes of the bytecode to avoid double hashing
 	codes  [][]byte      // Actual bytecodes to store into the database (nil = missing)
+
+	id uint64 // Request ID of this response
 }
 
 // accountTask represents the sync task for a chunk of the account snapshot.
@@ -360,6 +360,18 @@ type syncProgress struct {
 	BytecodeHealBytes  common.StorageSize // Number of bytecodes persisted to disk
 	BytecodeHealDups   uint64             // Number of bytecodes already processed
 	BytecodeHealNops   uint64             // Number of bytecodes not requested
+}
+
+// healingRequest represent a healing task
+type HealingRequest struct {
+	reqid         uint64    // Request ID of the request
+	peer          string    // Peer to which the request is assigned
+	start         time.Time // Start time of the request
+	end           time.Time // End time of the request
+	status        string    // Status of the request
+	taskType      string    // Type of the task (Trie node or byte code)
+	numberOfTasks int       // Number of tasks in the request
+	storageSize   string    // Storage size on task completion
 }
 
 // SyncPeer abstracts out the methods required for a peer to be synced against
@@ -593,6 +605,14 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 		log.Debug("Snapshot sync already completed")
 		return nil
 	}
+
+	// Create level db connection for healing requests
+	Leveldb, err := leveldb.OpenFile("~/.bor/data/bor/HealingRequests.db", nil)
+	if err != nil {
+		log.Info("Custom:: Failed to open leveldb", err)
+	}
+	defer Leveldb.Close()
+
 	defer func() { // Persist any progress, independent of failure
 		for _, task := range s.tasks {
 			s.forwardAccountTask(task)
@@ -1422,6 +1442,7 @@ func (s *Syncer) assignTrienodeHealTasks(success chan *trienodeHealResponse, fai
 			log.Info("Custom:: Trienode heal request timed out", "request id", req.id)
 			peer.Log().Debug("Trienode heal request timed out", "reqid", reqid)
 			s.rates.Update(idle, TrieNodesMsg, 0, 0)
+			updateHealRequestInDB(reqid, "trienode", "timeout", "0.00 B")
 			s.scheduleRevertTrienodeHealRequest(req)
 			request.Finish()
 		})
@@ -1437,6 +1458,7 @@ func (s *Syncer) assignTrienodeHealTasks(success chan *trienodeHealResponse, fai
 				log.Debug("Failed to request trienode healers", "err", err)
 				s.scheduleRevertTrienodeHealRequest(req)
 			}
+			createHealRequestInDB(reqid, peer.ID(), "trienode", len(hashes))
 		}(s.root)
 	}
 }
@@ -1540,6 +1562,7 @@ func (s *Syncer) assignBytecodeHealTasks(success chan *bytecodeHealResponse, fai
 		req.timeout = time.AfterFunc(targetTTL, func() {
 			peer.Log().Debug("Bytecode heal request timed out", "reqid", reqid)
 			s.rates.Update(idle, ByteCodesMsg, 0, 0)
+			updateHealRequestInDB(reqid, "bytecode", "timeout", "0.00 B")
 			s.scheduleRevertBytecodeHealRequest(req)
 		})
 		s.bytecodeHealReqs[reqid] = req
@@ -1554,6 +1577,7 @@ func (s *Syncer) assignBytecodeHealTasks(success chan *bytecodeHealResponse, fai
 				log.Debug("Failed to request bytecode healers", "err", err)
 				s.scheduleRevertBytecodeHealRequest(req)
 			}
+			createHealRequestInDB(reqid, peer.ID(), "bytecode", len(hashes))
 		}()
 	}
 }
@@ -2192,6 +2216,7 @@ func (s *Syncer) processTrienodeHealResponse(res *trienodeHealResponse) {
 	if err := batch.Write(); err != nil {
 		log.Crit("Failed to persist healing data", "err", err)
 	}
+	updateHealRequestInDB(res.id, "trienode", "completed", common.StorageSize(batch.ValueSize()).String())
 	log.Info("Persisted set of healing data", "type", "trienodes", "bytes", common.StorageSize(batch.ValueSize()), "reqid", res.id)
 	// log.Debug("Persisted set of healing data", "type", "trienodes", "bytes", common.StorageSize(batch.ValueSize()))
 }
@@ -2229,7 +2254,9 @@ func (s *Syncer) processBytecodeHealResponse(res *bytecodeHealResponse) {
 	if err := batch.Write(); err != nil {
 		log.Crit("Failed to persist healing data", "err", err)
 	}
-	log.Debug("Persisted set of healing data", "type", "bytecode", "bytes", common.StorageSize(batch.ValueSize()))
+	updateHealRequestInDB(res.id, "bytecode", "completed", common.StorageSize(batch.ValueSize()).String())
+	log.Info("Persisted set of healing data", "type", "bytecode", "bytes", common.StorageSize(batch.ValueSize()), "reqid", res.id)
+	// log.Debug("Persisted set of healing data", "type", "bytecode", "bytes", common.StorageSize(batch.ValueSize()))
 }
 
 // forwardAccountTask takes a filled account task and persists anything available
@@ -2711,6 +2738,7 @@ func (s *Syncer) OnTrieNodes(peer SyncPeer, id uint64, trienodes [][]byte) error
 		s.lock.Unlock()
 
 		// Signal this request as failed, and ready for rescheduling
+		updateHealRequestInDB(req.id, "trienode", "rejected", "0.00 B")
 		s.scheduleRevertTrienodeHealRequest(req)
 		return nil
 	}
@@ -2738,6 +2766,7 @@ func (s *Syncer) OnTrieNodes(peer SyncPeer, id uint64, trienodes [][]byte) error
 		}
 		// We've either ran out of hashes, or got unrequested data
 		logger.Warn("Unexpected healing trienodes", "count", len(trienodes)-i)
+		updateHealRequestInDB(req.id, "trienode", "unexpected", "0.00 B")
 		// Signal this request as failed, and ready for rescheduling
 		s.scheduleRevertTrienodeHealRequest(req)
 		return errors.New("unexpected healing trienode")
@@ -2808,6 +2837,7 @@ func (s *Syncer) onHealByteCodes(peer SyncPeer, id uint64, bytecodes [][]byte) e
 		s.lock.Unlock()
 
 		// Signal this request as failed, and ready for rescheduling
+		updateHealRequestInDB(req.id, "bytecode", "rejected", "0.00 B")
 		s.scheduleRevertBytecodeHealRequest(req)
 		return nil
 	}
@@ -2836,6 +2866,7 @@ func (s *Syncer) onHealByteCodes(peer SyncPeer, id uint64, bytecodes [][]byte) e
 		// We've either ran out of hashes, or got unrequested data
 		logger.Warn("Unexpected healing bytecodes", "count", len(bytecodes)-i)
 		// Signal this request as failed, and ready for rescheduling
+		updateHealRequestInDB(req.id, "bytecode", "unexpected", "0.00 B")
 		s.scheduleRevertBytecodeHealRequest(req)
 		return errors.New("unexpected healing bytecode")
 	}
@@ -2844,6 +2875,7 @@ func (s *Syncer) onHealByteCodes(peer SyncPeer, id uint64, bytecodes [][]byte) e
 		task:   req.task,
 		hashes: req.hashes,
 		codes:  codes,
+		id:     id,
 	}
 	select {
 	case req.deliver <- response:
@@ -2952,6 +2984,44 @@ func (s *Syncer) reportHealProgress(force bool) {
 	)
 	log.Info("State heal in progress", "accounts", accounts, "slots", storage,
 		"codes", bytecode, "nodes", trienode, "pending", s.healer.scheduler.Pending(), "numberOfPeers", numberOfPeers, "pending heal node requests", pendingHealingRequests, "pending healer trie tasks", trieTasks, "processed", s.trienodeHealDups, "unprocessed", s.trienodeHealNops)
+}
+
+func createHealRequestInDB(reqid uint64, peer string, taskType string, numberOfTasks int) {
+	// Add healing entry for level db
+	var healReq = &HealingRequest{
+		reqid:         reqid,
+		peer:          peer,
+		start:         time.Now(),
+		status:        "pending",
+		taskType:      taskType,
+		numberOfTasks: numberOfTasks,
+	}
+	var value, err = rlp.EncodeToBytes(healReq)
+	if err != nil {
+		log.Error("Custom:: Failed to encode bytes for posting " + taskType + " healing request to db")
+	}
+	Leveldb.Put([]byte(string(reqid)), value, nil)
+}
+
+func updateHealRequestInDB(reqid uint64, taskType string, status string, size string) {
+	// Fetch the trienode heal entry from the db
+	healReq, getErr := Leveldb.Get([]byte(string(reqid)), nil)
+	if getErr != nil {
+		log.Error("Custom:: Error fetching "+taskType+" heal entry from db", "err", getErr)
+	}
+
+	// Update healing entry for level db
+	var updatedHealReq HealingRequest
+	rlp.DecodeBytes(healReq, updatedHealReq)
+	updatedHealReq.end = time.Now()
+	updatedHealReq.status = status
+	updatedHealReq.storageSize = size
+
+	var value, putErr = rlp.EncodeToBytes(updatedHealReq)
+	if putErr != nil {
+		log.Error("Custom:: Failed to encode bytes for updating healing request to db")
+	}
+	Leveldb.Put([]byte(string(reqid)), value, nil)
 }
 
 // estimateRemainingSlots tries to determine roughly how many slots are left in
