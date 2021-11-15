@@ -88,9 +88,10 @@ func (api *PublicFilterAPI) DroppedTransactions(ctx context.Context) (*rpc.Subsc
 			case d := <-dropped:
 				for _, tx := range d.Txs {
 					notification := &dropNotification{
-						Tx:     newRPCPendingTransaction(tx),
-						Reason: d.Reason,
-						Time:   time.Now().UnixNano(),
+						Tx:          newRPCPendingTransaction(tx),
+						Reason:      d.Reason,
+						Replacement: newRPCPendingTransaction(d.Replacement),
+						Time:        time.Now().UnixNano(),
 					}
 					notifier.Notify(rpcSub.ID, notification)
 				}
