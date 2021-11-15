@@ -2992,9 +2992,11 @@ func createHealRequestInDB(reqid uint64, peer string, taskType string, numberOfT
 		reqid:         reqid,
 		peer:          peer,
 		start:         time.Now(),
+		end:           time.Now(),
 		status:        "pending",
 		taskType:      taskType,
 		numberOfTasks: numberOfTasks,
+		storageSize:   "0.00 B",
 	}
 	log.Info("Custom:: Healing Request before posting to leveldb", "healReq", healReq)
 	var value, err = rlp.EncodeToBytes(healReq)
