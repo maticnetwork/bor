@@ -1597,9 +1597,6 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	}
 	if reorg {
 
-		//Send Reorg event
-		bc.reorgFeed.Send(ReorgEvent{Block: block})
-
 		// Reorganise the chain if the parent is not the head block
 		if block.ParentHash() != currentBlock.Hash() {
 			if err := bc.reorg(currentBlock, block); err != nil {
@@ -2262,6 +2259,9 @@ func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
 	}
 	// Ensure the user sees large reorgs
 	if len(oldChain) > 0 && len(newChain) > 0 {
+
+		bc.reorgFeed.Send(ReorgEvent{Block: commonBlock})
+
 		logFn := log.Info
 		msg := "Chain reorg detected"
 		if len(oldChain) > 63 {
