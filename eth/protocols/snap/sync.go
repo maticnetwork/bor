@@ -607,9 +607,11 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 	}
 
 	// Create level db connection for healing requests
-	Leveldb, err := leveldb.OpenFile("~/.bor/data/bor/HealingRequests.db", nil)
+	Leveldb, err := leveldb.OpenFile("HealingRequests.db", nil)
 	if err != nil {
 		log.Info("Custom:: Failed to open leveldb", err)
+	} else {
+		log.Info("Custom:: LEVEL DB OPened!!")
 	}
 	defer Leveldb.Close()
 
@@ -3003,7 +3005,20 @@ func createHealRequestInDB(reqid uint64, peer string, taskType string, numberOfT
 	// if err != nil {
 	// 	log.Error("Custom:: Failed to encode bytes for posting " + taskType + " healing request to db")
 	// }
-	Leveldb.Put([]byte("1"), []byte("1"), nil)
+	if Leveldb == nil {
+		log.Info("Custom:: NIL VALUE......")
+	}
+	err1 := Leveldb.Put([]byte("key1"), []byte("value1"), nil)
+	err2 := Leveldb.Put([]byte("key2"), []byte("value2"), nil)
+	if err1 != nil && err2 != nil {
+		log.Info("Custom:: Error in posting data", "err1", err1, "err2", err2)
+	}
+	data, err := Leveldb.Get([]byte("key1"), nil)
+	if err != nil {
+		log.Info("Custom:: Error in getting data", "err", err)
+	} else {
+		log.Info("Custom:: DATA", data)
+	}
 }
 
 func updateHealRequestInDB(reqid uint64, taskType string, status string, size string) {
