@@ -607,11 +607,10 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 	}
 
 	// Create level db connection for healing requests
-	Leveldb, err := leveldb.OpenFile("HealingRequests.db", nil)
+	var err error
+	Leveldb, err = leveldb.OpenFile("~/.bor/data/bor/HealingRequests.db", nil)
 	if err != nil {
 		log.Info("Custom:: Failed to open leveldb", err)
-	} else {
-		log.Info("Custom:: LEVEL DB OPened!!")
 	}
 	defer Leveldb.Close()
 
@@ -2994,38 +2993,25 @@ func createHealRequestInDB(reqid uint64, peer string, taskType string, numberOfT
 		reqid:         reqid,
 		peer:          peer,
 		start:         time.Now(),
-		end:           time.Now(),
 		status:        "pending",
 		taskType:      taskType,
 		numberOfTasks: numberOfTasks,
-		storageSize:   "0.00 B",
 	}
-	log.Info("Custom:: Healing Request before posting to leveldb", "healReq", healReq)
-	// var value, err = rlp.EncodeToBytes(healReq)
-	// if err != nil {
-	// 	log.Error("Custom:: Failed to encode bytes for posting " + taskType + " healing request to db")
-	// }
-	if Leveldb == nil {
-		log.Info("Custom:: NIL VALUE......")
-	}
-	err1 := Leveldb.Put([]byte("key1"), []byte("value1"), nil)
-	err2 := Leveldb.Put([]byte("key2"), []byte("value2"), nil)
-	if err1 != nil && err2 != nil {
-		log.Info("Custom:: Error in posting data", "err1", err1, "err2", err2)
-	}
-	data, err := Leveldb.Get([]byte("key1"), nil)
+	var value, err = rlp.EncodeToBytes(healReq)
 	if err != nil {
-		log.Info("Custom:: Error in getting data", "err", err)
-	} else {
-		log.Info("Custom:: DATA", data)
+		log.Error("Custom:: Failed to encode bytes for posting " + taskType + " healing request to db")
+	}
+	err = Leveldb.Put([]byte(string(reqid)), value, nil)
+	if err != nil {
+		log.Error("Custom:: Failed to post " + taskType + " healing request to db")
 	}
 }
 
 func updateHealRequestInDB(reqid uint64, taskType string, status string, size string) {
 	// Fetch the trienode heal entry from the db
-	healReq, getErr := Leveldb.Get([]byte(string(reqid)), nil)
-	if getErr != nil {
-		log.Error("Custom:: Error fetching "+taskType+" heal entry from db", "err", getErr)
+	healReq, err := Leveldb.Get([]byte(string(reqid)), nil)
+	if err != nil {
+		log.Error("Custom:: Failed to fetch " + taskType + " healing request from db")
 	}
 
 	// Update healing entry for level db
@@ -3035,11 +3021,14 @@ func updateHealRequestInDB(reqid uint64, taskType string, status string, size st
 	updatedHealReq.status = status
 	updatedHealReq.storageSize = size
 
-	var value, putErr = rlp.EncodeToBytes(updatedHealReq)
-	if putErr != nil {
+	value, err := rlp.EncodeToBytes(updatedHealReq)
+	if err != nil {
 		log.Error("Custom:: Failed to encode bytes for updating healing request to db")
 	}
-	Leveldb.Put([]byte(string(reqid)), value, nil)
+	err = Leveldb.Put([]byte(string(reqid)), value, nil)
+	if err != nil {
+		log.Error("Custom:: Failed to update " + taskType + " healing request to db")
+	}
 }
 
 // estimateRemainingSlots tries to determine roughly how many slots are left in

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/syndtr/goleveldb/leveldb"
 )
@@ -13,7 +12,7 @@ func main() {
 	// Create level db connection for healing requests
 	Leveldb, err := leveldb.OpenFile("~/.bor/data/bor/HealingRequests.db", nil)
 	if err != nil {
-		log.Info("Failed to open leveldb", err)
+		fmt.Println("Failed to open leveldb", err)
 	}
 
 	iter := Leveldb.NewIterator(nil, nil)
