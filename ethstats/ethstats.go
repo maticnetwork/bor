@@ -57,11 +57,15 @@ const (
 	txChanSize = 4096
 	// chainHeadChanSize is the size of channel listening to ChainHeadEvent.
 	chainHeadChanSize = 10
+
+	// reorgChanSize is the size of channel listening to ReorgEvent.
+	reorgChanSize = 10
 )
 
 // backend encompasses the bare-minimum functionality needed for ethstats reporting
 type backend interface {
 	SubscribeChainHeadEvent(ch chan<- core.ChainHeadEvent) event.Subscription
+	SubscribeReorgEvent(ch chan<- core.ReorgEvent) event.Subscription
 	SubscribeNewTxsEvent(ch chan<- core.NewTxsEvent) event.Subscription
 	CurrentHeader() *types.Header
 	HeaderByNumber(ctx context.Context, number rpc.BlockNumber) (*types.Header, error)
@@ -94,8 +98,9 @@ type Service struct {
 	pongCh chan struct{} // Pong notifications are fed into this channel
 	histCh chan []uint64 // History request block numbers are fed into this channel
 
-	headSub event.Subscription
-	txSub   event.Subscription
+	headSub  event.Subscription
+	reorgSub event.Subscription
+	txSub    event.Subscription
 }
 
 // connWrapper is a wrapper to prevent concurrent-write or concurrent-read on the
@@ -193,9 +198,11 @@ func (s *Service) Start() error {
 	// Subscribe to chain events to execute updates on
 	chainHeadCh := make(chan core.ChainHeadEvent, chainHeadChanSize)
 	s.headSub = s.backend.SubscribeChainHeadEvent(chainHeadCh)
+	reorgCh := make(chan core.ReorgEvent, reorgChanSize)
+	s.reorgSub = s.backend.SubscribeReorgEvent(reorgCh)
 	txEventCh := make(chan core.NewTxsEvent, txChanSize)
 	s.txSub = s.backend.SubscribeNewTxsEvent(txEventCh)
-	go s.loop(chainHeadCh, txEventCh)
+	go s.loop(chainHeadCh, reorgCh, txEventCh)
 
 	log.Info("Stats daemon started")
 	return nil
@@ -211,12 +218,13 @@ func (s *Service) Stop() error {
 
 // loop keeps trying to connect to the netstats server, reporting chain events
 // until termination.
-func (s *Service) loop(chainHeadCh chan core.ChainHeadEvent, txEventCh chan core.NewTxsEvent) {
+func (s *Service) loop(chainHeadCh chan core.ChainHeadEvent, reorgEventCh chan core.ReorgEvent, txEventCh chan core.NewTxsEvent) {
 	// Start a goroutine that exhausts the subscriptions to avoid events piling up
 	var (
-		quitCh = make(chan struct{})
-		headCh = make(chan *types.Block, 1)
-		txCh   = make(chan struct{}, 1)
+		quitCh  = make(chan struct{})
+		headCh  = make(chan *types.Block, 1)
+		reorgCh = make(chan *types.Block, 1)
+		txCh    = make(chan struct{}, 1)
 	)
 	go func() {
 		var lastTx mclock.AbsTime
@@ -228,6 +236,13 @@ func (s *Service) loop(chainHeadCh chan core.ChainHeadEvent, txEventCh chan core
 			case head := <-chainHeadCh:
 				select {
 				case headCh <- head.Block:
+				default:
+				}
+
+			// Notify of Reorg Events
+			case reorg := <-reorgEventCh:
+				select {
+				case reorgCh <- reorg.Block:
 				default:
 				}
 
@@ -333,6 +348,12 @@ func (s *Service) loop(chainHeadCh chan core.ChainHeadEvent, txEventCh chan core
 					if err = s.reportPending(conn); err != nil {
 						log.Warn("Post-block transaction stats report failed", "err", err)
 					}
+
+				case reorg := <-reorgCh:
+					if err = s.reportReorg(conn, reorg); err != nil {
+						log.Warn("Reorg stats report failed", "err", err)
+					}
+
 				case <-txCh:
 					if err = s.reportPending(conn); err != nil {
 						log.Warn("Transaction stats report failed", "err", err)
@@ -515,6 +536,9 @@ func (s *Service) report(conn *connWrapper) error {
 	if err := s.reportBlock(conn, nil); err != nil {
 		return err
 	}
+	if err := s.reportReorg(conn, nil); err != nil {
+		return err
+	}
 	if err := s.reportPending(conn); err != nil {
 		return err
 	}
@@ -608,6 +632,26 @@ func (s *Service) reportBlock(conn *connWrapper, block *types.Block) error {
 	}
 	report := map[string][]interface{}{
 		"emit": {"block", stats},
+	}
+	return conn.WriteJSON(report)
+}
+
+// reportReorg checks for reorg and sends current head to stats server.
+func (s *Service) reportReorg(conn *connWrapper, block *types.Block) error {
+	// Gather the block details from the header or block chain
+	details := s.assembleBlockStats(block)
+
+	// Assemble the block report and send it to the server
+	log.Trace("Reorg Detected", "reorg root block number", details.Number, "block hash", details.Hash)
+
+	stats := map[string]interface{}{
+		"id":                      s.node,
+		"reorg root block number": details.Number,
+		"reorg root block hash":   details.Hash,
+		"block":                   details,
+	}
+	report := map[string][]interface{}{
+		"emit": {"REORG DETECTED", stats},
 	}
 	return conn.WriteJSON(report)
 }
