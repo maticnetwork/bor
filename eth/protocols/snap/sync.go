@@ -2999,11 +2999,11 @@ func createHealRequestInDB(reqid uint64, peer string, taskType string, numberOfT
 		storageSize:   "0.00 B",
 	}
 	log.Info("Custom:: Healing Request before posting to leveldb", "healReq", healReq)
-	var value, err = rlp.EncodeToBytes(healReq)
-	if err != nil {
-		log.Error("Custom:: Failed to encode bytes for posting " + taskType + " healing request to db")
-	}
-	Leveldb.Put([]byte(string(reqid)), value, nil)
+	// var value, err = rlp.EncodeToBytes(healReq)
+	// if err != nil {
+	// 	log.Error("Custom:: Failed to encode bytes for posting " + taskType + " healing request to db")
+	// }
+	Leveldb.Put([]byte("1"), []byte("1"), nil)
 }
 
 func updateHealRequestInDB(reqid uint64, taskType string, status string, size string) {
