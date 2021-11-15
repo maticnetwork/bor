@@ -86,7 +86,7 @@ func main() {
 			// fmt.Printf("key=%s, value=%s\n", iter.Key(), iter.Value())
 			rlp.DecodeBytes(iter.Value(), &healReq)
 			// check if healReq.start and healReq.end is between startTime and endTime
-			if healReq.start.After(startTime) && healReq.start.Before(endTIme) {
+			if healReq.start.After(startTime) && healReq.end.Before(endTIme) {
 				if healReq.taskType == "trienode" {
 					switch healReq.status {
 					case "pending":
