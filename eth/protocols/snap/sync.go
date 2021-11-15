@@ -608,7 +608,7 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 
 	// Create level db connection for healing requests
 	var err error
-	Leveldb, err = leveldb.OpenFile("~/.bor/data/bor/HealingRequests.db", nil)
+	Leveldb, err = leveldb.OpenFile("/home/ubuntu/.bor/data/bor/HealingRequests.db", nil)
 	if err != nil {
 		log.Info("Custom:: Failed to open leveldb", err)
 	}
@@ -3005,6 +3005,7 @@ func createHealRequestInDB(reqid uint64, peer string, taskType string, numberOfT
 	if err != nil {
 		log.Error("Custom:: Failed to post " + taskType + " healing request to db")
 	}
+	log.Info("Custom:: Posted Healing Request to level db", "reqid", reqid, "data", healReq)
 }
 
 func updateHealRequestInDB(reqid uint64, taskType string, status string, size string) {
