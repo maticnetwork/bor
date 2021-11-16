@@ -278,6 +278,9 @@ type TelemetryConfig struct {
 
 	// Prometheus Address
 	PrometheusAddr string `hcl:"prometheus-addr,optional"`
+
+	// Open collector port
+	OpenCollectorPort uint64 `hcl:"opencollector-port,optional"`
 }
 
 type InfluxDBConfig struct {
@@ -441,9 +444,10 @@ func DefaultConfig() *Config {
 		},
 		Ethstats: "",
 		Telemetry: &TelemetryConfig{
-			Enabled:        false,
-			Expensive:      false,
-			PrometheusAddr: "",
+			Enabled:           false,
+			Expensive:         false,
+			PrometheusAddr:    "",
+			OpenCollectorPort: 4317,
 			InfluxDB: &InfluxDBConfig{
 				V1Enabled:    false,
 				Endpoint:     "",
