@@ -17,3 +17,7 @@ func (b *LesApiBackend) GetRootHash(ctx context.Context, starBlockNr uint64, end
 func (b *LesApiBackend) SubscribeStateSyncEvent(ch chan<- core.StateSyncEvent) event.Subscription {
 	return b.eth.blockchain.SubscribeStateSyncEvent(ch)
 }
+
+func (b *LesApiBackend) SubscribeReorgEvent(ch chan<- core.ReorgEvent) event.Subscription {
+	return b.eth.BlockChain().SubscribeReorgEvent(ch)
+}

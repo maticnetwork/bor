@@ -57,6 +57,7 @@ type LightChain struct {
 	chainFeed     event.Feed
 	chainSideFeed event.Feed
 	chainHeadFeed event.Feed
+	reorgFeed     event.Feed
 	scope         event.SubscriptionScope
 	genesisBlock  *types.Block
 
@@ -554,6 +555,11 @@ func (lc *LightChain) SubscribeChainEvent(ch chan<- core.ChainEvent) event.Subsc
 // SubscribeChainHeadEvent registers a subscription of ChainHeadEvent.
 func (lc *LightChain) SubscribeChainHeadEvent(ch chan<- core.ChainHeadEvent) event.Subscription {
 	return lc.scope.Track(lc.chainHeadFeed.Subscribe(ch))
+}
+
+// SubscribeReorgEvent registers a subscription of ReorgEvent.
+func (lc *LightChain) SubscribeReorgEvent(ch chan<- core.ReorgEvent) event.Subscription {
+	return lc.scope.Track(lc.reorgFeed.Subscribe(ch))
 }
 
 // SubscribeChainSideEvent registers a subscription of ChainSideEvent.

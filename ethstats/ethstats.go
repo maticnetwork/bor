@@ -65,13 +65,17 @@ const (
 // backend encompasses the bare-minimum functionality needed for ethstats reporting
 type backend interface {
 	SubscribeChainHeadEvent(ch chan<- core.ChainHeadEvent) event.Subscription
-	SubscribeReorgEvent(ch chan<- core.ReorgEvent) event.Subscription
 	SubscribeNewTxsEvent(ch chan<- core.NewTxsEvent) event.Subscription
 	CurrentHeader() *types.Header
 	HeaderByNumber(ctx context.Context, number rpc.BlockNumber) (*types.Header, error)
 	GetTd(ctx context.Context, hash common.Hash) *big.Int
 	Stats() (pending int, queued int)
 	Downloader() *downloader.Downloader
+}
+
+type extendedBackend interface {
+	backend
+	SubscribeReorgEvent(ch chan<- core.ReorgEvent) event.Subscription
 }
 
 // fullNodeBackend encompasses the functionality necessary for a full node
@@ -88,7 +92,7 @@ type fullNodeBackend interface {
 // chain statistics up to a monitoring server.
 type Service struct {
 	server  *p2p.Server // Peer-to-peer server to retrieve networking infos
-	backend backend
+	backend extendedBackend
 	engine  consensus.Engine // Consensus engine to retrieve variadic block fields
 
 	node string // Name of the node to display on the monitoring page
@@ -173,7 +177,7 @@ func parseEthstatsURL(url string) (parts []string, err error) {
 }
 
 // New returns a monitoring service ready for stats reporting.
-func New(node *node.Node, backend backend, engine consensus.Engine, url string) error {
+func New(node *node.Node, backend extendedBackend, engine consensus.Engine, url string) error {
 	parts, err := parseEthstatsURL(url)
 	if err != nil {
 		return err
