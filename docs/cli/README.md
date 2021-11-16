@@ -15,4 +15,10 @@
 
 - [```account import```](./account_import.md)
 
+- [```chain```](./chain.md)
+
+- [```chain sethead```](./chain_sethead.md)
+
+- [```status```](./status.md)
+
 - [```version```](./version.md)
