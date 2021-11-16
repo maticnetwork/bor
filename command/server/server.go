@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/metrics/influxdb"
+	"github.com/ethereum/go-ethereum/metrics/prometheus"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/mattn/go-colorable"
 	"github.com/mattn/go-isatty"
@@ -27,6 +29,7 @@ import (
 type Server struct {
 	proto.UnimplementedBorServer
 	node       *node.Node
+	backend    *eth.Ethereum
 	grpcServer *grpc.Server
 }
 
@@ -65,6 +68,7 @@ func NewServer(config *Config) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+	srv.backend = backend
 
 	// debug tracing is enabled by default
 	stack.RegisterAPIs(tracers.APIs(backend.APIBackend))
@@ -148,6 +152,27 @@ func (s *Server) setupMetrics(config *TelemetryConfig) error {
 
 	// Start system runtime metrics collection
 	go metrics.CollectProcessMetrics(3 * time.Second)
+
+	if config.PrometheusAddr != "" {
+
+		prometheusMux := http.NewServeMux()
+
+		prometheusMux.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+			prometheus.Handler(metrics.DefaultRegistry)
+		})
+
+		promServer := &http.Server{
+			Addr:    config.PrometheusAddr,
+			Handler: prometheusMux,
+		}
+
+		go func() {
+			if err := promServer.ListenAndServe(); err != nil {
+				log.Error("Failure in running Prometheus server", "err", err)
+			}
+		}()
+
+	}
 
 	return nil
 }
