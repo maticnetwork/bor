@@ -736,8 +736,9 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 			pool.priced.Removed(1)
 			pendingReplaceMeter.Mark(1)
 			pool.dropTxFeed.Send(DropTxsEvent{
-				Txs:    []*types.Transaction{old},
-				Reason: dropReplaced,
+				Txs:         []*types.Transaction{old},
+				Reason:      dropReplaced,
+				Replacement: tx,
 			})
 		}
 		pool.all.Add(tx, isLocal)

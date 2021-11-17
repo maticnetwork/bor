@@ -26,8 +26,9 @@ type NewTxsEvent struct{ Txs []*types.Transaction }
 
 // DropTxsEvent is posted when a batch of transactions are removed from the transaction pool
 type DropTxsEvent struct {
-	Txs    []*types.Transaction
-	Reason string
+	Txs         []*types.Transaction
+	Reason      string
+	Replacement *types.Transaction
 }
 
 // NewMinedBlockEvent is posted when a block has been imported.
