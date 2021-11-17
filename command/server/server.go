@@ -199,7 +199,7 @@ func (s *Server) setupMetrics(config *TelemetryConfig) error {
 			),
 		)
 		if err != nil {
-			return fmt.Errorf("failed to create open telemetry resource for service " + "bor")
+			return fmt.Errorf("failed to create open telemetry resource for service: %v", err)
 		}
 
 		// Set up a trace exporter
@@ -209,7 +209,7 @@ func (s *Server) setupMetrics(config *TelemetryConfig) error {
 			otlptracegrpc.WithEndpoint(config.OpenCollectorEndpoint),
 		)
 		if err != nil {
-			return fmt.Errorf("failed to create open telemetry tracer exporter for service " + "bor")
+			return fmt.Errorf("failed to create open telemetry tracer exporter for service: %v", err)
 		}
 
 		// Register the trace exporter with a TracerProvider, using a batch
