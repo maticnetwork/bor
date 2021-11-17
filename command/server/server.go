@@ -188,20 +188,20 @@ func (s *Server) setupMetrics(config *TelemetryConfig) error {
 
 	}
 
-	// setup open collector tracer
-	ctx := context.Background()
-
-	res, err := resource.New(ctx,
-		resource.WithAttributes(
-			// the service name used to display traces in backends
-			semconv.ServiceNameKey.String("bor"), // TODO: use the service name from the config
-		),
-	)
-	if err != nil {
-		return fmt.Errorf("failed to create open telemetry resource for service " + "bor")
-	}
-
 	if config.OpenCollectorEndpoint != "" {
+		// setup open collector tracer
+		ctx := context.Background()
+
+		res, err := resource.New(ctx,
+			resource.WithAttributes(
+				// the service name used to display traces in backends
+				semconv.ServiceNameKey.String("bor"), // TODO: use the service name from the config
+			),
+		)
+		if err != nil {
+			return fmt.Errorf("failed to create open telemetry resource for service " + "bor")
+		}
+
 		// Set up a trace exporter
 		traceExporter, err := otlptracegrpc.New(
 			ctx,
