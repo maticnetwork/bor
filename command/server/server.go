@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -125,6 +124,13 @@ func NewServer(config *Config) (*Server, error) {
 
 func (s *Server) Stop() {
 	s.node.Close()
+
+	// shutdown the tracer
+	if s.tracer != nil {
+		if err := s.tracer.Shutdown(context.Background()); err != nil {
+			log.Error("Failed to shutdown open telemetry tracer")
+		}
+	}
 }
 
 func (s *Server) setupMetrics(config *TelemetryConfig) error {
@@ -192,34 +198,36 @@ func (s *Server) setupMetrics(config *TelemetryConfig) error {
 		),
 	)
 	if err != nil {
-		log.Error("Failed to create open telemetry resource", "service", "bor")
+		return fmt.Errorf("failed to create open telemetry resource for service " + "bor")
 	}
 
-	// Set up a trace exporter
-	traceExporter, err := otlptracegrpc.New(ctx,
-		otlptracegrpc.WithInsecure(),
-		otlptracegrpc.WithEndpoint("localhost:"+strconv.FormatUint(config.OpenCollectorPort, 10)),
-		otlptracegrpc.WithDialOption(grpc.WithBlock()),
-	)
-	if err != nil {
-		log.Error("Failed to create open telemetry tracer exporter", "service", "bor")
+	if config.OpenCollectorEndpoint != "" {
+		// Set up a trace exporter
+		traceExporter, err := otlptracegrpc.New(
+			ctx,
+			otlptracegrpc.WithInsecure(),
+			otlptracegrpc.WithEndpoint(config.OpenCollectorEndpoint),
+		)
+		if err != nil {
+			return fmt.Errorf("failed to create open telemetry tracer exporter for service " + "bor")
+		}
+
+		// Register the trace exporter with a TracerProvider, using a batch
+		// span processor to aggregate spans before export.
+		bsp := sdktrace.NewBatchSpanProcessor(traceExporter)
+		tracerProvider := sdktrace.NewTracerProvider(
+			sdktrace.WithSampler(sdktrace.AlwaysSample()),
+			sdktrace.WithResource(res),
+			sdktrace.WithSpanProcessor(bsp),
+		)
+		otel.SetTracerProvider(tracerProvider)
+
+		// set global propagator to tracecontext (the default is no-op).
+		otel.SetTextMapPropagator(propagation.TraceContext{})
+
+		// set the tracer
+		s.tracer = tracerProvider
 	}
-
-	// Register the trace exporter with a TracerProvider, using a batch
-	// span processor to aggregate spans before export.
-	bsp := sdktrace.NewBatchSpanProcessor(traceExporter)
-	tracerProvider := sdktrace.NewTracerProvider(
-		sdktrace.WithSampler(sdktrace.AlwaysSample()),
-		sdktrace.WithResource(res),
-		sdktrace.WithSpanProcessor(bsp),
-	)
-	otel.SetTracerProvider(tracerProvider)
-
-	// set global propagator to tracecontext (the default is no-op).
-	otel.SetTextMapPropagator(propagation.TraceContext{})
-
-	// set the tracer
-	s.tracer = tracerProvider
 
 	return nil
 }
@@ -271,12 +279,4 @@ func setupLogger(logLevel string) {
 		glogger.Verbosity(log.LvlInfo)
 	}
 	log.Root().SetHandler(glogger)
-}
-
-func (s *Server) shutdownTracer() {
-	if s.tracer != nil {
-		if err := s.tracer.Shutdown(context.Background()); err != nil {
-			log.Error("Failed to shutdown open telemetry tracer")
-		}
-	}
 }
