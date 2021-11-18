@@ -558,10 +558,10 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.I
 	spanCtx, span := d.tracer.Start(context.Background(), "downloader.syncWithPeer")
 
 	fetchers := []func(context.Context) error{
-		func(ctx context.Context) error { return d.fetchHeaders(p, origin+1, ctx) }, // Headers are always retrieved
-		func(ctx context.Context) error { return d.fetchBodies(origin+1, ctx) },     // Bodies are retrieved during normal and fast sync
-		func(ctx context.Context) error { return d.fetchReceipts(origin+1, ctx) },   // Receipts are retrieved during fast sync
-		func(ctx context.Context) error { return d.processHeaders(origin+1, td, ctx) },
+		func(ctx context.Context) error { return d.fetchHeaders(ctx, p, origin+1) }, // Headers are always retrieved
+		func(ctx context.Context) error { return d.fetchBodies(ctx, origin+1) },     // Bodies are retrieved during normal and fast sync
+		func(ctx context.Context) error { return d.fetchReceipts(ctx, origin+1) },   // Receipts are retrieved during fast sync
+		func(ctx context.Context) error { return d.processHeaders(ctx, origin+1, td) },
 	}
 	if mode == FastSync {
 		d.pivotLock.Lock()
@@ -572,12 +572,12 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.I
 	} else if mode == FullSync {
 		fetchers = append(fetchers, d.processFullSyncContent)
 	}
-	return d.spawnSync(fetchers, span, spanCtx)
+	return d.spawnSync(spanCtx, span, fetchers)
 }
 
 // spawnSync runs d.process and all given fetcher functions to completion in
 // separate goroutines, returning the first error that appears.
-func (d *Downloader) spawnSync(fetchers []func(ctx context.Context) error, span trace.Span, ctx context.Context) error {
+func (d *Downloader) spawnSync(ctx context.Context, span trace.Span, fetchers []func(ctx context.Context) error) error {
 	errc := make(chan error, len(fetchers))
 	d.cancelWg.Add(len(fetchers))
 	for _, fn := range fetchers {
@@ -1010,7 +1010,7 @@ func (d *Downloader) findAncestorBinarySearch(p *peerConnection, mode SyncMode, 
 // other peers are only accepted if they map cleanly to the skeleton. If no one
 // can fill in the skeleton - not even the origin peer - it's assumed invalid and
 // the origin is dropped.
-func (d *Downloader) fetchHeaders(p *peerConnection, from uint64, ctx context.Context) error {
+func (d *Downloader) fetchHeaders(ctx context.Context, p *peerConnection, from uint64) error {
 	// start sub-span
 	_, span := d.tracer.Start(ctx, "FetchHeaders")
 	defer span.End()
@@ -1280,7 +1280,7 @@ func (d *Downloader) fillHeaderSkeleton(from uint64, skeleton []*types.Header) (
 // fetchBodies iteratively downloads the scheduled block bodies, taking any
 // available peers, reserving a chunk of blocks for each, waiting for delivery
 // and also periodically checking for timeouts.
-func (d *Downloader) fetchBodies(from uint64, ctx context.Context) error {
+func (d *Downloader) fetchBodies(ctx context.Context, from uint64) error {
 	// start sub-span
 	_, span := d.tracer.Start(ctx, "FetchBodies")
 	defer span.End()
@@ -1308,7 +1308,7 @@ func (d *Downloader) fetchBodies(from uint64, ctx context.Context) error {
 // fetchReceipts iteratively downloads the scheduled block receipts, taking any
 // available peers, reserving a chunk of receipts for each, waiting for delivery
 // and also periodically checking for timeouts.
-func (d *Downloader) fetchReceipts(from uint64, ctx context.Context) error {
+func (d *Downloader) fetchReceipts(ctx context.Context, from uint64) error {
 	// start sub-span
 	_, span := d.tracer.Start(ctx, "FetchReceipts")
 	defer span.End()
@@ -1535,7 +1535,7 @@ func (d *Downloader) fetchParts(deliveryCh chan dataPack, deliver func(dataPack)
 // processHeaders takes batches of retrieved headers from an input channel and
 // keeps processing and scheduling them into the header chain and downloader's
 // queue until the stream ends or a failure occurs.
-func (d *Downloader) processHeaders(origin uint64, td *big.Int, ctx context.Context) error {
+func (d *Downloader) processHeaders(ctx context.Context, origin uint64, td *big.Int) error {
 	// start sub-span
 	_, span := d.tracer.Start(ctx, "ProcessHeaders")
 	defer span.End()
@@ -1772,7 +1772,7 @@ func (d *Downloader) importBlockResults(results []*fetchResult) error {
 // database. It also controls the synchronisation of state nodes of the pivot block.
 func (d *Downloader) processFastSyncContent(ctx context.Context) error {
 	// start sub-span
-	_, span := d.tracer.Start(ctx, "ProcessFastSyncContext")
+	_, span := d.tracer.Start(ctx, "ProcessFastSyncContent")
 	defer span.End()
 
 	// Start syncing state of the reported head block. This should get us most of
