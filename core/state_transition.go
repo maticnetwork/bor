@@ -55,7 +55,6 @@ type StateTransition struct {
 	gasPrice   *big.Int
 	gasFeeCap  *big.Int
 	gasTipCap  *big.Int
-	burnAmount *big.Int
 	initialGas uint64
 	value      *big.Int
 	data       []byte
