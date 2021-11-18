@@ -554,9 +554,6 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.I
 		d.syncInitHook(origin, height)
 	}
 
-	// start the trace span
-	spanCtx, span := d.tracer.Start(context.Background(), "downloader.syncWithPeer")
-
 	fetchers := []func(context.Context) error{
 		func(ctx context.Context) error { return d.fetchHeaders(ctx, p, origin+1) }, // Headers are always retrieved
 		func(ctx context.Context) error { return d.fetchBodies(ctx, origin+1) },     // Bodies are retrieved during normal and fast sync
@@ -572,19 +569,21 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.I
 	} else if mode == FullSync {
 		fetchers = append(fetchers, d.processFullSyncContent)
 	}
-	return d.spawnSync(spanCtx, span, fetchers)
+	return d.spawnSync(fetchers)
 }
 
 // spawnSync runs d.process and all given fetcher functions to completion in
 // separate goroutines, returning the first error that appears.
-func (d *Downloader) spawnSync(ctx context.Context, span trace.Span, fetchers []func(ctx context.Context) error) error {
+func (d *Downloader) spawnSync(fetchers []func(ctx context.Context) error) error {
+	// start the trace span
+	spanCtx, span := d.tracer.Start(context.Background(), "downloader.spawnSync")
+
 	errc := make(chan error, len(fetchers))
 	d.cancelWg.Add(len(fetchers))
 	for _, fn := range fetchers {
 		fn := fn
-		go func() { defer d.cancelWg.Done(); errc <- fn(ctx) }()
+		go func() { defer d.cancelWg.Done(); errc <- fn(spanCtx) }()
 	}
-	span.End()
 	// Wait for the first error, then terminate the others.
 	var err error
 	for i := 0; i < len(fetchers); i++ {
@@ -600,6 +599,7 @@ func (d *Downloader) spawnSync(ctx context.Context, span trace.Span, fetchers []
 	}
 	d.queue.Close()
 	d.Cancel()
+	span.End()
 	return err
 }
 
