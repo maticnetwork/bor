@@ -18,6 +18,7 @@
 package downloader
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math/big"
@@ -38,6 +39,9 @@ import (
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/trie"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 )
 
 var (
@@ -148,6 +152,9 @@ type Downloader struct {
 	bodyFetchHook    func([]*types.Header) // Method to call upon starting a block body fetch
 	receiptFetchHook func([]*types.Header) // Method to call upon starting a receipt fetch
 	chainInsertHook  func([]*fetchResult)  // Method to call upon inserting a chain of blocks (possibly in multiple invocations)
+
+	// tracer is a reference to the OpenTelemetry tracer
+	tracer trace.Tracer
 }
 
 // LightChain encapsulates functions required to synchronise a light chain.
@@ -232,6 +239,7 @@ func New(checkpoint uint64, stateDb ethdb.Database, stateBloom *trie.SyncBloom, 
 			processed: rawdb.ReadFastTrieProgress(stateDb),
 		},
 		trackStateReq: make(chan *stateReq),
+		tracer:        otel.GetTracerProvider().Tracer("Downloader"),
 	}
 	go dl.stateFetcher()
 	return dl
@@ -545,32 +553,37 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.I
 	if d.syncInitHook != nil {
 		d.syncInitHook(origin, height)
 	}
-	fetchers := []func() error{
-		func() error { return d.fetchHeaders(p, origin+1) }, // Headers are always retrieved
-		func() error { return d.fetchBodies(origin + 1) },   // Bodies are retrieved during normal and fast sync
-		func() error { return d.fetchReceipts(origin + 1) }, // Receipts are retrieved during fast sync
-		func() error { return d.processHeaders(origin+1, td) },
+
+	// start the trace span
+	spanCtx, span := d.tracer.Start(context.Background(), "downloader.syncWithPeer")
+	defer span.End()
+
+	fetchers := []func(context.Context) error{
+		func(ctx context.Context) error { return d.fetchHeaders(p, origin+1, ctx) }, // Headers are always retrieved
+		func(ctx context.Context) error { return d.fetchBodies(origin+1, ctx) },     // Bodies are retrieved during normal and fast sync
+		func(ctx context.Context) error { return d.fetchReceipts(origin+1, ctx) },   // Receipts are retrieved during fast sync
+		func(ctx context.Context) error { return d.processHeaders(origin+1, td, ctx) },
 	}
 	if mode == FastSync {
 		d.pivotLock.Lock()
 		d.pivotHeader = pivot
 		d.pivotLock.Unlock()
 
-		fetchers = append(fetchers, func() error { return d.processFastSyncContent() })
+		fetchers = append(fetchers, func(ctx context.Context) error { return d.processFastSyncContent(ctx) })
 	} else if mode == FullSync {
 		fetchers = append(fetchers, d.processFullSyncContent)
 	}
-	return d.spawnSync(fetchers)
+	return d.spawnSync(fetchers, spanCtx)
 }
 
 // spawnSync runs d.process and all given fetcher functions to completion in
 // separate goroutines, returning the first error that appears.
-func (d *Downloader) spawnSync(fetchers []func() error) error {
+func (d *Downloader) spawnSync(fetchers []func(ctx context.Context) error, ctx context.Context) error {
 	errc := make(chan error, len(fetchers))
 	d.cancelWg.Add(len(fetchers))
 	for _, fn := range fetchers {
 		fn := fn
-		go func() { defer d.cancelWg.Done(); errc <- fn() }()
+		go func() { defer d.cancelWg.Done(); errc <- fn(ctx) }()
 	}
 	// Wait for the first error, then terminate the others.
 	var err error
@@ -997,7 +1010,11 @@ func (d *Downloader) findAncestorBinarySearch(p *peerConnection, mode SyncMode, 
 // other peers are only accepted if they map cleanly to the skeleton. If no one
 // can fill in the skeleton - not even the origin peer - it's assumed invalid and
 // the origin is dropped.
-func (d *Downloader) fetchHeaders(p *peerConnection, from uint64) error {
+func (d *Downloader) fetchHeaders(p *peerConnection, from uint64, ctx context.Context) error {
+	// start sub-span
+	_, span := d.tracer.Start(ctx, "FetchHeaders")
+	defer span.End()
+
 	p.log.Debug("Directing header downloads", "origin", from)
 	defer p.log.Debug("Header download terminated")
 
@@ -1263,7 +1280,11 @@ func (d *Downloader) fillHeaderSkeleton(from uint64, skeleton []*types.Header) (
 // fetchBodies iteratively downloads the scheduled block bodies, taking any
 // available peers, reserving a chunk of blocks for each, waiting for delivery
 // and also periodically checking for timeouts.
-func (d *Downloader) fetchBodies(from uint64) error {
+func (d *Downloader) fetchBodies(from uint64, ctx context.Context) error {
+	// start sub-span
+	_, span := d.tracer.Start(ctx, "FetchBodies")
+	defer span.End()
+
 	log.Debug("Downloading block bodies", "origin", from)
 
 	var (
@@ -1287,7 +1308,11 @@ func (d *Downloader) fetchBodies(from uint64) error {
 // fetchReceipts iteratively downloads the scheduled block receipts, taking any
 // available peers, reserving a chunk of receipts for each, waiting for delivery
 // and also periodically checking for timeouts.
-func (d *Downloader) fetchReceipts(from uint64) error {
+func (d *Downloader) fetchReceipts(from uint64, ctx context.Context) error {
+	// start sub-span
+	_, span := d.tracer.Start(ctx, "FetchReceipts")
+	defer span.End()
+
 	log.Debug("Downloading transaction receipts", "origin", from)
 
 	var (
@@ -1510,7 +1535,11 @@ func (d *Downloader) fetchParts(deliveryCh chan dataPack, deliver func(dataPack)
 // processHeaders takes batches of retrieved headers from an input channel and
 // keeps processing and scheduling them into the header chain and downloader's
 // queue until the stream ends or a failure occurs.
-func (d *Downloader) processHeaders(origin uint64, td *big.Int) error {
+func (d *Downloader) processHeaders(origin uint64, td *big.Int, ctx context.Context) error {
+	// start sub-span
+	_, span := d.tracer.Start(ctx, "ProcessHeaders")
+	defer span.End()
+
 	// Keep a count of uncertain headers to roll back
 	var (
 		rollback    uint64 // Zero means no rollback (fine as you can't unroll the genesis)
@@ -1685,7 +1714,11 @@ func (d *Downloader) processHeaders(origin uint64, td *big.Int) error {
 }
 
 // processFullSyncContent takes fetch results from the queue and imports them into the chain.
-func (d *Downloader) processFullSyncContent() error {
+func (d *Downloader) processFullSyncContent(ctx context.Context) error {
+	// start sub-span
+	_, span := d.tracer.Start(ctx, "ProcessFullSyncContent")
+	defer span.End()
+
 	for {
 		results := d.queue.Results(true)
 		if len(results) == 0 {
@@ -1737,7 +1770,11 @@ func (d *Downloader) importBlockResults(results []*fetchResult) error {
 
 // processFastSyncContent takes fetch results from the queue and writes them to the
 // database. It also controls the synchronisation of state nodes of the pivot block.
-func (d *Downloader) processFastSyncContent() error {
+func (d *Downloader) processFastSyncContent(ctx context.Context) error {
+	// start sub-span
+	_, span := d.tracer.Start(ctx, "ProcessFastSyncContext")
+	defer span.End()
+
 	// Start syncing state of the reported head block. This should get us most of
 	// the state of the pivot block.
 	d.pivotLock.RLock()
