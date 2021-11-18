@@ -103,6 +103,12 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 		return nil, err
 	}
 
+	if result.BurnedAmount != nil {
+		// London fork enabled, send the burned amount to the governance contract that will burn the tokens
+		burntContractAddress := common.HexToAddress(evm.ChainConfig().Bor.CalculateBurntContract(evm.Context.BlockNumber.Uint64()))
+		evm.StateDB.AddBalance(burntContractAddress, result.BurnedAmount)
+	}
+
 	// Update the state with pending changes.
 	var root []byte
 	if config.IsByzantium(blockNumber) {

@@ -55,6 +55,7 @@ type StateTransition struct {
 	gasPrice   *big.Int
 	gasFeeCap  *big.Int
 	gasTipCap  *big.Int
+	burnAmount *big.Int
 	initialGas uint64
 	value      *big.Int
 	data       []byte
@@ -85,6 +86,8 @@ type ExecutionResult struct {
 	UsedGas    uint64 // Total used gas but include the refunded gas
 	Err        error  // Any error encountered during the execution(listed in core/vm/errors.go)
 	ReturnData []byte // Returned data from evm(function result or data supplied with revert opcode)
+
+	BurnedAmount *big.Int
 }
 
 // Unwrap returns the internal evm error which allows us for further
@@ -332,18 +335,15 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		// After EIP-3529: refunds are capped to gasUsed / 5
 		st.refundGas(params.RefundQuotientEIP3529)
 	}
+
+	var burnAmount *big.Int
+
 	effectiveTip := st.gasPrice
 	if london {
 		effectiveTip = cmath.BigMin(st.gasTipCap, new(big.Int).Sub(st.gasFeeCap, st.evm.Context.BaseFee))
+		burnAmount = new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.evm.Context.BaseFee)
 	}
-	amount := new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), effectiveTip)
-	if london {
-		burntContractAddress := common.HexToAddress(st.evm.ChainConfig().Bor.CalculateBurntContract(st.evm.Context.BlockNumber.Uint64()))
-		burnAmount := new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.evm.Context.BaseFee)
-		st.state.AddBalance(burntContractAddress, burnAmount)
-	}
-
-	st.state.AddBalance(st.evm.Context.Coinbase, amount)
+	st.state.AddBalance(st.evm.Context.Coinbase, new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), effectiveTip))
 
 	output1 := new(big.Int).SetBytes(input1.Bytes())
 	output2 := new(big.Int).SetBytes(input2.Bytes())
@@ -356,17 +356,18 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		msg.From(),
 		st.evm.Context.Coinbase,
 
-		amount,
+		effectiveTip,
 		input1,
 		input2,
-		output1.Sub(output1, amount),
-		output2.Add(output2, amount),
+		output1.Sub(output1, effectiveTip),
+		output2.Add(output2, effectiveTip),
 	)
 
 	return &ExecutionResult{
-		UsedGas:    st.gasUsed(),
-		Err:        vmerr,
-		ReturnData: ret,
+		UsedGas:      st.gasUsed(),
+		Err:          vmerr,
+		ReturnData:   ret,
+		BurnedAmount: burnAmount,
 	}, nil
 }
 
