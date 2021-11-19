@@ -1012,8 +1012,8 @@ func (d *Downloader) findAncestorBinarySearch(p *peerConnection, mode SyncMode, 
 // the origin is dropped.
 func (d *Downloader) fetchHeaders(ctx context.Context, p *peerConnection, from uint64) error {
 	// start sub-span
-	_, span := d.tracer.Start(ctx, "FetchHeaders")
-	defer span.End()
+	headerCtx, headerSpan := d.tracer.Start(ctx, "FetchHeaders")
+	defer headerSpan.End()
 
 	p.log.Debug("Directing header downloads", "origin", from)
 	defer p.log.Debug("Header download terminated")
@@ -1066,6 +1066,7 @@ func (d *Downloader) fetchHeaders(ctx context.Context, p *peerConnection, from u
 			return errCanceled
 
 		case packet := <-d.headerCh:
+			packetCtx, packetSpan := d.tracer.Start(headerCtx, "HeaderPacket")
 			// Make sure the active peer is giving us the skeleton headers
 			if packet.PeerId() != p.id {
 				log.Debug("Received skeleton from incorrect peer", "peer", packet.PeerId())
@@ -1144,6 +1145,7 @@ func (d *Downloader) fetchHeaders(ctx context.Context, p *peerConnection, from u
 
 			// If we received a skeleton batch, resolve internals concurrently
 			if skeleton {
+				_, skeletonSpan := d.tracer.Start(packetCtx, "FillHeaderSkeleton")
 				filled, proced, err := d.fillHeaderSkeleton(from, headers)
 				if err != nil {
 					p.log.Debug("Skeleton chain invalid", "err", err)
@@ -1151,6 +1153,7 @@ func (d *Downloader) fetchHeaders(ctx context.Context, p *peerConnection, from u
 				}
 				headers = filled[proced:]
 				from += uint64(proced)
+				skeletonSpan.End()
 			} else {
 				// If we're closing in on the chain head, but haven't yet reached it, delay
 				// the last few headers so mini reorgs on the head don't cause invalid hash
@@ -1210,6 +1213,7 @@ func (d *Downloader) fetchHeaders(ctx context.Context, p *peerConnection, from u
 					return errCanceled
 				}
 			}
+			packetSpan.End()
 
 		case <-timeout.C:
 			if d.dropPeer == nil {
