@@ -40,6 +40,9 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/msgrate"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
+	"github.com/opentracing/opentracing-go"
+	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/uber/jaeger-client-go/config"
 	"golang.org/x/crypto/sha3"
 )
 
@@ -49,6 +52,12 @@ var (
 
 	// emptyCode is the known hash of the empty EVM bytecode.
 	emptyCode = crypto.Keccak256Hash(nil)
+
+	// jaeger data
+	Parent opentracing.Span = nil
+
+	// leveldb
+	Leveldb *leveldb.DB = nil
 )
 
 const (
@@ -60,7 +69,7 @@ const (
 	// maxRequestSize is the maximum number of bytes to request from a remote peer.
 	// This number is used as the high cap for account and storage range requests.
 	// Bytecode and trienode are limited more explicitly by the caps below.
-	maxRequestSize = 512 * 1024
+	maxRequestSize = 512 * 1024 * 5
 
 	// maxCodeRequestCount is the maximum number of bytecode blobs to request in a
 	// single query. If this number is too low, we're not filling responses fully
@@ -242,6 +251,8 @@ type trienodeHealResponse struct {
 	hashes []common.Hash   // Hashes of the trie nodes to avoid double hashing
 	paths  []trie.SyncPath // Trie node paths requested for rescheduling missing ones
 	nodes  [][]byte        // Actual trie nodes to store into the database (nil = missing)
+
+	id uint64 // Request ID of this response
 }
 
 // bytecodeHealRequest tracks a pending bytecode request to ensure responses are to
@@ -274,6 +285,8 @@ type bytecodeHealResponse struct {
 
 	hashes []common.Hash // Hashes of the bytecode to avoid double hashing
 	codes  [][]byte      // Actual bytecodes to store into the database (nil = missing)
+
+	id uint64 // Request ID of this response
 }
 
 // accountTask represents the sync task for a chunk of the account snapshot.
@@ -347,6 +360,18 @@ type syncProgress struct {
 	BytecodeHealBytes  common.StorageSize // Number of bytecodes persisted to disk
 	BytecodeHealDups   uint64             // Number of bytecodes already processed
 	BytecodeHealNops   uint64             // Number of bytecodes not requested
+}
+
+// healingRequest represent a healing task
+type HealingRequest struct {
+	reqid         uint64    // Request ID of the request
+	peer          string    // Peer to which the request is assigned
+	start         time.Time // Start time of the request
+	end           time.Time // End time of the request
+	status        string    // Status of the request
+	taskType      string    // Type of the task (Trie node or byte code)
+	numberOfTasks int       // Number of tasks in the request
+	storageSize   string    // Storage size on task completion
 }
 
 // SyncPeer abstracts out the methods required for a peer to be synced against
@@ -450,6 +475,28 @@ type Syncer struct {
 // NewSyncer creates a new snapshot syncer to download the Ethereum state over the
 // snap protocol.
 func NewSyncer(db ethdb.KeyValueStore) *Syncer {
+	// jaeger configurations
+	cfg := config.Configuration{
+		Sampler: &config.SamplerConfig{
+			Type:  "const",
+			Param: 1,
+		},
+		Reporter: &config.ReporterConfig{
+			LogSpans:            false,
+			BufferFlushInterval: 1 * time.Second,
+		},
+	}
+	tracer, _, err := cfg.New("SnapSync")
+
+	if err != nil {
+		log.Info("Custom:: Failed to start jaeger tracer", err)
+	} else {
+		opentracing.SetGlobalTracer(tracer)
+		// defer closer.Close()
+	}
+
+	Parent = opentracing.GlobalTracer().StartSpan("SnapSync")
+
 	return &Syncer{
 		db: db,
 
@@ -558,6 +605,15 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 		log.Debug("Snapshot sync already completed")
 		return nil
 	}
+
+	// Create level db connection for healing requests
+	var err error
+	Leveldb, err = leveldb.OpenFile("/home/ubuntu/.bor/data/bor/HealingRequests.db", nil)
+	if err != nil {
+		log.Info("Custom:: Failed to open leveldb", err)
+	}
+	defer Leveldb.Close()
+
 	defer func() { // Persist any progress, independent of failure
 		for _, task := range s.tasks {
 			s.forwardAccountTask(task)
@@ -612,22 +668,49 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 		trienodeHealResps    = make(chan *trienodeHealResponse)
 		bytecodeHealResps    = make(chan *bytecodeHealResponse)
 	)
+	defer Parent.Finish()
 	for {
 		// Remove all completed tasks and terminate sync if everything's done
+		cleanTasks := opentracing.GlobalTracer().StartSpan("Clean Tasks", opentracing.ChildOf(Parent.Context()))
 		s.cleanStorageTasks()
 		s.cleanAccountTasks()
+		cleanTasks.Finish()
+
+		log.Info("Custom:: Looping in sync", "length of sync tasks", len(s.tasks), "pending scheduler tasks", s.healer.scheduler.Pending())
 		if len(s.tasks) == 0 && s.healer.scheduler.Pending() == 0 {
 			return nil
 		}
+
 		// Assign all the data retrieval tasks to any free peers
+		dataRetreivalTask := opentracing.GlobalTracer().StartSpan("Data (Account, Storage, Bytecode) Retrieval Tasks", opentracing.ChildOf(Parent.Context()))
 		s.assignAccountTasks(accountResps, accountReqFails, cancel)
 		s.assignBytecodeTasks(bytecodeResps, bytecodeReqFails, cancel)
 		s.assignStorageTasks(storageResps, storageReqFails, cancel)
+		dataRetreivalTask.Finish()
+
+		if s.healer.scheduler.Pending() < 5 {
+			trieTasks, codeTasks := s.healer.scheduler.PendingRequests()
+			log.Info("Custom:: Data of Pending Healing Tasks", "trie tasks", len(s.healer.trieTasks), "scheduled trie tasks", len(trieTasks), "code tasks", len(s.healer.codeTasks), "scheduled code tasks", len(codeTasks))
+			for k, v := range trieTasks {
+				log.Info("Custom:: Trie Tasks", "key", k, "value", v)
+			}
+			// iterate over s.healer.codeTasks and print
+			for k, v := range codeTasks {
+				log.Info("Custom:: Code Tasks", "key", k, "value", v)
+			}
+		}
 
 		if len(s.tasks) == 0 {
 			// Sync phase done, run heal phase
+			log.Info("Custom:: sync tasks completed, starting to heal", "pending scheduler tasks", s.healer.scheduler.Pending())
+
+			trienodeHealTask := opentracing.GlobalTracer().StartSpan("Trie Node Healing Task", opentracing.ChildOf(Parent.Context()))
 			s.assignTrienodeHealTasks(trienodeHealResps, trienodeHealReqFails, cancel)
+			trienodeHealTask.Finish()
+
+			bytecodeHealTask := opentracing.GlobalTracer().StartSpan("Bytecode Healing Task", opentracing.ChildOf(Parent.Context()))
 			s.assignBytecodeHealTasks(bytecodeHealResps, bytecodeHealReqFails, cancel)
+			bytecodeHealTask.Finish()
 		}
 		// Wait for something to happen
 		select {
@@ -638,6 +721,7 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 		case id := <-peerDrop:
 			s.revertRequests(id)
 		case <-cancel:
+			log.Info("Custom:: Sync cycle canceled")
 			return ErrCancelled
 
 		case req := <-accountReqFails:
@@ -658,14 +742,49 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 		case res := <-storageResps:
 			s.processStorageResponse(res)
 		case res := <-trienodeHealResps:
+			trienodeHealResponse := opentracing.GlobalTracer().StartSpan("Trie Node Healing Response", opentracing.ChildOf(Parent.Context()))
 			s.processTrienodeHealResponse(res)
+			trienodeHealResponse.Finish()
 		case res := <-bytecodeHealResps:
+			bytecodeHealResponse := opentracing.GlobalTracer().StartSpan("Bytecode Healing Response", opentracing.ChildOf(Parent.Context()))
 			s.processBytecodeHealResponse(res)
+			bytecodeHealResponse.Finish()
 		}
 		// Report stats if something meaningful happened
 		s.report(false)
+		// s.updateSyncStatus()
 	}
 }
+
+// Pending returns the number of pending healing tasks
+func (s *Syncer) Pending() int {
+	if len(s.tasks) != 0 {
+		return 0
+	}
+	return s.healer.scheduler.Pending()
+}
+
+/*
+func (s *Syncer) updateSyncStatus() {
+	// update the status every minute
+	if time.Since(interval) < time.Minute {
+		return
+	}
+
+	// Don't report anything until we have a meaningful progress
+	bytesSynced := s.accountBytes + s.bytecodeBytes + s.storageBytes
+	if bytesSynced == 0 {
+		return
+	}
+
+	// if we're syncing, mark the flag to false which states that we need to heal now
+	if syncing {
+		log.Info("Custom:: Pausing syncing")
+		syncing = false
+	}
+	interval = time.Now()
+}
+*/
 
 // loadSyncStatus retrieves a previously aborted sync status from the database,
 // or generates a fresh one if none is available.
@@ -863,7 +982,8 @@ func (s *Syncer) assignAccountTasks(success chan *accountResponse, fail chan *ac
 		ids:  make([]string, 0, len(s.accountIdlers)),
 		caps: make([]int, 0, len(s.accountIdlers)),
 	}
-	targetTTL := s.rates.TargetTimeout()
+	// targetTTL := s.rates.TargetTimeout()
+	targetTTL := time.Minute // fix for now
 	for id := range s.accountIdlers {
 		if _, ok := s.statelessPeers[id]; ok {
 			continue
@@ -920,7 +1040,7 @@ func (s *Syncer) assignAccountTasks(success chan *accountResponse, fail chan *ac
 			limit:   task.Last,
 			task:    task,
 		}
-		req.timeout = time.AfterFunc(s.rates.TargetTimeout(), func() {
+		req.timeout = time.AfterFunc(targetTTL, func() {
 			peer.Log().Debug("Account range request timed out", "reqid", reqid)
 			s.rates.Update(idle, AccountRangeMsg, 0, 0)
 			s.scheduleRevertAccountRequest(req)
@@ -960,7 +1080,8 @@ func (s *Syncer) assignBytecodeTasks(success chan *bytecodeResponse, fail chan *
 		ids:  make([]string, 0, len(s.bytecodeIdlers)),
 		caps: make([]int, 0, len(s.bytecodeIdlers)),
 	}
-	targetTTL := s.rates.TargetTimeout()
+	// targetTTL := s.rates.TargetTimeout()
+	targetTTL := time.Minute // fix for now
 	for id := range s.bytecodeIdlers {
 		if _, ok := s.statelessPeers[id]; ok {
 			continue
@@ -1031,7 +1152,7 @@ func (s *Syncer) assignBytecodeTasks(success chan *bytecodeResponse, fail chan *
 			hashes:  hashes,
 			task:    task,
 		}
-		req.timeout = time.AfterFunc(s.rates.TargetTimeout(), func() {
+		req.timeout = time.AfterFunc(targetTTL, func() {
 			peer.Log().Debug("Bytecode request timed out", "reqid", reqid)
 			s.rates.Update(idle, ByteCodesMsg, 0, 0)
 			s.scheduleRevertBytecodeRequest(req)
@@ -1063,7 +1184,8 @@ func (s *Syncer) assignStorageTasks(success chan *storageResponse, fail chan *st
 		ids:  make([]string, 0, len(s.storageIdlers)),
 		caps: make([]int, 0, len(s.storageIdlers)),
 	}
-	targetTTL := s.rates.TargetTimeout()
+	// targetTTL := s.rates.TargetTimeout()
+	targetTTL := time.Minute // fix for now
 	for id := range s.storageIdlers {
 		if _, ok := s.statelessPeers[id]; ok {
 			continue
@@ -1178,7 +1300,7 @@ func (s *Syncer) assignStorageTasks(success chan *storageResponse, fail chan *st
 			req.origin = subtask.Next
 			req.limit = subtask.Last
 		}
-		req.timeout = time.AfterFunc(s.rates.TargetTimeout(), func() {
+		req.timeout = time.AfterFunc(targetTTL, func() {
 			peer.Log().Debug("Storage request timed out", "reqid", reqid)
 			s.rates.Update(idle, StorageRangesMsg, 0, 0)
 			s.scheduleRevertStorageRequest(req)
@@ -1219,7 +1341,8 @@ func (s *Syncer) assignTrienodeHealTasks(success chan *trienodeHealResponse, fai
 		ids:  make([]string, 0, len(s.trienodeHealIdlers)),
 		caps: make([]int, 0, len(s.trienodeHealIdlers)),
 	}
-	targetTTL := s.rates.TargetTimeout()
+	// targetTTL := s.rates.TargetTimeout()
+	targetTTL := time.Minute // fix for now
 	for id := range s.trienodeHealIdlers {
 		if _, ok := s.statelessPeers[id]; ok {
 			continue
@@ -1231,6 +1354,7 @@ func (s *Syncer) assignTrienodeHealTasks(success chan *trienodeHealResponse, fai
 		return
 	}
 	sort.Sort(sort.Reverse(idlers))
+	log.Info("Custom:: Pre Assigning trienode heal tasks", "length of healer trie tasks", len(s.healer.trieTasks), "pending scheduler tasks", s.healer.scheduler.Pending())
 
 	// Iterate over pending tasks and try to find a peer to retrieve with
 	for len(s.healer.trieTasks) > 0 || s.healer.scheduler.Pending() > 0 {
@@ -1254,6 +1378,7 @@ func (s *Syncer) assignTrienodeHealTasks(success chan *trienodeHealResponse, fai
 		if len(s.healer.trieTasks) == 0 {
 			return
 		}
+		log.Info("Custom:: Assigning trienode heal tasks", "length of healer trie tasks", len(s.healer.trieTasks), "pending scheduler tasks", s.healer.scheduler.Pending())
 		// Task pending retrieval, try to find an idle peer. If no such peer
 		// exists, we probably assigned tasks for all (or they are stateless).
 		// Abort the entire assignment mechanism.
@@ -1311,10 +1436,16 @@ func (s *Syncer) assignTrienodeHealTasks(success chan *trienodeHealResponse, fai
 			paths:   paths,
 			task:    s.healer,
 		}
-		req.timeout = time.AfterFunc(s.rates.TargetTimeout(), func() {
+		request := opentracing.GlobalTracer().StartSpan("Requesting Trienodes", opentracing.ChildOf(Parent.Context()))
+		log.Info("Custom:: Timeout in trienode heal request", "timeout", targetTTL)
+		// req.timeout = time.AfterFunc(s.rates.TargetTimeout(), func() {
+		req.timeout = time.AfterFunc(targetTTL, func() {
+			log.Info("Custom:: Trienode heal request timed out", "request id", req.id)
 			peer.Log().Debug("Trienode heal request timed out", "reqid", reqid)
 			s.rates.Update(idle, TrieNodesMsg, 0, 0)
+			updateHealRequestInDB(reqid, "trienode", "timeout", "0.00 B")
 			s.scheduleRevertTrienodeHealRequest(req)
+			request.Finish()
 		})
 		s.trienodeHealReqs[reqid] = req
 		delete(s.trienodeHealIdlers, idle)
@@ -1322,12 +1453,13 @@ func (s *Syncer) assignTrienodeHealTasks(success chan *trienodeHealResponse, fai
 		s.pend.Add(1)
 		go func(root common.Hash) {
 			defer s.pend.Done()
-
+			log.Info("Custom:: Requesting peer for trie nodes", "reqId", req.id, "pending healer trie tasks", len(s.healer.trieTasks), "pending scheduler tasks", s.healer.scheduler.Pending())
 			// Attempt to send the remote request and revert if it fails
 			if err := peer.RequestTrieNodes(reqid, root, pathsets, maxRequestSize); err != nil {
 				log.Debug("Failed to request trienode healers", "err", err)
 				s.scheduleRevertTrienodeHealRequest(req)
 			}
+			createHealRequestInDB(reqid, peer.ID(), "trienode", len(hashes))
 		}(s.root)
 	}
 }
@@ -1343,7 +1475,8 @@ func (s *Syncer) assignBytecodeHealTasks(success chan *bytecodeHealResponse, fai
 		ids:  make([]string, 0, len(s.bytecodeHealIdlers)),
 		caps: make([]int, 0, len(s.bytecodeHealIdlers)),
 	}
-	targetTTL := s.rates.TargetTimeout()
+	// targetTTL := s.rates.TargetTimeout()
+	targetTTL := time.Minute // fix for now
 	for id := range s.bytecodeHealIdlers {
 		if _, ok := s.statelessPeers[id]; ok {
 			continue
@@ -1427,9 +1560,10 @@ func (s *Syncer) assignBytecodeHealTasks(success chan *bytecodeHealResponse, fai
 			hashes:  hashes,
 			task:    s.healer,
 		}
-		req.timeout = time.AfterFunc(s.rates.TargetTimeout(), func() {
+		req.timeout = time.AfterFunc(targetTTL, func() {
 			peer.Log().Debug("Bytecode heal request timed out", "reqid", reqid)
 			s.rates.Update(idle, ByteCodesMsg, 0, 0)
+			updateHealRequestInDB(reqid, "bytecode", "timeout", "0.00 B")
 			s.scheduleRevertBytecodeHealRequest(req)
 		})
 		s.bytecodeHealReqs[reqid] = req
@@ -1444,6 +1578,7 @@ func (s *Syncer) assignBytecodeHealTasks(success chan *bytecodeHealResponse, fai
 				log.Debug("Failed to request bytecode healers", "err", err)
 				s.scheduleRevertBytecodeHealRequest(req)
 			}
+			createHealRequestInDB(reqid, peer.ID(), "bytecode", len(hashes))
 		}()
 	}
 }
@@ -1649,7 +1784,7 @@ func (s *Syncer) scheduleRevertTrienodeHealRequest(req *trienodeHealRequest) {
 // Note, this needs to run on the event runloop thread to reschedule to idle peers.
 // On peer threads, use scheduleRevertTrienodeHealRequest.
 func (s *Syncer) revertTrienodeHealRequest(req *trienodeHealRequest) {
-	log.Debug("Reverting trienode heal request", "peer", req.peer)
+	log.Info("Custom:: Reverting trienode heal request", "peer", req.peer, "reqId", req.id, "time", time.Now())
 	select {
 	case <-req.stale:
 		log.Trace("Trienode heal request already reverted", "peer", req.peer, "reqid", req.id)
@@ -2082,7 +2217,9 @@ func (s *Syncer) processTrienodeHealResponse(res *trienodeHealResponse) {
 	if err := batch.Write(); err != nil {
 		log.Crit("Failed to persist healing data", "err", err)
 	}
-	log.Debug("Persisted set of healing data", "type", "trienodes", "bytes", common.StorageSize(batch.ValueSize()))
+	updateHealRequestInDB(res.id, "trienode", "completed", common.StorageSize(batch.ValueSize()).String())
+	log.Info("Persisted set of healing data", "type", "trienodes", "bytes", common.StorageSize(batch.ValueSize()), "reqid", res.id)
+	// log.Debug("Persisted set of healing data", "type", "trienodes", "bytes", common.StorageSize(batch.ValueSize()))
 }
 
 // processBytecodeHealResponse integrates an already validated bytecode response
@@ -2118,7 +2255,9 @@ func (s *Syncer) processBytecodeHealResponse(res *bytecodeHealResponse) {
 	if err := batch.Write(); err != nil {
 		log.Crit("Failed to persist healing data", "err", err)
 	}
-	log.Debug("Persisted set of healing data", "type", "bytecode", "bytes", common.StorageSize(batch.ValueSize()))
+	updateHealRequestInDB(res.id, "bytecode", "completed", common.StorageSize(batch.ValueSize()).String())
+	log.Info("Persisted set of healing data", "type", "bytecode", "bytes", common.StorageSize(batch.ValueSize()), "reqid", res.id)
+	// log.Debug("Persisted set of healing data", "type", "bytecode", "bytes", common.StorageSize(batch.ValueSize()))
 }
 
 // forwardAccountTask takes a filled account task and persists anything available
@@ -2548,6 +2687,8 @@ func (s *Syncer) OnStorage(peer SyncPeer, id uint64, hashes [][]common.Hash, slo
 // OnTrieNodes is a callback method to invoke when a batch of trie nodes
 // are received from a remote peer.
 func (s *Syncer) OnTrieNodes(peer SyncPeer, id uint64, trienodes [][]byte) error {
+	onTrienodesParent := opentracing.GlobalTracer().StartSpan("OnTrieNodes")
+	onTrienodeChild := opentracing.GlobalTracer().StartSpan("On Trie Nodes", opentracing.ChildOf(onTrienodesParent.Context()))
 	var size common.StorageSize
 	for _, node := range trienodes {
 		size += common.StorageSize(len(node))
@@ -2568,9 +2709,13 @@ func (s *Syncer) OnTrieNodes(peer SyncPeer, id uint64, trienodes [][]byte) error
 	}
 	// Ensure the response is for a valid request
 	req, ok := s.trienodeHealReqs[id]
+	if ok {
+		log.Info("Custom:: Got trienode heal response", "ok", ok, "id", id, "time", time.Now())
+	}
 	if !ok {
 		// Request stale, perhaps the peer timed out but came through in the end
-		logger.Warn("Unexpected trienode heal packet")
+		// logger.Warn("Unexpected trienode heal packet")
+		log.Info("Custom:: Got trienode heal response, Unexpected trienode heal packet", "id", id, "time", time.Now())
 		s.lock.Unlock()
 		return nil
 	}
@@ -2594,6 +2739,7 @@ func (s *Syncer) OnTrieNodes(peer SyncPeer, id uint64, trienodes [][]byte) error
 		s.lock.Unlock()
 
 		// Signal this request as failed, and ready for rescheduling
+		updateHealRequestInDB(req.id, "trienode", "rejected", "0.00 B")
 		s.scheduleRevertTrienodeHealRequest(req)
 		return nil
 	}
@@ -2621,6 +2767,7 @@ func (s *Syncer) OnTrieNodes(peer SyncPeer, id uint64, trienodes [][]byte) error
 		}
 		// We've either ran out of hashes, or got unrequested data
 		logger.Warn("Unexpected healing trienodes", "count", len(trienodes)-i)
+		updateHealRequestInDB(req.id, "trienode", "unexpected", "0.00 B")
 		// Signal this request as failed, and ready for rescheduling
 		s.scheduleRevertTrienodeHealRequest(req)
 		return errors.New("unexpected healing trienode")
@@ -2631,12 +2778,14 @@ func (s *Syncer) OnTrieNodes(peer SyncPeer, id uint64, trienodes [][]byte) error
 		hashes: req.hashes,
 		paths:  req.paths,
 		nodes:  nodes,
+		id:     id,
 	}
 	select {
 	case req.deliver <- response:
 	case <-req.cancel:
 	case <-req.stale:
 	}
+	onTrienodeChild.Finish()
 	return nil
 }
 
@@ -2689,6 +2838,7 @@ func (s *Syncer) onHealByteCodes(peer SyncPeer, id uint64, bytecodes [][]byte) e
 		s.lock.Unlock()
 
 		// Signal this request as failed, and ready for rescheduling
+		updateHealRequestInDB(req.id, "bytecode", "rejected", "0.00 B")
 		s.scheduleRevertBytecodeHealRequest(req)
 		return nil
 	}
@@ -2717,6 +2867,7 @@ func (s *Syncer) onHealByteCodes(peer SyncPeer, id uint64, bytecodes [][]byte) e
 		// We've either ran out of hashes, or got unrequested data
 		logger.Warn("Unexpected healing bytecodes", "count", len(bytecodes)-i)
 		// Signal this request as failed, and ready for rescheduling
+		updateHealRequestInDB(req.id, "bytecode", "unexpected", "0.00 B")
 		s.scheduleRevertBytecodeHealRequest(req)
 		return errors.New("unexpected healing bytecode")
 	}
@@ -2725,6 +2876,7 @@ func (s *Syncer) onHealByteCodes(peer SyncPeer, id uint64, bytecodes [][]byte) e
 		task:   req.task,
 		hashes: req.hashes,
 		codes:  codes,
+		id:     id,
 	}
 	select {
 	case req.deliver <- response:
@@ -2776,7 +2928,7 @@ func (s *Syncer) report(force bool) {
 // reportSyncProgress calculates various status reports and provides it to the user.
 func (s *Syncer) reportSyncProgress(force bool) {
 	// Don't report all the events, just occasionally
-	if !force && time.Since(s.logTime) < 8*time.Second {
+	if !force && time.Since(s.logTime) < 2*time.Second {
 		return
 	}
 	// Don't report anything until we have a meaningful progress
@@ -2803,32 +2955,81 @@ func (s *Syncer) reportSyncProgress(force bool) {
 
 	// Create a mega progress report
 	var (
-		progress = fmt.Sprintf("%.2f%%", float64(synced)*100/estBytes)
-		accounts = fmt.Sprintf("%v@%v", log.FormatLogfmtUint64(s.accountSynced), s.accountBytes.TerminalString())
-		storage  = fmt.Sprintf("%v@%v", log.FormatLogfmtUint64(s.storageSynced), s.storageBytes.TerminalString())
-		bytecode = fmt.Sprintf("%v@%v", log.FormatLogfmtUint64(s.bytecodeSynced), s.bytecodeBytes.TerminalString())
+		progress      = fmt.Sprintf("%.2f%%", float64(synced)*100/estBytes)
+		accounts      = fmt.Sprintf("%v@%v", log.FormatLogfmtUint64(s.accountSynced), s.accountBytes.TerminalString())
+		storage       = fmt.Sprintf("%v@%v", log.FormatLogfmtUint64(s.storageSynced), s.storageBytes.TerminalString())
+		bytecode      = fmt.Sprintf("%v@%v", log.FormatLogfmtUint64(s.bytecodeSynced), s.bytecodeBytes.TerminalString())
+		numberOfPeers = fmt.Sprintf("%v", len(s.peers))
 	)
 	log.Info("State sync in progress", "synced", progress, "state", synced,
-		"accounts", accounts, "slots", storage, "codes", bytecode, "eta", common.PrettyDuration(estTime-elapsed))
+		"accounts", accounts, "slots", storage, "codes", bytecode, "eta", common.PrettyDuration(estTime-elapsed), "numberOfPeers", numberOfPeers)
 }
 
 // reportHealProgress calculates various status reports and provides it to the user.
 func (s *Syncer) reportHealProgress(force bool) {
 	// Don't report all the events, just occasionally
-	if !force && time.Since(s.logTime) < 8*time.Second {
+	if !force && time.Since(s.logTime) < 2*time.Second {
 		return
 	}
 	s.logTime = time.Now()
 
 	// Create a mega progress report
 	var (
-		trienode = fmt.Sprintf("%v@%v", log.FormatLogfmtUint64(s.trienodeHealSynced), s.trienodeHealBytes.TerminalString())
-		bytecode = fmt.Sprintf("%v@%v", log.FormatLogfmtUint64(s.bytecodeHealSynced), s.bytecodeHealBytes.TerminalString())
-		accounts = fmt.Sprintf("%v@%v", log.FormatLogfmtUint64(s.accountHealed), s.accountHealedBytes.TerminalString())
-		storage  = fmt.Sprintf("%v@%v", log.FormatLogfmtUint64(s.storageHealed), s.storageHealedBytes.TerminalString())
+		trienode               = fmt.Sprintf("%v@%v", log.FormatLogfmtUint64(s.trienodeHealSynced), s.trienodeHealBytes.TerminalString())
+		bytecode               = fmt.Sprintf("%v@%v", log.FormatLogfmtUint64(s.bytecodeHealSynced), s.bytecodeHealBytes.TerminalString())
+		accounts               = fmt.Sprintf("%v@%v", log.FormatLogfmtUint64(s.accountHealed), s.accountHealedBytes.TerminalString())
+		storage                = fmt.Sprintf("%v@%v", log.FormatLogfmtUint64(s.storageHealed), s.storageHealedBytes.TerminalString())
+		numberOfPeers          = fmt.Sprintf("%v", len(s.peers))
+		pendingHealingRequests = fmt.Sprintf("%v", len(s.trienodeHealReqs))
+		trieTasks              = fmt.Sprintf("%v", len(s.healer.trieTasks))
 	)
 	log.Info("State heal in progress", "accounts", accounts, "slots", storage,
-		"codes", bytecode, "nodes", trienode, "pending", s.healer.scheduler.Pending())
+		"codes", bytecode, "nodes", trienode, "pending", s.healer.scheduler.Pending(), "numberOfPeers", numberOfPeers, "pending heal node requests", pendingHealingRequests, "pending healer trie tasks", trieTasks, "processed", s.trienodeHealDups, "unprocessed", s.trienodeHealNops)
+}
+
+func createHealRequestInDB(reqid uint64, peer string, taskType string, numberOfTasks int) {
+	// Add healing entry for level db
+	var healReq = HealingRequest{
+		reqid:         reqid,
+		peer:          peer,
+		start:         time.Now(),
+		status:        "pending",
+		taskType:      taskType,
+		numberOfTasks: numberOfTasks,
+	}
+	var value, err = rlp.EncodeToBytes(healReq)
+	if err != nil {
+		log.Error("Custom:: Failed to encode bytes for posting " + taskType + " healing request to db")
+	}
+	err = Leveldb.Put([]byte(string(reqid)), value, nil)
+	if err != nil {
+		log.Error("Custom:: Failed to post " + taskType + " healing request to db")
+	}
+	log.Info("Custom:: Posted Healing Request to level db", "reqid", reqid, "data", healReq)
+}
+
+func updateHealRequestInDB(reqid uint64, taskType string, status string, size string) {
+	// Fetch the trienode heal entry from the db
+	healReq, err := Leveldb.Get([]byte(string(reqid)), nil)
+	if err != nil {
+		log.Error("Custom:: Failed to fetch " + taskType + " healing request from db")
+	}
+
+	// Update healing entry for level db
+	var updatedHealReq HealingRequest
+	rlp.DecodeBytes(healReq, updatedHealReq)
+	updatedHealReq.end = time.Now()
+	updatedHealReq.status = status
+	updatedHealReq.storageSize = size
+
+	value, err := rlp.EncodeToBytes(updatedHealReq)
+	if err != nil {
+		log.Error("Custom:: Failed to encode bytes for updating healing request to db")
+	}
+	err = Leveldb.Put([]byte(string(reqid)), value, nil)
+	if err != nil {
+		log.Error("Custom:: Failed to update " + taskType + " healing request to db")
+	}
 }
 
 // estimateRemainingSlots tries to determine roughly how many slots are left in
