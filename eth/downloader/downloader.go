@@ -481,14 +481,7 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td *big.I
 	}
 	height := latest.Number.Uint64()
 
-	_, ancestorSearchSpan := d.tracer.Start(context.Background(), "findAncestor")
-	ancestorSearchSpan.SetAttributes(
-		attribute.String("peer", p.id),
-		attribute.String("latest header", latest.Number.String()),
-		attribute.String("pivot", pivot.Number.String()),
-	)
 	origin, err := d.findAncestor(p, latest)
-	ancestorSearchSpan.End()
 	if err != nil {
 		return err
 	}
@@ -1035,8 +1028,7 @@ func (d *Downloader) fetchHeaders(ctx context.Context, p *peerConnection, from u
 	defer timeout.Stop()
 
 	var ttl time.Duration
-	getHeaders := func(ctx context.Context, from uint64) {
-		_, getHeadersSpan := d.tracer.Start(ctx, "GetHeaders")
+	getHeaders := func(from uint64) {
 		request = time.Now()
 
 		ttl = d.peers.rates.TargetTimeout()
@@ -1044,28 +1036,11 @@ func (d *Downloader) fetchHeaders(ctx context.Context, p *peerConnection, from u
 
 		if skeleton {
 			p.log.Trace("Fetching skeleton headers", "count", MaxHeaderFetch, "from", from)
-			getHeadersSpan.SetAttributes(
-				attribute.Bool("skeleton", true),
-				attribute.String("origin", fmt.Sprintf("%d", from+uint64(MaxHeaderFetch)-1)),
-				attribute.String("amount", fmt.Sprintf("%d", MaxSkeletonSize)),
-				attribute.String("skip", fmt.Sprintf("%d", MaxHeaderFetch-1)),
-			)
 			go p.peer.RequestHeadersByNumber(from+uint64(MaxHeaderFetch)-1, MaxSkeletonSize, MaxHeaderFetch-1, false)
 		} else {
 			p.log.Trace("Fetching full headers", "count", MaxHeaderFetch, "from", from)
-			getHeadersSpan.SetAttributes(
-				attribute.Bool("skeleton", false),
-				attribute.String("origin", fmt.Sprintf("%d", from)),
-				attribute.String("amount", fmt.Sprintf("%d", MaxHeaderFetch)),
-				attribute.String("skip", fmt.Sprintf("%d", 0)),
-			)
 			go p.peer.RequestHeadersByNumber(from, MaxHeaderFetch, 0, false)
 		}
-		getHeadersSpan.SetAttributes(
-			attribute.Bool("skeleton", true),
-			attribute.Bool("reverse", false),
-		)
-		getHeadersSpan.End()
 	}
 	getNextPivot := func() {
 		pivoting = true
@@ -1083,7 +1058,7 @@ func (d *Downloader) fetchHeaders(ctx context.Context, p *peerConnection, from u
 	}
 	// Start pulling the header chain skeleton until all is done
 	ancestor := from
-	getHeaders(headerCtx, from)
+	getHeaders(from)
 
 	mode := d.getMode()
 	for {
@@ -1136,13 +1111,13 @@ func (d *Downloader) fetchHeaders(ctx context.Context, p *peerConnection, from u
 					rawdb.WriteLastPivotNumber(d.stateDB, pivot)
 				}
 				pivoting = false
-				getHeaders(packetCtx, from)
+				getHeaders(from)
 				continue
 			}
 			// If the skeleton's finished, pull any remaining head headers directly from the origin
 			if skeleton && packet.Items() == 0 {
 				skeleton = false
-				getHeaders(packetCtx, from)
+				getHeaders(from)
 				continue
 			}
 			// If no more headers are inbound, notify the content fetchers and return
@@ -1152,7 +1127,7 @@ func (d *Downloader) fetchHeaders(ctx context.Context, p *peerConnection, from u
 					p.log.Debug("No headers, waiting for pivot commit")
 					select {
 					case <-time.After(fsHeaderContCheck):
-						getHeaders(packetCtx, from)
+						getHeaders(from)
 						continue
 					case <-d.cancelCh:
 						return errCanceled
@@ -1224,14 +1199,14 @@ func (d *Downloader) fetchHeaders(ctx context.Context, p *peerConnection, from u
 				if skeleton && pivot > 0 {
 					getNextPivot()
 				} else {
-					getHeaders(packetCtx, from)
+					getHeaders(from)
 				}
 			} else {
 				// No headers delivered, or all of them being delayed, sleep a bit and retry
 				p.log.Trace("All headers delayed, waiting")
 				select {
 				case <-time.After(fsHeaderContCheck):
-					getHeaders(packetCtx, from)
+					getHeaders(from)
 					continue
 				case <-d.cancelCh:
 					return errCanceled
@@ -1464,7 +1439,7 @@ func (d *Downloader) fetchParts(ctx context.Context, deliveryCh chan dataPack, d
 
 		case <-update:
 			// update sub-span
-			_, updateSpan := d.tracer.Start(ctx, "UpdateChannel")
+			_, updateSpan := d.tracer.Start(ctx, "UpdateFetchParts")
 			defer updateSpan.End()
 			// Short circuit if we lost all our peers
 			if d.peers.Len() == 0 {
@@ -1581,7 +1556,7 @@ func (d *Downloader) fetchParts(ctx context.Context, deliveryCh chan dataPack, d
 // queue until the stream ends or a failure occurs.
 func (d *Downloader) processHeaders(ctx context.Context, origin uint64, td *big.Int) error {
 	// start sub-span
-	processHeaderCtx, processHeaderSpan := d.tracer.Start(ctx, "ProcessHeaders")
+	_, processHeaderSpan := d.tracer.Start(ctx, "ProcessHeaders")
 	defer processHeaderSpan.End()
 
 	// Keep a count of uncertain headers to roll back
@@ -1622,8 +1597,6 @@ func (d *Downloader) processHeaders(ctx context.Context, origin uint64, td *big.
 			return errCanceled
 
 		case headers := <-d.headerProcCh:
-			_, headerProcessingPacketSpan := d.tracer.Start(processHeaderCtx, "HeaderProcessingPacket")
-			defer headerProcessingPacketSpan.End()
 			// Terminate header processing if we synced up
 			if len(headers) == 0 {
 				// Notify everyone that headers are fully processed
@@ -1666,9 +1639,6 @@ func (d *Downloader) processHeaders(ctx context.Context, origin uint64, td *big.
 				}
 				// Disable any rollback and return
 				rollback = 0
-				headerProcessingPacketSpan.SetAttributes(
-					attribute.Bool("processed", true),
-				)
 				return nil
 			}
 			// Otherwise split the chunk of headers into batches and process them
@@ -1751,11 +1721,6 @@ func (d *Downloader) processHeaders(ctx context.Context, origin uint64, td *big.
 			}
 			d.syncStatsLock.Unlock()
 
-			headerProcessingPacketSpan.SetAttributes(
-				attribute.Bool("processed", false),
-				attribute.String("HighestBlock", fmt.Sprintf("%d", d.syncStatsChainHeight)),
-			)
-
 			// Signal the content downloaders of the availablility of new tasks
 			for _, ch := range []chan bool{d.bodyWakeCh, d.receiptWakeCh} {
 				select {
@@ -1770,7 +1735,7 @@ func (d *Downloader) processHeaders(ctx context.Context, origin uint64, td *big.
 // processFullSyncContent takes fetch results from the queue and imports them into the chain.
 func (d *Downloader) processFullSyncContent(ctx context.Context) error {
 	// start sub-span
-	processFullSyncContentCtx, processFullSyncContentSpan := d.tracer.Start(ctx, "ProcessFullSyncContent")
+	_, processFullSyncContentSpan := d.tracer.Start(ctx, "ProcessFullSyncContent")
 	defer processFullSyncContentSpan.End()
 
 	for {
@@ -1781,13 +1746,13 @@ func (d *Downloader) processFullSyncContent(ctx context.Context) error {
 		if d.chainInsertHook != nil {
 			d.chainInsertHook(results)
 		}
-		if err := d.importBlockResults(processFullSyncContentCtx, results); err != nil {
+		if err := d.importBlockResults(results); err != nil {
 			return err
 		}
 	}
 }
 
-func (d *Downloader) importBlockResults(ctx context.Context, results []*fetchResult) error {
+func (d *Downloader) importBlockResults(results []*fetchResult) error {
 	// Check for any early termination requests
 	if len(results) == 0 {
 		return nil
@@ -1797,21 +1762,11 @@ func (d *Downloader) importBlockResults(ctx context.Context, results []*fetchRes
 		return errCancelContentProcessing
 	default:
 	}
-	_, importBlockResultsSpan := d.tracer.Start(ctx, "ImportBlockResults")
-	defer importBlockResultsSpan.End()
 	// Retrieve the a batch of results to import
 	first, last := results[0].Header, results[len(results)-1].Header
 	log.Debug("Inserting downloaded chain", "items", len(results),
 		"firstnum", first.Number, "firsthash", first.Hash(),
 		"lastnum", last.Number, "lasthash", last.Hash(),
-	)
-	importBlockResultsSpan.SetAttributes(
-		attribute.Int("items", len(results)),
-		attribute.String("firstnum", fmt.Sprintf("%d", first.Number)),
-		attribute.String("firsthash", first.Hash().Hex()),
-		attribute.String("lastnum", fmt.Sprintf("%d", last.Number)),
-		attribute.String("lasthash", last.Hash().Hex()),
-		attribute.Bool("success", true),
 	)
 	blocks := make([]*types.Block, len(results))
 	for i, result := range results {
@@ -1827,9 +1782,6 @@ func (d *Downloader) importBlockResults(ctx context.Context, results []*fetchRes
 			// of the blocks delivered from the downloader, and the indexing will be off.
 			log.Debug("Downloaded item processing failed on sidechain import", "index", index, "err", err)
 		}
-		importBlockResultsSpan.SetAttributes(
-			attribute.Bool("success", false),
-		)
 		return fmt.Errorf("%w: %v", errInvalidChain, err)
 	}
 	return nil
@@ -1839,7 +1791,7 @@ func (d *Downloader) importBlockResults(ctx context.Context, results []*fetchRes
 // database. It also controls the synchronisation of state nodes of the pivot block.
 func (d *Downloader) processFastSyncContent(ctx context.Context) error {
 	// start sub-span
-	processFastSyncContentCtx, processFastSyncContentSpan := d.tracer.Start(ctx, "ProcessFastSyncContent")
+	_, processFastSyncContentSpan := d.tracer.Start(ctx, "ProcessFastSyncContent")
 	defer processFastSyncContentSpan.End()
 
 	// Start syncing state of the reported head block. This should get us most of
@@ -1869,9 +1821,6 @@ func (d *Downloader) processFastSyncContent(ctx context.Context) error {
 		oldTail  []*fetchResult // Downloaded content after the pivot
 	)
 	for {
-		// span for loop
-		loopCtx, loopSpan := d.tracer.Start(processFastSyncContentCtx, "FastSyncContentLoop")
-		defer loopSpan.End()
 		// Wait for the next batch of downloaded data to be available, and if the pivot
 		// block became stale, move the goalpost
 		results := d.queue.Results(oldPivot == nil) // Block if we're not monitoring pivot staleness
@@ -1896,11 +1845,6 @@ func (d *Downloader) processFastSyncContent(ctx context.Context) error {
 		d.pivotLock.RLock()
 		pivot := d.pivotHeader
 		d.pivotLock.RUnlock()
-
-		loopSpan.SetAttributes(
-			attribute.String("pivot", pivot.Number.String()),
-			attribute.Bool("pivoting", false),
-		)
 
 		if oldPivot == nil {
 			if pivot.Root != sync.root {
@@ -1933,15 +1877,10 @@ func (d *Downloader) processFastSyncContent(ctx context.Context) error {
 				// Write out the pivot into the database so a rollback beyond it will
 				// reenable fast sync
 				rawdb.WriteLastPivotNumber(d.stateDB, pivot.Number.Uint64())
-
-				loopSpan.SetAttributes(
-					attribute.Bool("pivoting", true),
-					attribute.String("updatedPivot", pivot.Number.String()),
-				)
 			}
 		}
 		P, beforeP, afterP := splitAroundPivot(pivot.Number.Uint64(), results)
-		if err := d.commitFastSyncData(loopCtx, beforeP, sync); err != nil {
+		if err := d.commitFastSyncData(beforeP, sync); err != nil {
 			return err
 		}
 		if P != nil {
@@ -1970,7 +1909,7 @@ func (d *Downloader) processFastSyncContent(ctx context.Context) error {
 			}
 		}
 		// Fast sync done, pivot commit done, full import
-		if err := d.importBlockResults(loopCtx, afterP); err != nil {
+		if err := d.importBlockResults(afterP); err != nil {
 			return err
 		}
 	}
@@ -1999,7 +1938,7 @@ func splitAroundPivot(pivot uint64, results []*fetchResult) (p *fetchResult, bef
 	return p, before, after
 }
 
-func (d *Downloader) commitFastSyncData(ctx context.Context, results []*fetchResult, stateSync *stateSync) error {
+func (d *Downloader) commitFastSyncData(results []*fetchResult, stateSync *stateSync) error {
 	// Check for any early termination requests
 	if len(results) == 0 {
 		return nil
@@ -2013,21 +1952,11 @@ func (d *Downloader) commitFastSyncData(ctx context.Context, results []*fetchRes
 		}
 	default:
 	}
-	_, commitFastSyncDataSpan := d.tracer.Start(ctx, "CommitFastSyncData")
-	defer commitFastSyncDataSpan.End()
 	// Retrieve the a batch of results to import
 	first, last := results[0].Header, results[len(results)-1].Header
 	log.Debug("Inserting fast-sync blocks", "items", len(results),
 		"firstnum", first.Number, "firsthash", first.Hash(),
 		"lastnumn", last.Number, "lasthash", last.Hash(),
-	)
-	commitFastSyncDataSpan.SetAttributes(
-		attribute.Int("items", len(results)),
-		attribute.String("firstnum", fmt.Sprintf("%d", first.Number)),
-		attribute.String("firsthash", first.Hash().Hex()),
-		attribute.String("lastnum", fmt.Sprintf("%d", last.Number)),
-		attribute.String("lasthash", last.Hash().Hex()),
-		attribute.Bool("success", true),
 	)
 	blocks := make([]*types.Block, len(results))
 	receipts := make([]types.Receipts, len(results))
@@ -2037,9 +1966,6 @@ func (d *Downloader) commitFastSyncData(ctx context.Context, results []*fetchRes
 	}
 	if index, err := d.blockchain.InsertReceiptChain(blocks, receipts, d.ancientLimit); err != nil {
 		log.Debug("Downloaded item processing failed", "number", results[index].Header.Number, "hash", results[index].Header.Hash(), "err", err)
-		commitFastSyncDataSpan.SetAttributes(
-			attribute.Bool("success", false),
-		)
 		return fmt.Errorf("%w: %v", errInvalidChain, err)
 	}
 	return nil
