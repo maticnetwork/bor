@@ -1906,7 +1906,8 @@ func TestTransactionPoolUnderpricingDynamicFee(t *testing.T) {
 	// Ensure that adding local transactions can push out even higher priced ones
 	ltx = dynamicFeeTx(1, 100000, big.NewInt(0), big.NewInt(0), keys[2])
 	if err := pool.AddLocal(ltx); err != nil {
-		t.Fatalf("failed to append underpriced local transaction: %v", err)68e6eba
+		t.Fatalf("failed to append underpriced local transaction: %v", err)
+	}
 
 	defer pool.Stop()
 
