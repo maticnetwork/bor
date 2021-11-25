@@ -85,7 +85,11 @@ func transaction(nonce uint64, gaslimit uint64, key *ecdsa.PrivateKey) *types.Tr
 }
 
 func pricedTransaction(nonce uint64, gaslimit uint64, gasprice *big.Int, key *ecdsa.PrivateKey) *types.Transaction {
-	tx, _ := types.SignTx(types.NewTransaction(nonce, common.Address{}, big.NewInt(100), gaslimit, gasprice, nil), types.HomesteadSigner{}, key)
+	return pricedRecipientAddressTransaction(nonce, common.Address{}, gaslimit, gasprice, key)
+}
+
+func pricedRecipientAddressTransaction(nonce uint64, address common.Address, gaslimit uint64, gasprice *big.Int, key *ecdsa.PrivateKey) *types.Transaction {
+	tx, _ := types.SignTx(types.NewTransaction(nonce, address, big.NewInt(100), gaslimit, gasprice, nil), types.HomesteadSigner{}, key)
 	return tx
 }
 
@@ -1902,33 +1906,8 @@ func TestTransactionPoolUnderpricingDynamicFee(t *testing.T) {
 	// Ensure that adding local transactions can push out even higher priced ones
 	ltx = dynamicFeeTx(1, 100000, big.NewInt(0), big.NewInt(0), keys[2])
 	if err := pool.AddLocal(ltx); err != nil {
-		t.Fatalf("failed to append underpriced local transaction: %v", err)
-	}
-	ltx = dynamicFeeTx(0, 100000, big.NewInt(0), big.NewInt(0), keys[3])
-	if err := pool.AddLocal(ltx); err != nil {
-		t.Fatalf("failed to add new underpriced local transaction: %v", err)
-	}
-	pending, queued = pool.Stats()
-	if pending != 3 {
-		t.Fatalf("pending transactions mismatched: have %d, want %d", pending, 3)
-	}
-	if queued != 1 {
-		t.Fatalf("queued transactions mismatched: have %d, want %d", queued, 1)
-	}
-	if err := validateEvents(events, 2); err != nil {
-		t.Fatalf("local event firing failed: %v", err)
-	}
-	if err := validateTxPoolInternals(pool); err != nil {
-		t.Fatalf("pool internal state corrupted: %v", err)
-	}
-}
+		t.Fatalf("failed to append underpriced local transaction: %v", err)68e6eba
 
-// Tests whether highest fee cap transaction is retained after a batch of high effective
-// tip transactions are added and vice versa
-func TestDualHeapEviction(t *testing.T) {
-	t.Parallel()
-
-	pool, _ := setupTxPoolWithConfig(eip1559Config)
 	defer pool.Stop()
 
 	pool.config.GlobalSlots = 10
@@ -2540,4 +2519,53 @@ func BenchmarkInsertRemoteWithAllLocals(b *testing.B) {
 		}
 		pool.Stop()
 	}
+}
+
+// FIXME: Move these benchmarks to another file?
+// Benchmarks the speed of pool content dumping
+// Variation of both sender number and transactions per sender
+func BenchmarkPoolContent100Addrs10Txs(b *testing.B) { benchmarkPoolContent(b, 100, 10) }
+func BenchmarkPoolContent1KAddrs100Txs(b *testing.B) { benchmarkPoolContent(b, 1000, 100) }
+func BenchmarkPoolContent1KAddrs1KTxs(b *testing.B)  { benchmarkPoolContent(b, 1000, 1000) }
+
+// Variation of sender number, each sender sends one transaction
+func BenchmarkPoolContent1KAddrs1Tx(b *testing.B)  { benchmarkPoolContent(b, 1000, 1) }
+func BenchmarkPoolContent10KAddrs1Tx(b *testing.B) { benchmarkPoolContent(b, 10000, 1) }
+func BenchmarkPoolContent100KAddrs1x(b *testing.B) { benchmarkPoolContent(b, 100000, 1) }
+func BenchmarkPoolContent300KAddrs1x(b *testing.B) { benchmarkPoolContent(b, 300000, 1) }
+
+func benchmarkPoolContent(b *testing.B, sendersCount int, txCountPerAddress int) {
+	// Setup tx pool
+	pool, _ := setupTxPool()
+	defer pool.Stop()
+
+	// Generate a transactions and add them into the pool
+	txs := make([]*types.Transaction, 0, sendersCount*txCountPerAddress)
+	for i := 0; i < sendersCount; i++ {
+		senderKey, senderKeyError := crypto.GenerateKey()
+		if senderKeyError != nil {
+			b.Fatalf("Failed to generate private key")
+		}
+
+		// Seed senders to pools
+		senderAccount := crypto.PubkeyToAddress(senderKey.PublicKey)
+		pool.currentState.AddBalance(senderAccount, big.NewInt(1000000))
+
+		for j := 0; j < txCountPerAddress; j++ {
+			// Create a transaction with some address and add it to slice
+			tx := transaction(uint64(j), 100000, senderKey)
+			txs = append(txs, tx)
+		}
+	}
+	pool.AddRemotesSync(txs)
+
+	// Benchmark dumping pool content
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		pool.Content()
+	}
+
+	// TODO: Write Benchmarks for runReorg method
+
+	// TODO: Benchmark AddRemotes, but with different senders (1K, 10K, 100K)
 }
