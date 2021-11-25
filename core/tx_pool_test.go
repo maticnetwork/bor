@@ -2522,7 +2522,6 @@ func BenchmarkInsertRemoteWithAllLocals(b *testing.B) {
 	}
 }
 
-// FIXME: Move these benchmarks to another file?
 // Benchmarks the speed of pool content dumping
 // Variation of both sender number and transactions per sender
 func BenchmarkPoolContent100Addrs10Txs(b *testing.B) { benchmarkPoolContent(b, 100, 10) }
@@ -2543,6 +2542,7 @@ func benchmarkPoolContent(b *testing.B, sendersCount int, txCountPerAddress int)
 	// Generate a transactions and add them into the pool
 	txs := make([]*types.Transaction, 0, sendersCount*txCountPerAddress)
 	for i := 0; i < sendersCount; i++ {
+		// Generate sender key
 		senderKey, senderKeyError := crypto.GenerateKey()
 		if senderKeyError != nil {
 			b.Fatalf("Failed to generate private key")
@@ -2560,13 +2560,42 @@ func benchmarkPoolContent(b *testing.B, sendersCount int, txCountPerAddress int)
 	}
 	pool.AddRemotesSync(txs)
 
-	// Benchmark dumping pool content
 	b.ResetTimer()
+	// Benchmark dumping pool content
 	for i := 0; i < b.N; i++ {
 		pool.Content()
 	}
-
-	// TODO: Write Benchmarks for runReorg method
-
-	// TODO: Benchmark AddRemotes, but with different senders (1K, 10K, 100K)
 }
+
+// Benchmark synchronized adding of transactions to pool
+func BenchmarkAddRemotes1KSenders(b *testing.B)   { benchmarkAddRemotes(b, 1000) }
+func BenchmarkAddRemotes10KSenders(b *testing.B)  { benchmarkAddRemotes(b, 10000) }
+func BenchmarkAddRemotes100KSenders(b *testing.B) { benchmarkAddRemotes(b, 100000) }
+
+func benchmarkAddRemotes(b *testing.B, sendersCount int) {
+	// Setup tx pool
+	pool, _ := setupTxPool()
+	defer pool.Stop()
+
+	txs := make([]*types.Transaction, 0, sendersCount)
+	for i := 0; i < sendersCount; i++ {
+		// Generate sender key
+		senderKey, senderKeyError := crypto.GenerateKey()
+		if senderKeyError != nil {
+			b.Fatalf("Failed to generate private key")
+		}
+		// Seed senders to pools
+		senderAccount := crypto.PubkeyToAddress(senderKey.PublicKey)
+		pool.currentState.AddBalance(senderAccount, big.NewInt(1000000))
+		tx := transaction(0, 100000, senderKey)
+		txs = append(txs, tx)
+	}
+
+	b.ResetTimer()
+	// Benchmark  synchronized adding remote transactions
+	for i := 0; i < b.N; i++ {
+		pool.AddRemotesSync(txs)
+	}
+}
+
+// TODO: Implement Benchmarks for runReorg method
