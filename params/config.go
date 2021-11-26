@@ -239,20 +239,21 @@ var (
 		PetersburgBlock:     big.NewInt(0),
 		IstanbulBlock:       big.NewInt(2722000),
 		MuirGlacierBlock:    big.NewInt(2722000),
-		BerlinBlock:         big.NewInt(13996000), // TODO - Add london fork block
+		BerlinBlock:         big.NewInt(13996000),
+		LondonBlock:         big.NewInt(0), // TODO - Add london fork block
 		Bor: &BorConfig{
 			Period: map[string]uint64{
 				"0": 2,
-			}, // TODO add london fork value
+			},
 			ProducerDelay: 6,
 			Sprint:        64,
 			BackupMultiplier: map[string]uint64{
 				"0": 2,
-			}, // TODO add london fork value
+			},
 			ValidatorContract:     "0x0000000000000000000000000000000000001000",
 			StateReceiverContract: "0x0000000000000000000000000000000000001001",
 			BurntContract: map[string]string{
-				"": "0x0000000000000000000000000000000000001001",
+				"0": "0x0000000000000000000000000000000000000000",
 			}, // TODO add london fork contract and block
 		},
 	}
@@ -271,16 +272,17 @@ var (
 		PetersburgBlock:     big.NewInt(0),
 		IstanbulBlock:       big.NewInt(3395000),
 		MuirGlacierBlock:    big.NewInt(3395000),
-		BerlinBlock:         big.NewInt(14750000), // TODO - Add london fork block
+		BerlinBlock:         big.NewInt(14750000),
+		LondonBlock:         big.NewInt(0), // TODO - Add london fork block
 		Bor: &BorConfig{
 			Period: map[string]uint64{
 				"0": 2,
-			}, // TODO add london fork value,
+			},
 			ProducerDelay: 6,
 			Sprint:        64,
 			BackupMultiplier: map[string]uint64{
 				"0": 2,
-			}, // TODO add london fork value,
+			},
 			ValidatorContract:     "0x0000000000000000000000000000000000001000",
 			StateReceiverContract: "0x0000000000000000000000000000000000001001",
 			OverrideStateSyncRecords: map[string]int{
@@ -295,7 +297,7 @@ var (
 				"14953856": 0,
 			},
 			BurntContract: map[string]string{
-				"": "0x0000000000000000000000000000000000000000",
+				"0": "0x0000000000000000000000000000000000000000",
 			}, // TODO add london fork contract and block
 		},
 	}
