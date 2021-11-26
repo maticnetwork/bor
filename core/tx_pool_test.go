@@ -193,6 +193,18 @@ func deriveSender(tx *types.Transaction) (common.Address, error) {
 	return types.Sender(types.HomesteadSigner{}, tx)
 }
 
+func createAndSeedSender(pool *TxPool, amount *big.Int) (*ecdsa.PrivateKey, error) {
+	// Generate sender key
+	senderKey, senderKeyError := crypto.GenerateKey()
+	if senderKeyError != nil {
+		return nil, senderKeyError
+	}
+	// Seed sender to pool
+	senderAccount := crypto.PubkeyToAddress(senderKey.PublicKey)
+	pool.currentState.AddBalance(senderAccount, amount)
+	return senderKey, nil
+}
+
 type testChain struct {
 	*testBlockChain
 	address common.Address
@@ -1908,7 +1920,31 @@ func TestTransactionPoolUnderpricingDynamicFee(t *testing.T) {
 	if err := pool.AddLocal(ltx); err != nil {
 		t.Fatalf("failed to append underpriced local transaction: %v", err)
 	}
+	ltx = dynamicFeeTx(0, 100000, big.NewInt(0), big.NewInt(0), keys[3])
+	if err := pool.AddLocal(ltx); err != nil {
+		t.Fatalf("failed to add new underpriced local transaction: %v", err)
+	}
+	pending, queued = pool.Stats()
+	if pending != 3 {
+		t.Fatalf("pending transactions mismatched: have %d, want %d", pending, 3)
+	}
+	if queued != 1 {
+		t.Fatalf("queued transactions mismatched: have %d, want %d", queued, 1)
+	}
+	if err := validateEvents(events, 2); err != nil {
+		t.Fatalf("local event firing failed: %v", err)
+	}
+	if err := validateTxPoolInternals(pool); err != nil {
+		t.Fatalf("pool internal state corrupted: %v", err)
+	}
+}
 
+// Tests whether highest fee cap transaction is retained after a batch of high effective
+// tip transactions are added and vice versa
+func TestDualHeapEviction(t *testing.T) {
+	t.Parallel()
+
+	pool, _ := setupTxPoolWithConfig(eip1559Config)
 	defer pool.Stop()
 
 	pool.config.GlobalSlots = 10
@@ -2524,15 +2560,15 @@ func BenchmarkInsertRemoteWithAllLocals(b *testing.B) {
 
 // Benchmarks the speed of pool content dumping
 // Variation of both sender number and transactions per sender
-func BenchmarkPoolContent100Addrs10Txs(b *testing.B) { benchmarkPoolContent(b, 100, 10) }
-func BenchmarkPoolContent1KAddrs100Txs(b *testing.B) { benchmarkPoolContent(b, 1000, 100) }
-func BenchmarkPoolContent1KAddrs1KTxs(b *testing.B)  { benchmarkPoolContent(b, 1000, 1000) }
+func BenchmarkPoolContent100Senders10TxsEach(b *testing.B) { benchmarkPoolContent(b, 100, 10) }
+func BenchmarkPoolContent1KSenders100TxsEach(b *testing.B) { benchmarkPoolContent(b, 1000, 100) }
+func BenchmarkPoolContent1KSenders1KTxsEach(b *testing.B)  { benchmarkPoolContent(b, 1000, 1000) }
 
 // Variation of sender number, each sender sends one transaction
-func BenchmarkPoolContent1KAddrs1Tx(b *testing.B)  { benchmarkPoolContent(b, 1000, 1) }
-func BenchmarkPoolContent10KAddrs1Tx(b *testing.B) { benchmarkPoolContent(b, 10000, 1) }
-func BenchmarkPoolContent100KAddrs1x(b *testing.B) { benchmarkPoolContent(b, 100000, 1) }
-func BenchmarkPoolContent300KAddrs1x(b *testing.B) { benchmarkPoolContent(b, 300000, 1) }
+func BenchmarkPoolContent1KSenders1Tx(b *testing.B)  { benchmarkPoolContent(b, 1000, 1) }
+func BenchmarkPoolContent10KSenders1Tx(b *testing.B) { benchmarkPoolContent(b, 10000, 1) }
+func BenchmarkPoolContent100KSenders1x(b *testing.B) { benchmarkPoolContent(b, 100000, 1) }
+func BenchmarkPoolContent300KSenders1x(b *testing.B) { benchmarkPoolContent(b, 300000, 1) }
 
 func benchmarkPoolContent(b *testing.B, sendersCount int, txCountPerAddress int) {
 	// Setup tx pool
@@ -2542,16 +2578,14 @@ func benchmarkPoolContent(b *testing.B, sendersCount int, txCountPerAddress int)
 	// Generate a transactions and add them into the pool
 	txs := make([]*types.Transaction, 0, sendersCount*txCountPerAddress)
 	for i := 0; i < sendersCount; i++ {
-		// Generate sender key
-		senderKey, senderKeyError := crypto.GenerateKey()
+		// Generate and seed sender
+		senderKey, senderKeyError := createAndSeedSender(pool, big.NewInt(1000000))
 		if senderKeyError != nil {
-			b.Fatalf("Failed to generate private key")
+			b.Fatalf("Failed to generate sender private key and to seed it to the tx pool")
 		}
 
-		// Seed senders to pools
-		senderAccount := crypto.PubkeyToAddress(senderKey.PublicKey)
-		pool.currentState.AddBalance(senderAccount, big.NewInt(1000000))
-
+		// Create transactions. Each transaction within loop will be generated with same sender key.
+		// We are simulating situation where each sender makes txCountPerAddress transactions.
 		for j := 0; j < txCountPerAddress; j++ {
 			// Create a transaction with some address and add it to slice
 			tx := transaction(uint64(j), 100000, senderKey)
@@ -2579,14 +2613,13 @@ func benchmarkAddRemotes(b *testing.B, sendersCount int) {
 
 	txs := make([]*types.Transaction, 0, sendersCount)
 	for i := 0; i < sendersCount; i++ {
-		// Generate sender key
-		senderKey, senderKeyError := crypto.GenerateKey()
+		// Generate and seed sender
+		senderKey, senderKeyError := createAndSeedSender(pool, big.NewInt(1000000))
 		if senderKeyError != nil {
-			b.Fatalf("Failed to generate private key")
+			b.Fatalf("Failed to generate sender private key and to seed it to the tx pool")
 		}
-		// Seed senders to pools
-		senderAccount := crypto.PubkeyToAddress(senderKey.PublicKey)
-		pool.currentState.AddBalance(senderAccount, big.NewInt(1000000))
+
+		// Create transaction
 		tx := transaction(0, 100000, senderKey)
 		txs = append(txs, tx)
 	}
@@ -2599,3 +2632,9 @@ func benchmarkAddRemotes(b *testing.B, sendersCount int) {
 }
 
 // TODO: Implement Benchmarks for runReorg method
+
+// TODO: Implement test case like this (refer to https://github.com/ethereum/go-ethereum/issues/21385 for more details):
+// Pending high gwei transactions
+// Sometimes (still not able to reproduce) a sequence of some priced transactions have issues like:
+//   -transactions not being included immediately.
+//   -transactions mined after some time.
