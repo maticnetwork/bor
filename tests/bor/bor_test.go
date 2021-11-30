@@ -377,6 +377,14 @@ func TestEIP1559Transition(t *testing.T) {
 		t.Fatalf("miner balance incorrect: expected %d, got %d", expected, actual)
 	}
 
+	// check burnt contract balance
+	actual = state.GetBalance(common.HexToAddress(params.BorTestChainConfig.Bor.CalculateBurntContract(block.NumberU64())))
+	expected = new(big.Int).Mul(new(big.Int).SetUint64(block.GasUsed()), block.BaseFee())
+	firstBalance := expected
+	if actual.Cmp(expected) != 0 {
+		t.Fatalf("burnt contract balance incorrect: expected %d, got %d", expected, actual)
+	}
+
 	// 4: Ensure the tx sender paid for the gasUsed * (tip + block baseFee).
 	actual = new(big.Int).Sub(funds, state.GetBalance(addr1))
 	expected = new(big.Int).SetUint64(block.GasUsed() * (block.Transactions()[0].GasTipCap().Uint64() + block.BaseFee().Uint64()))
@@ -417,12 +425,20 @@ func TestEIP1559Transition(t *testing.T) {
 		t.Fatalf("miner balance incorrect: expected %d, got %d", expected, actual)
 	}
 
+	// check burnt contract balance
+	actual = state.GetBalance(common.HexToAddress(params.BorTestChainConfig.Bor.CalculateBurntContract(block.NumberU64())))
+	expected = new(big.Int).Add(firstBalance, new(big.Int).Mul(new(big.Int).SetUint64(block.GasUsed()), block.BaseFee()))
+	if actual.Cmp(expected) != 0 {
+		t.Fatalf("burnt contract balance incorrect: expected %d, got %d", expected, actual)
+	}
+
 	// 4: Ensure the tx sender paid for the gasUsed * (effectiveTip + block baseFee).
 	actual = new(big.Int).Sub(funds, state.GetBalance(addr2))
 	expected = new(big.Int).SetUint64(block.GasUsed() * (effectiveTip + block.BaseFee().Uint64()))
 	if actual.Cmp(expected) != 0 {
 		t.Fatalf("sender balance incorrect: expected %d, got %d", expected, actual)
 	}
+
 }
 
 func newGwei(n int64) *big.Int {
