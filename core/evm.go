@@ -51,6 +51,7 @@ func NewEVMBlockContext(header *types.Header, chain ChainContext, author *common
 	if header.BaseFee != nil {
 		baseFee = new(big.Int).Set(header.BaseFee)
 	}
+
 	return vm.BlockContext{
 		CanTransfer: CanTransfer,
 		Transfer:    Transfer,

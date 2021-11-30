@@ -27,13 +27,21 @@ var mumbaiTestnet = &Chain{
 			IstanbulBlock:       big.NewInt(2722000),
 			MuirGlacierBlock:    big.NewInt(2722000),
 			BerlinBlock:         big.NewInt(13996000),
+			LondonBlock:         big.NewInt(0), // TODO - Add london block
 			Bor: &params.BorConfig{
-				Period:                2,
-				ProducerDelay:         6,
-				Sprint:                64,
-				BackupMultiplier:      2,
+				Period: map[string]uint64{
+					"0": 2,
+				},
+				ProducerDelay: 6,
+				Sprint:        64,
+				BackupMultiplier: map[string]uint64{
+					"0": 2,
+				},
 				ValidatorContract:     "0x0000000000000000000000000000000000001000",
 				StateReceiverContract: "0x0000000000000000000000000000000000001001",
+				BurntContract: map[string]string{
+					"0": "0x0000000000000000000000000000000000000000",
+				}, // TODO - Add london block
 			},
 		},
 		Nonce:      0,
