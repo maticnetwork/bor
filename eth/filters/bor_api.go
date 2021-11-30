@@ -19,7 +19,7 @@ func (api *PublicFilterAPI) SetChainConfig(chainConfig *params.ChainConfig) {
 
 func (api *PublicFilterAPI) GetBorBlockLogs(ctx context.Context, crit FilterCriteria) ([]*types.Log, error) {
 	if api.chainConfig == nil {
-		return nil, errors.New("No chain config found. Proper PublicFilterAPI initialization required")
+		return nil, errors.New("no chain config found. Proper PublicFilterAPI initialization required")
 	}
 
 	// get sprint from bor config

@@ -337,7 +337,7 @@ func (api *PublicFilterAPI) NewFilter(crit FilterCriteria) (rpc.ID, error) {
 // https://eth.wiki/json-rpc/API#eth_getlogs
 func (api *PublicFilterAPI) GetLogs(ctx context.Context, crit FilterCriteria) ([]*types.Log, error) {
 	if api.chainConfig == nil {
-		return nil, errors.New("No chain config found. Proper PublicFilterAPI initialization required")
+		return nil, errors.New("no chain config found. Proper PublicFilterAPI initialization required")
 	}
 
 	// get sprint from bor config

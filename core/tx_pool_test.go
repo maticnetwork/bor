@@ -192,15 +192,15 @@ func deriveSender(tx *types.Transaction) (common.Address, error) {
 	return types.Sender(types.HomesteadSigner{}, tx)
 }
 
-func createAndSeedSender(pool *TxPool, amount *big.Int) (*ecdsa.PrivateKey, error) {
+func createAndSeedSender(pool *TxPool, senderBalance *big.Int) (*ecdsa.PrivateKey, error) {
 	// Generate sender key
 	senderKey, senderKeyError := crypto.GenerateKey()
 	if senderKeyError != nil {
 		return nil, senderKeyError
 	}
-	// Seed sender to pool
+	// Seed sender to the pool
 	senderAccount := crypto.PubkeyToAddress(senderKey.PublicKey)
-	pool.currentState.AddBalance(senderAccount, amount)
+	pool.currentState.AddBalance(senderAccount, senderBalance)
 	return senderKey, nil
 }
 
@@ -472,9 +472,9 @@ func TestTransactionDoubleNonce(t *testing.T) {
 	resetState()
 
 	signer := types.HomesteadSigner{}
-	tx1, _ := types.SignTx(types.NewTransaction(0, common.Address{}, big.NewInt(100), 100000, big.NewInt(1), nil), signer, key)
-	tx2, _ := types.SignTx(types.NewTransaction(0, common.Address{}, big.NewInt(100), 1000000, big.NewInt(2), nil), signer, key)
-	tx3, _ := types.SignTx(types.NewTransaction(0, common.Address{}, big.NewInt(100), 1000000, big.NewInt(1), nil), signer, key)
+	tx1 := pricedTransaction(0, 100000, big.NewInt(1), key)
+	tx2 := pricedTransaction(0, 1000000, big.NewInt(2), key)
+	tx3 := pricedTransaction(0, 1000000, big.NewInt(1), key)
 
 	// Add the first two transaction, ensure higher priced stays only
 	if replace, err := pool.add(tx1, false); err != nil || replace {
@@ -2556,14 +2556,16 @@ func BenchmarkInsertRemoteWithAllLocals(b *testing.B) {
 // Benchmarks the speed of pool content dumping:
 // 1. Variation of both sender number and transactions per sender
 func BenchmarkPoolContent100Senders10TxsEach(b *testing.B) { benchmarkPoolContent(b, 100, 10) }
-func BenchmarkPoolContent1KSenders100TxsEach(b *testing.B) { benchmarkPoolContent(b, 1000, 100) }
-func BenchmarkPoolContent1KSenders1KTxsEach(b *testing.B)  { benchmarkPoolContent(b, 1000, 1000) }
+func BenchmarkPoolContent300Senders10TxsEach(b *testing.B) { benchmarkPoolContent(b, 300, 10) }
+func BenchmarkPoolContent500Senders10TxsEach(b *testing.B) { benchmarkPoolContent(b, 500, 10) }
+func BenchmarkPoolContent10Senders100TxsEach(b *testing.B) { benchmarkPoolContent(b, 10, 100) }
+func BenchmarkPoolContent10Senders300TxsEach(b *testing.B) { benchmarkPoolContent(b, 10, 300) }
+func BenchmarkPoolContent10Senders500TxsEach(b *testing.B) { benchmarkPoolContent(b, 10, 500) }
 
 // 2. Variation of sender number, each sender sends one transaction
-func BenchmarkPoolContent1KSenders1Tx(b *testing.B)  { benchmarkPoolContent(b, 1000, 1) }
-func BenchmarkPoolContent10KSenders1Tx(b *testing.B) { benchmarkPoolContent(b, 10000, 1) }
-func BenchmarkPoolContent100KSenders1x(b *testing.B) { benchmarkPoolContent(b, 100000, 1) }
-func BenchmarkPoolContent300KSenders1x(b *testing.B) { benchmarkPoolContent(b, 300000, 1) }
+func BenchmarkPoolContent1KSenders1TxEach(b *testing.B) { benchmarkPoolContent(b, 1000, 1) }
+func BenchmarkPoolContent3KSenders1TxEach(b *testing.B) { benchmarkPoolContent(b, 3000, 1) }
+func BenchmarkPoolContent5KSenders1TxEach(b *testing.B) { benchmarkPoolContent(b, 5000, 1) }
 
 func benchmarkPoolContent(b *testing.B, sendersCount int, txCountPerAddress int) {
 	// Setup tx pool
@@ -2574,7 +2576,7 @@ func benchmarkPoolContent(b *testing.B, sendersCount int, txCountPerAddress int)
 	txs := make([]*types.Transaction, 0, sendersCount*txCountPerAddress)
 	for i := 0; i < sendersCount; i++ {
 		// Generate and seed sender
-		senderKey, senderKeyError := createAndSeedSender(pool, big.NewInt(1000000))
+		senderKey, senderKeyError := createAndSeedSender(pool, big.NewInt(int64(txCountPerAddress)*1000000))
 		if senderKeyError != nil {
 			b.Fatalf("Failed to generate sender private key and to seed it to the tx pool")
 		}
@@ -2583,7 +2585,7 @@ func benchmarkPoolContent(b *testing.B, sendersCount int, txCountPerAddress int)
 		// We are simulating situation where each sender makes txCountPerAddress transactions.
 		for j := 0; j < txCountPerAddress; j++ {
 			// Create a transaction with some address and add it to slice
-			tx := transaction(uint64(j), testTxPoolConfig.PriceLimit, senderKey)
+			tx := transaction(uint64(j), 100000, senderKey)
 			txs = append(txs, tx)
 		}
 	}
@@ -2597,9 +2599,10 @@ func benchmarkPoolContent(b *testing.B, sendersCount int, txCountPerAddress int)
 }
 
 // Benchmark synchronized adding of transactions to pool
-func BenchmarkAddRemotes1KSenders(b *testing.B)   { benchmarkAddRemotes(b, 1000) }
-func BenchmarkAddRemotes10KSenders(b *testing.B)  { benchmarkAddRemotes(b, 10000) }
-func BenchmarkAddRemotes100KSenders(b *testing.B) { benchmarkAddRemotes(b, 100000) }
+func BenchmarkAddRemotes1KSenders(b *testing.B) { benchmarkAddRemotes(b, 1000) }
+func BenchmarkAddRemotes3KSenders(b *testing.B) { benchmarkAddRemotes(b, 3000) }
+func BenchmarkAddRemotes5KSenders(b *testing.B) { benchmarkAddRemotes(b, 5000) }
+func BenchmarkAddRemotes6KSenders(b *testing.B) { benchmarkAddRemotes(b, 6000) }
 
 func benchmarkAddRemotes(b *testing.B, sendersCount int) {
 	// Setup tx pool
@@ -2615,7 +2618,7 @@ func benchmarkAddRemotes(b *testing.B, sendersCount int) {
 		}
 
 		// Create transaction
-		tx := transaction(0, testTxPoolConfig.PriceLimit, senderKey)
+		tx := transaction(0, 100000, senderKey)
 		txs = append(txs, tx)
 	}
 
