@@ -86,11 +86,7 @@ func transaction(nonce uint64, gaslimit uint64, key *ecdsa.PrivateKey) *types.Tr
 }
 
 func pricedTransaction(nonce uint64, gaslimit uint64, gasprice *big.Int, key *ecdsa.PrivateKey) *types.Transaction {
-	return pricedRecipientAddressTransaction(nonce, common.Address{}, gaslimit, gasprice, key)
-}
-
-func pricedRecipientAddressTransaction(nonce uint64, address common.Address, gaslimit uint64, gasprice *big.Int, key *ecdsa.PrivateKey) *types.Transaction {
-	tx, _ := types.SignTx(types.NewTransaction(nonce, address, big.NewInt(100), gaslimit, gasprice, nil), types.HomesteadSigner{}, key)
+	tx, _ := types.SignTx(types.NewTransaction(nonce, common.Address{}, big.NewInt(100), gaslimit, gasprice, nil), types.HomesteadSigner{}, key)
 	return tx
 }
 
@@ -2557,13 +2553,13 @@ func BenchmarkInsertRemoteWithAllLocals(b *testing.B) {
 	}
 }
 
-// Benchmarks the speed of pool content dumping
-// Variation of both sender number and transactions per sender
+// Benchmarks the speed of pool content dumping:
+// 1. Variation of both sender number and transactions per sender
 func BenchmarkPoolContent100Senders10TxsEach(b *testing.B) { benchmarkPoolContent(b, 100, 10) }
 func BenchmarkPoolContent1KSenders100TxsEach(b *testing.B) { benchmarkPoolContent(b, 1000, 100) }
 func BenchmarkPoolContent1KSenders1KTxsEach(b *testing.B)  { benchmarkPoolContent(b, 1000, 1000) }
 
-// Variation of sender number, each sender sends one transaction
+// 2. Variation of sender number, each sender sends one transaction
 func BenchmarkPoolContent1KSenders1Tx(b *testing.B)  { benchmarkPoolContent(b, 1000, 1) }
 func BenchmarkPoolContent10KSenders1Tx(b *testing.B) { benchmarkPoolContent(b, 10000, 1) }
 func BenchmarkPoolContent100KSenders1x(b *testing.B) { benchmarkPoolContent(b, 100000, 1) }
@@ -2587,14 +2583,14 @@ func benchmarkPoolContent(b *testing.B, sendersCount int, txCountPerAddress int)
 		// We are simulating situation where each sender makes txCountPerAddress transactions.
 		for j := 0; j < txCountPerAddress; j++ {
 			// Create a transaction with some address and add it to slice
-			tx := transaction(uint64(j), 100000, senderKey)
+			tx := transaction(uint64(j), testTxPoolConfig.PriceLimit, senderKey)
 			txs = append(txs, tx)
 		}
 	}
 	pool.AddRemotesSync(txs)
 
 	b.ResetTimer()
-	// Benchmark dumping pool content
+	// Benchmark TxPool.Content()
 	for i := 0; i < b.N; i++ {
 		pool.Content()
 	}
@@ -2619,12 +2615,12 @@ func benchmarkAddRemotes(b *testing.B, sendersCount int) {
 		}
 
 		// Create transaction
-		tx := transaction(0, 100000, senderKey)
+		tx := transaction(0, testTxPoolConfig.PriceLimit, senderKey)
 		txs = append(txs, tx)
 	}
 
 	b.ResetTimer()
-	// Benchmark  synchronized adding remote transactions
+	// Benchmark  TxPool.AddRemotesSync()
 	for i := 0; i < b.N; i++ {
 		pool.AddRemotesSync(txs)
 	}
