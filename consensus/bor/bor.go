@@ -716,6 +716,7 @@ func (c *Bor) changeContractCodeIfNeeded(headerNumber uint64, state *state.State
 				return fmt.Errorf("failed to decode genesis alloc: %v", err)
 			}
 			for addr, account := range allocs {
+				log.Info("change contract code", "address", addr)
 				state.SetCode(addr, account.Code)
 			}
 		}
