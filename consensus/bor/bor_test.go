@@ -32,7 +32,7 @@ func TestGenesisContractChange(t *testing.T) {
 				"4": map[string]interface{}{
 					addr0.Hex(): map[string]interface{}{
 						"code":    hexutil.Bytes{0x1, 0x3},
-						"balance": "0",
+						"balance": "0x1000",
 					},
 				},
 			},
@@ -95,4 +95,7 @@ func TestGenesisContractChange(t *testing.T) {
 	// code changes 2nd time
 	_, statedb = addBlock(root, 4)
 	assert.Equal(t, statedb.GetCode(addr0), []byte{0x1, 0x3})
+
+	// make sure balance change DOES NOT take effect
+	assert.Equal(t, statedb.GetBalance(addr0), big.NewInt(0))
 }
