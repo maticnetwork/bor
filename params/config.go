@@ -245,9 +245,7 @@ var (
 			BackupMultiplier:      2,
 			ValidatorContract:     "0x0000000000000000000000000000000000001000",
 			StateReceiverContract: "0x0000000000000000000000000000000000001001",
-			BlockAlloc: map[string]interface{}{
-				"0": "",
-			},
+			BlockAlloc:            map[string]interface{}{},
 		},
 	}
 
@@ -284,9 +282,7 @@ var (
 				"14953792": 0,
 				"14953856": 0,
 			},
-			BlockAlloc: map[string]interface{}{
-				"0": "",
-			},
+			BlockAlloc: map[string]interface{}{},
 		},
 	}
 	// AllEthashProtocolChanges contains every protocol change (EIPs) introduced
