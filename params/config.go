@@ -422,7 +422,7 @@ type BorConfig struct {
 	StateReceiverContract string `json:"stateReceiverContract"` // State receiver contract
 
 	OverrideStateSyncRecords map[string]int         `json:"overrideStateSyncRecords"` // override state records count
-	BlockAlloc               map[string]interface{} `json:"block_alloc"`
+	BlockAlloc               map[string]interface{} `json:"blockAlloc"`
 }
 
 // String implements the stringer interface, returning the consensus engine details.
