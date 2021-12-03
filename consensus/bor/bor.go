@@ -703,7 +703,7 @@ func decodeGenesisAlloc(i interface{}) (core.GenesisAlloc, error) {
 
 func (c *Bor) changeContractCodeIfNeeded(headerNumber uint64, state *state.StateDB) error {
 	for blockNumber, genesisAlloc := range c.config.BlockAlloc {
-		if blockNumber == strconv.FormatUint(headerNumber+1, 10) {
+		if blockNumber == strconv.FormatUint(headerNumber, 10) {
 			allocs, err := decodeGenesisAlloc(genesisAlloc)
 			if err != nil {
 				return fmt.Errorf("failed to decode genesis alloc: %v", err)
