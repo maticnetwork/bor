@@ -267,6 +267,13 @@ func New(
 		WithoutHeimdall:        withoutHeimdall,
 	}
 
+	// make sure we can decode all the GenesisAlloc in the BorConfig.
+	for key, genesisAlloc := range c.config.BlockAlloc {
+		if _, err := decodeGenesisAlloc(genesisAlloc); err != nil {
+			panic(fmt.Sprintf("BUG: Block alloc '%s' in genesis is not correct: %v", key, err))
+		}
+	}
+
 	return c
 }
 
