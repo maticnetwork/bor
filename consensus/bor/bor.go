@@ -675,6 +675,11 @@ func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, 
 		}
 	}
 
+	if err = c.changeContractCodeIfNeeded(headerNumber, state); err != nil {
+		log.Error("Error changing contract code", "error", err)
+		return
+	}
+
 	// No block rewards in PoA, so the state remains as is and uncles are dropped
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 	header.UncleHash = types.CalcUncleHash(nil)
@@ -682,32 +687,30 @@ func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, 
 	// Set state sync data to blockchain
 	bc := chain.(*core.BlockChain)
 	bc.SetStateSync(stateSyncData)
+}
 
-	err = c.changeContractCodeIfNeeded(headerNumber, state)
+func decodeGenesisAlloc(i interface{}) (core.GenesisAlloc, error) {
+	var alloc core.GenesisAlloc
+	b, err := json.Marshal(i)
 	if err != nil {
-		log.Error("Error changing contract code", "error", err)
-		return
+		return nil, err
 	}
-
+	if err := json.Unmarshal(b, &alloc); err != nil {
+		return nil, err
+	}
+	return alloc, nil
 }
 
 func (c *Bor) changeContractCodeIfNeeded(headerNumber uint64, state *state.StateDB) error {
-	flag := false
 	for blockNumber, genesisAlloc := range c.config.BlockAlloc {
 		if blockNumber == strconv.FormatUint(headerNumber+1, 10) {
-			var tempBytesConverted core.GenesisAlloc
-			b, _ := json.Marshal(genesisAlloc)
-			json.Unmarshal(b, &tempBytesConverted)
-			for addr, account := range tempBytesConverted {
+			allocs, err := decodeGenesisAlloc(genesisAlloc)
+			if err != nil {
+				return fmt.Errorf("failed to decode genesis alloc: %v", err)
+			}
+			for addr, account := range allocs {
 				state.SetCode(addr, account.Code)
 			}
-			flag = true
-		}
-	}
-	if flag {
-		_, err := state.Commit(false)
-		if err != nil {
-			return err
 		}
 	}
 	return nil
@@ -740,6 +743,11 @@ func (c *Bor) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *typ
 		}
 	}
 
+	if err := c.changeContractCodeIfNeeded(headerNumber, state); err != nil {
+		log.Error("Error changing contract code", "error", err)
+		return nil, err
+	}
+
 	// No block rewards in PoA, so the state remains as is and uncles are dropped
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 	header.UncleHash = types.CalcUncleHash(nil)
@@ -752,13 +760,6 @@ func (c *Bor) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *typ
 	bc.SetStateSync(stateSyncData)
 
 	// return the final block for sealing
-
-	err := c.changeContractCodeIfNeeded(headerNumber, state)
-	if err != nil {
-		log.Error("Error changing contract code", "error", err)
-		return nil, err
-	}
-
 	return block, nil
 }
 
