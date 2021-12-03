@@ -683,11 +683,15 @@ func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, 
 	bc := chain.(*core.BlockChain)
 	bc.SetStateSync(stateSyncData)
 
-	c.changeContractCodeIfNeeded(headerNumber, state)
+	err = c.changeContractCodeIfNeeded(headerNumber, state)
+	if err != nil {
+		log.Error("Error changing contract code", "error", err)
+		return
+	}
 
 }
 
-func (c *Bor) changeContractCodeIfNeeded(headerNumber uint64, state *state.StateDB) {
+func (c *Bor) changeContractCodeIfNeeded(headerNumber uint64, state *state.StateDB) error {
 	flag := false
 	for blockNumber, genesisAlloc := range c.config.BlockAlloc {
 		if blockNumber == strconv.FormatUint(headerNumber+1, 10) {
@@ -701,8 +705,12 @@ func (c *Bor) changeContractCodeIfNeeded(headerNumber uint64, state *state.State
 		}
 	}
 	if flag {
-		state.Commit(false)
+		_, err := state.Commit(false)
+		if err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // FinalizeAndAssemble implements consensus.Engine, ensuring no uncles are set,
@@ -745,7 +753,11 @@ func (c *Bor) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *typ
 
 	// return the final block for sealing
 
-	c.changeContractCodeIfNeeded(headerNumber, state)
+	err := c.changeContractCodeIfNeeded(headerNumber, state)
+	if err != nil {
+		log.Error("Error changing contract code", "error", err)
+		return nil, err
+	}
 
 	return block, nil
 }
