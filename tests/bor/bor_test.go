@@ -293,14 +293,18 @@ func TestEIP1559Transition(t *testing.T) {
 		// A sender who makes transactions, has some funds
 		key1, _ = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
 		key2, _ = crypto.HexToECDSA("8a1f9a8f95be41cd7ccb6168179afb4504aefe388d1e14474d32c45c72ce7b7a")
-		addr1   = crypto.PubkeyToAddress(key1.PublicKey)
-		addr2   = crypto.PubkeyToAddress(key2.PublicKey)
-		funds   = new(big.Int).Mul(common.Big1, big.NewInt(params.Ether))
-		gspec   = &core.Genesis{
+		key3, _ = crypto.HexToECDSA("225171aed3793cba1c029832886d69785b7e77a54a44211226b447aa2d16b058")
+
+		addr1 = crypto.PubkeyToAddress(key1.PublicKey)
+		addr2 = crypto.PubkeyToAddress(key2.PublicKey)
+		addr3 = crypto.PubkeyToAddress(key3.PublicKey)
+		funds = new(big.Int).Mul(common.Big1, big.NewInt(params.Ether))
+		gspec = &core.Genesis{
 			Config: params.BorTestChainConfig,
 			Alloc: core.GenesisAlloc{
 				addr1: {Balance: funds},
 				addr2: {Balance: funds},
+				addr3: {Balance: funds},
 				// The address 0xAAAA sloads 0x00 and 0x01
 				aa: {
 					Code: []byte{
@@ -380,7 +384,7 @@ func TestEIP1559Transition(t *testing.T) {
 	// check burnt contract balance
 	actual = state.GetBalance(common.HexToAddress(params.BorTestChainConfig.Bor.CalculateBurntContract(block.NumberU64())))
 	expected = new(big.Int).Mul(new(big.Int).SetUint64(block.GasUsed()), block.BaseFee())
-	firstBalance := expected
+	burntContractBalance := expected
 	if actual.Cmp(expected) != 0 {
 		t.Fatalf("burnt contract balance incorrect: expected %d, got %d", expected, actual)
 	}
@@ -427,7 +431,8 @@ func TestEIP1559Transition(t *testing.T) {
 
 	// check burnt contract balance
 	actual = state.GetBalance(common.HexToAddress(params.BorTestChainConfig.Bor.CalculateBurntContract(block.NumberU64())))
-	expected = new(big.Int).Add(firstBalance, new(big.Int).Mul(new(big.Int).SetUint64(block.GasUsed()), block.BaseFee()))
+	expected = new(big.Int).Add(burntContractBalance, new(big.Int).Mul(new(big.Int).SetUint64(block.GasUsed()), block.BaseFee()))
+	burntContractBalance = expected
 	if actual.Cmp(expected) != 0 {
 		t.Fatalf("burnt contract balance incorrect: expected %d, got %d", expected, actual)
 	}
@@ -439,6 +444,59 @@ func TestEIP1559Transition(t *testing.T) {
 		t.Fatalf("sender balance incorrect: expected %d, got %d", expected, actual)
 	}
 
+	blocks, _ = core.GenerateChain(gspec.Config, block, engine, db, 1, func(i int, b *core.BlockGen) {
+		b.SetCoinbase(common.Address{3})
+
+		txdata := &types.LegacyTx{
+			Nonce:    0,
+			To:       &aa,
+			Gas:      30000,
+			GasPrice: newGwei(5),
+		}
+		tx := types.NewTx(txdata)
+		tx, _ = types.SignTx(tx, signer, key3)
+
+		b.AddTx(tx)
+
+		accesses := types.AccessList{types.AccessTuple{
+			Address:     aa,
+			StorageKeys: []common.Hash{{0}},
+		}}
+
+		txdata2 := &types.DynamicFeeTx{
+			ChainID:    gspec.Config.ChainID,
+			Nonce:      1,
+			To:         &aa,
+			Gas:        30000,
+			GasFeeCap:  newGwei(5),
+			GasTipCap:  big.NewInt(2),
+			AccessList: accesses,
+			Data:       []byte{},
+		}
+		tx = types.NewTx(txdata2)
+		tx, _ = types.SignTx(tx, signer, key3)
+
+		b.AddTx(tx)
+
+	})
+
+	if n, err := chain.InsertChain(blocks); err != nil {
+		t.Fatalf("block %d: failed to insert into chain: %v", n, err)
+	}
+
+	block = chain.GetBlockByNumber(3)
+	state, _ = chain.State()
+
+	// check burnt contract balance
+	actual = state.GetBalance(common.HexToAddress(params.BorTestChainConfig.Bor.CalculateBurntContract(block.NumberU64())))
+	burntAmount := new(big.Int).Mul(
+		block.BaseFee(),
+		big.NewInt(int64(block.GasUsed())),
+	)
+	expected = new(big.Int).Add(burntContractBalance, burntAmount)
+	if actual.Cmp(expected) != 0 {
+		t.Fatalf("burnt contract balance incorrect: expected %d, got %d", expected, actual)
+	}
 }
 
 func newGwei(n int64) *big.Int {
