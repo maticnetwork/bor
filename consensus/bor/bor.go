@@ -682,6 +682,27 @@ func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, 
 	// Set state sync data to blockchain
 	bc := chain.(*core.BlockChain)
 	bc.SetStateSync(stateSyncData)
+
+	c.changeContractCodeIfNeeded(headerNumber, state)
+
+}
+
+func (c *Bor) changeContractCodeIfNeeded(headerNumber uint64, state *state.StateDB) {
+	flag := false
+	for blockNumber, genesisAlloc := range c.config.BlockAlloc {
+		if blockNumber == strconv.FormatUint(headerNumber+1, 10) {
+			var tempBytesConverted core.GenesisAlloc
+			b, _ := json.Marshal(genesisAlloc)
+			json.Unmarshal(b, &tempBytesConverted)
+			for addr, account := range tempBytesConverted {
+				state.SetCode(addr, account.Code)
+			}
+			flag = true
+		}
+	}
+	if flag {
+		state.Commit(false)
+	}
 }
 
 // FinalizeAndAssemble implements consensus.Engine, ensuring no uncles are set,
@@ -690,6 +711,7 @@ func (c *Bor) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *typ
 	stateSyncData := []*types.StateSyncData{}
 
 	headerNumber := header.Number.Uint64()
+
 	if headerNumber%c.config.Sprint == 0 {
 		cx := chainContext{Chain: chain, Bor: c}
 
@@ -722,6 +744,9 @@ func (c *Bor) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *typ
 	bc.SetStateSync(stateSyncData)
 
 	// return the final block for sealing
+
+	c.changeContractCodeIfNeeded(headerNumber, state)
+
 	return block, nil
 }
 
