@@ -9,6 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
@@ -52,7 +53,7 @@ func (gc *GenesisContractsClient) CommitState(
 	event *EventRecordWithTime,
 	state *state.StateDB,
 	header *types.Header,
-	chCtx chainContext,
+	chCtx core.ChainContext,
 ) error {
 	eventRecord := event.BuildEventRecord()
 	recordBytes, err := rlp.EncodeToBytes(eventRecord)

@@ -259,6 +259,12 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 
 		borReceiptsCache: borReceiptsCache,
 	}
+
+	// BOR
+	if bor, ok := engine.(consensus.ConsensusNoPoW); ok {
+		bor.SetBlockchain(bc)
+	}
+
 	bc.validator = NewBlockValidator(chainConfig, bc, engine)
 	bc.prefetcher = newStatePrefetcher(chainConfig, bc, engine)
 	bc.processor = NewStateProcessor(chainConfig, bc, engine)

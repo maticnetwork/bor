@@ -16,17 +16,9 @@ var (
 	stateFetchLimit = 50
 )
 
-// ResponseWithHeight defines a response object type that wraps an original
-// response with a height.
-type ResponseWithHeight struct {
-	Height string          `json:"height"`
-	Result json.RawMessage `json:"result"`
-}
-
 type IHeimdallClient interface {
-	Fetch(path string, query string) (*ResponseWithHeight, error)
-	FetchWithRetry(path string, query string) (*ResponseWithHeight, error)
 	FetchStateSyncEvents(fromID uint64, to int64) ([]*EventRecordWithTime, error)
+	FetchSpan(span uint64) (*HeimdallSpan, error)
 }
 
 type HeimdallClient struct {
@@ -44,12 +36,24 @@ func NewHeimdallClient(urlString string) (*HeimdallClient, error) {
 	return h, nil
 }
 
+func (h *HeimdallClient) FetchSpan(spanNum uint64) (*HeimdallSpan, error) {
+	var span *HeimdallSpan
+	response, err := h.fetchWithRetry(fmt.Sprintf("bor/span/%d", spanNum), "")
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(response.Result, &span); err != nil {
+		return nil, err
+	}
+	return span, nil
+}
+
 func (h *HeimdallClient) FetchStateSyncEvents(fromID uint64, to int64) ([]*EventRecordWithTime, error) {
 	eventRecords := make([]*EventRecordWithTime, 0)
 	for {
 		queryParams := fmt.Sprintf("from-id=%d&to-time=%d&limit=%d", fromID, to, stateFetchLimit)
 		log.Info("Fetching state sync events", "queryParams", queryParams)
-		response, err := h.FetchWithRetry("clerk/event-record/list", queryParams)
+		response, err := h.fetchWithRetry("clerk/event-record/list", queryParams)
 		if err != nil {
 			return nil, err
 		}
@@ -73,21 +77,15 @@ func (h *HeimdallClient) FetchStateSyncEvents(fromID uint64, to int64) ([]*Event
 	return eventRecords, nil
 }
 
-// Fetch fetches response from heimdall
-func (h *HeimdallClient) Fetch(rawPath string, rawQuery string) (*ResponseWithHeight, error) {
-	u, err := url.Parse(h.urlString)
-	if err != nil {
-		return nil, err
-	}
-
-	u.Path = rawPath
-	u.RawQuery = rawQuery
-
-	return h.internalFetch(u)
+// responseWithHeight defines a response object type that wraps an original
+// response with a height.
+type responseWithHeight struct {
+	Height string          `json:"height"`
+	Result json.RawMessage `json:"result"`
 }
 
 // FetchWithRetry returns data from heimdall with retry
-func (h *HeimdallClient) FetchWithRetry(rawPath string, rawQuery string) (*ResponseWithHeight, error) {
+func (h *HeimdallClient) fetchWithRetry(rawPath string, rawQuery string) (*responseWithHeight, error) {
 	u, err := url.Parse(h.urlString)
 	if err != nil {
 		return nil, err
@@ -107,7 +105,7 @@ func (h *HeimdallClient) FetchWithRetry(rawPath string, rawQuery string) (*Respo
 }
 
 // internal fetch method
-func (h *HeimdallClient) internalFetch(u *url.URL) (*ResponseWithHeight, error) {
+func (h *HeimdallClient) internalFetch(u *url.URL) (*responseWithHeight, error) {
 	res, err := h.client.Get(u.String())
 	if err != nil {
 		return nil, err
@@ -120,7 +118,7 @@ func (h *HeimdallClient) internalFetch(u *url.URL) (*ResponseWithHeight, error) 
 	}
 
 	// unmarshall data from buffer
-	var response ResponseWithHeight
+	var response responseWithHeight
 	if res.StatusCode == 204 {
 		return &response, nil
 	}
@@ -134,6 +132,5 @@ func (h *HeimdallClient) internalFetch(u *url.URL) (*ResponseWithHeight, error) 
 	if err := json.Unmarshal(body, &response); err != nil {
 		return nil, err
 	}
-
 	return &response, nil
 }

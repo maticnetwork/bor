@@ -12,6 +12,7 @@ type IHeimdallClient struct {
 	mock.Mock
 }
 
+/*
 // Fetch provides a mock function with given fields: path, query
 func (_m *IHeimdallClient) Fetch(path string, query string) (*bor.ResponseWithHeight, error) {
 	ret := _m.Called(path, query)
@@ -33,6 +34,12 @@ func (_m *IHeimdallClient) Fetch(path string, query string) (*bor.ResponseWithHe
 	}
 
 	return r0, r1
+}
+*/
+
+func (_m *IHeimdallClient) FetchSpan(span uint64) (*bor.HeimdallSpan, error) {
+	// TODO
+	return nil, nil
 }
 
 // FetchStateSyncEvents provides a mock function with given fields: fromID, to
@@ -58,6 +65,7 @@ func (_m *IHeimdallClient) FetchStateSyncEvents(fromID uint64, to int64) ([]*bor
 	return r0, r1
 }
 
+/*
 // FetchWithRetry provides a mock function with given fields: path, query
 func (_m *IHeimdallClient) FetchWithRetry(path string, query string) (*bor.ResponseWithHeight, error) {
 	ret := _m.Called(path, query)
@@ -80,3 +88,4 @@ func (_m *IHeimdallClient) FetchWithRetry(path string, query string) (*bor.Respo
 
 	return r0, r1
 }
+*/
