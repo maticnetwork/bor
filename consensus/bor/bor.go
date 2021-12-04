@@ -489,7 +489,7 @@ func (c *Bor) snapshot(number uint64, hash common.Hash, parents []*types.Header)
 
 	// check if snapshot is nil
 	if snap == nil {
-		return nil, fmt.Errorf("Unknown error while retrieving snapshot at block number %v", number)
+		return nil, fmt.Errorf("unknown error while retrieving snapshot at block number %v", number)
 	}
 
 	// Previous snapshot found, apply any pending headers on top of it
