@@ -42,8 +42,7 @@ func newSnapshot(
 	validators []*Validator,
 ) *Snapshot {
 	snap := &Snapshot{
-		config: config,
-		//ethAPI:       ethAPI,
+		config:       config,
 		sigcache:     sigcache,
 		Number:       number,
 		Hash:         hash,
@@ -65,7 +64,6 @@ func loadSnapshot(config *params.BorConfig, sigcache *lru.ARCCache, db ethdb.Dat
 	}
 	snap.config = config
 	snap.sigcache = sigcache
-	//snap.ethAPI = ethAPI
 
 	// update total voting power
 	if err := snap.ValidatorSet.updateTotalVotingPower(); err != nil {
@@ -87,8 +85,7 @@ func (s *Snapshot) store(db ethdb.Database) error {
 // copy creates a deep copy of the snapshot, though not the individual votes.
 func (s *Snapshot) copy() *Snapshot {
 	cpy := &Snapshot{
-		config: s.config,
-		//ethAPI:       s.ethAPI,
+		config:       s.config,
 		sigcache:     s.sigcache,
 		Number:       s.Number,
 		Hash:         s.Hash,

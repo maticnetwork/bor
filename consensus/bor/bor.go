@@ -6,27 +6,22 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"math/big"
 	"sort"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
 	lru "github.com/hashicorp/golang-lru"
 	"golang.org/x/crypto/sha3"
 
-	ethereum "github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts"
-	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
@@ -215,12 +210,10 @@ type Bor struct {
 	signFn SignerFn       // Signer function to authorize hashes with
 	lock   sync.RWMutex   // Protects the signer fields
 
-	// ethAPI                 *ethapi.PublicBlockChainAPI
-	GenesisContractsClient *GenesisContractsClient
-	validatorSetABI        abi.ABI
-	stateReceiverABI       abi.ABI
-	HeimdallClient         HeimdallClient
-	WithoutHeimdall        bool
+	GenesisContractsClient Backend
+
+	HeimdallClient  HeimdallClient
+	WithoutHeimdall bool
 
 	scope event.SubscriptionScope
 	// The fields below are for testing only
@@ -248,22 +241,21 @@ func New(
 	// Allocate the snapshot caches and create the engine
 	recents, _ := lru.NewARC(inmemorySnapshots)
 	signatures, _ := lru.NewARC(inmemorySignatures)
-	vABI, _ := abi.JSON(strings.NewReader(validatorsetABI))
-	sABI, _ := abi.JSON(strings.NewReader(stateReceiverABI))
+
 	heimdallClient, _ := NewRestHeimdallClient(heimdallURL)
-	genesisContractsClient := NewGenesisContractsClient(chainConfig, borConfig.ValidatorContract, borConfig.StateReceiverContract, ethAPI)
+
 	c := &Bor{
-		chainConfig:            chainConfig,
-		config:                 borConfig,
-		db:                     db,
-		recents:                recents,
-		signatures:             signatures,
-		validatorSetABI:        vABI,
-		stateReceiverABI:       sABI,
-		GenesisContractsClient: genesisContractsClient,
-		HeimdallClient:         heimdallClient,
-		WithoutHeimdall:        withoutHeimdall,
+		chainConfig:     chainConfig,
+		config:          borConfig,
+		db:              db,
+		recents:         recents,
+		signatures:      signatures,
+		HeimdallClient:  heimdallClient,
+		WithoutHeimdall: withoutHeimdall,
 	}
+
+	ctx := &chainContext{Chain: c.chain, Bor: c}
+	c.GenesisContractsClient = NewGenesisContractsClient(ctx, borConfig.ValidatorContract, borConfig.StateReceiverContract, ethAPI)
 
 	return c
 }
@@ -657,25 +649,10 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 // Finalize implements consensus.Engine, ensuring no uncles are set, nor block
 // rewards given.
 func (c *Bor) Finalize(_ consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header) {
-	stateSyncData := []*types.StateSyncData{}
-
-	var err error
-	headerNumber := header.Number.Uint64()
-	if headerNumber%c.config.Sprint == 0 {
-		// check and commit span
-		if err := c.checkAndCommitSpan(state, header); err != nil {
-			log.Error("Error while committing span", "error", err)
-			return
-		}
-
-		if !c.WithoutHeimdall {
-			// commit statees
-			stateSyncData, err = c.CommitStates(state, header)
-			if err != nil {
-				log.Error("Error while committing states", "error", err)
-				return
-			}
-		}
+	stateSyncData, err := c.finalizeBor(header, state)
+	if err != nil {
+		log.Error("Error while finalizing bor", "error", err)
+		return
 	}
 
 	// No block rewards in PoA, so the state remains as is and uncles are dropped
@@ -690,25 +667,10 @@ func (c *Bor) Finalize(_ consensus.ChainHeaderReader, header *types.Header, stat
 // FinalizeAndAssemble implements consensus.Engine, ensuring no uncles are set,
 // nor block rewards given, and returns the final block.
 func (c *Bor) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
-	stateSyncData := []*types.StateSyncData{}
-
-	headerNumber := header.Number.Uint64()
-	if headerNumber%c.config.Sprint == 0 {
-		// check and commit span
-		err := c.checkAndCommitSpan(state, header)
-		if err != nil {
-			log.Error("Error while committing span", "error", err)
-			return nil, err
-		}
-
-		if !c.WithoutHeimdall {
-			// commit states
-			stateSyncData, err = c.CommitStates(state, header)
-			if err != nil {
-				log.Error("Error while committing states", "error", err)
-				return nil, err
-			}
-		}
+	stateSyncData, err := c.finalizeBor(header, state)
+	if err != nil {
+		log.Error("Error while finalizing and assembling bor", "error", err)
+		return nil, err
 	}
 
 	// No block rewards in PoA, so the state remains as is and uncles are dropped
@@ -724,6 +686,38 @@ func (c *Bor) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *typ
 
 	// return the final block for sealing
 	return block, nil
+}
+
+func (c *Bor) finalizeBor(header *types.Header, state *state.StateDB) ([]*types.StateSyncData, error) {
+	// These are the custom logic specific in the Bor consensus that is not part of the normal iterations
+	// of the smart contracts in the EVM
+	var stateSyncData []*types.StateSyncData
+
+	headerNumber := header.Number.Uint64()
+	if headerNumber%c.config.Sprint == 0 {
+		// We are at the end of the sprint, we need to commit any data available
+
+		// check and commit span
+		span, err := c.GenesisContractsClient.GetCurrentSpan(header.ParentHash)
+		if err != nil {
+			return nil, err
+		}
+		if needToCommitSpan(span, c.config.Sprint, headerNumber) {
+			if err := c.fetchAndCommitSpan(span.ID+1, state, header); err != nil {
+				return nil, err
+			}
+		}
+
+		if !c.WithoutHeimdall {
+			// commit states
+			stateSyncData, err = c.CommitStates(state, header)
+			if err != nil {
+				return nil, fmt.Errorf("failed to commit states: %v", err)
+			}
+		}
+	}
+
+	return stateSyncData, nil
 }
 
 // Authorize injects a private key into the consensus engine to mint new blocks
@@ -847,141 +841,19 @@ func (c *Bor) Close() error {
 	return nil
 }
 
-/*
-// GetCurrentSpan get current span from contract
-func (c *Bor) GetCurrentSpan(headerHash common.Hash) (*Span, error) {
-	// block
-	blockNr := rpc.BlockNumberOrHashWithHash(headerHash, false)
-
-	// method
-	method := "getCurrentSpan"
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	data, err := c.validatorSetABI.Pack(method)
-	if err != nil {
-		log.Error("Unable to pack tx for getCurrentSpan", "error", err)
-		return nil, err
-	}
-
-	msgData := (hexutil.Bytes)(data)
-	toAddress := common.HexToAddress(c.config.ValidatorContract)
-	gas := (hexutil.Uint64)(uint64(math.MaxUint64 / 2))
-	result, err := c.ethAPI.Call(ctx, ethapi.TransactionArgs{
-		Gas:  &gas,
-		To:   &toAddress,
-		Data: &msgData,
-	}, blockNr, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	// span result
-	ret := new(struct {
-		Number     *big.Int
-		StartBlock *big.Int
-		EndBlock   *big.Int
-	})
-	if err := c.validatorSetABI.UnpackIntoInterface(ret, method, result); err != nil {
-		return nil, err
-	}
-
-	// create new span
-	span := Span{
-		ID:         ret.Number.Uint64(),
-		StartBlock: ret.StartBlock.Uint64(),
-		EndBlock:   ret.EndBlock.Uint64(),
-	}
-
-	return &span, nil
-}
-
-// GetCurrentValidators get current validators
-func (c *Bor) GetCurrentValidators(headerHash common.Hash, blockNumber uint64) ([]*Validator, error) {
-	// block
-	blockNr := rpc.BlockNumberOrHashWithHash(headerHash, false)
-
-	// method
-	method := "getBorValidators"
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	data, err := c.validatorSetABI.Pack(method, big.NewInt(0).SetUint64(blockNumber))
-	if err != nil {
-		log.Error("Unable to pack tx for getValidator", "error", err)
-		return nil, err
-	}
-
-	// call
-	msgData := (hexutil.Bytes)(data)
-	toAddress := common.HexToAddress(c.config.ValidatorContract)
-	gas := (hexutil.Uint64)(uint64(math.MaxUint64 / 2))
-	result, err := c.ethAPI.Call(ctx, ethapi.TransactionArgs{
-		Gas:  &gas,
-		To:   &toAddress,
-		Data: &msgData,
-	}, blockNr, nil)
-	if err != nil {
-		panic(err)
-		// return nil, err
-	}
-
-	var (
-		ret0 = new([]common.Address)
-		ret1 = new([]*big.Int)
-	)
-	out := &[]interface{}{
-		ret0,
-		ret1,
-	}
-
-	if err := c.validatorSetABI.UnpackIntoInterface(out, method, result); err != nil {
-		return nil, err
-	}
-
-	valz := make([]*Validator, len(*ret0))
-	for i, a := range *ret0 {
-		valz[i] = &Validator{
-			Address:     a,
-			VotingPower: (*ret1)[i].Int64(),
-		}
-	}
-
-	return valz, nil
-}
-*/
-
-func (c *Bor) checkAndCommitSpan(state *state.StateDB, header *types.Header) error {
-	headerNumber := header.Number.Uint64()
-	span, err := c.GenesisContractsClient.GetCurrentSpan(header.ParentHash)
-	if err != nil {
-		return err
-	}
-	if c.needToCommitSpan(span, headerNumber) {
-		err := c.fetchAndCommitSpan(span.ID+1, state, header)
-		return err
-	}
-	return nil
-}
-
-func (c *Bor) needToCommitSpan(span *Span, headerNumber uint64) bool {
+func needToCommitSpan(span *Span, sprint uint64, headerNumber uint64) bool {
 	// if span is nil
 	if span == nil {
 		return false
 	}
-
 	// check span is not set initially
 	if span.EndBlock == 0 {
 		return true
 	}
-
 	// if current block is first block of last sprint in current span
-	if span.EndBlock > c.config.Sprint && span.EndBlock-c.config.Sprint+1 == headerNumber {
+	if span.EndBlock > sprint && span.EndBlock-sprint+1 == headerNumber {
 		return true
 	}
-
 	return false
 }
 
@@ -1011,55 +883,10 @@ func (c *Bor) fetchAndCommitSpan(newSpanID uint64, state *state.StateDB, header 
 		)
 	}
 
-	// get validators bytes
-	var validators []MinimalVal
-	for _, val := range heimdallSpan.ValidatorSet.Validators {
-		validators = append(validators, val.MinimalVal())
-	}
-	validatorBytes, err := rlp.EncodeToBytes(validators)
-	if err != nil {
+	if err := c.GenesisContractsClient.CommitSpan(state, &heimdallSpan, header); err != nil {
 		return err
 	}
-
-	// get producers bytes
-	var producers []MinimalVal
-	for _, val := range heimdallSpan.SelectedProducers {
-		producers = append(producers, val.MinimalVal())
-	}
-	producerBytes, err := rlp.EncodeToBytes(producers)
-	if err != nil {
-		return err
-	}
-
-	// method
-	method := "commitSpan"
-	log.Info("✅ Committing new span",
-		"id", heimdallSpan.ID,
-		"startBlock", heimdallSpan.StartBlock,
-		"endBlock", heimdallSpan.EndBlock,
-		"validatorBytes", hex.EncodeToString(validatorBytes),
-		"producerBytes", hex.EncodeToString(producerBytes),
-	)
-
-	// get packed data
-	data, err := c.validatorSetABI.Pack(method,
-		big.NewInt(0).SetUint64(heimdallSpan.ID),
-		big.NewInt(0).SetUint64(heimdallSpan.StartBlock),
-		big.NewInt(0).SetUint64(heimdallSpan.EndBlock),
-		validatorBytes,
-		producerBytes,
-	)
-	if err != nil {
-		log.Error("Unable to pack tx for commitSpan", "error", err)
-		return err
-	}
-
-	// get system message
-	msg := getSystemMessage(common.HexToAddress(c.config.ValidatorContract), data)
-
-	// apply message
-	cx := &chainContext{Chain: c.chain, Bor: c}
-	return applyMessage(msg, state, header, c.chainConfig, cx)
+	return nil
 }
 
 // CommitStates commit states
@@ -1106,8 +933,7 @@ func (c *Bor) CommitStates(state *state.StateDB, header *types.Header) ([]*types
 		}
 		stateSyncs = append(stateSyncs, &stateData)
 
-		cx := chainContext{Chain: c.chain, Bor: c}
-		if err := c.GenesisContractsClient.CommitState(eventRecord, state, header, cx); err != nil {
+		if err := c.GenesisContractsClient.CommitState(eventRecord, state, header); err != nil {
 			return nil, err
 		}
 		lastStateID++
@@ -1171,77 +997,6 @@ func (c *Bor) getNextHeimdallSpanForTest(newSpanID uint64, header *types.Header)
 //
 // Chain context
 //
-
-// chain context
-type chainContext struct {
-	Chain consensus.ChainHeaderReader
-	Bor   consensus.Engine
-}
-
-func (c chainContext) Engine() consensus.Engine {
-	return c.Bor
-}
-
-func (c chainContext) GetHeader(hash common.Hash, number uint64) *types.Header {
-	return c.Chain.GetHeader(hash, number)
-}
-
-// callmsg implements core.Message to allow passing it as a transaction simulator.
-type callmsg struct {
-	ethereum.CallMsg
-}
-
-func (m callmsg) From() common.Address { return m.CallMsg.From }
-func (m callmsg) Nonce() uint64        { return 0 }
-func (m callmsg) CheckNonce() bool     { return false }
-func (m callmsg) To() *common.Address  { return m.CallMsg.To }
-func (m callmsg) GasPrice() *big.Int   { return m.CallMsg.GasPrice }
-func (m callmsg) Gas() uint64          { return m.CallMsg.Gas }
-func (m callmsg) Value() *big.Int      { return m.CallMsg.Value }
-func (m callmsg) Data() []byte         { return m.CallMsg.Data }
-
-// get system message
-func getSystemMessage(toAddress common.Address, data []byte) callmsg {
-	return callmsg{
-		ethereum.CallMsg{
-			From:     systemAddress,
-			Gas:      math.MaxUint64 / 2,
-			GasPrice: big.NewInt(0),
-			Value:    big.NewInt(0),
-			To:       &toAddress,
-			Data:     data,
-		},
-	}
-}
-
-// apply message
-func applyMessage(
-	msg callmsg,
-	state *state.StateDB,
-	header *types.Header,
-	chainConfig *params.ChainConfig,
-	chainContext core.ChainContext,
-) error {
-	// Create a new context to be used in the EVM environment
-	blockContext := core.NewEVMBlockContext(header, chainContext, &header.Coinbase)
-	// Create a new environment which holds all relevant information
-	// about the transaction and calling mechanisms.
-	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, state, chainConfig, vm.Config{})
-	// Apply the transaction to the current state (included in the env)
-	_, _, err := vmenv.Call(
-		vm.AccountRef(msg.From()),
-		*msg.To(),
-		msg.Data(),
-		msg.Gas(),
-		msg.Value(),
-	)
-	// Update the state with pending changes
-	if err != nil {
-		state.Finalise(true)
-	}
-
-	return nil
-}
 
 func validatorContains(a []*Validator, x *Validator) (*Validator, bool) {
 	for _, n := range a {
