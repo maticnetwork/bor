@@ -8,7 +8,12 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 )
 
-// EventRecord represents state record
+type HeimdallClient interface {
+	FetchStateSyncEvents(fromID uint64, to int64) ([]*EventRecordWithTime, error)
+	FetchSpan(span uint64) (*HeimdallSpan, error)
+}
+
+// EventRecord represents a Heimdall state record
 type EventRecord struct {
 	ID       uint64         `json:"id" yaml:"id"`
 	Contract common.Address `json:"contract" yaml:"contract"`
@@ -18,8 +23,10 @@ type EventRecord struct {
 	ChainID  string         `json:"bor_chain_id" yaml:"bor_chain_id"`
 }
 
+// EventRecordWithTime represents a Heimdall state record that includes the timestamp
 type EventRecordWithTime struct {
 	EventRecord
+
 	Time time.Time `json:"record_time" yaml:"record_time"`
 }
 
@@ -46,4 +53,19 @@ func (e *EventRecordWithTime) BuildEventRecord() *EventRecord {
 		LogIndex: e.LogIndex,
 		ChainID:  e.ChainID,
 	}
+}
+
+// Span represents a current bor span
+type Span struct {
+	ID         uint64 `json:"span_id" yaml:"span_id"`
+	StartBlock uint64 `json:"start_block" yaml:"start_block"`
+	EndBlock   uint64 `json:"end_block" yaml:"end_block"`
+}
+
+// HeimdallSpan represents span from heimdall APIs
+type HeimdallSpan struct {
+	Span
+	ValidatorSet      ValidatorSet `json:"validator_set" yaml:"validator_set"`
+	SelectedProducers []Validator  `json:"selected_producers" yaml:"selected_producers"`
+	ChainID           string       `json:"bor_chain_id" yaml:"bor_chain_id"`
 }

@@ -16,18 +16,13 @@ var (
 	stateFetchLimit = 50
 )
 
-type IHeimdallClient interface {
-	FetchStateSyncEvents(fromID uint64, to int64) ([]*EventRecordWithTime, error)
-	FetchSpan(span uint64) (*HeimdallSpan, error)
-}
-
-type HeimdallClient struct {
+type RestHeimdallClient struct {
 	urlString string
 	client    http.Client
 }
 
-func NewHeimdallClient(urlString string) (*HeimdallClient, error) {
-	h := &HeimdallClient{
+func NewRestHeimdallClient(urlString string) (HeimdallClient, error) {
+	h := &RestHeimdallClient{
 		urlString: urlString,
 		client: http.Client{
 			Timeout: time.Duration(5 * time.Second),
@@ -36,7 +31,7 @@ func NewHeimdallClient(urlString string) (*HeimdallClient, error) {
 	return h, nil
 }
 
-func (h *HeimdallClient) FetchSpan(spanNum uint64) (*HeimdallSpan, error) {
+func (h *RestHeimdallClient) FetchSpan(spanNum uint64) (*HeimdallSpan, error) {
 	var span *HeimdallSpan
 	response, err := h.fetchWithRetry(fmt.Sprintf("bor/span/%d", spanNum), "")
 	if err != nil {
@@ -48,7 +43,7 @@ func (h *HeimdallClient) FetchSpan(spanNum uint64) (*HeimdallSpan, error) {
 	return span, nil
 }
 
-func (h *HeimdallClient) FetchStateSyncEvents(fromID uint64, to int64) ([]*EventRecordWithTime, error) {
+func (h *RestHeimdallClient) FetchStateSyncEvents(fromID uint64, to int64) ([]*EventRecordWithTime, error) {
 	eventRecords := make([]*EventRecordWithTime, 0)
 	for {
 		queryParams := fmt.Sprintf("from-id=%d&to-time=%d&limit=%d", fromID, to, stateFetchLimit)
@@ -85,7 +80,7 @@ type responseWithHeight struct {
 }
 
 // FetchWithRetry returns data from heimdall with retry
-func (h *HeimdallClient) fetchWithRetry(rawPath string, rawQuery string) (*responseWithHeight, error) {
+func (h *RestHeimdallClient) fetchWithRetry(rawPath string, rawQuery string) (*responseWithHeight, error) {
 	u, err := url.Parse(h.urlString)
 	if err != nil {
 		return nil, err
@@ -105,7 +100,7 @@ func (h *HeimdallClient) fetchWithRetry(rawPath string, rawQuery string) (*respo
 }
 
 // internal fetch method
-func (h *HeimdallClient) internalFetch(u *url.URL) (*responseWithHeight, error) {
+func (h *RestHeimdallClient) internalFetch(u *url.URL) (*responseWithHeight, error) {
 	res, err := h.client.Get(u.String())
 	if err != nil {
 		return nil, err

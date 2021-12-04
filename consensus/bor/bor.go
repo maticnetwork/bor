@@ -221,7 +221,7 @@ type Bor struct {
 	GenesisContractsClient *GenesisContractsClient
 	validatorSetABI        abi.ABI
 	stateReceiverABI       abi.ABI
-	HeimdallClient         IHeimdallClient
+	HeimdallClient         HeimdallClient
 	WithoutHeimdall        bool
 
 	scope event.SubscriptionScope
@@ -252,7 +252,7 @@ func New(
 	signatures, _ := lru.NewARC(inmemorySignatures)
 	vABI, _ := abi.JSON(strings.NewReader(validatorsetABI))
 	sABI, _ := abi.JSON(strings.NewReader(stateReceiverABI))
-	heimdallClient, _ := NewHeimdallClient(heimdallURL)
+	heimdallClient, _ := NewRestHeimdallClient(heimdallURL)
 	genesisContractsClient := NewGenesisContractsClient(chainConfig, borConfig.ValidatorContract, borConfig.StateReceiverContract, ethAPI)
 	c := &Bor{
 		chainConfig:            chainConfig,
@@ -1001,15 +1001,6 @@ func (c *Bor) fetchAndCommitSpan(newSpanID uint64, state *state.StateDB, header 
 			return err
 		}
 		heimdallSpan = *s
-		/*
-			response, err := c.HeimdallClient.FetchWithRetry(fmt.Sprintf("bor/span/%d", newSpanID), "")
-			if err != nil {
-				return err
-			}
-			if err := json.Unmarshal(response.Result, &heimdallSpan); err != nil {
-				return err
-			}
-		*/
 	}
 
 	// check if chain id matches with heimdall span
@@ -1133,7 +1124,7 @@ func validateEventRecord(eventRecord *EventRecordWithTime, number uint64, to tim
 	return nil
 }
 
-func (c *Bor) SetHeimdallClient(h IHeimdallClient) {
+func (c *Bor) SetHeimdallClient(h HeimdallClient) {
 	c.HeimdallClient = h
 }
 
