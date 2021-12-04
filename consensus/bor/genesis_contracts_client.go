@@ -102,3 +102,107 @@ func (gc *GenesisContractsClient) LastStateId(snapshotNumber uint64) (*big.Int, 
 	}
 	return *ret, nil
 }
+
+// GetCurrentSpan get current span from contract
+func (gc *GenesisContractsClient) GetCurrentSpan(headerHash common.Hash) (*Span, error) {
+	// block
+	blockNr := rpc.BlockNumberOrHashWithHash(headerHash, false)
+
+	// method
+	method := "getCurrentSpan"
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	data, err := gc.validatorSetABI.Pack(method)
+	if err != nil {
+		log.Error("Unable to pack tx for getCurrentSpan", "error", err)
+		return nil, err
+	}
+
+	msgData := (hexutil.Bytes)(data)
+	toAddress := common.HexToAddress(gc.ValidatorContract)
+	gas := (hexutil.Uint64)(uint64(math.MaxUint64 / 2))
+	result, err := gc.ethAPI.Call(ctx, ethapi.TransactionArgs{
+		Gas:  &gas,
+		To:   &toAddress,
+		Data: &msgData,
+	}, blockNr, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// span result
+	ret := new(struct {
+		Number     *big.Int
+		StartBlock *big.Int
+		EndBlock   *big.Int
+	})
+	if err := gc.validatorSetABI.UnpackIntoInterface(ret, method, result); err != nil {
+		return nil, err
+	}
+
+	// create new span
+	span := Span{
+		ID:         ret.Number.Uint64(),
+		StartBlock: ret.StartBlock.Uint64(),
+		EndBlock:   ret.EndBlock.Uint64(),
+	}
+
+	return &span, nil
+}
+
+// GetCurrentValidators get current validators
+func (gc *GenesisContractsClient) GetCurrentValidators(headerHash common.Hash, blockNumber uint64) ([]*Validator, error) {
+	// block
+	blockNr := rpc.BlockNumberOrHashWithHash(headerHash, false)
+
+	// method
+	method := "getBorValidators"
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	data, err := gc.validatorSetABI.Pack(method, big.NewInt(0).SetUint64(blockNumber))
+	if err != nil {
+		log.Error("Unable to pack tx for getValidator", "error", err)
+		return nil, err
+	}
+
+	// call
+	msgData := (hexutil.Bytes)(data)
+	toAddress := common.HexToAddress(gc.ValidatorContract)
+	gas := (hexutil.Uint64)(uint64(math.MaxUint64 / 2))
+	result, err := gc.ethAPI.Call(ctx, ethapi.TransactionArgs{
+		Gas:  &gas,
+		To:   &toAddress,
+		Data: &msgData,
+	}, blockNr, nil)
+	if err != nil {
+		panic(err)
+		// return nil, err
+	}
+
+	var (
+		ret0 = new([]common.Address)
+		ret1 = new([]*big.Int)
+	)
+	out := &[]interface{}{
+		ret0,
+		ret1,
+	}
+
+	if err := gc.validatorSetABI.UnpackIntoInterface(out, method, result); err != nil {
+		return nil, err
+	}
+
+	valz := make([]*Validator, len(*ret0))
+	for i, a := range *ret0 {
+		valz[i] = &Validator{
+			Address:     a,
+			VotingPower: (*ret1)[i].Int64(),
+		}
+	}
+
+	return valz, nil
+}

@@ -2,7 +2,6 @@ package bor
 
 import (
 	"bytes"
-	"context"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -22,7 +21,6 @@ import (
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/core"
@@ -217,7 +215,7 @@ type Bor struct {
 	signFn SignerFn       // Signer function to authorize hashes with
 	lock   sync.RWMutex   // Protects the signer fields
 
-	ethAPI                 *ethapi.PublicBlockChainAPI
+	// ethAPI                 *ethapi.PublicBlockChainAPI
 	GenesisContractsClient *GenesisContractsClient
 	validatorSetABI        abi.ABI
 	stateReceiverABI       abi.ABI
@@ -258,7 +256,6 @@ func New(
 		chainConfig:            chainConfig,
 		config:                 borConfig,
 		db:                     db,
-		ethAPI:                 ethAPI,
 		recents:                recents,
 		signatures:             signatures,
 		validatorSetABI:        vABI,
@@ -444,7 +441,7 @@ func (c *Bor) snapshot(number uint64, hash common.Hash, parents []*types.Header)
 
 		// If an on-disk checkpoint snapshot can be found, use that
 		if number%checkpointInterval == 0 {
-			if s, err := loadSnapshot(c.config, c.signatures, c.db, hash, c.ethAPI); err == nil {
+			if s, err := loadSnapshot(c.config, c.signatures, c.db, hash); err == nil {
 				log.Trace("Loaded snapshot from disk", "number", number, "hash", hash)
 				snap = s
 				break
@@ -463,13 +460,13 @@ func (c *Bor) snapshot(number uint64, hash common.Hash, parents []*types.Header)
 				hash := checkpoint.Hash()
 
 				// get validators and current span
-				validators, err := c.GetCurrentValidators(hash, number+1)
+				validators, err := c.GenesisContractsClient.GetCurrentValidators(hash, number+1)
 				if err != nil {
 					return nil, err
 				}
 
 				// new snap shot
-				snap = newSnapshot(c.config, c.signatures, number, hash, validators, c.ethAPI)
+				snap = newSnapshot(c.config, c.signatures, number, hash, validators)
 				if err := snap.store(c.db); err != nil {
 					return nil, err
 				}
@@ -617,7 +614,7 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 
 	// get validator set if number
 	if (number+1)%c.config.Sprint == 0 {
-		newValidators, err := c.GetCurrentValidators(header.ParentHash, number+1)
+		newValidators, err := c.GenesisContractsClient.GetCurrentValidators(header.ParentHash, number+1)
 		if err != nil {
 			return errors.New("unknown validators")
 		}
@@ -850,6 +847,7 @@ func (c *Bor) Close() error {
 	return nil
 }
 
+/*
 // GetCurrentSpan get current span from contract
 func (c *Bor) GetCurrentSpan(headerHash common.Hash) (*Span, error) {
 	// block
@@ -953,10 +951,11 @@ func (c *Bor) GetCurrentValidators(headerHash common.Hash, blockNumber uint64) (
 
 	return valz, nil
 }
+*/
 
 func (c *Bor) checkAndCommitSpan(state *state.StateDB, header *types.Header) error {
 	headerNumber := header.Number.Uint64()
-	span, err := c.GetCurrentSpan(header.ParentHash)
+	span, err := c.GenesisContractsClient.GetCurrentSpan(header.ParentHash)
 	if err != nil {
 		return err
 	}
@@ -1134,7 +1133,7 @@ func (c *Bor) SetHeimdallClient(h HeimdallClient) {
 
 func (c *Bor) getNextHeimdallSpanForTest(newSpanID uint64, header *types.Header) (*HeimdallSpan, error) {
 	headerNumber := header.Number.Uint64()
-	span, err := c.GetCurrentSpan(header.ParentHash)
+	span, err := c.GenesisContractsClient.GetCurrentSpan(header.ParentHash)
 	if err != nil {
 		return nil, err
 	}
