@@ -32,6 +32,8 @@ import (
 
 	//lint:ignore SA1019 Needed for precompile
 	"golang.org/x/crypto/ripemd160"
+
+	//Needed for SHA3-256 FIPS202 implementation
 	"golang.org/x/crypto/sha3"
 )
 
