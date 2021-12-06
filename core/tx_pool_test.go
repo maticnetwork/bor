@@ -2433,6 +2433,66 @@ func TestTransactionSlotCount(t *testing.T) {
 	}
 }
 
+func TestHighPricedPendingDynamicFeeTransactions(t *testing.T) {
+	t.Parallel()
+
+	config := testTxPoolConfig
+	config.GlobalSlots = 9
+	config.GlobalQueue = 1
+
+	statedb, _ := state.New(common.Hash{}, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
+	blockchain := &testBlockChain{1000000, statedb, new(event.Feed)}
+
+	pool := NewTxPool(config, eip1559Config, blockchain)
+	defer pool.Stop()
+
+	addTxsWithErrorsHandling := func(txs []*types.Transaction) {
+		for i, err := range pool.AddRemotesSync(txs) {
+			if err != nil {
+				t.Fatalf("tx #%d: failed to add transactions: %v", i, err)
+			}
+		}
+	}
+
+	checkTxsCount := func(expectedPending, expectedQueued int) {
+		pending, queued := pool.Stats()
+		if pending != expectedPending {
+			t.Errorf("Expected %d pending transactions, but got %d", expectedPending, pending)
+		}
+		if queued != expectedQueued {
+			t.Errorf("Expected %d queued transactions, but got %d", expectedQueued, queued)
+		}
+	}
+
+	initialTxsCount := 5
+	key, _ := createAndSeedSender(pool, big.NewInt(10000000))
+	txs := make([]*types.Transaction, 0, initialTxsCount)
+	for i := 0; i < initialTxsCount; i++ {
+		txs = append(txs, dynamicFeeTx(uint64(i), 22000, big.NewInt(10), big.NewInt(1), key))
+	}
+	addTxsWithErrorsHandling(txs)
+	checkTxsCount(initialTxsCount, 0)
+
+	lowPricedTx := dynamicFeeTx(uint64(initialTxsCount), 22000, big.NewInt(5), big.NewInt(1), key)
+	highPricedTx1 := dynamicFeeTx(uint64(initialTxsCount+1), 22000, big.NewInt(15), big.NewInt(1), key)
+	highPricedTx2 := dynamicFeeTx(uint64(initialTxsCount+2), 22000, big.NewInt(15), big.NewInt(1), key)
+	addTxsWithErrorsHandling([]*types.Transaction{lowPricedTx, highPricedTx1, highPricedTx2})
+	checkTxsCount(initialTxsCount+3, 0)
+
+	highPricedTxsCount := 4
+	txs = make([]*types.Transaction, 0, highPricedTxsCount)
+	for i := 0; i < highPricedTxsCount; i++ {
+		key, _ := createAndSeedSender(pool, big.NewInt(10000000))
+		txs = append(txs, dynamicFeeTx(0, 22000, big.NewInt(30), big.NewInt(1), key))
+	}
+	addTxsWithErrorsHandling(txs)
+	checkTxsCount(8, 1)
+
+	if err := validateTxPoolInternals(pool); err != nil {
+		t.Fatalf("Pool is in invalid state. Error %v", err)
+	}
+}
+
 // Benchmarks the speed of validating the contents of the pending queue of the
 // transaction pool.
 func BenchmarkPendingDemotion100(b *testing.B)   { benchmarkPendingDemotion(b, 100) }
@@ -2576,10 +2636,7 @@ func benchmarkPoolContent(b *testing.B, sendersCount int, txCountPerAddress int)
 	txs := make([]*types.Transaction, 0, sendersCount*txCountPerAddress)
 	for i := 0; i < sendersCount; i++ {
 		// Generate and seed sender
-		senderKey, senderKeyError := createAndSeedSender(pool, big.NewInt(int64(txCountPerAddress)*1000000))
-		if senderKeyError != nil {
-			b.Fatalf("Failed to generate sender private key and to seed it to the tx pool")
-		}
+		senderKey, _ := createAndSeedSender(pool, big.NewInt(int64(txCountPerAddress)*1000000))
 
 		// Create transactions. Each transaction within loop will be generated with same sender key.
 		// We are simulating situation where each sender makes txCountPerAddress transactions.
@@ -2599,17 +2656,25 @@ func benchmarkPoolContent(b *testing.B, sendersCount int, txCountPerAddress int)
 }
 
 // Benchmark synchronized adding of transactions to pool
-func BenchmarkAddRemotes1KSenders(b *testing.B) { benchmarkAddRemotes(b, 1000) }
-func BenchmarkAddRemotes3KSenders(b *testing.B) { benchmarkAddRemotes(b, 3000) }
-func BenchmarkAddRemotes5KSenders(b *testing.B) { benchmarkAddRemotes(b, 5000) }
-func BenchmarkAddRemotes6KSenders(b *testing.B) { benchmarkAddRemotes(b, 6000) }
+func BenchmarkAddRemotes1KSenders(b *testing.B)   { benchmarkAddRemotes(b, 1000) }
+func BenchmarkAddRemotes5KSenders(b *testing.B)   { benchmarkAddRemotes(b, 5000) }
+func BenchmarkAddRemotes10KSenders(b *testing.B)  { benchmarkAddRemotes(b, 10000) }
+func BenchmarkAddRemotes50KSenders(b *testing.B)  { benchmarkAddRemotes(b, 50000) }
+func BenchmarkAddRemotes100KSenders(b *testing.B) { benchmarkAddRemotes(b, 100000) }
 
 func benchmarkAddRemotes(b *testing.B, sendersCount int) {
 	// Setup tx pool
-	pool, _ := setupTxPool()
+	config := testTxPoolConfig
+	config.GlobalSlots = uint64(sendersCount)
+
+	statedb, _ := state.New(common.Hash{}, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
+	blockchain := &testBlockChain{1000000, statedb, new(event.Feed)}
+
+	pool := NewTxPool(config, params.TestChainConfig, blockchain)
 	defer pool.Stop()
 
 	txs := make([]*types.Transaction, 0, sendersCount)
+	accounts := make([]*common.Address, 0, sendersCount)
 	for i := 0; i < sendersCount; i++ {
 		// Generate and seed sender
 		senderKey, senderKeyError := createAndSeedSender(pool, big.NewInt(1000000))
@@ -2620,17 +2685,32 @@ func benchmarkAddRemotes(b *testing.B, sendersCount int) {
 		// Create transaction
 		tx := transaction(0, 100000, senderKey)
 		txs = append(txs, tx)
+		acc := crypto.PubkeyToAddress(senderKey.PublicKey)
+		accounts = append(accounts, &acc)
 	}
 
 	b.ResetTimer()
-	// Benchmark  TxPool.AddRemotesSync()
+	// Benchmark TxPool.AddRemotesSync()
 	for i := 0; i < b.N; i++ {
+		b.StartTimer()
 		pool.AddRemotesSync(txs)
+		b.StopTimer()
+
+		// Clean up pool in order to be prepared for the next iteration
+		for j := 0; j < len(accounts); j++ {
+			for _, tx := range pool.pending[*accounts[j]].Flatten() {
+				pool.removeTx(tx.Hash(), true)
+			}
+		}
 	}
 }
 
-func BenchmarkPromoteExecutables1000Senders1TxEach(b *testing.B) { benchmarkPromoteExecutables(b, 1000, 1) }
-func BenchmarkPromoteExecutables100Senders1TxEach(b *testing.B) { benchmarkPromoteExecutables(b, 100, 1) }
+func BenchmarkPromoteExecutables1000Senders1TxEach(b *testing.B) {
+	benchmarkPromoteExecutables(b, 1000, 1)
+}
+func BenchmarkPromoteExecutables100Senders1TxEach(b *testing.B) {
+	benchmarkPromoteExecutables(b, 100, 1)
+}
 func BenchmarkPromoteExecutables10Senders1TxEach(b *testing.B) { benchmarkPromoteExecutables(b, 10, 1) }
 func BenchmarkPromoteExecutables1Senders1TxEach(b *testing.B)  { benchmarkPromoteExecutables(b, 1, 1) }
 func BenchmarkPromoteExecutables1Senders10TxEach(b *testing.B) { benchmarkPromoteExecutables(b, 1, 10) }
@@ -2694,13 +2774,25 @@ func benchmarkPromoteExecutables(b *testing.B, senderCount int, txCountPerAddres
 	}
 }
 
-func BenchmarkDemoteUnexecutables1000Senders1TxEach(b *testing.B) { benchmarkDemoteUnexecutables(b, 1000, 1) }
-func BenchmarkDemoteUnexecutables100Senders1TxEach(b *testing.B) { benchmarkDemoteUnexecutables(b, 100, 1) }
-func BenchmarkDemoteUnexecutables10Senders1TxEach(b *testing.B) { benchmarkDemoteUnexecutables(b, 10, 1) }
+func BenchmarkDemoteUnexecutables1000Senders1TxEach(b *testing.B) {
+	benchmarkDemoteUnexecutables(b, 1000, 1)
+}
+func BenchmarkDemoteUnexecutables100Senders1TxEach(b *testing.B) {
+	benchmarkDemoteUnexecutables(b, 100, 1)
+}
+func BenchmarkDemoteUnexecutables10Senders1TxEach(b *testing.B) {
+	benchmarkDemoteUnexecutables(b, 10, 1)
+}
 func BenchmarkDemoteUnexecutables1Senders1TxEach(b *testing.B) { benchmarkDemoteUnexecutables(b, 1, 1) }
-func BenchmarkDemoteUnexecutables1Senders10TxEach(b *testing.B) { benchmarkDemoteUnexecutables(b, 1, 10) }
-func BenchmarkDemoteUnexecutables1Senders100TxEach(b *testing.B) { benchmarkDemoteUnexecutables(b, 1, 100) }
-func BenchmarkDemoteUnexecutables1Senders1000TxEach(b *testing.B) { benchmarkDemoteUnexecutables(b, 1, 1000) }
+func BenchmarkDemoteUnexecutables1Senders10TxEach(b *testing.B) {
+	benchmarkDemoteUnexecutables(b, 1, 10)
+}
+func BenchmarkDemoteUnexecutables1Senders100TxEach(b *testing.B) {
+	benchmarkDemoteUnexecutables(b, 1, 100)
+}
+func BenchmarkDemoteUnexecutables1Senders1000TxEach(b *testing.B) {
+	benchmarkDemoteUnexecutables(b, 1, 1000)
+}
 
 func benchmarkDemoteUnexecutables(b *testing.B, senderCount int, txCountPerAddress int) {
 	// Setup tx pool
@@ -2837,10 +2929,10 @@ func benchmarkTruncatePending(b *testing.B, senderCount int, overflowingTxCountP
 	}
 }
 
-func BenchmarkTruncateQueue1Tx(b *testing.B)   { benchmarkTruncateQueue(b, 1) }
-func BenchmarkTruncateQueue10Tx(b *testing.B)  { benchmarkTruncateQueue(b, 10) }
+func BenchmarkTruncateQueue1Tx(b *testing.B)    { benchmarkTruncateQueue(b, 1) }
+func BenchmarkTruncateQueue10Tx(b *testing.B)   { benchmarkTruncateQueue(b, 10) }
 func BenchmarkTruncateQueue100Tx(b *testing.B)  { benchmarkTruncateQueue(b, 100) }
-func BenchmarkTruncateQueue1000Tx(b *testing.B)  { benchmarkTruncateQueue(b, 1000) }
+func BenchmarkTruncateQueue1000Tx(b *testing.B) { benchmarkTruncateQueue(b, 1000) }
 
 func benchmarkTruncateQueue(b *testing.B, overflowingTxCountPerAddress int) {
 	txCount := int(testTxPoolConfig.GlobalQueue)
@@ -2875,7 +2967,7 @@ func benchmarkTruncateQueue(b *testing.B, overflowingTxCountPerAddress int) {
 	for j := 0; j < txCount; j++ {
 		// Create a transaction with some address and add it to slice
 		// will be added to pool.pending since nonce starts with 1
-		tx := transaction(uint64(j + 1), txGasLimit, senderKey)
+		tx := transaction(uint64(j+1), txGasLimit, senderKey)
 		txs = append(txs, tx)
 	}
 
@@ -2884,7 +2976,7 @@ func benchmarkTruncateQueue(b *testing.B, overflowingTxCountPerAddress int) {
 	for j := 0; j < overflowingTxCountPerAddress; j++ {
 		// Create a transaction with some address and add it to slice
 		// will be added to pool.pending since nonce starts with txCount + 1
-		tx := transaction(uint64(txCount + j + 1), txGasLimit, senderKey)
+		tx := transaction(uint64(txCount+j+1), txGasLimit, senderKey)
 		overflowingTxs = append(overflowingTxs, tx)
 	}
 
@@ -2914,9 +3006,9 @@ func benchmarkTruncateQueue(b *testing.B, overflowingTxCountPerAddress int) {
 }
 
 func BenchmarkRunReorg100Senders1TxEach(b *testing.B) { benchmarkRunReorg(b, 100, 1) }
-func BenchmarkRunReorg10Senders1TxEach(b *testing.B) { benchmarkRunReorg(b, 10, 1) }
-func BenchmarkRunReorg1Senders1TxEach(b *testing.B) { benchmarkRunReorg(b, 1, 1) }
-func BenchmarkRunReorg1Senders10TxEach(b *testing.B) { benchmarkRunReorg(b, 1, 10) }
+func BenchmarkRunReorg10Senders1TxEach(b *testing.B)  { benchmarkRunReorg(b, 10, 1) }
+func BenchmarkRunReorg1Senders1TxEach(b *testing.B)   { benchmarkRunReorg(b, 1, 1) }
+func BenchmarkRunReorg1Senders10TxEach(b *testing.B)  { benchmarkRunReorg(b, 1, 10) }
 func BenchmarkRunReorg1Senders100TxEach(b *testing.B) { benchmarkRunReorg(b, 1, 100) }
 
 func benchmarkRunReorg(b *testing.B, senderCount int, overflowingTxCountPerAddress int) {
@@ -2993,12 +3085,16 @@ func benchmarkRunReorg(b *testing.B, senderCount int, overflowingTxCountPerAddre
 }
 
 func BenchmarkRunReorgWithReset100Senders1TxEach(b *testing.B) { benchmarkRunReorgWithReset(b, 100, 1) }
-func BenchmarkRunReorgWithReset10Senders1TxEach(b *testing.B) { benchmarkRunReorgWithReset(b, 10, 1) }
-func BenchmarkRunReorgWithReset1Senders1TxEach(b *testing.B) { benchmarkRunReorgWithReset(b, 1, 1) }
-func BenchmarkRunReorgWithReset1Senders10TxEach(b *testing.B) { benchmarkRunReorgWithReset(b, 1, 10) }
+func BenchmarkRunReorgWithReset10Senders1TxEach(b *testing.B)  { benchmarkRunReorgWithReset(b, 10, 1) }
+func BenchmarkRunReorgWithReset1Senders1TxEach(b *testing.B)   { benchmarkRunReorgWithReset(b, 1, 1) }
+func BenchmarkRunReorgWithReset1Senders10TxEach(b *testing.B)  { benchmarkRunReorgWithReset(b, 1, 10) }
 func BenchmarkRunReorgWithReset1Senders100TxEach(b *testing.B) { benchmarkRunReorgWithReset(b, 1, 100) }
-func BenchmarkRunReorgWithReset1Senders1000TxEach(b *testing.B) { benchmarkRunReorgWithReset(b, 1, 1000) }
-func BenchmarkRunReorgWithReset1Senders5000TxEach(b *testing.B) { benchmarkRunReorgWithReset(b, 1, 5000) }
+func BenchmarkRunReorgWithReset1Senders1000TxEach(b *testing.B) {
+	benchmarkRunReorgWithReset(b, 1, 1000)
+}
+func BenchmarkRunReorgWithReset1Senders5000TxEach(b *testing.B) {
+	benchmarkRunReorgWithReset(b, 1, 5000)
+}
 
 func benchmarkRunReorgWithReset(b *testing.B, senderCount int, txCountPerAddress int) {
 	// Setup tx pool
@@ -3028,7 +3124,7 @@ func benchmarkRunReorgWithReset(b *testing.B, senderCount int, txCountPerAddress
 		for j := 0; j < txCountPerAddress; j++ {
 			// Create a transaction with some address and add it to slice
 			// will be added to pool.queue since nonce starts with 1
-			tx := transaction(uint64(j + 1), txGasLimit, senderKey)
+			tx := transaction(uint64(j+1), txGasLimit, senderKey)
 			txs = append(txs, tx)
 			queuedEvents[senderAccount].Put(tx)
 		}
@@ -3062,9 +3158,3 @@ func benchmarkRunReorgWithReset(b *testing.B, senderCount int, txCountPerAddress
 		}
 	}
 }
-
-// TODO: Implement test case like this (refer to https://github.com/ethereum/go-ethereum/issues/21385 for more details):
-// Pending high gwei transactions
-// Sometimes (still not able to reproduce) a sequence of some priced transactions have issues like:
-//   -transactions not being included immediately.
-//   -transactions mined after some time.

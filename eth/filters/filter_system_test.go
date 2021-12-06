@@ -670,7 +670,7 @@ func TestPendingTxFilterDeadlock(t *testing.T) {
 	var (
 		db      = rawdb.NewMemoryDatabase()
 		backend = &testBackend{db: db}
-		api     = NewPublicFilterAPI(backend, false, timeout, true)
+		api     = NewPublicFilterAPI(backend, false, timeout, false)
 		done    = make(chan struct{})
 	)
 
