@@ -1,19 +1,3 @@
-// Copyright 2016 The go-ethereum Authors
-// This file is part of the go-ethereum library.
-//
-// The go-ethereum library is free software: you can redistribute it and/or modify
-// it under the terms of the GNU Lesser General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// The go-ethereum library is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-// GNU Lesser General Public License for more details.
-//
-// You should have received a copy of the GNU Lesser General Public License
-// along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
-
 package core
 
 import (
@@ -24,32 +8,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 )
-
-// Tests that transactions can be added to strict lists and list contents and
-// nonce boundaries are correctly maintained.
-func TestStrictTxListAdd(t *testing.T) {
-	// Generate a list of transactions to insert
-	key, _ := crypto.GenerateKey()
-
-	txs := make(types.Transactions, 1024)
-	for i := 0; i < len(txs); i++ {
-		txs[i] = transaction(uint64(i), 0, key)
-	}
-	// Insert the transactions in a random order
-	list := newTxList(true)
-	for _, v := range rand.Perm(len(txs)) {
-		list.Add(txs[v], DefaultTxPoolConfig.PriceBump)
-	}
-	// Verify internal state
-	if len(list.txs.items) != len(txs) {
-		t.Errorf("transaction count mismatch: have %d, want %d", len(list.txs.items), len(txs))
-	}
-	for i, tx := range txs {
-		if list.txs.items[tx.Nonce()] != tx {
-			t.Errorf("item %d: transaction mismatch: have %v, want %v", i, list.txs.items[tx.Nonce()], tx)
-		}
-	}
-}
 
 func BenchmarkTxListAdd(b *testing.B) {
 	// Generate a list of transactions to insert
@@ -84,7 +42,6 @@ func benchmarkTxListReheap(b *testing.B, txCount int) {
 		txs[i] = pricedTransaction(uint64(i), 100000, big.NewInt(rand.Int63n(10000)), key)
 	}
 
-	// Benchmark txPricedList.Reheap()
 	b.ResetTimer()
 	b.StopTimer()
 	for i := 0; i < b.N; i++ {
@@ -94,6 +51,7 @@ func benchmarkTxListReheap(b *testing.B, txCount int) {
 			list.all.Add(txs[ind], false)
 		}
 
+		// Benchmark txPricedList.Reheap()
 		b.StartTimer()
 		list.Reheap()
 		b.StopTimer()
@@ -119,9 +77,9 @@ func benchmarkTxSortedMapForward(b *testing.B, txCount int) {
 		txsMap.Put(tx)
 	}
 
-	// Benchmark txSortedMap.Forward()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
+		// Benchmark txSortedMap.Forward()
 		b.StartTimer()
 		txsMap.Forward(nonceThreshold)
 		b.StopTimer()
