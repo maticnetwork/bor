@@ -253,7 +253,7 @@ var (
 			ValidatorContract:     "0x0000000000000000000000000000000000001000",
 			StateReceiverContract: "0x0000000000000000000000000000000000001001",
 			BurntContract: map[string]string{
-				"0": "0x0000000000000000000000000000000000000000f",
+				"0": "0x00000000000000000000000000000000000000000",
 			},
 		},
 	}
@@ -274,7 +274,7 @@ var (
 		IstanbulBlock:       big.NewInt(2722000),
 		MuirGlacierBlock:    big.NewInt(2722000),
 		BerlinBlock:         big.NewInt(13996000),
-		LondonBlock:         big.NewInt(0), // TODO - Add london fork block
+		LondonBlock:         big.NewInt(22640000),
 		Bor: &BorConfig{
 			Period: map[string]uint64{
 				"0": 2,
@@ -287,8 +287,8 @@ var (
 			ValidatorContract:     "0x0000000000000000000000000000000000001000",
 			StateReceiverContract: "0x0000000000000000000000000000000000001001",
 			BurntContract: map[string]string{
-				"0": "0x0000000000000000000000000000000000000000",
-			}, // TODO add london fork contract and block
+				"22640000": "0x70bcA57F4579f58670aB2d18Ef16e02C17553C38",
+			},
 			BlockAlloc: map[string]interface{}{
 				// write as interface since that is how it is decoded in genesis
 				"22244000": map[string]interface{}{
