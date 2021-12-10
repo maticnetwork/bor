@@ -183,7 +183,7 @@ func BenchmarkAddRemotes50KSenders(b *testing.B)  { benchmarkAddRemotes(b, 50000
 func BenchmarkAddRemotes100KSenders(b *testing.B) { benchmarkAddRemotes(b, 100000, 1) }
 
 // TODO: Commented, because working quite slow due to transaction signing.
-// Implement persisting transactions to json and loading them when running tests.
+// TODO: Implement persisting transactions to JSON and loading them when running tests.
 // func BenchmarkAddRemotes10KSenders50TxsAscending(b *testing.B) { benchmarkAddRemotes(b, 10000, 50) }
 // func BenchmarkAddRemotes50KSenders50TxsAscending(b *testing.B)  { benchmarkAddRemotes(b, 50000, 50) }
 // func BenchmarkAddRemotes100KSenders50TxsAscending(b *testing.B) { benchmarkAddRemotes(b, 100000, 50) }
