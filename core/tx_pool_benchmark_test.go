@@ -176,16 +176,23 @@ func benchmarkPoolContent(b *testing.B, sendersCount int, txCountPerAddress int)
 }
 
 // Benchmark synchronized adding of transactions to pool
-func BenchmarkAddRemotes1KSenders(b *testing.B)   { benchmarkAddRemotes(b, 1000) }
-func BenchmarkAddRemotes5KSenders(b *testing.B)   { benchmarkAddRemotes(b, 5000) }
-func BenchmarkAddRemotes10KSenders(b *testing.B)  { benchmarkAddRemotes(b, 10000) }
-func BenchmarkAddRemotes50KSenders(b *testing.B)  { benchmarkAddRemotes(b, 50000) }
-func BenchmarkAddRemotes100KSenders(b *testing.B) { benchmarkAddRemotes(b, 100000) }
+func BenchmarkAddRemotes1KSenders(b *testing.B)   { benchmarkAddRemotes(b, 1000, 1) }
+func BenchmarkAddRemotes5KSenders(b *testing.B)   { benchmarkAddRemotes(b, 5000, 1) }
+func BenchmarkAddRemotes10KSenders(b *testing.B)  { benchmarkAddRemotes(b, 10000, 1) }
+func BenchmarkAddRemotes50KSenders(b *testing.B)  { benchmarkAddRemotes(b, 50000, 1) }
+func BenchmarkAddRemotes100KSenders(b *testing.B) { benchmarkAddRemotes(b, 100000, 1) }
 
-func benchmarkAddRemotes(b *testing.B, sendersCount int) {
+// TODO: Commented, because working quite slow due to transaction signing.
+// Implement persisting transactions to json and loading them when running tests.
+// func BenchmarkAddRemotes10KSenders50TxsAscending(b *testing.B) { benchmarkAddRemotes(b, 10000, 50) }
+// func BenchmarkAddRemotes50KSenders50TxsAscending(b *testing.B)  { benchmarkAddRemotes(b, 50000, 50) }
+// func BenchmarkAddRemotes100KSenders50TxsAscending(b *testing.B) { benchmarkAddRemotes(b, 100000, 50) }
+
+func benchmarkAddRemotes(b *testing.B, sendersCount, txCountPerSender int) {
 	// Setup tx pool
 	config := testTxPoolConfig
 	config.GlobalSlots = uint64(sendersCount)
+	config.AccountSlots = uint64(txCountPerSender)
 
 	statedb, _ := state.New(common.Hash{}, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
 	blockchain := &testBlockChain{1000000, statedb, new(event.Feed)}
@@ -202,9 +209,12 @@ func benchmarkAddRemotes(b *testing.B, sendersCount int) {
 			b.Fatalf("Failed to generate sender private key and to seed it to the tx pool")
 		}
 
-		// Create transaction
-		tx := transaction(0, 100000, senderKey)
-		txs = append(txs, tx)
+		for j := 0; j < txCountPerSender; j++ {
+			// Create transaction
+			tx := transaction(uint64(j), 100000, senderKey)
+			txs = append(txs, tx)
+		}
+
 		acc := crypto.PubkeyToAddress(senderKey.PublicKey)
 		accounts = append(accounts, &acc)
 	}
@@ -216,11 +226,23 @@ func benchmarkAddRemotes(b *testing.B, sendersCount int) {
 		pool.AddRemotesSync(txs)
 		b.StopTimer()
 
+		if err := validateTxPoolInternals(pool); err != nil {
+			b.Fatalf("Pool is in incosistent state %v", err)
+		}
 		pool.mu.Lock()
 		// Clean up pool in order to be prepared for the next iteration
 		for j := 0; j < len(accounts); j++ {
-			for _, tx := range pool.pending[*accounts[j]].Flatten() {
-				pool.removeTx(tx.Hash(), true)
+			pendingTxs := pool.pending[*accounts[j]]
+			queuedTxs := pool.queue[*accounts[j]]
+			if pendingTxs != nil {
+				for _, tx := range pendingTxs.Flatten() {
+					pool.removeTx(tx.Hash(), true)
+				}
+			}
+			if queuedTxs != nil {
+				for _, tx := range queuedTxs.Flatten() {
+					pool.removeTx(tx.Hash(), true)
+				}
 			}
 		}
 		pool.mu.Unlock()
