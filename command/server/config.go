@@ -38,6 +38,9 @@ type Config struct {
 	// Chain is the chain to sync with
 	Chain string `hcl:"chain,optional"`
 
+	// Name, or identity of the node
+	Name string `hcl:"name,optional"`
+
 	// Whitelist is a list of required (block number, hash) pairs to accept
 	Whitelist map[string]string `hcl:"whitelist,optional"`
 
@@ -275,6 +278,12 @@ type TelemetryConfig struct {
 
 	// InfluxDB has the influxdb related settings
 	InfluxDB *InfluxDBConfig `hcl:"influx,block"`
+
+	// Prometheus Address
+	PrometheusAddr string `hcl:"prometheus-addr,optional"`
+
+	// Open collector endpoint
+	OpenCollectorEndpoint string `hcl:"opencollector-endpoint,optional"`
 }
 
 type InfluxDBConfig struct {
@@ -359,6 +368,7 @@ type AccountsConfig struct {
 func DefaultConfig() *Config {
 	return &Config{
 		Chain:     "mainnet",
+		Name:      Hostname(),
 		Whitelist: map[string]string{},
 		LogLevel:  "INFO",
 		DataDir:   defaultDataDir(),
@@ -383,7 +393,7 @@ func DefaultConfig() *Config {
 			URL:     "http://localhost:1317",
 			Without: false,
 		},
-		SyncMode: "fast",
+		SyncMode: "full",
 		GcMode:   "full",
 		Snapshot: true,
 		TxPool: &TxPoolConfig{
@@ -438,8 +448,10 @@ func DefaultConfig() *Config {
 		},
 		Ethstats: "",
 		Telemetry: &TelemetryConfig{
-			Enabled:   false,
-			Expensive: false,
+			Enabled:               false,
+			Expensive:             false,
+			PrometheusAddr:        "",
+			OpenCollectorEndpoint: "",
 			InfluxDB: &InfluxDBConfig{
 				V1Enabled:    false,
 				Endpoint:     "",
@@ -876,4 +888,12 @@ func defaultDataDir() string {
 	default:
 		return filepath.Join(home, ".bor")
 	}
+}
+
+func Hostname() string {
+	hostname, err := os.Hostname()
+	if err != nil {
+		return "bor"
+	}
+	return hostname
 }
