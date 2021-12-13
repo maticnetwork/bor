@@ -15,6 +15,11 @@ func (c *Command) Flags() *flagset.Flagset {
 		Value: &c.cliConfig.Chain,
 	})
 	f.StringFlag(&flagset.StringFlag{
+		Name:  "name",
+		Usage: "Name/Identity of the node",
+		Value: &c.cliConfig.Name,
+	})
+	f.StringFlag(&flagset.StringFlag{
 		Name:  "log-level",
 		Usage: "Set log level for the server",
 		Value: &c.cliConfig.LogLevel,
@@ -400,6 +405,11 @@ func (c *Command) Flags() *flagset.Flagset {
 		Name:  "metrics.prometheus-addr",
 		Usage: "Address for Prometheus Server",
 		Value: &c.cliConfig.Telemetry.PrometheusAddr,
+	})
+	f.StringFlag(&flagset.StringFlag{
+		Name:  "metrics.opencollector-endpoint",
+		Usage: "OpenCollector Endpoint (host:port)",
+		Value: &c.cliConfig.Telemetry.OpenCollectorEndpoint,
 	})
 	// influx db v2
 	f.BoolFlag(&flagset.BoolFlag{
