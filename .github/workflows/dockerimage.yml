@@ -2,8 +2,12 @@ name: Bor Docker Image CI
 
 on:
   push:
+    branches-ignore:
+      - '**'
     tags:
       - 'v*.*.*'
+      # to be used by fork patch-releases ^^
+      - 'v*.*.*-*'
   
 jobs:
   build:
