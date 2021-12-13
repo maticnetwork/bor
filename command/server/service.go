@@ -112,10 +112,18 @@ func (s *Server) ChainSetHead(ctx context.Context, req *proto.ChainSetHeadReques
 
 func (s *Server) Status(ctx context.Context, _ *empty.Empty) (*proto.StatusResponse, error) {
 	apiBackend := s.backend.APIBackend
+	syncProgress := apiBackend.SyncProgress()
 
 	resp := &proto.StatusResponse{
 		CurrentHeader: headerToProtoHeader(apiBackend.CurrentHeader()),
 		CurrentBlock:  headerToProtoHeader(apiBackend.CurrentBlock().Header()),
+		NumPeers:      int64(len(s.node.Server().PeersInfo())),
+		SyncMode:      s.config.SyncMode,
+		Syncing: &proto.StatusResponse_Syncing{
+			StartingBlock: int64(syncProgress.StartingBlock),
+			HighestBlock:  int64(syncProgress.HighestBlock),
+			CurrentBlock:  int64(syncProgress.CurrentBlock),
+		},
 	}
 	return resp, nil
 }

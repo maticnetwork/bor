@@ -58,10 +58,21 @@ func printStatus(status *proto.StatusResponse) string {
 		})
 	}
 	full := []string{
-		"Current Header",
+		"General",
+		formatKV([]string{
+			fmt.Sprintf("Num peers|%d", status.NumPeers),
+			fmt.Sprintf("Sync mode|%s", status.SyncMode),
+		}),
+		"\nCurrent Header",
 		printHeader(status.CurrentHeader),
 		"\nCurrent Block",
 		printHeader(status.CurrentBlock),
+		"\nSyncing",
+		formatKV([]string{
+			fmt.Sprintf("Current block|%d", status.Syncing.CurrentBlock),
+			fmt.Sprintf("Highest block|%d", status.Syncing.HighestBlock),
+			fmt.Sprintf("Starting block|%d", status.Syncing.StartingBlock),
+		}),
 	}
 	return strings.Join(full, "\n")
 }

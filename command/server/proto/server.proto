@@ -74,6 +74,15 @@ message ChainSetHeadResponse {
 message StatusResponse {
     Header currentBlock = 1;
     Header currentHeader = 2;
+    int64 numPeers = 3;
+    string syncMode = 4;
+    Syncing syncing = 5;
+
+    message Syncing {
+        int64 startingBlock = 1;
+        int64 highestBlock = 2;
+        int64 currentBlock = 3;
+    }
 }
 
 message Header {
