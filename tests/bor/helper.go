@@ -119,12 +119,12 @@ func buildNextBlock(t *testing.T, _bor *bor.Bor, chain *core.BlockChain, block *
 	if err != nil {
 		t.Fatalf("%s", err)
 	}
-	sign(t, header, signer)
+	sign(t, header, signer, borConfig)
 	return types.NewBlockWithHeader(header)
 }
 
-func sign(t *testing.T, header *types.Header, signer []byte) {
-	sig, err := secp256k1.Sign(crypto.Keccak256(bor.BorRLP(header)), signer)
+func sign(t *testing.T, header *types.Header, signer []byte, c *params.BorConfig) {
+	sig, err := secp256k1.Sign(crypto.Keccak256(bor.BorRLP(header, c)), signer)
 	if err != nil {
 		t.Fatalf("%s", err)
 	}

@@ -192,7 +192,7 @@ func TestOutOfTurnSigning(t *testing.T) {
 	header := block.Header()
 	header.Time += (bor.CalcProducerDelay(header.Number.Uint64(), expectedSuccessionNumber, init.genesis.Config.Bor) -
 		bor.CalcProducerDelay(header.Number.Uint64(), 0, init.genesis.Config.Bor))
-	sign(t, header, signerKey)
+	sign(t, header, signerKey, init.genesis.Config.Bor)
 	block = types.NewBlockWithHeader(header)
 	_, err = chain.InsertChain([]*types.Block{block})
 	assert.Equal(t,
@@ -200,7 +200,7 @@ func TestOutOfTurnSigning(t *testing.T) {
 		bor.WrongDifficultyError{Number: spanSize, Expected: expectedDifficulty, Actual: 3, Signer: addr.Bytes()})
 
 	header.Difficulty = new(big.Int).SetUint64(expectedDifficulty)
-	sign(t, header, signerKey)
+	sign(t, header, signerKey, init.genesis.Config.Bor)
 	block = types.NewBlockWithHeader(header)
 	_, err = chain.InsertChain([]*types.Block{block})
 	assert.Nil(t, err)
