@@ -1,8 +1,15 @@
 package core
 
 import (
+	"crypto/ecdsa"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"math/big"
+	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -12,6 +19,55 @@ import (
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/params"
 )
+
+// Pre-generate and save signed transactions to JSON file.
+// This approach is chosen, because transactions signing is slow.
+func saveTestLegacyTxsToJSON(sendersCount, txsPerSenderCount int, fileName string) error {
+	start := time.Now()
+	txs := make([]*types.Transaction, 0, sendersCount*txsPerSenderCount)
+	senderKeys := make([]*ecdsa.PrivateKey, 0, sendersCount)
+	for i := 0; i < sendersCount; i++ {
+		senderKey, _ := crypto.GenerateKey()
+		senderKeys = append(senderKeys, senderKey)
+	}
+
+	for i := 0; i < txsPerSenderCount; i++ {
+		for j := 0; j < sendersCount; j++ {
+			txs = append(txs, pricedTransaction(uint64(i), uint64(100000), big.NewInt(5), senderKeys[j]))
+		}
+	}
+	file, err := json.MarshalIndent(txs, "", " ")
+	if err != nil {
+		return err
+	}
+	testPath := filepath.Join(".", "testData")
+	err = os.MkdirAll(testPath, os.ModePerm)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("Save JSON: %s\r\n", time.Since(start))
+	return os.WriteFile(fileName, file, 0644)
+}
+
+// Function for loading transactions from given file.
+func loadTxsFromJSON(fileName string) ([]*types.Transaction, error) {
+	start := time.Now()
+	txs := make([]*types.Transaction, 0)
+	_, err := os.Stat(fileName)
+	if err == nil {
+
+		file, err := os.ReadFile(fileName)
+		if err != nil {
+			return txs, err
+		}
+		err = json.Unmarshal(file, &txs)
+		if err != nil {
+			return txs, err
+		}
+	}
+	fmt.Printf("Load JSON: %s\r\n", time.Since(start))
+	return txs, err
+}
 
 // Benchmarks the speed of validating the contents of the pending queue of the
 // transaction pool.
@@ -176,22 +232,51 @@ func benchmarkPoolContent(b *testing.B, sendersCount int, txCountPerAddress int)
 }
 
 // Benchmark synchronized adding of transactions to pool
-func BenchmarkAddRemotes1KSenders(b *testing.B)   { benchmarkAddRemotes(b, 1000, 1) }
-func BenchmarkAddRemotes5KSenders(b *testing.B)   { benchmarkAddRemotes(b, 5000, 1) }
-func BenchmarkAddRemotes10KSenders(b *testing.B)  { benchmarkAddRemotes(b, 10000, 1) }
-func BenchmarkAddRemotes50KSenders(b *testing.B)  { benchmarkAddRemotes(b, 50000, 1) }
-func BenchmarkAddRemotes100KSenders(b *testing.B) { benchmarkAddRemotes(b, 100000, 1) }
+func BenchmarkAddRemotes1KSenders(b *testing.B) {
+	benchmarkAddRemotesLoadFromFile(b, 1000, 10, "testData/LegacyTxs_10KSenders_10Txs.json", 10000, 10)
+}
+func BenchmarkAddRemotes5KSenders(b *testing.B) {
+	benchmarkAddRemotesLoadFromFile(b, 5000, 10, "testData/LegacyTxs_10KSenders_10Txs.json", 10000, 10)
+}
+func BenchmarkAddRemotes10KSenders(b *testing.B) {
+	benchmarkAddRemotesLoadFromFile(b, 10000, 10, "testData/LegacyTxs_10KSenders_10Txs.json", 10000, 10)
+}
+func BenchmarkAddRemotes50KSenders(b *testing.B) {
+	benchmarkAddRemotesLoadFromFile(b, 50000, 10, "testData/LegacyTxs_100KSenders_10Txs.json", 100000, 10)
+}
+func BenchmarkAddRemotes100KSenders(b *testing.B) {
+	benchmarkAddRemotesLoadFromFile(b, 100000, 10, "testData/LegacyTxs_100KSenders_10Txs.json", 100000, 10)
+}
 
-// TODO: Commented, because working quite slow due to transaction signing.
-// TODO: Implement persisting transactions to JSON and loading them when running tests.
-// func BenchmarkAddRemotes10KSenders50TxsAscending(b *testing.B) { benchmarkAddRemotes(b, 10000, 50) }
-// func BenchmarkAddRemotes50KSenders50TxsAscending(b *testing.B)  { benchmarkAddRemotes(b, 50000, 50) }
-// func BenchmarkAddRemotes100KSenders50TxsAscending(b *testing.B) { benchmarkAddRemotes(b, 100000, 50) }
+func BenchmarkAddRemotes10Senders2500Txs(b *testing.B) {
+	benchmarkAddRemotesLoadFromFile(b, 10, 2500, "testData/LegacyTxs_10Senders_10kTxs.json", 10, 10000)
+}
+func BenchmarkAddRemotes10Senders5000Txs(b *testing.B) {
+	benchmarkAddRemotesLoadFromFile(b, 10, 5000, "testData/LegacyTxs_10Senders_10kTxs.json", 10, 10000)
+}
+func BenchmarkAddRemotes10Senders10000Txs(b *testing.B) {
+	benchmarkAddRemotesLoadFromFile(b, 10, 10000, "testData/LegacyTxs_10Senders_10kTxs.json", 10, 10000)
+}
 
-func benchmarkAddRemotes(b *testing.B, sendersCount, txCountPerSender int) {
+func benchmarkAddRemotesLoadFromFile(b *testing.B, sendersCount, txCountPerSender int, fileName string, generateSendersCount, generateTxCount int) {
+	cachedTxs, err := loadTxsFromJSON(fileName)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			saveTestLegacyTxsToJSON(generateSendersCount, generateTxCount, fileName)
+			cachedTxs, err = loadTxsFromJSON(fileName)
+			if err != nil {
+				b.Fatalf("Failed to load transactions from '%v' file. Reason: %v", fileName, err)
+			}
+		} else {
+			b.Fatalf("Failed to load transactions from '%v' file. Reason: %v", fileName, err)
+		}
+	}
+
+	endCacheIndex := txCountPerSender * sendersCount
+	cachedTxs = cachedTxs[:endCacheIndex]
 	// Setup tx pool
 	config := testTxPoolConfig
-	config.GlobalSlots = uint64(sendersCount)
+	config.GlobalSlots = uint64(sendersCount * txCountPerSender)
 	config.AccountSlots = uint64(txCountPerSender)
 
 	statedb, _ := state.New(common.Hash{}, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
@@ -200,40 +285,33 @@ func benchmarkAddRemotes(b *testing.B, sendersCount, txCountPerSender int) {
 	pool := NewTxPool(config, params.TestChainConfig, blockchain)
 	defer pool.Stop()
 
-	txs := make([]*types.Transaction, 0, sendersCount)
-	accounts := make([]*common.Address, 0, sendersCount)
-	for i := 0; i < sendersCount; i++ {
-		// Generate and seed sender
-		senderKey, senderKeyError := createAndSeedSender(pool, big.NewInt(1000000))
-		if senderKeyError != nil {
-			b.Fatalf("Failed to generate sender private key and to seed it to the tx pool")
+	uniqueAccounts := make([]*common.Address, 0, sendersCount)
+	accountsTempMap := make(map[common.Hash]bool)
+	for _, tx := range cachedTxs {
+		acc, _ := types.Sender(pool.signer, tx)
+		accHash := acc.Hash()
+		if _, addrAlreadyAdded := accountsTempMap[accHash]; !addrAlreadyAdded {
+			accountsTempMap[accHash] = true
+			uniqueAccounts = append(uniqueAccounts, &acc)
 		}
+	}
 
-		for j := 0; j < txCountPerSender; j++ {
-			// Create transaction
-			tx := transaction(uint64(j), 100000, senderKey)
-			txs = append(txs, tx)
-		}
-
-		acc := crypto.PubkeyToAddress(senderKey.PublicKey)
-		accounts = append(accounts, &acc)
+	for _, acc := range uniqueAccounts {
+		pool.currentState.AddBalance(*acc, big.NewInt(10000000))
 	}
 
 	b.ResetTimer()
 	// Benchmark TxPool.AddRemotesSync()
 	for i := 0; i < b.N; i++ {
 		b.StartTimer()
-		pool.AddRemotesSync(txs)
+		pool.AddRemotesSync(cachedTxs)
 		b.StopTimer()
 
-		if err := validateTxPoolInternals(pool); err != nil {
-			b.Fatalf("Pool is in incosistent state %v", err)
-		}
 		pool.mu.Lock()
 		// Clean up pool in order to be prepared for the next iteration
-		for j := 0; j < len(accounts); j++ {
-			pendingTxs := pool.pending[*accounts[j]]
-			queuedTxs := pool.queue[*accounts[j]]
+		for j := 0; j < len(uniqueAccounts); j++ {
+			pendingTxs := pool.pending[*uniqueAccounts[j]]
+			queuedTxs := pool.queue[*uniqueAccounts[j]]
 			if pendingTxs != nil {
 				for _, tx := range pendingTxs.Flatten() {
 					pool.removeTx(tx.Hash(), true)
@@ -327,7 +405,9 @@ func BenchmarkDemoteUnexecutables100Senders1TxEach(b *testing.B) {
 func BenchmarkDemoteUnexecutables10Senders1TxEach(b *testing.B) {
 	benchmarkDemoteUnexecutables(b, 10, 1)
 }
-func BenchmarkDemoteUnexecutables1Senders1TxEach(b *testing.B) { benchmarkDemoteUnexecutables(b, 1, 1) }
+func BenchmarkDemoteUnexecutables1Senders1TxEach(b *testing.B) {
+	benchmarkDemoteUnexecutables(b, 1, 1)
+}
 func BenchmarkDemoteUnexecutables1Senders10TxEach(b *testing.B) {
 	benchmarkDemoteUnexecutables(b, 1, 10)
 }

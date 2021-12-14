@@ -51,3 +51,4 @@ profile.cov
 ./bor-debug-*
 
 dist
+core/testData/*.json
