@@ -29,7 +29,7 @@ var mumbaiTestnet = &Chain{
 			BerlinBlock:         big.NewInt(13996000),
 			LondonBlock:         big.NewInt(22640000),
 			Bor: &params.BorConfig{
-				JaipurBlock: 22770000, // TODO
+				JaipurBlock: 22770000,
 				Period: map[string]uint64{
 					"0": 2,
 				},
