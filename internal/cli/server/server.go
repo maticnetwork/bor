@@ -132,6 +132,13 @@ func NewServer(config *Config) (*Server, error) {
 	if config.Accounts.UseLightweightKDF {
 		n, p = keystore.LightScryptN, keystore.LightScryptP
 	}
+
+	if !config.Accounts.DisableBorWallet {
+		// add keystore globally to the node's account manager if personal wallet is enabled
+		stack.AccountManager().AddBackend(keystore.NewKeyStore(keydir, n, p))
+	}
+
+	// proceed to authorize in any case
 	accountManager.AddBackend(keystore.NewKeyStore(keydir, n, p))
 
 	// get the etherbase

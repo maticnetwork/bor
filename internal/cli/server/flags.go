@@ -461,6 +461,11 @@ func (c *Command) Flags() *flagset.Flagset {
 		Usage: "Reduce key-derivation RAM & CPU usage at some expense of KDF strength",
 		Value: &c.cliConfig.Accounts.UseLightweightKDF,
 	})
+	f.BoolFlag((&flagset.BoolFlag{
+		Name:  "disable-bor-wallet",
+		Usage: "Disable the personal wallet endpoints",
+		Value: &c.cliConfig.Accounts.DisableBorWallet,
+	}))
 
 	// grpc
 	f.StringFlag(&flagset.StringFlag{
