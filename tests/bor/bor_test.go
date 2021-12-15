@@ -3,7 +3,6 @@ package bor
 import (
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"io"
 	"math/big"
 	"testing"
@@ -554,7 +553,6 @@ func testEncodeSigHeader(w io.Writer, header *types.Header, c *params.BorConfig)
 	}
 	if c.JaipurBlock >= int(header.Number.Int64()) {
 		if header.BaseFee != nil {
-			fmt.Println("-------hey---------")
 			enc = append(enc, header.BaseFee)
 		}
 	}
