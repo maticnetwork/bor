@@ -3,6 +3,8 @@ package bor
 import (
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"io"
 	"math/big"
 	"testing"
 	"time"
@@ -16,9 +18,11 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/tests/bor/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"golang.org/x/crypto/sha3"
 )
 
 var (
@@ -501,4 +505,60 @@ func TestEIP1559Transition(t *testing.T) {
 
 func newGwei(n int64) *big.Int {
 	return new(big.Int).Mul(big.NewInt(n), big.NewInt(params.GWei))
+}
+
+func TestJaipurFork(t *testing.T) {
+	init := buildEthereumInstance(t, rawdb.NewMemoryDatabase())
+	chain := init.ethereum.BlockChain()
+	engine := init.ethereum.Engine()
+	_bor := engine.(*bor.Bor)
+	db := init.ethereum.ChainDb()
+	block := init.genesis.ToBlock(db)
+	for i := uint64(1); i < sprintSize; i++ {
+		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor)
+		insertNewBlock(t, chain, block)
+		if int(block.Number().Int64()) == init.genesis.Config.Bor.JaipurBlock-1 {
+			assert.Equal(t, testSealHash(block.Header(), init.genesis.Config.Bor), bor.SealHash(block.Header(), init.genesis.Config.Bor))
+		}
+		if int(block.Number().Int64()) == init.genesis.Config.Bor.JaipurBlock {
+			assert.Equal(t, testSealHash(block.Header(), init.genesis.Config.Bor), bor.SealHash(block.Header(), init.genesis.Config.Bor))
+		}
+	}
+}
+
+// SealHash returns the hash of a block prior to it being sealed.
+func testSealHash(header *types.Header, c *params.BorConfig) (hash common.Hash) {
+	hasher := sha3.NewLegacyKeccak256()
+	testEncodeSigHeader(hasher, header, c)
+	hasher.Sum(hash[:0])
+	return hash
+}
+
+func testEncodeSigHeader(w io.Writer, header *types.Header, c *params.BorConfig) {
+	enc := []interface{}{
+		header.ParentHash,
+		header.UncleHash,
+		header.Coinbase,
+		header.Root,
+		header.TxHash,
+		header.ReceiptHash,
+		header.Bloom,
+		header.Difficulty,
+		header.Number,
+		header.GasLimit,
+		header.GasUsed,
+		header.Time,
+		header.Extra[:len(header.Extra)-65], // Yes, this will panic if extra is too short
+		header.MixDigest,
+		header.Nonce,
+	}
+	if c.JaipurBlock >= int(header.Number.Int64()) {
+		if header.BaseFee != nil {
+			fmt.Println("-------hey---------")
+			enc = append(enc, header.BaseFee)
+		}
+	}
+	if err := rlp.Encode(w, enc); err != nil {
+		panic("can't encode: " + err.Error())
+	}
 }
