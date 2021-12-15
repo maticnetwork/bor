@@ -33,27 +33,75 @@ func BenchmarkTxListAdd(b *testing.B) {
 }
 
 // Benchmark txPricedList.Reheap
-func BenchmarkTxPricedListReheap1KTxs(b *testing.B)   { benchmarkTxPricedListReheap(b, 1000) }
-func BenchmarkTxPricedListReheap10KTxs(b *testing.B)  { benchmarkTxPricedListReheap(b, 10000) }
-func BenchmarkTxPricedListReheap100KTxs(b *testing.B) { benchmarkTxPricedListReheap(b, 100000) }
+func BenchmarkTxPricedListReheap1KLegacyTxs(b *testing.B) {
+	benchmarkTxPricedListLegacyTxsReheap(b, 1000)
+}
+func BenchmarkTxPricedListReheap10KLegacyTxs(b *testing.B) {
+	benchmarkTxPricedListLegacyTxsReheap(b, 10000)
+}
+func BenchmarkTxPricedListReheap100KLegacyTxs(b *testing.B) {
+	benchmarkTxPricedListLegacyTxsReheap(b, 100000)
+}
+func BenchmarkTxPricedListReheap1MLegacyTxs(b *testing.B) {
+	benchmarkTxPricedListLegacyTxsReheap(b, 1000000)
+}
 
-func benchmarkTxPricedListReheap(b *testing.B, txCount int) {
+func benchmarkTxPricedListLegacyTxsReheap(b *testing.B, txsCount int) {
 	// Generate a slice of transactions to insert
-	txs := make(types.Transactions, txCount)
-	key, _ := crypto.GenerateKey()
+	txs := make(types.Transactions, txsCount)
 
 	for i := 0; i < len(txs); i++ {
 		// Create priced transaction with random gas price
-		txs[i] = pricedTransaction(uint64(i), 100000, big.NewInt(rand.Int63n(10000)), key)
+		txs[i] = newNonSignedTransaction(uint64(i), rand.Int63n(10000))
 	}
 
 	b.ResetTimer()
 	b.StopTimer()
 	for i := 0; i < b.N; i++ {
 		list := newTxPricedList(newTxLookup())
-		// Insert the transactions in a random order
-		for _, ind := range rand.Perm(len(txs)) {
-			list.all.Add(txs[ind], false)
+		// Insert the transactions in a random order.
+		// Add only remote transactions, since they are subject to moving from urgent to floating price heap.
+		for _, tx := range txs {
+			list.all.Add(tx, false)
+		}
+
+		// Benchmark txPricedList.Reheap()
+		b.StartTimer()
+		list.Reheap()
+		b.StopTimer()
+	}
+}
+
+func BenchmarkTxPricedListReheap1KDynamicFeeTxs(b *testing.B) {
+	benchmarkTxPricedListDynamicFeeTxsReheap(b, 1000)
+}
+func BenchmarkTxPricedListReheap10KDynamicFeeTxs(b *testing.B) {
+	benchmarkTxPricedListDynamicFeeTxsReheap(b, 10000)
+}
+func BenchmarkTxPricedListReheap100KDynamicFeeTxs(b *testing.B) {
+	benchmarkTxPricedListDynamicFeeTxsReheap(b, 100000)
+}
+func BenchmarkTxPricedListReheap1MDynamicFeeTxs(b *testing.B) {
+	benchmarkTxPricedListLegacyTxsReheap(b, 1000000)
+}
+
+func benchmarkTxPricedListDynamicFeeTxsReheap(b *testing.B, txsCount int) {
+	// Generate a slice of transactions to insert
+	txs := make(types.Transactions, txsCount)
+
+	for i := 0; i < len(txs); i++ {
+		// Create priced transaction with random gas price
+		txs[i] = newNonSignedDynamicFeeTransaction(uint64(i), rand.Int63n(100), rand.Int63n(10000))
+	}
+
+	b.ResetTimer()
+	b.StopTimer()
+	for i := 0; i < b.N; i++ {
+		list := newTxPricedList(newTxLookup())
+		// Insert the transactions in a random order.
+		// Add only remote transactions, since they are subject to moving from urgent to floating price heap.
+		for _, tx := range txs {
+			list.all.Add(tx, false)
 		}
 
 		// Benchmark txPricedList.Reheap()
@@ -134,6 +182,7 @@ func benchmarkSortedListRemove(b *testing.B, txsCount int) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		b.StartTimer()
+		// Remove transactions in random nonces order
 		for _, nonce := range rand.Perm(txsCount) {
 			removedNonces = append(removedNonces, uint64(nonce))
 			sortedList.Remove(uint64(nonce))
@@ -181,6 +230,7 @@ func benchmarkSortedListFilter(b *testing.B, txsCount int) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		b.StartTimer()
+		// Filter out all the added transactions (which will remove transactions from the list too)
 		sortedList.Filter(func(tx *types.Transaction) bool { return true })
 		b.StopTimer()
 

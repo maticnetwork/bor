@@ -43,6 +43,17 @@ func newNonSignedTransaction(nonce uint64, gasPrice int64) *types.Transaction {
 	return types.NewTransaction(nonce, common.Address{}, big.NewInt(100), uint64(100000), big.NewInt(gasPrice), nil)
 }
 
+func newNonSignedDynamicFeeTransaction(nonce uint64, gasTipCap, gasFeeCap int64) *types.Transaction {
+	return types.NewTx(&types.DynamicFeeTx{
+		Nonce:     nonce,
+		To:        &common.Address{},
+		Gas:       100000,
+		GasFeeCap: big.NewInt(gasFeeCap),
+		GasTipCap: big.NewInt(gasTipCap),
+		Data:      []byte{},
+	})
+}
+
 func newSortedList() *txSortedMap {
 	return newTxSortedMap()
 }
@@ -101,7 +112,7 @@ func TestTxSortedListPutDescending(t *testing.T) { testTxSortedListPut(t, Descen
 func TestTxSortedListPutRandom(t *testing.T)     { testTxSortedListPut(t, Random) }
 
 func testTxSortedListPut(t *testing.T, nonceAlignment NonceAlignment) {
-	txsCount := 10000
+	txsCount := 10
 	sortedList := populateTransactions(newSortedList(), txsCount, nonceAlignment)
 
 	// Check whether all of the transactions are present within the cache
@@ -141,7 +152,7 @@ func TestSortedListPutSameNonces(t *testing.T) {
 }
 
 func TestSortedListRemove(t *testing.T) {
-	txsCount := 10000
+	txsCount := 10
 	sortedList := populateTransactions(newSortedList(), txsCount, Ascending)
 
 	remainingTxsCount := txsCount
@@ -162,7 +173,7 @@ func TestSortedListRemove(t *testing.T) {
 }
 
 func TestSortedListGet(t *testing.T) {
-	txsCount := 10000
+	txsCount := 10
 	sortedList := populateTransactions(newSortedList(), txsCount, Ascending)
 
 	expectedNonce := uint64(rand.Intn(txsCount))
@@ -174,7 +185,7 @@ func TestSortedListGet(t *testing.T) {
 }
 
 func TestSortedListReady(t *testing.T) {
-	txsCount := 10000
+	txsCount := 10
 	sortedList := populateTransactions(newSortedList(), txsCount, Ascending)
 
 	nonceGappedTxsCount := 3
@@ -197,13 +208,13 @@ func TestSortedListReady(t *testing.T) {
 	// Sending less starting nonce than present in cache
 	readies = sortedList.Ready(0)
 	if readies != nil {
-		t.Fatalf("Expected nil readies, but got %v", readies)
+		t.Fatalf("Expected nil readies, but got %d of them", len(readies))
 	}
 
 	// Set start nonce to first nonce gapped transaction and make sure it is returned from Ready function
 	readies = sortedList.Ready(uint64(txsCount + 10))
 	if len(readies) != 1 {
-		t.Fatalf("Expected one ready transaction, but got %d of them. Readies retrieved %v", len(readies), readies)
+		t.Fatalf("Expected one ready transaction, but got %d of them.", len(readies))
 	}
 	if tx := readies[0]; tx.Nonce() != uint64(txsCount+10) {
 		t.Fatalf("Expected transaction nonce %d, but got %d", uint64(txsCount+10), tx.Nonce())
@@ -222,7 +233,7 @@ func TestSortedListForward(t *testing.T) {
 	// All transactions should be removed from cache and returned back
 	removedTxs := sortedList.Forward(uint64(txsCount))
 	if removedCount := len(removedTxs); removedCount != txsCount {
-		t.Fatalf("Expected %d removed transactions, but got %d of them. Removed transactions: %v", txsCount, len(removedTxs), removedTxs)
+		t.Fatalf("Expected %d removed transactions, but got %d of them.", txsCount, len(removedTxs))
 	}
 	if length := sortedList.Len(); length != 0 {
 		t.Fatalf("Expected that transaction cache is empty, but it has %d items", length)
@@ -236,7 +247,7 @@ func TestSortedListForward(t *testing.T) {
 	// All transactions should be removed from cache and returned back
 	removedTxs = sortedList.Forward(uint64(txsCount * 5))
 	if removedCount := len(removedTxs); removedCount != txsCount {
-		t.Fatalf("Expected %d removed transactions, but got %d of them. Removed transactions: %v", txsCount, len(removedTxs), removedTxs)
+		t.Fatalf("Expected %d removed transactions, but got %d of them.", txsCount, len(removedTxs))
 	}
 	if length := sortedList.Len(); length != 0 {
 		t.Fatalf("Expected that transaction cache is empty, but it has %d items", length)
@@ -244,7 +255,7 @@ func TestSortedListForward(t *testing.T) {
 }
 
 func TestSortedListCap(t *testing.T) {
-	txsCount := 10000
+	txsCount := 10
 	sortedList := populateTransactions(newSortedList(), txsCount, Ascending)
 
 	drops := sortedList.Cap(txsCount * 2)
@@ -262,7 +273,7 @@ func TestSortedListCap(t *testing.T) {
 }
 
 func TestSortedListFilter(t *testing.T) {
-	txsCount := 10000
+	txsCount := 10
 	sortedList := populateTransactions(newSortedList(), txsCount, Ascending)
 
 	filteredTxs := sortedList.Filter(func(t *types.Transaction) bool {
@@ -277,7 +288,7 @@ func TestSortedListFilter(t *testing.T) {
 }
 
 func TestSortedListFlatten(t *testing.T) {
-	txsCount := 10000
+	txsCount := 10
 	sortedList := populateTransactions(newSortedList(), txsCount, Ascending)
 
 	flattenList := sortedList.Flatten()
@@ -298,7 +309,7 @@ func TestSortedListFlatten(t *testing.T) {
 }
 
 func TestSortedListLastElement(t *testing.T) {
-	txsCount := 10000
+	txsCount := 10
 	sortedList := populateTransactions(newSortedList(), txsCount, Ascending)
 
 	tx := sortedList.LastElement()
