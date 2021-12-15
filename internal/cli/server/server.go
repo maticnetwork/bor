@@ -142,7 +142,7 @@ func NewServer(config *Config) (*Server, error) {
 	accountManager.AddBackend(keystore.NewKeyStore(keydir, n, p))
 
 	// authorize for sealing only if mining
-	if config.Sealer.Etherbase != "0" {
+	if config.Sealer.Etherbase != "" {
 		// get the etherbase
 		eb, err := srv.backend.Etherbase()
 		if err != nil {
