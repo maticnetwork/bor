@@ -173,7 +173,7 @@ func encodeSigHeader(w io.Writer, header *types.Header, c *params.BorConfig) {
 		header.MixDigest,
 		header.Nonce,
 	}
-	if c.JaipurBlock >= int(header.Number.Int64()) {
+	if int(header.Number.Int64()) >= c.JaipurBlock {
 		if header.BaseFee != nil {
 			enc = append(enc, header.BaseFee)
 		}
