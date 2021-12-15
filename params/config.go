@@ -488,7 +488,7 @@ type BorConfig struct {
 	OverrideStateSyncRecords map[string]int         `json:"overrideStateSyncRecords"` // override state records count
 	BlockAlloc               map[string]interface{} `json:"blockAlloc"`
 	BurntContract            map[string]string      `json:"burntContract"`         // governance contract where the token will be sent to and burnt in london fork
-	JaipurBlock              uint64                 `json:"jaipurBlock,omitempty"` // Jaipur switch block (nil = no fork, 0 = already on jaipur)
+	JaipurBlock              uint64                 `json:"jaipurBlock"` // Jaipur switch block (nil = no fork, 0 = already on jaipur)
 }
 
 // String implements the stringer interface, returning the consensus engine details.
