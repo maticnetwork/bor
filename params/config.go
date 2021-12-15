@@ -505,7 +505,7 @@ func (c *BorConfig) CalculatePeriod(number uint64) uint64 {
 }
 
 func (c *BorConfig) IsJaipur(number int) bool {
-	return c.JaipurBlock <= number
+	return number >= c.JaipurBlock
 }
 
 func (c *BorConfig) calculateBorConfigHelper(field map[string]uint64, number uint64) uint64 {
