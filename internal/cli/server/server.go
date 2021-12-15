@@ -141,21 +141,24 @@ func NewServer(config *Config) (*Server, error) {
 	// proceed to authorize in any case
 	accountManager.AddBackend(keystore.NewKeyStore(keydir, n, p))
 
-	// get the etherbase
-	eb, err := srv.backend.Etherbase()
-	if err != nil {
-		log.Error("Cannot start mining without etherbase", "err", err)
-		return nil, fmt.Errorf("etherbase missing: %v", err)
-	}
-
-	// Authorize the consensus to sign using wallet signer
-	if bor, ok := srv.backend.Engine().(*bor.Bor); ok {
-		wallet, err := accountManager.Find(accounts.Account{Address: eb})
-		if wallet == nil || err != nil {
-			log.Error("Etherbase account unavailable locally", "err", err)
-			return nil, fmt.Errorf("signer missing: %v", err)
+	// authorize for sealing only if mining
+	if config.Sealer.Etherbase != "0" {
+		// get the etherbase
+		eb, err := srv.backend.Etherbase()
+		if err != nil {
+			log.Error("Cannot start mining without etherbase", "err", err)
+			return nil, fmt.Errorf("etherbase missing: %v", err)
 		}
-		bor.Authorize(eb, wallet.SignData)
+
+		// Authorize the consensus to sign using wallet signer
+		if bor, ok := srv.backend.Engine().(*bor.Bor); ok {
+			wallet, err := accountManager.Find(accounts.Account{Address: eb})
+			if wallet == nil || err != nil {
+				log.Error("Etherbase account unavailable locally", "err", err)
+				return nil, fmt.Errorf("signer missing: %v", err)
+			}
+			bor.Authorize(eb, wallet.SignData)
+		}
 	}
 
 	// sealing (if enabled) or in dev mode
