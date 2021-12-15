@@ -516,10 +516,10 @@ func TestJaipurFork(t *testing.T) {
 	for i := uint64(1); i < sprintSize; i++ {
 		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor)
 		insertNewBlock(t, chain, block)
-		if int(block.Number().Int64()) == init.genesis.Config.Bor.JaipurBlock-1 {
+		if block.Number().Uint64() == init.genesis.Config.Bor.JaipurBlock-1 {
 			assert.Equal(t, testSealHash(block.Header(), init.genesis.Config.Bor), bor.SealHash(block.Header(), init.genesis.Config.Bor))
 		}
-		if int(block.Number().Int64()) == init.genesis.Config.Bor.JaipurBlock {
+		if block.Number().Uint64() == init.genesis.Config.Bor.JaipurBlock {
 			assert.Equal(t, testSealHash(block.Header(), init.genesis.Config.Bor), bor.SealHash(block.Header(), init.genesis.Config.Bor))
 		}
 	}
@@ -551,7 +551,7 @@ func testEncodeSigHeader(w io.Writer, header *types.Header, c *params.BorConfig)
 		header.MixDigest,
 		header.Nonce,
 	}
-	if c.IsJaipur(int(header.Number.Int64())) {
+	if c.IsJaipur(header.Number.Uint64()) {
 		if header.BaseFee != nil {
 			enc = append(enc, header.BaseFee)
 		}
