@@ -276,6 +276,7 @@ var (
 		BerlinBlock:         big.NewInt(13996000),
 		LondonBlock:         big.NewInt(22640000),
 		Bor: &BorConfig{
+			JaipurBlock: 22770000, // TODO
 			Period: map[string]uint64{
 				"0": 2,
 			},
@@ -501,6 +502,10 @@ func (c *BorConfig) CalculateBackupMultiplier(number uint64) uint64 {
 
 func (c *BorConfig) CalculatePeriod(number uint64) uint64 {
 	return c.calculateBorConfigHelper(c.Period, number)
+}
+
+func (c *BorConfig) IsJaipur(number int) bool {
+	return c.JaipurBlock <= number
 }
 
 func (c *BorConfig) calculateBorConfigHelper(field map[string]uint64, number uint64) uint64 {
