@@ -111,18 +111,6 @@ func NewServer(config *Config) (*Server, error) {
 	}
 
 	// setup account manager (only keystore)
-	// Not used for RPC endpoints as personal/wallet endpoints will be deprecated
-	/*
-		{
-			keydir := stack.KeyStoreDir()
-			n, p := keystore.StandardScryptN, keystore.StandardScryptP
-			if config.Accounts.UseLightweightKDF {
-				n, p = keystore.LightScryptN, keystore.LightScryptP
-			}
-			stack.AccountManager().AddBackend(keystore.NewKeyStore(keydir, n, p))
-		}
-	*/
-
 	// create a new account manager, only for the scope of this function
 	accountManager := accounts.NewManager(&accounts.Config{})
 
