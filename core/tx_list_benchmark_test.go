@@ -152,7 +152,7 @@ func BenchmarkSortedListPut1MRandomNonces(b *testing.B) {
 }
 
 func benchmarkSortedListPut(b *testing.B, txsCount int, nonceAlignment NonceAlignment) {
-	sortedList := newSortedList()
+	sortedList := createTransactionsCache()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -171,7 +171,7 @@ func BenchmarkSortedListRemove100K(b *testing.B) { benchmarkSortedListRemove(b, 
 func BenchmarkSortedListRemove1M(b *testing.B)   { benchmarkSortedListRemove(b, 1000000) }
 
 func benchmarkSortedListRemove(b *testing.B, txsCount int) {
-	sortedList := populateTransactions(newSortedList(), txsCount, Ascending)
+	sortedList := populateTransactions(createTransactionsCache(), txsCount, Ascending)
 
 	txs := make([]*types.Transaction, 0, txsCount)
 	for i := 0; i < txsCount; i++ {
@@ -204,7 +204,7 @@ func BenchmarkSortedListGet100K(b *testing.B) { benchmarkSortedListGet(b, 100000
 func BenchmarkSortedListGet1M(b *testing.B)   { benchmarkSortedListGet(b, 1000000) }
 
 func benchmarkSortedListGet(b *testing.B, txsCount int) {
-	sortedList := populateTransactions(newSortedList(), txsCount, Ascending)
+	sortedList := populateTransactions(createTransactionsCache(), txsCount, Ascending)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -225,7 +225,7 @@ func BenchmarkSortedListFilter100K(b *testing.B) { benchmarkSortedListFilter(b, 
 func BenchmarkSortedListFilter1M(b *testing.B)   { benchmarkSortedListFilter(b, 1000000) }
 
 func benchmarkSortedListFilter(b *testing.B, txsCount int) {
-	sortedList := populateTransactions(newSortedList(), txsCount, Ascending)
+	sortedList := populateTransactions(createTransactionsCache(), txsCount, Ascending)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -246,7 +246,7 @@ func BenchmarkSortedListForward1MTxs(b *testing.B)   { benchmarkSortedListForwar
 
 func benchmarkSortedListForward(b *testing.B, txsCount int) {
 	// Generate a list of transactions to insert
-	txsMap := populateTransactions(newSortedList(), txsCount, Ascending)
+	txsMap := populateTransactions(createTransactionsCache(), txsCount, Ascending)
 	nonceThreshold := uint64(txsCount / 4)
 
 	txs := make([]*types.Transaction, 0, txsCount)
@@ -277,7 +277,7 @@ func BenchmarkSortedListReady100KTxs(b *testing.B) { benchmarkSortedListReady(b,
 func BenchmarkSortedListReady1MTxs(b *testing.B)   { benchmarkSortedListReady(b, 1000000) }
 
 func benchmarkSortedListReady(b *testing.B, txsCount int) {
-	sortedList := populateTransactions(newSortedList(), txsCount, Ascending)
+	sortedList := populateTransactions(createTransactionsCache(), txsCount, Ascending)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -296,7 +296,7 @@ func BenchmarkSortedListCap100KTxs(b *testing.B) { benchmarkSortedListCap(b, 100
 func BenchmarkSortedListCap1MTxs(b *testing.B)   { benchmarkSortedListCap(b, 1000000) }
 
 func benchmarkSortedListCap(b *testing.B, txsCount int) {
-	sortedList := populateTransactions(newSortedList(), txsCount, Ascending)
+	sortedList := populateTransactions(createTransactionsCache(), txsCount, Ascending)
 	txs := make([]*types.Transaction, 0, txsCount)
 	txs = append(txs, sortedList.Flatten()...)
 
@@ -320,7 +320,7 @@ func BenchmarkSortedListLastElement100KTxs(b *testing.B) { benchmarkSortedListLa
 func BenchmarkSortedListLastElement1MTxs(b *testing.B)   { benchmarkSortedListLastElement(b, 1000000) }
 
 func benchmarkSortedListLastElement(b *testing.B, txsCount int) {
-	sortedList := populateTransactions(newSortedList(), txsCount, Ascending)
+	sortedList := populateTransactions(createTransactionsCache(), txsCount, Ascending)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -335,7 +335,7 @@ func BenchmarkSortedListFlatten100KTxs(b *testing.B) { benchmarkSortedListFlatte
 func BenchmarkSortedListFlatten1MTxs(b *testing.B)   { benchmarkSortedListFlatten(b, 1000000) }
 
 func benchmarkSortedListFlatten(b *testing.B, txsCount int) {
-	sortedList := populateTransactions(newSortedList(), txsCount, Ascending)
+	sortedList := populateTransactions(createTransactionsCache(), txsCount, Ascending)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

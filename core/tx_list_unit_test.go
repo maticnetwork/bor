@@ -54,7 +54,7 @@ func newNonSignedDynamicFeeTransaction(nonce uint64, gasTipCap, gasFeeCap int64)
 	})
 }
 
-func newSortedList() *txSortedMap {
+func createTransactionsCache() *txSortedMap {
 	return newTxSortedMap()
 }
 
@@ -113,7 +113,7 @@ func TestTxSortedListPutRandom(t *testing.T)     { testTxSortedListPut(t, Random
 
 func testTxSortedListPut(t *testing.T, nonceAlignment NonceAlignment) {
 	txsCount := 10
-	sortedList := populateTransactions(newSortedList(), txsCount, nonceAlignment)
+	sortedList := populateTransactions(createTransactionsCache(), txsCount, nonceAlignment)
 
 	// Check whether all of the transactions are present within the cache
 	if sortedList.Len() != txsCount {
@@ -153,7 +153,7 @@ func TestSortedListPutSameNonces(t *testing.T) {
 
 func TestSortedListRemove(t *testing.T) {
 	txsCount := 10
-	sortedList := populateTransactions(newSortedList(), txsCount, Ascending)
+	sortedList := populateTransactions(createTransactionsCache(), txsCount, Ascending)
 
 	remainingTxsCount := txsCount
 	for i, nonce := range rand.Perm(txsCount) {
@@ -174,7 +174,7 @@ func TestSortedListRemove(t *testing.T) {
 
 func TestSortedListGet(t *testing.T) {
 	txsCount := 10
-	sortedList := populateTransactions(newSortedList(), txsCount, Ascending)
+	sortedList := populateTransactions(createTransactionsCache(), txsCount, Ascending)
 
 	expectedNonce := uint64(rand.Intn(txsCount))
 	tx := sortedList.Get(expectedNonce)
@@ -186,7 +186,7 @@ func TestSortedListGet(t *testing.T) {
 
 func TestSortedListReady(t *testing.T) {
 	txsCount := 10
-	sortedList := populateTransactions(newSortedList(), txsCount, Ascending)
+	sortedList := populateTransactions(createTransactionsCache(), txsCount, Ascending)
 
 	nonceGappedTxsCount := 3
 	// Put nonce gapped transactions
@@ -228,7 +228,7 @@ func TestSortedListReady(t *testing.T) {
 
 func TestSortedListForward(t *testing.T) {
 	txsCount := 10
-	sortedList := populateTransactions(newSortedList(), txsCount, Ascending)
+	sortedList := populateTransactions(createTransactionsCache(), txsCount, Ascending)
 
 	// All transactions should be removed from cache and returned back
 	removedTxs := sortedList.Forward(uint64(txsCount))
@@ -256,7 +256,7 @@ func TestSortedListForward(t *testing.T) {
 
 func TestSortedListCap(t *testing.T) {
 	txsCount := 10
-	sortedList := populateTransactions(newSortedList(), txsCount, Ascending)
+	sortedList := populateTransactions(createTransactionsCache(), txsCount, Ascending)
 
 	drops := sortedList.Cap(txsCount * 2)
 	if drops != nil {
@@ -274,7 +274,7 @@ func TestSortedListCap(t *testing.T) {
 
 func TestSortedListFilter(t *testing.T) {
 	txsCount := 10
-	sortedList := populateTransactions(newSortedList(), txsCount, Ascending)
+	sortedList := populateTransactions(createTransactionsCache(), txsCount, Ascending)
 
 	filteredTxs := sortedList.Filter(func(t *types.Transaction) bool {
 		return t.Nonce() > uint64(txsCount/2-1)
@@ -289,7 +289,7 @@ func TestSortedListFilter(t *testing.T) {
 
 func TestSortedListFlatten(t *testing.T) {
 	txsCount := 10
-	sortedList := populateTransactions(newSortedList(), txsCount, Ascending)
+	sortedList := populateTransactions(createTransactionsCache(), txsCount, Ascending)
 
 	flattenList := sortedList.Flatten()
 
@@ -310,7 +310,7 @@ func TestSortedListFlatten(t *testing.T) {
 
 func TestSortedListLastElement(t *testing.T) {
 	txsCount := 10
-	sortedList := populateTransactions(newSortedList(), txsCount, Ascending)
+	sortedList := populateTransactions(createTransactionsCache(), txsCount, Ascending)
 
 	tx := sortedList.LastElement()
 	if tx.Nonce() != uint64(txsCount-1) {
