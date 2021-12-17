@@ -6,7 +6,6 @@
 [Service]
   Restart=on-failure
   RestartSec=5s
-  EnvironmentFile=/etc/matic/metadata
   ExecStart=/usr/local/bin/bor \
     --datadir /var/lib/bor/data \
     --port 30303 \
