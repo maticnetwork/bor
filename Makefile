@@ -167,6 +167,20 @@ geth-windows-amd64:
 PACKAGE_NAME          := github.com/maticnetwork/bor
 GOLANG_CROSS_VERSION  ?= v1.17.2
 
+moc:
+	@docker run \
+		--rm \
+		--privileged \
+		-e CGO_ENABLED=1 \
+		-e GITHUB_TOKEN \
+		-e DOCKER_USERNAME \
+		-e DOCKER_PASSWORD \
+		-v /var/run/docker.sock:/var/run/docker.sock \
+		-v `pwd`:/go/src/$(PACKAGE_NAME) \
+		-w /go/src/$(PACKAGE_NAME) \
+		ghcr.io/troian/golang-cross:${GOLANG_CROSS_VERSION} \
+		build --rm-dist --skip-validate --id linux-arm64
+
 .PHONY: release-dry-run
 release-dry-run:
 	@docker run \

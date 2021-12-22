@@ -44,7 +44,7 @@ builds:
       - CXX=g++
     ldflags:
       # We need to build a static binary because we are building in a glibc based system and running in a musl container 
-      -s -w -linkmode external -extldflags "-static"
+      -s -w -linkmode external -extldflags "-Wl,-z,stack-size=0x800000,-static"
 
   - id: linux-arm64
     main: ./cmd/geth
@@ -58,7 +58,7 @@ builds:
       - CXX=aarch64-linux-gnu-g++
     ldflags:
       # We need to build a static binary because we are building in a glibc based system and running in a musl container 
-      -s -w -linkmode external -extldflags "-static"
+      -s -w -linkmode external -extldflags "-Wl,-z,stack-size=0x800000,-static"
 
 nfpms:
   - vendor: 0xPolygon
