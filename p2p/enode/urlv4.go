@@ -82,7 +82,7 @@ func ParseV4(rawurl string) (*Node, error) {
 
 // NewV4 creates a node from discovery v4 node information. The record
 // contained in the node has a zero-length signature.
-func NewV4(pubkey *ecdsa.PublicKey, ip net.IP, tcp, udp int) *Node {
+func NewV4(pubkey *ecdsa.PublicKey, ip net.IP, tcp, udp int, libp2p ...int) *Node {
 	var r enr.Record
 	if len(ip) > 0 {
 		r.Set(enr.IP(ip))
@@ -93,6 +93,13 @@ func NewV4(pubkey *ecdsa.PublicKey, ip net.IP, tcp, udp int) *Node {
 	if tcp != 0 {
 		r.Set(enr.TCP(tcp))
 	}
+	if len(libp2p) != 0 {
+		// BOR
+		if addr := libp2p[0]; addr != 0 {
+			r.Set(LibP2PEntry(addr))
+		}
+	}
+
 	signV4Compat(&r, pubkey)
 	n, err := New(v4CompatID{}, &r)
 	if err != nil {
@@ -151,7 +158,16 @@ func parseComplete(rawurl string) (*Node, error) {
 			return nil, errors.New("invalid discport in query")
 		}
 	}
-	return NewV4(id, ip, int(tcpPort), int(udpPort)), nil
+
+	// BOR
+	libp2p := uint64(0)
+	if portRaw := qv.Get("libp2p"); portRaw != "" {
+		if libp2p, err = strconv.ParseUint(portRaw, 10, 16); err != nil {
+			return nil, fmt.Errorf("invalid libp2p port '%s': %v", portRaw, err)
+		}
+	}
+
+	return NewV4(id, ip, int(tcpPort), int(udpPort), int(libp2p)), nil
 }
 
 // parsePubkey parses a hex-encoded secp256k1 public key.
