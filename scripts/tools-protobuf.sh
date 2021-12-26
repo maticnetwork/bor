@@ -9,7 +9,7 @@ rm -f $PROTOC_ZIP
 
 # Change permissions to use the binary
 sudo chmod 755 -R /usr/local/bin/protoc
-sudo chmod 755 -R /usr/local/include/google
+sudo chmod 755 -R /usr/local/include
 
 # Install golang extensions (DO NOT CHANGE THE VERSIONS)
 go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.25.0
