@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"math/big"
+	"reflect"
 	"strings"
 
 	"github.com/ethereum/go-ethereum/command/server/pprof"
@@ -124,6 +126,7 @@ func (s *Server) Status(ctx context.Context, _ *empty.Empty) (*proto.StatusRespo
 			HighestBlock:  int64(syncProgress.HighestBlock),
 			CurrentBlock:  int64(syncProgress.CurrentBlock),
 		},
+		Forks: gatherForks(s.config.chain.Genesis.Config),
 	}
 	return resp, nil
 }
@@ -133,4 +136,43 @@ func headerToProtoHeader(h *types.Header) *proto.Header {
 		Hash:   h.Hash().String(),
 		Number: h.Number.Uint64(),
 	}
+}
+
+// gatherForks gathers all the fork numbers via reflection
+func gatherForks(config interface{}) []*proto.StatusResponse_Fork {
+	var forks []*proto.StatusResponse_Fork
+
+	kind := reflect.TypeOf(config)
+	for kind.Kind() == reflect.Ptr {
+		kind = kind.Elem()
+	}
+
+	skip := "DAOForkBlock"
+
+	conf := reflect.ValueOf(config).Elem()
+	for i := 0; i < kind.NumField(); i++ {
+		// Fetch the next field and skip non-fork rules
+		field := kind.Field(i)
+		if strings.Contains(field.Name, skip) {
+			continue
+		}
+		if !strings.HasSuffix(field.Name, "Block") {
+			continue
+		}
+		if field.Type != reflect.TypeOf(new(big.Int)) {
+			continue
+		}
+
+		fork := &proto.StatusResponse_Fork{
+			Name: strings.TrimSuffix(field.Name, "Block"),
+		}
+		rule := conf.Field(i).Interface().(*big.Int)
+		if rule != nil {
+			fork.Block = rule.Int64()
+		} else {
+			fork.Disabled = true
+		}
+		forks = append(forks, fork)
+	}
+	return forks
 }
