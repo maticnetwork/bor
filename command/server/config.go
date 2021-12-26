@@ -14,9 +14,11 @@ import (
 
 	godebug "runtime/debug"
 
+	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/command/server/chains"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/fdlimit"
+	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/ethereum/go-ethereum/eth/gasprice"
@@ -91,6 +93,9 @@ type Config struct {
 
 	// GRPC has the grpc server related settings
 	GRPC *GRPCConfig
+
+	DevEnabled bool
+	DevPeriod  uint64
 }
 
 type P2PConfig struct {
@@ -371,7 +376,7 @@ func DefaultConfig() *Config {
 		Name:      Hostname(),
 		Whitelist: map[string]string{},
 		LogLevel:  "INFO",
-		DataDir:   defaultDataDir(),
+		DataDir:   "",
 		P2P: &P2PConfig{
 			MaxPeers:     30,
 			MaxPendPeers: 50,
@@ -573,6 +578,27 @@ func readConfigFile(path string) (*Config, error) {
 }
 
 func (c *Config) loadChain() error {
+	if c.DevEnabled {
+		ks := keystore.NewKeyStore("", keystore.LightScryptN, keystore.LightScryptP)
+
+		// generate a pass key for this
+		acct, err := ks.NewAccount("")
+		if err != nil {
+			return err
+		}
+		if err := ks.Unlock(acct, ""); err != nil {
+			return err
+		}
+
+		c.chain = &chains.Chain{
+			Genesis:   core.DeveloperGenesisBlock(c.DevPeriod, common.Address{}),
+			NetworkId: 1337,
+			Bootnodes: []string{},
+			DNS:       []string{},
+		}
+		return nil
+	}
+
 	chain, ok := chains.GetChain(c.Chain)
 	if !ok {
 		return fmt.Errorf("chain '%s' not found", c.Chain)
@@ -707,6 +733,11 @@ func (c *Config) buildEth() (*ethconfig.Config, error) {
 	}
 	n.RPCTxFeeCap = c.JsonRPC.TxFeeCap
 
+	if c.DevEnabled {
+		// In dev mode we only use full sync
+		c.SyncMode = "fast"
+	}
+
 	// sync mode. It can either be "fast", "full" or "snap". We disable
 	// for now the "light" mode.
 	switch c.SyncMode {
@@ -764,9 +795,19 @@ func (c *Config) buildNode() (*node.Config, error) {
 		}
 	}
 
+	dataDir := ""
+	if c.DataDir != "" {
+		dataDir = c.DataDir
+	} else if !c.DevEnabled {
+		dataDir = defaultDataDir()
+	}
+
+	if c.DevEnabled {
+		c.Accounts.UseLightweightKDF = true
+	}
 	cfg := &node.Config{
 		Name:                  clientIdentifier,
-		DataDir:               c.DataDir,
+		DataDir:               dataDir,
 		UseLightweightKDF:     c.Accounts.UseLightweightKDF,
 		InsecureUnlockAllowed: c.Accounts.AllowInsecureUnlock,
 		Version:               params.VersionWithCommit(gitCommit, gitDate),
@@ -830,6 +871,16 @@ func (c *Config) buildNode() (*node.Config, error) {
 		cfg.P2P.MaxPeers = 0
 		cfg.P2P.NoDiscovery = true
 	}
+
+	if c.DevEnabled {
+		// In dev mode all the networking is disabled
+		cfg.P2P.MaxPeers = 0
+		cfg.P2P.ListenAddr = ""
+		cfg.P2P.NoDial = true
+		cfg.P2P.NoDiscovery = true
+		cfg.P2P.DiscoveryV5 = false
+	}
+
 	return cfg, nil
 }
 

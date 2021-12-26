@@ -461,5 +461,18 @@ func (c *Command) Flags() *flagset.Flagset {
 		Usage: "Address and port to bind the GRPC server",
 		Value: &c.cliConfig.GRPC.Addr,
 	})
+
+	// dev
+	f.BoolFlag(&flagset.BoolFlag{
+		Name:  "dev",
+		Usage: "Enables dev mode",
+		Value: &c.cliConfig.DevEnabled,
+	})
+	f.Uint64Flag(&flagset.Uint64Flag{
+		Name:  "dev.period",
+		Usage: "Period for dev mode",
+		Value: &c.cliConfig.DevPeriod,
+	})
+
 	return f
 }

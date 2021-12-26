@@ -104,11 +104,13 @@ func NewServer(config *Config) (*Server, error) {
 		if config.Accounts.UseLightweightKDF {
 			n, p = keystore.LightScryptN, keystore.LightScryptP
 		}
-		stack.AccountManager().AddBackend(keystore.NewKeyStore(keydir, n, p))
+
+		ks := keystore.NewKeyStore(keydir, n, p)
+		stack.AccountManager().AddBackend(ks)
 	}
 
 	// sealing (if enabled)
-	if config.Sealer.Enabled {
+	if config.Sealer.Enabled || config.DevEnabled {
 		if err := backend.StartMining(1); err != nil {
 			return nil, err
 		}
