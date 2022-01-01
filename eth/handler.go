@@ -486,8 +486,13 @@ func (h *handler) BroadcastTransactions(txs types.Transactions) {
 			txset[peer] = append(txset[peer], tx.Hash())
 		}
 		// For the remaining peers, send announcement only
+		// If peer is static (sentry -> validator?), send the full tx
 		for _, peer := range peers[numDirect:] {
-			annos[peer] = append(annos[peer], tx.Hash())
+			if peer.IsStatic() {
+				txset[peer] = append(txset[peer], tx.Hash())
+			} else {
+				annos[peer] = append(annos[peer], tx.Hash())
+			}
 		}
 	}
 	for peer, hashes := range txset {
