@@ -40,11 +40,16 @@ func (c *Command) Synopsis() string {
 
 // Run implements the cli.Command interface
 func (c *Command) Run(args []string) int {
+	fmt.Println(args)
+
 	flags := c.Flags()
 	if err := flags.Parse(args); err != nil {
 		c.UI.Error(err.Error())
 		return 1
 	}
+
+	fmt.Println(c.cliConfig.P2P.Discovery.Bootnodes)
+	fmt.Println(c.cliConfig.Name)
 
 	// read config file
 	config := DefaultConfig()

@@ -540,8 +540,11 @@ func (t *dialTask) dial(d *dialScheduler, dest *enode.Node) error {
 		d.log.Trace("Dial error", "id", t.dest.ID(), "addr", nodeAddr(t.dest), "conn", t.flags, "err", cleanupDialErr(err))
 		return &dialError{err}
 	}
-	mfd := newMeteredConn(fd, false, &net.TCPAddr{IP: dest.IP(), Port: dest.TCP()})
-	return d.setupFunc(mfd, t.flags, dest)
+	// BOR (Because in libp2p we do not deal with net.Conn at this point but we let LibP2P dial himself)
+	if fd != nil {
+		fd = newMeteredConn(fd, false, &net.TCPAddr{IP: dest.IP(), Port: dest.TCP()})
+	}
+	return d.setupFunc(fd, t.flags, dest)
 }
 
 func (t *dialTask) String() string {

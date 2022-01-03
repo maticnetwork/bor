@@ -9,6 +9,18 @@ import (
 	"github.com/multiformats/go-multiaddr"
 )
 
+func (n *Node) IsMultiAddr() bool {
+	var libp2pPort LibP2PEntry
+	if err := n.Load(&libp2pPort); err != nil {
+		return false
+	}
+	return true
+}
+
+func (n *Node) GetMultiAddr() (multiaddr.Multiaddr, error) {
+	return EnodeToMultiAddr(n)
+}
+
 func EnodeToMultiAddr(node *Node) (multiaddr.Multiaddr, error) {
 	// convert the key to libp2p.crypto format
 	key := crypto.PubKey((*crypto.Secp256k1PublicKey)(node.Pubkey()))
@@ -28,6 +40,7 @@ func EnodeToMultiAddr(node *Node) (multiaddr.Multiaddr, error) {
 	if parsedIP := net.ParseIP(ipAddr); parsedIP.To4() != nil {
 		ipProto = "ip4"
 	}
+	//return multiaddr.NewMultiaddr(fmt.Sprintf("/%s/%s/%s/%d/p2p/%s", ipProto, ipAddr, "tcp", uint(libp2pPort), id.String()))
 	return multiaddr.NewMultiaddr(fmt.Sprintf("/%s/%s/%s/%d/p2p/%s", ipProto, ipAddr, "tcp", uint(libp2pPort), id.String()))
 }
 

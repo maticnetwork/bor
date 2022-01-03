@@ -114,6 +114,12 @@ type P2PConfig struct {
 
 	// Discovery has the p2p discovery related settings
 	Discovery *P2PDiscovery `hcl:"discovery,block"`
+
+	// LibP2PPort is the libp2p port
+	LibP2PPort uint64 `hcl:"libp2p,optional"`
+
+	// Join is the list of addresses to try to connect first
+	Join []string `hcl:"join,optional"`
 }
 
 type P2PDiscovery struct {
@@ -776,6 +782,7 @@ func (c *Config) buildNode() (*node.Config, error) {
 			MaxPendingPeers: int(c.P2P.MaxPendPeers),
 			ListenAddr:      c.P2P.Bind + ":" + strconv.Itoa(int(c.P2P.Port)),
 			DiscoveryV5:     c.P2P.Discovery.V5Enabled,
+			LibP2PPort:      int64(c.P2P.LibP2PPort),
 		},
 		HTTPModules:         c.JsonRPC.Modules,
 		HTTPCors:            c.JsonRPC.Cors,
@@ -809,6 +816,10 @@ func (c *Config) buildNode() (*node.Config, error) {
 	// Discovery
 	// if no bootnodes are defined, use the ones from the chain file.
 	bootnodes := c.P2P.Discovery.Bootnodes
+
+	fmt.Println("xxx")
+	fmt.Println(bootnodes)
+
 	if len(bootnodes) == 0 {
 		bootnodes = c.chain.Bootnodes
 	}

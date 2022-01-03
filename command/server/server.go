@@ -21,6 +21,7 @@ import (
 	"github.com/ethereum/go-ethereum/metrics/influxdb"
 	"github.com/ethereum/go-ethereum/metrics/prometheus"
 	"github.com/ethereum/go-ethereum/node"
+	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/mattn/go-colorable"
 	"github.com/mattn/go-isatty"
 	"go.opentelemetry.io/otel"
@@ -122,6 +123,19 @@ func NewServer(config *Config) (*Server, error) {
 	if err := srv.node.Start(); err != nil {
 		return nil, err
 	}
+
+	// join the nodes if any
+	if len(config.P2P.Join) != 0 {
+		for _, peer := range config.P2P.Join {
+			enodePeer, err := enode.Parse(enode.ValidSchemes, peer)
+			if err != nil {
+				return nil, fmt.Errorf("invalid join enode '%s': %v", peer, err)
+			}
+			// joins the node as static
+			srv.node.Server().AddPeer(enodePeer)
+		}
+	}
+
 	return srv, nil
 }
 

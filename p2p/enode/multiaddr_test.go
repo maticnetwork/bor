@@ -12,4 +12,5 @@ func TestMultiAddr(t *testing.T) {
 	ma, err := EnodeToMultiAddr(enode)
 	assert.NoError(t, err)
 	assert.Equal(t, ma.String(), "/ip6/::/tcp/2525/p2p/16Uiu2HAmEfWq7SDmG1FmstB4MdGc2CXvnWWNFUTR2RvEf1guiF6a")
+	assert.True(t, enode.IsMultiAddr())
 }

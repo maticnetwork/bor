@@ -19,6 +19,7 @@ package p2p
 
 import (
 	"bytes"
+	"context"
 	"crypto/ecdsa"
 	"encoding/hex"
 	"errors"
@@ -39,6 +40,11 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/ethereum/go-ethereum/p2p/nat"
 	"github.com/ethereum/go-ethereum/p2p/netutil"
+	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p-core/host"
+	"github.com/libp2p/go-libp2p-core/network"
+	"github.com/libp2p/go-libp2p-core/peer"
+	"github.com/multiformats/go-multiaddr"
 )
 
 const (
@@ -155,6 +161,8 @@ type Config struct {
 	// Logger is a custom logger to use with the p2p.Server.
 	Logger log.Logger `toml:",omitempty"`
 
+	LibP2PPort int64
+
 	clock mclock.Clock
 }
 
@@ -197,6 +205,10 @@ type Server struct {
 
 	// State of run loop and listenLoop.
 	inboundHistory expHeap
+
+	// Bor
+	libp2p host.Host
+	connCh map[peer.ID]chan struct{}
 }
 
 type peerOpFunc func(map[enode.ID]*Peer)
@@ -478,6 +490,11 @@ func (srv *Server) Start() (err error) {
 			return err
 		}
 	}
+	// TODO before any dialing
+	if err := srv.setupLibP2P(); err != nil {
+		return err
+	}
+
 	if err := srv.setupDiscovery(); err != nil {
 		return err
 	}
@@ -485,6 +502,139 @@ func (srv *Server) Start() (err error) {
 
 	srv.loopWG.Add(1)
 	go srv.run()
+	return nil
+}
+
+func (srv *Server) setupLibP2P() error {
+	if srv.Config.LibP2PPort == 0 {
+		return nil
+	}
+
+	// at this point the local node address already has the libp2p port and can be
+	// converted into a multiaddress
+	node := srv.localnode.Node()
+	if !node.IsMultiAddr() {
+		panic("LibP2P enabled but not multiaddr? BUG")
+	}
+
+	var libp2pPort enode.LibP2PEntry
+	if err := node.Load(&libp2pPort); err != nil {
+		panic(err)
+	}
+
+	// to listen the address we need to remove the p2p part
+	listenAddr, err := multiaddr.NewMultiaddr(fmt.Sprintf("/ip4/%s/tcp/%d", "127.0.0.1", libp2pPort))
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println("_ LISTEN LIBP2P _")
+	fmt.Println(listenAddr)
+	fmt.Println(node.GetMultiAddr())
+
+	// start libp2p
+	host, err := libp2p.New(
+		context.Background(),
+		// libp2p.Security(noise.ID, noise.New),
+		libp2p.ListenAddrs(listenAddr),
+		libp2p.Identity(toLibP2PCrypto(srv.PrivateKey)),
+		// libp2p.Transport(tcp.NewTCPTransport),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create libp2p stack: %v", err)
+	}
+
+	srv.connCh = map[peer.ID]chan struct{}{}
+
+	host.Network().Notify(&network.NotifyBundle{
+		ConnectedF: func(net network.Network, conn network.Conn) {
+			// TODO: Handshake goes here
+
+			fmt.Println("__ CONN __")
+			fmt.Println(conn.Stat().Direction, conn.RemotePeer())
+
+			if conn.Stat().Direction == network.DirOutbound {
+				// it goes outbound, we opened it, there is a channel here
+				ch, ok := srv.connCh[conn.RemotePeer()]
+				if !ok {
+					panic("channel not found")
+				}
+				close(ch)
+			}
+		},
+	})
+
+	srv.libp2p = host
+
+	fmt.Println("_ START _")
+
+	/// start a handler for legacy now since it needs to be active
+	srv.libp2p.SetStreamHandler(legacyProto, func(stream network.Stream) {
+		// TODO: wrap this to check if the peer is valid (polygon-sdk does this)
+		fmt.Println("_--xx--")
+	})
+
+	return nil
+}
+
+const legacyProto = "legacy/0.1"
+
+func (srv *Server) libp2pConnect(node *enode.Node) error {
+	mAddr, err := node.GetMultiAddr()
+	if err != nil {
+		panic(err)
+	}
+
+	addrInfo, err := peer.AddrInfoFromP2pAddr(mAddr)
+	if err != nil {
+		panic(err)
+	}
+
+	fmt.Println("__DIAL LibP2P__")
+	fmt.Println(mAddr, addrInfo.ID)
+
+	//addrInfo := &peer.AddrInfo{
+	//		Addrs: []multiaddr.Multiaddr{mAddr},
+	//}
+
+	waitCh := make(chan struct{})
+	srv.connCh[addrInfo.ID] = waitCh
+
+	if err := srv.libp2p.Connect(context.Background(), *addrInfo); err != nil {
+		// this means that it could not connect
+		delete(srv.connCh, addrInfo.ID)
+		panic(err)
+	}
+
+	// wait for handler and get conn reference
+	<-waitCh
+
+	// THIS FLOW IS WEIRD, IT SEEMS THAT BOTH ENDS OPEN CONNECTION STREAMS AT THE SAME TIME?
+	// NORMALLY, OPENNING A STREAM WOULD BE DONE IN A LAZY MANNER.
+
+	stream, err := srv.libp2p.NewStream(context.Background(), addrInfo.ID, legacyProto)
+	if err != nil {
+		panic(err)
+	}
+
+	tt := &libp2pTransport{
+		remoteAddr: &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 30304}, // HARDCODE
+		localAddr:  &net.TCPAddr{IP: net.ParseIP("127.0.0.1"), Port: 40304}, // HARDCODE
+		stream:     stream,
+	}
+	tt.init()
+
+	c := &conn{
+		node:      node,
+		fd:        tt,
+		transport: tt,
+		caps:      []Cap{}, // handle in handshake it
+	}
+	err = srv.checkpoint(c, srv.checkpointAddPeer)
+	if err != nil {
+		panic(err)
+	}
+
 	return nil
 }
 
@@ -628,11 +778,28 @@ func (srv *Server) setupDialScheduler() {
 		config.resolver = srv.ntab
 	}
 	if config.dialer == nil {
-		config.dialer = tcpDialer{&net.Dialer{Timeout: defaultDialTimeout}}
+		config.dialer = srv
 	}
 	srv.dialsched = newDialScheduler(config, srv.discmix, srv.SetupConn)
 	for _, n := range srv.StaticNodes {
 		srv.dialsched.addStatic(n)
+	}
+}
+
+// BOR
+func (srv *Server) Dial(ctx context.Context, enode *enode.Node) (net.Conn, error) {
+	fmt.Println("DIAL", enode.String())
+
+	// Instead of using the tcp dialer (which only works for rlpx) we use a custom dialer to call libp2p too
+
+	if enode.IsMultiAddr() {
+		// libp2p address, return an empty connection, then, dial manager calls SetupConn in Server where we
+		// will make the connection
+		return nil, nil
+	} else {
+		// rlpx address
+		dialer := &tcpDialer{&net.Dialer{Timeout: defaultDialTimeout}}
+		return dialer.Dial(ctx, enode)
 	}
 }
 
@@ -674,6 +841,11 @@ func (srv *Server) setupListening() error {
 				srv.loopWG.Done()
 			}()
 		}
+	}
+
+	// BOR: Set the libp2p port in the localNode
+	if srv.Config.LibP2PPort != 0 {
+		srv.LocalNode().Set(enode.LibP2PEntry(srv.Config.LibP2PPort))
 	}
 
 	srv.loopWG.Add(1)
@@ -750,9 +922,11 @@ running:
 			c.cont <- srv.postHandshakeChecks(peers, inboundCount, c)
 
 		case c := <-srv.checkpointAddPeer:
+			fmt.Println("_ add peer _")
 			// At this point the connection is past the protocol handshake.
 			// Its capabilities are known and the remote identity is verified.
 			err := srv.addPeerChecks(peers, inboundCount, c)
+			fmt.Println(err)
 			if err == nil {
 				// The handshakes are done and it passed all checks.
 				p := srv.launchPeer(c)
@@ -818,7 +992,8 @@ func (srv *Server) postHandshakeChecks(peers map[enode.ID]*Peer, inboundCount in
 func (srv *Server) addPeerChecks(peers map[enode.ID]*Peer, inboundCount int, c *conn) error {
 	// Drop connections with no matching protocols.
 	if len(srv.Protocols) > 0 && countMatchingProtocols(srv.Protocols, c.caps) == 0 {
-		return DiscUselessPeer
+		// BOR: TODO: Enable this again
+		// return DiscUselessPeer
 	}
 	// Repeat the post-handshake checks because the
 	// peer set might have changed since those checks were performed.
@@ -919,6 +1094,19 @@ func (srv *Server) checkInboundConn(remoteIP net.IP) error {
 // as a peer. It returns when the connection has been added as a peer
 // or the handshakes have failed.
 func (srv *Server) SetupConn(fd net.Conn, flags connFlag, dialDest *enode.Node) error {
+	if fd == nil {
+		// Bor, the connection is being made to a LibP2P node and we are not establishing the conn yet
+		if !dialDest.IsMultiAddr() {
+			panic("Multiaddr expected")
+		}
+
+		// connect... (this is async, needs to be converted to sync)
+		if err := srv.libp2pConnect(dialDest); err != nil {
+			panic(err)
+		}
+		return nil
+	}
+
 	c := &conn{fd: fd, flags: flags, cont: make(chan error)}
 	if dialDest == nil {
 		c.transport = srv.newTransport(fd, nil)

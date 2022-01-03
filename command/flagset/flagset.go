@@ -158,6 +158,9 @@ func (i *SliceStringFlag) String() string {
 }
 
 func (i *SliceStringFlag) Set(value string) error {
+	fmt.Println("- set -")
+	fmt.Println(value)
+
 	*i.Value = append(*i.Value, strings.Split(value, ",")...)
 	return nil
 }

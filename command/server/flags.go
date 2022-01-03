@@ -359,6 +359,16 @@ func (c *Command) Flags() *flagset.Flagset {
 		Usage: "Enables the experimental RLPx V5 (Topic Discovery) mechanism",
 		Value: &c.cliConfig.P2P.Discovery.V5Enabled,
 	})
+	f.Uint64Flag(&flagset.Uint64Flag{
+		Name:  "libp2p.port",
+		Usage: "LibP2P network listening port",
+		Value: &c.cliConfig.P2P.LibP2PPort,
+	})
+	f.SliceStringFlag(&flagset.SliceStringFlag{
+		Name:  "join",
+		Usage: "List of addresses to join",
+		Value: &c.cliConfig.P2P.Join,
+	})
 
 	// metrics
 	f.BoolFlag(&flagset.BoolFlag{
