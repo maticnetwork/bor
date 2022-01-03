@@ -204,12 +204,15 @@ func (n *Node) URLv4() string {
 		u.User = url.User(nodeid)
 		u.Host = addr.String()
 		if n.UDP() != n.TCP() {
-			u.RawQuery = "discport=" + strconv.Itoa(n.UDP()) + "&"
+			u.RawQuery = "discport=" + strconv.Itoa(n.UDP())
 		}
 
 		// BOR
 		var libp2pPort LibP2PEntry
 		if err := n.Load(&libp2pPort); err == nil {
+			if n.UDP() != n.TCP() {
+				u.RawQuery += "&" // ?discport=xxx&libp2p=yyy
+			}
 			u.RawQuery = "libp2p=" + strconv.Itoa(int(libp2pPort))
 		}
 	}

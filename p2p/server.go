@@ -209,6 +209,9 @@ type Server struct {
 	// Bor
 	libp2p host.Host
 	connCh map[peer.ID]chan struct{}
+
+	// new fields
+	trusted *sync.Map
 }
 
 type peerOpFunc func(map[enode.ID]*Peer)
@@ -873,12 +876,14 @@ func (srv *Server) run() {
 	var (
 		peers        = make(map[enode.ID]*Peer)
 		inboundCount = 0
-		trusted      = make(map[enode.ID]bool, len(srv.TrustedNodes))
 	)
+
+	srv.trusted = &sync.Map{}
+
 	// Put trusted nodes into a map to speed up checks.
 	// Trusted peers are loaded on startup or added via AddTrustedPeer RPC.
 	for _, n := range srv.TrustedNodes {
-		trusted[n.ID()] = true
+		srv.trusted.Store(n.ID(), true)
 	}
 
 running:
@@ -892,7 +897,7 @@ running:
 			// This channel is used by AddTrustedPeer to add a node
 			// to the trusted node set.
 			srv.log.Trace("Adding trusted node", "node", n)
-			trusted[n.ID()] = true
+			srv.trusted.Store(n.ID(), true)
 			if p, ok := peers[n.ID()]; ok {
 				p.rw.set(trustedConn, true)
 			}
@@ -901,7 +906,7 @@ running:
 			// This channel is used by RemoveTrustedPeer to remove a node
 			// from the trusted node set.
 			srv.log.Trace("Removing trusted node", "node", n)
-			delete(trusted, n.ID())
+			srv.trusted.Delete(n.ID())
 			if p, ok := peers[n.ID()]; ok {
 				p.rw.set(trustedConn, false)
 			}
@@ -914,7 +919,7 @@ running:
 		case c := <-srv.checkpointPostHandshake:
 			// A connection has passed the encryption handshake so
 			// the remote identity is known (but hasn't been verified yet).
-			if trusted[c.node.ID()] {
+			if _, ok := srv.trusted.Load(c.node.ID()); ok {
 				// Ensure that the trusted flag is set before checking against MaxPeers.
 				c.flags |= trustedConn
 			}
