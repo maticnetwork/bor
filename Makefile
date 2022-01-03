@@ -28,6 +28,10 @@ bor:
 	cp $(GOBIN)/geth $(GOBIN)/bor
 	cp $(GOBIN)/* $(GOPATH)/bin/
 
+download-spec-tests:
+	git submodule init
+	git submodule update
+
 geth:
 	$(GORUN) build/ci.go install ./cmd/geth
 	@echo "Done building."
