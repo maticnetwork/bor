@@ -169,7 +169,7 @@ type Config struct {
 // Server manages all peer connections.
 type Server struct {
 	// Config fields may not be modified while the server is running.
-	Config
+	Config // TODO: THIS INLINE IS UGLY
 
 	// Hooks for testing. These are useful because we can inhibit
 	// the whole protocol stack.
@@ -194,14 +194,14 @@ type Server struct {
 	dialsched *dialScheduler
 
 	// Channels into the run loop.
-	quit                    chan struct{}
-	addtrusted              chan *enode.Node
-	removetrusted           chan *enode.Node
-	peerOp                  chan peerOpFunc
-	peerOpDone              chan struct{}
-	delpeer                 chan peerDrop
-	checkpointPostHandshake chan *conn
-	checkpointAddPeer       chan *conn
+	quit chan struct{}
+	//addtrusted    chan *enode.Node // REMOVE
+	//removetrusted chan *enode.Node // REMOVE
+	//peerOp                  chan peerOpFunc
+	//peerOpDone              chan struct{}
+	//delpeer                 chan peerDrop // REMOVE
+	checkpointPostHandshake chan *conn // REMOVE
+	checkpointAddPeer       chan *conn // REMOVE
 
 	// State of run loop and listenLoop.
 	inboundHistory expHeap
@@ -212,6 +212,10 @@ type Server struct {
 
 	// new fields
 	trusted *sync.Map
+
+	peers        map[enode.ID]*Peer
+	peersLock    sync.Mutex
+	inboundCount int64
 }
 
 type peerOpFunc func(map[enode.ID]*Peer)
@@ -313,22 +317,28 @@ func (srv *Server) LocalNode() *enode.LocalNode {
 
 // Peers returns all connected peers.
 func (srv *Server) Peers() []*Peer {
+	srv.peersLock.Lock()
+	defer srv.peersLock.Unlock()
+
 	var ps []*Peer
-	srv.doPeerOp(func(peers map[enode.ID]*Peer) {
-		for _, p := range peers {
-			ps = append(ps, p)
-		}
-	})
+	//srv.doPeerOp(func(peers map[enode.ID]*Peer) {
+	for _, p := range srv.peers {
+		ps = append(ps, p)
+	}
+	//})
 	return ps
 }
 
 // PeerCount returns the number of connected peers.
 func (srv *Server) PeerCount() int {
-	var count int
-	srv.doPeerOp(func(ps map[enode.ID]*Peer) {
-		count = len(ps)
-	})
-	return count
+	return srv.lenPeers()
+	/*
+		var count int
+		srv.doPeerOp(func(ps map[enode.ID]*Peer) {
+			count = len(ps)
+		})
+		return count
+	*/
 }
 
 // AddPeer adds the given node to the static node set. When there is room in the peer set,
@@ -344,19 +354,25 @@ func (srv *Server) AddPeer(node *enode.Node) {
 // This method blocks until all protocols have exited and the peer is removed. Do not use
 // RemovePeer in protocol implementations, call Disconnect on the Peer instead.
 func (srv *Server) RemovePeer(node *enode.Node) {
+	srv.peersLock.Lock()
+
 	var (
 		ch  chan *PeerEvent
 		sub event.Subscription
 	)
 	// Disconnect the peer on the main loop.
-	srv.doPeerOp(func(peers map[enode.ID]*Peer) {
-		srv.dialsched.removeStatic(node)
-		if peer := peers[node.ID()]; peer != nil {
-			ch = make(chan *PeerEvent, 1)
-			sub = srv.peerFeed.Subscribe(ch)
-			peer.Disconnect(DiscRequested)
-		}
-	})
+	//srv.doPeerOp(func(peers map[enode.ID]*Peer) {
+	srv.dialsched.removeStatic(node)
+	if peer, ok := srv.peers[node.ID()]; ok {
+		ch = make(chan *PeerEvent, 1)
+		sub = srv.peerFeed.Subscribe(ch)
+		peer.Disconnect(DiscRequested)
+	}
+
+	// THIS, BE CAREFUL
+	srv.peersLock.Unlock()
+
+	//})
 	// Wait for the peer connection to end.
 	if ch != nil {
 		defer sub.Unsubscribe()
@@ -371,18 +387,31 @@ func (srv *Server) RemovePeer(node *enode.Node) {
 // AddTrustedPeer adds the given node to a reserved trusted list which allows the
 // node to always connect, even if the slot are full.
 func (srv *Server) AddTrustedPeer(node *enode.Node) {
-	select {
-	case srv.addtrusted <- node:
-	case <-srv.quit:
-	}
+	srv.log.Trace("Adding trusted node", "node", node)
+	srv.trusted.Store(node.ID(), true)
+	srv.setTrusted(node.ID(), true)
+
+	/*
+		select {
+		case srv.addtrusted <- node:
+		case <-srv.quit:
+		}
+	*/
 }
 
 // RemoveTrustedPeer removes the given node from the trusted peer set.
 func (srv *Server) RemoveTrustedPeer(node *enode.Node) {
-	select {
-	case srv.removetrusted <- node:
-	case <-srv.quit:
-	}
+	/*
+		select {
+		case srv.removetrusted <- node:
+		case <-srv.quit:
+		}
+	*/
+	// This channel is used by RemoveTrustedPeer to remove a node
+	// from the trusted node set.
+	srv.log.Trace("Removing trusted node", "node", node)
+	srv.trusted.Delete(node.ID())
+	srv.setTrusted(node.ID(), false)
 }
 
 // SubscribeEvents subscribes the given channel to peer events
@@ -477,13 +506,13 @@ func (srv *Server) Start() (err error) {
 		srv.listenFunc = net.Listen
 	}
 	srv.quit = make(chan struct{})
-	srv.delpeer = make(chan peerDrop)
+	//srv.delpeer = make(chan peerDrop)
 	srv.checkpointPostHandshake = make(chan *conn)
 	srv.checkpointAddPeer = make(chan *conn)
-	srv.addtrusted = make(chan *enode.Node)
-	srv.removetrusted = make(chan *enode.Node)
-	srv.peerOp = make(chan peerOpFunc)
-	srv.peerOpDone = make(chan struct{})
+	//srv.addtrusted = make(chan *enode.Node)
+	//srv.removetrusted = make(chan *enode.Node)
+	//srv.peerOp = make(chan peerOpFunc)
+	//srv.peerOpDone = make(chan struct{})
 
 	if err := srv.setupLocalNode(); err != nil {
 		return err
@@ -856,12 +885,54 @@ func (srv *Server) setupListening() error {
 	return nil
 }
 
+/*
 // doPeerOp runs fn on the main loop.
 func (srv *Server) doPeerOp(fn peerOpFunc) {
 	select {
 	case srv.peerOp <- fn:
 		<-srv.peerOpDone
 	case <-srv.quit:
+	}
+}
+*/
+
+func (srv *Server) peerExists(id enode.ID) bool {
+	srv.peersLock.Lock()
+	defer srv.peersLock.Unlock()
+
+	_, ok := srv.peers[id]
+	return ok
+}
+
+func (srv *Server) lenPeers() int {
+	srv.peersLock.Lock()
+	defer srv.peersLock.Unlock()
+
+	num := len(srv.peers)
+	return num
+}
+
+func (srv *Server) peerDelete(id enode.ID) {
+	// this only does the op to remove it from the list
+	srv.peersLock.Lock()
+	defer srv.peersLock.Unlock()
+
+	delete(srv.peers, id)
+}
+
+func (srv *Server) peerAdd(id enode.ID, p *Peer) {
+	srv.peersLock.Lock()
+	defer srv.peersLock.Unlock()
+
+	srv.peers[id] = p
+}
+
+func (srv *Server) setTrusted(id enode.ID, trusted bool) {
+	srv.peersLock.Lock()
+	defer srv.peersLock.Unlock()
+
+	if p, ok := srv.peers[id]; ok {
+		p.rw.set(trustedConn, trusted)
 	}
 }
 
@@ -873,9 +944,11 @@ func (srv *Server) run() {
 	defer srv.discmix.Close()
 	defer srv.dialsched.stop()
 
+	srv.peers = make(map[enode.ID]*Peer)
+
 	var (
-		peers        = make(map[enode.ID]*Peer)
-		inboundCount = 0
+	//	peers        = make(map[enode.ID]*Peer)
+	// inboundCount = 0
 	)
 
 	srv.trusted = &sync.Map{}
@@ -893,28 +966,32 @@ running:
 			// The server was stopped. Run the cleanup logic.
 			break running
 
-		case n := <-srv.addtrusted:
-			// This channel is used by AddTrustedPeer to add a node
-			// to the trusted node set.
-			srv.log.Trace("Adding trusted node", "node", n)
-			srv.trusted.Store(n.ID(), true)
-			if p, ok := peers[n.ID()]; ok {
-				p.rw.set(trustedConn, true)
-			}
+		/*
+			case n := <-srv.addtrusted:
+				// This channel is used by AddTrustedPeer to add a node
+				// to the trusted node set.
+				srv.log.Trace("Adding trusted node", "node", n)
+				srv.trusted.Store(n.ID(), true)
+				srv.setTrusted(n.ID(), true)
 
-		case n := <-srv.removetrusted:
-			// This channel is used by RemoveTrustedPeer to remove a node
-			// from the trusted node set.
-			srv.log.Trace("Removing trusted node", "node", n)
-			srv.trusted.Delete(n.ID())
-			if p, ok := peers[n.ID()]; ok {
-				p.rw.set(trustedConn, false)
-			}
+				fmt.Println("- is trusted ?")
+				fmt.Println(srv.trusted.Load(n.ID()))
 
-		case op := <-srv.peerOp:
-			// This channel is used by Peers and PeerCount.
-			op(peers)
-			srv.peerOpDone <- struct{}{}
+			case n := <-srv.removetrusted:
+				// This channel is used by RemoveTrustedPeer to remove a node
+				// from the trusted node set.
+				srv.log.Trace("Removing trusted node", "node", n)
+				srv.trusted.Delete(n.ID())
+				srv.setTrusted(n.ID(), false)
+		*/
+
+		/*
+			case op := <-srv.peerOp:
+				// This channel is used by Peers and PeerCount.
+				panic("DO NOT DO THIS")
+				op(peers)
+				srv.peerOpDone <- struct{}{}
+		*/
 
 		case c := <-srv.checkpointPostHandshake:
 			// A connection has passed the encryption handshake so
@@ -924,33 +1001,38 @@ running:
 				c.flags |= trustedConn
 			}
 			// TODO: track in-progress inbound node IDs (pre-Peer) to avoid dialing them.
-			c.cont <- srv.postHandshakeChecks(peers, inboundCount, c)
+			c.cont <- srv.postHandshakeChecks(c)
 
 		case c := <-srv.checkpointAddPeer:
 			// At this point the connection is past the protocol handshake.
 			// Its capabilities are known and the remote identity is verified.
-			err := srv.addPeerChecks(peers, inboundCount, c)
+			err := srv.addPeerChecks(c)
 			if err == nil {
 				// The handshakes are done and it passed all checks.
 				p := srv.launchPeer(c)
-				peers[c.node.ID()] = p
-				srv.log.Debug("Adding p2p peer", "peercount", len(peers), "id", p.ID(), "conn", c.flags, "addr", p.RemoteAddr(), "name", p.Name())
+				srv.peerAdd(c.node.ID(), p)
+				srv.log.Debug("Adding p2p peer", "peercount", srv.lenPeers(), "id", p.ID(), "conn", c.flags, "addr", p.RemoteAddr(), "name", p.Name())
 				srv.dialsched.peerAdded(c)
 				if p.Inbound() {
-					inboundCount++
+					srv.addInbound()
 				}
 			}
 			c.cont <- err
 
-		case pd := <-srv.delpeer:
-			// A peer disconnected.
-			d := common.PrettyDuration(mclock.Now() - pd.created)
-			delete(peers, pd.ID())
-			srv.log.Debug("Removing p2p peer", "peercount", len(peers), "id", pd.ID(), "duration", d, "req", pd.requested, "err", pd.err)
-			srv.dialsched.peerRemoved(pd.rw)
-			if pd.Inbound() {
-				inboundCount--
-			}
+			/*
+				case pd := <-srv.delpeer:
+					fmt.Println("_ delete peer in channel _", pd.ID())
+
+					// A peer disconnected.
+					d := common.PrettyDuration(mclock.Now() - pd.created)
+					srv.peerDelete(pd.ID())
+					srv.log.Debug("Removing p2p peer", "peercount", srv.lenPeers(), "id", pd.ID(), "duration", d, "req", pd.requested, "err", pd.err)
+					srv.dialsched.peerRemoved(pd.rw)
+					if pd.Inbound() {
+						inboundCount--
+					}
+			*/
+
 		}
 	}
 
@@ -964,26 +1046,51 @@ running:
 		srv.DiscV5.Close()
 	}
 	// Disconnect all peers.
-	for _, p := range peers {
+	for _, p := range srv.peers {
 		p.Disconnect(DiscQuitting)
 	}
 	// Wait for peers to shut down. Pending connections and tasks are
 	// not handled here and will terminate soon-ish because srv.quit
 	// is closed.
-	for len(peers) > 0 {
-		p := <-srv.delpeer
-		p.log.Trace("<-delpeer (spindown)")
-		delete(peers, p.ID())
+	for len(srv.peers) > 0 {
+		// TODO: IMPORTANT
+
+		//p := <-srv.delpeer
+		//p.log.Trace("<-delpeer (spindown)")
+		//delete(srv.peers, p.ID())
 	}
 }
 
-func (srv *Server) postHandshakeChecks(peers map[enode.ID]*Peer, inboundCount int, c *conn) error {
+func (srv *Server) addInbound() {
+	atomic.AddInt64(&srv.inboundCount, 1)
+}
+
+func (srv *Server) delInbound() {
+	atomic.AddInt64(&srv.inboundCount, -1)
+}
+
+func (srv *Server) getInbound() int64 {
+	return atomic.LoadInt64(&srv.inboundCount)
+}
+
+func (srv *Server) oldDelPeer(pd peerDrop) {
+	// A peer disconnected.
+	d := common.PrettyDuration(mclock.Now() - pd.created)
+	srv.peerDelete(pd.ID())
+	srv.log.Debug("Removing p2p peer", "peercount", srv.lenPeers(), "id", pd.ID(), "duration", d, "req", pd.requested, "err", pd.err)
+	srv.dialsched.peerRemoved(pd.rw)
+	if pd.Inbound() {
+		srv.delInbound()
+	}
+}
+
+func (srv *Server) postHandshakeChecks(c *conn) error {
 	switch {
-	case !c.is(trustedConn) && len(peers) >= srv.MaxPeers:
+	case !c.is(trustedConn) && srv.lenPeers() >= srv.MaxPeers:
 		return DiscTooManyPeers
-	case !c.is(trustedConn) && c.is(inboundConn) && inboundCount >= srv.maxInboundConns():
+	case !c.is(trustedConn) && c.is(inboundConn) && int(srv.getInbound()) >= srv.maxInboundConns():
 		return DiscTooManyPeers
-	case peers[c.node.ID()] != nil:
+	case srv.peerExists(c.node.ID()):
 		return DiscAlreadyConnected
 	case c.node.ID() == srv.localnode.ID():
 		return DiscSelf
@@ -992,7 +1099,7 @@ func (srv *Server) postHandshakeChecks(peers map[enode.ID]*Peer, inboundCount in
 	}
 }
 
-func (srv *Server) addPeerChecks(peers map[enode.ID]*Peer, inboundCount int, c *conn) error {
+func (srv *Server) addPeerChecks(c *conn) error {
 	// Drop connections with no matching protocols.
 	if len(srv.Protocols) > 0 && countMatchingProtocols(srv.Protocols, c.caps) == 0 {
 		// BOR: TODO: Enable this again
@@ -1000,7 +1107,7 @@ func (srv *Server) addPeerChecks(peers map[enode.ID]*Peer, inboundCount int, c *
 	}
 	// Repeat the post-handshake checks because the
 	// peer set might have changed since those checks were performed.
-	return srv.postHandshakeChecks(peers, inboundCount, c)
+	return srv.postHandshakeChecks(c)
 }
 
 // listenLoop runs in its own goroutine and accepts
@@ -1232,7 +1339,8 @@ func (srv *Server) runPeer(p *Peer) {
 	// Announce disconnect on the main loop to update the peer set.
 	// The main loop waits for existing peers to be sent on srv.delpeer
 	// before returning, so this send should not select on srv.quit.
-	srv.delpeer <- peerDrop{p, err, remoteRequested}
+	// srv.delpeer <- peerDrop{p, err, remoteRequested}
+	srv.oldDelPeer(peerDrop{p, err, remoteRequested})
 
 	// Broadcast peer drop to external subscribers. This needs to be
 	// after the send to delpeer so subscribers have a consistent view of
