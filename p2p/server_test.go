@@ -257,25 +257,26 @@ func TestServerAtCap(t *testing.T) {
 		fd, _ := net.Pipe()
 		tx := newTestTransport(&trustedNode.PublicKey, fd, nil)
 		node := enode.SignNull(new(enr.Record), id)
-		return &conn{fd: fd, transport: tx, flags: inboundConn, node: node, cont: make(chan error)}
+		return &conn{fd: fd, transport: tx, flags: inboundConn, node: node /*, cont: make(chan error)*/}
 	}
 
 	// Inject a few connections to fill up the peer set.
 	for i := 0; i < 10; i++ {
 		c := newconn(randomID())
-		if err := srv.checkpoint(c, srv.checkpointAddPeer); err != nil {
+		if err := srv.checkpointAddPeer(c); err != nil {
 			t.Fatalf("could not add conn %d: %v", i, err)
 		}
 	}
+
 	// Try inserting a non-trusted connection.
 	anotherID := randomID()
 	c := newconn(anotherID)
-	if err := srv.checkpoint(c, srv.checkpointPostHandshake); err != DiscTooManyPeers {
+	if err := srv.checkpointPostHandshake(c); err != DiscTooManyPeers {
 		t.Error("wrong error for insert:", err)
 	}
 	// Try inserting a trusted connection.
 	c = newconn(trustedID)
-	if err := srv.checkpoint(c, srv.checkpointPostHandshake); err != nil {
+	if err := srv.checkpointPostHandshake(c); err != nil {
 		t.Error("unexpected error for trusted conn @posthandshake:", err)
 	}
 	if !c.is(trustedConn) {
@@ -285,14 +286,14 @@ func TestServerAtCap(t *testing.T) {
 	// Remove from trusted set and try again
 	srv.RemoveTrustedPeer(newNode(trustedID, ""))
 	c = newconn(trustedID)
-	if err := srv.checkpoint(c, srv.checkpointPostHandshake); err != DiscTooManyPeers {
+	if err := srv.checkpointPostHandshake(c); err != DiscTooManyPeers {
 		t.Error("wrong error for insert:", err)
 	}
 
 	// Add anotherID to trusted set and try again
 	srv.AddTrustedPeer(newNode(anotherID, ""))
 	c = newconn(anotherID)
-	if err := srv.checkpoint(c, srv.checkpointPostHandshake); err != nil {
+	if err := srv.checkpointPostHandshake(c); err != nil {
 		t.Error("unexpected error for trusted conn @posthandshake:", err)
 	}
 	if !c.is(trustedConn) {

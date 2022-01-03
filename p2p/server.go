@@ -200,8 +200,8 @@ type Server struct {
 	//peerOp                  chan peerOpFunc
 	//peerOpDone              chan struct{}
 	//delpeer                 chan peerDrop // REMOVE
-	checkpointPostHandshake chan *conn // REMOVE
-	checkpointAddPeer       chan *conn // REMOVE
+	//checkpointPostHandshake chan *conn // REMOVE
+	//checkpointAddPeer       chan *conn // REMOVE
 
 	// State of run loop and listenLoop.
 	inboundHistory expHeap
@@ -242,9 +242,9 @@ type conn struct {
 	transport
 	node  *enode.Node
 	flags connFlag
-	cont  chan error // The run loop uses cont to signal errors to SetupConn.
-	caps  []Cap      // valid after the protocol handshake
-	name  string     // valid after the protocol handshake
+	//cont  chan error // The run loop uses cont to signal errors to SetupConn.
+	caps []Cap  // valid after the protocol handshake
+	name string // valid after the protocol handshake
 }
 
 type transport interface {
@@ -495,6 +495,15 @@ func (srv *Server) Start() (err error) {
 		srv.log.Warn("P2P server will be useless, neither dialing nor listening")
 	}
 
+	srv.peers = make(map[enode.ID]*Peer)
+	srv.trusted = &sync.Map{}
+
+	// Put trusted nodes into a map to speed up checks.
+	// Trusted peers are loaded on startup or added via AddTrustedPeer RPC.
+	for _, n := range srv.TrustedNodes {
+		srv.trusted.Store(n.ID(), true)
+	}
+
 	// static fields
 	if srv.PrivateKey == nil {
 		return errors.New("Server.PrivateKey must be set to a non-nil key")
@@ -507,8 +516,8 @@ func (srv *Server) Start() (err error) {
 	}
 	srv.quit = make(chan struct{})
 	//srv.delpeer = make(chan peerDrop)
-	srv.checkpointPostHandshake = make(chan *conn)
-	srv.checkpointAddPeer = make(chan *conn)
+	//srv.checkpointPostHandshake = make(chan *conn)
+	//srv.checkpointAddPeer = make(chan *conn)
 	//srv.addtrusted = make(chan *enode.Node)
 	//srv.removetrusted = make(chan *enode.Node)
 	//srv.peerOp = make(chan peerOpFunc)
@@ -662,10 +671,13 @@ func (srv *Server) libp2pConnect(node *enode.Node) error {
 		transport: tt,
 		caps:      []Cap{}, // handle in handshake it
 	}
-	err = srv.checkpoint(c, srv.checkpointAddPeer)
-	if err != nil {
-		panic(err)
-	}
+	/*
+		err = srv.checkpoint(c, srv.checkpointAddPeer)
+		if err != nil {
+			panic(err)
+		}
+	*/
+	fmt.Println(c)
 
 	return nil
 }
@@ -944,20 +956,24 @@ func (srv *Server) run() {
 	defer srv.discmix.Close()
 	defer srv.dialsched.stop()
 
-	srv.peers = make(map[enode.ID]*Peer)
+	/*
+		srv.peers = make(map[enode.ID]*Peer)
 
-	var (
-	//	peers        = make(map[enode.ID]*Peer)
-	// inboundCount = 0
-	)
+		var (
+		//	peers        = make(map[enode.ID]*Peer)
+		// inboundCount = 0
+		)
 
-	srv.trusted = &sync.Map{}
+		srv.trusted = &sync.Map{}
+	*/
 
-	// Put trusted nodes into a map to speed up checks.
-	// Trusted peers are loaded on startup or added via AddTrustedPeer RPC.
-	for _, n := range srv.TrustedNodes {
-		srv.trusted.Store(n.ID(), true)
-	}
+	/*
+		// Put trusted nodes into a map to speed up checks.
+		// Trusted peers are loaded on startup or added via AddTrustedPeer RPC.
+		for _, n := range srv.TrustedNodes {
+			srv.trusted.Store(n.ID(), true)
+		}
+	*/
 
 running:
 	for {
@@ -966,58 +982,61 @@ running:
 			// The server was stopped. Run the cleanup logic.
 			break running
 
-		/*
-			case n := <-srv.addtrusted:
-				// This channel is used by AddTrustedPeer to add a node
-				// to the trusted node set.
-				srv.log.Trace("Adding trusted node", "node", n)
-				srv.trusted.Store(n.ID(), true)
-				srv.setTrusted(n.ID(), true)
+			/*
+				case n := <-srv.addtrusted:
+					// This channel is used by AddTrustedPeer to add a node
+					// to the trusted node set.
+					srv.log.Trace("Adding trusted node", "node", n)
+					srv.trusted.Store(n.ID(), true)
+					srv.setTrusted(n.ID(), true)
 
-				fmt.Println("- is trusted ?")
-				fmt.Println(srv.trusted.Load(n.ID()))
+					fmt.Println("- is trusted ?")
+					fmt.Println(srv.trusted.Load(n.ID()))
 
-			case n := <-srv.removetrusted:
-				// This channel is used by RemoveTrustedPeer to remove a node
-				// from the trusted node set.
-				srv.log.Trace("Removing trusted node", "node", n)
-				srv.trusted.Delete(n.ID())
-				srv.setTrusted(n.ID(), false)
-		*/
+				case n := <-srv.removetrusted:
+					// This channel is used by RemoveTrustedPeer to remove a node
+					// from the trusted node set.
+					srv.log.Trace("Removing trusted node", "node", n)
+					srv.trusted.Delete(n.ID())
+					srv.setTrusted(n.ID(), false)
+			*/
 
-		/*
-			case op := <-srv.peerOp:
-				// This channel is used by Peers and PeerCount.
-				panic("DO NOT DO THIS")
-				op(peers)
-				srv.peerOpDone <- struct{}{}
-		*/
+			/*
+				case op := <-srv.peerOp:
+					// This channel is used by Peers and PeerCount.
+					panic("DO NOT DO THIS")
+					op(peers)
+					srv.peerOpDone <- struct{}{}
+			*/
 
-		case c := <-srv.checkpointPostHandshake:
-			// A connection has passed the encryption handshake so
-			// the remote identity is known (but hasn't been verified yet).
-			if _, ok := srv.trusted.Load(c.node.ID()); ok {
-				// Ensure that the trusted flag is set before checking against MaxPeers.
-				c.flags |= trustedConn
-			}
-			// TODO: track in-progress inbound node IDs (pre-Peer) to avoid dialing them.
-			c.cont <- srv.postHandshakeChecks(c)
+			/*
+				case c := <-srv.checkpointPostHandshake:
+					// A connection has passed the encryption handshake so
+					// the remote identity is known (but hasn't been verified yet).
+					if _, ok := srv.trusted.Load(c.node.ID()); ok {
+						// Ensure that the trusted flag is set before checking against MaxPeers.
+						c.flags |= trustedConn
+					}
+					// TODO: track in-progress inbound node IDs (pre-Peer) to avoid dialing them.
+					c.cont <- srv.postHandshakeChecks(c)
 
-		case c := <-srv.checkpointAddPeer:
-			// At this point the connection is past the protocol handshake.
-			// Its capabilities are known and the remote identity is verified.
-			err := srv.addPeerChecks(c)
-			if err == nil {
-				// The handshakes are done and it passed all checks.
-				p := srv.launchPeer(c)
-				srv.peerAdd(c.node.ID(), p)
-				srv.log.Debug("Adding p2p peer", "peercount", srv.lenPeers(), "id", p.ID(), "conn", c.flags, "addr", p.RemoteAddr(), "name", p.Name())
-				srv.dialsched.peerAdded(c)
-				if p.Inbound() {
-					srv.addInbound()
-				}
-			}
-			c.cont <- err
+				case c := <-srv.checkpointAddPeer:
+					// At this point the connection is past the protocol handshake.
+					// Its capabilities are known and the remote identity is verified.
+					err := srv.addPeerChecks(c)
+					if err == nil {
+						// The handshakes are done and it passed all checks.
+						p := srv.launchPeer(c)
+						srv.peerAdd(c.node.ID(), p)
+						srv.log.Debug("Adding p2p peer", "peercount", srv.lenPeers(), "id", p.ID(), "conn", c.flags, "addr", p.RemoteAddr(), "name", p.Name())
+						srv.dialsched.peerAdded(c)
+						if p.Inbound() {
+							srv.addInbound()
+						}
+					}
+					c.cont <- err
+
+			*/
 
 			/*
 				case pd := <-srv.delpeer:
@@ -1217,7 +1236,7 @@ func (srv *Server) SetupConn(fd net.Conn, flags connFlag, dialDest *enode.Node) 
 		return nil
 	}
 
-	c := &conn{fd: fd, flags: flags, cont: make(chan error)}
+	c := &conn{fd: fd, flags: flags /*, cont: make(chan error)*/}
 	if dialDest == nil {
 		c.transport = srv.newTransport(fd, nil)
 	} else {
@@ -1263,8 +1282,7 @@ func (srv *Server) setupConn(c *conn, flags connFlag, dialDest *enode.Node) erro
 		c.node = nodeFromConn(remotePubkey, c.fd)
 	}
 	clog := srv.log.New("id", c.node.ID(), "addr", c.fd.RemoteAddr(), "conn", c.flags)
-	err = srv.checkpoint(c, srv.checkpointPostHandshake)
-	if err != nil {
+	if err := srv.checkpointPostHandshake(c); err != nil {
 		clog.Trace("Rejected peer", "err", err)
 		return err
 	}
@@ -1280,13 +1298,39 @@ func (srv *Server) setupConn(c *conn, flags connFlag, dialDest *enode.Node) erro
 		return DiscUnexpectedIdentity
 	}
 	c.caps, c.name = phs.Caps, phs.Name
-	err = srv.checkpoint(c, srv.checkpointAddPeer)
+	err = srv.checkpointAddPeer(c)
 	if err != nil {
 		clog.Trace("Rejected peer", "err", err)
 		return err
 	}
 
 	return nil
+}
+
+func (srv *Server) checkpointAddPeer(c *conn) error {
+	err := srv.addPeerChecks(c)
+	if err == nil {
+		// The handshakes are done and it passed all checks.
+		p := srv.launchPeer(c)
+		srv.peerAdd(c.node.ID(), p)
+		srv.log.Debug("Adding p2p peer", "peercount", srv.lenPeers(), "id", p.ID(), "conn", c.flags, "addr", p.RemoteAddr(), "name", p.Name())
+		srv.dialsched.peerAdded(c)
+		if p.Inbound() {
+			srv.addInbound()
+		}
+	}
+	return err
+}
+
+func (srv *Server) checkpointPostHandshake(c *conn) error {
+	// A connection has passed the encryption handshake so
+	// the remote identity is known (but hasn't been verified yet).
+	if _, ok := srv.trusted.Load(c.node.ID()); ok {
+		// Ensure that the trusted flag is set before checking against MaxPeers.
+		c.flags |= trustedConn
+	}
+	// TODO: track in-progress inbound node IDs (pre-Peer) to avoid dialing them.
+	return srv.postHandshakeChecks(c)
 }
 
 func nodeFromConn(pubkey *ecdsa.PublicKey, conn net.Conn) *enode.Node {
@@ -1299,6 +1343,7 @@ func nodeFromConn(pubkey *ecdsa.PublicKey, conn net.Conn) *enode.Node {
 	return enode.NewV4(pubkey, ip, port, port)
 }
 
+/*
 // checkpoint sends the conn to run, which performs the
 // post-handshake checks for the stage (posthandshake, addpeer).
 func (srv *Server) checkpoint(c *conn, stage chan<- *conn) error {
@@ -1309,6 +1354,7 @@ func (srv *Server) checkpoint(c *conn, stage chan<- *conn) error {
 	}
 	return <-c.cont
 }
+*/
 
 func (srv *Server) launchPeer(c *conn) *Peer {
 	p := newPeer(srv.log, c, srv.Protocols)
