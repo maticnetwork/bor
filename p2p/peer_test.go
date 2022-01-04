@@ -135,9 +135,9 @@ func TestPeerProtoReadMsg(t *testing.T) {
 	closer, rw, _, errc := testPeer([]Protocol{proto})
 	defer closer()
 
-	Send(rw, baseProtocolLength+2, []uint{1})
-	Send(rw, baseProtocolLength+3, []uint{2})
-	Send(rw, baseProtocolLength+4, []uint{3})
+	Send(rw.transport, baseProtocolLength+2, []uint{1})
+	Send(rw.transport, baseProtocolLength+3, []uint{2})
+	Send(rw.transport, baseProtocolLength+4, []uint{3})
 
 	select {
 	case err := <-errc:
@@ -166,7 +166,7 @@ func TestPeerProtoEncodeMsg(t *testing.T) {
 	closer, rw, _, _ := testPeer([]Protocol{proto})
 	defer closer()
 
-	if err := ExpectMsg(rw, 17, []string{"foo", "bar"}); err != nil {
+	if err := ExpectMsg(rw.transport, 17, []string{"foo", "bar"}); err != nil {
 		t.Error(err)
 	}
 }
@@ -174,10 +174,10 @@ func TestPeerProtoEncodeMsg(t *testing.T) {
 func TestPeerPing(t *testing.T) {
 	closer, rw, _, _ := testPeer(nil)
 	defer closer()
-	if err := SendItems(rw, pingMsg); err != nil {
+	if err := SendItems(rw.transport, pingMsg); err != nil {
 		t.Fatal(err)
 	}
-	if err := ExpectMsg(rw, pongMsg, nil); err != nil {
+	if err := ExpectMsg(rw.transport, pongMsg, nil); err != nil {
 		t.Error(err)
 	}
 }
@@ -188,7 +188,7 @@ func TestPeerDisconnect(t *testing.T) {
 	closer, rw, _, disc := testPeer(nil)
 	defer closer()
 
-	if err := SendItems(rw, discMsg, DiscQuitting); err != nil {
+	if err := SendItems(rw.transport, discMsg, DiscQuitting); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -223,8 +223,8 @@ func TestPeerDisconnectRace(t *testing.T) {
 		})
 
 		// Simulate incoming messages.
-		go SendItems(rw, baseProtocolLength+1)
-		go SendItems(rw, baseProtocolLength+2)
+		go SendItems(rw.transport, baseProtocolLength+1)
+		go SendItems(rw.transport, baseProtocolLength+2)
 		// Close the network connection.
 		go closer()
 		// Make protocol "closereq" return.
@@ -237,7 +237,7 @@ func TestPeerDisconnectRace(t *testing.T) {
 		}
 		// In some cases, simulate remote requesting a disconnect.
 		if maybe() {
-			go SendItems(rw, discMsg, DiscQuitting)
+			go SendItems(rw.transport, discMsg, DiscQuitting)
 		}
 
 		select {

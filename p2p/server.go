@@ -236,10 +236,10 @@ const (
 // conn wraps a network connection with information gathered
 // during the two handshakes.
 type conn struct {
-	fd net.Conn
-	transport
-	node  *enode.Node
-	flags connFlag
+	fd        net.Conn
+	transport transport
+	node      *enode.Node
+	flags     connFlag
 	//cont  chan error // The run loop uses cont to signal errors to SetupConn.
 	caps []Cap  // valid after the protocol handshake
 	name string // valid after the protocol handshake
@@ -1252,7 +1252,7 @@ func (srv *Server) SetupConn(fd net.Conn, flags connFlag, dialDest *enode.Node) 
 
 	err := srv.setupConn(c, flags, dialDest)
 	if err != nil {
-		c.close(err)
+		c.transport.close(err)
 	}
 	return err
 }

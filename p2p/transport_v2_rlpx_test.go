@@ -29,7 +29,7 @@ func TestTranport_Rlpx(t *testing.T) {
 		if err != nil {
 			panic(err)
 		}
-		if err := p.WriteMsg(Msg{Code: 11}); err != nil {
+		if err := p.transport.WriteMsg(Msg{Code: 11}); err != nil {
 			panic(err)
 		}
 	}()
@@ -37,7 +37,7 @@ func TestTranport_Rlpx(t *testing.T) {
 	p1, err := t1.Dial(b2.Enode())
 	assert.NoError(t, err)
 
-	msg, err := p1.ReadMsg()
+	msg, err := p1.transport.ReadMsg()
 	assert.NoError(t, err)
 	assert.Equal(t, msg.Code, uint64(11))
 }

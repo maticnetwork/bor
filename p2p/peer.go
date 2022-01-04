@@ -217,7 +217,7 @@ func (p *Peer) Inbound() bool {
 }
 
 func newPeer(log log.Logger, conn *conn, protocols []Protocol) *Peer {
-	protomap := matchProtocols(protocols, conn.caps, conn)
+	protomap := matchProtocols(protocols, conn.caps, conn.transport)
 	p := &Peer{
 		rw:       conn,
 		running:  protomap,
@@ -279,7 +279,7 @@ loop:
 	}
 
 	close(p.closed)
-	p.rw.close(reason)
+	p.rw.transport.close(reason)
 	p.wg.Wait()
 	return remoteRequested, err
 }
@@ -291,7 +291,7 @@ func (p *Peer) pingLoop() {
 	for {
 		select {
 		case <-ping.C:
-			if err := SendItems(p.rw, pingMsg); err != nil {
+			if err := SendItems(p.rw.transport, pingMsg); err != nil {
 				p.protoErr <- err
 				return
 			}
@@ -305,7 +305,7 @@ func (p *Peer) pingLoop() {
 func (p *Peer) readLoop(errc chan<- error) {
 	defer p.wg.Done()
 	for {
-		msg, err := p.rw.ReadMsg()
+		msg, err := p.rw.transport.ReadMsg()
 		if err != nil {
 			errc <- err
 			return
@@ -322,7 +322,7 @@ func (p *Peer) handle(msg Msg) error {
 	switch {
 	case msg.Code == pingMsg:
 		msg.Discard()
-		go SendItems(p.rw, pongMsg)
+		go SendItems(p.rw.transport, pongMsg)
 	case msg.Code == discMsg:
 		var reason [1]DiscReason
 		// This is the last message. We don't need to discard or
