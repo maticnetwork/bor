@@ -174,7 +174,7 @@ func (p *Peer) Caps() []Cap {
 func (p *Peer) RunningCap(protocol string, versions []uint) bool {
 	if proto, ok := p.running[protocol]; ok {
 		for _, ver := range versions {
-			if proto.Version == ver {
+			if proto.proto.Version == ver {
 				return true
 			}
 		}
@@ -339,7 +339,7 @@ func (p *Peer) handle(msg Msg) error {
 			return fmt.Errorf("msg code out of range: %v", msg.Code)
 		}
 		if metrics.Enabled {
-			m := fmt.Sprintf("%s/%s/%d/%#02x", ingressMeterName, proto.Name, proto.Version, msg.Code-proto.offset)
+			m := fmt.Sprintf("%s/%s/%d/%#02x", ingressMeterName, proto.proto.Name, proto.proto.Version, msg.Code-proto.offset)
 			metrics.GetOrRegisterMeter(m, nil).Mark(int64(msg.meterSize))
 			metrics.GetOrRegisterMeter(m+"/packets", nil).Mark(1)
 		}
@@ -377,10 +377,10 @@ outer:
 			if proto.Name == cap.Name && proto.Version == cap.Version {
 				// If an old protocol version matched, revert it
 				if old := result[cap.Name]; old != nil {
-					offset -= old.Length
+					offset -= old.proto.Length
 				}
 				// Assign the new match
-				result[cap.Name] = &protoRW{Protocol: proto, offset: offset, in: make(chan Msg), w: rw}
+				result[cap.Name] = &protoRW{proto: proto, offset: offset, in: make(chan Msg), w: rw}
 				offset += proto.Length
 
 				continue outer
@@ -399,17 +399,17 @@ func (p *Peer) startProtocols(writeStart <-chan struct{}, writeErr chan<- error)
 		proto.werr = writeErr
 		var rw MsgReadWriter = proto
 		if p.events != nil {
-			rw = newMsgEventer(rw, p.events, p.ID(), proto.Name, p.Info().Network.RemoteAddress, p.Info().Network.LocalAddress)
+			rw = newMsgEventer(rw, p.events, p.ID(), proto.proto.Name, p.Info().Network.RemoteAddress, p.Info().Network.LocalAddress)
 		}
-		p.log.Trace(fmt.Sprintf("Starting protocol %s/%d", proto.Name, proto.Version))
+		p.log.Trace(fmt.Sprintf("Starting protocol %s/%d", proto.proto.Name, proto.proto.Version))
 		go func() {
 			defer p.wg.Done()
-			err := proto.Run(p, rw)
+			err := proto.proto.Run(p, rw)
 			if err == nil {
-				p.log.Trace(fmt.Sprintf("Protocol %s/%d returned", proto.Name, proto.Version))
+				p.log.Trace(fmt.Sprintf("Protocol %s/%d returned", proto.proto.Name, proto.proto.Version))
 				err = errProtocolReturned
 			} else if err != io.EOF {
-				p.log.Trace(fmt.Sprintf("Protocol %s/%d failed", proto.Name, proto.Version), "err", err)
+				p.log.Trace(fmt.Sprintf("Protocol %s/%d failed", proto.proto.Name, proto.proto.Version), "err", err)
 			}
 			p.protoErr <- err
 		}()
@@ -420,7 +420,7 @@ func (p *Peer) startProtocols(writeStart <-chan struct{}, writeErr chan<- error)
 // the given message code.
 func (p *Peer) getProto(code uint64) (*protoRW, error) {
 	for _, proto := range p.running {
-		if code >= proto.offset && code < proto.offset+proto.Length {
+		if code >= proto.offset && code < proto.offset+proto.proto.Length {
 			return proto, nil
 		}
 	}
@@ -428,7 +428,7 @@ func (p *Peer) getProto(code uint64) (*protoRW, error) {
 }
 
 type protoRW struct {
-	Protocol
+	proto  Protocol        // not the best name though
 	in     chan Msg        // receives read messages
 	closed <-chan struct{} // receives when peer is shutting down
 	wstart <-chan struct{} // receives when write may start
@@ -438,10 +438,10 @@ type protoRW struct {
 }
 
 func (rw *protoRW) WriteMsg(msg Msg) (err error) {
-	if msg.Code >= rw.Length {
+	if msg.Code >= rw.proto.Length {
 		return newPeerError(errInvalidMsgCode, "not handled")
 	}
-	msg.meterCap = rw.cap()
+	msg.meterCap = rw.proto.cap()
 	msg.meterCode = msg.Code
 
 	msg.Code += rw.offset
@@ -468,62 +468,4 @@ func (rw *protoRW) ReadMsg() (Msg, error) {
 	case <-rw.closed:
 		return Msg{}, io.EOF
 	}
-}
-
-// PeerInfo represents a short summary of the information known about a connected
-// peer. Sub-protocol independent fields are contained and initialized here, with
-// protocol specifics delegated to all connected sub-protocols.
-type PeerInfo struct {
-	ENR     string   `json:"enr,omitempty"` // Ethereum Node Record
-	Enode   string   `json:"enode"`         // Node URL
-	ID      string   `json:"id"`            // Unique node identifier
-	Name    string   `json:"name"`          // Name of the node, including client type, version, OS, custom data
-	Caps    []string `json:"caps"`          // Protocols advertised by this peer
-	Network struct {
-		LocalAddress  string `json:"localAddress"`  // Local endpoint of the TCP data connection
-		RemoteAddress string `json:"remoteAddress"` // Remote endpoint of the TCP data connection
-		Inbound       bool   `json:"inbound"`
-		Trusted       bool   `json:"trusted"`
-		Static        bool   `json:"static"`
-	} `json:"network"`
-	Protocols map[string]interface{} `json:"protocols"` // Sub-protocol specific metadata fields
-}
-
-// Info gathers and returns a collection of metadata known about a peer.
-func (p *Peer) Info() *PeerInfo {
-	// Gather the protocol capabilities
-	var caps []string
-	for _, cap := range p.Caps() {
-		caps = append(caps, cap.String())
-	}
-	// Assemble the generic peer metadata
-	info := &PeerInfo{
-		Enode:     p.Node().URLv4(),
-		ID:        p.ID().String(),
-		Name:      p.Fullname(),
-		Caps:      caps,
-		Protocols: make(map[string]interface{}),
-	}
-	if p.Node().Seq() > 0 {
-		info.ENR = p.Node().String()
-	}
-	info.Network.LocalAddress = p.LocalAddr().String()
-	info.Network.RemoteAddress = p.RemoteAddr().String()
-	info.Network.Inbound = p.rw.is(inboundConn)
-	info.Network.Trusted = p.rw.is(trustedConn)
-	info.Network.Static = p.rw.is(staticDialedConn)
-
-	// Gather all the running protocol infos
-	for _, proto := range p.running {
-		protoInfo := interface{}("unknown")
-		if query := proto.Protocol.PeerInfo; query != nil {
-			if metadata := query(p.ID()); metadata != nil {
-				protoInfo = metadata
-			} else {
-				protoInfo = "handshake"
-			}
-		}
-		info.Protocols[proto.Name] = protoInfo
-	}
-	return info
 }

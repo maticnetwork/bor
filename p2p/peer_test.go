@@ -292,13 +292,13 @@ func TestMatchProtocols(t *testing.T) {
 			// Some matches, some differences
 			Remote: []Cap{{Name: "local"}, {Name: "match1"}, {Name: "match2"}},
 			Local:  []Protocol{{Name: "match1"}, {Name: "match2"}, {Name: "remote"}},
-			Match:  map[string]protoRW{"match1": {Protocol: Protocol{Name: "match1"}}, "match2": {Protocol: Protocol{Name: "match2"}}},
+			Match:  map[string]protoRW{"match1": {proto: Protocol{Name: "match1"}}, "match2": {proto: Protocol{Name: "match2"}}},
 		},
 		{
 			// Various alphabetical ordering
 			Remote: []Cap{{Name: "aa"}, {Name: "ab"}, {Name: "bb"}, {Name: "ba"}},
 			Local:  []Protocol{{Name: "ba"}, {Name: "bb"}, {Name: "ab"}, {Name: "aa"}},
-			Match:  map[string]protoRW{"aa": {Protocol: Protocol{Name: "aa"}}, "ab": {Protocol: Protocol{Name: "ab"}}, "ba": {Protocol: Protocol{Name: "ba"}}, "bb": {Protocol: Protocol{Name: "bb"}}},
+			Match:  map[string]protoRW{"aa": {proto: Protocol{Name: "aa"}}, "ab": {proto: Protocol{Name: "ab"}}, "ba": {proto: Protocol{Name: "ba"}}, "bb": {proto: Protocol{Name: "bb"}}},
 		},
 		{
 			// No mutual versions
@@ -309,25 +309,25 @@ func TestMatchProtocols(t *testing.T) {
 			// Multiple versions, single common
 			Remote: []Cap{{Version: 1}, {Version: 2}},
 			Local:  []Protocol{{Version: 2}, {Version: 3}},
-			Match:  map[string]protoRW{"": {Protocol: Protocol{Version: 2}}},
+			Match:  map[string]protoRW{"": {proto: Protocol{Version: 2}}},
 		},
 		{
 			// Multiple versions, multiple common
 			Remote: []Cap{{Version: 1}, {Version: 2}, {Version: 3}, {Version: 4}},
 			Local:  []Protocol{{Version: 2}, {Version: 3}},
-			Match:  map[string]protoRW{"": {Protocol: Protocol{Version: 3}}},
+			Match:  map[string]protoRW{"": {proto: Protocol{Version: 3}}},
 		},
 		{
 			// Various version orderings
 			Remote: []Cap{{Version: 4}, {Version: 1}, {Version: 3}, {Version: 2}},
 			Local:  []Protocol{{Version: 2}, {Version: 3}, {Version: 1}},
-			Match:  map[string]protoRW{"": {Protocol: Protocol{Version: 3}}},
+			Match:  map[string]protoRW{"": {proto: Protocol{Version: 3}}},
 		},
 		{
 			// Versions overriding sub-protocol lengths
 			Remote: []Cap{{Version: 1}, {Version: 2}, {Version: 3}, {Name: "a"}},
 			Local:  []Protocol{{Version: 1, Length: 1}, {Version: 2, Length: 2}, {Version: 3, Length: 3}, {Name: "a"}},
-			Match:  map[string]protoRW{"": {Protocol: Protocol{Version: 3}}, "a": {Protocol: Protocol{Name: "a"}, offset: 3}},
+			Match:  map[string]protoRW{"": {proto: Protocol{Version: 3}}, "a": {proto: Protocol{Name: "a"}, offset: 3}},
 		},
 	}
 
@@ -344,11 +344,11 @@ func TestMatchProtocols(t *testing.T) {
 				t.Errorf("test %d, proto '%s': negotiated but shouldn't have", i, name)
 				continue
 			}
-			if proto.Name != match.Name {
-				t.Errorf("test %d, proto '%s': name mismatch: have %v, want %v", i, name, proto.Name, match.Name)
+			if proto.proto.Name != match.proto.Name {
+				t.Errorf("test %d, proto '%s': name mismatch: have %v, want %v", i, name, proto.proto.Name, match.proto.Name)
 			}
-			if proto.Version != match.Version {
-				t.Errorf("test %d, proto '%s': version mismatch: have %v, want %v", i, name, proto.Version, match.Version)
+			if proto.proto.Version != match.proto.Version {
+				t.Errorf("test %d, proto '%s': version mismatch: have %v, want %v", i, name, proto.proto.Version, match.proto.Version)
 			}
 			if proto.offset-baseProtocolLength != match.offset {
 				t.Errorf("test %d, proto '%s': offset mismatch: have %v, want %v", i, name, proto.offset-baseProtocolLength, match.offset)
