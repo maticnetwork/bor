@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"testing"
+	"time"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -12,34 +13,65 @@ import (
 )
 
 func TestTranport_Rlpx(t *testing.T) {
-	b1 := newMockBackend(8000)
+	m1 := &mockProtocol{}
+	b1 := newMockBackend(8000).WithProtocol(m1.Protocol())
 	t1 := &rlpxTransportV2{b: b1}
 	t1.Listen(b1.Addr())
 
-	b2 := newMockBackend(9000)
+	m2 := &mockProtocol{}
+	b2 := newMockBackend(9000).WithProtocol(m2.Protocol())
 	t2 := &rlpxTransportV2{b: b2}
 	t2.Listen(b2.Addr())
 
-	//timeout because no listener
-	//_, err := t1.Dial(b2.Enode())
-	//assert.Error(t, err)
-
 	go func() {
-		p, err := t2.Accept()
-		if err != nil {
+		if _, err := t2.Accept(); err != nil {
 			panic(err)
 		}
-		if err := p.transport.WriteMsg(Msg{Code: 11}); err != nil {
+		proto2 := <-m2.ch
+		if err := proto2.rw.WriteMsg(Msg{Code: 11}); err != nil {
 			panic(err)
 		}
 	}()
 
-	p1, err := t1.Dial(b2.Enode())
+	_, err := t1.Dial(b2.Enode())
 	assert.NoError(t, err)
 
-	msg, err := p1.transport.ReadMsg()
+	proto1 := <-m1.ch
+	msg, err := proto1.rw.ReadMsg()
 	assert.NoError(t, err)
-	assert.Equal(t, msg.Code, uint64(11))
+	fmt.Println(msg.Code)
+
+	time.Sleep(35 * time.Second)
+}
+
+type mockProtocol struct {
+	ch chan *streamRef
+}
+
+func (m *mockProtocol) Name(n string) {
+
+}
+
+func (m *mockProtocol) Protocol() Protocol {
+	m.ch = make(chan *streamRef, 10)
+
+	return Protocol{
+		Name:    "mock",
+		Version: 4,
+		Length:  20,
+		Run: func(peer *Peer, rw MsgReadWriter) error {
+			m.ch <- &streamRef{peer, rw}
+
+			done := make(chan bool)
+			<-done // run needs to block
+			return nil
+		},
+	}
+}
+
+type streamRef struct {
+	peer *Peer
+	rw   MsgReadWriter
 }
 
 func newMockBackend(port int) *mockBackend {
@@ -49,7 +81,7 @@ func newMockBackend(port int) *mockBackend {
 	proto := &protoHandshake{
 		Version: 3,
 		ID:      pub,
-		Caps:    []Cap{{"a", 0}, {"b", 2}},
+		Caps:    []Cap{{"a", 0}, {"b", 2}, {"mock", 4}},
 	}
 
 	mock := &mockBackend{
@@ -65,11 +97,21 @@ type mockBackend struct {
 	libp2pPort int
 	prv        *ecdsa.PrivateKey
 	proto      *protoHandshake
+	protocols  []Protocol
 }
 
 func (m *mockBackend) WithLibP2P(libp2pPort int) *mockBackend {
 	m.libp2pPort = libp2pPort
 	return m
+}
+
+func (m *mockBackend) WithProtocol(p Protocol) *mockBackend {
+	m.protocols = append(m.protocols, p)
+	return m
+}
+
+func (m *mockBackend) GetProtocols() []Protocol {
+	return m.protocols
 }
 
 func (m *mockBackend) OnConnectValidate(c *conn) error {

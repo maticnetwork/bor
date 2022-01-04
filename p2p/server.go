@@ -45,6 +45,14 @@ import (
 	"github.com/multiformats/go-multiaddr"
 )
 
+// Main ideas:
+// 1. The way protocols are defined will still be the same, by registering a
+// 	  p2p.Protocol object. Thus, the transports have to deal with that.
+// 2. We have a Peer object that returns the info about a peer. It DOES NOT
+// 	  include any transport info to send messages. That is done with protocols.
+//	  It does include functions to close the connection.
+//
+
 const (
 	defaultDialTimeout = 15 * time.Second
 
@@ -219,7 +227,7 @@ type Server struct {
 //type peerOpFunc func(map[enode.ID]*Peer)
 
 type peerDrop struct {
-	*Peer
+	peer      *Peer
 	err       error
 	requested bool // true if signaled by the peer
 }
@@ -239,7 +247,7 @@ type ConnAddr interface {
 }
 
 // conn wraps a network connection with information gathered
-// during the two handshakes.
+// during the two handshakes. TODO: This struct could be merged with the Peer
 type conn struct {
 	// information about the connection
 	fd ConnAddr
@@ -965,7 +973,7 @@ func (srv *Server) setTrusted(id enode.ID, trusted bool) {
 	defer srv.peersLock.Unlock()
 
 	if p, ok := srv.peers[id]; ok {
-		p.rw.set(trustedConn, trusted)
+		p.set(trustedConn, trusted)
 	}
 }
 
@@ -1116,39 +1124,39 @@ func (srv *Server) getInbound() int64 {
 
 func (srv *Server) oldDelPeer(pd peerDrop) {
 	// A peer disconnected.
-	d := common.PrettyDuration(mclock.Now() - pd.created)
-	srv.peerDelete(pd.ID())
-	srv.log.Debug("Removing p2p peer", "peercount", srv.lenPeers(), "id", pd.ID(), "duration", d, "req", pd.requested, "err", pd.err)
-	srv.dialsched.peerRemoved(pd.rw)
-	if pd.Inbound() {
+	d := common.PrettyDuration(mclock.Now() - pd.peer.created)
+	srv.peerDelete(pd.peer.ID())
+	srv.log.Debug("Removing p2p peer", "peercount", srv.lenPeers(), "id", pd.peer.ID(), "duration", d, "req", pd.requested, "err", pd.err)
+	srv.dialsched.peerRemoved(pd.peer.conn)
+	if pd.peer.Inbound() {
 		srv.delInbound()
 	}
 }
 
-func (srv *Server) postHandshakeChecks(c *conn) error {
+func (srv *Server) postHandshakeChecks(peer *Peer) error {
 	switch {
-	case !c.is(trustedConn) && srv.lenPeers() >= srv.MaxPeers:
+	case !peer.is(trustedConn) && srv.lenPeers() >= srv.MaxPeers:
 		return DiscTooManyPeers
-	case !c.is(trustedConn) && c.is(inboundConn) && int(srv.getInbound()) >= srv.maxInboundConns():
+	case !peer.is(trustedConn) && peer.is(inboundConn) && int(srv.getInbound()) >= srv.maxInboundConns():
 		return DiscTooManyPeers
-	case srv.peerExists(c.node.ID()):
+	case srv.peerExists(peer.ID()):
 		return DiscAlreadyConnected
-	case c.node.ID() == srv.localnode.ID():
+	case peer.ID() == srv.localnode.ID():
 		return DiscSelf
 	default:
 		return nil
 	}
 }
 
-func (srv *Server) addPeerChecks(c *conn) error {
+func (srv *Server) addPeerChecks(peer *Peer) error {
 	// Drop connections with no matching protocols.
-	if len(srv.Protocols) > 0 && countMatchingProtocols(srv.Protocols, c.caps) == 0 {
+	if len(srv.Protocols) > 0 && countMatchingProtocols(srv.Protocols, peer.Caps()) == 0 {
 		// BOR: TODO: Enable this again
 		return DiscUselessPeer
 	}
 	// Repeat the post-handshake checks because the
 	// peer set might have changed since those checks were performed.
-	return srv.postHandshakeChecks(c)
+	return srv.postHandshakeChecks(peer)
 }
 
 // listenLoop runs in its own goroutine and accepts
@@ -1288,6 +1296,10 @@ func (srv *Server) OnConnectValidate(c *conn) error {
 	return srv.checkpointPostHandshake(c)
 }
 
+func (srv *Server) GetProtocols() []Protocol {
+	return srv.Protocols
+}
+
 func (srv *Server) setupConn(c *conn, rawConn net.Conn, flags connFlag, dialDest *enode.Node) error {
 	// Prevent leftover pending conns from entering the handshake.
 	srv.lock.Lock()
@@ -1304,11 +1316,12 @@ func (srv *Server) setupConn(c *conn, rawConn net.Conn, flags connFlag, dialDest
 		b: srv,
 	}
 	// override the main conn
-	conn, err := rrr.connect(rawConn, flags, dialDest)
+	peer, err := rrr.connect(rawConn, flags, dialDest)
 	if err != nil {
 		return err
 	}
-	err = srv.checkpointAddPeer(conn)
+
+	err = srv.checkpointAddPeer(peer)
 	if err != nil {
 		// clog.Trace("Rejected peer", "err", err)
 		return err
@@ -1369,19 +1382,21 @@ func (srv *Server) setupConn(c *conn, rawConn net.Conn, flags connFlag, dialDest
 	return nil
 }
 
-func (srv *Server) checkpointAddPeer(c *conn) error {
-	err := srv.addPeerChecks(c)
-	if err == nil {
-		// The handshakes are done and it passed all checks.
-		p := srv.launchPeer(c)
-		srv.peerAdd(c.node.ID(), p)
-		srv.log.Debug("Adding p2p peer", "peercount", srv.lenPeers(), "id", p.ID(), "conn", c.flags, "addr", p.RemoteAddr(), "name", p.Name())
-		srv.dialsched.peerAdded(c)
-		if p.Inbound() {
-			srv.addInbound()
-		}
+func (srv *Server) checkpointAddPeer(p *Peer) error {
+	err := srv.addPeerChecks(p)
+	if err != nil {
+		return err
 	}
-	return err
+
+	// The handshakes are done and it passed all checks.
+	// p := srv.launchPeer(c)
+	srv.peerAdd(p.ID(), p)
+	srv.log.Debug("Adding p2p peer", "peercount", srv.lenPeers(), "id", p.ID(), "conn", p.conn.flags, "addr", p.RemoteAddr(), "name", p.Name())
+	srv.dialsched.peerAdded(p.conn)
+	if p.Inbound() {
+		srv.addInbound()
+	}
+	return nil
 }
 
 func (srv *Server) checkpointPostHandshake(c *conn) error {
@@ -1392,7 +1407,7 @@ func (srv *Server) checkpointPostHandshake(c *conn) error {
 		c.flags |= trustedConn
 	}
 	// TODO: track in-progress inbound node IDs (pre-Peer) to avoid dialing them.
-	return srv.postHandshakeChecks(c)
+	return srv.postHandshakeChecks(&Peer{conn: c})
 }
 
 func nodeFromConn(pubkey *ecdsa.PublicKey, conn net.Conn) *enode.Node {
@@ -1418,6 +1433,8 @@ func (srv *Server) checkpoint(c *conn, stage chan<- *conn) error {
 }
 */
 
+/*
+// THIS IS THE PART THAT GOES INTO RLPX
 func (srv *Server) launchPeer(c *conn) *Peer {
 	p := newPeer(srv.log, c, srv.Protocols)
 	if srv.EnableMsgEvents {
@@ -1428,7 +1445,9 @@ func (srv *Server) launchPeer(c *conn) *Peer {
 	go srv.runPeer(p)
 	return p
 }
+*/
 
+/*
 // runPeer runs in its own goroutine for each peer.
 func (srv *Server) runPeer(p *Peer) {
 	if srv.newPeerHook != nil {
@@ -1462,6 +1481,7 @@ func (srv *Server) runPeer(p *Peer) {
 		LocalAddress:  p.LocalAddr().String(),
 	})
 }
+*/
 
 // NodeInfo represents a short summary of the information known about the host.
 type NodeInfo struct {

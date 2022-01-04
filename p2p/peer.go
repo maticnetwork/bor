@@ -30,7 +30,6 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/p2p/enode"
-	"github.com/ethereum/go-ethereum/p2p/enr"
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
@@ -102,9 +101,10 @@ type PeerEvent struct {
 	RemoteAddress string        `json:"remote,omitempty"`
 }
 
-// Peer represents a connected remote node.
-type Peer struct {
-	rw      *conn
+// Peer1 represents a connected remote node to the RLPX
+type Peer1 struct {
+	rw *conn
+
 	running map[string]*protoRW
 	log     log.Logger
 	created mclock.AbsTime
@@ -119,37 +119,20 @@ type Peer struct {
 	testPipe *MsgPipeRW // for testing
 }
 
-// NewPeer returns a peer for testing purposes.
-func NewPeer(id enode.ID, name string, caps []Cap) *Peer {
-	pipe, _ := net.Pipe()
-	node := enode.SignNull(new(enr.Record), id)
-	conn := &conn{fd: pipe, transport: nil, node: node, caps: caps, name: name}
-	peer := newPeer(log.Root(), conn, nil)
-	close(peer.closed) // ensures Disconnect doesn't block
-	return peer
-}
-
-// NewPeerPipe creates a peer for testing purposes.
-// The message pipe given as the last parameter is closed when
-// Disconnect is called on the peer.
-func NewPeerPipe(id enode.ID, name string, caps []Cap, pipe *MsgPipeRW) *Peer {
-	p := NewPeer(id, name, caps)
-	p.testPipe = pipe
-	return p
-}
+// TODO: Much of this fields go away once we migrate to the new peer object
 
 // ID returns the node's public key.
-func (p *Peer) ID() enode.ID {
+func (p *Peer1) ID() enode.ID {
 	return p.rw.node.ID()
 }
 
 // Node returns the peer's node descriptor.
-func (p *Peer) Node() *enode.Node {
+func (p *Peer1) Node() *enode.Node {
 	return p.rw.node
 }
 
 // Name returns an abbreviated form of the name
-func (p *Peer) Name() string {
+func (p *Peer1) Name() string {
 	s := p.rw.name
 	if len(s) > 20 {
 		return s[:20] + "..."
@@ -158,20 +141,21 @@ func (p *Peer) Name() string {
 }
 
 // Fullname returns the node name that the remote node advertised.
-func (p *Peer) Fullname() string {
+func (p *Peer1) Fullname() string {
 	return p.rw.name
 }
 
 // Caps returns the capabilities (supported subprotocols) of the remote peer.
-func (p *Peer) Caps() []Cap {
+func (p *Peer1) Caps() []Cap {
 	// TODO: maybe return copy
 	return p.rw.caps
 }
 
+/*
 // RunningCap returns true if the peer is actively connected using any of the
 // enumerated versions of a specific protocol, meaning that at least one of the
 // versions is supported by both this node and the peer p.
-func (p *Peer) RunningCap(protocol string, versions []uint) bool {
+func (p *Peer1) RunninssgCap(protocol string, versions []uint) bool {
 	if proto, ok := p.running[protocol]; ok {
 		for _, ver := range versions {
 			if proto.proto.Version == ver {
@@ -181,20 +165,21 @@ func (p *Peer) RunningCap(protocol string, versions []uint) bool {
 	}
 	return false
 }
+*/
 
 // RemoteAddr returns the remote address of the network connection.
-func (p *Peer) RemoteAddr() net.Addr {
+func (p *Peer1) RemoteAddr() net.Addr {
 	return p.rw.fd.RemoteAddr()
 }
 
 // LocalAddr returns the local address of the network connection.
-func (p *Peer) LocalAddr() net.Addr {
+func (p *Peer1) LocalAddr() net.Addr {
 	return p.rw.fd.LocalAddr()
 }
 
 // Disconnect terminates the peer connection with the given reason.
 // It returns immediately and does not wait until the connection is closed.
-func (p *Peer) Disconnect(reason DiscReason) {
+func (p *Peer1) Disconnect(reason DiscReason) {
 	if p.testPipe != nil {
 		p.testPipe.Close()
 	}
@@ -206,19 +191,23 @@ func (p *Peer) Disconnect(reason DiscReason) {
 }
 
 // String implements fmt.Stringer.
-func (p *Peer) String() string {
+func (p *Peer1) String() string {
 	id := p.ID()
 	return fmt.Sprintf("Peer %x %v", id[:8], p.RemoteAddr())
 }
 
 // Inbound returns true if the peer is an inbound connection
-func (p *Peer) Inbound() bool {
+func (p *Peer1) Inbound() bool {
 	return p.rw.is(inboundConn)
 }
 
-func newPeer(log log.Logger, conn *conn, protocols []Protocol) *Peer {
+func newPeer(log log.Logger, conn *conn, protocols []Protocol) *Peer1 {
 	protomap := matchProtocols(protocols, conn.caps, conn.transport)
-	p := &Peer{
+
+	fmt.Println(protocols, conn.caps)
+	fmt.Println(protomap)
+
+	p := &Peer1{
 		rw:       conn,
 		running:  protomap,
 		created:  mclock.Now(),
@@ -230,11 +219,11 @@ func newPeer(log log.Logger, conn *conn, protocols []Protocol) *Peer {
 	return p
 }
 
-func (p *Peer) Log() log.Logger {
+func (p *Peer1) Log() log.Logger {
 	return p.log
 }
 
-func (p *Peer) run() (remoteRequested bool, err error) {
+func (p *Peer1) run() (remoteRequested bool, err error) {
 	var (
 		writeStart = make(chan struct{}, 1)
 		writeErr   = make(chan error, 1)
@@ -284,7 +273,7 @@ loop:
 	return remoteRequested, err
 }
 
-func (p *Peer) pingLoop() {
+func (p *Peer1) pingLoop() {
 	ping := time.NewTimer(pingInterval)
 	defer p.wg.Done()
 	defer ping.Stop()
@@ -302,7 +291,7 @@ func (p *Peer) pingLoop() {
 	}
 }
 
-func (p *Peer) readLoop(errc chan<- error) {
+func (p *Peer1) readLoop(errc chan<- error) {
 	defer p.wg.Done()
 	for {
 		msg, err := p.rw.transport.ReadMsg()
@@ -318,7 +307,9 @@ func (p *Peer) readLoop(errc chan<- error) {
 	}
 }
 
-func (p *Peer) handle(msg Msg) error {
+func (p *Peer1) handle(msg Msg) error {
+	fmt.Printf("Handle msg: %d\n", msg.Code)
+
 	switch {
 	case msg.Code == pingMsg:
 		msg.Discard()
@@ -335,6 +326,8 @@ func (p *Peer) handle(msg Msg) error {
 	default:
 		// it's a subprotocol message
 		proto, err := p.getProto(msg.Code)
+		fmt.Println(proto, err)
+
 		if err != nil {
 			return fmt.Errorf("msg code out of range: %v", msg.Code)
 		}
@@ -390,7 +383,7 @@ outer:
 	return result
 }
 
-func (p *Peer) startProtocols(writeStart <-chan struct{}, writeErr chan<- error) {
+func (p *Peer1) startProtocols(writeStart <-chan struct{}, writeErr chan<- error) {
 	p.wg.Add(len(p.running))
 	for _, proto := range p.running {
 		proto := proto
@@ -404,7 +397,8 @@ func (p *Peer) startProtocols(writeStart <-chan struct{}, writeErr chan<- error)
 		p.log.Trace(fmt.Sprintf("Starting protocol %s/%d", proto.proto.Name, proto.proto.Version))
 		go func() {
 			defer p.wg.Done()
-			err := proto.proto.Run(p, rw)
+			/// TODO, send the new Peer object
+			err := proto.proto.Run(nil, rw)
 			if err == nil {
 				p.log.Trace(fmt.Sprintf("Protocol %s/%d returned", proto.proto.Name, proto.proto.Version))
 				err = errProtocolReturned
@@ -418,7 +412,7 @@ func (p *Peer) startProtocols(writeStart <-chan struct{}, writeErr chan<- error)
 
 // getProto finds the protocol responsible for handling
 // the given message code.
-func (p *Peer) getProto(code uint64) (*protoRW, error) {
+func (p *Peer1) getProto(code uint64) (*protoRW, error) {
 	for _, proto := range p.running {
 		if code >= proto.offset && code < proto.offset+proto.proto.Length {
 			return proto, nil

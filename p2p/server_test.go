@@ -103,20 +103,20 @@ func TestServerListen(t *testing.T) {
 	b1 := newMockBackend(8000)
 	t1 := &rlpxTransportV2{b: b1}
 
-	conn, err := t1.Dial(srv.Self())
+	p2, err := t1.Dial(srv.Self())
 	if err != nil {
 		t.Fatalf("could not dial: %v", err)
 	}
-	defer conn.Close()
+	//defer conn.Close()
 
 	select {
 	case peer := <-connected:
 		if peer.ID() != b1.Enode().ID() {
 			t.Error("peer func called with wrong node id")
 		}
-		if peer.LocalAddr().String() != conn.fd.RemoteAddr().String() {
+		if peer.LocalAddr().String() != p2.RemoteAddr().String() {
 			t.Errorf("peer started with wrong conn: got %v, want %v",
-				peer.LocalAddr(), conn.fd.RemoteAddr())
+				peer.LocalAddr(), p2.RemoteAddr())
 		}
 		peers := srv.Peers()
 		if !reflect.DeepEqual(peers, []*Peer{peer}) {

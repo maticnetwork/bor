@@ -84,7 +84,7 @@ func newNode(id enode.ID, addr string) *enode.Node {
 	return enode.SignNull(&r, id)
 }
 
-func testPeer(protos []Protocol) (func(), *conn, *Peer, <-chan error) {
+func testPeer(protos []Protocol) (func(), *conn, *Peer1, <-chan error) {
 	panic("TODO")
 
 	/*

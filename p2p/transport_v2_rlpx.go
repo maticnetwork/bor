@@ -3,9 +3,11 @@ package p2p
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"net"
 
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 )
 
@@ -23,7 +25,7 @@ func (r *rlpxTransportV2) Listen(addr string) error {
 	return nil
 }
 
-func (r *rlpxTransportV2) Dial(enode *enode.Node) (*conn, error) {
+func (r *rlpxTransportV2) Dial(enode *enode.Node) (*Peer, error) {
 	// TODO
 	dialer := &tcpDialer{
 		d: &net.Dialer{Timeout: defaultDialTimeout},
@@ -39,7 +41,7 @@ func (r *rlpxTransportV2) Dial(enode *enode.Node) (*conn, error) {
 	return peer, nil
 }
 
-func (r *rlpxTransportV2) Accept() (*conn, error) {
+func (r *rlpxTransportV2) Accept() (*Peer, error) {
 	// TODO
 	conn, err := r.lis.Accept()
 	if err != nil {
@@ -52,7 +54,7 @@ func (r *rlpxTransportV2) Accept() (*conn, error) {
 	return peer, nil
 }
 
-func (r *rlpxTransportV2) connect(rawConn net.Conn, flags connFlag, dialDest *enode.Node) (*conn, error) {
+func (r *rlpxTransportV2) connect(rawConn net.Conn, flags connFlag, dialDest *enode.Node) (*Peer, error) {
 
 	// transport connection
 	var tt *rlpxTransport
@@ -66,19 +68,18 @@ func (r *rlpxTransportV2) connect(rawConn net.Conn, flags connFlag, dialDest *en
 	remotePubkey, err := tt.doEncHandshake(r.b.LocalPrivateKey())
 	if err != nil {
 		panic(err)
-		return nil, err
 	}
 
-	p := &conn{
+	cc := &conn{
 		fd:        rawConn,
 		transport: tt,
 		flags:     flags,
 	}
 
 	if dialDest != nil {
-		p.node = dialDest
+		cc.node = dialDest
 	} else {
-		p.node = nodeFromConn(remotePubkey, rawConn)
+		cc.node = nodeFromConn(remotePubkey, rawConn)
 	}
 
 	// Run the capability negotiation handshake.
@@ -86,12 +87,23 @@ func (r *rlpxTransportV2) connect(rawConn net.Conn, flags connFlag, dialDest *en
 	if err != nil {
 		return nil, err
 	}
-	if id := p.node.ID(); !bytes.Equal(crypto.Keccak256(phs.ID), id[:]) {
+	if id := cc.node.ID(); !bytes.Equal(crypto.Keccak256(phs.ID), id[:]) {
 		return nil, DiscUnexpectedIdentity
 	}
 
-	p.caps = phs.Caps
-	p.name = phs.Name
+	cc.caps = phs.Caps
+	cc.name = phs.Name
 
-	return p, nil
+	// here come the funny stuff
+	peer := newPeer(log.Root(), cc, r.b.GetProtocols())
+	go func() {
+		fmt.Println("- run -")
+		a, b := peer.run()
+		fmt.Println("- rlpx peer done -", a, b)
+	}()
+
+	// we cannot return the raw conn and allt he transport must be done with the protocols
+	pp := &Peer{}
+
+	return pp, nil
 }
