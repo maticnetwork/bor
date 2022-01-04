@@ -107,7 +107,7 @@ func TestServerListen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("could not dial: %v", err)
 	}
-	defer conn.fd.Close()
+	defer conn.Close()
 
 	select {
 	case peer := <-connected:

@@ -233,16 +233,35 @@ const (
 	trustedConn
 )
 
+type ConnAddr interface {
+	RemoteAddr() net.Addr
+	LocalAddr() net.Addr
+}
+
 // conn wraps a network connection with information gathered
 // during the two handshakes.
 type conn struct {
-	fd        net.Conn
+	// information about the connection
+	fd ConnAddr
+
+	// transport reference to send data
 	transport transport
-	node      *enode.Node
-	flags     connFlag
-	//cont  chan error // The run loop uses cont to signal errors to SetupConn.
-	caps []Cap  // valid after the protocol handshake
-	name string // valid after the protocol handshake
+
+	// enode address of the remote node
+	node *enode.Node
+
+	// bitmap of options of the connection
+	flags connFlag
+
+	// list of capabilities (valid after protocol handshake)
+	caps []Cap
+
+	// name of the node (valid after protocol handshake)
+	name string
+}
+
+func (c *conn) Close() {
+	c.transport.close(fmt.Errorf("requested"))
 }
 
 type transport interface {
@@ -1250,7 +1269,7 @@ func (srv *Server) SetupConn(fd net.Conn, flags connFlag, dialDest *enode.Node) 
 		}
 	*/
 
-	err := srv.setupConn(c, flags, dialDest)
+	err := srv.setupConn(c, fd, flags, dialDest)
 	if err != nil {
 		c.transport.close(err)
 	}
@@ -1269,7 +1288,7 @@ func (srv *Server) OnConnectValidate(c *conn) error {
 	return srv.checkpointPostHandshake(c)
 }
 
-func (srv *Server) setupConn(c *conn, flags connFlag, dialDest *enode.Node) error {
+func (srv *Server) setupConn(c *conn, rawConn net.Conn, flags connFlag, dialDest *enode.Node) error {
 	// Prevent leftover pending conns from entering the handshake.
 	srv.lock.Lock()
 	running := srv.running
@@ -1285,7 +1304,7 @@ func (srv *Server) setupConn(c *conn, flags connFlag, dialDest *enode.Node) erro
 		b: srv,
 	}
 	// override the main conn
-	conn, err := rrr.connect(c.fd, flags, dialDest)
+	conn, err := rrr.connect(rawConn, flags, dialDest)
 	if err != nil {
 		return err
 	}
