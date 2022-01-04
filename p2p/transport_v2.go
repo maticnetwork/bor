@@ -23,6 +23,7 @@ type peer2 struct {
 
 // backendv2 is the interface required by transport2 to work
 type backendv2 interface {
-	PrivateKey() *ecdsa.PrivateKey
+	LocalPrivateKey() *ecdsa.PrivateKey
 	LocalHandshake() *protoHandshake
+	OnConnectValidate(c *conn) error
 }

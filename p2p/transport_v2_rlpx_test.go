@@ -29,7 +29,7 @@ func TestTranport_Rlpx(t *testing.T) {
 		if err != nil {
 			panic(err)
 		}
-		if err := p.rlpx.WriteMsg(Msg{Code: 11}); err != nil {
+		if err := p.WriteMsg(Msg{Code: 11}); err != nil {
 			panic(err)
 		}
 	}()
@@ -37,7 +37,7 @@ func TestTranport_Rlpx(t *testing.T) {
 	p1, err := t1.Dial(b2.Enode())
 	assert.NoError(t, err)
 
-	msg, err := p1.rlpx.ReadMsg()
+	msg, err := p1.ReadMsg()
 	assert.NoError(t, err)
 	assert.Equal(t, msg.Code, uint64(11))
 }
@@ -61,12 +61,22 @@ func newMockBackend(port int) *mockBackend {
 }
 
 type mockBackend struct {
-	port  int
-	prv   *ecdsa.PrivateKey
-	proto *protoHandshake
+	port       int
+	libp2pPort int
+	prv        *ecdsa.PrivateKey
+	proto      *protoHandshake
 }
 
-func (m *mockBackend) PrivateKey() *ecdsa.PrivateKey {
+func (m *mockBackend) WithLibP2P(libp2pPort int) *mockBackend {
+	m.libp2pPort = libp2pPort
+	return m
+}
+
+func (m *mockBackend) OnConnectValidate(c *conn) error {
+	return nil
+}
+
+func (m *mockBackend) LocalPrivateKey() *ecdsa.PrivateKey {
 	return m.prv
 }
 
@@ -79,5 +89,5 @@ func (m *mockBackend) Addr() string {
 }
 
 func (m *mockBackend) Enode() *enode.Node {
-	return enode.NewV4(&m.prv.PublicKey, net.ParseIP("127.0.0.1"), m.port, m.port)
+	return enode.NewV4(&m.prv.PublicKey, net.ParseIP("127.0.0.1"), m.port, m.port, m.libp2pPort)
 }

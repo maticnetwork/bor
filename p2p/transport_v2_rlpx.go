@@ -23,7 +23,8 @@ func (r *rlpxTransportV2) Listen(addr string) error {
 	return nil
 }
 
-func (r *rlpxTransportV2) Dial(enode *enode.Node) (*peer2, error) {
+func (r *rlpxTransportV2) Dial(enode *enode.Node) (*conn, error) {
+	// TODO
 	dialer := &tcpDialer{
 		d: &net.Dialer{Timeout: defaultDialTimeout},
 	}
@@ -31,49 +32,53 @@ func (r *rlpxTransportV2) Dial(enode *enode.Node) (*peer2, error) {
 	if err != nil {
 		return nil, err
 	}
-	peer, err := r.connect(conn, enode)
+	peer, err := r.connect(conn, 0, enode)
 	if err != nil {
 		return nil, err
 	}
 	return peer, nil
 }
 
-func (r *rlpxTransportV2) Accept() (*peer2, error) {
+func (r *rlpxTransportV2) Accept() (*conn, error) {
+	// TODO
 	conn, err := r.lis.Accept()
 	if err != nil {
 		return nil, err
 	}
-	peer, err := r.connect(conn, nil)
+	peer, err := r.connect(conn, 0, nil)
 	if err != nil {
 		return nil, err
 	}
 	return peer, nil
 }
 
-func (r *rlpxTransportV2) connect(conn net.Conn, dialDest *enode.Node) (*peer2, error) {
+func (r *rlpxTransportV2) connect(rawConn net.Conn, flags connFlag, dialDest *enode.Node) (*conn, error) {
 
 	// transport connection
 	var tt *rlpxTransport
 	if dialDest == nil {
-		tt = newRLPX(conn, nil).(*rlpxTransport)
+		tt = newRLPX(rawConn, nil).(*rlpxTransport)
 	} else {
-		tt = newRLPX(conn, dialDest.Pubkey()).(*rlpxTransport)
+		tt = newRLPX(rawConn, dialDest.Pubkey()).(*rlpxTransport)
 	}
 
 	// Run the RLPx handshake.
-	remotePubkey, err := tt.doEncHandshake(r.b.PrivateKey())
+	remotePubkey, err := tt.doEncHandshake(r.b.LocalPrivateKey())
 	if err != nil {
+		panic(err)
 		return nil, err
 	}
 
-	p := &peer2{
-		rlpx: tt,
+	p := &conn{
+		fd:        rawConn,
+		transport: tt,
+		flags:     flags,
 	}
 
 	if dialDest != nil {
 		p.node = dialDest
 	} else {
-		p.node = nodeFromConn(remotePubkey, conn)
+		p.node = nodeFromConn(remotePubkey, rawConn)
 	}
 
 	// Run the capability negotiation handshake.

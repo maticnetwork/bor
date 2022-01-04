@@ -28,7 +28,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 )
@@ -86,29 +85,33 @@ func newNode(id enode.ID, addr string) *enode.Node {
 }
 
 func testPeer(protos []Protocol) (func(), *conn, *Peer, <-chan error) {
-	var (
-		fd1, fd2   = net.Pipe()
-		key1, key2 = newkey(), newkey()
-		t1         = newTestTransport(&key2.PublicKey, fd1, nil)
-		t2         = newTestTransport(&key1.PublicKey, fd2, &key1.PublicKey)
-	)
+	panic("TODO")
 
-	c1 := &conn{fd: fd1, node: newNode(uintID(1), ""), transport: t1}
-	c2 := &conn{fd: fd2, node: newNode(uintID(2), ""), transport: t2}
-	for _, p := range protos {
-		c1.caps = append(c1.caps, p.cap())
-		c2.caps = append(c2.caps, p.cap())
-	}
+	/*
+		var (
+			fd1, fd2   = net.Pipe()
+			key1, key2 = newkey(), newkey()
+			t1         = newTestTransport(&key2.PublicKey, fd1, nil)
+			t2         = newTestTransport(&key1.PublicKey, fd2, &key1.PublicKey)
+		)
 
-	peer := newPeer(log.Root(), c1, protos)
-	errc := make(chan error, 1)
-	go func() {
-		_, err := peer.run()
-		errc <- err
-	}()
+		c1 := &conn{fd: fd1, node: newNode(uintID(1), ""), transport: t1}
+		c2 := &conn{fd: fd2, node: newNode(uintID(2), ""), transport: t2}
+		for _, p := range protos {
+			c1.caps = append(c1.caps, p.cap())
+			c2.caps = append(c2.caps, p.cap())
+		}
 
-	closer := func() { c2.close(errors.New("close func called")) }
-	return closer, c2, peer, errc
+		peer := newPeer(log.Root(), c1, protos)
+		errc := make(chan error, 1)
+		go func() {
+			_, err := peer.run()
+			errc <- err
+		}()
+
+		closer := func() { c2.close(errors.New("close func called")) }
+		return closer, c2, peer, errc
+	*/
 }
 
 func TestPeerProtoReadMsg(t *testing.T) {

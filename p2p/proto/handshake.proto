@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package proto;
+
+option go_package = "/p2p/proto";
+
+message HandshakeRequest {
+}
+
+message HandshakeResponse {
+}

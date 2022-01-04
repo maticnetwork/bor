@@ -18,10 +18,8 @@
 package p2p
 
 import (
-	"bytes"
 	"context"
 	"crypto/ecdsa"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"net"
@@ -173,9 +171,9 @@ type Server struct {
 
 	// Hooks for testing. These are useful because we can inhibit
 	// the whole protocol stack.
-	newTransport func(net.Conn, *ecdsa.PublicKey) transport
-	newPeerHook  func(*Peer)
-	listenFunc   func(network, addr string) (net.Listener, error)
+	// newTransport func(net.Conn, *ecdsa.PublicKey) transport
+	newPeerHook func(*Peer)
+	listenFunc  func(network, addr string) (net.Listener, error)
 
 	lock    sync.Mutex // protects running
 	running bool
@@ -218,7 +216,7 @@ type Server struct {
 	inboundCount int64
 }
 
-type peerOpFunc func(map[enode.ID]*Peer)
+//type peerOpFunc func(map[enode.ID]*Peer)
 
 type peerDrop struct {
 	*Peer
@@ -249,8 +247,8 @@ type conn struct {
 
 type transport interface {
 	// The two handshakes.
-	doEncHandshake(prv *ecdsa.PrivateKey) (*ecdsa.PublicKey, error)
-	doProtoHandshake(our *protoHandshake) (*protoHandshake, error)
+	// doEncHandshake(prv *ecdsa.PrivateKey) (*ecdsa.PublicKey, error)
+	// doProtoHandshake(our *protoHandshake) (*protoHandshake, error)
 	// The MsgReadWriter can only be used after the encryption
 	// handshake has completed. The code uses conn.id to track this
 	// by setting it to a non-nil value after the encryption handshake.
@@ -447,6 +445,8 @@ func (srv *Server) Stop() {
 	close(srv.quit)
 	srv.lock.Unlock()
 	srv.loopWG.Wait()
+	// TODO: This wait breaks some stuff because we are actually not waiting or notifying some stuff
+	// Thus, the tests do not Stop the server.
 }
 
 // sharedUDPConn implements a shared connection. Write sends messages to the underlying connection while read returns
@@ -508,9 +508,11 @@ func (srv *Server) Start() (err error) {
 	if srv.PrivateKey == nil {
 		return errors.New("Server.PrivateKey must be set to a non-nil key")
 	}
-	if srv.newTransport == nil {
-		srv.newTransport = newRLPX
-	}
+	/*
+		if srv.newTransport == nil {
+			srv.newTransport = newRLPX
+		}
+	*/
 	if srv.listenFunc == nil {
 		srv.listenFunc = net.Listen
 	}
@@ -950,6 +952,7 @@ func (srv *Server) setTrusted(id enode.ID, trusted bool) {
 
 // run is the main loop of the server.
 func (srv *Server) run() {
+	// TODO: This should go in the Close function
 	srv.log.Info("Started P2P networking", "self", srv.localnode.Node().URLv4())
 	defer srv.loopWG.Done()
 	defer srv.nodedb.Close()
@@ -1237,17 +1240,33 @@ func (srv *Server) SetupConn(fd net.Conn, flags connFlag, dialDest *enode.Node) 
 	}
 
 	c := &conn{fd: fd, flags: flags /*, cont: make(chan error)*/}
-	if dialDest == nil {
-		c.transport = srv.newTransport(fd, nil)
-	} else {
-		c.transport = srv.newTransport(fd, dialDest.Pubkey())
-	}
+	/*
+		if dialDest == nil {
+			fmt.Println("_ A _")
+			c.transport = srv.newTransport(fd, nil)
+		} else {
+			fmt.Println("_ A 2 _")
+			c.transport = srv.newTransport(fd, dialDest.Pubkey())
+		}
+	*/
 
 	err := srv.setupConn(c, flags, dialDest)
 	if err != nil {
 		c.close(err)
 	}
 	return err
+}
+
+func (srv *Server) LocalPrivateKey() *ecdsa.PrivateKey {
+	return srv.Config.PrivateKey
+}
+
+func (srv *Server) LocalHandshake() *protoHandshake {
+	return srv.ourHandshake
+}
+
+func (srv *Server) OnConnectValidate(c *conn) error {
+	return srv.checkpointPostHandshake(c)
 }
 
 func (srv *Server) setupConn(c *conn, flags connFlag, dialDest *enode.Node) error {
@@ -1259,50 +1278,74 @@ func (srv *Server) setupConn(c *conn, flags connFlag, dialDest *enode.Node) erro
 		return errServerStopped
 	}
 
-	// If dialing, figure out the remote public key.
-	var dialPubkey *ecdsa.PublicKey
-	if dialDest != nil {
-		dialPubkey = new(ecdsa.PublicKey)
-		if err := dialDest.Load((*enode.Secp256k1)(dialPubkey)); err != nil {
-			err = errors.New("dial destination doesn't have a secp256k1 public key")
-			srv.log.Trace("Setting up connection failed", "addr", c.fd.RemoteAddr(), "conn", c.flags, "err", err)
+	// clog := srv.log.New("id", c.node.ID(), "addr", c.fd.RemoteAddr(), "conn", c.flags)
+
+	// THIS CONN IS FOR RLPX, HERE JUST CALL RLPX_TRANSPORT_V2
+	rrr := &rlpxTransportV2{
+		b: srv,
+	}
+	// override the main conn
+	conn, err := rrr.connect(c.fd, flags, dialDest)
+	if err != nil {
+		return err
+	}
+	err = srv.checkpointAddPeer(conn)
+	if err != nil {
+		// clog.Trace("Rejected peer", "err", err)
+		return err
+	}
+
+	/*
+
+		// If dialing, figure out the remote public key.
+		var dialPubkey *ecdsa.PublicKey
+		if dialDest != nil {
+			dialPubkey = new(ecdsa.PublicKey)
+			if err := dialDest.Load((*enode.Secp256k1)(dialPubkey)); err != nil {
+				err = errors.New("dial destination doesn't have a secp256k1 public key")
+				srv.log.Trace("Setting up connection failed", "addr", c.fd.RemoteAddr(), "conn", c.flags, "err", err)
+				return err
+			}
+		}
+
+		// Run the RLPx handshake.
+		remotePubkey, err := c.doEncHandshake(srv.PrivateKey)
+		if err != nil {
+			srv.log.Trace("Failed RLPx handshake", "addr", c.fd.RemoteAddr(), "conn", c.flags, "err", err)
 			return err
 		}
-	}
 
-	// Run the RLPx handshake.
-	remotePubkey, err := c.doEncHandshake(srv.PrivateKey)
-	if err != nil {
-		srv.log.Trace("Failed RLPx handshake", "addr", c.fd.RemoteAddr(), "conn", c.flags, "err", err)
-		return err
-	}
-	if dialDest != nil {
-		c.node = dialDest
-	} else {
-		c.node = nodeFromConn(remotePubkey, c.fd)
-	}
-	clog := srv.log.New("id", c.node.ID(), "addr", c.fd.RemoteAddr(), "conn", c.flags)
-	if err := srv.checkpointPostHandshake(c); err != nil {
-		clog.Trace("Rejected peer", "err", err)
-		return err
-	}
+		fmt.Println("-- remote --")
+		fmt.Println(remotePubkey)
 
-	// Run the capability negotiation handshake.
-	phs, err := c.doProtoHandshake(srv.ourHandshake)
-	if err != nil {
-		clog.Trace("Failed p2p handshake", "err", err)
-		return err
-	}
-	if id := c.node.ID(); !bytes.Equal(crypto.Keccak256(phs.ID), id[:]) {
-		clog.Trace("Wrong devp2p handshake identity", "phsid", hex.EncodeToString(phs.ID))
-		return DiscUnexpectedIdentity
-	}
-	c.caps, c.name = phs.Caps, phs.Name
-	err = srv.checkpointAddPeer(c)
-	if err != nil {
-		clog.Trace("Rejected peer", "err", err)
-		return err
-	}
+		if dialDest != nil {
+			c.node = dialDest
+		} else {
+			c.node = nodeFromConn(remotePubkey, c.fd)
+		}
+		clog := srv.log.New("id", c.node.ID(), "addr", c.fd.RemoteAddr(), "conn", c.flags)
+		if err := srv.checkpointPostHandshake(c); err != nil {
+			clog.Trace("Rejected peer", "err", err)
+			return err
+		}
+
+		// Run the capability negotiation handshake.
+		phs, err := c.doProtoHandshake(srv.ourHandshake)
+		if err != nil {
+			clog.Trace("Failed p2p handshake", "err", err)
+			return err
+		}
+		if id := c.node.ID(); !bytes.Equal(crypto.Keccak256(phs.ID), id[:]) {
+			clog.Trace("Wrong devp2p handshake identity", "phsid", hex.EncodeToString(phs.ID))
+			return DiscUnexpectedIdentity
+		}
+		c.caps, c.name = phs.Caps, phs.Name
+		err = srv.checkpointAddPeer(c)
+		if err != nil {
+			clog.Trace("Rejected peer", "err", err)
+			return err
+		}
+	*/
 
 	return nil
 }
