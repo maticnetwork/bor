@@ -109,6 +109,7 @@ func NewPeerPipe(id enode.ID, name string, caps []Cap, pipe *MsgPipeRW) *Peer {
 	panic("TODO")
 }
 
+/*
 // Info gathers and returns a collection of metadata known about a peer.
 func (p *Peer1) Info() *PeerInfo {
 	pp := &Peer{
@@ -116,6 +117,7 @@ func (p *Peer1) Info() *PeerInfo {
 	}
 	return pp.Info()
 }
+*/
 
 func (p *Peer) Info() *PeerInfo {
 	// Gather the protocol capabilities

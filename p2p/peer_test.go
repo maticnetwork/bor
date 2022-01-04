@@ -233,7 +233,7 @@ func TestPeerDisconnectRace(t *testing.T) {
 		protodisc <- DiscAlreadyConnected
 		// In some cases, simulate something else calling peer.Disconnect.
 		if maybe() {
-			go p.Disconnect(DiscInvalidIdentity)
+			go p.disconnect(DiscInvalidIdentity)
 		}
 		// In some cases, simulate remote requesting a disconnect.
 		if maybe() {

@@ -94,16 +94,20 @@ func (r *rlpxTransportV2) connect(rawConn net.Conn, flags connFlag, dialDest *en
 	cc.caps = phs.Caps
 	cc.name = phs.Name
 
+	pp := &Peer{
+		conn: cc,
+	}
+
 	// here come the funny stuff
-	peer := newPeer(log.Root(), cc, r.b.GetProtocols())
+	peer := newPeer(log.Root(), pp, tt, r.b.GetProtocols())
 	go func() {
 		fmt.Println("- run -")
 		a, b := peer.run()
 		fmt.Println("- rlpx peer done -", a, b)
+		// notify!
 	}()
 
 	// we cannot return the raw conn and allt he transport must be done with the protocols
-	pp := &Peer{}
 
 	return pp, nil
 }

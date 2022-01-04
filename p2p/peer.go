@@ -20,7 +20,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
 	"sort"
 	"sync"
 	"time"
@@ -103,8 +102,10 @@ type PeerEvent struct {
 
 // Peer1 represents a connected remote node to the RLPX
 type Peer1 struct {
-	rw *conn
+	rw *rlpxTransport
+	pp *Peer
 
+	id      enode.ID
 	running map[string]*protoRW
 	log     log.Logger
 	created mclock.AbsTime
@@ -123,14 +124,17 @@ type Peer1 struct {
 
 // ID returns the node's public key.
 func (p *Peer1) ID() enode.ID {
-	return p.rw.node.ID()
+	return p.id
 }
 
+/*
 // Node returns the peer's node descriptor.
 func (p *Peer1) Node() *enode.Node {
 	return p.rw.node
 }
+*/
 
+/*
 // Name returns an abbreviated form of the name
 func (p *Peer1) Name() string {
 	s := p.rw.name
@@ -139,17 +143,22 @@ func (p *Peer1) Name() string {
 	}
 	return s
 }
+*/
 
+/*
 // Fullname returns the node name that the remote node advertised.
 func (p *Peer1) Fullname() string {
 	return p.rw.name
 }
+*/
 
+/*
 // Caps returns the capabilities (supported subprotocols) of the remote peer.
 func (p *Peer1) Caps() []Cap {
 	// TODO: maybe return copy
 	return p.rw.caps
 }
+*/
 
 /*
 // RunningCap returns true if the peer is actively connected using any of the
@@ -167,19 +176,23 @@ func (p *Peer1) RunninssgCap(protocol string, versions []uint) bool {
 }
 */
 
+/*
 // RemoteAddr returns the remote address of the network connection.
 func (p *Peer1) RemoteAddr() net.Addr {
 	return p.rw.fd.RemoteAddr()
 }
+*/
 
+/*
 // LocalAddr returns the local address of the network connection.
 func (p *Peer1) LocalAddr() net.Addr {
 	return p.rw.fd.LocalAddr()
 }
+*/
 
 // Disconnect terminates the peer connection with the given reason.
 // It returns immediately and does not wait until the connection is closed.
-func (p *Peer1) Disconnect(reason DiscReason) {
+func (p *Peer1) disconnect(reason DiscReason) {
 	if p.testPipe != nil {
 		p.testPipe.Close()
 	}
@@ -190,31 +203,34 @@ func (p *Peer1) Disconnect(reason DiscReason) {
 	}
 }
 
+/*
 // String implements fmt.Stringer.
 func (p *Peer1) String() string {
 	id := p.ID()
 	return fmt.Sprintf("Peer %x %v", id[:8], p.RemoteAddr())
 }
-
+*/
+/*
 // Inbound returns true if the peer is an inbound connection
 func (p *Peer1) Inbound() bool {
 	return p.rw.is(inboundConn)
 }
+*/
 
-func newPeer(log log.Logger, conn *conn, protocols []Protocol) *Peer1 {
-	protomap := matchProtocols(protocols, conn.caps, conn.transport)
+func newPeer(log log.Logger, pp *Peer, transport *rlpxTransport, protocols []Protocol) *Peer1 {
+	protomap := matchProtocols(protocols, pp.conn.caps, transport)
 
-	fmt.Println(protocols, conn.caps)
-	fmt.Println(protomap)
+	//fmt.Println(protocols, conn.caps)
+	//fmt.Println(protomap)
 
 	p := &Peer1{
-		rw:       conn,
+		// rw:       transport,
 		running:  protomap,
 		created:  mclock.Now(),
 		disc:     make(chan DiscReason),
 		protoErr: make(chan error, len(protomap)+1), // protocols + pingLoop
 		closed:   make(chan struct{}),
-		log:      log.New("id", conn.node.ID(), "conn", conn.flags),
+		log:      log.New("id", pp.ID(), "conn", pp.conn.flags),
 	}
 	return p
 }
@@ -268,7 +284,7 @@ loop:
 	}
 
 	close(p.closed)
-	p.rw.transport.close(reason)
+	p.rw.close(reason)
 	p.wg.Wait()
 	return remoteRequested, err
 }
@@ -280,7 +296,7 @@ func (p *Peer1) pingLoop() {
 	for {
 		select {
 		case <-ping.C:
-			if err := SendItems(p.rw.transport, pingMsg); err != nil {
+			if err := SendItems(p.rw, pingMsg); err != nil {
 				p.protoErr <- err
 				return
 			}
@@ -294,7 +310,7 @@ func (p *Peer1) pingLoop() {
 func (p *Peer1) readLoop(errc chan<- error) {
 	defer p.wg.Done()
 	for {
-		msg, err := p.rw.transport.ReadMsg()
+		msg, err := p.rw.ReadMsg()
 		if err != nil {
 			errc <- err
 			return
@@ -313,7 +329,7 @@ func (p *Peer1) handle(msg Msg) error {
 	switch {
 	case msg.Code == pingMsg:
 		msg.Discard()
-		go SendItems(p.rw.transport, pongMsg)
+		go SendItems(p.rw, pongMsg)
 	case msg.Code == discMsg:
 		var reason [1]DiscReason
 		// This is the last message. We don't need to discard or
@@ -392,7 +408,7 @@ func (p *Peer1) startProtocols(writeStart <-chan struct{}, writeErr chan<- error
 		proto.werr = writeErr
 		var rw MsgReadWriter = proto
 		if p.events != nil {
-			rw = newMsgEventer(rw, p.events, p.ID(), proto.proto.Name, p.Info().Network.RemoteAddress, p.Info().Network.LocalAddress)
+			rw = newMsgEventer(rw, p.events, p.ID(), proto.proto.Name, "TODO", "TODO") // TODO
 		}
 		p.log.Trace(fmt.Sprintf("Starting protocol %s/%d", proto.proto.Name, proto.proto.Version))
 		go func() {

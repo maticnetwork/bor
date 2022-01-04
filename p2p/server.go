@@ -253,7 +253,7 @@ type conn struct {
 	fd ConnAddr
 
 	// transport reference to send data
-	transport transport
+	transport transport // we have to remove this once we merge with Peer. There is not reason for conn to have transport methods
 
 	// enode address of the remote node
 	node *enode.Node
@@ -1266,20 +1266,9 @@ func (srv *Server) SetupConn(fd net.Conn, flags connFlag, dialDest *enode.Node) 
 		return nil
 	}
 
-	c := &conn{fd: fd, flags: flags /*, cont: make(chan error)*/}
-	/*
-		if dialDest == nil {
-			fmt.Println("_ A _")
-			c.transport = srv.newTransport(fd, nil)
-		} else {
-			fmt.Println("_ A 2 _")
-			c.transport = srv.newTransport(fd, dialDest.Pubkey())
-		}
-	*/
-
-	err := srv.setupConn(c, fd, flags, dialDest)
+	err := srv.setupConn(fd, flags, dialDest)
 	if err != nil {
-		c.transport.close(err)
+		fd.Close()
 	}
 	return err
 }
@@ -1300,7 +1289,7 @@ func (srv *Server) GetProtocols() []Protocol {
 	return srv.Protocols
 }
 
-func (srv *Server) setupConn(c *conn, rawConn net.Conn, flags connFlag, dialDest *enode.Node) error {
+func (srv *Server) setupConn(rawConn net.Conn, flags connFlag, dialDest *enode.Node) error {
 	// Prevent leftover pending conns from entering the handshake.
 	srv.lock.Lock()
 	running := srv.running
@@ -1326,58 +1315,6 @@ func (srv *Server) setupConn(c *conn, rawConn net.Conn, flags connFlag, dialDest
 		// clog.Trace("Rejected peer", "err", err)
 		return err
 	}
-
-	/*
-
-		// If dialing, figure out the remote public key.
-		var dialPubkey *ecdsa.PublicKey
-		if dialDest != nil {
-			dialPubkey = new(ecdsa.PublicKey)
-			if err := dialDest.Load((*enode.Secp256k1)(dialPubkey)); err != nil {
-				err = errors.New("dial destination doesn't have a secp256k1 public key")
-				srv.log.Trace("Setting up connection failed", "addr", c.fd.RemoteAddr(), "conn", c.flags, "err", err)
-				return err
-			}
-		}
-
-		// Run the RLPx handshake.
-		remotePubkey, err := c.doEncHandshake(srv.PrivateKey)
-		if err != nil {
-			srv.log.Trace("Failed RLPx handshake", "addr", c.fd.RemoteAddr(), "conn", c.flags, "err", err)
-			return err
-		}
-
-		fmt.Println("-- remote --")
-		fmt.Println(remotePubkey)
-
-		if dialDest != nil {
-			c.node = dialDest
-		} else {
-			c.node = nodeFromConn(remotePubkey, c.fd)
-		}
-		clog := srv.log.New("id", c.node.ID(), "addr", c.fd.RemoteAddr(), "conn", c.flags)
-		if err := srv.checkpointPostHandshake(c); err != nil {
-			clog.Trace("Rejected peer", "err", err)
-			return err
-		}
-
-		// Run the capability negotiation handshake.
-		phs, err := c.doProtoHandshake(srv.ourHandshake)
-		if err != nil {
-			clog.Trace("Failed p2p handshake", "err", err)
-			return err
-		}
-		if id := c.node.ID(); !bytes.Equal(crypto.Keccak256(phs.ID), id[:]) {
-			clog.Trace("Wrong devp2p handshake identity", "phsid", hex.EncodeToString(phs.ID))
-			return DiscUnexpectedIdentity
-		}
-		c.caps, c.name = phs.Caps, phs.Name
-		err = srv.checkpointAddPeer(c)
-		if err != nil {
-			clog.Trace("Rejected peer", "err", err)
-			return err
-		}
-	*/
 
 	return nil
 }

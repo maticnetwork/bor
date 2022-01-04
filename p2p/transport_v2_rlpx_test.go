@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"testing"
-	"time"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -41,7 +40,7 @@ func TestTranport_Rlpx(t *testing.T) {
 	assert.NoError(t, err)
 	fmt.Println(msg.Code)
 
-	time.Sleep(35 * time.Second)
+	// time.Sleep(35 * time.Second)
 }
 
 type mockProtocol struct {
