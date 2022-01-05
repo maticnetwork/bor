@@ -1,25 +1,94 @@
 package p2p
 
 import (
+	"fmt"
 	"net"
+	"sync/atomic"
 
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 )
 
-type Peer struct {
-	// use this only to report info
-	conn *conn
+type connFlag int32
 
+const (
+	dynDialedConn connFlag = 1 << iota
+	staticDialedConn
+	inboundConn
+	trustedConn
+)
+
+// PeerEventType is the type of peer events emitted by a p2p.Server
+type PeerEventType string
+
+const (
+	// PeerEventTypeAdd is the type of event emitted when a peer is added
+	// to a p2p.Server
+	PeerEventTypeAdd PeerEventType = "add"
+
+	// PeerEventTypeDrop is the type of event emitted when a peer is
+	// dropped from a p2p.Server
+	PeerEventTypeDrop PeerEventType = "drop"
+
+	// PeerEventTypeMsgSend is the type of event emitted when a
+	// message is successfully sent to a peer
+	PeerEventTypeMsgSend PeerEventType = "msgsend"
+
+	// PeerEventTypeMsgRecv is the type of event emitted when a
+	// message is received from a peer
+	PeerEventTypeMsgRecv PeerEventType = "msgrecv"
+)
+
+// PeerEvent is an event emitted when peers are either added or dropped from
+// a p2p.Server or when a message is sent or received on a peer connection
+type PeerEvent struct {
+	Type          PeerEventType `json:"type"`
+	Peer          enode.ID      `json:"peer"`
+	Error         string        `json:"error,omitempty"`
+	Protocol      string        `json:"protocol,omitempty"`
+	MsgCode       *uint64       `json:"msg_code,omitempty"`
+	MsgSize       *uint32       `json:"msg_size,omitempty"`
+	LocalAddress  string        `json:"local,omitempty"`
+	RemoteAddress string        `json:"remote,omitempty"`
+}
+
+type Peer struct {
 	// logger for the peer
 	log log.Logger
 
+	// enode address of the remote node
+	node *enode.Node
+
+	// remote connected address
+	remoteAddr net.Addr
+
+	// local address of the peer (isnt this our local addr?)
+	localAddr net.Addr
+
+	// bitmap of options of the connection
+	flags connFlag
+
+	// list of capabilities (valid after protocol handshake)
+	caps []Cap
+
+	// name of the node (valid after protocol handshake)
+	name string
+
+	// closeFn closes the connection with the Peer
+	closeFn func(reason error)
+
+	// Is this still required?
 	created mclock.AbsTime
 }
 
-func (p *Peer) Disconnect(reason DiscReason) {
+func (p *Peer) Close() {
+	// merge this and disconnect
+	p.closeFn(fmt.Errorf("requested"))
+}
 
+func (p *Peer) Disconnect(reason DiscReason) {
+	p.closeFn(reason)
 }
 
 func (p *Peer) Inbound() bool {
@@ -27,16 +96,28 @@ func (p *Peer) Inbound() bool {
 }
 
 func (p *Peer) is(f connFlag) bool {
-	return p.conn.is(f)
+	flags := connFlag(atomic.LoadInt32((*int32)(&p.flags)))
+	return flags&f != 0
 }
 
 func (p *Peer) set(f connFlag, val bool) {
-	p.conn.set(f, val)
+	for {
+		oldFlags := connFlag(atomic.LoadInt32((*int32)(&p.flags)))
+		flags := oldFlags
+		if val {
+			flags |= f
+		} else {
+			flags &= ^f
+		}
+		if atomic.CompareAndSwapInt32((*int32)(&p.flags), int32(oldFlags), int32(flags)) {
+			return
+		}
+	}
 }
 
 // ID returns the node's public key.
 func (p *Peer) ID() enode.ID {
-	return p.conn.node.ID()
+	return p.node.ID()
 }
 
 func (p *Peer) Log() log.Logger {
@@ -45,12 +126,12 @@ func (p *Peer) Log() log.Logger {
 
 // Node returns the peer's node descriptor.
 func (p *Peer) Node() *enode.Node {
-	return p.conn.node
+	return p.node
 }
 
 // Name returns an abbreviated form of the name
 func (p *Peer) Name() string {
-	s := p.conn.name
+	s := p.name
 	if len(s) > 20 {
 		return s[:20] + "..."
 	}
@@ -59,12 +140,12 @@ func (p *Peer) Name() string {
 
 // Fullname returns the node name that the remote node advertised.
 func (p *Peer) Fullname() string {
-	return p.conn.name
+	return p.name
 }
 
 // Caps returns the capabilities (supported subprotocols) of the remote peer.
 func (p *Peer) Caps() []Cap {
-	return p.conn.caps
+	return p.caps
 }
 
 // RunningCap returns true if the peer is actively connected using any of the
@@ -76,12 +157,41 @@ func (p *Peer) RunningCap(protocol string, versions []uint) bool {
 
 // RemoteAddr returns the remote address of the network connection.
 func (p *Peer) RemoteAddr() net.Addr {
-	return p.conn.fd.RemoteAddr()
+	return p.remoteAddr
 }
 
 // LocalAddr returns the local address of the network connection.
 func (p *Peer) LocalAddr() net.Addr {
-	return p.conn.fd.LocalAddr()
+	return p.localAddr
+}
+
+func (p *Peer) String() string {
+	s := p.flags.String()
+	if (p.node.ID() != enode.ID{}) {
+		s += " " + p.node.ID().String()
+	}
+	s += " " + p.RemoteAddr().String()
+	return s
+}
+
+func (f connFlag) String() string {
+	s := ""
+	if f&trustedConn != 0 {
+		s += "-trusted"
+	}
+	if f&dynDialedConn != 0 {
+		s += "-dyndial"
+	}
+	if f&staticDialedConn != 0 {
+		s += "-staticdial"
+	}
+	if f&inboundConn != 0 {
+		s += "-inbound"
+	}
+	if s != "" {
+		s = s[1:]
+	}
+	return s
 }
 
 // NewPeer returns a peer for testing purposes.

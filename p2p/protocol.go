@@ -64,13 +64,14 @@ type Protocol struct {
 }
 
 func (p Protocol) cap() Cap {
-	return Cap{p.Name, p.Version}
+	return Cap{p.Name, p.Version, p.Length}
 }
 
 // Cap is the structure of a peer capability.
 type Cap struct {
 	Name    string
 	Version uint
+	Length  uint64
 }
 
 func (cap Cap) String() string {

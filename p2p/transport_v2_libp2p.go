@@ -163,6 +163,8 @@ func (l *libp2pTransportV2) Dial(node *enode.Node) error {
 		}
 	}
 
+	// TODO: here we have to start the session
+
 	return nil
 }
 

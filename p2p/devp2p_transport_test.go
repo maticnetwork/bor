@@ -80,7 +80,7 @@ func newMockBackend(port int) *mockBackend {
 	proto := &protoHandshake{
 		Version: 3,
 		ID:      pub,
-		Caps:    []Cap{{"a", 0}, {"b", 2}, {"mock", 4}},
+		Caps:    []Cap{{"a", 0, 0}, {"b", 2, 0}, {"mock", 4, 0}},
 	}
 
 	mock := &mockBackend{
@@ -113,7 +113,7 @@ func (m *mockBackend) GetProtocols() []Protocol {
 	return m.protocols
 }
 
-func (m *mockBackend) OnConnectValidate(c *conn) error {
+func (m *mockBackend) OnConnectValidate(p *Peer) error {
 	return nil
 }
 

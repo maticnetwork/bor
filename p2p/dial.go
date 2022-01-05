@@ -101,8 +101,8 @@ type dialScheduler struct {
 	doneCh      chan *dialTask
 	addStaticCh chan *enode.Node
 	remStaticCh chan *enode.Node
-	addPeerCh   chan *conn
-	remPeerCh   chan *conn
+	addPeerCh   chan *Peer
+	remPeerCh   chan *Peer
 
 	// Everything below here belongs to loop and
 	// should only be accessed by code on the loop goroutine.
@@ -171,8 +171,8 @@ func newDialScheduler(config dialConfig, it enode.Iterator, setupFunc dialSetupF
 		nodesIn:     make(chan *enode.Node),
 		addStaticCh: make(chan *enode.Node),
 		remStaticCh: make(chan *enode.Node),
-		addPeerCh:   make(chan *conn),
-		remPeerCh:   make(chan *conn),
+		addPeerCh:   make(chan *Peer),
+		remPeerCh:   make(chan *Peer),
 	}
 	d.lastStatsLog = d.clock.Now()
 	d.ctx, d.cancel = context.WithCancel(context.Background())
@@ -205,7 +205,7 @@ func (d *dialScheduler) removeStatic(n *enode.Node) {
 }
 
 // peerAdded updates the peer set.
-func (d *dialScheduler) peerAdded(c *conn) {
+func (d *dialScheduler) peerAdded(c *Peer) {
 	select {
 	case d.addPeerCh <- c:
 	case <-d.ctx.Done():
@@ -213,7 +213,7 @@ func (d *dialScheduler) peerAdded(c *conn) {
 }
 
 // peerRemoved updates the peer set.
-func (d *dialScheduler) peerRemoved(c *conn) {
+func (d *dialScheduler) peerRemoved(c *Peer) {
 	select {
 	case d.remPeerCh <- c:
 	case <-d.ctx.Done():

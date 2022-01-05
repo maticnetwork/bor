@@ -271,11 +271,11 @@ func TestServerAtCap(t *testing.T) {
 		t.Fatalf("could not start: %v", err)
 	}
 
-	newconn := func(id enode.ID) *conn {
+	newconn := func(id enode.ID) *Peer {
 		//fd, _ := net.Pipe()
 		// tx := newTestTransport(&trustedNode.PublicKey, fd, nil)
 		node := enode.SignNull(new(enr.Record), id)
-		return &conn{ /*fd: fd,*/ transport: nil /*transport: tx,*/, flags: inboundConn, node: node /*, cont: make(chan error)*/}
+		return &Peer{ /*fd: fd,*/ /*transport: nil*/ /*transport: tx,*/ flags: inboundConn, node: node /*, cont: make(chan error)*/}
 	}
 
 	// Inject a few connections to fill up the peer set.

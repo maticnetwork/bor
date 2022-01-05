@@ -16,7 +16,7 @@ type backendv2 interface {
 	LocalHandshake() *protoHandshake
 
 	// This is executed after the initial handhsake and before protocol negotiation
-	OnConnectValidate(c *conn) error
+	OnConnectValidate(c *Peer) error
 
 	// Returns the list of legacy protocols
 	GetProtocols() []Protocol

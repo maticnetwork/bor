@@ -46,7 +46,7 @@ func TestDialSchedDynDial(t *testing.T) {
 		// 3 out of 4 peers are connected, leaving 2 dial slots.
 		// 9 nodes are discovered, but only 2 are dialed.
 		{
-			peersAdded: []*conn{
+			peersAdded: []*Peer{
 				{flags: staticDialedConn, node: newNode(uintID(0x00), "")},
 				{flags: dynDialedConn, node: newNode(uintID(0x01), "")},
 				{flags: dynDialedConn, node: newNode(uintID(0x02), "")},
@@ -164,7 +164,7 @@ func TestDialSchedStaticDial(t *testing.T) {
 		// Static dials are launched for the nodes that
 		// aren't yet connected.
 		{
-			peersAdded: []*conn{
+			peersAdded: []*Peer{
 				{flags: dynDialedConn, node: newNode(uintID(0x01), "127.0.0.1:30303")},
 				{flags: dynDialedConn, node: newNode(uintID(0x02), "127.0.0.2:30303")},
 			},
@@ -213,7 +213,7 @@ func TestDialSchedStaticDial(t *testing.T) {
 		// Peer 0x01 drops and 0x07 connects as inbound peer.
 		// Only 0x01 is dialed.
 		{
-			peersAdded: []*conn{
+			peersAdded: []*Peer{
 				{flags: inboundConn, node: newNode(uintID(0x07), "127.0.0.7:30303")},
 			},
 			peersRemoved: []enode.ID{
@@ -285,7 +285,7 @@ func TestDialSchedManyStaticNodes(t *testing.T) {
 	config := dialConfig{maxDialPeers: 2}
 	runDialTest(t, config, []dialTestRound{
 		{
-			peersAdded: []*conn{
+			peersAdded: []*Peer{
 				{flags: dynDialedConn, node: newNode(uintID(0xFFFE), "")},
 				{flags: dynDialedConn, node: newNode(uintID(0xFFFF), "")},
 			},
@@ -398,7 +398,7 @@ func TestDialSchedResolve(t *testing.T) {
 // Code below here is the framework for the tests above.
 
 type dialTestRound struct {
-	peersAdded   []*conn
+	peersAdded   []*Peer
 	peersRemoved []enode.ID
 	update       func(*dialScheduler) // called at beginning of round
 	discovered   []*enode.Node        // newly discovered nodes
@@ -414,8 +414,8 @@ func runDialTest(t *testing.T, config dialConfig, rounds []dialTestRound) {
 		iterator = newDialTestIterator()
 		dialer   = newDialTestDialer()
 		resolver = new(dialTestResolver)
-		peers    = make(map[enode.ID]*conn)
-		setupCh  = make(chan *conn)
+		peers    = make(map[enode.ID]*Peer)
+		setupCh  = make(chan *Peer)
 	)
 
 	// Override config.
@@ -429,7 +429,7 @@ func runDialTest(t *testing.T, config dialConfig, rounds []dialTestRound) {
 	// goroutine and adds the peer.
 	var dialsched *dialScheduler
 	setup := func(fd net.Conn, f connFlag, node *enode.Node) error {
-		conn := &conn{flags: f, node: node}
+		conn := &Peer{flags: f, node: node}
 		dialsched.peerAdded(conn)
 		setupCh <- conn
 		return nil

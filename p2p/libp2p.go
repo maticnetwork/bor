@@ -68,14 +68,6 @@ func (l *libp2pTransport) WriteMsg(msg Msg) error {
 	return nil
 }
 
-func (l *libp2pTransport) doEncHandshake(prv *ecdsa.PrivateKey) (*ecdsa.PublicKey, error) {
-	panic("unimplemented")
-}
-
-func (l *libp2pTransport) doProtoHandshake(our *protoHandshake) (*protoHandshake, error) {
-	panic("unimplemented")
-}
-
 func (l *libp2pTransport) close(err error) {
 	close(l.closeCh)
 	panic("unimplemented")

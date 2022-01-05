@@ -232,109 +232,6 @@ type peerDrop struct {
 	requested bool // true if signaled by the peer
 }
 
-type connFlag int32
-
-const (
-	dynDialedConn connFlag = 1 << iota
-	staticDialedConn
-	inboundConn
-	trustedConn
-)
-
-type ConnAddr interface {
-	RemoteAddr() net.Addr
-	LocalAddr() net.Addr
-}
-
-// conn wraps a network connection with information gathered
-// during the two handshakes. TODO: This struct could be merged with the Peer
-type conn struct {
-	// information about the connection
-	fd ConnAddr
-
-	// transport reference to send data
-	transport transport // we have to remove this once we merge with Peer. There is not reason for conn to have transport methods
-
-	// enode address of the remote node
-	node *enode.Node
-
-	// bitmap of options of the connection
-	flags connFlag
-
-	// list of capabilities (valid after protocol handshake)
-	caps []Cap
-
-	// name of the node (valid after protocol handshake)
-	name string
-}
-
-func (c *conn) Close() {
-	c.transport.close(fmt.Errorf("requested"))
-}
-
-type transport interface {
-	// The two handshakes.
-	// doEncHandshake(prv *ecdsa.PrivateKey) (*ecdsa.PublicKey, error)
-	// doProtoHandshake(our *protoHandshake) (*protoHandshake, error)
-	// The MsgReadWriter can only be used after the encryption
-	// handshake has completed. The code uses conn.id to track this
-	// by setting it to a non-nil value after the encryption handshake.
-	MsgReadWriter
-	// transports must provide Close because we use MsgPipe in some of
-	// the tests. Closing the actual network connection doesn't do
-	// anything in those tests because MsgPipe doesn't use it.
-	close(err error)
-}
-
-func (c *conn) String() string {
-	s := c.flags.String()
-	if (c.node.ID() != enode.ID{}) {
-		s += " " + c.node.ID().String()
-	}
-	s += " " + c.fd.RemoteAddr().String()
-	return s
-}
-
-func (f connFlag) String() string {
-	s := ""
-	if f&trustedConn != 0 {
-		s += "-trusted"
-	}
-	if f&dynDialedConn != 0 {
-		s += "-dyndial"
-	}
-	if f&staticDialedConn != 0 {
-		s += "-staticdial"
-	}
-	if f&inboundConn != 0 {
-		s += "-inbound"
-	}
-	if s != "" {
-		s = s[1:]
-	}
-	return s
-}
-
-func (c *conn) is(f connFlag) bool {
-	flags := connFlag(atomic.LoadInt32((*int32)(&c.flags)))
-	return flags&f != 0
-}
-
-func (c *conn) set(f connFlag, val bool) {
-	for {
-		oldFlags := connFlag(atomic.LoadInt32((*int32)(&c.flags)))
-		flags := oldFlags
-		if val {
-			flags |= f
-		} else {
-			flags &= ^f
-		}
-		if atomic.CompareAndSwapInt32((*int32)(&c.flags), int32(oldFlags), int32(flags)) {
-			return
-		}
-	}
-}
-
 // LocalNode returns the local node record.
 func (srv *Server) LocalNode() *enode.LocalNode {
 	return srv.localnode
@@ -694,19 +591,21 @@ func (srv *Server) libp2pConnect(node *enode.Node) error {
 	}
 	tt.init()
 
-	c := &conn{
-		node:      node,
-		fd:        tt,
-		transport: tt,
-		caps:      []Cap{}, // handle in handshake it
-	}
+	/*
+		c := &conn{
+			node:      node,
+			fd:        tt,
+			transport: tt,
+			caps:      []Cap{}, // handle in handshake it
+		}
+	*/
 	/*
 		err = srv.checkpoint(c, srv.checkpointAddPeer)
 		if err != nil {
 			panic(err)
 		}
 	*/
-	fmt.Println(c)
+	// fmt.Println(c)
 
 	return nil
 }
@@ -1127,7 +1026,7 @@ func (srv *Server) oldDelPeer(pd peerDrop) {
 	d := common.PrettyDuration(mclock.Now() - pd.peer.created)
 	srv.peerDelete(pd.peer.ID())
 	srv.log.Debug("Removing p2p peer", "peercount", srv.lenPeers(), "id", pd.peer.ID(), "duration", d, "req", pd.requested, "err", pd.err)
-	srv.dialsched.peerRemoved(pd.peer.conn)
+	srv.dialsched.peerRemoved(pd.peer)
 	if pd.peer.Inbound() {
 		srv.delInbound()
 	}
@@ -1281,8 +1180,8 @@ func (srv *Server) LocalHandshake() *protoHandshake {
 	return srv.ourHandshake
 }
 
-func (srv *Server) OnConnectValidate(c *conn) error {
-	return srv.checkpointPostHandshake(c)
+func (srv *Server) OnConnectValidate(p *Peer) error {
+	return srv.checkpointPostHandshake(p)
 }
 
 func (srv *Server) GetProtocols() []Protocol {
@@ -1328,23 +1227,23 @@ func (srv *Server) checkpointAddPeer(p *Peer) error {
 	// The handshakes are done and it passed all checks.
 	// p := srv.launchPeer(c)
 	srv.peerAdd(p.ID(), p)
-	srv.log.Debug("Adding p2p peer", "peercount", srv.lenPeers(), "id", p.ID(), "conn", p.conn.flags, "addr", p.RemoteAddr(), "name", p.Name())
-	srv.dialsched.peerAdded(p.conn)
+	srv.log.Debug("Adding p2p peer", "peercount", srv.lenPeers(), "id", p.ID(), "conn", p.flags, "addr", p.RemoteAddr(), "name", p.Name())
+	srv.dialsched.peerAdded(p)
 	if p.Inbound() {
 		srv.addInbound()
 	}
 	return nil
 }
 
-func (srv *Server) checkpointPostHandshake(c *conn) error {
+func (srv *Server) checkpointPostHandshake(peer *Peer) error {
 	// A connection has passed the encryption handshake so
 	// the remote identity is known (but hasn't been verified yet).
-	if _, ok := srv.trusted.Load(c.node.ID()); ok {
+	if _, ok := srv.trusted.Load(peer.node.ID()); ok {
 		// Ensure that the trusted flag is set before checking against MaxPeers.
-		c.flags |= trustedConn
+		peer.flags |= trustedConn
 	}
 	// TODO: track in-progress inbound node IDs (pre-Peer) to avoid dialing them.
-	return srv.postHandshakeChecks(&Peer{conn: c})
+	return srv.postHandshakeChecks(peer)
 }
 
 func nodeFromConn(pubkey *ecdsa.PublicKey, conn net.Conn) *enode.Node {

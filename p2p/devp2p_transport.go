@@ -59,9 +59,9 @@ func (r *rlpxTransportV2) connect(rawConn net.Conn, flags connFlag, dialDest *en
 	// transport connection
 	var tt *rlpxTransport
 	if dialDest == nil {
-		tt = newRLPX(rawConn, nil).(*rlpxTransport)
+		tt = newRLPX(rawConn, nil)
 	} else {
-		tt = newRLPX(rawConn, dialDest.Pubkey()).(*rlpxTransport)
+		tt = newRLPX(rawConn, dialDest.Pubkey())
 	}
 
 	// Run the RLPx handshake.
@@ -70,16 +70,18 @@ func (r *rlpxTransportV2) connect(rawConn net.Conn, flags connFlag, dialDest *en
 		panic(err)
 	}
 
-	cc := &conn{
-		fd:        rawConn,
-		transport: tt,
-		flags:     flags,
+	pp := &Peer{
+		flags:      flags,
+		localAddr:  rawConn.LocalAddr(),
+		remoteAddr: rawConn.RemoteAddr(),
 	}
 
+	// TODO: First validation goes here
+
 	if dialDest != nil {
-		cc.node = dialDest
+		pp.node = dialDest
 	} else {
-		cc.node = nodeFromConn(remotePubkey, rawConn)
+		pp.node = nodeFromConn(remotePubkey, rawConn)
 	}
 
 	// Run the capability negotiation handshake.
@@ -87,25 +89,25 @@ func (r *rlpxTransportV2) connect(rawConn net.Conn, flags connFlag, dialDest *en
 	if err != nil {
 		return nil, err
 	}
-	if id := cc.node.ID(); !bytes.Equal(crypto.Keccak256(phs.ID), id[:]) {
+	if id := pp.node.ID(); !bytes.Equal(crypto.Keccak256(phs.ID), id[:]) {
 		return nil, DiscUnexpectedIdentity
 	}
 
-	cc.caps = phs.Caps
-	cc.name = phs.Name
-
-	pp := &Peer{
-		conn: cc,
-	}
+	pp.caps = phs.Caps
+	pp.name = phs.Name
 
 	// here come the funny stuff
-	peer := newPeer(log.Root(), pp, tt, r.b.GetProtocols())
+	peer := newRlpxSession(log.Root(), pp, tt, r.b.GetProtocols())
 	go func() {
 		fmt.Println("- run -")
 		a, b := peer.run()
 		fmt.Println("- rlpx peer done -", a, b)
 		// notify!
 	}()
+
+	pp.closeFn = func(reason error) {
+		peer.Close(DiscProtocolError)
+	}
 
 	// we cannot return the raw conn and allt he transport must be done with the protocols
 
