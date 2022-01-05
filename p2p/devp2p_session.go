@@ -114,22 +114,37 @@ func (p *devP2PSession) Close(reason DiscReason) {
 }
 
 func newRlpxSession(log log.Logger, peer *Peer, transport devP2PSessionTransport, protocols []Protocol) *devP2PSession {
-	protomap := matchProtocols(protocols, peer.caps, transport)
-
 	session := &devP2PSession{
 		transport: transport,
 		peer:      peer,
-		streams:   protomap,
 		created:   mclock.Now(),
 		disc:      make(chan DiscReason),
-		protoErr:  make(chan error, len(protomap)+1), // protocols + pingLoop
 		closed:    make(chan struct{}),
+		streams:   make(map[string]*devP2PStream),
 		log:       log.New("id", peer.ID(), "conn", peer.flags),
+	}
+
+	// for each of the match protocols create a stream
+	matchedProtocols := matchProtocols(protocols, peer.caps)
+	for _, m := range matchedProtocols {
+		session.createStream(m)
 	}
 	return session
 }
 
+func (p *devP2PSession) createStream(m *matchedProtocol) {
+	p.streams[m.proto.Name] = &devP2PStream{
+		proto:  m.proto,
+		offset: m.offset,
+		in:     make(chan Msg),
+		w:      p.transport,
+	}
+}
+
 func (p *devP2PSession) run() (remoteRequested bool, err error) {
+	// protocols + pingLoop
+	p.protoErr = make(chan error, len(p.streams)+1)
+
 	var (
 		writeStart = make(chan struct{}, 1)
 		writeErr   = make(chan error, 1)
@@ -141,13 +156,11 @@ func (p *devP2PSession) run() (remoteRequested bool, err error) {
 	go p.pingLoop()
 
 	// Start all protocol handlers.
-	writeStart <- struct{}{}
 	p.startProtocols(writeStart, writeErr)
 
 	// Wait for an error or disconnect.
-	// TODO: Test this with multiple read/write protocols working concurrently
-	// and then dropping the connection
 BACK:
+	writeStart <- struct{}{}
 	select {
 	case err = <-writeErr:
 		if err == nil {
@@ -248,7 +261,6 @@ func (p *devP2PSession) handle(msg Msg) error {
 	default:
 		// it's a subprotocol message
 		proto, err := p.getProto(msg.Code)
-		fmt.Println(proto, err)
 
 		if err != nil {
 			return fmt.Errorf("msg code out of range: %v", msg.Code)
@@ -280,42 +292,16 @@ func countMatchingProtocols(protocols []Protocol, caps []Cap) int {
 	return n
 }
 
-// TODO: Use this instead of matchProtocols and split the matching and creating the devp2p streams
 type matchedProtocol struct {
-	cap    Cap
+	proto  Protocol
 	offset uint64
 }
 
 // matchProtocols creates structures for matching named subprotocols.
-func matchProtocols2(local []Cap, caps []Cap, rw MsgReadWriter) map[string]*matchedProtocol {
+func matchProtocols(protocols []Protocol, caps []Cap) map[string]*matchedProtocol {
 	sort.Sort(capsByNameAndVersion(caps))
 	offset := baseProtocolLength
-	result := map[string]*matchedProtocol{}
-
-outer:
-	for _, cap := range caps {
-		for _, proto := range local {
-			if proto.Name == cap.Name && proto.Version == cap.Version {
-				// If an old protocol version matched, revert it
-				if old := result[cap.Name]; old != nil {
-					offset -= old.cap.Length
-				}
-				// Assign the new match
-				result[cap.Name] = &matchedProtocol{cap: cap, offset: offset}
-				offset += uint64(proto.Length)
-
-				continue outer
-			}
-		}
-	}
-	return result
-}
-
-// matchProtocols creates structures for matching named subprotocols.
-func matchProtocols(protocols []Protocol, caps []Cap, rw MsgReadWriter) map[string]*devP2PStream {
-	sort.Sort(capsByNameAndVersion(caps))
-	offset := baseProtocolLength
-	result := make(map[string]*devP2PStream)
+	result := make(map[string]*matchedProtocol)
 
 outer:
 	for _, cap := range caps {
@@ -326,7 +312,11 @@ outer:
 					offset -= old.proto.Length
 				}
 				// Assign the new match
-				result[cap.Name] = &devP2PStream{proto: proto, offset: offset, in: make(chan Msg), w: rw}
+				result[cap.Name] = &matchedProtocol{
+					proto:  proto,
+					offset: offset,
+				}
+				// result[cap.Name] = &devP2PStream{proto: proto, offset: offset, in: make(chan Msg), w: rw}
 				offset += proto.Length
 
 				continue outer

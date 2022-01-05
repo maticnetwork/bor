@@ -80,7 +80,7 @@ func newMockBackend(port int) *mockBackend {
 	proto := &protoHandshake{
 		Version: 3,
 		ID:      pub,
-		Caps:    []Cap{{"a", 0, 0}, {"b", 2, 0}, {"mock", 4, 0}},
+		Caps:    []Cap{{"a", 0}, {"b", 2}, {"mock", 4}},
 	}
 
 	mock := &mockBackend{

@@ -94,7 +94,6 @@ type mockRlpxTransport struct {
 
 	// declare closeCh if you want to simulate the remote peer dropping the connection
 	closeCh chan struct{}
-	closed  error
 }
 
 func (m *mockRlpxTransport) WriteMsg(msg Msg) error {
@@ -115,106 +114,6 @@ func (m *mockRlpxTransport) Close() {
 	if m.closeCh != nil {
 		close(m.closeCh)
 	}
-}
-
-func testSessionWithProto(protos []Protocol) {
-
-}
-
-func testPeer(protos []Protocol) (func(), *Peer, *devP2PSession, <-chan error) {
-
-	newRlpxSession(log.Root(), nil, nil, nil)
-
-	panic("X")
-
-	/*
-		var (
-			fd1, fd2   = net.Pipe()
-			key1, key2 = newkey(), newkey()
-			t1         = newTestTransport(&key2.PublicKey, fd1, nil)
-			t2         = newTestTransport(&key1.PublicKey, fd2, &key1.PublicKey)
-		)
-
-		c1 := &conn{fd: fd1, node: newNode(uintID(1), ""), transport: t1}
-		c2 := &conn{fd: fd2, node: newNode(uintID(2), ""), transport: t2}
-		for _, p := range protos {
-			c1.caps = append(c1.caps, p.cap())
-			c2.caps = append(c2.caps, p.cap())
-		}
-
-		peer := newPeer(log.Root(), c1, protos)
-		errc := make(chan error, 1)
-		go func() {
-			_, err := peer.run()
-			errc <- err
-		}()
-
-		closer := func() { c2.close(errors.New("close func called")) }
-		return closer, c2, peer, errc
-	*/
-}
-
-func TestDevP2PSession_ProtoWriteReadMsg(t *testing.T) {
-
-	/*
-		proto := Protocol{
-			Name:   "a",
-			Length: 5,
-			Run: func(peer *Peer, rw MsgReadWriter) error {
-				if err := ExpectMsg(rw, 2, []uint{1}); err != nil {
-					t.Error(err)
-				}
-				if err := ExpectMsg(rw, 3, []uint{2}); err != nil {
-					t.Error(err)
-				}
-				if err := ExpectMsg(rw, 4, []uint{3}); err != nil {
-					t.Error(err)
-				}
-				return nil
-			},
-		}
-
-		closer, _, _, errc := testPeer([]Protocol{proto})
-		defer closer()
-
-		Send(rw.transport, baseProtocolLength+2, []uint{1})
-		Send(rw.transport, baseProtocolLength+3, []uint{2})
-		Send(rw.transport, baseProtocolLength+4, []uint{3})
-
-		select {
-		case err := <-errc:
-			if err != errProtocolReturned {
-				t.Errorf("peer returned error: %v", err)
-			}
-		case <-time.After(2 * time.Second):
-			t.Errorf("receive timeout")
-		}
-	*/
-}
-
-func TestDevP2P_EncodeMsg(t *testing.T) {
-	t.Skip("not sure what is this doing")
-	/*
-		proto := Protocol{
-			Name:   "a",
-			Length: 2,
-			Run: func(peer *Peer, rw MsgReadWriter) error {
-				if err := SendItems(rw, 2); err == nil {
-					t.Error("expected error for out-of-range msg code, got nil")
-				}
-				if err := SendItems(rw, 1, "foo", "bar"); err != nil {
-					t.Errorf("write error: %v", err)
-				}
-				return nil
-			},
-		}
-		closer, rw, _, _ := testPeer([]Protocol{proto})
-		defer closer()
-
-		if err := ExpectMsg(rw.transport, 17, []string{"foo", "bar"}); err != nil {
-			t.Error(err)
-		}
-	*/
 }
 
 func TestDevP2PSession_PingPong(t *testing.T) {
@@ -326,67 +225,126 @@ func TestDevP2PSession_Protocol_Disconnect(t *testing.T) {
 	// This test is supposed to verify that a Protocol can reliable disconnect
 	// the session.
 
-	// session := newRlpxSession(log.Root(), &Peer{node: newNode(uintID(1), "")}, tr, []Protocol{})
+	tr := &mockRlpxTransport{
+		sendCh:  make(chan Msg, 1),
+		recvCh:  make(chan Msg, 1),
+		closeCh: make(chan struct{}),
+	}
 
-	/*
-		maybe := func() bool { return rand.Intn(2) == 1 }
+	session := newRlpxSession(log.Root(), &Peer{node: newNode(uintID(1), "")}, tr, []Protocol{})
+	session.createStream(&matchedProtocol{
+		proto: Protocol{
+			Name: "a",
+			Run: func(peer *Peer, rw MsgReadWriter) error {
+				time.Sleep(1 * time.Second)
+				// returning from Run stops the protocol and closes the connection
+				return nil
+			},
+		},
+	})
+	remoteRequested, err := session.run()
+	assert.False(t, remoteRequested)
+	assert.Error(t, err, errProtocolReturned)
 
-		for i := 0; i < 1000; i++ {
-			protoclose := make(chan error)
-			protodisc := make(chan DiscReason)
-			closer, rw, p, disc := testPeer([]Protocol{
-				{
-					Name:   "closereq",
-					Run:    func(p *Peer, rw MsgReadWriter) error { return <-protoclose },
-					Length: 1,
-				},
-				{
-					Name:   "disconnect",
-					Run:    func(p *Peer, rw MsgReadWriter) error { p.Disconnect(<-protodisc); return nil },
-					Length: 1,
-				},
-			})
-
-			// Simulate incoming messages.
-			go SendItems(rw.transport, baseProtocolLength+1)
-			go SendItems(rw.transport, baseProtocolLength+2)
-			// Close the network connection.
-			go closer()
-			// Make protocol "closereq" return.
-			protoclose <- errors.New("protocol closed")
-			// Make protocol "disconnect" call peer.Disconnect
-			protodisc <- DiscAlreadyConnected
-			// In some cases, simulate something else calling peer.Disconnect.
-			if maybe() {
-				go p.disconnect(DiscInvalidIdentity)
-			}
-			// In some cases, simulate remote requesting a disconnect.
-			if maybe() {
-				go SendItems(rw.transport, discMsg, DiscQuitting)
-			}
-
-			select {
-			case <-disc:
-			case <-time.After(2 * time.Second):
-				// Peer.run should return quickly. If it doesn't the Peer
-				// goroutines are probably deadlocked. Call panic in order to
-				// show the stacks.
-				panic("Peer.run took to long to return.")
-			}
-		}
-	*/
+	msg := <-tr.sendCh
+	assert.Equal(t, msg.Code, uint64(discMsg))
 }
 
 func TestDevP2PSession_Protocol_MultipleDisconnect(t *testing.T) {
 	// This test is supposed to verify that Peer can reliably handle
 	// multiple causes of disconnection occurring at the same time from protocols.
+
+	tr := &mockRlpxTransport{
+		sendCh:  make(chan Msg, 1),
+		recvCh:  make(chan Msg, 1),
+		closeCh: make(chan struct{}),
+	}
+
+	session := newRlpxSession(log.Root(), &Peer{node: newNode(uintID(1), "")}, tr, []Protocol{})
+	session.createStream(&matchedProtocol{
+		proto: Protocol{
+			Name: "a",
+			Run: func(peer *Peer, rw MsgReadWriter) error {
+				time.Sleep(1 * time.Second)
+				return nil
+			},
+		},
+	})
+	session.createStream(&matchedProtocol{
+		proto: Protocol{
+			Name: "b",
+			Run: func(peer *Peer, rw MsgReadWriter) error {
+				time.Sleep(1 * time.Second)
+				return nil
+			},
+		},
+		offset: 10,
+	})
+
+	remoteRequested, err := session.run()
+	assert.False(t, remoteRequested)
+	assert.Error(t, err, errProtocolReturned)
+
+	msg := <-tr.sendCh
+	assert.Equal(t, msg.Code, uint64(discMsg))
+}
+
+func TestDevP2PSession_Protocol_ConcurrentReadWrite(t *testing.T) {
+	tr := &mockRlpxTransport{
+		sendCh:  make(chan Msg, 100),
+		recvCh:  make(chan Msg, 100),
+		closeCh: make(chan struct{}),
+	}
+
+	closeCh := make(chan struct{})
+	doWriteOps := func(code uint64, rw MsgReadWriter) {
+		for i := 0; i < 10; i++ {
+			if err := rw.WriteMsg(Msg{Code: code}); err != nil {
+				panic(err)
+			}
+		}
+		<-closeCh
+	}
+
+	session := newRlpxSession(log.Root(), &Peer{node: newNode(uintID(1), "")}, tr, []Protocol{})
+	session.createStream(&matchedProtocol{
+		proto: Protocol{
+			Name:   "a",
+			Length: 10,
+			Run: func(peer *Peer, rw MsgReadWriter) error {
+				doWriteOps(5, rw)
+				return nil
+			},
+		},
+	})
+	session.createStream(&matchedProtocol{
+		proto: Protocol{
+			Name:   "b",
+			Length: 20,
+			Run: func(peer *Peer, rw MsgReadWriter) error {
+				doWriteOps(15, rw)
+				return nil
+			},
+		},
+		offset: 10,
+	})
+
+	go session.run()
+
+	for i := 0; i < 20; i++ {
+		msg := <-tr.sendCh
+		if msg.Code != 25 && msg.Code != 5 {
+			t.Fatal("bad")
+		}
+	}
+	close(closeCh)
 }
 
 func TestNewPeer(t *testing.T) {
 	t.Skip("I think this is not used") // is this only for the mock?
 
 	name := "nodename"
-	caps := []Cap{{"foo", 2, 0}, {"bar", 3, 0}}
+	caps := []Cap{{"foo", 2}, {"bar", 3}}
 	id := randomID()
 	p := NewPeer(id, name, caps)
 	if p.ID() != id {
@@ -406,7 +364,7 @@ func TestDevP2PSession_MatchProtocols(t *testing.T) {
 	tests := []struct {
 		Remote []Cap
 		Local  []Protocol
-		Match  map[string]devP2PStream
+		Match  map[string]matchedProtocol
 	}{
 		{
 			// No remote capabilities
@@ -425,13 +383,13 @@ func TestDevP2PSession_MatchProtocols(t *testing.T) {
 			// Some matches, some differences
 			Remote: []Cap{{Name: "local"}, {Name: "match1"}, {Name: "match2"}},
 			Local:  []Protocol{{Name: "match1"}, {Name: "match2"}, {Name: "remote"}},
-			Match:  map[string]devP2PStream{"match1": {proto: Protocol{Name: "match1"}}, "match2": {proto: Protocol{Name: "match2"}}},
+			Match:  map[string]matchedProtocol{"match1": {proto: Protocol{Name: "match1"}}, "match2": {proto: Protocol{Name: "match2"}}},
 		},
 		{
 			// Various alphabetical ordering
 			Remote: []Cap{{Name: "aa"}, {Name: "ab"}, {Name: "bb"}, {Name: "ba"}},
 			Local:  []Protocol{{Name: "ba"}, {Name: "bb"}, {Name: "ab"}, {Name: "aa"}},
-			Match:  map[string]devP2PStream{"aa": {proto: Protocol{Name: "aa"}}, "ab": {proto: Protocol{Name: "ab"}}, "ba": {proto: Protocol{Name: "ba"}}, "bb": {proto: Protocol{Name: "bb"}}},
+			Match:  map[string]matchedProtocol{"aa": {proto: Protocol{Name: "aa"}}, "ab": {proto: Protocol{Name: "ab"}}, "ba": {proto: Protocol{Name: "ba"}}, "bb": {proto: Protocol{Name: "bb"}}},
 		},
 		{
 			// No mutual versions
@@ -442,30 +400,30 @@ func TestDevP2PSession_MatchProtocols(t *testing.T) {
 			// Multiple versions, single common
 			Remote: []Cap{{Version: 1}, {Version: 2}},
 			Local:  []Protocol{{Version: 2}, {Version: 3}},
-			Match:  map[string]devP2PStream{"": {proto: Protocol{Version: 2}}},
+			Match:  map[string]matchedProtocol{"": {proto: Protocol{Version: 2}}},
 		},
 		{
 			// Multiple versions, multiple common
 			Remote: []Cap{{Version: 1}, {Version: 2}, {Version: 3}, {Version: 4}},
 			Local:  []Protocol{{Version: 2}, {Version: 3}},
-			Match:  map[string]devP2PStream{"": {proto: Protocol{Version: 3}}},
+			Match:  map[string]matchedProtocol{"": {proto: Protocol{Version: 3}}},
 		},
 		{
 			// Various version orderings
 			Remote: []Cap{{Version: 4}, {Version: 1}, {Version: 3}, {Version: 2}},
 			Local:  []Protocol{{Version: 2}, {Version: 3}, {Version: 1}},
-			Match:  map[string]devP2PStream{"": {proto: Protocol{Version: 3}}},
+			Match:  map[string]matchedProtocol{"": {proto: Protocol{Version: 3}}},
 		},
 		{
 			// Versions overriding sub-protocol lengths
 			Remote: []Cap{{Version: 1}, {Version: 2}, {Version: 3}, {Name: "a"}},
 			Local:  []Protocol{{Version: 1, Length: 1}, {Version: 2, Length: 2}, {Version: 3, Length: 3}, {Name: "a"}},
-			Match:  map[string]devP2PStream{"": {proto: Protocol{Version: 3}}, "a": {proto: Protocol{Name: "a"}, offset: 3}},
+			Match:  map[string]matchedProtocol{"": {proto: Protocol{Version: 3}}, "a": {proto: Protocol{Name: "a"}, offset: 3}},
 		},
 	}
 
 	for i, tt := range tests {
-		result := matchProtocols(tt.Local, tt.Remote, nil)
+		result := matchProtocols(tt.Local, tt.Remote)
 		if len(result) != len(tt.Match) {
 			t.Errorf("test %d: negotiation mismatch: have %v, want %v", i, len(result), len(tt.Match))
 			continue
