@@ -14,12 +14,12 @@ import (
 func TestTranport_Rlpx(t *testing.T) {
 	m1 := &mockProtocol{}
 	b1 := newMockBackend(8000).WithProtocol(m1.Protocol())
-	t1 := &rlpxTransportV2{b: b1}
+	t1 := &devp2pTransportV2{b: b1}
 	t1.Listen(b1.Addr())
 
 	m2 := &mockProtocol{}
 	b2 := newMockBackend(9000).WithProtocol(m2.Protocol())
-	t2 := &rlpxTransportV2{b: b2}
+	t2 := &devp2pTransportV2{b: b2}
 	t2.Listen(b2.Addr())
 
 	go func() {

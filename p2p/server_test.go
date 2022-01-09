@@ -101,7 +101,7 @@ func TestServerListen(t *testing.T) {
 
 	// dial the test server
 	b1 := newMockBackend(8000)
-	t1 := &rlpxTransportV2{b: b1}
+	t1 := &devp2pTransportV2{b: b1}
 
 	p2, err := t1.Dial(srv.Self())
 	if err != nil {
@@ -550,10 +550,12 @@ func TestServerInboundThrottle(t *testing.T) {
 				return newRLPX(fd, dialDest)
 			},
 		*/
-		listenFunc: func(network, laddr string) (net.Listener, error) {
-			fakeAddr := &net.TCPAddr{IP: net.IP{95, 33, 21, 2}, Port: 4444}
-			return listenFakeAddr(network, laddr, fakeAddr)
-		},
+		/*
+			listenFunc: func(network, laddr string) (net.Listener, error) {
+				fakeAddr := &net.TCPAddr{IP: net.IP{95, 33, 21, 2}, Port: 4444}
+				return listenFakeAddr(network, laddr, fakeAddr)
+			},
+		*/
 	}
 	if err := srv.Start(); err != nil {
 		t.Fatal("can't start: ", err)

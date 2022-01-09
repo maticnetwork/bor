@@ -17,16 +17,20 @@ func (n *Node) IsMultiAddr() bool {
 	return true
 }
 
+func (n *Node) PeerID() (peer.ID, error) {
+	key := crypto.PubKey((*crypto.Secp256k1PublicKey)(n.Pubkey()))
+	return peer.IDFromPublicKey(key)
+}
+
 func (n *Node) GetMultiAddr() (multiaddr.Multiaddr, error) {
 	return EnodeToMultiAddr(n)
 }
 
 func EnodeToMultiAddr(node *Node) (multiaddr.Multiaddr, error) {
 	// convert the key to libp2p.crypto format
-	key := crypto.PubKey((*crypto.Secp256k1PublicKey)(node.Pubkey()))
-	id, err := peer.IDFromPublicKey(key)
+	id, err := node.PeerID()
 	if err != nil {
-		return nil, fmt.Errorf("could not get peer id: %v", err)
+		return nil, err
 	}
 	ipAddr := node.IP().String()
 

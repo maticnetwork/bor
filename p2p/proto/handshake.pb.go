@@ -67,6 +67,13 @@ type HandshakeResponse struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
+
+	Version    int64  `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
+	Name       string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Caps       []*Cap `protobuf:"bytes,3,rep,name=caps,proto3" json:"caps,omitempty"`
+	ListenPort int64  `protobuf:"varint,4,opt,name=listenPort,proto3" json:"listenPort,omitempty"`
+	// secp256k1 public key
+	Id string `protobuf:"bytes,5,opt,name=id,proto3" json:"id,omitempty"`
 }
 
 func (x *HandshakeResponse) Reset() {
@@ -101,16 +108,117 @@ func (*HandshakeResponse) Descriptor() ([]byte, []int) {
 	return file_p2p_proto_handshake_proto_rawDescGZIP(), []int{1}
 }
 
+func (x *HandshakeResponse) GetVersion() int64 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+func (x *HandshakeResponse) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *HandshakeResponse) GetCaps() []*Cap {
+	if x != nil {
+		return x.Caps
+	}
+	return nil
+}
+
+func (x *HandshakeResponse) GetListenPort() int64 {
+	if x != nil {
+		return x.ListenPort
+	}
+	return 0
+}
+
+func (x *HandshakeResponse) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type Cap struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Name    string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Version int64  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+}
+
+func (x *Cap) Reset() {
+	*x = Cap{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_p2p_proto_handshake_proto_msgTypes[2]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *Cap) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Cap) ProtoMessage() {}
+
+func (x *Cap) ProtoReflect() protoreflect.Message {
+	mi := &file_p2p_proto_handshake_proto_msgTypes[2]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Cap.ProtoReflect.Descriptor instead.
+func (*Cap) Descriptor() ([]byte, []int) {
+	return file_p2p_proto_handshake_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *Cap) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *Cap) GetVersion() int64 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
 var File_p2p_proto_handshake_proto protoreflect.FileDescriptor
 
 var file_p2p_proto_handshake_proto_rawDesc = []byte{
 	0x0a, 0x19, 0x70, 0x32, 0x70, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2f, 0x68, 0x61, 0x6e, 0x64,
 	0x73, 0x68, 0x61, 0x6b, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x12, 0x05, 0x70, 0x72, 0x6f,
 	0x74, 0x6f, 0x22, 0x12, 0x0a, 0x10, 0x48, 0x61, 0x6e, 0x64, 0x73, 0x68, 0x61, 0x6b, 0x65, 0x52,
-	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x22, 0x13, 0x0a, 0x11, 0x48, 0x61, 0x6e, 0x64, 0x73, 0x68,
-	0x61, 0x6b, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x42, 0x0c, 0x5a, 0x0a, 0x2f,
-	0x70, 0x32, 0x70, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f,
-	0x33,
+	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x22, 0x91, 0x01, 0x0a, 0x11, 0x48, 0x61, 0x6e, 0x64, 0x73,
+	0x68, 0x61, 0x6b, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x18, 0x0a, 0x07,
+	0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03, 0x52, 0x07, 0x76,
+	0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x02,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x12, 0x1e, 0x0a, 0x04, 0x63, 0x61,
+	0x70, 0x73, 0x18, 0x03, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x0a, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f,
+	0x2e, 0x43, 0x61, 0x70, 0x52, 0x04, 0x63, 0x61, 0x70, 0x73, 0x12, 0x1e, 0x0a, 0x0a, 0x6c, 0x69,
+	0x73, 0x74, 0x65, 0x6e, 0x50, 0x6f, 0x72, 0x74, 0x18, 0x04, 0x20, 0x01, 0x28, 0x03, 0x52, 0x0a,
+	0x6c, 0x69, 0x73, 0x74, 0x65, 0x6e, 0x50, 0x6f, 0x72, 0x74, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64,
+	0x18, 0x05, 0x20, 0x01, 0x28, 0x09, 0x52, 0x02, 0x69, 0x64, 0x22, 0x33, 0x0a, 0x03, 0x43, 0x61,
+	0x70, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52,
+	0x04, 0x6e, 0x61, 0x6d, 0x65, 0x12, 0x18, 0x0a, 0x07, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e,
+	0x18, 0x02, 0x20, 0x01, 0x28, 0x03, 0x52, 0x07, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6f, 0x6e, 0x42,
+	0x0c, 0x5a, 0x0a, 0x2f, 0x70, 0x32, 0x70, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62, 0x06, 0x70,
+	0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -125,17 +233,19 @@ func file_p2p_proto_handshake_proto_rawDescGZIP() []byte {
 	return file_p2p_proto_handshake_proto_rawDescData
 }
 
-var file_p2p_proto_handshake_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_p2p_proto_handshake_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_p2p_proto_handshake_proto_goTypes = []interface{}{
 	(*HandshakeRequest)(nil),  // 0: proto.HandshakeRequest
 	(*HandshakeResponse)(nil), // 1: proto.HandshakeResponse
+	(*Cap)(nil),               // 2: proto.Cap
 }
 var file_p2p_proto_handshake_proto_depIdxs = []int32{
-	0, // [0:0] is the sub-list for method output_type
-	0, // [0:0] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	2, // 0: proto.HandshakeResponse.caps:type_name -> proto.Cap
+	1, // [1:1] is the sub-list for method output_type
+	1, // [1:1] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_p2p_proto_handshake_proto_init() }
@@ -168,6 +278,18 @@ func file_p2p_proto_handshake_proto_init() {
 				return nil
 			}
 		}
+		file_p2p_proto_handshake_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*Cap); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -175,7 +297,7 @@ func file_p2p_proto_handshake_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_p2p_proto_handshake_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

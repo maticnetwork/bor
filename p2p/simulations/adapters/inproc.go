@@ -93,10 +93,10 @@ func (s *SimAdapter) NewNode(config *NodeConfig) (Node, error) {
 
 	n, err := node.New(&node.Config{
 		P2P: p2p.Config{
-			PrivateKey:      config.PrivateKey,
-			MaxPeers:        math.MaxInt32,
-			NoDiscovery:     true,
-			Dialer:          s,
+			PrivateKey:  config.PrivateKey,
+			MaxPeers:    math.MaxInt32,
+			NoDiscovery: true,
+			//Dialer:          s,
 			EnableMsgEvents: config.EnableMsgEvents,
 		},
 		ExternalSigner: config.ExternalSigner,

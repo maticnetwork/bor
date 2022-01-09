@@ -3,6 +3,7 @@ package p2p
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
 	"fmt"
 	"net"
 
@@ -11,12 +12,12 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 )
 
-type rlpxTransportV2 struct {
+type devp2pTransportV2 struct {
 	b   backendv2
 	lis net.Listener
 }
 
-func (r *rlpxTransportV2) Listen(addr string) error {
+func (r *devp2pTransportV2) Listen(addr string) error {
 	lis, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err
@@ -25,12 +26,9 @@ func (r *rlpxTransportV2) Listen(addr string) error {
 	return nil
 }
 
-func (r *rlpxTransportV2) Dial(enode *enode.Node) (*Peer, error) {
-	// TODO
-	dialer := &tcpDialer{
-		d: &net.Dialer{Timeout: defaultDialTimeout},
-	}
-	conn, err := dialer.Dial(context.Background(), enode)
+func (r *devp2pTransportV2) Dial(enode *enode.Node) (*Peer, error) {
+	dialer := &net.Dialer{Timeout: defaultDialTimeout}
+	conn, err := dialer.DialContext(context.Background(), "tcp", nodeAddr(enode).String())
 	if err != nil {
 		return nil, err
 	}
@@ -41,7 +39,7 @@ func (r *rlpxTransportV2) Dial(enode *enode.Node) (*Peer, error) {
 	return peer, nil
 }
 
-func (r *rlpxTransportV2) Accept() (*Peer, error) {
+func (r *devp2pTransportV2) Accept() (*Peer, error) {
 	// TODO
 	conn, err := r.lis.Accept()
 	if err != nil {
@@ -54,7 +52,7 @@ func (r *rlpxTransportV2) Accept() (*Peer, error) {
 	return peer, nil
 }
 
-func (r *rlpxTransportV2) connect(rawConn net.Conn, flags connFlag, dialDest *enode.Node) (*Peer, error) {
+func (r *devp2pTransportV2) connect(rawConn net.Conn, flags connFlag, dialDest *enode.Node) (*Peer, error) {
 
 	// transport connection
 	var tt *rlpxTransport
@@ -112,4 +110,14 @@ func (r *rlpxTransportV2) connect(rawConn net.Conn, flags connFlag, dialDest *en
 	// we cannot return the raw conn and allt he transport must be done with the protocols
 
 	return pp, nil
+}
+
+func nodeFromConn(pubkey *ecdsa.PublicKey, conn net.Conn) *enode.Node {
+	var ip net.IP
+	var port int
+	if tcp, ok := conn.RemoteAddr().(*net.TCPAddr); ok {
+		ip = tcp.IP
+		port = tcp.Port
+	}
+	return enode.NewV4(pubkey, ip, port, port)
 }

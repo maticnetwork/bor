@@ -8,4 +8,16 @@ message HandshakeRequest {
 }
 
 message HandshakeResponse {
+    int64 version = 1;
+    string name = 2;
+    repeated Cap caps = 3;
+    int64 listenPort = 4;
+
+    // secp256k1 public key
+    string id = 5;
+}
+
+message Cap {
+    string name = 1;
+    int64 version = 2;
 }

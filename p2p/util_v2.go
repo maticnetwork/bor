@@ -15,14 +15,18 @@ func newPeerList() peerList {
 	return peerList{m: map[enode.ID]struct{}{}}
 }
 
-func (p peerList) len() int {
+func (p *peerList) reset() {
+	p.m = map[enode.ID]struct{}{}
+}
+
+func (p *peerList) len() int {
 	p.l.Lock()
 	defer p.l.Unlock()
 
 	return len(p.m)
 }
 
-func (p peerList) contains(n enode.ID) bool {
+func (p *peerList) contains(n enode.ID) bool {
 	p.l.Lock()
 	defer p.l.Unlock()
 
@@ -30,7 +34,7 @@ func (p peerList) contains(n enode.ID) bool {
 	return ok
 }
 
-func (p peerList) add(n enode.ID) bool {
+func (p *peerList) add(n enode.ID) bool {
 	p.l.Lock()
 	defer p.l.Unlock()
 
@@ -41,7 +45,7 @@ func (p peerList) add(n enode.ID) bool {
 	return !ok
 }
 
-func (p peerList) del(n enode.ID) bool {
+func (p *peerList) del(n enode.ID) bool {
 	p.l.Lock()
 	defer p.l.Unlock()
 
