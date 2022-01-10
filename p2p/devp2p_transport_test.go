@@ -109,7 +109,7 @@ func (m *mockBackend) WithProtocol(p Protocol) *mockBackend {
 	return m
 }
 
-func (m *mockBackend) Disconnected(peerID enode.ID) {
+func (m *mockBackend) Disconnected(disc peerDisconnected) {
 
 }
 
@@ -117,7 +117,11 @@ func (m *mockBackend) GetProtocols() []Protocol {
 	return m.protocols
 }
 
-func (m *mockBackend) OnConnectValidate(p *Peer) error {
+func (m *mockBackend) ValidatePreHandshake(c *Peer) error {
+	return nil
+}
+
+func (m *mockBackend) ValidatePostHandshake(c *Peer) error {
 	return nil
 }
 

@@ -248,7 +248,7 @@ func TestServerXXXX(t *testing.T) {
 	srv := &Server{
 		peers: map[enode.ID]*Peer{},
 	}
-	srv.peerAdd(randomID(), &Peer{})
+	srv.peers[randomID()] = &Peer{}
 }
 
 // This test checks that connections are disconnected just after the encryption handshake
@@ -280,7 +280,7 @@ func TestServerAtCap(t *testing.T) {
 
 	// Inject a few connections to fill up the peer set.
 	for i := 0; i < 10; i++ {
-		srv.peerAdd(randomID(), &Peer{})
+		srv.peers[randomID()] = &Peer{}
 		/*
 			if err := srv.checkpointAddPeer(c); err != nil {
 				t.Fatalf("could not add conn %d: %v", i, err)
@@ -291,12 +291,12 @@ func TestServerAtCap(t *testing.T) {
 	// Try inserting a non-trusted connection.
 	anotherID := randomID()
 	c := newconn(anotherID)
-	if err := srv.checkpointPostHandshake(c); err != DiscTooManyPeers {
+	if err := srv.ValidatePostHandshake(c); err != DiscTooManyPeers {
 		t.Error("wrong error for insert:", err)
 	}
 	// Try inserting a trusted connection.
 	c = newconn(trustedID)
-	if err := srv.checkpointPostHandshake(c); err != nil {
+	if err := srv.ValidatePostHandshake(c); err != nil {
 		t.Error("unexpected error for trusted conn @posthandshake:", err)
 	}
 	if !c.is(trustedConn) {
@@ -306,14 +306,14 @@ func TestServerAtCap(t *testing.T) {
 	// Remove from trusted set and try again
 	srv.RemoveTrustedPeer(newNode(trustedID, ""))
 	c = newconn(trustedID)
-	if err := srv.checkpointPostHandshake(c); err != DiscTooManyPeers {
+	if err := srv.ValidatePostHandshake(c); err != DiscTooManyPeers {
 		t.Error("wrong error for insert:", err)
 	}
 
 	// Add anotherID to trusted set and try again
 	srv.AddTrustedPeer(newNode(anotherID, ""))
 	c = newconn(anotherID)
-	if err := srv.checkpointPostHandshake(c); err != nil {
+	if err := srv.ValidatePostHandshake(c); err != nil {
 		t.Error("unexpected error for trusted conn @posthandshake:", err)
 	}
 	if !c.is(trustedConn) {
@@ -649,4 +649,27 @@ func syncAddPeer(srv *Server, node *enode.Node) bool {
 			return false
 		}
 	}
+}
+
+func TestServerPeerAddDrop(t *testing.T) {
+	sched := newDialScheduler(dialConfig{}, newDialTestIterator(), func(connFlag, *enode.Node) error {
+		return nil
+	})
+
+	srv := &Server{
+		log:       log.Root(),
+		peers:     map[enode.ID]*Peer{},
+		dialsched: sched,
+	}
+
+	peer := &Peer{
+		node: newNode(uintID(0x1), "127.0.0.1:30303"),
+	}
+
+	srv.addPeer(peer)
+
+	srv.Disconnected(peerDisconnected{
+		Id:    peer.node.ID(),
+		Error: DiscIncompatibleVersion,
+	})
 }

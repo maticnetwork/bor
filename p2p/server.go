@@ -27,7 +27,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/event"
@@ -234,6 +233,7 @@ func (srv *Server) LocalNode() *enode.LocalNode {
 
 // Peers returns all connected peers.
 func (srv *Server) Peers() []*Peer {
+	fmt.Println("=>2")
 	srv.peersLock.Lock()
 	defer srv.peersLock.Unlock()
 
@@ -271,6 +271,7 @@ func (srv *Server) AddPeer(node *enode.Node) {
 // This method blocks until all protocols have exited and the peer is removed. Do not use
 // RemovePeer in protocol implementations, call Disconnect on the Peer instead.
 func (srv *Server) RemovePeer(node *enode.Node) {
+	fmt.Println("=>3")
 	srv.peersLock.Lock()
 
 	var (
@@ -575,8 +576,28 @@ func (srv *Server) setupDiscovery() error {
 	return nil
 }
 
-func (srv *Server) Disconnected(peerID enode.ID) {
-	srv.oldDelPeer(peerDrop{})
+func (srv *Server) Disconnected(disc peerDisconnected) {
+	fmt.Println("=>4")
+	srv.peersLock.Lock()
+	defer srv.peersLock.Unlock()
+	fmt.Println("=>4.1")
+	peer, ok := srv.peers[disc.Id]
+	if !ok {
+		log.Error("disconnected peer not found", "id", disc.Id)
+		return
+	}
+	fmt.Println("=>4.2")
+	fmt.Println(disc)
+	fmt.Println(srv.peers)
+
+	delete(srv.peers, disc.Id)
+	srv.log.Debug("Removing p2p peer", "peercount", srv.lenPeers(), "id", disc.Id, "req", disc.RemoteRequested, "err", disc.Error)
+	fmt.Println("=>4.3")
+	srv.dialsched.peerRemoved(peer)
+	if peer.Inbound() {
+		srv.delInbound()
+	}
+	fmt.Println("=>4.4")
 }
 
 func (srv *Server) setupDialScheduler() {
@@ -645,58 +666,33 @@ func (srv *Server) setupListening() error {
 		srv.LocalNode().Set(enode.LibP2PEntry(srv.Config.LibP2PPort))
 	}
 
-	// start devp2p transport
-
-	// start libp2p transport
-
 	srv.loopWG.Add(1)
 	go srv.listenLoop()
 	return nil
 }
 
-/*
-// doPeerOp runs fn on the main loop.
-func (srv *Server) doPeerOp(fn peerOpFunc) {
-	select {
-	case srv.peerOp <- fn:
-		<-srv.peerOpDone
-	case <-srv.quit:
-	}
-}
-*/
-
 func (srv *Server) peerExists(id enode.ID) bool {
+	fmt.Println("=>5")
 	srv.peersLock.Lock()
 	defer srv.peersLock.Unlock()
+	fmt.Println("=>5.1")
 
 	_, ok := srv.peers[id]
 	return ok
 }
 
 func (srv *Server) lenPeers() int {
+	fmt.Println("=>6")
 	srv.peersLock.Lock()
 	defer srv.peersLock.Unlock()
+	fmt.Println("=>6.1")
 
 	num := len(srv.peers)
 	return num
 }
 
-func (srv *Server) peerDelete(id enode.ID) {
-	// this only does the op to remove it from the list
-	srv.peersLock.Lock()
-	defer srv.peersLock.Unlock()
-
-	delete(srv.peers, id)
-}
-
-func (srv *Server) peerAdd(id enode.ID, p *Peer) {
-	srv.peersLock.Lock()
-	defer srv.peersLock.Unlock()
-
-	srv.peers[id] = p
-}
-
 func (srv *Server) setTrusted(id enode.ID, trusted bool) {
+	fmt.Println("=>7")
 	srv.peersLock.Lock()
 	defer srv.peersLock.Unlock()
 
@@ -855,41 +851,43 @@ func (srv *Server) getInbound() int64 {
 	return atomic.LoadInt64(&srv.inboundCount)
 }
 
-func (srv *Server) oldDelPeer(pd peerDrop) {
-	// A peer disconnected.
-	d := common.PrettyDuration(mclock.Now() - pd.peer.created)
-	srv.peerDelete(pd.peer.ID())
-	srv.log.Debug("Removing p2p peer", "peercount", srv.lenPeers(), "id", pd.peer.ID(), "duration", d, "req", pd.requested, "err", pd.err)
-	srv.dialsched.peerRemoved(pd.peer)
-	if pd.peer.Inbound() {
-		srv.delInbound()
+func (srv *Server) ValidatePreHandshake(peer *Peer) error {
+	// A connection has passed the encryption handshake so
+	// the remote identity is known (but hasn't been verified yet).
+	fmt.Println("QQ1")
+	if srv.trusted.contains(peer.node.ID()) {
+		// Ensure that the trusted flag is set before checking against MaxPeers.
+		peer.set(trustedConn, true)
 	}
-}
-
-func (srv *Server) postHandshakeChecks(peer *Peer) error {
-	switch {
-	case !peer.is(trustedConn) && srv.lenPeers() >= srv.MaxPeers:
+	fmt.Println("QQ2")
+	if !peer.is(trustedConn) && srv.lenPeers() >= srv.MaxPeers {
+		fmt.Println("- eign?")
 		return DiscTooManyPeers
-	case !peer.is(trustedConn) && peer.is(inboundConn) && int(srv.getInbound()) >= srv.maxInboundConns():
+	}
+	fmt.Println("QQ3")
+	if !peer.is(trustedConn) && peer.is(inboundConn) && int(srv.getInbound()) >= srv.maxInboundConns() {
 		return DiscTooManyPeers
-	case srv.peerExists(peer.ID()):
+	}
+	fmt.Println("QQ4")
+	if srv.peerExists(peer.ID()) {
 		return DiscAlreadyConnected
-	case peer.ID() == srv.localnode.ID():
-		return DiscSelf
-	default:
-		return nil
 	}
+	fmt.Println("QQ5")
+	if peer.ID() == srv.localnode.ID() {
+		return DiscSelf
+	}
+	return nil
 }
 
-func (srv *Server) addPeerChecks(peer *Peer) error {
+func (srv *Server) ValidatePostHandshake(peer *Peer) error {
 	// Drop connections with no matching protocols.
 	if len(srv.Protocols) > 0 && countMatchingProtocols(srv.Protocols, peer.Caps()) == 0 {
-		// BOR: TODO: Enable this again
+		fmt.Println("no matching protocols")
+		fmt.Println(srv.Protocols, peer.Caps())
+
 		return DiscUselessPeer
 	}
-	// Repeat the post-handshake checks because the
-	// peer set might have changed since those checks were performed.
-	return srv.postHandshakeChecks(peer)
+	return nil
 }
 
 // listenLoop runs in its own goroutine and accepts
@@ -989,13 +987,7 @@ func (srv *Server) listenLoop() {
 			if err != nil {
 				panic(err)
 			}
-
-			fmt.Println("New peer", peer)
-			if err = srv.checkpointAddPeer(peer); err != nil {
-				// add a reason to this
-				peer.Close()
-				// clog.Trace("Rejected peer", "err", err)
-			}
+			srv.addPeer(peer)
 		}
 	}()
 
@@ -1011,17 +1003,15 @@ func (srv *Server) listenLoop() {
 				if err != nil {
 					panic(err)
 				}
-				if err = srv.checkpointAddPeer(peer); err != nil {
-					// add a reason to this
-					peer.Close()
-					// clog.Trace("Rejected peer", "err", err)
-				}
+				srv.addPeer(peer)
 			}
 		}()
 	}
 }
 
 func (srv *Server) checkInboundConn(remoteIP net.IP) error {
+	// TODO:
+
 	if remoteIP == nil {
 		return nil
 	}
@@ -1043,7 +1033,6 @@ func (srv *Server) checkInboundConn(remoteIP net.IP) error {
 // as a peer. It returns when the connection has been added as a peer
 // or the handshakes have failed.
 func (srv *Server) SetupConn(flags connFlag, dialDest *enode.Node) error {
-
 	var peer *Peer
 	var err error
 
@@ -1059,13 +1048,25 @@ func (srv *Server) SetupConn(flags connFlag, dialDest *enode.Node) error {
 		return err
 	}
 
-	if err = srv.checkpointAddPeer(peer); err != nil {
-		// add a reason to this
-		peer.Close()
-		// clog.Trace("Rejected peer", "err", err)
-		return err
-	}
+	srv.addPeer(peer)
 	return nil
+}
+
+func (srv *Server) addPeer(p *Peer) {
+	srv.log.Debug("Adding p2p peer", "peercount", srv.lenPeers(), "id", p.ID(), "conn", p.flags, "addr", p.RemoteAddr(), "name", p.Name())
+
+	fmt.Println("=>1")
+	srv.peersLock.Lock()
+	defer srv.peersLock.Unlock()
+
+	// add the peer to the set
+	srv.peers[p.ID()] = p
+
+	srv.dialsched.peerAdded(p, true)
+	if p.Inbound() {
+		srv.addInbound()
+	}
+	fmt.Println("=>1 done")
 }
 
 func (srv *Server) LocalPrivateKey() *ecdsa.PrivateKey {
@@ -1074,10 +1075,6 @@ func (srv *Server) LocalPrivateKey() *ecdsa.PrivateKey {
 
 func (srv *Server) LocalHandshake() *protoHandshake {
 	return srv.ourHandshake
-}
-
-func (srv *Server) OnConnectValidate(p *Peer) error {
-	return srv.checkpointPostHandshake(p)
 }
 
 func (srv *Server) GetProtocols() []Protocol {
@@ -1115,34 +1112,6 @@ func (srv *Server) setupConn(rawConn net.Conn, flags connFlag, dialDest *enode.N
 	return nil
 }
 */
-
-func (srv *Server) checkpointAddPeer(p *Peer) error {
-	err := srv.addPeerChecks(p)
-	if err != nil {
-		return err
-	}
-
-	// The handshakes are done and it passed all checks.
-	// p := srv.launchPeer(c)
-	srv.peerAdd(p.ID(), p)
-	srv.log.Debug("Adding p2p peer", "peercount", srv.lenPeers(), "id", p.ID(), "conn", p.flags, "addr", p.RemoteAddr(), "name", p.Name())
-	srv.dialsched.peerAdded(p, true)
-	if p.Inbound() {
-		srv.addInbound()
-	}
-	return nil
-}
-
-func (srv *Server) checkpointPostHandshake(peer *Peer) error {
-	// A connection has passed the encryption handshake so
-	// the remote identity is known (but hasn't been verified yet).
-	if srv.trusted.contains(peer.node.ID()) {
-		// Ensure that the trusted flag is set before checking against MaxPeers.
-		peer.flags |= trustedConn
-	}
-	// TODO: track in-progress inbound node IDs (pre-Peer) to avoid dialing them.
-	return srv.postHandshakeChecks(peer)
-}
 
 /*
 // checkpoint sends the conn to run, which performs the

@@ -12,12 +12,26 @@ type backendv2 interface {
 	LocalPrivateKey() *ecdsa.PrivateKey
 	LocalHandshake() *protoHandshake
 
-	// This is executed after the initial handhsake and before protocol negotiation
-	OnConnectValidate(c *Peer) error
+	// ValidatePreHandshake runs the validations before any protocol handshake
+	ValidatePreHandshake(c *Peer) error
+
+	// ValidatePostHandshake runs the validations after the protocol handshake
+	ValidatePostHandshake(c *Peer) error
 
 	// Returns the list of legacy protocols
 	GetProtocols() []Protocol
 
-	// Disconnect is used to notify when a peer disconnected in the transport
-	Disconnected(peer enode.ID)
+	// Disconnect is used to notify when a peer disconnected in
+	Disconnected(peerDisconnected)
+}
+
+type peerDisconnected struct {
+	// Id of the node being disconnected
+	Id enode.ID
+
+	// If the disconnection was requested by the remote peer
+	RemoteRequested bool
+
+	// The error code for the disconnection
+	Error error
 }

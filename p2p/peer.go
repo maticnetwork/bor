@@ -1,6 +1,7 @@
 package p2p
 
 import (
+	"fmt"
 	"net"
 	"sync/atomic"
 
@@ -79,7 +80,7 @@ type Peer struct {
 	name string
 
 	// closeFn closes the connection with the Peer
-	closeFn func(reason error)
+	closeFn func(reason DiscReason)
 
 	// running is the list of running protocols
 	running map[string]uint
@@ -88,8 +89,15 @@ type Peer struct {
 	created mclock.AbsTime
 }
 
-func (p *Peer) Disconnect(reason DiscReason) {
-	p.closeFn(reason)
+func (p *Peer) Disconnect(err error) {
+	// add a reason to this
+	if reason, ok := err.(DiscReason); ok {
+		p.closeFn(reason)
+	} else {
+		panic("provisional")
+		fmt.Println("-- not defined --", err)
+		p.closeFn(DiscUselessPeer)
+	}
 }
 
 func (p *Peer) Inbound() bool {

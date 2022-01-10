@@ -49,6 +49,7 @@ func (r *devp2pTransportV2) Accept() (*Peer, error) {
 	peer, err := r.connect(conn, 0, nil)
 	if err != nil {
 		conn.Close()
+		fmt.Println("__ __XXXX__")
 		return nil, err
 	}
 	return peer, nil
@@ -68,11 +69,19 @@ func (r *devp2pTransportV2) connect(rawConn net.Conn, flags connFlag, dialDest *
 	// Run the RLPx handshake.
 	remotePubkey, err := tt.doEncHandshake(r.b.LocalPrivateKey())
 	if err != nil {
-		log.Error("rlpx handshake failed", "err", err)
 		return nil, err
 	}
 
-	pp := &Peer{
+	// after this point we can disconnect with error messages
+	disconnect := func(reason error) {
+		if r, ok := err.(DiscReason); ok {
+			tt.WriteMsg(encodeDiscMsg(r))
+		} else {
+			tt.WriteMsg(encodeDiscMsg(DiscProtocolError))
+		}
+	}
+
+	peer := &Peer{
 		log:        log.Root(),
 		flags:      flags,
 		localAddr:  rawConn.LocalAddr(),
@@ -81,41 +90,56 @@ func (r *devp2pTransportV2) connect(rawConn net.Conn, flags connFlag, dialDest *
 	}
 
 	// TODO: First validation goes here
-
+	fmt.Println("A")
 	if dialDest != nil {
-		pp.node = dialDest
+		peer.node = dialDest
 	} else {
-		pp.node = nodeFromConn(remotePubkey, rawConn)
+		peer.node = nodeFromConn(remotePubkey, rawConn)
 	}
-
+	fmt.Println("A2")
+	if err := r.b.ValidatePreHandshake(peer); err != nil {
+		disconnect(err)
+		fmt.Println("YYY")
+		return nil, err
+	}
+	fmt.Println("A1")
 	// Run the capability negotiation handshake.
 	phs, err := tt.doProtoHandshake(r.b.LocalHandshake())
 	if err != nil {
 		return nil, err
 	}
-	if id := pp.node.ID(); !bytes.Equal(crypto.Keccak256(phs.ID), id[:]) {
+	if id := peer.node.ID(); !bytes.Equal(crypto.Keccak256(phs.ID), id[:]) {
+		disconnect(DiscUnexpectedIdentity)
 		return nil, DiscUnexpectedIdentity
 	}
+	fmt.Println("A2")
+	peer.caps = phs.Caps
+	peer.name = phs.Name
 
-	pp.caps = phs.Caps
-	pp.name = phs.Name
-
+	if err := r.b.ValidatePostHandshake(peer); err != nil {
+		disconnect(err)
+		fmt.Println("YYY")
+		return nil, err
+	}
+	fmt.Println("A3")
 	// here come the funny stuff
-	peer := newRlpxSession(log.Root(), pp, tt, r.b.GetProtocols())
-	pp.closeFn = func(reason error) {
-		fmt.Println("--- ")
-		peer.Close(DiscProtocolError)
+	session := newRlpxSession(log.Root(), peer, tt, r.b.GetProtocols())
+	peer.closeFn = func(reason DiscReason) {
+		session.Close(reason)
 	}
 
 	go func() {
-		// this should be running in some sort of connection manager
-		fmt.Println("- run -")
-		remoteRequested, err := peer.run()
-		fmt.Println("- rlpx peer done -", remoteRequested, err)
-		// notify!
+		// run the session until it is over
+		remoteRequested, err := session.run()
+
+		r.b.Disconnected(peerDisconnected{
+			Id:              dialDest.ID(),
+			RemoteRequested: remoteRequested,
+			Error:           err,
+		})
 	}()
 
-	return pp, nil
+	return peer, nil
 }
 
 func nodeFromConn(pubkey *ecdsa.PublicKey, conn net.Conn) *enode.Node {

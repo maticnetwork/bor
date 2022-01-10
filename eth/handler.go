@@ -18,6 +18,7 @@ package eth
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"math/big"
 	"sync"
@@ -354,6 +355,8 @@ func (h *handler) runSnapExtension(peer *snap.Peer, handler snap.Handler) error 
 
 // removePeer requests disconnection of a peer.
 func (h *handler) removePeer(id string) {
+	fmt.Println("remove peer", id)
+
 	peer := h.peers.peer(id)
 	if peer != nil {
 		peer.Peer.Disconnect(p2p.DiscUselessPeer)

@@ -197,7 +197,7 @@ BACK:
 
 	if reason != DiscNetworkError && !remoteRequested {
 		// we started the disconnection, send a close message to the peer
-		p.sendDiscMsg(reason)
+		p.transport.WriteMsg(encodeDiscMsg(reason))
 	}
 
 	close(p.closed)
@@ -206,7 +206,7 @@ BACK:
 	return remoteRequested, err
 }
 
-func (p *devP2PSession) sendDiscMsg(reason DiscReason) {
+func encodeDiscMsg(reason DiscReason) Msg {
 	raw, _ := rlp.EncodeToBytes([]DiscReason{reason})
 
 	msg := Msg{
@@ -214,7 +214,7 @@ func (p *devP2PSession) sendDiscMsg(reason DiscReason) {
 		Size:    uint32(len(raw)),
 		Payload: bytes.NewReader(raw),
 	}
-	p.transport.WriteMsg(msg)
+	return msg
 }
 
 func (p *devP2PSession) pingLoop() {
