@@ -1,7 +1,6 @@
 package p2p
 
 import (
-	"fmt"
 	"net"
 	"sync/atomic"
 
@@ -82,13 +81,11 @@ type Peer struct {
 	// closeFn closes the connection with the Peer
 	closeFn func(reason error)
 
+	// running is the list of running protocols
+	running map[string]uint
+
 	// Is this still required?
 	created mclock.AbsTime
-}
-
-func (p *Peer) Close() {
-	// merge this and disconnect
-	p.closeFn(fmt.Errorf("requested"))
 }
 
 func (p *Peer) Disconnect(reason DiscReason) {
@@ -117,6 +114,10 @@ func (p *Peer) set(f connFlag, val bool) {
 			return
 		}
 	}
+}
+
+func (p *Peer) setRunning(running map[string]uint) {
+	p.running = running
 }
 
 // ID returns the node's public key.
@@ -156,7 +157,14 @@ func (p *Peer) Caps() []Cap {
 // enumerated versions of a specific protocol, meaning that at least one of the
 // versions is supported by both this node and the peer p.
 func (p *Peer) RunningCap(protocol string, versions []uint) bool {
-	panic("not implemented")
+	if proto, ok := p.running[protocol]; ok {
+		for _, ver := range versions {
+			if proto == ver {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // RemoteAddr returns the remote address of the network connection.
@@ -252,9 +260,9 @@ func (p *Peer) Info() *PeerInfo {
 	}
 	info.Network.LocalAddress = p.LocalAddr().String()
 	info.Network.RemoteAddress = p.RemoteAddr().String()
-	//info.Network.Inbound = p.rw.is(inboundConn)
-	//info.Network.Trusted = p.rw.is(trustedConn)
-	//info.Network.Static = p.rw.is(staticDialedConn)
+	info.Network.Inbound = p.is(inboundConn)
+	info.Network.Trusted = p.is(trustedConn)
+	info.Network.Static = p.is(staticDialedConn)
 
 	// Gather all the running protocol infos
 	/*

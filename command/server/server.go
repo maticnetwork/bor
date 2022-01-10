@@ -50,6 +50,8 @@ func NewServer(config *Config) (*Server, error) {
 	// start the logger
 	setupLogger(config.LogLevel)
 
+	log.Info("Heimdall", "url", config.Heimdall.URL)
+
 	if err := srv.setupGRPCServer(config.GRPC.Addr); err != nil {
 		return nil, err
 	}

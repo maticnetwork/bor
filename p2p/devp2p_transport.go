@@ -34,6 +34,7 @@ func (r *devp2pTransportV2) Dial(enode *enode.Node) (*Peer, error) {
 	}
 	peer, err := r.connect(conn, 0, enode)
 	if err != nil {
+		conn.Close()
 		return nil, err
 	}
 	return peer, nil
@@ -47,12 +48,14 @@ func (r *devp2pTransportV2) Accept() (*Peer, error) {
 	}
 	peer, err := r.connect(conn, 0, nil)
 	if err != nil {
+		conn.Close()
 		return nil, err
 	}
 	return peer, nil
 }
 
 func (r *devp2pTransportV2) connect(rawConn net.Conn, flags connFlag, dialDest *enode.Node) (*Peer, error) {
+	fmt.Println("-- connect ", dialDest.ID())
 
 	// transport connection
 	var tt *rlpxTransport
@@ -65,13 +68,16 @@ func (r *devp2pTransportV2) connect(rawConn net.Conn, flags connFlag, dialDest *
 	// Run the RLPx handshake.
 	remotePubkey, err := tt.doEncHandshake(r.b.LocalPrivateKey())
 	if err != nil {
-		panic(err)
+		log.Error("rlpx handshake failed", "err", err)
+		return nil, err
 	}
 
 	pp := &Peer{
+		log:        log.Root(),
 		flags:      flags,
 		localAddr:  rawConn.LocalAddr(),
 		remoteAddr: rawConn.RemoteAddr(),
+		node:       dialDest,
 	}
 
 	// TODO: First validation goes here
@@ -96,18 +102,18 @@ func (r *devp2pTransportV2) connect(rawConn net.Conn, flags connFlag, dialDest *
 
 	// here come the funny stuff
 	peer := newRlpxSession(log.Root(), pp, tt, r.b.GetProtocols())
-	go func() {
-		fmt.Println("- run -")
-		a, b := peer.run()
-		fmt.Println("- rlpx peer done -", a, b)
-		// notify!
-	}()
-
 	pp.closeFn = func(reason error) {
+		fmt.Println("--- ")
 		peer.Close(DiscProtocolError)
 	}
 
-	// we cannot return the raw conn and allt he transport must be done with the protocols
+	go func() {
+		// this should be running in some sort of connection manager
+		fmt.Println("- run -")
+		remoteRequested, err := peer.run()
+		fmt.Println("- rlpx peer done -", remoteRequested, err)
+		// notify!
+	}()
 
 	return pp, nil
 }

@@ -208,12 +208,13 @@ type Server struct {
 	// Bor
 
 	// new fields
-	trusted *sync.Map
+	trusted peerList
 
 	peers        map[enode.ID]*Peer
 	peersLock    sync.Mutex
 	inboundCount int64
 
+	// new transports
 	libp2pTransport *libp2pTransportV2
 	devp2pTransport *devp2pTransportV2
 }
@@ -304,7 +305,6 @@ func (srv *Server) RemovePeer(node *enode.Node) {
 // node to always connect, even if the slot are full.
 func (srv *Server) AddTrustedPeer(node *enode.Node) {
 	srv.log.Trace("Adding trusted node", "node", node)
-	srv.trusted.Store(node.ID(), true)
 	srv.setTrusted(node.ID(), true)
 
 	/*
@@ -326,7 +326,6 @@ func (srv *Server) RemoveTrustedPeer(node *enode.Node) {
 	// This channel is used by RemoveTrustedPeer to remove a node
 	// from the trusted node set.
 	srv.log.Trace("Removing trusted node", "node", node)
-	srv.trusted.Delete(node.ID())
 	srv.setTrusted(node.ID(), false)
 }
 
@@ -416,36 +415,20 @@ func (srv *Server) Start() (err error) {
 	}
 
 	srv.peers = make(map[enode.ID]*Peer)
-	srv.trusted = &sync.Map{}
+	srv.trusted = newPeerList()
 
 	// Put trusted nodes into a map to speed up checks.
 	// Trusted peers are loaded on startup or added via AddTrustedPeer RPC.
 	for _, n := range srv.TrustedNodes {
-		srv.trusted.Store(n.ID(), true)
+		srv.trusted.add(n.ID())
 	}
 
 	// static fields
 	if srv.PrivateKey == nil {
 		return errors.New("Server.PrivateKey must be set to a non-nil key")
 	}
-	/*
-		if srv.newTransport == nil {
-			srv.newTransport = newRLPX
-		}
-	*/
-	/*
-		if srv.listenFunc == nil {
-			srv.listenFunc = net.Listen
-		}
-	*/
+
 	srv.closeCh = make(chan struct{})
-	//srv.delpeer = make(chan peerDrop)
-	//srv.checkpointPostHandshake = make(chan *conn)
-	//srv.checkpointAddPeer = make(chan *conn)
-	//srv.addtrusted = make(chan *enode.Node)
-	//srv.removetrusted = make(chan *enode.Node)
-	//srv.peerOp = make(chan peerOpFunc)
-	//srv.peerOpDone = make(chan struct{})
 
 	if err := srv.setupLocalNode(); err != nil {
 		return err
@@ -592,6 +575,10 @@ func (srv *Server) setupDiscovery() error {
 	return nil
 }
 
+func (srv *Server) Disconnected(peerID enode.ID) {
+	srv.oldDelPeer(peerDrop{})
+}
+
 func (srv *Server) setupDialScheduler() {
 	config := dialConfig{
 		self:           srv.localnode.ID(),
@@ -599,19 +586,16 @@ func (srv *Server) setupDialScheduler() {
 		maxActiveDials: srv.MaxPendingPeers,
 		log:            srv.Logger,
 		netRestrict:    srv.NetRestrict,
-		//dialer:         srv.Dialer,
-		clock: srv.clock,
+		clock:          srv.clock,
 	}
 	if srv.ntab != nil {
 		config.resolver = srv.ntab
 	}
-	//if config.dialer == nil {
-	//	config.dialer = srv
-	//}
 	srv.dialsched = newDialScheduler(config, srv.discmix, srv.SetupConn)
 	for _, n := range srv.StaticNodes {
 		srv.dialsched.addStatic(n)
 	}
+	go srv.dialsched.Run()
 }
 
 func (srv *Server) maxInboundConns() int {
@@ -716,6 +700,11 @@ func (srv *Server) setTrusted(id enode.ID, trusted bool) {
 	srv.peersLock.Lock()
 	defer srv.peersLock.Unlock()
 
+	if trusted {
+		srv.trusted.add(id)
+	} else {
+		srv.trusted.del(id)
+	}
 	if p, ok := srv.peers[id]; ok {
 		p.set(trustedConn, trusted)
 	}
@@ -986,6 +975,13 @@ func (srv *Server) listenLoop() {
 	// This was done as a middleground between devp2p and libp2p implementations, another option would
 	// be to have some interface implemetned by the server called AddPeer.
 
+	srv.devp2pTransport = &devp2pTransportV2{
+		b: srv,
+	}
+
+	// TODO: Nat is disabled
+	srv.devp2pTransport.Listen(srv.ListenAddr)
+
 	go func() {
 		// devp2p transport
 		for {
@@ -993,6 +989,8 @@ func (srv *Server) listenLoop() {
 			if err != nil {
 				panic(err)
 			}
+
+			fmt.Println("New peer", peer)
 			if err = srv.checkpointAddPeer(peer); err != nil {
 				// add a reason to this
 				peer.Close()
@@ -1001,20 +999,26 @@ func (srv *Server) listenLoop() {
 		}
 	}()
 
-	go func() {
-		// libp2p transport
-		for {
-			peer, err := srv.libp2pTransport.Accept()
-			if err != nil {
-				panic(err)
+	if srv.LibP2PPort != 0 {
+		// only enabled if libp2pPort flag is set
+		srv.libp2pTransport = newLibp2pTransportV2(srv)
+		srv.libp2pTransport.init(int(srv.LibP2PPort))
+
+		go func() {
+			// libp2p transport
+			for {
+				peer, err := srv.libp2pTransport.Accept()
+				if err != nil {
+					panic(err)
+				}
+				if err = srv.checkpointAddPeer(peer); err != nil {
+					// add a reason to this
+					peer.Close()
+					// clog.Trace("Rejected peer", "err", err)
+				}
 			}
-			if err = srv.checkpointAddPeer(peer); err != nil {
-				// add a reason to this
-				peer.Close()
-				// clog.Trace("Rejected peer", "err", err)
-			}
-		}
-	}()
+		}()
+	}
 }
 
 func (srv *Server) checkInboundConn(remoteIP net.IP) error {
@@ -1132,7 +1136,7 @@ func (srv *Server) checkpointAddPeer(p *Peer) error {
 func (srv *Server) checkpointPostHandshake(peer *Peer) error {
 	// A connection has passed the encryption handshake so
 	// the remote identity is known (but hasn't been verified yet).
-	if _, ok := srv.trusted.Load(peer.node.ID()); ok {
+	if srv.trusted.contains(peer.node.ID()) {
 		// Ensure that the trusted flag is set before checking against MaxPeers.
 		peer.flags |= trustedConn
 	}

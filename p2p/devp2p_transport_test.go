@@ -109,6 +109,10 @@ func (m *mockBackend) WithProtocol(p Protocol) *mockBackend {
 	return m
 }
 
+func (m *mockBackend) Disconnected(peerID enode.ID) {
+
+}
+
 func (m *mockBackend) GetProtocols() []Protocol {
 	return m.protocols
 }

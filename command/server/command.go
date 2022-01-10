@@ -50,6 +50,7 @@ func (c *Command) Run(args []string) int {
 
 	fmt.Println(c.cliConfig.P2P.Discovery.Bootnodes)
 	fmt.Println(c.cliConfig.Name)
+	fmt.Println(c.cliConfig.Heimdall)
 
 	// read config file
 	config := DefaultConfig()

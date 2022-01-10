@@ -129,6 +129,14 @@ func newRlpxSession(log log.Logger, peer *Peer, transport devP2PSessionTransport
 	for _, m := range matchedProtocols {
 		session.createStream(m)
 	}
+
+	// set the list of running protocols
+	running := map[string]uint{}
+	for _, m := range matchedProtocols {
+		running[m.proto.Name] = m.proto.Version
+	}
+	peer.setRunning(running)
+
 	return session
 }
 
@@ -158,13 +166,15 @@ func (p *devP2PSession) run() (remoteRequested bool, err error) {
 	// Start all protocol handlers.
 	p.startProtocols(writeStart, writeErr)
 
-	// Wait for an error or disconnect.
+	// The goal of this select is twofold:
+	// 1. Catch an error from any of the concurrent tasks.
+	// 2. Sync/Coordinate the writes from the subprotocols.
 BACK:
 	writeStart <- struct{}{}
 	select {
 	case err = <-writeErr:
 		if err == nil {
-			// A write finished. Allow the next write to start if
+			// (2) A write finished. Allow the next write to start if
 			// there was no error.
 			goto BACK
 		}
@@ -340,8 +350,8 @@ func (p *devP2PSession) startProtocols(writeStart <-chan struct{}, writeErr chan
 		p.log.Trace(fmt.Sprintf("Starting protocol %s/%d", proto.proto.Name, proto.proto.Version))
 		go func() {
 			defer p.wg.Done()
-			/// TODO, send the new Peer object
-			err := proto.proto.Run(nil, rw)
+
+			err := proto.proto.Run(p.peer, rw)
 			if err == nil {
 				p.log.Trace(fmt.Sprintf("Protocol %s/%d returned", proto.proto.Name, proto.proto.Version))
 				err = errProtocolReturned
