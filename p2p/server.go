@@ -193,13 +193,6 @@ type Server struct {
 
 	// Channels into the run loop.
 	closeCh chan struct{}
-	//addtrusted    chan *enode.Node // REMOVE
-	//removetrusted chan *enode.Node // REMOVE
-	//peerOp                  chan peerOpFunc
-	//peerOpDone              chan struct{}
-	//delpeer                 chan peerDrop // REMOVE
-	//checkpointPostHandshake chan *conn // REMOVE
-	//checkpointAddPeer       chan *conn // REMOVE
 
 	// State of run loop and listenLoop.
 	inboundHistory expHeap
@@ -323,10 +316,11 @@ func (srv *Server) Stop() {
 	}
 	srv.running = false
 	/*
-		if srv.listener != nil {
-			// this unblocks listener Accept
-			srv.listener.Close()
-		}
+		TODO: Stop the transports
+			if srv.listener != nil {
+				// this unblocks listener Accept
+				srv.listener.Close()
+			}
 	*/
 	close(srv.closeCh)
 	srv.lock.Unlock()
@@ -600,28 +594,6 @@ func (srv *Server) maxDialedConns() (limit int) {
 }
 
 func (srv *Server) setupListening() error {
-	/*
-		// Launch the listener.
-		listener, err := srv.listenFunc("tcp", srv.ListenAddr)
-		if err != nil {
-			return err
-		}
-		srv.listener = listener
-		srv.ListenAddr = listener.Addr().String()
-
-		// Update the local node record and map the TCP listening port if NAT is configured.
-		if tcp, ok := listener.Addr().(*net.TCPAddr); ok {
-			srv.localnode.Set(enr.TCP(tcp.Port))
-			if !tcp.IP.IsLoopback() && srv.NAT != nil {
-				srv.loopWG.Add(1)
-				go func() {
-					nat.Map(srv.NAT, srv.quit, "tcp", tcp.Port, tcp.Port, "ethereum p2p")
-					srv.loopWG.Done()
-				}()
-			}
-		}
-	*/
-
 	// BOR: Set the libp2p port in the localNode
 	if srv.Config.LibP2PPort != 0 {
 		srv.LocalNode().Set(enode.LibP2PEntry(srv.Config.LibP2PPort))
@@ -671,104 +643,9 @@ func (srv *Server) run() {
 	defer srv.discmix.Close()
 	defer srv.dialsched.Close()
 
-	/*
-		srv.peers = make(map[enode.ID]*Peer)
-
-		var (
-		//	peers        = make(map[enode.ID]*Peer)
-		// inboundCount = 0
-		)
-
-		srv.trusted = &sync.Map{}
-	*/
-
-	/*
-		// Put trusted nodes into a map to speed up checks.
-		// Trusted peers are loaded on startup or added via AddTrustedPeer RPC.
-		for _, n := range srv.TrustedNodes {
-			srv.trusted.Store(n.ID(), true)
-		}
-	*/
-
-running:
-	for {
-		select {
-		case <-srv.closeCh:
-			// The server was stopped. Run the cleanup logic.
-			break running
-
-			/*
-				case n := <-srv.addtrusted:
-					// This channel is used by AddTrustedPeer to add a node
-					// to the trusted node set.
-					srv.log.Trace("Adding trusted node", "node", n)
-					srv.trusted.Store(n.ID(), true)
-					srv.setTrusted(n.ID(), true)
-
-					fmt.Println("- is trusted ?")
-					fmt.Println(srv.trusted.Load(n.ID()))
-
-				case n := <-srv.removetrusted:
-					// This channel is used by RemoveTrustedPeer to remove a node
-					// from the trusted node set.
-					srv.log.Trace("Removing trusted node", "node", n)
-					srv.trusted.Delete(n.ID())
-					srv.setTrusted(n.ID(), false)
-			*/
-
-			/*
-				case op := <-srv.peerOp:
-					// This channel is used by Peers and PeerCount.
-					panic("DO NOT DO THIS")
-					op(peers)
-					srv.peerOpDone <- struct{}{}
-			*/
-
-			/*
-				case c := <-srv.checkpointPostHandshake:
-					// A connection has passed the encryption handshake so
-					// the remote identity is known (but hasn't been verified yet).
-					if _, ok := srv.trusted.Load(c.node.ID()); ok {
-						// Ensure that the trusted flag is set before checking against MaxPeers.
-						c.flags |= trustedConn
-					}
-					// TODO: track in-progress inbound node IDs (pre-Peer) to avoid dialing them.
-					c.cont <- srv.postHandshakeChecks(c)
-
-				case c := <-srv.checkpointAddPeer:
-					// At this point the connection is past the protocol handshake.
-					// Its capabilities are known and the remote identity is verified.
-					err := srv.addPeerChecks(c)
-					if err == nil {
-						// The handshakes are done and it passed all checks.
-						p := srv.launchPeer(c)
-						srv.peerAdd(c.node.ID(), p)
-						srv.log.Debug("Adding p2p peer", "peercount", srv.lenPeers(), "id", p.ID(), "conn", c.flags, "addr", p.RemoteAddr(), "name", p.Name())
-						srv.dialsched.peerAdded(c)
-						if p.Inbound() {
-							srv.addInbound()
-						}
-					}
-					c.cont <- err
-
-			*/
-
-			/*
-				case pd := <-srv.delpeer:
-					fmt.Println("_ delete peer in channel _", pd.ID())
-
-					// A peer disconnected.
-					d := common.PrettyDuration(mclock.Now() - pd.created)
-					srv.peerDelete(pd.ID())
-					srv.log.Debug("Removing p2p peer", "peercount", srv.lenPeers(), "id", pd.ID(), "duration", d, "req", pd.requested, "err", pd.err)
-					srv.dialsched.peerRemoved(pd.rw)
-					if pd.Inbound() {
-						inboundCount--
-					}
-			*/
-
-		}
-	}
+	// This is a legacy from original.
+	// TODO: Move all of this to a Close function and remove run
+	<-srv.closeCh
 
 	srv.log.Trace("P2P networking is spinning down")
 
@@ -788,6 +665,7 @@ running:
 	// is closed.
 	for len(srv.peers) > 0 {
 		// TODO: IMPORTANT
+		// Wait for all the peers to disconnect
 
 		//p := <-srv.delpeer
 		//p.log.Trace("<-delpeer (spindown)")
@@ -840,85 +718,15 @@ func (srv *Server) ValidatePostHandshake(peer *Peer) error {
 // listenLoop runs in its own goroutine and accepts
 // inbound connections.
 func (srv *Server) listenLoop() {
-	// srv.log.Debug("TCP listener up", "addr", srv.listener.Addr())
-
-	/*
-		// The slots channel limits accepts of new connections.
-		tokens := defaultMaxPendingPeers
-		if srv.MaxPendingPeers > 0 {
-			tokens = srv.MaxPendingPeers
-		}
-		slots := make(chan struct{}, tokens)
-		for i := 0; i < tokens; i++ {
-			slots <- struct{}{}
-		}
-
-		// Wait for slots to be returned on exit. This ensures all connection goroutines
-		// are down before listenLoop returns.
-		defer srv.loopWG.Done()
-		defer func() {
-			for i := 0; i < cap(slots); i++ {
-				<-slots
-			}
-		}()
-
-		for {
-			// Wait for a free slot before accepting.
-			<-slots
-
-			var (
-				fd      net.Conn
-				err     error
-				lastLog time.Time
-			)
-			for {
-				fd, err = srv.listener.Accept()
-				if netutil.IsTemporaryError(err) {
-					if time.Since(lastLog) > 1*time.Second {
-						srv.log.Debug("Temporary read error", "err", err)
-						lastLog = time.Now()
-					}
-					time.Sleep(time.Millisecond * 200)
-					continue
-				} else if err != nil {
-					srv.log.Debug("Read error", "err", err)
-					slots <- struct{}{}
-					return
-				}
-				break
-			}
-
-			remoteIP := netutil.AddrIP(fd.RemoteAddr())
-			if err := srv.checkInboundConn(remoteIP); err != nil {
-				srv.log.Debug("Rejected inbound connection", "addr", fd.RemoteAddr(), "err", err)
-				fd.Close()
-				slots <- struct{}{}
-				continue
-			}
-			if remoteIP != nil {
-				var addr *net.TCPAddr
-				if tcp, ok := fd.RemoteAddr().(*net.TCPAddr); ok {
-					addr = tcp
-				}
-				fd = newMeteredConn(fd, true, addr)
-				srv.log.Trace("Accepted connection", "addr", fd.RemoteAddr())
-			}
-			go func() {
-				srv.SetupConn(fd, inboundConn, nil)
-				slots <- struct{}{}
-			}()
-		}
-	*/
-
 	// TODO
 	// Slot management for incomming connections has been disabled
 	// because it is a bit harder to do with two transports at the same time.
+	// See original for the main idea behind it.
 
-	// The transport interface in this case is quite simple, we have an Accept method
-	// that will return a Peer object. As with the Dial method, after the Peer is returned, we assume we only have
-	// to do some final end checks but the peer is already valid and Protocols are running.
-	// This was done as a middleground between devp2p and libp2p implementations, another option would
-	// be to have some interface implemetned by the server called AddPeer.
+	// This way of using Accept for both transports might be a bit dummy since
+	// they both do the same all the time. Another approach would be to have a
+	// function Connected(Peer) that gets called by the transports every time
+	// a new peer is connected for incomming connections.
 
 	srv.devp2pTransport = &devp2pTransportV2{
 		b: srv,
@@ -929,6 +737,7 @@ func (srv *Server) listenLoop() {
 
 	go func() {
 		// devp2p transport
+
 		for {
 			peer, err := srv.devp2pTransport.Accept()
 			if err != nil {
@@ -959,7 +768,7 @@ func (srv *Server) listenLoop() {
 }
 
 func (srv *Server) checkInboundConn(remoteIP net.IP) error {
-	// TODO:
+	// TODO: Enable again
 
 	if remoteIP == nil {
 		return nil
@@ -1027,101 +836,6 @@ func (srv *Server) LocalHandshake() *protoHandshake {
 func (srv *Server) GetProtocols() []Protocol {
 	return srv.Protocols
 }
-
-/*
-func (srv *Server) setupConn(rawConn net.Conn, flags connFlag, dialDest *enode.Node) error {
-	// Prevent leftover pending conns from entering the handshake.
-	srv.lock.Lock()
-	running := srv.running
-	srv.lock.Unlock()
-	if !running {
-		return errServerStopped
-	}
-
-	// clog := srv.log.New("id", c.node.ID(), "addr", c.fd.RemoteAddr(), "conn", c.flags)
-
-	// THIS CONN IS FOR RLPX, HERE JUST CALL RLPX_TRANSPORT_V2
-	rrr := &devp2pTransportV2{
-		b: srv,
-	}
-	// override the main conn
-	peer, err := rrr.connect(rawConn, flags, dialDest)
-	if err != nil {
-		return err
-	}
-
-	err = srv.checkpointAddPeer(peer)
-	if err != nil {
-		// clog.Trace("Rejected peer", "err", err)
-		return err
-	}
-
-	return nil
-}
-*/
-
-/*
-// checkpoint sends the conn to run, which performs the
-// post-handshake checks for the stage (posthandshake, addpeer).
-func (srv *Server) checkpoint(c *conn, stage chan<- *conn) error {
-	select {
-	case stage <- c:
-	case <-srv.quit:
-		return errServerStopped
-	}
-	return <-c.cont
-}
-*/
-
-/*
-// THIS IS THE PART THAT GOES INTO RLPX
-func (srv *Server) launchPeer(c *conn) *Peer {
-	p := newPeer(srv.log, c, srv.Protocols)
-	if srv.EnableMsgEvents {
-		// If message events are enabled, pass the peerFeed
-		// to the peer.
-		p.events = &srv.peerFeed
-	}
-	go srv.runPeer(p)
-	return p
-}
-*/
-
-/*
-// runPeer runs in its own goroutine for each peer.
-func (srv *Server) runPeer(p *Peer) {
-	if srv.newPeerHook != nil {
-		srv.newPeerHook(p)
-	}
-	srv.peerFeed.Send(&PeerEvent{
-		Type:          PeerEventTypeAdd,
-		Peer:          p.ID(),
-		RemoteAddress: p.RemoteAddr().String(),
-		LocalAddress:  p.LocalAddr().String(),
-	})
-
-	// Run the per-peer main loop.
-	remoteRequested, err := p.run()
-
-	// Announce disconnect on the main loop to update the peer set.
-	// The main loop waits for existing peers to be sent on srv.delpeer
-	// before returning, so this send should not select on srv.quit.
-	// srv.delpeer <- peerDrop{p, err, remoteRequested}
-	srv.oldDelPeer(peerDrop{p, err, remoteRequested})
-
-	// Broadcast peer drop to external subscribers. This needs to be
-	// after the send to delpeer so subscribers have a consistent view of
-	// the peer set (i.e. Server.Peers() doesn't include the peer when the
-	// event is received.
-	srv.peerFeed.Send(&PeerEvent{
-		Type:          PeerEventTypeDrop,
-		Peer:          p.ID(),
-		Error:         err.Error(),
-		RemoteAddress: p.RemoteAddr().String(),
-		LocalAddress:  p.LocalAddr().String(),
-	})
-}
-*/
 
 // NodeInfo represents a short summary of the information known about the host.
 type NodeInfo struct {
