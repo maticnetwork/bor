@@ -13,6 +13,12 @@ GO ?= latest
 GORUN = env GO111MODULE=on go run
 GOPATH = $(shell go env GOPATH)
 
+bor:
+	$(GORUN) build/ci.go install ./cmd/geth
+	mkdir -p $(GOPATH)/bin/
+	cp $(GOBIN)/geth $(GOBIN)/bor
+	cp $(GOBIN)/* $(GOPATH)/bin/
+
 bor-all:
 	$(GORUN) build/ci.go install
 	mkdir -p $(GOPATH)/bin/
@@ -21,16 +27,6 @@ bor-all:
 
 protoc:
 	protoc --go_out=. --go-grpc_out=. ./command/server/proto/*.proto
-
-bor:
-	$(GORUN) build/ci.go install ./cmd/geth
-	mkdir -p $(GOPATH)/bin/
-	cp $(GOBIN)/geth $(GOBIN)/bor
-	cp $(GOBIN)/* $(GOPATH)/bin/
-
-download-spec-tests:
-	git submodule init
-	git submodule update
 
 geth:
 	$(GORUN) build/ci.go install ./cmd/geth
