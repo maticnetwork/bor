@@ -167,7 +167,7 @@ type Config struct {
 // Server manages all peer connections.
 type Server struct {
 	// Config fields may not be modified while the server is running.
-	Config // TODO: THIS INLINE IS UGLY
+	Config // This inline is ugly but it CANNOT be removed since many part os Ethereum use this config
 
 	// Hooks for testing. These are useful because we can inhibit
 	// the whole protocol stack.
