@@ -27,7 +27,7 @@ import (
 )
 
 type libp2pTransportV2 struct {
-	b           backendv2
+	b           backend
 	host        host.Host
 	pending     peerList
 	feed        event.Feed
@@ -44,7 +44,7 @@ const (
 	protoLegacyV1 = protocol.ID("legacy/0.1")
 )
 
-func newLibp2pTransportV2(b backendv2) *libp2pTransportV2 {
+func newLibp2pTransportV2(b backend) *libp2pTransportV2 {
 	return &libp2pTransportV2{
 		b:        b,
 		acceptCh: make(chan *Peer),

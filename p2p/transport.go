@@ -6,10 +6,13 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 )
 
-// backendv2 is the interface required by transport2 to work
-type backendv2 interface {
-	// Merge this in a single function?
+// backend is an interface implemented by the Server to be used
+// by the transport implementations.
+type backend interface {
+	// LocalPrivateKey returns the private key of the local node
 	LocalPrivateKey() *ecdsa.PrivateKey
+
+	// LocalHandshake returns the handshake of the local node
 	LocalHandshake() *protoHandshake
 
 	// ValidatePreHandshake runs the validations before any protocol handshake
@@ -25,6 +28,8 @@ type backendv2 interface {
 	Disconnected(peerDisconnected)
 }
 
+// peerDisconnected is a struct that returns context information
+// about a peer disconnection from any of the transports.
 type peerDisconnected struct {
 	// Id of the node being disconnected
 	Id enode.ID

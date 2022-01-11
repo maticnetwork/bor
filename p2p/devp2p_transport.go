@@ -11,8 +11,15 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 )
 
+/*
+TODO:
+- Add a Close function to stop the listener
+- Figure out how to configure the transport with info from the server
+	- Configure the NAT (more fields in the backend object)
+*/
+
 type devp2pTransportV2 struct {
-	b   backendv2
+	b   backend
 	lis net.Listener
 }
 
@@ -40,7 +47,6 @@ func (r *devp2pTransportV2) Dial(enode *enode.Node) (*Peer, error) {
 }
 
 func (r *devp2pTransportV2) Accept() (*Peer, error) {
-	// TODO
 	conn, err := r.lis.Accept()
 	if err != nil {
 		return nil, err
@@ -54,8 +60,6 @@ func (r *devp2pTransportV2) Accept() (*Peer, error) {
 }
 
 func (r *devp2pTransportV2) connect(rawConn net.Conn, flags connFlag, dialDest *enode.Node) (*Peer, error) {
-	// fmt.Println("-- connect ", dialDest.ID())
-
 	// transport connection
 	var tt *rlpxTransport
 	if dialDest == nil {

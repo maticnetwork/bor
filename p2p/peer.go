@@ -1,7 +1,6 @@
 package p2p
 
 import (
-	"fmt"
 	"net"
 	"sync/atomic"
 
@@ -94,8 +93,6 @@ func (p *Peer) Disconnect(err error) {
 	if reason, ok := err.(DiscReason); ok {
 		p.closeFn(reason)
 	} else {
-		panic("provisional")
-		fmt.Println("-- not defined --", err)
 		p.closeFn(DiscUselessPeer)
 	}
 }
@@ -216,6 +213,7 @@ func (f connFlag) String() string {
 
 // NewPeer returns a peer for testing purposes.
 func NewPeer(id enode.ID, name string, caps []Cap) *Peer {
+	// TODO
 	/*
 		pipe, _ := net.Pipe()
 		node := enode.SignNull(new(enr.Record), id)
@@ -231,6 +229,7 @@ func NewPeer(id enode.ID, name string, caps []Cap) *Peer {
 // The message pipe given as the last parameter is closed when
 // Disconnect is called on the peer.
 func NewPeerPipe(id enode.ID, name string, caps []Cap, pipe *MsgPipeRW) *Peer {
+	// TODO
 	/*
 		p := NewPeer(id, name, caps)
 		p.testPipe = pipe
@@ -272,7 +271,7 @@ func (p *Peer) Info() *PeerInfo {
 	info.Network.Trusted = p.is(trustedConn)
 	info.Network.Static = p.is(staticDialedConn)
 
-	// Gather all the running protocol infos
+	// TODO: Gather all the running protocol infos
 	/*
 		for _, proto := range p.running {
 			protoInfo := interface{}("unknown")

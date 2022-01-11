@@ -22,6 +22,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/mclock"
 )
 
+// TODO: Remove this queue and use the new helper/delayheap queue.
 // expHeap tracks strings and their expiry time.
 type expHeap []expItem
 

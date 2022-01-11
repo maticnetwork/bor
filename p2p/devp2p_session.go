@@ -98,8 +98,6 @@ type devP2PSession struct {
 	testPipe *MsgPipeRW // for testing
 }
 
-// TODO: Much of this fields go away once we migrate to the new peer object
-
 // Disconnect terminates the peer connection with the given reason.
 // It returns immediately and does not wait until the connection is closed.
 func (p *devP2PSession) Close(reason DiscReason) {
@@ -500,29 +498,6 @@ func (t *rlpxTransport) WriteMsg(msg Msg) error {
 }
 
 func (t *rlpxTransport) Close() {
-	//t.wmu.Lock()
-	//defer t.wmu.Unlock()
-
-	// Note, it does not make sense to send the message here since that
-	// is part of the session.
-
-	/*
-		// Tell the remote end why we're disconnecting if possible.
-		// We only bother doing this if the underlying connection supports
-		// setting a timeout tough.
-		if t.conn != nil {
-			if r, ok := err.(DiscReason); ok && r != DiscNetworkError {
-				deadline := time.Now().Add(discWriteTimeout)
-				if err := t.conn.SetWriteDeadline(deadline); err == nil {
-					// Connection supports write deadline.
-					t.wbuf.Reset()
-					rlp.Encode(&t.wbuf, []DiscReason{r})
-					t.conn.Write(discMsg, t.wbuf.Bytes())
-				}
-			}
-		}
-	*/
-
 	t.conn.Close()
 }
 

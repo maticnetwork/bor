@@ -39,8 +39,6 @@ func TestTranport_Rlpx(t *testing.T) {
 	msg, err := proto1.rw.ReadMsg()
 	assert.NoError(t, err)
 	fmt.Println(msg.Code)
-
-	// time.Sleep(35 * time.Second)
 }
 
 type mockProtocol struct {

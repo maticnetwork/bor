@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"net"
 	"reflect"
 	"strconv"
@@ -577,4 +578,11 @@ func TestRlpxTransport_Handshake_Errors(t *testing.T) {
 			t.Errorf("test %d: error mismatch: got %q, want %q", i, err, test.err)
 		}
 	}
+}
+
+func randomID() (id enode.ID) {
+	for i := range id {
+		id[i] = byte(rand.Intn(255))
+	}
+	return id
 }
