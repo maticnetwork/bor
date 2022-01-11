@@ -34,11 +34,6 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/netutil"
 )
 
-// TODO:
-// 1. dial task simulate
-//	- task fails after dial task (go to history)
-// 2. figure out relation between dial and peerAdd
-
 const (
 	// This is the amount of time spent waiting in between redialing a certain node. The
 	// limit is a bit higher than inboundThrottleTime to prevent failing dials in small
@@ -88,7 +83,7 @@ type dialScheduler struct {
 	// configuration of the dial scheduler
 	config *dialConfig
 
-	setupFunc dialFunc // fix
+	setupFunc dialFunc
 
 	// channel to notify of any update that might schedule dials
 	notifyCh chan struct{}
@@ -198,7 +193,10 @@ func (d *dialScheduler) readIterator() {
 }
 
 func (d *dialScheduler) Enqueue(h delayheap.HeapNode) {
-	panic("x")
+	// TODO. This function is called by the history queue whenever a task from the queue has expired
+	// this is, an enode from the queue is elegible again to be queried, we need to insert this enode
+	// back into the queue.
+	// Add tests accordingly.
 }
 
 func (d *dialScheduler) notify() {
@@ -224,9 +222,7 @@ func (d *dialScheduler) addStatic(node *enode.Node) {
 	d.config.log.Trace("Adding static node", "id", id, "ip", node.IP(), "added", added)
 
 	if added {
-		//if d.checkDial(node) == nil {
 		d.addToStaticPool(node)
-		//}
 		d.notify()
 	}
 }
@@ -240,7 +236,7 @@ func (d *dialScheduler) removeStatic(node *enode.Node) {
 }
 
 // peerAdded updates the peer set.
-func (d *dialScheduler) peerAdded(c *Peer, nofity bool) {
+func (d *dialScheduler) peerAdded(c *Peer) {
 	ok := d.peers.add(c.node.ID())
 	if !ok {
 		// already included
@@ -249,9 +245,7 @@ func (d *dialScheduler) peerAdded(c *Peer, nofity bool) {
 	if c.is(dynDialedConn) || c.is(staticDialedConn) {
 		d.dialPeers++
 	}
-	if nofity {
-		d.notify()
-	}
+	d.notify()
 }
 
 // peerRemoved updates the peer set.
@@ -261,7 +255,6 @@ func (d *dialScheduler) peerRemoved(c *Peer) {
 		return
 	}
 
-	//fmt.Println("-- peer removed --", c.node.ID(), d.peers.len())
 	if c.is(dynDialedConn) || c.is(staticDialedConn) {
 		d.dialPeers--
 	}
@@ -304,38 +297,20 @@ func (d *dialScheduler) runImpl() {
 	}
 
 	for slot := 0; slot < slots; {
-		//fmt.Println(slot, slots)
 		task := d.dialQueue.pop()
 		if task == nil {
 			return
 		}
-		//fmt.Println(task)
 
 		if err := d.isValidTask(task); err != nil {
-			//fmt.Println(task.addr.ID(), err)
 			d.config.log.Trace("Discarding dial candidate", "id", task.addr.ID(), "ip", task.addr.IP(), "reason", err)
 		} else {
-			//fmt.Println(task.addr.ID(), "-- good -")
 			// dial
 			d.startDial(task)
 			slot++
 		}
 	}
 }
-
-/*
-// readNodes runs in its own goroutine and delivers nodes from
-// the input iterator to the nodesIn channel.
-func (d *dialScheduler) readNodes(it enode.Iterator) {
-	defer d.wg.Done()
-		for it.Next() {
-			select {
-			case d.nodesIn <- it.Node():
-			case <-d.ctx.Done():
-			}
-		}
-}
-*/
 
 // logStats prints dialer statistics to the log. The message is suppressed when enough
 // peers are connected because users should only see it while their client is starting up
@@ -352,37 +327,6 @@ func (d *dialScheduler) logStats() {
 	d.lastStatsLog = now
 }
 
-/*
-// rearmHistoryTimer configures d.historyTimer to fire when the
-// next item in d.history expires.
-func (d *dialScheduler) rearmHistoryTimer(ch chan struct{}) {
-	if len(d.history) == 0 || d.historyTimerTime == d.history.nextExpiry() {
-		return
-	}
-	d.stopHistoryTimer(ch)
-	d.historyTimerTime = d.history.nextExpiry()
-	timeout := time.Duration(d.historyTimerTime - d.config.clock.Now())
-	d.historyTimer = d.config.clock.AfterFunc(timeout, func() { ch <- struct{}{} })
-}
-// stopHistoryTimer stops the timer and drains the channel it sends on.
-func (d *dialScheduler) stopHistoryTimer(ch chan struct{}) {
-	if d.historyTimer != nil && !d.historyTimer.Stop() {
-		<-ch
-	}
-}
-// expireHistory removes expired items from d.history.
-func (d *dialScheduler) expireHistory() {
-	d.historyTimer.Stop()
-	d.historyTimer = nil
-	d.historyTimerTime = 0
-	d.history.expire(d.config.clock.Now(), func(hkey string) {
-		var id enode.ID
-		copy(id[:], hkey)
-		d.updateStaticPool(id)
-	})
-}
-*/
-
 // freeDialSlots returns the number of free dial slots. The result can be negative
 // when peers are connected while their task is still running.
 func (d *dialScheduler) freeDialSlots() int {
@@ -395,7 +339,6 @@ func (d *dialScheduler) freeDialSlots() int {
 		// crop again the value between [0, maxActiveDials]
 		free = d.config.maxActiveDials
 	}
-	// fmt.Println("-- stats --", d.config.maxDialPeers, d.config.maxActiveDials, d.dialPeers, d.dialing.len(), (d.config.maxDialPeers-d.dialPeers)*2, slots, free)
 	return free
 }
 
@@ -455,13 +398,12 @@ func (d *dialScheduler) startDial(ttt *dialTask2) {
 	}
 
 	d.config.log.Trace("Starting p2p dial", "id", task.dest.ID(), "ip", task.dest.IP(), "flag", task.flags)
-	// hkey := string(task.dest.ID().Bytes())
 
 	if !ttt.isStatic {
+		// static nodes are included back into the queue automatically while non-static nodes have
+		// to wait for some history expiration time before they are redialed again
 		d.history.Add(&enodeWrapper{enode: task.dest}, time.Now().Add(dialHistoryExpiration))
 	}
-
-	//d.history.add(hkey, d.config.clock.Now().Add(dialHistoryExpiration))
 	d.dialing.add(task.dest.ID())
 
 	if task.needResolve() && !d.resolve(task) {
@@ -469,28 +411,11 @@ func (d *dialScheduler) startDial(ttt *dialTask2) {
 		return
 	}
 
-	/*
-		dial := func() {
-			err := d.dial(task)
-			if err != nil {
-				// For static nodes, resolve one more time if dialing fails.
-				if _, ok := err.(*dialError); ok && task.flags&staticDialedConn != 0 {
-					if d.resolve(task) {
-						d.dial(task)
-					}
-				}
-			}
-		}
-	*/
-
 	go func() {
-		if err := d.dial(task); err == nil {
-			// peer has been included, update the set
-			d.peerAdded(&Peer{node: task.dest, flags: task.flags}, false)
-		}
-
+		// Though we wait for the dial (including handshake) to continue, we do not use its result to
+		// add the peer into the set if it works but the server will call the peerAdded function.
+		d.dial(task)
 		d.dialing.del(task.dest.ID())
-
 		d.doneSinceLastLog++
 		d.notify()
 	}()
@@ -500,6 +425,7 @@ func (d *dialScheduler) startDial(ttt *dialTask2) {
 type dialTask struct {
 	// staticPoolIndex int
 	flags connFlag
+
 	// These fields are private to the task and should not be
 	// accessed by dialScheduler while the task is running.
 	dest         *enode.Node
@@ -515,33 +441,11 @@ func newDialTask(dest *enode.Node, flags connFlag) *dialTask {
 	return &dialTask{dest: dest, flags: flags /*, staticPoolIndex: -1*/}
 }
 
-/*
-type dialError struct {
-	error
-}
-*/
-
-/*
-func (t *dialTask) run(d *dialScheduler) {
-	if t.needResolve() && !t.resolve(d) {
-		return
-	}
-	err := t.dial(d, t.dest)
-	if err != nil {
-		// For static nodes, resolve one more time if dialing fails.
-		if _, ok := err.(*dialError); ok && t.flags&staticDialedConn != 0 {
-			if t.resolve(d) {
-				t.dial(d, t.dest)
-			}
-		}
-	}
-}
-*/
-
 func (t *dialTask) needResolve() bool {
 	return t.flags&staticDialedConn != 0 && t.dest.IP() == nil
 }
 
+// TODO: Resolve is something special for DevP2P so we should move this into the devp2p transport.
 // resolve attempts to find the current endpoint for the destination
 // using discovery.
 //
@@ -584,15 +488,6 @@ func (t *dialTask) String() string {
 	id := t.dest.ID()
 	return fmt.Sprintf("%v %x %v:%d", t.flags, id[:8], t.dest.IP(), t.dest.TCP())
 }
-
-func cleanupDialErr(err error) error {
-	if netErr, ok := err.(*net.OpError); ok && netErr.Op == "dial" {
-		return netErr.Err
-	}
-	return err
-}
-
-// ----
 
 // dialQueue is a queue where we store all the possible peer targets that
 // we can connect to.
@@ -648,18 +543,6 @@ func (d *dialQueue) popImpl() *dialTask2 {
 	d.lock.Unlock()
 	return nil
 }
-
-/*
-func (d *dialQueue) del(peer peer.ID) {
-	d.lock.Lock()
-	defer d.lock.Unlock()
-	item, ok := d.items[peer]
-	if ok {
-		heap.Remove(&d.heap, item.index)
-		delete(d.items, peer)
-	}
-}
-*/
 
 func (d *dialQueue) Len() int {
 	d.lock.Lock()

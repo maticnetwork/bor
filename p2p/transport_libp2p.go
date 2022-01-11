@@ -8,9 +8,11 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"sync"
 
 	"github.com/ethereum/go-ethereum/event"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/proto"
 	gproto "github.com/golang/protobuf/proto"
@@ -76,16 +78,16 @@ func (l *libp2pTransportV2) init(libp2pPort int) {
 
 	// 1. Start the handshake proto to handle queries
 	l.host.SetStreamHandler(protoHandshakeV1, func(stream network.Stream) {
-		// TODO: Send our handshake message
+		// TODO: Handle error
 		msg := handshakeToProto(l.b.LocalHandshake())
 		raw, err := gproto.Marshal(msg)
 		if err != nil {
+			// I do not think this can fail if the handshake is always the same
 			panic(err)
 		}
 
-		hdr := header(make([]byte, headerSize))
-		hdr.encode(0, uint32(len(raw)))
-
+		// reuse the same header format for the handshake message
+		hdr := newHeader(0, uint32(len(raw)))
 		if _, err := stream.Write(hdr); err != nil {
 			panic(err)
 		}
@@ -96,23 +98,16 @@ func (l *libp2pTransportV2) init(libp2pPort int) {
 
 	host.Network().Notify(&network.NotifyBundle{
 		ConnectedF: func(network network.Network, conn network.Conn) {
-			peerID := conn.RemotePeer()
-
-			// TODO: Convert peer.ID to enode.ID
-			// Add enode.ID to l.pending
+			// TODO: Add peer to pending
+			conn.RemotePeer()
 
 			go func() {
 				// this has to always be in a co-routine in ConnectedF
-				err := l.handleConnected(conn)
+				l.handleConnected(conn)
 
 				// TODO: if it did not work we have to disconnect here
 
-				// send event feed
-				l.feed.Send(&libp2pEvent{
-					ID:    peerID,
-					Error: err,
-				})
-				// TODO: disable pending
+				// TODO: remove from pending
 			}()
 		},
 		DisconnectedF: func(network network.Network, conn network.Conn) {
@@ -156,8 +151,8 @@ func (l *libp2pTransportV2) handleConnected(conn network.Conn) error {
 	}
 
 	// TODO: Validate the handshake message
+	// TODO: Call validation functions in Server.
 
-	fmt.Println("-- check --")
 	// local := l.b.LocalHandshake()
 	remote := protoToHandshake(msg)
 
@@ -176,14 +171,31 @@ func (l *libp2pTransportV2) handleConnected(conn network.Conn) error {
 	}
 
 	peer := &Peer{
-		node:   enodeAddr,
-		peerID: remotePeerID,
+		log:        log.Root(),
+		node:       enodeAddr,
+		peerID:     remotePeerID,
+		flags:      0,
+		caps:       remote.Caps,
+		name:       remote.Name,
+		localAddr:  &net.TCPAddr{}, // placeholder
+		remoteAddr: &net.TCPAddr{}, // placeholder
+		closeFn: func(reason DiscReason) {
+			panic("TODO")
+		},
 	}
 	l.handlePeer(peer)
 
 	// if the connection is incomming, we are adding this peer as part of
 	// the Accept method, so we have to call the acceptCh to update
-	l.acceptCh <- peer
+	if conn.Stat().Direction == network.DirInbound {
+		l.acceptCh <- peer
+	} else {
+		// send an event on the feed to notify
+		// this could be another channel as well
+		l.feed.Send(&libp2pEvent{
+			Peer: peer,
+		})
+	}
 
 	return nil
 }
@@ -233,6 +245,8 @@ func (l *libp2pLegacyConnPool) handleLegacyProtocolStream(stream network.Stream)
 	defer l.lock.Unlock()
 
 	id := stream.Conn().RemotePeer()
+
+	fmt.Println("__ handle legacy stream __")
 	fmt.Println(id)
 
 	c, ok := l.addr[id]
@@ -262,6 +276,8 @@ func (l *libp2pLegacyConn) handoffStream(stream network.Stream) {
 }
 
 func (l *libp2pLegacyConn) ReadMsg() (Msg, error) {
+	fmt.Println("_ READ MSG _")
+
 	l.readLock.Lock()
 	defer l.readLock.Unlock()
 
@@ -270,6 +286,8 @@ func (l *libp2pLegacyConn) ReadMsg() (Msg, error) {
 		stream := <-l.readCh
 		l.read = stream
 	}
+
+	fmt.Println("_ READ MSG CONN _")
 
 	hdr := header(make([]byte, headerSize))
 	if _, err := l.read.Read(hdr); err != nil {
@@ -286,10 +304,13 @@ func (l *libp2pLegacyConn) ReadMsg() (Msg, error) {
 		Payload: bytes.NewReader(data),
 		Size:    uint32(len(data)),
 	}
+	fmt.Println("_ READ MSG MSG _", hdr.Code(), len(data))
 	return msg, nil
 }
 
 func (l *libp2pLegacyConn) WriteMsg(msg Msg) error {
+	log.Info("libp2p write msg", "code", msg.Code, "size", msg.Size)
+
 	l.writeLock.Lock()
 	defer l.writeLock.Unlock()
 
@@ -302,9 +323,7 @@ func (l *libp2pLegacyConn) WriteMsg(msg Msg) error {
 		l.write = stream
 	}
 
-	hdr := header(make([]byte, headerSize))
-	hdr.encode(msg.Code, msg.Size)
-
+	hdr := newHeader(msg.Code, msg.Size)
 	if _, err := l.write.Write(hdr); err != nil {
 		panic(err)
 	}
@@ -330,6 +349,9 @@ func (l *libp2pTransportV2) Dial(node *enode.Node) (*Peer, error) {
 		return nil, err
 	}
 
+	fmt.Println(l)
+	fmt.Println(l.host)
+
 	if err := l.host.Connect(context.Background(), *addrInfo); err != nil {
 		// this means that it could not connect
 		return nil, err
@@ -339,20 +361,19 @@ func (l *libp2pTransportV2) Dial(node *enode.Node) (*Peer, error) {
 	sub := l.feed.Subscribe(ch)
 	defer sub.Unsubscribe()
 
+	var peer *Peer
 	for ev := range ch {
-		if ev.ID == addrInfo.ID {
-			fmt.Println("- done -")
+		if ev.Peer.peerID == addrInfo.ID {
+			peer = ev.Peer
 			break
 		}
 	}
 
-	peer := &Peer{}
 	return peer, nil
 }
 
 type libp2pEvent struct {
-	ID    peer.ID
-	Error error
+	Peer *Peer
 }
 
 func handshakeToProto(obj *protoHandshake) *proto.HandshakeResponse {
@@ -397,6 +418,12 @@ const (
 	sizeOfLength = 4
 	headerSize   = sizeOfCode + sizeOfLength
 )
+
+func newHeader(code uint64, length uint32) header {
+	hdr := header(make([]byte, headerSize))
+	hdr.encode(code, length)
+	return hdr
+}
 
 type header []byte
 

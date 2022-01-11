@@ -30,6 +30,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
+	"github.com/stretchr/testify/assert"
 )
 
 /*
@@ -662,14 +663,21 @@ func TestServerPeerAddDrop(t *testing.T) {
 		dialsched: sched,
 	}
 
-	peer := &Peer{
+	peer0 := &Peer{
 		node: newNode(uintID(0x1), "127.0.0.1:30303"),
 	}
+	peer1 := &Peer{
+		node: newNode(uintID(0x2), "127.0.0.1:30303"),
+	}
 
-	srv.addPeer(peer)
+	srv.addPeer(peer0)
+	srv.addPeer(peer1)
+
+	assert.Equal(t, srv.lenPeers(), 2)
 
 	srv.Disconnected(peerDisconnected{
-		Id:    peer.node.ID(),
+		Id:    peer0.node.ID(),
 		Error: DiscIncompatibleVersion,
 	})
+
 }

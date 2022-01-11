@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/ecdsa"
-	"fmt"
 	"net"
 
 	"github.com/ethereum/go-ethereum/crypto"
@@ -49,14 +48,13 @@ func (r *devp2pTransportV2) Accept() (*Peer, error) {
 	peer, err := r.connect(conn, 0, nil)
 	if err != nil {
 		conn.Close()
-		fmt.Println("__ __XXXX__")
 		return nil, err
 	}
 	return peer, nil
 }
 
 func (r *devp2pTransportV2) connect(rawConn net.Conn, flags connFlag, dialDest *enode.Node) (*Peer, error) {
-	fmt.Println("-- connect ", dialDest.ID())
+	// fmt.Println("-- connect ", dialDest.ID())
 
 	// transport connection
 	var tt *rlpxTransport
@@ -90,19 +88,16 @@ func (r *devp2pTransportV2) connect(rawConn net.Conn, flags connFlag, dialDest *
 	}
 
 	// TODO: First validation goes here
-	fmt.Println("A")
 	if dialDest != nil {
 		peer.node = dialDest
 	} else {
 		peer.node = nodeFromConn(remotePubkey, rawConn)
 	}
-	fmt.Println("A2")
 	if err := r.b.ValidatePreHandshake(peer); err != nil {
 		disconnect(err)
-		fmt.Println("YYY")
 		return nil, err
 	}
-	fmt.Println("A1")
+
 	// Run the capability negotiation handshake.
 	phs, err := tt.doProtoHandshake(r.b.LocalHandshake())
 	if err != nil {
@@ -112,16 +107,14 @@ func (r *devp2pTransportV2) connect(rawConn net.Conn, flags connFlag, dialDest *
 		disconnect(DiscUnexpectedIdentity)
 		return nil, DiscUnexpectedIdentity
 	}
-	fmt.Println("A2")
+
 	peer.caps = phs.Caps
 	peer.name = phs.Name
 
 	if err := r.b.ValidatePostHandshake(peer); err != nil {
 		disconnect(err)
-		fmt.Println("YYY")
 		return nil, err
 	}
-	fmt.Println("A3")
 	// here come the funny stuff
 	session := newRlpxSession(log.Root(), peer, tt, r.b.GetProtocols())
 	peer.closeFn = func(reason DiscReason) {

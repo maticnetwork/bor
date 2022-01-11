@@ -218,14 +218,6 @@ type Server struct {
 	devp2pTransport *devp2pTransportV2
 }
 
-//type peerOpFunc func(map[enode.ID]*Peer)
-
-type peerDrop struct {
-	peer      *Peer
-	err       error
-	requested bool // true if signaled by the peer
-}
-
 // LocalNode returns the local node record.
 func (srv *Server) LocalNode() *enode.LocalNode {
 	return srv.localnode
@@ -233,29 +225,19 @@ func (srv *Server) LocalNode() *enode.LocalNode {
 
 // Peers returns all connected peers.
 func (srv *Server) Peers() []*Peer {
-	fmt.Println("=>2")
 	srv.peersLock.Lock()
 	defer srv.peersLock.Unlock()
 
 	var ps []*Peer
-	//srv.doPeerOp(func(peers map[enode.ID]*Peer) {
 	for _, p := range srv.peers {
 		ps = append(ps, p)
 	}
-	//})
 	return ps
 }
 
 // PeerCount returns the number of connected peers.
 func (srv *Server) PeerCount() int {
 	return srv.lenPeers()
-	/*
-		var count int
-		srv.doPeerOp(func(ps map[enode.ID]*Peer) {
-			count = len(ps)
-		})
-		return count
-	*/
 }
 
 // AddPeer adds the given node to the static node set. When there is room in the peer set,
@@ -271,7 +253,6 @@ func (srv *Server) AddPeer(node *enode.Node) {
 // This method blocks until all protocols have exited and the peer is removed. Do not use
 // RemovePeer in protocol implementations, call Disconnect on the Peer instead.
 func (srv *Server) RemovePeer(node *enode.Node) {
-	fmt.Println("=>3")
 	srv.peersLock.Lock()
 
 	var (
@@ -307,25 +288,10 @@ func (srv *Server) RemovePeer(node *enode.Node) {
 func (srv *Server) AddTrustedPeer(node *enode.Node) {
 	srv.log.Trace("Adding trusted node", "node", node)
 	srv.setTrusted(node.ID(), true)
-
-	/*
-		select {
-		case srv.addtrusted <- node:
-		case <-srv.quit:
-		}
-	*/
 }
 
 // RemoveTrustedPeer removes the given node from the trusted peer set.
 func (srv *Server) RemoveTrustedPeer(node *enode.Node) {
-	/*
-		select {
-		case srv.removetrusted <- node:
-		case <-srv.quit:
-		}
-	*/
-	// This channel is used by RemoveTrustedPeer to remove a node
-	// from the trusted node set.
 	srv.log.Trace("Removing trusted node", "node", node)
 	srv.setTrusted(node.ID(), false)
 }
@@ -577,27 +543,22 @@ func (srv *Server) setupDiscovery() error {
 }
 
 func (srv *Server) Disconnected(disc peerDisconnected) {
-	fmt.Println("=>4")
+	srv.log.Info("Removing p2p peer", "peercount", srv.lenPeers(), "id", disc.Id, "req", disc.RemoteRequested, "err", disc.Error)
+
 	srv.peersLock.Lock()
 	defer srv.peersLock.Unlock()
-	fmt.Println("=>4.1")
+
 	peer, ok := srv.peers[disc.Id]
 	if !ok {
 		log.Error("disconnected peer not found", "id", disc.Id)
 		return
 	}
-	fmt.Println("=>4.2")
-	fmt.Println(disc)
-	fmt.Println(srv.peers)
-
 	delete(srv.peers, disc.Id)
-	srv.log.Debug("Removing p2p peer", "peercount", srv.lenPeers(), "id", disc.Id, "req", disc.RemoteRequested, "err", disc.Error)
-	fmt.Println("=>4.3")
+
 	srv.dialsched.peerRemoved(peer)
 	if peer.Inbound() {
 		srv.delInbound()
 	}
-	fmt.Println("=>4.4")
 }
 
 func (srv *Server) setupDialScheduler() {
@@ -666,33 +627,28 @@ func (srv *Server) setupListening() error {
 		srv.LocalNode().Set(enode.LibP2PEntry(srv.Config.LibP2PPort))
 	}
 
-	srv.loopWG.Add(1)
-	go srv.listenLoop()
+	// srv.loopWG.Add(1)
+	srv.listenLoop()
 	return nil
 }
 
 func (srv *Server) peerExists(id enode.ID) bool {
-	fmt.Println("=>5")
 	srv.peersLock.Lock()
 	defer srv.peersLock.Unlock()
-	fmt.Println("=>5.1")
 
 	_, ok := srv.peers[id]
 	return ok
 }
 
 func (srv *Server) lenPeers() int {
-	fmt.Println("=>6")
 	srv.peersLock.Lock()
 	defer srv.peersLock.Unlock()
-	fmt.Println("=>6.1")
 
 	num := len(srv.peers)
 	return num
 }
 
 func (srv *Server) setTrusted(id enode.ID, trusted bool) {
-	fmt.Println("=>7")
 	srv.peersLock.Lock()
 	defer srv.peersLock.Unlock()
 
@@ -854,25 +810,19 @@ func (srv *Server) getInbound() int64 {
 func (srv *Server) ValidatePreHandshake(peer *Peer) error {
 	// A connection has passed the encryption handshake so
 	// the remote identity is known (but hasn't been verified yet).
-	fmt.Println("QQ1")
 	if srv.trusted.contains(peer.node.ID()) {
 		// Ensure that the trusted flag is set before checking against MaxPeers.
 		peer.set(trustedConn, true)
 	}
-	fmt.Println("QQ2")
 	if !peer.is(trustedConn) && srv.lenPeers() >= srv.MaxPeers {
-		fmt.Println("- eign?")
 		return DiscTooManyPeers
 	}
-	fmt.Println("QQ3")
 	if !peer.is(trustedConn) && peer.is(inboundConn) && int(srv.getInbound()) >= srv.maxInboundConns() {
 		return DiscTooManyPeers
 	}
-	fmt.Println("QQ4")
 	if srv.peerExists(peer.ID()) {
 		return DiscAlreadyConnected
 	}
-	fmt.Println("QQ5")
 	if peer.ID() == srv.localnode.ID() {
 		return DiscSelf
 	}
@@ -882,9 +832,6 @@ func (srv *Server) ValidatePreHandshake(peer *Peer) error {
 func (srv *Server) ValidatePostHandshake(peer *Peer) error {
 	// Drop connections with no matching protocols.
 	if len(srv.Protocols) > 0 && countMatchingProtocols(srv.Protocols, peer.Caps()) == 0 {
-		fmt.Println("no matching protocols")
-		fmt.Println(srv.Protocols, peer.Caps())
-
 		return DiscUselessPeer
 	}
 	return nil
@@ -992,6 +939,8 @@ func (srv *Server) listenLoop() {
 	}()
 
 	if srv.LibP2PPort != 0 {
+		fmt.Println("_ libp2p started _")
+
 		// only enabled if libp2pPort flag is set
 		srv.libp2pTransport = newLibp2pTransportV2(srv)
 		srv.libp2pTransport.init(int(srv.LibP2PPort))
@@ -1055,18 +1004,16 @@ func (srv *Server) SetupConn(flags connFlag, dialDest *enode.Node) error {
 func (srv *Server) addPeer(p *Peer) {
 	srv.log.Debug("Adding p2p peer", "peercount", srv.lenPeers(), "id", p.ID(), "conn", p.flags, "addr", p.RemoteAddr(), "name", p.Name())
 
-	fmt.Println("=>1")
 	srv.peersLock.Lock()
 	defer srv.peersLock.Unlock()
 
 	// add the peer to the set
 	srv.peers[p.ID()] = p
 
-	srv.dialsched.peerAdded(p, true)
+	srv.dialsched.peerAdded(p)
 	if p.Inbound() {
 		srv.addInbound()
 	}
-	fmt.Println("=>1 done")
 }
 
 func (srv *Server) LocalPrivateKey() *ecdsa.PrivateKey {
