@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"math/big"
 	"reflect"
@@ -9,6 +10,8 @@ import (
 
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/eth/tracers"
 	"github.com/ethereum/go-ethereum/internal/cli/server/pprof"
 	"github.com/ethereum/go-ethereum/internal/cli/server/proto"
 	"github.com/ethereum/go-ethereum/p2p"
@@ -254,4 +257,31 @@ func (s *Server) ChainWatch(req *proto.ChainWatchRequest, reply proto.Bor_ChainW
 			return err
 		}
 	}
+}
+func (s *Server) TraceBlock(ctx context.Context, req *proto.TraceRequest) (*proto.TraceResponse, error) {
+	fmt.Println("- trace block -")
+
+	traceReq := &tracers.TraceBlockRequest{
+		Number: req.Number,
+		Config: &tracers.TraceConfig{
+			LogConfig: &vm.LogConfig{
+				EnableMemory: true,
+			},
+		},
+	}
+	res, err := s.tracerAPI.TraceBlock2(traceReq)
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: Use streams for this
+	raw, err := json.Marshal(res)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(res)
+	fmt.Println(err)
+	fmt.Println(string(raw))
+
+	return &proto.TraceResponse{}, nil
 }

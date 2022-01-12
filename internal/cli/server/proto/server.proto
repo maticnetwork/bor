@@ -20,8 +20,10 @@ service Bor {
     rpc ChainSetHead(ChainSetHeadRequest) returns (ChainSetHeadResponse);
 
     rpc Status(google.protobuf.Empty) returns (StatusResponse);
-    
+
     rpc ChainWatch(ChainWatchRequest) returns (stream ChainWatchResponse);
+
+    rpc TraceBlock(TraceRequest) returns (TraceResponse);
 }
 
 message ChainWatchRequest {
@@ -37,6 +39,14 @@ message ChainWatchResponse {
 message BlockStub {
     string hash = 1;
     uint64 number = 2;
+}
+
+message TraceRequest {
+    int64 number = 1;
+}
+
+message TraceResponse {
+
 }
 
 message PeersAddRequest {

@@ -80,6 +80,11 @@ func Commands() map[string]MarkDownCommandFactory {
 				Meta2: meta2,
 			}, nil
 		},
+		"trace": func() (MarkDownCommand, error) {
+			return &TraceCommand{
+				Meta2: meta2,
+			}, nil
+		},
 		"chain": func() (MarkDownCommand, error) {
 			return &ChainCommand{
 				UI: ui,
