@@ -20,8 +20,17 @@ service Bor {
     rpc ChainSetHead(ChainSetHeadRequest) returns (ChainSetHeadResponse);
 
     rpc Status(google.protobuf.Empty) returns (StatusResponse);
+
+    rpc TraceBlock(TraceRequest) returns (TraceResponse);
 }
 
+message TraceRequest {
+    int64 number = 1;
+}
+
+message TraceResponse {
+
+}
 
 message PeersAddRequest {
     string enode = 1;

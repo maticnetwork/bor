@@ -26,6 +26,7 @@ type BorClient interface {
 	PeersStatus(ctx context.Context, in *PeersStatusRequest, opts ...grpc.CallOption) (*PeersStatusResponse, error)
 	ChainSetHead(ctx context.Context, in *ChainSetHeadRequest, opts ...grpc.CallOption) (*ChainSetHeadResponse, error)
 	Status(ctx context.Context, in *empty.Empty, opts ...grpc.CallOption) (*StatusResponse, error)
+	TraceBlock(ctx context.Context, in *TraceRequest, opts ...grpc.CallOption) (*TraceResponse, error)
 }
 
 type borClient struct {
@@ -99,6 +100,15 @@ func (c *borClient) Status(ctx context.Context, in *empty.Empty, opts ...grpc.Ca
 	return out, nil
 }
 
+func (c *borClient) TraceBlock(ctx context.Context, in *TraceRequest, opts ...grpc.CallOption) (*TraceResponse, error) {
+	out := new(TraceResponse)
+	err := c.cc.Invoke(ctx, "/proto.Bor/TraceBlock", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // BorServer is the server API for Bor service.
 // All implementations must embed UnimplementedBorServer
 // for forward compatibility
@@ -110,6 +120,7 @@ type BorServer interface {
 	PeersStatus(context.Context, *PeersStatusRequest) (*PeersStatusResponse, error)
 	ChainSetHead(context.Context, *ChainSetHeadRequest) (*ChainSetHeadResponse, error)
 	Status(context.Context, *empty.Empty) (*StatusResponse, error)
+	TraceBlock(context.Context, *TraceRequest) (*TraceResponse, error)
 	mustEmbedUnimplementedBorServer()
 }
 
@@ -137,6 +148,9 @@ func (UnimplementedBorServer) ChainSetHead(context.Context, *ChainSetHeadRequest
 }
 func (UnimplementedBorServer) Status(context.Context, *empty.Empty) (*StatusResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Status not implemented")
+}
+func (UnimplementedBorServer) TraceBlock(context.Context, *TraceRequest) (*TraceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method TraceBlock not implemented")
 }
 func (UnimplementedBorServer) mustEmbedUnimplementedBorServer() {}
 
@@ -277,6 +291,24 @@ func _Bor_Status_Handler(srv interface{}, ctx context.Context, dec func(interfac
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Bor_TraceBlock_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TraceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(BorServer).TraceBlock(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/proto.Bor/TraceBlock",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(BorServer).TraceBlock(ctx, req.(*TraceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Bor_ServiceDesc is the grpc.ServiceDesc for Bor service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -311,6 +343,10 @@ var Bor_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Status",
 			Handler:    _Bor_Status_Handler,
+		},
+		{
+			MethodName: "TraceBlock",
+			Handler:    _Bor_TraceBlock_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

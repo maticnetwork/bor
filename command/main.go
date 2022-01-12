@@ -64,6 +64,11 @@ func commands() map[string]cli.CommandFactory {
 				Meta2: meta2,
 			}, nil
 		},
+		"trace": func() (cli.Command, error) {
+			return &TraceCommand{
+				Meta2: meta2,
+			}, nil
+		},
 		"chain": func() (cli.Command, error) {
 			return &ChainCommand{
 				UI: ui,
