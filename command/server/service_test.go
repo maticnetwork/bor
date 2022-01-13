@@ -13,8 +13,14 @@ func TestGatherBlocks(t *testing.T) {
 		ABlock *big.Int
 		BBlock *big.Int
 	}
+	type d struct {
+		DBlock uint64
+	}
 	val := &c{
 		BBlock: new(big.Int).SetInt64(1),
+	}
+	val2 := &d{
+		DBlock: 10,
 	}
 
 	expect := []*proto.StatusResponse_Fork{
@@ -26,8 +32,12 @@ func TestGatherBlocks(t *testing.T) {
 			Name:  "B",
 			Block: 1,
 		},
+		{
+			Name:  "D",
+			Block: 10,
+		},
 	}
 
-	res := gatherForks(val)
+	res := gatherForks(val, val2)
 	assert.Equal(t, res, expect)
 }
