@@ -7,7 +7,7 @@ import "google/protobuf/empty.proto";
 option go_package = "/command/server/proto";
 
 service Bor {
-    rpc Pprof(PprofRequest) returns (PprofResponse);
+    rpc Pprof(PprofRequest) returns (stream PprofResponse);
 
     rpc PeersAdd(PeersAddRequest) returns (PeersAddResponse);
 
@@ -86,6 +86,13 @@ message StatusResponse {
     int64 numPeers = 3;
     string syncMode = 4;
     Syncing syncing = 5;
+    repeated Fork forks = 6;
+
+    message Fork {
+        string name = 1;
+        int64 block = 2;
+        bool disabled = 3;
+    }
 
     message Syncing {
         int64 startingBlock = 1;
@@ -114,6 +121,18 @@ message PprofRequest {
 }
 
 message PprofResponse {
-    string payload = 1;
-    map<string, string> headers = 2;
+    oneof event {
+        Open open = 1;
+        Input input = 2;
+        google.protobuf.Empty eof = 3;
+    }
+
+    message Open {
+        map<string, string> headers = 1;
+        int64 size = 2;
+    }
+
+    message Input {
+        bytes data = 1;    
+    }
 }

@@ -2,9 +2,14 @@ package server
 
 import (
 	"context"
+<<<<<<< HEAD
 	"encoding/hex"
 	"encoding/json"
+=======
+>>>>>>> master
 	"fmt"
+	"math/big"
+	"reflect"
 	"strings"
 
 	"github.com/ethereum/go-ethereum/command/server/pprof"
@@ -14,14 +19,17 @@ import (
 	"github.com/ethereum/go-ethereum/eth/tracers"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/enode"
+	gproto "github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes/empty"
+	grpc_net_conn "github.com/mitchellh/go-grpc-net-conn"
 )
 
-func (s *Server) Pprof(ctx context.Context, req *proto.PprofRequest) (*proto.PprofResponse, error) {
+func (s *Server) Pprof(req *proto.PprofRequest, stream proto.Bor_PprofServer) error {
 	var payload []byte
 	var headers map[string]string
 	var err error
 
+	ctx := context.Background()
 	switch req.Type {
 	case proto.PprofRequest_CPU:
 		payload, headers, err = pprof.CPUProfile(ctx, int(req.Seconds))
@@ -31,14 +39,42 @@ func (s *Server) Pprof(ctx context.Context, req *proto.PprofRequest) (*proto.Ppr
 		payload, headers, err = pprof.Profile(req.Profile, 0, 0)
 	}
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	resp := &proto.PprofResponse{
-		Payload: hex.EncodeToString(payload),
-		Headers: headers,
+	// open the stream and send the headers
+	err = stream.Send(&proto.PprofResponse{
+		Event: &proto.PprofResponse_Open_{
+			Open: &proto.PprofResponse_Open{
+				Headers: headers,
+				Size:    int64(len(payload)),
+			},
+		},
+	})
+	if err != nil {
+		return err
 	}
-	return resp, nil
+
+	// Wrap our conn around the response.
+	conn := &grpc_net_conn.Conn{
+		Stream:  stream,
+		Request: &proto.PprofResponse_Input{},
+		Encode: grpc_net_conn.SimpleEncoder(func(msg gproto.Message) *[]byte {
+			return &msg.(*proto.PprofResponse_Input).Data
+		}),
+	}
+	if _, err := conn.Write(payload); err != nil {
+		return err
+	}
+
+	// send the eof
+	err = stream.Send(&proto.PprofResponse{
+		Event: &proto.PprofResponse_Eof{},
+	})
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *Server) PeersAdd(ctx context.Context, req *proto.PeersAddRequest) (*proto.PeersAddResponse, error) {
@@ -127,6 +163,7 @@ func (s *Server) Status(ctx context.Context, _ *empty.Empty) (*proto.StatusRespo
 			HighestBlock:  int64(syncProgress.HighestBlock),
 			CurrentBlock:  int64(syncProgress.CurrentBlock),
 		},
+		Forks: gatherForks(s.config.chain.Genesis.Config, s.config.chain.Genesis.Config.Bor),
 	}
 	return resp, nil
 }
@@ -164,4 +201,55 @@ func (s *Server) TraceBlock(ctx context.Context, req *proto.TraceRequest) (*prot
 	fmt.Println(string(raw))
 
 	return &proto.TraceResponse{}, nil
+}
+
+var bigIntT = reflect.TypeOf(new(big.Int)).Kind()
+
+// gatherForks gathers all the fork numbers via reflection
+func gatherForks(configList ...interface{}) []*proto.StatusResponse_Fork {
+	var forks []*proto.StatusResponse_Fork
+
+	for _, config := range configList {
+		kind := reflect.TypeOf(config)
+		for kind.Kind() == reflect.Ptr {
+			kind = kind.Elem()
+		}
+
+		skip := "DAOForkBlock"
+
+		conf := reflect.ValueOf(config).Elem()
+		for i := 0; i < kind.NumField(); i++ {
+			// Fetch the next field and skip non-fork rules
+			field := kind.Field(i)
+			if strings.Contains(field.Name, skip) {
+				continue
+			}
+			if !strings.HasSuffix(field.Name, "Block") {
+				continue
+			}
+
+			fork := &proto.StatusResponse_Fork{
+				Name: strings.TrimSuffix(field.Name, "Block"),
+			}
+
+			val := conf.Field(i)
+			switch field.Type.Kind() {
+			case bigIntT:
+				rule := val.Interface().(*big.Int)
+				if rule != nil {
+					fork.Block = rule.Int64()
+				} else {
+					fork.Disabled = true
+				}
+			case reflect.Uint64:
+				fork.Block = int64(val.Uint())
+
+			default:
+				continue
+			}
+
+			forks = append(forks, fork)
+		}
+	}
+	return forks
 }
