@@ -13,9 +13,6 @@ GO ?= latest
 GORUN = env GO111MODULE=on go run
 GOPATH = $(shell go env GOPATH)
 
-protoc:
-	protoc --go_out=. --go-grpc_out=. ./command/server/proto/*.proto
-
 bor:
 	$(GORUN) build/ci.go install ./cmd/geth
 	mkdir -p $(GOPATH)/bin/
@@ -27,6 +24,9 @@ bor-all:
 	mkdir -p $(GOPATH)/bin/
 	cp $(GOBIN)/geth $(GOBIN)/bor
 	cp $(GOBIN)/* $(GOPATH)/bin/
+
+protoc:
+	protoc --go_out=. --go-grpc_out=. ./command/server/proto/*.proto
 
 geth:
 	$(GORUN) build/ci.go install ./cmd/geth
@@ -50,8 +50,8 @@ ios:
 
 test: all
 	# $(GORUN) build/ci.go test
-	go test github.com/ethereum/go-ethereum/consensus/bor
-	go test github.com/ethereum/go-ethereum/tests/bor
+	go test github.com/ethereum/go-ethereum/consensus/bor -v
+	go test github.com/ethereum/go-ethereum/tests/bor -v
 
 lint: ## Run linters.
 	$(GORUN) build/ci.go lint
