@@ -23,7 +23,6 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type BorClient interface {
-	Pprof(ctx context.Context, in *PprofRequest, opts ...grpc.CallOption) (Bor_PprofClient, error)
 	PeersAdd(ctx context.Context, in *PeersAddRequest, opts ...grpc.CallOption) (*PeersAddResponse, error)
 	PeersRemove(ctx context.Context, in *PeersRemoveRequest, opts ...grpc.CallOption) (*PeersRemoveResponse, error)
 	PeersList(ctx context.Context, in *PeersListRequest, opts ...grpc.CallOption) (*PeersListResponse, error)
@@ -31,7 +30,8 @@ type BorClient interface {
 	ChainSetHead(ctx context.Context, in *ChainSetHeadRequest, opts ...grpc.CallOption) (*ChainSetHeadResponse, error)
 	Status(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*StatusResponse, error)
 	ChainWatch(ctx context.Context, in *ChainWatchRequest, opts ...grpc.CallOption) (Bor_ChainWatchClient, error)
-	TraceBlock(ctx context.Context, in *TraceRequest, opts ...grpc.CallOption) (*TraceResponse, error)
+	DebugPprof(ctx context.Context, in *DebugPprofRequest, opts ...grpc.CallOption) (Bor_DebugPprofClient, error)
+	DebugBlock(ctx context.Context, in *DebugBlockRequest, opts ...grpc.CallOption) (Bor_DebugBlockClient, error)
 }
 
 type borClient struct {
@@ -40,38 +40,6 @@ type borClient struct {
 
 func NewBorClient(cc grpc.ClientConnInterface) BorClient {
 	return &borClient{cc}
-}
-
-func (c *borClient) Pprof(ctx context.Context, in *PprofRequest, opts ...grpc.CallOption) (Bor_PprofClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Bor_ServiceDesc.Streams[0], "/proto.Bor/Pprof", opts...)
-	if err != nil {
-		return nil, err
-	}
-	x := &borPprofClient{stream}
-	if err := x.ClientStream.SendMsg(in); err != nil {
-		return nil, err
-	}
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
-	return x, nil
-}
-
-type Bor_PprofClient interface {
-	Recv() (*PprofResponse, error)
-	grpc.ClientStream
-}
-
-type borPprofClient struct {
-	grpc.ClientStream
-}
-
-func (x *borPprofClient) Recv() (*PprofResponse, error) {
-	m := new(PprofResponse)
-	if err := x.ClientStream.RecvMsg(m); err != nil {
-		return nil, err
-	}
-	return m, nil
 }
 
 func (c *borClient) PeersAdd(ctx context.Context, in *PeersAddRequest, opts ...grpc.CallOption) (*PeersAddResponse, error) {
@@ -129,7 +97,7 @@ func (c *borClient) Status(ctx context.Context, in *emptypb.Empty, opts ...grpc.
 }
 
 func (c *borClient) ChainWatch(ctx context.Context, in *ChainWatchRequest, opts ...grpc.CallOption) (Bor_ChainWatchClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Bor_ServiceDesc.Streams[1], "/proto.Bor/ChainWatch", opts...)
+	stream, err := c.cc.NewStream(ctx, &Bor_ServiceDesc.Streams[0], "/proto.Bor/ChainWatch", opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -160,20 +128,74 @@ func (x *borChainWatchClient) Recv() (*ChainWatchResponse, error) {
 	return m, nil
 }
 
-func (c *borClient) TraceBlock(ctx context.Context, in *TraceRequest, opts ...grpc.CallOption) (*TraceResponse, error) {
-	out := new(TraceResponse)
-	err := c.cc.Invoke(ctx, "/proto.Bor/TraceBlock", in, out, opts...)
+func (c *borClient) DebugPprof(ctx context.Context, in *DebugPprofRequest, opts ...grpc.CallOption) (Bor_DebugPprofClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Bor_ServiceDesc.Streams[1], "/proto.Bor/DebugPprof", opts...)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	x := &borDebugPprofClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Bor_DebugPprofClient interface {
+	Recv() (*DebugFileResponse, error)
+	grpc.ClientStream
+}
+
+type borDebugPprofClient struct {
+	grpc.ClientStream
+}
+
+func (x *borDebugPprofClient) Recv() (*DebugFileResponse, error) {
+	m := new(DebugFileResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
+func (c *borClient) DebugBlock(ctx context.Context, in *DebugBlockRequest, opts ...grpc.CallOption) (Bor_DebugBlockClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Bor_ServiceDesc.Streams[2], "/proto.Bor/DebugBlock", opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &borDebugBlockClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Bor_DebugBlockClient interface {
+	Recv() (*DebugFileResponse, error)
+	grpc.ClientStream
+}
+
+type borDebugBlockClient struct {
+	grpc.ClientStream
+}
+
+func (x *borDebugBlockClient) Recv() (*DebugFileResponse, error) {
+	m := new(DebugFileResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 // BorServer is the server API for Bor service.
 // All implementations must embed UnimplementedBorServer
 // for forward compatibility
 type BorServer interface {
-	Pprof(*PprofRequest, Bor_PprofServer) error
 	PeersAdd(context.Context, *PeersAddRequest) (*PeersAddResponse, error)
 	PeersRemove(context.Context, *PeersRemoveRequest) (*PeersRemoveResponse, error)
 	PeersList(context.Context, *PeersListRequest) (*PeersListResponse, error)
@@ -181,7 +203,8 @@ type BorServer interface {
 	ChainSetHead(context.Context, *ChainSetHeadRequest) (*ChainSetHeadResponse, error)
 	Status(context.Context, *emptypb.Empty) (*StatusResponse, error)
 	ChainWatch(*ChainWatchRequest, Bor_ChainWatchServer) error
-	TraceBlock(context.Context, *TraceRequest) (*TraceResponse, error)
+	DebugPprof(*DebugPprofRequest, Bor_DebugPprofServer) error
+	DebugBlock(*DebugBlockRequest, Bor_DebugBlockServer) error
 	mustEmbedUnimplementedBorServer()
 }
 
@@ -189,9 +212,6 @@ type BorServer interface {
 type UnimplementedBorServer struct {
 }
 
-func (UnimplementedBorServer) Pprof(*PprofRequest, Bor_PprofServer) error {
-	return status.Errorf(codes.Unimplemented, "method Pprof not implemented")
-}
 func (UnimplementedBorServer) PeersAdd(context.Context, *PeersAddRequest) (*PeersAddResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PeersAdd not implemented")
 }
@@ -213,8 +233,11 @@ func (UnimplementedBorServer) Status(context.Context, *emptypb.Empty) (*StatusRe
 func (UnimplementedBorServer) ChainWatch(*ChainWatchRequest, Bor_ChainWatchServer) error {
 	return status.Errorf(codes.Unimplemented, "method ChainWatch not implemented")
 }
-func (UnimplementedBorServer) TraceBlock(context.Context, *TraceRequest) (*TraceResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method TraceBlock not implemented")
+func (UnimplementedBorServer) DebugPprof(*DebugPprofRequest, Bor_DebugPprofServer) error {
+	return status.Errorf(codes.Unimplemented, "method DebugPprof not implemented")
+}
+func (UnimplementedBorServer) DebugBlock(*DebugBlockRequest, Bor_DebugBlockServer) error {
+	return status.Errorf(codes.Unimplemented, "method DebugBlock not implemented")
 }
 func (UnimplementedBorServer) mustEmbedUnimplementedBorServer() {}
 
@@ -227,27 +250,6 @@ type UnsafeBorServer interface {
 
 func RegisterBorServer(s grpc.ServiceRegistrar, srv BorServer) {
 	s.RegisterService(&Bor_ServiceDesc, srv)
-}
-
-func _Bor_Pprof_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(PprofRequest)
-	if err := stream.RecvMsg(m); err != nil {
-		return err
-	}
-	return srv.(BorServer).Pprof(m, &borPprofServer{stream})
-}
-
-type Bor_PprofServer interface {
-	Send(*PprofResponse) error
-	grpc.ServerStream
-}
-
-type borPprofServer struct {
-	grpc.ServerStream
-}
-
-func (x *borPprofServer) Send(m *PprofResponse) error {
-	return x.ServerStream.SendMsg(m)
 }
 
 func _Bor_PeersAdd_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -379,22 +381,46 @@ func (x *borChainWatchServer) Send(m *ChainWatchResponse) error {
 	return x.ServerStream.SendMsg(m)
 }
 
-func _Bor_TraceBlock_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(TraceRequest)
-	if err := dec(in); err != nil {
-		return nil, err
+func _Bor_DebugPprof_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(DebugPprofRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
 	}
-	if interceptor == nil {
-		return srv.(BorServer).TraceBlock(ctx, in)
+	return srv.(BorServer).DebugPprof(m, &borDebugPprofServer{stream})
+}
+
+type Bor_DebugPprofServer interface {
+	Send(*DebugFileResponse) error
+	grpc.ServerStream
+}
+
+type borDebugPprofServer struct {
+	grpc.ServerStream
+}
+
+func (x *borDebugPprofServer) Send(m *DebugFileResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func _Bor_DebugBlock_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(DebugBlockRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
 	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: "/proto.Bor/TraceBlock",
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(BorServer).TraceBlock(ctx, req.(*TraceRequest))
-	}
-	return interceptor(ctx, in, info, handler)
+	return srv.(BorServer).DebugBlock(m, &borDebugBlockServer{stream})
+}
+
+type Bor_DebugBlockServer interface {
+	Send(*DebugFileResponse) error
+	grpc.ServerStream
+}
+
+type borDebugBlockServer struct {
+	grpc.ServerStream
+}
+
+func (x *borDebugBlockServer) Send(m *DebugFileResponse) error {
+	return x.ServerStream.SendMsg(m)
 }
 
 // Bor_ServiceDesc is the grpc.ServiceDesc for Bor service.
@@ -428,20 +454,21 @@ var Bor_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "Status",
 			Handler:    _Bor_Status_Handler,
 		},
-		{
-			MethodName: "TraceBlock",
-			Handler:    _Bor_TraceBlock_Handler,
-		},
 	},
 	Streams: []grpc.StreamDesc{
 		{
-			StreamName:    "Pprof",
-			Handler:       _Bor_Pprof_Handler,
+			StreamName:    "ChainWatch",
+			Handler:       _Bor_ChainWatch_Handler,
 			ServerStreams: true,
 		},
 		{
-			StreamName:    "ChainWatch",
-			Handler:       _Bor_ChainWatch_Handler,
+			StreamName:    "DebugPprof",
+			Handler:       _Bor_DebugPprof_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "DebugBlock",
+			Handler:       _Bor_DebugBlock_Handler,
 			ServerStreams: true,
 		},
 	},

@@ -1,11 +1,8 @@
 package cli
 
-// Based on https://github.com/hashicorp/nomad/blob/main/command/operator_debug.go
-
 import (
 	"archive/tar"
 	"compress/gzip"
-	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -16,19 +13,18 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ethereum/go-ethereum/internal/cli/flagset"
 	"github.com/ethereum/go-ethereum/internal/cli/server/proto"
 	"github.com/golang/protobuf/jsonpb"
 	gproto "github.com/golang/protobuf/proto"
-	"github.com/golang/protobuf/ptypes/empty"
+	"github.com/mitchellh/cli"
 	grpc_net_conn "github.com/mitchellh/go-grpc-net-conn"
+	"google.golang.org/grpc"
+	"google.golang.org/protobuf/runtime/protoiface"
 )
 
+// DebugCommand is the command to group the peers commands
 type DebugCommand struct {
-	*Meta2
-
-	seconds uint64
-	output  string
+	UI cli.Ui
 }
 
 // MarkDown implements cli.MarkDown interface
@@ -52,185 +48,149 @@ func (d *DebugCommand) MarkDown() string {
 	items := []string{
 		"# Debug",
 		"The ```bor debug``` command takes a debug dump of the running client.",
-		d.Flags().MarkDown(),
+		// d.Flags().MarkDown(), TODO: update this
 	}
 	items = append(items, examples...)
 	return strings.Join(items, "\n\n")
 }
 
 // Help implements the cli.Command interface
-func (d *DebugCommand) Help() string {
-	return `Usage: bor debug
+func (c *DebugCommand) Help() string {
+	return `Usage: bor peers <subcommand>
 
-  Build an archive containing Bor pprof traces
+  This command groups actions to interact with peers.
+	
+  List the connected peers:
+  
+    $ bor peers list
+	
+  Add a new peer by enode:
+  
+    $ bor peers add <enode>
 
-  ` + d.Flags().Help()
-}
+  Remove a connected peer by enode:
 
-func (d *DebugCommand) Flags() *flagset.Flagset {
-	flags := d.NewFlagSet("debug")
+    $ bor peers remove <enode>
 
-	flags.Uint64Flag(&flagset.Uint64Flag{
-		Name:    "seconds",
-		Usage:   "seconds to trace",
-		Value:   &d.seconds,
-		Default: 2,
-	})
-	flags.StringFlag(&flagset.StringFlag{
-		Name:  "output",
-		Value: &d.output,
-		Usage: "Output directory",
-	})
+  Display information about a peer:
 
-	return flags
+    $ bor peers status <peer id>`
 }
 
 // Synopsis implements the cli.Command interface
-func (d *DebugCommand) Synopsis() string {
-	return "Build an archive containing Bor pprof traces"
+func (c *DebugCommand) Synopsis() string {
+	return "Interact with peers"
 }
 
 // Run implements the cli.Command interface
-func (d *DebugCommand) Run(args []string) int {
-	flags := d.Flags()
-	if err := flags.Parse(args); err != nil {
-		d.UI.Error(err.Error())
-		return 1
-	}
+func (c *DebugCommand) Run(args []string) int {
+	return cli.RunResultHelp
+}
 
-	clt, err := d.BorConn()
-	if err != nil {
-		d.UI.Error(err.Error())
-		return 1
-	}
+type debugEnv struct {
+	output string
+	prefix string
 
-	stamped := "bor-debug-" + time.Now().UTC().Format("2006-01-02-150405Z")
+	name string
+	dst  string
+}
+
+func (d *debugEnv) init() error {
+	d.name = d.prefix + time.Now().UTC().Format("2006-01-02-150405Z")
+
+	var err error
 
 	// Create the output directory
 	var tmp string
 	if d.output != "" {
 		// User specified output directory
-		tmp = filepath.Join(d.output, stamped)
+		tmp = filepath.Join(d.output, d.name)
 		_, err := os.Stat(tmp)
 		if !os.IsNotExist(err) {
-			d.UI.Error("Output directory already exists")
-			return 1
+			return fmt.Errorf("output directory already exists")
 		}
 	} else {
 		// Generate temp directory
-		tmp, err = ioutil.TempDir(os.TempDir(), stamped)
+		tmp, err = ioutil.TempDir(os.TempDir(), d.name)
 		if err != nil {
-			d.UI.Error(fmt.Sprintf("Error creating tmp directory: %s", err.Error()))
-			return 1
+			return fmt.Errorf("error creating tmp directory: %s", err.Error())
 		}
-		defer os.RemoveAll(tmp)
 	}
-
-	d.UI.Output("Starting debugger...")
-	d.UI.Output("")
 
 	// ensure destine folder exists
 	if err := os.MkdirAll(tmp, os.ModePerm); err != nil {
-		d.UI.Error(fmt.Sprintf("failed to create parent directory: %v", err))
-		return 1
+		return fmt.Errorf("failed to create parent directory: %v", err)
 	}
 
-	pprofProfile := func(ctx context.Context, profile string, filename string) error {
-		req := &proto.PprofRequest{
-			Seconds: int64(d.seconds),
-		}
-		switch profile {
-		case "cpu":
-			req.Type = proto.PprofRequest_CPU
-		case "trace":
-			req.Type = proto.PprofRequest_TRACE
-		default:
-			req.Type = proto.PprofRequest_LOOKUP
-			req.Profile = profile
-		}
-		stream, err := clt.Pprof(ctx, req)
-		if err != nil {
-			return err
-		}
-		// wait for open request
-		msg, err := stream.Recv()
-		if err != nil {
-			return err
-		}
-		if _, ok := msg.Event.(*proto.PprofResponse_Open_); !ok {
-			return fmt.Errorf("expected open message")
-		}
+	d.dst = tmp
+	return nil
+}
 
-		// create the stream
-		conn := &grpc_net_conn.Conn{
-			Stream:   stream,
-			Response: &proto.PprofResponse_Input{},
-			Decode: grpc_net_conn.SimpleDecoder(func(msg gproto.Message) *[]byte {
-				return &msg.(*proto.PprofResponse_Input).Data
-			}),
-		}
+func (d *debugEnv) tarName() string {
+	return d.name + ".tar.gz"
+}
 
-		file, err := os.OpenFile(filepath.Join(tmp, filename+".prof"), os.O_RDWR|os.O_CREATE, 0644)
-		if err != nil {
-			return err
-		}
-		defer file.Close()
-
-		if _, err := io.Copy(file, conn); err != nil {
-			return err
-		}
+func (d *debugEnv) finish() error {
+	// Exit before archive if output directory was specified
+	if d.output != "" {
 		return nil
 	}
 
-	ctx, cancelFn := context.WithCancel(context.Background())
-	trapSignal(cancelFn)
-
-	profiles := map[string]string{
-		"heap":  "heap",
-		"cpu":   "cpu",
-		"trace": "trace",
-	}
-	for profile, filename := range profiles {
-		if err := pprofProfile(ctx, profile, filename); err != nil {
-			d.UI.Error(fmt.Sprintf("Error creating profile '%s': %v", profile, err))
-			return 1
-		}
-	}
-
-	// append the status
-	{
-		statusResp, err := clt.Status(ctx, &empty.Empty{})
-		if err != nil {
-			d.UI.Output(fmt.Sprintf("Failed to get status: %v", err))
-			return 1
-		}
-		m := jsonpb.Marshaler{}
-		data, err := m.MarshalToString(statusResp)
-		if err != nil {
-			d.UI.Output(err.Error())
-			return 1
-		}
-		if err := ioutil.WriteFile(filepath.Join(tmp, "status.json"), []byte(data), 0644); err != nil {
-			d.UI.Output(fmt.Sprintf("Failed to write status: %v", err))
-			return 1
-		}
-	}
-
-	// Exit before archive if output directory was specified
-	if d.output != "" {
-		d.UI.Output(fmt.Sprintf("Created debug directory: %s", tmp))
-		return 0
-	}
-
 	// Create archive tarball
-	archiveFile := stamped + ".tar.gz"
-	if err = tarCZF(archiveFile, tmp, stamped); err != nil {
-		d.UI.Error(fmt.Sprintf("Error creating archive: %s", err.Error()))
-		return 1
+	archiveFile := d.name + ".tar.gz"
+	if err := tarCZF(archiveFile, d.dst, d.name); err != nil {
+		return fmt.Errorf("error creating archive: %s", err.Error())
+	}
+	return nil
+}
+
+type debugStream interface {
+	Recv() (*proto.DebugFileResponse, error)
+	grpc.ClientStream
+}
+
+func (d *debugEnv) writeFromStream(name string, stream debugStream) error {
+	// wait for open request
+	msg, err := stream.Recv()
+	if err != nil {
+		return err
+	}
+	if _, ok := msg.Event.(*proto.DebugFileResponse_Open_); !ok {
+		return fmt.Errorf("expected open message")
 	}
 
-	d.UI.Output(fmt.Sprintf("Created debug archive: %s", archiveFile))
-	return 0
+	// create the stream
+	conn := &grpc_net_conn.Conn{
+		Stream:   stream,
+		Response: &proto.DebugFileResponse_Input{},
+		Decode: grpc_net_conn.SimpleDecoder(func(msg gproto.Message) *[]byte {
+			return &msg.(*proto.DebugFileResponse_Input).Data
+		}),
+	}
+
+	file, err := os.OpenFile(filepath.Join(d.dst, name), os.O_RDWR|os.O_CREATE, 0644)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	if _, err := io.Copy(file, conn); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (d *debugEnv) writeJSON(name string, msg protoiface.MessageV1) error {
+	m := jsonpb.Marshaler{}
+	data, err := m.MarshalToString(msg)
+	if err != nil {
+		return err
+	}
+
+	if err := ioutil.WriteFile(filepath.Join(d.dst, name), []byte(data), 0644); err != nil {
+		return fmt.Errorf("failed to write status: %v", err)
+	}
+	return nil
 }
 
 func trapSignal(cancel func()) {
