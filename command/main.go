@@ -61,11 +61,16 @@ func commands() map[string]cli.CommandFactory {
 		},
 		"debug": func() (cli.Command, error) {
 			return &DebugCommand{
+				UI: ui,
+			}, nil
+		},
+		"debug pprof": func() (cli.Command, error) {
+			return &DebugPprofCommand{
 				Meta2: meta2,
 			}, nil
 		},
-		"trace": func() (cli.Command, error) {
-			return &TraceCommand{
+		"debug block": func() (cli.Command, error) {
+			return &DebugBlockCommand{
 				Meta2: meta2,
 			}, nil
 		},

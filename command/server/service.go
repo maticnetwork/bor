@@ -2,11 +2,7 @@ package server
 
 import (
 	"context"
-<<<<<<< HEAD
-	"encoding/hex"
 	"encoding/json"
-=======
->>>>>>> master
 	"fmt"
 	"math/big"
 	"reflect"
@@ -24,30 +20,12 @@ import (
 	grpc_net_conn "github.com/mitchellh/go-grpc-net-conn"
 )
 
-func (s *Server) Pprof(req *proto.PprofRequest, stream proto.Bor_PprofServer) error {
-	var payload []byte
-	var headers map[string]string
-	var err error
-
-	ctx := context.Background()
-	switch req.Type {
-	case proto.PprofRequest_CPU:
-		payload, headers, err = pprof.CPUProfile(ctx, int(req.Seconds))
-	case proto.PprofRequest_TRACE:
-		payload, headers, err = pprof.Trace(ctx, int(req.Seconds))
-	case proto.PprofRequest_LOOKUP:
-		payload, headers, err = pprof.Profile(req.Profile, 0, 0)
-	}
-	if err != nil {
-		return err
-	}
-
+func sendStreamDebugFile(stream proto.Bor_DebugPprofServer, headers map[string]string, data []byte) error {
 	// open the stream and send the headers
-	err = stream.Send(&proto.PprofResponse{
-		Event: &proto.PprofResponse_Open_{
-			Open: &proto.PprofResponse_Open{
+	err := stream.Send(&proto.DebugFileResponse{
+		Event: &proto.DebugFileResponse_Open_{
+			Open: &proto.DebugFileResponse_Open{
 				Headers: headers,
-				Size:    int64(len(payload)),
 			},
 		},
 	})
@@ -58,20 +36,46 @@ func (s *Server) Pprof(req *proto.PprofRequest, stream proto.Bor_PprofServer) er
 	// Wrap our conn around the response.
 	conn := &grpc_net_conn.Conn{
 		Stream:  stream,
-		Request: &proto.PprofResponse_Input{},
+		Request: &proto.DebugFileResponse_Input{},
 		Encode: grpc_net_conn.SimpleEncoder(func(msg gproto.Message) *[]byte {
-			return &msg.(*proto.PprofResponse_Input).Data
+			return &msg.(*proto.DebugFileResponse_Input).Data
 		}),
 	}
-	if _, err := conn.Write(payload); err != nil {
+	if _, err := conn.Write(data); err != nil {
 		return err
 	}
 
 	// send the eof
-	err = stream.Send(&proto.PprofResponse{
-		Event: &proto.PprofResponse_Eof{},
+	err = stream.Send(&proto.DebugFileResponse{
+		Event: &proto.DebugFileResponse_Eof{},
 	})
 	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *Server) DebugPprof(req *proto.DebugPprofRequest, stream proto.Bor_DebugPprofServer) error {
+	var payload []byte
+	var headers map[string]string
+	var err error
+
+	ctx := context.Background()
+	switch req.Type {
+	case proto.DebugPprofRequest_CPU:
+		payload, headers, err = pprof.CPUProfile(ctx, int(req.Seconds))
+	case proto.DebugPprofRequest_TRACE:
+		payload, headers, err = pprof.Trace(ctx, int(req.Seconds))
+	case proto.DebugPprofRequest_LOOKUP:
+		payload, headers, err = pprof.Profile(req.Profile, 0, 0)
+	}
+	if err != nil {
+		return err
+	}
+
+	// send the file on a grpc stream
+	if err := sendStreamDebugFile(stream, headers, payload); err != nil {
 		return err
 	}
 	return nil
@@ -175,9 +179,7 @@ func headerToProtoHeader(h *types.Header) *proto.Header {
 	}
 }
 
-func (s *Server) TraceBlock(ctx context.Context, req *proto.TraceRequest) (*proto.TraceResponse, error) {
-	fmt.Println("- trace block -")
-
+func (s *Server) DebugBlock(req *proto.DebugBlockRequest, stream proto.Bor_DebugBlockServer) error {
 	traceReq := &tracers.TraceBlockRequest{
 		Number: req.Number,
 		Config: &tracers.TraceConfig{
@@ -188,19 +190,19 @@ func (s *Server) TraceBlock(ctx context.Context, req *proto.TraceRequest) (*prot
 	}
 	res, err := s.tracerAPI.TraceBlock2(traceReq)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	// TODO: Use streams for this
-	raw, err := json.Marshal(res)
+	// this is memory heavy
+	data, err := json.Marshal(res)
 	if err != nil {
-		panic(err)
+		return err
 	}
-	fmt.Println(res)
-	fmt.Println(err)
-	fmt.Println(string(raw))
+	if err := sendStreamDebugFile(stream, map[string]string{}, data); err != nil {
+		return err
+	}
 
-	return &proto.TraceResponse{}, nil
+	return nil
 }
 
 var bigIntT = reflect.TypeOf(new(big.Int)).Kind()

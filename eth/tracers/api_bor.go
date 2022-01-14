@@ -13,8 +13,11 @@ import (
 )
 
 type BlockTraceResult struct {
-	Transactions []*TxTraceResult
-	Block        interface{}
+	// Trace of each transaction executed
+	Transactions []*TxTraceResult `json:"transactions,omitempty"`
+
+	// Block that we are executing on the trace
+	Block interface{} `json:"block"`
 }
 
 type TxTraceResult struct {
@@ -25,7 +28,7 @@ type TxTraceResult struct {
 	Error string `json:"error,omitempty"`
 
 	// IntermediateHash of the execution if succeeds
-	IntermediateHash common.Hash
+	IntermediateHash common.Hash `json:"intermediatehash"`
 }
 
 func (api *API) traceBlock2(ctx context.Context, block *types.Block, config *TraceConfig) (*BlockTraceResult, error) {
