@@ -50,7 +50,7 @@ ios:
 
 test:
 	# Skip mobile and cmd tests since they are being deprecated
-	go test -v $$(go list ./... | grep -v go-ethereum/cmd/ | grep -v go-ethereum/mobile/)
+	go test -v $$(go list ./... | grep -v go-ethereum/cmd/)
 
 lint: ## Run linters.
 	$(GORUN) build/ci.go lint
