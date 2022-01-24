@@ -360,16 +360,16 @@ var (
 	//
 	// This configuration is intentionally not using keyed fields to force anyone
 	// adding flags to the config to also have to set these fields.
-	AllEthashProtocolChanges = &ChainConfig{big.NewInt(1337), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, new(EthashConfig), nil, &BorConfig{BurntContract: map[string]string{"0": "0x000000000000000000000000000000000000dead"}}}
+	AllEthashProtocolChanges = &ChainConfig{big.NewInt(1337), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil, new(EthashConfig), nil, &BorConfig{BurntContract: map[string]string{"0": "0x000000000000000000000000000000000000dead"}}}
 
 	// AllCliqueProtocolChanges contains every protocol change (EIPs) introduced
 	// and accepted by the Ethereum core developers into the Clique consensus.
 	//
 	// This configuration is intentionally not using keyed fields to force anyone
 	// adding flags to the config to also have to set these fields.
-	AllCliqueProtocolChanges = &ChainConfig{big.NewInt(1337), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil, &CliqueConfig{Period: 0, Epoch: 30000}, &BorConfig{BurntContract: map[string]string{"0": "0x000000000000000000000000000000000000dead"}}}
+	AllCliqueProtocolChanges = &ChainConfig{big.NewInt(1337), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil, nil, &CliqueConfig{Period: 0, Epoch: 30000}, &BorConfig{BurntContract: map[string]string{"0": "0x000000000000000000000000000000000000dead"}}}
 
-	TestChainConfig = &ChainConfig{big.NewInt(1), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, new(EthashConfig), nil, &BorConfig{BurntContract: map[string]string{"0": "0x000000000000000000000000000000000000dead"}}}
+	TestChainConfig = &ChainConfig{big.NewInt(1), big.NewInt(0), nil, false, big.NewInt(0), common.Hash{}, big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), big.NewInt(0), nil, nil, new(EthashConfig), nil, &BorConfig{BurntContract: map[string]string{"0": "0x000000000000000000000000000000000000dead"}}}
 	TestRules       = TestChainConfig.Rules(new(big.Int))
 )
 
@@ -453,10 +453,18 @@ type ChainConfig struct {
 	// the network that triggers the consensus upgrade.
 	TerminalTotalDifficulty *big.Int `json:"terminalTotalDifficulty,omitempty"`
 
+	//FeeConfig after EIP1559
+	FeeConfigMap map[string]FeeConfig `json:"feeConfig,omitempty"`
+
 	// Various consensus engines
 	Ethash *EthashConfig `json:"ethash,omitempty"`
 	Clique *CliqueConfig `json:"clique,omitempty"`
 	Bor    *BorConfig    `json:"bor,omitempty"`
+}
+
+type FeeConfig struct {
+	BaseFeeChangeDenominator uint64  `json:"base_fee_change_denominator,omitempty"`
+	ElasticityMultiplier     float64 `json:"elasticity_multiplier,omitempty"`
 }
 
 // EthashConfig is the consensus engine configs for proof-of-work based sealing.
@@ -753,6 +761,29 @@ func (c *ChainConfig) checkCompatible(newcfg *ChainConfig, head *big.Int) *Confi
 		return newCompatError("London fork block", c.LondonBlock, newcfg.LondonBlock)
 	}
 	return nil
+}
+
+func (c *ChainConfig) GetFeeConfig(number uint64) FeeConfig {
+	if len(c.FeeConfigMap) == 0 {
+		return FeeConfig{
+			BaseFeeChangeDenominator: BaseFeeChangeDenominator,
+			ElasticityMultiplier:     ElasticityMultiplier,
+		}
+	}
+
+	keys := make([]string, 0, len(c.FeeConfigMap))
+	for k := range c.FeeConfigMap {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for i := 0; i < len(keys)-1; i++ {
+		valUint, _ := strconv.ParseUint(keys[i], 10, 64)
+		valUintNext, _ := strconv.ParseUint(keys[i+1], 10, 64)
+		if number > valUint && number < valUintNext {
+			return c.FeeConfigMap[keys[i]]
+		}
+	}
+	return c.FeeConfigMap[keys[len(keys)-1]]
 }
 
 // isForkIncompatible returns true if a fork scheduled at s1 cannot be rescheduled to
