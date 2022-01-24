@@ -17,12 +17,44 @@
 package vm
 
 import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"time"
+	
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/holiman/uint256"
 	"golang.org/x/crypto/sha3"
 )
+
+type dataOP struct {
+	Opcode_name string `json:"opcode_name"`
+	Num         int    `json:"num"`
+	ExeTime     int    `json:"exeTime"`
+}
+
+func writeFile(s string, i int, bnum int,path string) {
+	tempData := dataOP{Opcode_name: s, ExeTime: i, Num: bnum}
+	byteArray, err := json.Marshal(tempData)
+	if err != nil {
+		fmt.Println(err)
+	}
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0666)
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	n, err := io.WriteString(f, string(byteArray))
+	if err != nil {
+		fmt.Println(n, err)
+	}
+
+	defer f.Close()
+}
+
 
 func opAdd(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 	x, y := scope.Stack.pop(), scope.Stack.peek()
