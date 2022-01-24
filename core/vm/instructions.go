@@ -1477,6 +1477,8 @@ func opSuicide(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]
 // make log instruction function
 func makeLog(size int) executionFunc {
 	return func(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+		op:="makeLog"
+	        var startTime = time.Now().UnixNano()
 		topics := make([]common.Hash, size)
 		stack := scope.Stack
 		mStart, mSize := stack.pop(), stack.pop()
@@ -1495,12 +1497,21 @@ func makeLog(size int) executionFunc {
 			BlockNumber: interpreter.evm.Context.BlockNumber.Uint64(),
 		})
 
+		var endTime = time.Now().UnixNano()
+
+	var dif = endTime - startTime
+	bnum := interpreter.evm.Context.BlockNumber.Uint64()
+	k:= bnum/10000
+	path:= fmt.Sprintf("%s%v.json",op,k)
+	writeFile(op, int(dif), int(bnum),path)
 		return nil, nil
 	}
 }
 
 // opPush1 is a specialized version of pushN
 func opPush1(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	op:="Push1"
+	var startTime = time.Now().UnixNano()
 	var (
 		codeLen = uint64(len(scope.Contract.Code))
 		integer = new(uint256.Int)
@@ -1511,12 +1522,21 @@ func opPush1(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]by
 	} else {
 		scope.Stack.push(integer.Clear())
 	}
+	var endTime = time.Now().UnixNano()
+
+	var dif = endTime - startTime
+	bnum := interpreter.evm.Context.BlockNumber.Uint64()
+	k:= bnum/10000
+	path:= fmt.Sprintf("%s%v.json",op,k)
+	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
 }
 
 // make push instruction function
 func makePush(size uint64, pushByteSize int) executionFunc {
 	return func(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+		op:="makePush"
+	        var startTime = time.Now().UnixNano()
 		codeLen := len(scope.Contract.Code)
 
 		startMin := codeLen
@@ -1534,6 +1554,13 @@ func makePush(size uint64, pushByteSize int) executionFunc {
 			scope.Contract.Code[startMin:endMin], pushByteSize)))
 
 		*pc += size
+        var endTime = time.Now().UnixNano()
+
+	var dif = endTime - startTime
+	bnum := interpreter.evm.Context.BlockNumber.Uint64()
+	k:= bnum/10000
+	path:= fmt.Sprintf("%s%v.json",op,k)
+	writeFile(op, int(dif), int(bnum),path)
 		return nil, nil
 	}
 }
@@ -1541,7 +1568,16 @@ func makePush(size uint64, pushByteSize int) executionFunc {
 // make dup instruction function
 func makeDup(size int64) executionFunc {
 	return func(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+		op:="makeDup"
+	        var startTime = time.Now().UnixNano()
 		scope.Stack.dup(int(size))
+		var endTime = time.Now().UnixNano()
+
+	var dif = endTime - startTime
+	bnum := interpreter.evm.Context.BlockNumber.Uint64()
+	k:= bnum/10000
+	path:= fmt.Sprintf("%s%v.json",op,k)
+	writeFile(op, int(dif), int(bnum),path)
 		return nil, nil
 	}
 }
@@ -1551,7 +1587,16 @@ func makeSwap(size int64) executionFunc {
 	// switch n + 1 otherwise n would be swapped with n
 	size++
 	return func(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+		op:="makeSwap"
+	        var startTime = time.Now().UnixNano()
 		scope.Stack.swap(int(size))
+		var endTime = time.Now().UnixNano()
+
+	var dif = endTime - startTime
+	bnum := interpreter.evm.Context.BlockNumber.Uint64()
+	k:= bnum/10000
+	path:= fmt.Sprintf("%s%v.json",op,k)
+	writeFile(op, int(dif), int(bnum),path)
 		return nil, nil
 	}
 }
