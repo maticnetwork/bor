@@ -409,5 +409,5 @@ var Bor_ServiceDesc = grpc.ServiceDesc{
 			ServerStreams: true,
 		},
 	},
-	Metadata: "command/server/proto/server.proto",
+	Metadata: "internal/cli/server/proto/server.proto",
 }
