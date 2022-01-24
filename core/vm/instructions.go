@@ -57,162 +57,364 @@ func writeFile(s string, i int, bnum int,path string) {
 
 
 func opAdd(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	op:="Add"
+	var startTime = time.Now().UnixNano()
 	x, y := scope.Stack.pop(), scope.Stack.peek()
 	y.Add(&x, y)
+	
+	var endTime = time.Now().UnixNano()
+
+	var dif = endTime - startTime
+	bnum := interpreter.evm.Context.BlockNumber.Uint64()
+	k:= bnum/10000
+	path:= fmt.Sprintf("%s%v.json",op,k)
+	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
 }
 
 func opSub(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	op:="Sub"
+	var startTime = time.Now().UnixNano()
 	x, y := scope.Stack.pop(), scope.Stack.peek()
 	y.Sub(&x, y)
+	var endTime = time.Now().UnixNano()
+
+	var dif = endTime - startTime
+	bnum := interpreter.evm.Context.BlockNumber.Uint64()
+	k:= bnum/10000
+	path:= fmt.Sprintf("%s%v.json",op,k)
+	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
 }
 
 func opMul(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	op:="Mul"
+	var startTime = time.Now().UnixNano()
 	x, y := scope.Stack.pop(), scope.Stack.peek()
 	y.Mul(&x, y)
+	
+	var endTime = time.Now().UnixNano()
+
+	var dif = endTime - startTime
+	bnum := interpreter.evm.Context.BlockNumber.Uint64()
+	k:= bnum/10000
+	path:= fmt.Sprintf("%s%v.json",op,k)
+	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
 }
 
 func opDiv(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	op:="Div"
+	var startTime = time.Now().UnixNano()
 	x, y := scope.Stack.pop(), scope.Stack.peek()
 	y.Div(&x, y)
+	
+	var endTime = time.Now().UnixNano()
+
+	var dif = endTime - startTime
+	bnum := interpreter.evm.Context.BlockNumber.Uint64()
+	k:= bnum/10000
+	path:= fmt.Sprintf("%s%v.json",op,k)
+	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
 }
 
 func opSdiv(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	op:="Sdiv"
+	var startTime = time.Now().UnixNano()
 	x, y := scope.Stack.pop(), scope.Stack.peek()
 	y.SDiv(&x, y)
+	
+	var endTime = time.Now().UnixNano()
+
+	var dif = endTime - startTime
+	bnum := interpreter.evm.Context.BlockNumber.Uint64()
+	k:= bnum/10000
+	path:= fmt.Sprintf("%s%v.json",op,k)
+	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
 }
 
 func opMod(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	op:="Mod"
+	var startTime = time.Now().UnixNano()
 	x, y := scope.Stack.pop(), scope.Stack.peek()
 	y.Mod(&x, y)
+	var endTime = time.Now().UnixNano()
+
+	var dif = endTime - startTime
+	bnum := interpreter.evm.Context.BlockNumber.Uint64()
+	k:= bnum/10000
+	path:= fmt.Sprintf("%s%v.json",op,k)
+	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
 }
 
 func opSmod(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	op:="Smod"
+	var startTime = time.Now().UnixNano()
 	x, y := scope.Stack.pop(), scope.Stack.peek()
 	y.SMod(&x, y)
+	var endTime = time.Now().UnixNano()
+
+	var dif = endTime - startTime
+	bnum := interpreter.evm.Context.BlockNumber.Uint64()
+	k:= bnum/10000
+	path:= fmt.Sprintf("%s%v.json",op,k)
+	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
 }
 
 func opExp(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	op:="Exp"
+	var startTime = time.Now().UnixNano()
 	base, exponent := scope.Stack.pop(), scope.Stack.peek()
 	exponent.Exp(&base, exponent)
+	var endTime = time.Now().UnixNano()
+
+	var dif = endTime - startTime
+	bnum := interpreter.evm.Context.BlockNumber.Uint64()
+	k:= bnum/10000
+	path:= fmt.Sprintf("%s%v.json",op,k)
+	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
 }
 
 func opSignExtend(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	op:="SignExtend"
+	var startTime = time.Now().UnixNano()
 	back, num := scope.Stack.pop(), scope.Stack.peek()
 	num.ExtendSign(num, &back)
+	var endTime = time.Now().UnixNano()
+
+	var dif = endTime - startTime
+	bnum := interpreter.evm.Context.BlockNumber.Uint64()
+	k:= bnum/10000
+	path:= fmt.Sprintf("%s%v.json",op,k)
+	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
 }
 
 func opNot(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	op:="Not"
+	var startTime = time.Now().UnixNano()
 	x := scope.Stack.peek()
 	x.Not(x)
+	var endTime = time.Now().UnixNano()
+
+	var dif = endTime - startTime
+	bnum := interpreter.evm.Context.BlockNumber.Uint64()
+	k:= bnum/10000
+	path:= fmt.Sprintf("%s%v.json",op,k)
+	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
 }
 
 func opLt(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	op:="Lt"
+	var startTime = time.Now().UnixNano()
 	x, y := scope.Stack.pop(), scope.Stack.peek()
 	if x.Lt(y) {
 		y.SetOne()
 	} else {
 		y.Clear()
 	}
+	var endTime = time.Now().UnixNano()
+
+	var dif = endTime - startTime
+	bnum := interpreter.evm.Context.BlockNumber.Uint64()
+	k:= bnum/10000
+	path:= fmt.Sprintf("%s%v.json",op,k)
+	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
 }
 
 func opGt(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	op:="Gt"
+	var startTime = time.Now().UnixNano()
 	x, y := scope.Stack.pop(), scope.Stack.peek()
 	if x.Gt(y) {
 		y.SetOne()
 	} else {
 		y.Clear()
 	}
+	var endTime = time.Now().UnixNano()
+
+	var dif = endTime - startTime
+	bnum := interpreter.evm.Context.BlockNumber.Uint64()
+	k:= bnum/10000
+	path:= fmt.Sprintf("%s%v.json",op,k)
+	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
 }
 
 func opSlt(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	op:="Slt"
+	var startTime = time.Now().UnixNano()
 	x, y := scope.Stack.pop(), scope.Stack.peek()
 	if x.Slt(y) {
 		y.SetOne()
 	} else {
 		y.Clear()
 	}
+	var endTime = time.Now().UnixNano()
+
+	var dif = endTime - startTime
+	bnum := interpreter.evm.Context.BlockNumber.Uint64()
+	k:= bnum/10000
+	path:= fmt.Sprintf("%s%v.json",op,k)
+	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
 }
 
 func opSgt(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	op:="Sgt"
+	var startTime = time.Now().UnixNano()
 	x, y := scope.Stack.pop(), scope.Stack.peek()
 	if x.Sgt(y) {
 		y.SetOne()
 	} else {
 		y.Clear()
 	}
+	var endTime = time.Now().UnixNano()
+
+	var dif = endTime - startTime
+	bnum := interpreter.evm.Context.BlockNumber.Uint64()
+	k:= bnum/10000
+	path:= fmt.Sprintf("%s%v.json",op,k)
+	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
 }
 
 func opEq(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	op:="Eq"
+	var startTime = time.Now().UnixNano()
 	x, y := scope.Stack.pop(), scope.Stack.peek()
 	if x.Eq(y) {
 		y.SetOne()
 	} else {
 		y.Clear()
 	}
+	var endTime = time.Now().UnixNano()
+
+	var dif = endTime - startTime
+	bnum := interpreter.evm.Context.BlockNumber.Uint64()
+	k:= bnum/10000
+	path:= fmt.Sprintf("%s%v.json",op,k)
+	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
 }
 
 func opIszero(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	op:="Iszero"
+	var startTime = time.Now().UnixNano()
 	x := scope.Stack.peek()
 	if x.IsZero() {
 		x.SetOne()
 	} else {
 		x.Clear()
 	}
+	var endTime = time.Now().UnixNano()
+
+	var dif = endTime - startTime
+	bnum := interpreter.evm.Context.BlockNumber.Uint64()
+	k:= bnum/10000
+	path:= fmt.Sprintf("%s%v.json",op,k)
+	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
 }
 
 func opAnd(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	op:="And"
+	var startTime = time.Now().UnixNano()
 	x, y := scope.Stack.pop(), scope.Stack.peek()
 	y.And(&x, y)
+	var endTime = time.Now().UnixNano()
+
+	var dif = endTime - startTime
+	bnum := interpreter.evm.Context.BlockNumber.Uint64()
+	k:= bnum/10000
+	path:= fmt.Sprintf("%s%v.json",op,k)
+	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
 }
 
 func opOr(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	op:="Or"
+	var startTime = time.Now().UnixNano()
 	x, y := scope.Stack.pop(), scope.Stack.peek()
 	y.Or(&x, y)
+	var endTime = time.Now().UnixNano()
+
+	var dif = endTime - startTime
+	bnum := interpreter.evm.Context.BlockNumber.Uint64()
+	k:= bnum/10000
+	path:= fmt.Sprintf("%s%v.json",op,k)
+	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
 }
 
 func opXor(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	op:="Xor"
+	var startTime = time.Now().UnixNano()
 	x, y := scope.Stack.pop(), scope.Stack.peek()
 	y.Xor(&x, y)
+	var endTime = time.Now().UnixNano()
+
+	var dif = endTime - startTime
+	bnum := interpreter.evm.Context.BlockNumber.Uint64()
+	k:= bnum/10000
+	path:= fmt.Sprintf("%s%v.json",op,k)
+	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
 }
 
 func opByte(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	op:="Byte"
+	var startTime = time.Now().UnixNano()
 	th, val := scope.Stack.pop(), scope.Stack.peek()
 	val.Byte(&th)
+	var endTime = time.Now().UnixNano()
+
+	var dif = endTime - startTime
+	bnum := interpreter.evm.Context.BlockNumber.Uint64()
+	k:= bnum/10000
+	path:= fmt.Sprintf("%s%v.json",op,k)
+	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
 }
 
 func opAddmod(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	op:="Addmod"
+	var startTime = time.Now().UnixNano()
 	x, y, z := scope.Stack.pop(), scope.Stack.pop(), scope.Stack.peek()
 	if z.IsZero() {
 		z.Clear()
 	} else {
 		z.AddMod(&x, &y, z)
 	}
+	var endTime = time.Now().UnixNano()
+
+	var dif = endTime - startTime
+	bnum := interpreter.evm.Context.BlockNumber.Uint64()
+	k:= bnum/10000
+	path:= fmt.Sprintf("%s%v.json",op,k)
+	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
 }
 
 func opMulmod(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	op:="Mulmod"
+	var startTime = time.Now().UnixNano()
 	x, y, z := scope.Stack.pop(), scope.Stack.pop(), scope.Stack.peek()
 	z.MulMod(&x, &y, z)
+	var endTime = time.Now().UnixNano()
+
+	var dif = endTime - startTime
+	bnum := interpreter.evm.Context.BlockNumber.Uint64()
+	k:= bnum/10000
+	path:= fmt.Sprintf("%s%v.json",op,k)
+	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
 }
 
@@ -221,12 +423,21 @@ func opMulmod(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]b
 // and pushes on the stack arg2 shifted to the left by arg1 number of bits.
 func opSHL(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 	// Note, second operand is left in the stack; accumulate result into it, and no need to push it afterwards
+	op:="SHL"
+	var startTime = time.Now().UnixNano()
 	shift, value := scope.Stack.pop(), scope.Stack.peek()
 	if shift.LtUint64(256) {
 		value.Lsh(value, uint(shift.Uint64()))
 	} else {
 		value.Clear()
 	}
+	var endTime = time.Now().UnixNano()
+
+	var dif = endTime - startTime
+	bnum := interpreter.evm.Context.BlockNumber.Uint64()
+	k:= bnum/10000
+	path:= fmt.Sprintf("%s%v.json",op,k)
+	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
 }
 
