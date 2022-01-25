@@ -771,19 +771,19 @@ func (c *ChainConfig) GetFeeConfig(number uint64) FeeConfig {
 		}
 	}
 
-	keys := make([]string, 0, len(c.FeeConfigMap))
+	keys := make([]uint64, 0, len(c.FeeConfigMap))
 	for k := range c.FeeConfigMap {
-		keys = append(keys, k)
+		key, _ := strconv.ParseUint(k, 10, 64)
+		keys = append(keys, key)
 	}
-	sort.Strings(keys)
+	// Should not use sort.Strings because it doesn't sort numbers properly.
+	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
 	for i := 0; i < len(keys)-1; i++ {
-		valUint, _ := strconv.ParseUint(keys[i], 10, 64)
-		valUintNext, _ := strconv.ParseUint(keys[i+1], 10, 64)
-		if number > valUint && number < valUintNext {
-			return c.FeeConfigMap[keys[i]]
+		if number > keys[i] && number < keys[i+1] {
+			return c.FeeConfigMap[strconv.FormatUint(keys[i], 10)]
 		}
 	}
-	return c.FeeConfigMap[keys[len(keys)-1]]
+	return c.FeeConfigMap[strconv.FormatUint(keys[len(keys)-1], 10)]
 }
 
 // isForkIncompatible returns true if a fork scheduled at s1 cannot be rescheduled to
