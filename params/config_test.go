@@ -131,10 +131,9 @@ func config() *ChainConfig {
 
 func TestChainConfig_GetFeeConfig(t *testing.T) {
 	tests := []struct {
-		blockNumber                      string
-		feeConfig                        FeeConfig
-		expectedBaseFeeChangeDenominator uint64
-		expectedElasticityMultiplier     float64
+		blockNumber       string
+		feeConfig         FeeConfig
+		expectedFeeConfig FeeConfig
 	}{
 		{
 			blockNumber: "5",
@@ -142,8 +141,10 @@ func TestChainConfig_GetFeeConfig(t *testing.T) {
 				BaseFeeChangeDenominator: 2,
 				ElasticityMultiplier:     1.5,
 			},
-			expectedBaseFeeChangeDenominator: 2,
-			expectedElasticityMultiplier:     1.5,
+			expectedFeeConfig: FeeConfig{
+				BaseFeeChangeDenominator: 2,
+				ElasticityMultiplier:     1.5,
+			},
 		},
 		{
 			blockNumber: "15",
@@ -151,8 +152,10 @@ func TestChainConfig_GetFeeConfig(t *testing.T) {
 				BaseFeeChangeDenominator: 10,
 				ElasticityMultiplier:     1.15,
 			},
-			expectedBaseFeeChangeDenominator: 10,
-			expectedElasticityMultiplier:     1.15,
+			expectedFeeConfig: FeeConfig{
+				BaseFeeChangeDenominator: 10,
+				ElasticityMultiplier:     1.15,
+			},
 		},
 		{
 			blockNumber: "20",
@@ -160,8 +163,10 @@ func TestChainConfig_GetFeeConfig(t *testing.T) {
 				BaseFeeChangeDenominator: 35,
 				ElasticityMultiplier:     1.75,
 			},
-			expectedBaseFeeChangeDenominator: 35,
-			expectedElasticityMultiplier:     1.75,
+			expectedFeeConfig: FeeConfig{
+				BaseFeeChangeDenominator: 35,
+				ElasticityMultiplier:     1.75,
+			},
 		},
 	}
 	config := config()
@@ -187,11 +192,11 @@ func TestChainConfig_GetFeeConfig(t *testing.T) {
 			t.Errorf("error parsing block number: %v", err)
 		}
 		feeConfig := config.GetFeeConfig(number + 1)
-		if feeConfig.BaseFeeChangeDenominator != test.expectedBaseFeeChangeDenominator {
-			t.Errorf("expected base fee change denominator %v, got %v", test.expectedBaseFeeChangeDenominator, feeConfig.BaseFeeChangeDenominator)
+		if feeConfig.BaseFeeChangeDenominator != test.expectedFeeConfig.BaseFeeChangeDenominator {
+			t.Errorf("expected base fee change denominator %v, got %v", test.expectedFeeConfig.BaseFeeChangeDenominator, feeConfig.BaseFeeChangeDenominator)
 		}
-		if feeConfig.ElasticityMultiplier != test.expectedElasticityMultiplier {
-			t.Errorf("expected elasticity multiplier %v, got %v", test.expectedElasticityMultiplier, feeConfig.ElasticityMultiplier)
+		if feeConfig.ElasticityMultiplier != test.expectedFeeConfig.ElasticityMultiplier {
+			t.Errorf("expected elasticity multiplier %v, got %v", test.expectedFeeConfig.ElasticityMultiplier, feeConfig.ElasticityMultiplier)
 		}
 	}
 }
