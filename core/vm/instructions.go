@@ -66,7 +66,7 @@ func opAdd(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -81,7 +81,7 @@ func opSub(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -97,7 +97,7 @@ func opMul(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -113,7 +113,7 @@ func opDiv(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -129,7 +129,7 @@ func opSdiv(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byt
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -144,7 +144,7 @@ func opMod(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -159,7 +159,7 @@ func opSmod(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byt
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -174,7 +174,7 @@ func opExp(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -189,7 +189,7 @@ func opSignExtend(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) 
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -204,7 +204,7 @@ func opNot(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -223,7 +223,7 @@ func opLt(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte,
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -242,7 +242,7 @@ func opGt(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte,
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -261,7 +261,7 @@ func opSlt(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -280,7 +280,7 @@ func opSgt(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -299,7 +299,7 @@ func opEq(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte,
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -318,7 +318,7 @@ func opIszero(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]b
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -333,7 +333,7 @@ func opAnd(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -348,7 +348,7 @@ func opOr(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte,
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -363,7 +363,7 @@ func opXor(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -378,7 +378,7 @@ func opByte(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byt
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -397,7 +397,7 @@ func opAddmod(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]b
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -412,7 +412,7 @@ func opMulmod(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]b
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -435,7 +435,7 @@ func opSHL(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -458,7 +458,7 @@ func opSHR(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -486,7 +486,7 @@ func opSAR(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -516,7 +516,7 @@ func opSha3(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byt
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -529,7 +529,7 @@ func opAddress(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -546,7 +546,7 @@ func opBalance(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -560,7 +560,7 @@ func opOrigin(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]b
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -573,7 +573,7 @@ func opCaller(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]b
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -588,7 +588,7 @@ func opCallValue(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) (
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -608,7 +608,7 @@ func opCallDataLoad(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -622,7 +622,7 @@ func opCallDataSize(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -649,7 +649,7 @@ func opCallDataCopy(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 
@@ -664,7 +664,7 @@ func opReturnDataSize(pc *uint64, interpreter *EVMInterpreter, scope *ScopeConte
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -696,7 +696,7 @@ func opReturnDataCopy(pc *uint64, interpreter *EVMInterpreter, scope *ScopeConte
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -711,7 +711,7 @@ func opExtCodeSize(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext)
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -727,7 +727,7 @@ func opCodeSize(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -752,7 +752,7 @@ func opCodeCopy(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 
@@ -781,7 +781,7 @@ func opExtCodeCopy(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext)
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 
@@ -829,7 +829,7 @@ func opExtCodeHash(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext)
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -844,7 +844,7 @@ func opGasprice(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -875,7 +875,7 @@ func opBlockhash(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) (
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -889,7 +889,7 @@ func opCoinbase(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -904,7 +904,7 @@ func opTimestamp(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) (
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -919,7 +919,7 @@ func opNumber(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]b
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -934,7 +934,7 @@ func opDifficulty(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) 
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -948,7 +948,7 @@ func opGasLimit(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -962,7 +962,7 @@ func opPop(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -978,7 +978,7 @@ func opMload(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]by
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -994,7 +994,7 @@ func opMstore(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]b
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -1009,7 +1009,7 @@ func opMstore8(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -1026,7 +1026,7 @@ func opSload(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]by
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -1043,7 +1043,7 @@ func opSstore(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]b
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -1061,7 +1061,7 @@ func opJump(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byt
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -1083,7 +1083,7 @@ func opJumpi(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]by
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -1096,7 +1096,7 @@ func opJumpdest(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -1110,7 +1110,7 @@ func opPc(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte,
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -1124,7 +1124,7 @@ func opMsize(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]by
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -1138,7 +1138,7 @@ func opGas(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -1189,7 +1189,7 @@ func opCreate(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]b
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -1235,7 +1235,7 @@ func opCreate2(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -1282,7 +1282,7 @@ func opCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byt
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return ret, nil
@@ -1326,7 +1326,7 @@ func opCallCode(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return ret, nil
@@ -1363,7 +1363,7 @@ func opDelegateCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return ret, nil
@@ -1400,7 +1400,7 @@ func opStaticCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) 
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return ret, nil
@@ -1416,7 +1416,7 @@ func opReturn(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]b
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return ret, nil
@@ -1432,7 +1432,7 @@ func opRevert(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]b
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return ret, nil
@@ -1445,7 +1445,7 @@ func opStop(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byt
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -1466,7 +1466,7 @@ func opSuicide(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -1501,7 +1501,7 @@ func makeLog(size int) executionFunc {
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 		return nil, nil
@@ -1526,7 +1526,7 @@ func opPush1(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]by
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 	return nil, nil
@@ -1558,7 +1558,7 @@ func makePush(size uint64, pushByteSize int) executionFunc {
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 		return nil, nil
@@ -1575,7 +1575,7 @@ func makeDup(size int64) executionFunc {
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 		return nil, nil
@@ -1594,7 +1594,7 @@ func makeSwap(size int64) executionFunc {
 
 	var dif = endTime - startTime
 	bnum := interpreter.evm.Context.BlockNumber.Uint64()
-	k:= bnum/10000
+	k:= bnum
 	path:= fmt.Sprintf("%s%v.json",op,k)
 	writeFile(op, int(dif), int(bnum),path)
 		return nil, nil
