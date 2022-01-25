@@ -924,7 +924,7 @@ func (w *worker) commitNewWork(interrupt *int32, noempty bool, timestamp int64) 
 	if w.chainConfig.IsLondon(header.Number) {
 		header.BaseFee = misc.CalcBaseFee(w.chainConfig, parent.Header())
 		if !w.chainConfig.IsLondon(parent.Number()) {
-			parentGasLimit := uint64(float64(parent.GasLimit()) * w.chainConfig.GetFeeConfig(parent.NumberU64()).ElasticityMultiplier)
+			parentGasLimit := parent.GasLimit() * w.chainConfig.GetFeeConfig(parent.NumberU64()).ElasticityMultiplier
 			header.GasLimit = core.CalcGasLimit(parentGasLimit, w.config.GasCeil)
 		}
 	}

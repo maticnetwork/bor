@@ -138,34 +138,34 @@ func TestChainConfig_GetFeeConfig(t *testing.T) {
 		{
 			blockNumber: "5",
 			feeConfig: FeeConfig{
-				BaseFeeChangeDenominator: 2,
-				ElasticityMultiplier:     1.5,
+				BaseFeeChangeDenominator: 4,
+				ElasticityMultiplier:     2,
 			},
 			expectedFeeConfig: FeeConfig{
-				BaseFeeChangeDenominator: 2,
-				ElasticityMultiplier:     1.5,
+				BaseFeeChangeDenominator: 4,
+				ElasticityMultiplier:     2,
 			},
 		},
 		{
 			blockNumber: "15",
 			feeConfig: FeeConfig{
 				BaseFeeChangeDenominator: 10,
-				ElasticityMultiplier:     1.15,
+				ElasticityMultiplier:     1,
 			},
 			expectedFeeConfig: FeeConfig{
 				BaseFeeChangeDenominator: 10,
-				ElasticityMultiplier:     1.15,
+				ElasticityMultiplier:     1,
 			},
 		},
 		{
 			blockNumber: "20",
 			feeConfig: FeeConfig{
 				BaseFeeChangeDenominator: 35,
-				ElasticityMultiplier:     1.75,
+				ElasticityMultiplier:     4,
 			},
 			expectedFeeConfig: FeeConfig{
 				BaseFeeChangeDenominator: 35,
-				ElasticityMultiplier:     1.75,
+				ElasticityMultiplier:     4,
 			},
 		},
 	}

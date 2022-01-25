@@ -115,7 +115,7 @@ func buildNextBlock(t *testing.T, _bor *bor.Bor, chain *core.BlockChain, block *
 	if chain.Config().IsLondon(header.Number) {
 		header.BaseFee = misc.CalcBaseFee(chain.Config(), block.Header())
 		if !chain.Config().IsLondon(block.Number()) {
-			parentGasLimit := uint64(float64(block.GasLimit()) * chain.Config().GetFeeConfig(block.NumberU64()).ElasticityMultiplier)
+			parentGasLimit := block.GasLimit() * chain.Config().GetFeeConfig(block.NumberU64()).ElasticityMultiplier
 			header.GasLimit = core.CalcGasLimit(parentGasLimit, parentGasLimit)
 		}
 	}

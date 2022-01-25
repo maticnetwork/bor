@@ -463,8 +463,8 @@ type ChainConfig struct {
 }
 
 type FeeConfig struct {
-	BaseFeeChangeDenominator uint64  `json:"base_fee_change_denominator,omitempty"`
-	ElasticityMultiplier     float64 `json:"elasticity_multiplier,omitempty"`
+	BaseFeeChangeDenominator uint64 `json:"base_fee_change_denominator,omitempty"`
+	ElasticityMultiplier     uint64 `json:"elasticity_multiplier,omitempty"`
 }
 
 // EthashConfig is the consensus engine configs for proof-of-work based sealing.

@@ -33,7 +33,7 @@ func VerifyEip1559Header(config *params.ChainConfig, parent, header *types.Heade
 	// Verify that the gas limit remains within allowed bounds
 	parentGasLimit := parent.GasLimit
 	if !config.IsLondon(parent.Number) {
-		parentGasLimit = uint64(float64(parent.GasLimit) * config.GetFeeConfig(parent.Number.Uint64()).ElasticityMultiplier)
+		parentGasLimit = parent.GasLimit * config.GetFeeConfig(parent.Number.Uint64()).ElasticityMultiplier
 	}
 	if err := VerifyGaslimit(parentGasLimit, header.GasLimit); err != nil {
 		return err
@@ -59,7 +59,7 @@ func CalcBaseFee(config *params.ChainConfig, parent *types.Header) *big.Int {
 	}
 
 	var (
-		parentGasTarget          = uint64(float64(parent.GasLimit) / config.GetFeeConfig(parent.Number.Uint64()).ElasticityMultiplier)
+		parentGasTarget          = parent.GasLimit / config.GetFeeConfig(parent.Number.Uint64()).ElasticityMultiplier
 		parentGasTargetBig       = new(big.Int).SetUint64(parentGasTarget)
 		baseFeeChangeDenominator = new(big.Int).SetUint64(config.GetFeeConfig(parent.Number.Uint64()).BaseFeeChangeDenominator)
 	)
