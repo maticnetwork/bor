@@ -37,6 +37,7 @@ type dataOP struct {
 }
 
 func writeFile(s string, i int, bnum int, path string) {
+	fmt.Println("*************", bnum)
 	tempData := dataOP{Opcode_name: s, ExeTime: i, Num: bnum}
 	byteArray, err := json.Marshal(tempData)
 	if err != nil {
@@ -58,6 +59,7 @@ func writeFile(s string, i int, bnum int, path string) {
 func opAdd(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 	op := "Add"
 	var startTime = time.Now().UnixNano()
+	fmt.Println("*************", startTime)
 	x, y := scope.Stack.pop(), scope.Stack.peek()
 	y.Add(&x, y)
 
