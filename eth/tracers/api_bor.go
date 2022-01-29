@@ -9,6 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
@@ -123,7 +124,16 @@ type TraceBlockRequest struct {
 func (api *API) TraceBlock2(req *TraceBlockRequest) (*BlockTraceResult, error) {
 	ctx := context.Background()
 
-	block, err := api.blockByNumber(ctx, rpc.LatestBlockNumber)
+	var blockNumber rpc.BlockNumber
+	if req.Number == -1 {
+		blockNumber = rpc.LatestBlockNumber
+	} else {
+		blockNumber = rpc.BlockNumber(req.Number)
+	}
+
+	log.Debug("Tracing Bor Block", "block number", blockNumber)
+
+	block, err := api.blockByNumber(ctx, blockNumber)
 	if err != nil {
 		return nil, err
 	}
