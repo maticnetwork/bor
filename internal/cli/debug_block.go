@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"strconv"
 
 	"github.com/ethereum/go-ethereum/internal/cli/flagset"
 	"github.com/ethereum/go-ethereum/internal/cli/server/proto"
@@ -17,9 +18,9 @@ type DebugBlockCommand struct {
 
 // Help implements the cli.Command interface
 func (c *DebugBlockCommand) Help() string {
-	return `Usage: bor chain sethead <number> [--yes]
+	return `Usage: bor debug block <number>
 
-  This command sets the current chain to a certain block`
+  This command is used get traces of a bor block`
 }
 
 func (c *DebugBlockCommand) Flags() *flagset.Flagset {
@@ -36,12 +37,23 @@ func (c *DebugBlockCommand) Flags() *flagset.Flagset {
 
 // Synopsis implements the cli.Command interface
 func (c *DebugBlockCommand) Synopsis() string {
-	return "Set the new head of the chain"
+	return "Get trace of a bor block"
 }
 
 // Run implements the cli.Command interface
 func (c *DebugBlockCommand) Run(args []string) int {
 	flags := c.Flags()
+	var number *int64 = nil
+
+	// parse the block number (assuming)
+	if len(args) == 1 || len(args) == 3 {
+		num, err := strconv.ParseInt(args[0], 10, 64)
+		if err == nil {
+			number = &num
+		}
+		args = args[1:]
+	}
+	// parse output directory
 	if err := flags.Parse(args); err != nil {
 		c.UI.Error(err.Error())
 		return 1
@@ -65,7 +77,14 @@ func (c *DebugBlockCommand) Run(args []string) int {
 	c.UI.Output("Starting block tracer...")
 	c.UI.Output("")
 
-	stream, err := borClt.DebugBlock(context.Background(), &proto.DebugBlockRequest{})
+	var debugRequest *proto.DebugBlockRequest = &proto.DebugBlockRequest{}
+	if number != nil {
+		debugRequest.Number = *number
+	} else {
+		debugRequest.Number = -1
+	}
+
+	stream, err := borClt.DebugBlock(context.Background(), debugRequest)
 	if err != nil {
 		c.UI.Error(err.Error())
 		return 1
