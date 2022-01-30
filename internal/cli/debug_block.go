@@ -45,7 +45,7 @@ func (c *DebugBlockCommand) Run(args []string) int {
 	flags := c.Flags()
 	var number *int64 = nil
 
-	// parse the block number (assuming)
+	// parse the block number (if available)
 	if len(args) == 1 || len(args) == 3 {
 		num, err := strconv.ParseInt(args[0], 10, 64)
 		if err == nil {
@@ -77,6 +77,7 @@ func (c *DebugBlockCommand) Run(args []string) int {
 	c.UI.Output("Starting block tracer...")
 	c.UI.Output("")
 
+	// create a debug block request
 	var debugRequest *proto.DebugBlockRequest = &proto.DebugBlockRequest{}
 	if number != nil {
 		debugRequest.Number = *number
@@ -84,6 +85,8 @@ func (c *DebugBlockCommand) Run(args []string) int {
 		debugRequest.Number = -1
 	}
 
+	// send the request
+	// receives a grpc stream of debug block response
 	stream, err := borClt.DebugBlock(context.Background(), debugRequest)
 	if err != nil {
 		c.UI.Error(err.Error())
