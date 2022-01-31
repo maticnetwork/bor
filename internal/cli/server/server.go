@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math/big"
 	"net"
 	"net/http"
 	"os"
@@ -287,4 +288,8 @@ func setupLogger(logLevel string) {
 		glogger.Verbosity(log.LvlInfo)
 	}
 	log.Root().SetHandler(glogger)
+}
+
+func (s *Server) GetLatestBlockNumber() *big.Int {
+	return s.backend.BlockChain().CurrentBlock().Number()
 }
