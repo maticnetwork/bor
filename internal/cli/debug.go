@@ -137,7 +137,7 @@ func (d *debugEnv) finish() error {
 	}
 
 	// Create archive tarball
-	archiveFile := d.name + ".tar.gz"
+	archiveFile := d.tarName()
 	if err := tarCZF(archiveFile, d.dst, d.name); err != nil {
 		return fmt.Errorf("error creating archive: %s", err.Error())
 	}
