@@ -2,28 +2,16 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"os"
+	"path"
 	"testing"
 	"time"
 
 	"github.com/ethereum/go-ethereum/internal/cli/server"
 	"github.com/ethereum/go-ethereum/internal/cli/server/proto"
 	"github.com/mitchellh/cli"
-	grpc_net_conn "github.com/mitchellh/go-grpc-net-conn"
 	"github.com/stretchr/testify/assert"
-
-	"github.com/golang/protobuf/jsonpb"
-	gproto "github.com/golang/protobuf/proto"
 )
-
-type BlockData struct {
-	number int64 `json:"number"`
-}
-type Block struct {
-	block BlockData `json:"block"`
-}
 
 func TestCommand_DebugBlock(t *testing.T) {
 	// Start a blockchain in developer mode and get trace of block
@@ -31,7 +19,7 @@ func TestCommand_DebugBlock(t *testing.T) {
 
 	// enable developer mode
 	config.Developer.Enabled = true
-	config.Developer.Period = 5 // block time
+	config.Developer.Period = 2 // block time
 
 	// enable archive mode for getting traces of ancient blocks
 	config.GcMode = "archive"
@@ -40,10 +28,8 @@ func TestCommand_DebugBlock(t *testing.T) {
 	assert.NoError(t, err)
 	defer srv.Stop()
 
-	// wait for 10 seconds to mine a 2 blocks
+	// wait for 4 seconds to mine a 2 blocks
 	time.Sleep(2 * time.Duration(config.Developer.Period) * time.Second)
-
-	start := time.Now()
 
 	// initialize the debug block command
 	ui := &cli.BasicUi{
@@ -67,12 +53,14 @@ func TestCommand_DebugBlock(t *testing.T) {
 		t.Fatalf("unable to initialize bor client")
 	}
 
-	// create a new debug environment
-	dEnv := &debugEnv{
+	start := time.Now()
+
+	// create a new debug environment with predefined output
+	dEnv1 := &debugEnv{
 		output: "debug_block_test",
-		prefix: "bor-block-trace-test-",
+		prefix: "trace-1-",
 	}
-	if err := dEnv.init(); err != nil {
+	if err := dEnv1.init(); err != nil {
 		t.Fatalf("unable to initialize debug environment")
 	}
 
@@ -80,30 +68,35 @@ func TestCommand_DebugBlock(t *testing.T) {
 	req1 := &proto.DebugBlockRequest{Number: 1}
 	stream1, err1 := borClt.DebugBlock(context.Background(), req1)
 	if err1 != nil {
-		t.Log(err1)
 		t.Fatalf("unable to perform block trace for block number: %d", req1.Number)
 	}
 
-	// decode the stream
-	block1, err1 := decodeStream(stream1)
-	if err1 != nil {
-		t.Fatalf(err1.Error())
+	if err := dEnv1.writeFromStream("block.json", stream1); err != nil {
+		t.Fatalf("unable to write block trace for block number: %d", req1.Number)
 	}
 
-	if matched := assert.Equal(t, block1.block.number, int64(1)); matched == false {
-		t.Fatalf("trace failed: block number mismatch, expected: %d, got: %d", 1, block1.block.number)
+	// check if the trace file is created at the destination
+	p := path.Join(dEnv1.dst, "block.json")
+	if file, err := os.Stat(p); err == nil {
+		// check if the file has content
+		if file.Size() <= 0 {
+			t.Fatalf("Unable to gather block trace for block number: %d", req1.Number)
+		}
 	}
 
-	end := time.Now()
-	diff := end.Sub(start)
-	period := time.Duration(config.Developer.Period) * time.Second
-	t.Log("trace of block 1 took:", diff.Seconds(), "seconds")
+	t.Logf("Verified traces created at %s", p)
+	t.Logf("Completed trace of block %d in %d", req1.Number, time.Since(start).Milliseconds())
 
-	// update the latest block if the initial trace took
-	// longer than `config.Developer.Period` seconds
-	latestBlock := int64(2)
-	if diff.Seconds() > period.Seconds() {
-		latestBlock += int64(diff.Seconds() / period.Seconds())
+	start = time.Now()
+	latestBlock := srv.GetLatestBlockNumber().Int64()
+
+	// create a new debug environment with predefined output
+	dEnv2 := &debugEnv{
+		output: "debug_block_test",
+		prefix: "trace-2-",
+	}
+	if err := dEnv2.init(); err != nil {
+		t.Fatalf("unable to initialize debug environment")
 	}
 
 	// get trace of latest block
@@ -113,60 +106,27 @@ func TestCommand_DebugBlock(t *testing.T) {
 		t.Fatalf("unable to perform block trace for latest block with number: %d", latestBlock)
 	}
 
-	// decode the stream
-	block2, err2 := decodeStream(stream2)
-	if err2 != nil {
-		t.Fatalf(err2.Error())
+	if err := dEnv2.writeFromStream("block.json", stream2); err != nil {
+		t.Fatalf("unable to write block trace for block number: %d", latestBlock)
 	}
 
-	if matched := assert.Equal(t, block2.block.number, latestBlock); matched == false {
-		t.Fatalf("trace failed: block number mismatch, expected: %d, got: %d", 1, block2.block.number)
-	}
-}
-
-func decodeStream(stream proto.Bor_DebugBlockClient) (*Block, error) {
-	msg, err := stream.Recv()
-	if err != nil {
-		return nil, fmt.Errorf("unable to decode trace stream")
-	}
-	if _, ok := msg.Event.(*proto.DebugFileResponse_Open_); !ok {
-		return nil, fmt.Errorf("unable to decode trace stream")
+	// check if the trace file is created at the destination
+	p = path.Join(dEnv2.dst, "block.json")
+	if file, err := os.Stat(p); err == nil {
+		// check if the file has content
+		if file.Size() <= 0 {
+			t.Fatalf("Unable to gather block trace for block number: %d", latestBlock)
+		}
 	}
 
-	decode := grpc_net_conn.SimpleDecoder(func(msg gproto.Message) *[]byte {
-		return &msg.(*proto.DebugFileResponse).GetInput().Data
-	})
-	res, err := decode(msg, 0, []byte{})
-	if err != nil {
-		return nil, fmt.Errorf("unable to decode trace stream")
-	}
+	t.Logf("Verified traces created at %s", p)
+	t.Logf("Completed trace of block %d in %d ms", latestBlock, time.Since(start).Milliseconds())
 
-	// res, err := marshal(msg)
-	// if err != nil {
-	// 	return nil, fmt.Errorf("unable to decode trace stream")
-	// }
+	// delete the traces created
+	currDir, _ := os.Getwd()
+	tempDir := path.Join(currDir, dEnv1.output)
+	os.RemoveAll(tempDir)
+	tempDir = path.Join(currDir, dEnv2.output)
+	os.RemoveAll(tempDir)
 
-	// decode := grpc_net_conn.SimpleDecoder(func(msg gproto.Message) *[]byte {
-	// 	return &msg.(*proto.DebugFileResponse_Input).Data
-	// })
-
-	// res1, err1 := conn.Decode(msg, 0, []byte{})
-	// res1, err1 := nil, nil
-	// if err1 != nil {
-	// 	return nil, fmt.Errorf("unable to decode trace stream")
-	// }
-
-	var block Block
-	err = json.Unmarshal([]byte(res), &block)
-	if err != nil {
-		return nil, fmt.Errorf("unable to unmarshall trace block")
-	}
-	return &block, nil
-}
-
-func marshal(message gproto.Message) (string, error) {
-	marshaller := jsonpb.Marshaler{
-		Indent: "",
-	}
-	return marshaller.MarshalToString(message)
 }
