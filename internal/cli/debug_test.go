@@ -1,17 +1,36 @@
 package cli
 
 import (
-	"context"
+	"fmt"
+	"io/ioutil"
+	"net"
 	"os"
 	"path"
+	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/ethereum/go-ethereum/internal/cli/server"
-	"github.com/ethereum/go-ethereum/internal/cli/server/proto"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/mitchellh/cli"
 	"github.com/stretchr/testify/assert"
 )
+
+var currentDir string = ""
+var initialPort uint64 = 60000
+
+// nextPort gives the next available port starting from 60000
+func nextPort() uint64 {
+	log.Info("Checking for new port", "current", initialPort)
+	port := atomic.AddUint64(&initialPort, 1)
+	addr := fmt.Sprintf("localhost:%d", port)
+	if _, err := net.Listen("tcp", addr); err == nil {
+		return port
+	} else {
+		return nextPort()
+	}
+}
 
 func TestCommand_DebugBlock(t *testing.T) {
 	// Start a blockchain in developer mode and get trace of block
@@ -24,109 +43,90 @@ func TestCommand_DebugBlock(t *testing.T) {
 	// enable archive mode for getting traces of ancient blocks
 	config.GcMode = "archive"
 
+	// grpc port
+	port := strconv.Itoa(int(nextPort()))
+	log.Info("grpc port", "port", port)
+	config.GRPC.Addr = ":" + port
+
+	// datadir
+	datadir, _ := ioutil.TempDir("/tmp", "bor-cli-test")
+	config.DataDir = datadir
+	defer os.RemoveAll(datadir)
+
 	srv, err := server.NewServer(config)
 	assert.NoError(t, err)
-	defer srv.Stop()
 
 	// wait for 4 seconds to mine a 2 blocks
 	time.Sleep(2 * time.Duration(config.Developer.Period) * time.Second)
 
-	// initialize the debug block command
-	ui := &cli.BasicUi{
-		Reader:      os.Stdin,
-		Writer:      os.Stdout,
-		ErrorWriter: os.Stderr,
-	}
+	// add prefix for debug trace
+	prefix := "bor-block-trace-"
 
-	meta2 := &Meta2{
-		UI: ui,
-	}
-	meta2.addr = "127.0.0.1:3131"
+	// output dir
+	output := "debug_block_test"
 
-	command := &DebugBlockCommand{
-		Meta2: meta2,
-	}
+	// set current directory
+	currentDir, _ = os.Getwd()
 
-	// initialize the bor client
-	borClt, err := command.BorConn()
-	if err != nil {
-		t.Fatalf("unable to initialize bor client")
-	}
-
+	// trace 1st block
 	start := time.Now()
+	dst1 := path.Join(output, prefix+time.Now().UTC().Format("2006-01-02-150405Z"), "block.json")
+	res := traceBlock(port, 1, output)
+	assert.Equal(t, 0, res)
+	t.Logf("Completed trace of block %d in %d ms at %s", 1, time.Since(start).Milliseconds(), dst1)
 
-	// create a new debug environment with predefined output
-	dEnv1 := &debugEnv{
-		output: "debug_block_test",
-		prefix: "trace-1-",
-	}
-	if err := dEnv1.init(); err != nil {
-		t.Fatalf("unable to initialize debug environment")
-	}
+	// adding this to avoid debug directory name conflicts
+	time.Sleep(time.Second)
 
-	// get trace of 1st block
-	req1 := &proto.DebugBlockRequest{Number: 1}
-	stream1, err1 := borClt.DebugBlock(context.Background(), req1)
-	if err1 != nil {
-		t.Fatalf("unable to perform block trace for block number: %d", req1.Number)
-	}
-
-	if err := dEnv1.writeFromStream("block.json", stream1); err != nil {
-		t.Fatalf("unable to write block trace for block number: %d", req1.Number)
-	}
-
-	// check if the trace file is created at the destination
-	p := path.Join(dEnv1.dst, "block.json")
-	if file, err := os.Stat(p); err == nil {
-		// check if the file has content
-		if file.Size() <= 0 {
-			t.Fatalf("Unable to gather block trace for block number: %d", req1.Number)
-		}
-	}
-
-	t.Logf("Verified traces created at %s", p)
-	t.Logf("Completed trace of block %d in %d", req1.Number, time.Since(start).Milliseconds())
-
+	// trace last/recent block
 	start = time.Now()
 	latestBlock := srv.GetLatestBlockNumber().Int64()
+	dst2 := path.Join(output, prefix+time.Now().UTC().Format("2006-01-02-150405Z"), "block.json")
+	res = traceBlock(port, latestBlock, output)
+	assert.Equal(t, 0, res)
+	t.Logf("Completed trace of block %d in %d ms at %s", latestBlock, time.Since(start).Milliseconds(), dst2)
 
-	// create a new debug environment with predefined output
-	dEnv2 := &debugEnv{
-		output: "debug_block_test",
-		prefix: "trace-2-",
-	}
-	if err := dEnv2.init(); err != nil {
-		t.Fatalf("unable to initialize debug environment")
+	// verify if the trace files are created
+	done := verify(dst1)
+	assert.Equal(t, true, done)
+	done = verify(dst2)
+	assert.Equal(t, true, done)
+
+	// delete the traces
+	deleteTraces(output)
+}
+
+// traceBlock calls the cli command to trace a block
+func traceBlock(port string, number int64, output string) int {
+	ui := cli.NewMockUi()
+	log.Info("Port", "port", port)
+	command := &DebugBlockCommand{
+		Meta2: &Meta2{
+			UI:   ui,
+			addr: "127.0.0.1:" + port,
+		},
 	}
 
-	// get trace of latest block
-	req2 := &proto.DebugBlockRequest{Number: -1}
-	stream2, err2 := borClt.DebugBlock(context.Background(), req2)
-	if err2 != nil {
-		t.Fatalf("unable to perform block trace for latest block with number: %d", latestBlock)
-	}
+	// run trace (by explicity passing the output directory and grpc address)
+	return command.Run([]string{strconv.FormatInt(number, 10), "--output", output, "--address", command.Meta2.addr})
+}
 
-	if err := dEnv2.writeFromStream("block.json", stream2); err != nil {
-		t.Fatalf("unable to write block trace for block number: %d", latestBlock)
-	}
-
-	// check if the trace file is created at the destination
-	p = path.Join(dEnv2.dst, "block.json")
-	if file, err := os.Stat(p); err == nil {
+// verify checks if the trace file is created at the destination
+// directory or not
+func verify(dst string) bool {
+	dst = path.Join(currentDir, dst)
+	log.Info("Verifying trace file", "path", dst)
+	if file, err := os.Stat(dst); err == nil {
 		// check if the file has content
-		if file.Size() <= 0 {
-			t.Fatalf("Unable to gather block trace for block number: %d", latestBlock)
+		if file.Size() > 0 {
+			return true
 		}
 	}
+	return false
+}
 
-	t.Logf("Verified traces created at %s", p)
-	t.Logf("Completed trace of block %d in %d ms", latestBlock, time.Since(start).Milliseconds())
-
-	// delete the traces created
-	currDir, _ := os.Getwd()
-	tempDir := path.Join(currDir, dEnv1.output)
-	os.RemoveAll(tempDir)
-	tempDir = path.Join(currDir, dEnv2.output)
-	os.RemoveAll(tempDir)
-
+// deleteTraces removes the traces created during the test
+func deleteTraces(dst string) {
+	dst = path.Join(currentDir, dst)
+	os.RemoveAll(dst)
 }
