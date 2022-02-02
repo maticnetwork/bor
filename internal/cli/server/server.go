@@ -133,6 +133,7 @@ func NewServer(config *Config) (*Server, error) {
 
 func (s *Server) Stop() {
 	s.node.Close()
+	s.grpcServer.Stop()
 
 	// shutdown the tracer
 	if s.tracer != nil {
