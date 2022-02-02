@@ -56,7 +56,7 @@ func (c *DebugBlockCommand) Run(args []string) int {
 	var number *int64 = nil
 
 	// parse the block number (if available)
-	if len(args) == 1 || len(args) == 3 {
+	if len(args)%2 != 0 {
 		num, err := strconv.ParseInt(args[0], 10, 64)
 		if err == nil {
 			number = &num
