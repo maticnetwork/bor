@@ -6,7 +6,7 @@
 [Service]
   Restart=on-failure
   RestartSec=5s
-  ExecStart=/usr/local/bin/bor \
+  ExecStart=/usr/local/bin/bor server \
     --bor-mumbai \
     # --bor-mainnet \
     --datadir /var/lib/bor/data \
