@@ -25,7 +25,9 @@ func nextPort() uint64 {
 	log.Info("Checking for new port", "current", initialPort)
 	port := atomic.AddUint64(&initialPort, 1)
 	addr := fmt.Sprintf("localhost:%d", port)
-	if _, err := net.Listen("tcp", addr); err == nil {
+	lis, err := net.Listen("tcp", addr)
+	if err == nil {
+		lis.Close()
 		return port
 	} else {
 		return nextPort()
