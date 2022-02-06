@@ -2,10 +2,7 @@ package server
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net"
-	"os"
-	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -38,19 +35,10 @@ func TestServer_DeveloperMode(t *testing.T) {
 	config.Developer.Enabled = true
 	config.Developer.Period = 2 // block time
 
-	// grpc port
-	port := strconv.Itoa(int(nextPort()))
-	config.GRPC.Addr = ":" + port
-
-	// datadir
-	datadir, _ := ioutil.TempDir("/tmp", "bor-cli-test")
-	config.DataDir = datadir
-	defer os.RemoveAll(datadir)
-
-	// start the server
-	server, err := NewServer(config)
+	// start the mock server
+	server, err := CreateMockServer(config)
 	assert.NoError(t, err)
-	defer server.Stop()
+	defer CloseMockServer(server)
 
 	// record the initial block number
 	blockNumber := server.backend.BlockChain().CurrentBlock().Header().Number.Int64()
