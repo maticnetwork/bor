@@ -1,38 +1,18 @@
 package cli
 
 import (
-	"fmt"
-	"io/ioutil"
-	"net"
 	"os"
 	"path"
 	"strconv"
-	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/ethereum/go-ethereum/internal/cli/server"
-	"github.com/ethereum/go-ethereum/log"
 	"github.com/mitchellh/cli"
 	"github.com/stretchr/testify/assert"
 )
 
 var currentDir string = ""
-var initialPort uint64 = 60000
-
-// nextPort gives the next available port starting from 60000
-func nextPort() uint64 {
-	log.Info("Checking for new port", "current", initialPort)
-	port := atomic.AddUint64(&initialPort, 1)
-	addr := fmt.Sprintf("localhost:%d", port)
-	lis, err := net.Listen("tcp", addr)
-	if err == nil {
-		lis.Close()
-		return port
-	} else {
-		return nextPort()
-	}
-}
 
 func TestCommand_DebugBlock(t *testing.T) {
 	// Start a blockchain in developer mode and get trace of block
@@ -45,18 +25,13 @@ func TestCommand_DebugBlock(t *testing.T) {
 	// enable archive mode for getting traces of ancient blocks
 	config.GcMode = "archive"
 
-	// grpc port
-	port := strconv.Itoa(int(nextPort()))
-	log.Info("grpc port", "port", port)
-	config.GRPC.Addr = ":" + port
-
-	// datadir
-	datadir, _ := ioutil.TempDir("/tmp", "bor-cli-test")
-	config.DataDir = datadir
-	defer os.RemoveAll(datadir)
-
-	srv, err := server.NewServer(config)
+	// start the mock server
+	srv, err := server.CreateMockServer(config)
 	assert.NoError(t, err)
+	defer server.CloseMockServer(srv)
+
+	// get the grpc port
+	port := srv.GetGrpcAddr()
 
 	// wait for 4 seconds to mine a 2 blocks
 	time.Sleep(2 * time.Duration(config.Developer.Period) * time.Second)
@@ -101,7 +76,6 @@ func TestCommand_DebugBlock(t *testing.T) {
 // traceBlock calls the cli command to trace a block
 func traceBlock(port string, number int64, output string) int {
 	ui := cli.NewMockUi()
-	log.Info("Port", "port", port)
 	command := &DebugBlockCommand{
 		Meta2: &Meta2{
 			UI:   ui,
@@ -117,7 +91,6 @@ func traceBlock(port string, number int64, output string) int {
 // directory or not
 func verify(dst string) bool {
 	dst = path.Join(currentDir, dst)
-	log.Info("Verifying trace file", "path", dst)
 	if file, err := os.Stat(dst); err == nil {
 		// check if the file has content
 		if file.Size() > 0 {
