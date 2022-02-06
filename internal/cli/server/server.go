@@ -292,3 +292,7 @@ func setupLogger(logLevel string) {
 func (s *Server) GetLatestBlockNumber() *big.Int {
 	return s.backend.BlockChain().CurrentBlock().Number()
 }
+
+func (s *Server) GetGrpcAddr() string {
+	return s.config.GRPC.Addr[1:]
+}
