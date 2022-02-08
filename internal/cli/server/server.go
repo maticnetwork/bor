@@ -69,11 +69,22 @@ func NewServer(config *Config) (*Server, error) {
 	}
 	srv.node = stack
 
+	// setup account manager (only keystore)
+	{
+		keydir := stack.KeyStoreDir()
+		n, p := keystore.StandardScryptN, keystore.StandardScryptP
+		if config.Accounts.UseLightweightKDF {
+			n, p = keystore.LightScryptN, keystore.LightScryptP
+		}
+		stack.AccountManager().AddBackend(keystore.NewKeyStore(keydir, n, p))
+	}
+
 	// register the ethereum backend
-	ethCfg, err := config.buildEth()
+	ethCfg, err := config.buildEth(stack)
 	if err != nil {
 		return nil, err
 	}
+
 	backend, err := eth.New(stack, ethCfg)
 	if err != nil {
 		return nil, err
@@ -85,7 +96,7 @@ func NewServer(config *Config) (*Server, error) {
 
 	// graphql is started from another place
 	if config.JsonRPC.Graphql.Enabled {
-		if err := graphql.New(stack, backend.APIBackend, config.JsonRPC.Cors, config.JsonRPC.Modules); err != nil {
+		if err := graphql.New(stack, backend.APIBackend, config.JsonRPC.Cors, config.JsonRPC.VHost); err != nil {
 			return nil, fmt.Errorf("failed to register the GraphQL service: %v", err)
 		}
 	}
@@ -97,18 +108,8 @@ func NewServer(config *Config) (*Server, error) {
 		}
 	}
 
-	// setup account manager (only keystore)
-	{
-		keydir := stack.KeyStoreDir()
-		n, p := keystore.StandardScryptN, keystore.StandardScryptP
-		if config.Accounts.UseLightweightKDF {
-			n, p = keystore.LightScryptN, keystore.LightScryptP
-		}
-		stack.AccountManager().AddBackend(keystore.NewKeyStore(keydir, n, p))
-	}
-
-	// sealing (if enabled)
-	if config.Sealer.Enabled {
+	// sealing (if enabled) or in dev mode
+	if config.Sealer.Enabled || config.Developer.Enabled {
 		if err := backend.StartMining(1); err != nil {
 			return nil, err
 		}

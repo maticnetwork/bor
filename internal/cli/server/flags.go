@@ -263,11 +263,6 @@ func (c *Command) Flags() *flagset.Flagset {
 		Usage: "Comma separated list of virtual hostnames from which to accept requests (server enforced). Accepts '*' wildcard.",
 		Value: &c.cliConfig.JsonRPC.VHost,
 	})
-	f.SliceStringFlag(&flagset.SliceStringFlag{
-		Name:  "jsonrpc.modules",
-		Usage: "API's offered over the HTTP-RPC interface",
-		Value: &c.cliConfig.JsonRPC.Modules,
-	})
 
 	// http options
 	f.BoolFlag(&flagset.BoolFlag{
@@ -290,6 +285,12 @@ func (c *Command) Flags() *flagset.Flagset {
 		Usage: "HTTP path path prefix on which JSON-RPC is served. Use '/' to serve on all paths.",
 		Value: &c.cliConfig.JsonRPC.Http.Prefix,
 	})
+	f.SliceStringFlag(&flagset.SliceStringFlag{
+		Name:  "http.modules",
+		Usage: "API's offered over the HTTP-RPC interface",
+		Value: &c.cliConfig.JsonRPC.Http.Modules,
+	})
+
 	// ws options
 	f.BoolFlag(&flagset.BoolFlag{
 		Name:  "ws",
@@ -311,6 +312,12 @@ func (c *Command) Flags() *flagset.Flagset {
 		Usage: "HTTP path prefix on which JSON-RPC is served. Use '/' to serve on all paths.",
 		Value: &c.cliConfig.JsonRPC.Ws.Prefix,
 	})
+	f.SliceStringFlag(&flagset.SliceStringFlag{
+		Name:  "ws.modules",
+		Usage: "API's offered over the WS-RPC interface",
+		Value: &c.cliConfig.JsonRPC.Ws.Modules,
+	})
+
 	// graphql options
 	f.BoolFlag(&flagset.BoolFlag{
 		Name:  "graphql",
@@ -460,6 +467,18 @@ func (c *Command) Flags() *flagset.Flagset {
 		Name:  "grpc.addr",
 		Usage: "Address and port to bind the GRPC server",
 		Value: &c.cliConfig.GRPC.Addr,
+	})
+
+	// developer
+	f.BoolFlag(&flagset.BoolFlag{
+		Name:  "dev",
+		Usage: "Enable developer mode with ephemeral proof-of-authority network and a pre-funded developer account, mining enabled",
+		Value: &c.cliConfig.Developer.Enabled,
+	})
+	f.Uint64Flag(&flagset.Uint64Flag{
+		Name:  "dev.period",
+		Usage: "Block period to use in developer mode (0 = mine only if transaction pending)",
+		Value: &c.cliConfig.Developer.Period,
 	})
 	return f
 }
