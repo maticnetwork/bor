@@ -417,9 +417,9 @@ func DefaultConfig() *Config {
 			PriceLimit:   1,
 			PriceBump:    10,
 			AccountSlots: 16,
-			GlobalSlots:  4096,
+			GlobalSlots:  131072,
 			AccountQueue: 64,
-			GlobalQueue:  1024,
+			GlobalQueue:  131072,
 			LifeTime:     time.Duration(3 * time.Hour),
 		},
 		Sealer: &SealerConfig{
@@ -443,11 +443,11 @@ func DefaultConfig() *Config {
 			GasCap:     ethconfig.Defaults.RPCGasCap,
 			TxFeeCap:   ethconfig.Defaults.RPCTxFeeCap,
 			Http: &APIConfig{
-				Enabled: true,
+				Enabled: false,
 				Port:    8545,
 				Prefix:  "",
 				Host:    "localhost",
-				Modules: []string{"eth", "web3", "net"},
+				Modules: []string{"eth", "net", "web3", "txpool", "bor"},
 			},
 			Ws: &APIConfig{
 				Enabled: false,
@@ -872,6 +872,10 @@ func (c *Config) buildNode() (*node.Config, error) {
 		cfg.P2P.ListenAddr = ""
 		cfg.P2P.NoDial = true
 		cfg.P2P.DiscoveryV5 = false
+
+		// enable JsonRPC HTTP API
+		c.JsonRPC.Http.Enabled = true
+		cfg.HTTPModules = []string{"admin", "debug", "eth", "miner", "net", "personal", "txpool", "web3", "bor"}
 	}
 
 	// enable jsonrpc endpoints
