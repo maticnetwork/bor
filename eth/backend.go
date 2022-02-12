@@ -108,7 +108,12 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	if !config.SyncMode.IsValid() {
 		return nil, fmt.Errorf("invalid sync mode %d", config.SyncMode)
 	}
-	if config.Miner.GasPrice == nil || config.Miner.GasPrice.Cmp(common.Big0) <= 0 {
+
+	// The configured gas price must be greater than or equal to the default floor gas price
+	if ethconfig.Defaults.Miner.GasPrice.Cmp(gasprice.DefaultFloorGasPrice) < 0 {
+		ethconfig.Defaults.Miner.GasPrice = new(big.Int).Set(gasprice.DefaultFloorGasPrice)
+	}
+	if config.Miner.GasPrice == nil || config.Miner.GasPrice.Cmp(common.Big0) <= 0 || config.Miner.GasPrice.Cmp(gasprice.DefaultFloorGasPrice) < 0 {
 		log.Warn("Sanitizing invalid miner gas price", "provided", config.Miner.GasPrice, "updated", ethconfig.Defaults.Miner.GasPrice)
 		config.Miner.GasPrice = new(big.Int).Set(ethconfig.Defaults.Miner.GasPrice)
 	}
