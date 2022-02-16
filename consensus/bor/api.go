@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 	"math"
 	"math/big"
+	"sort"
 	"strconv"
 	"sync"
 
@@ -44,6 +45,76 @@ func (api *API) GetSnapshot(number *rpc.BlockNumber) (*Snapshot, error) {
 		return nil, errUnknownBlock
 	}
 	return api.bor.snapshot(api.chain, header.Number.Uint64(), header.Hash(), nil)
+}
+
+type BlockSigners struct {
+	Signers []difficultiesKV
+	Diff    int
+	Author  common.Address
+}
+
+type difficultiesKV struct {
+	Signer     common.Address
+	Difficulty uint64
+}
+
+func rankMapDifficulties(values map[common.Address]uint64) []difficultiesKV {
+
+	var ss []difficultiesKV
+	for k, v := range values {
+		ss = append(ss, difficultiesKV{k, v})
+	}
+	sort.Slice(ss, func(i, j int) bool {
+		return ss[i].Difficulty > ss[j].Difficulty
+	})
+
+	return ss
+}
+
+// GetSnapshotProposerSequence retrieves the in-turn signers of all sprints in a span
+func (api *API) GetSnapshotProposerSequence(number *rpc.BlockNumber) (BlockSigners, error) {
+	snapNumber := *number - 1
+	var difficulties = make(map[common.Address]uint64)
+	snap, err := api.GetSnapshot(&snapNumber)
+	if err != nil {
+		return BlockSigners{}, err
+	}
+	proposer := snap.ValidatorSet.GetProposer().Address
+	proposerIndex, _ := snap.ValidatorSet.GetByAddress(proposer)
+
+	signers := snap.signers()
+	for i := 0; i < len(signers); i++ {
+		tempIndex := i
+		if tempIndex < proposerIndex {
+			tempIndex = tempIndex + len(signers)
+		}
+		difficulties[signers[i]] = uint64(len(signers) - (tempIndex - proposerIndex))
+	}
+
+	rankedDifficulties := rankMapDifficulties(difficulties)
+
+	author, err := api.GetAuthor(number)
+	if err != nil {
+		return BlockSigners{}, err
+	}
+	diff := int(difficulties[*author])
+	blockSigners := &BlockSigners{
+		Signers: rankedDifficulties,
+		Diff:    diff,
+		Author:  *author,
+	}
+
+	return *blockSigners, nil
+}
+
+// GetSnapshotProposer retrieves the in-turn signer at a given block.
+func (api *API) GetSnapshotProposer(number *rpc.BlockNumber) (common.Address, error) {
+	*number -= 1
+	snap, err := api.GetSnapshot(number)
+	if err != nil {
+		return common.Address{}, err
+	}
+	return snap.ValidatorSet.GetProposer().Address, nil
 }
 
 // GetAuthor retrieves the author a block.
