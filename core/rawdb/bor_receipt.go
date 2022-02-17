@@ -14,9 +14,6 @@ var (
 	// bor receipt key
 	borReceiptKey = types.BorReceiptKey
 
-	// bor derived tx hash
-	getDerivedBorTxHash = types.GetDerivedBorTxHash
-
 	// borTxLookupPrefix + hash -> transaction/receipt lookup metadata
 	borTxLookupPrefix = []byte("matic-bor-tx-lookup-")
 

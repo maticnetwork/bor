@@ -32,8 +32,6 @@ var (
 
 	// This account is one the validators for 1st span (0-indexed)
 	privKey2 = "9b28f36fbd67381120752d6172ecdcf10e06ab2d9a1367aac00cdcd6ac7855d3"
-	key2, _  = crypto.HexToECDSA(privKey2)
-	addr2    = crypto.PubkeyToAddress(key2.PublicKey) // 0x9fB29AAc15b9A4B7F17c3385939b007540f4d791
 
 	validatorHeaderBytesLength        = common.AddressLength + 20 // address + power
 	sprintSize                 uint64 = 4

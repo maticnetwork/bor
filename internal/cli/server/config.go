@@ -413,14 +413,14 @@ func DefaultConfig() *Config {
 			Locals:       []string{},
 			NoLocals:     false,
 			Journal:      "",
-			Rejournal:    time.Duration(1 * time.Hour),
+			Rejournal:    1 * time.Hour,
 			PriceLimit:   1,
 			PriceBump:    10,
 			AccountSlots: 16,
 			GlobalSlots:  4096,
 			AccountQueue: 64,
 			GlobalQueue:  1024,
-			LifeTime:     time.Duration(3 * time.Hour),
+			LifeTime:     3 * time.Hour,
 		},
 		Sealer: &SealerConfig{
 			Enabled:   false,
@@ -751,7 +751,7 @@ func (c *Config) buildEth(stack *node.Node) (*ethconfig.Config, error) {
 				log.Warn("Lowering memory allowance on 32bit arch", "available", mem.Total/1024/1024, "addressable", 2*1024)
 				mem.Total = 2 * 1024 * 1024 * 1024
 			}
-			allowance := uint64(mem.Total / 1024 / 1024 / 3)
+			allowance := mem.Total / 1024 / 1024 / 3
 			if cache > allowance {
 				log.Warn("Sanitizing cache to Go's GC limits", "provided", cache, "updated", allowance)
 				cache = allowance

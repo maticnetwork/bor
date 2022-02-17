@@ -25,9 +25,7 @@ import (
 )
 
 var (
-	spanPath         = "bor/span/1"
-	clerkPath        = "clerk/event-record/list"
-	clerkQueryParams = "from-time=%d&to-time=%d&page=%d&limit=50"
+	spanPath = "bor/span/1"
 )
 
 func TestInsertingSpanSizeBlocks(t *testing.T) {

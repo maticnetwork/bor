@@ -56,9 +56,6 @@ var (
 
 	uncleHash = types.CalcUncleHash(nil) // Always Keccak256(RLP([])) as uncles are meaningless outside of PoW.
 
-	diffInTurn = big.NewInt(2) // Block difficulty for in-turn signatures
-	diffNoTurn = big.NewInt(1) // Block difficulty for out-of-turn signatures
-
 	validatorHeaderBytesLength = common.AddressLength + 20 // address + power
 	systemAddress              = common.HexToAddress("0xffffFFFfFFffffffffffffffFfFFFfffFFFfFFfE")
 )
@@ -71,18 +68,6 @@ var (
 	// errUnknownBlock is returned when the list of signers is requested for a block
 	// that is not part of the local blockchain.
 	errUnknownBlock = errors.New("unknown block")
-
-	// errInvalidCheckpointBeneficiary is returned if a checkpoint/epoch transition
-	// block has a beneficiary set to non-zeroes.
-	errInvalidCheckpointBeneficiary = errors.New("beneficiary in checkpoint block non-zero")
-
-	// errInvalidVote is returned if a nonce value is something else that the two
-	// allowed constants of 0x00..0 or 0xff..f.
-	errInvalidVote = errors.New("vote nonce not 0x00..0 or 0xff..f")
-
-	// errInvalidCheckpointVote is returned if a checkpoint/epoch transition block
-	// has a vote nonce set to non-zeroes.
-	errInvalidCheckpointVote = errors.New("vote nonce in checkpoint block non-zero")
 
 	// errMissingVanity is returned if a block's extra-data section is shorter than
 	// 32 bytes, which is required to store the signer vanity.
@@ -670,7 +655,7 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 
 	var succession int
 	// if signer is not empty
-	if bytes.Compare(c.signer.Bytes(), common.Address{}.Bytes()) != 0 {
+	if !bytes.Equal(c.signer.Bytes(), common.Address{}.Bytes()) {
 		succession, err = snap.GetSignerSuccessionNumber(c.signer)
 		if err != nil {
 			return err
@@ -1163,6 +1148,9 @@ func (c *Bor) CommitStates(
 		"fromID", lastStateID+1,
 		"to", to.Format(time.RFC3339))
 	eventRecords, err := c.HeimdallClient.FetchStateSyncEvents(lastStateID+1, to.Unix())
+	if err != nil {
+		return nil, err
+	}
 	if c.config.OverrideStateSyncRecords != nil {
 		if val, ok := c.config.OverrideStateSyncRecords[strconv.FormatUint(number, 10)]; ok {
 			eventRecords = eventRecords[0:val]
@@ -1331,7 +1319,7 @@ func applyMessage(
 
 func validatorContains(a []*Validator, x *Validator) (*Validator, bool) {
 	for _, n := range a {
-		if bytes.Compare(n.Address.Bytes(), x.Address.Bytes()) == 0 {
+		if bytes.Equal(n.Address.Bytes(), x.Address.Bytes()) {
 			return n, true
 		}
 	}

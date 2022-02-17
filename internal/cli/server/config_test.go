@@ -89,7 +89,7 @@ func TestConfigLoadFile(t *testing.T) {
 				MaxPeers: 30,
 			},
 			TxPool: &TxPoolConfig{
-				LifeTime: time.Duration(1 * time.Second),
+				LifeTime: 1 * time.Second,
 			},
 			Gpo: &GpoConfig{
 				MaxPrice: big.NewInt(100),

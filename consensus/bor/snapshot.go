@@ -202,7 +202,7 @@ func (s *Snapshot) signers() []common.Address {
 // Difficulty returns the difficulty for a particular signer at the current snapshot number
 func (s *Snapshot) Difficulty(signer common.Address) uint64 {
 	// if signer is empty
-	if bytes.Compare(signer.Bytes(), common.Address{}.Bytes()) == 0 {
+	if bytes.Equal(signer.Bytes(), common.Address{}.Bytes()) {
 		return 1
 	}
 

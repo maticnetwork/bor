@@ -25,7 +25,7 @@ func TestServer_DeveloperMode(t *testing.T) {
 	// record the initial block number
 	blockNumber := server.backend.BlockChain().CurrentBlock().Header().Number.Int64()
 
-	var i int64 = 0
+	var i int64
 	for i = 0; i < 10; i++ {
 		// We expect the node to mine blocks every `config.Developer.Period` time period
 		time.Sleep(time.Duration(config.Developer.Period) * time.Second)
