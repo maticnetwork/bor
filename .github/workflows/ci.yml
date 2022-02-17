@@ -11,5 +11,7 @@ jobs:
           go-version: 1.17
       - name: "Build binaries"
         run: make all
+      - name: "Run linter"
+        run: make lint
       - name: "Run tests"
         run: make test
