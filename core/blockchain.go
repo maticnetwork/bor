@@ -1339,6 +1339,30 @@ func (bc *BlockChain) InsertReceiptChain(blockChain types.Blocks, receiptChain [
 			rawdb.WriteReceipts(batch, block.Hash(), block.NumberU64(), receiptChain[i])
 			rawdb.WriteTxLookupEntriesByBlock(batch, block) // Always write tx indices for live blocks, we assume they are needed
 
+			// Write bor receipts to rawDB
+			// BOR: Retrieve all the bor receipts.
+			stateSyncLogs := bc.GetBorReceiptByHash(block.Hash()).Logs
+			if len(stateSyncLogs) > 0 {
+
+				var allLogs []*types.Log
+				for _, receipt := range receiptChain[i] {
+					allLogs = append(allLogs, receipt.Logs...)
+				}
+
+				// State sync logs don't have tx index, tx hash and other necessary fields
+				// DeriveFieldsForBorLogs will fill those fields for websocket subscriptions
+				types.DeriveFieldsForBorLogs(stateSyncLogs, block.Hash(), block.NumberU64(), uint(len(receiptChain[i])), uint(len(allLogs)))
+
+				// Write bor receipt
+				rawdb.WriteBorReceipt(batch, block.Hash(), block.NumberU64(), &types.ReceiptForStorage{
+					Status: types.ReceiptStatusSuccessful, // make receipt status successful
+					Logs:   stateSyncLogs,
+				})
+
+				// Write bor tx reverse lookup
+				rawdb.WriteBorTxLookupEntry(batch, block.Hash(), block.NumberU64())
+			}
+
 			// Write everything belongs to the blocks into the database. So that
 			// we can ensure all components of body is completed(body, receipts,
 			// tx indexes)
