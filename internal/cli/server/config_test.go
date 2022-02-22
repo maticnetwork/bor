@@ -76,6 +76,28 @@ func TestConfigMerge(t *testing.T) {
 	assert.Equal(t, c0, expected)
 }
 
+func TestDefaultDatatypeOverride(t *testing.T) {
+	// This test is specific to `maxpeers` flag (for now) to check
+	// if default datatype value (0 in case of uint64) is overridden.
+	c0 := &Config{
+		P2P: &P2PConfig{
+			MaxPeers: 30,
+		},
+	}
+	c1 := &Config{
+		P2P: &P2PConfig{
+			MaxPeers: 0,
+		},
+	}
+	expected := &Config{
+		P2P: &P2PConfig{
+			MaxPeers: 0,
+		},
+	}
+	assert.NoError(t, c0.Merge(c1))
+	assert.Equal(t, c0, expected)
+}
+
 func TestConfigLoadFile(t *testing.T) {
 	readFile := func(path string) {
 		config, err := readConfigFile(path)
