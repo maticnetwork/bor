@@ -344,7 +344,7 @@ func (c *Command) Flags() *flagset.Flagset {
 	f.Uint64Flag(&flagset.Uint64Flag{
 		Name:  "maxpeers",
 		Usage: "Maximum number of network peers (network disabled if set to 0)",
-		Value: c.cliConfig.P2P.MaxPeers,
+		Value: &c.cliConfig.P2P.MaxPeers,
 	})
 	f.Uint64Flag(&flagset.Uint64Flag{
 		Name:  "maxpendpeers",

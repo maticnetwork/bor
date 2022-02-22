@@ -100,7 +100,7 @@ type Config struct {
 
 type P2PConfig struct {
 	// MaxPeers sets the maximum number of connected peers
-	MaxPeers *uint64 `hcl:"max-peers,optional"`
+	MaxPeers uint64 `hcl:"max-peers,optional"`
 
 	// MaxPendPeers sets the maximum number of pending connected peers
 	MaxPendPeers uint64 `hcl:"max-pend-peers,optional"`
@@ -387,7 +387,7 @@ func DefaultConfig() *Config {
 		LogLevel:  "INFO",
 		DataDir:   defaultDataDir(),
 		P2P: &P2PConfig{
-			MaxPeers:     &defaultMaxPeers,
+			MaxPeers:     defaultMaxPeers,
 			MaxPendPeers: 50,
 			Bind:         "0.0.0.0",
 			Port:         30303,
@@ -848,7 +848,7 @@ func (c *Config) buildNode() (*node.Config, error) {
 		Version:               params.VersionWithCommit(gitCommit, gitDate),
 		IPCPath:               ipcPath,
 		P2P: p2p.Config{
-			MaxPeers:        int(*c.P2P.MaxPeers),
+			MaxPeers:        int(c.P2P.MaxPeers),
 			MaxPendingPeers: int(c.P2P.MaxPendPeers),
 			ListenAddr:      c.P2P.Bind + ":" + strconv.Itoa(int(c.P2P.Port)),
 			DiscoveryV5:     c.P2P.Discovery.V5Enabled,
@@ -931,6 +931,11 @@ func (c *Config) Merge(cc ...*Config) error {
 	for _, elem := range cc {
 		if err := mergo.Merge(c, elem, mergo.WithOverride, mergo.WithAppendSlice); err != nil {
 			return fmt.Errorf("failed to merge configurations: %v", err)
+		}
+
+		// override max peers
+		if elem.P2P.MaxPeers == 0 {
+			c.P2P.MaxPeers = 0
 		}
 	}
 	return nil
