@@ -100,7 +100,7 @@ type Config struct {
 
 type P2PConfig struct {
 	// MaxPeers sets the maximum number of connected peers
-	MaxPeers uint64 `hcl:"max-peers,optional"`
+	MaxPeers *uint64 `hcl:"max-peers,optional"`
 
 	// MaxPendPeers sets the maximum number of pending connected peers
 	MaxPendPeers uint64 `hcl:"max-pend-peers,optional"`
@@ -379,6 +379,7 @@ type DeveloperConfig struct {
 }
 
 func DefaultConfig() *Config {
+	defaultMaxPeers := uint64(30)
 	return &Config{
 		Chain:     "mainnet",
 		Name:      Hostname(),
@@ -386,7 +387,7 @@ func DefaultConfig() *Config {
 		LogLevel:  "INFO",
 		DataDir:   defaultDataDir(),
 		P2P: &P2PConfig{
-			MaxPeers:     30,
+			MaxPeers:     &defaultMaxPeers,
 			MaxPendPeers: 50,
 			Bind:         "0.0.0.0",
 			Port:         30303,
@@ -847,7 +848,7 @@ func (c *Config) buildNode() (*node.Config, error) {
 		Version:               params.VersionWithCommit(gitCommit, gitDate),
 		IPCPath:               ipcPath,
 		P2P: p2p.Config{
-			MaxPeers:        int(c.P2P.MaxPeers),
+			MaxPeers:        int(*c.P2P.MaxPeers),
 			MaxPendingPeers: int(c.P2P.MaxPendPeers),
 			ListenAddr:      c.P2P.Bind + ":" + strconv.Itoa(int(c.P2P.Port)),
 			DiscoveryV5:     c.P2P.Discovery.V5Enabled,

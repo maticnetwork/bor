@@ -38,13 +38,14 @@ func TestConfigMerge(t *testing.T) {
 			},
 		},
 	}
+	c1MaxPeers := uint64(10)
 	c1 := &Config{
 		Chain: "1",
 		Whitelist: map[string]string{
 			"b": "c",
 		},
 		P2P: &P2PConfig{
-			MaxPeers: 10,
+			MaxPeers: &c1MaxPeers,
 			Discovery: &P2PDiscovery{
 				StaticNodes: []string{
 					"b",
@@ -52,6 +53,7 @@ func TestConfigMerge(t *testing.T) {
 			},
 		},
 	}
+	expectedMaxPeers := uint64(10)
 	expected := &Config{
 		Chain:    "1",
 		Snapshot: true,
@@ -63,7 +65,67 @@ func TestConfigMerge(t *testing.T) {
 			LifeTime: 5 * time.Second,
 		},
 		P2P: &P2PConfig{
-			MaxPeers: 10,
+			MaxPeers: &expectedMaxPeers,
+			Discovery: &P2PDiscovery{
+				StaticNodes: []string{
+					"a",
+					"b",
+				},
+			},
+		},
+	}
+	assert.NoError(t, c0.Merge(c1))
+	assert.Equal(t, c0, expected)
+}
+
+func TestConfigMerge_Pointer(t *testing.T) {
+	c0MaxPeers := uint64(30)
+	c0 := &Config{
+		Chain:    "0",
+		Snapshot: true,
+		Whitelist: map[string]string{
+			"a": "b",
+		},
+		TxPool: &TxPoolConfig{
+			LifeTime: 5 * time.Second,
+		},
+		P2P: &P2PConfig{
+			MaxPeers: &c0MaxPeers,
+			Discovery: &P2PDiscovery{
+				StaticNodes: []string{
+					"a",
+				},
+			},
+		},
+	}
+	c1MaxPeers := uint64(0)
+	c1 := &Config{
+		Chain: "1",
+		Whitelist: map[string]string{
+			"b": "c",
+		},
+		P2P: &P2PConfig{
+			MaxPeers: &c1MaxPeers,
+			Discovery: &P2PDiscovery{
+				StaticNodes: []string{
+					"b",
+				},
+			},
+		},
+	}
+	expectedMaxPeers := uint64(30)
+	expected := &Config{
+		Chain:    "1",
+		Snapshot: true,
+		Whitelist: map[string]string{
+			"a": "b",
+			"b": "c",
+		},
+		TxPool: &TxPoolConfig{
+			LifeTime: 5 * time.Second,
+		},
+		P2P: &P2PConfig{
+			MaxPeers: &expectedMaxPeers,
 			Discovery: &P2PDiscovery{
 				StaticNodes: []string{
 					"a",
@@ -77,6 +139,7 @@ func TestConfigMerge(t *testing.T) {
 }
 
 func TestConfigLoadFile(t *testing.T) {
+	maxPeers := uint64(30)
 	readFile := func(path string) {
 		config, err := readConfigFile(path)
 		assert.NoError(t, err)
@@ -86,7 +149,7 @@ func TestConfigLoadFile(t *testing.T) {
 				"a": "b",
 			},
 			P2P: &P2PConfig{
-				MaxPeers: 30,
+				MaxPeers: &maxPeers,
 			},
 			TxPool: &TxPoolConfig{
 				LifeTime: time.Duration(1 * time.Second),
