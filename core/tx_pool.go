@@ -387,7 +387,7 @@ func (pool *TxPool) loop() {
 			stales := int(atomic.LoadInt64(&pool.priced.stales))
 
 			if pending != prevPending || queued != prevQueued || stales != prevStales {
-				log.Debug("Transaction pool status report", "executable", pending, "queued", queued, "stales", stales)
+				log.Info("Transaction pool status report", "executable", pending, "queued", queued, "stales", stales)
 				prevPending, prevQueued, prevStales = pending, queued, stales
 			}
 
@@ -704,6 +704,8 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 		// If it's a local transaction, forcibly discard all available transactions.
 		// Otherwise if we can't make enough room for new one, abort the operation.
 		drop, success := pool.priced.Discard(pool.all.Slots()-int(pool.config.GlobalSlots+pool.config.GlobalQueue)+numSlots(tx), isLocal)
+
+		log.Info("discard unpriced", "allslots", pool.all.Slots(), "numSlots", numSlots(tx), "global slots", pool.config.GlobalSlots, "global queue", pool.config.GlobalQueue, "drop", drop, "success", success)
 
 		// Special case, we still can't make the room for the new remote one.
 		if !isLocal && !success {
@@ -1398,8 +1400,11 @@ func (pool *TxPool) truncatePending() {
 		pending += uint64(list.Len())
 	}
 	if pending <= pool.config.GlobalSlots {
+		log.Info("truncate pending out", "total pending", pending, "global slots", pool.config.GlobalSlots)
 		return
 	}
+
+	numSpammers := 0
 
 	pendingBeforeCap := pending
 	// Assemble a spam order to penalize large transactors first
@@ -1407,9 +1412,17 @@ func (pool *TxPool) truncatePending() {
 	for addr, list := range pool.pending {
 		// Only evict transactions from high rollers
 		if !pool.locals.contains(addr) && uint64(list.Len()) > pool.config.AccountSlots {
+			numSpammers++
 			spammers.Push(addr, int64(list.Len()))
 		}
 	}
+
+	log.Info("truncate pending num spammers", "pending accounts", len(pool.pending), "spammers", numSpammers)
+
+	dropped := 0
+	dropped2 := 0
+	pendingBeforeCap1 := pending
+
 	// Gradually drop transactions from offenders
 	offenders := []common.Address{}
 	for pending > pool.config.GlobalSlots && !spammers.Empty() {
@@ -1442,11 +1455,19 @@ func (pool *TxPool) truncatePending() {
 					if pool.locals.contains(offenders[i]) {
 						localGauge.Dec(int64(len(caps)))
 					}
+					dropped2 += len(caps)
+					dropped += 1
 					pending--
 				}
 			}
 		}
 	}
+
+	log.Info("truncate pending offenders first", "prepending", pendingBeforeCap1, "pending", pending, "dropped", dropped, "dropped2", dropped2, "offenders", len(offenders))
+
+	dropped = 0
+	dropped2 = 0
+	pendingBeforeCap1 = 0
 
 	// If still above threshold, reduce to limit or min allowance
 	if pending > pool.config.GlobalSlots && len(offenders) > 0 {
@@ -1470,9 +1491,14 @@ func (pool *TxPool) truncatePending() {
 					localGauge.Dec(int64(len(caps)))
 				}
 				pending--
+				dropped2 += len(caps)
+				dropped += 1
 			}
 		}
 	}
+
+	log.Info("truncate pending offenders second", "prepending", pendingBeforeCap1, "pending", pending, "dropped", dropped, "dropped2", dropped2, "offenders", len(offenders))
+
 	pendingRateLimitMeter.Mark(int64(pendingBeforeCap - pending))
 }
 

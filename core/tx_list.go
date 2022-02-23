@@ -27,6 +27,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 // nonceHeap is a heap.Interface implementation over 64bit unsigned integers for
@@ -613,6 +614,9 @@ func (l *txPricedList) Reheap() {
 	l.reheapMu.Lock()
 	defer l.reheapMu.Unlock()
 	start := time.Now()
+
+	numStales := atomic.LoadInt64(&l.stales)
+
 	atomic.StoreInt64(&l.stales, 0)
 	l.urgent.list = make([]*types.Transaction, 0, l.all.RemoteCount())
 	l.all.Range(func(hash common.Hash, tx *types.Transaction, local bool) bool {
@@ -632,6 +636,9 @@ func (l *txPricedList) Reheap() {
 		l.floating.list[i] = heap.Pop(&l.urgent).(*types.Transaction)
 	}
 	heap.Init(&l.floating)
+
+	log.Info("reheap timer", "numstales", numStales, "time", time.Since(start), "allcount", l.all.RemoteCount(), "urgent", len(l.urgent.list), "floating", len(l.floating.list))
+
 	reheapTimer.Update(time.Since(start))
 }
 
