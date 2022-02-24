@@ -29,6 +29,7 @@ type IHeimdallClient interface {
 	Fetch(path string, query string) (*ResponseWithHeight, error)
 	FetchWithRetry(path string, query string) (*ResponseWithHeight, error)
 	FetchStateSyncEvents(fromID uint64, to int64) ([]*EventRecordWithTime, error)
+	FetchLatestCheckpoint() (*Checkpoint, error)
 }
 
 type HeimdallClient struct {
