@@ -135,3 +135,26 @@ func TestEncodeSigHeaderJaipur(t *testing.T) {
 	hash = SealHash(h, &params.BorConfig{JaipurBlock: 10})
 	assert.Equal(t, hash, hashWithoutBaseFee)
 }
+
+//checking the checkpoint
+func TestCheckpoint(t *testing.T) {
+
+	// t.Skip()
+
+	h, err := NewHeimdallClient("https://heimdall.api.matic.network/checkpoints/latest") //heimdall rest-server endpoint
+	// h, err := NewHeimdallClient("http://localhost:1317/") //heimdall rest-server endpoint
+
+	if err != nil {
+		t.Fatal("Connection Error")
+		t.Error(err)
+
+	}
+	checkpoint, err := h.FetchLatestCheckpoint()
+	if err != nil {
+		t.Fatal("Error in fetching latest checkpoint")
+		t.Error(err)
+	}
+
+	t.Log(checkpoint)
+
+}

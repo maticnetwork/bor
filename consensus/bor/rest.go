@@ -4,11 +4,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"math/big"
 	"net/http"
 	"net/url"
 	"sort"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
 )
 
@@ -71,6 +73,31 @@ func (h *HeimdallClient) FetchStateSyncEvents(fromID uint64, to int64) ([]*Event
 		return eventRecords[i].ID < eventRecords[j].ID
 	})
 	return eventRecords, nil
+}
+
+// Checkpoint result json
+type Checkpoint struct {
+	Proposer   common.Address `json:"proposer"`
+	StartBlock *big.Int       `json:"start_block"`
+	EndBlock   *big.Int       `json:"end_block"`
+	RootHash   common.Hash    `json:"root_hash"`
+	BorChainID *big.Int       `json:"bor_chain_id"`
+	Timestamp  uint64         `json:"timestamp"`
+}
+
+//Fetch latest checkpoint
+func (h *HeimdallClient) FetchLatestCheckpoint() (*Checkpoint, error) {
+	var checkpoint Checkpoint
+
+	response, err := h.Fetch("/checkpoints/latest", "")
+	if err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(response.Result, &checkpoint); err != nil {
+		return nil, err
+	}
+
+	return &checkpoint, nil
 }
 
 // Fetch fetches response from heimdall
