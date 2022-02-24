@@ -705,7 +705,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 		// Otherwise if we can't make enough room for new one, abort the operation.
 		drop, success := pool.priced.Discard(pool.all.Slots()-int(pool.config.GlobalSlots+pool.config.GlobalQueue)+numSlots(tx), isLocal)
 
-		log.Info("discard unpriced", "allslots", pool.all.Slots(), "numSlots", numSlots(tx), "global slots", pool.config.GlobalSlots, "global queue", pool.config.GlobalQueue, "drop", drop, "success", success)
+		log.Info("discard unpriced", "allslots", pool.all.Slots(), "numSlots", numSlots(tx), "global slots", pool.config.GlobalSlots, "global queue", pool.config.GlobalQueue, "drop", len(drop), "success", success)
 
 		// Special case, we still can't make the room for the new remote one.
 		if !isLocal && !success {
