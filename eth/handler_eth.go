@@ -155,16 +155,19 @@ func (h *ethHandler) handleHeaders(peer *eth.Peer, headers []*types.Header) erro
 
 		// fetch checkpoint from heimdall for whitelist
 		if headers[0].Number.Uint64()%h.chain.Config().Bor.Sprint == 0 && !h.chain.Engine().(*bor.Bor).WithoutHeimdall {
-			endBlockNum, want, ok := h.whitelistCheckpoint()
+			endBlockNum, endBlockHash, ok := h.whitelistCheckpoint()
 			if ok {
-				if hash := headers[0].Hash(); want != hash {
-					peer.Log().Info("Checkpoint Whitelist mismatch, dropping peer", "number", headers[0].Number.Uint64(), "hash", hash, "want", want)
-					startBlockNum := endBlockNum - h.chain.Config().Bor.Sprint
-					log.Info("Checkpoint Mismatch :", "Rewinding to", "startBlockNum", startBlockNum)
-					h.chain.SetHead(startBlockNum)
-					return errors.New("whitelist block mismatch")
-				}
-				peer.Log().Debug("Whitelist block verified", "number", headers[0].Number.Uint64(), "hash", want)
+				peer.Log().Debug("Whitelist block verified", "number", headers[0].Number.Uint64(), "hash", endBlockHash)
+				h.whitelist[endBlockNum] = endBlockHash
+			} else {
+				peer.Log().Info("Checkpoint Whitelist mismatch, dropping peer", "number", headers[0].Number.Uint64(), "hash", headers[0].Hash(), "want", endBlockHash)
+
+				//Rewinding chain to the startBlock
+				startBlockNum := endBlockNum - h.chain.Config().Bor.Sprint
+				log.Info("Checkpoint Mismatch :", "Rewinding to", "startBlockNum", startBlockNum)
+				h.chain.SetHead(startBlockNum)
+
+				return errors.New("whitelist block mismatch")
 			}
 		}
 
@@ -237,6 +240,7 @@ func (h *ethHandler) handleBlockBroadcast(peer *eth.Peer, block *types.Block, td
 	return nil
 }
 
+// Fetches the latest checkpoint from heimdallClient and verifies it against blocks in Bor. Returns endBlockNum, endBlockHash, ok
 func (h *ethHandler) whitelistCheckpoint() (uint64, common.Hash, bool) {
 	// check for checkpoint whitelisting: bor
 	checkpoint, err := h.chain.Engine().(*bor.Bor).HeimdallClient.FetchLatestCheckpoint()
