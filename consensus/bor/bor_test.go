@@ -139,7 +139,7 @@ func TestEncodeSigHeaderJaipur(t *testing.T) {
 //checking the checkpoint
 func TestCheckpoint(t *testing.T) {
 
-	// t.Skip()
+	t.Skip()
 
 	h, err := NewHeimdallClient("https://heimdall.api.matic.network/checkpoints/latest") //heimdall rest-server endpoint
 	// h, err := NewHeimdallClient("http://localhost:1317/") //heimdall rest-server endpoint
