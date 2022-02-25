@@ -114,7 +114,7 @@ func (h *ethHandler) handleHeaders(peer *eth.Peer, headers []*types.Header) erro
 	if p == nil {
 		return errors.New("unregistered during callback")
 	}
-	// If no headers were received, but we're expencting a checkpoint header, consider it that
+	// If no headers were received, but we're expecting a checkpoint header, consider it that
 	if len(headers) == 0 && p.syncDrop != nil {
 		// Stop the timer either way, decide later to drop or not
 		p.syncDrop.Stop()
@@ -154,13 +154,18 @@ func (h *ethHandler) handleHeaders(peer *eth.Peer, headers []*types.Header) erro
 		}
 
 		// fetch checkpoint from heimdall for whitelist
-		_, want, ok := h.whitelistCheckpoint()
-		if ok {
-			if hash := headers[0].Hash(); want != hash {
-				peer.Log().Info("Checkpoint Whitelist mismatch, dropping peer", "number", headers[0].Number.Uint64(), "hash", hash, "want", want)
-				return errors.New("whitelist block mismatch")
+		if headers[0].Number.Uint64()%h.chain.Config().Bor.Sprint == 0 && !h.chain.Engine().(*bor.Bor).WithoutHeimdall {
+			endBlockNum, want, ok := h.whitelistCheckpoint()
+			if ok {
+				if hash := headers[0].Hash(); want != hash {
+					peer.Log().Info("Checkpoint Whitelist mismatch, dropping peer", "number", headers[0].Number.Uint64(), "hash", hash, "want", want)
+					startBlockNum := endBlockNum - h.chain.Config().Bor.Sprint
+					log.Info("Checkpoint Mismatch :", "Rewinding to", "startBlockNum", startBlockNum)
+					h.chain.SetHead(startBlockNum)
+					return errors.New("whitelist block mismatch")
+				}
+				peer.Log().Debug("Whitelist block verified", "number", headers[0].Number.Uint64(), "hash", want)
 			}
-			peer.Log().Debug("Whitelist block verified", "number", headers[0].Number.Uint64(), "hash", want)
 		}
 
 		// Irrelevant of the fork checks, send the header to the fetcher just in case
