@@ -16,12 +16,14 @@
     "bor": {
       "jaipurBlock": 2,
       "period": {
-        "0": 1
+        "0": 1,
+        "2": 2
       },
       "producerDelay": 4,
       "sprint": 4,
       "backupMultiplier": {
-        "0": 1
+        "0": 1,
+        "2": 2
       },
       "validatorContract": "0x0000000000000000000000000000000000001000",
       "stateReceiverContract": "0x0000000000000000000000000000000000001001",

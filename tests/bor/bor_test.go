@@ -525,6 +525,27 @@ func TestJaipurFork(t *testing.T) {
 	}
 }
 
+func TestBlockTimes(t *testing.T) {
+	init := buildEthereumInstance(t, rawdb.NewMemoryDatabase())
+	chain := init.ethereum.BlockChain()
+	engine := init.ethereum.Engine()
+	_bor := engine.(*bor.Bor)
+	db := init.ethereum.ChainDb()
+	block := init.genesis.ToBlock(db)
+	blockTime := block.Header().Time
+	for i := uint64(1); i < sprintSize; i++ {
+		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor)
+		insertNewBlock(t, chain, block)
+		if block.Header().Number.Int64() == 1 {
+			assert.Equal(t, 1, int(block.Header().Time-blockTime))
+		}
+		if block.Header().Number.Int64() == 2 {
+			assert.Equal(t, 2, int(block.Header().Time-blockTime))
+		}
+		blockTime = block.Header().Time
+	}
+}
+
 // SealHash returns the hash of a block prior to it being sealed.
 func testSealHash(header *types.Header, c *params.BorConfig) (hash common.Hash) {
 	hasher := sha3.NewLegacyKeccak256()
