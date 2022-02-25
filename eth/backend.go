@@ -244,6 +244,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		EventMux:   eth.eventMux,
 		Checkpoint: checkpoint,
 		Whitelist:  config.Whitelist,
+		EthAPI:     ethAPI,
 	}); err != nil {
 		return nil, err
 	}

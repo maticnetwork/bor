@@ -17,6 +17,7 @@
 package eth
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math/big"
@@ -24,11 +25,13 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/consensus/bor"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/enode"
+	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/ethereum/go-ethereum/trie"
 )
 
@@ -140,6 +143,7 @@ func (h *ethHandler) handleHeaders(peer *eth.Peer, headers []*types.Header) erro
 			}
 			return nil
 		}
+
 		// Otherwise if it's a whitelisted block, validate against the set
 		if want, ok := h.whitelist[headers[0].Number.Uint64()]; ok {
 			if hash := headers[0].Hash(); want != hash {
@@ -148,6 +152,17 @@ func (h *ethHandler) handleHeaders(peer *eth.Peer, headers []*types.Header) erro
 			}
 			peer.Log().Debug("Whitelist block verified", "number", headers[0].Number.Uint64(), "hash", want)
 		}
+
+		// fetch checkpoint from heimdall for whitelist
+		_, want, ok := h.whitelistCheckpoint()
+		if ok {
+			if hash := headers[0].Hash(); want != hash {
+				peer.Log().Info("Checkpoint Whitelist mismatch, dropping peer", "number", headers[0].Number.Uint64(), "hash", hash, "want", want)
+				return errors.New("whitelist block mismatch")
+			}
+			peer.Log().Debug("Whitelist block verified", "number", headers[0].Number.Uint64(), "hash", want)
+		}
+
 		// Irrelevant of the fork checks, send the header to the fetcher just in case
 		headers = h.blockFetcher.FilterHeaders(peer.ID(), headers, time.Now())
 	}
@@ -215,4 +230,42 @@ func (h *ethHandler) handleBlockBroadcast(peer *eth.Peer, block *types.Block, td
 		h.chainSync.handlePeerEvent(peer)
 	}
 	return nil
+}
+
+func (h *ethHandler) whitelistCheckpoint() (uint64, common.Hash, bool) {
+	// check for checkpoint whitelisting: bor
+	checkpoint, err := h.chain.Engine().(*bor.Bor).HeimdallClient.FetchLatestCheckpoint()
+	if err != nil {
+		log.Warn("Failed to fetch latest checkpoint for whitelisting")
+		return 0, common.Hash{}, false
+	}
+
+	// verify the root hash of checkpoint
+	roothash, err := h.ethAPI.GetRootHash(context.Background(), checkpoint.StartBlock.Uint64(), checkpoint.EndBlock.Uint64())
+	if err != nil {
+		log.Warn("Failed to get root hash of checkpoint while whitelisting")
+		return 0, common.Hash{}, false
+	}
+	if roothash != checkpoint.RootHash.String() {
+		log.Warn("Checkpoint root hash mismatch while whitelisting", "expected", checkpoint.RootHash.String(), "got", roothash)
+		return 0, common.Hash{}, false
+	}
+
+	// Alternate idea:
+	// If ethApi can't be used here, expose the EthAPI instance through
+	// a getter function in bor consensus.
+
+	// fetch the end block hash
+	block, err := h.ethAPI.GetBlockByNumber(context.Background(), rpc.BlockNumber(checkpoint.EndBlock.Uint64()), false)
+	if err != nil {
+		log.Warn("Failed to get end block hash of checkpoint while whitelisting")
+		return 0, common.Hash{}, false
+	}
+	hash, ok := block["hash"].(string)
+	if !ok {
+		log.Warn("Failed to get end block hash of checkpoint while whitelisting")
+		return 0, common.Hash{}, false
+	}
+
+	return checkpoint.EndBlock.Uint64(), common.HexToHash(hash), true
 }

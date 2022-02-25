@@ -34,6 +34,7 @@ import (
 	"github.com/ethereum/go-ethereum/eth/protocols/snap"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
+	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/params"
@@ -76,15 +77,16 @@ type txPool interface {
 // handlerConfig is the collection of initialization parameters to create a full
 // node network handler.
 type handlerConfig struct {
-	Database   ethdb.Database            // Database for direct sync insertions
-	Chain      *core.BlockChain          // Blockchain to serve data from
-	TxPool     txPool                    // Transaction pool to propagate from
-	Network    uint64                    // Network identifier to adfvertise
-	Sync       downloader.SyncMode       // Whether to fast or full sync
-	BloomCache uint64                    // Megabytes to alloc for fast sync bloom
-	EventMux   *event.TypeMux            // Legacy event mux, deprecate for `feed`
-	Checkpoint *params.TrustedCheckpoint // Hard coded checkpoint for sync challenges
-	Whitelist  map[uint64]common.Hash    // Hard coded whitelist for sync challenged
+	Database   ethdb.Database              // Database for direct sync insertions
+	Chain      *core.BlockChain            // Blockchain to serve data from
+	TxPool     txPool                      // Transaction pool to propagate from
+	Network    uint64                      // Network identifier to adfvertise
+	Sync       downloader.SyncMode         // Whether to fast or full sync
+	BloomCache uint64                      // Megabytes to alloc for fast sync bloom
+	EventMux   *event.TypeMux              // Legacy event mux, deprecate for `feed`
+	Checkpoint *params.TrustedCheckpoint   // Hard coded checkpoint for sync challenges
+	Whitelist  map[uint64]common.Hash      // Hard coded whitelist for sync challenged
+	EthAPI     *ethapi.PublicBlockChainAPI // EthAPI to interact
 }
 
 type handler struct {
@@ -108,6 +110,8 @@ type handler struct {
 	blockFetcher *fetcher.BlockFetcher
 	txFetcher    *fetcher.TxFetcher
 	peers        *peerSet
+
+	ethAPI *ethapi.PublicBlockChainAPI // EthAPI to interact
 
 	eventMux      *event.TypeMux
 	txsCh         chan core.NewTxsEvent
@@ -138,6 +142,7 @@ func newHandler(config *handlerConfig) (*handler, error) {
 		txpool:     config.TxPool,
 		chain:      config.Chain,
 		peers:      newPeerSet(),
+		ethAPI:     config.EthAPI,
 		whitelist:  config.Whitelist,
 		quitSync:   make(chan struct{}),
 	}
