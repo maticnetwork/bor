@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/log"
+	"gopkg.in/DataDog/dd-trace-go.v1/profiler"
 )
 
 // Enabled is checked by the constructor functions for all of the
@@ -93,6 +94,28 @@ func CollectProcessMetrics(refresh time.Duration) {
 		diskWriteBytes        = GetOrRegisterMeter("system/disk/writedata", DefaultRegistry)
 		diskWriteBytesCounter = GetOrRegisterCounter("system/disk/writebytes", DefaultRegistry)
 	)
+
+	option := profiler.WithProfileTypes(
+		profiler.CPUProfile,
+		profiler.HeapProfile,
+	)
+
+	// The profiles below are disabled by default to keep overhead
+	// low, but can be enabled as needed.
+	if EnabledExpensive {
+		option = profiler.WithProfileTypes(
+			profiler.CPUProfile,
+			profiler.HeapProfile,
+			profiler.BlockProfile,
+			profiler.MutexProfile,
+			profiler.GoroutineProfile,
+		)
+	}
+	err := profiler.Start(option)
+	if err != nil {
+		log.Error("Error starting Datadog profiler", "err", err)
+	}
+
 	// Iterate loading the different stats and updating the meters
 	for i := 1; ; i++ {
 		location1 := i % 2

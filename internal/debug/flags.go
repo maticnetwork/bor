@@ -30,7 +30,6 @@ import (
 	"github.com/fjl/memsize/memsizeui"
 	"github.com/mattn/go-colorable"
 	"github.com/mattn/go-isatty"
-	"gopkg.in/DataDog/dd-trace-go.v1/profiler"
 	"gopkg.in/urfave/cli.v1"
 )
 
@@ -201,27 +200,6 @@ func StartPProf(address string, withMetrics bool, expensive bool) {
 			log.Error("Failure in running pprof server", "err", err)
 		}
 	}()
-
-	option := profiler.WithProfileTypes(
-		profiler.CPUProfile,
-		profiler.HeapProfile,
-	)
-
-	// The profiles below are disabled by default to keep overhead
-	// low, but can be enabled as needed.
-	if expensive {
-		option = profiler.WithProfileTypes(
-			profiler.CPUProfile,
-			profiler.HeapProfile,
-			profiler.BlockProfile,
-			profiler.MutexProfile,
-			profiler.GoroutineProfile,
-		)
-	}
-	err := profiler.Start(option)
-	if err != nil {
-		log.Error("Error starting Datadog profiler", "err", err)
-	}
 }
 
 // Exit stops all running profiles, flushing their output to the
