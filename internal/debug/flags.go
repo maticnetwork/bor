@@ -222,7 +222,6 @@ func StartPProf(address string, withMetrics bool, expensive bool) {
 	if err != nil {
 		log.Error("Error starting Datadog profiler", "err", err)
 	}
-	defer profiler.Stop()
 }
 
 // Exit stops all running profiles, flushing their output to the
