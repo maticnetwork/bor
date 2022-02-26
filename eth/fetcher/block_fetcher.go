@@ -42,8 +42,10 @@ const (
 	maxUncleDist = 7   // Maximum allowed backward distance from the chain head
 	maxQueueDist = 32  // Maximum allowed distance from the chain head to queue
 	hashLimit    = 256 // Maximum number of unique blocks or headers a peer may have announced
-	blockLimit   = 64  // Maximum number of unique blocks a peer may have delivered
+	blockLimit   = 128  // Maximum number of unique blocks a peer may have delivered
 )
+// blockLimit of 64 does not allow for situations in which the validator might be peered directly to bloxroute and propagate
+// a backup block from bloxroute to its sentry
 
 var (
 	blockAnnounceInMeter   = metrics.NewRegisteredMeter("eth/fetcher/block/announces/in", nil)

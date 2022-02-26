@@ -50,7 +50,10 @@ const (
 	// maxTxUnderpricedSetSize is the size of the underpriced transaction set that
 	// is used to track recent transactions that have been dropped so we don't
 	// re-request them.
-	maxTxUnderpricedSetSize = 32768
+	maxTxUnderpricedSetSize = 262144
+	//The previous value of 32768 was too low - many nodes had > 150,000 underpriced transactions in their txpool
+	//causing a vicious cycle of the same transactions being propagated and then forgotten
+	//this number may need to be increased again in the future
 
 	// txArriveTimeout is the time allowance before an announced transaction is
 	// explicitly requested.
