@@ -127,6 +127,8 @@ var Flags = []cli.Flag{
 	traceFlag,
 	datadogProfilerFlag,
 	datadogProfilerExpensiveFlag,
+	datadogProfilerEnvironmentFlag,
+	datadogProfilerTagsFlag,
 }
 
 var glogger *log.GlogHandler
