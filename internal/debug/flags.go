@@ -106,7 +106,7 @@ var (
 	}
 	datadogProfilerTagsFlag = cli.StringFlag{
 		Name:  "datadog.profiler.tags",
-		Usage: "Comma-separated tags (key:values) attached to all measurements",
+		Usage: "Comma-separated tags (key:value) attached to all measurements",
 		Value: "",
 	}
 )
