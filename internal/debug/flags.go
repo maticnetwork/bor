@@ -30,6 +30,7 @@ import (
 	"github.com/fjl/memsize/memsizeui"
 	"github.com/mattn/go-colorable"
 	"github.com/mattn/go-isatty"
+	"gopkg.in/DataDog/dd-trace-go.v1/profiler"
 	"gopkg.in/urfave/cli.v1"
 )
 
@@ -90,6 +91,24 @@ var (
 		Name:  "trace",
 		Usage: "Write execution trace to the given file",
 	}
+	datadogProfilerFlag = cli.BoolFlag{
+		Name:  "datadog.profiler",
+		Usage: "Enable Datadog profiler",
+	}
+	datadogProfilerExpensiveFlag = cli.BoolFlag{
+		Name:  "datadog.profiler.expensive",
+		Usage: "Enable Datadog profiler expensive metrics",
+	}
+	datadogProfilerEnvironmentFlag = cli.StringFlag{
+		Name:  "datadog.profiler.environment",
+		Usage: "Set Datadog profiler environment",
+		Value: "",
+	}
+	datadogProfilerTagsFlag = cli.StringFlag{
+		Name:  "datadog.profiler.tags",
+		Usage: "Comma-separated tags (key:values) attached to all measurements",
+		Value: "",
+	}
 )
 
 // Flags holds all command-line flags required for debugging.
@@ -106,6 +125,8 @@ var Flags = []cli.Flag{
 	blockprofilerateFlag,
 	cpuprofileFlag,
 	traceFlag,
+	datadogProfilerFlag,
+	datadogProfilerExpensiveFlag,
 }
 
 var glogger *log.GlogHandler
@@ -179,15 +200,25 @@ func Setup(ctx *cli.Context) error {
 		address := fmt.Sprintf("%s:%d", listenHost, port)
 		// This context value ("metrics.addr") represents the utils.MetricsHTTPFlag.Name.
 		// It cannot be imported because it will cause a cyclical dependency.
-		StartPProf(address, !ctx.GlobalIsSet("metrics.addr"), ctx.GlobalIsSet("metrics.expensive"))
+		StartPProf(address, !ctx.GlobalIsSet("metrics.addr"))
 	} else if ctx.GlobalIsSet("bor-mumbai") || ctx.GlobalIsSet("bor-mainnet") {
 		address := fmt.Sprintf("%s:%d", "0.0.0.0", 7071)
-		StartPProf(address, !ctx.GlobalIsSet("metrics.addr"), ctx.GlobalIsSet("metrics.expensive"))
+		StartPProf(address, !ctx.GlobalIsSet("metrics.addr"))
+	}
+
+	if ctx.GlobalBool(datadogProfilerFlag.Name) {
+		StartDatadogProfiler(
+			"bor",
+			datadogProfilerEnvironmentFlag.Value,
+			"devel",
+			datadogProfilerTagsFlag.Value,
+			ctx.GlobalBool(datadogProfilerExpensiveFlag.Name),
+		)
 	}
 	return nil
 }
 
-func StartPProf(address string, withMetrics bool, expensive bool) {
+func StartPProf(address string, withMetrics bool) {
 	// Hook go-metrics into expvar on any /debug/metrics request, load all vars
 	// from the registry into expvar, and execute regular expvar handler.
 	if withMetrics {
@@ -200,6 +231,34 @@ func StartPProf(address string, withMetrics bool, expensive bool) {
 			log.Error("Failure in running pprof server", "err", err)
 		}
 	}()
+}
+
+func StartDatadogProfiler(service string, env string, version string, tags string, expensive bool) {
+	option := profiler.WithProfileTypes(
+		profiler.CPUProfile,
+		profiler.HeapProfile,
+	)
+
+	// The profiles below are disabled by default to keep overhead
+	// low, but can be enabled as needed.
+	if expensive {
+		option = profiler.WithProfileTypes(
+			profiler.CPUProfile,
+			profiler.HeapProfile,
+			profiler.BlockProfile,
+			profiler.MutexProfile,
+			profiler.GoroutineProfile,
+		)
+	}
+	err := profiler.Start(profiler.WithService(service),
+		profiler.WithEnv(env),
+		profiler.WithVersion(version),
+		profiler.WithTags(tags),
+		option,
+	)
+	if err != nil {
+		log.Error("Error starting Datadog profiler", "err", err)
+	}
 }
 
 // Exit stops all running profiles, flushing their output to the
