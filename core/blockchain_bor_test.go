@@ -92,6 +92,8 @@ func TestChain2HeadEvent(t *testing.T) {
 	readEvent(&eventTest{
 		Type: Chain2HeadCanonicalEvent,
 		Added: []common.Hash{
+			chain[0].Hash(),
+			chain[1].Hash(),
 			chain[2].Hash(),
 		}})
 
@@ -129,6 +131,9 @@ func TestChain2HeadEvent(t *testing.T) {
 	readEvent(&eventTest{
 		Type: Chain2HeadCanonicalEvent,
 		Added: []common.Hash{
+			replacementBlocks[0].Hash(),
+			replacementBlocks[1].Hash(),
+			replacementBlocks[2].Hash(),
 			replacementBlocks[3].Hash(),
 		}})
 }
