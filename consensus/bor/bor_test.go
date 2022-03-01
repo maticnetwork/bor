@@ -151,8 +151,8 @@ func TestCheckpoint(t *testing.T) {
 	}
 	checkpoint, err := h.FetchLatestCheckpoint()
 	if err != nil {
-		t.Fatal("Error in fetching latest checkpoint")
 		t.Error(err)
+		t.Fatal("Error in fetching latest checkpoint")
 	}
 
 	t.Log(checkpoint)

@@ -149,25 +149,6 @@ func (h *ethHandler) handleHeaders(peer *eth.Peer, headers []*types.Header) erro
 			return nil
 		}
 
-		// Fetch checkpoint from heimdall for whitelisting
-		if headers[0].Number.Uint64()%h.chain.Config().Bor.Sprint == 0 && !h.chain.Engine().(*bor.Bor).WithoutHeimdall {
-			endBlockNum, endBlockHash, err := h.fetchWhitelistCheckpoint()
-			if err != nil && err == errRootHashMismatch {
-				// checkpoint root hash mismatch, rewind the chain to start block of checkpoint
-				peer.Log().Info("Checkpoint Whitelist mismatch, dropping peer", "number", headers[0].Number.Uint64(), "hash", headers[0].Hash(), "want", endBlockHash)
-
-				startBlockNum := endBlockNum - h.chain.Config().Bor.Sprint
-				log.Info("Checkpoint Whitelist mismatch, rewinding chain", "block number", startBlockNum)
-
-				h.chain.SetHead(startBlockNum)
-				return errors.New("whitelist block mismatch")
-			} else if err == nil {
-				peer.Log().Debug("Whitelisting checkpoint", "number", headers[0].Number.Uint64(), "hash", endBlockHash)
-				h.checkpointWhitelist[endBlockNum] = endBlockHash
-				h.purgeWhitelistMap(endBlockNum)
-			}
-		}
-
 		// Otherwise if it's a whitelisted block, validate against the set
 		if want, ok := h.whitelist[headers[0].Number.Uint64()]; ok {
 			if hash := headers[0].Hash(); want != hash {

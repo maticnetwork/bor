@@ -568,6 +568,55 @@ func (s *Ethereum) Start() error {
 	}
 	// Start the networking layer and the light server if requested
 	s.handler.Start(maxPeers)
+
+	go s.StartCheckpointWhitelistService()
+	return nil
+}
+
+// Start implements node.Lifecycle, starting all internal goroutines needed by the
+// Ethereum protocol implementation.
+func (s *Ethereum) StartCheckpointWhitelistService() error {
+
+	go func() error {
+		every := time.Duration(100) * time.Second
+		ticker := time.NewTicker(every)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				err := s.handleWhitelistCheckpoint()
+				if err != nil {
+					return err
+				}
+			}
+		}
+	}()
+	return nil
+}
+
+func (s *Ethereum) handleWhitelistCheckpoint() error {
+	ethHandler := (*ethHandler)(s.handler)
+	headNumber := ethHandler.ethAPI.BlockNumber()
+
+	if !ethHandler.chain.Engine().(*bor.Bor).WithoutHeimdall {
+		endBlockNum, endBlockHash, err := ethHandler.fetchWhitelistCheckpoint()
+		if err != nil && err == errRootHashMismatch {
+			// checkpoint root hash mismatch, rewind the chain to start block of checkpoint
+			log.Info("Checkpoint Whitelist mismatch, dropping peer", "number", headNumber)
+
+			startBlockNum := endBlockNum - ethHandler.chain.Config().Bor.Sprint
+			log.Info("Checkpoint Whitelist mismatch, rewinding chain", "block number", startBlockNum)
+
+			ethHandler.chain.SetHead(startBlockNum)
+			return errors.New("whitelist block mismatch")
+		} else if err == nil {
+			log.Debug("Whitelisting checkpoint", "number", headNumber, "hash", endBlockHash)
+			ethHandler.checkpointWhitelist[endBlockNum] = endBlockHash
+			ethHandler.purgeWhitelistMap(endBlockNum)
+		}
+	}
+
 	return nil
 }
 
