@@ -351,3 +351,11 @@ func (b *LesApiBackend) GetBorBlockTransaction(ctx context.Context, txHash commo
 func (b *LesApiBackend) GetBorBlockTransactionWithBlockHash(ctx context.Context, txHash common.Hash, blockHash common.Hash) (*types.Transaction, common.Hash, uint64, uint64, error) {
 	return nil, common.Hash{}, 0, 0, errors.New("Not implemented")
 }
+
+func (b *LesApiBackend) GetCheckpointWhitelist(ctx context.Context) (map[uint64]common.Hash, error) {
+	return nil, errors.New("Not implemented")
+}
+
+func (b *LesApiBackend) PurgeCheckpointWhitelist(ctx context.Context) error {
+	return errors.New("Not implemented")
+}

@@ -2106,6 +2106,21 @@ func (api *PublicDebugAPI) SeedHash(ctx context.Context, number uint64) (string,
 	return fmt.Sprintf("0x%x", ethash.SeedHash(number)), nil
 }
 
+// getCheckpointWhitelist retrieves the checkpoint whitelist map.
+func (api *PublicDebugAPI) GetCheckpointWhitelist(ctx context.Context) (map[uint64]common.Hash, error) {
+	checkpointWhitelistMap, _ := api.b.GetCheckpointWhitelist(ctx)
+	return checkpointWhitelistMap, nil
+}
+
+// getCheckpointWhitelist retrieves the checkpoint whitelist map.
+func (api *PublicDebugAPI) PurgeCheckpointWhitelist(ctx context.Context) error {
+	err := api.b.PurgeCheckpointWhitelist(ctx)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 // PrivateDebugAPI is the collection of Ethereum APIs exposed over the private
 // debugging endpoint.
 type PrivateDebugAPI struct {

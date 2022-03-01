@@ -279,12 +279,22 @@ func (h *ethHandler) fetchWhitelistCheckpoint() (uint64, common.Hash, error) {
 	return checkpoint.EndBlock.Uint64(), common.HexToHash(hash), nil
 }
 
-// purgeWhitelistMap purges old data from checkpoint whitelist map
-func (h *ethHandler) purgeWhitelistMap(endBlockNum uint64) error {
+// purgeWhitelistMap purges data from checkpoint whitelist map
+func (h *ethHandler) PurgeWhitelistMap() error {
 	for k, _ := range h.checkpointWhitelist {
-		if k < endBlockNum-(h.chain.Config().Bor.Sprint*100) {
-			delete(h.checkpointWhitelist, k)
-		}
+		delete(h.checkpointWhitelist, k)
 	}
 	return nil
+}
+
+func (h *ethHandler) EnqueueCheckpointWhitelist(key uint64, val common.Hash) {
+	h.checkpointWhitelist[key] = val
+	h.checkpointOrder = append(h.checkpointOrder, key)
+}
+
+func (h *ethHandler) DequeueCheckpointWhitelist() {
+	if len(h.checkpointOrder) > 0 {
+		delete(h.checkpointWhitelist, h.checkpointOrder[0])
+		h.checkpointOrder = h.checkpointOrder[1:]
+	}
 }

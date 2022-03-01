@@ -585,7 +585,8 @@ func (s *Ethereum) StartCheckpointWhitelistService() error {
 		for {
 			select {
 			case <-ticker.C:
-				err := s.handleWhitelistCheckpoint()
+				var m sync.Mutex
+				err := s.handleWhitelistCheckpoint(&m)
 				if err != nil {
 					return err
 				}
@@ -595,7 +596,7 @@ func (s *Ethereum) StartCheckpointWhitelistService() error {
 	return nil
 }
 
-func (s *Ethereum) handleWhitelistCheckpoint() error {
+func (s *Ethereum) handleWhitelistCheckpoint(m *sync.Mutex) error {
 	ethHandler := (*ethHandler)(s.handler)
 	headNumber := ethHandler.ethAPI.BlockNumber()
 
@@ -605,15 +606,18 @@ func (s *Ethereum) handleWhitelistCheckpoint() error {
 			// checkpoint root hash mismatch, rewind the chain to start block of checkpoint
 			log.Info("Checkpoint Whitelist mismatch, dropping peer", "number", headNumber)
 
-			startBlockNum := endBlockNum - ethHandler.chain.Config().Bor.Sprint
-			log.Info("Checkpoint Whitelist mismatch, rewinding chain", "block number", startBlockNum)
-
-			ethHandler.chain.SetHead(startBlockNum)
 			return errors.New("whitelist block mismatch")
 		} else if err == nil {
 			log.Debug("Whitelisting checkpoint", "number", headNumber, "hash", endBlockHash)
-			ethHandler.checkpointWhitelist[endBlockNum] = endBlockHash
-			ethHandler.purgeWhitelistMap(endBlockNum)
+
+			m.Lock()
+
+			ethHandler.EnqueueCheckpointWhitelist(endBlockNum, endBlockHash)
+			if len(ethHandler.checkpointWhitelist) > 10 {
+				ethHandler.DequeueCheckpointWhitelist()
+			}
+
+			m.Unlock()
 		}
 	}
 

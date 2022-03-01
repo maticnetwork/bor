@@ -120,6 +120,7 @@ type handler struct {
 
 	whitelist           map[uint64]common.Hash // Config whitelist
 	checkpointWhitelist map[uint64]common.Hash // Checkpoint whitelist, populated by reaching out to heimdall
+	checkpointOrder     []uint64               // Checkpoint order, populated by reaching out to heimdall
 
 	// channels for fetcher, syncer, txsyncLoop
 	quitSync chan struct{}
@@ -535,4 +536,9 @@ func (h *handler) txBroadcastLoop() {
 			return
 		}
 	}
+}
+
+// txBroadcastLoop announces new transactions to connected peers.
+func (h *handler) GetCheckpointWhitelist() map[uint64]common.Hash {
+	return h.checkpointWhitelist
 }

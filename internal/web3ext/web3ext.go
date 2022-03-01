@@ -474,6 +474,18 @@ web3._extend({
 			params: 2,
 			inputFormatter:[web3._extend.formatters.inputBlockNumberFormatter, web3._extend.formatters.inputBlockNumberFormatter],
 		}),
+		new web3._extend.Method({
+			name: 'getCheckpointWhitelist',
+			call: 'debug_getCheckpointWhitelist',
+			params: 0,
+			inputFormatter: [null]
+		}),
+		new web3._extend.Method({
+			name: 'purgeCheckpointWhitelist',
+			call: 'debug_purgeCheckpointWhitelist',
+			params: 0,
+			inputFormatter: [null]
+		}),
 	],
 	properties: []
 });
