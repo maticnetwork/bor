@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus/bor"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -33,6 +34,10 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/ethereum/go-ethereum/trie"
+)
+
+var (
+	errRootHashMismatch = errors.New("root hash mismatch")
 )
 
 // ethHandler implements the eth.Backend interface to handle the various network
@@ -144,6 +149,24 @@ func (h *ethHandler) handleHeaders(peer *eth.Peer, headers []*types.Header) erro
 			return nil
 		}
 
+		// Fetch checkpoint from heimdall for whitelisting
+		if headers[0].Number.Uint64()%h.chain.Config().Bor.Sprint == 0 && !h.chain.Engine().(*bor.Bor).WithoutHeimdall {
+			endBlockNum, endBlockHash, err := h.fetchWhitelistCheckpoint()
+			if err != nil && err == errRootHashMismatch {
+				// checkpoint root hash mismatch, rewind the chain to start block of checkpoint
+				peer.Log().Info("Checkpoint Whitelist mismatch, dropping peer", "number", headers[0].Number.Uint64(), "hash", headers[0].Hash(), "want", endBlockHash)
+
+				startBlockNum := endBlockNum - h.chain.Config().Bor.Sprint
+				log.Info("Checkpoint Whitelist mismatch, rewinding chain", "block number", startBlockNum)
+
+				h.chain.SetHead(startBlockNum)
+				return errors.New("whitelist block mismatch")
+			} else if err == nil {
+				peer.Log().Debug("Whitelisting checkpoint", "number", headers[0].Number.Uint64(), "hash", endBlockHash)
+				h.whitelist[endBlockNum] = endBlockHash
+			}
+		}
+
 		// Otherwise if it's a whitelisted block, validate against the set
 		if want, ok := h.whitelist[headers[0].Number.Uint64()]; ok {
 			if hash := headers[0].Hash(); want != hash {
@@ -151,24 +174,6 @@ func (h *ethHandler) handleHeaders(peer *eth.Peer, headers []*types.Header) erro
 				return errors.New("whitelist block mismatch")
 			}
 			peer.Log().Debug("Whitelist block verified", "number", headers[0].Number.Uint64(), "hash", want)
-		}
-
-		// fetch checkpoint from heimdall for whitelist
-		if headers[0].Number.Uint64()%h.chain.Config().Bor.Sprint == 0 && !h.chain.Engine().(*bor.Bor).WithoutHeimdall {
-			endBlockNum, endBlockHash, ok := h.whitelistCheckpoint()
-			if ok {
-				peer.Log().Debug("Whitelist block verified", "number", headers[0].Number.Uint64(), "hash", endBlockHash)
-				h.whitelist[endBlockNum] = endBlockHash
-			} else {
-				peer.Log().Info("Checkpoint Whitelist mismatch, dropping peer", "number", headers[0].Number.Uint64(), "hash", headers[0].Hash(), "want", endBlockHash)
-
-				//Rewinding chain to the startBlock
-				startBlockNum := endBlockNum - h.chain.Config().Bor.Sprint
-				log.Info("Checkpoint Mismatch :", "Rewinding to", "startBlockNum", startBlockNum)
-				h.chain.SetHead(startBlockNum)
-
-				return errors.New("whitelist block mismatch")
-			}
 		}
 
 		// Irrelevant of the fork checks, send the header to the fetcher just in case
@@ -240,41 +245,45 @@ func (h *ethHandler) handleBlockBroadcast(peer *eth.Peer, block *types.Block, td
 	return nil
 }
 
-// Fetches the latest checkpoint from heimdallClient and verifies it against blocks in Bor. Returns endBlockNum, endBlockHash, ok
-func (h *ethHandler) whitelistCheckpoint() (uint64, common.Hash, bool) {
+// fetchWhitelistCheckpoint fetched the latest checkpoint from it's local heimdall
+// and verifies the data against bor data.
+func (h *ethHandler) fetchWhitelistCheckpoint() (uint64, common.Hash, error) {
 	// check for checkpoint whitelisting: bor
 	checkpoint, err := h.chain.Engine().(*bor.Bor).HeimdallClient.FetchLatestCheckpoint()
 	if err != nil {
-		log.Warn("Failed to fetch latest checkpoint for whitelisting")
-		return 0, common.Hash{}, false
+		log.Debug("failed to fetch latest checkpoint for whitelisting")
+		return 0, common.Hash{}, fmt.Errorf("failed to fetch latest checkpoint")
+	}
+
+	// check if we have the checkpoint blocks
+	head := h.ethAPI.BlockNumber()
+	if head < hexutil.Uint64(checkpoint.EndBlock.Uint64()) {
+		log.Debug("Head block behing checkpoint block", "head", head, "checkpoint end block", checkpoint.EndBlock)
+		return 0, common.Hash{}, fmt.Errorf("missing checkpoint blocks")
 	}
 
 	// verify the root hash of checkpoint
 	roothash, err := h.ethAPI.GetRootHash(context.Background(), checkpoint.StartBlock.Uint64(), checkpoint.EndBlock.Uint64())
 	if err != nil {
-		log.Warn("Failed to get root hash of checkpoint while whitelisting")
-		return 0, common.Hash{}, false
+		log.Debug("failed to get root hash of checkpoint while whitelisting")
+		return 0, common.Hash{}, fmt.Errorf("failed to get local root hash")
 	}
 	if roothash != checkpoint.RootHash.String() {
-		log.Warn("Checkpoint root hash mismatch while whitelisting", "expected", checkpoint.RootHash.String(), "got", roothash)
-		return 0, common.Hash{}, false
+		log.Error("checkpoint root hash mismatch while whitelisting", "expected", checkpoint.RootHash.String(), "got", roothash)
+		return 0, common.Hash{}, errRootHashMismatch
 	}
-
-	// Alternate idea:
-	// If ethApi can't be used here, expose the EthAPI instance through
-	// a getter function in bor consensus.
 
 	// fetch the end block hash
 	block, err := h.ethAPI.GetBlockByNumber(context.Background(), rpc.BlockNumber(checkpoint.EndBlock.Uint64()), false)
 	if err != nil {
-		log.Warn("Failed to get end block hash of checkpoint while whitelisting")
-		return 0, common.Hash{}, false
+		log.Debug("failed to get end block hash of checkpoint while whitelisting")
+		return 0, common.Hash{}, fmt.Errorf("failed to get end block")
 	}
 	hash, ok := block["hash"].(string)
 	if !ok {
-		log.Warn("Failed to get end block hash of checkpoint while whitelisting")
-		return 0, common.Hash{}, false
+		log.Debug("failed to get end block hash of checkpoint while whitelisting")
+		return 0, common.Hash{}, fmt.Errorf("failed to get block hash")
 	}
 
-	return checkpoint.EndBlock.Uint64(), common.HexToHash(hash), true
+	return checkpoint.EndBlock.Uint64(), common.HexToHash(hash), nil
 }
