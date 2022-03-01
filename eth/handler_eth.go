@@ -164,6 +164,7 @@ func (h *ethHandler) handleHeaders(peer *eth.Peer, headers []*types.Header) erro
 			} else if err == nil {
 				peer.Log().Debug("Whitelisting checkpoint", "number", headers[0].Number.Uint64(), "hash", endBlockHash)
 				h.whitelist[endBlockNum] = endBlockHash
+				h.purgeWhitelistMap(endBlockNum)
 			}
 		}
 
@@ -183,6 +184,15 @@ func (h *ethHandler) handleHeaders(peer *eth.Peer, headers []*types.Header) erro
 		err := h.downloader.DeliverHeaders(peer.ID(), headers)
 		if err != nil {
 			log.Debug("Failed to deliver headers", "err", err)
+		}
+	}
+	return nil
+}
+
+func (h *ethHandler) purgeWhitelistMap(endBlockNum uint64) error {
+	for k, _ := range h.whitelist {
+		if k < endBlockNum-(h.chain.Config().Bor.Sprint*100) {
+			delete(h.whitelist, k)
 		}
 	}
 	return nil
