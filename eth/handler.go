@@ -118,7 +118,8 @@ type handler struct {
 	txsSub        event.Subscription
 	minedBlockSub *event.TypeMuxSubscription
 
-	whitelist map[uint64]common.Hash
+	whitelist           map[uint64]common.Hash // Config whitelist
+	checkpointWhitelist map[uint64]common.Hash // Checkpoint whitelist, populated by reaching out to heimdall
 
 	// channels for fetcher, syncer, txsyncLoop
 	quitSync chan struct{}
@@ -135,16 +136,17 @@ func newHandler(config *handlerConfig) (*handler, error) {
 		config.EventMux = new(event.TypeMux) // Nicety initialization for tests
 	}
 	h := &handler{
-		networkID:  config.Network,
-		forkFilter: forkid.NewFilter(config.Chain),
-		eventMux:   config.EventMux,
-		database:   config.Database,
-		txpool:     config.TxPool,
-		chain:      config.Chain,
-		peers:      newPeerSet(),
-		ethAPI:     config.EthAPI,
-		whitelist:  config.Whitelist,
-		quitSync:   make(chan struct{}),
+		networkID:           config.Network,
+		forkFilter:          forkid.NewFilter(config.Chain),
+		eventMux:            config.EventMux,
+		database:            config.Database,
+		txpool:              config.TxPool,
+		chain:               config.Chain,
+		peers:               newPeerSet(),
+		ethAPI:              config.EthAPI,
+		whitelist:           config.Whitelist,
+		checkpointWhitelist: make(map[uint64]common.Hash),
+		quitSync:            make(chan struct{}),
 	}
 	if config.Sync == downloader.FullSync {
 		// The database seems empty as the current block is the genesis. Yet the fast

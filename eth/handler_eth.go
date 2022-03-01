@@ -163,7 +163,7 @@ func (h *ethHandler) handleHeaders(peer *eth.Peer, headers []*types.Header) erro
 				return errors.New("whitelist block mismatch")
 			} else if err == nil {
 				peer.Log().Debug("Whitelisting checkpoint", "number", headers[0].Number.Uint64(), "hash", endBlockHash)
-				h.whitelist[endBlockNum] = endBlockHash
+				h.checkpointWhitelist[endBlockNum] = endBlockHash
 				h.purgeWhitelistMap(endBlockNum)
 			}
 		}
@@ -177,6 +177,15 @@ func (h *ethHandler) handleHeaders(peer *eth.Peer, headers []*types.Header) erro
 			peer.Log().Debug("Whitelist block verified", "number", headers[0].Number.Uint64(), "hash", want)
 		}
 
+		// Validate against the checkpoint whitelist set
+		if want, ok := h.checkpointWhitelist[headers[0].Number.Uint64()]; ok {
+			if hash := headers[0].Hash(); want != hash {
+				peer.Log().Info("Checkpoint whitelist mismatch, dropping peer", "number", headers[0].Number.Uint64(), "hash", hash, "want", want)
+				return errors.New("whitelist block mismatch")
+			}
+			peer.Log().Debug("Whitelist block verified", "number", headers[0].Number.Uint64(), "hash", want)
+		}
+
 		// Irrelevant of the fork checks, send the header to the fetcher just in case
 		headers = h.blockFetcher.FilterHeaders(peer.ID(), headers, time.Now())
 	}
@@ -184,15 +193,6 @@ func (h *ethHandler) handleHeaders(peer *eth.Peer, headers []*types.Header) erro
 		err := h.downloader.DeliverHeaders(peer.ID(), headers)
 		if err != nil {
 			log.Debug("Failed to deliver headers", "err", err)
-		}
-	}
-	return nil
-}
-
-func (h *ethHandler) purgeWhitelistMap(endBlockNum uint64) error {
-	for k, _ := range h.whitelist {
-		if k < endBlockNum-(h.chain.Config().Bor.Sprint*100) {
-			delete(h.whitelist, k)
 		}
 	}
 	return nil
@@ -296,4 +296,14 @@ func (h *ethHandler) fetchWhitelistCheckpoint() (uint64, common.Hash, error) {
 	}
 
 	return checkpoint.EndBlock.Uint64(), common.HexToHash(hash), nil
+}
+
+// purgeWhitelistMap purges old data from checkpoint whitelist map
+func (h *ethHandler) purgeWhitelistMap(endBlockNum uint64) error {
+	for k, _ := range h.checkpointWhitelist {
+		if k < endBlockNum-(h.chain.Config().Bor.Sprint*100) {
+			delete(h.checkpointWhitelist, k)
+		}
+	}
+	return nil
 }
