@@ -573,8 +573,8 @@ func (s *Ethereum) Start() error {
 	return nil
 }
 
-// Start implements node.Lifecycle, starting all internal goroutines needed by the
-// Ethereum protocol implementation.
+// StartCheckpointWhitelistService starts the goroutine to fetch checkpoints and update the
+// checkpoint whitelist map.
 func (s *Ethereum) StartCheckpointWhitelistService() error {
 
 	go func() error {
