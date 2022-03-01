@@ -27,6 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/metrics/exp"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/fjl/memsize/memsizeui"
 	"github.com/mattn/go-colorable"
 	"github.com/mattn/go-isatty"
@@ -212,7 +213,7 @@ func Setup(ctx *cli.Context) error {
 		StartDatadogProfiler(
 			"bor",
 			datadogProfilerEnvironmentFlag.Value,
-			"devel",
+			params.VersionWithMeta,
 			datadogProfilerTagsFlag.Value,
 			ctx.GlobalBool(datadogProfilerExpensiveFlag.Name),
 		)
