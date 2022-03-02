@@ -21,11 +21,17 @@ import (
 	"math/rand"
 	"sync"
 
-	mapset "github.com/deckarep/golang-set"
+	"github.com/VictoriaMetrics/fastcache"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/rlp"
+)
+
+var (
+	knownCacheTxn   = metrics.NewRegisteredMeter("eth/knowncache/txn", nil)
+	knownCacheBlock = metrics.NewRegisteredMeter("eth/knowncache/block", nil)
 )
 
 const (
@@ -75,12 +81,12 @@ type Peer struct {
 	head common.Hash // Latest advertised head block hash
 	td   *big.Int    // Latest advertised head block total difficulty
 
-	knownBlocks     *knownCache            // Set of block hashes known to be known by this peer
+	knownBlocks     *meteredKnownCache     // Set of block hashes known to be known by this peer
 	queuedBlocks    chan *blockPropagation // Queue of blocks to broadcast to the peer
 	queuedBlockAnns chan *types.Block      // Queue of blocks to announce to the peer
 
 	txpool      TxPool             // Transaction pool used by the broadcasters for liveness checks
-	knownTxs    *knownCache        // Set of transaction hashes known to be known by this peer
+	knownTxs    *meteredKnownCache // Set of transaction hashes known to be known by this peer
 	txBroadcast chan []common.Hash // Channel used to queue transaction propagation requests
 	txAnnounce  chan []common.Hash // Channel used to queue transaction announcement requests
 
@@ -100,8 +106,8 @@ func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter, txpool TxPool) *Pe
 		Peer:            p,
 		rw:              rw,
 		version:         version,
-		knownTxs:        newKnownCache(maxKnownTxs),
-		knownBlocks:     newKnownCache(maxKnownBlocks),
+		knownTxs:        newMeteredKnownCache(txnCachePool.Get(maxKnownTxs), knownCacheTxn),
+		knownBlocks:     newMeteredKnownCache(blockCachePool.Get(maxKnownBlocks), knownCacheBlock),
 		queuedBlocks:    make(chan *blockPropagation, maxQueuedBlocks),
 		queuedBlockAnns: make(chan *types.Block, maxQueuedBlockAnns),
 		txBroadcast:     make(chan []common.Hash),
@@ -126,6 +132,10 @@ func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter, txpool TxPool) *Pe
 // clean it up!
 func (p *Peer) Close() {
 	close(p.term)
+
+	// return values to the pool
+	txnCachePool.Put(p.knownTxs.knownCache)
+	blockCachePool.Put(p.knownBlocks.knownCache)
 }
 
 // ID retrieves the peer's unique identifier.
@@ -489,34 +499,72 @@ func (p *Peer) RequestTxs(hashes []common.Hash) error {
 
 // knownCache is a cache for known hashes.
 type knownCache struct {
-	hashes mapset.Set
-	max    int
+	cache *fastcache.Cache
+	max   int
 }
 
 // newKnownCache creates a new knownCache with a max capacity.
 func newKnownCache(max int) *knownCache {
 	return &knownCache{
-		max:    max,
-		hashes: mapset.NewSet(),
+		max:   max,
+		cache: fastcache.New(max * 32),
 	}
 }
 
 // Add adds a list of elements to the set.
 func (k *knownCache) Add(hashes ...common.Hash) {
-	for k.hashes.Cardinality() > max(0, k.max-len(hashes)) {
-		k.hashes.Pop()
-	}
 	for _, hash := range hashes {
-		k.hashes.Add(hash)
+		k.cache.Set(hash.Bytes(), nil)
 	}
 }
 
 // Contains returns whether the given item is in the set.
 func (k *knownCache) Contains(hash common.Hash) bool {
-	return k.hashes.Contains(hash)
+	return k.cache.Has(hash.Bytes())
 }
 
-// Cardinality returns the number of elements in the set.
-func (k *knownCache) Cardinality() int {
-	return k.hashes.Cardinality()
+// Reset resets the cache
+func (k *knownCache) Reset() {
+	k.cache.Reset()
+}
+
+type meteredKnownCache struct {
+	*knownCache
+
+	metrics metrics.Meter
+}
+
+func newMeteredKnownCache(k *knownCache, metrics metrics.Meter) *meteredKnownCache {
+	return &meteredKnownCache{
+		knownCache: k,
+		metrics:    metrics,
+	}
+}
+
+func (m *meteredKnownCache) Add(hashes ...common.Hash) {
+	m.metrics.Mark(int64(len(hashes)))
+	m.knownCache.Add(hashes...)
+}
+
+var (
+	txnCachePool   knownCachePool
+	blockCachePool knownCachePool
+)
+
+type knownCachePool struct {
+	pool sync.Pool
+}
+
+func (pp *knownCachePool) Get(size int) *knownCache {
+	v := pp.pool.Get()
+	if v == nil {
+		return newKnownCache(size)
+	}
+	return v.(*knownCache)
+}
+
+// Put releases the parser to the pool.
+func (pp *knownCachePool) Put(p *knownCache) {
+	p.Reset()
+	pp.pool.Put(p)
 }

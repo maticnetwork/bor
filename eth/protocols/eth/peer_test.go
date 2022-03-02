@@ -71,10 +71,6 @@ func TestPeerSet(t *testing.T) {
 		s.Add(common.Hash{byte(i)})
 	}
 
-	if s.Cardinality() != size {
-		t.Fatalf("wrong size, expected %d but found %d", size, s.Cardinality())
-	}
-
 	vals := []common.Hash{}
 	for i := 10; i < 20; i++ {
 		vals = append(vals, common.Hash{byte(i)})
@@ -82,7 +78,25 @@ func TestPeerSet(t *testing.T) {
 
 	// add item in batch
 	s.Add(vals...)
-	if s.Cardinality() < size {
-		t.Fatalf("bad size")
+}
+
+func BenchmarkKnownCache(b *testing.B) {
+	items := []common.Hash{}
+	for i := 0; i < 1000; i++ {
+		var item common.Hash
+		rand.Read(item[:])
+
+		items = append(items, item)
+	}
+
+	b.ResetTimer()
+	b.ReportAllocs()
+
+	s := newKnownCache(50)
+	for i := 0; i < b.N; i++ {
+		for _, item := range items {
+			s.Add(item)
+		}
+		s.cache.Reset()
 	}
 }
