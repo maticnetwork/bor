@@ -145,15 +145,13 @@ func (h *ethHandler) handleHeaders(peer *eth.Peer, headers []*types.Header) erro
 			return nil
 		}
 
-		log.Info("Inserting header", "number", headers[0].Number)
-
 		// Otherwise if it's a whitelisted block, validate against the set
 		if want, ok := h.whitelist[headers[0].Number.Uint64()]; ok {
 			if hash := headers[0].Hash(); want != hash {
 				peer.Log().Info("Whitelist mismatch, dropping peer", "number", headers[0].Number.Uint64(), "hash", hash, "want", want)
 				return errors.New("whitelist block mismatch")
 			}
-			peer.Log().Info("Whitelist block verified", "number", headers[0].Number.Uint64(), "hash", want)
+			peer.Log().Debug("Whitelist block verified", "number", headers[0].Number.Uint64(), "hash", want)
 		}
 
 		// Validate against the checkpoint whitelist set
@@ -162,7 +160,7 @@ func (h *ethHandler) handleHeaders(peer *eth.Peer, headers []*types.Header) erro
 				peer.Log().Info("Checkpoint whitelist mismatch, dropping peer", "number", headers[0].Number.Uint64(), "hash", hash, "want", want)
 				return errors.New("whitelist block mismatch")
 			}
-			peer.Log().Info("Checkpoint Whitelist block verified", "number", headers[0].Number.Uint64(), "hash", want)
+			peer.Log().Debug("Checkpoint Whitelist block verified", "number", headers[0].Number.Uint64(), "hash", want)
 		}
 
 		// Irrelevant of the fork checks, send the header to the fetcher just in case
