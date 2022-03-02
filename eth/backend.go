@@ -569,15 +569,15 @@ func (s *Ethereum) Start() error {
 	// Start the networking layer and the light server if requested
 	s.handler.Start(maxPeers)
 
-	go s.StartCheckpointWhitelistService()
+	s.StartCheckpointWhitelistService()
 	return nil
 }
 
 // StartCheckpointWhitelistService starts the goroutine to fetch checkpoints and update the
 // checkpoint whitelist map.
-func (s *Ethereum) StartCheckpointWhitelistService() error {
-
+func (s *Ethereum) StartCheckpointWhitelistService() {
 	go func() error {
+		var m sync.Mutex
 		every := time.Duration(100) * time.Second
 		ticker := time.NewTicker(every)
 		defer ticker.Stop()
@@ -585,40 +585,31 @@ func (s *Ethereum) StartCheckpointWhitelistService() error {
 		for {
 			select {
 			case <-ticker.C:
-				var m sync.Mutex
 				err := s.handleWhitelistCheckpoint(&m)
 				if err != nil {
-					return err
+					log.Warn(err.Error())
 				}
 			}
 		}
 	}()
-	return nil
 }
 
+// handleWhitelistCheckpoint handles the checkpoint whitelist mechanism.
 func (s *Ethereum) handleWhitelistCheckpoint(m *sync.Mutex) error {
 	ethHandler := (*ethHandler)(s.handler)
-	headNumber := ethHandler.ethAPI.BlockNumber()
 
 	if !ethHandler.chain.Engine().(*bor.Bor).WithoutHeimdall {
 		endBlockNum, endBlockHash, err := ethHandler.fetchWhitelistCheckpoint()
-		if err != nil && err == errRootHashMismatch {
-			// checkpoint root hash mismatch, rewind the chain to start block of checkpoint
-			log.Info("Checkpoint Whitelist mismatch, dropping peer", "number", headNumber)
-
-			return errors.New("whitelist block mismatch")
-		} else if err == nil {
-			log.Debug("Whitelisting checkpoint", "number", headNumber, "hash", endBlockHash)
-
-			m.Lock()
-
-			ethHandler.EnqueueCheckpointWhitelist(endBlockNum, endBlockHash)
-			if len(ethHandler.checkpointWhitelist) > 10 {
-				ethHandler.DequeueCheckpointWhitelist()
-			}
-
-			m.Unlock()
+		if err != nil {
+			return err
 		}
+
+		m.Lock()
+		ethHandler.EnqueueCheckpointWhitelist(endBlockNum, endBlockHash)
+		if len(ethHandler.checkpointWhitelist) > 10 {
+			ethHandler.DequeueCheckpointWhitelist()
+		}
+		m.Unlock()
 	}
 
 	return nil

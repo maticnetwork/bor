@@ -478,13 +478,11 @@ web3._extend({
 			name: 'getCheckpointWhitelist',
 			call: 'debug_getCheckpointWhitelist',
 			params: 0,
-			inputFormatter: [null]
 		}),
 		new web3._extend.Method({
 			name: 'purgeCheckpointWhitelist',
 			call: 'debug_purgeCheckpointWhitelist',
 			params: 0,
-			inputFormatter: [null]
 		}),
 	],
 	properties: []

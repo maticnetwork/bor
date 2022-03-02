@@ -36,10 +36,6 @@ import (
 	"github.com/ethereum/go-ethereum/trie"
 )
 
-var (
-	errRootHashMismatch = errors.New("root hash mismatch")
-)
-
 // ethHandler implements the eth.Backend interface to handle the various network
 // packets that are sent as replies or broadcasts.
 type ethHandler handler
@@ -149,13 +145,15 @@ func (h *ethHandler) handleHeaders(peer *eth.Peer, headers []*types.Header) erro
 			return nil
 		}
 
+		log.Info("Inserting header", "number", headers[0].Number)
+
 		// Otherwise if it's a whitelisted block, validate against the set
 		if want, ok := h.whitelist[headers[0].Number.Uint64()]; ok {
 			if hash := headers[0].Hash(); want != hash {
 				peer.Log().Info("Whitelist mismatch, dropping peer", "number", headers[0].Number.Uint64(), "hash", hash, "want", want)
 				return errors.New("whitelist block mismatch")
 			}
-			peer.Log().Debug("Whitelist block verified", "number", headers[0].Number.Uint64(), "hash", want)
+			peer.Log().Info("Whitelist block verified", "number", headers[0].Number.Uint64(), "hash", want)
 		}
 
 		// Validate against the checkpoint whitelist set
@@ -164,7 +162,7 @@ func (h *ethHandler) handleHeaders(peer *eth.Peer, headers []*types.Header) erro
 				peer.Log().Info("Checkpoint whitelist mismatch, dropping peer", "number", headers[0].Number.Uint64(), "hash", hash, "want", want)
 				return errors.New("whitelist block mismatch")
 			}
-			peer.Log().Debug("Whitelist block verified", "number", headers[0].Number.Uint64(), "hash", want)
+			peer.Log().Info("Checkpoint Whitelist block verified", "number", headers[0].Number.Uint64(), "hash", want)
 		}
 
 		// Irrelevant of the fork checks, send the header to the fetcher just in case
@@ -242,7 +240,7 @@ func (h *ethHandler) fetchWhitelistCheckpoint() (uint64, common.Hash, error) {
 	// check for checkpoint whitelisting: bor
 	checkpoint, err := h.chain.Engine().(*bor.Bor).HeimdallClient.FetchLatestCheckpoint()
 	if err != nil {
-		log.Debug("failed to fetch latest checkpoint for whitelisting")
+		log.Debug("Failed to fetch latest checkpoint for whitelisting")
 		return 0, common.Hash{}, fmt.Errorf("failed to fetch latest checkpoint")
 	}
 
@@ -256,26 +254,21 @@ func (h *ethHandler) fetchWhitelistCheckpoint() (uint64, common.Hash, error) {
 	// verify the root hash of checkpoint
 	roothash, err := h.ethAPI.GetRootHash(context.Background(), checkpoint.StartBlock.Uint64(), checkpoint.EndBlock.Uint64())
 	if err != nil {
-		log.Debug("failed to get root hash of checkpoint while whitelisting")
+		log.Debug("Failed to get root hash of checkpoint while whitelisting")
 		return 0, common.Hash{}, fmt.Errorf("failed to get local root hash")
 	}
-	if roothash != checkpoint.RootHash.String() {
-		log.Error("checkpoint root hash mismatch while whitelisting", "expected", checkpoint.RootHash.String(), "got", roothash)
-		return 0, common.Hash{}, errRootHashMismatch
+	if roothash != checkpoint.RootHash.String()[2:] {
+		log.Warn("Checkpoint root hash mismatch while whitelisting", "expected", checkpoint.RootHash.String()[2:], "got", roothash)
+		return 0, common.Hash{}, fmt.Errorf("checkpoint roothash mismatch")
 	}
 
-	// fetch the end block hash
+	// fetch the end checkpoint block hash
 	block, err := h.ethAPI.GetBlockByNumber(context.Background(), rpc.BlockNumber(checkpoint.EndBlock.Uint64()), false)
 	if err != nil {
-		log.Debug("failed to get end block hash of checkpoint while whitelisting")
+		log.Debug("Failed to get end block hash of checkpoint while whitelisting")
 		return 0, common.Hash{}, fmt.Errorf("failed to get end block")
 	}
-	hash, ok := block["hash"].(string)
-	if !ok {
-		log.Debug("failed to get end block hash of checkpoint while whitelisting")
-		return 0, common.Hash{}, fmt.Errorf("failed to get block hash")
-	}
-
+	hash := fmt.Sprintf("%v", block["hash"])
 	return checkpoint.EndBlock.Uint64(), common.HexToHash(hash), nil
 }
 
@@ -288,12 +281,16 @@ func (h *ethHandler) PurgeWhitelistMap() error {
 }
 
 func (h *ethHandler) EnqueueCheckpointWhitelist(key uint64, val common.Hash) {
-	h.checkpointWhitelist[key] = val
-	h.checkpointOrder = append(h.checkpointOrder, key)
+	if _, ok := h.checkpointWhitelist[key]; !ok {
+		log.Debug("Enqueing new checkpoint whitelist", "block number", key, "block hash", val)
+		h.checkpointWhitelist[key] = val
+		h.checkpointOrder = append(h.checkpointOrder, key)
+	}
 }
 
 func (h *ethHandler) DequeueCheckpointWhitelist() {
 	if len(h.checkpointOrder) > 0 {
+		log.Debug("Dequeing checkpoint whitelist", "block number", h.checkpointOrder[0], "block hash", h.checkpointWhitelist[h.checkpointOrder[0]])
 		delete(h.checkpointWhitelist, h.checkpointOrder[0])
 		h.checkpointOrder = h.checkpointOrder[1:]
 	}
