@@ -1334,33 +1334,50 @@ func (bc *BlockChain) InsertReceiptChain(blockChain types.Blocks, receiptChain [
 					skipPresenceCheck = true
 				}
 			}
+
+			var allLogs []*types.Log
+			blockReceipts := receiptChain[i]
+			for _, receipt := range blockReceipts {
+				allLogs = append(allLogs, receipt.Logs...)
+			}
+
 			// Write all the data out into the database
 			rawdb.WriteBody(batch, block.Hash(), block.NumberU64(), block.Body())
-			rawdb.WriteReceipts(batch, block.Hash(), block.NumberU64(), receiptChain[i])
+			rawdb.WriteReceipts(batch, block.Hash(), block.NumberU64(), blockReceipts)
 			rawdb.WriteTxLookupEntriesByBlock(batch, block) // Always write tx indices for live blocks, we assume they are needed
 
 			// Write bor receipts to rawDB
 			// BOR: Retrieve all the bor receipts.
-			stateSyncLogs := bc.GetBorReceiptByHash(block.Hash()).Logs
-			if len(stateSyncLogs) > 0 {
 
-				var allLogs []*types.Log
-				for _, receipt := range receiptChain[i] {
-					allLogs = append(allLogs, receipt.Logs...)
-				}
+			state, err := bc.State()
+			if err != nil {
+				return i, err
+			}
 
-				// State sync logs don't have tx index, tx hash and other necessary fields
-				// DeriveFieldsForBorLogs will fill those fields for websocket subscriptions
-				types.DeriveFieldsForBorLogs(stateSyncLogs, block.Hash(), block.NumberU64(), uint(len(receiptChain[i])), uint(len(allLogs)))
+			blockLogs := state.Logs()
+			var stateSyncLogs []*types.Log
 
-				// Write bor receipt
-				rawdb.WriteBorReceipt(batch, block.Hash(), block.NumberU64(), &types.ReceiptForStorage{
-					Status: types.ReceiptStatusSuccessful, // make receipt status successful
-					Logs:   stateSyncLogs,
+			if len(blockLogs) > 0 {
+				sort.SliceStable(blockLogs, func(i, j int) bool {
+					return blockLogs[i].Index < blockLogs[j].Index
 				})
 
-				// Write bor tx reverse lookup
-				rawdb.WriteBorTxLookupEntry(batch, block.Hash(), block.NumberU64())
+				if len(blockLogs) > len(allLogs) {
+					stateSyncLogs = blockLogs[len(allLogs):] // get state-sync logs from `state.Logs()`
+
+					// State sync logs don't have tx index, tx hash and other necessary fields
+					// DeriveFieldsForBorLogs will fill those fields for websocket subscriptions
+					types.DeriveFieldsForBorLogs(stateSyncLogs, block.Hash(), block.NumberU64(), uint(len(blockReceipts)), uint(len(allLogs)))
+
+					// Write bor receipt
+					rawdb.WriteBorReceipt(batch, block.Hash(), block.NumberU64(), &types.ReceiptForStorage{
+						Status: types.ReceiptStatusSuccessful, // make receipt status successful
+						Logs:   stateSyncLogs,
+					})
+
+					// Write bor tx reverse lookup
+					rawdb.WriteBorTxLookupEntry(batch, block.Hash(), block.NumberU64())
+				}
 			}
 
 			// Write everything belongs to the blocks into the database. So that
