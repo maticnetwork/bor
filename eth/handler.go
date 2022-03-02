@@ -147,6 +147,7 @@ func newHandler(config *handlerConfig) (*handler, error) {
 		ethAPI:              config.EthAPI,
 		whitelist:           config.Whitelist,
 		checkpointWhitelist: make(map[uint64]common.Hash),
+		checkpointOrder:     make([]uint64, 0),
 		quitSync:            make(chan struct{}),
 	}
 	if config.Sync == downloader.FullSync {

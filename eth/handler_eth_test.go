@@ -38,6 +38,7 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/trie"
+	"github.com/stretchr/testify/assert"
 )
 
 // testEthHandler is a mock event handler to listen for inbound network requests
@@ -739,4 +740,25 @@ func testBroadcastMalformedBlock(t *testing.T, protocol uint) {
 		case <-time.After(100 * time.Millisecond):
 		}
 	}
+}
+
+// TestWhitelistCheckpoint checks the checkpoint whitelist map queue mechanism
+func TestWhitelistCheckpoint(t *testing.T) {
+	t.Parallel()
+
+	testHandler := newTestHandler()
+	defer testHandler.close()
+
+	ethHandler := (*ethHandler)(testHandler.handler)
+	for i := 0; i < 10; i++ {
+		ethHandler.EnqueueCheckpointWhitelist(uint64(i), common.Hash{})
+	}
+
+	assert.Equal(t, len(ethHandler.checkpointWhitelist), 10, "expected 10 items in whitelist")
+
+	ethHandler.EnqueueCheckpointWhitelist(11, common.Hash{})
+	ethHandler.DequeueCheckpointWhitelist()
+
+	assert.Equal(t, len(ethHandler.checkpointWhitelist), 10, "expected 10 items in whitelist")
+
 }

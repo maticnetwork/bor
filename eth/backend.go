@@ -605,7 +605,9 @@ func (s *Ethereum) handleWhitelistCheckpoint(m *sync.Mutex) error {
 		}
 
 		m.Lock()
+		// Update the checkpoint whitelist map.
 		ethHandler.EnqueueCheckpointWhitelist(endBlockNum, endBlockHash)
+		// If size of checkpoint whitelist map is greater than 10, remove the oldest entry.
 		if len(ethHandler.checkpointWhitelist) > 10 {
 			ethHandler.DequeueCheckpointWhitelist()
 		}

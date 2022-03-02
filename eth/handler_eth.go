@@ -278,6 +278,7 @@ func (h *ethHandler) PurgeWhitelistMap() error {
 	return nil
 }
 
+// EnqueueWhitelistBlock enqueues blockNumber, blockHash to the checkpoint whitelist map
 func (h *ethHandler) EnqueueCheckpointWhitelist(key uint64, val common.Hash) {
 	if _, ok := h.checkpointWhitelist[key]; !ok {
 		log.Debug("Enqueing new checkpoint whitelist", "block number", key, "block hash", val)
@@ -286,6 +287,7 @@ func (h *ethHandler) EnqueueCheckpointWhitelist(key uint64, val common.Hash) {
 	}
 }
 
+// DequeueWhitelistBlock dequeues block, blockhash from the checkpoint whitelist map
 func (h *ethHandler) DequeueCheckpointWhitelist() {
 	if len(h.checkpointOrder) > 0 {
 		log.Debug("Dequeing checkpoint whitelist", "block number", h.checkpointOrder[0], "block hash", h.checkpointWhitelist[h.checkpointOrder[0]])
