@@ -27,6 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/metrics/exp"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/fjl/memsize/memsizeui"
 	"github.com/mattn/go-colorable"
 	"github.com/mattn/go-isatty"
@@ -183,6 +184,16 @@ func Setup(ctx *cli.Context) error {
 	} else if ctx.GlobalIsSet("bor-mumbai") || ctx.GlobalIsSet("bor-mainnet") {
 		address := fmt.Sprintf("%s:%d", "0.0.0.0", 7071)
 		StartPProf(address, !ctx.GlobalIsSet("metrics.addr"))
+	}
+
+	if ctx.GlobalBool(datadogProfilerFlag.Name) {
+		StartDatadogProfiler(
+			"bor",
+			datadogProfilerEnvironmentFlag.Value,
+			params.VersionWithMeta,
+			datadogProfilerTagsFlag.Value,
+			ctx.GlobalBool(datadogProfilerExpensiveFlag.Name),
+		)
 	}
 	return nil
 }
