@@ -1335,49 +1335,36 @@ func (bc *BlockChain) InsertReceiptChain(blockChain types.Blocks, receiptChain [
 				}
 			}
 
-			var allLogs []*types.Log
-			blockReceipts := receiptChain[i]
-			for _, receipt := range blockReceipts {
-				allLogs = append(allLogs, receipt.Logs...)
-			}
-
 			// Write all the data out into the database
 			rawdb.WriteBody(batch, block.Hash(), block.NumberU64(), block.Body())
-			rawdb.WriteReceipts(batch, block.Hash(), block.NumberU64(), blockReceipts)
+			rawdb.WriteReceipts(batch, block.Hash(), block.NumberU64(), receiptChain[i][:len(receiptChain[i])-1])
 			rawdb.WriteTxLookupEntriesByBlock(batch, block) // Always write tx indices for live blocks, we assume they are needed
 
-			// Write bor receipts to rawDB
-			// BOR: Retrieve all the bor receipts.
+			lastReceipt := receiptChain[i][len(receiptChain[i])-1]
+			log.Info("Checking Last Receipt")
+			if lastReceipt != nil {
+				stateSyncLogs := lastReceipt.Logs
 
-			state, err := bc.State()
-			if err != nil {
-				return i, err
-			}
+				var allLogs []*types.Log
+				for _, receipt := range receiptChain[i] {
+					allLogs = append(allLogs, receipt.Logs...)
+				}
 
-			blockLogs := state.Logs()
-			var stateSyncLogs []*types.Log
+				// State sync logs don't have tx index, tx hash and other necessary fields
+				// DeriveFieldsForBorLogs will fill those fields for websocket subscriptions
+				types.DeriveFieldsForBorLogs(stateSyncLogs, block.Hash(), block.NumberU64(), uint(len(receiptChain[i])), uint(len(allLogs)))
 
-			if len(blockLogs) > 0 {
-				sort.SliceStable(blockLogs, func(i, j int) bool {
-					return blockLogs[i].Index < blockLogs[j].Index
+				// Write bor receipt
+				rawdb.WriteBorReceipt(batch, block.Hash(), block.NumberU64(), &types.ReceiptForStorage{
+					Status: types.ReceiptStatusSuccessful, // make receipt status successful
+					Logs:   stateSyncLogs,
 				})
 
-				if len(blockLogs) > len(allLogs) {
-					stateSyncLogs = blockLogs[len(allLogs):] // get state-sync logs from `state.Logs()`
+				// Write bor tx reverse lookup
+				rawdb.WriteBorTxLookupEntry(batch, block.Hash(), block.NumberU64())
 
-					// State sync logs don't have tx index, tx hash and other necessary fields
-					// DeriveFieldsForBorLogs will fill those fields for websocket subscriptions
-					types.DeriveFieldsForBorLogs(stateSyncLogs, block.Hash(), block.NumberU64(), uint(len(blockReceipts)), uint(len(allLogs)))
+				log.Info("Added Bor Receipt")
 
-					// Write bor receipt
-					rawdb.WriteBorReceipt(batch, block.Hash(), block.NumberU64(), &types.ReceiptForStorage{
-						Status: types.ReceiptStatusSuccessful, // make receipt status successful
-						Logs:   stateSyncLogs,
-					})
-
-					// Write bor tx reverse lookup
-					rawdb.WriteBorTxLookupEntry(batch, block.Hash(), block.NumberU64())
-				}
 			}
 
 			// Write everything belongs to the blocks into the database. So that
