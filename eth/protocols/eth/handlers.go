@@ -221,8 +221,11 @@ func answerGetReceiptsQuery(backend Backend, query GetReceiptsPacket, peer *Peer
 			}
 		}
 		borReceipt := backend.Chain().GetBorReceiptByHash(hash)
-		results = append(results, borReceipt)
-		log.Info("Adding bor receipt to receipts query")
+		if borReceipt != nil {
+			results = append(results, borReceipt)
+			log.Info("Adding bor receipt to receipts query")
+		}
+
 		// If known, encode and queue for response packet
 		if encoded, err := rlp.EncodeToBytes(results); err != nil {
 			log.Error("Failed to encode receipt", "err", err)
