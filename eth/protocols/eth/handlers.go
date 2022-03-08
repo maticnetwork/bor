@@ -214,16 +214,11 @@ func answerGetReceiptsQuery(backend Backend, query GetReceiptsPacket, peer *Peer
 			break
 		}
 		// Retrieve the requested block's receipts
-		results := backend.Chain().GetReceiptsByHash(hash)
+		results := backend.Chain().GetAllReceiptsByHash(hash)
 		if results == nil {
 			if header := backend.Chain().GetHeaderByHash(hash); header == nil || header.ReceiptHash != types.EmptyRootHash {
 				continue
 			}
-		}
-		borReceipt := backend.Chain().GetBorReceiptByHash(hash)
-		if borReceipt != nil {
-			results = append(results, borReceipt)
-			log.Info("Adding bor receipt to receipts query")
 		}
 
 		// If known, encode and queue for response packet
