@@ -1074,13 +1074,39 @@ func (c *Bor) fetchAndCommitSpan(
 		}
 		heimdallSpan = *s
 	} else {
-		response, err := c.HeimdallClient.FetchWithRetry(fmt.Sprintf("bor/span/%d", newSpanID), "")
-		if err != nil {
+
+		var spanArray []*ResponseWithHeight
+
+		if err := json.Unmarshal([]byte(SPANS), &spanArray); err != nil {
 			return err
 		}
+		spanInJSON := false
 
-		if err := json.Unmarshal(response.Result, &heimdallSpan); err != nil {
-			return err
+		for _, val := range spanArray {
+
+			var tempHeimdallSpan HeimdallSpan
+
+			if err := json.Unmarshal(val.Result, &tempHeimdallSpan); err != nil {
+				return err
+			}
+
+			if tempHeimdallSpan.ID == newSpanID {
+				heimdallSpan = tempHeimdallSpan
+				log.Info("Got span from local", "span", heimdallSpan.Span.ID)
+				spanInJSON = true
+				break
+			}
+		}
+
+		if !spanInJSON {
+			response, err := c.HeimdallClient.FetchWithRetry(fmt.Sprintf("bor/span/%d", newSpanID), "")
+			if err != nil {
+				return err
+			}
+
+			if err := json.Unmarshal(response.Result, &heimdallSpan); err != nil {
+				return err
+			}
 		}
 	}
 
