@@ -101,7 +101,7 @@ func (h *HeimdallClient) FetchWithRetry(rawPath string, rawQuery string) (*Respo
 		if err == nil && res != nil {
 			return res, nil
 		}
-		log.Info("Retrying again in 5 seconds for next Heimdall span", "path", u.Path)
+		log.Info("Retrying again in 5 seconds to fetch data from Heimdall", "path", u.Path)
 		time.Sleep(5 * time.Second)
 	}
 }
