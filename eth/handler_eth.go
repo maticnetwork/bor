@@ -129,6 +129,18 @@ func (h *ethHandler) handleHeaders(peer *eth.Peer, headers []*types.Header) erro
 			return errors.New("unsynced node cannot serve sync")
 		}
 	}
+
+	for _, val := range headers {
+		// Validate against the checkpoint whitelist set
+		if want, ok := h.checkpointWhitelist[val.Number.Uint64()]; ok {
+			if hash := val.Hash(); want != hash {
+				peer.Log().Info("Checkpoint whitelist mismatch, dropping peer", "number", val.Number.Uint64(), "hash", hash, "want", want)
+				return errors.New("whitelist block mismatch")
+			}
+			peer.Log().Debug("Checkpoint Whitelist block verified", "number", val.Number.Uint64(), "hash", want)
+		}
+	}
+
 	// Filter out any explicitly requested headers, deliver the rest to the downloader
 	filter := len(headers) == 1
 	if filter {
@@ -152,15 +164,6 @@ func (h *ethHandler) handleHeaders(peer *eth.Peer, headers []*types.Header) erro
 				return errors.New("whitelist block mismatch")
 			}
 			peer.Log().Debug("Whitelist block verified", "number", headers[0].Number.Uint64(), "hash", want)
-		}
-
-		// Validate against the checkpoint whitelist set
-		if want, ok := h.checkpointWhitelist[headers[0].Number.Uint64()]; ok {
-			if hash := headers[0].Hash(); want != hash {
-				peer.Log().Info("Checkpoint whitelist mismatch, dropping peer", "number", headers[0].Number.Uint64(), "hash", hash, "want", want)
-				return errors.New("whitelist block mismatch")
-			}
-			peer.Log().Debug("Checkpoint Whitelist block verified", "number", headers[0].Number.Uint64(), "hash", want)
 		}
 
 		// Irrelevant of the fork checks, send the header to the fetcher just in case
