@@ -1,12 +1,16 @@
 package bor
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
+	"os/signal"
 	"sort"
+	"syscall"
 	"time"
 
 	"github.com/ethereum/go-ethereum/log"
@@ -96,13 +100,23 @@ func (h *HeimdallClient) FetchWithRetry(rawPath string, rawQuery string) (*Respo
 	u.Path = rawPath
 	u.RawQuery = rawQuery
 
+	// prepare a notify context to handle interrups
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	for {
-		res, err := h.internalFetch(u)
-		if err == nil && res != nil {
-			return res, nil
+		select {
+		case <-ctx.Done():
+			log.Info("Waiting for graceful shutdown")
+			time.Sleep(5 * time.Second)
+			return nil, fmt.Errorf("shutdown detected")
+		case <-time.After(5 * time.Second):
+			res, err := h.internalFetch(u)
+			if err == nil && res != nil {
+				return res, nil
+			}
+			log.Info("Retrying again in 5 seconds for next Heimdall span", "path", u.Path)
 		}
-		log.Info("Retrying again in 5 seconds for next Heimdall span", "path", u.Path)
-		time.Sleep(5 * time.Second)
 	}
 }
 
