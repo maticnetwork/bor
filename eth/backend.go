@@ -144,18 +144,19 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		log.Error("Failed to recover state", "error", err)
 	}
 	eth := &Ethereum{
-		config:            config,
-		chainDb:           chainDb,
-		eventMux:          stack.EventMux(),
-		accountManager:    stack.AccountManager(),
-		engine:            nil,
-		closeBloomHandler: make(chan struct{}),
-		networkID:         config.NetworkId,
-		gasPrice:          config.Miner.GasPrice,
-		etherbase:         config.Miner.Etherbase,
-		bloomRequests:     make(chan chan *bloombits.Retrieval),
-		bloomIndexer:      core.NewBloomIndexer(chainDb, params.BloomBitsBlocks, params.BloomConfirms),
-		p2pServer:         stack.Server(),
+		config:                      config,
+		chainDb:                     chainDb,
+		eventMux:                    stack.EventMux(),
+		accountManager:              stack.AccountManager(),
+		engine:                      nil,
+		closeBloomHandler:           make(chan struct{}),
+		networkID:                   config.NetworkId,
+		gasPrice:                    config.Miner.GasPrice,
+		etherbase:                   config.Miner.Etherbase,
+		bloomRequests:               make(chan chan *bloombits.Retrieval),
+		bloomIndexer:                core.NewBloomIndexer(chainDb, params.BloomBitsBlocks, params.BloomConfirms),
+		p2pServer:                   stack.Server(),
+		closeCheckpointWhitelisting: make(chan struct{}),
 	}
 
 	// START: Bor changes
