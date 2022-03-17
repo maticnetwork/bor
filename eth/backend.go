@@ -96,6 +96,8 @@ type Ethereum struct {
 	p2pServer *p2p.Server
 
 	lock sync.RWMutex // Protects the variadic fields (e.g. gas price and etherbase)
+
+	closeCheckpointWhitelisting chan struct{} // Channel to signal the checkpoint whitelist loop to exit
 }
 
 // New creates a new Ethereum object (including the
@@ -569,19 +571,20 @@ func (s *Ethereum) Start() error {
 	// Start the networking layer and the light server if requested
 	s.handler.Start(maxPeers)
 
-	s.StartCheckpointWhitelistService()
+	s.startCheckpointWhitelistService()
 	return nil
 }
 
 // StartCheckpointWhitelistService starts the goroutine to fetch checkpoints and update the
 // checkpoint whitelist map.
-func (s *Ethereum) StartCheckpointWhitelistService() {
-	go func() error {
+func (s *Ethereum) startCheckpointWhitelistService() {
+	go func() {
 		var m sync.Mutex
 		every := time.Duration(100) * time.Second
 		ticker := time.NewTicker(every)
 		defer ticker.Stop()
 
+	Loop:
 		for {
 			select {
 			case <-ticker.C:
@@ -589,6 +592,8 @@ func (s *Ethereum) StartCheckpointWhitelistService() {
 				if err != nil {
 					log.Warn(err.Error())
 				}
+			case <-s.closeCheckpointWhitelisting:
+				break Loop
 			}
 		}
 	}()
@@ -635,6 +640,7 @@ func (s *Ethereum) Stop() error {
 	rawdb.PopUncleanShutdownMarker(s.chainDb)
 	s.chainDb.Close()
 	s.eventMux.Stop()
+	close(s.closeCheckpointWhitelisting)
 
 	return nil
 }
