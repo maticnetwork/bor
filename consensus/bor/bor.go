@@ -916,6 +916,7 @@ func (c *Bor) APIs(chain consensus.ChainHeaderReader) []rpc.API {
 
 // Close implements consensus.Engine. It's a noop for bor as there are no background threads.
 func (c *Bor) Close() error {
+	c.HeimdallClient.Close()
 	return nil
 }
 

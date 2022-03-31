@@ -1,16 +1,12 @@
 package bor
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"os"
-	"os/signal"
 	"sort"
-	"syscall"
 	"time"
 
 	"github.com/ethereum/go-ethereum/log"
@@ -31,11 +27,13 @@ type IHeimdallClient interface {
 	Fetch(path string, query string) (*ResponseWithHeight, error)
 	FetchWithRetry(path string, query string) (*ResponseWithHeight, error)
 	FetchStateSyncEvents(fromID uint64, to int64) ([]*EventRecordWithTime, error)
+	Close()
 }
 
 type HeimdallClient struct {
 	urlString string
 	client    http.Client
+	closeCh   chan struct{}
 }
 
 func NewHeimdallClient(urlString string) (*HeimdallClient, error) {
@@ -44,6 +42,7 @@ func NewHeimdallClient(urlString string) (*HeimdallClient, error) {
 		client: http.Client{
 			Timeout: time.Duration(5 * time.Second),
 		},
+		closeCh: make(chan struct{}),
 	}
 	return h, nil
 }
@@ -100,15 +99,10 @@ func (h *HeimdallClient) FetchWithRetry(rawPath string, rawQuery string) (*Respo
 	u.Path = rawPath
 	u.RawQuery = rawQuery
 
-	// prepare a notify context to handle interrups
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
 	for {
 		select {
-		case <-ctx.Done():
+		case <-h.closeCh:
 			log.Info("Waiting for graceful shutdown")
-			time.Sleep(5 * time.Second)
 			return nil, fmt.Errorf("shutdown detected")
 		case <-time.After(5 * time.Second):
 			res, err := h.internalFetch(u)
@@ -150,4 +144,10 @@ func (h *HeimdallClient) internalFetch(u *url.URL) (*ResponseWithHeight, error) 
 	}
 
 	return &response, nil
+}
+
+// Close sends a signal to stop the running process
+func (h *HeimdallClient) Close() {
+	close(h.closeCh)
+	h.client.CloseIdleConnections()
 }
