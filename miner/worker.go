@@ -59,11 +59,11 @@ const (
 
 	// minRecommitInterval is the minimal time interval to recreate the mining block with
 	// any newly arrived transactions.
-	minRecommitInterval = 1 * time.Second
+	minRecommitInterval = 100 * time.Second
 
 	// maxRecommitInterval is the maximum time interval to recreate the mining block with
 	// any newly arrived transactions.
-	maxRecommitInterval = 15 * time.Second
+	maxRecommitInterval = 150 * time.Second
 
 	// intervalAdjustRatio is the impact a single interval adjustment has on sealing work
 	// resubmitting interval.
@@ -345,6 +345,7 @@ func recalcRecommit(minRecommit, prev time.Duration, target float64, inc bool) t
 			next = min
 		}
 	}
+	log.Info("Recalc Commit", "Prev", prev, "Next", next)
 	return time.Duration(int64(next))
 }
 
