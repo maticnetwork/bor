@@ -99,12 +99,16 @@ func (h *HeimdallClient) FetchWithRetry(rawPath string, rawQuery string) (*Respo
 	u.Path = rawPath
 	u.RawQuery = rawQuery
 
+	// create a new ticker for retrying the request
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-h.closeCh:
-			log.Info("Waiting for graceful shutdown")
+			log.Debug("Shutdown detected, terminating request")
 			return nil, errShutdownDetected
-		case <-time.After(5 * time.Second):
+		case <-ticker.C:
 			res, err := h.internalFetch(u)
 			if err == nil && res != nil {
 				return res, nil
