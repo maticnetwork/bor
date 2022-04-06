@@ -116,6 +116,9 @@ var (
 	// errOutOfRangeChain is returned if an authorization list is attempted to
 	// be modified via out-of-range or non-contiguous headers.
 	errOutOfRangeChain = errors.New("out of range or non-contiguous chain")
+
+	// errShutdownDetected is returned if a shutdown was detected
+	errShutdownDetected = errors.New("shutdown detected")
 )
 
 // SignerFn is a signer callback function to request a header to be signed by a

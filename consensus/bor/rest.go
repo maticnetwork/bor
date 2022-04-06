@@ -103,7 +103,7 @@ func (h *HeimdallClient) FetchWithRetry(rawPath string, rawQuery string) (*Respo
 		select {
 		case <-h.closeCh:
 			log.Info("Waiting for graceful shutdown")
-			return nil, fmt.Errorf("shutdown detected")
+			return nil, errShutdownDetected
 		case <-time.After(5 * time.Second):
 			res, err := h.internalFetch(u)
 			if err == nil && res != nil {
