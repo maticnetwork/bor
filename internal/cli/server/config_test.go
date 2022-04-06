@@ -22,8 +22,8 @@ func TestConfigDefault(t *testing.T) {
 
 func TestConfigMerge(t *testing.T) {
 	c0 := &Config{
-		Chain:    "0",
-		Snapshot: true,
+		Chain:      "0",
+		NoSnapshot: true,
 		Whitelist: map[string]string{
 			"a": "b",
 		},
@@ -53,8 +53,8 @@ func TestConfigMerge(t *testing.T) {
 		},
 	}
 	expected := &Config{
-		Chain:    "1",
-		Snapshot: true,
+		Chain:      "1",
+		NoSnapshot: true,
 		Whitelist: map[string]string{
 			"a": "b",
 			"b": "c",
