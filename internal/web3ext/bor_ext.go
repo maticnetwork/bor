@@ -48,6 +48,11 @@ web3._extend({
 			call: 'bor_getRootHash',
 			params: 2,
 		}),
+		new web3._extend.Method({
+			name: 'getRootHash',
+			call: 'bor_getRootHash',
+			params: 2,
+		}),
 	]
 });
 `

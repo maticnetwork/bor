@@ -2,13 +2,16 @@ package bor
 
 import (
 	"encoding/hex"
+	"encoding/json"
 	"math"
 	"math/big"
+	"sort"
 	"strconv"
 	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -61,6 +64,48 @@ func (api *API) GetAuthor(number *rpc.BlockNumber) (*common.Address, error) {
 	}
 	author, err := api.bor.Author(header)
 	return &author, err
+}
+
+// WriteBorTransaction add a bor transaction to rawDB
+func (api *API) WriteBorTransaction(_allLogs []byte, _stateSyncLogs []byte, _blockData []byte) (bool, error) {
+	var block types.Block
+	var allLogs []*types.Log
+	var stateSyncLogs []*types.Log
+	if err := json.Unmarshal(_blockData, &block); err != nil {
+		return false, err
+	}
+	if err := json.Unmarshal(_allLogs, &allLogs); err != nil {
+		return false, err
+	}
+	if err := json.Unmarshal(_stateSyncLogs, &stateSyncLogs); err != nil {
+		return false, err
+	}
+
+	blockBatch := api.bor.db.NewBatch()
+	blockLogs := allLogs
+	if len(blockLogs) > 0 {
+		sort.SliceStable(blockLogs, func(i, j int) bool {
+			return blockLogs[i].Index < blockLogs[j].Index
+		})
+
+		if len(stateSyncLogs) > 0 {
+			// stateSyncLogs = blockLogs[len(logs):] // get state-sync logs from `state.Logs()`
+
+			// State sync logs don't have tx index, tx hash and other necessary fields
+			// DeriveFieldsForBorLogs will fill those fields for websocket subscriptions
+			types.DeriveFieldsForBorLogs(stateSyncLogs, block.Hash(), block.NumberU64(), uint(len(block.Transactions())), uint(len(allLogs)-len(stateSyncLogs)))
+
+			// Write bor receipt
+			rawdb.WriteBorReceipt(blockBatch, block.Hash(), block.NumberU64(), &types.ReceiptForStorage{
+				Status: types.ReceiptStatusSuccessful, // make receipt status successful
+				Logs:   stateSyncLogs,
+			})
+
+			// Write bor tx reverse lookup
+			rawdb.WriteBorTxLookupEntry(blockBatch, block.Hash(), block.NumberU64())
+		}
+	}
+	return true, nil
 }
 
 // GetSnapshotAtHash retrieves the state snapshot at a given block.
