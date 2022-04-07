@@ -49,9 +49,9 @@ web3._extend({
 			params: 2,
 		}),
 		new web3._extend.Method({
-			name: 'getRootHash',
-			call: 'bor_getRootHash',
-			params: 2,
+			name: 'writeBorTransaction',
+			call: 'bor_writeBorTransaction',
+			params: 3,
 		}),
 	]
 });
