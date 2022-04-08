@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"math"
 	"math/big"
-	"sort"
 	"strconv"
 	"sync"
 
@@ -67,14 +66,11 @@ func (api *API) GetAuthor(number *rpc.BlockNumber) (*common.Address, error) {
 }
 
 // WriteBorTransaction add a bor transaction to rawDB
-func (api *API) WriteBorTransaction(_allLogs []byte, _stateSyncLogs []byte, _blockData []byte) (bool, error) {
+func (api *API) WriteBorTransaction(allLogsCount uint, _stateSyncLogs []byte, _blockData []byte) (bool, error) {
 	var block types.Block
-	var allLogs []*types.Log
 	var stateSyncLogs []*types.Log
+
 	if err := json.Unmarshal(_blockData, &block); err != nil {
-		return false, err
-	}
-	if err := json.Unmarshal(_allLogs, &allLogs); err != nil {
 		return false, err
 	}
 	if err := json.Unmarshal(_stateSyncLogs, &stateSyncLogs); err != nil {
@@ -82,18 +78,14 @@ func (api *API) WriteBorTransaction(_allLogs []byte, _stateSyncLogs []byte, _blo
 	}
 
 	blockBatch := api.bor.db.NewBatch()
-	blockLogs := allLogs
-	if len(blockLogs) > 0 {
-		sort.SliceStable(blockLogs, func(i, j int) bool {
-			return blockLogs[i].Index < blockLogs[j].Index
-		})
+	if allLogsCount > 0 {
 
 		if len(stateSyncLogs) > 0 {
 			// stateSyncLogs = blockLogs[len(logs):] // get state-sync logs from `state.Logs()`
 
 			// State sync logs don't have tx index, tx hash and other necessary fields
 			// DeriveFieldsForBorLogs will fill those fields for websocket subscriptions
-			types.DeriveFieldsForBorLogs(stateSyncLogs, block.Hash(), block.NumberU64(), uint(len(block.Transactions())), uint(len(allLogs)-len(stateSyncLogs)))
+			types.DeriveFieldsForBorLogs(stateSyncLogs, block.Hash(), block.NumberU64(), uint(len(block.Transactions())), uint(int(allLogsCount)-len(stateSyncLogs)))
 
 			// Write bor receipt
 			rawdb.WriteBorReceipt(blockBatch, block.Hash(), block.NumberU64(), &types.ReceiptForStorage{
