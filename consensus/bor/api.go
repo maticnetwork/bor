@@ -3,6 +3,7 @@ package bor
 import (
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"math"
 	"math/big"
 	"strconv"
@@ -68,6 +69,11 @@ func (api *API) GetAuthor(number *rpc.BlockNumber) (*common.Address, error) {
 // WriteBorTransaction add a bor transaction to rawDB
 func (api *API) WriteBorTransaction(allLogsCount uint, _stateSyncLogs []byte, _blockData []byte) (bool, error) {
 	var block types.Block
+
+	if block.NumberU64() >= api.chain.CurrentHeader().Number.Uint64() {
+		return false, errors.New("block number is greater than current header number")
+	}
+
 	var stateSyncLogs []*types.Log
 
 	if err := json.Unmarshal(_blockData, &block); err != nil {
