@@ -76,11 +76,16 @@ func (api *API) WriteBorTransaction(allLogsCount uint, _stateSyncLogs []byte, _b
 
 	var stateSyncLogs []*types.Log
 
+	// _blockdata refers to data of the block without state-sync transactions. It is derived from the local RPC of this same node.
 	if err := json.Unmarshal(_blockData, &block); err != nil {
 		return false, err
 	}
 	if err := json.Unmarshal(_stateSyncLogs, &stateSyncLogs); err != nil {
 		return false, err
+	}
+
+	if rawdb.ReadBorReceipt(api.bor.db, block.Hash(), block.NumberU64()) != nil {
+		return false, errors.New("bor receipts already exists")
 	}
 
 	blockBatch := api.bor.db.NewBatch()
