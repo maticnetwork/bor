@@ -70,16 +70,16 @@ func (api *API) GetAuthor(number *rpc.BlockNumber) (*common.Address, error) {
 func (api *API) WriteBorTransaction(allLogsCount uint, _stateSyncLogs []byte, _blockData []byte) (bool, error) {
 	var block types.Block
 
-	if block.NumberU64() >= api.chain.CurrentHeader().Number.Uint64() {
-		return false, errors.New("block number is greater than current header number")
-	}
-
 	var stateSyncLogs []*types.Log
 
 	// _blockdata refers to data of the block without state-sync transactions. It is derived from the local RPC of this same node.
 	if err := json.Unmarshal(_blockData, &block); err != nil {
 		return false, err
 	}
+	if block.NumberU64() >= api.chain.CurrentHeader().Number.Uint64() {
+		return false, errors.New("block number is greater than current header number")
+	}
+
 	if err := json.Unmarshal(_stateSyncLogs, &stateSyncLogs); err != nil {
 		return false, err
 	}
