@@ -164,7 +164,7 @@ geth-windows-amd64:
 	@ls -ld $(GOBIN)/geth-windows-* | grep amd64
 
 PACKAGE_NAME          := github.com/maticnetwork/bor
-GOLANG_CROSS_VERSION  ?= v1.18.1
+GOLANG_CROSS_VERSION  ?= v1.18.0
 
 .PHONY: release-dry-run
 release-dry-run:
