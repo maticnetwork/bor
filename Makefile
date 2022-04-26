@@ -14,16 +14,8 @@ GORUN = env GO111MODULE=on go run
 GOPATH = $(shell go env GOPATH)
 
 bor:
-	$(GORUN) build/ci.go install ./cmd/geth
 	mkdir -p $(GOPATH)/bin/
-	cp $(GOBIN)/geth $(GOBIN)/bor
-	cp $(GOBIN)/* $(GOPATH)/bin/
-
-bor-all:
-	$(GORUN) build/ci.go install
-	mkdir -p $(GOPATH)/bin/
-	cp $(GOBIN)/geth $(GOBIN)/bor
-	cp $(GOBIN)/* $(GOPATH)/bin/
+	go build -o $(GOBIN)/bor ./cmd/cli/main.go
 
 protoc:
 	protoc --go_out=. --go-grpc_out=. ./internal/cli/server/proto/*.proto
@@ -164,7 +156,7 @@ geth-windows-amd64:
 	@ls -ld $(GOBIN)/geth-windows-* | grep amd64
 
 PACKAGE_NAME          := github.com/maticnetwork/bor
-GOLANG_CROSS_VERSION  ?= v1.17.2
+GOLANG_CROSS_VERSION  ?= v1.17.6
 
 .PHONY: release-dry-run
 release-dry-run:
