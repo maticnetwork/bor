@@ -52,6 +52,7 @@ web3._extend({
 			name: 'writeBorTransaction',
 			call: 'bor_writeBorTransaction',
 			params: 3,
+			inputFormatter: [null]
 		}),
 	]
 });

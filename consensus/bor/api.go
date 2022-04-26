@@ -4,10 +4,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
 	"math/big"
 	"strconv"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
@@ -66,46 +69,72 @@ func (api *API) GetAuthor(number *rpc.BlockNumber) (*common.Address, error) {
 	return &author, err
 }
 
+type Block struct {
+	Transactions []*struct {
+		Hash string `json:"hash"`
+	} `json:"transactions"`
+	Header       *Header      `json:"header"`
+	Uncles       []*Header    `json:"uncles"`
+	Hash         common.Hash  `json:"hash"`
+	Size         atomic.Value `json:"size"`
+	Td           uint         `json:"totalDifficulty"`
+	ReceivedAt   time.Time    `json:"receivedAt"`
+	ReceivedFrom interface{}  `json:"receivedFrom"`
+}
+
+type Header struct {
+	Number *big.Int `json:"number"           gencodec:"required"`
+}
+
 // WriteBorTransaction add a bor transaction to rawDB
-func (api *API) WriteBorTransaction(allLogsCount uint, _stateSyncLogs []byte, _blockData []byte) (bool, error) {
-	var block types.Block
+func (api *API) WriteBorTransaction(allLogsCount uint, _stateSyncLogs string, _blockData string) (bool, error) {
+	var block Block
 
 	var stateSyncLogs []*types.Log
+	fmt.Println("LOLOLOL", allLogsCount)
+	fmt.Println("LOLOLOL", _stateSyncLogs)
+	fmt.Println("_blockdata", _blockData)
 
 	// _blockdata refers to data of the block without state-sync transactions. It is derived from the local RPC of this same node.
-	if err := json.Unmarshal(_blockData, &block); err != nil {
+	if err := json.Unmarshal([]byte(_blockData), &block); err != nil {
+		fmt.Println(1)
 		return false, err
 	}
-	if block.NumberU64() >= api.chain.CurrentHeader().Number.Uint64() {
+
+	if block.Header.Number.Uint64() >= api.chain.CurrentHeader().Number.Uint64() {
+		fmt.Println(2)
 		return false, errors.New("block number is greater than current header number")
 	}
 
-	if err := json.Unmarshal(_stateSyncLogs, &stateSyncLogs); err != nil {
+	if err := json.Unmarshal([]byte(_stateSyncLogs), &stateSyncLogs); err != nil {
+		fmt.Println(3)
 		return false, err
 	}
 
-	if rawdb.ReadBorReceipt(api.bor.db, block.Hash(), block.NumberU64()) != nil {
+	if rawdb.ReadBorReceipt(api.bor.db, block.Hash, block.Header.Number.Uint64()) != nil {
+		fmt.Println(4)
 		return false, errors.New("bor receipts already exists")
 	}
+	fmt.Println("statesynclogs", stateSyncLogs[0])
 
 	blockBatch := api.bor.db.NewBatch()
 	if allLogsCount > 0 {
-
+		fmt.Println(len(stateSyncLogs))
 		if len(stateSyncLogs) > 0 {
 			// stateSyncLogs = blockLogs[len(logs):] // get state-sync logs from `state.Logs()`
 
 			// State sync logs don't have tx index, tx hash and other necessary fields
 			// DeriveFieldsForBorLogs will fill those fields for websocket subscriptions
-			types.DeriveFieldsForBorLogs(stateSyncLogs, block.Hash(), block.NumberU64(), uint(len(block.Transactions())), uint(int(allLogsCount)-len(stateSyncLogs)))
+			types.DeriveFieldsForBorLogs(stateSyncLogs, block.Hash, block.Header.Number.Uint64(), uint(len(block.Transactions)), uint(int(allLogsCount)-len(stateSyncLogs)))
 
 			// Write bor receipt
-			rawdb.WriteBorReceipt(blockBatch, block.Hash(), block.NumberU64(), &types.ReceiptForStorage{
+			rawdb.WriteBorReceipt(blockBatch, block.Hash, block.Header.Number.Uint64(), &types.ReceiptForStorage{
 				Status: types.ReceiptStatusSuccessful, // make receipt status successful
 				Logs:   stateSyncLogs,
 			})
 
 			// Write bor tx reverse lookup
-			rawdb.WriteBorTxLookupEntry(blockBatch, block.Hash(), block.NumberU64())
+			rawdb.WriteBorTxLookupEntry(blockBatch, block.Hash, block.Header.Number.Uint64())
 		}
 	}
 	return true, nil
