@@ -115,7 +115,7 @@ func (api *API) WriteBorTransaction(allLogsCount uint, _stateSyncLogs string, _b
 		fmt.Println(4)
 		return false, errors.New("bor receipts already exists")
 	}
-	fmt.Println("statesynclogs", stateSyncLogs[0])
+	fmt.Println("statesynclogs", stateSyncLogs)
 
 	blockBatch := api.bor.db.NewBatch()
 	if allLogsCount > 0 {
