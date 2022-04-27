@@ -137,6 +137,10 @@ func (api *API) WriteBorTransaction(allLogsCount uint, _stateSyncLogs string, _b
 			rawdb.WriteBorTxLookupEntry(blockBatch, block.Hash, block.Header.Number.Uint64())
 		}
 	}
+	if err := blockBatch.Write(); err != nil {
+		fmt.Println("Failed to write block into disk", "err", err)
+		return false, err
+	}
 	return true, nil
 }
 
