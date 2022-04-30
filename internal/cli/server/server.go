@@ -10,7 +10,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
+	"github.com/ethereum/go-ethereum/consensus/bor"
+	"github.com/ethereum/go-ethereum/consensus/clique"
 	"github.com/ethereum/go-ethereum/eth"
 	"github.com/ethereum/go-ethereum/eth/tracers"
 	"github.com/ethereum/go-ethereum/ethstats"
@@ -67,16 +70,60 @@ func NewServer(config *Config) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	srv.node = stack
 
 	// setup account manager (only keystore)
-	{
-		keydir := stack.KeyStoreDir()
-		n, p := keystore.StandardScryptN, keystore.StandardScryptP
-		if config.Accounts.UseLightweightKDF {
-			n, p = keystore.LightScryptN, keystore.LightScryptP
-		}
+	// create a new account manager, only for the scope of this function
+	accountManager := accounts.NewManager(&accounts.Config{})
+
+	// register backend to account manager with keystore for signing
+	keydir := stack.KeyStoreDir()
+	n, p := keystore.StandardScryptN, keystore.StandardScryptP
+	if config.Accounts.UseLightweightKDF {
+		n, p = keystore.LightScryptN, keystore.LightScryptP
+	}
+
+	if !config.Accounts.DisableBorWallet {
+		// add keystore globally to the node's account manager if personal wallet is enabled
 		stack.AccountManager().AddBackend(keystore.NewKeyStore(keydir, n, p))
+	}
+
+	stack.AccountManager()
+
+	// proceed to authorize the local account manager in any case
+	accountManager.AddBackend(keystore.NewKeyStore(keydir, n, p))
+
+	authorized := false
+
+	// authorize only if mining or in developer mode
+	if config.Sealer.Enabled || config.Developer.Enabled {
+		// get the etherbase
+		eb, err := srv.backend.Etherbase()
+		if err != nil {
+			log.Error("Cannot start mining without etherbase", "err", err)
+			return nil, fmt.Errorf("etherbase missing: %v", err)
+		}
+
+		// Authorize the clique consensus (if chosen) to sign using wallet signer
+		if clique, ok := srv.backend.Engine().(*clique.Clique); ok {
+			wallet, err := accountManager.Find(accounts.Account{Address: eb})
+			if wallet == nil || err != nil {
+				log.Error("Etherbase account unavailable locally", "err", err)
+				return nil, fmt.Errorf("signer missing: %v", err)
+			}
+			clique.Authorize(eb, wallet.SignData)
+			authorized = true
+		}
+
+		// Authorize the bor consensus (if chosen) to sign using wallet signer
+		if bor, ok := srv.backend.Engine().(*bor.Bor); ok {
+			wallet, err := accountManager.Find(accounts.Account{Address: eb})
+			if wallet == nil || err != nil {
+				log.Error("Etherbase account unavailable locally", "err", err)
+				return nil, fmt.Errorf("signer missing: %v", err)
+			}
+			bor.Authorize(eb, wallet.SignData)
+			authorized = true
+		}
 	}
 
 	// register the ethereum backend
@@ -89,6 +136,7 @@ func NewServer(config *Config) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+	backend.SetAuthorized(authorized)
 	srv.backend = backend
 
 	// debug tracing is enabled by default
@@ -118,6 +166,9 @@ func NewServer(config *Config) (*Server, error) {
 	if err := srv.setupMetrics(config.Telemetry, config.Name); err != nil {
 		return nil, err
 	}
+
+	// Set the node instance
+	srv.node = stack
 
 	// start the node
 	if err := srv.node.Start(); err != nil {
