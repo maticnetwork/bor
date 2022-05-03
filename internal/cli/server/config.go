@@ -615,7 +615,7 @@ func (c *Config) loadChain() error {
 	return nil
 }
 
-func (c *Config) buildEth(stack *node.Node) (*ethconfig.Config, error) {
+func (c *Config) buildEth(accountManager *accounts.Manager) (*ethconfig.Config, error) {
 	dbHandles, err := makeDatabaseHandles()
 	if err != nil {
 		return nil, err
@@ -671,7 +671,7 @@ func (c *Config) buildEth(stack *node.Node) (*ethconfig.Config, error) {
 	if c.Developer.Enabled {
 		// Get a keystore
 		var ks *keystore.KeyStore
-		if keystores := stack.AccountManager().Backends(keystore.KeyStoreType); len(keystores) > 0 {
+		if keystores := accountManager.Backends(keystore.KeyStoreType); len(keystores) > 0 {
 			ks = keystores[0].(*keystore.KeyStore)
 		}
 
@@ -696,6 +696,10 @@ func (c *Config) buildEth(stack *node.Node) (*ethconfig.Config, error) {
 			return nil, fmt.Errorf("failed to unlock developer account: %v", err)
 		}
 		log.Info("Using developer account", "address", developer.Address)
+
+		// Set the Etherbase
+		c.Sealer.Etherbase = developer.Address.Hex()
+		n.Miner.Etherbase = developer.Address
 
 		// get developer mode chain config
 		c.chain = chains.GetDeveloperChain(c.Developer.Period, developer.Address)
