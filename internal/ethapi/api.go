@@ -1433,6 +1433,7 @@ func newRPCPendingTransaction(tx *types.Transaction, current *types.Header, conf
 // newRPCTransactionFromBlockIndex returns a transaction that will serialize to the RPC representation.
 func newRPCTransactionFromBlockIndex(b *types.Block, index uint64, config *params.ChainConfig, backend Backend) *RPCTransaction {
 	txs := b.Transactions()
+	log.Error(fmt.Sprintf("I am here", len(txs), "index", 0))
 	tx, _, _, _ := rawdb.ReadBorTransaction(backend.ChainDb(), b.Hash())
 	if tx != nil {
 		txs = append(txs, tx)
