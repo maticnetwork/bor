@@ -1810,9 +1810,8 @@ func (d *Downloader) DeliverSnapPacket(peer *snap.Peer, packet snap.Packet) erro
 
 // PurgeWhitelistMap purges data from checkpoint whitelist map
 func (d *Downloader) PurgeWhitelistMap() error {
-	for k := range d.checkpointWhitelist {
-		delete(d.checkpointWhitelist, k)
-	}
+	d.checkpointWhitelist = make(map[uint64]common.Hash)
+	d.checkpointOrder = make([]uint64, 0)
 	return nil
 }
 
