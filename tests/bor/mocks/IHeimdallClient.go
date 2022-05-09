@@ -41,7 +41,7 @@ func (_m *IHeimdallClient) Fetch(path string, query string) (*bor.ResponseWithHe
 }
 
 // FetchStateSyncEvents provides a mock function with given fields: fromID, to
-func (_m *IHeimdallClient) FetchStateSyncEvents(fromID uint64, to int64) ([]*bor.EventRecordWithTime, error) {
+func (_m *IHeimdallClient) FetchStateSyncEvents(fromID uint64, to int64, totalLimit int) ([]*bor.EventRecordWithTime, error) {
 	ret := _m.Called(fromID, to)
 
 	var r0 []*bor.EventRecordWithTime
