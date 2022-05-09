@@ -48,7 +48,13 @@ func NewHeimdallClient(urlString string) (*HeimdallClient, error) {
 }
 
 func (h *HeimdallClient) FetchStateSyncEvents(fromID uint64, to int64, totalLimit int) ([]*EventRecordWithTime, error) {
-	eventRecords := make([]*EventRecordWithTime, 0)
+	var capacity int
+	if limit := totalLimit / 3; limit >= 1 {
+		capacity = limit
+	} else {
+		capacity = 512
+	}
+	eventRecords := make([]*EventRecordWithTime, 0, capacity)
 	for {
 		queryParams := fmt.Sprintf("from-id=%d&to-time=%d&limit=%d", fromID, to, stateFetchLimit)
 		log.Info("Fetching state sync events", "queryParams", queryParams)
