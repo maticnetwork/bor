@@ -26,7 +26,7 @@ type ResponseWithHeight struct {
 type IHeimdallClient interface {
 	Fetch(path string, query string) (*ResponseWithHeight, error)
 	FetchWithRetry(path string, query string) (*ResponseWithHeight, error)
-	FetchStateSyncEvents(fromID uint64, to int64) ([]*EventRecordWithTime, error)
+	FetchStateSyncEvents(fromID uint64, to int64, totalLimit int) ([]*EventRecordWithTime, error)
 	Close()
 }
 
@@ -47,7 +47,7 @@ func NewHeimdallClient(urlString string) (*HeimdallClient, error) {
 	return h, nil
 }
 
-func (h *HeimdallClient) FetchStateSyncEvents(fromID uint64, to int64) ([]*EventRecordWithTime, error) {
+func (h *HeimdallClient) FetchStateSyncEvents(fromID uint64, to int64, totalLimit int) ([]*EventRecordWithTime, error) {
 	eventRecords := make([]*EventRecordWithTime, 0)
 	for {
 		queryParams := fmt.Sprintf("from-id=%d&to-time=%d&limit=%d", fromID, to, stateFetchLimit)
@@ -64,6 +64,11 @@ func (h *HeimdallClient) FetchStateSyncEvents(fromID uint64, to int64) ([]*Event
 			return nil, err
 		}
 		eventRecords = append(eventRecords, _eventRecords...)
+
+		if totalLimit != 0 && len(eventRecords) >= totalLimit {
+			break
+		}
+
 		if len(_eventRecords) < stateFetchLimit {
 			break
 		}

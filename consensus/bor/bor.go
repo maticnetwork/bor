@@ -1166,7 +1166,8 @@ func (c *Bor) CommitStates(
 		"Fetching state updates from Heimdall",
 		"fromID", lastStateID+1,
 		"to", to.Format(time.RFC3339))
-	eventRecords, err := c.HeimdallClient.FetchStateSyncEvents(lastStateID+1, to.Unix())
+	stateSyncLimit := c.config.CalculateStateSyncLimit(number)
+	eventRecords, err := c.HeimdallClient.FetchStateSyncEvents(lastStateID+1, to.Unix(), int(stateSyncLimit))
 	if c.config.OverrideStateSyncRecords != nil {
 		if val, ok := c.config.OverrideStateSyncRecords[strconv.FormatUint(number, 10)]; ok {
 			eventRecords = eventRecords[0:val]

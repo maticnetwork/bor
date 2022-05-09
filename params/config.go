@@ -524,8 +524,9 @@ type BorConfig struct {
 	StateReceiverContract    string                 `json:"stateReceiverContract"`    // State receiver contract
 	OverrideStateSyncRecords map[string]int         `json:"overrideStateSyncRecords"` // override state records count
 	BlockAlloc               map[string]interface{} `json:"blockAlloc"`
-	BurntContract            map[string]string      `json:"burntContract"` // governance contract where the token will be sent to and burnt in london fork
-	JaipurBlock              uint64                 `json:"jaipurBlock"`   // Jaipur switch block (nil = no fork, 0 = already on jaipur)
+	BurntContract            map[string]string      `json:"burntContract"`  // governance contract where the token will be sent to and burnt in london fork
+	JaipurBlock              uint64                 `json:"jaipurBlock"`    // Jaipur switch block (nil = no fork, 0 = already on jaipur)
+	StateSyncLimit           map[string]uint64      `json:"stateSyncLimit"` // state sync limit
 }
 
 // String implements the stringer interface, returning the consensus engine details.
@@ -539,6 +540,10 @@ func (c *BorConfig) CalculateBackupMultiplier(number uint64) uint64 {
 
 func (c *BorConfig) CalculatePeriod(number uint64) uint64 {
 	return c.calculateBorConfigHelper(c.Period, number)
+}
+
+func (c *BorConfig) CalculateStateSyncLimit(number uint64) uint64 {
+	return c.calculateBorConfigHelper(c.StateSyncLimit, number)
 }
 
 func (c *BorConfig) IsJaipur(number uint64) bool {
