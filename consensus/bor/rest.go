@@ -65,7 +65,7 @@ func (h *HeimdallClient) FetchStateSyncEvents(fromID uint64, to int64, totalLimi
 		}
 		eventRecords = append(eventRecords, _eventRecords...)
 
-		if totalLimit != 0 && len(eventRecords) >= totalLimit {
+		if totalLimit > 0 && len(eventRecords) >= totalLimit {
 			break
 		}
 
