@@ -669,6 +669,7 @@ func (s *PublicBlockChainAPI) GetTransactionReceiptsByBlock(ctx context.Context,
 			"contractAddress":   nil,
 			"logs":              receipt.Logs,
 			"logsBloom":         receipt.Bloom,
+			"type":              hexutil.Uint(tx.Type()),
 		}
 
 		// Assign receipt status or post state.
@@ -680,7 +681,7 @@ func (s *PublicBlockChainAPI) GetTransactionReceiptsByBlock(ctx context.Context,
 		if receipt.Logs == nil {
 			fields["logs"] = [][]*types.Log{}
 		}
-		if borReceipt != nil {
+		if borReceipt != nil && idx == len(receipts)-1 {
 			fields["transactionHash"] = txHash
 		}
 		// If the ContractAddress is 20 0x0 bytes, assume it is not a contract creation
