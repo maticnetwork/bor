@@ -12,6 +12,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
+	"github.com/ethereum/go-ethereum/consensus/beacon"
 	"github.com/ethereum/go-ethereum/consensus/bor"
 	"github.com/ethereum/go-ethereum/consensus/clique"
 	"github.com/ethereum/go-ethereum/eth"
@@ -90,7 +91,6 @@ func NewServer(config *Config) (*Server, error) {
 
 	// check if personal wallet endpoints are disabled or not
 	if !config.Accounts.DisableBorWallet {
-
 		// add keystore globally to the node's account manager if personal wallet is enabled
 		stack.AccountManager().AddBackend(keystore.NewKeyStore(keydir, n, p))
 
@@ -105,7 +105,6 @@ func NewServer(config *Config) (*Server, error) {
 		}
 		srv.backend = backend
 	} else {
-
 		// register the ethereum backend (with temporary created account manager)
 		ethCfg, err := config.buildEth(accountManager)
 		if err != nil {
@@ -127,13 +126,21 @@ func NewServer(config *Config) (*Server, error) {
 			}
 
 			// Authorize the clique consensus (if chosen) to sign using wallet signer
-			if clique, ok := srv.backend.Engine().(*clique.Clique); ok {
+			var cli *clique.Clique
+			if c, ok := srv.backend.Engine().(*clique.Clique); ok {
+				cli = c
+			} else if cl, ok := srv.backend.Engine().(*beacon.Beacon); ok {
+				if c, ok := cl.InnerEngine().(*clique.Clique); ok {
+					cli = c
+				}
+			}
+			if cli != nil {
 				wallet, err := accountManager.Find(accounts.Account{Address: eb})
 				if wallet == nil || err != nil {
 					log.Error("Etherbase account unavailable locally", "err", err)
 					return nil, fmt.Errorf("signer missing: %v", err)
 				}
-				clique.Authorize(eb, wallet.SignData)
+				cli.Authorize(eb, wallet.SignData)
 				authorized = true
 			}
 
