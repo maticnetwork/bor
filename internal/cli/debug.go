@@ -48,7 +48,8 @@ func (d *DebugCommand) MarkDown() string {
 	items := []string{
 		"# Debug",
 		"The ```bor debug``` command takes a debug dump of the running client.",
-		// d.Flags().MarkDown(), TODO: update this
+		"- [```bor debug pprof```](./debug_pprof.md): Dumps bor pprof traces.",
+		"- [```bor debug block <number>```](./debug_block.md): Dumps bor block traces.",
 	}
 	items = append(items, examples...)
 	return strings.Join(items, "\n\n")
@@ -56,25 +57,17 @@ func (d *DebugCommand) MarkDown() string {
 
 // Help implements the cli.Command interface
 func (c *DebugCommand) Help() string {
-	return `Usage: bor peers <subcommand>
+	return `Usage: bor debug <subcommand>
 
-  This command groups actions to interact with peers.
+  This command takes a debug dump of the running client. 
 	
-  List the connected peers:
-  
-    $ bor peers list
-	
-  Add a new peer by enode:
-  
-    $ bor peers add <enode>
+	Get the pprof traces:
 
-  Remove a connected peer by enode:
+		$ bor debug pprof <enode>
 
-    $ bor peers remove <enode>
+	Get the block traces:
 
-  Display information about a peer:
-
-    $ bor peers status <peer id>`
+		$ bor debug block <number>`
 }
 
 // Synopsis implements the cli.Command interface
