@@ -72,7 +72,7 @@ func (c *DebugCommand) Help() string {
 
 // Synopsis implements the cli.Command interface
 func (c *DebugCommand) Synopsis() string {
-	return "Interact with peers"
+	return "Get traces of the running client"
 }
 
 // Run implements the cli.Command interface
