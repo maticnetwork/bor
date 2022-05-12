@@ -34,7 +34,7 @@ func CreateMockServer(config *Config) (*Server, error) {
 		config = DefaultConfig()
 	}
 
-	// find available port
+	// find available port for grpc server
 	rand.Seed(time.Now().UnixNano())
 	var from int32 = 60000 // the min port to start checking from
 	var to int32 = 61000   // the max port to start checking from
@@ -49,6 +49,15 @@ func CreateMockServer(config *Config) (*Server, error) {
 	// datadir
 	datadir, _ := ioutil.TempDir("/tmp", "bor-cli-test")
 	config.DataDir = datadir
+
+	// find available port for http server
+	from = 8545
+	to = 9545
+	port, err = findAvailablePort(rand.Int31n(to-from+1)+from, 0)
+	if err != nil {
+		return nil, err
+	}
+	config.JsonRPC.Http.Port = uint64(port)
 
 	// start the server
 	return NewServer(config)
