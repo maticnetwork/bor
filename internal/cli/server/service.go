@@ -10,8 +10,8 @@ import (
 
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/eth/tracers"
+	"github.com/ethereum/go-ethereum/eth/tracers/logger"
 	"github.com/ethereum/go-ethereum/internal/cli/server/pprof"
 	"github.com/ethereum/go-ethereum/internal/cli/server/proto"
 	"github.com/ethereum/go-ethereum/p2p"
@@ -184,7 +184,7 @@ func (s *Server) DebugBlock(req *proto.DebugBlockRequest, stream proto.Bor_Debug
 	traceReq := &tracers.TraceBlockRequest{
 		Number: req.Number,
 		Config: &tracers.TraceConfig{
-			LogConfig: &vm.LogConfig{
+			Config: &logger.Config{
 				EnableMemory: true,
 			},
 		},
@@ -298,7 +298,7 @@ func (s *Server) TraceBlock(ctx context.Context, req *proto.TraceRequest) (*prot
 	traceReq := &tracers.TraceBlockRequest{
 		Number: req.Number,
 		Config: &tracers.TraceConfig{
-			LogConfig: &vm.LogConfig{
+			Config: &logger.Config{
 				EnableMemory: true,
 			},
 		},

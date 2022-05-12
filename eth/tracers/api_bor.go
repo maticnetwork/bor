@@ -8,6 +8,7 @@ import (
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/eth/tracers/logger"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -56,7 +57,8 @@ func (api *API) traceBlock2(ctx context.Context, block *types.Block, config *Tra
 	if config != nil && config.Reexec != nil {
 		reexec = *config.Reexec
 	}
-	statedb, err := api.backend.StateAtBlock(ctx, parent, reexec, nil, true)
+	// TODO: discuss consequences of setting preferDisk false.
+	statedb, err := api.backend.StateAtBlock(ctx, parent, reexec, nil, true, false)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +76,7 @@ func (api *API) traceBlock2(ctx context.Context, block *types.Block, config *Tra
 		message, _ := tx.AsMessage(signer, block.BaseFee())
 		txContext := core.NewEVMTxContext(message)
 
-		tracer := vm.NewStructLogger(config.LogConfig)
+		tracer := logger.NewStructLogger(config.Config)
 
 		// Run the transaction with tracing enabled.
 		vmenv := vm.NewEVM(blockCtx, txContext, statedb, api.backend.ChainConfig(), vm.Config{Debug: true, Tracer: tracer, NoBaseFee: true})
