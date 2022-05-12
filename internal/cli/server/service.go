@@ -21,6 +21,8 @@ import (
 	grpc_net_conn "github.com/mitchellh/go-grpc-net-conn"
 )
 
+const chunkSize = 1024 * 1024 * 1024
+
 func sendStreamDebugFile(stream proto.Bor_DebugPprofServer, headers map[string]string, data []byte) error {
 	// open the stream and send the headers
 	err := stream.Send(&proto.DebugFileResponse{
@@ -35,12 +37,13 @@ func sendStreamDebugFile(stream proto.Bor_DebugPprofServer, headers map[string]s
 	}
 
 	// Wrap our conn around the response.
+	encoder := grpc_net_conn.SimpleEncoder(func(msg gproto.Message) *[]byte {
+		return &msg.(*proto.DebugFileResponse_Input).Data
+	})
 	conn := &grpc_net_conn.Conn{
 		Stream:  stream,
 		Request: &proto.DebugFileResponse_Input{},
-		Encode: grpc_net_conn.SimpleEncoder(func(msg gproto.Message) *[]byte {
-			return &msg.(*proto.DebugFileResponse_Input).Data
-		}),
+		Encode:  grpc_net_conn.ChunkedEncoder(encoder, chunkSize),
 	}
 	if _, err := conn.Write(data); err != nil {
 		return err
