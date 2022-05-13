@@ -1,43 +1,34 @@
 name: Release
 
 on:
-  push:
-    branches-ignore:
-      - '**'
-    tags:
-      - 'v*.*.*'
-      # to be used by fork patch-releases ^^
-      - 'v*.*.*-*'
+  release:
+    types: [created]
 
 jobs:
-  goreleaser:
+  arm64:
+    name: Release Go Binary arm64
+    runs-on: [self-hosted, arm64]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Build bor
+        run: |
+          cd cmd/geth && /opt/go/1.18.1/bin/go build
+          mv geth bor
+          tar -czvf bor-$(basename ${GITHUB_REF})-linux-arm64.tar.gz bor
+          echo $(md5sum bor | awk '{print $1}') > bor-$(basename ${GITHUB_REF})-linux-arm64.tar.gz.md5
+      - name: Upload bor to release page
+        run: |
+          github-assets-uploader -logtostderr -f cmd/geth/bor-$(basename ${GITHUB_REF})-linux-arm64.tar.gz -mediatype application/gzip -repo ${GITHUB_REPOSITORY} -token ${{ secrets.GITHUB_TOKEN }} -tag=$(basename ${GITHUB_REF}) -releasename="" -retry 3
+          github-assets-uploader -logtostderr -f cmd/geth/bor-$(basename ${GITHUB_REF})-linux-arm64.tar.gz.md5 -mediatype text/plain -repo ${GITHUB_REPOSITORY} -token ${{ secrets.GITHUB_TOKEN }} -tag=$(basename ${GITHUB_REF}) -releasename="" -retry 3
+  amd64:
+    name: Release Go Binary amd64
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v2
+      - uses: actions/checkout@v2
+      - uses: wangyoucao577/go-release-action@v1.26
         with:
-          fetch-depth: 0
-
-      - name: Set up Go
-        uses: actions/setup-go@master
-        with:
-          go-version: 1.17.x
-
-      - name: Prepare
-        id: prepare
-        run: |
-            TAG=${GITHUB_REF#refs/tags/}
-            echo ::set-output name=tag_name::${TAG}
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v1
-
-      - name: Run GoReleaser
-        run: |
-            make release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ steps.prepare.outputs.tag_name }}
-          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-          DOCKER_USERNAME: ${{ secrets.DOCKERHUB }}
-          DOCKER_PASSWORD: ${{ secrets.DOCKERHUB_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          goos: linux
+          goarch: amd64
+          project_path: ./cmd/geth
+          binary_name: bor
