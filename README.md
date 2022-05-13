@@ -134,3 +134,4 @@ included in our repository in the `COPYING` file.
 ## Join our Discord server
 
 Join Polygon community  – share your ideas or just say hi over [on Discord](https://discord.gg/zdwkdvMNY2).
+
