@@ -1312,13 +1312,14 @@ func applyMessage(
 	chainConfig *params.ChainConfig,
 	chainContext core.ChainContext,
 ) error {
+	initialGas := msg.Gas()
 	// Create a new context to be used in the EVM environment
 	blockContext := core.NewEVMBlockContext(header, chainContext, &header.Coinbase)
 	// Create a new environment which holds all relevant information
 	// about the transaction and calling mechanisms.
 	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, state, chainConfig, vm.Config{})
 	// Apply the transaction to the current state (included in the env)
-	_, _, err := vmenv.Call(
+	_, gasLeft, err := vmenv.Call(
 		vm.AccountRef(msg.From()),
 		*msg.To(),
 		msg.Data(),
@@ -1329,6 +1330,9 @@ func applyMessage(
 	if err != nil {
 		state.Finalise(true)
 	}
+
+	gasUsed := initialGas - gasLeft
+	log.Info("Apply message", "gasUsed", gasUsed, "gasLeft", gasLeft, "initialGas", initialGas)
 
 	return nil
 }
