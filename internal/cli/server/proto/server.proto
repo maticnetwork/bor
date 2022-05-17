@@ -1,0 +1,145 @@
+syntax = "proto3";
+
+package proto;
+
+import "google/protobuf/empty.proto";
+
+option go_package = "/command/server/proto";
+
+service Bor {
+    rpc Pprof(PprofRequest) returns (stream PprofResponse);
+
+    rpc PeersAdd(PeersAddRequest) returns (PeersAddResponse);
+
+    rpc PeersRemove(PeersRemoveRequest) returns (PeersRemoveResponse);
+
+    rpc PeersList(PeersListRequest) returns (PeersListResponse);
+
+    rpc PeersStatus(PeersStatusRequest) returns (PeersStatusResponse);
+
+    rpc ChainSetHead(ChainSetHeadRequest) returns (ChainSetHeadResponse);
+
+    rpc Status(google.protobuf.Empty) returns (StatusResponse);
+    
+    rpc ChainWatch(ChainWatchRequest) returns (stream ChainWatchResponse);
+}
+
+message ChainWatchRequest {
+
+}
+
+message ChainWatchResponse {
+    repeated BlockStub oldchain = 1;
+    repeated BlockStub newchain = 2;
+    string type = 3;
+}
+
+message BlockStub {
+    string hash = 1;
+    uint64 number = 2;
+}
+
+message PeersAddRequest {
+    string enode = 1;
+    bool trusted = 2;
+}
+
+message PeersAddResponse {
+}
+
+message PeersRemoveRequest {
+    string enode = 1;
+    bool trusted = 2;
+}
+
+message PeersRemoveResponse {
+}
+
+message PeersListRequest {
+}
+
+message PeersListResponse {
+    repeated Peer peers = 1;
+}
+
+message PeersStatusRequest {
+    string enode = 1;
+}
+
+message PeersStatusResponse {
+    Peer peer = 1;
+}
+
+message Peer {
+    string id = 1;
+    string enode = 2;
+    string enr = 3;
+    repeated string caps = 4;
+    string name = 5;
+    bool trusted = 6;
+    bool static = 7;
+}
+
+message ChainSetHeadRequest {
+    uint64 number = 1;
+}
+
+message ChainSetHeadResponse {
+}
+
+message StatusResponse {
+    Header currentBlock = 1;
+    Header currentHeader = 2;
+    int64 numPeers = 3;
+    string syncMode = 4;
+    Syncing syncing = 5;
+    repeated Fork forks = 6;
+
+    message Fork {
+        string name = 1;
+        int64 block = 2;
+        bool disabled = 3;
+    }
+
+    message Syncing {
+        int64 startingBlock = 1;
+        int64 highestBlock = 2;
+        int64 currentBlock = 3;
+    }
+}
+
+message Header {
+    string hash = 1;
+    uint64 number = 2;
+}
+
+message PprofRequest {
+    Type type = 1;
+
+    string profile = 2;
+
+    int64 seconds = 3;
+
+    enum Type {
+        LOOKUP = 0;
+        CPU = 1;
+        TRACE = 2;
+    }
+}
+
+message PprofResponse {
+    oneof event {
+        Open open = 1;
+        Input input = 2;
+        google.protobuf.Empty eof = 3;
+    }
+
+    message Open {
+        map<string, string> headers = 1;
+        int64 size = 2;
+    }
+
+    message Input {
+        bytes data = 1;    
+    }
+}
