@@ -69,7 +69,8 @@ escape:
 	cd $(path) && go test -gcflags "-m -m" -run none -bench=BenchmarkJumpdest* -benchmem -memprofile mem.out
 
 lint:
-	@./build/bin/golangci-lint run --config ./.golangci.yml
+	@./build/bin/golangci-lint run --config ./.golangci.yml \
+		consensus/bor
 
 lintci-deps:
 	rm -f ./build/bin/golangci-lint
