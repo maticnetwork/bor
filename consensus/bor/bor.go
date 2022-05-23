@@ -291,6 +291,11 @@ func (c *Bor) Author(header *types.Header) (common.Address, error) {
 	return ecrecover(header, c.signatures, c.config)
 }
 
+// Return ethAPI
+func (c *Bor) EthAPI() *ethapi.PublicBlockChainAPI {
+	return c.ethAPI
+}
+
 // VerifyHeader checks whether a header conforms to the consensus rules.
 func (c *Bor) VerifyHeader(chain consensus.ChainHeaderReader, header *types.Header, seal bool) error {
 	return c.verifyHeader(chain, header, nil)
