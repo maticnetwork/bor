@@ -11,6 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor"
+	"github.com/ethereum/go-ethereum/consensus/bor/heimdall"
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -140,24 +141,24 @@ func sign(t *testing.T, header *types.Header, signer []byte, c *params.BorConfig
 	copy(header.Extra[len(header.Extra)-extraSeal:], sig)
 }
 
-func stateSyncEventsPayload(t *testing.T) *bor.ResponseWithHeight {
+func stateSyncEventsPayload(t *testing.T) *heimdall.ResponseWithHeight {
 	stateData, err := ioutil.ReadFile("./testdata/states.json")
 	if err != nil {
 		t.Fatalf("%s", err)
 	}
-	res := &bor.ResponseWithHeight{}
+	res := &heimdall.ResponseWithHeight{}
 	if err := json.Unmarshal(stateData, res); err != nil {
 		t.Fatalf("%s", err)
 	}
 	return res
 }
 
-func loadSpanFromFile(t *testing.T) (*bor.ResponseWithHeight, *bor.HeimdallSpan) {
+func loadSpanFromFile(t *testing.T) (*heimdall.ResponseWithHeight, *bor.HeimdallSpan) {
 	spanData, err := ioutil.ReadFile("./testdata/span.json")
 	if err != nil {
 		t.Fatalf("%s", err)
 	}
-	res := &bor.ResponseWithHeight{}
+	res := &heimdall.ResponseWithHeight{}
 	if err := json.Unmarshal(spanData, res); err != nil {
 		t.Fatalf("%s", err)
 	}
