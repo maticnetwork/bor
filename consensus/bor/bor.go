@@ -12,24 +12,24 @@ import (
 	"math/big"
 	"sort"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
 	lru "github.com/hashicorp/golang-lru"
 	"golang.org/x/crypto/sha3"
 
-	ethereum "github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts"
-	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/consensus/bor/api"
+	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
+	"github.com/ethereum/go-ethereum/consensus/bor/contract"
+	"github.com/ethereum/go-ethereum/consensus/bor/statefull"
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
@@ -116,9 +116,6 @@ var (
 	// errOutOfRangeChain is returned if an authorization list is attempted to
 	// be modified via out-of-range or non-contiguous headers.
 	errOutOfRangeChain = errors.New("out of range or non-contiguous chain")
-
-	// errShutdownDetected is returned if a shutdown was detected
-	errShutdownDetected = errors.New("shutdown detected")
 )
 
 // SignerFn is a signer callback function to request a header to be signed by a
@@ -213,6 +210,11 @@ func BorRLP(header *types.Header, c *params.BorConfig) []byte {
 	return b.Bytes()
 }
 
+type ABI interface {
+	Pack(name string, args ...interface{}) ([]byte, error)
+	UnpackIntoInterface(v interface{}, name string, data []byte) error
+}
+
 // Bor is the matic-bor consensus engine
 type Bor struct {
 	chainConfig *params.ChainConfig // Chain config
@@ -226,12 +228,10 @@ type Bor struct {
 	signFn SignerFn       // Signer function to authorize hashes with
 	lock   sync.RWMutex   // Protects the signer fields
 
-	ethAPI                 *ethapi.PublicBlockChainAPI
-	GenesisContractsClient *GenesisContractsClient
-	validatorSetABI        abi.ABI
-	stateReceiverABI       abi.ABI
+	ethAPI                 api.Caller
+	GenesisContractsClient GenesisContract
+	validatorSet           ABI
 	HeimdallClient         IHeimdallClient
-	WithoutHeimdall        bool
 
 	scope event.SubscriptionScope
 	// The fields below are for testing only
@@ -242,9 +242,9 @@ type Bor struct {
 func New(
 	chainConfig *params.ChainConfig,
 	db ethdb.Database,
-	ethAPI *ethapi.PublicBlockChainAPI,
-	heimdallURL string,
-	withoutHeimdall bool,
+	ethAPI api.Caller,
+	heimdallClient IHeimdallClient,
+	genesisContracts GenesisContract,
 ) *Bor {
 	// get bor config
 	borConfig := chainConfig.Bor
@@ -253,14 +253,10 @@ func New(
 	if borConfig != nil && borConfig.Sprint == 0 {
 		borConfig.Sprint = defaultSprintLength
 	}
-
 	// Allocate the snapshot caches and create the engine
 	recents, _ := lru.NewARC(inmemorySnapshots)
 	signatures, _ := lru.NewARC(inmemorySignatures)
-	vABI, _ := abi.JSON(strings.NewReader(validatorsetABI))
-	sABI, _ := abi.JSON(strings.NewReader(stateReceiverABI))
-	heimdallClient, _ := NewHeimdallClient(heimdallURL)
-	genesisContractsClient := NewGenesisContractsClient(chainConfig, borConfig.ValidatorContract, borConfig.StateReceiverContract, ethAPI)
+
 	c := &Bor{
 		chainConfig:            chainConfig,
 		config:                 borConfig,
@@ -268,11 +264,9 @@ func New(
 		ethAPI:                 ethAPI,
 		recents:                recents,
 		signatures:             signatures,
-		validatorSetABI:        vABI,
-		stateReceiverABI:       sABI,
-		GenesisContractsClient: genesisContractsClient,
+		validatorSet:           contract.ValidatorSet(),
+		GenesisContractsClient: genesisContracts,
 		HeimdallClient:         heimdallClient,
-		WithoutHeimdall:        withoutHeimdall,
 	}
 
 	// make sure we can decode all the GenesisAlloc in the BorConfig.
@@ -474,7 +468,7 @@ func (c *Bor) snapshot(chain consensus.ChainHeaderReader, number uint64, hash co
 
 		// If an on-disk checkpoint snapshot can be found, use that
 		if number%checkpointInterval == 0 {
-			if s, err := loadSnapshot(c.config, c.signatures, c.db, hash, c.ethAPI); err == nil {
+			if s, err := loadSnapshot(c.config, c.signatures, c.db, hash); err == nil {
 				log.Trace("Loaded snapshot from disk", "number", number, "hash", hash)
 				snap = s
 				break
@@ -499,7 +493,7 @@ func (c *Bor) snapshot(chain consensus.ChainHeaderReader, number uint64, hash co
 				}
 
 				// new snap shot
-				snap = newSnapshot(c.config, c.signatures, number, hash, validators, c.ethAPI)
+				snap = newSnapshot(c.config, c.signatures, number, hash, validators)
 				if err := snap.store(c.db); err != nil {
 					return nil, err
 				}
@@ -695,14 +689,14 @@ func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, 
 	var err error
 	headerNumber := header.Number.Uint64()
 	if headerNumber%c.config.Sprint == 0 {
-		cx := chainContext{Chain: chain, Bor: c}
+		cx := statefull.ChainContext{Chain: chain, Bor: c}
 		// check and commit span
 		if err := c.checkAndCommitSpan(state, header, cx); err != nil {
 			log.Error("Error while committing span", "error", err)
 			return
 		}
 
-		if !c.WithoutHeimdall {
+		if c.HeimdallClient != nil {
 			// commit statees
 			stateSyncData, err = c.CommitStates(state, header, cx)
 			if err != nil {
@@ -762,7 +756,7 @@ func (c *Bor) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *typ
 	headerNumber := header.Number.Uint64()
 
 	if headerNumber%c.config.Sprint == 0 {
-		cx := chainContext{Chain: chain, Bor: c}
+		cx := statefull.ChainContext{Chain: chain, Bor: c}
 
 		// check and commit span
 		err := c.checkAndCommitSpan(state, header, cx)
@@ -771,7 +765,7 @@ func (c *Bor) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *typ
 			return nil, err
 		}
 
-		if !c.WithoutHeimdall {
+		if c.HeimdallClient != nil {
 			// commit states
 			stateSyncData, err = c.CommitStates(state, header, cx)
 			if err != nil {
@@ -934,7 +928,7 @@ func (c *Bor) GetCurrentSpan(headerHash common.Hash) (*Span, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	data, err := c.validatorSetABI.Pack(method)
+	data, err := c.validatorSet.Pack(method)
 	if err != nil {
 		log.Error("Unable to pack tx for getCurrentSpan", "error", err)
 		return nil, err
@@ -958,7 +952,7 @@ func (c *Bor) GetCurrentSpan(headerHash common.Hash) (*Span, error) {
 		StartBlock *big.Int
 		EndBlock   *big.Int
 	})
-	if err := c.validatorSetABI.UnpackIntoInterface(ret, method, result); err != nil {
+	if err := c.validatorSet.UnpackIntoInterface(ret, method, result); err != nil {
 		return nil, err
 	}
 
@@ -983,7 +977,7 @@ func (c *Bor) GetCurrentValidators(headerHash common.Hash, blockNumber uint64) (
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	data, err := c.validatorSetABI.Pack(method, big.NewInt(0).SetUint64(blockNumber))
+	data, err := c.validatorSet.Pack(method, big.NewInt(0).SetUint64(blockNumber))
 	if err != nil {
 		log.Error("Unable to pack tx for getValidator", "error", err)
 		return nil, err
@@ -1012,7 +1006,7 @@ func (c *Bor) GetCurrentValidators(headerHash common.Hash, blockNumber uint64) (
 		ret1,
 	}
 
-	if err := c.validatorSetABI.UnpackIntoInterface(out, method, result); err != nil {
+	if err := c.validatorSet.UnpackIntoInterface(out, method, result); err != nil {
 		return nil, err
 	}
 
@@ -1071,7 +1065,7 @@ func (c *Bor) fetchAndCommitSpan(
 ) error {
 	var heimdallSpan HeimdallSpan
 
-	if c.WithoutHeimdall {
+	if c.HeimdallClient == nil {
 		s, err := c.getNextHeimdallSpanForTest(newSpanID, state, header, chain)
 		if err != nil {
 			return err
@@ -1128,7 +1122,7 @@ func (c *Bor) fetchAndCommitSpan(
 	)
 
 	// get packed data
-	data, err := c.validatorSetABI.Pack(method,
+	data, err := c.validatorSet.Pack(method,
 		big.NewInt(0).SetUint64(heimdallSpan.ID),
 		big.NewInt(0).SetUint64(heimdallSpan.StartBlock),
 		big.NewInt(0).SetUint64(heimdallSpan.EndBlock),
@@ -1141,10 +1135,10 @@ func (c *Bor) fetchAndCommitSpan(
 	}
 
 	// get system message
-	msg := getSystemMessage(common.HexToAddress(c.config.ValidatorContract), data)
+	msg := statefull.GetSystemMessage(common.HexToAddress(c.config.ValidatorContract), data)
 
 	// apply message
-	_, err = applyMessage(msg, state, header, c.chainConfig, chain)
+	_, err = statefull.ApplyMessage(msg, state, header, c.chainConfig, chain)
 	return err
 }
 
@@ -1152,7 +1146,7 @@ func (c *Bor) fetchAndCommitSpan(
 func (c *Bor) CommitStates(
 	state *state.StateDB,
 	header *types.Header,
-	chain chainContext,
+	chain statefull.ChainContext,
 ) ([]*types.StateSyncData, error) {
 	stateSyncs := make([]*types.StateSyncData, 0)
 	number := header.Number.Uint64()
@@ -1163,11 +1157,13 @@ func (c *Bor) CommitStates(
 
 	to := time.Unix(int64(chain.Chain.GetHeaderByNumber(number-c.config.Sprint).Time), 0)
 	lastStateID := _lastStateID.Uint64()
+
 	log.Info(
 		"Fetching state updates from Heimdall",
 		"fromID", lastStateID+1,
 		"to", to.Format(time.RFC3339))
 	eventRecords, err := c.HeimdallClient.FetchStateSyncEvents(lastStateID+1, to.Unix())
+
 	if c.config.OverrideStateSyncRecords != nil {
 		if val, ok := c.config.OverrideStateSyncRecords[strconv.FormatUint(number, 10)]; ok {
 			eventRecords = eventRecords[0:val]
@@ -1206,7 +1202,7 @@ func (c *Bor) CommitStates(
 	return stateSyncs, nil
 }
 
-func validateEventRecord(eventRecord *EventRecordWithTime, number uint64, to time.Time, lastStateID uint64, chainID string) error {
+func validateEventRecord(eventRecord *clerk.EventRecordWithTime, number uint64, to time.Time, lastStateID uint64, chainID string) error {
 	// event id should be sequential and event.Time should lie in the range [from, to)
 	if lastStateID+1 != eventRecord.ID || eventRecord.ChainID != chainID || !eventRecord.Time.Before(to) {
 		return &InvalidStateReceivedError{number, lastStateID, &to, eventRecord}
@@ -1235,7 +1231,7 @@ func (c *Bor) getNextHeimdallSpanForTest(
 	}
 
 	// get local chain context object
-	localContext := chain.(chainContext)
+	localContext := chain.(statefull.ChainContext)
 	// Retrieve the snapshot needed to verify this header and cache it
 	snap, err := c.snapshot(localContext.Chain, headerNumber-1, header.ParentHash, nil)
 	if err != nil {
@@ -1265,87 +1261,10 @@ func (c *Bor) getNextHeimdallSpanForTest(
 	return heimdallSpan, nil
 }
 
-//
-// Chain context
-//
-
-// chain context
-type chainContext struct {
-	Chain consensus.ChainHeaderReader
-	Bor   consensus.Engine
-}
-
-func (c chainContext) Engine() consensus.Engine {
-	return c.Bor
-}
-
-func (c chainContext) GetHeader(hash common.Hash, number uint64) *types.Header {
-	return c.Chain.GetHeader(hash, number)
-}
-
-// callmsg implements core.Message to allow passing it as a transaction simulator.
-type callmsg struct {
-	ethereum.CallMsg
-}
-
-func (m callmsg) From() common.Address { return m.CallMsg.From }
-func (m callmsg) Nonce() uint64        { return 0 }
-func (m callmsg) CheckNonce() bool     { return false }
-func (m callmsg) To() *common.Address  { return m.CallMsg.To }
-func (m callmsg) GasPrice() *big.Int   { return m.CallMsg.GasPrice }
-func (m callmsg) Gas() uint64          { return m.CallMsg.Gas }
-func (m callmsg) Value() *big.Int      { return m.CallMsg.Value }
-func (m callmsg) Data() []byte         { return m.CallMsg.Data }
-
-// get system message
-func getSystemMessage(toAddress common.Address, data []byte) callmsg {
-	return callmsg{
-		ethereum.CallMsg{
-			From:     systemAddress,
-			Gas:      math.MaxUint64 / 2,
-			GasPrice: big.NewInt(0),
-			Value:    big.NewInt(0),
-			To:       &toAddress,
-			Data:     data,
-		},
-	}
-}
-
-// apply message
-func applyMessage(
-	msg callmsg,
-	state *state.StateDB,
-	header *types.Header,
-	chainConfig *params.ChainConfig,
-	chainContext core.ChainContext,
-) (uint64, error) {
-	initialGas := msg.Gas()
-
-	// Create a new context to be used in the EVM environment
-	blockContext := core.NewEVMBlockContext(header, chainContext, &header.Coinbase)
-	// Create a new environment which holds all relevant information
-	// about the transaction and calling mechanisms.
-	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, state, chainConfig, vm.Config{})
-	// Apply the transaction to the current state (included in the env)
-	_, gasLeft, err := vmenv.Call(
-		vm.AccountRef(msg.From()),
-		*msg.To(),
-		msg.Data(),
-		msg.Gas(),
-		msg.Value(),
-	)
-	// Update the state with pending changes
-	if err != nil {
-		state.Finalise(true)
-	}
-
-	gasUsed := initialGas - gasLeft
-	return gasUsed, nil
-}
 
 func validatorContains(a []*Validator, x *Validator) (*Validator, bool) {
 	for _, n := range a {
-		if bytes.Compare(n.Address.Bytes(), x.Address.Bytes()) == 0 {
+		if n.Address == x.Address {
 			return n, true
 		}
 	}

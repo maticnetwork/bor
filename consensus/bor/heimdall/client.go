@@ -1,7 +1,8 @@
-package bor
+package heimdall
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -9,10 +10,14 @@ import (
 	"sort"
 	"time"
 
+	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
 	"github.com/ethereum/go-ethereum/log"
 )
 
-var (
+// errShutdownDetected is returned if a shutdown was detected
+var errShutdownDetected = errors.New("shutdown detected")
+
+const (
 	stateFetchLimit = 50
 )
 
@@ -23,32 +28,24 @@ type ResponseWithHeight struct {
 	Result json.RawMessage `json:"result"`
 }
 
-type IHeimdallClient interface {
-	Fetch(path string, query string) (*ResponseWithHeight, error)
-	FetchWithRetry(path string, query string) (*ResponseWithHeight, error)
-	FetchStateSyncEvents(fromID uint64, to int64) ([]*EventRecordWithTime, error)
-	Close()
-}
-
 type HeimdallClient struct {
 	urlString string
 	client    http.Client
 	closeCh   chan struct{}
 }
 
-func NewHeimdallClient(urlString string) (*HeimdallClient, error) {
-	h := &HeimdallClient{
+func NewHeimdallClient(urlString string) *HeimdallClient {
+	return &HeimdallClient{
 		urlString: urlString,
 		client: http.Client{
-			Timeout: time.Duration(5 * time.Second),
+			Timeout: 5 * time.Second,
 		},
 		closeCh: make(chan struct{}),
 	}
-	return h, nil
 }
 
-func (h *HeimdallClient) FetchStateSyncEvents(fromID uint64, to int64) ([]*EventRecordWithTime, error) {
-	eventRecords := make([]*EventRecordWithTime, 0)
+func (h *HeimdallClient) FetchStateSyncEvents(fromID uint64, to int64) ([]*clerk.EventRecordWithTime, error) {
+	eventRecords := make([]*clerk.EventRecordWithTime, 0)
 	for {
 		queryParams := fmt.Sprintf("from-id=%d&to-time=%d&limit=%d", fromID, to, stateFetchLimit)
 		log.Info("Fetching state sync events", "queryParams", queryParams)
@@ -56,7 +53,7 @@ func (h *HeimdallClient) FetchStateSyncEvents(fromID uint64, to int64) ([]*Event
 		if err != nil {
 			return nil, err
 		}
-		var _eventRecords []*EventRecordWithTime
+		var _eventRecords []*clerk.EventRecordWithTime
 		if response.Result == nil { // status 204
 			break
 		}
