@@ -13,6 +13,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor"
+	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -123,7 +124,7 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 
 	// First query will be from [id=1, (block-sprint).Time]
 	// Insert 5 events in this time range
-	eventRecords := []*bor.EventRecordWithTime{
+	eventRecords := []*clerk.EventRecordWithTime{
 		buildStateEvent(sample, 1, 3), // id = 1, time = 1
 		buildStateEvent(sample, 2, 1), // id = 2, time = 3
 		buildStateEvent(sample, 3, 2), // id = 3, time = 2
@@ -150,7 +151,7 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 	//
 	fromID = uint64(5)
 	to = int64(chain.GetHeaderByNumber(sprintSize).Time)
-	eventRecords = []*bor.EventRecordWithTime{
+	eventRecords = []*clerk.EventRecordWithTime{
 		buildStateEvent(sample, 5, 7),
 		buildStateEvent(sample, 6, 4),
 	}
@@ -243,35 +244,35 @@ func getMockedHeimdallClient(t *testing.T) (*mocks.IHeimdallClient, *bor.Heimdal
 	h.On(
 		"FetchStateSyncEvents",
 		mock.AnythingOfType("uint64"),
-		mock.AnythingOfType("int64")).Return([]*bor.EventRecordWithTime{getSampleEventRecord(t)}, nil)
+		mock.AnythingOfType("int64")).Return([]*clerk.EventRecordWithTime{getSampleEventRecord(t)}, nil)
 	return h, heimdallSpan
 }
 
-func generateFakeStateSyncEvents(sample *bor.EventRecordWithTime, count int) []*bor.EventRecordWithTime {
-	events := make([]*bor.EventRecordWithTime, count)
+func generateFakeStateSyncEvents(sample *clerk.EventRecordWithTime, count int) []*clerk.EventRecordWithTime {
+	events := make([]*clerk.EventRecordWithTime, count)
 	event := *sample
 	event.ID = 1
-	events[0] = &bor.EventRecordWithTime{}
+	events[0] = &clerk.EventRecordWithTime{}
 	*events[0] = event
 	for i := 1; i < count; i++ {
 		event.ID = uint64(i)
 		event.Time = event.Time.Add(1 * time.Second)
-		events[i] = &bor.EventRecordWithTime{}
+		events[i] = &clerk.EventRecordWithTime{}
 		*events[i] = event
 	}
 	return events
 }
 
-func buildStateEvent(sample *bor.EventRecordWithTime, id uint64, timeStamp int64) *bor.EventRecordWithTime {
+func buildStateEvent(sample *clerk.EventRecordWithTime, id uint64, timeStamp int64) *clerk.EventRecordWithTime {
 	event := *sample
 	event.ID = id
 	event.Time = time.Unix(timeStamp, 0)
 	return &event
 }
 
-func getSampleEventRecord(t *testing.T) *bor.EventRecordWithTime {
+func getSampleEventRecord(t *testing.T) *clerk.EventRecordWithTime {
 	res := stateSyncEventsPayload(t)
-	var _eventRecords []*bor.EventRecordWithTime
+	var _eventRecords []*clerk.EventRecordWithTime
 	if err := json.Unmarshal(res.Result, &_eventRecords); err != nil {
 		t.Fatalf("%s", err)
 	}

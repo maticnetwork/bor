@@ -21,10 +21,17 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
-var vABI, _ = abi.JSON(strings.NewReader(validatorsetABI))
+var (
+	vABI, _ = abi.JSON(strings.NewReader(validatorsetABI))
+	sABI, _ = abi.JSON(strings.NewReader(stateReceiverABI))
+)
 
 func ValidatorSet() abi.ABI {
 	return vABI
+}
+
+func StateReceiver() abi.ABI {
+	return sABI
 }
 
 type GenesisContractsClient struct {
@@ -49,6 +56,7 @@ func NewGenesisContractsClient(
 ) *GenesisContractsClient {
 	return &GenesisContractsClient{
 		validatorSetABI:       ValidatorSet(),
+		stateReceiverABI:      StateReceiver(),
 		ValidatorContract:     validatorContract,
 		StateReceiverContract: stateReceiverContract,
 		chainConfig:           chainConfig,
