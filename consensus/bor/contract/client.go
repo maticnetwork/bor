@@ -63,39 +63,50 @@ func (gc *GenesisContractsClient) CommitState(
 	chCtx statefull.ChainContext,
 ) (uint64, error) {
 	eventRecord := event.BuildEventRecord()
+
 	recordBytes, err := rlp.EncodeToBytes(eventRecord)
 	if err != nil {
 		return 0, err
 	}
-	method := "commitState"
+
+	const method = "commitState"
+
 	t := event.Time.Unix()
+
 	data, err := gc.stateReceiverABI.Pack(method, big.NewInt(0).SetInt64(t), recordBytes)
 	if err != nil {
 		log.Error("Unable to pack tx for commitState", "error", err)
 		return 0, err
 	}
+
 	msg := statefull.GetSystemMessage(common.HexToAddress(gc.StateReceiverContract), data)
 	gasUsed, err := statefull.ApplyMessage(msg, state, header, gc.chainConfig, chCtx)
+
 	// Logging event log with time and individual gasUsed
 	log.Info("→ committing new state", "eventRecord", event.String(gasUsed))
+
 	if err != nil {
 		return 0, err
 	}
+
 	return gasUsed, nil
 }
 
 func (gc *GenesisContractsClient) LastStateId(snapshotNumber uint64) (*big.Int, error) {
 	blockNr := rpc.BlockNumber(snapshotNumber)
 	method := "lastStateId"
+
 	data, err := gc.stateReceiverABI.Pack(method)
 	if err != nil {
 		log.Error("Unable to pack tx for LastStateId", "error", err)
+
 		return nil, err
 	}
 
 	msgData := (hexutil.Bytes)(data)
 	toAddress := common.HexToAddress(gc.StateReceiverContract)
 	gas := (hexutil.Uint64)(uint64(math.MaxUint64 / 2))
+
 	result, err := gc.ethAPI.Call(context.Background(), ethapi.TransactionArgs{
 		Gas:  &gas,
 		To:   &toAddress,
@@ -109,5 +120,6 @@ func (gc *GenesisContractsClient) LastStateId(snapshotNumber uint64) (*big.Int, 
 	if err := gc.stateReceiverABI.UnpackIntoInterface(ret, method, result); err != nil {
 		return nil, err
 	}
+
 	return *ret, nil
 }
