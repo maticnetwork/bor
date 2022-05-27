@@ -11,6 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor"
+	"github.com/ethereum/go-ethereum/consensus/bor/heimdall"
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -153,6 +154,30 @@ func sign(t *testing.T, header *types.Header, signer []byte, c *params.BorConfig
 	}
 
 	copy(header.Extra[len(header.Extra)-extraSeal:], sig)
+}
+
+//nolint:unused
+func loadSpanFromFile(t *testing.T) (*heimdall.ResponseWithHeight, *bor.HeimdallSpan) {
+	t.Helper()
+
+	spanData, err := ioutil.ReadFile("./testdata/span.json")
+	if err != nil {
+		t.Fatalf("%s", err)
+	}
+
+	res := &heimdall.ResponseWithHeight{}
+
+	if err := json.Unmarshal(spanData, res); err != nil {
+		t.Fatalf("%s", err)
+	}
+
+	heimdallSpan := &bor.HeimdallSpan{}
+
+	if err := json.Unmarshal(res.Result, heimdallSpan); err != nil {
+		t.Fatalf("%s", err)
+	}
+
+	return res, heimdallSpan
 }
 
 func getSignerKey(number uint64) []byte {
