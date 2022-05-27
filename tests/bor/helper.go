@@ -156,8 +156,10 @@ func sign(t *testing.T, header *types.Header, signer []byte, c *params.BorConfig
 	copy(header.Extra[len(header.Extra)-extraSeal:], sig)
 }
 
-//nolint:unused
+//nolint:unused,deadcode
 func stateSyncEventsPayload(t *testing.T) *heimdall.ResponseWithHeight {
+	t.Helper()
+
 	stateData, err := ioutil.ReadFile("./testdata/states.json")
 	if err != nil {
 		t.Fatalf("%s", err)
@@ -171,7 +173,7 @@ func stateSyncEventsPayload(t *testing.T) *heimdall.ResponseWithHeight {
 	return res
 }
 
-//nolint:unused
+//nolint:unused,deadcode
 func loadSpanFromFile(t *testing.T) (*heimdall.ResponseWithHeight, *bor.HeimdallSpan) {
 	t.Helper()
 

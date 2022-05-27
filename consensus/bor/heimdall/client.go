@@ -46,7 +46,7 @@ func NewHeimdallClient(urlString string) *HeimdallClient {
 
 const (
 	fetchStateSyncEventsFormat = "from-id=%d&to-time=%d&limit=%d"
-	fetchStateSyncEventsPath = "clerk/event-record/list"
+	fetchStateSyncEventsPath   = "clerk/event-record/list"
 )
 
 func (h *HeimdallClient) FetchStateSyncEvents(fromID uint64, to int64) ([]*clerk.EventRecordWithTime, error) {
