@@ -27,7 +27,6 @@ func TestGetSignerSuccessionNumber_ProposerIsSigner(t *testing.T) {
 	// proposer is signer
 	signer := validatorSet.Proposer.Address
 	successionNumber, err := snap.GetSignerSuccessionNumber(signer)
-
 	if err != nil {
 		t.Fatalf("%s", err)
 	}
@@ -54,7 +53,6 @@ func TestGetSignerSuccessionNumber_SignerIndexIsLarger(t *testing.T) {
 	// choose a signer at an index greater than proposer index
 	signer := snap.ValidatorSet.Validators[signerIndex].Address
 	successionNumber, err := snap.GetSignerSuccessionNumber(signer)
-
 	if err != nil {
 		t.Fatalf("%s", err)
 	}
@@ -77,7 +75,6 @@ func TestGetSignerSuccessionNumber_SignerIndexIsSmaller(t *testing.T) {
 	// choose a signer at an index greater than proposer index
 	signer := snap.ValidatorSet.Validators[signerIndex].Address
 	successionNumber, err := snap.GetSignerSuccessionNumber(signer)
-
 	if err != nil {
 		t.Fatalf("%s", err)
 	}
@@ -92,12 +89,16 @@ func TestGetSignerSuccessionNumber_ProposerNotFound(t *testing.T) {
 	snap := Snapshot{
 		ValidatorSet: NewValidatorSet(validators),
 	}
+
 	dummyProposerAddress := randomAddress()
 	snap.ValidatorSet.Proposer = &Validator{Address: dummyProposerAddress}
+
 	// choose any signer
 	signer := snap.ValidatorSet.Validators[3].Address
+
 	_, err := snap.GetSignerSuccessionNumber(signer)
 	assert.NotNil(t, err)
+
 	e, ok := err.(*UnauthorizedProposerError)
 	assert.True(t, ok)
 	assert.Equal(t, dummyProposerAddress.Bytes(), e.Proposer)
