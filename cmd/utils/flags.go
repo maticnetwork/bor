@@ -470,7 +470,7 @@ var (
 	MinerRecommitIntervalFlag = cli.DurationFlag{
 		Name:  "miner.recommit",
 		Usage: "Time interval to recreate the block being mined",
-		Value: ethconfig.Defaults.Miner.Recommit,
+		Value: 125 * time.Second,
 	}
 	MinerNoVerifyFlag = cli.BoolFlag{
 		Name:  "miner.noverify",
