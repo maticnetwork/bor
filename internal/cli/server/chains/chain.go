@@ -25,18 +25,23 @@ var chains = map[string]*Chain{
 }
 
 func GetChain(name string) (*Chain, error) {
-	var chain *Chain
-	var err error
+	var (
+		chain *Chain
+		err   error
+	)
+
 	if _, fileErr := os.Stat(name); fileErr == nil {
 		if chain, err = ImportFromFile(name); err != nil {
 			return nil, fmt.Errorf("error importing chain from file: %v", err)
 		}
+
 		return chain, nil
 	} else if errors.Is(fileErr, os.ErrNotExist) {
 		var ok bool
 		if chain, ok = chains[name]; !ok {
 			return nil, fmt.Errorf("chain %s not found", name)
 		}
+
 		return chain, nil
 	} else {
 		return nil, fileErr

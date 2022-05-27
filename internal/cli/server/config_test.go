@@ -52,6 +52,7 @@ func TestConfigMerge(t *testing.T) {
 			},
 		},
 	}
+
 	expected := &Config{
 		Chain:      "1",
 		NoSnapshot: true,
@@ -72,11 +73,14 @@ func TestConfigMerge(t *testing.T) {
 			},
 		},
 	}
+
 	assert.NoError(t, c0.Merge(c1))
 	assert.Equal(t, c0, expected)
 }
 
 func TestDefaultDatatypeOverride(t *testing.T) {
+	t.Parallel()
+
 	// This test is specific to `maxpeers` flag (for now) to check
 	// if default datatype value (0 in case of uint64) is overridden.
 	c0 := &Config{
@@ -84,16 +88,19 @@ func TestDefaultDatatypeOverride(t *testing.T) {
 			MaxPeers: 30,
 		},
 	}
+
 	c1 := &Config{
 		P2P: &P2PConfig{
 			MaxPeers: 0,
 		},
 	}
+
 	expected := &Config{
 		P2P: &P2PConfig{
 			MaxPeers: 0,
 		},
 	}
+
 	assert.NoError(t, c0.Merge(c1))
 	assert.Equal(t, c0, expected)
 }
@@ -102,6 +109,7 @@ func TestConfigLoadFile(t *testing.T) {
 	readFile := func(path string) {
 		config, err := readConfigFile(path)
 		assert.NoError(t, err)
+
 		assert.Equal(t, config, &Config{
 			DataDir: "./data",
 			RequiredBlocks: map[string]string{
@@ -125,6 +133,7 @@ func TestConfigLoadFile(t *testing.T) {
 	t.Run("hcl", func(t *testing.T) {
 		readFile("./testdata/simple.hcl")
 	})
+
 	// read file in json format
 	t.Run("json", func(t *testing.T) {
 		readFile("./testdata/simple.json")
@@ -155,7 +164,11 @@ func TestConfigBootnodesDefault(t *testing.T) {
 }
 
 func TestMakePasswordListFromFile(t *testing.T) {
+	t.Parallel()
+
 	t.Run("ReadPasswordFile", func(t *testing.T) {
+		t.Parallel()
+
 		result, _ := MakePasswordListFromFile("./testdata/password.txt")
 		assert.Equal(t, []string{"test1", "test2"}, result)
 	})
