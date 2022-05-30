@@ -2,6 +2,7 @@ package bor
 
 import (
 	"encoding/json"
+	"github.com/ethereum/go-ethereum/consensus/bor/set"
 
 	lru "github.com/hashicorp/golang-lru"
 
@@ -18,7 +19,7 @@ type Snapshot struct {
 
 	Number       uint64                    `json:"number"`       // Block number where the snapshot was created
 	Hash         common.Hash               `json:"hash"`         // Block hash where the snapshot was created
-	ValidatorSet *ValidatorSet             `json:"validatorSet"` // Validator set at this moment
+	ValidatorSet *set.ValidatorSet         `json:"validatorSet"` // Validator set at this moment
 	Recents      map[uint64]common.Address `json:"recents"`      // Set of recent signers for spam protections
 }
 
@@ -30,14 +31,14 @@ func newSnapshot(
 	sigcache *lru.ARCCache,
 	number uint64,
 	hash common.Hash,
-	validators []*Validator,
+	validators []*set.Validator,
 ) *Snapshot {
 	snap := &Snapshot{
 		config:       config,
 		sigcache:     sigcache,
 		Number:       number,
 		Hash:         hash,
-		ValidatorSet: NewValidatorSet(validators),
+		ValidatorSet: set.NewValidatorSet(validators),
 		Recents:      make(map[uint64]common.Address),
 	}
 
@@ -61,7 +62,7 @@ func loadSnapshot(config *params.BorConfig, sigcache *lru.ARCCache, db ethdb.Dat
 	snap.sigcache = sigcache
 
 	// update total voting power
-	if err := snap.ValidatorSet.updateTotalVotingPower(); err != nil {
+	if err := snap.ValidatorSet.UpdateTotalVotingPower(); err != nil {
 		return nil, err
 	}
 
@@ -149,7 +150,7 @@ func (s *Snapshot) apply(headers []*types.Header) (*Snapshot, error) {
 			validatorBytes := header.Extra[extraVanity : len(header.Extra)-extraSeal]
 
 			// get validators from headers and use that for new validator set
-			newVals, _ := ParseValidators(validatorBytes)
+			newVals, _ := set.ParseValidators(validatorBytes)
 			v := getUpdatedValidatorSet(snap.ValidatorSet.Copy(), newVals)
 			v.IncrementProposerPriority(1)
 			snap.ValidatorSet = v

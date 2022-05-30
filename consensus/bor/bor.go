@@ -25,6 +25,8 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/bor/api"
 	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
 	"github.com/ethereum/go-ethereum/consensus/bor/contract"
+	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
+	"github.com/ethereum/go-ethereum/consensus/bor/set"
 	"github.com/ethereum/go-ethereum/consensus/bor/statefull"
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/core"
@@ -445,7 +447,7 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 
 		currentValidators := snap.ValidatorSet.Copy().Validators
 		// sort validator by address
-		sort.Sort(ValidatorsByAddress(currentValidators))
+		sort.Sort(set.ValidatorsByAddress(currentValidators))
 
 		for i, validator := range currentValidators {
 			copy(validatorsBytes[i*validatorHeaderBytesLength:], validator.HeaderBytes())
@@ -673,7 +675,7 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 		}
 
 		// sort validator by address
-		sort.Sort(ValidatorsByAddress(newValidators))
+		sort.Sort(set.ValidatorsByAddress(newValidators))
 
 		for _, validator := range newValidators {
 			header.Extra = append(header.Extra, validator.HeaderBytes()...)
@@ -960,7 +962,7 @@ func (c *Bor) Close() error {
 }
 
 // GetCurrentSpan get current span from contract
-func (c *Bor) GetCurrentSpan(headerHash common.Hash) (*Span, error) {
+func (c *Bor) GetCurrentSpan(headerHash common.Hash) (*span.Span, error) {
 	// block
 	blockNr := rpc.BlockNumberOrHashWithHash(headerHash, false)
 
@@ -973,6 +975,7 @@ func (c *Bor) GetCurrentSpan(headerHash common.Hash) (*Span, error) {
 	data, err := c.validatorSet.Pack(method)
 	if err != nil {
 		log.Error("Unable to pack tx for getCurrentSpan", "error", err)
+
 		return nil, err
 	}
 
@@ -1000,7 +1003,7 @@ func (c *Bor) GetCurrentSpan(headerHash common.Hash) (*Span, error) {
 	}
 
 	// create new span
-	span := Span{
+	span := span.Span{
 		ID:         ret.Number.Uint64(),
 		StartBlock: ret.StartBlock.Uint64(),
 		EndBlock:   ret.EndBlock.Uint64(),
@@ -1010,7 +1013,7 @@ func (c *Bor) GetCurrentSpan(headerHash common.Hash) (*Span, error) {
 }
 
 // GetCurrentValidators get current validators
-func (c *Bor) GetCurrentValidators(headerHash common.Hash, blockNumber uint64) ([]*Validator, error) {
+func (c *Bor) GetCurrentValidators(headerHash common.Hash, blockNumber uint64) ([]*set.Validator, error) {
 	// block
 	blockNr := rpc.BlockNumberOrHashWithHash(headerHash, false)
 
@@ -1054,9 +1057,9 @@ func (c *Bor) GetCurrentValidators(headerHash common.Hash, blockNumber uint64) (
 		return nil, err
 	}
 
-	valz := make([]*Validator, len(*ret0))
+	valz := make([]*set.Validator, len(*ret0))
 	for i, a := range *ret0 {
-		valz[i] = &Validator{
+		valz[i] = &set.Validator{
 			Address:     a,
 			VotingPower: (*ret1)[i].Int64(),
 		}
@@ -1078,14 +1081,13 @@ func (c *Bor) checkAndCommitSpan(
 	}
 
 	if c.needToCommitSpan(span, headerNumber) {
-		err := c.fetchAndCommitSpan(span.ID+1, state, header, chain)
-		return err
+		return c.fetchAndCommitSpan(span.ID+1, state, header, chain)
 	}
 
 	return nil
 }
 
-func (c *Bor) needToCommitSpan(span *Span, headerNumber uint64) bool {
+func (c *Bor) needToCommitSpan(span *span.Span, headerNumber uint64) bool {
 	// if span is nil
 	if span == nil {
 		return false
@@ -1110,9 +1112,10 @@ func (c *Bor) fetchAndCommitSpan(
 	header *types.Header,
 	chain core.ChainContext,
 ) error {
-	var heimdallSpan HeimdallSpan
+	var heimdallSpan span.HeimdallSpan
 
 	if c.HeimdallClient == nil {
+		// fixme: move to a new mock or fake and remove c.HeimdallClient completely
 		s, err := c.getNextHeimdallSpanForTest(newSpanID, header, chain)
 		if err != nil {
 			return err
@@ -1120,14 +1123,12 @@ func (c *Bor) fetchAndCommitSpan(
 
 		heimdallSpan = *s
 	} else {
-		response, err := c.HeimdallClient.FetchWithRetry(fmt.Sprintf("bor/span/%d", newSpanID), "")
+		s, err := c.HeimdallClient.Span(newSpanID)
 		if err != nil {
 			return err
 		}
 
-		if err := json.Unmarshal(response.Result, &heimdallSpan); err != nil {
-			return err
-		}
+		heimdallSpan = *s
 	}
 
 	// check if chain id matches with heimdall span
@@ -1140,7 +1141,7 @@ func (c *Bor) fetchAndCommitSpan(
 	}
 
 	// get validators bytes
-	validators := make([]MinimalVal, 0, len(heimdallSpan.ValidatorSet.Validators))
+	validators := make([]set.MinimalVal, 0, len(heimdallSpan.ValidatorSet.Validators))
 	for _, val := range heimdallSpan.ValidatorSet.Validators {
 		validators = append(validators, val.MinimalVal())
 	}
@@ -1151,7 +1152,7 @@ func (c *Bor) fetchAndCommitSpan(
 	}
 
 	// get producers bytes
-	producers := make([]MinimalVal, 0, len(heimdallSpan.SelectedProducers))
+	producers := make([]set.MinimalVal, 0, len(heimdallSpan.SelectedProducers))
 	for _, val := range heimdallSpan.SelectedProducers {
 		producers = append(producers, val.MinimalVal())
 	}
@@ -1216,7 +1217,7 @@ func (c *Bor) CommitStates(
 		"fromID", lastStateID+1,
 		"to", to.Format(time.RFC3339))
 
-	eventRecords, err := c.HeimdallClient.FetchStateSyncEvents(lastStateID+1, to.Unix())
+	eventRecords, err := c.HeimdallClient.StateSyncEvents(lastStateID+1, to.Unix())
 	if err != nil {
 		log.Error("Error occurred when fetching state sync events", "stateID", lastStateID+1, "error", err)
 	}
@@ -1237,7 +1238,7 @@ func (c *Bor) CommitStates(
 		}
 
 		if err := validateEventRecord(eventRecord, number, to, lastStateID, chainID); err != nil {
-			log.Error(err.Error())
+			log.Error("while validating event record", "block", number, "to", to, "stateID", lastStateID, "error", err.Error())
 			break
 		}
 
@@ -1284,10 +1285,10 @@ func (c *Bor) getNextHeimdallSpanForTest(
 	newSpanID uint64,
 	header *types.Header,
 	chain core.ChainContext,
-) (*HeimdallSpan, error) {
+) (*span.HeimdallSpan, error) {
 	headerNumber := header.Number.Uint64()
 
-	span, err := c.GetCurrentSpan(header.ParentHash)
+	spanBor, err := c.GetCurrentSpan(header.ParentHash)
 	if err != nil {
 		return nil, err
 	}
@@ -1301,22 +1302,22 @@ func (c *Bor) getNextHeimdallSpanForTest(
 	}
 
 	// new span
-	span.ID = newSpanID
-	if span.EndBlock == 0 {
-		span.StartBlock = 256
+	spanBor.ID = newSpanID
+	if spanBor.EndBlock == 0 {
+		spanBor.StartBlock = 256
 	} else {
-		span.StartBlock = span.EndBlock + 1
+		spanBor.StartBlock = spanBor.EndBlock + 1
 	}
 
-	span.EndBlock = span.StartBlock + (100 * c.config.Sprint) - 1
+	spanBor.EndBlock = spanBor.StartBlock + (100 * c.config.Sprint) - 1
 
-	selectedProducers := make([]Validator, len(snap.ValidatorSet.Validators))
+	selectedProducers := make([]set.Validator, len(snap.ValidatorSet.Validators))
 	for i, v := range snap.ValidatorSet.Validators {
 		selectedProducers[i] = *v
 	}
 
-	heimdallSpan := &HeimdallSpan{
-		Span:              *span,
+	heimdallSpan := &span.HeimdallSpan{
+		Span:              *spanBor,
 		ValidatorSet:      *snap.ValidatorSet,
 		SelectedProducers: selectedProducers,
 		ChainID:           c.chainConfig.ChainID.String(),
@@ -1325,7 +1326,7 @@ func (c *Bor) getNextHeimdallSpanForTest(
 	return heimdallSpan, nil
 }
 
-func validatorContains(a []*Validator, x *Validator) (*Validator, bool) {
+func validatorContains(a []*set.Validator, x *set.Validator) (*set.Validator, bool) {
 	for _, n := range a {
 		if n.Address == x.Address {
 			return n, true
@@ -1335,11 +1336,11 @@ func validatorContains(a []*Validator, x *Validator) (*Validator, bool) {
 	return nil, false
 }
 
-func getUpdatedValidatorSet(oldValidatorSet *ValidatorSet, newVals []*Validator) *ValidatorSet {
+func getUpdatedValidatorSet(oldValidatorSet *set.ValidatorSet, newVals []*set.Validator) *set.ValidatorSet {
 	v := oldValidatorSet
 	oldVals := v.Validators
 
-	changes := make([]*Validator, 0, len(oldVals))
+	changes := make([]*set.Validator, 0, len(oldVals))
 
 	for _, ov := range oldVals {
 		if f, ok := validatorContains(newVals, ov); ok {
@@ -1358,7 +1359,7 @@ func getUpdatedValidatorSet(oldValidatorSet *ValidatorSet, newVals []*Validator)
 	}
 
 	if err := v.UpdateWithChangeSet(changes); err != nil {
-		log.Error("Error while updating change set", err)
+		log.Error("Error while updating change set", "error", err)
 	}
 
 	return v

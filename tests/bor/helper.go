@@ -12,6 +12,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall"
+	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
+	"github.com/ethereum/go-ethereum/consensus/bor/set"
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -47,6 +49,8 @@ type initializeData struct {
 }
 
 func buildEthereumInstance(t *testing.T, db ethdb.Database) *initializeData {
+	t.Helper()
+
 	genesisData, err := ioutil.ReadFile("./testdata/genesis.json")
 	if err != nil {
 		t.Fatalf("%s", err)
@@ -78,12 +82,16 @@ func buildEthereumInstance(t *testing.T, db ethdb.Database) *initializeData {
 }
 
 func insertNewBlock(t *testing.T, chain *core.BlockChain, block *types.Block) {
+	t.Helper()
+
 	if _, err := chain.InsertChain([]*types.Block{block}); err != nil {
 		t.Fatalf("%s", err)
 	}
 }
 
 func buildNextBlock(t *testing.T, _bor *bor.Bor, chain *core.BlockChain, block *types.Block, signer []byte, borConfig *params.BorConfig) *types.Block {
+	t.Helper()
+
 	header := block.Header()
 	header.Number.Add(header.Number, big.NewInt(1))
 	number := header.Number.Uint64()
@@ -96,7 +104,7 @@ func buildNextBlock(t *testing.T, _bor *bor.Bor, chain *core.BlockChain, block *
 	header.Time += bor.CalcProducerDelay(header.Number.Uint64(), 0, borConfig)
 	header.Extra = make([]byte, 32+65) // vanity + extraSeal
 
-	currentValidators := []*bor.Validator{bor.NewValidator(addr, 10)}
+	currentValidators := []*set.Validator{set.NewValidator(addr, 10)}
 
 	isSpanEnd := (number+1)%spanSize == 0
 	isSpanStart := number%spanSize == 0
@@ -111,7 +119,7 @@ func buildNextBlock(t *testing.T, _bor *bor.Bor, chain *core.BlockChain, block *
 	}
 
 	if isSprintEnd {
-		sort.Sort(bor.ValidatorsByAddress(currentValidators))
+		sort.Sort(set.ValidatorsByAddress(currentValidators))
 
 		validatorBytes := make([]byte, len(currentValidators)*validatorHeaderBytesLength)
 		header.Extra = make([]byte, 32+len(validatorBytes)+65) // vanity + validatorBytes + extraSeal
@@ -148,6 +156,8 @@ func buildNextBlock(t *testing.T, _bor *bor.Bor, chain *core.BlockChain, block *
 }
 
 func sign(t *testing.T, header *types.Header, signer []byte, c *params.BorConfig) {
+	t.Helper()
+
 	sig, err := secp256k1.Sign(crypto.Keccak256(bor.BorRLP(header, c)), signer)
 	if err != nil {
 		t.Fatalf("%s", err)
@@ -174,7 +184,7 @@ func stateSyncEventsPayload(t *testing.T) *heimdall.ResponseWithHeight {
 }
 
 //nolint:unused,deadcode
-func loadSpanFromFile(t *testing.T) (*heimdall.ResponseWithHeight, *bor.HeimdallSpan) {
+func loadSpanFromFile(t *testing.T) (*heimdall.SpanResponse, *span.HeimdallSpan) {
 	t.Helper()
 
 	spanData, err := ioutil.ReadFile("./testdata/span.json")
@@ -182,17 +192,13 @@ func loadSpanFromFile(t *testing.T) (*heimdall.ResponseWithHeight, *bor.Heimdall
 		t.Fatalf("%s", err)
 	}
 
-	res := &heimdall.ResponseWithHeight{}
+	res := &heimdall.SpanResponse{}
 
 	if err := json.Unmarshal(spanData, res); err != nil {
 		t.Fatalf("%s", err)
 	}
 
-	heimdallSpan := &bor.HeimdallSpan{}
-
-	if err := json.Unmarshal(res.Result, heimdallSpan); err != nil {
-		t.Fatalf("%s", err)
-	}
+	heimdallSpan := &span.HeimdallSpan{}
 
 	return res, heimdallSpan
 }

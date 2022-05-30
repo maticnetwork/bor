@@ -1,4 +1,4 @@
-package bor
+package set
 
 // Tendermint leader selection algorithm
 
@@ -281,7 +281,7 @@ func (vals *ValidatorSet) Size() int {
 }
 
 // Force recalculation of the set's total voting power.
-func (vals *ValidatorSet) updateTotalVotingPower() error {
+func (vals *ValidatorSet) UpdateTotalVotingPower() error {
 	sum := int64(0)
 	for _, val := range vals.Validators {
 		// mind overflow
@@ -302,7 +302,7 @@ func (vals *ValidatorSet) TotalVotingPower() int64 {
 	if vals.totalVotingPower == 0 {
 		log.Info("invoking updateTotalVotingPower before returning it")
 
-		if err := vals.updateTotalVotingPower(); err != nil {
+		if err := vals.UpdateTotalVotingPower(); err != nil {
 			// Can/should we do better?
 			panic(err)
 		}
@@ -602,7 +602,7 @@ func (vals *ValidatorSet) updateWithChangeSet(changes []*Validator, allowDeletes
 	vals.applyUpdates(updates)
 	vals.applyRemovals(deletes)
 
-	if err := vals.updateTotalVotingPower(); err != nil {
+	if err := vals.UpdateTotalVotingPower(); err != nil {
 		return err
 	}
 

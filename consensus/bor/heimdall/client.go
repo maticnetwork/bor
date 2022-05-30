@@ -1,6 +1,7 @@
 package heimdall
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
+	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
 	"github.com/ethereum/go-ethereum/log"
 )
 
@@ -18,14 +20,26 @@ import (
 var errShutdownDetected = errors.New("shutdown detected")
 
 const (
-	stateFetchLimit = 50
+	stateFetchLimit    = 50
+	apiHeimdallTimeout = 5 * time.Second
 )
 
 // ResponseWithHeight defines a response object type that wraps an original
 // response with a height.
+// FIXME: Remove!!!
 type ResponseWithHeight struct {
 	Height string          `json:"height"`
 	Result json.RawMessage `json:"result"`
+}
+
+type StateSyncEventsResponse struct {
+	Height string                       `json:"height"`
+	Result []*clerk.EventRecordWithTime `json:"result"`
+}
+
+type SpanResponse struct {
+	Height string            `json:"height"`
+	Result span.HeimdallSpan `json:"result"`
 }
 
 type HeimdallClient struct {
@@ -38,7 +52,7 @@ func NewHeimdallClient(urlString string) *HeimdallClient {
 	return &HeimdallClient{
 		urlString: urlString,
 		client: http.Client{
-			Timeout: 5 * time.Second,
+			Timeout: apiHeimdallTimeout,
 		},
 		closeCh: make(chan struct{}),
 	}
@@ -47,9 +61,12 @@ func NewHeimdallClient(urlString string) *HeimdallClient {
 const (
 	fetchStateSyncEventsFormat = "from-id=%d&to-time=%d&limit=%d"
 	fetchStateSyncEventsPath   = "clerk/event-record/list"
+
+	fetchSpanFormat = "%d"
+	fetchSpanPath   = "bor/span/"
 )
 
-func (h *HeimdallClient) FetchStateSyncEvents(fromID uint64, to int64) ([]*clerk.EventRecordWithTime, error) {
+func (h *HeimdallClient) StateSyncEvents(fromID uint64, to int64) ([]*clerk.EventRecordWithTime, error) {
 	eventRecords := make([]*clerk.EventRecordWithTime, 0)
 
 	for {
@@ -57,24 +74,19 @@ func (h *HeimdallClient) FetchStateSyncEvents(fromID uint64, to int64) ([]*clerk
 
 		log.Info("Fetching state sync events", "queryParams", queryParams)
 
-		response, err := h.FetchWithRetry(fetchStateSyncEventsPath, queryParams)
+		response, err := FetchWithRetry[StateSyncEventsResponse](h.client, h.urlString, fetchStateSyncEventsPath, queryParams, h.closeCh)
 		if err != nil {
 			return nil, err
 		}
 
-		var _eventRecords []*clerk.EventRecordWithTime
-
-		if response.Result == nil { // status 204
+		if response == nil || response.Result == nil {
+			// status 204
 			break
 		}
 
-		if err := json.Unmarshal(response.Result, &_eventRecords); err != nil {
-			return nil, err
-		}
+		eventRecords = append(eventRecords, response.Result...)
 
-		eventRecords = append(eventRecords, _eventRecords...)
-
-		if len(_eventRecords) < stateFetchLimit {
+		if len(response.Result) < stateFetchLimit {
 			break
 		}
 
@@ -88,22 +100,20 @@ func (h *HeimdallClient) FetchStateSyncEvents(fromID uint64, to int64) ([]*clerk
 	return eventRecords, nil
 }
 
-// Fetch fetches response from heimdall
-func (h *HeimdallClient) Fetch(rawPath string, rawQuery string) (*ResponseWithHeight, error) {
-	u, err := url.Parse(h.urlString)
+func (h *HeimdallClient) Span(spanID uint64) (*span.HeimdallSpan, error) {
+	queryParams := fmt.Sprintf(fetchSpanFormat, spanID)
+
+	response, err := FetchWithRetry[SpanResponse](h.client, h.urlString, fetchSpanPath, queryParams, h.closeCh)
 	if err != nil {
 		return nil, err
 	}
 
-	u.Path = rawPath
-	u.RawQuery = rawQuery
-
-	return h.internalFetch(u)
+	return &response.Result, nil
 }
 
 // FetchWithRetry returns data from heimdall with retry
-func (h *HeimdallClient) FetchWithRetry(rawPath string, rawQuery string) (*ResponseWithHeight, error) {
-	u, err := url.Parse(h.urlString)
+func FetchWithRetry[T any](client http.Client, urlString string, rawPath string, rawQuery string, closeCh chan struct{}) (*T, error) {
+	u, err := url.Parse(urlString)
 	if err != nil {
 		return nil, err
 	}
@@ -113,11 +123,22 @@ func (h *HeimdallClient) FetchWithRetry(rawPath string, rawQuery string) (*Respo
 
 	// attempt counter
 	attempt := 1
+	result := new(T)
+
+	ctx, cancel := context.WithTimeout(context.Background(), apiHeimdallTimeout)
 
 	// request data once
-	res, err := h.internalFetch(u)
-	if err == nil && res != nil {
-		return res, nil
+	body, err := internalFetch(ctx, client, u)
+
+	cancel()
+
+	if err == nil && body != nil {
+		err = json.Unmarshal(body, result)
+		if err != nil {
+			return nil, err
+		}
+
+		return result, nil
 	}
 
 	// create a new ticker for retrying the request
@@ -128,21 +149,37 @@ func (h *HeimdallClient) FetchWithRetry(rawPath string, rawQuery string) (*Respo
 		log.Info("Retrying again in 5 seconds to fetch data from Heimdall", "path", u.Path, "attempt", attempt)
 		attempt++
 		select {
-		case <-h.closeCh:
+		case <-closeCh:
 			log.Debug("Shutdown detected, terminating request")
+
 			return nil, errShutdownDetected
 		case <-ticker.C:
-			res, err := h.internalFetch(u)
-			if err == nil && res != nil {
-				return res, nil
+			ctx, cancel = context.WithTimeout(context.Background(), apiHeimdallTimeout)
+
+			body, err = internalFetch(ctx, client, u)
+
+			cancel()
+
+			if err == nil && body != nil {
+				err = json.Unmarshal(body, result)
+				if err != nil {
+					return nil, err
+				}
+
+				return result, nil
 			}
 		}
 	}
 }
 
 // internal fetch method
-func (h *HeimdallClient) internalFetch(u *url.URL) (*ResponseWithHeight, error) {
-	res, err := h.client.Get(u.String()) // nolint: noctx
+func internalFetch(ctx context.Context, client http.Client, u *url.URL) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -154,9 +191,8 @@ func (h *HeimdallClient) internalFetch(u *url.URL) (*ResponseWithHeight, error) 
 	}
 
 	// unmarshall data from buffer
-	var response ResponseWithHeight
 	if res.StatusCode == 204 {
-		return &response, nil
+		return nil, nil
 	}
 
 	// get response
@@ -165,11 +201,7 @@ func (h *HeimdallClient) internalFetch(u *url.URL) (*ResponseWithHeight, error) 
 		return nil, err
 	}
 
-	if err := json.Unmarshal(body, &response); err != nil {
-		return nil, err
-	}
-
-	return &response, nil
+	return body, nil
 }
 
 // Close sends a signal to stop the running process

@@ -1,8 +1,7 @@
-package bor
+package set
 
 import (
 	"bytes"
-	// "encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
