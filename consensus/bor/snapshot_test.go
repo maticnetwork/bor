@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"pgregory.net/rapid"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor/set"
@@ -171,6 +172,7 @@ func randomAddresses(n int) []common.Address {
 		_, exist = addrsSet[addr]
 		if !exist {
 			addrsSet[addr] = struct{}{}
+
 			addrs = append(addrs, addr)
 		}
 
@@ -178,4 +180,21 @@ func randomAddresses(n int) []common.Address {
 			return addrs
 		}
 	}
+}
+
+func TestRandomAddresses(t *testing.T) {
+	rapid.Check(t, func(t *rapid.T) {
+		length := rapid.IntMax(100).Draw(t, "length").(int)
+		set := make(map[common.Address]struct{}, length)
+
+		addrs := randomAddresses(length)
+
+		for _, addr := range addrs {
+			set[addr] = struct{}{}
+		}
+
+		if len(addrs) != len(set) {
+			t.Fatalf("length of unique addresses %d, expected %d", len(set), len(addrs))
+		}
+	})
 }

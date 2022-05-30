@@ -23,7 +23,7 @@ GO_FLAGS += -ldflags "-X ${PACKAGE}/params.GitCommit=${GIT_COMMIT} -X ${PACKAGE}
 
 TESTALL = $$(go list ./... | grep -v go-ethereum/cmd/)
 TESTE2E = ./tests/...
-GOTEST = GODEBUG=cgocheck=0 go test $(GO_FLAGS) -p 1
+GOTEST = GODEBUG=cgocheck=0 go test $(GO_FLAGS) -p 1 -rapid.checks=1000
 
 bor:
 	mkdir -p $(GOPATH)/bin/
