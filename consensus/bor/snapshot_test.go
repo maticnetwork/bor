@@ -161,8 +161,9 @@ func randomAddresses(n int) []common.Address {
 		exist bool
 	)
 
+	bytes := make([]byte, 32)
+
 	for {
-		bytes := make([]byte, 32)
 		rand.Read(bytes)
 
 		addr = common.BytesToAddress(bytes)
