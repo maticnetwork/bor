@@ -10,6 +10,7 @@ import (
 	"pgregory.net/rapid"
 
 	"github.com/ethereum/go-ethereum/common"
+	unique "github.com/ethereum/go-ethereum/common/set"
 	"github.com/ethereum/go-ethereum/consensus/bor/set"
 )
 
@@ -171,9 +172,9 @@ func randomAddresses(n int) []common.Address {
 
 		_, exist = addrsSet[addr]
 		if !exist {
-			addrsSet[addr] = struct{}{}
-
 			addrs = append(addrs, addr)
+
+			addrsSet[addr] = struct{}{}
 		}
 
 		if len(addrs) == n {
@@ -183,18 +184,16 @@ func randomAddresses(n int) []common.Address {
 }
 
 func TestRandomAddresses(t *testing.T) {
+	t.Parallel()
+
 	rapid.Check(t, func(t *rapid.T) {
 		length := rapid.IntMax(100).Draw(t, "length").(int)
-		set := make(map[common.Address]struct{}, length)
 
 		addrs := randomAddresses(length)
+		addressSet := unique.New(addrs)
 
-		for _, addr := range addrs {
-			set[addr] = struct{}{}
-		}
-
-		if len(addrs) != len(set) {
-			t.Fatalf("length of unique addresses %d, expected %d", len(set), len(addrs))
+		if len(addrs) != len(addressSet) {
+			t.Fatalf("length of unique addresses %d, expected %d", len(addressSet), len(addrs))
 		}
 	})
 }
