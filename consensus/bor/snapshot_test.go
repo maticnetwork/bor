@@ -125,10 +125,11 @@ func buildRandomValidatorSet(numVals int) []*set.Validator {
 	rand.Seed(time.Now().Unix())
 
 	validators := make([]*set.Validator, numVals)
+	valAddrs := randomAddresses(numVals)
 
 	for i := 0; i < numVals; i++ {
 		validators[i] = &set.Validator{
-			Address: randomAddress(),
+			Address: valAddrs[i],
 			// cannot process validators with voting power 0, hence +1
 			VotingPower: int64(rand.Intn(99) + 1),
 		}
@@ -145,4 +146,31 @@ func randomAddress() common.Address {
 	rand.Read(bytes)
 
 	return common.BytesToAddress(bytes)
+}
+
+func randomAddresses(n int) []common.Address {
+	addrs := make([]common.Address, 0, n)
+	addrsSet := make(map[common.Address]struct{}, n)
+
+	var (
+		addr  common.Address
+		exist bool
+	)
+
+	for {
+		bytes := make([]byte, 32)
+		rand.Read(bytes)
+
+		addr = common.BytesToAddress(bytes)
+
+		_, exist = addrsSet[addr]
+		if !exist {
+			addrsSet[addr] = struct{}{}
+			addrs = append(addrs, addr)
+		}
+
+		if len(addrs) == n {
+			return addrs
+		}
+	}
 }

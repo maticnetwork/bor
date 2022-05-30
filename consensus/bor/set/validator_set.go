@@ -55,8 +55,8 @@ type ValidatorSet struct {
 // function panics.
 func NewValidatorSet(valz []*Validator) *ValidatorSet {
 	vals := &ValidatorSet{}
-	err := vals.updateWithChangeSet(valz, false)
 
+	err := vals.updateWithChangeSet(valz, false)
 	if err != nil {
 		panic(fmt.Sprintf("cannot create validator set: %s", err))
 	}
