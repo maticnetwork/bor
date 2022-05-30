@@ -24,14 +24,6 @@ const (
 	apiHeimdallTimeout = 5 * time.Second
 )
 
-// ResponseWithHeight defines a response object type that wraps an original
-// response with a height.
-// FIXME: Remove!!!
-type ResponseWithHeight struct {
-	Height string          `json:"height"`
-	Result json.RawMessage `json:"result"`
-}
-
 type StateSyncEventsResponse struct {
 	Height string                       `json:"height"`
 	Result []*clerk.EventRecordWithTime `json:"result"`

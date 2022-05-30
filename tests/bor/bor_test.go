@@ -5,7 +5,6 @@ package bor
 
 import (
 	"encoding/hex"
-	"encoding/json"
 	"io"
 	"math/big"
 	"testing"
@@ -294,13 +293,9 @@ func buildStateEvent(sample *clerk.EventRecordWithTime, id uint64, timeStamp int
 }
 
 func getSampleEventRecord(t *testing.T) *clerk.EventRecordWithTime {
-	res := stateSyncEventsPayload(t)
-	var _eventRecords []*clerk.EventRecordWithTime
-	if err := json.Unmarshal(res.Result, &_eventRecords); err != nil {
-		t.Fatalf("%s", err)
-	}
-	_eventRecords[0].Time = time.Unix(1, 0)
-	return _eventRecords[0]
+	eventRecords := stateSyncEventsPayload(t)
+	eventRecords.Result[0].Time = time.Unix(1, 0)
+	return eventRecords.Result[0]
 }
 
 // TestEIP1559Transition tests the following:

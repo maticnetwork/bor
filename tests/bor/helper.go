@@ -167,7 +167,7 @@ func sign(t *testing.T, header *types.Header, signer []byte, c *params.BorConfig
 }
 
 //nolint:unused,deadcode
-func stateSyncEventsPayload(t *testing.T) *heimdall.ResponseWithHeight {
+func stateSyncEventsPayload(t *testing.T) *heimdall.StateSyncEventsResponse {
 	t.Helper()
 
 	stateData, err := ioutil.ReadFile("./testdata/states.json")
@@ -175,7 +175,7 @@ func stateSyncEventsPayload(t *testing.T) *heimdall.ResponseWithHeight {
 		t.Fatalf("%s", err)
 	}
 
-	res := &heimdall.ResponseWithHeight{}
+	res := &heimdall.StateSyncEventsResponse{}
 	if err := json.Unmarshal(stateData, res); err != nil {
 		t.Fatalf("%s", err)
 	}
