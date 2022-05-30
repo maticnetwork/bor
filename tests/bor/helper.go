@@ -198,9 +198,7 @@ func loadSpanFromFile(t *testing.T) (*heimdall.SpanResponse, *span.HeimdallSpan)
 		t.Fatalf("%s", err)
 	}
 
-	heimdallSpan := &span.HeimdallSpan{}
-
-	return res, heimdallSpan
+	return res, &res.Result
 }
 
 func getSignerKey(number uint64) []byte {

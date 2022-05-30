@@ -93,7 +93,7 @@ func TestFetchStateSyncEvents(t *testing.T) {
 	defer ctrl.Finish()
 
 	h := mocks.NewMockIHeimdallClient(ctrl)
-	h.EXPECT().Span(1).Return(res, nil)
+	h.EXPECT().Span(uint64(1)).Return(&res.Result, nil).AnyTimes()
 
 	// B.2 Mock State Sync events
 	fromID := uint64(1)
@@ -105,7 +105,7 @@ func TestFetchStateSyncEvents(t *testing.T) {
 	sample.Time = time.Unix(to-int64(eventCount+1), 0) // last event.Time will be just < to
 	eventRecords := generateFakeStateSyncEvents(sample, eventCount)
 
-	h.EXPECT().StateSyncEvents(fromID, to).Return(eventRecords, nil)
+	h.EXPECT().StateSyncEvents(fromID, to).Return(eventRecords, nil).AnyTimes()
 	_bor.SetHeimdallClient(h)
 
 	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor)
@@ -125,7 +125,7 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 	defer ctrl.Finish()
 
 	h := mocks.NewMockIHeimdallClient(ctrl)
-	h.EXPECT().Span(1).Return(res, nil)
+	h.EXPECT().Span(uint64(1)).Return(&res.Result, nil).AnyTimes()
 
 	// Mock State Sync events
 	// at # sprintSize, events are fetched for [fromID, (block-sprint).Time)
@@ -144,7 +144,7 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 		buildStateEvent(sample, 6, 4), // id = 6, time = 4
 	}
 
-	h.EXPECT().StateSyncEvents(fromID, to).Return(eventRecords, nil)
+	h.EXPECT().StateSyncEvents(fromID, to).Return(eventRecords, nil).AnyTimes()
 	_bor.SetHeimdallClient(h)
 
 	// Insert blocks for 0th sprint
@@ -168,7 +168,7 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 		buildStateEvent(sample, 5, 7),
 		buildStateEvent(sample, 6, 4),
 	}
-	h.EXPECT().StateSyncEvents(fromID, to).Return(eventRecords, nil)
+	h.EXPECT().StateSyncEvents(fromID, to).Return(eventRecords, nil).AnyTimes()
 
 	for i := sprintSize + 1; i <= spanSize; i++ {
 		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor)
@@ -261,9 +261,10 @@ func getMockedHeimdallClient(t *testing.T) (*mocks.MockIHeimdallClient, *span.He
 	ctrl := gomock.NewController(t)
 	h := mocks.NewMockIHeimdallClient(ctrl)
 
-	res, heimdallSpan := loadSpanFromFile(t)
+	_, heimdallSpan := loadSpanFromFile(t)
 
-	h.EXPECT().Span(uint64(1)).Return(&res.Result, nil).AnyTimes()
+	h.EXPECT().Span(uint64(1)).Return(heimdallSpan, nil).AnyTimes()
+
 	h.EXPECT().StateSyncEvents(gomock.Any(), gomock.Any()).
 		Return([]*clerk.EventRecordWithTime{getSampleEventRecord(t)}, nil).AnyTimes()
 

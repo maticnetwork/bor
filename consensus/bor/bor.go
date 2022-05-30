@@ -1123,12 +1123,12 @@ func (c *Bor) fetchAndCommitSpan(
 
 		heimdallSpan = *s
 	} else {
-		s, err := c.HeimdallClient.Span(newSpanID)
+		response, err := c.HeimdallClient.Span(newSpanID)
 		if err != nil {
 			return err
 		}
 
-		heimdallSpan = *s
+		heimdallSpan = *response
 	}
 
 	// check if chain id matches with heimdall span
