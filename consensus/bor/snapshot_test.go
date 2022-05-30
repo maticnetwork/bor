@@ -149,6 +149,10 @@ func randomAddress() common.Address {
 }
 
 func randomAddresses(n int) []common.Address {
+	if n <= 0 {
+		return []common.Address{}
+	}
+
 	addrs := make([]common.Address, 0, n)
 	addrsSet := make(map[common.Address]struct{}, n)
 
