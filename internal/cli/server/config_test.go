@@ -16,7 +16,7 @@ func TestConfigDefault(t *testing.T) {
 	_, err := config.buildNode()
 	assert.NoError(t, err)
 
-	_, err = config.buildEth(nil)
+	_, err = config.buildEth(nil, nil)
 	assert.NoError(t, err)
 }
 
@@ -151,5 +151,12 @@ func TestConfigBootnodesDefault(t *testing.T) {
 		cfg, err := config.buildNode()
 		assert.NoError(t, err)
 		assert.Len(t, cfg.P2P.BootstrapNodes, 1)
+	})
+}
+
+func TestMakePasswordListFromFile(t *testing.T) {
+	t.Run("ReadPasswordFile", func(t *testing.T) {
+		result, _ := MakePasswordListFromFile("./testdata/password.txt")
+		assert.Equal(t, []string{"test1", "test2"}, result)
 	})
 }

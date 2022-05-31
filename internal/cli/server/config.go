@@ -368,6 +368,9 @@ type AccountsConfig struct {
 
 	// UseLightweightKDF enables a faster but less secure encryption of accounts
 	UseLightweightKDF bool `hcl:"use-lightweight-kdf,optional"`
+
+	// DisableBorWallet disables the personal wallet endpoints
+	DisableBorWallet bool `hcl:"disable-bor-wallet,optional"`
 }
 
 type DeveloperConfig struct {
@@ -496,6 +499,7 @@ func DefaultConfig() *Config {
 			PasswordFile:        "",
 			AllowInsecureUnlock: false,
 			UseLightweightKDF:   false,
+			DisableBorWallet:    false,
 		},
 		GRPC: &GRPCConfig{
 			Addr: ":3131",
@@ -611,7 +615,7 @@ func (c *Config) loadChain() error {
 	return nil
 }
 
-func (c *Config) buildEth(stack *node.Node) (*ethconfig.Config, error) {
+func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*ethconfig.Config, error) {
 	dbHandles, err := makeDatabaseHandles()
 	if err != nil {
 		return nil, err
@@ -663,11 +667,30 @@ func (c *Config) buildEth(stack *node.Node) (*ethconfig.Config, error) {
 		}
 	}
 
+	// unlock accounts
+	if len(c.Accounts.Unlock) > 0 {
+		if !stack.Config().InsecureUnlockAllowed && stack.Config().ExtRPCEnabled() {
+			return nil, fmt.Errorf("account unlock with HTTP access is forbidden")
+		}
+		ks := stack.AccountManager().Backends(keystore.KeyStoreType)[0].(*keystore.KeyStore)
+		passwords, err := MakePasswordListFromFile(c.Accounts.PasswordFile)
+		if err != nil {
+			return nil, err
+		}
+		if len(passwords) < len(c.Accounts.Unlock) {
+			return nil, fmt.Errorf("number of passwords provided (%v) is less than number of accounts (%v) to unlock",
+				len(passwords), len(c.Accounts.Unlock))
+		}
+		for i, account := range c.Accounts.Unlock {
+			ks.Unlock(accounts.Account{Address: common.HexToAddress(account)}, passwords[i])
+		}
+	}
+
 	// update for developer mode
 	if c.Developer.Enabled {
 		// Get a keystore
 		var ks *keystore.KeyStore
-		if keystores := stack.AccountManager().Backends(keystore.KeyStoreType); len(keystores) > 0 {
+		if keystores := accountManager.Backends(keystore.KeyStoreType); len(keystores) > 0 {
 			ks = keystores[0].(*keystore.KeyStore)
 		}
 
@@ -692,6 +715,10 @@ func (c *Config) buildEth(stack *node.Node) (*ethconfig.Config, error) {
 			return nil, fmt.Errorf("failed to unlock developer account: %v", err)
 		}
 		log.Info("Using developer account", "address", developer.Address)
+
+		// Set the Etherbase
+		c.Sealer.Etherbase = developer.Address.Hex()
+		n.Miner.Etherbase = developer.Address
 
 		// get developer mode chain config
 		c.chain = chains.GetDeveloperChain(c.Developer.Period, developer.Address)
@@ -989,4 +1016,17 @@ func Hostname() string {
 		return "bor"
 	}
 	return hostname
+}
+
+func MakePasswordListFromFile(path string) ([]string, error) {
+	text, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("Failed to read password file: %v", err)
+	}
+	lines := strings.Split(string(text), "\n")
+	// Sanitise DOS line endings.
+	for i := range lines {
+		lines[i] = strings.TrimRight(lines[i], "\r")
+	}
+	return lines, nil
 }
