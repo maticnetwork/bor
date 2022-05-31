@@ -14,6 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/eth/tracers/logger"
 	"github.com/ethereum/go-ethereum/internal/cli/server/pprof"
 	"github.com/ethereum/go-ethereum/internal/cli/server/proto"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	gproto "github.com/golang/protobuf/proto"
@@ -296,7 +297,7 @@ func (s *Server) ChainWatch(req *proto.ChainWatchRequest, reply proto.Bor_ChainW
 	}
 }
 func (s *Server) TraceBlock(ctx context.Context, req *proto.TraceRequest) (*proto.TraceResponse, error) {
-	fmt.Println("- trace block -")
+	log.Info("Trace Block", "block", req.Number)
 
 	traceReq := &tracers.TraceBlockRequest{
 		Number: req.Number,
@@ -312,13 +313,10 @@ func (s *Server) TraceBlock(ctx context.Context, req *proto.TraceRequest) (*prot
 	}
 
 	// TODO: Use streams for this
-	raw, err := json.Marshal(res)
+	_, err = json.Marshal(res)
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(res)
-	fmt.Println(err)
-	fmt.Println(string(raw))
 
 	return &proto.TraceResponse{}, nil
 }
