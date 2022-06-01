@@ -13,8 +13,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/ethereum/go-ethereum/internal/cli/server/proto"
 	"github.com/mitchellh/cli"
+
+	"github.com/ethereum/go-ethereum/internal/cli/server/proto"
 
 	"github.com/golang/protobuf/jsonpb"       // nolint:staticcheck
 	gproto "github.com/golang/protobuf/proto" // nolint:staticcheck
@@ -119,6 +120,7 @@ func (d *debugEnv) init() error {
 	}
 
 	d.dst = tmp
+
 	return nil
 }
 
@@ -137,6 +139,7 @@ func (d *debugEnv) finish() error {
 	if err := tarCZF(archiveFile, d.dst, d.name); err != nil {
 		return fmt.Errorf("error creating archive: %s", err.Error())
 	}
+
 	return nil
 }
 
@@ -151,6 +154,7 @@ func (d *debugEnv) writeFromStream(name string, stream debugStream) error {
 	if err != nil {
 		return err
 	}
+
 	if _, ok := msg.Event.(*proto.DebugFileResponse_Open_); !ok {
 		return fmt.Errorf("expected open message")
 	}
@@ -173,19 +177,22 @@ func (d *debugEnv) writeFromStream(name string, stream debugStream) error {
 	if _, err := io.Copy(file, conn); err != nil {
 		return err
 	}
+
 	return nil
 }
 
 func (d *debugEnv) writeJSON(name string, msg protoiface.MessageV1) error {
 	m := jsonpb.Marshaler{}
 	data, err := m.MarshalToString(msg)
+
 	if err != nil {
 		return err
 	}
 
-	if err := ioutil.WriteFile(filepath.Join(d.dst, name), []byte(data), 0644); err != nil {
+	if err := ioutil.WriteFile(filepath.Join(d.dst, name), []byte(data), 0600); err != nil {
 		return fmt.Errorf("failed to write status: %v", err)
 	}
+
 	return nil
 }
 

@@ -7,14 +7,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ethereum/go-ethereum/internal/cli/server"
 	"github.com/mitchellh/cli"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/ethereum/go-ethereum/internal/cli/server"
 )
 
 var currentDir string = ""
 
 func TestCommand_DebugBlock(t *testing.T) {
+	t.Parallel()
+
 	// Start a blockchain in developer mode and get trace of block
 	config := server.DefaultConfig()
 
@@ -28,6 +31,7 @@ func TestCommand_DebugBlock(t *testing.T) {
 	// start the mock server
 	srv, err := server.CreateMockServer(config)
 	assert.NoError(t, err)
+
 	defer server.CloseMockServer(srv)
 
 	// get the grpc port
@@ -83,7 +87,7 @@ func traceBlock(port string, number int64, output string) int {
 		},
 	}
 
-	// run trace (by explicity passing the output directory and grpc address)
+	// run trace (by explicitly passing the output directory and grpc address)
 	return command.Run([]string{strconv.FormatInt(number, 10), "--output", output, "--address", command.Meta2.addr})
 }
 
@@ -97,6 +101,7 @@ func verify(dst string) bool {
 			return true
 		}
 	}
+
 	return false
 }
 

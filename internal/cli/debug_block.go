@@ -23,6 +23,7 @@ func (p *DebugBlockCommand) MarkDown() string {
 		"The ```bor debug block <number>``` command will create an archive containing traces of a bor block.",
 		p.Flags().MarkDown(),
 	}
+
 	return strings.Join(items, "\n\n")
 }
 
@@ -53,6 +54,7 @@ func (c *DebugBlockCommand) Synopsis() string {
 // Run implements the cli.Command interface
 func (c *DebugBlockCommand) Run(args []string) int {
 	flags := c.Flags()
+
 	var number *int64 = nil
 
 	// parse the block number (if available)
@@ -61,6 +63,7 @@ func (c *DebugBlockCommand) Run(args []string) int {
 		if err == nil {
 			number = &num
 		}
+
 		args = args[1:]
 	}
 	// parse output directory
@@ -102,6 +105,7 @@ func (c *DebugBlockCommand) Run(args []string) int {
 		c.UI.Error(err.Error())
 		return 1
 	}
+
 	if err := dEnv.writeFromStream("block.json", stream); err != nil {
 		c.UI.Error(err.Error())
 		return 1
@@ -111,10 +115,12 @@ func (c *DebugBlockCommand) Run(args []string) int {
 		c.UI.Error(err.Error())
 		return 1
 	}
+
 	if c.output != "" {
 		c.UI.Output(fmt.Sprintf("Created debug directory: %s", dEnv.dst))
 	} else {
 		c.UI.Output(fmt.Sprintf("Created block trace archive: %s", dEnv.tarName()))
 	}
+
 	return 0
 }

@@ -7,9 +7,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/golang/protobuf/ptypes/empty"
+
 	"github.com/ethereum/go-ethereum/internal/cli/flagset"
 	"github.com/ethereum/go-ethereum/internal/cli/server/proto"
-	"github.com/golang/protobuf/ptypes/empty"
 )
 
 type DebugPprofCommand struct {
@@ -25,6 +26,7 @@ func (p *DebugPprofCommand) MarkDown() string {
 		"The ```debug pprof <enode>``` command will create an archive containing bor pprof traces.",
 		p.Flags().MarkDown(),
 	}
+
 	return strings.Join(items, "\n\n")
 }
 
@@ -90,6 +92,7 @@ func (d *DebugPprofCommand) Run(args []string) int {
 		req := &proto.DebugPprofRequest{
 			Seconds: int64(d.seconds),
 		}
+
 		switch profile {
 		case "cpu":
 			req.Type = proto.DebugPprofRequest_CPU
@@ -99,7 +102,9 @@ func (d *DebugPprofCommand) Run(args []string) int {
 			req.Type = proto.DebugPprofRequest_LOOKUP
 			req.Profile = profile
 		}
+
 		stream, err := clt.DebugPprof(ctx, req)
+
 		if err != nil {
 			return err
 		}
@@ -107,6 +112,7 @@ func (d *DebugPprofCommand) Run(args []string) int {
 		if err := dEnv.writeFromStream(filename+".prof", stream); err != nil {
 			return err
 		}
+
 		return nil
 	}
 
@@ -142,10 +148,12 @@ func (d *DebugPprofCommand) Run(args []string) int {
 		d.UI.Error(err.Error())
 		return 1
 	}
+
 	if d.output != "" {
 		d.UI.Output(fmt.Sprintf("Created debug directory: %s", dEnv.dst))
 	} else {
 		d.UI.Output(fmt.Sprintf("Created debug archive: %s", dEnv.tarName()))
 	}
+
 	return 0
 }
