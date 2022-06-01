@@ -1,7 +1,7 @@
 package span
 
 import (
-	"github.com/ethereum/go-ethereum/consensus/bor/set"
+	"github.com/ethereum/go-ethereum/consensus/bor/valset"
 )
 
 // Span Bor represents a current bor span
@@ -14,7 +14,7 @@ type Span struct {
 // HeimdallSpan represents span from heimdall APIs
 type HeimdallSpan struct {
 	Span
-	ValidatorSet      set.ValidatorSet `json:"validator_set" yaml:"validator_set"`
-	SelectedProducers []set.Validator  `json:"selected_producers" yaml:"selected_producers"`
-	ChainID           string           `json:"bor_chain_id" yaml:"bor_chain_id"`
+	ValidatorSet      valset.ValidatorSet `json:"validator_set" yaml:"validator_set"`
+	SelectedProducers []valset.Validator  `json:"selected_producers" yaml:"selected_producers"`
+	ChainID           string              `json:"bor_chain_id" yaml:"bor_chain_id"`
 }

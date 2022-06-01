@@ -13,7 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/bor"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
-	"github.com/ethereum/go-ethereum/consensus/bor/set"
+	"github.com/ethereum/go-ethereum/consensus/bor/valset"
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -104,7 +104,7 @@ func buildNextBlock(t *testing.T, _bor *bor.Bor, chain *core.BlockChain, block *
 	header.Time += bor.CalcProducerDelay(header.Number.Uint64(), 0, borConfig)
 	header.Extra = make([]byte, 32+65) // vanity + extraSeal
 
-	currentValidators := []*set.Validator{set.NewValidator(addr, 10)}
+	currentValidators := []*valset.Validator{valset.NewValidator(addr, 10)}
 
 	isSpanEnd := (number+1)%spanSize == 0
 	isSpanStart := number%spanSize == 0
@@ -119,7 +119,7 @@ func buildNextBlock(t *testing.T, _bor *bor.Bor, chain *core.BlockChain, block *
 	}
 
 	if isSprintEnd {
-		sort.Sort(set.ValidatorsByAddress(currentValidators))
+		sort.Sort(valset.ValidatorsByAddress(currentValidators))
 
 		validatorBytes := make([]byte, len(currentValidators)*validatorHeaderBytesLength)
 		header.Extra = make([]byte, 32+len(validatorBytes)+65) // vanity + validatorBytes + extraSeal

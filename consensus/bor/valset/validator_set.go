@@ -1,4 +1,4 @@
-package set
+package valset
 
 // Tendermint leader selection algorithm
 

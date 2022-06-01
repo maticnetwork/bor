@@ -26,8 +26,8 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
 	"github.com/ethereum/go-ethereum/consensus/bor/contract"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
-	"github.com/ethereum/go-ethereum/consensus/bor/set"
 	"github.com/ethereum/go-ethereum/consensus/bor/statefull"
+	"github.com/ethereum/go-ethereum/consensus/bor/valset"
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/state"
@@ -447,7 +447,7 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 
 		currentValidators := snap.ValidatorSet.Copy().Validators
 		// sort validator by address
-		sort.Sort(set.ValidatorsByAddress(currentValidators))
+		sort.Sort(valset.ValidatorsByAddress(currentValidators))
 
 		for i, validator := range currentValidators {
 			copy(validatorsBytes[i*validatorHeaderBytesLength:], validator.HeaderBytes())
@@ -675,7 +675,7 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 		}
 
 		// sort validator by address
-		sort.Sort(set.ValidatorsByAddress(newValidators))
+		sort.Sort(valset.ValidatorsByAddress(newValidators))
 
 		for _, validator := range newValidators {
 			header.Extra = append(header.Extra, validator.HeaderBytes()...)
@@ -1013,7 +1013,7 @@ func (c *Bor) GetCurrentSpan(headerHash common.Hash) (*span.Span, error) {
 }
 
 // GetCurrentValidators get current validators
-func (c *Bor) GetCurrentValidators(headerHash common.Hash, blockNumber uint64) ([]*set.Validator, error) {
+func (c *Bor) GetCurrentValidators(headerHash common.Hash, blockNumber uint64) ([]*valset.Validator, error) {
 	// block
 	blockNr := rpc.BlockNumberOrHashWithHash(headerHash, false)
 
@@ -1057,9 +1057,9 @@ func (c *Bor) GetCurrentValidators(headerHash common.Hash, blockNumber uint64) (
 		return nil, err
 	}
 
-	valz := make([]*set.Validator, len(*ret0))
+	valz := make([]*valset.Validator, len(*ret0))
 	for i, a := range *ret0 {
-		valz[i] = &set.Validator{
+		valz[i] = &valset.Validator{
 			Address:     a,
 			VotingPower: (*ret1)[i].Int64(),
 		}
@@ -1141,7 +1141,7 @@ func (c *Bor) fetchAndCommitSpan(
 	}
 
 	// get validators bytes
-	validators := make([]set.MinimalVal, 0, len(heimdallSpan.ValidatorSet.Validators))
+	validators := make([]valset.MinimalVal, 0, len(heimdallSpan.ValidatorSet.Validators))
 	for _, val := range heimdallSpan.ValidatorSet.Validators {
 		validators = append(validators, val.MinimalVal())
 	}
@@ -1152,7 +1152,7 @@ func (c *Bor) fetchAndCommitSpan(
 	}
 
 	// get producers bytes
-	producers := make([]set.MinimalVal, 0, len(heimdallSpan.SelectedProducers))
+	producers := make([]valset.MinimalVal, 0, len(heimdallSpan.SelectedProducers))
 	for _, val := range heimdallSpan.SelectedProducers {
 		producers = append(producers, val.MinimalVal())
 	}
@@ -1311,7 +1311,7 @@ func (c *Bor) getNextHeimdallSpanForTest(
 
 	spanBor.EndBlock = spanBor.StartBlock + (100 * c.config.Sprint) - 1
 
-	selectedProducers := make([]set.Validator, len(snap.ValidatorSet.Validators))
+	selectedProducers := make([]valset.Validator, len(snap.ValidatorSet.Validators))
 	for i, v := range snap.ValidatorSet.Validators {
 		selectedProducers[i] = *v
 	}
@@ -1326,7 +1326,7 @@ func (c *Bor) getNextHeimdallSpanForTest(
 	return heimdallSpan, nil
 }
 
-func validatorContains(a []*set.Validator, x *set.Validator) (*set.Validator, bool) {
+func validatorContains(a []*valset.Validator, x *valset.Validator) (*valset.Validator, bool) {
 	for _, n := range a {
 		if n.Address == x.Address {
 			return n, true
@@ -1336,11 +1336,11 @@ func validatorContains(a []*set.Validator, x *set.Validator) (*set.Validator, bo
 	return nil, false
 }
 
-func getUpdatedValidatorSet(oldValidatorSet *set.ValidatorSet, newVals []*set.Validator) *set.ValidatorSet {
+func getUpdatedValidatorSet(oldValidatorSet *valset.ValidatorSet, newVals []*valset.Validator) *valset.ValidatorSet {
 	v := oldValidatorSet
 	oldVals := v.Validators
 
-	changes := make([]*set.Validator, 0, len(oldVals))
+	changes := make([]*valset.Validator, 0, len(oldVals))
 
 	for _, ov := range oldVals {
 		if f, ok := validatorContains(newVals, ov); ok {

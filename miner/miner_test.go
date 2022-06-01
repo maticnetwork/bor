@@ -274,7 +274,7 @@ func TestCloseMiner(t *testing.T) {
 // possible at the moment
 func TestMinerSetEtherbase(t *testing.T) {
 	t.Parallel()
-	
+
 	minerBor := newBorDefaultMiner(t)
 	defer func() {
 		minerBor.cleanup(false)
@@ -325,7 +325,7 @@ func waitForMiningState(t *testing.T, m *Miner, mining bool) {
 
 type defaultBorMiner struct {
 	miner   *Miner
-	mux     *event.TypeMux
+	mux     *event.TypeMux //nolint:staticcheck
 	cleanup func(skipMiner bool)
 
 	ctrl               *gomock.Controller
@@ -335,6 +335,8 @@ type defaultBorMiner struct {
 }
 
 func newBorDefaultMiner(t *testing.T) *defaultBorMiner {
+	t.Helper()
+
 	ctrl := gomock.NewController(t)
 
 	ethAPI := api.NewMockCaller(ctrl)
@@ -358,6 +360,7 @@ func newBorDefaultMiner(t *testing.T) *defaultBorMiner {
 	}
 }
 
+//nolint:staticcheck
 func createBorMiner(t *testing.T, ethAPIMock api.Caller, heimdallClientMock bor.IHeimdallClient, contractMock bor.GenesisContract) (*Miner, *event.TypeMux, func(skipMiner bool)) {
 	t.Helper()
 
