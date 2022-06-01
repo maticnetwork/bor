@@ -18,7 +18,7 @@ The ```bor server``` command runs the Bor client.
 
 - ```gcmode```: Blockchain garbage collection mode ("full", "archive")
 
-- ```whitelist```: Comma separated block number-to-hash mappings to enforce (<number>=<hash>)
+- ```requiredblocks```: Comma separated block number-to-hash mappings to enforce (<number>=<hash>)
 
 - ```no-snapshot```: Disables the snapshot-database mode (default = false)
 

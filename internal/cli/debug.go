@@ -14,9 +14,10 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/internal/cli/server/proto"
-	"github.com/golang/protobuf/jsonpb"
-	gproto "github.com/golang/protobuf/proto"
 	"github.com/mitchellh/cli"
+
+	"github.com/golang/protobuf/jsonpb"       // nolint:staticcheck
+	gproto "github.com/golang/protobuf/proto" // nolint:staticcheck
 	grpc_net_conn "github.com/mitchellh/go-grpc-net-conn"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/runtime/protoiface"
@@ -52,6 +53,7 @@ func (d *DebugCommand) MarkDown() string {
 		"- [```bor debug block <number>```](./debug_block.md): Dumps bor block traces.",
 	}
 	items = append(items, examples...)
+
 	return strings.Join(items, "\n\n")
 }
 
@@ -99,6 +101,7 @@ func (d *debugEnv) init() error {
 		// User specified output directory
 		tmp = filepath.Join(d.output, d.name)
 		_, err := os.Stat(tmp)
+
 		if !os.IsNotExist(err) {
 			return fmt.Errorf("output directory already exists")
 		}
