@@ -1123,6 +1123,10 @@ func (c *Bor) SetHeimdallClient(h IHeimdallClient) {
 	c.HeimdallClient = h
 }
 
+func (c *Bor) GetCurrentValidators(headerHash common.Hash, blockNumber uint64) ([]*valset.Validator, error) {
+	return c.spanner.GetCurrentValidators(headerHash, blockNumber)
+}
+
 //
 // Private methods
 //
