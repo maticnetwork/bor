@@ -2,13 +2,11 @@ package bor
 
 import (
 	"bytes"
-	"context"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"math/big"
 	"sort"
 	"strconv"
@@ -20,11 +18,9 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/bor/api"
 	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
-	"github.com/ethereum/go-ethereum/consensus/bor/contract"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
 	"github.com/ethereum/go-ethereum/consensus/bor/statefull"
 	"github.com/ethereum/go-ethereum/consensus/bor/valset"
@@ -34,7 +30,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
-	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -205,11 +200,6 @@ func BorRLP(header *types.Header, c *params.BorConfig) []byte {
 	return b.Bytes()
 }
 
-type ABI interface {
-	Pack(name string, args ...interface{}) ([]byte, error)
-	UnpackIntoInterface(v interface{}, name string, data []byte) error
-}
-
 // Bor is the matic-bor consensus engine
 type Bor struct {
 	chainConfig *params.ChainConfig // Chain config
@@ -224,12 +214,14 @@ type Bor struct {
 	lock   sync.RWMutex   // Protects the signer fields
 
 	ethAPI                 api.Caller
+	spanner                Spanner
 	GenesisContractsClient GenesisContract
-	validatorSet           ABI
 	HeimdallClient         IHeimdallClient
 
 	// The fields below are for testing only
 	fakeDiff bool // Skip difficulty verifications
+
+	closeOnce sync.Once
 }
 
 // New creates a Matic Bor consensus engine.
@@ -237,6 +229,7 @@ func New(
 	chainConfig *params.ChainConfig,
 	db ethdb.Database,
 	ethAPI api.Caller,
+	spanner Spanner,
 	heimdallClient IHeimdallClient,
 	genesisContracts GenesisContract,
 ) *Bor {
@@ -258,7 +251,7 @@ func New(
 		ethAPI:                 ethAPI,
 		recents:                recents,
 		signatures:             signatures,
-		validatorSet:           contract.ValidatorSet(),
+		spanner:                spanner,
 		GenesisContractsClient: genesisContracts,
 		HeimdallClient:         heimdallClient,
 	}
@@ -327,7 +320,7 @@ func (c *Bor) verifyHeader(chain consensus.ChainHeaderReader, header *types.Head
 	}
 
 	// check extr adata
-	isSprintEnd := (number+1)%c.config.Sprint == 0
+	isSprintEnd := IsSprintStart(number+1, c.config.Sprint)
 
 	// Ensure that the extra-data contains a signer list on checkpoint, but none otherwise
 	signersBytes := len(header.Extra) - extraVanity - extraSeal
@@ -441,7 +434,7 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 	}
 
 	// verify the validator list in the last sprint block
-	if isSprintStart(number, c.config.Sprint) {
+	if IsSprintStart(number, c.config.Sprint) {
 		parentValidatorBytes := parent.Extra[extraVanity : len(parent.Extra)-extraSeal]
 		validatorsBytes := make([]byte, len(snap.ValidatorSet.Validators)*validatorHeaderBytesLength)
 
@@ -503,7 +496,7 @@ func (c *Bor) snapshot(chain consensus.ChainHeaderReader, number uint64, hash co
 				hash := checkpoint.Hash()
 
 				// get validators and current span
-				validators, err := c.GetCurrentValidators(hash, number+1)
+				validators, err := c.spanner.GetCurrentValidators(hash, number+1)
 				if err != nil {
 					return nil, err
 				}
@@ -668,8 +661,8 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 	header.Extra = header.Extra[:extraVanity]
 
 	// get validator set if number
-	if (number+1)%c.config.Sprint == 0 {
-		newValidators, err := c.GetCurrentValidators(header.ParentHash, number+1)
+	if IsSprintStart(number+1, c.config.Sprint) {
+		newValidators, err := c.spanner.GetCurrentValidators(header.ParentHash, number+1)
 		if err != nil {
 			return errors.New("unknown validators")
 		}
@@ -825,7 +818,7 @@ func (c *Bor) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *typ
 	block := types.NewBlock(header, txs, nil, receipts, new(trie.Trie))
 
 	// set state sync
-	bc := chain.(*core.BlockChain)
+	bc := chain.(core.BorStateSyncer)
 	bc.SetStateSync(stateSyncData)
 
 	// return the final block for sealing
@@ -883,12 +876,10 @@ func (c *Bor) Seal(chain consensus.ChainHeaderReader, block *types.Block, result
 	wiggle := time.Duration(successionNumber) * time.Duration(c.config.CalculateBackupMultiplier(number)) * time.Second
 
 	// Sign all the things!
-	sighash, err := signFn(accounts.Account{Address: signer}, accounts.MimetypeBor, BorRLP(header, c.config))
+	err = Sign(signFn, signer, header, c.config)
 	if err != nil {
 		return err
 	}
-
-	copy(header.Extra[len(header.Extra)-extraSeal:], sighash)
 
 	// Wait until sealing is terminated or delay timeout.
 	log.Info("Waiting for slot to sign and propagate", "number", number, "hash", header.Hash, "delay-in-sec", uint(delay), "delay", common.PrettyDuration(delay))
@@ -927,6 +918,17 @@ func (c *Bor) Seal(chain consensus.ChainHeaderReader, block *types.Block, result
 	return nil
 }
 
+func Sign(signFn SignerFn, signer common.Address, header *types.Header, c *params.BorConfig) error {
+	sighash, err := signFn(accounts.Account{Address: signer}, accounts.MimetypeBor, BorRLP(header, c))
+	if err != nil {
+		return err
+	}
+
+	copy(header.Extra[len(header.Extra)-extraSeal:], sighash)
+
+	return nil
+}
+
 // CalcDifficulty is the difficulty adjustment algorithm. It returns the difficulty
 // that a new block should have based on the previous blocks in the chain and the
 // current signer.
@@ -957,115 +959,11 @@ func (c *Bor) APIs(chain consensus.ChainHeaderReader) []rpc.API {
 
 // Close implements consensus.Engine. It's a noop for bor as there are no background threads.
 func (c *Bor) Close() error {
-	c.HeimdallClient.Close()
-	return nil
-}
-
-// GetCurrentSpan get current span from contract
-func (c *Bor) GetCurrentSpan(headerHash common.Hash) (*span.Span, error) {
-	// block
-	blockNr := rpc.BlockNumberOrHashWithHash(headerHash, false)
-
-	// method
-	method := "getCurrentSpan"
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	data, err := c.validatorSet.Pack(method)
-	if err != nil {
-		log.Error("Unable to pack tx for getCurrentSpan", "error", err)
-
-		return nil, err
-	}
-
-	msgData := (hexutil.Bytes)(data)
-	toAddress := common.HexToAddress(c.config.ValidatorContract)
-	gas := (hexutil.Uint64)(uint64(math.MaxUint64 / 2))
-
-	result, err := c.ethAPI.Call(ctx, ethapi.TransactionArgs{
-		Gas:  &gas,
-		To:   &toAddress,
-		Data: &msgData,
-	}, blockNr, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	// span result
-	ret := new(struct {
-		Number     *big.Int
-		StartBlock *big.Int
-		EndBlock   *big.Int
+	c.closeOnce.Do(func() {
+		c.HeimdallClient.Close()
 	})
-	if err := c.validatorSet.UnpackIntoInterface(ret, method, result); err != nil {
-		return nil, err
-	}
 
-	// create new span
-	span := span.Span{
-		ID:         ret.Number.Uint64(),
-		StartBlock: ret.StartBlock.Uint64(),
-		EndBlock:   ret.EndBlock.Uint64(),
-	}
-
-	return &span, nil
-}
-
-// GetCurrentValidators get current validators
-func (c *Bor) GetCurrentValidators(headerHash common.Hash, blockNumber uint64) ([]*valset.Validator, error) {
-	// block
-	blockNr := rpc.BlockNumberOrHashWithHash(headerHash, false)
-
-	// method
-	method := "getBorValidators"
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	data, err := c.validatorSet.Pack(method, big.NewInt(0).SetUint64(blockNumber))
-	if err != nil {
-		log.Error("Unable to pack tx for getValidator", "error", err)
-		return nil, err
-	}
-
-	// call
-	msgData := (hexutil.Bytes)(data)
-	toAddress := common.HexToAddress(c.config.ValidatorContract)
-	gas := (hexutil.Uint64)(uint64(math.MaxUint64 / 2))
-
-	result, err := c.ethAPI.Call(ctx, ethapi.TransactionArgs{
-		Gas:  &gas,
-		To:   &toAddress,
-		Data: &msgData,
-	}, blockNr, nil)
-	if err != nil {
-		panic(err)
-	}
-
-	var (
-		ret0 = new([]common.Address)
-		ret1 = new([]*big.Int)
-	)
-
-	out := &[]interface{}{
-		ret0,
-		ret1,
-	}
-
-	if err := c.validatorSet.UnpackIntoInterface(out, method, result); err != nil {
-		return nil, err
-	}
-
-	valz := make([]*valset.Validator, len(*ret0))
-	for i, a := range *ret0 {
-		valz[i] = &valset.Validator{
-			Address:     a,
-			VotingPower: (*ret1)[i].Int64(),
-		}
-	}
-
-	return valz, nil
+	return nil
 }
 
 func (c *Bor) checkAndCommitSpan(
@@ -1075,13 +973,13 @@ func (c *Bor) checkAndCommitSpan(
 ) error {
 	headerNumber := header.Number.Uint64()
 
-	span, err := c.GetCurrentSpan(header.ParentHash)
+	span, err := c.spanner.GetCurrentSpan(header.ParentHash)
 	if err != nil {
 		return err
 	}
 
 	if c.needToCommitSpan(span, headerNumber) {
-		return c.fetchAndCommitSpan(span.ID+1, state, header, chain)
+		return c.FetchAndCommitSpan(span.ID+1, state, header, chain)
 	}
 
 	return nil
@@ -1106,7 +1004,7 @@ func (c *Bor) needToCommitSpan(span *span.Span, headerNumber uint64) bool {
 	return false
 }
 
-func (c *Bor) fetchAndCommitSpan(
+func (c *Bor) FetchAndCommitSpan(
 	newSpanID uint64,
 	state *state.StateDB,
 	header *types.Header,
@@ -1131,68 +1029,16 @@ func (c *Bor) fetchAndCommitSpan(
 		heimdallSpan = *response
 	}
 
-	// check if chain id matches with heimdall span
+	// check if chain id matches with Heimdall span
 	if heimdallSpan.ChainID != c.chainConfig.ChainID.String() {
 		return fmt.Errorf(
-			"Chain id proposed span, %s, and bor chain id, %s, doesn't match",
+			"chain id proposed span, %s, and bor chain id, %s, doesn't match",
 			heimdallSpan.ChainID,
 			c.chainConfig.ChainID,
 		)
 	}
 
-	// get validators bytes
-	validators := make([]valset.MinimalVal, 0, len(heimdallSpan.ValidatorSet.Validators))
-	for _, val := range heimdallSpan.ValidatorSet.Validators {
-		validators = append(validators, val.MinimalVal())
-	}
-
-	validatorBytes, err := rlp.EncodeToBytes(validators)
-	if err != nil {
-		return err
-	}
-
-	// get producers bytes
-	producers := make([]valset.MinimalVal, 0, len(heimdallSpan.SelectedProducers))
-	for _, val := range heimdallSpan.SelectedProducers {
-		producers = append(producers, val.MinimalVal())
-	}
-
-	producerBytes, err := rlp.EncodeToBytes(producers)
-	if err != nil {
-		return err
-	}
-
-	// method
-	method := "commitSpan"
-
-	log.Info("✅ Committing new span",
-		"id", heimdallSpan.ID,
-		"startBlock", heimdallSpan.StartBlock,
-		"endBlock", heimdallSpan.EndBlock,
-		"validatorBytes", hex.EncodeToString(validatorBytes),
-		"producerBytes", hex.EncodeToString(producerBytes),
-	)
-
-	// get packed data
-	data, err := c.validatorSet.Pack(method,
-		big.NewInt(0).SetUint64(heimdallSpan.ID),
-		big.NewInt(0).SetUint64(heimdallSpan.StartBlock),
-		big.NewInt(0).SetUint64(heimdallSpan.EndBlock),
-		validatorBytes,
-		producerBytes,
-	)
-	if err != nil {
-		log.Error("Unable to pack tx for commitSpan", "error", err)
-		return err
-	}
-
-	// get system message
-	msg := statefull.GetSystemMessage(common.HexToAddress(c.config.ValidatorContract), data)
-
-	// apply message
-	_, err = statefull.ApplyMessage(msg, state, header, c.chainConfig, chain)
-
-	return err
+	return c.spanner.CommitSpan(heimdallSpan, state, header, chain)
 }
 
 // CommitStates commit states
@@ -1288,7 +1134,7 @@ func (c *Bor) getNextHeimdallSpanForTest(
 ) (*span.HeimdallSpan, error) {
 	headerNumber := header.Number.Uint64()
 
-	spanBor, err := c.GetCurrentSpan(header.ParentHash)
+	spanBor, err := c.spanner.GetCurrentSpan(header.ParentHash)
 	if err != nil {
 		return nil, err
 	}
@@ -1365,6 +1211,6 @@ func getUpdatedValidatorSet(oldValidatorSet *valset.ValidatorSet, newVals []*val
 	return v
 }
 
-func isSprintStart(number, sprint uint64) bool {
+func IsSprintStart(number, sprint uint64) bool {
 	return number%sprint == 0
 }

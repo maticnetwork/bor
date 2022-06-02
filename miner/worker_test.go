@@ -24,9 +24,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
+
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/consensus/bor"
+	"github.com/ethereum/go-ethereum/consensus/bor/api"
+	"github.com/ethereum/go-ethereum/consensus/bor/valset"
 	"github.com/ethereum/go-ethereum/consensus/clique"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core"
@@ -38,6 +43,7 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/tests/bor/mocks"
 )
 
 const (
@@ -49,42 +55,7 @@ const (
 	testGas = 144109
 )
 
-var (
-	// Test chain configurations
-	testTxPoolConfig  core.TxPoolConfig
-	ethashChainConfig *params.ChainConfig
-	cliqueChainConfig *params.ChainConfig
-
-	// Test accounts
-	testBankKey, _  = crypto.GenerateKey()
-	testBankAddress = crypto.PubkeyToAddress(testBankKey.PublicKey)
-	testBankFunds   = big.NewInt(1000000000000000000)
-
-	testUserKey, _  = crypto.GenerateKey()
-	testUserAddress = crypto.PubkeyToAddress(testUserKey.PublicKey)
-
-	// Test transactions
-	pendingTxs []*types.Transaction
-	newTxs     []*types.Transaction
-
-	testConfig = &Config{
-		Recommit: time.Second,
-		GasCeil:  params.GenesisGasLimit,
-	}
-)
-
 func init() {
-	testTxPoolConfig = core.DefaultTxPoolConfig
-	testTxPoolConfig.Journal = ""
-	ethashChainConfig = new(params.ChainConfig)
-	*ethashChainConfig = *params.TestChainConfig
-	cliqueChainConfig = new(params.ChainConfig)
-	*cliqueChainConfig = *params.TestChainConfig
-	cliqueChainConfig.Clique = &params.CliqueConfig{
-		Period: 10,
-		Epoch:  30000,
-	}
-
 	signer := types.LatestSigner(params.TestChainConfig)
 
 	tx1 := types.MustSignNewTx(testBankKey, signer, &types.AccessListTx{
@@ -95,6 +66,7 @@ func init() {
 		Gas:      params.TxGas,
 		GasPrice: big.NewInt(params.InitialBaseFee),
 	})
+
 	pendingTxs = append(pendingTxs, tx1)
 
 	tx2 := types.MustSignNewTx(testBankKey, signer, &types.LegacyTx{
@@ -127,6 +99,12 @@ func newTestWorkerBackend(t *testing.T, chainConfig *params.ChainConfig, engine 
 	}
 
 	switch e := engine.(type) {
+	case *bor.Bor:
+		gspec.ExtraData = make([]byte, 32+common.AddressLength+crypto.SignatureLength)
+		copy(gspec.ExtraData[32:32+common.AddressLength], testBankAddress.Bytes())
+		e.Authorize(testBankAddress, func(account accounts.Account, s string, data []byte) ([]byte, error) {
+			return crypto.Sign(crypto.Keccak256(data), testBankKey)
+		})
 	case *clique.Clique:
 		gspec.ExtraData = make([]byte, 32+common.AddressLength+crypto.SignatureLength)
 		copy(gspec.ExtraData[32:32+common.AddressLength], testBankAddress.Bytes())
@@ -222,28 +200,70 @@ func newTestWorker(t *testing.T, chainConfig *params.ChainConfig, engine consens
 }
 
 func TestGenerateBlockAndImportEthash(t *testing.T) {
-	testGenerateBlockAndImport(t, false)
+	t.Parallel()
+
+	testGenerateBlockAndImport(t, false, false)
 }
 
 func TestGenerateBlockAndImportClique(t *testing.T) {
-	testGenerateBlockAndImport(t, true)
+	t.Parallel()
+
+	testGenerateBlockAndImport(t, true, false)
 }
 
-func testGenerateBlockAndImport(t *testing.T, isClique bool) {
+func TestGenerateBlockAndImportBor(t *testing.T) {
+	t.Parallel()
+
+	testGenerateBlockAndImport(t, false, true)
+}
+
+//nolint:thelper
+func testGenerateBlockAndImport(t *testing.T, isClique bool, isBor bool) {
 	var (
 		engine      consensus.Engine
 		chainConfig *params.ChainConfig
 		db          = rawdb.NewMemoryDatabase()
 	)
 
-	if isClique {
-		chainConfig = params.AllCliqueProtocolChanges
-		chainConfig.Clique = &params.CliqueConfig{Period: 1, Epoch: 30000}
-		engine = clique.New(chainConfig.Clique, db)
+	if isBor {
+		chainConfig = params.BorUnittestChainConfig
+
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		ethAPIMock := api.NewMockCaller(ctrl)
+		ethAPIMock.EXPECT().Call(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+		spanner := bor.NewMockSpanner(ctrl)
+		spanner.EXPECT().GetCurrentValidators(gomock.Any(), gomock.Any()).Return([]*valset.Validator{
+			{
+				ID:               0,
+				Address:          testBankAddress,
+				VotingPower:      100,
+				ProposerPriority: 0,
+			},
+		}, nil).AnyTimes()
+
+		heimdallClientMock := mocks.NewMockIHeimdallClient(ctrl)
+		heimdallClientMock.EXPECT().Close().Times(1)
+
+		contractMock := bor.NewMockGenesisContract(ctrl)
+
+		db, _, _ = NewDBForFakes(t)
+
+		engine = NewFakeBor(t, db, chainConfig, ethAPIMock, spanner, heimdallClientMock, contractMock)
 	} else {
-		chainConfig = params.AllEthashProtocolChanges
-		engine = ethash.NewFaker()
+		if isClique {
+			chainConfig = params.AllCliqueProtocolChanges
+			chainConfig.Clique = &params.CliqueConfig{Period: 1, Epoch: 30000}
+			engine = clique.New(chainConfig.Clique, db)
+		} else {
+			chainConfig = params.AllEthashProtocolChanges
+			engine = ethash.NewFaker()
+		}
 	}
+
+	defer engine.Close()
 
 	chainConfig.LondonBlock = big.NewInt(0)
 

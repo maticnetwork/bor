@@ -18,86 +18,24 @@
 package miner
 
 import (
-	"errors"
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
-
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/consensus/bor"
-	"github.com/ethereum/go-ethereum/consensus/bor/api"
-	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/core/rawdb"
-	"github.com/ethereum/go-ethereum/core/state"
-	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/eth/downloader"
-	"github.com/ethereum/go-ethereum/ethdb/memorydb"
-	"github.com/ethereum/go-ethereum/event"
-	"github.com/ethereum/go-ethereum/tests/bor/mocks"
-	"github.com/ethereum/go-ethereum/trie"
 )
-
-type mockBackend struct {
-	bc     *core.BlockChain
-	txPool *core.TxPool
-}
-
-func NewMockBackend(bc *core.BlockChain, txPool *core.TxPool) *mockBackend {
-	return &mockBackend{
-		bc:     bc,
-		txPool: txPool,
-	}
-}
-
-func (m *mockBackend) BlockChain() *core.BlockChain {
-	return m.bc
-}
-
-func (m *mockBackend) TxPool() *core.TxPool {
-	return m.txPool
-}
-
-func (m *mockBackend) StateAtBlock(block *types.Block, reexec uint64, base *state.StateDB, checkLive bool, preferDisk bool) (statedb *state.StateDB, err error) {
-	return nil, errors.New("not supported")
-}
-
-type testBlockChain struct {
-	statedb       *state.StateDB
-	gasLimit      uint64
-	chainHeadFeed *event.Feed
-}
-
-func (bc *testBlockChain) CurrentBlock() *types.Block {
-	return types.NewBlock(&types.Header{
-		GasLimit: bc.gasLimit,
-	}, nil, nil, nil, trie.NewStackTrie(nil))
-}
-
-func (bc *testBlockChain) GetBlock(hash common.Hash, number uint64) *types.Block {
-	return bc.CurrentBlock()
-}
-
-func (bc *testBlockChain) StateAt(common.Hash) (*state.StateDB, error) {
-	return bc.statedb, nil
-}
-
-func (bc *testBlockChain) SubscribeChainHeadEvent(ch chan<- core.ChainHeadEvent) event.Subscription {
-	return bc.chainHeadFeed.Subscribe(ch)
-}
 
 func TestMiner(t *testing.T) {
 	t.Parallel()
 
-	minerBor := newBorDefaultMiner(t)
+	minerBor := NewBorDefaultMiner(t)
 	defer func() {
-		minerBor.cleanup(false)
-		minerBor.ctrl.Finish()
+		minerBor.Cleanup(false)
+		minerBor.Ctrl.Finish()
 	}()
 
-	miner := minerBor.miner
-	mux := minerBor.mux
+	miner := minerBor.Miner
+	mux := minerBor.Mux
 
 	miner.Start(common.HexToAddress("0x12345"))
 	waitForMiningState(t, miner, true)
@@ -129,14 +67,14 @@ func TestMiner(t *testing.T) {
 func TestMinerDownloaderFirstFails(t *testing.T) {
 	t.Parallel()
 
-	minerBor := newBorDefaultMiner(t)
+	minerBor := NewBorDefaultMiner(t)
 	defer func() {
-		minerBor.cleanup(false)
-		minerBor.ctrl.Finish()
+		minerBor.Cleanup(false)
+		minerBor.Ctrl.Finish()
 	}()
 
-	miner := minerBor.miner
-	mux := minerBor.mux
+	miner := minerBor.Miner
+	mux := minerBor.Mux
 
 	miner.Start(common.HexToAddress("0x12345"))
 	waitForMiningState(t, miner, true)
@@ -171,14 +109,14 @@ func TestMinerDownloaderFirstFails(t *testing.T) {
 func TestMinerStartStopAfterDownloaderEvents(t *testing.T) {
 	t.Parallel()
 
-	minerBor := newBorDefaultMiner(t)
+	minerBor := NewBorDefaultMiner(t)
 	defer func() {
-		minerBor.cleanup(false)
-		minerBor.ctrl.Finish()
+		minerBor.Cleanup(false)
+		minerBor.Ctrl.Finish()
 	}()
 
-	miner := minerBor.miner
-	mux := minerBor.mux
+	miner := minerBor.Miner
+	mux := minerBor.Mux
 
 	miner.Start(common.HexToAddress("0x12345"))
 	waitForMiningState(t, miner, true)
@@ -204,14 +142,14 @@ func TestMinerStartStopAfterDownloaderEvents(t *testing.T) {
 func TestStartWhileDownload(t *testing.T) {
 	t.Parallel()
 
-	minerBor := newBorDefaultMiner(t)
+	minerBor := NewBorDefaultMiner(t)
 	defer func() {
-		minerBor.cleanup(false)
-		minerBor.ctrl.Finish()
+		minerBor.Cleanup(false)
+		minerBor.Ctrl.Finish()
 	}()
 
-	miner := minerBor.miner
-	mux := minerBor.mux
+	miner := minerBor.Miner
+	mux := minerBor.Mux
 
 	waitForMiningState(t, miner, false)
 	miner.Start(common.HexToAddress("0x12345"))
@@ -229,13 +167,13 @@ func TestStartWhileDownload(t *testing.T) {
 func TestStartStopMiner(t *testing.T) {
 	t.Parallel()
 
-	minerBor := newBorDefaultMiner(t)
+	minerBor := NewBorDefaultMiner(t)
 	defer func() {
-		minerBor.cleanup(false)
-		minerBor.ctrl.Finish()
+		minerBor.Cleanup(false)
+		minerBor.Ctrl.Finish()
 	}()
 
-	miner := minerBor.miner
+	miner := minerBor.Miner
 
 	waitForMiningState(t, miner, false)
 	miner.Start(common.HexToAddress("0x12345"))
@@ -250,13 +188,13 @@ func TestStartStopMiner(t *testing.T) {
 func TestCloseMiner(t *testing.T) {
 	t.Parallel()
 
-	minerBor := newBorDefaultMiner(t)
+	minerBor := NewBorDefaultMiner(t)
 	defer func() {
-		minerBor.cleanup(true)
-		minerBor.ctrl.Finish()
+		minerBor.Cleanup(true)
+		minerBor.Ctrl.Finish()
 	}()
 
-	miner := minerBor.miner
+	miner := minerBor.Miner
 
 	waitForMiningState(t, miner, false)
 
@@ -275,14 +213,14 @@ func TestCloseMiner(t *testing.T) {
 func TestMinerSetEtherbase(t *testing.T) {
 	t.Parallel()
 
-	minerBor := newBorDefaultMiner(t)
+	minerBor := NewBorDefaultMiner(t)
 	defer func() {
-		minerBor.cleanup(false)
-		minerBor.ctrl.Finish()
+		minerBor.Cleanup(false)
+		minerBor.Ctrl.Finish()
 	}()
 
-	miner := minerBor.miner
-	mux := minerBor.mux
+	miner := minerBor.Miner
+	mux := minerBor.Mux
 
 	// Start with a 'bad' mining address
 	miner.Start(common.HexToAddress("0xdead"))
@@ -321,93 +259,4 @@ func waitForMiningState(t *testing.T, m *Miner, mining bool) {
 	}
 
 	t.Fatalf("Mining() == %t, want %t", state, mining)
-}
-
-type defaultBorMiner struct {
-	miner   *Miner
-	mux     *event.TypeMux //nolint:staticcheck
-	cleanup func(skipMiner bool)
-
-	ctrl               *gomock.Controller
-	ethAPIMock         api.Caller
-	heimdallClientMock bor.IHeimdallClient
-	contractMock       bor.GenesisContract
-}
-
-func newBorDefaultMiner(t *testing.T) *defaultBorMiner {
-	t.Helper()
-
-	ctrl := gomock.NewController(t)
-
-	ethAPI := api.NewMockCaller(ctrl)
-	ethAPI.EXPECT().Call(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-
-	heimdallClient := mocks.NewMockIHeimdallClient(ctrl)
-	heimdallClient.EXPECT().Close().Times(1)
-
-	genesisContracts := bor.NewMockGenesisContract(ctrl)
-
-	miner, mux, cleanup := createBorMiner(t, ethAPI, heimdallClient, genesisContracts)
-
-	return &defaultBorMiner{
-		miner:              miner,
-		mux:                mux,
-		cleanup:            cleanup,
-		ctrl:               ctrl,
-		ethAPIMock:         ethAPI,
-		heimdallClientMock: heimdallClient,
-		contractMock:       genesisContracts,
-	}
-}
-
-//nolint:staticcheck
-func createBorMiner(t *testing.T, ethAPIMock api.Caller, heimdallClientMock bor.IHeimdallClient, contractMock bor.GenesisContract) (*Miner, *event.TypeMux, func(skipMiner bool)) {
-	t.Helper()
-
-	// Create Ethash config
-	config := Config{
-		Etherbase: common.HexToAddress("123456789"),
-	}
-
-	// Create chainConfig
-	memdb := memorydb.New()
-	chainDB := rawdb.NewDatabase(memdb)
-	genesis := core.DeveloperGenesisBlock(15, 11_500_000, common.HexToAddress("12345"))
-
-	chainConfig, _, err := core.SetupGenesisBlock(chainDB, genesis)
-	if err != nil {
-		t.Fatalf("can't create new chain config: %v", err)
-	}
-
-	// Create consensus engine
-	engine := bor.New(chainConfig, chainDB, ethAPIMock, heimdallClientMock, contractMock)
-
-	// Create Ethereum backend
-	bc, err := core.NewBlockChain(chainDB, nil, chainConfig, engine, vm.Config{}, nil, nil)
-	if err != nil {
-		t.Fatalf("can't create new chain %v", err)
-	}
-
-	statedb, _ := state.New(common.Hash{}, state.NewDatabase(chainDB), nil)
-	blockchain := &testBlockChain{statedb, 10000000, new(event.Feed)}
-
-	pool := core.NewTxPool(testTxPoolConfig, chainConfig, blockchain)
-	backend := NewMockBackend(bc, pool)
-
-	// Create event Mux
-	mux := new(event.TypeMux)
-
-	// Create Miner
-	miner := New(backend, &config, chainConfig, mux, engine, nil)
-
-	cleanup := func(skipMiner bool) {
-		bc.Stop()
-		engine.Close()
-		pool.Stop()
-		if !skipMiner {
-			miner.Close()
-		}
-	}
-
-	return miner, mux, cleanup
 }

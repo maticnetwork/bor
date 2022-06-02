@@ -16,11 +16,6 @@ import (
 
 var systemAddress = common.HexToAddress("0xffffFFFfFFffffffffffffffFfFFFfffFFFfFFfE")
 
-//
-// Chain context
-//
-
-// chain context
 type ChainContext struct {
 	Chain consensus.ChainHeaderReader
 	Bor   consensus.Engine
