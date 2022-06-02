@@ -235,6 +235,12 @@ func NewBlockWithHeader(header *Header) *Block {
 	return &Block{header: CopyHeader(header)}
 }
 
+// NewBlockWithHeaderAndBlock creates a block with the given header data and also keeps the transactions intact.
+func NewBlockWithHeaderAndBlock(header *Header, block *Block) *Block {
+	block.header = CopyHeader(header)
+	return block
+}
+
 // CopyHeader creates a deep copy of a block header to prevent side effects from
 // modifying a header variable.
 func CopyHeader(h *Header) *Header {

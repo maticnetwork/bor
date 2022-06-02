@@ -44,7 +44,7 @@ func TestInsertingSpanSizeBlocks(t *testing.T) {
 
 	// Insert sprintSize # of blocks so that span is fetched at the start of a new sprint
 	for i := uint64(1); i <= spanSize; i++ {
-		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor)
+		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, func(i int, b *BlockGen) {})
 		insertNewBlock(t, chain, block)
 	}
 
@@ -72,7 +72,7 @@ func TestFetchStateSyncEvents(t *testing.T) {
 	block := init.genesis.ToBlock(db)
 	// Insert sprintSize # of blocks so that span is fetched at the start of a new sprint
 	for i := uint64(1); i < sprintSize; i++ {
-		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor)
+		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, func(i int, b *BlockGen) {})
 		insertNewBlock(t, chain, block)
 	}
 
@@ -94,7 +94,7 @@ func TestFetchStateSyncEvents(t *testing.T) {
 	h.On("FetchStateSyncEvents", fromID, to).Return(eventRecords, nil)
 	_bor.SetHeimdallClient(h)
 
-	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor)
+	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, func(i int, b *BlockGen) {})
 	insertNewBlock(t, chain, block)
 
 	assert.True(t, h.AssertCalled(t, "FetchWithRetry", spanPath, ""))
@@ -135,7 +135,7 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 	db := init.ethereum.ChainDb()
 	block := init.genesis.ToBlock(db)
 	for i := uint64(1); i <= sprintSize; i++ {
-		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor)
+		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, func(i int, b *BlockGen) {})
 		insertNewBlock(t, chain, block)
 	}
 	assert.True(t, h.AssertCalled(t, "FetchWithRetry", spanPath, ""))
@@ -153,7 +153,7 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 	}
 	h.On("FetchStateSyncEvents", fromID, to).Return(eventRecords, nil)
 	for i := sprintSize + 1; i <= spanSize; i++ {
-		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor)
+		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, func(i int, b *BlockGen) {})
 		insertNewBlock(t, chain, block)
 	}
 	assert.True(t, h.AssertCalled(t, "FetchStateSyncEvents", fromID, to))
@@ -173,7 +173,7 @@ func TestOutOfTurnSigning(t *testing.T) {
 	block := init.genesis.ToBlock(db)
 
 	for i := uint64(1); i < spanSize; i++ {
-		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor)
+		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, func(i int, b *BlockGen) {})
 		insertNewBlock(t, chain, block)
 	}
 
@@ -185,7 +185,7 @@ func TestOutOfTurnSigning(t *testing.T) {
 	addr = crypto.PubkeyToAddress(key.PublicKey)
 	expectedSuccessionNumber := 2
 
-	block = buildNextBlock(t, _bor, chain, block, signerKey, init.genesis.Config.Bor)
+	block = buildNextBlock(t, _bor, chain, block, signerKey, init.genesis.Config.Bor, func(i int, b *BlockGen) {})
 	_, err := chain.InsertChain([]*types.Block{block})
 	assert.Equal(t,
 		*err.(*bor.BlockTooSoonError),
@@ -226,7 +226,7 @@ func TestSignerNotFound(t *testing.T) {
 	key, _ = crypto.HexToECDSA(signer)
 	addr = crypto.PubkeyToAddress(key.PublicKey)
 
-	block = buildNextBlock(t, _bor, chain, block, signerKey, init.genesis.Config.Bor)
+	block = buildNextBlock(t, _bor, chain, block, signerKey, init.genesis.Config.Bor, func(i int, b *BlockGen) {})
 	_, err := chain.InsertChain([]*types.Block{block})
 	assert.Equal(t,
 		*err.(*bor.UnauthorizedSignerError),
@@ -514,7 +514,7 @@ func TestJaipurFork(t *testing.T) {
 	db := init.ethereum.ChainDb()
 	block := init.genesis.ToBlock(db)
 	for i := uint64(1); i < sprintSize; i++ {
-		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor)
+		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, func(i int, b *BlockGen) {})
 		insertNewBlock(t, chain, block)
 		if block.Number().Uint64() == init.genesis.Config.Bor.JaipurBlock-1 {
 			assert.Equal(t, testSealHash(block.Header(), init.genesis.Config.Bor), bor.SealHash(block.Header(), init.genesis.Config.Bor))

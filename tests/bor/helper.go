@@ -3,6 +3,7 @@ package bor
 import (
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"math/big"
 	"sort"
@@ -10,9 +11,11 @@ import (
 
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/bor"
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/crypto/secp256k1"
@@ -40,6 +43,24 @@ var (
 	spanSize                   uint64 = 8
 )
 
+type BlockGen struct {
+	i       int
+	parent  *types.Block
+	chain   []*types.Block
+	header  *types.Header
+	statedb *state.StateDB
+
+	gasPool  *core.GasPool
+	txs      []*types.Transaction
+	receipts []*types.Receipt
+	uncles   []*types.Header
+
+	config *params.ChainConfig
+	engine consensus.Engine
+}
+type fakeChainReader struct {
+	config *params.ChainConfig
+}
 type initializeData struct {
 	genesis  *core.Genesis
 	ethereum *eth.Ethereum
@@ -77,15 +98,11 @@ func insertNewBlock(t *testing.T, chain *core.BlockChain, block *types.Block) {
 	}
 }
 
-func buildNextBlock(t *testing.T, _bor *bor.Bor, chain *core.BlockChain, block *types.Block, signer []byte, borConfig *params.BorConfig) *types.Block {
+func buildNextBlock(t *testing.T, _bor *bor.Bor, chain *core.BlockChain, block *types.Block, signer []byte, borConfig *params.BorConfig, gen func(int, *BlockGen)) *types.Block {
+
 	header := block.Header()
 	header.Number.Add(header.Number, big.NewInt(1))
 	number := header.Number.Uint64()
-
-	if signer == nil {
-		signer = getSignerKey(header.Number.Uint64())
-	}
-
 	header.ParentHash = block.Hash()
 	header.Time += bor.CalcProducerDelay(header.Number.Uint64(), 0, borConfig)
 	header.Extra = make([]byte, 32+65) // vanity + extraSeal
@@ -120,16 +137,87 @@ func buildNextBlock(t *testing.T, _bor *bor.Bor, chain *core.BlockChain, block *
 		}
 	}
 
-	state, err := chain.State()
-	if err != nil {
-		t.Fatalf("%s", err)
+	config := chain.Config()
+	if signer == nil {
+		signer = getSignerKey(header.Number.Uint64())
 	}
-	_, err = _bor.FinalizeAndAssemble(chain, header, state, nil, nil, nil)
-	if err != nil {
-		t.Fatalf("%s", err)
+	blocks := make([]*types.Block, 1)
+	genblock := func(i int, parent *types.Block, statedb *state.StateDB) *types.Block {
+
+		b := &BlockGen{i: i, chain: blocks, parent: parent, statedb: statedb, config: config, engine: _bor}
+		b.header = header
+
+		// Set the difficulty for clique block. The chain maker doesn't have access
+		// to a chain, so the difficulty will be left unset (nil). Set it here to the
+		// correct value.
+		if b.header.Difficulty == nil {
+			if config.TerminalTotalDifficulty == nil {
+				// Clique chain
+				b.header.Difficulty = big.NewInt(2)
+			} else {
+				// Post-merge chain
+				b.header.Difficulty = big.NewInt(0)
+			}
+		}
+		// Mutate the state and block according to any hard-fork specs
+		if daoBlock := config.DAOForkBlock; daoBlock != nil {
+			limit := new(big.Int).Add(daoBlock, params.DAOForkExtraRange)
+			if b.header.Number.Cmp(daoBlock) >= 0 && b.header.Number.Cmp(limit) < 0 {
+				if config.DAOForkSupport {
+					b.header.Extra = common.CopyBytes(params.DAOForkBlockExtra)
+				}
+			}
+		}
+		if config.DAOForkSupport && config.DAOForkBlock != nil && config.DAOForkBlock.Cmp(b.header.Number) == 0 {
+			misc.ApplyDAOHardFork(statedb)
+		}
+		// Execute any user modifications to the block
+		if gen != nil {
+			gen(i, b)
+		}
+		if b.engine != nil {
+			blockR, err := _bor.FinalizeAndAssemble(chain, b.header, statedb, b.txs, b.uncles, b.receipts)
+			if err != nil {
+				t.Fatalf("%s", err)
+			}
+
+			header2 := blockR.Header()
+
+			// Write state changes to db
+			root, err := statedb.Commit(config.IsEIP158(b.header.Number))
+			if err != nil {
+				panic(fmt.Sprintf("state write error: %v", err))
+			}
+			if err := statedb.Database().TrieDB().Commit(root, false, nil); err != nil {
+				panic(fmt.Sprintf("trie write error: %v", err))
+			}
+
+			sign(t, header2, signer, borConfig)
+
+			return types.NewBlockWithHeaderAndBlock(header2, blockR)
+
+		}
+		return nil
 	}
-	sign(t, header, signer, borConfig)
-	return types.NewBlockWithHeader(header)
+
+	// statedb, err := state.New(block.Root(), state.NewDatabase(*chain.DB()), nil)
+	// if err != nil {
+	// 	panic(err)
+	// }
+
+	statedb, err := state.New(block.Root(), chain.StateCache(), chain.Snapshots())
+	if err != nil {
+		panic(err)
+	}
+
+	// state, err := chain.State()
+	// if err != nil {
+	// 	t.Fatalf("%s", err)
+	// }
+	blockR := genblock(0, block, statedb)
+
+	return blockR
+
 }
 
 func sign(t *testing.T, header *types.Header, signer []byte, c *params.BorConfig) {

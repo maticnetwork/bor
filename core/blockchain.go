@@ -494,6 +494,10 @@ func (bc *BlockChain) SetHead(head uint64) error {
 	return err
 }
 
+func (bc *BlockChain) DB() *ethdb.Database {
+	return &bc.db
+}
+
 // setHeadBeyondRoot rewinds the local chain to a new head with the extra condition
 // that the rewind must pass the specified state root. This method is meant to be
 // used when rewinding with snapshots enabled to ensure that we go back further than
