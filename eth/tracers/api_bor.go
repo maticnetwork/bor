@@ -33,7 +33,7 @@ type TxTraceResult struct {
 	IntermediateHash common.Hash `json:"intermediatehash"`
 }
 
-func (api *API) traceBlock2(ctx context.Context, block *types.Block, config *TraceConfig) (*BlockTraceResult, error) {
+func (api *API) traceBorBlock(ctx context.Context, block *types.Block, config *TraceConfig) (*BlockTraceResult, error) {
 	if block.NumberU64() == 0 {
 		return nil, fmt.Errorf("genesis is not traceable")
 	}
@@ -123,7 +123,7 @@ type TraceBlockRequest struct {
 }
 
 // If you use context as first parameter this function gets exposed automaticall on rpc endpoint
-func (api *API) TraceBlock2(req *TraceBlockRequest) (*BlockTraceResult, error) {
+func (api *API) TraceBorBlock(req *TraceBlockRequest) (*BlockTraceResult, error) {
 	ctx := context.Background()
 
 	var blockNumber rpc.BlockNumber
@@ -139,5 +139,5 @@ func (api *API) TraceBlock2(req *TraceBlockRequest) (*BlockTraceResult, error) {
 	if err != nil {
 		return nil, err
 	}
-	return api.traceBlock2(ctx, block, req.Config)
+	return api.traceBorBlock(ctx, block, req.Config)
 }

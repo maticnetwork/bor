@@ -14,7 +14,6 @@ import (
 	"github.com/ethereum/go-ethereum/eth/tracers/logger"
 	"github.com/ethereum/go-ethereum/internal/cli/server/pprof"
 	"github.com/ethereum/go-ethereum/internal/cli/server/proto"
-	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	gproto "github.com/golang/protobuf/proto"
@@ -193,7 +192,7 @@ func (s *Server) DebugBlock(req *proto.DebugBlockRequest, stream proto.Bor_Debug
 			},
 		},
 	}
-	res, err := s.tracerAPI.TraceBlock2(traceReq)
+	res, err := s.tracerAPI.TraceBorBlock(traceReq)
 	if err != nil {
 		return err
 	}
@@ -295,28 +294,4 @@ func (s *Server) ChainWatch(req *proto.ChainWatchRequest, reply proto.Bor_ChainW
 			return err
 		}
 	}
-}
-func (s *Server) TraceBlock(ctx context.Context, req *proto.TraceRequest) (*proto.TraceResponse, error) {
-	log.Info("Trace Block", "block", req.Number)
-
-	traceReq := &tracers.TraceBlockRequest{
-		Number: req.Number,
-		Config: &tracers.TraceConfig{
-			Config: &logger.Config{
-				EnableMemory: true,
-			},
-		},
-	}
-	res, err := s.tracerAPI.TraceBlock2(traceReq)
-	if err != nil {
-		return nil, err
-	}
-
-	// TODO: Use streams for this
-	_, err = json.Marshal(res)
-	if err != nil {
-		panic(err)
-	}
-
-	return &proto.TraceResponse{}, nil
 }
