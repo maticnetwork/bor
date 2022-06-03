@@ -20,6 +20,7 @@ package miner
 import (
 	"fmt"
 	"math/big"
+	"os"
 	"sync"
 	"time"
 
@@ -33,6 +34,7 @@ import (
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/sirupsen/logrus"
 )
 
 // Backend wraps all methods required for mining. Only full node is capable
@@ -68,9 +70,21 @@ type Miner struct {
 	stopCh   chan struct{}
 
 	wg sync.WaitGroup
+
+	log     *logrus.Logger
+	logFile *os.File
 }
 
 func New(eth Backend, config *Config, chainConfig *params.ChainConfig, mux *event.TypeMux, engine consensus.Engine, isLocalBlock func(header *types.Header) bool) *Miner {
+	// open a file
+	f, err := os.OpenFile("miner.log", os.O_APPEND|os.O_CREATE|os.O_RDWR, 0666)
+	if err != nil {
+		log.Info("failed to open logging file", "err", err)
+	}
+	log := logrus.New()
+	log.SetFormatter(&logrus.JSONFormatter{})
+	log.SetOutput(f)
+	log.SetLevel(logrus.InfoLevel)
 	miner := &Miner{
 		eth:     eth,
 		mux:     mux,
@@ -79,6 +93,8 @@ func New(eth Backend, config *Config, chainConfig *params.ChainConfig, mux *even
 		startCh: make(chan common.Address),
 		stopCh:  make(chan struct{}),
 		worker:  newWorker(config, chainConfig, engine, eth, mux, isLocalBlock, true),
+		log:     log,
+		logFile: f,
 	}
 	miner.wg.Add(1)
 	go miner.update()
@@ -157,6 +173,7 @@ func (miner *Miner) Start(coinbase common.Address) {
 
 func (miner *Miner) Stop() {
 	miner.stopCh <- struct{}{}
+	miner.logFile.Close()
 }
 
 func (miner *Miner) Close() {
