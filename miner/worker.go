@@ -754,7 +754,7 @@ func (w *worker) resultLoop() {
 			// Insert the block into the set of pending ones to resultLoop for confirmations
 			w.unconfirmed.Insert(block.NumberU64(), block.Hash())
 
-			log.Info("[Mining Analysis] Sealed new block", "number", block.Number(),
+			log.Info("[Mining Analysis] Mined new block", "number", block.Number(),
 				"hash", hash, "gas used", block.GasUsed(), "elapsed", common.PrettyDuration(time.Since(start)))
 		case <-w.exitCh:
 			return
