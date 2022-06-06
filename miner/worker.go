@@ -684,6 +684,7 @@ func (w *worker) resultLoop() {
 	for {
 		select {
 		case block := <-w.resultCh:
+			start := time.Now()
 			// Short circuit when receiving empty result.
 			if block == nil {
 				continue
@@ -753,6 +754,8 @@ func (w *worker) resultLoop() {
 			// Insert the block into the set of pending ones to resultLoop for confirmations
 			w.unconfirmed.Insert(block.NumberU64(), block.Hash())
 
+			log.Info("[Mining Analysis] Sealed new block", "number", block.Number(),
+				"hash", hash, "gas used", block.GasUsed(), "elapsed", common.PrettyDuration(time.Since(start)))
 		case <-w.exitCh:
 			return
 		}
