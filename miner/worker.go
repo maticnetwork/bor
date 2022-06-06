@@ -1064,9 +1064,11 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 // into the given sealing block. The transaction selection and ordering strategy can
 // be customized with the plugin in the future.
 func (w *worker) fillTransactions(interrupt *int32, env *environment) {
+	start := time.Now()
 	// Split the pending transactions into locals and remotes
 	// Fill the block with all available pending transactions.
 	pending := w.eth.TxPool().Pending(true)
+	pendingCount := len(pending)
 	localTxs, remoteTxs := make(map[common.Address]types.Transactions), pending
 	for _, account := range w.eth.TxPool().Locals() {
 		if txs := remoteTxs[account]; len(txs) > 0 {
@@ -1086,6 +1088,7 @@ func (w *worker) fillTransactions(interrupt *int32, env *environment) {
 			return
 		}
 	}
+	log.Info("[Mining Analysis] Completed tx execution", "initial pending", pendingCount, "txs added", env.tcount, "elapsed", common.PrettyDuration(time.Since(start)))
 }
 
 // generateWork generates a sealing block based on the given parameters.
@@ -1114,6 +1117,8 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 		}
 		coinbase = w.coinbase // Use the preset address as the fee recipient
 	}
+
+	start1 := time.Now()
 	work, err := w.prepareWork(&generateParams{
 		timestamp: uint64(timestamp),
 		coinbase:  coinbase,
@@ -1121,6 +1126,8 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 	if err != nil {
 		return
 	}
+	log.Info("[Mining Analysis] Completed preparing work for mining", "block number", work.header.Number, "elapsed", common.PrettyDuration(time.Since(start1)))
+
 	// Create an empty block based on temporary copied state for
 	// sealing in advance without waiting block execution finished.
 	if !noempty && atomic.LoadUint32(&w.noempty) == 0 {
@@ -1143,6 +1150,7 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 // Note the assumption is held that the mutation is allowed to the passed env, do
 // the deep copy first.
 func (w *worker) commit(env *environment, interval func(), update bool, start time.Time) error {
+	start1 := time.Now()
 	if w.isRunning() {
 		if interval != nil {
 			interval()
@@ -1168,6 +1176,11 @@ func (w *worker) commit(env *environment, interval func(), update bool, start ti
 				log.Info("Worker has exited")
 			}
 		}
+		log.Info("[Mining Analysis] Completed committing block (FinalzeAndAssemble)",
+			"number", env.header.Number, "hash", block.Hash(),
+			"txs", env.tcount,
+			"gas", block.GasUsed(), "fees", totalFees(block, env.receipts),
+			"elapsed", common.PrettyDuration(time.Since(start1)))
 	}
 	if update {
 		w.updateSnapshot(env)

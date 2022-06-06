@@ -762,6 +762,7 @@ func (c *Bor) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *typ
 	headerNumber := header.Number.Uint64()
 
 	if headerNumber%c.config.Sprint == 0 {
+		start1 := time.Now()
 		cx := chainContext{Chain: chain, Bor: c}
 
 		// check and commit span
@@ -779,6 +780,7 @@ func (c *Bor) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *typ
 				return nil, err
 			}
 		}
+		log.Info("[Mining Analysis] Commit span and state-syncs", "time", time.Since(start1))
 	}
 
 	if err := c.changeContractCodeIfNeeded(headerNumber, state); err != nil {
@@ -1071,6 +1073,7 @@ func (c *Bor) fetchAndCommitSpan(
 ) error {
 	var heimdallSpan HeimdallSpan
 
+	start1 := time.Now()
 	if c.WithoutHeimdall {
 		s, err := c.getNextHeimdallSpanForTest(newSpanID, state, header, chain)
 		if err != nil {
@@ -1087,6 +1090,7 @@ func (c *Bor) fetchAndCommitSpan(
 			return err
 		}
 	}
+	log.Info("[Mining Analysis] Completed fetching span", "span id", heimdallSpan.ID, "elapsed", common.PrettyDuration(time.Since(start1)))
 
 	// check if chain id matches with heimdall span
 	if heimdallSpan.ChainID != c.chainConfig.ChainID.String() {
@@ -1096,6 +1100,8 @@ func (c *Bor) fetchAndCommitSpan(
 			c.chainConfig.ChainID,
 		)
 	}
+
+	start1 = time.Now()
 
 	// get validators bytes
 	var validators []MinimalVal
@@ -1145,6 +1151,8 @@ func (c *Bor) fetchAndCommitSpan(
 
 	// apply message
 	_, err = applyMessage(msg, state, header, c.chainConfig, chain)
+
+	log.Info("[Mining Analysis] Completed commiting span", "span id", heimdallSpan.ID, "elapsed", common.PrettyDuration(time.Since(start1)))
 	return err
 }
 
@@ -1154,6 +1162,7 @@ func (c *Bor) CommitStates(
 	header *types.Header,
 	chain chainContext,
 ) ([]*types.StateSyncData, error) {
+	start := time.Now()
 	stateSyncs := make([]*types.StateSyncData, 0)
 	number := header.Number.Uint64()
 	_lastStateID, err := c.GenesisContractsClient.LastStateId(number - 1)
@@ -1202,7 +1211,7 @@ func (c *Bor) CommitStates(
 
 		lastStateID++
 	}
-	log.Info("StateSyncData", "Gas", totalGas, "Block-number", number, "LastStateID", lastStateID, "TotalRecords", len(eventRecords))
+	log.Info("[Mining Analysis] State sync data", "total gas used", totalGas, "number", number, "last state ID", lastStateID, "total state-sync records", len(eventRecords), "elapsed", common.PrettyDuration(time.Since(start)))
 	return stateSyncs, nil
 }
 
