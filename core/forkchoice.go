@@ -22,6 +22,7 @@ import (
 	"math/big"
 	mrand "math/rand"
 
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -54,18 +55,21 @@ type ForkChoice struct {
 	// local td is equal to the extern one. It can be nil for light
 	// client
 	preserve func(header *types.Header) bool
+
+	validator ethereum.ChainValidator
 }
 
-func NewForkChoice(chainReader ChainReader, preserve func(header *types.Header) bool) *ForkChoice {
+func NewForkChoice(chainReader ChainReader, preserve func(header *types.Header) bool, validator ethereum.ChainValidator) *ForkChoice {
 	// Seed a fast but crypto originating random generator
 	seed, err := crand.Int(crand.Reader, big.NewInt(math.MaxInt64))
 	if err != nil {
 		log.Crit("Failed to initialize random seed", "err", err)
 	}
 	return &ForkChoice{
-		chain:    chainReader,
-		rand:     mrand.New(mrand.NewSource(seed.Int64())),
-		preserve: preserve,
+		chain:     chainReader,
+		rand:      mrand.New(mrand.NewSource(seed.Int64())),
+		preserve:  preserve,
+		validator: validator,
 	}
 }
 
@@ -75,6 +79,18 @@ func NewForkChoice(chainReader ChainReader, preserve func(header *types.Header) 
 // total difficulty is higher. In the extern mode, the trusted
 // header is always selected as the head.
 func (f *ForkChoice) ReorgNeeded(current *types.Header, header *types.Header) (bool, error) {
+	// todo: I believe we need to check the possible fork without fetching anything from remote peer. So add a new method to IsValidChain
+	if f.validator != nil {
+		// Bor case
+		// todo: compare latest local checkpoint with being inserted sidechain `header`. check if there are any checkpoints between `current` and `header` (`header` inclusive). if not, then just continue ReorgNeeded logic
+		// todo: if there are any, then check the latest from remote sidechain(just by it's number first) is it present in local whitelist service. If not, then return an error.
+		// todo: if lacally we have all checkpoints with respect to numbers, then compare all checkpoints between `current` and `header`.
+		_, err := f.validator.IsValidChain(current, header)
+		if err != nil {
+			return false, err
+		}
+	}
+
 	var (
 		localTD  = f.chain.GetTd(current.Hash(), current.Number.Uint64())
 		externTd = f.chain.GetTd(header.Hash(), header.Number.Uint64())
