@@ -33,6 +33,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/trie"
 )
@@ -75,6 +76,10 @@ const (
 
 	// staleThreshold is the maximum depth of the acceptable stale block.
 	staleThreshold = 7
+)
+
+var (
+	miner0txmetrics = metrics.NewRegisteredTimer("chain/miner/0tx", nil)
 )
 
 // environment is the worker's current environment and holds all
@@ -1168,6 +1173,7 @@ func (w *worker) commit(env *environment, interval func(), update bool, start ti
 				log.Info("Worker has exited")
 			}
 		}
+		miner0txmetrics.UpdateSince(start)
 	}
 	if update {
 		w.updateSnapshot(env)
