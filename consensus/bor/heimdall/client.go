@@ -54,19 +54,21 @@ const (
 	fetchStateSyncEventsFormat = "from-id=%d&to-time=%d&limit=%d"
 	fetchStateSyncEventsPath   = "clerk/event-record/list"
 
-	fetchSpanFormat = "%d"
-	fetchSpanPath   = "bor/span/"
+	fetchSpanFormat = "bor/span/%d"
 )
 
 func (h *HeimdallClient) StateSyncEvents(fromID uint64, to int64) ([]*clerk.EventRecordWithTime, error) {
 	eventRecords := make([]*clerk.EventRecordWithTime, 0)
 
 	for {
-		queryParams := fmt.Sprintf(fetchStateSyncEventsFormat, fromID, to, stateFetchLimit)
+		url, err := stateSyncURL(h.urlString, fromID, to)
+		if err != nil {
+			return nil, err
+		}
 
-		log.Info("Fetching state sync events", "queryParams", queryParams)
+		log.Info("Fetching state sync events", "queryParams", url.RawQuery)
 
-		response, err := FetchWithRetry[StateSyncEventsResponse](h.client, h.urlString, fetchStateSyncEventsPath, queryParams, h.closeCh)
+		response, err := FetchWithRetry[StateSyncEventsResponse](h.client, url, h.closeCh)
 		if err != nil {
 			return nil, err
 		}
@@ -93,9 +95,12 @@ func (h *HeimdallClient) StateSyncEvents(fromID uint64, to int64) ([]*clerk.Even
 }
 
 func (h *HeimdallClient) Span(spanID uint64) (*span.HeimdallSpan, error) {
-	queryParams := fmt.Sprintf(fetchSpanFormat, spanID)
+	url, err := spanURL(h.urlString, spanID)
+	if err != nil {
+		return nil, err
+	}
 
-	response, err := FetchWithRetry[SpanResponse](h.client, h.urlString, fetchSpanPath, queryParams, h.closeCh)
+	response, err := FetchWithRetry[SpanResponse](h.client, url, h.closeCh)
 	if err != nil {
 		return nil, err
 	}
@@ -104,15 +109,7 @@ func (h *HeimdallClient) Span(spanID uint64) (*span.HeimdallSpan, error) {
 }
 
 // FetchWithRetry returns data from heimdall with retry
-func FetchWithRetry[T any](client http.Client, urlString string, rawPath string, rawQuery string, closeCh chan struct{}) (*T, error) {
-	u, err := url.Parse(urlString)
-	if err != nil {
-		return nil, err
-	}
-
-	u.Path = rawPath
-	u.RawQuery = rawQuery
-
+func FetchWithRetry[T any](client http.Client, url *url.URL, closeCh chan struct{}) (*T, error) {
 	// attempt counter
 	attempt := 1
 	result := new(T)
@@ -120,7 +117,7 @@ func FetchWithRetry[T any](client http.Client, urlString string, rawPath string,
 	ctx, cancel := context.WithTimeout(context.Background(), apiHeimdallTimeout)
 
 	// request data once
-	body, err := internalFetch(ctx, client, u)
+	body, err := internalFetch(ctx, client, url)
 
 	cancel()
 
@@ -138,7 +135,7 @@ func FetchWithRetry[T any](client http.Client, urlString string, rawPath string,
 	defer ticker.Stop()
 
 	for {
-		log.Info("Retrying again in 5 seconds to fetch data from Heimdall", "path", u.Path, "attempt", attempt)
+		log.Info("Retrying again in 5 seconds to fetch data from Heimdall", "path", url.Path, "attempt", attempt)
 		attempt++
 		select {
 		case <-closeCh:
@@ -148,7 +145,7 @@ func FetchWithRetry[T any](client http.Client, urlString string, rawPath string,
 		case <-ticker.C:
 			ctx, cancel = context.WithTimeout(context.Background(), apiHeimdallTimeout)
 
-			body, err = internalFetch(ctx, client, u)
+			body, err = internalFetch(ctx, client, url)
 
 			cancel()
 
@@ -162,6 +159,28 @@ func FetchWithRetry[T any](client http.Client, urlString string, rawPath string,
 			}
 		}
 	}
+}
+
+func spanURL(urlString string, spanID uint64) (*url.URL, error) {
+	return makeURL(urlString, fmt.Sprintf(fetchSpanFormat, spanID), "")
+}
+
+func stateSyncURL(urlString string, fromID uint64, to int64) (*url.URL, error) {
+	queryParams := fmt.Sprintf(fetchStateSyncEventsFormat, fromID, to, stateFetchLimit)
+
+	return makeURL(urlString, fetchStateSyncEventsPath, queryParams)
+}
+
+func makeURL(urlString, rawPath, rawQuery string) (*url.URL, error) {
+	u, err := url.Parse(urlString)
+	if err != nil {
+		return nil, err
+	}
+
+	u.Path = rawPath
+	u.RawQuery = rawQuery
+
+	return u, err
 }
 
 // internal fetch method
