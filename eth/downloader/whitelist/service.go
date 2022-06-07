@@ -16,6 +16,8 @@ type Service struct {
 	checkpointWhitelist map[uint64]common.Hash // Checkpoint whitelist, populated by reaching out to heimdall
 	checkpointOrder     []uint64               // Checkpoint order, populated by reaching out to heimdall
 	maxCapacity         uint
+
+	checkpointInterval uint64 // fixme: provide this data
 }
 
 func NewService(maxCapacity uint) *Service {
@@ -70,6 +72,29 @@ func (w *Service) IsValidChain(remoteHeader *types.Header, fetchHeadersByNumber 
 	return false, ErrCheckpointMismatch
 }
 
+func (w *Service) GetCheckpoints(current, sidechainHeader *types.Header, sidechainCheckpoints []*types.Header) (map[uint64]*types.Header, error) {
+	// todo: carefully check every possible case :)
+	return map[uint64]*types.Header{}, nil
+}
+
+func (w *Service) GetCheckpointsBetween(from, to uint64) []uint64 {
+	if from > to {
+		return nil
+	}
+
+	capacity := (to-from)/w.checkpointInterval + 1
+	res := make([]uint64, 0, capacity)
+
+	for n := from; n <= to; n++ {
+		//todo: check if it's correct
+		if n%w.checkpointInterval == 0 {
+			res = append(res, n)
+		}
+	}
+
+	return res
+}
+
 func (w *Service) ProcessCheckpoint(endBlockNum uint64, endBlockHash common.Hash) {
 	w.m.Lock()
 	defer w.m.Unlock()
@@ -116,7 +141,7 @@ func (w *Service) dequeueCheckpointWhitelist() {
 		log.Debug("Dequeing checkpoint whitelist", "block number", w.checkpointOrder[0], "block hash", w.checkpointWhitelist[w.checkpointOrder[0]])
 
 		delete(w.checkpointWhitelist, w.checkpointOrder[0])
-		w.checkpointOrder = w.checkpointOrder[1:]
+		w.checkpointOrder = w.checkpointOrder[1:] // fixme: this slice is growing infinitely and never will be released. also a panic is possible if the last element is going to be removed
 	}
 }
 
