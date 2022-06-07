@@ -79,7 +79,10 @@ const (
 )
 
 var (
-	miner0txmetrics = metrics.NewRegisteredTimer("chain/miner/0tx", nil)
+	minerZeroTxBroadcastMetrics    = metrics.NewRegisteredTimer("chain/miner/zerotx/sealed", nil)
+	minerZeroTxCommitMetrics       = metrics.NewRegisteredTimer("chain/miner/zerotx/commit", nil)
+	minerNonZeroTxBroadcastMetrics = metrics.NewRegisteredTimer("chain/miner/nonzerotx/sealed", nil)
+	minerNonZeroTxCommitMetrics    = metrics.NewRegisteredTimer("chain/miner/nonzerotx/commit", nil)
 )
 
 // environment is the worker's current environment and holds all
@@ -757,7 +760,8 @@ func (w *worker) resultLoop() {
 
 			// Insert the block into the set of pending ones to resultLoop for confirmations
 			w.unconfirmed.Insert(block.NumberU64(), block.Hash())
-
+			minerZeroTxBroadcastMetrics.Update(time.Since(task.createdAt))
+			minerNonZeroTxBroadcastMetrics.Update(time.Since(task.createdAt))
 		case <-w.exitCh:
 			return
 		}
@@ -1173,11 +1177,12 @@ func (w *worker) commit(env *environment, interval func(), update bool, start ti
 				log.Info("Worker has exited")
 			}
 		}
-		miner0txmetrics.UpdateSince(start)
 	}
 	if update {
 		w.updateSnapshot(env)
 	}
+	minerZeroTxCommitMetrics.Update(time.Since(start))
+	minerNonZeroTxCommitMetrics.Update(time.Since(start))
 	return nil
 }
 
