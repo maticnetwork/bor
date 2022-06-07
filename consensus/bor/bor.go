@@ -771,18 +771,24 @@ func (c *Bor) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *typ
 			log.Error("Error while committing span", "error", err)
 			return nil, err
 		}
+		log.Info("[Mining Analysis] Completed Check and Commit Span", "number", header.Number.Uint64(), "hash", header.Hash(),
+			"elapsed", common.PrettyDuration(time.Since(start1)))
 
 		if !c.WithoutHeimdall {
+			start2 := time.Now()
 			// commit states
 			stateSyncData, err = c.CommitStates(state, header, cx)
 			if err != nil {
 				log.Error("Error while committing states", "error", err)
 				return nil, err
 			}
+			log.Info("[Mining Analysis] Completed Commit States (state-sync)", "number", header.Number.Uint64(), "hash", header.Hash(),
+				"elapsed", common.PrettyDuration(time.Since(start2)))
 		}
-		log.Info("[Mining Analysis] Commit span and state-syncs", "time", time.Since(start1))
+
 	}
 
+	start3 := time.Now()
 	if err := c.changeContractCodeIfNeeded(headerNumber, state); err != nil {
 		log.Error("Error changing contract code", "error", err)
 		return nil, err
@@ -798,6 +804,8 @@ func (c *Bor) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *typ
 	// set state sync
 	bc := chain.(*core.BlockChain)
 	bc.SetStateSync(stateSyncData)
+	log.Info("[Mining Analysis] Post processing in FinalizeAndAssemble", "number", header.Number.Uint64(), "hash", header.Hash(),
+		"elapsed", common.PrettyDuration(time.Since(start3)))
 
 	// return the final block for sealing
 	return block, nil
@@ -1040,11 +1048,14 @@ func (c *Bor) checkAndCommitSpan(
 	header *types.Header,
 	chain core.ChainContext,
 ) error {
+	start := time.Now()
 	headerNumber := header.Number.Uint64()
 	span, err := c.GetCurrentSpan(header.ParentHash)
 	if err != nil {
 		return err
 	}
+	log.Info("[Mining Analysis] Fetched current span from contract", "number", header.Number.Uint64(), "hash", header.Hash(),
+		"elapsed", common.PrettyDuration(time.Since(start)))
 	if c.needToCommitSpan(span, headerNumber) {
 		err := c.fetchAndCommitSpan(span.ID+1, state, header, chain)
 		return err
@@ -1096,7 +1107,8 @@ func (c *Bor) fetchAndCommitSpan(
 			return err
 		}
 	}
-	log.Info("[Mining Analysis] Completed fetching span", "span id", heimdallSpan.ID, "elapsed", common.PrettyDuration(time.Since(start1)))
+	log.Info("[Mining Analysis] Fetched next span from heimdall", "number", header.Number.Uint64(), "hash", header.Hash(),
+		"span id", heimdallSpan.ID, "elapsed", common.PrettyDuration(time.Since(start1)))
 
 	// check if chain id matches with heimdall span
 	if heimdallSpan.ChainID != c.chainConfig.ChainID.String() {
@@ -1158,7 +1170,8 @@ func (c *Bor) fetchAndCommitSpan(
 	// apply message
 	_, err = applyMessage(msg, state, header, c.chainConfig, chain)
 
-	log.Info("[Mining Analysis] Completed commiting span", "span id", heimdallSpan.ID, "elapsed", common.PrettyDuration(time.Since(start1)))
+	log.Info("[Mining Analysis] Completed commiting span", "span id", heimdallSpan.ID,
+		"number", header.Number.Uint64(), "hash", header.Hash(), "elapsed", common.PrettyDuration(time.Since(start1)))
 	return err
 }
 
@@ -1168,7 +1181,6 @@ func (c *Bor) CommitStates(
 	header *types.Header,
 	chain chainContext,
 ) ([]*types.StateSyncData, error) {
-	start := time.Now()
 	stateSyncs := make([]*types.StateSyncData, 0)
 	number := header.Number.Uint64()
 	_lastStateID, err := c.GenesisContractsClient.LastStateId(number - 1)
@@ -1176,6 +1188,7 @@ func (c *Bor) CommitStates(
 		return nil, err
 	}
 
+	start1 := time.Now()
 	to := time.Unix(int64(chain.Chain.GetHeaderByNumber(number-c.config.Sprint).Time), 0)
 	lastStateID := _lastStateID.Uint64()
 	log.Info(
@@ -1188,6 +1201,8 @@ func (c *Bor) CommitStates(
 			eventRecords = eventRecords[0:val]
 		}
 	}
+	log.Info("[Mining Analysis] Fetched state updates from Heimdall", "number", header.Number.Uint64(), "hash", header.Hash(), "elapsed", common.PrettyDuration(time.Since(start1)))
+	start2 := time.Now()
 
 	totalGas := 0 /// limit on gas for state sync per block
 
@@ -1217,7 +1232,9 @@ func (c *Bor) CommitStates(
 
 		lastStateID++
 	}
-	log.Info("[Mining Analysis] State sync data", "total gas used", totalGas, "number", number, "last state ID", lastStateID, "total state-sync records", len(eventRecords), "elapsed", common.PrettyDuration(time.Since(start)))
+	log.Info("[Mining Analysis] Processed state syncs", "number", number, "hash", header.Hash(),
+		"total gas used", totalGas, "last state ID", lastStateID,
+		"total state-sync records", len(eventRecords), "elapsed", common.PrettyDuration(time.Since(start2)))
 	return stateSyncs, nil
 }
 
