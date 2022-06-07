@@ -754,7 +754,7 @@ func (w *worker) resultLoop() {
 			// Insert the block into the set of pending ones to resultLoop for confirmations
 			w.unconfirmed.Insert(block.NumberU64(), block.Hash())
 
-			log.Info("[Mining Analysis] Mined new block", "number", block.Number(),
+			log.Info("[Mining Analysis] Mined new block", "number", block.Number().Uint64(),
 				"hash", hash, "gas used", block.GasUsed(), "elapsed", common.PrettyDuration(time.Since(start)))
 		case <-w.exitCh:
 			return
@@ -1091,7 +1091,8 @@ func (w *worker) fillTransactions(interrupt *int32, env *environment) {
 			return
 		}
 	}
-	log.Info("[Mining Analysis] Completed tx execution", "initial pending", pendingCount, "txs added", env.tcount, "elapsed", common.PrettyDuration(time.Since(start)))
+	log.Info("[Mining Analysis] Completed tx execution", "number", env.header.Number.Uint64(), "hash", env.header.Hash(),
+		"initial pending", pendingCount, "txs added", env.tcount, "elapsed", common.PrettyDuration(time.Since(start)))
 }
 
 // generateWork generates a sealing block based on the given parameters.
@@ -1129,7 +1130,7 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 	if err != nil {
 		return
 	}
-	log.Info("[Mining Analysis] Completed preparing work for mining", "block number", work.header.Number, "elapsed", common.PrettyDuration(time.Since(start1)))
+	log.Info("[Mining Analysis] Completed preparing work for mining", "number", work.header.Number.Uint64(), "elapsed", common.PrettyDuration(time.Since(start1)))
 
 	// Create an empty block based on temporary copied state for
 	// sealing in advance without waiting block execution finished.
