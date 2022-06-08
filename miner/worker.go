@@ -79,10 +79,10 @@ const (
 )
 
 var (
-	minerZeroTxBroadcastMetrics    = metrics.NewRegisteredTimer("chain/miner/test2/zerotx/broadcast", nil)
-	minerZeroTxCommitMetrics       = metrics.NewRegisteredTimer("chain/miner/test2/zerotx/commit", nil)
-	minerNonZeroTxBroadcastMetrics = metrics.NewRegisteredTimer("chain/miner/test2/nonzerotx/broadcast", nil)
-	minerNonZeroTxCommitMetrics    = metrics.NewRegisteredTimer("chain/miner/test2/nonzerotx/commit", nil)
+	minerZeroTxBroadcastMetrics    = metrics.NewRegisteredTimer("chain/miner/test3/zerotx/broadcast", nil)
+	minerZeroTxCommitMetrics       = metrics.NewRegisteredTimer("chain/miner/test3/zerotx/commit", nil)
+	minerNonZeroTxBroadcastMetrics = metrics.NewRegisteredTimer("chain/miner/test3/nonzerotx/broadcast", nil)
+	minerNonZeroTxCommitMetrics    = metrics.NewRegisteredTimer("chain/miner/test3/nonzerotx/commit", nil)
 )
 
 // environment is the worker's current environment and holds all
@@ -768,7 +768,9 @@ func (w *worker) resultLoop() {
 			}
 
 			log.Info("[Mining Analysis] Mined new block", "number", block.Number().Uint64(),
-				"hash", hash, "gas used", block.GasUsed(), "elapsed", common.PrettyDuration(time.Since(start)))
+				"hash", hash, "gas used", block.GasUsed(), "txs", len(block.Transactions()),
+				"total time", common.PrettyDuration(time.Since(task.createdAt)),
+				"elapsed", common.PrettyDuration(time.Since(start)))
 		case <-w.exitCh:
 			return
 		}
