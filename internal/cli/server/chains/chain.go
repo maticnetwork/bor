@@ -67,10 +67,12 @@ func importChain(content []byte) (*Chain, error) {
 
 	if chain.Genesis == nil {
 		log.Info("Try reading as legacy genesis")
+
 		var genesis core.Genesis
 		if err := json.Unmarshal(content, &genesis); err != nil {
 			return nil, err
 		}
+
 		if genesis.Config != nil {
 			chain.Genesis = &genesis
 			chain.NetworkId = genesis.Config.ChainID.Uint64()
