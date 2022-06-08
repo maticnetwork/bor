@@ -79,9 +79,9 @@ const (
 )
 
 var (
-	minerZeroTxBroadcastMetrics    = metrics.NewRegisteredTimer("chain/miner/zerotx/sealed", nil)
+	minerZeroTxBroadcastMetrics    = metrics.NewRegisteredTimer("chain/miner/zerotx/broadcast", nil)
 	minerZeroTxCommitMetrics       = metrics.NewRegisteredTimer("chain/miner/zerotx/commit", nil)
-	minerNonZeroTxBroadcastMetrics = metrics.NewRegisteredTimer("chain/miner/nonzerotx/sealed", nil)
+	minerNonZeroTxBroadcastMetrics = metrics.NewRegisteredTimer("chain/miner/nonzerotx/broadcast", nil)
 	minerNonZeroTxCommitMetrics    = metrics.NewRegisteredTimer("chain/miner/nonzerotx/commit", nil)
 )
 
@@ -760,8 +760,11 @@ func (w *worker) resultLoop() {
 
 			// Insert the block into the set of pending ones to resultLoop for confirmations
 			w.unconfirmed.Insert(block.NumberU64(), block.Hash())
-			minerZeroTxBroadcastMetrics.Update(time.Since(task.createdAt))
-			minerNonZeroTxBroadcastMetrics.Update(time.Since(task.createdAt))
+			if block.Transactions().Len() == 0 {
+				minerZeroTxBroadcastMetrics.Update(time.Since(task.createdAt))
+			} else {
+				minerNonZeroTxBroadcastMetrics.Update(time.Since(task.createdAt))
+			}
 		case <-w.exitCh:
 			return
 		}
@@ -1181,8 +1184,11 @@ func (w *worker) commit(env *environment, interval func(), update bool, start ti
 	if update {
 		w.updateSnapshot(env)
 	}
-	minerZeroTxCommitMetrics.Update(time.Since(start))
-	minerNonZeroTxCommitMetrics.Update(time.Since(start))
+	if env.tcount == 0 {
+		minerZeroTxCommitMetrics.Update(time.Since(start))
+	} else {
+		minerNonZeroTxCommitMetrics.Update(time.Since(start))
+	}
 	return nil
 }
 
