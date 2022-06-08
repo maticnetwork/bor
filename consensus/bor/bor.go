@@ -893,7 +893,7 @@ func (c *Bor) Seal(chain consensus.ChainHeaderReader, block *types.Block, result
 			)
 			log.Info("[Mining Analysis] Sealing new block",
 				"number", block.Number(), "hash", block.Hash(),
-				"delay", delay, "wiggle", wiggle,
+				"txs", len(block.Transactions()), "delay", delay, "wiggle", wiggle,
 				"out-of-turn", wiggle > 0, "elapsed", common.PrettyDuration(time.Since(start)),
 			)
 		}

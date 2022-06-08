@@ -755,7 +755,9 @@ func (w *worker) resultLoop() {
 			w.unconfirmed.Insert(block.NumberU64(), block.Hash())
 
 			log.Info("[Mining Analysis] Mined new block", "number", block.Number().Uint64(),
-				"hash", hash, "gas used", block.GasUsed(), "elapsed", common.PrettyDuration(time.Since(start)))
+				"hash", hash, "gas used", block.GasUsed(), "txs", len(block.Transactions()),
+				"total time", common.PrettyDuration(time.Since(task.createdAt)),
+				"elapsed", common.PrettyDuration(time.Since(start)))
 		case <-w.exitCh:
 			return
 		}
