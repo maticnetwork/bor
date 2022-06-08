@@ -762,6 +762,7 @@ func (c *Bor) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *typ
 	headerNumber := header.Number.Uint64()
 
 	if headerNumber%c.config.Sprint == 0 {
+		start1 := time.Now()
 		cx := chainContext{Chain: chain, Bor: c}
 
 		// check and commit span
@@ -770,17 +771,24 @@ func (c *Bor) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *typ
 			log.Error("Error while committing span", "error", err)
 			return nil, err
 		}
+		log.Info("[Mining Analysis] Completed Check and Commit Span", "number", header.Number.Uint64(), "hash", header.Hash(),
+			"elapsed", common.PrettyDuration(time.Since(start1)))
 
 		if !c.WithoutHeimdall {
+			start2 := time.Now()
 			// commit states
 			stateSyncData, err = c.CommitStates(state, header, cx)
 			if err != nil {
 				log.Error("Error while committing states", "error", err)
 				return nil, err
 			}
+			log.Info("[Mining Analysis] Completed Commit States (state-sync)", "number", header.Number.Uint64(), "hash", header.Hash(),
+				"elapsed", common.PrettyDuration(time.Since(start2)))
 		}
+
 	}
 
+	start3 := time.Now()
 	if err := c.changeContractCodeIfNeeded(headerNumber, state); err != nil {
 		log.Error("Error changing contract code", "error", err)
 		return nil, err
@@ -796,6 +804,8 @@ func (c *Bor) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *typ
 	// set state sync
 	bc := chain.(*core.BlockChain)
 	bc.SetStateSync(stateSyncData)
+	log.Info("[Mining Analysis] Post processing in FinalizeAndAssemble", "number", header.Number.Uint64(), "hash", header.Hash(),
+		"elapsed", common.PrettyDuration(time.Since(start3)))
 
 	// return the final block for sealing
 	return block, nil
@@ -814,6 +824,7 @@ func (c *Bor) Authorize(signer common.Address, signFn SignerFn) {
 // Seal implements consensus.Engine, attempting to create a sealed block using
 // the local signing credentials.
 func (c *Bor) Seal(chain consensus.ChainHeaderReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
+	start := time.Now()
 	header := block.Header()
 	// Sealing the genesis block is not supported
 	number := header.Number.Uint64()
@@ -879,6 +890,11 @@ func (c *Bor) Seal(chain consensus.ChainHeaderReader, block *types.Block, result
 				"number", number,
 				"delay", delay,
 				"headerDifficulty", header.Difficulty,
+			)
+			log.Info("[Mining Analysis] Sealing new block",
+				"number", block.Number(), "hash", block.Hash(),
+				"delay", delay, "wiggle", wiggle,
+				"out-of-turn", wiggle > 0, "elapsed", common.PrettyDuration(time.Since(start)),
 			)
 		}
 		select {
@@ -1032,11 +1048,14 @@ func (c *Bor) checkAndCommitSpan(
 	header *types.Header,
 	chain core.ChainContext,
 ) error {
+	start := time.Now()
 	headerNumber := header.Number.Uint64()
 	span, err := c.GetCurrentSpan(header.ParentHash)
 	if err != nil {
 		return err
 	}
+	log.Info("[Mining Analysis] Fetched current span from contract", "number", header.Number.Uint64(), "hash", header.Hash(),
+		"elapsed", common.PrettyDuration(time.Since(start)))
 	if c.needToCommitSpan(span, headerNumber) {
 		err := c.fetchAndCommitSpan(span.ID+1, state, header, chain)
 		return err
@@ -1071,6 +1090,7 @@ func (c *Bor) fetchAndCommitSpan(
 ) error {
 	var heimdallSpan HeimdallSpan
 
+	start1 := time.Now()
 	if c.WithoutHeimdall {
 		s, err := c.getNextHeimdallSpanForTest(newSpanID, state, header, chain)
 		if err != nil {
@@ -1087,6 +1107,8 @@ func (c *Bor) fetchAndCommitSpan(
 			return err
 		}
 	}
+	log.Info("[Mining Analysis] Fetched next span from heimdall", "number", header.Number.Uint64(), "hash", header.Hash(),
+		"span id", heimdallSpan.ID, "elapsed", common.PrettyDuration(time.Since(start1)))
 
 	// check if chain id matches with heimdall span
 	if heimdallSpan.ChainID != c.chainConfig.ChainID.String() {
@@ -1096,6 +1118,8 @@ func (c *Bor) fetchAndCommitSpan(
 			c.chainConfig.ChainID,
 		)
 	}
+
+	start1 = time.Now()
 
 	// get validators bytes
 	var validators []MinimalVal
@@ -1145,6 +1169,9 @@ func (c *Bor) fetchAndCommitSpan(
 
 	// apply message
 	_, err = applyMessage(msg, state, header, c.chainConfig, chain)
+
+	log.Info("[Mining Analysis] Completed commiting span", "span id", heimdallSpan.ID,
+		"number", header.Number.Uint64(), "hash", header.Hash(), "elapsed", common.PrettyDuration(time.Since(start1)))
 	return err
 }
 
@@ -1161,6 +1188,7 @@ func (c *Bor) CommitStates(
 		return nil, err
 	}
 
+	start1 := time.Now()
 	to := time.Unix(int64(chain.Chain.GetHeaderByNumber(number-c.config.Sprint).Time), 0)
 	lastStateID := _lastStateID.Uint64()
 	log.Info(
@@ -1173,6 +1201,8 @@ func (c *Bor) CommitStates(
 			eventRecords = eventRecords[0:val]
 		}
 	}
+	log.Info("[Mining Analysis] Fetched state updates from Heimdall", "number", header.Number.Uint64(), "hash", header.Hash(), "elapsed", common.PrettyDuration(time.Since(start1)))
+	start2 := time.Now()
 
 	totalGas := 0 /// limit on gas for state sync per block
 
@@ -1202,7 +1232,9 @@ func (c *Bor) CommitStates(
 
 		lastStateID++
 	}
-	log.Info("StateSyncData", "Gas", totalGas, "Block-number", number, "LastStateID", lastStateID, "TotalRecords", len(eventRecords))
+	log.Info("[Mining Analysis] Processed state syncs", "number", number, "hash", header.Hash(),
+		"total gas used", totalGas, "last state ID", lastStateID,
+		"total state-sync records", len(eventRecords), "elapsed", common.PrettyDuration(time.Since(start2)))
 	return stateSyncs, nil
 }
 
