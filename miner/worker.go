@@ -79,10 +79,10 @@ const (
 )
 
 var (
-	minerZeroTxBroadcastMetrics    = metrics.NewRegisteredTimer("chain/miner/zerotx/broadcast", nil)
-	minerZeroTxCommitMetrics       = metrics.NewRegisteredTimer("chain/miner/zerotx/commit", nil)
-	minerNonZeroTxBroadcastMetrics = metrics.NewRegisteredTimer("chain/miner/nonzerotx/broadcast", nil)
-	minerNonZeroTxCommitMetrics    = metrics.NewRegisteredTimer("chain/miner/nonzerotx/commit", nil)
+	minerZeroTxBroadcastMetrics    = metrics.NewRegisteredTimer("chain/miner/test/zerotx/broadcast", nil)
+	minerZeroTxCommitMetrics       = metrics.NewRegisteredTimer("chain/miner/test/zerotx/commit", nil)
+	minerNonZeroTxBroadcastMetrics = metrics.NewRegisteredTimer("chain/miner/test/nonzerotx/broadcast", nil)
+	minerNonZeroTxCommitMetrics    = metrics.NewRegisteredTimer("chain/miner/test/nonzerotx/commit", nil)
 )
 
 // environment is the worker's current environment and holds all
@@ -761,9 +761,9 @@ func (w *worker) resultLoop() {
 			// Insert the block into the set of pending ones to resultLoop for confirmations
 			w.unconfirmed.Insert(block.NumberU64(), block.Hash())
 			if block.Transactions().Len() == 0 {
-				minerZeroTxBroadcastMetrics.Update(time.Since(task.createdAt))
+				minerZeroTxBroadcastMetrics.Update(time.Duration(time.Since(task.createdAt).Seconds()) * time.Second)
 			} else {
-				minerNonZeroTxBroadcastMetrics.Update(time.Since(task.createdAt))
+				minerNonZeroTxBroadcastMetrics.Update(time.Duration(time.Since(task.createdAt).Seconds()) * time.Second)
 			}
 		case <-w.exitCh:
 			return
@@ -1185,9 +1185,9 @@ func (w *worker) commit(env *environment, interval func(), update bool, start ti
 		w.updateSnapshot(env)
 	}
 	if env.tcount == 0 {
-		minerZeroTxCommitMetrics.Update(time.Since(start))
+		minerZeroTxCommitMetrics.Update(time.Duration(time.Since(start).Seconds()) * time.Second)
 	} else {
-		minerNonZeroTxCommitMetrics.Update(time.Since(start))
+		minerNonZeroTxCommitMetrics.Update(time.Duration(time.Since(start).Seconds()) * time.Second)
 	}
 	return nil
 }
