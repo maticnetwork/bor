@@ -85,11 +85,11 @@ func (f *ForkChoice) ReorgNeeded(current *types.Header, header *types.Header, si
 		// todo: compare latest local checkpoint with being inserted sidechain `header`. check if there are any checkpoints between `current` and `header` (`header` inclusive). if not, then just continue ReorgNeeded logic
 		// todo: if there are any, then check the latest from remote sidechain(just by it's number first) is it present in local whitelist service. If not, then return an error.
 		// todo: if lacally we have all checkpoints with respect to numbers, then compare all checkpoints between `current` and `header`.
-		headers, err := f.validator.GetCheckpoints(current, header, sidechainCheckpoints)
-		_, err := f.validator.IsValidChain(current, header)
-		if err != nil {
-			return false, err
-		}
+		// headers, err := f.validator.GetCheckpoints(current, header, sidechainCheckpoints)
+		// _, err := f.validator.IsValidChain(current, header)
+		// if err != nil {
+		// 	return false, err
+		// }
 	}
 
 	var (

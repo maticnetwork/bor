@@ -68,7 +68,7 @@ func newTester() *downloadTester {
 	}
 	core.GenesisBlockForTesting(db, testAddress, big.NewInt(1000000000000000))
 
-	chain, err := core.NewBlockChain(db, nil, params.TestChainConfig, ethash.NewFaker(), vm.Config{}, nil, nil)
+	chain, err := core.NewBlockChain(db, nil, params.TestChainConfig, ethash.NewFaker(), vm.Config{}, nil, nil, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -82,7 +82,7 @@ func newTester() *downloadTester {
 	return tester
 }
 
-func (dl *downloadTester) setWhitelist(w ChainValidator) {
+func (dl *downloadTester) setWhitelist(w ethereum.ChainValidator) {
 	dl.downloader.ChainValidator = w
 }
 
@@ -1423,6 +1423,10 @@ func (w *whitelistFake) GetCheckpointWhitelist() map[uint64]common.Hash {
 }
 
 func (w *whitelistFake) PurgeCheckpointWhitelist() {}
+
+func (w *whitelistFake) GetCheckpoints(current, sidechainHeader *types.Header, sidechainCheckpoints []*types.Header) (map[uint64]*types.Header, error) {
+	return map[uint64]*types.Header{}, nil
+}
 
 // TestFakedSyncProgress66WhitelistMismatch tests if in case of whitelisted
 // checkpoint mismatch with opposite peer, the sync should fail.

@@ -55,7 +55,7 @@ func TestGenesisContractChange(t *testing.T) {
 	assert.NoError(t, err)
 
 	config := params.ChainConfig{}
-	chain, err := core.NewBlockChain(db, nil, &config, b, vm.Config{}, nil, nil)
+	chain, err := core.NewBlockChain(db, nil, &config, b, vm.Config{}, nil, nil, nil)
 	assert.NoError(t, err)
 
 	addBlock := func(root common.Hash, num int64) (common.Hash, *state.StateDB) {
