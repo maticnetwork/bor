@@ -78,6 +78,7 @@ geth-cross: geth-linux geth-darwin geth-windows geth-android geth-ios
 
 geth-linux: geth-linux-386 geth-linux-amd64 geth-linux-arm geth-linux-mips64 geth-linux-mips64le
 	@echo "Linux cross compilation done:"
+	@echo "Peter.. Test.."
 	@ls -ld $(GOBIN)/geth-linux-*
 
 geth-linux-386:
