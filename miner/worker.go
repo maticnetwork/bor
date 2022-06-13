@@ -1085,6 +1085,7 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *environment) {
 
 	_, fillTransactionsSpan := w.tracer.Start(ctx, "fillTransactions")
+	defer fillTransactionsSpan.End()
 
 	// Split the pending transactions into locals and remotes
 	// Fill the block with all available pending transactions.
@@ -1109,7 +1110,6 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		}
 	}
 
-	fillTransactionsSpan.End()
 }
 
 // generateWork generates a sealing block based on the given parameters.
@@ -1128,9 +1128,8 @@ func (w *worker) generateWork(ctx context.Context, params *generateParams) (*typ
 // and submit them to the sealer.
 func (w *worker) commitWork(ctx context.Context, interrupt *int32, noempty bool, timestamp int64) {
 
-	_, commitWorkSpan := w.tracer.Start(ctx, "commitWork")
-
-	// todo - analyze
+	commitWorkCtx, commitWorkSpan := w.tracer.Start(ctx, "commitWork")
+	defer commitWorkSpan.End()
 
 	start := time.Now()
 
@@ -1153,11 +1152,11 @@ func (w *worker) commitWork(ctx context.Context, interrupt *int32, noempty bool,
 	// Create an empty block based on temporary copied state for
 	// sealing in advance without waiting block execution finished.
 	if !noempty && atomic.LoadUint32(&w.noempty) == 0 {
-		w.commit(ctx, work.copy(), nil, false, start)
+		w.commit(commitWorkCtx, work.copy(), nil, false, start)
 	}
 	// Fill pending transactions from the txpool
-	w.fillTransactions(ctx, interrupt, work)
-	w.commit(ctx, work.copy(), w.fullTaskHook, true, start)
+	w.fillTransactions(commitWorkCtx, interrupt, work)
+	w.commit(commitWorkCtx, work.copy(), w.fullTaskHook, true, start)
 
 	// Swap out the old work with the new one, terminating any leftover
 	// prefetcher processes in the mean time and starting a new one.
@@ -1166,8 +1165,6 @@ func (w *worker) commitWork(ctx context.Context, interrupt *int32, noempty bool,
 	}
 	w.current = work
 
-	commitWorkSpan.End()
-
 }
 
 // commit runs any post-transaction state modifications, assembles the final block
@@ -1175,6 +1172,10 @@ func (w *worker) commitWork(ctx context.Context, interrupt *int32, noempty bool,
 // Note the assumption is held that the mutation is allowed to the passed env, do
 // the deep copy first.
 func (w *worker) commit(ctx context.Context, env *environment, interval func(), update bool, start time.Time) error {
+
+	commitCtx, commitSpan := w.tracer.Start(ctx, "commit")
+	defer commitSpan.End()
+
 	if w.isRunning() {
 		if interval != nil {
 			interval()
@@ -1189,7 +1190,7 @@ func (w *worker) commit(ctx context.Context, env *environment, interval func(), 
 		// If we're post merge, just ignore
 		if !w.isTTDReached(block.Header()) {
 			select {
-			case w.taskCh <- &task{receipts: env.receipts, state: env.state, block: block, createdAt: time.Now(), ctx: ctx}:
+			case w.taskCh <- &task{receipts: env.receipts, state: env.state, block: block, createdAt: time.Now(), ctx: commitCtx}:
 				w.unconfirmed.Shift(block.NumberU64() - 1)
 				log.Info("Commit new sealing work", "number", block.Number(), "sealhash", w.engine.SealHash(block.Header()),
 					"uncles", len(env.uncles), "txs", env.tcount,
