@@ -1105,33 +1105,33 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 			localTxs[account] = txs
 		}
 	}
+	lenLocals, lenNewLocals, localEnvTCount, lenRemotes, lenNewRemotes, remoteEnvTCount := 0, 0, 0, 0, 0, 0
 	if len(localTxs) > 0 {
-		lenLocals := len(localTxs)
+		lenLocals = len(localTxs)
 		txs := types.NewTransactionsByPriceAndNonce(env.signer, localTxs, env.header.BaseFee)
-		lenNewLocals := txs.GetTxs()
+		lenNewLocals = txs.GetTxs()
 		if w.commitTransactions(env, txs, interrupt) {
 			return
 		}
-		fillTransactionsSpan.SetAttributes(
-			attribute.Int("len of localTxs", lenLocals),
-			attribute.Int("len of sorted localTxs", lenNewLocals),
-			attribute.Int("len of final localTxs ", env.tcount),
-		)
+		localEnvTCount = env.tcount
 	}
 	if len(remoteTxs) > 0 {
-		lenRemotes := len(remoteTxs)
+		lenRemotes = len(remoteTxs)
 		txs := types.NewTransactionsByPriceAndNonce(env.signer, remoteTxs, env.header.BaseFee)
-		lenNewRemotes := txs.GetTxs()
+		lenNewRemotes = txs.GetTxs()
 		if w.commitTransactions(env, txs, interrupt) {
 			return
 		}
-		fillTransactionsSpan.SetAttributes(
-			attribute.Int("len of remoteTxs", lenRemotes),
-			attribute.Int("len of sorted remoteTxs", lenNewRemotes),
-			attribute.Int("len of final remoteTxs", env.tcount),
-		)
+		remoteEnvTCount = env.tcount
 	}
-
+	fillTransactionsSpan.SetAttributes(
+		attribute.Int("len of remoteTxs", lenRemotes),
+		attribute.Int("len of sorted remoteTxs", lenNewRemotes),
+		attribute.Int("len of final remoteTxs", localEnvTCount),
+		attribute.Int("len of localTxs", lenLocals),
+		attribute.Int("len of sorted localTxs", lenNewLocals),
+		attribute.Int("len of final localTxs ", remoteEnvTCount),
+	)
 }
 
 // generateWork generates a sealing block based on the given parameters.
