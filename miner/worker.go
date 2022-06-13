@@ -1106,31 +1106,29 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		}
 	}
 	if len(localTxs) > 0 {
-		fillTransactionsSpan.SetAttributes(
-			attribute.Int("len of localTxs", len(localTxs)),
-		)
+		lenLocals := len(localTxs)
 		txs := types.NewTransactionsByPriceAndNonce(env.signer, localTxs, env.header.BaseFee)
-		fillTransactionsSpan.SetAttributes(
-			attribute.Int("len of localTxs txs", txs.GetTxs()),
-		)
+		lenNewLocals := txs.GetTxs()
 		if w.commitTransactions(env, txs, interrupt) {
 			return
 		}
 		fillTransactionsSpan.SetAttributes(
-			attribute.Int("len of final localTxs txns", env.tcount),
+			attribute.Int("len of localTxs", lenLocals),
+			attribute.Int("len of sorted localTxs", lenNewLocals),
+			attribute.Int("len of final localTxs ", env.tcount),
 		)
 	}
 	if len(remoteTxs) > 0 {
-		attribute.Int("len of remoteTxs", len(remoteTxs))
+		lenRemotes := len(remoteTxs)
 		txs := types.NewTransactionsByPriceAndNonce(env.signer, remoteTxs, env.header.BaseFee)
-		fillTransactionsSpan.SetAttributes(
-			attribute.Int("len of remoteTxs txs", txs.GetTxs()),
-		)
+		lenNewRemotes := txs.GetTxs()
 		if w.commitTransactions(env, txs, interrupt) {
 			return
 		}
 		fillTransactionsSpan.SetAttributes(
-			attribute.Int("len of final remoteTxs txns", env.tcount),
+			attribute.Int("len of remoteTxs", lenRemotes),
+			attribute.Int("len of sorted remoteTxs", lenNewRemotes),
+			attribute.Int("len of final remoteTxs", env.tcount),
 		)
 	}
 
@@ -1228,6 +1226,7 @@ func (w *worker) commit(ctx context.Context, env *environment, interval func(), 
 
 		commitSpan.SetAttributes(
 			attribute.Int("number", int(block.Number().Uint64())),
+			attribute.String("hash", block.Hash().String()),
 			attribute.String("sealhash", w.engine.SealHash(block.Header()).String()),
 			attribute.Int("len of env.txs", len(env.txs)),
 		)
