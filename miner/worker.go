@@ -661,7 +661,7 @@ func (w *worker) taskLoop() {
 	for {
 		select {
 		case task := <-w.taskCh:
-			_, taskLoopSpan := w.tracer.Start(task.ctx, "taskLoop")
+			// taskLoopCtx, taskLoopSpan := w.tracer.Start(task.ctx, "taskLoop")
 
 			if w.newTaskHook != nil {
 				w.newTaskHook(task)
@@ -682,14 +682,14 @@ func (w *worker) taskLoop() {
 			w.pendingTasks[sealHash] = task
 			w.pendingMu.Unlock()
 
-			if err := w.engine.Seal(w.chain, task.block, w.resultCh, stopCh); err != nil {
+			if err := w.engine.Seal(task.ctx, w.chain, task.block, w.resultCh, stopCh); err != nil {
 				log.Warn("Block sealing failed", "err", err)
 				w.pendingMu.Lock()
 				delete(w.pendingTasks, sealHash)
 				w.pendingMu.Unlock()
 			}
 
-			taskLoopSpan.End()
+			// taskLoopSpan.End()
 
 		case <-w.exitCh:
 			interrupt()

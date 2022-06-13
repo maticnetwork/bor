@@ -2,6 +2,7 @@ package bor
 
 import (
 	"bytes"
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -14,6 +15,8 @@ import (
 	"time"
 
 	lru "github.com/hashicorp/golang-lru"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"golang.org/x/crypto/sha3"
 
 	"github.com/ethereum/go-ethereum/accounts"
@@ -837,7 +840,11 @@ func (c *Bor) Authorize(signer common.Address, signFn SignerFn) {
 
 // Seal implements consensus.Engine, attempting to create a sealed block using
 // the local signing credentials.
-func (c *Bor) Seal(chain consensus.ChainHeaderReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
+func (c *Bor) Seal(ctx context.Context, chain consensus.ChainHeaderReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
+
+	tracer := otel.GetTracerProvider().Tracer("MinerWorker")
+	_, sealSpan := tracer.Start(ctx, "Seal")
+
 	header := block.Header()
 	// Sealing the genesis block is not supported
 	number := header.Number.Uint64()
@@ -907,6 +914,13 @@ func (c *Bor) Seal(chain consensus.ChainHeaderReader, block *types.Block, result
 				"delay", delay,
 				"headerDifficulty", header.Difficulty,
 			)
+			sealSpan.SetAttributes(
+				attribute.Int("number", int(number)),
+				attribute.String("hash", header.Hash().String()),
+				attribute.String("delay", delay.String()),
+				attribute.Bool("out-of-turn", wiggle > 0),
+			)
+			sealSpan.End()
 		}
 		select {
 		case results <- block.WithSeal(header):
