@@ -27,6 +27,7 @@ import (
 
 	mapset "github.com/deckarep/golang-set"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -296,15 +297,13 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 		recommit = minRecommitInterval
 	}
 
-	workerCtx := context.Background()
-	newWorkerCtx, newWorkerSpan := worker.tracer.Start(workerCtx, "newWorker")
-
-	worker.span = newWorkerSpan
+	newWorkerCtx, newWorkSpan := worker.tracer.Start(context.Background(), "newWorker")
+	worker.span = newWorkSpan
 
 	worker.wg.Add(4)
 	go worker.mainLoop()
 	go worker.newWorkLoop(newWorkerCtx, recommit)
-	go worker.resultLoop()
+	go worker.resultLoop(newWorkerCtx)
 	go worker.taskLoop()
 
 	// Submit first work to initialize pending state.
@@ -663,6 +662,7 @@ func (w *worker) taskLoop() {
 		select {
 		case task := <-w.taskCh:
 			_, taskLoopSpan := w.tracer.Start(task.ctx, "taskLoop")
+
 			if w.newTaskHook != nil {
 				w.newTaskHook(task)
 			}
@@ -688,7 +688,9 @@ func (w *worker) taskLoop() {
 				delete(w.pendingTasks, sealHash)
 				w.pendingMu.Unlock()
 			}
+
 			taskLoopSpan.End()
+
 		case <-w.exitCh:
 			interrupt()
 			return
@@ -698,11 +700,12 @@ func (w *worker) taskLoop() {
 
 // resultLoop is a standalone goroutine to handle sealing result submitting
 // and flush relative data to the database.
-func (w *worker) resultLoop() {
+func (w *worker) resultLoop(ctx context.Context) {
 	defer w.wg.Done()
 	for {
 		select {
 		case block := <-w.resultCh:
+			_, resultLoopSpan := w.tracer.Start(ctx, "resultLoop")
 			// Short circuit when receiving empty result.
 			if block == nil {
 				continue
@@ -771,7 +774,12 @@ func (w *worker) resultLoop() {
 
 			// Insert the block into the set of pending ones to resultLoop for confirmations
 			w.unconfirmed.Insert(block.NumberU64(), block.Hash())
-
+			resultLoopSpan.SetAttributes(
+				attribute.String("hash", hash.String()),
+				attribute.Int("number", int(block.Number().Uint64())),
+				attribute.Int("txns", block.Transactions().Len()),
+			)
+			resultLoopSpan.End()
 		case <-w.exitCh:
 			return
 		}
@@ -1098,16 +1106,32 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		}
 	}
 	if len(localTxs) > 0 {
+		fillTransactionsSpan.SetAttributes(
+			attribute.Int("len of localTxs", len(localTxs)),
+		)
 		txs := types.NewTransactionsByPriceAndNonce(env.signer, localTxs, env.header.BaseFee)
+		fillTransactionsSpan.SetAttributes(
+			attribute.Int("len of localTxs txs", txs.GetTxs()),
+		)
 		if w.commitTransactions(env, txs, interrupt) {
 			return
 		}
+		fillTransactionsSpan.SetAttributes(
+			attribute.Int("len of final localTxs txns", env.tcount),
+		)
 	}
 	if len(remoteTxs) > 0 {
+		attribute.Int("len of remoteTxs", len(remoteTxs))
 		txs := types.NewTransactionsByPriceAndNonce(env.signer, remoteTxs, env.header.BaseFee)
+		fillTransactionsSpan.SetAttributes(
+			attribute.Int("len of remoteTxs txs", txs.GetTxs()),
+		)
 		if w.commitTransactions(env, txs, interrupt) {
 			return
 		}
+		fillTransactionsSpan.SetAttributes(
+			attribute.Int("len of final remoteTxs txns", env.tcount),
+		)
 	}
 
 }
@@ -1201,10 +1225,17 @@ func (w *worker) commit(ctx context.Context, env *environment, interval func(), 
 				log.Info("Worker has exited")
 			}
 		}
+
+		commitSpan.SetAttributes(
+			attribute.Int("number", int(block.Number().Uint64())),
+			attribute.String("sealhash", w.engine.SealHash(block.Header()).String()),
+			attribute.Int("len of env.txs", len(env.txs)),
+		)
 	}
 	if update {
 		w.updateSnapshot(env)
 	}
+
 	return nil
 }
 
