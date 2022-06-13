@@ -17,6 +17,7 @@ import (
 	lru "github.com/hashicorp/golang-lru"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/crypto/sha3"
 
 	"github.com/ethereum/go-ethereum/accounts"
@@ -890,10 +891,8 @@ func (c *Bor) Seal(ctx context.Context, chain consensus.ChainHeaderReader, block
 
 	// Wait until sealing is terminated or delay timeout.
 	log.Info("Waiting for slot to sign and propagate", "number", number, "hash", header.Hash, "delay-in-sec", uint(delay), "delay", common.PrettyDuration(delay))
-	sealSpan.SetAttributes(attribute.String("test", "hello"))
-	sealSpan.End()
 
-	go func() {
+	go func(sealSpan trace.Span) {
 		select {
 		case <-stop:
 			log.Debug("Discarding sealing operation for block", "number", number)
@@ -916,20 +915,20 @@ func (c *Bor) Seal(ctx context.Context, chain consensus.ChainHeaderReader, block
 				"delay", delay,
 				"headerDifficulty", header.Difficulty,
 			)
-			// sealSpan.SetAttributes(
-			// 	attribute.Int("number", int(number)),
-			// 	attribute.String("hash", header.Hash().String()),
-			// 	attribute.String("delay", delay.String()),
-			// 	attribute.Bool("out-of-turn", wiggle > 0),
-			// )
-			// sealSpan.End()
+			sealSpan.SetAttributes(
+				attribute.Int("number", int(number)),
+				attribute.String("hash", header.Hash().String()),
+				attribute.String("delay", delay.String()),
+				attribute.Bool("out-of-turn", wiggle > 0),
+			)
+			sealSpan.End()
 		}
 		select {
 		case results <- block.WithSeal(header):
 		default:
 			log.Warn("Sealing result was not read by miner", "number", number, "sealhash", SealHash(header, c.config))
 		}
-	}()
+	}(sealSpan)
 
 	return nil
 }
