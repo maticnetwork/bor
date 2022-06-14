@@ -1,3 +1,6 @@
+//go:build integration
+// +build integration
+
 package bor
 
 import (
@@ -10,6 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor"
 	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
+	"github.com/ethereum/go-ethereum/consensus/bor/valset"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
@@ -60,13 +64,20 @@ func TestGetTransactionReceiptsByBlock(t *testing.T) {
 	aa := common.HexToAddress("0x000000000000000000000000000000000000aaaa")
 
 	var err error
+	var txs []*types.Transaction
+
+	currentValidators := []*valset.Validator{valset.NewValidator(addr, 10)}
 
 	for i := uint64(1); i <= sprintSize; i++ {
 		txdata := &types.LegacyTx{
-			Nonce:    uint64(i - 1),
+			Nonce:    i - 1,
 			To:       &aa,
 			Gas:      30000,
 			GasPrice: newGwei(5),
+		}
+
+		if IsSpanEnd(i) {
+			currentValidators = []*valset.Validator{valset.NewValidator(addr, 10)}
 		}
 
 		tx := types.NewTx(txdata)
@@ -75,8 +86,14 @@ func TestGetTransactionReceiptsByBlock(t *testing.T) {
 			t.Fatalf("an incorrect transaction or signer: %v", err)
 		}
 
-		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, []*types.Transaction{tx})
-		fmt.Println("!!!!!!!!!!!!!", block.Transactions())
+		if i == 1 {
+			txs = []*types.Transaction{tx}
+		} else {
+			txs = nil
+		}
+
+		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, txs, currentValidators)
+		fmt.Println("!!!!!!!!!!!!!-1", i, block.Transactions())
 		insertNewBlock(t, chain, block)
 	}
 
@@ -92,7 +109,8 @@ func TestGetTransactionReceiptsByBlock(t *testing.T) {
 	h.EXPECT().StateSyncEvents(fromID, to).Return(eventRecords, nil).AnyTimes()
 
 	for i := sprintSize + 1; i <= spanSize; i++ {
-		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil)
+		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators)
+		fmt.Println("!!!!!!!!!!!!!-2", i, block.Transactions())
 		insertNewBlock(t, chain, block)
 	}
 

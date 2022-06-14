@@ -5,6 +5,7 @@ package bor
 
 import (
 	"encoding/hex"
+	"fmt"
 	"io"
 	"math/big"
 	"testing"
@@ -15,6 +16,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor"
 	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
+	"github.com/ethereum/go-ethereum/consensus/bor/valset"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -27,12 +29,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/crypto/sha3"
-)
-
-const (
-	spanPath         = "bor/span/1"
-	clerkPath        = "clerk/event-record/list"
-	clerkQueryParams = "from-time=%d&to-time=%d&page=%d&limit=50"
 )
 
 func TestInsertingSpanSizeBlocks(t *testing.T) {
@@ -50,9 +46,11 @@ func TestInsertingSpanSizeBlocks(t *testing.T) {
 	block := init.genesis.ToBlock(db)
 	// to := int64(block.Header().Time)
 
+	currentValidators := []*valset.Validator{valset.NewValidator(addr, 10)}
+
 	// Insert sprintSize # of blocks so that span is fetched at the start of a new sprint
 	for i := uint64(1); i <= spanSize; i++ {
-		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil)
+		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators)
 		insertNewBlock(t, chain, block)
 	}
 
@@ -77,16 +75,23 @@ func TestFetchStateSyncEvents(t *testing.T) {
 	// A. Insert blocks for 0th sprint
 	db := init.ethereum.ChainDb()
 	block := init.genesis.ToBlock(db)
+
+	// B.1 Mock /bor/span/1
+	res, _ := loadSpanFromFile(t)
+
+	currentValidators := []*valset.Validator{valset.NewValidator(addr, 10)}
+
 	// Insert sprintSize # of blocks so that span is fetched at the start of a new sprint
 	for i := uint64(1); i < sprintSize; i++ {
-		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil)
+		if IsSpanEnd(i) {
+			currentValidators = res.Result.ValidatorSet.Validators
+		}
+
+		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators)
 		insertNewBlock(t, chain, block)
 	}
 
 	// B. Before inserting 1st block of the next sprint, mock heimdall deps
-	// B.1 Mock /bor/span/1
-	res, _ := loadSpanFromFile(t)
-
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -106,7 +111,7 @@ func TestFetchStateSyncEvents(t *testing.T) {
 	h.EXPECT().StateSyncEvents(fromID, to).Return(eventRecords, nil).AnyTimes()
 	_bor.SetHeimdallClient(h)
 
-	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil)
+	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, res.Result.ValidatorSet.Validators)
 	insertNewBlock(t, chain, block)
 }
 
@@ -148,11 +153,21 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 	// Insert blocks for 0th sprint
 	db := init.ethereum.ChainDb()
 	block := init.genesis.ToBlock(db)
+
+	var currentValidators []*valset.Validator
+
 	for i := uint64(1); i <= sprintSize; i++ {
-		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil)
+		if IsSpanEnd(i) {
+			fmt.Println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!-1")
+			currentValidators = res.Result.ValidatorSet.Validators
+		} else {
+			currentValidators = []*valset.Validator{valset.NewValidator(addr, 10)}
+		}
+
+		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators)
 		insertNewBlock(t, chain, block)
 	}
-
+	fmt.Println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!-2")
 	lastStateID, _ := _bor.GenesisContractsClient.LastStateId(sprintSize)
 
 	// state 6 was not written
@@ -168,11 +183,21 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 	}
 	h.EXPECT().StateSyncEvents(fromID, to).Return(eventRecords, nil).AnyTimes()
 
+	fmt.Println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!-3")
+
 	for i := sprintSize + 1; i <= spanSize; i++ {
-		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil)
+		if IsSpanEnd(i) {
+			fmt.Println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!-3.1")
+			currentValidators = res.Result.ValidatorSet.Validators
+		} else {
+			fmt.Println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!-3.2", i)
+			currentValidators = []*valset.Validator{valset.NewValidator(addr, 10)}
+		}
+
+		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, res.Result.ValidatorSet.Validators)
 		insertNewBlock(t, chain, block)
 	}
-
+	fmt.Println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!-4")
 	lastStateID, _ = _bor.GenesisContractsClient.LastStateId(spanSize)
 	assert.Equal(t, uint64(6), lastStateID.Uint64())
 }
@@ -191,8 +216,11 @@ func TestOutOfTurnSigning(t *testing.T) {
 	db := init.ethereum.ChainDb()
 	block := init.genesis.ToBlock(db)
 
+	res, _ := loadSpanFromFile(t)
+	currentValidators := []*valset.Validator{valset.NewValidator(addr, 10)}
+
 	for i := uint64(1); i < spanSize; i++ {
-		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil)
+		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators)
 		insertNewBlock(t, chain, block)
 	}
 
@@ -204,7 +232,7 @@ func TestOutOfTurnSigning(t *testing.T) {
 	addr = crypto.PubkeyToAddress(key.PublicKey)
 	expectedSuccessionNumber := 2
 
-	block = buildNextBlock(t, _bor, chain, block, signerKey, init.genesis.Config.Bor, nil)
+	block = buildNextBlock(t, _bor, chain, block, signerKey, init.genesis.Config.Bor, nil, res.Result.ValidatorSet.Validators)
 	_, err := chain.InsertChain([]*types.Block{block})
 	assert.Equal(t,
 		*err.(*bor.BlockTooSoonError),
@@ -248,7 +276,9 @@ func TestSignerNotFound(t *testing.T) {
 	key, _ = crypto.HexToECDSA(signer)
 	addr = crypto.PubkeyToAddress(key.PublicKey)
 
-	block = buildNextBlock(t, _bor, chain, block, signerKey, init.genesis.Config.Bor, nil)
+	res, _ := loadSpanFromFile(t)
+
+	block = buildNextBlock(t, _bor, chain, block, signerKey, init.genesis.Config.Bor, nil, res.Result.ValidatorSet.Validators)
 	_, err := chain.InsertChain([]*types.Block{block})
 	assert.Equal(t,
 		*err.(*bor.UnauthorizedSignerError),
@@ -485,15 +515,22 @@ func TestJaipurFork(t *testing.T) {
 	init := buildEthereumInstance(t, rawdb.NewMemoryDatabase())
 	chain := init.ethereum.BlockChain()
 	engine := init.ethereum.Engine()
+
 	_bor := engine.(*bor.Bor)
+
 	db := init.ethereum.ChainDb()
 	block := init.genesis.ToBlock(db)
+
+	res, _ := loadSpanFromFile(t)
+
 	for i := uint64(1); i < sprintSize; i++ {
-		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil)
+		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, res.Result.ValidatorSet.Validators)
 		insertNewBlock(t, chain, block)
+
 		if block.Number().Uint64() == init.genesis.Config.Bor.JaipurBlock-1 {
 			assert.Equal(t, testSealHash(block.Header(), init.genesis.Config.Bor), bor.SealHash(block.Header(), init.genesis.Config.Bor))
 		}
+
 		if block.Number().Uint64() == init.genesis.Config.Bor.JaipurBlock {
 			assert.Equal(t, testSealHash(block.Header(), init.genesis.Config.Bor), bor.SealHash(block.Header(), init.genesis.Config.Bor))
 		}

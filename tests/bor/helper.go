@@ -35,8 +35,6 @@ import (
 )
 
 var (
-	// The genesis for tests was generated with following parameters
-	extraSeal = 65 // Fixed number of extra-data suffix bytes reserved for signer seal
 
 	// Only this account is a validator for the 0th span
 	privKey = "b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291"
@@ -48,9 +46,15 @@ var (
 	key2, _  = crypto.HexToECDSA(privKey2)
 	addr2    = crypto.PubkeyToAddress(key2.PublicKey) // 0x9fB29AAc15b9A4B7F17c3385939b007540f4d791
 
-	validatorHeaderBytesLength        = common.AddressLength + 20 // address + power
-	sprintSize                 uint64 = 4
-	spanSize                   uint64 = 8
+	validatorHeaderBytesLength = common.AddressLength + 20 // address + power
+)
+
+const (
+	// The genesis for tests was generated with following parameters
+	extraSeal = 65 // Fixed number of extra-data suffix bytes reserved for signer seal
+
+	sprintSize uint64 = 4
+	spanSize   uint64 = 8
 )
 
 type initializeData struct {
@@ -101,33 +105,29 @@ func insertNewBlock(t *testing.T, chain *core.BlockChain, block *types.Block) {
 	}
 }
 
-func buildNextBlock(t *testing.T, _bor consensus.Engine, chain *core.BlockChain, parentBlock *types.Block, signer []byte, borConfig *params.BorConfig, txs []*types.Transaction) *types.Block {
+func buildNextBlock(t *testing.T, _bor consensus.Engine, chain *core.BlockChain, parentBlock *types.Block, signer []byte, borConfig *params.BorConfig, txs []*types.Transaction, currentValidators []*valset.Validator) *types.Block {
 	t.Helper()
 
-	header := parentBlock.Header()
-	header.Number.Add(header.Number, big.NewInt(1))
+	header := &types.Header{
+		Number:     big.NewInt(int64(parentBlock.Number().Uint64() + 1)),
+		Difficulty: big.NewInt(int64(parentBlock.Difficulty().Uint64())),
+		GasLimit:   parentBlock.GasLimit(),
+		ParentHash: parentBlock.Hash(),
+	}
 	number := header.Number.Uint64()
 
 	if signer == nil {
 		signer = getSignerKey(header.Number.Uint64())
 	}
 
-	header.ParentHash = parentBlock.Hash()
-	header.Time += bor.CalcProducerDelay(header.Number.Uint64(), 0, borConfig)
+	header.Time = parentBlock.Time() + bor.CalcProducerDelay(header.Number.Uint64(), 0, borConfig)
 	header.Extra = make([]byte, 32+65) // vanity + extraSeal
 
-	currentValidators := []*valset.Validator{valset.NewValidator(addr, 10)}
+	isSpanStart := IsSpanStart(number)
+	isSprintEnd := IsSprintEnd(number)
 
-	isSpanEnd := (number+1)%spanSize == 0
-	isSpanStart := number%spanSize == 0
-	isSprintEnd := (header.Number.Uint64()+1)%sprintSize == 0
-
-	if isSpanEnd {
-		_, heimdallSpan := loadSpanFromFile(t)
-		// this is to stash the validator bytes in the header
-		currentValidators = heimdallSpan.ValidatorSet.Validators
-	} else if isSpanStart {
-		header.Difficulty = new(big.Int).SetInt64(3)
+	if isSpanStart {
+		header.Difficulty = new(big.Int).SetInt64(int64(len(currentValidators)))
 	}
 
 	if isSprintEnd {
@@ -151,26 +151,26 @@ func buildNextBlock(t *testing.T, _bor consensus.Engine, chain *core.BlockChain,
 			header.GasLimit = core.CalcGasLimit(parentGasLimit, parentGasLimit)
 		}
 	}
-
+	fmt.Println("hhh-1", header.GasUsed)
 	state, err := chain.State()
 	if err != nil {
 		t.Fatalf("%s", err)
 	}
-
+	fmt.Println("hhh-2", header.GasUsed)
 	b := &blockGen{header: header}
 	for _, tx := range txs {
 		b.addTxWithChain(chain, state, tx, addr)
 	}
-
+	fmt.Println("hhh-3", b.header)
 	// Finalize and seal the block
 	block, _ := _bor.FinalizeAndAssemble(chain, b.header, state, b.txs, nil, b.receipts)
-
+	fmt.Println("hhh-4", block.GasUsed())
 	// Write state changes to db
 	root, err := state.Commit(chain.Config().IsEIP158(b.header.Number))
 	if err != nil {
 		panic(fmt.Sprintf("state write error: %v", err))
 	}
-
+	fmt.Println("hhh-5", block.GasUsed())
 	if err := state.Database().TrieDB().Commit(root, false, nil); err != nil {
 		panic(fmt.Sprintf("trie write error: %v", err))
 	}
@@ -181,6 +181,8 @@ func buildNextBlock(t *testing.T, _bor consensus.Engine, chain *core.BlockChain,
 	if err != nil {
 		panic(fmt.Sprintf("seal error: %v", err))
 	}
+
+	fmt.Println("hhh-6", block.GasUsed())
 
 	return <-res
 }
@@ -332,4 +334,16 @@ func getSampleEventRecord(t *testing.T) *clerk.EventRecordWithTime {
 
 func newGwei(n int64) *big.Int {
 	return new(big.Int).Mul(big.NewInt(n), big.NewInt(params.GWei))
+}
+
+func IsSpanEnd(number uint64) bool {
+	return (number+1)%spanSize == 0
+}
+
+func IsSpanStart(number uint64) bool {
+	return number%spanSize == 0
+}
+
+func IsSprintEnd(number uint64) bool {
+	return (number+1)%sprintSize == 0
 }
