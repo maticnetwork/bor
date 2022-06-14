@@ -117,12 +117,12 @@ func (h *HeimdallClient) FetchLatestCheckpoint() (*checkpoint.Checkpoint, error)
 		return nil, err
 	}
 
-	response, err := FetchWithRetry[checkpoint.Checkpoint](h.client, url, h.closeCh)
+	response, err := FetchWithRetry[checkpoint.CheckpointResponse](h.client, url, h.closeCh)
 	if err != nil {
 		return nil, err
 	}
 
-	return response, nil
+	return &response.Result, nil
 }
 
 // FetchWithRetry returns data from heimdall with retry

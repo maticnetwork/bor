@@ -15,3 +15,8 @@ type Checkpoint struct {
 	BorChainID string         `json:"bor_chain_id"`
 	Timestamp  uint64         `json:"timestamp"`
 }
+
+type CheckpointResponse struct {
+	Height string     `json:"height"`
+	Result Checkpoint `json:"result"`
+}
