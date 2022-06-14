@@ -38,6 +38,7 @@ import "C"
 
 import (
 	"errors"
+	"fmt"
 	"math/big"
 	"unsafe"
 )
@@ -115,6 +116,7 @@ func RecoverPubkey(msg []byte, sig []byte) ([]byte, error) {
 		sigdata = (*C.uchar)(unsafe.Pointer(&sig[0]))
 		msgdata = (*C.uchar)(unsafe.Pointer(&msg[0]))
 	)
+	fmt.Printf("RECOVERY %d, %d - %v %v\n", len(sig), len(msg), sig, msg)
 	if C.secp256k1_ext_ecdsa_recover(context, (*C.uchar)(unsafe.Pointer(&pubkey[0])), sigdata, msgdata) == 0 {
 		return nil, ErrRecoverFailed
 	}

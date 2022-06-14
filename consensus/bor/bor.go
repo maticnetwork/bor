@@ -817,6 +817,8 @@ func (c *Bor) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *typ
 	// Assemble block
 	block := types.NewBlock(header, txs, nil, receipts, new(trie.Trie))
 
+	fmt.Println("??????????????????????", len(txs), block.Transactions())
+
 	// set state sync
 	bc := chain.(core.BorStateSyncer)
 	bc.SetStateSync(stateSyncData)
@@ -858,6 +860,8 @@ func (c *Bor) Seal(chain consensus.ChainHeaderReader, block *types.Block, result
 	if err != nil {
 		return err
 	}
+
+	fmt.Println("SNAP", snap.ValidatorSet.Validators)
 
 	// Bail out if we're unauthorized to sign a block
 	if !snap.ValidatorSet.HasAddress(signer.Bytes()) {

@@ -15,7 +15,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor"
 	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
-	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -53,7 +52,7 @@ func TestInsertingSpanSizeBlocks(t *testing.T) {
 
 	// Insert sprintSize # of blocks so that span is fetched at the start of a new sprint
 	for i := uint64(1); i <= spanSize; i++ {
-		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor)
+		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil)
 		insertNewBlock(t, chain, block)
 	}
 
@@ -80,7 +79,7 @@ func TestFetchStateSyncEvents(t *testing.T) {
 	block := init.genesis.ToBlock(db)
 	// Insert sprintSize # of blocks so that span is fetched at the start of a new sprint
 	for i := uint64(1); i < sprintSize; i++ {
-		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor)
+		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil)
 		insertNewBlock(t, chain, block)
 	}
 
@@ -107,7 +106,7 @@ func TestFetchStateSyncEvents(t *testing.T) {
 	h.EXPECT().StateSyncEvents(fromID, to).Return(eventRecords, nil).AnyTimes()
 	_bor.SetHeimdallClient(h)
 
-	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor)
+	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil)
 	insertNewBlock(t, chain, block)
 }
 
@@ -150,7 +149,7 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 	db := init.ethereum.ChainDb()
 	block := init.genesis.ToBlock(db)
 	for i := uint64(1); i <= sprintSize; i++ {
-		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor)
+		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil)
 		insertNewBlock(t, chain, block)
 	}
 
@@ -170,7 +169,7 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 	h.EXPECT().StateSyncEvents(fromID, to).Return(eventRecords, nil).AnyTimes()
 
 	for i := sprintSize + 1; i <= spanSize; i++ {
-		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor)
+		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil)
 		insertNewBlock(t, chain, block)
 	}
 
@@ -193,7 +192,7 @@ func TestOutOfTurnSigning(t *testing.T) {
 	block := init.genesis.ToBlock(db)
 
 	for i := uint64(1); i < spanSize; i++ {
-		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor)
+		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil)
 		insertNewBlock(t, chain, block)
 	}
 
@@ -205,7 +204,7 @@ func TestOutOfTurnSigning(t *testing.T) {
 	addr = crypto.PubkeyToAddress(key.PublicKey)
 	expectedSuccessionNumber := 2
 
-	block = buildNextBlock(t, _bor, chain, block, signerKey, init.genesis.Config.Bor)
+	block = buildNextBlock(t, _bor, chain, block, signerKey, init.genesis.Config.Bor, nil)
 	_, err := chain.InsertChain([]*types.Block{block})
 	assert.Equal(t,
 		*err.(*bor.BlockTooSoonError),
@@ -249,53 +248,11 @@ func TestSignerNotFound(t *testing.T) {
 	key, _ = crypto.HexToECDSA(signer)
 	addr = crypto.PubkeyToAddress(key.PublicKey)
 
-	block = buildNextBlock(t, _bor, chain, block, signerKey, init.genesis.Config.Bor)
+	block = buildNextBlock(t, _bor, chain, block, signerKey, init.genesis.Config.Bor, nil)
 	_, err := chain.InsertChain([]*types.Block{block})
 	assert.Equal(t,
 		*err.(*bor.UnauthorizedSignerError),
 		bor.UnauthorizedSignerError{Number: 0, Signer: addr.Bytes()})
-}
-
-func getMockedHeimdallClient(t *testing.T) (*mocks.MockIHeimdallClient, *span.HeimdallSpan, *gomock.Controller) {
-	ctrl := gomock.NewController(t)
-	h := mocks.NewMockIHeimdallClient(ctrl)
-
-	_, heimdallSpan := loadSpanFromFile(t)
-
-	h.EXPECT().Span(uint64(1)).Return(heimdallSpan, nil).AnyTimes()
-
-	h.EXPECT().StateSyncEvents(gomock.Any(), gomock.Any()).
-		Return([]*clerk.EventRecordWithTime{getSampleEventRecord(t)}, nil).AnyTimes()
-
-	return h, heimdallSpan, ctrl
-}
-
-func generateFakeStateSyncEvents(sample *clerk.EventRecordWithTime, count int) []*clerk.EventRecordWithTime {
-	events := make([]*clerk.EventRecordWithTime, count)
-	event := *sample
-	event.ID = 1
-	events[0] = &clerk.EventRecordWithTime{}
-	*events[0] = event
-	for i := 1; i < count; i++ {
-		event.ID = uint64(i)
-		event.Time = event.Time.Add(1 * time.Second)
-		events[i] = &clerk.EventRecordWithTime{}
-		*events[i] = event
-	}
-	return events
-}
-
-func buildStateEvent(sample *clerk.EventRecordWithTime, id uint64, timeStamp int64) *clerk.EventRecordWithTime {
-	event := *sample
-	event.ID = id
-	event.Time = time.Unix(timeStamp, 0)
-	return &event
-}
-
-func getSampleEventRecord(t *testing.T) *clerk.EventRecordWithTime {
-	eventRecords := stateSyncEventsPayload(t)
-	eventRecords.Result[0].Time = time.Unix(1, 0)
-	return eventRecords.Result[0]
 }
 
 // TestEIP1559Transition tests the following:
@@ -524,10 +481,6 @@ func TestEIP1559Transition(t *testing.T) {
 	}
 }
 
-func newGwei(n int64) *big.Int {
-	return new(big.Int).Mul(big.NewInt(n), big.NewInt(params.GWei))
-}
-
 func TestJaipurFork(t *testing.T) {
 	init := buildEthereumInstance(t, rawdb.NewMemoryDatabase())
 	chain := init.ethereum.BlockChain()
@@ -536,7 +489,7 @@ func TestJaipurFork(t *testing.T) {
 	db := init.ethereum.ChainDb()
 	block := init.genesis.ToBlock(db)
 	for i := uint64(1); i < sprintSize; i++ {
-		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor)
+		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil)
 		insertNewBlock(t, chain, block)
 		if block.Number().Uint64() == init.genesis.Config.Bor.JaipurBlock-1 {
 			assert.Equal(t, testSealHash(block.Header(), init.genesis.Config.Bor), bor.SealHash(block.Header(), init.genesis.Config.Bor))

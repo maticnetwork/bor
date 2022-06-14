@@ -3,25 +3,35 @@ package bor
 import (
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"math/big"
 	"sort"
 	"testing"
+	"time"
 
+	"github.com/golang/mock/gomock"
+
+	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/bor"
+	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
 	"github.com/ethereum/go-ethereum/consensus/bor/valset"
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/crypto/secp256k1"
 	"github.com/ethereum/go-ethereum/eth"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/tests/bor/mocks"
 )
 
 var (
@@ -49,8 +59,6 @@ type initializeData struct {
 }
 
 func buildEthereumInstance(t *testing.T, db ethdb.Database) *initializeData {
-	t.Helper()
-
 	genesisData, err := ioutil.ReadFile("./testdata/genesis.json")
 	if err != nil {
 		t.Fatalf("%s", err)
@@ -75,6 +83,10 @@ func buildEthereumInstance(t *testing.T, db ethdb.Database) *initializeData {
 
 	ethConf.Genesis.MustCommit(ethereum.ChainDb())
 
+	ethereum.Engine().(*bor.Bor).Authorize(addr, func(account accounts.Account, s string, data []byte) ([]byte, error) {
+		return crypto.Sign(crypto.Keccak256(data), key)
+	})
+
 	return &initializeData{
 		genesis:  gen,
 		ethereum: ethereum,
@@ -82,17 +94,17 @@ func buildEthereumInstance(t *testing.T, db ethdb.Database) *initializeData {
 }
 
 func insertNewBlock(t *testing.T, chain *core.BlockChain, block *types.Block) {
-	t.Helper()
+	fmt.Println("xxxxx-1", block.Number(), block.Transactions())
 
 	if _, err := chain.InsertChain([]*types.Block{block}); err != nil {
 		t.Fatalf("%s", err)
 	}
 }
 
-func buildNextBlock(t *testing.T, _bor *bor.Bor, chain *core.BlockChain, block *types.Block, signer []byte, borConfig *params.BorConfig) *types.Block {
+func buildNextBlock(t *testing.T, _bor consensus.Engine, chain *core.BlockChain, parentBlock *types.Block, signer []byte, borConfig *params.BorConfig, txs []*types.Transaction) *types.Block {
 	t.Helper()
 
-	header := block.Header()
+	header := parentBlock.Header()
 	header.Number.Add(header.Number, big.NewInt(1))
 	number := header.Number.Uint64()
 
@@ -100,7 +112,7 @@ func buildNextBlock(t *testing.T, _bor *bor.Bor, chain *core.BlockChain, block *
 		signer = getSignerKey(header.Number.Uint64())
 	}
 
-	header.ParentHash = block.Hash()
+	header.ParentHash = parentBlock.Hash()
 	header.Time += bor.CalcProducerDelay(header.Number.Uint64(), 0, borConfig)
 	header.Extra = make([]byte, 32+65) // vanity + extraSeal
 
@@ -132,10 +144,10 @@ func buildNextBlock(t *testing.T, _bor *bor.Bor, chain *core.BlockChain, block *
 	}
 
 	if chain.Config().IsLondon(header.Number) {
-		header.BaseFee = misc.CalcBaseFee(chain.Config(), block.Header())
+		header.BaseFee = misc.CalcBaseFee(chain.Config(), parentBlock.Header())
 
-		if !chain.Config().IsLondon(block.Number()) {
-			parentGasLimit := block.GasLimit() * params.ElasticityMultiplier
+		if !chain.Config().IsLondon(parentBlock.Number()) {
+			parentGasLimit := parentBlock.GasLimit() * params.ElasticityMultiplier
 			header.GasLimit = core.CalcGasLimit(parentGasLimit, parentGasLimit)
 		}
 	}
@@ -145,14 +157,67 @@ func buildNextBlock(t *testing.T, _bor *bor.Bor, chain *core.BlockChain, block *
 		t.Fatalf("%s", err)
 	}
 
-	_, err = _bor.FinalizeAndAssemble(chain, header, state, nil, nil, nil)
-	if err != nil {
-		t.Fatalf("%s", err)
+	b := &blockGen{header: header}
+	for _, tx := range txs {
+		b.addTxWithChain(chain, state, tx, addr)
 	}
 
-	sign(t, header, signer, borConfig)
+	// Finalize and seal the block
+	block, _ := _bor.FinalizeAndAssemble(chain, b.header, state, b.txs, nil, b.receipts)
 
-	return types.NewBlockWithHeader(header)
+	// Write state changes to db
+	root, err := state.Commit(chain.Config().IsEIP158(b.header.Number))
+	if err != nil {
+		panic(fmt.Sprintf("state write error: %v", err))
+	}
+
+	if err := state.Database().TrieDB().Commit(root, false, nil); err != nil {
+		panic(fmt.Sprintf("trie write error: %v", err))
+	}
+
+	res := make(chan *types.Block, 1)
+
+	err = _bor.Seal(chain, block, res, nil)
+	if err != nil {
+		panic(fmt.Sprintf("seal error: %v", err))
+	}
+
+	return <-res
+}
+
+type blockGen struct {
+	txs      []*types.Transaction
+	receipts []*types.Receipt
+	gasPool  *core.GasPool
+	header   *types.Header
+}
+
+func (b *blockGen) addTxWithChain(bc *core.BlockChain, statedb *state.StateDB, tx *types.Transaction, coinbase common.Address) {
+	if b.gasPool == nil {
+		b.setCoinbase(coinbase)
+	}
+
+	statedb.Prepare(tx.Hash(), len(b.txs))
+
+	receipt, err := core.ApplyTransaction(bc.Config(), bc, &b.header.Coinbase, b.gasPool, statedb, b.header, tx, &b.header.GasUsed, vm.Config{})
+	if err != nil {
+		panic(err)
+	}
+
+	b.txs = append(b.txs, tx)
+	b.receipts = append(b.receipts, receipt)
+}
+
+func (b *blockGen) setCoinbase(addr common.Address) {
+	if b.gasPool != nil {
+		if len(b.txs) > 0 {
+			panic("coinbase must be set before adding transactions")
+		}
+		panic("coinbase can only be set once")
+	}
+
+	b.header.Coinbase = addr
+	b.gasPool = new(core.GasPool).AddGas(b.header.GasLimit)
 }
 
 func sign(t *testing.T, header *types.Header, signer []byte, c *params.BorConfig) {
@@ -213,4 +278,58 @@ func getSignerKey(number uint64) []byte {
 	_key, _ := hex.DecodeString(signerKey)
 
 	return _key
+}
+
+func getMockedHeimdallClient(t *testing.T) (*mocks.MockIHeimdallClient, *span.HeimdallSpan, *gomock.Controller) {
+	t.Helper()
+
+	ctrl := gomock.NewController(t)
+	h := mocks.NewMockIHeimdallClient(ctrl)
+
+	_, heimdallSpan := loadSpanFromFile(t)
+
+	h.EXPECT().Span(uint64(1)).Return(heimdallSpan, nil).AnyTimes()
+
+	h.EXPECT().StateSyncEvents(gomock.Any(), gomock.Any()).
+		Return([]*clerk.EventRecordWithTime{getSampleEventRecord(t)}, nil).AnyTimes()
+
+	return h, heimdallSpan, ctrl
+}
+
+func generateFakeStateSyncEvents(sample *clerk.EventRecordWithTime, count int) []*clerk.EventRecordWithTime {
+	events := make([]*clerk.EventRecordWithTime, count)
+	event := *sample
+	event.ID = 1
+	events[0] = &clerk.EventRecordWithTime{}
+	*events[0] = event
+
+	for i := 1; i < count; i++ {
+		event.ID = uint64(i)
+		event.Time = event.Time.Add(1 * time.Second)
+		events[i] = &clerk.EventRecordWithTime{}
+		*events[i] = event
+	}
+
+	return events
+}
+
+func buildStateEvent(sample *clerk.EventRecordWithTime, id uint64, timeStamp int64) *clerk.EventRecordWithTime {
+	event := *sample
+	event.ID = id
+	event.Time = time.Unix(timeStamp, 0)
+
+	return &event
+}
+
+func getSampleEventRecord(t *testing.T) *clerk.EventRecordWithTime {
+	t.Helper()
+
+	eventRecords := stateSyncEventsPayload(t)
+	eventRecords.Result[0].Time = time.Unix(1, 0)
+
+	return eventRecords.Result[0]
+}
+
+func newGwei(n int64) *big.Int {
+	return new(big.Int).Mul(big.NewInt(n), big.NewInt(params.GWei))
 }
