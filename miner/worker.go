@@ -303,7 +303,7 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 	worker.wg.Add(4)
 	go worker.mainLoop()
 	go worker.newWorkLoop(newWorkerCtx, recommit)
-	go worker.resultLoop(newWorkerCtx)
+	go worker.resultLoop()
 	go worker.taskLoop()
 
 	// Submit first work to initialize pending state.
@@ -700,12 +700,11 @@ func (w *worker) taskLoop() {
 
 // resultLoop is a standalone goroutine to handle sealing result submitting
 // and flush relative data to the database.
-func (w *worker) resultLoop(ctx context.Context) {
+func (w *worker) resultLoop() {
 	defer w.wg.Done()
 	for {
 		select {
 		case block := <-w.resultCh:
-			_, resultLoopSpan := w.tracer.Start(ctx, "resultLoop")
 			// Short circuit when receiving empty result.
 			if block == nil {
 				continue
@@ -714,6 +713,7 @@ func (w *worker) resultLoop(ctx context.Context) {
 			if w.chain.HasBlock(block.Hash(), block.NumberU64()) {
 				continue
 			}
+			start1 := time.Now()
 			oldBlock := w.chain.GetBlockByNumber(block.NumberU64())
 			if oldBlock != nil {
 				oldBlockAuthor, _ := w.chain.Engine().Author(oldBlock.Header())
@@ -723,6 +723,7 @@ func (w *worker) resultLoop(ctx context.Context) {
 					continue
 				}
 			}
+			diff1 := time.Since(start1)
 			var (
 				sealhash = w.engine.SealHash(block.Header())
 				hash     = block.Hash()
@@ -730,6 +731,7 @@ func (w *worker) resultLoop(ctx context.Context) {
 			w.pendingMu.RLock()
 			task, exist := w.pendingTasks[sealhash]
 			w.pendingMu.RUnlock()
+			_, resultLoopSpan := w.tracer.Start(task.ctx, "resultLoop")
 			if !exist {
 				log.Error("Block found but no relative pending task", "number", block.Number(), "sealhash", sealhash, "hash", hash)
 				continue
@@ -761,7 +763,9 @@ func (w *worker) resultLoop(ctx context.Context) {
 				logs = append(logs, receipt.Logs...)
 			}
 			// Commit block and state to database.
+			start2 := time.Now()
 			_, err := w.chain.WriteBlockAndSetHead(block, receipts, logs, task.state, true)
+			diff2 := time.Since(start2)
 			if err != nil {
 				log.Error("Failed writing block to chain", "err", err)
 				continue
@@ -778,6 +782,8 @@ func (w *worker) resultLoop(ctx context.Context) {
 				attribute.String("hash", hash.String()),
 				attribute.Int("number", int(block.Number().Uint64())),
 				attribute.Int("txns", block.Transactions().Len()),
+				attribute.String("Block fetch and check time taken", diff1.String()),
+				attribute.String("WriteBlockAndSetHead time taken", diff2.String()),
 			)
 			resultLoopSpan.End()
 		case <-w.exitCh:
