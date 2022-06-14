@@ -1,6 +1,7 @@
 package bor
 
 import (
+	"context"
 	"encoding/hex"
 	"encoding/json"
 	"io/ioutil"
@@ -145,7 +146,7 @@ func buildNextBlock(t *testing.T, _bor *bor.Bor, chain *core.BlockChain, block *
 		t.Fatalf("%s", err)
 	}
 
-	_, err = _bor.FinalizeAndAssemble(chain, header, state, nil, nil, nil)
+	_, err = _bor.FinalizeAndAssemble(context.Background(), chain, header, state, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("%s", err)
 	}
