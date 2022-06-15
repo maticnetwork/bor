@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor"
@@ -312,7 +313,7 @@ func TestEIP1559Transition(t *testing.T) {
 		addr3 = crypto.PubkeyToAddress(key3.PublicKey)
 		funds = new(big.Int).Mul(common.Big1, big.NewInt(params.Ether))
 		gspec = &core.Genesis{
-			Config: params.BorTestChainConfig,
+			Config: params.BorUnittestChainConfig,
 			Alloc: core.GenesisAlloc{
 				addr1: {Balance: funds},
 				addr2: {Balance: funds},
@@ -394,7 +395,7 @@ func TestEIP1559Transition(t *testing.T) {
 	}
 
 	// check burnt contract balance
-	actual = state.GetBalance(common.HexToAddress(params.BorTestChainConfig.Bor.CalculateBurntContract(block.NumberU64())))
+	actual = state.GetBalance(common.HexToAddress(params.BorUnittestChainConfig.Bor.CalculateBurntContract(block.NumberU64())))
 	expected = new(big.Int).Mul(new(big.Int).SetUint64(block.GasUsed()), block.BaseFee())
 	burntContractBalance := expected
 	if actual.Cmp(expected) != 0 {
@@ -442,7 +443,7 @@ func TestEIP1559Transition(t *testing.T) {
 	}
 
 	// check burnt contract balance
-	actual = state.GetBalance(common.HexToAddress(params.BorTestChainConfig.Bor.CalculateBurntContract(block.NumberU64())))
+	actual = state.GetBalance(common.HexToAddress(params.BorUnittestChainConfig.Bor.CalculateBurntContract(block.NumberU64())))
 	expected = new(big.Int).Add(burntContractBalance, new(big.Int).Mul(new(big.Int).SetUint64(block.GasUsed()), block.BaseFee()))
 	burntContractBalance = expected
 	if actual.Cmp(expected) != 0 {
@@ -500,7 +501,7 @@ func TestEIP1559Transition(t *testing.T) {
 	state, _ = chain.State()
 
 	// check burnt contract balance
-	actual = state.GetBalance(common.HexToAddress(params.BorTestChainConfig.Bor.CalculateBurntContract(block.NumberU64())))
+	actual = state.GetBalance(common.HexToAddress(params.BorUnittestChainConfig.Bor.CalculateBurntContract(block.NumberU64())))
 	burntAmount := new(big.Int).Mul(
 		block.BaseFee(),
 		big.NewInt(int64(block.GasUsed())),
@@ -509,6 +510,165 @@ func TestEIP1559Transition(t *testing.T) {
 	if actual.Cmp(expected) != 0 {
 		t.Fatalf("burnt contract balance incorrect: expected %d, got %d", expected, actual)
 	}
+}
+
+// EIP1559 is not supported without EIP155. An error is expected
+func TestEIP1559TransitionWithEIP155(t *testing.T) {
+	var (
+		aa = common.HexToAddress("0x000000000000000000000000000000000000aaaa")
+
+		// Generate a canonical chain to act as the main dataset
+		db     = rawdb.NewMemoryDatabase()
+		engine = ethash.NewFaker()
+
+		// A sender who makes transactions, has some funds
+		key1, _ = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+		key2, _ = crypto.HexToECDSA("8a1f9a8f95be41cd7ccb6168179afb4504aefe388d1e14474d32c45c72ce7b7a")
+		key3, _ = crypto.HexToECDSA("225171aed3793cba1c029832886d69785b7e77a54a44211226b447aa2d16b058")
+
+		addr1 = crypto.PubkeyToAddress(key1.PublicKey)
+		addr2 = crypto.PubkeyToAddress(key2.PublicKey)
+		addr3 = crypto.PubkeyToAddress(key3.PublicKey)
+		funds = new(big.Int).Mul(common.Big1, big.NewInt(params.Ether))
+		gspec = &core.Genesis{
+			Config: params.BorUnittestChainConfig,
+			Alloc: core.GenesisAlloc{
+				addr1: {Balance: funds},
+				addr2: {Balance: funds},
+				addr3: {Balance: funds},
+				// The address 0xAAAA sloads 0x00 and 0x01
+				aa: {
+					Code: []byte{
+						byte(vm.PC),
+						byte(vm.PC),
+						byte(vm.SLOAD),
+						byte(vm.SLOAD),
+					},
+					Nonce:   0,
+					Balance: big.NewInt(0),
+				},
+			},
+		}
+	)
+
+	genesis := gspec.MustCommit(db)
+
+	// Use signer without chain ID
+	signer := types.HomesteadSigner{}
+
+	_, _ = core.GenerateChain(gspec.Config, genesis, engine, db, 1, func(i int, b *core.BlockGen) {
+		b.SetCoinbase(common.Address{1})
+		// One transaction to 0xAAAA
+		accesses := types.AccessList{types.AccessTuple{
+			Address:     aa,
+			StorageKeys: []common.Hash{{0}},
+		}}
+
+		txdata := &types.DynamicFeeTx{
+			ChainID:    gspec.Config.ChainID,
+			Nonce:      0,
+			To:         &aa,
+			Gas:        30000,
+			GasFeeCap:  newGwei(5),
+			GasTipCap:  big.NewInt(2),
+			AccessList: accesses,
+			Data:       []byte{},
+		}
+
+		var err error
+
+		tx := types.NewTx(txdata)
+		tx, err = types.SignTx(tx, signer, key1)
+
+		require.ErrorIs(t, err, types.ErrTxTypeNotSupported)
+	})
+}
+
+// it is up to a user to use protected transactions. so if a transaction is unprotected no errors related to chainID are expected.
+// transactions are checked in 2 places: transaction pool and blockchain processor.
+func TestTransitionWithoutEIP155(t *testing.T) {
+	var (
+		aa = common.HexToAddress("0x000000000000000000000000000000000000aaaa")
+
+		// Generate a canonical chain to act as the main dataset
+		db     = rawdb.NewMemoryDatabase()
+		engine = ethash.NewFaker()
+
+		// A sender who makes transactions, has some funds
+		key1, _ = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+		key2, _ = crypto.HexToECDSA("8a1f9a8f95be41cd7ccb6168179afb4504aefe388d1e14474d32c45c72ce7b7a")
+		key3, _ = crypto.HexToECDSA("225171aed3793cba1c029832886d69785b7e77a54a44211226b447aa2d16b058")
+
+		addr1 = crypto.PubkeyToAddress(key1.PublicKey)
+		addr2 = crypto.PubkeyToAddress(key2.PublicKey)
+		addr3 = crypto.PubkeyToAddress(key3.PublicKey)
+		funds = new(big.Int).Mul(common.Big1, big.NewInt(params.Ether))
+		gspec = &core.Genesis{
+			Config: params.BorUnittestChainConfig,
+			Alloc: core.GenesisAlloc{
+				addr1: {Balance: funds},
+				addr2: {Balance: funds},
+				addr3: {Balance: funds},
+				// The address 0xAAAA sloads 0x00 and 0x01
+				aa: {
+					Code: []byte{
+						byte(vm.PC),
+						byte(vm.PC),
+						byte(vm.SLOAD),
+						byte(vm.SLOAD),
+					},
+					Nonce:   0,
+					Balance: big.NewInt(0),
+				},
+			},
+		}
+	)
+
+	genesis := gspec.MustCommit(db)
+
+	// Use signer without chain ID
+	signer := types.HomesteadSigner{}
+	//signer := types.FrontierSigner{}
+
+	blocks, _ := core.GenerateChain(gspec.Config, genesis, engine, db, 1, func(i int, b *core.BlockGen) {
+		b.SetCoinbase(common.Address{1})
+
+		txdata := &types.LegacyTx{
+			Nonce:    0,
+			To:       &aa,
+			Gas:      30000,
+			GasPrice: newGwei(5),
+		}
+
+		var err error
+
+		tx := types.NewTx(txdata)
+		tx, err = types.SignTx(tx, signer, key1)
+
+		require.Nil(t, err)
+		require.False(t, tx.Protected())
+
+		from, err := types.Sender(types.EIP155Signer{}, tx)
+		require.Equal(t, addr1, from)
+		require.Nil(t, err)
+
+		b.AddTx(tx)
+	})
+
+	diskdb := rawdb.NewMemoryDatabase()
+	gspec.MustCommit(diskdb)
+
+	chain, err := core.NewBlockChain(diskdb, nil, gspec.Config, engine, vm.Config{}, nil, nil)
+	if err != nil {
+		t.Fatalf("failed to create tester chain: %v", err)
+	}
+	if n, err := chain.InsertChain(blocks); err != nil {
+		t.Fatalf("block %d: failed to insert into chain: %v", n, err)
+	}
+
+	block := chain.GetBlockByNumber(1)
+
+	require.Len(t, block.Transactions(), 1)
 }
 
 func TestJaipurFork(t *testing.T) {
