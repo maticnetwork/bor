@@ -1155,10 +1155,6 @@ func (w *worker) generateWork(ctx context.Context, params *generateParams) (*typ
 // commitWork generates several new sealing tasks based on the parent block
 // and submit them to the sealer.
 func (w *worker) commitWork(ctx context.Context, interrupt *int32, noempty bool, timestamp int64) {
-
-	commitWorkCtx, commitWorkSpan := w.tracer.Start(ctx, "commitWork")
-	defer commitWorkSpan.End()
-
 	start := time.Now()
 
 	// Set the coinbase if the worker is running or it's required
@@ -1177,6 +1173,13 @@ func (w *worker) commitWork(ctx context.Context, interrupt *int32, noempty bool,
 	if err != nil {
 		return
 	}
+
+	commitWorkCtx, commitWorkSpan := w.tracer.Start(ctx, "commitWork")
+	commitWorkSpan.SetAttributes(
+		attribute.Int("number", int(work.header.Number.Uint64())),
+	)
+	defer commitWorkSpan.End()
+
 	// Create an empty block based on temporary copied state for
 	// sealing in advance without waiting block execution finished.
 	if !noempty && atomic.LoadUint32(&w.noempty) == 0 {
