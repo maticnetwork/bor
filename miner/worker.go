@@ -148,11 +148,11 @@ func (env *environment) discard() {
 
 // task contains all information for consensus engine sealing and result submitting.
 type task struct {
+	ctx       context.Context
 	receipts  []*types.Receipt
 	state     *state.StateDB
 	block     *types.Block
 	createdAt time.Time
-	ctx       context.Context
 }
 
 const (
@@ -163,18 +163,18 @@ const (
 
 // newWorkReq represents a request for new sealing work submitting with relative interrupt notifier.
 type newWorkReq struct {
+	ctx       context.Context
 	interrupt *int32
 	noempty   bool
 	timestamp int64
-	ctx       context.Context
 }
 
 // getWorkReq represents a request for getting a new sealing work with provided parameters.
 type getWorkReq struct {
+	ctx    context.Context
 	params *generateParams
 	err    error
 	result chan *types.Block
-	ctx    context.Context
 }
 
 // intervalAdjust represents a resubmitting interval adjustment.
@@ -661,8 +661,6 @@ func (w *worker) taskLoop() {
 	for {
 		select {
 		case task := <-w.taskCh:
-			// taskLoopCtx, taskLoopSpan := w.tracer.Start(task.ctx, "taskLoop")
-
 			if w.newTaskHook != nil {
 				w.newTaskHook(task)
 			}
@@ -688,9 +686,6 @@ func (w *worker) taskLoop() {
 				delete(w.pendingTasks, sealHash)
 				w.pendingMu.Unlock()
 			}
-
-			// taskLoopSpan.End()
-
 		case <-w.exitCh:
 			interrupt()
 			return
@@ -713,7 +708,7 @@ func (w *worker) resultLoop() {
 			if w.chain.HasBlock(block.Hash(), block.NumberU64()) {
 				continue
 			}
-			start1 := time.Now()
+			getBlockStart := time.Now()
 			oldBlock := w.chain.GetBlockByNumber(block.NumberU64())
 			if oldBlock != nil {
 				oldBlockAuthor, _ := w.chain.Engine().Author(oldBlock.Header())
@@ -723,7 +718,7 @@ func (w *worker) resultLoop() {
 					continue
 				}
 			}
-			diff1 := time.Since(start1)
+			getBlockTime := time.Since(getBlockStart)
 			var (
 				sealhash = w.engine.SealHash(block.Header())
 				hash     = block.Hash()
@@ -763,9 +758,9 @@ func (w *worker) resultLoop() {
 				logs = append(logs, receipt.Logs...)
 			}
 			// Commit block and state to database.
-			start2 := time.Now()
+			writeBlockStart := time.Now()
 			_, err := w.chain.WriteBlockAndSetHead(block, receipts, logs, task.state, true)
-			diff2 := time.Since(start2)
+			writeBlockTime := time.Since(writeBlockStart)
 			if err != nil {
 				log.Error("Failed writing block to chain", "err", err)
 				continue
@@ -782,8 +777,8 @@ func (w *worker) resultLoop() {
 				attribute.String("hash", hash.String()),
 				attribute.Int("number", int(block.Number().Uint64())),
 				attribute.Int("txns", block.Transactions().Len()),
-				attribute.String("Block fetch and check time taken", diff1.String()),
-				attribute.String("WriteBlockAndSetHead time taken", diff2.String()),
+				attribute.String("Block fetch and check time taken", getBlockTime.String()),
+				attribute.String("WriteBlockAndSetHead time taken", writeBlockTime.String()),
 			)
 			resultLoopSpan.End()
 		case <-w.exitCh:
@@ -1131,12 +1126,12 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		remoteEnvTCount = env.tcount
 	}
 	fillTransactionsSpan.SetAttributes(
-		attribute.Int("len of remoteTxs", lenRemotes),
-		attribute.Int("len of sorted remoteTxs", lenNewRemotes),
-		attribute.Int("len of final remoteTxs", localEnvTCount),
 		attribute.Int("len of localTxs", lenLocals),
 		attribute.Int("len of sorted localTxs", lenNewLocals),
-		attribute.Int("len of final localTxs ", remoteEnvTCount),
+		attribute.Int("len of final localTxs ", localEnvTCount),
+		attribute.Int("len of remoteTxs", lenRemotes),
+		attribute.Int("len of sorted remoteTxs", lenNewRemotes),
+		attribute.Int("len of final remoteTxs", remoteEnvTCount),
 	)
 }
 
@@ -1204,10 +1199,9 @@ func (w *worker) commitWork(ctx context.Context, interrupt *int32, noempty bool,
 // the deep copy first.
 func (w *worker) commit(ctx context.Context, env *environment, interval func(), update bool, start time.Time) error {
 
-	commitCtx, commitSpan := w.tracer.Start(ctx, "commit")
-	defer commitSpan.End()
-
 	if w.isRunning() {
+		commitCtx, commitSpan := w.tracer.Start(ctx, "commit")
+		defer commitSpan.End()
 		if interval != nil {
 			interval()
 		}
@@ -1221,7 +1215,7 @@ func (w *worker) commit(ctx context.Context, env *environment, interval func(), 
 		// If we're post merge, just ignore
 		if !w.isTTDReached(block.Header()) {
 			select {
-			case w.taskCh <- &task{receipts: env.receipts, state: env.state, block: block, createdAt: time.Now(), ctx: commitCtx}:
+			case w.taskCh <- &task{ctx: commitCtx, receipts: env.receipts, state: env.state, block: block, createdAt: time.Now()}:
 				w.unconfirmed.Shift(block.NumberU64() - 1)
 				log.Info("Commit new sealing work", "number", block.Number(), "sealhash", w.engine.SealHash(block.Header()),
 					"uncles", len(env.uncles), "txs", env.tcount,
