@@ -42,7 +42,7 @@ func TestIsValidChain(t *testing.T) {
 	s := NewMockService(10)
 
 	// case1: no checkpoint whitelist, should consider the chain as valid
-	res, err := s.IsValidChain(nil, nil)
+	res, err := s.IsValidPeer(nil, nil)
 	assert.NilError(t, err, "expected no error")
 	assert.Equal(t, res, true, "expected chain to be valid")
 
@@ -59,7 +59,7 @@ func TestIsValidChain(t *testing.T) {
 
 	// case2: false fetchHeadersByNumber function provided, should consider the chain as invalid
 	// and throw `ErrNoRemoteCheckoint` error
-	res, err = s.IsValidChain(nil, falseFetchHeadersByNumber)
+	res, err = s.IsValidPeer(nil, falseFetchHeadersByNumber)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -90,7 +90,7 @@ func TestIsValidChain(t *testing.T) {
 		}
 	}
 
-	res, err = s.IsValidChain(nil, fetchHeadersByNumber)
+	res, err = s.IsValidPeer(nil, fetchHeadersByNumber)
 	assert.NilError(t, err, "expected no error")
 	assert.Equal(t, res, true, "expected chain to be valid")
 
@@ -100,7 +100,7 @@ func TestIsValidChain(t *testing.T) {
 
 	// case4: correct fetchHeadersByNumber function provided with wrong header
 	// for block number 2. Should consider the chain as invalid and throw an error
-	res, err = s.IsValidChain(nil, fetchHeadersByNumber)
+	res, err = s.IsValidPeer(nil, fetchHeadersByNumber)
 	assert.Equal(t, err, ErrCheckpointMismatch, "expected checkpoint mismatch error")
 	assert.Equal(t, res, false, "expected chain to be invalid")
 }

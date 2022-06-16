@@ -1407,23 +1407,23 @@ func newWhitelistFake(validate func(count int) (bool, error)) *whitelistFake {
 	return &whitelistFake{0, validate}
 }
 
-// IsValidChain is the mock function which the downloader will use to validate the chain
+// IsValidPeer is the mock function which the downloader will use to validate the chain
 // to be received from a peer.
-func (w *whitelistFake) IsValidChain(remoteHeader *types.Header, fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error) {
+func (w *whitelistFake) IsValidPeer(remoteHeader *types.Header, fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error) {
 	defer func() {
 		w.count++
 	}()
 	return w.validate(w.count)
 }
 
+func (w *whitelistFake) IsValidChain(headers []*types.Header) bool {
+	return true
+}
 func (w *whitelistFake) ProcessCheckpoint(endBlockNum uint64, endBlockHash common.Hash) {}
-
 func (w *whitelistFake) GetCheckpointWhitelist() map[uint64]common.Hash {
 	return nil
 }
-
 func (w *whitelistFake) PurgeCheckpointWhitelist() {}
-
 func (w *whitelistFake) GetCheckpoints(current, sidechainHeader *types.Header, sidechainCheckpoints []*types.Header) (map[uint64]*types.Header, error) {
 	return map[uint64]*types.Header{}, nil
 }

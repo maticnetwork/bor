@@ -283,6 +283,15 @@ func (hc *HeaderChain) writeHeadersAndSetHead(headers []*types.Header, forker *F
 			lastHeader: lastHeader,
 		}
 	)
+
+	// Ask the fork choicer for chain validity
+	if isValid := forker.IsValidChain(headers); !isValid {
+		if inserted != 0 {
+			result.status = SideStatTy
+		}
+		return result, nil
+	}
+
 	// Ask the fork choicer if the reorg is necessary
 	if reorg, err := forker.ReorgNeeded(hc.CurrentHeader(), lastHeader); err != nil {
 		return nil, err

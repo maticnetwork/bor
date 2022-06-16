@@ -33,9 +33,9 @@ var (
 	ErrNoRemoteCheckoint  = errors.New("remote peer doesn't have a checkoint")
 )
 
-// IsValidChain checks if the chain we're about to receive from this peer is valid or not
+// IsValidPeer checks if the chain we're about to receive from a peer is valid or not
 // in terms of reorgs. We won't reorg beyond the last bor checkpoint submitted to mainchain.
-func (w *Service) IsValidChain(remoteHeader *types.Header, fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error) {
+func (w *Service) IsValidPeer(remoteHeader *types.Header, fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error) {
 	// We want to validate the chain by comparing the last checkpointed block
 	// we're storing in `checkpointWhitelist` with the peer's block.
 
@@ -70,6 +70,41 @@ func (w *Service) IsValidChain(remoteHeader *types.Header, fetchHeadersByNumber 
 	}
 
 	return false, ErrCheckpointMismatch
+}
+
+// IsValidChain checks the validity of chain by comparing it
+// against the local checkpoint entries
+func (w *Service) IsValidChain(chain []*types.Header) bool {
+
+	// Check if we have checkpoints to validate incoming chain in memory
+	if len(w.checkpointWhitelist) == 0 {
+		// We don't have any entries, no additional validation will be possible
+		return true
+	}
+
+	// Check if we have whitelist entries in required range
+	oldestCheckpointNumber := w.checkpointOrder[0]
+	lastHeader := chain[len(chain)-1]
+	if lastHeader.Number.Uint64() < oldestCheckpointNumber {
+		// We have future whitelisted entries, so no additional validation will be possible
+		// This case will occur when bor is in middle of sync, but heimdall is ahead/fully synced.
+		// TODO: Do we want to ask for a checkpoint from heimdall in this range, or is it safe to accept a block?
+		return true
+	}
+
+	// TODO: Add case for checking for future block
+
+	// Iterate over the chain and validate checkpoint/s
+	// It will handle all cases where the incoming chain has atleast one checkpoint
+	for _, header := range chain {
+		if _, ok := w.checkpointWhitelist[header.Number.Uint64()]; ok {
+			if header.Hash() != w.checkpointWhitelist[header.Number.Uint64()] {
+				return false
+			}
+		}
+	}
+
+	return true
 }
 
 func (w *Service) GetCheckpoints(current, sidechainHeader *types.Header, sidechainCheckpoints []*types.Header) (map[uint64]*types.Header, error) {
