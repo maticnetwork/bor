@@ -94,12 +94,17 @@ func (w *Service) IsValidChain(chain []*types.Header) bool {
 
 	// TODO: Add case for checking for future block
 
-	// Iterate over the chain and validate checkpoint/s
+	// Iterate over the chain and validate against the last checkpoint
 	// It will handle all cases where the incoming chain has atleast one checkpoint
-	for _, header := range chain {
-		if _, ok := w.checkpointWhitelist[header.Number.Uint64()]; ok {
-			if header.Hash() != w.checkpointWhitelist[header.Number.Uint64()] {
+
+	// Iterate over chain in reverse manner
+	for i := len(chain) - 1; i >= 0; i-- {
+		if _, ok := w.checkpointWhitelist[chain[i].Number.Uint64()]; ok {
+			if chain[i].Hash() != w.checkpointWhitelist[chain[i].Number.Uint64()] {
 				return false
+			} else {
+				// No need to check for other checkpoints (if any) as the latest checkpoint is valid
+				break
 			}
 		}
 	}
