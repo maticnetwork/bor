@@ -96,8 +96,6 @@ func (w *Service) IsValidChain(chain []*types.Header) bool {
 
 	// Iterate over the chain and validate against the last checkpoint
 	// It will handle all cases where the incoming chain has atleast one checkpoint
-
-	// Iterate over chain in reverse manner
 	for i := len(chain) - 1; i >= 0; i-- {
 		if _, ok := w.checkpointWhitelist[chain[i].Number.Uint64()]; ok {
 			if chain[i].Hash() != w.checkpointWhitelist[chain[i].Number.Uint64()] {
