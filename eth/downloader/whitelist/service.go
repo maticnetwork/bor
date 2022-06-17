@@ -15,9 +15,8 @@ type Service struct {
 	m                   sync.Mutex
 	checkpointWhitelist map[uint64]common.Hash // Checkpoint whitelist, populated by reaching out to heimdall
 	checkpointOrder     []uint64               // Checkpoint order, populated by reaching out to heimdall
-	maxCapacity         uint
-
-	checkpointInterval uint64 // fixme: provide this data
+	maxCapacity         uint                   // Max capacity of the whitelist
+	checkpointInterval  uint64                 // Checkpoint interval, until which we can allow importing
 }
 
 func NewService(maxCapacity uint) *Service {
@@ -25,6 +24,7 @@ func NewService(maxCapacity uint) *Service {
 		checkpointWhitelist: make(map[uint64]common.Hash),
 		checkpointOrder:     []uint64{},
 		maxCapacity:         maxCapacity,
+		checkpointInterval:  256, // TODO: make it configurable through params?
 	}
 }
 
@@ -74,7 +74,13 @@ func (w *Service) IsValidPeer(remoteHeader *types.Header, fetchHeadersByNumber f
 
 // IsValidChain checks the validity of chain by comparing it
 // against the local checkpoint entries
-func (w *Service) IsValidChain(chain []*types.Header) bool {
+func (w *Service) IsValidChain(current *types.Header, chain []*types.Header) bool {
+
+	var (
+		oldestCheckpointNumber uint64        = w.checkpointOrder[0]
+		firstHeader            *types.Header = chain[0]
+		lastHeader             *types.Header = chain[len(chain)-1]
+	)
 
 	// Check if we have checkpoints to validate incoming chain in memory
 	if len(w.checkpointWhitelist) == 0 {
@@ -83,22 +89,33 @@ func (w *Service) IsValidChain(chain []*types.Header) bool {
 	}
 
 	// Check if we have whitelist entries in required range
-	oldestCheckpointNumber := w.checkpointOrder[0]
-	lastHeader := chain[len(chain)-1]
+
 	if lastHeader.Number.Uint64() < oldestCheckpointNumber {
 		// We have future whitelisted entries, so no additional validation will be possible
 		// This case will occur when bor is in middle of sync, but heimdall is ahead/fully synced.
-		// TODO: Do we want to ask for a checkpoint from heimdall in this range, or is it safe to accept a block?
 		return true
 	}
 
-	// TODO: Add case for checking for future block
+	var (
+		pastChain   []*types.Header
+		futureChain []*types.Header
+	)
+	if current.Number.Uint64() >= firstHeader.Number.Uint64() {
+		pastChain = chain[:current.Number.Uint64()-firstHeader.Number.Uint64()+1]
+	}
+	if current.Number.Uint64() < lastHeader.Number.Uint64() {
+		futureChain = chain[current.Number.Uint64()-firstHeader.Number.Uint64()+1:]
+	}
+
+	if len(futureChain) > int(w.checkpointInterval) {
+		return false
+	}
 
 	// Iterate over the chain and validate against the last checkpoint
 	// It will handle all cases where the incoming chain has atleast one checkpoint
-	for i := len(chain) - 1; i >= 0; i-- {
-		if _, ok := w.checkpointWhitelist[chain[i].Number.Uint64()]; ok {
-			if chain[i].Hash() != w.checkpointWhitelist[chain[i].Number.Uint64()] {
+	for i := len(pastChain) - 1; i >= 0; i-- {
+		if _, ok := w.checkpointWhitelist[pastChain[i].Number.Uint64()]; ok {
+			if pastChain[i].Hash() != w.checkpointWhitelist[pastChain[i].Number.Uint64()] {
 				return false
 			} else {
 				// No need to check for other checkpoints (if any) as the latest checkpoint is valid

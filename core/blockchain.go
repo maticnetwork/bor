@@ -909,6 +909,7 @@ func (bc *BlockChain) InsertReceiptChain(blockChain types.Blocks, receiptChain [
 		ancientBlocks, liveBlocks     types.Blocks
 		ancientReceipts, liveReceipts []types.Receipts
 	)
+
 	// Do a sanity check that the provided chain is actually ordered and linked
 	for i := 0; i < len(blockChain); i++ {
 		if i != 0 {
@@ -934,7 +935,7 @@ func (bc *BlockChain) InsertReceiptChain(blockChain types.Blocks, receiptChain [
 
 	// updateHead updates the head fast sync block if the inserted blocks are better
 	// and returns an indicator whether the inserted blocks are canonical.
-	updateHead := func(head *types.Block) bool {
+	updateHead := func(head *types.Block, headers []*types.Header) bool {
 		if !bc.chainmu.TryLock() {
 			return false
 		}
@@ -942,7 +943,7 @@ func (bc *BlockChain) InsertReceiptChain(blockChain types.Blocks, receiptChain [
 
 		// Rewind may have occurred, skip in that case.
 		if bc.CurrentHeader().Number.Cmp(head.Number()) >= 0 {
-			reorg, err := bc.forker.ReorgNeeded(bc.CurrentFastBlock().Header(), head.Header())
+			reorg, err := bc.forker.ReorgNeeded(bc.CurrentFastBlock().Header(), head.Header(), headers)
 			if err != nil {
 				log.Warn("Reorg failed", "err", err)
 				return false
@@ -986,10 +987,13 @@ func (bc *BlockChain) InsertReceiptChain(blockChain types.Blocks, receiptChain [
 			return 0, fmt.Errorf("containing header #%d [%x..] unknown", last.Number(), last.Hash().Bytes()[:4])
 		}
 
-		// BOR: Retrieve all the bor receipts.
+		// BOR: Retrieve all the bor receipts and also maintain the array of headers
+		// for bor specific reorg check.
 		borReceipts := []types.Receipts{}
+		var headers []*types.Header
 		for _, block := range blockChain {
 			borReceipts = append(borReceipts, []*types.Receipt{bc.GetBorReceiptByHash(block.Hash())})
+			headers = append(headers, block.Header())
 		}
 
 		// Write all chain data to ancients.
@@ -1040,7 +1044,7 @@ func (bc *BlockChain) InsertReceiptChain(blockChain types.Blocks, receiptChain [
 		}
 		// Update the current fast block because all block data is now present in DB.
 		previousFastBlock := bc.CurrentFastBlock().NumberU64()
-		if !updateHead(blockChain[len(blockChain)-1]) {
+		if !updateHead(blockChain[len(blockChain)-1], headers) {
 			// We end up here if the header chain has reorg'ed, and the blocks/receipts
 			// don't match the canonical chain.
 			if err := bc.db.TruncateHead(previousFastBlock + 1); err != nil {
@@ -1076,7 +1080,11 @@ func (bc *BlockChain) InsertReceiptChain(blockChain types.Blocks, receiptChain [
 	writeLive := func(blockChain types.Blocks, receiptChain []types.Receipts) (int, error) {
 		skipPresenceCheck := false
 		batch := bc.db.NewBatch()
+		headers := make([]*types.Header, 0, len(blockChain))
 		for i, block := range blockChain {
+			// Update the headers for bor specific reorg check
+			headers = append(headers, block.Header())
+
 			// Short circuit insertion if shutting down or processing failed
 			if bc.insertStopped() {
 				return 0, errInsertionInterrupted
@@ -1123,7 +1131,7 @@ func (bc *BlockChain) InsertReceiptChain(blockChain types.Blocks, receiptChain [
 				return 0, err
 			}
 		}
-		updateHead(blockChain[len(blockChain)-1])
+		updateHead(blockChain[len(blockChain)-1], headers)
 		return 0, nil
 	}
 
@@ -1340,7 +1348,8 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 		return NonStatTy, err
 	}
 	currentBlock := bc.CurrentBlock()
-	reorg, err := bc.forker.ReorgNeeded(currentBlock.Header(), block.Header())
+	headers := []*types.Header{block.Header()}
+	reorg, err := bc.forker.ReorgNeeded(currentBlock.Header(), block.Header(), headers)
 	if err != nil {
 		return NonStatTy, err
 	}
@@ -1504,7 +1513,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 			current = bc.CurrentBlock()
 		)
 		for block != nil && bc.skipBlock(err, it) {
-			reorg, err = bc.forker.ReorgNeeded(current.Header(), block.Header())
+			headers := []*types.Header{block.Header()}
+			reorg, err = bc.forker.ReorgNeeded(current.Header(), block.Header(), headers)
 			if err != nil {
 				return it.index, err
 			}
@@ -1834,6 +1844,7 @@ func (bc *BlockChain) insertSideChain(block *types.Block, it *insertIterator) (i
 		externTd  *big.Int
 		lastBlock = block
 		current   = bc.CurrentBlock()
+		headers   []*types.Header
 	)
 	// The first sidechain block error is already verified to be ErrPrunedAncestor.
 	// Since we don't import them here, we expect ErrUnknownAncestor for the remaining
@@ -1841,6 +1852,7 @@ func (bc *BlockChain) insertSideChain(block *types.Block, it *insertIterator) (i
 	// to disk.
 	err := consensus.ErrPrunedAncestor
 	for ; block != nil && errors.Is(err, consensus.ErrPrunedAncestor); block, err = it.next() {
+		headers = append(headers, block.Header())
 		// Check the canonical state root for that number
 		if number := block.NumberU64(); current.NumberU64() >= number {
 			canonical := bc.GetBlockByNumber(number)
@@ -1892,7 +1904,7 @@ func (bc *BlockChain) insertSideChain(block *types.Block, it *insertIterator) (i
 	//
 	// If the externTd was larger than our local TD, we now need to reimport the previous
 	// blocks to regenerate the required state
-	reorg, err := bc.forker.ReorgNeeded(current.Header(), lastBlock.Header())
+	reorg, err := bc.forker.ReorgNeeded(current.Header(), lastBlock.Header(), headers)
 	if err != nil {
 		return it.index, err
 	}

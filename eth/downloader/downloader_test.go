@@ -1416,7 +1416,7 @@ func (w *whitelistFake) IsValidPeer(remoteHeader *types.Header, fetchHeadersByNu
 	return w.validate(w.count)
 }
 
-func (w *whitelistFake) IsValidChain(headers []*types.Header) bool {
+func (w *whitelistFake) IsValidChain(current *types.Header, headers []*types.Header) bool {
 	return true
 }
 func (w *whitelistFake) ProcessCheckpoint(endBlockNum uint64, endBlockHash common.Hash) {}
