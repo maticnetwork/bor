@@ -11,6 +11,12 @@ type EventLogLogger struct {
 	EventsLogs map[common.Address][]*types.Log // contractAddress to array of emited log
 }
 
+func NewEventLogLogger() *EventLogLogger {
+	return &EventLogLogger{
+		EventsLogs: make(map[common.Address][]*types.Log),
+	}
+}
+
 func (logger *EventLogLogger)  CaptureEventLogs(address common.Address, logs []*types.Log) {
 	array, in := logger.EventsLogs[address]
 	fmt.Printf("Receive %d logs from %s", len(logs), address.String())

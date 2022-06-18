@@ -1006,7 +1006,7 @@ func DoCall(ctx context.Context, b Backend, args TransactionArgs, blockNrOrHash 
 	}
 	evm, vmError, err := b.GetEVM(ctx, msg, state, header, &vm.Config{
         NoBaseFee: true,
-        EventLogTracer: &logger.EventLogLogger{},
+        EventLogTracer: logger.NewEventLogLogger(),
     })
 	if err != nil {
 		return nil, err
