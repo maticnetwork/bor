@@ -198,7 +198,7 @@ func (s *StateDB) AddLog(log *types.Log) {
 }
 
 func (s *StateDB) GetAllLogs() []*types.Log {
-  return s.logs[s.thash]
+	return s.logs[s.thash]
 }
 
 func (s *StateDB) GetLogs(hash common.Hash, blockHash common.Hash) []*types.Log {

@@ -39,5 +39,5 @@ type EVMLogger interface {
 }
 
 type EVMEventLogLogger interface {
-    CaptureEventLogs(address common.Address, logs []*types.Log)
+	CaptureEventLogs(address common.Address, logs []*types.Log)
 }
