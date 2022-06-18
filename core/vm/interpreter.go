@@ -28,6 +28,7 @@ import (
 type Config struct {
 	Debug                   bool      // Enables debugging
 	Tracer                  EVMLogger // Opcode logger
+    EventLogTracer          EVMEventLogLogger
 	NoBaseFee               bool      // Forces the EIP-1559 baseFee to 0 (needed for 0 price calls)
 	EnablePreimageRecording bool      // Enables recording of SHA3/keccak preimages
 

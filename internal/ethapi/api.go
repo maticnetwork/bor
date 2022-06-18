@@ -1004,7 +1004,10 @@ func DoCall(ctx context.Context, b Backend, args TransactionArgs, blockNrOrHash 
 	if err != nil {
 		return nil, err
 	}
-	evm, vmError, err := b.GetEVM(ctx, msg, state, header, &vm.Config{NoBaseFee: true})
+	evm, vmError, err := b.GetEVM(ctx, msg, state, header, &vm.Config{
+        NoBaseFee: true,
+        EventLogTracer: &logger.EventLogLogger{},
+    })
 	if err != nil {
 		return nil, err
 	}
@@ -1015,12 +1018,14 @@ func DoCall(ctx context.Context, b Backend, args TransactionArgs, blockNrOrHash 
 		evm.Cancel()
 	}()
 
+    log.Info("Before running the message")
 	// Execute the message.
 	gp := new(core.GasPool).AddGas(math.MaxUint64)
 	result, err := core.ApplyMessage(evm, msg, gp)
 	if err := vmError(); err != nil {
 		return nil, err
 	}
+    log.Info("After running the message")
 
 	// If the timer caused an abort, return an appropriate error message
 	if evm.Cancelled() {

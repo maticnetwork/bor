@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"math/big"
 	"reflect"
 	"sort"
@@ -286,6 +287,12 @@ func TestTraceCall(t *testing.T) {
 	}
 	for _, testspec := range testSuite {
 		result, err := api.TraceCall(context.Background(), testspec.call, rpc.BlockNumberOrHash{BlockNumber: &testspec.blockNumber}, testspec.config)
+        log.Println(reflect.TypeOf(result))
+        if result == nil {
+            continue
+        }
+        bo := result.(*ethapi.ExecutionResult)
+        log.Println(bo.StructLogs)
 		if testspec.expectErr != nil {
 			if err == nil {
 				t.Errorf("Expect error %v, get nothing", testspec.expectErr)
