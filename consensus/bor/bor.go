@@ -790,12 +790,6 @@ func (c *Bor) FinalizeAndAssemble(ctx context.Context, chain consensus.ChainHead
 	finalizeCtx, finalizeSpan := tracer.Start(ctx, "FinalizeAndAssemble")
 	defer finalizeSpan.End()
 
-	finalizeSpan.SetAttributes(
-		attribute.Int("number", int(header.Number.Int64())),
-		attribute.String("hash", header.Hash().String()),
-		attribute.Int("number of txs", len(txs)),
-	)
-
 	stateSyncData := []*types.StateSyncData{}
 
 	headerNumber := header.Number.Uint64()
@@ -820,21 +814,36 @@ func (c *Bor) FinalizeAndAssemble(ctx context.Context, chain consensus.ChainHead
 		}
 	}
 
+	start1 := time.Now()
 	if err := c.changeContractCodeIfNeeded(headerNumber, state); err != nil {
 		log.Error("Error changing contract code", "error", err)
 		return nil, err
 	}
+	diff1 := time.Since(start1)
 
 	// No block rewards in PoA, so the state remains as is and uncles are dropped
+	start2 := time.Now()
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 	header.UncleHash = types.CalcUncleHash(nil)
+	diff2 := time.Since(start2)
 
 	// Assemble block
+	start3 := time.Now()
 	block := types.NewBlock(header, txs, nil, receipts, new(trie.Trie))
+	diff3 := time.Since(start3)
 
 	// set state sync
 	bc := chain.(core.BorStateSyncer)
 	bc.SetStateSync(stateSyncData)
+
+	finalizeSpan.SetAttributes(
+		attribute.Int("number", int(header.Number.Int64())),
+		attribute.String("hash", header.Hash().String()),
+		attribute.Int("number of txs", len(txs)),
+		attribute.String("change contract code time", diff1.String()),
+		attribute.String("intermeddiate root hash calc time", diff2.String()),
+		attribute.String("assemble new block time", diff3.String()),
+	)
 
 	// return the final block for sealing
 	return block, nil
