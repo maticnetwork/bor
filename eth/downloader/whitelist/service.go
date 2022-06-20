@@ -74,12 +74,12 @@ func (w *Service) IsValidPeer(remoteHeader *types.Header, fetchHeadersByNumber f
 
 // IsValidChain checks the validity of chain by comparing it
 // against the local checkpoint entries
-func (w *Service) IsValidChain(current *types.Header, chain []*types.Header) bool {
-
+func (w *Service) IsValidChain(currentHeader *types.Header, chain []*types.Header) bool {
 	var (
-		oldestCheckpointNumber uint64        = w.checkpointOrder[0]
-		firstHeader            *types.Header = chain[0]
-		lastHeader             *types.Header = chain[len(chain)-1]
+		oldestCheckpointNumber uint64 = w.checkpointOrder[0]
+		first                  uint64 = chain[0].Number.Uint64()
+		last                   uint64 = chain[len(chain)-1].Number.Uint64()
+		current                uint64 = currentHeader.Number.Uint64()
 	)
 
 	// Check if we have checkpoints to validate incoming chain in memory
@@ -89,22 +89,34 @@ func (w *Service) IsValidChain(current *types.Header, chain []*types.Header) boo
 	}
 
 	// Check if we have whitelist entries in required range
-
-	if lastHeader.Number.Uint64() < oldestCheckpointNumber {
+	if last < oldestCheckpointNumber {
 		// We have future whitelisted entries, so no additional validation will be possible
 		// This case will occur when bor is in middle of sync, but heimdall is ahead/fully synced.
 		return true
+	}
+
+	// Start iterating over the chain and apply validation for past and future
+	// chain, referring to chain behind and after current header respectively.
+	for i := 0; i < len(chain); i++ {
 	}
 
 	var (
 		pastChain   []*types.Header
 		futureChain []*types.Header
 	)
-	if current.Number.Uint64() >= firstHeader.Number.Uint64() {
-		pastChain = chain[:current.Number.Uint64()-firstHeader.Number.Uint64()+1]
+	if current >= first {
+		if len(chain) == 1 {
+			pastChain = chain
+		} else {
+			pastChain = chain[:current-first]
+		}
 	}
-	if current.Number.Uint64() < lastHeader.Number.Uint64() {
-		futureChain = chain[current.Number.Uint64()-firstHeader.Number.Uint64()+1:]
+	if current < last {
+		if len(chain) == 1 {
+			futureChain = chain
+		} else {
+			futureChain = chain[current-first+1:]
+		}
 	}
 
 	if len(futureChain) > int(w.checkpointInterval) {
