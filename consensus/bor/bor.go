@@ -840,6 +840,7 @@ func (c *Bor) FinalizeAndAssemble(ctx context.Context, chain consensus.ChainHead
 		attribute.Int("number", int(header.Number.Int64())),
 		attribute.String("hash", header.Hash().String()),
 		attribute.Int("number of txs", len(txs)),
+		attribute.Int("gas used", int(block.GasUsed())),
 		attribute.String("change contract code time", diff1.String()),
 		attribute.String("intermeddiate root hash calc time", diff2.String()),
 		attribute.String("assemble new block time", diff3.String()),
@@ -890,7 +891,10 @@ func (c *Bor) Seal(ctx context.Context, chain consensus.ChainHeaderReader, block
 	// Bail out if we're unauthorized to sign a block
 	if !snap.ValidatorSet.HasAddress(signer.Bytes()) {
 		// Check the UnauthorizedSignerError.Error() msg to see why we pass number-1
-		return &UnauthorizedSignerError{number - 1, signer.Bytes()}
+		err := &UnauthorizedSignerError{number - 1, signer.Bytes()}
+		sealSpan.SetAttributes(attribute.String("error", err.Error()))
+		sealSpan.End()
+		return err
 	}
 
 	successionNumber, err := snap.GetSignerSuccessionNumber(signer)
@@ -1010,7 +1014,7 @@ func (c *Bor) checkAndCommitSpan(
 ) error {
 
 	checkAndCommitSpanCtx := context.Background()
-	var checkAndCommitSpan trace.Span = nil
+	var checkAndCommitSpan trace.Span
 	if tracer != nil {
 		checkAndCommitSpanCtx, checkAndCommitSpan = tracer.Start(ctx, "checkAndCommitSpan")
 		defer checkAndCommitSpan.End()
@@ -1019,16 +1023,16 @@ func (c *Bor) checkAndCommitSpan(
 	headerNumber := header.Number.Uint64()
 
 	span, err := c.spanner.GetCurrentSpan(header.ParentHash)
-	if err != nil {
-		return err
-	}
-
 	if checkAndCommitSpan != nil {
 		checkAndCommitSpan.SetAttributes(
 			attribute.Int("number", int(headerNumber)),
 			attribute.String("hash", header.Hash().String()),
 			attribute.Int("current span id", int(span.ID)),
+			attribute.Bool("error", err != nil),
 		)
+	}
+	if err != nil {
+		return err
 	}
 
 	if c.needToCommitSpan(span, headerNumber) {
@@ -1066,7 +1070,7 @@ func (c *Bor) FetchAndCommitSpan(
 	chain core.ChainContext,
 ) error {
 
-	var fetchAndCommitSpan trace.Span = nil
+	var fetchAndCommitSpan trace.Span
 	if tracer != nil {
 		_, fetchAndCommitSpan = tracer.Start(ctx, "FetchAndCommitSpan")
 		defer fetchAndCommitSpan.End()
@@ -1120,7 +1124,7 @@ func (c *Bor) CommitStates(
 	chain statefull.ChainContext,
 ) ([]*types.StateSyncData, error) {
 
-	var commitStatesSpan trace.Span = nil
+	var commitStatesSpan trace.Span
 	if tracer != nil {
 		_, commitStatesSpan = tracer.Start(ctx, "CommitStates")
 		defer commitStatesSpan.End()

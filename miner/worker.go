@@ -765,6 +765,17 @@ func (w *worker) resultLoop() {
 			writeBlockStart := time.Now()
 			_, err := w.chain.WriteBlockAndSetHead(block, receipts, logs, task.state, true)
 			writeBlockTime := time.Since(writeBlockStart)
+			resultLoopSpan.SetAttributes(
+				attribute.String("hash", hash.String()),
+				attribute.Int("number", int(block.Number().Uint64())),
+				attribute.Int("txns", block.Transactions().Len()),
+				attribute.Int("gas used", int(block.GasUsed())),
+				attribute.String("Block fetch and check time taken", getBlockTime.String()),
+				attribute.String("WriteBlockAndSetHead time taken", writeBlockTime.String()),
+				attribute.Bool("error", err != nil),
+			)
+			resultLoopSpan.End()
+
 			if err != nil {
 				log.Error("Failed writing block to chain", "err", err)
 				continue
@@ -777,14 +788,6 @@ func (w *worker) resultLoop() {
 
 			// Insert the block into the set of pending ones to resultLoop for confirmations
 			w.unconfirmed.Insert(block.NumberU64(), block.Hash())
-			resultLoopSpan.SetAttributes(
-				attribute.String("hash", hash.String()),
-				attribute.Int("number", int(block.Number().Uint64())),
-				attribute.Int("txns", block.Transactions().Len()),
-				attribute.String("Block fetch and check time taken", getBlockTime.String()),
-				attribute.String("WriteBlockAndSetHead time taken", writeBlockTime.String()),
-			)
-			resultLoopSpan.End()
 		case <-w.exitCh:
 			return
 		}
@@ -1213,6 +1216,13 @@ func (w *worker) commit(ctx context.Context, env *environment, interval func(), 
 		// https://github.com/ethereum/go-ethereum/issues/24299
 		env := env.copy()
 		block, err := w.engine.FinalizeAndAssemble(commitCtx, w.chain, env.header, env.state, env.txs, env.unclelist(), env.receipts)
+		commitSpan.SetAttributes(
+			attribute.Int("number", int(block.Number().Uint64())),
+			attribute.String("hash", block.Hash().String()),
+			attribute.String("sealhash", w.engine.SealHash(block.Header()).String()),
+			attribute.Int("len of env.txs", len(env.txs)),
+			attribute.Bool("error", err != nil),
+		)
 		if err != nil {
 			return err
 		}
@@ -1230,13 +1240,6 @@ func (w *worker) commit(ctx context.Context, env *environment, interval func(), 
 				log.Info("Worker has exited")
 			}
 		}
-
-		commitSpan.SetAttributes(
-			attribute.Int("number", int(block.Number().Uint64())),
-			attribute.String("hash", block.Hash().String()),
-			attribute.String("sealhash", w.engine.SealHash(block.Header()).String()),
-			attribute.Int("len of env.txs", len(env.txs)),
-		)
 	}
 	if update {
 		w.updateSnapshot(env)
