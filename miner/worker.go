@@ -770,8 +770,9 @@ func (w *worker) resultLoop() {
 				attribute.Int("number", int(block.Number().Uint64())),
 				attribute.Int("txns", block.Transactions().Len()),
 				attribute.Int("gas used", int(block.GasUsed())),
-				attribute.String("Block fetch and check time taken", getBlockTime.String()),
-				attribute.String("WriteBlockAndSetHead time taken", writeBlockTime.String()),
+				attribute.Int("Block fetch and check time taken", int(getBlockTime.Milliseconds())),
+				attribute.Int("WriteBlockAndSetHead time taken", int(writeBlockTime.Milliseconds())),
+				attribute.Int("elapsed", int(time.Since(task.createdAt).Milliseconds())),
 				attribute.Bool("error", err != nil),
 			)
 			resultLoopSpan.End()

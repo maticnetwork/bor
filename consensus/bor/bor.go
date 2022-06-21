@@ -841,9 +841,9 @@ func (c *Bor) FinalizeAndAssemble(ctx context.Context, chain consensus.ChainHead
 		attribute.String("hash", header.Hash().String()),
 		attribute.Int("number of txs", len(txs)),
 		attribute.Int("gas used", int(block.GasUsed())),
-		attribute.String("change contract code time", diff1.String()),
-		attribute.String("intermeddiate root hash calc time", diff2.String()),
-		attribute.String("assemble new block time", diff3.String()),
+		attribute.Int("change contract code time", int(diff1.Milliseconds())),
+		attribute.Int("intermeddiate root hash calc time", int(diff2.Milliseconds())),
+		attribute.Int("assemble new block time", int(diff3.Milliseconds())),
 	)
 
 	// return the final block for sealing
@@ -942,7 +942,8 @@ func (c *Bor) Seal(ctx context.Context, chain consensus.ChainHeaderReader, block
 			sealSpan.SetAttributes(
 				attribute.Int("number", int(number)),
 				attribute.String("hash", header.Hash().String()),
-				attribute.String("delay", delay.String()),
+				attribute.Int("delay", int(delay.Milliseconds())),
+				attribute.Int("wiggle", int(wiggle.Milliseconds())),
 				attribute.Bool("out-of-turn", wiggle > 0),
 			)
 			sealSpan.End()
@@ -1198,8 +1199,8 @@ func (c *Bor) CommitStates(
 		commitStatesSpan.SetAttributes(
 			attribute.Int("number", int(number)),
 			attribute.String("hash", header.Hash().String()),
-			attribute.String("fetch time", fetchTime.String()),
-			attribute.String("process time", processTime.String()),
+			attribute.Int("fetch time", int(fetchTime.Milliseconds())),
+			attribute.Int("process time", int(processTime.Milliseconds())),
 			attribute.Int("state sync count", len(stateSyncs)),
 			attribute.Int("total gas", totalGas),
 		)
