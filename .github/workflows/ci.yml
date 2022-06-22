@@ -38,7 +38,7 @@ jobs:
           run: make lintci-deps
 
         - name: Print Branch
-          run: echo ${{ github.event.pull_request.head.ref }}
+          run: echo ${{ github.event.pull_request.base.ref }}
 
         - uses: actions/cache@v3
           with:
