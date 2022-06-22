@@ -682,10 +682,10 @@ func BenchmarkBorMining(b *testing.B) {
 
 	b.ResetTimer()
 
+	prev := uint64(time.Now().Unix())
+
 	// Start mining!
 	w.start()
-
-	var prev uint64
 
 	blockPeriod, ok := back.Genesis.Config.Bor.Period["0"]
 	if !ok {
