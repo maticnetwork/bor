@@ -148,6 +148,7 @@ func (env *environment) discard() {
 
 // task contains all information for consensus engine sealing and result submitting.
 type task struct {
+	//nolint:containedctx
 	ctx       context.Context
 	receipts  []*types.Receipt
 	state     *state.StateDB
@@ -163,6 +164,7 @@ const (
 
 // newWorkReq represents a request for new sealing work submitting with relative interrupt notifier.
 type newWorkReq struct {
+	//nolint:containedctx
 	ctx       context.Context
 	interrupt *int32
 	noempty   bool
@@ -171,6 +173,7 @@ type newWorkReq struct {
 
 // getWorkReq represents a request for getting a new sealing work with provided parameters.
 type getWorkReq struct {
+	//nolint:containedctx
 	ctx    context.Context
 	params *generateParams
 	err    error
@@ -433,6 +436,7 @@ func recalcRecommit(minRecommit, prev time.Duration, target float64, inc bool) t
 }
 
 // newWorkLoop is a standalone goroutine to submit new sealing work upon received events.
+//nolint:gocognit
 func (w *worker) newWorkLoop(ctx context.Context, recommit time.Duration) {
 	defer w.wg.Done()
 	var (
