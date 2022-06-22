@@ -92,10 +92,11 @@ type testWorkerBackend struct {
 	uncleBlock *types.Block
 }
 
-func newTestWorkerBackend(t *testing.T, chainConfig *params.ChainConfig, engine consensus.Engine, db ethdb.Database, n int) *testWorkerBackend {
+func newTestWorkerBackend(t TensingObject, chainConfig *params.ChainConfig, engine consensus.Engine, db ethdb.Database, n int) *testWorkerBackend {
 	var gspec = core.Genesis{
-		Config: chainConfig,
-		Alloc:  core.GenesisAlloc{testBankAddress: {Balance: testBankFunds}},
+		Config:   chainConfig,
+		Alloc:    core.GenesisAlloc{testBankAddress: {Balance: testBankFunds}},
+		GasLimit: 30_000_000,
 	}
 
 	switch e := engine.(type) {
@@ -190,7 +191,7 @@ func (b *testWorkerBackend) newRandomTx(creation bool) *types.Transaction {
 	return tx
 }
 
-func newTestWorker(t *testing.T, chainConfig *params.ChainConfig, engine consensus.Engine, db ethdb.Database, blocks int) (*worker, *testWorkerBackend) {
+func newTestWorker(t TensingObject, chainConfig *params.ChainConfig, engine consensus.Engine, db ethdb.Database, blocks int) (*worker, *testWorkerBackend) {
 	backend := newTestWorkerBackend(t, chainConfig, engine, db, blocks)
 	backend.txPool.AddLocals(pendingTxs)
 	w := newWorker(testConfig, chainConfig, engine, backend, new(event.TypeMux), nil, false)
@@ -303,6 +304,90 @@ func testGenerateBlockAndImport(t *testing.T, isClique bool, isBor bool) {
 			}
 		case <-time.After(3 * time.Second): // Worker needs 1s to include new changes.
 			t.Fatalf("timeout")
+		}
+	}
+}
+
+func BenchmarkBorMining(b *testing.B) {
+	chainConfig := params.BorUnittestChainConfig
+
+	ctrl := gomock.NewController(b)
+	defer ctrl.Finish()
+
+	ethAPIMock := api.NewMockCaller(ctrl)
+	ethAPIMock.EXPECT().Call(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	spanner := bor.NewMockSpanner(ctrl)
+	spanner.EXPECT().GetCurrentValidators(gomock.Any(), gomock.Any()).Return([]*valset.Validator{
+		{
+			ID:               0,
+			Address:          testBankAddress,
+			VotingPower:      100,
+			ProposerPriority: 0,
+		},
+	}, nil).AnyTimes()
+
+	heimdallClientMock := mocks.NewMockIHeimdallClient(ctrl)
+	heimdallClientMock.EXPECT().Close().Times(1)
+
+	contractMock := bor.NewMockGenesisContract(ctrl)
+
+	db, _, _ := NewDBForFakes(b)
+
+	engine := NewFakeBor(b, db, chainConfig, ethAPIMock, spanner, heimdallClientMock, contractMock)
+	defer engine.Close()
+
+	chainConfig.LondonBlock = big.NewInt(0)
+
+	w, back := newTestWorker(b, chainConfig, engine, db, 0)
+	defer w.close()
+
+	// This test chain imports the mined blocks.
+	db2 := rawdb.NewMemoryDatabase()
+	back.genesis.MustCommit(db2)
+
+	chain, _ := core.NewBlockChain(db2, nil, back.chain.Config(), engine, vm.Config{}, nil, nil)
+	defer chain.Stop()
+
+	// Ignore empty commit here for less noise.
+	w.skipSealHook = func(task *task) bool {
+		return len(task.receipts) == 0
+	}
+
+	// fullfill tx pool
+	const (
+		totalGas    = testGas + params.TxGas
+		totalBlocks = 10
+	)
+
+	var txInBlock = int(back.genesis.GasLimit/totalGas) + 1
+
+	// fullfill a tx pool
+	// a bit risky
+	for i := 0; i < totalBlocks*txInBlock; i++ {
+		back.txPool.AddLocal(back.newRandomTx(true))
+		back.txPool.AddLocal(back.newRandomTx(false))
+	}
+
+	// Wait for mined blocks.
+	sub := w.mux.Subscribe(core.NewMinedBlockEvent{})
+	defer sub.Unsubscribe()
+
+	b.ResetTimer()
+
+	// Start mining!
+	w.start()
+
+	for i := 0; i < totalBlocks; i++ {
+		select {
+		case ev := <-sub.Chan():
+			block := ev.Data.(core.NewMinedBlockEvent).Block
+			if _, err := chain.InsertChain([]*types.Block{block}); err != nil {
+				b.Fatalf("failed to insert new mined block %d: %v", block.NumberU64(), err)
+			}
+			b.Log("block", block.NumberU64(), "txs", block.Transactions().Len(), "gasUsed", block.GasUsed(), "gasLimit", block.GasLimit())
+		case <-time.After(5 * time.Second): // Worker needs 1s to include new changes.
+			b.Fatalf("timeout")
 		}
 	}
 }
