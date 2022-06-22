@@ -1283,6 +1283,7 @@ func (w *worker) getSealingBlock(parent common.Hash, timestamp uint64, coinbase 
 			noExtra:    true,
 		},
 		result: make(chan *types.Block, 1),
+		ctx:    context.Background(),
 	}
 	select {
 	case w.getWorkCh <- req:
