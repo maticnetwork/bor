@@ -117,6 +117,7 @@ func (ethash *Ethash) Seal(ctx context.Context, chain consensus.ChainHeaderReade
 		case <-ethash.update:
 			// Thread count was changed on user request, restart
 			close(abort)
+
 			if err := ethash.Seal(ctx, chain, block, results, stop); err != nil {
 				ethash.config.Log.Error("Failed to restart sealing after update", "err", err)
 			}

@@ -785,8 +785,8 @@ func (c *Bor) changeContractCodeIfNeeded(headerNumber uint64, state *state.State
 // FinalizeAndAssemble implements consensus.Engine, ensuring no uncles are set,
 // nor block rewards given, and returns the final block.
 func (c *Bor) FinalizeAndAssemble(ctx context.Context, chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
-
 	tracer := otel.GetTracerProvider().Tracer("MinerWorker")
+
 	finalizeCtx, finalizeSpan := tracer.Start(ctx, "FinalizeAndAssemble")
 	defer finalizeSpan.End()
 
@@ -819,6 +819,7 @@ func (c *Bor) FinalizeAndAssemble(ctx context.Context, chain consensus.ChainHead
 		log.Error("Error changing contract code", "error", err)
 		return nil, err
 	}
+
 	diff1 := time.Since(start1)
 
 	// No block rewards in PoA, so the state remains as is and uncles are dropped
@@ -863,7 +864,6 @@ func (c *Bor) Authorize(signer common.Address, signFn SignerFn) {
 // Seal implements consensus.Engine, attempting to create a sealed block using
 // the local signing credentials.
 func (c *Bor) Seal(ctx context.Context, chain consensus.ChainHeaderReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
-
 	tracer := otel.GetTracerProvider().Tracer("MinerWorker")
 	_, sealSpan := tracer.Start(ctx, "Seal")
 
@@ -894,6 +894,7 @@ func (c *Bor) Seal(ctx context.Context, chain consensus.ChainHeaderReader, block
 		err := &UnauthorizedSignerError{number - 1, signer.Bytes()}
 		sealSpan.SetAttributes(attribute.String("error", err.Error()))
 		sealSpan.End()
+
 		return err
 	}
 
@@ -1013,9 +1014,11 @@ func (c *Bor) checkAndCommitSpan(
 	header *types.Header,
 	chain core.ChainContext,
 ) error {
+	var (
+		checkAndCommitSpanCtx = context.Background()
+		checkAndCommitSpan    trace.Span
+	)
 
-	checkAndCommitSpanCtx := context.Background()
-	var checkAndCommitSpan trace.Span
 	if tracer != nil {
 		checkAndCommitSpanCtx, checkAndCommitSpan = tracer.Start(ctx, "checkAndCommitSpan")
 		defer checkAndCommitSpan.End()
