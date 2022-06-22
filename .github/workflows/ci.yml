@@ -37,6 +37,9 @@ jobs:
           if: runner.os == 'Linux'
           run: make lintci-deps
 
+        - name: Print Branch
+          run: echo ${{ github.event.pull_request.head.ref }}
+
         - uses: actions/cache@v3
           with:
             path: |
