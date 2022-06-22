@@ -79,13 +79,6 @@ func NewForkChoice(chainReader ChainReader, preserve func(header *types.Header) 
 // total difficulty is higher. In the extern mode, the trusted
 // header is always selected as the head.
 func (f *ForkChoice) ReorgNeeded(current *types.Header, header *types.Header, chain []*types.Header) (bool, error) {
-	// Check with the bor chain validator service
-	if f.validator != nil {
-		if isValid := f.validator.IsValidChain(current, chain); !isValid {
-			return false, nil
-		}
-	}
-
 	var (
 		localTD  = f.chain.GetTd(current.Hash(), current.Number.Uint64())
 		externTd = f.chain.GetTd(header.Hash(), header.Number.Uint64())
@@ -115,5 +108,12 @@ func (f *ForkChoice) ReorgNeeded(current *types.Header, header *types.Header, ch
 			reorg = !currentPreserve && (externPreserve || f.rand.Float64() < 0.5)
 		}
 	}
+	// Check with the bor chain validator service
+	if reorg && f.validator != nil {
+		if isValid := f.validator.IsValidChain(current, chain); !isValid {
+			reorg = false
+		}
+	}
+
 	return reorg, nil
 }
