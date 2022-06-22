@@ -129,11 +129,35 @@ func testGenerateBlockAndImport(t *testing.T, isClique bool, isBor bool) {
 	// Start mining!
 	w.start()
 
+	var (
+		err   error
+		uncle *types.Block
+	)
+
 	for i := 0; i < 5; i++ {
-		b.txPool.AddLocal(b.newRandomTx(true))
-		b.txPool.AddLocal(b.newRandomTx(false))
-		w.postSideBlock(core.ChainSideEvent{Block: b.newRandomUncle()})
-		w.postSideBlock(core.ChainSideEvent{Block: b.newRandomUncle()})
+		err = b.txPool.AddLocal(b.newRandomTx(true))
+		if err != nil {
+			t.Fatal("while adding a local transaction", err)
+		}
+
+		err = b.txPool.AddLocal(b.newRandomTx(false))
+		if err != nil {
+			t.Fatal("while adding a remote transaction", err)
+		}
+
+		uncle, err = b.newRandomUncle()
+		if err != nil {
+			t.Fatal("while making an uncle block", err)
+		}
+
+		w.postSideBlock(core.ChainSideEvent{Block: uncle})
+
+		uncle, err = b.newRandomUncle()
+		if err != nil {
+			t.Fatal("while making an uncle block", err)
+		}
+
+		w.postSideBlock(core.ChainSideEvent{Block: uncle})
 
 		select {
 		case ev := <-sub.Chan():
@@ -629,19 +653,27 @@ func BenchmarkBorMining(b *testing.B) {
 		return len(task.receipts) == 0
 	}
 
-	// fullfill tx pool
+	// fulfill tx pool
 	const (
 		totalGas    = testGas + params.TxGas
 		totalBlocks = 10
 	)
 
-	var txInBlock = int(back.Genesis.GasLimit/totalGas) + 1
+	var err error
 
-	// fullfill a tx pool
+	txInBlock := int(back.Genesis.GasLimit/totalGas) + 1
+
 	// a bit risky
 	for i := 0; i < 2*totalBlocks*txInBlock; i++ {
-		back.txPool.AddLocal(back.newRandomTx(true))
-		back.txPool.AddLocal(back.newRandomTx(false))
+		err = back.txPool.AddLocal(back.newRandomTx(true))
+		if err != nil {
+			b.Fatal("while adding a local transaction", err)
+		}
+
+		err = back.txPool.AddLocal(back.newRandomTx(false))
+		if err != nil {
+			b.Fatal("while adding a remote transaction", err)
+		}
 	}
 
 	// Wait for mined blocks.
@@ -655,16 +687,24 @@ func BenchmarkBorMining(b *testing.B) {
 
 	var prev uint64
 
+	blockPeriod, ok := back.Genesis.Config.Bor.Period["0"]
+	if !ok {
+		blockPeriod = 1
+	}
+
 	for i := 0; i < totalBlocks; i++ {
 		select {
 		case ev := <-sub.Chan():
 			block := ev.Data.(core.NewMinedBlockEvent).Block
+
 			if _, err := chain.InsertChain([]*types.Block{block}); err != nil {
 				b.Fatalf("failed to insert new mined block %d: %v", block.NumberU64(), err)
 			}
+
 			b.Log("block", block.NumberU64(), "time", block.Time()-prev, "txs", block.Transactions().Len(), "gasUsed", block.GasUsed(), "gasLimit", block.GasLimit())
+
 			prev = block.Time()
-		case <-time.After(5 * time.Second): // Worker needs 1s to include new changes.
+		case <-time.After(time.Duration(blockPeriod) * time.Second):
 			b.Fatalf("timeout")
 		}
 	}

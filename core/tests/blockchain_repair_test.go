@@ -1862,20 +1862,24 @@ func testRepair(t *testing.T, tt *rewindTest, snapshots bool) {
 			}
 		}
 	}
+
 	if _, err := back.BlockChain().InsertChain(canonblocks[tt.commitBlock:]); err != nil {
 		t.Fatalf("Failed to import canonical chain tail: %v", err)
 	}
+
 	// Force run a freeze cycle
 	type freezer interface {
 		Freeze(threshold uint64) error
 		Ancients() (uint64, error)
 	}
+
 	db.(freezer).Freeze(tt.freezeThreshold)
 
 	// Set the simulated pivot block
 	if tt.pivotBlock != nil {
 		rawdb.WriteLastPivotNumber(db, *tt.pivotBlock)
 	}
+
 	// Pull the plug on the database, simulating a hard crash
 	db.Close()
 
@@ -1884,12 +1888,14 @@ func testRepair(t *testing.T, tt *rewindTest, snapshots bool) {
 	if err != nil {
 		t.Fatalf("Failed to reopen persistent database: %v", err)
 	}
+
 	defer db.Close()
 
 	newChain, err := core.NewBlockChain(db, nil, params.AllEthashProtocolChanges, engine, vm.Config{}, nil, nil)
 	if err != nil {
 		t.Fatalf("Failed to recreate chain: %v", err)
 	}
+
 	defer newChain.Stop()
 
 	// Iterate over all the remaining blocks and ensure there are no gaps
@@ -1901,12 +1907,15 @@ func testRepair(t *testing.T, tt *rewindTest, snapshots bool) {
 	if head := newChain.CurrentHeader(); head.Number.Uint64() != tt.expHeadHeader {
 		t.Errorf("Head header mismatch: have %d, want %d", head.Number, tt.expHeadHeader)
 	}
+
 	if head := newChain.CurrentFastBlock(); head.NumberU64() != tt.expHeadFastBlock {
 		t.Errorf("Head fast block mismatch: have %d, want %d", head.NumberU64(), tt.expHeadFastBlock)
 	}
+
 	if head := newChain.CurrentBlock(); head.NumberU64() != tt.expHeadBlock {
 		t.Errorf("Head block mismatch: have %d, want %d", head.NumberU64(), tt.expHeadBlock)
 	}
+
 	if frozen, err := db.(freezer).Ancients(); err != nil {
 		t.Errorf("Failed to retrieve ancient count: %v\n", err)
 	} else if int(frozen) != tt.expFrozen {

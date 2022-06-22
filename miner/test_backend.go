@@ -1,10 +1,9 @@
 package miner
 
 import (
+	"crypto/rand"
 	"errors"
 	"math/big"
-	"math/rand"
-	"time"
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
@@ -54,8 +53,6 @@ func init() {
 	})
 
 	newTxs = append(newTxs, tx2)
-
-	rand.Seed(time.Now().UnixNano())
 }
 
 // testWorkerBackend implements worker.Backend interfaces and wraps all information needed during the testing.
@@ -63,7 +60,6 @@ type testWorkerBackend struct {
 	DB         ethdb.Database
 	txPool     *core.TxPool
 	chain      *core.BlockChain
-	testTxFeed event.Feed
 	Genesis    *core.Genesis
 	uncleBlock *types.Block
 }
@@ -132,7 +128,7 @@ func (b *testWorkerBackend) StateAtBlock(block *types.Block, reexec uint64, base
 	return nil, errors.New("not supported")
 }
 
-func (b *testWorkerBackend) newRandomUncle() *types.Block {
+func (b *testWorkerBackend) newRandomUncle() (*types.Block, error) {
 	var parent *types.Block
 
 	cur := b.chain.CurrentBlock()
@@ -143,14 +139,20 @@ func (b *testWorkerBackend) newRandomUncle() *types.Block {
 		parent = b.chain.GetBlockByHash(b.chain.CurrentBlock().ParentHash())
 	}
 
+	var err error
+
 	blocks, _ := core.GenerateChain(b.chain.Config(), parent, b.chain.Engine(), b.DB, 1, func(i int, gen *core.BlockGen) {
 		var addr = make([]byte, common.AddressLength)
 
-		rand.Read(addr)
+		_, err = rand.Read(addr)
+		if err != nil {
+			return
+		}
+
 		gen.SetCoinbase(common.BytesToAddress(addr))
 	})
 
-	return blocks[0]
+	return blocks[0], err
 }
 
 func (b *testWorkerBackend) newRandomTx(creation bool) *types.Transaction {
@@ -170,7 +172,10 @@ func (b *testWorkerBackend) newRandomTx(creation bool) *types.Transaction {
 func NewTestWorker(t TensingObject, chainConfig *params.ChainConfig, engine consensus.Engine, db ethdb.Database, blocks int) (*worker, *testWorkerBackend, func()) {
 	backend := newTestWorkerBackend(t, chainConfig, engine, db, blocks)
 	backend.txPool.AddLocals(pendingTxs)
+
+	//nolint:staticcheck
 	w := newWorker(testConfig, chainConfig, engine, backend, new(event.TypeMux), nil, false)
+
 	w.setEtherbase(TestBankAddress)
 
 	return w, backend, w.close
