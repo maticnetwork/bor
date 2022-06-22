@@ -581,7 +581,10 @@ func (w *worker) mainLoop() {
 			if w.isRunning() && w.current != nil && len(w.current.uncles) < 2 {
 				start := time.Now()
 				if err := w.commitUncle(w.current, ev.Block.Header()); err == nil {
-					w.commit(context.Background(), w.current.copy(), nil, true, start)
+					commitErr := w.commit(context.Background(), w.current.copy(), nil, true, start)
+					if commitErr != nil {
+						log.Error("error while committing", commitErr)
+					}
 				}
 			}
 
@@ -712,6 +715,7 @@ func (w *worker) resultLoop() {
 			if w.chain.HasBlock(block.Hash(), block.NumberU64()) {
 				continue
 			}
+
 			getBlockStart := time.Now()
 			oldBlock := w.chain.GetBlockByNumber(block.NumberU64())
 			if oldBlock != nil {
@@ -722,6 +726,7 @@ func (w *worker) resultLoop() {
 					continue
 				}
 			}
+
 			getBlockTime := time.Since(getBlockStart)
 			var (
 				sealhash = w.engine.SealHash(block.Header())
@@ -1100,7 +1105,6 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 // into the given sealing block. The transaction selection and ordering strategy can
 // be customized with the plugin in the future.
 func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *environment) {
-
 	_, fillTransactionsSpan := w.tracer.Start(ctx, "fillTransactions")
 	defer fillTransactionsSpan.End()
 
@@ -1114,7 +1118,9 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 			localTxs[account] = txs
 		}
 	}
+
 	lenLocals, lenNewLocals, localEnvTCount, lenRemotes, lenNewRemotes, remoteEnvTCount := 0, 0, 0, 0, 0, 0
+
 	if len(localTxs) > 0 {
 		lenLocals = len(localTxs)
 		txs := types.NewTransactionsByPriceAndNonce(env.signer, localTxs, env.header.BaseFee)
@@ -1122,6 +1128,7 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		if w.commitTransactions(env, txs, interrupt) {
 			return
 		}
+
 		localEnvTCount = env.tcount
 	}
 	if len(remoteTxs) > 0 {
@@ -1131,8 +1138,10 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		if w.commitTransactions(env, txs, interrupt) {
 			return
 		}
+
 		remoteEnvTCount = env.tcount
 	}
+
 	fillTransactionsSpan.SetAttributes(
 		attribute.Int("len of localTxs", lenLocals),
 		attribute.Int("len of sorted localTxs", lenNewLocals),
@@ -1152,6 +1161,7 @@ func (w *worker) generateWork(ctx context.Context, params *generateParams) (*typ
 	defer work.discard()
 
 	w.fillTransactions(ctx, nil, work)
+
 	return w.engine.FinalizeAndAssemble(ctx, w.chain, work.header, work.state, work.txs, work.unclelist(), work.receipts)
 }
 
@@ -1178,19 +1188,27 @@ func (w *worker) commitWork(ctx context.Context, interrupt *int32, noempty bool,
 	}
 
 	commitWorkCtx, commitWorkSpan := w.tracer.Start(ctx, "commitWork")
+	defer commitWorkSpan.End()
+
 	commitWorkSpan.SetAttributes(
 		attribute.Int("number", int(work.header.Number.Uint64())),
 	)
-	defer commitWorkSpan.End()
 
 	// Create an empty block based on temporary copied state for
 	// sealing in advance without waiting block execution finished.
 	if !noempty && atomic.LoadUint32(&w.noempty) == 0 {
-		w.commit(commitWorkCtx, work.copy(), nil, false, start)
+		err = w.commit(commitWorkCtx, work.copy(), nil, false, start)
+		if err != nil {
+			return
+		}
 	}
 	// Fill pending transactions from the txpool
 	w.fillTransactions(commitWorkCtx, interrupt, work)
-	w.commit(commitWorkCtx, work.copy(), w.fullTaskHook, true, start)
+
+	err = w.commit(commitWorkCtx, work.copy(), w.fullTaskHook, true, start)
+	if err != nil {
+		return
+	}
 
 	// Swap out the old work with the new one, terminating any leftover
 	// prefetcher processes in the mean time and starting a new one.
@@ -1206,7 +1224,6 @@ func (w *worker) commitWork(ctx context.Context, interrupt *int32, noempty bool,
 // Note the assumption is held that the mutation is allowed to the passed env, do
 // the deep copy first.
 func (w *worker) commit(ctx context.Context, env *environment, interval func(), update bool, start time.Time) error {
-
 	if w.isRunning() {
 		commitCtx, commitSpan := w.tracer.Start(ctx, "commit")
 		defer commitSpan.End()
