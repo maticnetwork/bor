@@ -68,27 +68,27 @@ func TestPastChainInsert(t *testing.T) {
 	testInsert(t, hc, chainA, CanonStatTy, nil, mockForker)
 
 	// The current chain is: G->A1->A2...A64
-	// chainC: G->A1->A2...A44->C45->C46...C64
+	// chain B: G->A1->A2...A44->B45->B46...B64
 	chainB := makeHeaderChain(chainA[43], 20, ethash.NewFaker(), db, 10)
 
-	// Inserting 20 blocks from chainC on canonical chain
-	// expecting 2 write status with no error
-	testInsert(t, hc, chainB, SideStatTy, nil, mockForker)
-
 	// The current chain is: G->A1->A2...A64
-	// chain B: G->A1->A2...A54->B55->B56...B64
+	// chain C: G->A1->A2...A54->C55->C56...C64
 	chainC := makeHeaderChain(chainA[53], 10, ethash.NewFaker(), db, 10)
 
 	// Update the function to consider chainC with higher difficulty
 	getTd = func(hash common.Hash, number uint64) *big.Int {
 		td := big.NewInt(int64(number))
-		if hash == chainC[len(chainC)-1].Hash() {
+		if hash == chainB[len(chainB)-1].Hash() || hash == chainC[len(chainC)-1].Hash() {
 			td = big.NewInt(65)
 		}
 		return td
 	}
 	mockChainReader = newChainReaderFake(getTd)
 	mockForker = NewForkChoice(mockChainReader, nil, mockChainValidator)
+
+	// Inserting 20 blocks from chainC on canonical chain
+	// expecting 2 write status with no error
+	testInsert(t, hc, chainB, SideStatTy, nil, mockForker)
 
 	// Inserting 10 blocks from chainB on canonical chain
 	// expecting 1 write status with no error
@@ -133,6 +133,7 @@ func TestFutureChainInsert(t *testing.T) {
 	// expecting 1 write status with no error
 	testInsert(t, hc, chainA, CanonStatTy, nil, mockForker)
 
+	// The current chain is: G->A1->A2...A64
 	// chain B: G->A1->A2...A64->B65->B66...B84
 	chainB := makeHeaderChain(chainA[63], 20, ethash.NewFaker(), db, 10)
 
@@ -140,9 +141,67 @@ func TestFutureChainInsert(t *testing.T) {
 	// expecting 0 write status with no error
 	testInsert(t, hc, chainB, SideStatTy, nil, mockForker)
 
-	// chain C: G->A1->A2...A64->B65->B66...B74
+	// The current chain is: G->A1->A2...A64
+	// chain C: G->A1->A2...A64->C65->C66...C74
 	chainC := makeHeaderChain(chainA[63], 10, ethash.NewFaker(), db, 10)
 
+	// Inserting 10 headers on the canonical chain
+	// expecting 0 write status with no error
+	testInsert(t, hc, chainC, CanonStatTy, nil, mockForker)
+}
+
+func TestOverlappingChainInsert(t *testing.T) {
+	var (
+		db      = rawdb.NewMemoryDatabase()
+		genesis = (&Genesis{BaseFee: big.NewInt(params.InitialBaseFee)}).MustCommit(db)
+	)
+
+	hc, err := NewHeaderChain(db, params.AllEthashProtocolChanges, ethash.NewFaker(), func() bool { return false })
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create mocks for forker
+	getTd := func(hash common.Hash, number uint64) *big.Int {
+		return big.NewInt(int64(number))
+	}
+	validate := func(currentHeader *types.Header, chain []*types.Header) bool {
+		// Put all explicit conditions here
+		// If canonical chain is empty and we're importing a chain of 64 blocks
+		if currentHeader.Number.Uint64() == uint64(0) && len(chain) == 64 {
+			return true
+		}
+		// If length of chain is > some fixed value then don't accept it
+		if currentHeader.Number.Uint64() == uint64(64) && len(chain) <= 20 {
+			return true
+		}
+		return false
+	}
+	mockChainReader := newChainReaderFake(getTd)
+	mockChainValidator := newChainValidatorFake(validate)
+	mockForker := NewForkChoice(mockChainReader, nil, mockChainValidator)
+
+	// chain A: G->A1->A2...A64
+	chainA := makeHeaderChain(genesis.Header(), 64, ethash.NewFaker(), db, 10)
+
+	// Inserting 64 headers on an empty chain
+	// expecting 1 write status with no error
+	testInsert(t, hc, chainA, CanonStatTy, nil, mockForker)
+
+	// The current chain is: G->A1->A2...A64
+	// chain B: G->A1->A2...A54->B55->B56...B84
+	chainB := makeHeaderChain(chainA[53], 30, ethash.NewFaker(), db, 10)
+
+	// Inserting 20 blocks on canonical chain
+	// expecting 2 write status with no error
+	testInsert(t, hc, chainB, SideStatTy, nil, mockForker)
+
+	// The current chain is: G->A1->A2...A64
+	// chain C: G->A1->A2...A54->C55->C56...C74
+	chainC := makeHeaderChain(chainA[53], 20, ethash.NewFaker(), db, 10)
+
+	// Inserting 10 blocks on canonical chain
+	// expecting 1 write status with no error
 	testInsert(t, hc, chainC, CanonStatTy, nil, mockForker)
 }
 
