@@ -95,11 +95,6 @@ func (w *Service) IsValidChain(currentHeader *types.Header, chain []*types.Heade
 		return true
 	}
 
-	// Start iterating over the chain and apply validation for past and future
-	// chain, referring to chain behind and after current header respectively.
-	for i := 0; i < len(chain); i++ {
-	}
-
 	var (
 		pastChain   []*types.Header
 		futureChain []*types.Header
@@ -127,12 +122,7 @@ func (w *Service) IsValidChain(currentHeader *types.Header, chain []*types.Heade
 	// It will handle all cases where the incoming chain has atleast one checkpoint
 	for i := len(pastChain) - 1; i >= 0; i-- {
 		if _, ok := w.checkpointWhitelist[pastChain[i].Number.Uint64()]; ok {
-			if pastChain[i].Hash() != w.checkpointWhitelist[pastChain[i].Number.Uint64()] {
-				return false
-			} else {
-				// No need to check for other checkpoints (if any) as the latest checkpoint is valid
-				break
-			}
+			return pastChain[i].Hash() == w.checkpointWhitelist[pastChain[i].Number.Uint64()]
 		}
 	}
 
