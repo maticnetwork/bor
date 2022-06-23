@@ -1,7 +1,6 @@
 package core
 
 import (
-	"fmt"
 	"math/big"
 	"testing"
 
@@ -30,7 +29,7 @@ func newChainReaderFake(getTd func(hash common.Hash, number uint64) *big.Int) *c
 	return &chainReaderFake{getTd: getTd}
 }
 
-func TestCorrectPastChain(t *testing.T) {
+func TestPastChainInsert(t *testing.T) {
 	var (
 		db      = rawdb.NewMemoryDatabase()
 		genesis = (&Genesis{BaseFee: big.NewInt(params.InitialBaseFee)}).MustCommit(db)
@@ -43,23 +42,16 @@ func TestCorrectPastChain(t *testing.T) {
 
 	// Create mocks for forker
 	getTd := func(hash common.Hash, number uint64) *big.Int {
-		td := big.NewInt(0)
-		if number == 64 {
-			td = big.NewInt(64)
-		}
-		fmt.Println("Getting td", "hash", hash, "number", number, "td", td)
-		return td
+		return big.NewInt(int64(number))
 	}
 	validate := func(currentHeader *types.Header, chain []*types.Header) bool {
 		// Put all explicit conditions here
 		// If canonical chain is empty and we're importing a chain of 64 blocks
 		if currentHeader.Number.Uint64() == uint64(0) && len(chain) == 64 {
-			fmt.Println("1st condition to validate")
 			return true
 		}
 		// If canonical chain is of len 64 and we're importing a past chain from 54-64, then accept it
 		if currentHeader.Number.Uint64() == uint64(64) && chain[0].Number.Uint64() == 55 && len(chain) == 10 {
-			fmt.Println("2nd condition to validate")
 			return true
 		}
 		return false
@@ -70,39 +62,40 @@ func TestCorrectPastChain(t *testing.T) {
 
 	// chain A: G->A1->A2...A64
 	chainA := makeHeaderChain(genesis.Header(), 64, ethash.NewFaker(), db, 10)
-	fmt.Println("chainA: start", chainA[0].Number.Uint64(), "end", chainA[len(chainA)-1].Number.Uint64())
-	fmt.Println("chainA: end block hash", chainA[len(chainA)-1].Hash())
 
-	// Inserting 64 headers on an empty chain with a mock forker,
-	// expecting 1 canon-status, 0 sidestatus with no error
+	// Inserting 64 headers on an empty chain
+	// expecting 1 write status with no error
 	testInsert(t, hc, chainA, CanonStatTy, nil, mockForker)
 
-	// chain B: G->A1->A2...A54->B55->B56...B64
-	chainB := makeHeaderChain(chainA[53], 10, ethash.NewFaker(), db, 10)
-	fmt.Println("chainB: start", chainB[0].Number.Uint64(), "end", chainB[len(chainB)-1].Number.Uint64())
-	fmt.Println("chainB: end block hash", chainB[len(chainB)-1].Hash())
+	// The current chain is: G->A1->A2...A64
+	// chainC: G->A1->A2...A44->C45->C46...C64
+	chainB := makeHeaderChain(chainA[43], 20, ethash.NewFaker(), db, 10)
 
+	// Inserting 20 blocks from chainC on canonical chain
+	// expecting 2 write status with no error
+	testInsert(t, hc, chainB, SideStatTy, nil, mockForker)
+
+	// The current chain is: G->A1->A2...A64
+	// chain B: G->A1->A2...A54->B55->B56...B64
+	chainC := makeHeaderChain(chainA[53], 10, ethash.NewFaker(), db, 10)
+
+	// Update the function to consider chainC with higher difficulty
 	getTd = func(hash common.Hash, number uint64) *big.Int {
-		td := big.NewInt(0)
-		if number == 64 {
-			td = big.NewInt(64)
-		}
-		if hash == chainB[len(chainB)-1].Hash() {
-			fmt.Println("here...")
+		td := big.NewInt(int64(number))
+		if hash == chainC[len(chainC)-1].Hash() {
 			td = big.NewInt(65)
 		}
-		fmt.Println("Getting td", "hash", hash, "number", number, "td", td)
 		return td
 	}
 	mockChainReader = newChainReaderFake(getTd)
 	mockForker = NewForkChoice(mockChainReader, nil, mockChainValidator)
 
-	testInsert(t, hc, chainB, CanonStatTy, nil, mockForker)
-
-	fmt.Println("header block number", hc.CurrentHeader().Number.Uint64(), "header block hash", hc.CurrentHeader().Hash())
+	// Inserting 10 blocks from chainB on canonical chain
+	// expecting 1 write status with no error
+	testInsert(t, hc, chainC, CanonStatTy, nil, mockForker)
 }
 
-func TestCorrectFutureChain(t *testing.T) {
+func TestFutureChainInsert(t *testing.T) {
 	var (
 		db      = rawdb.NewMemoryDatabase()
 		genesis = (&Genesis{BaseFee: big.NewInt(params.InitialBaseFee)}).MustCommit(db)
@@ -115,21 +108,16 @@ func TestCorrectFutureChain(t *testing.T) {
 
 	// Create mocks for forker
 	getTd := func(hash common.Hash, number uint64) *big.Int {
-		td := big.NewInt(int64(number))
-		// fmt.Println("Getting td", "hash", hash, "number", number, "td", td)
-		return td
+		return big.NewInt(int64(number))
 	}
 	validate := func(currentHeader *types.Header, chain []*types.Header) bool {
 		// Put all explicit conditions here
 		// If canonical chain is empty and we're importing a chain of 64 blocks
 		if currentHeader.Number.Uint64() == uint64(0) && len(chain) == 64 {
-			fmt.Println("1st condition to validate")
 			return true
 		}
-		// If canonical chain is of len 64 and we're importing a past chain from 64-74, then accept it
-		// Here we mock the condition where future chains > some value should not be accepted
+		// If length of future chains > some value, they should not be accepted
 		if currentHeader.Number.Uint64() == uint64(64) && len(chain) <= 10 {
-			fmt.Println("2nd condition to validate")
 			return true
 		}
 		return false
@@ -140,82 +128,22 @@ func TestCorrectFutureChain(t *testing.T) {
 
 	// chain A: G->A1->A2...A64
 	chainA := makeHeaderChain(genesis.Header(), 64, ethash.NewFaker(), db, 10)
-	fmt.Println("chainA: start", chainA[0].Number.Uint64(), "end", chainA[len(chainA)-1].Number.Uint64(), "len", len(chainA))
-	fmt.Println("chainA: end block hash", chainA[len(chainA)-1].Hash())
 
-	// Inserting 64 headers on an empty chain with a mock forker,
-	// expecting 1 canon-status, 0 sidestatus with no error
-	testInsert(t, hc, chainA, CanonStatTy, nil, mockForker)
-
-	// chain B: G->A1->A2...A64->B65->B66...B74
-	chainB := makeHeaderChain(chainA[63], 10, ethash.NewFaker(), db, 10)
-	fmt.Println("chainB: start", chainB[0].Number.Uint64(), "end", chainB[len(chainB)-1].Number.Uint64(), "len", len(chainB))
-	fmt.Println("chainB: end block hash", chainB[len(chainB)-1].Hash())
-
-	testInsert(t, hc, chainB, CanonStatTy, nil, mockForker)
-
-	fmt.Println("header block number", hc.CurrentHeader().Number.Uint64(), "header block hash", hc.CurrentHeader().Hash())
-}
-
-func TestIncorrectPastChain(t *testing.T) {
-	// TODO: decide if we need a separate test or add this
-	// into the above test
-}
-
-func TestIncorrectFutureChain(t *testing.T) {
-	var (
-		db      = rawdb.NewMemoryDatabase()
-		genesis = (&Genesis{BaseFee: big.NewInt(params.InitialBaseFee)}).MustCommit(db)
-	)
-
-	hc, err := NewHeaderChain(db, params.AllEthashProtocolChanges, ethash.NewFaker(), func() bool { return false })
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Create mocks for forker
-	getTd := func(hash common.Hash, number uint64) *big.Int {
-		td := big.NewInt(int64(number))
-		// fmt.Println("Getting td", "hash", hash, "number", number, "td", td)
-		return td
-	}
-	validate := func(currentHeader *types.Header, chain []*types.Header) bool {
-		// Put all explicit conditions here
-		// If canonical chain is empty and we're importing a chain of 64 blocks
-		if currentHeader.Number.Uint64() == uint64(0) && len(chain) == 64 {
-			fmt.Println("1st condition to validate")
-			return true
-		}
-		// If canonical chain is of len 64 and we're importing a past chain from 64-74, then accept it
-		// Here we mock the condition where future chains > some value should not be accepted
-		if currentHeader.Number.Uint64() == uint64(64) && len(chain) <= 10 {
-			fmt.Println("2nd condition to validate")
-			return true
-		}
-		fmt.Println("returning false in validate")
-		return false
-	}
-	mockChainReader := newChainReaderFake(getTd)
-	mockChainValidator := newChainValidatorFake(validate)
-	mockForker := NewForkChoice(mockChainReader, nil, mockChainValidator)
-
-	// chain A: G->A1->A2...A64
-	chainA := makeHeaderChain(genesis.Header(), 64, ethash.NewFaker(), db, 10)
-	fmt.Println("chainA: start", chainA[0].Number.Uint64(), "end", chainA[len(chainA)-1].Number.Uint64(), "len", len(chainA))
-	fmt.Println("chainA: end block hash", chainA[len(chainA)-1].Hash())
-
-	// Inserting 64 headers on an empty chain with a mock forker,
-	// expecting 1 canon-status, 0 sidestatus with no error
+	// Inserting 64 headers on an empty chain
+	// expecting 1 write status with no error
 	testInsert(t, hc, chainA, CanonStatTy, nil, mockForker)
 
 	// chain B: G->A1->A2...A64->B65->B66...B84
 	chainB := makeHeaderChain(chainA[63], 20, ethash.NewFaker(), db, 10)
-	fmt.Println("chainB: start", chainB[0].Number.Uint64(), "end", chainB[len(chainB)-1].Number.Uint64(), "len", len(chainB))
-	fmt.Println("chainB: end block hash", chainB[len(chainB)-1].Hash())
 
+	// Inserting 20 headers on the canonical chain
+	// expecting 0 write status with no error
 	testInsert(t, hc, chainB, SideStatTy, nil, mockForker)
 
-	fmt.Println("header block number", hc.CurrentHeader().Number.Uint64(), "header block hash", hc.CurrentHeader().Hash())
+	// chain C: G->A1->A2...A64->B65->B66...B74
+	chainC := makeHeaderChain(chainA[63], 10, ethash.NewFaker(), db, 10)
+
+	testInsert(t, hc, chainC, CanonStatTy, nil, mockForker)
 }
 
 // Mock chain reader functions
