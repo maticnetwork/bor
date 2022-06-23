@@ -4,6 +4,7 @@ import (
 	"errors"
 	"math/big"
 	"testing"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -34,9 +35,9 @@ func TestWhitelistCheckpoint(t *testing.T) {
 	assert.Equal(t, s.length(), 10, "expected 10 items in whitelist")
 }
 
-// TestIsValidChain checks che IsValidChain function in isolation
+// TestIsValidPeer checks the IsValidPeer function in isolation
 // for different cases by providing a mock fetchHeadersByNumber function
-func TestIsValidChain(t *testing.T) {
+func TestIsValidPeer(t *testing.T) {
 	t.Parallel()
 
 	s := NewMockService(10)
@@ -103,4 +104,50 @@ func TestIsValidChain(t *testing.T) {
 	res, err = s.IsValidPeer(nil, fetchHeadersByNumber)
 	assert.Equal(t, err, ErrCheckpointMismatch, "expected checkpoint mismatch error")
 	assert.Equal(t, res, false, "expected chain to be invalid")
+}
+
+// TestIsValidChain checks the IsValidChain function in isolation
+// for different cases by providing a mock current header and chain
+func TestIsValidChain(t *testing.T) {
+	t.Parallel()
+
+	s := NewMockService(10)
+	chainA := createMockChain(1, 20)
+	// case1: no checkpoint whitelist, should consider the chain as valid
+	res := s.IsValidChain(nil, chainA)
+	assert.Equal(t, res, true, "expected chain to be valid")
+
+	tempChain := createMockChain(21, 22)
+
+	// add mock checkpoint entries
+	s.ProcessCheckpoint(tempChain[0].Number.Uint64(), tempChain[0].Hash())
+	s.ProcessCheckpoint(tempChain[1].Number.Uint64(), tempChain[1].Hash())
+
+	assert.Equal(t, s.length(), 2, "expected 2 items in whitelist")
+
+	// case2: We're behind the oldest whitelisted block entry, should consider
+	// the chain as valid as we're still far behind the latest blocks
+	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
+	assert.Equal(t, res, true, "expected chain to be valid")
+
+	// TODO
+	// case3: Past chain case
+	// case4: Future chain case
+	// case5: Both past and future chain case
+}
+
+// createMockChain returns a chain with dummy headers
+// starting from `start` to `end` (inclusive)
+func createMockChain(start, end uint64) []*types.Header {
+	var i uint64
+	var chain []*types.Header
+	for i = start; i <= end; i++ {
+		header := &types.Header{
+			Number: big.NewInt(int64(i)),
+			Time:   uint64(time.Now().UnixMicro()),
+		}
+		chain = append(chain, header)
+		time.Sleep(time.Microsecond) // just to be safe
+	}
+	return chain
 }
