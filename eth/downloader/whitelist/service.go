@@ -75,18 +75,23 @@ func (w *Service) IsValidPeer(remoteHeader *types.Header, fetchHeadersByNumber f
 // IsValidChain checks the validity of chain by comparing it
 // against the local checkpoint entries
 func (w *Service) IsValidChain(currentHeader *types.Header, chain []*types.Header) bool {
+	// Check if we have checkpoints to validate incoming chain in memory
+	if len(w.checkpointWhitelist) == 0 {
+		// We don't have any entries, no additional validation will be possible
+		return true
+	}
+
+	// Return if we've received empty chain
+	if len(chain) == 0 {
+		return false
+	}
+
 	var (
 		oldestCheckpointNumber uint64 = w.checkpointOrder[0]
 		first                  uint64 = chain[0].Number.Uint64()
 		last                   uint64 = chain[len(chain)-1].Number.Uint64()
 		current                uint64 = currentHeader.Number.Uint64()
 	)
-
-	// Check if we have checkpoints to validate incoming chain in memory
-	if len(w.checkpointWhitelist) == 0 {
-		// We don't have any entries, no additional validation will be possible
-		return true
-	}
 
 	// Check if we have whitelist entries in required range
 	if last < oldestCheckpointNumber {
