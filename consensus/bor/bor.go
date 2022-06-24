@@ -628,7 +628,7 @@ func (c *Bor) verifySeal(chain consensus.ChainHeaderReader, header *types.Header
 
 	// Ensure that the difficulty corresponds to the turn-ness of the signer
 	if !c.fakeDiff {
-		difficulty := snap.Difficulty(signer)
+		difficulty := Difficulty(snap.ValidatorSet, signer)
 		if header.Difficulty.Uint64() != difficulty {
 			return &WrongDifficultyError{number, difficulty, header.Difficulty.Uint64(), signer.Bytes()}
 		}
@@ -652,7 +652,7 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 	}
 
 	// Set the correct difficulty
-	header.Difficulty = new(big.Int).SetUint64(snap.Difficulty(c.signer))
+	header.Difficulty = new(big.Int).SetUint64(Difficulty(snap.ValidatorSet, c.signer))
 
 	// Ensure the extra data has all it's components
 	if len(header.Extra) < extraVanity {
@@ -939,7 +939,7 @@ func (c *Bor) CalcDifficulty(chain consensus.ChainHeaderReader, time uint64, par
 		return nil
 	}
 
-	return new(big.Int).SetUint64(snap.Difficulty(c.signer))
+	return new(big.Int).SetUint64(Difficulty(snap.ValidatorSet, c.signer))
 }
 
 // SealHash returns the hash of a block prior to it being sealed.

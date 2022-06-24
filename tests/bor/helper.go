@@ -98,12 +98,16 @@ func buildEthereumInstance(t *testing.T, db ethdb.Database) *initializeData {
 }
 
 func insertNewBlock(t *testing.T, chain *core.BlockChain, block *types.Block) {
+	t.Helper()
+
 	if _, err := chain.InsertChain([]*types.Block{block}); err != nil {
 		t.Fatalf("%s", err)
 	}
 }
 
-func buildNextBlock(t *testing.T, _bor consensus.Engine, chain *core.BlockChain, parentBlock *types.Block, signer []byte, borConfig *params.BorConfig, txs []*types.Transaction, currentValidators []*valset.Validator) *types.Block {
+type Option func(header *types.Header)
+
+func buildNextBlock(t *testing.T, _bor consensus.Engine, chain *core.BlockChain, parentBlock *types.Block, signer []byte, borConfig *params.BorConfig, txs []*types.Transaction, currentValidators []*valset.Validator, opts ...Option) *types.Block {
 	t.Helper()
 
 	header := &types.Header{
@@ -128,7 +132,13 @@ func buildNextBlock(t *testing.T, _bor consensus.Engine, chain *core.BlockChain,
 		header.Difficulty = new(big.Int).SetInt64(int64(len(currentValidators)))
 	}
 
+	dif := bor.Difficulty(valset.NewValidatorSet(currentValidators), common.BytesToAddress(signer))
+	fmt.Println("=======================SNAP-HELPER", dif, valset.NewValidatorSet(currentValidators).String(), common.BytesToAddress(signer).String())
+	//header.Difficulty.SetUint64(dif)
+	fmt.Println("HELPER", number, isSpanStart, isSprintEnd, len(currentValidators), header.Difficulty.Uint64(), dif)
+
 	if isSprintEnd {
+		fmt.Println("!!!!!!!!!!!!!!!!!!!!!")
 		sort.Sort(valset.ValidatorsByAddress(currentValidators))
 
 		validatorBytes := make([]byte, len(currentValidators)*validatorHeaderBytesLength)
@@ -148,6 +158,10 @@ func buildNextBlock(t *testing.T, _bor consensus.Engine, chain *core.BlockChain,
 			parentGasLimit := parentBlock.GasLimit() * params.ElasticityMultiplier
 			header.GasLimit = core.CalcGasLimit(parentGasLimit, parentGasLimit)
 		}
+	}
+
+	for _, opt := range opts {
+		opt(header)
 	}
 
 	state, err := chain.State()

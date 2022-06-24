@@ -5,6 +5,7 @@ package bor
 
 import (
 	"encoding/hex"
+	"fmt"
 	"io"
 	"math/big"
 	"testing"
@@ -215,7 +216,19 @@ func TestOutOfTurnSigning(t *testing.T) {
 	block := init.genesis.ToBlock(db)
 
 	res, _ := loadSpanFromFile(t)
-	currentValidators := []*valset.Validator{valset.NewValidator(addr, 10)}
+
+	// add the block producer
+	currentValidators := res.Result.ValidatorSet.Validators
+	fmt.Println("START=VALS", currentValidators)
+	/*
+		fmt.Println("START!!!", res.Result.ValidatorSet.Validators)
+		res.Result.ValidatorSet.Validators = append(res.Result.ValidatorSet.Validators, valset.NewValidator(addr2, 10))
+
+		currentValidators := []*valset.Validator{
+			valset.NewValidator(addr2, 100),
+			valset.NewValidator(addr, 10),
+		}
+	*/
 
 	for i := uint64(1); i < spanSize; i++ {
 		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators)
@@ -230,7 +243,13 @@ func TestOutOfTurnSigning(t *testing.T) {
 	addr = crypto.PubkeyToAddress(key.PublicKey)
 	expectedSuccessionNumber := 2
 
-	block = buildNextBlock(t, _bor, chain, block, signerKey, init.genesis.Config.Bor, nil, res.Result.ValidatorSet.Validators)
+	parentTime := block.Time()
+
+	setParentTime := func(header *types.Header) {
+		header.Time = parentTime
+	}
+
+	block = buildNextBlock(t, _bor, chain, block, signerKey, init.genesis.Config.Bor, nil, res.Result.ValidatorSet.Validators, setParentTime)
 	_, err := chain.InsertChain([]*types.Block{block})
 	assert.Equal(t,
 		*err.(*bor.BlockTooSoonError),
@@ -241,6 +260,7 @@ func TestOutOfTurnSigning(t *testing.T) {
 	header.Time += (bor.CalcProducerDelay(header.Number.Uint64(), expectedSuccessionNumber, init.genesis.Config.Bor) -
 		bor.CalcProducerDelay(header.Number.Uint64(), 0, init.genesis.Config.Bor))
 	sign(t, header, signerKey, init.genesis.Config.Bor)
+
 	block = types.NewBlockWithHeader(header)
 	_, err = chain.InsertChain([]*types.Block{block})
 	assert.Equal(t,
