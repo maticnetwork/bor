@@ -256,6 +256,15 @@ type TxPool struct {
 	beats   map[common.Address]time.Time // Last heartbeat from each known account
 	all     *txLookup                    // All transactions to allow lookups
 	priced  *txPricedList                // All transactions sorted by price
+	// BX: attribute for tracking transaction hashes that should remain private.
+	// Some memory management (e.g. cleaning up transactions when they exit the mempool)
+	// would be a good idea, but is not implemented here.
+	//
+	// This is currently only needed for ensuring that transaction hashes don't
+	// get broadcast during syncing transaction state with a new peer, so if your
+	// peer list does not ever change you can remove this attribute and not worry
+	// about managing it.
+	privateTxs []common.Hash
 
 	chainHeadCh     chan ChainHeadEvent
 	chainHeadSub    event.Subscription
@@ -298,11 +307,12 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 		reorgShutdownCh: make(chan struct{}),
 		initDoneCh:      make(chan struct{}),
 		gasPrice:        new(big.Int).SetUint64(config.PriceLimit),
+		privateTxs:      make([]common.Hash, 0),
 	}
 	pool.locals = newAccountSet(pool.signer)
 	for _, addr := range config.Locals {
 		log.Info("Setting new local account", "address", addr)
-		pool.locals.add(addr)
+		pool.locals.add(addr) // --tx_pool.locals
 	}
 	pool.priced = newTxPricedList(pool.all)
 	pool.reset(nil, chain.CurrentBlock().Header())
@@ -846,7 +856,7 @@ func (pool *TxPool) promoteTx(addr common.Address, hash common.Hash, tx *types.T
 // This method is used to add transactions from the RPC API and performs synchronous pool
 // reorganization and event propagation.
 func (pool *TxPool) AddLocals(txs []*types.Transaction) []error {
-	return pool.addTxs(txs, !pool.config.NoLocals, true)
+	return pool.addTxs(txs, !pool.config.NoLocals, true, false)
 }
 
 // AddLocal enqueues a single local transaction into the pool if it is valid. This is
@@ -856,18 +866,25 @@ func (pool *TxPool) AddLocal(tx *types.Transaction) error {
 	return errs[0]
 }
 
+// BX: Add transactions to mempool without broadcasting them to peers, then marks then
+// to be avoided for future syncs
+func (pool *TxPool) AddPrivateRemote(tx *types.Transaction) error {
+	errs := pool.addTxs([]*types.Transaction{tx}, false, true, true)
+	return errs[0]
+}
+
 // AddRemotes enqueues a batch of transactions into the pool if they are valid. If the
 // senders are not among the locally tracked ones, full pricing constraints will apply.
 //
 // This method is used to add transactions from the p2p network and does not wait for pool
 // reorganization and internal event propagation.
 func (pool *TxPool) AddRemotes(txs []*types.Transaction) []error {
-	return pool.addTxs(txs, false, false)
+	return pool.addTxs(txs, false, false, false)
 }
 
 // This is like AddRemotes, but waits for pool reorganization. Tests use this method.
 func (pool *TxPool) AddRemotesSync(txs []*types.Transaction) []error {
-	return pool.addTxs(txs, false, true)
+	return pool.addTxs(txs, false, true, false)
 }
 
 // This is like AddRemotes with a single transaction, but waits for pool reorganization. Tests use this method.
@@ -886,7 +903,7 @@ func (pool *TxPool) AddRemote(tx *types.Transaction) error {
 }
 
 // addTxs attempts to queue a batch of transactions if they are valid.
-func (pool *TxPool) addTxs(txs []*types.Transaction, local, sync bool) []error {
+func (pool *TxPool) addTxs(txs []*types.Transaction, local, sync bool, private bool) []error {
 	// Filter out known ones without obtaining the pool lock or recovering signatures
 	var (
 		errs = make([]error, len(txs))
@@ -928,12 +945,31 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local, sync bool) []error {
 		errs[nilSlot] = err
 		nilSlot++
 	}
+
+	if private {
+		for _, tx := range news {
+			txHash := tx.Hash()
+			dirtyAddrs.privateTxs = append(dirtyAddrs.privateTxs, txHash)
+			pool.privateTxs = append(pool.privateTxs, txHash)
+		}
+	}
+
 	// Reorg the pool internals if needed and return
 	done := pool.requestPromoteExecutables(dirtyAddrs)
 	if sync {
 		<-done
 	}
 	return errs
+}
+
+// BX: query if a transaction is marked as private
+func (pool *TxPool) IsPrivateTxHash(hash common.Hash) bool {
+	for _, privateHash := range pool.privateTxs {
+		if privateHash == hash {
+			return true
+		}
+	}
+	return false
 }
 
 // addTxsLocked attempts to queue a batch of transactions if they are valid.
@@ -1215,7 +1251,11 @@ func (pool *TxPool) runReorg(done chan struct{}, reset *txpoolResetRequest, dirt
 	if len(events) > 0 {
 		var txs []*types.Transaction
 		for _, set := range events {
-			txs = append(txs, set.Flatten()...)
+			for _, tx := range set.Flatten() {
+				if dirtyAccounts != nil && !dirtyAccounts.isPrivate(tx) {
+					txs = append(txs, tx)
+				}
+			}
 		}
 		pool.txFeed.Send(NewTxsEvent{txs})
 	}
@@ -1588,19 +1628,36 @@ type accountSet struct {
 	accounts map[common.Address]struct{}
 	signer   types.Signer
 	cache    *[]common.Address
+	// BX: add set of transaction hashes to keep private for next broadcast.
+	// This attribute can be removed in favor of TxPool.privateTxs; however,
+	// you can choose to use only this attribute to avoid needing to manage
+	// the list of private hashes, since this struct is short lived.
+	privateTxs []common.Hash
 }
 
 // newAccountSet creates a new address set with an associated signer for sender
 // derivations.
 func newAccountSet(signer types.Signer, addrs ...common.Address) *accountSet {
 	as := &accountSet{
-		accounts: make(map[common.Address]struct{}),
-		signer:   signer,
+		accounts:   make(map[common.Address]struct{}),
+		signer:     signer,
+		privateTxs: make([]common.Hash, 0),
 	}
 	for _, addr := range addrs {
 		as.add(addr)
 	}
 	return as
+}
+
+// BX: check is transaction is on the list of private hashes to not broadcast
+func (as *accountSet) isPrivate(tx *types.Transaction) bool {
+	txHash := tx.Hash()
+	for _, privateHash := range as.privateTxs {
+		if privateHash == txHash {
+			return true
+		}
+	}
+	return false
 }
 
 // contains checks if a given address is contained within the set.
@@ -1626,6 +1683,7 @@ func (as *accountSet) containsTx(tx *types.Transaction) bool {
 func (as *accountSet) add(addr common.Address) {
 	as.accounts[addr] = struct{}{}
 	as.cache = nil
+
 }
 
 // addTx adds the sender of tx into the set.
@@ -1654,6 +1712,7 @@ func (as *accountSet) merge(other *accountSet) {
 		as.accounts[addr] = struct{}{}
 	}
 	as.cache = nil
+	as.privateTxs = append(as.privateTxs, other.privateTxs...)
 }
 
 // txLookup is used internally by TxPool to track transactions while allowing
