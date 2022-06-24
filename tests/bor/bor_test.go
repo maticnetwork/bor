@@ -5,7 +5,6 @@ package bor
 
 import (
 	"encoding/hex"
-	"fmt"
 	"io"
 	"math/big"
 	"testing"
@@ -125,6 +124,9 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 	// Mock /bor/span/1
 	res, _ := loadSpanFromFile(t)
 
+	// add the block producer
+	res.Result.ValidatorSet.Validators = append(res.Result.ValidatorSet.Validators, valset.NewValidator(addr, 4500))
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -159,7 +161,6 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 
 	for i := uint64(1); i <= sprintSize; i++ {
 		if IsSpanEnd(i) {
-			fmt.Println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!-1")
 			currentValidators = res.Result.ValidatorSet.Validators
 		} else {
 			currentValidators = []*valset.Validator{valset.NewValidator(addr, 10)}
@@ -168,7 +169,7 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators)
 		insertNewBlock(t, chain, block)
 	}
-	fmt.Println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!-2")
+
 	lastStateID, _ := _bor.GenesisContractsClient.LastStateId(sprintSize)
 
 	// state 6 was not written
@@ -184,21 +185,17 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 	}
 	h.EXPECT().StateSyncEvents(fromID, to).Return(eventRecords, nil).AnyTimes()
 
-	fmt.Println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!-3.0")
-
 	for i := sprintSize + 1; i <= spanSize; i++ {
 		if IsSpanEnd(i) {
-			fmt.Println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!-3.1", i)
 			currentValidators = res.Result.ValidatorSet.Validators
 		} else {
-			fmt.Println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!-3.2", i)
 			currentValidators = []*valset.Validator{valset.NewValidator(addr, 10)}
 		}
 
 		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, res.Result.ValidatorSet.Validators)
 		insertNewBlock(t, chain, block)
 	}
-	fmt.Println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!-4")
+
 	lastStateID, _ = _bor.GenesisContractsClient.LastStateId(spanSize)
 	assert.Equal(t, uint64(6), lastStateID.Uint64())
 }

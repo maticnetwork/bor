@@ -2,6 +2,7 @@ package bor
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/ethereum/go-ethereum/consensus/bor/valset"
 
@@ -132,6 +133,7 @@ func (s *Snapshot) apply(headers []*types.Header) (*Snapshot, error) {
 
 		// check if signer is in validator set
 		if !snap.ValidatorSet.HasAddress(signer.Bytes()) {
+			fmt.Println("UnauthorizedSignerError-3", number-1, signer.String(), snap.ValidatorSet.Validators)
 			return nil, &UnauthorizedSignerError{number, signer.Bytes()}
 		}
 
@@ -177,6 +179,7 @@ func (s *Snapshot) GetSignerSuccessionNumber(signer common.Address) (int, error)
 	signerIndex, _ := s.ValidatorSet.GetByAddress(signer)
 
 	if signerIndex == -1 {
+		fmt.Println("UnauthorizedSignerError-4", signer.String(), s.ValidatorSet.String())
 		return -1, &UnauthorizedSignerError{s.Number, signer.Bytes()}
 	}
 

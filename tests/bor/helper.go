@@ -98,8 +98,6 @@ func buildEthereumInstance(t *testing.T, db ethdb.Database) *initializeData {
 }
 
 func insertNewBlock(t *testing.T, chain *core.BlockChain, block *types.Block) {
-	fmt.Println("xxxxx-1", block.Number(), block.Transactions())
-
 	if _, err := chain.InsertChain([]*types.Block{block}); err != nil {
 		t.Fatalf("%s", err)
 	}
@@ -151,26 +149,26 @@ func buildNextBlock(t *testing.T, _bor consensus.Engine, chain *core.BlockChain,
 			header.GasLimit = core.CalcGasLimit(parentGasLimit, parentGasLimit)
 		}
 	}
-	fmt.Println("hhh-1", header.GasUsed)
+
 	state, err := chain.State()
 	if err != nil {
 		t.Fatalf("%s", err)
 	}
-	fmt.Println("hhh-2", header.GasUsed)
+
 	b := &blockGen{header: header}
 	for _, tx := range txs {
 		b.addTxWithChain(chain, state, tx, addr)
 	}
-	fmt.Println("hhh-3", b.header)
+
 	// Finalize and seal the block
 	block, _ := _bor.FinalizeAndAssemble(chain, b.header, state, b.txs, nil, b.receipts)
-	fmt.Println("hhh-4", block.GasUsed())
+
 	// Write state changes to db
 	root, err := state.Commit(chain.Config().IsEIP158(b.header.Number))
 	if err != nil {
 		panic(fmt.Sprintf("state write error: %v", err))
 	}
-	fmt.Println("hhh-5", block.GasUsed())
+
 	if err := state.Database().TrieDB().Commit(root, false, nil); err != nil {
 		panic(fmt.Sprintf("trie write error: %v", err))
 	}
@@ -181,8 +179,6 @@ func buildNextBlock(t *testing.T, _bor consensus.Engine, chain *core.BlockChain,
 	if err != nil {
 		panic(fmt.Sprintf("seal error: %v", err))
 	}
-
-	fmt.Println("hhh-6", block.GasUsed())
 
 	return <-res
 }

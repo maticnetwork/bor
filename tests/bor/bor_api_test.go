@@ -5,7 +5,6 @@ package bor
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -93,7 +92,6 @@ func TestGetTransactionReceiptsByBlock(t *testing.T) {
 		}
 
 		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, txs, currentValidators)
-		fmt.Println("!!!!!!!!!!!!!-1", i, block.Transactions())
 		insertNewBlock(t, chain, block)
 	}
 
@@ -110,7 +108,6 @@ func TestGetTransactionReceiptsByBlock(t *testing.T) {
 
 	for i := sprintSize + 1; i <= spanSize; i++ {
 		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators)
-		fmt.Println("!!!!!!!!!!!!!-2", i, block.Transactions())
 		insertNewBlock(t, chain, block)
 	}
 
@@ -120,12 +117,13 @@ func TestGetTransactionReceiptsByBlock(t *testing.T) {
 
 		ans, err := ethAPI.GetTransactionReceiptsByBlock(context.Background(), rpcNumber)
 		if err != nil {
-			t.Fatal(err)
+			t.Fatal("on GetTransactionReceiptsByBlock", err)
 		}
 
-		fmt.Printf("\n ANS ::: %v", ans)
+		t.Logf("\n ANS ::: %v", ans)
 
 		blockMap, err := ethAPI.GetBlockByNumber(context.Background(), rpc.BlockNumber(n), true)
-		fmt.Println(blockMap["transactions"], err)
+
+		t.Log(blockMap["transactions"], err)
 	}
 }

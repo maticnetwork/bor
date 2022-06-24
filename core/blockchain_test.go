@@ -288,8 +288,6 @@ func testExtendCanonical(t *testing.T, full bool) {
 	testFork(t, processor, length, 2, full, better)
 	testFork(t, processor, length, 5, full, better)
 	testFork(t, processor, length, 10, full, better)
-
-	testFork(t, processor, length+1, 10, full, better)
 }
 
 // Tests that given a starting canonical chain of a given size, it can be extended

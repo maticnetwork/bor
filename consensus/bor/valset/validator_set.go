@@ -661,7 +661,7 @@ func (vals *ValidatorSet) StringIndented(indent string) string {
 		return "nil-ValidatorSet"
 	}
 
-	var valStrings []string
+	valStrings := make([]string, 0, len(vals.Validators))
 
 	vals.Iterate(func(index int, val *Validator) bool {
 		valStrings = append(valStrings, val.String())

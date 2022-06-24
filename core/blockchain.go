@@ -1458,17 +1458,14 @@ func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 // is imported, but then new canon-head is added before the actual sidechain
 // completes, then the historic state could be pruned again
 func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool) (int, error) {
-	fmt.Println("xxxxxxxxxxxx", chain[0].Number().Uint64(), chain[0].Transactions())
-	fmt.Println("yyy-1")
-
 	// If the chain is terminating, don't even bother starting up.
 	if bc.insertStopped() {
 		return 0, nil
 	}
-	fmt.Println("yyy-2")
+
 	// Start a parallel signature recovery (signer will fluke on fork transition, minimal perf loss)
 	senderCacher.recoverFromBlocks(types.MakeSigner(bc.chainConfig, chain[0].Number()), chain)
-	fmt.Println("yyy-3")
+
 	var (
 		stats     = insertStats{startTime: mclock.Now()}
 		lastCanon *types.Block
@@ -1482,19 +1479,18 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 	// Start the parallel header verifier
 	headers := make([]*types.Header, len(chain))
 	seals := make([]bool, len(chain))
-	fmt.Println("yyy-3")
+
 	for i, block := range chain {
 		headers[i] = block.Header()
 		seals[i] = verifySeals
 	}
-	fmt.Println("yyy-4")
 	abort, results := bc.engine.VerifyHeaders(bc, headers, seals)
 	defer close(abort)
-	fmt.Println("yyy-5")
+
 	// Peek the error for the first block to decide the directing import logic
 	it := newInsertIterator(chain, results, bc.validator)
 	block, err := it.next()
-	fmt.Println("yyy-6")
+
 	// Left-trim all the known blocks that don't need to build snapshot
 	if bc.skipBlock(err, it) {
 		// First block (and state) is known
@@ -1545,7 +1541,6 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 		}
 		// Falls through to the block import
 	}
-	fmt.Println("yyy-7")
 	switch {
 	// First block is pruned
 	case errors.Is(err, consensus.ErrPrunedAncestor):
@@ -1582,7 +1577,6 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 		bc.reportBlock(block, nil, err)
 		return it.index, err
 	}
-	fmt.Println("yyy-8")
 	// No validation errors for the first block (or chain prefix skipped)
 	var activeState *state.StateDB
 	defer func() {
@@ -1610,20 +1604,18 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 		})
 		canonAccum = canonAccum[:0]
 	}
-	fmt.Println("yyy-9")
+
 	for ; block != nil && err == nil || errors.Is(err, ErrKnownBlock); block, err = it.next() {
 		// If the chain is terminating, stop processing blocks
 		if bc.insertStopped() {
 			log.Debug("Abort during block processing")
 			break
 		}
-		fmt.Println("yyy-9.1")
 		// If the header is a banned one, straight out abort
 		if BadHashes[block.Hash()] {
 			bc.reportBlock(block, nil, ErrBannedHash)
 			return it.index, ErrBannedHash
 		}
-		fmt.Println("yyy-9.2")
 		// If the block is known (in the middle of the chain), it's a special case for
 		// Clique blocks where they can share state among each other, so importing an
 		// older block might complete the state of the subsequent one. In this case,
@@ -1663,23 +1655,22 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 			lastCanon = block
 			continue
 		}
-		fmt.Println("yyy-9.3")
+
 		// Retrieve the parent block and it's state to execute on top
 		start := time.Now()
 		parent := it.previous()
 		if parent == nil {
 			parent = bc.GetHeader(block.ParentHash(), block.NumberU64()-1)
 		}
-		fmt.Println("yyy-9.4")
 		statedb, err := state.New(parent.Root, bc.stateCache, bc.snaps)
 		if err != nil {
 			return it.index, err
 		}
-		fmt.Println("yyy-9.5")
+
 		// Enable prefetching to pull in trie node paths while processing transactions
 		statedb.StartPrefetcher("chain")
 		activeState = statedb
-		fmt.Println("yyy-9.6")
+
 		// If we have a followup block, run that against the current state to pre-cache
 		// transactions and probabilistically some of the account/storage trie nodes.
 		var followupInterrupt uint32
@@ -1697,7 +1688,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 				}(time.Now(), followup, throwaway, &followupInterrupt)
 			}
 		}
-		fmt.Println("yyy-9.7")
+
 		// Process block using the parent state as reference point
 		substart := time.Now()
 		receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig)
@@ -1706,13 +1697,12 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 			atomic.StoreUint32(&followupInterrupt, 1)
 			return it.index, err
 		}
-		fmt.Println("yyy-9.8")
 		// BOR state sync feed related changes
 		for _, data := range bc.stateSyncData {
 			bc.stateSyncFeed.Send(StateSyncEvent{Data: data})
 		}
 		// BOR
-		fmt.Println("yyy-9.9")
+
 		// Update the metrics touched during block processing
 		accountReadTimer.Update(statedb.AccountReads)                 // Account reads are complete, we can mark them
 		storageReadTimer.Update(statedb.StorageReads)                 // Storage reads are complete, we can mark them
@@ -1723,7 +1713,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 		triehash := statedb.AccountHashes + statedb.StorageHashes     // Save to not double count in validation
 		trieproc := statedb.SnapshotAccountReads + statedb.AccountReads + statedb.AccountUpdates
 		trieproc += statedb.SnapshotStorageReads + statedb.StorageReads + statedb.StorageUpdates
-		fmt.Println("yyy-9.10", len(receipts), usedGas)
+
 		blockExecutionTimer.Update(time.Since(substart) - trieproc - triehash)
 
 		// Validate the state using the default validator
@@ -1734,12 +1724,12 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 			return it.index, err
 		}
 		proctime := time.Since(start)
-		fmt.Println("yyy-9.11")
+
 		// Update the metrics touched during block validation
 		accountHashTimer.Update(statedb.AccountHashes) // Account hashes are complete, we can mark them
 		storageHashTimer.Update(statedb.StorageHashes) // Storage hashes are complete, we can mark them
 		blockValidationTimer.Update(time.Since(substart) - (statedb.AccountHashes + statedb.StorageHashes - triehash))
-		fmt.Println("yyy-9.12")
+
 		// Write the block to the chain and get the status.
 		substart = time.Now()
 		var status WriteStatus
@@ -1749,7 +1739,6 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 		} else {
 			status, err = bc.writeBlockAndSetHead(block, receipts, logs, statedb, false)
 		}
-		fmt.Println("yyy-9.13")
 		atomic.StoreUint32(&followupInterrupt, 1)
 		if err != nil {
 			return it.index, err
@@ -1761,14 +1750,14 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 
 		blockWriteTimer.Update(time.Since(substart) - statedb.AccountCommits - statedb.StorageCommits - statedb.SnapshotCommits)
 		blockInsertTimer.UpdateSince(start)
-		fmt.Println("yyy-9.14")
+
 		// Report the import stats before returning the various results
 		stats.processed++
 		stats.usedGas += usedGas
 
 		dirty, _ := bc.stateCache.TrieDB().Size()
 		stats.report(chain, it.index, dirty, setHead)
-		fmt.Println("yyy-9.15")
+
 		if !setHead {
 			return it.index, nil // Direct block insertion of a single block
 		}
@@ -1780,7 +1769,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 			emitAccum()
 		}
 		// BOR
-		fmt.Println("yyy-9.16")
+
 		switch status {
 		case CanonStatTy:
 			log.Debug("Inserted new block", "number", block.Number(), "hash", block.Hash(),
@@ -1807,13 +1796,12 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 				"txs", len(block.Transactions()), "gas", block.GasUsed(), "uncles", len(block.Uncles()),
 				"root", block.Root())
 		}
-		fmt.Println("yyy-9.17")
 	}
-	fmt.Println("yyy-10")
+
 	// BOR
 	emitAccum()
 	// BOR
-	fmt.Println("yyy-11")
+
 	// Any blocks remaining here? The only ones we care about are the future ones
 	if block != nil && errors.Is(err, consensus.ErrFutureBlock) {
 		if err := bc.addFutureBlock(block); err != nil {
@@ -1828,10 +1816,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 			stats.queued++
 		}
 	}
-	fmt.Println("yyy-12")
 	stats.ignored += it.remaining()
-
-	fmt.Println("yyy-")
 
 	return it.index, err
 }

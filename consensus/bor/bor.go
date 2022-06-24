@@ -606,7 +606,7 @@ func (c *Bor) verifySeal(chain consensus.ChainHeaderReader, header *types.Header
 
 	if !snap.ValidatorSet.HasAddress(signer.Bytes()) {
 		// Check the UnauthorizedSignerError.Error() msg to see why we pass number-1
-		fmt.Println("snap-1", number-1, signer.Bytes(), snap.ValidatorSet.Validators)
+		fmt.Println("UnauthorizedSignerError-2", number-1, signer.String(), snap.ValidatorSet.Validators)
 		return &UnauthorizedSignerError{number - 1, signer.Bytes()}
 	}
 
@@ -818,8 +818,6 @@ func (c *Bor) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *typ
 	// Assemble block
 	block := types.NewBlock(header, txs, nil, receipts, new(trie.Trie))
 
-	fmt.Println("??????????????????????", len(txs), block.Transactions())
-
 	// set state sync
 	bc := chain.(core.BorStateSyncer)
 	bc.SetStateSync(stateSyncData)
@@ -862,15 +860,10 @@ func (c *Bor) Seal(chain consensus.ChainHeaderReader, block *types.Block, result
 		return err
 	}
 
-	fmt.Println("SNAP", snap.ValidatorSet.Validators)
-
 	// Bail out if we're unauthorized to sign a block
 	if !snap.ValidatorSet.HasAddress(signer.Bytes()) {
 		// Check the UnauthorizedSignerError.Error() msg to see why we pass number-1
-		fmt.Println("snap-2", number-1, signer.Hex(), snap.ValidatorSet.Validators)
 		return &UnauthorizedSignerError{number - 1, signer.Bytes()}
-	} else {
-		fmt.Println("snap-2.1", number-1, signer.Hex(), snap.ValidatorSet.Validators)
 	}
 
 	successionNumber, err := snap.GetSignerSuccessionNumber(signer)
