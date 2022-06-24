@@ -88,37 +88,20 @@ func (w *Service) IsValidChain(currentHeader *types.Header, chain []*types.Heade
 
 	var (
 		oldestCheckpointNumber uint64 = w.checkpointOrder[0]
-		first                  uint64 = chain[0].Number.Uint64()
-		last                   uint64 = chain[len(chain)-1].Number.Uint64()
 		current                uint64 = currentHeader.Number.Uint64()
 	)
 
 	// Check if we have whitelist entries in required range
-	if last < oldestCheckpointNumber {
+	if chain[len(chain)-1].Number.Uint64() < oldestCheckpointNumber {
 		// We have future whitelisted entries, so no additional validation will be possible
 		// This case will occur when bor is in middle of sync, but heimdall is ahead/fully synced.
 		return true
 	}
 
-	var (
-		pastChain   []*types.Header
-		futureChain []*types.Header
-	)
-	if current >= first {
-		if len(chain) == 1 {
-			pastChain = chain
-		} else {
-			pastChain = chain[:current-first]
-		}
-	}
-	if current < last {
-		if len(chain) == 1 {
-			futureChain = chain
-		} else {
-			futureChain = chain[current-first+1:]
-		}
-	}
+	// Split the chain into past and future chain
+	pastChain, futureChain := splitChain(current, chain)
 
+	// Don't accept future chain of unacceptable length
 	if len(futureChain) > int(w.checkpointInterval) {
 		return false
 	}
@@ -134,27 +117,28 @@ func (w *Service) IsValidChain(currentHeader *types.Header, chain []*types.Heade
 	return true
 }
 
-func (w *Service) GetCheckpoints(current, sidechainHeader *types.Header, sidechainCheckpoints []*types.Header) (map[uint64]*types.Header, error) {
-	// todo: carefully check every possible case :)
-	return map[uint64]*types.Header{}, nil
-}
-
-func (w *Service) GetCheckpointsBetween(from, to uint64) []uint64 {
-	if from > to {
-		return nil
-	}
-
-	capacity := (to-from)/w.checkpointInterval + 1
-	res := make([]uint64, 0, capacity)
-
-	for n := from; n <= to; n++ {
-		//todo: check if it's correct
-		if n%w.checkpointInterval == 0 {
-			res = append(res, n)
+func splitChain(current uint64, chain []*types.Header) ([]*types.Header, []*types.Header) {
+	var (
+		pastChain   []*types.Header
+		futureChain []*types.Header
+		first       uint64 = chain[0].Number.Uint64()
+		last        uint64 = chain[len(chain)-1].Number.Uint64()
+	)
+	if current >= first {
+		if len(chain) == 1 {
+			pastChain = chain
+		} else {
+			pastChain = chain[:current-first+1]
 		}
 	}
-
-	return res
+	if current < last {
+		if len(chain) == 1 {
+			futureChain = chain
+		} else {
+			futureChain = chain[current-first+1:]
+		}
+	}
+	return pastChain, futureChain
 }
 
 func (w *Service) ProcessCheckpoint(endBlockNum uint64, endBlockHash common.Hash) {
