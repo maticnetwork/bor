@@ -197,10 +197,9 @@ func createMockChain(start, end uint64) []*types.Header {
 	for i = start; i <= end; i++ {
 		header := &types.Header{
 			Number: big.NewInt(int64(i)),
-			Time:   uint64(time.Now().UnixMicro()),
+			Time:   uint64(time.Now().UnixMicro()) + i,
 		}
 		chain = append(chain, header)
-		time.Sleep(time.Microsecond) // just to be safe
 	}
 	return chain
 }
