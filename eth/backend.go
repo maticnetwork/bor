@@ -611,7 +611,7 @@ func (s *Ethereum) startCheckpointWhitelistService() {
 	}
 
 	// first run the checkpoint whitelist
-	err := s.handleWhitelistCheckpoint()
+	err := s.handleWhitelistCheckpoint(true)
 	if err != nil {
 		if errors.Is(err, ErrBorConsensusWithoutHeimdall) || errors.Is(err, ErrNotBorConsensus) {
 			return
@@ -626,7 +626,7 @@ func (s *Ethereum) startCheckpointWhitelistService() {
 	for {
 		select {
 		case <-ticker.C:
-			err := s.handleWhitelistCheckpoint()
+			err := s.handleWhitelistCheckpoint(false)
 			if err != nil {
 				log.Warn("unable to whitelist checkpoint", "err", err)
 			}
@@ -642,7 +642,7 @@ var (
 )
 
 // handleWhitelistCheckpoint handles the checkpoint whitelist mechanism.
-func (s *Ethereum) handleWhitelistCheckpoint() error {
+func (s *Ethereum) handleWhitelistCheckpoint(first bool) error {
 	ethHandler := (*ethHandler)(s.handler)
 
 	bor, ok := ethHandler.chain.Engine().(*bor.Bor)
@@ -654,13 +654,18 @@ func (s *Ethereum) handleWhitelistCheckpoint() error {
 		return ErrBorConsensusWithoutHeimdall
 	}
 
-	endBlockNum, endBlockHash, err := ethHandler.fetchWhitelistCheckpoint(bor)
-	if err != nil {
+	blockNums, blockHashes, err := ethHandler.fetchWhitelistCheckpoints(bor, first)
+	// If the array is empty, we're bound to receive an error. Non-nill error and non-empty array
+	// means that array has partial elements and it failed for some block. We'll add those partial
+	// elements anyway.
+	if len(blockNums) == 0 {
 		return err
 	}
 
 	// Update the checkpoint whitelist map.
-	ethHandler.downloader.ProcessCheckpoint(endBlockNum, endBlockHash)
+	for i := 0; i < len(blockNums); i++ {
+		ethHandler.downloader.ProcessCheckpoint(blockNums[i], blockHashes[i])
+	}
 
 	return nil
 }

@@ -45,7 +45,7 @@ func TestInsertingSpanSizeBlocks(t *testing.T) {
 	_, span := loadSpanFromFile(t)
 
 	h.EXPECT().Close().AnyTimes()
-	h.EXPECT().FetchLatestCheckpoint().Return(&bor.Checkpoint{
+	h.EXPECT().FetchCheckpoint(int64(-1)).Return(&bor.Checkpoint{
 		Proposer:   span.SelectedProducers[0].Address,
 		StartBlock: big.NewInt(0),
 		EndBlock:   big.NewInt(int64(spanSize)),

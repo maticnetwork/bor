@@ -40,7 +40,8 @@ type IHeimdallClient interface {
 	Fetch(path string, query string) (*ResponseWithHeight, error)
 	FetchWithRetry(path string, query string) (*ResponseWithHeight, error)
 	FetchStateSyncEvents(fromID uint64, to int64) ([]*EventRecordWithTime, error)
-	FetchLatestCheckpoint() (*Checkpoint, error)
+	FetchCheckpoint(number int64) (*Checkpoint, error)
+	FetchCheckpointCount() (uint64, error)
 	Close()
 }
 
@@ -90,11 +91,16 @@ func (h *HeimdallClient) FetchStateSyncEvents(fromID uint64, to int64) ([]*Event
 	return eventRecords, nil
 }
 
-// FetchLatestCheckpoint fetches the latest bor submitted checkpoint from heimdall
-func (h *HeimdallClient) FetchLatestCheckpoint() (*Checkpoint, error) {
+// FetchCheckpoint fetches the checkpoint from heimdall
+func (h *HeimdallClient) FetchCheckpoint(number int64) (*Checkpoint, error) {
 	checkpoint := &Checkpoint{}
 
-	response, err := h.Fetch("/checkpoints/latest", "")
+	url := fmt.Sprintf("/checkpoints/%d", number)
+	if number == -1 {
+		url = "/checkpoints/latest"
+	}
+
+	response, err := h.Fetch(url, "")
 	if err != nil {
 		return nil, err
 	}
@@ -103,6 +109,24 @@ func (h *HeimdallClient) FetchLatestCheckpoint() (*Checkpoint, error) {
 	}
 
 	return checkpoint, nil
+}
+
+// FetchCheckpoint fetches the checkpoint count from heimdall
+func (h *HeimdallClient) FetchCheckpointCount() (uint64, error) {
+	type CheckpointCount struct {
+		Result uint64 `json:"result"`
+	}
+	checkpointCount := &CheckpointCount{}
+
+	response, err := h.Fetch("/checkpoints/count", "")
+	if err != nil {
+		return 0, err
+	}
+	if err = json.Unmarshal(response.Result, checkpointCount); err != nil {
+		return 0, err
+	}
+
+	return checkpointCount.Result, nil
 }
 
 // Fetch fetches response from heimdall

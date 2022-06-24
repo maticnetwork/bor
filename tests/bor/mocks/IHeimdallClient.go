@@ -61,19 +61,34 @@ func (mr *MockIHeimdallClientMockRecorder) Fetch(arg0, arg1 interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Fetch", reflect.TypeOf((*MockIHeimdallClient)(nil).Fetch), arg0, arg1)
 }
 
-// FetchLatestCheckpoint mocks base method.
-func (m *MockIHeimdallClient) FetchLatestCheckpoint() (*bor.Checkpoint, error) {
+// FetchCheckpoint mocks base method.
+func (m *MockIHeimdallClient) FetchCheckpoint(arg0 int64) (*bor.Checkpoint, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FetchLatestCheckpoint")
+	ret := m.ctrl.Call(m, "FetchCheckpoint", arg0)
 	ret0, _ := ret[0].(*bor.Checkpoint)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// FetchLatestCheckpoint indicates an expected call of FetchLatestCheckpoint.
-func (mr *MockIHeimdallClientMockRecorder) FetchLatestCheckpoint() *gomock.Call {
+// FetchCheckpoint indicates an expected call of FetchCheckpoint.
+func (mr *MockIHeimdallClientMockRecorder) FetchCheckpoint(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchLatestCheckpoint", reflect.TypeOf((*MockIHeimdallClient)(nil).FetchLatestCheckpoint))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchCheckpoint", reflect.TypeOf((*MockIHeimdallClient)(nil).FetchCheckpoint), arg0)
+}
+
+// FetchCheckpointCount mocks base method.
+func (m *MockIHeimdallClient) FetchCheckpointCount() (uint64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FetchCheckpointCount")
+	ret0, _ := ret[0].(uint64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FetchCheckpointCount indicates an expected call of FetchCheckpointCount.
+func (mr *MockIHeimdallClientMockRecorder) FetchCheckpointCount() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchCheckpointCount", reflect.TypeOf((*MockIHeimdallClient)(nil).FetchCheckpointCount))
 }
 
 // FetchStateSyncEvents mocks base method.
