@@ -77,10 +77,10 @@ func (mr *MockIHeimdallClientMockRecorder) FetchCheckpoint(arg0 interface{}) *go
 }
 
 // FetchCheckpointCount mocks base method.
-func (m *MockIHeimdallClient) FetchCheckpointCount() (uint64, error) {
+func (m *MockIHeimdallClient) FetchCheckpointCount() (int64, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FetchCheckpointCount")
-	ret0, _ := ret[0].(uint64)
+	ret0, _ := ret[0].(int64)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

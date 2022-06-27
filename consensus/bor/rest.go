@@ -41,7 +41,7 @@ type IHeimdallClient interface {
 	FetchWithRetry(path string, query string) (*ResponseWithHeight, error)
 	FetchStateSyncEvents(fromID uint64, to int64) ([]*EventRecordWithTime, error)
 	FetchCheckpoint(number int64) (*Checkpoint, error)
-	FetchCheckpointCount() (uint64, error)
+	FetchCheckpointCount() (int64, error)
 	Close()
 }
 
@@ -112,9 +112,9 @@ func (h *HeimdallClient) FetchCheckpoint(number int64) (*Checkpoint, error) {
 }
 
 // FetchCheckpoint fetches the checkpoint count from heimdall
-func (h *HeimdallClient) FetchCheckpointCount() (uint64, error) {
+func (h *HeimdallClient) FetchCheckpointCount() (int64, error) {
 	type CheckpointCount struct {
-		Result uint64 `json:"result"`
+		Result int64 `json:"result"`
 	}
 	checkpointCount := &CheckpointCount{}
 
