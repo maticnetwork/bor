@@ -943,11 +943,18 @@ func (bc *BlockChain) InsertReceiptChain(blockChain types.Blocks, receiptChain [
 
 		// Rewind may have occurred, skip in that case.
 		if bc.CurrentHeader().Number.Cmp(head.Number()) >= 0 {
-			reorg, err := bc.forker.ReorgNeeded(bc.CurrentFastBlock().Header(), head.Header(), headers)
+			reorg, err := bc.forker.ReorgNeeded(bc.CurrentFastBlock().Header(), head.Header())
 			if err != nil {
 				log.Warn("Reorg failed", "err", err)
 				return false
 			} else if !reorg {
+				return false
+			}
+			isValid, err := bc.forker.ValidateReorg(bc.CurrentFastBlock().Header(), headers)
+			if err != nil {
+				log.Warn("Reorg failed", "err", err)
+				return false
+			} else if !isValid {
 				return false
 			}
 			rawdb.WriteHeadFastBlockHash(bc.db, head.Hash())
@@ -1348,8 +1355,7 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 		return NonStatTy, err
 	}
 	currentBlock := bc.CurrentBlock()
-	headers := []*types.Header{block.Header()}
-	reorg, err := bc.forker.ReorgNeeded(currentBlock.Header(), block.Header(), headers)
+	reorg, err := bc.forker.ReorgNeeded(currentBlock.Header(), block.Header())
 	if err != nil {
 		return NonStatTy, err
 	}
@@ -1501,6 +1507,17 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 	it := newInsertIterator(chain, results, bc.validator)
 	block, err := it.next()
 
+	// Check the validity of incoming chain
+	isValid, err1 := bc.forker.ValidateReorg(bc.CurrentBlock().Header(), headers)
+	if err1 != nil {
+		return it.index, err1
+	}
+	if !isValid {
+		// The chain to be imported is invalid as the blocks doesn't match with
+		// the whitelisted checkpoints.
+		return it.index, nil
+	}
+
 	// Left-trim all the known blocks that don't need to build snapshot
 	if bc.skipBlock(err, it) {
 		// First block (and state) is known
@@ -1513,8 +1530,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 			current = bc.CurrentBlock()
 		)
 		for block != nil && bc.skipBlock(err, it) {
-			headers := []*types.Header{block.Header()}
-			reorg, err = bc.forker.ReorgNeeded(current.Header(), block.Header(), headers)
+			reorg, err = bc.forker.ReorgNeeded(current.Header(), block.Header())
 			if err != nil {
 				return it.index, err
 			}
@@ -1904,11 +1920,15 @@ func (bc *BlockChain) insertSideChain(block *types.Block, it *insertIterator) (i
 	//
 	// If the externTd was larger than our local TD, we now need to reimport the previous
 	// blocks to regenerate the required state
-	reorg, err := bc.forker.ReorgNeeded(current.Header(), lastBlock.Header(), headers)
+	reorg, err := bc.forker.ReorgNeeded(current.Header(), lastBlock.Header())
 	if err != nil {
 		return it.index, err
 	}
-	if !reorg {
+	isValid, err := bc.forker.ValidateReorg(current.Header(), headers)
+	if err != nil {
+		return it.index, err
+	}
+	if !reorg || !isValid {
 		localTd := bc.GetTd(current.Hash(), current.NumberU64())
 		log.Info("Sidechain written to disk", "start", it.first().NumberU64(), "end", it.previous().Number, "sidetd", externTd, "localtd", localTd)
 		return it.index, err
