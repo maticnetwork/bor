@@ -17,6 +17,10 @@ var (
 	// the checkpoint count from local heimdall.
 	errCheckpointCount = errors.New("failed to fetch checkpoint count")
 
+	// errNoCheckpoint is returned when there is not checkpoint proposed
+	// by heimdall yet or heimdall is not in sync
+	errNoCheckpoint = errors.New("no checkpoint proposed")
+
 	// errCheckpoint is returned when we are unable to fetch the
 	// latest checkpoint from the local heimdall.
 	errCheckpoint = errors.New("failed to fetch latest checkpoint")
@@ -48,9 +52,12 @@ func (h *ethHandler) fetchWhitelistCheckpoints(bor *bor.Bor, first bool) ([]uint
 
 	// Fetch the checkpoint count from heimdall
 	count, err := bor.HeimdallClient.FetchCheckpointCount()
-	if err != nil || count == 0 {
+	if err != nil {
 		log.Debug("Failed to fetch checkpoint count for whitelisting", "err", err)
 		return blockNums, blockHashes, errCheckpointCount
+	}
+	if count == 0 {
+		return blockNums, blockHashes, errNoCheckpoint
 	}
 
 	// If we're in the first iteration, we'll fetch last 10 checkpoints, else only the latest one
