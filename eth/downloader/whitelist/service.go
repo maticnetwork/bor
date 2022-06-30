@@ -101,8 +101,14 @@ func (w *Service) IsValidChain(currentHeader *types.Header, chain []*types.Heade
 	// Split the chain into past and future chain
 	pastChain, futureChain := splitChain(current, chain)
 
-	// Don't accept future chain of unacceptable length
-	if len(futureChain) > int(w.checkpointInterval) {
+	// Add an offset to future chain if it's not in continuity
+	offset := 0
+	if len(futureChain) != 0 {
+		offset += int(futureChain[0].Number.Uint64()-currentHeader.Number.Uint64()) - 1
+	}
+
+	// Don't accept future chain of unacceptable length (from current block)
+	if len(futureChain)+offset > int(w.checkpointInterval) {
 		return false
 	}
 
