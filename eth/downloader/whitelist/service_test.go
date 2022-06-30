@@ -172,21 +172,64 @@ func TestIsValidChain(t *testing.T) {
 func TestSplitChain(t *testing.T) {
 	t.Parallel()
 
-	// create current block
-	current := createMockChain(10, 10)
+	type Result struct {
+		pastStart    uint64
+		pastEnd      uint64
+		futureStart  uint64
+		futureEnd    uint64
+		pastLength   int
+		futureLength int
+	}
 
-	// create chain
-	chain := createMockChain(3, 20)
+	// Current chain is at block: X
+	// Incoming chain is represented as [N, M]
+	testCases := []struct {
+		name    string
+		current uint64
+		chain   []*types.Header
+		result  Result
+	}{
+		{name: "X = 10, N = 11, M = 20", current: uint64(10), chain: createMockChain(11, 20), result: Result{futureStart: 11, futureEnd: 20, futureLength: 10}},
+		{name: "X = 10, N = 13, M = 20", current: uint64(10), chain: createMockChain(13, 20), result: Result{futureStart: 13, futureEnd: 20, futureLength: 8}},
+		{name: "X = 10, N = 2, M = 10", current: uint64(10), chain: createMockChain(2, 10), result: Result{pastStart: 2, pastEnd: 10, pastLength: 9}},
+		{name: "X = 10, N = 2, M = 9", current: uint64(10), chain: createMockChain(2, 9), result: Result{pastStart: 2, pastEnd: 9, pastLength: 8}},
+		{name: "X = 10, N = 2, M = 8", current: uint64(10), chain: createMockChain(2, 8), result: Result{pastStart: 2, pastEnd: 8, pastLength: 7}},
+		{name: "X = 10, N = 5, M = 15", current: uint64(10), chain: createMockChain(5, 15), result: Result{pastStart: 5, pastEnd: 10, pastLength: 6, futureStart: 11, futureEnd: 15, futureLength: 5}},
+		{name: "X = 10, N = 10, M = 20", current: uint64(10), chain: createMockChain(10, 20), result: Result{pastStart: 10, pastEnd: 10, pastLength: 1, futureStart: 11, futureEnd: 20, futureLength: 10}},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			past, future := splitChain(tc.current, tc.chain)
+			assert.Equal(t, len(past), tc.result.pastLength)
+			assert.Equal(t, len(future), tc.result.futureLength)
+			if len(past) > 0 {
+				// Check if we have expected block
+				assert.Equal(t, past[0].Number.Uint64(), tc.result.pastStart)
+				assert.Equal(t, past[len(past)-1].Number.Uint64(), tc.result.pastEnd)
 
-	// split the chain into past and future
-	pastChain, futureChain := splitChain(current[0].Number.Uint64(), chain)
+				// Check if the chain is ordered
+				for i := 1; i < len(past); i++ {
+					assert.Equal(t, past[i].Number.Uint64(), past[i-1].Number.Uint64()+1)
+				}
+			}
+			if len(future) > 0 {
+				// Check if we have expected block
+				assert.Equal(t, future[0].Number.Uint64(), tc.result.futureStart)
+				assert.Equal(t, future[len(future)-1].Number.Uint64(), tc.result.futureEnd)
 
-	assert.Equal(t, len(pastChain), 8, "expected 8 items in past chain")
-	assert.Equal(t, pastChain[0].Number.Uint64(), uint64(3), "expected block 3 as the first block in past chain")
-	assert.Equal(t, pastChain[len(pastChain)-1].Number.Uint64(), uint64(10), "expected block 10 as the last block in past chain")
-	assert.Equal(t, len(futureChain), 10, "expected 10 items in future chain")
-	assert.Equal(t, futureChain[0].Number.Uint64(), uint64(11), "expected block 11 as the first block in future chain")
-	assert.Equal(t, futureChain[len(futureChain)-1].Number.Uint64(), uint64(20), "expected block 20 as the last block in future chain")
+				// Check if the chain is ordered
+				for i := 1; i < len(future); i++ {
+					assert.Equal(t, future[i].Number.Uint64(), future[i-1].Number.Uint64()+1)
+				}
+			}
+
+			// Check if both chains are continious
+			if len(past) > 0 && len(future) > 0 {
+				assert.Equal(t, past[len(past)-1].Number.Uint64(), future[0].Number.Uint64()-1)
+			}
+		})
+	}
 }
 
 // createMockChain returns a chain with dummy headers
