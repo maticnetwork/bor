@@ -3,6 +3,7 @@ package whitelist
 import (
 	"errors"
 	"math/big"
+	"reflect"
 	"testing"
 	"time"
 
@@ -204,30 +205,68 @@ func TestSplitChain(t *testing.T) {
 			assert.Equal(t, len(past), tc.result.pastLength)
 			assert.Equal(t, len(future), tc.result.futureLength)
 			if len(past) > 0 {
-				// Check if we have expected block
+				// Check if we have expected block/s
 				assert.Equal(t, past[0].Number.Uint64(), tc.result.pastStart)
 				assert.Equal(t, past[len(past)-1].Number.Uint64(), tc.result.pastEnd)
+			}
+			if len(future) > 0 {
+				// Check if we have expected block/s
+				assert.Equal(t, future[0].Number.Uint64(), tc.result.futureStart)
+				assert.Equal(t, future[len(future)-1].Number.Uint64(), tc.result.futureEnd)
+			}
+		})
+	}
+}
 
+func TestSplitChainProperties(t *testing.T) {
+	t.Parallel()
+
+	// Current chain is at block: X
+	// Incoming chain is represented as [N, M]
+	testCases := []struct {
+		name    string
+		current uint64
+		chain   []*types.Header
+	}{
+		{name: "X = 10, N = 11, M = 20", current: uint64(10), chain: createMockChain(11, 20)},
+		{name: "X = 10, N = 13, M = 20", current: uint64(10), chain: createMockChain(13, 20)},
+		{name: "X = 10, N = 2, M = 10", current: uint64(10), chain: createMockChain(2, 10)},
+		{name: "X = 10, N = 2, M = 9", current: uint64(10), chain: createMockChain(2, 9)},
+		{name: "X = 10, N = 2, M = 8", current: uint64(10), chain: createMockChain(2, 8)},
+		{name: "X = 10, N = 5, M = 15", current: uint64(10), chain: createMockChain(5, 15)},
+		{name: "X = 10, N = 10, M = 20", current: uint64(10), chain: createMockChain(10, 20)},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			past, future := splitChain(tc.current, tc.chain)
+			if len(past) > 0 {
 				// Check if the chain is ordered
 				for i := 1; i < len(past); i++ {
 					assert.Equal(t, past[i].Number.Uint64(), past[i-1].Number.Uint64()+1)
 				}
+
+				// Check if current block >= past chain's last block
+				assert.Equal(t, past[len(past)-1].Number.Uint64() <= tc.current, true)
 			}
 			if len(future) > 0 {
-				// Check if we have expected block
-				assert.Equal(t, future[0].Number.Uint64(), tc.result.futureStart)
-				assert.Equal(t, future[len(future)-1].Number.Uint64(), tc.result.futureEnd)
-
 				// Check if the chain is ordered
 				for i := 1; i < len(future); i++ {
 					assert.Equal(t, future[i].Number.Uint64(), future[i-1].Number.Uint64()+1)
 				}
+
+				// Check if future chain's first block > current block
+				assert.Equal(t, future[len(future)-1].Number.Uint64() > tc.current, true)
 			}
 
 			// Check if both chains are continuous
 			if len(past) > 0 && len(future) > 0 {
 				assert.Equal(t, past[len(past)-1].Number.Uint64(), future[0].Number.Uint64()-1)
 			}
+
+			// Check if we get the original chain on appending both
+			chain := append(past, future...)
+			assert.Equal(t, reflect.DeepEqual(chain, tc.chain), true)
 		})
 	}
 }
