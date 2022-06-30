@@ -125,14 +125,14 @@ func splitChain(current uint64, chain []*types.Header) ([]*types.Header, []*type
 		last        uint64 = chain[len(chain)-1].Number.Uint64()
 	)
 	if current >= first {
-		if len(chain) == 1 {
+		if len(chain) == 1 || current >= last {
 			pastChain = chain
 		} else {
 			pastChain = chain[:current-first+1]
 		}
 	}
 	if current < last {
-		if len(chain) == 1 {
+		if len(chain) == 1 || current < first {
 			futureChain = chain
 		} else {
 			futureChain = chain[current-first+1:]
