@@ -224,7 +224,7 @@ func TestSplitChain(t *testing.T) {
 				}
 			}
 
-			// Check if both chains are continious
+			// Check if both chains are continuous
 			if len(past) > 0 && len(future) > 0 {
 				assert.Equal(t, past[len(past)-1].Number.Uint64(), future[0].Number.Uint64()-1)
 			}
