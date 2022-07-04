@@ -1,5 +1,4 @@
 //go:build integration
-// +build integration
 
 package bor
 
@@ -38,7 +37,9 @@ func TestInsertingSpanSizeBlocks(t *testing.T) {
 	engine := init.ethereum.Engine()
 	_bor := engine.(*bor.Bor)
 
-	h, heimdallSpan, ctrl := getMockedHeimdallClient(t)
+	_, heimdallSpan := loadSpanFromFile(t)
+
+	h, ctrl := getMockedHeimdallClient(t, heimdallSpan)
 	defer ctrl.Finish()
 
 	_bor.SetHeimdallClient(h)
@@ -207,18 +208,12 @@ func TestOutOfTurnSigning(t *testing.T) {
 	engine := init.ethereum.Engine()
 	_bor := engine.(*bor.Bor)
 
-	h, _, ctrl := getMockedHeimdallClient(t)
-	defer ctrl.Finish()
-
-	_bor.SetHeimdallClient(h)
-
-	db := init.ethereum.ChainDb()
-	block := init.genesis.ToBlock(db)
-
-	res, _ := loadSpanFromFile(t)
+	_, heimdallSpan := loadSpanFromFile(t)
+	proposer := valset.NewValidator(addr, 10)
+	heimdallSpan.ValidatorSet.Validators = append(heimdallSpan.ValidatorSet.Validators, proposer)
 
 	// add the block producer
-	currentValidators := res.Result.ValidatorSet.Validators
+	currentValidators := heimdallSpan.ValidatorSet.Validators
 	fmt.Println("START=VALS", currentValidators)
 	/*
 		fmt.Println("START!!!", res.Result.ValidatorSet.Validators)
@@ -230,8 +225,16 @@ func TestOutOfTurnSigning(t *testing.T) {
 		}
 	*/
 
+	h, ctrl := getMockedHeimdallClient(t, heimdallSpan)
+	defer ctrl.Finish()
+
+	_bor.SetHeimdallClient(h)
+
+	db := init.ethereum.ChainDb()
+	block := init.genesis.ToBlock(db)
+
 	for i := uint64(1); i < spanSize; i++ {
-		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators)
+		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, heimdallSpan.ValidatorSet.Validators)
 		insertNewBlock(t, chain, block)
 	}
 
@@ -246,22 +249,24 @@ func TestOutOfTurnSigning(t *testing.T) {
 	parentTime := block.Time()
 
 	setParentTime := func(header *types.Header) {
-		header.Time = parentTime
+		header.Time = parentTime + 1
 	}
 
-	block = buildNextBlock(t, _bor, chain, block, signerKey, init.genesis.Config.Bor, nil, res.Result.ValidatorSet.Validators, setParentTime)
+	block = buildNextBlock(t, _bor, chain, block, signerKey, init.genesis.Config.Bor, nil, heimdallSpan.ValidatorSet.Validators, setParentTime)
 	_, err := chain.InsertChain([]*types.Block{block})
 	assert.Equal(t,
 		*err.(*bor.BlockTooSoonError),
 		bor.BlockTooSoonError{Number: spanSize, Succession: expectedSuccessionNumber})
 
-	expectedDifficulty := uint64(3 - expectedSuccessionNumber) // len(validators) - succession
+	expectedDifficulty := uint64(len(heimdallSpan.ValidatorSet.Validators) - expectedSuccessionNumber)
 	header := block.Header()
-	header.Time += (bor.CalcProducerDelay(header.Number.Uint64(), expectedSuccessionNumber, init.genesis.Config.Bor) -
-		bor.CalcProducerDelay(header.Number.Uint64(), 0, init.genesis.Config.Bor))
+	header.Time += bor.CalcProducerDelay(header.Number.Uint64(), expectedSuccessionNumber, init.genesis.Config.Bor) -
+		bor.CalcProducerDelay(header.Number.Uint64(), 0, init.genesis.Config.Bor)
+
 	sign(t, header, signerKey, init.genesis.Config.Bor)
 
 	block = types.NewBlockWithHeader(header)
+
 	_, err = chain.InsertChain([]*types.Block{block})
 	assert.Equal(t,
 		*err.(*bor.WrongDifficultyError),
@@ -270,6 +275,7 @@ func TestOutOfTurnSigning(t *testing.T) {
 	header.Difficulty = new(big.Int).SetUint64(expectedDifficulty)
 	sign(t, header, signerKey, init.genesis.Config.Bor)
 	block = types.NewBlockWithHeader(header)
+
 	_, err = chain.InsertChain([]*types.Block{block})
 	assert.Nil(t, err)
 }
@@ -280,7 +286,9 @@ func TestSignerNotFound(t *testing.T) {
 	engine := init.ethereum.Engine()
 	_bor := engine.(*bor.Bor)
 
-	h, _, ctrl := getMockedHeimdallClient(t)
+	_, heimdallSpan := loadSpanFromFile(t)
+
+	h, ctrl := getMockedHeimdallClient(t, heimdallSpan)
 	defer ctrl.Finish()
 
 	_bor.SetHeimdallClient(h)
@@ -294,9 +302,7 @@ func TestSignerNotFound(t *testing.T) {
 	key, _ = crypto.HexToECDSA(signer)
 	addr = crypto.PubkeyToAddress(key.PublicKey)
 
-	res, _ := loadSpanFromFile(t)
-
-	block = buildNextBlock(t, _bor, chain, block, signerKey, init.genesis.Config.Bor, nil, res.Result.ValidatorSet.Validators)
+	block = buildNextBlock(t, _bor, chain, block, signerKey, init.genesis.Config.Bor, nil, heimdallSpan.ValidatorSet.Validators)
 	_, err := chain.InsertChain([]*types.Block{block})
 	assert.Equal(t,
 		*err.(*bor.UnauthorizedSignerError),

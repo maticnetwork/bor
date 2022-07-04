@@ -128,6 +128,7 @@ func buildNextBlock(t *testing.T, _bor consensus.Engine, chain *core.BlockChain,
 	isSpanStart := IsSpanStart(number)
 	isSprintEnd := IsSprintEnd(number)
 
+	fmt.Println("DIFFICULTY-HELPER", number, isSpanStart, isSprintEnd)
 	if isSpanStart {
 		header.Difficulty = new(big.Int).SetInt64(int64(len(currentValidators)))
 	}
@@ -292,20 +293,18 @@ func getSignerKey(number uint64) []byte {
 	return _key
 }
 
-func getMockedHeimdallClient(t *testing.T) (*mocks.MockIHeimdallClient, *span.HeimdallSpan, *gomock.Controller) {
+func getMockedHeimdallClient(t *testing.T, heimdallSpan *span.HeimdallSpan) (*mocks.MockIHeimdallClient, *gomock.Controller) {
 	t.Helper()
 
 	ctrl := gomock.NewController(t)
 	h := mocks.NewMockIHeimdallClient(ctrl)
-
-	_, heimdallSpan := loadSpanFromFile(t)
 
 	h.EXPECT().Span(uint64(1)).Return(heimdallSpan, nil).AnyTimes()
 
 	h.EXPECT().StateSyncEvents(gomock.Any(), gomock.Any()).
 		Return([]*clerk.EventRecordWithTime{getSampleEventRecord(t)}, nil).AnyTimes()
 
-	return h, heimdallSpan, ctrl
+	return h, ctrl
 }
 
 func generateFakeStateSyncEvents(sample *clerk.EventRecordWithTime, count int) []*clerk.EventRecordWithTime {

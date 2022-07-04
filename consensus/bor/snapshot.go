@@ -179,6 +179,7 @@ func (s *Snapshot) GetSignerSuccessionNumber(signer common.Address) (int, error)
 	signerIndex, _ := s.ValidatorSet.GetByAddress(signer)
 
 	if signerIndex == -1 {
+		fmt.Println("UnauthorizedSignerError-4", s.Number-1, signer.String(), s.ValidatorSet.Validators)
 		return -1, &UnauthorizedSignerError{s.Number, signer.Bytes()}
 	}
 
@@ -206,6 +207,7 @@ func (s *Snapshot) signers() []common.Address {
 func Difficulty(validatorSet *valset.ValidatorSet, signer common.Address) uint64 {
 	// if signer is empty
 	if signer == (common.Address{}) {
+		fmt.Println("SNAPSHOT-Difficulty-1")
 		return 1
 	}
 
@@ -222,6 +224,6 @@ func Difficulty(validatorSet *valset.ValidatorSet, signer common.Address) uint64
 		tempIndex = tempIndex + totalValidators
 	}
 
-	fmt.Println("=======================SNAP", uint64(totalValidators-(tempIndex-proposerIndex)), validatorSet.String(), signer.String())
+	fmt.Println("SNAPSHOT-Difficulty-2", uint64(totalValidators-(tempIndex-proposerIndex)), validatorSet.String(), signer.String())
 	return uint64(totalValidators - (tempIndex - proposerIndex))
 }
