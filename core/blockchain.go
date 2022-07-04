@@ -39,6 +39,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/state/snapshot"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/eth/downloader/whitelist"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/internal/syncx"
@@ -1515,7 +1516,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 	if !isValid {
 		// The chain to be imported is invalid as the blocks doesn't match with
 		// the whitelisted checkpoints.
-		return it.index, errors.New("checkpoint mismatch")
+		return it.index, whitelist.ErrCheckpointMismatch
 	}
 
 	// Left-trim all the known blocks that don't need to build snapshot
