@@ -230,15 +230,6 @@ func TestSplitChainProperties(t *testing.T) {
 	// Incoming chain is represented as [N, M]
 
 	currentChain := []int{0, 1, 2, 3, 10, 100} // blocks starting from genesis
-
-	type testCase struct {
-		current     int
-		remoteStart int
-		remoteEnd   int
-	}
-
-	var ts []testCase
-
 	blockDiffs := []int{0, 1, 2, 3, 4, 5, 9, 10, 11, 12, 90, 100, 101, 102}
 
 	caseParams := make(map[int]map[int]map[int]struct{}) // X -> N -> M
@@ -296,6 +287,14 @@ func TestSplitChainProperties(t *testing.T) {
 			}
 		}
 	}
+
+	type testCase struct {
+		current     int
+		remoteStart int
+		remoteEnd   int
+	}
+
+	var ts []testCase
 
 	// X -> N -> M
 	for x, nm := range caseParams {
