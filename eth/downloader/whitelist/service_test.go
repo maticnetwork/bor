@@ -241,6 +241,8 @@ func TestSplitChainProperties(t *testing.T) {
 
 	blockDiffs := []int{0, 1, 2, 3, 4, 5, 9, 10, 11, 12, 90, 100, 101, 102}
 
+	caseParams := make(map[int]map[int]map[int]struct{}) // X -> N -> M
+
 	for _, current := range currentChain {
 		// past cases only + past to current
 		for _, diff := range blockDiffs {
@@ -255,7 +257,7 @@ func TestSplitChainProperties(t *testing.T) {
 				to := current - diff
 
 				if to >= from {
-					ts = append(ts, testCase{current, from, to})
+					addTestCaseParams(caseParams, current, from, to)
 				}
 			}
 		}
@@ -272,13 +274,12 @@ func TestSplitChainProperties(t *testing.T) {
 				to := current + diff
 
 				if to >= from {
-					ts = append(ts, testCase{current, from, to})
+					addTestCaseParams(caseParams, current, from, to)
 				}
 			}
 		}
 
 		// past-current-future
-		// we don't care about duplicates
 		for _, diff := range blockDiffs {
 			from := current - diff
 
@@ -290,8 +291,17 @@ func TestSplitChainProperties(t *testing.T) {
 				to := current + diff
 
 				if to >= from {
-					ts = append(ts, testCase{current, from, to})
+					addTestCaseParams(caseParams, current, from, to)
 				}
+			}
+		}
+	}
+
+	// X -> N -> M
+	for x, nm := range caseParams {
+		for n, mMap := range nm {
+			for m, _ := range mMap {
+				ts = append(ts, testCase{x, n, m})
 			}
 		}
 	}
@@ -370,4 +380,21 @@ func createMockChain(start, end uint64) []*types.Header {
 		chain = append(chain, header)
 	}
 	return chain
+}
+
+// mXNM should be initialized
+func addTestCaseParams(mXNM map[int]map[int]map[int]struct{}, x, n, m int) {
+	mNM, ok := mXNM[x]
+	if !ok {
+		mNM = make(map[int]map[int]struct{})
+		mXNM[x] = mNM
+	}
+
+	mM, ok := mNM[n]
+	if !ok {
+		mM = make(map[int]struct{})
+		mNM[n] = mM
+	}
+
+	mXNM[x][n][m] = struct{}{}
 }
