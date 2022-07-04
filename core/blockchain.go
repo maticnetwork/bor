@@ -1515,7 +1515,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 	if !isValid {
 		// The chain to be imported is invalid as the blocks doesn't match with
 		// the whitelisted checkpoints.
-		return it.index, nil
+		return it.index, errors.New("checkpoint mismatch")
 	}
 
 	// Left-trim all the known blocks that don't need to build snapshot
