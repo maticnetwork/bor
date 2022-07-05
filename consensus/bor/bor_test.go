@@ -8,7 +8,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/ethereum/go-ethereum/consensus/bor/heimdall"
+	"github.com/ethereum/go-ethereum/consensus/bor/heimdall" //nolint:typecheck
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
@@ -147,6 +147,7 @@ func TestEncodeSigHeaderJaipur(t *testing.T) {
 // Also, this is kept only for local use.
 func TestCheckpoint(t *testing.T) {
 	t.Skip()
+	t.Parallel()
 
 	// TODO: For testing, add heimdall url here
 	h := heimdall.NewHeimdallClient("")
@@ -155,25 +156,30 @@ func TestCheckpoint(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+
 	t.Log("Count:", count)
 
 	checkpoint1, err := h.FetchCheckpoint(count)
 	if err != nil {
 		t.Error(err)
 	}
+
 	t.Log("Checkpoint1:", checkpoint1)
 
 	checkpoint2, err := h.FetchCheckpoint(10000)
 	if err != nil {
 		t.Error(err)
 	}
+
 	t.Log("Checkpoint2:", checkpoint2)
 
 	checkpoint3, err := h.FetchCheckpoint(-1)
 	if err != nil {
 		t.Error(err)
 	}
+
 	t.Log("Checkpoint3:", checkpoint3)
+
 	if checkpoint3.RootHash != checkpoint1.RootHash {
 		t.Fatal("Invalid root hash")
 	}

@@ -45,9 +45,10 @@ var (
 // and verifies the data against bor data.
 func (h *ethHandler) fetchWhitelistCheckpoints(bor *bor.Bor, first bool) ([]uint64, []common.Hash, error) {
 	// Create an array for block number and block hashes
+	//nolint:prealloc
 	var (
-		blockNums   []uint64
-		blockHashes []common.Hash
+		blockNums   []uint64      = make([]uint64, 0)
+		blockHashes []common.Hash = make([]common.Hash, 0)
 	)
 
 	// Fetch the checkpoint count from heimdall
@@ -56,6 +57,7 @@ func (h *ethHandler) fetchWhitelistCheckpoints(bor *bor.Bor, first bool) ([]uint
 		log.Debug("Failed to fetch checkpoint count for whitelisting", "err", err)
 		return blockNums, blockHashes, errCheckpointCount
 	}
+
 	if count == 0 {
 		return blockNums, blockHashes, errNoCheckpoint
 	}
@@ -73,7 +75,7 @@ func (h *ethHandler) fetchWhitelistCheckpoints(bor *bor.Bor, first bool) ([]uint
 		}
 
 		// fetch `count` indexed checkpoint from heimdall
-		checkpoint, err := bor.HeimdallClient.FetchCheckpoint(int64(count))
+		checkpoint, err := bor.HeimdallClient.FetchCheckpoint(count)
 		if err != nil {
 			log.Debug("Failed to fetch latest checkpoint for whitelisting", "err", err)
 			return blockNums, blockHashes, errCheckpoint
@@ -104,7 +106,9 @@ func (h *ethHandler) fetchWhitelistCheckpoints(bor *bor.Bor, first bool) ([]uint
 			log.Debug("Failed to get end block hash of checkpoint while whitelisting", "err", err)
 			return blockNums, blockHashes, errEndBlock
 		}
+
 		hash := fmt.Sprintf("%v", block["hash"])
+
 		blockNums = append(blockNums, checkpoint.EndBlock.Uint64())
 		blockHashes = append(blockHashes, common.HexToHash(hash))
 		count--
