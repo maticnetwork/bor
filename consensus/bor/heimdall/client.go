@@ -154,7 +154,7 @@ func (h *HeimdallClient) FetchCheckpointCount() (int64, error) {
 		return 0, err
 	}
 
-	return response.Result, nil
+	return response.Result.Result, nil
 }
 
 // FetchWithRetry returns data from heimdall with retry
