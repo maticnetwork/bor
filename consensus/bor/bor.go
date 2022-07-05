@@ -424,8 +424,6 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 	}
 
 	if parent.Time+c.config.CalculatePeriod(number) > header.Time {
-		//if IsBlockOnTime(parent, header, number, succession, c.config) {
-		fmt.Println("yyyyy", parent.Time, c.config.CalculatePeriod(number), parent.Time+c.config.CalculatePeriod(number), header.Time)
 		return ErrInvalidTimestamp
 	}
 
@@ -608,7 +606,6 @@ func (c *Bor) verifySeal(chain consensus.ChainHeaderReader, header *types.Header
 
 	if !snap.ValidatorSet.HasAddress(signer.Bytes()) {
 		// Check the UnauthorizedSignerError.Error() msg to see why we pass number-1
-		fmt.Println("UnauthorizedSignerError-1", number-1, signer.String(), snap.ValidatorSet.Validators)
 		return &UnauthorizedSignerError{number - 1, signer.Bytes()}
 	}
 
@@ -625,7 +622,6 @@ func (c *Bor) verifySeal(chain consensus.ChainHeaderReader, header *types.Header
 	}
 
 	if IsBlockOnTime(parent, header, number, succession, c.config) {
-		fmt.Println("yyyyy-1", parent.Time, c.config.CalculatePeriod(number), parent.Time+c.config.CalculatePeriod(number), header.Time)
 		return &BlockTooSoonError{number, succession}
 	}
 
@@ -870,7 +866,6 @@ func (c *Bor) Seal(chain consensus.ChainHeaderReader, block *types.Block, result
 	// Bail out if we're unauthorized to sign a block
 	if !snap.ValidatorSet.HasAddress(signer.Bytes()) {
 		// Check the UnauthorizedSignerError.Error() msg to see why we pass number-1
-		fmt.Println("UnauthorizedSignerError-2", number-1, signer.String(), snap.ValidatorSet.Validators)
 		return &UnauthorizedSignerError{number - 1, signer.Bytes()}
 	}
 

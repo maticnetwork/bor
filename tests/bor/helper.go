@@ -128,18 +128,11 @@ func buildNextBlock(t *testing.T, _bor consensus.Engine, chain *core.BlockChain,
 	isSpanStart := IsSpanStart(number)
 	isSprintEnd := IsSprintEnd(number)
 
-	fmt.Println("DIFFICULTY-HELPER", number, isSpanStart, isSprintEnd)
-	if isSpanStart {
+	if isSpanStart || IsSprintEnd(number-1) {
 		header.Difficulty = new(big.Int).SetInt64(int64(len(currentValidators)))
 	}
 
-	dif := bor.Difficulty(valset.NewValidatorSet(currentValidators), common.BytesToAddress(signer))
-	fmt.Println("=======================SNAP-HELPER", dif, valset.NewValidatorSet(currentValidators).String(), common.BytesToAddress(signer).String())
-	//header.Difficulty.SetUint64(dif)
-	fmt.Println("HELPER", number, isSpanStart, isSprintEnd, len(currentValidators), header.Difficulty.Uint64(), dif)
-
 	if isSprintEnd {
-		fmt.Println("!!!!!!!!!!!!!!!!!!!!!")
 		sort.Sort(valset.ValidatorsByAddress(currentValidators))
 
 		validatorBytes := make([]byte, len(currentValidators)*validatorHeaderBytesLength)

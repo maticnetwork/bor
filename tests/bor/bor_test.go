@@ -4,7 +4,6 @@ package bor
 
 import (
 	"encoding/hex"
-	"fmt"
 	"io"
 	"math/big"
 	"testing"
@@ -213,18 +212,6 @@ func TestOutOfTurnSigning(t *testing.T) {
 	heimdallSpan.ValidatorSet.Validators = append(heimdallSpan.ValidatorSet.Validators, proposer)
 
 	// add the block producer
-	currentValidators := heimdallSpan.ValidatorSet.Validators
-	fmt.Println("START=VALS", currentValidators)
-	/*
-		fmt.Println("START!!!", res.Result.ValidatorSet.Validators)
-		res.Result.ValidatorSet.Validators = append(res.Result.ValidatorSet.Validators, valset.NewValidator(addr2, 10))
-
-		currentValidators := []*valset.Validator{
-			valset.NewValidator(addr2, 100),
-			valset.NewValidator(addr, 10),
-		}
-	*/
-
 	h, ctrl := getMockedHeimdallClient(t, heimdallSpan)
 	defer ctrl.Finish()
 
@@ -244,7 +231,7 @@ func TestOutOfTurnSigning(t *testing.T) {
 	signerKey, _ := hex.DecodeString(signer)
 	key, _ = crypto.HexToECDSA(signer)
 	addr = crypto.PubkeyToAddress(key.PublicKey)
-	expectedSuccessionNumber := 2
+	expectedSuccessionNumber := 3
 
 	parentTime := block.Time()
 
@@ -254,30 +241,34 @@ func TestOutOfTurnSigning(t *testing.T) {
 
 	block = buildNextBlock(t, _bor, chain, block, signerKey, init.genesis.Config.Bor, nil, heimdallSpan.ValidatorSet.Validators, setParentTime)
 	_, err := chain.InsertChain([]*types.Block{block})
-	assert.Equal(t,
+	require.Equal(t,
 		*err.(*bor.BlockTooSoonError),
 		bor.BlockTooSoonError{Number: spanSize, Succession: expectedSuccessionNumber})
 
 	expectedDifficulty := uint64(len(heimdallSpan.ValidatorSet.Validators) - expectedSuccessionNumber)
 	header := block.Header()
-	header.Time += bor.CalcProducerDelay(header.Number.Uint64(), expectedSuccessionNumber, init.genesis.Config.Bor) -
-		bor.CalcProducerDelay(header.Number.Uint64(), 0, init.genesis.Config.Bor)
+
+	var diff uint64
+	diff = bor.CalcProducerDelay(header.Number.Uint64(), expectedSuccessionNumber, init.genesis.Config.Bor) -
+		bor.CalcProducerDelay(header.Number.Uint64(), 0, init.genesis.Config.Bor) + 3
+	header.Time += diff
 
 	sign(t, header, signerKey, init.genesis.Config.Bor)
 
 	block = types.NewBlockWithHeader(header)
 
 	_, err = chain.InsertChain([]*types.Block{block})
-	assert.Equal(t,
-		*err.(*bor.WrongDifficultyError),
-		bor.WrongDifficultyError{Number: spanSize, Expected: expectedDifficulty, Actual: 3, Signer: addr.Bytes()})
+	require.NotNil(t, err)
+	require.Equal(t,
+		bor.WrongDifficultyError{Number: spanSize, Expected: expectedDifficulty, Actual: 4, Signer: addr.Bytes()},
+		*err.(*bor.WrongDifficultyError))
 
 	header.Difficulty = new(big.Int).SetUint64(expectedDifficulty)
 	sign(t, header, signerKey, init.genesis.Config.Bor)
 	block = types.NewBlockWithHeader(header)
 
 	_, err = chain.InsertChain([]*types.Block{block})
-	assert.Nil(t, err)
+	require.Nil(t, err)
 }
 
 func TestSignerNotFound(t *testing.T) {

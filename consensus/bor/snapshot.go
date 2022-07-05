@@ -2,7 +2,6 @@ package bor
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"github.com/ethereum/go-ethereum/consensus/bor/valset"
 
@@ -133,7 +132,6 @@ func (s *Snapshot) apply(headers []*types.Header) (*Snapshot, error) {
 
 		// check if signer is in validator set
 		if !snap.ValidatorSet.HasAddress(signer.Bytes()) {
-			fmt.Println("UnauthorizedSignerError-3", number-1, signer.String(), snap.ValidatorSet.Validators)
 			return nil, &UnauthorizedSignerError{number, signer.Bytes()}
 		}
 
@@ -179,7 +177,6 @@ func (s *Snapshot) GetSignerSuccessionNumber(signer common.Address) (int, error)
 	signerIndex, _ := s.ValidatorSet.GetByAddress(signer)
 
 	if signerIndex == -1 {
-		fmt.Println("UnauthorizedSignerError-4", s.Number-1, signer.String(), s.ValidatorSet.Validators)
 		return -1, &UnauthorizedSignerError{s.Number, signer.Bytes()}
 	}
 
@@ -207,7 +204,6 @@ func (s *Snapshot) signers() []common.Address {
 func Difficulty(validatorSet *valset.ValidatorSet, signer common.Address) uint64 {
 	// if signer is empty
 	if signer == (common.Address{}) {
-		fmt.Println("SNAPSHOT-Difficulty-1")
 		return 1
 	}
 
@@ -224,6 +220,5 @@ func Difficulty(validatorSet *valset.ValidatorSet, signer common.Address) uint64
 		tempIndex = tempIndex + totalValidators
 	}
 
-	fmt.Println("SNAPSHOT-Difficulty-2", uint64(totalValidators-(tempIndex-proposerIndex)), validatorSet.String(), signer.String())
 	return uint64(totalValidators - (tempIndex - proposerIndex))
 }
