@@ -964,7 +964,9 @@ func (c *Bor) APIs(chain consensus.ChainHeaderReader) []rpc.API {
 // Close implements consensus.Engine. It's a noop for bor as there are no background threads.
 func (c *Bor) Close() error {
 	c.closeOnce.Do(func() {
-		c.HeimdallClient.Close()
+		if c.HeimdallClient != nil {
+			c.HeimdallClient.Close()
+		}
 	})
 
 	return nil
@@ -1110,6 +1112,8 @@ func (c *Bor) CommitStates(
 
 		lastStateID++
 	}
+
+	log.Info("StateSyncData", "Gas", totalGas, "Block-number", number, "LastStateID", lastStateID, "TotalRecords", len(eventRecords))
 
 	return stateSyncs, nil
 }

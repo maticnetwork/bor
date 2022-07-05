@@ -1,3 +1,5 @@
+//go:build integration
+
 package bor
 
 import (
@@ -128,7 +130,7 @@ func buildNextBlock(t *testing.T, _bor consensus.Engine, chain *core.BlockChain,
 	isSpanStart := IsSpanStart(number)
 	isSprintEnd := IsSprintEnd(number)
 
-	if isSpanStart || IsSprintEnd(number-1) {
+	if isSpanStart {
 		header.Difficulty = new(big.Int).SetInt64(int64(len(currentValidators)))
 	}
 
@@ -219,6 +221,7 @@ func (b *blockGen) setCoinbase(addr common.Address) {
 		if len(b.txs) > 0 {
 			panic("coinbase must be set before adding transactions")
 		}
+
 		panic("coinbase can only be set once")
 	}
 
