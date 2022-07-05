@@ -67,7 +67,7 @@ func NewForkChoice(chainReader ChainReader, preserve func(header *types.Header) 
 	}
 	return &ForkChoice{
 		chain:     chainReader,
-		rand:      mrand.New(mrand.NewSource(seed.Int64())),
+		rand:      mrand.New(mrand.NewSource(seed.Int64())), //nolint:gosec
 		preserve:  preserve,
 		validator: validator,
 	}
@@ -119,5 +119,6 @@ func (f *ForkChoice) ValidateReorg(current *types.Header, chain []*types.Header)
 			return false, nil
 		}
 	}
+
 	return true, nil
 }

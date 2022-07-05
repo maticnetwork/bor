@@ -149,6 +149,7 @@ func TestIsValidChain(t *testing.T) {
 
 	// Clear checkpoint whitelist and mock blocks in whitelist
 	tempChain = createMockChain(20, 20) // A20
+
 	s.PurgeCheckpointWhitelist()
 	s.ProcessCheckpoint(tempChain[0].Number.Uint64(), tempChain[0].Hash())
 
@@ -202,6 +203,7 @@ func TestSplitChain(t *testing.T) {
 		{name: "X = 10, N = 10, M = 20", current: uint64(10), chain: createMockChain(10, 20), result: Result{pastStart: 10, pastEnd: 10, pastLength: 1, futureStart: 11, futureEnd: 20, futureLength: 10}},
 	}
 	for _, tc := range testCases {
+		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			past, future := splitChain(tc.current, tc.chain)
@@ -223,6 +225,7 @@ func TestSplitChain(t *testing.T) {
 	}
 }
 
+//nolint:gocognit
 func TestSplitChainProperties(t *testing.T) {
 	t.Parallel()
 
@@ -299,12 +302,13 @@ func TestSplitChainProperties(t *testing.T) {
 	// X -> N -> M
 	for x, nm := range caseParams {
 		for n, mMap := range nm {
-			for m, _ := range mMap {
+			for m := range mMap {
 				ts = append(ts, testCase{x, n, m})
 			}
 		}
 	}
 
+	//nolint:paralleltest
 	for i, tc := range ts {
 		tc := tc
 
@@ -369,29 +373,37 @@ func TestSplitChainProperties(t *testing.T) {
 // createMockChain returns a chain with dummy headers
 // starting from `start` to `end` (inclusive)
 func createMockChain(start, end uint64) []*types.Header {
-	var i uint64
-	var chain []*types.Header
+	var (
+		i     uint64
+		idx   uint64
+		chain []*types.Header = make([]*types.Header, end-start+1)
+	)
+
 	for i = start; i <= end; i++ {
 		header := &types.Header{
 			Number: big.NewInt(int64(i)),
 			Time:   uint64(time.Now().UnixMicro()) + i,
 		}
-		chain = append(chain, header)
+		chain[idx] = header
+		idx++
 	}
+
 	return chain
 }
 
 // mXNM should be initialized
 func addTestCaseParams(mXNM map[int]map[int]map[int]struct{}, x, n, m int) {
+	//nolint:ineffassign
 	mNM, ok := mXNM[x]
 	if !ok {
 		mNM = make(map[int]map[int]struct{})
 		mXNM[x] = mNM
 	}
 
-	mM, ok := mNM[n]
+	//nolint:ineffassign
+	_, ok = mNM[n]
 	if !ok {
-		mM = make(map[int]struct{})
+		mM := make(map[int]struct{})
 		mNM[n] = mM
 	}
 

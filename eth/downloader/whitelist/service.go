@@ -130,6 +130,7 @@ func splitChain(current uint64, chain []*types.Header) ([]*types.Header, []*type
 		first       uint64 = chain[0].Number.Uint64()
 		last        uint64 = chain[len(chain)-1].Number.Uint64()
 	)
+
 	if current >= first {
 		if len(chain) == 1 || current >= last {
 			pastChain = chain
@@ -137,6 +138,7 @@ func splitChain(current uint64, chain []*types.Header) ([]*types.Header, []*type
 			pastChain = chain[:current-first+1]
 		}
 	}
+
 	if current < last {
 		if len(chain) == 1 || current < first {
 			futureChain = chain
@@ -144,6 +146,7 @@ func splitChain(current uint64, chain []*types.Header) ([]*types.Header, []*type
 			futureChain = chain[current-first+1:]
 		}
 	}
+
 	return pastChain, futureChain
 }
 

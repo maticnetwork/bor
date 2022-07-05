@@ -30,6 +30,8 @@ func newChainReaderFake(getTd func(hash common.Hash, number uint64) *big.Int) *c
 }
 
 func TestPastChainInsert(t *testing.T) {
+	t.Parallel()
+
 	var (
 		db      = rawdb.NewMemoryDatabase()
 		genesis = (&Genesis{BaseFee: big.NewInt(params.InitialBaseFee)}).MustCommit(db)
@@ -54,6 +56,7 @@ func TestPastChainInsert(t *testing.T) {
 		if currentHeader.Number.Uint64() == uint64(64) && chain[0].Number.Uint64() == 55 && len(chain) == 10 {
 			return true
 		}
+
 		return false
 	}
 	mockChainReader := newChainReaderFake(getTd)
@@ -81,6 +84,7 @@ func TestPastChainInsert(t *testing.T) {
 		if hash == chainB[len(chainB)-1].Hash() || hash == chainC[len(chainC)-1].Hash() {
 			td = big.NewInt(65)
 		}
+
 		return td
 	}
 	mockChainReader = newChainReaderFake(getTd)
@@ -96,6 +100,8 @@ func TestPastChainInsert(t *testing.T) {
 }
 
 func TestFutureChainInsert(t *testing.T) {
+	t.Parallel()
+
 	var (
 		db      = rawdb.NewMemoryDatabase()
 		genesis = (&Genesis{BaseFee: big.NewInt(params.InitialBaseFee)}).MustCommit(db)
@@ -120,6 +126,7 @@ func TestFutureChainInsert(t *testing.T) {
 		if currentHeader.Number.Uint64() == uint64(64) && len(chain) <= 10 {
 			return true
 		}
+
 		return false
 	}
 	mockChainReader := newChainReaderFake(getTd)
@@ -151,6 +158,8 @@ func TestFutureChainInsert(t *testing.T) {
 }
 
 func TestOverlappingChainInsert(t *testing.T) {
+	t.Parallel()
+
 	var (
 		db      = rawdb.NewMemoryDatabase()
 		genesis = (&Genesis{BaseFee: big.NewInt(params.InitialBaseFee)}).MustCommit(db)
@@ -175,6 +184,7 @@ func TestOverlappingChainInsert(t *testing.T) {
 		if currentHeader.Number.Uint64() == uint64(64) && len(chain) <= 20 {
 			return true
 		}
+
 		return false
 	}
 	mockChainReader := newChainReaderFake(getTd)

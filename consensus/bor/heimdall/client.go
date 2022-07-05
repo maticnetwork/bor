@@ -231,6 +231,7 @@ func checkpointURL(urlString string, number int64) (*url.URL, error) {
 	} else {
 		url = fmt.Sprintf(fetchCheckpoint, fmt.Sprint(number))
 	}
+
 	return makeURL(urlString, url, "")
 }
 

@@ -223,6 +223,7 @@ type BlockChain struct {
 // NewBlockChain returns a fully initialised block chain using information
 // available in the database. It initialises the default Ethereum Validator
 // and Processor.
+//nolint:gocognit
 func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *params.ChainConfig, engine consensus.Engine, vmConfig vm.Config, shouldPreserve func(header *types.Header) bool, txLookupLimit *uint64, checker ethereum.ChainValidator) (*BlockChain, error) {
 	if cacheConfig == nil {
 		cacheConfig = DefaultCacheConfig
@@ -951,6 +952,7 @@ func (bc *BlockChain) InsertReceiptChain(blockChain types.Blocks, receiptChain [
 			} else if !reorg {
 				return false
 			}
+
 			isValid, err := bc.forker.ValidateReorg(bc.CurrentFastBlock().Header(), headers)
 			if err != nil {
 				log.Warn("Reorg failed", "err", err)
@@ -998,6 +1000,7 @@ func (bc *BlockChain) InsertReceiptChain(blockChain types.Blocks, receiptChain [
 		// BOR: Retrieve all the bor receipts and also maintain the array of headers
 		// for bor specific reorg check.
 		borReceipts := []types.Receipts{}
+
 		var headers []*types.Header
 		for _, block := range blockChain {
 			borReceipts = append(borReceipts, []*types.Receipt{bc.GetBorReceiptByHash(block.Hash())})
@@ -1139,6 +1142,7 @@ func (bc *BlockChain) InsertReceiptChain(blockChain types.Blocks, receiptChain [
 				return 0, err
 			}
 		}
+
 		updateHead(blockChain[len(blockChain)-1], headers)
 		return 0, nil
 	}
@@ -1513,6 +1517,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 	if err1 != nil {
 		return it.index, err1
 	}
+
 	if !isValid {
 		// The chain to be imported is invalid as the blocks doesn't match with
 		// the whitelisted checkpoints.
@@ -1925,10 +1930,12 @@ func (bc *BlockChain) insertSideChain(block *types.Block, it *insertIterator) (i
 	if err != nil {
 		return it.index, err
 	}
+
 	isValid, err := bc.forker.ValidateReorg(current.Header(), headers)
 	if err != nil {
 		return it.index, err
 	}
+
 	if !reorg || !isValid {
 		localTd := bc.GetTd(current.Hash(), current.NumberU64())
 		log.Info("Sidechain written to disk", "start", it.first().NumberU64(), "end", it.previous().Number, "sidetd", externTd, "localtd", localTd)

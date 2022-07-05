@@ -294,6 +294,7 @@ func (hc *HeaderChain) writeHeadersAndSetHead(headers []*types.Header, forker *F
 		}
 		return result, nil
 	}
+
 	isValid, err := forker.ValidateReorg(hc.CurrentHeader(), headers)
 	if err != nil {
 		return nil, err
