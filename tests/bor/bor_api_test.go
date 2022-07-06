@@ -1,10 +1,10 @@
 //go:build integration
-// +build integration
 
 package bor
 
 import (
 	"context"
+	"math/big"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -12,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor"
 	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
+	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
 	"github.com/ethereum/go-ethereum/consensus/bor/valset"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -26,6 +27,8 @@ func TestGetTransactionReceiptsByBlock(t *testing.T) {
 	engine := init.ethereum.Engine()
 	_bor := engine.(*bor.Bor)
 
+	defer _bor.Close()
+
 	// Mock /bor/span/1
 	res, _ := loadSpanFromFile(t)
 
@@ -33,7 +36,14 @@ func TestGetTransactionReceiptsByBlock(t *testing.T) {
 	defer ctrl.Finish()
 
 	h := mocks.NewMockIHeimdallClient(ctrl)
+
 	h.EXPECT().Span(uint64(1)).Return(&res.Result, nil).AnyTimes()
+	h.EXPECT().Close().AnyTimes()
+	h.EXPECT().FetchLatestCheckpoint().Return(&checkpoint.Checkpoint{
+		Proposer:   res.Result.SelectedProducers[0].Address,
+		StartBlock: big.NewInt(0),
+		EndBlock:   big.NewInt(int64(spanSize)),
+	}, nil).AnyTimes()
 
 	// Mock State Sync events
 	// at # sprintSize, events are fetched for [fromID, (block-sprint).Time)
