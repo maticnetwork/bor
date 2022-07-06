@@ -208,7 +208,7 @@ var (
 
 	// Test accounts
 	testBankKey, _  = crypto.GenerateKey()
-	testBankAddress = crypto.PubkeyToAddress(testBankKey.PublicKey)
+	TestBankAddress = crypto.PubkeyToAddress(testBankKey.PublicKey)
 	testBankFunds   = big.NewInt(1000000000000000000)
 
 	testUserKey, _  = crypto.GenerateKey()
