@@ -611,14 +611,7 @@ func (vals *ValidatorSet) updateWithChangeSet(changes []*Validator, allowDeletes
 	computeNewPriorities(updates, vals, updatedTotalVotingPower)
 
 	// Apply updates and removals.
-	vals.applyUpdates(updates)
-	vals.applyRemovals(deletes)
-
-	vals.validatorsMap = make(map[common.Address]int, len(vals.Validators))
-
-	for i, val := range vals.Validators {
-		vals.validatorsMap[val.Address] = i
-	}
+	vals.updateValidators(updates, deletes)
 
 	if err := vals.UpdateTotalVotingPower(); err != nil {
 		return err
@@ -629,6 +622,17 @@ func (vals *ValidatorSet) updateWithChangeSet(changes []*Validator, allowDeletes
 	vals.shiftByAvgProposerPriority()
 
 	return nil
+}
+
+func (vals *ValidatorSet) updateValidators(updates []*Validator, deletes []*Validator) {
+	vals.applyUpdates(updates)
+	vals.applyRemovals(deletes)
+
+	vals.validatorsMap = make(map[common.Address]int, len(vals.Validators))
+
+	for i, val := range vals.Validators {
+		vals.validatorsMap[val.Address] = i
+	}
 }
 
 // UpdateWithChangeSet attempts to update the validator set with 'changes'.
