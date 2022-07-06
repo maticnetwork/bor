@@ -55,7 +55,7 @@ type ValidatorSet struct {
 // The addresses of validators in `valz` must be unique otherwise the
 // function panics.
 func NewValidatorSet(valz []*Validator) *ValidatorSet {
-	vals := &ValidatorSet{}
+	vals := &ValidatorSet{validatorsMap: make(map[common.Address]int)}
 
 	err := vals.updateWithChangeSet(valz, false)
 	if err != nil {
@@ -233,10 +233,11 @@ func validatorListCopy(valsList []*Validator) []*Validator {
 
 // Copy each validator into a new ValidatorSet.
 func (vals *ValidatorSet) Copy() *ValidatorSet {
+	valCopy := validatorListCopy(vals.Validators)
 	validatorsMap := make(map[common.Address]int, len(vals.Validators))
 
-	for i, val := range vals.Validators {
-		vals.validatorsMap[val.Address] = i
+	for i, val := range valCopy {
+		validatorsMap[val.Address] = i
 	}
 
 	return &ValidatorSet{
@@ -521,11 +522,6 @@ func (vals *ValidatorSet) applyUpdates(updates []*Validator) {
 	}
 
 	vals.Validators = merged[:i]
-	vals.validatorsMap = make(map[common.Address]int, len(vals.Validators))
-
-	for i, val := range vals.Validators {
-		vals.validatorsMap[val.Address] = i
-	}
 }
 
 // Checks that the validators to be removed are part of the validator set.
@@ -574,11 +570,6 @@ func (vals *ValidatorSet) applyRemovals(deletes []*Validator) {
 	}
 
 	vals.Validators = merged[:i]
-	vals.validatorsMap = make(map[common.Address]int, len(vals.Validators))
-
-	for i, val := range vals.Validators {
-		vals.validatorsMap[val.Address] = i
-	}
 }
 
 // Main function used by UpdateWithChangeSet() and NewValidatorSet().
@@ -622,6 +613,12 @@ func (vals *ValidatorSet) updateWithChangeSet(changes []*Validator, allowDeletes
 	// Apply updates and removals.
 	vals.applyUpdates(updates)
 	vals.applyRemovals(deletes)
+
+	vals.validatorsMap = make(map[common.Address]int, len(vals.Validators))
+
+	for i, val := range vals.Validators {
+		vals.validatorsMap[val.Address] = i
+	}
 
 	if err := vals.UpdateTotalVotingPower(); err != nil {
 		return err
