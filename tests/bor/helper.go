@@ -39,24 +39,25 @@ import (
 var (
 
 	// Only this account is a validator for the 0th span
-	privKey = "b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291"
-	key, _  = crypto.HexToECDSA(privKey)
-	addr    = crypto.PubkeyToAddress(key.PublicKey) // 0x71562b71999873DB5b286dF957af199Ec94617F7
+	key, _ = crypto.HexToECDSA(privKey)
+	addr   = crypto.PubkeyToAddress(key.PublicKey) // 0x71562b71999873DB5b286dF957af199Ec94617F7
 
 	// This account is one the validators for 1st span (0-indexed)
-	privKey2 = "9b28f36fbd67381120752d6172ecdcf10e06ab2d9a1367aac00cdcd6ac7855d3"
-	key2, _  = crypto.HexToECDSA(privKey2)
-	addr2    = crypto.PubkeyToAddress(key2.PublicKey) // 0x9fB29AAc15b9A4B7F17c3385939b007540f4d791
-
-	validatorHeaderBytesLength = common.AddressLength + 20 // address + power
+	key2, _ = crypto.HexToECDSA(privKey2)
+	addr2   = crypto.PubkeyToAddress(key2.PublicKey) // 0x9fB29AAc15b9A4B7F17c3385939b007540f4d791
 )
 
 const (
+	privKey  = "b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291"
+	privKey2 = "9b28f36fbd67381120752d6172ecdcf10e06ab2d9a1367aac00cdcd6ac7855d3"
+
 	// The genesis for tests was generated with following parameters
 	extraSeal = 65 // Fixed number of extra-data suffix bytes reserved for signer seal
 
 	sprintSize uint64 = 4
 	spanSize   uint64 = 8
+
+	validatorHeaderBytesLength = common.AddressLength + 20 // address + power
 )
 
 type initializeData struct {
@@ -187,7 +188,9 @@ func buildNextBlock(t *testing.T, _bor consensus.Engine, chain *core.BlockChain,
 
 	err = _bor.Seal(chain, block, res, nil)
 	if err != nil {
-		panic(fmt.Sprintf("seal error: %v", err))
+		// an error case - sign manually
+		sign(t, header, signer, borConfig)
+		return types.NewBlockWithHeader(header)
 	}
 
 	return <-res
@@ -283,9 +286,9 @@ func getSignerKey(number uint64) []byte {
 		signerKey = privKey2
 	}
 
-	key, _ := hex.DecodeString(signerKey)
+	newKey, _ := hex.DecodeString(signerKey)
 
-	return key
+	return newKey
 }
 
 func getMockedHeimdallClient(t *testing.T, heimdallSpan *span.HeimdallSpan) (*mocks.MockIHeimdallClient, *gomock.Controller) {

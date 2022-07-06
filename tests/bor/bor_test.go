@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/sha3"
 
+	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor"
 	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
@@ -254,9 +255,9 @@ func TestOutOfTurnSigning(t *testing.T) {
 	// This account is one the out-of-turn validators for 1st (0-indexed) span
 	signer := "c8deb0bea5c41afe8e37b4d1bd84e31adff11b09c8c96ff4b605003cce067cd9"
 	signerKey, _ := hex.DecodeString(signer)
-	key, _ = crypto.HexToECDSA(signer)
-	addr = crypto.PubkeyToAddress(key.PublicKey)
-	expectedSuccessionNumber := 3
+	newKey, _ := crypto.HexToECDSA(signer)
+	newAddr := crypto.PubkeyToAddress(newKey.PublicKey)
+	expectedSuccessionNumber := 2
 
 	parentTime := block.Time()
 
@@ -264,8 +265,10 @@ func TestOutOfTurnSigning(t *testing.T) {
 		header.Time = parentTime + 1
 	}
 
+	const turn = 1
+
 	setDifficulty = func(header *types.Header) {
-		header.Difficulty = big.NewInt(int64(len(heimdallSpan.ValidatorSet.Validators)) - 1)
+		header.Difficulty = big.NewInt(int64(len(heimdallSpan.ValidatorSet.Validators)) - turn)
 	}
 
 	block = buildNextBlock(t, _bor, chain, block, signerKey, init.genesis.Config.Bor, nil, heimdallSpan.ValidatorSet.Validators, setParentTime, setDifficulty)
@@ -274,7 +277,7 @@ func TestOutOfTurnSigning(t *testing.T) {
 		bor.BlockTooSoonError{Number: spanSize, Succession: expectedSuccessionNumber},
 		*err.(*bor.BlockTooSoonError))
 
-	expectedDifficulty := uint64(len(heimdallSpan.ValidatorSet.Validators) - expectedSuccessionNumber) // len(validators) - succession
+	expectedDifficulty := uint64(len(heimdallSpan.ValidatorSet.Validators) - expectedSuccessionNumber - turn) // len(validators) - succession
 	header := block.Header()
 
 	diff := bor.CalcProducerDelay(header.Number.Uint64(), expectedSuccessionNumber, init.genesis.Config.Bor)
@@ -287,7 +290,7 @@ func TestOutOfTurnSigning(t *testing.T) {
 	_, err = chain.InsertChain([]*types.Block{block})
 	require.NotNil(t, err)
 	require.Equal(t,
-		bor.WrongDifficultyError{Number: spanSize, Expected: expectedDifficulty, Actual: 3, Signer: addr.Bytes()},
+		bor.WrongDifficultyError{Number: spanSize, Expected: expectedDifficulty, Actual: 3, Signer: newAddr.Bytes()},
 		*err.(*bor.WrongDifficultyError))
 
 	header.Difficulty = new(big.Int).SetUint64(expectedDifficulty)
@@ -319,16 +322,21 @@ func TestSignerNotFound(t *testing.T) {
 	block := init.genesis.ToBlock(db)
 
 	// random signer account that is not a part of the validator set
-	signer := "3714d99058cd64541433d59c6b391555b2fd9b54629c2b717a6c9c00d1127b6b"
+	const signer = "3714d99058cd64541433d59c6b391555b2fd9b54629c2b717a6c9c00d1127b6b"
 	signerKey, _ := hex.DecodeString(signer)
-	key, _ = crypto.HexToECDSA(signer)
-	addr = crypto.PubkeyToAddress(key.PublicKey)
+	newKey, _ := crypto.HexToECDSA(signer)
+	newAddr := crypto.PubkeyToAddress(newKey.PublicKey)
+
+	_bor.Authorize(newAddr, func(account accounts.Account, s string, data []byte) ([]byte, error) {
+		return crypto.Sign(crypto.Keccak256(data), newKey)
+	})
 
 	block = buildNextBlock(t, _bor, chain, block, signerKey, init.genesis.Config.Bor, nil, heimdallSpan.ValidatorSet.Validators)
+
 	_, err := chain.InsertChain([]*types.Block{block})
 	assert.Equal(t,
 		*err.(*bor.UnauthorizedSignerError),
-		bor.UnauthorizedSignerError{Number: 0, Signer: addr.Bytes()})
+		bor.UnauthorizedSignerError{Number: 0, Signer: newAddr.Bytes()})
 }
 
 // TestEIP1559Transition tests the following:

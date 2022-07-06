@@ -46,6 +46,7 @@ type ValidatorSet struct {
 
 	// cached (unexported)
 	totalVotingPower int64
+	validatorsMap    map[common.Address]int // address -> index
 }
 
 // NewValidatorSet initializes a ValidatorSet by copying over the
@@ -232,30 +233,33 @@ func validatorListCopy(valsList []*Validator) []*Validator {
 
 // Copy each validator into a new ValidatorSet.
 func (vals *ValidatorSet) Copy() *ValidatorSet {
+	validatorsMap := make(map[common.Address]int, len(vals.Validators))
+
+	for i, val := range vals.Validators {
+		vals.validatorsMap[val.Address] = i
+	}
+
 	return &ValidatorSet{
 		Validators:       validatorListCopy(vals.Validators),
 		Proposer:         vals.Proposer,
 		totalVotingPower: vals.totalVotingPower,
+		validatorsMap:    validatorsMap,
 	}
 }
 
 // HasAddress returns true if address given is in the validator set, false -
 // otherwise.
-func (vals *ValidatorSet) HasAddress(address []byte) bool {
-	idx := sort.Search(len(vals.Validators), func(i int) bool {
-		return bytes.Compare(address, vals.Validators[i].Address.Bytes()) <= 0
-	})
+func (vals *ValidatorSet) HasAddress(address common.Address) bool {
+	_, ok := vals.validatorsMap[address]
 
-	return idx < len(vals.Validators) && bytes.Equal(vals.Validators[idx].Address.Bytes(), address)
+	return ok
 }
 
 // GetByAddress returns an index of the validator with address and validator
 // itself if found. Otherwise, -1 and nil are returned.
 func (vals *ValidatorSet) GetByAddress(address common.Address) (index int, val *Validator) {
-	idx := sort.Search(len(vals.Validators), func(i int) bool {
-		return bytes.Compare(address.Bytes(), vals.Validators[i].Address.Bytes()) <= 0
-	})
-	if idx < len(vals.Validators) && vals.Validators[idx].Address == address {
+	idx, ok := vals.validatorsMap[address]
+	if ok {
 		return idx, vals.Validators[idx].Copy()
 	}
 
@@ -328,7 +332,7 @@ func (vals *ValidatorSet) GetProposer() (proposer *Validator) {
 func (vals *ValidatorSet) findProposer() *Validator {
 	var proposer *Validator
 	for _, val := range vals.Validators {
-		if proposer == nil || !bytes.Equal(val.Address.Bytes(), proposer.Address.Bytes()) {
+		if proposer == nil || val.Address != proposer.Address {
 			proposer = proposer.Cmp(val)
 		}
 	}
@@ -378,7 +382,7 @@ func processChanges(origChanges []*Validator) (updates, removals []*Validator, e
 
 	// Scan changes by address and append valid validators to updates or removals lists.
 	for _, valUpdate := range changes {
-		if bytes.Equal(valUpdate.Address.Bytes(), prevAddr.Bytes()) {
+		if valUpdate.Address == prevAddr {
 			err = fmt.Errorf("duplicate entry %v in %v", valUpdate, changes)
 			return nil, nil, err
 		}
@@ -489,10 +493,11 @@ func (vals *ValidatorSet) applyUpdates(updates []*Validator) {
 		} else {
 			// Apply add or update.
 			merged[i] = updates[0]
-			if bytes.Equal(existing[0].Address.Bytes(), updates[0].Address.Bytes()) {
+			if existing[0].Address == updates[0].Address {
 				// Validator is present in both, advance existing.
 				existing = existing[1:]
 			}
+
 			updates = updates[1:]
 		}
 		i++
@@ -503,6 +508,7 @@ func (vals *ValidatorSet) applyUpdates(updates []*Validator) {
 		merged[i] = existing[j]
 		i++
 	}
+
 	// OR add updates which are left.
 	for j := 0; j < len(updates); j++ {
 		merged[i] = updates[j]
@@ -510,6 +516,11 @@ func (vals *ValidatorSet) applyUpdates(updates []*Validator) {
 	}
 
 	vals.Validators = merged[:i]
+	vals.validatorsMap = make(map[common.Address]int, len(vals.Validators))
+
+	for i, val := range vals.Validators {
+		vals.validatorsMap[val.Address] = i
+	}
 }
 
 // Checks that the validators to be removed are part of the validator set.
@@ -541,7 +552,7 @@ func (vals *ValidatorSet) applyRemovals(deletes []*Validator) {
 
 	// Loop over deletes until we removed all of them.
 	for len(deletes) > 0 {
-		if bytes.Equal(existing[0].Address.Bytes(), deletes[0].Address.Bytes()) {
+		if existing[0].Address == deletes[0].Address {
 			deletes = deletes[1:]
 		} else { // Leave it in the resulting slice.
 			merged[i] = existing[0]
@@ -558,6 +569,11 @@ func (vals *ValidatorSet) applyRemovals(deletes []*Validator) {
 	}
 
 	vals.Validators = merged[:i]
+	vals.validatorsMap = make(map[common.Address]int, len(vals.Validators))
+
+	for i, val := range vals.Validators {
+		vals.validatorsMap[val.Address] = i
+	}
 }
 
 // Main function used by UpdateWithChangeSet() and NewValidatorSet().
