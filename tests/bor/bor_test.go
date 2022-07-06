@@ -239,8 +239,14 @@ func TestOutOfTurnSigning(t *testing.T) {
 	db := init.ethereum.ChainDb()
 	block := init.genesis.ToBlock(db)
 
+	setDifficulty := func(header *types.Header) {
+		if IsSprintStart(header.Number.Uint64()) {
+			header.Difficulty = big.NewInt(int64(len(heimdallSpan.ValidatorSet.Validators)))
+		}
+	}
+
 	for i := uint64(1); i < spanSize; i++ {
-		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, heimdallSpan.ValidatorSet.Validators)
+		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, heimdallSpan.ValidatorSet.Validators, setDifficulty)
 		insertNewBlock(t, chain, block)
 	}
 
@@ -258,18 +264,20 @@ func TestOutOfTurnSigning(t *testing.T) {
 		header.Time = parentTime + 1
 	}
 
-	block = buildNextBlock(t, _bor, chain, block, signerKey, init.genesis.Config.Bor, nil, heimdallSpan.ValidatorSet.Validators, setParentTime)
+	setDifficulty = func(header *types.Header) {
+		header.Difficulty = big.NewInt(int64(len(heimdallSpan.ValidatorSet.Validators)) - 1)
+	}
+
+	block = buildNextBlock(t, _bor, chain, block, signerKey, init.genesis.Config.Bor, nil, heimdallSpan.ValidatorSet.Validators, setParentTime, setDifficulty)
 	_, err := chain.InsertChain([]*types.Block{block})
 	require.Equal(t,
-		*err.(*bor.BlockTooSoonError),
-		bor.BlockTooSoonError{Number: spanSize, Succession: expectedSuccessionNumber})
+		bor.BlockTooSoonError{Number: spanSize, Succession: expectedSuccessionNumber},
+		*err.(*bor.BlockTooSoonError))
 
-	expectedDifficulty := uint64(len(heimdallSpan.ValidatorSet.Validators) - expectedSuccessionNumber)
+	expectedDifficulty := uint64(len(heimdallSpan.ValidatorSet.Validators) - expectedSuccessionNumber) // len(validators) - succession
 	header := block.Header()
 
-	var diff uint64
-	diff = bor.CalcProducerDelay(header.Number.Uint64(), expectedSuccessionNumber, init.genesis.Config.Bor) -
-		bor.CalcProducerDelay(header.Number.Uint64(), 0, init.genesis.Config.Bor) + 3
+	diff := bor.CalcProducerDelay(header.Number.Uint64(), expectedSuccessionNumber, init.genesis.Config.Bor)
 	header.Time += diff
 
 	sign(t, header, signerKey, init.genesis.Config.Bor)
@@ -279,7 +287,7 @@ func TestOutOfTurnSigning(t *testing.T) {
 	_, err = chain.InsertChain([]*types.Block{block})
 	require.NotNil(t, err)
 	require.Equal(t,
-		bor.WrongDifficultyError{Number: spanSize, Expected: expectedDifficulty, Actual: 4, Signer: addr.Bytes()},
+		bor.WrongDifficultyError{Number: spanSize, Expected: expectedDifficulty, Actual: 3, Signer: addr.Bytes()},
 		*err.(*bor.WrongDifficultyError))
 
 	header.Difficulty = new(big.Int).SetUint64(expectedDifficulty)

@@ -278,15 +278,14 @@ func loadSpanFromFile(t *testing.T) (*heimdall.SpanResponse, *span.HeimdallSpan)
 func getSignerKey(number uint64) []byte {
 	signerKey := privKey
 
-	isSpanStart := number%spanSize == 0
-	if isSpanStart {
+	if IsSpanStart(number) {
 		// validator set in the new span has changed
 		signerKey = privKey2
 	}
 
-	_key, _ := hex.DecodeString(signerKey)
+	key, _ := hex.DecodeString(signerKey)
 
-	return _key
+	return key
 }
 
 func getMockedHeimdallClient(t *testing.T, heimdallSpan *span.HeimdallSpan) (*mocks.MockIHeimdallClient, *gomock.Controller) {
@@ -347,6 +346,10 @@ func IsSpanEnd(number uint64) bool {
 
 func IsSpanStart(number uint64) bool {
 	return number%spanSize == 0
+}
+
+func IsSprintStart(number uint64) bool {
+	return number%sprintSize == 0
 }
 
 func IsSprintEnd(number uint64) bool {
