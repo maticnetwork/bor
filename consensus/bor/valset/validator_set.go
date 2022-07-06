@@ -375,8 +375,13 @@ func processChanges(origChanges []*Validator) (updates, removals []*Validator, e
 	changes := validatorListCopy(origChanges)
 	sort.Sort(ValidatorsByAddress(changes))
 
-	removals = make([]*Validator, 0, len(changes))
-	updates = make([]*Validator, 0, len(changes))
+	sliceCap := len(changes) / 2
+	if sliceCap == 0 {
+		sliceCap = 1
+	}
+
+	removals = make([]*Validator, 0, sliceCap)
+	updates = make([]*Validator, 0, sliceCap)
 
 	var prevAddr common.Address
 
