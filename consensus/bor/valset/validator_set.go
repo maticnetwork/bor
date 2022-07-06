@@ -269,14 +269,14 @@ func (vals *ValidatorSet) GetByAddress(address common.Address) (index int, val *
 // GetByIndex returns the validator's address and validator itself by index.
 // It returns nil values if index is less than 0 or greater or equal to
 // len(ValidatorSet.Validators).
-func (vals *ValidatorSet) GetByIndex(index int) (address []byte, val *Validator) {
+func (vals *ValidatorSet) GetByIndex(index int) (address common.Address, val *Validator) {
 	if index < 0 || index >= len(vals.Validators) {
-		return nil, nil
+		return common.Address{}, nil
 	}
 
 	val = vals.Validators[index]
 
-	return val.Address.Bytes(), val.Copy()
+	return val.Address, val.Copy()
 }
 
 // Size returns the length of the validator set.
