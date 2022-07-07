@@ -108,6 +108,10 @@ func TestGetTransactionReceiptsByBlock(t *testing.T) {
 		insertNewBlock(t, chain, block)
 	}
 
+	ethAPI2 := ethapi.NewPublicTransactionPoolAPI(init.ethereum.APIBackend, nil)
+	ans1 := ethAPI2.GetTransactionByBlockNumberAndIndex(context.Background(), rpc.BlockNumber(4), 0, t)
+	t.Log("Answer here", ans1)
+
 	for n := 0; n < 6; n++ {
 		rpcNumber := rpc.BlockNumberOrHashWithNumber(rpc.BlockNumber(n))
 		ethAPI := ethapi.NewPublicBlockChainAPI(init.ethereum.APIBackend)
