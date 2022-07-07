@@ -1,6 +1,3 @@
-//go:build integration
-// +build integration
-
 package bor
 
 import (
@@ -85,11 +82,11 @@ func TestGetTransactionReceiptsByBlock(t *testing.T) {
 			t.Fatalf("an incorrect transaction or signer: %v", err)
 		}
 
-		if i == 1 {
-			txs = []*types.Transaction{tx}
-		} else {
-			txs = nil
-		}
+		//if i == 1 {
+		txs = []*types.Transaction{tx}
+		//} else {
+		//	txs = nil
+		//}
 
 		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, txs, currentValidators)
 		insertNewBlock(t, chain, block)
@@ -114,11 +111,14 @@ func TestGetTransactionReceiptsByBlock(t *testing.T) {
 	for n := 0; n < 6; n++ {
 		rpcNumber := rpc.BlockNumberOrHashWithNumber(rpc.BlockNumber(n))
 		ethAPI := ethapi.NewPublicBlockChainAPI(init.ethereum.APIBackend)
+		ethAPI2 := ethapi.NewPublicTransactionPoolAPI(init.ethereum.APIBackend, nil)
 
 		ans, err := ethAPI.GetTransactionReceiptsByBlock(context.Background(), rpcNumber)
 		if err != nil {
 			t.Fatal("on GetTransactionReceiptsByBlock", err)
 		}
+		ans1 := ethAPI2.GetTransactionByBlockNumberAndIndex(context.Background(), rpc.BlockNumber(n), 0, t)
+		t.Log("Answer", ans1)
 
 		t.Logf("\n ANS ::: %v", ans)
 
