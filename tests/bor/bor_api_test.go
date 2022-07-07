@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor"
@@ -70,32 +71,37 @@ func TestGetTransactionReceiptsByBlock(t *testing.T) {
 	block := init.genesis.ToBlock(db)
 
 	signer := types.LatestSigner(init.genesis.Config)
-	aa := common.HexToAddress("0x000000000000000000000000000000000000aaaa")
-
-	var err error
-	var txs []*types.Transaction
+	toAddress := common.HexToAddress("0x000000000000000000000000000000000000aaaa")
 
 	currentValidators := []*valset.Validator{valset.NewValidator(addr, 10)}
+	txHashes := map[int]common.Hash{} // blockNumber -> txHash
+
+	var (
+		err   error
+		nonce uint64
+		tx    *types.Transaction
+		txs   []*types.Transaction
+	)
 
 	for i := uint64(1); i <= sprintSize; i++ {
-		txdata := &types.LegacyTx{
-			Nonce:    i - 1,
-			To:       &aa,
-			Gas:      30000,
-			GasPrice: newGwei(5),
-		}
-
 		if IsSpanEnd(i) {
 			currentValidators = []*valset.Validator{valset.NewValidator(addr, 10)}
 		}
 
-		tx := types.NewTx(txdata)
-		tx, err = types.SignTx(tx, signer, key)
-		if err != nil {
-			t.Fatalf("an incorrect transaction or signer: %v", err)
-		}
+		if i%2 == 0 {
+			txdata := &types.LegacyTx{
+				Nonce:    nonce,
+				To:       &toAddress,
+				Gas:      30000,
+				GasPrice: newGwei(5),
+			}
 
-		if i == 1 {
+			nonce++
+
+			tx = types.NewTx(txdata)
+			tx, err = types.SignTx(tx, signer, key)
+			require.Nil(t, err, "an incorrect transaction or signer")
+
 			txs = []*types.Transaction{tx}
 		} else {
 			txs = nil
@@ -103,6 +109,10 @@ func TestGetTransactionReceiptsByBlock(t *testing.T) {
 
 		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, txs, currentValidators)
 		insertNewBlock(t, chain, block)
+
+		if len(txs) != 0 {
+			txHashes[int(block.Number().Uint64())] = tx.Hash()
+		}
 	}
 
 	// state 6 was not written
@@ -121,19 +131,41 @@ func TestGetTransactionReceiptsByBlock(t *testing.T) {
 		insertNewBlock(t, chain, block)
 	}
 
+	ethAPI := ethapi.NewPublicBlockChainAPI(init.ethereum.APIBackend)
+	txPoolAPI := ethapi.NewPublicTransactionPoolAPI(init.ethereum.APIBackend, nil)
+
 	for n := 0; n < 6; n++ {
 		rpcNumber := rpc.BlockNumberOrHashWithNumber(rpc.BlockNumber(n))
-		ethAPI := ethapi.NewPublicBlockChainAPI(init.ethereum.APIBackend)
 
-		ans, err := ethAPI.GetTransactionReceiptsByBlock(context.Background(), rpcNumber)
-		if err != nil {
-			t.Fatal("on GetTransactionReceiptsByBlock", err)
-		}
+		txs, err := ethAPI.GetTransactionReceiptsByBlock(context.Background(), rpcNumber)
+		require.Nil(t, err)
 
-		t.Logf("\n ANS ::: %v", ans)
+		tx := txPoolAPI.GetTransactionByBlockNumberAndIndex(context.Background(), rpc.BlockNumber(n), 0)
 
 		blockMap, err := ethAPI.GetBlockByNumber(context.Background(), rpc.BlockNumber(n), true)
+		require.Nil(t, err)
 
-		t.Log(blockMap["transactions"], err)
+		expectedTxHash, ok := txHashes[n]
+		if ok {
+			require.Len(t, txs, 1)
+
+			require.NotNil(t, tx, "not nil receipt expected")
+
+			require.Equal(t, expectedTxHash, tx.Hash, "got different from expected receipt")
+
+			blockTxs, ok := blockMap["transactions"].([]interface{})
+			require.Len(t, blockTxs, 1)
+
+			blockTx, ok := blockTxs[0].(*ethapi.RPCTransaction)
+			require.True(t, ok)
+			require.Equal(t, expectedTxHash, blockTx.Hash)
+		} else {
+			require.Len(t, txs, 0)
+
+			require.Nil(t, tx, "nil receipt expected")
+
+			blockTxs, _ := blockMap["transactions"].([]interface{})
+			require.Len(t, blockTxs, 0)
+		}
 	}
 }
