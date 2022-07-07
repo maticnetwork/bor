@@ -18,6 +18,8 @@
 package state
 
 import (
+	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math/big"
@@ -152,6 +154,130 @@ func New(root common.Hash, db Database, snaps *snapshot.Tree) (*StateDB, error) 
 		}
 	}
 	return sdb, nil
+}
+
+func NewWithMVHashmap(root common.Hash, db Database, snaps *snapshot.Tree, mvhm *MVHashMap) (*StateDB, error) {
+	if sdb, err := New(root, db, snaps); err != nil {
+		return nil, err
+	} else {
+		sdb.mvHashmap = mvhm
+		return sdb, nil
+	}
+}
+
+func (s *StateDB) ensureReadMap() {
+	if s.readMap == nil {
+		s.readMap = make(map[string]ReadDescriptor)
+	}
+}
+
+func (s *StateDB) ensureWriteMap() {
+	if s.writeMap == nil {
+		s.writeMap = make(map[string]WriteDescriptor)
+	}
+}
+
+func MVRead[T any](s *StateDB, k []byte, defaultV T, readStorage func(s *StateDB) T) (v T) {
+	if s.mvHashmap == nil {
+		return readStorage(s)
+	}
+
+	s.ensureReadMap()
+
+	if s.writeMap != nil {
+		if _, ok := s.writeMap[base64.StdEncoding.EncodeToString(k)]; ok {
+			return readStorage(s)
+		}
+	}
+
+	res := s.mvHashmap.Read(k, s.txIndex)
+
+	var rd ReadDescriptor
+
+	rd.V = Version{
+		TxnIndex:    res.depIdx,
+		Incarnation: res.incarnation,
+	}
+
+	rd.Path = k
+
+	switch res.status() {
+	case mvReadResultDone:
+		{
+			v = readStorage(res.value)
+			rd.Kind = ReadKindMap
+		}
+	case mvReadResultDependency:
+		{
+			return defaultV
+		}
+	case mvReadResultNone:
+		{
+			v = readStorage(s)
+			rd.Kind = ReadKindStorage
+		}
+	default:
+		return defaultV
+	}
+
+	mk := base64.StdEncoding.EncodeToString(k)
+	// TODO: I assume we don't want to overwrite an existing read because this could - for example - change a storage
+	//  read to map if the same value is read multiple times.
+	if _, ok := s.readMap[mk]; !ok {
+		s.readMap[mk] = rd
+	}
+
+	return
+}
+
+func MVWrite(s *StateDB, k []byte) {
+	if s.mvHashmap != nil {
+		s.ensureWriteMap()
+		s.mvHashmap.Write(k, s.Version(), s)
+		mk := base64.StdEncoding.EncodeToString(k)
+		s.writeMap[mk] = WriteDescriptor{
+			Path: k,
+			V:    s.Version(),
+			Val:  s,
+		}
+	}
+}
+
+func MVWritten(s *StateDB, k []byte) bool {
+	if s.mvHashmap == nil || s.writeMap == nil {
+		return false
+	}
+
+	mk := base64.StdEncoding.EncodeToString(k)
+	_, ok := s.writeMap[mk]
+
+	return ok
+}
+
+// get readMap Dump of format: "TxIdx, Inc, Path, Read"
+func (s *StateDB) GetReadMapDump() string {
+	str := ""
+	for _, val := range s.readMap {
+		// fmt.SprintF is expensive, but can be sued for debugging
+		str += fmt.Sprintf("%v", s.txIndex) + ", " + fmt.Sprintf("%v", s.incarnation) + ", " + fmt.Sprintf("%v", val.V.TxnIndex) + ", " + fmt.Sprintf("%v", val.V.Incarnation) + ", " + hex.EncodeToString(val.Path) + ", " + "Read\n"
+	}
+	return str
+}
+
+// get writeMap Dump of format: "TxIdx, Inc, Path, Write"
+func (s *StateDB) GetWriteMapDump() string {
+	str := ""
+	for _, val := range s.writeMap {
+		// fmt.SprintF is expensive, but can be sued for debugging
+		str += fmt.Sprintf("%v", s.txIndex) + ", " + fmt.Sprintf("%v", s.incarnation) + ", " + fmt.Sprintf("%v", val.V.TxnIndex) + ", " + fmt.Sprintf("%v", val.V.Incarnation) + ", " + hex.EncodeToString(val.Path) + ", " + "Write\n"
+	}
+	return str
+}
+
+// add empty MVHashMap to StateDB
+func (s *StateDB) AddEmptyMVHashMap() {
+	mvh := MakeMVHashMap()
+	s.mvHashmap = mvh
 }
 
 // StartPrefetcher initializes a new trie prefetcher to pull in nodes from the

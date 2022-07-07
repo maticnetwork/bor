@@ -61,6 +61,8 @@ const (
 	// For non-archive nodes, this limit _will_ be overblown, as disk-backed tries
 	// will only be found every ~15K blocks or so.
 	defaultTracechainMemLimit = common.StorageSize(500 * 1024 * 1024)
+
+	defaultPath = string("./")
 )
 
 // Backend interface provides the common API services (that are provided by
@@ -170,6 +172,7 @@ type TraceConfig struct {
 	Tracer  *string
 	Timeout *string
 	Reexec  *uint64
+	Path    *string
 }
 
 // TraceCallConfig is the config for traceCall API. It holds one more
@@ -575,10 +578,16 @@ func (api *API) traceBlock(ctx context.Context, block *types.Block, config *Trac
 	if config != nil && config.Reexec != nil {
 		reexec = *config.Reexec
 	}
+	path := defaultPath
+	if config != nil && config.Path != nil {
+		path = *config.Path
+	}
 	statedb, err := api.backend.StateAtBlock(ctx, parent, reexec, nil, true, false)
 	if err != nil {
 		return nil, err
 	}
+	// create and add empty mvHashMap in statedb as StateAtBlock does not have mvHashmap in it.
+	statedb.AddEmptyMVHashMap()
 	// Execute all the transaction contained within the block concurrently
 	var (
 		signer  = types.MakeSigner(api.backend.ChainConfig(), block.Number())
@@ -615,10 +624,14 @@ func (api *API) traceBlock(ctx context.Context, block *types.Block, config *Trac
 			}
 		}()
 	}
+
+	IOdump := "TransactionIndex, Incarnation, VersionTxIdx, VersionInc, Path, Operation\n"
 	// Feed the transactions into the tracers and return
 	var failed error
 	blockCtx := core.NewEVMBlockContext(block.Header(), api.chainContext(ctx), nil)
 	for i, tx := range txs {
+		// copy of statedb
+		statedb := statedb.Copy()
 		// Send the trace task over for execution
 		jobs <- &txTraceTask{statedb: statedb.Copy(), index: i}
 
@@ -633,7 +646,16 @@ func (api *API) traceBlock(ctx context.Context, block *types.Block, config *Trac
 		// Finalize the state so any modifications are written to the trie
 		// Only delete empty objects if EIP158/161 (a.k.a Spurious Dragon) is in effect
 		statedb.Finalise(vmenv.ChainConfig().IsEIP158(block.Number()))
+		strRead := statedb.GetReadMapDump()
+		strWrite := statedb.GetWriteMapDump()
+		IOdump += strRead + strWrite
 	}
+	// make sure that the file exists and write IOdump
+	err = ioutil.WriteFile(path+"data.csv", []byte(fmt.Sprintf(IOdump)), 0644)
+	if err != nil {
+		fmt.Println("Writting IOdump to the file FAILED!\n IOdump:", IOdump)
+	}
+
 	close(jobs)
 	pend.Wait()
 
