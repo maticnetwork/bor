@@ -162,8 +162,8 @@ func (d *debugEnv) writeFromStream(name string, stream debugStream) error {
 	conn := &grpc_net_conn.Conn[*proto.DebugFileResponse_Input, *proto.DebugFileResponse_Input]{
 		Stream:   stream,
 		Response: &proto.DebugFileResponse_Input{},
-		Decode: grpc_net_conn.SimpleDecoder(func(msg proto.DebugFileResponse_Input) *[]byte {
-			return &msg.(*proto.DebugFileResponse_Input).Data
+		Decode: grpc_net_conn.SimpleDecoder(func(msg *proto.DebugFileResponse_Input) *[]byte {
+			return &msg.Data
 		}),
 	}
 
