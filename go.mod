@@ -31,6 +31,7 @@ require (
 	github.com/gorilla/websocket v1.4.2
 	github.com/graph-gophers/graphql-go v1.3.0
 	github.com/hashicorp/go-bexpr v0.1.10
+	github.com/hashicorp/go-grpc-net-conn v0.0.0-20220321172933-7ab38178cb90
 	github.com/hashicorp/golang-lru v0.5.5-0.20210104140557-80c98217689d
 	github.com/hashicorp/hcl/v2 v2.10.1
 	github.com/holiman/bloomfilter/v2 v2.0.3
@@ -46,7 +47,6 @@ require (
 	github.com/mattn/go-colorable v0.1.8
 	github.com/mattn/go-isatty v0.0.12
 	github.com/mitchellh/cli v1.1.2
-	github.com/mitchellh/go-grpc-net-conn v0.0.0-20200427190222-eb030e4876f0
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/naoina/toml v0.1.2-0.20170918210437-9fafd6967416
 	github.com/olekukonko/tablewriter v0.0.5

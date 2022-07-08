@@ -8,9 +8,9 @@ import (
 	"reflect"
 	"strings"
 
-	gproto "github.com/golang/protobuf/proto" //nolint:staticcheck,typecheck
-	"github.com/golang/protobuf/ptypes/empty"
-	grpc_net_conn "github.com/mitchellh/go-grpc-net-conn"
+	grpc_net_conn "github.com/hashicorp/go-grpc-net-conn"
+	gproto "google.golang.org/protobuf/proto"
+	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
