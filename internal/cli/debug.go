@@ -17,9 +17,8 @@ import (
 
 	"github.com/ethereum/go-ethereum/internal/cli/server/proto"
 
-	"github.com/golang/protobuf/jsonpb"       // nolint:staticcheck
-	gproto "github.com/golang/protobuf/proto" // nolint:staticcheck
-	grpc_net_conn "github.com/mitchellh/go-grpc-net-conn"
+	grpc_net_conn "github.com/JekaMas/go-grpc-net-conn"
+	"github.com/golang/protobuf/jsonpb" // nolint:staticcheck
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/runtime/protoiface"
 )
@@ -160,10 +159,10 @@ func (d *debugEnv) writeFromStream(name string, stream debugStream) error {
 	}
 
 	// create the stream
-	conn := &grpc_net_conn.Conn{
+	conn := &grpc_net_conn.Conn[*proto.DebugFileResponse_Input, *proto.DebugFileResponse_Input]{
 		Stream:   stream,
 		Response: &proto.DebugFileResponse_Input{},
-		Decode: grpc_net_conn.SimpleDecoder(func(msg gproto.Message) *[]byte {
+		Decode: grpc_net_conn.SimpleDecoder(func(msg proto.DebugFileResponse_Input) *[]byte {
 			return &msg.(*proto.DebugFileResponse_Input).Data
 		}),
 	}
