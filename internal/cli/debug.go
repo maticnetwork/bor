@@ -18,9 +18,9 @@ import (
 	"github.com/ethereum/go-ethereum/internal/cli/server/proto"
 
 	grpc_net_conn "github.com/JekaMas/go-grpc-net-conn"
-	"github.com/golang/protobuf/jsonpb" // nolint:staticcheck
 	"google.golang.org/grpc"
-	"google.golang.org/protobuf/runtime/protoiface"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 // DebugCommand is the command to group the peers commands
@@ -180,15 +180,15 @@ func (d *debugEnv) writeFromStream(name string, stream debugStream) error {
 	return nil
 }
 
-func (d *debugEnv) writeJSON(name string, msg protoiface.MessageV1) error {
-	m := jsonpb.Marshaler{}
-	data, err := m.MarshalToString(msg)
+func (d *debugEnv) writeJSON(name string, msg protoreflect.ProtoMessage) error {
+	m := protojson.MarshalOptions{}
+	data, err := m.Marshal(msg)
 
 	if err != nil {
 		return err
 	}
 
-	if err := ioutil.WriteFile(filepath.Join(d.dst, name), []byte(data), 0600); err != nil {
+	if err := ioutil.WriteFile(filepath.Join(d.dst, name), data, 0600); err != nil {
 		return fmt.Errorf("failed to write status: %v", err)
 	}
 

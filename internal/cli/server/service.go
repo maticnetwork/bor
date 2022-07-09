@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	grpc_net_conn "github.com/JekaMas/go-grpc-net-conn"
-	"github.com/golang/protobuf/ptypes/empty"
+	empty "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
