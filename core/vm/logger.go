@@ -40,4 +40,6 @@ type EVMLogger interface {
 
 type EVMEventLogLogger interface {
 	CaptureEventLogs(address common.Address, logs []*types.Log)
+	GetEventsLogsMap() []*types.LogWithAddress
+
 }

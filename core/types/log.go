@@ -55,6 +55,11 @@ type Log struct {
 	Removed bool `json:"removed"`
 }
 
+type LogWithAddress struct {
+	Address common.Address
+	Logs []*Log
+}
+
 type logMarshaling struct {
 	Data        hexutil.Bytes
 	BlockNumber hexutil.Uint64

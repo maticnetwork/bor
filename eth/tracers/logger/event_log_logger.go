@@ -1,29 +1,29 @@
 package logger
 
 import (
-	"fmt"
-
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 )
 
+
 type EventLogLogger struct {
-	EventsLogs map[common.Address][]*types.Log // contractAddress to array of emited log
+	eventsLogs []*types.LogWithAddress
+// contractAddress to array of emited log
 }
 
 func NewEventLogLogger() *EventLogLogger {
 	return &EventLogLogger{
-		EventsLogs: make(map[common.Address][]*types.Log),
+		eventsLogs: make([]*types.LogWithAddress, 0),
 	}
 }
 
-func (logger *EventLogLogger)  CaptureEventLogs(address common.Address, logs []*types.Log) {
-	array, in := logger.EventsLogs[address]
-	fmt.Printf("Receive %d logs from %s", len(logs), address.String())
-	if !in {
-    	logger.EventsLogs[address] = logs
-    	return
-	}
+func (logger *EventLogLogger) CaptureEventLogs(address common.Address, logs []*types.Log) {
+	logger.eventsLogs = append(logger.eventsLogs, &types.LogWithAddress{
+		Address: address,
+		Logs: logs,
+	})
+}
 
-	logger.EventsLogs[address] = append(array, logs...)
+func (logger *EventLogLogger) GetEventsLogsMap() []*types.LogWithAddress{
+	return logger.eventsLogs
 }
