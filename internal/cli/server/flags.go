@@ -335,7 +335,7 @@ func (c *Command) Flags() *flagset.Flagset {
 		Group: "JsonRPC",
 	})
 	f.SliceStringFlag(&flagset.SliceStringFlag{
-		Name:  "jsonrpc.vhosts",
+		Name:  "http.vhosts",
 		Usage: "Comma separated list of virtual hostnames from which to accept requests (server enforced). Accepts '*' wildcard.",
 		Value: &c.cliConfig.JsonRPC.VHost,
 		Group: "JsonRPC",
