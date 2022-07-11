@@ -258,7 +258,7 @@ type APIConfig struct {
 	Host string `hcl:"host,optional"`
 
 	// Modules is the list of enabled api modules
-	Modules []string `hcl:"modules,optional"`
+	API []string `hcl:"modules,optional"`
 }
 
 type GpoConfig struct {
@@ -453,14 +453,14 @@ func DefaultConfig() *Config {
 				Port:    8545,
 				Prefix:  "",
 				Host:    "localhost",
-				Modules: []string{"eth", "net", "web3", "txpool", "bor"},
+				API:     []string{"eth", "net", "web3", "txpool", "bor"},
 			},
 			Ws: &APIConfig{
 				Enabled: false,
 				Port:    8546,
 				Prefix:  "",
 				Host:    "localhost",
-				Modules: []string{"web3", "net"},
+				API:     []string{"web3", "net"},
 			},
 			Graphql: &APIConfig{
 				Enabled: false,
@@ -908,11 +908,11 @@ func (c *Config) buildNode() (*node.Config, error) {
 			ListenAddr:      c.P2P.Bind + ":" + strconv.Itoa(int(c.P2P.Port)),
 			DiscoveryV5:     c.P2P.Discovery.V5Enabled,
 		},
-		HTTPModules:         c.JsonRPC.Http.Modules,
+		HTTPModules:         c.JsonRPC.Http.API,
 		HTTPCors:            c.JsonRPC.Cors,
 		HTTPVirtualHosts:    c.JsonRPC.VHost,
 		HTTPPathPrefix:      c.JsonRPC.Http.Prefix,
-		WSModules:           c.JsonRPC.Ws.Modules,
+		WSModules:           c.JsonRPC.Ws.API,
 		WSOrigins:           c.JsonRPC.Cors,
 		WSPathPrefix:        c.JsonRPC.Ws.Prefix,
 		GraphQLCors:         c.JsonRPC.Cors,

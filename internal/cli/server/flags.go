@@ -371,9 +371,9 @@ func (c *Command) Flags() *flagset.Flagset {
 		Group:   "JsonRPC",
 	})
 	f.SliceStringFlag(&flagset.SliceStringFlag{
-		Name:  "http.modules",
+		Name:  "http.api",
 		Usage: "API's offered over the HTTP-RPC interface",
-		Value: &c.cliConfig.JsonRPC.Http.Modules,
+		Value: &c.cliConfig.JsonRPC.Http.API,
 		Group: "JsonRPC",
 	})
 
@@ -407,9 +407,9 @@ func (c *Command) Flags() *flagset.Flagset {
 		Group:   "JsonRPC",
 	})
 	f.SliceStringFlag(&flagset.SliceStringFlag{
-		Name:  "ws.modules",
+		Name:  "ws.api",
 		Usage: "API's offered over the WS-RPC interface",
-		Value: &c.cliConfig.JsonRPC.Ws.Modules,
+		Value: &c.cliConfig.JsonRPC.Ws.API,
 		Group: "JsonRPC",
 	})
 
