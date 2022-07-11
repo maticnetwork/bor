@@ -232,10 +232,10 @@ type JsonRPCConfig struct {
 	// Http has the json-rpc http related settings
 	Http *APIConfig `hcl:"http,block"`
 
-	// Http has the json-rpc websocket related settings
+	// Ws has the json-rpc websocket related settings
 	Ws *APIConfig `hcl:"ws,block"`
 
-	// Http has the json-rpc graphql related settings
+	// Graphql has the json-rpc graphql related settings
 	Graphql *APIConfig `hcl:"graphql,block"`
 }
 
@@ -999,7 +999,7 @@ func (c *Config) buildNode() (*node.Config, error) {
 
 func (c *Config) Merge(cc ...*Config) error {
 	for _, elem := range cc {
-		if err := mergo.Merge(c, elem, mergo.WithOverwriteWithEmptyValue, mergo.WithAppendSlice); err != nil {
+		if err := mergo.Merge(c, elem, mergo.WithOverwriteWithEmptyValue); err != nil {
 			return fmt.Errorf("failed to merge configurations: %v", err)
 		}
 	}

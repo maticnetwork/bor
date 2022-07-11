@@ -217,8 +217,8 @@ func (i *SliceStringFlag) String() string {
 }
 
 func (i *SliceStringFlag) Set(value string) error {
-	*i.Value = append(*i.Value, strings.Split(value, ",")...)
-
+	// overwritting insted of appending
+	*i.Value = strings.Split(value, ",")
 	return nil
 }
 
