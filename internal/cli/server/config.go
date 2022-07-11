@@ -40,8 +40,8 @@ type Config struct {
 	// Chain is the chain to sync with
 	Chain string `hcl:"chain,optional"`
 
-	// Name, or identity of the node
-	Name string `hcl:"name,optional"`
+	// Identity of the node
+	Identity string `hcl:"identity,optional"`
 
 	// RequiredBlocks is a list of required (block number, hash) pairs to accept
 	RequiredBlocks map[string]string `hcl:"requiredblocks,optional"`
@@ -387,7 +387,7 @@ type DeveloperConfig struct {
 func DefaultConfig() *Config {
 	return &Config{
 		Chain:          "mainnet",
-		Name:           Hostname(),
+		Identity:       Hostname(),
 		RequiredBlocks: map[string]string{},
 		LogLevel:       "INFO",
 		DataDir:        defaultDataDir(),

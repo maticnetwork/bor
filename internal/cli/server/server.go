@@ -201,7 +201,7 @@ func NewServer(config *Config) (*Server, error) {
 		}
 	}
 
-	if err := srv.setupMetrics(config.Telemetry, config.Name); err != nil {
+	if err := srv.setupMetrics(config.Telemetry, config.Identity); err != nil {
 		return nil, err
 	}
 

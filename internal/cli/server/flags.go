@@ -16,10 +16,10 @@ func (c *Command) Flags() *flagset.Flagset {
 		Default: c.cliConfig.Chain,
 	})
 	f.StringFlag(&flagset.StringFlag{
-		Name:    "name",
+		Name:    "identity",
 		Usage:   "Name/Identity of the node",
-		Value:   &c.cliConfig.Name,
-		Default: c.cliConfig.Name,
+		Value:   &c.cliConfig.Identity,
+		Default: c.cliConfig.Identity,
 	})
 	f.StringFlag(&flagset.StringFlag{
 		Name:    "log-level",
