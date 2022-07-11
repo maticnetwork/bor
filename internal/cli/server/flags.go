@@ -329,7 +329,7 @@ func (c *Command) Flags() *flagset.Flagset {
 		Group:   "JsonRPC",
 	})
 	f.SliceStringFlag(&flagset.SliceStringFlag{
-		Name:  "jsonrpc.corsdomain",
+		Name:  "http.corsdomain",
 		Usage: "Comma separated list of domains from which to accept cross origin requests (browser enforced)",
 		Value: &c.cliConfig.JsonRPC.Cors,
 		Group: "JsonRPC",
