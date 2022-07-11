@@ -69,9 +69,9 @@ func TestGetValidatorByAddressAndIndex(t *testing.T) {
 		idx, valByAddress := valSet.GetByAddress(val.Address)
 		addr, valByIndex := valSet.GetByIndex(idx)
 
-		assert.Equal(t, val.String(), valByIndex.String())
-		assert.Equal(t, val.String(), valByAddress.String())
-		assert.Equal(t, val.Address, common.BytesToAddress(addr))
+		assert.DeepEqual(t, val, valByIndex)
+		assert.DeepEqual(t, val, valByAddress)
+		assert.DeepEqual(t, val.Address, common.BytesToAddress(addr))
 	}
 
 	tempAddress := common.HexToAddress("0x12345")
