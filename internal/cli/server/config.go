@@ -61,8 +61,8 @@ type Config struct {
 	// GcMode selects the garbage collection mode for the trie
 	GcMode string `hcl:"gc-mode,optional"`
 
-	// NoSnapshot disables the snapshot database mode
-	NoSnapshot bool `hcl:"no-snapshot,optional"`
+	// Snapshot disables/enables the snapshot database mode
+	Snapshot bool `hcl:"snapshot,optional"`
 
 	// Ethstats is the address of the ethstats server to send telemetry
 	Ethstats string `hcl:"ethstats,optional"`
@@ -412,9 +412,9 @@ func DefaultConfig() *Config {
 			URL:     "http://localhost:1317",
 			Without: false,
 		},
-		SyncMode:   "full",
-		GcMode:     "full",
-		NoSnapshot: false,
+		SyncMode: "full",
+		GcMode:   "full",
+		Snapshot: true,
 		TxPool: &TxPoolConfig{
 			Locals:       []string{},
 			NoLocals:     false,
@@ -864,7 +864,7 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 	}
 
 	// snapshot disable check
-	if c.NoSnapshot {
+	if !c.Snapshot {
 		if n.SyncMode == downloader.SnapSync {
 			log.Info("Snap sync requested, enabling --snapshot")
 		} else {

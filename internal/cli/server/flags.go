@@ -61,10 +61,10 @@ func (c *Command) Flags() *flagset.Flagset {
 		Value: &c.cliConfig.RequiredBlocks,
 	})
 	f.BoolFlag(&flagset.BoolFlag{
-		Name:    "no-snapshot",
-		Usage:   `Disables the snapshot-database mode (default = false)`,
-		Value:   &c.cliConfig.NoSnapshot,
-		Default: c.cliConfig.NoSnapshot,
+		Name:    "snapshot",
+		Usage:   `Disables/Enables the snapshot-database mode (default = true)`,
+		Value:   &c.cliConfig.Snapshot,
+		Default: c.cliConfig.Snapshot,
 	})
 
 	// heimdall
