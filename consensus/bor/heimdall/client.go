@@ -138,7 +138,7 @@ func FetchWithRetry[T any](ctx context.Context, client http.Client, url *url.URL
 		return result, nil
 	}
 
-	// ignore or log the error
+	log.Warn("an error while trying fetching from Heimdall", "attempt", attempt, "error", err)
 
 	// create a new ticker for retrying the request
 	ticker := time.NewTicker(retryCall)
@@ -146,7 +146,10 @@ func FetchWithRetry[T any](ctx context.Context, client http.Client, url *url.URL
 
 	// attempt counter
 	attempt := 1
+	
+	const logEach = 5
 
+retryLoop:
 	for {
 		log.Info("Retrying again in 5 seconds to fetch data from Heimdall", "path", url.Path, "attempt", attempt)
 
@@ -163,11 +166,15 @@ func FetchWithRetry[T any](ctx context.Context, client http.Client, url *url.URL
 			return nil, ErrShutdownDetected
 		case <-ticker.C:
 			result, err = Fetch[T](ctx, client, url)
-
-			// ignore or log the error
-			if err == nil {
-				return result, nil
+			if err != nil {
+				if attempt % logEach == 0 {
+					log.Warn("an error while trying fetching from Heimdall", "attempt", attempt, "error", err)
+				}
+				
+				continue retryLoop
 			}
+
+			return result, nil
 		}
 	}
 }
@@ -177,13 +184,12 @@ func Fetch[T any](ctx context.Context, client http.Client, url *url.URL) (*T, er
 	result := new(T)
 
 	body, err := internalFetchWithTimeout(ctx, client, url)
+	if err != nil {
+		return nil, err
+	}
 
 	if body == nil {
 		return nil, ErrNoResponse
-	}
-
-	if err != nil {
-		return nil, err
 	}
 
 	err = json.Unmarshal(body, result)
@@ -258,9 +264,7 @@ func internalFetchWithTimeout(ctx context.Context, client http.Client, url *url.
 	defer cancel()
 
 	// request data once
-	body, err := internalFetch(ctx, client, url)
-
-	return body, err
+	return internalFetch(ctx, client, url)
 }
 
 // Close sends a signal to stop the running process
