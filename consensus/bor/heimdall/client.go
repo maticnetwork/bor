@@ -157,11 +157,11 @@ retryLoop:
 
 		select {
 		case <-ctx.Done():
-			log.Debug("Shutdown detected, terminating request")
+			log.Debug("Shutdown detected, terminating request by context.Done")
 
 			return nil, ctx.Err()
 		case <-closeCh:
-			log.Debug("Shutdown detected, terminating request")
+			log.Debug("Shutdown detected, terminating request by closing")
 
 			return nil, ErrShutdownDetected
 		case <-ticker.C:
