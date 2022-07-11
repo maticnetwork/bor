@@ -146,7 +146,7 @@ func FetchWithRetry[T any](ctx context.Context, client http.Client, url *url.URL
 	// create a new ticker for retrying the request
 	ticker := time.NewTicker(retryCall)
 	defer ticker.Stop()
-	
+
 	const logEach = 5
 
 retryLoop:
@@ -167,10 +167,10 @@ retryLoop:
 		case <-ticker.C:
 			result, err = Fetch[T](ctx, client, url)
 			if err != nil {
-				if attempt % logEach == 0 {
+				if attempt%logEach == 0 {
 					log.Warn("an error while trying fetching from Heimdall", "attempt", attempt, "error", err)
 				}
-				
+
 				continue retryLoop
 			}
 
