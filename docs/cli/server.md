@@ -6,7 +6,7 @@ The ```bor server``` command runs the Bor client.
 
 - ```chain```: Name of the chain to sync
 
-- ```identity```: Identity of the node
+- ```identity```: Name/Identity of the node
 
 - ```log-level```: Set log level for the server
 
@@ -22,7 +22,7 @@ The ```bor server``` command runs the Bor client.
 
 - ```requiredblocks```: Comma separated block number-to-hash mappings to enforce (<number>=<hash>)
 
-- ```snapshot```: Disables the snapshot-database mode (default = true)
+- ```snapshot```: Disables/Enables the snapshot-database mode (default = true)
 
 - ```bor.heimdall```: URL of Heimdall service
 
