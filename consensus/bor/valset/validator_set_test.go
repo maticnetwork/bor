@@ -13,31 +13,37 @@ func NewValidatorFromKey(key string, votingPower int64) *Validator {
 	return NewValidator(crypto.PubkeyToAddress(privKey.PublicKey), votingPower)
 }
 
-var (
-	// addr1 = 0x96C42C56fdb78294F96B0cFa33c92bed7D75F96a
-	signer1 = "c8deb0bea5c41afe8e37b4d1bd84e31adff11b09c8c96ff4b605003cce067cd9"
-	val1    = NewValidatorFromKey(signer1, 100)
+func GetValidators() [4]*Validator {
+	const (
+		// addr0 = 0x96C42C56fdb78294F96B0cFa33c92bed7D75F96a
+		signer0 = "c8deb0bea5c41afe8e37b4d1bd84e31adff11b09c8c96ff4b605003cce067cd9"
 
-	// addr2 = 0x98925BE497f6dFF6A5a33dDA8B5933cA35262d69
-	signer2 = "c8deb0bea5c41afe8e37b4d1bd84e31adff11b09c8c96ff4b605003cce067cd8"
-	val2    = NewValidatorFromKey(signer2, 200)
+		// addr1 = 0x98925BE497f6dFF6A5a33dDA8B5933cA35262d69
+		signer1 = "c8deb0bea5c41afe8e37b4d1bd84e31adff11b09c8c96ff4b605003cce067cd8"
 
-	//addr3 = 0x648Cf2A5b119E2c04061021834F8f75735B1D36b
-	signer3 = "c8deb0bea5c41afe8e37b4d1bd84e31adff11b09c8c96ff4b605003cce067cd7"
-	val3    = NewValidatorFromKey(signer3, 300)
+		//addr2 = 0x648Cf2A5b119E2c04061021834F8f75735B1D36b
+		signer2 = "c8deb0bea5c41afe8e37b4d1bd84e31adff11b09c8c96ff4b605003cce067cd7"
 
-	//addr4 = 0x168f220B3b313D456eD4797520eFdFA9c57E6C45
-	signer4 = "c8deb0bea5c41afe8e37b4d1bd84e31adff11b09c8c96ff4b605003cce067cd6"
-	val4    = NewValidatorFromKey(signer4, 400)
-)
+		//addr3 = 0x168f220B3b313D456eD4797520eFdFA9c57E6C45
+		signer3 = "c8deb0bea5c41afe8e37b4d1bd84e31adff11b09c8c96ff4b605003cce067cd6"
+	)
+
+	return [4]*Validator{
+		NewValidatorFromKey(signer0, 100),
+		NewValidatorFromKey(signer1, 200),
+		NewValidatorFromKey(signer2, 300),
+		NewValidatorFromKey(signer3, 400),
+	}
+}
 
 func TestIncrementProposerPriority(t *testing.T) {
 
-	// Validator set length = 1
-	validators := []*Validator{val1}
-	valSet := NewValidatorSet(validators)
+	vals := GetValidators()
 
-	expectedPropsers := []*Validator{val1, val1, val1, val1, val1, val1, val1, val1, val1, val1}
+	// Validator set length = 1
+	valSet := NewValidatorSet(vals[:1])
+
+	expectedPropsers := []*Validator{vals[0], vals[0], vals[0], vals[0], vals[0], vals[0], vals[0], vals[0], vals[0], vals[0]}
 
 	for i := 0; i < 10; i++ {
 
@@ -48,10 +54,9 @@ func TestIncrementProposerPriority(t *testing.T) {
 	}
 
 	// Validator set length = 2
-	validators = []*Validator{val1, val2}
-	valSet = NewValidatorSet(validators)
+	valSet = NewValidatorSet(vals[:2])
 
-	expectedPropsers = []*Validator{val1, val2, val2, val1, val2, val2, val1, val2, val2, val1}
+	expectedPropsers = []*Validator{vals[0], vals[1], vals[1], vals[0], vals[1], vals[1], vals[0], vals[1], vals[1], vals[0]}
 
 	for i := 0; i < 10; i++ {
 
@@ -62,10 +67,9 @@ func TestIncrementProposerPriority(t *testing.T) {
 	}
 
 	// Validator set length = 3
-	validators = []*Validator{val1, val2, val3}
-	valSet = NewValidatorSet(validators)
+	valSet = NewValidatorSet(vals[:3])
 
-	expectedPropsers = []*Validator{val2, val3, val1, val2, val3, val3, val2, val3, val1, val2}
+	expectedPropsers = []*Validator{vals[1], vals[2], vals[0], vals[1], vals[2], vals[2], vals[1], vals[2], vals[0], vals[1]}
 
 	for i := 0; i < 10; i++ {
 
@@ -76,10 +80,9 @@ func TestIncrementProposerPriority(t *testing.T) {
 	}
 
 	// Validator set length = 4
-	validators = []*Validator{val1, val2, val3, val4}
-	valSet = NewValidatorSet(validators)
+	valSet = NewValidatorSet(vals[:4])
 
-	expectedPropsers = []*Validator{val3, val2, val4, val3, val1, val4, val2, val3, val4, val4}
+	expectedPropsers = []*Validator{vals[2], vals[1], vals[3], vals[2], vals[0], vals[3], vals[1], vals[2], vals[3], vals[3]}
 
 	for i := 0; i < 10; i++ {
 
@@ -92,10 +95,10 @@ func TestIncrementProposerPriority(t *testing.T) {
 }
 
 func TestRescalePriorities(t *testing.T) {
+	vals := GetValidators()
 
 	// Validator set length = 1
-	validators := []*Validator{val1}
-	valSet := NewValidatorSet(validators)
+	valSet := NewValidatorSet(vals[:1])
 
 	valSet.RescalePriorities(10)
 
@@ -105,8 +108,8 @@ func TestRescalePriorities(t *testing.T) {
 	}
 
 	// Validator set length = 2
-	validators = []*Validator{val1, val2}
-	valSet = NewValidatorSet(validators)
+
+	valSet = NewValidatorSet(vals[:2])
 
 	valSet.RescalePriorities(100)
 
@@ -116,8 +119,8 @@ func TestRescalePriorities(t *testing.T) {
 	}
 
 	// Validator set length = 3
-	validators = []*Validator{val1, val2, val3}
-	valSet = NewValidatorSet(validators)
+
+	valSet = NewValidatorSet(vals[:3])
 
 	valSet.RescalePriorities(30)
 
@@ -127,8 +130,8 @@ func TestRescalePriorities(t *testing.T) {
 	}
 
 	// Validator set length = 4
-	validators = []*Validator{val1, val2, val3, val4}
-	valSet = NewValidatorSet(validators)
+
+	valSet = NewValidatorSet(vals[:4])
 
 	valSet.RescalePriorities(10)
 
@@ -139,8 +142,8 @@ func TestRescalePriorities(t *testing.T) {
 }
 
 func TestGetValidatorByAddressAndIndex(t *testing.T) {
-	validators := []*Validator{val1, val2, val3, val4}
-	valSet := NewValidatorSet(validators)
+	vals := GetValidators()
+	valSet := NewValidatorSet(vals[:4])
 
 	for _, val := range valSet.Validators {
 		idx, valByAddress := valSet.GetByAddress(val.Address)
@@ -164,12 +167,12 @@ func TestGetValidatorByAddressAndIndex(t *testing.T) {
 }
 
 func TestUpdateWithChangeSet(t *testing.T) {
-	validators := []*Validator{val1, val2, val3, val4}
-	valSet := NewValidatorSet(validators)
+	vals := GetValidators()
+	valSet := NewValidatorSet(vals[:4])
 
-	// doubled the power of val4 and halved the power of val3
-	val3 = NewValidatorFromKey(signer3, 150)
-	val4 = NewValidatorFromKey(signer4, 800)
+	// halved the power of vals[2] and doubled the power of vals[3]
+	val2 := NewValidatorFromKey("c8deb0bea5c41afe8e37b4d1bd84e31adff11b09c8c96ff4b605003cce067cd7", 150) // signer2
+	val3 := NewValidatorFromKey("c8deb0bea5c41afe8e37b4d1bd84e31adff11b09c8c96ff4b605003cce067cd6", 800) // signer3
 
 	// Adding new temp validator in the set
 	tempSigner := "c8deb0bea5c41afe8e37b4d1bd84e31adff11b09c8c96ff4b605003cce067cd5"
@@ -178,16 +181,16 @@ func TestUpdateWithChangeSet(t *testing.T) {
 	// check totalVotingPower before updating validator set
 	assert.Equal(t, int64(1000), valSet.TotalVotingPower())
 
-	valSet.UpdateWithChangeSet([]*Validator{val3, val4, tempVal})
+	valSet.UpdateWithChangeSet([]*Validator{val2, val3, tempVal})
 
 	// check totalVotingPower after updating validator set
 	assert.Equal(t, int64(1500), valSet.TotalVotingPower())
 
-	_, updatedVal3 := valSet.GetByAddress(val3.Address)
-	assert.Equal(t, int64(150), updatedVal3.VotingPower)
+	_, updatedVal2 := valSet.GetByAddress(vals[2].Address)
+	assert.Equal(t, int64(150), updatedVal2.VotingPower)
 
-	_, updatedVal4 := valSet.GetByAddress(val4.Address)
-	assert.Equal(t, int64(800), updatedVal4.VotingPower)
+	_, updatedVal3 := valSet.GetByAddress(vals[3].Address)
+	assert.Equal(t, int64(800), updatedVal3.VotingPower)
 
 	_, updatedTempVal := valSet.GetByAddress(tempVal.Address)
 	assert.Equal(t, int64(250), updatedTempVal.VotingPower)
