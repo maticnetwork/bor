@@ -18,6 +18,7 @@
 package state
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math/big"
@@ -33,6 +34,8 @@ import (
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type revision struct {
@@ -819,9 +822,17 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 // IntermediateRoot computes the current root hash of the state trie.
 // It is called in between transactions to get the root hash that
 // goes into transaction receipts.
-func (s *StateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
+func (s *StateDB) IntermediateRoot(ctx context.Context, deleteEmptyObjects bool) common.Hash {
+	// Fetch the tracer and create a sub-span here
+	tracer := otel.GetTracerProvider().Tracer("MinerWorker")
+
+	_, intermediateRootSpan := tracer.Start(ctx, "IntermediateRoot")
+	defer intermediateRootSpan.End()
+
 	// Finalise all the dirty storage states and write them into the tries
+	finalizeStart := time.Now()
 	s.Finalise(deleteEmptyObjects)
+	finalizeTime := time.Since(finalizeStart)
 
 	// If there was a trie prefetcher operating, it gets aborted and irrevocably
 	// modified after we start retrieving tries. Remove it from the statedb after
@@ -842,19 +853,31 @@ func (s *StateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
 	// the account prefetcher. Instead, let's process all the storage updates
 	// first, giving the account prefeches just a few more milliseconds of time
 	// to pull useful data from disk.
+	updateRootStart := time.Now()
+	updatedRootInitialLength := len(s.stateObjectsPending)
+	updated := 0
 	for addr := range s.stateObjectsPending {
 		if obj := s.stateObjects[addr]; !obj.deleted {
 			obj.updateRoot(s.db)
+			updated++
 		}
 	}
+	updateRootTime := time.Since(updateRootStart)
+
 	// Now we're about to start to write changes to the trie. The trie is so far
 	// _untouched_. We can check with the prefetcher, if it can give us a trie
 	// which has the same root, but also has some content loaded into it.
+	trieFetchStart := time.Now()
 	if prefetcher != nil {
 		if trie := prefetcher.trie(s.originalRoot); trie != nil {
 			s.trie = trie
 		}
 	}
+	trieFetchTime := time.Since(trieFetchStart)
+
+	stateIterationStart := time.Now()
+	stateIterationLength := len(s.stateObjectsPending)
+	iterations := 0
 	usedAddrs := make([][]byte, 0, len(s.stateObjectsPending))
 	for addr := range s.stateObjectsPending {
 		if obj := s.stateObjects[addr]; obj.deleted {
@@ -865,7 +888,10 @@ func (s *StateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
 			s.AccountUpdated += 1
 		}
 		usedAddrs = append(usedAddrs, common.CopyBytes(addr[:])) // Copy needed for closure
+		iterations++
 	}
+	stateIterationTime := time.Since(stateIterationStart)
+
 	if prefetcher != nil {
 		prefetcher.used(s.originalRoot, usedAddrs)
 	}
@@ -876,7 +902,24 @@ func (s *StateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
 	if metrics.EnabledExpensive {
 		defer func(start time.Time) { s.AccountHashes += time.Since(start) }(time.Now())
 	}
-	return s.trie.Hash()
+
+	hashCalculationStart := time.Now()
+	hash := s.trie.Hash()
+	hashCalculationTime := time.Since(hashCalculationStart)
+
+	intermediateRootSpan.SetAttributes(
+		attribute.Int("finalize time", int(finalizeTime.Milliseconds())),
+		attribute.Int("updateRoot time", int(updateRootTime.Milliseconds())),
+		attribute.Int("updateRoot initial length", updatedRootInitialLength),
+		attribute.Int("updateRoot iterations", updated),
+		attribute.Int("trieFetch time", int(trieFetchTime.Milliseconds())),
+		attribute.Int("stateIteration time", int(stateIterationTime.Milliseconds())),
+		attribute.Int("stateIteration initial length", stateIterationLength),
+		attribute.Int("stateIteration iterations", iterations),
+		attribute.Int("hashCalculation time", int(hashCalculationTime.Milliseconds())),
+	)
+
+	return hash
 }
 
 // Prepare sets the current transaction hash and index which are
@@ -900,7 +943,7 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 		return common.Hash{}, fmt.Errorf("commit aborted due to earlier error: %v", s.dbErr)
 	}
 	// Finalize any pending changes and merge everything into the tries
-	s.IntermediateRoot(deleteEmptyObjects)
+	s.IntermediateRoot(context.Background(), deleteEmptyObjects)
 
 	// Commit objects to the trie, measuring the elapsed time
 	var storageCommitted int
