@@ -33,10 +33,53 @@ var (
 
 func TestIncrementProposerPriority(t *testing.T) {
 
-	validators := []*Validator{val1, val2, val3, val4}
+	// Validator set length = 1
+	validators := []*Validator{val1}
 	valSet := NewValidatorSet(validators)
 
-	expectedPropsers := []*Validator{val3, val2, val4, val3, val1, val4, val2, val3, val4, val4}
+	expectedPropsers := []*Validator{val1, val1, val1, val1, val1, val1, val1, val1, val1, val1}
+
+	for i := 0; i < 10; i++ {
+
+		valSet.IncrementProposerPriority(1)
+
+		assert.Equal(t, expectedPropsers[i].Address, valSet.GetProposer().Address)
+
+	}
+
+	// Validator set length = 2
+	validators = []*Validator{val1, val2}
+	valSet = NewValidatorSet(validators)
+
+	expectedPropsers = []*Validator{val1, val2, val2, val1, val2, val2, val1, val2, val2, val1}
+
+	for i := 0; i < 10; i++ {
+
+		valSet.IncrementProposerPriority(1)
+
+		assert.Equal(t, expectedPropsers[i].Address, valSet.GetProposer().Address)
+
+	}
+
+	// Validator set length = 3
+	validators = []*Validator{val1, val2, val3}
+	valSet = NewValidatorSet(validators)
+
+	expectedPropsers = []*Validator{val2, val3, val1, val2, val3, val3, val2, val3, val1, val2}
+
+	for i := 0; i < 10; i++ {
+
+		valSet.IncrementProposerPriority(1)
+
+		assert.Equal(t, expectedPropsers[i].Address, valSet.GetProposer().Address)
+
+	}
+
+	// Validator set length = 4
+	validators = []*Validator{val1, val2, val3, val4}
+	valSet = NewValidatorSet(validators)
+
+	expectedPropsers = []*Validator{val3, val2, val4, val3, val1, val4, val2, val3, val4, val4}
 
 	for i := 0; i < 10; i++ {
 
@@ -50,12 +93,46 @@ func TestIncrementProposerPriority(t *testing.T) {
 
 func TestRescalePriorities(t *testing.T) {
 
-	validators := []*Validator{val1, val2, val3, val4}
+	// Validator set length = 1
+	validators := []*Validator{val1}
 	valSet := NewValidatorSet(validators)
 
 	valSet.RescalePriorities(10)
 
-	expectedPriorities := []int64{-6, 3, 1, 2}
+	expectedPriorities := []int64{0}
+	for i, val := range valSet.Validators {
+		assert.Equal(t, expectedPriorities[i], val.ProposerPriority)
+	}
+
+	// Validator set length = 2
+	validators = []*Validator{val1, val2}
+	valSet = NewValidatorSet(validators)
+
+	valSet.RescalePriorities(100)
+
+	expectedPriorities = []int64{50, -50}
+	for i, val := range valSet.Validators {
+		assert.Equal(t, expectedPriorities[i], val.ProposerPriority)
+	}
+
+	// Validator set length = 3
+	validators = []*Validator{val1, val2, val3}
+	valSet = NewValidatorSet(validators)
+
+	valSet.RescalePriorities(30)
+
+	expectedPriorities = []int64{-17, 5, 11}
+	for i, val := range valSet.Validators {
+		assert.Equal(t, expectedPriorities[i], val.ProposerPriority)
+	}
+
+	// Validator set length = 4
+	validators = []*Validator{val1, val2, val3, val4}
+	valSet = NewValidatorSet(validators)
+
+	valSet.RescalePriorities(10)
+
+	expectedPriorities = []int64{-6, 3, 1, 2}
 	for i, val := range valSet.Validators {
 		assert.Equal(t, expectedPriorities[i], val.ProposerPriority)
 	}
