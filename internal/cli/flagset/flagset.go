@@ -202,10 +202,11 @@ func (f *Flagset) BigIntFlag(b *BigIntFlag) {
 }
 
 type SliceStringFlag struct {
-	Name  string
-	Usage string
-	Value *[]string
-	Group string
+	Name    string
+	Usage   string
+	Value   *[]string
+	Default []string
+	Group   string
 }
 
 func (i *SliceStringFlag) String() string {

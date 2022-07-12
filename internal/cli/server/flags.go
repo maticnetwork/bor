@@ -83,10 +83,11 @@ func (c *Command) Flags() *flagset.Flagset {
 
 	// txpool options
 	f.SliceStringFlag(&flagset.SliceStringFlag{
-		Name:  "txpool.locals",
-		Usage: "Comma separated accounts to treat as locals (no flush, priority inclusion)",
-		Value: &c.cliConfig.TxPool.Locals,
-		Group: "Transaction Pool",
+		Name:    "txpool.locals",
+		Usage:   "Comma separated accounts to treat as locals (no flush, priority inclusion)",
+		Value:   &c.cliConfig.TxPool.Locals,
+		Default: c.cliConfig.TxPool.Locals,
+		Group:   "Transaction Pool",
 	})
 	f.BoolFlag(&flagset.BoolFlag{
 		Name:    "txpool.nolocals",
@@ -329,16 +330,18 @@ func (c *Command) Flags() *flagset.Flagset {
 		Group:   "JsonRPC",
 	})
 	f.SliceStringFlag(&flagset.SliceStringFlag{
-		Name:  "http.corsdomain",
-		Usage: "Comma separated list of domains from which to accept cross origin requests (browser enforced)",
-		Value: &c.cliConfig.JsonRPC.Cors,
-		Group: "JsonRPC",
+		Name:    "http.corsdomain",
+		Usage:   "Comma separated list of domains from which to accept cross origin requests (browser enforced)",
+		Value:   &c.cliConfig.JsonRPC.Cors,
+		Default: c.cliConfig.JsonRPC.Cors,
+		Group:   "JsonRPC",
 	})
 	f.SliceStringFlag(&flagset.SliceStringFlag{
-		Name:  "http.vhosts",
-		Usage: "Comma separated list of virtual hostnames from which to accept requests (server enforced). Accepts '*' wildcard.",
-		Value: &c.cliConfig.JsonRPC.VHost,
-		Group: "JsonRPC",
+		Name:    "http.vhosts",
+		Usage:   "Comma separated list of virtual hostnames from which to accept requests (server enforced). Accepts '*' wildcard.",
+		Value:   &c.cliConfig.JsonRPC.VHost,
+		Default: c.cliConfig.JsonRPC.VHost,
+		Group:   "JsonRPC",
 	})
 
 	// http options
@@ -371,10 +374,11 @@ func (c *Command) Flags() *flagset.Flagset {
 		Group:   "JsonRPC",
 	})
 	f.SliceStringFlag(&flagset.SliceStringFlag{
-		Name:  "http.api",
-		Usage: "API's offered over the HTTP-RPC interface",
-		Value: &c.cliConfig.JsonRPC.Http.API,
-		Group: "JsonRPC",
+		Name:    "http.api",
+		Usage:   "API's offered over the HTTP-RPC interface",
+		Value:   &c.cliConfig.JsonRPC.Http.API,
+		Default: c.cliConfig.JsonRPC.Http.API,
+		Group:   "JsonRPC",
 	})
 
 	// ws options
@@ -407,10 +411,11 @@ func (c *Command) Flags() *flagset.Flagset {
 		Group:   "JsonRPC",
 	})
 	f.SliceStringFlag(&flagset.SliceStringFlag{
-		Name:  "ws.api",
-		Usage: "API's offered over the WS-RPC interface",
-		Value: &c.cliConfig.JsonRPC.Ws.API,
-		Group: "JsonRPC",
+		Name:    "ws.api",
+		Usage:   "API's offered over the WS-RPC interface",
+		Value:   &c.cliConfig.JsonRPC.Ws.API,
+		Default: c.cliConfig.JsonRPC.Ws.API,
+		Group:   "JsonRPC",
 	})
 
 	// graphql options
@@ -438,10 +443,11 @@ func (c *Command) Flags() *flagset.Flagset {
 		Group:   "P2P",
 	})
 	f.SliceStringFlag(&flagset.SliceStringFlag{
-		Name:  "bootnodes",
-		Usage: "Comma separated enode URLs for P2P discovery bootstrap",
-		Value: &c.cliConfig.P2P.Discovery.Bootnodes,
-		Group: "P2P",
+		Name:    "bootnodes",
+		Usage:   "Comma separated enode URLs for P2P discovery bootstrap",
+		Value:   &c.cliConfig.P2P.Discovery.Bootnodes,
+		Default: c.cliConfig.P2P.Discovery.Bootnodes,
+		Group:   "P2P",
 	})
 	f.Uint64Flag(&flagset.Uint64Flag{
 		Name:    "maxpeers",
@@ -581,10 +587,11 @@ func (c *Command) Flags() *flagset.Flagset {
 
 	// account
 	f.SliceStringFlag(&flagset.SliceStringFlag{
-		Name:  "unlock",
-		Usage: "Comma separated list of accounts to unlock",
-		Value: &c.cliConfig.Accounts.Unlock,
-		Group: "Account Management",
+		Name:    "unlock",
+		Usage:   "Comma separated list of accounts to unlock",
+		Value:   &c.cliConfig.Accounts.Unlock,
+		Default: c.cliConfig.Accounts.Unlock,
+		Group:   "Account Management",
 	})
 	f.StringFlag(&flagset.StringFlag{
 		Name:    "password",
