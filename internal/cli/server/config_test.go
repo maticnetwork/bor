@@ -64,7 +64,6 @@ func TestConfigMerge(t *testing.T) {
 			MaxPeers: 10,
 			Discovery: &P2PDiscovery{
 				StaticNodes: []string{
-					"a",
 					"b",
 				},
 			},
