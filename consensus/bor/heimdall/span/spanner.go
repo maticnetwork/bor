@@ -44,7 +44,7 @@ func (c *ChainSpanner) GetCurrentSpan(headerHash common.Hash) (*Span, error) {
 	blockNr := rpc.BlockNumberOrHashWithHash(headerHash, false)
 
 	// method
-	method := "getCurrentSpan"
+	const method = "getCurrentSpan"
 
 	data, err := c.validatorSet.Pack(method)
 	if err != nil {

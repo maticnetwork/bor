@@ -717,7 +717,7 @@ func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, 
 
 	headerNumber := header.Number.Uint64()
 
-	if headerNumber%c.config.Sprint == 0 {
+	if IsSprintStart(headerNumber, c.config.Sprint) {
 		cx := statefull.ChainContext{Chain: chain, Bor: c}
 		// check and commit span
 		if err := c.checkAndCommitSpan(state, header, cx); err != nil {
@@ -726,7 +726,7 @@ func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, 
 		}
 
 		if c.HeimdallClient != nil {
-			// commit statees
+			// commit states
 			stateSyncData, err = c.CommitStates(state, header, cx)
 			if err != nil {
 				log.Error("Error while committing states", "error", err)
@@ -789,7 +789,7 @@ func (c *Bor) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *typ
 
 	headerNumber := header.Number.Uint64()
 
-	if headerNumber%c.config.Sprint == 0 {
+	if IsSprintStart(headerNumber, c.config.Sprint) {
 		cx := statefull.ChainContext{Chain: chain, Bor: c}
 
 		// check and commit span
@@ -1053,7 +1053,6 @@ func (c *Bor) CommitStates(
 	header *types.Header,
 	chain statefull.ChainContext,
 ) ([]*types.StateSyncData, error) {
-	stateSyncs := make([]*types.StateSyncData, 0)
 	number := header.Number.Uint64()
 
 	_lastStateID, err := c.GenesisContractsClient.LastStateId(number - 1)
@@ -1081,15 +1080,17 @@ func (c *Bor) CommitStates(
 	}
 
 	totalGas := 0 /// limit on gas for state sync per block
-
 	chainID := c.chainConfig.ChainID.String()
+	stateSyncs := make([]*types.StateSyncData, len(eventRecords))
+
+	var gasUsed uint64
 
 	for _, eventRecord := range eventRecords {
 		if eventRecord.ID <= lastStateID {
 			continue
 		}
 
-		if err := validateEventRecord(eventRecord, number, to, lastStateID, chainID); err != nil {
+		if err = validateEventRecord(eventRecord, number, to, lastStateID, chainID); err != nil {
 			log.Error("while validating event record", "block", number, "to", to, "stateID", lastStateID, "error", err.Error())
 			break
 		}
@@ -1103,7 +1104,10 @@ func (c *Bor) CommitStates(
 
 		stateSyncs = append(stateSyncs, &stateData)
 
-		gasUsed, err := c.GenesisContractsClient.CommitState(eventRecord, state, header, chain)
+		// we expect that this call MUST emit an event, otherwise we wouldn't make a receipt
+		// if the receiver address is not a contract then we'll skip the most of the execution and emitting an event as well
+		// https://github.com/maticnetwork/genesis-contracts/blob/master/contracts/StateReceiver.sol#L27
+		gasUsed, err = c.GenesisContractsClient.CommitState(eventRecord, state, header, chain)
 		if err != nil {
 			return nil, err
 		}

@@ -79,6 +79,7 @@ func buildEthereumInstance(t *testing.T, db ethdb.Database) *initializeData {
 
 	ethConf := &eth.Config{
 		Genesis: gen,
+		BorLogs: true,
 	}
 
 	ethConf.Genesis.MustCommit(db)

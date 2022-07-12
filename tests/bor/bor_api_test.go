@@ -26,20 +26,20 @@ func TestGetTransactionReceiptsByBlock(t *testing.T) {
 	init := buildEthereumInstance(t, rawdb.NewMemoryDatabase())
 	chain := init.ethereum.BlockChain()
 	engine := init.ethereum.Engine()
-	_bor := engine.(*bor.Bor)
 
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	_bor := engine.(*bor.Bor)
 	defer _bor.Close()
 
 	// Mock /bor/span/1
 	res, _ := loadSpanFromFile(t)
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
 	h := mocks.NewMockIHeimdallClient(ctrl)
 
-	h.EXPECT().Span(uint64(1)).Return(&res.Result, nil).AnyTimes()
-	h.EXPECT().Close().AnyTimes()
+	h.EXPECT().Span(uint64(1)).Return(&res.Result, nil).MinTimes(1)
+	h.EXPECT().Close().MinTimes(1)
 	h.EXPECT().FetchLatestCheckpoint().Return(&checkpoint.Checkpoint{
 		Proposer:   res.Result.SelectedProducers[0].Address,
 		StartBlock: big.NewInt(0),
@@ -53,17 +53,13 @@ func TestGetTransactionReceiptsByBlock(t *testing.T) {
 	sample := getSampleEventRecord(t)
 
 	// First query will be from [id=1, (block-sprint).Time]
-	// Insert 5 events in this time range
 	eventRecords := []*clerk.EventRecordWithTime{
-		buildStateEvent(sample, 1, 3), // id = 1, time = 1
-		buildStateEvent(sample, 2, 1), // id = 2, time = 3
-		buildStateEvent(sample, 3, 2), // id = 3, time = 2
-		// event with id 5 is missing
-		buildStateEvent(sample, 4, 5), // id = 4, time = 5
-		buildStateEvent(sample, 6, 4), // id = 6, time = 4
+		buildStateEvent(sample, 1, 1),
+		buildStateEvent(sample, 2, 2),
+		buildStateEvent(sample, 3, 3),
 	}
 
-	h.EXPECT().StateSyncEvents(fromID, to).Return(eventRecords, nil).AnyTimes()
+	h.EXPECT().StateSyncEvents(fromID, to).Return(eventRecords, nil).MinTimes(1)
 	_bor.SetHeimdallClient(h)
 
 	// Insert blocks for 0th sprint
@@ -88,7 +84,7 @@ func TestGetTransactionReceiptsByBlock(t *testing.T) {
 			currentValidators = []*valset.Validator{valset.NewValidator(addr, 10)}
 		}
 
-		if i%2 == 0 {
+		if i%3 == 0 {
 			txdata := &types.LegacyTx{
 				Nonce:    nonce,
 				To:       &toAddress,
@@ -117,14 +113,14 @@ func TestGetTransactionReceiptsByBlock(t *testing.T) {
 
 	// state 6 was not written
 	//
-	fromID = uint64(5)
+	fromID = uint64(4)
 	to = int64(chain.GetHeaderByNumber(sprintSize).Time)
 
 	eventRecords = []*clerk.EventRecordWithTime{
-		buildStateEvent(sample, 5, 7),
-		buildStateEvent(sample, 6, 4),
+		buildStateEvent(sample, 4, 4),
+		buildStateEvent(sample, 5, 5),
 	}
-	h.EXPECT().StateSyncEvents(fromID, to).Return(eventRecords, nil).AnyTimes()
+	h.EXPECT().StateSyncEvents(fromID, to).Return(eventRecords, nil).MinTimes(1)
 
 	for i := sprintSize + 1; i <= spanSize; i++ {
 		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators)
@@ -134,7 +130,7 @@ func TestGetTransactionReceiptsByBlock(t *testing.T) {
 	ethAPI := ethapi.NewPublicBlockChainAPI(init.ethereum.APIBackend)
 	txPoolAPI := ethapi.NewPublicTransactionPoolAPI(init.ethereum.APIBackend, nil)
 
-	for n := 0; n < 6; n++ {
+	for n := 0; n < int(spanSize)+1; n++ {
 		rpcNumber := rpc.BlockNumberOrHashWithNumber(rpc.BlockNumber(n))
 
 		txs, err := ethAPI.GetTransactionReceiptsByBlock(context.Background(), rpcNumber)
@@ -146,6 +142,7 @@ func TestGetTransactionReceiptsByBlock(t *testing.T) {
 		require.Nil(t, err)
 
 		expectedTxHash, ok := txHashes[n]
+		// FIXME: add `IsSprintStart(uint64(n)) || IsSpanStart(uint64(n))` after adding a full state receiver contract
 		if ok {
 			require.Len(t, txs, 1)
 
