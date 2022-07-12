@@ -92,6 +92,14 @@ The ```bor server``` command runs the Bor client.
 
 - ```http.vhosts```: Comma separated list of virtual hostnames from which to accept requests (server enforced). Accepts '*' wildcard.
 
+- ```ws.corsdomain```: Comma separated list of domains from which to accept cross origin requests (browser enforced)
+
+- ```ws.vhosts```: Comma separated list of virtual hostnames from which to accept requests (server enforced). Accepts '*' wildcard.
+
+- ```graphql.corsdomain```: Comma separated list of domains from which to accept cross origin requests (browser enforced)
+
+- ```graphql.vhosts```: Comma separated list of virtual hostnames from which to accept requests (server enforced). Accepts '*' wildcard.
+
 - ```http```: Enable the HTTP-RPC server
 
 - ```http.addr```: HTTP-RPC server listening interface

@@ -332,15 +332,43 @@ func (c *Command) Flags() *flagset.Flagset {
 	f.SliceStringFlag(&flagset.SliceStringFlag{
 		Name:    "http.corsdomain",
 		Usage:   "Comma separated list of domains from which to accept cross origin requests (browser enforced)",
-		Value:   &c.cliConfig.JsonRPC.Cors,
-		Default: c.cliConfig.JsonRPC.Cors,
+		Value:   &c.cliConfig.JsonRPC.Http.Cors,
+		Default: c.cliConfig.JsonRPC.Http.Cors,
 		Group:   "JsonRPC",
 	})
 	f.SliceStringFlag(&flagset.SliceStringFlag{
 		Name:    "http.vhosts",
 		Usage:   "Comma separated list of virtual hostnames from which to accept requests (server enforced). Accepts '*' wildcard.",
-		Value:   &c.cliConfig.JsonRPC.VHost,
-		Default: c.cliConfig.JsonRPC.VHost,
+		Value:   &c.cliConfig.JsonRPC.Http.VHost,
+		Default: c.cliConfig.JsonRPC.Http.VHost,
+		Group:   "JsonRPC",
+	})
+	f.SliceStringFlag(&flagset.SliceStringFlag{
+		Name:    "ws.corsdomain",
+		Usage:   "Comma separated list of domains from which to accept cross origin requests (browser enforced)",
+		Value:   &c.cliConfig.JsonRPC.Ws.Cors,
+		Default: c.cliConfig.JsonRPC.Ws.Cors,
+		Group:   "JsonRPC",
+	})
+	f.SliceStringFlag(&flagset.SliceStringFlag{
+		Name:    "ws.vhosts",
+		Usage:   "Comma separated list of virtual hostnames from which to accept requests (server enforced). Accepts '*' wildcard.",
+		Value:   &c.cliConfig.JsonRPC.Ws.VHost,
+		Default: c.cliConfig.JsonRPC.Ws.VHost,
+		Group:   "JsonRPC",
+	})
+	f.SliceStringFlag(&flagset.SliceStringFlag{
+		Name:    "graphql.corsdomain",
+		Usage:   "Comma separated list of domains from which to accept cross origin requests (browser enforced)",
+		Value:   &c.cliConfig.JsonRPC.Graphql.Cors,
+		Default: c.cliConfig.JsonRPC.Graphql.Cors,
+		Group:   "JsonRPC",
+	})
+	f.SliceStringFlag(&flagset.SliceStringFlag{
+		Name:    "graphql.vhosts",
+		Usage:   "Comma separated list of virtual hostnames from which to accept requests (server enforced). Accepts '*' wildcard.",
+		Value:   &c.cliConfig.JsonRPC.Graphql.VHost,
+		Default: c.cliConfig.JsonRPC.Graphql.VHost,
 		Group:   "JsonRPC",
 	})
 

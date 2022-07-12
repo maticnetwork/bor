@@ -217,12 +217,6 @@ type JsonRPCConfig struct {
 	// IPCPath is the path of the ipc endpoint
 	IPCPath string `hcl:"ipc-path,optional"`
 
-	// VHost is the list of valid virtual hosts
-	VHost []string `hcl:"vhost,optional"`
-
-	// Cors is the list of Cors endpoints
-	Cors []string `hcl:"cors,optional"`
-
 	// GasCap is the global gas cap for eth-call variants.
 	GasCap uint64 `hcl:"gas-cap,optional"`
 
@@ -259,6 +253,12 @@ type APIConfig struct {
 
 	// Modules is the list of enabled api modules
 	API []string `hcl:"modules,optional"`
+
+	// VHost is the list of valid virtual hosts
+	VHost []string `hcl:"vhost,optional"`
+
+	// Cors is the list of Cors endpoints
+	Cors []string `hcl:"cors,optional"`
 }
 
 type GpoConfig struct {
@@ -444,8 +444,6 @@ func DefaultConfig() *Config {
 		JsonRPC: &JsonRPCConfig{
 			IPCDisable: false,
 			IPCPath:    "",
-			Cors:       []string{"*"},
-			VHost:      []string{"*"},
 			GasCap:     ethconfig.Defaults.RPCGasCap,
 			TxFeeCap:   ethconfig.Defaults.RPCTxFeeCap,
 			Http: &APIConfig{
@@ -454,6 +452,8 @@ func DefaultConfig() *Config {
 				Prefix:  "",
 				Host:    "localhost",
 				API:     []string{"eth", "net", "web3", "txpool", "bor"},
+				Cors:    []string{"*"},
+				VHost:   []string{"*"},
 			},
 			Ws: &APIConfig{
 				Enabled: false,
@@ -461,9 +461,13 @@ func DefaultConfig() *Config {
 				Prefix:  "",
 				Host:    "localhost",
 				API:     []string{"web3", "net"},
+				Cors:    []string{"*"},
+				VHost:   []string{"*"},
 			},
 			Graphql: &APIConfig{
 				Enabled: false,
+				Cors:    []string{"*"},
+				VHost:   []string{"*"},
 			},
 		},
 		Ethstats: "",
@@ -909,14 +913,14 @@ func (c *Config) buildNode() (*node.Config, error) {
 			DiscoveryV5:     c.P2P.Discovery.V5Enabled,
 		},
 		HTTPModules:         c.JsonRPC.Http.API,
-		HTTPCors:            c.JsonRPC.Cors,
-		HTTPVirtualHosts:    c.JsonRPC.VHost,
+		HTTPCors:            c.JsonRPC.Http.Cors,
+		HTTPVirtualHosts:    c.JsonRPC.Http.VHost,
 		HTTPPathPrefix:      c.JsonRPC.Http.Prefix,
 		WSModules:           c.JsonRPC.Ws.API,
-		WSOrigins:           c.JsonRPC.Cors,
+		WSOrigins:           c.JsonRPC.Ws.Cors,
 		WSPathPrefix:        c.JsonRPC.Ws.Prefix,
-		GraphQLCors:         c.JsonRPC.Cors,
-		GraphQLVirtualHosts: c.JsonRPC.VHost,
+		GraphQLCors:         c.JsonRPC.Graphql.Cors,
+		GraphQLVirtualHosts: c.JsonRPC.Graphql.VHost,
 	}
 
 	// dev mode
