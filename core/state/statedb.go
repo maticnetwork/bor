@@ -34,6 +34,7 @@ import (
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
+
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 )
@@ -832,6 +833,7 @@ func (s *StateDB) IntermediateRoot(ctx context.Context, deleteEmptyObjects bool)
 	// Finalise all the dirty storage states and write them into the tries
 	finalizeStart := time.Now()
 	s.Finalise(deleteEmptyObjects)
+
 	finalizeTime := time.Since(finalizeStart)
 
 	// If there was a trie prefetcher operating, it gets aborted and irrevocably
@@ -862,6 +864,7 @@ func (s *StateDB) IntermediateRoot(ctx context.Context, deleteEmptyObjects bool)
 			updated++
 		}
 	}
+
 	updateRootTime := time.Since(updateRootStart)
 
 	// Now we're about to start to write changes to the trie. The trie is so far
@@ -873,6 +876,7 @@ func (s *StateDB) IntermediateRoot(ctx context.Context, deleteEmptyObjects bool)
 			s.trie = trie
 		}
 	}
+
 	trieFetchTime := time.Since(trieFetchStart)
 
 	stateIterationStart := time.Now()
@@ -890,6 +894,7 @@ func (s *StateDB) IntermediateRoot(ctx context.Context, deleteEmptyObjects bool)
 		usedAddrs = append(usedAddrs, common.CopyBytes(addr[:])) // Copy needed for closure
 		iterations++
 	}
+
 	stateIterationTime := time.Since(stateIterationStart)
 
 	if prefetcher != nil {

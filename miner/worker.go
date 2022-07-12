@@ -740,7 +740,7 @@ func (w *worker) resultLoop() {
 			w.pendingMu.RLock()
 			task, exist := w.pendingTasks[sealhash]
 			w.pendingMu.RUnlock()
-			_, resultLoopSpan := w.tracer.Start(task.ctx, "resultLoop")
+			resultLoopCtx, resultLoopSpan := w.tracer.Start(task.ctx, "resultLoop")
 			if !exist {
 				log.Error("Block found but no relative pending task", "number", block.Number(), "sealhash", sealhash, "hash", hash)
 				continue
@@ -773,7 +773,7 @@ func (w *worker) resultLoop() {
 			}
 			// Commit block and state to database.
 			writeBlockStart := time.Now()
-			_, err := w.chain.WriteBlockAndSetHead(block, receipts, logs, task.state, true)
+			_, err := w.chain.WriteBlockAndSetHead(resultLoopCtx, block, receipts, logs, task.state, true)
 			writeBlockTime := time.Since(writeBlockStart)
 			resultLoopSpan.SetAttributes(
 				attribute.String("hash", hash.String()),
@@ -1126,6 +1126,7 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 			localTxs[account] = txs
 		}
 	}
+
 	splittingTransactionsSpan.SetAttributes(
 		attribute.Int("LocalTx Len", len(localTxs)),
 		attribute.Int("RemoteTx Len", len(remoteTxs)),
@@ -1142,12 +1143,14 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 			attribute.Int("len of tx Heads", txs.GetTxs()),
 		)
 		transactionsByPriceAndNonceSpan.End()
+
 		lenNewLocals = txs.GetTxs()
 
 		_, commitTransactionsSpan := w.tracer.Start(fillTxCtx, "LocalCommitTransactions")
 		if w.commitTransactions(env, txs, interrupt) {
 			return
 		}
+
 		commitTransactionsSpan.SetAttributes(
 			attribute.Int("len of tx Heads", txs.GetTxs()),
 		)
@@ -1163,12 +1166,14 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 			attribute.Int("len of tx Heads", txs.GetTxs()),
 		)
 		TransactionsByPriceAndNonceSpan.End()
+
 		lenNewRemotes = txs.GetTxs()
 
 		_, CommitTransactionsSpan := w.tracer.Start(fillTxCtx, "RemoteCommitTransactions")
 		if w.commitTransactions(env, txs, interrupt) {
 			return
 		}
+
 		CommitTransactionsSpan.SetAttributes(
 			attribute.Int("len of tx Heads", txs.GetTxs()),
 		)

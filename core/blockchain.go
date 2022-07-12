@@ -28,6 +28,9 @@ import (
 	"time"
 
 	lru "github.com/hashicorp/golang-lru"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"golang.org/x/net/context"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/mclock"
@@ -1205,7 +1208,8 @@ func (bc *BlockChain) writeKnownBlock(block *types.Block) error {
 
 // writeBlockWithState writes block, metadata and corresponding state data to the
 // database.
-func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB) ([]*types.Log, error) {
+//nolint:gocognit
+func (bc *BlockChain) writeBlockWithState(ctx context.Context, block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB) ([]*types.Log, error) {
 	// Calculate the total difficulty of the block
 	ptd := bc.GetTd(block.ParentHash(), block.NumberU64()-1)
 	if ptd == nil {
@@ -1214,14 +1218,31 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	// Make sure no inconsistent state is leaked during insertion
 	externTd := new(big.Int).Add(block.Difficulty(), ptd)
 
+	tracer := otel.GetTracerProvider().Tracer("MinerWorker")
+
+	_, writeBlockWithStateSpan := tracer.Start(ctx, "writeBlockWithState")
+	defer writeBlockWithStateSpan.End()
+
 	// Irrelevant of the canonical status, write the block itself to the database.
 	//
 	// Note all the components of block(td, hash->number map, header, body, receipts)
 	// should be written atomically. BlockBatch is used for containing all components.
 	blockBatch := bc.db.NewBatch()
+
+	writeTdStart := time.Now()
 	rawdb.WriteTd(blockBatch, block.Hash(), block.NumberU64(), externTd)
+
+	writeTdTime := time.Since(writeTdStart)
+
+	writeBlockStart := time.Now()
 	rawdb.WriteBlock(blockBatch, block)
+
+	writeBlockTime := time.Since(writeBlockStart)
+
+	writeReceiptsStart := time.Now()
 	rawdb.WriteReceipts(blockBatch, block.Hash(), block.NumberU64(), receipts)
+
+	writeReceiptsTime := time.Since(writeReceiptsStart)
 
 	// System call appends state-sync logs into state. So, `state.Logs()` contains
 	// all logs including system-call logs (state sync logs) while `logs` contains
@@ -1233,6 +1254,10 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	// block logs = receipt logs + state sync logs = `state.Logs()`
 	blockLogs := state.Logs()
 	var stateSyncLogs []*types.Log
+
+	writeBorReceiptStart := time.Now()
+	writeBorReceiptTime := time.Since(writeBorReceiptStart)
+	borLogs := false
 	if len(blockLogs) > 0 {
 		sort.SliceStable(blockLogs, func(i, j int) bool {
 			return blockLogs[i].Index < blockLogs[j].Index
@@ -1253,19 +1278,32 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 
 			// Write bor tx reverse lookup
 			rawdb.WriteBorTxLookupEntry(blockBatch, block.Hash(), block.NumberU64())
+
+			writeBorReceiptTime = time.Since(writeBorReceiptStart)
+			borLogs = true
 		}
 	}
 
+	writePreimagesStart := time.Now()
 	rawdb.WritePreimages(blockBatch, state.Preimages())
 	if err := blockBatch.Write(); err != nil {
 		log.Crit("Failed to write block into disk", "err", err)
 	}
+
+	writePreimagesTime := time.Since(writePreimagesStart)
+
 	// Commit all cached state changes into underlying memory database.
+	commitCacheStart := time.Now()
 	root, err := state.Commit(bc.chainConfig.IsEIP158(block.Number()))
 	if err != nil {
 		return []*types.Log{}, err
 	}
 	triedb := bc.stateCache.TrieDB()
+	commitCacheTime := time.Since(commitCacheStart)
+
+	garbageCollectionStart := time.Now()
+	garbageCollectionTime := time.Since(garbageCollectionStart) //nolint:staticcheck
+	garbageCollected := false
 
 	// If we're running an archive node, always flush
 	if bc.cacheConfig.TrieDirtyDisabled {
@@ -1316,39 +1354,73 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 				triedb.Dereference(root.(common.Hash))
 			}
 		}
+
+		garbageCollectionTime = time.Since(garbageCollectionStart)
+		garbageCollected = true
 	}
+
+	writeBlockWithStateSpan.SetAttributes(
+		attribute.Int("number", int(block.NumberU64())),
+		attribute.String("hash", block.Hash().String()),
+		attribute.Int("write total difficulty time", int(writeTdTime.Milliseconds())),
+		attribute.Int("write block time", int(writeBlockTime.Milliseconds())),
+		attribute.Int("write receipts time", int(writeReceiptsTime.Milliseconds())),
+		attribute.Bool("bor receipts present?", borLogs),
+		attribute.Int("write bor receipts time", int(writeBorReceiptTime.Milliseconds())),
+		attribute.Int("write preimage time", int(writePreimagesTime.Milliseconds())),
+		attribute.Int("commit cache time", int(commitCacheTime.Milliseconds())),
+		attribute.Bool("garbage collected?", garbageCollected),
+		attribute.Int("garbage collection time", int(garbageCollectionTime.Milliseconds())),
+	)
+
 	return stateSyncLogs, nil
 }
 
 // WriteBlockWithState writes the block and all associated state to the database.
-func (bc *BlockChain) WriteBlockAndSetHead(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool) (status WriteStatus, err error) {
+func (bc *BlockChain) WriteBlockAndSetHead(ctx context.Context, block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool) (status WriteStatus, err error) {
 	if !bc.chainmu.TryLock() {
 		return NonStatTy, errChainStopped
 	}
 	defer bc.chainmu.Unlock()
 
-	return bc.writeBlockAndSetHead(block, receipts, logs, state, emitHeadEvent)
+	return bc.writeBlockAndSetHead(ctx, block, receipts, logs, state, emitHeadEvent)
 }
 
 // writeBlockAndSetHead writes the block and all associated state to the database,
 // and also it applies the given block as the new chain head. This function expects
 // the chain mutex to be held.
-func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool) (status WriteStatus, err error) {
+func (bc *BlockChain) writeBlockAndSetHead(ctx context.Context, block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool) (status WriteStatus, err error) {
 	var stateSyncLogs []*types.Log
-	if stateSyncLogs, err = bc.writeBlockWithState(block, receipts, logs, state); err != nil {
+
+	tracer := otel.GetTracerProvider().Tracer("MinerWorker")
+
+	_, writeBlockAndSetHeadSpan := tracer.Start(ctx, "writeBlockAndSetHead")
+	defer writeBlockAndSetHeadSpan.End()
+
+	writeBlockWithStateStart := time.Now()
+
+	if stateSyncLogs, err = bc.writeBlockWithState(ctx, block, receipts, logs, state); err != nil {
 		return NonStatTy, err
 	}
+
+	writeBlockWithStateTime := time.Since(writeBlockWithStateStart)
+
 	currentBlock := bc.CurrentBlock()
 	reorg, err := bc.forker.ReorgNeeded(currentBlock.Header(), block.Header())
 	if err != nil {
 		return NonStatTy, err
 	}
+
+	reorgStart := time.Now()
+	reorgTime := time.Since(reorgStart)
 	if reorg {
 		// Reorganise the chain if the parent is not the head block
 		if block.ParentHash() != currentBlock.Hash() {
 			if err := bc.reorg(currentBlock, block); err != nil {
 				return NonStatTy, err
 			}
+
+			reorgTime = time.Since(reorgStart)
 		}
 		status = CanonStatTy
 	} else {
@@ -1360,6 +1432,7 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 	}
 	bc.futureBlocks.Remove(block.Hash())
 
+	sendEventStart := time.Now()
 	if status == CanonStatTy {
 		bc.chainFeed.Send(ChainEvent{Block: block, Hash: block.Hash(), Logs: logs})
 		if len(logs) > 0 {
@@ -1392,6 +1465,18 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 			NewChain: []*types.Block{block},
 		})
 	}
+
+	sendEventTime := time.Since(sendEventStart)
+
+	writeBlockAndSetHeadSpan.SetAttributes(
+		attribute.Int("number", int(block.NumberU64())),
+		attribute.String("hash", block.Hash().String()),
+		attribute.Int("write block with state time", int(writeBlockWithStateTime.Milliseconds())),
+		attribute.Bool("reorg", reorg),
+		attribute.Int("reorg time", int(reorgTime.Milliseconds())),
+		attribute.Int("send events time", int(sendEventTime.Milliseconds())),
+	)
+
 	return status, nil
 }
 
@@ -1735,9 +1820,9 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 		var status WriteStatus
 		if !setHead {
 			// Don't set the head, only insert the block
-			_, err = bc.writeBlockWithState(block, receipts, logs, statedb)
+			_, err = bc.writeBlockWithState(context.Background(), block, receipts, logs, statedb)
 		} else {
-			status, err = bc.writeBlockAndSetHead(block, receipts, logs, statedb, false)
+			status, err = bc.writeBlockAndSetHead(context.Background(), block, receipts, logs, statedb, false)
 		}
 		atomic.StoreUint32(&followupInterrupt, 1)
 		if err != nil {
