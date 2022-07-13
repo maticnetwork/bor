@@ -38,9 +38,9 @@ func TestGetTransactionReceiptsByBlock(t *testing.T) {
 
 	h := mocks.NewMockIHeimdallClient(ctrl)
 
-	h.EXPECT().Span(uint64(1)).Return(&res.Result, nil).MinTimes(1)
+	h.EXPECT().Span(gomock.Any(), uint64(1)).Return(&res.Result, nil).MinTimes(1)
 	h.EXPECT().Close().MinTimes(1)
-	h.EXPECT().FetchLatestCheckpoint().Return(&checkpoint.Checkpoint{
+	h.EXPECT().FetchLatestCheckpoint(gomock.Any()).Return(&checkpoint.Checkpoint{
 		Proposer:   res.Result.SelectedProducers[0].Address,
 		StartBlock: big.NewInt(0),
 		EndBlock:   big.NewInt(int64(spanSize)),
@@ -59,7 +59,7 @@ func TestGetTransactionReceiptsByBlock(t *testing.T) {
 		buildStateEvent(sample, 3, 3),
 	}
 
-	h.EXPECT().StateSyncEvents(fromID, to).Return(eventRecords, nil).MinTimes(1)
+	h.EXPECT().StateSyncEvents(gomock.Any(), fromID, to).Return(eventRecords, nil).MinTimes(1)
 	_bor.SetHeimdallClient(h)
 
 	// Insert blocks for 0th sprint
@@ -120,7 +120,7 @@ func TestGetTransactionReceiptsByBlock(t *testing.T) {
 		buildStateEvent(sample, 4, 4),
 		buildStateEvent(sample, 5, 5),
 	}
-	h.EXPECT().StateSyncEvents(fromID, to).Return(eventRecords, nil).MinTimes(1)
+	h.EXPECT().StateSyncEvents(gomock.Any(), fromID, to).Return(eventRecords, nil).MinTimes(1)
 
 	for i := sprintSize + 1; i <= spanSize; i++ {
 		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators)
