@@ -170,8 +170,8 @@ func TestUpdateWithChangeSet(t *testing.T) {
 	valSet := NewValidatorSet(vals[:4])
 
 	// halved the power of vals[2] and doubled the power of vals[3]
-	val2 := NewValidatorFromKey("c8deb0bea5c41afe8e37b4d1bd84e31adff11b09c8c96ff4b605003cce067cd7", 150) // signer2
-	val3 := NewValidatorFromKey("c8deb0bea5c41afe8e37b4d1bd84e31adff11b09c8c96ff4b605003cce067cd6", 800) // signer3
+	vals[2].VotingPower = 150
+	vals[3].VotingPower = 800
 
 	// Adding new temp validator in the set
 	tempSigner := "c8deb0bea5c41afe8e37b4d1bd84e31adff11b09c8c96ff4b605003cce067cd5"
@@ -180,7 +180,7 @@ func TestUpdateWithChangeSet(t *testing.T) {
 	// check totalVotingPower before updating validator set
 	assert.Equal(t, int64(1000), valSet.TotalVotingPower())
 
-	err := valSet.UpdateWithChangeSet([]*Validator{val2, val3, tempVal})
+	err := valSet.UpdateWithChangeSet([]*Validator{vals[2], vals[3], tempVal})
 	assert.NilError(t, err)
 
 	// check totalVotingPower after updating validator set
