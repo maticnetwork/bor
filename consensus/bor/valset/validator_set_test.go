@@ -5,6 +5,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+
 	"gotest.tools/assert"
 )
 
@@ -37,6 +38,7 @@ func GetValidators() [4]*Validator {
 }
 
 func TestIncrementProposerPriority(t *testing.T) {
+	t.Parallel()
 
 	vals := GetValidators()
 
@@ -46,11 +48,9 @@ func TestIncrementProposerPriority(t *testing.T) {
 	expectedPropsers := []*Validator{vals[0], vals[0], vals[0], vals[0], vals[0], vals[0], vals[0], vals[0], vals[0], vals[0]}
 
 	for i := 0; i < 10; i++ {
-
 		valSet.IncrementProposerPriority(1)
 
 		assert.Equal(t, expectedPropsers[i].Address, valSet.GetProposer().Address)
-
 	}
 
 	// Validator set length = 2
@@ -59,11 +59,9 @@ func TestIncrementProposerPriority(t *testing.T) {
 	expectedPropsers = []*Validator{vals[0], vals[1], vals[1], vals[0], vals[1], vals[1], vals[0], vals[1], vals[1], vals[0]}
 
 	for i := 0; i < 10; i++ {
-
 		valSet.IncrementProposerPriority(1)
 
 		assert.Equal(t, expectedPropsers[i].Address, valSet.GetProposer().Address)
-
 	}
 
 	// Validator set length = 3
@@ -72,11 +70,9 @@ func TestIncrementProposerPriority(t *testing.T) {
 	expectedPropsers = []*Validator{vals[1], vals[2], vals[0], vals[1], vals[2], vals[2], vals[1], vals[2], vals[0], vals[1]}
 
 	for i := 0; i < 10; i++ {
-
 		valSet.IncrementProposerPriority(1)
 
 		assert.Equal(t, expectedPropsers[i].Address, valSet.GetProposer().Address)
-
 	}
 
 	// Validator set length = 4
@@ -85,16 +81,15 @@ func TestIncrementProposerPriority(t *testing.T) {
 	expectedPropsers = []*Validator{vals[2], vals[1], vals[3], vals[2], vals[0], vals[3], vals[1], vals[2], vals[3], vals[3]}
 
 	for i := 0; i < 10; i++ {
-
 		valSet.IncrementProposerPriority(1)
 
 		assert.Equal(t, expectedPropsers[i].Address, valSet.GetProposer().Address)
-
 	}
-
 }
 
 func TestRescalePriorities(t *testing.T) {
+	t.Parallel()
+
 	vals := GetValidators()
 
 	// Validator set length = 1
@@ -142,6 +137,8 @@ func TestRescalePriorities(t *testing.T) {
 }
 
 func TestGetValidatorByAddressAndIndex(t *testing.T) {
+	t.Parallel()
+
 	vals := GetValidators()
 	valSet := NewValidatorSet(vals[:4])
 
@@ -163,10 +160,11 @@ func TestGetValidatorByAddressAndIndex(t *testing.T) {
 	// checking for validator index out of range
 	addr, _ := valSet.GetByIndex(100)
 	assert.Equal(t, common.BytesToAddress(addr), common.Address{})
-
 }
 
 func TestUpdateWithChangeSet(t *testing.T) {
+	t.Parallel()
+
 	vals := GetValidators()
 	valSet := NewValidatorSet(vals[:4])
 
@@ -181,7 +179,8 @@ func TestUpdateWithChangeSet(t *testing.T) {
 	// check totalVotingPower before updating validator set
 	assert.Equal(t, int64(1000), valSet.TotalVotingPower())
 
-	valSet.UpdateWithChangeSet([]*Validator{val2, val3, tempVal})
+	err := valSet.UpdateWithChangeSet([]*Validator{val2, val3, tempVal})
+	assert.NilError(t, err)
 
 	// check totalVotingPower after updating validator set
 	assert.Equal(t, int64(1500), valSet.TotalVotingPower())
