@@ -45,7 +45,7 @@ func TestInsertingSpanSizeBlocks(t *testing.T) {
 
 	h.EXPECT().Close().AnyTimes()
 	h.EXPECT().FetchCheckpoint(gomock.Any(), int64(-1)).Return(&checkpoint.Checkpoint{
-		Proposer:   span.SelectedProducers[0].Address,
+		Proposer:   currentSpan.SelectedProducers[0].Address,
 		StartBlock: big.NewInt(0),
 		EndBlock:   big.NewInt(int64(spanSize)),
 	}, nil).AnyTimes()
