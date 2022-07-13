@@ -174,7 +174,8 @@ func TestUpdateWithChangeSet(t *testing.T) {
 	vals[3].VotingPower = 800
 
 	// Adding new temp validator in the set
-	tempSigner := "c8deb0bea5c41afe8e37b4d1bd84e31adff11b09c8c96ff4b605003cce067cd5"
+	const tempSigner = "c8deb0bea5c41afe8e37b4d1bd84e31adff11b09c8c96ff4b605003cce067cd5"
+
 	tempVal := NewValidatorFromKey(tempSigner, 250)
 
 	// check totalVotingPower before updating validator set
