@@ -11,6 +11,7 @@ import (
 
 func NewValidatorFromKey(key string, votingPower int64) *Validator {
 	privKey, _ := crypto.HexToECDSA(key)
+
 	return NewValidator(crypto.PubkeyToAddress(privKey.PublicKey), votingPower)
 }
 
@@ -148,7 +149,7 @@ func TestGetValidatorByAddressAndIndex(t *testing.T) {
 
 		assert.DeepEqual(t, val, valByIndex)
 		assert.DeepEqual(t, val, valByAddress)
-		assert.DeepEqual(t, val.Address, common.BytesToAddress(addr))
+		assert.DeepEqual(t, val.Address, addr)
 	}
 
 	tempAddress := common.HexToAddress("0x12345")
@@ -159,7 +160,7 @@ func TestGetValidatorByAddressAndIndex(t *testing.T) {
 
 	// checking for validator index out of range
 	addr, _ := valSet.GetByIndex(100)
-	assert.Equal(t, common.BytesToAddress(addr), common.Address{})
+	assert.Equal(t, addr, common.Address{})
 }
 
 func TestUpdateWithChangeSet(t *testing.T) {
