@@ -43,7 +43,7 @@ var (
 
 // fetchWhitelistCheckpoints fetches the latest checkpoint/s from it's local heimdall
 // and verifies the data against bor data.
-func (h *ethHandler) fetchWhitelistCheckpoints(bor *bor.Bor, first bool) ([]uint64, []common.Hash, error) {
+func (h *ethHandler) fetchWhitelistCheckpoints(ctx context.Context, bor *bor.Bor, first bool) ([]uint64, []common.Hash, error) {
 	// Create an array for block number and block hashes
 	//nolint:prealloc
 	var (
@@ -52,7 +52,7 @@ func (h *ethHandler) fetchWhitelistCheckpoints(bor *bor.Bor, first bool) ([]uint
 	)
 
 	// Fetch the checkpoint count from heimdall
-	count, err := bor.HeimdallClient.FetchCheckpointCount()
+	count, err := bor.HeimdallClient.FetchCheckpointCount(ctx)
 	if err != nil {
 		log.Debug("Failed to fetch checkpoint count for whitelisting", "err", err)
 		return blockNums, blockHashes, errCheckpointCount
@@ -75,7 +75,7 @@ func (h *ethHandler) fetchWhitelistCheckpoints(bor *bor.Bor, first bool) ([]uint
 		}
 
 		// fetch `count` indexed checkpoint from heimdall
-		checkpoint, err := bor.HeimdallClient.FetchCheckpoint(count)
+		checkpoint, err := bor.HeimdallClient.FetchCheckpoint(ctx, count)
 		if err != nil {
 			log.Debug("Failed to fetch latest checkpoint for whitelisting", "err", err)
 			return blockNums, blockHashes, errCheckpoint
@@ -89,7 +89,7 @@ func (h *ethHandler) fetchWhitelistCheckpoints(bor *bor.Bor, first bool) ([]uint
 		}
 
 		// verify the root hash of checkpoint
-		roothash, err := h.ethAPI.GetRootHash(context.Background(), checkpoint.StartBlock.Uint64(), checkpoint.EndBlock.Uint64())
+		roothash, err := h.ethAPI.GetRootHash(ctx, checkpoint.StartBlock.Uint64(), checkpoint.EndBlock.Uint64())
 		if err != nil {
 			log.Debug("Failed to get root hash of checkpoint while whitelisting", "err", err)
 			return blockNums, blockHashes, errRootHash
@@ -101,7 +101,7 @@ func (h *ethHandler) fetchWhitelistCheckpoints(bor *bor.Bor, first bool) ([]uint
 		}
 
 		// fetch the end checkpoint block hash
-		block, err := h.ethAPI.GetBlockByNumber(context.Background(), rpc.BlockNumber(checkpoint.EndBlock.Uint64()), false)
+		block, err := h.ethAPI.GetBlockByNumber(ctx, rpc.BlockNumber(checkpoint.EndBlock.Uint64()), false)
 		if err != nil {
 			log.Debug("Failed to get end block hash of checkpoint while whitelisting", "err", err)
 			return blockNums, blockHashes, errEndBlock

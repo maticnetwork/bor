@@ -1,6 +1,7 @@
 package bor
 
 import (
+	"context"
 	"math/big"
 	"testing"
 
@@ -149,31 +150,33 @@ func TestCheckpoint(t *testing.T) {
 	t.Skip()
 	t.Parallel()
 
-	// TODO: For testing, add heimdall url here
-	h := heimdall.NewHeimdallClient("")
+	ctx := context.Background()
 
-	count, err := h.FetchCheckpointCount()
+	// TODO: For testing, add heimdall url here
+	h := heimdall.NewHeimdallClient("http://localhost:1317")
+
+	count, err := h.FetchCheckpointCount(ctx)
 	if err != nil {
 		t.Error(err)
 	}
 
 	t.Log("Count:", count)
 
-	checkpoint1, err := h.FetchCheckpoint(count)
+	checkpoint1, err := h.FetchCheckpoint(ctx, count)
 	if err != nil {
 		t.Error(err)
 	}
 
 	t.Log("Checkpoint1:", checkpoint1)
 
-	checkpoint2, err := h.FetchCheckpoint(10000)
+	checkpoint2, err := h.FetchCheckpoint(ctx, 10000)
 	if err != nil {
 		t.Error(err)
 	}
 
 	t.Log("Checkpoint2:", checkpoint2)
 
-	checkpoint3, err := h.FetchCheckpoint(-1)
+	checkpoint3, err := h.FetchCheckpoint(ctx, -1)
 	if err != nil {
 		t.Error(err)
 	}

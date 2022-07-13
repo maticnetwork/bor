@@ -18,6 +18,7 @@
 package eth
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math/big"
@@ -626,6 +627,13 @@ func (s *Ethereum) Start() error {
 	return nil
 }
 
+var (
+	ErrNotBorConsensus             = errors.New("not bor consensus was given")
+	ErrBorConsensusWithoutHeimdall = errors.New("bor consensus without heimdall")
+
+	whitelistTimeout = 30 * time.Second
+)
+
 // StartCheckpointWhitelistService starts the goroutine to fetch checkpoints and update the
 // checkpoint whitelist map.
 func (s *Ethereum) startCheckpointWhitelistService() {
@@ -637,7 +645,11 @@ func (s *Ethereum) startCheckpointWhitelistService() {
 	}
 
 	// first run the checkpoint whitelist
-	err := s.handleWhitelistCheckpoint(true)
+	firstCtx, cancel := context.WithTimeout(context.Background(), whitelistTimeout)
+	err := s.handleWhitelistCheckpoint(firstCtx, true)
+
+	cancel()
+
 	if err != nil {
 		if errors.Is(err, ErrBorConsensusWithoutHeimdall) || errors.Is(err, ErrNotBorConsensus) {
 			return
@@ -652,7 +664,11 @@ func (s *Ethereum) startCheckpointWhitelistService() {
 	for {
 		select {
 		case <-ticker.C:
-			err := s.handleWhitelistCheckpoint(false)
+			ctx, cancel := context.WithTimeout(context.Background(), whitelistTimeout)
+			err := s.handleWhitelistCheckpoint(ctx, false)
+
+			cancel()
+
 			if err != nil {
 				log.Warn("unable to whitelist checkpoint", "err", err)
 			}
@@ -662,13 +678,8 @@ func (s *Ethereum) startCheckpointWhitelistService() {
 	}
 }
 
-var (
-	ErrNotBorConsensus             = errors.New("not bor consensus was given")
-	ErrBorConsensusWithoutHeimdall = errors.New("bor consensus without heimdall")
-)
-
 // handleWhitelistCheckpoint handles the checkpoint whitelist mechanism.
-func (s *Ethereum) handleWhitelistCheckpoint(first bool) error {
+func (s *Ethereum) handleWhitelistCheckpoint(ctx context.Context, first bool) error {
 	ethHandler := (*ethHandler)(s.handler)
 
 	bor, ok := ethHandler.chain.Engine().(*bor.Bor)
@@ -680,7 +691,7 @@ func (s *Ethereum) handleWhitelistCheckpoint(first bool) error {
 		return ErrBorConsensusWithoutHeimdall
 	}
 
-	blockNums, blockHashes, err := ethHandler.fetchWhitelistCheckpoints(bor, first)
+	blockNums, blockHashes, err := ethHandler.fetchWhitelistCheckpoints(ctx, bor, first)
 	// If the array is empty, we're bound to receive an error. Non-nill error and non-empty array
 	// means that array has partial elements and it failed for some block. We'll add those partial
 	// elements anyway.
