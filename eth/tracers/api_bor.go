@@ -108,7 +108,7 @@ func (api *API) traceBorBlock(ctx context.Context, block *types.Block, config *T
 		}
 		res := &TxTraceResult{
 			Result:           result,
-			IntermediateHash: statedb.IntermediateRoot(deleteEmptyObjects),
+			IntermediateHash: statedb.IntermediateRoot(context.Background(), deleteEmptyObjects),
 		}
 
 		return res

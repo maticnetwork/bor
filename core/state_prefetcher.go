@@ -17,6 +17,7 @@
 package core
 
 import (
+	"context"
 	"sync/atomic"
 
 	"github.com/ethereum/go-ethereum/consensus"
@@ -73,12 +74,12 @@ func (p *statePrefetcher) Prefetch(block *types.Block, statedb *state.StateDB, c
 		}
 		// If we're pre-byzantium, pre-load trie nodes for the intermediate root
 		if !byzantium {
-			statedb.IntermediateRoot(true)
+			statedb.IntermediateRoot(context.Background(), true)
 		}
 	}
 	// If were post-byzantium, pre-load trie nodes for the final root hash
 	if byzantium {
-		statedb.IntermediateRoot(true)
+		statedb.IntermediateRoot(context.Background(), true)
 	}
 }
 

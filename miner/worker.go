@@ -740,7 +740,7 @@ func (w *worker) resultLoop() {
 			w.pendingMu.RLock()
 			task, exist := w.pendingTasks[sealhash]
 			w.pendingMu.RUnlock()
-			_, resultLoopSpan := w.tracer.Start(task.ctx, "resultLoop")
+			resultLoopCtx, resultLoopSpan := w.tracer.Start(task.ctx, "resultLoop")
 			if !exist {
 				log.Error("Block found but no relative pending task", "number", block.Number(), "sealhash", sealhash, "hash", hash)
 				continue
@@ -773,7 +773,7 @@ func (w *worker) resultLoop() {
 			}
 			// Commit block and state to database.
 			writeBlockStart := time.Now()
-			_, err := w.chain.WriteBlockAndSetHead(block, receipts, logs, task.state, true)
+			_, err := w.chain.WriteBlockAndSetHead(resultLoopCtx, block, receipts, logs, task.state, true)
 			writeBlockTime := time.Since(writeBlockStart)
 			resultLoopSpan.SetAttributes(
 				attribute.String("hash", hash.String()),
@@ -1110,11 +1110,14 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 // into the given sealing block. The transaction selection and ordering strategy can
 // be customized with the plugin in the future.
 func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *environment) {
-	_, fillTransactionsSpan := w.tracer.Start(ctx, "fillTransactions")
+	fillTxCtx, fillTransactionsSpan := w.tracer.Start(ctx, "fillTransactions")
 	defer fillTransactionsSpan.End()
 
 	// Split the pending transactions into locals and remotes
 	// Fill the block with all available pending transactions.
+
+	_, splittingTransactionsSpan := w.tracer.Start(fillTxCtx, "SplittingTransactions")
+
 	pending := w.eth.TxPool().Pending(true)
 	localTxs, remoteTxs := make(map[common.Address]types.Transactions), pending
 	for _, account := range w.eth.TxPool().Locals() {
@@ -1124,25 +1127,57 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		}
 	}
 
+	splittingTransactionsSpan.SetAttributes(
+		attribute.Int("LocalTx Len", len(localTxs)),
+		attribute.Int("RemoteTx Len", len(remoteTxs)),
+	)
+	splittingTransactionsSpan.End()
+
 	lenLocals, lenNewLocals, localEnvTCount, lenRemotes, lenNewRemotes, remoteEnvTCount := 0, 0, 0, 0, 0, 0
 
 	if len(localTxs) > 0 {
 		lenLocals = len(localTxs)
+		_, transactionsByPriceAndNonceSpan := w.tracer.Start(fillTxCtx, "LocalTransactionsByPriceAndNonce")
 		txs := types.NewTransactionsByPriceAndNonce(env.signer, localTxs, env.header.BaseFee)
+		transactionsByPriceAndNonceSpan.SetAttributes(
+			attribute.Int("len of tx Heads", txs.GetTxs()),
+		)
+		transactionsByPriceAndNonceSpan.End()
+
 		lenNewLocals = txs.GetTxs()
+
+		_, commitTransactionsSpan := w.tracer.Start(fillTxCtx, "LocalCommitTransactions")
 		if w.commitTransactions(env, txs, interrupt) {
 			return
 		}
+
+		commitTransactionsSpan.SetAttributes(
+			attribute.Int("len of tx Heads", txs.GetTxs()),
+		)
+		commitTransactionsSpan.End()
 
 		localEnvTCount = env.tcount
 	}
 	if len(remoteTxs) > 0 {
 		lenRemotes = len(remoteTxs)
+		_, TransactionsByPriceAndNonceSpan := w.tracer.Start(fillTxCtx, "RemoteTransactionsByPriceAndNonce")
 		txs := types.NewTransactionsByPriceAndNonce(env.signer, remoteTxs, env.header.BaseFee)
+		TransactionsByPriceAndNonceSpan.SetAttributes(
+			attribute.Int("len of tx Heads", txs.GetTxs()),
+		)
+		TransactionsByPriceAndNonceSpan.End()
+
 		lenNewRemotes = txs.GetTxs()
+
+		_, CommitTransactionsSpan := w.tracer.Start(fillTxCtx, "RemoteCommitTransactions")
 		if w.commitTransactions(env, txs, interrupt) {
 			return
 		}
+
+		CommitTransactionsSpan.SetAttributes(
+			attribute.Int("len of tx Heads", txs.GetTxs()),
+		)
+		CommitTransactionsSpan.End()
 
 		remoteEnvTCount = env.tcount
 	}

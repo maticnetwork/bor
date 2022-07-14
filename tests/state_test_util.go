@@ -17,6 +17,7 @@
 package tests
 
 import (
+	ctx "context"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -243,7 +244,7 @@ func (t *StateTest) RunNoVerify(subtest StateSubtest, vmconfig vm.Config, snapsh
 	//   the coinbase gets no txfee, so isn't created, and thus needs to be touched
 	statedb.AddBalance(block.Coinbase(), new(big.Int))
 	// And _now_ get the state root
-	root := statedb.IntermediateRoot(config.IsEIP158(block.Number()))
+	root := statedb.IntermediateRoot(ctx.Background(), config.IsEIP158(block.Number()))
 	return snaps, statedb, root, nil
 }
 
