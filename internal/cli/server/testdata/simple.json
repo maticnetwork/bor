@@ -1,139 +1,163 @@
 {
-  "accounts": [
+"accounts": [
     {
-      "allow-insecure-unlock": false,
-      "password-file": "",
-      "unlock": [],
-      "use-lightweight-kdf": false
+    "allow-insecure-unlock": false,
+    "password-file": "",
+    "unlock": [],
+    "use-lightweight-kdf": false
     }
-  ],
-  "cache": [
+],
+"cache": [
     {
-      "cache": 1024,
-      "journal": "triecache",
-      "no-prefetch": false,
-      "perc-database": 50,
-      "perc-gc": 25,
-      "perc-snapshot": 10,
-      "perc-trie": 15,
-      "preimages": false,
-      "rejournal": "60m",
-      "tx-lookup-limit": 2350000
+    "cache": 1024,
+    "journal": "triecache",
+    "no-prefetch": false,
+    "perc-database": 50,
+    "perc-gc": 25,
+    "perc-snapshot": 10,
+    "perc-trie": 15,
+    "preimages": false,
+    "rejournal": "60m",
+    "tx-lookup-limit": 2350000
     }
-  ],
-  "chain": "mainnet",
-  "data-dir": "",
-  "ethstats": "",
-  "gc-mode": "full",
-  "gpo": [
+],
+"chain": "mainnet",
+"data-dir": "",
+"developer": [
     {
-      "blocks": 20,
-      "percentile": 60
+    "dev": true,
+    "period": 2
     }
-  ],
-  "heimdall": [
+],
+"ethstats": "",
+"gc-mode": "full",
+"gpo": [
     {
-      "url": "http://localhost:1317",
-      "without": false
+    "blocks": 20,
+    "percentile": 60
     }
-  ],
-  "jsonrpc": [
+],
+"grpc": [
     {
-      "cors": [
+    "addr": ":3131"
+    }
+],
+"heimdall": [
+    {
+    "url": "http://localhost:1317",
+    "without": false
+    }
+],
+"jsonrpc": [
+    {
+    "cors": [
         "*"
-      ],
-      "graphql": [
+    ],
+    "graphql": [
         {
-          "enabled": false
+        "enabled": false,
+        "modules": [
+            "web3",
+            "net"
+        ]
         }
-      ],
-      "http": [
+    ],
+    "http": [
         {
-          "enabled": false,
-          "host": "localhost",
-          "port": 8545,
-          "prefix": ""
+        "enabled": false,
+        "host": "localhost",
+        "modules": [
+            "web3",
+            "net"
+        ],
+        "port": 8545,
+        "prefix": ""
         }
-      ],
-      "ipc-disable": false,
-      "ipc-path": "",
-      "vhost": [
+    ],
+    "ipc-disable": false,
+    "ipc-path": "",
+    "vhost": [
         "*"
-      ],
-      "ws": [
+    ],
+    "ws": [
         {
-          "enabled": false,
-          "host": "localhost",
-          "port": 8546,
-          "prefix": ""
+        "enabled": false,
+        "host": "localhost",
+        "modules": [
+            "web3",
+            "net"
+        ],
+        "port": 8546,
+        "prefix": ""
         }
-      ]
+    ]
     }
-  ],
-  "log-level": "info",
-  "p2p": [
+],
+"log-level": "info",
+"no-snapshot": false,
+"p2p": [
     {
-      "bind": "0.0.0.0",
-      "discovery": [
+    "bind": "0.0.0.0",
+    "discovery": [
         {
-          "bootnodes": [],
-          "bootnodesv4": [],
-          "bootnodesv5": [],
-          "dns": [],
-          "static-nodes": [],
-          "trusted-nodes": [],
-          "v5-enabled": false
+        "bootnodes": [],
+        "bootnodesv4": [],
+        "bootnodesv5": [],
+        "dns": [],
+        "static-nodes": [],
+        "trusted-nodes": [],
+        "v5-enabled": false
         }
-      ],
-      "max-peers": 30,
-      "max-pend-peers": 50,
-      "nat": "any",
-      "no-discover": false,
-      "port": 30303
+    ],
+    "max-peers": 30,
+    "max-pend-peers": 50,
+    "nat": "any",
+    "no-discover": false,
+    "port": 30303
     }
-  ],
-  "sealer": [
+],
+"requiredblocks": {},
+"sealer": [
     {
-      "enabled": false,
-      "etherbase": "",
-      "extra-data": "",
-      "gas-ceil": 8000000
+    "enabled": false,
+    "etherbase": "",
+    "extra-data": "",
+    "gas-ceil": 8000000
     }
-  ],
-  "no-snapshot": true,
-  "sync-mode": "fast",
-  "telemetry": [
+],
+"sync-mode": "fast",
+"telemetry": [
     {
-      "enabled": false,
-      "expensive": false,
-      "influx": [
+    "enabled": false,
+    "expensive": false,
+    "influx": [
         {
-          "bucket": "",
-          "database": "",
-          "endpoint": "",
-          "organization": "",
-          "password": "",
-          "token": "",
-          "username": "",
-          "v1-enabled": false,
-          "v2-enabled": false
+        "bucket": "",
+        "database": "",
+        "endpoint": "",
+        "organization": "",
+        "password": "",
+        "token": "",
+        "username": "",
+        "v1-enabled": false,
+        "v2-enabled": false
         }
-      ]
+    ]
     }
-  ],
-  "txpool": [
+],
+"txpool": [
     {
-      "account-queue": 64,
-      "account-slots": 16,
-      "global-queue": 1024,
-      "global-slots": 4096,
-      "journal": "",
-      "lifetime": "3h",
-      "locals": [],
-      "no-locals": false,
-      "price-bump": 10,
-      "price-limit": 1,
-      "rejournal": "1h"
+    "account-queue": 64,
+    "account-slots": 16,
+    "global-queue": 1024,
+    "global-slots": 4096,
+    "journal": "",
+    "lifetime": "3h",
+    "locals": [],
+    "no-locals": false,
+    "price-bump": 10,
+    "price-limit": 1,
+    "rejournal": "1h"
     }
-  ]
+]
 }

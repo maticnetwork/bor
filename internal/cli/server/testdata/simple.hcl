@@ -2,12 +2,12 @@
 
 chain = "mainnet"
 log-level = "info"
-data-dir = "../datadir"
+data-dir = ""
 sync-mode = "fast"
 gc-mode = "full"
 no-snapshot = false
 ethstats = ""
-# whitelist = {}
+requiredblocks = {}
 
 p2p {
     max-peers = 30
@@ -61,7 +61,6 @@ gpo {
 jsonrpc {
     ipc-disable = false
     ipc-path = ""
-    # modules = ["web3", "net"]
     cors = ["*"]
     vhost = ["*"]
     
@@ -70,6 +69,7 @@ jsonrpc {
         port = 8545
         prefix = ""
         host = "localhost"
+		modules = ["web3", "net"]
     }
 
     ws {
@@ -77,10 +77,12 @@ jsonrpc {
         port = 8546
         prefix = ""
         host = "localhost"
+		modules = ["web3", "net"]
     }
 
     graphql {
         enabled = false
+		modules = ["web3", "net"]
     }
 }
 
@@ -121,6 +123,11 @@ accounts {
     use-lightweight-kdf = false
 }
 
-# grpc {
-#     addr = ":3131"
-# }
+grpc {
+    addr = ":3131"
+}
+
+developer {
+	dev = true
+	period = 2
+}

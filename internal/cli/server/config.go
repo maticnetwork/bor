@@ -95,10 +95,10 @@ type Config struct {
 	Accounts *AccountsConfig `hcl:"accounts,block"`
 
 	// GRPC has the grpc server related settings
-	GRPC *GRPCConfig
+	GRPC *GRPCConfig `hcl:"grpc,block"`
 
 	// Developer has the developer mode related settings
-	Developer *DeveloperConfig
+	Developer *DeveloperConfig `hcl:"developer,block"`
 }
 
 type P2PConfig struct {
@@ -241,7 +241,7 @@ type JsonRPCConfig struct {
 
 type GRPCConfig struct {
 	// Addr is the bind address for the grpc rpc server
-	Addr string
+	Addr string `hcl:"addr,optional"`
 }
 
 type APIConfig struct {
