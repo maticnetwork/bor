@@ -578,13 +578,7 @@ func (c *Config) fillTimeDurations() error {
 func readConfigFile(path string) (*Config, error) {
 	ext := filepath.Ext(path)
 	if ext == ".toml" {
-		// read file and apply the legacy config
-		data, err := ioutil.ReadFile(path)
-		if err != nil {
-			return nil, err
-		}
-
-		return readLegacyConfig(data)
+		return readLegacyConfig(path)
 	}
 
 	config := &Config{

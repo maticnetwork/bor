@@ -1,33 +1,24 @@
 package server
 
 import (
-	"bytes"
+	"fmt"
+	"io/ioutil"
 
-	"github.com/naoina/toml"
+	"github.com/BurntSushi/toml"
 )
 
-type legacyConfig struct {
-	Node struct {
-		P2P struct {
-			StaticNodes  []string
-			TrustedNodes []string
-		}
+func readLegacyConfig(path string) (*Config, error) {
+
+	data, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read toml config file: %v", err)
 	}
-}
+	tomlData := string(data)
 
-func (l *legacyConfig) Config() *Config {
-	c := DefaultConfig()
-	c.P2P.Discovery.StaticNodes = l.Node.P2P.StaticNodes
-	c.P2P.Discovery.TrustedNodes = l.Node.P2P.TrustedNodes
-	return c
-}
-
-func readLegacyConfig(data []byte) (*Config, error) {
-	var legacy legacyConfig
-
-	r := toml.NewDecoder(bytes.NewReader(data))
-	if err := r.Decode(&legacy); err != nil {
-		return nil, err
+	var conf Config
+	if _, err := toml.Decode(tomlData, &conf); err != nil {
+		return nil, fmt.Errorf("failed to decode toml config file: %v", err)
 	}
-	return legacy.Config(), nil
+
+	return &conf, nil
 }

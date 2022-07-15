@@ -1,19 +1,20 @@
 chain = "mainnet"
-data-dir = ""
+data-dir = "/Users/psp024/Polygon/bor/POS-586/datadir"
 ethstats = ""
 gc-mode = "full"
 log-level = "info"
 no-snapshot = false
+requiredblocks = { }
 sync-mode = "fast"
 
-[[accounts]]
+[accounts]
 allow-insecure-unlock = false
 password-file = ""
 unlock = [ ]
 use-lightweight-kdf = false
 
-[[cache]]
-cache = 1_024
+[cache]
+cache = 1024
 journal = "triecache"
 no-prefetch = false
 perc-database = 50
@@ -22,56 +23,56 @@ perc-snapshot = 10
 perc-trie = 15
 preimages = false
 rejournal = "60m"
-tx-lookup-limit = 2_350_000
+tx-lookup-limit = 2350000
 
-[[developer]]
+[developer]
 dev = true
 period = 2
 
-[[gpo]]
+[gpo]
 blocks = 20
 percentile = 60
 
-[[grpc]]
+[grpc]
 addr = ":3131"
 
-[[heimdall]]
+[heimdall]
 url = "http://localhost:1317"
 without = false
 
-[[jsonrpc]]
+[jsonrpc]
 cors = [ "*" ]
 ipc-disable = false
 ipc-path = ""
 vhost = [ "*" ]
 
-  [[jsonrpc.graphql]]
+  [jsonrpc.graphql]
   enabled = false
   modules = [ "web3", "net" ]
 
-  [[jsonrpc.http]]
-  enabled = false
-  host = "localhost"
-  modules = [ "web3", "net" ]
-  port = 8_545
-  prefix = ""
-
-  [[jsonrpc.ws]]
+  [jsonrpc.http]
   enabled = false
   host = "localhost"
   modules = [ "web3", "net" ]
-  port = 8_546
+  port = 8545
   prefix = ""
 
-[[p2p]]
+  [jsonrpc.ws]
+  enabled = false
+  host = "localhost"
+  modules = [ "web3", "net" ]
+  port = 8546
+  prefix = ""
+
+[p2p]
 bind = "0.0.0.0"
 max-peers = 30
 max-pend-peers = 50
 nat = "any"
 no-discover = false
-port = 30_303
+port = 30303
 
-  [[p2p.discovery]]
+  [p2p.discovery]
   bootnodes = [ ]
   bootnodesv4 = [ ]
   bootnodesv5 = [ ]
@@ -80,19 +81,17 @@ port = 30_303
   trusted-nodes = [ ]
   v5-enabled = false
 
-[[requiredblocks]]
-
-[[sealer]]
+[sealer]
 enabled = false
 etherbase = ""
 extra-data = ""
-gas-ceil = 8_000_000
+gas-ceil = 8000000
 
-[[telemetry]]
+[telemetry]
 enabled = false
 expensive = false
 
-  [[telemetry.influx]]
+  [telemetry.influx]
   bucket = ""
   database = ""
   endpoint = ""
@@ -103,11 +102,11 @@ expensive = false
   v1-enabled = false
   v2-enabled = false
 
-[[txpool]]
+[txpool]
 account-queue = 64
 account-slots = 16
-global-queue = 1_024
-global-slots = 4_096
+global-queue = 1024
+global-slots = 4096
 journal = ""
 lifetime = "3h"
 locals = [ ]
