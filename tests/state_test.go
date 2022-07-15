@@ -22,6 +22,7 @@ package tests
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"math/big"
 	"os"
@@ -150,7 +151,7 @@ func TestState(t *testing.T) {
 					withTrace(t, test.gasLimit(subtest), func(vmconfig vm.Config) error {
 						snaps, statedb, err := test.Run(subtest, vmconfig, true)
 						if snaps != nil && statedb != nil {
-							if _, err := snaps.Journal(statedb.IntermediateRoot(false)); err != nil {
+							if _, err := snaps.Journal(context.Background(), statedb.IntermediateRoot(false)); err != nil {
 								t.Errorf("in 'rlp_test.go', test '%s' failed with error: '%v'", name, err)
 								return err
 							}
