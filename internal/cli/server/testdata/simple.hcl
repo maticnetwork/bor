@@ -5,7 +5,7 @@ log-level = "info"
 data-dir = ""
 sync-mode = "fast"
 gc-mode = "full"
-no-snapshot = false
+snapshot = true
 ethstats = ""
 requiredblocks = {}
 
@@ -61,15 +61,15 @@ gpo {
 jsonrpc {
     ipc-disable = false
     ipc-path = ""
-    cors = ["*"]
-    vhost = ["*"]
     
     http {
         enabled = false
         port = 8545
         prefix = ""
         host = "localhost"
-		modules = ["web3", "net"]
+		api = ["web3", "net"]
+        cors = ["*"]
+        vhost = ["*"]
     }
 
     ws {
@@ -77,12 +77,16 @@ jsonrpc {
         port = 8546
         prefix = ""
         host = "localhost"
-		modules = ["web3", "net"]
+		api = ["web3", "net"]
+        cors = ["*"]
+        vhost = ["*"]
     }
 
     graphql {
         enabled = false
-		modules = ["web3", "net"]
+		api = ["web3", "net"]
+        cors = ["*"]
+        vhost = ["*"]
     }
 }
 

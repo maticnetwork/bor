@@ -3,7 +3,7 @@ data-dir = "/Users/psp024/Polygon/bor/POS-586/datadir"
 ethstats = ""
 gc-mode = "full"
 log-level = "info"
-no-snapshot = false
+snapshot = true
 requiredblocks = { }
 sync-mode = "fast"
 
@@ -41,28 +41,32 @@ url = "http://localhost:1317"
 without = false
 
 [jsonrpc]
-cors = [ "*" ]
 ipc-disable = false
 ipc-path = ""
-vhost = [ "*" ]
 
   [jsonrpc.graphql]
+  cors = [ "*" ]
   enabled = false
-  modules = [ "web3", "net" ]
+  api = [ "web3", "net" ]
+  vhost = [ "*" ]
 
   [jsonrpc.http]
+  cors = [ "*" ]
   enabled = false
   host = "localhost"
-  modules = [ "web3", "net" ]
+  api = [ "web3", "net" ]
   port = 8545
   prefix = ""
+  vhost = [ "*" ]
 
   [jsonrpc.ws]
+  cors = [ "*" ]
   enabled = false
   host = "localhost"
-  modules = [ "web3", "net" ]
+  api = [ "web3", "net" ]
   port = 8546
   prefix = ""
+  vhost = [ "*" ]
 
 [p2p]
 bind = "0.0.0.0"

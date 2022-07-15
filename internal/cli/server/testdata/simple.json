@@ -50,51 +50,63 @@
 ],
 "jsonrpc": [
     {
-    "cors": [
-        "*"
-    ],
     "graphql": [
         {
+        "cors": [
+            "*"
+        ],
         "enabled": false,
-        "modules": [
+        "api": [
             "web3",
             "net"
+        ],
+        "vhost": [
+            "*"
         ]
         }
     ],
     "http": [
         {
+        "cors": [
+            "*"
+        ],
         "enabled": false,
         "host": "localhost",
-        "modules": [
+        "api": [
             "web3",
             "net"
         ],
         "port": 8545,
-        "prefix": ""
+        "prefix": "",
+        "vhost": [
+            "*"
+        ]
         }
     ],
     "ipc-disable": false,
     "ipc-path": "",
-    "vhost": [
-        "*"
-    ],
     "ws": [
         {
+        "cors": [
+            "*"
+        ],
         "enabled": false,
         "host": "localhost",
-        "modules": [
+        "api": [
             "web3",
             "net"
         ],
         "port": 8546,
-        "prefix": ""
+        "prefix": "",
+        "vhost": [
+            "*"
+        ]
         }
     ]
     }
 ],
 "log-level": "info",
-"no-snapshot": false,
+"snapshot": true,
 "p2p": [
     {
     "bind": "0.0.0.0",
