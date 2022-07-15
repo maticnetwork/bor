@@ -209,6 +209,18 @@ type SliceStringFlag struct {
 	Group   string
 }
 
+// SplitAndTrim splits input separated by a comma
+// and trims excessive white space from the substrings.
+func SplitAndTrim(input string) (ret []string) {
+	l := strings.Split(input, ",")
+	for _, r := range l {
+		if r = strings.TrimSpace(r); r != "" {
+			ret = append(ret, r)
+		}
+	}
+	return ret
+}
+
 func (i *SliceStringFlag) String() string {
 	if i.Value == nil {
 		return ""
@@ -219,7 +231,7 @@ func (i *SliceStringFlag) String() string {
 
 func (i *SliceStringFlag) Set(value string) error {
 	// overwritting insted of appending
-	*i.Value = strings.Split(value, ",")
+	*i.Value = SplitAndTrim(value)
 	return nil
 }
 

@@ -112,3 +112,8 @@ func (c *Command) handleSignals() int {
 	}
 	return 1
 }
+
+// GetConfig returns the user specified config
+func (c *Command) GetConfig() *Config {
+	return c.cliConfig
+}
