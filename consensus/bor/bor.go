@@ -724,7 +724,6 @@ func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, 
 	headerNumber := header.Number.Uint64()
 
 	if IsSprintStart(headerNumber, c.config.Sprint) {
-
 		cx := statefull.ChainContext{Chain: chain, Bor: c}
 		// check and commit span
 		if err := c.checkAndCommitSpan(context.Background(), nil, state, header, cx); err != nil {
