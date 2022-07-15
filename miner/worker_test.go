@@ -75,7 +75,7 @@ func testGenerateBlockAndImport(t *testing.T, isClique bool, isBor bool) {
 		ethAPIMock.EXPECT().Call(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 		spanner := bor.NewMockSpanner(ctrl)
-		spanner.EXPECT().GetCurrentValidators(gomock.Any(), gomock.Any()).Return([]*valset.Validator{
+		spanner.EXPECT().GetCurrentValidators(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*valset.Validator{
 			{
 				ID:               0,
 				Address:          TestBankAddress,
@@ -114,7 +114,7 @@ func testGenerateBlockAndImport(t *testing.T, isClique bool, isBor bool) {
 	db2 := rawdb.NewMemoryDatabase()
 	b.Genesis.MustCommit(db2)
 
-	chain, _ := core.NewBlockChain(db2, nil, b.chain.Config(), engine, vm.Config{}, nil, nil)
+	chain, _ := core.NewBlockChain(db2, nil, b.chain.Config(), engine, vm.Config{}, nil, nil, nil)
 	defer chain.Stop()
 
 	// Ignore empty commit here for less noise.
@@ -622,7 +622,7 @@ func BenchmarkBorMining(b *testing.B) {
 	ethAPIMock.EXPECT().Call(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	spanner := bor.NewMockSpanner(ctrl)
-	spanner.EXPECT().GetCurrentValidators(gomock.Any(), gomock.Any()).Return([]*valset.Validator{
+	spanner.EXPECT().GetCurrentValidators(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*valset.Validator{
 		{
 			ID:               0,
 			Address:          TestBankAddress,
@@ -650,7 +650,7 @@ func BenchmarkBorMining(b *testing.B) {
 	db2 := rawdb.NewMemoryDatabase()
 	back.Genesis.MustCommit(db2)
 
-	chain, _ := core.NewBlockChain(db2, nil, back.chain.Config(), engine, vm.Config{}, nil, nil)
+	chain, _ := core.NewBlockChain(db2, nil, back.chain.Config(), engine, vm.Config{}, nil, nil, nil)
 	defer chain.Stop()
 
 	// Ignore empty commit here for less noise.
