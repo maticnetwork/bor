@@ -223,9 +223,9 @@ func Fetch[T any](request *Request) (*T, error) {
 			heimdallRequestDurationTimer.Update(time.Since(request.start))
 
 			if failed {
-				heimdallRequestValidMeter.Mark(1)
-			} else {
 				heimdallRequestInvalidMeter.Mark(1)
+			} else {
+				heimdallRequestValidMeter.Mark(1)
 			}
 		}
 	}()
