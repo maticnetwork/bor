@@ -9,11 +9,11 @@ import (
 
 func readLegacyConfig(path string) (*Config, error) {
 	data, err := ioutil.ReadFile(path)
+	tomlData := string(data)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read toml config file: %v", err)
 	}
 
-	tomlData := string(data)
 	var conf Config
 
 	if _, err := toml.Decode(tomlData, &conf); err != nil {

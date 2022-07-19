@@ -1,10 +1,14 @@
 package cli
 
 import (
+	"math/big"
 	"reflect"
 	"strings"
+	"time"
 
+	"github.com/ethereum/go-ethereum/eth/gasprice"
 	"github.com/ethereum/go-ethereum/internal/cli/server"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/naoina/toml"
 )
 
@@ -59,16 +63,17 @@ func (c *DumpconfigCommand) Run(args []string) int {
 	}
 
 	userConfig := command.GetConfig()
-	config := server.DefaultConfig()
 
-	// Overwrite user provided values on defaults (as done in ./server/command.go's Run() function)
-	if err := config.Merge(userConfig); err != nil {
-		c.UI.Error(err.Error())
-		return 1
-	}
+	// setting the default values to the raw fields
+	userConfig.TxPool.RejournalRaw = time.Duration(1 * time.Hour).String()
+	userConfig.TxPool.LifeTimeRaw = time.Duration(3 * time.Hour).String()
+	userConfig.Sealer.GasPriceRaw = big.NewInt(30 * params.GWei).String()
+	userConfig.Gpo.MaxPriceRaw = gasprice.DefaultMaxPrice.String()
+	userConfig.Gpo.IgnorePriceRaw = gasprice.DefaultIgnorePrice.String()
+	userConfig.Cache.RejournalRaw = (60 * time.Minute).String()
 
-	// Currently, the config is exported into `toml` file format.
-	out, err := tomlSettings.Marshal(&config)
+	// Currently, the configurations (userConfig) is exported into `toml` file format.
+	out, err := tomlSettings.Marshal(&userConfig)
 	if err != nil {
 		c.UI.Error(err.Error())
 		return 1
