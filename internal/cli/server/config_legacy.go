@@ -10,6 +10,7 @@ import (
 func readLegacyConfig(path string) (*Config, error) {
 	data, err := ioutil.ReadFile(path)
 	tomlData := string(data)
+
 	if err != nil {
 		return nil, fmt.Errorf("failed to read toml config file: %v", err)
 	}

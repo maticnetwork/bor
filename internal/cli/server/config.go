@@ -419,14 +419,14 @@ func DefaultConfig() *Config {
 			Locals:       []string{},
 			NoLocals:     false,
 			Journal:      "",
-			rejournal:    time.Duration(1 * time.Hour),
+			rejournal:    1 * time.Hour,
 			PriceLimit:   30000000000,
 			PriceBump:    10,
 			AccountSlots: 16,
 			GlobalSlots:  32768,
 			AccountQueue: 16,
 			GlobalQueue:  32768,
-			lifeTime:     time.Duration(3 * time.Hour),
+			lifeTime:     3 * time.Hour,
 		},
 		Sealer: &SealerConfig{
 			Enabled:   false,
@@ -1070,7 +1070,7 @@ func Hostname() string {
 func MakePasswordListFromFile(path string) ([]string, error) {
 	text, err := ioutil.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to read password file: %v", err)
+		return nil, fmt.Errorf("failed to read password file: %v", err)
 	}
 
 	lines := strings.Split(string(text), "\n")

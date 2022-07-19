@@ -65,8 +65,8 @@ func (c *DumpconfigCommand) Run(args []string) int {
 	userConfig := command.GetConfig()
 
 	// setting the default values to the raw fields
-	userConfig.TxPool.RejournalRaw = time.Duration(1 * time.Hour).String()
-	userConfig.TxPool.LifeTimeRaw = time.Duration(3 * time.Hour).String()
+	userConfig.TxPool.RejournalRaw = (1 * time.Hour).String()
+	userConfig.TxPool.LifeTimeRaw = (3 * time.Hour).String()
 	userConfig.Sealer.GasPriceRaw = big.NewInt(30 * params.GWei).String()
 	userConfig.Gpo.MaxPriceRaw = gasprice.DefaultMaxPrice.String()
 	userConfig.Gpo.IgnorePriceRaw = gasprice.DefaultIgnorePrice.String()
