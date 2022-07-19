@@ -723,17 +723,19 @@ func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, 
 
 	headerNumber := header.Number.Uint64()
 
+	ctx := context.Background()
+
 	if IsSprintStart(headerNumber, c.config.Sprint) {
 		cx := statefull.ChainContext{Chain: chain, Bor: c}
 		// check and commit span
-		if err := c.checkAndCommitSpan(context.Background(), nil, state, header, cx); err != nil {
+		if err := c.checkAndCommitSpan(ctx, nil, state, header, cx); err != nil {
 			log.Error("Error while committing span", "error", err)
 			return
 		}
 
 		if c.HeimdallClient != nil {
 			// commit statees
-			stateSyncData, err = c.CommitStates(context.Background(), nil, state, header, cx)
+			stateSyncData, err = c.CommitStates(ctx, nil, state, header, cx)
 			if err != nil {
 				log.Error("Error while committing states", "error", err)
 				return
@@ -747,7 +749,7 @@ func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, 
 	}
 
 	// No block rewards in PoA, so the state remains as is and uncles are dropped
-	header.Root = state.IntermediateRoot(context.Background(), chain.Config().IsEIP158(header.Number))
+	header.Root = state.IntermediateRoot(ctx, chain.Config().IsEIP158(header.Number))
 	header.UncleHash = types.CalcUncleHash(nil)
 
 	// Set state sync data to blockchain
