@@ -6,10 +6,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/naoina/toml"
+
 	"github.com/ethereum/go-ethereum/eth/gasprice"
 	"github.com/ethereum/go-ethereum/internal/cli/server"
 	"github.com/ethereum/go-ethereum/params"
-	"github.com/naoina/toml"
 )
 
 // These settings ensure that TOML keys use the same names as Go struct fields.

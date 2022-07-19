@@ -14,6 +14,11 @@ import (
 
 	godebug "runtime/debug"
 
+	"github.com/hashicorp/hcl/v2/hclsimple"
+	"github.com/imdario/mergo"
+	"github.com/mitchellh/go-homedir"
+	gopsutil "github.com/shirou/gopsutil/mem"
+
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
@@ -28,10 +33,6 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/nat"
 	"github.com/ethereum/go-ethereum/params"
-	"github.com/hashicorp/hcl/v2/hclsimple"
-	"github.com/imdario/mergo"
-	"github.com/mitchellh/go-homedir"
-	gopsutil "github.com/shirou/gopsutil/mem"
 )
 
 type Config struct {

@@ -7,8 +7,9 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/ethereum/go-ethereum/log"
 	"github.com/mitchellh/cli"
+
+	"github.com/ethereum/go-ethereum/log"
 )
 
 // Command is the command to start the sever
