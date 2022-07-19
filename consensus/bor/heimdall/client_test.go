@@ -35,16 +35,21 @@ func (h *HttpHandlerFake) GetCheckpointHandler() http.HandlerFunc {
 }
 
 func CreateMockHeimdallServer(wg *sync.WaitGroup, port int32, handler *HttpHandlerFake) (*http.Server, error) {
-	srv := &http.Server{
-		Addr: fmt.Sprintf("localhost:%d", port),
-	}
+	// Create a new server mux
+	mux := http.NewServeMux()
 
 	// Create a route for fetching latest checkpoint
-	http.HandleFunc("/checkpoints/latest", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/checkpoints/latest", func(w http.ResponseWriter, r *http.Request) {
 		handler.GetCheckpointHandler()(w, r)
 	})
 
 	// Add other routes as per requirement
+
+	// Create the server with given port and mux
+	srv := &http.Server{
+		Addr:    fmt.Sprintf("localhost:%d", port),
+		Handler: mux,
+	}
 
 	go func() {
 		defer wg.Done()
