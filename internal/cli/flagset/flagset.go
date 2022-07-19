@@ -218,6 +218,7 @@ func SplitAndTrim(input string) (ret []string) {
 			ret = append(ret, r)
 		}
 	}
+
 	return ret
 }
 

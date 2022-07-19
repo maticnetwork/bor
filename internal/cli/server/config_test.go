@@ -127,12 +127,12 @@ func TestConfigLoadFile(t *testing.T) {
 
 	// read file in hcl format
 	t.Run("hcl", func(t *testing.T) {
-		readFile("./testdata/simple.hcl")
+		readFile("./testdata/test.hcl")
 	})
 
 	// read file in json format
 	t.Run("json", func(t *testing.T) {
-		readFile("./testdata/simple.json")
+		readFile("./testdata/test.json")
 	})
 }
 
