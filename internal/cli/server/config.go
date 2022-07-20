@@ -167,7 +167,7 @@ type TxPoolConfig struct {
 	Journal string `hcl:"journal,optional" toml:"journal,optional"`
 
 	// Rejournal is the time interval to regenerate the local transaction journal
-	Rejournal    time.Duration `hcl:"-" toml:"-"`
+	Rejournal    time.Duration `hcl:"-,optional" toml:"-,optional"`
 	RejournalRaw string        `hcl:"rejournal,optional" toml:"rejournal,optional"`
 
 	// PriceLimit is the minimum gas price to enforce for acceptance into the pool
@@ -189,7 +189,7 @@ type TxPoolConfig struct {
 	GlobalQueue uint64 `hcl:"global-queue,optional" toml:"global-queue,optional"`
 
 	// lifetime is the maximum amount of time non-executable transaction are queued
-	LifeTime    time.Duration `hcl:"-" toml:"-"`
+	LifeTime    time.Duration `hcl:"-,optional" toml:"-,optional"`
 	LifeTimeRaw string        `hcl:"lifetime,optional" toml:"lifetime,optional"`
 }
 
@@ -207,7 +207,7 @@ type SealerConfig struct {
 	GasCeil uint64 `hcl:"gas-ceil,optional" toml:"gas-ceil,optional"`
 
 	// GasPrice is the minimum gas price for mining a transaction
-	GasPrice    *big.Int `hcl:"-" toml:"-"`
+	GasPrice    *big.Int `hcl:"-,optional" toml:"-,optional"`
 	GasPriceRaw string   `hcl:"gas-price,optional" toml:"gas-price,optional"`
 }
 
@@ -270,11 +270,11 @@ type GpoConfig struct {
 	Percentile uint64 `hcl:"percentile,optional" toml:"percentile,optional"`
 
 	// MaxPrice is an upper bound gas price
-	MaxPrice    *big.Int `hcl:"-" toml:"-"`
+	MaxPrice    *big.Int `hcl:"-,optional" toml:"-,optional"`
 	MaxPriceRaw string   `hcl:"max-price,optional" toml:"max-price,optional"`
 
 	// IgnorePrice is a lower bound gas price
-	IgnorePrice    *big.Int `hcl:"-" toml:"-"`
+	IgnorePrice    *big.Int `hcl:"-,optional" toml:"-,optional"`
 	IgnorePriceRaw string   `hcl:"ignore-price,optional" toml:"ignore-price,optional"`
 }
 
@@ -347,7 +347,7 @@ type CacheConfig struct {
 	Journal string `hcl:"journal,optional" toml:"journal,optional"`
 
 	// Rejournal is the time interval to regenerate the journal for clean cache
-	Rejournal    time.Duration `hcl:"-" toml:"-"`
+	Rejournal    time.Duration `hcl:"-,optional" toml:"-,optional"`
 	RejournalRaw string        `hcl:"rejournal,optional" toml:"rejournal,optional"`
 
 	// NoPrefetch is used to disable prefetch of tries

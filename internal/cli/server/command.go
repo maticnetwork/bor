@@ -22,7 +22,7 @@ type Command struct {
 	// final configuration
 	config *Config
 
-	configFile []string
+	configFile string
 
 	srv *Server
 }
@@ -59,10 +59,16 @@ func (c *Command) Run(args []string) int {
 		return 1
 	}
 
-	// read config file
 	config := DefaultConfig()
-	for _, configFile := range c.configFile {
-		cfg, err := readConfigFile(configFile)
+	// read cli flags
+	if err := config.Merge(c.cliConfig); err != nil {
+		c.UI.Error(err.Error())
+		return 1
+	}
+	// read if config file is provided, this will overwrite the cli flags, if provided
+	if c.configFile != "" {
+		log.Warn("Config File provided, this will overwrite the cli flags.", "configFile:", c.configFile)
+		cfg, err := readConfigFile(c.configFile)
 		if err != nil {
 			c.UI.Error(err.Error())
 			return 1
@@ -71,10 +77,6 @@ func (c *Command) Run(args []string) int {
 			c.UI.Error(err.Error())
 			return 1
 		}
-	}
-	if err := config.Merge(c.cliConfig); err != nil {
-		c.UI.Error(err.Error())
-		return 1
 	}
 	c.config = config
 
