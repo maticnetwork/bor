@@ -31,10 +31,13 @@ const (
 	retryCall          = 5 * time.Second
 )
 
-var (
-	heimdallRequestValidMeter    metrics.Meter = metrics.NewRegisteredMeter("client/requests/valid/frequency", nil)
-	heimdallRequestInvalidMeter  metrics.Meter = metrics.NewRegisteredMeter("client/requests/invalid/frequency", nil)
-	heimdallRequestDurationTimer metrics.Timer = metrics.NewRegisteredTimer("client/requests/duration", nil)
+type RequestType string
+
+const (
+	StateSyncRequest       RequestType = "state-sync"
+	SpanRequest            RequestType = "span"
+	CheckpointRequest      RequestType = "checkpoint"
+	CheckpointCountRequest RequestType = "checkpoint-count"
 )
 
 type StateSyncEventsResponse struct {
@@ -54,10 +57,33 @@ type HeimdallClient struct {
 }
 
 type Request struct {
-	client http.Client
-	url    *url.URL
-	start  time.Time
+	client  http.Client
+	url     *url.URL
+	start   time.Time
+	reqType RequestType
 }
+
+var (
+	// State Sync requests
+	stateSyncValidRequestMeter   = metrics.NewRegisteredMeter("client/requests/state-sync/valid", nil)
+	stateSyncInvalidRequestMeter = metrics.NewRegisteredMeter("client/requests/state-sync/invalid", nil)
+	stateSyncRequestTimer        = metrics.NewRegisteredTimer("client/requests/state-sync/duration", nil)
+
+	// Span requests
+	spanValidRequestMeter   = metrics.NewRegisteredMeter("client/requests/span/valid", nil)
+	spanInvalidRequestMeter = metrics.NewRegisteredMeter("client/requests/span/invalid", nil)
+	spanRequestTimer        = metrics.NewRegisteredTimer("client/requests/span/duration", nil)
+
+	// Checkpoint requests
+	checkpointValidRequestMeter   = metrics.NewRegisteredMeter("client/requests/checkpoint/valid", nil)
+	checkpointInvalidRequestMeter = metrics.NewRegisteredMeter("client/requests/checkpoint-count/invalid", nil)
+	checkpointRequestTimer        = metrics.NewRegisteredTimer("client/requests/checkpoint-count/duration", nil)
+
+	// Checkpoint count requests
+	checkpointCountValidRequestMeter   = metrics.NewRegisteredMeter("client/requests/checkpoint-count/valid", nil)
+	checkpointCountInvalidRequestMeter = metrics.NewRegisteredMeter("client/requests/checkpoint-count/invalid", nil)
+	checkpointCountRequestTimer        = metrics.NewRegisteredTimer("client/requests/checkpoint-count/duration", nil)
+)
 
 func NewHeimdallClient(urlString string) *HeimdallClient {
 	return &HeimdallClient{
@@ -89,7 +115,7 @@ func (h *HeimdallClient) StateSyncEvents(ctx context.Context, fromID uint64, to 
 
 		log.Info("Fetching state sync events", "queryParams", url.RawQuery)
 
-		response, err := FetchWithRetry[StateSyncEventsResponse](ctx, h.client, url, h.closeCh)
+		response, err := FetchWithRetry[StateSyncEventsResponse](ctx, h.client, url, StateSyncRequest, h.closeCh)
 		if err != nil {
 			return nil, err
 		}
@@ -121,7 +147,7 @@ func (h *HeimdallClient) Span(ctx context.Context, spanID uint64) (*span.Heimdal
 		return nil, err
 	}
 
-	response, err := FetchWithRetry[SpanResponse](ctx, h.client, url, h.closeCh)
+	response, err := FetchWithRetry[SpanResponse](ctx, h.client, url, SpanRequest, h.closeCh)
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +162,7 @@ func (h *HeimdallClient) FetchCheckpoint(ctx context.Context, number int64) (*ch
 		return nil, err
 	}
 
-	response, err := FetchWithRetry[checkpoint.CheckpointResponse](ctx, h.client, url, h.closeCh)
+	response, err := FetchWithRetry[checkpoint.CheckpointResponse](ctx, h.client, url, CheckpointRequest, h.closeCh)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +177,7 @@ func (h *HeimdallClient) FetchCheckpointCount(ctx context.Context) (int64, error
 		return 0, err
 	}
 
-	response, err := FetchWithRetry[checkpoint.CheckpointCountResponse](ctx, h.client, url, h.closeCh)
+	response, err := FetchWithRetry[checkpoint.CheckpointCountResponse](ctx, h.client, url, CheckpointCountRequest, h.closeCh)
 	if err != nil {
 		return 0, err
 	}
@@ -160,9 +186,9 @@ func (h *HeimdallClient) FetchCheckpointCount(ctx context.Context) (int64, error
 }
 
 // FetchWithRetry returns data from heimdall with retry
-func FetchWithRetry[T any](ctx context.Context, client http.Client, url *url.URL, closeCh chan struct{}) (*T, error) {
+func FetchWithRetry[T any](ctx context.Context, client http.Client, url *url.URL, reqType RequestType, closeCh chan struct{}) (*T, error) {
 	// request data once
-	request := &Request{client: client, url: url, start: time.Now()}
+	request := &Request{client: client, url: url, start: time.Now(), reqType: reqType}
 	result, err := Fetch[T](ctx, request)
 
 	if err == nil {
@@ -218,13 +244,7 @@ func Fetch[T any](ctx context.Context, request *Request) (*T, error) {
 
 	defer func() {
 		if metrics.EnabledExpensive {
-			heimdallRequestDurationTimer.Update(time.Since(request.start))
-
-			if failed {
-				heimdallRequestInvalidMeter.Mark(1)
-			} else {
-				heimdallRequestValidMeter.Mark(1)
-			}
+			sendMetrics(request, failed)
 		}
 	}()
 
@@ -331,4 +351,38 @@ func internalFetchWithTimeout(ctx context.Context, client http.Client, url *url.
 func (h *HeimdallClient) Close() {
 	close(h.closeCh)
 	h.client.CloseIdleConnections()
+}
+
+func sendMetrics(request *Request, failed bool) {
+	if failed {
+		switch request.reqType {
+		case StateSyncRequest:
+			stateSyncInvalidRequestMeter.Mark(1)
+			stateSyncRequestTimer.Update(time.Since(request.start))
+		case SpanRequest:
+			spanInvalidRequestMeter.Mark(1)
+			spanRequestTimer.Update(time.Since(request.start))
+		case CheckpointRequest:
+			checkpointInvalidRequestMeter.Mark(1)
+			checkpointRequestTimer.Update(time.Since(request.start))
+		case CheckpointCountRequest:
+			checkpointCountInvalidRequestMeter.Mark(1)
+			checkpointCountRequestTimer.Update(time.Since(request.start))
+		}
+	} else {
+		switch request.reqType {
+		case StateSyncRequest:
+			stateSyncValidRequestMeter.Mark(1)
+			stateSyncRequestTimer.Update(time.Since(request.start))
+		case SpanRequest:
+			spanValidRequestMeter.Mark(1)
+			spanRequestTimer.Update(time.Since(request.start))
+		case CheckpointRequest:
+			checkpointValidRequestMeter.Mark(1)
+			checkpointRequestTimer.Update(time.Since(request.start))
+		case CheckpointCountRequest:
+			checkpointCountValidRequestMeter.Mark(1)
+			checkpointCountRequestTimer.Update(time.Since(request.start))
+		}
+	}
 }
