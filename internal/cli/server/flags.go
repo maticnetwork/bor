@@ -106,8 +106,8 @@ func (c *Command) Flags() *flagset.Flagset {
 	f.DurationFlag(&flagset.DurationFlag{
 		Name:    "txpool.rejournal",
 		Usage:   "Time interval to regenerate the local transaction journal",
-		Value:   &c.cliConfig.TxPool.rejournal,
-		Default: c.cliConfig.TxPool.rejournal,
+		Value:   &c.cliConfig.TxPool.Rejournal,
+		Default: c.cliConfig.TxPool.Rejournal,
 		Group:   "Transaction Pool",
 	})
 	f.Uint64Flag(&flagset.Uint64Flag{
@@ -155,8 +155,8 @@ func (c *Command) Flags() *flagset.Flagset {
 	f.DurationFlag(&flagset.DurationFlag{
 		Name:    "txpool.lifetime",
 		Usage:   "Maximum amount of time non-executable transaction are queued",
-		Value:   &c.cliConfig.TxPool.lifeTime,
-		Default: c.cliConfig.TxPool.lifeTime,
+		Value:   &c.cliConfig.TxPool.LifeTime,
+		Default: c.cliConfig.TxPool.LifeTime,
 		Group:   "Transaction Pool",
 	})
 
@@ -192,7 +192,7 @@ func (c *Command) Flags() *flagset.Flagset {
 	f.BigIntFlag(&flagset.BigIntFlag{
 		Name:  "miner.gasprice",
 		Usage: "Minimum gas price for mining a transaction",
-		Value: c.cliConfig.Sealer.gasPrice,
+		Value: c.cliConfig.Sealer.GasPrice,
 		Group: "Sealer",
 	})
 
@@ -220,12 +220,12 @@ func (c *Command) Flags() *flagset.Flagset {
 	f.BigIntFlag(&flagset.BigIntFlag{
 		Name:  "gpo.maxprice",
 		Usage: "Maximum gas price will be recommended by gpo",
-		Value: c.cliConfig.Gpo.maxPrice,
+		Value: c.cliConfig.Gpo.MaxPrice,
 	})
 	f.BigIntFlag(&flagset.BigIntFlag{
 		Name:  "gpo.ignoreprice",
 		Usage: "Gas price below which gpo will ignore transactions",
-		Value: c.cliConfig.Gpo.ignorePrice,
+		Value: c.cliConfig.Gpo.IgnorePrice,
 	})
 
 	// cache options
@@ -260,8 +260,8 @@ func (c *Command) Flags() *flagset.Flagset {
 	f.DurationFlag(&flagset.DurationFlag{
 		Name:    "cache.trie.rejournal",
 		Usage:   "Time interval to regenerate the trie cache journal",
-		Value:   &c.cliConfig.Cache.rejournal,
-		Default: c.cliConfig.Cache.rejournal,
+		Value:   &c.cliConfig.Cache.Rejournal,
+		Default: c.cliConfig.Cache.Rejournal,
 		Group:   "Cache",
 	})
 	f.Uint64Flag(&flagset.Uint64Flag{

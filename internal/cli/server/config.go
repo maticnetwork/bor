@@ -166,9 +166,9 @@ type TxPoolConfig struct {
 	// Journal is the path to store local transactions to survive node restarts
 	Journal string `hcl:"journal,optional" toml:"journal,optional"`
 
-	// rejournal is the time interval to regenerate the local transaction journal
-	rejournal    time.Duration
-	RejournalRaw string `hcl:"rejournal,optional" toml:"rejournal,optional"`
+	// Rejournal is the time interval to regenerate the local transaction journal
+	Rejournal    time.Duration `hcl:"-" toml:"-"`
+	RejournalRaw string        `hcl:"rejournal,optional" toml:"rejournal,optional"`
 
 	// PriceLimit is the minimum gas price to enforce for acceptance into the pool
 	PriceLimit uint64 `hcl:"price-limit,optional" toml:"price-limit,optional"`
@@ -189,8 +189,8 @@ type TxPoolConfig struct {
 	GlobalQueue uint64 `hcl:"global-queue,optional" toml:"global-queue,optional"`
 
 	// lifetime is the maximum amount of time non-executable transaction are queued
-	lifeTime    time.Duration
-	LifeTimeRaw string `hcl:"lifetime,optional" toml:"lifetime,optional"`
+	LifeTime    time.Duration `hcl:"-" toml:"-"`
+	LifeTimeRaw string        `hcl:"lifetime,optional" toml:"lifetime,optional"`
 }
 
 type SealerConfig struct {
@@ -206,9 +206,9 @@ type SealerConfig struct {
 	// GasCeil is the target gas ceiling for mined blocks.
 	GasCeil uint64 `hcl:"gas-ceil,optional" toml:"gas-ceil,optional"`
 
-	// gasPrice is the minimum gas price for mining a transaction
-	gasPrice    *big.Int
-	GasPriceRaw string `hcl:"gas-price,optional" toml:"gas-price,optional"`
+	// GasPrice is the minimum gas price for mining a transaction
+	GasPrice    *big.Int `hcl:"-" toml:"-"`
+	GasPriceRaw string   `hcl:"gas-price,optional" toml:"gas-price,optional"`
 }
 
 type JsonRPCConfig struct {
@@ -269,13 +269,13 @@ type GpoConfig struct {
 	// Percentile sets the weights to new blocks
 	Percentile uint64 `hcl:"percentile,optional" toml:"percentile,optional"`
 
-	// maxPrice is an upper bound gas price
-	maxPrice    *big.Int
-	MaxPriceRaw string `hcl:"max-price,optional" toml:"max-price,optional"`
+	// MaxPrice is an upper bound gas price
+	MaxPrice    *big.Int `hcl:"-" toml:"-"`
+	MaxPriceRaw string   `hcl:"max-price,optional" toml:"max-price,optional"`
 
-	// ignorePrice is a lower bound gas price
-	ignorePrice    *big.Int
-	IgnorePriceRaw string `hcl:"ignore-price,optional" toml:"ignore-price,optional"`
+	// IgnorePrice is a lower bound gas price
+	IgnorePrice    *big.Int `hcl:"-" toml:"-"`
+	IgnorePriceRaw string   `hcl:"ignore-price,optional" toml:"ignore-price,optional"`
 }
 
 type TelemetryConfig struct {
@@ -346,9 +346,9 @@ type CacheConfig struct {
 	// Journal is the disk journal directory for trie cache to survive node restarts
 	Journal string `hcl:"journal,optional" toml:"journal,optional"`
 
-	// rejournal is the time interval to regenerate the journal for clean cache
-	rejournal    time.Duration
-	RejournalRaw string `hcl:"rejournal,optional" toml:"rejournal,optional"`
+	// Rejournal is the time interval to regenerate the journal for clean cache
+	Rejournal    time.Duration `hcl:"-" toml:"-"`
+	RejournalRaw string        `hcl:"rejournal,optional" toml:"rejournal,optional"`
 
 	// NoPrefetch is used to disable prefetch of tries
 	NoPrefetch bool `hcl:"no-prefetch,optional" toml:"no-prefetch,optional"`
@@ -420,27 +420,27 @@ func DefaultConfig() *Config {
 			Locals:       []string{},
 			NoLocals:     false,
 			Journal:      "",
-			rejournal:    1 * time.Hour,
+			Rejournal:    1 * time.Hour,
 			PriceLimit:   30000000000,
 			PriceBump:    10,
 			AccountSlots: 16,
 			GlobalSlots:  32768,
 			AccountQueue: 16,
 			GlobalQueue:  32768,
-			lifeTime:     3 * time.Hour,
+			LifeTime:     3 * time.Hour,
 		},
 		Sealer: &SealerConfig{
 			Enabled:   false,
 			Etherbase: "",
 			GasCeil:   20000000,
-			gasPrice:  big.NewInt(30 * params.GWei),
+			GasPrice:  big.NewInt(30 * params.GWei),
 			ExtraData: "",
 		},
 		Gpo: &GpoConfig{
 			Blocks:      20,
 			Percentile:  60,
-			maxPrice:    gasprice.DefaultMaxPrice,
-			ignorePrice: gasprice.DefaultIgnorePrice,
+			MaxPrice:    gasprice.DefaultMaxPrice,
+			IgnorePrice: gasprice.DefaultIgnorePrice,
 		},
 		JsonRPC: &JsonRPCConfig{
 			IPCDisable: false,
@@ -497,7 +497,7 @@ func DefaultConfig() *Config {
 			PercGc:        25,
 			PercSnapshot:  10,
 			Journal:       "triecache",
-			rejournal:     60 * time.Minute,
+			Rejournal:     60 * time.Minute,
 			NoPrefetch:    false,
 			Preimages:     false,
 			TxLookupLimit: 2350000,
@@ -525,9 +525,9 @@ func (c *Config) fillBigInt() error {
 		td   **big.Int
 		str  *string
 	}{
-		{"gpo.maxprice", &c.Gpo.maxPrice, &c.Gpo.MaxPriceRaw},
-		{"gpo.ignoreprice", &c.Gpo.ignorePrice, &c.Gpo.IgnorePriceRaw},
-		{"sealer.gasprice", &c.Sealer.gasPrice, &c.Sealer.GasPriceRaw},
+		{"gpo.maxprice", &c.Gpo.MaxPrice, &c.Gpo.MaxPriceRaw},
+		{"gpo.ignoreprice", &c.Gpo.IgnorePrice, &c.Gpo.IgnorePriceRaw},
+		{"sealer.gasprice", &c.Sealer.GasPrice, &c.Sealer.GasPriceRaw},
 	}
 
 	for _, x := range tds {
@@ -560,9 +560,9 @@ func (c *Config) fillTimeDurations() error {
 		td   *time.Duration
 		str  *string
 	}{
-		{"txpool.lifetime", &c.TxPool.lifeTime, &c.TxPool.LifeTimeRaw},
-		{"txpool.rejournal", &c.TxPool.rejournal, &c.TxPool.RejournalRaw},
-		{"cache.rejournal", &c.Cache.rejournal, &c.Cache.RejournalRaw},
+		{"txpool.lifetime", &c.TxPool.LifeTime, &c.TxPool.LifeTimeRaw},
+		{"txpool.rejournal", &c.TxPool.Rejournal, &c.TxPool.RejournalRaw},
+		{"cache.rejournal", &c.Cache.Rejournal, &c.Cache.RejournalRaw},
 	}
 
 	for _, x := range tds {
@@ -652,27 +652,27 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 	{
 		n.GPO.Blocks = int(c.Gpo.Blocks)
 		n.GPO.Percentile = int(c.Gpo.Percentile)
-		n.GPO.MaxPrice = c.Gpo.maxPrice
-		n.GPO.IgnorePrice = c.Gpo.ignorePrice
+		n.GPO.MaxPrice = c.Gpo.MaxPrice
+		n.GPO.IgnorePrice = c.Gpo.IgnorePrice
 	}
 
 	// txpool options
 	{
 		n.TxPool.NoLocals = c.TxPool.NoLocals
 		n.TxPool.Journal = c.TxPool.Journal
-		n.TxPool.Rejournal = c.TxPool.rejournal
+		n.TxPool.Rejournal = c.TxPool.Rejournal
 		n.TxPool.PriceLimit = c.TxPool.PriceLimit
 		n.TxPool.PriceBump = c.TxPool.PriceBump
 		n.TxPool.AccountSlots = c.TxPool.AccountSlots
 		n.TxPool.GlobalSlots = c.TxPool.GlobalSlots
 		n.TxPool.AccountQueue = c.TxPool.AccountQueue
 		n.TxPool.GlobalQueue = c.TxPool.GlobalQueue
-		n.TxPool.Lifetime = c.TxPool.lifeTime
+		n.TxPool.Lifetime = c.TxPool.LifeTime
 	}
 
 	// miner options
 	{
-		n.Miner.GasPrice = c.Sealer.gasPrice
+		n.Miner.GasPrice = c.Sealer.GasPrice
 		n.Miner.GasCeil = c.Sealer.GasCeil
 		n.Miner.ExtraData = []byte(c.Sealer.ExtraData)
 
@@ -818,7 +818,7 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 		godebug.SetGCPercent(int(gogc))
 
 		n.TrieCleanCacheJournal = c.Cache.Journal
-		n.TrieCleanCacheRejournal = c.Cache.rejournal
+		n.TrieCleanCacheRejournal = c.Cache.Rejournal
 		n.DatabaseCache = calcPerc(c.Cache.PercDatabase)
 		n.SnapshotCache = calcPerc(c.Cache.PercSnapshot)
 		n.TrieCleanCache = calcPerc(c.Cache.PercTrie)

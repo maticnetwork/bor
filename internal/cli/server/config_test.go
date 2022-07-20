@@ -28,7 +28,7 @@ func TestConfigMerge(t *testing.T) {
 			"a": "b",
 		},
 		TxPool: &TxPoolConfig{
-			lifeTime: 5 * time.Second,
+			LifeTime: 5 * time.Second,
 		},
 		P2P: &P2PConfig{
 			Discovery: &P2PDiscovery{
@@ -115,10 +115,10 @@ func TestConfigLoadFile(t *testing.T) {
 				MaxPeers: 30,
 			},
 			TxPool: &TxPoolConfig{
-				lifeTime: 1 * time.Second,
+				LifeTime: 1 * time.Second,
 			},
 			Gpo: &GpoConfig{
-				maxPrice: big.NewInt(100),
+				MaxPrice: big.NewInt(100),
 			},
 			Sealer: &SealerConfig{},
 			Cache:  &CacheConfig{},
