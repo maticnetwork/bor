@@ -31,7 +31,6 @@ const (
 	retryCall          = 5 * time.Second
 )
 
-// Metric timers
 var (
 	heimdallRequestValidMeter    metrics.Meter = metrics.NewRegisteredMeter("client/requests/valid/frequency", nil)
 	heimdallRequestInvalidMeter  metrics.Meter = metrics.NewRegisteredMeter("client/requests/invalid/frequency", nil)
@@ -55,7 +54,6 @@ type HeimdallClient struct {
 }
 
 type Request struct {
-	ctx    context.Context //nolint:containedctx
 	client http.Client
 	url    *url.URL
 	start  time.Time
@@ -164,8 +162,8 @@ func (h *HeimdallClient) FetchCheckpointCount(ctx context.Context) (int64, error
 // FetchWithRetry returns data from heimdall with retry
 func FetchWithRetry[T any](ctx context.Context, client http.Client, url *url.URL, closeCh chan struct{}) (*T, error) {
 	// request data once
-	request := &Request{ctx: ctx, client: client, url: url, start: time.Now()}
-	result, err := Fetch[T](request)
+	request := &Request{client: client, url: url, start: time.Now()}
+	result, err := Fetch[T](ctx, request)
 
 	if err == nil {
 		return result, nil
@@ -198,8 +196,8 @@ retryLoop:
 
 			return nil, ErrShutdownDetected
 		case <-ticker.C:
-			request := &Request{ctx: ctx, client: client, url: url, start: time.Now()}
-			result, err = Fetch[T](request)
+			request := &Request{client: client, url: url, start: time.Now()}
+			result, err = Fetch[T](ctx, request)
 
 			if err != nil {
 				if attempt%logEach == 0 {
@@ -215,7 +213,7 @@ retryLoop:
 }
 
 // Fetch returns data from heimdall
-func Fetch[T any](request *Request) (*T, error) {
+func Fetch[T any](ctx context.Context, request *Request) (*T, error) {
 	var failed bool = true
 
 	defer func() {
@@ -232,7 +230,7 @@ func Fetch[T any](request *Request) (*T, error) {
 
 	result := new(T)
 
-	body, err := internalFetchWithTimeout(request.ctx, request.client, request.url)
+	body, err := internalFetchWithTimeout(ctx, request.client, request.url)
 	if err != nil {
 		return nil, err
 	}
