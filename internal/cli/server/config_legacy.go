@@ -21,5 +21,13 @@ func readLegacyConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("failed to decode toml config file: %v", err)
 	}
 
+	if err := conf.fillBigInt(); err != nil {
+		return nil, err
+	}
+
+	if err := conf.fillTimeDurations(); err != nil {
+		return nil, err
+	}
+
 	return &conf, nil
 }

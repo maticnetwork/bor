@@ -180,14 +180,15 @@ func (b *BigIntFlag) Set(value string) error {
 	var ok bool
 	if strings.HasPrefix(value, "0x") {
 		num, ok = num.SetString(value[2:], 16)
+		*b.Value = *num
 	} else {
 		num, ok = num.SetString(value, 10)
+		*b.Value = *num
 	}
 
 	if !ok {
 		return fmt.Errorf("failed to set big int")
 	}
-	*b.Value = *num
 
 	return nil
 }

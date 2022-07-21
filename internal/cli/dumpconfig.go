@@ -1,16 +1,12 @@
 package cli
 
 import (
-	"math/big"
 	"reflect"
 	"strings"
-	"time"
 
 	"github.com/naoina/toml"
 
-	"github.com/ethereum/go-ethereum/eth/gasprice"
 	"github.com/ethereum/go-ethereum/internal/cli/server"
-	"github.com/ethereum/go-ethereum/params"
 )
 
 // These settings ensure that TOML keys use the same names as Go struct fields.
@@ -65,13 +61,13 @@ func (c *DumpconfigCommand) Run(args []string) int {
 
 	userConfig := command.GetConfig()
 
-	// setting the default values to the raw fields
-	userConfig.TxPool.RejournalRaw = (1 * time.Hour).String()
-	userConfig.TxPool.LifeTimeRaw = (3 * time.Hour).String()
-	userConfig.Sealer.GasPriceRaw = big.NewInt(30 * params.GWei).String()
-	userConfig.Gpo.MaxPriceRaw = gasprice.DefaultMaxPrice.String()
-	userConfig.Gpo.IgnorePriceRaw = gasprice.DefaultIgnorePrice.String()
-	userConfig.Cache.RejournalRaw = (60 * time.Minute).String()
+	// convert the big.Int and time.Duration fields to their corrosponding Raw fields
+	userConfig.TxPool.RejournalRaw = userConfig.TxPool.Rejournal.String()
+	userConfig.TxPool.LifeTimeRaw = userConfig.TxPool.LifeTime.String()
+	userConfig.Sealer.GasPriceRaw = userConfig.Sealer.GasPrice.String()
+	userConfig.Gpo.MaxPriceRaw = userConfig.Gpo.MaxPrice.String()
+	userConfig.Gpo.IgnorePriceRaw = userConfig.Gpo.IgnorePrice.String()
+	userConfig.Cache.RejournalRaw = userConfig.Cache.Rejournal.String()
 
 	// Currently, the configurations (userConfig) is exported into `toml` file format.
 	out, err := tomlSettings.Marshal(&userConfig)
