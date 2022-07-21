@@ -187,7 +187,7 @@ func (b *BigIntFlag) Set(value string) error {
 	if !ok {
 		return fmt.Errorf("failed to set big int")
 	}
-	b.Value = num
+	*b.Value = *num
 
 	return nil
 }

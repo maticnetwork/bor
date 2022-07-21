@@ -60,6 +60,8 @@ func (c *Command) Run(args []string) int {
 	}
 
 	config := DefaultConfig()
+
+	// TODO: Check if this can be removed or not
 	// read cli flags
 	if err := config.Merge(c.cliConfig); err != nil {
 		c.UI.Error(err.Error())
