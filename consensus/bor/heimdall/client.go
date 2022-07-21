@@ -76,8 +76,8 @@ var (
 
 	// Checkpoint requests
 	checkpointValidRequestMeter   = metrics.NewRegisteredMeter("client/requests/checkpoint/valid", nil)
-	checkpointInvalidRequestMeter = metrics.NewRegisteredMeter("client/requests/checkpoint-count/invalid", nil)
-	checkpointRequestTimer        = metrics.NewRegisteredTimer("client/requests/checkpoint-count/duration", nil)
+	checkpointInvalidRequestMeter = metrics.NewRegisteredMeter("client/requests/checkpoint/invalid", nil)
+	checkpointRequestTimer        = metrics.NewRegisteredTimer("client/requests/checkpoint/duration", nil)
 
 	// Checkpoint count requests
 	checkpointCountValidRequestMeter   = metrics.NewRegisteredMeter("client/requests/checkpoint-count/valid", nil)
