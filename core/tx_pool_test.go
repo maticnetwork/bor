@@ -2681,8 +2681,6 @@ func TestPoolBatchInsert(t *testing.T) {
 			total         int
 		)
 
-		start := time.Now()
-
 		for _, batch := range batches {
 			total += len(batch)
 
@@ -2697,13 +2695,17 @@ func TestPoolBatchInsert(t *testing.T) {
 			}
 		}
 
+		start := time.Now()
+		pending := pool.Pending(true)
+		locals := pool.Locals()
 		done := time.Since(start)
+
 		durationPerTx := big.NewRat(done.Milliseconds(), int64(total))
 		expected := big.NewRat(1, 100_000)
 
 		if durationPerTx.Cmp(expected) > 0 {
-			rt.Fatalf("took too long %s(total time %s, total accs %d), expected %s",
-				durationPerTx.FloatString(7), done, total, expected.FloatString(7))
+			rt.Fatalf("took too long %s(total time %s, total accounts %d. Pending %d, locals %d), expected %s",
+				durationPerTx.FloatString(7), done, total, len(pending), len(locals), expected.FloatString(7))
 		}
 	})
 }
