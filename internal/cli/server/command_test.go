@@ -9,7 +9,10 @@ import (
 )
 
 func TestFlags(t *testing.T) {
+	t.Parallel()
+
 	var c Command
+
 	args := []string{
 		"--txpool.rejournal", "30m0s",
 		"--txpool.lifetime", "30m0s",
@@ -24,7 +27,9 @@ func TestFlags(t *testing.T) {
 		"--requiredblocks", "a=b",
 		"--http.api", "eth,web3,bor",
 	}
-	c.extractFlags(args)
+	err := c.extractFlags(args)
+
+	assert.NoError(t, err)
 
 	txRe, _ := time.ParseDuration("30m0s")
 	txLt, _ := time.ParseDuration("30m0s")

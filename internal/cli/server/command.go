@@ -58,6 +58,7 @@ func (c *Command) extractFlags(args []string) error {
 	if err := flags.Parse(args); err != nil {
 		c.UI.Error(err.Error())
 		c.config = &config
+
 		return err
 	}
 
@@ -66,6 +67,7 @@ func (c *Command) extractFlags(args []string) error {
 	if err := config.Merge(c.cliConfig); err != nil {
 		c.UI.Error(err.Error())
 		c.config = &config
+
 		return err
 	}
 	// read if config file is provided, this will overwrite the cli flags, if provided
@@ -75,15 +77,18 @@ func (c *Command) extractFlags(args []string) error {
 		if err != nil {
 			c.UI.Error(err.Error())
 			c.config = &config
+
 			return err
 		}
 		if err := config.Merge(cfg); err != nil {
 			c.UI.Error(err.Error())
 			c.config = &config
+
 			return err
 		}
 	}
 	c.config = &config
+
 	return nil
 }
 
