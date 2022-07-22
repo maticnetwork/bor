@@ -51,21 +51,22 @@ func (c *Command) Synopsis() string {
 	return "Run the Bor server"
 }
 
-// Run implements the cli.Command interface
-func (c *Command) Run(args []string) int {
+func (c *Command) extractFlags(args []string) error {
+	config := *DefaultConfig()
+
 	flags := c.Flags()
 	if err := flags.Parse(args); err != nil {
 		c.UI.Error(err.Error())
-		return 1
+		c.config = &config
+		return err
 	}
-
-	config := DefaultConfig()
 
 	// TODO: Check if this can be removed or not
 	// read cli flags
 	if err := config.Merge(c.cliConfig); err != nil {
 		c.UI.Error(err.Error())
-		return 1
+		c.config = &config
+		return err
 	}
 	// read if config file is provided, this will overwrite the cli flags, if provided
 	if c.configFile != "" {
@@ -73,16 +74,28 @@ func (c *Command) Run(args []string) int {
 		cfg, err := readConfigFile(c.configFile)
 		if err != nil {
 			c.UI.Error(err.Error())
-			return 1
+			c.config = &config
+			return err
 		}
 		if err := config.Merge(cfg); err != nil {
 			c.UI.Error(err.Error())
-			return 1
+			c.config = &config
+			return err
 		}
 	}
-	c.config = config
+	c.config = &config
+	return nil
+}
 
-	srv, err := NewServer(config)
+// Run implements the cli.Command interface
+func (c *Command) Run(args []string) int {
+	err := c.extractFlags(args)
+	if err != nil {
+		c.UI.Error(err.Error())
+		return 1
+	}
+
+	srv, err := NewServer(c.config)
 	if err != nil {
 		c.UI.Error(err.Error())
 		return 1

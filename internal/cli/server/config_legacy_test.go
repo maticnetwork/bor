@@ -24,8 +24,8 @@ func TestConfigLegacy(t *testing.T) {
 			},
 			TxPool: &TxPoolConfig{
 				Locals:    []string{},
-				Rejournal: time.Duration(1 * time.Hour),
-				LifeTime:  time.Duration(1 * time.Second),
+				Rejournal: 1 * time.Hour,
+				LifeTime:  1 * time.Second,
 			},
 			Gpo: &GpoConfig{
 				MaxPrice:    big.NewInt(100),
@@ -38,7 +38,7 @@ func TestConfigLegacy(t *testing.T) {
 			},
 			Cache: &CacheConfig{
 				Cache:     1024,
-				Rejournal: time.Duration(1 * time.Hour),
+				Rejournal: 1 * time.Hour,
 			},
 		})
 	}
