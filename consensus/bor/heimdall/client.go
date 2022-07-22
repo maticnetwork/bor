@@ -65,9 +65,9 @@ type Request struct {
 
 var (
 	// State Sync requests
-	stateSyncValidRequestMeter   = metrics.NewRegisteredMeter("client/requests/state-sync/valid", nil)
-	stateSyncInvalidRequestMeter = metrics.NewRegisteredMeter("client/requests/state-sync/invalid", nil)
-	stateSyncRequestTimer        = metrics.NewRegisteredTimer("client/requests/state-sync/duration", nil)
+	stateSyncValidRequestMeter   = metrics.NewRegisteredMeter("client/requests/statesync/valid", nil)
+	stateSyncInvalidRequestMeter = metrics.NewRegisteredMeter("client/requests/statesync/invalid", nil)
+	stateSyncRequestTimer        = metrics.NewRegisteredTimer("client/requests/statesync/duration", nil)
 
 	// Span requests
 	spanValidRequestMeter   = metrics.NewRegisteredMeter("client/requests/span/valid", nil)
@@ -80,9 +80,9 @@ var (
 	checkpointRequestTimer        = metrics.NewRegisteredTimer("client/requests/checkpoint/duration", nil)
 
 	// Checkpoint count requests
-	checkpointCountValidRequestMeter   = metrics.NewRegisteredMeter("client/requests/checkpoint-count/valid", nil)
-	checkpointCountInvalidRequestMeter = metrics.NewRegisteredMeter("client/requests/checkpoint-count/invalid", nil)
-	checkpointCountRequestTimer        = metrics.NewRegisteredTimer("client/requests/checkpoint-count/duration", nil)
+	checkpointCountValidRequestMeter   = metrics.NewRegisteredMeter("client/requests/checkpointcount/valid", nil)
+	checkpointCountInvalidRequestMeter = metrics.NewRegisteredMeter("client/requests/checkpointcount/invalid", nil)
+	checkpointCountRequestTimer        = metrics.NewRegisteredTimer("client/requests/checkpointcount/duration", nil)
 )
 
 func NewHeimdallClient(urlString string) *HeimdallClient {
