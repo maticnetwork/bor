@@ -2,22 +2,22 @@
 
 chain = "mainnet"
 log-level = "info"
-data-dir = ""
-sync-mode = "fast"
-gc-mode = "full"
+datadir = ""
+syncmode = "fast"
+gcmode = "full"
 snapshot = true
 ethstats = ""
 requiredblocks = {}
 
 p2p {
-    max-peers = 30
-    max-pend-peers = 50
+    maxpeers = 30
+    maxpendpeers = 50
     bind = "0.0.0.0"
     port = 30303
-    no-discover = false
+    nodiscover = false
     nat = "any"
     discovery {
-        v5-enabled = false
+        v5disc = false
         bootnodes = []
         bootnodesv4 = []
         bootnodesv5 = []
@@ -34,23 +34,23 @@ heimdall {
 
 txpool {
     locals = []
-    no-locals = false
+    nolocals = false
     journal = ""
     rejournal = "1h"
-    price-limit = 1
-    price-bump = 10
-    account-slots = 16
-    global-slots = 4096
-    account-queue = 64
-    global-queue = 1024
+    pricelimit = 1
+    pricebump = 10
+    accountslots = 16
+    globalslots = 4096
+    accountqueue = 64
+    globalqueue = 1024
     lifetime = "3h"
 }
 
-sealer {
-    enabled = false
+miner {
+    mine = false
     etherbase = ""
-    gas-ceil = 8000000
-    extra-data = ""
+    gasceil = 8000000
+    extradata = ""
 }
 
 gpo {
@@ -68,8 +68,8 @@ jsonrpc {
         prefix = ""
         host = "localhost"
 		api = ["web3", "net"]
-        cors = ["*"]
-        vhost = ["*"]
+        corsdomain = ["*"]
+        vhosts = ["*"]
     }
 
     ws {
@@ -78,29 +78,29 @@ jsonrpc {
         prefix = ""
         host = "localhost"
 		api = ["web3", "net"]
-        cors = ["*"]
-        vhost = ["*"]
+        corsdomain = ["*"]
+        vhosts = ["*"]
     }
 
     graphql {
         enabled = false
 		api = ["web3", "net"]
-        cors = ["*"]
-        vhost = ["*"]
+        corsdomain = ["*"]
+        vhosts = ["*"]
     }
 }
 
 telemetry {
-    enabled = false
+    metrics = false
     expensive = false
 
     influx {
-        v1-enabled = false
+        influxdb = false
         endpoint = ""
         database = ""
         username = ""
         password = ""
-        v2-enabled = false
+        influxdbv2 = false
         token = ""
         bucket = ""
         organization = ""
@@ -109,22 +109,22 @@ telemetry {
 
 cache {
     cache = 1024
-    perc-database = 50
-    perc-trie = 15
-    perc-gc = 25
-    perc-snapshot = 10
+    database = 50
+    trie = 15
+    gc = 25
+    snapshot = 10
     journal = "triecache"
     rejournal = "60m"
-    no-prefetch = false
+    noprefetch = false
     preimages = false
-    tx-lookup-limit = 2350000
+    txlookuplimit = 2350000
 }
 
 accounts {
     unlock = []
-    password-file = ""
+    passwordfile = ""
     allow-insecure-unlock = false
-    use-lightweight-kdf = false
+    lightkdf = false
 }
 
 grpc {

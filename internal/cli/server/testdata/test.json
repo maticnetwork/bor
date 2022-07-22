@@ -1,15 +1,15 @@
 {
-  "data-dir": "./data",
+  "datadir": "./data",
   "requiredblocks": {
       "a": "b"
   },
   "p2p": {
-      "max-peers": 30
+      "maxpeers": 30
   },
   "txpool": {
       "lifetime": "1s"
   },
   "gpo": {
-      "max-price": "100"
+      "maxprice": "100"
   }
 }

@@ -39,7 +39,7 @@ type Config struct {
 	chain *chains.Chain
 
 	// Chain is the chain to sync with
-	Chain string `hcl:"chain,optional" toml:"chain, optional"`
+	Chain string `hcl:"chain,optional" toml:"chain,optional"`
 
 	// Identity of the node
 	Identity string `hcl:"identity,optional" toml:"identity,optional"`
@@ -107,7 +107,7 @@ type P2PConfig struct {
 	MaxPeers uint64 `hcl:"maxpeers,optional" toml:"maxpeers,optional"`
 
 	// MaxPendPeers sets the maximum number of pending connected peers
-	MaxPendPeers uint64 `hcl:"maxpendpeers" toml:"maxpendpeers,optional"`
+	MaxPendPeers uint64 `hcl:"maxpendpeers,optional" toml:"maxpendpeers,optional"`
 
 	// Bind is the bind address
 	Bind string `hcl:"bind,optional" toml:"bind,optional"`

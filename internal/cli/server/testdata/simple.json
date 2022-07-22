@@ -2,27 +2,27 @@
 "accounts": [
     {
     "allow-insecure-unlock": false,
-    "password-file": "",
+    "passwordfile": "",
     "unlock": [],
-    "use-lightweight-kdf": false
+    "lightkdf": false
     }
 ],
 "cache": [
     {
     "cache": 1024,
     "journal": "triecache",
-    "no-prefetch": false,
-    "perc-database": 50,
-    "perc-gc": 25,
-    "perc-snapshot": 10,
-    "perc-trie": 15,
+    "noprefetch": false,
+    "database": 50,
+    "gc": 25,
+    "snapshot": 10,
+    "trie": 15,
     "preimages": false,
     "rejournal": "60m",
-    "tx-lookup-limit": 2350000
+    "txlookuplimit": 2350000
     }
 ],
 "chain": "mainnet",
-"data-dir": "",
+"datadir": "",
 "developer": [
     {
     "dev": true,
@@ -30,7 +30,7 @@
     }
 ],
 "ethstats": "",
-"gc-mode": "full",
+"gcmode": "full",
 "gpo": [
     {
     "blocks": 20,
@@ -52,7 +52,7 @@
     {
     "graphql": [
         {
-        "cors": [
+        "corsdomain": [
             "*"
         ],
         "enabled": false,
@@ -60,14 +60,14 @@
             "web3",
             "net"
         ],
-        "vhost": [
+        "vhosts": [
             "*"
         ]
         }
     ],
     "http": [
         {
-        "cors": [
+        "corsdomain": [
             "*"
         ],
         "enabled": false,
@@ -78,7 +78,7 @@
         ],
         "port": 8545,
         "prefix": "",
-        "vhost": [
+        "vhosts": [
             "*"
         ]
         }
@@ -87,7 +87,7 @@
     "ipc-path": "",
     "ws": [
         {
-        "cors": [
+        "corsdomain": [
             "*"
         ],
         "enabled": false,
@@ -98,7 +98,7 @@
         ],
         "port": 8546,
         "prefix": "",
-        "vhost": [
+        "vhosts": [
             "*"
         ]
         }
@@ -118,29 +118,29 @@
         "dns": [],
         "static-nodes": [],
         "trusted-nodes": [],
-        "v5-enabled": false
+        "v5disc": false
         }
     ],
-    "max-peers": 30,
-    "max-pend-peers": 50,
+    "maxpeers": 30,
+    "maxpendpeers": 50,
     "nat": "any",
-    "no-discover": false,
+    "nodiscover": false,
     "port": 30303
     }
 ],
 "requiredblocks": {},
-"sealer": [
+"miner": [
     {
-    "enabled": false,
+    "mine": false,
     "etherbase": "",
-    "extra-data": "",
-    "gas-ceil": 8000000
+    "extradata": "",
+    "gasceil": 8000000
     }
 ],
-"sync-mode": "fast",
+"syncmode": "fast",
 "telemetry": [
     {
-    "enabled": false,
+    "metrics": false,
     "expensive": false,
     "influx": [
         {
@@ -151,24 +151,24 @@
         "password": "",
         "token": "",
         "username": "",
-        "v1-enabled": false,
-        "v2-enabled": false
+        "influxdb": false,
+        "influxdbv2": false
         }
     ]
     }
 ],
 "txpool": [
     {
-    "account-queue": 64,
-    "account-slots": 16,
-    "global-queue": 1024,
-    "global-slots": 4096,
+    "accountqueue": 64,
+    "accountslots": 16,
+    "globalqueue": 1024,
+    "globalslots": 4096,
     "journal": "",
     "lifetime": "3h",
     "locals": [],
-    "no-locals": false,
-    "price-bump": 10,
-    "price-limit": 1,
+    "nolocals": false,
+    "pricebump": 10,
+    "pricelimit": 1,
     "rejournal": "1h"
     }
 ]
