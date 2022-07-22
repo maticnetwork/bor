@@ -62,20 +62,28 @@ func (h *ethHandler) fetchWhitelistCheckpoints(ctx context.Context, bor *bor.Bor
 		return blockNums, blockHashes, errNoCheckpoint
 	}
 
-	// If we're in the first iteration, we'll fetch last 10 checkpoints, else only the latest one
-	iterations := 1
-	if first {
-		iterations = 10
+	var (
+		start int64
+		end   int64
+	)
+
+	// Prepare the checkpoint range to fetch
+	if count <= 10 {
+		start = 1
+	} else {
+		start = count - 10 + 1 // 10 is the max number of checkpoints to fetch
 	}
 
-	for i := 0; i < iterations; i++ {
-		// If we don't have any checkpoints in heimdall, break
-		if count == 0 {
-			break
-		}
+	end = count
 
-		// fetch `count` indexed checkpoint from heimdall
-		checkpoint, err := bor.HeimdallClient.FetchCheckpoint(ctx, count)
+	// If we're in not in the first iteration, only fetch the latest checkpoint
+	if !first {
+		start = count
+	}
+
+	for i := start; i <= end; i++ {
+		// fetch `i` indexed checkpoint from heimdall
+		checkpoint, err := bor.HeimdallClient.FetchCheckpoint(ctx, i)
 		if err != nil {
 			log.Debug("Failed to fetch latest checkpoint for whitelisting", "err", err)
 			return blockNums, blockHashes, errCheckpoint
@@ -111,7 +119,6 @@ func (h *ethHandler) fetchWhitelistCheckpoints(ctx context.Context, bor *bor.Bor
 
 		blockNums = append(blockNums, checkpoint.EndBlock.Uint64())
 		blockHashes = append(blockHashes, common.HexToHash(hash))
-		count--
 	}
 
 	return blockNums, blockHashes, nil
