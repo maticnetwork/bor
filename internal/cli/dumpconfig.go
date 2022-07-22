@@ -61,7 +61,7 @@ func (c *DumpconfigCommand) Run(args []string) int {
 
 	userConfig := command.GetConfig()
 
-	// convert the big.Int and time.Duration fields to their corrosponding Raw fields
+	// convert the big.Int and time.Duration fields to their corresponding Raw fields
 	userConfig.TxPool.RejournalRaw = userConfig.TxPool.Rejournal.String()
 	userConfig.TxPool.LifeTimeRaw = userConfig.TxPool.LifeTime.String()
 	userConfig.Sealer.GasPriceRaw = userConfig.Sealer.GasPrice.String()

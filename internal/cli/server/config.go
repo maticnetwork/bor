@@ -51,16 +51,16 @@ type Config struct {
 	LogLevel string `hcl:"log-level,optional" toml:"log-level,optional"`
 
 	// DataDir is the directory to store the state in
-	DataDir string `hcl:"data-dir,optional" toml:"data-dir,optional"`
+	DataDir string `hcl:"datadir,optional" toml:"datadir,optional"`
 
 	// KeyStoreDir is the directory to store keystores
-	KeyStoreDir string `hcl:"keystore-dir,optional" toml:"keystore-dir,optional"`
+	KeyStoreDir string `hcl:"keystore,optional" toml:"keystore,optional"`
 
 	// SyncMode selects the sync protocol
-	SyncMode string `hcl:"sync-mode,optional" toml:"sync-mode,optional"`
+	SyncMode string `hcl:"syncmode,optional" toml:"syncmode,optional"`
 
 	// GcMode selects the garbage collection mode for the trie
-	GcMode string `hcl:"gc-mode,optional" toml:"gc-mode,optional"`
+	GcMode string `hcl:"gcmode,optional" toml:"gcmode,optional"`
 
 	// Snapshot disables/enables the snapshot database mode
 	Snapshot bool `hcl:"snapshot,optional" toml:"snapshot,optional"`
@@ -78,7 +78,7 @@ type Config struct {
 	TxPool *TxPoolConfig `hcl:"txpool,block" toml:"txpool,block"`
 
 	// Sealer has the validator related settings
-	Sealer *SealerConfig `hcl:"sealer,block" toml:"sealer,block"`
+	Sealer *SealerConfig `hcl:"miner,block" toml:"miner,block"`
 
 	// JsonRPC has the json-rpc related settings
 	JsonRPC *JsonRPCConfig `hcl:"jsonrpc,block" toml:"jsonrpc,block"`
@@ -104,10 +104,10 @@ type Config struct {
 
 type P2PConfig struct {
 	// MaxPeers sets the maximum number of connected peers
-	MaxPeers uint64 `hcl:"max-peers,optional" toml:"max-peers,optional"`
+	MaxPeers uint64 `hcl:"maxpeers,optional" toml:"maxpeers,optional"`
 
 	// MaxPendPeers sets the maximum number of pending connected peers
-	MaxPendPeers uint64 `hcl:"max-pend-peers,optional" toml:"max-pend-peers,optional"`
+	MaxPendPeers uint64 `hcl:"maxpendpeers" toml:"maxpendpeers,optional"`
 
 	// Bind is the bind address
 	Bind string `hcl:"bind,optional" toml:"bind,optional"`
@@ -116,7 +116,7 @@ type P2PConfig struct {
 	Port uint64 `hcl:"port,optional" toml:"port,optional"`
 
 	// NoDiscover is used to disable discovery
-	NoDiscover bool `hcl:"no-discover,optional" toml:"no-discover,optional"`
+	NoDiscover bool `hcl:"nodiscover,optional" toml:"nodiscover,optional"`
 
 	// NAT it used to set NAT options
 	NAT string `hcl:"nat,optional" toml:"nat,optional"`
@@ -127,7 +127,7 @@ type P2PConfig struct {
 
 type P2PDiscovery struct {
 	// V5Enabled is used to enable disc v5 discovery mode
-	V5Enabled bool `hcl:"v5-enabled,optional" toml:"v5-enabled,optional"`
+	V5Enabled bool `hcl:"v5disc,optional" toml:"v5disc,optional"`
 
 	// Bootnodes is the list of initial bootnodes
 	Bootnodes []string `hcl:"bootnodes,optional" toml:"bootnodes,optional"`
@@ -148,6 +148,7 @@ type P2PDiscovery struct {
 	DNS []string `hcl:"dns,optional" toml:"dns,optional"`
 }
 
+// discuss flags here
 type HeimdallConfig struct {
 	// URL is the url of the heimdall server
 	URL string `hcl:"url,optional" toml:"url,optional"`
@@ -161,7 +162,7 @@ type TxPoolConfig struct {
 	Locals []string `hcl:"locals,optional" toml:"locals,optional"`
 
 	// NoLocals enables whether local transaction handling should be disabled
-	NoLocals bool `hcl:"no-locals,optional" toml:"no-locals,optional"`
+	NoLocals bool `hcl:"nolocals,optional" toml:"nolocals,optional"`
 
 	// Journal is the path to store local transactions to survive node restarts
 	Journal string `hcl:"journal,optional" toml:"journal,optional"`
@@ -171,22 +172,22 @@ type TxPoolConfig struct {
 	RejournalRaw string        `hcl:"rejournal,optional" toml:"rejournal,optional"`
 
 	// PriceLimit is the minimum gas price to enforce for acceptance into the pool
-	PriceLimit uint64 `hcl:"price-limit,optional" toml:"price-limit,optional"`
+	PriceLimit uint64 `hcl:"pricelimit,optional" toml:"pricelimit,optional"`
 
 	// PriceBump is the minimum price bump percentage to replace an already existing transaction (nonce)
-	PriceBump uint64 `hcl:"price-bump,optional" toml:"price-bump,optional"`
+	PriceBump uint64 `hcl:"pricebump,optional" toml:"pricebump,optional"`
 
 	// AccountSlots is the number of executable transaction slots guaranteed per account
-	AccountSlots uint64 `hcl:"account-slots,optional" toml:"account-slots,optional"`
+	AccountSlots uint64 `hcl:"accountslots,optional" toml:"accountslots,optional"`
 
 	// GlobalSlots is the maximum number of executable transaction slots for all accounts
-	GlobalSlots uint64 `hcl:"global-slots,optional" toml:"global-slots,optional"`
+	GlobalSlots uint64 `hcl:"globalslots,optional" toml:"globalslots,optional"`
 
 	// AccountQueue is the maximum number of non-executable transaction slots permitted per account
-	AccountQueue uint64 `hcl:"account-queue,optional" toml:"account-queue,optional"`
+	AccountQueue uint64 `hcl:"accountqueue,optional" toml:"accountqueue,optional"`
 
 	// GlobalQueueis the maximum number of non-executable transaction slots for all accounts
-	GlobalQueue uint64 `hcl:"global-queue,optional" toml:"global-queue,optional"`
+	GlobalQueue uint64 `hcl:"globalqueue,optional" toml:"globalqueue,optional"`
 
 	// lifetime is the maximum amount of time non-executable transaction are queued
 	LifeTime    time.Duration `hcl:"-,optional" toml:"-,optional"`
@@ -195,34 +196,34 @@ type TxPoolConfig struct {
 
 type SealerConfig struct {
 	// Enabled is used to enable validator mode
-	Enabled bool `hcl:"enabled,optional" toml:"enabled,optional"`
+	Enabled bool `hcl:"mine,optional" toml:"mine,optional"`
 
 	// Etherbase is the address of the validator
 	Etherbase string `hcl:"etherbase,optional" toml:"etherbase,optional"`
 
 	// ExtraData is the block extra data set by the miner
-	ExtraData string `hcl:"extra-data,optional" toml:"extra-data,optional"`
+	ExtraData string `hcl:"extradata,optional" toml:"extradata,optional"`
 
 	// GasCeil is the target gas ceiling for mined blocks.
-	GasCeil uint64 `hcl:"gas-ceil,optional" toml:"gas-ceil,optional"`
+	GasCeil uint64 `hcl:"gaslimit,optional" toml:"gaslimit,optional"`
 
 	// GasPrice is the minimum gas price for mining a transaction
 	GasPrice    *big.Int `hcl:"-,optional" toml:"-,optional"`
-	GasPriceRaw string   `hcl:"gas-price,optional" toml:"gas-price,optional"`
+	GasPriceRaw string   `hcl:"gasprice,optional" toml:"gasprice,optional"`
 }
 
 type JsonRPCConfig struct {
 	// IPCDisable enables whether ipc is enabled or not
-	IPCDisable bool `hcl:"ipc-disable,optional" toml:"ipc-disable,optional"`
+	IPCDisable bool `hcl:"ipcdisable,optional" toml:"ipcdisable,optional"`
 
 	// IPCPath is the path of the ipc endpoint
-	IPCPath string `hcl:"ipc-path,optional" toml:"ipc-path,optional"`
+	IPCPath string `hcl:"ipcpath,optional" toml:"ipcpath,optional"`
 
 	// GasCap is the global gas cap for eth-call variants.
-	GasCap uint64 `hcl:"gas-cap,optional" toml:"gas-cap,optional"`
+	GasCap uint64 `hcl:"gascap,optional" toml:"gascap,optional"`
 
 	// TxFeeCap is the global transaction fee cap for send-transaction variants
-	TxFeeCap float64 `hcl:"tx-fee-cap,optional" toml:"tx-fee-cap,optional"`
+	TxFeeCap float64 `hcl:"txfeecap,optional" toml:"txfeecap,optional"`
 
 	// Http has the json-rpc http related settings
 	Http *APIConfig `hcl:"http,block" toml:"http,block"`
@@ -256,10 +257,10 @@ type APIConfig struct {
 	API []string `hcl:"api,optional" toml:"api,optional"`
 
 	// VHost is the list of valid virtual hosts
-	VHost []string `hcl:"vhost,optional" toml:"vhost,optional"`
+	VHost []string `hcl:"vhosts,optional" toml:"vhosts,optional"`
 
 	// Cors is the list of Cors endpoints
-	Cors []string `hcl:"cors,optional" toml:"cors,optional"`
+	Cors []string `hcl:"corsdomain,optional" toml:"corsdomain,optional"`
 }
 
 type GpoConfig struct {
@@ -271,16 +272,16 @@ type GpoConfig struct {
 
 	// MaxPrice is an upper bound gas price
 	MaxPrice    *big.Int `hcl:"-,optional" toml:"-,optional"`
-	MaxPriceRaw string   `hcl:"max-price,optional" toml:"max-price,optional"`
+	MaxPriceRaw string   `hcl:"maxprice,optional" toml:"maxprice,optional"`
 
 	// IgnorePrice is a lower bound gas price
 	IgnorePrice    *big.Int `hcl:"-,optional" toml:"-,optional"`
-	IgnorePriceRaw string   `hcl:"ignore-price,optional" toml:"ignore-price,optional"`
+	IgnorePriceRaw string   `hcl:"ignoreprice,optional" toml:"ignoreprice,optional"`
 }
 
 type TelemetryConfig struct {
 	// Enabled enables metrics
-	Enabled bool `hcl:"enabled,optional" toml:"enabled,optional"`
+	Enabled bool `hcl:"metrics,optional" toml:"metrics,optional"`
 
 	// Expensive enables expensive metrics
 	Expensive bool `hcl:"expensive,optional" toml:"expensive,optional"`
@@ -297,7 +298,7 @@ type TelemetryConfig struct {
 
 type InfluxDBConfig struct {
 	// V1Enabled enables influx v1 mode
-	V1Enabled bool `hcl:"v1-enabled,optional" toml:"v1-enabled,optional"`
+	V1Enabled bool `hcl:"influxdb,optional" toml:"influxdb,optional"`
 
 	// Endpoint is the url endpoint of the influxdb service
 	Endpoint string `hcl:"endpoint,optional" toml:"endpoint,optional"`
@@ -315,7 +316,7 @@ type InfluxDBConfig struct {
 	Tags map[string]string `hcl:"tags,optional" toml:"tags,optional"`
 
 	// Enabled enables influx v2 mode
-	V2Enabled bool `hcl:"v2-enabled,optional" toml:"v2-enabled,optional"`
+	V2Enabled bool `hcl:"influxdbv2,optional" toml:"influxdbv2,optional"`
 
 	// Token is the token to authorize access to Influxdb V2.
 	Token string `hcl:"token,optional" toml:"token,optional"`
@@ -332,16 +333,16 @@ type CacheConfig struct {
 	Cache uint64 `hcl:"cache,optional" toml:"cache,optional"`
 
 	// PercGc is percentage of cache used for garbage collection
-	PercGc uint64 `hcl:"perc-gc,optional" toml:"perc-gc,optional"`
+	PercGc uint64 `hcl:"gc,optional" toml:"gc,optional"`
 
 	// PercSnapshot is percentage of cache used for snapshots
-	PercSnapshot uint64 `hcl:"perc-snapshot,optional" toml:"perc-snapshot,optional"`
+	PercSnapshot uint64 `hcl:"snapshot,optional" toml:"snapshot,optional"`
 
 	// PercDatabase is percentage of cache used for the database
-	PercDatabase uint64 `hcl:"perc-database,optional" toml:"perc-database,optional"`
+	PercDatabase uint64 `hcl:"database,optional" toml:"database,optional"`
 
 	// PercTrie is percentage of cache used for the trie
-	PercTrie uint64 `hcl:"perc-trie,optional" toml:"perc-trie,optional"`
+	PercTrie uint64 `hcl:"trie,optional" toml:"trie,optional"`
 
 	// Journal is the disk journal directory for trie cache to survive node restarts
 	Journal string `hcl:"journal,optional" toml:"journal,optional"`
@@ -351,13 +352,13 @@ type CacheConfig struct {
 	RejournalRaw string        `hcl:"rejournal,optional" toml:"rejournal,optional"`
 
 	// NoPrefetch is used to disable prefetch of tries
-	NoPrefetch bool `hcl:"no-prefetch,optional" toml:"no-prefetch,optional"`
+	NoPrefetch bool `hcl:"noprefetch,optional" toml:"noprefetch,optional"`
 
 	// Preimages is used to enable the track of hash preimages
 	Preimages bool `hcl:"preimages,optional" toml:"preimages,optional"`
 
 	// TxLookupLimit sets the maximum number of blocks from head whose tx indices are reserved.
-	TxLookupLimit uint64 `hcl:"tx-lookup-limit,optional" toml:"tx-lookup-limit,optional"`
+	TxLookupLimit uint64 `hcl:"txlookuplimit,optional" toml:"txlookuplimit,optional"`
 }
 
 type AccountsConfig struct {
@@ -365,13 +366,13 @@ type AccountsConfig struct {
 	Unlock []string `hcl:"unlock,optional" toml:"unlock,optional"`
 
 	// PasswordFile is the file where the account passwords are stored
-	PasswordFile string `hcl:"password-file,optional" toml:"password-file,optional"`
+	PasswordFile string `hcl:"password,optional" toml:"password,optional"`
 
 	// AllowInsecureUnlock allows user to unlock accounts in unsafe http environment.
 	AllowInsecureUnlock bool `hcl:"allow-insecure-unlock,optional" toml:"allow-insecure-unlock,optional"`
 
 	// UseLightweightKDF enables a faster but less secure encryption of accounts
-	UseLightweightKDF bool `hcl:"use-lightweight-kdf,optional" toml:"use-lightweight-kdf,optional"`
+	UseLightweightKDF bool `hcl:"lightkdf,optional" toml:"lightkdf,optional"`
 
 	// DisableBorWallet disables the personal wallet endpoints
 	DisableBorWallet bool `hcl:"disable-bor-wallet,optional" toml:"disable-bor-wallet,optional"`
@@ -527,7 +528,7 @@ func (c *Config) fillBigInt() error {
 	}{
 		{"gpo.maxprice", &c.Gpo.MaxPrice, &c.Gpo.MaxPriceRaw},
 		{"gpo.ignoreprice", &c.Gpo.IgnorePrice, &c.Gpo.IgnorePriceRaw},
-		{"sealer.gasprice", &c.Sealer.GasPrice, &c.Sealer.GasPriceRaw},
+		{"miner.gasprice", &c.Sealer.GasPrice, &c.Sealer.GasPriceRaw},
 	}
 
 	for _, x := range tds {
