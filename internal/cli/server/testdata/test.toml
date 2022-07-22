@@ -1,13 +1,25 @@
-data-dir = "./data"
+datadir = "./data"
 
 [requiredblocks]
 a = "b"
 
 [p2p]
-max-peers = 30
+maxpeers = 30
 
 [txpool]
+locals = []
+rejournal = "1h0m0s"
 lifetime = "1s"
 
+[miner]
+mine = false
+gaslimit = 20000000
+gasprice = "30000000000"
+
 [gpo]
-max-price = "100"
+maxprice = "100"
+ignoreprice = "2"
+
+[cache]
+cache = 1024
+rejournal = "1h0m0s"
