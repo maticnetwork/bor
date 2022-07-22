@@ -64,25 +64,29 @@ type Request struct {
 }
 
 var (
+	// validMeter    = metrics.NewRegisteredMeter("chain/requests/valid", nil)
+	// invalidMeter  = metrics.NewRegisteredMeter("chain/requests/invalid", nil)
+	durationTimer = metrics.NewRegisteredTimer("chain/requests/duration", nil)
+
 	// State Sync requests
-	stateSyncValidRequestMeter   = metrics.NewRegisteredMeter("client/requests/state-sync/valid", nil)
-	stateSyncInvalidRequestMeter = metrics.NewRegisteredMeter("client/requests/state-sync/invalid", nil)
-	stateSyncRequestTimer        = metrics.NewRegisteredTimer("client/requests/state-sync/duration", nil)
+	// stateSyncValidRequestMeter   = metrics.NewRegisteredMeter("client/requests/state-sync/valid", nil)
+	// stateSyncInvalidRequestMeter = metrics.NewRegisteredMeter("client/requests/state-sync/invalid", nil)
+	// stateSyncRequestTimer        = metrics.NewRegisteredTimer("client/requests/state-sync/duration", nil)
 
 	// Span requests
-	spanValidRequestMeter   = metrics.NewRegisteredMeter("client/requests/span/valid", nil)
-	spanInvalidRequestMeter = metrics.NewRegisteredMeter("client/requests/span/invalid", nil)
-	spanRequestTimer        = metrics.NewRegisteredTimer("client/requests/span/duration", nil)
+	// spanValidRequestMeter   = metrics.NewRegisteredMeter("client/requests/span/valid", nil)
+	// spanInvalidRequestMeter = metrics.NewRegisteredMeter("client/requests/span/invalid", nil)
+	// spanRequestTimer        = metrics.NewRegisteredTimer("client/requests/span/duration", nil)
 
 	// Checkpoint requests
-	checkpointValidRequestMeter   = metrics.NewRegisteredMeter("client/requests/checkpoint/valid", nil)
-	checkpointInvalidRequestMeter = metrics.NewRegisteredMeter("client/requests/checkpoint/invalid", nil)
-	checkpointRequestTimer        = metrics.NewRegisteredTimer("client/requests/checkpoint/duration", nil)
+	// checkpointValidRequestMeter   = metrics.NewRegisteredMeter("client/requests/checkpoint/valid", nil)
+	// checkpointInvalidRequestMeter = metrics.NewRegisteredMeter("client/requests/checkpoint/invalid", nil)
+	// checkpointRequestTimer        = metrics.NewRegisteredTimer("client/requests/checkpoint/duration", nil)
 
 	// Checkpoint count requests
-	checkpointCountValidRequestMeter   = metrics.NewRegisteredMeter("client/requests/checkpoint-count/valid", nil)
-	checkpointCountInvalidRequestMeter = metrics.NewRegisteredMeter("client/requests/checkpoint-count/invalid", nil)
-	checkpointCountRequestTimer        = metrics.NewRegisteredTimer("client/requests/checkpoint-count/duration", nil)
+	// checkpointCountValidRequestMeter   = metrics.NewRegisteredMeter("client/requests/checkpoint-count/valid", nil)
+	// checkpointCountInvalidRequestMeter = metrics.NewRegisteredMeter("client/requests/checkpoint-count/invalid", nil)
+	// checkpointCountRequestTimer        = metrics.NewRegisteredTimer("client/requests/checkpoint-count/duration", nil)
 )
 
 func NewHeimdallClient(urlString string) *HeimdallClient {
@@ -240,11 +244,15 @@ retryLoop:
 
 // Fetch returns data from heimdall
 func Fetch[T any](ctx context.Context, request *Request) (*T, error) {
-	var failed bool = true
+	// var failed bool = true
 
 	defer func() {
 		if metrics.EnabledExpensive {
-			sendMetrics(request, failed)
+			// sendMetrics(request, failed)
+			log.Info("###")
+			log.Info("###", "duration", time.Since(request.start))
+			durationTimer.Update(time.Duration(time.Since(request.start).Milliseconds()))
+			log.Info("###")
 		}
 	}()
 
@@ -264,7 +272,7 @@ func Fetch[T any](ctx context.Context, request *Request) (*T, error) {
 		return nil, err
 	}
 
-	failed = false
+	// failed = false
 
 	return result, nil
 }
@@ -353,36 +361,36 @@ func (h *HeimdallClient) Close() {
 	h.client.CloseIdleConnections()
 }
 
-func sendMetrics(request *Request, failed bool) {
-	if failed {
-		switch request.reqType {
-		case StateSyncRequest:
-			stateSyncInvalidRequestMeter.Mark(1)
-			stateSyncRequestTimer.Update(time.Since(request.start))
-		case SpanRequest:
-			spanInvalidRequestMeter.Mark(1)
-			spanRequestTimer.Update(time.Since(request.start))
-		case CheckpointRequest:
-			checkpointInvalidRequestMeter.Mark(1)
-			checkpointRequestTimer.Update(time.Since(request.start))
-		case CheckpointCountRequest:
-			checkpointCountInvalidRequestMeter.Mark(1)
-			checkpointCountRequestTimer.Update(time.Since(request.start))
-		}
-	} else {
-		switch request.reqType {
-		case StateSyncRequest:
-			stateSyncValidRequestMeter.Mark(1)
-			stateSyncRequestTimer.Update(time.Since(request.start))
-		case SpanRequest:
-			spanValidRequestMeter.Mark(1)
-			spanRequestTimer.Update(time.Since(request.start))
-		case CheckpointRequest:
-			checkpointValidRequestMeter.Mark(1)
-			checkpointRequestTimer.Update(time.Since(request.start))
-		case CheckpointCountRequest:
-			checkpointCountValidRequestMeter.Mark(1)
-			checkpointCountRequestTimer.Update(time.Since(request.start))
-		}
-	}
-}
+// func sendMetrics(request *Request, failed bool) {
+// 	if failed {
+// 		switch request.reqType {
+// 		case StateSyncRequest:
+// 			stateSyncInvalidRequestMeter.Mark(1)
+// 			stateSyncRequestTimer.Update(time.Since(request.start))
+// 		case SpanRequest:
+// 			spanInvalidRequestMeter.Mark(1)
+// 			spanRequestTimer.Update(time.Since(request.start))
+// 		case CheckpointRequest:
+// 			checkpointInvalidRequestMeter.Mark(1)
+// 			checkpointRequestTimer.Update(time.Since(request.start))
+// 		case CheckpointCountRequest:
+// 			checkpointCountInvalidRequestMeter.Mark(1)
+// 			checkpointCountRequestTimer.Update(time.Since(request.start))
+// 		}
+// 	} else {
+// 		switch request.reqType {
+// 		case StateSyncRequest:
+// 			stateSyncValidRequestMeter.Mark(1)
+// 			stateSyncRequestTimer.Update(time.Since(request.start))
+// 		case SpanRequest:
+// 			spanValidRequestMeter.Mark(1)
+// 			spanRequestTimer.Update(time.Since(request.start))
+// 		case CheckpointRequest:
+// 			checkpointValidRequestMeter.Mark(1)
+// 			checkpointRequestTimer.Update(time.Since(request.start))
+// 		case CheckpointCountRequest:
+// 			checkpointCountValidRequestMeter.Mark(1)
+// 			checkpointCountRequestTimer.Update(time.Since(request.start))
+// 		}
+// 	}
+// }
