@@ -28,6 +28,8 @@ import (
 	"testing"
 	"time"
 
+	"pgregory.net/rapid"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
@@ -2560,4 +2562,148 @@ func BenchmarkPoolMultiAccountBatchInsert(b *testing.B) {
 	for _, tx := range batches {
 		pool.AddRemotesSync([]*types.Transaction{tx})
 	}
+}
+
+type acc struct {
+	nonce uint64
+	key   *ecdsa.PrivateKey
+}
+
+type testTx struct {
+	tx      *types.Transaction
+	isLocal bool
+}
+
+const localIdx = 0
+
+func transactionGen(keys map[int]acc) func(t *rapid.T) *testTx {
+	return func(t *rapid.T) *testTx {
+		idx := rapid.IntRange(0, len(keys)-1).Draw(t, "accIdx").(int)
+
+		var isLocal bool
+
+		if idx == localIdx {
+			isLocal = true
+		}
+
+		acc := keys[idx]
+		nonce := acc.nonce
+		nonce++
+		acc.nonce = nonce
+
+		gasPrice := big.NewInt(0).SetUint64(rapid.Uint64Range(1, 1000).Draw(t, "gasPrice").(uint64))
+
+		return &testTx{
+			tx:      pricedTransaction(keys[idx].nonce, rapid.Uint64Range(10_000, 30_0000).Draw(t, "gasLimit").(uint64), gasPrice, keys[idx].key),
+			isLocal: isLocal,
+		}
+	}
+}
+
+func getTransactionGen(t *rapid.T, keys map[int]*acc) *testTx {
+	idx := rapid.IntRange(0, len(keys)-1).Draw(t, "accIdx").(int)
+
+	var isLocal bool
+
+	if idx == localIdx {
+		isLocal = true
+	}
+
+	txAcc, _ := keys[idx]
+	nonce := txAcc.nonce
+	nonce++
+	txAcc.nonce = nonce
+
+	gasPrice := big.NewInt(0).SetUint64(rapid.Uint64Range(1, 1000).Draw(t, "gasPrice").(uint64))
+
+	return &testTx{
+		tx:      pricedTransaction(keys[idx].nonce, rapid.Uint64Range(10_000, 30_0000).Draw(t, "gasLimit").(uint64), gasPrice, keys[idx].key),
+		isLocal: isLocal,
+	}
+}
+
+func transactionsGen(keys map[int]*acc) func(t *rapid.T) [][]*testTx {
+	return func(t *rapid.T) [][]*testTx {
+		totalTxs := rapid.IntRange(10_000, 1_000_0000).Draw(t, "totalTxs").(int)
+		batchSize := rapid.IntRange(1, totalTxs).Draw(t, "batchSize").(int)
+
+		batchesN := totalTxs / batchSize
+		if totalTxs%batchSize > 0 {
+			batchesN++
+		}
+
+		batches := make([][]*testTx, batchesN)
+		for i := 0; i < batchesN; i++ {
+			batches[i] = make([]*testTx, batchSize)
+
+			for j := 0; j < batchSize; j++ {
+				batches[i][j] = getTransactionGen(t, keys)
+			}
+		}
+
+		return batches
+	}
+}
+
+func TestPoolBatchInsert(t *testing.T) {
+	t.Parallel()
+
+	rapid.Check(t, func(rt *rapid.T) {
+		// Generate a batch of transactions to enqueue into the pool
+		pool, key := setupTxPool()
+		defer pool.Stop()
+
+		totalAccs := rapid.IntRange(10, 1_000_0000).Draw(rt, "totalAccs").(int)
+		keys := make(map[int]*acc, totalAccs)
+
+		var account common.Address
+
+		for idx := 0; idx < totalAccs; idx++ {
+			if idx != 0 {
+				key, _ = crypto.GenerateKey()
+			}
+
+			account = crypto.PubkeyToAddress(key.PublicKey)
+			testAddBalance(pool, account, big.NewInt(1_000_000_000))
+
+			keys[idx] = &acc{
+				key:   key,
+				nonce: 0,
+			}
+		}
+
+		gen := rapid.Custom(transactionsGen(keys))
+
+		batches := gen.Draw(rt, "batches").([][]*testTx)
+
+		var (
+			addIntoTxPool func(tx *types.Transaction) error
+			total         int
+		)
+
+		start := time.Now()
+
+		for _, batch := range batches {
+			total += len(batch)
+
+			for _, tx := range batch {
+				addIntoTxPool = pool.AddRemote
+
+				if tx.isLocal {
+					addIntoTxPool = pool.AddLocal
+				}
+
+				addIntoTxPool(tx.tx)
+			}
+		}
+
+		done := time.Since(start)
+		durationPerTx := big.NewRat(done.Milliseconds(), int64(total))
+		expected := big.NewRat(1, 100_000)
+
+		if durationPerTx.Cmp(expected) > 0 {
+			rt.Fatalf("took too long %s(total time %s, total accs %d), expected %s",
+				durationPerTx.FloatString(7), done, total, expected.FloatString(7))
+		}
+	})
 }
