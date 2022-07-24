@@ -87,6 +87,7 @@ func (c *Command) extractFlags(args []string) error {
 			return err
 		}
 	}
+
 	c.config = &config
 
 	return nil
