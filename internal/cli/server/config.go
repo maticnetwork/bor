@@ -150,10 +150,10 @@ type P2PDiscovery struct {
 
 type HeimdallConfig struct {
 	// URL is the url of the heimdall server
-	URL string `hcl:"bor.heimdall,optional" toml:"bor.heimdall,optional"`
+	URL string `hcl:"url,optional" toml:"url,optional"`
 
 	// Without is used to disable remote heimdall during testing
-	Without bool `hcl:"bor.withoutheimdall,optional" toml:"bor.withoutheimdall,optional"`
+	Without bool `hcl:"bor.without,optional" toml:"bor.without,optional"`
 }
 
 type TxPoolConfig struct {
