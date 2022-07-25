@@ -3,7 +3,6 @@ package eth
 import (
 	"context"
 	"math/big"
-	"sync"
 	"testing"
 	"time"
 
@@ -57,14 +56,8 @@ func TestFetchWhitelistCheckpoints(t *testing.T) {
 	// create 20 mock checkpoints
 	checkpoints := createMockCheckpoints(20)
 
-	// Create a mux for preventing data race in parallel tests
-	var mux sync.RWMutex
-
 	// create a mock fetch checkpoint function
 	heimdall.fetchCheckpoint = func(_ context.Context, number int64) (*checkpoint.Checkpoint, error) {
-		mux.Lock()
-		defer mux.Unlock()
-
 		return checkpoints[number-1], nil // we're sure that number won't exceed 20
 	}
 
