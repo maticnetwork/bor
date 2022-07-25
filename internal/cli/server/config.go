@@ -148,13 +148,12 @@ type P2PDiscovery struct {
 	DNS []string `hcl:"dns,optional" toml:"dns,optional"`
 }
 
-// discuss flags here
 type HeimdallConfig struct {
 	// URL is the url of the heimdall server
-	URL string `hcl:"url,optional" toml:"url,optional"`
+	URL string `hcl:"bor.heimdall,optional" toml:"bor.heimdall,optional"`
 
 	// Without is used to disable remote heimdall during testing
-	Without bool `hcl:"without,optional" toml:"without,optional"`
+	Without bool `hcl:"bor.withoutheimdall,optional" toml:"bor.withoutheimdall,optional"`
 }
 
 type TxPoolConfig struct {
