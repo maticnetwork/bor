@@ -34,7 +34,7 @@ const (
 type RequestType string
 
 const (
-	reqType                RequestType = "type"
+	key                    RequestType = "type"
 	StateSyncRequest       RequestType = "state-sync"
 	SpanRequest            RequestType = "span"
 	CheckpointRequest      RequestType = "checkpoint"
@@ -115,7 +115,7 @@ func (h *HeimdallClient) StateSyncEvents(ctx context.Context, fromID uint64, to 
 
 		log.Info("Fetching state sync events", "queryParams", url.RawQuery)
 
-		ctx = context.WithValue(ctx, reqType, StateSyncRequest)
+		ctx = context.WithValue(ctx, key, StateSyncRequest)
 
 		response, err := FetchWithRetry[StateSyncEventsResponse](ctx, h.client, url, h.closeCh)
 		if err != nil {
@@ -149,7 +149,7 @@ func (h *HeimdallClient) Span(ctx context.Context, spanID uint64) (*span.Heimdal
 		return nil, err
 	}
 
-	ctx = context.WithValue(ctx, reqType, SpanRequest)
+	ctx = context.WithValue(ctx, key, SpanRequest)
 
 	response, err := FetchWithRetry[SpanResponse](ctx, h.client, url, h.closeCh)
 	if err != nil {
@@ -166,7 +166,7 @@ func (h *HeimdallClient) FetchCheckpoint(ctx context.Context, number int64) (*ch
 		return nil, err
 	}
 
-	ctx = context.WithValue(ctx, reqType, CheckpointRequest)
+	ctx = context.WithValue(ctx, key, CheckpointRequest)
 
 	response, err := FetchWithRetry[checkpoint.CheckpointResponse](ctx, h.client, url, h.closeCh)
 	if err != nil {
@@ -183,7 +183,7 @@ func (h *HeimdallClient) FetchCheckpointCount(ctx context.Context) (int64, error
 		return 0, err
 	}
 
-	ctx = context.WithValue(ctx, reqType, CheckpointCountRequest)
+	ctx = context.WithValue(ctx, key, CheckpointCountRequest)
 
 	response, err := FetchWithRetry[checkpoint.CheckpointCountResponse](ctx, h.client, url, h.closeCh)
 	if err != nil {
@@ -362,7 +362,10 @@ func (h *HeimdallClient) Close() {
 }
 
 func sendMetrics(ctx context.Context, start time.Time, failed bool) {
-	req := ctx.Value("type")
+	req := ctx.Value(key)
+	if req == nil {
+		return
+	}
 
 	if failed {
 		switch req.(RequestType) { //nolint:exhaustive
