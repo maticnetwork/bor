@@ -362,11 +362,10 @@ func (h *HeimdallClient) Close() {
 }
 
 func sendMetrics(ctx context.Context, start time.Time, failed bool) {
-
 	req := ctx.Value("type")
 
 	if failed {
-		switch req.(RequestType) {
+		switch req.(RequestType) { //nolint:exhaustive
 		case StateSyncRequest:
 			stateSyncInvalidRequestMeter.Mark(1)
 			stateSyncRequestTimer.Update(time.Since(start))
@@ -381,7 +380,7 @@ func sendMetrics(ctx context.Context, start time.Time, failed bool) {
 			checkpointCountRequestTimer.Update(time.Since(start))
 		}
 	} else {
-		switch req.(RequestType) {
+		switch req.(RequestType) { //nolint:exhaustive
 		case StateSyncRequest:
 			stateSyncValidRequestMeter.Mark(1)
 			stateSyncRequestTimer.Update(time.Since(start))
