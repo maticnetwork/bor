@@ -2792,7 +2792,8 @@ func TestPoolBatchInsert(t *testing.T) {
 			done := time.Since(start)
 
 			// from fillTransactions
-			removedFromPool := fillTransactions(pool, locals, pending, gasLimit)
+			fmt.Println("!!!!!!!!!!!!-0", len(locals), len(pending))
+			removedFromPool, blockGas := fillTransactions(pool, locals, pending, gasLimit)
 
 			durationPerTx := big.NewRat(done.Milliseconds(), int64(total))
 			expected := big.NewRat(1, 100_000)
@@ -2803,10 +2804,41 @@ func TestPoolBatchInsert(t *testing.T) {
 			}
 			// TODO: add metric for max time in txPool
 
-			fmt.Println("batch", n, "current_total", total, "in_batch", totalInBatch, "removed", removedFromPool, "pending", len(pending), "locals", len(locals),
+			fmt.Println("batch", n, "current_total", total, "in_batch", totalInBatch, "removed", removedFromPool, "blockGas", blockGas, "pending", len(pending), "locals", len(locals),
 				"batchSize", batches.batchSize, "totalTxs", batches.totalTxs, "locals+pending", done)
 
 			pendingStat, queuedStat := pool.Stats()
+			fmt.Println("batch-1", "pending", pendingStat, "queued", queuedStat)
+		}
+
+		for {
+			pendingStat, queuedStat := pool.Stats()
+			if pendingStat+queuedStat == 0 {
+				break
+			}
+
+			// copy-paste
+			start := time.Now()
+			pending := pool.Pending(true)
+			locals := pool.Locals()
+			done := time.Since(start)
+
+			// from fillTransactions
+			fmt.Println("!!!!!!!!!!!!-1", len(locals), len(pending))
+			removedFromPool, blockGas := fillTransactions(pool, locals, pending, gasLimit)
+
+			durationPerTx := big.NewRat(done.Milliseconds(), int64(total))
+			expected := big.NewRat(1, 100_000)
+
+			if durationPerTx.Cmp(expected) > 0 {
+				rt.Fatalf("took too long %s(total time %s, total accounts %d. Pending %d, locals %d), expected %s",
+					durationPerTx.FloatString(7), done, total, len(pending), len(locals), expected.FloatString(7))
+			}
+			// TODO: add metric for max time in txPool
+
+			fmt.Println("current_total", total, "in_batch", totalInBatch, "removed", removedFromPool, "blockGas", blockGas, "pending", len(pending), "locals", len(locals),
+				"batchSize", batches.batchSize, "totalTxs", batches.totalTxs, "locals+pending", done)
+
 			fmt.Println("batch-1", "pending", pendingStat, "queued", queuedStat)
 		}
 
@@ -2814,7 +2846,7 @@ func TestPoolBatchInsert(t *testing.T) {
 	})
 }
 
-func fillTransactions(pool *TxPool, locals []common.Address, pending map[common.Address]types.Transactions, gasLimit uint64) int {
+func fillTransactions(pool *TxPool, locals []common.Address, pending map[common.Address]types.Transactions, gasLimit uint64) (int, uint64) {
 	localTxs := make(map[common.Address]types.Transactions)
 	remoteTxs := pending
 
@@ -2841,7 +2873,6 @@ func fillTransactions(pool *TxPool, locals []common.Address, pending map[common.
 	if len(localTxs) > 0 {
 		txs := types.NewTransactionsByPriceAndNonce(signer, localTxs, baseFee)
 		blockGasLimit, txLocalCount = commitTransactions(pool, txs, blockGasLimit)
-		fmt.Println("removed")
 	}
 
 	if len(remoteTxs) > 0 {
@@ -2849,27 +2880,31 @@ func fillTransactions(pool *TxPool, locals []common.Address, pending map[common.
 		blockGasLimit, txRemoteCount = commitTransactions(pool, txs, blockGasLimit)
 	}
 
-	return txLocalCount + txRemoteCount
+	fmt.Println("===-0", localTxs, remoteTxs)
+
+	return txLocalCount + txRemoteCount, blockGasLimit
 }
 
 func commitTransactions(pool *TxPool, txs *types.TransactionsByPriceAndNonce, blockGasLimit uint64) (uint64, int) {
 	var tx *types.Transaction
-
+	fmt.Println("CALLLL")
 	var txCount int
 
 	for {
 		tx = txs.Peek()
 
 		if tx == nil {
+			fmt.Println("===-1")
 			return blockGasLimit, txCount
 		}
 
-		if tx.Gas() >= blockGasLimit {
+		if tx.Gas() <= blockGasLimit {
 			blockGasLimit -= tx.Gas()
 			pool.removeTx(tx.Hash(), false)
 
 			txCount++
 		} else {
+			fmt.Println("===-2", tx.Gas(), blockGasLimit)
 			// we don't maximize fulfilment of the block. just fill somehow
 			return blockGasLimit, txCount
 		}
