@@ -28,6 +28,7 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/sync/errgroup"
 	"pgregory.net/rapid"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -116,14 +117,21 @@ func dynamicFeeTx(nonce uint64, gaslimit uint64, gasFee *big.Int, tip *big.Int, 
 }
 
 func setupTxPool() (*TxPool, *ecdsa.PrivateKey) {
-	return setupTxPoolWithConfig(params.TestChainConfig)
+	return setupTxPoolWithConfig(params.TestChainConfig, testTxPoolConfig)
 }
 
-func setupTxPoolWithConfig(config *params.ChainConfig) (*TxPool, *ecdsa.PrivateKey) {
+func setupTxPoolWithConfig(config *params.ChainConfig, txPoolConfig TxPoolConfig, gasLimitOption ...uint64) (*TxPool, *ecdsa.PrivateKey) {
 	statedb, _ := state.New(common.Hash{}, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
-	blockchain := &testBlockChain{10000000, statedb, new(event.Feed)}
+
+	gasLimit := uint64(10_000_000)
+	if len(gasLimitOption) > 0 {
+		gasLimit = gasLimitOption[0]
+	}
+
+	blockchain := &testBlockChain{gasLimit, statedb, new(event.Feed)}
 
 	key, _ := crypto.GenerateKey()
+
 	pool := NewTxPool(testTxPoolConfig, config, blockchain)
 
 	// wait for the pool to initialize
@@ -386,7 +394,7 @@ func TestTransactionNegativeValue(t *testing.T) {
 func TestTransactionTipAboveFeeCap(t *testing.T) {
 	t.Parallel()
 
-	pool, key := setupTxPoolWithConfig(eip1559Config)
+	pool, key := setupTxPoolWithConfig(eip1559Config, testTxPoolConfig)
 	defer pool.Stop()
 
 	tx := dynamicFeeTx(0, 100, big.NewInt(1), big.NewInt(2), key)
@@ -399,7 +407,7 @@ func TestTransactionTipAboveFeeCap(t *testing.T) {
 func TestTransactionVeryHighValues(t *testing.T) {
 	t.Parallel()
 
-	pool, key := setupTxPoolWithConfig(eip1559Config)
+	pool, key := setupTxPoolWithConfig(eip1559Config, testTxPoolConfig)
 	defer pool.Stop()
 
 	veryBigNumber := big.NewInt(1)
@@ -1451,7 +1459,7 @@ func TestTransactionPoolRepricingDynamicFee(t *testing.T) {
 	t.Parallel()
 
 	// Create the pool to test the pricing enforcement with
-	pool, _ := setupTxPoolWithConfig(eip1559Config)
+	pool, _ := setupTxPoolWithConfig(eip1559Config, testTxPoolConfig)
 	defer pool.Stop()
 
 	// Keep track of transaction events to ensure all executables get announced
@@ -1822,7 +1830,7 @@ func TestTransactionPoolStableUnderpricing(t *testing.T) {
 func TestTransactionPoolUnderpricingDynamicFee(t *testing.T) {
 	t.Parallel()
 
-	pool, _ := setupTxPoolWithConfig(eip1559Config)
+	pool, _ := setupTxPoolWithConfig(eip1559Config, testTxPoolConfig)
 	defer pool.Stop()
 
 	pool.config.GlobalSlots = 2
@@ -1929,7 +1937,7 @@ func TestTransactionPoolUnderpricingDynamicFee(t *testing.T) {
 func TestDualHeapEviction(t *testing.T) {
 	t.Parallel()
 
-	pool, _ := setupTxPoolWithConfig(eip1559Config)
+	pool, _ := setupTxPoolWithConfig(eip1559Config, testTxPoolConfig)
 	defer pool.Stop()
 
 	pool.config.GlobalSlots = 10
@@ -2132,7 +2140,7 @@ func TestTransactionReplacementDynamicFee(t *testing.T) {
 	t.Parallel()
 
 	// Create the pool to test the pricing enforcement with
-	pool, key := setupTxPoolWithConfig(eip1559Config)
+	pool, key := setupTxPoolWithConfig(eip1559Config, testTxPoolConfig)
 	defer pool.Stop()
 	testAddBalance(pool, crypto.PubkeyToAddress(key.PublicKey), big.NewInt(1000000000))
 
@@ -2565,8 +2573,9 @@ func BenchmarkPoolMultiAccountBatchInsert(b *testing.B) {
 }
 
 type acc struct {
-	nonce uint64
-	key   *ecdsa.PrivateKey
+	nonce   uint64
+	key     *ecdsa.PrivateKey
+	account common.Address
 }
 
 type testTx struct {
@@ -2576,56 +2585,45 @@ type testTx struct {
 
 const localIdx = 0
 
-func transactionGen(keys map[int]acc) func(t *rapid.T) *testTx {
-	return func(t *rapid.T) *testTx {
-		idx := rapid.IntRange(0, len(keys)-1).Draw(t, "accIdx").(int)
-
-		var isLocal bool
-
-		if idx == localIdx {
-			isLocal = true
-		}
-
-		acc := keys[idx]
-		nonce := acc.nonce
-		nonce++
-		acc.nonce = nonce
-
-		gasPrice := big.NewInt(0).SetUint64(rapid.Uint64Range(1, 1000).Draw(t, "gasPrice").(uint64))
-
-		return &testTx{
-			tx:      pricedTransaction(keys[idx].nonce, rapid.Uint64Range(10_000, 30_0000).Draw(t, "gasLimit").(uint64), gasPrice, keys[idx].key),
-			isLocal: isLocal,
-		}
-	}
-}
-
-func getTransactionGen(t *rapid.T, keys map[int]*acc) *testTx {
+func getTransactionGen(t *rapid.T, keys []*acc, nonces []uint64, localKey *acc, gasPriceMin, gasPriceMax, gasLimitMin, gasLimitMax uint64) *testTx {
 	idx := rapid.IntRange(0, len(keys)-1).Draw(t, "accIdx").(int)
 
 	var isLocal bool
+	var key *ecdsa.PrivateKey
 
 	if idx == localIdx {
 		isLocal = true
+		key = localKey.key
+	} else {
+		key = keys[idx].key
 	}
 
-	txAcc, _ := keys[idx]
-	nonce := txAcc.nonce
-	nonce++
-	txAcc.nonce = nonce
+	nonces[idx]++
 
-	gasPrice := big.NewInt(0).SetUint64(rapid.Uint64Range(1, 1000).Draw(t, "gasPrice").(uint64))
+	gasPrice := big.NewInt(0).SetUint64(rapid.Uint64Range(gasPriceMin, gasPriceMax).Draw(t, "gasPrice").(uint64))
 
 	return &testTx{
-		tx:      pricedTransaction(keys[idx].nonce, rapid.Uint64Range(10_000, 30_0000).Draw(t, "gasLimit").(uint64), gasPrice, keys[idx].key),
+		tx:      pricedTransaction(nonces[idx]-1, rapid.Uint64Range(gasLimitMin, gasLimitMax).Draw(t, "gasLimit").(uint64), gasPrice, key),
 		isLocal: isLocal,
 	}
 }
 
-func transactionsGen(keys map[int]*acc) func(t *rapid.T) [][]*testTx {
-	return func(t *rapid.T) [][]*testTx {
-		totalTxs := rapid.IntRange(10_000, 1_000_0000).Draw(t, "totalTxs").(int)
-		batchSize := rapid.IntRange(1, totalTxs).Draw(t, "batchSize").(int)
+type transactionBatches struct {
+	batches   [][]*testTx
+	totalTxs  int
+	batchSize int
+}
+
+func transactionsGen(keys []*acc, nonces []uint64, localKey *acc, minTxs int, maxTxs int, gasPriceMin, gasPriceMax, gasLimitMin, gasLimitMax, minBatchSize uint64) func(t *rapid.T) transactionBatches {
+	return func(t *rapid.T) transactionBatches {
+		totalTxs := rapid.IntRange(minTxs, maxTxs).Draw(t, "totalTxs").(int)
+
+		minBatchSize := 10
+		if totalTxs < 10 {
+			minBatchSize = 1
+		}
+
+		batchSize := rapid.IntRange(minBatchSize, totalTxs).Draw(t, "batchSize").(int)
 
 		batchesN := totalTxs / batchSize
 		if totalTxs%batchSize > 0 {
@@ -2633,79 +2631,247 @@ func transactionsGen(keys map[int]*acc) func(t *rapid.T) [][]*testTx {
 		}
 
 		batches := make([][]*testTx, batchesN)
+
+		keys = keys[:len(nonces)]
+
 		for i := 0; i < batchesN; i++ {
 			batches[i] = make([]*testTx, batchSize)
 
 			for j := 0; j < batchSize; j++ {
-				batches[i][j] = getTransactionGen(t, keys)
+				batches[i][j] = getTransactionGen(t, keys, nonces, localKey, gasPriceMin, gasPriceMax, gasLimitMin, gasLimitMax)
 			}
 		}
 
-		return batches
+		return transactionBatches{batches, totalTxs, batchSize}
 	}
 }
 
 func TestPoolBatchInsert(t *testing.T) {
 	t.Parallel()
 
+	const (
+		// the most tweakable params
+		gasLimit = 30_000_000
+
+		minTxs = 1_000
+		maxTxs = 10_000
+
+		minAccs = 10
+		maxAccs = maxTxs
+
+		minBatchSize = 10
+
+		// less tweakable, more like constants
+		gasPriceMin = 1
+		gasPriceMax = 1_000
+
+		gasLimitMin = params.TxGas
+		gasLimitMax = 30_000
+
+		balance = 1_000_000_000
+	)
+
+	initialBalance := big.NewInt(balance)
+
+	keys := make([]*acc, maxAccs)
+
+	var key *ecdsa.PrivateKey
+
+	// prealloc keys
+	for idx := 0; idx < maxAccs; idx++ {
+		key, _ = crypto.GenerateKey()
+
+		keys[idx] = &acc{
+			key:     key,
+			nonce:   0,
+			account: crypto.PubkeyToAddress(key.PublicKey),
+		}
+	}
+
 	rapid.Check(t, func(rt *rapid.T) {
+		fmt.Println("data generation started")
+
 		// Generate a batch of transactions to enqueue into the pool
-		pool, key := setupTxPool()
+		testTxPoolConfig := testTxPoolConfig
+
+		// from sentry config
+		testTxPoolConfig.AccountQueue = 16
+		testTxPoolConfig.AccountSlots = 16
+		testTxPoolConfig.GlobalQueue = 32768
+		testTxPoolConfig.GlobalSlots = 32768
+		testTxPoolConfig.Lifetime = time.Hour + 30*time.Minute //"1h30m0s"
+		testTxPoolConfig.PriceLimit = 30000000000
+		//testTxPoolConfig.NoLocals = true
+
+		now := time.Now()
+		pool, key := setupTxPoolWithConfig(params.TestChainConfig, testTxPoolConfig, gasLimit)
+		fmt.Println("tx pool started", time.Since(now))
+		now = time.Now()
 		defer pool.Stop()
 
-		totalAccs := rapid.IntRange(10, 1_000_0000).Draw(rt, "totalAccs").(int)
-		keys := make(map[int]*acc, totalAccs)
+		totalAccs := rapid.IntRange(minAccs, maxAccs).Draw(rt, "totalAccs").(int)
+		fmt.Println("totalAccs done", time.Since(now))
+		now = time.Now()
 
-		var account common.Address
-
-		for idx := 0; idx < totalAccs; idx++ {
-			if idx != 0 {
-				key, _ = crypto.GenerateKey()
-			}
-
-			account = crypto.PubkeyToAddress(key.PublicKey)
-			testAddBalance(pool, account, big.NewInt(1_000_000_000))
-
-			keys[idx] = &acc{
-				key:   key,
-				nonce: 0,
-			}
+		// regenerate only local key
+		localKey := &acc{
+			key:     key,
+			account: crypto.PubkeyToAddress(key.PublicKey),
 		}
 
-		gen := rapid.Custom(transactionsGen(keys))
-
-		batches := gen.Draw(rt, "batches").([][]*testTx)
+		if err := validateTxPoolInternals(pool); err != nil {
+			t.Fatalf("pool internal state corrupted: %v", err)
+		}
 
 		var (
-			addIntoTxPool func(tx *types.Transaction) error
-			total         int
+			wg      errgroup.Group
+			batches transactionBatches
 		)
 
-		for _, batch := range batches {
+		wg.Go(func() error {
+			now := time.Now()
+
+			testAddBalance(pool, localKey.account, initialBalance)
+
+			for idx := 0; idx < totalAccs; idx++ {
+				testAddBalance(pool, keys[idx].account, initialBalance)
+			}
+			fmt.Println("add balance and keys done", time.Since(now))
+			return nil
+		})
+
+		wg.Go(func() error {
+			now := time.Now()
+			nonces := make([]uint64, totalAccs)
+			gen := rapid.Custom(transactionsGen(keys, nonces, localKey, minTxs, maxTxs, gasPriceMin, gasPriceMax, gasLimitMin, gasLimitMax, minBatchSize))
+			fmt.Println("generate transaction generator done", time.Since(now))
+			now = time.Now()
+
+			batches = gen.Draw(rt, "batches").(transactionBatches)
+			fmt.Println("generate transactions done", time.Since(now))
+
+			return nil
+		})
+
+		wg.Wait()
+
+		if err := validateTxPoolInternals(pool); err != nil {
+			t.Fatalf("pool internal state corrupted: %v", err)
+		}
+
+		fmt.Println("data generation completed", time.Since(now))
+
+		now = time.Now()
+
+		var (
+			addIntoTxPool func(tx []*types.Transaction) []error
+			total         int
+			totalInBatch  int
+		)
+
+		for n, batch := range batches.batches {
 			total += len(batch)
+			totalInBatch = len(batch)
 
 			for _, tx := range batch {
-				addIntoTxPool = pool.AddRemote
+				addIntoTxPool = pool.AddRemotesSync
 
 				if tx.isLocal {
-					addIntoTxPool = pool.AddLocal
+					addIntoTxPool = pool.AddLocals
 				}
 
-				addIntoTxPool(tx.tx)
+				err := addIntoTxPool([]*types.Transaction{tx.tx})
+				if len(err) != 0 && err[0] != nil {
+					t.Error("on adding a transaction to the tx pool", err[0])
+				}
 			}
+
+			start := time.Now()
+			pending := pool.Pending(true)
+			locals := pool.Locals()
+			done := time.Since(start)
+
+			// from fillTransactions
+			removedFromPool := fillTransactions(pool, locals, pending, gasLimit)
+
+			durationPerTx := big.NewRat(done.Milliseconds(), int64(total))
+			expected := big.NewRat(1, 100_000)
+
+			if durationPerTx.Cmp(expected) > 0 {
+				rt.Fatalf("took too long %s(total time %s, total accounts %d. Pending %d, locals %d), expected %s",
+					durationPerTx.FloatString(7), done, total, len(pending), len(locals), expected.FloatString(7))
+			}
+			// TODO: add metric for max time in txPool
+
+			fmt.Println("batch", n, "current_total", total, "in_batch", totalInBatch, "removed", removedFromPool, "pending", len(pending), "locals", len(locals),
+				"batchSize", batches.batchSize, "totalTxs", batches.totalTxs, "locals+pending", done)
+
+			pendingStat, queuedStat := pool.Stats()
+			fmt.Println("batch-1", "pending", pendingStat, "queued", queuedStat)
 		}
 
-		start := time.Now()
-		pending := pool.Pending(true)
-		locals := pool.Locals()
-		done := time.Since(start)
-
-		durationPerTx := big.NewRat(done.Milliseconds(), int64(total))
-		expected := big.NewRat(1, 100_000)
-
-		if durationPerTx.Cmp(expected) > 0 {
-			rt.Fatalf("took too long %s(total time %s, total accounts %d. Pending %d, locals %d), expected %s",
-				durationPerTx.FloatString(7), done, total, len(pending), len(locals), expected.FloatString(7))
-		}
+		fmt.Printf("case completed batchSize %d, totalTxs %d %v\n\n", batches.batchSize, batches.totalTxs, time.Since(now))
 	})
+}
+
+func fillTransactions(pool *TxPool, locals []common.Address, pending map[common.Address]types.Transactions, gasLimit uint64) int {
+	localTxs := make(map[common.Address]types.Transactions)
+	remoteTxs := pending
+
+	for _, txAcc := range locals {
+		if txs := remoteTxs[txAcc]; len(txs) > 0 {
+			delete(remoteTxs, txAcc)
+			localTxs[txAcc] = txs
+		}
+	}
+
+	// fake signer
+	signer := types.NewLondonSigner(big.NewInt(1))
+
+	// fake baseFee
+	baseFee := big.NewInt(1)
+
+	blockGasLimit := gasLimit
+
+	var (
+		txLocalCount  int
+		txRemoteCount int
+	)
+
+	if len(localTxs) > 0 {
+		txs := types.NewTransactionsByPriceAndNonce(signer, localTxs, baseFee)
+		blockGasLimit, txLocalCount = commitTransactions(pool, txs, blockGasLimit)
+		fmt.Println("removed")
+	}
+
+	if len(remoteTxs) > 0 {
+		txs := types.NewTransactionsByPriceAndNonce(signer, remoteTxs, baseFee)
+		blockGasLimit, txRemoteCount = commitTransactions(pool, txs, blockGasLimit)
+	}
+
+	return txLocalCount + txRemoteCount
+}
+
+func commitTransactions(pool *TxPool, txs *types.TransactionsByPriceAndNonce, blockGasLimit uint64) (uint64, int) {
+	var tx *types.Transaction
+
+	var txCount int
+
+	for {
+		tx = txs.Peek()
+
+		if tx == nil {
+			return blockGasLimit, txCount
+		}
+
+		if tx.Gas() >= blockGasLimit {
+			blockGasLimit -= tx.Gas()
+			pool.removeTx(tx.Hash(), false)
+
+			txCount++
+		} else {
+			// we don't maximize fulfilment of the block. just fill somehow
+			return blockGasLimit, txCount
+		}
+	}
 }
