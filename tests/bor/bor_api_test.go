@@ -4,41 +4,43 @@ package bor
 
 import (
 	"context"
-	"math/big"
+	//"math/big"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor"
-	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
-	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
-	"github.com/ethereum/go-ethereum/consensus/bor/valset"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/rpc"
-	"github.com/ethereum/go-ethereum/tests/bor/mocks"
 )
 
 func TestGetTransactionReceiptsByBlock(t *testing.T) {
+	// Initialise Bor client instance
+	//init := buildEthereumInstance(t, rawdb.NewMemoryDatabase())
 	init := buildEthereumInstance(t, rawdb.NewMemoryDatabase())
 	chain := init.ethereum.BlockChain()
 	engine := init.ethereum.Engine()
 
-	ctrl := gomock.NewController(t)
+	// Fetch mocked heimdall client
+	//ctrl := gomock.NewController(t)
+	//defer ctrl.Finish()
+
+	heimdallSpan := generateDummySpan(t)
+	_, ctrl := getMockedHeimdallClient(t, heimdallSpan)
 	defer ctrl.Finish()
 
 	_bor := engine.(*bor.Bor)
 	defer _bor.Close()
 
 	// Mock /bor/span/1
-	res, _ := loadSpanFromFile(t)
+	//res, _ := loadSpanFromFile(t)
 
-	h := mocks.NewMockIHeimdallClient(ctrl)
+	//h := mocks.NewMockIHeimdallClient(ctrl)
 
-	h.EXPECT().Span(gomock.Any(), uint64(1)).Return(&res.Result, nil).MinTimes(1)
+	/*h.EXPECT().Span(gomock.Any(), uint64(1)).Return(&res.Result, nil).MinTimes(1)
 	h.EXPECT().Close().MinTimes(1)
 	h.EXPECT().FetchCheckpoint(gomock.Any(), int64(-1)).Return(&checkpoint.Checkpoint{
 		Proposer:   res.Result.SelectedProducers[0].Address,
@@ -60,7 +62,7 @@ func TestGetTransactionReceiptsByBlock(t *testing.T) {
 	}
 
 	h.EXPECT().StateSyncEvents(gomock.Any(), fromID, to).Return(eventRecords, nil).MinTimes(1)
-	_bor.SetHeimdallClient(h)
+	_bor.SetHeimdallClient(h)*/
 
 	// Insert blocks for 0th sprint
 	db := init.ethereum.ChainDb()
@@ -69,7 +71,8 @@ func TestGetTransactionReceiptsByBlock(t *testing.T) {
 	signer := types.LatestSigner(init.genesis.Config)
 	toAddress := common.HexToAddress("0x000000000000000000000000000000000000aaaa")
 
-	currentValidators := []*valset.Validator{valset.NewValidator(addr, 10)}
+	//currentValidators := []*valset.Validator{valset.NewValidator(addr, 10)}
+	currentValidators := generateRandomValSet(t)
 	txHashes := map[int]common.Hash{} // blockNumber -> txHash
 
 	var (
@@ -79,9 +82,12 @@ func TestGetTransactionReceiptsByBlock(t *testing.T) {
 		txs   []*types.Transaction
 	)
 
+	// Block no.s which are multiple of 3 will have txs
 	for i := uint64(1); i <= sprintSize; i++ {
-		if IsSpanEnd(i) {
-			currentValidators = []*valset.Validator{valset.NewValidator(addr, 10)}
+		s := IsSpanEnd(i)
+		if s {
+			//currentValidators = []*valset.Validator{valset.NewValidator(addr, 10)}
+			currentValidators = generateRandomValSet(t)
 		}
 
 		if i%3 == 0 {
@@ -113,15 +119,18 @@ func TestGetTransactionReceiptsByBlock(t *testing.T) {
 
 	// state 6 was not written
 	//
-	fromID = uint64(4)
-	to = int64(chain.GetHeaderByNumber(sprintSize).Time)
+	/*fromID := uint64(4)
+	to := int64(chain.GetHeaderByNumber(sprintSize).Time)
+	sample := getSampleEventRecord(t)
 
-	eventRecords = []*clerk.EventRecordWithTime{
+	eventRecords := []*clerk.EventRecordWithTime{
 		buildStateEvent(sample, 4, 4),
 		buildStateEvent(sample, 5, 5),
 	}
-	h.EXPECT().StateSyncEvents(gomock.Any(), fromID, to).Return(eventRecords, nil).MinTimes(1)
 
+	h.EXPECT().StateSyncEvents(gomock.Any(), fromID, to).Return(eventRecords, nil).MinTimes(1)
+	*/
+	// Empty blocks for rest of the span
 	for i := sprintSize + 1; i <= spanSize; i++ {
 		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators)
 		insertNewBlock(t, chain, block)
@@ -130,6 +139,7 @@ func TestGetTransactionReceiptsByBlock(t *testing.T) {
 	ethAPI := ethapi.NewPublicBlockChainAPI(init.ethereum.APIBackend)
 	txPoolAPI := ethapi.NewPublicTransactionPoolAPI(init.ethereum.APIBackend, nil)
 
+	// Assertions
 	for n := 0; n < int(spanSize)+1; n++ {
 		rpcNumber := rpc.BlockNumberOrHashWithNumber(rpc.BlockNumber(n))
 

@@ -3,16 +3,19 @@
 package bor
 
 import (
+	"crypto/ecdsa"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"math/big"
+	"math/rand"
 	"sort"
 	"testing"
 	"time"
 
 	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/cmd/utils"
@@ -21,6 +24,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/bor"
 	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall" //nolint:typecheck
+	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
 	"github.com/ethereum/go-ethereum/consensus/bor/valset"
 	"github.com/ethereum/go-ethereum/consensus/misc"
@@ -300,10 +304,48 @@ func getMockedHeimdallClient(t *testing.T, heimdallSpan *span.HeimdallSpan) (*mo
 
 	h.EXPECT().Span(gomock.Any(), uint64(1)).Return(heimdallSpan, nil).AnyTimes()
 
-	h.EXPECT().StateSyncEvents(gomock.Any(), gomock.Any(), gomock.Any()).
-		Return([]*clerk.EventRecordWithTime{getSampleEventRecord(t)}, nil).AnyTimes()
+	sample := getSampleEventRecord(t)
+	//count := rand.Intn(10)
+	count := 5
 
+	h.EXPECT().StateSyncEvents(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(generateFakeStateSyncEvents(sample, count), nil).AnyTimes()
+
+	h.EXPECT().FetchCheckpoint(gomock.Any(), gomock.Any()).
+		Return(&checkpoint.Checkpoint{
+			Proposer:   heimdallSpan.SelectedProducers[0].Address,
+			StartBlock: big.NewInt(0),
+			EndBlock:   big.NewInt(int64(spanSize)),
+		}, nil).AnyTimes()
+
+	h.EXPECT().Close().MinTimes(1)
 	return h, ctrl
+}
+
+func generateDummySpan(t *testing.T) *span.HeimdallSpan {
+	//var span *span.HeimdallSpan
+	span := new(span.HeimdallSpan)
+	// 1. start block
+	// 2. end block
+	// 3. validator set
+	// 4. selected producers
+	// 5.  chain id
+	span.ID = 1
+	span.ChainID = "15001"
+	//span.StartBlock = uint64(rand.Intn(256))
+	//span.EndBlock = uint64(rand.Intn(6655))
+	span.StartBlock = 256
+	span.EndBlock = 6655
+
+	vals := generateRandomValSet(t)
+	span.ValidatorSet.Validators = vals
+	producers := make([]valset.Validator, 0, len(vals))
+	for _, v := range vals {
+		producers = append(producers, *v)
+	}
+	span.SelectedProducers = producers
+	t.Log("Dummy span: ", span)
+	return span
 }
 
 func generateFakeStateSyncEvents(sample *clerk.EventRecordWithTime, count int) []*clerk.EventRecordWithTime {
@@ -321,6 +363,31 @@ func generateFakeStateSyncEvents(sample *clerk.EventRecordWithTime, count int) [
 	}
 
 	return events
+}
+
+func generateRandomValSet(t *testing.T) []*valset.Validator {
+	t.Helper()
+
+	rand.Seed(time.Now().UnixNano())
+	count := rand.Intn(10-1) + 1
+	//count := rand.Intn(10)
+	votingPower := rand.Intn(10)
+	vals := make([]*valset.Validator, 0, count)
+
+	for i := 0; i < count; i++ {
+		pk, err := crypto.GenerateKey()
+		require.NoError(t, err)
+
+		pub := pk.Public()
+		pubECDSA, ok := pub.(*ecdsa.PublicKey)
+		if !ok {
+			t.Error("type assertion failed!")
+		}
+		val := crypto.PubkeyToAddress(*pubECDSA)
+
+		vals = append(vals, valset.NewValidator(val, int64(votingPower)))
+	}
+	return vals
 }
 
 func buildStateEvent(sample *clerk.EventRecordWithTime, id uint64, timeStamp int64) *clerk.EventRecordWithTime {
