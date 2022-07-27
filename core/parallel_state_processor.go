@@ -55,18 +55,19 @@ type ExecutionTask struct {
 	msg    types.Message
 	config *params.ChainConfig
 
-	gasLimit          uint64
-	blockNumber       *big.Int
-	blockHash         common.Hash
-	blockContext      vm.BlockContext
-	tx                *types.Transaction
-	index             int
-	statedb           *state.StateDB // State database that stores the modified values after tx execution.
-	cleanStateDB      *state.StateDB // A clean copy of the initial statedb. It should not be modified.
-	evmConfig         vm.Config
-	result            *ExecutionResult
-	shouldDelayFeeCal *bool
-	sender            common.Address
+	gasLimit                   uint64
+	blockNumber                *big.Int
+	blockHash                  common.Hash
+	blockContext               vm.BlockContext
+	tx                         *types.Transaction
+	index                      int
+	statedb                    *state.StateDB // State database that stores the modified values after tx execution.
+	cleanStateDB               *state.StateDB // A clean copy of the initial statedb. It should not be modified.
+	evmConfig                  vm.Config
+	result                     *ExecutionResult
+	shouldDelayFeeCal          *bool
+	shouldRerunWithoutFeeDelay bool
+	sender                     common.Address
 }
 
 func (task *ExecutionTask) Execute(mvh *blockstm.MVHashMap, incarnation int) (err error) {
@@ -95,6 +96,14 @@ func (task *ExecutionTask) Execute(mvh *blockstm.MVHashMap, incarnation int) (er
 	// Apply the transaction to the current state (included in the env).
 	if *task.shouldDelayFeeCal {
 		task.result, err = ApplyMessageNoFeeBurnOrTip(evm, task.msg, new(GasPool).AddGas(task.gasLimit))
+
+		if _, ok := task.statedb.MVReadMap()[string(task.blockContext.Coinbase.Bytes())]; ok {
+			task.shouldRerunWithoutFeeDelay = true
+		}
+
+		if _, ok := task.statedb.MVReadMap()[string(task.result.BurntContractAddress.Bytes())]; ok {
+			task.shouldRerunWithoutFeeDelay = true
+		}
 	} else {
 		task.result, err = ApplyMessage(evm, task.msg, new(GasPool).AddGas(task.gasLimit))
 	}
@@ -185,6 +194,16 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 	}
 
 	_, err := blockstm.ExecuteParallel(tasks)
+
+	for _, task := range tasks {
+		task := task.(*ExecutionTask)
+		if task.shouldRerunWithoutFeeDelay {
+			shouldDelayFeeCal = false
+			_, err = blockstm.ExecuteParallel(tasks)
+
+			break
+		}
+	}
 
 	if err != nil {
 		log.Error("blockstm error executing block", "err", err)
