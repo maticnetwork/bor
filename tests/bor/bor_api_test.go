@@ -14,55 +14,29 @@ import (
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
 func TestGetTransactionReceiptsByBlock(t *testing.T) {
+
 	// Initialise Bor client instance
-	//init := buildEthereumInstance(t, rawdb.NewMemoryDatabase())
-	init := buildEthereumInstance(t, rawdb.NewMemoryDatabase())
+	currentValidators := generateRandomValSet(t)
+
+	init := buildEthereumInstance(t, rawdb.NewMemoryDatabase(), currentValidators)
 	chain := init.ethereum.BlockChain()
 	engine := init.ethereum.Engine()
 
-	// Fetch mocked heimdall client
-	//ctrl := gomock.NewController(t)
-	//defer ctrl.Finish()
-
-	heimdallSpan := generateDummySpan(t)
-	_, ctrl := getMockedHeimdallClient(t, heimdallSpan)
+	heimdallSpan := generateDummySpan(t, currentValidators)
+	// RMV
+	log.Info("Heimdall Span", "Validators", heimdallSpan.ValidatorSet.Validators, "Producers", heimdallSpan.SelectedProducers)
+	h, ctrl := getMockedHeimdallClient(t, heimdallSpan)
 	defer ctrl.Finish()
 
 	_bor := engine.(*bor.Bor)
 	defer _bor.Close()
 
-	// Mock /bor/span/1
-	//res, _ := loadSpanFromFile(t)
-
-	//h := mocks.NewMockIHeimdallClient(ctrl)
-
-	/*h.EXPECT().Span(gomock.Any(), uint64(1)).Return(&res.Result, nil).MinTimes(1)
-	h.EXPECT().Close().MinTimes(1)
-	h.EXPECT().FetchCheckpoint(gomock.Any(), int64(-1)).Return(&checkpoint.Checkpoint{
-		Proposer:   res.Result.SelectedProducers[0].Address,
-		StartBlock: big.NewInt(0),
-		EndBlock:   big.NewInt(int64(spanSize)),
-	}, nil).AnyTimes()
-
-	// Mock State Sync events
-	// at # sprintSize, events are fetched for [fromID, (block-sprint).Time)
-	fromID := uint64(1)
-	to := int64(chain.GetHeaderByNumber(0).Time)
-	sample := getSampleEventRecord(t)
-
-	// First query will be from [id=1, (block-sprint).Time]
-	eventRecords := []*clerk.EventRecordWithTime{
-		buildStateEvent(sample, 1, 1),
-		buildStateEvent(sample, 2, 2),
-		buildStateEvent(sample, 3, 3),
-	}
-
-	h.EXPECT().StateSyncEvents(gomock.Any(), fromID, to).Return(eventRecords, nil).MinTimes(1)
-	_bor.SetHeimdallClient(h)*/
+	_bor.SetHeimdallClient(h)
 
 	// Insert blocks for 0th sprint
 	db := init.ethereum.ChainDb()
@@ -70,10 +44,8 @@ func TestGetTransactionReceiptsByBlock(t *testing.T) {
 
 	signer := types.LatestSigner(init.genesis.Config)
 	toAddress := common.HexToAddress("0x000000000000000000000000000000000000aaaa")
-
-	//currentValidators := []*valset.Validator{valset.NewValidator(addr, 10)}
-	currentValidators := generateRandomValSet(t)
 	txHashes := map[int]common.Hash{} // blockNumber -> txHash
+	//signer := currentValidators[0]
 
 	var (
 		err   error
@@ -84,8 +56,8 @@ func TestGetTransactionReceiptsByBlock(t *testing.T) {
 
 	// Block no.s which are multiple of 3 will have txs
 	for i := uint64(1); i <= sprintSize; i++ {
-		s := IsSpanEnd(i)
-		if s {
+
+		if IsSpanEnd(i) {
 			//currentValidators = []*valset.Validator{valset.NewValidator(addr, 10)}
 			currentValidators = generateRandomValSet(t)
 		}
@@ -101,7 +73,7 @@ func TestGetTransactionReceiptsByBlock(t *testing.T) {
 			nonce++
 
 			tx = types.NewTx(txdata)
-			tx, err = types.SignTx(tx, signer, key)
+			tx, err = types.SignTx(tx, signer, addrs[currentValidators[0].Address])
 			require.Nil(t, err, "an incorrect transaction or signer")
 
 			txs = []*types.Transaction{tx}
@@ -119,11 +91,11 @@ func TestGetTransactionReceiptsByBlock(t *testing.T) {
 
 	// state 6 was not written
 	//
-	/*fromID := uint64(4)
-	to := int64(chain.GetHeaderByNumber(sprintSize).Time)
-	sample := getSampleEventRecord(t)
+	/*fromID = uint64(4)
+	to = int64(chain.GetHeaderByNumber(sprintSize).Time)
+	sample = getSampleEventRecord(t)
 
-	eventRecords := []*clerk.EventRecordWithTime{
+	eventRecords = []*clerk.EventRecordWithTime{
 		buildStateEvent(sample, 4, 4),
 		buildStateEvent(sample, 5, 5),
 	}

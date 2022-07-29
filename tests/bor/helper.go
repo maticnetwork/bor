@@ -4,7 +4,6 @@ package bor
 
 import (
 	"crypto/ecdsa"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -43,17 +42,21 @@ import (
 var (
 
 	// Only this account is a validator for the 0th span
-	key, _ = crypto.HexToECDSA(privKey)
-	addr   = crypto.PubkeyToAddress(key.PublicKey) // 0x71562b71999873DB5b286dF957af199Ec94617F7
+	//key, _ = crypto.HexToECDSA(privKey)
+	//addr   = crypto.PubkeyToAddress(key.PublicKey) // 0x71562b71999873DB5b286dF957af199Ec94617F7
 
 	// This account is one the validators for 1st span (0-indexed)
-	key2, _ = crypto.HexToECDSA(privKey2)
-	addr2   = crypto.PubkeyToAddress(key2.PublicKey) // 0x9fB29AAc15b9A4B7F17c3385939b007540f4d791
+	//key2, _ = crypto.HexToECDSA(privKey2)
+	//addr2   = crypto.PubkeyToAddress(key2.PublicKey) // 0x9fB29AAc15b9A4B7F17c3385939b007540f4d791
+	//addr = crypto.PubkeyToAddress(key.PublicKey)
+	//addr2 = crypto.PubkeyToAddress(key2.PublicKey)
+
+	addrs = make(map[common.Address]*ecdsa.PrivateKey)
 )
 
 const (
-	privKey  = "b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291"
-	privKey2 = "9b28f36fbd67381120752d6172ecdcf10e06ab2d9a1367aac00cdcd6ac7855d3"
+	//privKey  = "b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291"
+	//privKey2 = "9b28f36fbd67381120752d6172ecdcf10e06ab2d9a1367aac00cdcd6ac7855d3"
 
 	// The genesis for tests was generated with following parameters
 	extraSeal = 65 // Fixed number of extra-data suffix bytes reserved for signer seal
@@ -69,17 +72,33 @@ type initializeData struct {
 	ethereum *eth.Ethereum
 }
 
-func buildEthereumInstance(t *testing.T, db ethdb.Database) *initializeData {
-	genesisData, err := ioutil.ReadFile("./testdata/genesis.json")
+func buildEthereumInstance(t *testing.T, db ethdb.Database, vals []*valset.Validator) *initializeData {
+	/*genesisData, err := ioutil.ReadFile("./testdata/genesis.json")
 	if err != nil {
 		t.Fatalf("%s", err)
-	}
+	}*/
 
-	gen := &core.Genesis{}
+	gen := generateDummyGenesis()
 
-	if err := json.Unmarshal(genesisData, gen); err != nil {
+	/*if err := json.Unmarshal(genesisData, gen); err != nil {
 		t.Fatalf("%s", err)
+	}*/
+
+	// TODO(ranee10): Currently we are modifying the predefined genesis. Find a better way to do this
+	//vals := generateRandomValSet(t)
+
+	//var alloc core.GenesisAlloc
+	for _, val := range vals {
+		for range gen.Alloc {
+			/*alloc = core.GenesisAlloc{
+				common.HexToAddress(val.Address.String()): core.GenesisAccount{Balance: big.NewInt(params.Ether)},
+			}*/
+			gen.Alloc[val.Address] = core.GenesisAccount{Balance: big.NewInt(params.Ether)}
+		}
 	}
+
+	/*jsonString, err := json.Marshal(gen)
+	ioutil.WriteFile("./testdata/genesis.json", jsonString, os.ModePerm)*/
 
 	ethConf := &eth.Config{
 		Genesis: gen,
@@ -89,12 +108,14 @@ func buildEthereumInstance(t *testing.T, db ethdb.Database) *initializeData {
 	ethConf.Genesis.MustCommit(db)
 
 	ethereum := utils.CreateBorEthereum(ethConf)
-	if err != nil {
+	/*if err != nil {
 		t.Fatalf("failed to register Ethereum protocol: %v", err)
-	}
+	}*/
 
 	ethConf.Genesis.MustCommit(ethereum.ChainDb())
 
+	key := addrs[vals[0].Address]
+	addr := crypto.PubkeyToAddress(key.PublicKey)
 	ethereum.Engine().(*bor.Bor).Authorize(addr, func(account accounts.Account, s string, data []byte) ([]byte, error) {
 		return crypto.Sign(crypto.Keccak256(data), key)
 	})
@@ -127,7 +148,7 @@ func buildNextBlock(t *testing.T, _bor consensus.Engine, chain *core.BlockChain,
 	number := header.Number.Uint64()
 
 	if signer == nil {
-		signer = getSignerKey(header.Number.Uint64())
+		signer = getSignerKey(header.Number.Uint64(), currentValidators)
 	}
 
 	header.Time = parentBlock.Time() + bor.CalcProducerDelay(header.Number.Uint64(), 0, borConfig)
@@ -173,7 +194,7 @@ func buildNextBlock(t *testing.T, _bor consensus.Engine, chain *core.BlockChain,
 
 	b := &blockGen{header: header}
 	for _, tx := range txs {
-		b.addTxWithChain(chain, state, tx, addr)
+		b.addTxWithChain(chain, state, tx, currentValidators[0].Address)
 	}
 
 	// Finalize and seal the block
@@ -283,15 +304,15 @@ func loadSpanFromFile(t *testing.T) (*heimdall.SpanResponse, *span.HeimdallSpan)
 	return res, &res.Result
 }
 
-func getSignerKey(number uint64) []byte {
-	signerKey := privKey
+func getSignerKey(number uint64, vals []*valset.Validator) []byte {
+	signerKey := addrs[vals[0].Address]
 
 	if IsSpanStart(number) {
 		// validator set in the new span has changed
-		signerKey = privKey2
+		signerKey = addrs[vals[1].Address]
 	}
 
-	newKey, _ := hex.DecodeString(signerKey)
+	newKey := crypto.FromECDSA(signerKey)
 
 	return newKey
 }
@@ -305,8 +326,7 @@ func getMockedHeimdallClient(t *testing.T, heimdallSpan *span.HeimdallSpan) (*mo
 	h.EXPECT().Span(gomock.Any(), uint64(1)).Return(heimdallSpan, nil).AnyTimes()
 
 	sample := getSampleEventRecord(t)
-	//count := rand.Intn(10)
-	count := 5
+	count := rand.Intn(10-1) + 1
 
 	h.EXPECT().StateSyncEvents(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(generateFakeStateSyncEvents(sample, count), nil).AnyTimes()
@@ -322,7 +342,54 @@ func getMockedHeimdallClient(t *testing.T, heimdallSpan *span.HeimdallSpan) (*mo
 	return h, ctrl
 }
 
-func generateDummySpan(t *testing.T) *span.HeimdallSpan {
+func generateDummyGenesis() *core.Genesis {
+	gen := new(core.Genesis)
+	gen.Config = &params.ChainConfig{
+		ChainID:             big.NewInt(15001),
+		HomesteadBlock:      big.NewInt(0),
+		LondonBlock:         big.NewInt(1),
+		BerlinBlock:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    big.NewInt(0),
+		EIP150Block:         big.NewInt(0),
+		EIP150Hash:          common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000"),
+		Bor: &params.BorConfig{
+			Period:                map[string]uint64{"0": 1},
+			ProducerDelay:         4,
+			Sprint:                4,
+			BackupMultiplier:      map[string]uint64{"0": 1},
+			ValidatorContract:     "0x0000000000000000000000000000000000001000",
+			StateReceiverContract: "0x0000000000000000000000000000000000001001",
+			BurntContract:         map[string]string{"0": "0x0000000000000000000000000000000000000000"},
+			JaipurBlock:           2,
+		},
+	}
+
+	gen.Nonce = 0
+	gen.Timestamp = 0x5ce28211
+	gen.ExtraData = []byte("0x")
+	gen.GasLimit = 0x989680
+	gen.Difficulty = big.NewInt(1)
+	gen.Mixhash = common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000")
+	gen.Coinbase = common.HexToAddress("0x0000000000000000000000000000000000000000")
+
+	gen.Alloc = core.GenesisAlloc{
+		common.HexToAddress("0000000000000000000000000000000000001000"): core.GenesisAccount{Code: []byte(validatorContract), Balance: big.NewInt(1)},
+		common.HexToAddress("0000000000000000000000000000000000001001"): core.GenesisAccount{Code: []byte(validatorContract), Balance: big.NewInt(1)},
+		common.HexToAddress("0000000000000000000000000000000000001010"): core.GenesisAccount{Code: []byte(matic), Balance: new(big.Int).Mul(big.NewInt(9), big.NewInt(params.Ether))},
+		//common.HexToAddress("71562b71999873DB5b286dF957af199Ec94617F7"): core.GenesisAccount{Balance: new(big.Int).Mul(big.NewInt(9), big.NewInt(params.Ether))},
+		//common.HexToAddress("9fB29AAc15b9A4B7F17c3385939b007540f4d791"): core.GenesisAccount{Balance: new(big.Int).Mul(big.NewInt(9), big.NewInt(params.Ether))},
+	}
+
+	return gen
+}
+
+func generateDummySpan(t *testing.T, vals []*valset.Validator) *span.HeimdallSpan {
 	//var span *span.HeimdallSpan
 	span := new(span.HeimdallSpan)
 	// 1. start block
@@ -332,19 +399,16 @@ func generateDummySpan(t *testing.T) *span.HeimdallSpan {
 	// 5.  chain id
 	span.ID = 1
 	span.ChainID = "15001"
-	//span.StartBlock = uint64(rand.Intn(256))
-	//span.EndBlock = uint64(rand.Intn(6655))
-	span.StartBlock = 256
-	span.EndBlock = 6655
+	span.StartBlock = uint64(rand.Intn(256))
+	span.EndBlock = uint64(rand.Intn(6655))
 
-	vals := generateRandomValSet(t)
 	span.ValidatorSet.Validators = vals
 	producers := make([]valset.Validator, 0, len(vals))
 	for _, v := range vals {
 		producers = append(producers, *v)
 	}
 	span.SelectedProducers = producers
-	t.Log("Dummy span: ", span)
+
 	return span
 }
 
@@ -368,26 +432,29 @@ func generateFakeStateSyncEvents(sample *clerk.EventRecordWithTime, count int) [
 func generateRandomValSet(t *testing.T) []*valset.Validator {
 	t.Helper()
 
-	rand.Seed(time.Now().UnixNano())
-	count := rand.Intn(10-1) + 1
-	//count := rand.Intn(10)
-	votingPower := rand.Intn(10)
-	vals := make([]*valset.Validator, 0, count)
+	pk := generatePrivateKeys(t)
+	votingPower := rand.Intn(10-1) + 1
+	vals := make([]*valset.Validator, 0, len(pk))
 
-	for i := 0; i < count; i++ {
-		pk, err := crypto.GenerateKey()
-		require.NoError(t, err)
-
-		pub := pk.Public()
-		pubECDSA, ok := pub.(*ecdsa.PublicKey)
-		if !ok {
-			t.Error("type assertion failed!")
-		}
-		val := crypto.PubkeyToAddress(*pubECDSA)
-
+	for i := 0; i < len(pk); i++ {
+		val := crypto.PubkeyToAddress(pk[i].PublicKey)
+		addrs[val] = pk[i]
 		vals = append(vals, valset.NewValidator(val, int64(votingPower)))
 	}
+
 	return vals
+}
+
+func generatePrivateKeys(t *testing.T) []*ecdsa.PrivateKey {
+	count := rand.Intn(10-1) + 1
+	var err error
+	pk := make([]*ecdsa.PrivateKey, count)
+	for i := 0; i < count; i++ {
+		pk[i], err = crypto.GenerateKey()
+		require.NoError(t, err)
+	}
+
+	return pk
 }
 
 func buildStateEvent(sample *clerk.EventRecordWithTime, id uint64, timeStamp int64) *clerk.EventRecordWithTime {
@@ -415,6 +482,7 @@ func IsSpanEnd(number uint64) bool {
 	return (number+1)%spanSize == 0
 }
 
+// Change this ?
 func IsSpanStart(number uint64) bool {
 	return number%spanSize == 0
 }
