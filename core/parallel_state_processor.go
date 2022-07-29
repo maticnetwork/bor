@@ -143,6 +143,8 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 		allLogs     []*types.Log
 		usedGas     = new(uint64)
 	)
+
+
 	// Mutate the block and state according to any hard-fork specs
 	if p.config.DAOForkSupport && p.config.DAOForkBlock != nil && p.config.DAOForkBlock.Cmp(block.Number()) == 0 {
 		misc.ApplyDAOHardFork(statedb)

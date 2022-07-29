@@ -44,7 +44,7 @@ func (ev *ExecVersionView) Execute() (er ExecResult) {
 
 var ErrExecAbort = fmt.Errorf("execution aborted with dependency")
 
-const numGoProcs = 4
+const numGoProcs = 16
 
 // nolint: gocognit
 func ExecuteParallel(tasks []ExecTask) (lastTxIO *TxnInputOutput, err error) {
@@ -167,7 +167,7 @@ func ExecuteParallel(tasks []ExecTask) (lastTxIO *TxnInputOutput, err error) {
 		// do validations ...
 		maxComplete := execTasks.maxAllComplete()
 
-		const validationIncrement = 2
+		const validationIncrement = 16
 
 		cntValidate := validateTasks.countPending()
 		// if we're currently done with all execution tasks then let's validate everything; otherwise do one increment ...

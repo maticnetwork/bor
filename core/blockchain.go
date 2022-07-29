@@ -206,12 +206,14 @@ type BlockChain struct {
 	running       int32          // 0 if chain is running, 1 when stopped
 	procInterrupt int32          // interrupt signaler for block processing
 
-	engine     consensus.Engine
-	validator  Validator // Block and state validator interface
-	prefetcher Prefetcher
-	processor  Processor // Block transaction processor interface
-	forker     *ForkChoice
-	vmConfig   vm.Config
+	engine         consensus.Engine
+	validator      Validator // Block and state validator interface
+	prefetcher     Prefetcher
+	processor      Processor // Block transaction processor interface
+	processorFirst Processor
+	processor2     Processor
+	forker         *ForkChoice
+	vmConfig       vm.Config
 
 	// Bor related changes
 	borReceiptsCache *lru.Cache             // Cache for the most recent bor receipt receipts per block
@@ -263,7 +265,9 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 	bc.forker = NewForkChoice(bc, shouldPreserve, checker)
 	bc.validator = NewBlockValidator(chainConfig, bc, engine)
 	bc.prefetcher = newStatePrefetcher(chainConfig, bc, engine)
-	bc.processor = NewStateProcessor(chainConfig, bc, engine)
+	bc.processor = NewParallelStateProcessor(chainConfig, bc, engine)
+	bc.processorFirst = NewStateProcessorFrist(chainConfig, bc, engine)
+	bc.processor2 = NewStateProcessor(chainConfig, bc, engine)
 
 	var err error
 	bc.hc, err = NewHeaderChain(db, chainConfig, engine, bc.insertStopped)
@@ -1723,8 +1727,34 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 		}
 
 		// Process block using the parent state as reference point
+		cleanStatedb := statedb.Copy()
+		cleanStatedb2 := statedb.Copy()
 		substart := time.Now()
-		receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig)
+
+		receipts, logs, usedGas, err := bc.processorFirst.Process(block, cleanStatedb, bc.vmConfig)
+		t1 := time.Now()
+
+		receipts, logs, usedGas, err = bc.processor2.Process(block, cleanStatedb2, bc.vmConfig)
+		t2 := time.Now()
+
+		receipts, logs, usedGas, err = bc.processor.Process(block, statedb, bc.vmConfig)
+		t3 := time.Now()
+
+		log.Info("Process block time", "blockNumber", block.Number(), "serial first time", t1.Sub(substart), "serial second time", t2.Sub(t1), "parallel", t3.Sub(t2))
+
+		// for i, receipt := range receipts {
+		// 	fmt.Printf("Wrong receipt: %v+\n", receipts[i])
+		// 	fmt.Printf("Right receipt: %v+\n", receipts2[i])
+		// 	fmt.Printf("Wrong Receipt hash: %v\n", types.DeriveSha(receipts, trie.NewStackTrie(nil)))
+		// 	fmt.Printf("Right Receipt hash: %v\n", types.DeriveSha(receipts2, trie.NewStackTrie(nil)))
+		// 	fmt.Printf("Remote Receipt hash: %v\n", block.ReceiptHash())
+
+		// 	for j := range receipt.Logs {
+		// 		fmt.Printf("Wrong log: %v+\n", receipts[i].Logs[j])
+		// 		fmt.Printf("Right log: %v+\n", receipts2[i].Logs[j])
+		// 	}
+		// }
+
 		if err != nil {
 			bc.reportBlock(block, receipts, err)
 			atomic.StoreUint32(&followupInterrupt, 1)
@@ -2445,6 +2475,9 @@ func (bc *BlockChain) reportBlock(block *types.Block, receipts types.Receipts, e
 		receiptString += fmt.Sprintf("\t %d: cumulative: %v gas: %v contract: %v status: %v tx: %v logs: %v bloom: %x state: %x\n",
 			i, receipt.CumulativeGasUsed, receipt.GasUsed, receipt.ContractAddress.Hex(),
 			receipt.Status, receipt.TxHash.Hex(), receipt.Logs, receipt.Bloom, receipt.PostState)
+		for _, log := range receipt.Logs {
+			receiptString += fmt.Sprintf("\t\t log index: %d, toppics: %x, data: %x\n", log.Index, log.Topics, log.Data)
+		}
 	}
 	log.Error(fmt.Sprintf(`
 ########## BAD BLOCK #########
@@ -2483,3 +2516,4 @@ func (bc *BlockChain) InsertHeaderChain(chain []*types.Header, checkFreq int) (i
 	_, err := bc.hc.InsertHeaderChain(chain, start, bc.forker)
 	return 0, err
 }
+
