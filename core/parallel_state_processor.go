@@ -66,6 +66,7 @@ type ExecutionTask struct {
 	evmConfig         vm.Config
 	result            *ExecutionResult
 	shouldDelayFeeCal *bool
+	sender            common.Address
 }
 
 func (task *ExecutionTask) Execute(mvh *blockstm.MVHashMap, incarnation int) (err error) {
@@ -118,6 +119,10 @@ func (task *ExecutionTask) MVWriteList() []blockstm.WriteDescriptor {
 
 func (task *ExecutionTask) MVFullWriteList() []blockstm.WriteDescriptor {
 	return task.statedb.MVFullWriteList()
+}
+
+func (task *ExecutionTask) Sender() common.Address {
+	return task.sender
 }
 
 // Process processes the state changes according to the Ethereum rules by running
@@ -173,6 +178,7 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 			blockContext:      bc,
 			evmConfig:         cfg,
 			shouldDelayFeeCal: &shouldDelayFeeCal,
+			sender:            msg.From(),
 		}
 
 		tasks = append(tasks, task)
