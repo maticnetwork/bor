@@ -23,6 +23,12 @@ type RemoveDBCommand struct {
 	datadir string
 }
 
+const (
+	chaindataPath      string = "chaindata"
+	ancientPath        string = "ancient"
+	lightchaindataPath string = "lightchaindata"
+)
+
 // MarkDown implements cli.MarkDown interface
 func (c *RemoveDBCommand) MarkDown() string {
 	items := []string{
@@ -77,7 +83,7 @@ func (c *RemoveDBCommand) Run(args []string) int {
 	nodeCfg := &node.Config{DataDir: datadir}
 
 	// Remove the full node state database
-	path := nodeCfg.ResolvePath("chaindata")
+	path := nodeCfg.ResolvePath(chaindataPath)
 	if common.FileExist(path) {
 		confirmAndRemoveDB(c.UI, path, "full node state database")
 	} else {
@@ -88,7 +94,7 @@ func (c *RemoveDBCommand) Run(args []string) int {
 	// Note: The old cli used DatabaseFreezer path from config if provided explicitly
 	// We don't have access to eth config and hence we assume it to be
 	// under the "chaindata" folder.
-	path = filepath.Join(nodeCfg.ResolvePath("chaindata"), "ancient")
+	path = filepath.Join(nodeCfg.ResolvePath(chaindataPath), ancientPath)
 	if common.FileExist(path) {
 		confirmAndRemoveDB(c.UI, path, "full node ancient database")
 	} else {
@@ -96,7 +102,7 @@ func (c *RemoveDBCommand) Run(args []string) int {
 	}
 
 	// Remove the light node database
-	path = nodeCfg.ResolvePath("lightchaindata")
+	path = nodeCfg.ResolvePath(lightchaindataPath)
 	if common.FileExist(path) {
 		confirmAndRemoveDB(c.UI, path, "light node database")
 	} else {
@@ -120,20 +126,23 @@ func confirmAndRemoveDB(ui cli.Ui, database string, kind string) {
 			switch strings.ToLower(confirm) {
 			case "y":
 				start := time.Now()
-				_ = filepath.Walk(database, func(path string, info os.FileInfo, err error) error {
+				err = filepath.Walk(database, func(path string, info os.FileInfo, err error) error {
 					// If we're at the top level folder, recurse into
 					if path == database {
 						return nil
 					}
 					// Delete all the files, but not subfolders
 					if !info.IsDir() {
-						os.Remove(path)
-						return nil
+						return os.Remove(path)
 					}
 					return filepath.SkipDir
 				})
 
-				log.Info("Database successfully deleted", "path", database, "elapsed", common.PrettyDuration(time.Since(start)))
+				if err != nil && err != filepath.SkipDir {
+					ui.Output(err.Error())
+				} else {
+					log.Info("Database successfully deleted", "path", database, "elapsed", common.PrettyDuration(time.Since(start)))
+				}
 
 				return
 			case "n":
