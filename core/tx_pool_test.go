@@ -2614,18 +2614,23 @@ type transactionBatches struct {
 	totalTxs int
 }
 
-func transactionsGen(keys []*acc, nonces []uint64, localKey *acc, minTxs int, maxTxs int, gasPriceMin, gasPriceMax, gasLimitMin, gasLimitMax uint64) func(t *rapid.T) transactionBatches {
-	return func(t *rapid.T) transactionBatches {
+func transactionsGen(keys []*acc, nonces []uint64, localKey *acc, minTxs int, maxTxs int, gasPriceMin, gasPriceMax, gasLimitMin, gasLimitMax uint64) func(t *rapid.T) *transactionBatches {
+	return func(t *rapid.T) *transactionBatches {
+		fmt.Println("2.3.0.totalTxs", minTxs, maxTxs)
 		totalTxs := rapid.IntRange(minTxs, maxTxs).Draw(t, "totalTxs").(int)
+		fmt.Println("2.3.1.totalTxs", totalTxs)
 		txs := make([]*testTx, totalTxs)
 
 		keys = keys[:len(nonces)]
 
 		for i := 0; i < totalTxs; i++ {
+			fmt.Printf("2.4.%d.0.genTx\n", i)
 			txs[i] = getTransactionGen(t, keys, nonces, localKey, gasPriceMin, gasPriceMax, gasLimitMin, gasLimitMax)
+			fmt.Printf("2.4.%d.1.genTx\n", i)
 		}
+		fmt.Println("2.5.DONE")
 
-		return transactionBatches{txs, totalTxs}
+		return &transactionBatches{txs, totalTxs}
 	}
 }
 
@@ -2729,7 +2734,7 @@ func TestPoolBatchInsert(t *testing.T) {
 
 				var (
 					wg  errgroup.Group
-					txs transactionBatches
+					txs *transactionBatches
 				)
 
 				wg.Go(func() error {
@@ -2740,7 +2745,7 @@ func TestPoolBatchInsert(t *testing.T) {
 					for idx := 0; idx < totalAccs; idx++ {
 						testAddBalance(pool, keys[idx].account, initialBalance)
 					}
-					fmt.Println("add balance and keys done", time.Since(now))
+					fmt.Println("1.add balance and keys done", time.Since(now))
 					return nil
 				})
 
@@ -2748,11 +2753,11 @@ func TestPoolBatchInsert(t *testing.T) {
 					now := time.Now()
 					nonces := make([]uint64, totalAccs)
 					gen := rapid.Custom(transactionsGen(keys, nonces, localKey, minTxs, maxTxs, gasPriceMin, gasPriceMax, gasLimitMin, gasLimitMax))
-					fmt.Println("generate transaction generator done", time.Since(now))
+					fmt.Println("2.0.generate transaction generator done", time.Since(now))
 
 					now = time.Now()
-					txs = gen.Draw(rt, "batches").(transactionBatches)
-					fmt.Println("generate transactions done", time.Since(now))
+					txs = gen.Draw(rt, "batches").(*transactionBatches)
+					fmt.Println("2.1.generate transactions done", time.Since(now))
 
 					return nil
 				})
