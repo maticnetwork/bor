@@ -25,6 +25,8 @@ import (
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
+	"github.com/tyler-smith/go-bip39"
+
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/abi"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
@@ -47,7 +49,6 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
-	"github.com/tyler-smith/go-bip39"
 )
 
 // PublicEthereumAPI provides an API to access Ethereum related information.
@@ -669,6 +670,7 @@ func (s *PublicBlockChainAPI) GetTransactionReceiptsByBlock(ctx context.Context,
 			"contractAddress":   nil,
 			"logs":              receipt.Logs,
 			"logsBloom":         receipt.Bloom,
+			"type":              hexutil.Uint(tx.Type()),
 		}
 
 		// Assign receipt status or post state.
@@ -680,9 +682,11 @@ func (s *PublicBlockChainAPI) GetTransactionReceiptsByBlock(ctx context.Context,
 		if receipt.Logs == nil {
 			fields["logs"] = [][]*types.Log{}
 		}
-		if borReceipt != nil {
+
+		if borReceipt != nil && idx == len(receipts)-1 {
 			fields["transactionHash"] = txHash
 		}
+
 		// If the ContractAddress is 20 0x0 bytes, assume it is not a contract creation
 		if receipt.ContractAddress != (common.Address{}) {
 			fields["contractAddress"] = receipt.ContractAddress
@@ -829,10 +833,10 @@ func (s *PublicBlockChainAPI) getAuthor(head *types.Header) *common.Address {
 }
 
 // GetBlockByNumber returns the requested canonical block.
-// * When blockNr is -1 the chain head is returned.
-// * When blockNr is -2 the pending chain head is returned.
-// * When fullTx is true all transactions in the block are returned, otherwise
-//   only the transaction hash is returned.
+//   - When blockNr is -1 the chain head is returned.
+//   - When blockNr is -2 the pending chain head is returned.
+//   - When fullTx is true all transactions in the block are returned, otherwise
+//     only the transaction hash is returned.
 func (s *PublicBlockChainAPI) GetBlockByNumber(ctx context.Context, number rpc.BlockNumber, fullTx bool) (map[string]interface{}, error) {
 	block, err := s.b.BlockByNumber(ctx, number)
 	if block != nil && err == nil {

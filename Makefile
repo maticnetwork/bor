@@ -28,10 +28,16 @@ GOTEST = GODEBUG=cgocheck=0 go test $(GO_FLAGS) -p 1
 bor:
 	mkdir -p $(GOPATH)/bin/
 	go build -o $(GOBIN)/bor ./cmd/cli/main.go
+	cp $(GOBIN)/bor $(GOPATH)/bin/
+	@echo "Done building."
 
 protoc:
 	protoc --go_out=. --go-grpc_out=. ./internal/cli/server/proto/*.proto
 
+generate-mocks:
+	go generate mockgen -destination=./tests/bor/mocks/IHeimdallClient.go -package=mocks ./consensus/bor IHeimdallClient
+	go generate mockgen -destination=./eth/filters/IBackend.go -package=filters ./eth/filters Backend
+	
 geth:
 	$(GORUN) build/ci.go install ./cmd/geth
 	@echo "Done building."
@@ -91,7 +97,7 @@ devtools:
 	$(GOBUILD) -o $(GOBIN)/codecgen github.com/ugorji/go/codec/codecgen
 	$(GOBUILD) -o $(GOBIN)/abigen ./cmd/abigen
 	$(GOBUILD) -o $(GOBIN)/mockgen github.com/golang/mock/mockgen
-	$(GOBUILD) -o $(GOBIN)/protoc-gen-go github.com/golang/protobuf/protoc-gen-go
+	$(GOBUILD) -o $(GOBIN)/protoc-gen-go google.golang.org/protobuf/cmd/protoc-gen-go
 	PATH=$(GOBIN):$(PATH) go generate ./common
 	PATH=$(GOBIN):$(PATH) go generate ./core/types
 	PATH=$(GOBIN):$(PATH) go generate ./consensus/bor

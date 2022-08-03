@@ -22,8 +22,8 @@ func TestConfigDefault(t *testing.T) {
 
 func TestConfigMerge(t *testing.T) {
 	c0 := &Config{
-		Chain:      "0",
-		NoSnapshot: true,
+		Chain:    "0",
+		Snapshot: true,
 		RequiredBlocks: map[string]string{
 			"a": "b",
 		},
@@ -54,8 +54,8 @@ func TestConfigMerge(t *testing.T) {
 	}
 
 	expected := &Config{
-		Chain:      "1",
-		NoSnapshot: false,
+		Chain:    "1",
+		Snapshot: false,
 		RequiredBlocks: map[string]string{
 			"a": "b",
 			"b": "c",
@@ -64,7 +64,6 @@ func TestConfigMerge(t *testing.T) {
 			MaxPeers: 10,
 			Discovery: &P2PDiscovery{
 				StaticNodes: []string{
-					"a",
 					"b",
 				},
 			},
@@ -116,7 +115,7 @@ func TestConfigLoadFile(t *testing.T) {
 				MaxPeers: 30,
 			},
 			TxPool: &TxPoolConfig{
-				LifeTime: time.Duration(1 * time.Second),
+				LifeTime: 1 * time.Second,
 			},
 			Gpo: &GpoConfig{
 				MaxPrice: big.NewInt(100),
@@ -128,12 +127,12 @@ func TestConfigLoadFile(t *testing.T) {
 
 	// read file in hcl format
 	t.Run("hcl", func(t *testing.T) {
-		readFile("./testdata/simple.hcl")
+		readFile("./testdata/test.hcl")
 	})
 
 	// read file in json format
 	t.Run("json", func(t *testing.T) {
-		readFile("./testdata/simple.json")
+		readFile("./testdata/test.json")
 	})
 }
 
