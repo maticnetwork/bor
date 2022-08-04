@@ -2,6 +2,7 @@ package network
 
 import (
 	"errors"
+	"fmt"
 	"net"
 )
 
@@ -17,8 +18,13 @@ var (
 
 // FindAvailablePort returns the an available port
 func FindAvailablePort() (int, net.Listener, error) {
+	var (
+		listener net.Listener
+		err      error
+	)
+
 	for i := uint(0); i < maxPortCheck; i++ {
-		listener, err := net.Listen("tcp", emptyPort)
+		listener, err = net.Listen("tcp", emptyPort)
 		if err != nil {
 			continue
 		}
@@ -26,5 +32,5 @@ func FindAvailablePort() (int, net.Listener, error) {
 		return listener.Addr().(*net.TCPAddr).Port, listener, nil
 	}
 
-	return 0, nil, ErrCantFindAPort
+	return 0, nil, fmt.Errorf("%w: %s", ErrCantFindAPort, err)
 }
