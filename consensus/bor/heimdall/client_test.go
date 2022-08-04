@@ -9,7 +9,6 @@ import (
 	"net"
 	"net/http"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -18,8 +17,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 )
-
-var maxPortCheck int32 = 100
 
 // HttpHandlerFake defines the handler functions required to serve
 // requests to the mock heimdal server for specific functions. Add more handlers
@@ -34,7 +31,7 @@ func (h *HttpHandlerFake) GetCheckpointHandler() http.HandlerFunc {
 	}
 }
 
-func CreateMockHeimdallServer(wg *sync.WaitGroup, port int32, handler *HttpHandlerFake) (*http.Server, error) {
+func CreateMockHeimdallServer(wg *sync.WaitGroup, port int, handler *HttpHandlerFake) (*http.Server, error) {
 	// Create a new server mux
 	mux := http.NewServeMux()
 
@@ -93,8 +90,9 @@ func TestFetchCheckpointFromMockHeimdall(t *testing.T) {
 		}
 	}
 
-	// Fetch available port starting from 50000
-	port, err := findAvailablePort(50000, 0)
+	// Fetch available port
+	port, err := findAvailablePort()
+	fmt.Println("port:", port)
 	require.NoError(t, err, "expect no error in finding available port")
 
 	// Create mock heimdall server and pass handler instance for setting up the routes
@@ -150,8 +148,8 @@ func TestFetchShutdown(t *testing.T) {
 		}
 	}
 
-	// Fetch available port starting from 50000
-	port, err := findAvailablePort(50000, 0)
+	// Fetch available port
+	port, err := findAvailablePort()
 	require.NoError(t, err, "expect no error in finding available port")
 
 	// Create mock heimdall server and pass handler instance for setting up the routes
@@ -216,24 +214,15 @@ func TestFetchShutdown(t *testing.T) {
 	wg.Wait()
 }
 
-// findAvailablePort returns the next available port starting from `from`
-func findAvailablePort(from int32, count int32) (int32, error) {
-	if count == maxPortCheck {
-		return 0, fmt.Errorf("no available port found")
+// findAvailablePort returns the next available port
+func findAvailablePort() (int, error) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return 0, err
 	}
+	defer l.Close()
 
-	port := atomic.AddInt32(&from, 1)
-	addr := fmt.Sprintf("localhost:%d", port)
-
-	count++
-
-	lis, err := net.Listen("tcp", addr)
-	if err == nil {
-		lis.Close()
-		return port, nil
-	} else {
-		return findAvailablePort(from, count)
-	}
+	return l.Addr().(*net.TCPAddr).Port, nil
 }
 
 // TestContext includes bunch of simple tests to verify the working of timeout
