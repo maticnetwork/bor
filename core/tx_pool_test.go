@@ -2587,7 +2587,9 @@ type testTx struct {
 const localIdx = 0
 
 func getTransactionGen(t *rapid.T, keys []*acc, nonces []uint64, localKey *acc, gasPriceMin, gasPriceMax, gasLimitMin, gasLimitMax uint64) *testTx {
+	fmt.Println("accIDx.0", localIdx, len(keys)-1)
 	idx := rapid.IntRange(0, len(keys)-1).Draw(t, "accIdx").(int)
+	fmt.Println("accIDx.1", localIdx, len(keys)-1)
 
 	var isLocal bool
 	var key *ecdsa.PrivateKey
@@ -2601,10 +2603,19 @@ func getTransactionGen(t *rapid.T, keys []*acc, nonces []uint64, localKey *acc, 
 
 	nonces[idx]++
 
-	gasPrice := big.NewInt(0).SetUint64(rapid.Uint64Range(gasPriceMin, gasPriceMax).Draw(t, "gasPrice").(uint64))
+	fmt.Println("accIDx.3", localIdx, gasPriceMin, gasPriceMax)
+
+	gasPriceUint := rapid.Uint64Range(gasPriceMin, gasPriceMax).Draw(t, "gasPrice").(uint64)
+	fmt.Println("accIDx.4", localIdx, gasPriceMin, gasPriceMax, gasPriceUint)
+	gasPrice := big.NewInt(0).SetUint64(gasPriceUint)
+	fmt.Println("accIDx.5", localIdx, gasPriceMin, gasPriceMax, gasPrice)
+	fmt.Println("accIDx.6", localIdx, gasLimitMin, gasLimitMax)
+	gasLimit := rapid.Uint64Range(gasLimitMin, gasLimitMax).Draw(t, "gasLimit").(uint64)
+
+	fmt.Println("accIDx.7", localIdx, gasLimitMin, gasLimitMax, gasLimit)
 
 	return &testTx{
-		tx:      pricedTransaction(nonces[idx]-1, rapid.Uint64Range(gasLimitMin, gasLimitMax).Draw(t, "gasLimit").(uint64), gasPrice, key),
+		tx:      pricedTransaction(nonces[idx]-1, gasLimit, gasPrice, key),
 		isLocal: isLocal,
 	}
 }
@@ -2616,7 +2627,7 @@ type transactionBatches struct {
 
 func transactionsGen(keys []*acc, nonces []uint64, localKey *acc, minTxs int, maxTxs int, gasPriceMin, gasPriceMax, gasLimitMin, gasLimitMax uint64) func(t *rapid.T) *transactionBatches {
 	return func(t *rapid.T) *transactionBatches {
-		fmt.Println("2.3.0.totalTxs", minTxs, maxTxs)
+		fmt.Println("2.3.0.totalTxs", minTxs, maxTxs, rapid.Int32().Draw(t, ""))
 		totalTxs := rapid.IntRange(minTxs, maxTxs).Draw(t, "totalTxs").(int)
 		fmt.Println("2.3.1.totalTxs", totalTxs)
 		txs := make([]*testTx, totalTxs)
@@ -2628,7 +2639,7 @@ func transactionsGen(keys []*acc, nonces []uint64, localKey *acc, minTxs int, ma
 			txs[i] = getTransactionGen(t, keys, nonces, localKey, gasPriceMin, gasPriceMax, gasLimitMin, gasLimitMax)
 			fmt.Printf("2.4.%d.1.genTx\n", i)
 		}
-		fmt.Println("2.5.DONE")
+		fmt.Println("2.5.DONE", len(txs))
 
 		return &transactionBatches{txs, totalTxs}
 	}
