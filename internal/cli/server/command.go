@@ -101,7 +101,7 @@ func (c *Command) Run(args []string) int {
 		return 1
 	}
 
-	srv, err := NewServer(c.config)
+	srv, err := NewServer(c.config, WithGRPCAddress())
 	if err != nil {
 		c.UI.Error(err.Error())
 		return 1
