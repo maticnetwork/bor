@@ -51,7 +51,7 @@ require (
 	github.com/mattn/go-isatty v0.0.12
 	github.com/mitchellh/cli v1.1.2
 	github.com/mitchellh/go-homedir v1.1.0
-	github.com/naoina/toml v0.1.2-0.20170918210437-9fafd6967416
+	github.com/naoina/toml v0.1.2-0.20210730182554-e80af6068b28
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/peterh/liner v1.1.1-0.20190123174540-a2c9a5303de7
 	github.com/prometheus/tsdb v0.7.1
