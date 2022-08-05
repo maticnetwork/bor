@@ -244,6 +244,9 @@ type ChainValidator interface {
 	IsValidPeer(remoteHeader *types.Header, fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error)
 	IsValidChain(currentHeader *types.Header, chain []*types.Header) bool
 	ProcessCheckpoint(endBlockNum uint64, endBlockHash common.Hash)
-	GetCheckpointWhitelist() map[uint64]common.Hash
-	PurgeCheckpointWhitelist()
+	ProcessMilestone(endBlockNum uint64, endBlockHash common.Hash)
+	GetWhitelistedCheckpoint() (bool, uint64, common.Hash)
+	PurgeWhitelistedCheckpoint()
+	GetMilestone() (bool, uint64, common.Hash)
+	PurgeMilestone()
 }

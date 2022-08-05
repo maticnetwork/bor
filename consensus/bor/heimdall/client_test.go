@@ -15,6 +15,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
+	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
 
 	"github.com/stretchr/testify/require"
 )
@@ -26,11 +27,18 @@ var maxPortCheck int32 = 100
 // according to requirements.
 type HttpHandlerFake struct {
 	handleFetchCheckpoint http.HandlerFunc
+	handleFetchMilestone  http.HandlerFunc
 }
 
 func (h *HttpHandlerFake) GetCheckpointHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		h.handleFetchCheckpoint.ServeHTTP(w, r)
+	}
+}
+
+func (h *HttpHandlerFake) GetMilestoneHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		h.handleFetchMilestone.ServeHTTP(w, r)
 	}
 }
 
@@ -41,6 +49,11 @@ func CreateMockHeimdallServer(wg *sync.WaitGroup, port int32, handler *HttpHandl
 	// Create a route for fetching latest checkpoint
 	mux.HandleFunc("/checkpoints/latest", func(w http.ResponseWriter, r *http.Request) {
 		handler.GetCheckpointHandler()(w, r)
+	})
+
+	// Create a route for fetching milestone
+	mux.HandleFunc("/milestone", func(w http.ResponseWriter, r *http.Request) {
+		handler.GetMilestoneHandler()(w, r)
 	})
 
 	// Add other routes as per requirement
@@ -103,8 +116,56 @@ func TestFetchCheckpointFromMockHeimdall(t *testing.T) {
 
 	// Create a new heimdall client and use same port for connection
 	client := NewHeimdallClient(fmt.Sprintf("http://localhost:%d", port))
-	_, err = client.FetchCheckpoint(context.Background(), -1)
+	_, err = client.FetchCheckpoint(context.Background())
 	require.NoError(t, err, "expect no error in fetching checkpoint")
+
+	// Shutdown the server
+	err = srv.Shutdown(context.TODO())
+	require.NoError(t, err, "expect no error in shutting down mock heimdall server")
+
+	// Wait for `wg.Done()` to be called in the mock server's routine.
+	wg.Wait()
+}
+
+func TestFetchMilestoneFromMockHeimdall(t *testing.T) {
+	t.Parallel()
+
+	// Create a wait group for sending across the mock server
+	wg := &sync.WaitGroup{}
+	wg.Add(1)
+
+	// Initialize the fake handler and add a fake checkpoint handler function
+	handler := &HttpHandlerFake{}
+	handler.handleFetchMilestone = func(w http.ResponseWriter, _ *http.Request) {
+		err := json.NewEncoder(w).Encode(milestone.MilestoneResponse{
+			Height: "0",
+			Result: milestone.Milestone{
+				Proposer:   common.Address{},
+				StartBlock: big.NewInt(0),
+				EndBlock:   big.NewInt(512),
+				RootHash:   common.Hash{},
+				BorChainID: "15001",
+				Timestamp:  0,
+			},
+		})
+
+		if err != nil {
+			w.WriteHeader(500) // Return 500 Internal Server Error.
+		}
+	}
+
+	// Fetch available port starting from 50000
+	port, err := findAvailablePort(50000, 0)
+	require.NoError(t, err, "expect no error in finding available port")
+
+	// Create mock heimdall server and pass handler instance for setting up the routes
+	srv, err := CreateMockHeimdallServer(wg, port, handler)
+	require.NoError(t, err, "expect no error in starting mock heimdall server")
+
+	// Create a new heimdall client and use same port for connection
+	client := NewHeimdallClient(fmt.Sprintf("http://localhost:%d", port))
+	_, err = client.FetchMilestone(context.Background())
+	require.NoError(t, err, "expect no error in fetching milestone")
 
 	// Shutdown the server
 	err = srv.Shutdown(context.TODO())
@@ -150,6 +211,26 @@ func TestFetchShutdown(t *testing.T) {
 		}
 	}
 
+	handler.handleFetchMilestone = func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(6 * time.Second)
+
+		err := json.NewEncoder(w).Encode(milestone.MilestoneResponse{
+			Height: "0",
+			Result: milestone.Milestone{
+				Proposer:   common.Address{},
+				StartBlock: big.NewInt(0),
+				EndBlock:   big.NewInt(512),
+				RootHash:   common.Hash{},
+				BorChainID: "15001",
+				Timestamp:  0,
+			},
+		})
+
+		if err != nil {
+			w.WriteHeader(500) // Return 500 Internal Server Error.
+		}
+	}
+
 	// Fetch available port starting from 50000
 	port, err := findAvailablePort(50000, 0)
 	require.NoError(t, err, "expect no error in finding available port")
@@ -164,7 +245,16 @@ func TestFetchShutdown(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 
 	// Expect this to fail due to timeout
-	_, err = client.FetchCheckpoint(ctx, -1)
+	_, err = client.FetchCheckpoint(ctx)
+	require.Equal(t, "context deadline exceeded", err.Error(), "expect the function error to be a context deadline exeeded error")
+	require.Equal(t, "context deadline exceeded", ctx.Err().Error(), "expect the ctx error to be a context deadline exeeded error")
+
+	cancel()
+
+	ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+
+	// Expect this to fail due to timeout
+	_, err = client.FetchMilestone(ctx)
 	require.Equal(t, "context deadline exceeded", err.Error(), "expect the function error to be a context deadline exeeded error")
 	require.Equal(t, "context deadline exceeded", ctx.Err().Error(), "expect the ctx error to be a context deadline exeeded error")
 
@@ -178,6 +268,11 @@ func TestFetchShutdown(t *testing.T) {
 		w.WriteHeader(500) // Return 500 Internal Server Error.
 	}
 
+	handler.handleFetchMilestone = func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(10 * time.Millisecond)
+		w.WriteHeader(500) // Return 500 Internal Server Error.
+	}
+
 	ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second) // Use some high value for timeout
 
 	// Cancel the context after a delay until we make request
@@ -187,7 +282,20 @@ func TestFetchShutdown(t *testing.T) {
 	}(cancel)
 
 	// Expect this to fail due to cancellation
-	_, err = client.FetchCheckpoint(ctx, -1)
+	_, err = client.FetchCheckpoint(ctx)
+	require.Equal(t, "context canceled", err.Error(), "expect the function error to be a context cancelled error")
+	require.Equal(t, "context canceled", ctx.Err().Error(), "expect the ctx error to be a context cancelled error")
+
+	ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second) // Use some high value for timeout
+
+	// Cancel the context after a delay until we make request
+	go func(cancel context.CancelFunc) {
+		time.Sleep(10 * time.Millisecond)
+		cancel()
+	}(cancel)
+
+	// Expect this to fail due to cancellation
+	_, err = client.FetchCheckpoint(ctx)
 	require.Equal(t, "context canceled", err.Error(), "expect the function error to be a context cancelled error")
 	require.Equal(t, "context canceled", ctx.Err().Error(), "expect the ctx error to be a context cancelled error")
 
@@ -205,7 +313,11 @@ func TestFetchShutdown(t *testing.T) {
 	}()
 
 	// Expect this to fail due to shutdown
-	_, err = client.FetchCheckpoint(context.Background(), -1)
+	_, err = client.FetchCheckpoint(context.Background())
+	require.Equal(t, ErrShutdownDetected.Error(), err.Error(), "expect the function error to be a shutdown detected error")
+
+	// Expect this to fail due to shutdown
+	_, err = client.FetchMilestone(context.Background())
 	require.Equal(t, ErrShutdownDetected.Error(), err.Error(), "expect the function error to be a shutdown detected error")
 
 	// Shutdown the server

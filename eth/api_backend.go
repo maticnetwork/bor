@@ -360,10 +360,18 @@ func (b *EthAPIBackend) StateAtTransaction(ctx context.Context, block *types.Blo
 	return b.eth.stateAtTransaction(block, txIndex, reexec)
 }
 
-func (b *EthAPIBackend) GetCheckpointWhitelist() map[uint64]common.Hash {
-	return b.eth.Downloader().ChainValidator.GetCheckpointWhitelist()
+func (b *EthAPIBackend) GetWhitelistedCheckpoint() (bool, uint64, common.Hash) {
+	return b.eth.Downloader().ChainValidator.GetWhitelistedCheckpoint()
 }
 
-func (b *EthAPIBackend) PurgeCheckpointWhitelist() {
-	b.eth.Downloader().ChainValidator.PurgeCheckpointWhitelist()
+func (b *EthAPIBackend) GetMilestone() (bool, uint64, common.Hash) {
+	return b.eth.Downloader().ChainValidator.GetMilestone()
+}
+
+func (b *EthAPIBackend) PurgeWhitelistedCheckpoint() {
+	b.eth.Downloader().ChainValidator.PurgeWhitelistedCheckpoint()
+}
+
+func (b *EthAPIBackend) PurgeMilestone() {
+	b.eth.Downloader().ChainValidator.PurgeMilestone()
 }

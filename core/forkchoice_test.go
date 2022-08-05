@@ -231,10 +231,16 @@ func (w *chainValidatorFake) IsValidChain(current *types.Header, headers []*type
 	return w.validate(current, headers)
 }
 func (w *chainValidatorFake) ProcessCheckpoint(endBlockNum uint64, endBlockHash common.Hash) {}
-func (w *chainValidatorFake) GetCheckpointWhitelist() map[uint64]common.Hash {
-	return nil
+func (w *chainValidatorFake) ProcessMilestone(endBlockNum uint64, endBlockHash common.Hash)  {}
+func (w *chainValidatorFake) GetWhitelistedCheckpoint() (bool, uint64, common.Hash) {
+	return false, 0, common.Hash{}
 }
-func (w *chainValidatorFake) PurgeCheckpointWhitelist() {}
+
+func (w *chainValidatorFake) GetMilestone() (bool, uint64, common.Hash) {
+	return false, 0, common.Hash{}
+}
+func (w *chainValidatorFake) PurgeWhitelistedCheckpoint() {}
+func (w *chainValidatorFake) PurgeMilestone()             {}
 func (w *chainValidatorFake) GetCheckpoints(current, sidechainHeader *types.Header, sidechainCheckpoints []*types.Header) (map[uint64]*types.Header, error) {
 	return map[uint64]*types.Header{}, nil
 }

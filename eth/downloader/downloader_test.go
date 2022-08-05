@@ -83,7 +83,7 @@ func newTester() *downloadTester {
 	}
 
 	//nolint: staticcheck
-	tester.downloader = New(0, db, new(event.TypeMux), tester.chain, nil, tester.dropPeer, nil, whitelist.NewService(10))
+	tester.downloader = New(0, db, new(event.TypeMux), tester.chain, nil, tester.dropPeer, nil, whitelist.NewService())
 
 	return tester
 }
@@ -1431,10 +1431,17 @@ func (w *whitelistFake) IsValidChain(current *types.Header, headers []*types.Hea
 }
 func (w *whitelistFake) ProcessCheckpoint(_ uint64, _ common.Hash) {}
 
-func (w *whitelistFake) GetCheckpointWhitelist() map[uint64]common.Hash {
-	return nil
+func (w *whitelistFake) GetWhitelistedCheckpoint() (bool, uint64, common.Hash) {
+	return false, 0, common.Hash{}
 }
-func (w *whitelistFake) PurgeCheckpointWhitelist() {}
+func (w *whitelistFake) PurgeWhitelistedCheckpoint() {}
+
+func (w *whitelistFake) ProcessMilestone(_ uint64, _ common.Hash) {}
+func (w *whitelistFake) GetMilestone() (bool, uint64, common.Hash) {
+	return false, 0, common.Hash{}
+}
+func (w *whitelistFake) PurgeMilestone() {}
+
 func (w *whitelistFake) GetCheckpoints(current, sidechainHeader *types.Header, sidechainCheckpoints []*types.Header) (map[uint64]*types.Header, error) {
 	return map[uint64]*types.Header{}, nil
 }

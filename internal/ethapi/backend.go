@@ -99,8 +99,10 @@ type Backend interface {
 	GetBorBlockTransaction(ctx context.Context, txHash common.Hash) (*types.Transaction, common.Hash, uint64, uint64, error)
 	GetBorBlockTransactionWithBlockHash(ctx context.Context, txHash common.Hash, blockHash common.Hash) (*types.Transaction, common.Hash, uint64, uint64, error)
 	SubscribeChain2HeadEvent(ch chan<- core.Chain2HeadEvent) event.Subscription
-	GetCheckpointWhitelist() map[uint64]common.Hash
-	PurgeCheckpointWhitelist()
+	GetWhitelistedCheckpoint() (bool, uint64, common.Hash)
+	PurgeWhitelistedCheckpoint()
+	GetMilestone() (bool, uint64, common.Hash)
+	PurgeMilestone()
 
 	ChainConfig() *params.ChainConfig
 	Engine() consensus.Engine

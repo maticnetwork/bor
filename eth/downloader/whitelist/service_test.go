@@ -16,28 +16,45 @@ import (
 )
 
 // NewMockService creates a new mock whitelist service
-func NewMockService(maxCapacity uint, checkpointInterval uint64) *Service {
-	return &Service{
-		checkpointWhitelist: make(map[uint64]common.Hash),
-		checkpointOrder:     []uint64{},
-		maxCapacity:         maxCapacity,
-		checkpointInterval:  checkpointInterval,
+func NewMockService(maxCapacity uint, checkpointInterval uint64) *WhitelistService {
+	return &WhitelistService{
+
+		whitelist{
+			doExist:  false,
+			interval: 256,
+		},
+
+		milestone{
+			doExist:  false,
+			interval: 256,
+		},
 	}
 }
 
-// TestWhitelistCheckpoint checks the checkpoint whitelist map queue mechanism
-func TestWhitelistCheckpoint(t *testing.T) {
+// TestWhitelistCheckpoint checks the checkpoint whitelist map queue mechanism// TestMilestone checks the milestoneList map queue mechanism
+func TestWhitelistedCheckpoint(t *testing.T) {
 	t.Parallel()
 
 	s := NewMockService(10, 10)
-	for i := 0; i < 10; i++ {
-		s.enqueueCheckpointWhitelist(uint64(i), common.Hash{})
-	}
-	require.Equal(t, s.length(), 10, "expected 10 items in whitelist")
 
-	s.enqueueCheckpointWhitelist(11, common.Hash{})
-	s.dequeueCheckpointWhitelist()
-	require.Equal(t, s.length(), 10, "expected 10 items in whitelist")
+	require.Equal(t, s.whitelist.doExist, false, "expected false as no milestone exist at this point")
+
+	s.ProcessCheckpoint(11, common.Hash{})
+
+	require.Equal(t, s.whitelist.doExist, true, "expected true as milestone exist")
+}
+
+// TestMilestone checks the milestoneList map queue mechanism
+func TestMilestone(t *testing.T) {
+	t.Parallel()
+
+	s := NewMockService(10, 10)
+
+	require.Equal(t, s.milestone.doExist, false, "expected false as no milestone exist at this point")
+
+	s.ProcessMilestone(11, common.Hash{})
+
+	require.Equal(t, s.milestone.doExist, true, "expected true as milestone exist")
 }
 
 // TestIsValidPeer checks the IsValidPeer function in isolation
@@ -56,7 +73,12 @@ func TestIsValidPeer(t *testing.T) {
 	s.ProcessCheckpoint(uint64(0), common.Hash{})
 	s.ProcessCheckpoint(uint64(1), common.Hash{})
 
-	require.Equal(t, s.length(), 2, "expected 2 items in whitelist")
+	// add milestone entries and mock fetchHeadersByNumber function
+	s.ProcessMilestone(uint64(0), common.Hash{})
+	s.ProcessMilestone(uint64(1), common.Hash{})
+
+	require.Equal(t, s.whitelist.doExist, true, "expected true as checkpoint exists")
+	require.Equal(t, s.milestone.doExist, true, "expected true as milestone exists")
 
 	// create a false function, returning absolutely nothing
 	falseFetchHeadersByNumber := func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error) {
@@ -102,13 +124,74 @@ func TestIsValidPeer(t *testing.T) {
 
 	// add one more checkpoint whitelist entry
 	s.ProcessCheckpoint(uint64(2), common.Hash{})
-	require.Equal(t, s.length(), 3, "expected 3 items in whitelist")
+	require.Equal(t, s.whitelist.doExist, true, "expected true as checkpoint exists")
 
 	// case4: correct fetchHeadersByNumber function provided with wrong header
 	// for block number 2. Should consider the chain as invalid and throw an error
 	res, err = s.IsValidPeer(nil, fetchHeadersByNumber)
 	require.Equal(t, err, ErrCheckpointMismatch, "expected checkpoint mismatch error")
 	require.Equal(t, res, false, "expected chain to be invalid")
+
+	s.ProcessMilestone(uint64(2), common.Hash{})
+	// case3: correct fetchHeadersByNumber function provided, should consider the chain as valid
+	// create a mock function, returning a the required header
+	fetchHeadersByNumber = func(number uint64, _ int, _ int, _ bool) ([]*types.Header, []common.Hash, error) {
+		hash := common.Hash{}
+		header := types.Header{Number: big.NewInt(0)}
+
+		switch number {
+		case 0:
+			return []*types.Header{&header}, []common.Hash{hash}, nil
+		case 1:
+			header.Number = big.NewInt(1)
+			return []*types.Header{&header}, []common.Hash{hash}, nil
+		case 2:
+			header.Number = big.NewInt(2)
+			return []*types.Header{&header}, []common.Hash{hash}, nil
+		default:
+			return nil, nil, errors.New("invalid number")
+		}
+	}
+
+	res, err = s.IsValidPeer(nil, fetchHeadersByNumber)
+	require.NoError(t, err, "expected no error")
+	require.Equal(t, res, true, "expected chain to be valid")
+
+	// case3: correct fetchHeadersByNumber function provided, should consider the chain as valid
+	// create a mock function, returning a the required header
+	fetchHeadersByNumber = func(number uint64, _ int, _ int, _ bool) ([]*types.Header, []common.Hash, error) {
+		hash := common.Hash{}
+		header := types.Header{Number: big.NewInt(0)}
+
+		switch number {
+		case 0:
+			return []*types.Header{&header}, []common.Hash{hash}, nil
+		case 1:
+			header.Number = big.NewInt(1)
+			return []*types.Header{&header}, []common.Hash{hash}, nil
+		case 2:
+			header.Number = big.NewInt(2)
+			return []*types.Header{&header}, []common.Hash{hash}, nil
+
+		case 3:
+			header.Number = big.NewInt(2) // sending wrong header for misamatch
+			return []*types.Header{&header}, []common.Hash{hash}, nil
+		default:
+			return nil, nil, errors.New("invalid number")
+		}
+	}
+
+	//require.Equal(t, s.milestone.length(), 3, "expected 3 items in milestoneList")
+
+	//Add one more milestone in the list
+	s.ProcessMilestone(uint64(3), common.Hash{})
+
+	// case4: correct fetchHeadersByNumber function provided with wrong header
+	// for block number 2. Should consider the chain as invalid and throw an error
+	res, err = s.IsValidPeer(nil, fetchHeadersByNumber)
+	require.Equal(t, err, ErrMilestoneMismatch, "expected milestone mismatch error")
+	require.Equal(t, res, false, "expected chain to be invalid")
+
 }
 
 // TestIsValidChain checks the IsValidChain function in isolation
@@ -118,7 +201,7 @@ func TestIsValidChain(t *testing.T) {
 
 	s := NewMockService(10, 10)
 	chainA := createMockChain(1, 20) // A1->A2...A19->A20
-	// case1: no checkpoint whitelist, should consider the chain as valid
+	// case1: no checkpoint whitelist and no milestone, should consider the chain as valid
 	res := s.IsValidChain(nil, chainA)
 	require.Equal(t, res, true, "expected chain to be valid")
 
@@ -128,21 +211,37 @@ func TestIsValidChain(t *testing.T) {
 	s.ProcessCheckpoint(tempChain[0].Number.Uint64(), tempChain[0].Hash())
 	s.ProcessCheckpoint(tempChain[1].Number.Uint64(), tempChain[1].Hash())
 
-	require.Equal(t, s.length(), 2, "expected 2 items in whitelist")
+	require.Equal(t, s.whitelist.doExist, true, "expected true as checkpoint exists")
+
+	// add mock milestone entries
+	s.ProcessMilestone(tempChain[0].Number.Uint64(), tempChain[0].Hash())
+	s.ProcessMilestone(tempChain[1].Number.Uint64(), tempChain[1].Hash())
+
+	//require.Equal(t, s.milestone.length(), 2, "expected 2 items in milestoneList")
 
 	// case2: We're behind the oldest whitelisted block entry, should consider
-	// the chain as valid as we're still far behind the latest blocks
+	// the chain as invalid as we won't require the chain.
 	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
-	require.Equal(t, res, true, "expected chain to be valid")
+	require.Equal(t, res, false, "expected chain to be valid")
 
 	// Clear checkpoint whitelist and add blocks A5 and A15 in whitelist
-	s.PurgeCheckpointWhitelist()
+	s.PurgeWhitelistedCheckpoint()
 	s.ProcessCheckpoint(chainA[5].Number.Uint64(), chainA[5].Hash())
 	s.ProcessCheckpoint(chainA[15].Number.Uint64(), chainA[15].Hash())
 
-	require.Equal(t, s.length(), 2, "expected 2 items in whitelist")
+	require.Equal(t, s.whitelist.doExist, true, "expected true as checkpoint exists.")
 
 	// case3: Try importing a past chain having valid checkpoint, should
+	// consider the chain as invalid as still lastest milestone is ahead of the chain.
+	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
+	require.Equal(t, res, false, "expected chain to be valid")
+
+	// Clear milestone and add blocks A5 and A15 in whitelist
+	s.PurgeMilestone()
+	s.ProcessMilestone(chainA[5].Number.Uint64(), chainA[5].Hash())
+	s.ProcessMilestone(chainA[15].Number.Uint64(), chainA[15].Hash())
+
+	// case4: Try importing a past chain having valid checkpoint, should
 	// consider the chain as valid
 	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
 	require.Equal(t, res, true, "expected chain to be valid")
@@ -150,14 +249,18 @@ func TestIsValidChain(t *testing.T) {
 	// Clear checkpoint whitelist and mock blocks in whitelist
 	tempChain = createMockChain(20, 20) // A20
 
-	s.PurgeCheckpointWhitelist()
+	s.PurgeWhitelistedCheckpoint()
 	s.ProcessCheckpoint(tempChain[0].Number.Uint64(), tempChain[0].Hash())
 
-	require.Equal(t, s.length(), 1, "expected 1 items in whitelist")
+	require.Equal(t, s.whitelist.doExist, true, "expected true ")
 
-	// case4: Try importing a past chain having invalid checkpoint
+	// case5: Try importing a past chain having invalid checkpoint
 	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
 	require.Equal(t, res, false, "expected chain to be invalid")
+
+	// case6: Try importing a future chain but within interval
+	res = s.IsValidChain(tempChain[len(tempChain)-1], tempChain)
+	require.Equal(t, res, true, "expected chain to be invalid")
 
 	// create a future chain to be imported of length <= `checkpointInterval`
 	chainB := createMockChain(21, 30) // B21->B22...B29->B30
@@ -167,7 +270,7 @@ func TestIsValidChain(t *testing.T) {
 	require.Equal(t, res, true, "expected chain to be valid")
 
 	// create a future chain to be imported of length > `checkpointInterval`
-	chainB = createMockChain(21, 40) // C21->C22...C39->C40
+	chainB = createMockChain(21, 300) // C21->C22...C39->C40...C->256
 
 	// case5: Try importing a future chain of unacceptable length
 	res = s.IsValidChain(chainA[len(chainA)-1], chainB)

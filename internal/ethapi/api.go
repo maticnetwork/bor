@@ -2183,14 +2183,25 @@ func (api *PrivateDebugAPI) SetHead(number hexutil.Uint64) {
 }
 
 // GetCheckpointWhitelist retrieves the current checkpoint whitelist
-// entries (of the form block number -> block hash)
-func (api *PrivateDebugAPI) GetCheckpointWhitelist() map[uint64]common.Hash {
-	return api.b.GetCheckpointWhitelist()
+//  entry (of the form doExist,block number,block hash)
+func (api *PrivateDebugAPI) GetWhitelistedCheckpoint() (bool, uint64, common.Hash) {
+	return api.b.GetWhitelistedCheckpoint()
 }
 
-// PurgeCheckpointWhitelist purges the current checkpoint whitelist entries
-func (api *PrivateDebugAPI) PurgeCheckpointWhitelist() {
-	api.b.PurgeCheckpointWhitelist()
+// PurgeCheckpointWhitelist purges the current checkpoint whitelist entry
+func (api *PrivateDebugAPI) PurgeWhitelistedCheckpoint() {
+	api.b.PurgeWhitelistedCheckpoint()
+}
+
+// GetMilestoneList retrieves the current milestones entry
+// entry (of the form doExist,block number,block hash)
+func (api *PrivateDebugAPI) GetMilestone() (bool, uint64, common.Hash) {
+	return api.b.GetMilestone()
+}
+
+// PurgeMilestoneList purges the current milestones entry
+func (api *PrivateDebugAPI) PurgeMilestone() {
+	api.b.PurgeMilestone()
 }
 
 // PublicNetAPI offers network related RPC methods
