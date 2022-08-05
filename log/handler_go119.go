@@ -6,18 +6,18 @@ import "sync/atomic"
 
 // swapHandler wraps another handler that may be swapped out
 // dynamically at runtime in a thread-safe fashion.
-type swapHandler struct {
-	handler atomic.Pointer[Handler]
+type swapHandler[T Handler] struct {
+	handler atomic.Pointer[T]
 }
 
-func (h *swapHandler) Log(r *Record) error {
+func (h *swapHandler[T]) Log(r *Record) error {
 	return (*h.handler.Load()).Log(r)
 }
 
-func (h *swapHandler) Swap(newHandler Handler) {
+func (h *swapHandler[T]) Swap(newHandler T) {
 	h.handler.Store(&newHandler)
 }
 
-func (h *swapHandler) Get() Handler {
+func (h *swapHandler[T]) Get() T {
 	return *h.handler.Load()
 }
