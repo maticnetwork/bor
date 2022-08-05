@@ -44,7 +44,6 @@ geth:
 	@echo "Run \"$(GOBIN)/geth\" to launch geth."
 
 all:
-	go mod tidy
 	$(GORUN) build/ci.go install
 
 android:
