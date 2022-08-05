@@ -2607,6 +2607,7 @@ func getTransactionGen(t *rapid.T, keys []*acc, nonces []uint64, localKey *acc, 
 
 	gasPriceUint := rapid.Uint64Range(gasPriceMin, gasPriceMax).Draw(t, "gasPrice").(uint64)
 	fmt.Println("accIDx.4", localIdx, gasPriceMin, gasPriceMax, gasPriceUint)
+	return &testTx{}
 	gasPrice := big.NewInt(0).SetUint64(gasPriceUint)
 	fmt.Println("accIDx.5", localIdx, gasPriceMin, gasPriceMax, gasPrice)
 	fmt.Println("accIDx.6", localIdx, gasLimitMin, gasLimitMax)
