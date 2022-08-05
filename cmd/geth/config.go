@@ -26,6 +26,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/naoina/toml"
 	"gopkg.in/urfave/cli.v1"
 
 	"github.com/ethereum/go-ethereum/accounts/external"
@@ -41,7 +42,6 @@ import (
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/params"
-	"github.com/naoina/toml"
 )
 
 var (
