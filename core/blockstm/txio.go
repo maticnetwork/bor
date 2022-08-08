@@ -1,21 +1,19 @@
 //nolint: unused
 package blockstm
 
-import "encoding/base64"
-
 const (
 	ReadKindMap     = 0
 	ReadKindStorage = 1
 )
 
 type ReadDescriptor struct {
-	Path []byte
+	Path Key
 	Kind int
 	V    Version
 }
 
 type WriteDescriptor struct {
-	Path []byte
+	Path Key
 	V    Version
 	Val  interface{}
 }
@@ -31,14 +29,14 @@ func (txo TxnOutput) hasNewWrite(cmpSet []WriteDescriptor) bool {
 		return true
 	}
 
-	cmpMap := map[string]bool{base64.StdEncoding.EncodeToString(cmpSet[0].Path): true}
+	cmpMap := map[Key]bool{cmpSet[0].Path: true}
 
 	for i := 1; i < len(cmpSet); i++ {
-		cmpMap[base64.StdEncoding.EncodeToString(cmpSet[i].Path)] = true
+		cmpMap[cmpSet[i].Path] = true
 	}
 
 	for _, v := range txo {
-		if !cmpMap[base64.StdEncoding.EncodeToString(v.Path)] {
+		if !cmpMap[v.Path] {
 			return true
 		}
 	}

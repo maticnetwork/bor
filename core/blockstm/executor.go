@@ -34,21 +34,29 @@ type ExecVersionView struct {
 func (ev *ExecVersionView) Execute() (er ExecResult) {
 	er.ver = ev.ver
 	if er.err = ev.et.Execute(ev.mvh, ev.ver.Incarnation); er.err != nil {
-		log.Debug("blockstm executed task failed", "Tx index", ev.ver.TxnIndex, "incarnation", ev.ver.Incarnation, "err", er.err)
 		return
 	}
 
 	er.txIn = ev.et.MVReadList()
 	er.txOut = ev.et.MVWriteList()
 	er.txAllOut = ev.et.MVFullWriteList()
-	log.Debug("blockstm executed task", "Tx index", ev.ver.TxnIndex, "incarnation", ev.ver.Incarnation, "err", er.err)
 
 	return
 }
 
-var ErrExecAbort = fmt.Errorf("execution aborted with dependency")
+type ErrExecAbortError struct {
+	DependencyIndices []int
+}
 
-const numGoProcs = 4
+func (e ErrExecAbortError) Error() string {
+	if len(e.DependencyIndices) > 0 {
+		return fmt.Sprintf("Execution aborted due to dependency %d", e.DependencyIndices)
+	} else {
+		return "Execution aborted"
+	}
+}
+
+const numGoProcs = 10
 
 // nolint: gocognit
 func ExecuteParallel(tasks []ExecTask) (lastTxIO *TxnInputOutput, err error) {
@@ -57,8 +65,9 @@ func ExecuteParallel(tasks []ExecTask) (lastTxIO *TxnInputOutput, err error) {
 	}
 
 	chTasks := make(chan ExecVersionView, len(tasks))
+	chSpeculativeTasks := make(chan ExecVersionView, len(tasks))
 	chResults := make(chan ExecResult, len(tasks))
-	chDone := make(chan bool)
+	chSpeculativeResults := make(chan ExecResult, len(tasks))
 	mutMap := map[common.Address]*sync.RWMutex{}
 
 	for _, t := range tasks {
@@ -69,44 +78,47 @@ func ExecuteParallel(tasks []ExecTask) (lastTxIO *TxnInputOutput, err error) {
 
 	var cntExec, cntSuccess, cntAbort, cntTotalValidations, cntValidationFail int
 
+	mvh := MakeMVHashMap()
+
 	for i := 0; i < numGoProcs; i++ {
-		go func(procNum int, t chan ExecVersionView) {
-		Loop:
-			for {
-				select {
-				case task := <-t:
-					{
-						m := mutMap[task.sender]
-						if !m.TryLock() {
-							// why not this? -> chTasks <- task
-							t <- task
-						} else {
-							res := task.Execute()
-							chResults <- res
-							m.Unlock()
+		go func(procNum int) {
+			if procNum < numGoProcs/2 { // nolint: nestif
+				for task := range chSpeculativeTasks {
+					m := mutMap[task.sender]
+					if !m.TryLock() {
+						chSpeculativeTasks <- task
+					} else {
+						res := task.Execute()
+						if res.err == nil {
+							mvh.FlushMVWriteSet(res.txAllOut)
 						}
+						chSpeculativeResults <- res
+						m.Unlock()
 					}
-				case <-chDone:
-					break Loop
+				}
+			} else {
+				for task := range chTasks {
+					res := task.Execute()
+					if res.err == nil {
+						mvh.FlushMVWriteSet(res.txAllOut)
+					}
+					chResults <- res
 				}
 			}
-			log.Debug("blockstm", "proc done", procNum) // TODO: logging ...
-		}(i, chTasks)
+		}(i)
 	}
-
-	mvh := MakeMVHashMap()
 
 	execTasks := makeStatusManager(len(tasks))
 	validateTasks := makeStatusManager(0)
 
 	// bootstrap execution
-	for x := 0; x < numGoProcs; x++ {
+
+	for x := 0; x < numGoProcs/2; x++ {
 		tx := execTasks.takeNextPending()
 		if tx != -1 {
 			cntExec++
 
-			log.Debug("blockstm", "bootstrap: proc", x, "executing task", tx)
-			chTasks <- ExecVersionView{ver: Version{tx, 0}, et: tasks[tx], mvh: mvh, sender: tasks[tx].Sender()}
+			chSpeculativeTasks <- ExecVersionView{ver: Version{tx, 0}, et: tasks[tx], mvh: mvh, sender: tasks[tx].Sender()}
 		}
 	}
 
@@ -116,104 +128,116 @@ func ExecuteParallel(tasks []ExecTask) (lastTxIO *TxnInputOutput, err error) {
 	diagExecSuccess := make([]int, len(tasks))
 	diagExecAbort := make([]int, len(tasks))
 
+	estimateDeps := make(map[int][]int, len(tasks))
+
+	for i := 0; i < len(tasks); i++ {
+		estimateDeps[i] = make([]int, 0)
+	}
+
 	for {
-		res := <-chResults
-		switch res.err {
-		case nil:
-			{
-				mvh.FlushMVWriteSet(res.txAllOut)
-				lastTxIO.recordRead(res.ver.TxnIndex, res.txIn)
-				if res.ver.Incarnation == 0 {
-					lastTxIO.recordWrite(res.ver.TxnIndex, res.txOut)
-					lastTxIO.recordAllWrite(res.ver.TxnIndex, res.txAllOut)
-				} else {
-					if res.txAllOut.hasNewWrite(lastTxIO.AllWriteSet(res.ver.TxnIndex)) {
-						log.Debug("blockstm", "Revalidate completed txs greater than current tx: ", res.ver.TxnIndex)
-						validateTasks.pushPendingSet(execTasks.getRevalidationRange(res.ver.TxnIndex))
-					}
-
-					prevWrite := lastTxIO.AllWriteSet(res.ver.TxnIndex)
-
-					// Remove entries that were previously written but are no longer written
-
-					cmpMap := make(map[string]bool)
-
-					for _, w := range res.txAllOut {
-						cmpMap[string(w.Path)] = true
-					}
-
-					for _, v := range prevWrite {
-						if _, ok := cmpMap[string(v.Path)]; !ok {
-							mvh.Delete(v.Path, res.ver.TxnIndex)
-						}
-					}
-
-					lastTxIO.recordWrite(res.ver.TxnIndex, res.txOut)
-					lastTxIO.recordAllWrite(res.ver.TxnIndex, res.txAllOut)
-				}
-				validateTasks.pushPending(res.ver.TxnIndex)
-				execTasks.markComplete(res.ver.TxnIndex)
-				if diagExecSuccess[res.ver.TxnIndex] > 0 && diagExecAbort[res.ver.TxnIndex] == 0 {
-					log.Debug("blockstm", "got multiple successful execution w/o abort?", "Tx", res.ver.TxnIndex, "incarnation", res.ver.Incarnation)
-				}
-				diagExecSuccess[res.ver.TxnIndex]++
-				cntSuccess++
-			}
-		case ErrExecAbort:
-			{
-				// bit of a subtle / tricky bug here. this adds the tx back to pending ...
-				execTasks.revertInProgress(res.ver.TxnIndex)
-				// ... but the incarnation needs to be bumped
-				txIncarnations[res.ver.TxnIndex]++
-				diagExecAbort[res.ver.TxnIndex]++
-				cntAbort++
-			}
-		default:
-			{
-				err = res.err
-				break
-			}
+		var res ExecResult
+		if len(chResults) > 0 {
+			res = <-chResults
+		} else if len(chSpeculativeResults) > 0 {
+			res = <-chSpeculativeResults
+		} else {
+			continue
 		}
 
-		// if we got more work, queue one up...
-		nextTx := execTasks.takeNextPending()
-		if nextTx != -1 {
-			cntExec++
-			chTasks <- ExecVersionView{ver: Version{nextTx, txIncarnations[nextTx]}, et: tasks[nextTx], mvh: mvh, sender: tasks[nextTx].Sender()}
+		if res.err == nil { //nolint:nestif
+			lastTxIO.recordRead(res.ver.TxnIndex, res.txIn)
+
+			if res.ver.Incarnation == 0 {
+				lastTxIO.recordWrite(res.ver.TxnIndex, res.txOut)
+				lastTxIO.recordAllWrite(res.ver.TxnIndex, res.txAllOut)
+			} else {
+				if res.txAllOut.hasNewWrite(lastTxIO.AllWriteSet(res.ver.TxnIndex)) {
+					validateTasks.pushPendingSet(execTasks.getRevalidationRange(res.ver.TxnIndex + 1))
+				}
+
+				prevWrite := lastTxIO.AllWriteSet(res.ver.TxnIndex)
+
+				// Remove entries that were previously written but are no longer written
+
+				cmpMap := make(map[Key]bool)
+
+				for _, w := range res.txAllOut {
+					cmpMap[w.Path] = true
+				}
+
+				for _, v := range prevWrite {
+					if _, ok := cmpMap[v.Path]; !ok {
+						mvh.Delete(v.Path, res.ver.TxnIndex)
+					}
+				}
+
+				lastTxIO.recordWrite(res.ver.TxnIndex, res.txOut)
+				lastTxIO.recordAllWrite(res.ver.TxnIndex, res.txAllOut)
+			}
+
+			validateTasks.pushPending(res.ver.TxnIndex)
+			execTasks.markComplete(res.ver.TxnIndex)
+			diagExecSuccess[res.ver.TxnIndex]++
+			cntSuccess++
+
+			execTasks.removeDependency(res.ver.TxnIndex)
+		} else if execErr, ok := res.err.(ErrExecAbortError); ok {
+
+			addedDependencies := false
+
+			if len(execErr.DependencyIndices) > 0 {
+				for _, dep := range execErr.DependencyIndices {
+					l := len(estimateDeps[res.ver.TxnIndex])
+					for l > 0 && estimateDeps[res.ver.TxnIndex][l-1] > dep {
+						execTasks.removeDependency(estimateDeps[res.ver.TxnIndex][l-1])
+						estimateDeps[res.ver.TxnIndex] = estimateDeps[res.ver.TxnIndex][:l-1]
+						l--
+					}
+				}
+				addedDependencies = execTasks.addDependencies(execErr.DependencyIndices, res.ver.TxnIndex)
+			} else if len(execTasks.blockCount[res.ver.TxnIndex]) == 0 {
+				estimate := 0
+
+				if len(estimateDeps[res.ver.TxnIndex]) > 0 {
+					estimate = estimateDeps[res.ver.TxnIndex][len(estimateDeps[res.ver.TxnIndex])-1]
+				}
+				addedDependencies = execTasks.addDependencies([]int{estimate}, res.ver.TxnIndex)
+				newEstimate := estimate + 1
+				if newEstimate >= res.ver.TxnIndex {
+					newEstimate = res.ver.TxnIndex - 1
+				}
+				estimateDeps[res.ver.TxnIndex] = append(estimateDeps[res.ver.TxnIndex], newEstimate)
+			}
+
+			execTasks.clearInProgress(res.ver.TxnIndex)
+			if !addedDependencies {
+				execTasks.pushPending(res.ver.TxnIndex)
+			}
+			txIncarnations[res.ver.TxnIndex]++
+			diagExecAbort[res.ver.TxnIndex]++
+			cntAbort++
+		} else {
+			err = res.err
+			break
 		}
 
 		// do validations ...
 		maxComplete := execTasks.maxAllComplete()
 
-		const validationIncrement = 2
-
-		cntValidate := validateTasks.countPending()
-		// if we're currently done with all execution tasks then let's validate everything; otherwise do one increment ...
-		if execTasks.countComplete() != len(tasks) && cntValidate > validationIncrement {
-			cntValidate = validationIncrement
-		}
-
 		var toValidate []int
 
-		for i := 0; i < cntValidate; i++ {
-			if validateTasks.minPending() <= maxComplete {
-				toValidate = append(toValidate, validateTasks.takeNextPending())
-			} else {
-				break
-			}
+		for validateTasks.minPending() <= maxComplete && validateTasks.minPending() >= 0 {
+			toValidate = append(toValidate, validateTasks.takeNextPending())
 		}
 
 		for i := 0; i < len(toValidate); i++ {
 			cntTotalValidations++
 
 			tx := toValidate[i]
-			log.Debug("blockstm", "validating task", tx)
 
 			if ValidateVersion(tx, lastTxIO, mvh) {
-				log.Debug("blockstm", "* completed validation task", tx)
 				validateTasks.markComplete(tx)
 			} else {
-				log.Debug("blockstm", "* validation task FAILED", tx)
 				cntValidationFail++
 				diagExecAbort[tx]++
 				for _, v := range lastTxIO.AllWriteSet(tx) {
@@ -232,28 +256,37 @@ func ExecuteParallel(tasks []ExecTask) (lastTxIO *TxnInputOutput, err error) {
 			}
 		}
 
+		maxValidated := validateTasks.maxAllComplete()
+
 		// if we didn't queue work previously, do check again so we keep making progress ...
-		if nextTx == -1 {
-			nextTx = execTasks.takeNextPending()
+		if execTasks.minPending() != -1 && execTasks.minPending() <= maxValidated+10 {
+			nextTx := execTasks.takeNextPending()
 			if nextTx != -1 {
 				cntExec++
 
-				log.Debug("blockstm", "# tx queued up", nextTx)
 				chTasks <- ExecVersionView{ver: Version{nextTx, txIncarnations[nextTx]}, et: tasks[nextTx], mvh: mvh, sender: tasks[nextTx].Sender()}
 			}
 		}
 
+		for execTasks.minPending() != -1 && len(chSpeculativeTasks) < numGoProcs/2 {
+			nextTx := execTasks.takeNextPending()
+			if nextTx != -1 {
+				cntExec++
+
+				chSpeculativeTasks <- ExecVersionView{ver: Version{nextTx, txIncarnations[nextTx]}, et: tasks[nextTx], mvh: mvh, sender: tasks[nextTx].Sender()}
+			}
+		}
+
 		if validateTasks.countComplete() == len(tasks) && execTasks.countComplete() == len(tasks) {
-			log.Debug("blockstm exec summary", "execs", cntExec, "success", cntSuccess, "aborts", cntAbort, "validations", cntTotalValidations, "failures", cntValidationFail)
+			log.Debug("blockstm exec summary", "execs", cntExec, "success", cntSuccess, "aborts", cntAbort, "validations", cntTotalValidations, "failures", cntValidationFail, "#tasks/#execs", fmt.Sprintf("%.2f%%", float64(len(tasks))/float64(cntExec)*100))
 			break
 		}
 	}
 
-	for i := 0; i < numGoProcs; i++ {
-		chDone <- true
-	}
 	close(chTasks)
+	close(chSpeculativeTasks)
 	close(chResults)
+	close(chSpeculativeResults)
 
 	return
 }

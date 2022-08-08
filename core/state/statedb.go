@@ -83,10 +83,10 @@ type StateDB struct {
 	// Block-stm related fields
 	mvHashmap       *blockstm.MVHashMap
 	incarnation     int
-	readMap         map[string]blockstm.ReadDescriptor
-	writeMap        map[string]blockstm.WriteDescriptor
+	readMap         map[blockstm.Key]blockstm.ReadDescriptor
+	writeMap        map[blockstm.Key]blockstm.WriteDescriptor
 	newStateObjects map[common.Address]struct{}
-	invalidRead     bool
+	deps            map[int]bool
 
 	// DB error.
 	// State objects are used by the consensus core and VM which are
@@ -181,9 +181,9 @@ func (s *StateDB) MVWriteList() []blockstm.WriteDescriptor {
 	writes := make([]blockstm.WriteDescriptor, 0, len(s.writeMap))
 
 	for _, v := range s.writeMap {
-		if len(v.Path) != common.AddressLength {
+		if !v.Path.IsAddress() {
 			writes = append(writes, v)
-		} else if _, ok := s.newStateObjects[common.BytesToAddress(v.Path)]; ok {
+		} else if _, ok := s.newStateObjects[common.BytesToAddress(v.Path[:common.AddressLength])]; ok {
 			writes = append(writes, v)
 		}
 	}
@@ -201,7 +201,7 @@ func (s *StateDB) MVFullWriteList() []blockstm.WriteDescriptor {
 	return writes
 }
 
-func (s *StateDB) MVReadMap() map[string]blockstm.ReadDescriptor {
+func (s *StateDB) MVReadMap() map[blockstm.Key]blockstm.ReadDescriptor {
 	return s.readMap
 }
 
@@ -217,33 +217,56 @@ func (s *StateDB) MVReadList() []blockstm.ReadDescriptor {
 
 func (s *StateDB) ensureReadMap() {
 	if s.readMap == nil {
-		s.readMap = make(map[string]blockstm.ReadDescriptor)
+		s.readMap = make(map[blockstm.Key]blockstm.ReadDescriptor)
 	}
 }
 
 func (s *StateDB) ensureWriteMap() {
 	if s.writeMap == nil {
-		s.writeMap = make(map[string]blockstm.WriteDescriptor)
+		s.writeMap = make(map[blockstm.Key]blockstm.WriteDescriptor)
+	}
+}
+
+func (s *StateDB) ensureDepsMap() {
+	if s.deps == nil {
+		s.deps = make(map[int]bool)
 	}
 }
 
 func (s *StateDB) HadInvalidRead() bool {
-	return s.invalidRead
+	s.ensureDepsMap()
+	return len(s.deps) > 0
+}
+
+func (s *StateDB) DepTxIndex() []int {
+	s.ensureDepsMap()
+	deps := make([]int, 0, len(s.deps))
+
+	for k := range s.deps {
+		deps = append(deps, k)
+	}
+
+	return deps
 }
 
 func (s *StateDB) SetIncarnation(inc int) {
 	s.incarnation = inc
 }
 
-func MVRead[T any](s *StateDB, k []byte, defaultV T, readStorage func(s *StateDB) T) (v T) {
+type StorageVal[T any] struct {
+	Value *T
+}
+
+func MVRead[T any](s *StateDB, k blockstm.Key, defaultV T, readStorage func(s *StateDB) T) (v T) {
 	if s.mvHashmap == nil {
 		return readStorage(s)
 	}
 
 	s.ensureReadMap()
+	s.ensureDepsMap()
 
 	if s.writeMap != nil {
-		if _, ok := s.writeMap[string(k)]; ok {
+		if _, ok := s.writeMap[k]; ok {
 			return readStorage(s)
 		}
 	}
@@ -267,32 +290,31 @@ func MVRead[T any](s *StateDB, k []byte, defaultV T, readStorage func(s *StateDB
 		}
 	case blockstm.MVReadResultDependency:
 		{
-			s.invalidRead = true
+			s.deps[res.DepIdx()] = true
 			return defaultV
 		}
 	case blockstm.MVReadResultNone:
 		{
-			v = readStorage(s)
+			readStorage(s)
 			rd.Kind = blockstm.ReadKindStorage
 		}
 	default:
 		return defaultV
 	}
 
-	mk := string(k)
 	// TODO: I assume we don't want to overwrite an existing read because this could - for example - change a storage
 	//  read to map if the same value is read multiple times.
-	if _, ok := s.readMap[mk]; !ok {
-		s.readMap[mk] = rd
+	if _, ok := s.readMap[k]; !ok {
+		s.readMap[k] = rd
 	}
 
 	return
 }
 
-func MVWrite(s *StateDB, k []byte) {
+func MVWrite(s *StateDB, k blockstm.Key) {
 	if s.mvHashmap != nil {
 		s.ensureWriteMap()
-		s.writeMap[string(k)] = blockstm.WriteDescriptor{
+		s.writeMap[k] = blockstm.WriteDescriptor{
 			Path: k,
 			V:    s.Version(),
 			Val:  s,
@@ -300,12 +322,12 @@ func MVWrite(s *StateDB, k []byte) {
 	}
 }
 
-func MVWritten(s *StateDB, k []byte) bool {
+func MVWritten(s *StateDB, k blockstm.Key) bool {
 	if s.mvHashmap == nil || s.writeMap == nil {
 		return false
 	}
 
-	_, ok := s.writeMap[string(k)]
+	_, ok := s.writeMap[k]
 
 	return ok
 }
@@ -324,30 +346,33 @@ func (sw *StateDB) ApplyMVWriteSet(writes []blockstm.WriteDescriptor) {
 		path := writes[i].Path
 		sr := writes[i].Val.(*StateDB)
 
-		keyLength := len(path)
-
-		if keyLength == common.AddressLength {
-			sw.GetOrNewStateObject(common.BytesToAddress(path))
-		} else if keyLength == (common.AddressLength + common.HashLength) {
-			addr := common.BytesToAddress(path[:common.AddressLength])
-			subPath := common.BytesToHash(path[common.AddressLength:])
-			sw.SetState(addr, subPath, sr.GetState(addr, subPath))
+		if path.IsAddress() {
+			sw.GetOrNewStateObject(path.GetAddress())
+		} else if path.IsState() {
+			addr := path.GetAddress()
+			stateKey := path.GetStateKey()
+			state := sr.GetState(addr, stateKey)
+			sw.SetState(addr, stateKey, state)
 		} else {
-			addr := common.BytesToAddress(path[:common.AddressLength])
-			switch path[keyLength-1] {
-			case balancePath:
+			addr := path.GetAddress()
+			switch path.GetSubpath() {
+			case BalancePath:
 				sw.SetBalance(addr, sr.GetBalance(addr))
-			case noncePath:
+			case NoncePath:
 				sw.SetNonce(addr, sr.GetNonce(addr))
-			case codePath:
+			case CodePath:
 				sw.SetCode(addr, sr.GetCode(addr))
-			case suicidePath:
+			case CodeSizePath:
+				continue
+			case CodeHashPath:
+				continue
+			case SuicidePath:
 				stateObject := sr.getDeletedStateObject(addr)
 				if stateObject != nil && stateObject.deleted {
 					sw.Suicide(addr)
 				}
 			default:
-				panic(fmt.Errorf("unknown key type: %d", path[keyLength-1]))
+				panic(fmt.Errorf("unknown key type: %d", path.GetSubpath()))
 			}
 		}
 	}
@@ -373,7 +398,7 @@ func (s *StateDB) GetReadMapDump() []DumpStruct {
 			TxInc:  s.incarnation,
 			VerIdx: val.V.TxnIndex,
 			VerInc: val.V.Incarnation,
-			Path:   val.Path,
+			Path:   val.Path[:],
 			Op:     "Read\n",
 		}
 		res = append(res, *temp)
@@ -393,7 +418,7 @@ func (s *StateDB) GetWriteMapDump() []DumpStruct {
 			TxInc:  s.incarnation,
 			VerIdx: val.V.TxnIndex,
 			VerInc: val.V.Incarnation,
-			Path:   val.Path,
+			Path:   val.Path[:],
 			Op:     "Write\n",
 		}
 		res = append(res, *temp)
@@ -512,17 +537,19 @@ func (s *StateDB) Empty(addr common.Address) bool {
 }
 
 // Create a unique path for special fields (e.g. balance, code) in a state object.
-func subPath(prefix []byte, s uint8) []byte {
-	path := append(prefix, common.Hash{}.Bytes()...) // append a full empty hash to avoid collision with storage state
-	path = append(path, s)                           // append the special field identifier
+// func subPath(prefix []byte, s uint8) [blockstm.KeyLength]byte {
+// 	path := append(prefix, common.Hash{}.Bytes()...) // append a full empty hash to avoid collision with storage state
+// 	path = append(path, s)                           // append the special field identifier
 
-	return path
-}
+// 	return path
+// }
 
-const balancePath = 1
-const noncePath = 2
-const codePath = 3
-const suicidePath = 4
+const BalancePath = 1
+const NoncePath = 2
+const CodePath = 3
+const CodeSizePath = 4
+const CodeHashPath = 5
+const SuicidePath = 6
 
 // GetBalance retrieves the balance from the given address or 0 if object not found
 func (s *StateDB) GetBalance(addr common.Address) *big.Int {
@@ -530,7 +557,7 @@ func (s *StateDB) GetBalance(addr common.Address) *big.Int {
 		return common.Big0
 	}
 
-	return MVRead(s, subPath(addr.Bytes(), balancePath), common.Big0, func(s *StateDB) *big.Int {
+	return MVRead(s, blockstm.NewSubpathKey(addr, BalancePath), common.Big0, func(s *StateDB) *big.Int {
 		stateObject := s.getStateObject(addr)
 		if stateObject != nil {
 			return stateObject.Balance()
@@ -545,7 +572,7 @@ func (s *StateDB) GetNonce(addr common.Address) uint64 {
 		return 0
 	}
 
-	return MVRead(s, subPath(addr.Bytes(), noncePath), 0, func(s *StateDB) uint64 {
+	return MVRead(s, blockstm.NewSubpathKey(addr, NoncePath), 0, func(s *StateDB) uint64 {
 		stateObject := s.getStateObject(addr)
 		if stateObject != nil {
 			return stateObject.Nonce()
@@ -572,7 +599,7 @@ func (s *StateDB) GetCode(addr common.Address) []byte {
 		return nil
 	}
 
-	return MVRead(s, subPath(addr.Bytes(), codePath), nil, func(s *StateDB) []byte {
+	return MVRead(s, blockstm.NewSubpathKey(addr, CodePath), nil, func(s *StateDB) []byte {
 		stateObject := s.getStateObject(addr)
 		if stateObject != nil {
 			return stateObject.Code(s.db)
@@ -586,7 +613,7 @@ func (s *StateDB) GetCodeSize(addr common.Address) int {
 		return 0
 	}
 
-	return MVRead(s, subPath(addr.Bytes(), codePath), 0, func(s *StateDB) int {
+	return MVRead(s, blockstm.NewSubpathKey(addr, CodeSizePath), 0, func(s *StateDB) int {
 		stateObject := s.getStateObject(addr)
 		if stateObject != nil {
 			return stateObject.CodeSize(s.db)
@@ -600,7 +627,7 @@ func (s *StateDB) GetCodeHash(addr common.Address) common.Hash {
 		return common.Hash{}
 	}
 
-	return MVRead(s, subPath(addr.Bytes(), codePath), common.Hash{}, func(s *StateDB) common.Hash {
+	return MVRead(s, blockstm.NewSubpathKey(addr, CodeHashPath), common.Hash{}, func(s *StateDB) common.Hash {
 		stateObject := s.getStateObject(addr)
 		if stateObject == nil {
 			return common.Hash{}
@@ -615,7 +642,7 @@ func (s *StateDB) GetState(addr common.Address, hash common.Hash) common.Hash {
 		return common.Hash{}
 	}
 
-	return MVRead(s, append(addr.Bytes(), hash.Bytes()...), common.Hash{}, func(s *StateDB) common.Hash {
+	return MVRead(s, blockstm.NewStateKey(addr, hash), common.Hash{}, func(s *StateDB) common.Hash {
 		stateObject := s.getStateObject(addr)
 		if stateObject != nil {
 			return stateObject.GetState(s.db, hash)
@@ -653,7 +680,7 @@ func (s *StateDB) GetCommittedState(addr common.Address, hash common.Hash) commo
 		return common.Hash{}
 	}
 
-	return MVRead(s, append(addr.Bytes(), hash.Bytes()...), common.Hash{}, func(s *StateDB) common.Hash {
+	return MVRead(s, blockstm.NewStateKey(addr, hash), common.Hash{}, func(s *StateDB) common.Hash {
 		stateObject := s.getStateObject(addr)
 		if stateObject != nil {
 			return stateObject.GetCommittedState(s.db, hash)
@@ -684,7 +711,7 @@ func (s *StateDB) HasSuicided(addr common.Address) bool {
 		return false
 	}
 
-	return MVRead(s, subPath(addr.Bytes(), suicidePath), false, func(s *StateDB) bool {
+	return MVRead(s, blockstm.NewSubpathKey(addr, SuicidePath), false, func(s *StateDB) bool {
 		stateObject := s.getStateObject(addr)
 		if stateObject != nil {
 			return stateObject.suicided
@@ -709,7 +736,7 @@ func (s *StateDB) AddBalance(addr common.Address, amount *big.Int) {
 	if stateObject != nil {
 		stateObject = s.mvRecordWritten(stateObject)
 		stateObject.AddBalance(amount)
-		MVWrite(s, subPath(addr.Bytes(), balancePath))
+		MVWrite(s, blockstm.NewSubpathKey(addr, BalancePath))
 	}
 }
 
@@ -725,7 +752,7 @@ func (s *StateDB) SubBalance(addr common.Address, amount *big.Int) {
 	if stateObject != nil {
 		stateObject = s.mvRecordWritten(stateObject)
 		stateObject.SubBalance(amount)
-		MVWrite(s, subPath(addr.Bytes(), balancePath))
+		MVWrite(s, blockstm.NewSubpathKey(addr, BalancePath))
 	}
 }
 
@@ -734,7 +761,7 @@ func (s *StateDB) SetBalance(addr common.Address, amount *big.Int) {
 	if stateObject != nil {
 		stateObject = s.mvRecordWritten(stateObject)
 		stateObject.SetBalance(amount)
-		MVWrite(s, subPath(addr.Bytes(), balancePath))
+		MVWrite(s, blockstm.NewSubpathKey(addr, BalancePath))
 	}
 }
 
@@ -743,7 +770,7 @@ func (s *StateDB) SetNonce(addr common.Address, nonce uint64) {
 	if stateObject != nil {
 		stateObject = s.mvRecordWritten(stateObject)
 		stateObject.SetNonce(nonce)
-		MVWrite(s, subPath(addr.Bytes(), noncePath))
+		MVWrite(s, blockstm.NewSubpathKey(addr, NoncePath))
 	}
 }
 
@@ -752,7 +779,9 @@ func (s *StateDB) SetCode(addr common.Address, code []byte) {
 	if stateObject != nil {
 		stateObject = s.mvRecordWritten(stateObject)
 		stateObject.SetCode(crypto.Keccak256Hash(code), code)
-		MVWrite(s, subPath(addr.Bytes(), codePath))
+		MVWrite(s, blockstm.NewSubpathKey(addr, CodePath))
+		MVWrite(s, blockstm.NewSubpathKey(addr, CodeSizePath))
+		MVWrite(s, blockstm.NewSubpathKey(addr, CodeHashPath))
 	}
 }
 
@@ -761,7 +790,7 @@ func (s *StateDB) SetState(addr common.Address, key, value common.Hash) {
 	if stateObject != nil {
 		stateObject = s.mvRecordWritten(stateObject)
 		stateObject.SetState(s.db, key, value)
-		MVWrite(s, append(addr.Bytes(), key.Bytes()...))
+		MVWrite(s, blockstm.NewStateKey(addr, key))
 	}
 }
 
@@ -794,8 +823,8 @@ func (s *StateDB) Suicide(addr common.Address) bool {
 	stateObject.markSuicided()
 	stateObject.data.Balance = new(big.Int)
 
-	MVWrite(s, subPath(addr.Bytes(), suicidePath))
-	MVWrite(s, subPath(addr.Bytes(), balancePath))
+	MVWrite(s, blockstm.NewSubpathKey(addr, SuicidePath))
+	MVWrite(s, blockstm.NewSubpathKey(addr, BalancePath))
 
 	return true
 }
@@ -853,7 +882,7 @@ func (s *StateDB) getStateObject(addr common.Address) *stateObject {
 // flag set. This is needed by the state journal to revert to the correct s-
 // destructed object instead of wiping all knowledge about the state object.
 func (s *StateDB) getDeletedStateObject(addr common.Address) *stateObject {
-	return MVRead(s, addr.Bytes(), nil, func(s *StateDB) *stateObject {
+	return MVRead(s, blockstm.NewAddressKey(addr), nil, func(s *StateDB) *stateObject {
 		// Prefer live objects if any is available
 		if obj := s.stateObjects[addr]; obj != nil {
 			return obj
@@ -932,16 +961,16 @@ func (s *StateDB) mvRecordWritten(object *stateObject) *stateObject {
 		return object
 	}
 
-	addrPath := object.Address().Bytes()
+	addrKey := blockstm.NewAddressKey(object.Address())
 
-	if MVWritten(s, addrPath) {
+	if MVWritten(s, addrKey) {
 		return object
 	}
 
 	// Deepcopy is needed to ensure that objects are not written by multiple transactions at the same time, because
 	// the input state object can come from a different transaction.
 	s.setStateObject(object.deepCopy(s))
-	MVWrite(s, addrPath)
+	MVWrite(s, addrKey)
 
 	return s.stateObjects[object.Address()]
 }
@@ -967,7 +996,7 @@ func (s *StateDB) createObject(addr common.Address) (newobj, prev *stateObject) 
 	s.setStateObject(newobj)
 	s.newStateObjects[addr] = struct{}{}
 
-	MVWrite(s, addr.Bytes())
+	MVWrite(s, blockstm.NewAddressKey(addr))
 	if prev != nil && !prev.deleted {
 		return newobj, prev
 	}
@@ -988,7 +1017,7 @@ func (s *StateDB) CreateAccount(addr common.Address) {
 	newObj, prev := s.createObject(addr)
 	if prev != nil {
 		newObj.setBalance(prev.data.Balance)
-		MVWrite(s, subPath(addr.Bytes(), balancePath))
+		MVWrite(s, blockstm.NewSubpathKey(addr, BalancePath))
 	}
 }
 
