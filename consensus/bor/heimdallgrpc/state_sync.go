@@ -2,6 +2,7 @@ package heimdallgrpc
 
 import (
 	"context"
+	"io"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
@@ -25,8 +26,12 @@ func (h *HeimdallGRPCClient) StateSyncEvents(ctx context.Context, fromID uint64,
 
 	for {
 		events, err := res.Recv()
+		if err == io.EOF {
+			return eventRecords, nil
+		}
+
 		if err != nil {
-			break
+			return nil, err
 		}
 
 		for _, event := range events.Result {
@@ -44,6 +49,4 @@ func (h *HeimdallGRPCClient) StateSyncEvents(ctx context.Context, fromID uint64,
 			eventRecords = append(eventRecords, eventRecord)
 		}
 	}
-
-	return eventRecords, nil
 }
