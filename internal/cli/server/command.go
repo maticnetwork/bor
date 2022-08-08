@@ -72,7 +72,7 @@ func (c *Command) extractFlags(args []string) error {
 	}
 	// read if config file is provided, this will overwrite the cli flags, if provided
 	if c.configFile != "" {
-		log.Warn("Config File provided, this will overwrite the cli flags.", "configFile:", c.configFile)
+		log.Warn("Config File provided, this will overwrite the cli flags", "path", c.configFile)
 		cfg, err := readConfigFile(c.configFile)
 		if err != nil {
 			c.UI.Error(err.Error())
