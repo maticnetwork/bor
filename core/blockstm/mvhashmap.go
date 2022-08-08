@@ -6,21 +6,81 @@ import (
 
 	"github.com/emirpasic/gods/maps/treemap"
 
-	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/common"
 )
 
 const FlagDone = 0
 const FlagEstimate = 1
 
+const addressType = 1
+const stateType = 2
+const subpathType = 3
+
+const KeyLength = common.AddressLength + common.HashLength + 2
+
+type Key [KeyLength]byte
+
+func (k *Key) IsAddress() bool {
+	return k[KeyLength-1] == addressType
+}
+
+func (k *Key) IsState() bool {
+	return k[KeyLength-1] == stateType
+}
+
+func (k *Key) IsSubpath() bool {
+	return k[KeyLength-1] == subpathType
+}
+
+func (k *Key) GetAddress() common.Address {
+	return common.BytesToAddress(k[:common.AddressLength])
+}
+
+func (k *Key) GetStateKey() common.Hash {
+	return common.BytesToHash(k[common.AddressLength : KeyLength-2])
+}
+
+func (k *Key) GetSubpath() byte {
+	return k[KeyLength-2]
+}
+
+func newKey(addr common.Address, hash common.Hash, subpath byte, keyType byte) Key {
+	var k Key
+
+	copy(k[:common.AddressLength], addr.Bytes())
+	copy(k[common.AddressLength:KeyLength-2], hash.Bytes())
+	k[KeyLength-2] = subpath
+	k[KeyLength-1] = keyType
+
+	return k
+}
+
+func NewAddressKey(addr common.Address) Key {
+	return newKey(addr, common.Hash{}, 0, addressType)
+}
+
+func NewStateKey(addr common.Address, hash common.Hash) Key {
+	k := newKey(addr, hash, 0, stateType)
+	if !k.IsState() {
+		panic(fmt.Errorf("key is not a state key"))
+	}
+
+	return k
+}
+
+func NewSubpathKey(addr common.Address, subpath byte) Key {
+	return newKey(addr, common.Hash{}, subpath, subpathType)
+}
+
 type MVHashMap struct {
 	rw sync.RWMutex
-	m  map[string]*TxnIndexCells // TODO: might want a more efficient key representation
+	m  map[Key]*TxnIndexCells // TODO: might want a more efficient key representation
 }
 
 func MakeMVHashMap() *MVHashMap {
 	return &MVHashMap{
 		rw: sync.RWMutex{},
-		m:  make(map[string]*TxnIndexCells),
+		m:  make(map[Key]*TxnIndexCells),
 	}
 }
 
@@ -40,31 +100,29 @@ type Version struct {
 	Incarnation int
 }
 
-func (mv *MVHashMap) getKeyCells(k []byte, fNoKey func(kenc string) *TxnIndexCells) (cells *TxnIndexCells) {
-	kenc := string(k)
-
+func (mv *MVHashMap) getKeyCells(k Key, fNoKey func(kenc Key) *TxnIndexCells) (cells *TxnIndexCells) {
 	var ok bool
 
 	mv.rw.RLock()
-	cells, ok = mv.m[kenc]
+	cells, ok = mv.m[k]
 	mv.rw.RUnlock()
 
 	if !ok {
-		cells = fNoKey(kenc)
+		cells = fNoKey(k)
 	}
 
 	return
 }
 
-func (mv *MVHashMap) Write(k []byte, v Version, data interface{}) {
-	cells := mv.getKeyCells(k, func(kenc string) (cells *TxnIndexCells) {
-		n := &TxnIndexCells{
-			rw: sync.RWMutex{},
-			tm: treemap.NewWithIntComparator(),
-		}
+func (mv *MVHashMap) Write(k Key, v Version, data interface{}) {
+	cells := mv.getKeyCells(k, func(kenc Key) (cells *TxnIndexCells) {
 		var ok bool
 		mv.rw.Lock()
 		if cells, ok = mv.m[kenc]; !ok {
+			n := &TxnIndexCells{
+				rw: sync.RWMutex{},
+				tm: treemap.NewWithIntComparator(),
+			}
 			mv.m[kenc] = n
 			cells = n
 		}
@@ -81,9 +139,7 @@ func (mv *MVHashMap) Write(k []byte, v Version, data interface{}) {
 	if ok {
 		if ci.(*WriteCell).incarnation > v.Incarnation {
 			panic(fmt.Errorf("existing transaction value does not have lower incarnation: %v, %v",
-				string(k), v.TxnIndex))
-		} else if ci.(*WriteCell).flag == FlagEstimate {
-			log.Debug("mvhashmap marking previous estimate as done", "tx index", v.TxnIndex, "incarnation", v.Incarnation)
+				k, v.TxnIndex))
 		}
 
 		ci.(*WriteCell).flag = FlagDone
@@ -98,22 +154,22 @@ func (mv *MVHashMap) Write(k []byte, v Version, data interface{}) {
 	}
 }
 
-func (mv *MVHashMap) MarkEstimate(k []byte, txIdx int) {
-	cells := mv.getKeyCells(k, func(_ string) *TxnIndexCells {
+func (mv *MVHashMap) MarkEstimate(k Key, txIdx int) {
+	cells := mv.getKeyCells(k, func(_ Key) *TxnIndexCells {
 		panic(fmt.Errorf("path must already exist"))
 	})
 
 	cells.rw.RLock()
 	if ci, ok := cells.tm.Get(txIdx); !ok {
-		panic("should not happen - cell should be present for path")
+		panic(fmt.Sprintf("should not happen - cell should be present for path. TxIdx: %v, path, %x, cells keys: %v", txIdx, k, cells.tm.Keys()))
 	} else {
 		ci.(*WriteCell).flag = FlagEstimate
 	}
 	cells.rw.RUnlock()
 }
 
-func (mv *MVHashMap) Delete(k []byte, txIdx int) {
-	cells := mv.getKeyCells(k, func(_ string) *TxnIndexCells {
+func (mv *MVHashMap) Delete(k Key, txIdx int) {
+	cells := mv.getKeyCells(k, func(_ Key) *TxnIndexCells {
 		panic(fmt.Errorf("path must already exist"))
 	})
 
@@ -158,11 +214,11 @@ func (mvr MVReadResult) Status() int {
 	return MVReadResultNone
 }
 
-func (mv *MVHashMap) Read(k []byte, txIdx int) (res MVReadResult) {
+func (mv *MVHashMap) Read(k Key, txIdx int) (res MVReadResult) {
 	res.depIdx = -1
 	res.incarnation = -1
 
-	cells := mv.getKeyCells(k, func(_ string) *TxnIndexCells {
+	cells := mv.getKeyCells(k, func(_ Key) *TxnIndexCells {
 		return nil
 	})
 	if cells == nil {
@@ -170,9 +226,10 @@ func (mv *MVHashMap) Read(k []byte, txIdx int) (res MVReadResult) {
 	}
 
 	cells.rw.RLock()
-	defer cells.rw.RUnlock()
+	fk, fv := cells.tm.Floor(txIdx - 1)
+	cells.rw.RUnlock()
 
-	if fk, fv := cells.tm.Floor(txIdx - 1); fk != nil && fv != nil {
+	if fk != nil && fv != nil {
 		c := fv.(*WriteCell)
 		switch c.flag {
 		case FlagEstimate:
