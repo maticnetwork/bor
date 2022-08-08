@@ -48,8 +48,6 @@ type Server struct {
 
 	// tracerAPI to trace block executions
 	tracerAPI *tracers.API
-
-	jsonRPCListener net.Listener
 }
 
 type serverOption func(srv *Server, config *Config) error
@@ -63,14 +61,6 @@ func WithGRPCAddress() serverOption {
 func WithGRPCListener(lis net.Listener) serverOption {
 	return func(srv *Server, _ *Config) error {
 		return srv.gRPCServerByListener(lis)
-	}
-}
-
-func WithJSONRPCListener(lis net.Listener) serverOption {
-	return func(srv *Server, _ *Config) error {
-		srv.jsonRPCListener = lis
-
-		return nil
 	}
 }
 
@@ -252,10 +242,6 @@ func (s *Server) Stop() {
 
 	if s.grpcServer != nil {
 		s.grpcServer.Stop()
-	}
-
-	if s.jsonRPCListener != nil {
-		s.jsonRPCListener.Close()
 	}
 
 	// shutdown the tracer
