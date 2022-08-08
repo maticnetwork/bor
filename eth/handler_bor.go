@@ -158,7 +158,7 @@ func (h *ethHandler) fetchWhitelistMilestone(ctx context.Context, bor *bor.Bor, 
 		return blockNum, blockHash, errMissingMilestone
 	}
 
-	// verify the root hash of checkpoint
+	// verify the root hash of milestone
 	roothash, err := h.ethAPI.GetRootHash(ctx, milestone.StartBlock.Uint64(), milestone.EndBlock.Uint64())
 	if err != nil {
 		log.Debug("Failed to get root hash of milestone while whitelisting", "err", err)
@@ -170,7 +170,7 @@ func (h *ethHandler) fetchWhitelistMilestone(ctx context.Context, bor *bor.Bor, 
 		return blockNum, blockHash, errCheckpointRootHashMismatch
 	}
 
-	// fetch the end checkpoint block hash
+	// fetch the end milestone block hash
 	block, err := h.ethAPI.GetBlockByNumber(ctx, rpc.BlockNumber(milestone.EndBlock.Uint64()), false)
 	if err != nil {
 		log.Debug("Failed to get end block hash of milestone while whitelisting", "err", err)

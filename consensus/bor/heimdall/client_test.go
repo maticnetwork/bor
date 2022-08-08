@@ -192,7 +192,7 @@ func TestFetchShutdown(t *testing.T) {
 	// greater than `retryDelay`. This should cause the request to timeout and trigger shutdown
 	// due to `ctx.Done()`. Expect context timeout error.
 	handler.handleFetchCheckpoint = func(w http.ResponseWriter, _ *http.Request) {
-		time.Sleep(6 * time.Second)
+		time.Sleep(3 * time.Second)
 
 		err := json.NewEncoder(w).Encode(checkpoint.CheckpointResponse{
 			Height: "0",
@@ -212,7 +212,7 @@ func TestFetchShutdown(t *testing.T) {
 	}
 
 	handler.handleFetchMilestone = func(w http.ResponseWriter, _ *http.Request) {
-		time.Sleep(6 * time.Second)
+		time.Sleep(3 * time.Second)
 
 		err := json.NewEncoder(w).Encode(milestone.MilestoneResponse{
 			Height: "0",
@@ -242,7 +242,7 @@ func TestFetchShutdown(t *testing.T) {
 	// Create a new heimdall client and use same port for connection
 	client := NewHeimdallClient(fmt.Sprintf("http://localhost:%d", port))
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 
 	// Expect this to fail due to timeout
 	_, err = client.FetchCheckpoint(ctx)
@@ -251,7 +251,7 @@ func TestFetchShutdown(t *testing.T) {
 
 	cancel()
 
-	ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel = context.WithTimeout(context.Background(), 2*time.Second)
 
 	// Expect this to fail due to timeout
 	_, err = client.FetchMilestone(ctx)
@@ -264,12 +264,12 @@ func TestFetchShutdown(t *testing.T) {
 	// cancel it before timeout. This should cause the request to timeout and trigger shutdown
 	// due to `ctx.Done()`. Expect context cancellation error.
 	handler.handleFetchCheckpoint = func(w http.ResponseWriter, _ *http.Request) {
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(3 * time.Millisecond)
 		w.WriteHeader(500) // Return 500 Internal Server Error.
 	}
 
 	handler.handleFetchMilestone = func(w http.ResponseWriter, _ *http.Request) {
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(3 * time.Millisecond)
 		w.WriteHeader(500) // Return 500 Internal Server Error.
 	}
 
@@ -277,7 +277,7 @@ func TestFetchShutdown(t *testing.T) {
 
 	// Cancel the context after a delay until we make request
 	go func(cancel context.CancelFunc) {
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(3 * time.Millisecond)
 		cancel()
 	}(cancel)
 
@@ -286,11 +286,11 @@ func TestFetchShutdown(t *testing.T) {
 	require.Equal(t, "context canceled", err.Error(), "expect the function error to be a context cancelled error")
 	require.Equal(t, "context canceled", ctx.Err().Error(), "expect the ctx error to be a context cancelled error")
 
-	ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second) // Use some high value for timeout
+	ctx, cancel = context.WithTimeout(context.Background(), 3*time.Second) // Use some high value for timeout
 
 	// Cancel the context after a delay until we make request
 	go func(cancel context.CancelFunc) {
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(3 * time.Millisecond)
 		cancel()
 	}(cancel)
 
