@@ -58,7 +58,6 @@ func ExecuteParallel(tasks []ExecTask) (lastTxIO *TxnInputOutput, err error) {
 
 	chTasks := make(chan ExecVersionView, len(tasks))
 	chResults := make(chan ExecResult, len(tasks))
-	chDone := make(chan bool)
 	mutMap := map[common.Address]*sync.RWMutex{}
 
 	for _, t := range tasks {
@@ -70,27 +69,19 @@ func ExecuteParallel(tasks []ExecTask) (lastTxIO *TxnInputOutput, err error) {
 	var cntExec, cntSuccess, cntAbort, cntTotalValidations, cntValidationFail int
 
 	for i := 0; i < numGoProcs; i++ {
-		go func(procNum int, t chan ExecVersionView) {
-		Loop:
-			for {
-				select {
-				case task := <-t:
-					{
-						if !mutMap[task.sender].TryLock() {
-							// why not this? -> chTasks <- task
-							t <- task
-						} else {
-							res := task.Execute()
-							chResults <- res
-							mutMap[task.sender].Unlock()
-						}
-					}
-				case <-chDone:
-					break Loop
+		go func(procNum int) {
+			for task := range chTasks {
+				if !mutMap[task.sender].TryLock() {
+					// why not this? -> chTasks <- task
+					chTasks <- task
+				} else {
+					res := task.Execute()
+					chResults <- res
+					mutMap[task.sender].Unlock()
 				}
 			}
 			log.Debug("blockstm", "proc done", procNum) // TODO: logging ...
-		}(i, chTasks)
+		}(i)
 	}
 
 	mvh := MakeMVHashMap()
@@ -115,8 +106,7 @@ func ExecuteParallel(tasks []ExecTask) (lastTxIO *TxnInputOutput, err error) {
 	diagExecSuccess := make([]int, len(tasks))
 	diagExecAbort := make([]int, len(tasks))
 
-	for {
-		res := <-chResults
+	for res := range chResults {
 		switch res.err {
 		case nil:
 			{
@@ -248,9 +238,6 @@ func ExecuteParallel(tasks []ExecTask) (lastTxIO *TxnInputOutput, err error) {
 		}
 	}
 
-	for i := 0; i < numGoProcs; i++ {
-		chDone <- true
-	}
 	close(chTasks)
 	close(chResults)
 
