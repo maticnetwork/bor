@@ -74,6 +74,7 @@ func WithJSONRPCListener(lis net.Listener) serverOption {
 	}
 }
 
+//nolint:gocognit
 func NewServer(config *Config, opts ...serverOption) (*Server, error) {
 	srv := &Server{
 		config: config,
@@ -92,7 +93,7 @@ func NewServer(config *Config, opts ...serverOption) (*Server, error) {
 	}
 
 	// load the chain genesis
-	if err := config.loadChain(); err != nil {
+	if err = config.loadChain(); err != nil {
 		return nil, err
 	}
 
@@ -180,7 +181,6 @@ func NewServer(config *Config, opts ...serverOption) (*Server, error) {
 				wallet, err := accountManager.Find(accounts.Account{Address: eb})
 				if wallet == nil || err != nil {
 					log.Error("Etherbase account unavailable locally", "err", err)
-
 					return nil, fmt.Errorf("signer missing: %v", err)
 				}
 

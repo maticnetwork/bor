@@ -20,12 +20,15 @@ import (
 	crand "crypto/rand"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"sync"
+
+	"github.com/prometheus/tsdb/fileutil"
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
@@ -36,7 +39,6 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/rpc"
-	"github.com/prometheus/tsdb/fileutil"
 )
 
 // Node is a container on which services can be registered.
@@ -466,12 +468,22 @@ func (n *Node) startRPC() error {
 		if err := initHttp(n.http, open, n.config.HTTPPort); err != nil {
 			return err
 		}
+		if n.config.HTTPPort == 0 {
+			defer func() {
+				n.config.HTTPPort = n.http.listener.Addr().(*net.TCPAddr).Port
+			}()
+		}
 	}
 	// Configure WebSocket.
 	if n.config.WSHost != "" {
 		// legacy unauthenticated
 		if err := initWS(open, n.config.WSPort); err != nil {
 			return err
+		}
+		if n.config.WSPort == 0 {
+			defer func() {
+				n.config.WSPort = n.ws.listener.Addr().(*net.TCPAddr).Port
+			}()
 		}
 	}
 	// Configure authenticated API
@@ -480,7 +492,7 @@ func (n *Node) startRPC() error {
 		if err != nil {
 			return err
 		}
-		if err := initAuth(all, n.config.AuthPort, jwtSecret); err != nil {
+		if err = initAuth(all, n.config.AuthPort, jwtSecret); err != nil {
 			return err
 		}
 	}

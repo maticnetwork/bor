@@ -9,7 +9,7 @@ import (
 const (
 	maxPortCheck = 100
 
-	emptyPort = ":0"
+	emptyPort = "127.0.0.1:0"
 )
 
 var (

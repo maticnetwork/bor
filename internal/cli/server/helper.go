@@ -17,22 +17,16 @@ func CreateMockServer(config *Config) (*Server, error) {
 	}
 
 	// datadir
-	datadir, err := os.MkdirTemp("/tmp", "bor-cli-test")
+	datadir, err := os.MkdirTemp("", "bor-cli-test")
 	if err != nil {
 		return nil, err
 	}
 
 	config.DataDir = datadir
-
-	jsonRPCPort, jsonRPCListener, err := network.FindAvailablePort()
-	if err != nil {
-		return nil, err
-	}
-
-	config.JsonRPC.Http.Port = uint64(jsonRPCPort)
+	config.JsonRPC.Http.Port = 0
 
 	// start the server
-	return NewServer(config, WithGRPCListener(gRPCListener), WithJSONRPCListener(jsonRPCListener))
+	return NewServer(config, WithGRPCListener(gRPCListener))
 }
 
 func CloseMockServer(server *Server) {
