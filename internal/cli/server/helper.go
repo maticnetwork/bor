@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/ethereum/go-ethereum/common/network"
@@ -11,10 +12,14 @@ func CreateMockServer(config *Config) (*Server, error) {
 		config = DefaultConfig()
 	}
 
-	_, gRPCListener, err := network.FindAvailablePort()
+	// get grpc port and listener
+	grpcPort, gRPCListener, err := network.FindAvailablePort()
 	if err != nil {
 		return nil, err
 	}
+
+	// The test uses grpc port from config so setting it here.
+	config.GRPC.Addr = fmt.Sprintf(":%d", grpcPort)
 
 	// datadir
 	datadir, err := os.MkdirTemp("", "bor-cli-test")
@@ -23,7 +28,7 @@ func CreateMockServer(config *Config) (*Server, error) {
 	}
 
 	config.DataDir = datadir
-	config.JsonRPC.Http.Port = 0
+	config.JsonRPC.Http.Port = 0 // It will choose a free/available port
 
 	// start the server
 	return NewServer(config, WithGRPCListener(gRPCListener))
