@@ -154,6 +154,9 @@ type HeimdallConfig struct {
 
 	// Without is used to disable remote heimdall during testing
 	Without bool `hcl:"bor.without,optional" toml:"bor.without,optional"`
+
+	// GRPCAddress is the address of the heimdall grpc server
+	GRPCAddress string `hcl:"grpc-address,optional" toml:"grpc-address,optional"`
 }
 
 type TxPoolConfig struct {
@@ -167,7 +170,7 @@ type TxPoolConfig struct {
 	Journal string `hcl:"journal,optional" toml:"journal,optional"`
 
 	// Rejournal is the time interval to regenerate the local transaction journal
-	Rejournal    time.Duration `hcl:"-,optional" toml:"-,optional"`
+	Rejournal    time.Duration `hcl:"-,optional" toml:"-"`
 	RejournalRaw string        `hcl:"rejournal,optional" toml:"rejournal,optional"`
 
 	// PriceLimit is the minimum gas price to enforce for acceptance into the pool
@@ -189,7 +192,7 @@ type TxPoolConfig struct {
 	GlobalQueue uint64 `hcl:"globalqueue,optional" toml:"globalqueue,optional"`
 
 	// lifetime is the maximum amount of time non-executable transaction are queued
-	LifeTime    time.Duration `hcl:"-,optional" toml:"-,optional"`
+	LifeTime    time.Duration `hcl:"-,optional" toml:"-"`
 	LifeTimeRaw string        `hcl:"lifetime,optional" toml:"lifetime,optional"`
 }
 
@@ -207,7 +210,7 @@ type SealerConfig struct {
 	GasCeil uint64 `hcl:"gaslimit,optional" toml:"gaslimit,optional"`
 
 	// GasPrice is the minimum gas price for mining a transaction
-	GasPrice    *big.Int `hcl:"-,optional" toml:"-,optional"`
+	GasPrice    *big.Int `hcl:"-,optional" toml:"-"`
 	GasPriceRaw string   `hcl:"gasprice,optional" toml:"gasprice,optional"`
 }
 
@@ -270,11 +273,11 @@ type GpoConfig struct {
 	Percentile uint64 `hcl:"percentile,optional" toml:"percentile,optional"`
 
 	// MaxPrice is an upper bound gas price
-	MaxPrice    *big.Int `hcl:"-,optional" toml:"-,optional"`
+	MaxPrice    *big.Int `hcl:"-,optional" toml:"-"`
 	MaxPriceRaw string   `hcl:"maxprice,optional" toml:"maxprice,optional"`
 
 	// IgnorePrice is a lower bound gas price
-	IgnorePrice    *big.Int `hcl:"-,optional" toml:"-,optional"`
+	IgnorePrice    *big.Int `hcl:"-,optional" toml:"-"`
 	IgnorePriceRaw string   `hcl:"ignoreprice,optional" toml:"ignoreprice,optional"`
 }
 
@@ -347,7 +350,7 @@ type CacheConfig struct {
 	Journal string `hcl:"journal,optional" toml:"journal,optional"`
 
 	// Rejournal is the time interval to regenerate the journal for clean cache
-	Rejournal    time.Duration `hcl:"-,optional" toml:"-,optional"`
+	Rejournal    time.Duration `hcl:"-,optional" toml:"-"`
 	RejournalRaw string        `hcl:"rejournal,optional" toml:"rejournal,optional"`
 
 	// NoPrefetch is used to disable prefetch of tries
@@ -391,7 +394,7 @@ func DefaultConfig() *Config {
 		Identity:       Hostname(),
 		RequiredBlocks: map[string]string{},
 		LogLevel:       "INFO",
-		DataDir:        defaultDataDir(),
+		DataDir:        DefaultDataDir(),
 		P2P: &P2PConfig{
 			MaxPeers:     30,
 			MaxPendPeers: 50,
@@ -410,8 +413,9 @@ func DefaultConfig() *Config {
 			},
 		},
 		Heimdall: &HeimdallConfig{
-			URL:     "http://localhost:1317",
-			Without: false,
+			URL:         "http://localhost:1317",
+			Without:     false,
+			GRPCAddress: "",
 		},
 		SyncMode: "full",
 		GcMode:   "full",
@@ -647,6 +651,7 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 	}
 	n.HeimdallURL = c.Heimdall.URL
 	n.WithoutHeimdall = c.Heimdall.Without
+	n.HeimdallgRPCAddress = c.Heimdall.GRPCAddress
 
 	// gas price oracle
 	{
@@ -1035,7 +1040,7 @@ func parseBootnodes(urls []string) ([]*enode.Node, error) {
 	return dst, nil
 }
 
-func defaultDataDir() string {
+func DefaultDataDir() string {
 	// Try to place the data folder in the user's home dir
 	home, _ := homedir.Dir()
 	if home == "" {
