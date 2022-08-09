@@ -178,7 +178,7 @@ func (h *HeimdallClient) FetchMilestoneCount(ctx context.Context) (int64, error)
 		return 0, err
 	}
 
-	return response.Result.Result, nil
+	return response.Result.Count, nil
 }
 
 // FetchWithRetry returns data from heimdall with retry

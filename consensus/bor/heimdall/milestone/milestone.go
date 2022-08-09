@@ -22,7 +22,7 @@ type MilestoneResponse struct {
 }
 
 type MilestoneCount struct {
-	Result int64 `json:"result"`
+	Count int64 `json:"count"`
 }
 
 type MilestoneCountResponse struct {
