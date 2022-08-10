@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
 )
@@ -135,7 +137,7 @@ var randomPathGenerator = func(sender common.Address, j int) Key {
 
 var dexPathGenerator = func(sender common.Address, j int) Key {
 	// Randomly interact with one of three contracts
-	return NewSubpathKey(common.BigToAddress(big.NewInt(int64(rand.Intn(3)))), 1)
+	return NewSubpathKey(common.BigToAddress(big.NewInt(int64(0))), 1)
 }
 
 var readTime = randTimeGenerator(4*time.Microsecond, 12*time.Microsecond)
@@ -231,7 +233,9 @@ func testExecutorComb(t *testing.T, totalTxs []int, numReads []int, numWrites []
 	fmt.Printf("Total exec duration: %v, total serial duration: %v, time reduced: %v, time reduced percent: %.2f%%\n", totalExecDuration, totalSerialDuration, totalSerialDuration-totalExecDuration, float64(totalSerialDuration-totalExecDuration)/float64(totalSerialDuration)*100)
 }
 
-func runParallel(tasks []ExecTask, expectedSerialDuration time.Duration) time.Duration {
+func runParallel(t *testing.T, tasks []ExecTask, expectedSerialDuration time.Duration, validation func(TxnInputOutput) bool) time.Duration {
+	t.Helper()
+
 	start := time.Now()
 	txio, _ := ExecuteParallel(tasks)
 
@@ -242,7 +246,13 @@ func runParallel(tasks []ExecTask, expectedSerialDuration time.Duration) time.Du
 		}
 	}
 
-	return time.Since(start)
+	duration := time.Since(start)
+
+	if validation != nil {
+		assert.True(t, validation(*txio))
+	}
+
+	return duration
 }
 
 func TestLessConflicts(t *testing.T) {
@@ -258,7 +268,7 @@ func TestLessConflicts(t *testing.T) {
 		sender := func(i int) common.Address { return common.BigToAddress(big.NewInt(int64(i % randomness))) }
 		tasks, serialDuration := taskFactory(numTx, sender, numRead, numWrite, numNonIO, randomPathGenerator, readTime, writeTime, nonIOTime)
 
-		return runParallel(tasks, serialDuration), serialDuration
+		return runParallel(t, tasks, serialDuration, nil), serialDuration
 	}
 
 	testExecutorComb(t, totalTxs, numReads, numWrites, numNonIO, taskRunner)
@@ -277,7 +287,7 @@ func TestMoreConflicts(t *testing.T) {
 		sender := func(i int) common.Address { return common.BigToAddress(big.NewInt(int64(i / randomness))) }
 		tasks, serialDuration := taskFactory(numTx, sender, numRead, numWrite, numNonIO, randomPathGenerator, readTime, writeTime, nonIOTime)
 
-		return runParallel(tasks, serialDuration), serialDuration
+		return runParallel(t, tasks, serialDuration, nil), serialDuration
 	}
 
 	testExecutorComb(t, totalTxs, numReads, numWrites, numNonIO, taskRunner)
@@ -296,7 +306,7 @@ func TestRandomTx(t *testing.T) {
 		sender := func(i int) common.Address { return common.BigToAddress(big.NewInt(int64(rand.Intn(10)))) }
 		tasks, serialDuration := taskFactory(numTx, sender, numRead, numWrite, numNonIO, randomPathGenerator, readTime, writeTime, nonIOTime)
 
-		return runParallel(tasks, serialDuration), serialDuration
+		return runParallel(t, tasks, serialDuration, nil), serialDuration
 	}
 
 	testExecutorComb(t, totalTxs, numReads, numWrites, numNonIO, taskRunner)
@@ -307,14 +317,26 @@ func TestDexScenario(t *testing.T) {
 
 	totalTxs := []int{10, 50, 100, 200, 300}
 	numReads := []int{20, 100, 200}
-	numWrites := []int{20}
+	numWrites := []int{20, 100, 200}
 	numNonIO := []int{100, 500}
+
+	validation := func(txio TxnInputOutput) bool {
+		for i, inputs := range txio.inputs {
+			for _, input := range inputs {
+				if input.V.TxnIndex != i-1 {
+					return false
+				}
+			}
+		}
+
+		return true
+	}
 
 	taskRunner := func(numTx int, numRead int, numWrite int, numNonIO int) (time.Duration, time.Duration) {
 		sender := func(i int) common.Address { return common.BigToAddress(big.NewInt(int64(i))) }
 		tasks, serialDuration := taskFactory(numTx, sender, numRead, numWrite, numNonIO, dexPathGenerator, readTime, writeTime, nonIOTime)
 
-		return runParallel(tasks, serialDuration), serialDuration
+		return runParallel(t, tasks, serialDuration, validation), serialDuration
 	}
 
 	testExecutorComb(t, totalTxs, numReads, numWrites, numNonIO, taskRunner)

@@ -52,7 +52,7 @@ func (e ErrExecAbortError) Error() string {
 	}
 }
 
-const numGoProcs = 6
+const numGoProcs = 8
 
 // nolint: gocognit
 func ExecuteParallel(tasks []ExecTask) (lastTxIO *TxnInputOutput, err error) {
@@ -153,24 +153,13 @@ func ExecuteParallel(tasks []ExecTask) (lastTxIO *TxnInputOutput, err error) {
 			break
 		}
 
-		// if we got more work, queue one up...
-		nextTx := execTasks.takeNextPending()
-		if nextTx != -1 {
-			cntExec++
-			chTasks <- ExecVersionView{ver: Version{nextTx, txIncarnations[nextTx]}, et: tasks[nextTx], mvh: mvh}
-		}
-
 		// do validations ...
 		maxComplete := execTasks.maxAllComplete()
 
 		var toValidate []int
 
-		for validateTasks.minPending() != -1 {
-			if validateTasks.minPending() <= maxComplete && validateTasks.minPending() >= 0 {
-				toValidate = append(toValidate, validateTasks.takeNextPending())
-			} else {
-				break
-			}
+		for validateTasks.minPending() <= maxComplete && validateTasks.minPending() >= 0 {
+			toValidate = append(toValidate, validateTasks.takeNextPending())
 		}
 
 		for i := 0; i < len(toValidate); i++ {
@@ -200,8 +189,8 @@ func ExecuteParallel(tasks []ExecTask) (lastTxIO *TxnInputOutput, err error) {
 		}
 
 		// if we didn't queue work previously, do check again so we keep making progress ...
-		for execTasks.minPending() != -1 {
-			nextTx = execTasks.takeNextPending()
+		for execTasks.minPending() != -1 && len(chTasks) < numGoProcs {
+			nextTx := execTasks.takeNextPending()
 			if nextTx != -1 {
 				cntExec++
 

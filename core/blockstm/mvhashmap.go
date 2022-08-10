@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"github.com/emirpasic/gods/maps/treemap"
+	cmap "github.com/orcaman/concurrent-map/v2"
 
 	"github.com/ethereum/go-ethereum/common"
 )
@@ -73,14 +74,14 @@ func NewSubpathKey(addr common.Address, subpath byte) Key {
 }
 
 type MVHashMap struct {
-	rw sync.RWMutex
-	m  map[Key]*TxnIndexCells // TODO: might want a more efficient key representation
+	m cmap.ConcurrentMap[*TxnIndexCells]
 }
 
 func MakeMVHashMap() *MVHashMap {
+	cmap.SHARD_COUNT = 128
+
 	return &MVHashMap{
-		rw: sync.RWMutex{},
-		m:  make(map[Key]*TxnIndexCells),
+		m: cmap.New[*TxnIndexCells](),
 	}
 }
 
@@ -103,9 +104,8 @@ type Version struct {
 func (mv *MVHashMap) getKeyCells(k Key, fNoKey func(kenc Key) *TxnIndexCells) (cells *TxnIndexCells) {
 	var ok bool
 
-	mv.rw.RLock()
-	cells, ok = mv.m[k]
-	mv.rw.RUnlock()
+	sk := string(k[:])
+	cells, ok = mv.m.Get(sk)
 
 	if !ok {
 		cells = fNoKey(k)
@@ -116,25 +116,22 @@ func (mv *MVHashMap) getKeyCells(k Key, fNoKey func(kenc Key) *TxnIndexCells) (c
 
 func (mv *MVHashMap) Write(k Key, v Version, data interface{}) {
 	cells := mv.getKeyCells(k, func(kenc Key) (cells *TxnIndexCells) {
-		var ok bool
-		mv.rw.Lock()
-		if cells, ok = mv.m[kenc]; !ok {
-			n := &TxnIndexCells{
-				rw: sync.RWMutex{},
-				tm: treemap.NewWithIntComparator(),
-			}
-			mv.m[kenc] = n
-			cells = n
+		n := &TxnIndexCells{
+			rw: sync.RWMutex{},
+			tm: treemap.NewWithIntComparator(),
 		}
-		mv.rw.Unlock()
+		cells = n
+		sk := string(kenc[:])
+		ok := mv.m.SetIfAbsent(sk, n)
+		if !ok {
+			cells, _ = mv.m.Get(sk)
+		}
 		return
 	})
 
-	// TODO: could probably have a scheme where this only generally requires a read lock since any given transaction transaction
-	//  should only have one incarnation executing at a time...
-	cells.rw.Lock()
-	defer cells.rw.Unlock()
+	cells.rw.RLock()
 	ci, ok := cells.tm.Get(v.TxnIndex)
+	cells.rw.RUnlock()
 
 	if ok {
 		if ci.(*WriteCell).incarnation > v.Incarnation {
@@ -146,11 +143,19 @@ func (mv *MVHashMap) Write(k Key, v Version, data interface{}) {
 		ci.(*WriteCell).incarnation = v.Incarnation
 		ci.(*WriteCell).data = data
 	} else {
-		cells.tm.Put(v.TxnIndex, &WriteCell{
-			flag:        FlagDone,
-			incarnation: v.Incarnation,
-			data:        data,
-		})
+		cells.rw.Lock()
+		if ci, ok = cells.tm.Get(v.TxnIndex); !ok {
+			cells.tm.Put(v.TxnIndex, &WriteCell{
+				flag:        FlagDone,
+				incarnation: v.Incarnation,
+				data:        data,
+			})
+		} else {
+			ci.(*WriteCell).flag = FlagDone
+			ci.(*WriteCell).incarnation = v.Incarnation
+			ci.(*WriteCell).data = data
+		}
+		cells.rw.Unlock()
 	}
 }
 
