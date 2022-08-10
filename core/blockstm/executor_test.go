@@ -59,6 +59,7 @@ func (t *testExecTask) Execute(mvh *MVHashMap, incarnation int) error {
 
 		if op.opType == readType { // nolint:nestif
 			if _, ok := t.writeMap[k]; ok {
+				sleep(op.duration)
 				continue
 			}
 
@@ -73,13 +74,13 @@ func (t *testExecTask) Execute(mvh *MVHashMap, incarnation int) error {
 			if result.Status() == MVReadResultDone {
 				readKind = ReadKindMap
 			} else if result.Status() == MVReadResultNone {
-				sleep(op.duration)
 				readKind = ReadKindStorage
 			}
 
+			sleep(op.duration)
+
 			t.readMap[k] = ReadDescriptor{k, readKind, Version{TxnIndex: result.depIdx, Incarnation: result.incarnation}}
 		} else if op.opType == writeType {
-			mvh.Write(k, version, 1)
 			t.writeMap[k] = WriteDescriptor{k, version, 1}
 		} else {
 			sleep(op.duration)
@@ -128,12 +129,13 @@ var randomPathGenerator = func(sender common.Address, j int) Key {
 		// First op is always related to nonce
 		return NewSubpathKey(sender, 2)
 	} else {
-		return NewStateKey(sender, common.BigToHash((big.NewInt(int64(rand.Intn(j) + 1)))))
+		return NewStateKey(sender, common.BigToHash((big.NewInt(int64(j)))))
 	}
 }
 
 var dexPathGenerator = func(sender common.Address, j int) Key {
-	return NewSubpathKey(common.BigToAddress(big.NewInt(int64(1))), 1)
+	// Randomly interact with one of three contracts
+	return NewSubpathKey(common.BigToAddress(big.NewInt(int64(rand.Intn(3)))), 1)
 }
 
 var readTime = randTimeGenerator(4*time.Microsecond, 12*time.Microsecond)
@@ -144,9 +146,6 @@ func taskFactory(numTask int, sender func(int) common.Address, readsPerT int, wr
 	exec := make([]ExecTask, 0, numTask)
 
 	var serialDuration time.Duration
-
-	readMap := make(map[Key]bool)
-	writeMap := make(map[Key]bool)
 
 	for i := 0; i < numTask; i++ {
 		s := sender(i)
@@ -174,23 +173,14 @@ func taskFactory(numTask int, sender func(int) common.Address, readsPerT int, wr
 			if ops[j].opType == readType {
 				ops[j].key = pathGenerator(s, j)
 				ops[j].duration = readTime()
-
-				if _, ok := readMap[ops[j].key]; !ok {
-					readMap[ops[j].key] = true
-					serialDuration += ops[j].duration
-				}
 			} else if ops[j].opType == writeType {
 				ops[j].key = pathGenerator(s, j)
 				ops[j].duration = writeTime()
-
-				if _, ok := writeMap[ops[j].key]; !ok {
-					writeMap[ops[j].key] = true
-					serialDuration += ops[j].duration
-				}
 			} else {
 				ops[j].duration = nonIOTime()
-				serialDuration += ops[j].duration
 			}
+
+			serialDuration += ops[j].duration
 		}
 
 		t := NewTestExecTask(i, ops, s)
@@ -317,7 +307,7 @@ func TestDexScenario(t *testing.T) {
 
 	totalTxs := []int{10, 50, 100, 200, 300}
 	numReads := []int{20, 100, 200}
-	numWrites := []int{20, 100, 200}
+	numWrites := []int{20}
 	numNonIO := []int{100, 500}
 
 	taskRunner := func(numTx int, numRead int, numWrite int, numNonIO int) (time.Duration, time.Duration) {
