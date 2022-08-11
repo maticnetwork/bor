@@ -29,8 +29,6 @@ func (h *HeimdallGRPCClient) StateSyncEvents(ctx context.Context, fromID uint64,
 		return nil, err
 	}
 
-	var events *proto.StateSyncEventsResponse
-
 	for {
 		events, err = res.Recv()
 		if err != nil {

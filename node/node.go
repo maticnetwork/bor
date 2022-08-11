@@ -468,6 +468,7 @@ func (n *Node) startRPC() error {
 		if err := initHttp(n.http, open, n.config.HTTPPort); err != nil {
 			return err
 		}
+
 		if n.config.HTTPPort == 0 {
 			defer func() {
 				n.config.HTTPPort = n.http.listener.Addr().(*net.TCPAddr).Port
@@ -480,6 +481,7 @@ func (n *Node) startRPC() error {
 		if err := initWS(open, n.config.WSPort); err != nil {
 			return err
 		}
+
 		if n.config.WSPort == 0 {
 			defer func() {
 				n.config.WSPort = n.ws.listener.Addr().(*net.TCPAddr).Port
@@ -492,6 +494,7 @@ func (n *Node) startRPC() error {
 		if err != nil {
 			return err
 		}
+
 		if err = initAuth(all, n.config.AuthPort, jwtSecret); err != nil {
 			return err
 		}

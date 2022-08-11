@@ -19,8 +19,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var maxPortCheck int32 = 100
-
 // HttpHandlerFake defines the handler functions required to serve
 // requests to the mock heimdal server for specific functions. Add more handlers
 // according to requirements.
