@@ -31,16 +31,6 @@ const (
 	retryCall          = 5 * time.Second
 )
 
-type RequestType string
-
-const (
-	key                    RequestType = "type"
-	StateSyncRequest       RequestType = "state-sync"
-	SpanRequest            RequestType = "span"
-	CheckpointRequest      RequestType = "checkpoint"
-	CheckpointCountRequest RequestType = "checkpoint-count"
-)
-
 type StateSyncEventsResponse struct {
 	Height string                       `json:"height"`
 	Result []*clerk.EventRecordWithTime `json:"result"`
@@ -62,28 +52,6 @@ type Request struct {
 	url    *url.URL
 	start  time.Time
 }
-
-var (
-	// State Sync requests
-	stateSyncValidRequestMeter   = metrics.NewRegisteredMeter("client/requests/statesync/valid", nil)
-	stateSyncInvalidRequestMeter = metrics.NewRegisteredMeter("client/requests/statesync/invalid", nil)
-	stateSyncRequestTimer        = metrics.NewRegisteredTimer("client/requests/statesync/duration", nil)
-
-	// Span requests
-	spanValidRequestMeter   = metrics.NewRegisteredMeter("client/requests/span/valid", nil)
-	spanInvalidRequestMeter = metrics.NewRegisteredMeter("client/requests/span/invalid", nil)
-	spanRequestTimer        = metrics.NewRegisteredTimer("client/requests/span/duration", nil)
-
-	// Checkpoint requests
-	checkpointValidRequestMeter   = metrics.NewRegisteredMeter("client/requests/checkpoint/valid", nil)
-	checkpointInvalidRequestMeter = metrics.NewRegisteredMeter("client/requests/checkpoint/invalid", nil)
-	checkpointRequestTimer        = metrics.NewRegisteredTimer("client/requests/checkpoint/duration", nil)
-
-	// Checkpoint count requests
-	checkpointCountValidRequestMeter   = metrics.NewRegisteredMeter("client/requests/checkpointcount/valid", nil)
-	checkpointCountInvalidRequestMeter = metrics.NewRegisteredMeter("client/requests/checkpointcount/invalid", nil)
-	checkpointCountRequestTimer        = metrics.NewRegisteredTimer("client/requests/checkpointcount/duration", nil)
-)
 
 func NewHeimdallClient(urlString string) *HeimdallClient {
 	return &HeimdallClient{
@@ -115,7 +83,7 @@ func (h *HeimdallClient) StateSyncEvents(ctx context.Context, fromID uint64, to 
 
 		log.Info("Fetching state sync events", "queryParams", url.RawQuery)
 
-		ctx = context.WithValue(ctx, key, StateSyncRequest)
+		ctx = withRequestType(ctx, stateSyncRequest)
 
 		response, err := FetchWithRetry[StateSyncEventsResponse](ctx, h.client, url, h.closeCh)
 		if err != nil {
@@ -149,7 +117,7 @@ func (h *HeimdallClient) Span(ctx context.Context, spanID uint64) (*span.Heimdal
 		return nil, err
 	}
 
-	ctx = context.WithValue(ctx, key, SpanRequest)
+	ctx = withRequestType(ctx, spanRequest)
 
 	response, err := FetchWithRetry[SpanResponse](ctx, h.client, url, h.closeCh)
 	if err != nil {
@@ -166,7 +134,7 @@ func (h *HeimdallClient) FetchCheckpoint(ctx context.Context, number int64) (*ch
 		return nil, err
 	}
 
-	ctx = context.WithValue(ctx, key, CheckpointRequest)
+	ctx = withRequestType(ctx, checkpointRequest)
 
 	response, err := FetchWithRetry[checkpoint.CheckpointResponse](ctx, h.client, url, h.closeCh)
 	if err != nil {
@@ -183,7 +151,7 @@ func (h *HeimdallClient) FetchCheckpointCount(ctx context.Context) (int64, error
 		return 0, err
 	}
 
-	ctx = context.WithValue(ctx, key, CheckpointCountRequest)
+	ctx = withRequestType(ctx, checkpointCountRequest)
 
 	response, err := FetchWithRetry[checkpoint.CheckpointCountResponse](ctx, h.client, url, h.closeCh)
 	if err != nil {
@@ -230,7 +198,7 @@ retryLoop:
 
 			return nil, ErrShutdownDetected
 		case <-ticker.C:
-			request := &Request{client: client, url: url, start: time.Now()}
+			request = &Request{client: client, url: url, start: time.Now()}
 			result, err = Fetch[T](ctx, request)
 
 			if err != nil {
@@ -248,11 +216,11 @@ retryLoop:
 
 // Fetch returns data from heimdall
 func Fetch[T any](ctx context.Context, request *Request) (*T, error) {
-	failed := true
+	isSuccessful := false
 
 	defer func() {
 		if metrics.EnabledExpensive {
-			sendMetrics(ctx, request.start, failed)
+			sendMetrics(ctx, request.start, isSuccessful)
 		}
 	}()
 
@@ -272,7 +240,7 @@ func Fetch[T any](ctx context.Context, request *Request) (*T, error) {
 		return nil, err
 	}
 
-	failed = false
+	isSuccessful = true
 
 	return result, nil
 }
@@ -359,43 +327,4 @@ func internalFetchWithTimeout(ctx context.Context, client http.Client, url *url.
 func (h *HeimdallClient) Close() {
 	close(h.closeCh)
 	h.client.CloseIdleConnections()
-}
-
-func sendMetrics(ctx context.Context, start time.Time, failed bool) {
-	req := ctx.Value(key)
-	if req == nil {
-		return
-	}
-
-	if failed {
-		switch req.(RequestType) { //nolint:exhaustive
-		case StateSyncRequest:
-			stateSyncInvalidRequestMeter.Mark(1)
-			stateSyncRequestTimer.Update(time.Since(start))
-		case SpanRequest:
-			spanInvalidRequestMeter.Mark(1)
-			spanRequestTimer.Update(time.Since(start))
-		case CheckpointRequest:
-			checkpointInvalidRequestMeter.Mark(1)
-			checkpointRequestTimer.Update(time.Since(start))
-		case CheckpointCountRequest:
-			checkpointCountInvalidRequestMeter.Mark(1)
-			checkpointCountRequestTimer.Update(time.Since(start))
-		}
-	} else {
-		switch req.(RequestType) { //nolint:exhaustive
-		case StateSyncRequest:
-			stateSyncValidRequestMeter.Mark(1)
-			stateSyncRequestTimer.Update(time.Since(start))
-		case SpanRequest:
-			spanValidRequestMeter.Mark(1)
-			spanRequestTimer.Update(time.Since(start))
-		case CheckpointRequest:
-			checkpointValidRequestMeter.Mark(1)
-			checkpointRequestTimer.Update(time.Since(start))
-		case CheckpointCountRequest:
-			checkpointCountValidRequestMeter.Mark(1)
-			checkpointCountRequestTimer.Update(time.Since(start))
-		}
-	}
 }
