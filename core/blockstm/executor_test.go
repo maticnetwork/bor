@@ -240,10 +240,20 @@ func runParallel(t *testing.T, tasks []ExecTask, expectedSerialDuration time.Dur
 	txio, _ := ExecuteParallel(tasks)
 
 	// Need to apply the final write set to storage
-	for _, output := range txio.allOutputs {
-		for i := 0; i < len(output); i++ {
-			sleep(writeTime())
+
+	finalWriteSet := make(map[Key]time.Duration)
+
+	for _, task := range tasks {
+		task := task.(*testExecTask)
+		for _, op := range task.ops {
+			if op.opType == writeType {
+				finalWriteSet[op.key] = op.duration
+			}
 		}
+	}
+
+	for _, v := range finalWriteSet {
+		sleep(v)
 	}
 
 	duration := time.Since(start)

@@ -120,21 +120,7 @@ func (task *ExecutionTask) Execute(mvh *blockstm.MVHashMap, incarnation int) (er
 		return
 	}
 
-	task.statedb.Finalise(false)
-
-	task.finalDBMutex.Lock()
-	for _, v := range task.statedb.MVFullWriteList() {
-		path := v.Path
-
-		if path.IsAddress() {
-			task.finalStateDB.GetOrNewStateObject(path.GetAddress())
-		} else if path.IsState() {
-			addr := path.GetAddress()
-			stateKey := path.GetStateKey()
-			task.finalStateDB.GetState(addr, stateKey)
-		}
-	}
-	task.finalDBMutex.Unlock()
+	task.statedb.Finalise(task.config.IsEIP158(task.blockNumber))
 
 	return
 }
@@ -241,7 +227,17 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 
 		coinbaseBalance := statedb.GetBalance(coinbase)
 
-		statedb.ApplyMVWriteSet(task.MVWriteList())
+		if !p.config.IsByzantium(blockNumber) && shouldDelayFeeCal {
+			writes := make([]blockstm.WriteDescriptor, 0)
+
+			for _, v := range task.MVWriteList() {
+				if v.Path.GetAddress() == coinbase || v.Path.GetAddress() == task.result.BurntContractAddress {
+					writes = append(writes, v)
+				}
+			}
+
+			statedb.ApplyMVWriteSet(writes)
+		}
 
 		for _, l := range task.statedb.GetLogs(task.tx.Hash(), blockHash) {
 			statedb.AddLog(l)
@@ -312,6 +308,26 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 		receipts = append(receipts, receipt)
 		allLogs = append(allLogs, receipt.Logs...)
 	}
+
+	finalWriteMap := make(map[blockstm.Key]blockstm.WriteDescriptor, 0)
+
+	for _, task := range tasks {
+		task := task.(*ExecutionTask)
+		for _, v := range task.MVWriteList() {
+			if v.Path.GetAddress() != coinbase && v.Path.GetAddress() != task.result.BurntContractAddress {
+				finalWriteMap[v.Path] = v
+			} else if p.config.IsByzantium(blockNumber) || !shouldDelayFeeCal {
+				finalWriteMap[v.Path] = v
+			}
+		}
+	}
+
+	finalWriteSet := make([]blockstm.WriteDescriptor, 0)
+	for _, v := range finalWriteMap {
+		finalWriteSet = append(finalWriteSet, v)
+	}
+
+	statedb.ApplyMVWriteSet(finalWriteSet)
 
 	statedb.Finalise(p.config.IsEIP158(blockNumber))
 
