@@ -56,6 +56,4 @@ func (h *HeimdallGRPCClient) StateSyncEvents(ctx context.Context, fromID uint64,
 			eventRecords = append(eventRecords, eventRecord)
 		}
 	}
-
-	return eventRecords, nil
 }
