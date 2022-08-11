@@ -469,11 +469,11 @@ func (n *Node) startRPC() error {
 			return err
 		}
 
-		if n.config.HTTPPort == 0 {
-			defer func() {
+		defer func() {
+			if n.http.listener != nil {
 				n.config.HTTPPort = n.http.listener.Addr().(*net.TCPAddr).Port
-			}()
-		}
+			}
+		}()
 	}
 	// Configure WebSocket.
 	if n.config.WSHost != "" {
@@ -482,11 +482,11 @@ func (n *Node) startRPC() error {
 			return err
 		}
 
-		if n.config.WSPort == 0 {
-			defer func() {
+		defer func() {
+			if n.ws.listener != nil {
 				n.config.WSPort = n.ws.listener.Addr().(*net.TCPAddr).Port
-			}()
-		}
+			}
+		}()
 	}
 	// Configure authenticated API
 	if len(open) != len(all) {
@@ -499,12 +499,14 @@ func (n *Node) startRPC() error {
 			return err
 		}
 	}
+
 	// Start the servers
 	for _, server := range servers {
 		if err := server.start(); err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
