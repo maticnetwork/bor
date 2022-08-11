@@ -18,7 +18,13 @@ func (h *HeimdallGRPCClient) StateSyncEvents(ctx context.Context, fromID uint64,
 		Limit:  uint64(stateFetchLimit),
 	}
 
-	res, err := h.client.StateSyncEvents(ctx, req)
+	var (
+		res    proto.Heimdall_StateSyncEventsClient
+		events *proto.StateSyncEventsResponse
+		err    error
+	)
+
+	res, err = h.client.StateSyncEvents(ctx, req)
 	if err != nil {
 		return nil, err
 	}
