@@ -10,6 +10,11 @@ import (
 type (
 	requestTypeKey struct{}
 	requestType    string
+
+	meter struct {
+		request map[bool]metrics.Meter // map[isSuccessful]metrics.Meter
+		timer   metrics.Timer
+	}
 )
 
 const (
@@ -75,9 +80,4 @@ func sendMetrics(ctx context.Context, start time.Time, isSuccessful bool) {
 
 	meters.request[isSuccessful].Mark(1)
 	meters.timer.Update(time.Since(start))
-}
-
-type meter struct {
-	request map[bool]metrics.Meter // map[isSuccessful]metrics.Meter
-	timer   metrics.Timer
 }
