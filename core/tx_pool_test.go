@@ -2842,6 +2842,8 @@ func TestPoolBatchInsert(t *testing.T) {
 
 					fmt.Println("block", block, "pending", pendingStat, "queued", queuedStat, "elapsed", done)
 
+					// todo: add check for nonce gaps and stuck transactions
+
 					block++
 
 					cancel()
