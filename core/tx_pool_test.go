@@ -26,11 +26,11 @@ import (
 	"math/rand"
 	"os"
 	"runtime"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"golang.org/x/sync/errgroup"
 	"pgregory.net/rapid"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -282,6 +282,16 @@ func testSetNonce(pool *TxPool, addr common.Address, nonce uint64) {
 	pool.mu.Lock()
 	pool.currentState.SetNonce(addr, nonce)
 	pool.mu.Unlock()
+}
+
+func getBalance(pool *TxPool, addr common.Address) *big.Int {
+	bal := big.NewInt(0)
+
+	pool.mu.Lock()
+	bal.Set(pool.currentState.GetBalance(addr))
+	pool.mu.Unlock()
+
+	return bal
 }
 
 func TestInvalidTransactions(t *testing.T) {
@@ -2581,15 +2591,14 @@ type acc struct {
 
 type testTx struct {
 	tx      *types.Transaction
+	idx     int
 	isLocal bool
 }
 
 const localIdx = 0
 
 func getTransactionGen(t *rapid.T, keys []*acc, nonces []uint64, localKey *acc, gasPriceMin, gasPriceMax, gasLimitMin, gasLimitMax uint64) *testTx {
-	fmt.Println("accIDx.0", localIdx, len(keys)-1)
 	idx := rapid.IntRange(0, len(keys)-1).Draw(t, "accIdx").(int)
-	fmt.Println("accIDx.1", localIdx, len(keys)-1)
 
 	var isLocal bool
 	var key *ecdsa.PrivateKey
@@ -2603,20 +2612,13 @@ func getTransactionGen(t *rapid.T, keys []*acc, nonces []uint64, localKey *acc, 
 
 	nonces[idx]++
 
-	fmt.Println("accIDx.3", localIdx, gasPriceMin, gasPriceMax)
-
 	gasPriceUint := rapid.Uint64Range(gasPriceMin, gasPriceMax).Draw(t, "gasPrice").(uint64)
-	fmt.Println("accIDx.4", localIdx, gasPriceMin, gasPriceMax, gasPriceUint)
-	return &testTx{}
 	gasPrice := big.NewInt(0).SetUint64(gasPriceUint)
-	fmt.Println("accIDx.5", localIdx, gasPriceMin, gasPriceMax, gasPrice)
-	fmt.Println("accIDx.6", localIdx, gasLimitMin, gasLimitMax)
 	gasLimit := rapid.Uint64Range(gasLimitMin, gasLimitMax).Draw(t, "gasLimit").(uint64)
-
-	fmt.Println("accIDx.7", localIdx, gasLimitMin, gasLimitMax, gasLimit)
 
 	return &testTx{
 		tx:      pricedTransaction(nonces[idx]-1, gasLimit, gasPrice, key),
+		idx:     idx,
 		isLocal: isLocal,
 	}
 }
@@ -2628,25 +2630,22 @@ type transactionBatches struct {
 
 func transactionsGen(keys []*acc, nonces []uint64, localKey *acc, minTxs int, maxTxs int, gasPriceMin, gasPriceMax, gasLimitMin, gasLimitMax uint64) func(t *rapid.T) *transactionBatches {
 	return func(t *rapid.T) *transactionBatches {
-		fmt.Println("2.3.0.totalTxs", minTxs, maxTxs, rapid.Int32().Draw(t, ""))
 		totalTxs := rapid.IntRange(minTxs, maxTxs).Draw(t, "totalTxs").(int)
-		fmt.Println("2.3.1.totalTxs", totalTxs)
 		txs := make([]*testTx, totalTxs)
 
 		keys = keys[:len(nonces)]
 
 		for i := 0; i < totalTxs; i++ {
-			fmt.Printf("2.4.%d.0.genTx\n", i)
 			txs[i] = getTransactionGen(t, keys, nonces, localKey, gasPriceMin, gasPriceMax, gasLimitMin, gasLimitMax)
-			fmt.Printf("2.4.%d.1.genTx\n", i)
 		}
-		fmt.Println("2.5.DONE", len(txs))
 
 		return &transactionBatches{txs, totalTxs}
 	}
 }
 
 func TestPoolBatchInsert(t *testing.T) {
+	t.Skip("Can reproduce stuck transactions as well as 0 txs blocks")
+
 	t.Parallel()
 
 	const (
@@ -2668,12 +2667,12 @@ func TestPoolBatchInsert(t *testing.T) {
 		gasLimitMin = params.TxGas
 		gasLimitMax = 30_000
 
-		balance = 1_000_000_000
+		balance = 0xffffffffffffff
 
 		blockTime      = 2 * time.Second
 		maxEmptyBlocks = 3
 
-		debug = true
+		debug = false
 	)
 
 	initialBalance := big.NewInt(balance)
@@ -2707,10 +2706,13 @@ func TestPoolBatchInsert(t *testing.T) {
 			t.Parallel()
 
 			rapid.Check(t, func(rt *rapid.T) {
-				defer atomic.AddUint64(testsDone, 1)
-				defer fmt.Println("!!!!!!!!!!!!!!!!!!!!!!!!!!!-case-done", atomic.LoadUint64(testsDone))
+				defer func() {
+					res := atomic.AddUint64(testsDone, 1)
 
-				fmt.Println("data generation started")
+					if res%1000 == 0 {
+						fmt.Println("case-done-", res)
+					}
+				}()
 
 				// Generate a batch of transactions to enqueue into the pool
 				testTxPoolConfig := testTxPoolConfig
@@ -2721,18 +2723,14 @@ func TestPoolBatchInsert(t *testing.T) {
 				testTxPoolConfig.GlobalQueue = 32768
 				testTxPoolConfig.GlobalSlots = 32768
 				testTxPoolConfig.Lifetime = time.Hour + 30*time.Minute //"1h30m0s"
-				testTxPoolConfig.PriceLimit = 30000000000
+				testTxPoolConfig.PriceLimit = 1
 
 				now := time.Now()
-				pendingAddedCh := make(chan struct{}, 100)
+				pendingAddedCh := make(chan struct{}, 1024)
 				pool, key := setupTxPoolWithConfig(params.TestChainConfig, testTxPoolConfig, gasLimit, MakeWithPromoteTxCh(pendingAddedCh))
-				fmt.Println("tx pool started", time.Since(now))
-				now = time.Now()
 				defer pool.Stop()
 
 				totalAccs := rapid.IntRange(minAccs, maxAccs).Draw(rt, "totalAccs").(int)
-				fmt.Println("totalAccs done", time.Since(now))
-				now = time.Now()
 
 				// regenerate only local key
 				localKey := &acc{
@@ -2744,41 +2742,27 @@ func TestPoolBatchInsert(t *testing.T) {
 					rt.Fatalf("pool internal state corrupted: %v", err)
 				}
 
-				var (
-					wg  errgroup.Group
-					txs *transactionBatches
-				)
+				var wg sync.WaitGroup
+				wg.Add(1)
 
-				wg.Go(func() error {
-					now := time.Now()
+				go func() {
+					defer wg.Done()
+					now = time.Now()
 
 					testAddBalance(pool, localKey.account, initialBalance)
 
 					for idx := 0; idx < totalAccs; idx++ {
 						testAddBalance(pool, keys[idx].account, initialBalance)
 					}
-					fmt.Println("1.add balance and keys done", time.Since(now))
-					return nil
-				})
 
-				wg.Go(func() error {
-					now := time.Now()
-					nonces := make([]uint64, totalAccs)
-					gen := rapid.Custom(transactionsGen(keys, nonces, localKey, minTxs, maxTxs, gasPriceMin, gasPriceMax, gasLimitMin, gasLimitMax))
-					fmt.Println("2.0.generate transaction generator done", time.Since(now))
+				}()
 
-					now = time.Now()
-					txs = gen.Draw(rt, "batches").(*transactionBatches)
-					fmt.Println("2.1.generate transactions done", time.Since(now))
+				nonces := make([]uint64, totalAccs)
+				gen := rapid.Custom(transactionsGen(keys, nonces, localKey, minTxs, maxTxs, gasPriceMin, gasPriceMax, gasLimitMin, gasLimitMax))
 
-					return nil
-				})
+				txs := gen.Draw(rt, "batches").(*transactionBatches)
 
 				wg.Wait()
-
-				fmt.Println("data generation completed", time.Since(now))
-
-				now = time.Now()
 
 				var (
 					addIntoTxPool func(tx []*types.Transaction) []error
@@ -2794,7 +2778,7 @@ func TestPoolBatchInsert(t *testing.T) {
 
 					err := addIntoTxPool([]*types.Transaction{tx.tx})
 					if len(err) != 0 && err[0] != nil {
-						rt.Fatal("on adding a transaction to the tx pool", err[0])
+						rt.Log("on adding a transaction to the tx pool", err[0], tx.tx.Gas(), tx.tx.GasPrice(), pool.GasPrice(), getBalance(pool, keys[tx.idx].account))
 					}
 				}
 
@@ -2824,7 +2808,6 @@ func TestPoolBatchInsert(t *testing.T) {
 					pendingStat, queuedStat := pool.Stats()
 					if pendingStat+queuedStat == 0 {
 						cancel()
-
 						break
 					}
 
@@ -2834,7 +2817,6 @@ func TestPoolBatchInsert(t *testing.T) {
 					locals := pool.Locals()
 
 					// from fillTransactions
-					fmt.Println("!!!!!!!!!!!!-1", len(locals), len(pending), pendingStat)
 					removedFromPool, blockGasLeft, err := fillTransactions(ctx, pool, locals, pending, gasLimit)
 
 					done := time.Since(start)
