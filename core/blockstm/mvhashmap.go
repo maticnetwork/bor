@@ -2,7 +2,7 @@ package blockstm
 
 import (
 	"fmt"
-	"sync"
+	"sync/atomic"
 
 	"github.com/emirpasic/gods/maps/treemap"
 	cmap "github.com/orcaman/concurrent-map/v2"
@@ -92,7 +92,10 @@ type WriteCell struct {
 }
 
 type TxnIndexCells struct {
-	rw sync.RWMutex
+	authorizedTm *atomic.Pointer[treeMap]
+}
+
+type treeMap struct {
 	tm *treemap.Map
 }
 
@@ -117,9 +120,13 @@ func (mv *MVHashMap) getKeyCells(k Key, fNoKey func(kenc Key) *TxnIndexCells) (c
 func (mv *MVHashMap) Write(k Key, v Version, data interface{}) {
 	cells := mv.getKeyCells(k, func(kenc Key) (cells *TxnIndexCells) {
 		n := &TxnIndexCells{
-			rw: sync.RWMutex{},
-			tm: treemap.NewWithIntComparator(),
+			authorizedTm: &atomic.Pointer[treeMap]{},
 		}
+		n.authorizedTm.Store(
+			&treeMap{
+				tm: treemap.NewWithIntComparator(),
+			},
+		)
 		cells = n
 		sk := string(kenc[:])
 		ok := mv.m.SetIfAbsent(sk, n)
@@ -129,9 +136,7 @@ func (mv *MVHashMap) Write(k Key, v Version, data interface{}) {
 		return
 	})
 
-	cells.rw.RLock()
-	ci, ok := cells.tm.Get(v.TxnIndex)
-	cells.rw.RUnlock()
+	ci, ok := cells.authorizedTm.Load().tm.Get(v.TxnIndex)
 
 	if ok {
 		if ci.(*WriteCell).incarnation > v.Incarnation {
@@ -143,9 +148,8 @@ func (mv *MVHashMap) Write(k Key, v Version, data interface{}) {
 		ci.(*WriteCell).incarnation = v.Incarnation
 		ci.(*WriteCell).data = data
 	} else {
-		cells.rw.Lock()
-		if ci, ok = cells.tm.Get(v.TxnIndex); !ok {
-			cells.tm.Put(v.TxnIndex, &WriteCell{
+		if ci, ok = cells.authorizedTm.Load().tm.Get(v.TxnIndex); !ok {
+			cells.authorizedTm.Load().tm.Put(v.TxnIndex, &WriteCell{
 				flag:        FlagDone,
 				incarnation: v.Incarnation,
 				data:        data,
@@ -155,7 +159,6 @@ func (mv *MVHashMap) Write(k Key, v Version, data interface{}) {
 			ci.(*WriteCell).incarnation = v.Incarnation
 			ci.(*WriteCell).data = data
 		}
-		cells.rw.Unlock()
 	}
 }
 
@@ -164,13 +167,11 @@ func (mv *MVHashMap) MarkEstimate(k Key, txIdx int) {
 		panic(fmt.Errorf("path must already exist"))
 	})
 
-	cells.rw.RLock()
-	if ci, ok := cells.tm.Get(txIdx); !ok {
-		panic(fmt.Sprintf("should not happen - cell should be present for path. TxIdx: %v, path, %x, cells keys: %v", txIdx, k, cells.tm.Keys()))
+	if ci, ok := cells.authorizedTm.Load().tm.Get(txIdx); !ok {
+		panic(fmt.Sprintf("should not happen - cell should be present for path. TxIdx: %v, path, %x, cells keys: %v", txIdx, k, cells.authorizedTm.Load().tm.Keys()))
 	} else {
 		ci.(*WriteCell).flag = FlagEstimate
 	}
-	cells.rw.RUnlock()
 }
 
 func (mv *MVHashMap) Delete(k Key, txIdx int) {
@@ -178,9 +179,7 @@ func (mv *MVHashMap) Delete(k Key, txIdx int) {
 		panic(fmt.Errorf("path must already exist"))
 	})
 
-	cells.rw.Lock()
-	defer cells.rw.Unlock()
-	cells.tm.Remove(txIdx)
+	cells.authorizedTm.Load().tm.Remove(txIdx)
 }
 
 const (
@@ -230,9 +229,9 @@ func (mv *MVHashMap) Read(k Key, txIdx int) (res MVReadResult) {
 		return
 	}
 
-	cells.rw.RLock()
-	fk, fv := cells.tm.Floor(txIdx - 1)
-	cells.rw.RUnlock()
+	// cells.rw.RLock()
+	fk, fv := cells.authorizedTm.Load().tm.Floor(txIdx - 1)
+	// cells.rw.RUnlock()
 
 	if fk != nil && fv != nil {
 		c := fv.(*WriteCell)
