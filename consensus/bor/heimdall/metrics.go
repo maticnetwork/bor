@@ -34,7 +34,6 @@ func getRequestType(ctx context.Context) (requestType, bool) {
 }
 
 var (
-	// State Sync requests
 	requestMeters = map[requestType]meter{
 		stateSyncRequest: {
 			request: map[bool]metrics.Meter{
