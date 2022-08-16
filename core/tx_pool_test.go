@@ -2674,8 +2674,10 @@ func TestPoolBatchInsert(t *testing.T) {
 
 		blockTime      = 2 * time.Second
 		maxEmptyBlocks = 3
+		maxStuckBlocks = 3
 
-		debug = false
+		checkNonceGaps = false
+		debug          = false
 	)
 
 	initialBalance := big.NewInt(balance)
@@ -2712,8 +2714,8 @@ func TestPoolBatchInsert(t *testing.T) {
 				defer func() {
 					res := atomic.AddUint64(testsDone, 1)
 
-					if res%1000 == 0 {
-						fmt.Println("case-done-", res)
+					if res%100 == 0 {
+						fmt.Println("case-done", res)
 					}
 				}()
 
@@ -2786,8 +2788,11 @@ func TestPoolBatchInsert(t *testing.T) {
 				}
 
 				var (
-					block       int
-					emptyBlocks int
+					block              int
+					emptyBlocks        int
+					stuckBlocks        int
+					lastTxPoolStats    int
+					currentTxPoolStats int
 				)
 
 				for {
@@ -2809,15 +2814,44 @@ func TestPoolBatchInsert(t *testing.T) {
 					}
 
 					pendingStat, queuedStat := pool.Stats()
-					if pendingStat+queuedStat == 0 {
+					currentTxPoolStats = pendingStat + queuedStat
+					if currentTxPoolStats == 0 {
 						cancel()
 						break
+					}
+
+					// check if txPool got stuck
+					if currentTxPoolStats == lastTxPoolStats {
+						stuckBlocks++
+					} else {
+						stuckBlocks = 0
+						lastTxPoolStats = currentTxPoolStats
 					}
 
 					// copy-paste
 					start := time.Now()
 					pending := pool.Pending(true)
 					locals := pool.Locals()
+
+					// check for nonce gaps
+					if checkNonceGaps {
+						var lastNonce, currentNonce int
+						for txAcc, pendingTxs := range pending {
+							lastNonce = int(pool.Nonce(txAcc)) - len(pendingTxs) - 1
+
+							isFirst := true
+
+							for _, tx := range pendingTxs {
+								currentNonce = int(tx.Nonce())
+								if currentNonce-lastNonce != 1 {
+									rt.Fatalf("got a nonce gap for account %q. Current nonce %d, previous %d %v",
+										txAcc, currentNonce, lastNonce, isFirst)
+								}
+
+								lastNonce = currentNonce
+							}
+						}
+					}
 
 					// from fillTransactions
 					removedFromPool, blockGasLeft, err := fillTransactions(ctx, pool, locals, pending, gasLimit)
@@ -2835,25 +2869,29 @@ func TestPoolBatchInsert(t *testing.T) {
 							emptyBlocks, maxEmptyBlocks, done, txs.totalTxs, len(pending), len(locals))
 					}
 
+					if stuckBlocks >= maxStuckBlocks {
+						rt.Fatalf("got %d empty blocks in a row(expected less then %d): total time %s, total accounts %d. Pending %d, locals %d)",
+							emptyBlocks, maxEmptyBlocks, done, txs.totalTxs, len(pending), len(locals))
+					}
+
 					if err != nil {
 						rt.Fatalf("took too long: total time %s(expected %s), total accounts %d. Pending %d, locals %d)",
 							done, blockTime, txs.totalTxs, len(pending), len(locals))
 					}
 
-					fmt.Println("current_total", txs.totalTxs, "in_batch", totalInBatch, "removed", removedFromPool, "emptyBlocks", emptyBlocks, "blockGasLeft", blockGasLeft, "pending", len(pending), "locals", len(locals),
+					rt.Log("current_total", txs.totalTxs, "in_batch", totalInBatch, "removed", removedFromPool, "emptyBlocks", emptyBlocks, "blockGasLeft", blockGasLeft, "pending", len(pending), "locals", len(locals),
 						"locals+pending", done)
 
-					fmt.Println("block", block, "pending", pendingStat, "queued", queuedStat, "elapsed", done)
-
-					// todo: add check for nonce gaps and stuck transactions
+					rt.Log("block", block, "pending", pendingStat, "queued", queuedStat, "elapsed", done)
 
 					block++
 
 					cancel()
+
 					time.Sleep(time.Second)
 				}
 
-				fmt.Printf("case completed totalTxs %d %v\n\n", txs.totalTxs, time.Since(now))
+				rt.Logf("case completed totalTxs %d %v\n\n", txs.totalTxs, time.Since(now))
 			})
 		})
 	}
