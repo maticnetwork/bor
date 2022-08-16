@@ -22,9 +22,8 @@ import (
 	"os"
 	"time"
 
-	"gopkg.in/urfave/cli.v1"
-
 	"github.com/BurntSushi/toml"
+	"gopkg.in/urfave/cli.v1"
 
 	"github.com/ethereum/go-ethereum/accounts/external"
 	"github.com/ethereum/go-ethereum/accounts/keystore"

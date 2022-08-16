@@ -49,7 +49,7 @@ func (b *TestBackend) GetBorBlockReceipt(ctx context.Context, hash common.Hash) 
 func (b *TestBackend) GetBorBlockLogs(ctx context.Context, hash common.Hash) ([]*types.Log, error) {
 	receipt, err := b.GetBorBlockReceipt(ctx, hash)
 	if err != nil {
-		return nil, err
+		return []*types.Log{}, err
 	}
 
 	if receipt == nil {
