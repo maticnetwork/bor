@@ -92,7 +92,7 @@ func (task *ExecutionTask) Execute(mvh *blockstm.MVHashMap, incarnation int) (er
 			// In some pre-matured executions, EVM will panic. Recover from panic and retry the execution.
 			log.Debug("Recovered from EVM failure. Error:\n", r)
 
-			err = blockstm.ErrExecAbortError{DependencyIndex: task.statedb.DepTxIndex()}
+			err = blockstm.ErrExecAbortError{DependencyIndices: task.statedb.DepTxIndex()}
 
 			return
 		}
@@ -116,11 +116,26 @@ func (task *ExecutionTask) Execute(mvh *blockstm.MVHashMap, incarnation int) (er
 	}
 
 	if task.statedb.HadInvalidRead() || err != nil {
-		err = blockstm.ErrExecAbortError{DependencyIndex: task.statedb.DepTxIndex()}
+		err = blockstm.ErrExecAbortError{DependencyIndices: task.statedb.DepTxIndex()}
 		return
 	}
 
 	task.statedb.Finalise(task.config.IsEIP158(task.blockNumber))
+
+	task.finalDBMutex.Lock()
+	for _, v := range task.statedb.MVFullWriteList() {
+		path := v.Path
+
+		if path.IsState() {
+			addr := path.GetAddress()
+			stateKey := path.GetStateKey()
+			task.finalStateDB.GetState(addr, stateKey)
+		} else if path.IsSubpath() && path.GetSubpath() == state.BalancePath {
+			addr := path.GetAddress()
+			task.finalStateDB.GetBalance(addr)
+		}
+	}
+	task.finalDBMutex.Unlock()
 
 	return
 }

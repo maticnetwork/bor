@@ -11,7 +11,8 @@ func makeStatusManager(numTasks int) (t taskStatusManager) {
 		t.pending[i] = i
 	}
 
-	t.dependency = make(map[int][]int, numTasks)
+	t.dependency = make(map[int]map[int]bool, numTasks)
+	t.blockCount = make(map[int]map[int]bool, numTasks)
 
 	return
 }
@@ -20,7 +21,8 @@ type taskStatusManager struct {
 	pending    []int
 	inProgress []int
 	complete   []int
-	dependency map[int][]int
+	dependency map[int]map[int]bool
+	blockCount map[int]map[int]bool
 }
 
 func insertInList(l []int, v int) []int {
@@ -116,22 +118,37 @@ func (m *taskStatusManager) revertInProgress(tx int) {
 	m.pending = insertInList(m.pending, tx)
 }
 
-func (m *taskStatusManager) addDependency(tx int, dependent int) bool {
-	x := sort.SearchInts(m.complete, tx)
-	if x < len(m.complete) && m.complete[x] == tx {
-		// Blocking tx has already completed
-		return false
+func (m *taskStatusManager) addDependencies(txs []int, dependent int) bool {
+	for _, tx := range txs {
+		x := sort.SearchInts(m.complete, tx)
+		if x < len(m.complete) && m.complete[x] == tx {
+			// Blocking tx has already completed
+			continue
+		}
+
+		if _, ok := m.dependency[tx]; !ok {
+			m.dependency[tx] = make(map[int]bool)
+		}
+
+		if _, ok := m.blockCount[dependent]; !ok {
+			m.blockCount[dependent] = make(map[int]bool)
+		}
+
+		m.dependency[tx][dependent] = true
+		m.blockCount[dependent][tx] = true
 	}
 
-	m.dependency[tx] = append(m.dependency[tx], dependent)
-
-	return true
+	return len(m.blockCount[dependent]) > 0
 }
 
 func (m *taskStatusManager) removeDependency(tx int) {
 	if deps, ok := m.dependency[tx]; ok && len(deps) > 0 {
-		for _, v := range deps {
-			m.pushPending(v)
+		for k := range deps {
+			delete(m.blockCount[k], tx)
+
+			if len(m.blockCount[k]) == 0 {
+				m.pushPending(k)
+			}
 		}
 
 		delete(m.dependency, tx)

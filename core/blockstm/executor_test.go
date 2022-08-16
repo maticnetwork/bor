@@ -34,6 +34,14 @@ type testExecTask struct {
 	sender   common.Address
 }
 
+type PathGenerator func(common.Address, int) Key
+
+type TaskRunner func(numTx int, numRead int, numWrite int, numNonIO int) (time.Duration, time.Duration)
+
+type Timer func() time.Duration
+
+type Sender func(int) common.Address
+
 func NewTestExecTask(txIdx int, ops []Op, sender common.Address) *testExecTask {
 	return &testExecTask{
 		txIdx:    txIdx,
@@ -56,6 +64,8 @@ func (t *testExecTask) Execute(mvh *MVHashMap, incarnation int) error {
 	t.readMap = make(map[Key]ReadDescriptor)
 	t.writeMap = make(map[Key]WriteDescriptor)
 
+	deps := make(map[int]bool, 0)
+
 	for _, op := range t.ops {
 		k := op.key
 
@@ -68,7 +78,7 @@ func (t *testExecTask) Execute(mvh *MVHashMap, incarnation int) error {
 			result := mvh.Read(k, t.txIdx)
 
 			if result.Status() == MVReadResultDependency {
-				return ErrExecAbortError{result.depIdx}
+				deps[result.depIdx] = true
 			}
 
 			var readKind int
@@ -87,6 +97,15 @@ func (t *testExecTask) Execute(mvh *MVHashMap, incarnation int) error {
 		} else {
 			sleep(op.duration)
 		}
+	}
+
+	if len(deps) > 0 {
+		depList := make([]int, 0, len(deps))
+		for k := range deps {
+			depList = append(depList, k)
+		}
+
+		return ErrExecAbortError{depList}
 	}
 
 	return nil
@@ -144,7 +163,7 @@ var readTime = randTimeGenerator(4*time.Microsecond, 12*time.Microsecond)
 var writeTime = randTimeGenerator(2*time.Microsecond, 6*time.Microsecond)
 var nonIOTime = randTimeGenerator(1*time.Microsecond, 2*time.Microsecond)
 
-func taskFactory(numTask int, sender func(int) common.Address, readsPerT int, writesPerT int, nonIOPerT int, pathGenerator func(common.Address, int) Key, readTime func() time.Duration, writeTime func() time.Duration, nonIOTime func() time.Duration) ([]ExecTask, time.Duration) {
+func taskFactory(numTask int, sender Sender, readsPerT int, writesPerT int, nonIOPerT int, pathGenerator PathGenerator, readTime Timer, writeTime Timer, nonIOTime Timer) ([]ExecTask, time.Duration) {
 	exec := make([]ExecTask, 0, numTask)
 
 	var serialDuration time.Duration
@@ -192,7 +211,7 @@ func taskFactory(numTask int, sender func(int) common.Address, readsPerT int, wr
 	return exec, serialDuration
 }
 
-func testExecutorComb(t *testing.T, totalTxs []int, numReads []int, numWrites []int, numNonIO []int, taskRunner func(numTx int, numRead int, numWrite int, numNonIO int) (time.Duration, time.Duration)) {
+func testExecutorComb(t *testing.T, totalTxs []int, numReads []int, numWrites []int, numNonIO []int, taskRunner TaskRunner) {
 	t.Helper()
 	log.Root().SetHandler(log.LvlFilterHandler(log.LvlDebug, log.StreamHandler(os.Stderr, log.TerminalFormat(false))))
 

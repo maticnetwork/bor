@@ -41,12 +41,12 @@ func (ev *ExecVersionView) Execute() (er ExecResult) {
 }
 
 type ErrExecAbortError struct {
-	DependencyIndex int
+	DependencyIndices []int
 }
 
 func (e ErrExecAbortError) Error() string {
-	if e.DependencyIndex >= 0 {
-		return fmt.Sprintf("Execution aborted due to dependency %d", e.DependencyIndex)
+	if len(e.DependencyIndices) > 0 {
+		return fmt.Sprintf("Execution aborted due to dependency %d", e.DependencyIndices)
 	} else {
 		return "Execution aborted"
 	}
@@ -98,7 +98,8 @@ func ExecuteParallel(tasks []ExecTask) (lastTxIO *TxnInputOutput, err error) {
 	diagExecSuccess := make([]int, len(tasks))
 	diagExecAbort := make([]int, len(tasks))
 
-	for res := range chResults {
+	for {
+		res := <-chResults
 		if res.err == nil { //nolint:nestif
 			lastTxIO.recordRead(res.ver.TxnIndex, res.txIn)
 
@@ -137,9 +138,9 @@ func ExecuteParallel(tasks []ExecTask) (lastTxIO *TxnInputOutput, err error) {
 
 			execTasks.removeDependency(res.ver.TxnIndex)
 		} else if execErr, ok := res.err.(ErrExecAbortError); ok {
-			if execErr.DependencyIndex >= 0 {
+			if len(execErr.DependencyIndices) > 0 {
 				execTasks.clearInProgress(res.ver.TxnIndex)
-				if !execTasks.addDependency(execErr.DependencyIndex, res.ver.TxnIndex) {
+				if !execTasks.addDependencies(execErr.DependencyIndices, res.ver.TxnIndex) {
 					execTasks.pushPending(res.ver.TxnIndex)
 				}
 			} else {

@@ -86,8 +86,7 @@ type StateDB struct {
 	readMap         map[blockstm.Key]blockstm.ReadDescriptor
 	writeMap        map[blockstm.Key]blockstm.WriteDescriptor
 	newStateObjects map[common.Address]struct{}
-	invalidRead     bool
-	depTxIndex      int
+	deps            map[int]bool
 
 	// DB error.
 	// State objects are used by the consensus core and VM which are
@@ -228,16 +227,26 @@ func (s *StateDB) ensureWriteMap() {
 	}
 }
 
-func (s *StateDB) HadInvalidRead() bool {
-	return s.invalidRead
+func (s *StateDB) ensureDepsMap() {
+	if s.deps == nil {
+		s.deps = make(map[int]bool)
+	}
 }
 
-func (s *StateDB) DepTxIndex() int {
-	if s.HadInvalidRead() {
-		return s.depTxIndex
-	} else {
-		return -1
+func (s *StateDB) HadInvalidRead() bool {
+	s.ensureDepsMap()
+	return len(s.deps) > 0
+}
+
+func (s *StateDB) DepTxIndex() []int {
+	s.ensureDepsMap()
+	deps := make([]int, 0, len(s.deps))
+
+	for k := range s.deps {
+		deps = append(deps, k)
 	}
+
+	return deps
 }
 
 func (s *StateDB) SetIncarnation(inc int) {
@@ -250,6 +259,7 @@ func MVRead[T any](s *StateDB, k blockstm.Key, defaultV T, readStorage func(s *S
 	}
 
 	s.ensureReadMap()
+	s.ensureDepsMap()
 
 	if s.writeMap != nil {
 		if _, ok := s.writeMap[k]; ok {
@@ -276,8 +286,7 @@ func MVRead[T any](s *StateDB, k blockstm.Key, defaultV T, readStorage func(s *S
 		}
 	case blockstm.MVReadResultDependency:
 		{
-			s.depTxIndex = res.DepIdx()
-			s.invalidRead = true
+			s.deps[res.DepIdx()] = true
 			return defaultV
 		}
 	case blockstm.MVReadResultNone:
