@@ -227,6 +227,7 @@ func (t *StateTest) RunNoVerify(subtest StateSubtest, vmconfig vm.Config, snapsh
 		evmContext.Random = &rnd
 		evmContext.Difficulty = big.NewInt(0)
 	}
+
 	evm := vm.NewEVM(evmContext, txContext, statedb, config, vmconfig)
 	// Execute the message.
 	snapshot := statedb.Snapshot()

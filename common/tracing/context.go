@@ -56,8 +56,6 @@ func Exec(ctx context.Context, spanName string, opts ...Option) {
 	if tr != nil {
 		span.End()
 	}
-
-	return
 }
 
 func WithTime(fn func(context.Context, trace.Span)) Option {

@@ -301,6 +301,7 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 	ctx := tracing.WithTracer(context.Background(), otel.GetTracerProvider().Tracer("MinerWorker"))
 
 	worker.wg.Add(4)
+
 	go worker.mainLoop(ctx)
 	go worker.newWorkLoop(ctx, recommit)
 	go worker.resultLoop()
@@ -540,6 +541,7 @@ func (w *worker) newWorkLoop(ctx context.Context, recommit time.Duration) {
 // mainLoop is responsible for generating and submitting sealing work based on
 // the received event. It can support two modes: automatically generate task and
 // submit it or return task according to given parameters for various proposes.
+// nolint: gocognit
 func (w *worker) mainLoop(ctx context.Context) {
 	defer w.wg.Done()
 	defer w.txsSub.Unsubscribe()
