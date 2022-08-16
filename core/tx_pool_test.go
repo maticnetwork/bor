@@ -2600,8 +2600,10 @@ const localIdx = 0
 func getTransactionGen(t *rapid.T, keys []*acc, nonces []uint64, localKey *acc, gasPriceMin, gasPriceMax, gasLimitMin, gasLimitMax uint64) *testTx {
 	idx := rapid.IntRange(0, len(keys)-1).Draw(t, "accIdx").(int)
 
-	var isLocal bool
-	var key *ecdsa.PrivateKey
+	var (
+		isLocal bool
+		key     *ecdsa.PrivateKey
+	)
 
 	if idx == localIdx {
 		isLocal = true
@@ -2643,6 +2645,7 @@ func transactionsGen(keys []*acc, nonces []uint64, localKey *acc, minTxs int, ma
 	}
 }
 
+//nolint:gocognit
 func TestPoolBatchInsert(t *testing.T) {
 	t.Skip("Can reproduce stuck transactions as well as 0 txs blocks")
 
@@ -2802,7 +2805,7 @@ func TestPoolBatchInsert(t *testing.T) {
 						}
 
 						rt.Fatalf("got %d block timeout in a row(expected less then %s): total accounts %d. Pending %d, queued %d)",
-							block, time.Duration(blockTime/2), txs.totalTxs, pendingStat, queuedStat)
+							block, blockTime/2, txs.totalTxs, pendingStat, queuedStat)
 					}
 
 					pendingStat, queuedStat := pool.Stats()
@@ -2865,6 +2868,7 @@ func fillTransactions(ctx context.Context, pool *TxPool, locals []common.Address
 	for _, txAcc := range locals {
 		if txs := remoteTxs[txAcc]; len(txs) > 0 {
 			delete(remoteTxs, txAcc)
+
 			localTxs[txAcc] = txs
 		}
 	}
@@ -2889,7 +2893,6 @@ func fillTransactions(ctx context.Context, pool *TxPool, locals []common.Address
 		case <-ctx.Done():
 			return txLocalCount + txRemoteCount, blockGasLimit, ctx.Err()
 		default:
-			// nothing to do
 		}
 
 		blockGasLimit, txLocalCount = commitTransactions(pool, txs, blockGasLimit)
@@ -2899,7 +2902,6 @@ func fillTransactions(ctx context.Context, pool *TxPool, locals []common.Address
 	case <-ctx.Done():
 		return txLocalCount + txRemoteCount, blockGasLimit, ctx.Err()
 	default:
-		// nothing to do
 	}
 
 	if len(remoteTxs) > 0 {
@@ -2909,7 +2911,6 @@ func fillTransactions(ctx context.Context, pool *TxPool, locals []common.Address
 		case <-ctx.Done():
 			return txLocalCount + txRemoteCount, blockGasLimit, ctx.Err()
 		default:
-			// nothing to do
 		}
 
 		blockGasLimit, txRemoteCount = commitTransactions(pool, txs, blockGasLimit)
@@ -2919,8 +2920,10 @@ func fillTransactions(ctx context.Context, pool *TxPool, locals []common.Address
 }
 
 func commitTransactions(pool *TxPool, txs *types.TransactionsByPriceAndNonce, blockGasLimit uint64) (uint64, int) {
-	var tx *types.Transaction
-	var txCount int
+	var (
+		tx      *types.Transaction
+		txCount int
+	)
 
 	for {
 		tx = txs.Peek()

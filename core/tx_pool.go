@@ -825,7 +825,6 @@ func (pool *TxPool) promoteTx(addr common.Address, hash common.Hash, tx *types.T
 		select {
 		case pool.promoteTxCh <- struct{}{}:
 		default:
-			// nothing to do
 		}
 	}()
 
