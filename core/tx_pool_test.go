@@ -2647,8 +2647,6 @@ func transactionsGen(keys []*acc, nonces []uint64, localKey *acc, minTxs int, ma
 
 //nolint:gocognit
 func TestPoolBatchInsert(t *testing.T) {
-	t.Skip("Can reproduce stuck transactions as well as 0 txs blocks")
-
 	t.Parallel()
 
 	const (
@@ -2979,5 +2977,11 @@ func commitTransactions(pool *TxPool, txs *types.TransactionsByPriceAndNonce, bl
 			// we don't maximize fulfilment of the block. just fill somehow
 			return blockGasLimit, txCount
 		}
+	}
+}
+
+func MakeWithPromoteTxCh(ch chan struct{}) func(*TxPool) {
+	return func(pool *TxPool) {
+		pool.promoteTxCh = ch
 	}
 }

@@ -1852,9 +1852,3 @@ func (t *txLookup) RemotesBelowTip(threshold *big.Int) types.Transactions {
 func numSlots(tx *types.Transaction) int {
 	return int((tx.Size() + txSlotSize - 1) / txSlotSize)
 }
-
-func MakeWithPromoteTxCh(ch chan struct{}) func(*TxPool) {
-	return func(pool *TxPool) {
-		pool.promoteTxCh = ch
-	}
-}
