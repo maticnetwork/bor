@@ -17,11 +17,7 @@ func WithTracer(ctx context.Context, tr trace.Tracer) context.Context {
 }
 
 func FromContext(ctx context.Context) trace.Tracer {
-	tr, ok := ctx.Value(tracerKey{}).(trace.Tracer)
-
-	if !ok {
-		panic("nil tracer")
-	}
+	tr, _ := ctx.Value(tracerKey{}).(trace.Tracer)
 
 	return tr
 }
@@ -51,8 +47,6 @@ func Exec(ctx context.Context, spanName string, opts ...Option) {
 
 	if tr != nil {
 		ctx, span = tr.Start(ctx, spanName)
-	} else {
-		panic("nil tracer")
 	}
 
 	for _, optFn := range opts {
