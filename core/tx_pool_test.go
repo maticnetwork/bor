@@ -2647,7 +2647,9 @@ func transactionsGen(keys []*acc, nonces []uint64, localKey *acc, minTxs int, ma
 
 //nolint:gocognit
 func TestPoolBatchInsert(t *testing.T) {
-	t.Parallel()
+	t.Skip("Can reproduce stuck transactions as well as 0 txs blocks")
+
+	t.Para§llel()
 
 	const (
 		// the most tweakable params
@@ -2757,7 +2759,6 @@ func TestPoolBatchInsert(t *testing.T) {
 					for idx := 0; idx < totalAccs; idx++ {
 						testAddBalance(pool, keys[idx].account, initialBalance)
 					}
-
 				}()
 
 				nonces := make([]uint64, totalAccs)
