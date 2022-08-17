@@ -2649,7 +2649,7 @@ func transactionsGen(keys []*acc, nonces []uint64, localKey *acc, minTxs int, ma
 func TestPoolBatchInsert(t *testing.T) {
 	t.Skip("Can reproduce stuck transactions as well as 0 txs blocks")
 
-	t.Para§llel()
+	t.Parallel()
 
 	const (
 		// the most tweakable params
