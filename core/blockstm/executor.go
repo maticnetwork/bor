@@ -59,11 +59,11 @@ func ExecuteParallel(tasks []ExecTask) (lastTxIO *TxnInputOutput, err error) {
 	chTasks := make(chan ExecVersionView, len(tasks))
 	chResults := make(chan ExecResult, len(tasks))
 	chDone := make(chan bool)
-	mutMap := map[common.Address]sync.RWMutex{}
+	mutMap := map[common.Address]*sync.RWMutex{}
 
 	for _, t := range tasks {
 		if _, ok := mutMap[t.Sender()]; !ok {
-			mutMap[t.Sender()] = sync.RWMutex{}
+			mutMap[t.Sender()] = &sync.RWMutex{}
 		}
 	}
 
