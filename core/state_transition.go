@@ -90,7 +90,7 @@ type ExecutionResult struct {
 	UsedGas              uint64 // Total used gas but include the refunded gas
 	Err                  error  // Any error encountered during the execution(listed in core/vm/errors.go)
 	ReturnData           []byte // Returned data from evm(function result or data supplied with revert opcode)
-	senderInitBalance    *big.Int
+	SenderInitBalance    *big.Int
 	FeeBurnt             *big.Int
 	BurntContractAddress common.Address
 	FeeTipped            *big.Int
@@ -401,7 +401,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		UsedGas:              st.gasUsed(),
 		Err:                  vmerr,
 		ReturnData:           ret,
-		senderInitBalance:    input1,
+		SenderInitBalance:    input1,
 		FeeBurnt:             burnAmount,
 		BurntContractAddress: burntContractAddress,
 		FeeTipped:            amount,
