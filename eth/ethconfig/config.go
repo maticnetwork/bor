@@ -32,6 +32,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/bor/contract"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall" //nolint:typecheck
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
+	"github.com/ethereum/go-ethereum/consensus/bor/heimdallgrpc"
 	"github.com/ethereum/go-ethereum/consensus/clique"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core"
@@ -216,6 +217,9 @@ type Config struct {
 	// No heimdall service
 	WithoutHeimdall bool
 
+	// Address to connect to Heimdall gRPC server
+	HeimdallgRPCAddress string
+
 	// Bor logs flag
 	BorLogs bool
 
@@ -240,13 +244,22 @@ func CreateConsensusEngine(stack *node.Node, chainConfig *params.ChainConfig, et
 	// In order to pass the ethereum transaction tests, we need to set the burn contract which is in the bor config
 	// Then, bor != nil will also be enabled for ethash and clique. Only enable Bor for real if there is a validator contract present.
 	if chainConfig.Bor != nil && chainConfig.Bor.ValidatorContract != "" {
-		genesisContractsClient := contract.NewGenesisContractsClient(chainConfig, chainConfig.Bor.ValidatorContract, chainConfig.Bor.StateReceiverContract, blockchainAPI)
-		spanner := span.NewChainSpanner(blockchainAPI, contract.ValidatorSet(), chainConfig, common.HexToAddress(chainConfig.Bor.ValidatorContract))
-
+		genesisContractsClient := contract.NewGenesisContractsClient(chainConfig, common.HexToAddress(chainConfig.Bor.ValidatorContract), common.HexToAddress(chainConfig.Bor.ValidatorContract))
+		spanner, err := span.NewChainSpanner(chainConfig, common.HexToAddress(chainConfig.Bor.ValidatorContract))
+		if err != nil {
+			log.Error("Failed to initalise spanner", "error", err)
+		}
 		if ethConfig.WithoutHeimdall {
 			return bor.New(chainConfig, db, blockchainAPI, spanner, nil, genesisContractsClient)
 		} else {
-			return bor.New(chainConfig, db, blockchainAPI, spanner, heimdall.NewHeimdallClient(ethConfig.HeimdallURL), genesisContractsClient)
+			var heimdallClient bor.IHeimdallClient
+			if ethConfig.HeimdallgRPCAddress != "" {
+				heimdallClient = heimdallgrpc.NewHeimdallGRPCClient(ethConfig.HeimdallgRPCAddress)
+			} else {
+				heimdallClient = heimdall.NewHeimdallClient(ethConfig.HeimdallURL)
+			}
+
+			return bor.New(chainConfig, db, blockchainAPI, spanner, heimdallClient, genesisContractsClient)
 		}
 	} else {
 		switch config.PowMode {
