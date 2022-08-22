@@ -2,8 +2,37 @@
 
 package bor
 
-/*func TestInsertingSpanSizeBlocks(t *testing.T) {
-	init:= buildEthereumInstance(t, rawdb.NewMemoryDatabase())
+import (
+	"context"
+	"encoding/hex"
+	"io"
+	"math/big"
+	"testing"
+	"time"
+
+	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/sha3"
+
+	"github.com/ethereum/go-ethereum/accounts"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/consensus/bor"
+	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
+	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
+	"github.com/ethereum/go-ethereum/consensus/bor/valset"
+	"github.com/ethereum/go-ethereum/consensus/ethash"
+	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/ethereum/go-ethereum/tests/bor/mocks"
+)
+
+func TestInsertingSpanSizeBlocks(t *testing.T) {
+	init := buildEthereumInstance(t, rawdb.NewMemoryDatabase())
 	chain := init.ethereum.BlockChain()
 	engine := init.ethereum.Engine()
 	_bor := engine.(*bor.Bor)
@@ -49,7 +78,7 @@ package bor
 }
 
 func TestFetchStateSyncEvents(t *testing.T) {
-	init:= buildEthereumInstance(t, rawdb.NewMemoryDatabase())
+	init := buildEthereumInstance(t, rawdb.NewMemoryDatabase())
 	chain := init.ethereum.BlockChain()
 	engine := init.ethereum.Engine()
 	_bor := engine.(*bor.Bor)
@@ -189,7 +218,7 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 }
 
 func TestOutOfTurnSigning(t *testing.T) {
-	init, _ := buildEthereumInstance(t, rawdb.NewMemoryDatabase())
+	init := buildEthereumInstance(t, rawdb.NewMemoryDatabase())
 	chain := init.ethereum.BlockChain()
 	engine := init.ethereum.Engine()
 	_bor := engine.(*bor.Bor)
@@ -273,7 +302,7 @@ func TestOutOfTurnSigning(t *testing.T) {
 }
 
 func TestSignerNotFound(t *testing.T) {
-	init, _ := buildEthereumInstance(t, rawdb.NewMemoryDatabase())
+	init := buildEthereumInstance(t, rawdb.NewMemoryDatabase())
 	chain := init.ethereum.BlockChain()
 	engine := init.ethereum.Engine()
 	_bor := engine.(*bor.Bor)
@@ -756,4 +785,4 @@ func testEncodeSigHeader(w io.Writer, header *types.Header, c *params.BorConfig)
 	if err := rlp.Encode(w, enc); err != nil {
 		panic("can't encode: " + err.Error())
 	}
-}*/
+}
