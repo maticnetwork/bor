@@ -2630,6 +2630,10 @@ type transactionBatches struct {
 	totalTxs int
 }
 
+func (t transactionBatches) String() string {
+	return ""
+}
+
 func transactionsGen(keys []*acc, nonces []uint64, localKey *acc, minTxs int, maxTxs int, gasPriceMin, gasPriceMax, gasLimitMin, gasLimitMax uint64) func(t *rapid.T) *transactionBatches {
 	return func(t *rapid.T) *transactionBatches {
 		totalTxs := rapid.IntRange(minTxs, maxTxs).Draw(t, "totalTxs").(int)
@@ -2647,8 +2651,6 @@ func transactionsGen(keys []*acc, nonces []uint64, localKey *acc, minTxs int, ma
 
 //nolint:gocognit
 func TestPoolBatchInsert(t *testing.T) {
-	t.Skip("Can reproduce stuck transactions as well as 0 txs blocks")
-
 	t.Parallel()
 
 	const (
@@ -2668,7 +2670,7 @@ func TestPoolBatchInsert(t *testing.T) {
 		gasPriceMax = 1_000
 
 		gasLimitMin = params.TxGas
-		gasLimitMax = 30_000
+		gasLimitMax = gasLimit / 2
 
 		balance = 0xffffffffffffff
 
@@ -2676,8 +2678,7 @@ func TestPoolBatchInsert(t *testing.T) {
 		maxEmptyBlocks = 3
 		maxStuckBlocks = 3
 
-		checkNonceGaps = false
-		debug          = false
+		debug = false
 	)
 
 	initialBalance := big.NewInt(balance)
@@ -2832,26 +2833,6 @@ func TestPoolBatchInsert(t *testing.T) {
 					pending := pool.Pending(true)
 					locals := pool.Locals()
 
-					// check for nonce gaps
-					if checkNonceGaps {
-						var lastNonce, currentNonce int
-						for txAcc, pendingTxs := range pending {
-							lastNonce = int(pool.Nonce(txAcc)) - len(pendingTxs) - 1
-
-							isFirst := true
-
-							for _, tx := range pendingTxs {
-								currentNonce = int(tx.Nonce())
-								if currentNonce-lastNonce != 1 {
-									rt.Fatalf("got a nonce gap for account %q. Current nonce %d, previous %d %v",
-										txAcc, currentNonce, lastNonce, isFirst)
-								}
-
-								lastNonce = currentNonce
-							}
-						}
-					}
-
 					// from fillTransactions
 					removedFromPool, blockGasLeft, err := fillTransactions(ctx, pool, locals, pending, gasLimit)
 
@@ -2861,6 +2842,26 @@ func TestPoolBatchInsert(t *testing.T) {
 						emptyBlocks = 0
 					} else {
 						emptyBlocks++
+					}
+
+					if emptyBlocks >= maxEmptyBlocks || stuckBlocks >= maxStuckBlocks {
+						// check for nonce gaps
+						var lastNonce, currentNonce int
+						for txAcc, pendingTxs := range pending {
+							lastNonce = int(pool.Nonce(txAcc)) - len(pendingTxs) - 1
+
+							isFirst := true
+
+							for _, tx := range pendingTxs {
+								currentNonce = int(tx.Nonce())
+								if currentNonce-lastNonce != 1 {
+									rt.Fatalf("got a nonce gap for account %q. Current nonce %d, previous %d %v; emptyBlocks - %v; stuckBlocks - %v",
+										txAcc, currentNonce, lastNonce, isFirst, emptyBlocks >= maxEmptyBlocks, stuckBlocks >= maxStuckBlocks)
+								}
+
+								lastNonce = currentNonce
+							}
+						}
 					}
 
 					if emptyBlocks >= maxEmptyBlocks {
