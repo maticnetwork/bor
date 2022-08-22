@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"math/big"
 	"strconv"
 	"strings"
 
@@ -121,6 +122,10 @@ func (bn BlockNumber) Int64() int64 {
 	return (int64)(bn)
 }
 
+func BlockNumberFromBigInt(bn *big.Int) BlockNumber {
+	return BlockNumber(bn.Int64())
+}
+
 type BlockNumberOrHash struct {
 	BlockNumber      *BlockNumber `json:"blockNumber,omitempty"`
 	BlockHash        *common.Hash `json:"blockHash,omitempty"`
@@ -209,6 +214,15 @@ func (bnh *BlockNumberOrHash) Hash() (common.Hash, bool) {
 func BlockNumberOrHashWithNumber(blockNr BlockNumber) BlockNumberOrHash {
 	return BlockNumberOrHash{
 		BlockNumber:      &blockNr,
+		BlockHash:        nil,
+		RequireCanonical: false,
+	}
+}
+
+func BlockNumberOrHashFromBigInt(blockNr *big.Int) BlockNumberOrHash {
+	b := BlockNumber(blockNr.Int64())
+	return BlockNumberOrHash{
+		BlockNumber:      &b,
 		BlockHash:        nil,
 		RequireCanonical: false,
 	}

@@ -749,7 +749,7 @@ func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, 
 
 		if c.HeimdallClient != nil {
 			// commit states
-			stateSyncData, err = c.CommitStates(ctx, state, header, cx)
+			stateSyncData, err = c.CommitStates(ctx, header, cx)
 			if err != nil {
 				log.Error("Error while committing states", "error", err)
 				return
@@ -825,7 +825,7 @@ func (c *Bor) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *typ
 
 		if c.HeimdallClient != nil {
 			// commit states
-			stateSyncData, err = c.CommitStates(ctx, state, header, cx)
+			stateSyncData, err = c.CommitStates(ctx, header, cx)
 			if err != nil {
 				log.Error("Error while committing states", "error", err)
 				return nil, err
@@ -1074,7 +1074,6 @@ func (c *Bor) FetchAndCommitSpan(
 // CommitStates commit states
 func (c *Bor) CommitStates(
 	ctx context.Context,
-	state *state.StateDB,
 	header *types.Header,
 	chain statefull.ChainContext,
 ) ([]*types.StateSyncData, error) {
@@ -1132,7 +1131,7 @@ func (c *Bor) CommitStates(
 		// we expect that this call MUST emit an event, otherwise we wouldn't make a receipt
 		// if the receiver address is not a contract then we'll skip the most of the execution and emitting an event as well
 		// https://github.com/maticnetwork/genesis-contracts/blob/master/contracts/StateReceiver.sol#L27
-		gasUsed, err = c.GenesisContractsClient.CommitState(eventRecord, state, header, chain)
+		gasUsed, err = c.GenesisContractsClient.CommitState(eventRecord)
 		if err != nil {
 			return nil, err
 		}

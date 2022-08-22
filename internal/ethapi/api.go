@@ -1387,6 +1387,10 @@ func (s *PublicBlockChainAPI) rpcMarshalBlock(ctx context.Context, b *types.Bloc
 	return fields, err
 }
 
+func (s *PublicBlockChainAPI) Backend() Backend {
+	return s.b
+}
+
 // RPCTransaction represents a transaction that will serialize to the RPC representation of a transaction
 type RPCTransaction struct {
 	BlockHash        *common.Hash      `json:"blockHash"`

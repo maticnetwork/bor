@@ -6,10 +6,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
-	"github.com/ethereum/go-ethereum/consensus/bor/statefull"
-	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -25,12 +22,7 @@ type GenesisContractsClient struct {
 	chainConfig       *params.ChainConfig
 }
 
-func NewGenesisContractsClient(chainConfig *params.ChainConfig, validatorSetAddr, stateReceiverAddr common.Address) *GenesisContractsClient {
-	backend, err := ethclient.Dial("127.0.0.1")
-	if err != nil {
-		log.Error("Failed to initialize ethereum client", "error", err)
-	}
-
+func NewGenesisContractsClient(chainConfig *params.ChainConfig, validatorSetAddr, stateReceiverAddr common.Address, backend bind.ContractBackend) *GenesisContractsClient {
 	validatorSet, err := contracts.NewBorValidatorSet(validatorSetAddr, backend)
 	if err != nil {
 		log.Error("Failed to initialize BorValidatorSet", "error", err)
@@ -51,9 +43,6 @@ func NewGenesisContractsClient(chainConfig *params.ChainConfig, validatorSetAddr
 
 func (gc *GenesisContractsClient) CommitState(
 	event *clerk.EventRecordWithTime,
-	state *state.StateDB,
-	header *types.Header,
-	chCtx statefull.ChainContext,
 ) (uint64, error) {
 	eventRecord := event.BuildEventRecord()
 

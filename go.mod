@@ -79,7 +79,7 @@ require (
 	gopkg.in/olebedev/go-duktape.v3 v3.0.0-20200619000410-60c24ae608a6
 	gopkg.in/urfave/cli.v1 v1.20.0
 	gotest.tools v2.2.0+incompatible
-	pgregory.net/rapid v0.4.7
+	pgregory.net/rapid v0.4.8
 )
 
 require (
