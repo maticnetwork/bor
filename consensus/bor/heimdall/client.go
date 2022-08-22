@@ -61,7 +61,7 @@ const (
 	fetchStateSyncEventsFormat = "from-id=%d&to-time=%d&limit=%d"
 	fetchStateSyncEventsPath   = "clerk/event-record/list"
 
-	fetchCheckpoint      = "/checkpoints/latest"
+	fetchCheckpoint      = "/checkpoints/%s"
 	fetchCheckpointCount = "/checkpoints/count"
 
 	fetchMilestone      = "/milestone"
@@ -122,8 +122,8 @@ func (h *HeimdallClient) Span(ctx context.Context, spanID uint64) (*span.Heimdal
 }
 
 // FetchCheckpoint fetches the checkpoint from heimdall
-func (h *HeimdallClient) FetchCheckpoint(ctx context.Context) (*checkpoint.Checkpoint, error) {
-	url, err := checkpointURL(h.urlString)
+func (h *HeimdallClient) FetchCheckpoint(ctx context.Context, number int64) (*checkpoint.Checkpoint, error) {
+	url, err := checkpointURL(h.urlString, number)
 	if err != nil {
 		return nil, err
 	}
@@ -261,9 +261,15 @@ func stateSyncURL(urlString string, fromID uint64, to int64) (*url.URL, error) {
 	return makeURL(urlString, fetchStateSyncEventsPath, queryParams)
 }
 
-func checkpointURL(urlString string) (*url.URL, error) {
+func checkpointURL(urlString string, number int64) (*url.URL, error) {
+	url := ""
+	if number == -1 {
+		url = fmt.Sprintf(fetchCheckpoint, "latest")
+	} else {
+		url = fmt.Sprintf(fetchCheckpoint, fmt.Sprint(number))
+	}
 
-	return makeURL(urlString, fetchCheckpoint, "")
+	return makeURL(urlString, url, "")
 }
 
 func milestoneURL(urlString string) (*url.URL, error) {

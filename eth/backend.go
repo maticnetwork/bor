@@ -103,8 +103,7 @@ type Ethereum struct {
 
 	lock sync.RWMutex // Protects the variadic fields (e.g. gas price and etherbase)
 
-	closeCheckpointCh chan struct{} // Channel to signal the background processes to exit
-	closeMilestoneCh  chan struct{} // Channel to signal the background processes to exit
+	closeCh chan struct{} // Channel to signal the background processes to exit
 
 	shutdownTracker *shutdowncheck.ShutdownTracker // Tracks if and when the node has shutdown ungracefully
 }
@@ -168,8 +167,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		bloomRequests:     make(chan chan *bloombits.Retrieval),
 		bloomIndexer:      core.NewBloomIndexer(chainDb, params.BloomBitsBlocks, params.BloomConfirms),
 		p2pServer:         stack.Server(),
-		closeCheckpointCh: make(chan struct{}),
-		closeMilestoneCh:  make(chan struct{}),
+		closeCh:           make(chan struct{}),
 		shutdownTracker:   shutdowncheck.NewShutdownTracker(chainDb),
 	}
 
@@ -629,7 +627,7 @@ func (s *Ethereum) Start() error {
 	s.handler.Start(maxPeers)
 
 	go s.startCheckpointWhitelistService()
-	go s.startMilestoneService()
+	go s.startMilestoneWhitelistService()
 
 	return nil
 }
@@ -639,18 +637,11 @@ var (
 	ErrBorConsensusWithoutHeimdall = errors.New("bor consensus without heimdall")
 
 	whitelistTimeout = 30 * time.Second
-	milestoneTimeout = 5 * time.Second
 )
 
 // StartCheckpointWhitelistService starts the goroutine to fetch checkpoints and update the
 // checkpoint whitelist map.
 func (s *Ethereum) startCheckpointWhitelistService() {
-	// a shortcut helps with tests and early exit
-	select {
-	case <-s.closeCheckpointCh:
-		return
-	default:
-	}
 
 	// first run the checkpoint whitelist
 	firstCtx, cancel := context.WithTimeout(context.Background(), whitelistTimeout)
@@ -680,23 +671,24 @@ func (s *Ethereum) startCheckpointWhitelistService() {
 			if err != nil {
 				log.Warn("unable to whitelist checkpoint", "err", err)
 			}
-		case <-s.closeCheckpointCh:
+		case <-s.closeCh:
 			return
 		}
 	}
 }
 
-// checkpoint whitelist map.
-func (s *Ethereum) startMilestoneService() {
+// startMilestoneWhitelistService starts the goroutine to fetch milestiones and update the
+// milestone whitelist map.
+func (s *Ethereum) startMilestoneWhitelistService() {
 	// a shortcut helps with tests and early exit
 	select {
-	case <-s.closeMilestoneCh:
+	case <-s.closeCh:
 		return
 	default:
 	}
 
-	// first run the milestone fetching
-	firstCtx, cancel := context.WithTimeout(context.Background(), milestoneTimeout)
+	// first run for fetching milestones
+	firstCtx, cancel := context.WithTimeout(context.Background(), whitelistTimeout)
 	err := s.handleMilestone(firstCtx, true)
 
 	cancel()
@@ -706,16 +698,16 @@ func (s *Ethereum) startMilestoneService() {
 			return
 		}
 
-		log.Warn("unable to milestone - first run", "err", err)
+		log.Warn("unable to whitelist milestone - first run", "err", err)
 	}
 
-	ticker := time.NewTicker(6 * time.Second)
+	ticker := time.NewTicker(50 * time.Second)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ticker.C:
-			ctx, cancel := context.WithTimeout(context.Background(), milestoneTimeout)
+			ctx, cancel := context.WithTimeout(context.Background(), whitelistTimeout)
 			err := s.handleMilestone(ctx, false)
 
 			cancel()
@@ -723,7 +715,7 @@ func (s *Ethereum) startMilestoneService() {
 			if err != nil {
 				log.Warn("unable to milestone", "err", err)
 			}
-		case <-s.closeMilestoneCh:
+		case <-s.closeCh:
 			return
 		}
 	}
@@ -742,7 +734,9 @@ func (s *Ethereum) handleWhitelistCheckpoint(ctx context.Context, first bool) er
 		return ErrBorConsensusWithoutHeimdall
 	}
 
-	blockNum, blockHash, err := ethHandler.fetchWhitelistCheckpoint(ctx, bor, first)
+	// Create a new bor verifier, which will be used to verify checkpoints and milestones
+	verifier := newBorVerifier(nil)
+	blockNum, blockHash, err := ethHandler.fetchWhitelistCheckpoint(ctx, bor, verifier, first)
 	// If the array is empty, we're bound to receive an error. Non-nill error and non-empty array
 	// means that array has partial elements and it failed for some block. We'll add those partial
 	// elements anyway.
@@ -768,7 +762,9 @@ func (s *Ethereum) handleMilestone(ctx context.Context, first bool) error {
 		return ErrBorConsensusWithoutHeimdall
 	}
 
-	blockNum, blockHash, err := ethHandler.fetchWhitelistMilestone(ctx, bor, first)
+	// Create a new bor verifier, which will be used to verify checkpoints and milestones
+	verifier := newBorVerifier(nil)
+	blockNum, blockHash, err := ethHandler.fetchWhitelistMilestone(ctx, bor, verifier, first)
 	// If blockNum, blockhash doesn't have any value than we're bound to receive an error. Non-nill
 	// means that either the milestone does exist on the heimdall or . We'll add those partial
 	// elements anyway.
@@ -794,8 +790,7 @@ func (s *Ethereum) Stop() error {
 	close(s.closeBloomHandler)
 
 	// Close all bg processes
-	close(s.closeCheckpointCh)
-	close(s.closeMilestoneCh)
+	close(s.closeCh)
 
 	// closing consensus engine first, as miner has deps on it
 	s.engine.Close()

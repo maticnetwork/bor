@@ -9,18 +9,16 @@ import (
 	"net"
 	"net/http"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/network"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
 
 	"github.com/stretchr/testify/require"
 )
-
-var maxPortCheck int32 = 100
 
 // HttpHandlerFake defines the handler functions required to serve
 // requests to the mock heimdal server for specific functions. Add more handlers
@@ -42,7 +40,7 @@ func (h *HttpHandlerFake) GetMilestoneHandler() http.HandlerFunc {
 	}
 }
 
-func CreateMockHeimdallServer(wg *sync.WaitGroup, port int32, handler *HttpHandlerFake) (*http.Server, error) {
+func CreateMockHeimdallServer(wg *sync.WaitGroup, port int, listener net.Listener, handler *HttpHandlerFake) (*http.Server, error) {
 	// Create a new server mux
 	mux := http.NewServeMux()
 
@@ -62,6 +60,12 @@ func CreateMockHeimdallServer(wg *sync.WaitGroup, port int32, handler *HttpHandl
 	srv := &http.Server{
 		Addr:    fmt.Sprintf("localhost:%d", port),
 		Handler: mux,
+	}
+
+	// Close the listener using the port and immediately consume it below
+	err := listener.Close()
+	if err != nil {
+		return nil, err
 	}
 
 	go func() {
@@ -106,17 +110,17 @@ func TestFetchCheckpointFromMockHeimdall(t *testing.T) {
 		}
 	}
 
-	// Fetch available port starting from 50000
-	port, err := findAvailablePort(50000, 0)
+	// Fetch available port
+	port, listener, err := network.FindAvailablePort()
 	require.NoError(t, err, "expect no error in finding available port")
 
 	// Create mock heimdall server and pass handler instance for setting up the routes
-	srv, err := CreateMockHeimdallServer(wg, port, handler)
+	srv, err := CreateMockHeimdallServer(wg, port, listener, handler)
 	require.NoError(t, err, "expect no error in starting mock heimdall server")
 
 	// Create a new heimdall client and use same port for connection
 	client := NewHeimdallClient(fmt.Sprintf("http://localhost:%d", port))
-	_, err = client.FetchCheckpoint(context.Background())
+	_, err = client.FetchCheckpoint(context.Background(), -1)
 	require.NoError(t, err, "expect no error in fetching checkpoint")
 
 	// Shutdown the server
@@ -127,6 +131,9 @@ func TestFetchCheckpointFromMockHeimdall(t *testing.T) {
 	wg.Wait()
 }
 
+// TestFetchMilestoneFromMockHeimdall tests the heimdall client side logic
+// to fetch milestone from a mock heimdall server.
+// It can be used for debugging purpose (like response fields, marshalling/unmarshalling, etc).
 func TestFetchMilestoneFromMockHeimdall(t *testing.T) {
 	t.Parallel()
 
@@ -134,7 +141,7 @@ func TestFetchMilestoneFromMockHeimdall(t *testing.T) {
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 
-	// Initialize the fake handler and add a fake checkpoint handler function
+	// Initialize the fake handler and add a fake milestone handler function
 	handler := &HttpHandlerFake{}
 	handler.handleFetchMilestone = func(w http.ResponseWriter, _ *http.Request) {
 		err := json.NewEncoder(w).Encode(milestone.MilestoneResponse{
@@ -154,12 +161,12 @@ func TestFetchMilestoneFromMockHeimdall(t *testing.T) {
 		}
 	}
 
-	// Fetch available port starting from 50000
-	port, err := findAvailablePort(50000, 0)
+	// Fetch available port
+	port, listener, err := network.FindAvailablePort()
 	require.NoError(t, err, "expect no error in finding available port")
 
 	// Create mock heimdall server and pass handler instance for setting up the routes
-	srv, err := CreateMockHeimdallServer(wg, port, handler)
+	srv, err := CreateMockHeimdallServer(wg, port, listener, handler)
 	require.NoError(t, err, "expect no error in starting mock heimdall server")
 
 	// Create a new heimdall client and use same port for connection
@@ -176,8 +183,7 @@ func TestFetchMilestoneFromMockHeimdall(t *testing.T) {
 }
 
 // TestFetchShutdown tests the heimdall client side logic for context timeout and
-// interrupt handling while fetching checkpoints (latest for the scope of test)
-// from a mock heimdall server.
+// interrupt handling while fetching data from a mock heimdall server.
 func TestFetchShutdown(t *testing.T) {
 	t.Parallel()
 
@@ -192,7 +198,7 @@ func TestFetchShutdown(t *testing.T) {
 	// greater than `retryDelay`. This should cause the request to timeout and trigger shutdown
 	// due to `ctx.Done()`. Expect context timeout error.
 	handler.handleFetchCheckpoint = func(w http.ResponseWriter, _ *http.Request) {
-		time.Sleep(3 * time.Second)
+		time.Sleep(100 * time.Millisecond)
 
 		err := json.NewEncoder(w).Encode(checkpoint.CheckpointResponse{
 			Height: "0",
@@ -211,50 +217,21 @@ func TestFetchShutdown(t *testing.T) {
 		}
 	}
 
-	handler.handleFetchMilestone = func(w http.ResponseWriter, _ *http.Request) {
-		time.Sleep(3 * time.Second)
-
-		err := json.NewEncoder(w).Encode(milestone.MilestoneResponse{
-			Height: "0",
-			Result: milestone.Milestone{
-				Proposer:   common.Address{},
-				StartBlock: big.NewInt(0),
-				EndBlock:   big.NewInt(512),
-				RootHash:   common.Hash{},
-				BorChainID: "15001",
-				Timestamp:  0,
-			},
-		})
-
-		if err != nil {
-			w.WriteHeader(500) // Return 500 Internal Server Error.
-		}
-	}
-
-	// Fetch available port starting from 50000
-	port, err := findAvailablePort(50000, 0)
+	// Fetch available port
+	port, listener, err := network.FindAvailablePort()
 	require.NoError(t, err, "expect no error in finding available port")
 
 	// Create mock heimdall server and pass handler instance for setting up the routes
-	srv, err := CreateMockHeimdallServer(wg, port, handler)
+	srv, err := CreateMockHeimdallServer(wg, port, listener, handler)
 	require.NoError(t, err, "expect no error in starting mock heimdall server")
 
 	// Create a new heimdall client and use same port for connection
 	client := NewHeimdallClient(fmt.Sprintf("http://localhost:%d", port))
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 
 	// Expect this to fail due to timeout
-	_, err = client.FetchCheckpoint(ctx)
-	require.Equal(t, "context deadline exceeded", err.Error(), "expect the function error to be a context deadline exeeded error")
-	require.Equal(t, "context deadline exceeded", ctx.Err().Error(), "expect the ctx error to be a context deadline exeeded error")
-
-	cancel()
-
-	ctx, cancel = context.WithTimeout(context.Background(), 2*time.Second)
-
-	// Expect this to fail due to timeout
-	_, err = client.FetchMilestone(ctx)
+	_, err = client.FetchCheckpoint(ctx, -1)
 	require.Equal(t, "context deadline exceeded", err.Error(), "expect the function error to be a context deadline exeeded error")
 	require.Equal(t, "context deadline exceeded", ctx.Err().Error(), "expect the ctx error to be a context deadline exeeded error")
 
@@ -264,38 +241,20 @@ func TestFetchShutdown(t *testing.T) {
 	// cancel it before timeout. This should cause the request to timeout and trigger shutdown
 	// due to `ctx.Done()`. Expect context cancellation error.
 	handler.handleFetchCheckpoint = func(w http.ResponseWriter, _ *http.Request) {
-		time.Sleep(3 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 		w.WriteHeader(500) // Return 500 Internal Server Error.
 	}
 
-	handler.handleFetchMilestone = func(w http.ResponseWriter, _ *http.Request) {
-		time.Sleep(3 * time.Millisecond)
-		w.WriteHeader(500) // Return 500 Internal Server Error.
-	}
-
-	ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second) // Use some high value for timeout
+	ctx, cancel = context.WithTimeout(context.Background(), 50*time.Millisecond) // Use some high value for timeout
 
 	// Cancel the context after a delay until we make request
 	go func(cancel context.CancelFunc) {
-		time.Sleep(3 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 		cancel()
 	}(cancel)
 
 	// Expect this to fail due to cancellation
-	_, err = client.FetchCheckpoint(ctx)
-	require.Equal(t, "context canceled", err.Error(), "expect the function error to be a context cancelled error")
-	require.Equal(t, "context canceled", ctx.Err().Error(), "expect the ctx error to be a context cancelled error")
-
-	ctx, cancel = context.WithTimeout(context.Background(), 3*time.Second) // Use some high value for timeout
-
-	// Cancel the context after a delay until we make request
-	go func(cancel context.CancelFunc) {
-		time.Sleep(3 * time.Millisecond)
-		cancel()
-	}(cancel)
-
-	// Expect this to fail due to cancellation
-	_, err = client.FetchCheckpoint(ctx)
+	_, err = client.FetchCheckpoint(ctx, -1)
 	require.Equal(t, "context canceled", err.Error(), "expect the function error to be a context cancelled error")
 	require.Equal(t, "context canceled", ctx.Err().Error(), "expect the ctx error to be a context cancelled error")
 
@@ -313,11 +272,7 @@ func TestFetchShutdown(t *testing.T) {
 	}()
 
 	// Expect this to fail due to shutdown
-	_, err = client.FetchCheckpoint(context.Background())
-	require.Equal(t, ErrShutdownDetected.Error(), err.Error(), "expect the function error to be a shutdown detected error")
-
-	// Expect this to fail due to shutdown
-	_, err = client.FetchMilestone(context.Background())
+	_, err = client.FetchCheckpoint(context.Background(), -1)
 	require.Equal(t, ErrShutdownDetected.Error(), err.Error(), "expect the function error to be a shutdown detected error")
 
 	// Shutdown the server
@@ -326,26 +281,6 @@ func TestFetchShutdown(t *testing.T) {
 
 	// Wait for `wg.Done()` to be called in the mock server's routine.
 	wg.Wait()
-}
-
-// findAvailablePort returns the next available port starting from `from`
-func findAvailablePort(from int32, count int32) (int32, error) {
-	if count == maxPortCheck {
-		return 0, fmt.Errorf("no available port found")
-	}
-
-	port := atomic.AddInt32(&from, 1)
-	addr := fmt.Sprintf("localhost:%d", port)
-
-	count++
-
-	lis, err := net.Listen("tcp", addr)
-	if err == nil {
-		lis.Close()
-		return port, nil
-	} else {
-		return findAvailablePort(from, count)
-	}
 }
 
 // TestContext includes bunch of simple tests to verify the working of timeout
