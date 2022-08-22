@@ -26,11 +26,14 @@ import (
 	"math/rand"
 	"os"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"gonum.org/v1/gonum/floats"
+	"gonum.org/v1/gonum/stat"
 	"pgregory.net/rapid"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -2630,20 +2633,25 @@ type transactionBatches struct {
 	totalTxs int
 }
 
-func (t transactionBatches) String() string {
-	return ""
-}
-
-func transactionsGen(keys []*acc, nonces []uint64, localKey *acc, minTxs int, maxTxs int, gasPriceMin, gasPriceMax, gasLimitMin, gasLimitMax uint64) func(t *rapid.T) *transactionBatches {
+func transactionsGen(keys []*acc, nonces []uint64, localKey *acc, minTxs int, maxTxs int, gasPriceMin, gasPriceMax, gasLimitMin, gasLimitMax uint64, caseParams *strings.Builder) func(t *rapid.T) *transactionBatches {
 	return func(t *rapid.T) *transactionBatches {
 		totalTxs := rapid.IntRange(minTxs, maxTxs).Draw(t, "totalTxs").(int)
 		txs := make([]*testTx, totalTxs)
+
+		gasValues := make([]float64, totalTxs)
+
+		fmt.Fprintf(caseParams, " totalTxs = %d;", totalTxs)
 
 		keys = keys[:len(nonces)]
 
 		for i := 0; i < totalTxs; i++ {
 			txs[i] = getTransactionGen(t, keys, nonces, localKey, gasPriceMin, gasPriceMax, gasLimitMin, gasLimitMax)
+
+			gasValues[i] = float64(txs[i].tx.Gas())
 		}
+
+		mean, stddev := stat.MeanStdDev(gasValues, nil)
+		fmt.Fprintf(caseParams, " mean %d, stdev %d, %d-%d);", int64(mean), int64(stddev), int64(floats.Min(gasValues)), int64(floats.Max(gasValues)))
 
 		return &transactionBatches{txs, totalTxs}
 	}
@@ -2712,6 +2720,8 @@ func TestPoolBatchInsert(t *testing.T) {
 			t.Parallel()
 
 			rapid.Check(t, func(rt *rapid.T) {
+				caseParams := new(strings.Builder)
+
 				defer func() {
 					res := atomic.AddUint64(testsDone, 1)
 
@@ -2738,6 +2748,35 @@ func TestPoolBatchInsert(t *testing.T) {
 
 				totalAccs := rapid.IntRange(minAccs, maxAccs).Draw(rt, "totalAccs").(int)
 
+				fmt.Fprintf(caseParams, "Case params: totalAccs = %d;", totalAccs)
+
+				defer func() {
+					pending, queued := pool.Content()
+
+					pendingGas := make([]float64, 0, len(pending))
+					queuedGas := make([]float64, 0, len(queued))
+
+					for _, txs := range pending {
+						for _, tx := range txs {
+							pendingGas = append(pendingGas, float64(tx.Gas()))
+						}
+					}
+
+					for _, txs := range queued {
+						for _, tx := range txs {
+							queuedGas = append(queuedGas, float64(tx.Gas()))
+						}
+					}
+
+					mean, stddev := stat.MeanStdDev(pendingGas, nil)
+					fmt.Fprintf(caseParams, "\tpending mean %d, stdev %d, %d-%d);\n", int64(mean), int64(stddev), int64(floats.Min(pendingGas)), int64(floats.Max(pendingGas)))
+
+					mean, stddev = stat.MeanStdDev(queuedGas, nil)
+					fmt.Fprintf(caseParams, "\tqueued mean %d, stdev %d, %d-%d);\n\n", int64(mean), int64(stddev), int64(floats.Min(queuedGas)), int64(floats.Max(queuedGas)))
+
+					rt.Log(caseParams)
+				}()
+
 				// regenerate only local key
 				localKey := &acc{
 					key:     key,
@@ -2763,7 +2802,7 @@ func TestPoolBatchInsert(t *testing.T) {
 				}()
 
 				nonces := make([]uint64, totalAccs)
-				gen := rapid.Custom(transactionsGen(keys, nonces, localKey, minTxs, maxTxs, gasPriceMin, gasPriceMax, gasLimitMin, gasLimitMax))
+				gen := rapid.Custom(transactionsGen(keys, nonces, localKey, minTxs, maxTxs, gasPriceMin, gasPriceMax, gasLimitMin, gasLimitMax, caseParams))
 
 				txs := gen.Draw(rt, "batches").(*transactionBatches)
 
@@ -2847,6 +2886,9 @@ func TestPoolBatchInsert(t *testing.T) {
 					if emptyBlocks >= maxEmptyBlocks || stuckBlocks >= maxStuckBlocks {
 						// check for nonce gaps
 						var lastNonce, currentNonce int
+
+						pending = pool.Pending(true)
+
 						for txAcc, pendingTxs := range pending {
 							lastNonce = int(pool.Nonce(txAcc)) - len(pendingTxs) - 1
 
@@ -2855,7 +2897,7 @@ func TestPoolBatchInsert(t *testing.T) {
 							for _, tx := range pendingTxs {
 								currentNonce = int(tx.Nonce())
 								if currentNonce-lastNonce != 1 {
-									rt.Fatalf("got a nonce gap for account %q. Current nonce %d, previous %d %v; emptyBlocks - %v; stuckBlocks - %v",
+									rt.Fatalf("got a nonce gap for account %q. Current pending nonce %d, previous %d %v; emptyBlocks - %v; stuckBlocks - %v",
 										txAcc, currentNonce, lastNonce, isFirst, emptyBlocks >= maxEmptyBlocks, stuckBlocks >= maxStuckBlocks)
 								}
 
