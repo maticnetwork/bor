@@ -2667,10 +2667,10 @@ func TestPoolBatchInsert(t *testing.T) {
 
 		avgBlockTxs = 30_000_000/params.TxGas + 1
 
-		minTxs = int(avgBlockTxs/2 + 1)
-		maxTxs = int(25 * avgBlockTxs)
+		minTxs = 1
+		maxTxs = int(50 * avgBlockTxs)
 
-		minAccs = 10
+		minAccs = 1
 		maxAccs = maxTxs
 
 		// less tweakable, more like constants
@@ -2753,26 +2753,31 @@ func TestPoolBatchInsert(t *testing.T) {
 				defer func() {
 					pending, queued := pool.Content()
 
-					pendingGas := make([]float64, 0, len(pending))
-					queuedGas := make([]float64, 0, len(queued))
+					if len(pending) != 0 {
+						pendingGas := make([]float64, 0, len(pending))
 
-					for _, txs := range pending {
-						for _, tx := range txs {
-							pendingGas = append(pendingGas, float64(tx.Gas()))
+						for _, txs := range pending {
+							for _, tx := range txs {
+								pendingGas = append(pendingGas, float64(tx.Gas()))
+							}
 						}
+
+						mean, stddev := stat.MeanStdDev(pendingGas, nil)
+						fmt.Fprintf(caseParams, "\tpending mean %d, stdev %d, %d-%d);\n", int64(mean), int64(stddev), int64(floats.Min(pendingGas)), int64(floats.Max(pendingGas)))
 					}
 
-					for _, txs := range queued {
-						for _, tx := range txs {
-							queuedGas = append(queuedGas, float64(tx.Gas()))
+					if len(queued) != 0 {
+						queuedGas := make([]float64, 0, len(queued))
+
+						for _, txs := range queued {
+							for _, tx := range txs {
+								queuedGas = append(queuedGas, float64(tx.Gas()))
+							}
 						}
+
+						mean, stddev := stat.MeanStdDev(queuedGas, nil)
+						fmt.Fprintf(caseParams, "\tqueued mean %d, stdev %d, %d-%d);\n\n", int64(mean), int64(stddev), int64(floats.Min(queuedGas)), int64(floats.Max(queuedGas)))
 					}
-
-					mean, stddev := stat.MeanStdDev(pendingGas, nil)
-					fmt.Fprintf(caseParams, "\tpending mean %d, stdev %d, %d-%d);\n", int64(mean), int64(stddev), int64(floats.Min(pendingGas)), int64(floats.Max(pendingGas)))
-
-					mean, stddev = stat.MeanStdDev(queuedGas, nil)
-					fmt.Fprintf(caseParams, "\tqueued mean %d, stdev %d, %d-%d);\n\n", int64(mean), int64(stddev), int64(floats.Min(queuedGas)), int64(floats.Max(queuedGas)))
 
 					rt.Log(caseParams)
 				}()
