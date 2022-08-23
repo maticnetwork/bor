@@ -2890,7 +2890,7 @@ func testPoolBatchInsert(t *testing.T, cfg txPoolRapidConfig) {
 
 				for {
 					// we'd expect fulfilling block take comparable, but less than blockTime
-					ctx, cancel := context.WithTimeout(context.Background(), cfg.blockTime/2)
+					ctx, cancel := context.WithTimeout(context.Background(), cfg.blockTime)
 
 					select {
 					case <-pendingAddedCh:
