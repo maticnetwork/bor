@@ -2716,8 +2716,12 @@ func TestSmallTxPool(t *testing.T) {
 
 	cfg.maxEmptyBlocks = 10
 	cfg.maxStuckBlocks = 10
+
 	cfg.minTxs = 1
 	cfg.maxTxs = 2
+
+	cfg.minAccs = 1
+	cfg.maxAccs = 2
 
 	testPoolBatchInsert(t, cfg)
 }
