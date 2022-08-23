@@ -5,16 +5,15 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 )
 
-//Service
 type WhitelistService struct {
-	whitelist
+	checkpoint
 	milestone
 }
 
 func NewService() *WhitelistService {
 	return &WhitelistService{
 
-		whitelist{
+		checkpoint{
 			doExist:  false,
 			interval: 256,
 		},
@@ -30,7 +29,7 @@ func NewService() *WhitelistService {
 // in terms of reorgs. We won't reorg beyond the last bor checkpoint submitted to mainchain and last milestone voted in the heimdall
 func (s *WhitelistService) IsValidPeer(remoteHeader *types.Header, fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error) {
 
-	checkpointBool, err := s.whitelist.IsValidPeer(remoteHeader, fetchHeadersByNumber)
+	checkpointBool, err := s.checkpoint.IsValidPeer(remoteHeader, fetchHeadersByNumber)
 	if !checkpointBool {
 		return checkpointBool, err
 	}
@@ -48,7 +47,7 @@ func (s *WhitelistService) IsValidPeer(remoteHeader *types.Header, fetchHeadersB
 // against the local checkpoint entries and milestone entries
 func (s *WhitelistService) IsValidChain(currentHeader *types.Header, chain []*types.Header) bool {
 
-	checkpointBool := s.whitelist.IsValidChain(currentHeader, chain)
+	checkpointBool := s.checkpoint.IsValidChain(currentHeader, chain)
 
 	if !checkpointBool {
 		return checkpointBool

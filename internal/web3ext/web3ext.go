@@ -485,13 +485,13 @@ web3._extend({
 			params: 0,
 		}),  
 		new web3._extend.Method({
-			name: 'getMilestone',
-			call: 'debug_getMilestone',
+			name: 'getWhitelistedMilestone',
+			call: 'debug_getWhitelistedMilestone',
 			params: 0,
 		}),
 		new web3._extend.Method({
-			name: 'purgeMilestone',
-			call: 'debug_purgeMilestone',
+			name: 'purgeWhitelistedMilestone',
+			call: 'debug_purgeWhitelistedMilestone',
 			params: 0,
 		}),
 	],
