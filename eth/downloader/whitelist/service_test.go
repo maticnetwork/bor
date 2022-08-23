@@ -191,7 +191,6 @@ func TestIsValidPeer(t *testing.T) {
 	res, err = s.IsValidPeer(nil, fetchHeadersByNumber)
 	require.Equal(t, err, ErrMilestoneMismatch, "expected milestone mismatch error")
 	require.Equal(t, res, false, "expected chain to be invalid")
-
 }
 
 // TestIsValidChain checks the IsValidChain function in isolation

@@ -642,7 +642,6 @@ var (
 // StartCheckpointWhitelistService starts the goroutine to fetch checkpoints and update the
 // checkpoint whitelist map.
 func (s *Ethereum) startCheckpointWhitelistService() {
-
 	// first run the checkpoint whitelist
 	firstCtx, cancel := context.WithTimeout(context.Background(), whitelistTimeout)
 	err := s.handleWhitelistCheckpoint(firstCtx)

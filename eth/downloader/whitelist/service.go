@@ -28,7 +28,6 @@ func NewService() *WhitelistService {
 // IsValidPeer checks if the chain we're about to receive from a peer is valid or not
 // in terms of reorgs. We won't reorg beyond the last bor checkpoint submitted to mainchain and last milestone voted in the heimdall
 func (s *WhitelistService) IsValidPeer(remoteHeader *types.Header, fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error) {
-
 	checkpointBool, err := s.checkpoint.IsValidPeer(remoteHeader, fetchHeadersByNumber)
 	if !checkpointBool {
 		return checkpointBool, err
@@ -40,13 +39,11 @@ func (s *WhitelistService) IsValidPeer(remoteHeader *types.Header, fetchHeadersB
 	}
 
 	return true, nil
-
 }
 
 // IsValidChain checks the validity of chain by comparing it
 // against the local checkpoint entries and milestone entries
 func (s *WhitelistService) IsValidChain(currentHeader *types.Header, chain []*types.Header) bool {
-
 	checkpointBool := s.checkpoint.IsValidChain(currentHeader, chain)
 
 	if !checkpointBool {
@@ -59,7 +56,6 @@ func (s *WhitelistService) IsValidChain(currentHeader *types.Header, chain []*ty
 	}
 
 	return true
-
 }
 
 func splitChain(current uint64, chain []*types.Header) ([]*types.Header, []*types.Header) {

@@ -27,8 +27,6 @@ var (
 func (m *milestone) IsValidPeer(remoteHeader *types.Header, fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error) {
 	// We want to validate the chain by comparing the last milestoned block
 	// we're storing in `milestone` with the peer's block.
-	//
-
 	m.m.Lock()
 
 	// Check for availaibility of the last milestone block.

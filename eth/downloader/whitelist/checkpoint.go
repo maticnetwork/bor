@@ -27,14 +27,12 @@ var (
 func (w *checkpoint) IsValidPeer(remoteHeader *types.Header, fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error) {
 	// We want to validate the chain by comparing the last checkpointed block
 	// we're storing in `checkpointWhitelist` with the peer's block.
-
 	w.m.Lock()
 
 	// Check for availaibility of the last checkpointed block.
 	// doExist will be false if our heimdall is not responding
 	// or we're running without it.
 	if !w.doExist {
-
 		w.m.Unlock()
 		// worst case, we don't have the checkpoint in memory
 		return true, nil
