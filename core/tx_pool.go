@@ -18,6 +18,7 @@ package core
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"math/big"
 	"sort"
@@ -1099,9 +1100,15 @@ func (pool *TxPool) scheduleReorgLoop() {
 		dirtyAccounts *accountSet
 		queuedEvents  = make(map[common.Address]*txSortedMap)
 	)
+
+	n := 0
+	now := time.Now()
 	for {
 		// Launch next background reorg if needed
 		if curDone == nil && launchNextRun {
+			fmt.Println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!", n, time.Since(now))
+			n++
+			now = time.Now()
 			// Run the background reorg and announcements
 			go pool.runReorg(nextDone, reset, dirtyAccounts, queuedEvents)
 
@@ -1115,6 +1122,8 @@ func (pool *TxPool) scheduleReorgLoop() {
 
 		select {
 		case req := <-pool.reqResetCh:
+			fmt.Println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!-reset", n)
+
 			// Reset request: update head if request is already pending.
 			if reset == nil {
 				reset = req
@@ -1125,6 +1134,7 @@ func (pool *TxPool) scheduleReorgLoop() {
 			pool.reorgDoneCh <- nextDone
 
 		case req := <-pool.reqPromoteCh:
+			fmt.Println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!-promote", n)
 			// Promote request: update address set if request is already pending.
 			if dirtyAccounts == nil {
 				dirtyAccounts = req
@@ -1135,6 +1145,7 @@ func (pool *TxPool) scheduleReorgLoop() {
 			pool.reorgDoneCh <- nextDone
 
 		case tx := <-pool.queueTxEventCh:
+			fmt.Println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!-queue", n)
 			// Queue up the event, but don't schedule a reorg. It's up to the caller to
 			// request one later if they want the events sent.
 			addr, _ := types.Sender(pool.signer, tx)

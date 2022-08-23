@@ -2890,7 +2890,7 @@ func testPoolBatchInsert(t *testing.T, cfg txPoolRapidConfig) {
 
 				for {
 					// we'd expect fulfilling block take comparable, but less than blockTime
-					ctx, cancel := context.WithTimeout(context.Background(), cfg.blockTime)
+					ctx, cancel := context.WithTimeout(context.Background(), 5*cfg.blockTime)
 
 					select {
 					case <-pendingAddedCh:
@@ -2902,8 +2902,8 @@ func testPoolBatchInsert(t *testing.T, cfg txPoolRapidConfig) {
 							break
 						}
 
-						rt.Fatalf("got %d block timeout in a row(expected less then %s): total accounts %d. Pending %d, queued %d)",
-							block, cfg.blockTime/2, txs.totalTxs, pendingStat, queuedStat)
+						rt.Fatalf("got %ds block timeout (expected less then %s): total accounts %d. Pending %d, queued %d)",
+							block, 5*cfg.blockTime, txs.totalTxs, pendingStat, queuedStat)
 					}
 
 					pendingStat, queuedStat := pool.Stats()
