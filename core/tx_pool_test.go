@@ -2657,46 +2657,91 @@ func transactionsGen(keys []*acc, nonces []uint64, localKey *acc, minTxs int, ma
 	}
 }
 
-//nolint:gocognit
-func TestPoolBatchInsert(t *testing.T) {
-	t.Parallel()
+type txPoolRapidConfig struct {
+	gasLimit    uint64
+	avgBlockTxs uint64
 
-	const (
-		// the most tweakable params
-		gasLimit = 30_000_000
+	minTxs int
+	maxTxs int
 
-		avgBlockTxs = 30_000_000/params.TxGas + 1
+	minAccs int
+	maxAccs int
 
-		minTxs = 1
-		maxTxs = int(50 * avgBlockTxs)
+	// less tweakable, more like constants
+	gasPriceMin uint64
+	gasPriceMax uint64
 
-		minAccs = 1
-		maxAccs = maxTxs
+	gasLimitMin uint64
+	gasLimitMax uint64
+
+	balance int64
+
+	blockTime      time.Duration
+	maxEmptyBlocks int
+	maxStuckBlocks int
+}
+
+func defaultTxPoolRapidConfig() txPoolRapidConfig {
+	gasLimit := uint64(30_000_000)
+	maxTxs := 2
+
+	return txPoolRapidConfig{
+		gasLimit: gasLimit,
+
+		avgBlockTxs: 30_000_000/params.TxGas + 1,
+
+		minTxs: 1,
+		maxTxs: 2,
+
+		minAccs: 1,
+		maxAccs: maxTxs,
 
 		// less tweakable, more like constants
-		gasPriceMin = 1
-		gasPriceMax = 1_000
+		gasPriceMin: 1,
+		gasPriceMax: 1_000,
 
-		gasLimitMin = params.TxGas
-		gasLimitMax = gasLimit / 2
+		gasLimitMin: params.TxGas,
+		gasLimitMax: gasLimit / 2,
 
-		balance = 0xffffffffffffff
+		balance: 0xffffffffffffff,
 
-		blockTime      = 2 * time.Second
-		maxEmptyBlocks = 3
-		maxStuckBlocks = 3
+		blockTime:      2 * time.Second,
+		maxEmptyBlocks: 10,
+		maxStuckBlocks: 10,
+	}
+}
 
-		debug = false
-	)
+func TestSmallTxPool(t *testing.T) {
+	cfg := defaultTxPoolRapidConfig()
 
-	initialBalance := big.NewInt(balance)
+	cfg.maxEmptyBlocks = 10
+	cfg.maxStuckBlocks = 10
+	cfg.minTxs = 1
+	cfg.maxTxs = 2
 
-	keys := make([]*acc, maxAccs)
+	testPoolBatchInsert(t, cfg)
+}
+
+func TestBigTxPool(t *testing.T) {
+	cfg := defaultTxPoolRapidConfig()
+
+	testPoolBatchInsert(t, cfg)
+}
+
+//nolint:gocognit
+func testPoolBatchInsert(t *testing.T, cfg txPoolRapidConfig) {
+	t.Parallel()
+
+	const debug = false
+
+	initialBalance := big.NewInt(cfg.balance)
+
+	keys := make([]*acc, cfg.maxAccs)
 
 	var key *ecdsa.PrivateKey
 
 	// prealloc keys
-	for idx := 0; idx < maxAccs; idx++ {
+	for idx := 0; idx < cfg.maxAccs; idx++ {
 		key, _ = crypto.GenerateKey()
 
 		keys[idx] = &acc{
@@ -2743,10 +2788,10 @@ func TestPoolBatchInsert(t *testing.T) {
 
 				now := time.Now()
 				pendingAddedCh := make(chan struct{}, 1024)
-				pool, key := setupTxPoolWithConfig(params.TestChainConfig, testTxPoolConfig, gasLimit, MakeWithPromoteTxCh(pendingAddedCh))
+				pool, key := setupTxPoolWithConfig(params.TestChainConfig, testTxPoolConfig, cfg.gasLimit, MakeWithPromoteTxCh(pendingAddedCh))
 				defer pool.Stop()
 
-				totalAccs := rapid.IntRange(minAccs, maxAccs).Draw(rt, "totalAccs").(int)
+				totalAccs := rapid.IntRange(cfg.minAccs, cfg.maxAccs).Draw(rt, "totalAccs").(int)
 
 				fmt.Fprintf(caseParams, "Case params: totalAccs = %d;", totalAccs)
 
@@ -2807,7 +2852,7 @@ func TestPoolBatchInsert(t *testing.T) {
 				}()
 
 				nonces := make([]uint64, totalAccs)
-				gen := rapid.Custom(transactionsGen(keys, nonces, localKey, minTxs, maxTxs, gasPriceMin, gasPriceMax, gasLimitMin, gasLimitMax, caseParams))
+				gen := rapid.Custom(transactionsGen(keys, nonces, localKey, cfg.minTxs, cfg.maxTxs, cfg.gasPriceMin, cfg.gasPriceMax, cfg.gasLimitMin, cfg.gasLimitMax, caseParams))
 
 				txs := gen.Draw(rt, "batches").(*transactionBatches)
 
@@ -2841,7 +2886,7 @@ func TestPoolBatchInsert(t *testing.T) {
 
 				for {
 					// we'd expect fulfilling block take comparable, but less than blockTime
-					ctx, cancel := context.WithTimeout(context.Background(), blockTime/2)
+					ctx, cancel := context.WithTimeout(context.Background(), cfg.blockTime/2)
 
 					select {
 					case <-pendingAddedCh:
@@ -2854,7 +2899,7 @@ func TestPoolBatchInsert(t *testing.T) {
 						}
 
 						rt.Fatalf("got %d block timeout in a row(expected less then %s): total accounts %d. Pending %d, queued %d)",
-							block, blockTime/2, txs.totalTxs, pendingStat, queuedStat)
+							block, cfg.blockTime/2, txs.totalTxs, pendingStat, queuedStat)
 					}
 
 					pendingStat, queuedStat := pool.Stats()
@@ -2878,7 +2923,7 @@ func TestPoolBatchInsert(t *testing.T) {
 					locals := pool.Locals()
 
 					// from fillTransactions
-					removedFromPool, blockGasLeft, err := fillTransactions(ctx, pool, locals, pending, gasLimit)
+					removedFromPool, blockGasLeft, err := fillTransactions(ctx, pool, locals, pending, cfg.gasLimit)
 
 					done := time.Since(start)
 
@@ -2888,7 +2933,7 @@ func TestPoolBatchInsert(t *testing.T) {
 						emptyBlocks++
 					}
 
-					if emptyBlocks >= maxEmptyBlocks || stuckBlocks >= maxStuckBlocks {
+					if emptyBlocks >= cfg.maxEmptyBlocks || stuckBlocks >= cfg.maxStuckBlocks {
 						// check for nonce gaps
 						var lastNonce, currentNonce int
 
@@ -2903,7 +2948,7 @@ func TestPoolBatchInsert(t *testing.T) {
 								currentNonce = int(tx.Nonce())
 								if currentNonce-lastNonce != 1 {
 									rt.Fatalf("got a nonce gap for account %q. Current pending nonce %d, previous %d %v; emptyBlocks - %v; stuckBlocks - %v",
-										txAcc, currentNonce, lastNonce, isFirst, emptyBlocks >= maxEmptyBlocks, stuckBlocks >= maxStuckBlocks)
+										txAcc, currentNonce, lastNonce, isFirst, emptyBlocks >= cfg.maxEmptyBlocks, stuckBlocks >= cfg.maxStuckBlocks)
 								}
 
 								lastNonce = currentNonce
@@ -2911,19 +2956,19 @@ func TestPoolBatchInsert(t *testing.T) {
 						}
 					}
 
-					if emptyBlocks >= maxEmptyBlocks {
+					if emptyBlocks >= cfg.maxEmptyBlocks {
 						rt.Fatalf("got %d empty blocks in a row(expected less then %d): total time %s, total accounts %d. Pending %d, locals %d)",
-							emptyBlocks, maxEmptyBlocks, done, txs.totalTxs, len(pending), len(locals))
+							emptyBlocks, cfg.maxEmptyBlocks, done, txs.totalTxs, len(pending), len(locals))
 					}
 
-					if stuckBlocks >= maxStuckBlocks {
+					if stuckBlocks >= cfg.maxStuckBlocks {
 						rt.Fatalf("got %d empty blocks in a row(expected less then %d): total time %s, total accounts %d. Pending %d, locals %d)",
-							emptyBlocks, maxEmptyBlocks, done, txs.totalTxs, len(pending), len(locals))
+							emptyBlocks, cfg.maxEmptyBlocks, done, txs.totalTxs, len(pending), len(locals))
 					}
 
 					if err != nil {
 						rt.Fatalf("took too long: total time %s(expected %s), total accounts %d. Pending %d, locals %d)",
-							done, blockTime, txs.totalTxs, len(pending), len(locals))
+							done, cfg.blockTime, txs.totalTxs, len(pending), len(locals))
 					}
 
 					rt.Log("current_total", txs.totalTxs, "in_batch", totalInBatch, "removed", removedFromPool, "emptyBlocks", emptyBlocks, "blockGasLeft", blockGasLeft, "pending", len(pending), "locals", len(locals),
