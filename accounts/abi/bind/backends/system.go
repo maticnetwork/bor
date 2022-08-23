@@ -24,8 +24,14 @@ func (b *SystemBackend) CallContract(ctx context.Context, call ethereum.CallMsg,
 	value := (*hexutil.Big)(call.Value)
 	data := hexutil.Bytes(call.Data)
 
+	var from *common.Address
+
+	if call.From != (common.Address{}) {
+		from = &call.From
+	}
+
 	opts := ethapi.TransactionArgs{
-		From:                 &call.From,
+		From:                 from,
 		To:                   call.To,
 		Gas:                  &gas,
 		GasPrice:             gasPrice,
