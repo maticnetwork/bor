@@ -645,7 +645,7 @@ func (s *Ethereum) startCheckpointWhitelistService() {
 
 	// first run the checkpoint whitelist
 	firstCtx, cancel := context.WithTimeout(context.Background(), whitelistTimeout)
-	err := s.handleWhitelistCheckpoint(firstCtx, true)
+	err := s.handleWhitelistCheckpoint(firstCtx)
 
 	cancel()
 
@@ -664,7 +664,7 @@ func (s *Ethereum) startCheckpointWhitelistService() {
 		select {
 		case <-ticker.C:
 			ctx, cancel := context.WithTimeout(context.Background(), whitelistTimeout)
-			err := s.handleWhitelistCheckpoint(ctx, false)
+			err := s.handleWhitelistCheckpoint(ctx)
 
 			cancel()
 
@@ -689,7 +689,7 @@ func (s *Ethereum) startMilestoneWhitelistService() {
 
 	// first run for fetching milestones
 	firstCtx, cancel := context.WithTimeout(context.Background(), whitelistTimeout)
-	err := s.handleMilestone(firstCtx, true)
+	err := s.handleMilestone(firstCtx)
 
 	cancel()
 
@@ -708,7 +708,7 @@ func (s *Ethereum) startMilestoneWhitelistService() {
 		select {
 		case <-ticker.C:
 			ctx, cancel := context.WithTimeout(context.Background(), whitelistTimeout)
-			err := s.handleMilestone(ctx, false)
+			err := s.handleMilestone(ctx)
 
 			cancel()
 
@@ -722,7 +722,7 @@ func (s *Ethereum) startMilestoneWhitelistService() {
 }
 
 // handleWhitelistCheckpoint handles the checkpoint whitelist mechanism.
-func (s *Ethereum) handleWhitelistCheckpoint(ctx context.Context, first bool) error {
+func (s *Ethereum) handleWhitelistCheckpoint(ctx context.Context) error {
 	ethHandler := (*ethHandler)(s.handler)
 
 	bor, ok := ethHandler.chain.Engine().(*bor.Bor)
@@ -736,7 +736,7 @@ func (s *Ethereum) handleWhitelistCheckpoint(ctx context.Context, first bool) er
 
 	// Create a new bor verifier, which will be used to verify checkpoints and milestones
 	verifier := newBorVerifier(nil)
-	blockNum, blockHash, err := ethHandler.fetchWhitelistCheckpoint(ctx, bor, verifier, first)
+	blockNum, blockHash, err := ethHandler.fetchWhitelistCheckpoint(ctx, bor, verifier)
 	// If the array is empty, we're bound to receive an error. Non-nill error and non-empty array
 	// means that array has partial elements and it failed for some block. We'll add those partial
 	// elements anyway.
@@ -750,7 +750,7 @@ func (s *Ethereum) handleWhitelistCheckpoint(ctx context.Context, first bool) er
 }
 
 // handleMilestone handles the milestone mechanism.
-func (s *Ethereum) handleMilestone(ctx context.Context, first bool) error {
+func (s *Ethereum) handleMilestone(ctx context.Context) error {
 	ethHandler := (*ethHandler)(s.handler)
 
 	bor, ok := ethHandler.chain.Engine().(*bor.Bor)
@@ -764,7 +764,7 @@ func (s *Ethereum) handleMilestone(ctx context.Context, first bool) error {
 
 	// Create a new bor verifier, which will be used to verify checkpoints and milestones
 	verifier := newBorVerifier(nil)
-	blockNum, blockHash, err := ethHandler.fetchWhitelistMilestone(ctx, bor, verifier, first)
+	blockNum, blockHash, err := ethHandler.fetchWhitelistMilestone(ctx, bor, verifier)
 	// If blockNum, blockhash doesn't have any value than we're bound to receive an error. Non-nill
 	// means that either the milestone does exist on the heimdall or . We'll add those partial
 	// elements anyway.
