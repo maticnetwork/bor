@@ -74,6 +74,7 @@ func NewSubpathKey(addr common.Address, subpath byte) Key {
 
 type MVHashMap struct {
 	m sync.Map
+	c sync.Map
 }
 
 func MakeMVHashMap() *MVHashMap {
@@ -94,6 +95,16 @@ type TxnIndexCells struct {
 type Version struct {
 	TxnIndex    int
 	Incarnation int
+}
+
+func (mv *MVHashMap) ReadStorage(k Key, fallBack func() any) any {
+	data, ok := mv.c.Load(string(k[:]))
+	if !ok {
+		data = fallBack()
+		mv.c.Store(string(k[:]), data)
+	}
+
+	return data
 }
 
 func (mv *MVHashMap) getKeyCells(k Key, fNoKey func(kenc Key) *TxnIndexCells) (cells *TxnIndexCells) {

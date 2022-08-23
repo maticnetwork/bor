@@ -295,7 +295,12 @@ func MVRead[T any](s *StateDB, k blockstm.Key, defaultV T, readStorage func(s *S
 		}
 	case blockstm.MVReadResultNone:
 		{
-			readStorage(s)
+			fallBack := func() any {
+				val := readStorage(s)
+
+				return val
+			}
+			v = s.mvHashmap.ReadStorage(k, fallBack).(T)
 			rd.Kind = blockstm.ReadKindStorage
 		}
 	default:
