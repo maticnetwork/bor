@@ -27,6 +27,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/prque"
+	"github.com/ethereum/go-ethereum/common/random"
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -538,7 +539,11 @@ func (pool *TxPool) Pending(enforceTips bool) map[common.Address]types.Transacti
 	defer pool.mu.Unlock()
 
 	pending := make(map[common.Address]types.Transactions)
-	for addr, list := range pool.pending {
+	addresses := random.ShuffleMap(pool.pending)
+
+	for _, addr := range addresses {
+		list := pool.pending[addr]
+
 		txs := list.Flatten()
 
 		// If the miner requests tip enforcement, cap the lists now
@@ -554,6 +559,7 @@ func (pool *TxPool) Pending(enforceTips bool) map[common.Address]types.Transacti
 			pending[addr] = txs
 		}
 	}
+
 	return pending
 }
 
