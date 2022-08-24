@@ -2651,7 +2651,7 @@ func transactionsGen(keys []*acc, nonces []uint64, localKey *acc, minTxs int, ma
 		}
 
 		mean, stddev := stat.MeanStdDev(gasValues, nil)
-		fmt.Fprintf(caseParams, " mean %d, stdev %d, %d-%d);", int64(mean), int64(stddev), int64(floats.Min(gasValues)), int64(floats.Max(gasValues)))
+		fmt.Fprintf(caseParams, " gasValues mean %d, stdev %d, %d-%d);", int64(mean), int64(stddev), int64(floats.Min(gasValues)), int64(floats.Max(gasValues)))
 
 		return &transactionBatches{txs, totalTxs}
 	}
@@ -2683,15 +2683,16 @@ type txPoolRapidConfig struct {
 
 func defaultTxPoolRapidConfig() txPoolRapidConfig {
 	gasLimit := uint64(30_000_000)
-	maxTxs := 2
+	avgBlockTxs := gasLimit/params.TxGas + 1
+	maxTxs := int(25 * avgBlockTxs)
 
 	return txPoolRapidConfig{
 		gasLimit: gasLimit,
 
-		avgBlockTxs: 30_000_000/params.TxGas + 1,
+		avgBlockTxs: avgBlockTxs,
 
 		minTxs: 1,
-		maxTxs: 2,
+		maxTxs: maxTxs,
 
 		minAccs: 1,
 		maxAccs: maxTxs,
@@ -2812,7 +2813,7 @@ func testPoolBatchInsert(t *testing.T, cfg txPoolRapidConfig) {
 						}
 
 						mean, stddev := stat.MeanStdDev(pendingGas, nil)
-						fmt.Fprintf(caseParams, "\tpending mean %d, stdev %d, %d-%d);\n", int64(mean), int64(stddev), int64(floats.Min(pendingGas)), int64(floats.Max(pendingGas)))
+						fmt.Fprintf(caseParams, "\tpending mean %d, stdev %d, %d-%d;\n", int64(mean), int64(stddev), int64(floats.Min(pendingGas)), int64(floats.Max(pendingGas)))
 					}
 
 					if len(queued) != 0 {
@@ -2890,7 +2891,7 @@ func testPoolBatchInsert(t *testing.T, cfg txPoolRapidConfig) {
 
 				for {
 					// we'd expect fulfilling block take comparable, but less than blockTime
-					ctx, cancel := context.WithTimeout(context.Background(), 5*cfg.blockTime)
+					ctx, cancel := context.WithTimeout(context.Background(), time.Duration(cfg.maxStuckBlocks)*cfg.blockTime)
 
 					select {
 					case <-pendingAddedCh:
@@ -2915,7 +2916,7 @@ func testPoolBatchInsert(t *testing.T, cfg txPoolRapidConfig) {
 
 					// check if txPool got stuck
 					if currentTxPoolStats == lastTxPoolStats {
-						stuckBlocks++
+						stuckBlocks++ //todo: переписать
 					} else {
 						stuckBlocks = 0
 						lastTxPoolStats = currentTxPoolStats
@@ -2984,7 +2985,7 @@ func testPoolBatchInsert(t *testing.T, cfg txPoolRapidConfig) {
 
 					cancel()
 
-					time.Sleep(time.Second)
+					//time.Sleep(time.Second)
 				}
 
 				rt.Logf("case completed totalTxs %d %v\n\n", txs.totalTxs, time.Since(now))
