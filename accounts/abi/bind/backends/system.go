@@ -10,6 +10,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
@@ -58,7 +59,7 @@ func (b *SystemBackend) PendingCodeAt(ctx context.Context, account common.Addres
 }
 
 func (b *SystemBackend) PendingNonceAt(ctx context.Context, account common.Address) (uint64, error) {
-	panic("not implemented")
+	return 0, nil
 }
 
 func (b *SystemBackend) SuggestGasPrice(ctx context.Context) (*big.Int, error) {
@@ -70,7 +71,7 @@ func (b *SystemBackend) SuggestGasTipCap(ctx context.Context) (*big.Int, error) 
 }
 
 func (b *SystemBackend) EstimateGas(ctx context.Context, call ethereum.CallMsg) (gas uint64, err error) {
-	panic("not implemented")
+	return params.TxGas, nil
 }
 
 func (b *SystemBackend) SendTransaction(ctx context.Context, tx *types.Transaction) error {
