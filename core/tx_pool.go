@@ -1134,7 +1134,7 @@ func (pool *TxPool) scheduleReorgLoop() {
 			pool.reorgDoneCh <- nextDone
 
 		case req := <-pool.reqPromoteCh:
-			fmt.Println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!-promote", n)
+			fmt.Println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!-promote", n, len(req.accounts))
 			// Promote request: update address set if request is already pending.
 			if dirtyAccounts == nil {
 				dirtyAccounts = req
