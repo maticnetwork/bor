@@ -5,6 +5,7 @@ package contracts
 
 import (
 	"errors"
+	"fmt"
 	"math/big"
 	"strings"
 
@@ -501,6 +502,7 @@ func (_BorValidatorSet *BorValidatorSetCallerSession) CurrentSprint() (*big.Int,
 // Solidity: function getBorValidators(uint256 number) view returns(address[], uint256[])
 func (_BorValidatorSet *BorValidatorSetCaller) GetBorValidators(opts *bind.CallOpts, number *big.Int) ([]common.Address, []*big.Int, error) {
 	var out []interface{}
+	fmt.Println("!!!1", opts.From.Hex(), opts.Pending)
 	err := _BorValidatorSet.contract.Call(opts, &out, "getBorValidators", number)
 
 	if err != nil {

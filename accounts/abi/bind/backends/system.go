@@ -2,6 +2,7 @@ package backends
 
 import (
 	"context"
+	"fmt"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum"
@@ -18,30 +19,24 @@ type SystemBackend struct {
 
 func (b *SystemBackend) CallContract(ctx context.Context, call ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
 	gas := hexutil.Uint64(call.Gas)
-	gasPrice := (*hexutil.Big)(call.GasPrice)
-	maxFeePerGas := (*hexutil.Big)(call.GasFeeCap)
-	maxPriorityFeePerGas := (*hexutil.Big)(call.GasTipCap)
-	value := (*hexutil.Big)(call.Value)
 	data := hexutil.Bytes(call.Data)
 
-	var from *common.Address
-
-	if call.From != (common.Address{}) {
-		from = &call.From
-	}
-
 	opts := ethapi.TransactionArgs{
-		From:                 from,
-		To:                   call.To,
-		Gas:                  &gas,
-		GasPrice:             gasPrice,
-		MaxFeePerGas:         maxFeePerGas,
-		MaxPriorityFeePerGas: maxPriorityFeePerGas,
-		Value:                value,
-		Data:                 &data,
-		AccessList:           &call.AccessList,
+		To:   call.To,
+		Gas:  &gas,
+		Data: &data,
 		//ChainID    *hexutil.Big      `json:"chainId,omitempty"`
 	}
+
+	fmt.Println("======================", blockNumber.String())
+
+	/*
+		result, err := c.ethAPI.Call(ctx, ethapi.TransactionArgs{
+			Gas:  &gas,
+			To:   &toAddress,
+			Data: &msgData,
+		}, blockNr, nil)
+	*/
 
 	return b.API.Call(ctx, opts, rpc.BlockNumberOrHashFromBigInt(blockNumber), nil)
 }
