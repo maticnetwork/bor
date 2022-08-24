@@ -798,11 +798,11 @@ func (d *Downloader) getFetchHeadersByNumber(p *peerConnection) func(number uint
 // the head links match), we do a binary search to find the common ancestor.
 func (d *Downloader) findAncestor(p *peerConnection, remoteHeader *types.Header) (uint64, error) {
 	// Check the validity of peer from which the chain is to be downloaded
-	if d.ChainValidator != nil {
-		if _, err := d.IsValidPeer(remoteHeader, d.getFetchHeadersByNumber(p)); err != nil {
-			return 0, err
-		}
-	}
+	// if d.ChainValidator != nil {
+	// 	if _, err := d.IsValidPeer(remoteHeader, d.getFetchHeadersByNumber(p)); err != nil {
+	// 		return 0, err
+	// 	}
+	// }
 
 	// Figure out the valid ancestor range to prevent rewrite attacks
 	var (

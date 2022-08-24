@@ -104,7 +104,7 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 
 	// Don't accept future chain of unacceptable length (from current block)
 	if len(futureChain)+offset > int(m.interval) {
-		log.Warn("❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌")
+		log.Warn("❌❌❌❌❌✅✅❌❌❌❌❌✅✅❌❌❌❌❌❌❌❌✅✅❌❌❌")
 		return false
 	}
 
