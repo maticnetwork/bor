@@ -101,8 +101,8 @@ type Backend interface {
 	SubscribeChain2HeadEvent(ch chan<- core.Chain2HeadEvent) event.Subscription
 	GetWhitelistedCheckpoint() (bool, uint64, common.Hash)
 	PurgeWhitelistedCheckpoint()
-	GetMilestone() (bool, uint64, common.Hash)
-	PurgeMilestone()
+	GetWhitelistedMilestone() (bool, uint64, common.Hash)
+	PurgeWhitelistedMilestone()
 
 	ChainConfig() *params.ChainConfig
 	Engine() consensus.Engine

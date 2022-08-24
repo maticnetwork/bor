@@ -21,7 +21,7 @@ var (
 
 // fetchWhitelistCheckpoint fetches the latest checkpoint from it's local heimdall
 // and verifies the data against bor data.
-func (h *ethHandler) fetchWhitelistCheckpoint(ctx context.Context, bor *bor.Bor, verifier *borVerifier, first bool) (uint64, common.Hash, error) {
+func (h *ethHandler) fetchWhitelistCheckpoint(ctx context.Context, bor *bor.Bor, verifier *borVerifier) (uint64, common.Hash, error) {
 	var (
 		blockNum  uint64
 		blockHash common.Hash
@@ -51,7 +51,7 @@ func (h *ethHandler) fetchWhitelistCheckpoint(ctx context.Context, bor *bor.Bor,
 
 // fetchWhitelistMilestone fetches the latest milestone from it's local heimdall
 // and verifies the data against bor data.
-func (h *ethHandler) fetchWhitelistMilestone(ctx context.Context, bor *bor.Bor, verifier *borVerifier, first bool) (uint64, common.Hash, error) {
+func (h *ethHandler) fetchWhitelistMilestone(ctx context.Context, bor *bor.Bor, verifier *borVerifier) (uint64, common.Hash, error) {
 	var (
 		blockNum  uint64
 		blockHash common.Hash

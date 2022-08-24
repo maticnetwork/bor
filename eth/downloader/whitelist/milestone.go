@@ -28,8 +28,6 @@ var (
 func (m *milestone) IsValidPeer(remoteHeader *types.Header, fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error) {
 	// We want to validate the chain by comparing the last milestoned block
 	// we're storing in `milestone` with the peer's block.
-	//
-
 	m.m.Lock()
 
 	// Check for availaibility of the last milestone block.
@@ -126,12 +124,11 @@ func (m *milestone) ProcessMilestone(endBlockNum uint64, endBlockHash common.Has
 	m.doExist = true
 	m.milestoneNumber = endBlockNum
 	m.milestoneHash = endBlockHash
-
 }
 
 // GetMilestone returns the existing whitelisted
 // entry of milestone
-func (m *milestone) GetMilestone() (bool, uint64, common.Hash) {
+func (m *milestone) GetWhitelistedMilestone() (bool, uint64, common.Hash) {
 	m.m.Lock()
 	defer m.m.Unlock()
 
@@ -139,7 +136,7 @@ func (m *milestone) GetMilestone() (bool, uint64, common.Hash) {
 }
 
 // PurgeMilestone purges data from milestone
-func (m *milestone) PurgeMilestone() {
+func (m *milestone) PurgeWhitelistedMilestone() {
 	m.m.Lock()
 	defer m.m.Unlock()
 

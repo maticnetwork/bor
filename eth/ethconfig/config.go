@@ -251,11 +251,11 @@ func CreateConsensusEngine(stack *node.Node, chainConfig *params.ChainConfig, et
 		if ethConfig.WithoutHeimdall {
 			return bor.New(chainConfig, db, blockchainAPI, spanner, nil, genesisContractsClient)
 		} else {
-			var heimdallClient bor.IHeimdallClient
+			// var heimdallClient bor.IHeimdallClient
 			//if ethConfig.HeimdallgRPCAddress != "" {
 			//	heimdallClient = heimdallgrpc.NewHeimdallGRPCClient(ethConfig.HeimdallgRPCAddress)
 			//} else {
-			heimdallClient = heimdall.NewHeimdallClient(ethConfig.HeimdallURL)
+			var heimdallClient bor.IHeimdallClient = heimdall.NewHeimdallClient(ethConfig.HeimdallURL)
 			//}
 
 			return bor.New(chainConfig, db, blockchainAPI, spanner, heimdallClient, genesisContractsClient)

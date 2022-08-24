@@ -364,14 +364,14 @@ func (b *EthAPIBackend) GetWhitelistedCheckpoint() (bool, uint64, common.Hash) {
 	return b.eth.Downloader().ChainValidator.GetWhitelistedCheckpoint()
 }
 
-func (b *EthAPIBackend) GetMilestone() (bool, uint64, common.Hash) {
-	return b.eth.Downloader().ChainValidator.GetMilestone()
-}
-
 func (b *EthAPIBackend) PurgeWhitelistedCheckpoint() {
 	b.eth.Downloader().ChainValidator.PurgeWhitelistedCheckpoint()
 }
 
-func (b *EthAPIBackend) PurgeMilestone() {
-	b.eth.Downloader().ChainValidator.PurgeMilestone()
+func (b *EthAPIBackend) GetWhitelistedMilestone() (bool, uint64, common.Hash) {
+	return b.eth.Downloader().ChainValidator.GetWhitelistedMilestone()
+}
+
+func (b *EthAPIBackend) PurgeWhitelistedMilestone() {
+	b.eth.Downloader().ChainValidator.PurgeWhitelistedMilestone()
 }
