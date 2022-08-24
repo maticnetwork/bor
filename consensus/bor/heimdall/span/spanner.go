@@ -11,7 +11,6 @@ import (
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -25,11 +24,7 @@ type ChainSpanner struct {
 	validatorContractAddress common.Address
 }
 
-func NewChainSpanner(chainConfig *params.ChainConfig, validatorContractAddress common.Address) (*ChainSpanner, error) {
-	backend, err := ethclient.Dial("127.0.0.1")
-	if err != nil {
-		return nil, err
-	}
+func NewChainSpanner(chainConfig *params.ChainConfig, validatorContractAddress common.Address, backend bind.ContractBackend) (*ChainSpanner, error) {
 	validatorSet, err := contracts.NewBorValidatorSet(validatorContractAddress, backend)
 	if err != nil {
 		return nil, err
@@ -45,8 +40,11 @@ func NewChainSpanner(chainConfig *params.ChainConfig, validatorContractAddress c
 func (c *ChainSpanner) GetCurrentSpan(ctx context.Context, headerHash common.Hash) (*Span, error) {
 
 	blockNr := rpc.BlockNumberOrHashWithHash(headerHash, false)
+	n, _ := blockNr.Number()
+	x := int64(n)
+
 	opts := &bind.CallOpts{
-		BlockNumber: big.NewInt(blockNr.BlockHash.Big().Int64()),
+		BlockNumber: big.NewInt(x),
 		Context:     ctx,
 	}
 	ret, err := c.validatorSet.GetCurrentSpan(opts)
@@ -69,9 +67,11 @@ func (c *ChainSpanner) GetCurrentValidators(ctx context.Context, headerHash comm
 	defer cancel()
 
 	blockNr := rpc.BlockNumberOrHashWithHash(headerHash, false)
+	n, _ := blockNr.Number()
+	x := int64(n)
 
 	opts := &bind.CallOpts{
-		BlockNumber: big.NewInt(blockNr.BlockNumber.Int64()),
+		BlockNumber: big.NewInt(x),
 		Context:     ctx,
 	}
 
