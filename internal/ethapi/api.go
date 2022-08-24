@@ -32,6 +32,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/accounts/scwallet"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/debug"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/consensus/clique"
@@ -1099,6 +1100,12 @@ func (e *revertError) ErrorData() interface{} {
 // Note, this function doesn't make and changes in the state/blockchain and is
 // useful to execute and retrieve values.
 func (s *PublicBlockChainAPI) Call(ctx context.Context, args TransactionArgs, blockNrOrHash rpc.BlockNumberOrHash, overrides *StateOverride) (hexutil.Bytes, error) {
+	gas := hexutil.Uint64(0x7fffffffffffffff)
+	args.Gas = &gas
+
+	fmt.Println("CALL!!!", args, blockNrOrHash.String(), debug.Callers(10))
+	// CALL!!! {<nil> 0x0000000000000000000000000000000000001000 0x7fffffffffffffff <nil> <nil> <nil> <nil> <nil> 0x0c35b1cb0000000000000000000000000000000000000000000000000000000000000001 <nil> <nil> <nil>} 0x3ea63916b1dcd05d0985412c6ca681b097ca32c341b966a4d2052352c89976ab [github.com/ethereum/go-ethereum/internal/ethapi.(*PublicBlockChainAPI).Call github.com/ethereum/go-ethereum/consensus/bor/heimdall/span.(*ChainSpanner).GetCurrentValidators github.com/ethereum/go-ethereum/consensus/bor.(*Bor).snapshot github.com/ethereum/go-ethereum/consensus/bor.(*Bor).Prepare github.com/ethereum/go-ethereum/miner.(*worker).prepareWork github.com/ethereum/go-ethereum/miner.(*worker).commitWork github.com/ethereum/go-ethereum/miner.(*worker).mainLoop runtime.goexit]
+	// CALL!!! {<nil> 0x0000000000000000000000000000000000001000 0x7fffffffffffffff <nil> <nil> <nil> <nil> <nil> 0x0c35b1cb0000000000000000000000000000000000000000000000000000000000000001 <nil> <nil> <nil>} 0 [github.com/ethereum/go-ethereum/internal/ethapi.(*PublicBlockChainAPI).Call github.com/ethereum/go-ethereum/accounts/abi/bind/backends.(*SystemBackend).CallContract github.com/ethereum/go-ethereum/accounts/abi/bind.(*BoundContract).Call github.com/ethereum/go-ethereum/tests/bor/contracts.(*BorValidatorSetCaller).GetBorValidators github.com/ethereum/go-ethereum/consensus/bor/heimdall/span.(*ChainSpanner).GetCurrentValidators github.com/ethereum/go-ethereum/consensus/bor.(*Bor).snapshot github.com/ethereum/go-ethereum/consensus/bor.(*Bor).verifyCascadingFields github.com/ethereum/go-ethereum/consensus/bor.(*Bor).verifyHeader github.com/ethereum/go-ethereum/consensus/bor.(*Bor).VerifyHeaders.func1 runtime.goexit]
 	result, err := DoCall(ctx, s.b, args, blockNrOrHash, overrides, s.b.RPCEVMTimeout(), s.b.RPCGasCap())
 	if err != nil {
 		return nil, err
