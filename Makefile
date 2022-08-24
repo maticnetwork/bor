@@ -37,7 +37,11 @@ protoc:
 generate-mocks:
 	go generate mockgen -destination=./tests/bor/mocks/IHeimdallClient.go -package=mocks ./consensus/bor IHeimdallClient
 	go generate mockgen -destination=./eth/filters/IBackend.go -package=filters ./eth/filters Backend
-	
+
+binding:
+	abigen --abi ./tests/bor/contracts/BorValidatorSet.abi --pkg contracts --type BorValidatorSet --out ./tests/bor/contracts/BorValidatorSet.go
+	abigen --abi ./tests/bor/contracts/StateReceiver.abi --pkg contracts --type StateReceiver --out ./tests/bor/contracts/StateReceiver.go
+
 geth:
 	$(GORUN) build/ci.go install ./cmd/geth
 	@echo "Done building."

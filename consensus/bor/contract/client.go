@@ -22,10 +22,10 @@ type GenesisContractsClient struct {
 	chainConfig       *params.ChainConfig
 }
 
-func NewGenesisContractsClient(chainConfig *params.ChainConfig, validatorSetAddr, stateReceiverAddr common.Address, backend bind.ContractBackend) *GenesisContractsClient {
+func NewGenesisContractsClient(chainConfig *params.ChainConfig, validatorSetAddr, stateReceiverAddr common.Address, backend bind.ContractBackend) (*GenesisContractsClient, error) {
 	validatorSet, err := contracts.NewBorValidatorSet(validatorSetAddr, backend)
 	if err != nil {
-		log.Error("Failed to initialize BorValidatorSet", "error", err)
+		return nil, err
 	}
 
 	stateReceiver, err := contracts.NewStateReceiver(stateReceiverAddr, backend)
@@ -38,7 +38,7 @@ func NewGenesisContractsClient(chainConfig *params.ChainConfig, validatorSetAddr
 		ValidatorSetAddr:  validatorSetAddr,
 		StateReceiverAddr: stateReceiverAddr,
 		chainConfig:       chainConfig,
-	}
+	}, nil
 }
 
 func (gc *GenesisContractsClient) CommitState(
