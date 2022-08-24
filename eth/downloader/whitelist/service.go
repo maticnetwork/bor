@@ -58,7 +58,7 @@ func (s *WhitelistService) IsValidChain(currentHeader *types.Header, chain []*ty
 		log.Warn("❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌")
 		return milestoneBool
 	}
-
+	log.Warn("✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅")
 	return true
 }
 
