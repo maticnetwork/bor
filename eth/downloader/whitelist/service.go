@@ -3,6 +3,7 @@ package whitelist
 import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 //Service
@@ -51,11 +52,13 @@ func (s *WhitelistService) IsValidChain(currentHeader *types.Header, chain []*ty
 	checkpointBool := s.whitelist.IsValidChain(currentHeader, chain)
 
 	if !checkpointBool {
+		log.Warn("❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌")
 		return checkpointBool
 	}
 
 	milestoneBool := s.milestone.IsValidChain(currentHeader, chain)
 	if !milestoneBool {
+		log.Warn("❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌")
 		return milestoneBool
 	}
 

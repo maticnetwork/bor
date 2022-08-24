@@ -7,6 +7,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 type milestone struct {
@@ -63,7 +64,7 @@ func (m *milestone) IsValidPeer(remoteHeader *types.Header, fetchHeadersByNumber
 	if reqBlockNum == lastMilestoneBlockNum && reqBlockHash == lastMilestoneBlockHash {
 		return true, nil
 	}
-
+	log.Warn("❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌")
 	return false, ErrMilestoneMismatch
 }
 
