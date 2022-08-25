@@ -89,7 +89,7 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 	// Check if we have milestoneList entries in required range
 	if chain[len(chain)-1].Number.Uint64() < lastMilestoneBlockNum {
 		// We have future milestone entries, so no additional validation will be possible
-		log.Warn("❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌")
+		log.Warn("❌❌❌❌❌❌❌❌❌❌PastChain❌❌❌❌❌❌❌❌❌❌❌")
 		return false
 	}
 
@@ -104,7 +104,7 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 
 	// Don't accept future chain of unacceptable length (from current block)
 	if len(futureChain)+offset > int(m.interval) {
-		log.Warn("❌❌❌❌❌✅✅❌❌❌❌❌✅✅❌❌❌❌❌❌❌❌✅✅❌❌❌")
+		log.Warn("❌❌❌❌❌LargeOffset❌❌❌")
 		return false
 	}
 
@@ -116,7 +116,7 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 				log.Warn("✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅")
 				return true
 			} else {
-				log.Warn("❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌")
+				log.Warn("❌❌❌❌❌❌MilestoneMismatch❌❌❌❌❌❌❌❌❌")
 				return false
 			}
 		}
