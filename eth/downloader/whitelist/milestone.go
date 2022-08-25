@@ -113,7 +113,7 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 	for i := len(pastChain) - 1; i >= 0; i-- {
 		if pastChain[i].Number.Uint64() == m.milestoneNumber {
 			if pastChain[i].Hash() == m.milestoneHash {
-				log.Warn("✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅")
+				log.Warn("✅✅✅✅✅✅✅✅✅✅MilestoneMatch✅✅✅✅✅✅✅✅✅✅✅✅", "Milestone Hash", m.milestoneHash)
 				return true
 			} else {
 				log.Warn("❌❌❌❌❌❌MilestoneMismatch❌❌❌❌❌❌❌❌❌")
