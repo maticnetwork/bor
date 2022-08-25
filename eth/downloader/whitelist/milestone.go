@@ -121,7 +121,7 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 			}
 		}
 	}
-	log.Warn("✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅")
+	log.Warn("✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅", "Milestone Hash", m.milestoneHash)
 	return true
 }
 
