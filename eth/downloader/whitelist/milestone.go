@@ -90,7 +90,7 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 	if chain[len(chain)-1].Number.Uint64() < lastMilestoneBlockNum {
 		// We have future milestone entries, so no additional validation will be possible
 		log.Warn("❌❌❌❌❌❌❌❌❌❌PastChain❌❌❌❌❌❌❌❌❌❌❌")
-		return false
+		return true
 	}
 
 	// Split the chain into past and future chain
