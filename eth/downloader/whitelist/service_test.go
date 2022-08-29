@@ -102,6 +102,7 @@ func TestIsValidPeer(t *testing.T) {
 	// create a mock function, returning a the required header
 	fetchHeadersByNumber := func(number uint64, _ int, _ int, _ bool) ([]*types.Header, []common.Hash, error) {
 		hash := common.Hash{}
+		fmt.Println(hash)
 		header := types.Header{Number: big.NewInt(0)}
 
 		switch number {
@@ -130,6 +131,38 @@ func TestIsValidPeer(t *testing.T) {
 	// for block number 2. Should consider the chain as invalid and throw an error
 	res, err = s.IsValidPeer(nil, fetchHeadersByNumber)
 	require.Equal(t, err, ErrCheckpointMismatch, "expected checkpoint mismatch error")
+	require.Equal(t, res, false, "expected chain to be invalid")
+
+	// case3: correct fetchHeadersByNumber function provided, should consider the chain as valid
+	// create a mock function, returning a the required header
+	fetchHeadersByNumber = func(number uint64, _ int, _ int, _ bool) ([]*types.Header, []common.Hash, error) {
+		hash := common.Hash{}
+		fmt.Println(hash)
+		header := types.Header{Number: big.NewInt(0)}
+
+		switch number {
+		case 0:
+			return []*types.Header{&header}, []common.Hash{hash}, nil
+		case 1:
+			header.Number = big.NewInt(1)
+			return []*types.Header{&header}, []common.Hash{hash}, nil
+		case 2:
+			header.Number = big.NewInt(2)
+			return []*types.Header{&header}, []common.Hash{hash}, nil
+
+		case 3:
+			header.Number = big.NewInt(3)
+			hash3 := common.Hash{3}
+			return []*types.Header{&header}, []common.Hash{hash3}, nil
+		default:
+			return nil, nil, errors.New("invalid number")
+		}
+	}
+
+	s.ProcessMilestone(uint64(3), common.Hash{})
+
+	res, err = s.IsValidPeer(nil, fetchHeadersByNumber)
+	require.Equal(t, err, ErrMilestoneMismatch, "expected checkpoint mismatch error")
 	require.Equal(t, res, false, "expected chain to be invalid")
 
 	s.ProcessMilestone(uint64(2), common.Hash{})
