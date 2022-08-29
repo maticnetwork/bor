@@ -27,15 +27,15 @@ var (
 )
 
 type borVerifier struct {
-	verify func(ctx context.Context, handler *ethHandler, start uint64, end uint64, rootHash string) (string, error)
+	verify func(ctx context.Context, eth *Ethereum, handler *ethHandler, start uint64, end uint64, rootHash string) (string, error)
 }
 
-func newBorVerifier(verifyFn func(ctx context.Context, handler *ethHandler, start uint64, end uint64, rootHash string) (string, error)) *borVerifier {
+func newBorVerifier(verifyFn func(ctx context.Context, eth *Ethereum, handler *ethHandler, start uint64, end uint64, rootHash string) (string, error)) *borVerifier {
 	if verifyFn != nil {
 		return &borVerifier{verifyFn}
 	}
 
-	verifyFn = func(ctx context.Context, handler *ethHandler, start uint64, end uint64, rootHash string) (string, error) {
+	verifyFn = func(ctx context.Context, eth *Ethereum, handler *ethHandler, start uint64, end uint64, rootHash string) (string, error) {
 		var hash string
 
 		// check if we have the given blocks
@@ -54,6 +54,41 @@ func newBorVerifier(verifyFn func(ctx context.Context, handler *ethHandler, star
 
 		if localRoothash != rootHash {
 			log.Warn("Root hash mismatch while whitelisting", "expected", localRoothash, "got", rootHash)
+			ethHandler := (*ethHandler)(eth.handler)
+
+			var rewindTo uint64
+			var doExist bool
+			if doExist, rewindTo, _ = ethHandler.downloader.GetWhitelistedMilestone(); doExist == true {
+
+				log.Warn("Rewinding chain to :", rewindTo, "block number")
+				err = eth.blockchain.SetHead(rewindTo)
+				if err != nil {
+					log.Error("Error while rewinding the chain to", "Block Number", rewindTo, "Error", err)
+				}
+
+			} else if doExist, rewindTo, _ = ethHandler.downloader.GetWhitelistedCheckpoint(); doExist == true {
+
+				log.Warn("Rewinding chain to :", rewindTo, "block number")
+				err = eth.blockchain.SetHead(rewindTo)
+				if err != nil {
+					log.Error("Error while rewinding the chain to", "Block Number", rewindTo, "Error", err)
+				}
+
+			} else {
+				if start <= 0 {
+					rewindTo = 0
+				} else {
+					rewindTo = start - 1
+				}
+
+				log.Warn("Rewinding chain to :", rewindTo, "block number")
+				err = eth.blockchain.SetHead(rewindTo)
+				if err != nil {
+					log.Error("Error while rewinding the chain to", "Block Number", rewindTo, "Error", err)
+				}
+
+			}
+
 			return hash, errRootHashMismatch
 		}
 
