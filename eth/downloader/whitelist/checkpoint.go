@@ -9,7 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 )
 
-type whitelist struct {
+type checkpoint struct {
 	m                sync.Mutex
 	checkpointHash   common.Hash // Whitelisted Checkpoint Hash, populated by reaching out to heimdall
 	checkpointNumber uint64      // Checkpoint Number , populated by reaching out to heimdall
@@ -24,17 +24,15 @@ var (
 
 // IsValidPeer checks if the chain we're about to receive from a peer is valid or not
 // in terms of reorgs. We won't reorg beyond the last bor checkpoint submitted to mainchain.
-func (w *whitelist) IsValidPeer(remoteHeader *types.Header, fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error) {
+func (w *checkpoint) IsValidPeer(remoteHeader *types.Header, fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error) {
 	// We want to validate the chain by comparing the last checkpointed block
 	// we're storing in `checkpointWhitelist` with the peer's block.
-
 	w.m.Lock()
 
 	// Check for availaibility of the last checkpointed block.
 	// doExist will be false if our heimdall is not responding
 	// or we're running without it.
 	if !w.doExist {
-
 		w.m.Unlock()
 		// worst case, we don't have the checkpoint in memory
 		return true, nil
@@ -69,7 +67,7 @@ func (w *whitelist) IsValidPeer(remoteHeader *types.Header, fetchHeadersByNumber
 
 // IsValidChain checks the validity of chain by comparing it
 // against the local checkpoint entry
-func (w *whitelist) IsValidChain(currentHeader *types.Header, chain []*types.Header) bool {
+func (w *checkpoint) IsValidChain(currentHeader *types.Header, chain []*types.Header) bool {
 	// Check if we have checkpoint to validate incoming chain in memory
 	if !w.doExist {
 		// We don't have whitelisted checkpoint, no additional validation will be possible
@@ -120,7 +118,7 @@ func (w *whitelist) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 	return true
 }
 
-func (w *whitelist) ProcessCheckpoint(endBlockNum uint64, endBlockHash common.Hash) {
+func (w *checkpoint) ProcessCheckpoint(endBlockNum uint64, endBlockHash common.Hash) {
 	w.m.Lock()
 	defer w.m.Unlock()
 
@@ -131,7 +129,7 @@ func (w *whitelist) ProcessCheckpoint(endBlockNum uint64, endBlockHash common.Ha
 
 // GetWhitelistedMilestone returns the existing whitelisted
 // entries of checkpoint of the form (doExist,block number,block hash.)
-func (w *whitelist) GetWhitelistedCheckpoint() (bool, uint64, common.Hash) {
+func (w *checkpoint) GetWhitelistedCheckpoint() (bool, uint64, common.Hash) {
 	w.m.Lock()
 	defer w.m.Unlock()
 
@@ -139,7 +137,7 @@ func (w *whitelist) GetWhitelistedCheckpoint() (bool, uint64, common.Hash) {
 }
 
 // PurgeWhitelistedCheckpoint purges the whitlisted checkpoint
-func (w *whitelist) PurgeWhitelistedCheckpoint() {
+func (w *checkpoint) PurgeWhitelistedCheckpoint() {
 	w.m.Lock()
 	defer w.m.Unlock()
 

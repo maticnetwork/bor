@@ -58,7 +58,7 @@ func newBorVerifier(verifyFn func(ctx context.Context, eth *Ethereum, handler *e
 
 			var rewindTo uint64
 			var doExist bool
-			if doExist, rewindTo, _ = ethHandler.downloader.GetMilestone(); doExist == true {
+			if doExist, rewindTo, _ = ethHandler.downloader.GetWhitelistedMilestone(); doExist == true {
 
 				log.Warn("Rewinding chain to :", rewindTo, "block number")
 				err = eth.blockchain.SetHead(rewindTo)
