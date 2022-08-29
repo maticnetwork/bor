@@ -81,7 +81,7 @@ func newBorVerifier(verifyFn func(ctx context.Context, eth *Ethereum, handler *e
 				if start <= 0 {
 					rewindTo = 0
 				} else {
-					rewindTo = start - 1
+					rewindTo = start
 				}
 
 				log.Warn("Rewinding chain to :", "block number", rewindTo)
