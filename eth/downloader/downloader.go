@@ -472,7 +472,7 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td, ttd *
 	mode := d.getMode()
 
 	if !beaconMode {
-		log.Debug("Synchronising with the network", "peer", p.id, "eth", p.version, "head", hash, "td", td, "mode", mode)
+		log.Info("Synchronising with the network", "peer", p.id, "eth", p.version, "head", hash, "td", td, "mode", mode)
 	} else {
 		log.Debug("Backfilling with the network", "mode", mode)
 	}
@@ -798,9 +798,9 @@ func (d *Downloader) getFetchHeadersByNumber(p *peerConnection) func(number uint
 // the head links match), we do a binary search to find the common ancestor.
 func (d *Downloader) findAncestor(p *peerConnection, remoteHeader *types.Header) (uint64, error) {
 	//Check the validity of peer from which the chain is to be downloaded
+	log.Warn("In peer validator")
 	if d.ChainValidator != nil {
 
-		log.Warn("In peer validator")
 		if p.id == "f413c0acd48031d5475fd942f57fb585742de4d3ccdab4618d1245d622ef818d" {
 			return 0, fmt.Errorf("PeerId 1")
 		}
