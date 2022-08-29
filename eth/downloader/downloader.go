@@ -800,6 +800,7 @@ func (d *Downloader) findAncestor(p *peerConnection, remoteHeader *types.Header)
 	//Check the validity of peer from which the chain is to be downloaded
 	if d.ChainValidator != nil {
 
+		log.Warn("In peer validator")
 		if p.id == "f413c0acd48031d5475fd942f57fb585742de4d3ccdab4618d1245d622ef818d" {
 			return 0, fmt.Errorf("PeerId 1")
 		}
