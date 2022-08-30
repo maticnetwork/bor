@@ -101,9 +101,9 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 	pastChain, futureChain := splitChain(current, chain)
 
 	// Add an offset to future chain if it's not in continuity
-	log.Info("### Checking for future chain", "start block", futureChain[0].Number.Uint64(), "end block", futureChain[len(pastChain)-1].Number.Uint64(), "milestone", m.milestoneNumber)
 	offset := 0
 	if len(futureChain) != 0 {
+		log.Info("### Checking for future chain", "start block", futureChain[0].Number.Uint64(), "end block", futureChain[len(futureChain)-1].Number.Uint64(), "milestone", m.milestoneNumber)
 		offset += int(futureChain[0].Number.Uint64()-currentHeader.Number.Uint64()) - 1
 	}
 
@@ -115,7 +115,9 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 
 	// Iterate over the chain and validate against the last milestone
 	// It will handle all cases where the incoming chain has atleast one milestone
-	log.Info("### Checking for past chain", "start block", pastChain[0].Number.Uint64(), "end block", pastChain[len(pastChain)-1].Number.Uint64(), "milestone", m.milestoneNumber)
+	if len(pastChain) != 0 {
+		log.Info("### Checking for past chain", "start block", pastChain[0].Number.Uint64(), "end block", pastChain[len(pastChain)-1].Number.Uint64(), "milestone", m.milestoneNumber)
+	}
 	for i := len(pastChain) - 1; i >= 0; i-- {
 		if pastChain[i].Number.Uint64() == m.milestoneNumber {
 			if pastChain[i].Hash() == m.milestoneHash {
