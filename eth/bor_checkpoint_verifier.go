@@ -38,17 +38,6 @@ func newBorVerifier(verifyFn func(ctx context.Context, eth *Ethereum, handler *e
 	verifyFn = func(ctx context.Context, eth *Ethereum, handler *ethHandler, start uint64, end uint64, rootHash string) (string, error) {
 		var hash string
 
-		if start >= 500 {
-
-			log.Warn("Rewinding chain to :", "block number", 300)
-			handler.downloader.Cancel()
-			err := eth.blockchain.SetHead(300)
-			if err != nil {
-				log.Error("Error while rewinding the chain to", "Block Number", 300, "Error", err)
-			}
-
-		}
-
 		// check if we have the given blocks
 		head := handler.ethAPI.BlockNumber()
 		if head < hexutil.Uint64(end) {
@@ -65,44 +54,44 @@ func newBorVerifier(verifyFn func(ctx context.Context, eth *Ethereum, handler *e
 
 		if localRoothash != rootHash {
 			log.Warn("Root hash mismatch while whitelisting", "expected", localRoothash, "got", rootHash)
-			ethHandler := (*ethHandler)(eth.handler)
+			//ethHandler := (*ethHandler)(eth.handler)
 
-			var rewindTo uint64
-			var doExist bool
-			if doExist, rewindTo, _ = ethHandler.downloader.GetWhitelistedMilestone(); doExist == true {
+			// var rewindTo uint64
+			// var doExist bool
+			// if doExist, rewindTo, _ = ethHandler.downloader.GetWhitelistedMilestone(); doExist == true {
 
-				log.Warn("Rewinding chain to :", "block number", rewindTo)
+			// 	log.Warn("Rewinding chain to :", "block number", rewindTo)
 
-				handler.downloader.Cancel()
-				err = eth.blockchain.SetHead(rewindTo)
-				if err != nil {
-					log.Error("Error while rewinding the chain to", "Block Number", rewindTo, "Error", err)
-				}
+			// 	handler.downloader.Cancel()
+			// 	err = eth.blockchain.SetHead(rewindTo)
+			// 	if err != nil {
+			// 		log.Error("Error while rewinding the chain to", "Block Number", rewindTo, "Error", err)
+			// 	}
 
-			} else if doExist, rewindTo, _ = ethHandler.downloader.GetWhitelistedCheckpoint(); doExist == true {
+			// } else if doExist, rewindTo, _ = ethHandler.downloader.GetWhitelistedCheckpoint(); doExist == true {
 
-				log.Warn("Rewinding chain to :", "block number", rewindTo)
-				handler.downloader.Cancel()
-				err = eth.blockchain.SetHead(rewindTo)
-				if err != nil {
-					log.Error("Error while rewinding the chain to", "Block Number", rewindTo, "Error", err)
-				}
+			// 	log.Warn("Rewinding chain to :", "block number", rewindTo)
+			// 	handler.downloader.Cancel()
+			// 	err = eth.blockchain.SetHead(rewindTo)
+			// 	if err != nil {
+			// 		log.Error("Error while rewinding the chain to", "Block Number", rewindTo, "Error", err)
+			// 	}
 
-			} else {
-				if start <= 0 {
-					rewindTo = 0
-				} else {
-					rewindTo = start
-				}
+			// } else {
+			// 	if start <= 0 {
+			// 		rewindTo = 0
+			// 	} else {
+			// 		rewindTo = start
+			// 	}
 
-				log.Warn("Rewinding chain to :", "block number", rewindTo)
-				handler.downloader.Cancel()
-				err = eth.blockchain.SetHead(rewindTo)
-				if err != nil {
-					log.Error("Error while rewinding the chain to", "Block Number", rewindTo, "Error", err)
-				}
+			// 	log.Warn("Rewinding chain to :", "block number", rewindTo)
+			// 	handler.downloader.Cancel()
+			// 	err = eth.blockchain.SetHead(rewindTo)
+			// 	if err != nil {
+			// 		log.Error("Error while rewinding the chain to", "Block Number", rewindTo, "Error", err)
+			// 	}
 
-			}
+			// }
 
 			return hash, errRootHashMismatch
 		}

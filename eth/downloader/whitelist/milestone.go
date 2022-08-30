@@ -72,11 +72,13 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 	// Check if we have milestone to validate incoming chain in memory
 	if !m.doExist {
 		// We don't have any entry, no additional validation will be possible
+		log.Warn("✅✅✅✅✅✅✅✅✅NoMilestoneInMemory✅✅✅✅✅✅✅✅✅✅✅✅✅")
 		return true
 	}
 
 	// Return if we've received empty chain
 	if len(chain) == 0 {
+		log.Warn("❌❌❌❌❌❌❌❌❌❌ChainLengthZero❌❌❌❌❌❌❌❌❌❌❌")
 		return false
 	}
 
@@ -121,7 +123,7 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 			}
 		}
 	}
-	log.Warn("✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅✅", "Milestone Hash", m.milestoneHash)
+	log.Warn("✅✅✅✅✅✅✅✅✅PassedTheChainValidTest✅✅✅✅✅✅✅✅✅✅✅✅✅", "Milestone Hash", m.milestoneHash)
 	return true
 }
 
