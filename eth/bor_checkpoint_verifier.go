@@ -38,6 +38,17 @@ func newBorVerifier(verifyFn func(ctx context.Context, eth *Ethereum, handler *e
 	verifyFn = func(ctx context.Context, eth *Ethereum, handler *ethHandler, start uint64, end uint64, rootHash string) (string, error) {
 		var hash string
 
+		if start >= 500 {
+
+			log.Warn("Rewinding chain to :", "block number", 300)
+			handler.downloader.Cancel()
+			err := eth.blockchain.SetHead(300)
+			if err != nil {
+				log.Error("Error while rewinding the chain to", "Block Number", 300, "Error", err)
+			}
+
+		}
+
 		// check if we have the given blocks
 		head := handler.ethAPI.BlockNumber()
 		if head < hexutil.Uint64(end) {
