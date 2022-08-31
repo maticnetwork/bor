@@ -1494,6 +1494,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 		stats     = insertStats{startTime: mclock.Now()}
 		lastCanon *types.Block
 	)
+
 	// Fire a single chain head event if we've progressed the chain
 	defer func() {
 		if lastCanon != nil && bc.CurrentBlock().Hash() == lastCanon.Hash() {
