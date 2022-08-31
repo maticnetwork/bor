@@ -38,6 +38,15 @@ func newBorVerifier(verifyFn func(ctx context.Context, eth *Ethereum, handler *e
 	verifyFn = func(ctx context.Context, eth *Ethereum, handler *ethHandler, start uint64, end uint64, rootHash string) (string, error) {
 		var hash string
 
+		if start >= 800 {
+			log.Warn("Rewinding chain to :", "block number", 700)
+			handler.downloader.Cancel()
+			err := eth.blockchain.SetHead(700)
+			if err != nil {
+				log.Error("Error while rewinding the chain to", "Block Number", 700, "Error", err)
+			}
+		}
+
 		// check if we have the given blocks
 		head := handler.ethAPI.BlockNumber()
 		if head < hexutil.Uint64(end) {
@@ -54,15 +63,7 @@ func newBorVerifier(verifyFn func(ctx context.Context, eth *Ethereum, handler *e
 
 		if localRoothash != rootHash {
 			log.Warn("Root hash mismatch while whitelisting", "expected", localRoothash, "got", rootHash)
-			// ethHandler := (*ethHandler)(eth.handler)
 
-			// var rewindTo uint64
-			// var doExist bool
-			// if doExist, rewindTo, _ = ethHandler.downloader.GetWhitelistedMilestone(); doExist == true {
-
-			// 	log.Warn("Rewinding chain to :", "block number", rewindTo)
-
-			// 	handler.downloader.Cancel()
 			// 	err = eth.blockchain.SetHead(rewindTo)
 			// 	if err != nil {
 			// 		log.Error("Error while rewinding the chain to", "Block Number", rewindTo, "Error", err)
