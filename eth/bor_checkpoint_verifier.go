@@ -64,18 +64,22 @@ func newBorVerifier(verifyFn func(ctx context.Context, eth *Ethereum, handler *e
 			if doExist, rewindTo, _ = ethHandler.downloader.GetWhitelistedMilestone(); doExist == true {
 
 				log.Warn("Rewinding chain to :", rewindTo, "block number")
+				eth.Miner().Stop()
 				err = eth.blockchain.SetHead(rewindTo)
 				if err != nil {
 					log.Error("Error while rewinding the chain to", "Block Number", rewindTo, "Error", err)
 				}
+				eth.Miner().Start(eth.etherbase)
 
 			} else if doExist, rewindTo, _ = ethHandler.downloader.GetWhitelistedCheckpoint(); doExist == true {
 
 				log.Warn("Rewinding chain to :", rewindTo, "block number")
+				eth.Miner().Stop()
 				err = eth.blockchain.SetHead(rewindTo)
 				if err != nil {
 					log.Error("Error while rewinding the chain to", "Block Number", rewindTo, "Error", err)
 				}
+				eth.Miner().Start(eth.etherbase)
 
 			} else {
 				if start <= 0 {
@@ -83,12 +87,13 @@ func newBorVerifier(verifyFn func(ctx context.Context, eth *Ethereum, handler *e
 				} else {
 					rewindTo = start - 1
 				}
-
+				eth.Miner().Stop()
 				log.Warn("Rewinding chain to :", rewindTo, "block number")
 				err = eth.blockchain.SetHead(rewindTo)
 				if err != nil {
 					log.Error("Error while rewinding the chain to", "Block Number", rewindTo, "Error", err)
 				}
+				eth.Miner().Start(eth.etherbase)
 
 			}
 
