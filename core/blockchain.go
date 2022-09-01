@@ -1233,6 +1233,7 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	// Calculate the total difficulty of the block
 	ptd := bc.GetTd(block.ParentHash(), block.NumberU64()-1)
 	if ptd == nil {
+		log.Warn("writeBlockWithState:Calc difficulty", "block", block.Number().Uint64())
 		return []*types.Log{}, consensus.ErrUnknownAncestor
 	}
 	// Make sure no inconsistent state is leaked during insertion
@@ -1595,6 +1596,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 		for block != nil && (it.index == 0 || errors.Is(err, consensus.ErrUnknownAncestor)) {
 			log.Debug("Future block, postponing import", "number", block.Number(), "hash", block.Hash())
 			if err := bc.addFutureBlock(block); err != nil {
+				log.Warn("Insert Chain:addFutureBlock", "Block", block.NumberU64())
 				return it.index, err
 			}
 			block, err = it.next()
@@ -1603,6 +1605,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 		stats.ignored += it.remaining()
 
 		// If there are any still remaining, mark as ignored
+		log.Warn("Insert Chain:1609, case", "Block", block.NumberU64())
 		return it.index, err
 
 	// Some other error(except ErrKnownBlock) occurred, abort.
@@ -1848,6 +1851,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 
 		for ; block != nil && errors.Is(err, consensus.ErrUnknownAncestor); block, err = it.next() {
 			if err := bc.addFutureBlock(block); err != nil {
+				log.Warn("Insert Chain:1854 addfututer block , case", "Block", block.NumberU64())
+
 				return it.index, err
 			}
 			stats.queued++

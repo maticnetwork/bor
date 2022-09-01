@@ -747,7 +747,7 @@ func (w *worker) resultLoop() {
 			// Commit block and state to database.
 			_, err := w.chain.WriteBlockAndSetHead(block, receipts, logs, task.state, true)
 			if err != nil {
-				log.Error("Failed writing block to chain", "err", err)
+				log.Error("Failed writing block to chain", "block number", block.Number().Uint64(), "err", err)
 				continue
 			}
 			log.Info("Successfully sealed new block", "number", block.Number(), "sealhash", sealhash, "hash", hash,

@@ -417,6 +417,7 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 	}
 
 	if parent == nil || parent.Number.Uint64() != number-1 || parent.Hash() != header.ParentHash {
+		log.Warn("Bor.verifyCascadingFields, case", "Block", header.Number.Uint64())
 		return consensus.ErrUnknownAncestor
 	}
 
@@ -536,6 +537,8 @@ func (c *Bor) snapshot(chain consensus.ChainHeaderReader, number uint64, hash co
 			// If we have explicit parents, pick from there (enforced)
 			header = parents[len(parents)-1]
 			if header.Hash() != hash || header.Number.Uint64() != number {
+				log.Warn("Bor.snapshot, case", "Block", header.Number.Uint64())
+
 				return nil, consensus.ErrUnknownAncestor
 			}
 
@@ -544,6 +547,7 @@ func (c *Bor) snapshot(chain consensus.ChainHeaderReader, number uint64, hash co
 			// No explicit parents (or no more left), reach out to the database
 			header = chain.GetHeader(hash, number)
 			if header == nil {
+				log.Warn("Bor.snapshot, case", "Block", header.Number.Uint64())
 				return nil, consensus.ErrUnknownAncestor
 			}
 		}
@@ -707,6 +711,7 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 	// Ensure the timestamp has the correct delay
 	parent := chain.GetHeader(header.ParentHash, number-1)
 	if parent == nil {
+		log.Warn("Bor.Prepare, case", "Block", header.Number.Uint64())
 		return consensus.ErrUnknownAncestor
 	}
 

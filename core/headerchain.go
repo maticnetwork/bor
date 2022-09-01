@@ -212,6 +212,8 @@ func (hc *HeaderChain) WriteHeaders(headers []*types.Header) (int, error) {
 	}
 	ptd := hc.GetTd(headers[0].ParentHash, headers[0].Number.Uint64()-1)
 	if ptd == nil {
+		log.Warn("Write Header", "Header", headers[0])
+
 		return 0, consensus.ErrUnknownAncestor
 	}
 	var (
