@@ -12,7 +12,7 @@ import (
 
 var (
 	// errMissingBlocks is returned when we don't have the blocks locally, yet.
-	errMissingBlocks = errors.New("missing checkpoint blocks")
+	errMissingBlocks = errors.New("missing blocks")
 
 	// errRootHash is returned when we aren't able to calculate the root hash
 	// locally for a range of blocks.
