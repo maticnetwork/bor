@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/JekaMas/crand"
 	"github.com/stretchr/testify/require"
 	"pgregory.net/rapid"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/prand"
 	unique "github.com/ethereum/go-ethereum/common/set"
 	"github.com/ethereum/go-ethereum/consensus/bor/valset"
 )
@@ -134,7 +134,7 @@ func buildRandomValidatorSet(numVals int) []*valset.Validator {
 	valAddrs := randomAddresses(numVals)
 
 	for i := 0; i < numVals; i++ {
-		power := prand.BigInt(big.NewInt(99))
+		power := crand.BigInt(big.NewInt(99))
 		powerN := power.Int64() + 1
 
 		validators[i] = &valset.Validator{
@@ -157,7 +157,7 @@ func randomAddress(exclude ...common.Address) common.Address {
 		excl[addr] = struct{}{}
 	}
 
-	r := prand.NewRand()
+	r := crand.NewRand()
 
 	for {
 		addr := r.Address()
@@ -179,7 +179,7 @@ func randomAddresses(n int) []common.Address {
 
 	var exist bool
 
-	r := prand.NewRand()
+	r := crand.NewRand()
 
 	for {
 		addr := r.Address()

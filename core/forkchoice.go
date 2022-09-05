@@ -20,9 +20,10 @@ import (
 	"errors"
 	"math/big"
 
+	"github.com/JekaMas/crand"
+
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/prand"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/params"
 )
@@ -62,7 +63,7 @@ type Floater interface {
 
 func NewForkChoice(chainReader ChainReader, preserve func(header *types.Header) bool, validator ethereum.ChainValidator) *ForkChoice {
 	// Seed a fast but crypto originating random generator
-	r := prand.NewRand()
+	r := crand.NewRand()
 	return &ForkChoice{
 		chain:     chainReader,
 		rand:      r,
