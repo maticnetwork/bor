@@ -65,7 +65,7 @@ type initializeData struct {
 	ethereum *eth.Ethereum
 }
 
-func buildEthereumInstance(t *testing.T, db ethdb.Database) *initializeData {
+func buildEthereumInstance(t *testing.T, db ethdb.Database, contracts map[common.Address]core.GenesisAccount) *initializeData {
 	genesisData, err := ioutil.ReadFile("./testdata/genesis.json")
 	if err != nil {
 		t.Fatalf("%s", err)
@@ -75,6 +75,10 @@ func buildEthereumInstance(t *testing.T, db ethdb.Database) *initializeData {
 
 	if err := json.Unmarshal(genesisData, gen); err != nil {
 		t.Fatalf("%s", err)
+	}
+
+	for addr, contract := range contracts {
+		gen.Alloc[addr] = contract
 	}
 
 	ethConf := &eth.Config{

@@ -1,6 +1,7 @@
 package bor
 
 import (
+	"math/big"
 	"math/rand"
 	"sort"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"pgregory.net/rapid"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/prand"
 	unique "github.com/ethereum/go-ethereum/common/set"
 	"github.com/ethereum/go-ethereum/consensus/bor/valset"
 )
@@ -132,10 +134,13 @@ func buildRandomValidatorSet(numVals int) []*valset.Validator {
 	valAddrs := randomAddresses(numVals)
 
 	for i := 0; i < numVals; i++ {
+		power := prand.BigInt(big.NewInt(99))
+		powerN := power.Int64() + 1
+
 		validators[i] = &valset.Validator{
 			Address: valAddrs[i],
 			// cannot process validators with voting power 0, hence +1
-			VotingPower: int64(rand.Intn(99) + 1),
+			VotingPower: powerN,
 		}
 	}
 
@@ -145,11 +150,23 @@ func buildRandomValidatorSet(numVals int) []*valset.Validator {
 	return validators
 }
 
-func randomAddress() common.Address {
-	bytes := make([]byte, 32)
-	rand.Read(bytes)
+func randomAddress(exclude ...common.Address) common.Address {
+	excl := make(map[common.Address]struct{}, len(exclude))
 
-	return common.BytesToAddress(bytes)
+	for _, addr := range exclude {
+		excl[addr] = struct{}{}
+	}
+
+	r := prand.NewRand()
+
+	for {
+		addr := r.Address()
+		if _, ok := excl[addr]; ok {
+			continue
+		}
+
+		return addr
+	}
 }
 
 func randomAddresses(n int) []common.Address {
@@ -160,17 +177,12 @@ func randomAddresses(n int) []common.Address {
 	addrs := make([]common.Address, 0, n)
 	addrsSet := make(map[common.Address]struct{}, n)
 
-	var (
-		addr  common.Address
-		exist bool
-	)
+	var exist bool
 
-	bytes := make([]byte, 32)
+	r := prand.NewRand()
 
 	for {
-		rand.Read(bytes)
-
-		addr = common.BytesToAddress(bytes)
+		addr := r.Address()
 
 		_, exist = addrsSet[addr]
 		if !exist {
