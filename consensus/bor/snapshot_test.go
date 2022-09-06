@@ -1,9 +1,7 @@
 package bor
 
 import (
-	"crypto/rand"
 	"math/big"
-	"math/rand"
 	"sort"
 	"testing"
 
