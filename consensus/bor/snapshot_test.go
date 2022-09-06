@@ -1,11 +1,11 @@
 package bor
 
 import (
+	"crypto/rand"
 	"math/big"
 	"math/rand"
 	"sort"
 	"testing"
-	"time"
 
 	"github.com/JekaMas/crand"
 	"github.com/stretchr/testify/require"
@@ -30,8 +30,8 @@ func TestGetSignerSuccessionNumber_ProposerIsSigner(t *testing.T) {
 	}
 
 	// proposer is signer
-	signer := validatorSet.Proposer.Address
-	successionNumber, err := snap.GetSignerSuccessionNumber(signer)
+	signerTest := validatorSet.Proposer.Address
+	successionNumber, err := snap.GetSignerSuccessionNumber(signerTest)
 	if err != nil {
 		t.Fatalf("%s", err)
 	}
@@ -56,8 +56,8 @@ func TestGetSignerSuccessionNumber_SignerIndexIsLarger(t *testing.T) {
 	}
 
 	// choose a signer at an index greater than proposer index
-	signer := snap.ValidatorSet.Validators[signerIndex].Address
-	successionNumber, err := snap.GetSignerSuccessionNumber(signer)
+	signerTest := snap.ValidatorSet.Validators[signerIndex].Address
+	successionNumber, err := snap.GetSignerSuccessionNumber(signerTest)
 	if err != nil {
 		t.Fatalf("%s", err)
 	}
@@ -78,8 +78,8 @@ func TestGetSignerSuccessionNumber_SignerIndexIsSmaller(t *testing.T) {
 	}
 
 	// choose a signer at an index greater than proposer index
-	signer := snap.ValidatorSet.Validators[signerIndex].Address
-	successionNumber, err := snap.GetSignerSuccessionNumber(signer)
+	signerTest := snap.ValidatorSet.Validators[signerIndex].Address
+	successionNumber, err := snap.GetSignerSuccessionNumber(signerTest)
 	if err != nil {
 		t.Fatalf("%s", err)
 	}
@@ -97,13 +97,13 @@ func TestGetSignerSuccessionNumber_ProposerNotFound(t *testing.T) {
 
 	require.Len(t, snap.ValidatorSet.Validators, numVals)
 
-	dummyProposerAddress := randomAddress()
+	dummyProposerAddress := randomAddress(toAddresses(validators)...)
 	snap.ValidatorSet.Proposer = &valset.Validator{Address: dummyProposerAddress}
 
 	// choose any signer
-	signer := snap.ValidatorSet.Validators[3].Address
+	signerTest := snap.ValidatorSet.Validators[3].Address
 
-	_, err := snap.GetSignerSuccessionNumber(signer)
+	_, err := snap.GetSignerSuccessionNumber(signerTest)
 	require.NotNil(t, err)
 
 	e, ok := err.(*UnauthorizedProposerError)
@@ -118,18 +118,19 @@ func TestGetSignerSuccessionNumber_SignerNotFound(t *testing.T) {
 	snap := Snapshot{
 		ValidatorSet: valset.NewValidatorSet(validators),
 	}
-	dummySignerAddress := randomAddress()
+
+	dummySignerAddress := randomAddress(toAddresses(validators)...)
 	_, err := snap.GetSignerSuccessionNumber(dummySignerAddress)
 	require.NotNil(t, err)
+
 	e, ok := err.(*UnauthorizedSignerError)
 	require.True(t, ok)
+
 	require.Equal(t, dummySignerAddress.Bytes(), e.Signer)
 }
 
 // nolint: unparam
 func buildRandomValidatorSet(numVals int) []*valset.Validator {
-	rand.Seed(time.Now().Unix())
-
 	validators := make([]*valset.Validator, numVals)
 	valAddrs := randomAddresses(numVals)
 
@@ -201,7 +202,7 @@ func TestRandomAddresses(t *testing.T) {
 	t.Parallel()
 
 	rapid.Check(t, func(t *rapid.T) {
-		length := rapid.IntMax(100).Draw(t, "length").(int)
+		length := rapid.IntMax(300).Draw(t, "length").(int)
 
 		addrs := randomAddresses(length)
 		addressSet := unique.New(addrs)
@@ -210,4 +211,14 @@ func TestRandomAddresses(t *testing.T) {
 			t.Fatalf("length of unique addresses %d, expected %d", len(addressSet), len(addrs))
 		}
 	})
+}
+
+func toAddresses(vals []*valset.Validator) []common.Address {
+	addrs := make([]common.Address, len(vals))
+
+	for i, val := range vals {
+		addrs[i] = val.Address
+	}
+
+	return addrs
 }
