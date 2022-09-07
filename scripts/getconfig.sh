@@ -2,7 +2,7 @@
 
 # Instructions:
 # Execute `./getconfig.sh`, and follow the instructions displayed on the terminal
-# The `config.toml` file will be created in the same directory as start.sh
+# The `*config.toml` file will be created in the same directory as start.sh
 # It is recommended to check the flags generated in config.toml
 
 
@@ -67,6 +67,8 @@ tempflags=${dumpconfigflags//$/}
 # using '@' as the path contains '/'
 tempflags=$(echo $tempflags | sed "s@ADDRESS@$ADD@g")
 tempflags=$(echo $tempflags | sed "s@BOR_DIR@$BORDIR@g")
+tempflags=$(echo $tempflags | sed "s@BOR_HOME@$BORDIR@g")
+tempflags=$(echo $tempflags | sed "s@BOR_DATA_DIR@$DATADIR@g")
 tempflags=$(echo $tempflags | sed "s@DATA_DIR@$DATADIR@g")
 
 # run the dumpconfig command with the flags from `./temp`

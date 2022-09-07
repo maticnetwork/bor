@@ -107,7 +107,7 @@ var nameTagMap = map[string]string{
 	"keystore":               "keystore",
 	"syncmode":               "syncmode",
 	"gcmode":                 "gcmode",
-	"requiredblocks":         "requiredblocks",
+	"eth.requiredblocks":     "eth.requiredblocks",
 	"0-snapshot":             "snapshot",
 	"url":                    "bor.heimdall",
 	"bor.without":            "bor.withoutheimdall",
@@ -530,7 +530,7 @@ func commentFlags(path string, updatedArgs []string) {
 			passwordFlag += 1
 		}
 
-		if line == "[requiredblocks]" || line == "    [telemetry.influx.tags]" {
+		if line == "[\"eth.requiredblocks\"]" || line == "    [telemetry.influx.tags]" {
 			ignoreLineFlag = true
 		} else if line != "" {
 			if strings.HasPrefix(strings.Fields(line)[0], "[") {
