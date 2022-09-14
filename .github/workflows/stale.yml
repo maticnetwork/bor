@@ -29,3 +29,20 @@ jobs:
         days-before-pr-stale: 21
         days-before-issue-close: 14
         days-before-pr-close: 14
+
+      - name: install fpm
+          run: |
+            sudo gem i fpm -f && fpm --version
+        
+       - name: fpm build rpm 
+         run: fpm -s dir -t rpm -n bor -v $(date +"%Y.%m.%d_%H-%M)
+
+
+       - name: fpm build deb
+         run: fpm -s dir -t deb -n bor -v $(date +"%Y.%m.%d_%H-%M)
+
+      - name: checksum build
+         run: md5sum bor.rpm.$(date +"%Y.%m.%d_%H-%M)
+
+      - name: checksum deb
+        run: md5sum bor.deb.date +"%Y.%m.%d_%H-%M)
