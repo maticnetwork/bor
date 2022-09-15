@@ -276,7 +276,7 @@ var (
 		BerlinBlock:         big.NewInt(0),
 		LondonBlock:         big.NewInt(0),
 		Bor: &BorConfig{
-			DubaiBlock: 22770000,
+			DubaiBlock: 128,
 			Period: map[string]uint64{
 				"0": 2,
 			},
