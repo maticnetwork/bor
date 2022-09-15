@@ -70,11 +70,12 @@ func (h *ethHandler) fetchWhitelistMilestone(ctx context.Context, bor *bor.Bor, 
 
 	chainConfig := eth.blockchain.GetChainConfig()
 	currentBlock := eth.blockchain.CurrentBlock().NumberU64()
-
+	log.Error("In the fetchWhitelisting A")
 	if !chainConfig.Bor.IsDubai(currentBlock) {
 		log.Error("Failed", "Hard Fork Number", chainConfig.Bor.DubaiBlock)
 		return blockNum, blockHash, errHardFork
 	}
+	log.Error("In the fetchWhitelisting B")
 
 	// fetch latest milestone
 	milestone, err := bor.HeimdallClient.FetchMilestone(ctx)
