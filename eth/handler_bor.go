@@ -72,6 +72,7 @@ func (h *ethHandler) fetchWhitelistMilestone(ctx context.Context, bor *bor.Bor, 
 	currentBlock := eth.blockchain.CurrentBlock().NumberU64()
 
 	if !chainConfig.Bor.IsDubai(currentBlock) {
+		log.Error("Failed", "Hard Fork Number", chainConfig.Bor.DubaiBlock)
 		return blockNum, blockHash, errHardFork
 	}
 
