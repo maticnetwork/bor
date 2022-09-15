@@ -560,7 +560,8 @@ func (s *Ethereum) StopMining() {
 		th.SetThreads(-1)
 	}
 	// Stop the block creating itself
-	s.miner.Stop()
+	ch := make(chan struct{})
+	s.miner.Stop(ch)
 }
 
 func (s *Ethereum) IsMining() bool      { return s.miner.Mining() }

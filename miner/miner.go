@@ -65,7 +65,7 @@ type Miner struct {
 	engine   consensus.Engine
 	exitCh   chan struct{}
 	startCh  chan common.Address
-	stopCh   chan struct{}
+	stopCh   chan chan struct{}
 
 	wg sync.WaitGroup
 }
@@ -77,7 +77,7 @@ func New(eth Backend, config *Config, chainConfig *params.ChainConfig, mux *even
 		engine:  engine,
 		exitCh:  make(chan struct{}),
 		startCh: make(chan common.Address),
-		stopCh:  make(chan struct{}),
+		stopCh:  make(chan chan struct{}),
 		worker:  newWorker(config, chainConfig, engine, eth, mux, isLocalBlock, true),
 	}
 	miner.wg.Add(1)
@@ -141,9 +141,10 @@ func (miner *Miner) update() {
 				miner.worker.start()
 			}
 			shouldStart = true
-		case <-miner.stopCh:
+		case ch := <-miner.stopCh:
 			shouldStart = false
 			miner.worker.stop()
+			close(ch)
 		case <-miner.exitCh:
 			miner.worker.close()
 			return
@@ -155,8 +156,8 @@ func (miner *Miner) Start(coinbase common.Address) {
 	miner.startCh <- coinbase
 }
 
-func (miner *Miner) Stop() {
-	miner.stopCh <- struct{}{}
+func (miner *Miner) Stop(ch chan struct{}) {
+	miner.stopCh <- ch
 }
 
 func (miner *Miner) Close() {
