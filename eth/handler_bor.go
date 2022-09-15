@@ -17,6 +17,10 @@ var (
 	// errMilestone is returned when we are unable to fetch the
 	// latest milestone from the local heimdall.
 	errMilestone = errors.New("failed to fetch latest milestone")
+
+	//errHardFork is returned when chain hasn't reached to the specified
+	//hard forked number.
+	errHardFork = errors.New("Chain hasn't reached to the hard forked number")
 )
 
 // fetchWhitelistCheckpoint fetches the latest checkpoint from it's local heimdall
@@ -26,6 +30,13 @@ func (h *ethHandler) fetchWhitelistCheckpoint(ctx context.Context, bor *bor.Bor,
 		blockNum  uint64
 		blockHash common.Hash
 	)
+
+	chainConfig := eth.blockchain.GetChainConfig()
+	currentBlock := eth.blockchain.CurrentBlock().NumberU64()
+
+	if !chainConfig.Bor.IsDubai(currentBlock) {
+		return blockNum, blockHash, errHardFork
+	}
 
 	// fetch the latest checkpoint from Heimdall
 	checkpoint, err := bor.HeimdallClient.FetchCheckpoint(ctx, -1)
@@ -56,6 +67,13 @@ func (h *ethHandler) fetchWhitelistMilestone(ctx context.Context, bor *bor.Bor, 
 		blockNum  uint64
 		blockHash common.Hash
 	)
+
+	chainConfig := eth.blockchain.GetChainConfig()
+	currentBlock := eth.blockchain.CurrentBlock().NumberU64()
+
+	if !chainConfig.Bor.IsDubai(currentBlock) {
+		return blockNum, blockHash, errHardFork
+	}
 
 	// fetch latest milestone
 	milestone, err := bor.HeimdallClient.FetchMilestone(ctx)

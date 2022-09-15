@@ -30,6 +30,7 @@ var mumbaiTestnet = &Chain{
 			LondonBlock:         big.NewInt(22640000),
 			Bor: &params.BorConfig{
 				JaipurBlock: 22770000,
+				DubaiBlock:  22770000, //Need to change this value
 				Period: map[string]uint64{
 					"0":        2,
 					"25275000": 5,
