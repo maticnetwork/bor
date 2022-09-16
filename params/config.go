@@ -584,7 +584,7 @@ func (c *BorConfig) IsJaipur(number uint64) bool {
 }
 
 func (c *BorConfig) IsDubai(number uint64) bool {
-	return number >= c.DubaiBlock
+	return number >= 128
 }
 
 func (c *BorConfig) calculateBorConfigHelper(field map[string]uint64, number uint64) uint64 {
