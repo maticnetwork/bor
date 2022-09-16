@@ -401,13 +401,13 @@ func (evm *EVM) AuthCall(caller ContractRef, from, addr common.Address, input []
 	if evm.depth > int(params.CallCreateDepth) {
 		return nil, gas, ErrDepth
 	}
-	// Fail if we're trying to transfer value external to the caller
-	if extValue.Sign() != 0 {
-		return nil, gas, ErrNonZeroExtValue
-	}
 	// Fail if we're trying to transfer more than the available balance
 	if value.Sign() != 0 && !evm.Context.CanTransfer(evm.StateDB, caller.Address(), value) {
 		return nil, 0, ErrInsufficientBalance
+	}
+	// Fail if we're trying to transfer value external to the caller
+	if extValue.Sign() != 0 {
+		return nil, gas, ErrNonZeroExtValue
 	}
 	snapshot := evm.StateDB.Snapshot()
 	p, isPrecompile := evm.precompile(addr)
