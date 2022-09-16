@@ -106,7 +106,7 @@ func testTwoOperandOp(t *testing.T, tests []TwoOperandTestcase, opFn executionFu
 		expected := new(uint256.Int).SetBytes(common.Hex2Bytes(test.Expected))
 		stack.push(x)
 		stack.push(y)
-		opFn(&pc, evmInterpreter, &ScopeContext{nil, stack, nil})
+		opFn(&pc, evmInterpreter, &ScopeContext{nil, stack, nil, nil})
 		if len(stack.data) != 1 {
 			t.Errorf("Expected one item on stack after %v, got %d: ", name, len(stack.data))
 		}
@@ -221,7 +221,7 @@ func TestAddMod(t *testing.T) {
 		stack.push(z)
 		stack.push(y)
 		stack.push(x)
-		opAddmod(&pc, evmInterpreter, &ScopeContext{nil, stack, nil})
+		opAddmod(&pc, evmInterpreter, &ScopeContext{nil, stack, nil, nil})
 		actual := stack.pop()
 		if actual.Cmp(expected) != 0 {
 			t.Errorf("Testcase %d, expected  %x, got %x", i, expected, actual)
@@ -243,7 +243,7 @@ func getResult(args []*twoOperandParams, opFn executionFunc) []TwoOperandTestcas
 		y := new(uint256.Int).SetBytes(common.Hex2Bytes(param.y))
 		stack.push(x)
 		stack.push(y)
-		opFn(&pc, interpreter, &ScopeContext{nil, stack, nil})
+		opFn(&pc, interpreter, &ScopeContext{nil, stack, nil, nil})
 		actual := stack.pop()
 		result[i] = TwoOperandTestcase{param.x, param.y, fmt.Sprintf("%064x", actual)}
 	}
@@ -301,7 +301,7 @@ func opBenchmark(bench *testing.B, op executionFunc, args ...string) {
 			a.SetBytes(arg)
 			stack.push(a)
 		}
-		op(&pc, evmInterpreter, &ScopeContext{nil, stack, nil})
+		op(&pc, evmInterpreter, &ScopeContext{nil, stack, nil, nil})
 		stack.pop()
 	}
 }
@@ -528,13 +528,13 @@ func TestOpMstore(t *testing.T) {
 	v := "abcdef00000000000000abba000000000deaf000000c0de00100000000133700"
 	stack.push(new(uint256.Int).SetBytes(common.Hex2Bytes(v)))
 	stack.push(new(uint256.Int))
-	opMstore(&pc, evmInterpreter, &ScopeContext{mem, stack, nil})
+	opMstore(&pc, evmInterpreter, &ScopeContext{mem, stack, nil, nil})
 	if got := common.Bytes2Hex(mem.GetCopy(0, 32)); got != v {
 		t.Fatalf("Mstore fail, got %v, expected %v", got, v)
 	}
 	stack.push(new(uint256.Int).SetUint64(0x1))
 	stack.push(new(uint256.Int))
-	opMstore(&pc, evmInterpreter, &ScopeContext{mem, stack, nil})
+	opMstore(&pc, evmInterpreter, &ScopeContext{mem, stack, nil, nil})
 	if common.Bytes2Hex(mem.GetCopy(0, 32)) != "0000000000000000000000000000000000000000000000000000000000000001" {
 		t.Fatalf("Mstore failed to overwrite previous value")
 	}
@@ -558,7 +558,7 @@ func BenchmarkOpMstore(bench *testing.B) {
 	for i := 0; i < bench.N; i++ {
 		stack.push(value)
 		stack.push(memStart)
-		opMstore(&pc, evmInterpreter, &ScopeContext{mem, stack, nil})
+		opMstore(&pc, evmInterpreter, &ScopeContext{mem, stack, nil, nil})
 	}
 }
 
@@ -578,7 +578,7 @@ func BenchmarkOpKeccak256(bench *testing.B) {
 	for i := 0; i < bench.N; i++ {
 		stack.push(uint256.NewInt(32))
 		stack.push(start)
-		opKeccak256(&pc, evmInterpreter, &ScopeContext{mem, stack, nil})
+		opKeccak256(&pc, evmInterpreter, &ScopeContext{mem, stack, nil, nil})
 	}
 }
 
@@ -674,7 +674,7 @@ func TestRandom(t *testing.T) {
 			pc             = uint64(0)
 			evmInterpreter = env.interpreter
 		)
-		opRandom(&pc, evmInterpreter, &ScopeContext{nil, stack, nil})
+		opRandom(&pc, evmInterpreter, &ScopeContext{nil, stack, nil, nil})
 		if len(stack.data) != 1 {
 			t.Errorf("Expected one item on stack after %v, got %d: ", tt.name, len(stack.data))
 		}
@@ -685,6 +685,78 @@ func TestRandom(t *testing.T) {
 		}
 		if actual.Cmp(expected) != 0 {
 			t.Errorf("Testcase %v: expected  %x, got %x", tt.name, expected, actual)
+		}
+	}
+}
+
+func TestAuth(t *testing.T) {
+	var (
+		env            = NewEVM(BlockContext{}, TxContext{Origin: common.HexToAddress("970e8128ab834e8eac17ab8e3812f010678cf791")}, nil, params.TestChainConfig, Config{})
+		stack          = newstack()
+		evmInterpreter = NewEVMInterpreter(env, env.Config)
+		pc             = uint64(0)
+	)
+
+	type testcase struct {
+		v        string
+		r        string
+		s        string
+		invoker  string
+		commit   string
+		expected string
+	}
+
+	for i, tt := range []testcase{
+		{
+			v:        "00",
+			r:        "7aa455a9f8b84965a8c2f32e29dbb8147a913fffa1b02375c6ab28161e6ebf25",
+			s:        "794dd7b68f540151c21953cc5322e6df1b809eec12e561353832a5d68e14809a",
+			invoker:  "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			commit:   "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			expected: "a94f5374Fce5edBC8E2a8697C15331677e6EbF0B",
+		},
+		{
+			v:        "01",
+			r:        "9a50f2fa6aa26558eb2d469e494e32676e563c9ea0a149286caccdba26758abf",
+			s:        "4de8a7bebbbf64ef197a11d23c3e2cc144481d8c1d9f80822b4844e98bccbc6d",
+			invoker:  "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			commit:   "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+			expected: "a94f5374Fce5edBC8E2a8697C15331677e6EbF0B",
+		},
+		// invalid signature
+		{
+			v:        "02",
+			r:        "7aa455a9f8b84965a8c2f32e29dbb8147a913fffa1b02375c6ab28161e6ebf25",
+			s:        "794dd7b68f540151c21953cc5322e6df1b809eec12e561353832a5d68e14809a",
+			invoker:  "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			commit:   "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			expected: "0000000000000000000000000000000000000000",
+		},
+	} {
+		stack.push(new(uint256.Int).SetBytes(common.Hex2Bytes(tt.s)))
+		stack.push(new(uint256.Int).SetBytes(common.Hex2Bytes(tt.r)))
+		stack.push(new(uint256.Int).SetBytes(common.Hex2Bytes(tt.v)))
+		stack.push(new(uint256.Int).SetBytes(common.Hex2Bytes(tt.commit)))
+
+		self := AccountRef(common.HexToAddress(tt.invoker))
+		contract := Contract{CallerAddress: common.Address{}, caller: nil, self: self}
+		ctx := ScopeContext{nil, stack, &contract, nil}
+		opAuth(&pc, evmInterpreter, &ctx)
+
+		result := stack.pop()
+		addr := common.BigToAddress(result.ToBig())
+
+		if addr.Hex()[2:] != tt.expected {
+			t.Fatalf("Auth failed to authenticate signature: test #%d got %s, expected 0x%s", i, addr.Hex(), tt.expected)
+		}
+
+		if ctx.Authorized != nil {
+			if addr.Hex() == (common.Address{}).Hex() {
+				t.Fatalf("Authorized ctx variable set after invalid auth invocation.")
+			}
+			if ctx.Authorized.Hex()[2:] != tt.expected {
+				t.Fatalf("Authorized ctx variable not equal to expected: test #%d got %s, expected 0x%s", i, ctx.Authorized.Hex(), tt.expected)
+			}
 		}
 	}
 }

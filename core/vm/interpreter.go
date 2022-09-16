@@ -39,9 +39,10 @@ type Config struct {
 // ScopeContext contains the things that are per-call, such as stack and memory,
 // but not transients like pc and gas
 type ScopeContext struct {
-	Memory   *Memory
-	Stack    *Stack
-	Contract *Contract
+	Memory     *Memory
+	Stack      *Stack
+	Contract   *Contract
+	Authorized *common.Address
 }
 
 // keccakState wraps sha3.state. In addition to the usual hash methods, it also supports
@@ -71,6 +72,8 @@ func NewEVMInterpreter(evm *EVM, cfg Config) *EVMInterpreter {
 		switch {
 		case evm.chainRules.IsMerge:
 			cfg.JumpTable = &mergeInstructionSet
+		case evm.chainRules.IsPuxi:
+			cfg.JumpTable = &puxiInstructionSet
 		case evm.chainRules.IsLondon:
 			cfg.JumpTable = &londonInstructionSet
 		case evm.chainRules.IsBerlin:

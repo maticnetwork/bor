@@ -36,6 +36,11 @@ var (
 	ErrGasUintOverflow          = errors.New("gas uint64 overflow")
 	ErrInvalidCode              = errors.New("invalid code: must not begin with 0xef")
 	ErrNonceUintOverflow        = errors.New("nonce uint64 overflow")
+	ErrInvalidRetsub            = errors.New("invalid retsub")
+	ErrReturnStackExceeded      = errors.New("return stack limit reached")
+	ErrNoAuthorizedAccount      = errors.New("authorized account not set")
+	ErrInsufficientAuthCallGas  = errors.New("insufficient remaining gas for authcall")
+	ErrNonZeroExtValue          = errors.New("non-zero external value")
 
 	// errStopToken is an internal token indicating interpreter loop termination,
 	// never returned to outside callers.

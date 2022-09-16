@@ -55,6 +55,7 @@ var (
 	berlinInstructionSet           = newBerlinInstructionSet()
 	londonInstructionSet           = newLondonInstructionSet()
 	mergeInstructionSet            = newMergeInstructionSet()
+	puxiInstructionSet             = newPuxiInstructionSet()
 )
 
 // JumpTable contains the EVM opcodes supported at a given fork.
@@ -96,6 +97,14 @@ func newLondonInstructionSet() JumpTable {
 	enable3529(&instructionSet) // EIP-3529: Reduction in refunds https://eips.ethereum.org/EIPS/eip-3529
 	enable3198(&instructionSet) // Base fee opcode https://eips.ethereum.org/EIPS/eip-3198
 	return validate(instructionSet)
+}
+
+// newPuxiInstructionSet returns the frontier, homestead, byzantium,
+// contantinople, istanbul, petersburg, berlin, london, puxi instructions.
+func newPuxiInstructionSet() JumpTable {
+	instructionSet := newLondonInstructionSet()
+	enable3074(&instructionSet)
+	return instructionSet
 }
 
 // newBerlinInstructionSet returns the frontier, homestead, byzantium,
