@@ -341,7 +341,7 @@ func (d *Downloader) LegacySync(id string, head common.Hash, td, ttd *big.Int, m
 	if errors.Is(err, errInvalidChain) || errors.Is(err, errBadPeer) || errors.Is(err, errTimeout) ||
 		errors.Is(err, errStallingPeer) || errors.Is(err, errUnsyncedPeer) || errors.Is(err, errEmptyHeaderSet) ||
 		errors.Is(err, errPeersUnavailable) || errors.Is(err, errTooOld) || errors.Is(err, errInvalidAncestor) ||
-		errors.Is(err, whitelist.ErrCheckpointMismatch) {
+		errors.Is(err, whitelist.ErrCheckpointMismatch) || errors.Is(err, whitelist.ErrMilestoneMismatch) {
 		log.Warn("Synchronisation failed, dropping peer", "peer", id, "err", err)
 		if d.dropPeer == nil {
 			// The dropPeer method is nil when `--copydb` is used for a local copy.
@@ -359,6 +359,10 @@ func (d *Downloader) LegacySync(id string, head common.Hash, td, ttd *big.Int, m
 
 	if errors.Is(err, whitelist.ErrNoRemoteCheckoint) {
 		log.Warn("Doesn't have remote checkpoint yet", "peer", id, "err", err)
+	}
+
+	if errors.Is(err, whitelist.ErrNoRemoteMilestone) {
+		log.Warn("Doesn't have remote milestone yet", "peer", id, "err", err)
 	}
 
 	log.Warn("Synchronisation failed, retrying", "peer", id, "err", err)

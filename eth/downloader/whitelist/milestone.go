@@ -87,7 +87,7 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 
 	// Check if we have milestoneList entries in required range
 	if chain[len(chain)-1].Number.Uint64() < lastMilestoneBlockNum {
-		// We have future milestone entries, so no additional validation will be possible
+		// We have future milestone entries, so we don't need to receive the past chain
 		return false
 	}
 
@@ -106,7 +106,7 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 	}
 
 	// Iterate over the chain and validate against the last milestone
-	// It will handle all cases where the incoming chain has atleast one milestone
+	// It will handle all cases when the incoming chain has atleast one milestone
 	for i := len(pastChain) - 1; i >= 0; i-- {
 		if pastChain[i].Number.Uint64() == m.milestoneNumber {
 			return pastChain[i].Hash() == m.milestoneHash
