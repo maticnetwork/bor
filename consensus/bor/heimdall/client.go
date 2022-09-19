@@ -16,6 +16,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/metrics"
 )
 
 var (
@@ -45,6 +46,12 @@ type HeimdallClient struct {
 	urlString string
 	client    http.Client
 	closeCh   chan struct{}
+}
+
+type Request struct {
+	client http.Client
+	url    *url.URL
+	start  time.Time
 }
 
 func NewHeimdallClient(urlString string) *HeimdallClient {
@@ -81,6 +88,8 @@ func (h *HeimdallClient) StateSyncEvents(ctx context.Context, fromID uint64, to 
 
 		log.Info("Fetching state sync events", "queryParams", url.RawQuery)
 
+		ctx = withRequestType(ctx, stateSyncRequest)
+
 		response, err := FetchWithRetry[StateSyncEventsResponse](ctx, h.client, url, h.closeCh)
 		if err != nil {
 			return nil, err
@@ -113,6 +122,8 @@ func (h *HeimdallClient) Span(ctx context.Context, spanID uint64) (*span.Heimdal
 		return nil, err
 	}
 
+	ctx = withRequestType(ctx, spanRequest)
+
 	response, err := FetchWithRetry[SpanResponse](ctx, h.client, url, h.closeCh)
 	if err != nil {
 		return nil, err
@@ -127,6 +138,8 @@ func (h *HeimdallClient) FetchCheckpoint(ctx context.Context, number int64) (*ch
 	if err != nil {
 		return nil, err
 	}
+
+	ctx = withRequestType(ctx, checkpointRequest)
 
 	response, err := FetchWithRetry[checkpoint.CheckpointResponse](ctx, h.client, url, h.closeCh)
 	if err != nil {
@@ -158,6 +171,8 @@ func (h *HeimdallClient) FetchCheckpointCount(ctx context.Context) (int64, error
 		return 0, err
 	}
 
+	ctx = withRequestType(ctx, checkpointCountRequest)
+
 	response, err := FetchWithRetry[checkpoint.CheckpointCountResponse](ctx, h.client, url, h.closeCh)
 	if err != nil {
 		return 0, err
@@ -184,7 +199,9 @@ func (h *HeimdallClient) FetchMilestoneCount(ctx context.Context) (int64, error)
 // FetchWithRetry returns data from heimdall with retry
 func FetchWithRetry[T any](ctx context.Context, client http.Client, url *url.URL, closeCh chan struct{}) (*T, error) {
 	// request data once
-	result, err := Fetch[T](ctx, client, url)
+	request := &Request{client: client, url: url, start: time.Now()}
+	result, err := Fetch[T](ctx, request)
+
 	if err == nil {
 		return result, nil
 	}
@@ -216,7 +233,9 @@ retryLoop:
 
 			return nil, ErrShutdownDetected
 		case <-ticker.C:
-			result, err = Fetch[T](ctx, client, url)
+			request = &Request{client: client, url: url, start: time.Now()}
+			result, err = Fetch[T](ctx, request)
+
 			if err != nil {
 				if attempt%logEach == 0 {
 					log.Warn("an error while trying fetching from Heimdall", "attempt", attempt, "error", err)
@@ -231,10 +250,18 @@ retryLoop:
 }
 
 // Fetch returns data from heimdall
-func Fetch[T any](ctx context.Context, client http.Client, url *url.URL) (*T, error) {
+func Fetch[T any](ctx context.Context, request *Request) (*T, error) {
+	isSuccessful := false
+
+	defer func() {
+		if metrics.EnabledExpensive {
+			sendMetrics(ctx, request.start, isSuccessful)
+		}
+	}()
+
 	result := new(T)
 
-	body, err := internalFetchWithTimeout(ctx, client, url)
+	body, err := internalFetchWithTimeout(ctx, request.client, request.url)
 	if err != nil {
 		return nil, err
 	}
@@ -247,6 +274,8 @@ func Fetch[T any](ctx context.Context, client http.Client, url *url.URL) (*T, er
 	if err != nil {
 		return nil, err
 	}
+
+	isSuccessful = true
 
 	return result, nil
 }
