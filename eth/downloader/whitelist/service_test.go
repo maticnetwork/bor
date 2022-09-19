@@ -61,7 +61,6 @@ func TestWhitelistedCheckpoint(t *testing.T) {
 	require.Equal(t, number, uint64(11), "expected number to be 11 but got", number)
 	require.Equal(t, hash, common.Hash{1}, "expected the 1 hash but got", hash)
 	require.NotEqual(t, hash, common.Hash{}, "expected the hash to be different from zero hash")
-
 }
 
 // TestMilestone checks the milestone whitelist setter and getter functions
@@ -91,7 +90,6 @@ func TestMilestone(t *testing.T) {
 	require.Equal(t, doExist, true, "expected true as milestone exist at this point")
 	require.Equal(t, number, uint64(11), "expected number to be 11 but got", number)
 	require.Equal(t, hash, common.Hash{1}, "expected the 1 hash but got", hash)
-
 }
 
 // TestIsValidPeer checks the IsValidPeer function in isolation
@@ -171,7 +169,6 @@ func TestIsValidPeer(t *testing.T) {
 	// create a mock function, returning a the required header
 	fetchHeadersByNumber = func(number uint64, _ int, _ int, _ bool) ([]*types.Header, []common.Hash, error) {
 		hash := common.Hash{}
-		fmt.Println(hash)
 		header := types.Header{Number: big.NewInt(0)}
 
 		switch number {
@@ -187,7 +184,9 @@ func TestIsValidPeer(t *testing.T) {
 		case 3:
 			header.Number = big.NewInt(3)
 			hash3 := common.Hash{3}
+
 			return []*types.Header{&header}, []common.Hash{hash3}, nil
+
 		default:
 			return nil, nil, errors.New("invalid number")
 		}

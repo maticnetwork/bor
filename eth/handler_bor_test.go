@@ -67,11 +67,9 @@ func TestFetchWhitelistCheckpointAndMilestone(t *testing.T) {
 }
 
 func fetchCheckpointTest(heimdall *mockHeimdall, bor *bor.Bor, handler *ethHandler, verifier *borVerifier, t *testing.T) {
-
 	var checkpoints []*checkpoint.Checkpoint
 	// create a mock fetch checkpoint function
 	heimdall.fetchCheckpoint = func(_ context.Context, number int64) (*checkpoint.Checkpoint, error) {
-
 		if len(checkpoints) == 0 {
 			return nil, errCheckpoint
 		} else if number == -1 {
@@ -84,27 +82,24 @@ func fetchCheckpointTest(heimdall *mockHeimdall, bor *bor.Bor, handler *ethHandl
 	// create a background context
 	ctx := context.Background()
 
-	blockNum, blockHash, err := handler.fetchWhitelistCheckpoint(ctx, bor, nil, verifier)
+	_, _, err := handler.fetchWhitelistCheckpoint(ctx, bor, nil, verifier)
 	require.Equal(t, err, errCheckpoint)
 
 	// create 4 mock checkpoints
 	checkpoints = createMockCheckpoints(4)
 
-	blockNum, blockHash, err = handler.fetchWhitelistCheckpoint(ctx, bor, nil, verifier)
+	blockNum, blockHash, err := handler.fetchWhitelistCheckpoint(ctx, bor, nil, verifier)
 
 	// Check if we have expected result
 	require.Equal(t, err, nil)
 	require.Equal(t, checkpoints[len(checkpoints)-1].EndBlock.Uint64(), blockNum)
 	require.Equal(t, checkpoints[len(checkpoints)-1].RootHash, blockHash)
-
 }
 
 func fetchMilestoneTest(heimdall *mockHeimdall, bor *bor.Bor, handler *ethHandler, verifier *borVerifier, t *testing.T) {
-
 	var milestones []*milestone.Milestone
 	// create a mock fetch checkpoint function
 	heimdall.fetchMilestone = func(_ context.Context) (*milestone.Milestone, error) {
-
 		if len(milestones) == 0 {
 			return nil, errMilestone
 		} else {
@@ -127,7 +122,6 @@ func fetchMilestoneTest(heimdall *mockHeimdall, bor *bor.Bor, handler *ethHandle
 	require.Equal(t, err, nil)
 	require.Equal(t, milestones[len(milestones)-1].EndBlock.Uint64(), blockNum)
 	require.Equal(t, milestones[len(milestones)-1].RootHash, blockHash)
-
 }
 
 func getMockFetchCheckpointFn(number int64, err error) func(ctx context.Context) (int64, error) {

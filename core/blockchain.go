@@ -226,7 +226,6 @@ type BlockChain struct {
 //
 //nolint:gocognit
 func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *params.ChainConfig, engine consensus.Engine, vmConfig vm.Config, shouldPreserve func(header *types.Header) bool, txLookupLimit *uint64, checker ethereum.ChainValidator) (*BlockChain, error) {
-
 	if cacheConfig == nil {
 		cacheConfig = DefaultCacheConfig
 	}
