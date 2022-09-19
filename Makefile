@@ -27,7 +27,7 @@ GOTEST = GODEBUG=cgocheck=0 go test $(GO_FLAGS) -p 1
 
 bor:
 	mkdir -p $(GOPATH)/bin/
-	env GOOS=linux GOARCH=arm64 go build -o $(GOBIN)/bor ./cmd/cli/main.go
+	env GOOS=linux GOARCH=amd64 go build -o $(GOBIN)/bor ./cmd/cli/main.go
 	cp $(GOBIN)/bor $(GOPATH)/bin/
 	@echo "Done building."
 
