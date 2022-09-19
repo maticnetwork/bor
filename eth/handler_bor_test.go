@@ -67,6 +67,7 @@ func TestFetchWhitelistCheckpointAndMilestone(t *testing.T) {
 }
 
 func fetchCheckpointTest(t *testing.T, heimdall *mockHeimdall, bor *bor.Bor, handler *ethHandler, verifier *borVerifier) {
+	t.Helper()
 	var checkpoints []*checkpoint.Checkpoint
 	// create a mock fetch checkpoint function
 	heimdall.fetchCheckpoint = func(_ context.Context, number int64) (*checkpoint.Checkpoint, error) {
@@ -97,6 +98,7 @@ func fetchCheckpointTest(t *testing.T, heimdall *mockHeimdall, bor *bor.Bor, han
 }
 
 func fetchMilestoneTest(t *testing.T, heimdall *mockHeimdall, bor *bor.Bor, handler *ethHandler, verifier *borVerifier) {
+	t.Helper()
 	var milestones []*milestone.Milestone
 	// create a mock fetch checkpoint function
 	heimdall.fetchMilestone = func(_ context.Context) (*milestone.Milestone, error) {
