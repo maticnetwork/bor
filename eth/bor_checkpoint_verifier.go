@@ -58,8 +58,10 @@ func newBorVerifier(verifyFn func(ctx context.Context, eth *Ethereum, handler *e
 
 			ethHandler := (*ethHandler)(eth.handler)
 
-			var rewindTo uint64
-			var doExist bool
+			var (
+				rewindTo uint64
+				doExist  bool
+			)
 
 			if doExist, rewindTo, _ = ethHandler.downloader.GetWhitelistedMilestone(); doExist {
 
@@ -71,7 +73,6 @@ func newBorVerifier(verifyFn func(ctx context.Context, eth *Ethereum, handler *e
 				} else {
 					rewindTo = start - 1
 				}
-
 			}
 
 			rewindBack(eth, rewindTo)
@@ -97,7 +98,6 @@ func newBorVerifier(verifyFn func(ctx context.Context, eth *Ethereum, handler *e
 // Stop the miner if the mining process is running and rewind back the chain
 func rewindBack(eth *Ethereum, rewindTo uint64) {
 	if eth.Miner().Mining() {
-
 		ch := make(chan struct{})
 		eth.Miner().Stop(ch)
 		<-ch

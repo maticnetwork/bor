@@ -62,11 +62,11 @@ func TestFetchWhitelistCheckpointAndMilestone(t *testing.T) {
 
 	bor := &bor.Bor{HeimdallClient: &heimdall}
 
-	fetchCheckpointTest(&heimdall, bor, handler, verifier, t)
-
+	fetchCheckpointTest(t, &heimdall, bor, handler, verifier)
+	fetchMilestoneTest(t, &heimdall, bor, handler, verifier)
 }
 
-func fetchCheckpointTest(heimdall *mockHeimdall, bor *bor.Bor, handler *ethHandler, verifier *borVerifier, t *testing.T) {
+func fetchCheckpointTest(t *testing.T, heimdall *mockHeimdall, bor *bor.Bor, handler *ethHandler, verifier *borVerifier) {
 	var checkpoints []*checkpoint.Checkpoint
 	// create a mock fetch checkpoint function
 	heimdall.fetchCheckpoint = func(_ context.Context, number int64) (*checkpoint.Checkpoint, error) {
@@ -96,7 +96,7 @@ func fetchCheckpointTest(heimdall *mockHeimdall, bor *bor.Bor, handler *ethHandl
 	require.Equal(t, checkpoints[len(checkpoints)-1].RootHash, blockHash)
 }
 
-func fetchMilestoneTest(heimdall *mockHeimdall, bor *bor.Bor, handler *ethHandler, verifier *borVerifier, t *testing.T) {
+func fetchMilestoneTest(t *testing.T, heimdall *mockHeimdall, bor *bor.Bor, handler *ethHandler, verifier *borVerifier) {
 	var milestones []*milestone.Milestone
 	// create a mock fetch checkpoint function
 	heimdall.fetchMilestone = func(_ context.Context) (*milestone.Milestone, error) {
@@ -110,13 +110,13 @@ func fetchMilestoneTest(heimdall *mockHeimdall, bor *bor.Bor, handler *ethHandle
 	// create a background context
 	ctx := context.Background()
 
-	blockNum, blockHash, err := handler.fetchWhitelistCheckpoint(ctx, bor, nil, verifier)
+	_, _, err := handler.fetchWhitelistCheckpoint(ctx, bor, nil, verifier)
 	require.Equal(t, err, errMilestone)
 
 	// create 4 mock checkpoints
 	milestones = createMockMilestones(4)
 
-	blockNum, blockHash, err = handler.fetchWhitelistMilestone(ctx, bor, nil, verifier)
+	blockNum, blockHash, err := handler.fetchWhitelistMilestone(ctx, bor, nil, verifier)
 
 	// Check if we have expected result
 	require.Equal(t, err, nil)
