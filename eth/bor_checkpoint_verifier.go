@@ -52,6 +52,7 @@ func newBorVerifier(verifyFn func(ctx context.Context, eth *Ethereum, handler *e
 			return hash, errRootHash
 		}
 
+		//nolint
 		if localRoothash != rootHash {
 
 			log.Warn("Root hash mismatch while whitelisting", "expected", localRoothash, "got", rootHash)
