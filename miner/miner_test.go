@@ -136,6 +136,7 @@ func TestMinerStartStopAfterDownloaderEvents(t *testing.T) {
 	miner.Start(common.HexToAddress("0x678910"))
 	waitForMiningState(t, miner, true)
 
+	ch = make(chan struct{})
 	miner.Stop(ch)
 	waitForMiningState(t, miner, false)
 }
