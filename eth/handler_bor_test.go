@@ -114,7 +114,7 @@ func fetchMilestoneTest(t *testing.T, heimdall *mockHeimdall, bor *bor.Bor, hand
 	// create a background context
 	ctx := context.Background()
 
-	_, _, err := handler.fetchWhitelistCheckpoint(ctx, bor, nil, verifier)
+	_, _, err := handler.fetchWhitelistMilestone(ctx, bor, nil, verifier)
 	require.Equal(t, err, errMilestone)
 
 	// create 4 mock checkpoints
