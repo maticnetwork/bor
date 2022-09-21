@@ -188,7 +188,7 @@ jobs:
 
         - name: install fpm
           run: |
-            sudo gem i fpm -f && fpm --version
+             gem i fpm -f && fpm --version
 
         - name: fpm build rpm 
           run: fpm -s dir -t rpm -n build/bor -v ${{ github.ref }}.$DATE

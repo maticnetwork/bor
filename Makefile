@@ -31,6 +31,12 @@ bor:
 	cp $(GOBIN)/bor $(GOPATH)/bin/
 	@echo "Done building."
 
+bor-static-binary:
+	mkdir -p ${GOPATH}/bin/
+	go build -o ${GOBIN}/bor -ldflags=".extldflags=-static" ./cmd/cli/main.go 
+	cp ${GOBIN}/bor ${GOPATH}/bin
+	@echo "Done building."
+
 protoc:
 	protoc --go_out=. --go-grpc_out=. ./internal/cli/server/proto/*.proto
 
