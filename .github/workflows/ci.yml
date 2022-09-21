@@ -21,6 +21,7 @@ jobs:
       matrix:
         os: [ ubuntu-20.04, macos-11 ] # list of os: https://github.com/actions/virtual-environments
     runs-on: ${{ matrix.os }}
+
     steps:
         - uses: actions/checkout@v3
         - run: |
@@ -86,6 +87,9 @@ jobs:
       matrix:
         os: [ ubuntu-20.04 ] # list of os: https://github.com/actions/virtual-environments
     runs-on: ${{ matrix.os }}
+    env:
+      DATE: $(date +"%Y.%m.%d_%H-%M)
+
     steps:
         - uses: actions/checkout@v3
           with:
@@ -186,15 +190,20 @@ jobs:
           run: |
             sudo gem i fpm -f && fpm --version
 
-       - name: fpm build rpm 
-         run: fpm -s dir -t rpm -n bor -v $(date +"%Y.%m.%d_%H-%M)
+        - name: fpm build rpm 
+          run: fpm -s dir -t rpm -n build/bor -v ${{ github.ref }}.$DATE
 
+        - name: fpm build pacman
+          run: fpm -s dir -t pacman -n build/bor -v ${{ github.ref }}.$DATE
 
-       - name: fpm build deb
-         run: fpm -s dir -t deb -n bor -v $(date +"%Y.%m.%d_%H-%M)
+        - name: fpm build deb
+          run: fpm -s dir -t deb -n build/bor -v ${{ github.ref }}.$DATE
 
-       - name: checksum build
-         run: md5sum bor.rpm.$(date +"%Y.%m.%d_%H-%M)
+        - name: checksum build
+          run: md5sum build/bor.rpm.${{ github.ref }}.$DATE
 
-       - name: checksum deb
-         run: md5sum bor.deb.$(date +"%Y.%m.%d_%H-%M)
+        - name: checksum deb
+          run: md5sum build/bor.deb.${{ github.ref }}.$DATE
+
+        - name: checksum packman
+          run: md5sum build/bor.pkg.tar.zst.${{ github.ref }}.$DATE

@@ -42,19 +42,31 @@ jobs:
           DOCKER_USERNAME: ${{ secrets.DOCKERHUB }}
           DOCKER_PASSWORD: ${{ secrets.DOCKERHUB_KEY }}
 
+      - name: prepping toml files
+          run: |
+            cp -rp templates/mainnet-v1/sentry/sentry/sentry/bor/config.toml build/bin/
+
       - name: install fpm
           run: |
-            sudo gem i fpm -f && fpm --version
+             gem i fpm -f && fpm --version
         
       - name: fpm build rpm 
-         run: fpm -s dir -t rpm -n bor -v $(TAG)
-
+         run: fpm -s dir -t rpm -n bor -v ${{ github.tag }} -C build/bin/
 
       - name: fpm build deb
-         run: fpm -s dir -t deb -n bor -v $(TAG)
+         run: fpm -s dir -t deb -n bor -v ${{ github.tag }} -C build/bin
 
       - name: checksum build
-         run: md5sum bor.rpm.$(TAG)
+         run: md5sum bor.rpm.${{ github.tag }}
 
       - name: checksum deb
-        run: md5sum bor.deb.$(TAG)
+        run: md5sum bor.deb.${{ github.tag }}
+
+     # - name: Release files
+     #   uses: softprops/action-gh-release@v1
+     #   env:
+     #     GITHUB_TOKEN: ${{ secrets.$TOKEN }}
+     #   with:
+     #     tag_name: ${{ steps.tag.outputs.tag_name }}
+     #     files:
+     #        bor
