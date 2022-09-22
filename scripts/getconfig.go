@@ -206,7 +206,9 @@ var replacedFlagsMapFlagAndValue = map[string]map[string]map[string]string{
 		},
 		"value": {
 			"'137'":   "mainnet",
+			"137":     "mainnet",
 			"'80001'": "mumbai",
+			"80001":   "mumbai",
 		},
 	},
 	"verbosity": {
