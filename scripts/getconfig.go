@@ -194,7 +194,6 @@ var nameTagMap = map[string]string{
 	"addr":                   "grpc.addr",
 	"dev":                    "dev",
 	"period":                 "dev.period",
-	// "config": ,
 }
 
 var removedFlagsAndValues = map[string]string{}
@@ -228,11 +227,6 @@ var replacedFlagsMapFlagAndValue = map[string]map[string]map[string]string{
 
 var replacedFlagsMapFlag = map[string]string{
 	"ws.origins": "ws.corsdomain",
-	// "jsonrpc.corsdomain": "http.corsdomain",
-	// "jsonrpc.vhosts":     "http.vhosts",
-	// "http.modules":       "http.api",
-	// "ws.modules":         "ws.api",
-	// "snapshot":           "no-snapshot",
 }
 
 var currentBoolFlags = []string{
