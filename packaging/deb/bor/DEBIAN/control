@@ -1,0 +1,14 @@
+Source: bor
+Section: develop
+Priority: Testing
+Maintainer: devops <devops@polygon.technology>
+Build-Depends: debhelper-compat (= 13)
+Standards-Version: v0.3.0-beta
+Homepage: https://polygon.technology
+Rules-Requires-Root: no
+Package: bor
+Version: 0.3.0-beta
+Architecture: amd64
+Multi-Arch: foreign
+Depends: 
+Description: Testing control file, this is not production ready 

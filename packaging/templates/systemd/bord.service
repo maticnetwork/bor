@@ -29,7 +29,6 @@
     -metrics.prometheus-addr="127.0.0.1:7071" \
     -metrics.opencollector-endpoint "0.0.0.0:4317"
   Type=simple
-  User=bor
   KillSignal=SIGINT
   TimeoutStopSec=120
 
