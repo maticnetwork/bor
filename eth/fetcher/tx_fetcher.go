@@ -281,7 +281,7 @@ func (f *TxFetcher) Enqueue(peer string, txs []*types.Transaction, direct bool) 
 		// Track the transaction hash if the price is too low for us.
 		// Avoid re-request this transaction when we receive another
 		// announcement.
-		if errors.Is(err, core.ErrUnderpriced) || errors.Is(err, core.ErrReplaceUnderpriced) {
+		if common.AnyError(err, core.ErrUnderpriced, core.ErrReplaceUnderpriced) {
 			for f.underpriced.Cardinality() >= maxTxUnderpricedSetSize {
 				f.underpriced.Pop()
 			}

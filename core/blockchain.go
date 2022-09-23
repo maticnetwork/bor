@@ -1588,8 +1588,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 			log.Debug("Pruned ancestor", "number", block.Number(), "hash", block.Hash())
 			return it.index, bc.recoverAncestors(block)
 		}
-	// First block is future, shove it (and all children) to the future queue (unknown ancestor)
-	case errors.Is(err, consensus.ErrFutureBlock) || (errors.Is(err, consensus.ErrUnknownAncestor) && bc.futureBlocks.Contains(it.first().ParentHash())):
+		// First block is future, shove it (and all children) to the future queue (unknown ancestor)
+	case common.AnyError(err, consensus.ErrFutureBlock, consensus.ErrUnknownAncestor) && bc.futureBlocks.Contains(it.first().ParentHash()):
 		for block != nil && (it.index == 0 || errors.Is(err, consensus.ErrUnknownAncestor)) {
 			log.Debug("Future block, postponing import", "number", block.Number(), "hash", block.Hash())
 			if err := bc.addFutureBlock(block); err != nil {

@@ -28,6 +28,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/stretchr/testify/require"
@@ -247,7 +248,7 @@ func TestFreezerConcurrentModifyTruncate(t *testing.T) {
 		if truncateErr != nil {
 			t.Fatal("concurrent truncate failed:", err)
 		}
-		if !(errors.Is(modifyErr, nil) || errors.Is(modifyErr, errOutOrderInsertion)) {
+		if !(common.AnyError(modifyErr, nil, errOutOrderInsertion)) {
 			t.Fatal("wrong error from concurrent modify:", modifyErr)
 		}
 		checkAncientCount(t, f, "test", 10)

@@ -650,7 +650,7 @@ func (s *Ethereum) startCheckpointWhitelistService() {
 	cancel()
 
 	if err != nil {
-		if errors.Is(err, ErrBorConsensusWithoutHeimdall) || errors.Is(err, ErrNotBorConsensus) {
+		if common.AnyError(err, ErrBorConsensusWithoutHeimdall, ErrNotBorConsensus) {
 			return
 		}
 
@@ -694,7 +694,7 @@ func (s *Ethereum) startMilestoneWhitelistService() {
 	cancel()
 
 	if err != nil {
-		if errors.Is(err, ErrBorConsensusWithoutHeimdall) || errors.Is(err, ErrNotBorConsensus) {
+		if common.AnyError(err, ErrBorConsensusWithoutHeimdall, ErrNotBorConsensus) {
 			return
 		}
 
