@@ -445,7 +445,7 @@ func updateArgsAdd(args []string) []string {
 	return args
 }
 
-// Unused for now, can be removed later
+//nolint:deadcode, unused
 func handleGRPC(args []string, updatedArgs []string) []string {
 	var newUpdatedArgs []string
 
