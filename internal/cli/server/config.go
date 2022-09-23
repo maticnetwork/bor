@@ -996,8 +996,7 @@ func (c *Config) buildNode() (*node.Config, error) {
 	}
 
 	if c.P2P.NoDiscover {
-		// Disable networking, for now, we will not even allow incomming connections
-		cfg.P2P.MaxPeers = 0
+		// Disable peer discovery
 		cfg.P2P.NoDiscovery = true
 	}
 
