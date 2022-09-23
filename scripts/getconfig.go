@@ -445,6 +445,7 @@ func updateArgsAdd(args []string) []string {
 	return args
 }
 
+<<<<<<< HEAD
 func handlePrometheus(args []string, updatedArgs []string) []string {
 	var newUpdatedArgs []string
 
@@ -453,10 +454,19 @@ func handlePrometheus(args []string, updatedArgs []string) []string {
 
 	pAddr := ""
 	pPort := ""
+=======
+func handleGRPC(args []string, updatedArgs []string) []string {
+	var newUpdatedArgs []string
+
+	var addr string
+
+	var port string
+>>>>>>> 77db80cc9 (Added script to generate config.toml fromstart.sh (#518))
 
 	newUpdatedArgs = append(newUpdatedArgs, updatedArgs...)
 
 	for i, val := range args {
+<<<<<<< HEAD
 		if strings.Contains(val, "metrics.addr") && strings.HasPrefix(val, "-") {
 			mAddr = args[i+1]
 		}
@@ -481,6 +491,19 @@ func handlePrometheus(args []string, updatedArgs []string) []string {
 		newUpdatedArgs = append(newUpdatedArgs, "--metrics.prometheus-addr")
 		newUpdatedArgs = append(newUpdatedArgs, pAddr+":"+pPort)
 	}
+=======
+		if strings.Contains(val, "pprof.addr") && strings.Contains(val, "-") {
+			addr = args[i+1]
+		}
+
+		if strings.Contains(val, "pprof.port") && strings.Contains(val, "-") {
+			port = args[i+1]
+		}
+	}
+
+	newUpdatedArgs = append(newUpdatedArgs, "--grpc.addr")
+	newUpdatedArgs = append(newUpdatedArgs, addr+":"+port)
+>>>>>>> 77db80cc9 (Added script to generate config.toml fromstart.sh (#518))
 
 	return newUpdatedArgs
 }
@@ -673,7 +696,11 @@ func main() {
 	outOfDateFlags := checkFlag(allFlags, flagsToCheck)
 	updatedArgs := updateArgsClean(args, outOfDateFlags)
 	updatedArgs = updateArgsAdd(updatedArgs)
+<<<<<<< HEAD
 	updatedArgs = handlePrometheus(args, updatedArgs)
+=======
+	updatedArgs = handleGRPC(args, updatedArgs)
+>>>>>>> 77db80cc9 (Added script to generate config.toml fromstart.sh (#518))
 
 	if temp == notYet {
 		updatedArgs = append(updatedArgs, ignoreForNow...)
