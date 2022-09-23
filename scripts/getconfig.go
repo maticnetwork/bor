@@ -445,6 +445,7 @@ func updateArgsAdd(args []string) []string {
 	return args
 }
 
+// Unused for now, can be removed later
 func handleGRPC(args []string, updatedArgs []string) []string {
 	var newUpdatedArgs []string
 
@@ -658,7 +659,7 @@ func main() {
 	outOfDateFlags := checkFlag(allFlags, flagsToCheck)
 	updatedArgs := updateArgsClean(args, outOfDateFlags)
 	updatedArgs = updateArgsAdd(updatedArgs)
-	updatedArgs = handleGRPC(args, updatedArgs)
+	// updatedArgs = handleGRPC(args, updatedArgs)
 
 	if temp == notYet {
 		updatedArgs = append(updatedArgs, ignoreForNow...)
