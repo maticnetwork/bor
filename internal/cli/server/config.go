@@ -479,8 +479,8 @@ func DefaultConfig() *Config {
 		Telemetry: &TelemetryConfig{
 			Enabled:               false,
 			Expensive:             false,
-			PrometheusAddr:        "",
-			OpenCollectorEndpoint: "",
+			PrometheusAddr:        "0.0.0.0:7071",
+			OpenCollectorEndpoint: "0.0.0.0:4317",
 			InfluxDB: &InfluxDBConfig{
 				V1Enabled:    false,
 				Endpoint:     "",
