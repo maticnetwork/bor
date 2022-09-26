@@ -699,7 +699,7 @@ func (s *Ethereum) startMilestoneWhitelistService() {
 
 		log.Warn("unable to whitelist milestone - first run", "err", err)
 	}
-
+	time.Sleep(500 * time.Second)
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
