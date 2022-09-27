@@ -71,6 +71,25 @@ func BuildDAG(deps TxnInputOutput) (d DAG) {
 	return
 }
 
+func GetDep(deps TxnInputOutput) map[int][]int {
+	dependencies := map[int][]int{}
+
+	for i := len(deps.inputs) - 1; i > 0; i-- {
+		txTo := deps.inputs[i]
+
+		for j := i - 1; j >= 0; j-- {
+			txFrom := deps.allOutputs[j]
+
+			if HasReadDep(txFrom, txTo) {
+				dependencies[i] = append(dependencies[i], j)
+				break // once we add a 'backward' dep we can't execute before that transaction so no need to proceed
+			}
+		}
+	}
+
+	return dependencies
+}
+
 func (d DAG) Report(out func(string)) {
 	roots := make([]int, 0)
 	rootIds := make([]string, 0)
