@@ -1149,6 +1149,8 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		localTxsCount = len(localTxs)
 		remoteTxsCount = len(remoteTxs)
 
+		log.Info("---- Splitting txs", "local", localTxsCount, "remote", remoteTxsCount)
+
 		span.SetAttributes(
 			attribute.Int("LocalTx Len", localTxsCount),
 			attribute.Int("RemoteTx Len", remoteTxsCount),
@@ -1163,6 +1165,7 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		var txs *types.TransactionsByPriceAndNonce
 
 		tracing.Exec(ctx, "worker.LocalTransactionsByPriceAndNonce", func(ctx context.Context, span trace.Span) {
+			log.Info("---- Sorting local txs", "txs", len(localTxs))
 			txs = types.NewTransactionsByPriceAndNonce(env.signer, localTxs, env.header.BaseFee)
 
 			span.SetAttributes(
@@ -1173,6 +1176,7 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		lenNewLocals = txs.GetTxs()
 
 		tracing.Exec(ctx, "worker.LocalCommitTransactions", func(ctx context.Context, span trace.Span) {
+			log.Info("---- Commiting local txs", "txs", txs.GetTxs())
 			committed = w.commitTransactions(env, txs, interrupt)
 		})
 
@@ -1187,6 +1191,7 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		var txs *types.TransactionsByPriceAndNonce
 
 		tracing.Exec(ctx, "worker.RemoteTransactionsByPriceAndNonce", func(ctx context.Context, span trace.Span) {
+			log.Info("---- Sorting remote txs", "txs", len(remoteTxs))
 			txs = types.NewTransactionsByPriceAndNonce(env.signer, remoteTxs, env.header.BaseFee)
 
 			span.SetAttributes(
@@ -1197,13 +1202,8 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		lenNewRemotes = txs.GetTxs()
 
 		tracing.Exec(ctx, "worker.RemoteCommitTransactions", func(ctx context.Context, span trace.Span) {
-			txs = types.NewTransactionsByPriceAndNonce(env.signer, remoteTxs, env.header.BaseFee)
-
+			log.Info("---- Commiting local txs", "txs", txs.GetTxs())
 			committed = w.commitTransactions(env, txs, interrupt)
-
-			span.SetAttributes(
-				attribute.Int("len of tx Heads", txs.GetTxs()),
-			)
 		})
 
 		if committed {
@@ -1319,7 +1319,7 @@ func (w *worker) commit(ctx context.Context, env *environment, interval func(), 
 		}
 
 		log.Info("---- In commit: before copy", "txs", len(env.txs))
-		
+
 		// Create a local environment copy, avoid the data race with snapshot state.
 		// https://github.com/ethereum/go-ethereum/issues/24299
 		env := env.copy()
