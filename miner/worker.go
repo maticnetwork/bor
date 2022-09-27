@@ -433,6 +433,7 @@ func recalcRecommit(minRecommit, prev time.Duration, target float64, inc bool) t
 }
 
 // newWorkLoop is a standalone goroutine to submit new sealing work upon received events.
+//
 //nolint:gocognit
 func (w *worker) newWorkLoop(ctx context.Context, recommit time.Duration) {
 	defer w.wg.Done()
@@ -1196,13 +1197,7 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		lenNewRemotes = txs.GetTxs()
 
 		tracing.Exec(ctx, "worker.RemoteCommitTransactions", func(ctx context.Context, span trace.Span) {
-			txs = types.NewTransactionsByPriceAndNonce(env.signer, remoteTxs, env.header.BaseFee)
-
 			committed = w.commitTransactions(env, txs, interrupt)
-
-			span.SetAttributes(
-				attribute.Int("len of tx Heads", txs.GetTxs()),
-			)
 		})
 
 		if committed {
