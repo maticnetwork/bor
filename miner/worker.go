@@ -451,7 +451,7 @@ func (w *worker) newWorkLoop(ctx context.Context, recommit time.Duration) {
 	commit := func(noempty bool, s int32) {
 		// we close spans only by the place we created them
 		ctx, span := tracing.Trace(ctx, "worker.commit")
-		defer span.End()
+		tracing.EndSpan(span)
 
 		if interrupt != nil {
 			atomic.StoreInt32(interrupt, s)
@@ -468,7 +468,7 @@ func (w *worker) newWorkLoop(ctx context.Context, recommit time.Duration) {
 	// clearPending cleans the stale pending tasks.
 	clearPending := func(number uint64) {
 		_, span := tracing.Trace(ctx, "worker.clearPending")
-		defer span.End()
+		tracing.EndSpan(span)
 
 		w.pendingMu.Lock()
 		for h, t := range w.pendingTasks {
@@ -783,12 +783,11 @@ func (w *worker) resultLoop() {
 
 				// Commit block and state to database.
 				tracing.ElapsedTime(ctx, span, "WriteBlockAndSetHead time taken", func(ctx context.Context, span trace.Span) {
-
 					_, err = w.chain.WriteBlockAndSetHead(ctx, block, receipts, logs, task.state, true)
-
 				})
 
-				span.SetAttributes(
+				tracing.SetAttributes(
+					span,
 					attribute.String("hash", hash.String()),
 					attribute.Int("number", int(block.Number().Uint64())),
 					attribute.Int("txns", block.Transactions().Len()),
@@ -1123,7 +1122,7 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 // be customized with the plugin in the future.
 func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *environment) {
 	ctx, span := tracing.StartSpan(ctx, "fillTransactions")
-	defer span.End()
+	defer tracing.EndSpan(span)
 
 	// Split the pending transactions into locals and remotes
 	// Fill the block with all available pending transactions.
@@ -1149,7 +1148,8 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		localTxsCount = len(localTxs)
 		remoteTxsCount = len(remoteTxs)
 
-		span.SetAttributes(
+		tracing.SetAttributes(
+			span,
 			attribute.Int("len of local txs", localTxsCount),
 			attribute.Int("len of remote txs", remoteTxsCount),
 		)
@@ -1167,7 +1167,8 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		tracing.Exec(ctx, "worker.LocalTransactionsByPriceAndNonce", func(ctx context.Context, span trace.Span) {
 			txs = types.NewTransactionsByPriceAndNonce(env.signer, localTxs, env.header.BaseFee)
 
-			span.SetAttributes(
+			tracing.SetAttributes(
+				span,
 				attribute.Int("len of tx local Heads", txs.GetTxs()),
 			)
 		})
@@ -1189,7 +1190,8 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		tracing.Exec(ctx, "worker.RemoteTransactionsByPriceAndNonce", func(ctx context.Context, span trace.Span) {
 			txs = types.NewTransactionsByPriceAndNonce(env.signer, remoteTxs, env.header.BaseFee)
 
-			span.SetAttributes(
+			tracing.SetAttributes(
+				span,
 				attribute.Int("len of tx remote Heads", txs.GetTxs()),
 			)
 		})
@@ -1205,7 +1207,8 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		remoteEnvTCount = env.tcount
 	}
 
-	span.SetAttributes(
+	tracing.SetAttributes(
+		span,
 		attribute.Int("len of final local txs ", localEnvTCount),
 		attribute.Int("len of final remote txs", remoteEnvTCount),
 	)
@@ -1257,9 +1260,10 @@ func (w *worker) commitWork(ctx context.Context, interrupt *int32, noempty bool,
 	}
 
 	ctx, span := tracing.StartSpan(ctx, "commitWork")
-	defer span.End()
+	defer tracing.EndSpan(span)
 
-	span.SetAttributes(
+	tracing.SetAttributes(
+		span,
 		attribute.Int("number", int(work.header.Number.Uint64())),
 	)
 
@@ -1296,7 +1300,7 @@ func (w *worker) commitWork(ctx context.Context, interrupt *int32, noempty bool,
 func (w *worker) commit(ctx context.Context, env *environment, interval func(), update bool, start time.Time) error {
 	if w.isRunning() {
 		ctx, span := tracing.StartSpan(ctx, "commit")
-		defer span.End()
+		defer tracing.EndSpan(span)
 
 		if interval != nil {
 			interval()
@@ -1308,7 +1312,8 @@ func (w *worker) commit(ctx context.Context, env *environment, interval func(), 
 
 		block, err := w.engine.FinalizeAndAssemble(ctx, w.chain, env.header, env.state, env.txs, env.unclelist(), env.receipts)
 
-		span.SetAttributes(
+		tracing.SetAttributes(
+			span,
 			attribute.Int("number", int(block.Number().Uint64())),
 			attribute.String("hash", block.Hash().String()),
 			attribute.String("sealhash", w.engine.SealHash(block.Header()).String()),

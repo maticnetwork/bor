@@ -16,7 +16,6 @@ import (
 	"time"
 
 	lru "github.com/hashicorp/golang-lru"
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/crypto/sha3"
@@ -810,7 +809,7 @@ func (c *Bor) changeContractCodeIfNeeded(headerNumber uint64, state *state.State
 // nor block rewards given, and returns the final block.
 func (c *Bor) FinalizeAndAssemble(ctx context.Context, chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, txs []*types.Transaction, uncles []*types.Header, receipts []*types.Receipt) (*types.Block, error) {
 	finalizeCtx, finalizeSpan := tracing.StartSpan(ctx, "bor.FinalizeAndAssemble")
-	defer finalizeSpan.End()
+	defer tracing.EndSpan(finalizeSpan)
 
 	stateSyncData := []*types.StateSyncData{}
 
@@ -868,7 +867,8 @@ func (c *Bor) FinalizeAndAssemble(ctx context.Context, chain consensus.ChainHead
 	bc := chain.(core.BorStateSyncer)
 	bc.SetStateSync(stateSyncData)
 
-	finalizeSpan.SetAttributes(
+	tracing.SetAttributes(
+		finalizeSpan,
 		attribute.Int("number", int(header.Number.Int64())),
 		attribute.String("hash", header.Hash().String()),
 		attribute.Int("number of txs", len(txs)),
@@ -891,8 +891,8 @@ func (c *Bor) Authorize(currentSigner common.Address, signFn SignerFn) {
 // Seal implements consensus.Engine, attempting to create a sealed block using
 // the local signing credentials.
 func (c *Bor) Seal(ctx context.Context, chain consensus.ChainHeaderReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
-	tracer := otel.GetTracerProvider().Tracer("MinerWorker")
-	_, sealSpan := tracer.Start(ctx, "Seal")
+	_, sealSpan := tracing.StartSpan(ctx, "bor.Seal")
+	defer tracing.EndSpan(sealSpan)
 
 	header := block.Header()
 	// Sealing the genesis block is not supported
@@ -918,9 +918,6 @@ func (c *Bor) Seal(ctx context.Context, chain consensus.ChainHeaderReader, block
 	if !snap.ValidatorSet.HasAddress(currentSigner.signer) {
 		// Check the UnauthorizedSignerError.Error() msg to see why we pass number-1
 		err := &UnauthorizedSignerError{number - 1, currentSigner.signer.Bytes()}
-		sealSpan.SetAttributes(attribute.String("error", err.Error()))
-		sealSpan.End()
-
 		return err
 	}
 
@@ -966,14 +963,17 @@ func (c *Bor) Seal(ctx context.Context, chain consensus.ChainHeaderReader, block
 				"delay", delay,
 				"headerDifficulty", header.Difficulty,
 			)
-			sealSpan.SetAttributes(
+
+			tracing.SetAttributes(
+				sealSpan,
 				attribute.Int("number", int(number)),
 				attribute.String("hash", header.Hash().String()),
 				attribute.Int("delay", int(delay.Milliseconds())),
 				attribute.Int("wiggle", int(wiggle.Milliseconds())),
 				attribute.Bool("out-of-turn", wiggle > 0),
 			)
-			sealSpan.End()
+
+			tracing.EndSpan(sealSpan)
 		}
 		select {
 		case results <- block.WithSeal(header):

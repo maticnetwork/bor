@@ -24,10 +24,21 @@ func FromContext(ctx context.Context) trace.Tracer {
 
 func StartSpan(ctx context.Context, snapName string) (context.Context, trace.Span) {
 	tr := FromContext(ctx)
+
+	if tr == nil {
+		return ctx, nil
+	}
+
 	ctx, span := tr.Start(ctx, snapName)
 	ctx = WithTracer(ctx, tr)
 
 	return ctx, span
+}
+
+func EndSpan(span trace.Span) {
+	if span != nil {
+		span.End()
+	}
 }
 
 func Trace(ctx context.Context, spanName string) (context.Context, trace.Span) {
@@ -75,5 +86,13 @@ func ElapsedTime(ctx context.Context, span trace.Span, msg string, fn func(conte
 
 	if span != nil {
 		span.SetAttributes(attribute.Int(msg, int(time.Since(now).Milliseconds())))
+	}
+}
+
+func SetAttributes(span trace.Span, kvs ...attribute.KeyValue) {
+	if span != nil {
+		for _, kv := range kvs {
+			span.SetAttributes(kv)
+		}
 	}
 }
