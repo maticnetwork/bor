@@ -433,6 +433,7 @@ func recalcRecommit(minRecommit, prev time.Duration, target float64, inc bool) t
 }
 
 // newWorkLoop is a standalone goroutine to submit new sealing work upon received events.
+//
 //nolint:gocognit
 func (w *worker) newWorkLoop(ctx context.Context, recommit time.Duration) {
 	defer w.wg.Done()
@@ -1212,6 +1213,8 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		remoteEnvTCount = env.tcount
 	}
 
+	log.Info("---- In fill transactions", "lenLocals", lenLocals, "localEnvTCount", localEnvTCount, "lenRemotes", lenRemotes, "remoteEnvTCount", remoteEnvTCount, "txs", len(env.txs))
+
 	span.SetAttributes(
 		attribute.Int("len of localTxs", lenLocals),
 		attribute.Int("len of sorted localTxs", lenNewLocals),
@@ -1286,6 +1289,8 @@ func (w *worker) commitWork(ctx context.Context, interrupt *int32, noempty bool,
 	// Fill pending transactions from the txpool
 	w.fillTransactions(ctx, interrupt, work)
 
+	log.Info("---- Completed fill transactions", "txs", len(work.txs))
+
 	err = w.commit(ctx, work.copy(), w.fullTaskHook, true, start)
 	if err != nil {
 		return
@@ -1313,9 +1318,13 @@ func (w *worker) commit(ctx context.Context, env *environment, interval func(), 
 			interval()
 		}
 
+		log.Info("---- In commit: before copy", "txs", len(env.txs))
+		
 		// Create a local environment copy, avoid the data race with snapshot state.
 		// https://github.com/ethereum/go-ethereum/issues/24299
 		env := env.copy()
+
+		log.Info("---- In commit: after copy", "txs", len(env.txs))
 
 		block, err := w.engine.FinalizeAndAssemble(ctx, w.chain, env.header, env.state, env.txs, env.unclelist(), env.receipts)
 
