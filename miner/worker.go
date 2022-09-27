@@ -1150,14 +1150,16 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		remoteTxsCount = len(remoteTxs)
 
 		span.SetAttributes(
-			attribute.Int("LocalTx Len", localTxsCount),
-			attribute.Int("RemoteTx Len", remoteTxsCount),
+			attribute.Int("len of local txs", localTxsCount),
+			attribute.Int("len of remote txs", remoteTxsCount),
 		)
 	})
 
-	lenLocals, lenNewLocals, localEnvTCount, lenRemotes, lenNewRemotes, remoteEnvTCount := 0, 0, 0, 0, 0, 0
-
-	var committed bool
+	var (
+		localEnvTCount  int
+		remoteEnvTCount int
+		committed       bool
+	)
 
 	if localTxsCount > 0 {
 		var txs *types.TransactionsByPriceAndNonce
@@ -1166,11 +1168,9 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 			txs = types.NewTransactionsByPriceAndNonce(env.signer, localTxs, env.header.BaseFee)
 
 			span.SetAttributes(
-				attribute.Int("len of tx Heads", txs.GetTxs()),
+				attribute.Int("len of tx local Heads", txs.GetTxs()),
 			)
 		})
-
-		lenNewLocals = txs.GetTxs()
 
 		tracing.Exec(ctx, "worker.LocalCommitTransactions", func(ctx context.Context, span trace.Span) {
 			committed = w.commitTransactions(env, txs, interrupt)
@@ -1190,11 +1190,9 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 			txs = types.NewTransactionsByPriceAndNonce(env.signer, remoteTxs, env.header.BaseFee)
 
 			span.SetAttributes(
-				attribute.Int("len of tx Heads", txs.GetTxs()),
+				attribute.Int("len of tx remote Heads", txs.GetTxs()),
 			)
 		})
-
-		lenNewRemotes = txs.GetTxs()
 
 		tracing.Exec(ctx, "worker.RemoteCommitTransactions", func(ctx context.Context, span trace.Span) {
 			committed = w.commitTransactions(env, txs, interrupt)
@@ -1208,12 +1206,8 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 	}
 
 	span.SetAttributes(
-		attribute.Int("len of localTxs", lenLocals),
-		attribute.Int("len of sorted localTxs", lenNewLocals),
-		attribute.Int("len of final localTxs ", localEnvTCount),
-		attribute.Int("len of remoteTxs", lenRemotes),
-		attribute.Int("len of sorted remoteTxs", lenNewRemotes),
-		attribute.Int("len of final remoteTxs", remoteEnvTCount),
+		attribute.Int("len of final local txs ", localEnvTCount),
+		attribute.Int("len of final remote txs", remoteEnvTCount),
 	)
 }
 
