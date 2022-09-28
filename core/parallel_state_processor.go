@@ -19,7 +19,6 @@ package core
 import (
 	"fmt"
 	"math/big"
-	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
@@ -258,6 +257,8 @@ func (task *ExecutionTask) Settle() {
 // transactions failed to execute due to insufficient gas it will return an error.
 // nolint:gocognit
 func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (types.Receipts, []*types.Log, uint64, error) {
+	// log.Info("**** blockstm exec summary", "ParallelStateProcessor executing block", block.Number())
+
 	var (
 		receipts    types.Receipts
 		header      = block.Header()
@@ -349,12 +350,278 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 
 	statedb.Finalise(p.config.IsEIP158(blockNumber))
 
-	start := time.Now()
+	// start := time.Now()
 
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
 	p.engine.Finalize(p.bc, header, statedb, block.Transactions(), block.Uncles())
 
-	fmt.Println("Finalize time of parallel execution:", time.Since(start))
+	// fmt.Println("Finalize time of parallel execution:", time.Since(start))
+
+	return receipts, allLogs, *usedGas, nil
+}
+
+// StateProcessor is a basic Processor, which takes care of transitioning
+// state from one point to another.
+//
+// StateProcessor implements Processor.
+type ParallelStateProcessorGet struct {
+	config *params.ChainConfig // Chain configuration options
+	bc     *BlockChain         // Canonical block chain
+	engine consensus.Engine    // Consensus engine used for block rewards
+}
+
+// NewStateProcessor initialises a new StateProcessor.
+func NewParallelStateProcessorGet(config *params.ChainConfig, bc *BlockChain, engine consensus.Engine) *ParallelStateProcessorGet {
+	return &ParallelStateProcessorGet{
+		config: config,
+		bc:     bc,
+		engine: engine,
+	}
+}
+
+// Process processes the state changes according to the Ethereum rules by running
+// the transaction messages using the statedb and applying any rewards to both
+// the processor (coinbase) and any included uncles.
+//
+// Process returns the receipts and logs accumulated during the process and
+// returns the amount of gas that was used in the process. If any of the
+// transactions failed to execute due to insufficient gas it will return an error.
+// nolint:gocognit
+func (p *ParallelStateProcessorGet) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (types.Receipts, []*types.Log, uint64, error) {
+	// log.Info("**** blockstm exec summary", "ParallelStateProcessorGet executing block", block.Number())
+
+	var (
+		receipts    types.Receipts
+		header      = block.Header()
+		blockHash   = block.Hash()
+		blockNumber = block.Number()
+		allLogs     []*types.Log
+		usedGas     = new(uint64)
+	)
+
+	// Mutate the block and state according to any hard-fork specs
+	if p.config.DAOForkSupport && p.config.DAOForkBlock != nil && p.config.DAOForkBlock.Cmp(block.Number()) == 0 {
+		misc.ApplyDAOHardFork(statedb)
+	}
+
+	tasks := make([]blockstm.ExecTask, 0, len(block.Transactions()))
+
+	shouldDelayFeeCal := true
+
+	coinbase, _ := p.bc.Engine().Author(header)
+
+	// Iterate over and process the individual transactions
+	for i, tx := range block.Transactions() {
+		msg, err := tx.AsMessage(types.MakeSigner(p.config, header.Number), header.BaseFee)
+		if err != nil {
+			log.Error("error creating message", "err", err)
+			return nil, nil, 0, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
+		}
+
+		cleansdb := statedb.Copy()
+
+		if msg.From() == coinbase {
+			shouldDelayFeeCal = false
+		}
+
+		task := &ExecutionTask{
+			msg:               msg,
+			config:            p.config,
+			gasLimit:          block.GasLimit(),
+			blockNumber:       blockNumber,
+			blockHash:         blockHash,
+			tx:                tx,
+			index:             i,
+			cleanStateDB:      cleansdb,
+			finalStateDB:      statedb,
+			blockChain:        p.bc,
+			header:            header,
+			evmConfig:         cfg,
+			shouldDelayFeeCal: &shouldDelayFeeCal,
+			sender:            msg.From(),
+			totalUsedGas:      usedGas,
+			receipts:          &receipts,
+			allLogs:           &allLogs,
+		}
+
+		tasks = append(tasks, task)
+	}
+
+	backupStateDB := statedb.Copy()
+	tempRes, err := blockstm.ExecuteParallel(tasks, false, true)
+
+	for _, task := range tasks {
+		task := task.(*ExecutionTask)
+		if task.shouldRerunWithoutFeeDelay {
+			shouldDelayFeeCal = false
+			*statedb = *backupStateDB
+
+			allLogs = []*types.Log{}
+			receipts = types.Receipts{}
+			usedGas = new(uint64)
+
+			for _, t := range tasks {
+				t := t.(*ExecutionTask)
+				t.finalStateDB = backupStateDB
+				t.allLogs = &allLogs
+				t.receipts = &receipts
+				t.totalUsedGas = usedGas
+			}
+
+			tempRes, err = blockstm.ExecuteParallel(tasks, false, true)
+
+			break
+		}
+
+	}
+
+	block.Dependency = tempRes.AllDeps
+
+	if err != nil {
+		log.Error("blockstm error executing block", "err", err)
+		return nil, nil, 0, err
+	}
+
+	statedb.Finalise(p.config.IsEIP158(blockNumber))
+
+	// start := time.Now()
+
+	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
+	p.engine.Finalize(p.bc, header, statedb, block.Transactions(), block.Uncles())
+
+	// fmt.Println("Finalize time of parallel execution:", time.Since(start))
+
+	return receipts, allLogs, *usedGas, nil
+}
+
+// StateProcessor is a basic Processor, which takes care of transitioning
+// state from one point to another.
+//
+// StateProcessor implements Processor.
+type ParallelStateProcessorUse struct {
+	config *params.ChainConfig // Chain configuration options
+	bc     *BlockChain         // Canonical block chain
+	engine consensus.Engine    // Consensus engine used for block rewards
+}
+
+// NewStateProcessor initialises a new StateProcessor.
+func NewParallelStateProcessorUse(config *params.ChainConfig, bc *BlockChain, engine consensus.Engine) *ParallelStateProcessorUse {
+	return &ParallelStateProcessorUse{
+		config: config,
+		bc:     bc,
+		engine: engine,
+	}
+}
+
+// Process processes the state changes according to the Ethereum rules by running
+// the transaction messages using the statedb and applying any rewards to both
+// the processor (coinbase) and any included uncles.
+//
+// Process returns the receipts and logs accumulated during the process and
+// returns the amount of gas that was used in the process. If any of the
+// transactions failed to execute due to insufficient gas it will return an error.
+// nolint:gocognit
+func (p *ParallelStateProcessorUse) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (types.Receipts, []*types.Log, uint64, error) {
+	// log.Info("**** blockstm exec summary", "ParallelStateProcessorUse executing block", block.Number())
+
+	var (
+		receipts    types.Receipts
+		header      = block.Header()
+		blockHash   = block.Hash()
+		blockNumber = block.Number()
+		allLogs     []*types.Log
+		usedGas     = new(uint64)
+	)
+
+	// Mutate the block and state according to any hard-fork specs
+	if p.config.DAOForkSupport && p.config.DAOForkBlock != nil && p.config.DAOForkBlock.Cmp(block.Number()) == 0 {
+		misc.ApplyDAOHardFork(statedb)
+	}
+
+	tasks := make([]blockstm.ExecTask, 0, len(block.Transactions()))
+
+	shouldDelayFeeCal := true
+
+	coinbase, _ := p.bc.Engine().Author(header)
+
+	// Iterate over and process the individual transactions
+	for i, tx := range block.Transactions() {
+		msg, err := tx.AsMessage(types.MakeSigner(p.config, header.Number), header.BaseFee)
+		if err != nil {
+			log.Error("error creating message", "err", err)
+			return nil, nil, 0, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
+		}
+
+		cleansdb := statedb.Copy()
+
+		if msg.From() == coinbase {
+			shouldDelayFeeCal = false
+		}
+
+		task := &ExecutionTask{
+			msg:               msg,
+			config:            p.config,
+			gasLimit:          block.GasLimit(),
+			blockNumber:       blockNumber,
+			blockHash:         blockHash,
+			tx:                tx,
+			index:             i,
+			cleanStateDB:      cleansdb,
+			finalStateDB:      statedb,
+			blockChain:        p.bc,
+			header:            header,
+			evmConfig:         cfg,
+			shouldDelayFeeCal: &shouldDelayFeeCal,
+			sender:            msg.From(),
+			totalUsedGas:      usedGas,
+			receipts:          &receipts,
+			allLogs:           &allLogs,
+			dependencies:      block.Dependency[i],
+		}
+
+		tasks = append(tasks, task)
+	}
+
+	backupStateDB := statedb.Copy()
+	_, err := blockstm.ExecuteParallel(tasks, false, false)
+
+	for _, task := range tasks {
+		task := task.(*ExecutionTask)
+		if task.shouldRerunWithoutFeeDelay {
+			shouldDelayFeeCal = false
+			*statedb = *backupStateDB
+
+			allLogs = []*types.Log{}
+			receipts = types.Receipts{}
+			usedGas = new(uint64)
+
+			for _, t := range tasks {
+				t := t.(*ExecutionTask)
+				t.finalStateDB = backupStateDB
+				t.allLogs = &allLogs
+				t.receipts = &receipts
+				t.totalUsedGas = usedGas
+			}
+
+			_, err = blockstm.ExecuteParallel(tasks, false, false)
+
+			break
+		}
+	}
+
+	if err != nil {
+		log.Error("blockstm error executing block", "err", err)
+		return nil, nil, 0, err
+	}
+
+	statedb.Finalise(p.config.IsEIP158(blockNumber))
+
+	// start := time.Now()
+
+	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
+	p.engine.Finalize(p.bc, header, statedb, block.Transactions(), block.Uncles())
+
+	// fmt.Println("Finalize time of parallel execution:", time.Since(start))
 
 	return receipts, allLogs, *usedGas, nil
 }
