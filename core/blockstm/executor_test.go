@@ -403,7 +403,7 @@ func runParallelGetMetadata(t *testing.T, tasks []ExecTask, validation PropertyC
 
 	assert.NoError(t, err, "error occur during parallel execution")
 
-	return res.allDeps
+	return res.AllDeps
 }
 
 func TestLessConflicts(t *testing.T) {

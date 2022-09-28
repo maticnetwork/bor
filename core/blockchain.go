@@ -206,12 +206,15 @@ type BlockChain struct {
 	running       int32          // 0 if chain is running, 1 when stopped
 	procInterrupt int32          // interrupt signaler for block processing
 
-	engine     consensus.Engine
-	validator  Validator // Block and state validator interface
-	prefetcher Prefetcher
-	processor  Processor // Block transaction processor interface
-	forker     *ForkChoice
-	vmConfig   vm.Config
+	engine          consensus.Engine
+	validator       Validator // Block and state validator interface
+	prefetcher      Prefetcher
+	processor       Processor // Block transaction processor interface
+	processorSTM    Processor
+	processorSTMGet Processor
+	processorSTMUse Processor
+	forker          *ForkChoice
+	vmConfig        vm.Config
 
 	// Bor related changes
 	borReceiptsCache *lru.Cache             // Cache for the most recent bor receipt receipts per block
@@ -223,6 +226,7 @@ type BlockChain struct {
 // NewBlockChain returns a fully initialised block chain using information
 // available in the database. It initialises the default Ethereum Validator
 // and Processor.
+//
 //nolint:gocognit
 func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *params.ChainConfig, engine consensus.Engine, vmConfig vm.Config, shouldPreserve func(header *types.Header) bool, txLookupLimit *uint64, checker ethereum.ChainValidator) (*BlockChain, error) {
 	if cacheConfig == nil {
@@ -264,6 +268,9 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 	bc.validator = NewBlockValidator(chainConfig, bc, engine)
 	bc.prefetcher = newStatePrefetcher(chainConfig, bc, engine)
 	bc.processor = NewStateProcessor(chainConfig, bc, engine)
+	bc.processorSTM = NewParallelStateProcessor(chainConfig, bc, engine)
+	bc.processorSTMGet = NewParallelStateProcessorGet(chainConfig, bc, engine)
+	bc.processorSTMUse = NewParallelStateProcessorUse(chainConfig, bc, engine)
 
 	var err error
 	bc.hc, err = NewHeaderChain(db, chainConfig, engine, bc.insertStopped)
@@ -1723,8 +1730,29 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 		}
 
 		// Process block using the parent state as reference point
+
+		statedbSTM := statedb.Copy()
+		statedbSTMGet := statedb.Copy()
+		statedbSTMUse := statedb.Copy()
+
+		t2 := time.Now()
+		receipts, logs, usedGas, err := bc.processorSTM.Process(block, statedbSTM, bc.vmConfig)
+		t3 := time.Now()
+
+		// t4 := time.Now()
+		receipts, logs, usedGas, err = bc.processorSTMGet.Process(block, statedbSTMGet, bc.vmConfig)
+		// t5 := time.Now()
+
+		t6 := time.Now()
+		receipts, logs, usedGas, err = bc.processorSTMUse.Process(block, statedbSTMUse, bc.vmConfig)
+		t7 := time.Now()
+
 		substart := time.Now()
-		receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig)
+		receipts, logs, usedGas, err = bc.processor.Process(block, statedb, bc.vmConfig)
+		t1 := time.Now()
+
+		log.Info("**** Process block time", "blockNumber", block.Number(), "transactions", block.Transactions().Len(), "Serial first time", t1.Sub(substart), "STM without dependency", t3.Sub(t2), "STM with dependency", t7.Sub(t6))
+
 		if err != nil {
 			bc.reportBlock(block, receipts, err)
 			atomic.StoreUint32(&followupInterrupt, 1)

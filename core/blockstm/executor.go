@@ -123,7 +123,7 @@ func (pq *SafePriorityQueue) Len() int {
 type ParallelExecutionResult struct {
 	TxIO    *TxnInputOutput
 	Stats   *[][]uint64
-	allDeps map[int][]int
+	AllDeps map[int][]int
 }
 
 const numGoProcs = 2
@@ -450,7 +450,7 @@ func (pe *ParallelExecutor) Step(res ExecResult) (result ParallelExecutionResult
 	}
 
 	if pe.validateTasks.countComplete() == len(pe.tasks) && pe.execTasks.countComplete() == len(pe.tasks) {
-		log.Debug("blockstm exec summary", "execs", pe.cntExec, "success", pe.cntSuccess, "aborts", pe.cntAbort, "validations", pe.cntTotalValidations, "failures", pe.cntValidationFail, "#tasks/#execs", fmt.Sprintf("%.2f%%", float64(len(pe.tasks))/float64(pe.cntExec)*100))
+		log.Info("**** blockstm exec summary", "execs", pe.cntExec, "success", pe.cntSuccess, "aborts", pe.cntAbort, "validations", pe.cntTotalValidations, "failures", pe.cntValidationFail, "#tasks/#execs", fmt.Sprintf("%.2f%%", float64(len(pe.tasks))/float64(pe.cntExec)*100))
 
 		close(pe.chTasks)
 		close(pe.chSpeculativeTasks)
