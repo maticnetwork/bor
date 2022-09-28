@@ -73,6 +73,7 @@ type ExecutionTask struct {
 	totalUsedGas               *uint64
 	receipts                   *types.Receipts
 	allLogs                    *[]*types.Log
+	dependencies               []int
 }
 
 func (task *ExecutionTask) Execute(mvh *blockstm.MVHashMap, incarnation int) (err error) {
@@ -153,6 +154,10 @@ func (task *ExecutionTask) Sender() common.Address {
 
 func (task *ExecutionTask) Hash() common.Hash {
 	return task.tx.Hash()
+}
+
+func (task *ExecutionTask) Dependencies() []int {
+	return task.dependencies
 }
 
 func (task *ExecutionTask) Settle() {
@@ -314,7 +319,7 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 	}
 
 	backupStateDB := statedb.Copy()
-	_, err := blockstm.ExecuteParallel(tasks, false)
+	_, err := blockstm.ExecuteParallel(tasks, false, false)
 
 	for _, task := range tasks {
 		task := task.(*ExecutionTask)
@@ -334,7 +339,7 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 				t.totalUsedGas = usedGas
 			}
 
-			_, err = blockstm.ExecuteParallel(tasks, false)
+			_, err = blockstm.ExecuteParallel(tasks, false, false)
 
 			break
 		}
