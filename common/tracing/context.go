@@ -91,8 +91,6 @@ func ElapsedTime(ctx context.Context, span trace.Span, msg string, fn func(conte
 
 func SetAttributes(span trace.Span, kvs ...attribute.KeyValue) {
 	if span != nil {
-		for _, kv := range kvs {
-			span.SetAttributes(kv)
-		}
+		span.SetAttributes(kvs...)
 	}
 }
