@@ -25,6 +25,7 @@ type ExecTask interface {
 	MVFullWriteList() []WriteDescriptor
 	Sender() common.Address
 	Settle()
+	Dependencies() []int
 }
 
 type ExecVersionView struct {
@@ -120,9 +121,9 @@ func (pq *SafePriorityQueue) Len() int {
 }
 
 type ParallelExecutionResult struct {
-	TxIO  *TxnInputOutput
-	Stats *[][]uint64
-	Deps  *DAG
+	TxIO    *TxnInputOutput
+	Stats   *[][]uint64
+	allDeps map[int][]int
 }
 
 const numGoProcs = 2
@@ -196,11 +197,14 @@ type ParallelExecutor struct {
 	// Enable profiling
 	profile bool
 
+	// Enable metadata
+	metadata bool
+
 	// Worker wait group
 	workerWg sync.WaitGroup
 }
 
-func NewParallelExecutor(tasks []ExecTask, profile bool) *ParallelExecutor {
+func NewParallelExecutor(tasks []ExecTask, profile bool, metadata bool) *ParallelExecutor {
 	numTasks := len(tasks)
 
 	pe := &ParallelExecutor{
@@ -225,24 +229,32 @@ func NewParallelExecutor(tasks []ExecTask, profile bool) *ParallelExecutor {
 		preValidated:       make(map[int]bool),
 		begin:              time.Now(),
 		profile:            profile,
+		metadata:           metadata,
 	}
 
 	return pe
 }
 
 func (pe *ParallelExecutor) Prepare() {
-	prevSenderTx := make(map[common.Address]int)
-
 	for i, t := range pe.tasks {
 		pe.skipCheck[i] = false
 		pe.estimateDeps[i] = make([]int, 0)
 
-		if tx, ok := prevSenderTx[t.Sender()]; ok {
-			pe.execTasks.addDependencies(tx, i)
-			pe.execTasks.clearPending(i)
-		}
+		if pe.metadata {
+			for _, tx := range t.Dependencies() {
+				pe.execTasks.addDependencies(tx, i)
+				pe.execTasks.clearPending(i)
+			}
+		} else {
+			prevSenderTx := make(map[common.Address]int)
 
-		prevSenderTx[t.Sender()] = i
+			if tx, ok := prevSenderTx[t.Sender()]; ok {
+				pe.execTasks.addDependencies(tx, i)
+				pe.execTasks.clearPending(i)
+			}
+
+			prevSenderTx[t.Sender()] = i
+		}
 	}
 
 	pe.workerWg.Add(numSpeculativeProcs + numGoProcs)
@@ -447,13 +459,13 @@ func (pe *ParallelExecutor) Step(res ExecResult) (result ParallelExecutionResult
 		pe.settleWg.Wait()
 		close(pe.chSettle)
 
-		var dag DAG
+		var allDeps map[int][]int
 
 		if pe.profile {
-			dag = BuildDAG(*pe.lastTxIO)
+			allDeps = GetDep(*pe.lastTxIO)
 		}
 
-		return ParallelExecutionResult{pe.lastTxIO, &pe.stats, &dag}, err
+		return ParallelExecutionResult{pe.lastTxIO, &pe.stats, allDeps}, err
 	}
 
 	// Send the next immediate pending transaction to be executed
@@ -491,12 +503,12 @@ func (pe *ParallelExecutor) Step(res ExecResult) (result ParallelExecutionResult
 
 type PropertyCheck func(*ParallelExecutor) error
 
-func executeParallelWithCheck(tasks []ExecTask, profile bool, check PropertyCheck) (result ParallelExecutionResult, err error) {
+func executeParallelWithCheck(tasks []ExecTask, profile bool, metadata bool, check PropertyCheck) (result ParallelExecutionResult, err error) {
 	if len(tasks) == 0 {
 		return ParallelExecutionResult{MakeTxnInputOutput(len(tasks)), nil, nil}, nil
 	}
 
-	pe := NewParallelExecutor(tasks, profile)
+	pe := NewParallelExecutor(tasks, profile, metadata)
 	pe.Prepare()
 
 	for range pe.chResults {
@@ -520,8 +532,8 @@ func executeParallelWithCheck(tasks []ExecTask, profile bool, check PropertyChec
 	return
 }
 
-func ExecuteParallel(tasks []ExecTask, profile bool) (result ParallelExecutionResult, err error) {
-	return executeParallelWithCheck(tasks, profile, func(pe *ParallelExecutor) error {
+func ExecuteParallel(tasks []ExecTask, profile bool, metadata bool) (result ParallelExecutionResult, err error) {
+	return executeParallelWithCheck(tasks, profile, metadata, func(pe *ParallelExecutor) error {
 		return nil
 	})
 }
