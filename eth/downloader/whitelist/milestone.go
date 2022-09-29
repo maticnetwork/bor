@@ -122,7 +122,7 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 			return pastChain[i].Hash() == m.milestoneHash
 		}
 	}
-
+	log.Warn("Passed the test", "hash", m.milestoneHash)
 	return true
 }
 
