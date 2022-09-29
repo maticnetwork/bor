@@ -892,7 +892,13 @@ func (c *Bor) Authorize(currentSigner common.Address, signFn SignerFn) {
 // the local signing credentials.
 func (c *Bor) Seal(ctx context.Context, chain consensus.ChainHeaderReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
 	_, sealSpan := tracing.StartSpan(ctx, "bor.Seal")
-	defer tracing.EndSpan(sealSpan)
+	var endSpan bool = true
+	defer func() {
+		// Only end span in case of early-returns/errors
+		if endSpan {
+			tracing.EndSpan(sealSpan)
+		}
+	}()
 
 	header := block.Header()
 	// Sealing the genesis block is not supported
@@ -981,6 +987,9 @@ func (c *Bor) Seal(ctx context.Context, chain consensus.ChainHeaderReader, block
 			log.Warn("Sealing result was not read by miner", "number", number, "sealhash", SealHash(header, c.config))
 		}
 	}(sealSpan)
+
+	// Set the endSpan flag to false, as the go routine will handle it
+	endSpan = false
 
 	return nil
 }
