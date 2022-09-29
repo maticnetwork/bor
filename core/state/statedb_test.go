@@ -659,16 +659,21 @@ func TestMVHashMapMarkEstimate(t *testing.T) {
 	assert.Equal(t, balance, b)
 
 	// Tx1 mark estimate
-	for _, v := range states[1].writeMap {
+	for _, v := range states[1].MVWriteList() {
 		mvhm.MarkEstimate(v.Path, 1)
 	}
 
-	// Tx2 read again should get default (empty) vals because its dependency Tx1 is marked as estimate
-	v = states[2].GetState(addr, key)
-	b = states[2].GetBalance(addr)
+	defer func() {
+		if r := recover(); r == nil {
+			t.Errorf("The code did not panic")
+		} else {
+			t.Log("Recovered in f", r)
+		}
+	}()
 
-	assert.Equal(t, common.Hash{}, v)
-	assert.Equal(t, common.Big0, b)
+	// Tx2 read again should get default (empty) vals because its dependency Tx1 is marked as estimate
+	states[2].GetState(addr, key)
+	states[2].GetBalance(addr)
 
 	// Tx1 read again should get Tx0 vals
 	v = states[1].GetState(addr, key)
@@ -880,7 +885,7 @@ func TestApplyMVWriteSet(t *testing.T) {
 	states[0].SetBalance(addr1, balance1)
 	states[0].SetState(addr2, key2, val2)
 	states[0].GetOrNewStateObject(addr3)
-	states[0].Finalise(false)
+	states[0].Finalise(true)
 	states[0].FlushMVWriteSet()
 
 	sSingleProcess.GetOrNewStateObject(addr1)
@@ -891,13 +896,13 @@ func TestApplyMVWriteSet(t *testing.T) {
 
 	sClean.ApplyMVWriteSet(states[0].MVWriteList())
 
-	assert.Equal(t, sSingleProcess.IntermediateRoot(false), sClean.IntermediateRoot(false))
+	assert.Equal(t, sSingleProcess.IntermediateRoot(true), sClean.IntermediateRoot(true))
 
 	// Tx1 write
 	states[1].SetState(addr1, key2, val2)
 	states[1].SetBalance(addr1, balance2)
 	states[1].SetNonce(addr1, 1)
-	states[1].Finalise(false)
+	states[1].Finalise(true)
 	states[1].FlushMVWriteSet()
 
 	sSingleProcess.SetState(addr1, key2, val2)
@@ -906,13 +911,13 @@ func TestApplyMVWriteSet(t *testing.T) {
 
 	sClean.ApplyMVWriteSet(states[1].MVWriteList())
 
-	assert.Equal(t, sSingleProcess.IntermediateRoot(false), sClean.IntermediateRoot(false))
+	assert.Equal(t, sSingleProcess.IntermediateRoot(true), sClean.IntermediateRoot(true))
 
 	// Tx2 write
 	states[2].SetState(addr1, key1, val2)
 	states[2].SetBalance(addr1, balance2)
 	states[2].SetNonce(addr1, 2)
-	states[2].Finalise(false)
+	states[2].Finalise(true)
 	states[2].FlushMVWriteSet()
 
 	sSingleProcess.SetState(addr1, key1, val2)
@@ -921,12 +926,12 @@ func TestApplyMVWriteSet(t *testing.T) {
 
 	sClean.ApplyMVWriteSet(states[2].MVWriteList())
 
-	assert.Equal(t, sSingleProcess.IntermediateRoot(false), sClean.IntermediateRoot(false))
+	assert.Equal(t, sSingleProcess.IntermediateRoot(true), sClean.IntermediateRoot(true))
 
 	// Tx3 write
 	states[3].Suicide(addr2)
 	states[3].SetCode(addr1, code)
-	states[3].Finalise(false)
+	states[3].Finalise(true)
 	states[3].FlushMVWriteSet()
 
 	sSingleProcess.Suicide(addr2)
@@ -934,7 +939,7 @@ func TestApplyMVWriteSet(t *testing.T) {
 
 	sClean.ApplyMVWriteSet(states[3].MVWriteList())
 
-	assert.Equal(t, sSingleProcess.IntermediateRoot(false), sClean.IntermediateRoot(false))
+	assert.Equal(t, sSingleProcess.IntermediateRoot(true), sClean.IntermediateRoot(true))
 }
 
 // TestCopyOfCopy tests that modified objects are carried over to the copy, and the copy of the copy.

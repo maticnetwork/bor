@@ -12,7 +12,11 @@ func makeStatusManager(numTasks int) (t taskStatusManager) {
 	}
 
 	t.dependency = make(map[int]map[int]bool, numTasks)
-	t.blockCount = make(map[int]map[int]bool, numTasks)
+	t.blockCount = make(map[int]int, numTasks)
+
+	for i := 0; i < numTasks; i++ {
+		t.blockCount[i] = -1
+	}
 
 	return
 }
@@ -22,7 +26,7 @@ type taskStatusManager struct {
 	inProgress []int
 	complete   []int
 	dependency map[int]map[int]bool
-	blockCount map[int]map[int]bool
+	blockCount map[int]int
 }
 
 func insertInList(l []int, v int) []int {
@@ -52,6 +56,35 @@ func (m *taskStatusManager) takeNextPending() int {
 	return x
 }
 
+func (m *taskStatusManager) peekPendingGE(n int) int {
+	x := sort.SearchInts(m.pending, n)
+	if x >= len(m.pending) {
+		return -1
+	}
+
+	return m.pending[x]
+}
+
+// Take a pending task whose transaction index is greater than or equal to the given tx index
+func (m *taskStatusManager) takePendingGE(n int) int {
+	x := sort.SearchInts(m.pending, n)
+	if x >= len(m.pending) {
+		return -1
+	}
+
+	v := m.pending[x]
+
+	if x < len(m.pending)-1 {
+		m.pending = append(m.pending[:x], m.pending[x+1:]...)
+	} else {
+		m.pending = m.pending[:x]
+	}
+
+	m.inProgress = insertInList(m.inProgress, v)
+
+	return v
+}
+
 func hasNoGap(l []int) bool {
 	return l[0]+len(l) == l[len(l)-1]+1
 }
@@ -73,7 +106,11 @@ func (m taskStatusManager) maxAllComplete() int {
 }
 
 func (m *taskStatusManager) pushPending(tx int) {
-	m.pending = insertInList(m.pending, tx)
+	if !m.checkComplete(tx) && !m.checkInProgress(tx) {
+		m.pending = insertInList(m.pending, tx)
+	} else {
+		panic(fmt.Errorf("should not happen - clear complete or inProgress before pushing pending"))
+	}
 }
 
 func removeFromList(l []int, v int, expect bool) []int {
@@ -113,41 +150,41 @@ func (m *taskStatusManager) countComplete() int {
 	return len(m.complete)
 }
 
-func (m *taskStatusManager) revertInProgress(tx int) {
-	m.inProgress = removeFromList(m.inProgress, tx, true)
-	m.pending = insertInList(m.pending, tx)
-}
-
-func (m *taskStatusManager) addDependencies(txs []int, dependent int) bool {
-	for _, tx := range txs {
-		x := sort.SearchInts(m.complete, tx)
-		if x < len(m.complete) && m.complete[x] == tx {
-			// Blocking tx has already completed
-			continue
-		}
-
-		if _, ok := m.dependency[tx]; !ok {
-			m.dependency[tx] = make(map[int]bool)
-		}
-
-		if _, ok := m.blockCount[dependent]; !ok {
-			m.blockCount[dependent] = make(map[int]bool)
-		}
-
-		m.dependency[tx][dependent] = true
-		m.blockCount[dependent][tx] = true
+func (m *taskStatusManager) addDependencies(blocker int, dependent int) bool {
+	if blocker < 0 || blocker >= dependent {
+		return false
 	}
 
-	return len(m.blockCount[dependent]) > 0
+	curBlocker := m.blockCount[dependent]
+
+	if curBlocker > blocker {
+		return true
+	}
+
+	if m.checkComplete(blocker) {
+		// Blocking blocker has already completed
+		m.blockCount[dependent] = -1
+		return false
+	}
+
+	if _, ok := m.dependency[blocker]; !ok {
+		m.dependency[blocker] = make(map[int]bool)
+	}
+
+	m.dependency[blocker][dependent] = true
+	m.blockCount[dependent] = blocker
+
+	return true
 }
 
 func (m *taskStatusManager) removeDependency(tx int) {
 	if deps, ok := m.dependency[tx]; ok && len(deps) > 0 {
 		for k := range deps {
-			delete(m.blockCount[k], tx)
-
-			if len(m.blockCount[k]) == 0 {
-				m.pushPending(k)
+			if m.blockCount[k] == tx {
+				m.blockCount[k] = -1
+				if !m.checkComplete(k) && !m.checkPending(k) && !m.checkInProgress(k) {
+					m.pushPending(k)
+				}
 			}
 		}
 
@@ -177,8 +214,18 @@ func (m *taskStatusManager) checkPending(tx int) bool {
 	return false
 }
 
+func (m *taskStatusManager) checkComplete(tx int) bool {
+	x := sort.SearchInts(m.complete, tx)
+	if x < len(m.complete) && m.complete[x] == tx {
+		return true
+	}
+
+	return false
+}
+
 // getRevalidationRange: this range will be all tasks from tx (inclusive) that are not currently in progress up to the
-//  'all complete' limit
+//
+//	'all complete' limit
 func (m *taskStatusManager) getRevalidationRange(txFrom int) (ret []int) {
 	max := m.maxAllComplete() // haven't learned to trust compilers :)
 	for x := txFrom; x <= max; x++ {
@@ -192,10 +239,20 @@ func (m *taskStatusManager) getRevalidationRange(txFrom int) (ret []int) {
 
 func (m *taskStatusManager) pushPendingSet(set []int) {
 	for _, v := range set {
-		m.pushPending(v)
+		if m.checkComplete(v) {
+			m.clearComplete(v)
+		}
+
+		if !m.checkInProgress(v) {
+			m.pushPending(v)
+		}
 	}
 }
 
 func (m *taskStatusManager) clearComplete(tx int) {
 	m.complete = removeFromList(m.complete, tx, false)
+}
+
+func (m *taskStatusManager) clearPending(tx int) {
+	m.pending = removeFromList(m.pending, tx, false)
 }

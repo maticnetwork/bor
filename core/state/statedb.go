@@ -86,7 +86,7 @@ type StateDB struct {
 	readMap         map[blockstm.Key]blockstm.ReadDescriptor
 	writeMap        map[blockstm.Key]blockstm.WriteDescriptor
 	newStateObjects map[common.Address]struct{}
-	deps            map[int]bool
+	dep             int
 
 	// DB error.
 	// State objects are used by the consensus core and VM which are
@@ -169,12 +169,14 @@ func NewWithMVHashmap(root common.Hash, db Database, snaps *snapshot.Tree, mvhm 
 		return nil, err
 	} else {
 		sdb.mvHashmap = mvhm
+		sdb.dep = -1
 		return sdb, nil
 	}
 }
 
 func (sdb *StateDB) SetMVHashmap(mvhm *blockstm.MVHashMap) {
 	sdb.mvHashmap = mvhm
+	sdb.dep = -1
 }
 
 func (s *StateDB) MVWriteList() []blockstm.WriteDescriptor {
@@ -182,8 +184,6 @@ func (s *StateDB) MVWriteList() []blockstm.WriteDescriptor {
 
 	for _, v := range s.writeMap {
 		if !v.Path.IsAddress() {
-			writes = append(writes, v)
-		} else if _, ok := s.newStateObjects[common.BytesToAddress(v.Path[:common.AddressLength])]; ok {
 			writes = append(writes, v)
 		}
 	}
@@ -227,30 +227,20 @@ func (s *StateDB) ensureWriteMap() {
 	}
 }
 
-func (s *StateDB) ensureDepsMap() {
-	if s.deps == nil {
-		s.deps = make(map[int]bool)
-	}
-}
-
 func (s *StateDB) HadInvalidRead() bool {
-	s.ensureDepsMap()
-	return len(s.deps) > 0
+	return s.dep >= 0
 }
 
-func (s *StateDB) DepTxIndex() []int {
-	s.ensureDepsMap()
-	deps := make([]int, 0, len(s.deps))
-
-	for k := range s.deps {
-		deps = append(deps, k)
-	}
-
-	return deps
+func (s *StateDB) DepTxIndex() int {
+	return s.dep
 }
 
 func (s *StateDB) SetIncarnation(inc int) {
 	s.incarnation = inc
+}
+
+type StorageVal[T any] struct {
+	Value *T
 }
 
 func MVRead[T any](s *StateDB, k blockstm.Key, defaultV T, readStorage func(s *StateDB) T) (v T) {
@@ -259,7 +249,6 @@ func MVRead[T any](s *StateDB, k blockstm.Key, defaultV T, readStorage func(s *S
 	}
 
 	s.ensureReadMap()
-	s.ensureDepsMap()
 
 	if s.writeMap != nil {
 		if _, ok := s.writeMap[k]; ok {
@@ -286,8 +275,12 @@ func MVRead[T any](s *StateDB, k blockstm.Key, defaultV T, readStorage func(s *S
 		}
 	case blockstm.MVReadResultDependency:
 		{
-			s.deps[res.DepIdx()] = true
-			return defaultV
+			if res.DepIdx() > s.dep {
+				s.dep = res.DepIdx()
+			}
+
+			// Return immediate to executor when we found a dependency
+			panic("Found dependency")
 		}
 	case blockstm.MVReadResultNone:
 		{
@@ -342,9 +335,7 @@ func (sw *StateDB) ApplyMVWriteSet(writes []blockstm.WriteDescriptor) {
 		path := writes[i].Path
 		sr := writes[i].Val.(*StateDB)
 
-		if path.IsAddress() {
-			sw.GetOrNewStateObject(path.GetAddress())
-		} else if path.IsState() {
+		if path.IsState() {
 			addr := path.GetAddress()
 			stateKey := path.GetStateKey()
 			state := sr.GetState(addr, stateKey)
@@ -368,6 +359,61 @@ func (sw *StateDB) ApplyMVWriteSet(writes []blockstm.WriteDescriptor) {
 			}
 		}
 	}
+}
+
+type DumpStruct struct {
+	TxIdx  int
+	TxInc  int
+	VerIdx int
+	VerInc int
+	Path   []byte
+	Op     string
+}
+
+// get readMap Dump of format: "TxIdx, Inc, Path, Read"
+func (s *StateDB) GetReadMapDump() []DumpStruct {
+	readList := s.MVReadList()
+	res := make([]DumpStruct, 0, len(readList))
+
+	for _, val := range readList {
+		temp := &DumpStruct{
+			TxIdx:  s.txIndex,
+			TxInc:  s.incarnation,
+			VerIdx: val.V.TxnIndex,
+			VerInc: val.V.Incarnation,
+			Path:   val.Path[:],
+			Op:     "Read\n",
+		}
+		res = append(res, *temp)
+	}
+
+	return res
+}
+
+// get writeMap Dump of format: "TxIdx, Inc, Path, Write"
+func (s *StateDB) GetWriteMapDump() []DumpStruct {
+	writeList := s.MVReadList()
+	res := make([]DumpStruct, 0, len(writeList))
+
+	for _, val := range writeList {
+		temp := &DumpStruct{
+			TxIdx:  s.txIndex,
+			TxInc:  s.incarnation,
+			VerIdx: val.V.TxnIndex,
+			VerInc: val.V.Incarnation,
+			Path:   val.Path[:],
+			Op:     "Write\n",
+		}
+		res = append(res, *temp)
+	}
+
+	return res
+}
+
+// add empty MVHashMap to StateDB
+func (s *StateDB) AddEmptyMVHashMap() {
+	mvh := blockstm.MakeMVHashMap()
+	s.mvHashmap = mvh
 }
 
 // StartPrefetcher initializes a new trie prefetcher to pull in nodes from the

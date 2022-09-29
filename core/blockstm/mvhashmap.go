@@ -5,7 +5,6 @@ import (
 	"sync"
 
 	"github.com/emirpasic/gods/maps/treemap"
-	cmap "github.com/orcaman/concurrent-map/v2"
 
 	"github.com/ethereum/go-ethereum/common"
 )
@@ -74,15 +73,12 @@ func NewSubpathKey(addr common.Address, subpath byte) Key {
 }
 
 type MVHashMap struct {
-	m cmap.ConcurrentMap[*TxnIndexCells]
+	m sync.Map
+	s sync.Map
 }
 
 func MakeMVHashMap() *MVHashMap {
-	cmap.SHARD_COUNT = 128
-
-	return &MVHashMap{
-		m: cmap.New[*TxnIndexCells](),
-	}
+	return &MVHashMap{}
 }
 
 type WriteCell struct {
@@ -102,13 +98,12 @@ type Version struct {
 }
 
 func (mv *MVHashMap) getKeyCells(k Key, fNoKey func(kenc Key) *TxnIndexCells) (cells *TxnIndexCells) {
-	var ok bool
-
-	sk := string(k[:])
-	cells, ok = mv.m.Get(sk)
+	val, ok := mv.m.Load(k)
 
 	if !ok {
 		cells = fNoKey(k)
+	} else {
+		cells = val.(*TxnIndexCells)
 	}
 
 	return
@@ -121,11 +116,8 @@ func (mv *MVHashMap) Write(k Key, v Version, data interface{}) {
 			tm: treemap.NewWithIntComparator(),
 		}
 		cells = n
-		sk := string(kenc[:])
-		ok := mv.m.SetIfAbsent(sk, n)
-		if !ok {
-			cells, _ = mv.m.Get(sk)
-		}
+		val, _ := mv.m.LoadOrStore(kenc, n)
+		cells = val.(*TxnIndexCells)
 		return
 	})
 
@@ -157,6 +149,16 @@ func (mv *MVHashMap) Write(k Key, v Version, data interface{}) {
 		}
 		cells.rw.Unlock()
 	}
+}
+
+func (mv *MVHashMap) ReadStorage(k Key, fallBack func() any) any {
+	data, ok := mv.s.Load(string(k[:]))
+	if !ok {
+		data = fallBack()
+		data, _ = mv.s.LoadOrStore(string(k[:]), data)
+	}
+
+	return data
 }
 
 func (mv *MVHashMap) MarkEstimate(k Key, txIdx int) {
