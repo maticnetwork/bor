@@ -171,10 +171,11 @@ func (beacon *Beacon) VerifyUncles(chain consensus.ChainReader, block *types.Blo
 // verifyHeader checks whether a header conforms to the consensus rules of the
 // stock Ethereum consensus engine. The difference between the beacon and classic is
 // (a) The following fields are expected to be constants:
-//     - difficulty is expected to be 0
-// 	   - nonce is expected to be 0
-//     - unclehash is expected to be Hash(emptyHeader)
+//   - difficulty is expected to be 0
+//   - nonce is expected to be 0
+//   - unclehash is expected to be Hash(emptyHeader)
 //     to be the desired constants
+//
 // (b) the timestamp is not verified anymore
 // (c) the extradata is limited to 32 bytes
 func (beacon *Beacon) verifyHeader(chain consensus.ChainHeaderReader, header, parent *types.Header) error {
@@ -274,7 +275,7 @@ func (beacon *Beacon) Finalize(chain consensus.ChainHeaderReader, header *types.
 	}
 	// The block reward is no longer handled here. It's done by the
 	// external consensus engine.
-	header.Root = state.IntermediateRoot(context.Background(), true)
+	header.Root = state.IntermediateRoot(true)
 }
 
 // FinalizeAndAssemble implements consensus.Engine, setting the final state and

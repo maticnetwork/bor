@@ -18,7 +18,6 @@ package eth
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"math/big"
 	"reflect"
@@ -85,7 +84,7 @@ func TestAccountRange(t *testing.T) {
 		}
 	}
 	state.Commit(true)
-	root := state.IntermediateRoot(context.Background(), true)
+	root := state.IntermediateRoot(true)
 
 	trie, err := statedb.OpenTrie(root)
 	if err != nil {
@@ -142,7 +141,7 @@ func TestEmptyAccountRange(t *testing.T) {
 		st, _   = state.New(common.Hash{}, statedb, nil)
 	)
 	st.Commit(true)
-	st.IntermediateRoot(context.Background(), true)
+	st.IntermediateRoot(true)
 	results := st.IteratorDump(&state.DumpConfig{
 		SkipCode:          true,
 		SkipStorage:       true,

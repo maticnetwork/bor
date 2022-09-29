@@ -17,7 +17,6 @@
 package core
 
 import (
-	"context"
 	"fmt"
 	"math/big"
 
@@ -109,7 +108,7 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	if config.IsByzantium(blockNumber) {
 		statedb.Finalise(true)
 	} else {
-		root = statedb.IntermediateRoot(context.Background(), config.IsEIP158(blockNumber)).Bytes()
+		root = statedb.IntermediateRoot(config.IsEIP158(blockNumber)).Bytes()
 	}
 	*usedGas += result.UsedGas
 

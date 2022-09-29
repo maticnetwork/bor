@@ -18,7 +18,6 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -270,7 +269,7 @@ func runCmd(ctx *cli.Context) error {
 
 	if ctx.GlobalBool(DumpFlag.Name) {
 		statedb.Commit(true)
-		statedb.IntermediateRoot(context.Background(), true)
+		statedb.IntermediateRoot(true)
 		fmt.Println(string(statedb.Dump(nil)))
 	}
 

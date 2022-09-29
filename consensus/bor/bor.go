@@ -764,7 +764,7 @@ func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, 
 	}
 
 	// No block rewards in PoA, so the state remains as is and uncles are dropped
-	header.Root = state.IntermediateRoot(ctx, chain.Config().IsEIP158(header.Number))
+	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 	header.UncleHash = types.CalcUncleHash(nil)
 
 	// Set state sync data to blockchain
@@ -854,7 +854,7 @@ func (c *Bor) FinalizeAndAssemble(ctx context.Context, chain consensus.ChainHead
 
 	// No block rewards in PoA, so the state remains as it is
 	tracing.Exec(finalizeCtx, "bor.IntermediateRoot", func(ctx context.Context, span trace.Span) {
-		header.Root = state.IntermediateRoot(finalizeCtx, chain.Config().IsEIP158(header.Number))
+		header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
 	})
 
 	// Uncles are dropped
