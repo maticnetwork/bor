@@ -1810,3 +1810,8 @@ func (d *Downloader) DeliverSnapPacket(peer *snap.Peer, packet snap.Packet) erro
 		return fmt.Errorf("unexpected snap packet type: %T", packet)
 	}
 }
+
+// GetWhitelistService returns the pointer to the whitelist service
+func (d *Downloader) GetWhitelistService() ethereum.ChainValidator {
+	return d.ChainValidator
+}

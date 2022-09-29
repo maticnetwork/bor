@@ -69,10 +69,14 @@ func (h *ethHandler) fetchWhitelistMilestone(ctx context.Context, bor *bor.Bor, 
 	// it will return appropriate error.
 	hash, err := verifier.verify(ctx, eth, h, milestone.StartBlock.Uint64(), milestone.EndBlock.Uint64(), milestone.RootHash.String()[2:])
 	if err != nil {
+		h.downloader.UnlockSprint()
+		log.Warn("Unlocking the Sprint when roothash mismatches")
 		log.Warn("Failed to whitelist milestone", "err", err)
 		return blockNum, blockHash, err
 	}
 
+	h.downloader.UnlockSprint()
+	log.Warn("Unlocking the Sprint when roothash matches")
 	blockNum = milestone.EndBlock.Uint64()
 	blockHash = common.HexToHash(hash)
 

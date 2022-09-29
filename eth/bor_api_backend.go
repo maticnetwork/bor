@@ -11,6 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/event"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 // GetRootHash returns root hash for given start and end block
@@ -26,9 +27,22 @@ func (b *EthAPIBackend) GetRootHash(ctx context.Context, starBlockNr uint64, end
 		return "", errors.New("Only available in Bor engine")
 	}
 
+	downloader := b.eth.handler.downloader
+	if endBlockNr-starBlockNr == 63 { //This condition just for testing pupose, will remove it afterward.
+		log.Warn("In the GetRootHash-Locking the mutex")
+		downloader.Lock(endBlockNr)
+	}
 	root, err := api.GetRootHash(starBlockNr, endBlockNr)
 	if err != nil {
+		if endBlockNr-starBlockNr == 63 { //This condition just for testing pupose, will remove it afterward.
+			log.Warn("In the GetRootHash-Unlocking the mutex")
+			downloader.Unlock(false)
+		}
 		return "", err
+	}
+	if endBlockNr-starBlockNr == 63 { //This condition just for testing pupose, will remove it afterward.
+		log.Warn("In the GetRootHash-Unlocking the mutex")
+		downloader.Unlock(false)
 	}
 	return root, nil
 }

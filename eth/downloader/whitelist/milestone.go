@@ -7,14 +7,18 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 type milestone struct {
-	m               sync.Mutex
-	milestoneHash   common.Hash // milestone, populated by reaching out to heimdall
-	milestoneNumber uint64      // Milestone order, populated by reaching out to heimdall
-	interval        uint64      // Milestone interval, until which we can allow importing
-	doExist         bool
+	m                  sync.Mutex
+	milestoneHash      common.Hash // milestone, populated by reaching out to heimdall
+	milestoneNumber    uint64      // Milestone order, populated by reaching out to heimdall
+	interval           uint64      // Milestone interval, until which we can allow importing
+	doExist            bool
+	LockedSprintNumber uint64      // Locked sprint number
+	LockedSprintHash   common.Hash //Hash for the locked endBlock
+	Locked             bool        //
 }
 
 var (
@@ -82,6 +86,12 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 	m.m.Lock()
 	defer m.m.Unlock()
 
+	if m.Locked && m.LockedSprintNumber >= chain[0].Number.Uint64() {
+
+		log.Warn("SPRINT IS LOCKED")
+		return false
+	}
+
 	lastMilestoneBlockNum := m.milestoneNumber
 	current := currentHeader.Number.Uint64()
 
@@ -140,4 +150,34 @@ func (m *milestone) PurgeWhitelistedMilestone() {
 	defer m.m.Unlock()
 
 	m.doExist = false
+}
+
+func (m *milestone) Lock(endBlockNum uint64) {
+	m.m.Lock()
+	m.Locked = true
+	m.LockedSprintNumber = endBlockNum
+
+}
+
+func (m *milestone) Unlock(doLock bool) {
+	m.Locked = doLock
+	m.m.Unlock()
+}
+
+func (m *milestone) UnlockSprint() {
+	m.m.Lock()
+	m.Locked = false
+	m.m.Unlock()
+}
+
+func (m *milestone) IsReorgAllowed(number uint64, chain []*types.Header) bool {
+
+	for i := 0; i < len(chain); i++ {
+		if chain[i].Number.Uint64() == number {
+			return chain[i].Hash() == m.LockedSprintHash
+
+		}
+	}
+
+	return true
 }
