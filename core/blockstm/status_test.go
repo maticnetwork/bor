@@ -7,6 +7,7 @@ import (
 )
 
 func TestStatusBasics(t *testing.T) {
+	t.Parallel()
 
 	s := makeStatusManager(10)
 
@@ -44,18 +45,20 @@ func TestStatusBasics(t *testing.T) {
 
 	exp := []int{1, 2}
 	require.Equal(t, exp, s.getRevalidationRange(1))
-
 }
 
 func TestMaxComplete(t *testing.T) {
+	t.Parallel()
 
 	s := makeStatusManager(10)
 
 	for {
 		tx := s.takeNextPending()
+
 		if tx == -1 {
 			break
 		}
+
 		if tx != 7 {
 			s.markComplete(tx)
 		}
@@ -64,8 +67,10 @@ func TestMaxComplete(t *testing.T) {
 	require.Equal(t, 6, s.maxAllComplete())
 
 	s2 := makeStatusManager(10)
+
 	for {
 		tx := s2.takeNextPending()
+
 		if tx == -1 {
 			break
 		}

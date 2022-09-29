@@ -6,8 +6,9 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/require"
+
+	"github.com/ethereum/go-ethereum/common"
 )
 
 var randomness = rand.Intn(10) + 10
@@ -22,6 +23,8 @@ func getCommonAddress(i int) common.Address {
 }
 
 func TestHelperFunctions(t *testing.T) {
+	t.Parallel()
+
 	ap1 := NewAddressKey(getCommonAddress(1))
 	ap2 := NewAddressKey(getCommonAddress(2))
 
@@ -51,6 +54,8 @@ func TestHelperFunctions(t *testing.T) {
 }
 
 func TestFlushMVWrite(t *testing.T) {
+	t.Parallel()
+
 	ap1 := NewAddressKey(getCommonAddress(1))
 	ap2 := NewAddressKey(getCommonAddress(2))
 
@@ -110,13 +115,10 @@ func TestFlushMVWrite(t *testing.T) {
 	require.Equal(t, 0, res.Status())
 }
 
-// TODO - add TestValidateVersion after making it parallel (maybe benchmark it)
-// func TestValidateVersion(t *testing.T) {
-
-// }
-
 // TODO - handle panic
 func TestLowerIncarnation(t *testing.T) {
+	t.Parallel()
+
 	ap1 := NewAddressKey(getCommonAddress(1))
 
 	mvh := MakeMVHashMap()
@@ -126,11 +128,11 @@ func TestLowerIncarnation(t *testing.T) {
 	mvh.Write(ap1, Version{1, 2}, valueFor(1, 2))
 	mvh.Write(ap1, Version{0, 5}, valueFor(0, 5))
 	mvh.Write(ap1, Version{1, 5}, valueFor(1, 5))
-	// will fail (panic) as Version{0 4} has lower incarnation than Version{0 5}
-	// mvh.Write(ap1, Version{0, 4}, valueFor(0, 4))
 }
 
 func TestMarkEstimate(t *testing.T) {
+	t.Parallel()
+
 	ap1 := NewAddressKey(getCommonAddress(1))
 
 	mvh := MakeMVHashMap()
@@ -141,6 +143,8 @@ func TestMarkEstimate(t *testing.T) {
 }
 
 func TestMVHashMapBasics(t *testing.T) {
+	t.Parallel()
+
 	// memory locations
 	ap1 := NewAddressKey(getCommonAddress(1))
 	ap2 := NewAddressKey(getCommonAddress(2))
@@ -247,6 +251,7 @@ func BenchmarkWriteTimeSameLocationDifferentTxIdx(b *testing.B) {
 	}
 
 	b.ResetTimer()
+
 	for i := 0; i < b.N; i++ {
 		mvh2.Write(ap2, Version{randInts[i], 1}, valueFor(randInts[i], 1))
 	}
@@ -256,6 +261,7 @@ func BenchmarkReadTimeSameLocationDifferentTxIdx(b *testing.B) {
 	mvh2 := MakeMVHashMap()
 	ap2 := NewAddressKey(getCommonAddress(2))
 	txIdxSlice := []int{}
+
 	for i := 0; i < b.N; i++ {
 		txIdx := rand.Intn(1000000000000000)
 		txIdxSlice = append(txIdxSlice, txIdx)
@@ -263,15 +269,18 @@ func BenchmarkReadTimeSameLocationDifferentTxIdx(b *testing.B) {
 	}
 
 	b.ResetTimer()
+
 	for _, value := range txIdxSlice {
 		mvh2.Read(ap2, value)
 	}
 }
 
 func TestTimeComplexity(t *testing.T) {
+	t.Parallel()
 
 	// for 1000000 read and write with no dependency at different memory location
 	mvh1 := MakeMVHashMap()
+
 	for i := 0; i < 1000000; i++ {
 		ap1 := NewAddressKey(getCommonAddress(i))
 		mvh1.Write(ap1, Version{i, 1}, valueFor(i, 1))
@@ -281,31 +290,40 @@ func TestTimeComplexity(t *testing.T) {
 	// for 1000000 read and write with dependency at same memory location
 	mvh2 := MakeMVHashMap()
 	ap2 := NewAddressKey(getCommonAddress(2))
+
 	for i := 0; i < 1000000; i++ {
 		mvh2.Write(ap2, Version{i, 1}, valueFor(i, 1))
 		mvh2.Read(ap2, i)
 	}
-
 }
 
 func TestWriteTimeSameLocationDifferentTxnIdx(t *testing.T) {
+	t.Parallel()
+
 	mvh1 := MakeMVHashMap()
 	ap1 := NewAddressKey(getCommonAddress(1))
+
 	for i := 0; i < 1000000; i++ {
 		mvh1.Write(ap1, Version{i, 1}, valueFor(i, 1))
 	}
 }
 
 func TestWriteTimeSameLocationSameTxnIdx(t *testing.T) {
+	t.Parallel()
+
 	mvh1 := MakeMVHashMap()
 	ap1 := NewAddressKey(getCommonAddress(1))
+
 	for i := 0; i < 1000000; i++ {
 		mvh1.Write(ap1, Version{1, i}, valueFor(i, 1))
 	}
 }
 
 func TestWriteTimeDifferentLocation(t *testing.T) {
+	t.Parallel()
+
 	mvh1 := MakeMVHashMap()
+
 	for i := 0; i < 1000000; i++ {
 		ap1 := NewAddressKey(getCommonAddress(i))
 		mvh1.Write(ap1, Version{i, 1}, valueFor(i, 1))
@@ -313,9 +331,13 @@ func TestWriteTimeDifferentLocation(t *testing.T) {
 }
 
 func TestReadTimeSameLocation(t *testing.T) {
+	t.Parallel()
+
 	mvh1 := MakeMVHashMap()
 	ap1 := NewAddressKey(getCommonAddress(1))
+
 	mvh1.Write(ap1, Version{1, 1}, valueFor(1, 1))
+
 	for i := 0; i < 1000000; i++ {
 		mvh1.Read(ap1, 2)
 	}
