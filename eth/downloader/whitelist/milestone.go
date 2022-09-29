@@ -98,6 +98,7 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 	// Check if we have milestoneList entries in required range
 	if chain[len(chain)-1].Number.Uint64() < lastMilestoneBlockNum {
 		// We have future milestone entries, so we don't need to receive the past chain
+		log.Warn("test", "hash", m.milestoneHash)
 		return false
 	}
 
@@ -112,6 +113,7 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 
 	// Don't accept future chain of unacceptable length (from current block)
 	if len(futureChain)+offset > int(m.interval) {
+		log.Warn("test failed", "hash", m.milestoneHash)
 		return false
 	}
 
@@ -119,6 +121,7 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 	// It will handle all cases when the incoming chain has atleast one milestone
 	for i := len(pastChain) - 1; i >= 0; i-- {
 		if pastChain[i].Number.Uint64() == m.milestoneNumber {
+			log.Warn("test", "hash", m.milestoneHash)
 			return pastChain[i].Hash() == m.milestoneHash
 		}
 	}
