@@ -450,7 +450,7 @@ func (w *worker) newWorkLoop(ctx context.Context, recommit time.Duration) {
 	// commit aborts in-flight transaction execution with given signal and resubmits a new one.
 	commit := func(noempty bool, s int32) {
 		// we close spans only by the place we created them
-		ctx, span := tracing.Trace(ctx, "worker.commit")
+		ctx, span := tracing.Trace(ctx, "worker.newWorkLoop.commit")
 		tracing.EndSpan(span)
 
 		if interrupt != nil {
@@ -467,7 +467,7 @@ func (w *worker) newWorkLoop(ctx context.Context, recommit time.Duration) {
 	}
 	// clearPending cleans the stale pending tasks.
 	clearPending := func(number uint64) {
-		_, span := tracing.Trace(ctx, "worker.clearPending")
+		_, span := tracing.Trace(ctx, "worker.newWorkLoop.clearPending")
 		tracing.EndSpan(span)
 
 		w.pendingMu.Lock()
@@ -593,7 +593,7 @@ func (w *worker) mainLoop(ctx context.Context) {
 				if err := w.commitUncle(w.current, ev.Block.Header()); err == nil {
 					commitErr := w.commit(ctx, w.current.copy(), nil, true, start)
 					if commitErr != nil {
-						log.Error("error while committing", commitErr)
+						log.Error("error while committing work for mining", "err", commitErr)
 					}
 				}
 			}
