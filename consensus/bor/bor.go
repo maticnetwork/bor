@@ -892,7 +892,9 @@ func (c *Bor) Authorize(currentSigner common.Address, signFn SignerFn) {
 // the local signing credentials.
 func (c *Bor) Seal(ctx context.Context, chain consensus.ChainHeaderReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
 	_, sealSpan := tracing.StartSpan(ctx, "bor.Seal")
+
 	var endSpan bool = true
+
 	defer func() {
 		// Only end span in case of early-returns/errors
 		if endSpan {
