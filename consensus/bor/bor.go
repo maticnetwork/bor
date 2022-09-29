@@ -749,7 +749,7 @@ func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, 
 		}
 
 		if c.HeimdallClient != nil {
-			// commit statees
+			// commit states
 			stateSyncData, err = c.CommitStates(ctx, state, header, cx)
 			if err != nil {
 				log.Error("Error while committing states", "error", err)
