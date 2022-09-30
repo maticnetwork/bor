@@ -239,13 +239,19 @@ func NewParallelExecutor(tasks []ExecTask, profile bool, metadata bool) *Paralle
 
 func (pe *ParallelExecutor) Prepare() {
 	for i, t := range pe.tasks {
+		clearPendingFlag := false
+
 		pe.skipCheck[i] = false
 		pe.estimateDeps[i] = make([]int, 0)
 
 		if pe.metadata {
 			for _, tx := range t.Dependencies() {
+				clearPendingFlag = true
 				pe.execTasks.addDependencies(tx, i)
+			}
+			if clearPendingFlag {
 				pe.execTasks.clearPending(i)
+				clearPendingFlag = false
 			}
 		} else {
 			prevSenderTx := make(map[common.Address]int)
