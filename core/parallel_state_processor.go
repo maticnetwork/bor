@@ -257,7 +257,7 @@ func (task *ExecutionTask) Settle() {
 // transactions failed to execute due to insufficient gas it will return an error.
 // nolint:gocognit
 func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (types.Receipts, []*types.Log, uint64, error) {
-	log.Info("**** blockstm exec summary", "ParallelStateProcessor executing block", block.Number())
+	// log.Info("**** blockstm exec summary", "ParallelStateProcessor executing block", block.Number())
 
 	var (
 		receipts    types.Receipts
@@ -388,7 +388,7 @@ func NewParallelStateProcessorGet(config *params.ChainConfig, bc *BlockChain, en
 // transactions failed to execute due to insufficient gas it will return an error.
 // nolint:gocognit
 func (p *ParallelStateProcessorGet) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (types.Receipts, []*types.Log, uint64, error) {
-	log.Info("**** blockstm exec summary", "ParallelStateProcessorGet executing block", block.Number())
+	// log.Info("**** blockstm exec summary", "ParallelStateProcessorGet executing block", block.Number())
 
 	var (
 		receipts    types.Receipts
@@ -450,8 +450,6 @@ func (p *ParallelStateProcessorGet) Process(block *types.Block, statedb *state.S
 	backupStateDB := statedb.Copy()
 	tempRes, err := blockstm.ExecuteParallel(tasks, false, true)
 
-	block.Dependency = tempRes.AllDeps
-
 	for _, task := range tasks {
 		task := task.(*ExecutionTask)
 		if task.shouldRerunWithoutFeeDelay {
@@ -470,11 +468,14 @@ func (p *ParallelStateProcessorGet) Process(block *types.Block, statedb *state.S
 				t.totalUsedGas = usedGas
 			}
 
-			_, err = blockstm.ExecuteParallel(tasks, false, false)
+			tempRes, err = blockstm.ExecuteParallel(tasks, false, true)
 
 			break
 		}
+
 	}
+
+	block.Dependency = tempRes.AllDeps
 
 	if err != nil {
 		log.Error("blockstm error executing block", "err", err)
@@ -521,7 +522,7 @@ func NewParallelStateProcessorUse(config *params.ChainConfig, bc *BlockChain, en
 // transactions failed to execute due to insufficient gas it will return an error.
 // nolint:gocognit
 func (p *ParallelStateProcessorUse) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (types.Receipts, []*types.Log, uint64, error) {
-	log.Info("**** blockstm exec summary", "ParallelStateProcessorUse executing block", block.Number())
+	// log.Info("**** blockstm exec summary", "ParallelStateProcessorUse executing block", block.Number())
 
 	var (
 		receipts    types.Receipts
