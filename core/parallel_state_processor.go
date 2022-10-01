@@ -448,7 +448,7 @@ func (p *ParallelStateProcessorGet) Process(block *types.Block, statedb *state.S
 	}
 
 	backupStateDB := statedb.Copy()
-	tempRes, err := blockstm.ExecuteParallel(tasks, false, true)
+	tempRes, err := blockstm.ExecuteParallel(tasks, true, false)
 
 	for _, task := range tasks {
 		task := task.(*ExecutionTask)
@@ -468,7 +468,7 @@ func (p *ParallelStateProcessorGet) Process(block *types.Block, statedb *state.S
 				t.totalUsedGas = usedGas
 			}
 
-			tempRes, err = blockstm.ExecuteParallel(tasks, false, true)
+			tempRes, err = blockstm.ExecuteParallel(tasks, true, false)
 
 			break
 		}
@@ -581,7 +581,7 @@ func (p *ParallelStateProcessorUse) Process(block *types.Block, statedb *state.S
 	}
 
 	backupStateDB := statedb.Copy()
-	_, err := blockstm.ExecuteParallel(tasks, false, false)
+	_, err := blockstm.ExecuteParallel(tasks, false, true)
 
 	for _, task := range tasks {
 		task := task.(*ExecutionTask)
@@ -601,7 +601,7 @@ func (p *ParallelStateProcessorUse) Process(block *types.Block, statedb *state.S
 				t.totalUsedGas = usedGas
 			}
 
-			_, err = blockstm.ExecuteParallel(tasks, false, false)
+			_, err = blockstm.ExecuteParallel(tasks, false, true)
 
 			break
 		}
