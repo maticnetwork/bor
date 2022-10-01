@@ -106,7 +106,7 @@ func (task *ExecutionTask) Execute(mvh *blockstm.MVHashMap, incarnation int) (er
 		task.result, err = ApplyMessageNoFeeBurnOrTip(evm, task.msg, new(GasPool).AddGas(task.gasLimit))
 
 		if task.result == nil || err != nil {
-			return blockstm.ErrExecAbortError{Dependency: task.statedb.DepTxIndex()}
+			return blockstm.ErrExecAbortError{Dependency: task.statedb.DepTxIndex(), OriginError: err}
 		}
 
 		reads := task.statedb.MVReadMap()
@@ -127,7 +127,7 @@ func (task *ExecutionTask) Execute(mvh *blockstm.MVHashMap, incarnation int) (er
 	}
 
 	if task.statedb.HadInvalidRead() || err != nil {
-		err = blockstm.ErrExecAbortError{Dependency: task.statedb.DepTxIndex()}
+		err = blockstm.ErrExecAbortError{Dependency: task.statedb.DepTxIndex(), OriginError: err}
 		return
 	}
 
@@ -150,6 +150,10 @@ func (task *ExecutionTask) MVFullWriteList() []blockstm.WriteDescriptor {
 
 func (task *ExecutionTask) Sender() common.Address {
 	return task.sender
+}
+
+func (task *ExecutionTask) Hash() common.Hash {
+	return task.tx.Hash()
 }
 
 func (task *ExecutionTask) Dependencies() []int {

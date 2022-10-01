@@ -82,7 +82,6 @@ func GetDep(deps TxnInputOutput) map[int][]int {
 
 			if HasReadDep(txFrom, txTo) {
 				dependencies[i] = append(dependencies[i], j)
-				break // once we add a 'backward' dep we can't execute before that transaction so no need to proceed
 			}
 		}
 	}
