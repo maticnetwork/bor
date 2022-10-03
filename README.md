@@ -1,5 +1,5 @@
 # Bor Overview
-Bor is the Official Golang implementation of the Matic protocol. It is a fork of Go Ethereum - https://github.com/ethereum/go-ethereum and EVM compabile.
+Bor is the Official Golang implementation of the matic protocol. It is a fork of Go Ethereum - https://github.com/ethereum/go-ethereum and EVM compabile.
 
 ![Forks](https://img.shields.io/github/forks/maticnetwork/bor?style=social)
 ![Stars](https://img.shields.io/github/stars/maticnetwork/bor?style=social)
@@ -16,10 +16,10 @@ Bor is the Official Golang implementation of the Matic protocol. It is a fork of
 ## How to contribute
 
 ### Contribution  Guidelines
-We believe one of the things that makes Polygon special is its coherent design and we seek to retain this defining characteristic. From the outset we defined some guidelines to ensure new contributions only ever enhance the project:
+We believe one of the things that makes Shibarium special is its coherent design and we seek to retain this defining characteristic. From the outset we defined some guidelines to ensure new contributions only ever enhance the project:
 
-* Quality: Code in the Polygon project should meet the style guidelines, with sufficient test-cases, descriptive commit messages, evidence that the contribution does not break any compatibility commitments or cause adverse feature interactions, and evidence of high-quality peer-review
-* Size: The Polygon project’s culture is one of small pull-requests, regularly submitted. The larger a pull-request, the more likely it is that you will be asked to resubmit as a series of self-contained and individually reviewable smaller PRs
+* Quality: Code in the Shibarium project should meet the style guidelines, with sufficient test-cases, descriptive commit messages, evidence that the contribution does not break any compatibility commitments or cause adverse feature interactions, and evidence of high-quality peer-review
+* Size: The Shibarium project’s culture is one of small pull-requests, regularly submitted. The larger a pull-request, the more likely it is that you will be asked to resubmit as a series of self-contained and individually reviewable smaller PRs
 * Maintainability: If the feature will require ongoing maintenance (eg support for a particular brand of database), we may ask you to accept responsibility for maintaining this feature
 ### Submit an issue
 
