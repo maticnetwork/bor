@@ -69,22 +69,35 @@ func BuildDAG(deps TxnInputOutput) (d DAG) {
 	return
 }
 
-func GetDep(deps TxnInputOutput) map[int][]int {
-	dependencies := map[int][]int{}
+func GetDep(deps TxnInputOutput) map[int]map[int]bool {
+	newDependencies := map[int]map[int]bool{}
 
 	for i := len(deps.inputs) - 1; i > 0; i-- {
 		txTo := deps.inputs[i]
+
+		newDependencies[i] = map[int]bool{}
 
 		for j := i - 1; j >= 0; j-- {
 			txFrom := deps.allOutputs[j]
 
 			if HasReadDep(txFrom, txTo) {
-				dependencies[i] = append(dependencies[i], j)
+				newDependencies[i][j] = true
+
+				// for dependencies of txIdx k (where k > i)
+				for k := i + 1; k <= len(deps.inputs)-1; k++ {
+					_, boool1 := newDependencies[k][i]
+					_, boool2 := newDependencies[k][j]
+
+					if boool1 && boool2 {
+						// remove j from dependencies[k]
+						delete(newDependencies[k], j)
+					}
+				}
 			}
 		}
 	}
 
-	return dependencies
+	return newDependencies
 }
 
 // Find the longest execution path in the DAG
