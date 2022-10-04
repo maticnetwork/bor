@@ -71,6 +71,28 @@ func BuildDAG(deps TxnInputOutput) (d DAG) {
 	return
 }
 
+func contains(s []int, e int) (bool, int) {
+	for i, a := range s {
+		if a == e {
+			return true, i
+		}
+	}
+	return false, -1
+}
+
+func removeIndex(s []int, index int) []int {
+	return append(s[:index], s[index+1:]...)
+}
+
+func findAndRemove(s []int, e int) []int {
+	boool, ind := contains(s, e)
+	if boool {
+		return removeIndex(s, ind)
+	}
+
+	return s
+}
+
 func GetDep(deps TxnInputOutput) map[int][]int {
 	dependencies := map[int][]int{}
 
@@ -82,6 +104,18 @@ func GetDep(deps TxnInputOutput) map[int][]int {
 
 			if HasReadDep(txFrom, txTo) {
 				dependencies[i] = append(dependencies[i], j)
+
+				// for dependencies of txIdx k (where k > i)
+				for k := i + 1; k <= len(deps.inputs)-1; k++ {
+					// if dependencies[k] contains i & j
+					boool1, _ := contains(dependencies[k], i)
+					boool2, _ := contains(dependencies[k], j)
+
+					if boool1 && boool2 {
+						// remove j from dependencies[k]
+						dependencies[k] = findAndRemove(dependencies[k], j)
+					}
+				}
 			}
 		}
 	}
