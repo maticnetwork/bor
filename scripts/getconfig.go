@@ -109,6 +109,7 @@ var nameTagMap = map[string]string{
 	"gcmode":                 "gcmode",
 	"eth.requiredblocks":     "eth.requiredblocks",
 	"0-snapshot":             "snapshot",
+	"\"bor.logs\"":           "bor.logs",
 	"url":                    "bor.heimdall",
 	"bor.without":            "bor.withoutheimdall",
 	"grpc-address":           "bor.heimdallgRPC",
@@ -231,6 +232,7 @@ var replacedFlagsMapFlag = map[string]string{
 
 var currentBoolFlags = []string{
 	"snapshot",
+	"bor.logs",
 	"bor.withoutheimdall",
 	"txpool.nolocals",
 	"mine",
