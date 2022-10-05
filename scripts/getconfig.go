@@ -111,7 +111,7 @@ var nameTagMap = map[string]string{
 	"0-snapshot":             "snapshot",
 	"\"bor.logs\"":           "bor.logs",
 	"url":                    "bor.heimdall",
-	"bor.without":            "bor.withoutheimdall",
+	"\"bor.without\"":        "bor.withoutheimdall",
 	"grpc-address":           "bor.heimdallgRPC",
 	"locals":                 "txpool.locals",
 	"nolocals":               "txpool.nolocals",
