@@ -15,7 +15,6 @@ Please complete this section if any breaking changes have been made, otherwise d
 
 # Checklist
 
-- [ ] I have assigned this PR to myself
 - [ ] I have added at least 2 reviewer or the whole pos-v1 team
 - [ ] I have added sufficient documentation in code
 - [ ] I will be resolving comments - if any - by pushing each fix in a separate commit and linking the commit hash in the comment reply
@@ -33,7 +32,8 @@ Please complete this section if any breaking changes have been made, otherwise d
 - [ ] I have added tests to CI
 - [ ] I have tested this code manually on local environment
 - [ ] I have tested this code manually on remote devnet using express-cli
-- [ ] I have created new e2e into matic-cli
+- [ ] I have tested this code manually on mumbai
+- [ ] I have created new e2e tests into express-cli
 
 ### Manual tests
 
