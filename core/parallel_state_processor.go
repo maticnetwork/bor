@@ -30,6 +30,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -106,7 +107,7 @@ func (task *ExecutionTask) Execute(mvh *blockstm.MVHashMap, incarnation int) (er
 		task.result, err = ApplyMessageNoFeeBurnOrTip(evm, task.msg, new(GasPool).AddGas(task.gasLimit))
 
 		if task.result == nil || err != nil {
-			return blockstm.ErrExecAbortError{Dependency: task.statedb.DepTxIndex()}
+			return blockstm.ErrExecAbortError{Dependency: task.statedb.DepTxIndex(), OriginError: err}
 		}
 
 		reads := task.statedb.MVReadMap()
@@ -127,7 +128,7 @@ func (task *ExecutionTask) Execute(mvh *blockstm.MVHashMap, incarnation int) (er
 	}
 
 	if task.statedb.HadInvalidRead() || err != nil {
-		err = blockstm.ErrExecAbortError{Dependency: task.statedb.DepTxIndex()}
+		err = blockstm.ErrExecAbortError{Dependency: task.statedb.DepTxIndex(), OriginError: err}
 		return
 	}
 
@@ -152,7 +153,22 @@ func (task *ExecutionTask) Sender() common.Address {
 	return task.sender
 }
 
+func (task *ExecutionTask) Hash() common.Hash {
+	return task.tx.Hash()
+}
+
 func (task *ExecutionTask) Settle() {
+	defer func() {
+		if r := recover(); r != nil {
+			// In some rare cases, ApplyMVWriteSet will panic due to an index out of range error when calculating the
+			// address hash in sha3 module. Recover from panic and continue the execution.
+			// After recovery, block receipts or merckle root will be incorrect, but this is fine, because the block
+			// will be rejected and re-synced.
+			log.Info("Recovered from error", "Error:", r)
+			return
+		}
+	}()
+
 	task.finalStateDB.Prepare(task.tx.Hash(), task.index)
 
 	coinbase, _ := task.blockChain.Engine().Author(task.header)
@@ -233,6 +249,8 @@ func (task *ExecutionTask) Settle() {
 	*task.allLogs = append(*task.allLogs, receipt.Logs...)
 }
 
+var parallelizabilityTimer = metrics.NewRegisteredTimer("block/parallelizability", nil)
+
 // Process processes the state changes according to the Ethereum rules by running
 // the transaction messages using the statedb and applying any rewards to both
 // the processor (coinbase) and any included uncles.
@@ -300,7 +318,25 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 	}
 
 	backupStateDB := statedb.Copy()
-	_, err := blockstm.ExecuteParallel(tasks, false)
+
+	profile := false
+	result, err := blockstm.ExecuteParallel(tasks, profile)
+
+	if err == nil && profile {
+		_, weight := result.Deps.LongestPath(*result.Stats)
+
+		serialWeight := uint64(0)
+
+		for i := 0; i < len(result.Deps.GetVertices()); i++ {
+			serialWeight += (*result.Stats)[i].End - (*result.Stats)[i].Start
+		}
+
+		parallelizabilityTimer.Update(time.Duration(serialWeight * 100 / weight))
+
+		log.Info("Parallelizability", "Average (%)", parallelizabilityTimer.Mean())
+
+		log.Info("Parallelizability", "Histogram (%)", parallelizabilityTimer.Percentiles([]float64{0.001, 0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 0.999, 0.9999}))
+	}
 
 	for _, task := range tasks {
 		task := task.(*ExecutionTask)
@@ -331,14 +367,8 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 		return nil, nil, 0, err
 	}
 
-	statedb.Finalise(p.config.IsEIP158(blockNumber))
-
-	start := time.Now()
-
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
 	p.engine.Finalize(p.bc, header, statedb, block.Transactions(), block.Uncles())
-
-	fmt.Println("Finalize time of parallel execution:", time.Since(start))
 
 	return receipts, allLogs, *usedGas, nil
 }
