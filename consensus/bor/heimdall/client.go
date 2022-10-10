@@ -74,6 +74,9 @@ const (
 	fetchMilestone      = "/milestone"
 	fetchMilestoneCount = "/milestone/count"
 
+	fetchLastNoAcKMilestone = "/milestone/lastNoAck"
+	fetchNoAckMilestone     = "/milestone/noAck/%s"
+
 	fetchSpanFormat = "bor/span/%d"
 )
 
@@ -196,6 +199,36 @@ func (h *HeimdallClient) FetchMilestoneCount(ctx context.Context) (int64, error)
 	return response.Result.Count, nil
 }
 
+// FetchLastNoAckMilestone fetches the last no-ack-milestone from heimdall
+func (h *HeimdallClient) FetchLastNoAckMilestone(ctx context.Context) (string, error) {
+	url, err := lastNoAckMilestoneURL(h.urlString)
+	if err != nil {
+		return "", err
+	}
+
+	response, err := FetchWithRetry[milestone.MilestoneLastNoAckResponse](ctx, h.client, url, h.closeCh)
+	if err != nil {
+		return "", err
+	}
+
+	return response.Result.Result, nil
+}
+
+// FetchNoAckMilestone fetches the last no-ack-milestone from heimdall
+func (h *HeimdallClient) FetchNoAckMilestone(ctx context.Context, milestoneID string) (bool, error) {
+	url, err := noAckMilestoneURL(h.urlString, milestoneID)
+	if err != nil {
+		return false, err
+	}
+
+	response, err := FetchWithRetry[milestone.MilestoneNoAckResponse](ctx, h.client, url, h.closeCh)
+	if err != nil {
+		return false, err
+	}
+
+	return response.Result.Result, nil
+}
+
 // FetchWithRetry returns data from heimdall with retry
 func FetchWithRetry[T any](ctx context.Context, client http.Client, url *url.URL, closeCh chan struct{}) (*T, error) {
 	// request data once
@@ -313,6 +346,15 @@ func checkpointCountURL(urlString string) (*url.URL, error) {
 
 func milestoneCountURL(urlString string) (*url.URL, error) {
 	return makeURL(urlString, fetchMilestoneCount, "")
+}
+
+func lastNoAckMilestoneURL(urlString string) (*url.URL, error) {
+	return makeURL(urlString, fetchLastNoAcKMilestone, "")
+}
+
+func noAckMilestoneURL(urlString string, id string) (*url.URL, error) {
+	url := fmt.Sprintf(fetchNoAckMilestone, id)
+	return makeURL(urlString, url, "")
 }
 
 func makeURL(urlString, rawPath, rawQuery string) (*url.URL, error) {

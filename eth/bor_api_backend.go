@@ -27,24 +27,59 @@ func (b *EthAPIBackend) GetRootHash(ctx context.Context, starBlockNr uint64, end
 		return "", errors.New("Only available in Bor engine")
 	}
 
-	downloader := b.eth.handler.downloader
-	if endBlockNr-starBlockNr == 63 { //This condition just for testing pupose, will remove it afterward.
-		log.Warn("In the GetRootHash-Locking the mutex")
-		downloader.Lock(endBlockNr)
-	}
 	root, err := api.GetRootHash(starBlockNr, endBlockNr)
 	if err != nil {
-		if endBlockNr-starBlockNr == 63 { //This condition just for testing pupose, will remove it afterward.
-			log.Warn("In the GetRootHash-Unlocking the mutex")
-			downloader.Unlock(false)
-		}
 		return "", err
 	}
-	if endBlockNr-starBlockNr == 63 { //This condition just for testing pupose, will remove it afterward.
-		log.Warn("In the GetRootHash-Unlocking the mutex")
-		downloader.Unlock(false)
-	}
+
 	return root, nil
+}
+
+// GetRootHash returns root hash for given start and end block
+func (b *EthAPIBackend) GetVoteOnRootHash(ctx context.Context, starBlockNr uint64, endBlockNr uint64, rootHash string, milestoneId string) (bool, error) {
+	var api *bor.API
+	for _, _api := range b.eth.Engine().APIs(b.eth.BlockChain()) {
+		if _api.Namespace == "bor" {
+			api = _api.Service.(*bor.API)
+		}
+	}
+
+	if api == nil {
+		return false, errors.New("Only available in Bor engine")
+	}
+
+	downloader := b.eth.handler.downloader
+
+	log.Warn("In the GetRootHash-Locking the mutex")
+	isLocked := downloader.Lock(endBlockNr)
+
+	if !isLocked {
+		log.Warn("In the GetRootHash-Unlocking the mutex")
+		downloader.Unlock(false, "")
+
+		return false, errors.New("Previous sprint is still in locked state")
+	}
+
+	root, err := api.GetRootHash(starBlockNr, endBlockNr)
+
+	if err != nil {
+		log.Warn("In the GetRootHash-Unlocking the mutex")
+		downloader.Unlock(false, "")
+
+		return false, err
+	}
+
+	if root != rootHash {
+		log.Warn("In the GetRootHash-Unlocking the mutex")
+		downloader.Unlock(false, "")
+
+		return false, errors.New("RootHash mismatch")
+	}
+
+	log.Warn("In the GetRootHash-Unlocking the mutex")
+	downloader.Unlock(true, milestoneId)
+
+	return true, nil
 }
 
 // GetBorBlockReceipt returns bor block receipt

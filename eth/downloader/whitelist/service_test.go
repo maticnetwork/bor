@@ -314,8 +314,24 @@ func TestIsValidChain(t *testing.T) {
 
 	//Remove the whitelisted milestone
 	s.PurgeWhitelistedMilestone()
+	s.Lock(20)
 	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
-	require.Equal(t, res, true, "expected chain to be valid as no milestone and checkpoint exist")
+	require.Equal(t, res, false, "expected chain to be valid as incoming chain is less than locked number 20 ")
+
+	s.Unlock(true)
+	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
+	require.Equal(t, res, false, "till in locked mode")
+
+	s.Lock(20)
+	s.Unlock(false)
+	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
+	require.Equal(t, res, true, "")
+
+	s.Lock(20)
+	s.Unlock(true)
+	s.UnlockSprint()
+	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
+	require.Equal(t, res, true, "")
 
 	// Clear checkpoint whitelist and add block A15 in whitelist
 	s.PurgeWhitelistedCheckpoint()

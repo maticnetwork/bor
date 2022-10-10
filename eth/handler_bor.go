@@ -17,6 +17,10 @@ var (
 	// errMilestone is returned when we are unable to fetch the
 	// latest milestone from the local heimdall.
 	errMilestone = errors.New("failed to fetch latest milestone")
+
+	// errNoAckMilestone is returned when we are unable to fetch the
+	// latest no-ack milestone from the local heimdall.
+	errNoAckMilestone = errors.New("failed to fetch no ack milestone")
 )
 
 // fetchWhitelistCheckpoint fetches the latest checkpoint from it's local heimdall
@@ -64,23 +68,47 @@ func (h *ethHandler) fetchWhitelistMilestone(ctx context.Context, bor *bor.Bor, 
 		return blockNum, blockHash, errMilestone
 	}
 
-	log.Warn("fetching the milestone")
 	// Verify if the milestone fetched can be added to the local whitelist entry or not
 	// If verified, it returns the hash of the end block of the milestone. If not,
 	// it will return appropriate error.
 	hash, err := verifier.verify(ctx, eth, h, milestone.StartBlock.Uint64(), milestone.EndBlock.Uint64(), milestone.RootHash.String()[2:])
 	if err != nil {
-		h.downloader.UnlockSprint()
-		log.Warn("Unlocking the Sprint when roothash mismatches")
-		log.Warn("Failed to whitelist milestone", "err", err)
+		h.downloader.UnlockSprint(milestone.EndBlock.Uint64())
 		return blockNum, blockHash, err
 	}
 
-	h.downloader.UnlockSprint()
-	log.Warn("milestoneupdated", "Hash", blockHash)
-	log.Warn("Unlocking the Sprint when roothash matches")
 	blockNum = milestone.EndBlock.Uint64()
 	blockHash = common.HexToHash(hash)
 
 	return blockNum, blockHash, nil
+}
+
+func (h *ethHandler) fetchNoAckMilestone(ctx context.Context, bor *bor.Bor) (string, error) {
+	var (
+		milestoneID string
+	)
+
+	// fetch latest milestone
+	milestoneID, err := bor.HeimdallClient.FetchLastNoAcKMilestone(ctx)
+	if err != nil {
+		log.Error("Failed to fetch latest no-ack milestone", "err", err)
+		return milestoneID, errMilestone
+	}
+
+	return milestoneID, nil
+}
+
+func (h *ethHandler) fetchNoAckMilestoneByID(ctx context.Context, bor *bor.Bor, milestoneID string) (bool, error) {
+	var (
+		res bool
+	)
+
+	// fetch latest milestone
+	res, err := bor.HeimdallClient.FetchNoAckMilestone(ctx, milestoneID)
+	if err != nil {
+		log.Error("Failed to fetch no-ack milestone", "milestoneID", milestoneID, "err", err)
+		return false, errMilestone
+	}
+
+	return res, nil
 }

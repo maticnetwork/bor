@@ -60,6 +60,11 @@ web3._extend({
 			call: 'bor_getRootHash',
 			params: 2,
 		}),
+		new web3._extend.Method({
+			name: 'getVoteOnRootHash',
+			call: 'bor_getVoteOnMilestone',
+			params: 3,
+		}),
 	]
 });
 `

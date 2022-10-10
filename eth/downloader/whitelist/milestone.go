@@ -16,9 +16,10 @@ type milestone struct {
 	milestoneNumber    uint64      // Milestone order, populated by reaching out to heimdall
 	interval           uint64      // Milestone interval, until which we can allow importing
 	doExist            bool
-	LockedSprintNumber uint64      // Locked sprint number
-	LockedSprintHash   common.Hash //Hash for the locked endBlock
-	Locked             bool        //
+	LockedSprintNumber uint64          // Locked sprint number
+	LockedSprintHash   common.Hash     //Hash for the locked endBlock
+	Locked             bool            //
+	LockedMilestoneIds map[string]bool //list of milestone ids
 }
 
 var (
@@ -72,11 +73,6 @@ func (m *milestone) IsValidPeer(remoteHeader *types.Header, fetchHeadersByNumber
 // IsValidChain checks the validity of chain by comparing it
 // against the local milestone entries
 func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Header) bool {
-	// Check if we have milestone to validate incoming chain in memory
-	if !m.doExist {
-		// We don't have any entry, no additional validation will be possible
-		return true
-	}
 
 	// Return if we've received empty chain
 	if len(chain) == 0 {
@@ -84,13 +80,18 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 	}
 
 	m.m.Lock()
-	defer m.m.Unlock()
-
-	if m.Locked && m.LockedSprintNumber >= chain[0].Number.Uint64() {
-
-		log.Warn("SPRINT IS LOCKED")
+	if m.Locked && m.IsReorgAllowed(chain) {
+		log.Warn("Sprint is locked")
 		return false
 	}
+
+	// Check if we have milestone to validate incoming chain in memory
+	if !m.doExist {
+		// We don't have any entry, no additional validation will be possible
+		return true
+	}
+
+	defer m.m.Unlock()
 
 	lastMilestoneBlockNum := m.milestoneNumber
 	current := currentHeader.Number.Uint64()
@@ -98,7 +99,7 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 	// Check if we have milestoneList entries in required range
 	if chain[len(chain)-1].Number.Uint64() < lastMilestoneBlockNum {
 		// We have future milestone entries, so we don't need to receive the past chain
-		log.Warn("test", "hash", m.milestoneHash)
+
 		return false
 	}
 
@@ -136,6 +137,8 @@ func (m *milestone) ProcessMilestone(endBlockNum uint64, endBlockHash common.Has
 	m.doExist = true
 	m.milestoneNumber = endBlockNum
 	m.milestoneHash = endBlockHash
+	m.UnlockSprint(endBlockNum)
+
 }
 
 // GetMilestone returns the existing whitelisted
@@ -155,32 +158,63 @@ func (m *milestone) PurgeWhitelistedMilestone() {
 	m.doExist = false
 }
 
-func (m *milestone) Lock(endBlockNum uint64) {
+func (m *milestone) Lock(endBlockNum uint64) bool {
 	m.m.Lock()
-	m.Locked = true
+	if m.Locked && m.LockedSprintNumber < endBlockNum {
+		return false
+	}
 	m.LockedSprintNumber = endBlockNum
-
+	return true
 }
 
-func (m *milestone) Unlock(doLock bool) {
-	m.Locked = doLock
+func (m *milestone) Unlock(doLock bool, milestoneId string) {
+	m.Locked = m.Locked || doLock
+	if doLock {
+		m.LockedMilestoneIds[milestoneId] = true
+	}
 	m.m.Unlock()
 }
 
-func (m *milestone) UnlockSprint() {
-	m.m.Lock()
+func (m *milestone) UnlockSprint(endBlockNum uint64) {
+
+	if endBlockNum < m.LockedSprintNumber {
+		return
+	}
 	m.Locked = false
+	for k := range m.LockedMilestoneIds {
+		delete(m.LockedMilestoneIds, k)
+	}
+
+}
+
+func (m *milestone) RemoveMilestoneID(milestoneId string) {
+	m.m.Lock()
+	delete(m.LockedMilestoneIds, milestoneId)
+
+	if len(m.LockedMilestoneIds) == 0 {
+		m.Locked = false
+	}
 	m.m.Unlock()
 }
 
-func (m *milestone) IsReorgAllowed(number uint64, chain []*types.Header) bool {
+func (m *milestone) IsReorgAllowed(chain []*types.Header) bool {
 
 	for i := 0; i < len(chain); i++ {
-		if chain[i].Number.Uint64() == number {
+		if chain[i].Number.Uint64() == m.LockedSprintNumber {
 			return chain[i].Hash() == m.LockedSprintHash
 
 		}
 	}
 
 	return true
+}
+
+func (m *milestone) GetMilestoneIDsList() []string {
+
+	keys := []string{}
+	for key, _ := range m.LockedMilestoneIds {
+		keys = append(keys, key)
+	}
+	return keys
+
 }
