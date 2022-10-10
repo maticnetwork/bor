@@ -83,6 +83,34 @@ func (h *IntHeap) Pop() any {
 	return x
 }
 
+type SafeQueue interface {
+	Push(v int, d interface{})
+	Pop() interface{}
+	Len() int
+}
+
+type SafeFIFOQueue struct {
+	c chan interface{}
+}
+
+func NewSafeFIFOQueue(capacity int) *SafeFIFOQueue {
+	return &SafeFIFOQueue{
+		c: make(chan interface{}, capacity),
+	}
+}
+
+func (q *SafeFIFOQueue) Push(v int, d interface{}) {
+	q.c <- d
+}
+
+func (q *SafeFIFOQueue) Pop() interface{} {
+	return <-q.c
+}
+
+func (q *SafeFIFOQueue) Len() int {
+	return len(q.c)
+}
+
 // A thread safe priority queue
 type SafePriorityQueue struct {
 	m     sync.Mutex
@@ -147,7 +175,7 @@ type ParallelExecutor struct {
 	chSpeculativeTasks chan struct{}
 
 	// Channel to signal that the result of a transaction could be written to storage
-	specTaskQueue *SafePriorityQueue
+	specTaskQueue SafeQueue
 
 	// A priority queue that stores speculative tasks
 	chSettle chan int
@@ -156,7 +184,7 @@ type ParallelExecutor struct {
 	chResults chan struct{}
 
 	// A priority queue that stores the transaction index of results, so we can validate the results in order
-	resultQueue *SafePriorityQueue
+	resultQueue SafeQueue
 
 	// A wait group to wait for all settling tasks to finish
 	settleWg sync.WaitGroup
@@ -216,6 +244,17 @@ type ExecutionStat struct {
 func NewParallelExecutor(tasks []ExecTask, profile bool) *ParallelExecutor {
 	numTasks := len(tasks)
 
+	var resultQueue SafeQueue
+	var specTaskQueue SafeQueue
+
+	if tasks[0].Dependencies() != nil {
+		resultQueue = NewSafeFIFOQueue(numTasks)
+		specTaskQueue = NewSafeFIFOQueue(numTasks)
+	} else {
+		resultQueue = NewSafePriorityQueue(numTasks)
+		specTaskQueue = NewSafePriorityQueue(numTasks)
+	}
+
 	pe := &ParallelExecutor{
 		tasks:              tasks,
 		stats:              make(map[int]ExecutionStat, numTasks),
@@ -223,8 +262,8 @@ func NewParallelExecutor(tasks []ExecTask, profile bool) *ParallelExecutor {
 		chSpeculativeTasks: make(chan struct{}, numTasks),
 		chSettle:           make(chan int, numTasks),
 		chResults:          make(chan struct{}, numTasks),
-		specTaskQueue:      NewSafePriorityQueue(numTasks),
-		resultQueue:        NewSafePriorityQueue(numTasks),
+		specTaskQueue:      specTaskQueue,
+		resultQueue:        resultQueue,
 		lastSettled:        -1,
 		skipCheck:          make(map[int]bool),
 		execTasks:          makeStatusManager(numTasks),
