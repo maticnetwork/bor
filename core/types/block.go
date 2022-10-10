@@ -87,6 +87,11 @@ type Header struct {
 	// BaseFee was added by EIP-1559 and is ignored in legacy headers.
 	BaseFee *big.Int `json:"baseFeePerGas" rlp:"optional"`
 
+	// length of TxDependency           -> n (n = number of transactions in the block)
+	// length of TxDependency[i]        -> 2k + 1 (k = a whole number)
+	// first element in TxDependency[i] -> transaction number (starting from 1) 1, 2, .....
+	// next k pairs of 2 elements       -> transaction number on which transaction i is dependent on, followed by flag representing
+	// 									   if delay is allowed or not (0 -> delay is not allowed, 1 -> delay is allowed)
 	TxDependency [][]uint64 `json:"txDependency" rlp:"optional"`
 
 	/*

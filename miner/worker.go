@@ -30,6 +30,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/core/blockstm"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/event"
@@ -76,6 +77,9 @@ const (
 
 	// staleThreshold is the maximum depth of the acceptable stale block.
 	staleThreshold = 7
+
+	// when true, will get the transaction dependencies for parallel execution, also set in `state_processor.go`
+	EnableMVHashMap = true
 )
 
 // environment is the worker's current environment and holds all
@@ -867,6 +871,17 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 	}
 	var coalescedLogs []*types.Log
 
+	// create and add empty mvHashMap in statedb
+	if true {
+		env.state.AddEmptyMVHashMap()
+	}
+
+	depsMVReadList := [][]blockstm.ReadDescriptor{}
+
+	depsMVFullWriteList := [][]blockstm.WriteDescriptor{}
+
+	mvReadMapList := []map[blockstm.Key]blockstm.ReadDescriptor{}
+
 	for {
 		// In the following three cases, we will interrupt the execution of the transaction.
 		// (1) new head block event arrival, the interrupt signal is 1
@@ -948,7 +963,46 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 			log.Debug("Transaction failed, account skipped", "hash", tx.Hash(), "err", err)
 			txs.Shift()
 		}
+
+		depsMVReadList = append(depsMVReadList, env.state.MVReadList())
+		depsMVFullWriteList = append(depsMVFullWriteList, env.state.MVFullWriteList())
+		mvReadMapList = append(mvReadMapList, env.state.MVReadMap())
+
+		env.state.ClearReadMap()
+		env.state.ClearWriteMap()
 	}
+
+	txIO := blockstm.MakeTxnInputOutput(len(depsMVReadList))
+
+	txIO.RecordReadAtOnce(depsMVReadList)
+	txIO.RecordAllWriteAtOnce(depsMVFullWriteList)
+
+	deps := blockstm.GetDep(*txIO)
+
+	tempDeps := make([][]uint64, len(mvReadMapList))
+
+	for i := 1; i <= len(mvReadMapList); i++ {
+		tempDeps[i] = append(tempDeps[i], uint64(i))
+
+		reads := mvReadMapList[i]
+
+		for j, _ := range deps[i] {
+			tempDeps[i] = append(tempDeps[i], uint64(j))
+
+			_, ok1 := reads[blockstm.NewSubpathKey(env.coinbase, state.BalancePath)]
+			_, ok2 := reads[blockstm.NewSubpathKey(common.HexToAddress(w.chainConfig.Bor.CalculateBurntContract(env.receipts[0].BlockNumber.Uint64())), state.BalancePath)]
+
+			if ok1 || ok2 {
+				// 0 -> delay is not allowed
+				tempDeps[i] = append(tempDeps[i], 0)
+			} else {
+				// 1 -> delay is allowed
+				tempDeps[i] = append(tempDeps[i], 1)
+			}
+		}
+	}
+
+	env.header.TxDependency = tempDeps
 
 	if !w.isRunning() && len(coalescedLogs) > 0 {
 		// We don't push the pendingLogsEvent while we are sealing. The reason is that

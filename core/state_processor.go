@@ -23,12 +23,16 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/misc"
+	"github.com/ethereum/go-ethereum/core/blockstm"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 )
+
+const EnableMVHashMap = true
 
 // StateProcessor is a basic Processor, which takes care of transitioning
 // state from one point to another.
@@ -97,10 +101,65 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	txContext := NewEVMTxContext(msg)
 	evm.Reset(txContext, statedb)
 
-	// Apply the transaction to the current state (included in the env).
-	result, err := ApplyMessage(evm, msg, gp)
-	if err != nil {
-		return nil, err
+	var result *ExecutionResult
+	var err error
+
+	if EnableMVHashMap {
+		var shouldRerunWithoutFeeDelay bool
+
+		coinbaseBalance := statedb.GetBalance(evm.Context.Coinbase)
+
+		result, err = ApplyMessageNoFeeBurnOrTip(evm, msg, new(GasPool).AddGas(msg.Gas()))
+		if err != nil {
+			return nil, err
+		}
+
+		reads := statedb.MVReadMap()
+
+		if _, ok := reads[blockstm.NewSubpathKey(evm.Context.Coinbase, state.BalancePath)]; ok {
+			log.Info("Coinbase is in MVReadMap", "address", evm.Context.Coinbase)
+
+			shouldRerunWithoutFeeDelay = true
+		}
+
+		if _, ok := reads[blockstm.NewSubpathKey(result.BurntContractAddress, state.BalancePath)]; ok {
+			log.Info("BurntContractAddress is in MVReadMap", "address", result.BurntContractAddress)
+
+			shouldRerunWithoutFeeDelay = true
+		}
+
+		if evm.ChainConfig().IsLondon(blockNumber) {
+			statedb.AddBalance(result.BurntContractAddress, result.FeeBurnt)
+		}
+
+		// stop recording read and write
+		if !shouldRerunWithoutFeeDelay {
+			statedb.SetMVHashMapNil()
+		}
+
+		statedb.AddBalance(evm.Context.Coinbase, result.FeeTipped)
+		output1 := new(big.Int).SetBytes(result.SenderInitBalance.Bytes())
+		output2 := new(big.Int).SetBytes(coinbaseBalance.Bytes())
+
+		// Deprecating transfer log and will be removed in future fork. PLEASE DO NOT USE this transfer log going forward. Parameters won't get updated as expected going forward with EIP1559
+		// add transfer log
+		AddFeeTransferLog(
+			statedb,
+
+			msg.From(),
+			evm.Context.Coinbase,
+
+			result.FeeTipped,
+			result.SenderInitBalance,
+			coinbaseBalance,
+			output1.Sub(output1, result.FeeTipped),
+			output2.Add(output2, result.FeeTipped),
+		)
+	} else {
+		result, err = ApplyMessage(evm, msg, gp)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Update the state with pending changes.
