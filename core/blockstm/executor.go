@@ -125,7 +125,7 @@ func (pq *SafePriorityQueue) Len() int {
 type ParallelExecutionResult struct {
 	TxIO    *TxnInputOutput
 	Stats   *[][]uint64
-	allDeps map[int][]int
+	AllDeps map[int]map[int]bool
 }
 
 const numGoProcs = 2
@@ -483,7 +483,7 @@ func (pe *ParallelExecutor) Step(res *ExecResult) (result ParallelExecutionResul
 
 		pe.Close(true)
 
-		var allDeps map[int][]int
+		var allDeps map[int]map[int]bool
 
 		if pe.profile {
 			allDeps = GetDep(*pe.lastTxIO)

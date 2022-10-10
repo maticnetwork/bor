@@ -399,7 +399,7 @@ func runParallel(t *testing.T, tasks []ExecTask, validation PropertyCheck, metad
 	return duration
 }
 
-func runParallelGetMetadata(t *testing.T, tasks []ExecTask, validation PropertyCheck) map[int][]int {
+func runParallelGetMetadata(t *testing.T, tasks []ExecTask, validation PropertyCheck) map[int]map[int]bool {
 	t.Helper()
 
 	// fmt.Println("len(tasks)", len(tasks))
@@ -407,7 +407,7 @@ func runParallelGetMetadata(t *testing.T, tasks []ExecTask, validation PropertyC
 
 	assert.NoError(t, err, "error occur during parallel execution")
 
-	return res.allDeps
+	return res.AllDeps
 }
 
 func TestLessConflicts(t *testing.T) {
@@ -434,7 +434,15 @@ func TestLessConflicts(t *testing.T) {
 		for _, t := range tasks {
 			temp := t.(*testExecTask)
 
-			temp.dependencies = allDeps[temp.txIdx]
+			keys := make([]int, len(allDeps[temp.txIdx]))
+
+			i := 0
+			for k := range allDeps[temp.txIdx] {
+				keys[i] = k
+				i++
+			}
+
+			temp.dependencies = keys
 			newTasks = append(newTasks, temp)
 		}
 
@@ -465,7 +473,15 @@ func TestZeroTx(t *testing.T) {
 		for _, t := range tasks {
 			temp := t.(*testExecTask)
 
-			temp.dependencies = allDeps[temp.txIdx]
+			keys := make([]int, len(allDeps[temp.txIdx]))
+
+			i := 0
+			for k := range allDeps[temp.txIdx] {
+				keys[i] = k
+				i++
+			}
+
+			temp.dependencies = keys
 			newTasks = append(newTasks, temp)
 		}
 
@@ -496,7 +512,15 @@ func TestAlternatingTx(t *testing.T) {
 		for _, t := range tasks {
 			temp := t.(*testExecTask)
 
-			temp.dependencies = allDeps[temp.txIdx]
+			keys := make([]int, len(allDeps[temp.txIdx]))
+
+			i := 0
+			for k := range allDeps[temp.txIdx] {
+				keys[i] = k
+				i++
+			}
+
+			temp.dependencies = keys
 			newTasks = append(newTasks, temp)
 		}
 
@@ -530,7 +554,15 @@ func TestMoreConflicts(t *testing.T) {
 		for _, t := range tasks {
 			temp := t.(*testExecTask)
 
-			temp.dependencies = allDeps[temp.txIdx]
+			keys := make([]int, len(allDeps[temp.txIdx]))
+
+			i := 0
+			for k := range allDeps[temp.txIdx] {
+				keys[i] = k
+				i++
+			}
+
+			temp.dependencies = keys
 			newTasks = append(newTasks, temp)
 		}
 
@@ -562,7 +594,15 @@ func TestRandomTx(t *testing.T) {
 		for _, t := range tasks {
 			temp := t.(*testExecTask)
 
-			temp.dependencies = allDeps[temp.txIdx]
+			keys := make([]int, len(allDeps[temp.txIdx]))
+
+			i := 0
+			for k := range allDeps[temp.txIdx] {
+				keys[i] = k
+				i++
+			}
+
+			temp.dependencies = keys
 			newTasks = append(newTasks, temp)
 		}
 
@@ -599,7 +639,15 @@ func TestTxWithLongTailRead(t *testing.T) {
 		for _, t := range tasks {
 			temp := t.(*testExecTask)
 
-			temp.dependencies = allDeps[temp.txIdx]
+			keys := make([]int, len(allDeps[temp.txIdx]))
+
+			i := 0
+			for k := range allDeps[temp.txIdx] {
+				keys[i] = k
+				i++
+			}
+
+			temp.dependencies = keys
 			newTasks = append(newTasks, temp)
 		}
 
@@ -644,7 +692,15 @@ func TestDexScenario(t *testing.T) {
 		for _, t := range tasks {
 			temp := t.(*testExecTask)
 
-			temp.dependencies = allDeps[temp.txIdx]
+			keys := make([]int, len(allDeps[temp.txIdx]))
+
+			i := 0
+			for k := range allDeps[temp.txIdx] {
+				keys[i] = k
+				i++
+			}
+
+			temp.dependencies = keys
 			newTasks = append(newTasks, temp)
 		}
 
