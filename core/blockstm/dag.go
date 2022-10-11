@@ -72,26 +72,24 @@ func BuildDAG(deps TxnInputOutput) (d DAG) {
 func GetDep(deps TxnInputOutput) map[int]map[int]bool {
 	newDependencies := map[int]map[int]bool{}
 
-	for i := len(deps.inputs) - 1; i > 0; i-- {
+	for i := 1; i < len(deps.inputs); i++ {
 		txTo := deps.inputs[i]
 
 		newDependencies[i] = map[int]bool{}
 
-		for j := i - 1; j >= 0; j-- {
+		for j := 0; j <= i-1; j++ {
 			txFrom := deps.allOutputs[j]
 
 			if HasReadDep(txFrom, txTo) {
 				newDependencies[i][j] = true
 
-				// for dependencies of txIdx k (where k > i)
-				for k := i + 1; k <= len(deps.inputs)-1; k++ {
-					_, boool1 := newDependencies[k][i]
-					_, boool2 := newDependencies[k][j]
+				for k := range newDependencies[i] {
+					_, boool1 := newDependencies[j][k]
 
-					if boool1 && boool2 {
-						// remove j from dependencies[k]
-						delete(newDependencies[k], j)
+					if boool1 {
+						delete(newDependencies[i], k)
 					}
+
 				}
 			}
 		}
