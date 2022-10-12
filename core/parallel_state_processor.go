@@ -75,7 +75,12 @@ type ExecutionTask struct {
 	totalUsedGas               *uint64
 	receipts                   *types.Receipts
 	allLogs                    *[]*types.Log
-	dependencies               []int
+
+	// length of dependencies          -> 2 + k (k = a whole number)
+	// first 2 element in dependencies -> transaction index, and flag representing if delay is allowed or not
+	//                                       (0 -> delay is not allowed, 1 -> delay is allowed)
+	// next k elements in dependencies -> transaction indexes on which transaction i is dependent on
+	dependencies []int
 }
 
 func (task *ExecutionTask) Execute(mvh *blockstm.MVHashMap, incarnation int) (err error) {
@@ -317,6 +322,7 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 			totalUsedGas:      usedGas,
 			receipts:          &receipts,
 			allLogs:           &allLogs,
+			dependencies:      GetDepListForTx(block.Header().TxDependency, i),
 		}
 
 		tasks = append(tasks, task)
@@ -376,4 +382,26 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 	p.engine.Finalize(p.bc, header, statedb, block.Transactions(), block.Uncles())
 
 	return receipts, allLogs, *usedGas, nil
+}
+
+func GetDepListForTx(txDependency [][]uint64, txIdx int) []int {
+	if len(txDependency) == 1 && (txDependency[0][0] == uint64(0) && txDependency[0][1] == uint64(1)) {
+		return []int{txIdx, 1}
+	}
+
+	tempArr := []int{}
+	tempIdx := -1
+
+	for ind, val := range txDependency {
+		if int(val[0]) == txIdx {
+			tempIdx = ind
+			break
+		}
+	}
+
+	for i := 0; i < len(txDependency[tempIdx]); i++ {
+		tempArr = append(tempArr, int(txDependency[tempIdx][i]))
+	}
+
+	return tempArr
 }

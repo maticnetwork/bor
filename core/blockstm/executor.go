@@ -201,6 +201,7 @@ type ParallelExecutor struct {
 	// Enable profiling
 	profile bool
 
+	// PSP - remove this and check for block.Header().TxDependency?
 	// Enable metadata
 	metadata bool
 
@@ -254,10 +255,15 @@ func (pe *ParallelExecutor) Prepare() {
 		pe.skipCheck[i] = false
 		pe.estimateDeps[i] = make([]int, 0)
 
+		// PSP - remove pe.metadata and check for block.Header().TxDependency?
 		if pe.metadata {
-			for _, tx := range t.Dependencies() {
-				clearPendingFlag = true
-				pe.execTasks.addDependencies(tx, i)
+			for index, val := range t.Dependencies() {
+				if index > 1 {
+					clearPendingFlag = true
+					pe.execTasks.addDependencies(val, i)
+				} else {
+					// PSP - what to do when index = 1 -> val = 0? (no delay)
+				}
 			}
 			if clearPendingFlag {
 				pe.execTasks.clearPending(i)

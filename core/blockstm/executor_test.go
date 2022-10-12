@@ -504,12 +504,15 @@ func TestLessConflictsWithMetadata(t *testing.T) {
 		allDeps := runParallelGetMetadata(t, tasks, checks)
 
 		newTasks := make([]ExecTask, 0, len(tasks))
-		for _, t := range tasks {
+		for idx, t := range tasks {
 			temp := t.(*testExecTask)
 
-			keys := make([]int, len(allDeps[temp.txIdx]))
+			keys := make([]int, len(allDeps[temp.txIdx])+2)
 
-			i := 0
+			keys[0] = idx
+			keys[1] = 1
+
+			i := 2
 			for k := range allDeps[temp.txIdx] {
 				keys[i] = k
 				i++
@@ -585,12 +588,15 @@ func TestAlternatingTxWithMetadata(t *testing.T) {
 		allDeps := runParallelGetMetadata(t, tasks, checks)
 
 		newTasks := make([]ExecTask, 0, len(tasks))
-		for _, t := range tasks {
+		for idx, t := range tasks {
 			temp := t.(*testExecTask)
 
-			keys := make([]int, len(allDeps[temp.txIdx]))
+			keys := make([]int, len(allDeps[temp.txIdx])+2)
 
-			i := 0
+			keys[0] = idx
+			keys[1] = 1
+
+			i := 2
 			for k := range allDeps[temp.txIdx] {
 				keys[i] = k
 				i++
@@ -651,12 +657,15 @@ func TestMoreConflictsWithMetadata(t *testing.T) {
 		allDeps := runParallelGetMetadata(t, tasks, checks)
 
 		newTasks := make([]ExecTask, 0, len(tasks))
-		for _, t := range tasks {
+		for idx, t := range tasks {
 			temp := t.(*testExecTask)
 
-			keys := make([]int, len(allDeps[temp.txIdx]))
+			keys := make([]int, len(allDeps[temp.txIdx])+2)
 
-			i := 0
+			keys[0] = idx
+			keys[1] = 1
+
+			i := 2
 			for k := range allDeps[temp.txIdx] {
 				keys[i] = k
 				i++
@@ -713,12 +722,15 @@ func TestRandomTxWithMetadata(t *testing.T) {
 		allDeps := runParallelGetMetadata(t, tasks, checks)
 
 		newTasks := make([]ExecTask, 0, len(tasks))
-		for _, t := range tasks {
+		for idx, t := range tasks {
 			temp := t.(*testExecTask)
 
-			keys := make([]int, len(allDeps[temp.txIdx]))
+			keys := make([]int, len(allDeps[temp.txIdx])+2)
 
-			i := 0
+			keys[0] = idx
+			keys[1] = 1
+
+			i := 2
 			for k := range allDeps[temp.txIdx] {
 				keys[i] = k
 				i++
@@ -785,12 +797,15 @@ func TestTxWithLongTailReadWithMetadata(t *testing.T) {
 		allDeps := runParallelGetMetadata(t, tasks, checks)
 
 		newTasks := make([]ExecTask, 0, len(tasks))
-		for _, t := range tasks {
+		for idx, t := range tasks {
 			temp := t.(*testExecTask)
 
-			keys := make([]int, len(allDeps[temp.txIdx]))
+			keys := make([]int, len(allDeps[temp.txIdx])+2)
 
-			i := 0
+			keys[0] = idx
+			keys[1] = 1
+
+			i := 2
 			for k := range allDeps[temp.txIdx] {
 				keys[i] = k
 				i++
@@ -873,12 +888,15 @@ func TestDexScenarioWithMetadata(t *testing.T) {
 		allDeps := runParallelGetMetadata(t, tasks, checks)
 
 		newTasks := make([]ExecTask, 0, len(tasks))
-		for _, t := range tasks {
+		for idx, t := range tasks {
 			temp := t.(*testExecTask)
 
-			keys := make([]int, len(allDeps[temp.txIdx]))
+			keys := make([]int, len(allDeps[temp.txIdx])+2)
 
-			i := 0
+			keys[0] = idx
+			keys[1] = 1
+
+			i := 2
 			for k := range allDeps[temp.txIdx] {
 				keys[i] = k
 				i++
