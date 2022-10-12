@@ -109,7 +109,7 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 
 		coinbaseBalance := statedb.GetBalance(evm.Context.Coinbase)
 
-		result, err = ApplyMessageNoFeeBurnOrTip(evm, msg, new(GasPool).AddGas(msg.Gas()))
+		result, err = ApplyMessageNoFeeBurnOrTip(evm, msg, gp)
 		if err != nil {
 			return nil, err
 		}
