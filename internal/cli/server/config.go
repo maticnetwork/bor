@@ -45,7 +45,7 @@ type Config struct {
 	Identity string `hcl:"identity,optional" toml:"identity,optional"`
 
 	// RequiredBlocks is a list of required (block number, hash) pairs to accept
-	RequiredBlocks map[string]string `hcl:"requiredblocks,optional" toml:"requiredblocks,optional"`
+	RequiredBlocks map[string]string `hcl:"eth.requiredblocks,optional" toml:"eth.requiredblocks,optional"`
 
 	// LogLevel is the level of the logs to put out
 	LogLevel string `hcl:"log-level,optional" toml:"log-level,optional"`
@@ -62,8 +62,11 @@ type Config struct {
 	// GcMode selects the garbage collection mode for the trie
 	GcMode string `hcl:"gcmode,optional" toml:"gcmode,optional"`
 
-	// Snapshot disables/enables the snapshot database mode
+	// Snapshot enables the snapshot database mode
 	Snapshot bool `hcl:"snapshot,optional" toml:"snapshot,optional"`
+
+	// BorLogs enables bor log retrieval
+	BorLogs bool `hcl:"bor.logs,optional" toml:"bor.logs,optional"`
 
 	// Ethstats is the address of the ethstats server to send telemetry
 	Ethstats string `hcl:"ethstats,optional" toml:"ethstats,optional"`
@@ -420,6 +423,7 @@ func DefaultConfig() *Config {
 		SyncMode: "full",
 		GcMode:   "full",
 		Snapshot: true,
+		BorLogs:  false,
 		TxPool: &TxPoolConfig{
 			Locals:       []string{},
 			NoLocals:     false,
@@ -479,8 +483,8 @@ func DefaultConfig() *Config {
 		Telemetry: &TelemetryConfig{
 			Enabled:               false,
 			Expensive:             false,
-			PrometheusAddr:        "",
-			OpenCollectorEndpoint: "",
+			PrometheusAddr:        "127.0.0.1:7071",
+			OpenCollectorEndpoint: "127.0.0.1:4317",
 			InfluxDB: &InfluxDBConfig{
 				V1Enabled:    false,
 				Endpoint:     "",
@@ -649,6 +653,7 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 		n.NetworkId = c.chain.NetworkId
 		n.Genesis = c.chain.Genesis
 	}
+
 	n.HeimdallURL = c.Heimdall.URL
 	n.WithoutHeimdall = c.Heimdall.Without
 	n.HeimdallgRPCAddress = c.Heimdall.GRPCAddress
@@ -881,6 +886,7 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 		}
 	}
 
+	n.BorLogs = c.BorLogs
 	n.DatabaseHandles = dbHandles
 
 	return &n, nil
@@ -996,8 +1002,7 @@ func (c *Config) buildNode() (*node.Config, error) {
 	}
 
 	if c.P2P.NoDiscover {
-		// Disable networking, for now, we will not even allow incomming connections
-		cfg.P2P.MaxPeers = 0
+		// Disable peer discovery
 		cfg.P2P.NoDiscovery = true
 	}
 
