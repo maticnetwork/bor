@@ -18,6 +18,6 @@ type IHeimdallClient interface {
 	FetchMilestone(ctx context.Context) (*milestone.Milestone, error)
 	FetchMilestoneCount(ctx context.Context) (int64, error)
 	FetchNoAckMilestone(ctx context.Context, milestoneID string) (bool, error)
-	FetchLastNoAcKMilestone(ctx context.Context) (string, error)
+	FetchLastNoAckMilestone(ctx context.Context) (string, error)
 	Close()
 }

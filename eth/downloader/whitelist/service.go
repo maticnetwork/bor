@@ -19,8 +19,9 @@ func NewService() *WhitelistService {
 		},
 
 		milestone{
-			doExist:  false,
-			interval: 256,
+			doExist:            false,
+			interval:           256,
+			LockedMilestoneIds: make(map[string]bool),
 		},
 	}
 }

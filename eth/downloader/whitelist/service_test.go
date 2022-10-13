@@ -25,8 +25,9 @@ func NewMockService() *WhitelistService {
 		},
 
 		milestone{
-			doExist:  false,
-			interval: 256,
+			doExist:            false,
+			interval:           256,
+			LockedMilestoneIds: make(map[string]bool),
 		},
 	}
 }
@@ -70,11 +71,62 @@ func TestMilestone(t *testing.T) {
 	s := NewMockService()
 
 	require.Equal(t, s.milestone.doExist, false, "expected false as no milestone exist at this point")
+	require.Equal(t, s.milestone.Locked, false, "expected false as it was not locked")
+	require.Equal(t, s.milestone.LockedSprintNumber, uint64(0), "expected 0 as it was not initialized")
+
+	//Acquiring the mutex lock
+	s.Lock(11)
+	require.Equal(t, s.milestone.LockedSprintNumber, uint64(11), "expected 11")
+	require.Equal(t, s.milestone.Locked, false, "expected false as sprint is not locked till this point")
+
+	//Releasing the mutex lock
+	s.Unlock(true, "milestoneID1", common.Hash{})
+	require.Equal(t, s.milestone.LockedSprintNumber, uint64(11), "expected 11 as it was not initialized")
+	require.Equal(t, s.milestone.Locked, true, "expected true as sprint is locked now")
+	require.Equal(t, len(s.milestone.LockedMilestoneIds), int(1), "expected 1 as only 1 milestoneID has been entered")
+	require.Equal(t, s.milestone.LockedMilestoneIds["milestoneID1"], true, "expected true as we have stored this milestoneID1 previously")
+	require.Equal(t, s.milestone.LockedMilestoneIds["milestoneID2"], false, "expected false as we have not stored this milestoneID2 previously")
+
+	s.Lock(11)
+	s.Unlock(true, "milestoneID2", common.Hash{})
+	require.Equal(t, len(s.milestone.LockedMilestoneIds), int(2), "expected 1 as only 1 milestoneID has been entered")
+	require.Equal(t, s.milestone.LockedMilestoneIds["milestoneID2"], true, "expected true as we have stored this milestoneID2 previously")
+
+	s.RemoveMilestoneID("milestoneID1")
+	require.Equal(t, len(s.milestone.LockedMilestoneIds), int(1), "expected 1 as one out of two has been removed in previous step")
+	require.Equal(t, s.milestone.Locked, true, "expected true as sprint is locked now")
+
+	s.RemoveMilestoneID("milestoneID2")
+	require.Equal(t, len(s.milestone.LockedMilestoneIds), int(0), "expected 1 as both the milestonesIDs has been removed in previous step")
+	require.Equal(t, s.milestone.Locked, false, "expected false")
+
+	s.Lock(11)
+	s.Unlock(true, "milestoneID3", common.Hash{})
+	require.True(t, s.milestone.Locked, "expected true")
+	require.Equal(t, s.milestone.LockedSprintNumber, uint64(11), "Expected 11")
+
+	s.Lock(15)
+	require.False(t, s.milestone.Locked, "expected false as till now final confirmation regarding the lock hasn't been made")
+	require.Equal(t, s.milestone.LockedSprintNumber, uint64(15), "Expected 15")
+	s.Unlock(true, "milestoneID4", common.Hash{})
+	require.True(t, s.milestone.Locked, "expected true as final confirmation regarding the lock has been made")
 
 	//Adding the milestone
 	s.ProcessMilestone(11, common.Hash{})
 
+	require.True(t, s.milestone.Locked, "expected true as locked sprint is of number 15")
 	require.Equal(t, s.milestone.doExist, true, "expected true as milestone exist")
+	require.Equal(t, len(s.milestone.LockedMilestoneIds), int(1), "expected 1 as still last milestone of sprint number 15 exist")
+
+	//Asking the lock for sprintNumber less than last whitelisted milestone
+	require.False(t, s.Lock(11), "Cant lock the sprintNumber less than equal to latest whitelisted milestone")
+	s.Unlock(false, "", common.Hash{}) //Unlock is required after every lock to release the mutex
+
+	//Adding the milestone
+	s.ProcessMilestone(51, common.Hash{})
+	require.False(t, s.milestone.Locked, "expected false as lock from sprint number 15 is removed")
+	require.Equal(t, s.milestone.doExist, true, "expected true as milestone exist")
+	require.Equal(t, len(s.milestone.LockedMilestoneIds), int(0), "expected 0 as all the milestones have been removed")
 
 	//Removing the milestone
 	s.PurgeWhitelistedMilestone()
@@ -286,8 +338,7 @@ func TestIsValidChain(t *testing.T) {
 
 	tempChain := createMockChain(21, 22) // A21->A22
 
-	// add mock checkpoint entries
-	s.ProcessCheckpoint(tempChain[0].Number.Uint64(), tempChain[0].Hash())
+	// add mock checkpoint entry
 	s.ProcessCheckpoint(tempChain[1].Number.Uint64(), tempChain[1].Hash())
 
 	zeroChain := make([]*types.Header, 0)
@@ -296,8 +347,12 @@ func TestIsValidChain(t *testing.T) {
 	res = s.IsValidChain(nil, zeroChain)
 	require.Equal(t, res, false, "expected chain to be invalid", len(zeroChain))
 
-	// add mock milestone entries
-	s.ProcessMilestone(tempChain[0].Number.Uint64(), tempChain[0].Hash())
+	// case3: As the received chain is behind the oldest whitelisted block entry, should consider
+	// the chain as invalid as we won't require the chain.
+	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
+	require.Equal(t, res, false, "expected chain to be invalid")
+
+	// add mock milestone entry
 	s.ProcessMilestone(tempChain[1].Number.Uint64(), tempChain[1].Hash())
 
 	//require.Equal(t, s.milestone.length(), 2, "expected 2 items in milestoneList")
@@ -314,24 +369,39 @@ func TestIsValidChain(t *testing.T) {
 
 	//Remove the whitelisted milestone
 	s.PurgeWhitelistedMilestone()
-	s.Lock(20)
-	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
-	require.Equal(t, res, false, "expected chain to be valid as incoming chain is less than locked number 20 ")
 
-	s.Unlock(true)
-	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
-	require.Equal(t, res, false, "till in locked mode")
+	//At this stage there is no whitelisted milestone and checkpoint
 
-	s.Lock(20)
-	s.Unlock(false)
-	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
-	require.Equal(t, res, true, "")
+	//Locking for sprintNumber 15
+	s.Lock(chainA[len(chainA)-5].Number.Uint64())
+	s.Unlock(true, "MilestoneID1", chainA[len(chainA)-5].Hash())
 
-	s.Lock(20)
-	s.Unlock(true)
-	s.UnlockSprint()
 	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
-	require.Equal(t, res, true, "")
+	require.Equal(t, res, true, "expected chain to be valid as incoming chain matches with the locked value ")
+
+	hash3 := common.Hash{3}
+	s.Lock(chainA[len(chainA)-4].Number.Uint64())
+	s.Unlock(true, "MilestoneID2", hash3)
+
+	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
+	require.Equal(t, res, false, "expected chain to be invalid as incoming chain does match with the locked value hash ")
+
+	//Locking for sprintNumber 19
+	s.Lock(chainA[len(chainA)-1].Number.Uint64())
+	s.Unlock(true, "MilestoneID1", chainA[len(chainA)-1].Hash())
+
+	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
+	require.Equal(t, res, false, "expected chain to be invalid as incoming chain is less than the locked value ")
+
+	//Locking for sprintNumber 19
+	s.Lock(uint64(21))
+	s.Unlock(true, "MilestoneID1", hash3)
+
+	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
+	require.Equal(t, res, false, "expected chain to be invalid as incoming chain is less than the locked value ")
+
+	//Unlocking the sprint
+	s.UnlockSprint(uint64(21))
 
 	// Clear checkpoint whitelist and add block A15 in whitelist
 	s.PurgeWhitelistedCheckpoint()

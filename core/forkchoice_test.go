@@ -244,3 +244,15 @@ func (w *chainValidatorFake) PurgeWhitelistedMilestone()  {}
 func (w *chainValidatorFake) GetCheckpoints(current, sidechainHeader *types.Header, sidechainCheckpoints []*types.Header) (map[uint64]*types.Header, error) {
 	return map[uint64]*types.Header{}, nil
 }
+func (w *chainValidatorFake) Lock(endBlockNum uint64) bool {
+	return false
+}
+func (w *chainValidatorFake) Unlock(doLock bool, milestoneId string, endBlockHash common.Hash) {
+}
+func (w *chainValidatorFake) UnlockSprint(endBlockNum uint64) {
+}
+func (w *chainValidatorFake) RemoveMilestoneID(milestoneId string) {
+}
+func (w *chainValidatorFake) GetMilestoneIDsList() []string {
+	return nil
+}

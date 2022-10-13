@@ -80,6 +80,21 @@ func (mr *MockIHeimdallClientMockRecorder) FetchCheckpointCount(arg0 interface{}
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchCheckpointCount", reflect.TypeOf((*MockIHeimdallClient)(nil).FetchCheckpointCount), arg0)
 }
 
+// FetchLastNoAckMilestone mocks base method.
+func (m *MockIHeimdallClient) FetchLastNoAckMilestone(arg0 context.Context) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FetchLastNoAckMilestone", arg0)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FetchLastNoAckMilestone indicates an expected call of FetchLastNoAckMilestone.
+func (mr *MockIHeimdallClientMockRecorder) FetchLastNoAckMilestone(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchLastNoAckMilestone", reflect.TypeOf((*MockIHeimdallClient)(nil).FetchLastNoAckMilestone), arg0)
+}
+
 // FetchMilestone mocks base method.
 func (m *MockIHeimdallClient) FetchMilestone(arg0 context.Context) (*milestone.Milestone, error) {
 	m.ctrl.T.Helper()
@@ -108,6 +123,21 @@ func (m *MockIHeimdallClient) FetchMilestoneCount(arg0 context.Context) (int64, 
 func (mr *MockIHeimdallClientMockRecorder) FetchMilestoneCount(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchMilestoneCount", reflect.TypeOf((*MockIHeimdallClient)(nil).FetchMilestoneCount), arg0)
+}
+
+// FetchNoAckMilestone mocks base method.
+func (m *MockIHeimdallClient) FetchNoAckMilestone(arg0 context.Context, arg1 string) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FetchNoAckMilestone", arg0, arg1)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FetchNoAckMilestone indicates an expected call of FetchNoAckMilestone.
+func (mr *MockIHeimdallClientMockRecorder) FetchNoAckMilestone(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchNoAckMilestone", reflect.TypeOf((*MockIHeimdallClient)(nil).FetchNoAckMilestone), arg0, arg1)
 }
 
 // Span mocks base method.

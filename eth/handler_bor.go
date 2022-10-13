@@ -89,7 +89,7 @@ func (h *ethHandler) fetchNoAckMilestone(ctx context.Context, bor *bor.Bor) (str
 	)
 
 	// fetch latest milestone
-	milestoneID, err := bor.HeimdallClient.FetchLastNoAcKMilestone(ctx)
+	milestoneID, err := bor.HeimdallClient.FetchLastNoAckMilestone(ctx)
 	if err != nil {
 		log.Error("Failed to fetch latest no-ack milestone", "err", err)
 		return milestoneID, errMilestone

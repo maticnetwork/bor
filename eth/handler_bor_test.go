@@ -17,10 +17,12 @@ import (
 )
 
 type mockHeimdall struct {
-	fetchCheckpoint      func(ctx context.Context, number int64) (*checkpoint.Checkpoint, error)
-	fetchCheckpointCount func(ctx context.Context) (int64, error)
-	fetchMilestone       func(ctx context.Context) (*milestone.Milestone, error)
-	fetchMilestoneCount  func(ctx context.Context) (int64, error)
+	fetchCheckpoint         func(ctx context.Context, number int64) (*checkpoint.Checkpoint, error)
+	fetchCheckpointCount    func(ctx context.Context) (int64, error)
+	fetchMilestone          func(ctx context.Context) (*milestone.Milestone, error)
+	fetchMilestoneCount     func(ctx context.Context) (int64, error)
+	fetchNoAckMilestone     func(ctx context.Context, milestoneID string) (bool, error)
+	fetchLastNoAckMilestone func(ctx context.Context) (string, error)
 }
 
 func (m *mockHeimdall) StateSyncEvents(ctx context.Context, fromID uint64, to int64) ([]*clerk.EventRecordWithTime, error) {
@@ -42,6 +44,13 @@ func (m *mockHeimdall) FetchMilestone(ctx context.Context) (*milestone.Milestone
 func (m *mockHeimdall) FetchMilestoneCount(ctx context.Context) (int64, error) {
 	return m.fetchMilestoneCount(ctx)
 }
+func (m *mockHeimdall) FetchNoAckMilestone(ctx context.Context, milestoneID string) (bool, error) {
+	return m.fetchNoAckMilestone(ctx, milestoneID)
+}
+func (m *mockHeimdall) FetchLastNoAckMilestone(ctx context.Context) (string, error) {
+	return m.fetchLastNoAckMilestone(ctx)
+}
+
 func (m *mockHeimdall) Close() {}
 
 func TestFetchWhitelistCheckpointAndMilestone(t *testing.T) {

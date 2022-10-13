@@ -74,7 +74,7 @@ const (
 	fetchMilestone      = "/milestone"
 	fetchMilestoneCount = "/milestone/count"
 
-	fetchLastNoAcKMilestone = "/milestone/lastNoAck"
+	fetchLastNoAckMilestone = "/milestone/lastNoAck"
 	fetchNoAckMilestone     = "/milestone/noAck/%s"
 
 	fetchSpanFormat = "bor/span/%d"
@@ -349,7 +349,7 @@ func milestoneCountURL(urlString string) (*url.URL, error) {
 }
 
 func lastNoAckMilestoneURL(urlString string) (*url.URL, error) {
-	return makeURL(urlString, fetchLastNoAcKMilestone, "")
+	return makeURL(urlString, fetchLastNoAckMilestone, "")
 }
 
 func noAckMilestoneURL(urlString string, id string) (*url.URL, error) {
