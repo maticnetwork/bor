@@ -201,10 +201,6 @@ type ParallelExecutor struct {
 	// Enable profiling
 	profile bool
 
-	// PSP - remove this and check for block.Header().TxDependency?
-	// Enable metadata
-	metadata bool
-
 	// Worker wait group
 	workerWg sync.WaitGroup
 }
@@ -217,7 +213,7 @@ type ExecutionStat struct {
 	Worker      int
 }
 
-func NewParallelExecutor(tasks []ExecTask, profile bool, metadata bool) *ParallelExecutor {
+func NewParallelExecutor(tasks []ExecTask, profile bool) *ParallelExecutor {
 	numTasks := len(tasks)
 
 	pe := &ParallelExecutor{
@@ -242,7 +238,6 @@ func NewParallelExecutor(tasks []ExecTask, profile bool, metadata bool) *Paralle
 		preValidated:       make(map[int]bool),
 		begin:              time.Now(),
 		profile:            profile,
-		metadata:           metadata,
 	}
 
 	return pe
@@ -255,14 +250,11 @@ func (pe *ParallelExecutor) Prepare() {
 		pe.skipCheck[i] = false
 		pe.estimateDeps[i] = make([]int, 0)
 
-		// PSP - remove pe.metadata and check for block.Header().TxDependency?
-		if pe.metadata {
+		if len(t.Dependencies()) > 0 {
 			for index, val := range t.Dependencies() {
 				if index > 1 {
 					clearPendingFlag = true
 					pe.execTasks.addDependencies(val, i)
-				} else {
-					// PSP - what to do when index = 1 -> val = 0? (no delay)
 				}
 			}
 			if clearPendingFlag {
@@ -543,12 +535,12 @@ func (pe *ParallelExecutor) Step(res *ExecResult) (result ParallelExecutionResul
 
 type PropertyCheck func(*ParallelExecutor) error
 
-func executeParallelWithCheck(tasks []ExecTask, profile bool, metadata bool, check PropertyCheck) (result ParallelExecutionResult, err error) {
+func executeParallelWithCheck(tasks []ExecTask, profile bool, check PropertyCheck) (result ParallelExecutionResult, err error) {
 	if len(tasks) == 0 {
 		return ParallelExecutionResult{MakeTxnInputOutput(len(tasks)), nil, nil, nil}, nil
 	}
 
-	pe := NewParallelExecutor(tasks, profile, metadata)
+	pe := NewParallelExecutor(tasks, profile)
 	pe.Prepare()
 
 	for range pe.chResults {
@@ -573,5 +565,5 @@ func executeParallelWithCheck(tasks []ExecTask, profile bool, metadata bool, che
 }
 
 func ExecuteParallel(tasks []ExecTask, profile bool, metadata bool) (result ParallelExecutionResult, err error) {
-	return executeParallelWithCheck(tasks, profile, metadata, nil)
+	return executeParallelWithCheck(tasks, profile, nil)
 }

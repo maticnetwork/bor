@@ -300,32 +300,61 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 
 		cleansdb := statedb.Copy()
 
-		if msg.From() == coinbase {
-			shouldDelayFeeCal = false
-		}
+		if len(block.Header().TxDependency) > 0 {
+			deps, delayMap := GetDeps(block.Header().TxDependency)
 
-		task := &ExecutionTask{
-			msg:               msg,
-			config:            p.config,
-			gasLimit:          block.GasLimit(),
-			blockNumber:       blockNumber,
-			blockHash:         blockHash,
-			tx:                tx,
-			index:             i,
-			cleanStateDB:      cleansdb,
-			finalStateDB:      statedb,
-			blockChain:        p.bc,
-			header:            header,
-			evmConfig:         cfg,
-			shouldDelayFeeCal: &shouldDelayFeeCal,
-			sender:            msg.From(),
-			totalUsedGas:      usedGas,
-			receipts:          &receipts,
-			allLogs:           &allLogs,
-			dependencies:      GetDepListForTx(block.Header().TxDependency, i),
-		}
+			temp := delayMap[i]
 
-		tasks = append(tasks, task)
+			task := &ExecutionTask{
+				msg:               msg,
+				config:            p.config,
+				gasLimit:          block.GasLimit(),
+				blockNumber:       blockNumber,
+				blockHash:         blockHash,
+				tx:                tx,
+				index:             i,
+				cleanStateDB:      cleansdb,
+				finalStateDB:      statedb,
+				blockChain:        p.bc,
+				header:            header,
+				evmConfig:         cfg,
+				shouldDelayFeeCal: &temp,
+				sender:            msg.From(),
+				totalUsedGas:      usedGas,
+				receipts:          &receipts,
+				allLogs:           &allLogs,
+				dependencies:      deps[i],
+			}
+
+			tasks = append(tasks, task)
+		} else {
+			if msg.From() == coinbase {
+				shouldDelayFeeCal = false
+			}
+
+			task := &ExecutionTask{
+				msg:               msg,
+				config:            p.config,
+				gasLimit:          block.GasLimit(),
+				blockNumber:       blockNumber,
+				blockHash:         blockHash,
+				tx:                tx,
+				index:             i,
+				cleanStateDB:      cleansdb,
+				finalStateDB:      statedb,
+				blockChain:        p.bc,
+				header:            header,
+				evmConfig:         cfg,
+				shouldDelayFeeCal: &shouldDelayFeeCal,
+				sender:            msg.From(),
+				totalUsedGas:      usedGas,
+				receipts:          &receipts,
+				allLogs:           &allLogs,
+				dependencies:      nil,
+			}
+
+			tasks = append(tasks, task)
+		}
 	}
 
 	backupStateDB := statedb.Copy()
@@ -404,4 +433,25 @@ func GetDepListForTx(txDependency [][]uint64, txIdx int) []int {
 	}
 
 	return tempArr
+}
+
+// Jerry's function
+func GetDeps(txDependency [][]uint64) (map[int][]int, map[int]bool) {
+	deps := make(map[int][]int)
+	delayMap := make(map[int]bool)
+
+	for i := 0; i <= len(txDependency)-1; i++ {
+		idx := int(txDependency[i][0])
+		shouldDelay := txDependency[i][1] == 1
+
+		delayMap[idx] = shouldDelay
+
+		deps[idx] = []int{}
+
+		for j := 2; j <= len(txDependency[i])-1; j++ {
+			deps[idx] = append(deps[idx], int(txDependency[i][j]))
+		}
+	}
+
+	return deps, delayMap
 }
