@@ -882,6 +882,23 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 
 	mvReadMapList := []map[blockstm.Key]blockstm.ReadDescriptor{}
 
+	deps := map[int]map[int]bool{}
+
+	chDeps := make(chan blockstm.DepsChan)
+
+	var depsWg sync.WaitGroup
+
+	count := 0
+
+	depsWg.Add(1)
+
+	go func(c chan blockstm.DepsChan) {
+		for t := range chDeps {
+			deps = blockstm.UpdateDeps(deps, t)
+		}
+		depsWg.Done()
+	}(chDeps)
+
 	for {
 		// In the following three cases, we will interrupt the execution of the transaction.
 		// (1) new head block event arrival, the interrupt signal is 1
@@ -970,14 +987,19 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 
 		env.state.ClearReadMap()
 		env.state.ClearWriteMap()
+
+		temp := blockstm.DepsChan{
+			Index:         count,
+			ReadList:      depsMVReadList[count],
+			FullWriteList: depsMVFullWriteList,
+		}
+
+		chDeps <- temp
+		count++
 	}
 
-	txIO := blockstm.MakeTxnInputOutput(len(depsMVReadList))
-
-	txIO.RecordReadAtOnce(depsMVReadList)
-	txIO.RecordAllWriteAtOnce(depsMVFullWriteList)
-
-	deps := blockstm.GetDep(*txIO)
+	close(chDeps)
+	depsWg.Wait()
 
 	tempDeps := make([][]uint64, len(mvReadMapList))
 

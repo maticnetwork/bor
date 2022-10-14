@@ -14,6 +14,12 @@ type DAG struct {
 	*dag.DAG
 }
 
+type DepsChan struct {
+	Index         int
+	ReadList      []ReadDescriptor
+	FullWriteList [][]WriteDescriptor
+}
+
 func HasReadDep(txFrom TxnOutput, txTo TxnInput) bool {
 	reads := make(map[Key]bool)
 
@@ -67,6 +73,31 @@ func BuildDAG(deps TxnInputOutput) (d DAG) {
 	}
 
 	return
+}
+
+func UpdateDeps(deps map[int]map[int]bool, t DepsChan) map[int]map[int]bool {
+	txTo := t.ReadList
+
+	deps[t.Index] = map[int]bool{}
+
+	for j := 0; j <= t.Index-1; j++ {
+		txFrom := t.FullWriteList[j]
+
+		if HasReadDep(txFrom, txTo) {
+			deps[t.Index][j] = true
+
+			for k := range deps[t.Index] {
+				_, boool1 := deps[j][k]
+
+				if boool1 {
+					delete(deps[t.Index], k)
+				}
+
+			}
+		}
+	}
+
+	return deps
 }
 
 func GetDep(deps TxnInputOutput) map[int]map[int]bool {
