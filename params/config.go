@@ -711,6 +711,11 @@ func (c *ChainConfig) IsLondon(num *big.Int) bool {
 	return isForked(c.LondonBlock, num)
 }
 
+// IsPuxi returns whether num is either equal to the Puxi fork block or greater.
+func (c *ChainConfig) IsPuxi(num *big.Int) bool {
+	return isForked(c.PuxiBlock, num)
+}
+
 // IsArrowGlacier returns whether num is either equal to the Arrow Glacier (EIP-4345) fork block or greater.
 func (c *ChainConfig) IsArrowGlacier(num *big.Int) bool {
 	return isForked(c.ArrowGlacierBlock, num)
@@ -930,6 +935,7 @@ func (c *ChainConfig) Rules(num *big.Int, isMerge bool) Rules {
 		IsIstanbul:       c.IsIstanbul(num),
 		IsBerlin:         c.IsBerlin(num),
 		IsLondon:         c.IsLondon(num),
+		IsPuxi:           c.IsPuxi(num),
 		IsMerge:          isMerge,
 	}
 }
