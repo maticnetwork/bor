@@ -86,6 +86,6 @@ func (s *authTestSuite) TestBasic() {
 	s.True(len(res) > 0)
 	retVal0, ok = res["0"].(ethgo.Address)
 	s.True(ok)
-	s.Equal(s.fc.Address(), retVal0, "eoa is not set to test invoker account")
+	s.Equal(s.fc.Address(), retVal0, "eoa is now set to test invoker account")
 
 }
