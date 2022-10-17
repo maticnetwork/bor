@@ -967,6 +967,19 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 			// Everything ok, collect the logs and shift in the next transaction from the same account
 			coalescedLogs = append(coalescedLogs, logs...)
 			env.tcount++
+
+			depsMVReadList = append(depsMVReadList, env.state.MVReadList())
+			depsMVFullWriteList = append(depsMVFullWriteList, env.state.MVFullWriteList())
+			mvReadMapList = append(mvReadMapList, env.state.MVReadMap())
+
+			temp := blockstm.DepsChan{
+				Index:         env.tcount - 1,
+				ReadList:      depsMVReadList[count],
+				FullWriteList: depsMVFullWriteList,
+			}
+
+			chDeps <- temp
+			count++
 			txs.Shift()
 
 		case errors.Is(err, core.ErrTxTypeNotSupported):
@@ -981,21 +994,8 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 			txs.Shift()
 		}
 
-		depsMVReadList = append(depsMVReadList, env.state.MVReadList())
-		depsMVFullWriteList = append(depsMVFullWriteList, env.state.MVFullWriteList())
-		mvReadMapList = append(mvReadMapList, env.state.MVReadMap())
-
 		env.state.ClearReadMap()
 		env.state.ClearWriteMap()
-
-		temp := blockstm.DepsChan{
-			Index:         count,
-			ReadList:      depsMVReadList[count],
-			FullWriteList: depsMVFullWriteList,
-		}
-
-		chDeps <- temp
-		count++
 	}
 
 	close(chDeps)
