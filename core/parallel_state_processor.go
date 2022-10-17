@@ -290,6 +290,8 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 
 	coinbase, _ := p.bc.Engine().Author(header)
 
+	deps, delayMap := GetDeps(block.Header().TxDependency)
+
 	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
 		msg, err := tx.AsMessage(types.MakeSigner(p.config, header.Number), header.BaseFee)
@@ -301,7 +303,6 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 		cleansdb := statedb.Copy()
 
 		if len(block.Header().TxDependency) > 0 {
-			deps, delayMap := GetDeps(block.Header().TxDependency)
 
 			temp := delayMap[i]
 
