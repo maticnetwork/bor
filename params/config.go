@@ -713,7 +713,8 @@ func (c *ChainConfig) IsLondon(num *big.Int) bool {
 
 // IsPuxi returns whether num is either equal to the Puxi fork block or greater.
 func (c *ChainConfig) IsPuxi(num *big.Int) bool {
-	return isForked(c.PuxiBlock, num)
+	return true
+	// return isForked(c.PuxiBlock, num)
 }
 
 // IsArrowGlacier returns whether num is either equal to the Arrow Glacier (EIP-4345) fork block or greater.

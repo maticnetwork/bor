@@ -938,7 +938,8 @@ func (c *Config) buildNode() (*node.Config, error) {
 
 		// enable JsonRPC HTTP API
 		c.JsonRPC.Http.Enabled = true
-		cfg.HTTPModules = []string{"admin", "debug", "eth", "miner", "net", "personal", "txpool", "web3", "bor"}
+		// cfg.HTTPModules = []string{"admin", "debug", "eth", "miner", "net", "personal", "txpool", "web3", "bor"}
+		cfg.HTTPModules = []string{"admin", "debug", "eth", "miner", "net", "personal", "txpool", "web3"}
 	}
 
 	// enable jsonrpc endpoints
