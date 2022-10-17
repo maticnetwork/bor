@@ -116,7 +116,14 @@ type headerMarshaling struct {
 // Hash returns the block hash of the header, which is simply the keccak256 hash of its
 // RLP encoding.
 func (h *Header) Hash() common.Hash {
-	return rlpHash(h)
+	newH := CopyHeader(h)
+
+	if newH.BaseFee != nil && newH.BaseFee.Cmp(big.NewInt(0)) == 0 {
+		newH.BaseFee = nil
+	}
+
+	newH.TxDependency = nil
+	return rlpHash(newH)
 }
 
 var headerSize = common.StorageSize(reflect.TypeOf(Header{}).Size())
