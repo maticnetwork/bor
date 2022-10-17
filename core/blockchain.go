@@ -1758,6 +1758,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 		substart := time.Now()
 		receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig)
 
+		tempHeader := block.Header()
+
 		if block.Transactions().Len() >= 20 {
 			substart1 := time.Now()
 			receipts, logs, usedGas, err = bc.processor1.Process(block, statedb1, bc.vmConfig)
@@ -1769,6 +1771,10 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 
 			receipts, logs, usedGas, err = bc.processorSTMGet.Process(block, statedbSTMGet, bc.vmConfig)
 
+			tempDeps := block.TxDependency()
+
+			block.HeaderWithoutCopy().TxDependency = tempHeader.TxDependency
+
 			t2 := time.Now()
 			receipts, logs, usedGas, err = bc.processorSTM.Process(block, statedbSTM, bc.vmConfig)
 			t3 := time.Now()
@@ -1776,6 +1782,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 			// if usedGas > 0 {
 			// 	parallelGasTimer.Update(time.Duration(uint64(usedGas * 1000 / uint64(time.Since(t2)))))
 			// }
+
+			block.HeaderWithoutCopy().TxDependency = tempDeps
 
 			t6 := time.Now()
 			receipts, logs, usedGas, err = bc.processorSTMUse.Process(block, statedbSTMUse, bc.vmConfig)
@@ -1800,6 +1808,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 				// log.Info("Histogram of mgasps time", "parallel metadata", parallelMetadataGasTimer.Percentiles([]float64{0.001, 0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 0.999, 0.9999}))
 			}
 		}
+
+		block.HeaderWithoutCopy().TxDependency = tempHeader.TxDependency
 
 		if err != nil {
 			bc.reportBlock(block, receipts, err)

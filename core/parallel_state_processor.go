@@ -559,7 +559,7 @@ func (p *ParallelStateProcessorGet) Process(block *types.Block, statedb *state.S
 		}
 	}
 
-	block.Header().TxDependency = tempDeps
+	block.HeaderWithoutCopy().TxDependency = tempDeps
 
 	if err != nil {
 		log.Error("blockstm error executing block", "err", err)
