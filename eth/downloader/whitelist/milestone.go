@@ -158,19 +158,25 @@ func (m *milestone) PurgeWhitelistedMilestone() {
 
 func (m *milestone) Lock(endBlockNum uint64) bool {
 	m.m.Lock()
+
 	if m.doExist && endBlockNum <= m.milestoneNumber { //if endNum is less than whitelisted milestone, then we won't lock the sprint
 		log.Warn("endBlockNum <= m.milestoneNumber")
 		return false
-	} else if m.Locked && endBlockNum < m.LockedSprintNumber {
-		log.Warn("endBlockNum < m.LockedSprintNumber")
-		return false
-	} else if m.Locked && endBlockNum > m.LockedSprintNumber {
+	}
+
+	if m.Locked && endBlockNum != m.LockedSprintNumber {
+		if endBlockNum < m.LockedSprintNumber {
+			log.Warn("endBlockNum < m.LockedSprintNumber")
+			return false
+		}
+
 		log.Warn("endBlockNum > m.LockedSprintNumber")
 		m.PurgeMilestoneIDsList()
 		m.Locked = false
 	}
 
 	m.LockedSprintNumber = endBlockNum
+
 	return true
 }
 
