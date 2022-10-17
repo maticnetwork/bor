@@ -19,6 +19,7 @@ package core
 import (
 	"fmt"
 	"math/big"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
@@ -29,6 +30,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -73,7 +75,12 @@ type ExecutionTask struct {
 	totalUsedGas               *uint64
 	receipts                   *types.Receipts
 	allLogs                    *[]*types.Log
-	dependencies               []int
+
+	// length of dependencies          -> 2 + k (k = a whole number)
+	// first 2 element in dependencies -> transaction index, and flag representing if delay is allowed or not
+	//                                       (0 -> delay is not allowed, 1 -> delay is allowed)
+	// next k elements in dependencies -> transaction indexes on which transaction i is dependent on
+	dependencies []int
 }
 
 func (task *ExecutionTask) Execute(mvh *blockstm.MVHashMap, incarnation int) (err error) {
@@ -252,6 +259,8 @@ func (task *ExecutionTask) Settle() {
 	*task.allLogs = append(*task.allLogs, receipt.Logs...)
 }
 
+var parallelizabilityTimer = metrics.NewRegisteredTimer("block/parallelizability", nil)
+
 // Process processes the state changes according to the Ethereum rules by running
 // the transaction messages using the statedb and applying any rewards to both
 // the processor (coinbase) and any included uncles.
@@ -291,35 +300,83 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 
 		cleansdb := statedb.Copy()
 
-		if msg.From() == coinbase {
-			shouldDelayFeeCal = false
-		}
+		if len(block.Header().TxDependency) > 0 {
+			deps, delayMap := GetDeps(block.Header().TxDependency)
 
-		task := &ExecutionTask{
-			msg:               msg,
-			config:            p.config,
-			gasLimit:          block.GasLimit(),
-			blockNumber:       blockNumber,
-			blockHash:         blockHash,
-			tx:                tx,
-			index:             i,
-			cleanStateDB:      cleansdb,
-			finalStateDB:      statedb,
-			blockChain:        p.bc,
-			header:            header,
-			evmConfig:         cfg,
-			shouldDelayFeeCal: &shouldDelayFeeCal,
-			sender:            msg.From(),
-			totalUsedGas:      usedGas,
-			receipts:          &receipts,
-			allLogs:           &allLogs,
-		}
+			temp := delayMap[i]
 
-		tasks = append(tasks, task)
+			task := &ExecutionTask{
+				msg:               msg,
+				config:            p.config,
+				gasLimit:          block.GasLimit(),
+				blockNumber:       blockNumber,
+				blockHash:         blockHash,
+				tx:                tx,
+				index:             i,
+				cleanStateDB:      cleansdb,
+				finalStateDB:      statedb,
+				blockChain:        p.bc,
+				header:            header,
+				evmConfig:         cfg,
+				shouldDelayFeeCal: &temp,
+				sender:            msg.From(),
+				totalUsedGas:      usedGas,
+				receipts:          &receipts,
+				allLogs:           &allLogs,
+				dependencies:      deps[i],
+			}
+
+			tasks = append(tasks, task)
+		} else {
+			if msg.From() == coinbase {
+				shouldDelayFeeCal = false
+			}
+
+			task := &ExecutionTask{
+				msg:               msg,
+				config:            p.config,
+				gasLimit:          block.GasLimit(),
+				blockNumber:       blockNumber,
+				blockHash:         blockHash,
+				tx:                tx,
+				index:             i,
+				cleanStateDB:      cleansdb,
+				finalStateDB:      statedb,
+				blockChain:        p.bc,
+				header:            header,
+				evmConfig:         cfg,
+				shouldDelayFeeCal: &shouldDelayFeeCal,
+				sender:            msg.From(),
+				totalUsedGas:      usedGas,
+				receipts:          &receipts,
+				allLogs:           &allLogs,
+				dependencies:      nil,
+			}
+
+			tasks = append(tasks, task)
+		}
 	}
 
 	backupStateDB := statedb.Copy()
-	_, err := blockstm.ExecuteParallel(tasks, false, false)
+
+	profile := false
+	result, err := blockstm.ExecuteParallel(tasks, false)
+
+	if err == nil && profile {
+		_, weight := result.Deps.LongestPath(*result.Stats)
+
+		serialWeight := uint64(0)
+
+		for i := 0; i < len(result.Deps.GetVertices()); i++ {
+			serialWeight += (*result.Stats)[i].End - (*result.Stats)[i].Start
+		}
+
+		parallelizabilityTimer.Update(time.Duration(serialWeight * 100 / weight))
+
+		log.Info("Parallelizability", "Average (%)", parallelizabilityTimer.Mean())
+
+		log.Info("Parallelizability", "Histogram (%)", parallelizabilityTimer.Percentiles([]float64{0.001, 0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 0.999, 0.9999}))
+	}
 
 	for _, task := range tasks {
 		task := task.(*ExecutionTask)
@@ -339,7 +396,7 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 				t.totalUsedGas = usedGas
 			}
 
-			_, err = blockstm.ExecuteParallel(tasks, false, false)
+			_, err = blockstm.ExecuteParallel(tasks, false)
 
 			break
 		}
@@ -448,7 +505,7 @@ func (p *ParallelStateProcessorGet) Process(block *types.Block, statedb *state.S
 	}
 
 	backupStateDB := statedb.Copy()
-	tempRes, err := blockstm.ExecuteParallel(tasks, true, false)
+	tempRes, err := blockstm.ExecuteParallel(tasks, true)
 
 	for _, task := range tasks {
 		task := task.(*ExecutionTask)
@@ -468,14 +525,40 @@ func (p *ParallelStateProcessorGet) Process(block *types.Block, statedb *state.S
 				t.totalUsedGas = usedGas
 			}
 
-			tempRes, err = blockstm.ExecuteParallel(tasks, true, false)
+			tempRes, err = blockstm.ExecuteParallel(tasks, true)
 
 			break
 		}
 
 	}
 
-	block.Dependency = tempRes.AllDeps
+	tempDeps := make([][]uint64, len(tasks))
+
+	for i := 0; i <= len(tasks)-1; i++ {
+		tempDeps[i] = []uint64{uint64(i)}
+
+		// reads := tasks[i]
+
+		// _, ok1 := reads[blockstm.NewSubpathKey(env.coinbase, state.BalancePath)]
+		// _, ok2 := reads[blockstm.NewSubpathKey(common.HexToAddress(w.chainConfig.Bor.CalculateBurntContract(env.header.Number.Uint64())), state.BalancePath)]
+
+		// if ok1 || ok2 {
+		// 	// 0 -> delay is not allowed
+		// 	tempDeps[i] = append(tempDeps[i], 0)
+		// } else {
+		// 	// 1 -> delay is allowed
+		// 	tempDeps[i] = append(tempDeps[i], 1)
+		// }
+
+		// not Idle, should check for coinbase and burnt contract address
+		tempDeps[i] = append(tempDeps[i], 1)
+
+		for j := range tempRes.AllDeps[i] {
+			tempDeps[i] = append(tempDeps[i], uint64(j))
+		}
+	}
+
+	block.Header().TxDependency = tempDeps
 
 	if err != nil {
 		log.Error("blockstm error executing block", "err", err)
@@ -552,36 +635,83 @@ func (p *ParallelStateProcessorUse) Process(block *types.Block, statedb *state.S
 
 		cleansdb := statedb.Copy()
 
-		if msg.From() == coinbase {
-			shouldDelayFeeCal = false
-		}
+		if len(block.Header().TxDependency) > 0 {
+			deps, delayMap := GetDeps(block.Header().TxDependency)
 
-		task := &ExecutionTask{
-			msg:               msg,
-			config:            p.config,
-			gasLimit:          block.GasLimit(),
-			blockNumber:       blockNumber,
-			blockHash:         blockHash,
-			tx:                tx,
-			index:             i,
-			cleanStateDB:      cleansdb,
-			finalStateDB:      statedb,
-			blockChain:        p.bc,
-			header:            header,
-			evmConfig:         cfg,
-			shouldDelayFeeCal: &shouldDelayFeeCal,
-			sender:            msg.From(),
-			totalUsedGas:      usedGas,
-			receipts:          &receipts,
-			allLogs:           &allLogs,
-			dependencies:      block.Dependency[i],
-		}
+			temp := delayMap[i]
 
-		tasks = append(tasks, task)
+			task := &ExecutionTask{
+				msg:               msg,
+				config:            p.config,
+				gasLimit:          block.GasLimit(),
+				blockNumber:       blockNumber,
+				blockHash:         blockHash,
+				tx:                tx,
+				index:             i,
+				cleanStateDB:      cleansdb,
+				finalStateDB:      statedb,
+				blockChain:        p.bc,
+				header:            header,
+				evmConfig:         cfg,
+				shouldDelayFeeCal: &temp,
+				sender:            msg.From(),
+				totalUsedGas:      usedGas,
+				receipts:          &receipts,
+				allLogs:           &allLogs,
+				dependencies:      deps[i],
+			}
+
+			tasks = append(tasks, task)
+		} else {
+			if msg.From() == coinbase {
+				shouldDelayFeeCal = false
+			}
+
+			task := &ExecutionTask{
+				msg:               msg,
+				config:            p.config,
+				gasLimit:          block.GasLimit(),
+				blockNumber:       blockNumber,
+				blockHash:         blockHash,
+				tx:                tx,
+				index:             i,
+				cleanStateDB:      cleansdb,
+				finalStateDB:      statedb,
+				blockChain:        p.bc,
+				header:            header,
+				evmConfig:         cfg,
+				shouldDelayFeeCal: &shouldDelayFeeCal,
+				sender:            msg.From(),
+				totalUsedGas:      usedGas,
+				receipts:          &receipts,
+				allLogs:           &allLogs,
+				dependencies:      nil,
+			}
+
+			tasks = append(tasks, task)
+		}
 	}
 
 	backupStateDB := statedb.Copy()
-	_, err := blockstm.ExecuteParallel(tasks, false, true)
+
+	profile := false
+	result, err := blockstm.ExecuteParallel(tasks, false)
+
+	if err == nil && profile {
+		_, weight := result.Deps.LongestPath(*result.Stats)
+
+		serialWeight := uint64(0)
+
+		for i := 0; i < len(result.Deps.GetVertices()); i++ {
+			serialWeight += (*result.Stats)[i].End - (*result.Stats)[i].Start
+		}
+
+		parallelizabilityTimer.Update(time.Duration(serialWeight * 100 / weight))
+
+		log.Info("Parallelizability", "Average (%)", parallelizabilityTimer.Mean())
+
+		log.Info("Parallelizability", "Histogram (%)", parallelizabilityTimer.Percentiles([]float64{0.001, 0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 0.999, 0.9999}))
+	}
 
 	for _, task := range tasks {
 		task := task.(*ExecutionTask)
@@ -601,7 +731,7 @@ func (p *ParallelStateProcessorUse) Process(block *types.Block, statedb *state.S
 				t.totalUsedGas = usedGas
 			}
 
-			_, err = blockstm.ExecuteParallel(tasks, false, true)
+			_, err = blockstm.ExecuteParallel(tasks, false)
 
 			break
 		}
@@ -622,4 +752,47 @@ func (p *ParallelStateProcessorUse) Process(block *types.Block, statedb *state.S
 	// fmt.Println("Finalize time of parallel execution:", time.Since(start))
 
 	return receipts, allLogs, *usedGas, nil
+}
+
+func GetDepListForTx(txDependency [][]uint64, txIdx int) []int {
+	if len(txDependency) == 1 && (txDependency[0][0] == uint64(0) && txDependency[0][1] == uint64(1)) {
+		return []int{txIdx, 1}
+	}
+
+	tempArr := []int{}
+	tempIdx := -1
+
+	for ind, val := range txDependency {
+		if int(val[0]) == txIdx {
+			tempIdx = ind
+			break
+		}
+	}
+
+	for i := 0; i < len(txDependency[tempIdx]); i++ {
+		tempArr = append(tempArr, int(txDependency[tempIdx][i]))
+	}
+
+	return tempArr
+}
+
+// Jerry's function
+func GetDeps(txDependency [][]uint64) (map[int][]int, map[int]bool) {
+	deps := make(map[int][]int)
+	delayMap := make(map[int]bool)
+
+	for i := 0; i <= len(txDependency)-1; i++ {
+		idx := int(txDependency[i][0])
+		shouldDelay := txDependency[i][1] == 1
+
+		delayMap[idx] = shouldDelay
+
+		deps[idx] = []int{}
+
+		for j := 2; j <= len(txDependency[i])-1; j++ {
+			deps[idx] = append(deps[idx], int(txDependency[i][j]))
+		}
+	}
+
+	return deps, delayMap
 }

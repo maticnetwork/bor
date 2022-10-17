@@ -152,8 +152,9 @@ func (pq *SafePriorityQueue) Len() int {
 
 type ParallelExecutionResult struct {
 	TxIO    *TxnInputOutput
-	Stats   *[][]uint64
-	AllDeps map[int][]int
+	Stats   *map[int]ExecutionStat
+	Deps    *DAG
+	AllDeps map[int]map[int]bool
 }
 
 const numGoProcs = 2
@@ -162,8 +163,9 @@ const numSpeculativeProcs = 8
 type ParallelExecutor struct {
 	tasks []ExecTask
 
-	// Stores the execution statistics for each task
-	stats      [][]uint64
+	// Stores the execution statistics for the last incarnation of each task
+	stats map[int]ExecutionStat
+
 	statsMutex sync.Mutex
 
 	// Channel for tasks that should be prioritized
@@ -227,20 +229,25 @@ type ParallelExecutor struct {
 	// Enable profiling
 	profile bool
 
-	// Enable metadata
-	metadata bool
-
 	// Worker wait group
 	workerWg sync.WaitGroup
 }
 
-func NewParallelExecutor(tasks []ExecTask, profile bool, metadata bool) *ParallelExecutor {
+type ExecutionStat struct {
+	TxIdx       int
+	Incarnation int
+	Start       uint64
+	End         uint64
+	Worker      int
+}
+
+func NewParallelExecutor(tasks []ExecTask, profile bool) *ParallelExecutor {
 	numTasks := len(tasks)
 
 	var resultQueue SafeQueue
 	var specTaskQueue SafeQueue
 
-	if metadata {
+	if tasks[0].Dependencies() != nil {
 		resultQueue = NewSafeFIFOQueue(numTasks)
 		specTaskQueue = NewSafeFIFOQueue(numTasks)
 	} else {
@@ -250,7 +257,7 @@ func NewParallelExecutor(tasks []ExecTask, profile bool, metadata bool) *Paralle
 
 	pe := &ParallelExecutor{
 		tasks:              tasks,
-		stats:              make([][]uint64, numTasks),
+		stats:              make(map[int]ExecutionStat, numTasks),
 		chTasks:            make(chan ExecVersionView, numTasks),
 		chSpeculativeTasks: make(chan struct{}, numTasks),
 		chSettle:           make(chan int, numTasks),
@@ -270,7 +277,6 @@ func NewParallelExecutor(tasks []ExecTask, profile bool, metadata bool) *Paralle
 		preValidated:       make(map[int]bool),
 		begin:              time.Now(),
 		profile:            profile,
-		metadata:           metadata,
 	}
 
 	return pe
@@ -283,10 +289,12 @@ func (pe *ParallelExecutor) Prepare() {
 		pe.skipCheck[i] = false
 		pe.estimateDeps[i] = make([]int, 0)
 
-		if pe.metadata {
-			for _, tx := range t.Dependencies() {
-				clearPendingFlag = true
-				pe.execTasks.addDependencies(tx, i)
+		if len(t.Dependencies()) > 0 {
+			for index, val := range t.Dependencies() {
+				if index > 1 {
+					clearPendingFlag = true
+					pe.execTasks.addDependencies(val, i)
+				}
 			}
 			if clearPendingFlag {
 				pe.execTasks.clearPending(i)
@@ -329,10 +337,14 @@ func (pe *ParallelExecutor) Prepare() {
 				if pe.profile {
 					end := time.Since(pe.begin)
 
-					stat := []uint64{uint64(res.ver.TxnIndex), uint64(res.ver.Incarnation), uint64(start), uint64(end), uint64(procNum)}
-
 					pe.statsMutex.Lock()
-					pe.stats = append(pe.stats, stat)
+					pe.stats[res.ver.TxnIndex] = ExecutionStat{
+						TxIdx:       res.ver.TxnIndex,
+						Incarnation: res.ver.Incarnation,
+						Start:       uint64(start),
+						End:         uint64(end),
+						Worker:      procNum,
+					}
 					pe.statsMutex.Unlock()
 				}
 			}
@@ -522,13 +534,13 @@ func (pe *ParallelExecutor) Step(res *ExecResult) (result ParallelExecutionResul
 
 		pe.Close(true)
 
-		var allDeps map[int][]int
+		var allDeps map[int]map[int]bool
 
 		if pe.profile {
 			allDeps = GetDep(*pe.lastTxIO)
 		}
 
-		return ParallelExecutionResult{pe.lastTxIO, &pe.stats, allDeps}, err
+		return ParallelExecutionResult{pe.lastTxIO, &pe.stats, nil, allDeps}, err
 	}
 
 	// Send the next immediate pending transaction to be executed
@@ -562,12 +574,12 @@ func (pe *ParallelExecutor) Step(res *ExecResult) (result ParallelExecutionResul
 
 type PropertyCheck func(*ParallelExecutor) error
 
-func executeParallelWithCheck(tasks []ExecTask, profile bool, metadata bool, check PropertyCheck) (result ParallelExecutionResult, err error) {
+func executeParallelWithCheck(tasks []ExecTask, profile bool, check PropertyCheck) (result ParallelExecutionResult, err error) {
 	if len(tasks) == 0 {
-		return ParallelExecutionResult{MakeTxnInputOutput(len(tasks)), nil, nil}, nil
+		return ParallelExecutionResult{MakeTxnInputOutput(len(tasks)), nil, nil, nil}, nil
 	}
 
-	pe := NewParallelExecutor(tasks, profile, metadata)
+	pe := NewParallelExecutor(tasks, profile)
 	pe.Prepare()
 
 	for range pe.chResults {
@@ -591,6 +603,6 @@ func executeParallelWithCheck(tasks []ExecTask, profile bool, metadata bool, che
 	return
 }
 
-func ExecuteParallel(tasks []ExecTask, profile bool, metadata bool) (result ParallelExecutionResult, err error) {
-	return executeParallelWithCheck(tasks, profile, metadata, nil)
+func ExecuteParallel(tasks []ExecTask, profile bool) (result ParallelExecutionResult, err error) {
+	return executeParallelWithCheck(tasks, profile, nil)
 }

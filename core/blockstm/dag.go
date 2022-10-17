@@ -2,8 +2,8 @@ package blockstm
 
 import (
 	"fmt"
-	"sort"
 	"strings"
+	"time"
 
 	"github.com/heimdalr/dag"
 
@@ -12,6 +12,12 @@ import (
 
 type DAG struct {
 	*dag.DAG
+}
+
+type DepsChan struct {
+	Index         int
+	ReadList      []ReadDescriptor
+	FullWriteList [][]WriteDescriptor
 }
 
 func HasReadDep(txFrom TxnOutput, txTo TxnInput) bool {
@@ -62,8 +68,6 @@ func BuildDAG(deps TxnInputOutput) (d DAG) {
 				if err != nil {
 					log.Warn("Failed to add edge", "from", txFromId, "to", txToId, "err", err)
 				}
-
-				break // once we add a 'backward' dep we can't execute before that transaction so no need to proceed
 			}
 		}
 	}
@@ -71,75 +75,121 @@ func BuildDAG(deps TxnInputOutput) (d DAG) {
 	return
 }
 
-func contains(s []int, e int) (bool, int) {
-	for i, a := range s {
-		if a == e {
-			return true, i
+func UpdateDeps(deps map[int]map[int]bool, t DepsChan) map[int]map[int]bool {
+	txTo := t.ReadList
+
+	deps[t.Index] = map[int]bool{}
+
+	for j := 0; j <= t.Index-1; j++ {
+		txFrom := t.FullWriteList[j]
+
+		if HasReadDep(txFrom, txTo) {
+			deps[t.Index][j] = true
+
+			for k := range deps[t.Index] {
+				_, boool1 := deps[j][k]
+
+				if boool1 {
+					delete(deps[t.Index], k)
+				}
+
+			}
 		}
 	}
-	return false, -1
+
+	return deps
 }
 
-func removeIndex(s []int, index int) []int {
-	return append(s[:index], s[index+1:]...)
-}
+func GetDep(deps TxnInputOutput) map[int]map[int]bool {
+	newDependencies := map[int]map[int]bool{}
 
-func findAndRemove(s []int, e int) []int {
-	boool, ind := contains(s, e)
-	if boool {
-		return removeIndex(s, ind)
-	}
-
-	return s
-}
-
-func GetDep(deps TxnInputOutput) map[int][]int {
-	dependencies := map[int][]int{}
-
-	for i := len(deps.inputs) - 1; i > 0; i-- {
+	for i := 1; i < len(deps.inputs); i++ {
 		txTo := deps.inputs[i]
 
-		for j := i - 1; j >= 0; j-- {
+		newDependencies[i] = map[int]bool{}
+
+		for j := 0; j <= i-1; j++ {
 			txFrom := deps.allOutputs[j]
 
 			if HasReadDep(txFrom, txTo) {
-				dependencies[i] = append(dependencies[i], j)
+				newDependencies[i][j] = true
 
-				// for dependencies of txIdx k (where k > i)
-				for k := i + 1; k <= len(deps.inputs)-1; k++ {
-					// if dependencies[k] contains i & j
-					boool1, _ := contains(dependencies[k], i)
-					boool2, _ := contains(dependencies[k], j)
+				for k := range newDependencies[i] {
+					_, boool1 := newDependencies[j][k]
 
-					if boool1 && boool2 {
-						// remove j from dependencies[k]
-						dependencies[k] = findAndRemove(dependencies[k], j)
+					if boool1 {
+						delete(newDependencies[i], k)
 					}
+
 				}
 			}
 		}
 	}
 
-	return dependencies
+	return newDependencies
 }
 
-func (d DAG) Report(out func(string)) {
-	roots := make([]int, 0)
-	rootIds := make([]string, 0)
-	rootIdMap := make(map[int]string, len(d.GetRoots()))
+// Find the longest execution path in the DAG
+func (d DAG) LongestPath(stats map[int]ExecutionStat) ([]int, uint64) {
+	prev := make(map[int]int, len(d.GetVertices()))
 
-	for k, i := range d.GetRoots() {
-		roots = append(roots, i.(int))
-		rootIdMap[i.(int)] = k
+	for i := 0; i < len(d.GetVertices()); i++ {
+		prev[i] = -1
 	}
 
-	sort.Ints(roots)
+	pathWeights := make(map[int]uint64, len(d.GetVertices()))
 
-	for _, i := range roots {
-		rootIds = append(rootIds, rootIdMap[i])
+	maxPath := 0
+	maxPathWeight := uint64(0)
+
+	idxToId := make(map[int]string, len(d.GetVertices()))
+
+	for k, i := range d.GetVertices() {
+		idxToId[i.(int)] = k
 	}
 
-	fmt.Println(roots)
+	for i := 0; i < len(idxToId); i++ {
+		parents, _ := d.GetParents(idxToId[i])
+
+		if len(parents) > 0 {
+			for _, p := range parents {
+				weight := pathWeights[p.(int)] + stats[i].End - stats[i].Start
+				if weight > pathWeights[i] {
+					pathWeights[i] = weight
+					prev[i] = p.(int)
+				}
+			}
+		} else {
+			pathWeights[i] = stats[i].End - stats[i].Start
+		}
+
+		if pathWeights[i] > maxPathWeight {
+			maxPath = i
+			maxPathWeight = pathWeights[i]
+		}
+	}
+
+	path := make([]int, 0)
+	for i := maxPath; i != -1; i = prev[i] {
+		path = append(path, i)
+	}
+
+	// Reverse the path so the transactions are in the ascending order
+	for i, j := 0, len(path)-1; i < j; i, j = i+1, j-1 {
+		path[i], path[j] = path[j], path[i]
+	}
+
+	return path, maxPathWeight
+}
+
+func (d DAG) Report(stats map[int]ExecutionStat, out func(string)) {
+	longestPath, weight := d.LongestPath(stats)
+
+	serialWeight := uint64(0)
+
+	for i := 0; i < len(d.GetVertices()); i++ {
+		serialWeight += stats[i].End - stats[i].Start
+	}
 
 	makeStrs := func(ints []int) (ret []string) {
 		for _, v := range ints {
@@ -149,29 +199,9 @@ func (d DAG) Report(out func(string)) {
 		return
 	}
 
-	maxDesc := 0
-	maxDeps := 0
-	totalDeps := 0
+	out("Longest execution path:")
+	out(fmt.Sprintf("(%v) %v", len(longestPath), strings.Join(makeStrs(longestPath), "->")))
 
-	for k, v := range roots {
-		ids := []int{v}
-		desc, _ := d.GetDescendants(rootIds[k])
-
-		for _, i := range desc {
-			ids = append(ids, i.(int))
-		}
-
-		sort.Ints(ids)
-		out(fmt.Sprintf("(%v) %v", len(ids), strings.Join(makeStrs(ids), "->")))
-
-		if len(desc) > maxDesc {
-			maxDesc = len(desc)
-		}
-	}
-
-	numTx := len(d.DAG.GetVertices())
-	out(fmt.Sprintf("max chain length: %v of %v (%v%%)", maxDesc+1, numTx,
-		fmt.Sprintf("%.1f", float64(maxDesc+1)*100.0/float64(numTx))))
-	out(fmt.Sprintf("max dep count: %v of %v (%v%%)", maxDeps, totalDeps,
-		fmt.Sprintf("%.1f", float64(maxDeps)*100.0/float64(totalDeps))))
+	out(fmt.Sprintf("Longest path ideal execution time: %v of %v (serial total), %v%%", time.Duration(weight),
+		time.Duration(serialWeight), fmt.Sprintf("%.1f", float64(weight)*100.0/float64(serialWeight))))
 }
