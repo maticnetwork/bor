@@ -290,11 +290,9 @@ func (pe *ParallelExecutor) Prepare() {
 		pe.estimateDeps[i] = make([]int, 0)
 
 		if len(t.Dependencies()) > 0 {
-			for index, val := range t.Dependencies() {
-				if index > 1 {
-					clearPendingFlag = true
-					pe.execTasks.addDependencies(val, i)
-				}
+			for _, val := range t.Dependencies() {
+				clearPendingFlag = true
+				pe.execTasks.addDependencies(val, i)
 			}
 			if clearPendingFlag {
 				pe.execTasks.clearPending(i)
