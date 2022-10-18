@@ -120,12 +120,12 @@ jobs:
         - uses: actions/setup-node@v3
           with:
             node-version: '10.17.0'
-            cache: 'npm'
-            cache-dependency-path: |
-              matic-cli/package-lock.json
-              matic-cli/devnet/code/contracts/package-lock.json
-              matic-cli/devnet/code/genesis-contracts/package-lock.json
-              matic-cli/devnet/code/genesis-contracts/matic-contracts/package-lock.json
+#            cache: 'npm'
+#            cache-dependency-path: |
+#              matic-cli/package-lock.json
+#              matic-cli/devnet/code/contracts/package-lock.json
+#              matic-cli/devnet/code/genesis-contracts/package-lock.json
+#              matic-cli/devnet/code/genesis-contracts/matic-contracts/package-lock.json
 
         - name: Bootstrap devnet
           run: |
