@@ -1135,8 +1135,13 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 	)
 
 	tracing.Exec(ctx, "worker.SplittingTransactions", func(ctx context.Context, span trace.Span) {
+
+		prePendingTime := time.Now()
+
 		pending := w.eth.TxPool().Pending(true)
 		remoteTxs = pending
+
+		postPendingTime := time.Now()
 
 		for _, account := range w.eth.TxPool().Locals() {
 			if txs := remoteTxs[account]; len(txs) > 0 {
@@ -1145,6 +1150,8 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 			}
 		}
 
+		postLocalsTime := time.Now()
+
 		localTxsCount = len(localTxs)
 		remoteTxsCount = len(remoteTxs)
 
@@ -1152,6 +1159,8 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 			span,
 			attribute.Int("len of local txs", localTxsCount),
 			attribute.Int("len of remote txs", remoteTxsCount),
+			attribute.String("time taken by Pending()", fmt.Sprintf("%v", postPendingTime.Sub(prePendingTime))),
+			attribute.String("time taken by Locals()", fmt.Sprintf("%v", postLocalsTime.Sub(postPendingTime))),
 		)
 	})
 
