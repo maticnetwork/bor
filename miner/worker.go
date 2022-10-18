@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -540,6 +541,7 @@ func (w *worker) mainLoop() {
 	for {
 		select {
 		case req := <-w.newWorkCh:
+			log.Info("\nFirst commitWork")
 			w.commitWork(req.interrupt, req.noempty, req.timestamp)
 
 		case req := <-w.getWorkCh:
@@ -618,6 +620,7 @@ func (w *worker) mainLoop() {
 				// submit sealing work here since all empty submission will be rejected
 				// by clique. Of course the advance sealing(empty submission) is disabled.
 				if w.chainConfig.Clique != nil && w.chainConfig.Clique.Period == 0 {
+					log.Info("\nSecond commitWork")
 					w.commitWork(nil, true, time.Now().Unix())
 				}
 			}
@@ -999,7 +1002,16 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 	}
 
 	close(chDeps)
+	t1 := time.Now()
 	depsWg.Wait()
+	t2 := time.Now()
+	log.Info("Waited for:", t2.Sub(t1))
+
+	if count > 2 {
+		log.Info("Now, Waited for:", t2.Sub(t1))
+	}
+
+	t3 := time.Now()
 
 	tempDeps := make([][]uint64, len(mvReadMapList))
 
@@ -1033,6 +1045,11 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 	}
 
 	env.header.TxDependency = tempDeps
+
+	t4 := time.Now()
+	log.Info("After waiting, Waited for:", t4.Sub(t3))
+
+	os.Exit(1)
 
 	if !w.isRunning() && len(coalescedLogs) > 0 {
 		// We don't push the pendingLogsEvent while we are sealing. The reason is that
@@ -1164,6 +1181,7 @@ func (w *worker) fillTransactions(interrupt *int32, env *environment) {
 			localTxs[account] = txs
 		}
 	}
+	log.Info("In fillTransactions", len(localTxs), len(remoteTxs))
 	if len(localTxs) > 0 {
 		txs := types.NewTransactionsByPriceAndNonce(env.signer, localTxs, env.header.BaseFee)
 		if w.commitTransactions(env, txs, interrupt) {
@@ -1186,6 +1204,7 @@ func (w *worker) generateWork(params *generateParams) (*types.Block, error) {
 	}
 	defer work.discard()
 
+	log.Info("Second fillTransactions")
 	w.fillTransactions(nil, work)
 	return w.engine.FinalizeAndAssemble(w.chain, work.header, work.state, work.txs, work.unclelist(), work.receipts)
 }
@@ -1214,10 +1233,13 @@ func (w *worker) commitWork(interrupt *int32, noempty bool, timestamp int64) {
 	// Create an empty block based on temporary copied state for
 	// sealing in advance without waiting block execution finished.
 	if !noempty && atomic.LoadUint32(&w.noempty) == 0 {
+		log.Info("First commit")
 		w.commit(work.copy(), nil, false, start)
 	}
 	// Fill pending transactions from the txpool
+	log.Info("First fillTransactions")
 	w.fillTransactions(interrupt, work)
+	log.Info("Second commit")
 	w.commit(work.copy(), w.fullTaskHook, true, start)
 
 	// Swap out the old work with the new one, terminating any leftover
