@@ -629,7 +629,9 @@ func (w *worker) mainLoop(ctx context.Context) {
 				}
 				txset := types.NewTransactionsByPriceAndNonce(w.current.signer, txs, w.current.header.BaseFee)
 				tcount := w.current.tcount
-				w.commitTransactions(w.current, txset, nil)
+
+				interruptCh, _ := getInterruptCh(w.current.header.Number.Uint64())
+				w.commitTransactions(w.current, txset, nil, interruptCh)
 
 				// Only update the snapshot if any new transactions were added
 				// to the pending block
@@ -911,7 +913,7 @@ func (w *worker) commitTransaction(env *environment, tx *types.Transaction) ([]*
 	return receipt.Logs, nil
 }
 
-func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByPriceAndNonce, interrupt *int32) bool {
+func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByPriceAndNonce, interrupt *int32, interruptCh chan struct{}) bool {
 	gasLimit := env.header.GasLimit
 	if env.gasPool == nil {
 		env.gasPool = new(core.GasPool).AddGas(gasLimit)
@@ -937,6 +939,14 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 					inc:   true,
 				}
 			}
+
+			select {
+			case <-interruptCh:
+				break
+			default:
+				// nothing to do
+			}
+
 			return atomic.LoadInt32(interrupt) == commitInterruptNewHead
 		}
 		// If we don't have enough gas for any further transactions then we're done
@@ -1120,7 +1130,7 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 // fillTransactions retrieves the pending transactions from the txpool and fills them
 // into the given sealing block. The transaction selection and ordering strategy can
 // be customized with the plugin in the future.
-func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *environment) {
+func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *environment, interruptCh chan struct{}) {
 	ctx, span := tracing.StartSpan(ctx, "fillTransactions")
 	defer tracing.EndSpan(span)
 
@@ -1174,7 +1184,7 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		})
 
 		tracing.Exec(ctx, "worker.LocalCommitTransactions", func(ctx context.Context, span trace.Span) {
-			committed = w.commitTransactions(env, txs, interrupt)
+			committed = w.commitTransactions(env, txs, interrupt, interruptCh)
 		})
 
 		if committed {
@@ -1197,7 +1207,7 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		})
 
 		tracing.Exec(ctx, "worker.RemoteCommitTransactions", func(ctx context.Context, span trace.Span) {
-			committed = w.commitTransactions(env, txs, interrupt)
+			committed = w.commitTransactions(env, txs, interrupt, interruptCh)
 		})
 
 		if committed {
@@ -1222,14 +1232,46 @@ func (w *worker) generateWork(ctx context.Context, params *generateParams) (*typ
 	}
 	defer work.discard()
 
-	w.fillTransactions(ctx, nil, work)
+	interruptCh, _ := getInterruptCh(work.header.Number.Uint64())
+
+	w.fillTransactions(ctx, nil, work, interruptCh)
 
 	return w.engine.FinalizeAndAssemble(ctx, w.chain, work.header, work.state, work.txs, work.unclelist(), work.receipts)
+}
+
+var interruptMap = make(map[uint64]chan struct{})
+var interruptMapMu sync.Mutex
+
+func getInterruptCh(blockNumber uint64) (chan struct{}, bool) {
+	interruptMapMu.Lock()
+	interruptMapCh, ok := interruptMap[blockNumber]
+	if !ok {
+		interruptMapCh = make(chan struct{})
+		interruptMap[blockNumber] = interruptMapCh
+	}
+	interruptMapMu.Unlock()
+
+	return interruptMapCh, !ok
 }
 
 // commitWork generates several new sealing tasks based on the parent block
 // and submit them to the sealer.
 func (w *worker) commitWork(ctx context.Context, interrupt *int32, noempty bool, timestamp int64) {
+	if !noempty && atomic.LoadUint32(&w.noempty) == 0 {
+		interruptCh, isNew := getInterruptCh(w.chain.CurrentBlock().NumberU64() + 1)
+		if !isNew {
+			select {
+			case <-interruptCh:
+				// nothing to do
+			default:
+				fmt.Println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+				close(interruptCh)
+			}
+
+			//return
+		}
+	}
+
 	start := time.Now()
 
 	var (
@@ -1277,7 +1319,9 @@ func (w *worker) commitWork(ctx context.Context, interrupt *int32, noempty bool,
 	}
 
 	// Fill pending transactions from the txpool
-	w.fillTransactions(ctx, interrupt, work)
+	interruptCh, _ := getInterruptCh(work.header.Number.Uint64())
+
+	w.fillTransactions(ctx, interrupt, work, interruptCh)
 
 	err = w.commit(ctx, work.copy(), w.fullTaskHook, true, start)
 	if err != nil {
