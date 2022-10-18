@@ -1003,10 +1003,18 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 
 	tempDeps := make([][]uint64, len(mvReadMapList))
 
-	for i := 0; i <= len(mvReadMapList)-1; i++ {
+	// adding for txIdx = 0
+	tempDeps[0] = []uint64{uint64(0)}
+	tempDeps[0] = append(tempDeps[0], 1)
+
+	for j := range deps[0] {
+		tempDeps[0] = append(tempDeps[0], uint64(j))
+	}
+
+	for i := 1; i <= len(mvReadMapList)-1; i++ {
 		tempDeps[i] = []uint64{uint64(i)}
 
-		reads := mvReadMapList[i]
+		reads := mvReadMapList[i-1]
 
 		_, ok1 := reads[blockstm.NewSubpathKey(env.coinbase, state.BalancePath)]
 		_, ok2 := reads[blockstm.NewSubpathKey(common.HexToAddress(w.chainConfig.Bor.CalculateBurntContract(env.header.Number.Uint64())), state.BalancePath)]
