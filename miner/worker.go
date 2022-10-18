@@ -1198,10 +1198,6 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		}
 	}()
 
-	defer func() {
-		close(done)
-	}()
-
 	tracing.Exec(ctx, "worker.SplittingTransactions", func(ctx context.Context, span trace.Span) {
 
 		prePendingTime := time.Now()
@@ -1219,6 +1215,7 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		}
 
 		postLocalsTime := time.Now()
+		close(done)
 
 		localTxsCount = len(localTxs)
 		remoteTxsCount = len(remoteTxs)
