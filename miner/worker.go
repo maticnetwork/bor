@@ -913,6 +913,7 @@ func (w *worker) commitTransaction(env *environment, tx *types.Transaction) ([]*
 	return receipt.Logs, nil
 }
 
+//nolint:gocognit
 func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByPriceAndNonce, interrupt *int32, interruptCh chan struct{}) bool {
 	gasLimit := env.header.GasLimit
 	if env.gasPool == nil {
@@ -944,7 +945,6 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 			case <-interruptCh:
 				break
 			default:
-				// nothing to do
 			}
 
 			return atomic.LoadInt32(interrupt) == commitInterruptNewHead
@@ -1244,12 +1244,16 @@ var interruptMapMu sync.Mutex
 
 func getInterruptCh(blockNumber uint64) (chan struct{}, bool) {
 	interruptMapMu.Lock()
+
 	interruptMapCh, ok := interruptMap[blockNumber]
 	if !ok {
 		interruptMapCh = make(chan struct{})
 		interruptMap[blockNumber] = interruptMapCh
 	}
+
 	interruptMapMu.Unlock()
+
+	fmt.Println("====", blockNumber, !ok)
 
 	return interruptMapCh, !ok
 }
