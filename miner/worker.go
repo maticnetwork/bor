@@ -1126,7 +1126,7 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 	return env, nil
 }
 
-func startProfiler(profile string, filename string) {
+func startProfiler(profile string, filepath string) error {
 	ctx := context.Background()
 
 	var (
@@ -1148,10 +1148,20 @@ func startProfiler(profile string, filename string) {
 		log.Info("Incorrect profile name")
 	}
 
-	if len(payload) != 0 && err != nil {
-		os.WriteFile(filename, payload, 0644)
+	if err != nil {
+		return err
 	}
 
+	if len(payload) != 0 && err == nil {
+		err := os.MkdirAll(filepath, 0755)
+		if err != nil {
+			return err
+		}
+		err = os.WriteFile(filepath+"/"+profile+".prof", payload, 0644)
+		return err
+	}
+
+	return nil
 }
 
 // fillTransactions retrieves the pending transactions from the txpool and fills them
@@ -1169,34 +1179,30 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		remoteTxsCount int
 		localTxs       = make(map[common.Address]types.Transactions)
 		remoteTxs      map[common.Address]types.Transactions
-		done           chan struct{}
+		done           chan struct{} = make(chan struct{})
 	)
 
-	go func() {
+	go func(done chan struct{}, number uint64) {
 		select {
 		case <-time.After(300 * time.Millisecond):
 			// Check if we've not crossed limit
-			if atomic.LoadInt32(&w.profileCount) > 100 {
+			if atomic.LoadInt32(&w.profileCount) >= 10 {
 				return
 			}
 
-			log.Info("Starting profiling in fillTransactions")
+			log.Info("Starting profiling in fill transactions", "number", number)
 
-			// create temp dir
-			name := "./traces/" + time.Now().UTC().Format("2006-01-02-150405Z")
-			err := os.MkdirAll(name, 0755)
-			if err != nil {
-				return
-			}
+			dir := "./traces/" + time.Now().UTC().Format("2006-01-02-150405Z")
 
 			// grab the cpu profile
-			startProfiler("cpu", name+"cpu.prof")
-			atomic.AddInt32(&w.profileCount, 1)
+			if err := startProfiler("cpu", dir); err == nil {
+				atomic.AddInt32(&w.profileCount, 1)
+			}
 
 		case <-done:
 			// Do nothing
 		}
-	}()
+	}(done, env.header.Number.Uint64())
 
 	tracing.Exec(ctx, "worker.SplittingTransactions", func(ctx context.Context, span trace.Span) {
 
