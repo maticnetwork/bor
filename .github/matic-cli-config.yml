@@ -2,7 +2,7 @@ defaultStake: 10000
 defaultFee: 2000
 borChainId: "15001"
 heimdallChainId: heimdall-15001
-contractsBranch: mardizzone/revert-node-upgrade
+contractsBranch: main
 sprintSize: 64
 blockNumber: '2'
 blockTime: '0'
