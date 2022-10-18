@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -41,6 +42,8 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/trie"
+
+	"github.com/ethereum/go-ethereum/internal/cli/server/pprof"
 )
 
 const (
@@ -257,6 +260,8 @@ type worker struct {
 	skipSealHook func(*task) bool                   // Method to decide whether skipping the sealing.
 	fullTaskHook func()                             // Method to call before pushing the full sealing task.
 	resubmitHook func(time.Duration, time.Duration) // Method to call upon updating resubmitting interval.
+
+	profileCount int32 // Global count for profiling
 }
 
 //nolint:staticcheck
@@ -1117,6 +1122,34 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 	return env, nil
 }
 
+func startProfiler(profile string, filename string) {
+	ctx := context.Background()
+
+	var (
+		payload []byte
+		err     error
+	)
+
+	switch profile {
+	case "cpu":
+		payload, _, err = pprof.CPUProfile(ctx, 10)
+
+	case "trace":
+		payload, _, err = pprof.Trace(ctx, 10)
+
+	case "heap":
+		// TODO
+
+	default:
+		log.Info("Incorrect profile name")
+	}
+
+	if len(payload) != 0 && err != nil {
+		os.WriteFile(filename, payload, 0644)
+	}
+
+}
+
 // fillTransactions retrieves the pending transactions from the txpool and fills them
 // into the given sealing block. The transaction selection and ordering strategy can
 // be customized with the plugin in the future.
@@ -1132,7 +1165,38 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		remoteTxsCount int
 		localTxs       = make(map[common.Address]types.Transactions)
 		remoteTxs      map[common.Address]types.Transactions
+		done           chan struct{}
 	)
+
+	go func() {
+		select {
+		case <-time.After(300 * time.Millisecond):
+			// Check if we've not crossed limit
+			if atomic.LoadInt32(&w.profileCount) > 100 {
+				return
+			}
+
+			log.Info("Starting profiling in fillTransactions")
+
+			// create temp dir
+			name := "./traces/" + time.Now().UTC().Format("2006-01-02-150405Z")
+			err := os.MkdirAll(name, 0755)
+			if err != nil {
+				return
+			}
+
+			// grab the cpu profile
+			startProfiler("cpu", name+"cpu.prof")
+			atomic.AddInt32(&w.profileCount, 1)
+
+		case <-done:
+			// Do nothing
+		}
+	}()
+
+	defer func() {
+		close(done)
+	}()
 
 	tracing.Exec(ctx, "worker.SplittingTransactions", func(ctx context.Context, span trace.Span) {
 		pending := w.eth.TxPool().Pending(true)
