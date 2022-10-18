@@ -1194,10 +1194,6 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		}
 	}()
 
-	defer func() {
-		close(done)
-	}()
-
 	tracing.Exec(ctx, "worker.SplittingTransactions", func(ctx context.Context, span trace.Span) {
 		pending := w.eth.TxPool().Pending(true)
 		remoteTxs = pending
@@ -1208,6 +1204,8 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 				localTxs[account] = txs
 			}
 		}
+
+		close(done)
 
 		localTxsCount = len(localTxs)
 		remoteTxsCount = len(remoteTxs)
