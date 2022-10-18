@@ -1369,6 +1369,10 @@ func (w *worker) commit(ctx context.Context, env *environment, interval func(), 
 			return err
 		}
 
+		interruptMapMu.Lock()
+		delete(interruptMap, block.Number().Uint64())
+		interruptMapMu.Unlock()
+
 		// If we're post merge, just ignore
 		if !w.isTTDReached(block.Header()) {
 			select {
