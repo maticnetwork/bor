@@ -119,7 +119,7 @@ jobs:
 
         - uses: actions/setup-node@v3
           with:
-            node-version: '16.17.1'
+            node-version: '10.17.0'
             cache: 'npm'
             cache-dependency-path: |
               matic-cli/package-lock.json
