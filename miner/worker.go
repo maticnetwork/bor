@@ -1225,8 +1225,6 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 	}()
 
 	go func(number uint64) {
-		var err error
-
 		closeFn := func() error {
 			return nil
 		}
