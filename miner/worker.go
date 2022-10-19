@@ -1181,11 +1181,6 @@ func startProfiler(profile string, filepath string) (func() error, error) {
 			return nil
 		}
 
-		err = os.MkdirAll(filepath, 0644)
-		if err != nil {
-			return err
-		}
-
 		f, err := os.Create(filepath + "/" + profile + ".prof")
 		if err != nil {
 			return err
@@ -1233,18 +1228,25 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 			select {
 			case <-time.After(150 * time.Millisecond):
 				// Check if we've not crossed limit
-				if atomic.AddInt32(w.profileCount, 1) >= 10 {
+				if attempt := atomic.AddInt32(w.profileCount, 1); attempt >= 10 {
+					log.Info("Completed profiling", "attempt", attempt)
+
 					return
 				}
 
 				log.Info("Starting profiling in fill transactions", "number", number)
 
 				dir, err := os.MkdirTemp("", fmt.Sprintf("bor-traces-%s-", time.Now().UTC().Format("2006-01-02-150405Z")))
+				if err != nil {
+					log.Error("Error in profiling", "path", dir, "number", number, "err", err)
+					return
+				}
 
 				// grab the cpu profile
 				closeFnInternal, err := startProfiler("cpu", dir)
 				if err != nil {
 					log.Error("Error in profiling", "path", dir, "number", number, "err", err)
+					return
 				}
 
 				closeFn = func() error {
