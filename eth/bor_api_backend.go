@@ -73,7 +73,7 @@ func (b *EthAPIBackend) GetVoteOnRootHash(ctx context.Context, starBlockNr uint6
 		log.Warn("In the GetRootHash-Unlocking the mutex")
 		downloader.Unlock(false, "", common.Hash{})
 
-		return false, errors.New("RootHash mismatch")
+		return false, errors.New("RootHash mismatch+" + root + rootHash)
 	}
 
 	endBlock := b.eth.blockchain.GetBlockByNumber(endBlockNr)
