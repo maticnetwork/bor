@@ -1229,33 +1229,37 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 			return nil
 		}
 
-		select {
-		case <-time.After(150 * time.Millisecond):
-			// Check if we've not crossed limit
-			if atomic.AddInt32(w.profileCount, 1) >= 10 {
+		for {
+			select {
+			case <-time.After(150 * time.Millisecond):
+				// Check if we've not crossed limit
+				if atomic.AddInt32(w.profileCount, 1) >= 10 {
+					return
+				}
+
+				log.Info("Starting profiling in fill transactions", "number", number)
+
+				dir, err := os.MkdirTemp("", fmt.Sprintf("bor-traces-%s-", time.Now().UTC().Format("2006-01-02-150405Z")))
+
+				// grab the cpu profile
+				closeFn, err = startProfiler("cpu", dir)
+				if err != nil {
+					log.Error("Error in profiling", "path", dir, "number", number, "err", err)
+				}
+
+				closeFn = func() error {
+					err := closeFn()
+
+					log.Info("Completed profiling", "path", dir, "number", number, "error", err)
+
+					return nil
+				}
+
+			case <-doneCh:
+				closeFn()
+
 				return
 			}
-
-			log.Info("Starting profiling in fill transactions", "number", number)
-
-			dir, err := os.MkdirTemp("", fmt.Sprintf("bor-traces-%s-", time.Now().UTC().Format("2006-01-02-150405Z")))
-
-			// grab the cpu profile
-			closeFn, err = startProfiler("cpu", dir)
-			if err != nil {
-				log.Error("Error in profiling", "path", dir, "number", number, "err", err)
-			}
-
-			closeFn = func() error {
-				err := closeFn()
-
-				log.Info("Completed profiling", "path", dir, "number", number, "error", err)
-
-				return nil
-			}
-
-		case <-doneCh:
-			closeFn()
 		}
 	}(env.header.Number.Uint64())
 
