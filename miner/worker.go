@@ -1153,7 +1153,7 @@ func startProfiler(profile string, filepath string) error {
 	}
 
 	if len(payload) != 0 && err == nil {
-		err := os.MkdirAll(filepath, 0755)
+		err := os.MkdirAll(filepath, 0777)
 		if err != nil {
 			return err
 		}
@@ -1192,7 +1192,7 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 
 			log.Info("Starting profiling in fill transactions", "number", number)
 
-			dir := "./traces/" + time.Now().UTC().Format("2006-01-02-150405Z")
+			dir := "/tmp/bor-traces/" + time.Now().UTC().Format("2006-01-02-150405Z")
 
 			// grab the cpu profile
 			if err := startProfiler("cpu", dir); err == nil {
