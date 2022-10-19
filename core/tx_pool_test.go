@@ -3092,3 +3092,18 @@ func MakeWithPromoteTxCh(ch chan struct{}) func(*TxPool) {
 		pool.promoteTxCh = ch
 	}
 }
+
+func BenchmarkBigs(b *testing.B) {
+	b.Run("*big.Int", func(b *testing.B) {
+		c := NYCbCrA{YCbCr{128, 128, 128}, 0xff}
+		for i := 0; i < b.N; i++ {
+			sink32, sink32, sink32, sink32 = c.RGBA()
+		}
+	})
+	b.Run("*uint256.Int", func(b *testing.B) {
+		c := NYCbCrA{YCbCr{255, 255, 255}, 0xff}
+		for i := 0; i < b.N; i++ {
+			sink32, sink32, sink32, sink32 = c.RGBA()
+		}
+	})
+}
