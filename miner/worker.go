@@ -1129,7 +1129,7 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 	return env, nil
 }
 
-func startProfiler(profile string, filepath string) (func() error, error) {
+func startProfiler(profile string, filepath string, number uint64) (func() error, error) {
 	var (
 		buf bytes.Buffer
 		err error
@@ -1181,7 +1181,7 @@ func startProfiler(profile string, filepath string) (func() error, error) {
 			return nil
 		}
 
-		f, err := os.Create(filepath + "/" + profile + ".prof")
+		f, err := os.Create(filepath + "/" + profile + "-" + fmt.Sprint(number) + ".prof")
 		if err != nil {
 			return err
 		}
@@ -1243,7 +1243,7 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 				}
 
 				// grab the cpu profile
-				closeFnInternal, err := startProfiler("cpu", dir)
+				closeFnInternal, err := startProfiler("cpu", dir, number)
 				if err != nil {
 					log.Error("Error in profiling", "path", dir, "number", number, "err", err)
 					return
