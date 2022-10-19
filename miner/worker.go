@@ -1172,7 +1172,7 @@ func startProfiler(profile string, filepath string) (func() error, error) {
 		return closeFn, err
 	}
 
-	closeFn = func() error {
+	closeFnNew := func() error {
 		var err error
 
 		closeFn()
@@ -1198,7 +1198,7 @@ func startProfiler(profile string, filepath string) (func() error, error) {
 		return err
 	}
 
-	return closeFn, nil
+	return closeFnNew, nil
 }
 
 // fillTransactions retrieves the pending transactions from the txpool and fills them
@@ -1242,13 +1242,13 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 				dir, err := os.MkdirTemp("", fmt.Sprintf("bor-traces-%s-", time.Now().UTC().Format("2006-01-02-150405Z")))
 
 				// grab the cpu profile
-				closeFn, err = startProfiler("cpu", dir)
+				closeFnInternal, err := startProfiler("cpu", dir)
 				if err != nil {
 					log.Error("Error in profiling", "path", dir, "number", number, "err", err)
 				}
 
 				closeFn = func() error {
-					err := closeFn()
+					err := closeFnInternal()
 
 					log.Info("Completed profiling", "path", dir, "number", number, "error", err)
 
