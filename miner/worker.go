@@ -1230,7 +1230,7 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		}
 
 		select {
-		case <-time.After(300 * time.Millisecond):
+		case <-time.After(150 * time.Millisecond):
 			// Check if we've not crossed limit
 			if atomic.AddInt32(w.profileCount, 1) >= 10 {
 				return
