@@ -20,6 +20,10 @@ func (s *PublicBlockChainAPI) GetBorBlockReceipt(ctx context.Context, hash commo
 	return s.b.GetBorBlockReceipt(ctx, hash)
 }
 
+func (s *PublicBlockChainAPI) GetVoteOnRootHash(ctx context.Context, starBlockNr uint64, endBlockNr uint64, rootHash string, milestoneId string) (bool, error) {
+	return s.b.GetVoteOnRootHash(ctx, starBlockNr, endBlockNr, rootHash, milestoneId)
+}
+
 //
 // Bor transaction utils
 //
