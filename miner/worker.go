@@ -1240,12 +1240,12 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 
 			log.Info("Starting profiling in fill transactions", "number", number)
 
-			dir := "./traces/" + time.Now().UTC().Format("2006-01-02-150405Z")
+			dir, err := os.MkdirTemp("", fmt.Sprintf("bor-traces-%s-", time.Now().UTC().Format("2006-01-02-150405Z")))
 
 			// grab the cpu profile
 			closeFn, err = startProfiler("cpu", dir)
 			if err != nil {
-				log.Error("profiling", "err", err)
+				log.Error("Error in profiling", "path", dir, "number", number, "err", err)
 			}
 			log.Info("Completed profiling", "path", dir, "number", number)
 
