@@ -171,7 +171,7 @@ func (m *milestone) Lock(endBlockNum uint64) bool {
 		}
 
 		log.Warn("endBlockNum > m.LockedSprintNumber")
-		m.PurgeMilestoneIDsList()
+		m.UnlockSprint(m.LockedSprintNumber)
 		m.Locked = false
 	}
 
@@ -183,26 +183,44 @@ func (m *milestone) Lock(endBlockNum uint64) bool {
 func (m *milestone) Unlock(doLock bool, milestoneId string, endBlockHash common.Hash) {
 	m.Locked = m.Locked || doLock
 	log.Warn("In Unlock ")
+	for key, _ := range m.LockedMilestoneIds { //Just for testing purpose, need to remove this.
+		log.Warn("Unlocking sprint before ", "key", key) // Need to remove this afterward
+	}
 	if doLock {
 		m.LockedSprintHash = endBlockHash
 		m.LockedMilestoneIds[milestoneId] = true
 	}
+	for key, _ := range m.LockedMilestoneIds { // Just for testing purpose
+		log.Warn("Unlocking sprint after ", "key", key) //  Need to remove this afterward
+	}
+
+	log.Warn("Locked Sprint", m.LockedSprintNumber) // Just for testing
 	m.m.Unlock()
 }
 
 func (m *milestone) UnlockSprint(endBlockNum uint64) {
 
+	log.Warn("Unlocking Sprint", "sprintNumber", endBlockNum) // Just for testing
+
 	if endBlockNum < m.LockedSprintNumber {
 		return
 	}
+	for key, _ := range m.LockedMilestoneIds { //Just for testing purpose, need to remove this.
+		log.Warn("Unlocking sprint before ", "key", key) // Need to remove this afterward
+	} //
 	log.Warn("Unlocking sprint")
 	m.Locked = false
 	m.PurgeMilestoneIDsList()
+	for key, _ := range m.LockedMilestoneIds { // Just for testing purpose
+		log.Warn("Unlocking sprint after ", "key", key) //  Need to remove this afterward
+	}
+	log.Warn("Value of lock", "value", m.Locked) // Just for testing
 
 }
 
 func (m *milestone) RemoveMilestoneID(milestoneId string) {
 	m.m.Lock()
+	log.Warn("Removing the MilestoneID") // Just for testing
 	delete(m.LockedMilestoneIds, milestoneId)
 
 	if len(m.LockedMilestoneIds) == 0 {

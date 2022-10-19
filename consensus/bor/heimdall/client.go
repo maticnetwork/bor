@@ -71,7 +71,7 @@ const (
 	fetchCheckpoint      = "/checkpoints/%s"
 	fetchCheckpointCount = "/checkpoints/count"
 
-	fetchMilestone      = "/milestone"
+	fetchMilestone      = "/milestone/latest"
 	fetchMilestoneCount = "/milestone/count"
 
 	fetchLastNoAckMilestone = "/milestone/lastNoAck"
