@@ -1209,7 +1209,7 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 
 		prePendingTime := time.Now()
 
-		pending := w.eth.TxPool().Pending(true)
+		pending := w.eth.TxPool().Pending(ctx, true)
 		remoteTxs = pending
 
 		postPendingTime := time.Now()

@@ -17,7 +17,9 @@
 package core
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"math"
 	"math/big"
 	"sort"
@@ -27,6 +29,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/prque"
+	"github.com/ethereum/go-ethereum/common/tracing"
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -34,6 +37,8 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/params"
+
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -541,13 +546,24 @@ func (pool *TxPool) ContentFrom(addr common.Address) (types.Transactions, types.
 // The enforceTips parameter can be used to do an extra filtering on the pending
 // transactions and only return those whose **effective** tip is large enough in
 // the next pending execution environment.
-func (pool *TxPool) Pending(enforceTips bool) map[common.Address]types.Transactions {
-	pool.mu.RLock()
+func (pool *TxPool) Pending(ctx context.Context, enforceTips bool) map[common.Address]types.Transactions {
+	ctx, span := tracing.StartSpan(ctx, "txpool.Pending()")
+	defer tracing.EndSpan(span)
+
+	tracing.ElapsedTime(ctx, span, "txpool.Pending.RLock() time taken", func(ctx context.Context, s trace.Span) {
+		pool.mu.RLock()
+	})
+
 	defer pool.mu.RUnlock()
 
 	pending := make(map[common.Address]types.Transactions)
 	for addr, list := range pool.pending {
-		txs := list.Flatten()
+		msg := "Flatten - " + addr.String() + " - " + fmt.Sprint(list.Len())
+
+		var txs types.Transactions
+		tracing.ElapsedTime(ctx, span, msg, func(ctx context.Context, s trace.Span) {
+			txs = list.Flatten()
+		})
 
 		// If the miner requests tip enforcement, cap the lists now
 		if enforceTips && !pool.locals.contains(addr) {
@@ -558,6 +574,7 @@ func (pool *TxPool) Pending(enforceTips bool) map[common.Address]types.Transacti
 				}
 			}
 		}
+
 		if len(txs) > 0 {
 			pending[addr] = txs
 		}

@@ -2932,7 +2932,7 @@ func testPoolBatchInsert(t *testing.T, cfg txPoolRapidConfig) {
 
 					// copy-paste
 					start := time.Now()
-					pending := pool.Pending(true)
+					pending := pool.Pending(context.Background(), true)
 					locals := pool.Locals()
 
 					// from fillTransactions
@@ -2950,7 +2950,7 @@ func testPoolBatchInsert(t *testing.T, cfg txPoolRapidConfig) {
 						// check for nonce gaps
 						var lastNonce, currentNonce int
 
-						pending = pool.Pending(true)
+						pending = pool.Pending(context.Background(), true)
 
 						for txAcc, pendingTxs := range pending {
 							lastNonce = int(pool.Nonce(txAcc)) - len(pendingTxs) - 1

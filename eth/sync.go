@@ -17,6 +17,7 @@
 package eth
 
 import (
+	"context"
 	"errors"
 	"math/big"
 	"sync/atomic"
@@ -44,7 +45,7 @@ func (h *handler) syncTransactions(p *eth.Peer) {
 	//
 	// TODO(karalabe): Figure out if we could get away with random order somehow
 	var txs types.Transactions
-	pending := h.txpool.Pending(false)
+	pending := h.txpool.Pending(context.Background(), false)
 	for _, batch := range pending {
 		txs = append(txs, batch...)
 	}
