@@ -19,7 +19,6 @@ package core
 import (
 	"context"
 	"errors"
-	"fmt"
 	"math"
 	"math/big"
 	"sort"
@@ -550,35 +549,39 @@ func (pool *TxPool) Pending(ctx context.Context, enforceTips bool) map[common.Ad
 	ctx, span := tracing.StartSpan(ctx, "txpool.Pending()")
 	defer tracing.EndSpan(span)
 
-	tracing.ElapsedTime(ctx, span, "txpool.Pending.RLock() time taken", func(ctx context.Context, s trace.Span) {
+	tracing.ElapsedTime(ctx, span, "txpool.Pending.RLock()", func(ctx context.Context, s trace.Span) {
 		pool.mu.RLock()
 	})
 
 	defer pool.mu.RUnlock()
 
-	pending := make(map[common.Address]types.Transactions)
-	for addr, list := range pool.pending {
-		msg := "Flatten - " + addr.String() + " - " + fmt.Sprint(list.Len())
+	pending := make(map[common.Address]types.Transactions, len(pool.pending))
 
-		var txs types.Transactions
-		tracing.ElapsedTime(ctx, span, msg, func(ctx context.Context, s trace.Span) {
-			txs = list.Flatten()
-		})
+	accounts := len(pool.pending)
+	var txCount int
 
-		// If the miner requests tip enforcement, cap the lists now
-		if enforceTips && !pool.locals.contains(addr) {
-			for i, tx := range txs {
-				if tx.EffectiveGasTipIntCmp(pool.gasPrice, pool.priced.urgent.baseFee) < 0 {
-					txs = txs[:i]
-					break
+	tracing.ElapsedTime(ctx, span, "txpool.Pending.Loop", func(ctx context.Context, s trace.Span) {
+		for addr, list := range pool.pending {
+			txs := list.Flatten()
+
+			// If the miner requests tip enforcement, cap the lists now
+			if enforceTips && !pool.locals.contains(addr) {
+				for i, tx := range txs {
+					if tx.EffectiveGasTipIntCmp(pool.gasPrice, pool.priced.urgent.baseFee) < 0 {
+						txs = txs[:i]
+						break
+					}
 				}
 			}
-		}
 
-		if len(txs) > 0 {
-			pending[addr] = txs
+			if len(txs) > 0 {
+				pending[addr] = txs
+				txCount += len(txs)
+			}
 		}
-	}
+	})
+
+	// log txCount and accounts
 	return pending
 }
 
