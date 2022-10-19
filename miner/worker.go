@@ -17,11 +17,15 @@
 package miner
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"math/big"
 	"os"
+	"runtime"
+	"runtime/pprof"
+	ptrace "runtime/trace"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -42,8 +46,6 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/trie"
-
-	"github.com/ethereum/go-ethereum/internal/cli/server/pprof"
 )
 
 const (
@@ -261,7 +263,7 @@ type worker struct {
 	fullTaskHook func()                             // Method to call before pushing the full sealing task.
 	resubmitHook func(time.Duration, time.Duration) // Method to call upon updating resubmitting interval.
 
-	profileCount int32 // Global count for profiling
+	profileCount *int32 // Global count for profiling
 }
 
 //nolint:staticcheck
@@ -290,6 +292,7 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 		resubmitIntervalCh: make(chan time.Duration),
 		resubmitAdjustCh:   make(chan *intervalAdjust, resubmitAdjustChanSize),
 	}
+	worker.profileCount = new(int32)
 	// Subscribe NewTxsEvent for tx pool
 	worker.txsSub = eth.TxPool().SubscribeNewTxsEvent(worker.txsCh)
 	// Subscribe events for blockchain
@@ -1126,42 +1129,76 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 	return env, nil
 }
 
-func startProfiler(profile string, filepath string) error {
-	ctx := context.Background()
-
+func startProfiler(profile string, filepath string) (func() error, error) {
 	var (
-		payload []byte
-		err     error
+		buf bytes.Buffer
+		err error
 	)
+
+	closeFn := func() error {
+		return nil
+	}
 
 	switch profile {
 	case "cpu":
-		payload, _, err = pprof.CPUProfile(ctx, 10)
+		err = pprof.StartCPUProfile(&buf)
+
+		if err == nil {
+			closeFn = func() error {
+				pprof.StopCPUProfile()
+				return nil
+			}
+		}
 
 	case "trace":
-		payload, _, err = pprof.Trace(ctx, 10)
+		err = ptrace.Start(&buf)
+
+		if err == nil {
+			closeFn = func() error {
+				ptrace.Stop()
+				return nil
+			}
+		}
 
 	case "heap":
-		// TODO
+		runtime.GC()
+		err = pprof.WriteHeapProfile(&buf)
 
 	default:
 		log.Info("Incorrect profile name")
 	}
 
 	if err != nil {
-		return err
+		return closeFn, err
 	}
 
-	if len(payload) != 0 && err == nil {
-		err := os.MkdirAll(filepath, 0755)
+	closeFn = func() error {
+		var err error
+
+		closeFn()
+
+		if buf.Len() == 0 {
+			return nil
+		}
+
+		err = os.MkdirAll(filepath, 0644)
 		if err != nil {
 			return err
 		}
-		err = os.WriteFile(filepath+"/"+profile+".prof", payload, 0644)
+
+		f, err := os.Create(filepath + "/" + profile + ".prof")
+		if err != nil {
+			return err
+		}
+
+		defer f.Close()
+
+		_, err = f.Write(buf.Bytes())
+
 		return err
 	}
 
-	return nil
+	return closeFn, nil
 }
 
 // fillTransactions retrieves the pending transactions from the txpool and fills them
@@ -1179,14 +1216,25 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		remoteTxsCount int
 		localTxs       = make(map[common.Address]types.Transactions)
 		remoteTxs      map[common.Address]types.Transactions
-		done           chan struct{} = make(chan struct{})
 	)
 
-	go func(done chan struct{}, number uint64) {
+	doneCh := make(chan struct{})
+
+	defer func() {
+		close(doneCh)
+	}()
+
+	go func(number uint64) {
+		var err error
+
+		closeFn := func() error {
+			return nil
+		}
+
 		select {
 		case <-time.After(300 * time.Millisecond):
 			// Check if we've not crossed limit
-			if atomic.LoadInt32(&w.profileCount) >= 10 {
+			if atomic.AddInt32(w.profileCount, 1) >= 10 {
 				return
 			}
 
@@ -1195,15 +1243,16 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 			dir := "./traces/" + time.Now().UTC().Format("2006-01-02-150405Z")
 
 			// grab the cpu profile
-			if err := startProfiler("cpu", dir); err == nil {
-				log.Info("Completed profiling", "path", dir, "number", number)
-				atomic.AddInt32(&w.profileCount, 1)
+			closeFn, err = startProfiler("cpu", dir)
+			if err != nil {
+				log.Error("profiling", "err", err)
 			}
+			log.Info("Completed profiling", "path", dir, "number", number)
 
-		case <-done:
-			// Do nothing
+		case <-doneCh:
+			closeFn()
 		}
-	}(done, env.header.Number.Uint64())
+	}(env.header.Number.Uint64())
 
 	tracing.Exec(ctx, "worker.SplittingTransactions", func(ctx context.Context, span trace.Span) {
 
@@ -1222,7 +1271,6 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		}
 
 		postLocalsTime := time.Now()
-		close(done)
 
 		localTxsCount = len(localTxs)
 		remoteTxsCount = len(remoteTxs)
