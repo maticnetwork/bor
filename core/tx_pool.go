@@ -26,6 +26,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.opentelemetry.io/otel/attribute"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/prque"
 	"github.com/ethereum/go-ethereum/common/tracing"
@@ -581,7 +583,11 @@ func (pool *TxPool) Pending(ctx context.Context, enforceTips bool) map[common.Ad
 		}
 	})
 
-	// log txCount and accounts
+	span.SetAttributes(
+		attribute.Int("txCount", txCount),
+		attribute.Int("accounts", accounts),
+	)
+
 	return pending
 }
 
