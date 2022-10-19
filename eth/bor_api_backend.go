@@ -69,7 +69,7 @@ func (b *EthAPIBackend) GetVoteOnRootHash(ctx context.Context, starBlockNr uint6
 		return false, err
 	}
 
-	if root != rootHash {
+	if root != rootHash[2:] {
 		log.Warn("In the GetRootHash-Unlocking the mutex")
 		downloader.Unlock(false, "", common.Hash{})
 
