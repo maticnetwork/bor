@@ -284,6 +284,7 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 		startCh:            make(chan struct{}, 1),
 		resubmitIntervalCh: make(chan time.Duration),
 		resubmitAdjustCh:   make(chan *intervalAdjust, resubmitAdjustChanSize),
+		noempty:            1,
 	}
 	// Subscribe NewTxsEvent for tx pool
 	worker.txsSub = eth.TxPool().SubscribeNewTxsEvent(worker.txsCh)
@@ -630,7 +631,8 @@ func (w *worker) mainLoop(ctx context.Context) {
 				txset := types.NewTransactionsByPriceAndNonce(w.current.signer, txs, w.current.header.BaseFee)
 				tcount := w.current.tcount
 
-				interruptCh, _ := getInterruptCh(w.current.header.Number.Uint64())
+				interruptCh, stopFn := getInterruptTimer(ctx, w.current, w.chain.CurrentBlock())
+
 				w.commitTransactions(w.current, txset, nil, interruptCh)
 
 				// Only update the snapshot if any new transactions were added
@@ -638,6 +640,8 @@ func (w *worker) mainLoop(ctx context.Context) {
 				if tcount != w.current.tcount {
 					w.updateSnapshot(w.current)
 				}
+
+				stopFn()
 			} else {
 				// Special case, if the consensus engine is 0 period clique(dev mode),
 				// submit sealing work here since all empty submission will be rejected
@@ -922,6 +926,13 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 	var coalescedLogs []*types.Log
 
 	for {
+		// case of interrupting by timeout
+		select {
+		case <-interruptCh:
+			break
+		default:
+		}
+
 		// In the following three cases, we will interrupt the execution of the transaction.
 		// (1) new head block event arrival, the interrupt signal is 1
 		// (2) worker start or restart, the interrupt signal is 1
@@ -939,12 +950,6 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 					ratio: ratio,
 					inc:   true,
 				}
-			}
-
-			select {
-			case <-interruptCh:
-				break
-			default:
 			}
 
 			return atomic.LoadInt32(interrupt) == commitInterruptNewHead
@@ -1232,48 +1237,20 @@ func (w *worker) generateWork(ctx context.Context, params *generateParams) (*typ
 	}
 	defer work.discard()
 
-	interruptCh, _ := getInterruptCh(work.header.Number.Uint64())
+	interruptCh, stopFn := getInterruptTimer(ctx, w.current, w.chain.CurrentBlock())
+	defer stopFn()
 
 	w.fillTransactions(ctx, nil, work, interruptCh)
 
 	return w.engine.FinalizeAndAssemble(ctx, w.chain, work.header, work.state, work.txs, work.unclelist(), work.receipts)
 }
 
-var interruptMap = make(map[uint64]chan struct{})
-var interruptMapMu sync.Mutex
-
-func getInterruptCh(blockNumber uint64) (chan struct{}, bool) {
-	interruptMapMu.Lock()
-
-	interruptMapCh, ok := interruptMap[blockNumber]
-	if !ok {
-		interruptMapCh = make(chan struct{})
-		interruptMap[blockNumber] = interruptMapCh
-	}
-
-	interruptMapMu.Unlock()
-
-	fmt.Println("====", blockNumber, !ok)
-
-	return interruptMapCh, !ok
-}
-
 // commitWork generates several new sealing tasks based on the parent block
 // and submit them to the sealer.
 func (w *worker) commitWork(ctx context.Context, interrupt *int32, noempty bool, timestamp int64) {
-	if !noempty && atomic.LoadUint32(&w.noempty) == 0 {
-		interruptCh, isNew := getInterruptCh(w.chain.CurrentBlock().NumberU64() + 1)
-		if !isNew {
-			select {
-			case <-interruptCh:
-				// nothing to do
-			default:
-				fmt.Println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-				close(interruptCh)
-			}
-
-			//return
-		}
+	if !noempty {
+		// empty blocks
+		return
 	}
 
 	start := time.Now()
@@ -1305,6 +1282,16 @@ func (w *worker) commitWork(ctx context.Context, interrupt *int32, noempty bool,
 		return
 	}
 
+	var (
+		interruptCh chan struct{}
+		stopFn      = func() {}
+	)
+
+	if !noempty {
+		interruptCh, stopFn = getInterruptTimer(ctx, work, w.chain.CurrentBlock())
+		defer stopFn()
+	}
+
 	ctx, span := tracing.StartSpan(ctx, "commitWork")
 	defer tracing.EndSpan(span)
 
@@ -1323,8 +1310,6 @@ func (w *worker) commitWork(ctx context.Context, interrupt *int32, noempty bool,
 	}
 
 	// Fill pending transactions from the txpool
-	interruptCh, _ := getInterruptCh(work.header.Number.Uint64())
-
 	w.fillTransactions(ctx, interrupt, work, interruptCh)
 
 	err = w.commit(ctx, work.copy(), w.fullTaskHook, true, start)
@@ -1339,6 +1324,34 @@ func (w *worker) commitWork(ctx context.Context, interrupt *int32, noempty bool,
 	}
 
 	w.current = work
+}
+
+func getInterruptTimer(ctx context.Context, work *environment, current *types.Block) (chan struct{}, func()) {
+	delay := time.Unix(int64(work.header.Time), 0).Sub(time.Now())
+
+	timeoutTimer := time.NewTimer(delay)
+	stopFn := func() {
+		timeoutTimer.Stop()
+	}
+
+	blockNumber := current.NumberU64() + 1
+	interruptCh := make(chan struct{})
+
+	go func() {
+		select {
+		case <-timeoutTimer.C:
+			log.Info("an interrupt event. cancelling the current block",
+				"block", blockNumber,
+				"hash", current.Hash().Hex(),
+			)
+
+			close(interruptCh)
+		case <-ctx.Done():
+			// nothing to do
+		}
+	}()
+
+	return interruptCh, stopFn
 }
 
 // commit runs any post-transaction state modifications, assembles the final block
@@ -1372,10 +1385,6 @@ func (w *worker) commit(ctx context.Context, env *environment, interval func(), 
 		if err != nil {
 			return err
 		}
-
-		interruptMapMu.Lock()
-		delete(interruptMap, block.Number().Uint64())
-		interruptMapMu.Unlock()
 
 		// If we're post merge, just ignore
 		if !w.isTTDReached(block.Header()) {
