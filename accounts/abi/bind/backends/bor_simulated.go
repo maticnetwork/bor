@@ -23,6 +23,10 @@ func (fb *filterBackend) GetBorBlockReceipt(ctx context.Context, hash common.Has
 	return receipt, nil
 }
 
+func (fb *filterBackend) GetVoteOnRootHash(ctx context.Context, starBlockNr uint64, endBlockNr uint64, rootHash string, milestoneId string) (bool, error) {
+	return false, nil
+}
+
 func (fb *filterBackend) GetBorBlockLogs(ctx context.Context, hash common.Hash) ([]*types.Log, error) {
 	receipt, err := fb.GetBorBlockReceipt(ctx, hash)
 	if err != nil || receipt == nil {
