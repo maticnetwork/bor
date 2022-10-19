@@ -583,10 +583,12 @@ func (pool *TxPool) Pending(ctx context.Context, enforceTips bool) map[common.Ad
 		}
 	})
 
-	span.SetAttributes(
-		attribute.Int("txCount", txCount),
-		attribute.Int("accounts", accounts),
-	)
+	if span != nil {
+		span.SetAttributes(
+			attribute.Int("txCount", txCount),
+			attribute.Int("accounts", accounts),
+		)
+	}
 
 	return pending
 }
