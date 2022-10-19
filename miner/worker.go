@@ -1196,6 +1196,7 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 
 			// grab the cpu profile
 			if err := startProfiler("cpu", dir); err == nil {
+				log.Info("Completed profiling", "path", dir, "number", number)
 				atomic.AddInt32(&w.profileCount, 1)
 			}
 
