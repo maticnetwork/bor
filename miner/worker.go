@@ -1247,7 +1247,14 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 			if err != nil {
 				log.Error("Error in profiling", "path", dir, "number", number, "err", err)
 			}
-			log.Info("Completed profiling", "path", dir, "number", number)
+
+			closeFn = func() error {
+				err := closeFn()
+
+				log.Info("Completed profiling", "path", dir, "number", number, "error", err)
+
+				return nil
+			}
 
 		case <-doneCh:
 			closeFn()
