@@ -1198,6 +1198,8 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 			if err := startProfiler("cpu", dir); err == nil {
 				log.Info("Completed profiling", "path", dir, "number", number)
 				atomic.AddInt32(&w.profileCount, 1)
+			} else {
+				log.Info("Error in profiling", "path", dir, "number", number, "err", err)
 			}
 
 		case <-done:
