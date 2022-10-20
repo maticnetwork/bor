@@ -12,7 +12,7 @@ Bor is the Official Golang implementation of the Matic protocol. It is a fork of
 ![lines](https://img.shields.io/tokei/lines/github/maticnetwork/bor)
 [![Discord](https://img.shields.io/discord/714888181740339261?color=1C1CE1&label=Polygon%20%7C%20Discord%20%F0%9F%91%8B%20&style=flat-square)](https://discord.gg/zdwkdvMNY2)
 [![Twitter Follow](https://img.shields.io/twitter/follow/0xPolygon.svg?style=social)](https://twitter.com/0xPolygon)
- 
+
 ## How to contribute
 
 ### Contribution  Guidelines
