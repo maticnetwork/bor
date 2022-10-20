@@ -28,6 +28,7 @@ import (
 	"github.com/holiman/uint256"
 
 	"github.com/ethereum/go-ethereum/common"
+	cmath "github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/core/types"
 )
 
@@ -286,15 +287,19 @@ func (l *txList) Add(tx *types.Transaction, priceBump uint64) (bool, *types.Tran
 		if old.GasFeeCapCmp(tx) >= 0 || old.GasTipCapCmp(tx) >= 0 {
 			return false, nil
 		}
-		// thresholdFeeCap = oldFC  * (100 + priceBump) / 100
-		a := uint256.NewInt(100 + priceBump)
-		aFeeCap := uint256.NewInt(0).Mul(a, old.GasFeeCapUint())
-		aTip := a.Mul(a, old.GasTipCapUint())
 
-		// thresholdTip    = oldTip * (100 + priceBump) / 100
-		b := uint256.NewInt(100)
-		thresholdFeeCap := aFeeCap.Div(aFeeCap, b)
-		thresholdTip := aTip.Div(aTip, b)
+		// thresholdFeeCap = oldFC  * (100 + priceBump) / 100 = oldFC  * (1 + priceBump/100) = oldFC + oldFC*priceBump/100)
+		gasFeeCap := old.GasFeeCapUint()
+		priceBumpU := uint256.NewInt(priceBump)
+		priceBumpFC := uint256.NewInt(0).Mul(gasFeeCap, priceBumpU)
+		priceBumpFC = priceBumpFC.Div(priceBumpFC, cmath.U100)
+		thresholdFeeCap := gasFeeCap.Add(gasFeeCap, priceBumpFC)
+
+		// thresholdTip    = oldTip * (100 + priceBump) / 100 = oldTip * (1 + priceBump/100) = oldTip + oldTip*priceBump/100
+		gasTipCap := old.GasTipCapUint()
+		priceBumpTC := uint256.NewInt(0).Mul(gasTipCap, priceBumpU)
+		priceBumpTC = priceBumpTC.Div(priceBumpTC, cmath.U100)
+		thresholdTip := gasTipCap.Add(gasTipCap, priceBumpTC)
 
 		// We have to ensure that both the new fee cap and tip are higher than the
 		// old ones as well as checking the percentage threshold to ensure that
