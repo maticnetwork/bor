@@ -303,14 +303,18 @@ func (l *txList) Add(tx *types.Transaction, priceBump uint64) (bool, *types.Tran
 			return false, nil
 		}
 	}
+
 	// Otherwise overwrite the old transaction with the current one
 	l.txs.Put(tx)
+
 	if cost := tx.CostUint(); l.costcap == nil || l.costcap.Cmp(cost) < 0 {
 		l.costcap = cost
 	}
+
 	if gas := tx.Gas(); l.gascap < gas {
 		l.gascap = gas
 	}
+
 	return true, old
 }
 
