@@ -2465,6 +2465,7 @@ func benchmarkPendingDemotion(b *testing.B, size int) {
 	}
 	// Benchmark the speed of pool validation
 	b.ResetTimer()
+	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		pool.demoteUnexecutables()
 	}
@@ -2521,6 +2522,7 @@ func benchmarkPoolBatchInsert(b *testing.B, size int, local bool) {
 	}
 	// Benchmark importing the transactions into the queue
 	b.ResetTimer()
+	b.ReportAllocs()
 	for _, batch := range batches {
 		if local {
 			pool.AddLocals(batch)

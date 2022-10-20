@@ -25,6 +25,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/holiman/uint256"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -265,16 +267,25 @@ func (tx *Transaction) AccessList() AccessList { return tx.inner.accessList() }
 func (tx *Transaction) Gas() uint64 { return tx.inner.gas() }
 
 // GasPrice returns the gas price of the transaction.
-func (tx *Transaction) GasPrice() *big.Int { return new(big.Int).Set(tx.inner.gasPrice()) }
+func (tx *Transaction) GasPrice() *big.Int    { return new(big.Int).Set(tx.inner.gasPrice()) }
+func (tx *Transaction) GasPriceRef() *big.Int { return tx.inner.gasPrice() }
 
 // GasTipCap returns the gasTipCap per gas of the transaction.
-func (tx *Transaction) GasTipCap() *big.Int { return new(big.Int).Set(tx.inner.gasTipCap()) }
+func (tx *Transaction) GasTipCap() *big.Int    { return new(big.Int).Set(tx.inner.gasTipCap()) }
+func (tx *Transaction) GasTipCapRef() *big.Int { return tx.inner.gasTipCap() }
+func (tx *Transaction) GasTipCapUint() *uint256.Int {
+	b, _ := uint256.FromBig(tx.inner.gasTipCap())
+	return b
+}
 
 // GasFeeCap returns the fee cap per gas of the transaction.
-func (tx *Transaction) GasFeeCap() *big.Int { return new(big.Int).Set(tx.inner.gasFeeCap()) }
+func (tx *Transaction) GasFeeCap() *big.Int    { return new(big.Int).Set(tx.inner.gasFeeCap()) }
+func (tx *Transaction) GasFeeCapRef() *big.Int { return tx.inner.gasFeeCap() }
 
 // Value returns the ether amount of the transaction.
 func (tx *Transaction) Value() *big.Int { return new(big.Int).Set(tx.inner.value()) }
+
+func (tx *Transaction) ValueRef() *big.Int { return tx.inner.value() }
 
 // Nonce returns the sender account nonce of the transaction.
 func (tx *Transaction) Nonce() uint64 { return tx.inner.nonce() }
@@ -287,9 +298,19 @@ func (tx *Transaction) To() *common.Address {
 
 // Cost returns gas * gasPrice + value.
 func (tx *Transaction) Cost() *big.Int {
-	total := new(big.Int).Mul(tx.GasPrice(), new(big.Int).SetUint64(tx.Gas()))
-	total.Add(total, tx.Value())
-	return total
+	gasPrice, _ := uint256.FromBig(tx.GasPriceRef())
+	gasPrice.Mul(gasPrice, uint256.NewInt(tx.Gas()))
+	value, _ := uint256.FromBig(tx.ValueRef())
+
+	return gasPrice.Add(gasPrice, value).ToBig()
+}
+
+func (tx *Transaction) CostUint() *uint256.Int {
+	gasPrice, _ := uint256.FromBig(tx.GasPriceRef())
+	gasPrice.Mul(gasPrice, uint256.NewInt(tx.Gas()))
+	value, _ := uint256.FromBig(tx.ValueRef())
+
+	return gasPrice.Add(gasPrice, value)
 }
 
 // RawSignatureValues returns the V, R, S signature values of the transaction.

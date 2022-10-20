@@ -461,10 +461,10 @@ func (fs FrontierSigner) SignatureValues(tx *Transaction, sig []byte) (r, s, v *
 func (fs FrontierSigner) Hash(tx *Transaction) common.Hash {
 	return rlpHash([]interface{}{
 		tx.Nonce(),
-		tx.GasPrice(),
+		tx.GasPriceRef(),
 		tx.Gas(),
 		tx.To(),
-		tx.Value(),
+		tx.ValueRef(),
 		tx.Data(),
 	})
 }

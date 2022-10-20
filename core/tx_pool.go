@@ -18,6 +18,7 @@ package core
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"math/big"
 	"sort"
@@ -25,8 +26,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/holiman/uint256"
+
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/prque"
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -251,11 +253,13 @@ type TxPool struct {
 	locals  *accountSet // Set of local transaction to exempt from eviction rules
 	journal *txJournal  // Journal of local transaction to back up to disk
 
-	pending map[common.Address]*txList   // All currently processable transactions
-	queue   map[common.Address]*txList   // Queued but non-processable transactions
-	beats   map[common.Address]time.Time // Last heartbeat from each known account
-	all     *txLookup                    // All transactions to allow lookups
-	priced  *txPricedList                // All transactions sorted by price
+	pending      map[common.Address]*txList // All currently processable transactions
+	pendingCount int
+	queue        map[common.Address]*txList // Queued but non-processable transactions
+	queueCount   int
+	beats        map[common.Address]time.Time // Last heartbeat from each known account
+	all          *txLookup                    // All transactions to allow lookups
+	priced       *txPricedList                // All transactions sorted by price
 
 	chainHeadCh     chan ChainHeadEvent
 	chainHeadSub    event.Subscription
@@ -614,14 +618,15 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 		return ErrGasLimit
 	}
 	// Sanity check for extremely large numbers
-	if tx.GasFeeCap().BitLen() > 256 {
+	gasFeeCap := tx.GasFeeCapRef()
+	if gasFeeCap.BitLen() > 256 {
 		return ErrFeeCapVeryHigh
 	}
-	if tx.GasTipCap().BitLen() > 256 {
+	if gasFeeCap.BitLen() > 256 {
 		return ErrTipVeryHigh
 	}
 	// Ensure gasFeeCap is greater than or equal to gasTipCap.
-	if tx.GasFeeCapIntCmp(tx.GasTipCap()) < 0 {
+	if tx.GasFeeCapIntCmp(gasFeeCap) < 0 {
 		return ErrTipAboveFeeCap
 	}
 	// Make sure the transaction is signed properly.
@@ -720,6 +725,8 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 	if list := pool.pending[from]; list != nil && list.Overlaps(tx) {
 		// Nonce already pending, check if required price bump is met
 		inserted, old := list.Add(tx, pool.config.PriceBump)
+		pool.pendingCount++
+
 		if !inserted {
 			pendingDiscardMeter.Mark(1)
 			return false, ErrReplaceUnderpriced
@@ -835,6 +842,7 @@ func (pool *TxPool) promoteTx(addr common.Address, hash common.Hash, tx *types.T
 	list := pool.pending[addr]
 
 	inserted, old := list.Add(tx, pool.config.PriceBump)
+	pool.pendingCount++
 	if !inserted {
 		// An older transaction was better, discard this
 		pool.all.Remove(hash)
@@ -910,10 +918,14 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local, sync bool) []error {
 	var (
 		errs = make([]error, len(txs))
 		news = make([]*types.Transaction, 0, len(txs))
+
+		hash common.Hash
 	)
+
 	for i, tx := range txs {
 		// If the transaction is known, pre-set the error slot
-		if pool.all.Get(tx.Hash()) != nil {
+		hash = tx.Hash()
+		if pool.all.Get(hash) != nil {
 			errs[i] = ErrAlreadyKnown
 			knownTxMeter.Mark(1)
 			continue
@@ -960,13 +972,18 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local, sync bool) []error {
 func (pool *TxPool) addTxsLocked(txs []*types.Transaction, local bool) ([]error, *accountSet) {
 	dirty := newAccountSet(pool.signer)
 	errs := make([]error, len(txs))
+
+	var (
+		replaced bool
+	)
+
 	for i, tx := range txs {
-		replaced, err := pool.add(tx, local)
-		errs[i] = err
-		if err == nil && !replaced {
+		replaced, errs[i] = pool.add(tx, local)
+		if errs[i] == nil && !replaced {
 			dirty.addTx(tx)
 		}
 	}
+
 	validTxMeter.Mark(int64(len(dirty.accounts)))
 	return errs, dirty
 }
@@ -1026,6 +1043,7 @@ func (pool *TxPool) removeTx(hash common.Hash, outofbound bool) {
 	// Remove the transaction from the pending lists and reset the account nonce
 	if pending := pool.pending[addr]; pending != nil {
 		if removed, invalids := pending.Remove(tx); removed {
+			pool.pendingCount--
 			// If no more pending transactions are left, remove the list
 			if pending.Empty() {
 				delete(pool.pending, addr)
@@ -1164,6 +1182,11 @@ func (pool *TxPool) runReorg(done chan struct{}, reset *txpoolResetRequest, dirt
 		reorgDurationTimer.Update(time.Since(t0))
 	}(time.Now())
 	defer close(done)
+
+	t := time.Now()
+	defer func() {
+		fmt.Println(time.Since(t))
+	}()
 
 	var promoteAddrs []common.Address
 	if dirtyAccounts != nil && reset == nil {
@@ -1338,6 +1361,7 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 func (pool *TxPool) promoteExecutables(accounts []common.Address) []*types.Transaction {
 	// Track the promoted transactions to broadcast them at once
 	var promoted []*types.Transaction
+	var balance *uint256.Int
 
 	// Iterate over all accounts and promote any executable transactions
 	for _, addr := range accounts {
@@ -1353,7 +1377,8 @@ func (pool *TxPool) promoteExecutables(accounts []common.Address) []*types.Trans
 		}
 		log.Trace("Removed old queued transactions", "count", len(forwards))
 		// Drop all transactions that are too costly (low balance or out of gas)
-		drops, _ := list.Filter(pool.currentState.GetBalance(addr), pool.currentMaxGas)
+		balance, _ = uint256.FromBig(pool.currentState.GetBalance(addr))
+		drops, _ := list.Filter(balance, pool.currentMaxGas)
 		for _, tx := range drops {
 			hash := tx.Hash()
 			pool.all.Remove(hash)
@@ -1402,55 +1427,81 @@ func (pool *TxPool) promoteExecutables(accounts []common.Address) []*types.Trans
 // pending limit. The algorithm tries to reduce transaction counts by an approximately
 // equal number for all for accounts with many pending transactions.
 func (pool *TxPool) truncatePending() {
-	pending := uint64(0)
-	for _, list := range pool.pending {
-		pending += uint64(list.Len())
-	}
+	pending := uint64(pool.pendingCount)
 	if pending <= pool.config.GlobalSlots {
 		return
 	}
 
 	pendingBeforeCap := pending
+
+	var listLen int
+
+	type pair struct {
+		address common.Address
+		value   int64
+	}
+
 	// Assemble a spam order to penalize large transactors first
-	spammers := prque.New(nil)
+	spammers := make([]pair, 0, 8)
+	count := 0
+	var ok bool
 	for addr, list := range pool.pending {
 		// Only evict transactions from high rollers
-		if !pool.locals.contains(addr) && uint64(list.Len()) > pool.config.AccountSlots {
-			spammers.Push(addr, int64(list.Len()))
+		listLen = len(list.txs.items)
+		if uint64(listLen) > pool.config.AccountSlots {
+			if _, ok = pool.locals.accounts[addr]; !ok {
+				continue
+			}
+			// todo: use slice and sort it once
+			count++
+			spammers = append(spammers, pair{addr, int64(listLen)})
 		}
 	}
 	// Gradually drop transactions from offenders
-	offenders := []common.Address{}
-	for pending > pool.config.GlobalSlots && !spammers.Empty() {
+	offenders := make([]common.Address, 0, len(spammers))
+	sort.Slice(spammers, func(i, j int) bool {
+		return spammers[i].value < spammers[j].value
+	})
+
+	var offender common.Address
+
+	// todo: metrics: spammers, offenders, total loops
+	for len(spammers) != 0 && pending > pool.config.GlobalSlots {
 		// Retrieve the next offender if not local address
-		offender, _ := spammers.Pop()
-		offenders = append(offenders, offender.(common.Address))
+		offender, spammers = spammers[len(spammers)-1].address, spammers[:len(spammers)-1]
+		offenders = append(offenders, offender)
 
 		// Equalize balances until all the same or below threshold
 		if len(offenders) > 1 {
 			// Calculate the equalization threshold for all current offenders
-			threshold := pool.pending[offender.(common.Address)].Len()
+			threshold := len(pool.pending[offender].txs.items)
+
+			var list *txList
+			var hash common.Hash
 
 			// Iteratively reduce all offenders until below limit or threshold reached
 			for pending > pool.config.GlobalSlots && pool.pending[offenders[len(offenders)-2]].Len() > threshold {
 				for i := 0; i < len(offenders)-1; i++ {
-					list := pool.pending[offenders[i]]
+					list = pool.pending[offenders[i]]
 
-					caps := list.Cap(list.Len() - 1)
+					caps := list.Cap(len(list.txs.items) - 1)
 					for _, tx := range caps {
 						// Drop the transaction from the global pools too
-						hash := tx.Hash()
+						hash = tx.Hash()
 						pool.all.Remove(hash)
 
 						// Update the account nonce to the dropped transaction
 						pool.pendingNonces.setIfLower(offenders[i], tx.Nonce())
 						log.Trace("Removed fairness-exceeding pending transaction", "hash", hash)
 					}
+
 					pool.priced.Removed(len(caps))
+
 					pendingGauge.Dec(int64(len(caps)))
 					if pool.locals.contains(offenders[i]) {
 						localGauge.Dec(int64(len(caps)))
 					}
+
 					pending--
 				}
 			}
@@ -1459,14 +1510,17 @@ func (pool *TxPool) truncatePending() {
 
 	// If still above threshold, reduce to limit or min allowance
 	if pending > pool.config.GlobalSlots && len(offenders) > 0 {
+		var list *txList
+		var hash common.Hash
+
 		for pending > pool.config.GlobalSlots && uint64(pool.pending[offenders[len(offenders)-1]].Len()) > pool.config.AccountSlots {
 			for _, addr := range offenders {
-				list := pool.pending[addr]
+				list = pool.pending[addr]
 
-				caps := list.Cap(list.Len() - 1)
+				caps := list.Cap(len(list.txs.items) - 1)
 				for _, tx := range caps {
 					// Drop the transaction from the global pools too
-					hash := tx.Hash()
+					hash = tx.Hash()
 					pool.all.Remove(hash)
 
 					// Update the account nonce to the dropped transaction
@@ -1474,8 +1528,9 @@ func (pool *TxPool) truncatePending() {
 					log.Trace("Removed fairness-exceeding pending transaction", "hash", hash)
 				}
 				pool.priced.Removed(len(caps))
+
 				pendingGauge.Dec(int64(len(caps)))
-				if pool.locals.contains(addr) {
+				if _, ok = pool.locals.accounts[addr]; ok {
 					localGauge.Dec(int64(len(caps)))
 				}
 				pending--
@@ -1538,6 +1593,8 @@ func (pool *TxPool) truncateQueue() {
 // is always explicitly triggered by SetBaseFee and it would be unnecessary and wasteful
 // to trigger a re-heap is this function
 func (pool *TxPool) demoteUnexecutables() {
+	balance := uint256.NewInt(0)
+
 	// Iterate over all accounts and demote any non-executable transactions
 	for addr, list := range pool.pending {
 		nonce := pool.currentState.GetNonce(addr)
@@ -1550,7 +1607,8 @@ func (pool *TxPool) demoteUnexecutables() {
 			log.Trace("Removed old pending transaction", "hash", hash)
 		}
 		// Drop all transactions that are too costly (low balance or out of gas), and queue any invalids back for later
-		drops, invalids := list.Filter(pool.currentState.GetBalance(addr), pool.currentMaxGas)
+		balance.SetFromBig(pool.currentState.GetBalance(addr))
+		drops, invalids := list.Filter(balance, pool.currentMaxGas)
 		for _, tx := range drops {
 			hash := tx.Hash()
 			log.Trace("Removed unpayable pending transaction", "hash", hash)
@@ -1585,6 +1643,7 @@ func (pool *TxPool) demoteUnexecutables() {
 		}
 		// Delete the entire pending entry if it became empty.
 		if list.Empty() {
+			pool.pendingCount -= pool.pending[addr].Len()
 			delete(pool.pending, addr)
 		}
 	}
@@ -1605,9 +1664,9 @@ func (a addressesByHeartbeat) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 // accountSet is simply a set of addresses to check for existence, and a signer
 // capable of deriving addresses from transactions.
 type accountSet struct {
-	accounts map[common.Address]struct{}
-	signer   types.Signer
-	cache    *[]common.Address
+	accounts        map[common.Address]struct{}
+	accountsFlatted []common.Address
+	signer          types.Signer
 }
 
 // newAccountSet creates a new address set with an associated signer for sender
@@ -1644,8 +1703,10 @@ func (as *accountSet) containsTx(tx *types.Transaction) bool {
 
 // add inserts a new address into the set to track.
 func (as *accountSet) add(addr common.Address) {
+	if _, ok := as.accounts[addr]; !ok {
+		as.accountsFlatted = append(as.accountsFlatted, addr)
+	}
 	as.accounts[addr] = struct{}{}
-	as.cache = nil
 }
 
 // addTx adds the sender of tx into the set.
@@ -1658,22 +1719,19 @@ func (as *accountSet) addTx(tx *types.Transaction) {
 // flatten returns the list of addresses within this set, also caching it for later
 // reuse. The returned slice should not be changed!
 func (as *accountSet) flatten() []common.Address {
-	if as.cache == nil {
-		accounts := make([]common.Address, 0, len(as.accounts))
-		for account := range as.accounts {
-			accounts = append(accounts, account)
-		}
-		as.cache = &accounts
-	}
-	return *as.cache
+	return as.accountsFlatted
 }
 
 // merge adds all addresses from the 'other' set into 'as'.
 func (as *accountSet) merge(other *accountSet) {
+	var ok bool
+
 	for addr := range other.accounts {
+		if _, ok = as.accounts[addr]; !ok {
+			as.accountsFlatted = append(as.accountsFlatted, addr)
+		}
 		as.accounts[addr] = struct{}{}
 	}
-	as.cache = nil
 }
 
 // txLookup is used internally by TxPool to track transactions while allowing
