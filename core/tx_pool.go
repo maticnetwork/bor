@@ -18,7 +18,6 @@ package core
 
 import (
 	"errors"
-	"fmt"
 	"math"
 	"math/big"
 	"sort"
@@ -1195,12 +1194,8 @@ func (pool *TxPool) runReorg(done chan struct{}, reset *txpoolResetRequest, dirt
 	defer func(t0 time.Time) {
 		reorgDurationTimer.Update(time.Since(t0))
 	}(time.Now())
-	defer close(done)
 
-	t := time.Now()
-	defer func() {
-		fmt.Println(time.Since(t))
-	}()
+	defer close(done)
 
 	var promoteAddrs []common.Address
 	if dirtyAccounts != nil && reset == nil {
@@ -1468,7 +1463,7 @@ func (pool *TxPool) truncatePending() {
 		// Only evict transactions from high rollers
 		listLen = len(list.txs.items)
 		if uint64(listLen) > pool.config.AccountSlots {
-			if _, ok = pool.locals.accounts[addr]; !ok {
+			if _, ok = pool.locals.accounts[addr]; ok {
 				continue
 			}
 
@@ -1477,13 +1472,17 @@ func (pool *TxPool) truncatePending() {
 			spammers = append(spammers, pair{addr, int64(listLen)})
 		}
 	}
+
 	// Gradually drop transactions from offenders
 	offenders := make([]common.Address, 0, len(spammers))
 	sort.Slice(spammers, func(i, j int) bool {
 		return spammers[i].value < spammers[j].value
 	})
 
-	var offender common.Address
+	var (
+		offender common.Address
+		caps     types.Transactions
+	)
 
 	// todo: metrics: spammers, offenders, total loops
 	for len(spammers) != 0 && pending > pool.config.GlobalSlots {
@@ -1508,7 +1507,7 @@ func (pool *TxPool) truncatePending() {
 				for i := 0; i < len(offenders)-1; i++ {
 					list = pool.pending[offenders[i]]
 
-					caps := list.Cap(len(list.txs.items) - 1)
+					caps = list.Cap(len(list.txs.items) - 1)
 					for _, tx := range caps {
 						// Drop the transaction from the global pools too
 						hash = tx.Hash()
@@ -1587,16 +1586,23 @@ func (pool *TxPool) truncateQueue() {
 	}
 	sort.Sort(addresses)
 
+	var (
+		tx   *types.Transaction
+		txs  types.Transactions
+		list *txList
+		addr addressByHeartbeat
+	)
+
 	// Drop transactions until the total is below the limit or only locals remain
 	for drop := queued - pool.config.GlobalQueue; drop > 0 && len(addresses) > 0; {
-		addr := addresses[len(addresses)-1]
-		list := pool.queue[addr.address]
+		addr = addresses[len(addresses)-1]
+		list = pool.queue[addr.address]
 
 		addresses = addresses[:len(addresses)-1]
 
 		// Drop all transactions if they are less than the overflow
 		if size := uint64(list.Len()); size <= drop {
-			for _, tx := range list.Flatten() {
+			for _, tx = range list.Flatten() {
 				pool.removeTx(tx.Hash(), true)
 			}
 			drop -= size
@@ -1604,7 +1610,7 @@ func (pool *TxPool) truncateQueue() {
 			continue
 		}
 		// Otherwise drop only last few transactions
-		txs := list.Flatten()
+		txs = list.Flatten()
 		for i := len(txs) - 1; i >= 0 && drop > 0; i-- {
 			pool.removeTx(txs[i].Hash(), true)
 			drop--
