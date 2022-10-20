@@ -28,6 +28,7 @@ import (
 	"github.com/holiman/uint256"
 
 	"github.com/ethereum/go-ethereum/common"
+	cmath "github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/core/types"
 )
 
@@ -286,31 +287,43 @@ func (l *txList) Add(tx *types.Transaction, priceBump uint64) (bool, *types.Tran
 		if old.GasFeeCapCmp(tx) >= 0 || old.GasTipCapCmp(tx) >= 0 {
 			return false, nil
 		}
+
+		gasFeeCap := old.GasFeeCapUint()
+
+		priceBumpU := uint256.NewInt(priceBump)
+		priceBumpU = priceBumpU.Div(priceBumpU, cmath.U100)
+
 		// thresholdFeeCap = oldFC  * (100 + priceBump) / 100
-		a := big.NewInt(100 + int64(priceBump))
-		aFeeCap := new(big.Int).Mul(a, old.GasFeeCap())
-		aTip := a.Mul(a, old.GasTipCap())
+		// thresholdFeeCap = oldFC  * (1 + priceBump/100)
+		a := cmath.U1.Clone().Add(cmath.U1, priceBumpU)
+		thresholdFeeCap := uint256.NewInt(0).Mul(a, gasFeeCap)
 
 		// thresholdTip    = oldTip * (100 + priceBump) / 100
-		b := big.NewInt(100)
-		thresholdFeeCap := aFeeCap.Div(aFeeCap, b)
-		thresholdTip := aTip.Div(aTip, b)
+		// thresholdTip    = oldTip * (1 + priceBump/100)
+		thresholdTip := a.Mul(a, gasFeeCap)
 
 		// We have to ensure that both the new fee cap and tip are higher than the
 		// old ones as well as checking the percentage threshold to ensure that
 		// this is accurate for low (Wei-level) gas price replacements.
-		if tx.GasFeeCapIntCmp(thresholdFeeCap) < 0 || tx.GasTipCapIntCmp(thresholdTip) < 0 {
+		newGasFeeCap := tx.GasFeeCapUint()
+		newGasTipCap := tx.GasTipCapUint()
+
+		if newGasFeeCap.Lt(thresholdFeeCap) || newGasTipCap.Lt(thresholdTip) {
 			return false, nil
 		}
 	}
+
 	// Otherwise overwrite the old transaction with the current one
 	l.txs.Put(tx)
-	if cost := tx.CostUint(); l.costcap == nil || l.costcap.Cmp(cost) < 0 {
+
+	if cost := tx.CostUint(); l.costcap == nil || l.costcap.Lt(cost) {
 		l.costcap = cost
 	}
+
 	if gas := tx.Gas(); l.gascap < gas {
 		l.gascap = gas
 	}
+
 	return true, old
 }
 
@@ -332,15 +345,16 @@ func (l *txList) Forward(threshold uint64) types.Transactions {
 // the newly invalidated transactions.
 func (l *txList) Filter(costLimit *uint256.Int, gasLimit uint64) (types.Transactions, types.Transactions) {
 	// If all transactions are below the threshold, short circuit
-	if l.costcap.Cmp(costLimit) <= 0 && l.gascap <= gasLimit {
+	if cmath.U256LTE(l.costcap, costLimit) && l.gascap <= gasLimit {
 		return nil, nil
 	}
+
 	l.costcap = costLimit.Clone() // Lower the caps to the thresholds
 	l.gascap = gasLimit
 
 	// Filter out all the transactions above the account's funds
 	removed := l.txs.Filter(func(tx *types.Transaction) bool {
-		return tx.Gas() > gasLimit || tx.CostUint().Cmp(costLimit) > 0
+		return tx.Gas() > gasLimit || tx.CostUint().Gt(costLimit)
 	})
 
 	if len(removed) == 0 {

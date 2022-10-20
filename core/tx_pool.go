@@ -255,8 +255,7 @@ type TxPool struct {
 
 	pending      map[common.Address]*txList // All currently processable transactions
 	pendingCount int
-	queue        map[common.Address]*txList // Queued but non-processable transactions
-	queueCount   int
+	queue        map[common.Address]*txList   // Queued but non-processable transactions
 	beats        map[common.Address]time.Time // Last heartbeat from each known account
 	all          *txLookup                    // All transactions to allow lookups
 	priced       *txPricedList                // All transactions sorted by price
@@ -600,61 +599,75 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	if !pool.eip2718 && tx.Type() != types.LegacyTxType {
 		return ErrTxTypeNotSupported
 	}
+
 	// Reject dynamic fee transactions until EIP-1559 activates.
 	if !pool.eip1559 && tx.Type() == types.DynamicFeeTxType {
 		return ErrTxTypeNotSupported
 	}
+
 	// Reject transactions over defined size to prevent DOS attacks
 	if uint64(tx.Size()) > txMaxSize {
 		return ErrOversizedData
 	}
+
 	// Transactions can't be negative. This may never happen using RLP decoded
 	// transactions but may occur if you create a transaction using the RPC.
 	if tx.Value().Sign() < 0 {
 		return ErrNegativeValue
 	}
+
 	// Ensure the transaction doesn't exceed the current block limit gas.
 	if pool.currentMaxGas < tx.Gas() {
 		return ErrGasLimit
 	}
+
 	// Sanity check for extremely large numbers
 	gasFeeCap := tx.GasFeeCapRef()
 	if gasFeeCap.BitLen() > 256 {
 		return ErrFeeCapVeryHigh
 	}
+
 	if gasFeeCap.BitLen() > 256 {
 		return ErrTipVeryHigh
 	}
+
 	// Ensure gasFeeCap is greater than or equal to gasTipCap.
 	if tx.GasFeeCapIntCmp(gasFeeCap) < 0 {
 		return ErrTipAboveFeeCap
 	}
+
 	// Make sure the transaction is signed properly.
 	from, err := types.Sender(pool.signer, tx)
 	if err != nil {
 		return ErrInvalidSender
 	}
+
 	// Drop non-local transactions under our own minimal accepted gas price or tip
 	if !local && tx.GasTipCapIntCmp(pool.gasPrice) < 0 {
 		return ErrUnderpriced
 	}
+
 	// Ensure the transaction adheres to nonce ordering
 	if pool.currentState.GetNonce(from) > tx.Nonce() {
 		return ErrNonceTooLow
 	}
+
 	// Transactor should have enough funds to cover the costs
 	// cost == V + GP * GL
 	if pool.currentState.GetBalance(from).Cmp(tx.Cost()) < 0 {
 		return ErrInsufficientFunds
 	}
+
 	// Ensure the transaction has more gas than the basic tx fee.
 	intrGas, err := IntrinsicGas(tx.Data(), tx.AccessList(), tx.To() == nil, true, pool.istanbul)
 	if err != nil {
 		return err
 	}
+
 	if tx.Gas() < intrGas {
 		return ErrIntrinsicGas
 	}
+
 	return nil
 }
 
@@ -1360,8 +1373,10 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 // invalidated transactions (low nonce, low balance) are deleted.
 func (pool *TxPool) promoteExecutables(accounts []common.Address) []*types.Transaction {
 	// Track the promoted transactions to broadcast them at once
-	var promoted []*types.Transaction
-	var balance *uint256.Int
+	var (
+		promoted []*types.Transaction
+		balance  *uint256.Int
+	)
 
 	// Iterate over all accounts and promote any executable transactions
 	for _, addr := range accounts {
@@ -1444,7 +1459,9 @@ func (pool *TxPool) truncatePending() {
 	// Assemble a spam order to penalize large transactors first
 	spammers := make([]pair, 0, 8)
 	count := 0
+
 	var ok bool
+
 	for addr, list := range pool.pending {
 		// Only evict transactions from high rollers
 		listLen = len(list.txs.items)
@@ -1452,8 +1469,9 @@ func (pool *TxPool) truncatePending() {
 			if _, ok = pool.locals.accounts[addr]; !ok {
 				continue
 			}
-			// todo: use slice and sort it once
+
 			count++
+
 			spammers = append(spammers, pair{addr, int64(listLen)})
 		}
 	}
@@ -1471,13 +1489,17 @@ func (pool *TxPool) truncatePending() {
 		offender, spammers = spammers[len(spammers)-1].address, spammers[:len(spammers)-1]
 		offenders = append(offenders, offender)
 
+		var threshold int
+
 		// Equalize balances until all the same or below threshold
 		if len(offenders) > 1 {
 			// Calculate the equalization threshold for all current offenders
-			threshold := len(pool.pending[offender].txs.items)
+			threshold = len(pool.pending[offender].txs.items)
 
-			var list *txList
-			var hash common.Hash
+			var (
+				list *txList
+				hash common.Hash
+			)
 
 			// Iteratively reduce all offenders until below limit or threshold reached
 			for pending > pool.config.GlobalSlots && pool.pending[offenders[len(offenders)-2]].Len() > threshold {
@@ -1510,8 +1532,10 @@ func (pool *TxPool) truncatePending() {
 
 	// If still above threshold, reduce to limit or min allowance
 	if pending > pool.config.GlobalSlots && len(offenders) > 0 {
-		var list *txList
-		var hash common.Hash
+		var (
+			list *txList
+			hash common.Hash
+		)
 
 		for pending > pool.config.GlobalSlots && uint64(pool.pending[offenders[len(offenders)-1]].Len()) > pool.config.AccountSlots {
 			for _, addr := range offenders {
@@ -1530,9 +1554,11 @@ func (pool *TxPool) truncatePending() {
 				pool.priced.Removed(len(caps))
 
 				pendingGauge.Dec(int64(len(caps)))
+
 				if _, ok = pool.locals.accounts[addr]; ok {
 					localGauge.Dec(int64(len(caps)))
 				}
+
 				pending--
 			}
 		}

@@ -281,6 +281,10 @@ func (tx *Transaction) GasTipCapUint() *uint256.Int {
 // GasFeeCap returns the fee cap per gas of the transaction.
 func (tx *Transaction) GasFeeCap() *big.Int    { return new(big.Int).Set(tx.inner.gasFeeCap()) }
 func (tx *Transaction) GasFeeCapRef() *big.Int { return tx.inner.gasFeeCap() }
+func (tx *Transaction) GasFeeCapUint() *uint256.Int {
+	b, _ := uint256.FromBig(tx.inner.gasFeeCap())
+	return b
+}
 
 // Value returns the ether amount of the transaction.
 func (tx *Transaction) Value() *big.Int { return new(big.Int).Set(tx.inner.value()) }
