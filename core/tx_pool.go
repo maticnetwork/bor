@@ -1376,8 +1376,9 @@ func (pool *TxPool) promoteExecutables(accounts []common.Address) []*types.Trans
 	// Track the promoted transactions to broadcast them at once
 	var (
 		promoted []*types.Transaction
-		balance  *uint256.Int
 	)
+
+	balance := uint256.NewInt(0)
 
 	// Iterate over all accounts and promote any executable transactions
 	for _, addr := range accounts {
@@ -1393,7 +1394,7 @@ func (pool *TxPool) promoteExecutables(accounts []common.Address) []*types.Trans
 		}
 		log.Trace("Removed old queued transactions", "count", len(forwards))
 		// Drop all transactions that are too costly (low balance or out of gas)
-		balance, _ = uint256.FromBig(pool.currentState.GetBalance(addr))
+		balance.SetFromBig(pool.currentState.GetBalance(addr))
 		drops, _ := list.Filter(balance, pool.currentMaxGas)
 		for _, tx := range drops {
 			hash := tx.Hash()

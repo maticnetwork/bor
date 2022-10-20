@@ -333,6 +333,11 @@ func (tx *Transaction) GasFeeCapIntCmp(other *big.Int) int {
 	return tx.inner.gasFeeCap().Cmp(other)
 }
 
+func (tx *Transaction) GasFeeCapUIntCmp(other *uint256.Int) int {
+	b, _ := uint256.FromBig(tx.inner.gasFeeCap())
+	return b.Cmp(other)
+}
+
 // GasTipCapCmp compares the gasTipCap of two transactions.
 func (tx *Transaction) GasTipCapCmp(other *Transaction) int {
 	return tx.inner.gasTipCap().Cmp(other.inner.gasTipCap())
@@ -341,6 +346,11 @@ func (tx *Transaction) GasTipCapCmp(other *Transaction) int {
 // GasTipCapIntCmp compares the gasTipCap of the transaction against the given gasTipCap.
 func (tx *Transaction) GasTipCapIntCmp(other *big.Int) int {
 	return tx.inner.gasTipCap().Cmp(other)
+}
+
+func (tx *Transaction) GasTipCapUIntCmp(other *uint256.Int) int {
+	b, _ := uint256.FromBig(tx.inner.gasTipCap())
+	return b.Cmp(other)
 }
 
 // EffectiveGasTip returns the effective miner gasTipCap for the given base fee.
