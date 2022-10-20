@@ -627,12 +627,13 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 		return ErrFeeCapVeryHigh
 	}
 
-	if gasFeeCap.BitLen() > 256 {
+	gasTipCap := tx.GasTipCapRef()
+	if gasTipCap.BitLen() > 256 {
 		return ErrTipVeryHigh
 	}
 
 	// Ensure gasFeeCap is greater than or equal to gasTipCap.
-	if tx.GasFeeCapIntCmp(gasFeeCap) < 0 {
+	if tx.GasFeeCapIntCmp(gasTipCap) < 0 {
 		return ErrTipAboveFeeCap
 	}
 
