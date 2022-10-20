@@ -3,7 +3,9 @@ package whitelist
 import (
 	"errors"
 	"fmt"
+	"math/big"
 	"sync"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -132,6 +134,8 @@ func (m *milestone) ProcessMilestone(endBlockNum uint64, endBlockHash common.Has
 	m.m.Lock()
 	defer m.m.Unlock()
 
+	log.Warn("Processing Milestone-", "endBlockNum", endBlockNum)
+
 	m.doExist = true
 	m.milestoneNumber = endBlockNum
 	m.milestoneHash = endBlockHash
@@ -184,14 +188,14 @@ func (m *milestone) Unlock(doLock bool, milestoneId string, endBlockHash common.
 	m.Locked = m.Locked || doLock
 	log.Warn("In Unlock ")
 	for key, _ := range m.LockedMilestoneIds { //Just for testing purpose, need to remove this.
-		log.Warn("Unlocking sprint before ", "key", key) // Need to remove this afterward
+		log.Warn("Unlocking mutex before ", "key", key) // Need to remove this afterward
 	}
 	if doLock {
 		m.LockedSprintHash = endBlockHash
 		m.LockedMilestoneIds[milestoneId] = true
 	}
 	for key, _ := range m.LockedMilestoneIds { // Just for testing purpose
-		log.Warn("Unlocking sprint after ", "key", key) //  Need to remove this afterward
+		log.Warn("Unlocking mutex after ", "key", key) //  Need to remove this afterward
 	}
 
 	log.Warn("Locked Sprint", m.LockedSprintNumber) // Just for testing
@@ -208,7 +212,27 @@ func (m *milestone) UnlockSprint(endBlockNum uint64) {
 	for key, _ := range m.LockedMilestoneIds { //Just for testing purpose, need to remove this.
 		log.Warn("Unlocking sprint before ", "key", key) // Need to remove this afterward
 	} //
-	log.Warn("Unlocking sprint")
+
+	chain := m.createMockChain(endBlockNum-64+1, endBlockNum)
+	val := m.MockIsValidChain(nil, chain)
+	if val != false {
+		log.Warn("Expected false in 1st experiment")
+	}
+
+	chain = m.createMockChain(endBlockNum-64+1, endBlockNum*2)
+	val = m.MockIsValidChain(nil, chain)
+
+	if val != false {
+		log.Warn("Expected false in 2nd experiment")
+	}
+
+	chain = m.createMockChain(endBlockNum-64+1, endBlockNum*2)
+	val = m.MockIsValidChain(nil, chain)
+
+	if val != false {
+		log.Warn("Expected false in 2nd experiment")
+	}
+
 	m.Locked = false
 	m.PurgeMilestoneIDsList()
 	for key, _ := range m.LockedMilestoneIds { // Just for testing purpose
@@ -261,4 +285,81 @@ func (m *milestone) PurgeMilestoneIDsList() {
 		delete(m.LockedMilestoneIds, k)
 	}
 
+}
+
+// createMockChain returns a chain with dummy headers
+// starting from `start` to `end` (inclusive)
+func (m *milestone) createMockChain(start, end uint64) []*types.Header {
+	var (
+		i     uint64
+		idx   uint64
+		chain []*types.Header = make([]*types.Header, end-start+1)
+	)
+
+	for i = start; i <= end; i++ {
+		header := &types.Header{
+			Number: big.NewInt(int64(i)),
+			Time:   uint64(time.Now().UnixMicro()) + i,
+		}
+		chain[idx] = header
+		idx++
+	}
+
+	return chain
+}
+
+func (m *milestone) MockIsValidChain(currentHeader *types.Header, chain []*types.Header) bool {
+
+	// Return if we've received empty chain
+	if len(chain) == 0 {
+		return false
+	}
+
+	if m.Locked && !m.IsReorgAllowed(chain) {
+		log.Warn("MockMockMockMock Sprint is locked")
+		return false
+	}
+
+	// // Check if we have milestone to validate incoming chain in memory
+	// if !m.doExist {
+	// 	// We don't have any entry, no additional validation will be possible
+	// 	return true
+	// }
+
+	// lastMilestoneBlockNum := m.milestoneNumber
+	// current := currentHeader.Number.Uint64()
+
+	// // Check if we have milestoneList entries in required range
+	// if chain[len(chain)-1].Number.Uint64() < lastMilestoneBlockNum {
+	// 	// We have future milestone entries, so we don't need to receive the past chain
+
+	// 	return false
+	// }
+
+	// // Split the chain into past and future chain
+	// pastChain, futureChain := splitChain(current, chain)
+
+	// // Add an offset to future chain if it's not in continuity
+	// offset := 0
+	// if len(futureChain) != 0 {
+	// 	offset += int(futureChain[0].Number.Uint64()-currentHeader.Number.Uint64()) - 1
+	// }
+
+	// // Don't accept future chain of unacceptable length (from current block)
+	// if len(futureChain)+offset > int(m.interval) {
+	// 	log.Warn("MockMockMockMockMock test failed", "hash", m.milestoneHash)
+	// 	return false
+	// }
+
+	// // Iterate over the chain and validate against the last milestone
+	// // It will handle all cases when the incoming chain has atleast one milestone
+	// for i := len(pastChain) - 1; i >= 0; i-- {
+	// 	if pastChain[i].Number.Uint64() == m.milestoneNumber {
+	// 		log.Warn("MockMockMockMock test", "hash", m.milestoneHash)
+	// 		return pastChain[i].Hash() == m.milestoneHash
+	// 	}
+	// }
+	// log.Warn("MockMockMockMock Passed the test", "hash", m.milestoneHash)
+	// return true
+	return true
 }

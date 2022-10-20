@@ -851,6 +851,10 @@ func (s *Ethereum) handleNoAckMilestone(ctx context.Context) error {
 		return err
 	}
 
+	if milestoneID == "" {
+		return nil
+	}
+
 	ethHandler.downloader.RemoveMilestoneID(milestoneID)
 
 	return nil
