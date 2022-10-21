@@ -21,6 +21,7 @@ import (
 	"crypto/ecdsa"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"math/big"
 	"math/rand"
@@ -2653,7 +2654,7 @@ func BenchmarkPoolMultiAccountBatchInsert(b *testing.B) {
 	// Generate a batch of transactions to enqueue into the pool
 	pool, _ := setupTxPool()
 	defer pool.Stop()
-	b.ReportAllocs()
+
 	batches := make(types.Transactions, b.N)
 	for i := 0; i < b.N; i++ {
 		key, _ := crypto.GenerateKey()
@@ -2662,11 +2663,111 @@ func BenchmarkPoolMultiAccountBatchInsert(b *testing.B) {
 		tx := transaction(uint64(0), 100000, key)
 		batches[i] = tx
 	}
+
 	// Benchmark importing the transactions into the queue
+	b.ReportAllocs()
 	b.ResetTimer()
+
 	for _, tx := range batches {
 		pool.AddRemotesSync([]*types.Transaction{tx})
 	}
+}
+
+func BenchmarkPoolMultiAccountBatchInsertRace(b *testing.B) {
+	// Generate a batch of transactions to enqueue into the pool
+	pool, _ := setupTxPool()
+	defer pool.Stop()
+
+	batches := make(types.Transactions, b.N)
+
+	for i := 0; i < b.N; i++ {
+		key, _ := crypto.GenerateKey()
+		account := crypto.PubkeyToAddress(key.PublicKey)
+		tx := transaction(uint64(0), 100000, key)
+
+		pool.currentState.AddBalance(account, big.NewInt(1000000))
+
+		batches[i] = tx
+	}
+
+	done := make(chan struct{})
+
+	go func() {
+		t := time.NewTicker(time.Microsecond)
+		defer t.Stop()
+
+		var pending map[common.Address]types.Transactions
+
+	loop:
+		for {
+			select {
+			case <-t.C:
+				pending = pool.Pending(true)
+			case <-done:
+				break loop
+			}
+		}
+
+		fmt.Fprint(io.Discard, pending)
+	}()
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for _, tx := range batches {
+		pool.AddRemotesSync([]*types.Transaction{tx})
+	}
+
+	close(done)
+}
+
+func TestPoolMultiAccountBatchInsertRace(t *testing.T) {
+	t.Parallel()
+
+	// Generate a batch of transactions to enqueue into the pool
+	pool, _ := setupTxPool()
+	defer pool.Stop()
+
+	const n = 5000
+
+	batches := make(types.Transactions, n)
+
+	for i := 0; i < n; i++ {
+		key, _ := crypto.GenerateKey()
+		account := crypto.PubkeyToAddress(key.PublicKey)
+		tx := transaction(uint64(0), 100000, key)
+
+		pool.currentState.AddBalance(account, big.NewInt(1000000))
+
+		batches[i] = tx
+	}
+
+	done := make(chan struct{})
+
+	go func() {
+		t := time.NewTicker(time.Microsecond)
+		defer t.Stop()
+
+		var pending map[common.Address]types.Transactions
+
+	loop:
+		for {
+			select {
+			case <-t.C:
+				pending = pool.Pending(true)
+			case <-done:
+				break loop
+			}
+		}
+
+		fmt.Fprint(io.Discard, pending)
+	}()
+
+	for _, tx := range batches {
+		pool.AddRemotesSync([]*types.Transaction{tx})
+	}
+
+	close(done)
 }
 
 type acc struct {

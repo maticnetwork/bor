@@ -1683,6 +1683,7 @@ func (pool *TxPool) truncatePending() {
 					pool.pendingNonces.setIfLower(addr, tx.Nonce())
 					log.Trace("Removed fairness-exceeding pending transaction", "hash", hash)
 				}
+
 				pool.priced.Removed(capsLen)
 
 				pendingGauge.Dec(int64(capsLen))
@@ -1737,11 +1738,15 @@ func (pool *TxPool) truncateQueue() {
 
 		addresses = addresses[:len(addresses)-1]
 
-		var listFlatten types.Transactions
+		var (
+			listFlatten types.Transactions
+			isSet       bool
+		)
 
 		// Drop all transactions if they are less than the overflow
 		if size = uint64(list.Len()); size <= drop {
 			listFlatten = list.Flatten()
+			isSet = true
 
 			for _, tx = range listFlatten {
 				pool.removeTx(tx.Hash(), true)
@@ -1754,7 +1759,7 @@ func (pool *TxPool) truncateQueue() {
 		}
 
 		// Otherwise drop only last few transactions
-		if listFlatten == nil {
+		if !isSet {
 			listFlatten = list.Flatten()
 		}
 
