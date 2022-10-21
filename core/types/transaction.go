@@ -79,8 +79,11 @@ type TxData interface {
 	data() []byte
 	gas() uint64
 	gasPrice() *big.Int
+	gasPriceU256() *uint256.Int
 	gasTipCap() *big.Int
+	gasTipCapU256() *uint256.Int
 	gasFeeCap() *big.Int
+	gasFeeCapU256() *uint256.Int
 	value() *big.Int
 	nonce() uint64
 	to() *common.Address
@@ -267,28 +270,22 @@ func (tx *Transaction) AccessList() AccessList { return tx.inner.accessList() }
 func (tx *Transaction) Gas() uint64 { return tx.inner.gas() }
 
 // GasPrice returns the gas price of the transaction.
-func (tx *Transaction) GasPrice() *big.Int    { return new(big.Int).Set(tx.inner.gasPrice()) }
-func (tx *Transaction) GasPriceRef() *big.Int { return tx.inner.gasPrice() }
+func (tx *Transaction) GasPrice() *big.Int         { return new(big.Int).Set(tx.inner.gasPrice()) }
+func (tx *Transaction) GasPriceRef() *big.Int      { return tx.inner.gasPrice() }
+func (tx *Transaction) GasPriceUint() *uint256.Int { return tx.inner.gasPriceU256() }
 
 // GasTipCap returns the gasTipCap per gas of the transaction.
-func (tx *Transaction) GasTipCap() *big.Int    { return new(big.Int).Set(tx.inner.gasTipCap()) }
-func (tx *Transaction) GasTipCapRef() *big.Int { return tx.inner.gasTipCap() }
-func (tx *Transaction) GasTipCapUint() *uint256.Int {
-	b, _ := uint256.FromBig(tx.inner.gasTipCap())
-	return b
-}
+func (tx *Transaction) GasTipCap() *big.Int         { return new(big.Int).Set(tx.inner.gasTipCap()) }
+func (tx *Transaction) GasTipCapRef() *big.Int      { return tx.inner.gasTipCap() }
+func (tx *Transaction) GasTipCapUint() *uint256.Int { return tx.inner.gasTipCapU256() }
 
 // GasFeeCap returns the fee cap per gas of the transaction.
-func (tx *Transaction) GasFeeCap() *big.Int    { return new(big.Int).Set(tx.inner.gasFeeCap()) }
-func (tx *Transaction) GasFeeCapRef() *big.Int { return tx.inner.gasFeeCap() }
-func (tx *Transaction) GasFeeCapUint() *uint256.Int {
-	b, _ := uint256.FromBig(tx.inner.gasFeeCap())
-	return b
-}
+func (tx *Transaction) GasFeeCap() *big.Int         { return new(big.Int).Set(tx.inner.gasFeeCap()) }
+func (tx *Transaction) GasFeeCapRef() *big.Int      { return tx.inner.gasFeeCap() }
+func (tx *Transaction) GasFeeCapUint() *uint256.Int { return tx.inner.gasFeeCapU256() }
 
 // Value returns the ether amount of the transaction.
-func (tx *Transaction) Value() *big.Int { return new(big.Int).Set(tx.inner.value()) }
-
+func (tx *Transaction) Value() *big.Int    { return new(big.Int).Set(tx.inner.value()) }
 func (tx *Transaction) ValueRef() *big.Int { return tx.inner.value() }
 
 // Nonce returns the sender account nonce of the transaction.
@@ -328,14 +325,16 @@ func (tx *Transaction) GasFeeCapCmp(other *Transaction) int {
 	return tx.inner.gasFeeCap().Cmp(other.inner.gasFeeCap())
 }
 
-// GasFeeCapIntCmp compares the fee cap of the transaction against the given fee cap.
 func (tx *Transaction) GasFeeCapIntCmp(other *big.Int) int {
-	return tx.inner.gasFeeCap().Cmp(other)
+	return tx.inner.gasTipCap().Cmp(other)
 }
 
 func (tx *Transaction) GasFeeCapUIntCmp(other *uint256.Int) int {
-	b, _ := uint256.FromBig(tx.inner.gasFeeCap())
-	return b.Cmp(other)
+	return tx.inner.gasFeeCapU256().Cmp(other)
+}
+
+func (tx *Transaction) GasFeeCapUIntLt(other *uint256.Int) bool {
+	return tx.inner.gasFeeCapU256().Lt(other)
 }
 
 // GasTipCapCmp compares the gasTipCap of two transactions.
@@ -349,8 +348,11 @@ func (tx *Transaction) GasTipCapIntCmp(other *big.Int) int {
 }
 
 func (tx *Transaction) GasTipCapUIntCmp(other *uint256.Int) int {
-	b, _ := uint256.FromBig(tx.inner.gasTipCap())
-	return b.Cmp(other)
+	return tx.inner.gasTipCapU256().Cmp(other)
+}
+
+func (tx *Transaction) GasTipCapUIntLt(other *uint256.Int) bool {
+	return tx.inner.gasTipCapU256().Lt(other)
 }
 
 // EffectiveGasTip returns the effective miner gasTipCap for the given base fee.

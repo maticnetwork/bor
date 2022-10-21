@@ -32,6 +32,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/holiman/uint256"
 	"gonum.org/v1/gonum/floats"
 	"gonum.org/v1/gonum/stat"
 	"pgregory.net/rapid"
@@ -326,6 +327,7 @@ func TestInvalidTransactions(t *testing.T) {
 
 	tx = transaction(1, 100000, key)
 	pool.gasPrice = big.NewInt(1000)
+	pool.gasPriceUint = uint256.NewInt(1000)
 	if err := pool.AddRemote(tx); err != ErrUnderpriced {
 		t.Error("expected", ErrUnderpriced, "got", err)
 	}

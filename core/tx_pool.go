@@ -232,14 +232,15 @@ func (config *TxPoolConfig) sanitize() TxPoolConfig {
 // current state) and future transactions. Transactions move between those
 // two states over time as they are received and processed.
 type TxPool struct {
-	config      TxPoolConfig
-	chainconfig *params.ChainConfig
-	chain       blockChain
-	gasPrice    *big.Int
-	txFeed      event.Feed
-	scope       event.SubscriptionScope
-	signer      types.Signer
-	mu          sync.RWMutex
+	config       TxPoolConfig
+	chainconfig  *params.ChainConfig
+	chain        blockChain
+	gasPrice     *big.Int
+	gasPriceUint *uint256.Int
+	txFeed       event.Feed
+	scope        event.SubscriptionScope
+	signer       types.Signer
+	mu           sync.RWMutex
 
 	istanbul bool // Fork indicator whether we are in the istanbul stage.
 	eip2718  bool // Fork indicator whether we are using EIP-2718 type transactions.
@@ -302,6 +303,7 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chain block
 		reorgShutdownCh: make(chan struct{}),
 		initDoneCh:      make(chan struct{}),
 		gasPrice:        new(big.Int).SetUint64(config.PriceLimit),
+		gasPriceUint:    uint256.NewInt(config.PriceLimit),
 	}
 
 	pool.locals = newAccountSet(pool.signer)
@@ -449,6 +451,13 @@ func (pool *TxPool) GasPrice() *big.Int {
 	return new(big.Int).Set(pool.gasPrice)
 }
 
+func (pool *TxPool) GasPriceUint256() *uint256.Int {
+	pool.mu.RLock()
+	defer pool.mu.RUnlock()
+
+	return pool.gasPriceUint.Clone()
+}
+
 // SetGasPrice updates the minimum price required by the transaction pool for a
 // new transaction, and drops all transactions below this threshold.
 func (pool *TxPool) SetGasPrice(price *big.Int) {
@@ -457,6 +466,13 @@ func (pool *TxPool) SetGasPrice(price *big.Int) {
 
 	old := pool.gasPrice
 	pool.gasPrice = price
+
+	if pool.gasPriceUint == nil {
+		pool.gasPriceUint, _ = uint256.FromBig(price)
+	} else {
+		pool.gasPriceUint.SetFromBig(price)
+	}
+
 	// if the min miner fee increased, remove transactions below the new threshold
 	if price.Cmp(old) > 0 {
 		// pool.priced is sorted by GasFeeCap, so we have to iterate through pool.all instead
@@ -464,6 +480,7 @@ func (pool *TxPool) SetGasPrice(price *big.Int) {
 		for _, tx := range drop {
 			pool.removeTx(tx.Hash(), false)
 		}
+
 		pool.priced.Removed(len(drop))
 	}
 
@@ -626,13 +643,15 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 		return ErrFeeCapVeryHigh
 	}
 
+	// do NOT use uint256 here. results vs *big.Int are different
 	gasTipCap := tx.GasTipCapRef()
 	if gasTipCap.BitLen() > 256 {
 		return ErrTipVeryHigh
 	}
 
 	// Ensure gasFeeCap is greater than or equal to gasTipCap.
-	if tx.GasFeeCapIntCmp(gasTipCap) < 0 {
+	gasTipCapU, _ := uint256.FromBig(gasTipCap)
+	if tx.GasFeeCapUIntLt(gasTipCapU) {
 		return ErrTipAboveFeeCap
 	}
 
@@ -643,7 +662,7 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	}
 
 	// Drop non-local transactions under our own minimal accepted gas price or tip
-	if !local && tx.GasTipCapIntCmp(pool.gasPrice) < 0 {
+	if !local && tx.GasTipCapUIntLt(pool.gasPriceUint) {
 		return ErrUnderpriced
 	}
 
@@ -700,7 +719,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 	if uint64(pool.all.Slots()+numSlots(tx)) > pool.config.GlobalSlots+pool.config.GlobalQueue {
 		// If the new transaction is underpriced, don't accept it
 		if !isLocal && pool.priced.Underpriced(tx) {
-			log.Trace("Discarding underpriced transaction", "hash", hash, "gasTipCap", tx.GasTipCap(), "gasFeeCap", tx.GasFeeCap())
+			log.Trace("Discarding underpriced transaction", "hash", hash, "gasTipCap", tx.GasTipCapUint(), "gasFeeCap", tx.GasFeeCapUint())
 			underpricedTxMeter.Mark(1)
 			return false, ErrUnderpriced
 		}
@@ -728,7 +747,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 		pool.changesSinceReorg += len(drop)
 		// Kick out the underpriced remote transactions.
 		for _, tx := range drop {
-			log.Trace("Discarding freshly underpriced transaction", "hash", tx.Hash(), "gasTipCap", tx.GasTipCap(), "gasFeeCap", tx.GasFeeCap())
+			log.Trace("Discarding freshly underpriced transaction", "hash", tx.Hash(), "gasTipCap", tx.GasTipCapUint(), "gasFeeCap", tx.GasFeeCapUint())
 			underpricedTxMeter.Mark(1)
 			pool.removeTx(tx.Hash(), false)
 		}
@@ -1370,62 +1389,92 @@ func (pool *TxPool) reset(oldHead, newHead *types.Header) {
 func (pool *TxPool) promoteExecutables(accounts []common.Address) []*types.Transaction {
 	// Track the promoted transactions to broadcast them at once
 	var (
-		promoted []*types.Transaction
+		promoted    []*types.Transaction
+		promotedLen int
+		forwards    types.Transactions
+		forwardsLen int
+		caps        types.Transactions
+		capsLen     int
+		drops       types.Transactions
+		dropsLen    int
+		list        *txList
+		hash        common.Hash
+		readies     types.Transactions
+		readiesLen  int
 	)
 
 	balance := uint256.NewInt(0)
 
 	// Iterate over all accounts and promote any executable transactions
 	for _, addr := range accounts {
-		list := pool.queue[addr]
+		list = pool.queue[addr]
 		if list == nil {
 			continue // Just in case someone calls with a non existing account
 		}
+
 		// Drop all transactions that are deemed too old (low nonce)
-		forwards := list.Forward(pool.currentState.GetNonce(addr))
+		forwards = list.Forward(pool.currentState.GetNonce(addr))
+		forwardsLen = len(forwards)
+
 		for _, tx := range forwards {
-			hash := tx.Hash()
+			hash = tx.Hash()
 			pool.all.Remove(hash)
 		}
-		log.Trace("Removed old queued transactions", "count", len(forwards))
+
+		log.Trace("Removed old queued transactions", "count", forwardsLen)
+
 		// Drop all transactions that are too costly (low balance or out of gas)
 		balance.SetFromBig(pool.currentState.GetBalance(addr))
-		drops, _ := list.Filter(balance, pool.currentMaxGas)
+
+		drops, _ = list.Filter(balance, pool.currentMaxGas)
+		dropsLen = len(drops)
+
 		for _, tx := range drops {
-			hash := tx.Hash()
+			hash = tx.Hash()
 			pool.all.Remove(hash)
 		}
-		log.Trace("Removed unpayable queued transactions", "count", len(drops))
-		queuedNofundsMeter.Mark(int64(len(drops)))
+
+		log.Trace("Removed unpayable queued transactions", "count", dropsLen)
+		queuedNofundsMeter.Mark(int64(dropsLen))
 
 		// Gather all executable transactions and promote them
-		readies := list.Ready(pool.pendingNonces.get(addr))
+		readies = list.Ready(pool.pendingNonces.get(addr))
+		readiesLen = len(readies)
+
 		for _, tx := range readies {
-			hash := tx.Hash()
+			hash = tx.Hash()
 			if pool.promoteTx(addr, hash, tx) {
 				promoted = append(promoted, tx)
 			}
 		}
-		log.Trace("Promoted queued transactions", "count", len(promoted))
-		queuedGauge.Dec(int64(len(readies)))
+
+		log.Trace("Promoted queued transactions", "count", promotedLen)
+		queuedGauge.Dec(int64(readiesLen))
 
 		// Drop all transactions over the allowed limit
-		var caps types.Transactions
 		if !pool.locals.contains(addr) {
 			caps = list.Cap(int(pool.config.AccountQueue))
+			capsLen = len(caps)
+
 			for _, tx := range caps {
-				hash := tx.Hash()
+				hash = tx.Hash()
 				pool.all.Remove(hash)
+
 				log.Trace("Removed cap-exceeding queued transaction", "hash", hash)
 			}
-			queuedRateLimitMeter.Mark(int64(len(caps)))
+
+			queuedRateLimitMeter.Mark(int64(capsLen))
 		}
+
 		// Mark all the items dropped as removed
-		pool.priced.Removed(len(forwards) + len(drops) + len(caps))
-		queuedGauge.Dec(int64(len(forwards) + len(drops) + len(caps)))
+		pool.priced.Removed(forwardsLen + dropsLen + capsLen)
+
+		queuedGauge.Dec(int64(forwardsLen + dropsLen + capsLen))
+
 		if pool.locals.contains(addr) {
-			localGauge.Dec(int64(len(forwards) + len(drops) + len(caps)))
+			localGauge.Dec(int64(forwardsLen + dropsLen + capsLen))
 		}
+
 		// Delete the entire queue entry if it became empty.
 		if list.Empty() {
 			delete(pool.queue, addr)
@@ -1542,7 +1591,7 @@ func (pool *TxPool) truncatePending() {
 			for _, addr := range offenders {
 				list = pool.pending[addr]
 
-				caps := list.Cap(len(list.txs.items) - 1)
+				caps = list.Cap(len(list.txs.items) - 1)
 				for _, tx := range caps {
 					// Drop the transaction from the global pools too
 					hash = tx.Hash()
@@ -1591,6 +1640,7 @@ func (pool *TxPool) truncateQueue() {
 		txs  types.Transactions
 		list *txList
 		addr addressByHeartbeat
+		size uint64
 	)
 
 	// Drop transactions until the total is below the limit or only locals remain
@@ -1601,7 +1651,7 @@ func (pool *TxPool) truncateQueue() {
 		addresses = addresses[:len(addresses)-1]
 
 		// Drop all transactions if they are less than the overflow
-		if size := uint64(list.Len()); size <= drop {
+		if size = uint64(list.Len()); size <= drop {
 			for _, tx = range list.Flatten() {
 				pool.removeTx(tx.Hash(), true)
 			}
@@ -1629,51 +1679,77 @@ func (pool *TxPool) truncateQueue() {
 func (pool *TxPool) demoteUnexecutables() {
 	balance := uint256.NewInt(0)
 
+	var (
+		olds        types.Transactions
+		oldsLen     int
+		hash        common.Hash
+		drops       types.Transactions
+		dropsLen    int
+		invalids    types.Transactions
+		invalidsLen int
+		gapped      types.Transactions
+		gappedLen   int
+	)
+
 	// Iterate over all accounts and demote any non-executable transactions
 	for addr, list := range pool.pending {
 		nonce := pool.currentState.GetNonce(addr)
 
 		// Drop all transactions that are deemed too old (low nonce)
-		olds := list.Forward(nonce)
+		olds = list.Forward(nonce)
+		oldsLen = len(olds)
+
 		for _, tx := range olds {
-			hash := tx.Hash()
+			hash = tx.Hash()
 			pool.all.Remove(hash)
 			log.Trace("Removed old pending transaction", "hash", hash)
 		}
 		// Drop all transactions that are too costly (low balance or out of gas), and queue any invalids back for later
 		balance.SetFromBig(pool.currentState.GetBalance(addr))
-		drops, invalids := list.Filter(balance, pool.currentMaxGas)
+		drops, invalids = list.Filter(balance, pool.currentMaxGas)
+		dropsLen = len(drops)
+		invalidsLen = len(invalids)
+
 		for _, tx := range drops {
-			hash := tx.Hash()
+			hash = tx.Hash()
+
 			log.Trace("Removed unpayable pending transaction", "hash", hash)
+
 			pool.all.Remove(hash)
 		}
-		pendingNofundsMeter.Mark(int64(len(drops)))
+
+		pendingNofundsMeter.Mark(int64(dropsLen))
 
 		for _, tx := range invalids {
-			hash := tx.Hash()
+			hash = tx.Hash()
+
 			log.Trace("Demoting pending transaction", "hash", hash)
 
 			// Internal shuffle shouldn't touch the lookup set.
 			pool.enqueueTx(hash, tx, false, false)
 		}
-		pendingGauge.Dec(int64(len(olds) + len(drops) + len(invalids)))
+
+		pendingGauge.Dec(int64(oldsLen + dropsLen + invalidsLen))
+
 		if pool.locals.contains(addr) {
-			localGauge.Dec(int64(len(olds) + len(drops) + len(invalids)))
+			localGauge.Dec(int64(oldsLen + dropsLen + invalidsLen))
 		}
 		// If there's a gap in front, alert (should never happen) and postpone all transactions
 		if list.Len() > 0 && list.txs.Get(nonce) == nil {
-			gapped := list.Cap(0)
+			gapped = list.Cap(0)
+			gappedLen = len(gapped)
+
 			for _, tx := range gapped {
-				hash := tx.Hash()
+				hash = tx.Hash()
 				log.Error("Demoting invalidated transaction", "hash", hash)
 
 				// Internal shuffle shouldn't touch the lookup set.
 				pool.enqueueTx(hash, tx, false, false)
 			}
-			pendingGauge.Dec(int64(len(gapped)))
+
+			pendingGauge.Dec(int64(gappedLen))
 			// This might happen in a reorg, so log it to the metering
-			blockReorgInvalidatedTx.Mark(int64(len(gapped)))
+			blockReorgInvalidatedTx.Mark(int64(gappedLen))
 		}
 		// Delete the entire pending entry if it became empty.
 		if list.Empty() {
