@@ -154,12 +154,17 @@ func validateTxPoolInternals(pool *TxPool) error {
 	if total := pool.all.Count(); total != pending+queued {
 		return fmt.Errorf("total transaction count %d != %d pending + %d queued", total, pending, queued)
 	}
+
 	pool.priced.Reheap()
 	priced, remote := pool.priced.urgent.Len()+pool.priced.floating.Len(), pool.all.RemoteCount()
 	if priced != remote {
 		return fmt.Errorf("total priced transaction count %d != %d", priced, remote)
 	}
+
 	// Ensure the next nonce to assign is the correct one
+	pool.pendingMu.RLock()
+	defer pool.pendingMu.RUnlock()
+
 	for addr, txs := range pool.pending {
 		// Find the last transaction
 		var last uint64
@@ -168,10 +173,12 @@ func validateTxPoolInternals(pool *TxPool) error {
 				last = nonce
 			}
 		}
+
 		if nonce := pool.pendingNonces.get(addr); nonce != last+1 {
 			return fmt.Errorf("pending nonce mismatch: have %v, want %v", nonce, last+1)
 		}
 	}
+
 	return nil
 }
 
@@ -349,9 +356,12 @@ func TestTransactionQueue(t *testing.T) {
 
 	pool.enqueueTx(tx.Hash(), tx, false, true)
 	<-pool.requestPromoteExecutables(newAccountSet(pool.signer, from))
+
+	pool.pendingMu.RLock()
 	if len(pool.pending) != 1 {
 		t.Error("expected valid txs to be 1 is", len(pool.pending))
 	}
+	pool.pendingMu.RUnlock()
 
 	tx = transaction(1, 100, key)
 	from, _ = deriveSender(tx)
@@ -359,9 +369,13 @@ func TestTransactionQueue(t *testing.T) {
 	pool.enqueueTx(tx.Hash(), tx, false, true)
 
 	<-pool.requestPromoteExecutables(newAccountSet(pool.signer, from))
+
+	pool.pendingMu.RLock()
 	if _, ok := pool.pending[from].txs.items[tx.Nonce()]; ok {
 		t.Error("expected transaction to be in tx pool")
 	}
+	pool.pendingMu.RUnlock()
+
 	if len(pool.queue) > 0 {
 		t.Error("expected transaction queue to be empty. is", len(pool.queue))
 	}
@@ -385,9 +399,13 @@ func TestTransactionQueue2(t *testing.T) {
 	pool.enqueueTx(tx3.Hash(), tx3, false, true)
 
 	pool.promoteExecutables([]common.Address{from})
+
+	pool.pendingMu.RLock()
 	if len(pool.pending) != 1 {
 		t.Error("expected pending length to be 1, got", len(pool.pending))
 	}
+	pool.pendingMu.RUnlock()
+
 	if pool.queue[from].Len() != 2 {
 		t.Error("expected len(queue) == 2, got", pool.queue[from].Len())
 	}
@@ -497,23 +515,32 @@ func TestTransactionDoubleNonce(t *testing.T) {
 	if replace, err := pool.add(tx2, false); err != nil || !replace {
 		t.Errorf("second transaction insert failed (%v) or not reported replacement (%v)", err, replace)
 	}
+
 	<-pool.requestPromoteExecutables(newAccountSet(signer, addr))
+
+	pool.pendingMu.RLock()
 	if pool.pending[addr].Len() != 1 {
 		t.Error("expected 1 pending transactions, got", pool.pending[addr].Len())
 	}
 	if tx := pool.pending[addr].txs.items[0]; tx.Hash() != tx2.Hash() {
 		t.Errorf("transaction mismatch: have %x, want %x", tx.Hash(), tx2.Hash())
 	}
+	pool.pendingMu.RUnlock()
 
 	// Add the third transaction and ensure it's not saved (smaller price)
 	pool.add(tx3, false)
+
 	<-pool.requestPromoteExecutables(newAccountSet(signer, addr))
+
+	pool.pendingMu.RLock()
 	if pool.pending[addr].Len() != 1 {
 		t.Error("expected 1 pending transactions, got", pool.pending[addr].Len())
 	}
 	if tx := pool.pending[addr].txs.items[0]; tx.Hash() != tx2.Hash() {
 		t.Errorf("transaction mismatch: have %x, want %x", tx.Hash(), tx2.Hash())
 	}
+	pool.pendingMu.RUnlock()
+
 	// Ensure the total transaction count is correct
 	if pool.all.Count() != 1 {
 		t.Error("expected 1 total transactions, got", pool.all.Count())
@@ -532,9 +559,13 @@ func TestTransactionMissingNonce(t *testing.T) {
 	if _, err := pool.add(tx, false); err != nil {
 		t.Error("didn't expect error", err)
 	}
+
+	pool.pendingMu.RLock()
 	if len(pool.pending) != 0 {
 		t.Error("expected 0 pending transactions, got", len(pool.pending))
 	}
+	pool.pendingMu.RUnlock()
+
 	if pool.queue[addr].Len() != 1 {
 		t.Error("expected 1 queued transaction, got", pool.queue[addr].Len())
 	}
@@ -605,19 +636,27 @@ func TestTransactionDropping(t *testing.T) {
 	pool.enqueueTx(tx12.Hash(), tx12, false, true)
 
 	// Check that pre and post validations leave the pool as is
+	pool.pendingMu.RLock()
 	if pool.pending[account].Len() != 3 {
 		t.Errorf("pending transaction mismatch: have %d, want %d", pool.pending[account].Len(), 3)
 	}
+	pool.pendingMu.RUnlock()
+
 	if pool.queue[account].Len() != 3 {
 		t.Errorf("queued transaction mismatch: have %d, want %d", pool.queue[account].Len(), 3)
 	}
 	if pool.all.Count() != 6 {
 		t.Errorf("total transaction mismatch: have %d, want %d", pool.all.Count(), 6)
 	}
+
 	<-pool.requestReset(nil, nil)
+
+	pool.pendingMu.RLock()
 	if pool.pending[account].Len() != 3 {
 		t.Errorf("pending transaction mismatch: have %d, want %d", pool.pending[account].Len(), 3)
 	}
+	pool.pendingMu.RUnlock()
+
 	if pool.queue[account].Len() != 3 {
 		t.Errorf("queued transaction mismatch: have %d, want %d", pool.queue[account].Len(), 3)
 	}
@@ -628,6 +667,7 @@ func TestTransactionDropping(t *testing.T) {
 	testAddBalance(pool, account, big.NewInt(-650))
 	<-pool.requestReset(nil, nil)
 
+	pool.pendingMu.RLock()
 	if _, ok := pool.pending[account].txs.items[tx0.Nonce()]; !ok {
 		t.Errorf("funded pending transaction missing: %v", tx0)
 	}
@@ -637,6 +677,8 @@ func TestTransactionDropping(t *testing.T) {
 	if _, ok := pool.pending[account].txs.items[tx2.Nonce()]; ok {
 		t.Errorf("out-of-fund pending transaction present: %v", tx1)
 	}
+	pool.pendingMu.RUnlock()
+
 	if _, ok := pool.queue[account].txs.items[tx10.Nonce()]; !ok {
 		t.Errorf("funded queued transaction missing: %v", tx10)
 	}
@@ -653,12 +695,15 @@ func TestTransactionDropping(t *testing.T) {
 	atomic.StoreUint64(&pool.chain.(*testBlockChain).gasLimit, 100)
 	<-pool.requestReset(nil, nil)
 
+	pool.pendingMu.RLock()
 	if _, ok := pool.pending[account].txs.items[tx0.Nonce()]; !ok {
 		t.Errorf("funded pending transaction missing: %v", tx0)
 	}
 	if _, ok := pool.pending[account].txs.items[tx1.Nonce()]; ok {
 		t.Errorf("over-gased pending transaction present: %v", tx1)
 	}
+	pool.pendingMu.RUnlock()
+
 	if _, ok := pool.queue[account].txs.items[tx10.Nonce()]; !ok {
 		t.Errorf("funded queued transaction missing: %v", tx10)
 	}
@@ -713,19 +758,27 @@ func TestTransactionPostponing(t *testing.T) {
 		}
 	}
 	// Check that pre and post validations leave the pool as is
+	pool.pendingMu.RLock()
 	if pending := pool.pending[accs[0]].Len() + pool.pending[accs[1]].Len(); pending != len(txs) {
 		t.Errorf("pending transaction mismatch: have %d, want %d", pending, len(txs))
 	}
+	pool.pendingMu.RUnlock()
+
 	if len(pool.queue) != 0 {
 		t.Errorf("queued accounts mismatch: have %d, want %d", len(pool.queue), 0)
 	}
 	if pool.all.Count() != len(txs) {
 		t.Errorf("total transaction mismatch: have %d, want %d", pool.all.Count(), len(txs))
 	}
+
 	<-pool.requestReset(nil, nil)
+
+	pool.pendingMu.RLock()
 	if pending := pool.pending[accs[0]].Len() + pool.pending[accs[1]].Len(); pending != len(txs) {
 		t.Errorf("pending transaction mismatch: have %d, want %d", pending, len(txs))
 	}
+	pool.pendingMu.RUnlock()
+
 	if len(pool.queue) != 0 {
 		t.Errorf("queued accounts mismatch: have %d, want %d", len(pool.queue), 0)
 	}
@@ -740,12 +793,17 @@ func TestTransactionPostponing(t *testing.T) {
 
 	// The first account's first transaction remains valid, check that subsequent
 	// ones are either filtered out, or queued up for later.
+	pool.pendingMu.RLock()
 	if _, ok := pool.pending[accs[0]].txs.items[txs[0].Nonce()]; !ok {
 		t.Errorf("tx %d: valid and funded transaction missing from pending pool: %v", 0, txs[0])
 	}
+	pool.pendingMu.RUnlock()
+
 	if _, ok := pool.queue[accs[0]].txs.items[txs[0].Nonce()]; ok {
 		t.Errorf("tx %d: valid and funded transaction present in future queue: %v", 0, txs[0])
 	}
+
+	pool.pendingMu.RLock()
 	for i, tx := range txs[1:100] {
 		if i%2 == 1 {
 			if _, ok := pool.pending[accs[0]].txs.items[tx.Nonce()]; ok {
@@ -763,11 +821,16 @@ func TestTransactionPostponing(t *testing.T) {
 			}
 		}
 	}
+	pool.pendingMu.RUnlock()
+
 	// The second account's first transaction got invalid, check that all transactions
 	// are either filtered out, or queued up for later.
+	pool.pendingMu.RLock()
 	if pool.pending[accs[1]] != nil {
 		t.Errorf("invalidated account still has pending transactions")
 	}
+	pool.pendingMu.RUnlock()
+
 	for i, tx := range txs[100:] {
 		if i%2 == 1 {
 			if _, ok := pool.queue[accs[1]].txs.items[tx.Nonce()]; !ok {
@@ -856,9 +919,13 @@ func TestTransactionQueueAccountLimiting(t *testing.T) {
 		if err := pool.addRemoteSync(transaction(i, 100000, key)); err != nil {
 			t.Fatalf("tx %d: failed to add transaction: %v", i, err)
 		}
+
+		pool.pendingMu.RLock()
 		if len(pool.pending) != 0 {
 			t.Errorf("tx %d: pending pool size mismatch: have %d, want %d", i, len(pool.pending), 0)
 		}
+		pool.pendingMu.RUnlock()
+
 		if i <= testTxPoolConfig.AccountQueue {
 			if pool.queue[account].Len() != int(i) {
 				t.Errorf("tx %d: queue size mismatch: have %d, want %d", i, pool.queue[account].Len(), i)
@@ -1114,6 +1181,7 @@ func testTransactionQueueTimeLimiting(t *testing.T, nolocals bool) {
 			t.Fatalf("queued transactions mismatched: have %d, want %d", queued, 1)
 		}
 	}
+
 	if err := validateTxPoolInternals(pool); err != nil {
 		t.Fatalf("pool internal state corrupted: %v", err)
 	}
@@ -1142,9 +1210,13 @@ func TestTransactionPendingLimiting(t *testing.T) {
 		if err := pool.addRemoteSync(transaction(i, 100000, key)); err != nil {
 			t.Fatalf("tx %d: failed to add transaction: %v", i, err)
 		}
+
+		pool.pendingMu.RLock()
 		if pool.pending[account].Len() != int(i)+1 {
 			t.Errorf("tx %d: pending pool size mismatch: have %d, want %d", i, pool.pending[account].Len(), i+1)
 		}
+		pool.pendingMu.RUnlock()
+
 		if len(pool.queue) != 0 {
 			t.Errorf("tx %d: queue size mismatch: have %d, want %d", i, pool.queue[account].Len(), 0)
 		}
@@ -1197,9 +1269,13 @@ func TestTransactionPendingGlobalLimiting(t *testing.T) {
 	pool.AddRemotesSync(txs)
 
 	pending := 0
+
+	pool.pendingMu.RLock()
 	for _, list := range pool.pending {
 		pending += list.Len()
 	}
+	pool.pendingMu.RUnlock()
+
 	if pending > int(config.GlobalSlots) {
 		t.Fatalf("total pending transactions overflow allowance: %d > %d", pending, config.GlobalSlots)
 	}
@@ -1332,11 +1408,14 @@ func TestTransactionPendingMinimumAllowance(t *testing.T) {
 	// Import the batch and verify that limits have been enforced
 	pool.AddRemotesSync(txs)
 
+	pool.pendingMu.RLock()
 	for addr, list := range pool.pending {
 		if list.Len() != int(config.AccountSlots) {
 			t.Errorf("addr %x: total pending transactions mismatch: have %d, want %d", addr, list.Len(), config.AccountSlots)
 		}
 	}
+	pool.pendingMu.RUnlock()
+
 	if err := validateTxPoolInternals(pool); err != nil {
 		t.Fatalf("pool internal state corrupted: %v", err)
 	}
