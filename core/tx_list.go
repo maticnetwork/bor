@@ -383,9 +383,9 @@ func (l *txList) Filter(costLimit *uint256.Int, gasLimit uint64) (types.Transact
 	l.gascap = gasLimit
 
 	// Filter out all the transactions above the account's funds
-	var cost *uint256.Int
+	cost := uint256.NewInt(0)
 	removed := l.txs.Filter(func(tx *types.Transaction) bool {
-		cost, _ = uint256.FromBig(tx.Cost())
+		cost.SetFromBig(tx.Cost())
 		return tx.Gas() > gasLimit || cost.Gt(costLimit)
 	})
 
