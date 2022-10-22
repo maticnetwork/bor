@@ -19,6 +19,7 @@ package les
 import (
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
@@ -523,7 +524,15 @@ func handleSendTx(msg Decoder) (serveRequestFn, uint64, uint64, error) {
 					addFn = backend.TxPool().AddRemotesSync
 				}
 				if errs := addFn([]*types.Transaction{tx}); errs[0] != nil {
-					stats[i].Error = errs[0].Error()
+					err := errs[0].Error()
+
+					// we receive a wrapped error
+					if unwrapped := errors.Unwrap(errs[0]); unwrapped != nil {
+						err = unwrapped.Error()
+					}
+
+					stats[i].Error = err
+
 					continue
 				}
 				stats[i] = txStatus(backend, hash)
