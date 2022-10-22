@@ -2781,15 +2781,11 @@ func TestPoolMultiAccountBatchInsertRace(t *testing.T) {
 	const n = 5000
 
 	batches := make(types.Transactions, n)
+	batchesSecond := make(types.Transactions, n)
 
 	for i := 0; i < n; i++ {
-		key, _ := crypto.GenerateKey()
-		account := crypto.PubkeyToAddress(key.PublicKey)
-		tx := transaction(uint64(0), 100000, key)
-
-		pool.currentState.AddBalance(account, big.NewInt(1000000))
-
-		batches[i] = tx
+		batches[i] = newTx(pool)
+		batchesSecond[i] = newTx(pool)
 	}
 
 	done := make(chan struct{})
@@ -2798,26 +2794,43 @@ func TestPoolMultiAccountBatchInsertRace(t *testing.T) {
 		t := time.NewTicker(time.Microsecond)
 		defer t.Stop()
 
-		var pending map[common.Address]types.Transactions
+		var (
+			pending map[common.Address]types.Transactions
+			locals  []common.Address
+		)
 
 	loop:
 		for {
 			select {
 			case <-t.C:
 				pending = pool.Pending(true)
+				locals = pool.Locals()
 			case <-done:
 				break loop
 			}
 		}
 
-		fmt.Fprint(io.Discard, pending)
+		fmt.Fprint(io.Discard, pending, locals)
 	}()
 
 	for _, tx := range batches {
 		pool.AddRemotesSync([]*types.Transaction{tx})
 	}
 
+	for _, tx := range batchesSecond {
+		pool.AddRemotes([]*types.Transaction{tx})
+	}
+
 	close(done)
+}
+
+func newTx(pool *TxPool) *types.Transaction {
+	key, _ := crypto.GenerateKey()
+	account := crypto.PubkeyToAddress(key.PublicKey)
+	tx := transaction(uint64(0), 100000, key)
+	pool.currentState.AddBalance(account, big.NewInt(1000000))
+
+	return tx
 }
 
 type acc struct {
