@@ -326,7 +326,7 @@ func (tx *Transaction) GasFeeCapCmp(other *Transaction) int {
 }
 
 func (tx *Transaction) GasFeeCapIntCmp(other *big.Int) int {
-	return tx.inner.gasTipCap().Cmp(other)
+	return tx.inner.gasFeeCap().Cmp(other)
 }
 
 func (tx *Transaction) GasFeeCapUIntCmp(other *uint256.Int) int {

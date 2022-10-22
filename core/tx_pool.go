@@ -18,6 +18,7 @@ package core
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"math/big"
 	"sort"
@@ -952,7 +953,11 @@ func (pool *TxPool) AddLocals(txs []*types.Transaction) []error {
 // a convenience wrapper aroundd AddLocals.
 func (pool *TxPool) AddLocal(tx *types.Transaction) error {
 	errs := pool.AddLocals([]*types.Transaction{tx})
-	return errs[0]
+	if len(errs) != 0 {
+		return errs[0]
+	}
+
+	return nil
 }
 
 // AddRemotes enqueues a batch of transactions into the pool if they are valid. If the
@@ -972,7 +977,11 @@ func (pool *TxPool) AddRemotesSync(txs []*types.Transaction) []error {
 // This is like AddRemotes with a single transaction, but waits for pool reorganization. Tests use this method.
 func (pool *TxPool) addRemoteSync(tx *types.Transaction) error {
 	errs := pool.AddRemotesSync([]*types.Transaction{tx})
-	return errs[0]
+	if len(errs) != 0 {
+		return errs[0]
+	}
+
+	return nil
 }
 
 // AddRemote enqueues a single transaction into the pool if it is valid. This is a convenience
@@ -981,15 +990,42 @@ func (pool *TxPool) addRemoteSync(tx *types.Transaction) error {
 // Deprecated: use AddRemotes
 func (pool *TxPool) AddRemote(tx *types.Transaction) error {
 	errs := pool.AddRemotes([]*types.Transaction{tx})
-	return errs[0]
+	if len(errs) != 0 {
+		return errs[0]
+	}
+
+	return nil
+}
+
+type TxError struct {
+	Index int
+	Err   error
+}
+
+func (te TxError) Is(target error) bool {
+	t, ok := target.(*TxError)
+	if !ok {
+		return false
+	}
+
+	return te.Index == t.Index && errors.Is(te.Err, t.Err)
+}
+
+func (te TxError) Unwrap() error {
+	return te.Err
+}
+
+func (te TxError) Error() string {
+	return fmt.Sprintf("index %d, error %v", te.Index, te.Err)
 }
 
 // addTxs attempts to queue a batch of transactions if they are valid.
 func (pool *TxPool) addTxs(txs []*types.Transaction, local, sync bool) []error {
 	// Filter out known ones without obtaining the pool lock or recovering signatures
 	var (
-		errs = make([]error, len(txs))
+		errs []error
 		news = make([]*types.Transaction, 0, len(txs))
+		err  error
 
 		hash common.Hash
 	)
@@ -997,45 +1033,44 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local, sync bool) []error {
 	for i, tx := range txs {
 		// If the transaction is known, pre-set the error slot
 		hash = tx.Hash()
+
 		if pool.all.Get(hash) != nil {
-			errs[i] = ErrAlreadyKnown
+			errs = append(errs, TxError{i, ErrAlreadyKnown})
 			knownTxMeter.Mark(1)
+
 			continue
 		}
+
 		// Exclude transactions with invalid signatures as soon as
 		// possible and cache senders in transactions before
 		// obtaining lock
-		_, err := types.Sender(pool.signer, tx)
+		_, err = types.Sender(pool.signer, tx)
 		if err != nil {
-			errs[i] = ErrInvalidSender
+			errs = append(errs, TxError{i, ErrInvalidSender})
 			invalidTxMeter.Mark(1)
+
 			continue
 		}
+
 		// Accumulate all unknown transactions for deeper processing
 		news = append(news, tx)
 	}
+
 	if len(news) == 0 {
 		return errs
 	}
 
 	// Process all the new transaction and merge any errors into the original slice
 	pool.mu.Lock()
-	newErrs, dirtyAddrs := pool.addTxsLocked(news, local)
+	errs, dirtyAddrs := pool.addTxsLocked(news, local)
 	pool.mu.Unlock()
 
-	var nilSlot = 0
-	for _, err := range newErrs {
-		for errs[nilSlot] != nil {
-			nilSlot++
-		}
-		errs[nilSlot] = err
-		nilSlot++
-	}
 	// Reorg the pool internals if needed and return
 	done := pool.requestPromoteExecutables(dirtyAddrs)
 	if sync {
 		<-done
 	}
+
 	return errs
 }
 
@@ -1043,20 +1078,27 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local, sync bool) []error {
 // The transaction pool lock must be held.
 func (pool *TxPool) addTxsLocked(txs []*types.Transaction, local bool) ([]error, *accountSet) {
 	dirty := newAccountSet(pool.signer)
-	errs := make([]error, len(txs))
 
 	var (
 		replaced bool
+		errs     []error
 	)
 
 	for i, tx := range txs {
-		replaced, errs[i] = pool.add(tx, local)
-		if errs[i] == nil && !replaced {
+		var err error
+
+		replaced, err = pool.add(tx, local)
+		if err == nil && !replaced {
 			dirty.addTx(tx)
+		}
+
+		if err != nil {
+			errs = append(errs, TxError{i, err})
 		}
 	}
 
 	validTxMeter.Mark(int64(len(dirty.accounts)))
+
 	return errs, dirty
 }
 

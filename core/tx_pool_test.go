@@ -336,7 +336,7 @@ func TestInvalidTransactions(t *testing.T) {
 	tx = transaction(1, 100000, key)
 	pool.gasPrice = big.NewInt(1000)
 	pool.gasPriceUint = uint256.NewInt(1000)
-	if err := pool.AddRemote(tx); err != ErrUnderpriced {
+	if err := pool.AddRemote(tx); !errors.Is(err, ErrUnderpriced) {
 		t.Error("expected", ErrUnderpriced, "got", err)
 	}
 	if err := pool.AddLocal(tx); err != nil {
@@ -421,7 +421,7 @@ func TestTransactionNegativeValue(t *testing.T) {
 	tx, _ := types.SignTx(types.NewTransaction(0, common.Address{}, big.NewInt(-1), 100, big.NewInt(1), nil), types.HomesteadSigner{}, key)
 	from, _ := deriveSender(tx)
 	testAddBalance(pool, from, big.NewInt(1))
-	if err := pool.AddRemote(tx); err != ErrNegativeValue {
+	if err := pool.AddRemote(tx); !errors.Is(err, ErrNegativeValue) {
 		t.Error("expected", ErrNegativeValue, "got", err)
 	}
 }
@@ -434,7 +434,7 @@ func TestTransactionTipAboveFeeCap(t *testing.T) {
 
 	tx := dynamicFeeTx(0, 100, big.NewInt(1), big.NewInt(2), key)
 
-	if err := pool.AddRemote(tx); err != ErrTipAboveFeeCap {
+	if err := pool.AddRemote(tx); !errors.Is(err, ErrTipAboveFeeCap) {
 		t.Error("expected", ErrTipAboveFeeCap, "got", err)
 	}
 }
@@ -449,12 +449,12 @@ func TestTransactionVeryHighValues(t *testing.T) {
 	veryBigNumber.Lsh(veryBigNumber, 300)
 
 	tx := dynamicFeeTx(0, 100, big.NewInt(1), veryBigNumber, key)
-	if err := pool.AddRemote(tx); err != ErrTipVeryHigh {
+	if err := pool.AddRemote(tx); !errors.Is(err, ErrTipVeryHigh) {
 		t.Error("expected", ErrTipVeryHigh, "got", err)
 	}
 
 	tx2 := dynamicFeeTx(0, 100, veryBigNumber, big.NewInt(1), key)
-	if err := pool.AddRemote(tx2); err != ErrFeeCapVeryHigh {
+	if err := pool.AddRemote(tx2); !errors.Is(err, ErrFeeCapVeryHigh) {
 		t.Error("expected", ErrFeeCapVeryHigh, "got", err)
 	}
 }
@@ -1005,6 +1005,7 @@ func testTransactionQueueGlobalLimiting(t *testing.T, nolocals bool) {
 	for i := uint64(0); i < 3*config.GlobalQueue; i++ {
 		txs = append(txs, transaction(i+1, 100000, local))
 	}
+
 	pool.AddLocals(txs)
 
 	// If locals are disabled, the previous eviction algorithm should apply here too
@@ -1499,13 +1500,13 @@ func TestTransactionPoolRepricing(t *testing.T) {
 		t.Fatalf("pool internal state corrupted: %v", err)
 	}
 	// Check that we can't add the old transactions back
-	if err := pool.AddRemote(pricedTransaction(1, 100000, big.NewInt(1), keys[0])); err != ErrUnderpriced {
+	if err := pool.AddRemote(pricedTransaction(1, 100000, big.NewInt(1), keys[0])); !errors.Is(err, ErrUnderpriced) {
 		t.Fatalf("adding underpriced pending transaction error mismatch: have %v, want %v", err, ErrUnderpriced)
 	}
-	if err := pool.AddRemote(pricedTransaction(0, 100000, big.NewInt(1), keys[1])); err != ErrUnderpriced {
+	if err := pool.AddRemote(pricedTransaction(0, 100000, big.NewInt(1), keys[1])); !errors.Is(err, ErrUnderpriced) {
 		t.Fatalf("adding underpriced pending transaction error mismatch: have %v, want %v", err, ErrUnderpriced)
 	}
-	if err := pool.AddRemote(pricedTransaction(2, 100000, big.NewInt(1), keys[2])); err != ErrUnderpriced {
+	if err := pool.AddRemote(pricedTransaction(2, 100000, big.NewInt(1), keys[2])); !errors.Is(err, ErrUnderpriced) {
 		t.Fatalf("adding underpriced queued transaction error mismatch: have %v, want %v", err, ErrUnderpriced)
 	}
 	if err := validateEvents(events, 0); err != nil {
@@ -1621,15 +1622,15 @@ func TestTransactionPoolRepricingDynamicFee(t *testing.T) {
 	}
 	// Check that we can't add the old transactions back
 	tx := pricedTransaction(1, 100000, big.NewInt(1), keys[0])
-	if err := pool.AddRemote(tx); err != ErrUnderpriced {
+	if err := pool.AddRemote(tx); !errors.Is(err, ErrUnderpriced) {
 		t.Fatalf("adding underpriced pending transaction error mismatch: have %v, want %v", err, ErrUnderpriced)
 	}
 	tx = dynamicFeeTx(0, 100000, big.NewInt(2), big.NewInt(1), keys[1])
-	if err := pool.AddRemote(tx); err != ErrUnderpriced {
+	if err := pool.AddRemote(tx); !errors.Is(err, ErrUnderpriced) {
 		t.Fatalf("adding underpriced pending transaction error mismatch: have %v, want %v", err, ErrUnderpriced)
 	}
 	tx = dynamicFeeTx(2, 100000, big.NewInt(1), big.NewInt(1), keys[2])
-	if err := pool.AddRemote(tx); err != ErrUnderpriced {
+	if err := pool.AddRemote(tx); !errors.Is(err, ErrUnderpriced) {
 		t.Fatalf("adding underpriced queued transaction error mismatch: have %v, want %v", err, ErrUnderpriced)
 	}
 	if err := validateEvents(events, 0); err != nil {
@@ -1801,7 +1802,7 @@ func TestTransactionPoolUnderpricing(t *testing.T) {
 		t.Fatalf("pool internal state corrupted: %v", err)
 	}
 	// Ensure that adding an underpriced transaction on block limit fails
-	if err := pool.AddRemote(pricedTransaction(0, 100000, big.NewInt(1), keys[1])); err != ErrUnderpriced {
+	if err := pool.AddRemote(pricedTransaction(0, 100000, big.NewInt(1), keys[1])); !errors.Is(err, ErrUnderpriced) {
 		t.Fatalf("adding underpriced pending transaction error mismatch: have %v, want %v", err, ErrUnderpriced)
 	}
 	// Ensure that adding high priced transactions drops cheap ones, but not own
@@ -1973,7 +1974,7 @@ func TestTransactionPoolUnderpricingDynamicFee(t *testing.T) {
 
 	// Ensure that adding an underpriced transaction fails
 	tx := dynamicFeeTx(0, 100000, big.NewInt(2), big.NewInt(1), keys[1])
-	if err := pool.AddRemote(tx); err != ErrUnderpriced { // Pend K0:0, K0:1, K2:0; Que K1:1
+	if err := pool.AddRemote(tx); !errors.Is(err, ErrUnderpriced) { // Pend K0:0, K0:1, K2:0; Que K1:1
 		t.Fatalf("adding underpriced pending transaction error mismatch: have %v, want %v", err, ErrUnderpriced)
 	}
 
@@ -2110,8 +2111,8 @@ func TestTransactionDeduplication(t *testing.T) {
 		firsts = append(firsts, txs[i])
 	}
 	errs := pool.AddRemotesSync(firsts)
-	if len(errs) != len(firsts) {
-		t.Fatalf("first add mismatching result count: have %d, want %d", len(errs), len(firsts))
+	if len(errs) != 0 {
+		t.Fatalf("first add mismatching result count: have %d, want %d", len(errs), 0)
 	}
 	for i, err := range errs {
 		if err != nil {
@@ -2127,8 +2128,8 @@ func TestTransactionDeduplication(t *testing.T) {
 	}
 	// Try to add all of them now and ensure previous ones error out as knowns
 	errs = pool.AddRemotesSync(txs)
-	if len(errs) != len(txs) {
-		t.Fatalf("all add mismatching result count: have %d, want %d", len(errs), len(txs))
+	if len(errs) != 0 {
+		t.Fatalf("all add mismatching result count: have %d, want %d", len(errs), 0)
 	}
 	for i, err := range errs {
 		if i%2 == 0 && err == nil {
@@ -2178,7 +2179,7 @@ func TestTransactionReplacement(t *testing.T) {
 	if err := pool.addRemoteSync(pricedTransaction(0, 100000, big.NewInt(1), key)); err != nil {
 		t.Fatalf("failed to add original cheap pending transaction: %v", err)
 	}
-	if err := pool.AddRemote(pricedTransaction(0, 100001, big.NewInt(1), key)); err != ErrReplaceUnderpriced {
+	if err := pool.AddRemote(pricedTransaction(0, 100001, big.NewInt(1), key)); !errors.Is(err, ErrReplaceUnderpriced) {
 		t.Fatalf("original cheap pending transaction replacement error mismatch: have %v, want %v", err, ErrReplaceUnderpriced)
 	}
 	if err := pool.AddRemote(pricedTransaction(0, 100000, big.NewInt(2), key)); err != nil {
@@ -2191,7 +2192,7 @@ func TestTransactionReplacement(t *testing.T) {
 	if err := pool.addRemoteSync(pricedTransaction(0, 100000, big.NewInt(price), key)); err != nil {
 		t.Fatalf("failed to add original proper pending transaction: %v", err)
 	}
-	if err := pool.AddRemote(pricedTransaction(0, 100001, big.NewInt(threshold-1), key)); err != ErrReplaceUnderpriced {
+	if err := pool.AddRemote(pricedTransaction(0, 100001, big.NewInt(threshold-1), key)); !errors.Is(err, ErrReplaceUnderpriced) {
 		t.Fatalf("original proper pending transaction replacement error mismatch: have %v, want %v", err, ErrReplaceUnderpriced)
 	}
 	if err := pool.AddRemote(pricedTransaction(0, 100000, big.NewInt(threshold), key)); err != nil {
@@ -2205,7 +2206,7 @@ func TestTransactionReplacement(t *testing.T) {
 	if err := pool.AddRemote(pricedTransaction(2, 100000, big.NewInt(1), key)); err != nil {
 		t.Fatalf("failed to add original cheap queued transaction: %v", err)
 	}
-	if err := pool.AddRemote(pricedTransaction(2, 100001, big.NewInt(1), key)); err != ErrReplaceUnderpriced {
+	if err := pool.AddRemote(pricedTransaction(2, 100001, big.NewInt(1), key)); !errors.Is(err, ErrReplaceUnderpriced) {
 		t.Fatalf("original cheap queued transaction replacement error mismatch: have %v, want %v", err, ErrReplaceUnderpriced)
 	}
 	if err := pool.AddRemote(pricedTransaction(2, 100000, big.NewInt(2), key)); err != nil {
@@ -2215,7 +2216,7 @@ func TestTransactionReplacement(t *testing.T) {
 	if err := pool.AddRemote(pricedTransaction(2, 100000, big.NewInt(price), key)); err != nil {
 		t.Fatalf("failed to add original proper queued transaction: %v", err)
 	}
-	if err := pool.AddRemote(pricedTransaction(2, 100001, big.NewInt(threshold-1), key)); err != ErrReplaceUnderpriced {
+	if err := pool.AddRemote(pricedTransaction(2, 100001, big.NewInt(threshold-1), key)); !errors.Is(err, ErrReplaceUnderpriced) {
 		t.Fatalf("original proper queued transaction replacement error mismatch: have %v, want %v", err, ErrReplaceUnderpriced)
 	}
 	if err := pool.AddRemote(pricedTransaction(2, 100000, big.NewInt(threshold), key)); err != nil {
@@ -2279,7 +2280,7 @@ func TestTransactionReplacementDynamicFee(t *testing.T) {
 		}
 		// 2.  Don't bump tip or feecap => discard
 		tx = dynamicFeeTx(nonce, 100001, big.NewInt(2), big.NewInt(1), key)
-		if err := pool.AddRemote(tx); err != ErrReplaceUnderpriced {
+		if err := pool.AddRemote(tx); !errors.Is(err, ErrReplaceUnderpriced) {
 			t.Fatalf("original cheap %s transaction replacement error mismatch: have %v, want %v", stage, err, ErrReplaceUnderpriced)
 		}
 		// 3.  Bump both more than min => accept
@@ -2302,22 +2303,22 @@ func TestTransactionReplacementDynamicFee(t *testing.T) {
 		}
 		// 6.  Bump tip max allowed so it's still underpriced => discard
 		tx = dynamicFeeTx(nonce, 100000, big.NewInt(gasFeeCap), big.NewInt(tipThreshold-1), key)
-		if err := pool.AddRemote(tx); err != ErrReplaceUnderpriced {
+		if err := pool.AddRemote(tx); !errors.Is(err, ErrReplaceUnderpriced) {
 			t.Fatalf("original proper %s transaction replacement error mismatch: have %v, want %v", stage, err, ErrReplaceUnderpriced)
 		}
 		// 7.  Bump fee cap max allowed so it's still underpriced => discard
 		tx = dynamicFeeTx(nonce, 100000, big.NewInt(feeCapThreshold-1), big.NewInt(gasTipCap), key)
-		if err := pool.AddRemote(tx); err != ErrReplaceUnderpriced {
+		if err := pool.AddRemote(tx); !errors.Is(err, ErrReplaceUnderpriced) {
 			t.Fatalf("original proper %s transaction replacement error mismatch: have %v, want %v", stage, err, ErrReplaceUnderpriced)
 		}
 		// 8.  Bump tip min for acceptance => accept
 		tx = dynamicFeeTx(nonce, 100000, big.NewInt(gasFeeCap), big.NewInt(tipThreshold), key)
-		if err := pool.AddRemote(tx); err != ErrReplaceUnderpriced {
+		if err := pool.AddRemote(tx); !errors.Is(err, ErrReplaceUnderpriced) {
 			t.Fatalf("original proper %s transaction replacement error mismatch: have %v, want %v", stage, err, ErrReplaceUnderpriced)
 		}
 		// 9.  Bump fee cap min for acceptance => accept
 		tx = dynamicFeeTx(nonce, 100000, big.NewInt(feeCapThreshold), big.NewInt(gasTipCap), key)
-		if err := pool.AddRemote(tx); err != ErrReplaceUnderpriced {
+		if err := pool.AddRemote(tx); !errors.Is(err, ErrReplaceUnderpriced) {
 			t.Fatalf("original proper %s transaction replacement error mismatch: have %v, want %v", stage, err, ErrReplaceUnderpriced)
 		}
 		// 10. Check events match expected (3 new executable txs during pending, 0 during queue)
@@ -2723,8 +2724,11 @@ func BenchmarkPoolMultiAccountBatchInsertRace(b *testing.B) {
 
 func BenchmarkPoolMultiAccountBatchInsertNoLockRace(b *testing.B) {
 	// Generate a batch of transactions to enqueue into the pool
-	pool, _ := setupTxPool()
+	pendingAddedCh := make(chan struct{}, 1024)
+	pool, localKey := setupTxPoolWithConfig(params.TestChainConfig, testTxPoolConfig, txPoolGasLimit, MakeWithPromoteTxCh(pendingAddedCh))
 	defer pool.Stop()
+
+	_ = localKey
 
 	batches := make(types.Transactions, b.N)
 
@@ -2746,17 +2750,15 @@ func BenchmarkPoolMultiAccountBatchInsertNoLockRace(b *testing.B) {
 
 		var pending map[common.Address]types.Transactions
 
-	loop:
-		for {
-			select {
-			case <-t.C:
-				pending = pool.Pending(true)
-			case <-done:
-				break loop
+		for range t.C {
+			pending = pool.Pending(true)
+
+			if len(pending) >= b.N/2 {
+				close(done)
+
+				return
 			}
 		}
-
-		fmt.Fprint(io.Discard, pending)
 	}()
 
 	b.ReportAllocs()
@@ -2766,9 +2768,7 @@ func BenchmarkPoolMultiAccountBatchInsertNoLockRace(b *testing.B) {
 		pool.AddRemotes([]*types.Transaction{tx})
 	}
 
-	close(done)
-
-	time.Sleep(10 * time.Second)
+	<-done
 }
 
 func TestPoolMultiAccountBatchInsertRace(t *testing.T) {
@@ -2784,8 +2784,8 @@ func TestPoolMultiAccountBatchInsertRace(t *testing.T) {
 	batchesSecond := make(types.Transactions, n)
 
 	for i := 0; i < n; i++ {
-		batches[i] = newTx(pool)
-		batchesSecond[i] = newTx(pool)
+		batches[i] = newTxs(pool)
+		batchesSecond[i] = newTxs(pool)
 	}
 
 	done := make(chan struct{})
@@ -2796,21 +2796,21 @@ func TestPoolMultiAccountBatchInsertRace(t *testing.T) {
 
 		var (
 			pending map[common.Address]types.Transactions
-			locals  []common.Address
+			total   int
 		)
 
-	loop:
-		for {
-			select {
-			case <-t.C:
-				pending = pool.Pending(true)
-				locals = pool.Locals()
-			case <-done:
-				break loop
+		for range t.C {
+			pending = pool.Pending(true)
+			total = len(pending)
+
+			_ = pool.Locals()
+
+			if total >= n {
+				close(done)
+
+				return
 			}
 		}
-
-		fmt.Fprint(io.Discard, pending, locals)
 	}()
 
 	for _, tx := range batches {
@@ -2821,15 +2821,15 @@ func TestPoolMultiAccountBatchInsertRace(t *testing.T) {
 		pool.AddRemotes([]*types.Transaction{tx})
 	}
 
-	close(done)
+	<-done
 }
 
-func newTx(pool *TxPool) *types.Transaction {
+func newTxs(pool *TxPool) *types.Transaction {
 	key, _ := crypto.GenerateKey()
 	account := crypto.PubkeyToAddress(key.PublicKey)
 	tx := transaction(uint64(0), 100000, key)
 
-	pool.currentState.AddBalance(account, big.NewInt(1000000))
+	pool.currentState.AddBalance(account, big.NewInt(1_000_000_000))
 
 	return tx
 }
