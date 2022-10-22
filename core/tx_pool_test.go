@@ -2721,6 +2721,56 @@ func BenchmarkPoolMultiAccountBatchInsertRace(b *testing.B) {
 	close(done)
 }
 
+func BenchmarkPoolMultiAccountBatchInsertNoLockRace(b *testing.B) {
+	// Generate a batch of transactions to enqueue into the pool
+	pool, _ := setupTxPool()
+	defer pool.Stop()
+
+	batches := make(types.Transactions, b.N)
+
+	for i := 0; i < b.N; i++ {
+		key, _ := crypto.GenerateKey()
+		account := crypto.PubkeyToAddress(key.PublicKey)
+		tx := transaction(uint64(0), 100000, key)
+
+		pool.currentState.AddBalance(account, big.NewInt(1000000))
+
+		batches[i] = tx
+	}
+
+	done := make(chan struct{})
+
+	go func() {
+		t := time.NewTicker(time.Microsecond)
+		defer t.Stop()
+
+		var pending map[common.Address]types.Transactions
+
+	loop:
+		for {
+			select {
+			case <-t.C:
+				pending = pool.Pending(true)
+			case <-done:
+				break loop
+			}
+		}
+
+		fmt.Fprint(io.Discard, pending)
+	}()
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for _, tx := range batches {
+		pool.AddRemotes([]*types.Transaction{tx})
+	}
+
+	close(done)
+
+	time.Sleep(10 * time.Second)
+}
+
 func TestPoolMultiAccountBatchInsertRace(t *testing.T) {
 	t.Parallel()
 

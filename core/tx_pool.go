@@ -250,8 +250,9 @@ type TxPool struct {
 	pendingNonces *txNoncer      // Pending state tracking virtual nonces
 	currentMaxGas uint64         // Current gas limit for transaction caps
 
-	locals  *accountSet // Set of local transaction to exempt from eviction rules
-	journal *txJournal  // Journal of local transaction to back up to disk
+	locals   *accountSet // Set of local transaction to exempt from eviction rules
+	localsMu sync.RWMutex
+	journal  *txJournal // Journal of local transaction to back up to disk
 
 	pending      map[common.Address]*txList // All currently processable transactions
 	pendingCount int
@@ -603,9 +604,6 @@ func (pool *TxPool) Pending(enforceTips bool) map[common.Address]types.Transacti
 
 // Locals retrieves the accounts currently considered local by the pool.
 func (pool *TxPool) Locals() []common.Address {
-	pool.mu.Lock()
-	defer pool.mu.Unlock()
-
 	return pool.locals.flatten()
 }
 
@@ -614,6 +612,9 @@ func (pool *TxPool) Locals() []common.Address {
 // freely modified by calling code.
 func (pool *TxPool) local() map[common.Address]types.Transactions {
 	txs := make(map[common.Address]types.Transactions)
+
+	pool.locals.m.RLock()
+	defer pool.locals.m.RUnlock()
 
 	for addr := range pool.locals.accounts {
 		pool.pendingMu.RLock()
@@ -1583,8 +1584,11 @@ func (pool *TxPool) truncatePending() {
 	for addr, list := range pool.pending {
 		// Only evict transactions from high rollers
 		listLen = len(list.txs.items)
+		pool.locals.m.RLock()
+
 		if uint64(listLen) > pool.config.AccountSlots {
 			if _, ok = pool.locals.accounts[addr]; ok {
+				pool.locals.m.RUnlock()
 				continue
 			}
 
@@ -1592,6 +1596,8 @@ func (pool *TxPool) truncatePending() {
 
 			spammers = append(spammers, pair{addr, int64(listLen)})
 		}
+
+		pool.locals.m.RUnlock()
 	}
 	pool.pendingMu.RUnlock()
 
@@ -1886,6 +1892,7 @@ type accountSet struct {
 	accounts        map[common.Address]struct{}
 	accountsFlatted []common.Address
 	signer          types.Signer
+	m               sync.RWMutex
 }
 
 // newAccountSet creates a new address set with an associated signer for sender
@@ -1903,17 +1910,26 @@ func newAccountSet(signer types.Signer, addrs ...common.Address) *accountSet {
 
 // contains checks if a given address is contained within the set.
 func (as *accountSet) contains(addr common.Address) bool {
+	as.m.RLock()
+	defer as.m.RUnlock()
+
 	_, exist := as.accounts[addr]
 	return exist
 }
 
 func (as *accountSet) empty() bool {
+	as.m.RLock()
+	defer as.m.RUnlock()
+
 	return len(as.accounts) == 0
 }
 
 // containsTx checks if the sender of a given tx is within the set. If the sender
 // cannot be derived, this method returns false.
 func (as *accountSet) containsTx(tx *types.Transaction) bool {
+	as.m.RLock()
+	defer as.m.RUnlock()
+
 	if addr, err := types.Sender(as.signer, tx); err == nil {
 		return as.contains(addr)
 	}
@@ -1922,9 +1938,13 @@ func (as *accountSet) containsTx(tx *types.Transaction) bool {
 
 // add inserts a new address into the set to track.
 func (as *accountSet) add(addr common.Address) {
+	as.m.Lock()
+	defer as.m.Unlock()
+
 	if _, ok := as.accounts[addr]; !ok {
 		as.accountsFlatted = append(as.accountsFlatted, addr)
 	}
+
 	as.accounts[addr] = struct{}{}
 }
 
@@ -1938,12 +1958,18 @@ func (as *accountSet) addTx(tx *types.Transaction) {
 // flatten returns the list of addresses within this set, also caching it for later
 // reuse. The returned slice should not be changed!
 func (as *accountSet) flatten() []common.Address {
+	as.m.RLock()
+	defer as.m.RUnlock()
+
 	return as.accountsFlatted
 }
 
 // merge adds all addresses from the 'other' set into 'as'.
 func (as *accountSet) merge(other *accountSet) {
 	var ok bool
+
+	as.m.Lock()
+	defer as.m.Unlock()
 
 	for addr := range other.accounts {
 		if _, ok = as.accounts[addr]; !ok {
@@ -2106,7 +2132,10 @@ func (t *txLookup) RemoteToLocals(locals *accountSet) int {
 	var migrated int
 	for hash, tx := range t.remotes {
 		if locals.containsTx(tx) {
+			locals.m.Lock()
 			t.locals[hash] = tx
+			locals.m.Unlock()
+
 			delete(t.remotes, hash)
 			migrated += 1
 		}
