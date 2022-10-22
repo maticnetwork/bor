@@ -809,6 +809,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 		return old != nil, nil
 	}
 
+	// it is not an unlocking of unlocked because of the return in previous 'if'
 	pool.pendingMu.RUnlock()
 
 	// New transaction isn't replacing a pending one, push into queue
