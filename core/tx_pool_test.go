@@ -2828,6 +2828,7 @@ func newTx(pool *TxPool) *types.Transaction {
 	key, _ := crypto.GenerateKey()
 	account := crypto.PubkeyToAddress(key.PublicKey)
 	tx := transaction(uint64(0), 100000, key)
+
 	pool.currentState.AddBalance(account, big.NewInt(1000000))
 
 	return tx

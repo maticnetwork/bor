@@ -250,9 +250,8 @@ type TxPool struct {
 	pendingNonces *txNoncer      // Pending state tracking virtual nonces
 	currentMaxGas uint64         // Current gas limit for transaction caps
 
-	locals   *accountSet // Set of local transaction to exempt from eviction rules
-	localsMu sync.RWMutex
-	journal  *txJournal // Journal of local transaction to back up to disk
+	locals  *accountSet // Set of local transaction to exempt from eviction rules
+	journal *txJournal  // Journal of local transaction to back up to disk
 
 	pending      map[common.Address]*txList // All currently processable transactions
 	pendingCount int
@@ -1584,6 +1583,7 @@ func (pool *TxPool) truncatePending() {
 	for addr, list := range pool.pending {
 		// Only evict transactions from high rollers
 		listLen = len(list.txs.items)
+
 		pool.locals.m.RLock()
 
 		if uint64(listLen) > pool.config.AccountSlots {
