@@ -2685,23 +2685,23 @@ func BenchmarkPoolBatchInsert(b *testing.B) {
 		{size: 10000, isLocal: true},
 	}
 
-	for _, testCase := range cases {
-		testCase.name = fmt.Sprintf(format, testCase.size, testCase.isLocal)
+	for i := range cases {
+		cases[i].name = fmt.Sprintf(format, cases[i].size, cases[i].isLocal)
 	}
 
 	// Benchmark importing the transactions into the queue
 
 	for _, testCase := range cases {
-		testCase := testCase
+		singleCase := testCase
 
-		b.Run(testCase.name, func(b *testing.B) {
+		b.Run(singleCase.name, func(b *testing.B) {
 			batches := make([]types.Transactions, b.N)
 
 			for i := 0; i < b.N; i++ {
-				batches[i] = make(types.Transactions, testCase.size)
+				batches[i] = make(types.Transactions, singleCase.size)
 
-				for j := 0; j < testCase.size; j++ {
-					batches[i][j] = transaction(uint64(testCase.size*i+j), 100000, key)
+				for j := 0; j < singleCase.size; j++ {
+					batches[i][j] = transaction(uint64(singleCase.size*i+j), 100000, key)
 				}
 			}
 
@@ -2886,11 +2886,15 @@ func BenchmarkPoolAccountsBatchInsert(b *testing.B) {
 	defer pool.Stop()
 
 	batches := make(types.Transactions, b.N)
+
 	for i := 0; i < b.N; i++ {
 		key, _ := crypto.GenerateKey()
 		account := crypto.PubkeyToAddress(key.PublicKey)
+
 		pool.currentState.AddBalance(account, big.NewInt(1000000))
+
 		tx := transaction(uint64(0), 100000, key)
+
 		batches[i] = tx
 	}
 
