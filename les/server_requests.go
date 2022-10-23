@@ -519,7 +519,8 @@ func handleSendTx(msg Decoder) (serveRequestFn, uint64, uint64, error) {
 			stats[i] = txStatus(backend, hash)
 			if stats[i].Status == core.TxStatusUnknown {
 				addFn := backend.TxPool().AddRemotes
-				// Add txs synchronously for testing purpose
+				
+// Add txs synchronously for testing purpose
 				if backend.AddTxsSync() {
 					addFn = backend.TxPool().AddRemotesSync
 				}
