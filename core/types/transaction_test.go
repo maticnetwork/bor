@@ -275,12 +275,15 @@ func TestTransactionPriceNonceSort1559(t *testing.T) {
 // Tests that transactions can be correctly sorted according to their price in
 // decreasing order, but at the same time with increasing nonces when issued by
 // the same account.
+//
+//nolint:gocognit,thelper
 func testTransactionPriceNonceSort(t *testing.T, baseFeeBig *big.Int) {
 	// Generate a batch of accounts to start with
 	keys := make([]*ecdsa.PrivateKey, 25)
 	for i := 0; i < len(keys); i++ {
 		keys[i], _ = crypto.GenerateKey()
 	}
+
 	signer := LatestSignerForChainID(common.Big1)
 
 	var baseFee *uint256.Int
@@ -349,6 +352,7 @@ func testTransactionPriceNonceSort(t *testing.T, baseFeeBig *big.Int) {
 				t.Errorf("invalid nonce ordering: tx #%d (A=%x N=%v) < tx #%d (A=%x N=%v)", i, fromi[:4], txi.Nonce(), i+j, fromj[:4], txj.Nonce())
 			}
 		}
+
 		// If the next tx has different from account, the price must be lower than the current one
 		if i+1 < len(txs) {
 			next := txs[i+1]

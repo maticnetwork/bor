@@ -412,7 +412,6 @@ func (tx *Transaction) EffectiveGasTipUintLt(other *uint256.Int, baseFee *uint25
 
 func (tx *Transaction) EffectiveGasTipTxUintCmp(other *Transaction, baseFee *uint256.Int) int {
 	if baseFee == nil {
-		return tx.GasTipCapCmp(other)
 		return tx.inner.gasTipCapU256().Cmp(other.inner.gasTipCapU256())
 	}
 
@@ -430,6 +429,7 @@ func (tx *Transaction) EffectiveGasTipUnit(baseFee *uint256.Int) (*uint256.Int, 
 	}
 
 	var err error
+
 	gasFeeCap := tx.GasFeeCapUint()
 
 	if gasFeeCap.Lt(baseFee) {
@@ -447,8 +447,10 @@ func (tx *Transaction) EffectiveGasTipUnit(baseFee *uint256.Int) (*uint256.Int, 
 	}
 
 	gasFeeCap.Sub(gasFeeCap, baseFee)
+
 	if gasFeeCap.Gt(gasTipCapUint) || gasFeeCap.Eq(gasTipCapUint) {
 		gasFeeCap.Add(gasFeeCap, baseFee)
+
 		return gasTipCapUint, err
 	}
 
@@ -645,6 +647,7 @@ func NewTransactionsByPriceAndNonce(signer Signer, txs map[common.Address]Transa
 func NewTransactionsByPriceAndNonce(signer Signer, txs map[common.Address]Transactions, baseFee *uint256.Int) *TransactionsByPriceAndNonce {
 	// Initialize a price and received time based heap with the head transactions
 	heads := make(TxByPriceAndTime, 0, len(txs))
+
 	for from, accTxs := range txs {
 		if len(accTxs) == 0 {
 			continue
@@ -652,14 +655,17 @@ func NewTransactionsByPriceAndNonce(signer Signer, txs map[common.Address]Transa
 
 		acc, _ := Sender(signer, accTxs[0])
 		wrapped, err := NewTxWithMinerFee(accTxs[0], baseFee)
+
 		// Remove transaction if sender doesn't match from, or if wrapping fails.
 		if acc != from || err != nil {
 			delete(txs, from)
 			continue
 		}
+
 		heads = append(heads, wrapped)
 		txs[from] = accTxs[1:]
 	}
+
 	heap.Init(&heads)
 
 	// Assemble and return the transaction set
