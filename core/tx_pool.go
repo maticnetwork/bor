@@ -575,7 +575,7 @@ func (pool *TxPool) ContentFrom(addr common.Address) (types.Transactions, types.
 // transactions and only return those whose **effective** tip is large enough in
 // the next pending execution environment.
 func (pool *TxPool) Pending(enforceTips bool) map[common.Address]types.Transactions {
-	pending := make(map[common.Address]types.Transactions)
+	pending := make(map[common.Address]types.Transactions, 10)
 
 	pool.pendingMu.RLock()
 	defer pool.pendingMu.RUnlock()
@@ -586,7 +586,7 @@ func (pool *TxPool) Pending(enforceTips bool) map[common.Address]types.Transacti
 		// If the miner requests tip enforcement, cap the lists now
 		if enforceTips && !pool.locals.contains(addr) {
 			for i, tx := range txs {
-				if tx.EffectiveGasTipIntCmp(pool.gasPrice, pool.priced.urgent.baseFee) < 0 {
+				if tx.EffectiveGasTipUintLt(pool.gasPriceUint, pool.priced.urgent.baseFee) {
 					txs = txs[:i]
 					break
 				}
@@ -1392,7 +1392,7 @@ func (pool *TxPool) runReorg(done chan struct{}, reset *txpoolResetRequest, dirt
 		if reset.newHead != nil {
 			if pool.chainconfig.IsLondon(new(big.Int).Add(reset.newHead.Number, big.NewInt(1))) {
 				// london fork enabled, reset given the base fee
-				pendingBaseFee := misc.CalcBaseFee(pool.chainconfig, reset.newHead)
+				pendingBaseFee := misc.CalcBaseFeeUint(pool.chainconfig, reset.newHead)
 				pool.priced.SetBaseFee(pendingBaseFee)
 			} else {
 				// london fork not enabled, reheap to "reset" the priced list

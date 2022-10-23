@@ -394,6 +394,51 @@ func (tx *Transaction) EffectiveGasTipIntCmp(other *big.Int, baseFee *big.Int) i
 	return tx.EffectiveGasTipValue(baseFee).Cmp(other)
 }
 
+func (tx *Transaction) EffectiveGasTipUintCmp(other *uint256.Int, baseFee *uint256.Int) int {
+	if baseFee == nil {
+		return tx.GasTipCapUIntCmp(other)
+	}
+
+	return tx.EffectiveGasTipValueUint(baseFee).Cmp(other)
+}
+
+func (tx *Transaction) EffectiveGasTipUintLt(other *uint256.Int, baseFee *uint256.Int) bool {
+	if baseFee == nil {
+		return tx.GasTipCapUIntLt(other)
+	}
+
+	return tx.EffectiveGasTipValueUint(baseFee).Lt(other)
+}
+
+func (tx *Transaction) EffectiveGasTipTxUintCmp(other *Transaction, baseFee *uint256.Int) int {
+	if baseFee == nil {
+		return tx.GasTipCapCmp(other)
+		return tx.inner.gasTipCapU256().Cmp(other.inner.gasTipCapU256())
+	}
+
+	return tx.EffectiveGasTipValueUint(baseFee).Cmp(other.EffectiveGasTipValueUint(baseFee))
+}
+
+func (tx *Transaction) EffectiveGasTipValueUint(baseFee *uint256.Int) *uint256.Int {
+	effectiveTip, _ := tx.EffectiveGasTipUnit(baseFee)
+	return effectiveTip
+}
+
+func (tx *Transaction) EffectiveGasTipUnit(baseFee *uint256.Int) (*uint256.Int, error) {
+	if baseFee == nil {
+		return tx.GasFeeCapUint(), nil
+	}
+
+	var err error
+	gasFeeCap := tx.GasFeeCapUint()
+
+	if gasFeeCap.Lt(baseFee) {
+		err = ErrGasFeeCapTooLow
+	}
+
+	return math.BigMinUint256(tx.GasTipCapUint(), gasFeeCap.Sub(gasFeeCap, baseFee)), err
+}
+
 // Hash returns the transaction hash.
 func (tx *Transaction) Hash() common.Hash {
 	if hash := tx.hash.Load(); hash != nil {
@@ -487,14 +532,14 @@ func (s TxByNonce) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
 // TxWithMinerFee wraps a transaction with its gas price or effective miner gasTipCap
 type TxWithMinerFee struct {
 	tx       *Transaction
-	minerFee *big.Int
+	minerFee *uint256.Int
 }
 
 // NewTxWithMinerFee creates a wrapped transaction, calculating the effective
 // miner gasTipCap if a base fee is provided.
 // Returns error in case of a negative effective miner gasTipCap.
-func NewTxWithMinerFee(tx *Transaction, baseFee *big.Int) (*TxWithMinerFee, error) {
-	minerFee, err := tx.EffectiveGasTip(baseFee)
+func NewTxWithMinerFee(tx *Transaction, baseFee *uint256.Int) (*TxWithMinerFee, error) {
+	minerFee, err := tx.EffectiveGasTipUnit(baseFee)
 	if err != nil {
 		return nil, err
 	}
@@ -539,7 +584,7 @@ type TransactionsByPriceAndNonce struct {
 	txs     map[common.Address]Transactions // Per account nonce-sorted list of transactions
 	heads   TxByPriceAndTime                // Next transaction for each unique account (price heap)
 	signer  Signer                          // Signer for the set of transactions
-	baseFee *big.Int                        // Current base fee
+	baseFee *uint256.Int                    // Current base fee
 }
 
 // NewTransactionsByPriceAndNonce creates a transaction set that can retrieve
@@ -547,7 +592,37 @@ type TransactionsByPriceAndNonce struct {
 //
 // Note, the input map is reowned so the caller should not interact any more with
 // if after providing it to the constructor.
+/*
 func NewTransactionsByPriceAndNonce(signer Signer, txs map[common.Address]Transactions, baseFee *big.Int) *TransactionsByPriceAndNonce {
+	// Initialize a price and received time based heap with the head transactions
+	heads := make(TxByPriceAndTime, 0, len(txs))
+	for from, accTxs := range txs {
+		if len(accTxs) == 0 {
+			continue
+		}
+
+		acc, _ := Sender(signer, accTxs[0])
+		wrapped, err := NewTxWithMinerFee(accTxs[0], baseFee)
+		// Remove transaction if sender doesn't match from, or if wrapping fails.
+		if acc != from || err != nil {
+			delete(txs, from)
+			continue
+		}
+		heads = append(heads, wrapped)
+		txs[from] = accTxs[1:]
+	}
+	heap.Init(&heads)
+
+	// Assemble and return the transaction set
+	return &TransactionsByPriceAndNonce{
+		txs:     txs,
+		heads:   heads,
+		signer:  signer,
+		baseFee: baseFee,
+	}
+}*/
+
+func NewTransactionsByPriceAndNonce(signer Signer, txs map[common.Address]Transactions, baseFee *uint256.Int) *TransactionsByPriceAndNonce {
 	// Initialize a price and received time based heap with the head transactions
 	heads := make(TxByPriceAndTime, 0, len(txs))
 	for from, accTxs := range txs {

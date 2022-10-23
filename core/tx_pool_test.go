@@ -2128,7 +2128,7 @@ func TestDualHeapEviction(t *testing.T) {
 
 	add(false)
 	for baseFee = 0; baseFee <= 1000; baseFee += 100 {
-		pool.priced.SetBaseFee(big.NewInt(int64(baseFee)))
+		pool.priced.SetBaseFee(uint256.NewInt(uint64(baseFee)))
 		add(true)
 		check(highCap, "fee cap")
 		add(false)
@@ -2715,6 +2715,89 @@ func BenchmarkPoolBatchInsert(b *testing.B) {
 					pool.AddRemotes(batch)
 				}
 			}
+		})
+	}
+}
+
+func BenchmarkPoolMining(b *testing.B) {
+	const format = "size %d"
+
+	cases := []struct {
+		name string
+		size int
+	}{
+		{size: 1},
+		{size: 5},
+		{size: 10},
+		//{size: 100},
+	}
+
+	for i := range cases {
+		cases[i].name = fmt.Sprintf(format, cases[i].size)
+	}
+
+	// Benchmark importing the transactions into the queue
+
+	for _, testCase := range cases {
+		singleCase := testCase
+
+		b.Run(singleCase.name, func(b *testing.B) {
+			// Generate a batch of transactions to enqueue into the pool
+			pendingAddedCh := make(chan struct{}, 1024)
+
+			pool, localKey := setupTxPoolWithConfig(params.TestChainConfig, testTxPoolConfig, txPoolGasLimit, MakeWithPromoteTxCh(pendingAddedCh))
+			defer pool.Stop()
+
+			localKeyPub := localKey.PublicKey
+			account := crypto.PubkeyToAddress(localKeyPub)
+
+			balanceStr := "1_000_000_000"
+			balance, ok := big.NewInt(0).SetString(balanceStr, 0)
+			if !ok {
+				b.Fatal("incorrect initial balance", balanceStr)
+			}
+
+			testAddBalance(pool, account, balance)
+
+			signer := types.NewEIP155Signer(big.NewInt(1))
+			baseFee := uint256.NewInt(1)
+
+			const batchesSize = 100
+
+			batches := make([]types.Transactions, batchesSize)
+
+			for i := 0; i < batchesSize; i++ {
+				batches[i] = make(types.Transactions, singleCase.size)
+
+				for j := 0; j < singleCase.size; j++ {
+					batches[i][j] = transaction(uint64(singleCase.size*i+j), 100_000, localKey)
+				}
+
+				for _, batch := range batches {
+					pool.AddRemotes(batch)
+				}
+			}
+
+			var promoted int
+
+			for range pendingAddedCh {
+				promoted++
+
+				if promoted >= batchesSize*singleCase.size/2 {
+					break
+				}
+			}
+
+			var total int
+
+			b.ResetTimer()
+			b.ReportAllocs()
+
+			for i := 0; i < b.N; i++ {
+				total += mining(pool, signer, baseFee)
+			}
+
+			b.StopTimer()
 		})
 	}
 }
@@ -3502,7 +3585,7 @@ func fillTransactions(ctx context.Context, pool *TxPool, locals []common.Address
 	signer := types.NewLondonSigner(big.NewInt(1))
 
 	// fake baseFee
-	baseFee := big.NewInt(1)
+	baseFee := uint256.NewInt(1)
 
 	blockGasLimit := gasLimit
 
@@ -3573,4 +3656,42 @@ func MakeWithPromoteTxCh(ch chan struct{}) func(*TxPool) {
 	return func(pool *TxPool) {
 		pool.promoteTxCh = ch
 	}
+}
+
+func mining(pool *TxPool, signer types.Signer, baseFee *uint256.Int) int {
+	var (
+		localTxsCount  int
+		remoteTxsCount int
+		localTxs       = make(map[common.Address]types.Transactions)
+		remoteTxs      map[common.Address]types.Transactions
+		total          int
+	)
+
+	pending := pool.Pending(true)
+	remoteTxs = pending
+
+	for _, account := range pool.Locals() {
+		if txs := remoteTxs[account]; len(txs) > 0 {
+			delete(remoteTxs, account)
+
+			localTxs[account] = txs
+		}
+	}
+
+	localTxsCount = len(localTxs)
+	remoteTxsCount = len(remoteTxs)
+
+	if localTxsCount > 0 {
+		txs := types.NewTransactionsByPriceAndNonce(signer, localTxs, baseFee)
+
+		total += txs.GetTxs()
+	}
+
+	if remoteTxsCount > 0 {
+		txs := types.NewTransactionsByPriceAndNonce(signer, remoteTxs, baseFee)
+
+		total += txs.GetTxs()
+	}
+
+	return total
 }
