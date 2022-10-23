@@ -2661,15 +2661,7 @@ func benchmarkFuturePromotion(b *testing.B, size int) {
 }
 
 // Benchmarks the speed of batched transaction insertion.
-func BenchmarkPoolBatchInsert100(b *testing.B)   { benchmarkPoolBatchInsert(b, 100, false) }
-func BenchmarkPoolBatchInsert1000(b *testing.B)  { benchmarkPoolBatchInsert(b, 1000, false) }
-func BenchmarkPoolBatchInsert10000(b *testing.B) { benchmarkPoolBatchInsert(b, 10000, false) }
-
-func BenchmarkPoolBatchLocalInsert100(b *testing.B)   { benchmarkPoolBatchInsert(b, 100, true) }
-func BenchmarkPoolBatchLocalInsert1000(b *testing.B)  { benchmarkPoolBatchInsert(b, 1000, true) }
-func BenchmarkPoolBatchLocalInsert10000(b *testing.B) { benchmarkPoolBatchInsert(b, 10000, true) }
-
-func benchmarkPoolBatchInsert(b *testing.B, size int, local bool) {
+func BenchmarkPoolBatchInsert(b *testing.B) {
 	// Generate a batch of transactions to enqueue into the pool
 	pool, key := setupTxPool()
 	defer pool.Stop()
@@ -2677,22 +2669,53 @@ func benchmarkPoolBatchInsert(b *testing.B, size int, local bool) {
 	account := crypto.PubkeyToAddress(key.PublicKey)
 	testAddBalance(pool, account, big.NewInt(1000000))
 
-	batches := make([]types.Transactions, b.N)
-	for i := 0; i < b.N; i++ {
-		batches[i] = make(types.Transactions, size)
-		for j := 0; j < size; j++ {
-			batches[i][j] = transaction(uint64(size*i+j), 100000, key)
-		}
+	const format = "size %d, is local %t"
+
+	cases := []struct {
+		name    string
+		size    int
+		isLocal bool
+	}{
+		{size: 100, isLocal: false},
+		{size: 1000, isLocal: false},
+		{size: 10000, isLocal: false},
+
+		{size: 100, isLocal: true},
+		{size: 1000, isLocal: true},
+		{size: 10000, isLocal: true},
 	}
+
+	for _, testCase := range cases {
+		testCase.name = fmt.Sprintf(format, testCase.size, testCase.isLocal)
+	}
+
 	// Benchmark importing the transactions into the queue
-	b.ResetTimer()
-	b.ReportAllocs()
-	for _, batch := range batches {
-		if local {
-			pool.AddLocals(batch)
-		} else {
-			pool.AddRemotes(batch)
-		}
+
+	for _, testCase := range cases {
+		testCase := testCase
+
+		b.Run(testCase.name, func(b *testing.B) {
+			batches := make([]types.Transactions, b.N)
+
+			for i := 0; i < b.N; i++ {
+				batches[i] = make(types.Transactions, testCase.size)
+
+				for j := 0; j < testCase.size; j++ {
+					batches[i][j] = transaction(uint64(testCase.size*i+j), 100000, key)
+				}
+			}
+
+			b.ResetTimer()
+			b.ReportAllocs()
+
+			for _, batch := range batches {
+				if testCase.isLocal {
+					pool.AddLocals(batch)
+				} else {
+					pool.AddRemotes(batch)
+				}
+			}
+		})
 	}
 }
 

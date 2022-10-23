@@ -55,9 +55,9 @@ type Transaction struct {
 	time  time.Time // Time first seen locally (spam avoidance)
 
 	// caches
-	hash atomic.Value
-	size atomic.Value
-	from atomic.Value
+	hash atomic.Pointer[common.Hash]
+	size atomic.Pointer[common.StorageSize]
+	from atomic.Pointer[sigCache]
 }
 
 // NewTx creates a new transaction.
@@ -199,7 +199,8 @@ func (tx *Transaction) setDecoded(inner TxData, size int) {
 	tx.inner = inner
 	tx.time = time.Now()
 	if size > 0 {
-		tx.size.Store(common.StorageSize(size))
+		v := float64(size)
+		tx.size.Store((*common.StorageSize)(&v))
 	}
 }
 
@@ -396,7 +397,7 @@ func (tx *Transaction) EffectiveGasTipIntCmp(other *big.Int, baseFee *big.Int) i
 // Hash returns the transaction hash.
 func (tx *Transaction) Hash() common.Hash {
 	if hash := tx.hash.Load(); hash != nil {
-		return hash.(common.Hash)
+		return *hash
 	}
 
 	var h common.Hash
@@ -405,7 +406,9 @@ func (tx *Transaction) Hash() common.Hash {
 	} else {
 		h = prefixedRlpHash(tx.Type(), tx.inner)
 	}
-	tx.hash.Store(h)
+
+	tx.hash.Store(&h)
+
 	return h
 }
 
@@ -413,11 +416,14 @@ func (tx *Transaction) Hash() common.Hash {
 // encoding and returning it, or returning a previously cached value.
 func (tx *Transaction) Size() common.StorageSize {
 	if size := tx.size.Load(); size != nil {
-		return size.(common.StorageSize)
+		return *size
 	}
+
 	c := writeCounter(0)
+
 	rlp.Encode(&c, &tx.inner)
-	tx.size.Store(common.StorageSize(c))
+	tx.size.Store((*common.StorageSize)(&c))
+
 	return common.StorageSize(c)
 }
 
