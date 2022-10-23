@@ -2729,7 +2729,7 @@ func BenchmarkPoolMining(b *testing.B) {
 		{size: 1},
 		{size: 5},
 		{size: 10},
-		//{size: 100},
+		{size: 20},
 	}
 
 	for i := range cases {
