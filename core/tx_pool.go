@@ -18,7 +18,6 @@ package core
 
 import (
 	"errors"
-	"fmt"
 	"math"
 	"math/big"
 	"sort"
@@ -952,12 +951,7 @@ func (pool *TxPool) AddLocals(txs []*types.Transaction) []error {
 // AddLocal enqueues a single local transaction into the pool if it is valid. This is
 // a convenience wrapper aroundd AddLocals.
 func (pool *TxPool) AddLocal(tx *types.Transaction) error {
-	errs := pool.AddLocals([]*types.Transaction{tx})
-	if len(errs) != 0 {
-		return errs[0]
-	}
-
-	return nil
+	return pool.addTx(tx, !pool.config.NoLocals, true)
 }
 
 // AddRemotes enqueues a batch of transactions into the pool if they are valid. If the
@@ -974,49 +968,19 @@ func (pool *TxPool) AddRemotesSync(txs []*types.Transaction) []error {
 	return pool.addTxs(txs, false, true)
 }
 
+func (pool *TxPool) AddRemoteSync(txs *types.Transaction) error {
+	return pool.addTx(txs, false, true)
+}
+
 // This is like AddRemotes with a single transaction, but waits for pool reorganization. Tests use this method.
 func (pool *TxPool) addRemoteSync(tx *types.Transaction) error {
-	errs := pool.AddRemotesSync([]*types.Transaction{tx})
-	if len(errs) != 0 {
-		return errs[0]
-	}
-
-	return nil
+	return pool.AddRemoteSync(tx)
 }
 
 // AddRemote enqueues a single transaction into the pool if it is valid. This is a convenience
 // wrapper around AddRemotes.
-//
-// Deprecated: use AddRemotes
 func (pool *TxPool) AddRemote(tx *types.Transaction) error {
-	errs := pool.AddRemotes([]*types.Transaction{tx})
-	if len(errs) != 0 {
-		return errs[0]
-	}
-
-	return nil
-}
-
-type TxError struct {
-	Index int
-	Err   error
-}
-
-func (te TxError) Is(target error) bool {
-	t, ok := target.(*TxError)
-	if !ok {
-		return false
-	}
-
-	return te.Index == t.Index && errors.Is(te.Err, t.Err)
-}
-
-func (te TxError) Unwrap() error {
-	return te.Err
-}
-
-func (te TxError) Error() string {
-	return fmt.Sprintf("index %d, error %v", te.Index, te.Err)
+	return pool.addTx(tx, false, false)
 }
 
 // addTxs attempts to queue a batch of transactions if they are valid.
@@ -1030,12 +994,12 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local, sync bool) []error {
 		hash common.Hash
 	)
 
-	for i, tx := range txs {
+	for _, tx := range txs {
 		// If the transaction is known, pre-set the error slot
 		hash = tx.Hash()
 
 		if pool.all.Get(hash) != nil {
-			errs = append(errs, TxError{i, ErrAlreadyKnown})
+			errs = append(errs, ErrAlreadyKnown)
 			knownTxMeter.Mark(1)
 
 			continue
@@ -1046,7 +1010,7 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local, sync bool) []error {
 		// obtaining lock
 		_, err = types.Sender(pool.signer, tx)
 		if err != nil {
-			errs = append(errs, TxError{i, ErrInvalidSender})
+			errs = append(errs, ErrInvalidSender)
 			invalidTxMeter.Mark(1)
 
 			continue
@@ -1074,6 +1038,57 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local, sync bool) []error {
 	return errs
 }
 
+// addTxs attempts to queue a batch of transactions if they are valid.
+func (pool *TxPool) addTx(tx *types.Transaction, local, sync bool) error {
+	// Filter out known ones without obtaining the pool lock or recovering signatures
+	var (
+		err  error
+		hash common.Hash
+	)
+
+	func() {
+		// If the transaction is known, pre-set the error slot
+		hash = tx.Hash()
+
+		if pool.all.Get(hash) != nil {
+			err = ErrAlreadyKnown
+
+			knownTxMeter.Mark(1)
+
+			return
+		}
+
+		// Exclude transactions with invalid signatures as soon as
+		// possible and cache senders in transactions before
+		// obtaining lock
+		_, err = types.Sender(pool.signer, tx)
+		if err != nil {
+			invalidTxMeter.Mark(1)
+
+			return
+		}
+	}()
+
+	if err != nil {
+		return err
+	}
+
+	var dirtyAddrs *accountSet
+
+	// Process all the new transaction and merge any errors into the original slice
+	pool.mu.Lock()
+	err, dirtyAddrs = pool.addTxLocked(tx, local)
+	pool.mu.Unlock()
+
+	// Reorg the pool internals if needed and return
+	done := pool.requestPromoteExecutables(dirtyAddrs)
+	if sync {
+		<-done
+	}
+
+	return err
+}
+
 // addTxsLocked attempts to queue a batch of transactions if they are valid.
 // The transaction pool lock must be held.
 func (pool *TxPool) addTxsLocked(txs []*types.Transaction, local bool) ([]error, *accountSet) {
@@ -1084,7 +1099,7 @@ func (pool *TxPool) addTxsLocked(txs []*types.Transaction, local bool) ([]error,
 		errs     []error
 	)
 
-	for i, tx := range txs {
+	for _, tx := range txs {
 		var err error
 
 		replaced, err = pool.add(tx, local)
@@ -1093,13 +1108,31 @@ func (pool *TxPool) addTxsLocked(txs []*types.Transaction, local bool) ([]error,
 		}
 
 		if err != nil {
-			errs = append(errs, TxError{i, err})
+			errs = append(errs, err)
 		}
 	}
 
 	validTxMeter.Mark(int64(len(dirty.accounts)))
 
 	return errs, dirty
+}
+
+func (pool *TxPool) addTxLocked(tx *types.Transaction, local bool) (error, *accountSet) {
+	dirty := newAccountSet(pool.signer)
+
+	var (
+		replaced bool
+		err      error
+	)
+
+	replaced, err = pool.add(tx, local)
+	if err == nil && !replaced {
+		dirty.addTx(tx)
+	}
+
+	validTxMeter.Mark(int64(len(dirty.accounts)))
+
+	return err, dirty
 }
 
 // Status returns the status (unknown/pending/queued) of a batch of transactions

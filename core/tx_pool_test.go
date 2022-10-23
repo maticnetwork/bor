@@ -2732,17 +2732,21 @@ func BenchmarkInsertRemoteWithAllLocals(b *testing.B) {
 }
 
 // Benchmarks the speed of batch transaction insertion in case of multiple accounts.
-func BenchmarkPoolMultiAccountBatchInsert(b *testing.B) {
+func BenchmarkPoolAccountMultiBatchInsert(b *testing.B) {
 	// Generate a batch of transactions to enqueue into the pool
 	pool, _ := setupTxPool()
 	defer pool.Stop()
 
 	batches := make(types.Transactions, b.N)
+
 	for i := 0; i < b.N; i++ {
 		key, _ := crypto.GenerateKey()
 		account := crypto.PubkeyToAddress(key.PublicKey)
+
 		pool.currentState.AddBalance(account, big.NewInt(1000000))
+
 		tx := transaction(uint64(0), 100000, key)
+
 		batches[i] = tx
 	}
 
@@ -2755,7 +2759,7 @@ func BenchmarkPoolMultiAccountBatchInsert(b *testing.B) {
 	}
 }
 
-func BenchmarkPoolMultiAccountBatchInsertRace(b *testing.B) {
+func BenchmarkPoolAccountMultiBatchInsertRace(b *testing.B) {
 	// Generate a batch of transactions to enqueue into the pool
 	pool, _ := setupTxPool()
 	defer pool.Stop()
@@ -2803,7 +2807,7 @@ func BenchmarkPoolMultiAccountBatchInsertRace(b *testing.B) {
 	close(done)
 }
 
-func BenchmarkPoolMultiAccountBatchInsertNoLockRace(b *testing.B) {
+func BenchmarkPoolAccountMultiBatchInsertNoLockRace(b *testing.B) {
 	// Generate a batch of transactions to enqueue into the pool
 	pendingAddedCh := make(chan struct{}, 1024)
 
@@ -2848,6 +2852,127 @@ func BenchmarkPoolMultiAccountBatchInsertNoLockRace(b *testing.B) {
 
 	for _, tx := range batches {
 		pool.AddRemotes([]*types.Transaction{tx})
+	}
+
+	<-done
+}
+
+func BenchmarkPoolAccountsBatchInsert(b *testing.B) {
+	// Generate a batch of transactions to enqueue into the pool
+	pool, _ := setupTxPool()
+	defer pool.Stop()
+
+	batches := make(types.Transactions, b.N)
+	for i := 0; i < b.N; i++ {
+		key, _ := crypto.GenerateKey()
+		account := crypto.PubkeyToAddress(key.PublicKey)
+		pool.currentState.AddBalance(account, big.NewInt(1000000))
+		tx := transaction(uint64(0), 100000, key)
+		batches[i] = tx
+	}
+
+	// Benchmark importing the transactions into the queue
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for _, tx := range batches {
+		_ = pool.AddRemoteSync(tx)
+	}
+}
+
+func BenchmarkPoolAccountsBatchInsertRace(b *testing.B) {
+	// Generate a batch of transactions to enqueue into the pool
+	pool, _ := setupTxPool()
+	defer pool.Stop()
+
+	batches := make(types.Transactions, b.N)
+
+	for i := 0; i < b.N; i++ {
+		key, _ := crypto.GenerateKey()
+		account := crypto.PubkeyToAddress(key.PublicKey)
+		tx := transaction(uint64(0), 100000, key)
+
+		pool.currentState.AddBalance(account, big.NewInt(1000000))
+
+		batches[i] = tx
+	}
+
+	done := make(chan struct{})
+
+	go func() {
+		t := time.NewTicker(time.Microsecond)
+		defer t.Stop()
+
+		var pending map[common.Address]types.Transactions
+
+	loop:
+		for {
+			select {
+			case <-t.C:
+				pending = pool.Pending(true)
+			case <-done:
+				break loop
+			}
+		}
+
+		fmt.Fprint(io.Discard, pending)
+	}()
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for _, tx := range batches {
+		_ = pool.AddRemoteSync(tx)
+	}
+
+	close(done)
+}
+
+func BenchmarkPoolAccountsBatchInsertNoLockRace(b *testing.B) {
+	// Generate a batch of transactions to enqueue into the pool
+	pendingAddedCh := make(chan struct{}, 1024)
+
+	pool, localKey := setupTxPoolWithConfig(params.TestChainConfig, testTxPoolConfig, txPoolGasLimit, MakeWithPromoteTxCh(pendingAddedCh))
+	defer pool.Stop()
+
+	_ = localKey
+
+	batches := make(types.Transactions, b.N)
+
+	for i := 0; i < b.N; i++ {
+		key, _ := crypto.GenerateKey()
+		account := crypto.PubkeyToAddress(key.PublicKey)
+		tx := transaction(uint64(0), 100000, key)
+
+		pool.currentState.AddBalance(account, big.NewInt(1000000))
+
+		batches[i] = tx
+	}
+
+	done := make(chan struct{})
+
+	go func() {
+		t := time.NewTicker(time.Microsecond)
+		defer t.Stop()
+
+		var pending map[common.Address]types.Transactions
+
+		for range t.C {
+			pending = pool.Pending(true)
+
+			if len(pending) >= b.N/2 {
+				close(done)
+
+				return
+			}
+		}
+	}()
+
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for _, tx := range batches {
+		_ = pool.AddRemote(tx)
 	}
 
 	<-done
@@ -3202,20 +3327,20 @@ func testPoolBatchInsert(t *testing.T, cfg txPoolRapidConfig) {
 				wg.Wait()
 
 				var (
-					addIntoTxPool func(tx []*types.Transaction) []error
+					addIntoTxPool func(tx *types.Transaction) error
 					totalInBatch  int
 				)
 
 				for _, tx := range txs.txs {
-					addIntoTxPool = pool.AddRemotesSync
+					addIntoTxPool = pool.AddRemoteSync
 
 					if tx.isLocal {
-						addIntoTxPool = pool.AddLocals
+						addIntoTxPool = pool.AddLocal
 					}
 
-					err := addIntoTxPool([]*types.Transaction{tx.tx})
-					if len(err) != 0 && err[0] != nil {
-						rt.Log("on adding a transaction to the tx pool", err[0], tx.tx.Gas(), tx.tx.GasPrice(), pool.GasPrice(), getBalance(pool, keys[tx.idx].account))
+					err := addIntoTxPool(tx.tx)
+					if err != nil {
+						rt.Log("on adding a transaction to the tx pool", err, tx.tx.Gas(), tx.tx.GasPrice(), pool.GasPrice(), getBalance(pool, keys[tx.idx].account))
 					}
 				}
 

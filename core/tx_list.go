@@ -268,9 +268,7 @@ func (m *txSortedMap) Flatten() types.Transactions {
 	defer m.m.Unlock()
 
 	// Copy the cache to prevent accidental modifications
-	cache := m.flatten()
-	txs := make(types.Transactions, len(cache))
-	copy(txs, cache)
+	txs := m.flatten()
 
 	return txs
 }
