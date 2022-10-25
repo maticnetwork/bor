@@ -226,13 +226,6 @@ func (m *milestone) UnlockSprint(endBlockNum uint64) {
 		log.Warn("Expected false in 2nd experiment")
 	}
 
-	chain = m.createMockChain(endBlockNum-64+1, endBlockNum*2)
-	val = m.MockIsValidChain(nil, chain)
-
-	if val != false {
-		log.Warn("Expected false in 2nd experiment")
-	}
-
 	m.Locked = false
 	m.PurgeMilestoneIDsList()
 	for key, _ := range m.LockedMilestoneIds { // Just for testing purpose
