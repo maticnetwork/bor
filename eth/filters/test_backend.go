@@ -103,6 +103,11 @@ func (b *TestBackend) GetReceipts(ctx context.Context, hash common.Hash) (types.
 	return nil, nil
 }
 
+func (b *TestBackend) GetVoteOnRootHash(ctx context.Context, starBlockNr uint64, endBlockNr uint64, rootHash string, milestoneId string) (bool, error) {
+
+	return false, nil
+}
+
 func (b *TestBackend) GetLogs(ctx context.Context, hash common.Hash) ([][]*types.Log, error) {
 	number := rawdb.ReadHeaderNumber(b.DB, hash)
 	if number == nil {
