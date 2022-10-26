@@ -303,7 +303,6 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 		cleansdb := statedb.Copy()
 
 		if len(block.Header().TxDependency) > 0 {
-
 			temp := delayMap[i]
 
 			task := &ExecutionTask{
@@ -468,6 +467,8 @@ func (p *ParallelStateProcessorGet) Process(block *types.Block, statedb *state.S
 
 	coinbase, _ := p.bc.Engine().Author(header)
 
+	coinbaseArr := []uint64{}
+
 	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
 		msg, err := tx.AsMessage(types.MakeSigner(p.config, header.Number), header.BaseFee)
@@ -480,6 +481,9 @@ func (p *ParallelStateProcessorGet) Process(block *types.Block, statedb *state.S
 
 		if msg.From() == coinbase {
 			shouldDelayFeeCal = false
+			coinbaseArr = append(coinbaseArr, 0)
+		} else {
+			coinbaseArr = append(coinbaseArr, 1)
 		}
 
 		task := &ExecutionTask{
@@ -536,23 +540,10 @@ func (p *ParallelStateProcessorGet) Process(block *types.Block, statedb *state.S
 	tempDeps := make([][]uint64, len(tasks))
 
 	for i := 0; i <= len(tasks)-1; i++ {
-		tempDeps[i] = []uint64{uint64(i)}
+		tempDeps[i] = []uint64{uint64(i), coinbaseArr[i]}
 
-		// reads := tasks[i]
-
-		// _, ok1 := reads[blockstm.NewSubpathKey(env.coinbase, state.BalancePath)]
-		// _, ok2 := reads[blockstm.NewSubpathKey(common.HexToAddress(w.chainConfig.Bor.CalculateBurntContract(env.header.Number.Uint64())), state.BalancePath)]
-
-		// if ok1 || ok2 {
-		// 	// 0 -> delay is not allowed
-		// 	tempDeps[i] = append(tempDeps[i], 0)
-		// } else {
-		// 	// 1 -> delay is allowed
-		// 	tempDeps[i] = append(tempDeps[i], 1)
-		// }
-
-		// not Idle, should check for coinbase and burnt contract address
-		tempDeps[i] = append(tempDeps[i], 1)
+		// not Idle, burnt contract address
+		// tempDeps[i] = append(tempDeps[i], coinbaseArr[i])
 
 		for j := range tempRes.AllDeps[i] {
 			tempDeps[i] = append(tempDeps[i], uint64(j))
@@ -626,6 +617,8 @@ func (p *ParallelStateProcessorUse) Process(block *types.Block, statedb *state.S
 
 	coinbase, _ := p.bc.Engine().Author(header)
 
+	deps, delayMap := GetDeps(block.Header().TxDependency)
+
 	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
 		msg, err := tx.AsMessage(types.MakeSigner(p.config, header.Number), header.BaseFee)
@@ -637,8 +630,6 @@ func (p *ParallelStateProcessorUse) Process(block *types.Block, statedb *state.S
 		cleansdb := statedb.Copy()
 
 		if len(block.Header().TxDependency) > 0 {
-			deps, delayMap := GetDeps(block.Header().TxDependency)
-
 			temp := delayMap[i]
 
 			task := &ExecutionTask{
