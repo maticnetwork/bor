@@ -245,6 +245,7 @@ func NewParallelExecutor(tasks []ExecTask, profile bool) *ParallelExecutor {
 	numTasks := len(tasks)
 
 	var resultQueue SafeQueue
+
 	var specTaskQueue SafeQueue
 
 	if tasks[0].Dependencies() != nil {
@@ -282,6 +283,7 @@ func NewParallelExecutor(tasks []ExecTask, profile bool) *ParallelExecutor {
 	return pe
 }
 
+// nolint: gocognit
 func (pe *ParallelExecutor) Prepare() {
 	for i, t := range pe.tasks {
 		clearPendingFlag := false
@@ -292,10 +294,13 @@ func (pe *ParallelExecutor) Prepare() {
 		if len(t.Dependencies()) > 0 {
 			for _, val := range t.Dependencies() {
 				clearPendingFlag = true
+
 				pe.execTasks.addDependencies(val, i)
 			}
+
 			if clearPendingFlag {
 				pe.execTasks.clearPending(i)
+
 				clearPendingFlag = false
 			}
 		} else {

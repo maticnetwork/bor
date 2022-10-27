@@ -19,6 +19,9 @@ type OpType int
 const readType = 0
 const writeType = 1
 const otherType = 2
+const greenTick = "✅"
+const redCross = "❌"
+const threeRockets = "🚀🚀🚀"
 
 type Op struct {
 	key      Key
@@ -283,10 +286,10 @@ func testExecutorComb(t *testing.T, totalTxs []int, numReads []int, numWrites []
 					}
 					total++
 
-					performance := "✅"
+					performance := greenTick
 
 					if execDuration >= expectedSerialDuration {
-						performance = "❌"
+						performance = redCross
 					}
 
 					fmt.Printf("exec duration %v, serial duration %v, time reduced %v %.2f%%, %v \n", execDuration, expectedSerialDuration, expectedSerialDuration-execDuration, float64(expectedSerialDuration-execDuration)/float64(expectedSerialDuration)*100, performance)
@@ -302,6 +305,7 @@ func testExecutorComb(t *testing.T, totalTxs []int, numReads []int, numWrites []
 	fmt.Printf("Total exec duration: %v, total serial duration: %v, time reduced: %v, time reduced percent: %.2f%%\n", totalExecDuration, totalSerialDuration, totalSerialDuration-totalExecDuration, float64(totalSerialDuration-totalExecDuration)/float64(totalSerialDuration)*100)
 }
 
+// nolint: gocognit
 func testExecutorCombWithMetadata(t *testing.T, totalTxs []int, numReads []int, numWrites []int, numNonIOs []int, taskRunner TaskRunnerWithMetadata) {
 	t.Helper()
 	log.Root().SetHandler(log.LvlFilterHandler(log.LvlDebug, log.StreamHandler(os.Stderr, log.TerminalFormat(false))))
@@ -327,13 +331,13 @@ func testExecutorCombWithMetadata(t *testing.T, totalTxs []int, numReads []int, 
 					}
 					total++
 
-					performance := "✅"
+					performance := greenTick
 
 					if execDuration >= expectedSerialDuration {
-						performance = "❌"
+						performance = redCross
 
 						if execDurationMetadata <= expectedSerialDuration {
-							performance = "🚀🚀🚀"
+							performance = threeRockets
 							rocket++
 						}
 					}
@@ -506,6 +510,7 @@ func TestLessConflictsWithMetadata(t *testing.T) {
 		allDeps := runParallelGetMetadata(t, tasks, checks)
 
 		newTasks := make([]ExecTask, 0, len(tasks))
+
 		for idx, t := range tasks {
 			temp := t.(*testExecTask)
 
@@ -515,6 +520,7 @@ func TestLessConflictsWithMetadata(t *testing.T) {
 			keys[1] = 1
 
 			i := 2
+
 			for k := range allDeps[temp.txIdx] {
 				keys[i] = k
 				i++
@@ -592,6 +598,7 @@ func TestAlternatingTxWithMetadata(t *testing.T) {
 		allDeps := runParallelGetMetadata(t, tasks, checks)
 
 		newTasks := make([]ExecTask, 0, len(tasks))
+
 		for idx, t := range tasks {
 			temp := t.(*testExecTask)
 
@@ -601,6 +608,7 @@ func TestAlternatingTxWithMetadata(t *testing.T) {
 			keys[1] = 1
 
 			i := 2
+
 			for k := range allDeps[temp.txIdx] {
 				keys[i] = k
 				i++
@@ -663,6 +671,7 @@ func TestMoreConflictsWithMetadata(t *testing.T) {
 		allDeps := runParallelGetMetadata(t, tasks, checks)
 
 		newTasks := make([]ExecTask, 0, len(tasks))
+
 		for idx, t := range tasks {
 			temp := t.(*testExecTask)
 
@@ -672,6 +681,7 @@ func TestMoreConflictsWithMetadata(t *testing.T) {
 			keys[1] = 1
 
 			i := 2
+
 			for k := range allDeps[temp.txIdx] {
 				keys[i] = k
 				i++
@@ -730,6 +740,7 @@ func TestRandomTxWithMetadata(t *testing.T) {
 		allDeps := runParallelGetMetadata(t, tasks, checks)
 
 		newTasks := make([]ExecTask, 0, len(tasks))
+
 		for idx, t := range tasks {
 			temp := t.(*testExecTask)
 
@@ -739,6 +750,7 @@ func TestRandomTxWithMetadata(t *testing.T) {
 			keys[1] = 1
 
 			i := 2
+
 			for k := range allDeps[temp.txIdx] {
 				keys[i] = k
 				i++
@@ -807,6 +819,7 @@ func TestTxWithLongTailReadWithMetadata(t *testing.T) {
 		allDeps := runParallelGetMetadata(t, tasks, checks)
 
 		newTasks := make([]ExecTask, 0, len(tasks))
+
 		for idx, t := range tasks {
 			temp := t.(*testExecTask)
 
@@ -816,6 +829,7 @@ func TestTxWithLongTailReadWithMetadata(t *testing.T) {
 			keys[1] = 1
 
 			i := 2
+
 			for k := range allDeps[temp.txIdx] {
 				keys[i] = k
 				i++
@@ -900,6 +914,7 @@ func TestDexScenarioWithMetadata(t *testing.T) {
 		allDeps := runParallelGetMetadata(t, tasks, checks)
 
 		newTasks := make([]ExecTask, 0, len(tasks))
+
 		for idx, t := range tasks {
 			temp := t.(*testExecTask)
 
@@ -909,6 +924,7 @@ func TestDexScenarioWithMetadata(t *testing.T) {
 			keys[1] = 1
 
 			i := 2
+
 			for k := range allDeps[temp.txIdx] {
 				keys[i] = k
 				i++

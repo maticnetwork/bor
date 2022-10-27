@@ -92,7 +92,6 @@ func UpdateDeps(deps map[int]map[int]bool, t DepsChan) map[int]map[int]bool {
 				if boool1 {
 					delete(deps[t.Index], k)
 				}
-
 			}
 		}
 	}
@@ -120,7 +119,6 @@ func GetDep(deps TxnInputOutput) map[int]map[int]bool {
 					if boool1 {
 						delete(newDependencies[i], k)
 					}
-
 				}
 			}
 		}

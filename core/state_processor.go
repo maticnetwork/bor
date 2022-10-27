@@ -102,8 +102,10 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	evm.Reset(txContext, statedb)
 
 	var result *ExecutionResult
+
 	var err error
 
+	// nolint: nestif
 	if EnableMVHashMap {
 		var shouldRerunWithoutFeeDelay bool
 

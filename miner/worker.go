@@ -892,10 +892,11 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 
 	depsWg.Add(1)
 
-	go func(c chan blockstm.DepsChan) {
+	go func(chDeps chan blockstm.DepsChan) {
 		for t := range chDeps {
 			deps = blockstm.UpdateDeps(deps, t)
 		}
+
 		depsWg.Done()
 	}(chDeps)
 
