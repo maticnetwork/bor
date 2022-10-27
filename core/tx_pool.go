@@ -1232,9 +1232,9 @@ func (pool *TxPool) removeTx(hash common.Hash, outofbound bool) {
 				delete(pool.pending, addr)
 			}
 
-			isLocked = false
-
 			pool.pendingMu.Unlock()
+
+			isLocked = false
 
 			// Postpone any invalidated transactions
 			for _, tx := range invalids {
