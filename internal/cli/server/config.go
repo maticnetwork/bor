@@ -364,6 +364,9 @@ type CacheConfig struct {
 
 	// TxLookupLimit sets the maximum number of blocks from head whose tx indices are reserved.
 	TxLookupLimit uint64 `hcl:"txlookuplimit,optional" toml:"txlookuplimit,optional"`
+
+	// Number of block states to keep in memory (default = 128)
+	TriesInMemory uint64 `hcl:"triesinmemory,optional" toml:"triesinmemory,optional"`
 }
 
 type AccountsConfig struct {
@@ -399,7 +402,7 @@ func DefaultConfig() *Config {
 		LogLevel:       "INFO",
 		DataDir:        DefaultDataDir(),
 		P2P: &P2PConfig{
-			MaxPeers:     30,
+			MaxPeers:     50,
 			MaxPendPeers: 50,
 			Bind:         "0.0.0.0",
 			Port:         30303,
@@ -509,6 +512,7 @@ func DefaultConfig() *Config {
 			NoPrefetch:    false,
 			Preimages:     false,
 			TxLookupLimit: 2350000,
+			TriesInMemory: 128,
 		},
 		Accounts: &AccountsConfig{
 			Unlock:              []string{},
