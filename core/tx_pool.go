@@ -1354,6 +1354,7 @@ func (pool *TxPool) scheduleReorgLoop() {
 }
 
 // runReorg runs reset and promoteExecutables on behalf of scheduleReorgLoop.
+//nolint:gocognit
 func (pool *TxPool) runReorg(ctx context.Context, done chan struct{}, reset *txpoolResetRequest, dirtyAccounts *accountSet, events map[common.Address]*txSortedMap) {
 	tracing.Exec(ctx, "txpool-reorg", func(ctx context.Context, span trace.Span) {
 		defer func(t0 time.Time) {
@@ -1707,6 +1708,7 @@ func (pool *TxPool) promoteExecutables(accounts []common.Address) []*types.Trans
 			delete(pool.beats, addr)
 		}
 	}
+
 	return promoted
 }
 
