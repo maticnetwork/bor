@@ -588,8 +588,9 @@ func (pool *TxPool) Pending(ctx context.Context, enforceTips bool) map[common.Ad
 
 		defer pool.pendingMu.RUnlock()
 
-		accounts := len(pool.pending)
-		var txCount int
+		pendingAccounts := len(pool.pending)
+
+		var pendingTxs int
 
 		tracing.ElapsedTime(ctx, span, "Loop", func(ctx context.Context, s trace.Span) {
 			for addr, list := range pool.pending {
@@ -607,13 +608,13 @@ func (pool *TxPool) Pending(ctx context.Context, enforceTips bool) map[common.Ad
 
 				if len(txs) > 0 {
 					pending[addr] = txs
-					txCount += len(txs)
+					pendingTxs += len(txs)
 				}
 			}
 
 			tracing.SetAttributes(span,
-				attribute.Int("txCount", txCount),
-				attribute.Int("accounts", accounts),
+				attribute.Int("pending-transactions", pendingTxs),
+				attribute.Int("pending-accounts", pendingAccounts),
 			)
 		})
 	})
@@ -1758,11 +1759,16 @@ func (pool *TxPool) truncatePending() {
 		// Only evict transactions from high rollers
 		listLen = len(list.txs.items)
 
+		pool.pendingMu.RUnlock()
+
 		pool.locals.m.RLock()
 
 		if uint64(listLen) > pool.config.AccountSlots {
 			if _, ok = pool.locals.accounts[addr]; ok {
 				pool.locals.m.RUnlock()
+
+				pool.pendingMu.RLock()
+
 				continue
 			}
 
@@ -1772,7 +1778,10 @@ func (pool *TxPool) truncatePending() {
 		}
 
 		pool.locals.m.RUnlock()
+
+		pool.pendingMu.RLock()
 	}
+
 	pool.pendingMu.RUnlock()
 
 	// Gradually drop transactions from offenders
@@ -1977,8 +1986,7 @@ func (pool *TxPool) demoteUnexecutables() {
 	)
 
 	// Iterate over all accounts and demote any non-executable transactions
-	pool.pendingMu.Lock()
-	defer pool.pendingMu.Unlock()
+	pool.pendingMu.RLock()
 
 	for addr, list := range pool.pending {
 		nonce := pool.currentState.GetNonce(addr)
@@ -2042,10 +2050,18 @@ func (pool *TxPool) demoteUnexecutables() {
 		}
 		// Delete the entire pending entry if it became empty.
 		if list.Empty() {
+			pool.pendingMu.RUnlock()
+			pool.pendingMu.Lock()
+
 			pool.pendingCount -= pool.pending[addr].Len()
 			delete(pool.pending, addr)
+
+			pool.pendingMu.Unlock()
+			pool.pendingMu.RLock()
 		}
 	}
+
+	pool.pendingMu.RUnlock()
 }
 
 // addressByHeartbeat is an account address tagged with its last activity timestamp.
