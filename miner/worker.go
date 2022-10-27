@@ -36,6 +36,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/ethereum/go-ethereum/common"
+	cmath "github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/common/tracing"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/misc"
@@ -630,13 +631,17 @@ func (w *worker) mainLoop(ctx context.Context) {
 				if gp := w.current.gasPool; gp != nil && gp.Gas() < params.TxGas {
 					continue
 				}
+
 				txs := make(map[common.Address]types.Transactions)
+
 				for _, tx := range ev.Txs {
 					acc, _ := types.Sender(w.current.signer, tx)
 					txs[acc] = append(txs[acc], tx)
 				}
-				txset := types.NewTransactionsByPriceAndNonce(w.current.signer, txs, w.current.header.BaseFee)
+
+				txset := types.NewTransactionsByPriceAndNonce(w.current.signer, txs, cmath.FromBig(w.current.header.BaseFee))
 				tcount := w.current.tcount
+
 				w.commitTransactions(w.current, txset, nil)
 
 				// Only update the snapshot if any new transactions were added
@@ -1089,7 +1094,7 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 	}
 	// Set baseFee and GasLimit if we are on an EIP-1559 chain
 	if w.chainConfig.IsLondon(header.Number) {
-		header.BaseFee = misc.CalcBaseFee(w.chainConfig, parent.Header())
+		header.BaseFee = misc.CalcBaseFeeUint(w.chainConfig, parent.Header()).ToBig()
 		if !w.chainConfig.IsLondon(parent.Number()) {
 			parentGasLimit := parent.GasLimit() * params.ElasticityMultiplier
 			header.GasLimit = core.CalcGasLimit(parentGasLimit, w.config.GasCeil)
@@ -1135,41 +1140,38 @@ func startProfiler(profile string, filepath string, number uint64) (func() error
 		err error
 	)
 
-	closeFn := func() error {
-		return nil
-	}
+	closeFn := func() {}
 
 	switch profile {
 	case "cpu":
 		err = pprof.StartCPUProfile(&buf)
 
 		if err == nil {
-			closeFn = func() error {
+			closeFn = func() {
 				pprof.StopCPUProfile()
-				return nil
 			}
 		}
-
 	case "trace":
 		err = ptrace.Start(&buf)
 
 		if err == nil {
-			closeFn = func() error {
+			closeFn = func() {
 				ptrace.Stop()
-				return nil
 			}
 		}
-
 	case "heap":
 		runtime.GC()
-		err = pprof.WriteHeapProfile(&buf)
 
+		err = pprof.WriteHeapProfile(&buf)
 	default:
 		log.Info("Incorrect profile name")
 	}
 
 	if err != nil {
-		return closeFn, err
+		return func() error {
+			closeFn()
+			return nil
+		}, err
 	}
 
 	closeFnNew := func() error {
@@ -1199,6 +1201,8 @@ func startProfiler(profile string, filepath string, number uint64) (func() error
 // fillTransactions retrieves the pending transactions from the txpool and fills them
 // into the given sealing block. The transaction selection and ordering strategy can
 // be customized with the plugin in the future.
+//
+//nolint:gocognit
 func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *environment) {
 	ctx, span := tracing.StartSpan(ctx, "fillTransactions")
 	defer tracing.EndSpan(span)
@@ -1258,7 +1262,11 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 				}
 
 			case <-doneCh:
-				closeFn()
+				err := closeFn()
+
+				if err != nil {
+					log.Info("closing fillTransactions", "number", number, "error", err)
+				}
 
 				return
 			}
@@ -1305,7 +1313,7 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		var txs *types.TransactionsByPriceAndNonce
 
 		tracing.Exec(ctx, "worker.LocalTransactionsByPriceAndNonce", func(ctx context.Context, span trace.Span) {
-			txs = types.NewTransactionsByPriceAndNonce(env.signer, localTxs, env.header.BaseFee)
+			txs = types.NewTransactionsByPriceAndNonce(env.signer, localTxs, cmath.FromBig(env.header.BaseFee))
 
 			tracing.SetAttributes(
 				span,
@@ -1328,7 +1336,7 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		var txs *types.TransactionsByPriceAndNonce
 
 		tracing.Exec(ctx, "worker.RemoteTransactionsByPriceAndNonce", func(ctx context.Context, span trace.Span) {
-			txs = types.NewTransactionsByPriceAndNonce(env.signer, remoteTxs, env.header.BaseFee)
+			txs = types.NewTransactionsByPriceAndNonce(env.signer, remoteTxs, cmath.FromBig(env.header.BaseFee))
 
 			tracing.SetAttributes(
 				span,

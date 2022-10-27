@@ -20,6 +20,8 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/holiman/uint256"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/params"
@@ -108,6 +110,8 @@ func TestBlockGasLimits(t *testing.T) {
 
 // TestCalcBaseFee assumes all blocks are 1559-blocks
 func TestCalcBaseFee(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		parentBaseFee   int64
 		parentGasLimit  uint64
@@ -126,6 +130,32 @@ func TestCalcBaseFee(t *testing.T) {
 			BaseFee:  big.NewInt(test.parentBaseFee),
 		}
 		if have, want := CalcBaseFee(config(), parent), big.NewInt(test.expectedBaseFee); have.Cmp(want) != 0 {
+			t.Errorf("test %d: have %d  want %d, ", i, have, want)
+		}
+	}
+}
+
+func TestCalcBaseFeeUint(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		parentBaseFee   int64
+		parentGasLimit  uint64
+		parentGasUsed   uint64
+		expectedBaseFee uint64
+	}{
+		{params.InitialBaseFee, 20000000, 10000000, params.InitialBaseFee}, // usage == target
+		{params.InitialBaseFee, 20000000, 9000000, 987500000},              // usage below target
+		{params.InitialBaseFee, 20000000, 11000000, 1012500000},            // usage above target
+	}
+	for i, test := range tests {
+		parent := &types.Header{
+			Number:   common.Big32,
+			GasLimit: test.parentGasLimit,
+			GasUsed:  test.parentGasUsed,
+			BaseFee:  big.NewInt(test.parentBaseFee),
+		}
+		if have, want := CalcBaseFeeUint(config(), parent), uint256.NewInt(test.expectedBaseFee); have.Cmp(want) != 0 {
 			t.Errorf("test %d: have %d  want %d, ", i, have, want)
 		}
 	}
