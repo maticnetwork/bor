@@ -17,6 +17,7 @@
 package core
 
 import (
+	"context"
 	"errors"
 	"math"
 	"math/big"
@@ -26,8 +27,11 @@ import (
 	"time"
 
 	"github.com/holiman/uint256"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/tracing"
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -1292,8 +1296,10 @@ func (pool *TxPool) scheduleReorgLoop() {
 	for {
 		// Launch next background reorg if needed
 		if curDone == nil && launchNextRun {
+			ctx := context.Background()
+
 			// Run the background reorg and announcements
-			go pool.runReorg(nextDone, reset, dirtyAccounts, queuedEvents)
+			go pool.runReorg(ctx, nextDone, reset, dirtyAccounts, queuedEvents)
 
 			// Prepare everything for the next round of reorg
 			curDone, nextDone = nextDone, make(chan struct{})
@@ -1348,95 +1354,168 @@ func (pool *TxPool) scheduleReorgLoop() {
 }
 
 // runReorg runs reset and promoteExecutables on behalf of scheduleReorgLoop.
-func (pool *TxPool) runReorg(done chan struct{}, reset *txpoolResetRequest, dirtyAccounts *accountSet, events map[common.Address]*txSortedMap) {
-	defer func(t0 time.Time) {
-		reorgDurationTimer.Update(time.Since(t0))
-	}(time.Now())
+func (pool *TxPool) runReorg(ctx context.Context, done chan struct{}, reset *txpoolResetRequest, dirtyAccounts *accountSet, events map[common.Address]*txSortedMap) {
+	tracing.Exec(ctx, "txpool-reorg", func(ctx context.Context, span trace.Span) {
+		defer func(t0 time.Time) {
+			reorgDurationTimer.Update(time.Since(t0))
+		}(time.Now())
 
-	defer close(done)
+		defer close(done)
 
-	var promoteAddrs []common.Address
-	if dirtyAccounts != nil && reset == nil {
-		// Only dirty accounts need to be promoted, unless we're resetting.
-		// For resets, all addresses in the tx queue will be promoted and
-		// the flatten operation can be avoided.
-		promoteAddrs = dirtyAccounts.flatten()
-	}
-	pool.mu.Lock()
-	if reset != nil {
-		// Reset from the old head to the new, rescheduling any reorged transactions
-		pool.reset(reset.oldHead, reset.newHead)
+		var promoteAddrs []common.Address
 
-		// Nonces were reset, discard any events that became stale
-		for addr := range events {
-			events[addr].Forward(pool.pendingNonces.get(addr))
-			if events[addr].Len() == 0 {
-				delete(events, addr)
+		tracing.ElapsedTime(ctx, span, "dirty accounts flattening", func(_ context.Context, innerSpan trace.Span) {
+			if dirtyAccounts != nil && reset == nil {
+				// Only dirty accounts need to be promoted, unless we're resetting.
+				// For resets, all addresses in the tx queue will be promoted and
+				// the flatten operation can be avoided.
+				promoteAddrs = dirtyAccounts.flatten()
 			}
-		}
-		// Reset needs promote for all addresses
-		promoteAddrs = make([]common.Address, 0, len(pool.queue))
-		for addr := range pool.queue {
-			promoteAddrs = append(promoteAddrs, addr)
-		}
-	}
-	// Check for pending transactions for every account that sent new ones
-	promoted := pool.promoteExecutables(promoteAddrs)
 
-	// If a new block appeared, validate the pool of pending transactions. This will
-	// remove any transaction that has been included in the block or was invalidated
-	// because of another transaction (e.g. higher gas price).
+			tracing.SetAttributes(
+				innerSpan,
+				attribute.Int("promoteAddresses-flatten", len(promoteAddrs)),
+			)
+		})
 
-	if reset != nil {
-		pool.demoteUnexecutables()
-		if reset.newHead != nil {
-			if pool.chainconfig.IsLondon(new(big.Int).Add(reset.newHead.Number, big.NewInt(1))) {
-				// london fork enabled, reset given the base fee
-				pendingBaseFee := misc.CalcBaseFeeUint(pool.chainconfig, reset.newHead)
-				pool.priced.SetBaseFee(pendingBaseFee)
-			} else {
-				// london fork not enabled, reheap to "reset" the priced list
-				pool.priced.Reheap()
+		tracing.ElapsedTime(ctx, span, "obtaining pool.WMutex", func(_ context.Context, _ trace.Span) {
+			pool.mu.Lock()
+		})
+
+		if reset != nil {
+			tracing.ElapsedTime(ctx, span, "reset-head reorg", func(_ context.Context, innerSpan trace.Span) {
+
+				// Reset from the old head to the new, rescheduling any reorged transactions
+				tracing.ElapsedTime(ctx, span, "reset-head-itself reorg", func(_ context.Context, innerSpan trace.Span) {
+					pool.reset(reset.oldHead, reset.newHead)
+				})
+
+				tracing.SetAttributes(
+					innerSpan,
+					attribute.Int("events-reset-head", len(events)),
+				)
+
+				// Nonces were reset, discard any events that became stale
+				for addr := range events {
+					events[addr].Forward(pool.pendingNonces.get(addr))
+
+					if events[addr].Len() == 0 {
+						delete(events, addr)
+					}
+				}
+
+				// Reset needs promote for all addresses
+				promoteAddrs = make([]common.Address, 0, len(pool.queue))
+				for addr := range pool.queue {
+					promoteAddrs = append(promoteAddrs, addr)
+				}
+
+				tracing.SetAttributes(
+					innerSpan,
+					attribute.Int("promoteAddresses-reset-head", len(promoteAddrs)),
+				)
+			})
+		}
+
+		// Check for pending transactions for every account that sent new ones
+		var promoted []*types.Transaction
+
+		tracing.ElapsedTime(ctx, span, "promoteExecutables", func(_ context.Context, _ trace.Span) {
+			promoted = pool.promoteExecutables(promoteAddrs)
+		})
+
+		tracing.SetAttributes(
+			span,
+			attribute.Int("promoteAddresses-reset-head", len(promoteAddrs)),
+			attribute.Int("all", pool.all.Count()),
+			attribute.Int("pending", len(pool.pending)),
+			attribute.Int("queue", len(pool.queue)),
+		)
+
+		// If a new block appeared, validate the pool of pending transactions. This will
+		// remove any transaction that has been included in the block or was invalidated
+		// because of another transaction (e.g. higher gas price).
+
+		if reset != nil {
+			tracing.ElapsedTime(ctx, span, "new block", func(_ context.Context, innerSpan trace.Span) {
+
+				tracing.ElapsedTime(ctx, innerSpan, "demoteUnexecutables", func(_ context.Context, _ trace.Span) {
+					pool.demoteUnexecutables()
+				})
+
+				if reset.newHead != nil {
+					if pool.chainconfig.IsLondon(new(big.Int).Add(reset.newHead.Number, big.NewInt(1))) {
+						// london fork enabled, reset given the base fee
+						pendingBaseFee := misc.CalcBaseFeeUint(pool.chainconfig, reset.newHead)
+						pool.priced.SetBaseFee(pendingBaseFee)
+					} else {
+						// london fork not enabled, reheap to "reset" the priced list
+						pool.priced.Reheap()
+					}
+				}
+
+				// Update all accounts to the latest known pending nonce
+				nonces := make(map[common.Address]uint64, len(pool.pending))
+
+				tracing.ElapsedTime(ctx, innerSpan, "obtaining pendingMu.RMutex", func(_ context.Context, innerSpan trace.Span) {
+					pool.pendingMu.RLock()
+				})
+
+				var highestPending *types.Transaction
+
+				for addr, list := range pool.pending {
+					highestPending = list.LastElement()
+					nonces[addr] = highestPending.Nonce() + 1
+				}
+
+				pool.pendingMu.RUnlock()
+
+				tracing.ElapsedTime(ctx, innerSpan, "reset nonces", func(_ context.Context, _ trace.Span) {
+					pool.pendingNonces.setAll(nonces)
+				})
+			})
+		}
+
+		// Ensure pool.queue and pool.pending sizes stay within the configured limits.
+		tracing.ElapsedTime(ctx, span, "truncatePending", func(_ context.Context, _ trace.Span) {
+			pool.truncatePending()
+		})
+
+		tracing.ElapsedTime(ctx, span, "truncateQueue", func(_ context.Context, _ trace.Span) {
+			pool.truncateQueue()
+		})
+
+		dropBetweenReorgHistogram.Update(int64(pool.changesSinceReorg))
+		pool.changesSinceReorg = 0 // Reset change counter
+
+		pool.mu.Unlock()
+
+		// Notify subsystems for newly added transactions
+		tracing.ElapsedTime(ctx, span, "notify about new transactions", func(_ context.Context, _ trace.Span) {
+			for _, tx := range promoted {
+				addr, _ := types.Sender(pool.signer, tx)
+
+				if _, ok := events[addr]; !ok {
+					events[addr] = newTxSortedMap()
+				}
+
+				events[addr].Put(tx)
 			}
+		})
+
+		if len(events) > 0 {
+			tracing.ElapsedTime(ctx, span, "txFeed", func(_ context.Context, _ trace.Span) {
+				var txs []*types.Transaction
+
+				for _, set := range events {
+					txs = append(txs, set.Flatten()...)
+				}
+
+				pool.txFeed.Send(NewTxsEvent{txs})
+			})
 		}
-		// Update all accounts to the latest known pending nonce
-		nonces := make(map[common.Address]uint64, len(pool.pending))
 
-		pool.pendingMu.RLock()
-		for addr, list := range pool.pending {
-			highestPending := list.LastElement()
-			nonces[addr] = highestPending.Nonce() + 1
-		}
-
-		pool.pendingMu.RUnlock()
-
-		pool.pendingNonces.setAll(nonces)
-	}
-
-	// Ensure pool.queue and pool.pending sizes stay within the configured limits.
-	pool.truncatePending()
-	pool.truncateQueue()
-
-	dropBetweenReorgHistogram.Update(int64(pool.changesSinceReorg))
-	pool.changesSinceReorg = 0 // Reset change counter
-	pool.mu.Unlock()
-
-	// Notify subsystems for newly added transactions
-	for _, tx := range promoted {
-		addr, _ := types.Sender(pool.signer, tx)
-		if _, ok := events[addr]; !ok {
-			events[addr] = newTxSortedMap()
-		}
-		events[addr].Put(tx)
-	}
-
-	if len(events) > 0 {
-		var txs []*types.Transaction
-		for _, set := range events {
-			txs = append(txs, set.Flatten()...)
-		}
-		pool.txFeed.Send(NewTxsEvent{txs})
-	}
+	})
 }
 
 // reset retrieves the current state of the blockchain and ensures the content
