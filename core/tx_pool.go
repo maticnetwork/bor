@@ -1218,7 +1218,10 @@ func (pool *TxPool) removeTx(hash common.Hash, outofbound bool) {
 	}
 
 	// Remove the transaction from the pending lists and reset the account nonce
+
 	pool.pendingMu.Lock()
+
+	isLocked := true
 
 	if pending := pool.pending[addr]; pending != nil {
 		if removed, invalids := pending.Remove(tx); removed {
@@ -1228,6 +1231,9 @@ func (pool *TxPool) removeTx(hash common.Hash, outofbound bool) {
 			if pending.Empty() {
 				delete(pool.pending, addr)
 			}
+
+			isLocked = false
+
 			pool.pendingMu.Unlock()
 
 			// Postpone any invalidated transactions
@@ -1245,7 +1251,11 @@ func (pool *TxPool) removeTx(hash common.Hash, outofbound bool) {
 			return
 		}
 
-		pool.pendingMu.TryLock()
+		if !isLocked {
+			pool.pendingMu.Lock()
+
+			isLocked = true
+		}
 	}
 
 	pool.pendingMu.Unlock()
