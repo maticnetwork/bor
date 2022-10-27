@@ -91,7 +91,7 @@ func ElapsedTime(ctx context.Context, span trace.Span, msg string, fn func(conte
 	fn(ctx, span)
 
 	if span != nil {
-		span.SetAttributes(attribute.Int(msg, int(time.Since(now).Milliseconds())))
+		span.SetAttributes(attribute.Int(msg, int(time.Since(now).Microseconds())))
 	}
 }
 
