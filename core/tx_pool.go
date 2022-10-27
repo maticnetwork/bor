@@ -1414,7 +1414,7 @@ func (pool *TxPool) runReorg(ctx context.Context, done chan struct{}, reset *txp
 			tracing.ElapsedTime(ctx, span, "reset-head reorg", func(_ context.Context, innerSpan trace.Span) {
 
 				// Reset from the old head to the new, rescheduling any reorged transactions
-				tracing.ElapsedTime(ctx, span, "reset-head-itself reorg", func(_ context.Context, innerSpan trace.Span) {
+				tracing.ElapsedTime(ctx, innerSpan, "reset-head-itself reorg", func(_ context.Context, innerSpan trace.Span) {
 					pool.reset(reset.oldHead, reset.newHead)
 				})
 
