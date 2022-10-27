@@ -304,7 +304,7 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 
 		if len(block.Header().TxDependency) > 0 {
 
-			temp := delayMap[i]
+			shouldDelayFeeCal = delayMap[i]
 
 			task := &ExecutionTask{
 				msg:               msg,
@@ -319,7 +319,7 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 				blockChain:        p.bc,
 				header:            header,
 				evmConfig:         cfg,
-				shouldDelayFeeCal: &temp,
+				shouldDelayFeeCal: &shouldDelayFeeCal,
 				sender:            msg.From(),
 				totalUsedGas:      usedGas,
 				receipts:          &receipts,
