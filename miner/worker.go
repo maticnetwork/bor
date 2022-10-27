@@ -17,10 +17,15 @@
 package miner
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"math/big"
+	"os"
+	"runtime"
+	"runtime/pprof"
+	ptrace "runtime/trace"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -30,9 +35,9 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/ethereum/go-ethereum/common/tracing"
-
 	"github.com/ethereum/go-ethereum/common"
+	cmath "github.com/ethereum/go-ethereum/common/math"
+	"github.com/ethereum/go-ethereum/common/tracing"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/core"
@@ -258,6 +263,8 @@ type worker struct {
 	skipSealHook func(*task) bool                   // Method to decide whether skipping the sealing.
 	fullTaskHook func()                             // Method to call before pushing the full sealing task.
 	resubmitHook func(time.Duration, time.Duration) // Method to call upon updating resubmitting interval.
+
+	profileCount *int32 // Global count for profiling
 }
 
 //nolint:staticcheck
@@ -286,6 +293,7 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 		resubmitIntervalCh: make(chan time.Duration),
 		resubmitAdjustCh:   make(chan *intervalAdjust, resubmitAdjustChanSize),
 	}
+	worker.profileCount = new(int32)
 	// Subscribe NewTxsEvent for tx pool
 	worker.txsSub = eth.TxPool().SubscribeNewTxsEvent(worker.txsCh)
 	// Subscribe events for blockchain
@@ -623,13 +631,17 @@ func (w *worker) mainLoop(ctx context.Context) {
 				if gp := w.current.gasPool; gp != nil && gp.Gas() < params.TxGas {
 					continue
 				}
+
 				txs := make(map[common.Address]types.Transactions)
+
 				for _, tx := range ev.Txs {
 					acc, _ := types.Sender(w.current.signer, tx)
 					txs[acc] = append(txs[acc], tx)
 				}
-				txset := types.NewTransactionsByPriceAndNonce(w.current.signer, txs, w.current.header.BaseFee)
+
+				txset := types.NewTransactionsByPriceAndNonce(w.current.signer, txs, cmath.FromBig(w.current.header.BaseFee))
 				tcount := w.current.tcount
+
 				w.commitTransactions(w.current, txset, nil)
 
 				// Only update the snapshot if any new transactions were added
@@ -698,7 +710,7 @@ func (w *worker) taskLoop() {
 			w.pendingTasks[sealHash] = task
 			w.pendingMu.Unlock()
 
-			if err := w.engine.Seal(task.ctx, w.chain, task.block, w.resultCh, stopCh); err != nil {
+			if err := w.engine.Seal(w.chain, task.block, w.resultCh, stopCh); err != nil {
 				log.Warn("Block sealing failed", "err", err)
 				w.pendingMu.Lock()
 				delete(w.pendingTasks, sealHash)
@@ -966,7 +978,10 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 		// Start executing the transaction
 		env.state.Prepare(tx.Hash(), env.tcount)
 
+		start := time.Now()
+
 		logs, err := w.commitTransaction(env, tx)
+
 		switch {
 		case errors.Is(err, core.ErrGasLimitReached):
 			// Pop the current out-of-gas transaction without shifting in the next from the account
@@ -988,6 +1003,7 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 			coalescedLogs = append(coalescedLogs, logs...)
 			env.tcount++
 			txs.Shift()
+			log.Info("Committed new tx", "tx hash", tx.Hash(), "from", from, "to", tx.To(), "nonce", tx.Nonce(), "gas", tx.Gas(), "gasPrice", tx.GasPrice(), "value", tx.Value(), "time spent", time.Since(start))
 
 		case errors.Is(err, core.ErrTxTypeNotSupported):
 			// Pop the unsupported transaction without shifting in the next from the account
@@ -1078,7 +1094,7 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 	}
 	// Set baseFee and GasLimit if we are on an EIP-1559 chain
 	if w.chainConfig.IsLondon(header.Number) {
-		header.BaseFee = misc.CalcBaseFee(w.chainConfig, parent.Header())
+		header.BaseFee = misc.CalcBaseFeeUint(w.chainConfig, parent.Header()).ToBig()
 		if !w.chainConfig.IsLondon(parent.Number()) {
 			parentGasLimit := parent.GasLimit() * params.ElasticityMultiplier
 			header.GasLimit = core.CalcGasLimit(parentGasLimit, w.config.GasCeil)
@@ -1118,9 +1134,75 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 	return env, nil
 }
 
+func startProfiler(profile string, filepath string, number uint64) (func() error, error) {
+	var (
+		buf bytes.Buffer
+		err error
+	)
+
+	closeFn := func() {}
+
+	switch profile {
+	case "cpu":
+		err = pprof.StartCPUProfile(&buf)
+
+		if err == nil {
+			closeFn = func() {
+				pprof.StopCPUProfile()
+			}
+		}
+	case "trace":
+		err = ptrace.Start(&buf)
+
+		if err == nil {
+			closeFn = func() {
+				ptrace.Stop()
+			}
+		}
+	case "heap":
+		runtime.GC()
+
+		err = pprof.WriteHeapProfile(&buf)
+	default:
+		log.Info("Incorrect profile name")
+	}
+
+	if err != nil {
+		return func() error {
+			closeFn()
+			return nil
+		}, err
+	}
+
+	closeFnNew := func() error {
+		var err error
+
+		closeFn()
+
+		if buf.Len() == 0 {
+			return nil
+		}
+
+		f, err := os.Create(filepath + "/" + profile + "-" + fmt.Sprint(number) + ".prof")
+		if err != nil {
+			return err
+		}
+
+		defer f.Close()
+
+		_, err = f.Write(buf.Bytes())
+
+		return err
+	}
+
+	return closeFnNew, nil
+}
+
 // fillTransactions retrieves the pending transactions from the txpool and fills them
 // into the given sealing block. The transaction selection and ordering strategy can
 // be customized with the plugin in the future.
+//
+//nolint:gocognit
 func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *environment) {
 	ctx, span := tracing.StartSpan(ctx, "fillTransactions")
 	defer tracing.EndSpan(span)
@@ -1135,9 +1217,70 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		remoteTxs      map[common.Address]types.Transactions
 	)
 
+	doneCh := make(chan struct{})
+
+	defer func() {
+		close(doneCh)
+	}()
+
+	go func(number uint64) {
+		closeFn := func() error {
+			return nil
+		}
+
+		for {
+			select {
+			case <-time.After(150 * time.Millisecond):
+				// Check if we've not crossed limit
+				if attempt := atomic.AddInt32(w.profileCount, 1); attempt >= 10 {
+					log.Info("Completed profiling", "attempt", attempt)
+
+					return
+				}
+
+				log.Info("Starting profiling in fill transactions", "number", number)
+
+				dir, err := os.MkdirTemp("", fmt.Sprintf("bor-traces-%s-", time.Now().UTC().Format("2006-01-02-150405Z")))
+				if err != nil {
+					log.Error("Error in profiling", "path", dir, "number", number, "err", err)
+					return
+				}
+
+				// grab the cpu profile
+				closeFnInternal, err := startProfiler("cpu", dir, number)
+				if err != nil {
+					log.Error("Error in profiling", "path", dir, "number", number, "err", err)
+					return
+				}
+
+				closeFn = func() error {
+					err := closeFnInternal()
+
+					log.Info("Completed profiling", "path", dir, "number", number, "error", err)
+
+					return nil
+				}
+
+			case <-doneCh:
+				err := closeFn()
+
+				if err != nil {
+					log.Info("closing fillTransactions", "number", number, "error", err)
+				}
+
+				return
+			}
+		}
+	}(env.header.Number.Uint64())
+
 	tracing.Exec(ctx, "worker.SplittingTransactions", func(ctx context.Context, span trace.Span) {
-		pending := w.eth.TxPool().Pending(true)
+
+		prePendingTime := time.Now()
+
+		pending := w.eth.TxPool().Pending(ctx, true)
 		remoteTxs = pending
+
+		postPendingTime := time.Now()
 
 		for _, account := range w.eth.TxPool().Locals() {
 			if txs := remoteTxs[account]; len(txs) > 0 {
@@ -1146,6 +1289,8 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 			}
 		}
 
+		postLocalsTime := time.Now()
+
 		localTxsCount = len(localTxs)
 		remoteTxsCount = len(remoteTxs)
 
@@ -1153,6 +1298,8 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 			span,
 			attribute.Int("len of local txs", localTxsCount),
 			attribute.Int("len of remote txs", remoteTxsCount),
+			attribute.String("time taken by Pending()", fmt.Sprintf("%v", postPendingTime.Sub(prePendingTime))),
+			attribute.String("time taken by Locals()", fmt.Sprintf("%v", postLocalsTime.Sub(postPendingTime))),
 		)
 	})
 
@@ -1166,7 +1313,7 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		var txs *types.TransactionsByPriceAndNonce
 
 		tracing.Exec(ctx, "worker.LocalTransactionsByPriceAndNonce", func(ctx context.Context, span trace.Span) {
-			txs = types.NewTransactionsByPriceAndNonce(env.signer, localTxs, env.header.BaseFee)
+			txs = types.NewTransactionsByPriceAndNonce(env.signer, localTxs, cmath.FromBig(env.header.BaseFee))
 
 			tracing.SetAttributes(
 				span,
@@ -1189,7 +1336,7 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		var txs *types.TransactionsByPriceAndNonce
 
 		tracing.Exec(ctx, "worker.RemoteTransactionsByPriceAndNonce", func(ctx context.Context, span trace.Span) {
-			txs = types.NewTransactionsByPriceAndNonce(env.signer, remoteTxs, env.header.BaseFee)
+			txs = types.NewTransactionsByPriceAndNonce(env.signer, remoteTxs, cmath.FromBig(env.header.BaseFee))
 
 			tracing.SetAttributes(
 				span,
@@ -1225,7 +1372,7 @@ func (w *worker) generateWork(ctx context.Context, params *generateParams) (*typ
 
 	w.fillTransactions(ctx, nil, work)
 
-	return w.engine.FinalizeAndAssemble(ctx, w.chain, work.header, work.state, work.txs, work.unclelist(), work.receipts)
+	return w.engine.FinalizeAndAssemble(w.chain, work.header, work.state, work.txs, work.unclelist(), work.receipts)
 }
 
 // commitWork generates several new sealing tasks based on the parent block
@@ -1311,7 +1458,7 @@ func (w *worker) commit(ctx context.Context, env *environment, interval func(), 
 		// https://github.com/ethereum/go-ethereum/issues/24299
 		env := env.copy()
 
-		block, err := w.engine.FinalizeAndAssemble(ctx, w.chain, env.header, env.state, env.txs, env.unclelist(), env.receipts)
+		block, err := w.engine.FinalizeAndAssemble(w.chain, env.header, env.state, env.txs, env.unclelist(), env.receipts)
 
 		tracing.SetAttributes(
 			span,
