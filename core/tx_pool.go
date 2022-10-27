@@ -581,7 +581,7 @@ func (pool *TxPool) ContentFrom(addr common.Address) (types.Transactions, types.
 func (pool *TxPool) Pending(ctx context.Context, enforceTips bool) map[common.Address]types.Transactions {
 	pending := make(map[common.Address]types.Transactions, 10)
 
-	tracing.Exec(ctx, "txpool.Pending()", func(ctx context.Context, span trace.Span) {
+	tracing.Exec(ctx, "TxpoolPending", "txpool.Pending()", func(ctx context.Context, span trace.Span) {
 		tracing.ElapsedTime(ctx, span, "txpool.Pending.RLock()", func(ctx context.Context, s trace.Span) {
 			pool.pendingMu.RLock()
 		})
@@ -1373,7 +1373,7 @@ func (pool *TxPool) scheduleReorgLoop() {
 //
 //nolint:gocognit
 func (pool *TxPool) runReorg(ctx context.Context, done chan struct{}, reset *txpoolResetRequest, dirtyAccounts *accountSet, events map[common.Address]*txSortedMap) {
-	tracing.Exec(ctx, "txpool-reorg", func(ctx context.Context, span trace.Span) {
+	tracing.Exec(ctx, "TxPoolReorg", "txpool-reorg", func(ctx context.Context, span trace.Span) {
 		defer func(t0 time.Time) {
 			reorgDurationTimer.Update(time.Since(t0))
 		}(time.Now())
@@ -1404,7 +1404,7 @@ func (pool *TxPool) runReorg(ctx context.Context, done chan struct{}, reset *txp
 			tracing.ElapsedTime(ctx, span, "reset-head reorg", func(_ context.Context, innerSpan trace.Span) {
 
 				// Reset from the old head to the new, rescheduling any reorged transactions
-				tracing.ElapsedTime(ctx, span, "reset-head-itself reorg", func(_ context.Context, innerSpan trace.Span) {
+				tracing.ElapsedTime(ctx, innerSpan, "reset-head-itself reorg", func(_ context.Context, innerSpan trace.Span) {
 					pool.reset(reset.oldHead, reset.newHead)
 				})
 

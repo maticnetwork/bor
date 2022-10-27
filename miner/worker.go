@@ -771,7 +771,7 @@ func (w *worker) resultLoop() {
 				err      error
 			)
 
-			tracing.Exec(task.ctx, "resultLoop", func(ctx context.Context, span trace.Span) {
+			tracing.Exec(task.ctx, "", "resultLoop", func(ctx context.Context, span trace.Span) {
 				for i, taskReceipt := range task.receipts {
 					receipt := new(types.Receipt)
 					receipts[i] = receipt
@@ -1273,7 +1273,7 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		}
 	}(env.header.Number.Uint64())
 
-	tracing.Exec(ctx, "worker.SplittingTransactions", func(ctx context.Context, span trace.Span) {
+	tracing.Exec(ctx, "", "worker.SplittingTransactions", func(ctx context.Context, span trace.Span) {
 
 		prePendingTime := time.Now()
 
@@ -1312,7 +1312,7 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 	if localTxsCount > 0 {
 		var txs *types.TransactionsByPriceAndNonce
 
-		tracing.Exec(ctx, "worker.LocalTransactionsByPriceAndNonce", func(ctx context.Context, span trace.Span) {
+		tracing.Exec(ctx, "", "worker.LocalTransactionsByPriceAndNonce", func(ctx context.Context, span trace.Span) {
 			txs = types.NewTransactionsByPriceAndNonce(env.signer, localTxs, cmath.FromBig(env.header.BaseFee))
 
 			tracing.SetAttributes(
@@ -1321,7 +1321,7 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 			)
 		})
 
-		tracing.Exec(ctx, "worker.LocalCommitTransactions", func(ctx context.Context, span trace.Span) {
+		tracing.Exec(ctx, "", "worker.LocalCommitTransactions", func(ctx context.Context, span trace.Span) {
 			committed = w.commitTransactions(env, txs, interrupt)
 		})
 
@@ -1335,7 +1335,7 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 	if remoteTxsCount > 0 {
 		var txs *types.TransactionsByPriceAndNonce
 
-		tracing.Exec(ctx, "worker.RemoteTransactionsByPriceAndNonce", func(ctx context.Context, span trace.Span) {
+		tracing.Exec(ctx, "", "worker.RemoteTransactionsByPriceAndNonce", func(ctx context.Context, span trace.Span) {
 			txs = types.NewTransactionsByPriceAndNonce(env.signer, remoteTxs, cmath.FromBig(env.header.BaseFee))
 
 			tracing.SetAttributes(
@@ -1344,7 +1344,7 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 			)
 		})
 
-		tracing.Exec(ctx, "worker.RemoteCommitTransactions", func(ctx context.Context, span trace.Span) {
+		tracing.Exec(ctx, "", "worker.RemoteCommitTransactions", func(ctx context.Context, span trace.Span) {
 			committed = w.commitTransactions(env, txs, interrupt)
 		})
 
@@ -1385,7 +1385,7 @@ func (w *worker) commitWork(ctx context.Context, interrupt *int32, noempty bool,
 		err  error
 	)
 
-	tracing.Exec(ctx, "worker.prepareWork", func(ctx context.Context, span trace.Span) {
+	tracing.Exec(ctx, "", "worker.prepareWork", func(ctx context.Context, span trace.Span) {
 		// Set the coinbase if the worker is running or it's required
 		var coinbase common.Address
 		if w.isRunning() {
