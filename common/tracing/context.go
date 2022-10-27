@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -51,10 +52,15 @@ func Trace(ctx context.Context, spanName string) (context.Context, trace.Span) {
 	return tr.Start(ctx, spanName)
 }
 
-func Exec(ctx context.Context, spanName string, opts ...Option) {
+func Exec(ctx context.Context, instrumentationName, spanName string, opts ...Option) {
 	var span trace.Span
 
 	tr := FromContext(ctx)
+
+	if tr == nil && len(instrumentationName) != 0 {
+		tr = otel.GetTracerProvider().Tracer(instrumentationName)
+		ctx = WithTracer(ctx, tr)
+	}
 
 	if tr != nil {
 		ctx, span = tr.Start(ctx, spanName)
