@@ -131,6 +131,9 @@ var (
 	localGauge   = metrics.NewRegisteredGauge("txpool/local", nil)
 	slotsGauge   = metrics.NewRegisteredGauge("txpool/slots", nil)
 
+	resetCacheGauge  = metrics.NewRegisteredGauge("txpool/resetcache", nil)
+	reinitCacheGauge = metrics.NewRegisteredGauge("txpool/reinittcache", nil)
+
 	reheapTimer = metrics.NewRegisteredTimer("txpool/reheap", nil)
 )
 
@@ -1383,7 +1386,7 @@ func (pool *TxPool) runReorg(ctx context.Context, done chan struct{}, reset *txp
 
 		var promoteAddrs []common.Address
 
-		tracing.ElapsedTime(ctx, span, "dirty accounts flattening", func(_ context.Context, innerSpan trace.Span) {
+		tracing.ElapsedTime(ctx, span, "01 dirty accounts flattening", func(_ context.Context, innerSpan trace.Span) {
 			if dirtyAccounts != nil && reset == nil {
 				// Only dirty accounts need to be promoted, unless we're resetting.
 				// For resets, all addresses in the tx queue will be promoted and
@@ -1397,15 +1400,15 @@ func (pool *TxPool) runReorg(ctx context.Context, done chan struct{}, reset *txp
 			)
 		})
 
-		tracing.ElapsedTime(ctx, span, "obtaining pool.WMutex", func(_ context.Context, _ trace.Span) {
+		tracing.ElapsedTime(ctx, span, "02 obtaining pool.WMutex", func(_ context.Context, _ trace.Span) {
 			pool.mu.Lock()
 		})
 
 		if reset != nil {
-			tracing.ElapsedTime(ctx, span, "reset-head reorg", func(_ context.Context, innerSpan trace.Span) {
+			tracing.ElapsedTime(ctx, span, "03 reset-head reorg", func(_ context.Context, innerSpan trace.Span) {
 
 				// Reset from the old head to the new, rescheduling any reorged transactions
-				tracing.ElapsedTime(ctx, innerSpan, "reset-head-itself reorg", func(_ context.Context, innerSpan trace.Span) {
+				tracing.ElapsedTime(ctx, innerSpan, "04 reset-head-itself reorg", func(_ context.Context, innerSpan trace.Span) {
 					pool.reset(reset.oldHead, reset.newHead)
 				})
 
@@ -1439,16 +1442,16 @@ func (pool *TxPool) runReorg(ctx context.Context, done chan struct{}, reset *txp
 		// Check for pending transactions for every account that sent new ones
 		var promoted []*types.Transaction
 
-		tracing.ElapsedTime(ctx, span, "promoteExecutables", func(_ context.Context, _ trace.Span) {
+		tracing.ElapsedTime(ctx, span, "05 promoteExecutables", func(_ context.Context, _ trace.Span) {
 			promoted = pool.promoteExecutables(promoteAddrs)
 		})
 
 		tracing.SetAttributes(
 			span,
-			attribute.Int("promoteAddresses-reset-head", len(promoteAddrs)),
-			attribute.Int("all", pool.all.Count()),
-			attribute.Int("pending", len(pool.pending)),
-			attribute.Int("queue", len(pool.queue)),
+			attribute.Int("count.promoteAddresses-reset-head", len(promoteAddrs)),
+			attribute.Int("count.all", pool.all.Count()),
+			attribute.Int("count.pending", len(pool.pending)),
+			attribute.Int("count.queue", len(pool.queue)),
 		)
 
 		// If a new block appeared, validate the pool of pending transactions. This will
@@ -1458,49 +1461,55 @@ func (pool *TxPool) runReorg(ctx context.Context, done chan struct{}, reset *txp
 		if reset != nil {
 			tracing.ElapsedTime(ctx, span, "new block", func(_ context.Context, innerSpan trace.Span) {
 
-				tracing.ElapsedTime(ctx, innerSpan, "demoteUnexecutables", func(_ context.Context, _ trace.Span) {
+				tracing.ElapsedTime(ctx, innerSpan, "06 demoteUnexecutables", func(_ context.Context, _ trace.Span) {
 					pool.demoteUnexecutables()
 				})
 
-				if reset.newHead != nil {
-					if pool.chainconfig.IsLondon(new(big.Int).Add(reset.newHead.Number, big.NewInt(1))) {
-						// london fork enabled, reset given the base fee
-						pendingBaseFee := misc.CalcBaseFeeUint(pool.chainconfig, reset.newHead)
-						pool.priced.SetBaseFee(pendingBaseFee)
-					} else {
-						// london fork not enabled, reheap to "reset" the priced list
-						pool.priced.Reheap()
+				var nonces map[common.Address]uint64
+
+				tracing.ElapsedTime(ctx, innerSpan, "07 set_base_fee", func(_ context.Context, _ trace.Span) {
+					if reset.newHead != nil {
+						if pool.chainconfig.IsLondon(new(big.Int).Add(reset.newHead.Number, big.NewInt(1))) {
+							// london fork enabled, reset given the base fee
+							pendingBaseFee := misc.CalcBaseFeeUint(pool.chainconfig, reset.newHead)
+							pool.priced.SetBaseFee(pendingBaseFee)
+						} else {
+							// london fork not enabled, reheap to "reset" the priced list
+							pool.priced.Reheap()
+						}
 					}
-				}
 
-				// Update all accounts to the latest known pending nonce
-				nonces := make(map[common.Address]uint64, len(pool.pending))
+					// Update all accounts to the latest known pending nonce
+					nonces = make(map[common.Address]uint64, len(pool.pending))
+				})
 
-				tracing.ElapsedTime(ctx, innerSpan, "obtaining pendingMu.RMutex", func(_ context.Context, innerSpan trace.Span) {
+				tracing.ElapsedTime(ctx, innerSpan, "08 obtaining pendingMu.RMutex", func(_ context.Context, _ trace.Span) {
 					pool.pendingMu.RLock()
 				})
 
 				var highestPending *types.Transaction
 
-				for addr, list := range pool.pending {
-					highestPending = list.LastElement()
-					nonces[addr] = highestPending.Nonce() + 1
-				}
+				tracing.ElapsedTime(ctx, innerSpan, "09 fill nonces", func(_ context.Context, innerSpan trace.Span) {
+					for addr, list := range pool.pending {
+						highestPending = list.LastElement()
+						nonces[addr] = highestPending.Nonce() + 1
+					}
+				})
 
 				pool.pendingMu.RUnlock()
 
-				tracing.ElapsedTime(ctx, innerSpan, "reset nonces", func(_ context.Context, _ trace.Span) {
+				tracing.ElapsedTime(ctx, innerSpan, "10 reset nonces", func(_ context.Context, _ trace.Span) {
 					pool.pendingNonces.setAll(nonces)
 				})
 			})
 		}
 
 		// Ensure pool.queue and pool.pending sizes stay within the configured limits.
-		tracing.ElapsedTime(ctx, span, "truncatePending", func(_ context.Context, _ trace.Span) {
+		tracing.ElapsedTime(ctx, span, "11 truncatePending", func(_ context.Context, _ trace.Span) {
 			pool.truncatePending()
 		})
 
-		tracing.ElapsedTime(ctx, span, "truncateQueue", func(_ context.Context, _ trace.Span) {
+		tracing.ElapsedTime(ctx, span, "12 truncateQueue", func(_ context.Context, _ trace.Span) {
 			pool.truncateQueue()
 		})
 
@@ -1510,7 +1519,7 @@ func (pool *TxPool) runReorg(ctx context.Context, done chan struct{}, reset *txp
 		pool.mu.Unlock()
 
 		// Notify subsystems for newly added transactions
-		tracing.ElapsedTime(ctx, span, "notify about new transactions", func(_ context.Context, _ trace.Span) {
+		tracing.ElapsedTime(ctx, span, "13 notify about new transactions", func(_ context.Context, _ trace.Span) {
 			for _, tx := range promoted {
 				addr, _ := types.Sender(pool.signer, tx)
 
@@ -1523,7 +1532,7 @@ func (pool *TxPool) runReorg(ctx context.Context, done chan struct{}, reset *txp
 		})
 
 		if len(events) > 0 {
-			tracing.ElapsedTime(ctx, span, "txFeed", func(_ context.Context, _ trace.Span) {
+			tracing.ElapsedTime(ctx, span, "14 txFeed", func(_ context.Context, _ trace.Span) {
 				var txs []*types.Transaction
 
 				for _, set := range events {
@@ -1533,7 +1542,6 @@ func (pool *TxPool) runReorg(ctx context.Context, done chan struct{}, reset *txp
 				pool.txFeed.Send(NewTxsEvent{txs})
 			})
 		}
-
 	})
 }
 
