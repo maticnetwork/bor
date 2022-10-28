@@ -168,10 +168,12 @@ func (m *txSortedMap) Cap(threshold int) types.Transactions {
 	if len(m.items) <= threshold {
 		return nil
 	}
+
 	// Otherwise gather and drop the highest nonce'd transactions
 	var drops types.Transactions
 
 	sort.Sort(*m.index)
+
 	for size := len(m.items); size > threshold; size-- {
 		drops = append(drops, m.items[(*m.index)[size-1]])
 		delete(m.items, (*m.index)[size-1])
@@ -199,14 +201,18 @@ func (m *txSortedMap) Remove(nonce uint64) bool {
 	if !ok {
 		return false
 	}
+
 	// Otherwise delete the transaction and fix the heap index
 	for i := 0; i < m.index.Len(); i++ {
 		if (*m.index)[i] == nonce {
 			heap.Remove(m.index, i)
+
 			break
 		}
 	}
+
 	delete(m.items, nonce)
+
 	m.cache = nil
 
 	return true
@@ -249,13 +255,28 @@ func (m *txSortedMap) Len() int {
 
 func (m *txSortedMap) flatten() types.Transactions {
 	// If the sorting was not cached yet, create and cache it
-	if m.cache == nil {
-		m.cache = make(types.Transactions, 0, len(m.items))
+	m.m.RLock()
+	isEmpty := m.cache == nil
+	m.m.RUnlock()
+
+	if isEmpty {
+		m.m.RLock()
+
+		cache := make(types.Transactions, 0, len(m.items))
+
 		for _, tx := range m.items {
-			m.cache = append(m.cache, tx)
+			cache = append(cache, tx)
 		}
-		sort.Sort(types.TxByNonce(m.cache))
+
+		m.m.RUnlock()
+
+		sort.Sort(types.TxByNonce(cache))
+
+		m.m.Lock()
+		m.cache = cache
+		m.m.Unlock()
 	}
+
 	return m.cache
 }
 
@@ -263,21 +284,13 @@ func (m *txSortedMap) flatten() types.Transactions {
 // sorted internal representation. The result of the sorting is cached in case
 // it's requested again before any modifications are made to the contents.
 func (m *txSortedMap) Flatten() types.Transactions {
-	m.m.Lock()
-	defer m.m.Unlock()
-
 	// Copy the cache to prevent accidental modifications
-	txs := m.flatten()
-
-	return txs
+	return m.flatten()
 }
 
 // LastElement returns the last element of a flattened list, thus, the
 // transaction with the highest nonce
 func (m *txSortedMap) LastElement() *types.Transaction {
-	m.m.Lock()
-	defer m.m.Unlock()
-
 	cache := m.flatten()
 	return cache[len(cache)-1]
 }
