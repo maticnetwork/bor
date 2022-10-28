@@ -569,9 +569,11 @@ func (w *worker) mainLoop(ctx context.Context) {
 	for {
 		select {
 		case req := <-w.newWorkCh:
+			//nolint:contextcheck
 			w.commitWork(req.ctx, req.interrupt, req.noempty, req.timestamp)
 
 		case req := <-w.getWorkCh:
+			//nolint:contextcheck
 			block, err := w.generateWork(req.ctx, req.params)
 			if err != nil {
 				req.err = err
