@@ -56,15 +56,19 @@ func (h *nonceHeap) Pop() interface{} {
 type txSortedMap struct {
 	items map[uint64]*types.Transaction // Hash map storing the transaction data
 	index *nonceHeap                    // Heap of nonces of all the stored transactions (non-strict mode)
-	cache types.Transactions            // Cache of the transactions already sorted
 	m     sync.RWMutex
+
+	cache     types.Transactions // Cache of the transactions already sorted
+	isEmpty   bool
+	cacheOnce sync.Once
 }
 
 // newTxSortedMap creates a new nonce-sorted transaction map.
 func newTxSortedMap() *txSortedMap {
 	return &txSortedMap{
-		items: make(map[uint64]*types.Transaction),
-		index: new(nonceHeap),
+		items:   make(map[uint64]*types.Transaction),
+		index:   new(nonceHeap),
+		isEmpty: true,
 	}
 }
 
@@ -87,7 +91,10 @@ func (m *txSortedMap) Put(tx *types.Transaction) {
 		heap.Push(m.index, nonce)
 	}
 
-	m.items[nonce], m.cache = tx, nil
+	m.items[nonce] = tx
+	m.cache = nil
+	m.isEmpty = true
+	m.cacheOnce = sync.Once{}
 }
 
 // Forward removes all transactions from the map with a nonce lower than the
@@ -133,11 +140,18 @@ func (m *txSortedMap) Filter(filter func(*types.Transaction) bool) types.Transac
 
 func (m *txSortedMap) reheap() {
 	*m.index = make([]uint64, 0, len(m.items))
+
 	for nonce := range m.items {
 		*m.index = append(*m.index, nonce)
 	}
+
 	heap.Init(m.index)
+
 	m.cache = nil
+	m.isEmpty = true
+	m.cacheOnce = sync.Once{}
+
+	resetCacheGauge.Inc(1)
 }
 
 // filter is identical to Filter, but **does not** regenerate the heap. This method
@@ -154,6 +168,10 @@ func (m *txSortedMap) filter(filter func(*types.Transaction) bool) types.Transac
 	}
 	if len(removed) > 0 {
 		m.cache = nil
+		m.isEmpty = true
+		m.cacheOnce = sync.Once{}
+
+		resetCacheGauge.Inc(1)
 	}
 	return removed
 }
@@ -214,6 +232,10 @@ func (m *txSortedMap) Remove(nonce uint64) bool {
 	delete(m.items, nonce)
 
 	m.cache = nil
+	m.isEmpty = true
+	m.cacheOnce = sync.Once{}
+
+	resetCacheGauge.Inc(1)
 
 	return true
 }
@@ -233,14 +255,21 @@ func (m *txSortedMap) Ready(start uint64) types.Transactions {
 	if m.index.Len() == 0 || (*m.index)[0] > start {
 		return nil
 	}
+
 	// Otherwise start accumulating incremental transactions
 	var ready types.Transactions
+
 	for next := (*m.index)[0]; m.index.Len() > 0 && (*m.index)[0] == next; next++ {
 		ready = append(ready, m.items[next])
 		delete(m.items, next)
 		heap.Pop(m.index)
 	}
+
 	m.cache = nil
+	m.isEmpty = true
+	m.cacheOnce = sync.Once{}
+
+	resetCacheGauge.Inc(1)
 
 	return ready
 }
@@ -256,25 +285,30 @@ func (m *txSortedMap) Len() int {
 func (m *txSortedMap) flatten() types.Transactions {
 	// If the sorting was not cached yet, create and cache it
 	m.m.RLock()
-	isEmpty := m.cache == nil
+	isEmpty := m.isEmpty
 	m.m.RUnlock()
 
 	if isEmpty {
-		m.m.RLock()
+		m.cacheOnce.Do(func() {
+			m.m.RLock()
+			cache := make(types.Transactions, 0, len(m.items))
 
-		cache := make(types.Transactions, 0, len(m.items))
+			for _, tx := range m.items {
+				cache = append(cache, tx)
+			}
 
-		for _, tx := range m.items {
-			cache = append(cache, tx)
-		}
+			m.m.RUnlock()
 
-		m.m.RUnlock()
+			// exclude sorting from locks
+			sort.Sort(types.TxByNonce(cache))
 
-		sort.Sort(types.TxByNonce(cache))
+			m.m.Lock()
+			m.cache = cache
+			m.isEmpty = false
+			m.m.Unlock()
 
-		m.m.Lock()
-		m.cache = cache
-		m.m.Unlock()
+			reinitCacheGauge.Inc(1)
+		})
 	}
 
 	return m.cache
