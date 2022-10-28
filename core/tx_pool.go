@@ -131,8 +131,10 @@ var (
 	localGauge   = metrics.NewRegisteredGauge("txpool/local", nil)
 	slotsGauge   = metrics.NewRegisteredGauge("txpool/slots", nil)
 
-	resetCacheGauge  = metrics.NewRegisteredGauge("txpool/resetcache", nil)
-	reinitCacheGauge = metrics.NewRegisteredGauge("txpool/reinittcache", nil)
+	resetCacheGauge    = metrics.NewRegisteredGauge("txpool/resetcache", nil)
+	reinitCacheGauge   = metrics.NewRegisteredGauge("txpool/reinittcache", nil)
+	hitCacheHistogram  = metrics.NewRegisteredCounter("txpool/cachehit", nil)
+	missCacheHistogram = metrics.NewRegisteredCounter("txpool/cachemiss", nil)
 
 	reheapTimer = metrics.NewRegisteredTimer("txpool/reheap", nil)
 )
