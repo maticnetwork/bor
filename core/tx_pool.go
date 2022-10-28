@@ -133,6 +133,8 @@ var (
 
 	resetCacheGauge  = metrics.NewRegisteredGauge("txpool/resetcache", nil)
 	reinitCacheGauge = metrics.NewRegisteredGauge("txpool/reinittcache", nil)
+	hitCacheCounter  = metrics.NewRegisteredCounter("txpool/cachehit", nil)
+	missCacheCounter = metrics.NewRegisteredCounter("txpool/cachemiss", nil)
 
 	reheapTimer = metrics.NewRegisteredTimer("txpool/reheap", nil)
 )

@@ -93,6 +93,7 @@ func (m *txSortedMap) Put(tx *types.Transaction) {
 
 	m.items[nonce] = tx
 	m.cache = nil
+
 	m.isEmpty = true
 	m.cacheOnce = sync.Once{}
 }
@@ -115,6 +116,7 @@ func (m *txSortedMap) Forward(threshold uint64) types.Transactions {
 
 	// If we had a cached order, shift the front
 	if m.cache != nil {
+		hitCacheCounter.Inc(1)
 		m.cache = m.cache[len(removed):]
 	}
 
@@ -309,6 +311,10 @@ func (m *txSortedMap) flatten() types.Transactions {
 
 			reinitCacheGauge.Inc(1)
 		})
+
+		missCacheCounter.Inc(1)
+	} else {
+		hitCacheCounter.Inc(1)
 	}
 
 	return m.cache
