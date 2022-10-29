@@ -402,22 +402,45 @@ func (pool *TxPool) loop() {
 
 		// Handle inactive account transaction eviction
 		case <-evict.C:
-			pool.mu.Lock()
+			now := time.Now()
+
+			var (
+				list     types.Transactions
+				tx       *types.Transaction
+				toRemove []common.Hash
+			)
+
+			pool.mu.RLock()
 			for addr := range pool.queue {
 				// Skip local transactions from the eviction mechanism
 				if pool.locals.contains(addr) {
 					continue
 				}
+
 				// Any non-locals old enough should be removed
-				if time.Since(pool.beats[addr]) > pool.config.Lifetime {
-					list := pool.queue[addr].Flatten()
-					for _, tx := range list {
-						pool.removeTx(tx.Hash(), true)
+				if now.Sub(pool.beats[addr]) > pool.config.Lifetime {
+					list = pool.queue[addr].Flatten()
+					for _, tx = range list {
+						toRemove = append(toRemove, tx.Hash())
 					}
+
 					queuedEvictionMeter.Mark(int64(len(list)))
 				}
 			}
-			pool.mu.Unlock()
+
+			pool.mu.RUnlock()
+
+			if len(toRemove) > 0 {
+				pool.mu.Lock()
+
+				var hash common.Hash
+
+				for _, hash = range toRemove {
+					pool.removeTx(hash, true)
+				}
+
+				pool.mu.Unlock()
+			}
 
 		// Handle local transaction journal rotation
 		case <-journal.C:
@@ -1212,6 +1235,7 @@ func (pool *TxPool) removeTx(hash common.Hash, outofbound bool) {
 	if tx == nil {
 		return
 	}
+
 	addr, _ := types.Sender(pool.signer, tx) // already validated during insertion
 
 	// Remove it from the list of known transactions
@@ -1219,6 +1243,7 @@ func (pool *TxPool) removeTx(hash common.Hash, outofbound bool) {
 	if outofbound {
 		pool.priced.Removed(1)
 	}
+
 	if pool.locals.contains(addr) {
 		localGauge.Dec(1)
 	}
@@ -1234,6 +1259,7 @@ func (pool *TxPool) removeTx(hash common.Hash, outofbound bool) {
 			if pending.Empty() {
 				delete(pool.pending, addr)
 			}
+
 			pool.pendingMu.Unlock()
 
 			// Postpone any invalidated transactions
