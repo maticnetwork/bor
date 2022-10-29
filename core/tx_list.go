@@ -116,7 +116,7 @@ func (m *txSortedMap) Forward(threshold uint64) types.Transactions {
 
 	// If we had a cached order, shift the front
 	if m.cache != nil {
-		hitCacheHistogram.Inc(1)
+		hitCacheCounter.Inc(1)
 		m.cache = m.cache[len(removed):]
 	}
 
@@ -312,9 +312,9 @@ func (m *txSortedMap) flatten() types.Transactions {
 			reinitCacheGauge.Inc(1)
 		})
 
-		missCacheHistogram.Inc(1)
+		missCacheCounter.Inc(1)
 	} else {
-		hitCacheHistogram.Inc(1)
+		hitCacheCounter.Inc(1)
 	}
 
 	return m.cache
