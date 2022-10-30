@@ -292,6 +292,7 @@ func (m *txSortedMap) Len() int {
 func (m *txSortedMap) flatten() types.Transactions {
 	// If the sorting was not cached yet, create and cache it
 	m.cacheMu.Lock()
+	defer m.cacheMu.Unlock()
 
 	if m.isEmpty {
 		m.isEmpty = false // to simulate sync.Once
@@ -312,12 +313,12 @@ func (m *txSortedMap) flatten() types.Transactions {
 
 		m.cacheMu.Lock()
 		m.cache = cache
-		m.cacheMu.Unlock()
+		// m.cacheMu.Unlock() - deferred
 
 		reinitCacheGauge.Inc(1)
 		missCacheCounter.Inc(1)
 	} else {
-		m.cacheMu.Unlock()
+		// m.cacheMu.Unlock() - deferred
 
 		hitCacheCounter.Inc(1)
 	}
