@@ -58,9 +58,9 @@ type txSortedMap struct {
 	index *nonceHeap                    // Heap of nonces of all the stored transactions (non-strict mode)
 	m     sync.RWMutex
 
-	cache     types.Transactions // Cache of the transactions already sorted
-	isEmpty   bool
-	cacheOnce sync.Once
+	cache   types.Transactions // Cache of the transactions already sorted
+	isEmpty bool
+	cacheMu sync.RWMutex
 }
 
 // newTxSortedMap creates a new nonce-sorted transaction map.
@@ -92,10 +92,11 @@ func (m *txSortedMap) Put(tx *types.Transaction) {
 	}
 
 	m.items[nonce] = tx
-	m.cache = nil
 
+	m.cacheMu.Lock()
 	m.isEmpty = true
-	m.cacheOnce = sync.Once{}
+	m.cache = nil
+	m.cacheMu.Unlock()
 }
 
 // Forward removes all transactions from the map with a nonce lower than the
@@ -149,9 +150,10 @@ func (m *txSortedMap) reheap() {
 
 	heap.Init(m.index)
 
+	m.cacheMu.Lock()
 	m.cache = nil
 	m.isEmpty = true
-	m.cacheOnce = sync.Once{}
+	m.cacheMu.Unlock()
 
 	resetCacheGauge.Inc(1)
 }
@@ -169,9 +171,10 @@ func (m *txSortedMap) filter(filter func(*types.Transaction) bool) types.Transac
 		}
 	}
 	if len(removed) > 0 {
+		m.cacheMu.Lock()
 		m.cache = nil
 		m.isEmpty = true
-		m.cacheOnce = sync.Once{}
+		m.cacheMu.Unlock()
 
 		resetCacheGauge.Inc(1)
 	}
@@ -233,9 +236,10 @@ func (m *txSortedMap) Remove(nonce uint64) bool {
 
 	delete(m.items, nonce)
 
+	m.cacheMu.Lock()
 	m.cache = nil
 	m.isEmpty = true
-	m.cacheOnce = sync.Once{}
+	m.cacheMu.Unlock()
 
 	resetCacheGauge.Inc(1)
 
@@ -267,9 +271,10 @@ func (m *txSortedMap) Ready(start uint64) types.Transactions {
 		heap.Pop(m.index)
 	}
 
+	m.cacheMu.Lock()
 	m.cache = nil
 	m.isEmpty = true
-	m.cacheOnce = sync.Once{}
+	m.cacheMu.Unlock()
 
 	resetCacheGauge.Inc(1)
 
@@ -286,36 +291,38 @@ func (m *txSortedMap) Len() int {
 
 func (m *txSortedMap) flatten() types.Transactions {
 	// If the sorting was not cached yet, create and cache it
-	m.m.RLock()
-	isEmpty := m.isEmpty
-	m.m.RUnlock()
+	m.cacheMu.Lock()
 
-	if isEmpty {
-		m.cacheOnce.Do(func() {
-			m.m.RLock()
-			cache := make(types.Transactions, 0, len(m.items))
+	if m.isEmpty {
+		m.isEmpty = false // to simulate sync.Once
 
-			for _, tx := range m.items {
-				cache = append(cache, tx)
-			}
+		m.cacheMu.Unlock()
 
-			m.m.RUnlock()
+		m.m.RLock()
+		cache := make(types.Transactions, 0, len(m.items))
 
-			// exclude sorting from locks
-			sort.Sort(types.TxByNonce(cache))
+		for _, tx := range m.items {
+			cache = append(cache, tx)
+		}
 
-			m.m.Lock()
-			m.cache = cache
-			m.isEmpty = false
-			m.m.Unlock()
+		m.m.RUnlock()
 
-			reinitCacheGauge.Inc(1)
-		})
+		// exclude sorting from locks
+		sort.Sort(types.TxByNonce(cache))
 
+		m.m.Lock()
+		m.cache = cache
+		m.m.Unlock()
+
+		reinitCacheGauge.Inc(1)
 		missCacheCounter.Inc(1)
+
+		m.cacheMu.Lock()
 	} else {
 		hitCacheCounter.Inc(1)
 	}
+
+	m.cacheMu.RUnlock()
 
 	return m.cache
 }
