@@ -316,13 +316,11 @@ func (m *txSortedMap) flatten() types.Transactions {
 
 		reinitCacheGauge.Inc(1)
 		missCacheCounter.Inc(1)
-
-		m.cacheMu.Lock()
 	} else {
+		m.cacheMu.Unlock()
+
 		hitCacheCounter.Inc(1)
 	}
-
-	m.cacheMu.RUnlock()
 
 	return m.cache
 }
