@@ -1219,61 +1219,63 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		remoteTxs      map[common.Address]types.Transactions
 	)
 
-	doneCh := make(chan struct{})
+	/*
 
-	defer func() {
-		close(doneCh)
-	}()
+		doneCh := make(chan struct{})
 
-	go func(number uint64) {
-		closeFn := func() error {
-			return nil
-		}
-
-		for {
-			select {
-			case <-time.After(150 * time.Millisecond):
-				// Check if we've not crossed limit
-				if attempt := atomic.AddInt32(w.profileCount, 1); attempt >= 10 {
-					log.Info("Completed profiling", "attempt", attempt)
-
-					return
-				}
-
-				log.Info("Starting profiling in fill transactions", "number", number)
-
-				dir, err := os.MkdirTemp("", fmt.Sprintf("bor-traces-%s-", time.Now().UTC().Format("2006-01-02-150405Z")))
-				if err != nil {
-					log.Error("Error in profiling", "path", dir, "number", number, "err", err)
-					return
-				}
-
-				// grab the cpu profile
-				closeFnInternal, err := startProfiler("cpu", dir, number)
-				if err != nil {
-					log.Error("Error in profiling", "path", dir, "number", number, "err", err)
-					return
-				}
-
-				closeFn = func() error {
-					err := closeFnInternal()
-
-					log.Info("Completed profiling", "path", dir, "number", number, "error", err)
-
+		defer func() {
+			close(doneCh)
+		}()
+			go func(number uint64) {
+				closeFn := func() error {
 					return nil
 				}
 
-			case <-doneCh:
-				err := closeFn()
+				for {
+					select {
+					case <-time.After(150 * time.Millisecond):
+						// Check if we've not crossed limit
+						if attempt := atomic.AddInt32(w.profileCount, 1); attempt >= 10 {
+							log.Info("Completed profiling", "attempt", attempt)
 
-				if err != nil {
-					log.Info("closing fillTransactions", "number", number, "error", err)
+							return
+						}
+
+						log.Info("Starting profiling in fill transactions", "number", number)
+
+						dir, err := os.MkdirTemp("", fmt.Sprintf("bor-traces-%s-", time.Now().UTC().Format("2006-01-02-150405Z")))
+						if err != nil {
+							log.Error("Error in profiling", "path", dir, "number", number, "err", err)
+							return
+						}
+
+						// grab the cpu profile
+						closeFnInternal, err := startProfiler("cpu", dir, number)
+						if err != nil {
+							log.Error("Error in profiling", "path", dir, "number", number, "err", err)
+							return
+						}
+
+						closeFn = func() error {
+							err := closeFnInternal()
+
+							log.Info("Completed profiling", "path", dir, "number", number, "error", err)
+
+							return nil
+						}
+
+					case <-doneCh:
+						err := closeFn()
+
+						if err != nil {
+							log.Info("closing fillTransactions", "number", number, "error", err)
+						}
+
+						return
+					}
 				}
-
-				return
-			}
-		}
-	}(env.header.Number.Uint64())
+			}(env.header.Number.Uint64())
+	*/
 
 	tracing.Exec(ctx, "", "worker.SplittingTransactions", func(ctx context.Context, span trace.Span) {
 
