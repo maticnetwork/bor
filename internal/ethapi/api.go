@@ -21,7 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"runtime/debug"
+	"runtime"
 	"strings"
 	"time"
 
@@ -2210,7 +2210,15 @@ func (api *PrivateDebugAPI) PurgeCheckpointWhitelist() {
 
 // GetTraceStack() returns the current trace stack
 func (api *PrivateDebugAPI) GetTraceStack() string {
-	return string(debug.Stack())
+	buf := make([]byte, 1024)
+	for {
+		n := runtime.Stack(buf, true)
+		if n < len(buf) {
+			return string((buf[:n]))
+		}
+		buf = make([]byte, 2*len(buf))
+	}
+
 }
 
 // PublicNetAPI offers network related RPC methods
