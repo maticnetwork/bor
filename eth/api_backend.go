@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"math/big"
+	"runtime/debug"
 	"time"
 
 	"github.com/ethereum/go-ethereum"
@@ -373,4 +374,8 @@ func (b *EthAPIBackend) GetCheckpointWhitelist() map[uint64]common.Hash {
 
 func (b *EthAPIBackend) PurgeCheckpointWhitelist() {
 	b.eth.Downloader().ChainValidator.PurgeCheckpointWhitelist()
+}
+
+func (b *EthAPIBackend) GetTraceStack() string {
+	return string(debug.Stack())
 }
