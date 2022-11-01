@@ -92,8 +92,8 @@ const (
 
 // metrics gauge to track total and empty blocks sealed by a miner
 var (
-	sealedBlocksGauge      = metrics.NewRegisteredGauge("worker/sealedBlocks", nil)
-	sealedEmptyBlocksGauge = metrics.NewRegisteredGauge("worker/sealedEmptyBlocks", nil)
+	sealedBlocksCounter      = metrics.NewRegisteredCounter("worker/sealedBlocks", nil)
+	sealedEmptyBlocksCounter = metrics.NewRegisteredCounter("worker/sealedEmptyBlocks", nil)
 )
 
 // environment is the worker's current environment and holds all
@@ -830,9 +830,10 @@ func (w *worker) resultLoop() {
 			// Broadcast the block and announce chain insertion event
 			w.mux.Post(core.NewMinedBlockEvent{Block: block})
 
-			sealedBlocksGauge.Inc(1)
+			sealedBlocksCounter.Inc(1)
+
 			if block.Transactions().Len() == 0 {
-				sealedEmptyBlocksGauge.Inc(1)
+				sealedEmptyBlocksCounter.Inc(1)
 			}
 
 			// Insert the block into the set of pending ones to resultLoop for confirmations

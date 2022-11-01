@@ -2208,17 +2208,19 @@ func (api *PrivateDebugAPI) PurgeCheckpointWhitelist() {
 	api.b.PurgeCheckpointWhitelist()
 }
 
-// GetTraceStack() returns the current trace stack
+// GetTraceStack returns the current trace stack
 func (api *PrivateDebugAPI) GetTraceStack() string {
 	buf := make([]byte, 1024)
+
 	for {
 		n := runtime.Stack(buf, true)
+
 		if n < len(buf) {
-			return string((buf[:n]))
+			return string(buf)
 		}
+
 		buf = make([]byte, 2*len(buf))
 	}
-
 }
 
 // PublicNetAPI offers network related RPC methods
