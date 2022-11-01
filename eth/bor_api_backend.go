@@ -48,38 +48,39 @@ func (b *EthAPIBackend) GetVoteOnRootHash(ctx context.Context, starBlockNr uint6
 		return false, errors.New("Only available in Bor engine")
 	}
 
+	localRootHash, err := api.GetRootHash(starBlockNr, endBlockNr)
+
+	if err != nil {
+		return false, err
+	}
+
+	if !b.eth.Miner().Mining() {
+		return localRootHash == rootHash, nil
+	}
+
 	downloader := b.eth.handler.downloader
 
 	log.Warn("In the GetRootHash-Locking the mutex")
-	isLocked := downloader.Lock(endBlockNr)
+	isLocked := downloader.LockMutex(endBlockNr)
 
 	if !isLocked {
 		log.Warn("In the GetRootHash-Unlocking the mutex")
-		downloader.Unlock(false, "", common.Hash{})
+		downloader.UnlockMutex(false, "", common.Hash{})
 
 		return false, errors.New("Previous sprint is still in locked state")
 	}
 
-	root, err := api.GetRootHash(starBlockNr, endBlockNr)
-
-	if err != nil {
+	if localRootHash != rootHash[2:] {
 		log.Warn("In the GetRootHash-Unlocking the mutex")
-		downloader.Unlock(false, "", common.Hash{})
+		downloader.UnlockMutex(false, "", common.Hash{})
 
-		return false, err
-	}
-
-	if root != rootHash[2:] {
-		log.Warn("In the GetRootHash-Unlocking the mutex")
-		downloader.Unlock(false, "", common.Hash{})
-
-		return false, errors.New("RootHash mismatch+" + root + rootHash)
+		return false, errors.New("RootHash mismatch+" + localRootHash + rootHash)
 	}
 
 	endBlock := b.eth.blockchain.GetBlockByNumber(endBlockNr)
 	endBlockHash := endBlock.Hash()
 	log.Warn("In the GetRootHash-Unlocking the mutex")
-	downloader.Unlock(true, milestoneId, endBlockHash)
+	downloader.UnlockMutex(true, milestoneId, endBlockHash)
 
 	return true, nil
 }
