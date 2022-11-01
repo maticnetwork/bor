@@ -630,6 +630,7 @@ func (s *Ethereum) Start() error {
 	go s.startCheckpointWhitelistService()
 	go s.startMilestoneWhitelistService()
 	go s.startNoAckMilestoneService()
+	go s.startNoAckMilestoneByIDService()
 
 	return nil
 }
@@ -744,10 +745,6 @@ func (s *Ethereum) startNoAckMilestoneService() {
 		log.Warn("unable to start the no-ack-milestone service - first run", "err", err)
 	}
 
-	secondCtx, cancel := context.WithTimeout(context.Background(), noAckMilestoneTimeout)
-	err = s.handleNoAckMilestoneByID(secondCtx)
-	cancel()
-
 	if err != nil {
 		if errors.Is(err, ErrBorConsensusWithoutHeimdall) || errors.Is(err, ErrNotBorConsensus) {
 			return
@@ -768,6 +765,46 @@ func (s *Ethereum) startNoAckMilestoneService() {
 
 			if err != nil {
 				log.Warn("unable to milestone", "err", err)
+			}
+		case <-s.closeCh:
+			return
+		}
+	}
+}
+
+func (s *Ethereum) startNoAckMilestoneByIDService() {
+	// a shortcut helps with tests and early exit
+	select {
+	case <-s.closeCh:
+		return
+	default:
+	}
+
+	// first run for fetching milestones
+	firstCtx, cancel := context.WithTimeout(context.Background(), noAckMilestoneTimeout)
+	err := s.handleNoAckMilestoneByID(firstCtx)
+	cancel()
+
+	if err != nil {
+		if errors.Is(err, ErrBorConsensusWithoutHeimdall) || errors.Is(err, ErrNotBorConsensus) {
+			return
+		}
+
+		log.Warn("unable to start the no-ack-milestone-by-id service - first run", "err", err)
+	}
+
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			ctx, cancel := context.WithTimeout(context.Background(), noAckMilestoneTimeout)
+			err := s.handleNoAckMilestoneByID(ctx)
+			cancel()
+
+			if err != nil {
+				log.Warn("unable to handle NoAckMilestoneByID", "err", err)
 			}
 		case <-s.closeCh:
 			return
