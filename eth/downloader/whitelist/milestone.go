@@ -231,7 +231,7 @@ func (m *milestone) UnlockSprint(endBlockNum uint64) {
 
 func (m *milestone) RemoveMilestoneID(milestoneId string) {
 	m.m.Lock()
-	log.Warn("Removing the MilestoneID", "MilestoneID", milestoneId) // Just for testing
+	log.Warn("Removing the MilestoneID  gog gogoooog", "MilestoneID", milestoneId) // Just for testing
 
 	delete(m.LockedMilestoneIds, milestoneId)
 
