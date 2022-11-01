@@ -249,8 +249,8 @@ type ChainValidator interface {
 	PurgeWhitelistedCheckpoint()
 	GetWhitelistedMilestone() (bool, uint64, common.Hash)
 	PurgeWhitelistedMilestone()
-	Lock(endBlockNum uint64) bool
-	Unlock(doLock bool, milestoneId string, endBlockHash common.Hash)
+	LockMutex(endBlockNum uint64) bool
+	UnlockMutex(doLock bool, milestoneId string, endBlockHash common.Hash)
 	UnlockSprint(endBlockNum uint64)
 	RemoveMilestoneID(milestoneId string)
 	GetMilestoneIDsList() []string

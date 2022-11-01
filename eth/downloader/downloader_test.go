@@ -1445,10 +1445,10 @@ func (w *whitelistFake) PurgeWhitelistedMilestone() {}
 func (w *whitelistFake) GetCheckpoints(current, sidechainHeader *types.Header, sidechainCheckpoints []*types.Header) (map[uint64]*types.Header, error) {
 	return map[uint64]*types.Header{}, nil
 }
-func (w *whitelistFake) Lock(endBlockNum uint64) bool {
+func (w *whitelistFake) LockMutex(endBlockNum uint64) bool {
 	return false
 }
-func (w *whitelistFake) Unlock(doLock bool, milestoneId string, endBlockHash common.Hash) {
+func (w *whitelistFake) UnlockMutex(doLock bool, milestoneId string, endBlockHash common.Hash) {
 }
 func (w *whitelistFake) UnlockSprint(endBlockNum uint64) {
 }

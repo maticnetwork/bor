@@ -75,20 +75,20 @@ func TestMilestone(t *testing.T) {
 	require.Equal(t, s.milestone.LockedSprintNumber, uint64(0), "expected 0 as it was not initialized")
 
 	//Acquiring the mutex lock
-	s.Lock(11)
+	s.LockMutex(11)
 	require.Equal(t, s.milestone.LockedSprintNumber, uint64(11), "expected 11")
 	require.Equal(t, s.milestone.Locked, false, "expected false as sprint is not locked till this point")
 
 	//Releasing the mutex lock
-	s.Unlock(true, "milestoneID1", common.Hash{})
+	s.UnlockMutex(true, "milestoneID1", common.Hash{})
 	require.Equal(t, s.milestone.LockedSprintNumber, uint64(11), "expected 11 as it was not initialized")
 	require.Equal(t, s.milestone.Locked, true, "expected true as sprint is locked now")
 	require.Equal(t, len(s.milestone.LockedMilestoneIds), int(1), "expected 1 as only 1 milestoneID has been entered")
 	require.Equal(t, s.milestone.LockedMilestoneIds["milestoneID1"], true, "expected true as we have stored this milestoneID1 previously")
 	require.Equal(t, s.milestone.LockedMilestoneIds["milestoneID2"], false, "expected false as we have not stored this milestoneID2 previously")
 
-	s.Lock(11)
-	s.Unlock(true, "milestoneID2", common.Hash{})
+	s.LockMutex(11)
+	s.UnlockMutex(true, "milestoneID2", common.Hash{})
 	require.Equal(t, len(s.milestone.LockedMilestoneIds), int(2), "expected 1 as only 1 milestoneID has been entered")
 	require.Equal(t, s.milestone.LockedMilestoneIds["milestoneID2"], true, "expected true as we have stored this milestoneID2 previously")
 
@@ -100,15 +100,15 @@ func TestMilestone(t *testing.T) {
 	require.Equal(t, len(s.milestone.LockedMilestoneIds), int(0), "expected 1 as both the milestonesIDs has been removed in previous step")
 	require.Equal(t, s.milestone.Locked, false, "expected false")
 
-	s.Lock(11)
-	s.Unlock(true, "milestoneID3", common.Hash{})
+	s.LockMutex(11)
+	s.UnlockMutex(true, "milestoneID3", common.Hash{})
 	require.True(t, s.milestone.Locked, "expected true")
 	require.Equal(t, s.milestone.LockedSprintNumber, uint64(11), "Expected 11")
 
-	s.Lock(15)
+	s.LockMutex(15)
 	require.False(t, s.milestone.Locked, "expected false as till now final confirmation regarding the lock hasn't been made")
 	require.Equal(t, s.milestone.LockedSprintNumber, uint64(15), "Expected 15")
-	s.Unlock(true, "milestoneID4", common.Hash{})
+	s.UnlockMutex(true, "milestoneID4", common.Hash{})
 	require.True(t, s.milestone.Locked, "expected true as final confirmation regarding the lock has been made")
 
 	//Adding the milestone
@@ -119,8 +119,8 @@ func TestMilestone(t *testing.T) {
 	require.Equal(t, len(s.milestone.LockedMilestoneIds), int(1), "expected 1 as still last milestone of sprint number 15 exist")
 
 	//Asking the lock for sprintNumber less than last whitelisted milestone
-	require.False(t, s.Lock(11), "Cant lock the sprintNumber less than equal to latest whitelisted milestone")
-	s.Unlock(false, "", common.Hash{}) //Unlock is required after every lock to release the mutex
+	require.False(t, s.LockMutex(11), "Cant lock the sprintNumber less than equal to latest whitelisted milestone")
+	s.UnlockMutex(false, "", common.Hash{}) //Unlock is required after every lock to release the mutex
 
 	//Adding the milestone
 	s.ProcessMilestone(51, common.Hash{})
@@ -373,29 +373,29 @@ func TestIsValidChain(t *testing.T) {
 	//At this stage there is no whitelisted milestone and checkpoint
 
 	//Locking for sprintNumber 15
-	s.Lock(chainA[len(chainA)-5].Number.Uint64())
-	s.Unlock(true, "MilestoneID1", chainA[len(chainA)-5].Hash())
+	s.LockMutex(chainA[len(chainA)-5].Number.Uint64())
+	s.UnlockMutex(true, "MilestoneID1", chainA[len(chainA)-5].Hash())
 
 	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
 	require.Equal(t, res, true, "expected chain to be valid as incoming chain matches with the locked value ")
 
 	hash3 := common.Hash{3}
-	s.Lock(chainA[len(chainA)-4].Number.Uint64())
-	s.Unlock(true, "MilestoneID2", hash3)
+	s.LockMutex(chainA[len(chainA)-4].Number.Uint64())
+	s.UnlockMutex(true, "MilestoneID2", hash3)
 
 	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
 	require.Equal(t, res, false, "expected chain to be invalid as incoming chain does match with the locked value hash ")
 
 	//Locking for sprintNumber 19
-	s.Lock(chainA[len(chainA)-1].Number.Uint64())
-	s.Unlock(true, "MilestoneID1", chainA[len(chainA)-1].Hash())
+	s.LockMutex(chainA[len(chainA)-1].Number.Uint64())
+	s.UnlockMutex(true, "MilestoneID1", chainA[len(chainA)-1].Hash())
 
 	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
 	require.Equal(t, res, false, "expected chain to be invalid as incoming chain is less than the locked value ")
 
 	//Locking for sprintNumber 19
-	s.Lock(uint64(21))
-	s.Unlock(true, "MilestoneID1", hash3)
+	s.LockMutex(uint64(21))
+	s.UnlockMutex(true, "MilestoneID1", hash3)
 
 	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
 	require.Equal(t, res, false, "expected chain to be invalid as incoming chain is less than the locked value ")
