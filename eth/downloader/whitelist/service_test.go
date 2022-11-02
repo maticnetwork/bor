@@ -70,6 +70,7 @@ func TestMilestone(t *testing.T) {
 
 	s := NewMockService()
 
+	//Checking for the varaibles when no milestone is Processed
 	require.Equal(t, s.milestone.doExist, false, "expected false as no milestone exist at this point")
 	require.Equal(t, s.milestone.Locked, false, "expected false as it was not locked")
 	require.Equal(t, s.milestone.LockedSprintNumber, uint64(0), "expected 0 as it was not initialized")
@@ -332,22 +333,23 @@ func TestIsValidChain(t *testing.T) {
 	s := NewMockService()
 	chainA := createMockChain(1, 20) // A1->A2...A19->A20
 
-	// case1: no checkpoint whitelist and no milestone, should consider the chain as valid
+	//Case1: no checkpoint whitelist and no milestone and no locking, should consider the chain as valid
 	res := s.IsValidChain(nil, chainA)
-	require.Equal(t, res, true, "expected chain to be valid")
+	require.Equal(t, res, true, "Expected chain to be valid")
 
 	tempChain := createMockChain(21, 22) // A21->A22
 
 	// add mock checkpoint entry
 	s.ProcessCheckpoint(tempChain[1].Number.Uint64(), tempChain[1].Hash())
 
+	//Make the mock chain with zero blocks
 	zeroChain := make([]*types.Header, 0)
 
-	//case2: As input chain is of zero length,should consider the chain as invalid
+	//Case2: As input chain is of zero length,should consider the chain as invalid
 	res = s.IsValidChain(nil, zeroChain)
 	require.Equal(t, res, false, "expected chain to be invalid", len(zeroChain))
 
-	// case3: As the received chain is behind the oldest whitelisted block entry, should consider
+	//Case3: As the received chain is behind the oldest whitelisted block entry, should consider
 	// the chain as invalid as we won't require the chain.
 	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
 	require.Equal(t, res, false, "expected chain to be invalid")
@@ -355,15 +357,16 @@ func TestIsValidChain(t *testing.T) {
 	// add mock milestone entry
 	s.ProcessMilestone(tempChain[1].Number.Uint64(), tempChain[1].Hash())
 
-	//require.Equal(t, s.milestone.length(), 2, "expected 2 items in milestoneList")
-
-	// case3: As the received chain is behind the oldest whitelisted block entry, should consider
+	//Case4: As the received chain is behind the oldest whitelisted block entry, should consider
 	// the chain as invalid as we won't require the chain.
 	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
 	require.Equal(t, res, false, "expected chain to be invalid")
 
 	//Remove the whitelisted checkpoint
 	s.PurgeWhitelistedCheckpoint()
+
+	//Case5: As the received chain is still invalid after removing the checkpoint as it is
+	//still behind the whitelisted milestone
 	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
 	require.Equal(t, res, false, "expected chain to be invalid")
 
@@ -376,10 +379,13 @@ func TestIsValidChain(t *testing.T) {
 	s.LockMutex(chainA[len(chainA)-5].Number.Uint64())
 	s.UnlockMutex(true, "MilestoneID1", chainA[len(chainA)-5].Hash())
 
+	//Case6: As the received chain is valid as the locked sprintHash matches with the incoming chain.
 	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
 	require.Equal(t, res, true, "expected chain to be valid as incoming chain matches with the locked value ")
 
 	hash3 := common.Hash{3}
+
+	//Locking for sprintNumber 16 with differnt hash
 	s.LockMutex(chainA[len(chainA)-4].Number.Uint64())
 	s.UnlockMutex(true, "MilestoneID2", hash3)
 
@@ -390,6 +396,7 @@ func TestIsValidChain(t *testing.T) {
 	s.LockMutex(chainA[len(chainA)-1].Number.Uint64())
 	s.UnlockMutex(true, "MilestoneID1", chainA[len(chainA)-1].Hash())
 
+	//Case7: As the received chain is valid as the locked sprintHash matches with the incoming chain.
 	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
 	require.Equal(t, res, false, "expected chain to be invalid as incoming chain is less than the locked value ")
 
@@ -397,6 +404,7 @@ func TestIsValidChain(t *testing.T) {
 	s.LockMutex(uint64(21))
 	s.UnlockMutex(true, "MilestoneID1", hash3)
 
+	//Case8: As the received chain is invalid as the locked sprintHash matches is ahead of incoming chain.
 	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
 	require.Equal(t, res, false, "expected chain to be invalid as incoming chain is less than the locked value ")
 
@@ -409,14 +417,14 @@ func TestIsValidChain(t *testing.T) {
 
 	require.Equal(t, s.checkpoint.doExist, true, "expected true as checkpoint exists.")
 
-	// case4: As the received chain is having valid checkpoint,should consider the chain as valid.
+	// case9: As the received chain is having valid checkpoint,should consider the chain as valid.
 	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
 	require.Equal(t, res, true, "expected chain to be valid")
 
 	// add mock milestone entries
 	s.ProcessMilestone(tempChain[1].Number.Uint64(), tempChain[1].Hash())
 
-	// case5: Try importing a past chain having valid checkpoint, should
+	// case10: Try importing a past chain having valid checkpoint, should
 	// consider the chain as invalid as still lastest milestone is ahead of the chain.
 	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
 	require.Equal(t, res, false, "expected chain to be invalid")
@@ -424,7 +432,7 @@ func TestIsValidChain(t *testing.T) {
 	// add mock milestone entries
 	s.ProcessMilestone(chainA[19].Number.Uint64(), chainA[19].Hash())
 
-	// case6: Try importing a past chain having valid checkpoint and milestone, should
+	// case12: Try importing a past chain having valid checkpoint and milestone, should
 	// consider the chain as valid
 	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
 	require.Equal(t, res, true, "expected chain to be invalid")
@@ -432,23 +440,23 @@ func TestIsValidChain(t *testing.T) {
 	// add mock milestone entries
 	s.ProcessMilestone(chainA[19].Number.Uint64(), chainA[19].Hash())
 
-	// case7: Try importing a past chain having valid checkpoint and milestone, should
+	// case13: Try importing a past chain having valid checkpoint and milestone, should
 	// consider the chain as valid
 	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
-	require.Equal(t, res, true, "expected chain to be invalid")
+	require.Equal(t, res, true, "expected chain to be valid")
 
 	// add mock milestone entries with wrong hash
 	s.ProcessMilestone(chainA[19].Number.Uint64(), chainA[18].Hash())
 
-	// case8: Try importing a past chain having valid checkpoint and milestone with wrong hash, should
+	// case14: Try importing a past chain having valid checkpoint and milestone with wrong hash, should
 	// consider the chain as invalid
 	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
-	require.Equal(t, res, false, "expected chain to be invalid as hash is wrong")
+	require.Equal(t, res, false, "expected chain to be invalid as hash mismatches")
 
 	// Clear milestone and add blocks A15 in whitelist
 	s.ProcessMilestone(chainA[15].Number.Uint64(), chainA[15].Hash())
 
-	// case8: Try importing a past chain having valid checkpoint, should
+	// case16: Try importing a past chain having valid checkpoint, should
 	// consider the chain as valid
 	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
 	require.Equal(t, res, true, "expected chain to be valid")
@@ -461,25 +469,25 @@ func TestIsValidChain(t *testing.T) {
 
 	require.Equal(t, s.checkpoint.doExist, true, "expected true")
 
-	// case9: Try importing a past chain having invalid checkpoint,should consider the chain as invalid
+	// case17: Try importing a past chain having invalid checkpoint,should consider the chain as invalid
 	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
 	require.Equal(t, res, false, "expected chain to be invalid")
 
-	// case10: Try importing a future chain but within interval, should consider the chain as valid
+	// case18: Try importing a future chain but within interval, should consider the chain as valid
 	res = s.IsValidChain(tempChain[len(tempChain)-1], tempChain)
 	require.Equal(t, res, true, "expected chain to be invalid")
 
 	// create a future chain to be imported of length <= `checkpointInterval`
 	chainB := createMockChain(21, 30) // B21->B22...B29->B30
 
-	// case11: Try importing a future chain of acceptable length,should consider the chain as valid
+	// case19: Try importing a future chain of acceptable length,should consider the chain as valid
 	res = s.IsValidChain(chainA[len(chainA)-1], chainB)
 	require.Equal(t, res, true, "expected chain to be valid")
 
 	// create a future chain to be imported of length > `checkpointInterval`x
 	chainB = createMockChain(21, 300) // C21->C22...C39->C40...C->256
 
-	// case12: Try importing a future chain of unacceptable length,should consider the chain as invalid
+	// case20: Try importing a future chain of unacceptable length,should consider the chain as invalid
 	res = s.IsValidChain(chainA[len(chainA)-1], chainB)
 	require.Equal(t, res, false, "expected chain to be invalid")
 }

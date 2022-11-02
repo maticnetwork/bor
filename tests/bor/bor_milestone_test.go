@@ -1,3 +1,5 @@
+//go:build integration
+
 package bor
 
 import (
@@ -68,10 +70,10 @@ func TestMiningAfterLocking(t *testing.T) {
 
 	for {
 
-		// for block 1 to 8, the primary validator is node0
-		// for block 9 to 16, the primary validator is node1
-		// for block 17 to 24, the primary validator is node0
-		// for block 25 to 32, the primary validator is node1
+		// for block 0 to 7, the primary validator is node0
+		// for block 8 to 15, the primary validator is node1
+		// for block 16 to 23, the primary validator is node0
+		// for block 24 to 31, the primary validator is node1
 		blockHeaderVal0 := nodes[0].BlockChain().CurrentHeader()
 		blockHeaderVal1 := nodes[1].BlockChain().CurrentHeader()
 
@@ -169,10 +171,10 @@ func TestReorgingAfterLockingSprint(t *testing.T) {
 
 	for {
 
-		// for block 1 to 8, the primary validator is node0
-		// for block 9 to 16, the primary validator is node1
-		// for block 17 to 24, the primary validator is node0
-		// for block 25 to 32, the primary validator is node1
+		// for block 0 to 7, the primary validator is node0
+		// for block 8 to 15, the primary validator is node1
+		// for block 16 to 23, the primary validator is node0
+		// for block 24 to 31, the primary validator is node1
 		blockHeaderVal0 := nodes[0].BlockChain().CurrentHeader()
 
 		//Disconnect the peers at block 9
@@ -198,7 +200,7 @@ func TestReorgingAfterLockingSprint(t *testing.T) {
 
 		authorVal0, err := nodes[0].Engine().Author(blockHeaderVal0)
 
-		//Node 0 has received the block from node 1
+		//This will be true only when Node 0 has received the block from node 1 after 12th block.
 		if err == nil && blockHeaderVal0.Number.Uint64() > 12 && authorVal0 == nodes[1].AccountManager().Accounts()[0] {
 			break
 		}
@@ -283,10 +285,10 @@ func TestReorgingAfterWhitelisting(t *testing.T) {
 
 	for {
 
-		// for block 1 to 8, the primary validator is node0
-		// for block 9 to 16, the primary validator is node1
-		// for block 17 to 24, the primary validator is node0
-		// for block 25 to 32, the primary validator is node1
+		// for block 0 to 7, the primary validator is node0
+		// for block 8 to 15, the primary validator is node1
+		// for block 16 to 23, the primary validator is node0
+		// for block 24 to 31, the primary validator is node1
 		blockHeaderVal0 := nodes[0].BlockChain().CurrentHeader()
 
 		//Disconnect the peers at block 9
@@ -317,7 +319,7 @@ func TestReorgingAfterWhitelisting(t *testing.T) {
 
 		authorVal0, err := nodes[0].Engine().Author(blockHeaderVal0)
 
-		//Node 0 has received the block from node 1
+		//This condition is true when Node 0 has received the block from node 1 after block 12
 		if err == nil && blockHeaderVal0.Number.Uint64() > 12 && authorVal0 == nodes[1].AccountManager().Accounts()[0] {
 			break
 		}
@@ -395,10 +397,10 @@ func TestPeerConnectionAfterWhitelisting(t *testing.T) {
 
 	for {
 
-		// for block 1 to 8, the primary validator is node0
-		// for block 9 to 16, the primary validator is node1
-		// for block 17 to 24, the primary validator is node0
-		// for block 25 to 32, the primary validator is node1
+		// for block 0 to 7, the primary validator is node0
+		// for block 8 to 15, the primary validator is node1
+		// for block 16 to 23, the primary validator is node0
+		// for block 24 to 31, the primary validator is node1
 		blockHeaderVal0 := nodes[0].BlockChain().CurrentHeader()
 		blockHeaderVal1 := nodes[1].BlockChain().CurrentHeader()
 
@@ -1011,19 +1013,19 @@ func TestNonMinerNodeWithTryToLock(t *testing.T) {
 		blockHeaderVal0 := nodes[0].BlockChain().CurrentHeader()
 		blockHeaderVal1 := nodes[1].BlockChain().CurrentHeader()
 
-		//Whitelisting milestone
+		//Asking for the vote
 		if blockHeaderVal1.Number.Uint64() == 7 {
 			blockHash := blockHeaderVal1.Hash()
 			nodes[1].APIBackend.GetVoteOnRootHash(nil, 0, 7, "0x"+blockHash.String(), "MilestoneID1")
 		}
 
-		//Whitelisting milestone
+		//Asking for the vote
 		if blockHeaderVal1.Number.Uint64() == 15 {
 			blockHash := blockHeaderVal1.Hash()
 			nodes[1].APIBackend.GetVoteOnRootHash(nil, 0, 7, "0x"+blockHash.String(), "MilestoneID2")
 		}
 
-		//Whitelisting milestone
+		//Asking for the vote
 		if blockHeaderVal1.Number.Uint64() == 23 {
 			blockHash := blockHeaderVal1.Hash()
 			nodes[1].APIBackend.GetVoteOnRootHash(nil, 0, 7, "0x"+blockHash.String(), "MilestoneID3")

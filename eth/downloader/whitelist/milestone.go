@@ -82,13 +82,13 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 	defer m.m.Unlock()
 
 	if m.Locked && !m.IsReorgAllowed(chain) {
-		log.Warn("Sprint is locked")
 		return false
 	}
 
 	// Check if we have milestone to validate incoming chain in memory
 	if !m.doExist {
 		// We don't have any entry, no additional validation will be possible
+		return true
 	}
 
 	lastMilestoneBlockNum := m.milestoneNumber
@@ -112,7 +112,6 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 
 	// Don't accept future chain of unacceptable length (from current block)
 	if len(futureChain)+offset > int(m.interval) {
-		log.Warn("test failed", "hash", m.milestoneHash)
 		return false
 	}
 
@@ -120,11 +119,10 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 	// It will handle all cases when the incoming chain has atleast one milestone
 	for i := len(pastChain) - 1; i >= 0; i-- {
 		if pastChain[i].Number.Uint64() == m.milestoneNumber {
-			log.Warn("test", "hash", m.milestoneHash)
 			return pastChain[i].Hash() == m.milestoneHash
 		}
 	}
-	log.Warn("Passed the test", "hash", m.milestoneHash)
+
 	return true
 }
 
@@ -136,7 +134,6 @@ func (m *milestone) ProcessMilestone(endBlockNum uint64, endBlockHash common.Has
 	m.milestoneNumber = endBlockNum
 	m.milestoneHash = endBlockHash
 	m.UnlockSprint(endBlockNum)
-
 }
 
 // GetMilestone returns the existing whitelisted
@@ -156,6 +153,7 @@ func (m *milestone) PurgeWhitelistedMilestone() {
 	m.doExist = false
 }
 
+// This function will Lock the mutex at the time of voting
 func (m *milestone) LockMutex(endBlockNum uint64) bool {
 	m.m.Lock()
 
@@ -180,6 +178,7 @@ func (m *milestone) LockMutex(endBlockNum uint64) bool {
 	return true
 }
 
+// This function will unlock the mutex locked in LockMutex
 func (m *milestone) UnlockMutex(doLock bool, milestoneId string, endBlockHash common.Hash) {
 	m.Locked = m.Locked || doLock
 
@@ -191,19 +190,19 @@ func (m *milestone) UnlockMutex(doLock bool, milestoneId string, endBlockHash co
 	m.m.Unlock()
 }
 
+// This function will unlock the locked sprint
 func (m *milestone) UnlockSprint(endBlockNum uint64) {
 
 	if endBlockNum < m.LockedSprintNumber {
 		return
 	}
 	m.Locked = false
-	m.PurgeMilestoneIDsList()
-
+	m.purgeMilestoneIDsList()
 }
 
+// This function will remove the stored milestoneID
 func (m *milestone) RemoveMilestoneID(milestoneId string) {
 	m.m.Lock()
-	log.Warn("Removing the MilestoneID") // Just for testing
 
 	delete(m.LockedMilestoneIds, milestoneId)
 
@@ -213,6 +212,7 @@ func (m *milestone) RemoveMilestoneID(milestoneId string) {
 	m.m.Unlock()
 }
 
+// This will check whether the incoming chain matches the locked sprint hash
 func (m *milestone) IsReorgAllowed(chain []*types.Header) bool {
 
 	if chain[len(chain)-1].Number.Uint64() <= m.LockedSprintNumber { //Can't reorg if the end block of incoming
@@ -226,11 +226,10 @@ func (m *milestone) IsReorgAllowed(chain []*types.Header) bool {
 		}
 	}
 
-	log.Warn("Here at 229")
-
 	return true
 }
 
+// This will return the list of milestoneIDs stored.
 func (m *milestone) GetMilestoneIDsList() []string {
 
 	keys := []string{}
@@ -241,7 +240,8 @@ func (m *milestone) GetMilestoneIDsList() []string {
 
 }
 
-func (m *milestone) PurgeMilestoneIDsList() {
+// This is remove the milestoneIDs stored in the list.
+func (m *milestone) purgeMilestoneIDsList() {
 
 	for k := range m.LockedMilestoneIds {
 		delete(m.LockedMilestoneIds, k)
