@@ -292,6 +292,30 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 
 	deps, delayMap := GetDeps(block.Header().TxDependency)
 
+	weights := make([]int, len(block.Transactions()))
+
+	longest := 0
+
+	for i := 0; i <= len(block.Transactions())-1; i++ {
+		weights[i] = 1
+		for _, dep := range deps[i] {
+			if weights[dep]+1 > weights[i] {
+				weights[i] = weights[dep] + 1
+			}
+
+			if weights[i] > longest {
+				longest = weights[i]
+			}
+		}
+	}
+
+	for _, j := range delayMap {
+		if !j || (float64(longest)/float64(len(block.Transactions())) > 0.7) {
+			pSeral := NewStateProcessor(p.config, p.bc, p.engine)
+			return pSeral.Process(block, statedb, cfg)
+		}
+	}
+
 	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
 		msg, err := tx.AsMessage(types.MakeSigner(p.config, header.Number), header.BaseFee)
