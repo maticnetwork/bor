@@ -745,14 +745,6 @@ func (s *Ethereum) startNoAckMilestoneService() {
 		log.Warn("unable to start the no-ack-milestone service - first run", "err", err)
 	}
 
-	if err != nil {
-		if errors.Is(err, ErrBorConsensusWithoutHeimdall) || errors.Is(err, ErrNotBorConsensus) {
-			return
-		}
-
-		log.Warn("unable to start the no-ack-milestone service - first run", "err", err)
-	}
-
 	ticker := time.NewTicker(4 * time.Second)
 	defer ticker.Stop()
 

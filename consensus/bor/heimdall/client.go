@@ -276,7 +276,7 @@ retryLoop:
 
 				continue retryLoop
 			}
-			log.Error("Result of fetching", "Result", result)
+
 			return result, nil
 		}
 	}
