@@ -64,14 +64,12 @@ func (b *EthAPIBackend) GetVoteOnRootHash(ctx context.Context, starBlockNr uint6
 	isLocked := downloader.LockMutex(endBlockNr)
 
 	if !isLocked {
-		log.Warn("In the GetRootHash-Unlocking the mutex")
 		downloader.UnlockMutex(false, "", common.Hash{})
 
 		return false, errors.New("Previous sprint is still in locked state")
 	}
 
 	if localRootHash != rootHash[2:] {
-		log.Warn("In the GetRootHash-Unlocking the mutex")
 		downloader.UnlockMutex(false, "", common.Hash{})
 
 		return false, errors.New("RootHash mismatch+" + localRootHash + rootHash)
@@ -79,7 +77,7 @@ func (b *EthAPIBackend) GetVoteOnRootHash(ctx context.Context, starBlockNr uint6
 
 	endBlock := b.eth.blockchain.GetBlockByNumber(endBlockNr)
 	endBlockHash := endBlock.Hash()
-	log.Warn("In the GetRootHash-Unlocking the mutex")
+
 	downloader.UnlockMutex(true, milestoneId, endBlockHash)
 
 	return true, nil

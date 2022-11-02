@@ -84,13 +84,14 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 	defer m.m.Unlock()
 
 	if m.Locked && !m.IsReorgAllowed(chain) {
-		log.Warn("Sprint is locked")
+		log.Warn("Sprint is locked so could not allow the Reorg")
 		return false
 	}
 
 	// Check if we have milestone to validate incoming chain in memory
 	if !m.doExist {
 		// We don't have any entry, no additional validation will be possible
+		return true
 	}
 
 	lastMilestoneBlockNum := m.milestoneNumber
@@ -122,7 +123,7 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 	// It will handle all cases when the incoming chain has atleast one milestone
 	for i := len(pastChain) - 1; i >= 0; i-- {
 		if pastChain[i].Number.Uint64() == m.milestoneNumber {
-			log.Warn("test", "hash", m.milestoneHash)
+			log.Warn("In Chain valid", "hash", m.milestoneHash)
 			return pastChain[i].Hash() == m.milestoneHash
 		}
 	}
@@ -134,7 +135,7 @@ func (m *milestone) ProcessMilestone(endBlockNum uint64, endBlockHash common.Has
 	m.m.Lock()
 	defer m.m.Unlock()
 
-	log.Warn("Processing Milestone-", "endBlockNum", endBlockNum)
+	log.Warn("Processing Milestone", "endBlockNum", endBlockNum, "endBlockHash", endBlockHash)
 
 	m.doExist = true
 	m.milestoneNumber = endBlockNum
@@ -163,6 +164,7 @@ func (m *milestone) PurgeWhitelistedMilestone() {
 func (m *milestone) LockMutex(endBlockNum uint64) bool {
 	m.m.Lock()
 
+	log.Warn("In lockMutex function ")
 	if m.doExist && endBlockNum <= m.milestoneNumber { //if endNum is less than whitelisted milestone, then we won't lock the sprint
 		log.Warn("endBlockNum <= m.milestoneNumber")
 		return false
@@ -186,17 +188,11 @@ func (m *milestone) LockMutex(endBlockNum uint64) bool {
 
 func (m *milestone) UnlockMutex(doLock bool, milestoneId string, endBlockHash common.Hash) {
 	m.Locked = m.Locked || doLock
-	log.Warn("In Unlock ")
-	for key, _ := range m.LockedMilestoneIds { //Just for testing purpose, need to remove this.
-		log.Warn("Unlocking mutex before ", "key", key) // Need to remove this afterward
-	}
+	log.Warn("In UnlockMutex function")
 
 	if doLock {
 		m.LockedSprintHash = endBlockHash
 		m.LockedMilestoneIds[milestoneId] = true
-	}
-	for key, _ := range m.LockedMilestoneIds { // Just for testing purpose
-		log.Warn("Unlocking mutex after ", "key", key) //  Need to remove this afterward
 	}
 
 	m.m.Unlock()
@@ -207,31 +203,20 @@ func (m *milestone) UnlockSprint(endBlockNum uint64) {
 	if endBlockNum < m.LockedSprintNumber {
 		return
 	}
-	for key, _ := range m.LockedMilestoneIds { //Just for testing purpose, need to remove this.
-		log.Warn("Unlocking sprint before ", "key", key) // Need to remove this afterward
-	} //
 
-	chain := m.createMockChain(endBlockNum-64+1, endBlockNum)
-	val := m.MockIsValidChain(nil, chain)
-	if val != false {
-		log.Warn("Expected false in 1st experiment")
-	}
-
-	chain = m.createMockChain(endBlockNum-64+1, endBlockNum*2)
-	val = m.MockIsValidChain(nil, chain)
-
-	if val != false {
-		log.Warn("Expected false in 2nd experiment")
-	}
+	log.Warn("Unlocking the Sprint")                                                           // Need to remove this afterward
+	log.Warn("Size of the milestoneList before unclocking", "size", len(m.LockedMilestoneIds)) // Need to remove this afterward
 
 	m.Locked = false
 	m.PurgeMilestoneIDsList()
+
+	log.Warn("Size of the milestoneList after unclocking", "size", len(m.LockedMilestoneIds)) // Need to remove this afterward
 
 }
 
 func (m *milestone) RemoveMilestoneID(milestoneId string) {
 	m.m.Lock()
-	log.Warn("Removing the MilestoneID  gog gogoooog", "MilestoneID", milestoneId) // Just for testing
+	log.Warn("Removing the MilestoneID from the milestone list", "MilestoneID", milestoneId) // Just for testing
 
 	delete(m.LockedMilestoneIds, milestoneId)
 
@@ -253,8 +238,6 @@ func (m *milestone) IsReorgAllowed(chain []*types.Header) bool {
 
 		}
 	}
-
-	log.Warn("Here at 229")
 
 	return true
 }
@@ -296,60 +279,4 @@ func (m *milestone) createMockChain(start, end uint64) []*types.Header {
 	}
 
 	return chain
-}
-
-func (m *milestone) MockIsValidChain(currentHeader *types.Header, chain []*types.Header) bool {
-
-	// Return if we've received empty chain
-	if len(chain) == 0 {
-		return false
-	}
-
-	if m.Locked && !m.IsReorgAllowed(chain) {
-		log.Warn("MockMockMockMock Sprint is locked")
-		return false
-	}
-
-	// // Check if we have milestone to validate incoming chain in memory
-	// if !m.doExist {
-	// 	// We don't have any entry, no additional validation will be possible
-	// 	return true
-	// }
-
-	// lastMilestoneBlockNum := m.milestoneNumber
-	// current := currentHeader.Number.Uint64()
-
-	// // Check if we have milestoneList entries in required range
-	// if chain[len(chain)-1].Number.Uint64() < lastMilestoneBlockNum {
-	// 	// We have future milestone entries, so we don't need to receive the past chain
-
-	// 	return false
-	// }
-
-	// // Split the chain into past and future chain
-	// pastChain, futureChain := splitChain(current, chain)
-
-	// // Add an offset to future chain if it's not in continuity
-	// offset := 0
-	// if len(futureChain) != 0 {
-	// 	offset += int(futureChain[0].Number.Uint64()-currentHeader.Number.Uint64()) - 1
-	// }
-
-	// // Don't accept future chain of unacceptable length (from current block)
-	// if len(futureChain)+offset > int(m.interval) {
-	// 	log.Warn("MockMockMockMockMock test failed", "hash", m.milestoneHash)
-	// 	return false
-	// }
-
-	// // Iterate over the chain and validate against the last milestone
-	// // It will handle all cases when the incoming chain has atleast one milestone
-	// for i := len(pastChain) - 1; i >= 0; i-- {
-	// 	if pastChain[i].Number.Uint64() == m.milestoneNumber {
-	// 		log.Warn("MockMockMockMock test", "hash", m.milestoneHash)
-	// 		return pastChain[i].Hash() == m.milestoneHash
-	// 	}
-	// }
-	// log.Warn("MockMockMockMock Passed the test", "hash", m.milestoneHash)
-	// return true
-	return true
 }
