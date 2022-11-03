@@ -430,7 +430,7 @@ func (tx *Transaction) EffectiveGasTipUnit(baseFee *uint256.Int) (*uint256.Int, 
 
 	var err error
 
-	gasFeeCap := tx.GasFeeCapUint()
+	gasFeeCap := tx.GasFeeCapUint().Clone()
 
 	if gasFeeCap.Lt(baseFee) {
 		err = ErrGasFeeCapTooLow
@@ -454,11 +454,7 @@ func (tx *Transaction) EffectiveGasTipUnit(baseFee *uint256.Int) (*uint256.Int, 
 		return gasTipCapUint, err
 	}
 
-	gasFeeCapWithoudBaseFee := gasFeeCap.Clone()
-
-	gasFeeCap.Add(gasFeeCap, baseFee)
-
-	return gasFeeCapWithoudBaseFee, err
+	return gasFeeCap, err
 }
 
 // Hash returns the transaction hash.

@@ -364,11 +364,11 @@ func testTransactionPriceNonceSort(t *testing.T, baseFeeBig *big.Int) {
 			nextTipBig, _ := next.EffectiveGasTip(baseFeeBig)
 
 			if tip.Cmp(cmath.FromBig(tipBig)) != 0 {
-				t.Fatalf("EffectiveGasTip incorrect. uint256 %q, big.Int %q", tip.String(), tipBig.String())
+				t.Fatalf("EffectiveGasTip incorrect. uint256 %q, big.Int %q, baseFee %q, baseFeeBig %q", tip.String(), tipBig.String(), baseFee.String(), baseFeeBig.String())
 			}
 
 			if nextTip.Cmp(cmath.FromBig(nextTipBig)) != 0 {
-				t.Fatalf("EffectiveGasTip next incorrect. uint256 %q, big.Int %q", nextTip.String(), nextTipBig.String())
+				t.Fatalf("EffectiveGasTip next incorrect. uint256 %q, big.Int %q, baseFee %q, baseFeeBig %q", nextTip.String(), nextTipBig.String(), baseFee.String(), baseFeeBig.String())
 			}
 
 			if err != nil || nextErr != nil {

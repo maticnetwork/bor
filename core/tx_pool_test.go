@@ -3804,7 +3804,7 @@ func TestPoolMiningDataRaces(t *testing.T) {
 				}
 			}
 
-			const timeoutDuration = time.Second
+			const timeoutDuration = 10 * time.Second
 
 			t.Log("starting goroutines")
 
@@ -4056,7 +4056,11 @@ func runWithTimeout(t *testing.T, fn func(chan struct{}), outerDone chan struct{
 
 	select {
 	case <-timeout.C:
-		defer close(outerDone)
+		select {
+		case <-outerDone:
+			close(outerDone)
+		default:
+		}
 		t.Fatalf("%s timeouted", name)
 	case <-doneCh:
 	}
