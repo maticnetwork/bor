@@ -762,7 +762,7 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	if err != nil {
 		return ErrInvalidSender
 	}
-	
+
 	// Drop non-local transactions under our own minimal accepted gas price or tip
 	pool.gasPriceMu.RLock()
 
