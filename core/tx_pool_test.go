@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"github.com/holiman/uint256"
+	"go.uber.org/goleak"
 	"gonum.org/v1/gonum/floats"
 	"gonum.org/v1/gonum/stat"
 	"pgregory.net/rapid"
@@ -3725,6 +3726,8 @@ func TestPoolMiningDataRaces(t *testing.T) {
 		singleCase := testCase
 
 		t.Run(singleCase.name, func(t *testing.T) {
+			defer goleak.VerifyNone(t)
+
 			done := make(chan struct{})
 			defer close(done)
 
@@ -3804,7 +3807,7 @@ func TestPoolMiningDataRaces(t *testing.T) {
 				}
 			}
 
-			const timeoutDuration = 10 * time.Second
+			const timeoutDuration = 3 * time.Second
 
 			t.Log("starting goroutines")
 
