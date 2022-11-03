@@ -3855,6 +3855,9 @@ func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase
 
 	// locals
 	go func() {
+		tb.Log("starting AddLocal(s)")
+		defer tb.Log("stop AddLocal(s)")
+
 		for _, batch := range batchesLocal {
 			if rand.Int()%2 == 0 {
 				runWithTimeout(tb, func(_ chan struct{}) {
@@ -3882,6 +3885,9 @@ func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase
 
 	// remotes
 	go func() {
+		tb.Log("starting AddRemotes")
+		defer tb.Log("stop AddRemotes")
+
 		for _, batch := range batchesRemotes {
 			runWithTimeout(tb, func(_ chan struct{}) {
 				errs := pool.AddRemotes(batch)
@@ -3896,6 +3902,9 @@ func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase
 
 	// remote
 	go func() {
+		tb.Log("starting AddRemote")
+		defer tb.Log("stop AddRemote")
+
 		for _, batch := range batchesRemote {
 			for _, tx := range batch {
 				runWithTimeout(tb, func(_ chan struct{}) {
@@ -3915,6 +3924,9 @@ func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase
 	// sync
 	// remotes
 	go func() {
+		tb.Log("starting AddRemotesSync")
+		defer tb.Log("stop AddRemotesSync")
+
 		for _, batch := range batchesRemotesSync {
 			runWithTimeout(tb, func(_ chan struct{}) {
 				errs := pool.AddRemotesSync(batch)
@@ -3929,6 +3941,9 @@ func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase
 
 	// remote
 	go func() {
+		tb.Log("starting AddRemoteSync")
+		defer tb.Log("stop AddRemoteSync")
+
 		for _, batch := range batchesRemoteSync {
 			for _, tx := range batch {
 				runWithTimeout(tb, func(_ chan struct{}) {
@@ -4111,7 +4126,7 @@ func runWithTimeout(tb testing.TB, fn func(chan struct{}), outerDone chan struct
 
 	select {
 	case <-timeout.C:
-		tb.Fatalf("%s timeouted", name)
+		tb.Errorf("%s timeouted", name)
 	case <-outerDone:
 	case <-doneCh:
 	}
