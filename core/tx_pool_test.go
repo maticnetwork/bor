@@ -3751,7 +3751,7 @@ func TestPoolMiningDataRaces(t *testing.T) {
 			signer := types.NewEIP155Signer(big.NewInt(1))
 			baseFee := uint256.NewInt(1)
 
-			const batchesSize = 1000
+			const batchesSize = 10_000
 
 			batchesLocal := make([]types.Transactions, batchesSize)
 			batchesRemote := make([]types.Transactions, batchesSize)
