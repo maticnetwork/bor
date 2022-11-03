@@ -326,6 +326,43 @@ func (m *txSortedMap) flatten() types.Transactions {
 	return m.cache
 }
 
+func (m *txSortedMap) lastElement() *types.Transaction {
+	// If the sorting was not cached yet, create and cache it
+	m.cacheMu.Lock()
+	defer m.cacheMu.Unlock()
+
+	if m.isEmpty {
+		m.isEmpty = false // to simulate sync.Once
+
+		m.cacheMu.Unlock()
+
+		m.m.RLock()
+		cache := make(types.Transactions, 0, len(m.items))
+
+		for _, tx := range m.items {
+			cache = append(cache, tx)
+		}
+
+		m.m.RUnlock()
+
+		// exclude sorting from locks
+		sort.Sort(types.TxByNonce(cache))
+
+		m.cacheMu.Lock()
+		m.cache = cache
+		// m.cacheMu.Unlock() - deferred
+
+		reinitCacheGauge.Inc(1)
+		missCacheCounter.Inc(1)
+	} else {
+		// m.cacheMu.Unlock() - deferred
+
+		hitCacheCounter.Inc(1)
+	}
+
+	return m.cache[len(m.cache)-1]
+}
+
 // Flatten creates a nonce-sorted slice of transactions based on the loosely
 // sorted internal representation. The result of the sorting is cached in case
 // it's requested again before any modifications are made to the contents.
@@ -337,8 +374,7 @@ func (m *txSortedMap) Flatten() types.Transactions {
 // LastElement returns the last element of a flattened list, thus, the
 // transaction with the highest nonce
 func (m *txSortedMap) LastElement() *types.Transaction {
-	cache := m.flatten()
-	return cache[len(cache)-1]
+	return m.lastElement()
 }
 
 // txList is a "list" of transactions belonging to an account, sorted by account
