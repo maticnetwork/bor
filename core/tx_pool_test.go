@@ -3697,15 +3697,13 @@ func mining(pool *TxPool, signer types.Signer, baseFee *uint256.Int) int {
 	return total
 }
 
-//nolint:gocognit,paralleltest
+//nolint:paralleltest
 func TestPoolMiningDataRaces(t *testing.T) {
 	if testing.Short() {
 		t.Skip("only for data race testing")
 	}
 
 	const format = "size %d"
-
-	const blocks = 300
 
 	cases := []struct {
 		name string
@@ -3728,310 +3726,324 @@ func TestPoolMiningDataRaces(t *testing.T) {
 		t.Run(singleCase.name, func(t *testing.T) {
 			defer goleak.VerifyNone(t)
 
-			done := make(chan struct{})
-			defer close(done)
+			const (
+				blocks          = 300
+				blockPeriod     = time.Second
+				threads         = 10
+				batchesSize     = 10_000
+				timeoutDuration = 3 * time.Second
+				tickerDuration  = 5 * time.Millisecond
 
-			// Generate a batch of transactions to enqueue into the pool
-			pendingAddedCh := make(chan struct{}, 1024)
-
-			pool, localKey := setupTxPoolWithConfig(params.TestChainConfig, testTxPoolConfig, txPoolGasLimit, MakeWithPromoteTxCh(pendingAddedCh))
-			defer pool.Stop()
-
-			localKeyPub := localKey.PublicKey
-			account := crypto.PubkeyToAddress(localKeyPub)
-
-			const balanceStr = "1_000_000_000"
-			balance, ok := big.NewInt(0).SetString(balanceStr, 0)
-			if !ok {
-				t.Fatal("incorrect initial balance", balanceStr)
-			}
-
-			testAddBalance(pool, account, balance)
-
-			signer := types.NewEIP155Signer(big.NewInt(1))
-			baseFee := uint256.NewInt(1)
-
-			const batchesSize = 10_000
-
-			batchesLocal := make([]types.Transactions, batchesSize)
-			batchesRemote := make([]types.Transactions, batchesSize)
-			batchesRemotes := make([]types.Transactions, batchesSize)
-			batchesRemoteSync := make([]types.Transactions, batchesSize)
-			batchesRemotesSync := make([]types.Transactions, batchesSize)
-
-			for i := 0; i < batchesSize; i++ {
-				batchesLocal[i] = make(types.Transactions, singleCase.size)
-
-				for j := 0; j < singleCase.size; j++ {
-					batchesLocal[i][j] = transaction(uint64(singleCase.size*i+j), 100_000, localKey)
-				}
-
-				batchesRemote[i] = make(types.Transactions, singleCase.size)
-
-				for j := 0; j < singleCase.size; j++ {
-					remoteKey, _ := crypto.GenerateKey()
-					remoteAddr := crypto.PubkeyToAddress(remoteKey.PublicKey)
-					testAddBalance(pool, remoteAddr, balance)
-
-					batchesRemote[i][j] = transaction(uint64(singleCase.size*i+j), 100_000, remoteKey)
-				}
-
-				batchesRemotes[i] = make(types.Transactions, singleCase.size)
-
-				for j := 0; j < singleCase.size; j++ {
-					remoteKey, _ := crypto.GenerateKey()
-					remoteAddr := crypto.PubkeyToAddress(remoteKey.PublicKey)
-					testAddBalance(pool, remoteAddr, balance)
-
-					batchesRemotes[i][j] = transaction(uint64(singleCase.size*i+j), 100_000, remoteKey)
-				}
-
-				batchesRemoteSync[i] = make(types.Transactions, singleCase.size)
-
-				for j := 0; j < singleCase.size; j++ {
-					remoteKey, _ := crypto.GenerateKey()
-					remoteAddr := crypto.PubkeyToAddress(remoteKey.PublicKey)
-					testAddBalance(pool, remoteAddr, balance)
-
-					batchesRemoteSync[i][j] = transaction(uint64(singleCase.size*i+j), 100_000, remoteKey)
-				}
-
-				batchesRemotesSync[i] = make(types.Transactions, singleCase.size)
-
-				for j := 0; j < singleCase.size; j++ {
-					remoteKey, _ := crypto.GenerateKey()
-					remoteAddr := crypto.PubkeyToAddress(remoteKey.PublicKey)
-					testAddBalance(pool, remoteAddr, balance)
-
-					batchesRemotesSync[i][j] = transaction(uint64(singleCase.size*i+j), 100_000, remoteKey)
-				}
-			}
-
-			const timeoutDuration = 3 * time.Second
-
-			t.Log("starting goroutines")
-
-			// locals
-			go func() {
-				for _, batch := range batchesLocal {
-					if rand.Int()%2 == 0 {
-						runWithTimeout(t, func(c chan struct{}) {
-							res := pool.AddLocals(batch)
-							fmt.Fprint(io.Discard, res)
-							close(c)
-						}, done, "AddLocals", timeoutDuration)
-					} else {
-						for _, tx := range batch {
-							runWithTimeout(t, func(c chan struct{}) {
-								res := pool.AddLocal(tx)
-								fmt.Fprint(io.Discard, res)
-								close(c)
-							}, done, "AddLocal", timeoutDuration)
-						}
-					}
-				}
-			}()
-
-			// remotes
-			go func() {
-				for _, batch := range batchesRemotes {
-					runWithTimeout(t, func(c chan struct{}) {
-						res := pool.AddRemotes(batch)
-						fmt.Fprint(io.Discard, res)
-						close(c)
-					}, done, "AddRemotes", timeoutDuration)
-				}
-			}()
-
-			// remote
-			go func() {
-				for _, batch := range batchesRemote {
-					for _, tx := range batch {
-						runWithTimeout(t, func(c chan struct{}) {
-							res := pool.AddRemote(tx)
-							fmt.Fprint(io.Discard, res)
-							close(c)
-						}, done, "AddRemote", timeoutDuration)
-					}
-				}
-			}()
-
-			// sync
-			// remotes
-			go func() {
-				for _, batch := range batchesRemotesSync {
-					runWithTimeout(t, func(c chan struct{}) {
-						res := pool.AddRemotesSync(batch)
-						fmt.Fprint(io.Discard, res)
-						close(c)
-					}, done, "AddRemotesSync", timeoutDuration)
-				}
-			}()
-
-			// remote
-			go func() {
-				for _, batch := range batchesRemoteSync {
-					for _, tx := range batch {
-						runWithTimeout(t, func(c chan struct{}) {
-							res := pool.AddRemoteSync(tx)
-							fmt.Fprint(io.Discard, res)
-							close(c)
-						}, done, "AddRemoteSync", timeoutDuration)
-					}
-				}
-			}()
-
-			// tx pool API
-			for i := 0; i < 5; i++ {
-				go func() {
-					runWithTicker(t, func(c chan struct{}) {
-						p := pool.Pending(context.Background(), false)
-						fmt.Fprint(io.Discard, p)
-						close(c)
-					}, done, "Pending-no-tips", timeoutDuration)
-				}()
-
-				go func() {
-					runWithTicker(t, func(c chan struct{}) {
-						p := pool.Pending(context.Background(), true)
-						fmt.Fprint(io.Discard, p)
-						close(c)
-					}, done, "Pending-with-tips", timeoutDuration)
-				}()
-
-				go func() {
-					runWithTicker(t, func(c chan struct{}) {
-						l := pool.Locals()
-						fmt.Fprint(io.Discard, l)
-						close(c)
-					}, done, "Locals", timeoutDuration)
-				}()
-
-				go func() {
-					runWithTicker(t, func(c chan struct{}) {
-						p, q := pool.Content()
-						fmt.Fprint(io.Discard, p, q)
-						close(c)
-					}, done, "Content", timeoutDuration)
-				}()
-
-				go func() {
-					runWithTicker(t, func(c chan struct{}) {
-						res := pool.GasPriceUint256()
-						fmt.Fprint(io.Discard, res)
-						close(c)
-					}, done, "GasPriceUint256", timeoutDuration)
-				}()
-
-				go func() {
-					runWithTicker(t, func(c chan struct{}) {
-						res := pool.GasPrice()
-						fmt.Fprint(io.Discard, res)
-						close(c)
-					}, done, "GasPrice", timeoutDuration)
-				}()
-
-				go func() {
-					runWithTicker(t, func(c chan struct{}) {
-						pool.SetGasPrice(pool.GasPrice())
-						close(c)
-					}, done, "SetGasPrice", timeoutDuration)
-				}()
-
-				go func() {
-					runWithTicker(t, func(c chan struct{}) {
-						p, q := pool.ContentFrom(account)
-						fmt.Fprint(io.Discard, p, q)
-						close(c)
-					}, done, "ContentFrom", timeoutDuration)
-				}()
-
-				go func() {
-					runWithTicker(t, func(c chan struct{}) {
-						res := pool.Has(batchesRemotes[0][0].Hash())
-						fmt.Fprint(io.Discard, res)
-						close(c)
-					}, done, "Has", timeoutDuration)
-				}()
-
-				go func() {
-					runWithTicker(t, func(c chan struct{}) {
-						tx := pool.Get(batchesRemotes[0][0].Hash())
-						fmt.Fprint(io.Discard, tx)
-						close(c)
-					}, done, "Get", timeoutDuration)
-				}()
-
-				go func() {
-					runWithTicker(t, func(c chan struct{}) {
-						res := pool.Nonce(account)
-						fmt.Fprint(io.Discard, res)
-						close(c)
-					}, done, "Nonce", timeoutDuration)
-				}()
-
-				go func() {
-					runWithTicker(t, func(c chan struct{}) {
-						p, q := pool.Stats()
-						fmt.Fprint(io.Discard, p, q)
-						close(c)
-					}, done, "Stats", timeoutDuration)
-				}()
-
-				go func() {
-					runWithTicker(t, func(c chan struct{}) {
-						st := pool.Status([]common.Hash{batchesRemotes[1][0].Hash()})
-						fmt.Fprint(io.Discard, st)
-						close(c)
-					}, done, "Status", timeoutDuration)
-				}()
-
-				go func() {
-					runWithTicker(t, func(c chan struct{}) {
-						ch := make(chan NewTxsEvent, 10)
-						sub := pool.SubscribeNewTxsEvent(ch)
-						res := <-ch
-						fmt.Fprint(io.Discard, res)
-						sub.Unsubscribe()
-						close(c)
-					}, done, "SubscribeNewTxsEvent", timeoutDuration)
-				}()
-			}
-
-			// wait for the start
-			t.Log("before the first propagated transaction")
-			<-pendingAddedCh
-			t.Log("after the first propagated transaction")
-
-			var (
-				totalTxs    int
-				totalBlocks int
+				balanceStr = "1_000_000_000"
 			)
 
-			blockTicker := time.NewTicker(time.Second)
-			defer blockTicker.Stop()
-
-			for range blockTicker.C {
-				totalTxs += mining(pool, signer, baseFee)
-
-				t.Log("block", totalBlocks, "transactions", totalTxs)
-
-				totalBlocks++
-
-				if totalBlocks > blocks {
-					fmt.Fprint(io.Discard, totalTxs)
-					return
-				}
-			}
+			apiWithMining(t, balanceStr, batchesSize, singleCase, timeoutDuration, threads, tickerDuration, blockPeriod, blocks)
 		})
 	}
 }
 
+//nolint:gocognit,thelper
+func apiWithMining(t *testing.T, balanceStr string, batchesSize int, singleCase struct {
+	name string
+	size int
+}, timeoutDuration time.Duration, threads int, tickerDuration time.Duration, blockPeriod time.Duration, blocks int) {
+	done := make(chan struct{})
+	defer close(done)
+
+	// Generate a batch of transactions to enqueue into the pool
+	pendingAddedCh := make(chan struct{}, 1024)
+
+	pool, localKey := setupTxPoolWithConfig(params.TestChainConfig, testTxPoolConfig, txPoolGasLimit, MakeWithPromoteTxCh(pendingAddedCh))
+	defer pool.Stop()
+
+	localKeyPub := localKey.PublicKey
+	account := crypto.PubkeyToAddress(localKeyPub)
+
+	balance, ok := big.NewInt(0).SetString(balanceStr, 0)
+	if !ok {
+		t.Fatal("incorrect initial balance", balanceStr)
+	}
+
+	testAddBalance(pool, account, balance)
+
+	signer := types.NewEIP155Signer(big.NewInt(1))
+	baseFee := uint256.NewInt(1)
+
+	batchesLocal := make([]types.Transactions, batchesSize)
+	batchesRemote := make([]types.Transactions, batchesSize)
+	batchesRemotes := make([]types.Transactions, batchesSize)
+	batchesRemoteSync := make([]types.Transactions, batchesSize)
+	batchesRemotesSync := make([]types.Transactions, batchesSize)
+
+	for i := 0; i < batchesSize; i++ {
+		batchesLocal[i] = make(types.Transactions, singleCase.size)
+
+		for j := 0; j < singleCase.size; j++ {
+			batchesLocal[i][j] = transaction(uint64(singleCase.size*i+j), 100_000, localKey)
+		}
+
+		batchesRemote[i] = make(types.Transactions, singleCase.size)
+
+		for j := 0; j < singleCase.size; j++ {
+			remoteKey, _ := crypto.GenerateKey()
+			remoteAddr := crypto.PubkeyToAddress(remoteKey.PublicKey)
+			testAddBalance(pool, remoteAddr, balance)
+
+			batchesRemote[i][j] = transaction(uint64(singleCase.size*i+j), 100_000, remoteKey)
+		}
+
+		batchesRemotes[i] = make(types.Transactions, singleCase.size)
+
+		for j := 0; j < singleCase.size; j++ {
+			remoteKey, _ := crypto.GenerateKey()
+			remoteAddr := crypto.PubkeyToAddress(remoteKey.PublicKey)
+			testAddBalance(pool, remoteAddr, balance)
+
+			batchesRemotes[i][j] = transaction(uint64(singleCase.size*i+j), 100_000, remoteKey)
+		}
+
+		batchesRemoteSync[i] = make(types.Transactions, singleCase.size)
+
+		for j := 0; j < singleCase.size; j++ {
+			remoteKey, _ := crypto.GenerateKey()
+			remoteAddr := crypto.PubkeyToAddress(remoteKey.PublicKey)
+			testAddBalance(pool, remoteAddr, balance)
+
+			batchesRemoteSync[i][j] = transaction(uint64(singleCase.size*i+j), 100_000, remoteKey)
+		}
+
+		batchesRemotesSync[i] = make(types.Transactions, singleCase.size)
+
+		for j := 0; j < singleCase.size; j++ {
+			remoteKey, _ := crypto.GenerateKey()
+			remoteAddr := crypto.PubkeyToAddress(remoteKey.PublicKey)
+			testAddBalance(pool, remoteAddr, balance)
+
+			batchesRemotesSync[i][j] = transaction(uint64(singleCase.size*i+j), 100_000, remoteKey)
+		}
+	}
+
+	t.Log("starting goroutines")
+
+	// locals
+	go func() {
+		for _, batch := range batchesLocal {
+			if rand.Int()%2 == 0 {
+				runWithTimeout(t, func(c chan struct{}) {
+					res := pool.AddLocals(batch)
+					fmt.Fprint(io.Discard, res)
+					close(c)
+				}, done, "AddLocals", timeoutDuration)
+			} else {
+				for _, tx := range batch {
+					runWithTimeout(t, func(c chan struct{}) {
+						res := pool.AddLocal(tx)
+						fmt.Fprint(io.Discard, res)
+						close(c)
+					}, done, "AddLocal", timeoutDuration)
+				}
+			}
+		}
+	}()
+
+	// remotes
+	go func() {
+		for _, batch := range batchesRemotes {
+			runWithTimeout(t, func(c chan struct{}) {
+				res := pool.AddRemotes(batch)
+				fmt.Fprint(io.Discard, res)
+				close(c)
+			}, done, "AddRemotes", timeoutDuration)
+		}
+	}()
+
+	// remote
+	go func() {
+		for _, batch := range batchesRemote {
+			for _, tx := range batch {
+				runWithTimeout(t, func(c chan struct{}) {
+					res := pool.AddRemote(tx)
+					fmt.Fprint(io.Discard, res)
+					close(c)
+				}, done, "AddRemote", timeoutDuration)
+			}
+		}
+	}()
+
+	// sync
+	// remotes
+	go func() {
+		for _, batch := range batchesRemotesSync {
+			runWithTimeout(t, func(c chan struct{}) {
+				res := pool.AddRemotesSync(batch)
+				fmt.Fprint(io.Discard, res)
+				close(c)
+			}, done, "AddRemotesSync", timeoutDuration)
+		}
+	}()
+
+	// remote
+	go func() {
+		for _, batch := range batchesRemoteSync {
+			for _, tx := range batch {
+				runWithTimeout(t, func(c chan struct{}) {
+					res := pool.AddRemoteSync(tx)
+					fmt.Fprint(io.Discard, res)
+					close(c)
+				}, done, "AddRemoteSync", timeoutDuration)
+			}
+		}
+	}()
+
+	// tx pool API
+	for i := 0; i < threads; i++ {
+		go func() {
+			runWithTicker(t, func(c chan struct{}) {
+				p := pool.Pending(context.Background(), false)
+				fmt.Fprint(io.Discard, p)
+				close(c)
+			}, done, "Pending-no-tips", tickerDuration, timeoutDuration)
+		}()
+
+		go func() {
+			runWithTicker(t, func(c chan struct{}) {
+				p := pool.Pending(context.Background(), true)
+				fmt.Fprint(io.Discard, p)
+				close(c)
+			}, done, "Pending-with-tips", tickerDuration, timeoutDuration)
+		}()
+
+		go func() {
+			runWithTicker(t, func(c chan struct{}) {
+				l := pool.Locals()
+				fmt.Fprint(io.Discard, l)
+				close(c)
+			}, done, "Locals", tickerDuration, timeoutDuration)
+		}()
+
+		go func() {
+			runWithTicker(t, func(c chan struct{}) {
+				p, q := pool.Content()
+				fmt.Fprint(io.Discard, p, q)
+				close(c)
+			}, done, "Content", tickerDuration, timeoutDuration)
+		}()
+
+		go func() {
+			runWithTicker(t, func(c chan struct{}) {
+				res := pool.GasPriceUint256()
+				fmt.Fprint(io.Discard, res)
+				close(c)
+			}, done, "GasPriceUint256", tickerDuration, timeoutDuration)
+		}()
+
+		go func() {
+			runWithTicker(t, func(c chan struct{}) {
+				res := pool.GasPrice()
+				fmt.Fprint(io.Discard, res)
+				close(c)
+			}, done, "GasPrice", tickerDuration, timeoutDuration)
+		}()
+
+		go func() {
+			runWithTicker(t, func(c chan struct{}) {
+				pool.SetGasPrice(pool.GasPrice())
+				close(c)
+			}, done, "SetGasPrice", tickerDuration, timeoutDuration)
+		}()
+
+		go func() {
+			runWithTicker(t, func(c chan struct{}) {
+				p, q := pool.ContentFrom(account)
+				fmt.Fprint(io.Discard, p, q)
+				close(c)
+			}, done, "ContentFrom", tickerDuration, timeoutDuration)
+		}()
+
+		go func() {
+			runWithTicker(t, func(c chan struct{}) {
+				res := pool.Has(batchesRemotes[0][0].Hash())
+				fmt.Fprint(io.Discard, res)
+				close(c)
+			}, done, "Has", tickerDuration, timeoutDuration)
+		}()
+
+		go func() {
+			runWithTicker(t, func(c chan struct{}) {
+				tx := pool.Get(batchesRemotes[0][0].Hash())
+				fmt.Fprint(io.Discard, tx)
+				close(c)
+			}, done, "Get", tickerDuration, timeoutDuration)
+		}()
+
+		go func() {
+			runWithTicker(t, func(c chan struct{}) {
+				res := pool.Nonce(account)
+				fmt.Fprint(io.Discard, res)
+				close(c)
+			}, done, "Nonce", tickerDuration, timeoutDuration)
+		}()
+
+		go func() {
+			runWithTicker(t, func(c chan struct{}) {
+				p, q := pool.Stats()
+				fmt.Fprint(io.Discard, p, q)
+				close(c)
+			}, done, "Stats", tickerDuration, timeoutDuration)
+		}()
+
+		go func() {
+			runWithTicker(t, func(c chan struct{}) {
+				st := pool.Status([]common.Hash{batchesRemotes[1][0].Hash()})
+				fmt.Fprint(io.Discard, st)
+				close(c)
+			}, done, "Status", tickerDuration, timeoutDuration)
+		}()
+
+		go func() {
+			runWithTicker(t, func(c chan struct{}) {
+				ch := make(chan NewTxsEvent, 10)
+				sub := pool.SubscribeNewTxsEvent(ch)
+				res := <-ch
+				fmt.Fprint(io.Discard, res)
+				sub.Unsubscribe()
+				close(c)
+			}, done, "SubscribeNewTxsEvent", tickerDuration, timeoutDuration)
+		}()
+	}
+
+	// wait for the start
+	t.Log("before the first propagated transaction")
+	<-pendingAddedCh
+	t.Log("after the first propagated transaction")
+
+	var (
+		totalTxs    int
+		totalBlocks int
+	)
+
+	blockTicker := time.NewTicker(blockPeriod)
+	defer blockTicker.Stop()
+
+	for range blockTicker.C {
+		totalTxs += mining(pool, signer, baseFee)
+
+		t.Log("block", totalBlocks, "transactions", totalTxs)
+
+		totalBlocks++
+
+		if totalBlocks > blocks {
+			fmt.Fprint(io.Discard, totalTxs)
+			return
+		}
+	}
+}
+
 //nolint:unparam
-func runWithTicker(t *testing.T, fn func(c chan struct{}), done chan struct{}, name string, timeoutDuration time.Duration) {
+func runWithTicker(t *testing.T, fn func(c chan struct{}), done chan struct{}, name string, tickerDuration, timeoutDuration time.Duration) {
 	t.Helper()
 
-	localTicker := time.NewTimer(100 * time.Millisecond)
+	localTicker := time.NewTimer(tickerDuration)
 	defer localTicker.Stop()
 
 	for range localTicker.C {
