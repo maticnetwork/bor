@@ -336,9 +336,12 @@ func TestInvalidTransactions(t *testing.T) {
 	}
 
 	tx = transaction(1, 100000, key)
+
 	pool.gasPriceMu.Lock()
+
 	pool.gasPrice = big.NewInt(1000)
 	pool.gasPriceUint = uint256.NewInt(1000)
+
 	pool.gasPriceMu.Unlock()
 
 	if err := pool.AddRemote(tx); !errors.Is(err, ErrUnderpriced) {
@@ -3667,7 +3670,8 @@ func MakeWithPromoteTxCh(ch chan struct{}) func(*TxPool) {
 	}
 }
 
-func mining(t testing.TB, pool *TxPool, signer types.Signer, baseFee *uint256.Int, blockGasLimit uint64, totalBlocks int) int {
+//nolint:thelper
+func mining(tb testing.TB, pool *TxPool, signer types.Signer, baseFee *uint256.Int, blockGasLimit uint64, totalBlocks int) int {
 	var (
 		localTxsCount  int
 		remoteTxsCount int
@@ -3714,7 +3718,7 @@ func mining(t testing.TB, pool *TxPool, signer types.Signer, baseFee *uint256.In
 		total += txRemoteCount
 	}
 
-	t.Logf("mining block. block %d. total %d: pending %d(added %d), local %d(added %d), queued %d",
+	tb.Logf("mining block. block %d. total %d: pending %d(added %d), local %d(added %d), queued %d",
 		totalBlocks, total, pendingLen, txRemoteCount, localTxsCount, txLocalCount, queuedLen)
 
 	return total
@@ -3767,7 +3771,7 @@ func TestPoolMiningDataRaces(t *testing.T) {
 }
 
 //nolint:gocognit,thelper
-func apiWithMining(t testing.TB, balanceStr string, batchesSize int, singleCase struct {
+func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase struct {
 	name string
 	size int
 }, timeoutDuration time.Duration, threads int, tickerDuration time.Duration, blockPeriod time.Duration, blocks int, blockGasLimit uint64) {
@@ -3785,7 +3789,7 @@ func apiWithMining(t testing.TB, balanceStr string, batchesSize int, singleCase 
 
 	balance, ok := big.NewInt(0).SetString(balanceStr, 0)
 	if !ok {
-		t.Fatal("incorrect initial balance", balanceStr)
+		tb.Fatal("incorrect initial balance", balanceStr)
 	}
 
 	testAddBalance(pool, account, balance)
@@ -3847,24 +3851,24 @@ func apiWithMining(t testing.TB, balanceStr string, batchesSize int, singleCase 
 		}
 	}
 
-	t.Log("starting goroutines")
+	tb.Log("starting goroutines")
 
 	// locals
 	go func() {
 		for _, batch := range batchesLocal {
 			if rand.Int()%2 == 0 {
-				runWithTimeout(t, func(_ chan struct{}) {
+				runWithTimeout(tb, func(_ chan struct{}) {
 					errs := pool.AddLocals(batch)
 					if len(errs) != 0 {
-						t.Log("AddLocals error", errs)
+						tb.Log("AddLocals error", errs)
 					}
 				}, done, "AddLocals", timeoutDuration)
 			} else {
 				for _, tx := range batch {
-					runWithTimeout(t, func(_ chan struct{}) {
+					runWithTimeout(tb, func(_ chan struct{}) {
 						err := pool.AddLocal(tx)
 						if err != nil {
-							t.Log("AddLocal error", err)
+							tb.Log("AddLocal error", err)
 						}
 					}, done, "AddLocal", timeoutDuration)
 
@@ -3879,10 +3883,10 @@ func apiWithMining(t testing.TB, balanceStr string, batchesSize int, singleCase 
 	// remotes
 	go func() {
 		for _, batch := range batchesRemotes {
-			runWithTimeout(t, func(_ chan struct{}) {
+			runWithTimeout(tb, func(_ chan struct{}) {
 				errs := pool.AddRemotes(batch)
 				if len(errs) != 0 {
-					t.Log("AddRemotes error", errs)
+					tb.Log("AddRemotes error", errs)
 				}
 			}, done, "AddRemotes", timeoutDuration)
 
@@ -3894,10 +3898,10 @@ func apiWithMining(t testing.TB, balanceStr string, batchesSize int, singleCase 
 	go func() {
 		for _, batch := range batchesRemote {
 			for _, tx := range batch {
-				runWithTimeout(t, func(_ chan struct{}) {
+				runWithTimeout(tb, func(_ chan struct{}) {
 					err := pool.AddRemote(tx)
 					if err != nil {
-						t.Log("AddRemote error", err)
+						tb.Log("AddRemote error", err)
 					}
 				}, done, "AddRemote", timeoutDuration)
 
@@ -3912,10 +3916,10 @@ func apiWithMining(t testing.TB, balanceStr string, batchesSize int, singleCase 
 	// remotes
 	go func() {
 		for _, batch := range batchesRemotesSync {
-			runWithTimeout(t, func(_ chan struct{}) {
+			runWithTimeout(tb, func(_ chan struct{}) {
 				errs := pool.AddRemotesSync(batch)
 				if len(errs) != 0 {
-					t.Log("AddRemotesSync error", errs)
+					tb.Log("AddRemotesSync error", errs)
 				}
 			}, done, "AddRemotesSync", timeoutDuration)
 
@@ -3927,10 +3931,10 @@ func apiWithMining(t testing.TB, balanceStr string, batchesSize int, singleCase 
 	go func() {
 		for _, batch := range batchesRemoteSync {
 			for _, tx := range batch {
-				runWithTimeout(t, func(_ chan struct{}) {
+				runWithTimeout(tb, func(_ chan struct{}) {
 					err := pool.AddRemoteSync(tx)
 					if err != nil {
-						t.Log("AddRemoteSync error", err)
+						tb.Log("AddRemoteSync error", err)
 					}
 				}, done, "AddRemoteSync", timeoutDuration)
 
@@ -3944,97 +3948,97 @@ func apiWithMining(t testing.TB, balanceStr string, batchesSize int, singleCase 
 	// tx pool API
 	for i := 0; i < threads; i++ {
 		go func() {
-			runWithTicker(t, func(_ chan struct{}) {
+			runWithTicker(tb, func(_ chan struct{}) {
 				p := pool.Pending(context.Background(), false)
 				fmt.Fprint(io.Discard, p)
 			}, done, "Pending-no-tips", tickerDuration, timeoutDuration)
 		}()
 
 		go func() {
-			runWithTicker(t, func(_ chan struct{}) {
+			runWithTicker(tb, func(_ chan struct{}) {
 				p := pool.Pending(context.Background(), true)
 				fmt.Fprint(io.Discard, p)
 			}, done, "Pending-with-tips", tickerDuration, timeoutDuration)
 		}()
 
 		go func() {
-			runWithTicker(t, func(_ chan struct{}) {
+			runWithTicker(tb, func(_ chan struct{}) {
 				l := pool.Locals()
 				fmt.Fprint(io.Discard, l)
 			}, done, "Locals", tickerDuration, timeoutDuration)
 		}()
 
 		go func() {
-			runWithTicker(t, func(_ chan struct{}) {
+			runWithTicker(tb, func(_ chan struct{}) {
 				p, q := pool.Content()
 				fmt.Fprint(io.Discard, p, q)
 			}, done, "Content", tickerDuration, timeoutDuration)
 		}()
 
 		go func() {
-			runWithTicker(t, func(_ chan struct{}) {
+			runWithTicker(tb, func(_ chan struct{}) {
 				res := pool.GasPriceUint256()
 				fmt.Fprint(io.Discard, res)
 			}, done, "GasPriceUint256", tickerDuration, timeoutDuration)
 		}()
 
 		go func() {
-			runWithTicker(t, func(_ chan struct{}) {
+			runWithTicker(tb, func(_ chan struct{}) {
 				res := pool.GasPrice()
 				fmt.Fprint(io.Discard, res)
 			}, done, "GasPrice", tickerDuration, timeoutDuration)
 		}()
 
 		go func() {
-			runWithTicker(t, func(_ chan struct{}) {
+			runWithTicker(tb, func(_ chan struct{}) {
 				pool.SetGasPrice(pool.GasPrice())
 			}, done, "SetGasPrice", tickerDuration, timeoutDuration)
 		}()
 
 		go func() {
-			runWithTicker(t, func(_ chan struct{}) {
+			runWithTicker(tb, func(_ chan struct{}) {
 				p, q := pool.ContentFrom(account)
 				fmt.Fprint(io.Discard, p, q)
 			}, done, "ContentFrom", tickerDuration, timeoutDuration)
 		}()
 
 		go func() {
-			runWithTicker(t, func(_ chan struct{}) {
+			runWithTicker(tb, func(_ chan struct{}) {
 				res := pool.Has(batchesRemotes[0][0].Hash())
 				fmt.Fprint(io.Discard, res)
 			}, done, "Has", tickerDuration, timeoutDuration)
 		}()
 
 		go func() {
-			runWithTicker(t, func(_ chan struct{}) {
+			runWithTicker(tb, func(_ chan struct{}) {
 				tx := pool.Get(batchesRemotes[0][0].Hash())
 				fmt.Fprint(io.Discard, tx.Hash())
 			}, done, "Get", tickerDuration, timeoutDuration)
 		}()
 
 		go func() {
-			runWithTicker(t, func(_ chan struct{}) {
+			runWithTicker(tb, func(_ chan struct{}) {
 				res := pool.Nonce(account)
 				fmt.Fprint(io.Discard, res)
 			}, done, "Nonce", tickerDuration, timeoutDuration)
 		}()
 
 		go func() {
-			runWithTicker(t, func(_ chan struct{}) {
+			runWithTicker(tb, func(_ chan struct{}) {
 				p, q := pool.Stats()
 				fmt.Fprint(io.Discard, p, q)
 			}, done, "Stats", tickerDuration, timeoutDuration)
 		}()
 
 		go func() {
-			runWithTicker(t, func(_ chan struct{}) {
+			runWithTicker(tb, func(_ chan struct{}) {
 				st := pool.Status([]common.Hash{batchesRemotes[1][0].Hash()})
 				fmt.Fprint(io.Discard, st)
 			}, done, "Status", tickerDuration, timeoutDuration)
 		}()
 
 		go func() {
-			runWithTicker(t, func(c chan struct{}) {
+			runWithTicker(tb, func(c chan struct{}) {
 				ch := make(chan NewTxsEvent, 10)
 				sub := pool.SubscribeNewTxsEvent(ch)
 
@@ -4050,9 +4054,9 @@ func apiWithMining(t testing.TB, balanceStr string, batchesSize int, singleCase 
 	}
 
 	// wait for the start
-	t.Log("before the first propagated transaction")
+	tb.Log("before the first propagated transaction")
 	<-pendingAddedCh
-	t.Log("after the first propagated transaction")
+	tb.Log("after the first propagated transaction")
 
 	var (
 		totalTxs    int
@@ -4063,7 +4067,7 @@ func apiWithMining(t testing.TB, balanceStr string, batchesSize int, singleCase 
 	defer blockTicker.Stop()
 
 	for range blockTicker.C {
-		totalTxs += mining(t, pool, signer, baseFee, blockGasLimit, totalBlocks)
+		totalTxs += mining(tb, pool, signer, baseFee, blockGasLimit, totalBlocks)
 
 		totalBlocks++
 
@@ -4075,8 +4079,8 @@ func apiWithMining(t testing.TB, balanceStr string, batchesSize int, singleCase 
 }
 
 //nolint:unparam
-func runWithTicker(t testing.TB, fn func(c chan struct{}), done chan struct{}, name string, tickerDuration, timeoutDuration time.Duration) {
-	t.Helper()
+func runWithTicker(tb testing.TB, fn func(c chan struct{}), done chan struct{}, name string, tickerDuration, timeoutDuration time.Duration) {
+	tb.Helper()
 
 	localTicker := time.NewTimer(tickerDuration)
 	defer localTicker.Stop()
@@ -4088,12 +4092,12 @@ func runWithTicker(t testing.TB, fn func(c chan struct{}), done chan struct{}, n
 		default:
 		}
 
-		runWithTimeout(t, fn, done, name, timeoutDuration)
+		runWithTimeout(tb, fn, done, name, timeoutDuration)
 	}
 }
 
-func runWithTimeout(t testing.TB, fn func(chan struct{}), outerDone chan struct{}, name string, timeoutDuration time.Duration) {
-	t.Helper()
+func runWithTimeout(tb testing.TB, fn func(chan struct{}), outerDone chan struct{}, name string, timeoutDuration time.Duration) {
+	tb.Helper()
 
 	timeout := time.NewTimer(timeoutDuration)
 	defer timeout.Stop()
@@ -4107,7 +4111,7 @@ func runWithTimeout(t testing.TB, fn func(chan struct{}), outerDone chan struct{
 
 	select {
 	case <-timeout.C:
-		t.Fatalf("%s timeouted", name)
+		tb.Fatalf("%s timeouted", name)
 	case <-outerDone:
 	case <-doneCh:
 	}

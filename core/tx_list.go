@@ -294,13 +294,16 @@ func (m *txSortedMap) flatten() types.Transactions {
 	m.cacheMu.Lock()
 	defer m.cacheMu.Unlock()
 
+	cache := m.cache
+
 	if m.isEmpty {
 		m.isEmpty = false // to simulate sync.Once
 
 		m.cacheMu.Unlock()
 
+		cache = make(types.Transactions, 0, len(m.items))
+
 		m.m.RLock()
-		cache := make(types.Transactions, 0, len(m.items))
 
 		for _, tx := range m.items {
 			cache = append(cache, tx)
@@ -313,17 +316,14 @@ func (m *txSortedMap) flatten() types.Transactions {
 
 		m.cacheMu.Lock()
 		m.cache = cache
-		// m.cacheMu.Unlock() - deferred
 
 		reinitCacheGauge.Inc(1)
 		missCacheCounter.Inc(1)
 	} else {
-		// m.cacheMu.Unlock() - deferred
-
 		hitCacheCounter.Inc(1)
 	}
 
-	return m.cache
+	return cache
 }
 
 func (m *txSortedMap) lastElement() *types.Transaction {
@@ -331,13 +331,16 @@ func (m *txSortedMap) lastElement() *types.Transaction {
 	m.cacheMu.Lock()
 	defer m.cacheMu.Unlock()
 
+	cache := m.cache
+
 	if m.isEmpty {
 		m.isEmpty = false // to simulate sync.Once
 
 		m.cacheMu.Unlock()
 
+		cache = make(types.Transactions, 0, len(m.items))
+
 		m.m.RLock()
-		cache := make(types.Transactions, 0, len(m.items))
 
 		for _, tx := range m.items {
 			cache = append(cache, tx)
@@ -350,17 +353,14 @@ func (m *txSortedMap) lastElement() *types.Transaction {
 
 		m.cacheMu.Lock()
 		m.cache = cache
-		// m.cacheMu.Unlock() - deferred
 
 		reinitCacheGauge.Inc(1)
 		missCacheCounter.Inc(1)
 	} else {
-		// m.cacheMu.Unlock() - deferred
-
 		hitCacheCounter.Inc(1)
 	}
 
-	return m.cache[len(m.cache)-1]
+	return cache[len(cache)-1]
 }
 
 // Flatten creates a nonce-sorted slice of transactions based on the loosely
