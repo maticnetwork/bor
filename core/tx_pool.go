@@ -762,11 +762,17 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 	if err != nil {
 		return ErrInvalidSender
 	}
-
+	
 	// Drop non-local transactions under our own minimal accepted gas price or tip
+	pool.gasPriceMu.RLock()
+
 	if !local && tx.GasTipCapUIntLt(pool.gasPriceUint) {
+		pool.gasPriceMu.RUnlock()
+
 		return ErrUnderpriced
 	}
+
+	pool.gasPriceMu.RUnlock()
 
 	// Ensure the transaction adheres to nonce ordering
 	if pool.currentState.GetNonce(from) > tx.Nonce() {

@@ -3736,7 +3736,7 @@ func TestPoolMiningDataRaces(t *testing.T) {
 		name string
 		size int
 	}{
-		{size: 5},
+		{size: 1},
 		{size: 5},
 		{size: 10},
 		{size: 20},
