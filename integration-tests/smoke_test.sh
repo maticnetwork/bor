@@ -23,11 +23,10 @@ if (( $balance <= $balanceInit )); then
     exit 1
 fi
 
+latestCheckpointResponse=$(curl -sL http://localhost:1317/checkpoints/latest)
+echo "latestCheckpointResponse: " $latestCheckpointResponse
+
 checkpointID=$(curl -sL http://localhost:1317/checkpoints/latest | jq .result.id)
-checkpoint=$(curl -sL http://localhost:1317/checkpoints/latest)
-
-    echo "checkpointcheckpointcheckpoint:" $checkpoint
-
 if [ $checkpointID == "null" ]; then
     echo "Something is wrong! Could not find any checkpoint."
     exit 1
