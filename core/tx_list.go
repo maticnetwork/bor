@@ -524,8 +524,9 @@ func (l *txList) LastElement() *types.Transaction {
 // then the heap is sorted based on the effective tip based on the given base fee.
 // If baseFee is nil then the sorting is based on gasFeeCap.
 type priceHeap struct {
-	baseFee *uint256.Int // heap should always be re-sorted after baseFee is changed
-	list    []*types.Transaction
+	baseFee   *uint256.Int // heap should always be re-sorted after baseFee is changed
+	list      []*types.Transaction
+	baseFeeMu sync.RWMutex
 }
 
 func (h *priceHeap) Len() int      { return len(h.list) }
@@ -543,12 +544,18 @@ func (h *priceHeap) Less(i, j int) bool {
 }
 
 func (h *priceHeap) cmp(a, b *types.Transaction) int {
+	h.baseFeeMu.RLock()
+
 	if h.baseFee != nil {
 		// Compare effective tips if baseFee is specified
 		if c := a.EffectiveGasTipTxUintCmp(b, h.baseFee); c != 0 {
+			h.baseFeeMu.RUnlock()
+
 			return c
 		}
 	}
+
+	h.baseFeeMu.RUnlock()
 
 	// Compare fee caps if baseFee is not specified or effective tips are equal
 	if c := a.GasFeeCapCmp(b); c != 0 {
@@ -735,6 +742,9 @@ func (l *txPricedList) Reheap() {
 // SetBaseFee updates the base fee and triggers a re-heap. Note that Removed is not
 // necessary to call right before SetBaseFee when processing a new block.
 func (l *txPricedList) SetBaseFee(baseFee *uint256.Int) {
+	l.urgent.baseFeeMu.Lock()
 	l.urgent.baseFee = baseFee
+	l.urgent.baseFeeMu.Unlock()
+
 	l.Reheap()
 }

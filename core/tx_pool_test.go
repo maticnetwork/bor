@@ -102,7 +102,7 @@ func transaction(nonce uint64, gaslimit uint64, key *ecdsa.PrivateKey) *types.Tr
 }
 
 func pricedTransaction(nonce uint64, gaslimit uint64, gasprice *big.Int, key *ecdsa.PrivateKey) *types.Transaction {
-	tx, _ := types.SignTx(types.NewTransaction(nonce, common.Address{}, big.NewInt(100), gaslimit, gasprice, nil), types.HomesteadSigner{}, key)
+	tx, _ := types.SignTx(types.NewTransaction(nonce, common.Address{0x01}, big.NewInt(100), gaslimit, gasprice, nil), types.HomesteadSigner{}, key)
 	return tx
 }
 
@@ -336,8 +336,10 @@ func TestInvalidTransactions(t *testing.T) {
 	}
 
 	tx = transaction(1, 100000, key)
+	pool.gasPriceMu.Lock()
 	pool.gasPrice = big.NewInt(1000)
 	pool.gasPriceUint = uint256.NewInt(1000)
+	pool.gasPriceMu.Unlock()
 
 	if err := pool.AddRemote(tx); !errors.Is(err, ErrUnderpriced) {
 		t.Error("expected", ErrUnderpriced, "got", err)
@@ -2738,6 +2740,8 @@ func BenchmarkPoolMining(b *testing.B) {
 		cases[i].name = fmt.Sprintf(format, cases[i].size)
 	}
 
+	const blockGasLimit = 30_000_000
+
 	// Benchmark importing the transactions into the queue
 
 	for _, testCase := range cases {
@@ -2796,7 +2800,7 @@ func BenchmarkPoolMining(b *testing.B) {
 			b.ReportAllocs()
 
 			for i := 0; i < b.N; i++ {
-				total += mining(pool, signer, baseFee)
+				total += mining(b, pool, signer, baseFee, blockGasLimit, i)
 			}
 
 			b.StopTimer()
@@ -3491,7 +3495,7 @@ func testPoolBatchInsert(t *testing.T, cfg txPoolRapidConfig) {
 
 					// check if txPool got stuck
 					if currentTxPoolStats == lastTxPoolStats {
-						stuckBlocks++ //todo: переписать
+						stuckBlocks++ //todo: need something better then that
 					} else {
 						stuckBlocks = 0
 						lastTxPoolStats = currentTxPoolStats
@@ -3644,7 +3648,10 @@ func commitTransactions(pool *TxPool, txs *types.TransactionsByPriceAndNonce, bl
 
 		if tx.Gas() <= blockGasLimit {
 			blockGasLimit -= tx.Gas()
+
+			pool.mu.Lock()
 			pool.removeTx(tx.Hash(), false)
+			pool.mu.Unlock()
 
 			txCount++
 		} else {
@@ -3660,7 +3667,7 @@ func MakeWithPromoteTxCh(ch chan struct{}) func(*TxPool) {
 	}
 }
 
-func mining(pool *TxPool, signer types.Signer, baseFee *uint256.Int) int {
+func mining(t testing.TB, pool *TxPool, signer types.Signer, baseFee *uint256.Int, blockGasLimit uint64, totalBlocks int) int {
 	var (
 		localTxsCount  int
 		remoteTxsCount int
@@ -3672,7 +3679,11 @@ func mining(pool *TxPool, signer types.Signer, baseFee *uint256.Int) int {
 	pending := pool.Pending(context.Background(), true)
 	remoteTxs = pending
 
-	for _, account := range pool.Locals() {
+	locals := pool.Locals()
+
+	pendingLen, queuedLen := pool.Stats()
+
+	for _, account := range locals {
 		if txs := remoteTxs[account]; len(txs) > 0 {
 			delete(remoteTxs, account)
 
@@ -3683,17 +3694,28 @@ func mining(pool *TxPool, signer types.Signer, baseFee *uint256.Int) int {
 	localTxsCount = len(localTxs)
 	remoteTxsCount = len(remoteTxs)
 
+	var txLocalCount int
+
 	if localTxsCount > 0 {
 		txs := types.NewTransactionsByPriceAndNonce(signer, localTxs, baseFee)
 
-		total += txs.GetTxs()
+		blockGasLimit, txLocalCount = commitTransactions(pool, txs, blockGasLimit)
+
+		total += txLocalCount
 	}
+
+	var txRemoteCount int
 
 	if remoteTxsCount > 0 {
 		txs := types.NewTransactionsByPriceAndNonce(signer, remoteTxs, baseFee)
 
-		total += txs.GetTxs()
+		_, txRemoteCount = commitTransactions(pool, txs, blockGasLimit)
+
+		total += txRemoteCount
 	}
+
+	t.Logf("mining block. block %d. total %d: pending %d(added %d), local %d(added %d), queued %d",
+		totalBlocks, total, pendingLen, txRemoteCount, localTxsCount, txLocalCount, queuedLen)
 
 	return total
 }
@@ -3710,7 +3732,7 @@ func TestPoolMiningDataRaces(t *testing.T) {
 		name string
 		size int
 	}{
-		{size: 1},
+		{size: 5},
 		{size: 5},
 		{size: 10},
 		{size: 20},
@@ -3729,6 +3751,7 @@ func TestPoolMiningDataRaces(t *testing.T) {
 
 			const (
 				blocks          = 600
+				blockGasLimit   = 40_000_000
 				blockPeriod     = time.Second
 				threads         = 10
 				batchesSize     = 10_000
@@ -3738,16 +3761,16 @@ func TestPoolMiningDataRaces(t *testing.T) {
 				balanceStr = "1_000_000_000"
 			)
 
-			apiWithMining(t, balanceStr, batchesSize, singleCase, timeoutDuration, threads, tickerDuration, blockPeriod, blocks)
+			apiWithMining(t, balanceStr, batchesSize, singleCase, timeoutDuration, threads, tickerDuration, blockPeriod, blocks, blockGasLimit)
 		})
 	}
 }
 
 //nolint:gocognit,thelper
-func apiWithMining(t *testing.T, balanceStr string, batchesSize int, singleCase struct {
+func apiWithMining(t testing.TB, balanceStr string, batchesSize int, singleCase struct {
 	name string
 	size int
-}, timeoutDuration time.Duration, threads int, tickerDuration time.Duration, blockPeriod time.Duration, blocks int) {
+}, timeoutDuration time.Duration, threads int, tickerDuration time.Duration, blockPeriod time.Duration, blocks int, blockGasLimit uint64) {
 	done := make(chan struct{})
 	defer close(done)
 
@@ -3785,42 +3808,42 @@ func apiWithMining(t *testing.T, balanceStr string, batchesSize int, singleCase 
 
 		batchesRemote[i] = make(types.Transactions, singleCase.size)
 
-		for j := 0; j < singleCase.size; j++ {
-			remoteKey, _ := crypto.GenerateKey()
-			remoteAddr := crypto.PubkeyToAddress(remoteKey.PublicKey)
-			testAddBalance(pool, remoteAddr, balance)
+		remoteKey, _ := crypto.GenerateKey()
+		remoteAddr := crypto.PubkeyToAddress(remoteKey.PublicKey)
+		testAddBalance(pool, remoteAddr, balance)
 
+		for j := 0; j < singleCase.size; j++ {
 			batchesRemote[i][j] = transaction(uint64(singleCase.size*i+j), 100_000, remoteKey)
 		}
 
 		batchesRemotes[i] = make(types.Transactions, singleCase.size)
 
-		for j := 0; j < singleCase.size; j++ {
-			remoteKey, _ := crypto.GenerateKey()
-			remoteAddr := crypto.PubkeyToAddress(remoteKey.PublicKey)
-			testAddBalance(pool, remoteAddr, balance)
+		remotesKey, _ := crypto.GenerateKey()
+		remotesAddr := crypto.PubkeyToAddress(remotesKey.PublicKey)
+		testAddBalance(pool, remotesAddr, balance)
 
-			batchesRemotes[i][j] = transaction(uint64(singleCase.size*i+j), 100_000, remoteKey)
+		for j := 0; j < singleCase.size; j++ {
+			batchesRemotes[i][j] = transaction(uint64(singleCase.size*i+j), 100_000, remotesKey)
 		}
 
 		batchesRemoteSync[i] = make(types.Transactions, singleCase.size)
 
-		for j := 0; j < singleCase.size; j++ {
-			remoteKey, _ := crypto.GenerateKey()
-			remoteAddr := crypto.PubkeyToAddress(remoteKey.PublicKey)
-			testAddBalance(pool, remoteAddr, balance)
+		remoteSyncKey, _ := crypto.GenerateKey()
+		remoteSyncAddr := crypto.PubkeyToAddress(remoteSyncKey.PublicKey)
+		testAddBalance(pool, remoteSyncAddr, balance)
 
-			batchesRemoteSync[i][j] = transaction(uint64(singleCase.size*i+j), 100_000, remoteKey)
+		for j := 0; j < singleCase.size; j++ {
+			batchesRemoteSync[i][j] = transaction(uint64(singleCase.size*i+j), 100_000, remoteSyncKey)
 		}
 
 		batchesRemotesSync[i] = make(types.Transactions, singleCase.size)
 
-		for j := 0; j < singleCase.size; j++ {
-			remoteKey, _ := crypto.GenerateKey()
-			remoteAddr := crypto.PubkeyToAddress(remoteKey.PublicKey)
-			testAddBalance(pool, remoteAddr, balance)
+		remotesSyncKey, _ := crypto.GenerateKey()
+		remotesSyncAddr := crypto.PubkeyToAddress(remotesSyncKey.PublicKey)
+		testAddBalance(pool, remotesSyncAddr, balance)
 
-			batchesRemotesSync[i][j] = transaction(uint64(singleCase.size*i+j), 100_000, remoteKey)
+		for j := 0; j < singleCase.size; j++ {
+			batchesRemotesSync[i][j] = transaction(uint64(singleCase.size*i+j), 100_000, remotesSyncKey)
 		}
 	}
 
@@ -3831,14 +3854,18 @@ func apiWithMining(t *testing.T, balanceStr string, batchesSize int, singleCase 
 		for _, batch := range batchesLocal {
 			if rand.Int()%2 == 0 {
 				runWithTimeout(t, func(_ chan struct{}) {
-					res := pool.AddLocals(batch)
-					fmt.Fprint(io.Discard, res)
+					errs := pool.AddLocals(batch)
+					if len(errs) != 0 {
+						t.Log("AddLocals error", errs)
+					}
 				}, done, "AddLocals", timeoutDuration)
 			} else {
 				for _, tx := range batch {
 					runWithTimeout(t, func(_ chan struct{}) {
-						res := pool.AddLocal(tx)
-						fmt.Fprint(io.Discard, res)
+						err := pool.AddLocal(tx)
+						if err != nil {
+							t.Log("AddLocal error", err)
+						}
 					}, done, "AddLocal", timeoutDuration)
 
 					time.Sleep(tickerDuration)
@@ -3853,8 +3880,10 @@ func apiWithMining(t *testing.T, balanceStr string, batchesSize int, singleCase 
 	go func() {
 		for _, batch := range batchesRemotes {
 			runWithTimeout(t, func(_ chan struct{}) {
-				res := pool.AddRemotes(batch)
-				fmt.Fprint(io.Discard, res)
+				errs := pool.AddRemotes(batch)
+				if len(errs) != 0 {
+					t.Log("AddRemotes error", errs)
+				}
 			}, done, "AddRemotes", timeoutDuration)
 
 			time.Sleep(tickerDuration)
@@ -3866,8 +3895,10 @@ func apiWithMining(t *testing.T, balanceStr string, batchesSize int, singleCase 
 		for _, batch := range batchesRemote {
 			for _, tx := range batch {
 				runWithTimeout(t, func(_ chan struct{}) {
-					res := pool.AddRemote(tx)
-					fmt.Fprint(io.Discard, res)
+					err := pool.AddRemote(tx)
+					if err != nil {
+						t.Log("AddRemote error", err)
+					}
 				}, done, "AddRemote", timeoutDuration)
 
 				time.Sleep(tickerDuration)
@@ -3882,8 +3913,10 @@ func apiWithMining(t *testing.T, balanceStr string, batchesSize int, singleCase 
 	go func() {
 		for _, batch := range batchesRemotesSync {
 			runWithTimeout(t, func(_ chan struct{}) {
-				res := pool.AddRemotesSync(batch)
-				fmt.Fprint(io.Discard, res)
+				errs := pool.AddRemotesSync(batch)
+				if len(errs) != 0 {
+					t.Log("AddRemotesSync error", errs)
+				}
 			}, done, "AddRemotesSync", timeoutDuration)
 
 			time.Sleep(tickerDuration)
@@ -3895,8 +3928,10 @@ func apiWithMining(t *testing.T, balanceStr string, batchesSize int, singleCase 
 		for _, batch := range batchesRemoteSync {
 			for _, tx := range batch {
 				runWithTimeout(t, func(_ chan struct{}) {
-					res := pool.AddRemoteSync(tx)
-					fmt.Fprint(io.Discard, res)
+					err := pool.AddRemoteSync(tx)
+					if err != nil {
+						t.Log("AddRemoteSync error", err)
+					}
 				}, done, "AddRemoteSync", timeoutDuration)
 
 				time.Sleep(tickerDuration)
@@ -4028,9 +4063,7 @@ func apiWithMining(t *testing.T, balanceStr string, batchesSize int, singleCase 
 	defer blockTicker.Stop()
 
 	for range blockTicker.C {
-		totalTxs += mining(pool, signer, baseFee)
-
-		t.Log("block", totalBlocks, "transactions", totalTxs)
+		totalTxs += mining(t, pool, signer, baseFee, blockGasLimit, totalBlocks)
 
 		totalBlocks++
 
@@ -4042,7 +4075,7 @@ func apiWithMining(t *testing.T, balanceStr string, batchesSize int, singleCase 
 }
 
 //nolint:unparam
-func runWithTicker(t *testing.T, fn func(c chan struct{}), done chan struct{}, name string, tickerDuration, timeoutDuration time.Duration) {
+func runWithTicker(t testing.TB, fn func(c chan struct{}), done chan struct{}, name string, tickerDuration, timeoutDuration time.Duration) {
 	t.Helper()
 
 	localTicker := time.NewTimer(tickerDuration)
@@ -4059,7 +4092,7 @@ func runWithTicker(t *testing.T, fn func(c chan struct{}), done chan struct{}, n
 	}
 }
 
-func runWithTimeout(t *testing.T, fn func(chan struct{}), outerDone chan struct{}, name string, timeoutDuration time.Duration) {
+func runWithTimeout(t testing.TB, fn func(chan struct{}), outerDone chan struct{}, name string, timeoutDuration time.Duration) {
 	t.Helper()
 
 	timeout := time.NewTimer(timeoutDuration)

@@ -246,10 +246,12 @@ type TxPool struct {
 	chain        blockChain
 	gasPrice     *big.Int
 	gasPriceUint *uint256.Int
-	txFeed       event.Feed
-	scope        event.SubscriptionScope
-	signer       types.Signer
-	mu           sync.RWMutex
+	gasPriceMu   sync.RWMutex
+
+	txFeed event.Feed
+	scope  event.SubscriptionScope
+	signer types.Signer
+	mu     sync.RWMutex
 
 	istanbul bool // Fork indicator whether we are in the istanbul stage.
 	eip2718  bool // Fork indicator whether we are using EIP-2718 type transactions.
@@ -476,15 +478,15 @@ func (pool *TxPool) SubscribeNewTxsEvent(ch chan<- NewTxsEvent) event.Subscripti
 
 // GasPrice returns the current gas price enforced by the transaction pool.
 func (pool *TxPool) GasPrice() *big.Int {
-	pool.mu.RLock()
-	defer pool.mu.RUnlock()
+	pool.gasPriceMu.RLock()
+	defer pool.gasPriceMu.RUnlock()
 
 	return new(big.Int).Set(pool.gasPrice)
 }
 
 func (pool *TxPool) GasPriceUint256() *uint256.Int {
-	pool.mu.RLock()
-	defer pool.mu.RUnlock()
+	pool.gasPriceMu.RLock()
+	defer pool.gasPriceMu.RUnlock()
 
 	return pool.gasPriceUint.Clone()
 }
@@ -492,8 +494,8 @@ func (pool *TxPool) GasPriceUint256() *uint256.Int {
 // SetGasPrice updates the minimum price required by the transaction pool for a
 // new transaction, and drops all transactions below this threshold.
 func (pool *TxPool) SetGasPrice(price *big.Int) {
-	pool.mu.Lock()
-	defer pool.mu.Unlock()
+	pool.gasPriceMu.Lock()
+	defer pool.gasPriceMu.Unlock()
 
 	old := pool.gasPrice
 	pool.gasPrice = price
@@ -506,6 +508,9 @@ func (pool *TxPool) SetGasPrice(price *big.Int) {
 
 	// if the min miner fee increased, remove transactions below the new threshold
 	if price.Cmp(old) > 0 {
+		pool.mu.Lock()
+		defer pool.mu.Unlock()
+
 		// pool.priced is sorted by GasFeeCap, so we have to iterate through pool.all instead
 		drop := pool.all.RemotesBelowTip(price)
 		for _, tx := range drop {
@@ -638,15 +643,18 @@ func (pool *TxPool) Pending(ctx context.Context, enforceTips bool) map[common.Ad
 					for i, tx := range txs {
 						pool.pendingMu.RUnlock()
 
-						pool.mu.RLock()
+						pool.gasPriceMu.RLock()
 						if pool.gasPriceUint != nil {
 							gasPriceUint.Set(pool.gasPriceUint)
 						}
 
+						pool.priced.urgent.baseFeeMu.Lock()
 						if pool.priced.urgent.baseFee != nil {
 							baseFee.Set(pool.priced.urgent.baseFee)
 						}
-						pool.mu.RUnlock()
+						pool.priced.urgent.baseFeeMu.Unlock()
+
+						pool.gasPriceMu.RUnlock()
 
 						pool.pendingMu.RLock()
 
