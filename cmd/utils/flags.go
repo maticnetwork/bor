@@ -904,22 +904,14 @@ func setNodeUserIdent(ctx *cli.Context, cfg *node.Config) {
 // setBootstrapNodes creates a list of bootstrap nodes from the command line
 // flags, reverting to pre-configured ones if none have been specified.
 func setBootstrapNodes(ctx *cli.Context, cfg *p2p.Config) {
-	urls := params.MainnetBootnodes
+	urls := params.BorMainnetBootnodes
 	switch {
-	case ctx.GlobalIsSet(BootnodesFlag.Name):
-		urls = SplitAndTrim(ctx.GlobalString(BootnodesFlag.Name))
-	case ctx.GlobalBool(RopstenFlag.Name):
-		urls = params.RopstenBootnodes
-	case ctx.GlobalBool(SepoliaFlag.Name):
-		urls = params.SepoliaBootnodes
-	case ctx.GlobalBool(RinkebyFlag.Name):
-		urls = params.RinkebyBootnodes
+	case ctx.GlobalBool(BorMainnetFlag.Name):
+		urls = params.BorMainnetBootnodes
 	case ctx.GlobalBool(GoerliFlag.Name):
 		urls = params.GoerliBootnodes
 	case ctx.GlobalBool(MumbaiFlag.Name):
 		urls = params.MumbaiBootnodes
-	case ctx.GlobalBool(BorMainnetFlag.Name):
-		urls = params.BorMainnetBootnodes
 	case ctx.GlobalBool(KilnFlag.Name):
 		urls = params.KilnBootnodes
 	case cfg.BootstrapNodes != nil:
