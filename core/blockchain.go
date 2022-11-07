@@ -1744,7 +1744,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 		var usedGas uint64
 
 		log.Info("\nProcessing block", "blockNumber", block.Number())
-		if new(big.Int).Rem(block.Number(), big.NewInt(2)) == big.NewInt(0) {
+		if new(big.Int).Rem(block.Number(), big.NewInt(2)).Cmp(big.NewInt(0)) == 0 {
 			log.Info("Processing block Serial", "blockNumber", block.Number())
 			substart = time.Now()
 			receipts, logs, usedGas, err = bc.processor.Process(block, statedb, bc.vmConfig)
