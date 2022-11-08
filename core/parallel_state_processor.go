@@ -311,6 +311,7 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 
 	for _, j := range delayMap {
 		if !j || (float64(longest)/float64(len(block.Transactions())) > 0.7) {
+			log.Info("Going Serial", "!j", !j, "float64(longest)/float64(len(block.Transactions()))", float64(longest)/float64(len(block.Transactions())))
 			pSeral := NewStateProcessor(p.config, p.bc, p.engine)
 			return pSeral.Process(block, statedb, cfg)
 		}
