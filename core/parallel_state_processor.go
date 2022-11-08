@@ -292,6 +292,8 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 
 	deps, delayMap := GetDeps(block.Header().TxDependency)
 
+	log.Info("Dependencies", "block.Header().TxDependency", block.Header().TxDependency, "deps", deps, "delayMap", delayMap)
+
 	weights := make([]int, len(block.Transactions()))
 
 	longest := 0
