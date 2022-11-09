@@ -31,65 +31,65 @@ type borVerifier struct {
 }
 
 func newBorVerifier() *borVerifier {
-	verifyFn := func(ctx context.Context, eth *Ethereum, handler *ethHandler, start uint64, end uint64, rootHash string) (string, error) {
-		var hash string
+	return &borVerifier{borVerify}
+}
 
-		// check if we have the given blocks
-		head := handler.ethAPI.BlockNumber()
-		if head < hexutil.Uint64(end) {
-			log.Debug("Head block behind given block", "head", head, "end block", end)
-			return hash, errMissingBlocks
-		}
+func borVerify(ctx context.Context, eth *Ethereum, handler *ethHandler, start uint64, end uint64, rootHash string) (string, error) {
+	var hash string
 
-		// verify the root hash
-		localRoothash, err := handler.ethAPI.GetRootHash(ctx, start, end)
-		if err != nil {
-			log.Debug("Failed to get root hash of given block range while whitelisting", "start", start, "end", end, "err", err)
-			return hash, errRootHash
-		}
-
-		//nolint
-		if localRoothash != rootHash {
-
-			log.Warn("Root hash mismatch while whitelisting", "expected", localRoothash, "got", rootHash)
-
-			ethHandler := (*ethHandler)(eth.handler)
-
-			var (
-				rewindTo uint64
-				doExist  bool
-			)
-
-			if doExist, rewindTo, _ = ethHandler.downloader.GetWhitelistedMilestone(); doExist {
-
-			} else if doExist, rewindTo, _ = ethHandler.downloader.GetWhitelistedCheckpoint(); doExist {
-
-			} else {
-				if start <= 0 {
-					rewindTo = 0
-				} else {
-					rewindTo = start - 1
-				}
-			}
-
-			rewindBack(eth, rewindTo)
-
-			return hash, errRootHashMismatch
-		}
-
-		// fetch the end block hash
-		block, err := handler.ethAPI.GetBlockByNumber(ctx, rpc.BlockNumber(end), false)
-		if err != nil {
-			log.Debug("Failed to get end block hash while whitelisting", "err", err)
-			return hash, errEndBlock
-		}
-
-		hash = fmt.Sprintf("%v", block["hash"])
-
-		return hash, nil
+	// check if we have the given blocks
+	head := handler.ethAPI.BlockNumber()
+	if head < hexutil.Uint64(end) {
+		log.Debug("Head block behind given block", "head", head, "end block", end)
+		return hash, errMissingBlocks
 	}
 
-	return &borVerifier{verifyFn}
+	// verify the root hash
+	localRoothash, err := handler.ethAPI.GetRootHash(ctx, start, end)
+	if err != nil {
+		log.Debug("Failed to get root hash of given block range while whitelisting", "start", start, "end", end, "err", err)
+		return hash, errRootHash
+	}
+
+	//nolint
+	if localRoothash != rootHash {
+
+		log.Warn("Root hash mismatch while whitelisting", "expected", localRoothash, "got", rootHash)
+
+		ethHandler := (*ethHandler)(eth.handler)
+
+		var (
+			rewindTo uint64
+			doExist  bool
+		)
+
+		if doExist, rewindTo, _ = ethHandler.downloader.GetWhitelistedMilestone(); doExist {
+
+		} else if doExist, rewindTo, _ = ethHandler.downloader.GetWhitelistedCheckpoint(); doExist {
+
+		} else {
+			if start <= 0 {
+				rewindTo = 0
+			} else {
+				rewindTo = start - 1
+			}
+		}
+
+		rewindBack(eth, rewindTo)
+
+		return hash, errRootHashMismatch
+	}
+
+	// fetch the end block hash
+	block, err := handler.ethAPI.GetBlockByNumber(ctx, rpc.BlockNumber(end), false)
+	if err != nil {
+		log.Debug("Failed to get end block hash while whitelisting", "err", err)
+		return hash, errEndBlock
+	}
+
+	hash = fmt.Sprintf("%v", block["hash"])
+
+	return hash, nil
 }
 
 // Stop the miner if the mining process is running and rewind back the chain
