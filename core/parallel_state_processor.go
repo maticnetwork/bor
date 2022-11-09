@@ -327,6 +327,10 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 			return nil, nil, 0, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
 		}
 
+		fmt.Println("\ninfo Parallel tx:", i)
+		fmt.Println("info from:", msg.From())
+		fmt.Println("info to:", msg.To())
+
 		cleansdb := statedb.Copy()
 
 		if len(block.Header().TxDependency) > 0 {
