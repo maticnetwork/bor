@@ -638,7 +638,9 @@ func (s *Ethereum) Start() error {
 var (
 	ErrNotBorConsensus             = errors.New("not bor consensus was given")
 	ErrBorConsensusWithoutHeimdall = errors.New("bor consensus without heimdall")
+)
 
+const (
 	whitelistTimeout      = 30 * time.Second
 	noAckMilestoneTimeout = 4 * time.Second
 )
@@ -646,179 +648,94 @@ var (
 // StartCheckpointWhitelistService starts the goroutine to fetch checkpoints and update the
 // checkpoint whitelist map.
 func (s *Ethereum) startCheckpointWhitelistService() {
-	// first run the checkpoint whitelist
-	firstCtx, cancel := context.WithTimeout(context.Background(), whitelistTimeout)
-	err := s.handleWhitelistCheckpoint(firstCtx)
+	const (
+		tickerDuration = 100 * time.Second
+		fnName         = "whitelist checkpoint"
+	)
 
-	cancel()
-
-	if err != nil {
-		if errors.Is(err, ErrBorConsensusWithoutHeimdall) || errors.Is(err, ErrNotBorConsensus) {
-			return
-		}
-
-		log.Warn("unable to whitelist checkpoint - first run", "err", err)
-	}
-
-	ticker := time.NewTicker(100 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			ctx, cancel := context.WithTimeout(context.Background(), whitelistTimeout)
-			err := s.handleWhitelistCheckpoint(ctx)
-
-			cancel()
-
-			if err != nil {
-				log.Warn("unable to whitelist checkpoint", "err", err)
-			}
-		case <-s.closeCh:
-			return
-		}
-	}
+	s.retryHeimdallHandler(s.handleWhitelistCheckpoint, tickerDuration, whitelistTimeout, fnName)
 }
 
 // startMilestoneWhitelistService starts the goroutine to fetch milestiones and update the
 // milestone whitelist map.
 func (s *Ethereum) startMilestoneWhitelistService() {
-	// a shortcut helps with tests and early exit
-	select {
-	case <-s.closeCh:
-		return
-	default:
-	}
+	const (
+		tickerDuration = 50 * time.Second
+		fnName         = "whitelist milestone"
+	)
 
-	// first run for fetching milestone
-	firstCtx, cancel := context.WithTimeout(context.Background(), whitelistTimeout)
-	err := s.handleMilestone(firstCtx)
-
-	cancel()
-
-	if err != nil {
-		if errors.Is(err, ErrBorConsensusWithoutHeimdall) || errors.Is(err, ErrNotBorConsensus) {
-			return
-		}
-
-		log.Warn("unable to whitelist milestone - first run", "err", err)
-	}
-
-	ticker := time.NewTicker(50 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			ctx, cancel := context.WithTimeout(context.Background(), whitelistTimeout)
-			err := s.handleMilestone(ctx)
-
-			cancel()
-
-			if err != nil {
-				log.Warn("unable to milestone", "err", err)
-			}
-		case <-s.closeCh:
-			return
-		}
-	}
+	s.retryHeimdallHandler(s.handleMilestone, tickerDuration, whitelistTimeout, fnName)
 }
 
 func (s *Ethereum) startNoAckMilestoneService() {
-	// a shortcut helps with tests and early exit
-	select {
-	case <-s.closeCh:
-		return
-	default:
-	}
+	const (
+		tickerDuration = 4 * time.Second
+		fnName         = "no-ack-milestone service"
+	)
 
-	// first run for fetching milestones
-	firstCtx, cancel := context.WithTimeout(context.Background(), noAckMilestoneTimeout)
-	err := s.handleNoAckMilestone(firstCtx)
-	cancel()
-
-	if err != nil {
-		if errors.Is(err, ErrBorConsensusWithoutHeimdall) || errors.Is(err, ErrNotBorConsensus) {
-			return
-		}
-
-		log.Warn("unable to start the no-ack-milestone service - first run", "err", err)
-	}
-
-	ticker := time.NewTicker(4 * time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ticker.C:
-			ctx, cancel := context.WithTimeout(context.Background(), noAckMilestoneTimeout)
-			err := s.handleNoAckMilestone(ctx)
-			cancel()
-
-			if err != nil {
-				log.Warn("unable to milestone", "err", err)
-			}
-		case <-s.closeCh:
-			return
-		}
-	}
+	s.retryHeimdallHandler(s.handleNoAckMilestone, tickerDuration, noAckMilestoneTimeout, fnName)
 }
 
 func (s *Ethereum) startNoAckMilestoneByIDService() {
+	const (
+		tickerDuration = 1 * time.Minute
+		fnName         = "no-ack-milestone-by-id service"
+	)
+
+	s.retryHeimdallHandler(s.handleNoAckMilestoneByID, tickerDuration, noAckMilestoneTimeout, fnName)
+}
+
+func (s *Ethereum) retryHeimdallHandler(fn heimdallHandler, tickerDuration time.Duration, timeout time.Duration, fnName string) {
+	retryHeimdallHandler(fn, tickerDuration, timeout, fnName, s.closeCh, s.getHandler)
+}
+
+func retryHeimdallHandler(fn heimdallHandler, tickerDuration time.Duration, timeout time.Duration, fnName string, closeCh chan struct{}, getHandler func() (*ethHandler, *bor.Bor, error)) {
 	// a shortcut helps with tests and early exit
 	select {
-	case <-s.closeCh:
+	case <-closeCh:
 		return
 	default:
 	}
 
+	ethHandler, bor, err := getHandler()
+	if err != nil {
+		//todo: log the error
+		return
+	}
+
 	// first run for fetching milestones
-	firstCtx, cancel := context.WithTimeout(context.Background(), noAckMilestoneTimeout)
-	err := s.handleNoAckMilestoneByID(firstCtx)
+	firstCtx, cancel := context.WithTimeout(context.Background(), timeout)
+	err = fn(firstCtx, ethHandler, bor)
 	cancel()
 
 	if err != nil {
-		if errors.Is(err, ErrBorConsensusWithoutHeimdall) || errors.Is(err, ErrNotBorConsensus) {
-			return
-		}
-
-		log.Warn("unable to start the no-ack-milestone-by-id service - first run", "err", err)
+		log.Warn(fmt.Sprintf("unable to start the %s service - first run", fnName), "err", err)
 	}
 
-	ticker := time.NewTicker(1 * time.Minute)
+	ticker := time.NewTicker(tickerDuration)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ticker.C:
-			ctx, cancel := context.WithTimeout(context.Background(), noAckMilestoneTimeout)
-			err := s.handleNoAckMilestoneByID(ctx)
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
+			err := fn(ctx, ethHandler, bor)
 			cancel()
 
 			if err != nil {
-				log.Warn("unable to handle NoAckMilestoneByID", "err", err)
+				log.Warn(fmt.Sprintf("unable to handle %s", fnName), "err", err)
 			}
-		case <-s.closeCh:
+		case <-closeCh:
 			return
 		}
 	}
 }
 
 // handleWhitelistCheckpoint handles the checkpoint whitelist mechanism.
-func (s *Ethereum) handleWhitelistCheckpoint(ctx context.Context) error {
-	ethHandler := (*ethHandler)(s.handler)
-
-	bor, ok := ethHandler.chain.Engine().(*bor.Bor)
-	if !ok {
-		return ErrNotBorConsensus
-	}
-
-	if bor.HeimdallClient == nil {
-		return ErrBorConsensusWithoutHeimdall
-	}
-
+func (s *Ethereum) handleWhitelistCheckpoint(ctx context.Context, ethHandler *ethHandler, bor *bor.Bor) error {
 	// Create a new bor verifier, which will be used to verify checkpoints and milestones
-	verifier := newBorVerifier(nil)
+	verifier := newBorVerifier()
+
 	blockNum, blockHash, err := ethHandler.fetchWhitelistCheckpoint(ctx, bor, s, verifier)
 	// If the array is empty, we're bound to receive an error. Non-nill error and non-empty array
 	// means that array has partial elements and it failed for some block. We'll add those partial
@@ -832,21 +749,12 @@ func (s *Ethereum) handleWhitelistCheckpoint(ctx context.Context) error {
 	return nil
 }
 
+type heimdallHandler func(ctx context.Context, ethHandler *ethHandler, bor *bor.Bor) error
+
 // handleMilestone handles the milestone mechanism.
-func (s *Ethereum) handleMilestone(ctx context.Context) error {
-	ethHandler := (*ethHandler)(s.handler)
-
-	bor, ok := ethHandler.chain.Engine().(*bor.Bor)
-	if !ok {
-		return ErrNotBorConsensus
-	}
-
-	if bor.HeimdallClient == nil {
-		return ErrBorConsensusWithoutHeimdall
-	}
-
+func (s *Ethereum) handleMilestone(ctx context.Context, ethHandler *ethHandler, bor *bor.Bor) error {
 	// Create a new bor verifier, which will be used to verify checkpoints and milestones
-	verifier := newBorVerifier(nil)
+	verifier := newBorVerifier()
 	blockNum, blockHash, err := ethHandler.fetchWhitelistMilestone(ctx, bor, s, verifier)
 
 	// If blockNum, blockhash doesn't have any value than we're bound to receive an error. Non-nill
@@ -861,18 +769,7 @@ func (s *Ethereum) handleMilestone(ctx context.Context) error {
 	return nil
 }
 
-func (s *Ethereum) handleNoAckMilestone(ctx context.Context) error {
-	ethHandler := (*ethHandler)(s.handler)
-
-	bor, ok := ethHandler.chain.Engine().(*bor.Bor)
-	if !ok {
-		return ErrNotBorConsensus
-	}
-
-	if bor.HeimdallClient == nil {
-		return ErrBorConsensusWithoutHeimdall
-	}
-
+func (s *Ethereum) handleNoAckMilestone(ctx context.Context, ethHandler *ethHandler, bor *bor.Bor) error {
 	milestoneID, err := ethHandler.fetchNoAckMilestone(ctx, bor)
 
 	//If failed to fetch the no-ack milestone then it give the error.
@@ -885,30 +782,33 @@ func (s *Ethereum) handleNoAckMilestone(ctx context.Context) error {
 	return nil
 }
 
-func (s *Ethereum) handleNoAckMilestoneByID(ctx context.Context) error {
-	ethHandler := (*ethHandler)(s.handler)
-
-	bor, ok := ethHandler.chain.Engine().(*bor.Bor)
-	if !ok {
-		return ErrNotBorConsensus
-	}
-
-	if bor.HeimdallClient == nil {
-		return ErrBorConsensusWithoutHeimdall
-	}
-
+func (s *Ethereum) handleNoAckMilestoneByID(ctx context.Context, ethHandler *ethHandler, bor *bor.Bor) error {
 	milestoneIDs := ethHandler.downloader.GetMilestoneIDsList()
 
 	for _, milestoneID := range milestoneIDs {
-
+		// todo: check if we can ignore the error
 		res, _ := ethHandler.fetchNoAckMilestoneByID(ctx, bor, milestoneID)
-
 		if res {
 			ethHandler.downloader.RemoveMilestoneID(milestoneID)
 		}
 	}
 
 	return nil
+}
+
+func (s *Ethereum) getHandler() (*ethHandler, *bor.Bor, error) {
+	ethHandler := (*ethHandler)(s.handler)
+
+	bor, ok := ethHandler.chain.Engine().(*bor.Bor)
+	if !ok {
+		return nil, nil, ErrNotBorConsensus
+	}
+
+	if bor.HeimdallClient == nil {
+		return nil, nil, ErrBorConsensusWithoutHeimdall
+	}
+
+	return ethHandler, bor, nil
 }
 
 // Stop implements node.Lifecycle, terminating all internal goroutines used by the
