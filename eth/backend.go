@@ -818,7 +818,8 @@ func (s *Ethereum) handleWhitelistCheckpoint(ctx context.Context) error {
 	}
 
 	// Create a new bor verifier, which will be used to verify checkpoints and milestones
-	verifier := newBorVerifier(nil)
+	verifier := newBorVerifier()
+
 	blockNum, blockHash, err := ethHandler.fetchWhitelistCheckpoint(ctx, bor, s, verifier)
 	// If the array is empty, we're bound to receive an error. Non-nill error and non-empty array
 	// means that array has partial elements and it failed for some block. We'll add those partial
@@ -846,7 +847,7 @@ func (s *Ethereum) handleMilestone(ctx context.Context) error {
 	}
 
 	// Create a new bor verifier, which will be used to verify checkpoints and milestones
-	verifier := newBorVerifier(nil)
+	verifier := newBorVerifier()
 	blockNum, blockHash, err := ethHandler.fetchWhitelistMilestone(ctx, bor, s, verifier)
 
 	// If blockNum, blockhash doesn't have any value than we're bound to receive an error. Non-nill

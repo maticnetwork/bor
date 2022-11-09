@@ -30,12 +30,8 @@ type borVerifier struct {
 	verify func(ctx context.Context, eth *Ethereum, handler *ethHandler, start uint64, end uint64, rootHash string) (string, error)
 }
 
-func newBorVerifier(verifyFn func(ctx context.Context, eth *Ethereum, handler *ethHandler, start uint64, end uint64, rootHash string) (string, error)) *borVerifier {
-	if verifyFn != nil {
-		return &borVerifier{verifyFn}
-	}
-
-	verifyFn = func(ctx context.Context, eth *Ethereum, handler *ethHandler, start uint64, end uint64, rootHash string) (string, error) {
+func newBorVerifier() *borVerifier {
+	verifyFn := func(ctx context.Context, eth *Ethereum, handler *ethHandler, start uint64, end uint64, rootHash string) (string, error) {
 		var hash string
 
 		// check if we have the given blocks

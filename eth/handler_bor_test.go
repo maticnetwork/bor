@@ -64,7 +64,8 @@ func TestFetchWhitelistCheckpointAndMilestone(t *testing.T) {
 		return "", nil
 	}
 
-	verifier := newBorVerifier(verify)
+	verifier := newBorVerifier()
+	verifier.setVerify(verify)
 
 	// Create a mock heimdall instance and use it for creating a bor instance
 	var heimdall mockHeimdall
@@ -73,6 +74,10 @@ func TestFetchWhitelistCheckpointAndMilestone(t *testing.T) {
 
 	fetchCheckpointTest(t, &heimdall, bor, handler, verifier)
 	fetchMilestoneTest(t, &heimdall, bor, handler, verifier)
+}
+
+func (b *borVerifier) setVerify(verifyFn func(ctx context.Context, eth *Ethereum, handler *ethHandler, start uint64, end uint64, rootHash string) (string, error)) {
+	b.verify = verifyFn
 }
 
 func fetchCheckpointTest(t *testing.T, heimdall *mockHeimdall, bor *bor.Bor, handler *ethHandler, verifier *borVerifier) {
