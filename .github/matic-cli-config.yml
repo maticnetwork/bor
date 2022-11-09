@@ -13,3 +13,4 @@ ethHostUser: ubuntu
 devnetType: docker
 borDockerBuildContext: "../../bor"
 heimdallDockerBuildContext: "https://github.com/maticnetwork/heimdall.git#develop"
+devnetBorUsers: ubuntu,ubuntu,ubuntu

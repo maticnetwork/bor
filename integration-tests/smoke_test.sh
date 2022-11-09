@@ -3,7 +3,7 @@ set -e
 
 balanceInit=$(docker exec bor0 bash -c "bor attach /root/.bor/data/bor.ipc -exec 'Math.round(web3.fromWei(eth.getBalance(eth.accounts[0])))'")
 
-delay=600
+delay=1200
 
 echo "Wait ${delay} seconds for state-sync..."
 sleep $delay
