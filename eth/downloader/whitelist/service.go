@@ -1,8 +1,16 @@
 package whitelist
 
 import (
+	"errors"
+	"fmt"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+)
+
+var (
+	ErrMismatch = errors.New("Mismatch Error")
+	ErrNoRemote = errors.New("remote peer doesn't have a target block number")
 )
 
 type WhitelistService struct {
@@ -84,4 +92,77 @@ func splitChain(current uint64, chain []*types.Header) ([]*types.Header, []*type
 	}
 
 	return pastChain, futureChain
+}
+
+func isValidChain(currentHeader *types.Header, chain []*types.Header, doExist bool, number uint64, hash common.Hash, interval uint64) bool {
+
+	// Check if we have milestone to validate incoming chain in memory
+	if !doExist {
+		// We don't have any entry, no additional validation will be possible
+		return true
+	}
+
+	current := currentHeader.Number.Uint64()
+
+	// Check if we have milestoneList entries in required range
+	if chain[len(chain)-1].Number.Uint64() < number {
+		// We have future milestone entries, so we don't need to receive the past chain
+
+		return false
+	}
+
+	// Split the chain into past and future chain
+	pastChain, futureChain := splitChain(current, chain)
+
+	// Add an offset to future chain if it's not in continuity
+	offset := 0
+	if len(futureChain) != 0 {
+		offset += int(futureChain[0].Number.Uint64()-currentHeader.Number.Uint64()) - 1
+	}
+
+	// Don't accept future chain of unacceptable length (from current block)
+	if len(futureChain)+offset > int(interval) {
+		return false
+	}
+
+	// Iterate over the chain and validate against the last milestone
+	// It will handle all cases when the incoming chain has atleast one milestone
+	for i := len(pastChain) - 1; i >= 0; i-- {
+		if pastChain[i].Number.Uint64() == number {
+			return pastChain[i].Hash() == hash
+		}
+	}
+
+	return true
+}
+
+func isValidPeer(remoteHeader *types.Header, fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error), doExist bool, number uint64, hash common.Hash) (bool, error) {
+
+	// Check for availaibility of the last milestone block.
+	// This can be also be empty if our heimdall is not responding
+	// or we're running without it.
+	if !doExist {
+		// worst case, we don't have the milestone in memory
+		return true, nil
+	}
+
+	// todo: we can extract this as an interface and mock as well or just test IsValidChain in isolation from downloader passing fake fetchHeadersByNumber functions
+	headers, hashes, err := fetchHeadersByNumber(number, 1, 0, false)
+	if err != nil {
+		return false, fmt.Errorf("%w: last whitelisted block number %d, err %v", ErrNoRemote, number, err)
+	}
+
+	if len(headers) == 0 {
+		return false, fmt.Errorf("%w: last whitlisted block number %d", ErrNoRemote, number)
+	}
+
+	reqBlockNum := headers[0].Number.Uint64()
+	reqBlockHash := hashes[0]
+
+	// Check against the whitelisted blocks
+	if reqBlockNum == number && reqBlockHash == hash {
+		return true, nil
+	}
+
+	return false, ErrMismatch
 }

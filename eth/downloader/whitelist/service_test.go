@@ -179,8 +179,8 @@ func TestIsValidPeer(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 
-	if !errors.Is(err, ErrNoRemoteCheckoint) {
-		t.Fatalf("expected error ErrNoRemoteCheckoint, got %v", err)
+	if !errors.Is(err, ErrNoRemote) {
+		t.Fatalf("expected error ErrNoRemote, got %v", err)
 	}
 
 	require.Equal(t, res, false, "expected peer chain to be invalid")
@@ -216,7 +216,7 @@ func TestIsValidPeer(t *testing.T) {
 	// case4: correct fetchHeadersByNumber function provided with wrong header
 	// for block number 2. Should consider the chain as invalid and throw an error
 	res, err = s.IsValidPeer(nil, fetchHeadersByNumber)
-	require.Equal(t, err, ErrCheckpointMismatch, "expected checkpoint mismatch error")
+	require.Equal(t, err, ErrMismatch, "expected mismatch error")
 	require.Equal(t, res, false, "expected chain to be invalid")
 
 	// create a mock function, returning a the required header
@@ -249,7 +249,7 @@ func TestIsValidPeer(t *testing.T) {
 
 	//Case5: correct fetchHeadersByNumber function provided with hash mismatch, should consider the chain as invalid
 	res, err = s.IsValidPeer(nil, fetchHeadersByNumber)
-	require.Equal(t, err, ErrMilestoneMismatch, "expected milestone mismatch error")
+	require.Equal(t, err, ErrMismatch, "expected milestone mismatch error")
 	require.Equal(t, res, false, "expected chain to be invalid")
 
 	s.ProcessMilestone(uint64(2), common.Hash{})
@@ -311,7 +311,7 @@ func TestIsValidPeer(t *testing.T) {
 
 	// case7: correct fetchHeadersByNumber function provided with wrong header for block 3, should consider the chain as invalid
 	res, err = s.IsValidPeer(nil, fetchHeadersByNumber)
-	require.Equal(t, err, ErrMilestoneMismatch, "expected milestone mismatch error")
+	require.Equal(t, err, ErrMismatch, "expected milestone mismatch error")
 	require.Equal(t, res, false, "expected chain to be invalid")
 
 	//require.Equal(t, s.milestone.length(), 3, "expected 3 items in milestoneList")
@@ -321,7 +321,7 @@ func TestIsValidPeer(t *testing.T) {
 
 	// case8: correct fetchHeadersByNumber function provided with wrong hash for block 3, should consider the chain as valid
 	res, err = s.IsValidPeer(nil, fetchHeadersByNumber)
-	require.Equal(t, err, ErrMilestoneMismatch, "expected milestone mismatch error")
+	require.Equal(t, err, ErrMismatch, "expected milestone mismatch error")
 	require.Equal(t, res, false, "expected chain to be invalid")
 }
 

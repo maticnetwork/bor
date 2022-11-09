@@ -1468,7 +1468,7 @@ func TestFakedSyncProgress66WhitelistMismatch(t *testing.T) {
 
 	tester := newTester()
 	validate := func(count int) (bool, error) {
-		return false, whitelist.ErrCheckpointMismatch
+		return false, whitelist.ErrMismatch
 	}
 	tester.downloader.ChainValidator = newWhitelistFake(validate)
 
@@ -1521,7 +1521,7 @@ func TestFakedSyncProgress66NoRemoteCheckpoint(t *testing.T) {
 	validate := func(count int) (bool, error) {
 		// only return the `ErrNoRemoteCheckoint` error for the first call
 		if count == 0 {
-			return false, whitelist.ErrNoRemoteCheckoint
+			return false, whitelist.ErrNoRemote
 		}
 
 		return true, nil
@@ -1537,7 +1537,7 @@ func TestFakedSyncProgress66NoRemoteCheckpoint(t *testing.T) {
 	// Synchronise with the peer and make sure all blocks were retrieved
 	// Should fail in first attempt
 	if err := tester.sync("light", nil, mode); err != nil {
-		assert.Equal(t, whitelist.ErrNoRemoteCheckoint, err, "failed synchronisation")
+		assert.Equal(t, whitelist.ErrNoRemote, err, "failed synchronisation")
 	}
 
 	// Try syncing again, should succeed
