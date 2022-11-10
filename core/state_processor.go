@@ -121,6 +121,14 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 
 		reads := statedb.MVReadMap()
 
+		// print writeset
+		fmt.Println("BlockSTM Writelist (applyTransaction):\n", statedb.MVWriteList())
+
+		// // stop recording read and write
+		// if !shouldRerunWithoutFeeDelay {
+		// 	statedb.SetMVHashMapNil()
+		// }
+
 		if _, ok := reads[blockstm.NewSubpathKey(evm.Context.Coinbase, state.BalancePath)]; ok {
 			log.Info("Coinbase is in MVReadMap", "address", evm.Context.Coinbase)
 
