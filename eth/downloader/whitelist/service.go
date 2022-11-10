@@ -29,7 +29,7 @@ func NewService() *WhitelistService {
 		milestone{
 			doExist:            false,
 			interval:           256,
-			LockedMilestoneIds: make(map[string]bool),
+			LockedMilestoneIDs: make(map[string]struct{}),
 		},
 	}
 }
@@ -71,8 +71,8 @@ func splitChain(current uint64, chain []*types.Header) ([]*types.Header, []*type
 	var (
 		pastChain   []*types.Header
 		futureChain []*types.Header
-		first       uint64 = chain[0].Number.Uint64()
-		last        uint64 = chain[len(chain)-1].Number.Uint64()
+		first       = chain[0].Number.Uint64()
+		last        = chain[len(chain)-1].Number.Uint64()
 	)
 
 	if current >= first {
@@ -136,6 +136,7 @@ func isValidChain(currentHeader *types.Header, chain []*types.Header, doExist bo
 	return true
 }
 
+// FIXME: remoteHeader is not used
 func isValidPeer(remoteHeader *types.Header, fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error), doExist bool, number uint64, hash common.Hash) (bool, error) {
 
 	// Check for availaibility of the last milestone block.

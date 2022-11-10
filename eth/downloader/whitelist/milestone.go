@@ -9,27 +9,33 @@ import (
 )
 
 type milestone struct {
-	m                  sync.Mutex
-	milestoneHash      common.Hash // milestone, populated by reaching out to heimdall
-	milestoneNumber    uint64      // Milestone order, populated by reaching out to heimdall
-	interval           uint64      // Milestone interval, until which we can allow importing
-	doExist            bool
-	LockedSprintNumber uint64          // Locked sprint number
-	LockedSprintHash   common.Hash     //Hash for the locked endBlock
-	Locked             bool            //
-	LockedMilestoneIds map[string]bool //list of milestone ids
+	m        sync.RWMutex
+	Hash     common.Hash // milestone, populated by reaching out to heimdall
+	Number   uint64      // Milestone order, populated by reaching out to heimdall
+	interval uint64      // Milestone interval, until which we can allow importing
+	doExist  bool
 
+	//todo: need persistence
+	LockedSprintNumber uint64              // Locked sprint number
+	LockedSprintHash   common.Hash         //Hash for the locked endBlock
+	Locked             bool                //
+	LockedMilestoneIDs map[string]struct{} //list of milestone ids
 }
 
 // IsValidPeer checks if the chain we're about to receive from a peer is valid or not
-// in terms of reorgs. We won't reorg beyond the last milestone voted on the heimdall chain
+// in terms of reorgs. We won't reorg beyond the last milestone voted on the Heimdall chain
 func (m *milestone) IsValidPeer(remoteHeader *types.Header, fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error) {
-	// We want to validate the chain by comparing the last milestoned block
+	// We want to validate the chain by comparing the last milestone block
 	// we're storing in `milestone` with the peer's block.
-	m.m.Lock()
-	defer m.m.Unlock()
+	m.m.RLock()
 
-	return isValidPeer(remoteHeader, fetchHeadersByNumber, m.doExist, m.milestoneNumber, m.milestoneHash)
+	doExist := m.doExist
+	milestoneNumber := m.Number
+	milestoneHash := m.Hash
+
+	m.m.RUnlock()
+
+	return isValidPeer(remoteHeader, fetchHeadersByNumber, doExist, milestoneNumber, milestoneHash)
 
 }
 
@@ -42,15 +48,24 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 		return false
 	}
 
-	m.m.Lock()
-	defer m.m.Unlock()
+	m.m.RLock()
 
-	if m.Locked && !m.IsReorgAllowed(chain) {
+	locked := m.Locked
+	doExist := m.doExist
+	milestoneNumber := m.Number
+	milestoneHash := m.Hash
+	interval := m.interval
+
+	lockedSprintNumber := m.LockedSprintNumber
+	lockedSprintHash := m.LockedSprintHash
+
+	m.m.RUnlock()
+
+	if locked && !m.IsReorgAllowed(chain, lockedSprintNumber, lockedSprintHash) {
 		return false
 	}
 
-	return isValidChain(currentHeader, chain, m.doExist, m.milestoneNumber, m.milestoneHash, m.interval)
-
+	return isValidChain(currentHeader, chain, doExist, milestoneNumber, milestoneHash, interval)
 }
 
 func (m *milestone) ProcessMilestone(endBlockNum uint64, endBlockHash common.Hash) {
@@ -58,18 +73,19 @@ func (m *milestone) ProcessMilestone(endBlockNum uint64, endBlockHash common.Has
 	defer m.m.Unlock()
 
 	m.doExist = true
-	m.milestoneNumber = endBlockNum
-	m.milestoneHash = endBlockHash
+	m.Number = endBlockNum
+	m.Hash = endBlockHash
+
 	m.UnlockSprint(endBlockNum)
 }
 
 // GetMilestone returns the existing whitelisted
 // entry of milestone
 func (m *milestone) GetWhitelistedMilestone() (bool, uint64, common.Hash) {
-	m.m.Lock()
-	defer m.m.Unlock()
+	m.m.RLock()
+	defer m.m.RUnlock()
 
-	return m.doExist, m.milestoneNumber, m.milestoneHash
+	return m.doExist, m.Number, m.Hash
 }
 
 // PurgeMilestone purges data from milestone
@@ -81,11 +97,13 @@ func (m *milestone) PurgeWhitelistedMilestone() {
 }
 
 // This function will Lock the mutex at the time of voting
+// fixme: get rid of it
 func (m *milestone) LockMutex(endBlockNum uint64) bool {
 	m.m.Lock()
 
-	if m.doExist && endBlockNum <= m.milestoneNumber { //if endNum is less than whitelisted milestone, then we won't lock the sprint
-		log.Warn("endBlockNum <= m.milestoneNumber")
+	if m.doExist && endBlockNum <= m.Number { //if endNum is less than whitelisted milestone, then we won't lock the sprint
+		// todo: add endBlockNum and m.Number as values - the same below
+		log.Warn("endBlockNum <= m.Number")
 		return false
 	}
 
@@ -106,12 +124,13 @@ func (m *milestone) LockMutex(endBlockNum uint64) bool {
 }
 
 // This function will unlock the mutex locked in LockMutex
+// fixme: get rid of it
 func (m *milestone) UnlockMutex(doLock bool, milestoneId string, endBlockHash common.Hash) {
 	m.Locked = m.Locked || doLock
 
 	if doLock {
 		m.LockedSprintHash = endBlockHash
-		m.LockedMilestoneIds[milestoneId] = true
+		m.LockedMilestoneIDs[milestoneId] = struct{}{}
 	}
 
 	m.m.Unlock()
@@ -119,10 +138,10 @@ func (m *milestone) UnlockMutex(doLock bool, milestoneId string, endBlockHash co
 
 // This function will unlock the locked sprint
 func (m *milestone) UnlockSprint(endBlockNum uint64) {
-
 	if endBlockNum < m.LockedSprintNumber {
 		return
 	}
+
 	m.Locked = false
 	m.purgeMilestoneIDsList()
 }
@@ -131,24 +150,25 @@ func (m *milestone) UnlockSprint(endBlockNum uint64) {
 func (m *milestone) RemoveMilestoneID(milestoneId string) {
 	m.m.Lock()
 
-	delete(m.LockedMilestoneIds, milestoneId)
+	delete(m.LockedMilestoneIDs, milestoneId)
 
-	if len(m.LockedMilestoneIds) == 0 {
+	if len(m.LockedMilestoneIDs) == 0 {
 		m.Locked = false
 	}
+
 	m.m.Unlock()
 }
 
 // This will check whether the incoming chain matches the locked sprint hash
-func (m *milestone) IsReorgAllowed(chain []*types.Header) bool {
+func (m *milestone) IsReorgAllowed(chain []*types.Header, lockedSprintNumber uint64, lockedSprintHash common.Hash) bool {
 
-	if chain[len(chain)-1].Number.Uint64() <= m.LockedSprintNumber { //Can't reorg if the end block of incoming
+	if chain[len(chain)-1].Number.Uint64() <= lockedSprintNumber { //Can't reorg if the end block of incoming
 		return false //chain is less than locked sprint number
 	}
 
 	for i := 0; i < len(chain); i++ {
-		if chain[i].Number.Uint64() == m.LockedSprintNumber {
-			return chain[i].Hash() == m.LockedSprintHash
+		if chain[i].Number.Uint64() == lockedSprintNumber {
+			return chain[i].Hash() == lockedSprintHash
 
 		}
 	}
@@ -158,20 +178,19 @@ func (m *milestone) IsReorgAllowed(chain []*types.Header) bool {
 
 // This will return the list of milestoneIDs stored.
 func (m *milestone) GetMilestoneIDsList() []string {
+	m.m.RLock()
+	defer m.m.RUnlock()
 
-	keys := []string{}
-	for key, _ := range m.LockedMilestoneIds {
+	// fixme: use generics :)
+	keys := make([]string, 0, len(m.LockedMilestoneIDs))
+	for key := range m.LockedMilestoneIDs {
 		keys = append(keys, key)
 	}
-	return keys
 
+	return keys
 }
 
 // This is remove the milestoneIDs stored in the list.
 func (m *milestone) purgeMilestoneIDsList() {
-
-	for k := range m.LockedMilestoneIds {
-		delete(m.LockedMilestoneIds, k)
-	}
-
+	m.LockedMilestoneIDs = make(map[string]struct{})
 }
