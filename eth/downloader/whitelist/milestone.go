@@ -5,10 +5,12 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 )
 
 type milestone struct {
+	db       ethdb.Database
 	m        sync.RWMutex
 	Hash     common.Hash // milestone, populated by reaching out to heimdall
 	Number   uint64      // Milestone order, populated by reaching out to heimdall

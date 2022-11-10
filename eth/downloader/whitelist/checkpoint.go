@@ -5,9 +5,11 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/ethdb"
 )
 
 type checkpoint struct {
+	db       ethdb.Database
 	m        sync.RWMutex
 	Hash     common.Hash // Whitelisted Checkpoint Hash, populated by reaching out to heimdall
 	Number   uint64      // Checkpoint Number , populated by reaching out to heimdall

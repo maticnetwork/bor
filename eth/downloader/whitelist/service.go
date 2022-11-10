@@ -6,6 +6,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/ethdb"
 )
 
 var (
@@ -18,18 +19,20 @@ type WhitelistService struct {
 	milestone
 }
 
-func NewService() *WhitelistService {
+func NewService(db *ethdb.Database) *WhitelistService {
 	return &WhitelistService{
 
 		checkpoint{
 			doExist:  false,
 			interval: 256,
+			db:       db,
 		},
 
 		milestone{
 			doExist:            false,
 			interval:           256,
 			LockedMilestoneIDs: make(map[string]struct{}),
+			db:                 db,
 		},
 	}
 }

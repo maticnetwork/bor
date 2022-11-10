@@ -63,10 +63,12 @@ func borVerify(ctx context.Context, eth *Ethereum, handler *ethHandler, start ui
 			doExist  bool
 		)
 
+		// up to ~ < 128
+		// todo: should work fine with persistence
 		if doExist, rewindTo, _ = ethHandler.downloader.GetWhitelistedMilestone(); doExist {
 
 		} else if doExist, rewindTo, _ = ethHandler.downloader.GetWhitelistedCheckpoint(); doExist {
-
+			// up to ~ < 512
 		} else {
 			if start <= 0 {
 				rewindTo = 0
