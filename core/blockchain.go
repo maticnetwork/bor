@@ -1743,22 +1743,29 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 		var logs []*types.Log
 		var usedGas uint64
 
-		log.Info("\nProcessing block", "blockNumber", block.Number())
-		if new(big.Int).Rem(block.Number(), big.NewInt(2)).Cmp(big.NewInt(0)) == 0 {
-			log.Info("Processing block Serial", "blockNumber", block.Number())
-			substart = time.Now()
-			receipts, logs, usedGas, err = bc.processor.Process(block, statedb, bc.vmConfig)
-			substop := time.Now()
+		// log.Info("\nProcessing block", "blockNumber", block.Number())
+		// if new(big.Int).Rem(block.Number(), big.NewInt(2)).Cmp(big.NewInt(0)) == 0 {
+		// 	log.Info("Processing block Serial", "blockNumber", block.Number())
+		// 	substart = time.Now()
+		// 	receipts, logs, usedGas, err = bc.processor.Process(block, statedb, bc.vmConfig)
+		// 	substop := time.Now()
 
-			log.Info("**** Serial - Process block time", "blockNumber", block.Number(), "transactions", block.Transactions().Len(), "Time", substop.Sub(substart))
-		} else {
-			log.Info("Processing block Parallel", "blockNumber", block.Number())
-			substart = time.Now()
-			receipts, logs, usedGas, err = bc.processorSTM.Process(block, statedb, bc.vmConfig)
-			substop := time.Now()
+		// 	log.Info("**** Serial - Process block time", "blockNumber", block.Number(), "transactions", block.Transactions().Len(), "Time", substop.Sub(substart))
+		// } else {
+		// 	log.Info("Processing block Parallel", "blockNumber", block.Number())
+		// 	substart = time.Now()
+		// 	receipts, logs, usedGas, err = bc.processorSTM.Process(block, statedb, bc.vmConfig)
+		// 	substop := time.Now()
 
-			log.Info("**** Parallel - Process block time", "blockNumber", block.Number(), "transactions", block.Transactions().Len(), "Time", substop.Sub(substart))
-		}
+		// 	log.Info("**** Parallel - Process block time", "blockNumber", block.Number(), "transactions", block.Transactions().Len(), "Time", substop.Sub(substart))
+		// }
+
+		log.Info("Processing block Parallel", "blockNumber", block.Number())
+		substart = time.Now()
+		receipts, logs, usedGas, err = bc.processorSTM.Process(block, statedb, bc.vmConfig)
+		substop := time.Now()
+
+		log.Info("**** Parallel - Process block time", "blockNumber", block.Number(), "transactions", block.Transactions().Len(), "Time", substop.Sub(substart))
 
 		if err != nil {
 			bc.reportBlock(block, receipts, err)
