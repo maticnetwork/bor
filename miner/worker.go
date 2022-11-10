@@ -871,34 +871,46 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 	}
 	var coalescedLogs []*types.Log
 
-	// create and add empty mvHashMap in statedb
-	if true {
-		env.state.AddEmptyMVHashMap()
-	}
+	var depsMVReadList [][]blockstm.ReadDescriptor
 
-	depsMVReadList := [][]blockstm.ReadDescriptor{}
+	var depsMVFullWriteList [][]blockstm.WriteDescriptor
 
-	depsMVFullWriteList := [][]blockstm.WriteDescriptor{}
+	var mvReadMapList []map[blockstm.Key]blockstm.ReadDescriptor
 
-	mvReadMapList := []map[blockstm.Key]blockstm.ReadDescriptor{}
-
-	deps := map[int]map[int]bool{}
+	var deps map[int]map[int]bool
 
 	chDeps := make(chan blockstm.DepsChan)
 
+	var count int
+
 	var depsWg sync.WaitGroup
 
-	count := 0
+	// create and add empty mvHashMap in statedb
+	if EnableMVHashMap {
+		env.state.AddEmptyMVHashMap()
 
-	depsWg.Add(1)
+		depsMVReadList = [][]blockstm.ReadDescriptor{}
 
-	go func(chDeps chan blockstm.DepsChan) {
-		for t := range chDeps {
-			deps = blockstm.UpdateDeps(deps, t)
-		}
+		depsMVFullWriteList = [][]blockstm.WriteDescriptor{}
 
-		depsWg.Done()
-	}(chDeps)
+		mvReadMapList = []map[blockstm.Key]blockstm.ReadDescriptor{}
+
+		deps = map[int]map[int]bool{}
+
+		chDeps = make(chan blockstm.DepsChan)
+
+		count = 0
+
+		depsWg.Add(1)
+
+		go func(chDeps chan blockstm.DepsChan) {
+			for t := range chDeps {
+				deps = blockstm.UpdateDeps(deps, t)
+			}
+
+			depsWg.Done()
+		}(chDeps)
+	}
 
 	for {
 		// In the following three cases, we will interrupt the execution of the transaction.
@@ -969,19 +981,21 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 			coalescedLogs = append(coalescedLogs, logs...)
 			env.tcount++
 
-			depsMVReadList = append(depsMVReadList, env.state.MVReadList())
-			depsMVFullWriteList = append(depsMVFullWriteList, env.state.MVFullWriteList())
-			mvReadMapList = append(mvReadMapList, env.state.MVReadMap())
+			if EnableMVHashMap {
+				depsMVReadList = append(depsMVReadList, env.state.MVReadList())
+				depsMVFullWriteList = append(depsMVFullWriteList, env.state.MVFullWriteList())
+				mvReadMapList = append(mvReadMapList, env.state.MVReadMap())
 
-			temp := blockstm.DepsChan{
-				Index:         env.tcount - 1,
-				ReadList:      depsMVReadList[count],
-				FullWriteList: depsMVFullWriteList,
+				temp := blockstm.DepsChan{
+					Index:         env.tcount - 1,
+					ReadList:      depsMVReadList[count],
+					FullWriteList: depsMVFullWriteList,
+				}
+
+				chDeps <- temp
+				count++
+				txs.Shift()
 			}
-
-			chDeps <- temp
-			count++
-			txs.Shift()
 
 		case errors.Is(err, core.ErrTxTypeNotSupported):
 			// Pop the unsupported transaction without shifting in the next from the account
@@ -995,45 +1009,49 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 			txs.Shift()
 		}
 
-		env.state.ClearReadMap()
-		env.state.ClearWriteMap()
-	}
-
-	close(chDeps)
-	depsWg.Wait()
-
-	tempDeps := make([][]uint64, len(mvReadMapList))
-
-	// adding for txIdx = 0
-	tempDeps[0] = []uint64{uint64(0)}
-	tempDeps[0] = append(tempDeps[0], 1)
-
-	for j := range deps[0] {
-		tempDeps[0] = append(tempDeps[0], uint64(j))
-	}
-
-	for i := 1; i <= len(mvReadMapList)-1; i++ {
-		tempDeps[i] = []uint64{uint64(i)}
-
-		reads := mvReadMapList[i-1]
-
-		_, ok1 := reads[blockstm.NewSubpathKey(env.coinbase, state.BalancePath)]
-		_, ok2 := reads[blockstm.NewSubpathKey(common.HexToAddress(w.chainConfig.Bor.CalculateBurntContract(env.header.Number.Uint64())), state.BalancePath)]
-
-		if ok1 || ok2 {
-			// 0 -> delay is not allowed
-			tempDeps[i] = append(tempDeps[i], 0)
-		} else {
-			// 1 -> delay is allowed
-			tempDeps[i] = append(tempDeps[i], 1)
-		}
-
-		for j := range deps[i] {
-			tempDeps[i] = append(tempDeps[i], uint64(j))
+		if EnableMVHashMap {
+			env.state.ClearReadMap()
+			env.state.ClearWriteMap()
 		}
 	}
 
-	env.header.TxDependency = tempDeps
+	if EnableMVHashMap {
+		close(chDeps)
+		depsWg.Wait()
+
+		tempDeps := make([][]uint64, len(mvReadMapList))
+
+		// adding for txIdx = 0
+		tempDeps[0] = []uint64{uint64(0)}
+		tempDeps[0] = append(tempDeps[0], 1)
+
+		for j := range deps[0] {
+			tempDeps[0] = append(tempDeps[0], uint64(j))
+		}
+
+		for i := 1; i <= len(mvReadMapList)-1; i++ {
+			tempDeps[i] = []uint64{uint64(i)}
+
+			reads := mvReadMapList[i-1]
+
+			_, ok1 := reads[blockstm.NewSubpathKey(env.coinbase, state.BalancePath)]
+			_, ok2 := reads[blockstm.NewSubpathKey(common.HexToAddress(w.chainConfig.Bor.CalculateBurntContract(env.header.Number.Uint64())), state.BalancePath)]
+
+			if ok1 || ok2 {
+				// 0 -> delay is not allowed
+				tempDeps[i] = append(tempDeps[i], 0)
+			} else {
+				// 1 -> delay is allowed
+				tempDeps[i] = append(tempDeps[i], 1)
+			}
+
+			for j := range deps[i] {
+				tempDeps[i] = append(tempDeps[i], uint64(j))
+			}
+		}
+
+		env.header.TxDependency = tempDeps
+	}
 
 	if !w.isRunning() && len(coalescedLogs) > 0 {
 		// We don't push the pendingLogsEvent while we are sealing. The reason is that
