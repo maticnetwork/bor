@@ -122,7 +122,7 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 		reads := statedb.MVReadMap()
 
 		// print writeset
-		fmt.Println("BlockSTM Writelist (applyTransaction):\n", statedb.MVWriteList())
+		fmt.Println("BlockSTM Writelist (applyTransaction) 1:\n", statedb.MVWriteList())
 
 		// // stop recording read and write
 		// if !shouldRerunWithoutFeeDelay {
@@ -141,18 +141,29 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 			shouldRerunWithoutFeeDelay = true
 		}
 
+		fmt.Println("BlockSTM Writelist (applyTransaction) 2:\n", statedb.MVWriteList())
+
 		if evm.ChainConfig().IsLondon(blockNumber) {
 			statedb.AddBalance(result.BurntContractAddress, result.FeeBurnt)
 		}
+
+		fmt.Println("BlockSTM Writelist (applyTransaction) 3:\n", statedb.MVWriteList())
 
 		// stop recording read and write
 		if !shouldRerunWithoutFeeDelay {
 			statedb.SetMVHashMapNil()
 		}
 
+		fmt.Println("BlockSTM Writelist (applyTransaction) 4:\n", statedb.MVWriteList())
+
 		statedb.AddBalance(evm.Context.Coinbase, result.FeeTipped)
+
+		fmt.Println("BlockSTM Writelist (applyTransaction) 5:\n", statedb.MVWriteList())
+
 		output1 := new(big.Int).SetBytes(result.SenderInitBalance.Bytes())
 		output2 := new(big.Int).SetBytes(coinbaseBalance.Bytes())
+
+		fmt.Println("BlockSTM Writelist (applyTransaction) 6:\n", statedb.MVWriteList())
 
 		// Deprecating transfer log and will be removed in future fork. PLEASE DO NOT USE this transfer log going forward. Parameters won't get updated as expected going forward with EIP1559
 		// add transfer log
@@ -168,6 +179,8 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 			output1.Sub(output1, result.FeeTipped),
 			output2.Add(output2, result.FeeTipped),
 		)
+
+		fmt.Println("BlockSTM Writelist (applyTransaction) 7:\n", statedb.MVWriteList())
 	} else {
 		result, err = ApplyMessage(evm, msg, gp)
 		if err != nil {
@@ -183,6 +196,8 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 		root = statedb.IntermediateRoot(config.IsEIP158(blockNumber)).Bytes()
 	}
 	*usedGas += result.UsedGas
+
+	fmt.Println("BlockSTM Writelist (applyTransaction) 8:\n", statedb.MVWriteList())
 
 	// Create a new receipt for the transaction, storing the intermediate root and gas used
 	// by the tx.
