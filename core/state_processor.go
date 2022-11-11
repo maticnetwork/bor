@@ -124,11 +124,6 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 		// print writeset
 		fmt.Println("BlockSTM Writelist (applyTransaction) 1:\n", statedb.MVWriteList())
 
-		// stop recording read and write
-		if !shouldRerunWithoutFeeDelay {
-			statedb.SetMVHashMapNil()
-		}
-
 		if _, ok := reads[blockstm.NewSubpathKey(evm.Context.Coinbase, state.BalancePath)]; ok {
 			log.Info("Coinbase is in MVReadMap", "address", evm.Context.Coinbase)
 
@@ -139,6 +134,11 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 			log.Info("BurntContractAddress is in MVReadMap", "address", result.BurntContractAddress)
 
 			shouldRerunWithoutFeeDelay = true
+		}
+
+		// stop recording read and write
+		if !shouldRerunWithoutFeeDelay {
+			statedb.SetMVHashMapNil()
 		}
 
 		fmt.Println("BlockSTM Writelist (applyTransaction) 2:\n", statedb.MVWriteList())
