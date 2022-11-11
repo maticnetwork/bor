@@ -124,10 +124,10 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 		// print writeset
 		fmt.Println("BlockSTM Writelist (applyTransaction) 1:\n", statedb.MVWriteList())
 
-		// // stop recording read and write
-		// if !shouldRerunWithoutFeeDelay {
-		// 	statedb.SetMVHashMapNil()
-		// }
+		// stop recording read and write
+		if !shouldRerunWithoutFeeDelay {
+			statedb.SetMVHashMapNil()
+		}
 
 		if _, ok := reads[blockstm.NewSubpathKey(evm.Context.Coinbase, state.BalancePath)]; ok {
 			log.Info("Coinbase is in MVReadMap", "address", evm.Context.Coinbase)
@@ -143,16 +143,17 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 
 		fmt.Println("BlockSTM Writelist (applyTransaction) 2:\n", statedb.MVWriteList())
 
+		// [0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 222 173 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 3] is getting added in write, here
 		if evm.ChainConfig().IsLondon(blockNumber) {
 			statedb.AddBalance(result.BurntContractAddress, result.FeeBurnt)
 		}
 
 		fmt.Println("BlockSTM Writelist (applyTransaction) 3:\n", statedb.MVWriteList())
 
-		// stop recording read and write
-		if !shouldRerunWithoutFeeDelay {
-			statedb.SetMVHashMapNil()
-		}
+		// // stop recording read and write
+		// if !shouldRerunWithoutFeeDelay {
+		// 	statedb.SetMVHashMapNil()
+		// }
 
 		fmt.Println("BlockSTM Writelist (applyTransaction) 4:\n", statedb.MVWriteList())
 
