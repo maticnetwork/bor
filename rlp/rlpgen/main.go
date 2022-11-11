@@ -21,6 +21,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/ethereum/go-ethereum/common"
 	"go/types"
 	"io/ioutil"
 	"os"
@@ -52,8 +53,15 @@ func main() {
 	}
 	if *output == "-" {
 		os.Stdout.Write(code)
-	} else if err := ioutil.WriteFile(*output, code, 0644); err != nil {
-		fatal(err)
+	} else {
+		canonicalPath, err := common.VerifyPath(*output)
+		if err != nil {
+			fmt.Println("path not verified: " + err.Error())
+			fatal(err)
+		}
+		if err := ioutil.WriteFile(canonicalPath, code, 0644); err != nil {
+			fatal(err)
+		}
 	}
 }
 

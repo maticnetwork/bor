@@ -47,3 +47,15 @@ func AbsolutePath(datadir string, filename string) string {
 	}
 	return filepath.Join(datadir, filename)
 }
+
+// VerifyPath sanitizes the path to avoid Path Traversal vulnerability
+func VerifyPath(path string) (string, error) {
+	c := filepath.Clean(path)
+
+	r, err := filepath.EvalSymlinks(c)
+	if err != nil {
+		return c, fmt.Errorf("unsafe or invalid path specified: %s", path)
+	} else {
+		return r, nil
+	}
+}

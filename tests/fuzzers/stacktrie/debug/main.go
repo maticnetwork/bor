@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/ethereum/go-ethereum/common"
 	"io/ioutil"
 	"os"
 
@@ -14,9 +15,16 @@ func main() {
 		os.Exit(1)
 	}
 	crasher := os.Args[1]
-	data, err := ioutil.ReadFile(crasher)
+
+	canonicalPath, err := common.VerifyPath(crasher)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "error loading crasher %v: %v", crasher, err)
+		fmt.Println("path not verified: " + err.Error())
+		return
+	}
+
+	data, err := ioutil.ReadFile(canonicalPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error loading crasher %v: %v", canonicalPath, err)
 		os.Exit(1)
 	}
 	stacktrie.Debug(data)
