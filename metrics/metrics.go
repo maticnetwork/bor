@@ -6,7 +6,6 @@
 package metrics
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -184,7 +183,7 @@ func verifyPath(path string) (string, error) {
 
 	r, err := filepath.EvalSymlinks(c)
 	if err != nil {
-		return c, errors.New(fmt.Sprintf("unsafe or invalid path specified: %s", path))
+		return c, fmt.Errorf("unsafe or invalid path specified: %s", path)
 	} else {
 		return r, nil
 	}
