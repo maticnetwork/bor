@@ -4300,6 +4300,11 @@ func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase
 			runWithTicker(tb, func(c chan struct{}) {
 				ch := make(chan NewTxsEvent, 10)
 				sub := pool.SubscribeNewTxsEvent(ch)
+
+				if sub == nil {
+					return
+				}
+
 				defer sub.Unsubscribe()
 
 				select {
