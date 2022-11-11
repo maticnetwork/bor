@@ -62,7 +62,7 @@ test:
 	$(GOTEST) --timeout 5m -shuffle=on -cover -short -coverprofile=cover.out -covermode=atomic $(TESTALL)
 
 test-txpool-race:
-	$(GOTEST) -run=TestPoolMiningDataRaces --timeout 30m -race -v ./core/
+	$(GOTEST) -run=TestPoolMiningDataRaces --timeout 300m -race -v ./core/
 
 test-race:
 	$(GOTEST) --timeout 15m -race -shuffle=on $(TESTALL)

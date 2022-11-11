@@ -298,16 +298,14 @@ func (m *txSortedMap) flatten() types.Transactions {
 	m.cacheMu.Lock()
 	defer m.cacheMu.Unlock()
 
-	cache := m.cache
-
 	if m.isEmpty {
 		m.isEmpty = false // to simulate sync.Once
 
 		m.cacheMu.Unlock()
 
-		cache = make(types.Transactions, 0, len(m.items))
-
 		m.m.RLock()
+
+		cache := make(types.Transactions, 0, len(m.items))
 
 		for _, tx := range m.items {
 			cache = append(cache, tx)
@@ -327,7 +325,7 @@ func (m *txSortedMap) flatten() types.Transactions {
 		hitCacheCounter.Inc(1)
 	}
 
-	return cache
+	return m.cache
 }
 
 func (m *txSortedMap) lastElement() *types.Transaction {

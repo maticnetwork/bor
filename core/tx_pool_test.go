@@ -3734,13 +3734,115 @@ func TestPoolMiningDataRaces(t *testing.T) {
 	const format = "size %d"
 
 	cases := []struct {
-		name string
-		size int
+		name              string
+		size              int
+		txsTickerDuration time.Duration
+		apiTickerDuration time.Duration
 	}{
-		{size: 1},
-		{size: 5},
-		{size: 10},
-		{size: 20},
+		{
+			size:              1,
+			txsTickerDuration: 200 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+		{
+			size:              1,
+			txsTickerDuration: 400 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+		{
+			size:              1,
+			txsTickerDuration: 600 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+		{
+			size:              1,
+			txsTickerDuration: 800 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+
+		{
+			size:              5,
+			txsTickerDuration: 200 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+		{
+			size:              5,
+			txsTickerDuration: 400 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+		{
+			size:              5,
+			txsTickerDuration: 600 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+		{
+			size:              5,
+			txsTickerDuration: 800 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+
+		{
+			size:              10,
+			txsTickerDuration: 200 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+		{
+			size:              10,
+			txsTickerDuration: 400 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+		{
+			size:              10,
+			txsTickerDuration: 600 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+		{
+			size:              10,
+			txsTickerDuration: 800 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+
+		{
+			size:              20,
+			txsTickerDuration: 200 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+		{
+			size:              20,
+			txsTickerDuration: 400 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+		{
+			size:              20,
+			txsTickerDuration: 600 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+		{
+			size:              20,
+			txsTickerDuration: 800 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+
+		{
+			size:              30,
+			txsTickerDuration: 200 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+		{
+			size:              30,
+			txsTickerDuration: 400 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+		{
+			size:              30,
+			txsTickerDuration: 600 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+		{
+			size:              30,
+			txsTickerDuration: 800 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
 	}
 
 	for i := range cases {
@@ -3755,28 +3857,28 @@ func TestPoolMiningDataRaces(t *testing.T) {
 			defer goleak.VerifyNone(t, leak.IgnoreList()...)
 
 			const (
-				blocks            = 300
-				blockGasLimit     = 40_000_000
-				blockPeriod       = time.Second
-				threads           = 10
-				batchesSize       = 10_000
-				timeoutDuration   = 10 * blockPeriod
-				txsTickerDuration = 800 * time.Millisecond
-				apiTickerDuration = 10 * time.Millisecond
+				blocks          = 300
+				blockGasLimit   = 40_000_000
+				blockPeriod     = time.Second
+				threads         = 10
+				batchesSize     = 10_000
+				timeoutDuration = 10 * blockPeriod
 
 				balanceStr = "1_000_000_000"
 			)
 
-			apiWithMining(t, balanceStr, batchesSize, singleCase, timeoutDuration, threads, txsTickerDuration, apiTickerDuration, blockPeriod, blocks, blockGasLimit)
+			apiWithMining(t, balanceStr, batchesSize, singleCase, timeoutDuration, threads, blockPeriod, blocks, blockGasLimit)
 		})
 	}
 }
 
 //nolint:gocognit,thelper
 func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase struct {
-	name string
-	size int
-}, timeoutDuration time.Duration, threads int, txsTickerDuration time.Duration, apiTickerDuration time.Duration, blockPeriod time.Duration, blocks int, blockGasLimit uint64) {
+	name              string
+	size              int
+	txsTickerDuration time.Duration
+	apiTickerDuration time.Duration
+}, timeoutDuration time.Duration, threads int, blockPeriod time.Duration, blocks int, blockGasLimit uint64) {
 	done := make(chan struct{})
 
 	var wg sync.WaitGroup
@@ -3865,6 +3967,9 @@ func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase
 	}
 
 	tb.Logf("[%s] starting goroutines", common.NowMilliseconds())
+
+	txsTickerDuration := singleCase.txsTickerDuration
+	apiTickerDuration := singleCase.apiTickerDuration
 
 	// locals
 	wg.Add(1)
