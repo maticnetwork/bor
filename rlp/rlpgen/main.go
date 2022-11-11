@@ -21,12 +21,13 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"github.com/ethereum/go-ethereum/common"
 	"go/types"
 	"io/ioutil"
 	"os"
 
 	"golang.org/x/tools/go/packages"
+
+	"github.com/ethereum/go-ethereum/common"
 )
 
 const pathOfPackageRLP = "github.com/ethereum/go-ethereum/rlp"
@@ -59,7 +60,7 @@ func main() {
 			fmt.Println("path not verified: " + err.Error())
 			fatal(err)
 		}
-		if err := ioutil.WriteFile(canonicalPath, code, 0644); err != nil {
+		if err := ioutil.WriteFile(canonicalPath, code, 0600); err != nil {
 			fatal(err)
 		}
 	}

@@ -18,10 +18,10 @@ package main
 
 import (
 	"fmt"
-	"github.com/ethereum/go-ethereum/common"
 	"io/ioutil"
 	"os"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/tests/fuzzers/rangeproof"
 )
 

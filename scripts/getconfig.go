@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/ethereum/go-ethereum/common"
 	"log"
 	"os"
 	"strconv"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/pelletier/go-toml"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/internal/cli/server"
 )
 
