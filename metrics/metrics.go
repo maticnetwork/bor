@@ -6,7 +6,10 @@
 package metrics
 
 import (
+	"errors"
+	"fmt"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -71,7 +74,13 @@ func init() {
 func updateMetricsFromConfig(path string) {
 	// Don't act upon any errors here. They're already taken into
 	// consideration when the toml config file will be parsed in the cli.
-	data, err := os.ReadFile(path)
+	canonicalPath, err := verifyPath(path)
+	if err != nil {
+		fmt.Println("path not verified: " + err.Error())
+		return
+	}
+
+	data, err := os.ReadFile(canonicalPath)
 	tomlData := string(data)
 
 	if err != nil {
@@ -167,5 +176,16 @@ func CollectProcessMetrics(refresh time.Duration) {
 			diskWriteBytesCounter.Inc(diskstats[location1].WriteBytes - diskstats[location2].WriteBytes)
 		}
 		time.Sleep(refresh)
+	}
+}
+
+func verifyPath(path string) (string, error) {
+	c := filepath.Clean(path)
+
+	r, err := filepath.EvalSymlinks(c)
+	if err != nil {
+		return c, errors.New(fmt.Sprintf("unsafe or invalid path specified: %s", path))
+	} else {
+		return r, nil
 	}
 }
