@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
 )
@@ -54,13 +55,14 @@ func (w *checkpoint) IsValidChain(currentHeader *types.Header, chain []*types.He
 	return isValidChain(currentHeader, chain, doExist, checkpointNumber, checkpointHash, interval)
 }
 
-func (w *checkpoint) ProcessCheckpoint(endBlockNum uint64, endBlockHash common.Hash) {
+func (w *checkpoint) ProcessCheckpoint(block uint64, hash common.Hash) {
 	w.m.Lock()
 	defer w.m.Unlock()
 
 	w.doExist = true
-	w.Hash = endBlockHash
-	w.Number = endBlockNum
+	w.Hash = hash
+	w.Number = block
+	rawdb.WriteLastCheckpoint(w.db, block, hash)
 }
 
 // GetWhitelistedMilestone returns the existing whitelisted

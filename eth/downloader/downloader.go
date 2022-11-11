@@ -204,6 +204,8 @@ type BlockChain interface {
 
 	// Snapshots returns the blockchain snapshot tree to paused it during sync.
 	Snapshots() *snapshot.Tree
+
+	GetChainConfig() *params.ChainConfig
 }
 
 // New creates a new downloader to fetch hashes and blocks from remote peers.
@@ -793,8 +795,12 @@ func (d *Downloader) getFetchHeadersByNumber(p *peerConnection) func(number uint
 // In the rare scenario when we ended up on a long reorganisation (i.e. none of
 // the head links match), we do a binary search to find the common ancestor.
 func (d *Downloader) findAncestor(p *peerConnection, remoteHeader *types.Header) (uint64, error) {
+
+	currentBlock := d.blockchain.CurrentBlock().Number().Uint64()
+	chainConfig := d.blockchain.GetChainConfig()
+
 	// Check the validity of peer from which the chain is to be downloaded
-	if d.ChainValidator != nil {
+	if d.ChainValidator != nil && chainConfig.Bor.IsDubai(currentBlock) {
 		if _, err := d.IsValidPeer(remoteHeader, d.getFetchHeadersByNumber(p)); err != nil {
 			return 0, err
 		}

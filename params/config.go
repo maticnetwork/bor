@@ -229,7 +229,8 @@ var (
 		MuirGlacierBlock:    nil,
 		BerlinBlock:         big.NewInt(4_460_644),
 		LondonBlock:         big.NewInt(5_062_605),
-		ArrowGlacierBlock:   nil,
+
+		ArrowGlacierBlock: nil,
 		Clique: &CliqueConfig{
 			Period: 15,
 			Epoch:  30000,
@@ -275,6 +276,7 @@ var (
 		BerlinBlock:         big.NewInt(0),
 		LondonBlock:         big.NewInt(0),
 		Bor: &BorConfig{
+			DubaiBlock: 128,
 			Period: map[string]uint64{
 				"0": 2,
 			},
@@ -342,6 +344,7 @@ var (
 		LondonBlock:         big.NewInt(22640000),
 		Bor: &BorConfig{
 			JaipurBlock: 22770000,
+			DubaiBlock:  22770000, //Need to change the value
 			Period: map[string]uint64{
 				"0":        2,
 				"25275000": 5,
@@ -387,6 +390,7 @@ var (
 		LondonBlock:         big.NewInt(23850000),
 		Bor: &BorConfig{
 			JaipurBlock: 23850000,
+			DubaiBlock:  22770000, //Need to change the value
 			Period: map[string]uint64{
 				"0": 2,
 			},
@@ -559,6 +563,7 @@ type BorConfig struct {
 	BlockAlloc               map[string]interface{} `json:"blockAlloc"`
 	BurntContract            map[string]string      `json:"burntContract"` // governance contract where the token will be sent to and burnt in london fork
 	JaipurBlock              uint64                 `json:"jaipurBlock"`   // Jaipur switch block (nil = no fork, 0 = already on jaipur)
+	DubaiBlock               uint64                 `json:"dubaiBlock"`    // Dubai switch block (nil = no fork, 0 = already on dubai)
 }
 
 // String implements the stringer interface, returning the consensus engine details.
@@ -576,6 +581,10 @@ func (c *BorConfig) CalculatePeriod(number uint64) uint64 {
 
 func (c *BorConfig) IsJaipur(number uint64) bool {
 	return number >= c.JaipurBlock
+}
+
+func (c *BorConfig) IsDubai(number uint64) bool {
+	return number >= 128
 }
 
 func (c *BorConfig) calculateBorConfigHelper(field map[string]uint64, number uint64) uint64 {

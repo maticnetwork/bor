@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
@@ -70,15 +71,16 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 	return isValidChain(currentHeader, chain, doExist, milestoneNumber, milestoneHash, interval)
 }
 
-func (m *milestone) ProcessMilestone(endBlockNum uint64, endBlockHash common.Hash) {
+func (m *milestone) ProcessMilestone(block uint64, hash common.Hash) {
 	m.m.Lock()
 	defer m.m.Unlock()
 
 	m.doExist = true
-	m.Number = endBlockNum
-	m.Hash = endBlockHash
+	m.Number = block
+	m.Hash = hash
+	rawdb.WriteLastMilestone(m.db, block, hash)
 
-	m.UnlockSprint(endBlockNum)
+	m.UnlockSprint(block)
 }
 
 // GetMilestone returns the existing whitelisted
@@ -87,7 +89,15 @@ func (m *milestone) GetWhitelistedMilestone() (bool, uint64, common.Hash) {
 	m.m.RLock()
 	defer m.m.RUnlock()
 
-	return m.doExist, m.Number, m.Hash
+	if m.doExist {
+		return m.doExist, m.Number, m.Hash
+	}
+
+	if block, hash, err := rawdb.ReadLastMilestone(m.db); err == nil {
+		return true, block, hash
+	}
+
+	return false, m.Number, m.Hash
 }
 
 // PurgeMilestone purges data from milestone

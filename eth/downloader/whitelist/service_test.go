@@ -27,7 +27,7 @@ func NewMockService() *WhitelistService {
 		milestone{
 			doExist:            false,
 			interval:           256,
-			LockedMilestoneIDs: make(map[string]bool),
+			LockedMilestoneIDs: make(map[string]struct{}),
 		},
 	}
 }

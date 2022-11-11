@@ -955,7 +955,7 @@ func (bc *BlockChain) InsertReceiptChain(blockChain types.Blocks, receiptChain [
 				return false
 			}
 
-			isValid, err := bc.forker.ValidateReorg(bc.CurrentFastBlock().Header(), headers)
+			isValid, err := bc.forker.ValidateReorg(bc.CurrentFastBlock().Header(), headers, bc.chainConfig)
 			if err != nil {
 				log.Warn("Reorg failed", "err", err)
 				return false
@@ -1515,7 +1515,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 	block, err := it.next()
 
 	// Check the validity of incoming chain
-	isValid, err1 := bc.forker.ValidateReorg(bc.CurrentBlock().Header(), headers)
+	isValid, err1 := bc.forker.ValidateReorg(bc.CurrentBlock().Header(), headers, bc.chainConfig)
 	if err1 != nil {
 		return it.index, err1
 	}
@@ -1933,7 +1933,7 @@ func (bc *BlockChain) insertSideChain(block *types.Block, it *insertIterator) (i
 		return it.index, err
 	}
 
-	isValid, err := bc.forker.ValidateReorg(current.Header(), headers)
+	isValid, err := bc.forker.ValidateReorg(current.Header(), headers, bc.chainConfig)
 	if err != nil {
 		return it.index, err
 	}
@@ -2484,4 +2484,8 @@ func (bc *BlockChain) InsertHeaderChain(chain []*types.Header, checkFreq int) (i
 	defer bc.chainmu.Unlock()
 	_, err := bc.hc.InsertHeaderChain(chain, start, bc.forker)
 	return 0, err
+}
+
+func (bc *BlockChain) GetChainConfig() *params.ChainConfig {
+	return bc.chainConfig
 }

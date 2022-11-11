@@ -1,5 +1,3 @@
-//go:build integration
-
 package bor
 
 import (
@@ -1037,6 +1035,109 @@ func TestNonMinerNodeWithTryToLock(t *testing.T) {
 		}
 
 		if blockHeaderVal0.Number.Uint64() == 30 {
+			break
+		}
+
+	}
+
+}
+
+func TestRewind(t *testing.T) {
+
+	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
+	fdlimit.Raise(2048)
+
+	// Generate a batch of accounts to seal and fund with
+	faucets := make([]*ecdsa.PrivateKey, 128)
+	for i := 0; i < len(faucets); i++ {
+		faucets[i], _ = crypto.GenerateKey()
+	}
+
+	// Create an Ethash network based off of the Ropsten config
+	genesis := InitGenesis(t, faucets, "./testdata/genesis_2val.json")
+
+	var (
+		stacks []*node.Node
+		nodes  []*eth.Ethereum
+		enodes []*enode.Node
+	)
+	for i := 0; i < 2; i++ {
+		// Start the node and wait until it's up
+		stack, ethBackend, err := InitMiner(genesis, keys[i], true)
+		if err != nil {
+			panic(err)
+		}
+		defer stack.Close()
+
+		for stack.Server().NodeInfo().Ports.Listener == 0 {
+			time.Sleep(250 * time.Millisecond)
+		}
+
+		// Connect the node to all the previous ones
+		for _, n := range enodes {
+			stack.Server().AddPeer(n)
+		}
+
+		// Start tracking the node and its enode
+		stacks = append(stacks, stack)
+		nodes = append(nodes, ethBackend)
+		enodes = append(enodes, stack.Server().Self())
+	}
+
+	// Iterate over all the nodes and start mining
+	time.Sleep(3 * time.Second)
+
+	for _, node := range nodes {
+		if err := node.StartMining(1); err != nil {
+			panic(err)
+		}
+	}
+
+	// step1 := false
+	// step2 := false
+	// step3 := false
+	step4 := false
+
+	for {
+
+		blockHeaderVal0 := nodes[0].BlockChain().CurrentHeader()
+		blockHeaderVal1 := nodes[1].BlockChain().CurrentHeader()
+
+		// if blockHeaderVal1.Number.Uint64() == 20 && !step1 {
+		// 	nodes[1].BlockChain().SetHead(2)
+
+		// 	step1 = true
+		// }
+
+		// if blockHeaderVal1.Number.Uint64() == 40 && !step2 {
+		// 	nodes[1].BlockChain().SetHead(2)
+
+		// 	step2 = true
+		// }
+
+		// if blockHeaderVal1.Number.Uint64() == 80 && !step3 {
+		// 	nodes[1].BlockChain().SetHead(2)
+
+		// 	step3 = true
+		// }
+
+		// if blockHeaderVal1.Number.Uint64() == 120 && !step4 {
+		// 	nodes[1].BlockChain().SetHead(2)
+
+		// 	step4 = true
+		// }
+
+		if blockHeaderVal1.Number.Uint64() == 180 && !step4 {
+
+			ch := make(chan struct{})
+			nodes[1].Miner().Stop(ch)
+			<-ch
+			nodes[1].BlockChain().SetHead(2)
+			nodes[1].StartMining(1)
+			step4 = true
+		}
+
+		if blockHeaderVal0.Number.Uint64() == 200 {
 			break
 		}
 
