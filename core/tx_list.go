@@ -116,10 +116,12 @@ func (m *txSortedMap) Forward(threshold uint64) types.Transactions {
 	}
 
 	// If we had a cached order, shift the front
+	m.cacheMu.Lock()
 	if m.cache != nil {
 		hitCacheCounter.Inc(1)
 		m.cache = m.cache[len(removed):]
 	}
+	m.cacheMu.Unlock()
 
 	return removed
 }
@@ -206,9 +208,11 @@ func (m *txSortedMap) Cap(threshold int) types.Transactions {
 	heap.Init(m.index)
 
 	// If we had a cache, shift the back
+	m.cacheMu.Lock()
 	if m.cache != nil {
 		m.cache = m.cache[:len(m.cache)-len(drops)]
 	}
+	m.cacheMu.Unlock()
 
 	return drops
 }
