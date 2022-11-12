@@ -3501,21 +3501,6 @@ func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase
 		addTransactionsBatches(tb, batchesRemotesSync, getFnForBatches(pool.AddRemotesSync), done, timeoutDuration, txsTickerDuration, "AddRemotesSync", 0)
 	}()
 
-	// remote
-	wg.Add(1)
-
-	go func() {
-		defer func() {
-			tb.Logf("[%s] stopping AddRemoteSync", common.NowMilliseconds())
-
-			wg.Done()
-
-			tb.Logf("[%s] stopped AddRemoteSync", common.NowMilliseconds())
-		}()
-
-		addTransactions(tb, batchesRemoteSync, pool.addRemoteSync, done, timeoutDuration, txsTickerDuration, "AddRemoteSync", 0)
-	}()
-
 	// tx pool API
 	for i := 0; i < threads; i++ {
 		i := i

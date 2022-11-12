@@ -1,0 +1,1690 @@
+GODEBUG=cgocheck=0 go test -buildvcs=false -ldflags "-X github.com/ethereum/go-ethereum/params.GitCommit=1b457b7f9c3a2891f9795c0d497837b1293e3ad3 -X github.com/ethereum/go-ethereum/params.GitBranch=txpool-benchmark-develop -X github.com/ethereum/go-ethereum/params.GitTag=v0.2.17" -p 1 -run=TestPoolMiningDataRaces --timeout 600m -v ./core/
+=== RUN   TestPoolMiningDataRaces
+=== RUN   TestPoolMiningDataRaces/size_1,_txs_ticker_200ms,_api_ticker_10ms
+    tx_pool_test.go:3404: [21:05:41.085] starting goroutines
+    tx_pool_test.go:3745: [21:05:41.085] before the first propagated transaction
+    tx_pool_test.go:3421: [21:05:41.085] starting AddLocal(s)
+    tx_pool_test.go:3470: [21:05:41.085] starting AddRemotes
+    tx_pool_test.go:3485: [21:05:41.085] starting AddRemote
+    tx_pool_test.go:3501: [21:05:41.085] starting AddRemotesSync
+    tx_pool_test.go:3747: [21:05:41.085] after the first propagated transaction
+    tx_pool_test.go:3157: [21:05:41.086] mining block. block 0. total 400: pending 4(added 0), local 1(added 400), queued 0, localTxsCount 1, remoteTxsCount 3, pending 1.75µs, mining 297.416µs
+    tx_pool_test.go:3157: [21:05:42.087] mining block. block 1. total 400: pending 13(added 400), local 0(added 0), queued 2, localTxsCount 0, remoteTxsCount 13, pending 3µs, mining 707.459µs
+    tx_pool_test.go:3157: [21:05:43.087] mining block. block 2. total 400: pending 24(added 400), local 0(added 0), queued 6, localTxsCount 0, remoteTxsCount 24, pending 5.666µs, mining 959.875µs
+    tx_pool_test.go:3157: [21:05:44.094] mining block. block 3. total 400: pending 36(added 400), local 0(added 0), queued 10, localTxsCount 0, remoteTxsCount 36, pending 14.625µs, mining 3.7725ms
+    tx_pool_test.go:3157: [21:05:45.094] mining block. block 4. total 400: pending 47(added 400), local 0(added 0), queued 13, localTxsCount 0, remoteTxsCount 47, pending 82.167µs, mining 3.568167ms
+    tx_pool_test.go:3157: [21:05:46.093] mining block. block 5. total 400: pending 59(added 400), local 0(added 0), queued 16, localTxsCount 0, remoteTxsCount 59, pending 24.625µs, mining 1.487709ms
+    tx_pool_test.go:3157: [21:05:47.094] mining block. block 6. total 400: pending 70(added 400), local 0(added 0), queued 19, localTxsCount 0, remoteTxsCount 70, pending 79.333µs, mining 1.626083ms
+    tx_pool_test.go:3157: [21:05:48.094] mining block. block 7. total 400: pending 82(added 400), local 0(added 0), queued 22, localTxsCount 0, remoteTxsCount 82, pending 46.25µs, mining 1.484459ms
+    tx_pool_test.go:3157: [21:05:49.098] mining block. block 8. total 400: pending 93(added 400), local 0(added 0), queued 26, localTxsCount 0, remoteTxsCount 93, pending 322.416µs, mining 3.367708ms
+    tx_pool_test.go:3157: [21:05:50.100] mining block. block 9. total 400: pending 105(added 400), local 0(added 0), queued 29, localTxsCount 0, remoteTxsCount 105, pending 1.435458ms, mining 4.171292ms
+    tx_pool_test.go:3157: [21:05:51.104] mining block. block 10. total 400: pending 116(added 400), local 0(added 0), queued 32, localTxsCount 0, remoteTxsCount 116, pending 3.884792ms, mining 5.902542ms
+    tx_pool_test.go:3157: [21:05:52.100] mining block. block 11. total 400: pending 128(added 400), local 0(added 0), queued 34, localTxsCount 0, remoteTxsCount 128, pending 272.334µs, mining 1.396292ms
+    tx_pool_test.go:3157: [21:05:53.101] mining block. block 12. total 400: pending 139(added 400), local 0(added 0), queued 38, localTxsCount 0, remoteTxsCount 139, pending 68.541µs, mining 2.25875ms
+    tx_pool_test.go:3157: [21:05:54.101] mining block. block 13. total 400: pending 151(added 400), local 0(added 0), queued 42, localTxsCount 0, remoteTxsCount 151, pending 88.417µs, mining 2.560458ms
+    tx_pool_test.go:3157: [21:05:55.101] mining block. block 14. total 400: pending 162(added 400), local 0(added 0), queued 45, localTxsCount 0, remoteTxsCount 162, pending 73.792µs, mining 2.1415ms
+    tx_pool_test.go:3157: [21:05:56.101] mining block. block 15. total 400: pending 174(added 400), local 0(added 0), queued 48, localTxsCount 0, remoteTxsCount 174, pending 70.167µs, mining 3.010667ms
+    tx_pool_test.go:3157: [21:05:57.100] mining block. block 16. total 400: pending 185(added 400), local 0(added 0), queued 51, localTxsCount 0, remoteTxsCount 185, pending 30.167µs, mining 1.205542ms
+    tx_pool_test.go:3157: [21:05:58.101] mining block. block 17. total 400: pending 197(added 400), local 0(added 0), queued 53, localTxsCount 0, remoteTxsCount 197, pending 67.042µs, mining 1.358667ms
+    tx_pool_test.go:3157: [21:05:59.101] mining block. block 18. total 400: pending 208(added 400), local 0(added 0), queued 57, localTxsCount 0, remoteTxsCount 208, pending 42.791µs, mining 1.496083ms
+    tx_pool_test.go:3157: [21:06:00.101] mining block. block 19. total 400: pending 220(added 400), local 0(added 0), queued 61, localTxsCount 0, remoteTxsCount 220, pending 45.25µs, mining 1.093667ms
+    tx_pool_test.go:3157: [21:06:01.102] mining block. block 20. total 400: pending 231(added 400), local 0(added 0), queued 64, localTxsCount 0, remoteTxsCount 231, pending 113.292µs, mining 1.042667ms
+    tx_pool_test.go:3157: [21:06:02.103] mining block. block 21. total 400: pending 243(added 400), local 0(added 0), queued 67, localTxsCount 0, remoteTxsCount 243, pending 65.834µs, mining 1.296125ms
+    tx_pool_test.go:3157: [21:06:03.103] mining block. block 22. total 400: pending 254(added 400), local 0(added 0), queued 70, localTxsCount 0, remoteTxsCount 254, pending 96.083µs, mining 1.198375ms
+    tx_pool_test.go:3157: [21:06:04.104] mining block. block 23. total 400: pending 266(added 400), local 0(added 0), queued 73, localTxsCount 0, remoteTxsCount 266, pending 108.875µs, mining 1.692667ms
+    tx_pool_test.go:3157: [21:06:05.104] mining block. block 24. total 400: pending 276(added 400), local 0(added 0), queued 75, localTxsCount 0, remoteTxsCount 276, pending 79.041µs, mining 963.25µs
+    tx_pool_test.go:3157: [21:06:06.105] mining block. block 25. total 400: pending 288(added 400), local 0(added 0), queued 79, localTxsCount 0, remoteTxsCount 288, pending 193.75µs, mining 1.19525ms
+    tx_pool_test.go:3157: [21:06:07.105] mining block. block 26. total 400: pending 299(added 400), local 0(added 0), queued 82, localTxsCount 0, remoteTxsCount 299, pending 648.458µs, mining 1.573833ms
+    tx_pool_test.go:3157: [21:06:08.105] mining block. block 27. total 400: pending 311(added 400), local 0(added 0), queued 85, localTxsCount 0, remoteTxsCount 311, pending 89.625µs, mining 1.097084ms
+    tx_pool_test.go:3157: [21:06:09.106] mining block. block 28. total 400: pending 322(added 400), local 0(added 0), queued 87, localTxsCount 0, remoteTxsCount 322, pending 115.125µs, mining 1.1055ms
+    tx_pool_test.go:3157: [21:06:10.107] mining block. block 29. total 400: pending 334(added 400), local 0(added 0), queued 90, localTxsCount 0, remoteTxsCount 334, pending 100.792µs, mining 1.238333ms
+fatal error: concurrent map iteration and map write
+
+goroutine 364678 [running]:
+github.com/ethereum/go-ethereum/core.(*TxPool).Pending(0x140004e2000, 0x0)
+	/Users/jekamas/projects/bor/core/tx_pool.go:549 +0xb4
+github.com/ethereum/go-ethereum/core.apiWithMining.func6.2(0x0?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3520 +0x24
+github.com/ethereum/go-ethereum/core.runWithTimeout.func1()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3927 +0x90
+created by github.com/ethereum/go-ethereum/core.runWithTimeout
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3920 +0x280
+
+goroutine 1 [chan receive]:
+testing.(*T).Run(0x14000501ba0, {0x100fd07ec?, 0x1d16e57bf8da9?}, 0x1012984c8)
+	/Users/jekamas/go/go1.19.2/src/testing/testing.go:1494 +0x314
+testing.runTests.func1(0x0?)
+	/Users/jekamas/go/go1.19.2/src/testing/testing.go:1846 +0x70
+testing.tRunner(0x14000501ba0, 0x14000565cb8)
+	/Users/jekamas/go/go1.19.2/src/testing/testing.go:1446 +0x10c
+testing.runTests(0x140000ae0a0?, {0x1016ef420, 0x87, 0x87}, {0x14000565d28?, 0x100934718?, 0x1016f5d20?})
+	/Users/jekamas/go/go1.19.2/src/testing/testing.go:1844 +0x3f0
+testing.(*M).Run(0x140000ae0a0)
+	/Users/jekamas/go/go1.19.2/src/testing/testing.go:1726 +0x4f0
+main.main()
+	_testmain.go:403 +0x1d0
+
+goroutine 4 [chan receive]:
+github.com/ethereum/go-ethereum/metrics.(*meterArbiter).tick(0x1016f57e0)
+	/Users/jekamas/projects/bor/metrics/meter.go:290 +0x54
+created by github.com/ethereum/go-ethereum/metrics.NewMeterForced
+	/Users/jekamas/projects/bor/metrics/meter.go:71 +0xc4
+
+goroutine 5 [select]:
+github.com/ethereum/go-ethereum/consensus/ethash.(*remoteSealer).loop(0x140001f2000)
+	/Users/jekamas/projects/bor/consensus/ethash/sealer.go:280 +0x13c
+created by github.com/ethereum/go-ethereum/consensus/ethash.startRemoteSealer
+	/Users/jekamas/projects/bor/consensus/ethash/sealer.go:264 +0x2b8
+
+goroutine 24 [chan receive]:
+github.com/ethereum/go-ethereum/core.(*txSenderCacher).cache(0x0?)
+	/Users/jekamas/projects/bor/core/tx_cacher.go:63 +0x34
+created by github.com/ethereum/go-ethereum/core.newTxSenderCacher
+	/Users/jekamas/projects/bor/core/tx_cacher.go:55 +0x88
+
+goroutine 25 [chan receive]:
+github.com/ethereum/go-ethereum/core.(*txSenderCacher).cache(0x0?)
+	/Users/jekamas/projects/bor/core/tx_cacher.go:63 +0x34
+created by github.com/ethereum/go-ethereum/core.newTxSenderCacher
+	/Users/jekamas/projects/bor/core/tx_cacher.go:55 +0x88
+
+goroutine 26 [chan receive]:
+github.com/ethereum/go-ethereum/core.(*txSenderCacher).cache(0x0?)
+	/Users/jekamas/projects/bor/core/tx_cacher.go:63 +0x34
+created by github.com/ethereum/go-ethereum/core.newTxSenderCacher
+	/Users/jekamas/projects/bor/core/tx_cacher.go:55 +0x88
+
+goroutine 27 [chan receive]:
+github.com/ethereum/go-ethereum/core.(*txSenderCacher).cache(0x0?)
+	/Users/jekamas/projects/bor/core/tx_cacher.go:63 +0x34
+created by github.com/ethereum/go-ethereum/core.newTxSenderCacher
+	/Users/jekamas/projects/bor/core/tx_cacher.go:55 +0x88
+
+goroutine 28 [chan receive]:
+github.com/ethereum/go-ethereum/core.(*txSenderCacher).cache(0x0?)
+	/Users/jekamas/projects/bor/core/tx_cacher.go:63 +0x34
+created by github.com/ethereum/go-ethereum/core.newTxSenderCacher
+	/Users/jekamas/projects/bor/core/tx_cacher.go:55 +0x88
+
+goroutine 29 [chan receive]:
+github.com/ethereum/go-ethereum/core.(*txSenderCacher).cache(0x1016f57e0?)
+	/Users/jekamas/projects/bor/core/tx_cacher.go:63 +0x34
+created by github.com/ethereum/go-ethereum/core.newTxSenderCacher
+	/Users/jekamas/projects/bor/core/tx_cacher.go:55 +0x88
+
+goroutine 30 [chan receive]:
+github.com/ethereum/go-ethereum/core.(*txSenderCacher).cache(0x14000102ea0?)
+	/Users/jekamas/projects/bor/core/tx_cacher.go:63 +0x34
+created by github.com/ethereum/go-ethereum/core.newTxSenderCacher
+	/Users/jekamas/projects/bor/core/tx_cacher.go:55 +0x88
+
+goroutine 31 [chan receive]:
+github.com/ethereum/go-ethereum/core.(*txSenderCacher).cache(0x14000102d00?)
+	/Users/jekamas/projects/bor/core/tx_cacher.go:63 +0x34
+created by github.com/ethereum/go-ethereum/core.newTxSenderCacher
+	/Users/jekamas/projects/bor/core/tx_cacher.go:55 +0x88
+
+goroutine 32 [chan receive]:
+github.com/ethereum/go-ethereum/core.(*txSenderCacher).cache(0x0?)
+	/Users/jekamas/projects/bor/core/tx_cacher.go:63 +0x34
+created by github.com/ethereum/go-ethereum/core.newTxSenderCacher
+	/Users/jekamas/projects/bor/core/tx_cacher.go:55 +0x88
+
+goroutine 33 [chan receive]:
+github.com/ethereum/go-ethereum/core.(*txSenderCacher).cache(0x0?)
+	/Users/jekamas/projects/bor/core/tx_cacher.go:63 +0x34
+created by github.com/ethereum/go-ethereum/core.newTxSenderCacher
+	/Users/jekamas/projects/bor/core/tx_cacher.go:55 +0x88
+
+goroutine 66 [chan receive]:
+testing.(*T).Run(0x14000501d40, {0x140003458c0?, 0x140001c5c08?}, 0x1400033b020)
+	/Users/jekamas/go/go1.19.2/src/testing/testing.go:1494 +0x314
+github.com/ethereum/go-ethereum/core.TestPoolMiningDataRaces(0x14000501d40)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3291 +0x238
+testing.tRunner(0x14000501d40, 0x1012984c8)
+	/Users/jekamas/go/go1.19.2/src/testing/testing.go:1446 +0x10c
+created by testing.(*T).Run
+	/Users/jekamas/go/go1.19.2/src/testing/testing.go:1493 +0x300
+
+goroutine 67 [runnable]:
+github.com/ethereum/go-ethereum/core.(*txLookup).Get(0x1400037ca80, {0xb3, 0x20, 0xc2, 0xa0, 0xd6, 0xa6, 0x80, 0x20, 0x54, ...})
+	/Users/jekamas/projects/bor/core/tx_pool.go:1734 +0xd8
+github.com/ethereum/go-ethereum/core.(*TxPool).removeTx(0x140004e2000, {0xb3, 0x20, 0xc2, 0xa0, 0xd6, 0xa6, 0x80, 0x20, 0x54, ...}, ...)
+	/Users/jekamas/projects/bor/core/tx_pool.go:1012 +0x4c
+github.com/ethereum/go-ethereum/core.commitTransactions(0x1012a3ec0?, 0x1400034e000, 0x14005f81500?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3084 +0x90
+github.com/ethereum/go-ethereum/core.mining({0x1012a8010, 0x140001b4820}, 0x1400535c3c0?, {0x1012a3ec0, 0x1400523a020}, 0x140004dfcd0, 0x2625a00, 0x140001d8700?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3150 +0x214
+github.com/ethereum/go-ethereum/core.apiWithMining({0x1012a8010, 0x140001b4820}, {0x100fcae47, 0x11}, 0x2710, {{0x140003458c0, 0x29}, 0x1, 0xbebc200, 0x989680}, ...)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3764 +0x1a34
+github.com/ethereum/go-ethereum/core.TestPoolMiningDataRaces.func1(0x140001b4820)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3305 +0xd4
+testing.tRunner(0x140001b4820, 0x1400033b020)
+	/Users/jekamas/go/go1.19.2/src/testing/testing.go:1446 +0x10c
+created by testing.(*T).Run
+	/Users/jekamas/go/go1.19.2/src/testing/testing.go:1493 +0x300
+
+goroutine 9 [select]:
+github.com/ethereum/go-ethereum/core.(*TxPool).scheduleReorgLoop(0x140004e2000)
+	/Users/jekamas/projects/bor/core/tx_pool.go:1117 +0x210
+created by github.com/ethereum/go-ethereum/core.NewTxPool
+	/Users/jekamas/projects/bor/core/tx_pool.go:320 +0x5b4
+
+goroutine 10 [select]:
+github.com/ethereum/go-ethereum/core.(*TxPool).loop(0x140004e2000)
+	/Users/jekamas/projects/bor/core/tx_pool.go:364 +0x218
+created by github.com/ethereum/go-ethereum/core.NewTxPool
+	/Users/jekamas/projects/bor/core/tx_pool.go:337 +0x7ec
+
+goroutine 82 [sleep]:
+time.Sleep(0xbebc200)
+	/Users/jekamas/go/go1.19.2/src/runtime/time.go:195 +0x118
+github.com/ethereum/go-ethereum/core.apiWithMining.func2()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3454 +0x294
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3412 +0x9a0
+
+goroutine 83 [sleep]:
+time.Sleep(0xbebc200)
+	/Users/jekamas/go/go1.19.2/src/runtime/time.go:195 +0x118
+github.com/ethereum/go-ethereum/core.addTransactionsBatches({0x1012a8010, 0x140001b4820}, {0x140007e4000, 0x2710, 0x0?}, 0x140041238c0, 0x0?, 0x0?, 0x0?, {0x100fc5f41, ...}, ...)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3819 +0x2fc
+github.com/ethereum/go-ethereum/core.apiWithMining.func3()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3470 +0x11c
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3461 +0xa88
+
+goroutine 84 [sleep]:
+time.Sleep(0xbebc200)
+	/Users/jekamas/go/go1.19.2/src/runtime/time.go:195 +0x118
+github.com/ethereum/go-ethereum/core.addTransactions({0x1012a8010, 0x140001b4820}, {0x140007a8000, 0x2710, 0x0?}, 0x14004123940, 0x0?, 0x0?, 0x0?, {0x100fc5365, ...}, ...)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3852 +0x1f0
+github.com/ethereum/go-ethereum/core.apiWithMining.func4()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3485 +0x118
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3476 +0xb70
+
+goroutine 85 [sleep]:
+time.Sleep(0xbebc200)
+	/Users/jekamas/go/go1.19.2/src/runtime/time.go:195 +0x118
+github.com/ethereum/go-ethereum/core.addTransactionsBatches({0x1012a8010, 0x140001b4820}, {0x1400085c000, 0x2710, 0x0?}, 0x140041239e0, 0x0?, 0x0?, 0x0?, {0x100fc8a9c, ...}, ...)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3819 +0x2fc
+github.com/ethereum/go-ethereum/core.apiWithMining.func5()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3501 +0x11c
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3492 +0xc58
+
+goroutine 86 [select]:
+github.com/ethereum/go-ethereum/core.runWithTimeout({0x1012a8010, 0x140001b4820}, 0x14004123a60, 0x14000357860, {0x100fc98b5, 0xf}, 0x0?, 0x0?, 0x0?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3935 +0x2c4
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x0?, 0x0?, {0x100fc98b5, 0xf}, 0x0?, 0x0?, 0x0)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3895 +0x240
+github.com/ethereum/go-ethereum/core.apiWithMining.func6()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3519 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3510 +0xd60
+
+goroutine 87 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x0?, 0x0?, {0x100fcb100, 0x11}, 0x0?, 0x0?, 0x0)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func7()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3536 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3527 +0xe34
+
+goroutine 88 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x14000506f38?, 0x100938ce8?, {0x100fc2167, 0x6}, 0x0?, 0x1009886c4?, 0x0)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func8()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3553 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3544 +0xf08
+
+goroutine 89 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x14000059738?, 0x100938ce8?, {0x100fc334f, 0x7}, 0x0?, 0x1009886c4?, 0x0)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func9()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3570 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3561 +0xfdc
+
+goroutine 90 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x7f0c3505802f21e3?, 0x8d9a15772018d9cf?, {0x100fc46d9, 0x8}, 0x0?, 0x70d0603070c0204?, 0x0)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func10()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3587 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3578 +0x10b0
+
+goroutine 91 [select]:
+github.com/ethereum/go-ethereum/core.runWithTimeout({0x1012a8010, 0x140001b4820}, 0x14004123ab0, 0x14000357860, {0x100fc6c16, 0xb}, 0x389b657636733901?, 0x4f0da351e0e9443?, 0xc452fa186378839f?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3935 +0x2c4
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0xee7bb72c2c900bf8?, 0x86f4840798449ef3?, {0x100fc6c16, 0xb}, 0x63482036e6d1c787?, 0xdfc57cebddfa8fbe?, 0x0)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3895 +0x240
+github.com/ethereum/go-ethereum/core.apiWithMining.func11()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3604 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3595 +0x1184
+
+goroutine 92 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0xab4d8e3866546f4b?, 0x7fcb53f45b9ae762?, {0x100fc6a1c, 0xb}, 0x1f174f8e7a5efbba?, 0x3f482b9ada970fdc?, 0x0)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func12()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3620 +0x124
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3611 +0x128c
+
+goroutine 93 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x6a13427328d00f7f?, 0x97ca3b2590b222e1?, {0x100fc063f, 0x3}, 0x77d09529419d77c3?, 0xba4cbfa040e92d9b?, 0x0)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func13()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3637 +0x14c
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3628 +0x13a8
+
+goroutine 94 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0xf984544f0a193000?, 0x5f0763691228559c?, {0x100fc0630, 0x3}, 0xecd5f079d98879a3?, 0xe1?, 0x0)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func14()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3654 +0x14c
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3645 +0x14c4
+
+goroutine 95 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x0?, 0x0?, {0x100fc13d2, 0x5}, 0x0?, 0x0?, 0x0)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func15()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3671 +0x124
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3662 +0x15cc
+
+goroutine 96 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x14000502ec8?, 0x14000356060?, {0x100fc14e5, 0x5}, 0x14000502ed8?, 0x0?, 0x0)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func16()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3688 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3679 +0x16a0
+
+goroutine 97 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x0?, 0x0?, {0x100fc22f3, 0x6}, 0x0?, 0x0?, 0x0)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func17()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3705 +0x14c
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3696 +0x17bc
+
+goroutine 98 [select]:
+github.com/ethereum/go-ethereum/core.runWithTimeout({0x1012a8010, 0x140001b4820}, 0x140044430f8, 0x14000357860, {0x100fcdaa9, 0x14}, 0x2540be400?, 0x7f?, 0x0?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3935 +0x2c4
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x325bfc7bc904737d?, 0x831b6ddf403e05d8?, {0x100fcdaa9, 0x14}, 0x325bfc7bc904737d?, 0x0?, 0x0)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3895 +0x240
+github.com/ethereum/go-ethereum/core.apiWithMining.func18()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3722 +0x114
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3713 +0xc74
+
+goroutine 99 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x140000763e0?, 0x14000076420?, {0x100fc98b5, 0xf}, 0x0?, 0x14000076320?, 0x1)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func6()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3519 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3510 +0xd60
+
+goroutine 100 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x140000763e0?, 0x14000076420?, {0x100fcb100, 0x11}, 0x0?, 0x14000076320?, 0x1)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func7()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3536 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3527 +0xe34
+
+goroutine 101 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x140000763e0?, 0x14000076420?, {0x100fc2167, 0x6}, 0x0?, 0x14000076320?, 0x1)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func8()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3553 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3544 +0xf08
+
+goroutine 102 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x140000763e0?, 0x14000076420?, {0x100fc334f, 0x7}, 0x0?, 0x14000076320?, 0x1)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func9()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3570 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3561 +0xfdc
+
+goroutine 103 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x254c08476356a194?, 0x0?, {0x100fc46d9, 0x8}, 0x5049f4f45a71a852?, 0xd2d6250147629654?, 0x1)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func10()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3587 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3578 +0x10b0
+
+goroutine 104 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0xcf952b538b613f15?, 0xa0b474b690ea103d?, {0x100fc6c16, 0xb}, 0x156968ea6efd8972?, 0x6b?, 0x1)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func11()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3604 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3595 +0x1184
+
+goroutine 105 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x99d79740071d3335?, 0x0?, {0x100fc6a1c, 0xb}, 0xdf34a60b2d23f80f?, 0xca4291f9ddd45396?, 0x1)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func12()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3620 +0x124
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3611 +0x128c
+
+goroutine 106 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x217fd2ab0fa1ba14?, 0xd1bfc0389aec5749?, {0x100fc063f, 0x3}, 0x217fd2ab0fa1ba14?, 0xd1bfc0389aec5749?, 0x1)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func13()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3637 +0x14c
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3628 +0x13a8
+
+goroutine 107 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0xa75ba0a9aad008fc?, 0xaeb60519a566f6c2?, {0x100fc0630, 0x3}, 0x2a637c155eaba6d0?, 0x54be0547a85f4ba1?, 0x1)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func14()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3654 +0x14c
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3645 +0x14c4
+
+goroutine 108 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x4d6180f03d026c96?, 0x13c60674d652aaa1?, {0x100fc13d2, 0x5}, 0xe333b8b5285444d5?, 0x1d7911b723461af5?, 0x1)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func15()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3671 +0x124
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3662 +0x15cc
+
+goroutine 109 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x340c4b24e0ead551?, 0x124cf25a051d5672?, {0x100fc14e5, 0x5}, 0xf4e31053841a6b44?, 0x6af4f6bcf87aa59c?, 0x1)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func16()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3688 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3679 +0x16a0
+
+goroutine 110 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0xf2bf3bb2d920c0a4?, 0xcb5953afc10e6762?, {0x100fc22f3, 0x6}, 0x3b62619e77260ce4?, 0x22?, 0x1)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func17()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3705 +0x14c
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3696 +0x17bc
+
+goroutine 111 [select]:
+github.com/ethereum/go-ethereum/core.runWithTimeout({0x1012a8010, 0x140001b4820}, 0x14004443248, 0x14000357860, {0x100fcdaa9, 0x14}, 0xa3c431817ebb737?, 0x44c805f5acc806b7?, 0x8f1ffb30cba584df?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3935 +0x2c4
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0xe1d50f3906e07485?, 0x0?, {0x100fcdaa9, 0x14}, 0x0?, 0x22ac793fad990658?, 0x1)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3895 +0x240
+github.com/ethereum/go-ethereum/core.apiWithMining.func18()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3722 +0x114
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3713 +0xc74
+
+goroutine 112 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0xb93151e6bccbf111?, 0x0?, {0x100fc98b5, 0xf}, 0x0?, 0xb0b88e7890d4038a?, 0x2)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func6()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3519 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3510 +0xd60
+
+goroutine 113 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x30eaae88c3f56439?, 0x290f0abe7478c471?, {0x100fcb100, 0x11}, 0xaee34315e6aad632?, 0xe9c71708e756e5e5?, 0x2)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func7()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3536 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3527 +0xe34
+
+goroutine 114 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x140000763e0?, 0x14000076420?, {0x100fc2167, 0x6}, 0x0?, 0x14000076320?, 0x2)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func8()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3553 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3544 +0xf08
+
+goroutine 115 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x0?, 0x689b8874fafecd10?, {0x100fc334f, 0x7}, 0x911476e9adfe42ed?, 0xefa60b28686b2b87?, 0x2)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func9()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3570 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3561 +0xfdc
+
+goroutine 116 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0xf7b52ad735d25bd1?, 0x0?, {0x100fc46d9, 0x8}, 0x0?, 0x0?, 0x2)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func10()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3587 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3578 +0x10b0
+
+goroutine 117 [select]:
+github.com/ethereum/go-ethereum/core.runWithTimeout({0x1012a8010, 0x140001b4820}, 0x14004123b90, 0x14000357860, {0x100fc6c16, 0xb}, 0x680dd1dbdf21e897?, 0xe5ba360091188e40?, 0x6ce0842ab9e39310?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3935 +0x2c4
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x7510cb4b86c2f1a9?, 0x0?, {0x100fc6c16, 0xb}, 0x0?, 0x867322d9d769ca40?, 0x2)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3895 +0x240
+github.com/ethereum/go-ethereum/core.apiWithMining.func11()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3604 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3595 +0x1184
+
+goroutine 118 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x0?, 0x0?, {0x100fc6a1c, 0xb}, 0xdbdb44a65035b26d?, 0x751919607a548fa5?, 0x2)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func12()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3620 +0x124
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3611 +0x128c
+
+goroutine 119 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x0?, 0x0?, {0x100fc063f, 0x3}, 0x7fd449cfc8e8f499?, 0x36b158a9fb16290c?, 0x2)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func13()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3637 +0x14c
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3628 +0x13a8
+
+goroutine 120 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x4ff037da6a0dd530?, 0xda1c28db602b45e3?, {0x100fc0630, 0x3}, 0x46711b93b3cc4231?, 0xf4b1cb2ec30289e2?, 0x2)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func14()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3654 +0x14c
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3645 +0x14c4
+
+goroutine 121 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x18535ea75a72585d?, 0xa6bd9e732ddd12f2?, {0x100fc13d2, 0x5}, 0x0?, 0x0?, 0x2)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func15()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3671 +0x124
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3662 +0x15cc
+
+goroutine 122 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x2050207020f0c02?, 0x608060c0d0e060b?, {0x100fc14e5, 0x5}, 0x0?, 0x3dceb1bdf55d244b?, 0x2)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func16()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3688 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3679 +0x16a0
+
+goroutine 123 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x0?, 0x0?, {0x100fc22f3, 0x6}, 0x48cf4270e792735e?, 0xb9cf01002fc58ac8?, 0x2)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func17()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3705 +0x14c
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3696 +0x17bc
+
+goroutine 124 [select]:
+github.com/ethereum/go-ethereum/core.runWithTimeout({0x1012a8010, 0x140001b4820}, 0x14004443398, 0x14000357860, {0x100fcdaa9, 0x14}, 0x9c2ee3c1b4fdf128?, 0x1593fa2c5d7e762f?, 0x6d590418dbb0396a?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3935 +0x2c4
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0xe540026300b79358?, 0x390fdd62fefab066?, {0x100fcdaa9, 0x14}, 0x990812e43ba3e41f?, 0x390fdd62fefab066?, 0x2)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3895 +0x240
+github.com/ethereum/go-ethereum/core.apiWithMining.func18()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3722 +0x114
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3713 +0xc74
+
+goroutine 125 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x95d1e9d3ac317471?, 0x0?, {0x100fc98b5, 0xf}, 0x0?, 0x4fbf85252dadf2f1?, 0x3)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func6()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3519 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3510 +0xd60
+
+goroutine 126 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x9701a14ebcc00f99?, 0x0?, {0x100fcb100, 0x11}, 0x0?, 0xa10ee5aad82ee6e3?, 0x3)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func7()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3536 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3527 +0xe34
+
+goroutine 127 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x140000763e0?, 0x14000076420?, {0x100fc2167, 0x6}, 0x0?, 0x14000076320?, 0x3)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func8()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3553 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3544 +0xf08
+
+goroutine 128 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x140000763e0?, 0x14000076420?, {0x100fc334f, 0x7}, 0x0?, 0x14000076320?, 0x3)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func9()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3570 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3561 +0xfdc
+
+goroutine 129 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x140000763e0?, 0x14000076420?, {0x100fc46d9, 0x8}, 0x0?, 0x14000076320?, 0x3)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func10()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3587 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3578 +0x10b0
+
+goroutine 130 [select]:
+github.com/ethereum/go-ethereum/core.runWithTimeout({0x1012a8010, 0x140001b4820}, 0x14004123c00, 0x14000357860, {0x100fc6c16, 0xb}, 0x100?, 0x0?, 0x0?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3935 +0x2c4
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x140000763e0?, 0x14000076420?, {0x100fc6c16, 0xb}, 0x0?, 0x14000076320?, 0x3)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3895 +0x240
+github.com/ethereum/go-ethereum/core.apiWithMining.func11()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3604 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3595 +0x1184
+
+goroutine 131 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x27f02f40041c75d4?, 0xb6f30a4e6f09f15f?, {0x100fc6a1c, 0xb}, 0x0?, 0x0?, 0x3)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func12()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3620 +0x124
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3611 +0x128c
+
+goroutine 132 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x1190d4219cf75570?, 0x954edff915cfca31?, {0x100fc063f, 0x3}, 0x0?, 0x0?, 0x3)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func13()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3637 +0x14c
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3628 +0x13a8
+
+goroutine 133 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x73bdfcf672105925?, 0xbb6ddc6725a5565b?, {0x100fc0630, 0x3}, 0x0?, 0x0?, 0x3)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func14()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3654 +0x14c
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3645 +0x14c4
+
+goroutine 134 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0xe79062301aa5cb99?, 0x34939e7f59ab7023?, {0x100fc13d2, 0x5}, 0x0?, 0x0?, 0x3)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func15()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3671 +0x124
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3662 +0x15cc
+
+goroutine 135 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0xe0a060401030a0f?, 0x10?, {0x100fc14e5, 0x5}, 0xd060a0a0c0e050b?, 0x2030d0e0408080d?, 0x3)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func16()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3688 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3679 +0x16a0
+
+goroutine 136 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0xdde0817235648e2b?, 0x177a047a36bbdc29?, {0x100fc22f3, 0x6}, 0xd5acc513d79a8218?, 0x2452361700632a35?, 0x3)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func17()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3705 +0x14c
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3696 +0x17bc
+
+goroutine 137 [select]:
+github.com/ethereum/go-ethereum/core.runWithTimeout({0x1012a8010, 0x140001b4820}, 0x140044434e8, 0x14000357860, {0x100fcdaa9, 0x14}, 0x0?, 0xdcd0f8684f7f0ffb?, 0xe4d5f08a2e28dd4b?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3935 +0x2c4
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x0?, 0x91d9c816fd71904?, {0x100fcdaa9, 0x14}, 0xfd10ca47bf21577d?, 0xa94f3aec844e93bd?, 0x3)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3895 +0x240
+github.com/ethereum/go-ethereum/core.apiWithMining.func18()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3722 +0x114
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3713 +0xc74
+
+goroutine 138 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x9aceac4b1966a0b6?, 0xf02adb8ceb054aa3?, {0x100fc98b5, 0xf}, 0x0?, 0x0?, 0x4)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func6()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3519 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3510 +0xd60
+
+goroutine 139 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x1a75a8fff61f050c?, 0x5761b189df2207d6?, {0x100fcb100, 0x11}, 0x32955a2cf1b0a899?, 0x5761b189df2207d6?, 0x4)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func7()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3536 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3527 +0xe34
+
+goroutine 140 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0xc929df95dc30faeb?, 0x0?, {0x100fc2167, 0x6}, 0x0?, 0x2b2ee8ec5221e177?, 0x4)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func8()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3553 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3544 +0xf08
+
+goroutine 141 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0xc62ee72057ec5455?, 0x481d756bd8cbda2a?, {0x100fc334f, 0x7}, 0xc62ee72057ec5455?, 0x0?, 0x4)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func9()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3570 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3561 +0xfdc
+
+goroutine 142 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x0?, 0x755e3b42cbebdde2?, {0x100fc46d9, 0x8}, 0xf55fd33c048b1117?, 0x0?, 0x4)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func10()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3587 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3578 +0x10b0
+
+goroutine 143 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x140000763e0?, 0x14000076420?, {0x100fc6c16, 0xb}, 0x0?, 0x14000076320?, 0x4)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func11()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3604 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3595 +0x1184
+
+goroutine 144 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x14000076360?, 0x140000763a0?, {0x100fc6a1c, 0xb}, 0x100?, 0x0?, 0x4)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func12()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3620 +0x124
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3611 +0x128c
+
+goroutine 145 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x14000076360?, 0x140000763a0?, {0x100fc063f, 0x3}, 0x100?, 0x0?, 0x4)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func13()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3637 +0x14c
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3628 +0x13a8
+
+goroutine 146 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0xb1f623efb2ad98d4?, 0x2079ecc9331f9287?, {0x100fc0630, 0x3}, 0x0?, 0x0?, 0x4)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func14()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3654 +0x14c
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3645 +0x14c4
+
+goroutine 147 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x7037c912e8374484?, 0x4fe0ab70c04fb033?, {0x100fc13d2, 0x5}, 0xd59a29463128048e?, 0x416e1f8b786a61e0?, 0x4)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func15()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3671 +0x124
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3662 +0x15cc
+
+goroutine 148 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x3641465d1d69eef5?, 0x0?, {0x100fc14e5, 0x5}, 0x0?, 0x0?, 0x4)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func16()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3688 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3679 +0x16a0
+
+goroutine 149 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x0?, 0x0?, {0x100fc22f3, 0x6}, 0x0?, 0xacf74ce60c976b50?, 0x4)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func17()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3705 +0x14c
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3696 +0x17bc
+
+goroutine 150 [select]:
+github.com/ethereum/go-ethereum/core.runWithTimeout({0x1012a8010, 0x140001b4820}, 0x14004443638, 0x14000357860, {0x100fcdaa9, 0x14}, 0x0?, 0x52ea0a02b6ec27b3?, 0x95435ebfd418ac2d?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3935 +0x2c4
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0xd372fa2fec7ad3f3?, 0x38626c3328c0ad97?, {0x100fcdaa9, 0x14}, 0x4a74d832b264bc18?, 0x839902f7a9cbfd3e?, 0x4)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3895 +0x240
+github.com/ethereum/go-ethereum/core.apiWithMining.func18()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3722 +0x114
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3713 +0xc74
+
+goroutine 151 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x3cf9df08a130964?, 0x6a7b423cae482cae?, {0x100fc98b5, 0xf}, 0xa4ab0bdf8691c1d?, 0x7b9abcd867a6a4e8?, 0x5)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func6()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3519 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3510 +0xd60
+
+goroutine 152 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x9253f559921379e2?, 0xa378268bc87c8025?, {0x100fcb100, 0x11}, 0x98957d58d5d1a576?, 0x4f550b32b7a5e701?, 0x5)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func7()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3536 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3527 +0xe34
+
+goroutine 153 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0xec9e2c4357c4d9f?, 0x70b082659abd394d?, {0x100fc2167, 0x6}, 0x39b556fa40e53c02?, 0x7bef6af6fbe524f?, 0x5)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func8()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3553 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3544 +0xf08
+
+goroutine 154 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x16f57c533698d3be?, 0x8d43cfb6ba0354e2?, {0x100fc334f, 0x7}, 0x0?, 0x0?, 0x5)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func9()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3570 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3561 +0xfdc
+
+goroutine 155 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x140000763e0?, 0x14000076420?, {0x100fc46d9, 0x8}, 0x0?, 0x14000076320?, 0x5)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func10()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3587 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3578 +0x10b0
+
+goroutine 156 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x140000763e0?, 0x14000076420?, {0x100fc6c16, 0xb}, 0x0?, 0x14000076320?, 0x5)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func11()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3604 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3595 +0x1184
+
+goroutine 157 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x14000076360?, 0x140000763a0?, {0x100fc6a1c, 0xb}, 0x100?, 0x0?, 0x5)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func12()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3620 +0x124
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3611 +0x128c
+
+goroutine 158 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x14000076360?, 0x140000763a0?, {0x100fc063f, 0x3}, 0x100?, 0x0?, 0x5)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func13()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3637 +0x14c
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3628 +0x13a8
+
+goroutine 159 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0xfd3a6fafb57bd7c?, 0x731a06b60a855afe?, {0x100fc0630, 0x3}, 0x0?, 0x0?, 0x5)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func14()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3654 +0x14c
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3645 +0x14c4
+
+goroutine 160 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x90f76b1e1995a5ff?, 0x42bb85e2633cdb19?, {0x100fc13d2, 0x5}, 0x0?, 0x0?, 0x5)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func15()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3671 +0x124
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3662 +0x15cc
+
+goroutine 161 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0xa41d3eb04fc0e369?, 0x0?, {0x100fc14e5, 0x5}, 0x0?, 0x0?, 0x5)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func16()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3688 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3679 +0x16a0
+
+goroutine 162 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x5697ec44fb05ef40?, 0xa3561b648f8e3560?, {0x100fc22f3, 0x6}, 0x0?, 0x0?, 0x5)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func17()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3705 +0x14c
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3696 +0x17bc
+
+goroutine 163 [select]:
+github.com/ethereum/go-ethereum/core.runWithTimeout({0x1012a8010, 0x140001b4820}, 0x14004443788, 0x14000357860, {0x100fcdaa9, 0x14}, 0x1c3ef5f895c33244?, 0xa?, 0x0?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3935 +0x2c4
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x692d2425850cea8e?, 0x1?, {0x100fcdaa9, 0x14}, 0x231ee9d9e9b89082?, 0x889165d668d5dc8?, 0x5)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3895 +0x240
+github.com/ethereum/go-ethereum/core.apiWithMining.func18()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3722 +0x114
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3713 +0xc74
+
+goroutine 164 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x1d374a40209a3c1b?, 0x0?, {0x100fc98b5, 0xf}, 0x0?, 0x0?, 0x6)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func6()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3519 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3510 +0xd60
+
+goroutine 165 [select]:
+github.com/ethereum/go-ethereum/core.runWithTimeout({0x1012a8010, 0x140001b4820}, 0x14004123d10, 0x14000357860, {0x100fcb100, 0x11}, 0x0?, 0xabcba3337f1786eb?, 0xfddc5f17b1227cff?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3935 +0x2c4
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x0?, 0x70d050205040907?, {0x100fcb100, 0x11}, 0x605090d000e0f0b?, 0xc0603000605060a?, 0x6)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3895 +0x240
+github.com/ethereum/go-ethereum/core.apiWithMining.func7()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3536 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3527 +0xe34
+
+goroutine 166 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x971cd74b18052540?, 0xd41f97c600ddbb3c?, {0x100fc2167, 0x6}, 0x0?, 0x9c7c1a7088a21a0e?, 0x6)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func8()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3553 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3544 +0xf08
+
+goroutine 167 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x84fc128c266172a5?, 0xd8c2ae70dd33f41c?, {0x100fc334f, 0x7}, 0x3d174f404af1b1c6?, 0xf8c9e0d3690f561d?, 0x6)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func9()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3570 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3561 +0xfdc
+
+goroutine 168 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0xd216eff4aa361e6f?, 0x28bdd01d128ebdb1?, {0x100fc46d9, 0x8}, 0x42cb6519214ca1d4?, 0x1ccd2877b953c3ad?, 0x6)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func10()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3587 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3578 +0x10b0
+
+goroutine 169 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0xe63d58fce0a01319?, 0xa63c2d838835d595?, {0x100fc6c16, 0xb}, 0xa694e9b2b1522c4a?, 0x65b37aec259f3a70?, 0x6)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func11()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3604 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3595 +0x1184
+
+goroutine 170 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x5f41b10780acd5ae?, 0x56f438431d626143?, {0x100fc6a1c, 0xb}, 0x95e26ffce40d8e70?, 0xd2?, 0x6)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func12()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3620 +0x124
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3611 +0x128c
+
+goroutine 171 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0xb9556dd081e92bdf?, 0xd0556566a9b025e1?, {0x100fc063f, 0x3}, 0xe8683eae5294dbbf?, 0xfb408d388bdb647c?, 0x6)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func13()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3637 +0x14c
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3628 +0x13a8
+
+goroutine 172 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x5b0b0183037a4fa3?, 0xc50f9ebe2ebb4d78?, {0x100fc0630, 0x3}, 0xa05408707810df6c?, 0x85132b9ca226340e?, 0x6)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func14()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3654 +0x14c
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3645 +0x14c4
+
+goroutine 173 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0xc3737eac164d98fb?, 0xb5d847cd554f2565?, {0x100fc13d2, 0x5}, 0x36ee3e24e96d5623?, 0x2c785d12987b1d01?, 0x6)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func15()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3671 +0x124
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3662 +0x15cc
+
+goroutine 174 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x8d86d0767d2e872f?, 0x740358fcee8771b1?, {0x100fc14e5, 0x5}, 0x0?, 0x0?, 0x6)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func16()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3688 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3679 +0x16a0
+
+goroutine 175 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x0?, 0x0?, {0x100fc22f3, 0x6}, 0x367d7c56eb588c0d?, 0xe6ff745abd58e086?, 0x6)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func17()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3705 +0x14c
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3696 +0x17bc
+
+goroutine 176 [select]:
+github.com/ethereum/go-ethereum/core.runWithTimeout({0x1012a8010, 0x140001b4820}, 0x140044438d8, 0x14000357860, {0x100fcdaa9, 0x14}, 0x0?, 0x0?, 0x0?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3935 +0x2c4
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x0?, 0x3172d97bd4e22c61?, {0x100fcdaa9, 0x14}, 0xc906cbed8432b897?, 0x5803dd5e34665930?, 0x6)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3895 +0x240
+github.com/ethereum/go-ethereum/core.apiWithMining.func18()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3722 +0x114
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3713 +0xc74
+
+goroutine 177 [select]:
+github.com/ethereum/go-ethereum/core.runWithTimeout({0x1012a8010, 0x140001b4820}, 0x14004123d70, 0x14000357860, {0x100fc98b5, 0xf}, 0x87dcad947c178f88?, 0x37ef849aa302669a?, 0x778b8ca413ad6de9?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3935 +0x2c4
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x1d054f480d7490cc?, 0xfa57236047e80e5a?, {0x100fc98b5, 0xf}, 0x1c9477294f2bce3a?, 0xfa57236047e80e5a?, 0x7)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3895 +0x240
+github.com/ethereum/go-ethereum/core.apiWithMining.func6()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3519 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3510 +0xd60
+
+goroutine 178 [select]:
+github.com/ethereum/go-ethereum/core.runWithTimeout({0x1012a8010, 0x140001b4820}, 0x14004123d80, 0x14000357860, {0x100fcb100, 0x11}, 0x100?, 0x0?, 0x0?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3935 +0x2c4
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x140000763e0?, 0x14000076420?, {0x100fcb100, 0x11}, 0x0?, 0x14000076320?, 0x7)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3895 +0x240
+github.com/ethereum/go-ethereum/core.apiWithMining.func7()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3536 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3527 +0xe34
+
+goroutine 179 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x0?, 0x1ac5b115d64e7120?, {0x100fc2167, 0x6}, 0xc9f0185ac0a047bd?, 0xd4bfabec6fcf7d40?, 0x7)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func8()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3553 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3544 +0xf08
+
+goroutine 180 [select]:
+github.com/ethereum/go-ethereum/core.runWithTimeout({0x1012a8010, 0x140001b4820}, 0x14004123da0, 0x14000357860, {0x100fc334f, 0x7}, 0x88afebdbe73b7799?, 0xf4445829a726b390?, 0xabd275dc3743cea?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3935 +0x2c4
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0xdf05a98cbcef5129?, 0xc090a580b02512a6?, {0x100fc334f, 0x7}, 0xfc0542e9cb22342f?, 0xc090a580b02512a6?, 0x7)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3895 +0x240
+github.com/ethereum/go-ethereum/core.apiWithMining.func9()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3570 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3561 +0xfdc
+
+goroutine 181 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0xeea41475f40b78d8?, 0x0?, {0x100fc46d9, 0x8}, 0x0?, 0xfb520ea922c915b3?, 0x7)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func10()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3587 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3578 +0x10b0
+
+goroutine 182 [select]:
+github.com/ethereum/go-ethereum/core.runWithTimeout({0x1012a8010, 0x140001b4820}, 0x14004123dc0, 0x14000357860, {0x100fc6c16, 0xb}, 0x70a586cf9035618b?, 0xb5ab48823e0f87e?, 0x3f20127a8a25be11?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3935 +0x2c4
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x6c8b40746ed9a417?, 0xca9f5c9dc3834021?, {0x100fc6c16, 0xb}, 0x6c8b40746ed9a417?, 0x0?, 0x7)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3895 +0x240
+github.com/ethereum/go-ethereum/core.apiWithMining.func11()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3604 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3595 +0x1184
+
+goroutine 183 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0xc15a34a569375b90?, 0x20c56a97afd69c81?, {0x100fc6a1c, 0xb}, 0x0?, 0xb94c122724141625?, 0x7)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func12()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3620 +0x124
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3611 +0x128c
+
+goroutine 184 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x6a5e13c106ae5cc?, 0xad2105fc605d0d2e?, {0x100fc063f, 0x3}, 0x763e09aa2ca0b33f?, 0x8f48062c50c13d16?, 0x7)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func13()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3637 +0x14c
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3628 +0x13a8
+
+goroutine 185 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0xdb1a4dc32b0d6f8b?, 0x0?, {0x100fc0630, 0x3}, 0xa0612b105f804212?, 0xf9331f6e6a90c7c?, 0x7)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func14()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3654 +0x14c
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3645 +0x14c4
+
+goroutine 186 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x9c4532568e13d295?, 0x7b363c65378793e2?, {0x100fc13d2, 0x5}, 0x73c74e2d1451b965?, 0x89?, 0x7)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func15()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3671 +0x124
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3662 +0x15cc
+
+goroutine 187 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x1198b6574ebacd59?, 0x417753bebd9af3fc?, {0x100fc14e5, 0x5}, 0x320d8c68bc3b49f?, 0x0?, 0x7)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func16()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3688 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3679 +0x16a0
+
+goroutine 188 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x83ac197f9928f954?, 0x2d50b6cba2fda89c?, {0x100fc22f3, 0x6}, 0x0?, 0x0?, 0x7)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func17()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3705 +0x14c
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3696 +0x17bc
+
+goroutine 189 [select]:
+github.com/ethereum/go-ethereum/core.runWithTimeout({0x1012a8010, 0x140001b4820}, 0x14004443a28, 0x14000357860, {0x100fcdaa9, 0x14}, 0x0?, 0x0?, 0x0?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3935 +0x2c4
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x0?, 0x0?, {0x100fcdaa9, 0x14}, 0xbbfc729e671aa669?, 0x425b6bb3020a01a4?, 0x7)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3895 +0x240
+github.com/ethereum/go-ethereum/core.apiWithMining.func18()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3722 +0x114
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3713 +0xc74
+
+goroutine 190 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x2d6dd751f54192da?, 0x7987f67a9d5cb52?, {0x100fc98b5, 0xf}, 0xd479334841a56c7b?, 0xddc016396b3e9ee2?, 0x8)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func6()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3519 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3510 +0xd60
+
+goroutine 191 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x140000763e0?, 0x14000076420?, {0x100fcb100, 0x11}, 0x0?, 0x14000076320?, 0x8)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func7()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3536 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3527 +0xe34
+
+goroutine 192 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x140000763e0?, 0x14000076420?, {0x100fc2167, 0x6}, 0x0?, 0x14000076320?, 0x8)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func8()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3553 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3544 +0xf08
+
+goroutine 193 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x140000763e0?, 0x14000076420?, {0x100fc334f, 0x7}, 0x0?, 0x14000076320?, 0x8)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func9()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3570 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3561 +0xfdc
+
+goroutine 194 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x0?, 0xdb3bcea0cc62fd99?, {0x100fc46d9, 0x8}, 0x527f51e67618aac9?, 0x0?, 0x8)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func10()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3587 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3578 +0x10b0
+
+goroutine 195 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x140000763e0?, 0x14000076420?, {0x100fc6c16, 0xb}, 0x0?, 0x14000076320?, 0x8)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func11()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3604 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3595 +0x1184
+
+goroutine 196 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x14000076360?, 0x140000763a0?, {0x100fc6a1c, 0xb}, 0x100?, 0x0?, 0x8)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func12()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3620 +0x124
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3611 +0x128c
+
+goroutine 197 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x14000076360?, 0x140000763a0?, {0x100fc063f, 0x3}, 0x100?, 0x0?, 0x8)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func13()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3637 +0x14c
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3628 +0x13a8
+
+goroutine 198 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x14000076360?, 0x140000763a0?, {0x100fc0630, 0x3}, 0x100?, 0x0?, 0x8)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func14()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3654 +0x14c
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3645 +0x14c4
+
+goroutine 199 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x3819e77f5909da15?, 0x9287c8c2a6738cb9?, {0x100fc13d2, 0x5}, 0x2f068fdb96aaf91?, 0x20a673fef86a74fd?, 0x8)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func15()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3671 +0x124
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3662 +0x15cc
+
+goroutine 200 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x507964ac93e85199?, 0x6b67ea0b83054d0?, {0x100fc14e5, 0x5}, 0x90de50e82a20c34c?, 0x60c647de8de4f522?, 0x8)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func16()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3688 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3679 +0x16a0
+
+goroutine 201 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0xe3db3ef8962e17ab?, 0xc2553b6fbbe0c4bf?, {0x100fc22f3, 0x6}, 0xc0f7bef0a22d7322?, 0x76aacc7b14ff0928?, 0x8)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func17()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3705 +0x14c
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3696 +0x17bc
+
+goroutine 202 [select]:
+github.com/ethereum/go-ethereum/core.runWithTimeout({0x1012a8010, 0x140001b4820}, 0x14004443b78, 0x14000357860, {0x100fcdaa9, 0x14}, 0x0?, 0x0?, 0x0?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3935 +0x2c4
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x0?, 0x3ebde74575db0024?, {0x100fcdaa9, 0x14}, 0x2e744ece4abfe68b?, 0xf4e73a3ca42a71a3?, 0x8)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3895 +0x240
+github.com/ethereum/go-ethereum/core.apiWithMining.func18()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3722 +0x114
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3713 +0xc74
+
+goroutine 203 [select]:
+github.com/ethereum/go-ethereum/core.runWithTimeout({0x1012a8010, 0x140001b4820}, 0x14004123e50, 0x14000357860, {0x100fc98b5, 0xf}, 0x2137677af6724297?, 0x0?, 0x0?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3935 +0x2c4
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x0?, 0x0?, {0x100fc98b5, 0xf}, 0x53a5dc5a46062ddf?, 0xef43637fa242a772?, 0x9)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3895 +0x240
+github.com/ethereum/go-ethereum/core.apiWithMining.func6()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3519 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3510 +0xd60
+
+goroutine 204 [select]:
+github.com/ethereum/go-ethereum/core.runWithTimeout({0x1012a8010, 0x140001b4820}, 0x14004123e60, 0x14000357860, {0x100fcb100, 0x11}, 0xcf5351be824480b9?, 0x38e0b498a772d8b5?, 0xe2acb02100ebc761?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3935 +0x2c4
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x5ba2f750e430d1d8?, 0x92100cb5e0caa30e?, {0x100fcb100, 0x11}, 0x36746e2390d56299?, 0x1?, 0x9)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3895 +0x240
+github.com/ethereum/go-ethereum/core.apiWithMining.func7()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3536 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3527 +0xe34
+
+goroutine 205 [select]:
+github.com/ethereum/go-ethereum/core.runWithTimeout({0x1012a8010, 0x140001b4820}, 0x14004123e70, 0x14000357860, {0x100fc2167, 0x6}, 0x0?, 0x593ca546210c4e12?, 0x77486a6c08069b79?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3935 +0x2c4
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x0?, 0x54d358cfc85808a5?, {0x100fc2167, 0x6}, 0xa996cfc907fdc?, 0x0?, 0x9)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3895 +0x240
+github.com/ethereum/go-ethereum/core.apiWithMining.func8()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3553 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3544 +0xf08
+
+goroutine 206 [select]:
+github.com/ethereum/go-ethereum/core.runWithTimeout({0x1012a8010, 0x140001b4820}, 0x14004123e80, 0x14000357860, {0x100fc334f, 0x7}, 0x0?, 0x0?, 0x0?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3935 +0x2c4
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x40d0d030f0b0c00?, 0x2060a0a04010c0e?, {0x100fc334f, 0x7}, 0x0?, 0xa000f0d04050e04?, 0x9)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3895 +0x240
+github.com/ethereum/go-ethereum/core.apiWithMining.func9()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3570 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3561 +0xfdc
+
+goroutine 207 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x0?, 0xc7df0bfa6d0c040c?, {0x100fc46d9, 0x8}, 0x45e33ffb88d18ba7?, 0x0?, 0x9)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func10()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3587 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3578 +0x10b0
+
+goroutine 208 [select]:
+github.com/ethereum/go-ethereum/core.runWithTimeout({0x1012a8010, 0x140001b4820}, 0x14004123ea0, 0x14000357860, {0x100fc6c16, 0xb}, 0x0?, 0x0?, 0x0?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3935 +0x2c4
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0xca6b5d61a5dbb98?, 0x659087fde568eea9?, {0x100fc6c16, 0xb}, 0x8ca15346f48c6e0b?, 0x0?, 0x9)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3895 +0x240
+github.com/ethereum/go-ethereum/core.apiWithMining.func11()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3604 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3595 +0x1184
+
+goroutine 209 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x0?, 0x0?, {0x100fc6a1c, 0xb}, 0x0?, 0x0?, 0x9)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func12()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3620 +0x124
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3611 +0x128c
+
+goroutine 210 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0xd05800b12e1f1106?, 0x355bfaf0ad461b8d?, {0x100fc063f, 0x3}, 0xf4fc1ebcf1dfc9b1?, 0x72?, 0x9)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func13()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3637 +0x14c
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3628 +0x13a8
+
+goroutine 211 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x2b24b286b436cff8?, 0xd2faa8c51d09857f?, {0x100fc0630, 0x3}, 0x0?, 0x0?, 0x9)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func14()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3654 +0x14c
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3645 +0x14c4
+
+goroutine 212 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0xe4aee199b8360fba?, 0x697283c3bdbb112a?, {0x100fc13d2, 0x5}, 0x7d400dbc5c2807f2?, 0x93d43c943c4fee10?, 0x9)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func15()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3671 +0x124
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3662 +0x15cc
+
+goroutine 213 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0xb99f53cef56e335e?, 0x2d9ec9bf90568e68?, {0x100fc14e5, 0x5}, 0xb99f53cef56e335e?, 0x0?, 0x9)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func16()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3688 +0x104
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3679 +0x16a0
+
+goroutine 214 [chan receive]:
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x0?, 0x0?, {0x100fc22f3, 0x6}, 0x658227b7621f3aa5?, 0x4e18d1e9b0887caf?, 0x9)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3888 +0x258
+github.com/ethereum/go-ethereum/core.apiWithMining.func17()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3705 +0x14c
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3696 +0x17bc
+
+goroutine 215 [select]:
+github.com/ethereum/go-ethereum/core.runWithTimeout({0x1012a8010, 0x140001b4820}, 0x14004442b40, 0x14000357860, {0x100fcdaa9, 0x14}, 0x0?, 0x0?, 0x0?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3935 +0x2c4
+github.com/ethereum/go-ethereum/core.runWithTicker({0x1012a8010, 0x140001b4820}, 0x0?, 0x51b76e91919a8690?, {0x100fcdaa9, 0x14}, 0x11e5049264f02f3b?, 0x2ad23abee5826a08?, 0x9)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3895 +0x240
+github.com/ethereum/go-ethereum/core.apiWithMining.func18()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3722 +0x114
+created by github.com/ethereum/go-ethereum/core.apiWithMining
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3713 +0xc74
+
+goroutine 364723 [runnable]:
+golang.org/x/crypto/sha3.copyOutGeneric(0x140068e5880?, {0x140068e5969?, 0x88?, 0xa8?})
+	/Users/jekamas/go/pkg/mod/golang.org/x/crypto@v0.0.0-20220507011949-2cf3adece122/sha3/xor_generic.go:23 +0x94
+golang.org/x/crypto/sha3.(*state).padAndPermute(0x140068e5880, 0x20?)
+	/Users/jekamas/go/pkg/mod/golang.org/x/crypto@v0.0.0-20220507011949-2cf3adece122/sha3/sha3.go:121 +0x1e0
+golang.org/x/crypto/sha3.(*state).Read(0x140068e5880, {0x140068c7520, 0x20, 0x20})
+	/Users/jekamas/go/pkg/mod/golang.org/x/crypto@v0.0.0-20220507011949-2cf3adece122/sha3/sha3.go:164 +0x3c
+golang.org/x/crypto/sha3.(*state).Sum(0x140068e56c0, {0x0, 0x0, 0x0})
+	/Users/jekamas/go/pkg/mod/golang.org/x/crypto@v0.0.0-20220507011949-2cf3adece122/sha3/sha3.go:191 +0x15c
+github.com/ethereum/go-ethereum/common.(*Address).checksumHex(0x140003b7608?)
+	/Users/jekamas/projects/bor/common/types.go:250 +0x108
+github.com/ethereum/go-ethereum/common.Address.Format({0x2a, 0xd0, 0x9f, 0xbf, 0xe6, 0x48, 0x55, 0x61, 0xa, 0x3c, ...}, ...)
+	/Users/jekamas/projects/bor/common/types.go:277 +0x22c
+fmt.(*pp).handleMethods(0x140060581a0, 0x4cc5ed8?)
+	/Users/jekamas/go/go1.19.2/src/fmt/print.go:624 +0x404
+fmt.(*pp).printValue(0x140060581a0, {0x101254cc0?, 0x14004cc5ed8?, 0x10172d588?}, 0x76, 0x1)
+	/Users/jekamas/go/go1.19.2/src/fmt/print.go:754 +0xa0
+fmt.(*pp).printValue(0x140060581a0, {0x1011d8720?, 0x140035a3a10?, 0x100f3ab4c?}, 0x76, 0x0)
+	/Users/jekamas/go/go1.19.2/src/fmt/print.go:809 +0x1cdc
+fmt.(*pp).printArg(0x140060581a0, {0x1011d8720?, 0x140035a3a10}, 0x76)
+	/Users/jekamas/go/go1.19.2/src/fmt/print.go:743 +0x788
+fmt.(*pp).doPrint(0x140060581a0, {0x140003b7f58?, 0x2, 0x0?})
+	/Users/jekamas/go/go1.19.2/src/fmt/print.go:1188 +0x190
+fmt.Fprint({0x10129ee40, 0x10172f560}, {0x14004f51f58, 0x2, 0x2})
+	/Users/jekamas/go/go1.19.2/src/fmt/print.go:242 +0x44
+github.com/ethereum/go-ethereum/core.apiWithMining.func9.2(0x0?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3572 +0x60
+github.com/ethereum/go-ethereum/core.runWithTimeout.func1()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3927 +0x90
+created by github.com/ethereum/go-ethereum/core.runWithTimeout
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3920 +0x280
+
+goroutine 364631 [semacquire]:
+sync.runtime_SemacquireMutex(0x14000100000?, 0x4c?, 0x14005223e88?)
+	/Users/jekamas/go/go1.19.2/src/runtime/sema.go:77 +0x24
+sync.(*Mutex).lockSlow(0x140004e2120)
+	/Users/jekamas/go/go1.19.2/src/sync/mutex.go:171 +0x178
+sync.(*Mutex).Lock(...)
+	/Users/jekamas/go/go1.19.2/src/sync/mutex.go:90
+sync.(*RWMutex).Lock(0x140004e2120?)
+	/Users/jekamas/go/go1.19.2/src/sync/rwmutex.go:147 +0x74
+github.com/ethereum/go-ethereum/core.(*TxPool).SetGasPrice(0x140004e2000, 0x140025e93e0)
+	/Users/jekamas/projects/bor/core/tx_pool.go:453 +0x40
+github.com/ethereum/go-ethereum/core.apiWithMining.func11.2(0x0?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3605 +0x30
+github.com/ethereum/go-ethereum/core.runWithTimeout.func1()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3927 +0x90
+created by github.com/ethereum/go-ethereum/core.runWithTimeout
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3920 +0x280
+
+goroutine 364244 [select]:
+github.com/ethereum/go-ethereum/core.apiWithMining.func18.2(0x14000088900)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3732 +0xe0
+github.com/ethereum/go-ethereum/core.runWithTimeout.func1()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3927 +0x90
+created by github.com/ethereum/go-ethereum/core.runWithTimeout
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3920 +0x280
+
+goroutine 364110 [select]:
+github.com/ethereum/go-ethereum/core.apiWithMining.func18.2(0x140044ea780)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3732 +0xe0
+github.com/ethereum/go-ethereum/core.runWithTimeout.func1()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3927 +0x90
+created by github.com/ethereum/go-ethereum/core.runWithTimeout
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3920 +0x280
+
+goroutine 364201 [select]:
+github.com/ethereum/go-ethereum/core.apiWithMining.func18.2(0x14001ef8ea0)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3732 +0xe0
+github.com/ethereum/go-ethereum/core.runWithTimeout.func1()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3927 +0x90
+created by github.com/ethereum/go-ethereum/core.runWithTimeout
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3920 +0x280
+
+goroutine 364626 [semacquire]:
+sync.runtime_SemacquireMutex(0x14006381ce0?, 0xe8?, 0x1400416d5e8?)
+	/Users/jekamas/go/go1.19.2/src/runtime/sema.go:77 +0x24
+sync.(*Mutex).lockSlow(0x140004e2120)
+	/Users/jekamas/go/go1.19.2/src/sync/mutex.go:171 +0x178
+sync.(*Mutex).Lock(...)
+	/Users/jekamas/go/go1.19.2/src/sync/mutex.go:90
+sync.(*RWMutex).Lock(0x140004e2120?)
+	/Users/jekamas/go/go1.19.2/src/sync/rwmutex.go:147 +0x74
+github.com/ethereum/go-ethereum/core.(*TxPool).Pending(0x140004e2000, 0x0)
+	/Users/jekamas/projects/bor/core/tx_pool.go:545 +0x48
+github.com/ethereum/go-ethereum/core.apiWithMining.func6.2(0x0?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3520 +0x24
+github.com/ethereum/go-ethereum/core.runWithTimeout.func1()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3927 +0x90
+created by github.com/ethereum/go-ethereum/core.runWithTimeout
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3920 +0x280
+
+goroutine 364681 [semacquire]:
+sync.runtime_SemacquireMutex(0x14000580000?, 0x4c?, 0x14004142e88?)
+	/Users/jekamas/go/go1.19.2/src/runtime/sema.go:77 +0x24
+sync.(*Mutex).lockSlow(0x140004e2120)
+	/Users/jekamas/go/go1.19.2/src/sync/mutex.go:171 +0x178
+sync.(*Mutex).Lock(...)
+	/Users/jekamas/go/go1.19.2/src/sync/mutex.go:90
+sync.(*RWMutex).Lock(0x140004e2120?)
+	/Users/jekamas/go/go1.19.2/src/sync/rwmutex.go:147 +0x74
+github.com/ethereum/go-ethereum/core.(*TxPool).SetGasPrice(0x140004e2000, 0x140054bab60)
+	/Users/jekamas/projects/bor/core/tx_pool.go:453 +0x40
+github.com/ethereum/go-ethereum/core.apiWithMining.func11.2(0x0?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3605 +0x30
+github.com/ethereum/go-ethereum/core.runWithTimeout.func1()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3927 +0x90
+created by github.com/ethereum/go-ethereum/core.runWithTimeout
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3920 +0x280
+
+goroutine 364460 [semacquire]:
+sync.runtime_SemacquireMutex(0x14000552000?, 0x4c?, 0x1400413be88?)
+	/Users/jekamas/go/go1.19.2/src/runtime/sema.go:77 +0x24
+sync.(*Mutex).lockSlow(0x140004e2120)
+	/Users/jekamas/go/go1.19.2/src/sync/mutex.go:171 +0x178
+sync.(*Mutex).Lock(...)
+	/Users/jekamas/go/go1.19.2/src/sync/mutex.go:90
+sync.(*RWMutex).Lock(0x140004e2120?)
+	/Users/jekamas/go/go1.19.2/src/sync/rwmutex.go:147 +0x74
+github.com/ethereum/go-ethereum/core.(*TxPool).SetGasPrice(0x140004e2000, 0x140005e4aa0)
+	/Users/jekamas/projects/bor/core/tx_pool.go:453 +0x40
+github.com/ethereum/go-ethereum/core.apiWithMining.func11.2(0x0?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3605 +0x30
+github.com/ethereum/go-ethereum/core.runWithTimeout.func1()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3927 +0x90
+created by github.com/ethereum/go-ethereum/core.runWithTimeout
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3920 +0x280
+
+goroutine 364203 [select]:
+github.com/ethereum/go-ethereum/core.apiWithMining.func18.2(0x14001ef8f60)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3732 +0xe0
+github.com/ethereum/go-ethereum/core.runWithTimeout.func1()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3927 +0x90
+created by github.com/ethereum/go-ethereum/core.runWithTimeout
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3920 +0x280
+
+goroutine 364643 [semacquire]:
+sync.runtime_SemacquireMutex(0x14000580000?, 0x4c?, 0x14003693e88?)
+	/Users/jekamas/go/go1.19.2/src/runtime/sema.go:77 +0x24
+sync.(*Mutex).lockSlow(0x140004e2120)
+	/Users/jekamas/go/go1.19.2/src/sync/mutex.go:171 +0x178
+sync.(*Mutex).Lock(...)
+	/Users/jekamas/go/go1.19.2/src/sync/mutex.go:90
+sync.(*RWMutex).Lock(0x140004e2120?)
+	/Users/jekamas/go/go1.19.2/src/sync/rwmutex.go:147 +0x74
+github.com/ethereum/go-ethereum/core.(*TxPool).SetGasPrice(0x140004e2000, 0x140054ba9a0)
+	/Users/jekamas/projects/bor/core/tx_pool.go:453 +0x40
+github.com/ethereum/go-ethereum/core.apiWithMining.func11.2(0x0?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3605 +0x30
+github.com/ethereum/go-ethereum/core.runWithTimeout.func1()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3927 +0x90
+created by github.com/ethereum/go-ethereum/core.runWithTimeout
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3920 +0x280
+
+goroutine 364243 [select]:
+github.com/ethereum/go-ethereum/core.apiWithMining.func18.2(0x140000888a0)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3732 +0xe0
+github.com/ethereum/go-ethereum/core.runWithTimeout.func1()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3927 +0x90
+created by github.com/ethereum/go-ethereum/core.runWithTimeout
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3920 +0x280
+
+goroutine 364677 [runnable]:
+golang.org/x/crypto/sha3.(*state).Write(0x14006ad8e00?, {0x14006a9d142?, 0x28?, 0x28?})
+	/Users/jekamas/go/pkg/mod/golang.org/x/crypto@v0.0.0-20220507011949-2cf3adece122/sha3/sha3.go:126 +0x2f8
+github.com/ethereum/go-ethereum/common.(*Address).checksumHex(0x1400774d608?)
+	/Users/jekamas/projects/bor/common/types.go:249 +0xf4
+github.com/ethereum/go-ethereum/common.Address.Format({0x46, 0x3a, 0x6f, 0x24, 0x45, 0x42, 0x40, 0xbd, 0xf0, 0x57, ...}, ...)
+	/Users/jekamas/projects/bor/common/types.go:277 +0x22c
+fmt.(*pp).handleMethods(0x14006992270, 0x25bbe30?)
+	/Users/jekamas/go/go1.19.2/src/fmt/print.go:624 +0x404
+fmt.(*pp).printValue(0x14006992270, {0x101254cc0?, 0x140025bbe30?, 0x10172ef08?}, 0x76, 0x1)
+	/Users/jekamas/go/go1.19.2/src/fmt/print.go:754 +0xa0
+fmt.(*pp).printValue(0x14006992270, {0x1011d8720?, 0x14002360ff0?, 0x100f3ab4c?}, 0x76, 0x0)
+	/Users/jekamas/go/go1.19.2/src/fmt/print.go:809 +0x1cdc
+fmt.(*pp).printArg(0x14006992270, {0x1011d8720?, 0x14002360ff0}, 0x76)
+	/Users/jekamas/go/go1.19.2/src/fmt/print.go:743 +0x788
+fmt.(*pp).doPrint(0x14006992270, {0x1400774df58?, 0x2, 0x0?})
+	/Users/jekamas/go/go1.19.2/src/fmt/print.go:1188 +0x190
+fmt.Fprint({0x10129ee40, 0x10172f560}, {0x1400486cf58, 0x2, 0x2})
+	/Users/jekamas/go/go1.19.2/src/fmt/print.go:242 +0x44
+github.com/ethereum/go-ethereum/core.apiWithMining.func9.2(0x0?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3572 +0x60
+github.com/ethereum/go-ethereum/core.runWithTimeout.func1()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3927 +0x90
+created by github.com/ethereum/go-ethereum/core.runWithTimeout
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3920 +0x280
+
+goroutine 364725 [semacquire]:
+sync.runtime_SemacquireMutex(0x1400521de18?, 0xbc?, 0x1400521ddd8?)
+	/Users/jekamas/go/go1.19.2/src/runtime/sema.go:77 +0x24
+sync.(*Mutex).lockSlow(0x140004e2120)
+	/Users/jekamas/go/go1.19.2/src/sync/mutex.go:171 +0x178
+sync.(*Mutex).Lock(...)
+	/Users/jekamas/go/go1.19.2/src/sync/mutex.go:90
+sync.(*RWMutex).Lock(0x140004e2120?)
+	/Users/jekamas/go/go1.19.2/src/sync/rwmutex.go:147 +0x74
+github.com/ethereum/go-ethereum/core.(*TxPool).Locals(0x140004e2000)
+	/Users/jekamas/projects/bor/core/tx_pool.go:570 +0x48
+github.com/ethereum/go-ethereum/core.apiWithMining.func8.2(0x0?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3554 +0x20
+github.com/ethereum/go-ethereum/core.runWithTimeout.func1()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3927 +0x90
+created by github.com/ethereum/go-ethereum/core.runWithTimeout
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3920 +0x280
+
+goroutine 364245 [select]:
+github.com/ethereum/go-ethereum/core.apiWithMining.func18.2(0x14000088960)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3732 +0xe0
+github.com/ethereum/go-ethereum/core.runWithTimeout.func1()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3927 +0x90
+created by github.com/ethereum/go-ethereum/core.runWithTimeout
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3920 +0x280
+
+goroutine 364724 [runnable]:
+internal/fmtsort.(*SortedMap).Swap(0x140035f17a0?, 0x111?, 0x112?)
+	/Users/jekamas/go/go1.19.2/src/internal/fmtsort/sort.go:28 +0x1c8
+sort.swapRange(...)
+	/Users/jekamas/go/go1.19.2/src/sort/zsortinterface.go:331
+sort.rotate({0x1012a1f58, 0x140035f17a0}, 0x109?, 0x112, 0x109?)
+	/Users/jekamas/go/go1.19.2/src/sort/zsortinterface.go:478 +0xa4
+sort.symMerge({0x1012a1f58, 0x140035f17a0}, 0x10e, 0x112, 0x118)
+	/Users/jekamas/go/go1.19.2/src/sort/zsortinterface.go:450 +0x10c
+sort.symMerge({0x1012a1f58, 0x140035f17a0}, 0x104, 0x10f, 0x118)
+	/Users/jekamas/go/go1.19.2/src/sort/zsortinterface.go:456 +0x17c
+sort.symMerge({0x1012a1f58, 0x140035f17a0}, 0xf0, 0x100, 0x118)
+	/Users/jekamas/go/go1.19.2/src/sort/zsortinterface.go:456 +0x17c
+sort.symMerge({0x1012a1f58, 0x140035f17a0}, 0xf0, 0x118, 0x140)
+	/Users/jekamas/go/go1.19.2/src/sort/zsortinterface.go:453 +0x148
+sort.stable({0x1012a1f58, 0x140035f17a0}, 0x159)
+	/Users/jekamas/go/go1.19.2/src/sort/zsortinterface.go:348 +0xec
+sort.Stable({0x1012a1f58, 0x140035f17a0})
+	/Users/jekamas/go/go1.19.2/src/sort/sort.go:208 +0x3c
+internal/fmtsort.Sort({0x1011d8720?, 0x140040d5890?, 0x1400236fbe8?})
+	/Users/jekamas/go/go1.19.2/src/internal/fmtsort/sort.go:70 +0x358
+fmt.(*pp).printValue(0x14006992000, {0x1011d8720?, 0x140040d5890?, 0x140067b2fa8?}, 0x76, 0x0)
+	/Users/jekamas/go/go1.19.2/src/fmt/print.go:800 +0x964
+fmt.(*pp).printArg(0x14006992000, {0x1011d8720?, 0x140040d5890}, 0x76)
+	/Users/jekamas/go/go1.19.2/src/fmt/print.go:743 +0x788
+fmt.(*pp).doPrint(0x14006992000, {0x14006786f68?, 0x1, 0x3e?})
+	/Users/jekamas/go/go1.19.2/src/fmt/print.go:1188 +0x190
+fmt.Fprint({0x10129ee40, 0x10172f560}, {0x14006786f68, 0x1, 0x1})
+	/Users/jekamas/go/go1.19.2/src/fmt/print.go:242 +0x44
+github.com/ethereum/go-ethereum/core.apiWithMining.func7.2(0x0?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3538 +0x58
+github.com/ethereum/go-ethereum/core.runWithTimeout.func1()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3927 +0x90
+created by github.com/ethereum/go-ethereum/core.runWithTimeout
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3920 +0x280
+
+goroutine 364513 [semacquire]:
+sync.runtime_SemacquireMutex(0x14000580000?, 0x4c?, 0x14002647688?)
+	/Users/jekamas/go/go1.19.2/src/runtime/sema.go:77 +0x24
+sync.(*Mutex).lockSlow(0x140004e2120)
+	/Users/jekamas/go/go1.19.2/src/sync/mutex.go:171 +0x178
+sync.(*Mutex).Lock(...)
+	/Users/jekamas/go/go1.19.2/src/sync/mutex.go:90
+sync.(*RWMutex).Lock(0x140004e2120?)
+	/Users/jekamas/go/go1.19.2/src/sync/rwmutex.go:147 +0x74
+github.com/ethereum/go-ethereum/core.(*TxPool).SetGasPrice(0x140004e2000, 0x140054baa80)
+	/Users/jekamas/projects/bor/core/tx_pool.go:453 +0x40
+github.com/ethereum/go-ethereum/core.apiWithMining.func11.2(0x0?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3605 +0x30
+github.com/ethereum/go-ethereum/core.runWithTimeout.func1()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3927 +0x90
+created by github.com/ethereum/go-ethereum/core.runWithTimeout
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3920 +0x280
+
+goroutine 364242 [select]:
+github.com/ethereum/go-ethereum/core.apiWithMining.func18.2(0x14000088540)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3732 +0xe0
+github.com/ethereum/go-ethereum/core.runWithTimeout.func1()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3927 +0x90
+created by github.com/ethereum/go-ethereum/core.runWithTimeout
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3920 +0x280
+
+goroutine 364202 [select]:
+github.com/ethereum/go-ethereum/core.apiWithMining.func18.2(0x14001ef8f00)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3732 +0xe0
+github.com/ethereum/go-ethereum/core.runWithTimeout.func1()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3927 +0x90
+created by github.com/ethereum/go-ethereum/core.runWithTimeout
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3920 +0x280
+
+goroutine 364606 [runnable]:
+golang.org/x/crypto/sha3.(*state).Sum(0x140067d9500, {0x0, 0x0, 0x0})
+	/Users/jekamas/go/pkg/mod/golang.org/x/crypto@v0.0.0-20220507011949-2cf3adece122/sha3/sha3.go:192 +0x194
+github.com/ethereum/go-ethereum/common.(*Address).checksumHex(0x14007753618?)
+	/Users/jekamas/projects/bor/common/types.go:250 +0x108
+github.com/ethereum/go-ethereum/common.Address.Format({0x76, 0xc2, 0x98, 0x5e, 0x1c, 0x73, 0x29, 0xcc, 0x1f, 0x1d, ...}, ...)
+	/Users/jekamas/projects/bor/common/types.go:277 +0x22c
+fmt.(*pp).handleMethods(0x140000f8340, 0x2b5edb0?)
+	/Users/jekamas/go/go1.19.2/src/fmt/print.go:624 +0x404
+fmt.(*pp).printValue(0x140000f8340, {0x101254cc0?, 0x14002b5edb0?, 0x39e?}, 0x76, 0x1)
+	/Users/jekamas/go/go1.19.2/src/fmt/print.go:754 +0xa0
+fmt.(*pp).printValue(0x140000f8340, {0x1011d8720?, 0x14003396f00?, 0x14006a7d9e8?}, 0x76, 0x0)
+	/Users/jekamas/go/go1.19.2/src/fmt/print.go:809 +0x1cdc
+fmt.(*pp).printArg(0x140000f8340, {0x1011d8720?, 0x14003396f00}, 0x76)
+	/Users/jekamas/go/go1.19.2/src/fmt/print.go:743 +0x788
+fmt.(*pp).doPrint(0x140000f8340, {0x14007753f68?, 0x1, 0x3d?})
+	/Users/jekamas/go/go1.19.2/src/fmt/print.go:1188 +0x190
+fmt.Fprint({0x10129ee40, 0x10172f560}, {0x140041cef68, 0x1, 0x1})
+	/Users/jekamas/go/go1.19.2/src/fmt/print.go:242 +0x44
+github.com/ethereum/go-ethereum/core.apiWithMining.func6.2(0x0?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3521 +0x58
+github.com/ethereum/go-ethereum/core.runWithTimeout.func1()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3927 +0x90
+created by github.com/ethereum/go-ethereum/core.runWithTimeout
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3920 +0x280
+
+goroutine 364675 [runnable]:
+golang.org/x/crypto/sha3.(*state).Write(0x14006b33c00?, {0x14006b1ced2?, 0x28?, 0x28?})
+	/Users/jekamas/go/pkg/mod/golang.org/x/crypto@v0.0.0-20220507011949-2cf3adece122/sha3/sha3.go:126 +0x2f8
+github.com/ethereum/go-ethereum/common.(*Address).checksumHex(0x14007665618?)
+	/Users/jekamas/projects/bor/common/types.go:249 +0xf4
+github.com/ethereum/go-ethereum/common.Address.Format({0xb7, 0xd8, 0xc9, 0x83, 0xc9, 0x38, 0xc8, 0xc1, 0x26, 0x54, ...}, ...)
+	/Users/jekamas/projects/bor/common/types.go:277 +0x22c
+fmt.(*pp).handleMethods(0x140060584e0, 0x2cddda0?)
+	/Users/jekamas/go/go1.19.2/src/fmt/print.go:624 +0x404
+fmt.(*pp).printValue(0x140060584e0, {0x101254cc0?, 0x14002cddda0?, 0x39e?}, 0x76, 0x1)
+	/Users/jekamas/go/go1.19.2/src/fmt/print.go:754 +0xa0
+fmt.(*pp).printValue(0x140060584e0, {0x1011d8720?, 0x140039ff1d0?, 0x14005513b88?}, 0x76, 0x0)
+	/Users/jekamas/go/go1.19.2/src/fmt/print.go:809 +0x1cdc
+fmt.(*pp).printArg(0x140060584e0, {0x1011d8720?, 0x140039ff1d0}, 0x76)
+	/Users/jekamas/go/go1.19.2/src/fmt/print.go:743 +0x788
+fmt.(*pp).doPrint(0x140060584e0, {0x14007665f68?, 0x1, 0x2b?})
+	/Users/jekamas/go/go1.19.2/src/fmt/print.go:1188 +0x190
+fmt.Fprint({0x10129ee40, 0x10172f560}, {0x140041b3f68, 0x1, 0x1})
+	/Users/jekamas/go/go1.19.2/src/fmt/print.go:242 +0x44
+github.com/ethereum/go-ethereum/core.apiWithMining.func7.2(0x0?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3538 +0x58
+github.com/ethereum/go-ethereum/core.runWithTimeout.func1()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3927 +0x90
+created by github.com/ethereum/go-ethereum/core.runWithTimeout
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3920 +0x280
+
+goroutine 364706 [runnable]:
+golang.org/x/crypto/sha3.copyOutGeneric(0x14006b9c700?, {0x14006b9c7e9?, 0x88?, 0xa8?})
+	/Users/jekamas/go/pkg/mod/golang.org/x/crypto@v0.0.0-20220507011949-2cf3adece122/sha3/xor_generic.go:23 +0x94
+golang.org/x/crypto/sha3.(*state).padAndPermute(0x14006b9c700, 0xc0?)
+	/Users/jekamas/go/pkg/mod/golang.org/x/crypto@v0.0.0-20220507011949-2cf3adece122/sha3/sha3.go:121 +0x1e0
+golang.org/x/crypto/sha3.(*state).Read(0x14006b9c700, {0x14006b9a1c0, 0x20, 0x20})
+	/Users/jekamas/go/pkg/mod/golang.org/x/crypto@v0.0.0-20220507011949-2cf3adece122/sha3/sha3.go:164 +0x3c
+golang.org/x/crypto/sha3.(*state).Sum(0x14006b9c540, {0x0, 0x0, 0x0})
+	/Users/jekamas/go/pkg/mod/golang.org/x/crypto@v0.0.0-20220507011949-2cf3adece122/sha3/sha3.go:191 +0x15c
+github.com/ethereum/go-ethereum/common.(*Address).checksumHex(0x140004dd618?)
+	/Users/jekamas/projects/bor/common/types.go:250 +0x108
+github.com/ethereum/go-ethereum/common.Address.Format({0x6a, 0xf6, 0x9a, 0x87, 0x8a, 0xb6, 0xcf, 0x17, 0x90, 0x1e, ...}, ...)
+	/Users/jekamas/projects/bor/common/types.go:277 +0x22c
+fmt.(*pp).handleMethods(0x140074f6000, 0x441d428?)
+	/Users/jekamas/go/go1.19.2/src/fmt/print.go:624 +0x404
+fmt.(*pp).printValue(0x140074f6000, {0x101254cc0?, 0x1400441d428?, 0x39e?}, 0x76, 0x1)
+	/Users/jekamas/go/go1.19.2/src/fmt/print.go:754 +0xa0
+fmt.(*pp).printValue(0x140074f6000, {0x1011d8720?, 0x1400169dd10?, 0x140041a6a70?}, 0x76, 0x0)
+	/Users/jekamas/go/go1.19.2/src/fmt/print.go:809 +0x1cdc
+fmt.(*pp).printArg(0x140074f6000, {0x1011d8720?, 0x1400169dd10}, 0x76)
+	/Users/jekamas/go/go1.19.2/src/fmt/print.go:743 +0x788
+fmt.(*pp).doPrint(0x140074f6000, {0x140004ddf68?, 0x1, 0x35?})
+	/Users/jekamas/go/go1.19.2/src/fmt/print.go:1188 +0x190
+fmt.Fprint({0x10129ee40, 0x10172f560}, {0x1400764af68, 0x1, 0x1})
+	/Users/jekamas/go/go1.19.2/src/fmt/print.go:242 +0x44
+github.com/ethereum/go-ethereum/core.apiWithMining.func7.2(0x0?)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3538 +0x58
+github.com/ethereum/go-ethereum/core.runWithTimeout.func1()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3927 +0x90
+created by github.com/ethereum/go-ethereum/core.runWithTimeout
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3920 +0x280
+
+goroutine 364200 [select]:
+github.com/ethereum/go-ethereum/core.apiWithMining.func18.2(0x14001ef8e40)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3732 +0xe0
+github.com/ethereum/go-ethereum/core.runWithTimeout.func1()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3927 +0x90
+created by github.com/ethereum/go-ethereum/core.runWithTimeout
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3920 +0x280
+
+goroutine 364204 [select]:
+github.com/ethereum/go-ethereum/core.apiWithMining.func18.2(0x14001ef8fc0)
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3732 +0xe0
+github.com/ethereum/go-ethereum/core.runWithTimeout.func1()
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3927 +0x90
+created by github.com/ethereum/go-ethereum/core.runWithTimeout
+	/Users/jekamas/projects/bor/core/tx_pool_test.go:3920 +0x280
+FAIL	github.com/ethereum/go-ethereum/core	35.292s
+FAIL
+make: *** [test-txpool-race] Error 1
