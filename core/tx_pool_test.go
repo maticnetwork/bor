@@ -2808,7 +2808,7 @@ func BenchmarkPoolMining(b *testing.B) {
 			var added int
 
 			for i := 0; i < b.N; i++ {
-				added, pendingDurations[i] = mining(b, pool, signer, baseFee, blockGasLimit, i)
+				added, pendingDurations[i], _ = mining(b, pool, signer, baseFee, blockGasLimit, i)
 				total += added
 			}
 
@@ -2821,8 +2821,8 @@ func BenchmarkPoolMining(b *testing.B) {
 			}
 
 			mean, stddev := stat.MeanStdDev(pendingDurationsFloat, nil)
-			b.Logf("pending mean %v, stdev %v, %v-%v);",
-				time.Duration(mean), time.Duration(stddev), time.Duration(floats.Min(pendingDurationsFloat)), time.Duration(floats.Max(pendingDurationsFloat)))
+			b.Logf("[%s] pending mean %v, stdev %v, %v-%v",
+				common.NowMilliseconds(), time.Duration(mean), time.Duration(stddev), time.Duration(floats.Min(pendingDurationsFloat)), time.Duration(floats.Max(pendingDurationsFloat)))
 		})
 	}
 }
@@ -3687,7 +3687,7 @@ func MakeWithPromoteTxCh(ch chan struct{}) func(*TxPool) {
 }
 
 //nolint:thelper
-func mining(tb testing.TB, pool *TxPool, signer types.Signer, baseFee *uint256.Int, blockGasLimit uint64, totalBlocks int) (int, time.Duration) {
+func mining(tb testing.TB, pool *TxPool, signer types.Signer, baseFee *uint256.Int, blockGasLimit uint64, totalBlocks int) (int, time.Duration, time.Duration) {
 	var (
 		localTxsCount  int
 		remoteTxsCount int
@@ -3739,10 +3739,12 @@ func mining(tb testing.TB, pool *TxPool, signer types.Signer, baseFee *uint256.I
 		total += txRemoteCount
 	}
 
-	tb.Logf("[%s] mining block. block %d. total %d: pending %d(added %d), local %d(added %d), queued %d, localTxsCount %d, remoteTxsCount %d, pending %v, mining %v",
-		common.NowMilliseconds(), totalBlocks, total, pendingLen, txRemoteCount, localTxsCount, txLocalCount, queuedLen, localTxsCount, remoteTxsCount, pendingDuration, time.Since(start))
+	miningDuration := time.Since(start)
 
-	return total, pendingDuration
+	tb.Logf("[%s] mining block. block %d. total %d: pending %d(added %d), local %d(added %d), queued %d, localTxsCount %d, remoteTxsCount %d, pending %v, mining %v",
+		common.NowMilliseconds(), totalBlocks, total, pendingLen, txRemoteCount, localTxsCount, txLocalCount, queuedLen, localTxsCount, remoteTxsCount, pendingDuration, miningDuration)
+
+	return total, pendingDuration, miningDuration
 }
 
 //nolint:paralleltest
@@ -4368,20 +4370,20 @@ func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase
 		totalBlocks int
 	)
 
-	blockTicker := time.NewTicker(blockPeriod)
-	defer blockTicker.Stop()
-
 	pendingDurations := make([]time.Duration, 0, blocks)
 
 	var (
 		added           int
 		pendingDuration time.Duration
+		miningDuration  time.Duration
+		diff            time.Duration
 	)
 
-	for range blockTicker.C {
-		added, pendingDuration = mining(tb, pool, signer, baseFee, blockGasLimit, totalBlocks)
+	for {
+		added, pendingDuration, miningDuration = mining(tb, pool, signer, baseFee, blockGasLimit, totalBlocks)
 
 		totalTxs += added
+
 		pendingDurations = append(pendingDurations, pendingDuration)
 
 		totalBlocks++
@@ -4389,6 +4391,11 @@ func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase
 		if totalBlocks > blocks {
 			fmt.Fprint(io.Discard, totalTxs)
 			break
+		}
+
+		diff = blockPeriod - miningDuration
+		if diff > 0 {
+			time.Sleep(diff)
 		}
 	}
 
@@ -4399,8 +4406,8 @@ func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase
 	}
 
 	mean, stddev := stat.MeanStdDev(pendingDurationsFloat, nil)
-	tb.Logf("pending mean %v, stddev %v, %v-%v);",
-		time.Duration(mean), time.Duration(stddev), time.Duration(floats.Min(pendingDurationsFloat)), time.Duration(floats.Max(pendingDurationsFloat)))
+	tb.Logf("[%s] pending mean %v, stddev %v, %v-%v",
+		common.NowMilliseconds(), time.Duration(mean), time.Duration(stddev), time.Duration(floats.Min(pendingDurationsFloat)), time.Duration(floats.Max(pendingDurationsFloat)))
 }
 
 func addTransactionsBatches(tb testing.TB, batches []types.Transactions, fn func(types.Transactions) error, done chan struct{}, timeoutDuration time.Duration, tickerDuration time.Duration, name string, thread int) {
