@@ -3432,7 +3432,7 @@ func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase
 			if rand.Int()%2 == 0 {
 				runWithTimeout(tb, func(_ chan struct{}) {
 					errs := pool.AddLocals(batch)
-					if len(errs) != 0 {
+					if len(errs) != 0 && errs[0] != nil {
 						tb.Logf("[%s] AddLocals error, %v", common.NowMilliseconds(), errs)
 					}
 				}, done, "AddLocals", timeoutDuration, 0, 0)
@@ -3871,7 +3871,7 @@ func addTransactions(tb testing.TB, batches []types.Transactions, fn func(*types
 func getFnForBatches(fn func([]*types.Transaction) []error) func(types.Transactions) error {
 	return func(batch types.Transactions) error {
 		errs := fn(batch)
-		if len(errs) != 0 {
+		if len(errs) != 0 && errs[0] != nil {
 			return errs[0]
 		}
 
