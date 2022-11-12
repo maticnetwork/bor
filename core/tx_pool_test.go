@@ -3731,7 +3731,7 @@ func TestPoolMiningDataRaces(t *testing.T) {
 		t.Skip("only for data race testing")
 	}
 
-	const format = "size %d"
+	const format = "size %d, txs ticker %v, api ticker %v"
 
 	cases := []struct {
 		name              string
@@ -3846,7 +3846,7 @@ func TestPoolMiningDataRaces(t *testing.T) {
 	}
 
 	for i := range cases {
-		cases[i].name = fmt.Sprintf(format, cases[i].size)
+		cases[i].name = fmt.Sprintf(format, cases[i].size, cases[i].txsTickerDuration, cases[i].apiTickerDuration)
 	}
 
 	//nolint:paralleltest
@@ -3864,7 +3864,7 @@ func TestPoolMiningDataRaces(t *testing.T) {
 				batchesSize     = 10_000
 				timeoutDuration = 10 * blockPeriod
 
-				balanceStr = "1_000_000_000"
+				balanceStr = "1_000_000_000_000"
 			)
 
 			apiWithMining(t, balanceStr, batchesSize, singleCase, timeoutDuration, threads, blockPeriod, blocks, blockGasLimit)
@@ -3922,7 +3922,7 @@ func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase
 		batchesLocal[i] = make(types.Transactions, singleCase.size)
 
 		for j := 0; j < singleCase.size; j++ {
-			batchesLocal[i][j] = transaction(uint64(singleCase.size*i+j), 100_000, localKey)
+			batchesLocal[i][j] = pricedTransaction(uint64(singleCase.size*i+j), 100_000, big.NewInt(int64(i+1)), localKey)
 		}
 
 		batchesRemote[i] = make(types.Transactions, singleCase.size)
@@ -3932,7 +3932,7 @@ func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase
 		testAddBalance(pool, remoteAddr, balance)
 
 		for j := 0; j < singleCase.size; j++ {
-			batchesRemote[i][j] = transaction(uint64(j), 100_000, remoteKey)
+			batchesRemote[i][j] = pricedTransaction(uint64(j), 100_000, big.NewInt(int64(i+1)), remoteKey)
 		}
 
 		batchesRemotes[i] = make(types.Transactions, singleCase.size)
@@ -3942,7 +3942,7 @@ func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase
 		testAddBalance(pool, remotesAddr, balance)
 
 		for j := 0; j < singleCase.size; j++ {
-			batchesRemotes[i][j] = transaction(uint64(j), 100_000, remotesKey)
+			batchesRemotes[i][j] = pricedTransaction(uint64(j), 100_000, big.NewInt(int64(i+1)), remotesKey)
 		}
 
 		batchesRemoteSync[i] = make(types.Transactions, singleCase.size)
@@ -3952,7 +3952,7 @@ func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase
 		testAddBalance(pool, remoteSyncAddr, balance)
 
 		for j := 0; j < singleCase.size; j++ {
-			batchesRemoteSync[i][j] = transaction(uint64(j), 100_000, remoteSyncKey)
+			batchesRemoteSync[i][j] = pricedTransaction(uint64(j), 100_000, big.NewInt(int64(i+1)), remoteSyncKey)
 		}
 
 		batchesRemotesSync[i] = make(types.Transactions, singleCase.size)
@@ -3962,7 +3962,7 @@ func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase
 		testAddBalance(pool, remotesSyncAddr, balance)
 
 		for j := 0; j < singleCase.size; j++ {
-			batchesRemotesSync[i][j] = transaction(uint64(j), 100_000, remotesSyncKey)
+			batchesRemotesSync[i][j] = pricedTransaction(uint64(j), 100_000, big.NewInt(int64(i+1)), remotesSyncKey)
 		}
 	}
 
@@ -3973,6 +3973,7 @@ func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase
 
 	// locals
 	wg.Add(1)
+
 	go func() {
 		defer func() {
 			tb.Logf("[%s] stopping AddLocal(s)", common.NowMilliseconds())
@@ -4021,6 +4022,7 @@ func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase
 
 	// remotes
 	wg.Add(1)
+
 	go func() {
 		defer func() {
 			tb.Logf("[%s] stopping AddRemotes", common.NowMilliseconds())
@@ -4035,6 +4037,7 @@ func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase
 
 	// remote
 	wg.Add(1)
+
 	go func() {
 		defer func() {
 			tb.Logf("[%s] stopping AddRemote", common.NowMilliseconds())
@@ -4050,6 +4053,7 @@ func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase
 	// sync
 	// remotes
 	wg.Add(1)
+
 	go func() {
 		defer func() {
 			tb.Logf("[%s] stopping AddRemotesSync", common.NowMilliseconds())
@@ -4064,6 +4068,7 @@ func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase
 
 	// remote
 	wg.Add(1)
+
 	go func() {
 		defer func() {
 			tb.Logf("[%s] stopping AddRemoteSync", common.NowMilliseconds())
@@ -4081,13 +4086,14 @@ func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase
 		i := i
 
 		wg.Add(1)
+
 		go func() {
 			defer func() {
-				tb.Logf("[%s] stopping Pending-no-tips", common.NowMilliseconds())
+				tb.Logf("[%s] stopping Pending-no-tips, thread %d", common.NowMilliseconds(), i)
 
 				wg.Done()
 
-				tb.Logf("[%s] stopped Pending-no-tips", common.NowMilliseconds())
+				tb.Logf("[%s] stopped Pending-no-tips, thread %d", common.NowMilliseconds(), i)
 			}()
 
 			runWithTicker(tb, func(_ chan struct{}) {
@@ -4097,13 +4103,14 @@ func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase
 		}()
 
 		wg.Add(1)
+
 		go func() {
 			defer func() {
-				tb.Logf("[%s] stopping Pending-with-tips", common.NowMilliseconds())
+				tb.Logf("[%s] stopping Pending-with-tips, thread %d", common.NowMilliseconds(), i)
 
 				wg.Done()
 
-				tb.Logf("[%s] stopped Pending-with-tips", common.NowMilliseconds())
+				tb.Logf("[%s] stopped Pending-with-tips, thread %d", common.NowMilliseconds(), i)
 			}()
 
 			runWithTicker(tb, func(_ chan struct{}) {
@@ -4113,13 +4120,14 @@ func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase
 		}()
 
 		wg.Add(1)
+
 		go func() {
 			defer func() {
-				tb.Logf("[%s] stopping Locals", common.NowMilliseconds())
+				tb.Logf("[%s] stopping Locals, thread %d", common.NowMilliseconds(), i)
 
 				wg.Done()
 
-				tb.Logf("[%s] stopped Locals", common.NowMilliseconds())
+				tb.Logf("[%s] stopped Locals, thread %d", common.NowMilliseconds(), i)
 			}()
 
 			runWithTicker(tb, func(_ chan struct{}) {
@@ -4129,13 +4137,14 @@ func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase
 		}()
 
 		wg.Add(1)
+
 		go func() {
 			defer func() {
-				tb.Logf("[%s] stopping Content", common.NowMilliseconds())
+				tb.Logf("[%s] stopping Content, thread %d", common.NowMilliseconds(), i)
 
 				wg.Done()
 
-				tb.Logf("[%s] stopped Content", common.NowMilliseconds())
+				tb.Logf("[%s] stopped Content, thread %d", common.NowMilliseconds(), i)
 			}()
 
 			runWithTicker(tb, func(_ chan struct{}) {
@@ -4145,13 +4154,14 @@ func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase
 		}()
 
 		wg.Add(1)
+
 		go func() {
 			defer func() {
-				tb.Logf("[%s] stopping GasPriceUint256", common.NowMilliseconds())
+				tb.Logf("[%s] stopping GasPriceUint256, thread %d", common.NowMilliseconds(), i)
 
 				wg.Done()
 
-				tb.Logf("[%s] stopped GasPriceUint256", common.NowMilliseconds())
+				tb.Logf("[%s] stopped GasPriceUint256, thread %d", common.NowMilliseconds(), i)
 			}()
 
 			runWithTicker(tb, func(_ chan struct{}) {
@@ -4161,13 +4171,14 @@ func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase
 		}()
 
 		wg.Add(1)
+
 		go func() {
 			defer func() {
-				tb.Logf("[%s] stopping GasPrice", common.NowMilliseconds())
+				tb.Logf("[%s] stopping GasPrice, thread %d", common.NowMilliseconds(), i)
 
 				wg.Done()
 
-				tb.Logf("[%s] stopped GasPrice", common.NowMilliseconds())
+				tb.Logf("[%s] stopped GasPrice, thread %d", common.NowMilliseconds(), i)
 			}()
 
 			runWithTicker(tb, func(_ chan struct{}) {
@@ -4177,13 +4188,14 @@ func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase
 		}()
 
 		wg.Add(1)
+
 		go func() {
 			defer func() {
-				tb.Logf("[%s] stopping SetGasPrice", common.NowMilliseconds())
+				tb.Logf("[%s] stopping SetGasPrice, thread %d", common.NowMilliseconds(), i)
 
 				wg.Done()
 
-				tb.Logf("[%s] stopped SetGasPrice", common.NowMilliseconds())
+				tb.Logf("[%s] stopped SetGasPrice, , thread %d", common.NowMilliseconds(), i)
 			}()
 
 			runWithTicker(tb, func(_ chan struct{}) {
@@ -4192,13 +4204,14 @@ func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase
 		}()
 
 		wg.Add(1)
+
 		go func() {
 			defer func() {
-				tb.Logf("[%s] stopping ContentFrom", common.NowMilliseconds())
+				tb.Logf("[%s] stopping ContentFrom, thread %d", common.NowMilliseconds(), i)
 
 				wg.Done()
 
-				tb.Logf("[%s] stopped ContentFrom", common.NowMilliseconds())
+				tb.Logf("[%s] stopped ContentFrom, thread %d", common.NowMilliseconds(), i)
 			}()
 
 			runWithTicker(tb, func(_ chan struct{}) {
@@ -4208,13 +4221,14 @@ func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase
 		}()
 
 		wg.Add(1)
+
 		go func() {
 			defer func() {
-				tb.Logf("[%s] stopping Has", common.NowMilliseconds())
+				tb.Logf("[%s] stopping Has, thread %d", common.NowMilliseconds(), i)
 
 				wg.Done()
 
-				tb.Logf("[%s] stopped Has", common.NowMilliseconds())
+				tb.Logf("[%s] stopped Has, thread %d", common.NowMilliseconds(), i)
 			}()
 
 			runWithTicker(tb, func(_ chan struct{}) {
@@ -4224,13 +4238,14 @@ func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase
 		}()
 
 		wg.Add(1)
+
 		go func() {
 			defer func() {
-				tb.Logf("[%s] stopping Get", common.NowMilliseconds())
+				tb.Logf("[%s] stopping Get, thread %d", common.NowMilliseconds(), i)
 
 				wg.Done()
 
-				tb.Logf("[%s] stopped Get", common.NowMilliseconds())
+				tb.Logf("[%s] stopped Get, thread %d", common.NowMilliseconds(), i)
 			}()
 
 			runWithTicker(tb, func(_ chan struct{}) {
@@ -4240,13 +4255,14 @@ func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase
 		}()
 
 		wg.Add(1)
+
 		go func() {
 			defer func() {
-				tb.Logf("[%s] stopping Nonce", common.NowMilliseconds())
+				tb.Logf("[%s] stopping Nonce, thread %d", common.NowMilliseconds(), i)
 
 				wg.Done()
 
-				tb.Logf("[%s] stopped Nonce", common.NowMilliseconds())
+				tb.Logf("[%s] stopped Nonce, thread %d", common.NowMilliseconds(), i)
 			}()
 
 			runWithTicker(tb, func(_ chan struct{}) {
@@ -4256,13 +4272,14 @@ func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase
 		}()
 
 		wg.Add(1)
+
 		go func() {
 			defer func() {
-				tb.Logf("[%s] stopping Stats", common.NowMilliseconds())
+				tb.Logf("[%s] stopping Stats, thread %d", common.NowMilliseconds(), i)
 
 				wg.Done()
 
-				tb.Logf("[%s] stopped Stats", common.NowMilliseconds())
+				tb.Logf("[%s] stopped Stats, thread %d", common.NowMilliseconds(), i)
 			}()
 
 			runWithTicker(tb, func(_ chan struct{}) {
@@ -4272,13 +4289,14 @@ func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase
 		}()
 
 		wg.Add(1)
+
 		go func() {
 			defer func() {
-				tb.Logf("[%s] stopping Status", common.NowMilliseconds())
+				tb.Logf("[%s] stopping Status, thread %d", common.NowMilliseconds(), i)
 
 				wg.Done()
 
-				tb.Logf("[%s] stopped Status", common.NowMilliseconds())
+				tb.Logf("[%s] stopped Status, thread %d", common.NowMilliseconds(), i)
 			}()
 
 			runWithTicker(tb, func(_ chan struct{}) {
@@ -4288,13 +4306,14 @@ func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase
 		}()
 
 		wg.Add(1)
+
 		go func() {
 			defer func() {
-				tb.Logf("[%s] stopping SubscribeNewTxsEvent", common.NowMilliseconds())
+				tb.Logf("[%s] stopping SubscribeNewTxsEvent, thread %d", common.NowMilliseconds(), i)
 
 				wg.Done()
 
-				tb.Logf("[%s] stopped SubscribeNewTxsEvent", common.NowMilliseconds())
+				tb.Logf("[%s] stopped SubscribeNewTxsEvent, thread %d", common.NowMilliseconds(), i)
 			}()
 
 			runWithTicker(tb, func(c chan struct{}) {
@@ -4345,7 +4364,10 @@ func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase
 }
 
 func addTransactionsBatches(tb testing.TB, batches []types.Transactions, fn func(types.Transactions) error, done chan struct{}, timeoutDuration time.Duration, tickerDuration time.Duration, name string, thread int) {
+	tb.Helper()
+
 	tb.Logf("[%s] starting %s", common.NowMilliseconds(), name)
+
 	defer func() {
 		tb.Logf("[%s] stop %s", common.NowMilliseconds(), name)
 	}()
@@ -4371,7 +4393,10 @@ func addTransactionsBatches(tb testing.TB, batches []types.Transactions, fn func
 }
 
 func addTransactions(tb testing.TB, batches []types.Transactions, fn func(*types.Transaction) error, done chan struct{}, timeoutDuration time.Duration, tickerDuration time.Duration, name string, thread int) {
+	tb.Helper()
+
 	tb.Logf("[%s] starting %s", common.NowMilliseconds(), name)
+
 	defer func() {
 		tb.Logf("[%s] stop %s", common.NowMilliseconds(), name)
 	}()
@@ -4418,6 +4443,7 @@ func runWithTicker(tb testing.TB, fn func(c chan struct{}), done chan struct{}, 
 	select {
 	case <-done:
 		tb.Logf("[%s] Short path. finishing outer runWithTicker for %q, thread %d", common.NowMilliseconds(), name, thread)
+
 		return
 	default:
 	}
@@ -4455,14 +4481,6 @@ func runWithTimeout(tb testing.TB, fn func(chan struct{}), outerDone chan struct
 	default:
 	}
 
-	/*
-		defer func() {
-			tb.Logf("[%s] finishing inner runWithTimeout for %q, thread %d, iteration %d",
-				common.NowMilliseconds(), name, thread, n)
-		}()
-
-	*/
-
 	timeout := time.NewTimer(timeoutDuration)
 	defer timeout.Stop()
 
@@ -4474,23 +4492,12 @@ func runWithTimeout(tb testing.TB, fn func(chan struct{}), outerDone chan struct
 	go func() {
 		defer close(doneCh)
 
-		/*
-			tb.Logf("[%s] starting inner runWithTimeout for %q, timeout in %v, thread %d, iteration %d",
-				common.NowMilliseconds(), name, timeoutDuration, thread, n)
-
-		*/
-
 		select {
 		case <-outerDone:
 			return
 		default:
 			fn(doneCh)
 		}
-
-		/*
-			tb.Logf("[%s] finished inner runWithTimeout for %q, thread %d, iteration %d", common.NowMilliseconds(), name, thread, n)
-
-		*/
 	}()
 
 	const isDebug = false

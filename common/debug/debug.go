@@ -40,13 +40,13 @@ func CodeLineStr() string {
 
 func Stack(all bool) []byte {
 	buf := make([]byte, 4096)
+
 	for {
 		n := runtime.Stack(buf, all)
 		if n < len(buf) {
 			return buf[:n]
 		}
+
 		buf = make([]byte, 2*len(buf))
 	}
-
-	return buf
 }
