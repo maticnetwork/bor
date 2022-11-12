@@ -80,6 +80,17 @@ func (m *txSortedMap) Get(nonce uint64) *types.Transaction {
 	return m.items[nonce]
 }
 
+func (m *txSortedMap) Has(nonce uint64) bool {
+	if m == nil {
+		return false
+	}
+
+	m.m.RLock()
+	defer m.m.RUnlock()
+
+	return m.items[nonce] == nil
+}
+
 // Put inserts a new transaction into the map, also updating the map's nonce
 // index. If a transaction already exists with the same nonce, it's overwritten.
 func (m *txSortedMap) Put(tx *types.Transaction) {
@@ -555,6 +566,10 @@ func (l *txList) Flatten() types.Transactions {
 // transaction with the highest nonce
 func (l *txList) LastElement() *types.Transaction {
 	return l.txs.LastElement()
+}
+
+func (l *txList) Has(nonce uint64) bool {
+	return l != nil && l.txs.items[nonce] != nil
 }
 
 // priceHeap is a heap.Interface implementation over transactions for retrieving

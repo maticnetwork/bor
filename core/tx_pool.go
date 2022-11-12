@@ -1243,7 +1243,7 @@ func (pool *TxPool) Status(hashes []common.Hash) []TxStatus {
 
 		pool.pendingMu.RLock()
 
-		if txList = pool.pending[from]; txList != nil && txList.txs.items[tx.Nonce()] != nil {
+		if txList = pool.pending[from]; txList != nil && txList.txs.Has(tx.Nonce()) {
 			status[i] = TxStatusPending
 			isPending = true
 		} else {
@@ -1255,7 +1255,7 @@ func (pool *TxPool) Status(hashes []common.Hash) []TxStatus {
 		if !isPending {
 			pool.mu.RLock()
 
-			if txList := pool.queue[from]; txList != nil && txList.txs.items[tx.Nonce()] != nil {
+			if txList := pool.queue[from]; txList != nil && txList.txs.Has(tx.Nonce()) {
 				status[i] = TxStatusQueued
 			}
 
