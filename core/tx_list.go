@@ -88,7 +88,7 @@ func (m *txSortedMap) Has(nonce uint64) bool {
 	m.m.RLock()
 	defer m.m.RUnlock()
 
-	return m.items[nonce] == nil
+	return m.items[nonce] != nil
 }
 
 // Put inserts a new transaction into the map, also updating the map's nonce
