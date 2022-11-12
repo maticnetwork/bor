@@ -21,6 +21,7 @@ import (
 	"crypto/ecdsa"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"math/big"
 	"math/rand"
@@ -32,11 +33,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/holiman/uint256"
+	"go.uber.org/goleak"
 	"gonum.org/v1/gonum/floats"
 	"gonum.org/v1/gonum/stat"
 	"pgregory.net/rapid"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/leak"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -3090,5 +3094,868 @@ func commitTransactions(pool *TxPool, txs *types.TransactionsByPriceAndNonce, bl
 func MakeWithPromoteTxCh(ch chan struct{}) func(*TxPool) {
 	return func(pool *TxPool) {
 		pool.promoteTxCh = ch
+	}
+}
+
+//nolint:thelper
+func mining(tb testing.TB, pool *TxPool, signer types.Signer, baseFeeU *uint256.Int, blockGasLimit uint64, totalBlocks int) (int, time.Duration, time.Duration) {
+	var (
+		localTxsCount  int
+		remoteTxsCount int
+		localTxs       = make(map[common.Address]types.Transactions)
+		remoteTxs      map[common.Address]types.Transactions
+		total          int
+	)
+
+	baseFee := baseFeeU.ToBig()
+
+	start := time.Now()
+
+	pending := pool.Pending(true)
+
+	pendingDuration := time.Since(start)
+
+	remoteTxs = pending
+
+	locals := pool.Locals()
+
+	pendingLen, queuedLen := pool.Stats()
+
+	for _, account := range locals {
+		if txs := remoteTxs[account]; len(txs) > 0 {
+			delete(remoteTxs, account)
+
+			localTxs[account] = txs
+		}
+	}
+
+	localTxsCount = len(localTxs)
+	remoteTxsCount = len(remoteTxs)
+
+	var txLocalCount int
+
+	if localTxsCount > 0 {
+		txs := types.NewTransactionsByPriceAndNonce(signer, localTxs, baseFee)
+
+		blockGasLimit, txLocalCount = commitTransactions(pool, txs, blockGasLimit)
+
+		total += txLocalCount
+	}
+
+	var txRemoteCount int
+
+	if remoteTxsCount > 0 {
+		txs := types.NewTransactionsByPriceAndNonce(signer, remoteTxs, baseFee)
+
+		_, txRemoteCount = commitTransactions(pool, txs, blockGasLimit)
+
+		total += txRemoteCount
+	}
+
+	miningDuration := time.Since(start)
+
+	tb.Logf("[%s] mining block. block %d. total %d: pending %d(added %d), local %d(added %d), queued %d, localTxsCount %d, remoteTxsCount %d, pending %v, mining %v",
+		common.NowMilliseconds(), totalBlocks, total, pendingLen, txRemoteCount, localTxsCount, txLocalCount, queuedLen, localTxsCount, remoteTxsCount, pendingDuration, miningDuration)
+
+	return total, pendingDuration, miningDuration
+}
+
+//nolint:paralleltest
+func TestPoolMiningDataRaces(t *testing.T) {
+	if testing.Short() {
+		t.Skip("only for data race testing")
+	}
+
+	const format = "size %d, txs ticker %v, api ticker %v"
+
+	cases := []struct {
+		name              string
+		size              int
+		txsTickerDuration time.Duration
+		apiTickerDuration time.Duration
+	}{
+		{
+			size:              1,
+			txsTickerDuration: 200 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+		{
+			size:              1,
+			txsTickerDuration: 400 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+		{
+			size:              1,
+			txsTickerDuration: 600 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+		{
+			size:              1,
+			txsTickerDuration: 800 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+
+		{
+			size:              5,
+			txsTickerDuration: 200 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+		{
+			size:              5,
+			txsTickerDuration: 400 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+		{
+			size:              5,
+			txsTickerDuration: 600 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+		{
+			size:              5,
+			txsTickerDuration: 800 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+
+		{
+			size:              10,
+			txsTickerDuration: 200 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+		{
+			size:              10,
+			txsTickerDuration: 400 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+		{
+			size:              10,
+			txsTickerDuration: 600 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+		{
+			size:              10,
+			txsTickerDuration: 800 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+
+		{
+			size:              20,
+			txsTickerDuration: 200 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+		{
+			size:              20,
+			txsTickerDuration: 400 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+		{
+			size:              20,
+			txsTickerDuration: 600 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+		{
+			size:              20,
+			txsTickerDuration: 800 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+
+		{
+			size:              30,
+			txsTickerDuration: 200 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+		{
+			size:              30,
+			txsTickerDuration: 400 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+		{
+			size:              30,
+			txsTickerDuration: 600 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+		{
+			size:              30,
+			txsTickerDuration: 800 * time.Millisecond,
+			apiTickerDuration: 10 * time.Millisecond,
+		},
+	}
+
+	for i := range cases {
+		cases[i].name = fmt.Sprintf(format, cases[i].size, cases[i].txsTickerDuration, cases[i].apiTickerDuration)
+	}
+
+	//nolint:paralleltest
+	for _, testCase := range cases {
+		singleCase := testCase
+
+		t.Run(singleCase.name, func(t *testing.T) {
+			defer goleak.VerifyNone(t, leak.IgnoreList()...)
+
+			const (
+				blocks          = 300
+				blockGasLimit   = 40_000_000
+				blockPeriod     = time.Second
+				threads         = 10
+				batchesSize     = 10_000
+				timeoutDuration = 10 * blockPeriod
+
+				balanceStr = "1_000_000_000_000"
+			)
+
+			apiWithMining(t, balanceStr, batchesSize, singleCase, timeoutDuration, threads, blockPeriod, blocks, blockGasLimit)
+		})
+	}
+}
+
+//nolint:gocognit,thelper
+func apiWithMining(tb testing.TB, balanceStr string, batchesSize int, singleCase struct {
+	name              string
+	size              int
+	txsTickerDuration time.Duration
+	apiTickerDuration time.Duration
+}, timeoutDuration time.Duration, threads int, blockPeriod time.Duration, blocks int, blockGasLimit uint64) {
+	done := make(chan struct{})
+
+	var wg sync.WaitGroup
+
+	defer func() {
+		close(done)
+
+		tb.Logf("[%s] finishing apiWithMining", common.NowMilliseconds())
+
+		wg.Wait()
+
+		tb.Logf("[%s] apiWithMining finished", common.NowMilliseconds())
+	}()
+
+	// Generate a batch of transactions to enqueue into the pool
+	pendingAddedCh := make(chan struct{}, 1024)
+
+	pool, localKey := setupTxPoolWithConfig(params.TestChainConfig, testTxPoolConfig, txPoolGasLimit, MakeWithPromoteTxCh(pendingAddedCh))
+	defer pool.Stop()
+
+	localKeyPub := localKey.PublicKey
+	account := crypto.PubkeyToAddress(localKeyPub)
+
+	balance, ok := big.NewInt(0).SetString(balanceStr, 0)
+	if !ok {
+		tb.Fatal("incorrect initial balance", balanceStr)
+	}
+
+	testAddBalance(pool, account, balance)
+
+	signer := types.NewEIP155Signer(big.NewInt(1))
+	baseFee := uint256.NewInt(1)
+
+	batchesLocal := make([]types.Transactions, batchesSize)
+	batchesRemote := make([]types.Transactions, batchesSize)
+	batchesRemotes := make([]types.Transactions, batchesSize)
+	batchesRemoteSync := make([]types.Transactions, batchesSize)
+	batchesRemotesSync := make([]types.Transactions, batchesSize)
+
+	for i := 0; i < batchesSize; i++ {
+		batchesLocal[i] = make(types.Transactions, singleCase.size)
+
+		for j := 0; j < singleCase.size; j++ {
+			batchesLocal[i][j] = pricedTransaction(uint64(singleCase.size*i+j), 100_000, big.NewInt(int64(i+1)), localKey)
+		}
+
+		batchesRemote[i] = make(types.Transactions, singleCase.size)
+
+		remoteKey, _ := crypto.GenerateKey()
+		remoteAddr := crypto.PubkeyToAddress(remoteKey.PublicKey)
+		testAddBalance(pool, remoteAddr, balance)
+
+		for j := 0; j < singleCase.size; j++ {
+			batchesRemote[i][j] = pricedTransaction(uint64(j), 100_000, big.NewInt(int64(i+1)), remoteKey)
+		}
+
+		batchesRemotes[i] = make(types.Transactions, singleCase.size)
+
+		remotesKey, _ := crypto.GenerateKey()
+		remotesAddr := crypto.PubkeyToAddress(remotesKey.PublicKey)
+		testAddBalance(pool, remotesAddr, balance)
+
+		for j := 0; j < singleCase.size; j++ {
+			batchesRemotes[i][j] = pricedTransaction(uint64(j), 100_000, big.NewInt(int64(i+1)), remotesKey)
+		}
+
+		batchesRemoteSync[i] = make(types.Transactions, singleCase.size)
+
+		remoteSyncKey, _ := crypto.GenerateKey()
+		remoteSyncAddr := crypto.PubkeyToAddress(remoteSyncKey.PublicKey)
+		testAddBalance(pool, remoteSyncAddr, balance)
+
+		for j := 0; j < singleCase.size; j++ {
+			batchesRemoteSync[i][j] = pricedTransaction(uint64(j), 100_000, big.NewInt(int64(i+1)), remoteSyncKey)
+		}
+
+		batchesRemotesSync[i] = make(types.Transactions, singleCase.size)
+
+		remotesSyncKey, _ := crypto.GenerateKey()
+		remotesSyncAddr := crypto.PubkeyToAddress(remotesSyncKey.PublicKey)
+		testAddBalance(pool, remotesSyncAddr, balance)
+
+		for j := 0; j < singleCase.size; j++ {
+			batchesRemotesSync[i][j] = pricedTransaction(uint64(j), 100_000, big.NewInt(int64(i+1)), remotesSyncKey)
+		}
+	}
+
+	tb.Logf("[%s] starting goroutines", common.NowMilliseconds())
+
+	txsTickerDuration := singleCase.txsTickerDuration
+	apiTickerDuration := singleCase.apiTickerDuration
+
+	// locals
+	wg.Add(1)
+
+	go func() {
+		defer func() {
+			tb.Logf("[%s] stopping AddLocal(s)", common.NowMilliseconds())
+
+			wg.Done()
+
+			tb.Logf("[%s] stopped AddLocal(s)", common.NowMilliseconds())
+		}()
+
+		tb.Logf("[%s] starting AddLocal(s)", common.NowMilliseconds())
+
+		for _, batch := range batchesLocal {
+			batch := batch
+
+			select {
+			case <-done:
+				return
+			default:
+			}
+
+			if rand.Int()%2 == 0 {
+				runWithTimeout(tb, func(_ chan struct{}) {
+					errs := pool.AddLocals(batch)
+					if len(errs) != 0 {
+						tb.Logf("[%s] AddLocals error, %v", common.NowMilliseconds(), errs)
+					}
+				}, done, "AddLocals", timeoutDuration, 0, 0)
+			} else {
+				for _, tx := range batch {
+					tx := tx
+
+					runWithTimeout(tb, func(_ chan struct{}) {
+						err := pool.AddLocal(tx)
+						if err != nil {
+							tb.Logf("[%s] AddLocal error %s", common.NowMilliseconds(), err)
+						}
+					}, done, "AddLocal", timeoutDuration, 0, 0)
+
+					time.Sleep(txsTickerDuration)
+				}
+			}
+
+			time.Sleep(txsTickerDuration)
+		}
+	}()
+
+	// remotes
+	wg.Add(1)
+
+	go func() {
+		defer func() {
+			tb.Logf("[%s] stopping AddRemotes", common.NowMilliseconds())
+
+			wg.Done()
+
+			tb.Logf("[%s] stopped AddRemotes", common.NowMilliseconds())
+		}()
+
+		addTransactionsBatches(tb, batchesRemotes, getFnForBatches(pool.AddRemotes), done, timeoutDuration, txsTickerDuration, "AddRemotes", 0)
+	}()
+
+	// remote
+	wg.Add(1)
+
+	go func() {
+		defer func() {
+			tb.Logf("[%s] stopping AddRemote", common.NowMilliseconds())
+
+			wg.Done()
+
+			tb.Logf("[%s] stopped AddRemote", common.NowMilliseconds())
+		}()
+
+		addTransactions(tb, batchesRemote, pool.AddRemote, done, timeoutDuration, txsTickerDuration, "AddRemote", 0)
+	}()
+
+	// sync
+	// remotes
+	wg.Add(1)
+
+	go func() {
+		defer func() {
+			tb.Logf("[%s] stopping AddRemotesSync", common.NowMilliseconds())
+
+			wg.Done()
+
+			tb.Logf("[%s] stopped AddRemotesSync", common.NowMilliseconds())
+		}()
+
+		addTransactionsBatches(tb, batchesRemotesSync, getFnForBatches(pool.AddRemotesSync), done, timeoutDuration, txsTickerDuration, "AddRemotesSync", 0)
+	}()
+
+	// remote
+	wg.Add(1)
+
+	go func() {
+		defer func() {
+			tb.Logf("[%s] stopping AddRemoteSync", common.NowMilliseconds())
+
+			wg.Done()
+
+			tb.Logf("[%s] stopped AddRemoteSync", common.NowMilliseconds())
+		}()
+
+		addTransactions(tb, batchesRemoteSync, pool.addRemoteSync, done, timeoutDuration, txsTickerDuration, "AddRemoteSync", 0)
+	}()
+
+	// tx pool API
+	for i := 0; i < threads; i++ {
+		i := i
+
+		wg.Add(1)
+
+		go func() {
+			defer func() {
+				tb.Logf("[%s] stopping Pending-no-tips, thread %d", common.NowMilliseconds(), i)
+
+				wg.Done()
+
+				tb.Logf("[%s] stopped Pending-no-tips, thread %d", common.NowMilliseconds(), i)
+			}()
+
+			runWithTicker(tb, func(_ chan struct{}) {
+				p := pool.Pending(false)
+				fmt.Fprint(io.Discard, p)
+			}, done, "Pending-no-tips", apiTickerDuration, timeoutDuration, i)
+		}()
+
+		wg.Add(1)
+
+		go func() {
+			defer func() {
+				tb.Logf("[%s] stopping Pending-with-tips, thread %d", common.NowMilliseconds(), i)
+
+				wg.Done()
+
+				tb.Logf("[%s] stopped Pending-with-tips, thread %d", common.NowMilliseconds(), i)
+			}()
+
+			runWithTicker(tb, func(_ chan struct{}) {
+				p := pool.Pending(true)
+				fmt.Fprint(io.Discard, p)
+			}, done, "Pending-with-tips", apiTickerDuration, timeoutDuration, i)
+		}()
+
+		wg.Add(1)
+
+		go func() {
+			defer func() {
+				tb.Logf("[%s] stopping Locals, thread %d", common.NowMilliseconds(), i)
+
+				wg.Done()
+
+				tb.Logf("[%s] stopped Locals, thread %d", common.NowMilliseconds(), i)
+			}()
+
+			runWithTicker(tb, func(_ chan struct{}) {
+				l := pool.Locals()
+				fmt.Fprint(io.Discard, l)
+			}, done, "Locals", apiTickerDuration, timeoutDuration, i)
+		}()
+
+		wg.Add(1)
+
+		go func() {
+			defer func() {
+				tb.Logf("[%s] stopping Content, thread %d", common.NowMilliseconds(), i)
+
+				wg.Done()
+
+				tb.Logf("[%s] stopped Content, thread %d", common.NowMilliseconds(), i)
+			}()
+
+			runWithTicker(tb, func(_ chan struct{}) {
+				p, q := pool.Content()
+				fmt.Fprint(io.Discard, p, q)
+			}, done, "Content", apiTickerDuration, timeoutDuration, i)
+		}()
+
+		wg.Add(1)
+
+		go func() {
+			defer func() {
+				tb.Logf("[%s] stopping GasPrice, thread %d", common.NowMilliseconds(), i)
+
+				wg.Done()
+
+				tb.Logf("[%s] stopped GasPrice, thread %d", common.NowMilliseconds(), i)
+			}()
+
+			runWithTicker(tb, func(_ chan struct{}) {
+				res := pool.GasPrice()
+				fmt.Fprint(io.Discard, res)
+			}, done, "GasPrice", apiTickerDuration, timeoutDuration, i)
+		}()
+
+		wg.Add(1)
+
+		go func() {
+			defer func() {
+				tb.Logf("[%s] stopping SetGasPrice, thread %d", common.NowMilliseconds(), i)
+
+				wg.Done()
+
+				tb.Logf("[%s] stopped SetGasPrice, , thread %d", common.NowMilliseconds(), i)
+			}()
+
+			runWithTicker(tb, func(_ chan struct{}) {
+				pool.SetGasPrice(pool.GasPrice())
+			}, done, "SetGasPrice", apiTickerDuration, timeoutDuration, i)
+		}()
+
+		wg.Add(1)
+
+		go func() {
+			defer func() {
+				tb.Logf("[%s] stopping ContentFrom, thread %d", common.NowMilliseconds(), i)
+
+				wg.Done()
+
+				tb.Logf("[%s] stopped ContentFrom, thread %d", common.NowMilliseconds(), i)
+			}()
+
+			runWithTicker(tb, func(_ chan struct{}) {
+				p, q := pool.ContentFrom(account)
+				fmt.Fprint(io.Discard, p, q)
+			}, done, "ContentFrom", apiTickerDuration, timeoutDuration, i)
+		}()
+
+		wg.Add(1)
+
+		go func() {
+			defer func() {
+				tb.Logf("[%s] stopping Has, thread %d", common.NowMilliseconds(), i)
+
+				wg.Done()
+
+				tb.Logf("[%s] stopped Has, thread %d", common.NowMilliseconds(), i)
+			}()
+
+			runWithTicker(tb, func(_ chan struct{}) {
+				res := pool.Has(batchesRemotes[0][0].Hash())
+				fmt.Fprint(io.Discard, res)
+			}, done, "Has", apiTickerDuration, timeoutDuration, i)
+		}()
+
+		wg.Add(1)
+
+		go func() {
+			defer func() {
+				tb.Logf("[%s] stopping Get, thread %d", common.NowMilliseconds(), i)
+
+				wg.Done()
+
+				tb.Logf("[%s] stopped Get, thread %d", common.NowMilliseconds(), i)
+			}()
+
+			runWithTicker(tb, func(_ chan struct{}) {
+				tx := pool.Get(batchesRemotes[0][0].Hash())
+				fmt.Fprint(io.Discard, tx == nil)
+			}, done, "Get", apiTickerDuration, timeoutDuration, i)
+		}()
+
+		wg.Add(1)
+
+		go func() {
+			defer func() {
+				tb.Logf("[%s] stopping Nonce, thread %d", common.NowMilliseconds(), i)
+
+				wg.Done()
+
+				tb.Logf("[%s] stopped Nonce, thread %d", common.NowMilliseconds(), i)
+			}()
+
+			runWithTicker(tb, func(_ chan struct{}) {
+				res := pool.Nonce(account)
+				fmt.Fprint(io.Discard, res)
+			}, done, "Nonce", apiTickerDuration, timeoutDuration, i)
+		}()
+
+		wg.Add(1)
+
+		go func() {
+			defer func() {
+				tb.Logf("[%s] stopping Stats, thread %d", common.NowMilliseconds(), i)
+
+				wg.Done()
+
+				tb.Logf("[%s] stopped Stats, thread %d", common.NowMilliseconds(), i)
+			}()
+
+			runWithTicker(tb, func(_ chan struct{}) {
+				p, q := pool.Stats()
+				fmt.Fprint(io.Discard, p, q)
+			}, done, "Stats", apiTickerDuration, timeoutDuration, i)
+		}()
+
+		wg.Add(1)
+
+		go func() {
+			defer func() {
+				tb.Logf("[%s] stopping Status, thread %d", common.NowMilliseconds(), i)
+
+				wg.Done()
+
+				tb.Logf("[%s] stopped Status, thread %d", common.NowMilliseconds(), i)
+			}()
+
+			runWithTicker(tb, func(_ chan struct{}) {
+				st := pool.Status([]common.Hash{batchesRemotes[1][0].Hash()})
+				fmt.Fprint(io.Discard, st)
+			}, done, "Status", apiTickerDuration, timeoutDuration, i)
+		}()
+
+		wg.Add(1)
+
+		go func() {
+			defer func() {
+				tb.Logf("[%s] stopping SubscribeNewTxsEvent, thread %d", common.NowMilliseconds(), i)
+
+				wg.Done()
+
+				tb.Logf("[%s] stopped SubscribeNewTxsEvent, thread %d", common.NowMilliseconds(), i)
+			}()
+
+			runWithTicker(tb, func(c chan struct{}) {
+				ch := make(chan NewTxsEvent, 10)
+				sub := pool.SubscribeNewTxsEvent(ch)
+
+				if sub == nil {
+					return
+				}
+
+				defer sub.Unsubscribe()
+
+				select {
+				case <-done:
+					return
+				case <-c:
+				case res := <-ch:
+					fmt.Fprint(io.Discard, res)
+				}
+
+			}, done, "SubscribeNewTxsEvent", apiTickerDuration, timeoutDuration, i)
+		}()
+	}
+
+	// wait for the start
+	tb.Logf("[%s] before the first propagated transaction", common.NowMilliseconds())
+	<-pendingAddedCh
+	tb.Logf("[%s] after the first propagated transaction", common.NowMilliseconds())
+
+	var (
+		totalTxs    int
+		totalBlocks int
+	)
+
+	pendingDurations := make([]time.Duration, 0, blocks)
+
+	var (
+		added           int
+		pendingDuration time.Duration
+		miningDuration  time.Duration
+		diff            time.Duration
+	)
+
+	for {
+		added, pendingDuration, miningDuration = mining(tb, pool, signer, baseFee, blockGasLimit, totalBlocks)
+
+		totalTxs += added
+
+		pendingDurations = append(pendingDurations, pendingDuration)
+
+		totalBlocks++
+
+		if totalBlocks > blocks {
+			fmt.Fprint(io.Discard, totalTxs)
+			break
+		}
+
+		diff = blockPeriod - miningDuration
+		if diff > 0 {
+			time.Sleep(diff)
+		}
+	}
+
+	pendingDurationsFloat := make([]float64, len(pendingDurations))
+
+	for i, v := range pendingDurations {
+		pendingDurationsFloat[i] = float64(v.Nanoseconds())
+	}
+
+	mean, stddev := stat.MeanStdDev(pendingDurationsFloat, nil)
+	tb.Logf("[%s] pending mean %v, stddev %v, %v-%v",
+		common.NowMilliseconds(), time.Duration(mean), time.Duration(stddev), time.Duration(floats.Min(pendingDurationsFloat)), time.Duration(floats.Max(pendingDurationsFloat)))
+}
+
+func addTransactionsBatches(tb testing.TB, batches []types.Transactions, fn func(types.Transactions) error, done chan struct{}, timeoutDuration time.Duration, tickerDuration time.Duration, name string, thread int) {
+	tb.Helper()
+
+	tb.Logf("[%s] starting %s", common.NowMilliseconds(), name)
+
+	defer func() {
+		tb.Logf("[%s] stop %s", common.NowMilliseconds(), name)
+	}()
+
+	for _, batch := range batches {
+		batch := batch
+
+		select {
+		case <-done:
+			return
+		default:
+		}
+
+		runWithTimeout(tb, func(_ chan struct{}) {
+			err := fn(batch)
+			if err != nil {
+				tb.Logf("[%s] %s error: %s", common.NowMilliseconds(), name, err)
+			}
+		}, done, name, timeoutDuration, 0, thread)
+
+		time.Sleep(tickerDuration)
+	}
+}
+
+func addTransactions(tb testing.TB, batches []types.Transactions, fn func(*types.Transaction) error, done chan struct{}, timeoutDuration time.Duration, tickerDuration time.Duration, name string, thread int) {
+	tb.Helper()
+
+	tb.Logf("[%s] starting %s", common.NowMilliseconds(), name)
+
+	defer func() {
+		tb.Logf("[%s] stop %s", common.NowMilliseconds(), name)
+	}()
+
+	for _, batch := range batches {
+		for _, tx := range batch {
+			tx := tx
+
+			select {
+			case <-done:
+				return
+			default:
+			}
+
+			runWithTimeout(tb, func(_ chan struct{}) {
+				err := fn(tx)
+				if err != nil {
+					tb.Logf("%s error: %s", name, err)
+				}
+			}, done, name, timeoutDuration, 0, thread)
+
+			time.Sleep(tickerDuration)
+		}
+
+		time.Sleep(tickerDuration)
+	}
+}
+
+func getFnForBatches(fn func([]*types.Transaction) []error) func(types.Transactions) error {
+	return func(batch types.Transactions) error {
+		errs := fn(batch)
+		if len(errs) != 0 {
+			return errs[0]
+		}
+
+		return nil
+	}
+}
+
+//nolint:unparam
+func runWithTicker(tb testing.TB, fn func(c chan struct{}), done chan struct{}, name string, tickerDuration, timeoutDuration time.Duration, thread int) {
+	tb.Helper()
+
+	select {
+	case <-done:
+		tb.Logf("[%s] Short path. finishing outer runWithTicker for %q, thread %d", common.NowMilliseconds(), name, thread)
+
+		return
+	default:
+	}
+
+	defer func() {
+		tb.Logf("[%s] finishing outer runWithTicker for %q, thread %d", common.NowMilliseconds(), name, thread)
+	}()
+
+	localTicker := time.NewTicker(tickerDuration)
+	defer localTicker.Stop()
+
+	n := 0
+
+	for range localTicker.C {
+		select {
+		case <-done:
+			return
+		default:
+		}
+
+		runWithTimeout(tb, fn, done, name, timeoutDuration, n, thread)
+
+		n++
+	}
+}
+
+func runWithTimeout(tb testing.TB, fn func(chan struct{}), outerDone chan struct{}, name string, timeoutDuration time.Duration, n, thread int) {
+	tb.Helper()
+
+	select {
+	case <-outerDone:
+		tb.Logf("[%s] Short path. exiting inner runWithTimeout by outer exit event for %q, thread %d, iteration %d", common.NowMilliseconds(), name, thread, n)
+
+		return
+	default:
+	}
+
+	timeout := time.NewTimer(timeoutDuration)
+	defer timeout.Stop()
+
+	doneCh := make(chan struct{})
+
+	isError := new(int32)
+	*isError = 0
+
+	go func() {
+		defer close(doneCh)
+
+		select {
+		case <-outerDone:
+			return
+		default:
+			fn(doneCh)
+		}
+	}()
+
+	const isDebug = false
+
+	var stack string
+
+	select {
+	case <-outerDone:
+		tb.Logf("[%s] exiting inner runWithTimeout by outer exit event for %q, thread %d, iteration %d", common.NowMilliseconds(), name, thread, n)
+	case <-doneCh:
+		// only for debug
+		//tb.Logf("[%s] exiting inner runWithTimeout by successful call for %q, thread %d, iteration %d", common.NowMilliseconds(), name, thread, n)
+	case <-timeout.C:
+		atomic.StoreInt32(isError, 1)
+
+		tb.Errorf("[%s] %s timeouted, thread %d, iteration %d. Stack %s", common.NowMilliseconds(), name, thread, n, stack)
 	}
 }
