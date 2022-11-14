@@ -19,7 +19,7 @@ type WhitelistService struct {
 	milestone
 }
 
-func NewService(db *ethdb.Database) *WhitelistService {
+func NewService(db ethdb.Database) *WhitelistService {
 	return &WhitelistService{
 
 		checkpoint{

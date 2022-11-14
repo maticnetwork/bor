@@ -27,7 +27,7 @@ func NewMockService() *WhitelistService {
 		milestone{
 			doExist:            false,
 			interval:           256,
-			LockedMilestoneIDs: make(map[string]bool),
+			LockedMilestoneIDs: make(map[string]struct{}),
 		},
 	}
 }
@@ -85,13 +85,19 @@ func TestMilestone(t *testing.T) {
 	require.Equal(t, s.milestone.LockedSprintNumber, uint64(11), "expected 11 as it was not initialized")
 	require.Equal(t, s.milestone.Locked, true, "expected true as sprint is locked now")
 	require.Equal(t, len(s.milestone.LockedMilestoneIDs), int(1), "expected 1 as only 1 milestoneID has been entered")
-	require.Equal(t, s.milestone.LockedMilestoneIDs["milestoneID1"], true, "expected true as we have stored this milestoneID1 previously")
-	require.Equal(t, s.milestone.LockedMilestoneIDs["milestoneID2"], false, "expected false as we have not stored this milestoneID2 previously")
+
+	_, ok := s.milestone.LockedMilestoneIDs["milestoneID1"]
+	require.Equal(t, ok, true, "expected true as we have stored this milestoneID1 previously")
+
+	_, ok = s.milestone.LockedMilestoneIDs["milestoneID2"]
+	require.Equal(t, ok, false, "expected false as we have not stored this milestoneID2 previously")
 
 	s.LockMutex(11)
 	s.UnlockMutex(true, "milestoneID2", common.Hash{})
 	require.Equal(t, len(s.milestone.LockedMilestoneIDs), int(2), "expected 1 as only 1 milestoneID has been entered")
-	require.Equal(t, s.milestone.LockedMilestoneIDs["milestoneID2"], true, "expected true as we have stored this milestoneID2 previously")
+
+	_, ok = s.milestone.LockedMilestoneIDs["milestoneID2"]
+	require.Equal(t, ok, true, "expected true as we have stored this milestoneID2 previously")
 
 	s.RemoveMilestoneID("milestoneID1")
 	require.Equal(t, len(s.milestone.LockedMilestoneIDs), int(1), "expected 1 as one out of two has been removed in previous step")
