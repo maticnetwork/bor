@@ -28,7 +28,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -119,14 +118,6 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 			return nil, err
 		}
 
-		// [0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 222 173 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 3] is getting added in write, here
-		// (0x000000000000000000000000000000000000dead)
-		// [0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 3] also this
-		// (0x0000000000000000000000000000000000000000)
-		if evm.ChainConfig().IsLondon(blockNumber) {
-			statedb.AddBalance(result.BurntContractAddress, result.FeeBurnt)
-		}
-
 		reads := statedb.MVReadMap()
 
 		// print writeset
@@ -139,7 +130,7 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 		}
 
 		if _, ok := reads[blockstm.NewSubpathKey(result.BurntContractAddress, state.BalancePath)]; ok {
-			log.Info("BurntContractAddress is in MVReadMap", "address", result.BurntContractAddress)
+			fmt.Println("BurntContractAddress is in MVReadMap", "address", result.BurntContractAddress)
 
 			shouldRerunWithoutFeeDelay = true
 		}
@@ -153,13 +144,13 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 
 		fmt.Println("BlockSTM Writelist (applyTransaction) 2:\n", statedb.MVWriteList())
 
-		// // [0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 222 173 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 3] is getting added in write, here
-		// // (0x000000000000000000000000000000000000dead)
-		// // [0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 3] also this
-		// // (0x0000000000000000000000000000000000000000)
-		// if evm.ChainConfig().IsLondon(blockNumber) {
-		// 	statedb.AddBalance(result.BurntContractAddress, result.FeeBurnt)
-		// }
+		// [0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 222 173 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 3] is getting added in write, here
+		// (0x000000000000000000000000000000000000dead)
+		// [0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 3] also this
+		// (0x0000000000000000000000000000000000000000)
+		if evm.ChainConfig().IsLondon(blockNumber) {
+			statedb.AddBalance(result.BurntContractAddress, result.FeeBurnt)
+		}
 
 		fmt.Println("BlockSTM Writelist (applyTransaction) 3:\n", statedb.MVWriteList())
 
@@ -169,6 +160,8 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 		// }
 
 		statedb.AddBalance(evm.Context.Coinbase, result.FeeTipped)
+
+		fmt.Println("BlockSTM Writelist (applyTransaction) 4:\n", statedb.MVWriteList())
 
 		output1 := new(big.Int).SetBytes(result.SenderInitBalance.Bytes())
 		output2 := new(big.Int).SetBytes(coinbaseBalance.Bytes())
@@ -204,7 +197,7 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	}
 	*usedGas += result.UsedGas
 
-	fmt.Println("BlockSTM Writelist (applyTransaction) 4:\n", statedb.MVWriteList())
+	fmt.Println("BlockSTM Writelist (applyTransaction) 5:\n", statedb.MVWriteList())
 
 	// Create a new receipt for the transaction, storing the intermediate root and gas used
 	// by the tx.
