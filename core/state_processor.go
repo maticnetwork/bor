@@ -135,10 +135,12 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 			shouldRerunWithoutFeeDelay = true
 		}
 
-		// stop recording read and write
-		if !shouldRerunWithoutFeeDelay {
-			statedb.SetMVHashmap(nil)
-		}
+		// // stop recording read and write
+		// if !shouldRerunWithoutFeeDelay {
+		// 	statedb.SetMVHashmap(nil)
+		// }
+
+		statedb.SetMVHashmap(nil)
 
 		fmt.Println(shouldRerunWithoutFeeDelay)
 

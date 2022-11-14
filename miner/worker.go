@@ -871,10 +871,10 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 	}
 	var coalescedLogs []*types.Log
 
-	// create and add empty mvHashMap in statedb
-	if true {
-		env.state.AddEmptyMVHashMap()
-	}
+	// // create and add empty mvHashMap in statedb
+	// if true {
+	// 	env.state.AddEmptyMVHashMap()
+	// }
 
 	depsMVReadList := [][]blockstm.ReadDescriptor{}
 
@@ -901,6 +901,10 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 	}(chDeps)
 
 	for {
+		if true {
+			env.state.AddEmptyMVHashMap()
+		}
+
 		// In the following three cases, we will interrupt the execution of the transaction.
 		// (1) new head block event arrival, the interrupt signal is 1
 		// (2) worker start or restart, the interrupt signal is 1
