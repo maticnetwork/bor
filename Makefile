@@ -78,7 +78,8 @@ lintci-deps:
 	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b ./build/bin v1.48.0
 
 mutesting-deps:
-	go get -u github.com/avito-tech/go-mutesting/...
+	go get github.com/JekaMas/go-mutesting/cmd/go-mutesting@v1.1.1
+	go install github.com/JekaMas/go-mutesting/...
 
 mutesting:
 	go-mutesting --blacklist=".github/mut_blacklist" --config=".github/mut_config.yml" ./consensus/bor/...
