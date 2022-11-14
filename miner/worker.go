@@ -1040,6 +1040,8 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 
 	env.header.TxDependency = tempDeps
 
+	fmt.Println("Worker Deps:\n", env.header.TxDependency)
+
 	if !w.isRunning() && len(coalescedLogs) > 0 {
 		// We don't push the pendingLogsEvent while we are sealing. The reason is that
 		// when we are sealing, the worker will regenerate a sealing block every 3 seconds.
