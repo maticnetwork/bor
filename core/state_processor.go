@@ -140,8 +140,6 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 
 		statedb.SetMVHashmap(nil)
 
-		fmt.Println(shouldRerunWithoutFeeDelay)
-
 		if evm.ChainConfig().IsLondon(blockNumber) {
 			statedb.AddBalance(result.BurntContractAddress, result.FeeBurnt)
 		}

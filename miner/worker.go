@@ -973,11 +973,6 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 			coalescedLogs = append(coalescedLogs, logs...)
 			env.tcount++
 
-			fmt.Println("BlockSTM env.tcount:\n", env.tcount)
-			fmt.Println("BlockSTM Readlist:\n", env.state.MVReadList())
-			fmt.Println("BlockSTM Writelist:\n", env.state.MVWriteList())
-			fmt.Println("BlockSTM FullWriteList:\n", env.state.MVFullWriteList())
-
 			depsMVReadList = append(depsMVReadList, env.state.MVReadList())
 			depsMVFullWriteList = append(depsMVFullWriteList, env.state.MVFullWriteList())
 			mvReadMapList = append(mvReadMapList, env.state.MVReadMap())
