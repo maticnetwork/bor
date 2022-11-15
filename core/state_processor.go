@@ -106,10 +106,6 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 
 	// nolint: nestif
 	if EnableMVHashMap {
-		fmt.Println("\n------------------------------------")
-		fmt.Println("BlockSTM ReadList (applyTransaction) 0:\n", statedb.MVReadList())
-		fmt.Println("BlockSTM Writelist (applyTransaction) 0:\n", statedb.MVWriteList())
-
 		var shouldRerunWithoutFeeDelay bool
 
 		statedb.SetMVHashmap(nil)
@@ -124,10 +120,6 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 		}
 
 		reads := statedb.MVReadMap()
-
-		// print writeset
-		fmt.Println("BlockSTM ReadList (applyTransaction) 1:\n", statedb.MVReadList())
-		fmt.Println("BlockSTM Writelist (applyTransaction) 1:\n", statedb.MVWriteList())
 
 		if _, ok := reads[blockstm.NewSubpathKey(evm.Context.Coinbase, state.BalancePath)]; ok {
 			fmt.Println("Coinbase is in MVReadMap", "address", evm.Context.Coinbase)
@@ -150,20 +142,11 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 
 		fmt.Println(shouldRerunWithoutFeeDelay)
 
-		fmt.Println("BlockSTM ReadList (applyTransaction) 2:\n", statedb.MVReadList())
-		fmt.Println("BlockSTM Writelist (applyTransaction) 2:\n", statedb.MVWriteList())
-
 		if evm.ChainConfig().IsLondon(blockNumber) {
 			statedb.AddBalance(result.BurntContractAddress, result.FeeBurnt)
 		}
 
-		fmt.Println("BlockSTM ReadList (applyTransaction) 3:\n", statedb.MVReadList())
-		fmt.Println("BlockSTM Writelist (applyTransaction) 3:\n", statedb.MVWriteList())
-
 		statedb.AddBalance(evm.Context.Coinbase, result.FeeTipped)
-
-		fmt.Println("BlockSTM ReadList (applyTransaction) 4:\n", statedb.MVReadList())
-		fmt.Println("BlockSTM Writelist (applyTransaction) 4:\n", statedb.MVWriteList())
 
 		output1 := new(big.Int).SetBytes(result.SenderInitBalance.Bytes())
 		output2 := new(big.Int).SetBytes(coinbaseBalance.Bytes())
@@ -198,9 +181,6 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 		root = statedb.IntermediateRoot(config.IsEIP158(blockNumber)).Bytes()
 	}
 	*usedGas += result.UsedGas
-
-	fmt.Println("BlockSTM ReadList (applyTransaction) 5:\n", statedb.MVReadList())
-	fmt.Println("BlockSTM Writelist (applyTransaction) 5:\n", statedb.MVWriteList())
 
 	// Create a new receipt for the transaction, storing the intermediate root and gas used
 	// by the tx.
