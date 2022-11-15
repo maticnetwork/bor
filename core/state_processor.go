@@ -115,7 +115,11 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 
 		var shouldRerunWithoutFeeDelay bool
 
+		statedb.SetMVHashmap(nil)
+
 		coinbaseBalance := statedb.GetBalance(evm.Context.Coinbase)
+
+		statedb.AddEmptyMVHashMap()
 
 		result, err = ApplyMessageNoFeeBurnOrTip(evm, msg, gp)
 		if err != nil {
@@ -152,21 +156,12 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 		fmt.Println("BlockSTM ReadList (applyTransaction) 2:\n", statedb.MVReadList())
 		fmt.Println("BlockSTM Writelist (applyTransaction) 2:\n", statedb.MVWriteList())
 
-		// [0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 222 173 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 3] is getting added in write, here
-		// (0x000000000000000000000000000000000000dead)
-		// [0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 3] also this
-		// (0x0000000000000000000000000000000000000000)
 		if evm.ChainConfig().IsLondon(blockNumber) {
 			statedb.AddBalance(result.BurntContractAddress, result.FeeBurnt)
 		}
 
 		fmt.Println("BlockSTM ReadList (applyTransaction) 3:\n", statedb.MVReadList())
 		fmt.Println("BlockSTM Writelist (applyTransaction) 3:\n", statedb.MVWriteList())
-
-		// // stop recording read and write
-		// if !shouldRerunWithoutFeeDelay {
-		// 	statedb.SetMVHashMapNil()
-		// }
 
 		statedb.AddBalance(evm.Context.Coinbase, result.FeeTipped)
 
