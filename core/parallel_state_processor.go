@@ -292,10 +292,6 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 
 	deps, delayMap := GetDeps(block.Header().TxDependency)
 
-	fmt.Println("Dependencies block.Header().TxDependency", block.Header().TxDependency)
-	fmt.Println("Dependencies deps", deps)
-	fmt.Println("Dependencies delayMap", delayMap)
-
 	weights := make([]int, len(block.Transactions()))
 
 	longest := 0
@@ -315,6 +311,8 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 
 	for _, j := range delayMap {
 		if !j || (float64(longest)/float64(len(block.Transactions())) > 0.7) {
+			log.Info("BlockSTM", "Dependencies deps", deps)
+			log.Info("BlockSTM", "Dependencies delayMap", delayMap)
 			log.Info("Going Serial", "!j", !j, "float64(longest)/float64(len(block.Transactions()))", float64(longest)/float64(len(block.Transactions())))
 			pSeral := NewStateProcessor(p.config, p.bc, p.engine)
 			return pSeral.Process(block, statedb, cfg)
@@ -328,10 +326,6 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 			log.Error("error creating message", "err", err)
 			return nil, nil, 0, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
 		}
-
-		fmt.Println("\ninfo Parallel tx:", i)
-		fmt.Println("info from:", msg.From())
-		fmt.Println("info to:", msg.To())
 
 		cleansdb := statedb.Copy()
 
