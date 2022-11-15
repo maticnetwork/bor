@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
 )
@@ -24,17 +25,21 @@ func NewService(db ethdb.Database) *WhitelistService {
 
 		//fixme: try to restore from DB
 		checkpoint{
-			doExist:  false,
-			interval: 256,
-			db:       db,
+			finality[*rawdb.Checkpoint]{
+				doExist:  false,
+				interval: 256,
+				db:       db,
+			},
 		},
 
 		//fixme: try to restore from DB
 		milestone{
-			doExist:            false,
-			interval:           256,
+			finality: finality[*rawdb.Milestone]{
+				doExist:  false,
+				interval: 256,
+				db:       db,
+			},
 			LockedMilestoneIDs: make(map[string]struct{}), //fixme: store it also
-			db:                 db,
 		},
 	}
 }
@@ -55,8 +60,30 @@ func (s *WhitelistService) IsValidPeer(remoteHeader *types.Header, fetchHeadersB
 	return true, nil
 }
 
-// IsValidChain checks the validity of chain by comparing it
-// against the local checkpoint entries and milestone entries
+func (s *WhitelistService) PurgeWhitelistedCheckpoint() {
+	s.checkpoint.Purge()
+}
+
+func (s *WhitelistService) PurgeWhitelistedMilestone() {
+	s.milestone.Purge()
+}
+
+func (s *WhitelistService) GetWhitelistedCheckpoint() (bool, uint64, common.Hash) {
+	return s.checkpoint.Get()
+}
+
+func (s *WhitelistService) GetWhitelistedMilestone() (bool, uint64, common.Hash) {
+	return s.milestone.Get()
+}
+
+func (s *WhitelistService) ProcessMilestone(endBlockNum uint64, endBlockHash common.Hash) {
+	s.milestone.Process(endBlockNum, endBlockHash)
+}
+
+func (s *WhitelistService) ProcessCheckpoint(endBlockNum uint64, endBlockHash common.Hash) {
+	s.checkpoint.Process(endBlockNum, endBlockHash)
+}
+
 func (s *WhitelistService) IsValidChain(currentHeader *types.Header, chain []*types.Header) bool {
 	checkpointBool := s.checkpoint.IsValidChain(currentHeader, chain)
 

@@ -6,6 +6,7 @@ import (
 	json "github.com/json-iterator/go"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/gererics"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 )
@@ -33,21 +34,17 @@ func ReadFinality[T BlockFinality](db ethdb.KeyValueReader) (T, error) {
 
 	data, err := db.Get(key)
 	if err != nil {
-		return nil, fmt.Errorf("%w: empty response for %s", err, string(key))
+		return gererics.Empty[T](), fmt.Errorf("%w: empty response for %s", err, string(key))
 	}
 
 	if len(data) == 0 {
-		return nil, fmt.Errorf("%w for %s", ErrEmptyLastFinality, string(key))
+		return gererics.Empty[T](), fmt.Errorf("%w for %s", ErrEmptyLastFinality, string(key))
 	}
 
 	if err = json.Unmarshal(data, lastTV); err != nil {
-		log.Error("Unable to unmarshal the last milestone block number in database", "err", err)
-
-		return nil, err
-
 		log.Error(fmt.Sprintf("Unable to unmarshal the last %s block number in database", string(key)), "err", err)
 
-		return nil, fmt.Errorf("%w(%v) for %s, data %v(%q)",
+		return gererics.Empty[T](), fmt.Errorf("%w(%v) for %s, data %v(%q)",
 			ErrIncorrectFinality, err, string(key), data, string(data))
 	}
 

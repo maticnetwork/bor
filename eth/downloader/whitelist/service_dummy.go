@@ -15,25 +15,22 @@ func (DummyService) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 	return true
 }
 
-func (DummyService) ProcessCheckpoint(endBlockNum uint64, endBlockHash common.Hash) {
-}
+func (DummyService) ProcessCheckpoint(endBlockNum uint64, endBlockHash common.Hash) {}
+func (DummyService) ProcessMilestone(endBlockNum uint64, endBlockHash common.Hash)  {}
 
-func (DummyService) ProcessMilestone(endBlockNum uint64, endBlockHash common.Hash) {
-}
+func (DummyService) PurgeWhitelistedCheckpoint() {}
+func (DummyService) PurgeWhitelistedMilestone()  {}
 
 // todo: check if we use it somewhere alse then PrivateAPI
 func (DummyService) GetWhitelistedCheckpoint() (bool, uint64, common.Hash) {
 	return true, 0, common.Hash{}
 }
 
-func (DummyService) PurgeWhitelistedCheckpoint() {
-}
-
 func (DummyService) GetWhitelistedMilestone() (bool, uint64, common.Hash) {
 	return true, 0, common.Hash{}
 }
 
-func (DummyService) PurgeWhitelistedMilestone() {
+func (DummyService) Purge() {
 }
 
 func (DummyService) LockMutex(endBlockNum uint64) bool {

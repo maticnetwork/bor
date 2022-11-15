@@ -22,16 +22,20 @@ func NewMockService(db ethdb.Database) *WhitelistService {
 	return &WhitelistService{
 
 		checkpoint{
-			doExist:  false,
-			interval: 256,
-			db:       db,
+			finality[*rawdb.Checkpoint]{
+				doExist:  false,
+				interval: 256,
+				db:       db,
+			},
 		},
 
 		milestone{
-			doExist:            false,
-			interval:           256,
+			finality: finality[*rawdb.Milestone]{
+				doExist:  false,
+				interval: 256,
+				db:       db,
+			},
 			LockedMilestoneIDs: make(map[string]struct{}),
-			db:                 db,
 		},
 	}
 }
