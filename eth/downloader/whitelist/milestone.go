@@ -19,6 +19,15 @@ type milestone struct {
 	b bool
 }
 
+type milestoneService interface {
+	finalityService
+	GetMilestoneIDsList() []string
+	RemoveMilestoneID(milestoneId string)
+	LockMutex(endBlockNum uint64) bool
+	UnlockMutex(doLock bool, milestoneId string, endBlockHash common.Hash)
+	UnlockSprint(endBlockNum uint64)
+}
+
 // IsValidChain checks the validity of chain by comparing it
 // against the local milestone entries
 func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Header) bool {
@@ -143,4 +152,8 @@ func (m *milestone) GetMilestoneIDsList() []string {
 // This is remove the milestoneIDs stored in the list.
 func (m *milestone) purgeMilestoneIDsList() {
 	m.LockedMilestoneIDs = make(map[string]struct{})
+}
+
+func (m *milestone) block() (uint64, common.Hash) {
+	return m.Number, m.Hash
 }

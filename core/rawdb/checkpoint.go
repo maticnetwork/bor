@@ -2,6 +2,8 @@ package rawdb
 
 import (
 	"errors"
+
+	"github.com/ethereum/go-ethereum/common"
 )
 
 var (
@@ -15,4 +17,12 @@ var (
 
 type Checkpoint struct {
 	Finality
+}
+
+func (c *Checkpoint) clone() *Checkpoint {
+	return &Checkpoint{}
+}
+
+func (c *Checkpoint) block() (uint64, common.Hash) {
+	return c.Block, c.Hash
 }

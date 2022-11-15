@@ -29,34 +29,44 @@ type Milestone struct {
 	Finality
 }
 
-func ReadFinality[T BlockFinality](db ethdb.KeyValueReader) (T, error) {
+func (m *Milestone) clone() *Milestone {
+	return &Milestone{}
+}
+
+func (m *Milestone) block() (uint64, common.Hash) {
+	return m.Block, m.Hash
+}
+
+func ReadFinality[T BlockFinality[T]](db ethdb.KeyValueReader) (uint64, common.Hash, error) {
 	lastTV, key := getKey[T]()
 
 	data, err := db.Get(key)
 	if err != nil {
-		return gererics.Empty[T](), fmt.Errorf("%w: empty response for %s", err, string(key))
+		return 0, common.Hash{}, fmt.Errorf("%w: empty response for %s", err, string(key))
 	}
 
 	if len(data) == 0 {
-		return gererics.Empty[T](), fmt.Errorf("%w for %s", ErrEmptyLastFinality, string(key))
+		return 0, common.Hash{}, fmt.Errorf("%w for %s", ErrEmptyLastFinality, string(key))
 	}
 
 	if err = json.Unmarshal(data, lastTV); err != nil {
 		log.Error(fmt.Sprintf("Unable to unmarshal the last %s block number in database", string(key)), "err", err)
 
-		return gererics.Empty[T](), fmt.Errorf("%w(%v) for %s, data %v(%q)",
+		return 0, common.Hash{}, fmt.Errorf("%w(%v) for %s, data %v(%q)",
 			ErrIncorrectFinality, err, string(key), data, string(data))
 	}
 
-	return lastTV, nil
+	block, hash := lastTV.block()
+
+	return block, hash, nil
 }
 
-func WriteLastFinality[T BlockFinality](db ethdb.KeyValueWriter, block uint64, hash common.Hash) error {
+func WriteLastFinality[T BlockFinality[T]](db ethdb.KeyValueWriter, block uint64, hash common.Hash) error {
 	lastTV, key := getKey[T]()
 
 	lastTV.set(block, hash)
 
-	enc, err := json.Marshal(key)
+	enc, err := json.Marshal(lastTV)
 	if err != nil {
 		log.Error(fmt.Sprintf("Failed to marshal the %s struct", string(key)), "err", err)
 
@@ -64,7 +74,7 @@ func WriteLastFinality[T BlockFinality](db ethdb.KeyValueWriter, block uint64, h
 	}
 
 	if err := db.Put(key, enc); err != nil {
-		log.Crit(fmt.Sprintf("Failed to store the %s struct", string(key)), "err", err)
+		log.Error(fmt.Sprintf("Failed to store the %s struct", string(key)), "err", err)
 
 		return fmt.Errorf("%w: %v for %s struct", ErrDBNotResponding, err, string(key))
 	}
@@ -72,12 +82,14 @@ func WriteLastFinality[T BlockFinality](db ethdb.KeyValueWriter, block uint64, h
 	return nil
 }
 
-type BlockFinality interface {
+type BlockFinality[T any] interface {
 	set(block uint64, hash common.Hash)
+	clone() T
+	block() (uint64, common.Hash)
 }
 
-func getKey[T BlockFinality]() (T, []byte) {
-	lastT := *new(T)
+func getKey[T BlockFinality[T]]() (T, []byte) {
+	lastT := gererics.Empty[T]().clone()
 
 	var key []byte
 

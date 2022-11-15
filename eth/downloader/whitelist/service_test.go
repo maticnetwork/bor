@@ -18,10 +18,10 @@ import (
 )
 
 // NewMockService creates a new mock whitelist service
-func NewMockService(db ethdb.Database) *WhitelistService {
-	return &WhitelistService{
+func NewMockService(db ethdb.Database) *Service {
+	return &Service{
 
-		checkpoint{
+		&checkpoint{
 			finality[*rawdb.Checkpoint]{
 				doExist:  false,
 				interval: 256,
@@ -29,7 +29,7 @@ func NewMockService(db ethdb.Database) *WhitelistService {
 			},
 		},
 
-		milestone{
+		&milestone{
 			finality: finality[*rawdb.Milestone]{
 				doExist:  false,
 				interval: 256,
@@ -49,17 +49,19 @@ func TestWhitelistedCheckpoint(t *testing.T) {
 	//Creating the service for the whitelisting the checkpoints
 	s := NewMockService(db)
 
-	require.Equal(t, s.checkpoint.doExist, false, "expected false as no checkpoint exist at this point")
+	cp := s.checkpointService.(*checkpoint)
+
+	require.Equal(t, cp.doExist, false, "expected false as no cp exist at this point")
 
 	//Adding the checkpoint
 	s.ProcessCheckpoint(11, common.Hash{})
 
-	require.Equal(t, s.checkpoint.doExist, true, "expected true as checkpoint exist")
+	require.Equal(t, cp.doExist, true, "expected true as cp exist")
 
 	//Removing the checkpoint
 	s.PurgeWhitelistedCheckpoint()
 
-	require.Equal(t, s.checkpoint.doExist, false, "expected false as no checkpoint exist at this point")
+	require.Equal(t, cp.doExist, false, "expected false as no cp exist at this point")
 
 	//Adding the checkpoint
 	s.ProcessCheckpoint(11, common.Hash{1})
@@ -73,8 +75,12 @@ func TestWhitelistedCheckpoint(t *testing.T) {
 	require.Equal(t, hash, common.Hash{1}, "expected the 1 hash but got", hash)
 	require.NotEqual(t, hash, common.Hash{}, "expected the hash to be different from zero hash")
 
+	c1 := s.checkpointService.(*checkpoint)
+	fmt.Println("!!!-0", c1.doExist)
 	s.PurgeWhitelistedCheckpoint()
+	fmt.Println("!!!-1", c1.doExist)
 	doExist, number, hash = s.GetWhitelistedCheckpoint()
+	fmt.Println("!!!-2", c1.doExist)
 	//Validating the values received from the db, not memory
 	require.Equal(t, doExist, true, "expected true ascheckpoint exist at this point")
 	require.Equal(t, number, uint64(11), "expected number to be 11 but got", number)
@@ -89,75 +95,77 @@ func TestMilestone(t *testing.T) {
 	db := rawdb.NewMemoryDatabase()
 	s := NewMockService(db)
 
+	milestone := s.milestoneService.(*milestone)
+
 	//Checking for the varaibles when no milestone is Processed
-	require.Equal(t, s.milestone.doExist, false, "expected false as no milestone exist at this point")
-	require.Equal(t, s.milestone.Locked, false, "expected false as it was not locked")
-	require.Equal(t, s.milestone.LockedSprintNumber, uint64(0), "expected 0 as it was not initialized")
+	require.Equal(t, milestone.doExist, false, "expected false as no milestone exist at this point")
+	require.Equal(t, milestone.Locked, false, "expected false as it was not locked")
+	require.Equal(t, milestone.LockedSprintNumber, uint64(0), "expected 0 as it was not initialized")
 
 	//Acquiring the mutex lock
-	s.LockMutex(11)
-	require.Equal(t, s.milestone.LockedSprintNumber, uint64(11), "expected 11")
-	require.Equal(t, s.milestone.Locked, false, "expected false as sprint is not locked till this point")
+	milestone.LockMutex(11)
+	require.Equal(t, milestone.LockedSprintNumber, uint64(11), "expected 11")
+	require.Equal(t, milestone.Locked, false, "expected false as sprint is not locked till this point")
 
 	//Releasing the mutex lock
-	s.UnlockMutex(true, "milestoneID1", common.Hash{})
-	require.Equal(t, s.milestone.LockedSprintNumber, uint64(11), "expected 11 as it was not initialized")
-	require.Equal(t, s.milestone.Locked, true, "expected true as sprint is locked now")
-	require.Equal(t, len(s.milestone.LockedMilestoneIDs), int(1), "expected 1 as only 1 milestoneID has been entered")
+	milestone.UnlockMutex(true, "milestoneID1", common.Hash{})
+	require.Equal(t, milestone.LockedSprintNumber, uint64(11), "expected 11 as it was not initialized")
+	require.Equal(t, milestone.Locked, true, "expected true as sprint is locked now")
+	require.Equal(t, len(milestone.LockedMilestoneIDs), 1, "expected 1 as only 1 milestoneID has been entered")
 
-	_, ok := s.milestone.LockedMilestoneIDs["milestoneID1"]
+	_, ok := milestone.LockedMilestoneIDs["milestoneID1"]
 	require.True(t, ok, "milestoneID1 should exist in the LockedMilestoneIDs map")
 
-	_, ok = s.milestone.LockedMilestoneIDs["milestoneID2"]
+	_, ok = milestone.LockedMilestoneIDs["milestoneID2"]
 	require.False(t, ok, "milestoneID2 shouldn't exist in the LockedMilestoneIDs map")
 
-	s.LockMutex(11)
-	s.UnlockMutex(true, "milestoneID2", common.Hash{})
-	require.Equal(t, len(s.milestone.LockedMilestoneIDs), int(2), "expected 1 as only 1 milestoneID has been entered")
+	milestone.LockMutex(11)
+	milestone.UnlockMutex(true, "milestoneID2", common.Hash{})
+	require.Equal(t, len(milestone.LockedMilestoneIDs), 2, "expected 1 as only 1 milestoneID has been entered")
 
-	_, ok = s.milestone.LockedMilestoneIDs["milestoneID2"]
+	_, ok = milestone.LockedMilestoneIDs["milestoneID2"]
 	require.True(t, ok, "milestoneID2 should exist in the LockedMilestoneIDs map")
 
-	s.RemoveMilestoneID("milestoneID1")
-	require.Equal(t, len(s.milestone.LockedMilestoneIDs), int(1), "expected 1 as one out of two has been removed in previous step")
-	require.Equal(t, s.milestone.Locked, true, "expected true as sprint is locked now")
+	milestone.RemoveMilestoneID("milestoneID1")
+	require.Equal(t, len(milestone.LockedMilestoneIDs), 1, "expected 1 as one out of two has been removed in previous step")
+	require.Equal(t, milestone.Locked, true, "expected true as sprint is locked now")
 
-	s.RemoveMilestoneID("milestoneID2")
-	require.Equal(t, len(s.milestone.LockedMilestoneIDs), int(0), "expected 1 as both the milestonesIDs has been removed in previous step")
-	require.Equal(t, s.milestone.Locked, false, "expected false")
+	milestone.RemoveMilestoneID("milestoneID2")
+	require.Equal(t, len(milestone.LockedMilestoneIDs), 0, "expected 1 as both the milestonesIDs has been removed in previous step")
+	require.Equal(t, milestone.Locked, false, "expected false")
 
-	s.LockMutex(11)
-	s.UnlockMutex(true, "milestoneID3", common.Hash{})
-	require.True(t, s.milestone.Locked, "expected true")
-	require.Equal(t, s.milestone.LockedSprintNumber, uint64(11), "Expected 11")
+	milestone.LockMutex(11)
+	milestone.UnlockMutex(true, "milestoneID3", common.Hash{})
+	require.True(t, milestone.Locked, "expected true")
+	require.Equal(t, milestone.LockedSprintNumber, uint64(11), "Expected 11")
 
-	s.LockMutex(15)
-	require.False(t, s.milestone.Locked, "expected false as till now final confirmation regarding the lock hasn't been made")
-	require.Equal(t, s.milestone.LockedSprintNumber, uint64(15), "Expected 15")
-	s.UnlockMutex(true, "milestoneID4", common.Hash{})
-	require.True(t, s.milestone.Locked, "expected true as final confirmation regarding the lock has been made")
+	milestone.LockMutex(15)
+	require.False(t, milestone.Locked, "expected false as till now final confirmation regarding the lock hasn't been made")
+	require.Equal(t, milestone.LockedSprintNumber, uint64(15), "Expected 15")
+	milestone.UnlockMutex(true, "milestoneID4", common.Hash{})
+	require.True(t, milestone.Locked, "expected true as final confirmation regarding the lock has been made")
 
 	//Adding the milestone
 	s.ProcessMilestone(11, common.Hash{})
 
-	require.True(t, s.milestone.Locked, "expected true as locked sprint is of number 15")
-	require.Equal(t, s.milestone.doExist, true, "expected true as milestone exist")
-	require.Equal(t, len(s.milestone.LockedMilestoneIDs), int(1), "expected 1 as still last milestone of sprint number 15 exist")
+	require.True(t, milestone.Locked, "expected true as locked sprint is of number 15")
+	require.Equal(t, milestone.doExist, true, "expected true as milestone exist")
+	require.Equal(t, len(milestone.LockedMilestoneIDs), 1, "expected 1 as still last milestone of sprint number 15 exist")
 
 	//Asking the lock for sprintNumber less than last whitelisted milestone
-	require.False(t, s.LockMutex(11), "Cant lock the sprintNumber less than equal to latest whitelisted milestone")
-	s.UnlockMutex(false, "", common.Hash{}) //Unlock is required after every lock to release the mutex
+	require.False(t, milestone.LockMutex(11), "Cant lock the sprintNumber less than equal to latest whitelisted milestone")
+	milestone.UnlockMutex(false, "", common.Hash{}) //Unlock is required after every lock to release the mutex
 
 	//Adding the milestone
 	s.ProcessMilestone(51, common.Hash{})
-	require.False(t, s.milestone.Locked, "expected false as lock from sprint number 15 is removed")
-	require.Equal(t, s.milestone.doExist, true, "expected true as milestone exist")
-	require.Equal(t, len(s.milestone.LockedMilestoneIDs), int(0), "expected 0 as all the milestones have been removed")
+	require.False(t, milestone.Locked, "expected false as lock from sprint number 15 is removed")
+	require.Equal(t, milestone.doExist, true, "expected true as milestone exist")
+	require.Equal(t, len(milestone.LockedMilestoneIDs), 0, "expected 0 as all the milestones have been removed")
 
 	//Removing the milestone
 	s.PurgeWhitelistedMilestone()
 
-	require.Equal(t, s.milestone.doExist, false, "expected false as no milestone exist at this point")
+	require.Equal(t, milestone.doExist, false, "expected false as no milestone exist at this point")
 
 	//Removing the milestone
 	s.ProcessMilestone(11, common.Hash{1})
@@ -197,9 +205,12 @@ func TestIsValidPeer(t *testing.T) {
 	// add milestone entry and mock fetchHeadersByNumber function
 	s.ProcessMilestone(uint64(1), common.Hash{})
 
+	checkpoint := s.checkpointService.(*checkpoint)
+	milestone := s.milestoneService.(*milestone)
+
 	//Check whether the milestone and checkpoint exist
-	require.Equal(t, s.checkpoint.doExist, true, "expected true as checkpoint exists")
-	require.Equal(t, s.milestone.doExist, true, "expected true as milestone exists")
+	require.Equal(t, checkpoint.doExist, true, "expected true as checkpoint exists")
+	require.Equal(t, milestone.doExist, true, "expected true as milestone exists")
 
 	// create a false function, returning absolutely nothing
 	falseFetchHeadersByNumber := func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error) {
@@ -219,7 +230,7 @@ func TestIsValidPeer(t *testing.T) {
 
 	require.Equal(t, res, false, "expected peer chain to be invalid")
 
-	// create a mock function, returning a the required header
+	// create a mock function, returning the required header
 	fetchHeadersByNumber := func(number uint64, _ int, _ int, _ bool) ([]*types.Header, []common.Hash, error) {
 		hash := common.Hash{}
 		header := types.Header{Number: big.NewInt(0)}
@@ -245,7 +256,7 @@ func TestIsValidPeer(t *testing.T) {
 
 	// add checkpoint whitelist entry
 	s.ProcessCheckpoint(uint64(2), common.Hash{})
-	require.Equal(t, s.checkpoint.doExist, true, "expected true as checkpoint exists")
+	require.Equal(t, checkpoint.doExist, true, "expected true as checkpoint exists")
 
 	// case4: correct fetchHeadersByNumber function provided with wrong header
 	// for block number 2. Should consider the chain as invalid and throw an error
@@ -253,7 +264,7 @@ func TestIsValidPeer(t *testing.T) {
 	require.Equal(t, err, ErrMismatch, "expected mismatch error")
 	require.Equal(t, res, false, "expected chain to be invalid")
 
-	// create a mock function, returning a the required header
+	// create a mock function, returning the required header
 	fetchHeadersByNumber = func(number uint64, _ int, _ int, _ bool) ([]*types.Header, []common.Hash, error) {
 		hash := common.Hash{}
 		header := types.Header{Number: big.NewInt(0)}
@@ -288,7 +299,7 @@ func TestIsValidPeer(t *testing.T) {
 
 	s.ProcessMilestone(uint64(2), common.Hash{})
 
-	// create a mock function, returning a the required header
+	// create a mock function, returning the required header
 	fetchHeadersByNumber = func(number uint64, _ int, _ int, _ bool) ([]*types.Header, []common.Hash, error) {
 		hash := common.Hash{}
 		header := types.Header{Number: big.NewInt(0)}
@@ -312,7 +323,7 @@ func TestIsValidPeer(t *testing.T) {
 	require.NoError(t, err, "expected no error")
 	require.Equal(t, res, true, "expected chain to be valid")
 
-	// create a mock function, returning a the required header
+	// create a mock function, returning the required header
 	fetchHeadersByNumber = func(number uint64, _ int, _ int, _ bool) ([]*types.Header, []common.Hash, error) {
 		hash := common.Hash{}
 		hash3 := common.Hash{3}
@@ -348,7 +359,7 @@ func TestIsValidPeer(t *testing.T) {
 	require.Equal(t, err, ErrMismatch, "expected milestone mismatch error")
 	require.Equal(t, res, false, "expected chain to be invalid")
 
-	//require.Equal(t, s.milestone.length(), 3, "expected 3 items in milestoneList")
+	//require.Equal(t, milestone.length(), 3, "expected 3 items in milestoneList")
 
 	//Add one more milestone in the list
 	s.ProcessMilestone(uint64(4), common.Hash{})
@@ -410,9 +421,12 @@ func TestIsValidChain(t *testing.T) {
 
 	//At this stage there is no whitelisted milestone and checkpoint
 
+	checkpoint := s.checkpointService.(*checkpoint)
+	milestone := s.milestoneService.(*milestone)
+
 	//Locking for sprintNumber 15
-	s.LockMutex(chainA[len(chainA)-5].Number.Uint64())
-	s.UnlockMutex(true, "MilestoneID1", chainA[len(chainA)-5].Hash())
+	milestone.LockMutex(chainA[len(chainA)-5].Number.Uint64())
+	milestone.UnlockMutex(true, "MilestoneID1", chainA[len(chainA)-5].Hash())
 
 	//Case6: As the received chain is valid as the locked sprintHash matches with the incoming chain.
 	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
@@ -421,36 +435,36 @@ func TestIsValidChain(t *testing.T) {
 	hash3 := common.Hash{3}
 
 	//Locking for sprintNumber 16 with differnt hash
-	s.LockMutex(chainA[len(chainA)-4].Number.Uint64())
-	s.UnlockMutex(true, "MilestoneID2", hash3)
+	milestone.LockMutex(chainA[len(chainA)-4].Number.Uint64())
+	milestone.UnlockMutex(true, "MilestoneID2", hash3)
 
 	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
 	require.Equal(t, res, false, "expected chain to be invalid as incoming chain does match with the locked value hash ")
 
 	//Locking for sprintNumber 19
-	s.LockMutex(chainA[len(chainA)-1].Number.Uint64())
-	s.UnlockMutex(true, "MilestoneID1", chainA[len(chainA)-1].Hash())
+	milestone.LockMutex(chainA[len(chainA)-1].Number.Uint64())
+	milestone.UnlockMutex(true, "MilestoneID1", chainA[len(chainA)-1].Hash())
 
 	//Case7: As the received chain is valid as the locked sprintHash matches with the incoming chain.
 	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
 	require.Equal(t, res, false, "expected chain to be invalid as incoming chain is less than the locked value ")
 
 	//Locking for sprintNumber 19
-	s.LockMutex(uint64(21))
-	s.UnlockMutex(true, "MilestoneID1", hash3)
+	milestone.LockMutex(uint64(21))
+	milestone.UnlockMutex(true, "MilestoneID1", hash3)
 
 	//Case8: As the received chain is invalid as the locked sprintHash matches is ahead of incoming chain.
 	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
 	require.Equal(t, res, false, "expected chain to be invalid as incoming chain is less than the locked value ")
 
 	//Unlocking the sprint
-	s.UnlockSprint(uint64(21))
+	milestone.UnlockSprint(uint64(21))
 
 	// Clear checkpoint whitelist and add block A15 in whitelist
 	s.PurgeWhitelistedCheckpoint()
 	s.ProcessCheckpoint(chainA[15].Number.Uint64(), chainA[15].Hash())
 
-	require.Equal(t, s.checkpoint.doExist, true, "expected true as checkpoint exists.")
+	require.Equal(t, checkpoint.doExist, true, "expected true as checkpoint exists.")
 
 	// case9: As the received chain is having valid checkpoint,should consider the chain as valid.
 	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
@@ -502,7 +516,7 @@ func TestIsValidChain(t *testing.T) {
 	s.PurgeWhitelistedCheckpoint()
 	s.ProcessCheckpoint(tempChain[0].Number.Uint64(), tempChain[0].Hash())
 
-	require.Equal(t, s.checkpoint.doExist, true, "expected true")
+	require.Equal(t, checkpoint.doExist, true, "expected true")
 
 	// case17: Try importing a past chain having invalid checkpoint,should consider the chain as invalid
 	res = s.IsValidChain(chainA[len(chainA)-1], chainA)
@@ -727,10 +741,11 @@ func TestSplitChainProperties(t *testing.T) {
 // starting from `start` to `end` (inclusive)
 func createMockChain(start, end uint64) []*types.Header {
 	var (
-		i     uint64
-		idx   uint64
-		chain []*types.Header = make([]*types.Header, end-start+1)
+		i   uint64
+		idx uint64
 	)
+
+	chain := make([]*types.Header, end-start+1)
 
 	for i = start; i <= end; i++ {
 		header := &types.Header{

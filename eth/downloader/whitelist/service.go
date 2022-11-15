@@ -11,20 +11,19 @@ import (
 )
 
 var (
-	ErrMismatch = errors.New("Mismatch Error")
+	ErrMismatch = errors.New("mismatch error")
 	ErrNoRemote = errors.New("remote peer doesn't have a target block number")
 )
 
-type WhitelistService struct {
-	checkpoint
-	milestone
+type Service struct {
+	checkpointService
+	milestoneService
 }
 
-func NewService(db ethdb.Database) *WhitelistService {
-	return &WhitelistService{
-
+func NewService(db ethdb.Database) *Service {
+	return &Service{
 		//fixme: try to restore from DB
-		checkpoint{
+		&checkpoint{
 			finality[*rawdb.Checkpoint]{
 				doExist:  false,
 				interval: 256,
@@ -33,7 +32,7 @@ func NewService(db ethdb.Database) *WhitelistService {
 		},
 
 		//fixme: try to restore from DB
-		milestone{
+		&milestone{
 			finality: finality[*rawdb.Milestone]{
 				doExist:  false,
 				interval: 256,
@@ -46,13 +45,13 @@ func NewService(db ethdb.Database) *WhitelistService {
 
 // IsValidPeer checks if the chain we're about to receive from a peer is valid or not
 // in terms of reorgs. We won't reorg beyond the last bor checkpoint submitted to mainchain and last milestone voted in the heimdall
-func (s *WhitelistService) IsValidPeer(remoteHeader *types.Header, fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error) {
-	checkpointBool, err := s.checkpoint.IsValidPeer(remoteHeader, fetchHeadersByNumber)
+func (s *Service) IsValidPeer(remoteHeader *types.Header, fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error) {
+	checkpointBool, err := s.checkpointService.IsValidPeer(remoteHeader, fetchHeadersByNumber)
 	if !checkpointBool {
 		return checkpointBool, err
 	}
 
-	milestoneBool, err := s.milestone.IsValidPeer(remoteHeader, fetchHeadersByNumber)
+	milestoneBool, err := s.milestoneService.IsValidPeer(remoteHeader, fetchHeadersByNumber)
 	if !milestoneBool {
 		return milestoneBool, err
 	}
@@ -60,43 +59,47 @@ func (s *WhitelistService) IsValidPeer(remoteHeader *types.Header, fetchHeadersB
 	return true, nil
 }
 
-func (s *WhitelistService) PurgeWhitelistedCheckpoint() {
-	s.checkpoint.Purge()
+func (s *Service) PurgeWhitelistedCheckpoint() {
+	s.checkpointService.Purge()
 }
 
-func (s *WhitelistService) PurgeWhitelistedMilestone() {
-	s.milestone.Purge()
+func (s *Service) PurgeWhitelistedMilestone() {
+	s.milestoneService.Purge()
 }
 
-func (s *WhitelistService) GetWhitelistedCheckpoint() (bool, uint64, common.Hash) {
-	return s.checkpoint.Get()
+func (s *Service) GetWhitelistedCheckpoint() (bool, uint64, common.Hash) {
+	return s.checkpointService.Get()
 }
 
-func (s *WhitelistService) GetWhitelistedMilestone() (bool, uint64, common.Hash) {
-	return s.milestone.Get()
+func (s *Service) GetWhitelistedMilestone() (bool, uint64, common.Hash) {
+	return s.milestoneService.Get()
 }
 
-func (s *WhitelistService) ProcessMilestone(endBlockNum uint64, endBlockHash common.Hash) {
-	s.milestone.Process(endBlockNum, endBlockHash)
+func (s *Service) ProcessMilestone(endBlockNum uint64, endBlockHash common.Hash) {
+	s.milestoneService.Process(endBlockNum, endBlockHash)
 }
 
-func (s *WhitelistService) ProcessCheckpoint(endBlockNum uint64, endBlockHash common.Hash) {
-	s.checkpoint.Process(endBlockNum, endBlockHash)
+func (s *Service) ProcessCheckpoint(endBlockNum uint64, endBlockHash common.Hash) {
+	s.checkpointService.Process(endBlockNum, endBlockHash)
 }
 
-func (s *WhitelistService) IsValidChain(currentHeader *types.Header, chain []*types.Header) bool {
-	checkpointBool := s.checkpoint.IsValidChain(currentHeader, chain)
+func (s *Service) IsValidChain(currentHeader *types.Header, chain []*types.Header) bool {
+	checkpointBool := s.checkpointService.IsValidChain(currentHeader, chain)
 
 	if !checkpointBool {
 		return checkpointBool
 	}
 
-	milestoneBool := s.milestone.IsValidChain(currentHeader, chain)
+	milestoneBool := s.milestoneService.IsValidChain(currentHeader, chain)
 	if !milestoneBool {
 		return milestoneBool
 	}
 
 	return true
+}
+
+func (s *Service) GetMilestoneIDsList() []string {
+	return s.milestoneService.GetMilestoneIDsList()
 }
 
 func splitChain(current uint64, chain []*types.Header) ([]*types.Header, []*types.Header) {
