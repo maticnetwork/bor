@@ -23,6 +23,8 @@ type milestone struct {
 	LockedSprintHash   common.Hash         //Hash for the locked endBlock
 	Locked             bool                //
 	LockedMilestoneIDs map[string]struct{} //list of milestone ids
+
+	b bool
 }
 
 // IsValidPeer checks if the chain we're about to receive from a peer is valid or not

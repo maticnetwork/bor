@@ -215,18 +215,23 @@ func (h *HeimdallClient) FetchLastNoAckMilestone(ctx context.Context) (string, e
 }
 
 // FetchNoAckMilestone fetches the last no-ack-milestone from heimdall
-func (h *HeimdallClient) FetchNoAckMilestone(ctx context.Context, milestoneID string) (bool, error) {
+func (h *HeimdallClient) FetchNoAckMilestone(ctx context.Context, milestoneID string) error {
 	url, err := noAckMilestoneURL(h.urlString, milestoneID)
 	if err != nil {
-		return false, err
+		return err
 	}
 
 	response, err := FetchWithRetry[milestone.MilestoneNoAckResponse](ctx, h.client, url, h.closeCh)
 	if err != nil {
-		return false, err
+		return err
 	}
 
-	return response.Result.Result, nil
+	if !response.Result.Result {
+		return fmt.Errorf("milestoneID doesn't exist in rejected list")
+	} else {
+		return nil
+	}
+
 }
 
 // FetchWithRetry returns data from heimdall with retry

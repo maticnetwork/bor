@@ -17,7 +17,7 @@ type IHeimdallClient interface {
 	FetchCheckpointCount(ctx context.Context) (int64, error)
 	FetchMilestone(ctx context.Context) (*milestone.Milestone, error)
 	FetchMilestoneCount(ctx context.Context) (int64, error)
-	FetchNoAckMilestone(ctx context.Context, milestoneID string) (bool, error) //Fetch failed milestone by ID number
-	FetchLastNoAckMilestone(ctx context.Context) (string, error)               //Fetch latest failed milestone
+	FetchNoAckMilestone(ctx context.Context, milestoneID string) error //Fetch failed milestone by ID number
+	FetchLastNoAckMilestone(ctx context.Context) (string, error)       //Fetch latest failed milestone
 	Close()
 }

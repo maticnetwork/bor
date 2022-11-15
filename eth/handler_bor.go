@@ -118,17 +118,14 @@ func (h *ethHandler) fetchNoAckMilestone(ctx context.Context, bor *bor.Bor) (str
 	return milestoneID, nil
 }
 
-func (h *ethHandler) fetchNoAckMilestoneByID(ctx context.Context, bor *bor.Bor, milestoneID string) (bool, error) {
-	var (
-		res bool
-	)
+func (h *ethHandler) fetchNoAckMilestoneByID(ctx context.Context, bor *bor.Bor, milestoneID string) error {
 
 	// fetch latest milestone
-	res, err := bor.HeimdallClient.FetchNoAckMilestone(ctx, milestoneID)
+	err := bor.HeimdallClient.FetchNoAckMilestone(ctx, milestoneID)
 	if err != nil {
 		log.Error("Failed to fetch no-ack milestone", "milestoneID", milestoneID, "err", err)
-		return false, errMilestone
+		return errMilestone
 	}
 
-	return res, nil
+	return nil
 }

@@ -12,22 +12,26 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/ethdb"
 )
 
 // NewMockService creates a new mock whitelist service
-func NewMockService() *WhitelistService {
+func NewMockService(db ethdb.Database) *WhitelistService {
 	return &WhitelistService{
 
 		checkpoint{
 			doExist:  false,
 			interval: 256,
+			db:       db,
 		},
 
 		milestone{
 			doExist:            false,
 			interval:           256,
 			LockedMilestoneIDs: make(map[string]struct{}),
+			db:                 db,
 		},
 	}
 }
@@ -36,8 +40,10 @@ func NewMockService() *WhitelistService {
 func TestWhitelistedCheckpoint(t *testing.T) {
 	t.Parallel()
 
+	db := rawdb.NewMemoryDatabase()
+
 	//Creating the service for the whitelisting the checkpoints
-	s := NewMockService()
+	s := NewMockService(db)
 
 	require.Equal(t, s.checkpoint.doExist, false, "expected false as no checkpoint exist at this point")
 
@@ -55,9 +61,17 @@ func TestWhitelistedCheckpoint(t *testing.T) {
 	s.ProcessCheckpoint(11, common.Hash{1})
 
 	//Receiving the stored checkpoint
-	doExist, number, hash := s.getWhitelistedCheckpoint()
+	doExist, number, hash := s.GetWhitelistedCheckpoint()
 
 	//Validating the values received
+	require.Equal(t, doExist, true, "expected true ascheckpoint exist at this point")
+	require.Equal(t, number, uint64(11), "expected number to be 11 but got", number)
+	require.Equal(t, hash, common.Hash{1}, "expected the 1 hash but got", hash)
+	require.NotEqual(t, hash, common.Hash{}, "expected the hash to be different from zero hash")
+
+	s.PurgeWhitelistedCheckpoint()
+	doExist, number, hash = s.GetWhitelistedCheckpoint()
+	//Validating the values received from the db, not memory
 	require.Equal(t, doExist, true, "expected true ascheckpoint exist at this point")
 	require.Equal(t, number, uint64(11), "expected number to be 11 but got", number)
 	require.Equal(t, hash, common.Hash{1}, "expected the 1 hash but got", hash)
@@ -68,7 +82,8 @@ func TestWhitelistedCheckpoint(t *testing.T) {
 func TestMilestone(t *testing.T) {
 	t.Parallel()
 
-	s := NewMockService()
+	db := rawdb.NewMemoryDatabase()
+	s := NewMockService(db)
 
 	//Checking for the varaibles when no milestone is Processed
 	require.Equal(t, s.milestone.doExist, false, "expected false as no milestone exist at this point")
@@ -85,13 +100,19 @@ func TestMilestone(t *testing.T) {
 	require.Equal(t, s.milestone.LockedSprintNumber, uint64(11), "expected 11 as it was not initialized")
 	require.Equal(t, s.milestone.Locked, true, "expected true as sprint is locked now")
 	require.Equal(t, len(s.milestone.LockedMilestoneIDs), int(1), "expected 1 as only 1 milestoneID has been entered")
-	require.Equal(t, s.milestone.LockedMilestoneIDs["milestoneID1"], true, "expected true as we have stored this milestoneID1 previously")
-	require.Equal(t, s.milestone.LockedMilestoneIDs["milestoneID2"], false, "expected false as we have not stored this milestoneID2 previously")
+
+	_, ok := s.milestone.LockedMilestoneIDs["milestoneID1"]
+	require.True(t, ok, "milestoneID1 should exist in the LockedMilestoneIDs map")
+
+	_, ok = s.milestone.LockedMilestoneIDs["milestoneID2"]
+	require.False(t, ok, "milestoneID2 shouldn't exist in the LockedMilestoneIDs map")
 
 	s.LockMutex(11)
 	s.UnlockMutex(true, "milestoneID2", common.Hash{})
 	require.Equal(t, len(s.milestone.LockedMilestoneIDs), int(2), "expected 1 as only 1 milestoneID has been entered")
-	require.Equal(t, s.milestone.LockedMilestoneIDs["milestoneID2"], true, "expected true as we have stored this milestoneID2 previously")
+
+	_, ok = s.milestone.LockedMilestoneIDs["milestoneID2"]
+	require.True(t, ok, "milestoneID2 should exist in the LockedMilestoneIDs map")
 
 	s.RemoveMilestoneID("milestoneID1")
 	require.Equal(t, len(s.milestone.LockedMilestoneIDs), int(1), "expected 1 as one out of two has been removed in previous step")
@@ -137,31 +158,20 @@ func TestMilestone(t *testing.T) {
 	//Removing the milestone
 	s.ProcessMilestone(11, common.Hash{1})
 
-	doExist, number, hash := s.getWhitelistedMilestone()
+	doExist, number, hash := s.GetWhitelistedMilestone()
 
 	//validating the values received
 	require.Equal(t, doExist, true, "expected true as milestone exist at this point")
 	require.Equal(t, number, uint64(11), "expected number to be 11 but got", number)
 	require.Equal(t, hash, common.Hash{1}, "expected the 1 hash but got", hash)
-}
 
-// Only for testing
-// GetMilestone returns the existing whitelisted
-// entry of milestone
-func (m *milestone) getWhitelistedMilestone() (bool, uint64, common.Hash) {
-	m.m.RLock()
-	defer m.m.RUnlock()
+	s.PurgeWhitelistedMilestone()
+	doExist, number, hash = s.GetWhitelistedMilestone()
 
-	return m.doExist, m.Number, m.Hash
-}
-
-// GetWhitelistedMilestone returns the existing whitelisted
-// entries of checkpoint of the form (doExist,block number,block hash.)
-func (w *checkpoint) getWhitelistedCheckpoint() (bool, uint64, common.Hash) {
-	w.m.RLock()
-	defer w.m.RUnlock()
-
-	return w.doExist, w.Number, w.Hash
+	//Validating the values received from the db, not memory
+	require.Equal(t, doExist, true, "expected true as milestone exist at this point")
+	require.Equal(t, number, uint64(11), "expected number to be 11 but got", number)
+	require.Equal(t, hash, common.Hash{1}, "expected the 1 hash but got", hash)
 }
 
 // TestIsValidPeer checks the IsValidPeer function in isolation
@@ -169,7 +179,8 @@ func (w *checkpoint) getWhitelistedCheckpoint() (bool, uint64, common.Hash) {
 func TestIsValidPeer(t *testing.T) {
 	t.Parallel()
 
-	s := NewMockService()
+	db := rawdb.NewMemoryDatabase()
+	s := NewMockService(db)
 
 	// case1: no checkpoint whitelist, should consider the chain as valid
 	res, err := s.IsValidPeer(nil, nil)
@@ -349,7 +360,8 @@ func TestIsValidPeer(t *testing.T) {
 func TestIsValidChain(t *testing.T) {
 	t.Parallel()
 
-	s := NewMockService()
+	db := rawdb.NewMemoryDatabase()
+	s := NewMockService(db)
 	chainA := createMockChain(1, 20) // A1->A2...A19->A20
 
 	//Case1: no checkpoint whitelist and no milestone and no locking, should consider the chain as valid

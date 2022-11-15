@@ -21,7 +21,7 @@ type mockHeimdall struct {
 	fetchCheckpointCount    func(ctx context.Context) (int64, error)
 	fetchMilestone          func(ctx context.Context) (*milestone.Milestone, error)
 	fetchMilestoneCount     func(ctx context.Context) (int64, error)
-	fetchNoAckMilestone     func(ctx context.Context, milestoneID string) (bool, error)
+	fetchNoAckMilestone     func(ctx context.Context, milestoneID string) error
 	fetchLastNoAckMilestone func(ctx context.Context) (string, error)
 }
 
@@ -44,7 +44,7 @@ func (m *mockHeimdall) FetchMilestone(ctx context.Context) (*milestone.Milestone
 func (m *mockHeimdall) FetchMilestoneCount(ctx context.Context) (int64, error) {
 	return m.fetchMilestoneCount(ctx)
 }
-func (m *mockHeimdall) FetchNoAckMilestone(ctx context.Context, milestoneID string) (bool, error) {
+func (m *mockHeimdall) FetchNoAckMilestone(ctx context.Context, milestoneID string) error {
 	return m.fetchNoAckMilestone(ctx, milestoneID)
 }
 func (m *mockHeimdall) FetchLastNoAckMilestone(ctx context.Context) (string, error) {

@@ -71,7 +71,15 @@ func (w *checkpoint) GetWhitelistedCheckpoint() (bool, uint64, common.Hash) {
 	w.m.RLock()
 	defer w.m.RUnlock()
 
-	return w.doExist, w.Number, w.Hash
+	if w.doExist {
+		return w.doExist, w.Number, w.Hash
+	}
+
+	if block, hash, err := rawdb.ReadLastCheckpoint(w.db); err == nil {
+		return true, block, hash
+	}
+
+	return false, w.Number, w.Hash
 }
 
 // PurgeWhitelistedCheckpoint purges the whitlisted checkpoint
