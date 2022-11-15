@@ -112,6 +112,7 @@ func (h *ethHandler) fetchNoAckMilestone(ctx context.Context, bor *bor.Bor) (str
 	milestoneID, err := bor.HeimdallClient.FetchLastNoAckMilestone(ctx)
 	if err != nil {
 		log.Error("Failed to fetch latest no-ack milestone", "err", err)
+
 		return milestoneID, errMilestone
 	}
 
@@ -119,11 +120,17 @@ func (h *ethHandler) fetchNoAckMilestone(ctx context.Context, bor *bor.Bor) (str
 }
 
 func (h *ethHandler) fetchNoAckMilestoneByID(ctx context.Context, bor *bor.Bor, milestoneID string) error {
-
 	// fetch latest milestone
 	err := bor.HeimdallClient.FetchNoAckMilestone(ctx, milestoneID)
+
+	// fixme: handle different types of errors
+	if errors.Is(err, ErrNotInRejectedList) {
+		// todo:
+		log.Warn("Failed to fetch no-ack milestone", "milestoneID", milestoneID, "err", err)
+	}
 	if err != nil {
 		log.Error("Failed to fetch no-ack milestone", "milestoneID", milestoneID, "err", err)
+
 		return errMilestone
 	}
 

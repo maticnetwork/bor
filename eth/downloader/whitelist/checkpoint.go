@@ -62,7 +62,8 @@ func (w *checkpoint) ProcessCheckpoint(block uint64, hash common.Hash) {
 	w.doExist = true
 	w.Hash = hash
 	w.Number = block
-	rawdb.WriteLastCheckpoint(w.db, block, hash)
+
+	rawdb.WriteLastFinality[*rawdb.Checkpoint](w.db, block, hash)
 }
 
 // GetWhitelistedMilestone returns the existing whitelisted
@@ -75,11 +76,12 @@ func (w *checkpoint) GetWhitelistedCheckpoint() (bool, uint64, common.Hash) {
 		return w.doExist, w.Number, w.Hash
 	}
 
-	if block, hash, err := rawdb.ReadLastCheckpoint(w.db); err == nil {
-		return true, block, hash
+	checkpoint, err := rawdb.ReadFinality[*rawdb.Checkpoint](w.db)
+	if err != nil {
+		return false, w.Number, w.Hash
 	}
 
-	return false, w.Number, w.Hash
+	return true, checkpoint.Block, checkpoint.Hash
 }
 
 // PurgeWhitelistedCheckpoint purges the whitlisted checkpoint

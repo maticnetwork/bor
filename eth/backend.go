@@ -29,6 +29,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/flags"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/beacon"
@@ -221,9 +222,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		}
 	)
 
-	const whitelistFeature = false
-
-	checker := whitelist.New(chainDb, whitelistFeature)
+	checker := whitelist.New(chainDb, flags.Milestone)
 
 	eth.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, chainConfig, eth.engine, vmConfig, eth.shouldPreserve, &config.TxLookupLimit, checker)
 	if err != nil {
@@ -790,7 +789,9 @@ func (s *Ethereum) handleNoAckMilestoneByID(ctx context.Context, ethHandler *eth
 	for _, milestoneID := range milestoneIDs {
 		// todo: check if we can ignore the error
 		err := ethHandler.fetchNoAckMilestoneByID(ctx, bor, milestoneID)
+
 		if err != nil {
+			log.Warn("", "err", err)
 			ethHandler.downloader.RemoveMilestoneID(milestoneID)
 		}
 	}

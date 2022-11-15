@@ -22,16 +22,18 @@ type WhitelistService struct {
 func NewService(db ethdb.Database) *WhitelistService {
 	return &WhitelistService{
 
+		//fixme: try to restore from DB
 		checkpoint{
 			doExist:  false,
 			interval: 256,
 			db:       db,
 		},
 
+		//fixme: try to restore from DB
 		milestone{
 			doExist:            false,
 			interval:           256,
-			LockedMilestoneIDs: make(map[string]struct{}),
+			LockedMilestoneIDs: make(map[string]struct{}), //fixme: store it also
 			db:                 db,
 		},
 	}

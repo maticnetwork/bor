@@ -80,7 +80,9 @@ func (m *milestone) ProcessMilestone(block uint64, hash common.Hash) {
 	m.doExist = true
 	m.Number = block
 	m.Hash = hash
-	rawdb.WriteLastMilestone(m.db, block, hash)
+
+	// fixme: handle errors for Milestone and Checkpoint
+	rawdb.WriteLastFinality[*rawdb.Milestone](m.db, block, hash)
 
 	m.UnlockSprint(block)
 }
@@ -95,11 +97,13 @@ func (m *milestone) GetWhitelistedMilestone() (bool, uint64, common.Hash) {
 		return m.doExist, m.Number, m.Hash
 	}
 
-	if block, hash, err := rawdb.ReadLastMilestone(m.db); err == nil {
-		return true, block, hash
+	ms, err := rawdb.ReadFinality[*rawdb.Milestone](m.db)
+	if err != nil {
+		return false, m.Number, m.Hash
 	}
 
-	return false, m.Number, m.Hash
+	return true, ms.Block, ms.Hash
+
 }
 
 // PurgeMilestone purges data from milestone

@@ -24,6 +24,7 @@ var (
 	ErrShutdownDetected      = errors.New("shutdown detected")
 	ErrNoResponse            = errors.New("got a nil response")
 	ErrNotSuccessfulResponse = errors.New("error while fetching data from Heimdall")
+	ErrNotInRejectedList     = errors.New("milestoneID doesn't exist in rejected list")
 )
 
 const (
@@ -227,11 +228,10 @@ func (h *HeimdallClient) FetchNoAckMilestone(ctx context.Context, milestoneID st
 	}
 
 	if !response.Result.Result {
-		return fmt.Errorf("milestoneID doesn't exist in rejected list")
-	} else {
-		return nil
+		return fmt.Errorf("%w: milestoneID %q", ErrNotInRejectedList, milestoneID)
 	}
 
+	return nil
 }
 
 // FetchWithRetry returns data from heimdall with retry
