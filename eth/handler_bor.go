@@ -6,6 +6,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor"
+	"github.com/ethereum/go-ethereum/consensus/bor/heimdall"
 	"github.com/ethereum/go-ethereum/log"
 )
 
@@ -24,7 +25,7 @@ var (
 
 	//errHardFork is returned when chain hasn't reached to the specified
 	//hard forked number.
-	errHardFork = errors.New("Chain hasn't reached to the hard forked number")
+	errHardFork = errors.New("chain hasn't reached to the hard forked number")
 )
 
 // fetchWhitelistCheckpoint fetches the latest checkpoint from it's local heimdall
@@ -124,7 +125,7 @@ func (h *ethHandler) fetchNoAckMilestoneByID(ctx context.Context, bor *bor.Bor, 
 	err := bor.HeimdallClient.FetchNoAckMilestone(ctx, milestoneID)
 
 	// fixme: handle different types of errors
-	if errors.Is(err, ErrNotInRejectedList) {
+	if errors.Is(err, heimdall.ErrNotInRejectedList) {
 		// todo:
 		log.Warn("Failed to fetch no-ack milestone", "milestoneID", milestoneID, "err", err)
 	}
