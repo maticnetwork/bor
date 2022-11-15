@@ -109,6 +109,10 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 
 	// nolint: nestif
 	if EnableMVHashMap {
+		fmt.Println("\n------------------------------------")
+		fmt.Println("BlockSTM ReadList (applyTransaction) 0:\n", statedb.MVReadList())
+		fmt.Println("BlockSTM Writelist (applyTransaction) 0:\n", statedb.MVWriteList())
+
 		var shouldRerunWithoutFeeDelay bool
 
 		coinbaseBalance := statedb.GetBalance(evm.Context.Coinbase)
@@ -121,6 +125,7 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 		reads := statedb.MVReadMap()
 
 		// print writeset
+		fmt.Println("BlockSTM ReadList (applyTransaction) 1:\n", statedb.MVReadList())
 		fmt.Println("BlockSTM Writelist (applyTransaction) 1:\n", statedb.MVWriteList())
 
 		if _, ok := reads[blockstm.NewSubpathKey(evm.Context.Coinbase, state.BalancePath)]; ok {
@@ -144,6 +149,7 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 
 		fmt.Println(shouldRerunWithoutFeeDelay)
 
+		fmt.Println("BlockSTM ReadList (applyTransaction) 2:\n", statedb.MVReadList())
 		fmt.Println("BlockSTM Writelist (applyTransaction) 2:\n", statedb.MVWriteList())
 
 		// [0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 222 173 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 3] is getting added in write, here
@@ -154,6 +160,7 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 			statedb.AddBalance(result.BurntContractAddress, result.FeeBurnt)
 		}
 
+		fmt.Println("BlockSTM ReadList (applyTransaction) 3:\n", statedb.MVReadList())
 		fmt.Println("BlockSTM Writelist (applyTransaction) 3:\n", statedb.MVWriteList())
 
 		// // stop recording read and write
@@ -163,6 +170,7 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 
 		statedb.AddBalance(evm.Context.Coinbase, result.FeeTipped)
 
+		fmt.Println("BlockSTM ReadList (applyTransaction) 4:\n", statedb.MVReadList())
 		fmt.Println("BlockSTM Writelist (applyTransaction) 4:\n", statedb.MVWriteList())
 
 		output1 := new(big.Int).SetBytes(result.SenderInitBalance.Bytes())
@@ -199,6 +207,7 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 	}
 	*usedGas += result.UsedGas
 
+	fmt.Println("BlockSTM ReadList (applyTransaction) 5:\n", statedb.MVReadList())
 	fmt.Println("BlockSTM Writelist (applyTransaction) 5:\n", statedb.MVWriteList())
 
 	// Create a new receipt for the transaction, storing the intermediate root and gas used
