@@ -56,7 +56,7 @@ jobs:
           run: make lint
 
         - name: Running govulncheck
-          uses: Templum/govulncheck-action@0.0.6
+          uses: Templum/govulncheck-action@v0.0.6
           with:
             go-version: 1.19
             vulncheck-version: latest
