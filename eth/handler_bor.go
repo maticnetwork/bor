@@ -25,6 +25,8 @@ var (
 	//errHardFork is returned when chain hasn't reached to the specified
 	//hard forked number.
 	errHardFork = errors.New("Chain hasn't reached to the hard forked number")
+
+	ErrNotInRejectedList = errors.New("MilestoneID not in rejected list")
 )
 
 // fetchWhitelistCheckpoint fetches the latest checkpoint from it's local heimdall
@@ -72,15 +74,6 @@ func (h *ethHandler) fetchWhitelistMilestone(ctx context.Context, bor *bor.Bor, 
 		blockHash common.Hash
 	)
 
-	chainConfig := eth.blockchain.GetChainConfig()
-	currentBlock := eth.blockchain.CurrentBlock().NumberU64()
-	log.Error("In the fetchWhitelisting A")
-	if !chainConfig.Bor.IsDubai(currentBlock) {
-		log.Error("Failed", "Hard Fork Number", chainConfig.Bor.DubaiBlock)
-		return blockNum, blockHash, errHardFork
-	}
-	log.Error("In the fetchWhitelisting B")
-
 	// fetch latest milestone
 	milestone, err := bor.HeimdallClient.FetchMilestone(ctx)
 	if err != nil {
@@ -125,11 +118,12 @@ func (h *ethHandler) fetchNoAckMilestoneByID(ctx context.Context, bor *bor.Bor, 
 
 	// fixme: handle different types of errors
 	if errors.Is(err, ErrNotInRejectedList) {
-		// todo:
-		log.Warn("Failed to fetch no-ack milestone", "milestoneID", milestoneID, "err", err)
+		log.Warn("MilestoneID not in rejected list", "milestoneID", milestoneID, "err", err)
+		return err
 	}
+
 	if err != nil {
-		log.Error("Failed to fetch no-ack milestone", "milestoneID", milestoneID, "err", err)
+		log.Error("Failed to fetch no-ack milestone by ID ", "milestoneID", milestoneID, "err", err)
 
 		return errMilestone
 	}

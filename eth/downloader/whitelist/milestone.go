@@ -16,7 +16,6 @@ type milestone struct {
 	Locked             bool                //
 	LockedMilestoneIDs map[string]struct{} //list of milestone ids
 
-	b bool
 }
 
 // IsValidChain checks the validity of chain by comparing it
