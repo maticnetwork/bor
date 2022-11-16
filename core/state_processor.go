@@ -106,7 +106,7 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 
 	// nolint: nestif
 	if EnableMVHashMap {
-		var shouldRerunWithoutFeeDelay bool
+		// var shouldRerunWithoutFeeDelay bool
 
 		statedb.SetMVHashmap(nil)
 
@@ -124,13 +124,13 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 		if _, ok := reads[blockstm.NewSubpathKey(evm.Context.Coinbase, state.BalancePath)]; ok {
 			fmt.Println("Coinbase is in MVReadMap", "address", evm.Context.Coinbase)
 
-			shouldRerunWithoutFeeDelay = true
+			// shouldRerunWithoutFeeDelay = true
 		}
 
 		if _, ok := reads[blockstm.NewSubpathKey(result.BurntContractAddress, state.BalancePath)]; ok {
 			fmt.Println("BurntContractAddress is in MVReadMap", "address", result.BurntContractAddress)
 
-			shouldRerunWithoutFeeDelay = true
+			// shouldRerunWithoutFeeDelay = true
 		}
 
 		// // stop recording read and write
