@@ -285,6 +285,8 @@ func NewParallelExecutor(tasks []ExecTask, profile bool) *ParallelExecutor {
 
 // nolint: gocognit
 func (pe *ParallelExecutor) Prepare() {
+
+	substart := time.Now()
 	for i, t := range pe.tasks {
 		clearPendingFlag := false
 
@@ -314,6 +316,8 @@ func (pe *ParallelExecutor) Prepare() {
 			prevSenderTx[t.Sender()] = i
 		}
 	}
+	substop := time.Now()
+	log.Info("blockstm time taken", "addDependencies loop in Prepare", substop.Sub(substart))
 
 	pe.workerWg.Add(numSpeculativeProcs + numGoProcs)
 
@@ -583,8 +587,12 @@ func executeParallelWithCheck(tasks []ExecTask, profile bool, check PropertyChec
 	}
 
 	pe := NewParallelExecutor(tasks, profile)
+	substart := time.Now()
 	pe.Prepare()
+	substop := time.Now()
+	log.Info("blockstm time taken", "Prepare", substop.Sub(substart))
 
+	substart = time.Now()
 	for range pe.chResults {
 		res := pe.resultQueue.Pop().(ExecResult)
 
@@ -602,6 +610,8 @@ func executeParallelWithCheck(tasks []ExecTask, profile bool, check PropertyChec
 			return result, err
 		}
 	}
+	substop = time.Now()
+	log.Info("blockstm time taken", "Step loop", substop.Sub(substart))
 
 	return
 }
