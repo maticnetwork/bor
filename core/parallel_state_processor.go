@@ -290,7 +290,7 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 
 	coinbase, _ := p.bc.Engine().Author(header)
 
-	substart := time.Now()
+	// substart := time.Now()
 	deps, delayMap := GetDeps(block.Header().TxDependency)
 
 	weights := make([]int, len(block.Transactions()))
@@ -319,10 +319,10 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 			return pSeral.Process(block, statedb, cfg)
 		}
 	}
-	substop := time.Now()
-	log.Info("blockstm time taken", "GetDeps and calculate longest", substop.Sub(substart))
+	// substop := time.Now()
+	// log.Info("blockstm time taken", "GetDeps and calculate longest", substop.Sub(substart))
 
-	substart = time.Now()
+	// substart = time.Now()
 	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
 		msg, err := tx.AsMessage(types.MakeSigner(p.config, header.Number), header.BaseFee)
@@ -393,8 +393,8 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 	profile := false
 	result, err := blockstm.ExecuteParallel(tasks, false, false)
 
-	substop = time.Now()
-	log.Info("blockstm time taken", "first ExecuteParallel", substop.Sub(substart))
+	// substop = time.Now()
+	// log.Info("blockstm time taken", "first ExecuteParallel", substop.Sub(substart))
 
 	if err == nil && profile {
 		_, weight := result.Deps.LongestPath(*result.Stats)
@@ -412,7 +412,7 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 		log.Info("Parallelizability", "Histogram (%)", parallelizabilityTimer.Percentiles([]float64{0.001, 0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 0.999, 0.9999}))
 	}
 
-	substart = time.Now()
+	// substart = time.Now()
 	for _, task := range tasks {
 		task := task.(*ExecutionTask)
 		if task.shouldRerunWithoutFeeDelay {
@@ -437,19 +437,19 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 		}
 	}
 
-	substop = time.Now()
-	log.Info("blockstm time taken", "second ExecuteParallel", substop.Sub(substart))
+	// substop = time.Now()
+	// log.Info("blockstm time taken", "second ExecuteParallel", substop.Sub(substart))
 
 	if err != nil {
 		log.Error("blockstm error executing block", "err", err)
 		return nil, nil, 0, err
 	}
 
-	substart = time.Now()
+	// substart = time.Now()
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
 	p.engine.Finalize(p.bc, header, statedb, block.Transactions(), block.Uncles())
-	substop = time.Now()
-	log.Info("blockstm time taken", "Finalize", substop.Sub(substart))
+	// substop = time.Now()
+	// log.Info("blockstm time taken", "Finalize", substop.Sub(substart))
 
 	return receipts, allLogs, *usedGas, nil
 }
