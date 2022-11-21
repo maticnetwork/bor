@@ -23,12 +23,10 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/misc"
-	"github.com/ethereum/go-ethereum/core/blockstm"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -107,36 +105,24 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 
 	// nolint: nestif
 	if EnableMVHashMap {
-		var shouldRerunWithoutFeeDelay bool
+		// pause recording read and write
+		statedb.SetMVHashmap(nil)
 
 		coinbaseBalance := statedb.GetBalance(evm.Context.Coinbase)
+
+		// resume recording read and write
+		statedb.AddEmptyMVHashMap()
 
 		result, err = ApplyMessageNoFeeBurnOrTip(evm, msg, gp)
 		if err != nil {
 			return nil, err
 		}
 
-		reads := statedb.MVReadMap()
-
-		if _, ok := reads[blockstm.NewSubpathKey(evm.Context.Coinbase, state.BalancePath)]; ok {
-			log.Info("Coinbase is in MVReadMap", "address", evm.Context.Coinbase)
-
-			shouldRerunWithoutFeeDelay = true
-		}
-
-		if _, ok := reads[blockstm.NewSubpathKey(result.BurntContractAddress, state.BalancePath)]; ok {
-			log.Info("BurntContractAddress is in MVReadMap", "address", result.BurntContractAddress)
-
-			shouldRerunWithoutFeeDelay = true
-		}
+		// stop recording read and write
+		statedb.SetMVHashmap(nil)
 
 		if evm.ChainConfig().IsLondon(blockNumber) {
 			statedb.AddBalance(result.BurntContractAddress, result.FeeBurnt)
-		}
-
-		// stop recording read and write
-		if !shouldRerunWithoutFeeDelay {
-			statedb.SetMVHashMapNil()
 		}
 
 		statedb.AddBalance(evm.Context.Coinbase, result.FeeTipped)

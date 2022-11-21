@@ -887,7 +887,6 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 
 	// create and add empty mvHashMap in statedb
 	if EnableMVHashMap {
-		env.state.AddEmptyMVHashMap()
 
 		depsMVReadList = [][]blockstm.ReadDescriptor{}
 
@@ -913,6 +912,10 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 	}
 
 	for {
+		if EnableMVHashMap {
+			env.state.AddEmptyMVHashMap()
+		}
+
 		// In the following three cases, we will interrupt the execution of the transaction.
 		// (1) new head block event arrival, the interrupt signal is 1
 		// (2) worker start or restart, the interrupt signal is 1

@@ -235,10 +235,6 @@ func (s *StateDB) ClearWriteMap() {
 	s.writeMap = make(map[blockstm.Key]blockstm.WriteDescriptor)
 }
 
-func (s *StateDB) SetMVHashMapNil() {
-	s.mvHashmap = nil
-}
-
 func (s *StateDB) HadInvalidRead() bool {
 	return s.dep >= 0
 }
