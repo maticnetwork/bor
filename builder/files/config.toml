@@ -87,11 +87,11 @@ syncmode = "full"
     # vhosts = ["*"]
     # corsdomain = ["*"]
 
-# [gpo]
+[gpo]
   # blocks = 20
   # percentile = 60
   # maxprice = "5000000000000"
-  # ignoreprice = "2"
+  ignoreprice = "30000000000"
 
 [telemetry]
   metrics = true
