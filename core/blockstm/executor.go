@@ -241,14 +241,14 @@ type ExecutionStat struct {
 	Worker      int
 }
 
-func NewParallelExecutor(tasks []ExecTask, profile bool) *ParallelExecutor {
+func NewParallelExecutor(tasks []ExecTask, profile bool, metadata bool) *ParallelExecutor {
 	numTasks := len(tasks)
 
 	var resultQueue SafeQueue
 
 	var specTaskQueue SafeQueue
 
-	if tasks[0].Dependencies() != nil {
+	if metadata {
 		resultQueue = NewSafeFIFOQueue(numTasks)
 		specTaskQueue = NewSafeFIFOQueue(numTasks)
 	} else {
@@ -577,12 +577,12 @@ func (pe *ParallelExecutor) Step(res *ExecResult) (result ParallelExecutionResul
 
 type PropertyCheck func(*ParallelExecutor) error
 
-func executeParallelWithCheck(tasks []ExecTask, profile bool, check PropertyCheck) (result ParallelExecutionResult, err error) {
+func executeParallelWithCheck(tasks []ExecTask, profile bool, check PropertyCheck, metadata bool) (result ParallelExecutionResult, err error) {
 	if len(tasks) == 0 {
 		return ParallelExecutionResult{MakeTxnInputOutput(len(tasks)), nil, nil, nil}, nil
 	}
 
-	pe := NewParallelExecutor(tasks, profile)
+	pe := NewParallelExecutor(tasks, profile, metadata)
 	pe.Prepare()
 
 	for range pe.chResults {
@@ -607,5 +607,5 @@ func executeParallelWithCheck(tasks []ExecTask, profile bool, check PropertyChec
 }
 
 func ExecuteParallel(tasks []ExecTask, profile bool, metadata bool) (result ParallelExecutionResult, err error) {
-	return executeParallelWithCheck(tasks, profile, nil)
+	return executeParallelWithCheck(tasks, profile, nil, metadata)
 }

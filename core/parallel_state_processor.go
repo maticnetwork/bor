@@ -277,6 +277,7 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 		blockNumber = block.Number()
 		allLogs     []*types.Log
 		usedGas     = new(uint64)
+		metadata    bool
 	)
 
 	// Mutate the block and state according to any hard-fork specs
@@ -291,6 +292,10 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 	coinbase, _ := p.bc.Engine().Author(header)
 
 	deps, delayMap := GetDeps(block.Header().TxDependency)
+
+	if block.Header().TxDependency != nil {
+		metadata = true
+	}
 
 	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
@@ -360,7 +365,7 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 	backupStateDB := statedb.Copy()
 
 	profile := false
-	result, err := blockstm.ExecuteParallel(tasks, false, false)
+	result, err := blockstm.ExecuteParallel(tasks, false, metadata)
 
 	if err == nil && profile {
 		_, weight := result.Deps.LongestPath(*result.Stats)
@@ -396,7 +401,7 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 				t.totalUsedGas = usedGas
 			}
 
-			_, err = blockstm.ExecuteParallel(tasks, false, false)
+			_, err = blockstm.ExecuteParallel(tasks, false, metadata)
 
 			break
 		}

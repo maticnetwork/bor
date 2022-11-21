@@ -887,7 +887,6 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 
 	// create and add empty mvHashMap in statedb
 	if EnableMVHashMap {
-
 		depsMVReadList = [][]blockstm.ReadDescriptor{}
 
 		depsMVFullWriteList = [][]blockstm.WriteDescriptor{}
@@ -997,6 +996,7 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 
 				chDeps <- temp
 				count++
+
 				txs.Shift()
 			}
 
