@@ -83,6 +83,7 @@ type ExecutionTask struct {
 	dependencies []int
 
 	blockContext vm.BlockContext
+	coinbase     common.Address
 }
 
 func (task *ExecutionTask) Execute(mvh *blockstm.MVHashMap, incarnation int) (err error) {
@@ -181,9 +182,9 @@ func (task *ExecutionTask) Settle() {
 
 	task.finalStateDB.Prepare(task.tx.Hash(), task.index)
 
-	coinbase, _ := task.blockChain.Engine().Author(task.header)
+	// coinbase, _ := task.blockChain.Engine().Author(task.header)
 
-	coinbaseBalance := task.finalStateDB.GetBalance(coinbase)
+	coinbaseBalance := task.finalStateDB.GetBalance(task.coinbase)
 
 	task.finalStateDB.ApplyMVWriteSet(task.statedb.MVWriteList())
 
@@ -196,7 +197,7 @@ func (task *ExecutionTask) Settle() {
 			task.finalStateDB.AddBalance(task.result.BurntContractAddress, task.result.FeeBurnt)
 		}
 
-		task.finalStateDB.AddBalance(coinbase, task.result.FeeTipped)
+		task.finalStateDB.AddBalance(task.coinbase, task.result.FeeTipped)
 		output1 := new(big.Int).SetBytes(task.result.SenderInitBalance.Bytes())
 		output2 := new(big.Int).SetBytes(coinbaseBalance.Bytes())
 
@@ -206,7 +207,7 @@ func (task *ExecutionTask) Settle() {
 			task.finalStateDB,
 
 			task.msg.From(),
-			coinbase,
+			task.coinbase,
 
 			task.result.FeeTipped,
 			task.result.SenderInitBalance,
@@ -301,6 +302,7 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 	//
 
 	blockContext := NewEVMBlockContext(header, p.bc, nil)
+	// p.bc.Engine().Author(header)
 	for i, tx := range block.Transactions() {
 		msg, err := tx.AsMessage(types.MakeSigner(p.config, header.Number), header.BaseFee)
 		if err != nil {
@@ -333,6 +335,7 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 				allLogs:           &allLogs,
 				dependencies:      deps[i],
 				blockContext:      blockContext,
+				coinbase:          coinbase,
 			}
 
 			tasks = append(tasks, task)
@@ -361,6 +364,7 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 				allLogs:           &allLogs,
 				dependencies:      nil,
 				blockContext:      blockContext,
+				coinbase:          coinbase,
 			}
 
 			tasks = append(tasks, task)
