@@ -338,7 +338,7 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 
 		cleansdb := statedb.Copy()
 
-		if len(block.Header().TxDependency) > 0 {
+		if len(header.TxDependency) > 0 {
 			shouldDelayFeeCal = delayMap[i]
 
 			task := &ExecutionTask{
