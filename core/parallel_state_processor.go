@@ -294,15 +294,40 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 
 	deps, delayMap := GetDeps(block.Header().TxDependency)
 
+	weights := make([]int, len(block.Transactions()))
+
+	longest := 0
+
+	for i := 0; i <= len(block.Transactions())-1; i++ {
+		weights[i] = 1
+		for _, dep := range deps[i] {
+			if weights[dep]+1 > weights[i] {
+				weights[i] = weights[dep] + 1
+			}
+
+			if weights[i] > longest {
+				longest = weights[i]
+			}
+		}
+	}
+
+	for _, j := range delayMap {
+		if !j || (float64(longest)/float64(len(block.Transactions())) > 0.7) {
+			log.Info("BlockSTM", "Dependencies deps", deps)
+			log.Info("BlockSTM", "Dependencies delayMap", delayMap)
+			log.Info("Going Serial", "!j", !j, "float64(longest)/float64(len(block.Transactions()))", float64(longest)/float64(len(block.Transactions())))
+			pSeral := NewStateProcessor(p.config, p.bc, p.engine)
+			return pSeral.Process(block, statedb, cfg)
+		}
+	}
+
 	if block.Header().TxDependency != nil {
 		metadata = true
 	}
 
-	// Iterate over and process the individual transactions
-	//
-
 	blockContext := NewEVMBlockContext(header, p.bc, nil)
-	// p.bc.Engine().Author(header)
+
+	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
 		msg, err := tx.AsMessage(types.MakeSigner(p.config, header.Number), header.BaseFee)
 		if err != nil {
