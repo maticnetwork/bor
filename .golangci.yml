@@ -30,7 +30,7 @@ linters:
     - gocognit
     - gofmt
     # - gomnd
-    - gomoddirectives
+    # - gomoddirectives
     - gosec
     - makezero
     - nestif
