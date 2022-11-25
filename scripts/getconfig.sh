@@ -43,6 +43,11 @@ cleanup() {
 }
 trap cleanup EXIT INT QUIT TERM
 
+if [[ -f $HOME/.bor/data/bor/static-nodes.json ]]
+then
+cp $HOME/.bor/data/bor/static-nodes.json ./static-nodes.json
+fi
+
 # SHA1 hash of `tempStart` -> `3305fe263dd4a999d58f96deb064e21bb70123d9`
 sed 's/bor --/go run getconfig.go notYet --/g' $startPath > $tmpDir/3305fe263dd4a999d58f96deb064e21bb70123d9.sh
 chmod +x $tmpDir/3305fe263dd4a999d58f96deb064e21bb70123d9.sh
@@ -112,5 +117,10 @@ sed "s%bor --%go run getconfig.go ${confPath} --%" $startPath > $tmpDir/3305fe26
 chmod +x $tmpDir/3305fe263dd4a999d58f96deb064e21bb70123d9.sh
 $tmpDir/3305fe263dd4a999d58f96deb064e21bb70123d9.sh $ADD
 rm $tmpDir/3305fe263dd4a999d58f96deb064e21bb70123d9.sh
+
+if [[ -f $HOME/.bor/data/bor/static-nodes.json ]]
+then
+rm ./static-nodes.json
+fi
 
 exit 0
