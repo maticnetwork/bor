@@ -4,7 +4,7 @@ chain = "mumbai"
 datadir = "/var/lib/bor/data"
 # keystore = ""
 syncmode = "full"
-# gcmode = "full"
+gcmode = "archive"
 # snapshot = true
 # ethstats = ""
 
