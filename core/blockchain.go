@@ -73,6 +73,9 @@ var (
 	blockExecutionTimer  = metrics.NewRegisteredTimer("chain/execution", nil)
 	blockWriteTimer      = metrics.NewRegisteredTimer("chain/write", nil)
 
+	serialGasTimer   = metrics.NewRegisteredTimer("chain/serialGas", nil)
+	parallelGasTimer = metrics.NewRegisteredTimer("chain/parallelGas", nil)
+
 	blockReorgMeter         = metrics.NewRegisteredMeter("chain/reorg/executes", nil)
 	blockReorgAddMeter      = metrics.NewRegisteredMeter("chain/reorg/add", nil)
 	blockReorgDropMeter     = metrics.NewRegisteredMeter("chain/reorg/drop", nil)
@@ -1754,6 +1757,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 			substart = time.Now()
 			receipts, logs, usedGas, err = bc.processor.Process(block, statedb, bc.vmConfig)
 			substop := time.Now()
+			serialGasTimer.Update(substop.Sub(substart))
 
 			log.Info("**** Serial - Process block time", "blockNumber", block.Number(), "transactions", block.Transactions().Len(), "Time", substop.Sub(substart))
 		} else {
@@ -1761,8 +1765,17 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 			substart = time.Now()
 			receipts, logs, usedGas, err = bc.processorSTM.Process(block, statedb, bc.vmConfig)
 			substop := time.Now()
+			parallelGasTimer.Update(substop.Sub(substart))
 
 			log.Info("**** Parallel - Process block time", "blockNumber", block.Number(), "transactions", block.Transactions().Len(), "Time", substop.Sub(substart))
+		}
+
+		if serialGasTimer.Count()%50 == 0 {
+			log.Info("Histogram of processing time", "serial", serialGasTimer.Percentiles([]float64{0.001, 0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 0.999, 0.9999}))
+			log.Info("Histogram of processing time", "parallel", parallelGasTimer.Percentiles([]float64{0.001, 0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 0.999, 0.9999}))
+
+			log.Info("Average processing time for serial, and parallel", "serial", time.Duration(serialGasTimer.Mean()), "parallel", time.Duration(parallelGasTimer.Mean()))
+			log.Info("Average mgasps time for serial, and parallel", "serial", serialGasTimer.Mean(), "parallel", parallelGasTimer.Mean())
 		}
 
 		if err != nil {
