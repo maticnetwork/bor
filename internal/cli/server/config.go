@@ -497,7 +497,7 @@ func DefaultConfig() *Config {
 			},
 		},
 		Cache: &CacheConfig{
-			Cache:         1024,
+			Cache:         1024, // geth's default (suitable for mumbai)
 			PercDatabase:  50,
 			PercTrie:      15,
 			PercGc:        25,
@@ -624,13 +624,6 @@ func (c *Config) loadChain() error {
 	// preload some default values that depend on the chain file
 	if c.P2P.Discovery.DNS == nil {
 		c.P2P.Discovery.DNS = c.chain.DNS
-	}
-
-	// depending on the chain we have different cache values
-	if c.Chain == "mainnet" {
-		c.Cache.Cache = 4096
-	} else {
-		c.Cache.Cache = 1024
 	}
 
 	return nil
