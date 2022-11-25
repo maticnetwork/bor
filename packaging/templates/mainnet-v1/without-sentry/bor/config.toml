@@ -104,8 +104,8 @@ syncmode = "full"
         # organization = ""
     # [telemetry.influx.tags]
 
-# [cache]
-#     cache = 1024
+[cache]
+    cache = 4096
 #     gc = 25
 #     snapshot = 10
 #     database = 50
