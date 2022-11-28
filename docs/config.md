@@ -5,6 +5,7 @@
     - One can `pipe (>)` this to a file (say `config.toml`) and use it to start bor.
         - Command to provide a config file: `bor server -config config.toml`
 - Bor uses TOML, HCL, and JSON format config files.
+- You can find an example config file [here](./cli/example_config.toml) to know more about what each flag is used for.
 - This is the format of the config file in TOML:
     - **NOTE: The values of these following flags are just for reference**
     - `config.toml` file:
