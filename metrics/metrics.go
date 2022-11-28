@@ -12,8 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BurntSushi/toml"
 	"github.com/ethereum/go-ethereum/common"
+
+	"github.com/BurntSushi/toml"
 )
 
 // Enabled is checked by the constructor functions for all of the
