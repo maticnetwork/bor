@@ -7,13 +7,13 @@ package metrics
 
 import (
 	"fmt"
-	"github.com/ethereum/go-ethereum/common"
 	"os"
 	"runtime"
 	"strings"
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/ethereum/go-ethereum/common"
 )
 
 // Enabled is checked by the constructor functions for all of the
