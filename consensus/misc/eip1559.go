@@ -97,7 +97,6 @@ func CalcBaseFee(config *params.ChainConfig, parent *types.Header) *big.Int {
 
 // CalcBaseFee calculates the basefee of the header.
 func CalcBaseFeeUint(config *params.ChainConfig, parent *types.Header) *uint256.Int {
-
 	var (
 		initialBaseFeeUint             = uint256.NewInt(params.InitialBaseFee)
 		baseFeeChangeDenominatorUint64 = params.BaseFeeChangeDenominator(config.Bor, parent.Number)
