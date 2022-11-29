@@ -20,9 +20,6 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/holiman/uint256"
-
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/params"
 )
@@ -49,12 +46,14 @@ func copyConfig(original *params.ChainConfig) *params.ChainConfig {
 		TerminalTotalDifficulty: original.TerminalTotalDifficulty,
 		Ethash:                  original.Ethash,
 		Clique:                  original.Clique,
+		Bor:                     original.Bor,
 	}
 }
 
 func config() *params.ChainConfig {
 	config := copyConfig(params.TestChainConfig)
 	config.LondonBlock = big.NewInt(5)
+	config.Bor.DelhiBlock = big.NewInt(8)
 	return config
 }
 
@@ -121,10 +120,12 @@ func TestCalcBaseFee(t *testing.T) {
 		{params.InitialBaseFee, 20000000, 10000000, params.InitialBaseFee}, // usage == target
 		{params.InitialBaseFee, 20000000, 9000000, 987500000},              // usage below target
 		{params.InitialBaseFee, 20000000, 11000000, 1012500000},            // usage above target
+		{params.InitialBaseFee, 20000000, 20000000, 1125000000},            // usage full
+		{params.InitialBaseFee, 20000000, 0, 875000000},                    // usage 0
 	}
 	for i, test := range tests {
 		parent := &types.Header{
-			Number:   common.Big32,
+			Number:   big.NewInt(6),
 			GasLimit: test.parentGasLimit,
 			GasUsed:  test.parentGasUsed,
 			BaseFee:  big.NewInt(test.parentBaseFee),
@@ -135,27 +136,36 @@ func TestCalcBaseFee(t *testing.T) {
 	}
 }
 
-func TestCalcBaseFeeUint(t *testing.T) {
+// TestCalcBaseFee assumes all blocks are 1559-blocks post Delhi Hard Fork
+func TestCalcBaseFeeDelhi(t *testing.T) {
 	t.Parallel()
+
+	testConfig := copyConfig(config())
+
+	// Test Delhi Hard Fork
+	// Hard fork kicks in at block 8
 
 	tests := []struct {
 		parentBaseFee   int64
 		parentGasLimit  uint64
 		parentGasUsed   uint64
-		expectedBaseFee uint64
+		expectedBaseFee int64
 	}{
 		{params.InitialBaseFee, 20000000, 10000000, params.InitialBaseFee}, // usage == target
-		{params.InitialBaseFee, 20000000, 9000000, 987500000},              // usage below target
-		{params.InitialBaseFee, 20000000, 11000000, 1012500000},            // usage above target
+		{params.InitialBaseFee, 20000000, 9000000, 993750000},              // usage below target
+		{params.InitialBaseFee, 20000000, 11000000, 1006250000},            // usage above target
+		{params.InitialBaseFee, 20000000, 20000000, 1062500000},            // usage full
+		{params.InitialBaseFee, 20000000, 0, 937500000},                    // usage 0
+
 	}
 	for i, test := range tests {
 		parent := &types.Header{
-			Number:   common.Big32,
+			Number:   big.NewInt(8),
 			GasLimit: test.parentGasLimit,
 			GasUsed:  test.parentGasUsed,
 			BaseFee:  big.NewInt(test.parentBaseFee),
 		}
-		if have, want := CalcBaseFeeUint(config(), parent), uint256.NewInt(test.expectedBaseFee); have.Cmp(want) != 0 {
+		if have, want := CalcBaseFee(testConfig, parent), big.NewInt(test.expectedBaseFee); have.Cmp(want) != 0 {
 			t.Errorf("test %d: have %d  want %d, ", i, have, want)
 		}
 	}

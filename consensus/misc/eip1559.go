@@ -61,9 +61,10 @@ func CalcBaseFee(config *params.ChainConfig, parent *types.Header) *big.Int {
 	}
 
 	var (
-		parentGasTarget          = parent.GasLimit / params.ElasticityMultiplier
-		parentGasTargetBig       = new(big.Int).SetUint64(parentGasTarget)
-		baseFeeChangeDenominator = new(big.Int).SetUint64(params.BaseFeeChangeDenominator)
+		parentGasTarget                = parent.GasLimit / params.ElasticityMultiplier
+		parentGasTargetBig             = new(big.Int).SetUint64(parentGasTarget)
+		baseFeeChangeDenominatorUint64 = params.BaseFeeChangeDenominator(config.Bor, parent.Number)
+		baseFeeChangeDenominator       = new(big.Int).SetUint64(baseFeeChangeDenominatorUint64)
 	)
 	// If the parent gasUsed is the same as the target, the baseFee remains unchanged.
 	if parent.GasUsed == parentGasTarget {
@@ -94,13 +95,15 @@ func CalcBaseFee(config *params.ChainConfig, parent *types.Header) *big.Int {
 	}
 }
 
-var (
-	initialBaseFeeUint           = uint256.NewInt(params.InitialBaseFee)
-	baseFeeChangeDenominatorUint = uint256.NewInt(params.BaseFeeChangeDenominator)
-)
-
 // CalcBaseFee calculates the basefee of the header.
 func CalcBaseFeeUint(config *params.ChainConfig, parent *types.Header) *uint256.Int {
+
+	var (
+		initialBaseFeeUint             = uint256.NewInt(params.InitialBaseFee)
+		baseFeeChangeDenominatorUint64 = params.BaseFeeChangeDenominator(config.Bor, parent.Number)
+		baseFeeChangeDenominatorUint   = uint256.NewInt(baseFeeChangeDenominatorUint64)
+	)
+
 	// If the current block is the first EIP-1559 block, return the InitialBaseFee.
 	if !config.IsLondon(parent.Number) {
 		return initialBaseFeeUint.Clone()
