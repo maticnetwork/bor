@@ -218,4 +218,4 @@ replace github.com/tendermint/tendermint => github.com/maticnetwork/tendermint v
 
 replace github.com/ethereum/go-ethereum => github.com/maticnetwork/bor v0.2.18-0.20220922050621-c91d4ca1fa4f
 
-replace github.com/btcsuite/btcd/chaincfg/chainhash => github.com/btcsuite/btcd/chaincfg/chainhash v1.0.0
+replace github.com/btcsuite/btcd/chaincfg/chainhash => github.com/btcsuite/btcd/chaincfg/chainhash v1.0.1
