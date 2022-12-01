@@ -33,6 +33,7 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/nat"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/rpc"
 )
 
 type Config struct {
@@ -235,6 +236,8 @@ type JsonRPCConfig struct {
 
 	// Graphql has the json-rpc graphql related settings
 	Graphql *APIConfig `hcl:"graphql,block" toml:"graphql,block"`
+
+	HttpTimeout *HttpTimeouts `hcl:"timeouts,block" toml:"timeouts,block"`
 }
 
 type GRPCConfig struct {
@@ -266,6 +269,30 @@ type APIConfig struct {
 
 	// Origins is the list of endpoints to accept requests from (only consumed for websockets)
 	Origins []string `hcl:"origins,optional" toml:"origins,optional"`
+}
+
+// Used from rpc.HTTPTimeouts
+type HttpTimeouts struct {
+	// ReadTimeout is the maximum duration for reading the entire
+	// request, including the body.
+	//
+	// Because ReadTimeout does not let Handlers make per-request
+	// decisions on each request body's acceptable deadline or
+	// upload rate, most users will prefer to use
+	// ReadHeaderTimeout. It is valid to use them both.
+	ReadTimeout time.Duration `hcl:"read,optional" toml:"read,optional"`
+
+	// WriteTimeout is the maximum duration before timing out
+	// writes of the response. It is reset whenever a new
+	// request's header is read. Like ReadTimeout, it does not
+	// let Handlers make decisions on a per-request basis.
+	WriteTimeout time.Duration `hcl:"write,optional" toml:"write,optional"`
+
+	// IdleTimeout is the maximum amount of time to wait for the
+	// next request when keep-alives are enabled. If IdleTimeout
+	// is zero, the value of ReadTimeout is used. If both are
+	// zero, ReadHeaderTimeout is used.
+	IdleTimeout time.Duration `hcl:"idle,optional" toml:"idle,optional"`
 }
 
 type GpoConfig struct {
@@ -364,6 +391,9 @@ type CacheConfig struct {
 
 	// TxLookupLimit sets the maximum number of blocks from head whose tx indices are reserved.
 	TxLookupLimit uint64 `hcl:"txlookuplimit,optional" toml:"txlookuplimit,optional"`
+
+	// Time after which the Merkle Patricia Trie is stored to disc from memory
+	TrieTimeout time.Duration `hcl:"timeout,optional" toml:"timeout,optional"`
 }
 
 type AccountsConfig struct {
@@ -476,6 +506,11 @@ func DefaultConfig() *Config {
 				Cors:    []string{"localhost"},
 				VHost:   []string{"localhost"},
 			},
+			HttpTimeout: &HttpTimeouts{
+				ReadTimeout:  30 * time.Second,
+				WriteTimeout: 30 * time.Second,
+				IdleTimeout:  120 * time.Second,
+			},
 		},
 		Ethstats: "",
 		Telemetry: &TelemetryConfig{
@@ -507,6 +542,7 @@ func DefaultConfig() *Config {
 			NoPrefetch:    false,
 			Preimages:     false,
 			TxLookupLimit: 2350000,
+			TrieTimeout:   60 * time.Minute,
 		},
 		Accounts: &AccountsConfig{
 			Unlock:              []string{},
@@ -826,6 +862,7 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 		n.NoPrefetch = c.Cache.NoPrefetch
 		n.Preimages = c.Cache.Preimages
 		n.TxLookupLimit = c.Cache.TxLookupLimit
+		n.TrieTimeout = c.Cache.TrieTimeout
 	}
 
 	n.RPCGasCap = c.JsonRPC.GasCap
@@ -920,6 +957,11 @@ func (c *Config) buildNode() (*node.Config, error) {
 		WSPathPrefix:        c.JsonRPC.Ws.Prefix,
 		GraphQLCors:         c.JsonRPC.Graphql.Cors,
 		GraphQLVirtualHosts: c.JsonRPC.Graphql.VHost,
+		HTTPTimeouts: rpc.HTTPTimeouts{
+			ReadTimeout:  c.JsonRPC.HttpTimeout.ReadTimeout,
+			WriteTimeout: c.JsonRPC.HttpTimeout.WriteTimeout,
+			IdleTimeout:  c.JsonRPC.HttpTimeout.IdleTimeout,
+		},
 	}
 
 	// dev mode
