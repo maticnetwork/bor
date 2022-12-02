@@ -60,7 +60,7 @@ func VerifyPath(path string) (string, error) {
 	}
 }
 
-// VerifyCrasher sanitizes the path to avoid Path Traversal vulnerability and read the file from that path, returning its content
+// VerifyCrasher sanitizes the path to avoid Path Traversal vulnerability and reads the file from that path, returning its content
 func VerifyCrasher(crasher string) []byte {
 	canonicalPath, err := VerifyPath(crasher)
 	if err != nil {
