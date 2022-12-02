@@ -59,3 +59,20 @@ func VerifyPath(path string) (string, error) {
 		return r, nil
 	}
 }
+
+// VerifyCrasher sanitizes the path to avoid Path Traversal vulnerability and read the file from that path, returning its content
+func VerifyCrasher(crasher string) []byte {
+	canonicalPath, err := VerifyPath(crasher)
+	if err != nil {
+		fmt.Println("path not verified: " + err.Error())
+		return nil
+	}
+
+	data, err := os.ReadFile(canonicalPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error loading crasher %v: %v", canonicalPath, err)
+		os.Exit(1)
+	}
+
+	return data
+}
