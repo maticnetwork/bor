@@ -280,19 +280,22 @@ type HttpTimeouts struct {
 	// decisions on each request body's acceptable deadline or
 	// upload rate, most users will prefer to use
 	// ReadHeaderTimeout. It is valid to use them both.
-	ReadTimeout time.Duration `hcl:"read,optional" toml:"read,optional"`
+	ReadTimeout    time.Duration `hcl:"-,optional" toml:"-"`
+	ReadTimeoutRaw string        `hcl:"read,optional" toml:"read,optional"`
 
 	// WriteTimeout is the maximum duration before timing out
 	// writes of the response. It is reset whenever a new
 	// request's header is read. Like ReadTimeout, it does not
 	// let Handlers make decisions on a per-request basis.
-	WriteTimeout time.Duration `hcl:"write,optional" toml:"write,optional"`
+	WriteTimeout    time.Duration `hcl:"-,optional" toml:"-"`
+	WriteTimeoutRaw string        `hcl:"write,optional" toml:"write,optional"`
 
 	// IdleTimeout is the maximum amount of time to wait for the
 	// next request when keep-alives are enabled. If IdleTimeout
 	// is zero, the value of ReadTimeout is used. If both are
 	// zero, ReadHeaderTimeout is used.
-	IdleTimeout time.Duration `hcl:"idle,optional" toml:"idle,optional"`
+	IdleTimeout    time.Duration `hcl:"-,optional" toml:"-"`
+	IdleTimeoutRaw string        `hcl:"idle,optional" toml:"idle,optional"`
 }
 
 type GpoConfig struct {
@@ -393,7 +396,8 @@ type CacheConfig struct {
 	TxLookupLimit uint64 `hcl:"txlookuplimit,optional" toml:"txlookuplimit,optional"`
 
 	// Time after which the Merkle Patricia Trie is stored to disc from memory
-	TrieTimeout time.Duration `hcl:"timeout,optional" toml:"timeout,optional"`
+	TrieTimeout    time.Duration `hcl:"-,optional" toml:"-"`
+	TrieTimeoutRaw string        `hcl:"timeout,optional" toml:"timeout,optional"`
 }
 
 type AccountsConfig struct {
@@ -602,9 +606,13 @@ func (c *Config) fillTimeDurations() error {
 		td   *time.Duration
 		str  *string
 	}{
+		{"jsonrpc.timeouts.read", &c.JsonRPC.HttpTimeout.ReadTimeout, &c.JsonRPC.HttpTimeout.ReadTimeoutRaw},
+		{"jsonrpc.timeouts.write", &c.JsonRPC.HttpTimeout.WriteTimeout, &c.JsonRPC.HttpTimeout.WriteTimeoutRaw},
+		{"jsonrpc.timeouts.idle", &c.JsonRPC.HttpTimeout.IdleTimeout, &c.JsonRPC.HttpTimeout.IdleTimeoutRaw},
 		{"txpool.lifetime", &c.TxPool.LifeTime, &c.TxPool.LifeTimeRaw},
 		{"txpool.rejournal", &c.TxPool.Rejournal, &c.TxPool.RejournalRaw},
 		{"cache.rejournal", &c.Cache.Rejournal, &c.Cache.RejournalRaw},
+		{"cache.timeout", &c.Cache.TrieTimeout, &c.Cache.TrieTimeoutRaw},
 	}
 
 	for _, x := range tds {
