@@ -85,6 +85,10 @@ ethstats = ""                # Reporting URL of a ethstats service (nodename:sec
     host = ""                   # 
     vhosts = ["localhost"]      # Comma separated list of virtual hostnames from which to accept requests (server enforced). Accepts '*' wildcard.
     corsdomain = ["localhost"]  # Comma separated list of domains from which to accept cross origin requests (browser enforced)
+  [jsonrpc.timeouts]
+    read = "30s"
+    write = "30s"
+    idle = "2m0s"
 
 [gpo]
   blocks = 20                 # Number of recent blocks to check for gas prices
