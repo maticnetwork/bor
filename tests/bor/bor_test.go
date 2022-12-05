@@ -101,6 +101,11 @@ func TestFetchStateSyncEvents(t *testing.T) {
 	h := mocks.NewMockIHeimdallClient(ctrl)
 	h.EXPECT().Close().AnyTimes()
 	h.EXPECT().Span(uint64(1)).Return(&res.Result, nil).AnyTimes()
+	h.EXPECT().FetchLatestCheckpoint().Return(&checkpoint.Checkpoint{
+		StartBlock: big.NewInt(1),
+		EndBlock:   big.NewInt(2),
+		RootHash:   common.Hash{},
+	}, nil).AnyTimes()
 
 	// B.2 Mock State Sync events
 	fromID := uint64(1)
