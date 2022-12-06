@@ -75,6 +75,22 @@ func BuildDAG(deps TxnInputOutput) (d DAG) {
 	return
 }
 
+func depsHelper(dependencies map[int]map[int]bool, txFrom TxnOutput, txTo TxnInput, i int, j int) map[int]map[int]bool {
+	if HasReadDep(txFrom, txTo) {
+		dependencies[i][j] = true
+
+		for k := range dependencies[i] {
+			_, foundDep := dependencies[j][k]
+
+			if foundDep {
+				delete(dependencies[i], k)
+			}
+		}
+	}
+
+	return dependencies
+}
+
 func UpdateDeps(deps map[int]map[int]bool, t DepsChan) map[int]map[int]bool {
 	txTo := t.ReadList
 
@@ -83,17 +99,7 @@ func UpdateDeps(deps map[int]map[int]bool, t DepsChan) map[int]map[int]bool {
 	for j := 0; j <= t.Index-1; j++ {
 		txFrom := t.FullWriteList[j]
 
-		if HasReadDep(txFrom, txTo) {
-			deps[t.Index][j] = true
-
-			for k := range deps[t.Index] {
-				_, foundDep := deps[j][k]
-
-				if foundDep {
-					delete(deps[t.Index], k)
-				}
-			}
-		}
+		deps = depsHelper(deps, txFrom, txTo, t.Index, j)
 	}
 
 	return deps
@@ -110,17 +116,7 @@ func GetDep(deps TxnInputOutput) map[int]map[int]bool {
 		for j := 0; j <= i-1; j++ {
 			txFrom := deps.allOutputs[j]
 
-			if HasReadDep(txFrom, txTo) {
-				newDependencies[i][j] = true
-
-				for k := range newDependencies[i] {
-					_, foundDep := newDependencies[j][k]
-
-					if foundDep {
-						delete(newDependencies[i], k)
-					}
-				}
-			}
+			newDependencies = depsHelper(newDependencies, txFrom, txTo, i, j)
 		}
 	}
 
