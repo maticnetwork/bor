@@ -85,8 +85,6 @@ require (
 	pgregory.net/rapid v0.4.8
 )
 
-require github.com/btcsuite/btcd v0.22.0-beta // indirect
-
 require (
 	cloud.google.com/go v0.65.0 // indirect
 	cloud.google.com/go/pubsub v1.3.1 // indirect
@@ -112,6 +110,7 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bgentry/speakeasy v0.1.0 // indirect
 	github.com/bradfitz/gomemcache v0.0.0-20190913173617-a41fca850d0b // indirect
+	github.com/btcsuite/btcd v0.22.0-beta // indirect
 	github.com/btcsuite/btcutil v1.0.3-0.20201208143702-a53e38424cce // indirect
 	github.com/cbergoon/merkletree v0.2.0 // indirect
 	github.com/cenkalti/backoff/v4 v4.1.1 // indirect
@@ -222,4 +221,3 @@ replace github.com/Masterminds/goutils => github.com/Masterminds/goutils v1.1.1
 replace github.com/btcsuite/btcd => ./vendor_local/btcd
 
 replace github.com/btcsuite/btcd/chaincfg/chainhash => ./vendor_local/btcd/chaincfg/chainhash
-
