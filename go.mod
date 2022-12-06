@@ -216,8 +216,10 @@ replace github.com/tendermint/tendermint => github.com/maticnetwork/tendermint v
 
 replace github.com/ethereum/go-ethereum => github.com/maticnetwork/bor v0.2.18-0.20220922050621-c91d4ca1fa4f
 
-replace github.com/btcsuite/btcd => ./vendor/btcd
-
-replace github.com/btcsuite/btcd/chaincfg/chainhash => ./vendor/btcd/chaincfg/chainhash
-
 replace github.com/Masterminds/goutils => github.com/Masterminds/goutils v1.1.1
+
+// we use vendored github.com/btcsuite/btcd@v0.22.0-beta to resolve ambiguous import of github.com/btcsuite/btcd/chaincfg/chainhash
+replace github.com/btcsuite/btcd => ./vendor_local/btcd
+
+replace github.com/btcsuite/btcd/chaincfg/chainhash => ./vendor_local/btcd/chaincfg/chainhash
+
