@@ -72,7 +72,7 @@ require (
 	golang.org/x/crypto v0.0.0-20220507011949-2cf3adece122
 	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4
 	golang.org/x/sys v0.0.0-20220818161305-2296e01440c6
-	golang.org/x/text v0.3.7
+	golang.org/x/text v0.3.8
 	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac
 	golang.org/x/tools v0.1.12
 	gonum.org/v1/gonum v0.11.0
@@ -218,4 +218,4 @@ replace github.com/tendermint/tendermint => github.com/maticnetwork/tendermint v
 
 replace github.com/ethereum/go-ethereum => github.com/maticnetwork/bor v0.2.18-0.20220922050621-c91d4ca1fa4f
 
-replace github.com/btcsuite/btcd/chaincfg/chainhash => github.com/btcsuite/btcd/chaincfg/chainhash v1.0.1
+replace github.com/Masterminds/goutils => github.com/Masterminds/goutils v1.1.1
