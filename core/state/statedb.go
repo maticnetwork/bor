@@ -179,6 +179,10 @@ func (sdb *StateDB) SetMVHashmap(mvhm *blockstm.MVHashMap) {
 	sdb.dep = -1
 }
 
+func (sdb *StateDB) GetMVHashmap() *blockstm.MVHashMap {
+	return sdb.mvHashmap
+}
+
 func (s *StateDB) MVWriteList() []blockstm.WriteDescriptor {
 	writes := make([]blockstm.WriteDescriptor, 0, len(s.writeMap))
 
