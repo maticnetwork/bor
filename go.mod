@@ -219,9 +219,11 @@ replace github.com/Masterminds/goutils => github.com/Masterminds/goutils v1.1.1
 
 // we use vendored github.com/btcsuite/btcd@v0.22.0-beta to resolve ambiguous import of github.com/btcsuite/btcd/chaincfg/chainhash
 replace github.com/btcsuite/btcd/btcec => ./vendor_local/btcec // v2.1.2
+
 replace github.com/btcsuite/btcd/btcec/v2 => ./vendor_local/btcec // v2.1.2
+
 replace github.com/btcsuite/btcd/btcec/v2/ecdsa => ./vendor_local/btcec/ecdsa // v2.1.2
 
-replace github.com/btcsuite/btcd => ./vendor_local/btcd
+replace github.com/btcsuite/btcd@v0.22.0-beta => ./vendor_local/btcd
 
 replace github.com/btcsuite/btcd/chaincfg/chainhash => ./vendor_local/btcd/chaincfg/chainhash
