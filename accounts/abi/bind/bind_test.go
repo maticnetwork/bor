@@ -2022,6 +2022,15 @@ func TestGolangBindings(t *testing.T) {
 	if out, err := replacer.CombinedOutput(); err != nil {
 		t.Fatalf("failed to replace binding test dependency to current source tree: %v\n%s", err, out)
 	}
+
+	// Delete ambigious imports
+	remove := exec.Command("rm", "-Rdf", "/home/runner/go/pkg/mod/github.com/btcsuite/btcd@v0.22.0-beta/chaincfg/chainhash")
+	remove.Dir = pkg
+
+	if out, err := remove.CombinedOutput(); err != nil {
+		t.Fatalf("failed to remove ambigious imports: %v\n%s", err, out)
+	}
+
 	tidier := exec.Command(gocmd, "mod", "tidy")
 	tidier.Dir = pkg
 	if out, err := tidier.CombinedOutput(); err != nil {
