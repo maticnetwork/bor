@@ -44,9 +44,37 @@ type ParallelStateProcessor struct {
 	engine consensus.Engine    // Consensus engine used for block rewards
 }
 
+type ParallelStateProcessorProfile struct {
+	config *params.ChainConfig // Chain configuration options
+	bc     *BlockChain         // Canonical block chain
+	engine consensus.Engine    // Consensus engine used for block rewards
+}
+
+type ParallelStateProcessorUse struct {
+	config *params.ChainConfig // Chain configuration options
+	bc     *BlockChain         // Canonical block chain
+	engine consensus.Engine    // Consensus engine used for block rewards
+}
+
 // NewStateProcessor initialises a new StateProcessor.
 func NewParallelStateProcessor(config *params.ChainConfig, bc *BlockChain, engine consensus.Engine) *ParallelStateProcessor {
 	return &ParallelStateProcessor{
+		config: config,
+		bc:     bc,
+		engine: engine,
+	}
+}
+
+func NewParallelStateProcessorProfile(config *params.ChainConfig, bc *BlockChain, engine consensus.Engine) *ParallelStateProcessorProfile {
+	return &ParallelStateProcessorProfile{
+		config: config,
+		bc:     bc,
+		engine: engine,
+	}
+}
+
+func NewParallelStateProcessorUse(config *params.ChainConfig, bc *BlockChain, engine consensus.Engine) *ParallelStateProcessorUse {
+	return &ParallelStateProcessorUse{
 		config: config,
 		bc:     bc,
 		engine: engine,
@@ -297,6 +325,371 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 	if block.Header().TxDependency != nil {
 		metadata = true
 	}
+
+	for _, j := range delayMap {
+		if !j {
+			log.Info("BlockSTM", "Dependencies deps", deps)
+			log.Info("BlockSTM", "Dependencies delayMap", delayMap)
+			log.Info("Going Serial", "!j", !j)
+			pSeral := NewStateProcessor(p.config, p.bc, p.engine)
+			return pSeral.Process(block, statedb, cfg)
+		}
+	}
+
+	log.Info("BlockSTM", "Dependencies deps", deps)
+	log.Info("BlockSTM", "Dependencies delayMap", delayMap)
+
+	// Iterate over and process the individual transactions
+	//
+
+	blockContext := NewEVMBlockContext(header, p.bc, nil)
+	// p.bc.Engine().Author(header)
+	for i, tx := range block.Transactions() {
+		msg, err := tx.AsMessage(types.MakeSigner(p.config, header.Number), header.BaseFee)
+		if err != nil {
+			log.Error("error creating message", "err", err)
+			return nil, nil, 0, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
+		}
+
+		cleansdb := statedb.Copy()
+
+		if len(header.TxDependency) > 0 {
+			shouldDelayFeeCal = delayMap[i]
+
+			task := &ExecutionTask{
+				msg:               msg,
+				config:            p.config,
+				gasLimit:          block.GasLimit(),
+				blockNumber:       blockNumber,
+				blockHash:         blockHash,
+				tx:                tx,
+				index:             i,
+				cleanStateDB:      cleansdb,
+				finalStateDB:      statedb,
+				blockChain:        p.bc,
+				header:            header,
+				evmConfig:         cfg,
+				shouldDelayFeeCal: &shouldDelayFeeCal,
+				sender:            msg.From(),
+				totalUsedGas:      usedGas,
+				receipts:          &receipts,
+				allLogs:           &allLogs,
+				dependencies:      deps[i],
+				blockContext:      blockContext,
+				coinbase:          coinbase,
+			}
+
+			tasks = append(tasks, task)
+		} else {
+			if msg.From() == coinbase {
+				shouldDelayFeeCal = false
+			}
+
+			task := &ExecutionTask{
+				msg:               msg,
+				config:            p.config,
+				gasLimit:          block.GasLimit(),
+				blockNumber:       blockNumber,
+				blockHash:         blockHash,
+				tx:                tx,
+				index:             i,
+				cleanStateDB:      cleansdb,
+				finalStateDB:      statedb,
+				blockChain:        p.bc,
+				header:            header,
+				evmConfig:         cfg,
+				shouldDelayFeeCal: &shouldDelayFeeCal,
+				sender:            msg.From(),
+				totalUsedGas:      usedGas,
+				receipts:          &receipts,
+				allLogs:           &allLogs,
+				dependencies:      nil,
+				blockContext:      blockContext,
+				coinbase:          coinbase,
+			}
+
+			tasks = append(tasks, task)
+		}
+	}
+
+	backupStateDB := statedb.Copy()
+
+	profile := false
+	result, err := blockstm.ExecuteParallel(tasks, false, metadata)
+
+	if err == nil && profile {
+		_, weight := result.Deps.LongestPath(*result.Stats)
+
+		serialWeight := uint64(0)
+
+		for i := 0; i < len(result.Deps.GetVertices()); i++ {
+			serialWeight += (*result.Stats)[i].End - (*result.Stats)[i].Start
+		}
+
+		parallelizabilityTimer.Update(time.Duration(serialWeight * 100 / weight))
+
+		log.Info("Parallelizability", "Average (%)", parallelizabilityTimer.Mean())
+
+		log.Info("Parallelizability", "Histogram (%)", parallelizabilityTimer.Percentiles([]float64{0.001, 0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 0.999, 0.9999}))
+	}
+
+	for _, task := range tasks {
+		task := task.(*ExecutionTask)
+		if task.shouldRerunWithoutFeeDelay {
+			shouldDelayFeeCal = false
+			*statedb = *backupStateDB
+
+			allLogs = []*types.Log{}
+			receipts = types.Receipts{}
+			usedGas = new(uint64)
+
+			for _, t := range tasks {
+				t := t.(*ExecutionTask)
+				t.finalStateDB = backupStateDB
+				t.allLogs = &allLogs
+				t.receipts = &receipts
+				t.totalUsedGas = usedGas
+			}
+
+			_, err = blockstm.ExecuteParallel(tasks, false, metadata)
+
+			break
+		}
+	}
+
+	if err != nil {
+		log.Error("blockstm error executing block", "err", err)
+		return nil, nil, 0, err
+	}
+
+	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
+	p.engine.Finalize(p.bc, header, statedb, block.Transactions(), block.Uncles())
+
+	return receipts, allLogs, *usedGas, nil
+}
+
+func (p *ParallelStateProcessorProfile) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (types.Receipts, []*types.Log, uint64, error) {
+	var (
+		receipts    types.Receipts
+		header      = block.Header()
+		blockHash   = block.Hash()
+		blockNumber = block.Number()
+		allLogs     []*types.Log
+		usedGas     = new(uint64)
+		metadata    bool
+	)
+
+	// Mutate the block and state according to any hard-fork specs
+	if p.config.DAOForkSupport && p.config.DAOForkBlock != nil && p.config.DAOForkBlock.Cmp(block.Number()) == 0 {
+		misc.ApplyDAOHardFork(statedb)
+	}
+
+	tasks := make([]blockstm.ExecTask, 0, len(block.Transactions()))
+
+	shouldDelayFeeCal := true
+
+	coinbase, _ := p.bc.Engine().Author(header)
+
+	deps, delayMap := GetDeps(block.Header().TxDependency)
+
+	if block.Header().TxDependency != nil {
+		metadata = true
+	}
+
+	for _, j := range delayMap {
+		if !j {
+			log.Info("BlockSTM", "Dependencies deps", deps)
+			log.Info("BlockSTM", "Dependencies delayMap", delayMap)
+			log.Info("Going Serial", "!j", !j)
+			pSeral := NewStateProcessor(p.config, p.bc, p.engine)
+			return pSeral.Process(block, statedb, cfg)
+		}
+	}
+
+	log.Info("BlockSTM", "Dependencies deps", deps)
+	log.Info("BlockSTM", "Dependencies delayMap", delayMap)
+
+	// Iterate over and process the individual transactions
+	//
+
+	blockContext := NewEVMBlockContext(header, p.bc, nil)
+	// p.bc.Engine().Author(header)
+	for i, tx := range block.Transactions() {
+		msg, err := tx.AsMessage(types.MakeSigner(p.config, header.Number), header.BaseFee)
+		if err != nil {
+			log.Error("error creating message", "err", err)
+			return nil, nil, 0, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
+		}
+
+		cleansdb := statedb.Copy()
+
+		if len(header.TxDependency) > 0 {
+			shouldDelayFeeCal = delayMap[i]
+
+			task := &ExecutionTask{
+				msg:               msg,
+				config:            p.config,
+				gasLimit:          block.GasLimit(),
+				blockNumber:       blockNumber,
+				blockHash:         blockHash,
+				tx:                tx,
+				index:             i,
+				cleanStateDB:      cleansdb,
+				finalStateDB:      statedb,
+				blockChain:        p.bc,
+				header:            header,
+				evmConfig:         cfg,
+				shouldDelayFeeCal: &shouldDelayFeeCal,
+				sender:            msg.From(),
+				totalUsedGas:      usedGas,
+				receipts:          &receipts,
+				allLogs:           &allLogs,
+				dependencies:      deps[i],
+				blockContext:      blockContext,
+				coinbase:          coinbase,
+			}
+
+			tasks = append(tasks, task)
+		} else {
+			if msg.From() == coinbase {
+				shouldDelayFeeCal = false
+			}
+
+			task := &ExecutionTask{
+				msg:               msg,
+				config:            p.config,
+				gasLimit:          block.GasLimit(),
+				blockNumber:       blockNumber,
+				blockHash:         blockHash,
+				tx:                tx,
+				index:             i,
+				cleanStateDB:      cleansdb,
+				finalStateDB:      statedb,
+				blockChain:        p.bc,
+				header:            header,
+				evmConfig:         cfg,
+				shouldDelayFeeCal: &shouldDelayFeeCal,
+				sender:            msg.From(),
+				totalUsedGas:      usedGas,
+				receipts:          &receipts,
+				allLogs:           &allLogs,
+				dependencies:      nil,
+				blockContext:      blockContext,
+				coinbase:          coinbase,
+			}
+
+			tasks = append(tasks, task)
+		}
+	}
+
+	backupStateDB := statedb.Copy()
+
+	profile := false
+	result, err := blockstm.ExecuteParallel(tasks, true, metadata)
+
+	if err == nil && profile {
+		_, weight := result.Deps.LongestPath(*result.Stats)
+
+		serialWeight := uint64(0)
+
+		for i := 0; i < len(result.Deps.GetVertices()); i++ {
+			serialWeight += (*result.Stats)[i].End - (*result.Stats)[i].Start
+		}
+
+		parallelizabilityTimer.Update(time.Duration(serialWeight * 100 / weight))
+
+		log.Info("Parallelizability", "Average (%)", parallelizabilityTimer.Mean())
+
+		log.Info("Parallelizability", "Histogram (%)", parallelizabilityTimer.Percentiles([]float64{0.001, 0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 0.999, 0.9999}))
+	}
+
+	for _, task := range tasks {
+		task := task.(*ExecutionTask)
+		if task.shouldRerunWithoutFeeDelay {
+			shouldDelayFeeCal = false
+			*statedb = *backupStateDB
+
+			allLogs = []*types.Log{}
+			receipts = types.Receipts{}
+			usedGas = new(uint64)
+
+			for _, t := range tasks {
+				t := t.(*ExecutionTask)
+				t.finalStateDB = backupStateDB
+				t.allLogs = &allLogs
+				t.receipts = &receipts
+				t.totalUsedGas = usedGas
+			}
+
+			result, err = blockstm.ExecuteParallel(tasks, true, metadata)
+
+			break
+		}
+	}
+
+	if err != nil {
+		log.Error("blockstm error executing block", "err", err)
+		return nil, nil, 0, err
+	}
+
+	tempDeps := make([][]uint64, len(tasks))
+
+	for i := 0; i <= len(tasks)-1; i++ {
+		tempDeps[i] = []uint64{uint64(i), 1}
+
+		for j := range result.AllDeps[i] {
+			tempDeps[i] = append(tempDeps[i], uint64(j))
+		}
+	}
+
+	block.HeaderWithoutCopy().TxDependency = tempDeps
+
+	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
+	p.engine.Finalize(p.bc, header, statedb, block.Transactions(), block.Uncles())
+
+	return receipts, allLogs, *usedGas, nil
+}
+
+func (p *ParallelStateProcessorUse) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config) (types.Receipts, []*types.Log, uint64, error) {
+	var (
+		receipts    types.Receipts
+		header      = block.Header()
+		blockHash   = block.Hash()
+		blockNumber = block.Number()
+		allLogs     []*types.Log
+		usedGas     = new(uint64)
+		metadata    bool
+	)
+
+	// Mutate the block and state according to any hard-fork specs
+	if p.config.DAOForkSupport && p.config.DAOForkBlock != nil && p.config.DAOForkBlock.Cmp(block.Number()) == 0 {
+		misc.ApplyDAOHardFork(statedb)
+	}
+
+	tasks := make([]blockstm.ExecTask, 0, len(block.Transactions()))
+
+	shouldDelayFeeCal := true
+
+	coinbase, _ := p.bc.Engine().Author(header)
+
+	deps, delayMap := GetDeps(block.Header().TxDependency)
+
+	if block.Header().TxDependency != nil {
+		metadata = true
+	}
+
+	for _, j := range delayMap {
+		if !j {
+			log.Info("BlockSTM", "Dependencies deps", deps)
+			log.Info("BlockSTM", "Dependencies delayMap", delayMap)
+			log.Info("Going Serial", "!j", !j)
+			pSeral := NewStateProcessor(p.config, p.bc, p.engine)
+			return pSeral.Process(block, statedb, cfg)
+		}
+	}
+
+	log.Info("BlockSTM", "Dependencies deps", deps)
+	log.Info("BlockSTM", "Dependencies delayMap", delayMap)
 
 	// Iterate over and process the individual transactions
 	//
