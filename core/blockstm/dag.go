@@ -14,7 +14,7 @@ type DAG struct {
 	*dag.DAG
 }
 
-type DepsChan struct {
+type TxDep struct {
 	Index         int
 	ReadList      []ReadDescriptor
 	FullWriteList [][]WriteDescriptor
@@ -91,7 +91,7 @@ func depsHelper(dependencies map[int]map[int]bool, txFrom TxnOutput, txTo TxnInp
 	return dependencies
 }
 
-func UpdateDeps(deps map[int]map[int]bool, t DepsChan) map[int]map[int]bool {
+func UpdateDeps(deps map[int]map[int]bool, t TxDep) map[int]map[int]bool {
 	txTo := t.ReadList
 
 	deps[t.Index] = map[int]bool{}

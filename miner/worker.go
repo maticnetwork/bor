@@ -83,6 +83,7 @@ const (
 	// staleThreshold is the maximum depth of the acceptable stale block.
 	staleThreshold = 7
 
+	// TODO: will be handled (and made mandatory) in a hardfork event
 	// when true, will get the transaction dependencies for parallel execution, also set in `state_processor.go`
 	EnableMVHashMap = true
 )
@@ -930,7 +931,7 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 
 	var deps map[int]map[int]bool
 
-	chDeps := make(chan blockstm.DepsChan)
+	chDeps := make(chan blockstm.TxDep)
 
 	var count int
 
@@ -946,13 +947,13 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 
 		deps = map[int]map[int]bool{}
 
-		chDeps = make(chan blockstm.DepsChan)
+		chDeps = make(chan blockstm.TxDep)
 
 		count = 0
 
 		depsWg.Add(1)
 
-		go func(chDeps chan blockstm.DepsChan) {
+		go func(chDeps chan blockstm.TxDep) {
 			for t := range chDeps {
 				deps = blockstm.UpdateDeps(deps, t)
 			}
@@ -1039,7 +1040,7 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 				depsMVFullWriteList = append(depsMVFullWriteList, env.state.MVFullWriteList())
 				mvReadMapList = append(mvReadMapList, env.state.MVReadMap())
 
-				temp := blockstm.DepsChan{
+				temp := blockstm.TxDep{
 					Index:         env.tcount - 1,
 					ReadList:      depsMVReadList[count],
 					FullWriteList: depsMVFullWriteList,

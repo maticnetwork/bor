@@ -182,8 +182,6 @@ func (task *ExecutionTask) Settle() {
 
 	task.finalStateDB.Prepare(task.tx.Hash(), task.index)
 
-	// coinbase, _ := task.blockChain.Engine().Author(task.header)
-
 	coinbaseBalance := task.finalStateDB.GetBalance(task.coinbase)
 
 	task.finalStateDB.ApplyMVWriteSet(task.statedb.MVWriteList())
@@ -298,11 +296,9 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 		metadata = true
 	}
 
-	// Iterate over and process the individual transactions
-	//
-
 	blockContext := NewEVMBlockContext(header, p.bc, nil)
-	// p.bc.Engine().Author(header)
+
+	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
 		msg, err := tx.AsMessage(types.MakeSigner(p.config, header.Number), header.BaseFee)
 		if err != nil {
@@ -427,29 +423,6 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 	return receipts, allLogs, *usedGas, nil
 }
 
-func GetDepListForTx(txDependency [][]uint64, txIdx int) []int {
-	if len(txDependency) == 1 && (txDependency[0][0] == uint64(0) && txDependency[0][1] == uint64(1)) {
-		return []int{txIdx, 1}
-	}
-
-	tempArr := []int{}
-	tempIdx := -1
-
-	for ind, val := range txDependency {
-		if int(val[0]) == txIdx {
-			tempIdx = ind
-			break
-		}
-	}
-
-	for i := 0; i < len(txDependency[tempIdx]); i++ {
-		tempArr = append(tempArr, int(txDependency[tempIdx][i]))
-	}
-
-	return tempArr
-}
-
-// Jerry's function
 func GetDeps(txDependency [][]uint64) (map[int][]int, map[int]bool) {
 	deps := make(map[int][]int)
 	delayMap := make(map[int]bool)
