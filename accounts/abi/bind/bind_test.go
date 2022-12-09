@@ -2024,7 +2024,7 @@ func TestGolangBindings(t *testing.T) {
 		t.Fatalf("failed to replace binding test dependency to current source tree: %v\n%s", err, out)
 	}
 
-	replacer = exec.Command(gocmd, "mod", "edit", "-x", "-replace", "github.com/btcsuite/btcd/chaincfg/chainhash="+"github.com/btcsuite/btcd@v0.22.0-beta")
+	replacer = exec.Command(gocmd, "mod", "edit", "-x", "-replace", "github.com/btcsuite/btcd/chaincfg/chainhash="+"github.com/btcsuite/btcd/chaincfg/chainhash@v1.0.0")
 	replacer.Dir = pkg
 
 	if out, err := replacer.CombinedOutput(); err != nil {
