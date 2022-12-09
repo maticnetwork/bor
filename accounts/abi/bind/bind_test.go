@@ -2024,26 +2024,34 @@ func TestGolangBindings(t *testing.T) {
 		t.Fatalf("failed to replace binding test dependency to current source tree: %v\n%s", err, out)
 	}
 
-	replacer = exec.Command(gocmd, "mod", "edit", "-x", "-require", "github.com/cosmos/cosmos-sdk@v0.37.4", "-replace", "github.com/cosmos/cosmos-sdk="+"github.com/maticnetwork/cosmos-sdk@v0.37.5-0.20220311095845-81690c6a53e7") // Repo root
+	replacer = exec.Command(gocmd, "mod", "edit", "-x", "-require", "github.com/cosmos/cosmos-sdk@v0.37.4", "-replace", "github.com/cosmos/cosmos-sdk="+"github.com/maticnetwork/cosmos-sdk@v0.37.5-0.20220311095845-81690c6a53e7")
 	replacer.Dir = pkg
 
 	if out, err := replacer.CombinedOutput(); err != nil {
 		t.Fatalf("failed to replace binding test dependency to current source tree: %v\n%s", err, out)
 	}
 
-	replacer = exec.Command(gocmd, "mod", "edit", "-x", "-require", "github.com/tendermint/tendermint@v0.32.7", "-replace", "github.com/tendermint/tendermint="+"github.com/maticnetwork/tendermint@v0.26.0-dev0.0.20220923185258-3e7c7f86ce9f") // Repo root
+	replacer = exec.Command(gocmd, "mod", "edit", "-x", "-require", "github.com/tendermint/tendermint@v0.32.7", "-replace", "github.com/tendermint/tendermint="+"github.com/maticnetwork/tendermint@v0.26.0-dev0.0.20220923185258-3e7c7f86ce9f")
 	replacer.Dir = pkg
 
 	if out, err := replacer.CombinedOutput(); err != nil {
 		t.Fatalf("failed to replace binding test dependency to current source tree: %v\n%s", err, out)
 	}
 
-	replacer = exec.Command(gocmd, "mod", "edit", "-x", "-require", "github.com/Masterminds/goutils@v1.1.0", "-replace", "github.com/Masterminds/goutils="+"github.com/Masterminds/goutils@v1.1.1") // Repo root
+	replacer = exec.Command(gocmd, "mod", "edit", "-x", "-require", "github.com/Masterminds/goutils@v1.1.0", "-replace", "github.com/Masterminds/goutils="+"github.com/Masterminds/goutils@v1.1.1")
 	replacer.Dir = pkg
 
 	if out, err := replacer.CombinedOutput(); err != nil {
 		t.Fatalf("failed to replace binding test dependency to current source tree: %v\n%s", err, out)
 	}
+
+	replacer = exec.Command(gocmd, "mod", "edit", "-x", "-replace", "github.com/btcsuite/btcd/chaincfg/chainhash="+"github.com/btcsuite/btcd/chaincfg/chainhash@v1.0.1")
+	replacer.Dir = pkg
+
+	if out, err := replacer.CombinedOutput(); err != nil {
+		t.Fatalf("failed to replace binding test dependency to current source tree: %v\n%s", err, out)
+	}
+
 	tidier := exec.Command(gocmd, "mod", "tidy")
 	tidier.Dir = pkg
 	if out, err := tidier.CombinedOutput(); err != nil {
