@@ -2019,6 +2019,28 @@ func TestGolangBindings(t *testing.T) {
 	pwd, _ := os.Getwd()
 	replacer := exec.Command(gocmd, "mod", "edit", "-x", "-require", "github.com/ethereum/go-ethereum@v0.0.0", "-replace", "github.com/ethereum/go-ethereum="+filepath.Join(pwd, "..", "..", "..")) // Repo root
 	replacer.Dir = pkg
+
+	if out, err := replacer.CombinedOutput(); err != nil {
+		t.Fatalf("failed to replace binding test dependency to current source tree: %v\n%s", err, out)
+	}
+
+	replacer = exec.Command(gocmd, "mod", "edit", "-x", "-require", "github.com/cosmos/cosmos-sdk@v0.37.4", "-replace", "github.com/cosmos/cosmos-sdk="+"github.com/maticnetwork/cosmos-sdk@v0.37.5-0.20220311095845-81690c6a53e7") // Repo root
+	replacer.Dir = pkg
+
+	if out, err := replacer.CombinedOutput(); err != nil {
+		t.Fatalf("failed to replace binding test dependency to current source tree: %v\n%s", err, out)
+	}
+
+	replacer = exec.Command(gocmd, "mod", "edit", "-x", "-require", "github.com/tendermint/tendermint@v0.32.7", "-replace", "github.com/tendermint/tendermint="+"github.com/maticnetwork/tendermint@v0.26.0-dev0.0.20220923185258-3e7c7f86ce9f") // Repo root
+	replacer.Dir = pkg
+
+	if out, err := replacer.CombinedOutput(); err != nil {
+		t.Fatalf("failed to replace binding test dependency to current source tree: %v\n%s", err, out)
+	}
+
+	replacer = exec.Command(gocmd, "mod", "edit", "-x", "-require", "github.com/Masterminds/goutils@v1.1.0", "-replace", "github.com/Masterminds/goutils="+"github.com/Masterminds/goutils@v1.1.1") // Repo root
+	replacer.Dir = pkg
+
 	if out, err := replacer.CombinedOutput(); err != nil {
 		t.Fatalf("failed to replace binding test dependency to current source tree: %v\n%s", err, out)
 	}
