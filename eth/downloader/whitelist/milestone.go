@@ -18,6 +18,15 @@ type milestone struct {
 
 }
 
+type milestoneService interface {
+	finalityService
+	GetMilestoneIDsList() []string
+	RemoveMilestoneID(milestoneId string)
+	LockMutex(endBlockNum uint64) bool
+	UnlockMutex(doLock bool, milestoneId string, endBlockHash common.Hash)
+	UnlockSprint(endBlockNum uint64)
+}
+
 // IsValidChain checks the validity of chain by comparing it
 // against the local milestone entries
 func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Header) bool {
@@ -82,6 +91,8 @@ func (m *milestone) UnlockMutex(doLock bool, milestoneId string, endBlockHash co
 		m.LockedMilestoneIDs[milestoneId] = struct{}{}
 	}
 
+	rawdb.WriteLockField(m.db, m.Locked, m.LockedSprintNumber, m.LockedSprintHash, m.LockedMilestoneIDs)
+
 	m.finality.Unlock()
 }
 
@@ -93,6 +104,7 @@ func (m *milestone) UnlockSprint(endBlockNum uint64) {
 
 	m.Locked = false
 	m.purgeMilestoneIDsList()
+	rawdb.WriteLockField(m.db, m.Locked, m.LockedSprintNumber, m.LockedSprintHash, m.LockedMilestoneIDs)
 }
 
 // This function will remove the stored milestoneID
@@ -104,6 +116,8 @@ func (m *milestone) RemoveMilestoneID(milestoneId string) {
 	if len(m.LockedMilestoneIDs) == 0 {
 		m.Locked = false
 	}
+
+	rawdb.WriteLockField(m.db, m.Locked, m.LockedSprintNumber, m.LockedSprintHash, m.LockedMilestoneIDs)
 
 	m.finality.Unlock()
 }
@@ -142,4 +156,8 @@ func (m *milestone) GetMilestoneIDsList() []string {
 // This is remove the milestoneIDs stored in the list.
 func (m *milestone) purgeMilestoneIDsList() {
 	m.LockedMilestoneIDs = make(map[string]struct{})
+}
+
+func (m *milestone) block() (uint64, common.Hash) {
+	return m.Number, m.Hash
 }

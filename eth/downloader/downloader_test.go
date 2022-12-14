@@ -83,7 +83,7 @@ func newTester() *downloadTester {
 	}
 
 	//nolint: staticcheck
-	tester.downloader = New(0, db, new(event.TypeMux), tester.chain, nil, tester.dropPeer, nil, whitelist.NewService())
+	tester.downloader = New(0, db, new(event.TypeMux), tester.chain, nil, tester.dropPeer, nil, whitelist.NewService(db))
 
 	return tester
 }

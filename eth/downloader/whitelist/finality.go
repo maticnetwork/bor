@@ -1,6 +1,7 @@
 package whitelist
 
 import (
+	"fmt"
 	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -9,13 +10,21 @@ import (
 	"github.com/ethereum/go-ethereum/ethdb"
 )
 
-type finality[T rawdb.BlockFinality] struct {
+type finality[T rawdb.BlockFinality[T]] struct {
 	sync.RWMutex
 	db       ethdb.Database
 	Hash     common.Hash // Whitelisted Hash, populated by reaching out to heimdall
 	Number   uint64      // Number , populated by reaching out to heimdall
 	interval uint64      // Interval, until which we can allow importing
 	doExist  bool
+}
+
+type finalityService interface {
+	IsValidPeer(remoteHeader *types.Header, fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error)
+	IsValidChain(currentHeader *types.Header, chain []*types.Header) bool
+	Get() (bool, uint64, common.Hash)
+	Process(block uint64, hash common.Hash)
+	Purge()
 }
 
 // IsValidPeer checks if the chain we're about to receive from a peer is valid or not
@@ -63,12 +72,13 @@ func (f *finality[T]) Get() (bool, uint64, common.Hash) {
 		return f.doExist, f.Number, f.Hash
 	}
 
-	checkpoint, err := rawdb.ReadFinality[*rawdb.Checkpoint](f.db)
+	block, hash, err := rawdb.ReadFinality[T](f.db)
 	if err != nil {
+		fmt.Println("XXX-111", err)
 		return false, f.Number, f.Hash
 	}
 
-	return true, checkpoint.Block, checkpoint.Hash
+	return true, block, hash
 }
 
 // Purge purges the whitlisted checkpoint
@@ -77,4 +87,8 @@ func (f *finality[T]) Purge() {
 	defer f.Unlock()
 
 	f.doExist = false
+}
+
+func (f *finality[T]) block() (uint64, common.Hash) {
+	return f.Number, f.Hash
 }

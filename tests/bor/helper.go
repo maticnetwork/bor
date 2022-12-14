@@ -427,23 +427,3 @@ func InitMiner(genesis *core.Genesis, privKey *ecdsa.PrivateKey, withoutHeimdall
 	err = stack.Start()
 	return stack, ethBackend, err
 }
-
-func InitGenesis(t *testing.T, faucets []*ecdsa.PrivateKey, fileLocation string) *core.Genesis {
-
-	// sprint size = 8 in genesis
-	genesisData, err := ioutil.ReadFile(fileLocation)
-	if err != nil {
-		t.Fatalf("%s", err)
-	}
-
-	genesis := &core.Genesis{}
-
-	if err := json.Unmarshal(genesisData, genesis); err != nil {
-		t.Fatalf("%s", err)
-	}
-
-	genesis.Config.ChainID = big.NewInt(15001)
-	genesis.Config.EIP150Hash = common.Hash{}
-
-	return genesis
-}

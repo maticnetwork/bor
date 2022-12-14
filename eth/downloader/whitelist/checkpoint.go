@@ -10,6 +10,10 @@ type checkpoint struct {
 	finality[*rawdb.Checkpoint]
 }
 
+type checkpointService interface {
+	finalityService
+}
+
 // IsValidChain checks the validity of chain by comparing it
 // against the local checkpoint entry
 func (w *checkpoint) IsValidChain(currentHeader *types.Header, chain []*types.Header) bool {
@@ -24,4 +28,8 @@ func (w *checkpoint) Process(block uint64, hash common.Hash) {
 	defer w.finality.Unlock()
 
 	w.finality.Process(block, hash)
+}
+
+func (w *checkpoint) block() (uint64, common.Hash) {
+	return w.Number, w.Hash
 }

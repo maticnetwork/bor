@@ -221,9 +221,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		}
 	)
 
-	const whitelistFeature = false
-
-	checker := whitelist.New(chainDb, whitelistFeature)
+	checker := whitelist.NewService(chainDb)
 
 	eth.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, chainConfig, eth.engine, vmConfig, eth.shouldPreserve, &config.TxLookupLimit, checker)
 	if err != nil {
