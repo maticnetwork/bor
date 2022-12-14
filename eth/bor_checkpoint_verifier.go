@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/log"
@@ -24,6 +25,9 @@ var (
 
 	// errEndBlock is returned when we're unable to fetch a block locally.
 	errEndBlock = errors.New("failed to get end block")
+
+	// errBlockNumberConversion is returned when we get err in parsing hexautil block number
+	errBlockNumberConversion = errors.New("failed to parse the block number")
 )
 
 type borVerifier struct {
@@ -75,6 +79,14 @@ func borVerify(ctx context.Context, eth *Ethereum, handler *ethHandler, start ui
 			} else {
 				rewindTo = start - 1
 			}
+		}
+
+		if head-hexutil.Uint64(end) > 255 {
+			headInt64, err := strconv.ParseInt(head.String(), 10, 64)
+			if err != nil {
+				return hash, errBlockNumberConversion
+			}
+			rewindTo = uint64(headInt64) - 255
 		}
 
 		rewindBack(eth, rewindTo)

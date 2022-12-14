@@ -2,6 +2,7 @@ package whitelist
 
 import (
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/flags"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
@@ -33,6 +34,11 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 	m.finality.RLock()
 	defer m.finality.RUnlock()
 
+	//Checking for the milestone flag
+	if !flags.Milestone {
+		return true
+	}
+
 	if !m.finality.IsValidChain(currentHeader, chain) {
 		return false
 	}
@@ -42,6 +48,17 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 	}
 
 	return true
+}
+
+// IsValidPeer checks if the chain we're about to receive from a peer is valid or not
+// in terms of reorgs. We won't reorg beyond the last bor finality submitted to mainchain.
+func (m *milestone) IsValidPeer(remoteHeader *types.Header, fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error) {
+
+	if !flags.Milestone {
+		return true, nil
+	}
+
+	return m.finality.IsValidPeer(remoteHeader, fetchHeadersByNumber)
 }
 
 func (m *milestone) Process(block uint64, hash common.Hash) {

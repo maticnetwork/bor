@@ -1,3 +1,5 @@
+//go:build integration
+
 package bor
 
 import (
@@ -117,6 +119,10 @@ func TestMiningAfterLocking(t *testing.T) {
 
 	assert.Equal(t, len(milestoneListVal1), int(0))
 
+}
+
+func InitGenesis(t *testing.T, faucets []*ecdsa.PrivateKey, s string) {
+	panic("unimplemented")
 }
 
 func TestReorgingAfterLockingSprint(t *testing.T) {
