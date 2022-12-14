@@ -113,7 +113,7 @@ func (f *ForkChoice) ReorgNeeded(current *types.Header, header *types.Header) (b
 // ValidateReorg calls the chain validator service to check if the reorg is valid or not
 func (f *ForkChoice) ValidateReorg(current *types.Header, chain []*types.Header, chainConfig *params.ChainConfig) (bool, error) {
 	// Call the bor chain validator service
-	if f.validator != nil && chainConfig.Bor.IsDubai(current.Number.Uint64()) {
+	if f.validator != nil {
 		if isValid := f.validator.IsValidChain(current, chain); !isValid {
 			return false, nil
 		}

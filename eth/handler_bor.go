@@ -37,13 +37,6 @@ func (h *ethHandler) fetchWhitelistCheckpoint(ctx context.Context, bor *bor.Bor,
 		blockHash common.Hash
 	)
 
-	chainConfig := eth.blockchain.GetChainConfig()
-	currentBlock := eth.blockchain.CurrentBlock().NumberU64()
-
-	if !chainConfig.Bor.IsDubai(currentBlock) {
-		return blockNum, blockHash, errHardFork
-	}
-
 	// fetch the latest checkpoint from Heimdall
 	checkpoint, err := bor.HeimdallClient.FetchCheckpoint(ctx, -1)
 	if err != nil {

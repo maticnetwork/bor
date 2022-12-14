@@ -276,7 +276,6 @@ var (
 		BerlinBlock:         big.NewInt(0),
 		LondonBlock:         big.NewInt(0),
 		Bor: &BorConfig{
-			DubaiBlock: 128,
 			Period: map[string]uint64{
 				"0": 2,
 			},
@@ -614,10 +613,6 @@ func (c *BorConfig) IsJaipur(number *big.Int) bool {
 
 func (c *BorConfig) IsDelhi(number *big.Int) bool {
 	return isForked(c.DelhiBlock, number)
-}
-
-func (c *BorConfig) IsDubai(number uint64) bool {
-	return number >= 128
 }
 
 func (c *BorConfig) calculateBorConfigHelper(field map[string]uint64, number uint64) uint64 {

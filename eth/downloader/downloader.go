@@ -796,11 +796,8 @@ func (d *Downloader) getFetchHeadersByNumber(p *peerConnection) func(number uint
 // the head links match), we do a binary search to find the common ancestor.
 func (d *Downloader) findAncestor(p *peerConnection, remoteHeader *types.Header) (uint64, error) {
 
-	currentBlock := d.blockchain.CurrentBlock().Number().Uint64()
-	chainConfig := d.blockchain.GetChainConfig()
-
 	// Check the validity of peer from which the chain is to be downloaded
-	if d.ChainValidator != nil && chainConfig.Bor.IsDubai(currentBlock) {
+	if d.ChainValidator != nil {
 		if _, err := d.IsValidPeer(remoteHeader, d.getFetchHeadersByNumber(p)); err != nil {
 			return 0, err
 		}
