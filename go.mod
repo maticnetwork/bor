@@ -5,7 +5,6 @@ go 1.19
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.3.0
 	github.com/BurntSushi/toml v1.1.0
-	github.com/JekaMas/crand v1.0.1
 	github.com/JekaMas/go-grpc-net-conn v0.0.0-20220708155319-6aff21f2d13d
 	github.com/VictoriaMetrics/fastcache v1.6.0
 	github.com/aws/aws-sdk-go-v2 v1.2.0
@@ -47,7 +46,11 @@ require (
 	github.com/jedisct1/go-minisign v0.0.0-20190909160543-45766022959e
 	github.com/julienschmidt/httprouter v1.3.0
 	github.com/karalabe/usb v0.0.2
+<<<<<<< HEAD
 	github.com/labstack/gommon v0.3.0
+=======
+	github.com/maticnetwork/crand v1.0.2
+>>>>>>> 19fe8b41d22358f13cd36ebad271f0f625010970
 	github.com/maticnetwork/polyproto v0.0.2
 	github.com/mattn/go-colorable v0.1.8
 	github.com/mattn/go-isatty v0.0.12
@@ -72,11 +75,11 @@ require (
 	golang.org/x/crypto v0.0.0-20220507011949-2cf3adece122
 	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4
 	golang.org/x/sys v0.0.0-20220728004956-3c1f35247d10
-	golang.org/x/text v0.3.7
+	golang.org/x/text v0.4.0
 	golang.org/x/time v0.0.0-20210220033141-f8bda1e9f3ba
 	golang.org/x/tools v0.1.12
 	gonum.org/v1/gonum v0.11.0
-	google.golang.org/grpc v1.48.0
+	google.golang.org/grpc v1.51.0
 	google.golang.org/protobuf v1.28.0
 	gopkg.in/natefinch/npipe.v2 v2.0.0-20160621034901-c1b8fa8bdcce
 	gopkg.in/olebedev/go-duktape.v3 v3.0.0-20200619000410-60c24ae608a6
@@ -148,3 +151,5 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
+
+replace github.com/Masterminds/goutils => github.com/Masterminds/goutils v1.1.1

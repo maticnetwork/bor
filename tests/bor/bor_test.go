@@ -1,4 +1,5 @@
 //go:build integration
+// +build integration
 
 package bor
 
@@ -9,6 +10,7 @@ import (
 	"io"
 	"math/big"
 	"os"
+	"sync"
 	"testing"
 	"time"
 
@@ -59,7 +61,8 @@ func TestValidatorWentOffline(t *testing.T) {
 	}
 
 	// Create an Ethash network based off of the Ropsten config
-	genesis := InitGenesis(t, faucets, "./testdata/genesis_2val.json")
+	// Generate a batch of accounts to seal and fund with
+	genesis := InitGenesis(t, faucets, "./testdata/genesis_2val.json", 8)
 
 	var (
 		stacks []*node.Node
@@ -207,6 +210,157 @@ func TestValidatorWentOffline(t *testing.T) {
 
 	// check node1 has block mined by node1
 	assert.Equal(t, authorVal1, nodes[0].AccountManager().Accounts()[0])
+}
+
+func TestForkWithBlockTime(t *testing.T) {
+
+	cases := []struct {
+		name          string
+		sprint        map[string]uint64
+		blockTime     map[string]uint64
+		change        uint64
+		producerDelay map[string]uint64
+		forkExpected  bool
+	}{
+		{
+			name: "No fork after 2 sprints with producer delay = max block time",
+			sprint: map[string]uint64{
+				"0": 128,
+			},
+			blockTime: map[string]uint64{
+				"0":   5,
+				"128": 2,
+				"256": 8,
+			},
+			change: 2,
+			producerDelay: map[string]uint64{
+				"0": 8,
+			},
+			forkExpected: false,
+		},
+		{
+			name: "No Fork after 1 sprint producer delay = max block time",
+			sprint: map[string]uint64{
+				"0": 64,
+			},
+			blockTime: map[string]uint64{
+				"0":  5,
+				"64": 2,
+			},
+			change: 1,
+			producerDelay: map[string]uint64{
+				"0": 5,
+			},
+			forkExpected: false,
+		},
+		{
+			name: "Fork after 4 sprints with producer delay < max block time",
+			sprint: map[string]uint64{
+				"0": 16,
+			},
+			blockTime: map[string]uint64{
+				"0":  2,
+				"64": 5,
+			},
+			change: 4,
+			producerDelay: map[string]uint64{
+				"0": 4,
+			},
+			forkExpected: true,
+		},
+	}
+
+	// Create an Ethash network based off of the Ropsten config
+	// Generate a batch of accounts to seal and fund with
+	faucets := make([]*ecdsa.PrivateKey, 128)
+	for i := 0; i < len(faucets); i++ {
+		faucets[i], _ = crypto.GenerateKey()
+	}
+	genesis := InitGenesis(t, faucets, "./testdata/genesis_2val.json", 8)
+
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+
+			genesis.Config.Bor.Sprint = test.sprint
+			genesis.Config.Bor.Period = test.blockTime
+			genesis.Config.Bor.BackupMultiplier = test.blockTime
+			genesis.Config.Bor.ProducerDelay = test.producerDelay
+
+			stacks, nodes, _ := setupMiner(t, 2, genesis)
+
+			defer func() {
+				for _, stack := range stacks {
+					stack.Close()
+				}
+			}()
+
+			// Iterate over all the nodes and start mining
+			for _, node := range nodes {
+				if err := node.StartMining(1); err != nil {
+					t.Fatal("Error occured while starting miner", "node", node, "error", err)
+				}
+			}
+			var wg sync.WaitGroup
+			blockHeaders := make([]*types.Header, 2)
+			ticker := time.NewTicker(time.Duration(test.blockTime["0"]) * time.Second)
+			defer ticker.Stop()
+
+			for i := 0; i < 2; i++ {
+				wg.Add(1)
+
+				go func(i int) {
+					defer wg.Done()
+
+					for range ticker.C {
+						blockHeaders[i] = nodes[i].BlockChain().GetHeaderByNumber(test.sprint["0"]*test.change + 10)
+						if blockHeaders[i] != nil {
+							break
+						}
+					}
+
+				}(i)
+			}
+
+			wg.Wait()
+
+			// Before the end of sprint
+			blockHeaderVal0 := nodes[0].BlockChain().GetHeaderByNumber(test.sprint["0"] - 1)
+			blockHeaderVal1 := nodes[1].BlockChain().GetHeaderByNumber(test.sprint["0"] - 1)
+			assert.Equal(t, blockHeaderVal0.Hash(), blockHeaderVal1.Hash())
+			assert.Equal(t, blockHeaderVal0.Time, blockHeaderVal1.Time)
+
+			author0, err := nodes[0].Engine().Author(blockHeaderVal0)
+			if err != nil {
+				t.Error("Error occured while fetching author", "err", err)
+			}
+			author1, err := nodes[1].Engine().Author(blockHeaderVal1)
+			if err != nil {
+				t.Error("Error occured while fetching author", "err", err)
+			}
+			assert.Equal(t, author0, author1)
+
+			// After the end of sprint
+			author2, err := nodes[0].Engine().Author(blockHeaders[0])
+			if err != nil {
+				t.Error("Error occured while fetching author", "err", err)
+			}
+			author3, err := nodes[1].Engine().Author(blockHeaders[1])
+			if err != nil {
+				t.Error("Error occured while fetching author", "err", err)
+			}
+
+			if test.forkExpected {
+				assert.NotEqual(t, blockHeaders[0].Hash(), blockHeaders[1].Hash())
+				assert.NotEqual(t, blockHeaders[0].Time, blockHeaders[1].Time)
+				assert.NotEqual(t, author2, author3)
+			} else {
+				assert.Equal(t, blockHeaders[0].Hash(), blockHeaders[1].Hash())
+				assert.Equal(t, blockHeaders[0].Time, blockHeaders[1].Time)
+				assert.Equal(t, author2, author3)
+			}
+		})
+
+	}
 
 }
 
@@ -920,11 +1074,11 @@ func TestJaipurFork(t *testing.T) {
 		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, res.Result.ValidatorSet.Validators)
 		insertNewBlock(t, chain, block)
 
-		if block.Number().Uint64() == init.genesis.Config.Bor.JaipurBlock-1 {
+		if block.Number().Uint64() == init.genesis.Config.Bor.JaipurBlock.Uint64()-1 {
 			require.Equal(t, testSealHash(block.Header(), init.genesis.Config.Bor), bor.SealHash(block.Header(), init.genesis.Config.Bor))
 		}
 
-		if block.Number().Uint64() == init.genesis.Config.Bor.JaipurBlock {
+		if block.Number().Uint64() == init.genesis.Config.Bor.JaipurBlock.Uint64() {
 			require.Equal(t, testSealHash(block.Header(), init.genesis.Config.Bor), bor.SealHash(block.Header(), init.genesis.Config.Bor))
 		}
 	}
@@ -956,7 +1110,7 @@ func testEncodeSigHeader(w io.Writer, header *types.Header, c *params.BorConfig)
 		header.MixDigest,
 		header.Nonce,
 	}
-	if c.IsJaipur(header.Number.Uint64()) {
+	if c.IsJaipur(header.Number) {
 		if header.BaseFee != nil {
 			enc = append(enc, header.BaseFee)
 		}

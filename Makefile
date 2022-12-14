@@ -59,13 +59,16 @@ ios:
 	@echo "Import \"$(GOBIN)/Geth.framework\" to use the library."
 
 test:
-	$(GOTEST) --timeout 5m -shuffle=on -cover -coverprofile=cover.out $(TESTALL)
+	$(GOTEST) --timeout 5m -shuffle=on -cover -short -coverprofile=cover.out -covermode=atomic $(TESTALL)
+
+test-txpool-race:
+	$(GOTEST) -run=TestPoolMiningDataRaces --timeout 600m -race -v ./core/
 
 test-race:
 	$(GOTEST) --timeout 15m -race -shuffle=on $(TESTALL)
 
 test-integration:
-	$(GOTEST) --timeout 30m -tags integration $(TESTE2E)
+	$(GOTEST) --timeout 60m -tags integration $(TESTE2E)
 
 escape:
 	cd $(path) && go test -gcflags "-m -m" -run none -bench=BenchmarkJumpdest* -benchmem -memprofile mem.out
@@ -75,7 +78,7 @@ lint:
 
 lintci-deps:
 	rm -f ./build/bin/golangci-lint
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b ./build/bin v1.48.0
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b ./build/bin v1.50.1
 
 goimports:
 	goimports -local "$(PACKAGE)" -w .
