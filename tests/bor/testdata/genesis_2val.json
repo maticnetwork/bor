@@ -15,11 +15,16 @@
       "londonBlock": 1,
       "bor": {
         "jaipurBlock": 2,
+        "delhiBlock" :3,
         "period": {
           "0": 1
         },
-        "producerDelay": 4,
-        "sprint": 8,
+        "producerDelay": {
+          "0": 4
+        },
+        "sprint": {
+          "0": 8
+        },
         "backupMultiplier": {
           "0": 1
         },
@@ -61,4 +66,3 @@
     "gasUsed": "0x0",
     "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000"
   }
-  

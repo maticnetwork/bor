@@ -316,7 +316,7 @@ func TestGetStaleCodeLes4(t *testing.T) { testGetStaleCode(t, 4) }
 
 func testGetStaleCode(t *testing.T, protocol int) {
 	netconfig := testnetConfig{
-		blocks:    core.TriesInMemory + 4,
+		blocks:    int(core.DefaultCacheConfig.TriesInMemory) + 4,
 		protocol:  protocol,
 		nopruning: true,
 	}
@@ -430,7 +430,7 @@ func TestGetStaleProofLes4(t *testing.T) { testGetStaleProof(t, 4) }
 
 func testGetStaleProof(t *testing.T, protocol int) {
 	netconfig := testnetConfig{
-		blocks:    core.TriesInMemory + 4,
+		blocks:    int(core.DefaultCacheConfig.TriesInMemory) + 4,
 		protocol:  protocol,
 		nopruning: true,
 	}
@@ -617,7 +617,7 @@ func testTransactionStatus(t *testing.T, protocol int) {
 			sendRequest(rawPeer.app, GetTxStatusMsg, reqID, []common.Hash{tx.Hash()})
 		}
 		if err := expectResponse(rawPeer.app, TxStatusMsg, reqID, testBufLimit, []light.TxStatus{expStatus}); err != nil {
-			t.Errorf("transaction status mismatch")
+			t.Error("transaction status mismatch", err)
 		}
 	}
 	signer := types.HomesteadSigner{}
