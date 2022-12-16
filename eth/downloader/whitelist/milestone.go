@@ -34,6 +34,8 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 	m.finality.RLock()
 	defer m.finality.RUnlock()
 
+	log.Warn("Enter IsValidChain fn", "MilestoneHash", m.Hash)
+
 	//Checking for the milestone flag
 	if !flags.Milestone {
 		return true
@@ -46,6 +48,8 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 	if m.Locked && !m.IsReorgAllowed(chain, m.LockedSprintNumber, m.LockedSprintHash) {
 		return false
 	}
+
+	log.Warn("✅✅✅ IsValidChain fn Passed")
 
 	return true
 }
@@ -65,7 +69,9 @@ func (m *milestone) Process(block uint64, hash common.Hash) {
 	m.finality.Lock()
 	defer m.finality.Unlock()
 
+	log.Warn("✅ Entered Processing Milestone", "MilestoneHash", m.Hash, "Lock", m.Locked, "LockedSprint", m.LockedSprintNumber)
 	m.finality.Process(block, hash)
+	log.Warn("✅ ✅ Exit Processing Milestone", "MilestoneHash", m.Hash, "Lock", m.Locked, "LockedSprint", m.LockedSprintNumber)
 
 	m.UnlockSprint(block)
 }
@@ -94,6 +100,7 @@ func (m *milestone) LockMutex(endBlockNum uint64) bool {
 	}
 
 	m.LockedSprintNumber = endBlockNum
+	log.Warn("Locked Sprint Number", "LockedSprintNumber", m.LockedSprintNumber)
 
 	return true
 }
@@ -115,12 +122,21 @@ func (m *milestone) UnlockMutex(doLock bool, milestoneId string, endBlockHash co
 
 // This function will unlock the locked sprint
 func (m *milestone) UnlockSprint(endBlockNum uint64) {
+
+	log.Warn("Enter UnlockSprint", "LockedVal", m.Locked)
+
 	if endBlockNum < m.LockedSprintNumber {
+		log.Warn("endBlockNum < m.LockedSprintNumber")
 		return
 	}
 
 	m.Locked = false
+	log.Warn("Exit UnlockSprint", "LockedVal", m.Locked)
+
+	log.Warn("In MilestonePurgeList", "length", len(m.LockedMilestoneIDs))
 	m.purgeMilestoneIDsList()
+	log.Warn("Out MilestonePurgeList", "length", len(m.LockedMilestoneIDs))
+
 	rawdb.WriteLockField(m.db, m.Locked, m.LockedSprintNumber, m.LockedSprintHash, m.LockedMilestoneIDs)
 }
 
