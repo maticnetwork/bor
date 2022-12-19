@@ -8,6 +8,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 type finality[T rawdb.BlockFinality[T]] struct {
@@ -20,7 +21,7 @@ type finality[T rawdb.BlockFinality[T]] struct {
 }
 
 type finalityService interface {
-	IsValidPeer(remoteHeader *types.Header, fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error)
+	IsValidPeer(fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error)
 	IsValidChain(currentHeader *types.Header, chain []*types.Header) bool
 	Get() (bool, uint64, common.Hash)
 	Process(block uint64, hash common.Hash)
@@ -29,7 +30,7 @@ type finalityService interface {
 
 // IsValidPeer checks if the chain we're about to receive from a peer is valid or not
 // in terms of reorgs. We won't reorg beyond the last bor finality submitted to mainchain.
-func (f *finality[T]) IsValidPeer(remoteHeader *types.Header, fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error) {
+func (f *finality[T]) IsValidPeer(fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error) {
 	// We want to validate the chain by comparing the last finalized block
 	f.RLock()
 
@@ -39,7 +40,7 @@ func (f *finality[T]) IsValidPeer(remoteHeader *types.Header, fetchHeadersByNumb
 
 	f.RUnlock()
 
-	return isValidPeer(remoteHeader, fetchHeadersByNumber, doExist, number, hash)
+	return isValidPeer(fetchHeadersByNumber, doExist, number, hash)
 }
 
 // IsValidChain checks the validity of chain by comparing it
@@ -59,7 +60,10 @@ func (f *finality[T]) Process(block uint64, hash common.Hash) {
 	f.Hash = hash
 	f.Number = block
 
-	rawdb.WriteLastFinality[T](f.db, block, hash)
+	err := rawdb.WriteLastFinality[T](f.db, block, hash)
+	if err != nil {
+		log.Error("Error in writing whitelist state to db", "err", err)
+	}
 }
 
 // Get returns the existing whitelisted

@@ -798,7 +798,7 @@ func (d *Downloader) findAncestor(p *peerConnection, remoteHeader *types.Header)
 
 	// Check the validity of peer from which the chain is to be downloaded
 	if d.ChainValidator != nil {
-		if _, err := d.IsValidPeer(remoteHeader, d.getFetchHeadersByNumber(p)); err != nil {
+		if _, err := d.IsValidPeer(d.getFetchHeadersByNumber(p)); err != nil {
 			return 0, err
 		}
 	}

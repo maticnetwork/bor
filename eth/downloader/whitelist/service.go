@@ -72,13 +72,13 @@ func NewService(db ethdb.Database) *Service {
 
 // IsValidPeer checks if the chain we're about to receive from a peer is valid or not
 // in terms of reorgs. We won't reorg beyond the last bor checkpoint submitted to mainchain and last milestone voted in the heimdall
-func (s *Service) IsValidPeer(remoteHeader *types.Header, fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error) {
-	checkpointBool, err := s.checkpointService.IsValidPeer(remoteHeader, fetchHeadersByNumber)
+func (s *Service) IsValidPeer(fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error) {
+	checkpointBool, err := s.checkpointService.IsValidPeer(fetchHeadersByNumber)
 	if !checkpointBool {
 		return checkpointBool, err
 	}
 
-	milestoneBool, err := s.milestoneService.IsValidPeer(remoteHeader, fetchHeadersByNumber)
+	milestoneBool, err := s.milestoneService.IsValidPeer(fetchHeadersByNumber)
 	if !milestoneBool {
 		return milestoneBool, err
 	}
@@ -199,7 +199,7 @@ func isValidChain(currentHeader *types.Header, chain []*types.Header, doExist bo
 }
 
 // FIXME: remoteHeader is not used
-func isValidPeer(remoteHeader *types.Header, fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error), doExist bool, number uint64, hash common.Hash) (bool, error) {
+func isValidPeer(fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error), doExist bool, number uint64, hash common.Hash) (bool, error) {
 
 	// Check for availaibility of the last milestone block.
 	// This can be also be empty if our heimdall is not responding

@@ -1418,7 +1418,7 @@ func newWhitelistFake(validate func(count int) (bool, error)) *whitelistFake {
 
 // IsValidPeer is the mock function which the downloader will use to validate the chain
 // to be received from a peer.
-func (w *whitelistFake) IsValidPeer(_ *types.Header, _ func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error) {
+func (w *whitelistFake) IsValidPeer(_ func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error) {
 	defer func() {
 		w.count++
 	}()

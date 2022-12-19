@@ -52,13 +52,13 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 
 // IsValidPeer checks if the chain we're about to receive from a peer is valid or not
 // in terms of reorgs. We won't reorg beyond the last bor finality submitted to mainchain.
-func (m *milestone) IsValidPeer(remoteHeader *types.Header, fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error) {
+func (m *milestone) IsValidPeer(fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error) {
 
 	if !flags.Milestone {
 		return true, nil
 	}
 
-	return m.finality.IsValidPeer(remoteHeader, fetchHeadersByNumber)
+	return m.finality.IsValidPeer(fetchHeadersByNumber)
 }
 
 func (m *milestone) Process(block uint64, hash common.Hash) {
@@ -108,7 +108,10 @@ func (m *milestone) UnlockMutex(doLock bool, milestoneId string, endBlockHash co
 		m.LockedMilestoneIDs[milestoneId] = struct{}{}
 	}
 
-	rawdb.WriteLockField(m.db, m.Locked, m.LockedSprintNumber, m.LockedSprintHash, m.LockedMilestoneIDs)
+	err := rawdb.WriteLockField(m.db, m.Locked, m.LockedSprintNumber, m.LockedSprintHash, m.LockedMilestoneIDs)
+	if err != nil {
+		log.Error("Error in writing lock data of milestone to db", "err", err)
+	}
 
 	m.finality.Unlock()
 }
@@ -121,7 +124,10 @@ func (m *milestone) UnlockSprint(endBlockNum uint64) {
 
 	m.Locked = false
 	m.purgeMilestoneIDsList()
-	rawdb.WriteLockField(m.db, m.Locked, m.LockedSprintNumber, m.LockedSprintHash, m.LockedMilestoneIDs)
+	err := rawdb.WriteLockField(m.db, m.Locked, m.LockedSprintNumber, m.LockedSprintHash, m.LockedMilestoneIDs)
+	if err != nil {
+		log.Error("Error in writing lock data of milestone to db", "err", err)
+	}
 }
 
 // This function will remove the stored milestoneID
@@ -134,8 +140,10 @@ func (m *milestone) RemoveMilestoneID(milestoneId string) {
 		m.Locked = false
 	}
 
-	rawdb.WriteLockField(m.db, m.Locked, m.LockedSprintNumber, m.LockedSprintHash, m.LockedMilestoneIDs)
-
+	err := rawdb.WriteLockField(m.db, m.Locked, m.LockedSprintNumber, m.LockedSprintHash, m.LockedMilestoneIDs)
+	if err != nil {
+		log.Error("Error in writing lock data of milestone to db", "err", err)
+	}
 	m.finality.Unlock()
 }
 

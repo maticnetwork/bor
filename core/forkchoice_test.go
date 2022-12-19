@@ -224,7 +224,7 @@ func (c *chainReaderFake) GetTd(hash common.Hash, number uint64) *big.Int {
 }
 
 // Mock chain validator functions
-func (w *chainValidatorFake) IsValidPeer(remoteHeader *types.Header, fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error) {
+func (w *chainValidatorFake) IsValidPeer(fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error) {
 	return true, nil
 }
 func (w *chainValidatorFake) IsValidChain(current *types.Header, headers []*types.Header) bool {

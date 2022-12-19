@@ -106,7 +106,7 @@ func TestMilestone(t *testing.T) {
 
 	milestone := s.milestoneService.(*milestone)
 
-	//Checking for the varaibles when no milestone is Processed
+	//Checking for the variables when no milestone is Processed
 	require.Equal(t, milestone.doExist, false, "expected false as no milestone exist at this point")
 	require.Equal(t, milestone.Locked, false, "expected false as it was not locked")
 	require.Equal(t, milestone.LockedSprintNumber, uint64(0), "expected 0 as it was not initialized")
@@ -232,7 +232,7 @@ func TestIsValidPeer(t *testing.T) {
 	s := NewMockService(db)
 
 	// case1: no checkpoint whitelist, should consider the chain as valid
-	res, err := s.IsValidPeer(nil, nil)
+	res, err := s.IsValidPeer(nil)
 	require.NoError(t, err, "expected no error")
 	require.Equal(t, res, true, "expected chain to be valid")
 
@@ -256,7 +256,7 @@ func TestIsValidPeer(t *testing.T) {
 
 	// case2: false fetchHeadersByNumber function provided, should consider the chain as invalid
 	// and throw `ErrNoRemoteCheckoint` error
-	res, err = s.IsValidPeer(nil, falseFetchHeadersByNumber)
+	res, err = s.IsValidPeer(falseFetchHeadersByNumber)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -287,7 +287,7 @@ func TestIsValidPeer(t *testing.T) {
 	}
 
 	// case3: correct fetchHeadersByNumber function provided, should consider the chain as valid
-	res, err = s.IsValidPeer(nil, fetchHeadersByNumber)
+	res, err = s.IsValidPeer(fetchHeadersByNumber)
 	require.NoError(t, err, "expected no error")
 	require.Equal(t, res, true, "expected chain to be valid")
 
@@ -297,7 +297,7 @@ func TestIsValidPeer(t *testing.T) {
 
 	// case4: correct fetchHeadersByNumber function provided with wrong header
 	// for block number 2. Should consider the chain as invalid and throw an error
-	res, err = s.IsValidPeer(nil, fetchHeadersByNumber)
+	res, err = s.IsValidPeer(fetchHeadersByNumber)
 	require.Equal(t, err, ErrMismatch, "expected mismatch error")
 	require.Equal(t, res, false, "expected chain to be invalid")
 
@@ -330,7 +330,7 @@ func TestIsValidPeer(t *testing.T) {
 	s.ProcessMilestone(uint64(3), common.Hash{})
 
 	//Case5: correct fetchHeadersByNumber function provided with hash mismatch, should consider the chain as invalid
-	res, err = s.IsValidPeer(nil, fetchHeadersByNumber)
+	res, err = s.IsValidPeer(fetchHeadersByNumber)
 	require.Equal(t, err, ErrMismatch, "expected milestone mismatch error")
 	require.Equal(t, res, false, "expected chain to be invalid")
 
@@ -356,7 +356,7 @@ func TestIsValidPeer(t *testing.T) {
 	}
 
 	// case6: correct fetchHeadersByNumber function provided, should consider the chain as valid
-	res, err = s.IsValidPeer(nil, fetchHeadersByNumber)
+	res, err = s.IsValidPeer(fetchHeadersByNumber)
 	require.NoError(t, err, "expected no error")
 	require.Equal(t, res, true, "expected chain to be valid")
 
@@ -392,7 +392,7 @@ func TestIsValidPeer(t *testing.T) {
 	s.ProcessMilestone(uint64(3), common.Hash{})
 
 	// case7: correct fetchHeadersByNumber function provided with wrong header for block 3, should consider the chain as invalid
-	res, err = s.IsValidPeer(nil, fetchHeadersByNumber)
+	res, err = s.IsValidPeer(fetchHeadersByNumber)
 	require.Equal(t, err, ErrMismatch, "expected milestone mismatch error")
 	require.Equal(t, res, false, "expected chain to be invalid")
 
@@ -402,7 +402,7 @@ func TestIsValidPeer(t *testing.T) {
 	s.ProcessMilestone(uint64(4), common.Hash{})
 
 	// case8: correct fetchHeadersByNumber function provided with wrong hash for block 3, should consider the chain as valid
-	res, err = s.IsValidPeer(nil, fetchHeadersByNumber)
+	res, err = s.IsValidPeer(fetchHeadersByNumber)
 	require.Equal(t, err, ErrMismatch, "expected milestone mismatch error")
 	require.Equal(t, res, false, "expected chain to be invalid")
 }
@@ -471,7 +471,7 @@ func TestIsValidChain(t *testing.T) {
 
 	hash3 := common.Hash{3}
 
-	//Locking for sprintNumber 16 with differnt hash
+	//Locking for sprintNumber 16 with different hash
 	milestone.LockMutex(chainA[len(chainA)-4].Number.Uint64())
 	milestone.UnlockMutex(true, "MilestoneID2", hash3)
 
