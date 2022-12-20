@@ -707,6 +707,7 @@ func retryHeimdallHandler(fn heimdallHandler, tickerDuration time.Duration, time
 	// first run for fetching milestones
 	firstCtx, cancel := context.WithTimeout(context.Background(), timeout)
 	err = fn(firstCtx, ethHandler, bor)
+
 	cancel()
 
 	if err != nil {
@@ -721,6 +722,7 @@ func retryHeimdallHandler(fn heimdallHandler, tickerDuration time.Duration, time
 		case <-ticker.C:
 			ctx, cancel := context.WithTimeout(context.Background(), timeout)
 			err := fn(ctx, ethHandler, bor)
+
 			cancel()
 
 			if err != nil {

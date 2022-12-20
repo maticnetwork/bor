@@ -53,7 +53,6 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 // IsValidPeer checks if the chain we're about to receive from a peer is valid or not
 // in terms of reorgs. We won't reorg beyond the last bor finality submitted to mainchain.
 func (m *milestone) IsValidPeer(fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error) {
-
 	if !flags.Milestone {
 		return true, nil
 	}
@@ -124,7 +123,9 @@ func (m *milestone) UnlockSprint(endBlockNum uint64) {
 
 	m.Locked = false
 	m.purgeMilestoneIDsList()
+
 	err := rawdb.WriteLockField(m.db, m.Locked, m.LockedSprintNumber, m.LockedSprintHash, m.LockedMilestoneIDs)
+
 	if err != nil {
 		log.Error("Error in writing lock data of milestone to db", "err", err)
 	}

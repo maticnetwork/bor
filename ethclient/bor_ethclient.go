@@ -23,6 +23,7 @@ func (ec *Client) GetVoteOnRootHash(ctx context.Context, startBlockNumber uint64
 	if err := ec.c.CallContext(ctx, &value, "eth_getVoteOnRootHash", startBlockNumber, endBlockNumber, rootHash, milestoneID); err != nil {
 		return false, err
 	}
+
 	return value, nil
 }
 
