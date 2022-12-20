@@ -923,28 +923,37 @@ func unlockAccount(ks *keystore.KeyStore, address string, i int, passwords []str
 }
 
 func ambiguousAddrRecovery(ks *keystore.KeyStore, err *keystore.AmbiguousAddrError, auth string) accounts.Account {
-	fmt.Printf("Multiple key files exist for address %x:\n", err.Addr)
+	log.Warn("Multiple key files exist for", "address", err.Addr)
+
 	for _, a := range err.Matches {
-		fmt.Println("  ", a.URL)
+		log.Info("Multiple keys", "file", a.URL)
 	}
-	fmt.Println("Testing your password against all of them...")
+
+	log.Info("Testing your password against all of them...")
+
 	var match *accounts.Account
+
 	for _, a := range err.Matches {
 		if err := ks.Unlock(a, auth); err == nil {
+			// nolint: gosec, exportloopref
 			match = &a
 			break
 		}
 	}
+
 	if match == nil {
 		utils.Fatalf("None of the listed files could be unlocked.")
 	}
-	fmt.Printf("Your password unlocked %s\n", match.URL)
-	fmt.Println("In order to avoid this warning, you need to remove the following duplicate key files:")
+
+	log.Info("Your password unlocked", "key", match.URL)
+	log.Warn("In order to avoid this warning, you need to remove the following duplicate key files:")
+
 	for _, a := range err.Matches {
 		if a != *match {
 			fmt.Println("  ", a.URL)
 		}
 	}
+
 	return *match
 }
 
