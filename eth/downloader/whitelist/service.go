@@ -22,6 +22,7 @@ type Service struct {
 
 func NewService(db ethdb.Database) *Service {
 	var checkpointDoExist = true
+
 	checkpointNumber, checkpointHash, err := rawdb.ReadFinality[*rawdb.Checkpoint](db)
 
 	if err != nil {
@@ -29,6 +30,7 @@ func NewService(db ethdb.Database) *Service {
 	}
 
 	var milestoneDoExist = true
+
 	milestoneNumber, milestoneHash, err := rawdb.ReadFinality[*rawdb.Milestone](db)
 	if err != nil {
 		milestoneDoExist = false
