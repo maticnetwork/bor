@@ -18,14 +18,6 @@ var (
 	// latest milestone from the local heimdall.
 	errMilestone = errors.New("failed to fetch latest milestone")
 
-	// errNoAckMilestone is returned when we are unable to fetch the
-	// latest no-ack milestone from the local heimdall.
-	errNoAckMilestone = errors.New("failed to fetch no ack milestone")
-
-	//errHardFork is returned when chain hasn't reached to the specified
-	//hard forked number.
-	errHardFork = errors.New("Chain hasn't reached to the hard forked number")
-
 	ErrNotInRejectedList = errors.New("MilestoneID not in rejected list")
 )
 

@@ -29,7 +29,3 @@ func (w *checkpoint) Process(block uint64, hash common.Hash) {
 
 	w.finality.Process(block, hash)
 }
-
-func (w *checkpoint) block() (uint64, common.Hash) {
-	return w.Number, w.Hash
-}

@@ -149,7 +149,6 @@ func (m *milestone) RemoveMilestoneID(milestoneId string) {
 
 // This will check whether the incoming chain matches the locked sprint hash
 func (m *milestone) IsReorgAllowed(chain []*types.Header, lockedSprintNumber uint64, lockedSprintHash common.Hash) bool {
-
 	if chain[len(chain)-1].Number.Uint64() <= lockedSprintNumber { //Can't reorg if the end block of incoming
 		return false //chain is less than locked sprint number
 	}
@@ -157,7 +156,6 @@ func (m *milestone) IsReorgAllowed(chain []*types.Header, lockedSprintNumber uin
 	for i := 0; i < len(chain); i++ {
 		if chain[i].Number.Uint64() == lockedSprintNumber {
 			return chain[i].Hash() == lockedSprintHash
-
 		}
 	}
 
@@ -181,8 +179,4 @@ func (m *milestone) GetMilestoneIDsList() []string {
 // This is remove the milestoneIDs stored in the list.
 func (m *milestone) purgeMilestoneIDsList() {
 	m.LockedMilestoneIDs = make(map[string]struct{})
-}
-
-func (m *milestone) block() (uint64, common.Hash) {
-	return m.Number, m.Hash
 }

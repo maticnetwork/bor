@@ -92,7 +92,3 @@ func (f *finality[T]) Purge() {
 
 	f.doExist = false
 }
-
-func (f *finality[T]) block() (uint64, common.Hash) {
-	return f.Number, f.Hash
-}

@@ -169,7 +169,6 @@ func isValidChain(currentHeader *types.Header, chain []*types.Header, doExist bo
 	// Check if we have milestoneList entries in required range
 	if chain[len(chain)-1].Number.Uint64() < number {
 		// We have future milestone entries, so we don't need to receive the past chain
-
 		return false
 	}
 
