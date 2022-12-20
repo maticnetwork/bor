@@ -64,17 +64,17 @@ func CreateMockHeimdallServer(wg *sync.WaitGroup, port int, listener net.Listene
 	})
 
 	// Create a route for fetching milestone
-	mux.HandleFunc("/milestone", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/milestone/latest", func(w http.ResponseWriter, r *http.Request) {
 		handler.GetMilestoneHandler()(w, r)
 	})
 
 	// Create a route for fetching milestone
-	mux.HandleFunc("/milestone/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/milestone/noAck/{id}", func(w http.ResponseWriter, r *http.Request) {
 		handler.GetNoAckMilestoneHandler()(w, r)
 	})
 
 	// Create a route for fetching milestone
-	mux.HandleFunc("/milestone/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/milestone/lastNoAck", func(w http.ResponseWriter, r *http.Request) {
 		handler.GetLastNoAckMilestoneHandler()(w, r)
 	})
 
