@@ -21,9 +21,9 @@ type Service struct {
 }
 
 func NewService(db ethdb.Database) *Service {
-
 	var checkpointDoExist = true
 	checkpointNumber, checkpointHash, err := rawdb.ReadFinality[*rawdb.Checkpoint](db)
+
 	if err != nil {
 		checkpointDoExist = false
 	}
@@ -157,7 +157,6 @@ func splitChain(current uint64, chain []*types.Header) ([]*types.Header, []*type
 }
 
 func isValidChain(currentHeader *types.Header, chain []*types.Header, doExist bool, number uint64, hash common.Hash, interval uint64) bool {
-
 	// Check if we have milestone to validate incoming chain in memory
 	if !doExist {
 		// We don't have any entry, no additional validation will be possible
@@ -166,10 +165,13 @@ func isValidChain(currentHeader *types.Header, chain []*types.Header, doExist bo
 
 	current := currentHeader.Number.Uint64()
 
-	// Check if we have milestoneList entries in required range
+	// Check if imported chain is less than whitelisted number
 	if chain[len(chain)-1].Number.Uint64() < number {
-		// We have future milestone entries, so we don't need to receive the past chain
-		return false
+		if current >= number { //If current tip of the chain is greater than whitelist number then return false
+			return false
+		} else {
+			return true
+		}
 	}
 
 	// Split the chain into past and future chain
@@ -199,7 +201,6 @@ func isValidChain(currentHeader *types.Header, chain []*types.Header, doExist bo
 
 // FIXME: remoteHeader is not used
 func isValidPeer(fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error), doExist bool, number uint64, hash common.Hash) (bool, error) {
-
 	// Check for availaibility of the last milestone block.
 	// This can be also be empty if our heimdall is not responding
 	// or we're running without it.

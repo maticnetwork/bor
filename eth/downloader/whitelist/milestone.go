@@ -124,7 +124,9 @@ func (m *milestone) UnlockSprint(endBlockNum uint64) {
 
 	m.Locked = false
 	m.purgeMilestoneIDsList()
+
 	err := rawdb.WriteLockField(m.db, m.Locked, m.LockedSprintNumber, m.LockedSprintHash, m.LockedMilestoneIDs)
+
 	if err != nil {
 		log.Error("Error in writing lock data of milestone to db", "err", err)
 	}
