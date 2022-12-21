@@ -13,6 +13,11 @@ Please provide a detailed description of what was done in this PR
 
 Please complete this section if any breaking changes have been made, otherwise delete it
 
+# Nodes audience
+
+Does this PR contain changes that must be enabled only for a subset of nodes?
+In case, please specify how you handled it (e.g. by adding a flag with a default value...)
+
 # Checklist
 
 - [ ] I have added at least 2 reviewer or the whole pos-v1 team
