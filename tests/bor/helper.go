@@ -448,6 +448,7 @@ func InitMiner(genesis *core.Genesis, privKey *ecdsa.PrivateKey, withoutHeimdall
 	if err != nil {
 		return nil, nil, err
 	}
+
 	ethBackend, err := eth.New(stack, &ethconfig.Config{
 		Genesis:         genesis,
 		NetworkId:       genesis.Config.ChainID.Uint64(),
@@ -465,6 +466,7 @@ func InitMiner(genesis *core.Genesis, privKey *ecdsa.PrivateKey, withoutHeimdall
 		},
 		WithoutHeimdall: withoutHeimdall,
 	})
+
 	if err != nil {
 		return nil, nil, err
 	}

@@ -46,7 +46,6 @@ var (
 	pkey1, _ = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
 	// addr2 = 0x9fB29AAc15b9A4B7F17c3385939b007540f4d791
 	pkey2, _ = crypto.HexToECDSA("9b28f36fbd67381120752d6172ecdcf10e06ab2d9a1367aac00cdcd6ac7855d3")
-	keys     = []*ecdsa.PrivateKey{pkey1, pkey2}
 )
 
 func TestValidatorWentOffline(t *testing.T) {
