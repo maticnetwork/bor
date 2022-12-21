@@ -15,7 +15,7 @@ Please complete this section if any breaking changes have been made, otherwise d
 
 # Nodes audience
 
-Does this PR contain changes that must be enabled only for a subset of nodes?
+Do the features included by this PR must be enabled only for a subset of nodes?
 In case, please specify how you handled it (e.g. by adding a flag with a default value...)
 
 # Checklist
