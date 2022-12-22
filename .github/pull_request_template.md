@@ -8,6 +8,7 @@ Please provide a detailed description of what was done in this PR
 - [ ] Hotfix (change that solves an urgent issue, and requires immediate attention)
 - [ ] New feature (non-breaking change that adds functionality)
 - [ ] Breaking change (change that is not backwards-compatible and/or changes current functionality)
+- [ ] Changes only for a subset of nodes
 
 # Breaking changes
 
@@ -15,8 +16,7 @@ Please complete this section if any breaking changes have been made, otherwise d
 
 # Nodes audience
 
-Do the features included by this PR must be enabled only for a subset of nodes?
-In case, please specify how you handled it (e.g. by adding a flag with a default value...)
+In case this PR includes changes that must be applied only to a subset of nodes, please specify how you handled it (e.g. by adding a flag with a default value...)
 
 # Checklist
 
