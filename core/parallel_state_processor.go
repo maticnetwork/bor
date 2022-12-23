@@ -334,11 +334,6 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 		}
 	}
 
-	log.Info("BlockSTM", "Dependencies deps", deps)
-	log.Info("BlockSTM", "Dependencies delayMap", delayMap)
-	// Iterate over and process the individual transactions
-	//
-
 	blockContext := NewEVMBlockContext(header, p.bc, nil)
 	// p.bc.Engine().Author(header)
 	for i, tx := range block.Transactions() {
@@ -502,12 +497,6 @@ func (p *ParallelStateProcessorProfile) Process(block *types.Block, statedb *sta
 			return pSeral.Process(block, statedb, cfg)
 		}
 	}
-
-	log.Info("BlockSTM", "Dependencies deps", deps)
-	log.Info("BlockSTM", "Dependencies delayMap", delayMap)
-
-	// Iterate over and process the individual transactions
-	//
 
 	blockContext := NewEVMBlockContext(header, p.bc, nil)
 	// p.bc.Engine().Author(header)
@@ -684,12 +673,6 @@ func (p *ParallelStateProcessorUse) Process(block *types.Block, statedb *state.S
 			return pSeral.Process(block, statedb, cfg)
 		}
 	}
-
-	log.Info("BlockSTM", "Dependencies deps", deps)
-	log.Info("BlockSTM", "Dependencies delayMap", delayMap)
-
-	// Iterate over and process the individual transactions
-	//
 
 	blockContext := NewEVMBlockContext(header, p.bc, nil)
 	// p.bc.Engine().Author(header)

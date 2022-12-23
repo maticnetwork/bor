@@ -74,6 +74,10 @@ var (
 	blockExecutionTimer  = metrics.NewRegisteredTimer("chain/execution", nil)
 	blockWriteTimer      = metrics.NewRegisteredTimer("chain/write", nil)
 
+	serialGasTimer           = metrics.NewRegisteredTimer("chain/serialGas", nil)
+	parallelMetadataGasTimer = metrics.NewRegisteredTimer("chain/parallelGas", nil)
+	parallelGasTimer         = metrics.NewRegisteredTimer("chain/parallelGas", nil)
+
 	blockReorgMeter         = metrics.NewRegisteredMeter("chain/reorg/executes", nil)
 	blockReorgAddMeter      = metrics.NewRegisteredMeter("chain/reorg/add", nil)
 	blockReorgDropMeter     = metrics.NewRegisteredMeter("chain/reorg/drop", nil)
@@ -1747,26 +1751,46 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 		}
 
 		var substart time.Time
+		var substop time.Time
 		var receipts types.Receipts
 		var logs []*types.Log
 		var usedGas uint64
 
 		log.Info("\nProcessing block", "blockNumber", block.Number())
 
-		deps := blockstm.GetBlockDep(block.NumberU64(), "http://35.93.83.173:8000")
+		if new(big.Int).Rem(block.Number(), big.NewInt(3)).Cmp(big.NewInt(0)) == 0 {
+			deps := blockstm.GetBlockDep(block.NumberU64(), "http://35.93.83.173:8000")
+			block.SetTxDependency(deps)
+			log.Info("Processing block Parallel Metadata", "blockNumber", block.Number())
+			substart = time.Now()
+			receipts, logs, usedGas, err = bc.processorSTM.Process(block, statedb, bc.vmConfig)
+			substop = time.Now()
+			block.SetTxDependency(nil)
+			parallelMetadataGasTimer.Update(substop.Sub(substart))
+			log.Info("Process block time - Parallel Metadata", "blockNumber", block.Number(), "transactions", block.Transactions().Len(), "Time", substop.Sub(substart))
+		} else if new(big.Int).Rem(block.Number(), big.NewInt(2)).Cmp(big.NewInt(0)) == 1 {
+			log.Info("Processing block Parallel", "blockNumber", block.Number())
+			substart = time.Now()
+			receipts, logs, usedGas, err = bc.processorSTM.Process(block, statedb, bc.vmConfig)
+			substop = time.Now()
+			parallelGasTimer.Update(substop.Sub(substart))
+			log.Info("Process block time - Parallel", "blockNumber", block.Number(), "transactions", block.Transactions().Len(), "Time", substop.Sub(substart))
+		} else {
+			log.Info("Processing block Serial", "blockNumber", block.Number())
+			substart = time.Now()
+			receipts, logs, usedGas, err = bc.processor.Process(block, statedb, bc.vmConfig)
+			substop = time.Now()
+			serialGasTimer.Update(substop.Sub(substart))
+			log.Info("Process block time - Serial", "blockNumber", block.Number(), "transactions", block.Transactions().Len(), "Time", substop.Sub(substart))
+		}
 
-		fmt.Println("BlockSTM deps:", deps)
+		if serialGasTimer.Count()%50 == 0 {
+			log.Info("Histogram of processing time", "parallel metadata", parallelMetadataGasTimer.Percentiles([]float64{0.001, 0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 0.999, 0.9999}))
+			log.Info("Histogram of processing time", "parallel", parallelGasTimer.Percentiles([]float64{0.001, 0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 0.999, 0.9999}))
+			log.Info("Histogram of processing time", "serial", serialGasTimer.Percentiles([]float64{0.001, 0.01, 0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95, 0.99, 0.999, 0.9999}))
 
-		block.SetTxDependency(deps)
-
-		log.Info("Processing block Parallel", "blockNumber", block.Number())
-		substart = time.Now()
-		receipts, logs, usedGas, err = bc.processorSTM.Process(block, statedb, bc.vmConfig)
-		substop := time.Now()
-
-		block.SetTxDependency(nil)
-
-		log.Info("**** Parallel - Process block time", "blockNumber", block.Number(), "transactions", block.Transactions().Len(), "Time", substop.Sub(substart))
+			log.Info("Average processing time for parallel metadata, parallel, and serial", "parallel metadata", time.Duration(parallelMetadataGasTimer.Mean()), "parallel", time.Duration(parallelGasTimer.Mean()), "serial", time.Duration(serialGasTimer.Mean()))
+		}
 
 		if err != nil {
 			bc.reportBlock(block, receipts, err)
