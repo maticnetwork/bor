@@ -210,8 +210,6 @@ func (task *ExecutionTask) Settle() {
 
 	task.finalStateDB.Prepare(task.tx.Hash(), task.index)
 
-	// coinbase, _ := task.blockChain.Engine().Author(task.header)
-
 	coinbaseBalance := task.finalStateDB.GetBalance(task.coinbase)
 
 	task.finalStateDB.ApplyMVWriteSet(task.statedb.MVWriteList())
@@ -338,7 +336,6 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 
 	log.Info("BlockSTM", "Dependencies deps", deps)
 	log.Info("BlockSTM", "Dependencies delayMap", delayMap)
-
 	// Iterate over and process the individual transactions
 	//
 
