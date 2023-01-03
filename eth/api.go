@@ -285,6 +285,12 @@ func (api *PublicDebugAPI) DumpBlock(blockNr rpc.BlockNumber) (state.Dump, error
 	var block *types.Block
 	if blockNr == rpc.LatestBlockNumber {
 		block = api.eth.blockchain.CurrentBlock()
+	} else if blockNr == rpc.FinalizedBlockNumber {
+		number, err := getFinalizedBlockNumber(api.eth)
+		if err != nil {
+			return state.Dump{}, fmt.Errorf("finalized block not found")
+		}
+		block = api.eth.blockchain.CurrentFinalizedBlock(number)
 	} else {
 		block = api.eth.blockchain.GetBlockByNumber(uint64(blockNr))
 	}
@@ -374,6 +380,12 @@ func (api *PublicDebugAPI) AccountRange(blockNrOrHash rpc.BlockNumberOrHash, sta
 			var block *types.Block
 			if number == rpc.LatestBlockNumber {
 				block = api.eth.blockchain.CurrentBlock()
+			} else if number == rpc.FinalizedBlockNumber {
+				number, err := getFinalizedBlockNumber(api.eth)
+				if err != nil {
+					return state.IteratorDump{}, fmt.Errorf("finalized block not found")
+				}
+				block = api.eth.blockchain.CurrentFinalizedBlock(number)
 			} else {
 				block = api.eth.blockchain.GetBlockByNumber(uint64(number))
 			}
@@ -607,4 +619,20 @@ func (api *PrivateDebugAPI) GetAccessibleState(from, to rpc.BlockNumber) (uint64
 		}
 	}
 	return 0, fmt.Errorf("No state found")
+}
+
+func getFinalizedBlockNumber(eth *Ethereum) (uint64, error) {
+	currentBlockNum := eth.BlockChain().CurrentBlock()
+
+	doExist, number, _ := eth.Downloader().GetWhitelistedMilestone()
+	if doExist && number >= currentBlockNum.NumberU64() {
+		return number, nil
+	}
+
+	doExist, number, _ = eth.Downloader().GetWhitelistedCheckpoint()
+	if doExist && number >= currentBlockNum.NumberU64() {
+		return number, nil
+	}
+
+	return 0, fmt.Errorf("No finalized block")
 }

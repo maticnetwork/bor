@@ -90,6 +90,9 @@ func (bn *BlockNumber) UnmarshalJSON(data []byte) error {
 	case "pending":
 		*bn = PendingBlockNumber
 		return nil
+	case "finalized":
+		*bn = FinalizedBlockNumber
+		return nil
 	}
 
 	blckNum, err := hexutil.DecodeUint64(input)
@@ -104,7 +107,7 @@ func (bn *BlockNumber) UnmarshalJSON(data []byte) error {
 }
 
 // MarshalText implements encoding.TextMarshaler. It marshals:
-// - "latest", "earliest" or "pending" as strings
+// - "latest", "earliest" ,"pending" or "finalized" as strings
 // - other numbers as hex
 func (bn BlockNumber) MarshalText() ([]byte, error) {
 	switch bn {
@@ -114,6 +117,8 @@ func (bn BlockNumber) MarshalText() ([]byte, error) {
 		return []byte("latest"), nil
 	case PendingBlockNumber:
 		return []byte("pending"), nil
+	case FinalizedBlockNumber:
+		return []byte("finalized"), nil
 	default:
 		return hexutil.Uint64(bn).MarshalText()
 	}

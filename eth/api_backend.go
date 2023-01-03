@@ -19,6 +19,7 @@ package eth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math/big"
 	"time"
 
@@ -72,6 +73,14 @@ func (b *EthAPIBackend) HeaderByNumber(ctx context.Context, number rpc.BlockNumb
 	if number == rpc.LatestBlockNumber {
 		return b.eth.blockchain.CurrentBlock().Header(), nil
 	}
+	if number == rpc.FinalizedBlockNumber {
+		number, err := getFinalizedBlockNumber(b.eth)
+		if err != nil {
+			return nil, fmt.Errorf("finalized block not found")
+		}
+
+		return b.eth.blockchain.CurrentFinalizedBlock(number).Header(), nil
+	}
 	return b.eth.blockchain.GetHeaderByNumber(uint64(number)), nil
 }
 
@@ -105,6 +114,13 @@ func (b *EthAPIBackend) BlockByNumber(ctx context.Context, number rpc.BlockNumbe
 	// Otherwise resolve and return the block
 	if number == rpc.LatestBlockNumber {
 		return b.eth.blockchain.CurrentBlock(), nil
+	}
+	if number == rpc.FinalizedBlockNumber {
+		number, err := getFinalizedBlockNumber(b.eth)
+		if err != nil {
+			return nil, fmt.Errorf("finalized block not found")
+		}
+		return b.eth.blockchain.CurrentFinalizedBlock(number), nil
 	}
 	return b.eth.blockchain.GetBlockByNumber(uint64(number)), nil
 }
