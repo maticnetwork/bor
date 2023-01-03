@@ -2,6 +2,7 @@ package heimdallgrpc
 
 import (
 	"context"
+	"fmt"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
@@ -24,7 +25,7 @@ func (h *HeimdallGRPCClient) FetchMilestoneCount(ctx context.Context) (int64, er
 	return res.Result.Count, nil
 }
 
-func (h *HeimdallGRPCClient) FetchMilestone(ctx context.Context, number int64) (*milestone.Milestone, error) {
+func (h *HeimdallGRPCClient) FetchMilestone(ctx context.Context) (*milestone.Milestone, error) {
 	log.Info("Fetching milestone")
 
 	res, err := h.client.FetchMilestone(ctx, nil)
@@ -59,7 +60,7 @@ func (h *HeimdallGRPCClient) FetchLastNoAckMilestone(ctx context.Context) (strin
 	return res.Result.Result, nil
 }
 
-func (h *HeimdallGRPCClient) FetchNoAckMilestone(ctx context.Context, milestoneID string) (bool, error) {
+func (h *HeimdallGRPCClient) FetchNoAckMilestone(ctx context.Context, milestoneID string) error {
 	req := &proto.FetchMilestoneNoAckRequest{
 		MilestoneID: milestoneID,
 	}
@@ -68,10 +69,14 @@ func (h *HeimdallGRPCClient) FetchNoAckMilestone(ctx context.Context, milestoneI
 
 	res, err := h.client.FetchNoAckMilestone(ctx, req)
 	if err != nil {
-		return false, err
+		return err
+	}
+
+	if !res.Result.Result {
+		return fmt.Errorf("Not in rejected list: milestoneID %q", milestoneID)
 	}
 
 	log.Info("Fetched no ack milestone", "milestoneaID", milestoneID)
 
-	return res.Result.Result, nil
+	return nil
 }
