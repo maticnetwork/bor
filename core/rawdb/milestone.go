@@ -13,8 +13,9 @@ import (
 )
 
 var (
-	lastMilestone = []byte("LastMilestone")
-	lockFieldKey  = []byte("LockField")
+	lastMilestone      = []byte("LastMilestone")
+	lockFieldKey       = []byte("LockField")
+	futureMilestoneKey = []byte("FutureMilestoneField")
 )
 
 type Finality struct {
@@ -27,6 +28,11 @@ type LockField struct {
 	Block  uint64
 	Hash   common.Hash
 	IdList map[string]struct{}
+}
+
+type FutureMilestoneField struct {
+	Order []uint64
+	List  map[uint64]common.FutureMilestone
 }
 
 func (f *Finality) set(block uint64, hash common.Hash) {
@@ -162,4 +168,54 @@ func ReadLockField(db ethdb.KeyValueReader) (bool, uint64, common.Hash, map[stri
 	val, block, hash, idList := lockField.Val, lockField.Block, lockField.Hash, lockField.IdList
 
 	return val, block, hash, idList, nil
+}
+
+func WriteFutureMilestoneList(db ethdb.KeyValueWriter, order []uint64, list map[uint64]common.FutureMilestone) error {
+
+	futureMilestoneField := FutureMilestoneField{
+		Order: order,
+		List:  list,
+	}
+
+	key := futureMilestoneKey
+
+	enc, err := json.Marshal(futureMilestoneField)
+	if err != nil {
+		log.Error("Failed to marshal the future milestone field struct", "err", err)
+
+		return fmt.Errorf("%w: %v for future milestone field struct", ErrIncorrectFutureMilestoneFieldToStore, err)
+	}
+
+	if err := db.Put(key, enc); err != nil {
+		log.Error("Failed to store the future milestone field struct", "err", err)
+
+		return fmt.Errorf("%w: %v for future milestone field struct", ErrDBNotResponding, err)
+	}
+
+	return nil
+}
+
+func ReadFutureMilestoneList(db ethdb.KeyValueReader) ([]uint64, map[uint64]common.FutureMilestone, error) {
+	key := futureMilestoneKey
+	futureMilestoneField := FutureMilestoneField{}
+
+	data, err := db.Get(key)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w: empty response for future milestone field", err)
+	}
+
+	if len(data) == 0 {
+		return nil, nil, fmt.Errorf("%w for %s", ErrIncorrectLockField, string(key))
+	}
+
+	if err = json.Unmarshal(data, &futureMilestoneField); err != nil {
+		log.Error(fmt.Sprintf("Unable to unmarshal the future milestone field in database"), "err", err)
+
+		return nil, nil, fmt.Errorf("%w(%v) for future milestone field, data %v(%q)",
+			ErrIncorrectFutureMilestoneField, err, data, string(data))
+	}
+
+	order, list := futureMilestoneField.Order, futureMilestoneField.List
+
+	return order, list, nil
 }

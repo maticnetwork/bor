@@ -128,17 +128,17 @@ func fetchMilestoneTest(t *testing.T, heimdall *mockHeimdall, bor *bor.Bor, hand
 	// create a background context
 	ctx := context.Background()
 
-	_, _, err := handler.fetchWhitelistMilestone(ctx, bor, nil, verifier)
+	_, _, _, err := handler.fetchWhitelistMilestone(ctx, bor, nil, verifier)
 	require.Equal(t, err, errMilestone)
 
 	// create 4 mock checkpoints
 	milestones = createMockMilestones(4)
 
-	blockNum, blockHash, err := handler.fetchWhitelistMilestone(ctx, bor, nil, verifier)
+	_, blockEndNum, blockHash, err := handler.fetchWhitelistMilestone(ctx, bor, nil, verifier)
 
 	// Check if we have expected result
 	require.Equal(t, err, nil)
-	require.Equal(t, milestones[len(milestones)-1].EndBlock.Uint64(), blockNum)
+	require.Equal(t, milestones[len(milestones)-1].EndBlock.Uint64(), blockEndNum)
 	require.Equal(t, milestones[len(milestones)-1].RootHash, blockHash)
 }
 

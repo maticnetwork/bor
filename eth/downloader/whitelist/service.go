@@ -42,6 +42,12 @@ func NewService(db ethdb.Database) *Service {
 		lockedMilestoneIDs = make(map[string]struct{})
 	}
 
+	order, list, err := rawdb.ReadFutureMilestoneList(db)
+	if err != nil {
+		order = make([]uint64, 0)
+		list = make(map[uint64]common.FutureMilestone)
+	}
+
 	return &Service{
 		//fixme: try to restore from DB
 		&checkpoint{
@@ -64,10 +70,13 @@ func NewService(db ethdb.Database) *Service {
 				db:       db,
 			},
 
-			Locked:             locked,
-			LockedSprintNumber: lockedSprintNumber,
-			LockedSprintHash:   lockedSprintHash,
-			LockedMilestoneIDs: lockedMilestoneIDs,
+			Locked:               locked,
+			LockedSprintNumber:   lockedSprintNumber,
+			LockedSprintHash:     lockedSprintHash,
+			LockedMilestoneIDs:   lockedMilestoneIDs,
+			FutureMilestoneList:  list,
+			FutureMilestoneOrder: order,
+			MaxCapacity:          10,
 		},
 	}
 }

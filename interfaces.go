@@ -247,6 +247,7 @@ type ChainValidator interface {
 	GetWhitelistedMilestone() (bool, uint64, common.Hash)
 	ProcessCheckpoint(endBlockNum uint64, endBlockHash common.Hash)
 	ProcessMilestone(endBlockNum uint64, endBlockHash common.Hash)
+	ProcessFutureMilestone(startBlockNum uint64, endBlockNum uint64, rootHash string)
 	PurgeWhitelistedCheckpoint()
 	PurgeWhitelistedMilestone()
 

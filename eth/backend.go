@@ -758,7 +758,13 @@ type heimdallHandler func(ctx context.Context, ethHandler *ethHandler, bor *bor.
 func (s *Ethereum) handleMilestone(ctx context.Context, ethHandler *ethHandler, bor *bor.Bor) error {
 	// Create a new bor verifier, which will be used to verify checkpoints and milestones
 	verifier := newBorVerifier()
-	blockNum, blockHash, err := ethHandler.fetchWhitelistMilestone(ctx, bor, s, verifier)
+	blockStartNum, blockEndNum, hash, err := ethHandler.fetchWhitelistMilestone(ctx, bor, s, verifier)
+
+	//If the current chain head is behind the received milestone, then we will store the milestone in the
+	//future milestone list.
+	if err == errMissingBlocks {
+		ethHandler.downloader.ProcessFutureMilestone(blockStartNum, blockEndNum, hash.String()[2:])
+	}
 
 	// If blockNum, blockhash doesn't have any value than we're bound to receive an error. Non-nill
 	// means that either the milestone does exist on the heimdall or . We'll add those partial
@@ -767,7 +773,7 @@ func (s *Ethereum) handleMilestone(ctx context.Context, ethHandler *ethHandler, 
 		return err
 	}
 
-	ethHandler.downloader.ProcessMilestone(blockNum, blockHash)
+	ethHandler.downloader.ProcessMilestone(blockEndNum, hash)
 
 	return nil
 }

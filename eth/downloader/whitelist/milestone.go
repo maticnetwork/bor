@@ -11,21 +11,25 @@ import (
 type milestone struct {
 	finality[*rawdb.Milestone]
 
-	//todo: need persistence
 	LockedSprintNumber uint64              // Locked sprint number
 	LockedSprintHash   common.Hash         //Hash for the locked endBlock
 	Locked             bool                //
 	LockedMilestoneIDs map[string]struct{} //list of milestone ids
 
+	FutureMilestoneList  map[uint64]common.FutureMilestone // Future Milestone list
+	FutureMilestoneOrder []uint64                          // Future Milestone Order
+	MaxCapacity          int                               //Capacity of future Milestone list
 }
 
 type milestoneService interface {
 	finalityService
+
 	GetMilestoneIDsList() []string
 	RemoveMilestoneID(milestoneId string)
 	LockMutex(endBlockNum uint64) bool
 	UnlockMutex(doLock bool, milestoneId string, endBlockHash common.Hash)
 	UnlockSprint(endBlockNum uint64)
+	ProcessFutureMilestone(startBlockNum uint64, endBlockNum uint64, rootHash string)
 }
 
 // IsValidChain checks the validity of chain by comparing it
@@ -65,6 +69,14 @@ func (m *milestone) Process(block uint64, hash common.Hash) {
 	defer m.finality.Unlock()
 
 	m.finality.Process(block, hash)
+
+	for i := 0; i < len(m.FutureMilestoneOrder); i++ {
+		if m.FutureMilestoneOrder[i] <= block {
+			m.dequeueFutureMilestone()
+		} else {
+			break
+		}
+	}
 
 	m.UnlockSprint(block)
 }
@@ -180,4 +192,83 @@ func (m *milestone) GetMilestoneIDsList() []string {
 // This is remove the milestoneIDs stored in the list.
 func (m *milestone) purgeMilestoneIDsList() {
 	m.LockedMilestoneIDs = make(map[string]struct{})
+}
+
+func (m *milestone) IsFutureMilestoneCompatible(currentHeader *types.Header, chain []*types.Header) bool {
+	chainTipNumber := chain[len(chain)-1].Number.Uint64()
+
+	for i := 0; i < len(m.FutureMilestoneOrder); i++ {
+
+		if chainTipNumber < m.FutureMilestoneOrder[i] {
+
+			if i == 0 {
+				return true
+			}
+
+			for j := len(chain) - 1; j >= 0; j-- {
+				if chain[j].Number.Uint64() == m.FutureMilestoneOrder[i-1] {
+
+					endBlockNum := m.FutureMilestoneOrder[i-1]
+					startBlockNum := m.FutureMilestoneList[endBlockNum].Start
+					milestoneRootHash := m.FutureMilestoneList[endBlockNum].Hash
+
+					if j < int(endBlockNum-startBlockNum) {
+						return true
+					}
+
+					end := j
+					start := j - int(endBlockNum-startBlockNum)
+
+					chainRootHash, err := getRootHash(chain[start : end+1])
+
+					if err != nil {
+						return true
+					}
+
+					return chainRootHash[2:] == milestoneRootHash
+				}
+			}
+		}
+	}
+	return true
+}
+
+func (m *milestone) ProcessFutureMilestone(startBlockNum uint64, endBlockNum uint64, rootHash string) {
+
+	futureMilestone := common.FutureMilestone{
+		Start: startBlockNum,
+		End:   endBlockNum,
+		Hash:  rootHash,
+	}
+
+	if len(m.FutureMilestoneOrder) < m.MaxCapacity {
+		m.enqueueFutureMilestone(endBlockNum, futureMilestone)
+	}
+}
+
+// EnqueueFutureMilestone add the future milestone to the list
+func (m *milestone) enqueueFutureMilestone(key uint64, futureMilestone common.FutureMilestone) {
+
+	if _, ok := m.FutureMilestoneList[key]; !ok {
+		log.Debug("Enqueing new future milestone", "end block number", key, "root hash", futureMilestone.Hash)
+
+		m.FutureMilestoneList[key] = futureMilestone
+		m.FutureMilestoneOrder = append(m.FutureMilestoneOrder, key)
+
+		err := rawdb.WriteFutureMilestoneList(m.db, m.FutureMilestoneOrder, m.FutureMilestoneList)
+		if err != nil {
+			log.Error("Error in writing future milestone data to db", "err", err)
+		}
+	}
+}
+
+// DequeueFutureMilestone remove the future milestone entry from the list.
+func (m *milestone) dequeueFutureMilestone() {
+	delete(m.FutureMilestoneList, m.FutureMilestoneOrder[0])
+	m.FutureMilestoneOrder = m.FutureMilestoneOrder[1:]
+
+	err := rawdb.WriteFutureMilestoneList(m.db, m.FutureMilestoneOrder, m.FutureMilestoneList)
+	if err != nil {
+		log.Error("Error in writing future milestone data to db", "err", err)
+	}
 }
