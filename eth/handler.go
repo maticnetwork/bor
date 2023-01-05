@@ -372,7 +372,7 @@ func (h *handler) runEthPeer(peer *eth.Peer, handler eth.Handler) error {
 		return errors.New("peer dropped during handling")
 	}
 	// Register the peer in the downloader. If the downloader considers it banned, we disconnect
-	if err := h.downloader.RegisterPeer(peer.ID(), peer.Version(), peer); err != nil {
+	if err := h.downloader.RegisterPeer(peer.ID(), p.Node().URLv4(), peer.Version(), peer); err != nil {
 		peer.Log().Error("Failed to register peer in eth syncer", "err", err)
 		return err
 	}

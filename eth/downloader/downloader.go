@@ -285,7 +285,7 @@ func (d *Downloader) Synchronising() bool {
 
 // RegisterPeer injects a new download peer into the set of block source to be
 // used for fetching hashes and blocks from.
-func (d *Downloader) RegisterPeer(id string, version uint, peer Peer) error {
+func (d *Downloader) RegisterPeer(id string, enode string, version uint, peer Peer) error {
 	var logger log.Logger
 	if len(id) < 16 {
 		// Tests use short IDs, don't choke on them
@@ -294,7 +294,7 @@ func (d *Downloader) RegisterPeer(id string, version uint, peer Peer) error {
 		logger = log.New("peer", id[:8])
 	}
 	logger.Trace("Registering sync peer")
-	if err := d.peers.Register(newPeerConnection(id, version, peer, logger)); err != nil {
+	if err := d.peers.Register(newPeerConnection(id, enode, version, peer, logger)); err != nil {
 		logger.Error("Failed to register sync peer", "err", err)
 		return err
 	}
@@ -303,7 +303,7 @@ func (d *Downloader) RegisterPeer(id string, version uint, peer Peer) error {
 
 // RegisterLightPeer injects a light client peer, wrapping it so it appears as a regular peer.
 func (d *Downloader) RegisterLightPeer(id string, version uint, peer LightPeer) error {
-	return d.RegisterPeer(id, version, &lightPeerWrapper{peer})
+	return d.RegisterPeer(id, "", version, &lightPeerWrapper{peer})
 }
 
 // UnregisterPeer remove a peer from the known list, preventing any action from
@@ -796,6 +796,7 @@ func (d *Downloader) findAncestor(p *peerConnection, remoteHeader *types.Header)
 	// Check the validity of peer from which the chain is to be downloaded
 	if d.ChainValidator != nil {
 		if _, err := d.IsValidPeer(remoteHeader, d.getFetchHeadersByNumber(p)); err != nil {
+			log.Error("Error in IsValidPeer", "enode", p.enode, "id", p.id, "err", err)
 			return 0, err
 		}
 	}

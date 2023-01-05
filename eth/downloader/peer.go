@@ -43,7 +43,8 @@ var (
 
 // peerConnection represents an active peer from which hashes and blocks are retrieved.
 type peerConnection struct {
-	id string // Unique identifier of the peer
+	id    string // Unique identifier of the peer
+	enode string
 
 	rates   *msgrate.Tracker         // Tracker to hone in on the number of items retrievable per second
 	lacking map[common.Hash]struct{} // Set of hashes not to request (didn't have previously)
@@ -89,9 +90,10 @@ func (w *lightPeerWrapper) RequestReceipts([]common.Hash, chan *eth.Response) (*
 }
 
 // newPeerConnection creates a new downloader peer.
-func newPeerConnection(id string, version uint, peer Peer, logger log.Logger) *peerConnection {
+func newPeerConnection(id string, enode string, version uint, peer Peer, logger log.Logger) *peerConnection {
 	return &peerConnection{
 		id:      id,
+		enode:   enode,
 		lacking: make(map[common.Hash]struct{}),
 		peer:    peer,
 		version: version,

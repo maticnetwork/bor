@@ -51,6 +51,8 @@ func (w *Service) IsValidPeer(remoteHeader *types.Header, fetchHeadersByNumber f
 	lastCheckpointBlockNum := w.checkpointOrder[len(w.checkpointOrder)-1]
 	lastCheckpointBlockHash := w.checkpointWhitelist[lastCheckpointBlockNum]
 
+	log.Info("Validating peer with last checkpoint", "number", lastCheckpointBlockNum, "hash", lastCheckpointBlockHash)
+
 	// todo: we can extract this as an interface and mock as well or just test IsValidChain in isolation from downloader passing fake fetchHeadersByNumber functions
 	headers, hashes, err := fetchHeadersByNumber(lastCheckpointBlockNum, 1, 0, false)
 	if err != nil {
@@ -63,6 +65,8 @@ func (w *Service) IsValidPeer(remoteHeader *types.Header, fetchHeadersByNumber f
 
 	reqBlockNum := headers[0].Number.Uint64()
 	reqBlockHash := hashes[0]
+
+	log.Info("Requested blocks", "number", reqBlockNum, "hash", reqBlockHash)
 
 	// Check against the checkpointed blocks
 	if reqBlockNum == lastCheckpointBlockNum && reqBlockHash == lastCheckpointBlockHash {

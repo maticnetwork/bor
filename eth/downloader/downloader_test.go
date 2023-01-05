@@ -133,7 +133,7 @@ func (dl *downloadTester) newPeer(id string, version uint, blocks []*types.Block
 	}
 	dl.peers[id] = peer
 
-	if err := dl.downloader.RegisterPeer(id, version, peer); err != nil {
+	if err := dl.downloader.RegisterPeer(id, "", version, peer); err != nil {
 		panic(err)
 	}
 	if err := dl.downloader.SnapSyncer.Register(peer); err != nil {
