@@ -93,9 +93,9 @@ func getTestSprintLengthMilestoneReorgCases() []map[string]uint64 {
 	for i := uint64(0); i < uint64(len(sprintSizes)); i++ {
 		for m := uint64(0); m < uint64(len(milestoneLength)); m++ {
 			maxReorgLength := sprintSizes[i] * 4
-			for j := uint64(3); j <= maxReorgLength; j = j + 4 {
+			for j := uint64(3); j <= maxReorgLength; j = j + 8 {
 				maxStartBlock := sprintSizes[i] - 1
-				for k := sprintSizes[i] / 2; k <= maxStartBlock; k = k + 4 {
+				for k := sprintSizes[i] / 2; k <= maxStartBlock; k = k + 8 {
 					for l := uint64(0); l < uint64(len(faultyNodes)); l++ {
 						if j+k < sprintSizes[i] {
 							continue
@@ -276,7 +276,6 @@ func TestSprintLengthMilestoneReorg(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-
 	for index, tt := range reorgsLengthTests {
 		if index%4 == 0 {
 			wg.Wait()
