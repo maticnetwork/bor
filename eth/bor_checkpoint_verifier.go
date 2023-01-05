@@ -80,7 +80,7 @@ func borVerify(ctx context.Context, eth *Ethereum, handler *ethHandler, start ui
 			}
 		}
 
-		if head-hexutil.Uint64(end) > 255 {
+		if head-hexutil.Uint64(rewindTo) > 255 {
 			headInt64, err := strconv.ParseInt(head.String(), 10, 64)
 			if err != nil {
 				return hash, errBlockNumberConversion
