@@ -370,6 +370,7 @@ func (d *Downloader) LegacySync(id string, head common.Hash, td, ttd *big.Int, m
 // it will use the best peer possible and synchronize if its TD is higher than our own. If any of the
 // checks fail an error will be returned. This method is synchronous
 func (d *Downloader) synchronise(id string, hash common.Hash, td, ttd *big.Int, mode SyncMode, beaconMode bool, beaconPing chan struct{}) error {
+	log.Info("---------------- synchronise")
 	// The beacon header syncer is async. It will start this synchronization and
 	// will continue doing other tasks. However, if synchornization needs to be
 	// cancelled, the syncer needs to know if we reached the startup point (and
@@ -455,6 +456,7 @@ func (d *Downloader) getMode() SyncMode {
 // syncWithPeer starts a block synchronization based on the hash chain from the
 // specified peer and head hash.
 func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td, ttd *big.Int, beaconMode bool) (err error) {
+	log.Info("---------------- syncWithPeer")
 	d.mux.Post(StartEvent{})
 	defer func() {
 		// reset on error
@@ -793,10 +795,11 @@ func (d *Downloader) getFetchHeadersByNumber(p *peerConnection) func(number uint
 // In the rare scenario when we ended up on a long reorganisation (i.e. none of
 // the head links match), we do a binary search to find the common ancestor.
 func (d *Downloader) findAncestor(p *peerConnection, remoteHeader *types.Header) (uint64, error) {
+	log.Info("---------------- findAncestor")
 	// Check the validity of peer from which the chain is to be downloaded
 	if d.ChainValidator != nil {
 		if _, err := d.IsValidPeer(remoteHeader, d.getFetchHeadersByNumber(p)); err != nil {
-			log.Error("Error in IsValidPeer", "enode", p.enode, "id", p.id, "err", err)
+			log.Info("---------------- Error in IsValidPeer", "enode", p.enode, "id", p.id, "err", err)
 			return 0, err
 		}
 	}
