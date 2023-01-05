@@ -1131,6 +1131,7 @@ func (d *Downloader) fetchHeaders(p *peerConnection, from uint64, head uint64) e
 			filled, hashset, proced, err := d.fillHeaderSkeleton(from, headers)
 			if err != nil {
 				p.log.Debug("Skeleton chain invalid", "err", err)
+				log.Info("---------------- Skeleton chain invalid", "err", err)
 				return fmt.Errorf("%w: %v", errInvalidChain, err)
 			}
 			headers = filled[proced:]
@@ -1426,7 +1427,7 @@ func (d *Downloader) processHeaders(origin uint64, td, ttd *big.Int, beaconMode 
 								rollback = chunkHeaders[0].Number.Uint64()
 							}
 
-							log.Warn("Invalid header encountered", "number", chunkHeaders[n].Number, "hash", chunkHashes[n], "parent", chunkHeaders[n].ParentHash, "err", err)
+							log.Warn("---------------- Invalid header encountered", "number", chunkHeaders[n].Number, "hash", chunkHashes[n], "parent", chunkHeaders[n].ParentHash, "err", err)
 
 							return fmt.Errorf("%w: %v", errInvalidChain, err)
 						}
@@ -1585,6 +1586,7 @@ func (d *Downloader) importBlockResults(results []*fetchResult) error {
 			// of the blocks delivered from the downloader, and the indexing will be off.
 			log.Debug("Downloaded item processing failed on sidechain import", "index", index, "err", err)
 		}
+		log.Info("---------------- importBlockResults", "err", err)
 		return fmt.Errorf("%w: %v", errInvalidChain, err)
 	}
 	return nil
@@ -1764,7 +1766,7 @@ func (d *Downloader) commitSnapSyncData(results []*fetchResult, stateSync *state
 		receipts[i] = result.Receipts
 	}
 	if index, err := d.blockchain.InsertReceiptChain(blocks, receipts, d.ancientLimit); err != nil {
-		log.Debug("Downloaded item processing failed", "number", results[index].Header.Number, "hash", results[index].Header.Hash(), "err", err)
+		log.Info("---------------- Downloaded item processing failed", "number", results[index].Header.Number, "hash", results[index].Header.Hash(), "err", err)
 		return fmt.Errorf("%w: %v", errInvalidChain, err)
 	}
 	return nil
