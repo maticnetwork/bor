@@ -60,6 +60,9 @@ type Config struct {
 	// KeyStoreDir is the directory to store keystores
 	KeyStoreDir string `hcl:"keystore,optional" toml:"keystore,optional"`
 
+	// Maximum number of messages in a batch
+	RPCBatchLimit uint64 `hcl:"rpcbatchlimit,optional" toml:"rpcbatchlimit,optional"`
+
 	// SyncMode selects the sync protocol
 	SyncMode string `hcl:"syncmode,optional" toml:"syncmode,optional"`
 
@@ -441,6 +444,7 @@ func DefaultConfig() *Config {
 		LogLevel:       "INFO",
 		DataDir:        DefaultDataDir(),
 		Ancient:        "",
+		RPCBatchLimit:  100,
 		P2P: &P2PConfig{
 			MaxPeers:     50,
 			MaxPendPeers: 50,
@@ -986,6 +990,7 @@ func (c *Config) buildNode() (*node.Config, error) {
 			WriteTimeout: c.JsonRPC.HttpTimeout.WriteTimeout,
 			IdleTimeout:  c.JsonRPC.HttpTimeout.IdleTimeout,
 		},
+		RPCBatchLimit: c.RPCBatchLimit,
 	}
 
 	// dev mode

@@ -46,6 +46,12 @@ func (c *Command) Flags() *flagset.Flagset {
 		Usage: "Path of the directory where keystores are located",
 		Value: &c.cliConfig.KeyStoreDir,
 	})
+	f.Uint64Flag(&flagset.Uint64Flag{
+		Name:    "rpcbatchlimit",
+		Usage:   "Maximum number of messages in a batch",
+		Value:   &c.cliConfig.RPCBatchLimit,
+		Default: c.cliConfig.RPCBatchLimit,
+	})
 	f.StringFlag(&flagset.StringFlag{
 		Name:  "config",
 		Usage: "File for the config file",
