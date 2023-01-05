@@ -81,14 +81,18 @@ func (w *Service) IsValidPeer(remoteHeader *types.Header, fetchHeadersByNumber f
 // IsValidChain checks the validity of chain by comparing it
 // against the local checkpoint entries
 func (w *Service) IsValidChain(currentHeader *types.Header, chain []*types.Header) bool {
+	log.Info("---------------- IsValidChain", "current", currentHeader.Number.Uint64(), "first", chain[0].Number.Uint64(), "last", chain[len(chain)-1].Number.Uint64())
+
 	// Check if we have checkpoints to validate incoming chain in memory
 	if len(w.checkpointWhitelist) == 0 {
 		// We don't have any entries, no additional validation will be possible
+		// log.Info("---------------- true: no checkpoints in memory")
 		return true
 	}
 
 	// Return if we've received empty chain
 	if len(chain) == 0 {
+		log.Info("---------------- false: empty chain received")
 		return false
 	}
 
@@ -101,11 +105,14 @@ func (w *Service) IsValidChain(currentHeader *types.Header, chain []*types.Heade
 	if chain[len(chain)-1].Number.Uint64() < oldestCheckpointNumber {
 		// We have future whitelisted entries, so no additional validation will be possible
 		// This case will occur when bor is in middle of sync, but heimdall is ahead/fully synced.
+		// log.Info("---------------- true: out of range", "oldest checkpoint", oldestCheckpointNumber)
 		return true
 	}
 
 	// Split the chain into past and future chain
 	pastChain, futureChain := splitChain(current, chain)
+	// log.Info("---------------- split chain range", "past first", pastChain[0].Number.Uint64(), "past last", pastChain[len(pastChain)-1].Number.Uint64())
+	// log.Info("---------------- split chain range", "future first", futureChain[0].Number.Uint64(), "future last", futureChain[len(futureChain)-1].Number.Uint64())
 
 	// Add an offset to future chain if it's not in continuity
 	offset := 0
@@ -115,6 +122,7 @@ func (w *Service) IsValidChain(currentHeader *types.Header, chain []*types.Heade
 
 	// Don't accept future chain of unacceptable length (from current block)
 	if len(futureChain)+offset > int(w.checkpointInterval) {
+		log.Info("---------------- false: long chain", "len", len(futureChain)+offset)
 		return false
 	}
 
@@ -122,10 +130,12 @@ func (w *Service) IsValidChain(currentHeader *types.Header, chain []*types.Heade
 	// It will handle all cases where the incoming chain has atleast one checkpoint
 	for i := len(pastChain) - 1; i >= 0; i-- {
 		if _, ok := w.checkpointWhitelist[pastChain[i].Number.Uint64()]; ok {
+			log.Info("---------------- compare: long chain", "1", pastChain[i].Hash(), "2", w.checkpointWhitelist[pastChain[i].Number.Uint64()], "number", pastChain[i].Number.Uint64())
 			return pastChain[i].Hash() == w.checkpointWhitelist[pastChain[i].Number.Uint64()]
 		}
 	}
 
+	// log.Info("---------------- true")
 	return true
 }
 
