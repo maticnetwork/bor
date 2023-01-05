@@ -611,8 +611,8 @@ github.com/maticnetwork/cosmos-sdk v0.37.5-0.20220311095845-81690c6a53e7 h1:8NoE
 github.com/maticnetwork/cosmos-sdk v0.37.5-0.20220311095845-81690c6a53e7/go.mod h1:uW55Ru86N5o3L8SVkVL1TPE+mV/WRM2la8sC3TR/Ajc=
 github.com/maticnetwork/crand v1.0.2 h1:Af0tAivC8zrxXDpGWNWVT/0s1fOz8w0eRbahZgURS8I=
 github.com/maticnetwork/crand v1.0.2/go.mod h1:/NRNL3bj2eYdqpWmoIP5puxndTpi0XRxpj5ZKxfHjyg=
-github.com/maticnetwork/heimdall v0.3.0-beta1.0.20221123180730-457028136461 h1:XMznEUVoJVzrZjGzh252yNrmsEKLFgiXefWbhKRabJQ=
-github.com/maticnetwork/heimdall v0.3.0-beta1.0.20221123180730-457028136461/go.mod h1:IHC6KRjp1c9DLUXLB0+65Fdn+T55OV9y4VViCwYv4lk=
+github.com/maticnetwork/heimdall v0.3.1-0.20230105132832-d0063f71e3f0 h1:MYTAcBs4y88GEzesT8eAU472ZfQSLluW0qgkZTzNgwM=
+github.com/maticnetwork/heimdall v0.3.1-0.20230105132832-d0063f71e3f0/go.mod h1:A3bUSe9jjMQHEPPOUW1JytM3x2g3t+jvsbPY66KBPIs=
 github.com/maticnetwork/polyproto v0.0.2 h1:cPxuxbIDItdwGnucc3lZB58U8Zfe1mH73PWTGd15554=
 github.com/maticnetwork/polyproto v0.0.2/go.mod h1:e1mU2EXSwEpn5jM7GfNwu3AupsV6WAGoPFFfswXOF0o=
 github.com/maticnetwork/tendermint v0.26.0-dev0.0.20220923185258-3e7c7f86ce9f h1:iV69PJUEdwJJFXQvbADYVEMxDrkKAsPdHTg4U3F510I=
