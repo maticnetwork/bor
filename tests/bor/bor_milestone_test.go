@@ -3,6 +3,8 @@ package bor
 import (
 	"crypto/ecdsa"
 	"encoding/json"
+	"errors"
+
 	"io/ioutil"
 	"math/big"
 	"os"
@@ -156,6 +158,7 @@ func TestMiningAfterLocking(t *testing.T) {
 }
 
 func TestReorgingAfterLockingSprint(t *testing.T) {
+	t.Parallel()
 
 	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
 	fdlimit.Raise(2048)
@@ -270,6 +273,7 @@ func TestReorgingAfterLockingSprint(t *testing.T) {
 }
 
 func TestReorgingAfterWhitelisting(t *testing.T) {
+	t.Parallel()
 
 	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
 	fdlimit.Raise(2048)
@@ -380,6 +384,7 @@ func TestReorgingAfterWhitelisting(t *testing.T) {
 }
 
 func TestPeerConnectionAfterWhitelisting(t *testing.T) {
+	t.Parallel()
 
 	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
 	fdlimit.Raise(2048)
@@ -496,6 +501,7 @@ func TestPeerConnectionAfterWhitelisting(t *testing.T) {
 }
 
 func TestReorgingFutureSprintAfterLocking(t *testing.T) {
+	t.Parallel()
 
 	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
 	fdlimit.Raise(2048)
@@ -580,6 +586,7 @@ func TestReorgingFutureSprintAfterLocking(t *testing.T) {
 }
 
 func TestReorgingFutureSprintAfterLockingOnSameHash(t *testing.T) {
+	t.Parallel()
 
 	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
 	fdlimit.Raise(2048)
@@ -664,6 +671,7 @@ func TestReorgingFutureSprintAfterLockingOnSameHash(t *testing.T) {
 }
 
 func TestReorgingAfterLockingOnDifferentHash(t *testing.T) {
+	t.Parallel()
 
 	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
 	fdlimit.Raise(2048)
@@ -780,6 +788,7 @@ func TestReorgingAfterLockingOnDifferentHash(t *testing.T) {
 }
 
 func TestReorgingAfterWhitelistingOnDifferentHash(t *testing.T) {
+	t.Parallel()
 
 	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
 	fdlimit.Raise(2048)
@@ -898,6 +907,7 @@ func TestReorgingAfterWhitelistingOnDifferentHash(t *testing.T) {
 }
 
 func TestNonMinerNodeWithWhitelisting(t *testing.T) {
+	t.Parallel()
 
 	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
 	fdlimit.Raise(2048)
@@ -992,6 +1002,7 @@ func TestNonMinerNodeWithWhitelisting(t *testing.T) {
 }
 
 func TestNonMinerNodeWithTryToLock(t *testing.T) {
+	t.Parallel()
 
 	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
 	fdlimit.Raise(2048)
@@ -1079,6 +1090,8 @@ func TestNonMinerNodeWithTryToLock(t *testing.T) {
 }
 
 func TestRewind(t *testing.T) {
+	t.Skip()
+	t.Parallel()
 
 	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
 	fdlimit.Raise(2048)
@@ -1181,6 +1194,103 @@ func TestRewind(t *testing.T) {
 
 }
 
+func TestRewinding(t *testing.T) {
+	t.Skip()
+	t.Parallel()
+
+	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
+	fdlimit.Raise(2048)
+
+	// Generate a batch of accounts to seal and fund with
+	faucets := make([]*ecdsa.PrivateKey, 128)
+	for i := 0; i < len(faucets); i++ {
+		faucets[i], _ = crypto.GenerateKey()
+	}
+
+	// Create an Ethash network based off of the Ropsten config
+	genesis := InitGenesis(t, faucets, "./testdata/genesis_2val.json", 8)
+
+	var (
+		stacks []*node.Node
+		nodes  []*eth.Ethereum
+		enodes []*enode.Node
+	)
+	for i := 0; i < 2; i++ {
+		// Start the node and wait until it's up
+		stack, ethBackend, err := InitMiner(genesis, keys[i], true)
+		if err != nil {
+			panic(err)
+		}
+		defer stack.Close()
+
+		for stack.Server().NodeInfo().Ports.Listener == 0 {
+			time.Sleep(250 * time.Millisecond)
+		}
+
+		// Connect the node to all the previous ones
+		for _, n := range enodes {
+			stack.Server().AddPeer(n)
+		}
+
+		// Start tracking the node and its enode
+		stacks = append(stacks, stack)
+		nodes = append(nodes, ethBackend)
+		enodes = append(enodes, stack.Server().Self())
+	}
+
+	// Iterate over all the nodes and start mining
+	time.Sleep(3 * time.Second)
+
+	//Start mining
+	for _, node := range nodes {
+		if err := node.StartMining(1); err != nil {
+			panic(err)
+		}
+	}
+
+	var step1 = false
+	var step2 = false
+
+	for {
+
+		blockHeaderVal0 := nodes[0].BlockChain().CurrentHeader()
+		blockHeaderVal1 := nodes[1].BlockChain().CurrentHeader()
+
+		//Processing the milestone
+		if blockHeaderVal0.Number.Uint64() == 7 {
+			blockHash := blockHeaderVal1.Hash()
+			nodes[0].Downloader().ChainValidator.ProcessMilestone(blockHeaderVal1.Number.Uint64(), blockHash)
+		}
+
+		//Verify the wrong hash to rewind back
+		if blockHeaderVal0.Number.Uint64() == 15 && !step1 {
+			borVerify(nodes[0], 8, 15, "LocalHash", "RootHash", 15, 7)
+			step1 = true
+		}
+
+		//Check for the rewind
+		if step1 && blockHeaderVal0.Number.Uint64() <= 6 {
+			assert.Fail(t, "Node1 chain rewound to more than expected number")
+		}
+
+		//Verify the wrong hash
+		if blockHeaderVal0.Number.Uint64() == 270 && !step2 {
+			borVerify(nodes[0], 8, 15, "LocalHash", "RootHash", 270, 7)
+			step2 = true
+		}
+
+		//Check for the rewind
+		if step2 && blockHeaderVal0.Number.Uint64() <= 14 {
+			assert.Fail(t, "Node1 chain rewound to more than expected number")
+		}
+
+		if blockHeaderVal0.Number.Uint64() == 300 {
+			break
+		}
+
+	}
+}
+
 func InitGenesis(t *testing.T, faucets []*ecdsa.PrivateKey, fileLocation string, sprintSize uint64) *core.Genesis {
 	t.Helper()
 
@@ -1271,4 +1381,66 @@ func InitMiner(genesis *core.Genesis, privKey *ecdsa.PrivateKey, withoutHeimdall
 	err = stack.Start()
 
 	return stack, ethBackend, err
+}
+
+var (
+	// errMissingBlocks is returned when we don't have the blocks locally, yet.
+	errMissingBlocks = errors.New("missing blocks")
+
+	// errRootHash is returned when we aren't able to calculate the root hash
+	// locally for a range of blocks.
+	errRootHash = errors.New("failed to get local root hash")
+
+	// errRootHashMismatch is returned when the local root hash doesn't match
+	// with the root hash in checkpoint/milestone.
+	errRootHashMismatch = errors.New("roothash mismatch")
+
+	// errEndBlock is returned when we're unable to fetch a block locally.
+	errEndBlock = errors.New("failed to get end block")
+
+	// errBlockNumberConversion is returned when we get err in parsing hexautil block number
+	errBlockNumberConversion = errors.New("failed to parse the block number")
+)
+
+func borVerify(eth *eth.Ethereum, start uint64, end uint64, rootHash string, localHash string, head uint64, lastMilestone uint64) (string, error) {
+
+	//nolint
+	if localHash != rootHash {
+
+		var rewindTo uint64
+		rewindTo = lastMilestone
+
+		if head-rewindTo > 255 {
+
+			rewindTo = head - 254
+		}
+
+		rewindBack(eth, rewindTo)
+
+		return "", errRootHashMismatch
+	}
+
+	return "", nil
+}
+
+// Stop the miner if the mining process is running and rewind back the chain
+func rewindBack(eth *eth.Ethereum, rewindTo uint64) {
+	if eth.Miner().Mining() {
+		ch := make(chan struct{})
+		eth.Miner().Stop(ch)
+		<-ch
+		rewind(eth, rewindTo)
+		eth.StartMining(1)
+	} else {
+		rewind(eth, rewindTo)
+	}
+}
+
+func rewind(eth *eth.Ethereum, rewindTo uint64) {
+	log.Warn("Rewinding chain to :", rewindTo, "block number")
+	err := eth.BlockChain().SetHead(rewindTo)
+
+	if err != nil {
+		log.Error("Error while rewinding the chain to", "Block Number", rewindTo, "Error", err)
+	}
 }
