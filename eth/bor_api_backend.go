@@ -11,6 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/event"
+	"github.com/ethereum/go-ethereum/rpc"
 )
 
 // GetRootHash returns root hash for given start and end block
@@ -35,7 +36,7 @@ func (b *EthAPIBackend) GetRootHash(ctx context.Context, starBlockNr uint64, end
 }
 
 // GetRootHash returns root hash for given start and end block
-func (b *EthAPIBackend) GetVoteOnRootHash(ctx context.Context, starBlockNr uint64, endBlockNr uint64, rootHash string, milestoneId string) (bool, error) {
+func (b *EthAPIBackend) GetVoteOnRootHash(ctx context.Context, starBlockNr uint64, endBlockNr uint64, endBlockHash string, milestoneId string) (bool, error) {
 	var api *bor.API
 
 	for _, _api := range b.eth.Engine().APIs(b.eth.BlockChain()) {
@@ -48,14 +49,15 @@ func (b *EthAPIBackend) GetVoteOnRootHash(ctx context.Context, starBlockNr uint6
 		return false, errors.New("Only available in Bor engine")
 	}
 
-	localRootHash, err := api.GetRootHash(starBlockNr, endBlockNr)
+	localEndBlock, err := b.BlockByNumber(ctx, rpc.BlockNumber(endBlockNr))
+	if err != nil {
+		return false, errEndBlock
+	}
+
+	localEndBlockHash := localEndBlock.Hash().String()
 
 	if err != nil {
 		return false, err
-	}
-
-	if !b.eth.Miner().Mining() {
-		return localRootHash == rootHash, nil
 	}
 
 	downloader := b.eth.handler.downloader
@@ -63,20 +65,15 @@ func (b *EthAPIBackend) GetVoteOnRootHash(ctx context.Context, starBlockNr uint6
 
 	if !isLocked {
 		downloader.UnlockMutex(false, "", common.Hash{})
-
-		return false, errors.New("Previous sprint is still in locked state")
+		return false, errors.New("Whitelisted number or locked sprint number is more than the received end block number")
 	}
 
-	if localRootHash != rootHash[2:] {
+	if localEndBlockHash != endBlockHash {
 		downloader.UnlockMutex(false, "", common.Hash{})
-
-		return false, errors.New("RootHash mismatch+" + localRootHash + rootHash)
+		return false, errors.New("EndBlockHash mismatch")
 	}
 
-	endBlock := b.eth.blockchain.GetBlockByNumber(endBlockNr)
-	endBlockHash := endBlock.Hash()
-
-	downloader.UnlockMutex(true, milestoneId, endBlockHash)
+	downloader.UnlockMutex(true, milestoneId, localEndBlock.Hash())
 
 	return true, nil
 }
