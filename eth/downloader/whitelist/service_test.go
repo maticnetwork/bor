@@ -35,7 +35,10 @@ func NewMockService(db ethdb.Database) *Service {
 				interval: 256,
 				db:       db,
 			},
-			LockedMilestoneIDs: make(map[string]struct{}),
+			LockedMilestoneIDs:   make(map[string]struct{}),
+			FutureMilestoneList:  make(map[uint64]common.FutureMilestone),
+			FutureMilestoneOrder: make([]uint64, 0),
+			MaxCapacity:          10,
 		},
 	}
 }
@@ -219,6 +222,32 @@ func TestMilestone(t *testing.T) {
 	require.Nil(t, err, "Error should be nil while reading from the db")
 	require.Equal(t, milestoneHash, common.Hash{1}, "expected the 1 hash but got", hash)
 	require.Equal(t, milestoneNumber, uint64(11), "expected number to be 11 but got", number)
+
+	_, _, err = rawdb.ReadFutureMilestoneList(db)
+	require.NotNil(t, err, "Error should be not nil")
+
+	s.ProcessFutureMilestone(0, 16, common.Hash{16}.String()[2:])
+	require.Equal(t, len(milestone.FutureMilestoneOrder), 1, "expected length is 1 as we added only 1 future milestone")
+	require.Equal(t, milestone.FutureMilestoneOrder[0], uint64(16), "expected value is 16 but got", milestone.FutureMilestoneOrder[0])
+	require.Equal(t, milestone.FutureMilestoneList[16].Start, uint64(0), "expected value is 0 but got", milestone.FutureMilestoneList[16].Start)
+	require.Equal(t, milestone.FutureMilestoneList[16].End, uint64(16), "expected value is 16 but got", milestone.FutureMilestoneList[16].End)
+	require.Equal(t, milestone.FutureMilestoneList[16].Hash, common.Hash{16}.String()[2:], "expected value is", common.Hash{16}.String()[2:], "but got", milestone.FutureMilestoneList[16].Hash)
+
+	order, list, err := rawdb.ReadFutureMilestoneList(db)
+	require.Nil(t, err, "Error should be nil while reading from the db")
+	require.Equal(t, len(order), 1, "expected the 1 hash but got", len(order))
+	require.Equal(t, order[0], uint64(16), "expected number to be 16 but got", order[0])
+	require.Equal(t, list[order[0]].Start, uint64(0), "expected number to be 0 but got", list[order[0]].Start)
+	require.Equal(t, list[order[0]].End, uint64(16), "expected number to be 16 but got", list[order[0]].End)
+	require.Equal(t, list[order[0]].Hash, common.Hash{16}.String()[2:], "expected value is", common.Hash{16}.String()[2:], "but got", list[order[0]].Hash)
+
+	cap := milestone.MaxCapacity
+	for i := 16; i <= 16*(cap+1); i = i + 16 {
+		s.ProcessFutureMilestone(uint64(i-15), uint64(i), common.Hash{16}.String()[2:])
+	}
+
+	require.Equal(t, len(milestone.FutureMilestoneOrder), cap, "expected length is", cap)
+	require.Equal(t, milestone.FutureMilestoneOrder[cap-1], uint64(16*cap), "expected value is", uint64(16*cap), "but got", milestone.FutureMilestoneOrder[cap-1])
 }
 
 // TestIsValidPeer checks the IsValidPeer function in isolation
@@ -584,6 +613,28 @@ func TestIsValidChain(t *testing.T) {
 	// case20: Try importing a future chain of unacceptable length,should consider the chain as invalid
 	res = s.IsValidChain(tempChain[0], chainB)
 	require.Equal(t, res, false, "expected chain to be invalid")
+
+	s.PurgeWhitelistedCheckpoint()
+	s.PurgeWhitelistedMilestone()
+
+	chainB = createMockChain(21, 29) // C21->C22...C39->C40...C->256
+
+	rootHash2630, _ := getRootHash(chainB[5:])
+	s.milestoneService.ProcessFutureMilestone(26, 29, rootHash2630[2:])
+
+	// case21: Try importing a future chain which match the future milestone should the chain as valid
+	res = s.IsValidChain(tempChain[0], chainB)
+	require.Equal(t, res, true, "expected chain to be valid")
+
+	chainB = createMockChain(30, 39) // C21->C22...C39->C40...C->256
+
+	rootHash3439, _ := getRootHash(chainB[4:])
+	s.milestoneService.ProcessFutureMilestone(35, 39, rootHash3439[2:])
+
+	// case22: Try importing a future chain with mismatch future milestone
+	res = s.IsValidChain(tempChain[0], chainB)
+	require.Equal(t, res, false, "expected chain to be invalid")
+
 }
 
 func TestSplitChain(t *testing.T) {
