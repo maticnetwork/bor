@@ -166,7 +166,7 @@ func TestIsValidChain(t *testing.T) {
 	res = s.IsValidChain(chainA[len(chainA)-1], chainB)
 	require.Equal(t, res, true, "expected chain to be valid")
 
-	// (NOTE): Skipping this test and the future chain validations
+	// (NOTE): Skipping this test as the future chain validations
 	// are commented for the time being.
 
 	// create a future chain to be imported of length > `checkpointInterval`
