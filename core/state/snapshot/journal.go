@@ -91,6 +91,7 @@ func ParseGeneratorStatus(generatorBlob []byte) string {
 
 // loadAndParseJournal tries to parse the snapshot journal in latest format.
 func loadAndParseJournal(db ethdb.KeyValueStore, base *diskLayer) (snapshot, journalGenerator, error) {
+	log.Info("Journal.go", "loadAndParseJournal, root", base.root)
 	// Retrieve the disk layer generator. It must exist, no matter the
 	// snapshot is fully generated or not. Otherwise the entire disk
 	// layer is invalid.
@@ -150,6 +151,8 @@ func loadAndParseJournal(db ethdb.KeyValueStore, base *diskLayer) (snapshot, jou
 
 // loadSnapshot loads a pre-existing state snapshot backed by a key-value store.
 func loadSnapshot(diskdb ethdb.KeyValueStore, triedb *trie.Database, cache int, root common.Hash, recovery bool) (snapshot, bool, error) {
+	log.Info("Journal.go", "loadSnapshot, root", root)
+
 	// If snapshotting is disabled (initial sync in progress), don't do anything,
 	// wait for the chain to permit us to do something meaningful
 	if rawdb.ReadSnapshotDisabled(diskdb) {
@@ -221,6 +224,7 @@ func loadSnapshot(diskdb ethdb.KeyValueStore, triedb *trie.Database, cache int, 
 // loadDiffLayer reads the next sections of a snapshot journal, reconstructing a new
 // diff and verifying that it can be linked to the requested parent.
 func loadDiffLayer(parent snapshot, r *rlp.Stream) (snapshot, error) {
+	log.Info("Journal.go", "loadDifflayer, root", parent.Root())
 	// Read the next diff journal entry
 	var root common.Hash
 	if err := r.Decode(&root); err != nil {
@@ -272,6 +276,8 @@ func loadDiffLayer(parent snapshot, r *rlp.Stream) (snapshot, error) {
 // Journal terminates any in-progress snapshot generation, also implicitly pushing
 // the progress into the database.
 func (dl *diskLayer) Journal(buffer *bytes.Buffer) (common.Hash, error) {
+	log.Info("Journal.go", "Journal", "1")
+
 	// If the snapshot is currently being generated, abort it
 	var stats *generatorStats
 	if dl.genAbort != nil {
@@ -299,6 +305,8 @@ func (dl *diskLayer) Journal(buffer *bytes.Buffer) (common.Hash, error) {
 // Journal writes the memory layer contents into a buffer to be stored in the
 // database as the snapshot journal.
 func (dl *diffLayer) Journal(buffer *bytes.Buffer) (common.Hash, error) {
+	log.Info("Journal.go", "Journal", "1")
+
 	// Journal the parent first
 	base, err := dl.parent.Journal(buffer)
 	if err != nil {

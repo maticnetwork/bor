@@ -146,6 +146,8 @@ func (gs *generatorStats) Log(msg string, root common.Hash, marker []byte) {
 // and generation is continued in the background until done.
 func generateSnapshot(diskdb ethdb.KeyValueStore, triedb *trie.Database, cache int, root common.Hash) *diskLayer {
 	// Create a new disk layer with an initialized state marker at zero
+	log.Info("Generate.go", "generateSnapshot, root", root)
+
 	var (
 		stats     = &generatorStats{start: time.Now()}
 		batch     = diskdb.NewBatch()
@@ -537,6 +539,8 @@ func (dl *diskLayer) generateRange(root common.Hash, prefix []byte, kind string,
 // gathering and logging, since the method surfs the blocks as they arrive, often
 // being restarted.
 func (dl *diskLayer) generate(stats *generatorStats) {
+	log.Info("Generate.go", "generate", "1")
+
 	var (
 		accMarker    []byte
 		accountRange = accountCheckRange
@@ -575,6 +579,7 @@ func (dl *diskLayer) generate(stats *generatorStats) {
 				return err
 			}
 			batch.Reset()
+			log.Info("Generate.go", "generate", "2")
 
 			dl.lock.Lock()
 			dl.genMarker = currentLocation
@@ -582,6 +587,7 @@ func (dl *diskLayer) generate(stats *generatorStats) {
 
 			if abort != nil {
 				stats.Log("Aborting state snapshot generation", dl.root, currentLocation)
+				log.Info("Generate.go", "generate", "3")
 				return errors.New("aborted")
 			}
 		}

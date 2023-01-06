@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 	bloomfilter "github.com/holiman/bloomfilter/v2"
 )
@@ -431,6 +432,8 @@ func (dl *diffLayer) Update(blockRoot common.Hash, destructs map[common.Hash]str
 // a single diff at the bottom. Since usually the lowermost diff is the largest,
 // the flattening builds up from there in reverse.
 func (dl *diffLayer) flatten() snapshot {
+	log.Info("Difflayer.go", "flatten", "1")
+
 	// If the parent is not diff, we're the first in line, return unmodified
 	parent, ok := dl.parent.(*diffLayer)
 	if !ok {
