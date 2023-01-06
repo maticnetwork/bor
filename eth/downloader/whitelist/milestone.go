@@ -51,6 +51,10 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 		return false
 	}
 
+	if !m.IsFutureMilestoneCompatible(chain) {
+		return false
+	}
+
 	return true
 }
 
@@ -194,21 +198,17 @@ func (m *milestone) purgeMilestoneIDsList() {
 	m.LockedMilestoneIDs = make(map[string]struct{})
 }
 
-func (m *milestone) IsFutureMilestoneCompatible(currentHeader *types.Header, chain []*types.Header) bool {
+func (m *milestone) IsFutureMilestoneCompatible(chain []*types.Header) bool {
+
 	chainTipNumber := chain[len(chain)-1].Number.Uint64()
 
-	for i := 0; i < len(m.FutureMilestoneOrder); i++ {
-
-		if chainTipNumber < m.FutureMilestoneOrder[i] {
-
-			if i == 0 {
-				return true
-			}
+	for i := len(m.FutureMilestoneOrder) - 1; i >= 0; i-- {
+		if chainTipNumber >= m.FutureMilestoneOrder[i] {
 
 			for j := len(chain) - 1; j >= 0; j-- {
-				if chain[j].Number.Uint64() == m.FutureMilestoneOrder[i-1] {
+				if chain[j].Number.Uint64() == m.FutureMilestoneOrder[i] {
 
-					endBlockNum := m.FutureMilestoneOrder[i-1]
+					endBlockNum := m.FutureMilestoneOrder[i]
 					startBlockNum := m.FutureMilestoneList[endBlockNum].Start
 					milestoneRootHash := m.FutureMilestoneList[endBlockNum].Hash
 
@@ -222,7 +222,7 @@ func (m *milestone) IsFutureMilestoneCompatible(currentHeader *types.Header, cha
 					chainRootHash, err := getRootHash(chain[start : end+1])
 
 					if err != nil {
-						return true
+						return false
 					}
 
 					return chainRootHash[2:] == milestoneRootHash
