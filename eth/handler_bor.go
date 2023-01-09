@@ -53,23 +53,21 @@ func (h *ethHandler) fetchWhitelistCheckpoint(ctx context.Context, bor *bor.Bor,
 
 // fetchWhitelistMilestone fetches the latest milestone from it's local heimdall
 // and verifies the data against bor data.
-func (h *ethHandler) fetchWhitelistMilestone(ctx context.Context, bor *bor.Bor, eth *Ethereum, verifier *borVerifier) (uint64, uint64, common.Hash, error) {
+func (h *ethHandler) fetchWhitelistMilestone(ctx context.Context, bor *bor.Bor, eth *Ethereum, verifier *borVerifier) (uint64, common.Hash, error) {
 	var (
-		blockStartNum uint64
-		blockEndNum   uint64
-		blockHash     common.Hash
+		blockEndNum uint64
+		blockHash   common.Hash
 	)
 
 	// fetch latest milestone
 	milestone, err := bor.HeimdallClient.FetchMilestone(ctx)
 	if err != nil {
 		log.Error("Failed to fetch latest milestone for whitelisting", "err", err)
-		return blockStartNum, blockEndNum, blockHash, errMilestone
+		return blockEndNum, blockHash, errMilestone
 	}
 
-	blockStartNum = milestone.StartBlock.Uint64()
 	blockEndNum = milestone.EndBlock.Uint64()
-	milestoneRootHash := milestone.RootHash
+	milestoneHash := milestone.RootHash
 
 	// Verify if the milestone fetched can be added to the local whitelist entry or not
 	// If verified, it returns the hash of the end block of the milestone. If not,
@@ -77,17 +75,17 @@ func (h *ethHandler) fetchWhitelistMilestone(ctx context.Context, bor *bor.Bor, 
 	hash, err := verifier.verify(ctx, eth, h, milestone.StartBlock.Uint64(), milestone.EndBlock.Uint64(), milestone.RootHash.String()[2:])
 
 	if err == errMissingBlocks {
-		return blockStartNum, blockEndNum, milestoneRootHash, err
+		return blockEndNum, milestoneHash, err
 	}
 
 	if err != nil {
 		h.downloader.UnlockSprint(milestone.EndBlock.Uint64())
-		return blockStartNum, blockEndNum, blockHash, err
+		return blockEndNum, blockHash, err
 	}
 
 	blockHash = common.HexToHash(hash)
 
-	return blockStartNum, blockEndNum, blockHash, nil
+	return blockEndNum, blockHash, nil
 }
 
 func (h *ethHandler) fetchNoAckMilestone(ctx context.Context, bor *bor.Bor) (string, error) {

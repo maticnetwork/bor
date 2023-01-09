@@ -32,7 +32,7 @@ type LockField struct {
 
 type FutureMilestoneField struct {
 	Order []uint64
-	List  map[uint64]common.FutureMilestone
+	List  map[uint64]common.Hash
 }
 
 func (f *Finality) set(block uint64, hash common.Hash) {
@@ -170,7 +170,7 @@ func ReadLockField(db ethdb.KeyValueReader) (bool, uint64, common.Hash, map[stri
 	return val, block, hash, idList, nil
 }
 
-func WriteFutureMilestoneList(db ethdb.KeyValueWriter, order []uint64, list map[uint64]common.FutureMilestone) error {
+func WriteFutureMilestoneList(db ethdb.KeyValueWriter, order []uint64, list map[uint64]common.Hash) error {
 
 	futureMilestoneField := FutureMilestoneField{
 		Order: order,
@@ -195,7 +195,7 @@ func WriteFutureMilestoneList(db ethdb.KeyValueWriter, order []uint64, list map[
 	return nil
 }
 
-func ReadFutureMilestoneList(db ethdb.KeyValueReader) ([]uint64, map[uint64]common.FutureMilestone, error) {
+func ReadFutureMilestoneList(db ethdb.KeyValueReader) ([]uint64, map[uint64]common.Hash, error) {
 	key := futureMilestoneKey
 	futureMilestoneField := FutureMilestoneField{}
 

@@ -16,9 +16,9 @@ type milestone struct {
 	Locked             bool                //
 	LockedMilestoneIDs map[string]struct{} //list of milestone ids
 
-	FutureMilestoneList  map[uint64]common.FutureMilestone // Future Milestone list
-	FutureMilestoneOrder []uint64                          // Future Milestone Order
-	MaxCapacity          int                               //Capacity of future Milestone list
+	FutureMilestoneList  map[uint64]common.Hash // Future Milestone list
+	FutureMilestoneOrder []uint64               // Future Milestone Order
+	MaxCapacity          int                    //Capacity of future Milestone list
 }
 
 type milestoneService interface {
@@ -29,7 +29,7 @@ type milestoneService interface {
 	LockMutex(endBlockNum uint64) bool
 	UnlockMutex(doLock bool, milestoneId string, endBlockHash common.Hash)
 	UnlockSprint(endBlockNum uint64)
-	ProcessFutureMilestone(startBlockNum uint64, endBlockNum uint64, rootHash string)
+	ProcessFutureMilestone(num uint64, hash common.Hash)
 }
 
 // IsValidChain checks the validity of chain by comparing it
@@ -209,23 +209,9 @@ func (m *milestone) IsFutureMilestoneCompatible(chain []*types.Header) bool {
 				if chain[j].Number.Uint64() == m.FutureMilestoneOrder[i] {
 
 					endBlockNum := m.FutureMilestoneOrder[i]
-					startBlockNum := m.FutureMilestoneList[endBlockNum].Start
-					milestoneRootHash := m.FutureMilestoneList[endBlockNum].Hash
+					endBlockHash := m.FutureMilestoneList[endBlockNum]
 
-					if j < int(endBlockNum-startBlockNum) {
-						return true
-					}
-
-					end := j
-					start := j - int(endBlockNum-startBlockNum)
-
-					chainRootHash, err := getRootHash(chain[start : end+1])
-
-					if err != nil {
-						return false
-					}
-
-					return chainRootHash[2:] == milestoneRootHash
+					return chain[j].Hash() == endBlockHash
 				}
 			}
 		}
@@ -233,26 +219,20 @@ func (m *milestone) IsFutureMilestoneCompatible(chain []*types.Header) bool {
 	return true
 }
 
-func (m *milestone) ProcessFutureMilestone(startBlockNum uint64, endBlockNum uint64, rootHash string) {
-
-	futureMilestone := common.FutureMilestone{
-		Start: startBlockNum,
-		End:   endBlockNum,
-		Hash:  rootHash,
-	}
+func (m *milestone) ProcessFutureMilestone(num uint64, hash common.Hash) {
 
 	if len(m.FutureMilestoneOrder) < m.MaxCapacity {
-		m.enqueueFutureMilestone(endBlockNum, futureMilestone)
+		m.enqueueFutureMilestone(num, hash)
 	}
 }
 
 // EnqueueFutureMilestone add the future milestone to the list
-func (m *milestone) enqueueFutureMilestone(key uint64, futureMilestone common.FutureMilestone) {
+func (m *milestone) enqueueFutureMilestone(key uint64, hash common.Hash) {
 
 	if _, ok := m.FutureMilestoneList[key]; !ok {
-		log.Debug("Enqueing new future milestone", "end block number", key, "root hash", futureMilestone.Hash)
+		log.Debug("Enqueing new future milestone", "end block number", key, "futureMilestoneHash", hash)
 
-		m.FutureMilestoneList[key] = futureMilestone
+		m.FutureMilestoneList[key] = hash
 		m.FutureMilestoneOrder = append(m.FutureMilestoneOrder, key)
 
 		err := rawdb.WriteFutureMilestoneList(m.db, m.FutureMilestoneOrder, m.FutureMilestoneList)

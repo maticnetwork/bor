@@ -232,7 +232,7 @@ func (w *chainValidatorFake) IsValidChain(current *types.Header, headers []*type
 }
 func (w *chainValidatorFake) ProcessCheckpoint(endBlockNum uint64, endBlockHash common.Hash) {}
 func (w *chainValidatorFake) ProcessMilestone(endBlockNum uint64, endBlockHash common.Hash)  {}
-func (w *chainValidatorFake) ProcessFutureMilestone(endBlockNum uint64, startBlockNum uint64, rootHash string) {
+func (w *chainValidatorFake) ProcessFutureMilestone(num uint64, hash common.Hash) {
 }
 func (w *chainValidatorFake) GetWhitelistedCheckpoint() (bool, uint64, common.Hash) {
 	return false, 0, common.Hash{}

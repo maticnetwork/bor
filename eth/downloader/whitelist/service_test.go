@@ -36,7 +36,7 @@ func NewMockService(db ethdb.Database) *Service {
 				db:       db,
 			},
 			LockedMilestoneIDs:   make(map[string]struct{}),
-			FutureMilestoneList:  make(map[uint64]common.FutureMilestone),
+			FutureMilestoneList:  make(map[uint64]common.Hash),
 			FutureMilestoneOrder: make([]uint64, 0),
 			MaxCapacity:          10,
 		},
@@ -226,24 +226,20 @@ func TestMilestone(t *testing.T) {
 	_, _, err = rawdb.ReadFutureMilestoneList(db)
 	require.NotNil(t, err, "Error should be not nil")
 
-	s.ProcessFutureMilestone(0, 16, common.Hash{16}.String()[2:])
+	s.ProcessFutureMilestone(16, common.Hash{16})
 	require.Equal(t, len(milestone.FutureMilestoneOrder), 1, "expected length is 1 as we added only 1 future milestone")
 	require.Equal(t, milestone.FutureMilestoneOrder[0], uint64(16), "expected value is 16 but got", milestone.FutureMilestoneOrder[0])
-	require.Equal(t, milestone.FutureMilestoneList[16].Start, uint64(0), "expected value is 0 but got", milestone.FutureMilestoneList[16].Start)
-	require.Equal(t, milestone.FutureMilestoneList[16].End, uint64(16), "expected value is 16 but got", milestone.FutureMilestoneList[16].End)
-	require.Equal(t, milestone.FutureMilestoneList[16].Hash, common.Hash{16}.String()[2:], "expected value is", common.Hash{16}.String()[2:], "but got", milestone.FutureMilestoneList[16].Hash)
+	require.Equal(t, milestone.FutureMilestoneList[16], common.Hash{16}, "expected value is", common.Hash{16}.String()[2:], "but got", milestone.FutureMilestoneList[16])
 
 	order, list, err := rawdb.ReadFutureMilestoneList(db)
 	require.Nil(t, err, "Error should be nil while reading from the db")
 	require.Equal(t, len(order), 1, "expected the 1 hash but got", len(order))
 	require.Equal(t, order[0], uint64(16), "expected number to be 16 but got", order[0])
-	require.Equal(t, list[order[0]].Start, uint64(0), "expected number to be 0 but got", list[order[0]].Start)
-	require.Equal(t, list[order[0]].End, uint64(16), "expected number to be 16 but got", list[order[0]].End)
-	require.Equal(t, list[order[0]].Hash, common.Hash{16}.String()[2:], "expected value is", common.Hash{16}.String()[2:], "but got", list[order[0]].Hash)
+	require.Equal(t, list[order[0]], common.Hash{16}, "expected value is", common.Hash{16}.String()[2:], "but got", list[order[0]])
 
 	cap := milestone.MaxCapacity
 	for i := 16; i <= 16*(cap+1); i = i + 16 {
-		s.ProcessFutureMilestone(uint64(i-15), uint64(i), common.Hash{16}.String()[2:])
+		s.ProcessFutureMilestone(uint64(i), common.Hash{16})
 	}
 
 	require.Equal(t, len(milestone.FutureMilestoneOrder), cap, "expected length is", cap)
@@ -619,21 +615,32 @@ func TestIsValidChain(t *testing.T) {
 
 	chainB = createMockChain(21, 29) // C21->C22...C39->C40...C->256
 
-	rootHash2630, _ := getRootHash(chainB[5:])
-	s.milestoneService.ProcessFutureMilestone(26, 29, rootHash2630[2:])
+	s.milestoneService.ProcessFutureMilestone(29, chainB[8].Hash())
 
 	// case21: Try importing a future chain which match the future milestone should the chain as valid
 	res = s.IsValidChain(tempChain[0], chainB)
 	require.Equal(t, res, true, "expected chain to be valid")
 
+	chainB = createMockChain(21, 27) // C21->C22...C39->C40...C->256
+
+	// case22: Try importing a chain whose end point is less than future milestone
+	res = s.IsValidChain(tempChain[0], chainB)
+	require.Equal(t, res, true, "expected chain to be valid")
+
 	chainB = createMockChain(30, 39) // C21->C22...C39->C40...C->256
 
-	rootHash3439, _ := getRootHash(chainB[4:])
-	s.milestoneService.ProcessFutureMilestone(35, 39, rootHash3439[2:])
+	//Processing wrong hash
+	s.milestoneService.ProcessFutureMilestone(38, chainB[9].Hash())
 
-	// case22: Try importing a future chain with mismatch future milestone
+	// case23: Try importing a future chain with mismatch future milestone
 	res = s.IsValidChain(tempChain[0], chainB)
 	require.Equal(t, res, false, "expected chain to be invalid")
+
+	chainB = createMockChain(40, 49) // C40->C41...C48->C49
+
+	// case24: Try importing a future chain whose starting point is ahead of latest future milestone
+	res = s.IsValidChain(tempChain[0], chainB)
+	require.Equal(t, res, true, "expected chain to be invalid")
 
 }
 

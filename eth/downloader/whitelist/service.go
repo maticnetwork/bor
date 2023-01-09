@@ -45,7 +45,7 @@ func NewService(db ethdb.Database) *Service {
 	order, list, err := rawdb.ReadFutureMilestoneList(db)
 	if err != nil {
 		order = make([]uint64, 0)
-		list = make(map[uint64]common.FutureMilestone)
+		list = make(map[uint64]common.Hash)
 	}
 
 	return &Service{
