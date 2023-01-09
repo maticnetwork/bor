@@ -39,7 +39,7 @@ func (h *ethHandler) fetchWhitelistCheckpoint(ctx context.Context, bor *bor.Bor,
 	// Verify if the checkpoint fetched can be added to the local whitelist entry or not
 	// If verified, it returns the hash of the end block of the checkpoint. If not,
 	// it will return appropriate error.
-	hash, err := verifier.verify(ctx, eth, h, checkpoint.StartBlock.Uint64(), checkpoint.EndBlock.Uint64(), checkpoint.RootHash.String()[2:])
+	hash, err := verifier.verify(ctx, eth, h, checkpoint.StartBlock.Uint64(), checkpoint.EndBlock.Uint64(), checkpoint.RootHash.String()[2:], true)
 	if err != nil {
 		log.Warn("Failed to whitelist checkpoint", "err", err)
 		return blockNum, blockHash, err
@@ -69,7 +69,7 @@ func (h *ethHandler) fetchWhitelistMilestone(ctx context.Context, bor *bor.Bor, 
 	// Verify if the milestone fetched can be added to the local whitelist entry or not
 	// If verified, it returns the hash of the end block of the milestone. If not,
 	// it will return appropriate error.
-	hash, err := verifier.verify(ctx, eth, h, milestone.StartBlock.Uint64(), milestone.EndBlock.Uint64(), milestone.RootHash.String()[2:])
+	hash, err := verifier.verify(ctx, eth, h, milestone.StartBlock.Uint64(), milestone.EndBlock.Uint64(), milestone.RootHash.String()[2:], false)
 	if err != nil {
 		h.downloader.UnlockSprint(milestone.EndBlock.Uint64())
 		return blockNum, blockHash, err
