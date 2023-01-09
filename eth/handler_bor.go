@@ -39,7 +39,7 @@ func (h *ethHandler) fetchWhitelistCheckpoint(ctx context.Context, bor *bor.Bor,
 	// Verify if the checkpoint fetched can be added to the local whitelist entry or not
 	// If verified, it returns the hash of the end block of the checkpoint. If not,
 	// it will return appropriate error.
-	hash, err := verifier.verify(ctx, eth, h, checkpoint.StartBlock.Uint64(), checkpoint.EndBlock.Uint64(), checkpoint.RootHash.String()[2:])
+	hash, err := verifier.verify(ctx, eth, h, checkpoint.StartBlock.Uint64(), checkpoint.EndBlock.Uint64(), checkpoint.RootHash.String()[2:], true)
 	if err != nil {
 		log.Warn("Failed to whitelist checkpoint", "err", err)
 		return blockNum, blockHash, err
@@ -55,37 +55,30 @@ func (h *ethHandler) fetchWhitelistCheckpoint(ctx context.Context, bor *bor.Bor,
 // and verifies the data against bor data.
 func (h *ethHandler) fetchWhitelistMilestone(ctx context.Context, bor *bor.Bor, eth *Ethereum, verifier *borVerifier) (uint64, common.Hash, error) {
 	var (
-		blockEndNum uint64
-		blockHash   common.Hash
+		num  uint64
+		hash common.Hash
 	)
 
 	// fetch latest milestone
 	milestone, err := bor.HeimdallClient.FetchMilestone(ctx)
 	if err != nil {
 		log.Error("Failed to fetch latest milestone for whitelisting", "err", err)
-		return blockEndNum, blockHash, errMilestone
+		return num, hash, errMilestone
 	}
 
-	blockEndNum = milestone.EndBlock.Uint64()
-	milestoneHash := milestone.RootHash
+	num = milestone.EndBlock.Uint64()
+	hash = milestone.RootHash
 
 	// Verify if the milestone fetched can be added to the local whitelist entry or not
 	// If verified, it returns the hash of the end block of the milestone. If not,
 	// it will return appropriate error.
-	hash, err := verifier.verify(ctx, eth, h, milestone.StartBlock.Uint64(), milestone.EndBlock.Uint64(), milestone.RootHash.String()[2:])
-
-	if err == errMissingBlocks {
-		return blockEndNum, milestoneHash, err
-	}
-
+	_, err = verifier.verify(ctx, eth, h, milestone.StartBlock.Uint64(), milestone.EndBlock.Uint64(), milestone.RootHash.String()[2:], false)
 	if err != nil {
 		h.downloader.UnlockSprint(milestone.EndBlock.Uint64())
-		return blockEndNum, blockHash, err
+		return num, hash, err
 	}
 
-	blockHash = common.HexToHash(hash)
-
-	return blockEndNum, blockHash, nil
+	return num, hash, nil
 }
 
 func (h *ethHandler) fetchNoAckMilestone(ctx context.Context, bor *bor.Bor) (string, error) {

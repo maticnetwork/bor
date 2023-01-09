@@ -60,7 +60,7 @@ func TestFetchWhitelistCheckpointAndMilestone(t *testing.T) {
 	handler := &ethHandler{}
 
 	// create a mock checkpoint verification function and use it to create a verifier
-	verify := func(ctx context.Context, eth *Ethereum, handler *ethHandler, start uint64, end uint64, rootHash string) (string, error) {
+	verify := func(ctx context.Context, eth *Ethereum, handler *ethHandler, start uint64, end uint64, hash string, isCheckpoint bool) (string, error) {
 		return "", nil
 	}
 
@@ -76,7 +76,7 @@ func TestFetchWhitelistCheckpointAndMilestone(t *testing.T) {
 	fetchMilestoneTest(t, &heimdall, bor, handler, verifier)
 }
 
-func (b *borVerifier) setVerify(verifyFn func(ctx context.Context, eth *Ethereum, handler *ethHandler, start uint64, end uint64, rootHash string) (string, error)) {
+func (b *borVerifier) setVerify(verifyFn func(ctx context.Context, eth *Ethereum, handler *ethHandler, start uint64, end uint64, hash string, isCheckpoint bool) (string, error)) {
 	b.verify = verifyFn
 }
 
@@ -128,18 +128,18 @@ func fetchMilestoneTest(t *testing.T, heimdall *mockHeimdall, bor *bor.Bor, hand
 	// create a background context
 	ctx := context.Background()
 
-	_, _, _, err := handler.fetchWhitelistMilestone(ctx, bor, nil, verifier)
+	_, _, err := handler.fetchWhitelistMilestone(ctx, bor, nil, verifier)
 	require.Equal(t, err, errMilestone)
 
 	// create 4 mock checkpoints
 	milestones = createMockMilestones(4)
 
-	_, blockEndNum, blockHash, err := handler.fetchWhitelistMilestone(ctx, bor, nil, verifier)
+	num, hash, err := handler.fetchWhitelistMilestone(ctx, bor, nil, verifier)
 
 	// Check if we have expected result
 	require.Equal(t, err, nil)
-	require.Equal(t, milestones[len(milestones)-1].EndBlock.Uint64(), blockEndNum)
-	require.Equal(t, milestones[len(milestones)-1].RootHash, blockHash)
+	require.Equal(t, milestones[len(milestones)-1].EndBlock.Uint64(), num)
+	require.Equal(t, milestones[len(milestones)-1].RootHash, hash)
 }
 
 func getMockFetchCheckpointFn(number int64, err error) func(ctx context.Context) (int64, error) {

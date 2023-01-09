@@ -32,16 +32,14 @@ var (
 )
 
 type borVerifier struct {
-	verify func(ctx context.Context, eth *Ethereum, handler *ethHandler, start uint64, end uint64, rootHash string) (string, error)
+	verify func(ctx context.Context, eth *Ethereum, handler *ethHandler, start uint64, end uint64, hash string, isCheckpoint bool) (string, error)
 }
 
 func newBorVerifier() *borVerifier {
 	return &borVerifier{borVerify}
 }
 
-func borVerify(ctx context.Context, eth *Ethereum, handler *ethHandler, start uint64, end uint64, rootHash string) (string, error) {
-	var hash string
-
+func borVerify(ctx context.Context, eth *Ethereum, handler *ethHandler, start uint64, end uint64, hash string, isCheckpoint bool) (string, error) {
 	// check if we have the given blocks
 	head := handler.ethAPI.BlockNumber()
 	if head < hexutil.Uint64(end) {
@@ -49,17 +47,33 @@ func borVerify(ctx context.Context, eth *Ethereum, handler *ethHandler, start ui
 		return hash, errMissingBlocks
 	}
 
-	// verify the root hash
-	localRoothash, err := handler.ethAPI.GetRootHash(ctx, start, end)
-	if err != nil {
-		log.Debug("Failed to get root hash of given block range while whitelisting", "start", start, "end", end, "err", err)
-		return hash, errRootHash
+	var localHash string
+
+	//verify the hash
+	if isCheckpoint {
+		var err error
+
+		//in case of checkpoint get the rootHash
+		localHash, err = handler.ethAPI.GetRootHash(ctx, start, end)
+		if err != nil {
+			log.Debug("Failed to get root hash of given block range while whitelisting checkpoint", "start", start, "end", end, "err", err)
+			return hash, errRootHash
+		}
+	} else {
+		//in case of milestone(isCheckpoint==false) get the hash of endBlock
+		block, err := handler.ethAPI.GetBlockByNumber(ctx, rpc.BlockNumber(end), false)
+		if err != nil {
+			log.Debug("Failed to get end block hash while whitelisting milestone", "err", err)
+			return hash, errEndBlock
+		}
+
+		localHash = fmt.Sprintf("%v", block["hash"])
 	}
 
 	//nolint
-	if localRoothash != rootHash {
+	if localHash != hash {
 
-		log.Warn("Root hash mismatch while whitelisting", "expected", localRoothash, "got", rootHash)
+		log.Warn("Root hash mismatch while whitelisting", "expected", localHash, "got", hash)
 
 		ethHandler := (*ethHandler)(eth.handler)
 
