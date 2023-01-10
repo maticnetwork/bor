@@ -218,6 +218,9 @@ type Config struct {
 	// No heimdall service
 	WithoutHeimdall bool
 
+	// No authorized signer
+	WithoutAuthorizedSigner bool
+
 	// Address to connect to Heimdall gRPC server
 	HeimdallgRPCAddress string
 
@@ -255,7 +258,12 @@ func CreateConsensusEngine(stack *node.Node, chainConfig *params.ChainConfig, et
 		spanner := span.NewChainSpanner(blockchainAPI, contract.ValidatorSet(), chainConfig, common.HexToAddress(chainConfig.Bor.ValidatorContract))
 
 		if ethConfig.WithoutHeimdall {
-			return bor.New(chainConfig, db, blockchainAPI, spanner, nil, genesisContractsClient)
+
+			if ethConfig.WithoutAuthorizedSigner {
+				return bor.New(chainConfig, db, blockchainAPI, spanner, nil, genesisContractsClient, true)
+			} else {
+				return bor.New(chainConfig, db, blockchainAPI, spanner, nil, genesisContractsClient, false)
+			}
 		} else {
 			var heimdallClient bor.IHeimdallClient
 			if ethConfig.HeimdallgRPCAddress != "" {
@@ -264,7 +272,7 @@ func CreateConsensusEngine(stack *node.Node, chainConfig *params.ChainConfig, et
 				heimdallClient = heimdall.NewHeimdallClient(ethConfig.HeimdallURL)
 			}
 
-			return bor.New(chainConfig, db, blockchainAPI, spanner, heimdallClient, genesisContractsClient)
+			return bor.New(chainConfig, db, blockchainAPI, spanner, heimdallClient, genesisContractsClient, false)
 		}
 	} else {
 		switch config.PowMode {

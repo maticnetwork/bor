@@ -167,6 +167,8 @@ type HeimdallConfig struct {
 
 	// RunHeimdal args are the arguments to run heimdall with
 	RunHeimdallArgs string `hcl:"bor.runheimdallargs,optional" toml:"bor.runheimdallargs,optional"`
+
+	WithoutAuthorizedSigner bool `hcl:"bor.withoutauthorizedsigner,optional" toml:"bor.withoutauthorizedsigner,optional"`
 }
 
 type TxPoolConfig struct {
@@ -672,6 +674,7 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 	n.HeimdallgRPCAddress = c.Heimdall.GRPCAddress
 	n.RunHeimdall = c.Heimdall.RunHeimdall
 	n.RunHeimdallArgs = c.Heimdall.RunHeimdallArgs
+	n.WithoutAuthorizedSigner = c.Heimdall.WithoutAuthorizedSigner
 
 	// gas price oracle
 	{

@@ -133,6 +133,7 @@ func (s *Snapshot) apply(headers []*types.Header) (*Snapshot, error) {
 		}
 
 		// check if signer is in validator set
+		// Add (&& !ethConfig.newFlag)
 		if !snap.ValidatorSet.HasAddress(signer) {
 			return nil, &UnauthorizedSignerError{number, signer.Bytes()}
 		}
@@ -178,6 +179,7 @@ func (s *Snapshot) GetSignerSuccessionNumber(signer common.Address) (int, error)
 
 	signerIndex, _ := s.ValidatorSet.GetByAddress(signer)
 
+	// Add (&& !ethConfig.newFlag)
 	if signerIndex == -1 {
 		return -1, &UnauthorizedSignerError{s.Number, signer.Bytes()}
 	}

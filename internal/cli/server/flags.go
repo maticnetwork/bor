@@ -86,6 +86,14 @@ func (c *Command) Flags() *flagset.Flagset {
 		Value:   &c.cliConfig.Heimdall.Without,
 		Default: c.cliConfig.Heimdall.Without,
 	})
+
+	f.BoolFlag(&flagset.BoolFlag{
+		Name:    "bor.withoutauthorizedsigner",
+		Usage:   "Run bor without checking if the signer is in validator set",
+		Value:   &c.cliConfig.Heimdall.Without,
+		Default: c.cliConfig.Heimdall.Without,
+	})
+
 	f.StringFlag(&flagset.StringFlag{
 		Name:    "bor.heimdallgRPC",
 		Usage:   "Address of Heimdall gRPC service",

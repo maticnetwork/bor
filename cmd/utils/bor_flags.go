@@ -50,6 +50,12 @@ var (
 		Value: "",
 	}
 
+	// WithoutAuthorizedSigner
+	WithoutAuthorizedSignerFlag = cli.BoolFlag{
+		Name:  "bor.withoutauthorizedsigner",
+		Usage: "Run bor without checking if the signer is in validator set",
+	}
+
 	// BorFlags all bor related flags
 	BorFlags = []cli.Flag{
 		HeimdallURLFlag,
@@ -57,6 +63,7 @@ var (
 		HeimdallgRPCAddressFlag,
 		RunHeimdallFlag,
 		RunHeimdallArgsFlag,
+		WithoutAuthorizedSignerFlag,
 	}
 )
 
@@ -82,6 +89,8 @@ func SetBorConfig(ctx *cli.Context, cfg *eth.Config) {
 	cfg.HeimdallgRPCAddress = ctx.GlobalString(HeimdallgRPCAddressFlag.Name)
 	cfg.RunHeimdall = ctx.GlobalBool(RunHeimdallFlag.Name)
 	cfg.RunHeimdallArgs = ctx.GlobalString(RunHeimdallArgsFlag.Name)
+	cfg.WithoutAuthorizedSigner = ctx.GlobalBool(WithoutAuthorizedSignerFlag.Name)
+
 }
 
 // CreateBorEthereum Creates bor ethereum object from eth.Config

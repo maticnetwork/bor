@@ -229,6 +229,9 @@ type Bor struct {
 	// The fields below are for testing only
 	fakeDiff bool // Skip difficulty verifications
 
+	// dev mode
+	WithoutAuthorizedSigner bool
+
 	closeOnce sync.Once
 }
 
@@ -245,6 +248,7 @@ func New(
 	spanner Spanner,
 	heimdallClient IHeimdallClient,
 	genesisContracts GenesisContract,
+	WithoutAuthorizedSigner bool,
 ) *Bor {
 	// get bor config
 	borConfig := chainConfig.Bor
@@ -258,15 +262,16 @@ func New(
 	signatures, _ := lru.NewARC(inmemorySignatures)
 
 	c := &Bor{
-		chainConfig:            chainConfig,
-		config:                 borConfig,
-		db:                     db,
-		ethAPI:                 ethAPI,
-		recents:                recents,
-		signatures:             signatures,
-		spanner:                spanner,
-		GenesisContractsClient: genesisContracts,
-		HeimdallClient:         heimdallClient,
+		chainConfig:             chainConfig,
+		config:                  borConfig,
+		db:                      db,
+		ethAPI:                  ethAPI,
+		recents:                 recents,
+		signatures:              signatures,
+		spanner:                 spanner,
+		GenesisContractsClient:  genesisContracts,
+		HeimdallClient:          heimdallClient,
+		WithoutAuthorizedSigner: WithoutAuthorizedSigner,
 	}
 
 	c.authorizedSigner.Store(&signer{
@@ -624,7 +629,7 @@ func (c *Bor) verifySeal(chain consensus.ChainHeaderReader, header *types.Header
 		return err
 	}
 
-	if !snap.ValidatorSet.HasAddress(signer) {
+	if !snap.ValidatorSet.HasAddress(signer) && !c.WithoutAuthorizedSigner {
 		// Check the UnauthorizedSignerError.Error() msg to see why we pass number-1
 		return &UnauthorizedSignerError{number - 1, signer.Bytes()}
 	}
@@ -924,7 +929,7 @@ func (c *Bor) Seal(ctx context.Context, chain consensus.ChainHeaderReader, block
 	}
 
 	// Bail out if we're unauthorized to sign a block
-	if !snap.ValidatorSet.HasAddress(currentSigner.signer) {
+	if !snap.ValidatorSet.HasAddress(currentSigner.signer) && !c.WithoutAuthorizedSigner {
 		// Check the UnauthorizedSignerError.Error() msg to see why we pass number-1
 		return &UnauthorizedSignerError{number - 1, currentSigner.signer.Bytes()}
 	}
