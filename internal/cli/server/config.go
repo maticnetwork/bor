@@ -63,6 +63,9 @@ type Config struct {
 	// Maximum number of messages in a batch
 	RPCBatchLimit uint64 `hcl:"rpcbatchlimit,optional" toml:"rpcbatchlimit,optional"`
 
+	// Maximum size (in bytes) a result of an rpc request could have
+	RPCReturnDataLimit uint64 `hcl:"rpcreturndatalimit,optional" toml:"rpcreturndatalimit,optional"`
+
 	// SyncMode selects the sync protocol
 	SyncMode string `hcl:"syncmode,optional" toml:"syncmode,optional"`
 
@@ -438,13 +441,14 @@ type DeveloperConfig struct {
 
 func DefaultConfig() *Config {
 	return &Config{
-		Chain:          "mainnet",
-		Identity:       Hostname(),
-		RequiredBlocks: map[string]string{},
-		LogLevel:       "INFO",
-		DataDir:        DefaultDataDir(),
-		Ancient:        "",
-		RPCBatchLimit:  100,
+		Chain:              "mainnet",
+		Identity:           Hostname(),
+		RequiredBlocks:     map[string]string{},
+		LogLevel:           "INFO",
+		DataDir:            DefaultDataDir(),
+		Ancient:            "",
+		RPCBatchLimit:      100,
+		RPCReturnDataLimit: 100000,
 		P2P: &P2PConfig{
 			MaxPeers:     50,
 			MaxPendPeers: 50,
@@ -939,6 +943,8 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 
 	n.BorLogs = c.BorLogs
 	n.DatabaseHandles = dbHandles
+
+	n.RPCReturnDataLimit = c.RPCReturnDataLimit
 
 	if c.Ancient != "" {
 		n.DatabaseFreezer = c.Ancient
