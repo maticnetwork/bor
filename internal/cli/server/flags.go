@@ -52,6 +52,12 @@ func (c *Command) Flags() *flagset.Flagset {
 		Value:   &c.cliConfig.RPCBatchLimit,
 		Default: c.cliConfig.RPCBatchLimit,
 	})
+	f.Uint64Flag(&flagset.Uint64Flag{
+		Name:    "rpcreturndatalimit",
+		Usage:   "Maximum number of messages in a batch",
+		Value:   &c.cliConfig.RPCReturnDataLimit,
+		Default: c.cliConfig.RPCReturnDataLimit,
+	})
 	f.StringFlag(&flagset.StringFlag{
 		Name:  "config",
 		Usage: "File for the config file",
