@@ -35,7 +35,19 @@ type milestoneService interface {
 
 var (
 	//Metrics for collecting the whitelisted milestone number
-	whitelistedMilestoneNumberMeter = metrics.NewRegisteredMeter("chain/milestone/latest", nil)
+	whitelistedMilestoneMeter = metrics.NewRegisteredGauge("chain/milestone/latest", nil)
+
+	//Metrics for collecting the future milestone number
+	FutureMilestoneMeter = metrics.NewRegisteredGauge("chain/milestone/future", nil)
+
+	//Metrics for collecting the length of the MilestoneIds map
+	MilestoneIdsLengthMeter = metrics.NewRegisteredGauge("chain/milestone/idslength", nil)
+
+	//Metrics for collecting the number of valid chains received
+	MilestoneChainMeter = metrics.NewRegisteredMeter("chain/milestone/isvalidchain", nil)
+
+	//Metrics for collecting the number of valid peers received
+	MilestonePeerMeter = metrics.NewRegisteredMeter("chain/milestone/isvalidpeer", nil)
 )
 
 // IsValidChain checks the validity of chain by comparing it
@@ -44,23 +56,38 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 	m.finality.RLock()
 	defer m.finality.RUnlock()
 
+	var isValid bool = false
+
+	defer func() {
+		if isValid {
+			MilestoneChainMeter.Mark(int64(1))
+		} else {
+			MilestoneChainMeter.Mark(int64(-1))
+		}
+	}()
+
 	//Checking for the milestone flag
 	if !flags.Milestone {
+		isValid = true
 		return true
 	}
 
 	if !m.finality.IsValidChain(currentHeader, chain) {
+		isValid = false
 		return false
 	}
 
 	if m.Locked && !m.IsReorgAllowed(chain, m.LockedSprintNumber, m.LockedSprintHash) {
+		isValid = false
 		return false
 	}
 
 	if !m.IsFutureMilestoneCompatible(chain) {
+		isValid = false
 		return false
 	}
 
+	isValid = true
 	return true
 }
 
@@ -71,7 +98,15 @@ func (m *milestone) IsValidPeer(fetchHeadersByNumber func(number uint64, amount 
 		return true, nil
 	}
 
-	return m.finality.IsValidPeer(fetchHeadersByNumber)
+	res, err := m.finality.IsValidPeer(fetchHeadersByNumber)
+
+	if res {
+		MilestonePeerMeter.Mark(int64(1))
+	} else {
+		MilestonePeerMeter.Mark(int64(-1))
+	}
+
+	return res, err
 }
 
 func (m *milestone) Process(block uint64, hash common.Hash) {
@@ -91,7 +126,8 @@ func (m *milestone) Process(block uint64, hash common.Hash) {
 			break
 		}
 	}
-	whitelistedMilestoneNumberMeter.Mark(int64(block))
+
+	whitelistedMilestoneMeter.Update(int64(block))
 
 	m.UnlockSprint(block)
 }
@@ -139,6 +175,9 @@ func (m *milestone) UnlockMutex(doLock bool, milestoneId string, endBlockHash co
 		log.Error("Error in writing lock data of milestone to db", "err", err)
 	}
 
+	milestoneIDLength := int64(len(m.LockedMilestoneIDs))
+	MilestoneIdsLengthMeter.Update(milestoneIDLength)
+
 	m.finality.Unlock()
 }
 
@@ -172,6 +211,7 @@ func (m *milestone) RemoveMilestoneID(milestoneId string) {
 	if err != nil {
 		log.Error("Error in writing lock data of milestone to db", "err", err)
 	}
+
 	m.finality.Unlock()
 }
 
@@ -250,6 +290,8 @@ func (m *milestone) enqueueFutureMilestone(key uint64, hash common.Hash) {
 		if err != nil {
 			log.Error("Error in writing future milestone data to db", "err", err)
 		}
+
+		FutureMilestoneMeter.Update(int64(key))
 	}
 }
 
