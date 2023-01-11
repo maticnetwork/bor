@@ -53,6 +53,11 @@ var (
 // IsValidChain checks the validity of chain by comparing it
 // against the local milestone entries
 func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Header) bool {
+	//Checking for the milestone flag
+	if !flags.Milestone {
+		return true
+	}
+
 	m.finality.RLock()
 	defer m.finality.RUnlock()
 
@@ -65,12 +70,6 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 			MilestoneChainMeter.Mark(int64(-1))
 		}
 	}()
-
-	//Checking for the milestone flag
-	if !flags.Milestone {
-		isValid = true
-		return true
-	}
 
 	if !m.finality.IsValidChain(currentHeader, chain) {
 		isValid = false
