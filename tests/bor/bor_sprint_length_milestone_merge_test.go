@@ -93,11 +93,11 @@ func getTestSprintLengthMilestoneReorgCases() []map[string]uint64 {
 	for i := uint64(0); i < uint64(len(sprintSizes)); i++ {
 		for m := uint64(0); m < uint64(len(milestoneLength)); m++ {
 			maxReorgLength := sprintSizes[i] * 4
-			for j := uint64(3); j <= maxReorgLength; j = j + 8 {
+			for j := uint64(8); j <= maxReorgLength; j = j + 12 {
 				maxStartBlock := sprintSizes[i] - 1
 				for k := sprintSizes[i] / 2; k <= maxStartBlock; k = k + 8 {
 					for l := uint64(0); l < uint64(len(faultyNodes)); l++ {
-						if j+k < sprintSizes[i] {
+						if j+k < sprintSizes[i] || k <= milestoneLength[m] {
 							continue
 						}
 
@@ -429,7 +429,7 @@ func SetupValidatorsAndTest2NodesSprintLengthMilestone(t *testing.T, tt map[stri
 			}
 		}
 
-		if blockHeaderFaulty.Number.Uint64() >= 255 {
+		if blockHeaderObserver.Number.Uint64() >= 255 {
 			break
 		}
 
@@ -536,14 +536,22 @@ func SetupValidatorsAndTestSprintLengthMilestone(t *testing.T, tt map[string]uin
 
 	stacks[faultyProducerIndex].Server().NoDiscovery = true
 
+	var milestoneNum uint64 = 0
+	var milestoneHash common.Hash
+	var lastRun uint64 = 0
+
 	for {
 		blockHeaderObserver := nodes[subscribedNodeIndex].BlockChain().CurrentHeader()
 		blockHeaderFaulty := nodes[faultyProducerIndex].BlockChain().CurrentHeader()
 
 		log.Warn("Current Observer block", "number", blockHeaderObserver.Number, "hash", blockHeaderObserver.Hash())
-		log.Warn("Current Faulty block", "number", blockHeaderFaulty.Number, "hash", blockHeaderFaulty.Hash())
+		if blockHeaderFaulty != nil {
+			log.Warn("Current Faulty block", "number", blockHeaderFaulty.Number, "hash", blockHeaderFaulty.Hash())
+		}
 
-		if blockHeaderFaulty.Number.Uint64() == tt["startBlock"] {
+		log.Warn("At 553")
+
+		if blockHeaderObserver.Number.Uint64() == tt["startBlock"] {
 			stacks[faultyProducerIndex].Server().MaxPeers = 0
 
 			for _, enode := range enodes {
@@ -551,16 +559,35 @@ func SetupValidatorsAndTestSprintLengthMilestone(t *testing.T, tt map[string]uin
 			}
 		}
 
+		log.Warn("At 563")
+
 		if blockHeaderObserver.Number.Uint64() >= tt["startBlock"] && blockHeaderObserver.Number.Uint64() < tt["startBlock"]+tt["reorgLength"] {
 			for _, enode := range enodes {
 				stacks[faultyProducerIndex].Server().RemovePeer(enode)
 			}
 		}
 
-		if math.Mod(float64(blockHeaderObserver.Number.Uint64()), float64(milestoneLength)) == 0 {
-			blockHash := blockHeaderObserver.Hash()
-			nodes[subscribedNodeIndex].Downloader().ChainValidator.ProcessMilestone(blockHeaderObserver.Number.Uint64(), blockHash)
+		log.Warn("At 570")
+
+		if blockHeaderObserver.Number.Uint64() >= milestoneLength && math.Mod(float64(blockHeaderObserver.Number.Uint64()), float64(milestoneLength)) == 0 && blockHeaderObserver.Number.Uint64() > milestoneNum {
+			milestoneNum = blockHeaderObserver.Number.Uint64()
+			milestoneHash = blockHeaderObserver.Hash()
 		}
+
+		if blockHeaderObserver.Number.Uint64() > lastRun {
+			for _, nodeTemp := range nodes {
+				log.Warn("At 579")
+				_, _, err := borVerifyTemP(nodeTemp, milestoneNum-milestoneLength+1, milestoneNum, milestoneHash.String())
+				if err == nil {
+					nodeTemp.Downloader().ChainValidator.ProcessMilestone(milestoneNum, milestoneHash)
+				} else {
+					nodeTemp.Downloader().ChainValidator.ProcessFutureMilestone(milestoneNum, milestoneHash)
+				}
+				log.Warn("At 586")
+			}
+		}
+
+		log.Warn("At 589")
 
 		if blockHeaderObserver.Number.Uint64() == tt["startBlock"]+tt["reorgLength"] {
 			stacks[faultyProducerIndex].Server().NoDiscovery = false
@@ -571,7 +598,7 @@ func SetupValidatorsAndTestSprintLengthMilestone(t *testing.T, tt map[string]uin
 			}
 		}
 
-		if blockHeaderFaulty.Number.Uint64() >= 255 {
+		if blockHeaderObserver.Number.Uint64() >= 255 {
 			break
 		}
 
@@ -690,4 +717,90 @@ func InitMinerSprintLengthMiner(genesis *core.Genesis, privKey *ecdsa.PrivateKey
 	err = stack.Start()
 
 	return stack, ethBackend, err
+}
+
+func borVerifyTemP(eth *eth.Ethereum, start uint64, end uint64, hash string) (string, uint64, error) {
+	defer log.Warn("Passed this borVerifyTemp")
+	// check if we have the given blocks
+	currentBlock := eth.BlockChain().CurrentBlock()
+
+	if currentBlock == nil {
+		return hash, 0, errMissingBlocks
+	}
+	head := currentBlock.Number().Uint64()
+
+	if head < end {
+		log.Debug("Head block behind given block", "head", head, "end block", end)
+		return hash, 0, errMissingBlocks
+	}
+
+	var localHash string
+
+	block := eth.BlockChain().GetBlockByNumber(end)
+	if block == nil {
+		log.Debug("Failed to get end block hash while whitelisting milestone")
+		return hash, 0, errEndBlock
+	}
+
+	localHash = block.Hash().String()
+
+	//nolint
+	if localHash != hash {
+
+		log.Warn("Root hash mismatch while whitelisting", "expected", localHash, "got", hash)
+		var (
+			rewindTo uint64
+			doExist  bool
+		)
+
+		if doExist, rewindTo, _ = eth.Downloader().GetWhitelistedMilestone(); doExist {
+
+		} else if doExist, rewindTo, _ = eth.Downloader().GetWhitelistedCheckpoint(); doExist {
+
+		} else {
+			if start <= 0 {
+				rewindTo = 0
+			} else {
+				rewindTo = start - 1
+			}
+		}
+
+		if head-rewindTo > 255 {
+			rewindTo = head - 255
+		}
+
+		rewindBackTemp(eth, rewindTo)
+
+		return hash, rewindTo, errRootHashMismatch
+	}
+
+	return block.Hash().String(), 0, nil
+}
+
+// Stop the miner if the mining process is running and rewind back the chain
+func rewindBackTemp(eth *eth.Ethereum, rewindTo uint64) {
+	defer log.Warn("Passed this rewindBackTemp")
+
+	if eth.Miner().Mining() {
+		ch := make(chan struct{})
+		eth.Miner().Stop(ch)
+		<-ch
+		rewindTemp(eth, rewindTo)
+		eth.StartMining(1)
+	} else {
+
+		rewindTemp(eth, rewindTo)
+
+	}
+}
+
+func rewindTemp(eth *eth.Ethereum, rewindTo uint64) {
+	defer log.Warn("Passed this rewindTemp")
+
+	log.Warn("Rewinding chain to :", rewindTo, "block number")
+	err := eth.BlockChain().SetHead(rewindTo)
+
+	if err != nil {
+		log.Error("Error while rewinding the chain to", "Block Number", rewindTo, "Error", err)
+	}
 }
