@@ -186,7 +186,7 @@ func WriteFutureMilestoneList(db ethdb.KeyValueWriter, order []uint64, list map[
 		return fmt.Errorf("%w: %v for future milestone field struct", ErrIncorrectFutureMilestoneFieldToStore, err)
 	}
 
-	if err := db.Put(key, enc); err != nil {
+	if err = db.Put(key, enc); err != nil {
 		log.Error("Failed to store the future milestone field struct", "err", err)
 
 		return fmt.Errorf("%w: %v for future milestone field struct", ErrDBNotResponding, err)
