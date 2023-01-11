@@ -18,10 +18,14 @@ type (
 )
 
 const (
-	stateSyncRequest       requestType = "state-sync"
-	spanRequest            requestType = "span"
-	checkpointRequest      requestType = "checkpoint"
-	checkpointCountRequest requestType = "checkpoint-count"
+	stateSyncRequest          requestType = "state-sync"
+	spanRequest               requestType = "span"
+	checkpointRequest         requestType = "checkpoint"
+	checkpointCountRequest    requestType = "checkpoint-count"
+	milestoneRequest          requestType = "milestone"
+	milestoneCountRequest     requestType = "milestone-count"
+	milestoneNoAckRequest     requestType = "milestone-no-ack"
+	milestoneLastNoAckRequest requestType = "milestone-last-no-ack"
 )
 
 func withRequestType(ctx context.Context, reqType requestType) context.Context {
@@ -62,6 +66,34 @@ var (
 				false: metrics.NewRegisteredMeter("client/requests/checkpointcount/invalid", nil),
 			},
 			timer: metrics.NewRegisteredTimer("client/requests/checkpointcount/duration", nil),
+		},
+		milestoneRequest: {
+			request: map[bool]metrics.Meter{
+				true:  metrics.NewRegisteredMeter("client/requests/milestone/valid", nil),
+				false: metrics.NewRegisteredMeter("client/requests/milestone/invalid", nil),
+			},
+			timer: metrics.NewRegisteredTimer("client/requests/milestone/duration", nil),
+		},
+		milestoneCountRequest: {
+			request: map[bool]metrics.Meter{
+				true:  metrics.NewRegisteredMeter("client/requests/milestonecount/valid", nil),
+				false: metrics.NewRegisteredMeter("client/requests/milestonecount/invalid", nil),
+			},
+			timer: metrics.NewRegisteredTimer("client/requests/milestonecount/duration", nil),
+		},
+		milestoneNoAckRequest: {
+			request: map[bool]metrics.Meter{
+				true:  metrics.NewRegisteredMeter("client/requests/milestonenoack/valid", nil),
+				false: metrics.NewRegisteredMeter("client/requests/milestonenoack/invalid", nil),
+			},
+			timer: metrics.NewRegisteredTimer("client/requests/milestonenoack/duration", nil),
+		},
+		milestoneLastNoAckRequest: {
+			request: map[bool]metrics.Meter{
+				true:  metrics.NewRegisteredMeter("client/requests/milestonelastnoack/valid", nil),
+				false: metrics.NewRegisteredMeter("client/requests/milestonelastnoack/invalid", nil),
+			},
+			timer: metrics.NewRegisteredTimer("client/requests/milestonelastnoack/duration", nil),
 		},
 	}
 )

@@ -160,6 +160,8 @@ func (h *HeimdallClient) FetchMilestone(ctx context.Context) (*milestone.Milesto
 		return nil, err
 	}
 
+	ctx = withRequestType(ctx, milestoneRequest)
+
 	response, err := FetchWithRetry[milestone.MilestoneResponse](ctx, h.client, url, h.closeCh)
 	if err != nil {
 		return nil, err
@@ -192,6 +194,8 @@ func (h *HeimdallClient) FetchMilestoneCount(ctx context.Context) (int64, error)
 		return 0, err
 	}
 
+	ctx = withRequestType(ctx, milestoneCountRequest)
+
 	response, err := FetchWithRetry[milestone.MilestoneCountResponse](ctx, h.client, url, h.closeCh)
 	if err != nil {
 		return 0, err
@@ -207,6 +211,8 @@ func (h *HeimdallClient) FetchLastNoAckMilestone(ctx context.Context) (string, e
 		return "", err
 	}
 
+	ctx = withRequestType(ctx, milestoneLastNoAckRequest)
+
 	response, err := FetchWithRetry[milestone.MilestoneLastNoAckResponse](ctx, h.client, url, h.closeCh)
 	if err != nil {
 		return "", err
@@ -221,6 +227,8 @@ func (h *HeimdallClient) FetchNoAckMilestone(ctx context.Context, milestoneID st
 	if err != nil {
 		return err
 	}
+
+	ctx = withRequestType(ctx, milestoneNoAckRequest)
 
 	response, err := FetchWithRetry[milestone.MilestoneNoAckResponse](ctx, h.client, url, h.closeCh)
 	if err != nil {
