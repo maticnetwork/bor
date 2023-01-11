@@ -3,6 +3,7 @@ package eth
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
@@ -56,10 +57,6 @@ func (b *EthAPIBackend) GetVoteOnRootHash(ctx context.Context, starBlockNr uint6
 
 	localEndBlockHash := localEndBlock.Hash().String()
 
-	if err != nil {
-		return false, err
-	}
-
 	downloader := b.eth.handler.downloader
 	isLocked := downloader.LockMutex(endBlockNr)
 
@@ -70,7 +67,7 @@ func (b *EthAPIBackend) GetVoteOnRootHash(ctx context.Context, starBlockNr uint6
 
 	if localEndBlockHash != endBlockHash {
 		downloader.UnlockMutex(false, "", common.Hash{})
-		return false, errors.New("EndBlockHash mismatch")
+		return false, fmt.Errorf("Hash mismatch: localChainHash %s, milestoneHash %s", localEndBlockHash, endBlockHash)
 	}
 
 	downloader.UnlockMutex(true, milestoneId, localEndBlock.Hash())
