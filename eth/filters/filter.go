@@ -38,7 +38,7 @@ type Backend interface {
 	GetReceipts(ctx context.Context, blockHash common.Hash) (types.Receipts, error)
 	GetLogs(ctx context.Context, blockHash common.Hash) ([][]*types.Log, error)
 	GetBorBlockReceipt(ctx context.Context, blockHash common.Hash) (*types.Receipt, error)
-	GetVoteOnRootHash(ctx context.Context, starBlockNr uint64, endBlockNr uint64, rootHash string, milestoneId string) (bool, error)
+	GetVoteOnHash(ctx context.Context, starBlockNr uint64, endBlockNr uint64, rootHash string, milestoneId string) (bool, error)
 	GetBorBlockLogs(ctx context.Context, blockHash common.Hash) ([]*types.Log, error)
 
 	SubscribeNewTxsEvent(chan<- core.NewTxsEvent) event.Subscription

@@ -1061,19 +1061,19 @@ func TestNonMinerNodeWithTryToLock(t *testing.T) {
 		//Asking for the vote
 		if blockHeaderVal1.Number.Uint64() == 7 {
 			blockHash := blockHeaderVal1.Hash()
-			nodes[1].APIBackend.GetVoteOnRootHash(nil, 0, 7, "0x"+blockHash.String(), "MilestoneID1")
+			nodes[1].APIBackend.GetVoteOnHash(nil, 0, 7, "0x"+blockHash.String(), "MilestoneID1")
 		}
 
 		//Asking for the vote
 		if blockHeaderVal1.Number.Uint64() == 15 {
 			blockHash := blockHeaderVal1.Hash()
-			nodes[1].APIBackend.GetVoteOnRootHash(nil, 0, 7, "0x"+blockHash.String(), "MilestoneID2")
+			nodes[1].APIBackend.GetVoteOnHash(nil, 0, 7, "0x"+blockHash.String(), "MilestoneID2")
 		}
 
 		//Asking for the vote
 		if blockHeaderVal1.Number.Uint64() == 23 {
 			blockHash := blockHeaderVal1.Hash()
-			nodes[1].APIBackend.GetVoteOnRootHash(nil, 0, 7, "0x"+blockHash.String(), "MilestoneID3")
+			nodes[1].APIBackend.GetVoteOnHash(nil, 0, 7, "0x"+blockHash.String(), "MilestoneID3")
 		}
 
 		milestoneList := nodes[0].Downloader().ChainValidator.GetMilestoneIDsList()
