@@ -5,10 +5,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
@@ -29,6 +28,9 @@ var (
 
 	// errBlockNumberConversion is returned when we get err in parsing hexautil block number
 	errBlockNumberConversion = errors.New("failed to parse the block number")
+
+	//Metrics for collecting the rewindLength
+	rewindLengthMeter = metrics.NewRegisteredMeter("chain/autorewind/length", nil)
 )
 
 type borVerifier struct {
@@ -41,8 +43,15 @@ func newBorVerifier() *borVerifier {
 
 func borVerify(ctx context.Context, eth *Ethereum, handler *ethHandler, start uint64, end uint64, hash string, isCheckpoint bool) (string, error) {
 	// check if we have the given blocks
-	head := handler.ethAPI.BlockNumber()
-	if head < hexutil.Uint64(end) {
+	currentBlock := eth.BlockChain().CurrentBlock()
+	if currentBlock == nil {
+		log.Debug("Current Block does not exist")
+		return hash, errMissingBlocks
+	}
+
+	head := currentBlock.Number().Uint64()
+
+	if head < end {
 		log.Debug("Head block behind given block", "head", head, "end block", end)
 		return hash, errMissingBlocks
 	}
@@ -55,6 +64,7 @@ func borVerify(ctx context.Context, eth *Ethereum, handler *ethHandler, start ui
 
 		//in case of checkpoint get the rootHash
 		localHash, err = handler.ethAPI.GetRootHash(ctx, start, end)
+
 		if err != nil {
 			log.Debug("Failed to get root hash of given block range while whitelisting checkpoint", "start", start, "end", end, "err", err)
 			return hash, errRootHash
@@ -73,7 +83,7 @@ func borVerify(ctx context.Context, eth *Ethereum, handler *ethHandler, start ui
 	//nolint
 	if localHash != hash {
 
-		log.Warn("Root hash mismatch while whitelisting", "expected", localRoothash, "got", rootHash)
+		log.Warn("Root hash mismatch while whitelisting", "expected", localHash, "got", hash)
 
 		ethHandler := (*ethHandler)(eth.handler)
 
@@ -94,15 +104,11 @@ func borVerify(ctx context.Context, eth *Ethereum, handler *ethHandler, start ui
 			}
 		}
 
-		if head-hexutil.Uint64(rewindTo) > 255 {
-			headInt64, err := strconv.ParseInt(head.String(), 10, 64)
-			if err != nil {
-				return hash, errBlockNumberConversion
-			}
-			rewindTo = uint64(headInt64) - 255
+		if head-rewindTo > 255 {
+			rewindTo = head - 255
 		}
 
-		rewindBack(eth, rewindTo)
+		rewindBack(eth, head, rewindTo)
 
 		return hash, errRootHashMismatch
 	}
@@ -120,25 +126,28 @@ func borVerify(ctx context.Context, eth *Ethereum, handler *ethHandler, start ui
 }
 
 // Stop the miner if the mining process is running and rewind back the chain
-func rewindBack(eth *Ethereum, rewindTo uint64) {
+func rewindBack(eth *Ethereum, head uint64, rewindTo uint64) {
 	if eth.Miner().Mining() {
 		ch := make(chan struct{})
 		eth.Miner().Stop(ch)
+
 		<-ch
-		rewind(eth, rewindTo)
+		rewind(eth, head, rewindTo)
+
 		eth.Miner().Start(eth.etherbase)
 	} else {
-
-		rewind(eth, rewindTo)
-
+		rewind(eth, head, rewindTo)
 	}
 }
 
-func rewind(eth *Ethereum, rewindTo uint64) {
+func rewind(eth *Ethereum, head uint64, rewindTo uint64) {
 	log.Warn("Rewinding chain to :", rewindTo, "block number")
 	err := eth.blockchain.SetHead(rewindTo)
 
 	if err != nil {
 		log.Error("Error while rewinding the chain to", "Block Number", rewindTo, "Error", err)
+	} else {
+		rewindLengthMeter.Mark(int64(head - rewindTo))
 	}
+
 }

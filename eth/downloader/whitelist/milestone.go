@@ -6,6 +6,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/metrics"
 )
 
 type milestone struct {
@@ -27,6 +28,11 @@ type milestoneService interface {
 	UnlockMutex(doLock bool, milestoneId string, endBlockHash common.Hash)
 	UnlockSprint(endBlockNum uint64)
 }
+
+var (
+	//Metrics for collecting the whitelisted milestone number
+	whitelistedMilestoneNumberMeter = metrics.NewRegisteredMeter("chain/milestone/latest", nil)
+)
 
 // IsValidChain checks the validity of chain by comparing it
 // against the local milestone entries
@@ -64,7 +70,13 @@ func (m *milestone) Process(block uint64, hash common.Hash) {
 	m.finality.Lock()
 	defer m.finality.Unlock()
 
+	if m.finality.Number == block {
+		return
+	}
+
 	m.finality.Process(block, hash)
+
+	whitelistedMilestoneNumberMeter.Mark(int64(block))
 
 	m.UnlockSprint(block)
 }
