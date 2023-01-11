@@ -116,6 +116,7 @@ func (b *EthAPIBackend) BlockByNumber(ctx context.Context, number rpc.BlockNumbe
 	if number == rpc.LatestBlockNumber {
 		return b.eth.blockchain.CurrentBlock(), nil
 	}
+
 	if number == rpc.FinalizedBlockNumber {
 		number, err := getFinalizedBlockNumber(b.eth)
 		if err != nil {

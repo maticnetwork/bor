@@ -237,13 +237,13 @@ func TestMilestone(t *testing.T) {
 	require.Equal(t, order[0], uint64(16), "expected number to be 16 but got", order[0])
 	require.Equal(t, list[order[0]], common.Hash{16}, "expected value is", common.Hash{16}.String()[2:], "but got", list[order[0]])
 
-	cap := milestone.MaxCapacity
-	for i := 16; i <= 16*(cap+1); i = i + 16 {
+	capicity := milestone.MaxCapacity
+	for i := 16; i <= 16*(capicity+1); i = i + 16 {
 		s.ProcessFutureMilestone(uint64(i), common.Hash{16})
 	}
 
-	require.Equal(t, len(milestone.FutureMilestoneOrder), cap, "expected length is", cap)
-	require.Equal(t, milestone.FutureMilestoneOrder[cap-1], uint64(16*cap), "expected value is", uint64(16*cap), "but got", milestone.FutureMilestoneOrder[cap-1])
+	require.Equal(t, len(milestone.FutureMilestoneOrder), capicity, "expected length is", capicity)
+	require.Equal(t, milestone.FutureMilestoneOrder[capicity-1], uint64(16*capicity), "expected value is", uint64(16*capicity), "but got", milestone.FutureMilestoneOrder[capicity-1])
 }
 
 // TestIsValidPeer checks the IsValidPeer function in isolation

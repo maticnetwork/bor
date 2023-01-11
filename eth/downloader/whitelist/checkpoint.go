@@ -46,7 +46,6 @@ func (w *checkpoint) IsValidChain(currentHeader *types.Header, chain []*types.He
 // IsValidPeer checks if the chain we're about to receive from a peer is valid or not
 // in terms of reorgs. We won't reorg beyond the last bor finality submitted to mainchain.
 func (w *checkpoint) IsValidPeer(fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error) {
-
 	res, err := w.finality.IsValidPeer(fetchHeadersByNumber)
 
 	if res {
