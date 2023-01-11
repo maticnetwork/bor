@@ -57,6 +57,7 @@ func (bc *BlockChain) CurrentFinalizedBlock(number uint64) *types.Block {
 	if hash == (common.Hash{}) {
 		return nil
 	}
+
 	return bc.GetBlock(hash, number)
 }
 

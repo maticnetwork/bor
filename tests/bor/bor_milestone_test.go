@@ -1,3 +1,4 @@
+// nolint
 package bor
 
 import (
@@ -57,9 +58,13 @@ const (
 )
 
 func TestMiningAfterLocking(t *testing.T) {
-
 	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
-	fdlimit.Raise(2048)
+
+	_, err := fdlimit.Raise(2048)
+
+	if err != nil {
+		panic(err)
+	}
 
 	// Generate a batch of accounts to seal and fund with
 	faucets := make([]*ecdsa.PrivateKey, 128)
@@ -75,6 +80,7 @@ func TestMiningAfterLocking(t *testing.T) {
 		nodes  []*eth.Ethereum
 		enodes []*enode.Node
 	)
+
 	for i := 0; i < 2; i++ {
 		// Start the node and wait until it's up
 		stack, ethBackend, err := InitMiner(genesis, keys[i], true)
@@ -98,6 +104,7 @@ func TestMiningAfterLocking(t *testing.T) {
 
 	// Iterate over all the nodes and start mining
 	time.Sleep(3 * time.Second)
+
 	for _, node := range nodes {
 		if err := node.StartMining(1); err != nil {
 			panic(err)
@@ -116,6 +123,7 @@ func TestMiningAfterLocking(t *testing.T) {
 		//Lock the sprint at 8th block
 		if blockHeaderVal0.Number.Uint64() == 8 {
 			block8Hash := blockHeaderVal0.Hash()
+
 			nodes[0].Downloader().ChainValidator.LockMutex(uint64(8))
 			nodes[0].Downloader().ChainValidator.UnlockMutex(true, "MilestoneID1", block8Hash)
 		}
@@ -138,7 +146,6 @@ func TestMiningAfterLocking(t *testing.T) {
 		if blockHeaderVal0.Number.Uint64() == 30 {
 			break
 		}
-
 	}
 
 	blockHeaderVal0 := nodes[0].BlockChain().GetHeaderByNumber(29)
@@ -154,14 +161,18 @@ func TestMiningAfterLocking(t *testing.T) {
 	milestoneListVal1 := nodes[1].Downloader().ChainValidator.GetMilestoneIDsList()
 
 	assert.Equal(t, len(milestoneListVal1), int(0))
-
 }
 
 func TestReorgingAfterLockingSprint(t *testing.T) {
 	t.Parallel()
 
 	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
-	fdlimit.Raise(2048)
+
+	_, err := fdlimit.Raise(2048)
+
+	if err != nil {
+		panic(err)
+	}
 
 	// Generate a batch of accounts to seal and fund with
 	faucets := make([]*ecdsa.PrivateKey, 128)
@@ -177,6 +188,7 @@ func TestReorgingAfterLockingSprint(t *testing.T) {
 		nodes  []*eth.Ethereum
 		enodes []*enode.Node
 	)
+
 	for i := 0; i < 2; i++ {
 		// Start the node and wait until it's up
 		stack, ethBackend, err := InitMiner(genesis, keys[i], true)
@@ -200,6 +212,7 @@ func TestReorgingAfterLockingSprint(t *testing.T) {
 
 	// Iterate over all the nodes and start mining
 	time.Sleep(3 * time.Second)
+
 	for _, node := range nodes {
 		if err := node.StartMining(1); err != nil {
 			panic(err)
@@ -230,7 +243,6 @@ func TestReorgingAfterLockingSprint(t *testing.T) {
 
 		//Connect both the nodes
 		if blockHeaderVal0.Number.Uint64() == 14 {
-
 			stacks[0].Server().AddPeer(enodes[1])
 			stacks[1].Server().AddPeer(enodes[0])
 		}
@@ -245,7 +257,6 @@ func TestReorgingAfterLockingSprint(t *testing.T) {
 		if blockHeaderVal0.Number.Uint64() == 30 {
 			break
 		}
-
 	}
 
 	// check block 10 block ; expected author is node1 signer
@@ -269,14 +280,18 @@ func TestReorgingAfterLockingSprint(t *testing.T) {
 	milestoneListVal1 := nodes[0].Downloader().ChainValidator.GetMilestoneIDsList()
 
 	assert.Equal(t, len(milestoneListVal1), int(1))
-
 }
 
 func TestReorgingAfterWhitelisting(t *testing.T) {
 	t.Parallel()
 
 	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
-	fdlimit.Raise(2048)
+
+	_, err := fdlimit.Raise(2048)
+
+	if err != nil {
+		panic(err)
+	}
 
 	// Generate a batch of accounts to seal and fund with
 	faucets := make([]*ecdsa.PrivateKey, 128)
@@ -292,6 +307,7 @@ func TestReorgingAfterWhitelisting(t *testing.T) {
 		nodes  []*eth.Ethereum
 		enodes []*enode.Node
 	)
+
 	for i := 0; i < 2; i++ {
 		// Start the node and wait until it's up
 		stack, ethBackend, err := InitMiner(genesis, keys[i], true)
@@ -315,6 +331,7 @@ func TestReorgingAfterWhitelisting(t *testing.T) {
 
 	// Iterate over all the nodes and start mining
 	time.Sleep(3 * time.Second)
+
 	for _, node := range nodes {
 		if err := node.StartMining(1); err != nil {
 			panic(err)
@@ -322,7 +339,6 @@ func TestReorgingAfterWhitelisting(t *testing.T) {
 	}
 
 	for {
-
 		// for block 0 to 7, the primary validator is node0
 		// for block 8 to 15, the primary validator is node1
 		// for block 16 to 23, the primary validator is node0
@@ -331,7 +347,6 @@ func TestReorgingAfterWhitelisting(t *testing.T) {
 
 		//Disconnect the peers at block 9
 		if blockHeaderVal0.Number.Uint64() == 9 {
-
 			stacks[0].Server().RemovePeer(enodes[1])
 			stacks[1].Server().RemovePeer(enodes[0])
 		}
@@ -339,6 +354,7 @@ func TestReorgingAfterWhitelisting(t *testing.T) {
 		//Node0 will be sealing out of turn and lock it till 12th block
 		if blockHeaderVal0.Number.Uint64() == 12 {
 			block12Hash := blockHeaderVal0.Hash()
+
 			nodes[0].Downloader().ChainValidator.LockMutex(uint64(12))
 			nodes[0].Downloader().ChainValidator.UnlockMutex(true, "MilestoneID1", block12Hash)
 		}
@@ -346,11 +362,9 @@ func TestReorgingAfterWhitelisting(t *testing.T) {
 		if blockHeaderVal0.Number.Uint64() == 13 {
 			block13Hash := blockHeaderVal0.Hash()
 			nodes[0].Downloader().ChainValidator.ProcessMilestone(13, block13Hash)
-
 		}
 
 		if blockHeaderVal0.Number.Uint64() == 14 {
-
 			stacks[0].Server().AddPeer(enodes[1])
 			stacks[1].Server().AddPeer(enodes[0])
 		}
@@ -365,7 +379,6 @@ func TestReorgingAfterWhitelisting(t *testing.T) {
 		if blockHeaderVal0.Number.Uint64() == 30 {
 			break
 		}
-
 	}
 
 	arr := []uint64{10, 12, 13}
@@ -378,16 +391,19 @@ func TestReorgingAfterWhitelisting(t *testing.T) {
 		if err == nil {
 			assert.Equal(t, authorVal, nodes[0].AccountManager().Accounts()[0])
 		}
-
 	}
-
 }
 
 func TestPeerConnectionAfterWhitelisting(t *testing.T) {
 	t.Parallel()
 
 	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
-	fdlimit.Raise(2048)
+
+	_, err := fdlimit.Raise(2048)
+
+	if err != nil {
+		panic(err)
+	}
 
 	// Generate a batch of accounts to seal and fund with
 	faucets := make([]*ecdsa.PrivateKey, 128)
@@ -403,6 +419,7 @@ func TestPeerConnectionAfterWhitelisting(t *testing.T) {
 		nodes  []*eth.Ethereum
 		enodes []*enode.Node
 	)
+
 	for i := 0; i < 2; i++ {
 		// Start the node and wait until it's up
 		stack, ethBackend, err := InitMiner(genesis, keys[i], true)
@@ -426,6 +443,7 @@ func TestPeerConnectionAfterWhitelisting(t *testing.T) {
 
 	// Iterate over all the nodes and start mining
 	time.Sleep(3 * time.Second)
+
 	for _, node := range nodes {
 		if err := node.StartMining(1); err != nil {
 			panic(err)
@@ -435,7 +453,6 @@ func TestPeerConnectionAfterWhitelisting(t *testing.T) {
 	disconnectFlag := false
 
 	for {
-
 		// for block 0 to 7, the primary validator is node0
 		// for block 8 to 15, the primary validator is node1
 		// for block 16 to 23, the primary validator is node0
@@ -470,7 +487,6 @@ func TestPeerConnectionAfterWhitelisting(t *testing.T) {
 		if blockHeaderVal0.Number.Uint64() == 30 {
 			break
 		}
-
 	}
 
 	// validator one peer count
@@ -497,14 +513,18 @@ func TestPeerConnectionAfterWhitelisting(t *testing.T) {
 			assert.Equal(t, author13Val1, nodes[1].AccountManager().Accounts()[0])
 		}
 	}
-
 }
 
 func TestReorgingFutureSprintAfterLocking(t *testing.T) {
 	t.Parallel()
 
 	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
-	fdlimit.Raise(2048)
+
+	_, err := fdlimit.Raise(2048)
+
+	if err != nil {
+		panic(err)
+	}
 
 	// Generate a batch of accounts to seal and fund with
 	faucets := make([]*ecdsa.PrivateKey, 128)
@@ -543,6 +563,7 @@ func TestReorgingFutureSprintAfterLocking(t *testing.T) {
 
 	// Iterate over all the nodes and start mining
 	time.Sleep(3 * time.Second)
+
 	for _, node := range nodes {
 		if err := node.StartMining(1); err != nil {
 			panic(err)
@@ -550,7 +571,6 @@ func TestReorgingFutureSprintAfterLocking(t *testing.T) {
 	}
 
 	for {
-
 		// for block 0 to 7, the primary validator is node0
 		// for block 8 to 15, the primary validator is node1
 		// for block 16 to 23, the primary validator is node0
@@ -567,7 +587,6 @@ func TestReorgingFutureSprintAfterLocking(t *testing.T) {
 		if blockHeaderVal0.Number.Uint64() == 30 {
 			break
 		}
-
 	}
 
 	node1Arr := []uint64{8, 15, 24}
@@ -580,16 +599,19 @@ func TestReorgingFutureSprintAfterLocking(t *testing.T) {
 		if err == nil {
 			assert.Equal(t, authorVal, nodes[1].AccountManager().Accounts()[0])
 		}
-
 	}
-
 }
 
 func TestReorgingFutureSprintAfterLockingOnSameHash(t *testing.T) {
 	t.Parallel()
 
 	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
-	fdlimit.Raise(2048)
+
+	_, err := fdlimit.Raise(2048)
+
+	if err != nil {
+		panic(err)
+	}
 
 	// Generate a batch of accounts to seal and fund with
 	faucets := make([]*ecdsa.PrivateKey, 128)
@@ -628,6 +650,7 @@ func TestReorgingFutureSprintAfterLockingOnSameHash(t *testing.T) {
 
 	// Iterate over all the nodes and start mining
 	time.Sleep(3 * time.Second)
+
 	for _, node := range nodes {
 		if err := node.StartMining(1); err != nil {
 			panic(err)
@@ -635,7 +658,6 @@ func TestReorgingFutureSprintAfterLockingOnSameHash(t *testing.T) {
 	}
 
 	for {
-
 		// for block 0 to 7, the primary validator is node0
 		// for block 8 to 15, the primary validator is node1
 		// for block 16 to 23, the primary validator is node0
@@ -665,16 +687,19 @@ func TestReorgingFutureSprintAfterLockingOnSameHash(t *testing.T) {
 		if err == nil {
 			assert.Equal(t, authorVal, nodes[1].AccountManager().Accounts()[0])
 		}
-
 	}
-
 }
 
 func TestReorgingAfterLockingOnDifferentHash(t *testing.T) {
 	t.Parallel()
 
 	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
-	fdlimit.Raise(2048)
+
+	_, err := fdlimit.Raise(2048)
+
+	if err != nil {
+		panic(err)
+	}
 
 	// Generate a batch of accounts to seal and fund with
 	faucets := make([]*ecdsa.PrivateKey, 128)
@@ -715,6 +740,7 @@ func TestReorgingAfterLockingOnDifferentHash(t *testing.T) {
 
 	// Iterate over all the nodes and start mining
 	time.Sleep(3 * time.Second)
+
 	for _, node := range nodes {
 		if err := node.StartMining(1); err != nil {
 			panic(err)
@@ -733,7 +759,6 @@ func TestReorgingAfterLockingOnDifferentHash(t *testing.T) {
 	nodes[1].BlockChain().SubscribeChain2HeadEvent(chain2HeadChNode1)
 
 	for {
-
 		// for block 0 to 7, the primary validator is node0
 		// for block 8 to 15, the primary validator is node1
 		// for block 16 to 23, the primary validator is node0
@@ -768,7 +793,6 @@ func TestReorgingAfterLockingOnDifferentHash(t *testing.T) {
 			}
 
 		case ev := <-chain2HeadChNode1:
-
 			if ev.Type == core.Chain2HeadReorgEvent {
 				assert.Fail(t, "Node 1 should not get reorged")
 				break
@@ -782,16 +806,19 @@ func TestReorgingAfterLockingOnDifferentHash(t *testing.T) {
 		if blockHeaderVal0.Number.Uint64() == 30 {
 			break
 		}
-
 	}
-
 }
 
 func TestReorgingAfterWhitelistingOnDifferentHash(t *testing.T) {
 	t.Parallel()
 
 	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
-	fdlimit.Raise(2048)
+
+	_, err := fdlimit.Raise(2048)
+
+	if err != nil {
+		panic(err)
+	}
 
 	// Generate a batch of accounts to seal and fund with
 	faucets := make([]*ecdsa.PrivateKey, 128)
@@ -807,6 +834,7 @@ func TestReorgingAfterWhitelistingOnDifferentHash(t *testing.T) {
 		nodes  []*eth.Ethereum
 		enodes []*enode.Node
 	)
+
 	for i := 0; i < 2; i++ {
 		// Start the node and wait until it's up
 		stack, ethBackend, err := InitMiner(genesis, keys[i], true)
@@ -832,6 +860,7 @@ func TestReorgingAfterWhitelistingOnDifferentHash(t *testing.T) {
 
 	// Iterate over all the nodes and start mining
 	time.Sleep(3 * time.Second)
+
 	for _, node := range nodes {
 		if err := node.StartMining(1); err != nil {
 			panic(err)
@@ -850,7 +879,6 @@ func TestReorgingAfterWhitelistingOnDifferentHash(t *testing.T) {
 	nodes[1].BlockChain().SubscribeChain2HeadEvent(chain2HeadChNode1)
 
 	for {
-
 		// for block 0 to 7, the primary validator is node0
 		// for block 8 to 15, the primary validator is node1
 		// for block 16 to 23, the primary validator is node0
@@ -883,7 +911,6 @@ func TestReorgingAfterWhitelistingOnDifferentHash(t *testing.T) {
 			if ev.Type == core.Chain2HeadReorgEvent {
 				assert.Fail(t, "Node 0 should not get reorged as it was whitelisted on different hash")
 				break
-
 			}
 
 		case ev := <-chain2HeadChNode1:
@@ -895,22 +922,24 @@ func TestReorgingAfterWhitelistingOnDifferentHash(t *testing.T) {
 
 		default:
 			time.Sleep(1 * time.Millisecond)
-
 		}
 
 		if blockHeaderVal0.Number.Uint64() == 30 {
 			break
 		}
-
 	}
-
 }
 
 func TestNonMinerNodeWithWhitelisting(t *testing.T) {
 	t.Parallel()
 
 	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
-	fdlimit.Raise(2048)
+
+	_, err := fdlimit.Raise(2048)
+
+	if err != nil {
+		panic(err)
+	}
 
 	// Generate a batch of accounts to seal and fund with
 	faucets := make([]*ecdsa.PrivateKey, 128)
@@ -926,6 +955,7 @@ func TestNonMinerNodeWithWhitelisting(t *testing.T) {
 		nodes  []*eth.Ethereum
 		enodes []*enode.Node
 	)
+
 	for i := 0; i < 2; i++ {
 		// Start the node and wait until it's up
 		stack, ethBackend, err := InitMiner(genesis, keys[i], true)
@@ -953,13 +983,12 @@ func TestNonMinerNodeWithWhitelisting(t *testing.T) {
 	time.Sleep(3 * time.Second)
 
 	//Only started the node 0 and keep the node 1 as non mining
-	err := nodes[0].StartMining(1)
+	err = nodes[0].StartMining(1)
 	if err != nil {
 		panic(err)
 	}
 
 	for {
-
 		blockHeaderVal0 := nodes[0].BlockChain().CurrentHeader()
 		blockHeaderVal1 := nodes[1].BlockChain().CurrentHeader()
 
@@ -984,11 +1013,9 @@ func TestNonMinerNodeWithWhitelisting(t *testing.T) {
 		if blockHeaderVal0.Number.Uint64() == 30 {
 			break
 		}
-
 	}
 
 	for i := uint64(0); i < nodes[1].BlockChain().CurrentBlock().NumberU64(); i++ {
-
 		blockHeader := nodes[1].BlockChain().GetHeaderByNumber(i)
 
 		authorVal, err := nodes[1].Engine().Author(blockHeader)
@@ -996,16 +1023,19 @@ func TestNonMinerNodeWithWhitelisting(t *testing.T) {
 		if err == nil {
 			assert.Equal(t, authorVal, nodes[0].AccountManager().Accounts()[0])
 		}
-
 	}
-
 }
 
 func TestNonMinerNodeWithTryToLock(t *testing.T) {
 	t.Parallel()
 
 	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
-	fdlimit.Raise(2048)
+
+	_, err := fdlimit.Raise(2048)
+
+	if err != nil {
+		panic(err)
+	}
 
 	// Generate a batch of accounts to seal and fund with
 	faucets := make([]*ecdsa.PrivateKey, 128)
@@ -1048,32 +1078,32 @@ func TestNonMinerNodeWithTryToLock(t *testing.T) {
 	time.Sleep(3 * time.Second)
 
 	//Only started the node 0 and keep the node 1 as non mining
-	err := nodes[0].StartMining(1)
+	err = nodes[0].StartMining(1)
 	if err != nil {
 		panic(err)
 	}
 
 	for {
-
 		blockHeaderVal0 := nodes[0].BlockChain().CurrentHeader()
 		blockHeaderVal1 := nodes[1].BlockChain().CurrentHeader()
 
 		//Asking for the vote
 		if blockHeaderVal1.Number.Uint64() == 7 {
 			blockHash := blockHeaderVal1.Hash()
-			nodes[1].APIBackend.GetVoteOnHash(nil, 0, 7, "0x"+blockHash.String(), "MilestoneID1")
+			_, _ = nodes[1].APIBackend.GetVoteOnHash(nil, 0, 7, "0x"+blockHash.String(), "MilestoneID1")
+
 		}
 
 		//Asking for the vote
 		if blockHeaderVal1.Number.Uint64() == 15 {
 			blockHash := blockHeaderVal1.Hash()
-			nodes[1].APIBackend.GetVoteOnHash(nil, 0, 7, "0x"+blockHash.String(), "MilestoneID2")
+			_, _ = nodes[1].APIBackend.GetVoteOnHash(nil, 0, 7, "0x"+blockHash.String(), "MilestoneID2")
 		}
 
 		//Asking for the vote
 		if blockHeaderVal1.Number.Uint64() == 23 {
 			blockHash := blockHeaderVal1.Hash()
-			nodes[1].APIBackend.GetVoteOnHash(nil, 0, 7, "0x"+blockHash.String(), "MilestoneID3")
+			_, _ = nodes[1].APIBackend.GetVoteOnHash(nil, 0, 7, "0x"+blockHash.String(), "MilestoneID3")
 		}
 
 		milestoneList := nodes[0].Downloader().ChainValidator.GetMilestoneIDsList()
@@ -1084,9 +1114,7 @@ func TestNonMinerNodeWithTryToLock(t *testing.T) {
 		if blockHeaderVal0.Number.Uint64() == 30 {
 			break
 		}
-
 	}
-
 }
 
 func TestRewind(t *testing.T) {
@@ -1094,7 +1122,12 @@ func TestRewind(t *testing.T) {
 	t.Parallel()
 
 	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
-	fdlimit.Raise(2048)
+
+	_, err := fdlimit.Raise(2048)
+
+	if err != nil {
+		panic(err)
+	}
 
 	// Generate a batch of accounts to seal and fund with
 	faucets := make([]*ecdsa.PrivateKey, 128)
@@ -1148,7 +1181,6 @@ func TestRewind(t *testing.T) {
 	step4 := false
 
 	for {
-
 		blockHeaderVal0 := nodes[0].BlockChain().CurrentHeader()
 		blockHeaderVal1 := nodes[1].BlockChain().CurrentHeader()
 
@@ -1177,21 +1209,28 @@ func TestRewind(t *testing.T) {
 		// }
 
 		if blockHeaderVal1.Number.Uint64() == 180 && !step4 {
-
 			ch := make(chan struct{})
 			nodes[1].Miner().Stop(ch)
 			<-ch
-			nodes[1].BlockChain().SetHead(2)
-			nodes[1].StartMining(1)
+			err := nodes[1].BlockChain().SetHead(2)
+
+			if err != nil {
+				panic(err)
+			}
+
+			err = nodes[1].StartMining(1)
+
+			if err != nil {
+				panic(err)
+			}
+
 			step4 = true
 		}
 
 		if blockHeaderVal0.Number.Uint64() == 200 {
 			break
 		}
-
 	}
-
 }
 
 func TestRewinding(t *testing.T) {
@@ -1199,7 +1238,12 @@ func TestRewinding(t *testing.T) {
 	t.Parallel()
 
 	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
-	fdlimit.Raise(2048)
+
+	_, err := fdlimit.Raise(2048)
+
+	if err != nil {
+		panic(err)
+	}
 
 	// Generate a batch of accounts to seal and fund with
 	faucets := make([]*ecdsa.PrivateKey, 128)
@@ -1252,7 +1296,6 @@ func TestRewinding(t *testing.T) {
 	var step2 = false
 
 	for {
-
 		blockHeaderVal0 := nodes[0].BlockChain().CurrentHeader()
 		blockHeaderVal1 := nodes[1].BlockChain().CurrentHeader()
 
@@ -1264,7 +1307,7 @@ func TestRewinding(t *testing.T) {
 
 		//Verify the wrong hash to rewind back
 		if blockHeaderVal0.Number.Uint64() == 15 && !step1 {
-			borVerify(nodes[0], 8, 15, "LocalHash", "RootHash", 15, 7)
+			_, _ = borVerify(nodes[0], 8, 15, "LocalHash", "RootHash", 15, 7)
 			step1 = true
 		}
 
@@ -1275,7 +1318,7 @@ func TestRewinding(t *testing.T) {
 
 		//Verify the wrong hash
 		if blockHeaderVal0.Number.Uint64() == 270 && !step2 {
-			borVerify(nodes[0], 8, 15, "LocalHash", "RootHash", 270, 7)
+			_, _ = borVerify(nodes[0], 8, 15, "LocalHash", "RootHash", 270, 7)
 			step2 = true
 		}
 
@@ -1287,7 +1330,6 @@ func TestRewinding(t *testing.T) {
 		if blockHeaderVal0.Number.Uint64() == 300 {
 			break
 		}
-
 	}
 }
 
@@ -1403,15 +1445,12 @@ var (
 )
 
 func borVerify(eth *eth.Ethereum, start uint64, end uint64, rootHash string, localHash string, head uint64, lastMilestone uint64) (string, error) {
-
 	//nolint
 	if localHash != rootHash {
-
 		var rewindTo uint64
 		rewindTo = lastMilestone
 
 		if head-rewindTo > 255 {
-
 			rewindTo = head - 254
 		}
 
@@ -1430,7 +1469,12 @@ func rewindBack(eth *eth.Ethereum, rewindTo uint64) {
 		eth.Miner().Stop(ch)
 		<-ch
 		rewind(eth, rewindTo)
-		eth.StartMining(1)
+
+		err := eth.StartMining(1)
+
+		if err != nil {
+			panic(err)
+		}
 	} else {
 		rewind(eth, rewindTo)
 	}

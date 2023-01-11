@@ -87,6 +87,7 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 	}
 
 	isValid = true
+
 	return true
 }
 
@@ -249,7 +250,6 @@ func (m *milestone) purgeMilestoneIDsList() {
 }
 
 func (m *milestone) IsFutureMilestoneCompatible(chain []*types.Header) bool {
-
 	//Tip of the received chain
 	chainTipNumber := chain[len(chain)-1].Number.Uint64()
 
@@ -260,7 +260,6 @@ func (m *milestone) IsFutureMilestoneCompatible(chain []*types.Header) bool {
 			//Looking for the received chain 's particular block number(matching future milestone number)
 			for j := len(chain) - 1; j >= 0; j-- {
 				if chain[j].Number.Uint64() == m.FutureMilestoneOrder[i] {
-
 					endBlockNum := m.FutureMilestoneOrder[i]
 					endBlockHash := m.FutureMilestoneList[endBlockNum]
 
@@ -270,11 +269,11 @@ func (m *milestone) IsFutureMilestoneCompatible(chain []*types.Header) bool {
 			}
 		}
 	}
+
 	return true
 }
 
 func (m *milestone) ProcessFutureMilestone(num uint64, hash common.Hash) {
-
 	if len(m.FutureMilestoneOrder) < m.MaxCapacity {
 		m.enqueueFutureMilestone(num, hash)
 	}
@@ -282,7 +281,6 @@ func (m *milestone) ProcessFutureMilestone(num uint64, hash common.Hash) {
 
 // EnqueueFutureMilestone add the future milestone to the list
 func (m *milestone) enqueueFutureMilestone(key uint64, hash common.Hash) {
-
 	if _, ok := m.FutureMilestoneList[key]; ok {
 		log.Debug("Future milestone already exist", "endBlockNumber", key, "futureMilestoneHash", hash)
 		return
@@ -299,7 +297,6 @@ func (m *milestone) enqueueFutureMilestone(key uint64, hash common.Hash) {
 	}
 
 	FutureMilestoneMeter.Update(int64(key))
-
 }
 
 // DequeueFutureMilestone remove the future milestone entry from the list.
