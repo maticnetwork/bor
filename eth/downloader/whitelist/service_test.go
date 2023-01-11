@@ -70,14 +70,14 @@ func TestWhitelistedCheckpoint(t *testing.T) {
 	require.Equal(t, cp.doExist, false, "expected false as no cp exist at this point")
 
 	//Adding the checkpoint
-	s.ProcessCheckpoint(11, common.Hash{1})
+	s.ProcessCheckpoint(12, common.Hash{1})
 
 	//Receiving the stored checkpoint
 	doExist, number, hash := s.GetWhitelistedCheckpoint()
 
 	//Validating the values received
 	require.Equal(t, doExist, true, "expected true ascheckpoint exist at this point")
-	require.Equal(t, number, uint64(11), "expected number to be 11 but got", number)
+	require.Equal(t, number, uint64(12), "expected number to be 11 but got", number)
 	require.Equal(t, hash, common.Hash{1}, "expected the 1 hash but got", hash)
 	require.NotEqual(t, hash, common.Hash{}, "expected the hash to be different from zero hash")
 
@@ -89,14 +89,14 @@ func TestWhitelistedCheckpoint(t *testing.T) {
 	fmt.Println("!!!-2", c1.doExist)
 	//Validating the values received from the db, not memory
 	require.Equal(t, doExist, true, "expected true ascheckpoint exist at this point")
-	require.Equal(t, number, uint64(11), "expected number to be 11 but got", number)
+	require.Equal(t, number, uint64(12), "expected number to be 11 but got", number)
 	require.Equal(t, hash, common.Hash{1}, "expected the 1 hash but got", hash)
 	require.NotEqual(t, hash, common.Hash{}, "expected the hash to be different from zero hash")
 
 	checkpointNumber, checkpointHash, err := rawdb.ReadFinality[*rawdb.Checkpoint](db)
 	require.Nil(t, err, "Error should be nil while reading from the db")
 	require.Equal(t, checkpointHash, common.Hash{1}, "expected the 1 hash but got", hash)
-	require.Equal(t, checkpointNumber, uint64(11), "expected number to be 11 but got", number)
+	require.Equal(t, checkpointNumber, uint64(12), "expected number to be 11 but got", number)
 }
 
 // TestMilestone checks the milestone whitelist setter and getter functions
@@ -546,6 +546,7 @@ func TestIsValidChain(t *testing.T) {
 	// case10: Try importing a past chain having valid checkpoint, should
 	// consider the chain as invalid as still lastest milestone is ahead of the chain.
 	res = s.IsValidChain(tempChain[1], chainA)
+
 	require.Equal(t, res, false, "expected chain to be invalid")
 
 	// add mock milestone entries
