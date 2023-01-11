@@ -250,17 +250,21 @@ func (m *milestone) purgeMilestoneIDsList() {
 
 func (m *milestone) IsFutureMilestoneCompatible(chain []*types.Header) bool {
 
+	//Tip of the received chain
 	chainTipNumber := chain[len(chain)-1].Number.Uint64()
 
 	for i := len(m.FutureMilestoneOrder) - 1; i >= 0; i-- {
+		//Finding out the highest future milestone number
+		//which is less or equal to received chain tip
 		if chainTipNumber >= m.FutureMilestoneOrder[i] {
-
+			//Looking for the received chain 's particular block number(matching future milestone number)
 			for j := len(chain) - 1; j >= 0; j-- {
 				if chain[j].Number.Uint64() == m.FutureMilestoneOrder[i] {
 
 					endBlockNum := m.FutureMilestoneOrder[i]
 					endBlockHash := m.FutureMilestoneList[endBlockNum]
 
+					//Checking the received chain matches with future milestone
 					return chain[j].Hash() == endBlockHash
 				}
 			}
@@ -279,19 +283,23 @@ func (m *milestone) ProcessFutureMilestone(num uint64, hash common.Hash) {
 // EnqueueFutureMilestone add the future milestone to the list
 func (m *milestone) enqueueFutureMilestone(key uint64, hash common.Hash) {
 
-	if _, ok := m.FutureMilestoneList[key]; !ok {
-		log.Debug("Enqueing new future milestone", "end block number", key, "futureMilestoneHash", hash)
-
-		m.FutureMilestoneList[key] = hash
-		m.FutureMilestoneOrder = append(m.FutureMilestoneOrder, key)
-
-		err := rawdb.WriteFutureMilestoneList(m.db, m.FutureMilestoneOrder, m.FutureMilestoneList)
-		if err != nil {
-			log.Error("Error in writing future milestone data to db", "err", err)
-		}
-
-		FutureMilestoneMeter.Update(int64(key))
+	if _, ok := m.FutureMilestoneList[key]; ok {
+		log.Debug("Future milestone already exist", "endBlockNumber", key, "futureMilestoneHash", hash)
+		return
 	}
+
+	log.Debug("Enqueing new future milestone", "endBlockNumber", key, "futureMilestoneHash", hash)
+
+	m.FutureMilestoneList[key] = hash
+	m.FutureMilestoneOrder = append(m.FutureMilestoneOrder, key)
+
+	err := rawdb.WriteFutureMilestoneList(m.db, m.FutureMilestoneOrder, m.FutureMilestoneList)
+	if err != nil {
+		log.Error("Error in writing future milestone data to db", "err", err)
+	}
+
+	FutureMilestoneMeter.Update(int64(key))
+
 }
 
 // DequeueFutureMilestone remove the future milestone entry from the list.
