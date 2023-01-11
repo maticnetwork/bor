@@ -60,11 +60,11 @@ type Config struct {
 	// KeyStoreDir is the directory to store keystores
 	KeyStoreDir string `hcl:"keystore,optional" toml:"keystore,optional"`
 
-	// Maximum number of messages in a batch
-	RPCBatchLimit uint64 `hcl:"rpcbatchlimit,optional" toml:"rpcbatchlimit,optional"`
+	// Maximum number of messages in a batch (default=100, use 0 for no limits)
+	RPCBatchLimit uint64 `hcl:"rpc.batchlimit,optional" toml:"rpc.batchlimit,optional"`
 
-	// Maximum size (in bytes) a result of an rpc request could have
-	RPCReturnDataLimit uint64 `hcl:"rpcreturndatalimit,optional" toml:"rpcreturndatalimit,optional"`
+	// Maximum size (in bytes) a result of an rpc request could have (default=100000, use 0 for no limits)
+	RPCReturnDataLimit uint64 `hcl:"rpc.returndatalimit,optional" toml:"rpc.returndatalimit,optional"`
 
 	// SyncMode selects the sync protocol
 	SyncMode string `hcl:"syncmode,optional" toml:"syncmode,optional"`

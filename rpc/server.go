@@ -112,14 +112,20 @@ func (s *Server) serveSingleRequest(ctx context.Context, codec ServerCodec) {
 	reqs, batch, err := codec.readBatch()
 	if err != nil {
 		if err != io.EOF {
-			codec.writeJSON(ctx, err)
+			if err1 := codec.writeJSON(ctx, err); err1 != nil {
+				log.Warn("WARNING - error in reading batch", "err", err1)
+				return
+			}
 		}
 		return
 	}
 
 	if batch {
 		if s.BatchLimit > 0 && len(reqs) > int(s.BatchLimit) {
-			codec.writeJSON(ctx, errorMessage(fmt.Errorf("batch limit %d exceeded: %d requests given", s.BatchLimit, len(reqs))))
+			if err1 := codec.writeJSON(ctx, errorMessage(fmt.Errorf("batch limit %d exceeded: %d requests given", s.BatchLimit, len(reqs)))); err1 != nil {
+				log.Warn("WARNING - requests given exceeds the batch limit", "err", err1)
+				log.Debug("batch limit %d exceeded: %d requests given", s.BatchLimit, len(reqs))
+			}
 		} else {
 			h.handleBatch(reqs)
 		}
