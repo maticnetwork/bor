@@ -113,10 +113,6 @@ func (m *milestone) Process(block uint64, hash common.Hash) {
 	m.finality.Lock()
 	defer m.finality.Unlock()
 
-	if m.finality.Number == block {
-		return
-	}
-
 	m.finality.Process(block, hash)
 
 	for i := 0; i < len(m.FutureMilestoneOrder); i++ {

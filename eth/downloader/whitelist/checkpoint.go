@@ -61,10 +61,6 @@ func (w *checkpoint) Process(block uint64, hash common.Hash) {
 	w.finality.Lock()
 	defer w.finality.Unlock()
 
-	if w.finality.Number == block {
-		return
-	}
-
 	w.finality.Process(block, hash)
 
 	whitelistedCheckpointNumberMeter.Update(int64(block))
