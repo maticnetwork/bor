@@ -624,14 +624,22 @@ func (api *PrivateDebugAPI) GetAccessibleState(from, to rpc.BlockNumber) (uint64
 func getFinalizedBlockNumber(eth *Ethereum) (uint64, error) {
 	currentBlockNum := eth.BlockChain().CurrentBlock()
 
-	doExist, number, _ := eth.Downloader().GetWhitelistedMilestone()
-	if doExist && number >= currentBlockNum.NumberU64() {
-		return number, nil
+	doExist, number, hash := eth.Downloader().GetWhitelistedMilestone()
+	if doExist && number <= currentBlockNum.NumberU64() {
+		block := eth.BlockChain().GetBlockByNumber(number)
+
+		if block.Hash() == hash {
+			return number, nil
+		}
 	}
 
-	doExist, number, _ = eth.Downloader().GetWhitelistedCheckpoint()
-	if doExist && number >= currentBlockNum.NumberU64() {
-		return number, nil
+	doExist, number, hash = eth.Downloader().GetWhitelistedCheckpoint()
+	if doExist && number <= currentBlockNum.NumberU64() {
+		block := eth.BlockChain().GetBlockByNumber(number)
+
+		if block.Hash() == hash {
+			return number, nil
+		}
 	}
 
 	return 0, fmt.Errorf("No finalized block")
