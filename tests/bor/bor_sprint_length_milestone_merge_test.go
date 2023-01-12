@@ -87,7 +87,7 @@ var keys_21validator = []map[string]string{
 
 func getTestSprintLengthMilestoneReorgCases() []map[string]uint64 {
 	sprintSizes := []uint64{16, 32, 64}
-	faultyNodes := []uint64{0, 1}
+	faultyNodes := []uint64{0}
 	milestoneLength := []uint64{16, 32, 64}
 	reorgsLengthTests := make([]map[string]uint64, 0)
 
@@ -102,14 +102,18 @@ func getTestSprintLengthMilestoneReorgCases() []map[string]uint64 {
 							continue
 						}
 
-						reorgsLengthTest := map[string]uint64{
-							"reorgLength":     j,
-							"startBlock":      k,
-							"sprintSize":      sprintSizes[i],
-							"faultyNode":      faultyNodes[l], // node 1(index) is primary validator of the first sprint
-							"milestoneLength": milestoneLength[m],
+						for n := uint64(0); n < 2; n++ {
+							reorgsLengthTest := map[string]uint64{
+								"reorgLength":     j,
+								"startBlock":      k,
+								"sprintSize":      sprintSizes[i],
+								"faultyNode":      faultyNodes[l], // node 1(index) is primary validator of the first sprint
+								"milestoneFlag":   n,
+								"milestoneLength": milestoneLength[m],
+							}
+							reorgsLengthTests = append(reorgsLengthTests, reorgsLengthTest)
+
 						}
-						reorgsLengthTests = append(reorgsLengthTests, reorgsLengthTest)
 					}
 				}
 			}
@@ -168,10 +172,10 @@ func getTestSprintLengthMilestoneReorgCases2Nodes() []map[string]interface{} {
 	return reorgsLengthTests
 }
 
-func SprintLengthMilestoneReorgIndividual(t *testing.T, index int, tt map[string]uint64) (uint64, uint64, uint64, uint64, uint64, uint64, uint64) {
+func SprintLengthMilestoneReorgIndividual(t *testing.T, index int, tt map[string]uint64) (uint64, uint64, uint64, uint64, uint64, uint64, uint64, uint64) {
 	t.Helper()
 
-	log.Warn("Case ----- ", "Index", index, "InducedReorgLength", tt["reorgLength"], "BlockStart", tt["startBlock"], "SprintSize", tt["sprintSize"], "MilestoneLength", tt["milestoneLength"], "DisconnectedNode", tt["faultyNode"])
+	log.Warn("Case ----- ", "Index", index, "InducedReorgLength", tt["reorgLength"], "BlockStart", tt["startBlock"], "SprintSize", tt["startBlock"], "MilestoneFlag", tt["milestoneFlag"], "MilestoneLength", tt["milestoneLength"], "DisconnectedNode", tt["faultyNode"])
 	observerOldChainLength, faultyOldChainLength := SetupValidatorsAndTestSprintLengthMilestone(t, tt)
 
 	if observerOldChainLength > 0 {
@@ -182,7 +186,7 @@ func SprintLengthMilestoneReorgIndividual(t *testing.T, index int, tt map[string
 		log.Warn("Faulty", "Old Chain length", faultyOldChainLength)
 	}
 
-	return tt["reorgLength"], tt["startBlock"], tt["sprintSize"], tt["milestoneLength"], tt["faultyNode"], faultyOldChainLength, observerOldChainLength
+	return tt["reorgLength"], tt["startBlock"], tt["sprintSize"], tt["milestoneFlag"], tt["milestoneLength"], tt["faultyNode"], faultyOldChainLength, observerOldChainLength
 }
 
 func SprintLengthMilestoneReorgIndividual2Nodes(t *testing.T, index int, tt map[string]interface{}) (uint64, uint64, uint64, uint64, []uint64, uint64, uint64) {
@@ -253,7 +257,6 @@ func TestSprintLengthMilestoneReorg2Nodes(t *testing.T) {
 
 func TestSprintLengthMilestoneReorg(t *testing.T) {
 	t.Parallel()
-	t.Skip()
 
 	reorgsLengthTests := getTestSprintLengthMilestoneReorgCases()
 	f, err := os.Create("sprintMilestoneReorg.csv")
@@ -293,8 +296,8 @@ func TestSprintLengthMilestoneReorg(t *testing.T) {
 func SprintLengthMilestoneReorgIndividualHelper(t *testing.T, index int, tt map[string]uint64, w *csv.Writer, wg *sync.WaitGroup) {
 	t.Helper()
 
-	r1, r2, r3, r4, r5, r6, r7 := SprintLengthMilestoneReorgIndividual(t, index, tt)
-	err := w.Write([]string{fmt.Sprint(r1), fmt.Sprint(r2), fmt.Sprint(r3), fmt.Sprint(r4), fmt.Sprint(r5), fmt.Sprint(r6), fmt.Sprint(r7)})
+	r1, r2, r3, r4, r5, r6, r7, r8 := SprintLengthMilestoneReorgIndividual(t, index, tt)
+	err := w.Write([]string{fmt.Sprint(r1), fmt.Sprint(r2), fmt.Sprint(r3), fmt.Sprint(r4), fmt.Sprint(r5), fmt.Sprint(r6), fmt.Sprint(r7), fmt.Sprint(r8)})
 
 	if err != nil {
 		panic(err)
@@ -533,6 +536,7 @@ func SetupValidatorsAndTestSprintLengthMilestone(t *testing.T, tt map[string]uin
 	subscribedNodeIndex := 6                // node on different partition, produces 7th sprint but our testcase does not run till 7th sprint. :: observer ::
 
 	milestoneLength := tt["milestoneLength"]
+	milestoneFlag := tt["milestoneFlag"]
 
 	nodes[subscribedNodeIndex].BlockChain().SubscribeChain2HeadEvent(chain2HeadChObserver)
 	nodes[faultyProducerIndex].BlockChain().SubscribeChain2HeadEvent(chain2HeadChFaulty)
@@ -566,18 +570,20 @@ func SetupValidatorsAndTestSprintLengthMilestone(t *testing.T, tt map[string]uin
 			}
 		}
 
-		if blockHeaderObserver.Number.Uint64() >= milestoneLength && math.Mod(float64(blockHeaderObserver.Number.Uint64()), float64(milestoneLength)) == 0 && blockHeaderObserver.Number.Uint64() > milestoneNum {
-			milestoneNum = blockHeaderObserver.Number.Uint64()
-			milestoneHash = blockHeaderObserver.Hash()
-		}
+		if milestoneFlag == 1 {
+			if blockHeaderObserver.Number.Uint64() >= milestoneLength && math.Mod(float64(blockHeaderObserver.Number.Uint64()), float64(milestoneLength)) == 0 && blockHeaderObserver.Number.Uint64() > milestoneNum {
+				milestoneNum = blockHeaderObserver.Number.Uint64()
+				milestoneHash = blockHeaderObserver.Hash()
+			}
 
-		if blockHeaderObserver.Number.Uint64() > lastRun {
-			for _, nodeTemp := range nodes {
-				_, _, err := borVerifyTemP(nodeTemp, milestoneNum-milestoneLength+1, milestoneNum, milestoneHash.String())
-				if err == nil {
-					nodeTemp.Downloader().ChainValidator.ProcessMilestone(milestoneNum, milestoneHash)
-				} else {
-					nodeTemp.Downloader().ChainValidator.ProcessFutureMilestone(milestoneNum, milestoneHash)
+			if blockHeaderObserver.Number.Uint64() > lastRun {
+				for _, nodeTemp := range nodes {
+					_, _, err := borVerifyTemP(nodeTemp, milestoneNum-milestoneLength+1, milestoneNum, milestoneHash.String())
+					if err == nil {
+						nodeTemp.Downloader().ChainValidator.ProcessMilestone(milestoneNum, milestoneHash)
+					} else {
+						nodeTemp.Downloader().ChainValidator.ProcessFutureMilestone(milestoneNum, milestoneHash)
+					}
 				}
 			}
 		}
