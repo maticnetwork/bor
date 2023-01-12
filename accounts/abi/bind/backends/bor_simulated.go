@@ -23,7 +23,7 @@ func (fb *filterBackend) GetBorBlockReceipt(ctx context.Context, hash common.Has
 	return receipt, nil
 }
 
-func (fb *filterBackend) GetVoteOnHash(ctx context.Context, starBlockNr uint64, endBlockNr uint64, rootHash string, milestoneId string) (bool, error) {
+func (fb *filterBackend) GetVoteOnHash(ctx context.Context, starBlockNr uint64, endBlockNr uint64, hash string, milestoneId string) (bool, error) {
 	return false, nil
 }
 

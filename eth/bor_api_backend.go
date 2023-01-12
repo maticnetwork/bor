@@ -37,7 +37,7 @@ func (b *EthAPIBackend) GetRootHash(ctx context.Context, starBlockNr uint64, end
 }
 
 // GetRootHash returns root hash for given start and end block
-func (b *EthAPIBackend) GetVoteOnHash(ctx context.Context, starBlockNr uint64, endBlockNr uint64, endBlockHash string, milestoneId string) (bool, error) {
+func (b *EthAPIBackend) GetVoteOnHash(ctx context.Context, starBlockNr uint64, endBlockNr uint64, hash string, milestoneId string) (bool, error) {
 	var api *bor.API
 
 	for _, _api := range b.eth.Engine().APIs(b.eth.BlockChain()) {
@@ -65,9 +65,9 @@ func (b *EthAPIBackend) GetVoteOnHash(ctx context.Context, starBlockNr uint64, e
 		return false, errors.New("Whitelisted number or locked sprint number is more than the received end block number")
 	}
 
-	if localEndBlockHash != endBlockHash {
+	if localEndBlockHash != hash {
 		downloader.UnlockMutex(false, "", common.Hash{})
-		return false, fmt.Errorf("Hash mismatch: localChainHash %s, milestoneHash %s", localEndBlockHash, endBlockHash)
+		return false, fmt.Errorf("Hash mismatch: localChainHash %s, milestoneHash %s", localEndBlockHash, hash)
 	}
 
 	downloader.UnlockMutex(true, milestoneId, localEndBlock.Hash())
