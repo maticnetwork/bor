@@ -74,20 +74,25 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 
 	if !m.finality.IsValidChain(currentHeader, chain) {
 		isValid = false
+		log.Warn("IsValidChainFailed❎❎❎ in 1")
 		return false
 	}
 
 	if m.Locked && !m.IsReorgAllowed(chain, m.LockedSprintNumber, m.LockedSprintHash) {
 		isValid = false
+		log.Warn("IsValidChainFailed❎❎❎ in 2")
 		return false
 	}
 
 	if !m.IsFutureMilestoneCompatible(chain) {
 		isValid = false
+		log.Warn("IsValidChainFailed❎❎❎ in 3")
 		return false
 	}
 
 	isValid = true
+
+	log.Warn("IsValidChainPassed✅✅✅✅")
 
 	return true
 }
@@ -113,7 +118,7 @@ func (m *milestone) IsValidPeer(fetchHeadersByNumber func(number uint64, amount 
 func (m *milestone) Process(block uint64, hash common.Hash) {
 	m.finality.Lock()
 	defer m.finality.Unlock()
-
+	log.Warn("Processing Milestone", "Number", block, "hash", hash)
 	m.finality.Process(block, hash)
 
 	for i := 0; i < len(m.FutureMilestoneOrder); i++ {
