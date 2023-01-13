@@ -139,6 +139,7 @@ func (m *milestone) Process(block uint64, hash common.Hash) {
 func (m *milestone) LockMutex(endBlockNum uint64) bool {
 	m.finality.Lock()
 
+	log.Warn("LockMutex")
 	if m.doExist && endBlockNum <= m.Number { //if endNum is less than whitelisted milestone, then we won't lock the sprint
 		// todo: add endBlockNum and m.Number as values - the same below
 		log.Warn("endBlockNum <= m.Number")
@@ -165,6 +166,7 @@ func (m *milestone) LockMutex(endBlockNum uint64) bool {
 // This function will unlock the mutex locked in LockMutex
 // fixme: get rid of it
 func (m *milestone) UnlockMutex(doLock bool, milestoneId string, endBlockHash common.Hash) {
+	log.Warn("unLockMutex")
 	m.Locked = m.Locked || doLock
 
 	if doLock {
@@ -178,6 +180,7 @@ func (m *milestone) UnlockMutex(doLock bool, milestoneId string, endBlockHash co
 	}
 
 	milestoneIDLength := int64(len(m.LockedMilestoneIDs))
+	log.Warn("unLockMutexlength", "length", milestoneIDLength)
 	MilestoneIdsLengthMeter.Update(milestoneIDLength)
 
 	m.finality.Unlock()
@@ -185,6 +188,7 @@ func (m *milestone) UnlockMutex(doLock bool, milestoneId string, endBlockHash co
 
 // This function will unlock the locked sprint
 func (m *milestone) UnlockSprint(endBlockNum uint64) {
+	log.Warn("UnlockSprint")
 	if endBlockNum < m.LockedSprintNumber {
 		return
 	}
@@ -266,6 +270,7 @@ func (m *milestone) IsFutureMilestoneCompatible(chain []*types.Header) bool {
 					endBlockHash := m.FutureMilestoneList[endBlockNum]
 
 					//Checking the received chain matches with future milestone
+					log.Warn("In Future", "h1", chain[j].Hash(), "h2", endBlockHash)
 					return chain[j].Hash() == endBlockHash
 				}
 			}
@@ -276,6 +281,7 @@ func (m *milestone) IsFutureMilestoneCompatible(chain []*types.Header) bool {
 }
 
 func (m *milestone) ProcessFutureMilestone(num uint64, hash common.Hash) {
+	log.Warn("ProcessFutureMilestone")
 	if len(m.FutureMilestoneOrder) < m.MaxCapacity {
 		m.enqueueFutureMilestone(num, hash)
 	}

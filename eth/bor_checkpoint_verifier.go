@@ -61,7 +61,7 @@ func borVerify(ctx context.Context, eth *Ethereum, handler *ethHandler, start ui
 	//verify the hash
 	if isCheckpoint {
 		var err error
-
+		log.Warn("In Checkpoint")
 		//in case of checkpoint get the rootHash
 		localHash, err = handler.ethAPI.GetRootHash(ctx, start, end)
 
@@ -70,6 +70,7 @@ func borVerify(ctx context.Context, eth *Ethereum, handler *ethHandler, start ui
 			return hash, errRootHash
 		}
 	} else {
+		log.Warn("In Milestone")
 		//in case of milestone(isCheckpoint==false) get the hash of endBlock
 		block, err := handler.ethAPI.GetBlockByNumber(ctx, rpc.BlockNumber(end), false)
 		if err != nil {
@@ -77,7 +78,7 @@ func borVerify(ctx context.Context, eth *Ethereum, handler *ethHandler, start ui
 			return hash, errEndBlock
 		}
 
-		localHash = fmt.Sprintf("%v", block["hash"])
+		localHash = fmt.Sprintf("%v", block["hash"])[2:]
 	}
 
 	//nolint
