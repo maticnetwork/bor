@@ -185,15 +185,15 @@ func toBlockNumArg(number *big.Int) string {
 	}
 
 	pending := big.NewInt(-1)
-	finalized := big.NewInt(int64(rpc.FinalizedBlockNumber))
+	final := big.NewInt(int64(rpc.FinalizedBlockNumber))
 	safe := big.NewInt(int64(rpc.SafeBlockNumber))
 
 	if number.Cmp(pending) == 0 {
 		return "pending"
 	}
 
-	if number.Cmp(finalized) == 0 {
-		return "finalized"
+	if number.Cmp(final) == 0 {
+		return "final"
 	}
 
 	if number.Cmp(safe) == 0 {

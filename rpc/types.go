@@ -90,7 +90,7 @@ func (bn *BlockNumber) UnmarshalJSON(data []byte) error {
 	case "pending":
 		*bn = PendingBlockNumber
 		return nil
-	case "finalized":
+	case "final":
 		*bn = FinalizedBlockNumber
 		return nil
 	}
@@ -118,7 +118,7 @@ func (bn BlockNumber) MarshalText() ([]byte, error) {
 	case PendingBlockNumber:
 		return []byte("pending"), nil
 	case FinalizedBlockNumber:
-		return []byte("finalized"), nil
+		return []byte("final"), nil
 	default:
 		return hexutil.Uint64(bn).MarshalText()
 	}
@@ -165,7 +165,7 @@ func (bnh *BlockNumberOrHash) UnmarshalJSON(data []byte) error {
 		bn := PendingBlockNumber
 		bnh.BlockNumber = &bn
 		return nil
-	case "finalized":
+	case "final":
 		bn := FinalizedBlockNumber
 		bnh.BlockNumber = &bn
 		return nil
