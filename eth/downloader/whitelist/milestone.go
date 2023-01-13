@@ -57,9 +57,10 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 	if !flags.Milestone {
 		return true
 	}
-
 	m.finality.RLock()
 	defer m.finality.RUnlock()
+
+	log.Warn("MilestoneHash", "Hash", m.finality.Hash)
 
 	var isValid bool = false
 

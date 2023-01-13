@@ -45,9 +45,10 @@ func TestBlockNumberJSONUnmarshal(t *testing.T) {
 		11: {`"pending"`, false, PendingBlockNumber},
 		12: {`"latest"`, false, LatestBlockNumber},
 		13: {`"earliest"`, false, EarliestBlockNumber},
-		14: {`someString`, true, BlockNumber(0)},
-		15: {`""`, true, BlockNumber(0)},
-		16: {``, true, BlockNumber(0)},
+		14: {`"final"`, false, FinalizedBlockNumber},
+		15: {`someString`, true, BlockNumber(0)},
+		16: {`""`, true, BlockNumber(0)},
+		17: {``, true, BlockNumber(0)},
 	}
 
 	for i, test := range tests {
@@ -98,7 +99,8 @@ func TestBlockNumberOrHash_UnmarshalJSON(t *testing.T) {
 		22: {`{"blockNumber":"pending"}`, false, BlockNumberOrHashWithNumber(PendingBlockNumber)},
 		23: {`{"blockNumber":"latest"}`, false, BlockNumberOrHashWithNumber(LatestBlockNumber)},
 		24: {`{"blockNumber":"earliest"}`, false, BlockNumberOrHashWithNumber(EarliestBlockNumber)},
-		25: {`{"blockNumber":"0x1", "blockHash":"0x0000000000000000000000000000000000000000000000000000000000000000"}`, true, BlockNumberOrHash{}},
+		25: {`{"blockNumber":"final"}`, false, BlockNumberOrHashWithNumber(FinalizedBlockNumber)},
+		26: {`{"blockNumber":"0x1", "blockHash":"0x0000000000000000000000000000000000000000000000000000000000000000"}`, true, BlockNumberOrHash{}},
 	}
 
 	for i, test := range tests {
