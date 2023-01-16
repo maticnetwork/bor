@@ -131,30 +131,33 @@ func getTestSprintLengthMilestoneReorgCases() []map[string]uint64 {
 }
 
 func getTestSprintLengthMilestoneReorgCases2Nodes() []map[string]interface{} {
-	sprintSizes := []uint64{16, 32, 64}
+	sprintSizes := []uint64{16}
 	faultyNodes := [][]uint64{{0, 1}, {1, 2}, {0, 2}}
-	milestoneLength := []uint64{16, 32, 64}
+	milestoneLength := []uint64{32, 64}
 	reorgsLengthTests := make([]map[string]interface{}, 0)
 
 	for i := uint64(0); i < uint64(len(sprintSizes)); i++ {
 		for m := uint64(0); m < uint64(len(milestoneLength)); m++ {
 			maxReorgLength := sprintSizes[i] * 4
-			for j := uint64(20); j <= maxReorgLength; j = j + 8 {
-				maxStartBlock := sprintSizes[i] - 1
+			for j := uint64(12); j <= maxReorgLength; j = j + 8 {
+				maxStartBlock := milestoneLength[m] + 2
 				for k := sprintSizes[i] / 2; k <= maxStartBlock; k = k + 8 {
 					for l := uint64(0); l < uint64(len(faultyNodes)); l++ {
 						if j+k < sprintSizes[i] {
 							continue
 						}
 
-						reorgsLengthTest := map[string]interface{}{
-							"reorgLength":     j,
-							"startBlock":      k,
-							"sprintSize":      sprintSizes[i],
-							"faultyNodes":     faultyNodes[l], // node 1(index) is primary validator of the first sprint
-							"milestoneLength": milestoneLength[m],
+						for n := uint64(0); n < 2; n++ {
+							reorgsLengthTest := map[string]interface{}{
+								"reorgLength":     j,
+								"startBlock":      k,
+								"sprintSize":      sprintSizes[i],
+								"faultyNodes":     faultyNodes[l], // node 1(index) is primary validator of the first sprint
+								"milestoneFlag":   n,
+								"milestoneLength": milestoneLength[m],
+							}
+							reorgsLengthTests = append(reorgsLengthTests, reorgsLengthTest)
 						}
-						reorgsLengthTests = append(reorgsLengthTests, reorgsLengthTest)
 					}
 				}
 			}
@@ -166,6 +169,7 @@ func getTestSprintLengthMilestoneReorgCases2Nodes() []map[string]interface{} {
 	// 		"startBlock":  7,
 	// 		"sprintSize":  8,
 	// 		"faultyNode":  1,
+	//      "milestoneFlag":0,
 	//      "milestoneLength": 32
 	// 	},
 	// }
@@ -189,7 +193,7 @@ func SprintLengthMilestoneReorgIndividual(t *testing.T, index int, tt map[string
 	return tt["reorgLength"], tt["startBlock"], tt["sprintSize"], tt["milestoneFlag"], tt["milestoneLength"], tt["faultyNode"], faultyOldChainLength, observerOldChainLength
 }
 
-func SprintLengthMilestoneReorgIndividual2Nodes(t *testing.T, index int, tt map[string]interface{}) (uint64, uint64, uint64, uint64, []uint64, uint64, uint64) {
+func SprintLengthMilestoneReorgIndividual2Nodes(t *testing.T, index int, tt map[string]interface{}) (uint64, uint64, uint64, uint64, uint64, []uint64, uint64, uint64) {
 	t.Helper()
 
 	log.Warn("Case ----- ", "Index", index, "InducedReorgLength", tt["reorgLength"], "BlockStart", tt["startBlock"], "SprintSize", tt["sprintSize"], "DisconnectedNode", tt["faultyNodes"])
@@ -205,12 +209,12 @@ func SprintLengthMilestoneReorgIndividual2Nodes(t *testing.T, index int, tt map[
 
 	fNodes, _ := tt["faultyNodes"].([]uint64)
 
-	return tt["reorgLength"].(uint64), tt["startBlock"].(uint64), tt["sprintSize"].(uint64), tt["milestoneLength"].(uint64), fNodes, faultyOldChainLength, observerOldChainLength
+	return tt["reorgLength"].(uint64), tt["startBlock"].(uint64), tt["milestoneFlag"].(uint64), tt["sprintSize"].(uint64), tt["milestoneLength"].(uint64), fNodes, faultyOldChainLength, observerOldChainLength
 }
 
 func TestSprintLengthMilestoneReorg2Nodes(t *testing.T) {
 	t.Parallel()
-	t.Skip()
+	//t.Skip()
 
 	log.Root().SetHandler(log.LvlFilterHandler(3, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
 
@@ -236,7 +240,7 @@ func TestSprintLengthMilestoneReorg2Nodes(t *testing.T) {
 	}
 
 	w := csv.NewWriter(f)
-	err = w.Write([]string{"Induced Reorg Length", "Start Block", "Sprint Size", "MilestoneLength", "Disconnected Node Ids", "Disconnected Node Id's Rewind Length", "Observer Node Id's Reorg Length"})
+	err = w.Write([]string{"Induced Reorg Length", "Start Block", "Milestone Flag", "Sprint Size", "MilestoneLength", "Disconnected Node Ids", "Disconnected Node Id's Rewind Length", "Observer Node Id's Reorg Length"})
 	w.Flush()
 
 	if err != nil {
@@ -310,8 +314,8 @@ func SprintLengthMilestoneReorgIndividualHelper(t *testing.T, index int, tt map[
 func SprintLengthMilestoneReorgIndividual2NodesHelper(t *testing.T, index int, tt map[string]interface{}, w *csv.Writer, wg *sync.WaitGroup) {
 	t.Helper()
 
-	r1, r2, r3, r4, r5, r6, r7 := SprintLengthMilestoneReorgIndividual2Nodes(t, index, tt)
-	err := w.Write([]string{fmt.Sprint(r1), fmt.Sprint(r2), fmt.Sprint(r3), fmt.Sprint(r4), fmt.Sprint(r5), fmt.Sprint(r6), fmt.Sprint(r7)})
+	r1, r2, r3, r4, r5, r6, r7, r8 := SprintLengthMilestoneReorgIndividual2Nodes(t, index, tt)
+	err := w.Write([]string{fmt.Sprint(r1), fmt.Sprint(r2), fmt.Sprint(r3), fmt.Sprint(r4), fmt.Sprint(r5), fmt.Sprint(r6), fmt.Sprint(r7), fmt.Sprint(r8)})
 
 	if err != nil {
 		panic(err)
@@ -386,6 +390,7 @@ func SetupValidatorsAndTest2NodesSprintLengthMilestone(t *testing.T, tt map[stri
 	}
 
 	milestoneLength := tt["milestoneLength"].(uint64)
+	milestoneFlag := tt["milestoneFlag"].(uint64)
 
 	chain2HeadChObserver := make(chan core.Chain2HeadEvent, 64)
 	chain2HeadChFaulty := make(chan core.Chain2HeadEvent, 64)
@@ -399,6 +404,10 @@ func SetupValidatorsAndTest2NodesSprintLengthMilestone(t *testing.T, tt map[stri
 	nodes[faultyProducerIndex].BlockChain().SubscribeChain2HeadEvent(chain2HeadChFaulty)
 
 	stacks[faultyProducerIndex].Server().NoDiscovery = true
+
+	var milestoneNum uint64 = 0
+	var milestoneHash common.Hash
+	var lastRun uint64 = 0
 
 	for {
 		blockHeaderObserver := nodes[subscribedNodeIndex].BlockChain().CurrentHeader()
@@ -421,9 +430,22 @@ func SetupValidatorsAndTest2NodesSprintLengthMilestone(t *testing.T, tt map[stri
 			}
 		}
 
-		if math.Mod(float64(blockHeaderObserver.Number.Uint64()), float64(milestoneLength)) == 0 {
-			blockHash := blockHeaderObserver.Hash()
-			nodes[subscribedNodeIndex].Downloader().ChainValidator.ProcessMilestone(blockHeaderObserver.Number.Uint64(), blockHash)
+		if milestoneFlag == 1 {
+			if blockHeaderObserver.Number.Uint64() >= milestoneLength && math.Mod(float64(blockHeaderObserver.Number.Uint64()), float64(milestoneLength)) == 0 && blockHeaderObserver.Number.Uint64() > milestoneNum {
+				milestoneNum = blockHeaderObserver.Number.Uint64()
+				milestoneHash = blockHeaderObserver.Hash()
+			}
+
+			if blockHeaderObserver.Number.Uint64() > lastRun {
+				for _, nodeTemp := range nodes {
+					_, _, err := borVerifyTemP(nodeTemp, milestoneNum-milestoneLength+1, milestoneNum, milestoneHash.String())
+					if err == nil {
+						nodeTemp.Downloader().ChainValidator.ProcessMilestone(milestoneNum, milestoneHash)
+					} else {
+						nodeTemp.Downloader().ChainValidator.ProcessFutureMilestone(milestoneNum, milestoneHash)
+					}
+				}
+			}
 		}
 
 		if blockHeaderObserver.Number.Uint64() == tt["startBlock"].(uint64)+tt["reorgLength"].(uint64) {
