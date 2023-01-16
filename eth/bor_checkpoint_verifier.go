@@ -77,7 +77,7 @@ func borVerify(ctx context.Context, eth *Ethereum, handler *ethHandler, start ui
 			return hash, errEndBlock
 		}
 
-		localHash = fmt.Sprintf("%v", block["hash"])
+		localHash = fmt.Sprintf("%v", block["hash"])[2:]
 	}
 
 	//nolint
