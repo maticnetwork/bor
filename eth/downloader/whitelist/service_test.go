@@ -592,6 +592,7 @@ func TestIsValidChain(t *testing.T) {
 	// case17: Try importing a past chain having invalid checkpoint,should consider the chain as invalid
 	res = s.IsValidChain(tempChain[0], chainA)
 	require.Equal(t, res, false, "expected chain to be invalid")
+	// Not checking error here because we return nil in case of checkpoint mismatch
 
 	// case18: Try importing a future chain but within interval, should consider the chain as valid
 	res = s.IsValidChain(tempChain[len(tempChain)-1], tempChain)

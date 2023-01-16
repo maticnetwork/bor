@@ -1584,6 +1584,13 @@ func (d *Downloader) importBlockResults(results []*fetchResult) error {
 			// of the blocks delivered from the downloader, and the indexing will be off.
 			log.Debug("Downloaded item processing failed on sidechain import", "index", index, "err", err)
 		}
+
+		// If we've received too long future chain error (from whitelisting service),
+		// return that as the root error and `errInvalidChain` as context.
+		if errors.Is(err, whitelist.ErrLongFutureChain) {
+			return fmt.Errorf("%v: %w", errInvalidChain, err)
+		}
+
 		return fmt.Errorf("%w: %v", errInvalidChain, err)
 	}
 	return nil

@@ -13,6 +13,10 @@ import (
 var (
 	ErrMismatch = errors.New("mismatch error")
 	ErrNoRemote = errors.New("remote peer doesn't have a target block number")
+
+	ErrCheckpointMismatch = errors.New("checkpoint mismatch")
+	ErrLongFutureChain    = errors.New("received future chain of unacceptable length")
+	ErrNoRemoteCheckoint  = errors.New("remote peer doesn't have a checkoint")
 )
 
 type Service struct {
@@ -123,7 +127,6 @@ func (s *Service) ProcessCheckpoint(endBlockNum uint64, endBlockHash common.Hash
 
 func (s *Service) IsValidChain(currentHeader *types.Header, chain []*types.Header) bool {
 	checkpointBool := s.checkpointService.IsValidChain(currentHeader, chain)
-
 	if !checkpointBool {
 		return checkpointBool
 	}
