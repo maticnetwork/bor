@@ -952,12 +952,14 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 	var breakCause string
 
 	defer func() {
-		log.Warn("commitTransactions-stats",
-			"initialTxsCount", initialTxs,
-			"initialGasLimit", initialGasLimit,
-			"resultTxsCount", txs.GetTxs(),
-			"resultGapPool", env.gasPool.Gas(),
-			"exitCause", breakCause)
+		if log.Root().GetHandler().Level() >= log.LvlDebug {
+			log.Debug("commitTransactions-stats",
+				"initialTxsCount", initialTxs,
+				"initialGasLimit", initialGasLimit,
+				"resultTxsCount", txs.GetTxs(),
+				"resultGapPool", env.gasPool.Gas(),
+				"exitCause", breakCause)
+		}
 	}()
 
 	for {
