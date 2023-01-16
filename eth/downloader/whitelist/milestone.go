@@ -61,6 +61,8 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 	m.finality.RLock()
 	defer m.finality.RUnlock()
 
+	log.Warn("IsValidChainFailed", "MilestoneHash", m.Hash)
+
 	var isValid bool = false
 
 	defer func() {
@@ -73,18 +75,22 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 
 	if !m.finality.IsValidChain(currentHeader, chain) {
 		isValid = false
+		log.Warn("IsValidChainFailed✅✅✅✅1")
 		return false
 	}
 
 	if m.Locked && !m.IsReorgAllowed(chain, m.LockedSprintNumber, m.LockedSprintHash) {
 		isValid = false
+		log.Warn("IsValidChainFailed✅✅✅✅2")
 		return false
 	}
 
 	if !m.IsFutureMilestoneCompatible(chain) {
 		isValid = false
+		log.Warn("IsValidChainFailed✅✅✅✅3")
 		return false
 	}
+	log.Warn("IsValidChainPassed✅✅✅✅")
 
 	isValid = true
 
