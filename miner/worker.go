@@ -1013,7 +1013,7 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 		env.state.Prepare(tx.Hash(), env.tcount)
 
 		var start time.Time
-		if log.Root().GetHandler().Level() >= 5 {
+		if log.Root().GetHandler().Level() >= log.LvlDebug {
 			start = time.Now()
 		}
 
@@ -1040,7 +1040,9 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 			coalescedLogs = append(coalescedLogs, logs...)
 			env.tcount++
 			txs.Shift()
-			log.Debug("Committed new tx", "tx hash", tx.Hash(), "from", from, "to", tx.To(), "nonce", tx.Nonce(), "gas", tx.Gas(), "gasPrice", tx.GasPrice(), "value", tx.Value(), "time spent", time.Since(start))
+			if log.Root().GetHandler().Level() >= log.LvlDebug {
+				log.Debug("Committed new tx", "tx hash", tx.Hash(), "from", from, "to", tx.To(), "nonce", tx.Nonce(), "gas", tx.Gas(), "gasPrice", tx.GasPrice(), "value", tx.Value(), "time spent", time.Since(start))
+			}
 
 		case errors.Is(err, core.ErrTxTypeNotSupported):
 			// Pop the unsupported transaction without shifting in the next from the account
