@@ -28,6 +28,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
@@ -93,6 +94,7 @@ func (ec *Client) TransactionReceiptsInBlock(ctx context.Context, blockNrOrHash 
 // Note that loading full blocks requires two requests. Use HeaderByNumber
 // if you don't need all transactions or uncle headers.
 func (ec *Client) BlockByNumber(ctx context.Context, number *big.Int) (*types.Block, error) {
+	log.Warn("While going for Finallized in B✅✅✅✅")
 	return ec.getBlock(ctx, "eth_getBlockByNumber", toBlockNumArg(number), true)
 }
 
@@ -185,6 +187,7 @@ func (ec *Client) HeaderByHash(ctx context.Context, hash common.Hash) (*types.He
 // nil, the latest known header is returned.
 func (ec *Client) HeaderByNumber(ctx context.Context, number *big.Int) (*types.Header, error) {
 	var head *types.Header
+	log.Warn("While going for Finallized in H✅✅✅✅")
 	err := ec.c.CallContext(ctx, &head, "eth_getBlockByNumber", toBlockNumArg(number), false)
 	if err == nil && head == nil {
 		err = ethereum.NotFound
