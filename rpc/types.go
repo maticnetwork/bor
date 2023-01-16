@@ -26,6 +26,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 // API describes the set of methods offered over the RPC interface
@@ -93,6 +94,10 @@ func (bn *BlockNumber) UnmarshalJSON(data []byte) error {
 	case "finalized":
 		*bn = FinalizedBlockNumber
 		return nil
+	}
+
+	if input == "finalized" {
+		log.Warn("Got the finalized❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌")
 	}
 
 	blckNum, err := hexutil.DecodeUint64(input)
@@ -170,6 +175,10 @@ func (bnh *BlockNumberOrHash) UnmarshalJSON(data []byte) error {
 		bnh.BlockNumber = &bn
 		return nil
 	default:
+		if input == "finalized" {
+			log.Warn("Got the finalized❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌❌")
+		}
+
 		if len(input) == 66 {
 			hash := common.Hash{}
 			err := hash.UnmarshalText([]byte(input))
