@@ -4,6 +4,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 )
 
@@ -31,6 +32,8 @@ var (
 func (w *checkpoint) IsValidChain(currentHeader *types.Header, chain []*types.Header) (bool, error) {
 	w.finality.RLock()
 	defer w.finality.RUnlock()
+
+	log.Warn("IsValidChainMilestone", "Hash", w.finality.Hash, "number", w.finality.Number)
 
 	res, err := w.finality.IsValidChain(currentHeader, chain)
 

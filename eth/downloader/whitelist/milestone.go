@@ -71,22 +71,32 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 		}
 	}()
 
+	log.Warn("IsValidChainMilestone", "Hash", m.finality.Hash, "number", m.finality.Number)
+
 	res, err := m.finality.IsValidChain(currentHeader, chain)
 
 	if !res {
+		log.Warn("IsValidChainFailed✅✅✅✅11")
+
 		isValid = false
 		return false, err
 	}
 
 	if m.Locked && !m.IsReorgAllowed(chain, m.LockedSprintNumber, m.LockedSprintHash) {
+
+		log.Warn("IsValidChainFailed✅✅✅✅22")
 		isValid = false
 		return false, nil
 	}
 
 	if !m.IsFutureMilestoneCompatible(chain) {
+
+		log.Warn("IsValidChainFailed✅✅✅✅33")
 		isValid = false
 		return false, nil
 	}
+
+	log.Warn("IsValidChainPassed✅✅✅✅")
 
 	isValid = true
 
@@ -115,6 +125,8 @@ func (m *milestone) Process(block uint64, hash common.Hash) {
 	m.finality.Lock()
 	defer m.finality.Unlock()
 
+	log.Warn("Processing new milestone", "blockNum", block, "Hash", hash)
+
 	m.finality.Process(block, hash)
 
 	for i := 0; i < len(m.FutureMilestoneOrder); i++ {
@@ -134,6 +146,8 @@ func (m *milestone) Process(block uint64, hash common.Hash) {
 // fixme: get rid of it
 func (m *milestone) LockMutex(endBlockNum uint64) bool {
 	m.finality.Lock()
+
+	log.Warn("In LockMutex")
 
 	if m.doExist && endBlockNum <= m.Number { //if endNum is less than whitelisted milestone, then we won't lock the sprint
 		// todo: add endBlockNum and m.Number as values - the same below
@@ -163,6 +177,8 @@ func (m *milestone) LockMutex(endBlockNum uint64) bool {
 func (m *milestone) UnlockMutex(doLock bool, milestoneId string, endBlockHash common.Hash) {
 	m.Locked = m.Locked || doLock
 
+	log.Warn("In UnlockMutex")
+
 	if doLock {
 		m.LockedSprintHash = endBlockHash
 		m.LockedMilestoneIDs[milestoneId] = struct{}{}
@@ -174,6 +190,9 @@ func (m *milestone) UnlockMutex(doLock bool, milestoneId string, endBlockHash co
 	}
 
 	milestoneIDLength := int64(len(m.LockedMilestoneIDs))
+
+	log.Warn("MilestoneIDLengthSize", milestoneIDLength)
+
 	MilestoneIdsLengthMeter.Update(milestoneIDLength)
 
 	m.finality.Unlock()
@@ -184,6 +203,8 @@ func (m *milestone) UnlockSprint(endBlockNum uint64) {
 	if endBlockNum < m.LockedSprintNumber {
 		return
 	}
+
+	log.Warn("Unlocking the sprint", "Num", endBlockNum)
 
 	m.Locked = false
 	m.purgeMilestoneIDsList()
