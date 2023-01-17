@@ -52,10 +52,10 @@ var (
 
 // IsValidChain checks the validity of chain by comparing it
 // against the local milestone entries
-func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Header) bool {
+func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Header) (bool, error) {
 	//Checking for the milestone flag
 	if !flags.Milestone {
-		return true
+		return true, nil
 	}
 
 	m.finality.RLock()
@@ -71,24 +71,26 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 		}
 	}()
 
-	if !m.finality.IsValidChain(currentHeader, chain) {
+	res, err := m.finality.IsValidChain(currentHeader, chain)
+
+	if !res {
 		isValid = false
-		return false
+		return false, err
 	}
 
 	if m.Locked && !m.IsReorgAllowed(chain, m.LockedSprintNumber, m.LockedSprintHash) {
 		isValid = false
-		return false
+		return false, nil
 	}
 
 	if !m.IsFutureMilestoneCompatible(chain) {
 		isValid = false
-		return false
+		return false, nil
 	}
 
 	isValid = true
 
-	return true
+	return true, nil
 }
 
 // IsValidPeer checks if the chain we're about to receive from a peer is valid or not

@@ -125,18 +125,18 @@ func (s *Service) ProcessCheckpoint(endBlockNum uint64, endBlockHash common.Hash
 	s.checkpointService.Process(endBlockNum, endBlockHash)
 }
 
-func (s *Service) IsValidChain(currentHeader *types.Header, chain []*types.Header) bool {
-	checkpointBool := s.checkpointService.IsValidChain(currentHeader, chain)
+func (s *Service) IsValidChain(currentHeader *types.Header, chain []*types.Header) (bool, error) {
+	checkpointBool, err := s.checkpointService.IsValidChain(currentHeader, chain)
 	if !checkpointBool {
-		return checkpointBool
+		return checkpointBool, err
 	}
 
-	milestoneBool := s.milestoneService.IsValidChain(currentHeader, chain)
+	milestoneBool, err := s.milestoneService.IsValidChain(currentHeader, chain)
 	if !milestoneBool {
-		return milestoneBool
+		return milestoneBool, err
 	}
 
-	return true
+	return true, nil
 }
 
 func (s *Service) GetMilestoneIDsList() []string {
@@ -170,11 +170,11 @@ func splitChain(current uint64, chain []*types.Header) ([]*types.Header, []*type
 	return pastChain, futureChain
 }
 
-func isValidChain(currentHeader *types.Header, chain []*types.Header, doExist bool, number uint64, hash common.Hash, interval uint64) bool {
+func isValidChain(currentHeader *types.Header, chain []*types.Header, doExist bool, number uint64, hash common.Hash, interval uint64) (bool, error) {
 	// Check if we have milestone to validate incoming chain in memory
 	if !doExist {
 		// We don't have any entry, no additional validation will be possible
-		return true
+		return true, nil
 	}
 
 	current := currentHeader.Number.Uint64()
@@ -182,9 +182,9 @@ func isValidChain(currentHeader *types.Header, chain []*types.Header, doExist bo
 	// Check if imported chain is less than whitelisted number
 	if chain[len(chain)-1].Number.Uint64() < number {
 		if current >= number { //If current tip of the chain is greater than whitelist number then return false
-			return false
+			return false, nil
 		} else {
-			return true
+			return true, nil
 		}
 	}
 
@@ -199,18 +199,20 @@ func isValidChain(currentHeader *types.Header, chain []*types.Header, doExist bo
 
 	// Don't accept future chain of unacceptable length (from current block)
 	if len(futureChain)+offset > int(interval) {
-		return false
+		return false, ErrLongFutureChain
 	}
 
 	// Iterate over the chain and validate against the last milestone
 	// It will handle all cases when the incoming chain has atleast one milestone
 	for i := len(pastChain) - 1; i >= 0; i-- {
 		if pastChain[i].Number.Uint64() == number {
-			return pastChain[i].Hash() == hash
+			res := pastChain[i].Hash() == hash
+
+			return res, nil
 		}
 	}
 
-	return true
+	return true, nil
 }
 
 // FIXME: remoteHeader is not used

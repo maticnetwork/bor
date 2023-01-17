@@ -28,11 +28,11 @@ var (
 
 // IsValidChain checks the validity of chain by comparing it
 // against the local checkpoint entry
-func (w *checkpoint) IsValidChain(currentHeader *types.Header, chain []*types.Header) bool {
+func (w *checkpoint) IsValidChain(currentHeader *types.Header, chain []*types.Header) (bool, error) {
 	w.finality.RLock()
 	defer w.finality.RUnlock()
 
-	res := w.finality.IsValidChain(currentHeader, chain)
+	res, err := w.finality.IsValidChain(currentHeader, chain)
 
 	if res {
 		CheckpointChainMeter.Mark(int64(1))
@@ -40,7 +40,7 @@ func (w *checkpoint) IsValidChain(currentHeader *types.Header, chain []*types.He
 		CheckpointPeerMeter.Mark(int64(-1))
 	}
 
-	return res
+	return res, err
 }
 
 // IsValidPeer checks if the chain we're about to receive from a peer is valid or not
