@@ -86,47 +86,31 @@ var keys_21validator = []map[string]string{
 }
 
 func getTestSprintLengthMilestoneReorgCases() []map[string]uint64 {
-	sprintSizes := []uint64{16, 32, 64}
-	faultyNodes := []uint64{0}
-	milestoneLength := []uint64{16, 32, 64}
+	faultyNodes := []uint64{2, 4}
+	milestoneMark := []uint64{48, 72}
+	sprintLen := uint64(16)
+	milestoneLen := uint64(24)
 	reorgsLengthTests := make([]map[string]uint64, 0)
 
-	for i := uint64(0); i < uint64(len(sprintSizes)); i++ {
-		for m := uint64(0); m < uint64(len(milestoneLength)); m++ {
-			maxReorgLength := sprintSizes[i] * 4
-			for j := uint64(8); j <= maxReorgLength; j = j + 12 {
-				maxStartBlock := sprintSizes[i] - 1
-				for k := sprintSizes[i] / 2; k <= maxStartBlock; k = k + 8 {
-					for l := uint64(0); l < uint64(len(faultyNodes)); l++ {
-						if j+k < sprintSizes[i] || k <= milestoneLength[m] {
-							continue
-						}
+	for i := uint64(0); i < uint64(len(faultyNodes)); i++ {
+		for j := uint64(1); j < +14; j = j + 2 {
+			startBlock := faultyNodes[i]*sprintLen + j
+			diff := milestoneMark[i] - startBlock
 
-						for n := uint64(0); n < 2; n++ {
-							reorgsLengthTest := map[string]uint64{
-								"reorgLength":     j,
-								"startBlock":      k,
-								"sprintSize":      sprintSizes[i],
-								"faultyNode":      faultyNodes[l], // node 1(index) is primary validator of the first sprint
-								"milestoneFlag":   n,
-								"milestoneLength": milestoneLength[m],
-							}
-							reorgsLengthTests = append(reorgsLengthTests, reorgsLengthTest)
+			for k := diff + 1; k < 2*diff-2; k = k + 4 {
 
-						}
-					}
+				reorgsLengthTest := map[string]uint64{
+					"reorgLength":     k,
+					"startBlock":      startBlock,
+					"sprintSize":      sprintLen,
+					"faultyNodes":     faultyNodes[i], // node 1(index) is primary validator of the first sprint
+					"milestoneLength": milestoneLen,
 				}
+
+				reorgsLengthTests = append(reorgsLengthTests, reorgsLengthTest)
 			}
 		}
 	}
-	// reorgsLengthTests := []map[string]uint64{
-	// 	{
-	// 		"reorgLength": 3,
-	// 		"startBlock":  7,
-	// 		"sprintSize":  8,
-	// 		"faultyNode":  1,
-	// 	},
-	// }
 	return reorgsLengthTests
 }
 
