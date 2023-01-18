@@ -952,14 +952,14 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 	var breakCause string
 
 	defer func() {
-		if log.Root().GetHandler().Level() >= log.LvlDebug {
-			log.Debug("commitTransactions-stats",
+		log.OnDebug(func(lg log.Logging) {
+			lg("commitTransactions-stats",
 				"initialTxsCount", initialTxs,
 				"initialGasLimit", initialGasLimit,
 				"resultTxsCount", txs.GetTxs(),
 				"resultGapPool", env.gasPool.Gas(),
 				"exitCause", breakCause)
-		}
+		})
 	}()
 
 	for {
@@ -1015,9 +1015,9 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 		env.state.Prepare(tx.Hash(), env.tcount)
 
 		var start time.Time
-		if log.Root().GetHandler().Level() >= log.LvlDebug {
+		log.OnDebug(func(log.Logging) {
 			start = time.Now()
-		}
+		})
 
 		logs, err := w.commitTransaction(env, tx)
 
@@ -1043,9 +1043,9 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 			env.tcount++
 			txs.Shift()
 
-			if log.Root().GetHandler().Level() >= log.LvlDebug {
-				log.Debug("Committed new tx", "tx hash", tx.Hash(), "from", from, "to", tx.To(), "nonce", tx.Nonce(), "gas", tx.Gas(), "gasPrice", tx.GasPrice(), "value", tx.Value(), "time spent", time.Since(start))
-			}
+			log.OnDebug(func(lg log.Logging) {
+				lg("Committed new tx", "tx hash", tx.Hash(), "from", from, "to", tx.To(), "nonce", tx.Nonce(), "gas", tx.Gas(), "gasPrice", tx.GasPrice(), "value", tx.Value(), "time spent", time.Since(start))
+			})
 
 		case errors.Is(err, core.ErrTxTypeNotSupported):
 			// Pop the unsupported transaction without shifting in the next from the account
