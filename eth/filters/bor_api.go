@@ -67,8 +67,8 @@ func (api *PublicFilterAPI) NewDeposits(ctx context.Context, crit ethereum.State
 		for {
 			select {
 			case h := <-stateSyncData:
-				if h != nil || crit.ID == h.ID || bytes.Equal(crit.Contract.Bytes(), h.Contract.Bytes()) ||
-					(crit.ID == 0 && crit.Contract == common.Address{}) {
+				if h != nil && (crit.ID == h.ID || bytes.Equal(crit.Contract.Bytes(), h.Contract.Bytes()) ||
+					(crit.ID == 0 && crit.Contract == common.Address{})) {
 					notifier.Notify(rpcSub.ID, h)
 				}
 			case <-rpcSub.Err():
