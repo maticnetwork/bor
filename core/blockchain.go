@@ -1745,7 +1745,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 		}
 		// BOR state sync feed related changes
 		for _, data := range bc.stateSyncData {
-			log.Info("[state-sync-debug] writeBlockAndSetHead", "data", data)
+			log.Info("[state-sync-debug] insertChain", "data", data)
 			bc.stateSyncFeed.Send(StateSyncEvent{Data: data})
 		}
 		// BOR
