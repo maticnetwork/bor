@@ -69,7 +69,7 @@ func (api *PublicFilterAPI) NewDeposits(ctx context.Context, crit ethereum.State
 			select {
 			case h := <-stateSyncData:
 				if h == nil {
-					log.Info("[state-sync-debug] nil state sync received")
+					log.Info("[state-sync-debug] #### nil state sync received")
 				} else {
 					log.Info("[state-sync-debug] non-nil state sync recieved", "id", h.ID)
 					if crit.ID == h.ID || bytes.Equal(crit.Contract.Bytes(), h.Contract.Bytes()) ||

@@ -28,6 +28,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 )
@@ -419,6 +420,7 @@ type BorStateSyncer interface {
 
 // SetStateSync set sync data in state_data
 func (bc *BlockChain) SetStateSync(stateData []*types.StateSyncData) {
+	log.Info("[state-sync-debug] setting state syncs")
 	bc.stateSyncData = stateData
 }
 

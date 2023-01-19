@@ -834,6 +834,7 @@ func (c *Bor) FinalizeAndAssemble(ctx context.Context, chain consensus.ChainHead
 		if c.HeimdallClient != nil {
 			tracing.Exec(finalizeCtx, "bor.checkAndCommitSpan", func(ctx context.Context, span trace.Span) {
 				// commit states
+				log.Info("[state-sync-debug] calling commitStates", "number", header.Number.Uint64())
 				stateSyncData, err = c.CommitStates(finalizeCtx, state, header, cx)
 			})
 
