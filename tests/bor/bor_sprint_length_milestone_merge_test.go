@@ -86,28 +86,34 @@ var keys_21validator = []map[string]string{
 }
 
 func getTestSprintLengthMilestoneReorgCases() []map[string]uint64 {
-	faultyNodes := []uint64{2, 4}
-	milestoneMark := []uint64{48, 72}
-	sprintLen := uint64(16)
-	milestoneLen := uint64(24)
+	faultyNodes := []int64{2, 4}
+	milestoneMark := []int64{48, 72}
+	sprintLen := int64(16)
+	milestoneLen := int64(24)
 	reorgsLengthTests := make([]map[string]uint64, 0)
 
-	for i := uint64(0); i < uint64(len(faultyNodes)); i++ {
-		for j := uint64(1); j < +14; j = j + 2 {
+	for i := int64(0); i < int64(len(faultyNodes)); i++ {
+		for j := int64(1); j < int64(14); j = j + 2 {
 			startBlock := faultyNodes[i]*sprintLen + j
 			diff := milestoneMark[i] - startBlock
+			if diff <= 0 {
+				break
+			}
+			a := diff*2 - 2
+			for k := diff + 1; k < a; k = k + 4 {
+				for l := 0; l < 2; l++ {
 
-			for k := diff + 1; k < 2*diff-2; k = k + 4 {
+					reorgsLengthTest := map[string]uint64{
+						"reorgLength":     uint64(k),
+						"startBlock":      uint64(startBlock),
+						"sprintSize":      uint64(sprintLen),
+						"faultyNode":      uint64(faultyNodes[i]), // node 1(index) is primary validator of the first sprint
+						"milestoneLength": uint64(milestoneLen),
+						"milestoneFlag":   uint64(l),
+					}
 
-				reorgsLengthTest := map[string]uint64{
-					"reorgLength":     k,
-					"startBlock":      startBlock,
-					"sprintSize":      sprintLen,
-					"faultyNodes":     faultyNodes[i], // node 1(index) is primary validator of the first sprint
-					"milestoneLength": milestoneLen,
+					reorgsLengthTests = append(reorgsLengthTests, reorgsLengthTest)
 				}
-
-				reorgsLengthTests = append(reorgsLengthTests, reorgsLengthTest)
 			}
 		}
 	}
@@ -194,7 +200,6 @@ func SprintLengthMilestoneReorgIndividual2Nodes(t *testing.T, index int, tt map[
 
 func TestSprintLengthMilestoneReorg2Nodes(t *testing.T) {
 	t.Parallel()
-	t.Skip()
 
 	log.Root().SetHandler(log.LvlFilterHandler(3, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
 
@@ -242,6 +247,14 @@ func TestSprintLengthMilestoneReorg2Nodes(t *testing.T) {
 func TestSprintLengthMilestoneReorg(t *testing.T) {
 	t.Parallel()
 
+	log.Root().SetHandler(log.LvlFilterHandler(3, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
+
+	_, err := fdlimit.Raise(2048)
+
+	if err != nil {
+		panic(err)
+	}
+
 	reorgsLengthTests := getTestSprintLengthMilestoneReorgCases()
 	f, err := os.Create("sprintMilestoneReorg.csv")
 
@@ -258,12 +271,14 @@ func TestSprintLengthMilestoneReorg(t *testing.T) {
 	}
 
 	w := csv.NewWriter(f)
-	err = w.Write([]string{"Induced Reorg Length", "Start Block", "Sprint Size", "Milestone Length", "Disconnected Node Id", "Disconnected Node Id's Rewind Length", "Observer Node Id's Reorg Length"})
-	w.Flush()
+	err = w.Write([]string{"Induced Reorg Length", "Start Block", "Sprint Size", "MilestoneFlag", "Milestone Length", "Disconnected Node Id", "Disconnected Node Id's Rewind Length", "Observer Node Id's Reorg Length"})
 
+	w.Flush()
 	if err != nil {
 		panic(err)
 	}
+
+	err = w.Write([]string{fmt.Sprint(len(reorgsLengthTests))})
 
 	var wg sync.WaitGroup
 	for index, tt := range reorgsLengthTests {
@@ -540,7 +555,7 @@ func SetupValidatorsAndTestSprintLengthMilestone(t *testing.T, tt map[string]uin
 			log.Warn("Current Faulty block", "number", blockHeaderFaulty.Number, "hash", blockHeaderFaulty.Hash())
 		}
 
-		if blockHeaderObserver.Number.Uint64() == tt["startBlock"] {
+		if blockHeaderFaulty.Number.Uint64() == tt["startBlock"] {
 			stacks[faultyProducerIndex].Server().MaxPeers = 0
 
 			for _, enode := range enodes {
@@ -548,7 +563,7 @@ func SetupValidatorsAndTestSprintLengthMilestone(t *testing.T, tt map[string]uin
 			}
 		}
 
-		if blockHeaderObserver.Number.Uint64() >= tt["startBlock"] && blockHeaderObserver.Number.Uint64() < tt["startBlock"]+tt["reorgLength"] {
+		if blockHeaderFaulty.Number.Uint64() >= tt["startBlock"] && blockHeaderFaulty.Number.Uint64() < tt["startBlock"]+tt["reorgLength"] {
 			for _, enode := range enodes {
 				stacks[faultyProducerIndex].Server().RemovePeer(enode)
 			}
@@ -572,7 +587,7 @@ func SetupValidatorsAndTestSprintLengthMilestone(t *testing.T, tt map[string]uin
 			}
 		}
 
-		if blockHeaderObserver.Number.Uint64() == tt["startBlock"]+tt["reorgLength"] {
+		if blockHeaderFaulty.Number.Uint64() == tt["startBlock"]+tt["reorgLength"] {
 			stacks[faultyProducerIndex].Server().NoDiscovery = false
 			stacks[faultyProducerIndex].Server().MaxPeers = 100
 
@@ -581,7 +596,7 @@ func SetupValidatorsAndTestSprintLengthMilestone(t *testing.T, tt map[string]uin
 			}
 		}
 
-		if blockHeaderObserver.Number.Uint64() >= 255 {
+		if blockHeaderFaulty.Number.Uint64() >= 150 {
 			break
 		}
 
