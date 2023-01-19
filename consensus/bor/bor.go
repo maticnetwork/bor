@@ -629,8 +629,10 @@ func (c *Bor) verifySeal(chain consensus.ChainHeaderReader, header *types.Header
 		return err
 	}
 
+	fmt.Printf("WithoutAuthorizedSigner flag is %v", c.WithoutAuthorizedSigner)
 	if !snap.ValidatorSet.HasAddress(signer) && !c.WithoutAuthorizedSigner {
 		// Check the UnauthorizedSignerError.Error() msg to see why we pass number-1
+
 		return &UnauthorizedSignerError{number - 1, signer.Bytes()}
 	}
 
@@ -929,6 +931,7 @@ func (c *Bor) Seal(ctx context.Context, chain consensus.ChainHeaderReader, block
 	}
 
 	// Bail out if we're unauthorized to sign a block
+	fmt.Printf("WithoutAuthorizedSigner flag is %v", c.WithoutAuthorizedSigner)
 	if !snap.ValidatorSet.HasAddress(currentSigner.signer) && !c.WithoutAuthorizedSigner {
 		// Check the UnauthorizedSignerError.Error() msg to see why we pass number-1
 		return &UnauthorizedSignerError{number - 1, currentSigner.signer.Bytes()}
