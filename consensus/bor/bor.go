@@ -1161,17 +1161,23 @@ func (c *Bor) CommitStates(
 	processStart := time.Now()
 	totalGas := 0 /// limit on gas for state sync per block
 	chainID := c.chainConfig.ChainID.String()
+
+	log.Info("[state-sync-debug] initialising slice", "len", len(eventRecords))
 	stateSyncs := make([]*types.StateSyncData, len(eventRecords))
 
 	var gasUsed uint64
+	count := 0
 
 	for _, eventRecord := range eventRecords {
+		log.Info("[state-sync-debug] processing event record", "id", eventRecord.ID, "last id", lastStateID)
 		if eventRecord.ID <= lastStateID {
+			log.Info("[state-sync-debug] #### continue case")
 			continue
 		}
 
 		if err = validateEventRecord(eventRecord, number, to, lastStateID, chainID); err != nil {
 			log.Error("while validating event record", "block", number, "to", to, "stateID", lastStateID, "error", err.Error())
+			log.Info("[state-sync-debug] #### break case", "block", number, "to", to, "stateID", lastStateID, "error", err.Error())
 			break
 		}
 
@@ -1189,12 +1195,20 @@ func (c *Bor) CommitStates(
 		// https://github.com/maticnetwork/genesis-contracts/blob/master/contracts/StateReceiver.sol#L27
 		gasUsed, err = c.GenesisContractsClient.CommitState(eventRecord, state, header, chain)
 		if err != nil {
+			log.Info("[state-sync-debug] #### error in calling CommitState", "err", err)
 			return nil, err
 		}
 
 		totalGas += int(gasUsed)
 
 		lastStateID++
+
+		count++
+	}
+
+	log.Info("[state-sync-debug] completed execution", "count", count)
+	if count < len(eventRecords) {
+		log.Info("[state-sync-debug] #### count < number of event records", "remaining slice", fmt.Sprintf("%v", stateSyncs[count:]))
 	}
 
 	processTime := time.Since(processStart)

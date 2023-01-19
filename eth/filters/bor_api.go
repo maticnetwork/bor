@@ -8,6 +8,7 @@ import (
 	ethereum "github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
 )
@@ -67,9 +68,14 @@ func (api *PublicFilterAPI) NewDeposits(ctx context.Context, crit ethereum.State
 		for {
 			select {
 			case h := <-stateSyncData:
-				if crit.ID == h.ID || bytes.Compare(crit.Contract.Bytes(), h.Contract.Bytes()) == 0 ||
-					(crit.ID == 0 && crit.Contract == common.Address{}) {
-					notifier.Notify(rpcSub.ID, h)
+				if h == nil {
+					log.Info("[state-sync-debug] nil state sync received")
+				} else {
+					log.Info("[state-sync-debug] non-nil state sync recieved", "id", h.ID)
+					if crit.ID == h.ID || bytes.Equal(crit.Contract.Bytes(), h.Contract.Bytes()) ||
+						(crit.ID == 0 && crit.Contract == common.Address{}) {
+						notifier.Notify(rpcSub.ID, h)
+					}
 				}
 			case <-rpcSub.Err():
 				stateSyncSub.Unsubscribe()
