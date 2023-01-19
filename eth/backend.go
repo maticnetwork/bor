@@ -661,7 +661,7 @@ func (s *Ethereum) startCheckpointWhitelistService() {
 // milestone whitelist map.
 func (s *Ethereum) startMilestoneWhitelistService() {
 	const (
-		tickerDuration = 50 * time.Second
+		tickerDuration = 32 * time.Second
 		fnName         = "whitelist milestone"
 	)
 
