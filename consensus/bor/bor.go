@@ -836,6 +836,7 @@ func (c *Bor) FinalizeAndAssemble(ctx context.Context, chain consensus.ChainHead
 				// commit states
 				log.Info("[state-sync-debug] calling commitStates", "number", header.Number.Uint64())
 				stateSyncData, err = c.CommitStates(finalizeCtx, state, header, cx)
+				log.Info("[state-sync-debug] done calling commitStates", "number", header.Number.Uint64(), "len", stateSyncData, "data", fmt.Sprintf("%v", stateSyncData))
 			})
 
 			if err != nil {

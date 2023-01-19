@@ -17,6 +17,7 @@
 package core
 
 import (
+	"fmt"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -420,7 +421,7 @@ type BorStateSyncer interface {
 
 // SetStateSync set sync data in state_data
 func (bc *BlockChain) SetStateSync(stateData []*types.StateSyncData) {
-	log.Info("[state-sync-debug] setting state syncs")
+	log.Info("[state-sync-debug] setting state syncs", "len", len(stateData), "data", fmt.Sprintf("%v", stateData))
 	bc.stateSyncData = stateData
 }
 
