@@ -47,3 +47,12 @@ type MilestoneNoAckResponse struct {
 	Height string         `json:"height"`
 	Result MilestoneNoAck `json:"result"`
 }
+
+type MilestoneID struct {
+	Result bool `json:"result"`
+}
+
+type MilestoneIDResponse struct {
+	Height string      `json:"height"`
+	Result MilestoneID `json:"result"`
+}

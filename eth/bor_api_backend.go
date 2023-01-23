@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
@@ -68,6 +69,31 @@ func (b *EthAPIBackend) GetVoteOnHash(ctx context.Context, starBlockNr uint64, e
 	if localEndBlockHash != hash {
 		downloader.UnlockMutex(false, "", common.Hash{})
 		return false, fmt.Errorf("Hash mismatch: localChainHash %s, milestoneHash %s", localEndBlockHash, hash)
+	}
+
+	ethHandler := (*ethHandler)(b.eth.handler)
+
+	bor, ok := ethHandler.chain.Engine().(*bor.Bor)
+
+	if !ok {
+		return false, fmt.Errorf("Bor not available")
+	}
+
+	fmt.Print("Here in the Bor API Backend 1")
+
+	timeout := 2 * time.Second
+
+	firstCtx, cancel := context.WithTimeout(context.Background(), timeout)
+
+	err = bor.HeimdallClient.FetchMilestoneID(firstCtx, milestoneId)
+
+	fmt.Print("Here in the Bor API Backend 2")
+
+	cancel()
+
+	if err != nil {
+		downloader.UnlockMutex(false, "", common.Hash{})
+		return false, fmt.Errorf("Milestone ID doesn't exist in Heimdall")
 	}
 
 	downloader.UnlockMutex(true, milestoneId, localEndBlock.Hash())
