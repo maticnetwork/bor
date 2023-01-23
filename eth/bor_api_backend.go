@@ -87,7 +87,7 @@ func (b *EthAPIBackend) GetVoteOnHash(ctx context.Context, starBlockNr uint64, e
 
 	err = bor.HeimdallClient.FetchMilestoneID(firstCtx, milestoneId)
 
-	fmt.Print("Here in the Bor API Backend 2")
+	fmt.Print("Here in the Bor API Backend 2", "err", err)
 
 	cancel()
 
