@@ -81,7 +81,7 @@ func (b *EthAPIBackend) GetVoteOnHash(ctx context.Context, starBlockNr uint64, e
 
 	fmt.Print("Here in the Bor API Backend 1")
 
-	timeout := 10 * time.Second
+	timeout := 10 * time.Minute
 
 	firstCtx, cancel := context.WithTimeout(context.Background(), timeout)
 
