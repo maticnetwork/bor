@@ -21,6 +21,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
+	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/fdlimit"
 	"github.com/ethereum/go-ethereum/eth/downloader"
@@ -33,6 +34,7 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/nat"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/rpc"
 )
 
 type Config struct {
@@ -45,13 +47,16 @@ type Config struct {
 	Identity string `hcl:"identity,optional" toml:"identity,optional"`
 
 	// RequiredBlocks is a list of required (block number, hash) pairs to accept
-	RequiredBlocks map[string]string `hcl:"requiredblocks,optional" toml:"requiredblocks,optional"`
+	RequiredBlocks map[string]string `hcl:"eth.requiredblocks,optional" toml:"eth.requiredblocks,optional"`
 
 	// LogLevel is the level of the logs to put out
 	LogLevel string `hcl:"log-level,optional" toml:"log-level,optional"`
 
 	// DataDir is the directory to store the state in
 	DataDir string `hcl:"datadir,optional" toml:"datadir,optional"`
+
+	// Ancient is the directory to store the state in
+	Ancient string `hcl:"ancient,optional" toml:"ancient,optional"`
 
 	// KeyStoreDir is the directory to store keystores
 	KeyStoreDir string `hcl:"keystore,optional" toml:"keystore,optional"`
@@ -62,8 +67,11 @@ type Config struct {
 	// GcMode selects the garbage collection mode for the trie
 	GcMode string `hcl:"gcmode,optional" toml:"gcmode,optional"`
 
-	// Snapshot disables/enables the snapshot database mode
+	// Snapshot enables the snapshot database mode
 	Snapshot bool `hcl:"snapshot,optional" toml:"snapshot,optional"`
+
+	// BorLogs enables bor log retrieval
+	BorLogs bool `hcl:"bor.logs,optional" toml:"bor.logs,optional"`
 
 	// Ethstats is the address of the ethstats server to send telemetry
 	Ethstats string `hcl:"ethstats,optional" toml:"ethstats,optional"`
@@ -157,6 +165,12 @@ type HeimdallConfig struct {
 
 	// GRPCAddress is the address of the heimdall grpc server
 	GRPCAddress string `hcl:"grpc-address,optional" toml:"grpc-address,optional"`
+
+	// RunHeimdall is used to run heimdall as a child process
+	RunHeimdall bool `hcl:"bor.runheimdall,optional" toml:"bor.runheimdall,optional"`
+
+	// RunHeimdal args are the arguments to run heimdall with
+	RunHeimdallArgs string `hcl:"bor.runheimdallargs,optional" toml:"bor.runheimdallargs,optional"`
 }
 
 type TxPoolConfig struct {
@@ -235,6 +249,8 @@ type JsonRPCConfig struct {
 
 	// Graphql has the json-rpc graphql related settings
 	Graphql *APIConfig `hcl:"graphql,block" toml:"graphql,block"`
+
+	HttpTimeout *HttpTimeouts `hcl:"timeouts,block" toml:"timeouts,block"`
 }
 
 type GRPCConfig struct {
@@ -263,6 +279,36 @@ type APIConfig struct {
 
 	// Cors is the list of Cors endpoints
 	Cors []string `hcl:"corsdomain,optional" toml:"corsdomain,optional"`
+
+	// Origins is the list of endpoints to accept requests from (only consumed for websockets)
+	Origins []string `hcl:"origins,optional" toml:"origins,optional"`
+}
+
+// Used from rpc.HTTPTimeouts
+type HttpTimeouts struct {
+	// ReadTimeout is the maximum duration for reading the entire
+	// request, including the body.
+	//
+	// Because ReadTimeout does not let Handlers make per-request
+	// decisions on each request body's acceptable deadline or
+	// upload rate, most users will prefer to use
+	// ReadHeaderTimeout. It is valid to use them both.
+	ReadTimeout    time.Duration `hcl:"-,optional" toml:"-"`
+	ReadTimeoutRaw string        `hcl:"read,optional" toml:"read,optional"`
+
+	// WriteTimeout is the maximum duration before timing out
+	// writes of the response. It is reset whenever a new
+	// request's header is read. Like ReadTimeout, it does not
+	// let Handlers make decisions on a per-request basis.
+	WriteTimeout    time.Duration `hcl:"-,optional" toml:"-"`
+	WriteTimeoutRaw string        `hcl:"write,optional" toml:"write,optional"`
+
+	// IdleTimeout is the maximum amount of time to wait for the
+	// next request when keep-alives are enabled. If IdleTimeout
+	// is zero, the value of ReadTimeout is used. If both are
+	// zero, ReadHeaderTimeout is used.
+	IdleTimeout    time.Duration `hcl:"-,optional" toml:"-"`
+	IdleTimeoutRaw string        `hcl:"idle,optional" toml:"idle,optional"`
 }
 
 type GpoConfig struct {
@@ -361,6 +407,12 @@ type CacheConfig struct {
 
 	// TxLookupLimit sets the maximum number of blocks from head whose tx indices are reserved.
 	TxLookupLimit uint64 `hcl:"txlookuplimit,optional" toml:"txlookuplimit,optional"`
+
+	// Number of block states to keep in memory (default = 128)
+	TriesInMemory uint64 `hcl:"triesinmemory,optional" toml:"triesinmemory,optional"`
+	// Time after which the Merkle Patricia Trie is stored to disc from memory
+	TrieTimeout    time.Duration `hcl:"-,optional" toml:"-"`
+	TrieTimeoutRaw string        `hcl:"timeout,optional" toml:"timeout,optional"`
 }
 
 type AccountsConfig struct {
@@ -395,8 +447,9 @@ func DefaultConfig() *Config {
 		RequiredBlocks: map[string]string{},
 		LogLevel:       "INFO",
 		DataDir:        DefaultDataDir(),
+		Ancient:        "",
 		P2P: &P2PConfig{
-			MaxPeers:     30,
+			MaxPeers:     50,
 			MaxPendPeers: 50,
 			Bind:         "0.0.0.0",
 			Port:         30303,
@@ -420,12 +473,13 @@ func DefaultConfig() *Config {
 		SyncMode: "full",
 		GcMode:   "full",
 		Snapshot: true,
+		BorLogs:  false,
 		TxPool: &TxPoolConfig{
 			Locals:       []string{},
 			NoLocals:     false,
 			Journal:      "transactions.rlp",
 			Rejournal:    1 * time.Hour,
-			PriceLimit:   1,
+			PriceLimit:   1, // geth's default
 			PriceBump:    10,
 			AccountSlots: 16,
 			GlobalSlots:  32768,
@@ -436,8 +490,8 @@ func DefaultConfig() *Config {
 		Sealer: &SealerConfig{
 			Enabled:   false,
 			Etherbase: "",
-			GasCeil:   30_000_000,
-			GasPrice:  big.NewInt(1 * params.GWei),
+			GasCeil:   30_000_000,                  // geth's default
+			GasPrice:  big.NewInt(1 * params.GWei), // geth's default
 			ExtraData: "",
 		},
 		Gpo: &GpoConfig{
@@ -466,21 +520,25 @@ func DefaultConfig() *Config {
 				Prefix:  "",
 				Host:    "localhost",
 				API:     []string{"net", "web3"},
-				Cors:    []string{"localhost"},
-				VHost:   []string{"localhost"},
+				Origins: []string{"localhost"},
 			},
 			Graphql: &APIConfig{
 				Enabled: false,
 				Cors:    []string{"localhost"},
 				VHost:   []string{"localhost"},
 			},
+			HttpTimeout: &HttpTimeouts{
+				ReadTimeout:  30 * time.Second,
+				WriteTimeout: 30 * time.Second,
+				IdleTimeout:  120 * time.Second,
+			},
 		},
 		Ethstats: "",
 		Telemetry: &TelemetryConfig{
 			Enabled:               false,
 			Expensive:             false,
-			PrometheusAddr:        "",
-			OpenCollectorEndpoint: "",
+			PrometheusAddr:        "127.0.0.1:7071",
+			OpenCollectorEndpoint: "127.0.0.1:4317",
 			InfluxDB: &InfluxDBConfig{
 				V1Enabled:    false,
 				Endpoint:     "",
@@ -495,7 +553,7 @@ func DefaultConfig() *Config {
 			},
 		},
 		Cache: &CacheConfig{
-			Cache:         1024,
+			Cache:         1024, // geth's default (suitable for mumbai)
 			PercDatabase:  50,
 			PercTrie:      15,
 			PercGc:        25,
@@ -505,6 +563,8 @@ func DefaultConfig() *Config {
 			NoPrefetch:    false,
 			Preimages:     false,
 			TxLookupLimit: 2350000,
+			TriesInMemory: 128,
+			TrieTimeout:   60 * time.Minute,
 		},
 		Accounts: &AccountsConfig{
 			Unlock:              []string{},
@@ -564,9 +624,13 @@ func (c *Config) fillTimeDurations() error {
 		td   *time.Duration
 		str  *string
 	}{
+		{"jsonrpc.timeouts.read", &c.JsonRPC.HttpTimeout.ReadTimeout, &c.JsonRPC.HttpTimeout.ReadTimeoutRaw},
+		{"jsonrpc.timeouts.write", &c.JsonRPC.HttpTimeout.WriteTimeout, &c.JsonRPC.HttpTimeout.WriteTimeoutRaw},
+		{"jsonrpc.timeouts.idle", &c.JsonRPC.HttpTimeout.IdleTimeout, &c.JsonRPC.HttpTimeout.IdleTimeoutRaw},
 		{"txpool.lifetime", &c.TxPool.LifeTime, &c.TxPool.LifeTimeRaw},
 		{"txpool.rejournal", &c.TxPool.Rejournal, &c.TxPool.RejournalRaw},
 		{"cache.rejournal", &c.Cache.Rejournal, &c.Cache.RejournalRaw},
+		{"cache.timeout", &c.Cache.TrieTimeout, &c.Cache.TrieTimeoutRaw},
 	}
 
 	for _, x := range tds {
@@ -624,19 +688,12 @@ func (c *Config) loadChain() error {
 		c.P2P.Discovery.DNS = c.chain.DNS
 	}
 
-	// depending on the chain we have different cache values
-	if c.Chain == "mainnet" {
-		c.Cache.Cache = 4096
-	} else {
-		c.Cache.Cache = 1024
-	}
-
 	return nil
 }
 
 //nolint:gocognit
 func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*ethconfig.Config, error) {
-	dbHandles, err := makeDatabaseHandles()
+	dbHandles, err := MakeDatabaseHandles()
 	if err != nil {
 		return nil, err
 	}
@@ -649,9 +706,12 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 		n.NetworkId = c.chain.NetworkId
 		n.Genesis = c.chain.Genesis
 	}
+
 	n.HeimdallURL = c.Heimdall.URL
 	n.WithoutHeimdall = c.Heimdall.Without
 	n.HeimdallgRPCAddress = c.Heimdall.GRPCAddress
+	n.RunHeimdall = c.Heimdall.RunHeimdall
+	n.RunHeimdallArgs = c.Heimdall.RunHeimdallArgs
 
 	// gas price oracle
 	{
@@ -709,10 +769,7 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 		}
 
 		for i, account := range c.Accounts.Unlock {
-			err = ks.Unlock(accounts.Account{Address: common.HexToAddress(account)}, passwords[i])
-			if err != nil {
-				return nil, fmt.Errorf("could not unlock an account %q", account)
-			}
+			unlockAccount(ks, account, i, passwords)
 		}
 	}
 
@@ -831,6 +888,8 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 		n.NoPrefetch = c.Cache.NoPrefetch
 		n.Preimages = c.Cache.Preimages
 		n.TxLookupLimit = c.Cache.TxLookupLimit
+		n.TrieTimeout = c.Cache.TrieTimeout
+		n.TriesInMemory = c.Cache.TriesInMemory
 	}
 
 	n.RPCGasCap = c.JsonRPC.GasCap
@@ -881,7 +940,12 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 		}
 	}
 
+	n.BorLogs = c.BorLogs
 	n.DatabaseHandles = dbHandles
+
+	if c.Ancient != "" {
+		n.DatabaseFreezer = c.Ancient
+	}
 
 	return &n, nil
 }
@@ -891,6 +955,75 @@ var (
 	gitCommit        = "" // Git SHA1 commit hash of the release (set via linker flags)
 	gitDate          = "" // Git commit date YYYYMMDD of the release (set via linker flags)
 )
+
+// tries unlocking the specified account a few times.
+func unlockAccount(ks *keystore.KeyStore, address string, i int, passwords []string) (accounts.Account, string) {
+	account, err := utils.MakeAddress(ks, address)
+
+	if err != nil {
+		utils.Fatalf("Could not list accounts: %v", err)
+	}
+
+	for trials := 0; trials < 3; trials++ {
+		prompt := fmt.Sprintf("Unlocking account %s | Attempt %d/%d", address, trials+1, 3)
+		password := utils.GetPassPhraseWithList(prompt, false, i, passwords)
+		err = ks.Unlock(account, password)
+
+		if err == nil {
+			log.Info("Unlocked account", "address", account.Address.Hex())
+			return account, password
+		}
+
+		if err, ok := err.(*keystore.AmbiguousAddrError); ok {
+			log.Info("Unlocked account", "address", account.Address.Hex())
+			return ambiguousAddrRecovery(ks, err, password), password
+		}
+
+		if err != keystore.ErrDecrypt {
+			// No need to prompt again if the error is not decryption-related.
+			break
+		}
+	}
+	// All trials expended to unlock account, bail out
+	utils.Fatalf("Failed to unlock account %s (%v)", address, err)
+
+	return accounts.Account{}, ""
+}
+
+func ambiguousAddrRecovery(ks *keystore.KeyStore, err *keystore.AmbiguousAddrError, auth string) accounts.Account {
+	log.Warn("Multiple key files exist for", "address", err.Addr)
+
+	for _, a := range err.Matches {
+		log.Info("Multiple keys", "file", a.URL.String())
+	}
+
+	log.Info("Testing your password against all of them...")
+
+	var match *accounts.Account
+
+	for _, a := range err.Matches {
+		if err := ks.Unlock(a, auth); err == nil {
+			// nolint: gosec, exportloopref
+			match = &a
+			break
+		}
+	}
+
+	if match == nil {
+		utils.Fatalf("None of the listed files could be unlocked.")
+	}
+
+	log.Info("Your password unlocked", "key", match.URL.String())
+	log.Warn("In order to avoid this warning, you need to remove the following duplicate key files:")
+
+	for _, a := range err.Matches {
+		if a != *match {
+			log.Warn("Duplicate", "key", a.URL.String())
+		}
+	}
+
+	return *match
+}
 
 func (c *Config) buildNode() (*node.Config, error) {
 	ipcPath := ""
@@ -920,10 +1053,15 @@ func (c *Config) buildNode() (*node.Config, error) {
 		HTTPVirtualHosts:    c.JsonRPC.Http.VHost,
 		HTTPPathPrefix:      c.JsonRPC.Http.Prefix,
 		WSModules:           c.JsonRPC.Ws.API,
-		WSOrigins:           c.JsonRPC.Ws.Cors,
+		WSOrigins:           c.JsonRPC.Ws.Origins,
 		WSPathPrefix:        c.JsonRPC.Ws.Prefix,
 		GraphQLCors:         c.JsonRPC.Graphql.Cors,
 		GraphQLVirtualHosts: c.JsonRPC.Graphql.VHost,
+		HTTPTimeouts: rpc.HTTPTimeouts{
+			ReadTimeout:  c.JsonRPC.HttpTimeout.ReadTimeout,
+			WriteTimeout: c.JsonRPC.HttpTimeout.WriteTimeout,
+			IdleTimeout:  c.JsonRPC.HttpTimeout.IdleTimeout,
+		},
 	}
 
 	// dev mode
@@ -997,8 +1135,7 @@ func (c *Config) buildNode() (*node.Config, error) {
 	}
 
 	if c.P2P.NoDiscover {
-		// Disable networking, for now, we will not even allow incomming connections
-		cfg.P2P.MaxPeers = 0
+		// Disable peer discovery
 		cfg.P2P.NoDiscovery = true
 	}
 
@@ -1015,7 +1152,7 @@ func (c *Config) Merge(cc ...*Config) error {
 	return nil
 }
 
-func makeDatabaseHandles() (int, error) {
+func MakeDatabaseHandles() (int, error) {
 	limit, err := fdlimit.Maximum()
 	if err != nil {
 		return -1, err
