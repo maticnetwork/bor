@@ -50,6 +50,9 @@ func (m *mockHeimdall) FetchNoAckMilestone(ctx context.Context, milestoneID stri
 func (m *mockHeimdall) FetchLastNoAckMilestone(ctx context.Context) (string, error) {
 	return m.fetchLastNoAckMilestone(ctx)
 }
+func (m *mockHeimdall) FetchMilestoneID(ctx context.Context, milestoneID string) error {
+	return m.fetchNoAckMilestone(ctx, milestoneID)
+}
 
 func (m *mockHeimdall) Close() {}
 
