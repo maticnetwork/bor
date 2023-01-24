@@ -1016,6 +1016,7 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 		env.state.Prepare(tx.Hash(), env.tcount)
 
 		var start time.Time
+
 		log.OnDebug(func(log.Logging) {
 			start = time.Now()
 		})
