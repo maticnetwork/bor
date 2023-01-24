@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"reflect"
 	"runtime"
 	"strings"
 	"time"
@@ -1925,6 +1926,40 @@ func (s *PublicTransactionPoolAPI) SendRawTransaction(ctx context.Context, input
 	if err := tx.UnmarshalBinary(input); err != nil {
 		return common.Hash{}, err
 	}
+	return SubmitTransaction(ctx, s.b, tx)
+}
+
+// SendRawTransactionConditional will add the signed transaction to the transaction pool.
+// The sender/bundler is responsible for signing the transaction
+func (s *PublicTransactionPoolAPI) SendRawTransactionConditional(ctx context.Context, input hexutil.Bytes, knownAccounts map[string]map[common.Address]interface{}) (common.Hash, error) {
+	tx := new(types.Transaction)
+	if err := tx.UnmarshalBinary(input); err != nil {
+		return common.Hash{}, err
+	}
+
+	// check knownAccounts
+	currentBlock := s.b.CurrentBlock()
+	currentState, _, _ := s.b.StateAndHeaderByNumber(ctx, rpc.BlockNumber(currentBlock.Number().Int64()))
+
+	for k, v := range knownAccounts["knownAccounts"] {
+		// check if the value is hex string or an object
+		if object, ok := v.(string); ok {
+			actualRootHash := currentState.StorageTrie(k).Hash()
+			if common.HexToHash(object) != actualRootHash {
+				return common.Hash{}, fmt.Errorf("invalid root hash for: %v root hash: %v actual root hash: %v", k, common.HexToHash(object), actualRootHash)
+			}
+		} else if object, ok := v.(map[string]interface{}); ok {
+			for slot, value := range object {
+				actualValue := currentState.GetState(k, common.HexToHash(slot))
+				if common.HexToHash(value.(string)) != actualValue {
+					return common.Hash{}, fmt.Errorf("invalid slot value at address: %v slot: %v value: %v actual value: %v", k, slot, value, actualValue)
+				}
+			}
+		} else {
+			return common.Hash{}, fmt.Errorf("invalid type in knownAccounts %v", reflect.TypeOf(v))
+		}
+	}
+
 	return SubmitTransaction(ctx, s.b, tx)
 }
 
