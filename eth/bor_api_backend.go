@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
@@ -81,15 +80,9 @@ func (b *EthAPIBackend) GetVoteOnHash(ctx context.Context, starBlockNr uint64, e
 
 	fmt.Print("Here in the Bor API Backend 1")
 
-	timeout := 10 * time.Minute
-
-	firstCtx, cancel := context.WithTimeout(context.Background(), timeout)
-
-	err = bor.HeimdallClient.FetchMilestoneID(firstCtx, milestoneId)
+	err = bor.HeimdallClient.FetchMilestoneID(ctx, milestoneId)
 
 	fmt.Print("Here in the Bor API Backend 2", "err", err)
-
-	cancel()
 
 	if err != nil {
 		downloader.UnlockMutex(false, "", common.Hash{})

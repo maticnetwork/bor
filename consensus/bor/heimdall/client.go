@@ -251,9 +251,16 @@ func (h *HeimdallClient) FetchMilestoneID(ctx context.Context, milestoneID strin
 		return err
 	}
 
+	log.Warn("In Fetching Milestone ID Start")
+	start := time.Now()
+
 	ctx = withRequestType(ctx, milestoneIDRequest)
 
 	response, err := FetchWithRetry[milestone.MilestoneIDResponse](ctx, h.client, url, h.closeCh)
+
+	end := time.Since(start)
+	log.Warn("In Fetching Milestone ID End", "Time Elapsed", end.Seconds())
+
 	if err != nil {
 		return err
 	}
@@ -269,7 +276,14 @@ func (h *HeimdallClient) FetchMilestoneID(ctx context.Context, milestoneID strin
 func FetchWithRetry[T any](ctx context.Context, client http.Client, url *url.URL, closeCh chan struct{}) (*T, error) {
 	// request data once
 	request := &Request{client: client, url: url, start: time.Now()}
+
+	log.Warn("FetchWithRetry Start", "url", url)
+	start := time.Now()
+
 	result, err := Fetch[T](ctx, request)
+
+	end := time.Since(start)
+	log.Warn("FetchWithRetry End", "url", url, "Time Elapsed", end.Seconds())
 
 	if err == nil {
 		return result, nil
@@ -330,7 +344,14 @@ func Fetch[T any](ctx context.Context, request *Request) (*T, error) {
 
 	result := new(T)
 
+	log.Warn("Fetch Start", "url", request.url)
+	start := time.Now()
+
 	body, err := internalFetchWithTimeout(ctx, request.client, request.url)
+
+	end := time.Since(start)
+	log.Warn("Fetch End", "url", request.url, "Time Elapsed", end.Seconds())
+
 	if err != nil {
 		return nil, err
 	}
@@ -417,7 +438,13 @@ func internalFetch(ctx context.Context, client http.Client, u *url.URL) ([]byte,
 		return nil, err
 	}
 
+	log.Warn("internalFetch Start", "url", u)
+	start := time.Now()
+
 	res, err := client.Do(req)
+
+	log.Warn("internalFetch End", "url", u, "Time Elapsed", time.Since(start).Seconds())
+
 	if err != nil {
 		return nil, err
 	}
@@ -446,6 +473,13 @@ func internalFetch(ctx context.Context, client http.Client, u *url.URL) ([]byte,
 func internalFetchWithTimeout(ctx context.Context, client http.Client, url *url.URL) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, apiHeimdallTimeout)
 	defer cancel()
+
+	var start time.Time
+
+	defer log.Warn("internalFetchWithTimeout End", "url", url, "Time Elapsed", time.Since(start).Seconds())
+
+	log.Warn("internalFetchWithTimeout Start", "url", url)
+	start = time.Now()
 
 	// request data once
 	return internalFetch(ctx, client, url)
