@@ -1432,10 +1432,6 @@ func (w *worker) generateWork(ctx context.Context, params *generateParams) (*typ
 // commitWork generates several new sealing tasks based on the parent block
 // and submit them to the sealer.
 func (w *worker) commitWork(ctx context.Context, interrupt *int32, noempty bool, timestamp int64) {
-	if !noempty {
-		// empty blocks
-		return
-	}
 
 	start := time.Now()
 
@@ -1525,10 +1521,7 @@ func getInterruptTimer(ctx context.Context, work *environment, current *types.Bl
 	go func() {
 		select {
 		case <-timeoutTimer.C:
-			log.Info("an interrupt event. cancelling the current block",
-				"block", blockNumber,
-				"hash", current.Hash().Hex(),
-			)
+			log.Info("Commit Interrupt. Pre-commiting the current block", "block", blockNumber)
 
 			close(interruptCh)
 		case <-ctx.Done(): // nothing to do
