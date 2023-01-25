@@ -1460,6 +1460,10 @@ func newRPCTransactionFromBlockIndex(b *types.Block, index uint64, config *param
 			txs = append(txs, tx)
 		}
 	}
+
+	if index >= uint64(len(txs)) {
+		return nil
+	}
 	return newRPCTransaction(txs[index], b.Hash(), b.NumberU64(), index, b.BaseFee(), config)
 }
 
