@@ -98,7 +98,7 @@ func ReadRawBorReceipt(db ethdb.Reader, hash common.Hash, number uint64) *types.
 // fields then nil is returned.
 func ReadBorReceipt(db ethdb.Reader, hash common.Hash, number uint64, config *params.ChainConfig) *types.Receipt {
 
-	if config != nil && !config.Bor.IsSprintStart(number, config.Bor.CalculateSprint(number)) {
+	if config != nil && config.Bor != nil && config.Bor.Sprint != nil && !config.Bor.IsSprintStart(number, config.Bor.CalculateSprint(number)) {
 		return nil
 	}
 
