@@ -96,7 +96,7 @@ func ReadRawBorReceipt(db ethdb.Reader, hash common.Hash, number uint64) *types.
 // ReadBorReceipt retrieves all the bor block receipts belonging to a block, including
 // its correspoinding metadata fields. If it is unable to populate these metadata
 // fields then nil is returned.
-func ReadBorReceipt(db ethdb.Reader, hash common.Hash, number uint64, config *params.ChainConfig) *types.Receipt {
+func ReadBorReceipt(db ethdb.Reader, hash common.Hash, number uint64, config *params.ChainConfig, checkBody bool) *types.Receipt {
 	if config != nil && !config.Bor.IsSprintStart(number) {
 		return nil
 	}
@@ -113,16 +113,20 @@ func ReadBorReceipt(db ethdb.Reader, hash common.Hash, number uint64, config *pa
 		return nil
 	}
 
-	body := HasBody(db, hash, number)
-	if !body {
-		log.Error("Missing body but have bor receipt", "hash", hash, "number", number)
-		return nil
+	if checkBody {
+		body := HasBody(db, hash, number)
+		if !body {
+			log.Error("Missing body but have bor receipt", "hash", hash, "number", number)
+
+			return nil
+		}
 	}
 
 	if err := types.DeriveFieldsForBorReceipt(borReceipt, hash, number, receipts); err != nil {
 		log.Error("Failed to derive bor receipt fields", "hash", hash, "number", number, "err", err)
 		return nil
 	}
+
 	return borReceipt
 }
 
@@ -169,7 +173,7 @@ func ReadBorTransactionWithBlockHash(db ethdb.Reader, txHash common.Hash, blockH
 
 // ReadBorTransaction retrieves a specific bor (fake) transaction by hash, along with
 // its added positional metadata.
-func ReadBorTransaction(db ethdb.Reader, hash common.Hash) (*types.Transaction, common.Hash, uint64, uint64) {
+func ReadBorTransaction(db ethdb.Reader, hash common.Hash, checkBody bool) (*types.Transaction, common.Hash, uint64, uint64) {
 	blockNumber := ReadBorTxLookupEntry(db, hash)
 	if blockNumber == nil {
 		return nil, common.Hash{}, 0, 0
@@ -178,6 +182,10 @@ func ReadBorTransaction(db ethdb.Reader, hash common.Hash) (*types.Transaction, 
 	blockHash := ReadCanonicalHash(db, *blockNumber)
 	if blockHash == (common.Hash{}) {
 		return nil, common.Hash{}, 0, 0
+	}
+
+	if !checkBody {
+		return types.NewBorTransaction(), blockHash, *blockNumber, 0
 	}
 
 	body := ReadBody(db, blockHash, *blockNumber)

@@ -1457,14 +1457,21 @@ func newRPCTransactionFromBlockIndex(b *types.Block, index uint64, config *param
 		return nil
 	}
 
-	borReceipt := rawdb.ReadBorReceipt(db, b.Hash(), b.NumberU64(), config)
-	if borReceipt != nil {
-		tx, _, _, _ := rawdb.ReadBorTransaction(db, borReceipt.TxHash)
+	body := rawdb.ReadBody(db, b.Hash(), b.NumberU64())
+	if body == nil {
+		log.Error("Transaction referenced missing", "number", b.NumberU64(), "hash", b.Hash())
 
+		return newRPCTransaction(txs[index], b.Hash(), b.NumberU64(), index, b.BaseFee(), config)
+	}
+
+	borReceipt := rawdb.ReadBorReceipt(db, b.Hash(), b.NumberU64(), config, false)
+	if borReceipt != nil {
+		tx, _, _, _ := rawdb.ReadBorTransaction(db, borReceipt.TxHash, false)
 		if tx != nil {
 			txs = append(txs, tx)
 		}
 	}
+
 	return newRPCTransaction(txs[index], b.Hash(), b.NumberU64(), index, b.BaseFee(), config)
 }
 
