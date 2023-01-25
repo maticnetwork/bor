@@ -53,9 +53,16 @@ func ReadBorReceiptRLP(db ethdb.Reader, hash common.Hash, number uint64) rlp.Raw
 	// First try to look up the data in ancient database. Extra hash
 	// comparison is necessary since ancient database only maintains
 	// the canonical data.
+	data, _ := db.Ancient(freezerBorReceiptTable, number)
+	if len(data) > 0 {
+		h, _ := db.Ancient(freezerHashTable, number)
+		if common.BytesToHash(h) == hash {
+			return data
+		}
+	}
 
 	// Look up the data in leveldb.
-	data, _ := db.Get(borReceiptKey(number, hash))
+	data, _ = db.Get(borReceiptKey(number, hash))
 	if len(data) > 0 {
 		return data
 	}
