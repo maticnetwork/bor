@@ -94,7 +94,7 @@ func (c *Command) Flags() *flagset.Flagset {
 	})
 	f.BoolFlag(&flagset.BoolFlag{
 		Name:    "bor.runheimdall",
-		Usage:   "Run Heimdall service as a child process",
+		Usage:   "Run Heimdall service as a child process [ WIP ]",
 		Value:   &c.cliConfig.Heimdall.RunHeimdall,
 		Default: c.cliConfig.Heimdall.RunHeimdall,
 	})

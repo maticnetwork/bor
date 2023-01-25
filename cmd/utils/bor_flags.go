@@ -41,7 +41,7 @@ var (
 	// RunHeimdallFlag flag for running heimdall internally from bor
 	RunHeimdallFlag = cli.BoolFlag{
 		Name:  "bor.runheimdall",
-		Usage: "Run Heimdall service as a child process",
+		Usage: "Run Heimdall service as a child process [ WIP ]",
 	}
 
 	RunHeimdallArgsFlag = cli.StringFlag{
