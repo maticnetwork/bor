@@ -97,8 +97,7 @@ func ReadRawBorReceipt(db ethdb.Reader, hash common.Hash, number uint64) *types.
 // its correspoinding metadata fields. If it is unable to populate these metadata
 // fields then nil is returned.
 func ReadBorReceipt(db ethdb.Reader, hash common.Hash, number uint64, config *params.ChainConfig) *types.Receipt {
-
-	if config != nil && !config.Bor.IsSprintStart(number, config.Bor.CalculateSprint(number)) {
+	if config != nil && !config.Bor.IsSprintStart(number) {
 		return nil
 	}
 
