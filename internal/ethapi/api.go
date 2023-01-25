@@ -1457,15 +1457,19 @@ func newRPCTransactionFromBlockIndex(b *types.Block, index uint64, config *param
 		return nil
 	}
 
-	borReceipt := rawdb.ReadBorReceipt(db, b.Hash(), b.NumberU64(), config)
-	if borReceipt != nil {
-		tx, _, _, _ := rawdb.ReadBorTransaction(db, borReceipt.TxHash)
+	// If the index out of the range of transactions defined in block body, it means that the transaction is a bor state sync transaction, and we need to fetch it from the database
+	if index == uint64(len(txs)) {
+		borReceipt := rawdb.ReadBorReceipt(db, b.Hash(), b.NumberU64(), config)
+		if borReceipt != nil {
+			tx, _, _, _ := rawdb.ReadBorTransaction(db, borReceipt.TxHash)
 
-		if tx != nil {
-			txs = append(txs, tx)
+			if tx != nil {
+				txs = append(txs, tx)
+			}
 		}
 	}
 
+	// If the index is still out of the range after checking bor state sync transaction, it means that the transaction index is invalid
 	if index >= uint64(len(txs)) {
 		return nil
 	}
