@@ -34,20 +34,6 @@ func borTxLookupKey(hash common.Hash) []byte {
 	return append(borTxLookupPrefix, hash.Bytes()...)
 }
 
-// HasBorReceipt verifies the existence of all block receipt belonging
-// to a block.
-func HasBorReceipt(db ethdb.Reader, hash common.Hash, number uint64) bool {
-	if has, err := db.Ancient(freezerHashTable, number); err == nil && common.BytesToHash(has) == hash {
-		return true
-	}
-
-	if has, err := db.Has(borReceiptKey(number, hash)); !has || err != nil {
-		return false
-	}
-
-	return true
-}
-
 func ReadBorReceiptRLP(db ethdb.Reader, hash common.Hash, number uint64) rlp.RawValue {
 	var data []byte
 	db.ReadAncients(func(reader ethdb.AncientReader) error {
