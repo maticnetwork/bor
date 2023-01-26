@@ -1521,7 +1521,7 @@ func getInterruptTimer(ctx context.Context, work *environment, current *types.Bl
 	go func() {
 		select {
 		case <-timeoutTimer.C:
-			log.Info("Commit Interrupt. Pre-commiting the current block", "block", blockNumber)
+			log.Info("Commit Interrupt. Pre-committing the current block", "block", blockNumber)
 
 			close(interruptCh)
 		case <-ctx.Done(): // nothing to do
