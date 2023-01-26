@@ -7,6 +7,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
@@ -59,7 +60,8 @@ func ReadBorReceiptRLP(db ethdb.Reader, hash common.Hash, number uint64) rlp.Raw
 			return data
 		}
 	}
-	// Then try to look up the data in leveldb.
+
+	// Look up the data in leveldb.
 	data, _ = db.Get(borReceiptKey(number, hash))
 	if len(data) > 0 {
 		return data
@@ -101,7 +103,11 @@ func ReadRawBorReceipt(db ethdb.Reader, hash common.Hash, number uint64) *types.
 // ReadBorReceipt retrieves all the bor block receipts belonging to a block, including
 // its correspoinding metadata fields. If it is unable to populate these metadata
 // fields then nil is returned.
-func ReadBorReceipt(db ethdb.Reader, hash common.Hash, number uint64) *types.Receipt {
+func ReadBorReceipt(db ethdb.Reader, hash common.Hash, number uint64, config *params.ChainConfig) *types.Receipt {
+	if config != nil && config.Bor != nil && config.Bor.Sprint != nil && !config.Bor.IsSprintStart(number) {
+		return nil
+	}
+
 	// We're deriving many fields from the block body, retrieve beside the receipt
 	borReceipt := ReadRawBorReceipt(db, hash, number)
 	if borReceipt == nil {
@@ -114,8 +120,8 @@ func ReadBorReceipt(db ethdb.Reader, hash common.Hash, number uint64) *types.Rec
 		return nil
 	}
 
-	body := ReadBody(db, hash, number)
-	if body == nil {
+	body := HasBody(db, hash, number)
+	if !body {
 		log.Error("Missing body but have bor receipt", "hash", hash, "number", number)
 		return nil
 	}
