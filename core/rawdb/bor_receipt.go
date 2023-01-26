@@ -36,16 +36,25 @@ func borTxLookupKey(hash common.Hash) []byte {
 
 func ReadBorReceiptRLP(db ethdb.Reader, hash common.Hash, number uint64) rlp.RawValue {
 	var data []byte
-	db.ReadAncients(func(reader ethdb.AncientReader) error {
+
+	err := db.ReadAncients(func(reader ethdb.AncientReader) error {
 		// Check if the data is in ancients
 		if isCanon(reader, number, hash) {
 			data, _ = reader.Ancient(freezerBorReceiptTable, number)
+
 			return nil
 		}
+
 		// If not, try reading from leveldb
 		data, _ = db.Get(borReceiptKey(number, hash))
+
 		return nil
 	})
+
+	if err != nil {
+		log.Warn("during ReadBorReceiptRLP", "number", number, "hash", hash, "err", err)
+	}
+
 	return data
 }
 
