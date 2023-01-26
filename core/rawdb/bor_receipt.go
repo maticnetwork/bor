@@ -48,36 +48,19 @@ func HasBorReceipt(db ethdb.Reader, hash common.Hash, number uint64) bool {
 	return true
 }
 
-// ReadBorReceiptRLP retrieves the block receipt belonging to a block in RLP encoding.
 func ReadBorReceiptRLP(db ethdb.Reader, hash common.Hash, number uint64) rlp.RawValue {
-	// First try to look up the data in ancient database. Extra hash
-	// comparison is necessary since ancient database only maintains
-	// the canonical data.
-	data, _ := db.Ancient(freezerBorReceiptTable, number)
-	if len(data) > 0 {
-		h, _ := db.Ancient(freezerHashTable, number)
-		if common.BytesToHash(h) == hash {
-			return data
+	var data []byte
+	db.ReadAncients(func(reader ethdb.AncientReader) error {
+		// Check if the data is in ancients
+		if isCanon(reader, number, hash) {
+			data, _ = reader.Ancient(freezerBorReceiptTable, number)
+			return nil
 		}
-	}
-
-	// Then try to look up the data in leveldb.
-	data, _ = db.Get(borReceiptKey(number, hash))
-	if len(data) > 0 {
-		return data
-	}
-	// In the background freezer is moving data from leveldb to flatten files.
-	// So during the first check for ancient db, the data is not yet in there,
-	// but when we reach into leveldb, the data was already moved. That would
-	// result in a not found error.
-	data, _ = db.Ancient(freezerBorReceiptTable, number)
-	if len(data) > 0 {
-		h, _ := db.Ancient(freezerHashTable, number)
-		if common.BytesToHash(h) == hash {
-			return data
-		}
-	}
-	return nil // Can't find the data anywhere.
+		// If not, try reading from leveldb
+		data, _ = db.Get(borReceiptKey(number, hash))
+		return nil
+	})
+	return data
 }
 
 // ReadRawBorReceipt retrieves the block receipt belonging to a block.
@@ -120,8 +103,8 @@ func ReadBorReceipt(db ethdb.Reader, hash common.Hash, number uint64, config *pa
 		return nil
 	}
 
-	body := HasBody(db, hash, number)
-	if !body {
+	body := ReadBody(db, hash, number)
+	if body == nil {
 		log.Error("Missing body but have bor receipt", "hash", hash, "number", number)
 		return nil
 	}
