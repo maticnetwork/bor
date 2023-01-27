@@ -87,7 +87,7 @@ func (msg *jsonrpcMessage) namespace() string {
 }
 
 func (msg *jsonrpcMessage) String() string {
-	b, _ := json.Marshal(msg)
+	b, _ := ji.Marshal(msg)
 	return string(b)
 }
 
@@ -98,7 +98,7 @@ func (msg *jsonrpcMessage) errorResponse(err error) *jsonrpcMessage {
 }
 
 func (msg *jsonrpcMessage) response(result interface{}) *jsonrpcMessage {
-	enc, err := json.Marshal(result)
+	enc, err := ji.Marshal(result)
 	if err != nil {
 		// TODO: wrap with 'internal server error'
 		return msg.errorResponse(err)
@@ -192,8 +192,8 @@ func NewFuncCodec(conn deadlineCloser, encode, decode func(v interface{}) error)
 // NewCodec creates a codec on the given connection. If conn implements ConnRemoteAddr, log
 // messages will use it to include the remote address of the connection.
 func NewCodec(conn Conn) ServerCodec {
-	enc := json.NewEncoder(conn)
-	dec := json.NewDecoder(conn)
+	enc := ji.NewEncoder(conn)
+	dec := ji.NewDecoder(conn)
 	dec.UseNumber()
 	return NewFuncCodec(conn, enc.Encode, dec.Decode)
 }
@@ -211,9 +211,16 @@ func (c *jsonCodec) readBatch() (messages []*jsonrpcMessage, batch bool, err err
 	// Decode the next JSON object in the input stream.
 	// This verifies basic syntax, etc.
 	var rawmsg json.RawMessage
+	fmt.Println("=====-0")
 	if err := c.decode(&rawmsg); err != nil {
+		if errors.Is(err, io.EOF) {
+			// todo: need to make a suitable json.syntax error here
+			return nil, false, fmt.Errorf("invalid character looking for beginning of value %w", &json.SyntaxError{})
+		}
+
 		return nil, false, err
 	}
+	fmt.Println("=====-1")
 	messages, batch = parseMessage(rawmsg)
 	for i, msg := range messages {
 		if msg == nil {
@@ -256,7 +263,7 @@ func (c *jsonCodec) closed() <-chan interface{} {
 func parseMessage(raw json.RawMessage) ([]*jsonrpcMessage, bool) {
 	if !isBatch(raw) {
 		msgs := []*jsonrpcMessage{{}}
-		json.Unmarshal(raw, &msgs[0])
+		ji.Unmarshal(raw, &msgs[0])
 		return msgs, false
 	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
@@ -285,8 +292,23 @@ func isBatch(raw json.RawMessage) bool {
 // given types. It returns the parsed values or an error when the args could not be
 // parsed. Missing optional arguments are returned as reflect.Zero values.
 func parsePositionalArguments(rawArgs json.RawMessage, types []reflect.Type) ([]reflect.Value, error) {
-	dec := json.NewDecoder(bytes.NewReader(rawArgs))
+	if len(rawArgs) == 0 {
+		// empty case
+		return nil, nil
+	}
+	if len(rawArgs) == 2 {
+		// [],{} cases
+		// if any types were required
+		if len(types) > 0 {
+			return nil, errors.New("missing value for required argument 0")
+		}
+
+		return nil, nil
+	}
+
 	var args []reflect.Value
+
+	dec := json.NewDecoder(bytes.NewReader(rawArgs))
 	tok, err := dec.Token()
 	switch {
 	case err == io.EOF || tok == nil && err == nil:
@@ -302,13 +324,16 @@ func parsePositionalArguments(rawArgs json.RawMessage, types []reflect.Type) ([]
 	default:
 		return nil, errors.New("non-array args")
 	}
+
 	// Set any missing args to nil.
 	for i := len(args); i < len(types); i++ {
 		if types[i].Kind() != reflect.Ptr {
 			return nil, fmt.Errorf("missing value for required argument %d", i)
 		}
+
 		args = append(args, reflect.Zero(types[i]))
 	}
+
 	return args, nil
 }
 

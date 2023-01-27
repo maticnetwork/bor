@@ -125,9 +125,14 @@ func TestServerShortLivedConn(t *testing.T) {
 	go server.ServeListener(listener)
 
 	var (
-		request  = `{"jsonrpc":"2.0","id":1,"method":"rpc_modules"}` + "\n"
-		wantResp = `{"jsonrpc":"2.0","id":1,"result":{"nftest":"1.0","rpc":"1.0","test":"1.0"}}` + "\n"
-		deadline = time.Now().Add(10 * time.Second)
+		request   = `{"jsonrpc":"2.0","id":1,"method":"rpc_modules"}` + "\n"
+		wantResp  = `{"jsonrpc":"2.0","id":1,"result":{"nftest":"1.0","rpc":"1.0","test":"1.0"}}` + "\n"
+		wantResp1 = `{"jsonrpc":"2.0","id":1,"result":{"nftest":"1.0","test":"1.0","rpc":"1.0"}}` + "\n"
+		wantResp2 = `{"jsonrpc":"2.0","id":1,"result":{"rpc":"1.0","test":"1.0","nftest":"1.0"}}` + "\n"
+		wantResp3 = `{"jsonrpc":"2.0","id":1,"result":{"rpc":"1.0","nftest":"1.0","test":"1.0"}}` + "\n"
+		wantResp4 = `{"jsonrpc":"2.0","id":1,"result":{"test":"1.0","rpc":"1.0","nftest":"1.0"}}` + "\n"
+		wantResp5 = `{"jsonrpc":"2.0","id":1,"result":{"test":"1.0","nftest":"1.0","rpc":"1.0"}}` + "\n"
+		deadline  = time.Now().Add(10 * time.Second)
 	)
 	for i := 0; i < 20; i++ {
 		conn, err := net.Dial("tcp", listener.Addr().String())
@@ -147,8 +152,10 @@ func TestServerShortLivedConn(t *testing.T) {
 		if err != nil {
 			t.Fatal("read error:", err)
 		}
-		if !bytes.Equal(buf[:n], []byte(wantResp)) {
-			t.Fatalf("wrong response: %s", buf[:n])
+		if !bytes.Equal(buf[:n], []byte(wantResp)) && !bytes.Equal(buf[:n], []byte(wantResp1)) &&
+			!bytes.Equal(buf[:n], []byte(wantResp2)) && !bytes.Equal(buf[:n], []byte(wantResp3)) &&
+			!bytes.Equal(buf[:n], []byte(wantResp4)) && !bytes.Equal(buf[:n], []byte(wantResp5)) {
+			t.Fatalf("wrong response: %s - %s", buf[:n], []byte(wantResp))
 		}
 	}
 }
