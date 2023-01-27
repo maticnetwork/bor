@@ -24,6 +24,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -193,6 +194,7 @@ func (s londonSigner) Sender(tx *Transaction) (common.Address, error) {
 	if tx.ChainId().Cmp(s.chainId) != 0 {
 		return common.Address{}, ErrInvalidChainId
 	}
+	log.Info("TX TYPE in londonSigner", "type", tx.Type())
 	return recoverPlain(s.Hash(tx), R, S, V, true)
 }
 
@@ -262,6 +264,7 @@ func (s eip2930Signer) Sender(tx *Transaction) (common.Address, error) {
 			return HomesteadSigner{}.Sender(tx)
 		}
 		V = new(big.Int).Sub(V, s.chainIdMul)
+		//V = new(big.Int).Sub(V, tx.inner.chainID().Mul(tx.ChainId(), big.NewInt(2)))
 		V.Sub(V, big8)
 	case AccessListTxType:
 		// AL txs are defined to use 0 and 1 as their recovery
@@ -273,7 +276,11 @@ func (s eip2930Signer) Sender(tx *Transaction) (common.Address, error) {
 	if tx.ChainId().Cmp(s.chainId) != 0 {
 		return common.Address{}, ErrInvalidChainId
 	}
+	log.Info("TX TYPE in eip2930Signer", "type", tx.Type())
+	// return recoverPlain(s.Hash(tx), R, S, V, true)
+
 	return recoverPlain(s.Hash(tx), R, S, V, true)
+
 }
 
 func (s eip2930Signer) SignatureValues(tx *Transaction, sig []byte) (R, S, V *big.Int, err error) {
@@ -307,12 +314,14 @@ func (s eip2930Signer) Hash(tx *Transaction) common.Hash {
 			tx.Value(),
 			tx.Data(),
 			s.chainId, uint(0), uint(0),
+			//tx.ChainId(), uint(0), uint(0),
 		})
 	case AccessListTxType:
 		return prefixedRlpHash(
 			tx.Type(),
 			[]interface{}{
-				s.chainId,
+				//s.chainId,
+				tx.ChainId(),
 				tx.Nonce(),
 				tx.GasPrice(),
 				tx.Gas(),
@@ -370,6 +379,7 @@ func (s EIP155Signer) Sender(tx *Transaction) (common.Address, error) {
 	V, R, S := tx.RawSignatureValues()
 	V = new(big.Int).Sub(V, s.chainIdMul)
 	V.Sub(V, big8)
+	log.Info("TX TYPE in EIP155Signer", "type", tx.Type())
 	return recoverPlain(s.Hash(tx), R, S, V, true)
 }
 
@@ -425,6 +435,7 @@ func (hs HomesteadSigner) Sender(tx *Transaction) (common.Address, error) {
 		return common.Address{}, ErrTxTypeNotSupported
 	}
 	v, r, s := tx.RawSignatureValues()
+	log.Info("TX TYPE in HomesteadSigner", "type", tx.Type())
 	return recoverPlain(hs.Hash(tx), r, s, v, true)
 }
 
@@ -444,6 +455,7 @@ func (fs FrontierSigner) Sender(tx *Transaction) (common.Address, error) {
 		return common.Address{}, ErrTxTypeNotSupported
 	}
 	v, r, s := tx.RawSignatureValues()
+	log.Info("TX TYPE in FrontierSigner", "type", tx.Type())
 	return recoverPlain(fs.Hash(tx), r, s, v, false)
 }
 
@@ -470,7 +482,6 @@ func (fs FrontierSigner) Hash(tx *Transaction) common.Hash {
 	})
 }
 
-// FakeSigner implements the Signer interface and accepts unprotected transactions
 type FakeSigner struct{ londonSigner }
 
 var _ Signer = FakeSigner{}
@@ -478,26 +489,92 @@ var _ Signer = FakeSigner{}
 func NewFakeSigner(chainId *big.Int) Signer {
 	signer := NewLondonSigner(chainId)
 	ls, _ := signer.(londonSigner)
-
 	return FakeSigner{londonSigner: ls}
 }
 
 func (f FakeSigner) Sender(tx *Transaction) (common.Address, error) {
 	return f.londonSigner.Sender(tx)
+	// V, R, S := tx.RawSignatureValues()
+	// if tx.Type() == DynamicFeeTxType || tx.Type() == AccessListTxType {
+	// 	V = new(big.Int).Add(V, big.NewInt(27))
+	// }
+	// if tx.Type() == LegacyTxType {
+	// 	if !tx.Protected() {
+	// 		return HomesteadSigner{}.Sender(tx)
+	// 	}
+	// 	// Using chain Id of the chain on which the tx was sent
+	// 	V = new(big.Int).Sub(V, tx.inner.chainID().Mul(tx.ChainId(), big.NewInt(2)))
+	// 	V.Sub(V, big8)
+	// }
+
+	// return recoverPlain(f.Hash(tx), R, S, V, true)
 }
 
 func (f FakeSigner) SignatureValues(tx *Transaction, sig []byte) (r, s, v *big.Int, err error) {
 	return f.londonSigner.SignatureValues(tx, sig)
+	// ls := NewLondonSigner(tx.ChainId())
+	// return ls.SignatureValues(tx, sig)
 }
 
 func (f FakeSigner) ChainID() *big.Int {
 	return f.londonSigner.ChainID()
+	// return nil
 }
 
 // Hash returns 'signature hash', i.e. the transaction hash that is signed by the
 // private key. This hash does not uniquely identify the transaction.
 func (f FakeSigner) Hash(tx *Transaction) common.Hash {
+
 	return f.londonSigner.Hash(tx)
+	// switch tx.Type() {
+
+	// case DynamicFeeTxType:
+	// 	// Using chain Id of the chain on which the tx was sent
+	// 	return prefixedRlpHash(
+	// 		tx.Type(),
+	// 		[]interface{}{
+	// 			tx.ChainId(),
+	// 			tx.Nonce(),
+	// 			tx.GasTipCap(),
+	// 			tx.GasFeeCap(),
+	// 			tx.Gas(),
+	// 			tx.To(),
+	// 			tx.Value(),
+	// 			tx.Data(),
+	// 			tx.AccessList(),
+	// 		})
+
+	// case LegacyTxType:
+	// 	return rlpHash([]interface{}{
+	// 		tx.Nonce(),
+	// 		tx.GasPrice(),
+	// 		tx.Gas(),
+	// 		tx.To(),
+	// 		tx.Value(),
+	// 		tx.Data(),
+	// 		tx.ChainId(), uint(0), uint(0),
+	// 	})
+
+	// case AccessListTxType:
+	// 	return prefixedRlpHash(
+	// 		tx.Type(),
+	// 		[]interface{}{
+	// 			tx.ChainId(),
+	// 			tx.Nonce(),
+	// 			tx.GasPrice(),
+	// 			tx.Gas(),
+	// 			tx.To(),
+	// 			tx.Value(),
+	// 			tx.Data(),
+	// 			tx.AccessList(),
+	// 		})
+	// default:
+	// 	// This _should_ not happen, but in case someone sends in a bad
+	// 	// json struct via RPC, it's probably more prudent to return an
+	// 	// empty hash instead of killing the node with a panic
+	// 	//panic("Unsupported transaction type: %d", tx.typ)
+	// 	return common.Hash{}
+	// }
 }
 
 // Equal returns true if the given signer is the same as the receiver.
@@ -540,6 +617,7 @@ func recoverPlain(sighash common.Hash, R, S, Vb *big.Int, homestead bool) (commo
 	}
 	var addr common.Address
 	copy(addr[:], crypto.Keccak256(pub[1:])[12:])
+	// log.Info("DERIVED SENDER ADDR in recoverPlain!!!", "from", addr)
 	return addr, nil
 }
 

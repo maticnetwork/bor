@@ -778,14 +778,20 @@ func (pool *TxPool) validateTx(tx *types.Transaction, local bool) error {
 
 	// Ensure the transaction adheres to nonce ordering
 	if pool.currentState.GetNonce(from) > tx.Nonce() {
-		return ErrNonceTooLow
+		// Ignore if unprotected txs are allowed
+		if pool.config.AllowUnprotectedTxs {
+			pool.currentState.SetNonce(from, tx.Nonce()-1)
+		} else {
+			return ErrNonceTooLow
+		}
+
 	}
 
 	// Transactor should have enough funds to cover the costs
 	// cost == V + GP * GL
-	if pool.currentState.GetBalance(from).Cmp(tx.Cost()) < 0 {
-		return ErrInsufficientFunds
-	}
+	// if pool.currentState.GetBalance(from).Cmp(tx.Cost()) < 0 {
+	// 	return ErrInsufficientFunds
+	// }
 
 	// Ensure the transaction has more gas than the basic tx fee.
 	intrGas, err := IntrinsicGas(tx.Data(), tx.AccessList(), tx.To() == nil, true, pool.istanbul)
@@ -918,7 +924,7 @@ func (pool *TxPool) add(tx *types.Transaction, local bool) (replaced bool, err e
 	}
 	pool.journalTx(from, tx)
 
-	log.Trace("Pooled new future transaction", "hash", hash, "from", from, "to", tx.To())
+	log.Info("Pooled new future transaction", "hash", hash, "from", from, "to", tx.To())
 	return replaced, nil
 }
 
@@ -1159,7 +1165,6 @@ func (pool *TxPool) addTx(tx *types.Transaction, local, sync bool) error {
 		if pool.config.AllowUnprotectedTxs {
 			pool.signer = types.NewFakeSigner(tx.ChainId())
 		}
-
 		_, err = types.Sender(pool.signer, tx)
 		if err != nil {
 			invalidTxMeter.Mark(1)
@@ -1555,7 +1560,9 @@ func (pool *TxPool) runReorg(ctx context.Context, done chan struct{}, reset *txp
 			tracing.ElapsedTime(ctx, span, "new block", func(_ context.Context, innerSpan trace.Span) {
 
 				tracing.ElapsedTime(ctx, innerSpan, "06 demoteUnexecutables", func(_ context.Context, _ trace.Span) {
-					pool.demoteUnexecutables()
+					if !pool.config.AllowUnprotectedTxs {
+						pool.demoteUnexecutables()
+					}
 				})
 
 				var nonces map[common.Address]uint64
@@ -1754,6 +1761,12 @@ func (pool *TxPool) promoteExecutables(accounts []common.Address) []*types.Trans
 	// Iterate over all accounts and promote any executable transactions
 	for _, addr := range accounts {
 		list = pool.queue[addr]
+
+		// log.Info("*** ACCOUNT LIST ****", "list", list.txs.items, "INDEX", list.txs.index.Len(), "ADDR", addr)
+		for _, v := range list.txs.items {
+			log.Info("TX HASH", v.Hash().String())
+		}
+
 		if list == nil {
 			continue // Just in case someone calls with a non existing account
 		}
@@ -1767,24 +1780,28 @@ func (pool *TxPool) promoteExecutables(accounts []common.Address) []*types.Trans
 			pool.all.Remove(hash)
 		}
 
-		log.Trace("Removed old queued transactions", "count", forwardsLen)
+		log.Info("Removed old queued transactions", "count", forwardsLen)
 
 		// Drop all transactions that are too costly (low balance or out of gas)
-		balance.SetFromBig(pool.currentState.GetBalance(addr))
+		if !pool.config.AllowUnprotectedTxs {
+			balance.SetFromBig(pool.currentState.GetBalance(addr))
 
-		drops, _ = list.Filter(balance, pool.currentMaxGas)
-		dropsLen = len(drops)
+			drops, _ = list.Filter(balance, pool.currentMaxGas)
+			dropsLen = len(drops)
 
-		for _, tx := range drops {
-			hash = tx.Hash()
-			pool.all.Remove(hash)
+			for _, tx := range drops {
+				hash = tx.Hash()
+				pool.all.Remove(hash)
+			}
+
+			log.Info("Removed unpayable queued transactions", "count", dropsLen)
+			queuedNofundsMeter.Mark(int64(dropsLen))
 		}
 
-		log.Trace("Removed unpayable queued transactions", "count", dropsLen)
-		queuedNofundsMeter.Mark(int64(dropsLen))
-
 		// Gather all executable transactions and promote them
-		readies = list.Ready(pool.pendingNonces.get(addr))
+		// log.Info("NONCE RETURNED", "nonce", pool.pendingNonces.get(addr), "actual", (*list.txs.index)[0])
+		readies = list.Ready((*list.txs.index)[0])
+		// log.Info("***** READIES *****", "readies", readies)
 		readiesLen = len(readies)
 
 		for _, tx := range readies {
@@ -1794,7 +1811,8 @@ func (pool *TxPool) promoteExecutables(accounts []common.Address) []*types.Trans
 			}
 		}
 
-		log.Trace("Promoted queued transactions", "count", promotedLen)
+		promotedLen = len(promoted)
+		log.Info("Promoted queued transactions", "count", promotedLen)
 		queuedGauge.Dec(int64(readiesLen))
 
 		// Drop all transactions over the allowed limit
@@ -1806,7 +1824,7 @@ func (pool *TxPool) promoteExecutables(accounts []common.Address) []*types.Trans
 				hash = tx.Hash()
 				pool.all.Remove(hash)
 
-				log.Trace("Removed cap-exceeding queued transaction", "hash", hash)
+				log.Info("Removed cap-exceeding queued transaction", "hash", hash)
 			}
 
 			queuedRateLimitMeter.Mark(int64(capsLen))

@@ -29,6 +29,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	cmath "github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 // nonceHeap is a heap.Interface implementation over 64bit unsigned integers for
@@ -273,7 +274,9 @@ func (m *txSortedMap) Ready(start uint64) types.Transactions {
 	defer m.m.Unlock()
 
 	// Short circuit if no transactions are available
+	log.Info("INDEX LENGTH", "index", m.index.Len(), "starting nonce", (*m.index)[0])
 	if m.index.Len() == 0 || (*m.index)[0] > start {
+		log.Info("RETURN FROM HERE!")
 		return nil
 	}
 
