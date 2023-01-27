@@ -1573,7 +1573,9 @@ func (pool *TxPool) runReorg(ctx context.Context, done chan struct{}, reset *txp
 				tracing.ElapsedTime(ctx, innerSpan, "09 fill nonces", func(_ context.Context, innerSpan trace.Span) {
 					for addr, list := range pool.pending {
 						highestPending = list.LastElement()
-						nonces[addr] = highestPending.Nonce() + 1
+						if highestPending != nil {
+							nonces[addr] = highestPending.Nonce() + 1
+						}
 					}
 				})
 
