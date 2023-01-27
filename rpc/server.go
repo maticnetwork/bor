@@ -18,7 +18,6 @@ package rpc
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"sync/atomic"
 
@@ -104,18 +103,15 @@ func (s *Server) serveSingleRequest(ctx context.Context, codec ServerCodec) {
 	h.allowSubscribe = false
 	defer h.close(io.EOF, nil)
 
-	fmt.Println("=====- -1")
 	reqs, batch, err := codec.readBatch()
 	if err != nil {
-		fmt.Println("=====-3")
 		if err != io.EOF {
-			fmt.Println("=====-4")
 			codec.writeJSON(ctx, errorMessage(&invalidMessageError{"parse error"}))
 		}
-		fmt.Println("=====-5")
+
 		return
 	}
-	fmt.Println("=====-6")
+
 	if batch {
 		h.handleBatch(reqs)
 	} else {

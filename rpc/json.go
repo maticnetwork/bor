@@ -211,7 +211,6 @@ func (c *jsonCodec) readBatch() (messages []*jsonrpcMessage, batch bool, err err
 	// Decode the next JSON object in the input stream.
 	// This verifies basic syntax, etc.
 	var rawmsg json.RawMessage
-	fmt.Println("=====-0")
 	if err := c.decode(&rawmsg); err != nil {
 		if errors.Is(err, io.EOF) {
 			// todo: need to make a suitable json.syntax error here
@@ -220,7 +219,6 @@ func (c *jsonCodec) readBatch() (messages []*jsonrpcMessage, batch bool, err err
 
 		return nil, false, err
 	}
-	fmt.Println("=====-1")
 	messages, batch = parseMessage(rawmsg)
 	for i, msg := range messages {
 		if msg == nil {
