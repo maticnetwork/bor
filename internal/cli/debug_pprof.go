@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"strings"
 
-	empty "google.golang.org/protobuf/types/known/emptypb"
-
 	"github.com/ethereum/go-ethereum/internal/cli/flagset"
 	"github.com/ethereum/go-ethereum/internal/cli/server/proto"
 )
@@ -133,7 +131,7 @@ func (d *DebugPprofCommand) Run(args []string) int {
 
 	// append the status
 	{
-		statusResp, err := clt.Status(ctx, &empty.Empty{})
+		statusResp, err := clt.Status(ctx, &proto.StatusRequest{})
 		if err != nil {
 			d.UI.Output(fmt.Sprintf("Failed to get status: %v", err))
 			return 1
