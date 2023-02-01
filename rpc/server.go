@@ -104,7 +104,9 @@ func (s *Server) serveSingleRequest(ctx context.Context, codec ServerCodec) {
 	if s.maxConReq > 0 {
 		if s.reqCount > s.maxConReq { //if maxConReq is 0, then no limit
 			maxConcReqDiscardedTxs.Inc(1)
+			// nolint: errcheck
 			codec.writeJSON(ctx, errorMessage(&invalidMessageError{"too many requests"}))
+
 			return
 		} else {
 			atomic.AddInt64(&s.reqCount, 1)
