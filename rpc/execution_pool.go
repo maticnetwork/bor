@@ -15,11 +15,10 @@ const (
 var execPool atomic.Pointer[workerpool.WorkerPool]
 
 func init() {
-	execPool.Store(workerpool.New(threads))
+	changePoolSize(threads)
 }
 
 func changePoolSize(n int) {
-	newPool := workerpool.New(n)
 	oldPool := execPool.Load()
 
 	if oldPool != nil {
@@ -28,7 +27,7 @@ func changePoolSize(n int) {
 		}()
 	}
 
-	execPool.Store(newPool)
+	execPool.Store(workerpool.New(n))
 }
 
 func Run(runFn func()) {
