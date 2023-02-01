@@ -23,10 +23,14 @@ import (
 
 	mapset "github.com/deckarep/golang-set"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/metrics"
 )
 
 const MetadataApi = "rpc"
 const EngineApi = "engine"
+
+// metrics to count the number of requests discarded through ratelimiting ( through maxconreq param )
+var maxConcReqDiscardedTxs = metrics.NewRegisteredCounter("rpc/maxConcReqDiscardedTxs", nil)
 
 // CodecOption specifies which type of messages a codec supports.
 //
@@ -99,6 +103,7 @@ func (s *Server) serveSingleRequest(ctx context.Context, codec ServerCodec) {
 
 	if s.maxConReq > 0 {
 		if s.reqCount > s.maxConReq { //if maxConReq is 0, then no limit
+			maxConcReqDiscardedTxs.Inc(1)
 			codec.writeJSON(ctx, errorMessage(&invalidMessageError{"too many requests"}))
 			return
 		} else {
