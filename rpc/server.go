@@ -50,14 +50,14 @@ type Server struct {
 	services  serviceRegistry
 	idgen     func() ID
 	run       int32
-	reqCount  int64
+	reqCount  atomic.Int64
 	codecs    mapset.Set
 	maxConReq int64 //maximum concurrent requests to be handled by the server. 0 means no limit
 }
 
 // NewServer creates a new server instance with no registered handlers. maxConcurrentReq is the maximum number of concurrent requests to be handled by the server. 0 means no limit.
 func NewServer(maxConcurrentReq uint64) *Server {
-	server := &Server{idgen: randomIDGenerator(), codecs: mapset.NewSet(), run: 1, reqCount: 0, maxConReq: int64(maxConcurrentReq)}
+	server := &Server{idgen: randomIDGenerator(), codecs: mapset.NewSet(), run: 1, maxConReq: int64(maxConcurrentReq)}
 
 	// Register the default service providing meta information about the RPC service such
 	// as the services and methods it offers.
@@ -102,16 +102,16 @@ func (s *Server) ServeCodec(codec ServerCodec, options CodecOption) {
 func (s *Server) serveSingleRequest(ctx context.Context, codec ServerCodec) {
 
 	if s.maxConReq > 0 {
-		if s.reqCount > s.maxConReq { //if maxConReq is 0, then no limit
+		if s.reqCount.Load() > s.maxConReq { //if maxConReq is 0, then no limit
 			maxConcReqDiscardedTxs.Inc(1)
-			log.Warn("RPC server ratelimiting", "Concurrent Reqs", s.reqCount, "MaxConcurrentReqs", s.maxConReq)
+			log.Warn("RPC server ratelimiting", "Concurrent Reqs", s.reqCount.Load(), "MaxConcurrentReqs", s.maxConReq)
 			// nolint: errcheck
 			codec.writeJSON(ctx, errorMessage(&invalidMessageError{"too many requests"}))
 
 			return
 		} else {
-			atomic.AddInt64(&s.reqCount, 1)
-			defer atomic.AddInt64(&s.reqCount, -1)
+			s.reqCount.Add(1)
+			defer s.reqCount.Add(-1)
 		}
 	}
 
