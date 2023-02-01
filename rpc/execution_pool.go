@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"context"
+	"sync/atomic"
 
 	"github.com/JekaMas/workerpool"
 )
@@ -11,7 +12,21 @@ const (
 	requestTimeout = 0 //10 * time.Second
 )
 
-var execPool = workerpool.New(threads)
+var execPool atomic.Pointer[workerpool.WorkerPool]
+
+func init() {
+	execPool.Store(workerpool.New(threads))
+}
+
+func changePoolSize(n int) {
+
+	newPool := workerpool.New(n)
+	oldPool := execPool.Load()
+
+	go oldPool.StopWait()
+
+	execPool.Store(newPool)
+}
 
 func Run(runFn func()) {
 	fn := func() error {
@@ -23,8 +38,8 @@ func Run(runFn func()) {
 	ctx := context.Background()
 
 	if requestTimeout > 0 {
-		execPool.Submit(ctx, fn, requestTimeout)
+		execPool.Load().Submit(ctx, fn, requestTimeout)
 	} else {
-		execPool.Submit(ctx, fn)
+		execPool.Load().Submit(ctx, fn)
 	}
 }

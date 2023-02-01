@@ -34,21 +34,20 @@ import (
 //
 // The entry points for incoming messages are:
 //
-//    h.handleMsg(message)
-//    h.handleBatch(message)
+//	h.handleMsg(message)
+//	h.handleBatch(message)
 //
 // Outgoing calls use the requestOp struct. Register the request before sending it
 // on the connection:
 //
-//    op := &requestOp{ids: ...}
-//    h.addRequestOp(op)
+//	op := &requestOp{ids: ...}
+//	h.addRequestOp(op)
 //
 // Now send the request, then wait for the reply to be delivered through handleMsg:
 //
-//    if err := op.wait(...); err != nil {
-//        h.removeRequestOp(op) // timeout, etc.
-//    }
-//
+//	if err := op.wait(...); err != nil {
+//	    h.removeRequestOp(op) // timeout, etc.
+//	}
 type handler struct {
 	reg            *serviceRegistry
 	unsubscribeCb  *callback
@@ -222,7 +221,7 @@ func (h *handler) startCallProc(fn func(*callProc)) {
 
 	ctx, cancel := context.WithCancel(h.rootCtx)
 
-	execPool.Submit(context.Background(), func() error {
+	execPool.Load().Submit(context.Background(), func() error {
 		defer h.callWG.Done()
 		defer cancel()
 		fn(&callProc{ctx: ctx})
@@ -285,7 +284,7 @@ func (h *handler) handleResponse(msg *jsonrpcMessage) {
 		return
 	}
 	if op.err = json.Unmarshal(msg.Result, &op.sub.subid); op.err == nil {
-		execPool.Submit(context.Background(), func() error {
+		execPool.Load().Submit(context.Background(), func() error {
 			op.sub.run()
 			return nil
 		}, requestTimeout)
