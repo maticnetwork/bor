@@ -139,6 +139,9 @@ type Config struct {
 	// HTTPPathPrefix specifies a path prefix on which http-rpc is to be served.
 	HTTPPathPrefix string `toml:",omitempty"`
 
+	// HTTPMaxConcurrentRequests is the maximum number of concurrent HTTP requests. 0 means no limit.
+	HTTPMaxConcurrentRequests uint64 `toml:",omitempty"`
+
 	// AuthAddr is the listening address on which authenticated APIs are provided.
 	AuthAddr string `toml:",omitempty"`
 
@@ -160,6 +163,9 @@ type Config struct {
 
 	// WSPathPrefix specifies a path prefix on which ws-rpc is to be served.
 	WSPathPrefix string `toml:",omitempty"`
+
+	// WSMaxConcurrentRequests is the maximum number of concurrent websocket requests. 0 means no limit.
+	WSMaxConcurrentRequests uint64 `toml:",omitempty"`
 
 	// WSOrigins is the list of domain to accept websocket requests from. Please be
 	// aware that the server can only act upon the HTTP request the client sends and

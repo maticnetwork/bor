@@ -444,6 +444,13 @@ func (c *Command) Flags() *flagset.Flagset {
 		Default: c.cliConfig.JsonRPC.Http.API,
 		Group:   "JsonRPC",
 	})
+	f.Uint64Flag(&flagset.Uint64Flag{
+		Name:    "http.maxconcreq",
+		Usage:   "HTTP-RPC max concurrent requests",
+		Value:   &c.cliConfig.JsonRPC.Http.MaxConcurrentRequests,
+		Default: c.cliConfig.JsonRPC.Http.MaxConcurrentRequests,
+		Group:   "JsonRPC",
+	})
 
 	// ws options
 	f.BoolFlag(&flagset.BoolFlag{
@@ -479,6 +486,13 @@ func (c *Command) Flags() *flagset.Flagset {
 		Usage:   "API's offered over the WS-RPC interface",
 		Value:   &c.cliConfig.JsonRPC.Ws.API,
 		Default: c.cliConfig.JsonRPC.Ws.API,
+		Group:   "JsonRPC",
+	})
+	f.Uint64Flag(&flagset.Uint64Flag{
+		Name:    "ws.maxconcreq",
+		Usage:   "WS-RPC max concurrent requests",
+		Value:   &c.cliConfig.JsonRPC.Ws.MaxConcurrentRequests,
+		Default: c.cliConfig.JsonRPC.Ws.MaxConcurrentRequests,
 		Group:   "JsonRPC",
 	})
 

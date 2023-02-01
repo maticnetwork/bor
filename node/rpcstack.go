@@ -42,14 +42,16 @@ type httpConfig struct {
 	Vhosts             []string
 	prefix             string // path prefix on which to mount http handler
 	jwtSecret          []byte // optional JWT secret
+	maxConcReq         uint64 // maximum number of concurrent requests
 }
 
 // wsConfig is the JSON-RPC/Websocket configuration
 type wsConfig struct {
-	Origins   []string
-	Modules   []string
-	prefix    string // path prefix on which to mount ws handler
-	jwtSecret []byte // optional JWT secret
+	Origins    []string
+	Modules    []string
+	prefix     string // path prefix on which to mount ws handler
+	jwtSecret  []byte // optional JWT secret
+	maxConcReq uint64 // maximum number of concurrent requests
 }
 
 type rpcHandler struct {
@@ -282,7 +284,7 @@ func (h *httpServer) enableRPC(apis []rpc.API, config httpConfig) error {
 	}
 
 	// Create RPC server and handler.
-	srv := rpc.NewServer()
+	srv := rpc.NewServer(config.maxConcReq)
 	if err := RegisterApis(apis, config.Modules, srv, false); err != nil {
 		return err
 	}
@@ -313,7 +315,7 @@ func (h *httpServer) enableWS(apis []rpc.API, config wsConfig) error {
 		return fmt.Errorf("JSON-RPC over WebSocket is already enabled")
 	}
 	// Create RPC server and handler.
-	srv := rpc.NewServer()
+	srv := rpc.NewServer(config.maxConcReq)
 	if err := RegisterApis(apis, config.Modules, srv, false); err != nil {
 		return err
 	}

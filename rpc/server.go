@@ -43,15 +43,18 @@ const (
 
 // Server is an RPC server.
 type Server struct {
-	services serviceRegistry
-	idgen    func() ID
-	run      int32
-	codecs   mapset.Set
+	services  serviceRegistry
+	idgen     func() ID
+	run       int32
+	reqCount  int64
+	codecs    mapset.Set
+	maxConReq int64 //maximum concurrent requests to be handled by the server. 0 means no limit
 }
 
-// NewServer creates a new server instance with no registered handlers.
-func NewServer() *Server {
-	server := &Server{idgen: randomIDGenerator(), codecs: mapset.NewSet(), run: 1}
+// NewServer creates a new server instance with no registered handlers. maxConcurrentReq is the maximum number of concurrent requests to be handled by the server. 0 means no limit.
+func NewServer(maxConcurrentReq uint64) *Server {
+	server := &Server{idgen: randomIDGenerator(), codecs: mapset.NewSet(), run: 1, reqCount: 0, maxConReq: int64(maxConcurrentReq)}
+
 	// Register the default service providing meta information about the RPC service such
 	// as the services and methods it offers.
 	rpcService := &RPCService{server}
@@ -93,6 +96,14 @@ func (s *Server) ServeCodec(codec ServerCodec, options CodecOption) {
 // is used to serve HTTP connections. Subscriptions and reverse calls are not allowed in
 // this mode.
 func (s *Server) serveSingleRequest(ctx context.Context, codec ServerCodec) {
+
+	// TODO @0xsharma : remove debug logs.
+	log.Info("####", "serveSingleRequest : number", s.reqCount, "maxConReq", s.maxConReq)
+	if s.maxConReq > 0 && s.reqCount > s.maxConReq { //if maxConReq is 0, then no limit
+		log.Warn("####", "serveSingleRequest : too many", s.reqCount)
+		codec.writeJSON(ctx, errorMessage(&invalidMessageError{"too many requests"}))
+		return
+	}
 	// Don't serve if server is stopped.
 	if atomic.LoadInt32(&s.run) == 0 {
 		return
@@ -109,6 +120,13 @@ func (s *Server) serveSingleRequest(ctx context.Context, codec ServerCodec) {
 		}
 		return
 	}
+	if s.maxConReq > 0 { //if maxConReq is 0, then no limit
+		reqLen := int64((len(reqs)))
+
+		atomic.AddInt64(&s.reqCount, reqLen)
+		defer atomic.AddInt64(&s.reqCount, -reqLen)
+	}
+
 	if batch {
 		h.handleBatch(reqs)
 	} else {

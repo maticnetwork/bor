@@ -105,7 +105,7 @@ func New(conf *Config) (*Node, error) {
 
 	node := &Node{
 		config:        conf,
-		inprocHandler: rpc.NewServer(),
+		inprocHandler: rpc.NewServer(0),
 		eventmux:      new(event.TypeMux),
 		log:           conf.Logger,
 		stop:          make(chan struct{}),
@@ -406,6 +406,7 @@ func (n *Node) startRPC() error {
 			Vhosts:             n.config.HTTPVirtualHosts,
 			Modules:            n.config.HTTPModules,
 			prefix:             n.config.HTTPPathPrefix,
+			maxConcReq:         n.config.HTTPMaxConcurrentRequests,
 		}); err != nil {
 			return err
 		}
@@ -419,9 +420,10 @@ func (n *Node) startRPC() error {
 			return err
 		}
 		if err := server.enableWS(n.rpcAPIs, wsConfig{
-			Modules: n.config.WSModules,
-			Origins: n.config.WSOrigins,
-			prefix:  n.config.WSPathPrefix,
+			Modules:    n.config.WSModules,
+			Origins:    n.config.WSOrigins,
+			prefix:     n.config.WSPathPrefix,
+			maxConcReq: n.config.WSMaxConcurrentRequests,
 		}); err != nil {
 			return err
 		}

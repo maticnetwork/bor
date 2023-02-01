@@ -282,6 +282,9 @@ type APIConfig struct {
 
 	// Origins is the list of endpoints to accept requests from (only consumed for websockets)
 	Origins []string `hcl:"origins,optional" toml:"origins,optional"`
+
+	// MaxConcRequests is the maximum number of concurrent requests. 0 means unlimited
+	MaxConcurrentRequests uint64 `hcl:"maxconcurrentrequests,optional" toml:"maxconcurrentrequests,optional"`
 }
 
 // Used from rpc.HTTPTimeouts
@@ -506,21 +509,23 @@ func DefaultConfig() *Config {
 			GasCap:     ethconfig.Defaults.RPCGasCap,
 			TxFeeCap:   ethconfig.Defaults.RPCTxFeeCap,
 			Http: &APIConfig{
-				Enabled: false,
-				Port:    8545,
-				Prefix:  "",
-				Host:    "localhost",
-				API:     []string{"eth", "net", "web3", "txpool", "bor"},
-				Cors:    []string{"localhost"},
-				VHost:   []string{"localhost"},
+				Enabled:               false,
+				Port:                  8545,
+				Prefix:                "",
+				Host:                  "localhost",
+				API:                   []string{"eth", "net", "web3", "txpool", "bor"},
+				Cors:                  []string{"localhost"},
+				VHost:                 []string{"localhost"},
+				MaxConcurrentRequests: 0,
 			},
 			Ws: &APIConfig{
-				Enabled: false,
-				Port:    8546,
-				Prefix:  "",
-				Host:    "localhost",
-				API:     []string{"net", "web3"},
-				Origins: []string{"localhost"},
+				Enabled:               false,
+				Port:                  8546,
+				Prefix:                "",
+				Host:                  "localhost",
+				API:                   []string{"net", "web3"},
+				Origins:               []string{"localhost"},
+				MaxConcurrentRequests: 0,
 			},
 			Graphql: &APIConfig{
 				Enabled: false,
@@ -1048,15 +1053,17 @@ func (c *Config) buildNode() (*node.Config, error) {
 			ListenAddr:      c.P2P.Bind + ":" + strconv.Itoa(int(c.P2P.Port)),
 			DiscoveryV5:     c.P2P.Discovery.V5Enabled,
 		},
-		HTTPModules:         c.JsonRPC.Http.API,
-		HTTPCors:            c.JsonRPC.Http.Cors,
-		HTTPVirtualHosts:    c.JsonRPC.Http.VHost,
-		HTTPPathPrefix:      c.JsonRPC.Http.Prefix,
-		WSModules:           c.JsonRPC.Ws.API,
-		WSOrigins:           c.JsonRPC.Ws.Origins,
-		WSPathPrefix:        c.JsonRPC.Ws.Prefix,
-		GraphQLCors:         c.JsonRPC.Graphql.Cors,
-		GraphQLVirtualHosts: c.JsonRPC.Graphql.VHost,
+		HTTPModules:               c.JsonRPC.Http.API,
+		HTTPCors:                  c.JsonRPC.Http.Cors,
+		HTTPVirtualHosts:          c.JsonRPC.Http.VHost,
+		HTTPPathPrefix:            c.JsonRPC.Http.Prefix,
+		HTTPMaxConcurrentRequests: c.JsonRPC.Http.MaxConcurrentRequests,
+		WSModules:                 c.JsonRPC.Ws.API,
+		WSOrigins:                 c.JsonRPC.Ws.Origins,
+		WSPathPrefix:              c.JsonRPC.Ws.Prefix,
+		WSMaxConcurrentRequests:   c.JsonRPC.Ws.MaxConcurrentRequests,
+		GraphQLCors:               c.JsonRPC.Graphql.Cors,
+		GraphQLVirtualHosts:       c.JsonRPC.Graphql.VHost,
 		HTTPTimeouts: rpc.HTTPTimeouts{
 			ReadTimeout:  c.JsonRPC.HttpTimeout.ReadTimeout,
 			WriteTimeout: c.JsonRPC.HttpTimeout.WriteTimeout,
