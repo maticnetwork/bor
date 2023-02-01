@@ -37,7 +37,7 @@ func (s *Server) ServeListener(l net.Listener) error {
 
 		log.Trace("Accepted RPC connection", "conn", conn.RemoteAddr())
 
-		execPool.Submit(context.Background(), func() error {
+		execPool.Load().Submit(context.Background(), func() error {
 			s.ServeCodec(NewCodec(conn), 0)
 			return nil
 		})
