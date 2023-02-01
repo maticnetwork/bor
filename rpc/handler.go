@@ -219,12 +219,16 @@ func (h *handler) cancelServerSubscriptions(err error) {
 // startCallProc runs fn in a new goroutine and starts tracking it in the h.calls wait group.
 func (h *handler) startCallProc(fn func(*callProc)) {
 	h.callWG.Add(1)
-	go func() {
-		ctx, cancel := context.WithCancel(h.rootCtx)
+
+	ctx, cancel := context.WithCancel(h.rootCtx)
+
+	execPool.Submit(context.Background(), func() error {
 		defer h.callWG.Done()
 		defer cancel()
 		fn(&callProc{ctx: ctx})
-	}()
+
+		return nil
+	}, requestTimeout)
 }
 
 // handleImmediate executes non-call messages. It returns false if the message is a
@@ -281,7 +285,10 @@ func (h *handler) handleResponse(msg *jsonrpcMessage) {
 		return
 	}
 	if op.err = json.Unmarshal(msg.Result, &op.sub.subid); op.err == nil {
-		go op.sub.run()
+		execPool.Submit(context.Background(), func() error {
+			op.sub.run()
+			return nil
+		}, requestTimeout)
 		h.clientSubs[op.sub.subid] = op.sub
 	}
 }

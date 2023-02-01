@@ -6,6 +6,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.3.0
 	github.com/BurntSushi/toml v1.1.0
 	github.com/JekaMas/go-grpc-net-conn v0.0.0-20220708155319-6aff21f2d13d
+	github.com/JekaMas/workerpool v1.1.4-0.20230201132313-ac79298aeb41
 	github.com/VictoriaMetrics/fastcache v1.6.0
 	github.com/aws/aws-sdk-go-v2 v1.2.0
 	github.com/aws/aws-sdk-go-v2/config v1.1.1
@@ -82,6 +83,11 @@ require (
 	gopkg.in/urfave/cli.v1 v1.20.0
 	gotest.tools v2.2.0+incompatible
 	pgregory.net/rapid v0.4.8
+)
+
+require (
+	github.com/btcsuite/btcd v0.22.0-beta // indirect
+	github.com/gammazero/deque v0.2.1 // indirect
 )
 
 require (
