@@ -284,7 +284,7 @@ type APIConfig struct {
 	Origins []string `hcl:"origins,optional" toml:"origins,optional"`
 
 	// MaxConcRequests is the maximum number of concurrent requests. 0 means unlimited
-	MaxConcurrentRequests uint64 `hcl:"maxconcurrentrequests,optional" toml:"maxconcurrentrequests,optional"`
+	MaxConcReq uint64 `hcl:"maxconcreq,optional" toml:"maxconcreq,optional"`
 }
 
 // Used from rpc.HTTPTimeouts
@@ -509,23 +509,23 @@ func DefaultConfig() *Config {
 			GasCap:     ethconfig.Defaults.RPCGasCap,
 			TxFeeCap:   ethconfig.Defaults.RPCTxFeeCap,
 			Http: &APIConfig{
-				Enabled:               false,
-				Port:                  8545,
-				Prefix:                "",
-				Host:                  "localhost",
-				API:                   []string{"eth", "net", "web3", "txpool", "bor"},
-				Cors:                  []string{"localhost"},
-				VHost:                 []string{"localhost"},
-				MaxConcurrentRequests: 0,
+				Enabled:    false,
+				Port:       8545,
+				Prefix:     "",
+				Host:       "localhost",
+				API:        []string{"eth", "net", "web3", "txpool", "bor"},
+				Cors:       []string{"localhost"},
+				VHost:      []string{"localhost"},
+				MaxConcReq: 0,
 			},
 			Ws: &APIConfig{
-				Enabled:               false,
-				Port:                  8546,
-				Prefix:                "",
-				Host:                  "localhost",
-				API:                   []string{"net", "web3"},
-				Origins:               []string{"localhost"},
-				MaxConcurrentRequests: 0,
+				Enabled:    false,
+				Port:       8546,
+				Prefix:     "",
+				Host:       "localhost",
+				API:        []string{"net", "web3"},
+				Origins:    []string{"localhost"},
+				MaxConcReq: 0,
 			},
 			Graphql: &APIConfig{
 				Enabled: false,
@@ -1057,11 +1057,11 @@ func (c *Config) buildNode() (*node.Config, error) {
 		HTTPCors:                  c.JsonRPC.Http.Cors,
 		HTTPVirtualHosts:          c.JsonRPC.Http.VHost,
 		HTTPPathPrefix:            c.JsonRPC.Http.Prefix,
-		HTTPMaxConcurrentRequests: c.JsonRPC.Http.MaxConcurrentRequests,
+		HTTPMaxConcurrentRequests: c.JsonRPC.Http.MaxConcReq,
 		WSModules:                 c.JsonRPC.Ws.API,
 		WSOrigins:                 c.JsonRPC.Ws.Origins,
 		WSPathPrefix:              c.JsonRPC.Ws.Prefix,
-		WSMaxConcurrentRequests:   c.JsonRPC.Ws.MaxConcurrentRequests,
+		WSMaxConcurrentRequests:   c.JsonRPC.Ws.MaxConcReq,
 		GraphQLCors:               c.JsonRPC.Graphql.Cors,
 		GraphQLVirtualHosts:       c.JsonRPC.Graphql.VHost,
 		HTTPTimeouts: rpc.HTTPTimeouts{
@@ -1071,6 +1071,7 @@ func (c *Config) buildNode() (*node.Config, error) {
 		},
 	}
 
+	fmt.Printf("########$$$$$$$$$$ %v\n", cfg.HTTPMaxConcurrentRequests)
 	// dev mode
 	if c.Developer.Enabled {
 		cfg.UseLightweightKDF = true

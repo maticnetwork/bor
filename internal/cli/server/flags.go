@@ -447,8 +447,8 @@ func (c *Command) Flags() *flagset.Flagset {
 	f.Uint64Flag(&flagset.Uint64Flag{
 		Name:    "http.maxconcreq",
 		Usage:   "HTTP-RPC max concurrent requests",
-		Value:   &c.cliConfig.JsonRPC.Http.MaxConcurrentRequests,
-		Default: c.cliConfig.JsonRPC.Http.MaxConcurrentRequests,
+		Value:   &c.cliConfig.JsonRPC.Http.MaxConcReq,
+		Default: c.cliConfig.JsonRPC.Http.MaxConcReq,
 		Group:   "JsonRPC",
 	})
 
@@ -491,8 +491,8 @@ func (c *Command) Flags() *flagset.Flagset {
 	f.Uint64Flag(&flagset.Uint64Flag{
 		Name:    "ws.maxconcreq",
 		Usage:   "WS-RPC max concurrent requests",
-		Value:   &c.cliConfig.JsonRPC.Ws.MaxConcurrentRequests,
-		Default: c.cliConfig.JsonRPC.Ws.MaxConcurrentRequests,
+		Value:   &c.cliConfig.JsonRPC.Ws.MaxConcReq,
+		Default: c.cliConfig.JsonRPC.Ws.MaxConcReq,
 		Group:   "JsonRPC",
 	})
 
