@@ -2,14 +2,13 @@ package rpc
 
 import (
 	"context"
-	"time"
 
 	"github.com/JekaMas/workerpool"
 )
 
 const (
 	threads        = 100
-	requestTimeout = 10 * time.Second
+	requestTimeout = 0 //10 * time.Second
 )
 
 var execPool = workerpool.New(threads)
