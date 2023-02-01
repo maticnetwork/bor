@@ -65,6 +65,7 @@ gcmode = "archive"
         vhosts = ["*"]
         corsdomain = ["*"]
         # prefix = ""
+        # maxconcreq = 0
     [jsonrpc.ws]
         enabled = true
         port = 8546
@@ -72,6 +73,7 @@ gcmode = "archive"
         # host = "localhost"
         # api = ["web3", "net"]
         origins = ["*"]
+        # maxconcreq = 0
     # [jsonrpc.graphql]
         # enabled = false
         # port = 0
