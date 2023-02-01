@@ -97,11 +97,8 @@ func (s *Server) ServeCodec(codec ServerCodec, options CodecOption) {
 // this mode.
 func (s *Server) serveSingleRequest(ctx context.Context, codec ServerCodec) {
 
-	// TODO @0xsharma : remove debug logs.
-	log.Info("####", "serveSingleRequest : number", s.reqCount, "maxConReq", s.maxConReq)
 	if s.maxConReq > 0 {
 		if s.reqCount > s.maxConReq { //if maxConReq is 0, then no limit
-			log.Warn("####", "serveSingleRequest : too many", s.reqCount)
 			codec.writeJSON(ctx, errorMessage(&invalidMessageError{"too many requests"}))
 			return
 		} else {

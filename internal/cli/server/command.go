@@ -103,8 +103,6 @@ func (c *Command) Run(args []string) int {
 		return 1
 	}
 
-	// TODO 0xsharma : remove debug logs
-	fmt.Printf("###$$$ 1111 %v\n", c.config.JsonRPC.Http.MaxConcReq)
 	srv, err := NewServer(c.config, WithGRPCAddress())
 	if err != nil {
 		c.UI.Error(err.Error())
