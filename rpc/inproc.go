@@ -28,7 +28,7 @@ func DialInProc(handler *Server) *Client {
 		p1, p2 := net.Pipe()
 
 		//nolint:contextcheck
-		execPool.Load().Submit(initctx, func() error {
+		handler.executionPool.Load().Submit(initctx, func() error {
 			handler.ServeCodec(NewCodec(p1), 0)
 			return nil
 		})
