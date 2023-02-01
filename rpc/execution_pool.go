@@ -19,11 +19,14 @@ func init() {
 }
 
 func changePoolSize(n int) {
-
 	newPool := workerpool.New(n)
 	oldPool := execPool.Load()
 
-	go oldPool.StopWait()
+	if oldPool != nil {
+		go func() {
+			oldPool.StopWait()
+		}()
+	}
 
 	execPool.Store(newPool)
 }
