@@ -104,6 +104,7 @@ func (s *Server) serveSingleRequest(ctx context.Context, codec ServerCodec) {
 	if s.maxConReq > 0 {
 		if s.reqCount > s.maxConReq { //if maxConReq is 0, then no limit
 			maxConcReqDiscardedTxs.Inc(1)
+			log.Warn("RPC server ratelimiting", "Concurrent Reqs", s.reqCount, "MaxConcurrentReqs", s.maxConReq)
 			// nolint: errcheck
 			codec.writeJSON(ctx, errorMessage(&invalidMessageError{"too many requests"}))
 
