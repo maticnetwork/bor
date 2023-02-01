@@ -1071,7 +1071,6 @@ func (c *Config) buildNode() (*node.Config, error) {
 		},
 	}
 
-	fmt.Printf("########$$$$$$$$$$ %v\n", cfg.HTTPMaxConcurrentRequests)
 	// dev mode
 	if c.Developer.Enabled {
 		cfg.UseLightweightKDF = true
