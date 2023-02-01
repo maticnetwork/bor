@@ -23,7 +23,10 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
+
+	"github.com/JekaMas/workerpool"
 
 	"github.com/ethereum/go-ethereum/log"
 )
@@ -63,6 +66,8 @@ type handler struct {
 
 	subLock    sync.Mutex
 	serverSubs map[ID]*Subscription
+
+	executionPool atomic.Pointer[workerpool.WorkerPool]
 }
 
 type callProc struct {
@@ -88,6 +93,8 @@ func newHandler(connCtx context.Context, conn jsonWriter, idgen func() ID, reg *
 		h.log = h.log.New("conn", conn.remoteAddr())
 	}
 	h.unsubscribeCb = newCallback(reflect.Value{}, reflect.ValueOf(h.unsubscribe))
+
+	h.executionPool.Store(workerpool.New(threads))
 	return h
 }
 
@@ -221,7 +228,7 @@ func (h *handler) startCallProc(fn func(*callProc)) {
 
 	ctx, cancel := context.WithCancel(h.rootCtx)
 
-	execPool.Load().Submit(context.Background(), func() error {
+	h.executionPool.Load().Submit(context.Background(), func() error {
 		defer h.callWG.Done()
 		defer cancel()
 		fn(&callProc{ctx: ctx})
@@ -284,7 +291,7 @@ func (h *handler) handleResponse(msg *jsonrpcMessage) {
 		return
 	}
 	if op.err = json.Unmarshal(msg.Result, &op.sub.subid); op.err == nil {
-		execPool.Load().Submit(context.Background(), func() error {
+		h.executionPool.Load().Submit(context.Background(), func() error {
 			op.sub.run()
 			return nil
 		}, requestTimeout)

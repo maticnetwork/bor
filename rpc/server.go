@@ -22,7 +22,9 @@ import (
 	"io"
 	"sync/atomic"
 
+	"github.com/JekaMas/workerpool"
 	mapset "github.com/deckarep/golang-set"
+
 	"github.com/ethereum/go-ethereum/log"
 )
 
@@ -49,7 +51,8 @@ type Server struct {
 	run      int32
 	codecs   mapset.Set
 
-	BatchLimit uint64
+	BatchLimit    uint64
+	executionPool atomic.Pointer[workerpool.WorkerPool]
 }
 
 // NewServer creates a new server instance with no registered handlers.
@@ -59,6 +62,7 @@ func NewServer() *Server {
 	// as the services and methods it offers.
 	rpcService := &RPCService{server}
 	server.RegisterName(MetadataApi, rpcService)
+	server.executionPool.Store(workerpool.New(threads))
 	return server
 }
 
