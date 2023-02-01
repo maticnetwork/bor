@@ -99,11 +99,17 @@ func (s *Server) serveSingleRequest(ctx context.Context, codec ServerCodec) {
 
 	// TODO @0xsharma : remove debug logs.
 	log.Info("####", "serveSingleRequest : number", s.reqCount, "maxConReq", s.maxConReq)
-	if s.maxConReq > 0 && s.reqCount > s.maxConReq { //if maxConReq is 0, then no limit
-		log.Warn("####", "serveSingleRequest : too many", s.reqCount)
-		codec.writeJSON(ctx, errorMessage(&invalidMessageError{"too many requests"}))
-		return
+	if s.maxConReq > 0 {
+		if s.reqCount > s.maxConReq { //if maxConReq is 0, then no limit
+			log.Warn("####", "serveSingleRequest : too many", s.reqCount)
+			codec.writeJSON(ctx, errorMessage(&invalidMessageError{"too many requests"}))
+			return
+		} else {
+			atomic.AddInt64(&s.reqCount, 1)
+			defer atomic.AddInt64(&s.reqCount, -1)
+		}
 	}
+
 	// Don't serve if server is stopped.
 	if atomic.LoadInt32(&s.run) == 0 {
 		return
@@ -119,12 +125,6 @@ func (s *Server) serveSingleRequest(ctx context.Context, codec ServerCodec) {
 			codec.writeJSON(ctx, errorMessage(&invalidMessageError{"parse error"}))
 		}
 		return
-	}
-	if s.maxConReq > 0 { //if maxConReq is 0, then no limit
-		reqLen := int64((len(reqs)))
-
-		atomic.AddInt64(&s.reqCount, reqLen)
-		defer atomic.AddInt64(&s.reqCount, -reqLen)
 	}
 
 	if batch {
