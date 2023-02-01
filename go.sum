@@ -54,6 +54,8 @@ github.com/JekaMas/workerpool v1.1.4-0.20230201132313-ac79298aeb41 h1:arwRyEijo3
 github.com/JekaMas/workerpool v1.1.4-0.20230201132313-ac79298aeb41/go.mod h1:IoDWPpwMcA27qbuugZKeBslDrgX09lVmksuh9sjzbhc=
 github.com/JekaMas/workerpool v1.1.4-0.20230201160636-cee35debca78 h1:bcipg7jVbgRYeshOVInxOwp5pgVJboLbQMM/2cBQNIg=
 github.com/JekaMas/workerpool v1.1.4-0.20230201160636-cee35debca78/go.mod h1:IoDWPpwMcA27qbuugZKeBslDrgX09lVmksuh9sjzbhc=
+github.com/JekaMas/workerpool v1.1.4 h1:HtGpDD+XOtkupb6ZiWQcSOrheDbFyN4rJYv73FCjwYg=
+github.com/JekaMas/workerpool v1.1.4/go.mod h1:IoDWPpwMcA27qbuugZKeBslDrgX09lVmksuh9sjzbhc=
 github.com/Knetic/govaluate v3.0.1-0.20171022003610-9aa49832a739+incompatible/go.mod h1:r7JcOSlj0wfOMncg0iLm8Leh48TZaKVeNIfJntJ2wa0=
 github.com/Masterminds/goutils v1.1.1 h1:5nUrii3FMTL5diU80unEVvNevw1nH4+ZV4DSLVJLSYI=
 github.com/Masterminds/goutils v1.1.1/go.mod h1:8cTjp+g8YejhMuvIA5y2vz3BpJxksy863GQaJW2MFNU=
