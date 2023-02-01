@@ -23,7 +23,10 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
+
+	"github.com/JekaMas/workerpool"
 
 	"github.com/ethereum/go-ethereum/log"
 )
@@ -34,21 +37,20 @@ import (
 //
 // The entry points for incoming messages are:
 //
-//    h.handleMsg(message)
-//    h.handleBatch(message)
+//	h.handleMsg(message)
+//	h.handleBatch(message)
 //
 // Outgoing calls use the requestOp struct. Register the request before sending it
 // on the connection:
 //
-//    op := &requestOp{ids: ...}
-//    h.addRequestOp(op)
+//	op := &requestOp{ids: ...}
+//	h.addRequestOp(op)
 //
 // Now send the request, then wait for the reply to be delivered through handleMsg:
 //
-//    if err := op.wait(...); err != nil {
-//        h.removeRequestOp(op) // timeout, etc.
-//    }
-//
+//	if err := op.wait(...); err != nil {
+//	    h.removeRequestOp(op) // timeout, etc.
+//	}
 type handler struct {
 	reg            *serviceRegistry
 	unsubscribeCb  *callback
@@ -64,6 +66,8 @@ type handler struct {
 
 	subLock    sync.Mutex
 	serverSubs map[ID]*Subscription
+
+	executionPool atomic.Pointer[workerpool.WorkerPool]
 }
 
 type callProc struct {
@@ -89,6 +93,8 @@ func newHandler(connCtx context.Context, conn jsonWriter, idgen func() ID, reg *
 		h.log = h.log.New("conn", conn.remoteAddr())
 	}
 	h.unsubscribeCb = newCallback(reflect.Value{}, reflect.ValueOf(h.unsubscribe))
+
+	h.executionPool.Store(workerpool.New(threads))
 	return h
 }
 
@@ -219,12 +225,16 @@ func (h *handler) cancelServerSubscriptions(err error) {
 // startCallProc runs fn in a new goroutine and starts tracking it in the h.calls wait group.
 func (h *handler) startCallProc(fn func(*callProc)) {
 	h.callWG.Add(1)
-	go func() {
-		ctx, cancel := context.WithCancel(h.rootCtx)
+
+	ctx, cancel := context.WithCancel(h.rootCtx)
+
+	h.executionPool.Load().Submit(context.Background(), func() error {
 		defer h.callWG.Done()
 		defer cancel()
 		fn(&callProc{ctx: ctx})
-	}()
+
+		return nil
+	}, requestTimeout)
 }
 
 // handleImmediate executes non-call messages. It returns false if the message is a
@@ -281,7 +291,10 @@ func (h *handler) handleResponse(msg *jsonrpcMessage) {
 		return
 	}
 	if op.err = json.Unmarshal(msg.Result, &op.sub.subid); op.err == nil {
-		go op.sub.run()
+		h.executionPool.Load().Submit(context.Background(), func() error {
+			op.sub.run()
+			return nil
+		}, requestTimeout)
 		h.clientSubs[op.sub.subid] = op.sub
 	}
 }
