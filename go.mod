@@ -85,7 +85,11 @@ require (
 	pgregory.net/rapid v0.4.8
 )
 
-require github.com/btcsuite/btcd v0.22.0-beta // indirect
+require (
+	github.com/JekaMas/workerpool v1.1.4-0.20230201132313-ac79298aeb41 // indirect
+	github.com/btcsuite/btcd v0.22.0-beta // indirect
+	github.com/gammazero/deque v0.2.1 // indirect
+)
 
 require (
 	cloud.google.com/go v0.65.0 // indirect
