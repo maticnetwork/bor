@@ -31,7 +31,7 @@ func NewExecutionPool(initialSize int) *SafePool {
 	return &SafePool{executionPool: &ptr}
 }
 
-func (s *SafePool) Submit(ctx context.Context, fn func() error, timeout ...time.Duration) (<-chan error, bool) {
+func (s *SafePool) Submit(ctx context.Context, fn func() error, timeout time.Duration) (<-chan error, bool) {
 	if s.fastPath {
 		go func() {
 			_ = fn()
@@ -49,7 +49,7 @@ func (s *SafePool) Submit(ctx context.Context, fn func() error, timeout ...time.
 		return nil, false
 	}
 
-	return pool.Submit(ctx, fn, timeout...), true
+	return pool.Submit(ctx, fn, timeout), true
 }
 
 func (s *SafePool) ChangeSize(n int) {
