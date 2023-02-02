@@ -20,8 +20,6 @@ import (
 	"context"
 	"net"
 
-	"github.com/JekaMas/workerpool"
-
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/netutil"
 )
@@ -37,11 +35,7 @@ func (s *Server) ServeListener(l net.Listener) error {
 			return err
 		}
 		log.Trace("Accepted RPC connection", "conn", conn.RemoteAddr())
-
-		s.executionPool.Submit(context.Background(), func() error {
-			s.ServeCodec(NewCodec(conn), 0)
-			return nil
-		}, workerpool.NoTimeout)
+		go s.ServeCodec(NewCodec(conn), 0)
 	}
 }
 
