@@ -103,7 +103,8 @@ func (s *Server) serveSingleRequest(ctx context.Context, codec ServerCodec) {
 		return
 	}
 
-	h := newHandler(ctx, codec, s.idgen, &s.services)
+	h := newHandler(ctx, codec, s.idgen, &s.services, s.executionPool.Load())
+
 	h.allowSubscribe = false
 	defer h.close(io.EOF, nil)
 
