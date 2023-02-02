@@ -15,11 +15,12 @@ const (
 
 type SafePool struct {
 	executionPool *atomic.Pointer[workerpool.WorkerPool]
+	fastPath      bool
 }
 
 func NewExecutionPool(initialSize int) *SafePool {
 	if initialSize == 0 {
-		return &SafePool{}
+		return &SafePool{fastPath: true}
 	}
 
 	var ptr atomic.Pointer[workerpool.WorkerPool]
@@ -27,20 +28,28 @@ func NewExecutionPool(initialSize int) *SafePool {
 	p := workerpool.New(initialSize)
 	ptr.Store(p)
 
-	return &SafePool{&ptr}
+	return &SafePool{executionPool: &ptr}
 }
 
 func (s *SafePool) Submit(ctx context.Context, fn func() error, timeout ...time.Duration) (<-chan error, bool) {
-	pool := s.executionPool.Load()
-	if pool != nil {
-		return pool.Submit(ctx, fn, timeout...), true
+	if s.fastPath {
+		go func() {
+			_ = fn()
+		}()
+
+		return nil, false
 	}
 
-	go func() {
-		_ = fn()
-	}()
+	if s.executionPool == nil {
+		return nil, false
+	}
 
-	return nil, false
+	pool := s.executionPool.Load()
+	if pool == nil {
+		return nil, false
+	}
+
+	return pool.Submit(ctx, fn, timeout...), true
 }
 
 func (s *SafePool) ChangeSize(n int) {
