@@ -11,9 +11,10 @@ import (
 type SafePool struct {
 	executionPool *atomic.Pointer[workerpool.WorkerPool]
 	fastPath      bool
+	timeout       time.Duration
 }
 
-func NewExecutionPool(initialSize int) *SafePool {
+func NewExecutionPool(initialSize int, timeout time.Duration) *SafePool {
 	if initialSize == 0 {
 		return &SafePool{fastPath: true}
 	}
@@ -23,7 +24,7 @@ func NewExecutionPool(initialSize int) *SafePool {
 	p := workerpool.New(initialSize)
 	ptr.Store(p)
 
-	return &SafePool{executionPool: &ptr}
+	return &SafePool{executionPool: &ptr, timeout: timeout}
 }
 
 func (s *SafePool) Submit(ctx context.Context, fn func() error, timeout ...time.Duration) (<-chan error, bool) {

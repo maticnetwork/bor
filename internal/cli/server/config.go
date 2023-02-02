@@ -285,7 +285,8 @@ type APIConfig struct {
 
 	Threads uint64 `hcl:"threads,optional" toml:"threads,optional"`
 
-	Requesttimeout time.Duration `hcl:"requesttimeout,optional" toml:"requesttimeout,optional"`
+	Requesttimeout    time.Duration `hcl:"-,optional" toml:"-"`
+	RequesttimeoutRaw string        `hcl:"requesttimeout,optional" toml:"requesttimeout,optional"`
 }
 
 // Used from rpc.HTTPTimeouts
@@ -635,6 +636,8 @@ func (c *Config) fillTimeDurations() error {
 		{"jsonrpc.timeouts.read", &c.JsonRPC.HttpTimeout.ReadTimeout, &c.JsonRPC.HttpTimeout.ReadTimeoutRaw},
 		{"jsonrpc.timeouts.write", &c.JsonRPC.HttpTimeout.WriteTimeout, &c.JsonRPC.HttpTimeout.WriteTimeoutRaw},
 		{"jsonrpc.timeouts.idle", &c.JsonRPC.HttpTimeout.IdleTimeout, &c.JsonRPC.HttpTimeout.IdleTimeoutRaw},
+		{"jsonrpc.ws.requesttimeout", &c.JsonRPC.Ws.Requesttimeout, &c.JsonRPC.Ws.RequesttimeoutRaw},
+		{"jsonrpc.http.requesttimeout", &c.JsonRPC.Http.Requesttimeout, &c.JsonRPC.Http.RequesttimeoutRaw},
 		{"txpool.lifetime", &c.TxPool.LifeTime, &c.TxPool.LifeTimeRaw},
 		{"txpool.rejournal", &c.TxPool.Rejournal, &c.TxPool.RejournalRaw},
 		{"cache.rejournal", &c.Cache.Rejournal, &c.Cache.RejournalRaw},

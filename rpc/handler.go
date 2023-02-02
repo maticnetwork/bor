@@ -19,7 +19,6 @@ package rpc
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"reflect"
 	"strconv"
 	"strings"
@@ -65,8 +64,7 @@ type handler struct {
 	subLock    sync.Mutex
 	serverSubs map[ID]*Subscription
 
-	executionPoolRequestTimeout time.Duration
-	executionPool               *SafePool
+	executionPool *SafePool
 }
 
 type callProc struct {
@@ -74,21 +72,20 @@ type callProc struct {
 	notifiers []*Notifier
 }
 
-func newHandler(connCtx context.Context, conn jsonWriter, idgen func() ID, reg *serviceRegistry, pool *SafePool, executionPoolRequestTimeout time.Duration) *handler {
+func newHandler(connCtx context.Context, conn jsonWriter, idgen func() ID, reg *serviceRegistry, pool *SafePool) *handler {
 	rootCtx, cancelRoot := context.WithCancel(connCtx)
 	h := &handler{
-		reg:                         reg,
-		idgen:                       idgen,
-		conn:                        conn,
-		respWait:                    make(map[string]*requestOp),
-		clientSubs:                  make(map[string]*ClientSubscription),
-		rootCtx:                     rootCtx,
-		cancelRoot:                  cancelRoot,
-		allowSubscribe:              true,
-		serverSubs:                  make(map[ID]*Subscription),
-		log:                         log.Root(),
-		executionPool:               pool,
-		executionPoolRequestTimeout: executionPoolRequestTimeout,
+		reg:            reg,
+		idgen:          idgen,
+		conn:           conn,
+		respWait:       make(map[string]*requestOp),
+		clientSubs:     make(map[string]*ClientSubscription),
+		rootCtx:        rootCtx,
+		cancelRoot:     cancelRoot,
+		allowSubscribe: true,
+		serverSubs:     make(map[ID]*Subscription),
+		log:            log.Root(),
+		executionPool:  pool,
 	}
 	if conn.remoteAddr() != "" {
 		h.log = h.log.New("conn", conn.remoteAddr())
@@ -234,7 +231,7 @@ func (h *handler) startCallProc(fn func(*callProc)) {
 		fn(&callProc{ctx: ctx})
 
 		return nil
-	}, h.executionPoolRequestTimeout)
+	}, h.executionPool.timeout)
 }
 
 // handleImmediate executes non-call messages. It returns false if the message is a
@@ -272,8 +269,6 @@ func (h *handler) handleSubscriptionResult(msg *jsonrpcMessage) {
 // handleResponse processes method call responses.
 func (h *handler) handleResponse(msg *jsonrpcMessage) {
 
-	fmt.Println("---------------- handleResponse, h.executionPoolRequestTimeout", h.executionPoolRequestTimeout)
-
 	op := h.respWait[string(msg.ID)]
 	if op == nil {
 		h.log.Debug("Unsolicited RPC response", "reqid", idForLog{msg.ID})
@@ -297,7 +292,7 @@ func (h *handler) handleResponse(msg *jsonrpcMessage) {
 		h.executionPool.Submit(context.Background(), func() error {
 			op.sub.run()
 			return nil
-		}, h.executionPoolRequestTimeout)
+		}, h.executionPool.timeout)
 
 		h.clientSubs[op.sub.subid] = op.sub
 	}

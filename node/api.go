@@ -366,7 +366,7 @@ func (api *privateAdminAPI) GetExecutionPoolThreads() *ExecutionPoolThreads {
 	return executionPoolThreads
 }
 
-func (api *privateAdminAPI) getExecutionPoolRequestTimeout() *ExecutionPoolRequestTimeout {
+func (api *privateAdminAPI) GetExecutionPoolRequestTimeout() *ExecutionPoolRequestTimeout {
 	httpLimit := api.node.http.httpConfig.requesttimeout
 	wsLimit := api.node.ws.wsConfig.requesttimeout
 

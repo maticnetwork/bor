@@ -112,8 +112,7 @@ func (c *Client) newClientConn(conn ServerCodec) *clientConn {
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, clientContextKey{}, c)
 	ctx = context.WithValue(ctx, peerInfoContextKey{}, conn.peerInfo())
-	// TODO - Check this
-	handler := newHandler(ctx, conn, c.idgen, c.services, NewExecutionPool(0), 10*time.Second)
+	handler := newHandler(ctx, conn, c.idgen, c.services, NewExecutionPool(0, 0))
 	return &clientConn{conn, handler}
 }
 

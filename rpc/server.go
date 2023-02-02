@@ -18,7 +18,6 @@ package rpc
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"sync/atomic"
 	"time"
@@ -57,14 +56,11 @@ type Server struct {
 
 // NewServer creates a new server instance with no registered handlers.
 func NewServer(executionPoolThreads uint64, executionPoolThreadRequesttimeout time.Duration) *Server {
-	fmt.Println("---------------- NewServer, executionPoolThreads", executionPoolThreads)
-	fmt.Println("---------------- NewServer, executionPoolThreadRequesttimeout", executionPoolThreadRequesttimeout)
 	server := &Server{
-		idgen:                             randomIDGenerator(),
-		codecs:                            mapset.NewSet(),
-		run:                               1,
-		executionPool:                     NewExecutionPool(int(executionPoolThreads)),
-		executionPoolThreadRequesttimeout: executionPoolThreadRequesttimeout,
+		idgen:         randomIDGenerator(),
+		codecs:        mapset.NewSet(),
+		run:           1,
+		executionPool: NewExecutionPool(int(executionPoolThreads), executionPoolThreadRequesttimeout),
 	}
 
 	// Register the default service providing meta information about the RPC service such
@@ -113,7 +109,7 @@ func (s *Server) serveSingleRequest(ctx context.Context, codec ServerCodec) {
 		return
 	}
 
-	h := newHandler(ctx, codec, s.idgen, &s.services, s.executionPool, s.executionPoolThreadRequesttimeout)
+	h := newHandler(ctx, codec, s.idgen, &s.services, s.executionPool)
 
 	h.allowSubscribe = false
 	defer h.close(io.EOF, nil)
