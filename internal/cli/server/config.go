@@ -251,6 +251,8 @@ type JsonRPCConfig struct {
 	Graphql *APIConfig `hcl:"graphql,block" toml:"graphql,block"`
 
 	HttpTimeout *HttpTimeouts `hcl:"timeouts,block" toml:"timeouts,block"`
+
+	ExecutionPool *ExecutionPoolConfig `hcl:"executionpool,block" toml:"executionpool,block"`
 }
 
 type GRPCConfig struct {
@@ -282,6 +284,12 @@ type APIConfig struct {
 
 	// Origins is the list of endpoints to accept requests from (only consumed for websockets)
 	Origins []string `hcl:"origins,optional" toml:"origins,optional"`
+}
+
+type ExecutionPoolConfig struct {
+	Threads uint64 `hcl:"threads,optional" toml:"threads,optional"`
+
+	Requesttimeout time.Duration `hcl:"requesttimeout,optional" toml:"requesttimeout,optional"`
 }
 
 // Used from rpc.HTTPTimeouts
@@ -531,6 +539,10 @@ func DefaultConfig() *Config {
 				ReadTimeout:  30 * time.Second,
 				WriteTimeout: 30 * time.Second,
 				IdleTimeout:  120 * time.Second,
+			},
+			ExecutionPool: &ExecutionPoolConfig{
+				Threads:        100,
+				Requesttimeout: 10 * time.Second,
 			},
 		},
 		Ethstats: "",
@@ -1062,6 +1074,8 @@ func (c *Config) buildNode() (*node.Config, error) {
 			WriteTimeout: c.JsonRPC.HttpTimeout.WriteTimeout,
 			IdleTimeout:  c.JsonRPC.HttpTimeout.IdleTimeout,
 		},
+		JsonRPCExecutionPoolThreads:        c.JsonRPC.ExecutionPool.Threads,
+		JsonRPCExecutionPoolRequesttimeout: c.JsonRPC.ExecutionPool.Requesttimeout,
 	}
 
 	// dev mode

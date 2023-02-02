@@ -20,6 +20,7 @@ import (
 	"context"
 	"io"
 	"sync/atomic"
+	"time"
 
 	"github.com/JekaMas/workerpool"
 	mapset "github.com/deckarep/golang-set"
@@ -50,17 +51,18 @@ type Server struct {
 	run      int32
 	codecs   mapset.Set
 
-	executionPool atomic.Pointer[workerpool.WorkerPool]
+	executionPool                     atomic.Pointer[workerpool.WorkerPool]
+	executionPoolThreadRequesttimeout time.Duration
 }
 
 // NewServer creates a new server instance with no registered handlers.
-func NewServer() *Server {
-	server := &Server{idgen: randomIDGenerator(), codecs: mapset.NewSet(), run: 1}
+func NewServer(executionPoolThreads uint64, executionPoolThreadRequesttimeout time.Duration) *Server {
+	server := &Server{idgen: randomIDGenerator(), codecs: mapset.NewSet(), run: 1, executionPoolThreadRequesttimeout: executionPoolThreadRequesttimeout}
 	// Register the default service providing meta information about the RPC service such
 	// as the services and methods it offers.
 	rpcService := &RPCService{server}
 	server.RegisterName(MetadataApi, rpcService)
-	server.executionPool.Store(workerpool.New(threads))
+	server.executionPool.Store(workerpool.New(int(executionPoolThreads)))
 	return server
 }
 

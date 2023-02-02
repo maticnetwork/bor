@@ -482,6 +482,22 @@ func (c *Command) Flags() *flagset.Flagset {
 		Group:   "JsonRPC",
 	})
 
+	// execution pool options
+	f.Uint64Flag(&flagset.Uint64Flag{
+		Name:    "executionpool.threads",
+		Usage:   "No of threads for executionpool",
+		Value:   &c.cliConfig.JsonRPC.ExecutionPool.Threads,
+		Default: c.cliConfig.JsonRPC.ExecutionPool.Threads,
+		Group:   "JsonRPC",
+	})
+	f.DurationFlag(&flagset.DurationFlag{
+		Name:    "executionpool.requesttimeout",
+		Usage:   "Timeout for threads for executionpool",
+		Value:   &c.cliConfig.JsonRPC.ExecutionPool.Requesttimeout,
+		Default: c.cliConfig.JsonRPC.ExecutionPool.Requesttimeout,
+		Group:   "JsonRPC",
+	})
+
 	// graphql options
 	f.BoolFlag(&flagset.BoolFlag{
 		Name:    "graphql",

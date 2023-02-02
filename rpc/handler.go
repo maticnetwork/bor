@@ -68,6 +68,8 @@ type handler struct {
 	serverSubs map[ID]*Subscription
 
 	executionPool atomic.Pointer[workerpool.WorkerPool]
+
+	executionPoolRequestTimeout time.Duration
 }
 
 type callProc struct {
@@ -75,19 +77,20 @@ type callProc struct {
 	notifiers []*Notifier
 }
 
-func newHandler(connCtx context.Context, conn jsonWriter, idgen func() ID, reg *serviceRegistry, pool *workerpool.WorkerPool) *handler {
+func newHandler(connCtx context.Context, conn jsonWriter, idgen func() ID, reg *serviceRegistry, pool *workerpool.WorkerPool, executionPoolRequestTimeout time.Duration) *handler {
 	rootCtx, cancelRoot := context.WithCancel(connCtx)
 	h := &handler{
-		reg:            reg,
-		idgen:          idgen,
-		conn:           conn,
-		respWait:       make(map[string]*requestOp),
-		clientSubs:     make(map[string]*ClientSubscription),
-		rootCtx:        rootCtx,
-		cancelRoot:     cancelRoot,
-		allowSubscribe: true,
-		serverSubs:     make(map[ID]*Subscription),
-		log:            log.Root(),
+		reg:                         reg,
+		idgen:                       idgen,
+		conn:                        conn,
+		respWait:                    make(map[string]*requestOp),
+		clientSubs:                  make(map[string]*ClientSubscription),
+		rootCtx:                     rootCtx,
+		cancelRoot:                  cancelRoot,
+		allowSubscribe:              true,
+		serverSubs:                  make(map[ID]*Subscription),
+		log:                         log.Root(),
+		executionPoolRequestTimeout: executionPoolRequestTimeout,
 	}
 	if conn.remoteAddr() != "" {
 		h.log = h.log.New("conn", conn.remoteAddr())
@@ -236,7 +239,7 @@ func (h *handler) startCallProc(fn func(*callProc)) {
 			fn(&callProc{ctx: ctx})
 
 			return nil
-		}, requestTimeout)
+		}, h.executionPoolRequestTimeout)
 	} else {
 		go func() {
 			defer h.callWG.Done()
@@ -304,7 +307,7 @@ func (h *handler) handleResponse(msg *jsonrpcMessage) {
 			h.executionPool.Load().Submit(context.Background(), func() error {
 				op.sub.run()
 				return nil
-			}, requestTimeout)
+			}, h.executionPoolRequestTimeout)
 		} else {
 			go op.sub.run()
 		}
