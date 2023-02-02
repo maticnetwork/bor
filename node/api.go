@@ -78,6 +78,24 @@ func (api *privateAdminAPI) AddPeer(url string) (bool, error) {
 	return true, nil
 }
 
+type MaxConcReq struct {
+	HttpLimit uint64 // max concurrent requests for http requests. 0(Default) means no limit
+	WSLimit   uint64 // max concurrent requests for ws requests. 0(Default) means no limit
+}
+
+// get max concurrent requests parameter for rpc requests
+func (api *privateAdminAPI) GetMaxConcReq() *MaxConcReq {
+	httpLimit := api.node.http.httpConfig.maxConcReq
+	wsLimit := api.node.ws.wsConfig.maxConcReq
+
+	maxConcReq := &MaxConcReq{
+		HttpLimit: httpLimit,
+		WSLimit:   wsLimit,
+	}
+
+	return maxConcReq
+}
+
 // RemovePeer disconnects from a remote node if the connection exists
 func (api *privateAdminAPI) RemovePeer(url string) (bool, error) {
 	// Make sure the server is running, fail otherwise
