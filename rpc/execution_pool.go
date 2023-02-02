@@ -8,11 +8,6 @@ import (
 	"github.com/JekaMas/workerpool"
 )
 
-const (
-	threads        = 100
-	requestTimeout = 0 //10 * time.Second
-)
-
 type SafePool struct {
 	executionPool *atomic.Pointer[workerpool.WorkerPool]
 	fastPath      bool
