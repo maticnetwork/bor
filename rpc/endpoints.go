@@ -19,6 +19,7 @@ package rpc
 import (
 	"net"
 	"strings"
+	"time"
 
 	"github.com/ethereum/go-ethereum/log"
 )
@@ -27,7 +28,7 @@ import (
 func StartIPCEndpoint(ipcEndpoint string, apis []API) (net.Listener, *Server, error) {
 	// Register all the APIs exposed by the services.
 	var (
-		handler    = NewServer(0, 0)
+		handler    = NewServer(0, time.Duration(10)*time.Second)
 		regMap     = make(map[string]struct{})
 		registered []string
 	)

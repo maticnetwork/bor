@@ -345,8 +345,8 @@ func (s *publicWeb3API) Sha3(input hexutil.Bytes) hexutil.Bytes {
 }
 
 type ExecutionPoolThreads struct {
-	HttpLimit uint64
-	WSLimit   uint64
+	HttpLimit int
+	WSLimit   int
 }
 
 type ExecutionPoolRequestTimeout struct {
@@ -355,8 +355,8 @@ type ExecutionPoolRequestTimeout struct {
 }
 
 func (api *privateAdminAPI) GetExecutionPoolThreads() *ExecutionPoolThreads {
-	httpLimit := api.node.http.httpConfig.threads
-	wsLimit := api.node.ws.wsConfig.threads
+	httpLimit := api.node.http.httpHandler.Load().(*rpcHandler).server.GetExecutionPoolThreads()
+	wsLimit := api.node.ws.wsHandler.Load().(*rpcHandler).server.GetExecutionPoolThreads()
 
 	executionPoolThreads := &ExecutionPoolThreads{
 		HttpLimit: httpLimit,
@@ -367,8 +367,8 @@ func (api *privateAdminAPI) GetExecutionPoolThreads() *ExecutionPoolThreads {
 }
 
 func (api *privateAdminAPI) GetExecutionPoolRequestTimeout() *ExecutionPoolRequestTimeout {
-	httpLimit := api.node.http.httpConfig.requesttimeout
-	wsLimit := api.node.ws.wsConfig.requesttimeout
+	httpLimit := api.node.http.httpHandler.Load().(*rpcHandler).server.GetExecutionPoolRequestTimeout()
+	wsLimit := api.node.ws.wsHandler.Load().(*rpcHandler).server.GetExecutionPoolRequestTimeout()
 
 	executionPoolRequestTimeout := &ExecutionPoolRequestTimeout{
 		HttpLimit: httpLimit,
@@ -379,21 +379,25 @@ func (api *privateAdminAPI) GetExecutionPoolRequestTimeout() *ExecutionPoolReque
 }
 
 func (api *privateAdminAPI) SetWSExecutionPoolRequestTimeout(n int) *ExecutionPoolRequestTimeout {
-	api.node.ws.wsHandler.Load().(*rpcHandler).server.SetExecutionPoolRequestTimeout(time.Duration(n))
+	api.node.ws.wsHandler.Load().(*rpcHandler).server.SetExecutionPoolRequestTimeout(time.Duration(n) * time.Second)
+	log.Info("modifying ws execution pool request timeout", "timeout", n)
 	return api.GetExecutionPoolRequestTimeout()
 }
 
 func (api *privateAdminAPI) SetHttpExecutionPoolRequestTimeout(n int) *ExecutionPoolRequestTimeout {
-	api.node.http.httpHandler.Load().(*rpcHandler).server.SetExecutionPoolRequestTimeout(time.Duration(n))
+	api.node.http.httpHandler.Load().(*rpcHandler).server.SetExecutionPoolRequestTimeout(time.Duration(n) * time.Second)
+	log.Info("modifying http execution pool request timeout", "timeout", n)
 	return api.GetExecutionPoolRequestTimeout()
 }
 
 func (api *privateAdminAPI) SetWSExecutionPoolThreads(n int) *ExecutionPoolThreads {
 	api.node.ws.wsHandler.Load().(*rpcHandler).server.SetExecutionPoolSize(n)
+	log.Info("modifying ws execution pool threads", "threads", n)
 	return api.GetExecutionPoolThreads()
 }
 
 func (api *privateAdminAPI) SetHttpExecutionPoolThreads(n int) *ExecutionPoolThreads {
 	api.node.http.httpHandler.Load().(*rpcHandler).server.SetExecutionPoolSize(n)
+	log.Info("modifying http execution pool threads", "threads", n)
 	return api.GetExecutionPoolThreads()
 }
