@@ -33,12 +33,14 @@ import (
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
+
 	"github.com/ethereum/go-ethereum/log"
 )
 
 func TestClientRequest(t *testing.T) {
 	server := newTestServer()
 	defer server.Stop()
+
 	client := DialInProc(server)
 	defer client.Close()
 
@@ -46,6 +48,7 @@ func TestClientRequest(t *testing.T) {
 	if err := client.Call(&resp, "test_echo", "hello", 10, &echoArgs{"world"}); err != nil {
 		t.Fatal(err)
 	}
+
 	if !reflect.DeepEqual(resp, echoResult{"hello", 10, &echoArgs{"world"}}) {
 		t.Errorf("incorrect result %#v", resp)
 	}
