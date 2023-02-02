@@ -64,7 +64,8 @@ type handler struct {
 	subLock    sync.Mutex
 	serverSubs map[ID]*Subscription
 
-	executionPool *SafePool
+	executionPool               *SafePool
+	executionPoolRequestTimeout time.Duration
 }
 
 type callProc struct {
@@ -231,7 +232,7 @@ func (h *handler) startCallProc(fn func(*callProc)) {
 		fn(&callProc{ctx: ctx})
 
 		return nil
-	}, requestTimeout)
+	})
 }
 
 // handleImmediate executes non-call messages. It returns false if the message is a
@@ -291,7 +292,7 @@ func (h *handler) handleResponse(msg *jsonrpcMessage) {
 		h.executionPool.Submit(context.Background(), func() error {
 			op.sub.run()
 			return nil
-		}, requestTimeout)
+		})
 
 		h.clientSubs[op.sub.subid] = op.sub
 	}

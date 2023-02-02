@@ -25,6 +25,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -206,7 +207,10 @@ type Config struct {
 	JWTSecret string `toml:",omitempty"`
 
 	// Maximum number of messages in a batch
-	RPCBatchLimit uint64 `toml:",omitempty"`
+	RPCBatchLimit               uint64 `toml:",omitempty"`
+	JsonRPCExecutionPoolThreads uint64 `toml:",omitempty"`
+
+	JsonRPCExecutionPoolRequesttimeout time.Duration `toml:",omitempty"`
 }
 
 // IPCEndpoint resolves an IPC endpoint based on a configured value, taking into

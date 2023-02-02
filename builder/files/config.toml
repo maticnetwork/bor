@@ -93,6 +93,9 @@ syncmode = "full"
 #     read = "30s"
 #     write = "30s"
 #     idle = "2m0s"
+#   [jsonrpc.executionpool]
+#     threads = 100
+#     requesttimeout = "10s"
 
 [gpo]
   # blocks = 20

@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"sync/atomic"
+	"time"
 
 	mapset "github.com/deckarep/golang-set"
 
@@ -55,19 +56,18 @@ type Server struct {
 }
 
 // NewServer creates a new server instance with no registered handlers.
-func NewServer() *Server {
+func NewServer(executionPoolThreads uint64, executionPoolThreadRequesttimeout time.Duration) *Server {
 	server := &Server{
 		idgen:         randomIDGenerator(),
 		codecs:        mapset.NewSet(),
 		run:           1,
-		executionPool: NewExecutionPool(threads),
+		executionPool: NewExecutionPool(int(executionPoolThreads), executionPoolThreadRequesttimeout),
 	}
 
 	// Register the default service providing meta information about the RPC service such
 	// as the services and methods it offers.
 	rpcService := &RPCService{server}
 	server.RegisterName(MetadataApi, rpcService)
-
 	return server
 }
 
