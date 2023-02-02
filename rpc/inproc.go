@@ -19,8 +19,6 @@ package rpc
 import (
 	"context"
 	"net"
-
-	"github.com/JekaMas/workerpool"
 )
 
 // DialInProc attaches an in-process connection to the given RPC server.
@@ -33,7 +31,7 @@ func DialInProc(handler *Server) *Client {
 		handler.executionPool.Submit(initctx, func() error {
 			handler.ServeCodec(NewCodec(p1), 0)
 			return nil
-		}, workerpool.NoTimeout)
+		})
 
 		return NewCodec(p2), nil
 	})
