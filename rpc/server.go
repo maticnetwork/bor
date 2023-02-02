@@ -22,7 +22,6 @@ import (
 	"io"
 	"sync/atomic"
 
-	"github.com/JekaMas/workerpool"
 	mapset "github.com/deckarep/golang-set"
 
 	"github.com/ethereum/go-ethereum/log"
@@ -52,17 +51,23 @@ type Server struct {
 	codecs   mapset.Set
 
 	BatchLimit    uint64
-	executionPool atomic.Pointer[workerpool.WorkerPool]
+	executionPool *SafePool
 }
 
 // NewServer creates a new server instance with no registered handlers.
 func NewServer() *Server {
-	server := &Server{idgen: randomIDGenerator(), codecs: mapset.NewSet(), run: 1}
+	server := &Server{
+		idgen:         randomIDGenerator(),
+		codecs:        mapset.NewSet(),
+		run:           1,
+		executionPool: NewExecutionPool(threads),
+	}
+
 	// Register the default service providing meta information about the RPC service such
 	// as the services and methods it offers.
 	rpcService := &RPCService{server}
 	server.RegisterName(MetadataApi, rpcService)
-	server.executionPool.Store(workerpool.New(threads))
+
 	return server
 }
 
@@ -109,7 +114,7 @@ func (s *Server) serveSingleRequest(ctx context.Context, codec ServerCodec) {
 		return
 	}
 
-	h := newHandler(ctx, codec, s.idgen, &s.services, s.executionPool.Load())
+	h := newHandler(ctx, codec, s.idgen, &s.services, s.executionPool)
 
 	h.allowSubscribe = false
 	defer h.close(io.EOF, nil)
