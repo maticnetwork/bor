@@ -404,7 +404,6 @@ func (n *Node) startRPC() error {
 		if err := server.setListenAddr(n.config.HTTPHost, port); err != nil {
 			return err
 		}
-		fmt.Println("---------------- httpConfig", n.config.HTTPJsonRPCExecutionPoolThreads, n.config.HTTPJsonRPCExecutionPoolRequesttimeout)
 		if err := server.enableRPC(apis, httpConfig{
 			CorsAllowedOrigins: n.config.HTTPCors,
 			Vhosts:             n.config.HTTPVirtualHosts,
