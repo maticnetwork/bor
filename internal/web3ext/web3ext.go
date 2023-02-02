@@ -200,6 +200,26 @@ web3._extend({
 			name: 'getExecutionPoolRequestTimeout',
 			call: 'admin_getExecutionPoolRequestTimeout'
 		}),
+		new web3._extend.Method({
+			name: 'setWSExecutionPoolRequestTimeout',
+			call: 'admin_setWSExecutionPoolRequestTimeout',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'setHttpExecutionPoolRequestTimeout',
+			call: 'admin_setHttpExecutionPoolRequestTimeout',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'setWSExecutionPoolThreads',
+			call: 'admin_setWSExecutionPoolThreads',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'setHttpExecutionPoolThreads',
+			call: 'admin_setHttpExecutionPoolThreads',
+			params: 1
+		}),
 	],
 	properties: [
 		new web3._extend.Property({

@@ -377,3 +377,23 @@ func (api *privateAdminAPI) GetExecutionPoolRequestTimeout() *ExecutionPoolReque
 
 	return executionPoolRequestTimeout
 }
+
+func (api *privateAdminAPI) SetWSExecutionPoolRequestTimeout(n int) *ExecutionPoolRequestTimeout {
+	api.node.ws.wsHandler.Load().(*rpcHandler).server.SetExecutionPoolRequestTimeout(time.Duration(n))
+	return api.GetExecutionPoolRequestTimeout()
+}
+
+func (api *privateAdminAPI) SetHttpExecutionPoolRequestTimeout(n int) *ExecutionPoolRequestTimeout {
+	api.node.http.httpHandler.Load().(*rpcHandler).server.SetExecutionPoolRequestTimeout(time.Duration(n))
+	return api.GetExecutionPoolRequestTimeout()
+}
+
+func (api *privateAdminAPI) SetWSExecutionPoolThreads(n int) *ExecutionPoolThreads {
+	api.node.ws.wsHandler.Load().(*rpcHandler).server.SetExecutionPoolSize(n)
+	return api.GetExecutionPoolThreads()
+}
+
+func (api *privateAdminAPI) SetHttpExecutionPoolThreads(n int) *ExecutionPoolThreads {
+	api.node.http.httpHandler.Load().(*rpcHandler).server.SetExecutionPoolSize(n)
+	return api.GetExecutionPoolThreads()
+}

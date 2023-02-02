@@ -18,6 +18,7 @@ package rpc
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"sync/atomic"
 	"time"
@@ -72,6 +73,14 @@ func NewServer(executionPoolThreads uint64, executionPoolThreadRequesttimeout ti
 
 func (s *Server) SetRPCBatchLimit(batchLimit uint64) {
 	s.BatchLimit = batchLimit
+}
+
+func (s *Server) SetExecutionPoolSize(n int) {
+	s.executionPool.ChangeSize(n)
+}
+
+func (s *Server) SetExecutionPoolRequestTimeout(n time.Duration) {
+	s.executionPool.ChangeTimeout(n)
 }
 
 // RegisterName creates a service for the given receiver type under the given name. When no

@@ -423,7 +423,6 @@ func (n *Node) startRPC() error {
 		if err := server.setListenAddr(n.config.WSHost, port); err != nil {
 			return err
 		}
-		fmt.Println("---------------- wsconfig", n.config.WSJsonRPCExecutionPoolThreads, n.config.WSJsonRPCExecutionPoolRequesttimeout)
 		if err := server.enableWS(n.rpcAPIs, wsConfig{
 			Modules:        n.config.WSModules,
 			Origins:        n.config.WSOrigins,
