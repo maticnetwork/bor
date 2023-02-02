@@ -103,7 +103,6 @@ func New(conf *Config) (*Node, error) {
 		return nil, errors.New(`Config.Name cannot end in ".ipc"`)
 	}
 
-	// TODO - Check this
 	node := &Node{
 		config:        conf,
 		inprocHandler: rpc.NewServer(0, 0),
@@ -405,6 +404,7 @@ func (n *Node) startRPC() error {
 		if err := server.setListenAddr(n.config.HTTPHost, port); err != nil {
 			return err
 		}
+		fmt.Println("---------------- httpConfig", n.config.HTTPJsonRPCExecutionPoolThreads, n.config.HTTPJsonRPCExecutionPoolRequesttimeout)
 		if err := server.enableRPC(apis, httpConfig{
 			CorsAllowedOrigins: n.config.HTTPCors,
 			Vhosts:             n.config.HTTPVirtualHosts,
@@ -424,6 +424,7 @@ func (n *Node) startRPC() error {
 		if err := server.setListenAddr(n.config.WSHost, port); err != nil {
 			return err
 		}
+		fmt.Println("---------------- wsconfig", n.config.WSJsonRPCExecutionPoolThreads, n.config.WSJsonRPCExecutionPoolRequesttimeout)
 		if err := server.enableWS(n.rpcAPIs, wsConfig{
 			Modules:        n.config.WSModules,
 			Origins:        n.config.WSOrigins,
@@ -443,7 +444,6 @@ func (n *Node) startRPC() error {
 		if err := server.setListenAddr(n.config.AuthAddr, port); err != nil {
 			return err
 		}
-		// TODO - Check this
 		if err := server.enableRPC(apis, httpConfig{
 			CorsAllowedOrigins: DefaultAuthCors,
 			Vhosts:             n.config.AuthVirtualHosts,
@@ -459,7 +459,6 @@ func (n *Node) startRPC() error {
 		if err := server.setListenAddr(n.config.AuthAddr, port); err != nil {
 			return err
 		}
-		// TODO - Check this
 		if err := server.enableWS(apis, wsConfig{
 			Modules:   DefaultAuthModules,
 			Origins:   DefaultAuthOrigins,

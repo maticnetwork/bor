@@ -18,7 +18,6 @@ package rpc
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"sync/atomic"
 	"time"
@@ -57,8 +56,6 @@ type Server struct {
 
 // NewServer creates a new server instance with no registered handlers.
 func NewServer(executionPoolThreads uint64, executionPoolThreadRequesttimeout time.Duration) *Server {
-	fmt.Println("---------------- NewServer, executionPoolThreads", executionPoolThreads)
-	fmt.Println("---------------- NewServer, executionPoolThreadRequesttimeout", executionPoolThreadRequesttimeout)
 	server := &Server{
 		idgen:         randomIDGenerator(),
 		codecs:        mapset.NewSet(),

@@ -19,7 +19,6 @@ package rpc
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"reflect"
 	"strconv"
 	"strings"
@@ -269,8 +268,6 @@ func (h *handler) handleSubscriptionResult(msg *jsonrpcMessage) {
 
 // handleResponse processes method call responses.
 func (h *handler) handleResponse(msg *jsonrpcMessage) {
-
-	fmt.Println("---------------- handleResponse, h.executionPoolRequestTimeout", h.executionPoolRequestTimeout)
 
 	op := h.respWait[string(msg.ID)]
 	if op == nil {
