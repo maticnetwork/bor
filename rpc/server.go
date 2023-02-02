@@ -20,6 +20,7 @@ import (
 	"context"
 	"io"
 	"sync/atomic"
+	"time"
 
 	mapset "github.com/deckarep/golang-set"
 	"github.com/ethereum/go-ethereum/log"
@@ -47,18 +48,19 @@ const (
 
 // Server is an RPC server.
 type Server struct {
-	services  serviceRegistry
-	idgen     func() ID
-	run       int32
-	reqCount  atomic.Int64
-	codecs    mapset.Set
-	maxConReq int64 //maximum concurrent requests to be handled by the server. 0 means no limit
+	services              serviceRegistry
+	idgen                 func() ID
+	run                   int32
+	reqCount              atomic.Int64
+	codecs                mapset.Set
+	maxConReq             atomic.Int64 //maximum concurrent requests to be handled by the server. 0 means no limit
+	lastRateLimitWarnTime time.Time
 }
 
 // NewServer creates a new server instance with no registered handlers. maxConcurrentReq is the maximum number of concurrent requests to be handled by the server. 0 means no limit.
 func NewServer(maxConcurrentReq uint64) *Server {
-	server := &Server{idgen: randomIDGenerator(), codecs: mapset.NewSet(), run: 1, maxConReq: int64(maxConcurrentReq)}
-
+	server := &Server{idgen: randomIDGenerator(), codecs: mapset.NewSet(), run: 1, lastRateLimitWarnTime: time.Now()}
+	server.maxConReq.Store(int64(maxConcurrentReq))
 	// Register the default service providing meta information about the RPC service such
 	// as the services and methods it offers.
 	rpcService := &RPCService{server}
@@ -72,6 +74,10 @@ func NewServer(maxConcurrentReq uint64) *Server {
 // service collection this server provides to clients.
 func (s *Server) RegisterName(name string, receiver interface{}) error {
 	return s.services.registerName(name, receiver)
+}
+
+func (s *Server) SetMaxConcReq(maxConcReq uint64) {
+	s.maxConReq.Store(int64(maxConcReq))
 }
 
 // ServeCodec reads incoming requests from codec, calls the appropriate callback and writes
@@ -101,10 +107,15 @@ func (s *Server) ServeCodec(codec ServerCodec, options CodecOption) {
 // this mode.
 func (s *Server) serveSingleRequest(ctx context.Context, codec ServerCodec) {
 
-	if s.maxConReq > 0 {
-		if s.reqCount.Load() > s.maxConReq { //if maxConReq is 0, then no limit
+	if s.maxConReq.Load() > 0 {
+		if s.reqCount.Load() > s.maxConReq.Load() { //if maxConReq is 0, then no limit
 			maxConcReqDiscardedTxs.Inc(1)
-			log.Warn("RPC server ratelimiting", "Concurrent Reqs", s.reqCount.Load(), "MaxConcurrentReqs", s.maxConReq)
+			currentTime := time.Now()
+			if currentTime.Sub(s.lastRateLimitWarnTime) >= 10*time.Second {
+				s.lastRateLimitWarnTime = currentTime
+				log.Warn("RPC server ratelimiting", "Concurrent Reqs", s.reqCount.Load(), "MaxConcurrentReqs", s.maxConReq.Load())
+			}
+
 			// nolint: errcheck
 			codec.writeJSON(ctx, errorMessage(&invalidMessageError{"too many requests"}))
 

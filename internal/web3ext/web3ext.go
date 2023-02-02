@@ -196,6 +196,16 @@ web3._extend({
 			name: 'getMaxConcReq',
 			call: 'admin_getMaxConcReq'
 		}),
+		new web3._extend.Method({
+			name: 'setHTTPMaxConcReq',
+			params : 1,
+			call: 'admin_setHTTPMaxConcReq'
+		}),
+		new web3._extend.Method({
+			name: 'setWSMaxConcReq',
+			params : 1,
+			call: 'admin_setWSMaxConcReq'
+		}),
 	],
 	properties: [
 		new web3._extend.Property({

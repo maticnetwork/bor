@@ -96,6 +96,24 @@ func (api *privateAdminAPI) GetMaxConcReq() *MaxConcReq {
 	return maxConcReq
 }
 
+// get max concurrent requests parameter for http rpc requests
+func (api *privateAdminAPI) SetHTTPMaxConcReq(httpMaxConcReq uint64) *MaxConcReq {
+	api.node.http.httpConfig.maxConcReq = httpMaxConcReq
+
+	api.node.http.httpHandler.Load().(*rpcHandler).server.SetMaxConcReq(httpMaxConcReq)
+
+	return api.GetMaxConcReq()
+}
+
+// get max concurrent requests parameter for websocket rpc requests
+func (api *privateAdminAPI) SetWSMaxConcReq(wsMaxConcReq uint64) *MaxConcReq {
+	api.node.ws.wsConfig.maxConcReq = wsMaxConcReq
+
+	api.node.ws.wsHandler.Load().(*rpcHandler).server.SetMaxConcReq(wsMaxConcReq)
+
+	return api.GetMaxConcReq()
+}
+
 // RemovePeer disconnects from a remote node if the connection exists
 func (api *privateAdminAPI) RemovePeer(url string) (bool, error) {
 	// Make sure the server is running, fail otherwise
