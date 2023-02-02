@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -10,28 +11,33 @@ import (
 
 type SafePool struct {
 	executionPool *atomic.Pointer[workerpool.WorkerPool]
-	fastPath      bool
-	timeout       *atomic.Pointer[time.Duration]
+
+	sync.RWMutex
+	fastPath bool
+	timeout  time.Duration
+	size     int
 }
 
 func NewExecutionPool(initialSize int, timeout time.Duration) *SafePool {
-	if initialSize == 0 {
-		return &SafePool{fastPath: true}
+	sp := &SafePool{
+		size:    initialSize,
+		timeout: timeout,
 	}
 
-	var ptr atomic.Pointer[workerpool.WorkerPool]
-	var ptrTimeout atomic.Pointer[time.Duration]
+	if initialSize == 0 {
+		sp.fastPath = true
+
+		return sp
+	}
 
 	p := workerpool.New(initialSize)
-	ptr.Store(p)
+	sp.executionPool.Store(p)
 
-	ptrTimeout.Store(&timeout)
-
-	return &SafePool{executionPool: &ptr, timeout: &ptrTimeout}
+	return sp
 
 }
 
-func (s *SafePool) Submit(ctx context.Context, fn func() error, timeout time.Duration) (<-chan error, bool) {
+func (s *SafePool) Submit(ctx context.Context, fn func() error) (<-chan error, bool) {
 	if s.fastPath {
 		go func() {
 			_ = fn()
@@ -49,7 +55,7 @@ func (s *SafePool) Submit(ctx context.Context, fn func() error, timeout time.Dur
 		return nil, false
 	}
 
-	return pool.Submit(ctx, fn, timeout), true
+	return pool.Submit(ctx, fn, s.Timeout()), true
 }
 
 func (s *SafePool) ChangeSize(n int) {
@@ -60,8 +66,29 @@ func (s *SafePool) ChangeSize(n int) {
 			oldPool.StopWait()
 		}()
 	}
+
+	s.Lock()
+	s.size = n
+	s.Unlock()
 }
 
 func (s *SafePool) ChangeTimeout(n time.Duration) {
-	s.timeout.Swap(&n)
+	s.Lock()
+	defer s.Unlock()
+
+	s.timeout = n
+}
+
+func (s *SafePool) Timeout() time.Duration {
+	s.RLock()
+	defer s.RUnlock()
+
+	return s.timeout
+}
+
+func (s *SafePool) Size() int {
+	s.RLock()
+	defer s.RUnlock()
+
+	return s.size
 }

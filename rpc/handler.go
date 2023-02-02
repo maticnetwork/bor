@@ -231,7 +231,7 @@ func (h *handler) startCallProc(fn func(*callProc)) {
 		fn(&callProc{ctx: ctx})
 
 		return nil
-	}, *h.executionPool.timeout.Load())
+	})
 }
 
 // handleImmediate executes non-call messages. It returns false if the message is a
@@ -292,7 +292,7 @@ func (h *handler) handleResponse(msg *jsonrpcMessage) {
 		h.executionPool.Submit(context.Background(), func() error {
 			op.sub.run()
 			return nil
-		}, *h.executionPool.timeout.Load())
+		})
 
 		h.clientSubs[op.sub.subid] = op.sub
 	}
