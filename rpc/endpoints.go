@@ -28,7 +28,7 @@ import (
 func StartIPCEndpoint(ipcEndpoint string, apis []API) (net.Listener, *Server, error) {
 	// Register all the APIs exposed by the services.
 	var (
-		handler    = NewServer(0, time.Duration(10)*time.Second)
+		handler    = NewServer(10, time.Duration(10)*time.Second)
 		regMap     = make(map[string]struct{})
 		registered []string
 	)
