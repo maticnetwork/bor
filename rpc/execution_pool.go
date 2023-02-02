@@ -2,13 +2,14 @@ package rpc
 
 import (
 	"sync/atomic"
+	"time"
 
 	"github.com/JekaMas/workerpool"
 )
 
 const (
 	threads        = 100
-	requestTimeout = 0 //10 * time.Second
+	requestTimeout = 10 * time.Second
 )
 
 //nolint:unused
