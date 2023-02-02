@@ -37,7 +37,7 @@ func (s *SafePool) Submit(ctx context.Context, fn func() error, timeout time.Dur
 			_ = fn()
 		}()
 
-		return nil, false
+		return nil, true
 	}
 
 	if s.executionPool == nil {
