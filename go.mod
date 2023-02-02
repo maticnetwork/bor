@@ -85,7 +85,7 @@ require (
 )
 
 require (
-	github.com/JekaMas/workerpool v1.1.4 // indirect
+	github.com/JekaMas/workerpool v1.1.5 // indirect
 	github.com/gammazero/deque v0.2.0 // indirect
 )
 
