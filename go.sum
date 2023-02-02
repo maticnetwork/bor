@@ -31,8 +31,8 @@ github.com/BurntSushi/xgb v0.0.0-20160522181843-27f122750802/go.mod h1:IVnqGOEym
 github.com/DATA-DOG/go-sqlmock v1.3.3/go.mod h1:f/Ixk793poVmq4qj/V1dPUg2JEAKC73Q5eFN3EC/SaM=
 github.com/JekaMas/go-grpc-net-conn v0.0.0-20220708155319-6aff21f2d13d h1:RO27lgfZF8s9lZ3pWyzc0gCE0RZC+6/PXbRjAa0CNp8=
 github.com/JekaMas/go-grpc-net-conn v0.0.0-20220708155319-6aff21f2d13d/go.mod h1:romz7UPgSYhfJkKOalzEEyV6sWtt/eAEm0nX2aOrod0=
-github.com/JekaMas/workerpool v1.1.4 h1:HtGpDD+XOtkupb6ZiWQcSOrheDbFyN4rJYv73FCjwYg=
-github.com/JekaMas/workerpool v1.1.4/go.mod h1:IoDWPpwMcA27qbuugZKeBslDrgX09lVmksuh9sjzbhc=
+github.com/JekaMas/workerpool v1.1.5 h1:xmrx2Zyft95CEGiEqzDxiawptCIRZQ0zZDhTGDFOCaw=
+github.com/JekaMas/workerpool v1.1.5/go.mod h1:IoDWPpwMcA27qbuugZKeBslDrgX09lVmksuh9sjzbhc=
 github.com/Masterminds/goutils v1.1.0 h1:zukEsf/1JZwCMgHiK3GZftabmxiCw4apj3a28RPBiVg=
 github.com/Masterminds/goutils v1.1.0/go.mod h1:8cTjp+g8YejhMuvIA5y2vz3BpJxksy863GQaJW2MFNU=
 github.com/Masterminds/semver v1.5.0 h1:H65muMkzWKEuNDnfl9d70GUjFniHKHRbFPGBuZ3QEww=
