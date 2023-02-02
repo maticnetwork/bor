@@ -75,7 +75,7 @@ type callProc struct {
 	notifiers []*Notifier
 }
 
-func newHandler(connCtx context.Context, conn jsonWriter, idgen func() ID, reg *serviceRegistry) *handler {
+func newHandler(connCtx context.Context, conn jsonWriter, idgen func() ID, reg *serviceRegistry, pool *workerpool.WorkerPool) *handler {
 	rootCtx, cancelRoot := context.WithCancel(connCtx)
 	h := &handler{
 		reg:            reg,
@@ -94,7 +94,8 @@ func newHandler(connCtx context.Context, conn jsonWriter, idgen func() ID, reg *
 	}
 	h.unsubscribeCb = newCallback(reflect.Value{}, reflect.ValueOf(h.unsubscribe))
 
-	h.executionPool.Store(workerpool.New(threads))
+	h.executionPool.Store(pool)
+
 	return h
 }
 
@@ -228,13 +229,21 @@ func (h *handler) startCallProc(fn func(*callProc)) {
 
 	ctx, cancel := context.WithCancel(h.rootCtx)
 
-	h.executionPool.Load().Submit(context.Background(), func() error {
-		defer h.callWG.Done()
-		defer cancel()
-		fn(&callProc{ctx: ctx})
+	if h.executionPool.Load() != nil {
+		h.executionPool.Load().Submit(context.Background(), func() error {
+			defer h.callWG.Done()
+			defer cancel()
+			fn(&callProc{ctx: ctx})
 
-		return nil
-	}, requestTimeout)
+			return nil
+		}, requestTimeout)
+	} else {
+		go func() {
+			defer h.callWG.Done()
+			defer cancel()
+			fn(&callProc{ctx: ctx})
+		}()
+	}
 }
 
 // handleImmediate executes non-call messages. It returns false if the message is a
@@ -291,10 +300,15 @@ func (h *handler) handleResponse(msg *jsonrpcMessage) {
 		return
 	}
 	if op.err = json.Unmarshal(msg.Result, &op.sub.subid); op.err == nil {
-		h.executionPool.Load().Submit(context.Background(), func() error {
-			op.sub.run()
-			return nil
-		}, requestTimeout)
+		if h.executionPool.Load() != nil {
+			h.executionPool.Load().Submit(context.Background(), func() error {
+				op.sub.run()
+				return nil
+			}, requestTimeout)
+		} else {
+			go op.sub.run()
+		}
+
 		h.clientSubs[op.sub.subid] = op.sub
 	}
 }
