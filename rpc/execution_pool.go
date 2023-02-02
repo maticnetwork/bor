@@ -96,7 +96,3 @@ func (s *SafePool) Size() int {
 
 	return s.size
 }
-
-func (s *SafePool) ChangeTimeout(n time.Duration) {
-	s.timeout.Swap(&n)
-}
