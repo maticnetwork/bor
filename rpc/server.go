@@ -83,6 +83,14 @@ func (s *Server) SetExecutionPoolRequestTimeout(n time.Duration) {
 	s.executionPool.ChangeTimeout(n)
 }
 
+func (s *Server) GetExecutionPoolRequestTimeout() time.Duration {
+	return *s.executionPool.timeout.Load()
+}
+
+func (s *Server) GetExecutionPoolThreads() int {
+	return s.executionPool.executionPool.Load().Size()
+}
+
 // RegisterName creates a service for the given receiver type under the given name. When no
 // methods on the given receiver match the criteria to be either a RPC method or a
 // subscription an error is returned. Otherwise a new service is created and added to the

@@ -28,6 +28,7 @@ func NewExecutionPool(initialSize int, timeout time.Duration) *SafePool {
 	ptrTimeout.Store(&timeout)
 
 	return &SafePool{executionPool: &ptr, timeout: &ptrTimeout}
+
 }
 
 func (s *SafePool) Submit(ctx context.Context, fn func() error, timeout time.Duration) (<-chan error, bool) {
