@@ -84,11 +84,11 @@ func (s *Server) SetExecutionPoolRequestTimeout(n time.Duration) {
 }
 
 func (s *Server) GetExecutionPoolRequestTimeout() time.Duration {
-	return *s.executionPool.timeout.Load()
+	return s.executionPool.Timeout()
 }
 
 func (s *Server) GetExecutionPoolThreads() int {
-	return s.executionPool.executionPool.Load().Size()
+	return s.executionPool.Size()
 }
 
 // RegisterName creates a service for the given receiver type under the given name. When no
