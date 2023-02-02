@@ -250,8 +250,6 @@ type JsonRPCConfig struct {
 	Graphql *APIConfig `hcl:"graphql,block" toml:"graphql,block"`
 
 	HttpTimeout *HttpTimeouts `hcl:"timeouts,block" toml:"timeouts,block"`
-
-	ExecutionPool *ExecutionPoolConfig `hcl:"executionpool,block" toml:"executionpool,block"`
 }
 
 type GRPCConfig struct {
@@ -283,9 +281,7 @@ type APIConfig struct {
 
 	// Origins is the list of endpoints to accept requests from (only consumed for websockets)
 	Origins []string `hcl:"origins,optional" toml:"origins,optional"`
-}
 
-type ExecutionPoolConfig struct {
 	Threads uint64 `hcl:"threads,optional" toml:"threads,optional"`
 
 	Requesttimeout time.Duration `hcl:"requesttimeout,optional" toml:"requesttimeout,optional"`
@@ -515,21 +511,25 @@ func DefaultConfig() *Config {
 			GasCap:     ethconfig.Defaults.RPCGasCap,
 			TxFeeCap:   ethconfig.Defaults.RPCTxFeeCap,
 			Http: &APIConfig{
-				Enabled: false,
-				Port:    8545,
-				Prefix:  "",
-				Host:    "localhost",
-				API:     []string{"eth", "net", "web3", "txpool", "bor"},
-				Cors:    []string{"localhost"},
-				VHost:   []string{"localhost"},
+				Enabled:        false,
+				Port:           8545,
+				Prefix:         "",
+				Host:           "localhost",
+				API:            []string{"eth", "net", "web3", "txpool", "bor"},
+				Cors:           []string{"localhost"},
+				VHost:          []string{"localhost"},
+				Threads:        100,
+				Requesttimeout: 10 * time.Second,
 			},
 			Ws: &APIConfig{
-				Enabled: false,
-				Port:    8546,
-				Prefix:  "",
-				Host:    "localhost",
-				API:     []string{"net", "web3"},
-				Origins: []string{"localhost"},
+				Enabled:        false,
+				Port:           8546,
+				Prefix:         "",
+				Host:           "localhost",
+				API:            []string{"net", "web3"},
+				Origins:        []string{"localhost"},
+				Threads:        100,
+				Requesttimeout: 10 * time.Second,
 			},
 			Graphql: &APIConfig{
 				Enabled: false,
@@ -540,10 +540,6 @@ func DefaultConfig() *Config {
 				ReadTimeout:  30 * time.Second,
 				WriteTimeout: 30 * time.Second,
 				IdleTimeout:  120 * time.Second,
-			},
-			ExecutionPool: &ExecutionPoolConfig{
-				Threads:        100,
-				Requesttimeout: 10 * time.Second,
 			},
 		},
 		Ethstats: "",
@@ -1009,9 +1005,11 @@ func (c *Config) buildNode() (*node.Config, error) {
 			WriteTimeout: c.JsonRPC.HttpTimeout.WriteTimeout,
 			IdleTimeout:  c.JsonRPC.HttpTimeout.IdleTimeout,
 		},
-		RPCBatchLimit:                      c.RPCBatchLimit,
-		JsonRPCExecutionPoolThreads:        c.JsonRPC.ExecutionPool.Threads,
-		JsonRPCExecutionPoolRequesttimeout: c.JsonRPC.ExecutionPool.Requesttimeout,
+		RPCBatchLimit:                          c.RPCBatchLimit,
+		WSJsonRPCExecutionPoolThreads:          c.JsonRPC.Ws.Threads,
+		WSJsonRPCExecutionPoolRequesttimeout:   c.JsonRPC.Ws.Requesttimeout,
+		HTTPJsonRPCExecutionPoolThreads:        c.JsonRPC.Http.Threads,
+		HTTPJsonRPCExecutionPoolRequesttimeout: c.JsonRPC.Http.Requesttimeout,
 	}
 
 	// dev mode

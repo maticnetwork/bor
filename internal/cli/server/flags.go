@@ -444,6 +444,20 @@ func (c *Command) Flags() *flagset.Flagset {
 		Default: c.cliConfig.JsonRPC.Http.API,
 		Group:   "JsonRPC",
 	})
+	f.Uint64Flag(&flagset.Uint64Flag{
+		Name:    "http.threads",
+		Usage:   "No of threads for executionpool",
+		Value:   &c.cliConfig.JsonRPC.Http.Threads,
+		Default: c.cliConfig.JsonRPC.Http.Threads,
+		Group:   "JsonRPC",
+	})
+	f.DurationFlag(&flagset.DurationFlag{
+		Name:    "http.requesttimeout",
+		Usage:   "Timeout for threads for executionpool",
+		Value:   &c.cliConfig.JsonRPC.Http.Requesttimeout,
+		Default: c.cliConfig.JsonRPC.Http.Requesttimeout,
+		Group:   "JsonRPC",
+	})
 
 	// ws options
 	f.BoolFlag(&flagset.BoolFlag{
@@ -481,20 +495,18 @@ func (c *Command) Flags() *flagset.Flagset {
 		Default: c.cliConfig.JsonRPC.Ws.API,
 		Group:   "JsonRPC",
 	})
-
-	// execution pool options
 	f.Uint64Flag(&flagset.Uint64Flag{
-		Name:    "executionpool.threads",
+		Name:    "ws.threads",
 		Usage:   "No of threads for executionpool",
-		Value:   &c.cliConfig.JsonRPC.ExecutionPool.Threads,
-		Default: c.cliConfig.JsonRPC.ExecutionPool.Threads,
+		Value:   &c.cliConfig.JsonRPC.Ws.Threads,
+		Default: c.cliConfig.JsonRPC.Ws.Threads,
 		Group:   "JsonRPC",
 	})
 	f.DurationFlag(&flagset.DurationFlag{
-		Name:    "executionpool.requesttimeout",
+		Name:    "ws.requesttimeout",
 		Usage:   "Timeout for threads for executionpool",
-		Value:   &c.cliConfig.JsonRPC.ExecutionPool.Requesttimeout,
-		Default: c.cliConfig.JsonRPC.ExecutionPool.Requesttimeout,
+		Value:   &c.cliConfig.JsonRPC.Ws.Requesttimeout,
+		Default: c.cliConfig.JsonRPC.Ws.Requesttimeout,
 		Group:   "JsonRPC",
 	})
 

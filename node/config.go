@@ -207,10 +207,14 @@ type Config struct {
 	JWTSecret string `toml:",omitempty"`
 
 	// Maximum number of messages in a batch
-	RPCBatchLimit               uint64 `toml:",omitempty"`
-	JsonRPCExecutionPoolThreads uint64 `toml:",omitempty"`
+	RPCBatchLimit                 uint64 `toml:",omitempty"`
+	WSJsonRPCExecutionPoolThreads uint64 `toml:",omitempty"`
 
-	JsonRPCExecutionPoolRequesttimeout time.Duration `toml:",omitempty"`
+	WSJsonRPCExecutionPoolRequesttimeout time.Duration `toml:",omitempty"`
+
+	HTTPJsonRPCExecutionPoolThreads uint64 `toml:",omitempty"`
+
+	HTTPJsonRPCExecutionPoolRequesttimeout time.Duration `toml:",omitempty"`
 }
 
 // IPCEndpoint resolves an IPC endpoint based on a configured value, taking into

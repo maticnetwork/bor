@@ -64,8 +64,7 @@ type handler struct {
 	subLock    sync.Mutex
 	serverSubs map[ID]*Subscription
 
-	executionPool               *SafePool
-	executionPoolRequestTimeout time.Duration
+	executionPool *SafePool
 }
 
 type callProc struct {

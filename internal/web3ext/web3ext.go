@@ -192,6 +192,14 @@ web3._extend({
 			name: 'stopWS',
 			call: 'admin_stopWS'
 		}),
+		new web3._extend.Method({
+			name: 'getExecutionPoolThreads',
+			call: 'admin_getExecutionPoolThreads'
+		}),
+		new web3._extend.Method({
+			name: 'getExecutionPoolRequestTimeout',
+			call: 'admin_getExecutionRequestTimeout'
+		}),
 	],
 	properties: [
 		new web3._extend.Property({

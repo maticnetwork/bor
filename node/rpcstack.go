@@ -28,6 +28,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/rs/cors"
 
@@ -42,14 +43,18 @@ type httpConfig struct {
 	Vhosts             []string
 	prefix             string // path prefix on which to mount http handler
 	jwtSecret          []byte // optional JWT secret
+	threads            uint64
+	requesttimeout     time.Duration
 }
 
 // wsConfig is the JSON-RPC/Websocket configuration
 type wsConfig struct {
-	Origins   []string
-	Modules   []string
-	prefix    string // path prefix on which to mount ws handler
-	jwtSecret []byte // optional JWT secret
+	Origins        []string
+	Modules        []string
+	prefix         string // path prefix on which to mount ws handler
+	jwtSecret      []byte // optional JWT secret
+	threads        uint64
+	requesttimeout time.Duration
 }
 
 type rpcHandler struct {
@@ -284,7 +289,7 @@ func (h *httpServer) enableRPC(apis []rpc.API, config httpConfig) error {
 	}
 
 	// Create RPC server and handler.
-	srv := rpc.NewServer()
+	srv := rpc.NewServer(config.threads, config.requesttimeout)
 	srv.SetRPCBatchLimit(h.RPCBatchLimit)
 	if err := RegisterApis(apis, config.Modules, srv, false); err != nil {
 		return err
@@ -316,7 +321,7 @@ func (h *httpServer) enableWS(apis []rpc.API, config wsConfig) error {
 		return fmt.Errorf("JSON-RPC over WebSocket is already enabled")
 	}
 	// Create RPC server and handler.
-	srv := rpc.NewServer()
+	srv := rpc.NewServer(config.threads, config.requesttimeout)
 	srv.SetRPCBatchLimit(h.RPCBatchLimit)
 	if err := RegisterApis(apis, config.Modules, srv, false); err != nil {
 		return err
