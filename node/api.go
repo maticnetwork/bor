@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -341,4 +342,38 @@ func (s *publicWeb3API) ClientVersion() string {
 // It assumes the input is hex encoded.
 func (s *publicWeb3API) Sha3(input hexutil.Bytes) hexutil.Bytes {
 	return crypto.Keccak256(input)
+}
+
+type ExecutionPoolThreads struct {
+	HttpLimit uint64
+	WSLimit   uint64
+}
+
+type ExecutionPoolRequestTimeout struct {
+	HttpLimit time.Duration
+	WSLimit   time.Duration
+}
+
+func (api *privateAdminAPI) GetExecutionPoolThreads() *ExecutionPoolThreads {
+	httpLimit := api.node.http.httpConfig.threads
+	wsLimit := api.node.ws.wsConfig.threads
+
+	executionPoolThreads := &ExecutionPoolThreads{
+		HttpLimit: httpLimit,
+		WSLimit:   wsLimit,
+	}
+
+	return executionPoolThreads
+}
+
+func (api *privateAdminAPI) getExecutionPoolRequestTimeout() *ExecutionPoolRequestTimeout {
+	httpLimit := api.node.http.httpConfig.requesttimeout
+	wsLimit := api.node.ws.wsConfig.requesttimeout
+
+	executionPoolRequestTimeout := &ExecutionPoolRequestTimeout{
+		HttpLimit: httpLimit,
+		WSLimit:   wsLimit,
+	}
+
+	return executionPoolRequestTimeout
 }

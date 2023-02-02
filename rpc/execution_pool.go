@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"context"
 	"sync/atomic"
 	"time"
 
@@ -9,18 +10,54 @@ import (
 
 const (
 	threads        = 100
-	requestTimeout = 10 * time.Second
+	requestTimeout = 0 //10 * time.Second
 )
 
-//nolint:unused
-func changePoolSize(execPool *atomic.Pointer[workerpool.WorkerPool], n int) {
-	oldPool := execPool.Load()
+type SafePool struct {
+	executionPool *atomic.Pointer[workerpool.WorkerPool]
+	fastPath      bool
+}
+
+func NewExecutionPool(initialSize int) *SafePool {
+	if initialSize == 0 {
+		return &SafePool{fastPath: true}
+	}
+
+	var ptr atomic.Pointer[workerpool.WorkerPool]
+
+	p := workerpool.New(initialSize)
+	ptr.Store(p)
+
+	return &SafePool{executionPool: &ptr}
+}
+
+func (s *SafePool) Submit(ctx context.Context, fn func() error, timeout ...time.Duration) (<-chan error, bool) {
+	if s.fastPath {
+		go func() {
+			_ = fn()
+		}()
+
+		return nil, false
+	}
+
+	if s.executionPool == nil {
+		return nil, false
+	}
+
+	pool := s.executionPool.Load()
+	if pool == nil {
+		return nil, false
+	}
+
+	return pool.Submit(ctx, fn, timeout...), true
+}
+
+func (s *SafePool) ChangeSize(n int) {
+	oldPool := s.executionPool.Swap(workerpool.New(n))
 
 	if oldPool != nil {
 		go func() {
 			oldPool.StopWait()
 		}()
 	}
-
-	execPool.Store(workerpool.New(n))
 }
