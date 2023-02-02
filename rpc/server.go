@@ -110,7 +110,9 @@ func (s *Server) serveSingleRequest(ctx context.Context, codec ServerCodec) {
 	if s.maxConReq.Load() > 0 {
 		if s.reqCount.Load() > s.maxConReq.Load() { //if maxConReq is 0, then no limit
 			maxConcReqDiscardedTxs.Inc(1)
+
 			currentTime := time.Now()
+
 			if currentTime.Sub(s.lastRateLimitWarnTime) >= 10*time.Second {
 				s.lastRateLimitWarnTime = currentTime
 				log.Warn("RPC server ratelimiting", "Concurrent Reqs", s.reqCount.Load(), "MaxConcurrentReqs", s.maxConReq.Load())
