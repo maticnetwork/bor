@@ -392,25 +392,25 @@ func (api *privateAdminAPI) GetExecutionPoolRequestTimeout() *ExecutionPoolReque
 	return executionPoolRequestTimeout
 }
 
-func (api *privateAdminAPI) SetWSExecutionPoolRequestTimeout(n int) *ExecutionPoolRequestTimeout {
-	if api.node.ws.host != "" {
-		api.node.ws.wsConfig.executionPoolRequestTimeout = time.Duration(n) * time.Millisecond
-		api.node.ws.wsHandler.Load().(*rpcHandler).server.SetExecutionPoolRequestTimeout(time.Duration(n) * time.Millisecond)
-		log.Warn("updating ws execution pool request timeout", "timeout", n)
-	}
+// func (api *privateAdminAPI) SetWSExecutionPoolRequestTimeout(n int) *ExecutionPoolRequestTimeout {
+// 	if api.node.ws.host != "" {
+// 		api.node.ws.wsConfig.executionPoolRequestTimeout = time.Duration(n) * time.Millisecond
+// 		api.node.ws.wsHandler.Load().(*rpcHandler).server.SetExecutionPoolRequestTimeout(time.Duration(n) * time.Millisecond)
+// 		log.Warn("updating ws execution pool request timeout", "timeout", n)
+// 	}
 
-	return api.GetExecutionPoolRequestTimeout()
-}
+// 	return api.GetExecutionPoolRequestTimeout()
+// }
 
-func (api *privateAdminAPI) SetHttpExecutionPoolRequestTimeout(n int) *ExecutionPoolRequestTimeout {
-	if api.node.http.host != "" {
-		api.node.http.httpConfig.executionPoolRequestTimeout = time.Duration(n) * time.Millisecond
-		api.node.http.httpHandler.Load().(*rpcHandler).server.SetExecutionPoolRequestTimeout(time.Duration(n) * time.Millisecond)
-		log.Warn("updating http execution pool request timeout", "timeout", n)
-	}
+// func (api *privateAdminAPI) SetHttpExecutionPoolRequestTimeout(n int) *ExecutionPoolRequestTimeout {
+// 	if api.node.http.host != "" {
+// 		api.node.http.httpConfig.executionPoolRequestTimeout = time.Duration(n) * time.Millisecond
+// 		api.node.http.httpHandler.Load().(*rpcHandler).server.SetExecutionPoolRequestTimeout(time.Duration(n) * time.Millisecond)
+// 		log.Warn("updating http execution pool request timeout", "timeout", n)
+// 	}
 
-	return api.GetExecutionPoolRequestTimeout()
-}
+// 	return api.GetExecutionPoolRequestTimeout()
+// }
 
 func (api *privateAdminAPI) SetWSExecutionPoolSize(n int) *ExecutionPoolSize {
 	if api.node.ws.host != "" {
