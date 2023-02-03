@@ -379,7 +379,7 @@ func (api *privateAdminAPI) GetExecutionPoolRequestTimeout() *ExecutionPoolReque
 }
 
 func (api *privateAdminAPI) SetWSExecutionPoolRequestTimeout(n int) *ExecutionPoolRequestTimeout {
-	api.node.ws.wsConfig.requesttimeout = time.Duration(n) * time.Second
+	api.node.ws.wsConfig.executionPoolRequestTimeout = time.Duration(n) * time.Second
 	api.node.ws.wsHandler.Load().(*rpcHandler).server.SetExecutionPoolRequestTimeout(time.Duration(n) * time.Second)
 	log.Warn("Updating ws execution pool request timeout", "timeout", n)
 
@@ -387,7 +387,7 @@ func (api *privateAdminAPI) SetWSExecutionPoolRequestTimeout(n int) *ExecutionPo
 }
 
 func (api *privateAdminAPI) SetHttpExecutionPoolRequestTimeout(n int) *ExecutionPoolRequestTimeout {
-	api.node.http.httpConfig.requesttimeout = time.Duration(n) * time.Second
+	api.node.http.httpConfig.executionPoolRequestTimeout = time.Duration(n) * time.Second
 	api.node.http.httpHandler.Load().(*rpcHandler).server.SetExecutionPoolRequestTimeout(time.Duration(n) * time.Second)
 	log.Warn("Updating http execution pool request timeout", "timeout", n)
 
@@ -395,7 +395,7 @@ func (api *privateAdminAPI) SetHttpExecutionPoolRequestTimeout(n int) *Execution
 }
 
 func (api *privateAdminAPI) SetWSExecutionPoolSize(n int) *ExecutionPoolSize {
-	api.node.ws.wsConfig.threads = uint64(n)
+	api.node.ws.wsConfig.executionPoolSize = uint64(n)
 	api.node.ws.wsHandler.Load().(*rpcHandler).server.SetExecutionPoolSize(n)
 	log.Warn("Updating ws execution pool size", "threads", n)
 
@@ -403,7 +403,7 @@ func (api *privateAdminAPI) SetWSExecutionPoolSize(n int) *ExecutionPoolSize {
 }
 
 func (api *privateAdminAPI) SetHttpExecutionPoolSize(n int) *ExecutionPoolSize {
-	api.node.http.httpConfig.threads = uint64(n)
+	api.node.http.httpConfig.executionPoolSize = uint64(n)
 	api.node.http.httpHandler.Load().(*rpcHandler).server.SetExecutionPoolSize(n)
 	log.Warn("Updating http execution pool size", "threads", n)
 
