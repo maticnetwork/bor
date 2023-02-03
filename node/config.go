@@ -206,13 +206,11 @@ type Config struct {
 	// JWTSecret is the hex-encoded jwt secret.
 	JWTSecret string `toml:",omitempty"`
 
-	WSJsonRPCExecutionPoolThreads uint64 `toml:",omitempty"`
-
-	WSJsonRPCExecutionPoolRequesttimeout time.Duration `toml:",omitempty"`
-
-	HTTPJsonRPCExecutionPoolThreads uint64 `toml:",omitempty"`
-
-	HTTPJsonRPCExecutionPoolRequesttimeout time.Duration `toml:",omitempty"`
+	// Configs for RPC execution pool
+	WSJsonRPCExecutionPoolSize             uint64        `toml:",omitempty"`
+	WSJsonRPCExecutionPoolRequestTimeout   time.Duration `toml:",omitempty"`
+	HTTPJsonRPCExecutionPoolSize           uint64        `toml:",omitempty"`
+	HTTPJsonRPCExecutionPoolRequestTimeout time.Duration `toml:",omitempty"`
 }
 
 // IPCEndpoint resolves an IPC endpoint based on a configured value, taking into

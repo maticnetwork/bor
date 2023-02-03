@@ -193,8 +193,8 @@ web3._extend({
 			call: 'admin_stopWS'
 		}),
 		new web3._extend.Method({
-			name: 'getExecutionPoolThreads',
-			call: 'admin_getExecutionPoolThreads'
+			name: 'getExecutionPoolSize',
+			call: 'admin_getExecutionPoolSize'
 		}),
 		new web3._extend.Method({
 			name: 'getExecutionPoolRequestTimeout',
@@ -211,13 +211,13 @@ web3._extend({
 			params: 1
 		}),
 		new web3._extend.Method({
-			name: 'setWSExecutionPoolThreads',
-			call: 'admin_setWSExecutionPoolThreads',
+			name: 'setWSExecutionPoolSize',
+			call: 'admin_setWSExecutionPoolSize',
 			params: 1
 		}),
 		new web3._extend.Method({
-			name: 'setHttpExecutionPoolThreads',
-			call: 'admin_setHttpExecutionPoolThreads',
+			name: 'setHttpExecutionPoolSize',
+			call: 'admin_setHttpExecutionPoolSize',
 			params: 1
 		}),
 	],

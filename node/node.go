@@ -406,8 +406,8 @@ func (n *Node) startRPC() error {
 			Vhosts:             n.config.HTTPVirtualHosts,
 			Modules:            n.config.HTTPModules,
 			prefix:             n.config.HTTPPathPrefix,
-			threads:            n.config.HTTPJsonRPCExecutionPoolThreads,
-			requesttimeout:     n.config.HTTPJsonRPCExecutionPoolRequesttimeout,
+			threads:            n.config.HTTPJsonRPCExecutionPoolSize,
+			requesttimeout:     n.config.HTTPJsonRPCExecutionPoolRequestTimeout,
 		}); err != nil {
 			return err
 		}
@@ -424,8 +424,8 @@ func (n *Node) startRPC() error {
 			Modules:        n.config.WSModules,
 			Origins:        n.config.WSOrigins,
 			prefix:         n.config.WSPathPrefix,
-			threads:        n.config.WSJsonRPCExecutionPoolThreads,
-			requesttimeout: n.config.WSJsonRPCExecutionPoolRequesttimeout,
+			threads:        n.config.WSJsonRPCExecutionPoolSize,
+			requesttimeout: n.config.WSJsonRPCExecutionPoolRequestTimeout,
 		}); err != nil {
 			return err
 		}
