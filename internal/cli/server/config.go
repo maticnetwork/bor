@@ -521,7 +521,7 @@ func DefaultConfig() *Config {
 				API:                         []string{"eth", "net", "web3", "txpool", "bor"},
 				Cors:                        []string{"localhost"},
 				VHost:                       []string{"localhost"},
-				ExecutionPoolSize:           100,
+				ExecutionPoolSize:           40,
 				ExecutionPoolRequestTimeout: 10 * time.Second,
 			},
 			Ws: &APIConfig{
@@ -531,7 +531,7 @@ func DefaultConfig() *Config {
 				Host:                        "localhost",
 				API:                         []string{"net", "web3"},
 				Origins:                     []string{"localhost"},
-				ExecutionPoolSize:           100,
+				ExecutionPoolSize:           40,
 				ExecutionPoolRequestTimeout: 10 * time.Second,
 			},
 			Graphql: &APIConfig{
