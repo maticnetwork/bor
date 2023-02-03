@@ -33,11 +33,12 @@ func NewExecutionPool(initialSize int, timeout time.Duration) *SafePool {
 		return sp
 	}
 
+	var ptr atomic.Pointer[workerpool.WorkerPool]
 	p := workerpool.New(initialSize)
-	sp.executionPool.Store(p)
+	ptr.Store(p)
+	sp.executionPool = &ptr
 
 	return sp
-
 }
 
 func (s *SafePool) Submit(ctx context.Context, fn func() error) (<-chan error, bool) {
