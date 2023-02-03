@@ -13,9 +13,12 @@ type SafePool struct {
 	executionPool *atomic.Pointer[workerpool.WorkerPool]
 
 	sync.RWMutex
+
+	timeout time.Duration
+	size    int
+
+	// Skip sending task to execution pool
 	fastPath bool
-	timeout  time.Duration
-	size     int
 }
 
 func NewExecutionPool(initialSize int, timeout time.Duration) *SafePool {
