@@ -56,12 +56,12 @@ type Server struct {
 }
 
 // NewServer creates a new server instance with no registered handlers.
-func NewServer(executionPoolThreads uint64, executionPoolThreadRequesttimeout time.Duration) *Server {
+func NewServer(executionPoolSize uint64, executionPoolRequesttimeout time.Duration) *Server {
 	server := &Server{
 		idgen:         randomIDGenerator(),
 		codecs:        mapset.NewSet(),
 		run:           1,
-		executionPool: NewExecutionPool(int(executionPoolThreads), executionPoolThreadRequesttimeout),
+		executionPool: NewExecutionPool(int(executionPoolSize), executionPoolRequesttimeout),
 	}
 
 	// Register the default service providing meta information about the RPC service such
@@ -87,7 +87,7 @@ func (s *Server) GetExecutionPoolRequestTimeout() time.Duration {
 	return s.executionPool.Timeout()
 }
 
-func (s *Server) GetExecutionPoolThreads() int {
+func (s *Server) GetExecutionPoolSize() int {
 	return s.executionPool.Size()
 }
 
