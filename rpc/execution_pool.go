@@ -34,6 +34,7 @@ func NewExecutionPool(initialSize int, timeout time.Duration) *SafePool {
 	}
 
 	var ptr atomic.Pointer[workerpool.WorkerPool]
+
 	p := workerpool.New(initialSize)
 	ptr.Store(p)
 	sp.executionPool = &ptr

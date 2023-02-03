@@ -153,7 +153,7 @@ func (s *Server) serveSingleRequest(ctx context.Context, codec ServerCodec) {
 				log.Debug("batch limit %d exceeded: %d requests given", s.BatchLimit, len(reqs))
 			}
 		} else {
-			h.handleBatch(reqs)
+			h.handleBatch(reqs) // nolint: contextcheck
 		}
 	} else {
 		h.handleMsg(reqs[0])
