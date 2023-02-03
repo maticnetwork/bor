@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	threads        = 100
+	threads        = 40
 	requestTimeout = 0 //10 * time.Second
 )
 
