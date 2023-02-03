@@ -228,6 +228,9 @@ type Config struct {
 	// Arguments to pass to heimdall service
 	RunHeimdallArgs string
 
+	// Use child heimdall process to fetch data, Only works when RunHeimdall is true
+	UseHeimdallApp bool
+
 	// Bor logs flag
 	BorLogs bool
 
@@ -259,7 +262,7 @@ func CreateConsensusEngine(stack *node.Node, chainConfig *params.ChainConfig, et
 			return bor.New(chainConfig, db, blockchainAPI, spanner, nil, genesisContractsClient)
 		} else {
 			var heimdallClient bor.IHeimdallClient
-			if ethConfig.RunHeimdall {
+			if ethConfig.RunHeimdall && ethConfig.UseHeimdallApp {
 				heimdallClient = heimdallapp.NewHeimdallAppClient()
 			} else if ethConfig.HeimdallgRPCAddress != "" {
 				heimdallClient = heimdallgrpc.NewHeimdallGRPCClient(ethConfig.HeimdallgRPCAddress)

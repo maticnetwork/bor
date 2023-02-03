@@ -94,7 +94,7 @@ func (c *Command) Flags() *flagset.Flagset {
 	})
 	f.BoolFlag(&flagset.BoolFlag{
 		Name:    "bor.runheimdall",
-		Usage:   "Run Heimdall service as a child process [ WIP ]",
+		Usage:   "Run Heimdall service as a child process",
 		Value:   &c.cliConfig.Heimdall.RunHeimdall,
 		Default: c.cliConfig.Heimdall.RunHeimdall,
 	})
@@ -103,6 +103,12 @@ func (c *Command) Flags() *flagset.Flagset {
 		Usage:   "Arguments to pass to Heimdall service",
 		Value:   &c.cliConfig.Heimdall.RunHeimdallArgs,
 		Default: c.cliConfig.Heimdall.RunHeimdallArgs,
+	})
+	f.BoolFlag(&flagset.BoolFlag{
+		Name:    "bor.useheimdallapp",
+		Usage:   "Use child heimdall process to fetch data, Only works when bor.runheimdall is true",
+		Value:   &c.cliConfig.Heimdall.UseHeimdallApp,
+		Default: c.cliConfig.Heimdall.UseHeimdallApp,
 	})
 
 	// txpool options
