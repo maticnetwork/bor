@@ -38,10 +38,6 @@ The ```bor server``` command runs the Bor client.
 
 - ```bor.heimdallgRPC```: Address of Heimdall gRPC service
 
-- ```bor.runheimdall```: Run Heimdall service as a child process (default: false)
-
-- ```bor.runheimdallargs```: Arguments to pass to Heimdall service
-
 - ```ethstats```: Reporting URL of a ethstats service (nodename:secret@host:port)
 
 - ```gpo.blocks```: Number of recent blocks to check for gas prices (default: 20)
@@ -126,7 +122,7 @@ The ```bor server``` command runs the Bor client.
 
 - ```http.ep-size```: Maximum size of workers to run in rpc execution pool for HTTP requests (default: 40)
 
-- ```http.ep-requesttimeout```: Request Timeout for rpc execution pool for HTTP requests (default: 10s)
+- ```http.ep-requesttimeout```: Request Timeout for rpc execution pool for HTTP requests (default: 0s)
 
 - ```ws```: Enable the WS-RPC server (default: false)
 
@@ -140,7 +136,7 @@ The ```bor server``` command runs the Bor client.
 
 - ```ws.ep-size```: Maximum size of workers to run in rpc execution pool for WS requests (default: 40)
 
-- ```ws.ep-requesttimeout```: Request Timeout for rpc execution pool for WS requests (default: 10s)
+- ```ws.ep-requesttimeout```: Request Timeout for rpc execution pool for WS requests (default: 0s)
 
 - ```graphql```: Enable GraphQL on the HTTP-RPC server. Note that GraphQL can only be started if an HTTP server is started as well. (default: false)
 
