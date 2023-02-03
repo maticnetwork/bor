@@ -50,8 +50,7 @@ type Server struct {
 	run      int32
 	codecs   mapset.Set
 
-	executionPool               *SafePool
-	executionPoolRequesttimeout time.Duration
+	executionPool *SafePool
 }
 
 // NewServer creates a new server instance with no registered handlers.
