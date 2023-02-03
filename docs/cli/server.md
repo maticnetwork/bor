@@ -120,7 +120,7 @@ The ```bor server``` command runs the Bor client.
 
 - ```http.api```: API's offered over the HTTP-RPC interface (default: eth,net,web3,txpool,bor)
 
-- ```http.ep-size```: Maximum size of workers to run in rpc execution pool for HTTP requests (default: 100)
+- ```http.ep-size```: Maximum size of workers to run in rpc execution pool for HTTP requests (default: 40)
 
 - ```http.ep-requesttimeout```: Request Timeout for rpc execution pool for HTTP requests (default: 10s)
 
@@ -134,7 +134,7 @@ The ```bor server``` command runs the Bor client.
 
 - ```ws.api```: API's offered over the WS-RPC interface (default: net,web3)
 
-- ```ws.ep-size```: Maximum size of workers to run in rpc execution pool for WS requests (default: 100)
+- ```ws.ep-size```: Maximum size of workers to run in rpc execution pool for WS requests (default: 40)
 
 - ```ws.ep-requesttimeout```: Request Timeout for rpc execution pool for WS requests (default: 10s)
 
