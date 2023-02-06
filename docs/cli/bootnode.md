@@ -6,7 +6,7 @@
 
 - ```v5```: Enable UDP v5 (default: false)
 
-- ```log-level```: Log level (trace|debug|info|warn|error|crit) (default: info)
+- ```verbosity```: Logging verbosity (trace|debug|info|warn|error|crit) (default: info)
 
 - ```nat```: port mapping mechanism (any|none|upnp|pmp|extip:<IP>) (default: none)
 

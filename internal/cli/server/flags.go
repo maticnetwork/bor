@@ -23,10 +23,10 @@ func (c *Command) Flags() *flagset.Flagset {
 		HideDefaultFromDoc: true,
 	})
 	f.StringFlag(&flagset.StringFlag{
-		Name:    "log-level",
-		Usage:   "Set log level for the server",
-		Value:   &c.cliConfig.LogLevel,
-		Default: c.cliConfig.LogLevel,
+		Name:    "verbosity",
+		Usage:   "Logging verbosity for the server (trace|debug|info|warn|error|crit)",
+		Value:   &c.cliConfig.Verbosity,
+		Default: c.cliConfig.Verbosity,
 	})
 	f.StringFlag(&flagset.StringFlag{
 		Name:               "datadir",

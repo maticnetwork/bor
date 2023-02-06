@@ -75,7 +75,7 @@ func NewServer(config *Config, opts ...serverOption) (*Server, error) {
 	}
 
 	// start the logger
-	setupLogger(config.LogLevel)
+	setupLogger(config.Verbosity)
 
 	var err error
 

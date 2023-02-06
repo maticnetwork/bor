@@ -8,7 +8,7 @@ The ```bor server``` command runs the Bor client.
 
 - ```identity```: Name/Identity of the node
 
-- ```log-level```: Set log level for the server (default: INFO)
+- ```verbosity```: Logging verbosity for the server (trace|debug|info|warn|error|crit) (default: INFO)
 
 - ```datadir```: Path of the data directory to store information
 

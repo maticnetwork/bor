@@ -65,9 +65,9 @@ func (b *BootnodeCommand) Flags() *flagset.Flagset {
 		Value:   &b.v5,
 	})
 	flags.StringFlag(&flagset.StringFlag{
-		Name:    "log-level",
+		Name:    "verbosity",
 		Default: "info",
-		Usage:   "Log level (trace|debug|info|warn|error|crit)",
+		Usage:   "Logging verbosity (trace|debug|info|warn|error|crit)",
 		Value:   &b.logLevel,
 	})
 	flags.StringFlag(&flagset.StringFlag{
