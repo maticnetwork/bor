@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"reflect"
 	"sync"
 	"time"
 
@@ -673,6 +674,33 @@ func (b *SimulatedBackend) SendTransaction(ctx context.Context, tx *types.Transa
 	b.pendingBlock = blocks[0]
 	b.pendingState, _ = state.New(b.pendingBlock.Root(), stateDB.Database(), nil)
 	return nil
+}
+
+// a replica of above `SendTransaction` function
+func (b *SimulatedBackend) SendTransactionConditional(ctx context.Context, tx *types.Transaction, knownAccounts map[string]map[common.Address]interface{}) error {
+	// check knownAccounts
+	currentState, _ := b.blockchain.State()
+
+	for k, v := range knownAccounts["knownAccounts"] {
+		// check if the value is hex string or an object
+		if object, ok := v.(string); ok {
+			actualRootHash := currentState.StorageTrie(k).Hash()
+			if common.HexToHash(object) != actualRootHash {
+				return fmt.Errorf("invalid root hash for: %v root hash: %v actual root hash: %v", k, common.HexToHash(object), actualRootHash)
+			}
+		} else if object, ok := v.(map[string]interface{}); ok {
+			for slot, value := range object {
+				actualValue := currentState.GetState(k, common.HexToHash(slot))
+				if common.HexToHash(value.(string)) != actualValue {
+					return fmt.Errorf("invalid slot value at address: %v slot: %v value: %v actual value: %v", k, slot, value, actualValue)
+				}
+			}
+		} else {
+			return fmt.Errorf("invalid type in knownAccounts %v", reflect.TypeOf(v))
+		}
+	}
+
+	return b.SendTransaction(ctx, tx)
 }
 
 // FilterLogs executes a log filter operation, blocking during execution and

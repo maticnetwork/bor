@@ -21,6 +21,7 @@ package geth
 import (
 	"math/big"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 )
@@ -313,4 +314,8 @@ func (ec *EthereumClient) EstimateGas(ctx *Context, msg *CallMsg) (gas int64, _ 
 // contract address after the transaction has been mined.
 func (ec *EthereumClient) SendTransaction(ctx *Context, tx *Transaction) error {
 	return ec.client.SendTransaction(ctx.context, tx.tx)
+}
+
+func (ec *EthereumClient) SendTransactionConditional(ctx *Context, tx *Transaction, knownAccounts map[string]map[common.Address]interface{}) error {
+	return ec.client.SendTransactionConditional(ctx.context, tx.tx, knownAccounts)
 }
