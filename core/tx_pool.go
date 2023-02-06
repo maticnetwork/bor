@@ -1539,6 +1539,7 @@ func (pool *TxPool) runReorg(ctx context.Context, done chan struct{}, reset *txp
 		// remove any transaction that has been included in the block or was invalidated
 		// because of another transaction (e.g. higher gas price).
 
+		//nolint:nestif
 		if reset != nil {
 			tracing.ElapsedTime(ctx, span, "new block", func(_ context.Context, innerSpan trace.Span) {
 
