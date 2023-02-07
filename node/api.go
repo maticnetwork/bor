@@ -68,7 +68,9 @@ func (api *privateAdminAPI) SetMaxPeers(maxPeers int) (bool, error) {
 	if server == nil {
 		return false, ErrNodeStopped
 	}
+
 	server.SetMaxPeers(maxPeers)
+
 	return true, nil
 }
 
@@ -79,6 +81,7 @@ func (api *privateAdminAPI) GetMaxPeers() (int, error) {
 	if server == nil {
 		return 0, ErrNodeStopped
 	}
+
 	return server.MaxPeers, nil
 }
 

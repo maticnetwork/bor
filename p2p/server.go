@@ -308,15 +308,12 @@ func (srv *Server) Peers() []*Peer {
 }
 
 func (srv *Server) getNonTrustedPeers() []*Peer {
-
 	allPeers := srv.Peers()
 
 	nontrustedPeers := []*Peer{}
 
 	for _, peer := range allPeers {
-
 		if !peer.Info().Network.Trusted {
-
 			nontrustedPeers = append(nontrustedPeers, peer)
 		}
 	}
@@ -334,6 +331,7 @@ func (srv *Server) SetMaxPeers(maxPeers int) {
 			srv.RemovePeer(peer.Node())
 		}
 	}
+
 	srv.MaxPeers = maxPeers
 }
 
