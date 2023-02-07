@@ -307,6 +307,36 @@ func (srv *Server) Peers() []*Peer {
 	return ps
 }
 
+func (srv *Server) getNonTrustedPeers() []*Peer {
+
+	allPeers := srv.Peers()
+
+	nontrustedPeers := []*Peer{}
+
+	for _, peer := range allPeers {
+
+		if !peer.Info().Network.Trusted {
+
+			nontrustedPeers = append(nontrustedPeers, peer)
+		}
+	}
+
+	return nontrustedPeers
+}
+
+// Peers returns all connected peers.
+func (srv *Server) SetMaxPeers(maxPeers int) {
+	currentPeers := srv.getNonTrustedPeers()
+	if len(currentPeers) > maxPeers {
+		peersToDrop := currentPeers[maxPeers:]
+		for _, peer := range peersToDrop {
+			log.Warn("CurrentPeers more than MaxPeers", "removing", peer.ID())
+			srv.RemovePeer(peer.Node())
+		}
+	}
+	srv.MaxPeers = maxPeers
+}
+
 // PeerCount returns the number of connected peers.
 func (srv *Server) PeerCount() int {
 	var count int
@@ -368,6 +398,7 @@ func (srv *Server) RemoveTrustedPeer(node *enode.Node) {
 	case srv.removetrusted <- node:
 	case <-srv.quit:
 	}
+	srv.SetMaxPeers(srv.MaxPeers)
 }
 
 // SubscribeEvents subscribes the given channel to peer events
