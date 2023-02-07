@@ -27,6 +27,7 @@ type BootnodeCommand struct {
 
 	listenAddr string
 	v5         bool
+	verbosity  string
 	logLevel   string
 	nat        string
 	nodeKey    string
@@ -68,6 +69,12 @@ func (b *BootnodeCommand) Flags() *flagset.Flagset {
 		Name:    "verbosity",
 		Default: "info",
 		Usage:   "Logging verbosity (trace|debug|info|warn|error|crit)",
+		Value:   &b.verbosity,
+	})
+	flags.StringFlag(&flagset.StringFlag{
+		Name:    "log-level",
+		Default: "info",
+		Usage:   "log level (trace|debug|info|warn|error|crit), will be deprecated soon. Use verbosity instead",
 		Value:   &b.logLevel,
 	})
 	flags.StringFlag(&flagset.StringFlag{
@@ -114,7 +121,18 @@ func (b *BootnodeCommand) Run(args []string) int {
 
 	glogger := log.NewGlogHandler(log.StreamHandler(os.Stderr, log.TerminalFormat(false)))
 
-	lvl, err := log.LvlFromString(strings.ToLower(b.logLevel))
+	var logInfo string
+
+	if b.verbosity != "" && b.logLevel != "" {
+		b.UI.Warn(fmt.Sprintf("Both verbosity and log-level provided, using verbosity: %v", b.verbosity))
+		logInfo = b.verbosity
+	} else if b.verbosity != "" {
+		logInfo = b.verbosity
+	} else {
+		logInfo = b.logLevel
+	}
+
+	lvl, err := log.LvlFromString(strings.ToLower(logInfo))
 	if err == nil {
 		glogger.Verbosity(lvl)
 	} else {

@@ -52,6 +52,9 @@ type Config struct {
 	// Verbosity is the level of the logs to put out
 	Verbosity string `hcl:"verbosity,optional" toml:"verbosity,optional"`
 
+	// LogLevel is the level of the logs to put out
+	LogLevel string `hcl:"log-level,optional" toml:"log-level,optional"`
+
 	// DataDir is the directory to store the state in
 	DataDir string `hcl:"datadir,optional" toml:"datadir,optional"`
 
@@ -446,6 +449,7 @@ func DefaultConfig() *Config {
 		Identity:       Hostname(),
 		RequiredBlocks: map[string]string{},
 		Verbosity:      "INFO",
+		LogLevel:       "",
 		DataDir:        DefaultDataDir(),
 		Ancient:        "",
 		P2P: &P2PConfig{
