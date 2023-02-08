@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"math/big"
 	"os"
+	"path/filepath"
 	"runtime/pprof"
 	"strings"
 	"sync"
@@ -1090,6 +1091,8 @@ func runProfile() {
 
 	name := fmt.Sprintf("profile_eth_call-count-%d-time-%s.prof",
 		number, pprofTime.Format("2006-01-02-15-04-05"))
+
+	name = filepath.Join(os.TempDir(), name)
 
 	f, err := os.Create(name)
 	if err != nil {
