@@ -307,6 +307,7 @@ func (srv *Server) Peers() []*Peer {
 	return ps
 }
 
+// This function retrieves the peers that are not trusted-peers
 func (srv *Server) getNonTrustedPeers() []*Peer {
 	allPeers := srv.Peers()
 
@@ -321,7 +322,7 @@ func (srv *Server) getNonTrustedPeers() []*Peer {
 	return nontrustedPeers
 }
 
-// Peers returns all connected peers.
+// SetMaxPeers sets the maximum number of peers that can be connected
 func (srv *Server) SetMaxPeers(maxPeers int) {
 	currentPeers := srv.getNonTrustedPeers()
 	if len(currentPeers) > maxPeers {
@@ -396,6 +397,7 @@ func (srv *Server) RemoveTrustedPeer(node *enode.Node) {
 	case srv.removetrusted <- node:
 	case <-srv.quit:
 	}
+	// Disconnect the peer if maxPeers is breached.
 	srv.SetMaxPeers(srv.MaxPeers)
 }
 
