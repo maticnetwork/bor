@@ -1449,13 +1449,10 @@ func newRPCPendingTransaction(tx *types.Transaction, current *types.Header, conf
 func newRPCTransactionFromBlockIndex(b *types.Block, index uint64, config *params.ChainConfig, db ethdb.Database) *RPCTransaction {
 	txs := b.Transactions()
 
-	var txHash common.Hash
-
 	borReceipt := rawdb.ReadBorReceipt(db, b.Hash(), b.NumberU64())
 	if borReceipt != nil {
-		txHash = types.GetDerivedBorTxHash(types.BorReceiptKey(b.Number().Uint64(), b.Hash()))
-		if txHash != (common.Hash{}) {
-			borTx, _, _, _ := rawdb.ReadBorTransactionWithBlockHash(db, txHash, b.Hash())
+		if borReceipt.TxHash != (common.Hash{}) {
+			borTx, _, _, _ := rawdb.ReadBorTransactionWithBlockHash(db, borReceipt.TxHash, b.Hash())
 			txs = append(txs, borTx)
 		}
 	}
@@ -1468,7 +1465,7 @@ func newRPCTransactionFromBlockIndex(b *types.Block, index uint64, config *param
 
 	// If the transaction is a bor transaction, we need to set the hash to the derived bor tx hash. BorTx is always the last index.
 	if borReceipt != nil && int(index) == len(txs)-1 {
-		rpcTx.Hash = txHash
+		rpcTx.Hash = borReceipt.TxHash
 	}
 
 	return rpcTx
