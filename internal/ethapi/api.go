@@ -1448,6 +1448,7 @@ func newRPCPendingTransaction(tx *types.Transaction, current *types.Header, conf
 // newRPCTransactionFromBlockIndex returns a transaction that will serialize to the RPC representation.
 func newRPCTransactionFromBlockIndex(b *types.Block, index uint64, config *params.ChainConfig, db ethdb.Database) *RPCTransaction {
 	txs := b.Transactions()
+
 	var txHash common.Hash
 
 	borReceipt := rawdb.ReadBorReceipt(db, b.Hash(), b.NumberU64())
