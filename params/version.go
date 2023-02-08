@@ -27,6 +27,13 @@ const (
 	VersionMeta  = "stable" // Version metadata to append to the version string
 )
 
+var (
+	GitCommit = ""
+	GitBranch = ""
+	GitDate   = ""
+	BuildDate = ""
+)
+
 // Version holds the textual version string.
 var Version = func() string {
 	return fmt.Sprintf("%d.%d.%d", VersionMajor, VersionMinor, VersionPatch)
@@ -39,6 +46,16 @@ var VersionWithMeta = func() string {
 		v += "-" + VersionMeta
 	}
 	return v
+}()
+
+// VersionWithCommitDetails holds the textual version string including the metadata and Git Details.
+var VersionWithMetaCommitDetails = func() string {
+	v := Version
+	if VersionMeta != "" {
+		v += "-" + VersionMeta
+	}
+	v_git := fmt.Sprintf("Version : %s\nGitCommit : %s\nGitBranch : %s\nCommitDate : %s\nBuildDate : %s\n", v, GitCommit, GitBranch, GitDate, BuildDate)
+	return v_git
 }()
 
 // ArchiveVersion holds the textual version string used for Geth archives.
