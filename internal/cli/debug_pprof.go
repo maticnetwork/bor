@@ -131,7 +131,6 @@ func (d *DebugPprofCommand) Run(args []string) int {
 	profiles := map[string]string{
 		"heap":  "heap",
 		"cpu":   "cpu",
-		"trace": "trace",
 		"mutex": "mutex",
 	}
 
