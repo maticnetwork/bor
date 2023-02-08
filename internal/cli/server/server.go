@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -70,6 +71,8 @@ func WithGRPCListener(lis net.Listener) serverOption {
 
 //nolint:gocognit
 func NewServer(config *Config, opts ...serverOption) (*Server, error) {
+	runtime.SetMutexProfileFraction(5)
+
 	srv := &Server{
 		config: config,
 	}
