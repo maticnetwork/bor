@@ -99,7 +99,7 @@ func (c *Command) extractFlags(args []string) error {
 			log.Warn("Config contains both, verbosity and log-level, log-level will be deprecated soon. Use verbosity only.", "using", data.Get("verbosity"))
 		} else if !data.Has("verbosity") && data.Has("log-level") {
 			log.Warn("Config contains log-level only, note that log-level will be deprecated soon. Use verbosity instead.", "using", data.Get("log-level"))
-			config.Verbosity = data.Get("log-level").(string)
+			config.Verbosity = VerbosityStringToInt(strings.ToLower(data.Get("log-level").(string)))
 		}
 	} else {
 		tempFlag := 0
@@ -113,7 +113,7 @@ func (c *Command) extractFlags(args []string) error {
 			log.Warn("Both, verbosity and log-level flags are provided, log-level will be deprecated soon. Use verbosity only.", "using", config.Verbosity)
 		} else if tempFlag == 0 && config.LogLevel != "" {
 			log.Warn("Only log-level flag is provided, note that log-level will be deprecated soon. Use verbosity instead.", "using", config.LogLevel)
-			config.Verbosity = config.LogLevel
+			config.Verbosity = VerbosityStringToInt(strings.ToLower(config.LogLevel))
 		}
 	}
 

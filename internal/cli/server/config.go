@@ -50,7 +50,7 @@ type Config struct {
 	RequiredBlocks map[string]string `hcl:"eth.requiredblocks,optional" toml:"eth.requiredblocks,optional"`
 
 	// Verbosity is the level of the logs to put out
-	Verbosity string `hcl:"verbosity,optional" toml:"verbosity,optional"`
+	Verbosity int `hcl:"verbosity,optional" toml:"verbosity,optional"`
 
 	// LogLevel is the level of the logs to put out
 	LogLevel string `hcl:"log-level,optional" toml:"log-level,optional"`
@@ -448,7 +448,7 @@ func DefaultConfig() *Config {
 		Chain:          "mainnet",
 		Identity:       Hostname(),
 		RequiredBlocks: map[string]string{},
-		Verbosity:      "INFO",
+		Verbosity:      3,
 		LogLevel:       "",
 		DataDir:        DefaultDataDir(),
 		Ancient:        "",

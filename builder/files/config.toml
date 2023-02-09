@@ -4,7 +4,7 @@
 chain = "mainnet"
 # chain = "mumbai"
 # identity = "Annon-Identity"
-# verbosity = "INFO"
+# verbosity = 3
 datadir = "/var/lib/bor/data"
 # ancient = ""
 # keystore = "/var/lib/bor/keystore"

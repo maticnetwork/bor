@@ -22,9 +22,9 @@ func (c *Command) Flags() *flagset.Flagset {
 		Default:            c.cliConfig.Identity,
 		HideDefaultFromDoc: true,
 	})
-	f.StringFlag(&flagset.StringFlag{
+	f.IntFlag(&flagset.IntFlag{
 		Name:    "verbosity",
-		Usage:   "Logging verbosity for the server (trace|debug|info|warn|error|crit)",
+		Usage:   "Logging verbosity for the server (5=trace|4=debug|3=info|2=warn|1=error|0=crit), default = 3",
 		Value:   &c.cliConfig.Verbosity,
 		Default: c.cliConfig.Verbosity,
 	})

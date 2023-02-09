@@ -14,6 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/internal/cli/flagset"
+	"github.com/ethereum/go-ethereum/internal/cli/server"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -27,7 +28,7 @@ type BootnodeCommand struct {
 
 	listenAddr string
 	v5         bool
-	verbosity  string
+	verbosity  int
 	logLevel   string
 	nat        string
 	nodeKey    string
@@ -65,10 +66,10 @@ func (b *BootnodeCommand) Flags() *flagset.Flagset {
 		Usage:   "Enable UDP v5",
 		Value:   &b.v5,
 	})
-	flags.StringFlag(&flagset.StringFlag{
+	flags.IntFlag(&flagset.IntFlag{
 		Name:    "verbosity",
-		Default: "info",
-		Usage:   "Logging verbosity (trace|debug|info|warn|error|crit)",
+		Default: 3,
+		Usage:   "Logging verbosity (5=trace|4=debug|3=info|2=warn|1=error|0=crit)",
 		Value:   &b.verbosity,
 	})
 	flags.StringFlag(&flagset.StringFlag{
@@ -123,11 +124,11 @@ func (b *BootnodeCommand) Run(args []string) int {
 
 	var logInfo string
 
-	if b.verbosity != "" && b.logLevel != "" {
+	if b.verbosity != 0 && b.logLevel != "" {
 		b.UI.Warn(fmt.Sprintf("Both verbosity and log-level provided, using verbosity: %v", b.verbosity))
-		logInfo = b.verbosity
-	} else if b.verbosity != "" {
-		logInfo = b.verbosity
+		logInfo = server.VerbosityIntToString(b.verbosity)
+	} else if b.verbosity != 0 {
+		logInfo = server.VerbosityIntToString(b.verbosity)
 	} else {
 		logInfo = b.logLevel
 	}
