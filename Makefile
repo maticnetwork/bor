@@ -61,7 +61,7 @@ ios:
 	@echo "Import \"$(GOBIN)/Geth.framework\" to use the library."
 
 test:
-	$(GOTEST) --timeout 5m -shuffle=on -cover -coverprofile=cover.out $(TESTALL)
+	$(GOTEST) --timeout 5m -shuffle=on -cover -short -coverprofile=cover.out -covermode=atomic $(TESTALL)
 
 test-race:
 	$(GOTEST) --timeout 15m -race -shuffle=on $(TESTALL)
@@ -77,7 +77,7 @@ lint:
 
 lintci-deps:
 	rm -f ./build/bin/golangci-lint
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b ./build/bin v1.48.0
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b ./build/bin v1.50.1
 
 goimports:
 	goimports -local "$(PACKAGE)" -w .
