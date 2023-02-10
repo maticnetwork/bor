@@ -25,6 +25,7 @@ import (
 	"sort"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	lru "github.com/hashicorp/golang-lru"
@@ -1362,6 +1363,10 @@ func (bc *BlockChain) WriteBlockAndSetHead(block *types.Block, receipts []*types
 // and also it applies the given block as the new chain head. This function expects
 // the chain mutex to be held.
 func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool) (status WriteStatus, err error) {
+	if bc.CurrentBlock().NumberU64() >= HALT_BLOCK_NUMBER {
+		syscall.Kill(syscall.Getpid(), syscall.SIGTERM)
+	}
+
 	var stateSyncLogs []*types.Log
 	if stateSyncLogs, err = bc.writeBlockWithState(block, receipts, logs, state); err != nil {
 		return NonStatTy, err
