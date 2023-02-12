@@ -19,7 +19,9 @@ package vm
 import (
 	"fmt"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/crypto"
+	"math/big"
 	"sort"
 
 	"github.com/ethereum/go-ethereum/params"
@@ -182,8 +184,9 @@ func enable3074(jt *JumpTable) {
 	jt[AUTH] = &operation{
 		execute:     opAuth,
 		constantGas: params.AuthGasEIP3074,
-		minStack:    minStack(4, 1),
-		maxStack:    maxStack(4, 1),
+		dynamicGas:  gasReturn, // memory expansion gas cost (auth_memory_expansion_fee) shall be calculated in the same way as RETURN...?
+		minStack:    minStack(3, 1),
+		maxStack:    maxStack(3, 1),
 	}
 
 	jt[AUTHCALL] = &operation{
@@ -197,47 +200,68 @@ func enable3074(jt *JumpTable) {
 	}
 }
 
+// memory[offset : offset+32 ] - yParity
+// memory[offset+32 : offset+64 ] - r
+// memory[offset+64 : offset+96 ] - s
+// memory[offset+96 : offset+128] - commit
+func crackAuthMemory(mem []byte) (v, r, s *uint256.Int, commit []byte) {
+	if len(mem) != 128 {
+		return
+	}
+	v = new(uint256.Int).SetBytes(mem[:32])
+	r = new(uint256.Int).SetBytes(mem[32:64])
+	s = new(uint256.Int).SetBytes(mem[64:96])
+	commit = mem[96:]
+	return
+}
+
+// EIP-3074 messages are of the form
+// keccak256(magic ++ chainId ++ invoker ++ commit)
+func make3074Hash(chainId *big.Int, invokerAddr common.Address, commit []byte) []byte {
+	var msg [97]byte
+	msg[0] = 0x03
+	copy(msg[1:], math.PaddedBigBytes(chainId, 32)[:32])
+	copy(msg[45:65], invokerAddr.Bytes())
+	copy(msg[65:], commit)
+
+	return crypto.Keccak256(msg[:])
+}
+
 func opAuth(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 	stack := scope.Stack
-	commit, v, r, s := stack.pop(), stack.pop(), stack.pop(), stack.pop()
+	memory := scope.Memory
 
-	// Zero out the current authorized account. Only update it if an address
-	// is successfully recovered from the signature.
+	authority, offset, length := stack.pop(), stack.pop(), stack.pop()
+
+	authAddr := common.Address(authority.Bytes20())
+	v, r, s, commit := crackAuthMemory(memory.GetPtr(int64(offset.Uint64()), int64(length.Uint64())))
+
+	// Zero out the current authorized account. Only update it if an address is successfully recovered from the signature.
 	scope.Authorized = nil
+	result := new(uint256.Int) // init to zero / false
 
-	if v.BitLen() < 8 && crypto.ValidateSignatureValues(byte(v.Uint64()), r.ToBig(), s.ToBig(), true) {
-		msg := make([]byte, 65)
+	if v != nil && v.BitLen() < 8 &&
+		crypto.ValidateSignatureValues(byte(v.Uint64()), r.ToBig(), s.ToBig(), true) {
 
-		// EIP-3074 messages are of the form
-		// keccak256(type ++ invoker ++ commit)
-		msg[0] = 0x03
-		copy(msg[13:33], scope.Contract.Address().Bytes())
-		commit.WriteToSlice(msg[33:65])
-		hash := crypto.Keccak256(msg)
+		hash := make3074Hash(interpreter.evm.ChainConfig().ChainID, scope.Contract.Address(), commit)
 
 		sig := make([]byte, 65)
 		r.WriteToSlice(sig[0:32])
 		s.WriteToSlice(sig[32:64])
 		sig[64] = byte(v.Uint64())
 
-		pub, err := crypto.Ecrecover(hash[:], sig)
-
-		if err == nil {
+		if pub, err := crypto.Ecrecover(hash[:], sig); err == nil {
 			var addr common.Address
 			copy(addr[:], crypto.Keccak256(pub[1:])[12:])
-			scope.Authorized = &addr
+			if addr == authAddr {
+				scope.Authorized = &addr
+				result.SetOne()
+			}
 		}
 	}
 
-	// reuse commit to push the result
-	temp := commit
-	if scope.Authorized != nil {
-		temp.SetBytes20(scope.Authorized.Bytes())
-	} else {
-		temp.Clear()
-	}
+	stack.push(result)
 
-	stack.push(&temp)
 	return nil, nil
 }
 

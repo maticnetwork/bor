@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/stretchr/testify/require"
 	"io/ioutil"
 	"math/big"
 	"testing"
@@ -689,6 +690,24 @@ func TestRandom(t *testing.T) {
 	}
 }
 
+// TODO: delete?
+func TestMake3074Data(t *testing.T) {
+	sk, err := crypto.HexToECDSA("deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
+	require.NoError(t, err)
+
+	addr := crypto.PubkeyToAddress(sk.PublicKey)
+	println(addr.String())
+
+	h := make3074Hash(params.TestChainConfig.ChainID,
+		common.HexToAddress("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+		common.Hex2Bytes("cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"))
+
+	sig, err := crypto.Sign(h, sk)
+	println(common.Bytes2Hex(sig[64:]))
+	println(common.Bytes2Hex(sig[:32]))
+	println(common.Bytes2Hex(sig[32:64]))
+}
+
 func TestAuth(t *testing.T) {
 	var (
 		env            = NewEVM(BlockContext{}, TxContext{Origin: common.HexToAddress("970e8128ab834e8eac17ab8e3812f010678cf791")}, nil, params.TestChainConfig, Config{})
@@ -703,59 +722,79 @@ func TestAuth(t *testing.T) {
 		s        string
 		invoker  string
 		commit   string
-		expected string
+		expected *uint256.Int
 	}
+
+	authAddr := common.HexToAddress("C96aAa54E2d44c299564da76e1cD3184A2386B8D")
 
 	for i, tt := range []testcase{
 		{
 			v:        "00",
-			r:        "7aa455a9f8b84965a8c2f32e29dbb8147a913fffa1b02375c6ab28161e6ebf25",
-			s:        "794dd7b68f540151c21953cc5322e6df1b809eec12e561353832a5d68e14809a",
+			r:        "26eb7c9d8cdddc766b12543d885065cc93c34e93ea63a0b0bdf05a91c235ddf0",
+			s:        "72f9da1ff1302602807fac940860cbd4435f1121f61ebcdaf6180bc17c7c89a9",
 			invoker:  "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 			commit:   "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-			expected: "a94f5374Fce5edBC8E2a8697C15331677e6EbF0B",
+			expected: uint256.NewInt(uint64(1)),
 		},
 		{
 			v:        "01",
-			r:        "9a50f2fa6aa26558eb2d469e494e32676e563c9ea0a149286caccdba26758abf",
-			s:        "4de8a7bebbbf64ef197a11d23c3e2cc144481d8c1d9f80822b4844e98bccbc6d",
+			r:        "cd02862c56edb04a0e1c0f544e80db67520d5469dc7aa68988c4c93f65b7e393",
+			s:        "029f975a343c4721c9386e5ea1072b4eebd45b0d5941cb22d015f72149c1915a",
 			invoker:  "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 			commit:   "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-			expected: "a94f5374Fce5edBC8E2a8697C15331677e6EbF0B",
+			expected: uint256.NewInt(uint64(1)),
 		},
-		// invalid signature
+		// invalid signature - bad v
 		{
 			v:        "02",
-			r:        "7aa455a9f8b84965a8c2f32e29dbb8147a913fffa1b02375c6ab28161e6ebf25",
-			s:        "794dd7b68f540151c21953cc5322e6df1b809eec12e561353832a5d68e14809a",
+			r:        "26eb7c9d8cdddc766b12543d885065cc93c34e93ea63a0b0bdf05a91c235ddf0",
+			s:        "72f9da1ff1302602807fac940860cbd4435f1121f61ebcdaf6180bc17c7c89a9",
 			invoker:  "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 			commit:   "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-			expected: "0000000000000000000000000000000000000000",
+			expected: uint256.NewInt(uint64(0)),
+		},
+		// invalid signature - bad r
+		{
+			v:        "01",
+			r:        "deadbeef8cdddc766b12543d885065cc93c34e93ea63a0b0bdf05a91c235ddf0",
+			s:        "72f9da1ff1302602807fac940860cbd4435f1121f61ebcdaf6180bc17c7c89a9",
+			invoker:  "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+			commit:   "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+			expected: uint256.NewInt(uint64(0)),
 		},
 	} {
-		stack.push(new(uint256.Int).SetBytes(common.Hex2Bytes(tt.s)))
-		stack.push(new(uint256.Int).SetBytes(common.Hex2Bytes(tt.r)))
-		stack.push(new(uint256.Int).SetBytes(common.Hex2Bytes(tt.v)))
-		stack.push(new(uint256.Int).SetBytes(common.Hex2Bytes(tt.commit)))
+		// auth, offset, length
+		stack.push(new(uint256.Int).SetUint64(uint64(128)))
+		stack.push(new(uint256.Int).SetUint64(uint64(0)))
+		stack.push(new(uint256.Int).SetBytes(authAddr.Bytes()))
+
+		mem := NewMemory()
+		mem.Resize(128)
+		// mem is v, r, s, commit
+		mem.Set(31, 1, common.Hex2Bytes(tt.v))
+		mem.Set(32, 32, common.Hex2Bytes(tt.r))
+		mem.Set(64, 32, common.Hex2Bytes(tt.s))
+		mem.Set(96, 32, common.Hex2Bytes(tt.commit))
 
 		self := AccountRef(common.HexToAddress(tt.invoker))
 		contract := Contract{CallerAddress: common.Address{}, caller: nil, self: self}
-		ctx := ScopeContext{nil, stack, &contract, nil}
+		ctx := ScopeContext{mem, stack, &contract, nil}
 		opAuth(&pc, evmInterpreter, &ctx)
 
 		result := stack.pop()
-		addr := common.BigToAddress(result.ToBig())
 
-		if addr.Hex()[2:] != tt.expected {
-			t.Fatalf("Auth failed to authenticate signature: test #%d got %s, expected 0x%s", i, addr.Hex(), tt.expected)
+		if result.Cmp(tt.expected) != 0 {
+			t.Fatalf("Auth failed to authenticate signature: test #%d got %s, expected 0x%s",
+				i, result.String(), tt.expected.String())
 		}
 
 		if ctx.Authorized != nil {
-			if addr.Hex() == (common.Address{}).Hex() {
+			if result.Cmp(uint256.NewInt(0)) == 0 {
 				t.Fatalf("Authorized ctx variable set after invalid auth invocation.")
 			}
-			if ctx.Authorized.Hex()[2:] != tt.expected {
-				t.Fatalf("Authorized ctx variable not equal to expected: test #%d got %s, expected 0x%s", i, ctx.Authorized.Hex(), tt.expected)
+			if *ctx.Authorized != authAddr {
+				t.Fatalf("Authorized ctx variable not equal to expected: test #%d got %s, expected 0x%s",
+					i, ctx.Authorized.Hex(), authAddr.Hex())
 			}
 		}
 	}
