@@ -29,8 +29,6 @@ const (
 
 var (
 	GitCommit = ""
-	GitBranch = ""
-	GitDate   = ""
 )
 
 // Version holds the textual version string.
@@ -53,7 +51,7 @@ var VersionWithMetaCommitDetails = func() string {
 	if VersionMeta != "" {
 		v += "-" + VersionMeta
 	}
-	v_git := fmt.Sprintf("Version : %s\nGitCommit : %s\nGitBranch : %s\nCommitDate : %s\n", v, GitCommit, GitBranch, GitDate)
+	v_git := fmt.Sprintf("Version : %s\nGitCommit : %s\n", v, GitCommit)
 	return v_git
 }()
 
