@@ -54,7 +54,7 @@ func (c *Command) Flags() *flagset.Flagset {
 	})
 	f.StringFlag(&flagset.StringFlag{
 		Name:  "config",
-		Usage: "File for the config file",
+		Usage: "Path to the TOML configuration file",
 		Value: &c.configFile,
 	})
 	f.StringFlag(&flagset.StringFlag{
