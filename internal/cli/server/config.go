@@ -238,6 +238,10 @@ type SealerConfig struct {
 	// GasPrice is the minimum gas price for mining a transaction
 	GasPrice    *big.Int `hcl:"-,optional" toml:"-"`
 	GasPriceRaw string   `hcl:"gasprice,optional" toml:"gasprice,optional"`
+
+	// The time interval for miner to re-create mining work.
+	Recommit    time.Duration `hcl:"-,optional" toml:"-"`
+	RecommitRaw string        `hcl:"recommit,optional" toml:"recommit,optional"`
 }
 
 type JsonRPCConfig struct {
@@ -529,6 +533,7 @@ func DefaultConfig() *Config {
 			GasCeil:   30_000_000,                  // geth's default
 			GasPrice:  big.NewInt(1 * params.GWei), // geth's default
 			ExtraData: "",
+			Recommit:  125 * time.Second,
 		},
 		Gpo: &GpoConfig{
 			Blocks:      20,
@@ -668,6 +673,7 @@ func (c *Config) fillTimeDurations() error {
 		td   *time.Duration
 		str  *string
 	}{
+		{"miner.recommit", &c.Sealer.Recommit, &c.Sealer.RecommitRaw},
 		{"jsonrpc.evmtimeout", &c.JsonRPC.RPCEVMTimeout, &c.JsonRPC.RPCEVMTimeoutRaw},
 		{"jsonrpc.timeouts.read", &c.JsonRPC.HttpTimeout.ReadTimeout, &c.JsonRPC.HttpTimeout.ReadTimeoutRaw},
 		{"jsonrpc.timeouts.write", &c.JsonRPC.HttpTimeout.WriteTimeout, &c.JsonRPC.HttpTimeout.WriteTimeoutRaw},
@@ -788,6 +794,7 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 
 	// miner options
 	{
+		n.Miner.Recommit = c.Sealer.Recommit
 		n.Miner.GasPrice = c.Sealer.GasPrice
 		n.Miner.GasCeil = c.Sealer.GasCeil
 		n.Miner.ExtraData = []byte(c.Sealer.ExtraData)
