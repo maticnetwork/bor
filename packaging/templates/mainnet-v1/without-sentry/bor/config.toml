@@ -58,6 +58,7 @@ syncmode = "full"
     ipcpath = "/var/lib/bor/bor.ipc"
     # ipcdisable = false
     # gascap = 50000000
+    # evmtimeout = "5s"
     # txfeecap = 5.0
     [jsonrpc.http]
         enabled = true

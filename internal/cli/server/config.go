@@ -244,6 +244,10 @@ type JsonRPCConfig struct {
 	// GasCap is the global gas cap for eth-call variants.
 	GasCap uint64 `hcl:"gascap,optional" toml:"gascap,optional"`
 
+	// Sets a timeout used for eth_call (0=infinite)
+	RPCEVMTimeout    time.Duration `hcl:"-,optional" toml:"-"`
+	RPCEVMTimeoutRaw string        `hcl:"evmtimeout,optional" toml:"evmtimeout,optional"`
+
 	// TxFeeCap is the global transaction fee cap for send-transaction variants
 	TxFeeCap float64 `hcl:"txfeecap,optional" toml:"txfeecap,optional"`
 
@@ -508,10 +512,11 @@ func DefaultConfig() *Config {
 			IgnorePrice: gasprice.DefaultIgnorePrice,
 		},
 		JsonRPC: &JsonRPCConfig{
-			IPCDisable: false,
-			IPCPath:    "",
-			GasCap:     ethconfig.Defaults.RPCGasCap,
-			TxFeeCap:   ethconfig.Defaults.RPCTxFeeCap,
+			IPCDisable:    false,
+			IPCPath:       "",
+			GasCap:        ethconfig.Defaults.RPCGasCap,
+			RPCEVMTimeout: ethconfig.Defaults.RPCEVMTimeout,
+			TxFeeCap:      ethconfig.Defaults.RPCTxFeeCap,
 			Http: &APIConfig{
 				Enabled: false,
 				Port:    8545,
@@ -632,6 +637,7 @@ func (c *Config) fillTimeDurations() error {
 		td   *time.Duration
 		str  *string
 	}{
+		{"jsonrpc.evmtimeout", &c.JsonRPC.RPCEVMTimeout, &c.JsonRPC.RPCEVMTimeoutRaw},
 		{"jsonrpc.timeouts.read", &c.JsonRPC.HttpTimeout.ReadTimeout, &c.JsonRPC.HttpTimeout.ReadTimeoutRaw},
 		{"jsonrpc.timeouts.write", &c.JsonRPC.HttpTimeout.WriteTimeout, &c.JsonRPC.HttpTimeout.WriteTimeoutRaw},
 		{"jsonrpc.timeouts.idle", &c.JsonRPC.HttpTimeout.IdleTimeout, &c.JsonRPC.HttpTimeout.IdleTimeoutRaw},
@@ -909,6 +915,8 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 	} else {
 		log.Info("Global gas cap disabled")
 	}
+
+	n.RPCEVMTimeout = c.JsonRPC.RPCEVMTimeout
 
 	n.RPCTxFeeCap = c.JsonRPC.TxFeeCap
 
