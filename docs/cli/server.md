@@ -108,6 +108,14 @@ The ```bor server``` command runs the Bor client.
 
 - ```ipcpath```: Filename for IPC socket/pipe within the datadir (explicit paths escape it)
 
+- ```authrpc.jwtsecret```: Path to a JWT secret to use for authenticated RPC endpoints
+
+- ```authrpc.addr```: Listening address for authenticated APIs (default: localhost)
+
+- ```authrpc.port```: Listening port for authenticated APIs (default: 8551)
+
+- ```authrpc.vhosts```: Comma separated list of virtual hostnames from which to accept requests (server enforced). Accepts '*' wildcard. (default: localhost)
+
 - ```http.corsdomain```: Comma separated list of domains from which to accept cross origin requests (browser enforced) (default: localhost)
 
 - ```http.vhosts```: Comma separated list of virtual hostnames from which to accept requests (server enforced). Accepts '*' wildcard. (default: localhost)

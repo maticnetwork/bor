@@ -81,6 +81,11 @@ syncmode = "full"
         # host = ""
         # vhosts = ["*"]
         # corsdomain = ["*"]
+    # [jsonrpc.auth]
+        # jwtsecret = ""
+        # addr = "localhost"
+        # port = 8551
+        # vhosts = ["localhost"]
     # [jsonrpc.timeouts]
         # read = "30s"
         # write = "30s"
