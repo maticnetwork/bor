@@ -3,6 +3,7 @@
 chain = "mumbai"
 # identity = "node_name"
 # verbosity = 3
+# vmdebug = true
 datadir = "/var/lib/bor/data"
 # ancient = ""
 # keystore = "$BOR_DIR/keystore"

@@ -55,6 +55,9 @@ type Config struct {
 	// LogLevel is the level of the logs to put out
 	LogLevel string `hcl:"log-level,optional" toml:"log-level,optional"`
 
+	// Record information useful for VM and contract debugging
+	EnablePreimageRecording bool `hcl:"vmdebug,optional" toml:"vmdebug,optional"`
+
 	// DataDir is the directory to store the state in
 	DataDir string `hcl:"datadir,optional" toml:"datadir,optional"`
 
@@ -452,13 +455,14 @@ type DeveloperConfig struct {
 
 func DefaultConfig() *Config {
 	return &Config{
-		Chain:          "mainnet",
-		Identity:       Hostname(),
-		RequiredBlocks: map[string]string{},
-		Verbosity:      3,
-		LogLevel:       "",
-		DataDir:        DefaultDataDir(),
-		Ancient:        "",
+		Chain:                   "mainnet",
+		Identity:                Hostname(),
+		RequiredBlocks:          map[string]string{},
+		Verbosity:               3,
+		LogLevel:                "",
+		EnablePreimageRecording: false,
+		DataDir:                 DefaultDataDir(),
+		Ancient:                 "",
 		P2P: &P2PConfig{
 			MaxPeers:     50,
 			MaxPendPeers: 50,
@@ -737,6 +741,8 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 		n.GPO.MaxPrice = c.Gpo.MaxPrice
 		n.GPO.IgnorePrice = c.Gpo.IgnorePrice
 	}
+
+	n.EnablePreimageRecording = c.EnablePreimageRecording
 
 	// txpool options
 	{
