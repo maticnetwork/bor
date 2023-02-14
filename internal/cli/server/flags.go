@@ -369,6 +369,13 @@ func (c *Command) Flags() *flagset.Flagset {
 		Default: c.cliConfig.JsonRPC.GasCap,
 		Group:   "JsonRPC",
 	})
+	f.DurationFlag(&flagset.DurationFlag{
+		Name:    "rpc.evmtimeout",
+		Usage:   "Sets a timeout used for eth_call (0=infinite)",
+		Value:   &c.cliConfig.JsonRPC.RPCEVMTimeout,
+		Default: c.cliConfig.JsonRPC.RPCEVMTimeout,
+		Group:   "JsonRPC",
+	})
 	f.Float64Flag(&flagset.Float64Flag{
 		Name:    "rpc.txfeecap",
 		Usage:   "Sets a cap on transaction fee (in ether) that can be sent via the RPC APIs (0 = no cap)",

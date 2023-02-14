@@ -98,6 +98,8 @@ The ```bor server``` command runs the Bor client.
 
 - ```rpc.gascap```: Sets a cap on gas that can be used in eth_call/estimateGas (0=infinite) (default: 50000000)
 
+- ```rpc.evmtimeout```: Sets a timeout used for eth_call (0=infinite) (default: 5s)
+
 - ```rpc.txfeecap```: Sets a cap on transaction fee (in ether) that can be sent via the RPC APIs (0 = no cap) (default: 5)
 
 - ```ipcdisable```: Disable the IPC-RPC server (default: false)

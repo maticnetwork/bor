@@ -64,6 +64,7 @@ syncmode = "full"
 #   ipcdisable = false
 #   ipcpath = ""
 #   gascap = 50000000
+#   evmtimeout = "5s"
 #   txfeecap = 5.0
 #   [jsonrpc.http]
 #     enabled = false
