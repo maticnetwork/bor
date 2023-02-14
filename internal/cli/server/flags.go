@@ -41,6 +41,12 @@ func (c *Command) Flags() *flagset.Flagset {
 		Default:            c.cliConfig.DataDir,
 		HideDefaultFromDoc: true,
 	})
+	f.BoolFlag(&flagset.BoolFlag{
+		Name:    "vmdebug",
+		Usage:   "Record information useful for VM and contract debugging",
+		Value:   &c.cliConfig.EnablePreimageRecording,
+		Default: c.cliConfig.EnablePreimageRecording,
+	})
 	f.StringFlag(&flagset.StringFlag{
 		Name:    "datadir.ancient",
 		Usage:   "Data directory for ancient chain segments (default = inside chaindata)",

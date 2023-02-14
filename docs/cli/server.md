@@ -14,6 +14,8 @@ The ```bor server``` command runs the Bor client.
 
 - ```datadir```: Path of the data directory to store information
 
+- ```vmdebug```: Record information useful for VM and contract debugging (default: false)
+
 - ```datadir.ancient```: Data directory for ancient chain segments (default = inside chaindata)
 
 - ```keystore```: Path of the directory where keystores are located
