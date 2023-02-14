@@ -18,7 +18,7 @@ The ```bor server``` command runs the Bor client.
 
 - ```keystore```: Path of the directory where keystores are located
 
-- ```config```: File for the config file
+- ```config```: Path to the TOML configuration file
 
 - ```syncmode```: Blockchain sync mode (only "full" sync supported) (default: full)
 
@@ -33,6 +33,8 @@ The ```bor server``` command runs the Bor client.
 - ```bor.heimdall```: URL of Heimdall service (default: http://localhost:1317)
 
 - ```bor.withoutheimdall```: Run without Heimdall service (for testing purpose) (default: false)
+
+- ```bor.devfakeauthor```: Run miner without validator set authorization [dev mode] : Use with '--bor.withoutheimdall' (default: false)
 
 - ```bor.heimdallgRPC```: Address of Heimdall gRPC service
 
