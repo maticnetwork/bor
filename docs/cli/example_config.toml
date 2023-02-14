@@ -88,6 +88,11 @@ ethstats = ""                # Reporting URL of a ethstats service (nodename:sec
     host = ""                   # 
     vhosts = ["localhost"]      # Comma separated list of virtual hostnames from which to accept requests (server enforced). Accepts '*' wildcard.
     corsdomain = ["localhost"]  # Comma separated list of domains from which to accept cross origin requests (browser enforced)
+  [jsonrpc.auth]
+    jwtsecret = ""              # Path to a JWT secret to use for authenticated RPC endpoints
+    addr = "localhost"          # Listening address for authenticated APIs
+    port = 8551                 # Listening port for authenticated APIs
+    vhosts = ["localhost"]      # Comma separated list of virtual hostnames from which to accept requests (server enforced). Accepts '*' wildcard.
   [jsonrpc.timeouts]
     read = "30s"
     write = "30s"

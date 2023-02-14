@@ -397,6 +397,34 @@ func (c *Command) Flags() *flagset.Flagset {
 		Default: c.cliConfig.JsonRPC.IPCPath,
 		Group:   "JsonRPC",
 	})
+	f.StringFlag(&flagset.StringFlag{
+		Name:    "authrpc.jwtsecret",
+		Usage:   "Path to a JWT secret to use for authenticated RPC endpoints",
+		Value:   &c.cliConfig.JsonRPC.Auth.JWTSecret,
+		Default: c.cliConfig.JsonRPC.Auth.JWTSecret,
+		Group:   "JsonRPC",
+	})
+	f.StringFlag(&flagset.StringFlag{
+		Name:    "authrpc.addr",
+		Usage:   "Listening address for authenticated APIs",
+		Value:   &c.cliConfig.JsonRPC.Auth.Addr,
+		Default: c.cliConfig.JsonRPC.Auth.Addr,
+		Group:   "JsonRPC",
+	})
+	f.Uint64Flag(&flagset.Uint64Flag{
+		Name:    "authrpc.port",
+		Usage:   "Listening port for authenticated APIs",
+		Value:   &c.cliConfig.JsonRPC.Auth.Port,
+		Default: c.cliConfig.JsonRPC.Auth.Port,
+		Group:   "JsonRPC",
+	})
+	f.SliceStringFlag(&flagset.SliceStringFlag{
+		Name:    "authrpc.vhosts",
+		Usage:   "Comma separated list of virtual hostnames from which to accept requests (server enforced). Accepts '*' wildcard.",
+		Value:   &c.cliConfig.JsonRPC.Auth.VHosts,
+		Default: c.cliConfig.JsonRPC.Auth.VHosts,
+		Group:   "JsonRPC",
+	})
 	f.SliceStringFlag(&flagset.SliceStringFlag{
 		Name:    "http.corsdomain",
 		Usage:   "Comma separated list of domains from which to accept cross origin requests (browser enforced)",

@@ -263,7 +263,25 @@ type JsonRPCConfig struct {
 	// Graphql has the json-rpc graphql related settings
 	Graphql *APIConfig `hcl:"graphql,block" toml:"graphql,block"`
 
+	// AUTH RPC related settings
+	Auth *AUTHConfig `hcl:"auth,block" toml:"auth,block"`
+
 	HttpTimeout *HttpTimeouts `hcl:"timeouts,block" toml:"timeouts,block"`
+}
+
+type AUTHConfig struct {
+	// JWTSecret is the hex-encoded jwt secret.
+	JWTSecret string `hcl:"jwtsecret,optional" toml:"jwtsecret,optional"`
+
+	// Addr is the listening address on which authenticated APIs are provided.
+	Addr string `hcl:"addr,optional" toml:"addr,optional"`
+
+	// Port is the port number on which authenticated APIs are provided.
+	Port uint64 `hcl:"port,optional" toml:"port,optional"`
+
+	// VHosts is the list of virtual hostnames which are allowed on incoming requests
+	// for the authenticated api. This is by default {'localhost'}.
+	VHosts []string `hcl:"vhosts,optional" toml:"vhosts,optional"`
 }
 
 type GRPCConfig struct {
@@ -547,6 +565,12 @@ func DefaultConfig() *Config {
 				ReadTimeout:  30 * time.Second,
 				WriteTimeout: 30 * time.Second,
 				IdleTimeout:  120 * time.Second,
+			},
+			Auth: &AUTHConfig{
+				JWTSecret: "",
+				Port:      node.DefaultAuthPort,
+				Addr:      node.DefaultAuthHost,
+				VHosts:    node.DefaultAuthVhosts,
 			},
 		},
 		Ethstats: "",
@@ -1087,6 +1111,10 @@ func (c *Config) buildNode() (*node.Config, error) {
 			WriteTimeout: c.JsonRPC.HttpTimeout.WriteTimeout,
 			IdleTimeout:  c.JsonRPC.HttpTimeout.IdleTimeout,
 		},
+		JWTSecret:        c.JsonRPC.Auth.JWTSecret,
+		AuthPort:         int(c.JsonRPC.Auth.Port),
+		AuthAddr:         c.JsonRPC.Auth.Addr,
+		AuthVirtualHosts: c.JsonRPC.Auth.VHosts,
 	}
 
 	// dev mode
