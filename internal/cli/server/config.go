@@ -353,6 +353,12 @@ type GpoConfig struct {
 	// Percentile sets the weights to new blocks
 	Percentile uint64 `hcl:"percentile,optional" toml:"percentile,optional"`
 
+	// Maximum header history of gasprice oracle
+	MaxHeaderHistory int `hcl:"maxheaderhistory,optional" toml:"maxheaderhistory,optional"`
+
+	// Maximum block history of gasprice oracle
+	MaxBlockHistory int `hcl:"maxblockhistory,optional" toml:"maxblockhistory,optional"`
+
 	// MaxPrice is an upper bound gas price
 	MaxPrice    *big.Int `hcl:"-,optional" toml:"-"`
 	MaxPriceRaw string   `hcl:"maxprice,optional" toml:"maxprice,optional"`
@@ -533,10 +539,12 @@ func DefaultConfig() *Config {
 			Recommit:  125 * time.Second,
 		},
 		Gpo: &GpoConfig{
-			Blocks:      20,
-			Percentile:  60,
-			MaxPrice:    gasprice.DefaultMaxPrice,
-			IgnorePrice: gasprice.DefaultIgnorePrice,
+			Blocks:           20,
+			Percentile:       60,
+			MaxHeaderHistory: 1024,
+			MaxBlockHistory:  1024,
+			MaxPrice:         gasprice.DefaultMaxPrice,
+			IgnorePrice:      gasprice.DefaultIgnorePrice,
 		},
 		JsonRPC: &JsonRPCConfig{
 			IPCDisable:    false,
@@ -768,6 +776,8 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 	{
 		n.GPO.Blocks = int(c.Gpo.Blocks)
 		n.GPO.Percentile = int(c.Gpo.Percentile)
+		n.GPO.MaxHeaderHistory = c.Gpo.MaxHeaderHistory
+		n.GPO.MaxBlockHistory = c.Gpo.MaxBlockHistory
 		n.GPO.MaxPrice = c.Gpo.MaxPrice
 		n.GPO.IgnorePrice = c.Gpo.IgnorePrice
 	}
