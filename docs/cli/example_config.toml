@@ -102,6 +102,8 @@ ethstats = ""                # Reporting URL of a ethstats service (nodename:sec
 [gpo]
   blocks = 20                 # Number of recent blocks to check for gas prices
   percentile = 60             # Suggested gas price is the given percentile of a set of recent transaction gas prices
+  maxheaderhistory = 1024     # Maximum header history of gasprice oracle
+  maxblockhistory = 1024      # Maximum block history of gasprice oracle
   maxprice = "5000000000000"  # Maximum gas price will be recommended by gpo
   ignoreprice = "2"           # Gas price below which gpo will ignore transactions (recommended for mainnet = 30000000000, default suitable for mumbai/devnet)
 

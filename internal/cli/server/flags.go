@@ -282,6 +282,18 @@ func (c *Command) Flags() *flagset.Flagset {
 		Value:   &c.cliConfig.Gpo.Percentile,
 		Default: c.cliConfig.Gpo.Percentile,
 	})
+	f.IntFlag(&flagset.IntFlag{
+		Name:    "gpo.maxheaderhistory",
+		Usage:   "Maximum header history of gasprice oracle",
+		Value:   &c.cliConfig.Gpo.MaxHeaderHistory,
+		Default: c.cliConfig.Gpo.MaxHeaderHistory,
+	})
+	f.IntFlag(&flagset.IntFlag{
+		Name:    "gpo.maxblockhistory",
+		Usage:   "Maximum block history of gasprice oracle",
+		Value:   &c.cliConfig.Gpo.MaxBlockHistory,
+		Default: c.cliConfig.Gpo.MaxBlockHistory,
+	})
 	f.BigIntFlag(&flagset.BigIntFlag{
 		Name:    "gpo.maxprice",
 		Usage:   "Maximum gas price will be recommended by gpo",

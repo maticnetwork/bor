@@ -50,6 +50,10 @@ The ```bor server``` command runs the Bor client.
 
 - ```gpo.percentile```: Suggested gas price is the given percentile of a set of recent transaction gas prices (default: 60)
 
+- ```gpo.maxheaderhistory```: Maximum header history of gasprice oracle (default: 1024)
+
+- ```gpo.maxblockhistory```: Maximum block history of gasprice oracle (default: 1024)
+
 - ```gpo.maxprice```: Maximum gas price will be recommended by gpo (default: 5000000000000)
 
 - ```gpo.ignoreprice```: Gas price below which gpo will ignore transactions (default: 2)

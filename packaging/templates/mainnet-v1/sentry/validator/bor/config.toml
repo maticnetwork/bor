@@ -97,6 +97,8 @@ syncmode = "full"
 [gpo]
     # blocks = 20
     # percentile = 60
+    # maxheaderhistory = 1024
+    # maxblockhistory = 1024
     # maxprice = "5000000000000"
     ignoreprice = "30000000000"
 
