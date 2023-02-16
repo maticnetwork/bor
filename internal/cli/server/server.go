@@ -11,16 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mattn/go-colorable"
-	"github.com/mattn/go-isatty"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
-	"go.opentelemetry.io/otel/propagation"
-	"go.opentelemetry.io/otel/sdk/resource"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
-	"google.golang.org/grpc"
-
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/consensus/beacon" //nolint:typecheck
@@ -30,12 +20,22 @@ import (
 	"github.com/ethereum/go-ethereum/eth/tracers"
 	"github.com/ethereum/go-ethereum/ethstats"
 	"github.com/ethereum/go-ethereum/graphql"
+	"github.com/ethereum/go-ethereum/internal/cli/server/pprof"
 	"github.com/ethereum/go-ethereum/internal/cli/server/proto"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/metrics/influxdb"
 	"github.com/ethereum/go-ethereum/metrics/prometheus"
 	"github.com/ethereum/go-ethereum/node"
+	"github.com/mattn/go-colorable"
+	"github.com/mattn/go-isatty"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
+	"google.golang.org/grpc"
 
 	// Force-load the tracer engines to trigger registration
 	_ "github.com/ethereum/go-ethereum/eth/tracers/js"
@@ -96,6 +96,13 @@ func VerbosityStringToInt(loglevel string) int {
 
 //nolint:gocognit
 func NewServer(config *Config, opts ...serverOption) (*Server, error) {
+	// start pprof
+	if config.Pprof.Enabled {
+		pprof.SetMemProfileRate(config.Pprof.MemProfileRate)
+		pprof.SetSetBlockProfileRate(config.Pprof.BlockProfileRate)
+		pprof.StartPProf(fmt.Sprintf("%s:%d", config.Pprof.Addr, config.Pprof.Port))
+	}
+
 	srv := &Server{
 		config: config,
 	}

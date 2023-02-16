@@ -117,6 +117,29 @@ type Config struct {
 
 	// Develop Fake Author mode to produce blocks without authorisation
 	DevFakeAuthor bool `hcl:"devfakeauthor,optional" toml:"devfakeauthor,optional"`
+
+	// Pprof has the pprof related settings
+	Pprof *PprofConfig `hcl:"pprof,block" toml:"pprof,block"`
+}
+
+type PprofConfig struct {
+	// Enableed enable the pprof HTTP server
+	Enabled bool `hcl:"pprof,optional" toml:"pprof,optional"`
+
+	// pprof HTTP server listening port
+	Port int `hcl:"port,optional" toml:"port,optional"`
+
+	// pprof HTTP server listening interface
+	Addr string `hcl:"addr,optional" toml:"addr,optional"`
+
+	// Turn on memory profiling with the given rate
+	MemProfileRate int `hcl:"memprofilerate,optional" toml:"memprofilerate,optional"`
+
+	// Turn on block profiling with the given rate
+	BlockProfileRate int `hcl:"blockprofilerate,optional" toml:"blockprofilerate,optional"`
+
+	// // Write CPU profile to the given file
+	// CPUProfile string `hcl:"cpuprofile,optional" toml:"cpuprofile,optional"`
 }
 
 type P2PConfig struct {
@@ -629,6 +652,14 @@ func DefaultConfig() *Config {
 			Period:  0,
 		},
 		DevFakeAuthor: false,
+		Pprof: &PprofConfig{
+			Enabled:          false,
+			Port:             6060,
+			Addr:             "127.0.0.1",
+			MemProfileRate:   512 * 1024,
+			BlockProfileRate: 0,
+			// CPUProfile:       "",
+		},
 	}
 }
 

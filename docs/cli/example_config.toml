@@ -154,3 +154,10 @@ ethstats = ""                # Reporting URL of a ethstats service (nodename:sec
 [developer]
   dev = false  # Enable developer mode with ephemeral proof-of-authority network and a pre-funded developer account, mining enabled
   period = 0   # Block period to use in developer mode (0 = mine only if transaction pending)
+
+[pprof]
+  pprof = false            # Enable the pprof HTTP server
+  port = 6060              # pprof HTTP server listening port
+  addr = "127.0.0.1"       # pprof HTTP server listening interface
+  memprofilerate = 524288  # Turn on memory profiling with the given rate
+  blockprofilerate = 0     # Turn on block profiling with the given rate

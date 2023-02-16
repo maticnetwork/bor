@@ -142,3 +142,10 @@ gcmode = "archive"
 # [developer]
     # dev = false
     # period = 0
+
+# [pprof]
+#   pprof = false
+#   port = 6060
+#   addr = "127.0.0.1"
+#   memprofilerate = 524288
+#   blockprofilerate = 0

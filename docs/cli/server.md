@@ -66,6 +66,16 @@ The ```bor server``` command runs the Bor client.
 
 - ```dev.period```: Block period to use in developer mode (0 = mine only if transaction pending) (default: 0)
 
+- ```pprof```: Enable the pprof HTTP server (default: false)
+
+- ```pprof.port```: pprof HTTP server listening port (default: 6060)
+
+- ```pprof.addr```: pprof HTTP server listening interface (default: 127.0.0.1)
+
+- ```pprof.memprofilerate```: Turn on memory profiling with the given rate (default: 524288)
+
+- ```pprof.blockprofilerate```: Turn on block profiling with the given rate (default: 0)
+
 ### Account Management Options
 
 - ```unlock```: Comma separated list of accounts to unlock
