@@ -25,6 +25,7 @@ var (
 	ErrNoResponse            = errors.New("got a nil response")
 	ErrNotSuccessfulResponse = errors.New("error while fetching data from Heimdall")
 	ErrNotInRejectedList     = errors.New("milestoneID doesn't exist in rejected list")
+	ErrNotInMilestoneList    = errors.New("milestoneID doesn't exist in Heimdall")
 )
 
 const (
@@ -77,6 +78,7 @@ const (
 
 	fetchLastNoAckMilestone = "/milestone/lastNoAck"
 	fetchNoAckMilestone     = "/milestone/noAck/%s"
+	fetchMilestoneID        = "/milestone/ID/%s"
 
 	fetchSpanFormat = "bor/span/%d"
 )
@@ -242,6 +244,27 @@ func (h *HeimdallClient) FetchNoAckMilestone(ctx context.Context, milestoneID st
 	return nil
 }
 
+func (h *HeimdallClient) FetchMilestoneID(ctx context.Context, milestoneID string) error {
+	url, err := milestoneIDURL(h.urlString, milestoneID)
+	if err != nil {
+		return err
+	}
+
+	ctx = withRequestType(ctx, milestoneIDRequest)
+
+	response, err := FetchWithRetry[milestone.MilestoneIDResponse](ctx, h.client, url, h.closeCh)
+
+	if err != nil {
+		return err
+	}
+
+	if !response.Result.Result {
+		return fmt.Errorf("%w: milestoneID %q", ErrNotInMilestoneList, milestoneID)
+	}
+
+	return nil
+}
+
 // FetchWithRetry returns data from heimdall with retry
 func FetchWithRetry[T any](ctx context.Context, client http.Client, url *url.URL, closeCh chan struct{}) (*T, error) {
 	// request data once
@@ -367,6 +390,11 @@ func lastNoAckMilestoneURL(urlString string) (*url.URL, error) {
 
 func noAckMilestoneURL(urlString string, id string) (*url.URL, error) {
 	url := fmt.Sprintf(fetchNoAckMilestone, id)
+	return makeURL(urlString, url, "")
+}
+
+func milestoneIDURL(urlString string, id string) (*url.URL, error) {
+	url := fmt.Sprintf(fetchMilestoneID, id)
 	return makeURL(urlString, url, "")
 }
 

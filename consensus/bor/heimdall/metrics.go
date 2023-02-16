@@ -26,6 +26,7 @@ const (
 	milestoneCountRequest     requestType = "milestone-count"
 	milestoneNoAckRequest     requestType = "milestone-no-ack"
 	milestoneLastNoAckRequest requestType = "milestone-last-no-ack"
+	milestoneIDRequest        requestType = "milestone-id"
 )
 
 func withRequestType(ctx context.Context, reqType requestType) context.Context {
@@ -94,6 +95,13 @@ var (
 				false: metrics.NewRegisteredMeter("client/requests/milestonelastnoack/invalid", nil),
 			},
 			timer: metrics.NewRegisteredTimer("client/requests/milestonelastnoack/duration", nil),
+		},
+		milestoneIDRequest: {
+			request: map[bool]metrics.Meter{
+				true:  metrics.NewRegisteredMeter("client/requests/milestoneid/valid", nil),
+				false: metrics.NewRegisteredMeter("client/requests/milestoneid/invalid", nil),
+			},
+			timer: metrics.NewRegisteredTimer("client/requests/milestoneid/duration", nil),
 		},
 	}
 )

@@ -51,6 +51,10 @@ func (m *mockHeimdall) FetchLastNoAckMilestone(ctx context.Context) (string, err
 	return m.fetchLastNoAckMilestone(ctx)
 }
 
+func (m *mockHeimdall) FetchMilestoneID(ctx context.Context, milestoneID string) error {
+	return m.fetchNoAckMilestone(ctx, milestoneID)
+}
+
 func (m *mockHeimdall) Close() {}
 
 func TestFetchWhitelistCheckpointAndMilestone(t *testing.T) {

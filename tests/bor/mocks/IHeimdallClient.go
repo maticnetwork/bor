@@ -154,6 +154,20 @@ func (mr *MockIHeimdallClientMockRecorder) Span(arg0, arg1 interface{}) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Span", reflect.TypeOf((*MockIHeimdallClient)(nil).Span), arg0, arg1)
 }
 
+// FetchMilestoneID mocks base method
+func (m *MockIHeimdallClient) FetchMilestoneID(arg0 context.Context, arg1 string) (error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FetchMilestoneID", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// FetchNoAckMilestone indicates an expected call of FetchNoAckMilestone.
+func (mr *MockIHeimdallClientMockRecorder) FetchMilestoneID(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchMilestoneID", reflect.TypeOf((*MockIHeimdallClient)(nil).FetchMilestoneID), arg0, arg1)
+}
+
 // StateSyncEvents mocks base method.
 func (m *MockIHeimdallClient) StateSyncEvents(arg0 context.Context, arg1 uint64, arg2 int64) ([]*clerk.EventRecordWithTime, error) {
 	m.ctrl.T.Helper()
