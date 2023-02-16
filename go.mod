@@ -49,7 +49,7 @@ require (
 	github.com/karalabe/usb v0.0.2
 	github.com/maticnetwork/crand v1.0.2
 	github.com/maticnetwork/heimdall v0.3.0-beta1.0.20221123180730-457028136461
-	github.com/maticnetwork/polyproto v0.0.3-0.20221219122123-40d0e1244129
+	github.com/maticnetwork/polyproto v0.0.3-0.20230216113155-340ea926ca53
 	github.com/mattn/go-colorable v0.1.8
 	github.com/mattn/go-isatty v0.0.12
 	github.com/mitchellh/cli v1.1.2
@@ -91,6 +91,7 @@ require github.com/btcsuite/btcd v0.22.0-beta // indirect
 require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
+	google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.2.0 // indirect
 )
 
 require (
