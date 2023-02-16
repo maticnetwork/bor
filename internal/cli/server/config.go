@@ -482,6 +482,9 @@ type DeveloperConfig struct {
 
 	// Period is the block period to use in developer mode
 	Period uint64 `hcl:"period,optional" toml:"period,optional"`
+
+	// Initial block gas limit
+	GasLimit uint64 `hcl:"gaslimit,optional" toml:"gaslimit,optional"`
 }
 
 func DefaultConfig() *Config {
@@ -633,8 +636,9 @@ func DefaultConfig() *Config {
 			Addr: ":3131",
 		},
 		Developer: &DeveloperConfig{
-			Enabled: false,
-			Period:  0,
+			Enabled:  false,
+			Period:   0,
+			GasLimit: 11500000,
 		},
 		DevFakeAuthor: false,
 	}
@@ -878,7 +882,7 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 		n.Miner.Etherbase = developer.Address
 
 		// get developer mode chain config
-		c.chain = chains.GetDeveloperChain(c.Developer.Period, developer.Address)
+		c.chain = chains.GetDeveloperChain(c.Developer.Period, c.Developer.GasLimit, developer.Address)
 
 		// update the parameters
 		n.NetworkId = c.chain.NetworkId

@@ -66,6 +66,8 @@ The ```bor server``` command runs the Bor client.
 
 - ```dev.period```: Block period to use in developer mode (0 = mine only if transaction pending) (default: 0)
 
+- ```dev.gaslimit```: Initial block gas limit (default: 11500000)
+
 ### Account Management Options
 
 - ```unlock```: Comma separated list of accounts to unlock
