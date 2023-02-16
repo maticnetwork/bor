@@ -142,6 +142,7 @@ gcmode = "archive"
 # [developer]
     # dev = false
     # period = 0
+    # gaslimit = 11500000
 
 # [pprof]
 #   pprof = false

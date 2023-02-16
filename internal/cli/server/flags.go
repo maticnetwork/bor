@@ -772,6 +772,12 @@ func (c *Command) Flags() *flagset.Flagset {
 		Value:   &c.cliConfig.Developer.Period,
 		Default: c.cliConfig.Developer.Period,
 	})
+	f.Uint64Flag(&flagset.Uint64Flag{
+		Name:    "dev.gaslimit",
+		Usage:   "Initial block gas limit",
+		Value:   &c.cliConfig.Developer.GasLimit,
+		Default: c.cliConfig.Developer.GasLimit,
+	})
 
 	// pprof
 	f.BoolFlag(&flagset.BoolFlag{

@@ -66,6 +66,8 @@ The ```bor server``` command runs the Bor client.
 
 - ```dev.period```: Block period to use in developer mode (0 = mine only if transaction pending) (default: 0)
 
+- ```dev.gaslimit```: Initial block gas limit (default: 11500000)
+
 - ```pprof```: Enable the pprof HTTP server (default: false)
 
 - ```pprof.port```: pprof HTTP server listening port (default: 6060)

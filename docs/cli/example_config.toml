@@ -152,8 +152,9 @@ ethstats = ""                # Reporting URL of a ethstats service (nodename:sec
   addr = ":3131" # Address and port to bind the GRPC server
 
 [developer]
-  dev = false  # Enable developer mode with ephemeral proof-of-authority network and a pre-funded developer account, mining enabled
-  period = 0   # Block period to use in developer mode (0 = mine only if transaction pending)
+  dev = false          # Enable developer mode with ephemeral proof-of-authority network and a pre-funded developer account, mining enabled
+  period = 0           # Block period to use in developer mode (0 = mine only if transaction pending)
+  gaslimit = 11500000  # Initial block gas limit
 
 [pprof]
   pprof = false            # Enable the pprof HTTP server
