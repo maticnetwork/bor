@@ -93,6 +93,12 @@ type AncientReader interface {
 
 	// AncientSize returns the ancient size of the specified category.
 	AncientSize(kind string) (uint64, error)
+
+	// ItemAmountInAncient returns the actual length of current ancientDB.
+	ItemAmountInAncient() (uint64, error)
+
+	// AncientOffSet returns the offset of current ancientDB.
+	AncientOffSet() uint64
 }
 
 // AncientBatchReader is the interface for 'batched' or 'atomic' reading.
@@ -164,6 +170,7 @@ type AncientStore interface {
 
 // Database contains all the methods required by the high level database to not
 // only access the key-value data store but also the chain freezer.
+//
 //go:generate mockgen -destination=../eth/filters/IDatabase.go -package=filters . Database
 type Database interface {
 	Reader
