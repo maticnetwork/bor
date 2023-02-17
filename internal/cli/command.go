@@ -200,6 +200,11 @@ func Commands() map[string]MarkDownCommandFactory {
 				Meta: meta,
 			}, nil
 		},
+		"snapshot prune-block": func() (MarkDownCommand, error) {
+			return &PruneBlockCommand{
+				Meta: meta,
+			}, nil
+		},
 	}
 }
 
