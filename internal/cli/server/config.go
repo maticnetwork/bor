@@ -457,6 +457,9 @@ type CacheConfig struct {
 	// Time after which the Merkle Patricia Trie is stored to disc from memory
 	TrieTimeout    time.Duration `hcl:"-,optional" toml:"-"`
 	TrieTimeoutRaw string        `hcl:"timeout,optional" toml:"timeout,optional"`
+
+	// Raise the open file descriptor resource limit (default = system fd limit)
+	FDLimit int `hcl:"fdlimit,optional" toml:"fdlimit,optional"`
 }
 
 type AccountsConfig struct {
@@ -624,6 +627,7 @@ func DefaultConfig() *Config {
 			TxLookupLimit: 2350000,
 			TriesInMemory: 128,
 			TrieTimeout:   60 * time.Minute,
+			FDLimit:       0,
 		},
 		Accounts: &AccountsConfig{
 			Unlock:              []string{},
@@ -756,7 +760,7 @@ func (c *Config) loadChain() error {
 
 //nolint:gocognit
 func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*ethconfig.Config, error) {
-	dbHandles, err := MakeDatabaseHandles()
+	dbHandles, err := MakeDatabaseHandles(c.Cache.FDLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -1229,10 +1233,24 @@ func (c *Config) Merge(cc ...*Config) error {
 	return nil
 }
 
-func MakeDatabaseHandles() (int, error) {
+func MakeDatabaseHandles(max int) (int, error) {
 	limit, err := fdlimit.Maximum()
 	if err != nil {
 		return -1, err
+	}
+
+	switch {
+	case max == 0:
+		// User didn't specify a meaningful value, use system limits
+	case max < 128:
+		// User specified something unhealthy, just use system defaults
+		log.Error("File descriptor limit invalid (<128)", "had", max, "updated", limit)
+	case max > limit:
+		// User requested more than the OS allows, notify that we can't allocate it
+		log.Warn("Requested file descriptors denied by OS", "req", max, "limit", limit)
+	default:
+		// User limit is meaningful and within allowed range, use that
+		limit = max
 	}
 
 	raised, err := fdlimit.Raise(uint64(limit))
@@ -1240,7 +1258,7 @@ func MakeDatabaseHandles() (int, error) {
 		return -1, err
 	}
 
-	return int(raised / 2), nil
+	return int(raised / 2), nil // Leave half for networking and other stuff
 }
 
 func parseBootnodes(urls []string) ([]*enode.Node, error) {
