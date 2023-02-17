@@ -64,7 +64,7 @@ func newTester() *downloadTester {
 		panic(err)
 	}
 
-	db, err := rawdb.NewDatabaseWithFreezer(rawdb.NewMemoryDatabase(), freezer, "", false)
+	db, err := rawdb.NewDatabaseWithFreezer(rawdb.NewMemoryDatabase(), freezer, "", false, false, false)
 	if err != nil {
 		panic(err)
 	}
