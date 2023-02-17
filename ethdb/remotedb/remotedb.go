@@ -91,6 +91,16 @@ func (db *Database) AncientSize(kind string) (uint64, error) {
 	panic("not supported")
 }
 
+// ItemAmountInAncient returns an error as we don't have a backing chain freezer.
+func (db *Database) ItemAmountInAncient() (uint64, error) {
+	panic("not supported")
+}
+
+// AncientOffSet returns an error as we don't have a backing chain freezer.
+func (db *Database) AncientOffSet() uint64 {
+	panic("not supported")
+}
+
 func (db *Database) ReadAncients(fn func(op ethdb.AncientReaderOp) error) (err error) {
 	return fn(db)
 }

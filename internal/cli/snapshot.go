@@ -161,7 +161,7 @@ func (c *PruneStateCommand) Run(args []string) int {
 		return 1
 	}
 
-	chaindb, err := node.OpenDatabaseWithFreezer(chaindataPath, int(c.cache), dbHandles, c.datadirAncient, "", false)
+	chaindb, err := node.OpenDatabaseWithFreezer(chaindataPath, int(c.cache), dbHandles, c.datadirAncient, "", false, false, false)
 
 	if err != nil {
 		c.UI.Error(err.Error())

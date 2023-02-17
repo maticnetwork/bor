@@ -54,7 +54,7 @@ func NewResettableFreezer(datadir string, namespace string, readonly bool, maxTa
 	}
 
 	opener := func() (*Freezer, error) {
-		return NewFreezer(datadir, namespace, readonly, maxTableSize, tables)
+		return NewFreezer(datadir, namespace, readonly, 0, maxTableSize, tables)
 	}
 
 	freezer, err := opener()
@@ -144,6 +144,16 @@ func (f *ResettableFreezer) Ancients() (uint64, error) {
 	defer f.lock.RUnlock()
 
 	return f.freezer.Ancients()
+}
+
+// ItemAmountInAncient returns the actual length of current ancientDB.
+func (f *ResettableFreezer) ItemAmountInAncient() (uint64, error) {
+	return f.Ancients()
+}
+
+// AncientOffSet returns the offset of current ancientDB.
+func (f *ResettableFreezer) AncientOffSet() uint64 {
+	return 0
 }
 
 // Tail returns the number of first stored item in the freezer.

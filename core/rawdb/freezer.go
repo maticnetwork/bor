@@ -74,12 +74,13 @@ type Freezer struct {
 	tables       map[string]*freezerTable // Data tables for storing everything
 	instanceLock *flock.Flock             // File-system lock to prevent double opens
 	closeOnce    sync.Once
+	offset       uint64 // Starting BlockNumber in current freezer
 }
 
 // NewChainFreezer is a small utility method around NewFreezer that sets the
 // default parameters for the chain storage.
-func NewChainFreezer(datadir string, namespace string, readonly bool) (*Freezer, error) {
-	return NewFreezer(datadir, namespace, readonly, freezerTableSize, chainFreezerNoSnappy)
+func NewChainFreezer(datadir string, namespace string, readonly bool, offset uint64) (*Freezer, error) {
+	return NewFreezer(datadir, namespace, readonly, offset, freezerTableSize, chainFreezerNoSnappy)
 }
 
 // NewFreezer creates a freezer instance for maintaining immutable ordered
@@ -87,7 +88,7 @@ func NewChainFreezer(datadir string, namespace string, readonly bool) (*Freezer,
 //
 // The 'tables' argument defines the data tables. If the value of a map
 // entry is true, snappy compression is disabled for the table.
-func NewFreezer(datadir string, namespace string, readonly bool, maxTableSize uint32, tables map[string]bool) (*Freezer, error) {
+func NewFreezer(datadir string, namespace string, readonly bool, offset uint64, maxTableSize uint32, tables map[string]bool) (*Freezer, error) {
 	// Create the initial freezer object
 	var (
 		readMeter  = metrics.NewRegisteredMeter(namespace+"ancient/read", nil)
@@ -122,6 +123,7 @@ func NewFreezer(datadir string, namespace string, readonly bool, maxTableSize ui
 		readonly:     readonly,
 		tables:       make(map[string]*freezerTable),
 		instanceLock: lock,
+		offset:       offset,
 	}
 
 	// Create the tables.
@@ -152,6 +154,10 @@ func NewFreezer(datadir string, namespace string, readonly bool, maxTableSize ui
 		lock.Unlock()
 		return nil, err
 	}
+
+	// Some blocks in ancientDB may have already been frozen and been pruned, so adding the offset to
+	// reprensent the absolute number of blocks already frozen.
+	freezer.frozen.Store(freezer.frozen.Add(offset))
 
 	// Create the write batch.
 	freezer.writeBatch = newFreezerBatch(freezer)
@@ -186,7 +192,7 @@ func (f *Freezer) Close() error {
 // in the freezer.
 func (f *Freezer) HasAncient(kind string, number uint64) (bool, error) {
 	if table := f.tables[kind]; table != nil {
-		return table.has(number), nil
+		return table.has(number - f.offset), nil
 	}
 	return false, nil
 }
@@ -194,7 +200,7 @@ func (f *Freezer) HasAncient(kind string, number uint64) (bool, error) {
 // Ancient retrieves an ancient binary blob from the append-only immutable files.
 func (f *Freezer) Ancient(kind string, number uint64) ([]byte, error) {
 	if table := f.tables[kind]; table != nil {
-		return table.Retrieve(number)
+		return table.Retrieve(number - f.offset)
 	}
 	return nil, errUnknownTable
 }
@@ -215,6 +221,16 @@ func (f *Freezer) AncientRange(kind string, start, count, maxBytes uint64) ([][]
 // Ancients returns the length of the frozen items.
 func (f *Freezer) Ancients() (uint64, error) {
 	return f.frozen.Load(), nil
+}
+
+// ItemAmountInAncient returns the actual length of current ancientDB.
+func (f *Freezer) ItemAmountInAncient() (uint64, error) {
+	return f.frozen.Load() - f.AncientOffSet(), nil
+}
+
+// AncientOffSet returns the offset of current ancientDB.
+func (f *Freezer) AncientOffSet() uint64 {
+	return atomic.LoadUint64(&f.offset)
 }
 
 // Tail returns the number of first stored item in the freezer.
@@ -313,7 +329,7 @@ func (f *Freezer) TruncateTail(tail uint64) (uint64, error) {
 		return old, nil
 	}
 	for _, table := range f.tables {
-		if err := table.truncateTail(tail); err != nil {
+		if err := table.truncateTail(tail - f.offset); err != nil {
 			return 0, err
 		}
 	}
