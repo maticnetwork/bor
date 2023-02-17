@@ -2002,7 +2002,7 @@ func testSideImport(t *testing.T, numCanonBlocksInSidechain, blocksBetweenCommon
 
 	lastPrunedIndex := len(blocks) - TempTriesInMemory - 1
 	//lastPrunedBlock := blocks[lastPrunedIndex]
-	firstNonPrunedBlock := blocks[len(blocks)-int(TempTriesInMemory)]
+	firstNonPrunedBlock := blocks[len(blocks)-TempTriesInMemory]
 
 	// // Verify pruning of lastPrunedBlock
 	// if chain.HasBlockAndState(lastPrunedBlock.Hash(), lastPrunedBlock.NumberU64()) {
