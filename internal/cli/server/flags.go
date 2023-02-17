@@ -372,6 +372,13 @@ func (c *Command) Flags() *flagset.Flagset {
 		Default: c.cliConfig.Cache.TxLookupLimit,
 		Group:   "Cache",
 	})
+	f.IntFlag(&flagset.IntFlag{
+		Name:    "fdlimit",
+		Usage:   "Raise the open file descriptor resource limit (default = system fd limit)",
+		Value:   &c.cliConfig.Cache.FDLimit,
+		Default: c.cliConfig.Cache.FDLimit,
+		Group:   "Cache",
+	})
 
 	// rpc options
 	f.Uint64Flag(&flagset.Uint64Flag{

@@ -112,6 +112,8 @@ The ```bor server``` command runs the Bor client.
 
 - ```txlookuplimit```: Number of recent blocks to maintain transactions index for (default: 2350000)
 
+- ```fdlimit```: Raise the open file descriptor resource limit (default = system fd limit) (default: 0)
+
 ### JsonRPC Options
 
 - ```rpc.gascap```: Sets a cap on gas that can be used in eth_call/estimateGas (0=infinite) (default: 50000000)
