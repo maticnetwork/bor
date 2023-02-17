@@ -70,10 +70,10 @@ const (
 // freezer is a memory mapped append-only database to store immutable chain data
 // into flat files:
 //
-// - The append only nature ensures that disk writes are minimized.
-// - The memory mapping ensures we can max out system memory for caching without
-//   reserving it for go-ethereum. This would also reduce the memory requirements
-//   of Geth, and thus also GC overhead.
+//   - The append only nature ensures that disk writes are minimized.
+//   - The memory mapping ensures we can max out system memory for caching without
+//     reserving it for go-ethereum. This would also reduce the memory requirements
+//     of Geth, and thus also GC overhead.
 type freezer struct {
 	// WARNING: The `frozen` field is accessed atomically. On 32 bit platforms, only
 	// 64-bit aligned fields can be atomic. The struct is guaranteed to be so aligned,
@@ -96,6 +96,8 @@ type freezer struct {
 	quit      chan struct{}
 	wg        sync.WaitGroup
 	closeOnce sync.Once
+
+	offset uint64 // Starting BlockNumber in current freezer
 }
 
 // newFreezer creates a chain freezer that moves ancient chain data into
@@ -103,7 +105,7 @@ type freezer struct {
 //
 // The 'tables' argument defines the data tables. If the value of a map
 // entry is true, snappy compression is disabled for the table.
-func newFreezer(datadir string, namespace string, readonly bool, maxTableSize uint32, tables map[string]bool) (*freezer, error) {
+func newFreezer(datadir string, namespace string, readonly bool, offset uint64, maxTableSize uint32, tables map[string]bool) (*freezer, error) {
 	// Create the initial freezer object
 	var (
 		readMeter  = metrics.NewRegisteredMeter(namespace+"ancient/read", nil)
@@ -131,6 +133,7 @@ func newFreezer(datadir string, namespace string, readonly bool, maxTableSize ui
 		instanceLock: lock,
 		trigger:      make(chan chan struct{}),
 		quit:         make(chan struct{}),
+		offset:       offset,
 	}
 
 	// Create the tables.
@@ -175,6 +178,10 @@ func newFreezer(datadir string, namespace string, readonly bool, maxTableSize ui
 		return nil, err
 	}
 
+	// Some blocks in ancientDB may have already been frozen and been pruned, so adding the offset to
+	// reprensent the absolute number of blocks already frozen.
+	freezer.frozen += offset
+
 	// Create the write batch.
 	freezer.writeBatch = newFreezerBatch(freezer)
 
@@ -211,7 +218,7 @@ func (f *freezer) Close() error {
 // in the freezer.
 func (f *freezer) HasAncient(kind string, number uint64) (bool, error) {
 	if table := f.tables[kind]; table != nil {
-		return table.has(number), nil
+		return table.has(number - f.offset), nil
 	}
 	return false, nil
 }
@@ -219,16 +226,16 @@ func (f *freezer) HasAncient(kind string, number uint64) (bool, error) {
 // Ancient retrieves an ancient binary blob from the append-only immutable files.
 func (f *freezer) Ancient(kind string, number uint64) ([]byte, error) {
 	if table := f.tables[kind]; table != nil {
-		return table.Retrieve(number)
+		return table.Retrieve(number - f.offset)
 	}
 	return nil, errUnknownTable
 }
 
 // AncientRange retrieves multiple items in sequence, starting from the index 'start'.
 // It will return
-//  - at most 'max' items,
-//  - at least 1 item (even if exceeding the maxByteSize), but will otherwise
-//   return as many items as fit into maxByteSize.
+//   - at most 'max' items,
+//   - at least 1 item (even if exceeding the maxByteSize), but will otherwise
+//     return as many items as fit into maxByteSize.
 func (f *freezer) AncientRange(kind string, start, count, maxBytes uint64) ([][]byte, error) {
 	if table := f.tables[kind]; table != nil {
 		return table.RetrieveItems(start, count, maxBytes)
@@ -239,6 +246,16 @@ func (f *freezer) AncientRange(kind string, start, count, maxBytes uint64) ([][]
 // Ancients returns the length of the frozen items.
 func (f *freezer) Ancients() (uint64, error) {
 	return atomic.LoadUint64(&f.frozen), nil
+}
+
+// ItemAmountInAncient returns the actual length of current ancientDB.
+func (f *freezer) ItemAmountInAncient() (uint64, error) {
+	return atomic.LoadUint64(&f.frozen) - atomic.LoadUint64(&f.offset), nil
+}
+
+// AncientOffSet returns the offset of current ancientDB.
+func (f *freezer) AncientOffSet() uint64 {
+	return atomic.LoadUint64(&f.offset)
 }
 
 // Tail returns the number of first stored item in the freezer.
@@ -333,7 +350,7 @@ func (f *freezer) TruncateTail(tail uint64) error {
 		return nil
 	}
 	for _, table := range f.tables {
-		if err := table.truncateTail(tail); err != nil {
+		if err := table.truncateTail(tail - f.offset); err != nil {
 			return err
 		}
 	}
