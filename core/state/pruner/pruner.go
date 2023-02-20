@@ -339,16 +339,14 @@ func (p *Pruner) Prune(root common.Hash) error {
 }
 
 type BlockPruner struct {
-	db                  ethdb.Database
 	oldAncientPath      string
 	newAncientPath      string
 	node                *node.Node
 	BlockAmountReserved uint64
 }
 
-func NewBlockPruner(db ethdb.Database, n *node.Node, oldAncientPath, newAncientPath string, BlockAmountReserved uint64) *BlockPruner {
+func NewBlockPruner(n *node.Node, oldAncientPath, newAncientPath string, BlockAmountReserved uint64) *BlockPruner {
 	return &BlockPruner{
-		db:                  db,
 		oldAncientPath:      oldAncientPath,
 		newAncientPath:      newAncientPath,
 		node:                n,

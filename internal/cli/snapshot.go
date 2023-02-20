@@ -13,7 +13,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state/pruner"
 	"github.com/ethereum/go-ethereum/core/state/snapshot"
-	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/internal/cli/flagset"
 	"github.com/ethereum/go-ethereum/internal/cli/server"
 	"github.com/ethereum/go-ethereum/log"
@@ -297,20 +296,13 @@ func (c *PruneBlockCommand) Run(args []string) int {
 		return 1
 	}
 
-	chaindb, err := node.OpenDatabaseWithFreezer(chaindataPath, c.cache, dbHandles, c.datadirAncient, "", false, true, false)
-	if err != nil {
-		c.UI.Error(err.Error())
-		return 1
-	}
-	defer chaindb.Close()
-
-	err = c.accessDb(node, chaindb)
+	err = c.accessDb(node, dbHandles)
 	if err != nil {
 		c.UI.Error(err.Error())
 		return 1
 	}
 
-	err = c.pruneBlock(node, chaindb, dbHandles)
+	err = c.pruneBlock(node, dbHandles)
 	if err != nil {
 		c.UI.Error(err.Error())
 		return 1
@@ -318,7 +310,12 @@ func (c *PruneBlockCommand) Run(args []string) int {
 	return 0
 }
 
-func (c *PruneBlockCommand) accessDb(stack *node.Node, chaindb ethdb.Database) error {
+func (c *PruneBlockCommand) accessDb(stack *node.Node, dbHandles int) error {
+	chaindb, err := stack.OpenDatabaseWithFreezer(chaindataPath, c.cache, dbHandles, c.datadirAncient, "", false, true, false)
+	if err != nil {
+		return err
+	}
+	defer chaindb.Close()
 	if !c.checkSnapshotWithMPT {
 		return nil
 	}
@@ -400,7 +397,7 @@ func (c *PruneBlockCommand) accessDb(stack *node.Node, chaindb ethdb.Database) e
 	return nil
 }
 
-func (c *PruneBlockCommand) pruneBlock(stack *node.Node, chaindb ethdb.Database, fdHandles int) error {
+func (c *PruneBlockCommand) pruneBlock(stack *node.Node, fdHandles int) error {
 	oldAncientPath := c.datadirAncient
 	if !filepath.IsAbs(oldAncientPath) {
 		oldAncientPath = stack.ResolvePath(oldAncientPath)
@@ -412,7 +409,7 @@ func (c *PruneBlockCommand) pruneBlock(stack *node.Node, chaindb ethdb.Database,
 	}
 	newAncientPath := filepath.Join(path, "ancient_back")
 
-	blockpruner := pruner.NewBlockPruner(chaindb, stack, oldAncientPath, newAncientPath, c.blockAmountReserved)
+	blockpruner := pruner.NewBlockPruner(stack, oldAncientPath, newAncientPath, c.blockAmountReserved)
 
 	lock, exist, err := fileutil.Flock(filepath.Join(oldAncientPath, "PRUNEFLOCK"))
 	if err != nil {
@@ -446,7 +443,7 @@ func (c *PruneBlockCommand) pruneBlock(stack *node.Node, chaindb ethdb.Database,
 		return err
 	}
 
-	log.Info("backup block successfully")
+	log.Info("Block backup successfully")
 
 	// After backup successfully, rename the new ancientdb name to the original one, and delete the old ancientdb
 	if err := blockpruner.AncientDbReplacer(); err != nil {
