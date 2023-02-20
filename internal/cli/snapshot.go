@@ -313,9 +313,10 @@ func (c *PruneBlockCommand) Run(args []string) int {
 func (c *PruneBlockCommand) accessDb(stack *node.Node, dbHandles int) error {
 	chaindb, err := stack.OpenDatabaseWithFreezer(chaindataPath, c.cache, dbHandles, c.datadirAncient, "", false, true, false)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to accessdb %v", err)
 	}
 	defer chaindb.Close()
+
 	if !c.checkSnapshotWithMPT {
 		return nil
 	}
@@ -398,8 +399,13 @@ func (c *PruneBlockCommand) accessDb(stack *node.Node, dbHandles int) error {
 }
 
 func (c *PruneBlockCommand) pruneBlock(stack *node.Node, fdHandles int) error {
+	name := "chaindata"
+
 	oldAncientPath := c.datadirAncient
-	if !filepath.IsAbs(oldAncientPath) {
+	switch {
+	case oldAncientPath == "":
+		oldAncientPath = filepath.Join(stack.ResolvePath(name), "ancient")
+	case !filepath.IsAbs(oldAncientPath):
 		oldAncientPath = stack.ResolvePath(oldAncientPath)
 	}
 
@@ -437,7 +443,6 @@ func (c *PruneBlockCommand) pruneBlock(stack *node.Node, fdHandles int) error {
 		log.Info("Block prune successfully")
 		return nil
 	}
-	name := "chaindata"
 	if err := blockpruner.BlockPruneBackup(name, c.cache, fdHandles, "", false, false); err != nil {
 		log.Error("Failed to backup block", "err", err)
 		return err
