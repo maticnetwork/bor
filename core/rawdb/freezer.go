@@ -330,7 +330,7 @@ func (f *freezer) TruncateHead(items uint64) error {
 		return nil
 	}
 	for _, table := range f.tables {
-		if err := table.truncateHead(items); err != nil {
+		if err := table.truncateHead(items - f.offset); err != nil {
 			return err
 		}
 	}

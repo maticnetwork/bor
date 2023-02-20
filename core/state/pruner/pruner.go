@@ -401,7 +401,7 @@ func (p *BlockPruner) backupOldDb(name string, cache, handles int, namespace str
 	// For every round, newoffset actually equals to the startBlockNumber in ancient backup db.
 	frdbBack, err := rawdb.NewFreezerDb(chainDb, p.newAncientPath, namespace, readonly, startBlockNumber)
 	if err != nil {
-		log.Error("Failed to create ancient freezer backup", "err=", err)
+		log.Error("Failed to create ancient freezer backup", "err", err)
 		return err
 	}
 	defer frdbBack.Close()
@@ -438,7 +438,7 @@ func (p *BlockPruner) backupOldDb(name string, cache, handles int, namespace str
 		}
 		// Write into new ancient_back db.
 		if _, err := rawdb.WriteAncientBlocks(frdbBack, []*types.Block{block}, []types.Receipts{receipts}, []types.Receipts{borReceipts}, td); err != nil {
-			log.Error("failed to write new ancient", "error", err)
+			log.Error("failed to write new ancient", "err", err)
 			return err
 		}
 		// Print the log every 5s for better trace.
