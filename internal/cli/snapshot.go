@@ -441,14 +441,14 @@ func (c *PruneBlockCommand) pruneBlock(stack *node.Node, chaindb ethdb.Database,
 		return nil
 	}
 	name := "chaindata"
-	if err := blockpruner.BlockPruneBackUp(name, c.cache, fdHandles, "", false, false); err != nil {
-		log.Error("Failed to back up block", "err", err)
+	if err := blockpruner.BlockPruneBackup(name, c.cache, fdHandles, "", false, false); err != nil {
+		log.Error("Failed to backup block", "err", err)
 		return err
 	}
 
 	log.Info("backup block successfully")
 
-	// After backing up successfully, rename the new ancientdb name to the original one, and delete the old ancientdb
+	// After backup successfully, rename the new ancientdb name to the original one, and delete the old ancientdb
 	if err := blockpruner.AncientDbReplacer(); err != nil {
 		return err
 	}

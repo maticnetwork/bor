@@ -356,11 +356,11 @@ func NewBlockPruner(db ethdb.Database, n *node.Node, oldAncientPath, newAncientP
 	}
 }
 
-func (p *BlockPruner) backUpOldDb(name string, cache, handles int, namespace string, readonly, interrupt bool) error {
+func (p *BlockPruner) backupOldDb(name string, cache, handles int, namespace string, readonly, interrupt bool) error {
 	// Open old db wrapper.
 	chainDb, err := p.node.OpenDatabaseWithFreezer(name, cache, handles, p.oldAncientPath, namespace, readonly, true, interrupt)
 	if err != nil {
-		log.Error("Failed to open ancient database", "err=", err)
+		log.Error("Failed to open ancient database", "err", err)
 		return err
 	}
 	defer chainDb.Close()
@@ -449,19 +449,19 @@ func (p *BlockPruner) backUpOldDb(name string, cache, handles int, namespace str
 		}
 	}
 	lock.Release()
-	log.Info("block back up done", "current start blockNumber in ancientDB", startBlockNumber)
+	log.Info("block backup done", "current start blockNumber in ancientDB", startBlockNumber)
 	return nil
 }
 
-// Backup the ancient data for the old ancient db, i.e. the most recent 128 blocks in ancient db.
-func (p *BlockPruner) BlockPruneBackUp(name string, cache, handles int, namespace string, readonly, interrupt bool) error {
+// BlockPruneBackup backup the ancient data for the old ancient db, i.e. the most recent 128 blocks in ancient db.
+func (p *BlockPruner) BlockPruneBackup(name string, cache, handles int, namespace string, readonly, interrupt bool) error {
 	start := time.Now()
 
-	if err := p.backUpOldDb(name, cache, handles, namespace, readonly, interrupt); err != nil {
+	if err := p.backupOldDb(name, cache, handles, namespace, readonly, interrupt); err != nil {
 		return err
 	}
 
-	log.Info("Block pruning BackUp successfully", "time duration since start is", common.PrettyDuration(time.Since(start)))
+	log.Info("Block pruning backup successfully", "time duration since start is", common.PrettyDuration(time.Since(start)))
 	return nil
 }
 
@@ -489,13 +489,13 @@ func (p *BlockPruner) RecoverInterruption(name string, cache, handles int, names
 		}
 		if flockOfAncientBack {
 			// Indicating the oldOffset/newOffset have already been updated.
-			if err := p.BlockPruneBackUp(name, cache, handles, namespace, readonly, true); err != nil {
+			if err := p.BlockPruneBackup(name, cache, handles, namespace, readonly, true); err != nil {
 				log.Error("Failed to prune")
 				return err
 			}
 		} else {
 			// Indicating the flock did not exist and the new offset did not be updated, so just handle this case as usual.
-			if err := p.BlockPruneBackUp(name, cache, handles, namespace, readonly, false); err != nil {
+			if err := p.BlockPruneBackup(name, cache, handles, namespace, readonly, false); err != nil {
 				log.Error("Failed to prune")
 				return err
 			}
@@ -509,7 +509,7 @@ func (p *BlockPruner) RecoverInterruption(name string, cache, handles int, names
 		log.Info("New ancientDB_backup did not exist in interruption scenario")
 		// Indicating new ancientDB even did not be created, just prune starting at backup from startBlockNumber as usual,
 		// in this case, the new offset have not been written into kvDB.
-		if err := p.BlockPruneBackUp(name, cache, handles, namespace, readonly, false); err != nil {
+		if err := p.BlockPruneBackup(name, cache, handles, namespace, readonly, false); err != nil {
 			log.Error("Failed to prune")
 			return err
 		}
