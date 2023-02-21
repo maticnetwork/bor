@@ -290,14 +290,12 @@ func TestFreezerReadonlyValidate(t *testing.T) {
 	}
 
 	var item = make([]byte, 1024)
-
-	aBatch := f.tables["a"].newBatch()
+	aBatch := f.tables["a"].newBatch(0)
 	require.NoError(t, aBatch.AppendRaw(0, item))
 	require.NoError(t, aBatch.AppendRaw(1, item))
 	require.NoError(t, aBatch.AppendRaw(2, item))
 	require.NoError(t, aBatch.commit())
-
-	bBatch := f.tables["b"].newBatch()
+	bBatch := f.tables["b"].newBatch(0)
 	require.NoError(t, bBatch.AppendRaw(0, item))
 	require.NoError(t, bBatch.commit())
 
@@ -330,7 +328,7 @@ func TestFreezerConcurrentReadonly(t *testing.T) {
 		t.Fatal("can't open freezer", err)
 	}
 	var item = make([]byte, 1024)
-	batch := f.tables["a"].newBatch()
+	batch := f.tables["a"].newBatch(0)
 	items := uint64(10)
 	for i := uint64(0); i < items; i++ {
 		require.NoError(t, batch.AppendRaw(i, item))
