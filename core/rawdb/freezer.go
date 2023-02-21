@@ -712,7 +712,7 @@ func (f *freezer) MigrateTable(kind string, convert convertLegacyFn) error {
 		return err
 	}
 	var (
-		batch  = newTable.newBatch()
+		batch  = newTable.newBatch(f.offset)
 		out    []byte
 		start  = time.Now()
 		logged = time.Now()

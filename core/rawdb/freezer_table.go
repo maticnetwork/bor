@@ -931,7 +931,7 @@ func (t *freezerTable) dumpIndex(w io.Writer, start, stop int64) {
 // Fill adds empty data till given number (convenience method for backward compatibilty)
 func (t *freezerTable) Fill(number uint64) error {
 	if t.items < number {
-		b := t.newBatch()
+		b := t.newBatch(0)
 		log.Info("Filling all data into freezer for backward compatablity", "name", t.name, "items", t.items, "number", number)
 		for t.items < number {
 			if err := b.Append(t.items, nil); err != nil {
