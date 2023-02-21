@@ -636,6 +636,9 @@ func (s *PublicBlockChainAPI) GetTransactionReceiptsByBlock(ctx context.Context,
 	if err != nil {
 		return nil, err
 	}
+	if receipts == nil {
+		return nil, fmt.Errorf("block %d receipts not found", block.NumberU64())
+	}
 
 	txs := block.Transactions()
 
