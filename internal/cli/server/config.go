@@ -33,6 +33,7 @@ import (
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/nat"
+	"github.com/ethereum/go-ethereum/p2p/netutil"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
 )
@@ -160,6 +161,11 @@ type P2PConfig struct {
 
 	// NAT it used to set NAT options
 	NAT string `hcl:"nat,optional" toml:"nat,optional"`
+
+	// Connectivity can be restricted to certain IP networks.
+	// If this option is set to a non-nil value, only hosts which match one of the
+	// IP networks contained in the list are considered.
+	NetRestrict string `hcl:"netrestrict,optional" toml:"netrestrict,optional"`
 
 	// Discovery has the p2p discovery related settings
 	Discovery *P2PDiscovery `hcl:"discovery,block" toml:"discovery,block"`
@@ -523,6 +529,7 @@ func DefaultConfig() *Config {
 			Port:         30303,
 			NoDiscover:   false,
 			NAT:          "any",
+			NetRestrict:  "",
 			Discovery: &P2PDiscovery{
 				V5Enabled:    false,
 				Bootnodes:    []string{},
@@ -1132,6 +1139,11 @@ func (c *Config) buildNode() (*node.Config, error) {
 		}
 	}
 
+	list, err := netutil.ParseNetlist(c.P2P.NetRestrict)
+	if err != nil {
+		utils.Fatalf("Option %q: %v", c.P2P.NetRestrict, err)
+	}
+
 	cfg := &node.Config{
 		Name:                  clientIdentifier,
 		DataDir:               c.DataDir,
@@ -1145,6 +1157,7 @@ func (c *Config) buildNode() (*node.Config, error) {
 			MaxPendingPeers: int(c.P2P.MaxPendPeers),
 			ListenAddr:      c.P2P.Bind + ":" + strconv.Itoa(int(c.P2P.Port)),
 			DiscoveryV5:     c.P2P.Discovery.V5Enabled,
+			NetRestrict:     list,
 		},
 		HTTPModules:         c.JsonRPC.Http.API,
 		HTTPCors:            c.JsonRPC.Http.Cors,
