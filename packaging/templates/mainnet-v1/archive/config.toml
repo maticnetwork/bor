@@ -20,6 +20,8 @@ gcmode = "archive"
     # nodiscover = false
     # nat = "any"
     # netrestrict = ""
+    # nodekey = ""
+    # nodekeyhex = ""
     # [p2p.discovery]
         # v5disc = false
         # bootnodes = []
