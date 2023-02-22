@@ -619,6 +619,13 @@ func (c *Command) Flags() *flagset.Flagset {
 		Default: c.cliConfig.P2P.NAT,
 		Group:   "P2P",
 	})
+	f.StringFlag(&flagset.StringFlag{
+		Name:    "netrestrict",
+		Usage:   "Restricts network communication to the given IP networks (CIDR masks)",
+		Value:   &c.cliConfig.P2P.NetRestrict,
+		Default: c.cliConfig.P2P.NetRestrict,
+		Group:   "P2P",
+	})
 	f.BoolFlag(&flagset.BoolFlag{
 		Name:    "nodiscover",
 		Usage:   "Disables the peer discovery mechanism (manual peer addition)",
