@@ -613,6 +613,20 @@ func (c *Command) Flags() *flagset.Flagset {
 		Default: c.cliConfig.P2P.NetRestrict,
 		Group:   "P2P",
 	})
+	f.StringFlag(&flagset.StringFlag{
+		Name:    "nodekey",
+		Usage:   " P2P node key file",
+		Value:   &c.cliConfig.P2P.NodeKey,
+		Default: c.cliConfig.P2P.NodeKey,
+		Group:   "P2P",
+	})
+	f.StringFlag(&flagset.StringFlag{
+		Name:    "nodekeyhex",
+		Usage:   "P2P node key as hex",
+		Value:   &c.cliConfig.P2P.NodeKeyHex,
+		Default: c.cliConfig.P2P.NodeKeyHex,
+		Group:   "P2P",
+	})
 	f.BoolFlag(&flagset.BoolFlag{
 		Name:    "nodiscover",
 		Usage:   "Disables the peer discovery mechanism (manual peer addition)",

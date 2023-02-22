@@ -22,6 +22,8 @@ syncmode = "full"
     # bind = "0.0.0.0"
     # nat = "any"
     # netrestrict = ""
+    # nodekey = ""
+    # nodekeyhex = ""
     # [p2p.discovery]
         # v5disc = false
         # bootnodes = []

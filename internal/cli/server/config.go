@@ -1,6 +1,7 @@
 package server
 
 import (
+	"crypto/ecdsa"
 	"fmt"
 	"io/ioutil"
 	"math"
@@ -24,6 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/fdlimit"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/ethereum/go-ethereum/eth/gasprice"
@@ -166,6 +168,12 @@ type P2PConfig struct {
 	// If this option is set to a non-nil value, only hosts which match one of the
 	// IP networks contained in the list are considered.
 	NetRestrict string `hcl:"netrestrict,optional" toml:"netrestrict,optional"`
+
+	// P2P node key file
+	NodeKey string `hcl:"nodekey,optional" toml:"nodekey,optional"`
+
+	// P2P node key as hex
+	NodeKeyHex string `hcl:"nodekeyhex,optional" toml:"nodekeyhex,optional"`
 
 	// Discovery has the p2p discovery related settings
 	Discovery *P2PDiscovery `hcl:"discovery,block" toml:"discovery,block"`
@@ -1130,6 +1138,32 @@ func ambiguousAddrRecovery(ks *keystore.KeyStore, err *keystore.AmbiguousAddrErr
 	return *match
 }
 
+// setNodeKey creates a node key from set command line flags, either loading it
+// from a file or as a specified hex value. If neither flags were provided, this
+// method returns nil and an emphemeral key is to be generated.
+func getNodeKey(hex string, file string) *ecdsa.PrivateKey {
+	var (
+		key *ecdsa.PrivateKey
+		err error
+	)
+	switch {
+	case file != "" && hex != "":
+		utils.Fatalf("Options %q and %q are mutually exclusive", file, hex)
+	case file != "":
+		if key, err = crypto.LoadECDSA(file); err != nil {
+			utils.Fatalf("Option %q: %v", file, err)
+		}
+		return key
+	case hex != "":
+		if key, err = crypto.HexToECDSA(hex); err != nil {
+			utils.Fatalf("Option %q: %v", hex, err)
+		}
+		return key
+	}
+
+	return nil
+}
+
 func (c *Config) buildNode() (*node.Config, error) {
 	ipcPath := ""
 	if !c.JsonRPC.IPCDisable {
@@ -1177,6 +1211,11 @@ func (c *Config) buildNode() (*node.Config, error) {
 		AuthPort:         int(c.JsonRPC.Auth.Port),
 		AuthAddr:         c.JsonRPC.Auth.Addr,
 		AuthVirtualHosts: c.JsonRPC.Auth.VHosts,
+	}
+
+	key := getNodeKey(c.P2P.NodeKeyHex, c.P2P.NodeKey)
+	if key != nil {
+		cfg.P2P.PrivateKey = key
 	}
 
 	// dev mode
