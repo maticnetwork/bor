@@ -2193,18 +2193,33 @@ func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
 	} else {
 		// len(newChain) == 0 && len(oldChain) > 0
 		// rewind the canonical chain to a lower point.
-		out := fmt.Sprintf("oldChain: %+v,\n\noldBlock : %+v,\n\nnewBlock : %+v", oldChain, oldBlock, newBlock)
 
 		home, err := os.UserHomeDir()
 		if err != nil {
-			log.Error("Impossible reorg : Unable to get user home dir", "Error", err)
+			fmt.Println("Impossible reorg : Unable to get user home dir", "Error", err)
+		}
+		outPath := filepath.Join(home, "impossible-reorgs", fmt.Sprintf("%v-impossibleReorg", time.Now().Format(time.RFC3339)))
+
+		if _, err := os.Stat(outPath); errors.Is(err, os.ErrNotExist) {
+			err := os.MkdirAll(outPath, os.ModePerm)
+			if err != nil {
+				log.Error("Impossible reorg : Unable to create Dir", "Error", err)
+			}
 		}
 
-		outPath := filepath.Join(home, fmt.Sprintf("impossibleReorg-%v.txt", time.Now().Format(time.RFC3339)))
-
-		err = os.WriteFile(outPath, []byte(out), 0600)
+		err = os.WriteFile(filepath.Join(outPath, "oldchain.txt"), []byte(fmt.Sprintf("%+v", oldChain)), 0600)
 		if err != nil {
-			log.Error("Impossible reorg : Unable to write to file", "Error", err)
+			log.Error("Impossible reorg : Unable to write to oldchain.txt", "Error", err)
+		}
+
+		err = os.WriteFile(filepath.Join(outPath, "oldBlock.txt"), []byte(fmt.Sprintf("%+v", oldBlock)), 0600)
+		if err != nil {
+			log.Error("Impossible reorg : Unable to write to oldblock.txt", "Error", err)
+		}
+
+		err = os.WriteFile(filepath.Join(outPath, "newBlock.txt"), []byte(fmt.Sprintf("%+v", newBlock)), 0600)
+		if err != nil {
+			log.Error("Impossible reorg : Unable to write to newBlock.txt", "Error", err)
 		}
 
 		log.Error("Impossible reorg, please file an issue", "oldnum", oldBlock.Number(), "oldhash", oldBlock.Hash(), "oldblocks", len(oldChain), "newnum", newBlock.Number(), "newhash", newBlock.Hash(), "newblocks", len(newChain))
