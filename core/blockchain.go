@@ -1366,9 +1366,12 @@ func (bc *BlockChain) WriteBlockAndSetHead(ctx context.Context, block *types.Blo
 // and also it applies the given block as the new chain head. This function expects
 // the chain mutex to be held.
 func (bc *BlockChain) writeBlockAndSetHead(ctx context.Context, block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool) (status WriteStatus, err error) {
+	writeBlockAndSetHeadCtx, span := tracing.StartSpan(ctx, "blockchain.writeBlockAndSetHead")
+	defer tracing.EndSpan(span)
+
 	var stateSyncLogs []*types.Log
 
-	tracing.Exec(ctx, "blockchain.writeBlockWithState", func(_ context.Context, span trace.Span) {
+	tracing.Exec(writeBlockAndSetHeadCtx, "blockchain.writeBlockWithState", func(_ context.Context, span trace.Span) {
 		stateSyncLogs, err = bc.writeBlockWithState(block, receipts, logs, state)
 		tracing.SetAttributes(
 			span,
