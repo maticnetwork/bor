@@ -1376,6 +1376,7 @@ func (bc *BlockChain) writeBlockAndSetHead(ctx context.Context, block *types.Blo
 			attribute.Bool("error", err != nil),
 		)
 	})
+
 	if err != nil {
 		return NonStatTy, err
 	}
@@ -1383,6 +1384,7 @@ func (bc *BlockChain) writeBlockAndSetHead(ctx context.Context, block *types.Blo
 	currentBlock := bc.CurrentBlock()
 
 	var reorg bool
+
 	tracing.Exec(ctx, "blockchain.ReorgNeeded", func(_ context.Context, span trace.Span) {
 		reorg, err = bc.forker.ReorgNeeded(currentBlock.Header(), block.Header())
 		tracing.SetAttributes(
