@@ -2186,6 +2186,19 @@ func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
 
 	log.Info("[DEBUG] About to perform reorg", "old block", oldBlock.NumberU64(), "old block hash", oldBlock.Hash(), "new block", newBlock.NumberU64(), "new block hash", newBlock.Hash())
 
+	var (
+		tdOld int = -1
+		tdNew int = -1
+	)
+	if td := bc.GetTd(oldBlock.Hash(), oldBlock.NumberU64()); td != nil {
+		tdOld = int(td.Uint64())
+	}
+	if td := bc.GetTd(newBlock.Hash(), newBlock.NumberU64()); td != nil {
+		tdNew = int(td.Uint64())
+	}
+
+	log.Info("[DEBUG] Total difficulty", "old block", tdOld, "new block", tdNew)
+
 	for {
 		// If the common ancestor was found, bail out
 		if oldBlock.Hash() == newBlock.Hash() {
