@@ -22,6 +22,8 @@ import (
 	"fmt"
 	"io"
 	"math/big"
+	"os"
+	"path/filepath"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -2191,6 +2193,20 @@ func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
 	} else {
 		// len(newChain) == 0 && len(oldChain) > 0
 		// rewind the canonical chain to a lower point.
+		out := fmt.Sprintf("oldChain: %+v,\n\noldBlock : %+v,\n\nnewBlock : %+v", oldChain, oldBlock, newBlock)
+
+		home, err := os.UserHomeDir()
+		if err != nil {
+			log.Error("Impossible reorg : Unable to get user home dir", "Error", err)
+		}
+
+		outPath := filepath.Join(home, fmt.Sprintf("impossibleReorg-%v.txt", time.Now().Format(time.RFC3339)))
+
+		err = os.WriteFile(outPath, []byte(out), 0600)
+		if err != nil {
+			log.Error("Impossible reorg : Unable to write to file", "Error", err)
+		}
+
 		log.Error("Impossible reorg, please file an issue", "oldnum", oldBlock.Number(), "oldhash", oldBlock.Hash(), "oldblocks", len(oldChain), "newnum", newBlock.Number(), "newhash", newBlock.Hash(), "newblocks", len(newChain))
 	}
 	// Insert the new chain(except the head block(reverse order)),
