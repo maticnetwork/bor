@@ -56,6 +56,14 @@ type Server struct {
 
 type serverOption func(srv *Server, config *Config) error
 
+var glogger *log.GlogHandler
+
+func init() {
+	glogger = log.NewGlogHandler(log.StreamHandler(os.Stderr, log.TerminalFormat(false)))
+	glogger.Verbosity(log.LvlInfo)
+	log.Root().SetHandler(glogger)
+}
+
 func WithGRPCAddress() serverOption {
 	return func(srv *Server, config *Config) error {
 		return srv.gRPCServerByAddress(config.GRPC.Addr)
@@ -108,7 +116,7 @@ func NewServer(config *Config, opts ...serverOption) (*Server, error) {
 	}
 
 	// start the logger
-	setupLogger(VerbosityIntToString(config.Verbosity))
+	setupLogger(VerbosityIntToString(config.Verbosity), *config.Logging)
 
 	var err error
 
@@ -445,16 +453,23 @@ func (s *Server) loggingServerInterceptor(ctx context.Context, req interface{}, 
 	return h, err
 }
 
-func setupLogger(logLevel string) {
+func setupLogger(logLevel string, loggingInfo LoggingConfig) {
+
+	var ostream log.Handler
+
 	output := io.Writer(os.Stderr)
 
-	usecolor := (isatty.IsTerminal(os.Stderr.Fd()) || isatty.IsCygwinTerminal(os.Stderr.Fd())) && os.Getenv("TERM") != "dumb"
-	if usecolor {
-		output = colorable.NewColorableStderr()
+	if loggingInfo.Json {
+		ostream = log.StreamHandler(output, log.JSONFormat())
+	} else {
+		usecolor := (isatty.IsTerminal(os.Stderr.Fd()) || isatty.IsCygwinTerminal(os.Stderr.Fd())) && os.Getenv("TERM") != "dumb"
+		if usecolor {
+			output = colorable.NewColorableStderr()
+		}
+		ostream = log.StreamHandler(output, log.TerminalFormat(usecolor))
 	}
 
-	ostream := log.StreamHandler(output, log.TerminalFormat(usecolor))
-	glogger := log.NewGlogHandler(ostream)
+	glogger.SetHandler(ostream)
 
 	// logging
 	lvl, err := log.LvlFromString(strings.ToLower(logLevel))
@@ -463,6 +478,12 @@ func setupLogger(logLevel string) {
 	} else {
 		glogger.Verbosity(log.LvlInfo)
 	}
+
+	glogger.Vmodule(loggingInfo.Vmodule)
+
+	log.PrintOrigins(loggingInfo.Debug)
+
+	glogger.BacktraceAt(loggingInfo.Backtrace)
 
 	log.Root().SetHandler(glogger)
 }

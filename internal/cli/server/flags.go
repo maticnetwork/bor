@@ -94,6 +94,36 @@ func (c *Command) Flags() *flagset.Flagset {
 		Default: c.cliConfig.BorLogs,
 	})
 
+	// logging related flags (log-level and verbosity is present above, it will be removed soon)
+	f.StringFlag(&flagset.StringFlag{
+		Name:    "vmodule",
+		Usage:   "Per-module verbosity: comma-separated list of <pattern>=<level> (e.g. eth/*=5,p2p=4)",
+		Value:   &c.cliConfig.Logging.Vmodule,
+		Default: c.cliConfig.Logging.Vmodule,
+		Group:   "Logging",
+	})
+	f.BoolFlag(&flagset.BoolFlag{
+		Name:    "log.json",
+		Usage:   "Format logs with JSON",
+		Value:   &c.cliConfig.Logging.Json,
+		Default: c.cliConfig.Logging.Json,
+		Group:   "Logging",
+	})
+	f.StringFlag(&flagset.StringFlag{
+		Name:    "log.backtrace",
+		Usage:   "Request a stack trace at a specific logging statement (e.g. 'block.go:271')",
+		Value:   &c.cliConfig.Logging.Backtrace,
+		Default: c.cliConfig.Logging.Backtrace,
+		Group:   "Logging",
+	})
+	f.BoolFlag(&flagset.BoolFlag{
+		Name:    "log.debug",
+		Usage:   "Prepends log messages with call-site location (file and line number)",
+		Value:   &c.cliConfig.Logging.Debug,
+		Default: c.cliConfig.Logging.Debug,
+		Group:   "Logging",
+	})
+
 	// heimdall
 	f.StringFlag(&flagset.StringFlag{
 		Name:    "bor.heimdall",
