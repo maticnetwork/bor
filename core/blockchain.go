@@ -2207,21 +2207,21 @@ func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
 			if err != nil {
 				log.Error("Impossible reorg : Unable to create Dir", "Error", err)
 			}
-		}
+		} else {
+			err = ExportBlocks(oldChain, filepath.Join(outPath, "oldChain.gz"))
+			if err != nil {
+				log.Error("Impossible reorg : Unable to export oldChain", "Error", err)
+			}
 
-		err = ExportBlocks(oldChain, filepath.Join(outPath, "oldChain.gz"))
-		if err != nil {
-			log.Error("Impossible reorg : Unable to export oldChain", "Error", err)
-		}
+			err = ExportBlocks([]*types.Block{oldBlock}, filepath.Join(outPath, "oldBlock.gz"))
+			if err != nil {
+				log.Error("Impossible reorg : Unable to export oldBlock", "Error", err)
+			}
 
-		err = ExportBlocks([]*types.Block{oldBlock}, filepath.Join(outPath, "oldBlock.gz"))
-		if err != nil {
-			log.Error("Impossible reorg : Unable to export oldBlock", "Error", err)
-		}
-
-		err = ExportBlocks([]*types.Block{newBlock}, filepath.Join(outPath, "newBlock.gz"))
-		if err != nil {
-			log.Error("Impossible reorg : Unable to export newBlock", "Error", err)
+			err = ExportBlocks([]*types.Block{newBlock}, filepath.Join(outPath, "newBlock.gz"))
+			if err != nil {
+				log.Error("Impossible reorg : Unable to export newBlock", "Error", err)
+			}
 		}
 
 		log.Error("Impossible reorg, please file an issue", "oldnum", oldBlock.Number(), "oldhash", oldBlock.Hash(), "oldblocks", len(oldChain), "newnum", newBlock.Number(), "newhash", newBlock.Hash(), "newblocks", len(newChain))
