@@ -429,7 +429,7 @@ func (p *BlockPruner) backupOldDb(name string, cache, handles int, namespace str
 		blockHash := rawdb.ReadCanonicalHash(chainDb, blockNumber)
 		block := rawdb.ReadBlock(chainDb, blockHash, blockNumber)
 		receipts := rawdb.ReadRawReceipts(chainDb, blockHash, blockNumber)
-		borReceipts := []*types.Receipt{rawdb.ReadBorReceipt(chainDb, blockHash, blockNumber)}
+		borReceipts := []*types.Receipt{rawdb.ReadRawBorReceipt(chainDb, blockHash, blockNumber)}
 
 		// Calculate the total difficulty of the block
 		td := rawdb.ReadTd(chainDb, blockHash, blockNumber)
@@ -442,7 +442,7 @@ func (p *BlockPruner) backupOldDb(name string, cache, handles int, namespace str
 			return err
 		}
 		// Print the log every 5s for better trace.
-		if common.PrettyDuration(time.Since(start)) > common.PrettyDuration(5*time.Second) {
+		if time.Since(start) > 5*time.Second {
 			log.Info("block backup process running successfully", "current blockNumber for backup", blockNumber)
 			start = time.Now()
 		}
