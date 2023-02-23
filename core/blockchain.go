@@ -2209,13 +2209,13 @@ func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
 			log.Info("[DEBUG] Found common ancestor in reorg", "number", commonBlock.NumberU64())
 
 			if len(oldChain) > 0 {
-				log.Info("[DEBUG] Old chain", "start", oldChain[0], "end", oldChain[len(oldChain)-1], "length", len(oldChain))
+				log.Info("[DEBUG] Old chain", "start", oldChain[0].NumberU64(), "end", oldChain[len(oldChain)-1].NumberU64(), "length", len(oldChain))
 			} else {
 				log.Info("[DEBUG] Empty old chain")
 			}
 
 			if len(newChain) > 0 {
-				log.Info("[DEBUG] New chain", "start", newChain[0], "end", newChain[len(newChain)-1], "length", len(newChain))
+				log.Info("[DEBUG] New chain", "start", newChain[0].NumberU64(), "end", newChain[len(newChain)-1].NumberU64(), "length", len(newChain))
 			} else {
 				log.Info("[DEBUG] Empty new chain")
 			}
