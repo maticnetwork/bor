@@ -12,6 +12,12 @@ gcmode = "archive"
 
 # ["eth.requiredblocks"]
 
+# [log]
+    # vmodule = ""
+    # json = false
+    # backtrace = ""
+    # debug = true
+
 [p2p]
     maxpeers = 50
     port = 30303

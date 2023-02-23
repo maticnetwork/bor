@@ -85,6 +85,9 @@ type Config struct {
 	// Ethstats is the address of the ethstats server to send telemetry
 	Ethstats string `hcl:"ethstats,optional" toml:"ethstats,optional"`
 
+	// Logging has the logging related settings
+	Logging *LoggingConfig `hcl:"log,block" toml:"log,block"`
+
 	// P2P has the p2p network related settings
 	P2P *P2PConfig `hcl:"p2p,block" toml:"p2p,block"`
 
@@ -120,6 +123,24 @@ type Config struct {
 
 	// Develop Fake Author mode to produce blocks without authorisation
 	DevFakeAuthor bool `hcl:"devfakeauthor,optional" toml:"devfakeauthor,optional"`
+}
+
+type LoggingConfig struct {
+	// Per-module verbosity: comma-separated list of <pattern>=<level> (e.g. eth/*=5,p2p=4)
+	Vmodule string `hcl:"vmodule,optional" toml:"vmodule,optional"`
+
+	// Format logs with JSON
+	Json bool `hcl:"json,optional" toml:"json,optional"`
+
+	// Request a stack trace at a specific logging statement (e.g. "block.go:271")
+	Backtrace string `hcl:"backtrace,optional" toml:"backtrace,optional"`
+
+	// Prepends log messages with call-site location (file and line number)
+	Debug bool `hcl:"debug,optional" toml:"debug,optional"`
+
+	// TODO - implement this
+	// // Write execution trace to the given file
+	// Trace string `hcl:"trace,optional" toml:"trace,optional"`
 }
 
 type P2PConfig struct {
@@ -514,6 +535,12 @@ func DefaultConfig() *Config {
 		EnablePreimageRecording: false,
 		DataDir:                 DefaultDataDir(),
 		Ancient:                 "",
+		Logging: &LoggingConfig{
+			Vmodule:   "",
+			Json:      false,
+			Backtrace: "",
+			Debug:     false,
+		},
 		P2P: &P2PConfig{
 			MaxPeers:     50,
 			MaxPendPeers: 50,

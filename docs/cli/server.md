@@ -156,6 +156,16 @@ The ```bor server``` command runs the Bor client.
 
 - ```graphql```: Enable GraphQL on the HTTP-RPC server. Note that GraphQL can only be started if an HTTP server is started as well. (default: false)
 
+### Logging Options
+
+- ```vmodule```: Per-module verbosity: comma-separated list of <pattern>=<level> (e.g. eth/*=5,p2p=4)
+
+- ```log.json```: Format logs with JSON (default: false)
+
+- ```log.backtrace```: Request a stack trace at a specific logging statement (e.g. 'block.go:271')
+
+- ```log.debug```: Prepends log messages with call-site location (file and line number) (default: false)
+
 ### P2P Options
 
 - ```bind```: Network binding address (default: 0.0.0.0)
