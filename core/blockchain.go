@@ -2183,43 +2183,10 @@ func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
 	}
 	// Both sides of the reorg are at the same number, reduce both until the common
 	// ancestor is found
-
-	log.Info("[DEBUG] About to perform reorg", "old block", oldBlock.NumberU64(), "old block hash", oldBlock.Hash(), "new block", newBlock.NumberU64(), "new block hash", newBlock.Hash())
-
-	var (
-		tdOld int = -1
-		tdNew int = -1
-	)
-
-	if td := bc.GetTd(oldBlock.Hash(), oldBlock.NumberU64()); td != nil {
-		tdOld = int(td.Uint64())
-	}
-
-	if td := bc.GetTd(newBlock.Hash(), newBlock.NumberU64()); td != nil {
-		tdNew = int(td.Uint64())
-	}
-
-	log.Info("[DEBUG] Total difficulty", "old block", tdOld, "new block", tdNew)
-
 	for {
 		// If the common ancestor was found, bail out
 		if oldBlock.Hash() == newBlock.Hash() {
 			commonBlock = oldBlock
-
-			log.Info("[DEBUG] Found common ancestor in reorg", "number", commonBlock.NumberU64())
-
-			if len(oldChain) > 0 {
-				log.Info("[DEBUG] Old chain", "start", oldChain[0].NumberU64(), "end", oldChain[len(oldChain)-1].NumberU64(), "length", len(oldChain))
-			} else {
-				log.Info("[DEBUG] Empty old chain")
-			}
-
-			if len(newChain) > 0 {
-				log.Info("[DEBUG] New chain", "start", newChain[0].NumberU64(), "end", newChain[len(newChain)-1].NumberU64(), "length", len(newChain))
-			} else {
-				log.Info("[DEBUG] Empty new chain")
-			}
-
 			break
 		}
 		// Remove an old block as well as stash away a new block
