@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 
@@ -110,6 +111,8 @@ func NewServer(config *Config, opts ...serverOption) (*Server, error) {
 		pprof.SetSetBlockProfileRate(config.Pprof.BlockProfileRate)
 		pprof.StartPProf(fmt.Sprintf("%s:%d", config.Pprof.Addr, config.Pprof.Port))
 	}
+
+	runtime.SetMutexProfileFraction(5)
 
 	srv := &Server{
 		config: config,
