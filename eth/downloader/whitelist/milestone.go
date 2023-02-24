@@ -137,18 +137,18 @@ func (m *milestone) LockMutex(endBlockNum uint64) bool {
 
 	if m.doExist && endBlockNum <= m.Number { //if endNum is less than whitelisted milestone, then we won't lock the sprint
 		// todo: add endBlockNum and m.Number as values - the same below
-		log.Warn("endBlockNum <= m.Number")
+		log.Warn("endBlockNumber <= m.Number", "endBlock Number", endBlockNum, "LatestMilestone Number", m.Number)
 
 		return false
 	}
 
 	if m.Locked && endBlockNum != m.LockedSprintNumber {
 		if endBlockNum < m.LockedSprintNumber {
-			log.Warn("endBlockNum < m.LockedSprintNumber")
+			log.Warn("endBlockNum < m.LockedSprintNumber", "endBlock Number", endBlockNum, "Locked Sprint Number", m.LockedSprintNumber)
 			return false
 		}
 
-		log.Warn("endBlockNum > m.LockedSprintNumber")
+		log.Warn("endBlockNum > m.LockedSprintNumber", "endBlock Number", endBlockNum, "Locked Sprint Number", m.LockedSprintNumber)
 		m.UnlockSprint(m.LockedSprintNumber)
 		m.Locked = false
 	}

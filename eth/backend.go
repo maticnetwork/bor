@@ -700,7 +700,7 @@ func retryHeimdallHandler(fn heimdallHandler, tickerDuration time.Duration, time
 
 	ethHandler, bor, err := getHandler()
 	if err != nil {
-		//todo: log the error
+		log.Error(fmt.Sprintf("Error while getting the ethHandler"), "err", err)
 		return
 	}
 

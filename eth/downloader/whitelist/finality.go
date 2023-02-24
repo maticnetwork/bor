@@ -80,7 +80,7 @@ func (f *finality[T]) Get() (bool, uint64, common.Hash) {
 
 	block, hash, err := rawdb.ReadFinality[T](f.db)
 	if err != nil {
-		fmt.Println("XXX-111", err)
+		fmt.Println("Error while reading from Db", "err", err)
 		return false, f.Number, f.Hash
 	}
 

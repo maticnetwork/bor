@@ -53,7 +53,6 @@ func NewService(db ethdb.Database) *Service {
 	}
 
 	return &Service{
-		//fixme: try to restore from DB
 		&checkpoint{
 			finality[*rawdb.Checkpoint]{
 				doExist:  checkpointDoExist,
@@ -64,7 +63,6 @@ func NewService(db ethdb.Database) *Service {
 			},
 		},
 
-		//fixme: try to restore from DB
 		&milestone{
 			finality: finality[*rawdb.Milestone]{
 				doExist:  milestoneDoExist,

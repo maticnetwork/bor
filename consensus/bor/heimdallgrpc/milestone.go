@@ -48,7 +48,7 @@ func (h *HeimdallGRPCClient) FetchMilestone(ctx context.Context) (*milestone.Mil
 }
 
 func (h *HeimdallGRPCClient) FetchLastNoAckMilestone(ctx context.Context) (string, error) {
-	log.Info("Fetching milestone")
+	log.Info("Fetching latest no ack milestone Id")
 
 	res, err := h.client.FetchLastNoAckMilestone(ctx, nil)
 	if err != nil {
@@ -86,7 +86,7 @@ func (h *HeimdallGRPCClient) FetchMilestoneID(ctx context.Context, milestoneID s
 		MilestoneID: milestoneID,
 	}
 
-	log.Info("Fetching milestone id", "milestoneaID", milestoneID)
+	log.Info("Fetching milestone id", "milestoneID", milestoneID)
 
 	res, err := h.client.FetchMilestoneID(ctx, req)
 	if err != nil {
@@ -97,7 +97,7 @@ func (h *HeimdallGRPCClient) FetchMilestoneID(ctx context.Context, milestoneID s
 		return fmt.Errorf("This milestoneID %q does not exist", milestoneID)
 	}
 
-	log.Info("Fetched milestone id", "milestoneaID", milestoneID)
+	log.Info("Fetched milestone id", "milestoneID", milestoneID)
 
 	return nil
 }

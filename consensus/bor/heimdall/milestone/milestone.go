@@ -6,7 +6,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
-// milestone defines a response object type of bor checkpoint
+// milestone defines a response object type of bor milestone
 type Milestone struct {
 	Proposer   common.Address `json:"proposer"`
 	StartBlock *big.Int       `json:"start_block"`
