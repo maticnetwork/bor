@@ -141,11 +141,11 @@ func rewindBack(eth *Ethereum, head uint64, rewindTo uint64) {
 }
 
 func rewind(eth *Ethereum, head uint64, rewindTo uint64) {
-	log.Warn("Rewinding chain because it doesn't match the received milestone :", "Rewound BlockNumber", rewindTo)
+	log.Warn("rewinding chain because it doesn't match the received milestone :", "Rewound BlockNumber", rewindTo)
 	err := eth.blockchain.SetHead(rewindTo)
 
 	if err != nil {
-		log.Error("Error while rewinding the chain to", "Block Number", rewindTo, "Error", err)
+		log.Error("error while rewinding the chain", "to", rewindTo, "err", err)
 	} else {
 		rewindLengthMeter.Mark(int64(head - rewindTo))
 	}

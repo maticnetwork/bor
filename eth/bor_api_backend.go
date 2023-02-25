@@ -15,7 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
-var borEngineNotAvailable error = errors.New("Only available in Bor engine")
+var errBorEngineNotAvailable error = errors.New("Only available in Bor engine")
 
 // GetRootHash returns root hash for given start and end block
 func (b *EthAPIBackend) GetRootHash(ctx context.Context, starBlockNr uint64, endBlockNr uint64) (string, error) {
@@ -27,7 +27,7 @@ func (b *EthAPIBackend) GetRootHash(ctx context.Context, starBlockNr uint64, end
 	}
 
 	if api == nil {
-		return "", borEngineNotAvailable
+		return "", errBorEngineNotAvailable
 	}
 
 	root, err := api.GetRootHash(starBlockNr, endBlockNr)
@@ -49,7 +49,7 @@ func (b *EthAPIBackend) GetVoteOnHash(ctx context.Context, starBlockNr uint64, e
 	}
 
 	if api == nil {
-		return false, borEngineNotAvailable
+		return false, errBorEngineNotAvailable
 	}
 
 	localEndBlock, err := b.BlockByNumber(ctx, rpc.BlockNumber(endBlockNr))
