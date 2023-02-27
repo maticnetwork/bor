@@ -613,8 +613,6 @@ github.com/maticnetwork/crand v1.0.2/go.mod h1:/NRNL3bj2eYdqpWmoIP5puxndTpi0XRxp
 github.com/maticnetwork/heimdall v0.3.0-beta1.0.20221123180730-457028136461 h1:XMznEUVoJVzrZjGzh252yNrmsEKLFgiXefWbhKRabJQ=
 github.com/maticnetwork/heimdall v0.3.0-beta1.0.20221123180730-457028136461/go.mod h1:IHC6KRjp1c9DLUXLB0+65Fdn+T55OV9y4VViCwYv4lk=
 github.com/maticnetwork/polyproto v0.0.2/go.mod h1:e1mU2EXSwEpn5jM7GfNwu3AupsV6WAGoPFFfswXOF0o=
-github.com/maticnetwork/polyproto v0.0.3-0.20221219122123-40d0e1244129 h1:Kvf6sILi5uReASoSH1bm0mjQEuaU5piYZtWaCXlwhcU=
-github.com/maticnetwork/polyproto v0.0.3-0.20221219122123-40d0e1244129/go.mod h1:e1mU2EXSwEpn5jM7GfNwu3AupsV6WAGoPFFfswXOF0o=
 github.com/maticnetwork/polyproto v0.0.3-0.20230216113155-340ea926ca53 h1:PjYV+lghs106JKkrYgOnrsfDLoTc11BxZd4rUa4Rus4=
 github.com/maticnetwork/polyproto v0.0.3-0.20230216113155-340ea926ca53/go.mod h1:e1mU2EXSwEpn5jM7GfNwu3AupsV6WAGoPFFfswXOF0o=
 github.com/maticnetwork/tendermint v0.26.0-dev0.0.20220923185258-3e7c7f86ce9f h1:iV69PJUEdwJJFXQvbADYVEMxDrkKAsPdHTg4U3F510I=
@@ -1390,7 +1388,6 @@ google.golang.org/grpc v1.42.0/go.mod h1:k+4IHHFw41K8+bbowsex27ge2rCb65oeWqe4jJ5
 google.golang.org/grpc v1.48.0/go.mod h1:vN9eftEi1UMyUsIF80+uQXhHjbXYbm0uXoFCACuMGWk=
 google.golang.org/grpc v1.51.0 h1:E1eGv1FTqoLIdnBCZufiSHgKjlqG6fKFf6pPWtMTh8U=
 google.golang.org/grpc v1.51.0/go.mod h1:wgNDFcnuBGmxLKI/qn4T+m5BtEBYXJPvibbUPsAIPww=
-google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.2.0 h1:TLkBREm4nIsEcexnCjgQd5GQWaHcqMzwQV0TX9pq8S0=
 google.golang.org/grpc/cmd/protoc-gen-go-grpc v1.2.0/go.mod h1:DNq5QpG7LJqD2AamLZ7zvKE0DEpVl2BSEVjFycAAjRY=
 google.golang.org/protobuf v0.0.0-20200109180630-ec00e32a8dfd/go.mod h1:DFci5gLYBciE7Vtevhsrf46CRTquxDuWsQurQQe4oz8=
 google.golang.org/protobuf v0.0.0-20200221191635-4d8936d0db64/go.mod h1:kwYJMbMJ01Woi6D6+Kah6886xMZcty6N08ah7+eCXa0=
