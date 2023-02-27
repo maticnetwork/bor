@@ -111,19 +111,19 @@ func TestMilestone(t *testing.T) {
 	//Checking for the variables when no milestone is Processed
 	require.Equal(t, milestone.doExist, false, "expected false as no milestone exist at this point")
 	require.Equal(t, milestone.Locked, false, "expected false as it was not locked")
-	require.Equal(t, milestone.LockedSprintNumber, uint64(0), "expected 0 as it was not initialized")
+	require.Equal(t, milestone.LockedMilestoneNumber, uint64(0), "expected 0 as it was not initialized")
 
 	_, _, err := rawdb.ReadFinality[*rawdb.Milestone](db)
 	require.NotNil(t, err, "Error should be nil while reading from the db")
 
 	//Acquiring the mutex lock
 	milestone.LockMutex(11)
-	require.Equal(t, milestone.LockedSprintNumber, uint64(11), "expected 11")
+	require.Equal(t, milestone.LockedMilestoneNumber, uint64(11), "expected 11")
 	require.Equal(t, milestone.Locked, false, "expected false as sprint is not locked till this point")
 
 	//Releasing the mutex lock
 	milestone.UnlockMutex(true, "milestoneID1", common.Hash{})
-	require.Equal(t, milestone.LockedSprintNumber, uint64(11), "expected 11 as it was not initialized")
+	require.Equal(t, milestone.LockedMilestoneNumber, uint64(11), "expected 11 as it was not initialized")
 	require.Equal(t, milestone.Locked, true, "expected true as sprint is locked now")
 	require.Equal(t, len(milestone.LockedMilestoneIDs), 1, "expected 1 as only 1 milestoneID has been entered")
 
@@ -151,11 +151,11 @@ func TestMilestone(t *testing.T) {
 	milestone.LockMutex(11)
 	milestone.UnlockMutex(true, "milestoneID3", common.Hash{})
 	require.True(t, milestone.Locked, "expected true")
-	require.Equal(t, milestone.LockedSprintNumber, uint64(11), "Expected 11")
+	require.Equal(t, milestone.LockedMilestoneNumber, uint64(11), "Expected 11")
 
 	milestone.LockMutex(15)
 	require.False(t, milestone.Locked, "expected false as till now final confirmation regarding the lock hasn't been made")
-	require.Equal(t, milestone.LockedSprintNumber, uint64(15), "Expected 15")
+	require.Equal(t, milestone.LockedMilestoneNumber, uint64(15), "Expected 15")
 	milestone.UnlockMutex(true, "milestoneID4", common.Hash{})
 	require.True(t, milestone.Locked, "expected true as final confirmation regarding the lock has been made")
 
@@ -167,12 +167,12 @@ func TestMilestone(t *testing.T) {
 	require.Equal(t, len(milestone.LockedMilestoneIDs), 1, "expected 1 as still last milestone of sprint number 15 exist")
 
 	//Reading from the Db
-	locked, lockedSprintNumber, lockedSprintHash, lockedMilestoneIDs, err := rawdb.ReadLockField(db)
+	locked, lockedMilestoneNumber, lockedMilestoneHash, lockedMilestoneIDs, err := rawdb.ReadLockField(db)
 
 	require.Nil(t, err)
 	require.True(t, locked, "expected true as locked sprint is of number 15")
-	require.Equal(t, lockedSprintNumber, uint64(15), "Expected 15")
-	require.Equal(t, lockedSprintHash, common.Hash{}, "Expected", common.Hash{})
+	require.Equal(t, lockedMilestoneNumber, uint64(15), "Expected 15")
+	require.Equal(t, lockedMilestoneHash, common.Hash{}, "Expected", common.Hash{})
 	require.Equal(t, len(lockedMilestoneIDs), 1, "expected 1 as still last milestone of sprint number 15 exist")
 
 	_, ok = lockedMilestoneIDs["milestoneID4"]

@@ -12,10 +12,10 @@ import (
 type milestone struct {
 	finality[*rawdb.Milestone]
 
-	LockedSprintNumber uint64              // Locked sprint number
-	LockedSprintHash   common.Hash         //Hash for the locked endBlock
-	Locked             bool                //
-	LockedMilestoneIDs map[string]struct{} //list of milestone ids
+	LockedMilestoneNumber uint64              // Locked sprint number
+	LockedMilestoneHash   common.Hash         //Hash for the locked endBlock
+	Locked                bool                //
+	LockedMilestoneIDs    map[string]struct{} //list of milestone ids
 
 	FutureMilestoneList  map[uint64]common.Hash // Future Milestone list
 	FutureMilestoneOrder []uint64               // Future Milestone Order
@@ -78,7 +78,7 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 		return false, err
 	}
 
-	if m.Locked && !m.IsReorgAllowed(chain, m.LockedSprintNumber, m.LockedSprintHash) {
+	if m.Locked && !m.IsReorgAllowed(chain, m.LockedMilestoneNumber, m.LockedMilestoneHash) {
 		isValid = false
 		return false, nil
 	}
@@ -136,24 +136,23 @@ func (m *milestone) LockMutex(endBlockNum uint64) bool {
 	m.finality.Lock()
 
 	if m.doExist && endBlockNum <= m.Number { //if endNum is less than whitelisted milestone, then we won't lock the sprint
-		// todo: add endBlockNum and m.Number as values - the same below
-		log.Warn("endBlockNumber <= m.Number", "endBlock Number", endBlockNum, "LatestMilestone Number", m.Number)
+		log.Debug("endBlockNumber is less than or equal to latesMilestoneNumber", "endBlock Number", endBlockNum, "LatestMilestone Number", m.Number)
 
 		return false
 	}
 
-	if m.Locked && endBlockNum != m.LockedSprintNumber {
-		if endBlockNum < m.LockedSprintNumber {
-			log.Warn("endBlockNum < m.LockedSprintNumber", "endBlock Number", endBlockNum, "Locked Sprint Number", m.LockedSprintNumber)
+	if m.Locked && endBlockNum != m.LockedMilestoneNumber {
+		if endBlockNum < m.LockedMilestoneNumber {
+			log.Debug("endBlockNum is less than locked milestone number", "endBlock Number", endBlockNum, "Locked Milestone Number", m.LockedMilestoneNumber)
 			return false
 		}
 
-		log.Warn("endBlockNum > m.LockedSprintNumber", "endBlock Number", endBlockNum, "Locked Sprint Number", m.LockedSprintNumber)
-		m.UnlockSprint(m.LockedSprintNumber)
+		log.Debug("endBlockNum is more than locked milestone number", "endBlock Number", endBlockNum, "Locked Milestone Number", m.LockedMilestoneNumber)
+		m.UnlockSprint(m.LockedMilestoneNumber)
 		m.Locked = false
 	}
 
-	m.LockedSprintNumber = endBlockNum
+	m.LockedMilestoneNumber = endBlockNum
 
 	return true
 }
@@ -164,11 +163,11 @@ func (m *milestone) UnlockMutex(doLock bool, milestoneId string, endBlockHash co
 	m.Locked = m.Locked || doLock
 
 	if doLock {
-		m.LockedSprintHash = endBlockHash
+		m.LockedMilestoneHash = endBlockHash
 		m.LockedMilestoneIDs[milestoneId] = struct{}{}
 	}
 
-	err := rawdb.WriteLockField(m.db, m.Locked, m.LockedSprintNumber, m.LockedSprintHash, m.LockedMilestoneIDs)
+	err := rawdb.WriteLockField(m.db, m.Locked, m.LockedMilestoneNumber, m.LockedMilestoneHash, m.LockedMilestoneIDs)
 	if err != nil {
 		log.Error("Error in writing lock data of milestone to db", "err", err)
 	}
@@ -181,14 +180,14 @@ func (m *milestone) UnlockMutex(doLock bool, milestoneId string, endBlockHash co
 
 // This function will unlock the locked sprint
 func (m *milestone) UnlockSprint(endBlockNum uint64) {
-	if endBlockNum < m.LockedSprintNumber {
+	if endBlockNum < m.LockedMilestoneNumber {
 		return
 	}
 
 	m.Locked = false
 	m.purgeMilestoneIDsList()
 
-	err := rawdb.WriteLockField(m.db, m.Locked, m.LockedSprintNumber, m.LockedSprintHash, m.LockedMilestoneIDs)
+	err := rawdb.WriteLockField(m.db, m.Locked, m.LockedMilestoneNumber, m.LockedMilestoneHash, m.LockedMilestoneIDs)
 
 	if err != nil {
 		log.Error("Error in writing lock data of milestone to db", "err", err)
@@ -205,7 +204,7 @@ func (m *milestone) RemoveMilestoneID(milestoneId string) {
 		m.Locked = false
 	}
 
-	err := rawdb.WriteLockField(m.db, m.Locked, m.LockedSprintNumber, m.LockedSprintHash, m.LockedMilestoneIDs)
+	err := rawdb.WriteLockField(m.db, m.Locked, m.LockedMilestoneNumber, m.LockedMilestoneHash, m.LockedMilestoneIDs)
 	if err != nil {
 		log.Error("Error in writing lock data of milestone to db", "err", err)
 	}
@@ -214,14 +213,14 @@ func (m *milestone) RemoveMilestoneID(milestoneId string) {
 }
 
 // This will check whether the incoming chain matches the locked sprint hash
-func (m *milestone) IsReorgAllowed(chain []*types.Header, lockedSprintNumber uint64, lockedSprintHash common.Hash) bool {
-	if chain[len(chain)-1].Number.Uint64() <= lockedSprintNumber { //Can't reorg if the end block of incoming
+func (m *milestone) IsReorgAllowed(chain []*types.Header, lockedMilestoneNumber uint64, lockedMilestoneHash common.Hash) bool {
+	if chain[len(chain)-1].Number.Uint64() <= lockedMilestoneNumber { //Can't reorg if the end block of incoming
 		return false //chain is less than locked sprint number
 	}
 
 	for i := 0; i < len(chain); i++ {
-		if chain[i].Number.Uint64() == lockedSprintNumber {
-			return chain[i].Hash() == lockedSprintHash
+		if chain[i].Number.Uint64() == lockedMilestoneNumber {
+			return chain[i].Hash() == lockedMilestoneHash
 		}
 	}
 
