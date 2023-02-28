@@ -1173,6 +1173,7 @@ func getNodeKey(hex string, file string) *ecdsa.PrivateKey {
 		key *ecdsa.PrivateKey
 		err error
 	)
+
 	switch {
 	case file != "" && hex != "":
 		utils.Fatalf("Options %q and %q are mutually exclusive", file, hex)
@@ -1180,11 +1181,13 @@ func getNodeKey(hex string, file string) *ecdsa.PrivateKey {
 		if key, err = crypto.LoadECDSA(file); err != nil {
 			utils.Fatalf("Option %q: %v", file, err)
 		}
+
 		return key
 	case hex != "":
 		if key, err = crypto.HexToECDSA(hex); err != nil {
 			utils.Fatalf("Option %q: %v", hex, err)
 		}
+
 		return key
 	}
 

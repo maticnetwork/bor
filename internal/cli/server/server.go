@@ -12,6 +12,16 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mattn/go-colorable"
+	"github.com/mattn/go-isatty"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
+	"google.golang.org/grpc"
+
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/consensus/beacon" //nolint:typecheck
@@ -28,15 +38,6 @@ import (
 	"github.com/ethereum/go-ethereum/metrics/influxdb"
 	"github.com/ethereum/go-ethereum/metrics/prometheus"
 	"github.com/ethereum/go-ethereum/node"
-	"github.com/mattn/go-colorable"
-	"github.com/mattn/go-isatty"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
-	"go.opentelemetry.io/otel/propagation"
-	"go.opentelemetry.io/otel/sdk/resource"
-	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
-	"google.golang.org/grpc"
 
 	// Force-load the tracer engines to trigger registration
 	_ "github.com/ethereum/go-ethereum/eth/tracers/js"
@@ -457,7 +458,6 @@ func (s *Server) loggingServerInterceptor(ctx context.Context, req interface{}, 
 }
 
 func setupLogger(logLevel string, loggingInfo LoggingConfig) {
-
 	var ostream log.Handler
 
 	output := io.Writer(os.Stderr)
@@ -482,11 +482,15 @@ func setupLogger(logLevel string, loggingInfo LoggingConfig) {
 		glogger.Verbosity(log.LvlInfo)
 	}
 
-	glogger.Vmodule(loggingInfo.Vmodule)
+	if err := glogger.Vmodule(loggingInfo.Vmodule); err != nil {
+		log.Error("failed to set Vmodule", "err", err)
+	}
 
 	log.PrintOrigins(loggingInfo.Debug)
 
-	glogger.BacktraceAt(loggingInfo.Backtrace)
+	if err := glogger.BacktraceAt(loggingInfo.Backtrace); err != nil {
+		log.Error("failed to set BacktraceAt", "err", err)
+	}
 
 	log.Root().SetHandler(glogger)
 }
