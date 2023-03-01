@@ -82,7 +82,7 @@ var (
 	// fastTxLookupLimitKey tracks the transaction lookup limit during fast sync.
 	fastTxLookupLimitKey = []byte("FastTransactionLookupLimit")
 
-	// offSet of new updated ancientDB.
+	// offSet of the new updated ancientDB.
 	offSetOfCurrentAncientFreezer = []byte("offSetOfCurrentAncientFreezer")
 
 	// offSet of the ancientDB before updated version.
