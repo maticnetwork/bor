@@ -424,7 +424,7 @@ func (c *PruneBlockCommand) pruneBlock(stack *node.Node, fdHandles int) error {
 	}
 	if exist {
 		defer lock.Release()
-		log.Info("file lock existed, waiting for prune recovery and continue", "err", err)
+		log.Info("File lock existed, waiting for prune recovery and continue", "err", err)
 		if err := blockpruner.RecoverInterruption("chaindata", c.cache, fdHandles, "", false); err != nil {
 			log.Error("Pruning failed", "err", err)
 			return err
@@ -437,14 +437,12 @@ func (c *PruneBlockCommand) pruneBlock(stack *node.Node, fdHandles int) error {
 		// No file lock found for old ancientDB but new ancientDB exsisted, indicating the geth was interrupted
 		// after old ancientDB removal, this happened after backup successfully, so just rename the new ancientDB
 		if err := blockpruner.AncientDbReplacer(); err != nil {
-			log.Error("Failed to rename new ancient directory")
 			return err
 		}
 		log.Info("Block prune successfully")
 		return nil
 	}
 	if err := blockpruner.BlockPruneBackup(name, c.cache, fdHandles, "", false, false); err != nil {
-		log.Error("Failed to backup block", "err", err)
 		return err
 	}
 
