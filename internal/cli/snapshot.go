@@ -209,7 +209,7 @@ type PruneBlockCommand struct {
 func (c *PruneBlockCommand) MarkDown() string {
 	items := []string{
 		"# Prune block",
-		"The ```bor snapshot prune-block``` command will prune ancient blockchain offline",
+		"The ```bor snapshot prune-block``` command will prune ancient blockchain data offline",
 		c.Flags().MarkDown(),
 	}
 
@@ -225,7 +225,7 @@ func (c *PruneBlockCommand) Help() string {
 
 // Synopsis implements the cli.Command interface
 func (c *PruneBlockCommand) Synopsis() string {
-	return "Prune ancient data"
+	return "Prune ancient chaindata"
 }
 
 // Flags: datadir, datadir.ancient, cache.trie.journal, bloomfilter.size
@@ -235,7 +235,7 @@ func (c *PruneBlockCommand) Flags() *flagset.Flagset {
 	flags.StringFlag(&flagset.StringFlag{
 		Name:    "datadir.ancient",
 		Value:   &c.datadirAncient,
-		Usage:   "Path of the ancient data directory to store information",
+		Usage:   "Path of the old ancient data directory",
 		Default: "",
 	})
 
@@ -248,7 +248,7 @@ func (c *PruneBlockCommand) Flags() *flagset.Flagset {
 	})
 	flags.Uint64Flag(&flagset.Uint64Flag{
 		Name:    "block-amount-reserved",
-		Usage:   "Sets the expected remained amount of blocks for offline block prune",
+		Usage:   "Sets the expected reserved number of blocks for offline block prune",
 		Value:   &c.blockAmountReserved,
 		Default: 1024,
 	})
@@ -263,7 +263,7 @@ func (c *PruneBlockCommand) Flags() *flagset.Flagset {
 	flags.BoolFlag(&flagset.BoolFlag{
 		Name:  "check-snapshot-with-mpt",
 		Value: &c.checkSnapshotWithMPT,
-		Usage: "Path of the trie journal directory to store information",
+		Usage: "Enable checking between snapshot and MPT",
 	})
 
 	return flags
