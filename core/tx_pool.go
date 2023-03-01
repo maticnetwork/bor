@@ -176,7 +176,7 @@ type TxPoolConfig struct {
 
 	Lifetime time.Duration // Maximum amount of time non-executable transaction are queued
 
-	FastLanePeer string // Peer to prioritize with Fastlane.
+	FastLanePeer string // Peer to prioritize with FastLane.
 }
 
 // DefaultTxPoolConfig contains the default configurations for the transaction

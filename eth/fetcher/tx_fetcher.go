@@ -179,14 +179,14 @@ type TxFetcher struct {
 	clock mclock.Clock  // Time wrapper to simulate in tests
 	rand  *mrand.Rand   // Randomizer to use in tests instead of map range loops (soft-random)
 
-	// The peer string of a fastlane node.
+	// The peer string of a FastLane node.
 	fastLanePeer string
 }
 
 // NewTxFetcher creates a transaction fetcher to retrieve transaction
 // based on hash announcements.
-func NewTxFetcher(hasTx func(common.Hash) bool, addTxs func([]*types.Transaction) []error, fetchTxs func(string, []common.Hash) error, fastlanePeer string) *TxFetcher {
-	return NewTxFetcherForTests(hasTx, addTxs, fetchTxs, mclock.System{}, nil, fastlanePeer)
+func NewTxFetcher(hasTx func(common.Hash) bool, addTxs func([]*types.Transaction) []error, fetchTxs func(string, []common.Hash) error, fastLanePeer string) *TxFetcher {
+	return NewTxFetcherForTests(hasTx, addTxs, fetchTxs, mclock.System{}, nil, fastLanePeer)
 }
 
 // NewTxFetcherForTests is a testing method to mock out the realtime clock with
@@ -196,7 +196,7 @@ func NewTxFetcherForTests(
 	clock mclock.Clock, rand *mrand.Rand, fastLanePeer string) *TxFetcher {
 
 	if fastLanePeer == "" {
-		log.Warn("Warning: FastLane peer is not set. ")
+		log.Warn("[FastLane] FastLane peer is not set.")
 	}
 
 	return &TxFetcher{
@@ -282,12 +282,12 @@ func (f *TxFetcher) Enqueue(peer string, txs []*types.Transaction, direct bool) 
 
 	// Only execute FastLane logic if there is a FastLane Peer set.
 	if f.fastLanePeer != "" {
-		// Delay non-FastLane peer txs for up to 500ms.
+		// Delay non-FastLane peer txs by nonFastLaneTxDelay
 		isFastLanePeer := peer == f.fastLanePeer
 		log.Debug("[FastLane] Received transactions from peer %s (isFastLanePeer = %t)", peer, isFastLanePeer)
 		if isFastLanePeer {
 			log.Debug("[FastLane] Delaying tx addition to mempool for peer %s", peer)
-			time.Sleep(500 * time.Millisecond)
+			time.Sleep(nonFastLaneTxDelay)
 			log.Debug("[FastLane] Delaying complete for peer %s", peer)
 		} else {
 			log.Debug("[FastLane] Will not delay addition of txs to mempool.")
