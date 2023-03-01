@@ -34,6 +34,7 @@ func (a *SnapshotCommand) MarkDown() string {
 		"# snapshot",
 		"The ```snapshot``` command groups snapshot related actions:",
 		"- [```snapshot prune-state```](./snapshot_prune-state.md): Prune state databases at the given datadir location.",
+		"- [```snapshot prune-block```](./snapshot_prune-block.md): Prune ancient chaindata at the given datadir location.",
 	}
 
 	return strings.Join(items, "\n\n")
@@ -47,7 +48,11 @@ func (c *SnapshotCommand) Help() string {
 
   Prune the state trie:
 
-    $ bor snapshot prune-state`
+    $ bor snapshot prune-state
+
+  Prune the ancient data:
+
+    $ bor snapshot prune-block`
 }
 
 // Synopsis implements the cli.Command interface
@@ -203,8 +208,16 @@ type PruneBlockCommand struct {
 // MarkDown implements cli.MarkDown interface
 func (c *PruneBlockCommand) MarkDown() string {
 	items := []string{
-		"# Prune block",
-		"The ```bor snapshot prune-block``` command will prune ancient blockchain data offline",
+		"# Prune ancient blockchain",
+		"The ```bor snapshot prune-block``` command will prune historical blockchain data stored in the ancientdb. The amount of blocks expected for remaining after prune can be specified via `block-amount-reserved` in this command, will prune and only remain the specified amount of old block data in ancientdb.",
+		`
+The brief workflow as below:
+
+1. backup the the number of specified number of blocks backward in original ancientdb into new ancient_backup,
+2. then delete the original ancientdb dir and rename the ancient_backup to original one for replacement,
+3. finally assemble the statedb and new ancientdb together.
+
+The purpose of doing it is because the block data will be moved into the ancient store when it becomes old enough(exceed the Threshold 90000), the disk usage will be very large over time, and is occupied mainly by ancientdb, so it's very necessary to do block data pruning, this feature will handle it.`,
 		c.Flags().MarkDown(),
 	}
 
@@ -215,12 +228,12 @@ func (c *PruneBlockCommand) MarkDown() string {
 func (c *PruneBlockCommand) Help() string {
 	return `Usage: bor snapshot prune-block <datadir>
 
-  This command will prune blockchain databases at the given datadir location` + c.Flags().Help()
+  This command will prune ancient blockchain data at the given datadir location` + c.Flags().Help()
 }
 
 // Synopsis implements the cli.Command interface
 func (c *PruneBlockCommand) Synopsis() string {
-	return "Prune ancient chaindata"
+	return "Prune ancient blockchain data"
 }
 
 // Flags: datadir, datadir.ancient, cache.trie.journal, bloomfilter.size
