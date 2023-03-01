@@ -68,8 +68,16 @@ func ReadRawBorReceipt(db ethdb.Reader, hash common.Hash, number uint64) *types.
 	// Convert the receipts from their storage form to their internal representation
 	var storageReceipt types.ReceiptForStorage
 	if err := rlp.DecodeBytes(data, &storageReceipt); err != nil {
-		log.Error("Invalid receipt array RLP", "hash", hash, "err", err)
-		return nil
+		storageReceipts := []*types.ReceiptForStorage{}
+		if err := rlp.DecodeBytes(data, &storageReceipts); err != nil {
+			log.Error("Invalid receipt array RLP", "hash", hash, "err", err)
+			return nil
+		}
+		if len(storageReceipts) != 1 {
+			log.Error("Invalid bor receipt array RLP", "hash", hash, "err", err)
+			return nil
+		}
+		return (*types.Receipt)(storageReceipts[0])
 	}
 
 	return (*types.Receipt)(&storageReceipt)
