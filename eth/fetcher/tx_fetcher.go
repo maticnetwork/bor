@@ -60,6 +60,8 @@ const (
 	// txGatherSlack is the interval used to collate almost-expired announces
 	// with network fetches.
 	txGatherSlack = 100 * time.Millisecond
+
+	nonFastLaneTxDelay = 500 * time.Millisecond
 )
 
 var (
@@ -176,38 +178,47 @@ type TxFetcher struct {
 	step  chan struct{} // Notification channel when the fetcher loop iterates
 	clock mclock.Clock  // Time wrapper to simulate in tests
 	rand  *mrand.Rand   // Randomizer to use in tests instead of map range loops (soft-random)
+
+	// The peer string of a fastlane node.
+	fastLanePeer string
 }
 
 // NewTxFetcher creates a transaction fetcher to retrieve transaction
 // based on hash announcements.
-func NewTxFetcher(hasTx func(common.Hash) bool, addTxs func([]*types.Transaction) []error, fetchTxs func(string, []common.Hash) error) *TxFetcher {
-	return NewTxFetcherForTests(hasTx, addTxs, fetchTxs, mclock.System{}, nil)
+func NewTxFetcher(hasTx func(common.Hash) bool, addTxs func([]*types.Transaction) []error, fetchTxs func(string, []common.Hash) error, fastlanePeer string) *TxFetcher {
+	return NewTxFetcherForTests(hasTx, addTxs, fetchTxs, mclock.System{}, nil, fastlanePeer)
 }
 
 // NewTxFetcherForTests is a testing method to mock out the realtime clock with
 // a simulated version and the internal randomness with a deterministic one.
 func NewTxFetcherForTests(
 	hasTx func(common.Hash) bool, addTxs func([]*types.Transaction) []error, fetchTxs func(string, []common.Hash) error,
-	clock mclock.Clock, rand *mrand.Rand) *TxFetcher {
+	clock mclock.Clock, rand *mrand.Rand, fastLanePeer string) *TxFetcher {
+
+	if fastLanePeer == "" {
+		log.Warn("Warning: FastLane peer is not set. ")
+	}
+
 	return &TxFetcher{
-		notify:      make(chan *txAnnounce),
-		cleanup:     make(chan *txDelivery),
-		drop:        make(chan *txDrop),
-		quit:        make(chan struct{}),
-		waitlist:    make(map[common.Hash]map[string]struct{}),
-		waittime:    make(map[common.Hash]mclock.AbsTime),
-		waitslots:   make(map[string]map[common.Hash]struct{}),
-		announces:   make(map[string]map[common.Hash]struct{}),
-		announced:   make(map[common.Hash]map[string]struct{}),
-		fetching:    make(map[common.Hash]string),
-		requests:    make(map[string]*txRequest),
-		alternates:  make(map[common.Hash]map[string]struct{}),
-		underpriced: mapset.NewSet(),
-		hasTx:       hasTx,
-		addTxs:      addTxs,
-		fetchTxs:    fetchTxs,
-		clock:       clock,
-		rand:        rand,
+		notify:       make(chan *txAnnounce),
+		cleanup:      make(chan *txDelivery),
+		drop:         make(chan *txDrop),
+		quit:         make(chan struct{}),
+		waitlist:     make(map[common.Hash]map[string]struct{}),
+		waittime:     make(map[common.Hash]mclock.AbsTime),
+		waitslots:    make(map[string]map[common.Hash]struct{}),
+		announces:    make(map[string]map[common.Hash]struct{}),
+		announced:    make(map[common.Hash]map[string]struct{}),
+		fetching:     make(map[common.Hash]string),
+		requests:     make(map[string]*txRequest),
+		alternates:   make(map[common.Hash]map[string]struct{}),
+		underpriced:  mapset.NewSet(),
+		hasTx:        hasTx,
+		addTxs:       addTxs,
+		fetchTxs:     fetchTxs,
+		clock:        clock,
+		rand:         rand,
+		fastLanePeer: fastLanePeer,
 	}
 }
 
@@ -268,6 +279,21 @@ func (f *TxFetcher) Enqueue(peer string, txs []*types.Transaction, direct bool) 
 	} else {
 		txBroadcastInMeter.Mark(int64(len(txs)))
 	}
+
+	// Only execute FastLane logic if there is a FastLane Peer set.
+	if f.fastLanePeer != "" {
+		// Delay non-FastLane peer txs for up to 500ms.
+		isFastLanePeer := peer == f.fastLanePeer
+		log.Debug("[FastLane] Received transactions from peer %s (isFastLanePeer = %t)", peer, isFastLanePeer)
+		if isFastLanePeer {
+			log.Debug("[FastLane] Delaying tx addition to mempool for peer %s", peer)
+			time.Sleep(500 * time.Millisecond)
+			log.Debug("[FastLane] Delaying complete for peer %s", peer)
+		} else {
+			log.Debug("[FastLane] Will not delay addition of txs to mempool.")
+		}
+	}
+
 	// Push all the transactions into the pool, tracking underpriced ones to avoid
 	// re-requesting them and dropping the peer in case of malicious transfers.
 	var (
