@@ -180,29 +180,34 @@ func (db *nofreezedb) AncientDatadir() (string, error) {
 	return "", errNotSupported
 }
 
-func ReadOffSetOfCurrentAncientFreezer(db ethdb.KeyValueReader) uint64 {
-	offset, _ := db.Get(offSetOfCurrentAncientFreezer)
+// ReadOffsetOfCurrentAncientFreezer reads the offset of current ancient freezer
+func ReadOffsetOfCurrentAncientFreezer(db ethdb.KeyValueReader) uint64 {
+	offset, _ := db.Get(offsetOfCurrentAncientFreezer)
 	if offset == nil {
 		return 0
 	}
 	return new(big.Int).SetBytes(offset).Uint64()
 }
 
-func ReadOffSetOfLastAncientFreezer(db ethdb.KeyValueReader) uint64 {
-	offset, _ := db.Get(offSetOfLastAncientFreezer)
+// ReadOffsetOfLastAncientFreezer reads the offset of last pruned ancient freezer
+func ReadOffsetOfLastAncientFreezer(db ethdb.KeyValueReader) uint64 {
+	offset, _ := db.Get(offsetOfLastAncientFreezer)
 	if offset == nil {
 		return 0
 	}
 	return new(big.Int).SetBytes(offset).Uint64()
 }
 
-func WriteOffSetOfCurrentAncientFreezer(db ethdb.KeyValueWriter, offset uint64) {
-	if err := db.Put(offSetOfCurrentAncientFreezer, new(big.Int).SetUint64(offset).Bytes()); err != nil {
+// WriteOffsetOfCurrentAncientFreezer writes current offset of ancient freezer into ethdb
+func WriteOffsetOfCurrentAncientFreezer(db ethdb.KeyValueWriter, offset uint64) {
+	if err := db.Put(offsetOfCurrentAncientFreezer, new(big.Int).SetUint64(offset).Bytes()); err != nil {
 		log.Crit("Failed to store offSetOfAncientFreezer", "err", err)
 	}
 }
-func WriteOffSetOfLastAncientFreezer(db ethdb.KeyValueWriter, offset uint64) {
-	if err := db.Put(offSetOfLastAncientFreezer, new(big.Int).SetUint64(offset).Bytes()); err != nil {
+
+// WriteOffsetOfLastAncientFreezer writes the last offset of ancient freezer into ethdb
+func WriteOffsetOfLastAncientFreezer(db ethdb.KeyValueWriter, offset uint64) {
+	if err := db.Put(offsetOfLastAncientFreezer, new(big.Int).SetUint64(offset).Bytes()); err != nil {
 		log.Crit("Failed to store offSetOfAncientFreezer", "err", err)
 	}
 }
@@ -246,9 +251,9 @@ func NewDatabaseWithFreezer(db ethdb.KeyValueStore, ancient string, namespace st
 	var offset uint64
 	// The offset of ancientDB should be handled differently in different scenarios.
 	if isLastOffset {
-		offset = ReadOffSetOfLastAncientFreezer(db)
+		offset = ReadOffsetOfLastAncientFreezer(db)
 	} else {
-		offset = ReadOffSetOfCurrentAncientFreezer(db)
+		offset = ReadOffsetOfCurrentAncientFreezer(db)
 	}
 
 	// Create the idle freezer instance
@@ -517,7 +522,7 @@ func (s *stat) Count() string {
 }
 
 func AncientInspect(db ethdb.Database) error {
-	offset := counter(ReadOffSetOfCurrentAncientFreezer(db))
+	offset := counter(ReadOffsetOfCurrentAncientFreezer(db))
 	// Get number of ancient rows inside the freezer.
 	ancients := counter(0)
 	if count, err := db.ItemAmountInAncient(); err != nil {
