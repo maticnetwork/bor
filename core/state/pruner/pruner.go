@@ -384,10 +384,10 @@ func (p *BlockPruner) backupOldDb(name string, cache, handles int, namespace str
 		// The interrupt scecario within this function is specific for old and new ancientDB exsisted concurrently,
 		// should use last version of offset for oldAncientDB, because current offset is
 		// actually of the new ancientDB_Backup, but what we want is the offset of ancientDB being backup.
-		oldOffset = rawdb.ReadOffSetOfLastAncientFreezer(chainDb)
+		oldOffset = rawdb.ReadOffsetOfLastAncientFreezer(chainDb)
 	} else {
 		// Using current version of ancientDB for oldOffSet because the db for backup is current version.
-		oldOffset = rawdb.ReadOffSetOfCurrentAncientFreezer(chainDb)
+		oldOffset = rawdb.ReadOffsetOfCurrentAncientFreezer(chainDb)
 	}
 
 	// Get the start BlockNumber for pruning.
@@ -403,8 +403,8 @@ func (p *BlockPruner) backupOldDb(name string, cache, handles int, namespace str
 	defer frdbBack.Close()
 
 	offsetBatch := chainDb.NewBatch()
-	rawdb.WriteOffSetOfCurrentAncientFreezer(offsetBatch, startBlockNumber)
-	rawdb.WriteOffSetOfLastAncientFreezer(offsetBatch, oldOffset)
+	rawdb.WriteOffsetOfCurrentAncientFreezer(offsetBatch, startBlockNumber)
+	rawdb.WriteOffsetOfLastAncientFreezer(offsetBatch, oldOffset)
 	if err := offsetBatch.Write(); err != nil {
 		log.Crit("Failed to write offset into disk", "err", err)
 	}
