@@ -49,6 +49,9 @@ type Config struct {
 	// RequiredBlocks is a list of required (block number, hash) pairs to accept
 	RequiredBlocks map[string]string `hcl:"eth.requiredblocks,optional" toml:"eth.requiredblocks,optional"`
 
+	// Verbosity is the level of the logs to put out
+	Verbosity int `hcl:"verbosity,optional" toml:"verbosity,optional"`
+
 	// LogLevel is the level of the logs to put out
 	LogLevel string `hcl:"log-level,optional" toml:"log-level,optional"`
 
@@ -108,6 +111,9 @@ type Config struct {
 
 	// Developer has the developer mode related settings
 	Developer *DeveloperConfig `hcl:"developer,block" toml:"developer,block"`
+
+	// Develop Fake Author mode to produce blocks without authorisation
+	DevFakeAuthor bool `hcl:"devfakeauthor,optional" toml:"devfakeauthor,optional"`
 }
 
 type P2PConfig struct {
@@ -448,7 +454,8 @@ func DefaultConfig() *Config {
 		Chain:          "mainnet",
 		Identity:       Hostname(),
 		RequiredBlocks: map[string]string{},
-		LogLevel:       "INFO",
+		Verbosity:      3,
+		LogLevel:       "",
 		DataDir:        DefaultDataDir(),
 		Ancient:        "",
 		P2P: &P2PConfig{
@@ -583,6 +590,7 @@ func DefaultConfig() *Config {
 			Enabled: false,
 			Period:  0,
 		},
+		DevFakeAuthor: false,
 	}
 }
 
@@ -716,6 +724,9 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 	n.RunHeimdall = c.Heimdall.RunHeimdall
 	n.RunHeimdallArgs = c.Heimdall.RunHeimdallArgs
 	n.UseHeimdallApp = c.Heimdall.UseHeimdallApp
+
+	// Developer Fake Author for producing blocks without authorisation on bor consensus
+	n.DevFakeAuthor = c.DevFakeAuthor
 
 	// gas price oracle
 	{
