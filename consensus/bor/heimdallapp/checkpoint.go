@@ -2,11 +2,11 @@ package heimdallapp
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
 	"github.com/ethereum/go-ethereum/log"
 
+	jsoniter "github.com/json-iterator/go"
 	abci "github.com/tendermint/tendermint/abci/types"
 )
 
@@ -34,14 +34,14 @@ func (h *HeimdallAppClient) FetchCheckpoint(ctx context.Context, number int64) (
 
 	log.Info("Fetched checkpoint", "number", number)
 
-	resBytes, err := json.Marshal(res)
+	resBytes, err := jsoniter.ConfigFastest.Marshal(res)
 	if err != nil {
 		return nil, err
 	}
 
 	var checkpoint checkpoint.Checkpoint
 
-	err = json.Unmarshal(resBytes, &checkpoint)
+	err = jsoniter.ConfigFastest.Unmarshal(resBytes, &checkpoint)
 	if err != nil {
 		return nil, err
 	}

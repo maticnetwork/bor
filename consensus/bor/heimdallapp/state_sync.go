@@ -2,11 +2,11 @@ package heimdallapp
 
 import (
 	"context"
-	"encoding/json"
 	"time"
 
 	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
 
+	jsoniter "github.com/json-iterator/go"
 	abci "github.com/tendermint/tendermint/abci/types"
 )
 
@@ -26,14 +26,14 @@ func (h *HeimdallAppClient) StateSyncEvents(ctx context.Context, fromID uint64, 
 			return nil, err
 		}
 
-		eventsByte, err := json.Marshal(events)
+		eventsByte, err := jsoniter.ConfigFastest.Marshal(events)
 		if err != nil {
 			return nil, err
 		}
 
 		var eventRecords []*clerk.EventRecordWithTime
 
-		err = json.Unmarshal(eventsByte, &eventRecords)
+		err = jsoniter.ConfigFastest.Unmarshal(eventsByte, &eventRecords)
 		if err != nil {
 			return nil, err
 		}

@@ -23,5 +23,5 @@ func NewHeimdallAppClient() *HeimdallAppClient {
 
 func (h *HeimdallAppClient) Close() {
 	// Nothing to close as of now
-	log.Debug("Shutdown detected, Closing Heimdall App conn")
+	log.Warn("Shutdown detected, Closing Heimdall App conn")
 }
