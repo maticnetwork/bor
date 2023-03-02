@@ -4,9 +4,12 @@ import (
 	"context"
 	"time"
 
+	"github.com/maticnetwork/heimdall/clerk/types"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
 
-	jsoniter "github.com/json-iterator/go"
 	abci "github.com/tendermint/tendermint/abci/types"
 )
 
@@ -26,19 +29,7 @@ func (h *HeimdallAppClient) StateSyncEvents(ctx context.Context, fromID uint64, 
 			return nil, err
 		}
 
-		eventsByte, err := jsoniter.ConfigFastest.Marshal(events)
-		if err != nil {
-			return nil, err
-		}
-
-		var eventRecords []*clerk.EventRecordWithTime
-
-		err = jsoniter.ConfigFastest.Unmarshal(eventsByte, &eventRecords)
-		if err != nil {
-			return nil, err
-		}
-
-		totalRecords = append(totalRecords, eventRecords...)
+		totalRecords = append(totalRecords, toEvents(events)...)
 
 		if len(events) < stateFetchLimit {
 			break
@@ -48,4 +39,28 @@ func (h *HeimdallAppClient) StateSyncEvents(ctx context.Context, fromID uint64, 
 	}
 
 	return totalRecords, nil
+}
+
+func toEvents(hdEvents []types.EventRecord) []*clerk.EventRecordWithTime {
+	events := make([]*clerk.EventRecordWithTime, len(hdEvents))
+
+	for i, ev := range hdEvents {
+		events[i] = toEvent(ev)
+	}
+
+	return events
+}
+
+func toEvent(hdEvent types.EventRecord) *clerk.EventRecordWithTime {
+	return &clerk.EventRecordWithTime{
+		EventRecord: clerk.EventRecord{
+			ID:       hdEvent.ID,
+			Contract: common.Address(hdEvent.Contract),
+			Data:     hexutil.Bytes(hdEvent.Data),
+			TxHash:   common.Hash(hdEvent.TxHash),
+			LogIndex: hdEvent.LogIndex,
+			ChainID:  hdEvent.ChainID,
+		},
+		Time: hdEvent.RecordTime,
+	}
 }
