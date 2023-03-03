@@ -6,8 +6,6 @@ import (
 
 	"github.com/maticnetwork/heimdall/clerk/types"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
 
 	abci "github.com/tendermint/tendermint/abci/types"
@@ -55,9 +53,9 @@ func toEvent(hdEvent types.EventRecord) *clerk.EventRecordWithTime {
 	return &clerk.EventRecordWithTime{
 		EventRecord: clerk.EventRecord{
 			ID:       hdEvent.ID,
-			Contract: common.Address(hdEvent.Contract),
-			Data:     hexutil.Bytes(hdEvent.Data),
-			TxHash:   common.Hash(hdEvent.TxHash),
+			Contract: hdEvent.Contract.EthAddress(),
+			Data:     hdEvent.Data.Bytes(),
+			TxHash:   hdEvent.TxHash.EthHash(),
 			LogIndex: hdEvent.LogIndex,
 			ChainID:  hdEvent.ChainID,
 		},

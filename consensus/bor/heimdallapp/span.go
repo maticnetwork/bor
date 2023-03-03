@@ -5,7 +5,6 @@ import (
 
 	hmTypes "github.com/maticnetwork/heimdall/types"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
 	"github.com/ethereum/go-ethereum/consensus/bor/valset"
 	"github.com/ethereum/go-ethereum/log"
@@ -38,23 +37,10 @@ func toSpan(hdSpan *hmTypes.Span) *span.HeimdallSpan {
 }
 
 func toValidatorSet(vs hmTypes.ValidatorSet) valset.ValidatorSet {
-	set := valset.ValidatorSet{
+	return valset.ValidatorSet{
 		Validators: toValidatorsRef(vs.Validators),
 		Proposer:   toValidatorRef(vs.Proposer),
 	}
-
-	// set validator map
-	validatorsMap := make(map[common.Address]int, len(set.Validators))
-
-	for i, val := range set.Validators {
-		validatorsMap[val.Address] = i
-	}
-
-	set.SetMap(validatorsMap)
-
-	set.SetTotalVotingPower(vs.TotalVotingPower())
-
-	return set
 }
 
 func toValidators(vs []hmTypes.Validator) []valset.Validator {
@@ -81,19 +67,19 @@ func toValidatorsRef(vs []*hmTypes.Validator) []*valset.Validator {
 	return newVS
 }
 
-func toValidator(v hmTypes.Validator) valset.Validator {
-	return valset.Validator{
-		ID:               uint64(v.ID),
-		Address:          common.Address(v.Signer),
+func toValidatorRef(v *hmTypes.Validator) *valset.Validator {
+	return &valset.Validator{
+		ID:               v.ID.Uint64(),
+		Address:          v.Signer.EthAddress(),
 		VotingPower:      v.VotingPower,
 		ProposerPriority: v.ProposerPriority,
 	}
 }
 
-func toValidatorRef(v *hmTypes.Validator) *valset.Validator {
-	return &valset.Validator{
-		ID:               uint64(v.ID),
-		Address:          common.Address(v.Signer),
+func toValidator(v hmTypes.Validator) valset.Validator {
+	return valset.Validator{
+		ID:               v.ID.Uint64(),
+		Address:          v.Signer.EthAddress(),
 		VotingPower:      v.VotingPower,
 		ProposerPriority: v.ProposerPriority,
 	}

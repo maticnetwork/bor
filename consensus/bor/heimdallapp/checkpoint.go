@@ -6,7 +6,6 @@ import (
 
 	"github.com/cosmos/cosmos-sdk/types"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
 	"github.com/ethereum/go-ethereum/log"
 
@@ -43,10 +42,10 @@ func (h *HeimdallAppClient) NewContext() types.Context {
 
 func toBorCheckpoint(hdCheckpoint hmTypes.Checkpoint) *checkpoint.Checkpoint {
 	return &checkpoint.Checkpoint{
-		Proposer:   common.Address(hdCheckpoint.Proposer),
+		Proposer:   hdCheckpoint.Proposer.EthAddress(),
 		StartBlock: big.NewInt(int64(hdCheckpoint.StartBlock)),
 		EndBlock:   big.NewInt(int64(hdCheckpoint.EndBlock)),
-		RootHash:   common.Hash(hdCheckpoint.RootHash),
+		RootHash:   hdCheckpoint.RootHash.EthHash(),
 		BorChainID: hdCheckpoint.BorChainID,
 		Timestamp:  hdCheckpoint.TimeStamp,
 	}
