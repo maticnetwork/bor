@@ -108,6 +108,9 @@ type Config struct {
 
 	// Developer has the developer mode related settings
 	Developer *DeveloperConfig `hcl:"developer,block" toml:"developer,block"`
+
+	// Milestone has the milestone feature related config
+	Milestone *MilestoneConfig `hcl:"milestone,block" toml:"milestone,block"`
 }
 
 type P2PConfig struct {
@@ -440,6 +443,11 @@ type DeveloperConfig struct {
 	Period uint64 `hcl:"period,optional" toml:"period,optional"`
 }
 
+type MilestoneConfig struct {
+	// Disabled disables milestone implementation
+	Disabled bool `hcl:"disabled,optional" toml:"disabled,optional"`
+}
+
 func DefaultConfig() *Config {
 	return &Config{
 		Chain:          "mainnet",
@@ -579,6 +587,9 @@ func DefaultConfig() *Config {
 		Developer: &DeveloperConfig{
 			Enabled: false,
 			Period:  0,
+		},
+		Milestone: &MilestoneConfig{
+			Disabled: false,
 		},
 	}
 }

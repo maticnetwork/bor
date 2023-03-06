@@ -707,5 +707,14 @@ func (c *Command) Flags() *flagset.Flagset {
 		Value:   &c.cliConfig.Developer.Period,
 		Default: c.cliConfig.Developer.Period,
 	})
+
+	// milestone
+	f.BoolFlag(&flagset.BoolFlag{
+		Name:    "disable-milestone",
+		Usage:   "Disables milestone feature implementation",
+		Value:   &c.cliConfig.Milestone.Disabled,
+		Default: c.cliConfig.Milestone.Disabled,
+	})
+
 	return f
 }

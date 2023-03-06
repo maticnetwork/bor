@@ -1,3 +1,5 @@
 package flags
 
-const Milestone = true
+import "sync/atomic"
+
+var MilestoneDisabled atomic.Bool

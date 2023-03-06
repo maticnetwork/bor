@@ -23,6 +23,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
+	"github.com/ethereum/go-ethereum/common/flags"
 	"github.com/ethereum/go-ethereum/consensus/beacon" //nolint:typecheck
 	"github.com/ethereum/go-ethereum/consensus/bor"    //nolint:typecheck
 	"github.com/ethereum/go-ethereum/consensus/clique"
@@ -226,6 +227,11 @@ func NewServer(config *Config, opts ...serverOption) (*Server, error) {
 
 	if err := srv.setupMetrics(config.Telemetry, config.Identity); err != nil {
 		return nil, err
+	}
+
+	// Disable milestone if required
+	if config.Milestone.Disabled {
+		flags.MilestoneDisabled.Store(true)
 	}
 
 	// Set the node instance
