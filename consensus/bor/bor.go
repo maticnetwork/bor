@@ -298,6 +298,14 @@ func (c *Bor) VerifyHeader(chain consensus.ChainHeaderReader, header *types.Head
 	return c.verifyHeader(chain, header, nil)
 }
 
+func (c *Bor) GetSpanner() Spanner {
+	return c.spanner
+}
+
+func (c *Bor) SetSpanner(spanner Spanner) {
+	c.spanner = spanner
+}
+
 // VerifyHeaders is similar to VerifyHeader, but verifies a batch of headers. The
 // method returns a quit channel to abort the operations and a results channel to
 // retrieve the async verifications (the order is that of the input slice).
@@ -456,7 +464,9 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 
 	// Verify the validator list match the local contract
 	if IsSprintStart(number+1, c.config.CalculateSprint(number)) {
-		newValidators, err := c.spanner.GetCurrentValidators(context.Background(), header.ParentHash, number+1)
+		parentHeader := chain.GetHeaderByNumber(number - 1)
+		newValidators, err := c.spanner.GetCurrentValidators(context.Background(), parentHeader.Hash(), number+1)
+
 		if err != nil {
 			return errUnknownValidators
 		}
