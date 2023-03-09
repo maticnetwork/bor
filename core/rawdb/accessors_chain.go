@@ -490,11 +490,20 @@ func ReadBody(db ethdb.Reader, hash common.Hash, number uint64) *types.Body {
 }
 
 // WriteBody stores a block body into the database.
-func WriteBody(db ethdb.KeyValueWriter, hash common.Hash, number uint64, body *types.Body) {
+func WriteBody(db ethdb.KeyValueWriter, hash common.Hash, number uint64, body *types.Body, withLog ...bool) {
+	/*
+		fixme: log time here for EncodeToBytes
+		if len(withLog) > 0 && withLog[0] {
+			// log
+		}
+	*/
+
 	data, err := rlp.EncodeToBytes(body)
 	if err != nil {
 		log.Crit("Failed to RLP encode body", "err", err)
 	}
+
+	//fixme: log time here `if len(withLog) > 0 && withLog[0] {`
 	WriteBodyRLP(db, hash, number, data)
 }
 
@@ -1002,4 +1011,24 @@ func ReadHeadBlock(db ethdb.Reader) *types.Block {
 		return nil
 	}
 	return ReadBlock(db, headBlockHash, *headBlockNumber)
+}
+
+func WriteBlockWithLogs(db ethdb.KeyValueWriter, blockNum uint64, blockHash common.Hash, blockBody *types.Body, blockHeaderRLP []byte) {
+	WriteBody(db, blockHash, blockNum, blockBody, true)
+	WriteHeaderWithLogs(db, blockNum, blockHash, blockHeaderRLP)
+}
+
+func WriteHeaderWithLogs(db ethdb.KeyValueWriter, blockNum uint64, blockHash common.Hash, blockRLP []byte) {
+	// Write the hash -> number mapping
+	//fixme: log time
+	WriteHeaderNumber(db, blockHash, blockNum)
+
+	// Write the encoded header
+	//fixme: log time
+	key := headerKey(blockNum, blockHash)
+
+	//fixme: log time
+	if err := db.Put(key, blockRLP); err != nil {
+		log.Crit("Failed to store header", "err", err)
+	}
 }

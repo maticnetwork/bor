@@ -1235,7 +1235,10 @@ func (bc *BlockChain) writeKnownBlock(block *types.Block) error {
 // database.
 func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB) ([]*types.Log, error) {
 	// Calculate the total difficulty of the block
-	ptd := bc.GetTd(block.ParentHash(), block.NumberU64()-1)
+	blockNum := block.NumberU64()
+	blockHash := block.Hash()
+
+	ptd := bc.GetTd(block.ParentHash(), blockNum-1)
 	if ptd == nil {
 		return []*types.Log{}, consensus.ErrUnknownAncestor
 	}
@@ -1246,10 +1249,24 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	//
 	// Note all the components of block(td, hash->number map, header, body, receipts)
 	// should be written atomically. BlockBatch is used for containing all components.
+
+	//fixme: log time
 	blockBatch := bc.db.NewBatch()
-	rawdb.WriteTd(blockBatch, block.Hash(), block.NumberU64(), externTd)
-	rawdb.WriteBlock(blockBatch, block)
-	rawdb.WriteReceipts(blockBatch, block.Hash(), block.NumberU64(), receipts)
+
+	//fixme: log time
+	rawdb.WriteTd(blockBatch, blockHash, blockNum, externTd)
+
+	//fixme: log time
+	blockBody := block.Body()
+
+	//fixme: log time
+	blockHeaderRLP := block.HeaderRLP()
+
+	//fixme: log time
+	rawdb.WriteBlockWithLogs(blockBatch, blockNum, blockHash, blockBody, blockHeaderRLP)
+
+	//fixme: log time
+	rawdb.WriteReceipts(blockBatch, blockHash, blockNum, receipts)
 
 	// System call appends state-sync logs into state. So, `state.Logs()` contains
 	// all logs including system-call logs (state sync logs) while `logs` contains
@@ -1271,16 +1288,16 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 
 			// State sync logs don't have tx index, tx hash and other necessary fields
 			// DeriveFieldsForBorLogs will fill those fields for websocket subscriptions
-			types.DeriveFieldsForBorLogs(stateSyncLogs, block.Hash(), block.NumberU64(), uint(len(receipts)), uint(len(logs)))
+			types.DeriveFieldsForBorLogs(stateSyncLogs, blockHash, blockNum, uint(len(receipts)), uint(len(logs)))
 
 			// Write bor receipt
-			rawdb.WriteBorReceipt(blockBatch, block.Hash(), block.NumberU64(), &types.ReceiptForStorage{
+			rawdb.WriteBorReceipt(blockBatch, blockHash, blockNum, &types.ReceiptForStorage{
 				Status: types.ReceiptStatusSuccessful, // make receipt status successful
 				Logs:   stateSyncLogs,
 			})
 
 			// Write bor tx reverse lookup
-			rawdb.WriteBorTxLookupEntry(blockBatch, block.Hash(), block.NumberU64())
+			rawdb.WriteBorTxLookupEntry(blockBatch, blockHash, blockNum)
 		}
 	}
 
@@ -1301,9 +1318,9 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	} else {
 		// Full but not archive node, do proper garbage collection
 		triedb.Reference(root, common.Hash{}) // metadata reference to keep trie alive
-		bc.triegc.Push(root, -int64(block.NumberU64()))
+		bc.triegc.Push(root, -int64(blockNum))
 
-		if current := block.NumberU64(); current > bc.cacheConfig.TriesInMemory {
+		if current := blockNum; current > bc.cacheConfig.TriesInMemory {
 			// If we exceeded our memory allowance, flush matured singleton nodes to disk
 			var (
 				nodes, imgs = triedb.Size()

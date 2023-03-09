@@ -28,6 +28,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
@@ -316,6 +317,15 @@ func (b *Block) BaseFee() *big.Int {
 }
 
 func (b *Block) Header() *Header { return CopyHeader(b.header) }
+
+func (b *Block) HeaderRLP() []byte {
+	data, err := rlp.EncodeToBytes(b.header)
+	if err != nil {
+		log.Crit("Failed to RLP encode header", "err", err)
+	}
+
+	return data
+}
 
 // Body returns the non-header content of the block.
 func (b *Block) Body() *Body { return &Body{b.transactions, b.uncles} }
