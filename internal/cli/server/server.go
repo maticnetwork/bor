@@ -482,14 +482,18 @@ func setupLogger(logLevel string, loggingInfo LoggingConfig) {
 		glogger.Verbosity(log.LvlInfo)
 	}
 
-	if err := glogger.Vmodule(loggingInfo.Vmodule); err != nil {
-		log.Error("failed to set Vmodule", "err", err)
+	if loggingInfo.Vmodule != "" {
+		if err := glogger.Vmodule(loggingInfo.Vmodule); err != nil {
+			log.Error("failed to set Vmodule", "err", err)
+		}
 	}
 
 	log.PrintOrigins(loggingInfo.Debug)
 
-	if err := glogger.BacktraceAt(loggingInfo.Backtrace); err != nil {
-		log.Error("failed to set BacktraceAt", "err", err)
+	if loggingInfo.Backtrace != "" {
+		if err := glogger.BacktraceAt(loggingInfo.Backtrace); err != nil {
+			log.Error("failed to set BacktraceAt", "err", err)
+		}
 	}
 
 	log.Root().SetHandler(glogger)
