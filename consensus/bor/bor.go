@@ -473,7 +473,11 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 
 		sort.Sort(valset.ValidatorsByAddress(newValidators))
 
-		headerVals, _ := valset.ParseValidators(header.Extra[extraVanity : len(header.Extra)-extraSeal])
+		headerVals, err := valset.ParseValidators(header.Extra[extraVanity : len(header.Extra)-extraSeal])
+
+		if err != nil {
+			return err
+		}
 
 		sort.Sort(valset.ValidatorsByAddress(headerVals))
 
