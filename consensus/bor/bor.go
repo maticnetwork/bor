@@ -464,8 +464,15 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 
 	// Verify the validator list match the local contract
 	if IsSprintStart(number+1, c.config.CalculateSprint(number)) {
-		parentHeader := chain.GetHeaderByNumber(number - 1)
-		newValidators, err := c.spanner.GetCurrentValidators(context.Background(), parentHeader.Hash(), number+1)
+		parentBlockNumber := number - 1
+
+		var newValidators []*valset.Validator
+
+		var err error
+
+		for newValidators, err = c.spanner.GetCurrentValidators(context.Background(), chain.GetHeaderByNumber(parentBlockNumber).Hash(), number+1); err != nil && parentBlockNumber > 0; {
+			parentBlockNumber--
+		}
 
 		if err != nil {
 			return errUnknownValidators
