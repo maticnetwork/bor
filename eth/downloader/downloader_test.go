@@ -1426,8 +1426,8 @@ func (w *whitelistFake) IsValidPeer(_ func(number uint64, amount int, skip int, 
 	return w.validate(w.count)
 }
 
-func (w *whitelistFake) IsValidChain(current *types.Header, headers []*types.Header) (bool, error) {
-	return true, nil
+func (w *whitelistFake) IsValidChain(current *types.Header, headers []*types.Header) (bool, bool, error) {
+	return true, false, nil
 }
 func (w *whitelistFake) ProcessCheckpoint(_ uint64, _ common.Hash) {}
 

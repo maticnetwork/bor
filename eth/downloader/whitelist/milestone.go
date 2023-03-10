@@ -50,12 +50,17 @@ var (
 	MilestonePeerMeter = metrics.NewRegisteredMeter("chain/milestone/isvalidpeer", nil)
 )
 
-// IsValidChain checks the validity of chain by comparing it
-// against the local milestone entries
-func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Header) (bool, error) {
-	//Checking for the milestone flag
+// IsValidChain checks the validity of chain by comparing it against the local
+// milestone entries. It returns 2 values (with an error). The first boolean value represents
+// if the chain is valid or not. The second boolean value represents if we need to
+// skip the 'total difficulty' check or not. Note that it will only be true for cases when we've
+// received a correct future chain (i.e. ahead of our current block and has a future milestone).
+func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Header) (bool, bool, error) {
+	var skipTdCheck bool
+
+	// Checking for the milestone flag
 	if !flags.Milestone {
-		return true, nil
+		return true, skipTdCheck, nil
 	}
 
 	m.finality.RLock()
@@ -75,22 +80,23 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 
 	if !res {
 		isValid = false
-		return false, err
+		return false, skipTdCheck, err
 	}
 
 	if m.Locked && !m.IsReorgAllowed(chain, m.LockedMilestoneNumber, m.LockedMilestoneHash) {
 		isValid = false
-		return false, nil
+		return false, skipTdCheck, nil
 	}
 
-	if !m.IsFutureMilestoneCompatible(chain) {
+	isCompatible, skipTdCheck := m.IsFutureMilestoneCompatible(chain)
+	if !isCompatible {
 		isValid = false
-		return false, nil
+		return false, skipTdCheck, nil
 	}
 
 	isValid = true
 
-	return true, nil
+	return true, skipTdCheck, nil
 }
 
 // IsValidPeer checks if the chain we're about to receive from a peer is valid or not
@@ -246,28 +252,39 @@ func (m *milestone) purgeMilestoneIDsList() {
 	m.LockedMilestoneIDs = make(map[string]struct{})
 }
 
-func (m *milestone) IsFutureMilestoneCompatible(chain []*types.Header) bool {
-	//Tip of the received chain
+// IsFutureMilestoneCompatible checks the incoming chain against the future milestone
+// list. It returns 2 boolean values. The first one represents whether it's good to
+// proceed to import this chain. The second one represents whether the difficulty
+// check can be skiped or not.
+func (m *milestone) IsFutureMilestoneCompatible(chain []*types.Header) (bool, bool) {
+	// Tip of the received chain
 	chainTipNumber := chain[len(chain)-1].Number.Uint64()
 
+	// skip represents whether to skip the difficulty check or not
+	var skip bool
+
 	for i := len(m.FutureMilestoneOrder) - 1; i >= 0; i-- {
-		//Finding out the highest future milestone number
-		//which is less or equal to received chain tip
+		// Finding out the highest future milestone number
+		// which is less or equal to received chain tip
 		if chainTipNumber >= m.FutureMilestoneOrder[i] {
-			//Looking for the received chain 's particular block number(matching future milestone number)
+			// Looking for the received chain 's particular block number(matching future milestone number)
 			for j := len(chain) - 1; j >= 0; j-- {
 				if chain[j].Number.Uint64() == m.FutureMilestoneOrder[i] {
 					endBlockNum := m.FutureMilestoneOrder[i]
 					endBlockHash := m.FutureMilestoneList[endBlockNum]
 
-					//Checking the received chain matches with future milestone
-					return chain[j].Hash() == endBlockHash
+					// Checking the received chain matches with future milestone
+					match := chain[j].Hash() == endBlockHash
+					if match {
+						skip = true
+					}
+					return match, skip
 				}
 			}
 		}
 	}
 
-	return true
+	return true, skip
 }
 
 func (m *milestone) ProcessFutureMilestone(num uint64, hash common.Hash) {

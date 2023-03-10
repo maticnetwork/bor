@@ -123,18 +123,23 @@ func (s *Service) ProcessCheckpoint(endBlockNum uint64, endBlockHash common.Hash
 	s.checkpointService.Process(endBlockNum, endBlockHash)
 }
 
-func (s *Service) IsValidChain(currentHeader *types.Header, chain []*types.Header) (bool, error) {
-	checkpointBool, err := s.checkpointService.IsValidChain(currentHeader, chain)
+// IsValidChain validates the incoming chain against local whitelisted checkpoints and
+// milestones. It returns 2 values (with an error). The first boolean value represents
+// if the chain is valid or not. The second boolean value represents if we need to
+// skip the 'total difficulty' check or not. Note that it will only be true for cases when we've
+// received a correct future chain (i.e. ahead of our current block and has a future milestone).
+func (s *Service) IsValidChain(currentHeader *types.Header, chain []*types.Header) (bool, bool, error) {
+	checkpointBool, skipTdcheck, err := s.checkpointService.IsValidChain(currentHeader, chain)
 	if !checkpointBool {
-		return checkpointBool, err
+		return checkpointBool, skipTdcheck, err
 	}
 
-	milestoneBool, err := s.milestoneService.IsValidChain(currentHeader, chain)
+	milestoneBool, skipTdCheck, err := s.milestoneService.IsValidChain(currentHeader, chain)
 	if !milestoneBool {
-		return milestoneBool, err
+		return milestoneBool, skipTdCheck, err
 	}
 
-	return true, nil
+	return true, skipTdCheck, nil
 }
 
 func (s *Service) GetMilestoneIDsList() []string {

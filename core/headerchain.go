@@ -284,19 +284,10 @@ func (hc *HeaderChain) writeHeadersAndSetHead(headers []*types.Header, forker *F
 		}
 	)
 
-	// Ask the fork choicer if the reorg is necessary
-	reorg, err := forker.ReorgNeeded(hc.CurrentHeader(), lastHeader)
+	// Ask the fork choicer to validate reorg
+	isValid, skipTdCheck, err := forker.ValidateReorg(hc.CurrentHeader(), headers, hc.config)
 	if err != nil {
-		return nil, err
-	} else if !reorg {
-		if inserted != 0 {
-			result.status = SideStatTy
-		}
-		return result, nil
-	}
-
-	isValid, err := forker.ValidateReorg(hc.CurrentHeader(), headers, hc.config)
-	if err != nil {
+		log.Info("Reorg validation failed", "err", err)
 		return nil, err
 	} else if !isValid {
 		if inserted != 0 {
@@ -304,6 +295,21 @@ func (hc *HeaderChain) writeHeadersAndSetHead(headers []*types.Header, forker *F
 		}
 		return result, nil
 	}
+
+	// Only check total difficulty if required.
+	if !skipTdCheck {
+		// Ask the fork choicer if the reorg is necessary
+		reorg, err := forker.ReorgNeeded(hc.CurrentHeader(), lastHeader)
+		if err != nil {
+			return nil, err
+		} else if !reorg {
+			if inserted != 0 {
+				result.status = SideStatTy
+			}
+			return result, nil
+		}
+	}
+
 	// Special case, all the inserted headers are already on the canonical
 	// header chain, skip the reorg operation.
 	if hc.GetCanonicalHash(lastHeader.Number.Uint64()) == lastHash && lastHeader.Number.Uint64() <= hc.CurrentHeader().Number.Uint64() {

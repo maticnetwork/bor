@@ -110,12 +110,14 @@ func (f *ForkChoice) ReorgNeeded(current *types.Header, header *types.Header) (b
 	return reorg, nil
 }
 
-// ValidateReorg calls the chain validator service to check if the reorg is valid or not
-func (f *ForkChoice) ValidateReorg(current *types.Header, chain []*types.Header, chainConfig *params.ChainConfig) (bool, error) {
+// ValidateReorg calls the chain validator service to check if the reorg is valid or not. It
+// also returns a boolean variable stating whether the `total difficulty` check needs to be
+// skipped or not. Note: It only happens if you receive a future chain with a valid future milestone.
+func (f *ForkChoice) ValidateReorg(current *types.Header, chain []*types.Header, chainConfig *params.ChainConfig) (bool, bool, error) {
 	// Call the bor chain validator service
 	if f.validator != nil {
 		return f.validator.IsValidChain(current, chain)
 	}
 
-	return true, nil
+	return true, false, nil
 }

@@ -22,7 +22,7 @@ type finality[T rawdb.BlockFinality[T]] struct {
 
 type finalityService interface {
 	IsValidPeer(fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error)
-	IsValidChain(currentHeader *types.Header, chain []*types.Header) (bool, error)
+	IsValidChain(currentHeader *types.Header, chain []*types.Header) (bool, bool, error)
 	Get() (bool, uint64, common.Hash)
 	Process(block uint64, hash common.Hash)
 	Purge()

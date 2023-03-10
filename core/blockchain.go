@@ -952,21 +952,29 @@ func (bc *BlockChain) InsertReceiptChain(blockChain types.Blocks, receiptChain [
 
 		// Rewind may have occurred, skip in that case.
 		if bc.CurrentHeader().Number.Cmp(head.Number()) >= 0 {
-			reorg, err := bc.forker.ReorgNeeded(bc.CurrentFastBlock().Header(), head.Header())
+			isValid, skipTdCheck, err := bc.forker.ValidateReorg(bc.CurrentFastBlock().Header(), headers, bc.chainConfig)
 			if err != nil {
-				log.Warn("Reorg failed", "err", err)
-				return false
-			} else if !reorg {
-				return false
-			}
-
-			isValid, err := bc.forker.ValidateReorg(bc.CurrentFastBlock().Header(), headers, bc.chainConfig)
-			if err != nil {
-				log.Warn("Reorg failed", "err", err)
+				log.Warn("Reorg validation failed", "err", err)
 				return false
 			} else if !isValid {
 				return false
 			}
+
+			// Skip the total difficulty check if required. Note: `skipTdCheck` will only be true
+			// when we receive a future chain with valid milestone (from future milestone list). We don't
+			// need to check total difficulty in this case.
+			if !skipTdCheck {
+				reorg, err := bc.forker.ReorgNeeded(bc.CurrentFastBlock().Header(), head.Header())
+				if err != nil {
+					log.Warn("Reorg failed", "err", err)
+					return false
+				} else if !reorg {
+					return false
+				}
+			} else {
+				log.Info("Skipping total difficulty validation for incoming future chain")
+			}
+
 			rawdb.WriteHeadFastBlockHash(bc.db, head.Hash())
 			bc.currentFastBlock.Store(head)
 			headFastBlockGauge.Update(int64(head.NumberU64()))
@@ -1528,8 +1536,9 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 	blockImportTimer.Mark(int64(len(headers)))
 
 	// Check the validity of incoming chain
-	isValid, err1 := bc.forker.ValidateReorg(bc.CurrentBlock().Header(), headers, bc.chainConfig)
+	isValid, _, err1 := bc.forker.ValidateReorg(bc.CurrentBlock().Header(), headers, bc.chainConfig)
 	if err1 != nil {
+		log.Warn("Reorg validation failed", "err", err)
 		return it.index, err1
 	}
 
@@ -1555,6 +1564,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 			if err != nil {
 				return it.index, err
 			}
+			// TODO: figure out how to use skipTd check here
+
 			if reorg {
 				// Switch to import mode if the forker says the reorg is necessary
 				// and also the block is not on the canonical chain.
@@ -1935,27 +1946,39 @@ func (bc *BlockChain) insertSideChain(block *types.Block, it *insertIterator) (i
 		}
 		lastBlock = block
 	}
+
+	isValid, skipTdCheck, err := bc.forker.ValidateReorg(current.Header(), headers, bc.chainConfig)
+	if err != nil {
+		log.Info("Reorg validation failed", "err", err)
+		return it.index, err
+	}
+
+	if !isValid {
+		log.Info("Sidechain written to disk", "start", it.first().NumberU64(), "end", it.previous().Number)
+		return it.index, err
+	}
+
 	// At this point, we've written all sidechain blocks to database. Loop ended
 	// either on some other error or all were processed. If there was some other
 	// error, we can ignore the rest of those blocks.
 	//
 	// If the externTd was larger than our local TD, we now need to reimport the previous
 	// blocks to regenerate the required state
-	reorg, err := bc.forker.ReorgNeeded(current.Header(), lastBlock.Header())
-	if err != nil {
-		return it.index, err
+
+	// Only check total difficulty if required.
+	if !skipTdCheck {
+		reorg, err := bc.forker.ReorgNeeded(current.Header(), lastBlock.Header())
+		if err != nil {
+			return it.index, err
+		}
+
+		if !reorg {
+			localTd := bc.GetTd(current.Hash(), current.NumberU64())
+			log.Info("Sidechain written to disk", "start", it.first().NumberU64(), "end", it.previous().Number, "sidetd", externTd, "localtd", localTd)
+			return it.index, err
+		}
 	}
 
-	isValid, err := bc.forker.ValidateReorg(current.Header(), headers, bc.chainConfig)
-	if err != nil {
-		return it.index, err
-	}
-
-	if !reorg || !isValid {
-		localTd := bc.GetTd(current.Hash(), current.NumberU64())
-		log.Info("Sidechain written to disk", "start", it.first().NumberU64(), "end", it.previous().Number, "sidetd", externTd, "localtd", localTd)
-		return it.index, err
-	}
 	// Gather all the sidechain hashes (full blocks may be memory heavy)
 	var (
 		hashes  []common.Hash
