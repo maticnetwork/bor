@@ -1975,6 +1975,7 @@ func (bc *BlockChain) insertSideChain(block *types.Block, it *insertIterator) (i
 		if !reorg {
 			localTd := bc.GetTd(current.Hash(), current.NumberU64())
 			log.Info("Sidechain written to disk", "start", it.first().NumberU64(), "end", it.previous().Number, "sidetd", externTd, "localtd", localTd)
+
 			return it.index, err
 		}
 	}

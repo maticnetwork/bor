@@ -647,10 +647,11 @@ func TestIsValidChain(t *testing.T) {
 	// create a future chain to be imported of length > `checkpointInterval`x
 	chainB = createMockChain(21, 300) // C21->C22...C39->C40...C->256
 
-	// Case20: Try importing a future chain of unacceptable length,should consider the chain as invalid
+	// Case20: Try importing a future chain of unacceptable length, should consider the chain as invalid
 	res, skipTdCheck, err = s.IsValidChain(tempChain[0], chainB)
 	require.Equal(t, err, ErrLongFutureChain)
 	require.Equal(t, res, false, "expected chain to be invalid")
+	require.Equal(t, skipTdCheck, false, "Expected skip total difficulty value to be false")
 
 	s.PurgeWhitelistedCheckpoint()
 	s.PurgeWhitelistedMilestone()

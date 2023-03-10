@@ -255,7 +255,7 @@ func (m *milestone) purgeMilestoneIDsList() {
 // IsFutureMilestoneCompatible checks the incoming chain against the future milestone
 // list. It returns 2 boolean values. The first one represents whether it's good to
 // proceed to import this chain. The second one represents whether the difficulty
-// check can be skiped or not.
+// check can be skipped or not.
 func (m *milestone) IsFutureMilestoneCompatible(chain []*types.Header) (bool, bool) {
 	// Tip of the received chain
 	chainTipNumber := chain[len(chain)-1].Number.Uint64()
@@ -278,6 +278,7 @@ func (m *milestone) IsFutureMilestoneCompatible(chain []*types.Header) (bool, bo
 					if match {
 						skip = true
 					}
+
 					return match, skip
 				}
 			}
