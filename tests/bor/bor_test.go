@@ -369,12 +369,13 @@ func TestInsertingSpanSizeBlocks(t *testing.T) {
 	engine := init.ethereum.Engine()
 	_bor := engine.(*bor.Bor)
 
-	defer _bor.Close()
-
 	_, currentSpan := loadSpanFromFile(t)
 
 	h, ctrl := getMockedHeimdallClient(t, currentSpan)
-	defer ctrl.Finish()
+	defer func() {
+		_bor.Close()
+		ctrl.Finish()
+	}()
 
 	h.EXPECT().Close().AnyTimes()
 
