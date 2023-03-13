@@ -965,11 +965,12 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 			"exitCause", breakCause)
 	}()
 
+mainloop:
 	for {
 		// case of interrupting by timeout
 		select {
 		case <-interruptCh:
-			break
+			break mainloop
 		default:
 		}
 
