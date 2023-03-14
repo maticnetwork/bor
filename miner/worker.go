@@ -94,6 +94,7 @@ const (
 var (
 	sealedBlocksCounter      = metrics.NewRegisteredCounter("worker/sealedBlocks", nil)
 	sealedEmptyBlocksCounter = metrics.NewRegisteredCounter("worker/sealedEmptyBlocks", nil)
+	commitInterruptCounter   = metrics.NewRegisteredCounter("worker/commitInterrupt", nil)
 )
 
 // environment is the worker's current environment and holds all
@@ -970,6 +971,7 @@ mainloop:
 		// case of interrupting by timeout
 		select {
 		case <-interruptCh:
+			commitInterruptCounter.Inc(1)
 			break mainloop
 		default:
 		}
