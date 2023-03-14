@@ -843,8 +843,6 @@ func (c *Command) Flags() *flagset.Flagset {
 		Value:   &c.cliConfig.Developer.Period,
 		Default: c.cliConfig.Developer.Period,
 	})
-<<<<<<< HEAD
-=======
 	f.Uint64Flag(&flagset.Uint64Flag{
 		Name:    "dev.gaslimit",
 		Usage:   "Initial block gas limit",
@@ -852,44 +850,5 @@ func (c *Command) Flags() *flagset.Flagset {
 		Default: c.cliConfig.Developer.GasLimit,
 	})
 
-	// pprof
-	f.BoolFlag(&flagset.BoolFlag{
-		Name:    "pprof",
-		Usage:   "Enable the pprof HTTP server",
-		Value:   &c.cliConfig.Pprof.Enabled,
-		Default: c.cliConfig.Pprof.Enabled,
-	})
-	f.IntFlag(&flagset.IntFlag{
-		Name:    "pprof.port",
-		Usage:   "pprof HTTP server listening port",
-		Value:   &c.cliConfig.Pprof.Port,
-		Default: c.cliConfig.Pprof.Port,
-	})
-	f.StringFlag(&flagset.StringFlag{
-		Name:    "pprof.addr",
-		Usage:   "pprof HTTP server listening interface",
-		Value:   &c.cliConfig.Pprof.Addr,
-		Default: c.cliConfig.Pprof.Addr,
-	})
-	f.IntFlag(&flagset.IntFlag{
-		Name:    "pprof.memprofilerate",
-		Usage:   "Turn on memory profiling with the given rate",
-		Value:   &c.cliConfig.Pprof.MemProfileRate,
-		Default: c.cliConfig.Pprof.MemProfileRate,
-	})
-	f.IntFlag(&flagset.IntFlag{
-		Name:    "pprof.blockprofilerate",
-		Usage:   "Turn on block profiling with the given rate",
-		Value:   &c.cliConfig.Pprof.BlockProfileRate,
-		Default: c.cliConfig.Pprof.BlockProfileRate,
-	})
-	// f.StringFlag(&flagset.StringFlag{
-	// 	Name:    "pprof.cpuprofile",
-	// 	Usage:   "Write CPU profile to the given file",
-	// 	Value:   &c.cliConfig.Pprof.CPUProfile,
-	// 	Default: c.cliConfig.Pprof.CPUProfile,
-	// })
-
->>>>>>> aeaac2e62 (added support for --dev.gaslimit flag)
 	return f
 }
