@@ -804,7 +804,7 @@ func (w *worker) resultLoop() {
 				}
 
 				// Commit block and state to database.
-				tracing.Exec(ctx, "resultLoop.WriteBlockAndSetHead", func(ctx context.Context, span trace.Span) {
+				tracing.Exec(ctx, "", "resultLoop.WriteBlockAndSetHead", func(ctx context.Context, span trace.Span) {
 					_, err = w.chain.WriteBlockAndSetHead(ctx, block, receipts, logs, task.state, true)
 				})
 
