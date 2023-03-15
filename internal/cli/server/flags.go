@@ -22,9 +22,15 @@ func (c *Command) Flags() *flagset.Flagset {
 		Default:            c.cliConfig.Identity,
 		HideDefaultFromDoc: true,
 	})
+	f.IntFlag(&flagset.IntFlag{
+		Name:    "verbosity",
+		Usage:   "Logging verbosity for the server (5=trace|4=debug|3=info|2=warn|1=error|0=crit), default = 3",
+		Value:   &c.cliConfig.Verbosity,
+		Default: c.cliConfig.Verbosity,
+	})
 	f.StringFlag(&flagset.StringFlag{
 		Name:    "log-level",
-		Usage:   "Set log level for the server",
+		Usage:   "Log level for the server (trace|debug|info|warn|error|crit), will be deprecated soon. Use verbosity instead",
 		Value:   &c.cliConfig.LogLevel,
 		Default: c.cliConfig.LogLevel,
 	})
@@ -95,6 +101,12 @@ func (c *Command) Flags() *flagset.Flagset {
 		Value:   &c.cliConfig.Heimdall.Without,
 		Default: c.cliConfig.Heimdall.Without,
 	})
+	f.BoolFlag(&flagset.BoolFlag{
+		Name:    "bor.devfakeauthor",
+		Usage:   "Run miner without validator set authorization [dev mode] : Use with '--bor.withoutheimdall'",
+		Value:   &c.cliConfig.DevFakeAuthor,
+		Default: c.cliConfig.DevFakeAuthor,
+	})
 	f.StringFlag(&flagset.StringFlag{
 		Name:    "bor.heimdallgRPC",
 		Usage:   "Address of Heimdall gRPC service",
@@ -112,6 +124,12 @@ func (c *Command) Flags() *flagset.Flagset {
 		Usage:   "Arguments to pass to Heimdall service",
 		Value:   &c.cliConfig.Heimdall.RunHeimdallArgs,
 		Default: c.cliConfig.Heimdall.RunHeimdallArgs,
+	})
+	f.BoolFlag(&flagset.BoolFlag{
+		Name:    "bor.useheimdallapp",
+		Usage:   "Use child heimdall process to fetch data, Only works when bor.runheimdall is true",
+		Value:   &c.cliConfig.Heimdall.UseHeimdallApp,
+		Default: c.cliConfig.Heimdall.UseHeimdallApp,
 	})
 
 	// txpool options
