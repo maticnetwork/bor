@@ -180,6 +180,7 @@ func NewStateTransition(evm *vm.EVM, msg Message, gp *GasPool) *StateTransition 
 // indicates a core error meaning that the message would always fail for that particular
 // state and would never be accepted within a block.
 func ApplyMessage(evm *vm.EVM, msg Message, gp *GasPool) (*ExecutionResult, error) {
+	fmt.Println("PSP in ApplyMessage")
 	return NewStateTransition(evm, msg, gp).TransitionDb()
 }
 
@@ -275,6 +276,7 @@ func (st *StateTransition) preCheck() error {
 // However if any consensus issue encountered, return the error directly with
 // nil evm execution result.
 func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
+	fmt.Println("PSP in TransitionDb")
 	input1 := st.state.GetBalance(st.msg.From())
 	input2 := st.state.GetBalance(st.evm.Context.Coinbase)
 
@@ -337,16 +339,19 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		// After EIP-3529: refunds are capped to gasUsed / 5
 		st.refundGas(params.RefundQuotientEIP3529)
 	}
+
 	effectiveTip := st.gasPrice
 	if london {
 		effectiveTip = cmath.BigMin(st.gasTipCap, new(big.Int).Sub(st.gasFeeCap, st.evm.Context.BaseFee))
 	}
+
 	amount := new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), effectiveTip)
 	if london {
 		burntContractAddress := common.HexToAddress(st.evm.ChainConfig().Bor.CalculateBurntContract(st.evm.Context.BlockNumber.Uint64()))
 		burnAmount := new(big.Int).Mul(new(big.Int).SetUint64(st.gasUsed()), st.evm.Context.BaseFee)
 		st.state.AddBalance(burntContractAddress, burnAmount)
 	}
+
 	st.state.AddBalance(st.evm.Context.Coinbase, amount)
 	output1 := new(big.Int).SetBytes(input1.Bytes())
 	output2 := new(big.Int).SetBytes(input2.Bytes())
@@ -365,6 +370,8 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 		output1.Sub(output1, amount),
 		output2.Add(output2, amount),
 	)
+
+	fmt.Println("PSP Returning from TransitionDb - UsedGas", st.gasUsed())
 
 	return &ExecutionResult{
 		UsedGas:    st.gasUsed(),

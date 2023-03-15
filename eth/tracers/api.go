@@ -679,6 +679,8 @@ func (api *API) StandardTraceBadBlockToFile(ctx context.Context, hash common.Has
 // per transaction, dependent on the requestd tracer.
 func (api *API) traceBlock(ctx context.Context, block *types.Block, config *TraceConfig) ([]*txTraceResult, error) {
 
+	fmt.Println("\nPSP in traceBlock - block number - ", block.Number(), "block hash - ", block.Hash())
+
 	if config == nil {
 		config = &TraceConfig{
 			BorTraceEnabled: defaultBorTraceEnabled,
@@ -1076,6 +1078,8 @@ func (api *API) TraceCall(ctx context.Context, args ethapi.TransactionArgs, bloc
 // be tracer dependent.
 func (api *API) traceTx(ctx context.Context, message core.Message, txctx *Context, vmctx vm.BlockContext, statedb *state.StateDB, config *TraceConfig) (interface{}, error) {
 
+	fmt.Println("PSP in traceTx - txIndex - ", txctx.TxIndex, "txHash - ", txctx.TxHash)
+
 	if config == nil {
 		config = &TraceConfig{
 			BorTraceEnabled: defaultBorTraceEnabled,
@@ -1138,6 +1142,7 @@ func (api *API) traceTx(ctx context.Context, message core.Message, txctx *Contex
 			return nil, fmt.Errorf("tracing failed: %w", err)
 		}
 	} else {
+		fmt.Println("PSP in traceTx - calling ApplyMessage")
 		result, err = core.ApplyMessage(vmenv, message, new(core.GasPool).AddGas(message.Gas()))
 		if err != nil {
 			return nil, fmt.Errorf("tracing failed: %w", err)
@@ -1152,6 +1157,7 @@ func (api *API) traceTx(ctx context.Context, message core.Message, txctx *Contex
 		if len(result.Revert()) > 0 {
 			returnVal = fmt.Sprintf("%x", result.Revert())
 		}
+		fmt.Println("PSP Returning from traceTx - UsedGas", result.UsedGas)
 		return &ethapi.ExecutionResult{
 			Gas:         result.UsedGas,
 			Failed:      result.Failed(),
