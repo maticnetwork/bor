@@ -1150,6 +1150,7 @@ func (api *API) traceTx(ctx context.Context, message core.Message, txctx *Contex
 		if err != nil {
 			return nil, fmt.Errorf("tracing failed: %w", err)
 		}
+		fmt.Println("PSP in traceTx - returned from ApplyMessage - gasUsed - ", result.UsedGas)
 	}
 
 	// Depending on the tracer type, format and return the output.
