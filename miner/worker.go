@@ -805,7 +805,7 @@ func (w *worker) resultLoop() {
 
 				// Commit block and state to database.
 				tracing.ElapsedTime(ctx, span, "WriteBlockAndSetHead time taken", func(_ context.Context, _ trace.Span) {
-					_, err = w.chain.WriteBlockAndSetHead(block, receipts, logs, task.state, true)
+					_, err = w.chain.WriteBlockAndSetHead(block, receipts, logs, task.state, true, false)
 				})
 
 				tracing.SetAttributes(

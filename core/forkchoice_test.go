@@ -145,7 +145,7 @@ func TestFutureChainInsert(t *testing.T) {
 	chainB := makeHeaderChain(chainA[63], 20, ethash.NewFaker(), db, 10)
 
 	// Inserting 20 headers on the canonical chain
-	// expecting 0 write status with no error
+	// expecting 2 write status with no error
 	testInsert(t, hc, chainB, SideStatTy, nil, mockForker)
 
 	// The current chain is: G->A1->A2...A64
@@ -153,7 +153,7 @@ func TestFutureChainInsert(t *testing.T) {
 	chainC := makeHeaderChain(chainA[63], 10, ethash.NewFaker(), db, 10)
 
 	// Inserting 10 headers on the canonical chain
-	// expecting 0 write status with no error
+	// expecting 1 write status with no error
 	testInsert(t, hc, chainC, CanonStatTy, nil, mockForker)
 }
 
@@ -213,6 +213,79 @@ func TestOverlappingChainInsert(t *testing.T) {
 	// Inserting 10 blocks on canonical chain
 	// expecting 1 write status with no error
 	testInsert(t, hc, chainC, CanonStatTy, nil, mockForker)
+}
+
+func TestLowerDiffChainInsert(t *testing.T) {
+	t.Parallel()
+
+	var (
+		db      = rawdb.NewMemoryDatabase()
+		genesis = (&Genesis{BaseFee: big.NewInt(params.InitialBaseFee)}).MustCommit(db)
+	)
+
+	hc, err := NewHeaderChain(db, params.AllEthashProtocolChanges, ethash.NewFaker(), func() bool { return false })
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create mocks for forker
+	getTd := func(hash common.Hash, number uint64) *big.Int {
+		return big.NewInt(int64(number))
+	}
+	validate := func(currentHeader *types.Header, chain []*types.Header) (bool, bool, error) {
+		return true, true, nil
+	}
+
+	mockChainReader := newChainReaderFake(getTd)
+	mockChainValidator := newChainValidatorFake(validate)
+	mockForker := NewForkChoice(mockChainReader, nil, mockChainValidator)
+
+	// chain A: G->A1->A2...A64
+	chainA := makeHeaderChain(genesis.Header(), 64, ethash.NewFaker(), db, 10)
+
+	// Inserting 64 headers on an empty chain
+	// expecting 1 write status with no error
+	testInsert(t, hc, chainA, CanonStatTy, nil, mockForker)
+
+	// The current chain is: G->A1->A2...A64
+	// chain C: G->A1->A2...A54->C55->C56...C64
+	chainB := makeHeaderChain(chainA[53], 10, ethash.NewFaker(), db, 10)
+
+	// Update the function to consider chainC with higher difficulty
+	getTd = func(hash common.Hash, number uint64) *big.Int {
+		td := big.NewInt(int64(number))
+		if hash == chainB[len(chainB)-1].Hash() {
+			td = big.NewInt(-1)
+		}
+
+		return td
+	}
+
+	validate = func(currentHeader *types.Header, chain []*types.Header) (bool, bool, error) {
+		return true, false, nil
+	}
+
+	mockChainValidator = newChainValidatorFake(validate)
+
+	mockChainReader = newChainReaderFake(getTd)
+	mockForker = NewForkChoice(mockChainReader, nil, mockChainValidator)
+
+	// Inserting 10 blocks from chainB on canonical chain
+	// expecting 1 write status with no error
+	testInsert(t, hc, chainB, SideStatTy, nil, mockForker)
+
+	validate = func(currentHeader *types.Header, chain []*types.Header) (bool, bool, error) {
+		return true, true, nil
+	}
+
+	mockChainValidator = newChainValidatorFake(validate)
+
+	mockChainReader = newChainReaderFake(getTd)
+	mockForker = NewForkChoice(mockChainReader, nil, mockChainValidator)
+
+	// Inserting 10 blocks from chainB on canonical chain
+	// expecting 1 write status with no error
+	testInsert(t, hc, chainB, CanonStatTy, nil, mockForker)
 }
 
 // Mock chain reader functions

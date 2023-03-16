@@ -1357,19 +1357,19 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 }
 
 // WriteBlockWithState writes the block and all associated state to the database.
-func (bc *BlockChain) WriteBlockAndSetHead(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool) (status WriteStatus, err error) {
+func (bc *BlockChain) WriteBlockAndSetHead(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool, skipTdCheck bool) (status WriteStatus, err error) {
 	if !bc.chainmu.TryLock() {
 		return NonStatTy, errChainStopped
 	}
 	defer bc.chainmu.Unlock()
 
-	return bc.writeBlockAndSetHead(block, receipts, logs, state, emitHeadEvent)
+	return bc.writeBlockAndSetHead(block, receipts, logs, state, emitHeadEvent, skipTdCheck)
 }
 
 // writeBlockAndSetHead writes the block and all associated state to the database,
 // and also it applies the given block as the new chain head. This function expects
 // the chain mutex to be held.
-func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool) (status WriteStatus, err error) {
+func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool, skipTdCheck bool) (status WriteStatus, err error) {
 	var stateSyncLogs []*types.Log
 
 	if stateSyncLogs, err = bc.writeBlockWithState(block, receipts, logs, state); err != nil {
@@ -1381,7 +1381,7 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 		return NonStatTy, err
 	}
 
-	if reorg {
+	if skipTdCheck || reorg {
 		// Reorganise the chain if the parent is not the head block
 		if block.ParentHash() != currentBlock.Hash() {
 			if err := bc.reorg(currentBlock, block); err != nil {
@@ -1536,7 +1536,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 	blockImportTimer.Mark(int64(len(headers)))
 
 	// Check the validity of incoming chain
-	isValid, _, err1 := bc.forker.ValidateReorg(bc.CurrentBlock().Header(), headers, bc.chainConfig)
+	isValid, skipTdCheck, err1 := bc.forker.ValidateReorg(bc.CurrentBlock().Header(), headers, bc.chainConfig)
 	if err1 != nil {
 		log.Warn("Reorg validation failed", "err", err)
 		return it.index, err1
@@ -1559,6 +1559,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 			reorg   bool
 			current = bc.CurrentBlock()
 		)
+
 		for block != nil && bc.skipBlock(err, it) {
 			reorg, err = bc.forker.ReorgNeeded(current.Header(), block.Header())
 			if err != nil {
@@ -1796,7 +1797,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 			// Don't set the head, only insert the block
 			_, err = bc.writeBlockWithState(block, receipts, logs, statedb)
 		} else {
-			status, err = bc.writeBlockAndSetHead(block, receipts, logs, statedb, false)
+			status, err = bc.writeBlockAndSetHead(block, receipts, logs, statedb, false, skipTdCheck)
 		}
 		atomic.StoreUint32(&followupInterrupt, 1)
 		if err != nil {
