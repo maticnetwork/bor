@@ -276,7 +276,7 @@ func (st *StateTransition) preCheck() error {
 // However if any consensus issue encountered, return the error directly with
 // nil evm execution result.
 func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
-	fmt.Println("PSP in TransitionDb")
+	fmt.Println("PSP in TransitionDb - from - ", st.msg.From(), "to - ", st.msg.To())
 	input1 := st.state.GetBalance(st.msg.From())
 	input2 := st.state.GetBalance(st.evm.Context.Coinbase)
 

@@ -753,6 +753,7 @@ func (api *API) traceBlock(ctx context.Context, block *types.Block, config *Trac
 					results[task.index] = &txTraceResult{Error: err.Error()}
 					continue
 				}
+				fmt.Println("PSP returned from traceTx - res - ", res)
 				results[task.index] = &txTraceResult{Result: res}
 			}
 		}()
@@ -1157,7 +1158,7 @@ func (api *API) traceTx(ctx context.Context, message core.Message, txctx *Contex
 		if len(result.Revert()) > 0 {
 			returnVal = fmt.Sprintf("%x", result.Revert())
 		}
-		fmt.Println("PSP Returning from traceTx - UsedGas", result.UsedGas)
+		fmt.Println("PSP Returning from traceTx 1 - UsedGas", result.UsedGas)
 		return &ethapi.ExecutionResult{
 			Gas:         result.UsedGas,
 			Failed:      result.Failed(),
@@ -1166,6 +1167,8 @@ func (api *API) traceTx(ctx context.Context, message core.Message, txctx *Contex
 		}, nil
 
 	case Tracer:
+		temp, _ := tracer.GetResult()
+		fmt.Println("PSP Returning from traceTx 2 - temp", temp)
 		return tracer.GetResult()
 
 	default:
