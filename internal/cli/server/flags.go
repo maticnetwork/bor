@@ -161,6 +161,12 @@ func (c *Command) Flags() *flagset.Flagset {
 		Value:   &c.cliConfig.Heimdall.RunHeimdallArgs,
 		Default: c.cliConfig.Heimdall.RunHeimdallArgs,
 	})
+	f.BoolFlag(&flagset.BoolFlag{
+		Name:    "bor.useheimdallapp",
+		Usage:   "Use child heimdall process to fetch data, Only works when bor.runheimdall is true",
+		Value:   &c.cliConfig.Heimdall.UseHeimdallApp,
+		Default: c.cliConfig.Heimdall.UseHeimdallApp,
+	})
 
 	// txpool options
 	f.SliceStringFlag(&flagset.SliceStringFlag{
@@ -430,6 +436,13 @@ func (c *Command) Flags() *flagset.Flagset {
 		Usage:   "Sets a cap on transaction fee (in ether) that can be sent via the RPC APIs (0 = no cap)",
 		Value:   &c.cliConfig.JsonRPC.TxFeeCap,
 		Default: c.cliConfig.JsonRPC.TxFeeCap,
+		Group:   "JsonRPC",
+	})
+	f.BoolFlag(&flagset.BoolFlag{
+		Name:    "rpc.allow-unprotected-txs",
+		Usage:   "Allow for unprotected (non EIP155 signed) transactions to be submitted via RPC",
+		Value:   &c.cliConfig.JsonRPC.AllowUnprotectedTxs,
+		Default: c.cliConfig.JsonRPC.AllowUnprotectedTxs,
 		Group:   "JsonRPC",
 	})
 	f.BoolFlag(&flagset.BoolFlag{

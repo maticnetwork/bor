@@ -122,6 +122,8 @@ The ```bor server``` command runs the Bor client.
 
 - ```rpc.txfeecap```: Sets a cap on transaction fee (in ether) that can be sent via the RPC APIs (0 = no cap) (default: 5)
 
+- ```rpc.allow-unprotected-txs```: Allow for unprotected (non EIP155 signed) transactions to be submitted via RPC (default: false)
+
 - ```ipcdisable```: Disable the IPC-RPC server (default: false)
 
 - ```ipcpath```: Filename for IPC socket/pipe within the datadir (explicit paths escape it)

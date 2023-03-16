@@ -14,7 +14,7 @@ syncmode = "full"
 # snapshot = true
 # "bor.logs" = false
 # ethstats = ""
-
+# devfakeauthor = false
 # ["eth.requiredblocks"]
 
 # [log]
@@ -76,6 +76,7 @@ syncmode = "full"
 #   gascap = 50000000
 #   evmtimeout = "5s"
 #   txfeecap = 5.0
+#   allow-unprotected-txs = false
 #   [jsonrpc.http]
 #     enabled = false
 #     port = 8545

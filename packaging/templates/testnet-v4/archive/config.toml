@@ -9,6 +9,7 @@ syncmode = "full"
 gcmode = "archive"
 # snapshot = true
 # ethstats = ""
+# devfakeauthor = false
 
 # ["eth.requiredblocks"]
 
@@ -68,6 +69,7 @@ gcmode = "archive"
     # gascap = 50000000
     # evmtimeout = "5s"
     # txfeecap = 5.0
+    # allow-unprotected-txs = false
     [jsonrpc.http]
         enabled = true
         port = 8545
