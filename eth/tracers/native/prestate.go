@@ -18,6 +18,7 @@ package native
 
 import (
 	"encoding/json"
+	"fmt"
 	"math/big"
 	"sync/atomic"
 	"time"
@@ -148,6 +149,7 @@ func (t *prestateTracer) CaptureExit(output []byte, gasUsed uint64, err error) {
 // GetResult returns the json-encoded nested list of call traces, and any
 // error arising from the encoding or forceful termination (via `Stop`).
 func (t *prestateTracer) GetResult() (json.RawMessage, error) {
+	fmt.Println("PSP in GetResult - prestateTracer")
 	res, err := json.Marshal(t.prestate)
 	if err != nil {
 		return nil, err

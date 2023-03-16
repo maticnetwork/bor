@@ -19,6 +19,7 @@ package native
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math/big"
 	"strconv"
 	"strings"
@@ -145,6 +146,7 @@ func (t *callTracer) CaptureExit(output []byte, gasUsed uint64, err error) {
 // GetResult returns the json-encoded nested list of call traces, and any
 // error arising from the encoding or forceful termination (via `Stop`).
 func (t *callTracer) GetResult() (json.RawMessage, error) {
+	fmt.Println("PSP in GetResult - callTracer")
 	if len(t.callstack) != 1 {
 		return nil, errors.New("incorrect number of top-level calls")
 	}

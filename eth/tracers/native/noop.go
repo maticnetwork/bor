@@ -18,6 +18,7 @@ package native
 
 import (
 	"encoding/json"
+	"fmt"
 	"math/big"
 	"time"
 
@@ -66,6 +67,7 @@ func (t *noopTracer) CaptureExit(output []byte, gasUsed uint64, err error) {
 
 // GetResult returns an empty json object.
 func (t *noopTracer) GetResult() (json.RawMessage, error) {
+	fmt.Println("PSP in GetResult - noopTracer")
 	return json.RawMessage(`{}`), nil
 }
 

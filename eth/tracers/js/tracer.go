@@ -827,6 +827,7 @@ func (jst *jsTracer) CaptureExit(output []byte, gasUsed uint64, err error) {
 
 // GetResult calls the Javascript 'result' function and returns its value, or any accumulated error
 func (jst *jsTracer) GetResult() (json.RawMessage, error) {
+	fmt.Println("PSP in GetResult - jsTracer")
 	// Transform the context into a JavaScript object and inject into the state
 	obj := jst.vm.PushObject()
 
