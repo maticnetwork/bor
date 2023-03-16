@@ -754,7 +754,8 @@ func (api *API) traceBlock(ctx context.Context, block *types.Block, config *Trac
 					results[task.index] = &txTraceResult{Error: err.Error()}
 					continue
 				}
-				fmt.Println("PSP returned from traceTx - res - ", res)
+				// fmt.Println("PSP returned from traceTx - res - ", res)
+				fmt.Println("PSP returned from traceTx")
 				results[task.index] = &txTraceResult{Result: res}
 			}
 		}()
@@ -1170,9 +1171,9 @@ func (api *API) traceTx(ctx context.Context, message core.Message, txctx *Contex
 	case Tracer:
 		temp, _ := tracer.GetResult()
 		var tempInterface interface{}
-		json.Unmarshal(temp, tempInterface)
+		err = json.Unmarshal(temp, &tempInterface)
 		// fmt.Println("PSP Returning from traceTx 2 - temp", temp)
-		fmt.Println("PSP Returning from traceTx 2 - tempInterface", tempInterface)
+		fmt.Println("PSP Returning from traceTx 2 - tempInterface", tempInterface, err)
 		return tracer.GetResult()
 
 	default:
