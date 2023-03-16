@@ -20,6 +20,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -1168,7 +1169,10 @@ func (api *API) traceTx(ctx context.Context, message core.Message, txctx *Contex
 
 	case Tracer:
 		temp, _ := tracer.GetResult()
-		fmt.Println("PSP Returning from traceTx 2 - temp", temp)
+		var tempInterface interface{}
+		json.Unmarshal(temp, tempInterface)
+		// fmt.Println("PSP Returning from traceTx 2 - temp", temp)
+		fmt.Println("PSP Returning from traceTx 2 - tempInterface", tempInterface)
 		return tracer.GetResult()
 
 	default:
