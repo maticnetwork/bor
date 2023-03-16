@@ -1203,11 +1203,6 @@ func (c *Config) buildNode() (*node.Config, error) {
 		}
 	}
 
-	list, err := netutil.ParseNetlist(c.P2P.NetRestrict)
-	if err != nil {
-		utils.Fatalf("Option %q: %v", c.P2P.NetRestrict, err)
-	}
-
 	cfg := &node.Config{
 		Name:                  clientIdentifier,
 		DataDir:               c.DataDir,
@@ -1221,7 +1216,6 @@ func (c *Config) buildNode() (*node.Config, error) {
 			MaxPendingPeers: int(c.P2P.MaxPendPeers),
 			ListenAddr:      c.P2P.Bind + ":" + strconv.Itoa(int(c.P2P.Port)),
 			DiscoveryV5:     c.P2P.Discovery.V5Enabled,
-			NetRestrict:     list,
 		},
 		HTTPModules:         c.JsonRPC.Http.API,
 		HTTPCors:            c.JsonRPC.Http.Cors,
@@ -1241,6 +1235,15 @@ func (c *Config) buildNode() (*node.Config, error) {
 		AuthPort:         int(c.JsonRPC.Auth.Port),
 		AuthAddr:         c.JsonRPC.Auth.Addr,
 		AuthVirtualHosts: c.JsonRPC.Auth.VHosts,
+	}
+
+	if c.P2P.NetRestrict != "" {
+		list, err := netutil.ParseNetlist(c.P2P.NetRestrict)
+		if err != nil {
+			utils.Fatalf("Option %q: %v", c.P2P.NetRestrict, err)
+		}
+
+		cfg.P2P.NetRestrict = list
 	}
 
 	key := getNodeKey(c.P2P.NodeKeyHex, c.P2P.NodeKey)
