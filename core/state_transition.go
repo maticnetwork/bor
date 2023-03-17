@@ -309,6 +309,7 @@ func (st *StateTransition) TransitionDb() (*ExecutionResult, error) {
 	if st.gas < gas {
 		return nil, fmt.Errorf("%w: have %d, want %d", ErrIntrinsicGas, st.gas, gas)
 	}
+	fmt.Println("PSP in TransitionDb, reducing st.gas - ", st.gas, " - by - ", gas)
 	st.gas -= gas
 
 	// Check clause 6
