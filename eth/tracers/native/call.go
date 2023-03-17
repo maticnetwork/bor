@@ -81,6 +81,7 @@ func (t *callTracer) CaptureStart(env *vm.EVM, from common.Address, to common.Ad
 
 // CaptureEnd is called after the call finishes to finalize the tracing.
 func (t *callTracer) CaptureEnd(output []byte, gasUsed uint64, _ time.Duration, err error) {
+	fmt.Println("PSP in CaptureEnd - callTracer - ", gasUsed, t.callstack[0].GasUsed, uintToHex(gasUsed))
 	t.callstack[0].GasUsed = uintToHex(gasUsed)
 	if err != nil {
 		t.callstack[0].Error = err.Error()
@@ -122,6 +123,7 @@ func (t *callTracer) CaptureEnter(typ vm.OpCode, from common.Address, to common.
 // CaptureExit is called when EVM exits a scope, even if the scope didn't
 // execute any code.
 func (t *callTracer) CaptureExit(output []byte, gasUsed uint64, err error) {
+	fmt.Println("PSP in CaptureExit - callTracer - ", gasUsed, t.callstack[0].GasUsed, uintToHex(gasUsed))
 	size := len(t.callstack)
 	if size <= 1 {
 		return
@@ -146,7 +148,7 @@ func (t *callTracer) CaptureExit(output []byte, gasUsed uint64, err error) {
 // GetResult returns the json-encoded nested list of call traces, and any
 // error arising from the encoding or forceful termination (via `Stop`).
 func (t *callTracer) GetResult() (json.RawMessage, error) {
-	fmt.Println("PSP in GetResult - callTracer")
+	fmt.Println("PSP in GetResult - callTracer - ", t.callstack[0].GasUsed)
 	if len(t.callstack) != 1 {
 		return nil, errors.New("incorrect number of top-level calls")
 	}
