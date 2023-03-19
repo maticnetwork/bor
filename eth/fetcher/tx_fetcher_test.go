@@ -81,6 +81,7 @@ func TestTransactionFetcherWaiting(t *testing.T) {
 				func(common.Hash) bool { return false },
 				nil,
 				func(string, []common.Hash) error { return nil },
+				"",
 			)
 		},
 		steps: []interface{}{
@@ -171,6 +172,7 @@ func TestTransactionFetcherSkipWaiting(t *testing.T) {
 				func(common.Hash) bool { return false },
 				nil,
 				func(string, []common.Hash) error { return nil },
+				"",
 			)
 		},
 		steps: []interface{}{
@@ -234,6 +236,7 @@ func TestTransactionFetcherSingletonRequesting(t *testing.T) {
 				func(common.Hash) bool { return false },
 				nil,
 				func(string, []common.Hash) error { return nil },
+				"",
 			)
 		},
 		steps: []interface{}{
@@ -314,6 +317,7 @@ func TestTransactionFetcherFailedRescheduling(t *testing.T) {
 					<-proceed
 					return errors.New("peer disconnected")
 				},
+				"",
 			)
 		},
 		steps: []interface{}{
@@ -383,6 +387,7 @@ func TestTransactionFetcherCleanup(t *testing.T) {
 					return make([]error, len(txs))
 				},
 				func(string, []common.Hash) error { return nil },
+				"",
 			)
 		},
 		steps: []interface{}{
@@ -422,6 +427,7 @@ func TestTransactionFetcherCleanupEmpty(t *testing.T) {
 					return make([]error, len(txs))
 				},
 				func(string, []common.Hash) error { return nil },
+				"",
 			)
 		},
 		steps: []interface{}{
@@ -460,6 +466,7 @@ func TestTransactionFetcherMissingRescheduling(t *testing.T) {
 					return make([]error, len(txs))
 				},
 				func(string, []common.Hash) error { return nil },
+				"",
 			)
 		},
 		steps: []interface{}{
@@ -506,6 +513,7 @@ func TestTransactionFetcherMissingCleanup(t *testing.T) {
 					return make([]error, len(txs))
 				},
 				func(string, []common.Hash) error { return nil },
+				"",
 			)
 		},
 		steps: []interface{}{
@@ -544,6 +552,7 @@ func TestTransactionFetcherBroadcasts(t *testing.T) {
 					return make([]error, len(txs))
 				},
 				func(string, []common.Hash) error { return nil },
+				"",
 			)
 		},
 		steps: []interface{}{
@@ -592,6 +601,7 @@ func TestTransactionFetcherWaitTimerResets(t *testing.T) {
 				func(common.Hash) bool { return false },
 				nil,
 				func(string, []common.Hash) error { return nil },
+				"",
 			)
 		},
 		steps: []interface{}{
@@ -649,6 +659,7 @@ func TestTransactionFetcherTimeoutRescheduling(t *testing.T) {
 					return make([]error, len(txs))
 				},
 				func(string, []common.Hash) error { return nil },
+				"",
 			)
 		},
 		steps: []interface{}{
@@ -714,6 +725,7 @@ func TestTransactionFetcherTimeoutTimerResets(t *testing.T) {
 				func(common.Hash) bool { return false },
 				nil,
 				func(string, []common.Hash) error { return nil },
+				"",
 			)
 		},
 		steps: []interface{}{
@@ -773,6 +785,7 @@ func TestTransactionFetcherRateLimiting(t *testing.T) {
 				func(common.Hash) bool { return false },
 				nil,
 				func(string, []common.Hash) error { return nil },
+				"",
 			)
 		},
 		steps: []interface{}{
@@ -811,6 +824,7 @@ func TestTransactionFetcherDoSProtection(t *testing.T) {
 				func(common.Hash) bool { return false },
 				nil,
 				func(string, []common.Hash) error { return nil },
+				"",
 			)
 		},
 		steps: []interface{}{
@@ -878,6 +892,7 @@ func TestTransactionFetcherUnderpricedDedup(t *testing.T) {
 					return errs
 				},
 				func(string, []common.Hash) error { return nil },
+				"",
 			)
 		},
 		steps: []interface{}{
@@ -947,6 +962,7 @@ func TestTransactionFetcherUnderpricedDoSProtection(t *testing.T) {
 					return errs
 				},
 				func(string, []common.Hash) error { return nil },
+				"",
 			)
 		},
 		steps: append(steps, []interface{}{
@@ -969,6 +985,7 @@ func TestTransactionFetcherOutOfBoundDeliveries(t *testing.T) {
 					return make([]error, len(txs))
 				},
 				func(string, []common.Hash) error { return nil },
+				"",
 			)
 		},
 		steps: []interface{}{
@@ -1022,6 +1039,7 @@ func TestTransactionFetcherDrop(t *testing.T) {
 					return make([]error, len(txs))
 				},
 				func(string, []common.Hash) error { return nil },
+				"",
 			)
 		},
 		steps: []interface{}{
@@ -1088,6 +1106,7 @@ func TestTransactionFetcherDropRescheduling(t *testing.T) {
 					return make([]error, len(txs))
 				},
 				func(string, []common.Hash) error { return nil },
+				"",
 			)
 		},
 		steps: []interface{}{
@@ -1133,6 +1152,7 @@ func TestTransactionFetcherFuzzCrash01(t *testing.T) {
 					return make([]error, len(txs))
 				},
 				func(string, []common.Hash) error { return nil },
+				"",
 			)
 		},
 		steps: []interface{}{
@@ -1160,6 +1180,7 @@ func TestTransactionFetcherFuzzCrash02(t *testing.T) {
 					return make([]error, len(txs))
 				},
 				func(string, []common.Hash) error { return nil },
+				"",
 			)
 		},
 		steps: []interface{}{
@@ -1189,6 +1210,7 @@ func TestTransactionFetcherFuzzCrash03(t *testing.T) {
 					return make([]error, len(txs))
 				},
 				func(string, []common.Hash) error { return nil },
+				"",
 			)
 		},
 		steps: []interface{}{
@@ -1225,6 +1247,7 @@ func TestTransactionFetcherFuzzCrash04(t *testing.T) {
 					<-proceed
 					return errors.New("peer disconnected")
 				},
+				"",
 			)
 		},
 		steps: []interface{}{
@@ -1241,6 +1264,86 @@ func TestTransactionFetcherFuzzCrash04(t *testing.T) {
 			}),
 			doWait{time: 0, step: true},
 			doWait{time: txFetchTimeout, step: true},
+		},
+	})
+}
+
+func TestTransactionFetcherFastlaneValidatorOnlyPatch(t *testing.T) {
+	testTxpool := make(map[common.Hash]*types.Transaction)
+	txFetcher := NewTxFetcher(
+		func(hash common.Hash) bool {
+			if _, has := testTxpool[hash]; has {
+				return true
+			}
+			return false
+		},
+		func(txs []*types.Transaction) []error {
+			for _, tx := range txs {
+				testTxpool[tx.Hash()] = tx
+			}
+			return make([]error, len(txs))
+		},
+		func(string, []common.Hash) error { return nil },
+		"FASTLANEPEER",
+	)
+
+	testTransactionFetcherParallel(t, txFetcherTest{
+		init: func() *TxFetcher { return txFetcher },
+		steps: []interface{}{
+			// 1. Broadcast from Fastlane peer.
+			doTxEnqueue{peer: "FASTLANEPEER", txs: []*types.Transaction{testTxs[0]}, direct: false},
+			// Tx should be added to txpool without delay.
+			doFunc(func() {
+				hash := testTxs[0].Hash()
+				if !txFetcher.hasTx(hash) {
+					t.Errorf("step 1, peer FASTLANEPEER: hash %x missing from testTxpool", hash)
+				}
+			}),
+
+			// 2. Broadcast from non-Fastlane peer.
+			// doTxEnqueue wait for the fetcher to process something, which defeat our async
+			// method of delaying the tx. Doing our own Enqueue instead.
+			doFunc(func() {
+				if err := txFetcher.Enqueue("A", []*types.Transaction{testTxs[1]}, false); err != nil {
+					t.Errorf("step 2: %v", err)
+				}
+			}),
+			// Tx should be added to txpool after a delay.
+			doFunc(func() {
+				hash := testTxs[1].Hash()
+				if txFetcher.hasTx(hash) {
+					t.Errorf("step 3, peer A: hash %x added to testTxpool too early", hash)
+				}
+				// Add minor delay to nonFastLaneTxDelay to ensure Enqueue as time to process
+				time.Sleep(nonFastLaneTxDelay + 10*time.Millisecond)
+				if !txFetcher.hasTx(hash) {
+					t.Errorf("step 3, peer A: hash %x missing from testTxpool", hash)
+				}
+			}),
+			// Reset for next step
+			doWait{time: 0, step: true},
+
+			// 3. Announcements from Fastlane and non-Fastlane peers
+			doTxNotify{peer: "FASTLANEPEER", hashes: []common.Hash{testTxsHashes[2]}},
+			doWait{time: txArriveTimeout, step: true},
+			doTxEnqueue{peer: "FASTLANEPEER", txs: []*types.Transaction{testTxs[2]}, direct: true},
+			// Tx should be added to txpool without delay.
+			doFunc(func() {
+				hash := testTxs[2].Hash()
+				if !txFetcher.hasTx(hash) {
+					t.Errorf("step 8, peer FASTLANEPEER: hash %x missing from testTxpool", hash)
+				}
+			}),
+			doTxNotify{peer: "A", hashes: []common.Hash{testTxsHashes[3]}},
+			doWait{time: txArriveTimeout, step: true},
+			doTxEnqueue{peer: "A", txs: []*types.Transaction{testTxs[3]}, direct: true},
+			// Tx should be added to txpool without delay.
+			doFunc(func() {
+				hash := testTxs[3].Hash()
+				if !txFetcher.hasTx(hash) {
+					t.Errorf("step 12, peer A: hash %x missing from testTxpool", hash)
+				}
+			}),
 		},
 	})
 }
