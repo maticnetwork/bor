@@ -1,7 +1,7 @@
 chain = "mainnet"
 # identity = "node_name"
 # verbosity = 3
-# vmdebug = true
+# vmdebug = false
 datadir = "/var/lib/bor/data"
 # ancient = ""
 # keystore = ""
