@@ -113,6 +113,7 @@ func (s *Server) serveSingleRequest(ctx context.Context, codec ServerCodec) {
 
 	// nolint: contextcheck
 	if batch {
+		// nolint: contextcheck
 		h.handleBatch(reqs)
 	} else {
 		h.handleMsg(reqs[0])

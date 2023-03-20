@@ -49,6 +49,8 @@ import (
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/trie"
+
+	"github.com/JekaMas/crand"
 )
 
 var (
@@ -1936,6 +1938,7 @@ func TestTransactionPoolUnderpricing(t *testing.T) {
 	if err := validateEvents(events, 1); err != nil {
 		t.Fatalf("additional event firing failed: %v", err)
 	}
+
 	if err := validateTxPoolInternals(pool); err != nil {
 		t.Fatalf("pool internal state corrupted: %v", err)
 	}
@@ -2115,6 +2118,7 @@ func TestTransactionPoolUnderpricingDynamicFee(t *testing.T) {
 	if err := validateEvents(events, 1); err != nil {
 		t.Fatalf("additional event firing failed: %v", err)
 	}
+
 	if err := validateTxPoolInternals(pool); err != nil {
 		t.Fatalf("pool internal state corrupted: %v", err)
 	}
@@ -3741,6 +3745,45 @@ func MakeWithPromoteTxCh(ch chan struct{}) func(*TxPool) {
 	return func(pool *TxPool) {
 		pool.promoteTxCh = ch
 	}
+}
+
+func BenchmarkBigs(b *testing.B) {
+	// max 256-bit
+	max := new(big.Int)
+	max.Exp(big.NewInt(2), big.NewInt(256), nil).Sub(max, big.NewInt(1))
+
+	ints := make([]*big.Int, 1000000)
+	intUs := make([]*uint256.Int, 1000000)
+
+	var over bool
+
+	for i := 0; i < len(ints); i++ {
+		ints[i] = crand.BigInt(max)
+		intUs[i], over = uint256.FromBig(ints[i])
+
+		if over {
+			b.Fatal(ints[i], over)
+		}
+	}
+
+	b.Run("*big.Int", func(b *testing.B) {
+		var r int
+
+		for i := 0; i < b.N; i++ {
+			r = ints[i%len(ints)%b.N].Cmp(ints[(i+1)%len(ints)%b.N])
+		}
+
+		fmt.Fprintln(io.Discard, r)
+	})
+	b.Run("*uint256.Int", func(b *testing.B) {
+		var r int
+
+		for i := 0; i < b.N; i++ {
+			r = intUs[i%len(intUs)%b.N].Cmp(intUs[(i+1)%len(intUs)%b.N])
+		}
+
+		fmt.Fprintln(io.Discard, r)
+	})
 }
 
 //nolint:thelper
