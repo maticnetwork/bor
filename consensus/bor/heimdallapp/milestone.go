@@ -6,6 +6,7 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
+
 	"github.com/ethereum/go-ethereum/log"
 
 	chTypes "github.com/maticnetwork/heimdall/checkpoint/types"
