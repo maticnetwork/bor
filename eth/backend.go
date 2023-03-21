@@ -760,15 +760,13 @@ func (s *Ethereum) handleMilestone(ctx context.Context, ethHandler *ethHandler, 
 	verifier := newBorVerifier()
 	num, hash, err := ethHandler.fetchWhitelistMilestone(ctx, bor, s, verifier)
 
-	//If the current chain head is behind the received milestone, then we will store the milestone in the
-	//future milestone list.
-	if err != errMissingBlocks {
+	// If the current chain head is behind the received milestone, add it to the future milestone
+	// list. Also, the hash mismatch (end block hash) error will lead to rewind so also
+	// add that milestone to the future milestone list.
+	if errors.Is(err, errMissingBlocks) || errors.Is(err, errHashMismatch) {
 		ethHandler.downloader.ProcessFutureMilestone(num, hash)
 	}
 
-	// If blockNum, blockhash doesn't have any value than we're bound to receive an error. Non-nill
-	// means that either the milestone does exist on the heimdall or . We'll add those partial
-	// elements anyway.
 	if err != nil {
 		return err
 	}

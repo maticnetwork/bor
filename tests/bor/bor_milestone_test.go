@@ -1434,9 +1434,10 @@ var (
 	// locally for a range of blocks.
 	errRootHash = errors.New("failed to get local root hash")
 
-	// errRootHashMismatch is returned when the local root hash doesn't match
-	// with the root hash in checkpoint/milestone.
-	errRootHashMismatch = errors.New("roothash mismatch")
+	// errHashMismatch is returned when the local hash doesn't match
+	// with the hash of checkpoint/milestone. It is the root hash of blocks
+	// in case of checkpoint and is end block hash in case of milestones.
+	errHashMismatch = errors.New("hash mismatch")
 
 	// errEndBlock is returned when we're unable to fetch a block locally.
 	errEndBlock = errors.New("failed to get end block")
@@ -1457,7 +1458,7 @@ func borVerify(eth *eth.Ethereum, start uint64, end uint64, rootHash string, loc
 
 		rewindBack(eth, rewindTo)
 
-		return "", errRootHashMismatch
+		return "", errHashMismatch
 	}
 
 	return "", nil

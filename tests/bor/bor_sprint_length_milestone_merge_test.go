@@ -724,12 +724,14 @@ func borVerifyTemP(eth *eth.Ethereum, start uint64, end uint64, hash string) (st
 	currentBlock := eth.BlockChain().CurrentBlock()
 
 	if currentBlock == nil {
+		log.Debug("Failed to fetch current block from blockchain while verifying incoming milestone")
 		return hash, 0, errMissingBlocks
 	}
+
 	head := currentBlock.Number().Uint64()
 
 	if head < end {
-		log.Debug("Head block behind given block", "head", head, "end block", end)
+		log.Debug("Current head block behind incoming milestone block", "head", head, "end block", end)
 		return hash, 0, errMissingBlocks
 	}
 
@@ -737,7 +739,7 @@ func borVerifyTemP(eth *eth.Ethereum, start uint64, end uint64, hash string) (st
 
 	block := eth.BlockChain().GetBlockByNumber(end)
 	if block == nil {
-		log.Debug("Failed to get end block hash while whitelisting milestone")
+		log.Debug("Failed to get end block hash while whitelisting milestone", "number", end)
 		return hash, 0, errEndBlock
 	}
 
@@ -746,7 +748,7 @@ func borVerifyTemP(eth *eth.Ethereum, start uint64, end uint64, hash string) (st
 	//nolint
 	if localHash != hash {
 
-		log.Warn("Root hash mismatch while whitelisting", "expected", localHash, "got", hash)
+		log.Warn("End block hash mismatch while whitelisting milestone", "expected", localHash, "got", hash)
 		var (
 			rewindTo uint64
 			doExist  bool
@@ -770,7 +772,7 @@ func borVerifyTemP(eth *eth.Ethereum, start uint64, end uint64, hash string) (st
 
 		rewindBackTemp(eth, rewindTo)
 
-		return hash, rewindTo, errRootHashMismatch
+		return hash, rewindTo, errHashMismatch
 	}
 
 	return block.Hash().String(), 0, nil

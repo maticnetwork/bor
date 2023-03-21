@@ -19,9 +19,10 @@ var (
 	// locally for a range of blocks.
 	errRootHash = errors.New("failed to get local root hash")
 
-	// errRootHashMismatch is returned when the local root hash doesn't match
-	// with the root hash in checkpoint/milestone.
-	errRootHashMismatch = errors.New("roothash mismatch")
+	// errHashMismatch is returned when the local hash doesn't match
+	// with the hash of checkpoint/milestone. It is the root hash of blocks
+	// in case of checkpoint and is end block hash in case of milestones.
+	errHashMismatch = errors.New("hash mismatch")
 
 	// errEndBlock is returned when we're unable to fetch a block locally.
 	errEndBlock = errors.New("failed to get end block")
@@ -42,27 +43,32 @@ func newBorVerifier() *borVerifier {
 }
 
 func borVerify(ctx context.Context, eth *Ethereum, handler *ethHandler, start uint64, end uint64, hash string, isCheckpoint bool) (string, error) {
+	str := "milestone"
+	if isCheckpoint {
+		str = "checkpoint"
+	}
+
 	// check if we have the given blocks
 	currentBlock := eth.BlockChain().CurrentBlock()
 	if currentBlock == nil {
-		log.Debug("Current Block does not exist")
+		log.Debug(fmt.Sprintf("Failed to fetch current block from blockchain while verifying incoming %s", str))
 		return hash, errMissingBlocks
 	}
 
 	head := currentBlock.Number().Uint64()
 
 	if head < end {
-		log.Debug("Head block behind given block", "head", head, "end block", end)
+		log.Debug(fmt.Sprintf("Current head block behind incoming %s block", str), "head", head, "end block", end)
 		return hash, errMissingBlocks
 	}
 
 	var localHash string
 
-	//verify the hash
+	// verify the hash
 	if isCheckpoint {
 		var err error
 
-		//in case of checkpoint get the rootHash
+		// in case of checkpoint get the rootHash
 		localHash, err = handler.ethAPI.GetRootHash(ctx, start, end)
 
 		if err != nil {
@@ -70,10 +76,10 @@ func borVerify(ctx context.Context, eth *Ethereum, handler *ethHandler, start ui
 			return hash, errRootHash
 		}
 	} else {
-		//in case of milestone(isCheckpoint==false) get the hash of endBlock
+		// in case of milestone(isCheckpoint==false) get the hash of endBlock
 		block, err := handler.ethAPI.GetBlockByNumber(ctx, rpc.BlockNumber(end), false)
 		if err != nil {
-			log.Debug("Failed to get end block hash while whitelisting milestone", "err", err)
+			log.Debug("Failed to get end block hash while whitelisting milestone", "number", end, "err", err)
 			return hash, errEndBlock
 		}
 
@@ -83,7 +89,11 @@ func borVerify(ctx context.Context, eth *Ethereum, handler *ethHandler, start ui
 	//nolint
 	if localHash != hash {
 
-		log.Warn("Root hash mismatch while whitelisting", "expected", localHash, "got", hash)
+		if isCheckpoint {
+			log.Warn("Root hash mismatch while whitelisting checkpoint", "expected", localHash, "got", hash)
+		} else {
+			log.Warn("End block hash mismatch while whitelisting milestone", "expected", localHash, "got", hash)
+		}
 
 		ethHandler := (*ethHandler)(eth.handler)
 
@@ -110,7 +120,7 @@ func borVerify(ctx context.Context, eth *Ethereum, handler *ethHandler, start ui
 
 		rewindBack(eth, head, rewindTo)
 
-		return hash, errRootHashMismatch
+		return hash, errHashMismatch
 	}
 
 	// fetch the end block hash
@@ -141,11 +151,11 @@ func rewindBack(eth *Ethereum, head uint64, rewindTo uint64) {
 }
 
 func rewind(eth *Ethereum, head uint64, rewindTo uint64) {
-	log.Warn("rewinding chain because it doesn't match the received milestone :", "Rewound BlockNumber", rewindTo)
+	log.Warn("Rewinding chain because it doesn't match the received milestone", "to", rewindTo)
 	err := eth.blockchain.SetHead(rewindTo)
 
 	if err != nil {
-		log.Error("error while rewinding the chain", "to", rewindTo, "err", err)
+		log.Error("Error while rewinding the chain", "to", rewindTo, "err", err)
 	} else {
 		rewindLengthMeter.Mark(int64(head - rewindTo))
 	}
