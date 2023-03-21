@@ -458,17 +458,9 @@ func TestFetchStateSyncEvents(t *testing.T) {
 
 	h.EXPECT().Span(gomock.Any(), uint64(1)).Return(&res.Result, nil).AnyTimes()
 
-	h.EXPECT().FetchCheckpoint(gomock.Any(), int64(-1)).Return(&checkpoint.Checkpoint{
-		Proposer:   currentSpan.SelectedProducers[0].Address,
-		StartBlock: big.NewInt(0),
-		EndBlock:   big.NewInt(int64(1)),
-	}, nil).AnyTimes()
+	h.EXPECT().FetchCheckpoint(gomock.Any(), int64(-1)).Return(&checkpoint.Checkpoint{}, nil).AnyTimes()
 
-	h.EXPECT().FetchMilestone(gomock.Any()).Return(&milestone.Milestone{
-		Proposer:   currentSpan.SelectedProducers[0].Address,
-		StartBlock: big.NewInt(0),
-		EndBlock:   big.NewInt(int64(1)),
-	}, nil).AnyTimes()
+	h.EXPECT().FetchMilestone(gomock.Any()).Return(&milestone.Milestone{}, nil).AnyTimes()
 
 	h.EXPECT().FetchLastNoAckMilestone(gomock.Any()).Return("", nil).AnyTimes()
 
@@ -513,17 +505,9 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 
 	h.EXPECT().Span(gomock.Any(), uint64(1)).Return(&res.Result, nil).AnyTimes()
 
-	h.EXPECT().FetchCheckpoint(gomock.Any(), int64(-1)).Return(&checkpoint.Checkpoint{
-		Proposer:   currentSpan.SelectedProducers[0].Address,
-		StartBlock: big.NewInt(0),
-		EndBlock:   big.NewInt(int64(1)),
-	}, nil).AnyTimes()
+	h.EXPECT().FetchCheckpoint(gomock.Any(), int64(-1)).Return(&checkpoint.Checkpoint{}, nil).AnyTimes()
 
-	h.EXPECT().FetchMilestone(gomock.Any()).Return(&milestone.Milestone{
-		Proposer:   currentSpan.SelectedProducers[0].Address,
-		StartBlock: big.NewInt(0),
-		EndBlock:   big.NewInt(int64(1)),
-	}, nil).AnyTimes()
+	h.EXPECT().FetchMilestone(gomock.Any()).Return(&milestone.Milestone{}, nil).AnyTimes()
 
 	h.EXPECT().FetchLastNoAckMilestone(gomock.Any()).Return("", nil).AnyTimes()
 
@@ -614,17 +598,9 @@ func TestOutOfTurnSigning(t *testing.T) {
 
 	h.EXPECT().Close().AnyTimes()
 
-	h.EXPECT().FetchCheckpoint(gomock.Any(), int64(-1)).Return(&checkpoint.Checkpoint{
-		Proposer:   currentSpan.SelectedProducers[0].Address,
-		StartBlock: big.NewInt(0),
-		EndBlock:   big.NewInt(int64(1)),
-	}, nil).AnyTimes()
+	h.EXPECT().FetchCheckpoint(gomock.Any(), int64(-1)).Return(&checkpoint.Checkpoint{}, nil).AnyTimes()
 
-	h.EXPECT().FetchMilestone(gomock.Any()).Return(&milestone.Milestone{
-		Proposer:   currentSpan.SelectedProducers[0].Address,
-		StartBlock: big.NewInt(0),
-		EndBlock:   big.NewInt(int64(1)),
-	}, nil).AnyTimes()
+	h.EXPECT().FetchMilestone(gomock.Any()).Return(&milestone.Milestone{}, nil).AnyTimes()
 
 	h.EXPECT().FetchLastNoAckMilestone(gomock.Any()).Return("", nil).AnyTimes()
 
@@ -710,17 +686,9 @@ func TestSignerNotFound(t *testing.T) {
 	defer ctrl.Finish()
 
 	h.EXPECT().Close().AnyTimes()
-	h.EXPECT().FetchCheckpoint(gomock.Any(), int64(-1)).Return(&checkpoint.Checkpoint{
-		Proposer:   currentSpan.SelectedProducers[0].Address,
-		StartBlock: big.NewInt(0),
-		EndBlock:   big.NewInt(int64(1)),
-	}, nil).AnyTimes()
+	h.EXPECT().FetchCheckpoint(gomock.Any(), int64(-1)).Return(&checkpoint.Checkpoint{}, nil).AnyTimes()
 
-	h.EXPECT().FetchMilestone(gomock.Any()).Return(&milestone.Milestone{
-		Proposer:   currentSpan.SelectedProducers[0].Address,
-		StartBlock: big.NewInt(0),
-		EndBlock:   big.NewInt(int64(1)),
-	}, nil).AnyTimes()
+	h.EXPECT().FetchMilestone(gomock.Any()).Return(&milestone.Milestone{}, nil).AnyTimes()
 
 	h.EXPECT().FetchLastNoAckMilestone(gomock.Any()).Return("", nil).AnyTimes()
 
