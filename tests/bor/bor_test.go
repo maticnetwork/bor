@@ -25,6 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/bor"
 	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
+	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
 	"github.com/ethereum/go-ethereum/consensus/bor/valset"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core"
@@ -385,7 +386,7 @@ func TestInsertingSpanSizeBlocks(t *testing.T) {
 		EndBlock:   big.NewInt(int64(spanSize)),
 	}, nil).AnyTimes()
 
-	h.EXPECT().FetchMilestone(gomock.Any(), int64(-1)).Return(&milestone.Milestone{
+	h.EXPECT().FetchMilestone(gomock.Any()).Return(&milestone.Milestone{
 		Proposer:   currentSpan.SelectedProducers[0].Address,
 		StartBlock: big.NewInt(0),
 		EndBlock:   big.NewInt(int64(spanSize)),
