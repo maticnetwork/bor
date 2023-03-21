@@ -67,12 +67,12 @@ func (h *ethHandler) fetchWhitelistMilestone(ctx context.Context, bor *bor.Bor, 
 	}
 
 	num = milestone.EndBlock.Uint64()
-	hash = milestone.RootHash
+	hash = milestone.Hash
 
 	// Verify if the milestone fetched can be added to the local whitelist entry or not
 	// If verified, it returns the hash of the end block of the milestone. If not,
 	// it will return appropriate error.
-	_, err = verifier.verify(ctx, eth, h, milestone.StartBlock.Uint64(), milestone.EndBlock.Uint64(), milestone.RootHash.String()[2:], false)
+	_, err = verifier.verify(ctx, eth, h, milestone.StartBlock.Uint64(), milestone.EndBlock.Uint64(), milestone.Hash.String()[2:], false)
 	if err != nil {
 		h.downloader.UnlockSprint(milestone.EndBlock.Uint64())
 		return num, hash, err

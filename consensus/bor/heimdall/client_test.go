@@ -174,7 +174,7 @@ func TestFetchMilestoneFromMockHeimdall(t *testing.T) {
 				Proposer:   common.Address{},
 				StartBlock: big.NewInt(0),
 				EndBlock:   big.NewInt(512),
-				RootHash:   common.Hash{},
+				Hash:       common.Hash{},
 				BorChainID: "15001",
 				Timestamp:  0,
 			},

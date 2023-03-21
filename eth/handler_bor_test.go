@@ -143,7 +143,7 @@ func fetchMilestoneTest(t *testing.T, heimdall *mockHeimdall, bor *bor.Bor, hand
 	// Check if we have expected result
 	require.Equal(t, err, nil)
 	require.Equal(t, milestones[len(milestones)-1].EndBlock.Uint64(), num)
-	require.Equal(t, milestones[len(milestones)-1].RootHash, hash)
+	require.Equal(t, milestones[len(milestones)-1].Hash, hash)
 }
 
 func getMockFetchCheckpointFn(number int64, err error) func(ctx context.Context) (int64, error) {
@@ -184,7 +184,7 @@ func createMockMilestones(count int) []*milestone.Milestone {
 			Proposer:   common.Address{},
 			StartBlock: big.NewInt(startBlock),
 			EndBlock:   big.NewInt(startBlock + 255),
-			RootHash:   common.Hash{},
+			Hash:       common.Hash{},
 			BorChainID: "137",
 			Timestamp:  uint64(time.Now().Unix()),
 		}
