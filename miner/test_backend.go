@@ -27,6 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
+
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -187,6 +188,7 @@ func NewTestWorker(t TensingObject, chainConfig *params.ChainConfig, engine cons
 	var w *worker
 
 	if delay != 0 {
+		//nolint:staticcheck
 		w = newWorkerWithDelay(testConfig, chainConfig, engine, backend, new(event.TypeMux), nil, false, delay)
 	} else {
 		//nolint:staticcheck
@@ -255,9 +257,11 @@ func newWorkerWithDelay(config *Config, chainConfig *params.ChainConfig, engine 
 	if init {
 		worker.startCh <- struct{}{}
 	}
+
 	return worker
 }
 
+// nolint:gocognit
 func (w *worker) mainLoopWithDelay(ctx context.Context, delay uint) {
 	defer w.wg.Done()
 	defer w.txsSub.Unsubscribe()
@@ -276,7 +280,6 @@ func (w *worker) mainLoopWithDelay(ctx context.Context, delay uint) {
 		select {
 		case req := <-w.newWorkCh:
 			//nolint:contextcheck
-
 			w.commitWorkWithDelay(req.ctx, req.interrupt, req.noempty, req.timestamp, delay)
 
 		case req := <-w.getWorkCh:
@@ -294,15 +297,18 @@ func (w *worker) mainLoopWithDelay(ctx context.Context, delay uint) {
 			if _, exist := w.localUncles[ev.Block.Hash()]; exist {
 				continue
 			}
+
 			if _, exist := w.remoteUncles[ev.Block.Hash()]; exist {
 				continue
 			}
+
 			// Add side block to possible uncle block set depending on the author.
 			if w.isLocalBlock != nil && w.isLocalBlock(ev.Block.Header()) {
 				w.localUncles[ev.Block.Hash()] = ev.Block
 			} else {
 				w.remoteUncles[ev.Block.Hash()] = ev.Block
 			}
+
 			// If our sealing block contains less than 2 uncle blocks,
 			// add the new uncle block if valid and regenerate a new
 			// sealing block for higher profit.
@@ -323,6 +329,7 @@ func (w *worker) mainLoopWithDelay(ctx context.Context, delay uint) {
 					delete(w.localUncles, hash)
 				}
 			}
+
 			for hash, uncle := range w.remoteUncles {
 				if uncle.NumberU64()+staleThreshold <= chainHead.NumberU64() {
 					delete(w.remoteUncles, hash)
@@ -369,6 +376,7 @@ func (w *worker) mainLoopWithDelay(ctx context.Context, delay uint) {
 					w.commitWork(ctx, nil, true, time.Now().Unix())
 				}
 			}
+
 			atomic.AddInt32(&w.newTxs, int32(len(ev.Txs)))
 
 		// System stopped
@@ -384,11 +392,13 @@ func (w *worker) mainLoopWithDelay(ctx context.Context, delay uint) {
 	}
 }
 
+// nolint:gocognit
 func (w *worker) commitTransactionsWithDelay(env *environment, txs *types.TransactionsByPriceAndNonce, interrupt *int32, interruptCh chan struct{}, delay uint) bool {
 	gasLimit := env.header.GasLimit
 	if env.gasPool == nil {
 		env.gasPool = new(core.GasPool).AddGas(gasLimit)
 	}
+
 	var coalescedLogs []*types.Log
 
 	initialGasLimit := env.gasPool.Gas()
@@ -427,6 +437,7 @@ mainloop:
 			if atomic.LoadInt32(interrupt) == commitInterruptResubmit {
 				ratio := float64(gasLimit-env.gasPool.Gas()) / float64(gasLimit)
 				if ratio < 0.1 {
+					// nolint:goconst
 					ratio = 0.1
 				}
 				w.resubmitAdjustCh <- &intervalAdjust{
@@ -434,20 +445,21 @@ mainloop:
 					inc:   true,
 				}
 			}
-
+			// nolint:goconst
 			breakCause = "interrupt"
 			return atomic.LoadInt32(interrupt) == commitInterruptNewHead
 		}
 		// If we don't have enough gas for any further transactions then we're done
 		if env.gasPool.Gas() < params.TxGas {
 			log.Trace("Not enough gas for further transactions", "have", env.gasPool, "want", params.TxGas)
-
+			// nolint:goconst
 			breakCause = "Not enough gas for further transactions"
 			break
 		}
 		// Retrieve the next transaction and abort if all done
 		tx := txs.Peek()
 		if tx == nil {
+			// nolint:goconst
 			breakCause = "all transactions has been included"
 			break
 		}
@@ -519,7 +531,6 @@ mainloop:
 		// We don't push the pendingLogsEvent while we are sealing. The reason is that
 		// when we are sealing, the worker will regenerate a sealing block every 3 seconds.
 		// In order to avoid pushing the repeated pendingLog, we disable the pending log pushing.
-
 		// make a copy, the state caches the logs and these logs get "upgraded" from pending to mined
 		// logs by filling in the block hash when the block was mined by the local miner. This can
 		// cause a race condition if a log was "upgraded" before the PendingLogsEvent is processed.
@@ -528,6 +539,7 @@ mainloop:
 			cpy[i] = new(types.Log)
 			*cpy[i] = *l
 		}
+
 		w.pendingLogsFeed.Send(cpy)
 	}
 	// Notify resubmit loop to decrease resubmitting interval if current interval is larger
@@ -535,11 +547,11 @@ mainloop:
 	if interrupt != nil {
 		w.resubmitAdjustCh <- &intervalAdjust{inc: false}
 	}
+
 	return false
 }
 
 func (w *worker) commitWorkWithDelay(ctx context.Context, interrupt *int32, noempty bool, timestamp int64, delay uint) {
-
 	start := time.Now()
 
 	var (
@@ -614,6 +626,7 @@ func (w *worker) commitWorkWithDelay(ctx context.Context, interrupt *int32, noem
 	w.current = work
 }
 
+// nolint:gocognit
 func (w *worker) fillTransactionsWithDelay(ctx context.Context, interrupt *int32, env *environment, interruptCh chan struct{}, delay uint) {
 	ctx, span := tracing.StartSpan(ctx, "fillTransactions")
 	defer tracing.EndSpan(span)

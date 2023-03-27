@@ -154,6 +154,8 @@ func testGenerateBlockAndImport(t *testing.T, isClique bool, isBor bool) {
 }
 
 func getFakeBorFromConfig(t *testing.T, chainConfig *params.ChainConfig) (consensus.Engine, *gomock.Controller) {
+	t.Helper()
+
 	ctrl := gomock.NewController(t)
 
 	ethAPIMock := api.NewMockCaller(ctrl)
@@ -625,6 +627,7 @@ func testGetSealingWork(t *testing.T, chainConfig *params.ChainConfig, engine co
 }
 
 func TestCommitInterruptExperimentBor(t *testing.T) {
+	t.Parallel()
 	// with 1 sec block time and 200 millisec tx delay we should get 5 txs per block
 	testCommitInterruptExperimentBor(t, 200, 5)
 
@@ -633,6 +636,8 @@ func TestCommitInterruptExperimentBor(t *testing.T) {
 }
 
 func testCommitInterruptExperimentBor(t *testing.T, delay uint, txCount int) {
+	t.Helper()
+
 	var (
 		engine      consensus.Engine
 		chainConfig *params.ChainConfig
@@ -641,7 +646,9 @@ func testCommitInterruptExperimentBor(t *testing.T, delay uint, txCount int) {
 	)
 
 	chainConfig = params.BorUnittestChainConfig
+
 	log.Root().SetHandler(log.LvlFilterHandler(4, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
+
 	engine, ctrl = getFakeBorFromConfig(t, chainConfig)
 	defer func() {
 		engine.Close()
@@ -654,7 +661,10 @@ func testCommitInterruptExperimentBor(t *testing.T, delay uint, txCount int) {
 	go func() {
 		for {
 			tx := b.newRandomTx(false)
-			b.TxPool().AddRemote(tx)
+			if err := b.TxPool().AddRemote(tx); err != nil {
+				t.Error(err)
+			}
+
 			time.Sleep(6 * time.Millisecond)
 		}
 	}()
