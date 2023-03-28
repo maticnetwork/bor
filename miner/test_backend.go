@@ -485,7 +485,7 @@ mainloop:
 			start = time.Now()
 		})
 
-		logs, err := w.commitTransaction(env, tx)
+		logs, err := w.commitTransaction(env, tx, nil)
 		time.Sleep(time.Duration(delay) * time.Millisecond)
 
 		switch {

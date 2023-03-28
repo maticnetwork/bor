@@ -22,7 +22,10 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/metrics"
 )
+
+var commitInterruptCounter = metrics.NewRegisteredCounter("worker/commitInterrupt", nil)
 
 // Config are the configuration options for the Interpreter
 type Config struct {
@@ -113,7 +116,7 @@ func NewEVMInterpreter(evm *EVM, cfg Config) *EVMInterpreter {
 // It's important to note that any errors returned by the interpreter should be
 // considered a revert-and-consume-all-gas operation except for
 // ErrExecutionReverted which means revert-and-keep-gas-left.
-func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (ret []byte, err error) {
+func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool, interruptCh *chan struct{}) (ret []byte, err error) {
 
 	// Increment the call depth which is restricted to 1024
 	in.evm.depth++
@@ -178,7 +181,15 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool) (
 	// explicit STOP, RETURN or SELFDESTRUCT is executed, an error occurred during
 	// the execution of one of the operations or until the done flag is set by the
 	// parent context.
+mainloop:
 	for {
+		// case of interrupting by timeout
+		select {
+		case <-*interruptCh:
+			commitInterruptCounter.Inc(1)
+			break mainloop
+		default:
+		}
 		if in.cfg.Debug {
 			// Capture pre-execution values for tracing.
 			logged, pcCopy, gasCopy = false, pc, contract.Gas

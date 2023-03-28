@@ -95,7 +95,6 @@ const (
 var (
 	sealedBlocksCounter      = metrics.NewRegisteredCounter("worker/sealedBlocks", nil)
 	sealedEmptyBlocksCounter = metrics.NewRegisteredCounter("worker/sealedEmptyBlocks", nil)
-	commitInterruptCounter   = metrics.NewRegisteredCounter("worker/commitInterrupt", nil)
 )
 
 // environment is the worker's current environment and holds all
@@ -931,10 +930,10 @@ func (w *worker) updateSnapshot(env *environment) {
 	w.snapshotState = env.state.Copy()
 }
 
-func (w *worker) commitTransaction(env *environment, tx *types.Transaction) ([]*types.Log, error) {
+func (w *worker) commitTransaction(env *environment, tx *types.Transaction, interruptCh chan struct{}) ([]*types.Log, error) {
 	snap := env.state.Snapshot()
 
-	receipt, err := core.ApplyTransaction(w.chainConfig, w.chain, &env.coinbase, env.gasPool, env.state, env.header, tx, &env.header.GasUsed, *w.chain.GetVMConfig())
+	receipt, err := core.ApplyTransaction(w.chainConfig, w.chain, &env.coinbase, env.gasPool, env.state, env.header, tx, &env.header.GasUsed, *w.chain.GetVMConfig(), &interruptCh)
 	if err != nil {
 		env.state.RevertToSnapshot(snap)
 		return nil, err
@@ -969,15 +968,7 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 		})
 	}()
 
-mainloop:
 	for {
-		// case of interrupting by timeout
-		select {
-		case <-interruptCh:
-			commitInterruptCounter.Inc(1)
-			break mainloop
-		default:
-		}
 
 		// In the following three cases, we will interrupt the execution of the transaction.
 		// (1) new head block event arrival, the interrupt signal is 1
@@ -1036,7 +1027,7 @@ mainloop:
 			start = time.Now()
 		})
 
-		logs, err := w.commitTransaction(env, tx)
+		logs, err := w.commitTransaction(env, tx, interruptCh)
 
 		switch {
 		case errors.Is(err, core.ErrGasLimitReached):
