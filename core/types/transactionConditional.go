@@ -17,6 +17,7 @@
 package types
 
 import (
+	"errors"
 	"fmt"
 	"math/big"
 	"reflect"
@@ -34,9 +35,11 @@ type OptionsAA4337 struct {
 	TimestampMax   uint64        `json:"timestampMax"`
 }
 
+var ErrEmptyKnownAccounts = errors.New("knownAccounts cannot be nil")
+
 func (ka KnownAccounts) ValidateLength() error {
 	if ka == nil {
-		return fmt.Errorf("knownAccounts cannot be nil")
+		return ErrEmptyKnownAccounts
 	}
 
 	length := 0

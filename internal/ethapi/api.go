@@ -1942,25 +1942,25 @@ func (s *PublicTransactionPoolAPI) SendRawTransactionConditional(ctx context.Con
 	// check block number range
 	if options.BlockNumberMax != big.NewInt(0) {
 		if err := currentHeader.ValidateBlockNumberOptions4337(options.BlockNumberMin, options.BlockNumberMax); err != nil {
-			return common.Hash{}, err
+			return common.Hash{}, &rpc.OptionsValidateError{Message: "out of block range. err: " + err.Error()}
 		}
 	}
 
 	// check timestamp range
 	if options.TimestampMax != 0 {
 		if err := currentHeader.ValidateTimestampOptions4337(options.TimestampMin, options.TimestampMax); err != nil {
-			return common.Hash{}, err
+			return common.Hash{}, &rpc.OptionsValidateError{Message: "out of time range. err: " + err.Error()}
 		}
 	}
 
 	// check knownAccounts length (number of slots/accounts) should be less than 1000
 	if err := options.KnownAccounts.ValidateLength(); err != nil {
-		return common.Hash{}, err
+		return common.Hash{}, &rpc.KnownAccountsLimitExceededError{Message: "limit exceeded. err: " + err.Error()}
 	}
 
 	// check knownAccounts
 	if err := currentState.ValidateKnownAccounts(options.KnownAccounts); err != nil {
-		return common.Hash{}, err
+		return common.Hash{}, &rpc.OptionsValidateError{Message: "storage error. err: " + err.Error()}
 	}
 
 	// put options data in Tx, to use it later while block building

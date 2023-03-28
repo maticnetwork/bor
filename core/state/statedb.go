@@ -1050,7 +1050,7 @@ func (s *StateDB) SlotInAccessList(addr common.Address, slot common.Hash) (addre
 
 func (s *StateDB) ValidateKnownAccounts(knownAccounts types.KnownAccounts) error {
 	if knownAccounts == nil {
-		return fmt.Errorf("knownAccounts cannot be nil")
+		return types.ErrEmptyKnownAccounts
 	}
 
 	for k, v := range knownAccounts {
