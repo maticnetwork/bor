@@ -1571,13 +1571,16 @@ func AccessList(ctx context.Context, b Backend, blockNrOrHash rpc.BlockNumberOrH
 		if err != nil {
 			return nil, 0, nil, err
 		}
+
 		res, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(msg.Gas()), nil)
 		if err != nil {
 			return nil, 0, nil, fmt.Errorf("failed to apply transaction: %v err: %v", args.toTransaction().Hash(), err)
 		}
+
 		if tracer.Equal(prevTracer) {
 			return accessList, res.UsedGas, res.Err, nil
 		}
+
 		prevTracer = tracer
 	}
 }

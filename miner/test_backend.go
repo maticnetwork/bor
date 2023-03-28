@@ -392,7 +392,7 @@ func (w *worker) mainLoopWithDelay(ctx context.Context, delay uint) {
 	}
 }
 
-// nolint:gocognit
+// nolint:gocognit, unparam
 func (w *worker) commitTransactionsWithDelay(env *environment, txs *types.TransactionsByPriceAndNonce, interrupt *int32, interruptCh chan struct{}, delay uint) bool {
 	gasLimit := env.header.GasLimit
 	if env.gasPool == nil {
@@ -417,15 +417,7 @@ func (w *worker) commitTransactionsWithDelay(env *environment, txs *types.Transa
 		})
 	}()
 
-mainloop:
 	for {
-		// case of interrupting by timeout
-		select {
-		case <-interruptCh:
-			commitInterruptCounter.Inc(1)
-			break mainloop
-		default:
-		}
 		// In the following three cases, we will interrupt the execution of the transaction.
 		// (1) new head block event arrival, the interrupt signal is 1
 		// (2) worker start or restart, the interrupt signal is 1
@@ -447,6 +439,7 @@ mainloop:
 			}
 			// nolint:goconst
 			breakCause = "interrupt"
+
 			return atomic.LoadInt32(interrupt) == commitInterruptNewHead
 		}
 		// If we don't have enough gas for any further transactions then we're done
@@ -454,6 +447,7 @@ mainloop:
 			log.Trace("Not enough gas for further transactions", "have", env.gasPool, "want", params.TxGas)
 			// nolint:goconst
 			breakCause = "Not enough gas for further transactions"
+
 			break
 		}
 		// Retrieve the next transaction and abort if all done
@@ -474,6 +468,7 @@ mainloop:
 			log.Trace("Ignoring reply protected transaction", "hash", tx.Hash(), "eip155", w.chainConfig.EIP155Block)
 
 			txs.Pop()
+
 			continue
 		}
 		// Start executing the transaction
@@ -486,6 +481,7 @@ mainloop:
 		})
 
 		logs, err := w.commitTransaction(env, tx, nil)
+
 		time.Sleep(time.Duration(delay) * time.Millisecond)
 
 		switch {
@@ -508,6 +504,7 @@ mainloop:
 			// Everything ok, collect the logs and shift in the next transaction from the same account
 			coalescedLogs = append(coalescedLogs, logs...)
 			env.tcount++
+
 			txs.Shift()
 
 			log.OnDebug(func(lg log.Logging) {

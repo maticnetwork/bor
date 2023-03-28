@@ -386,11 +386,14 @@ func benchmarkNonModifyingCode(gas uint64, code []byte, name string, tracerCode 
 	//cfg.State.CreateAccount(cfg.Origin)
 	// set the receiver's (the executing contract) code for execution.
 	cfg.State.SetCode(destination, code)
+
+	// nolint: errcheck
 	vmenv.Call(sender, destination, nil, gas, cfg.Value, nil)
 
 	b.Run(name, func(b *testing.B) {
 		b.ReportAllocs()
 		for i := 0; i < b.N; i++ {
+			// nolint: errcheck
 			vmenv.Call(sender, destination, nil, gas, cfg.Value, nil)
 		}
 	})
