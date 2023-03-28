@@ -183,13 +183,16 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool, i
 	// parent context.
 mainloop:
 	for {
-		// case of interrupting by timeout
-		select {
-		case <-*interruptCh:
-			commitInterruptCounter.Inc(1)
-			break mainloop
-		default:
+		if interruptCh != nil {
+			// case of interrupting by timeout
+			select {
+			case <-*interruptCh:
+				commitInterruptCounter.Inc(1)
+				break mainloop
+			default:
+			}
 		}
+
 		if in.cfg.Debug {
 			// Capture pre-execution values for tracing.
 			logged, pcCopy, gasCopy = false, pc, contract.Gas
