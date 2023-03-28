@@ -19,6 +19,7 @@ package miner
 import (
 	"math/big"
 	"os"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -658,16 +659,23 @@ func testCommitInterruptExperimentBor(t *testing.T, delay uint, txCount int) {
 	w, b, _ := NewTestWorker(t, chainConfig, engine, db, 0, 1, delay)
 	defer w.close()
 
+	wg := new(sync.WaitGroup)
+	wg.Add(1)
+
 	go func() {
+		wg.Done()
+
 		for {
 			tx := b.newRandomTx(false)
 			if err := b.TxPool().AddRemote(tx); err != nil {
-				t.Error(err)
+				t.Log(err)
 			}
 
-			time.Sleep(6 * time.Millisecond)
+			time.Sleep(20 * time.Millisecond)
 		}
 	}()
+
+	wg.Wait()
 
 	// Start mining!
 	w.start()
