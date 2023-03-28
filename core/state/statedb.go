@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"reflect"
 	"sort"
 	"time"
 
@@ -1045,4 +1046,31 @@ func (s *StateDB) AddressInAccessList(addr common.Address) bool {
 // SlotInAccessList returns true if the given (address, slot)-tuple is in the access list.
 func (s *StateDB) SlotInAccessList(addr common.Address, slot common.Hash) (addressPresent bool, slotPresent bool) {
 	return s.accessList.Contains(addr, slot)
+}
+
+func (s *StateDB) ValidateKnownAccounts(knownAccounts types.KnownAccounts) error {
+	if knownAccounts == nil {
+		return fmt.Errorf("knownAccounts cannot be nil")
+	}
+
+	for k, v := range knownAccounts {
+		// check if the value is hex string or an object
+		if object, ok := v.(string); ok {
+			actualRootHash := s.StorageTrie(k).Hash()
+			if common.HexToHash(object) != actualRootHash {
+				return fmt.Errorf("invalid root hash for: %v root hash: %v actual root hash: %v", k, common.HexToHash(object), actualRootHash)
+			}
+		} else if object, ok := v.(map[string]interface{}); ok {
+			for slot, value := range object {
+				actualValue := s.GetState(k, common.HexToHash(slot))
+				if common.HexToHash(value.(string)) != actualValue {
+					return fmt.Errorf("invalid slot value at address: %v slot: %v value: %v actual value: %v", k, slot, value, actualValue)
+				}
+			}
+		} else {
+			return fmt.Errorf("invalid type in knownAccounts %v", reflect.TypeOf(v))
+		}
+	}
+
+	return nil
 }

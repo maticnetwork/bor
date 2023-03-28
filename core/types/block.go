@@ -155,6 +155,24 @@ func (h *Header) EmptyReceipts() bool {
 	return h.ReceiptHash == EmptyRootHash
 }
 
+func (h *Header) ValidateBlockNumberOptions4337(minBlockNumber *big.Int, maxBlockNumber *big.Int) error {
+	currentBlockNumber := h.Number
+	if currentBlockNumber.Cmp(maxBlockNumber) == 1 || currentBlockNumber.Cmp(minBlockNumber) == -1 {
+		return fmt.Errorf("current block number %v does not fall in the block number range of: %v to: %v", currentBlockNumber, minBlockNumber, maxBlockNumber)
+	}
+
+	return nil
+}
+
+func (h *Header) ValidateTimestampOptions4337(minTimestamp uint64, maxTimestamp uint64) error {
+	currentBlockTime := h.Time
+	if currentBlockTime > maxTimestamp || currentBlockTime < minTimestamp {
+		return fmt.Errorf("current block time %v does not fall in the block time range of: %v to: %v", currentBlockTime, minTimestamp, maxTimestamp)
+	}
+
+	return nil
+}
+
 // Body is a simple (mutable, non-safe) data container for storing and moving
 // a block's data contents (transactions and uncles) together.
 type Body struct {
