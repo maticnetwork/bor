@@ -75,22 +75,21 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 
 	if !res {
 		isValid = false
-		return false, err
+		return isValid, err
 	}
 
 	if m.Locked && !m.IsReorgAllowed(chain, m.LockedMilestoneNumber, m.LockedMilestoneHash) {
 		isValid = false
-		return false, nil
+		return isValid, nil
 	}
 
 	if !m.IsFutureMilestoneCompatible(chain) {
 		isValid = false
-		return false, nil
+		return isValid, nil
 	}
 
 	isValid = true
-
-	return true, nil
+	return isValid, nil
 }
 
 // IsValidPeer checks if the chain we're about to receive from a peer is valid or not
