@@ -633,14 +633,5 @@ func getFinalizedBlockNumber(eth *Ethereum) (uint64, error) {
 		}
 	}
 
-	doExist, number, hash = eth.Downloader().GetWhitelistedCheckpoint()
-	if doExist && number <= currentBlockNum.NumberU64() {
-		block := eth.BlockChain().GetBlockByNumber(number)
-
-		if block.Hash() == hash {
-			return number, nil
-		}
-	}
-
 	return 0, fmt.Errorf("No finalized block")
 }
