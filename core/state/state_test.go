@@ -18,11 +18,13 @@ package state
 
 import (
 	"bytes"
+	"fmt"
 	"math/big"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
 )
@@ -250,4 +252,77 @@ func compareStateObjects(so0, so1 *stateObject, t *testing.T) {
 			t.Errorf("Origin storage key %x mismatch: have %v, want none.", k, v)
 		}
 	}
+}
+
+func TestValidateKnownAccounts(t *testing.T) {
+	t.Parallel()
+
+	knownAccounts := make(types.KnownAccounts)
+
+	knownAccounts[common.HexToAddress("0xadd1add1add1add1add1add1add1add1add1add1")] = "0x2d6f8a898e7dec0bb7a50e8c142be32d7c98c096ff68ed57b9b08280d9aca1ce"
+	knownAccounts[common.HexToAddress("0xadd2add2add2add2add2add2add2add2add2add2")] = make(map[string]interface{})
+	knownAccounts[common.HexToAddress("0xadd2add2add2add2add2add2add2add2add2add2")] = map[string]interface{}{
+		"0x0000000000000000000000000000000000000000000000000000000000000aaa": "0x0000000000000000000000000000000000000000000000000000000000000bbb",
+		"0x0000000000000000000000000000000000000000000000000000000000000ccc": "0x0000000000000000000000000000000000000000000000000000000000000ddd",
+	}
+
+	stateobjaddr1 := common.HexToAddress("0xadd1add1add1add1add1add1add1add1add1add1")
+	stateobjaddr2 := common.HexToAddress("0xadd2add2add2add2add2add2add2add2add2add2")
+
+	storageaddr1 := common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000zzz")
+	storageaddr21 := common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000aaa")
+	storageaddr22 := common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000ccc")
+
+	data1 := common.BytesToHash([]byte{24})
+	data21 := common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000bbb")
+	data22 := common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000ddd")
+
+	s := newStateTest()
+
+	// set initial state object value
+	s.state.SetState(stateobjaddr1, storageaddr1, data1)
+	s.state.SetState(stateobjaddr2, storageaddr21, data21)
+	s.state.SetState(stateobjaddr2, storageaddr22, data22)
+
+	fmt.Println("\nStorageTrie.Hash()", s.state.StorageTrie(stateobjaddr1).Hash())
+
+	if err := s.state.ValidateKnownAccounts(knownAccounts); err != nil {
+		t.Fatalf(err.Error())
+	}
+
+	knownAccounts[common.HexToAddress("0xadd1add1add1add1add1add1add1add1add1add2")] = "0x2d6f8a898e7dec0bb7a50e8c142be32d7c98c096ff68ed57b9b08280d9aca1cf"
+
+	stateobjaddr3 := common.HexToAddress("0xadd1add1add1add1add1add1add1add1add1add2")
+	storageaddr3 := common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000yyy")
+	data3 := common.BytesToHash([]byte{24})
+
+	s.state.SetState(stateobjaddr3, storageaddr3, data3)
+
+	// expected error
+	if err := s.state.ValidateKnownAccounts(knownAccounts); err == nil {
+		t.Fatalf("should have been an error")
+	}
+
+	// correct the previous mistake "0x2d6f8a898e7dec0bb7a50e8c142be32d7c98c096ff68ed57b9b08280d9aca1cf" -> "0x2d6f8a898e7dec0bb7a50e8c142be32d7c98c096ff68ed57b9b08280d9aca1ce"
+	knownAccounts[common.HexToAddress("0xadd1add1add1add1add1add1add1add1add1add2")] = "0x2d6f8a898e7dec0bb7a50e8c142be32d7c98c096ff68ed57b9b08280d9aca1ce"
+
+	knownAccounts[common.HexToAddress("0xadd2add2add2add2add2add2add2add2add2add3")] = make(map[string]interface{})
+	knownAccounts[common.HexToAddress("0xadd2add2add2add2add2add2add2add2add2add3")] = map[string]interface{}{
+		"0x0000000000000000000000000000000000000000000000000000000000000aaa": "0x0000000000000000000000000000000000000000000000000000000000000bbb",
+		"0x0000000000000000000000000000000000000000000000000000000000000ccc": "0x0000000000000000000000000000000000000000000000000000000000000ddd",
+	}
+
+	stateobjaddr4 := common.HexToAddress("0xadd2add2add2add2add2add2add2add2add2add3")
+	storageaddr41 := common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000aaa")
+	storageaddr42 := common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000ccc")
+	data4 := common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000bbb")
+
+	s.state.SetState(stateobjaddr4, storageaddr41, data4)
+	s.state.SetState(stateobjaddr4, storageaddr42, data4)
+
+	// expected error
+	if err := s.state.ValidateKnownAccounts(knownAccounts); err == nil {
+		t.Fatalf("should have been an error")
+	}
+
 }
