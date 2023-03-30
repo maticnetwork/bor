@@ -22,6 +22,8 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/davecgh/go-spew/spew"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -259,12 +261,13 @@ func TestValidateKnownAccounts(t *testing.T) {
 
 	knownAccounts := make(types.KnownAccounts)
 
-	knownAccounts[common.HexToAddress("0xadd1add1add1add1add1add1add1add1add1add1")] = "0x2d6f8a898e7dec0bb7a50e8c142be32d7c98c096ff68ed57b9b08280d9aca1ce"
-	knownAccounts[common.HexToAddress("0xadd2add2add2add2add2add2add2add2add2add2")] = make(map[string]interface{})
-	knownAccounts[common.HexToAddress("0xadd2add2add2add2add2add2add2add2add2add2")] = map[string]interface{}{
+	types.InsertKnownAccounts(knownAccounts, common.HexToAddress("0xadd1add1add1add1add1add1add1add1add1add1"), "0x2d6f8a898e7dec0bb7a50e8c142be32d7c98c096ff68ed57b9b08280d9aca1ce")
+	types.InsertKnownAccounts(knownAccounts, common.HexToAddress("0xadd2add2add2add2add2add2add2add2add2add2"), map[string]string{
 		"0x0000000000000000000000000000000000000000000000000000000000000aaa": "0x0000000000000000000000000000000000000000000000000000000000000bbb",
 		"0x0000000000000000000000000000000000000000000000000000000000000ccc": "0x0000000000000000000000000000000000000000000000000000000000000ddd",
-	}
+	})
+
+	spew.Dump(knownAccounts)
 
 	stateobjaddr1 := common.HexToAddress("0xadd1add1add1add1add1add1add1add1add1add1")
 	stateobjaddr2 := common.HexToAddress("0xadd2add2add2add2add2add2add2add2add2add2")
@@ -290,7 +293,7 @@ func TestValidateKnownAccounts(t *testing.T) {
 		t.Fatalf(err.Error())
 	}
 
-	knownAccounts[common.HexToAddress("0xadd1add1add1add1add1add1add1add1add1add2")] = "0x2d6f8a898e7dec0bb7a50e8c142be32d7c98c096ff68ed57b9b08280d9aca1cf"
+	types.InsertKnownAccounts(knownAccounts, common.HexToAddress("0xadd1add1add1add1add1add1add1add1add1add2"), "0x2d6f8a898e7dec0bb7a50e8c142be32d7c98c096ff68ed57b9b08280d9aca1cf")
 
 	stateobjaddr3 := common.HexToAddress("0xadd1add1add1add1add1add1add1add1add1add2")
 	storageaddr3 := common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000yyy")
@@ -304,13 +307,11 @@ func TestValidateKnownAccounts(t *testing.T) {
 	}
 
 	// correct the previous mistake "0x2d6f8a898e7dec0bb7a50e8c142be32d7c98c096ff68ed57b9b08280d9aca1cf" -> "0x2d6f8a898e7dec0bb7a50e8c142be32d7c98c096ff68ed57b9b08280d9aca1ce"
-	knownAccounts[common.HexToAddress("0xadd1add1add1add1add1add1add1add1add1add2")] = "0x2d6f8a898e7dec0bb7a50e8c142be32d7c98c096ff68ed57b9b08280d9aca1ce"
-
-	knownAccounts[common.HexToAddress("0xadd2add2add2add2add2add2add2add2add2add3")] = make(map[string]interface{})
-	knownAccounts[common.HexToAddress("0xadd2add2add2add2add2add2add2add2add2add3")] = map[string]interface{}{
+	types.InsertKnownAccounts(knownAccounts, common.HexToAddress("0xadd1add1add1add1add1add1add1add1add1add2"), "0x2d6f8a898e7dec0bb7a50e8c142be32d7c98c096ff68ed57b9b08280d9aca1ce")
+	types.InsertKnownAccounts(knownAccounts, common.HexToAddress("0xadd2add2add2add2add2add2add2add2add2add3"), map[string]string{
 		"0x0000000000000000000000000000000000000000000000000000000000000aaa": "0x0000000000000000000000000000000000000000000000000000000000000bbb",
 		"0x0000000000000000000000000000000000000000000000000000000000000ccc": "0x0000000000000000000000000000000000000000000000000000000000000ddd",
-	}
+	})
 
 	stateobjaddr4 := common.HexToAddress("0xadd2add2add2add2add2add2add2add2add2add3")
 	storageaddr41 := common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000aaa")

@@ -20,12 +20,33 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"reflect"
 
 	"github.com/ethereum/go-ethereum/common"
 )
 
-type KnownAccounts map[common.Address]interface{}
+type KnownAccounts map[common.Address]Value
+
+type Value struct {
+	Str string
+	Map map[string]string
+}
+
+func (v *Value) IsString() bool {
+	return !v.IsMap()
+}
+
+func (v *Value) IsMap() bool {
+	return v.Map == nil
+}
+
+func InsertKnownAccounts[T string | map[string]string](accounts KnownAccounts, k common.Address, v T) {
+	switch typedV := any(v).(type) {
+	case string:
+		accounts[k] = Value{Str: typedV}
+	case map[string]string:
+		accounts[k] = Value{Map: typedV}
+	}
+}
 
 type OptionsAA4337 struct {
 	KnownAccounts  KnownAccounts `json:"knownAccounts"`
@@ -46,12 +67,10 @@ func (ka KnownAccounts) ValidateLength() error {
 
 	for _, v := range ka {
 		// check if the value is hex string or an object
-		if _, ok := v.(string); ok {
+		if v.IsString() {
 			length += 1
-		} else if object, ok := v.(map[string]interface{}); ok {
-			length += len(object)
 		} else {
-			return fmt.Errorf("invalid type in knownAccounts %v", reflect.TypeOf(v))
+			length += len(v.Map)
 		}
 	}
 

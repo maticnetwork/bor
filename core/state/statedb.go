@@ -21,7 +21,6 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"reflect"
 	"sort"
 	"time"
 
@@ -1055,20 +1054,18 @@ func (s *StateDB) ValidateKnownAccounts(knownAccounts types.KnownAccounts) error
 
 	for k, v := range knownAccounts {
 		// check if the value is hex string or an object
-		if object, ok := v.(string); ok {
+		if v.IsString() {
 			actualRootHash := s.StorageTrie(k).Hash()
-			if common.HexToHash(object) != actualRootHash {
-				return fmt.Errorf("invalid root hash for: %v root hash: %v actual root hash: %v", k, common.HexToHash(object), actualRootHash)
+			if common.HexToHash(v.Str) != actualRootHash {
+				return fmt.Errorf("invalid root hash for: %v root hash: %v actual root hash: %v", k, common.HexToHash(v.Str), actualRootHash)
 			}
-		} else if object, ok := v.(map[string]interface{}); ok {
-			for slot, value := range object {
+		} else {
+			for slot, value := range v.Map {
 				actualValue := s.GetState(k, common.HexToHash(slot))
-				if common.HexToHash(value.(string)) != actualValue {
+				if common.HexToHash(value) != actualValue {
 					return fmt.Errorf("invalid slot value at address: %v slot: %v value: %v actual value: %v", k, slot, value, actualValue)
 				}
 			}
-		} else {
-			return fmt.Errorf("invalid type in knownAccounts %v", reflect.TypeOf(v))
 		}
 	}
 
