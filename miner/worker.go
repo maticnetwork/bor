@@ -1004,7 +1004,7 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 
 		// not prioritising conditional transaction, yet.
 		if options := tx.GetOptions(); options != nil {
-			if options.BlockNumberMax != big.NewInt(0) {
+			if options.BlockNumberMax.Cmp(big.NewInt(0)) != 0 {
 				if err := env.header.ValidateBlockNumberOptions4337(options.BlockNumberMin, options.BlockNumberMax); err != nil {
 					log.Trace("Dropping conditional transaction from", from, "with hash", tx.Hash(), "reason", err)
 					txs.Pop()

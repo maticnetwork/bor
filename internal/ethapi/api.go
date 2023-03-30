@@ -1940,7 +1940,7 @@ func (s *PublicTransactionPoolAPI) SendRawTransactionConditional(ctx context.Con
 	currentState, _, _ := s.b.StateAndHeaderByNumber(ctx, rpc.BlockNumber(currentHeader.Number.Int64()))
 
 	// check block number range
-	if options.BlockNumberMax != big.NewInt(0) {
+	if options.BlockNumberMax.Cmp(big.NewInt(0)) != 0 {
 		if err := currentHeader.ValidateBlockNumberOptions4337(options.BlockNumberMin, options.BlockNumberMax); err != nil {
 			return common.Hash{}, &rpc.OptionsValidateError{Message: "out of block range. err: " + err.Error()}
 		}
