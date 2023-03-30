@@ -56,6 +56,7 @@ func (v *Value) UnmarshalJSON(data []byte) error {
 
 	err := json.Unmarshal(data, m)
 	if err != nil {
+		// single Hash value case
 		return json.Unmarshal(data, v.Single)
 	}
 
