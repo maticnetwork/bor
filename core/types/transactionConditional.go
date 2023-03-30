@@ -36,7 +36,7 @@ func (v *Value) IsString() bool {
 }
 
 func (v *Value) IsMap() bool {
-	return v.Map == nil
+	return v.Map != nil
 }
 
 func InsertKnownAccounts[T string | map[string]string](accounts KnownAccounts, k common.Address, v T) {
