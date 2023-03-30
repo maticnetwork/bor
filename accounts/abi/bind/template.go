@@ -22,7 +22,7 @@ import "github.com/ethereum/go-ethereum/accounts/abi"
 type tmplData struct {
 	Package   string                   // Name of the package to place the generated file in
 	Contracts map[string]*tmplContract // List of contracts to generate into this file
-	Libraries map[string]string        // Map the bytecode's link pattern to the library name
+	Libraries map[string]string        // Storage the bytecode's link pattern to the library name
 	Structs   map[string]*tmplStruct   // Contract struct type definitions
 }
 
@@ -588,7 +588,7 @@ import java.util.*;
 	public final static String ABI = "{{.InputABI}}";
 	{{if $contract.FuncSigs}}
 		// {{.Type}}FuncSigs maps the 4-byte function signature to its string representation.
-		public final static Map<String, String> {{.Type}}FuncSigs;
+		public final static Storage<String, String> {{.Type}}FuncSigs;
 		static {
 			Hashtable<String, String> temp = new Hashtable<String, String>();
 			{{range $strsig, $binsig := .FuncSigs}}temp.put("{{$binsig}}", "{{$strsig}}");

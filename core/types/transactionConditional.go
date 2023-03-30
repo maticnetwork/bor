@@ -17,34 +17,81 @@
 package types
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 )
 
 type KnownAccounts map[common.Address]Value
 
 type Value struct {
-	Str string
-	Map map[string]string
+	Single  common.Hash
+	Storage map[common.Hash]common.Hash
 }
 
-func (v *Value) IsString() bool {
-	return !v.IsMap()
+func (v *Value) IsSingle() bool {
+	return !v.IsStorage()
 }
 
-func (v *Value) IsMap() bool {
-	return v.Map == nil
+func (v *Value) IsStorage() bool {
+	return v.Storage == nil
 }
 
-func InsertKnownAccounts[T string | map[string]string](accounts KnownAccounts, k common.Address, v T) {
+func (v *Value) MarshalJSON() ([]byte, error) {
+	if v.IsSingle() {
+		return json.Marshal(v.Single)
+	}
+
+	return json.Marshal(v.Storage)
+}
+
+const hashTypeName = "Hash"
+
+func (v *Value) UnmarshalJSON(data []byte) error {
+	var m map[string]json.RawMessage
+
+	err := json.Unmarshal(data, m)
+	if err != nil {
+		return json.Unmarshal(data, v.Single)
+	}
+
+	res := make(map[common.Hash]common.Hash, len(m))
+
+	for k, v := range m {
+		// check k if it is a Hex value
+		var kHash common.Hash
+
+		err = hexutil.UnmarshalFixedText(hashTypeName, []byte(k), kHash[:])
+		if err != nil {
+			return fmt.Errorf("%w: %s with key %v and value %v", ErrKnownAccounts, err, k, v)
+		}
+
+		// check v if it is a Hex value
+		var vHash common.Hash
+
+		err = hexutil.UnmarshalFixedText("hashTypeName", v, vHash[:])
+		if err != nil {
+			return fmt.Errorf("%w: %s with key %v and value %v", ErrKnownAccounts, err, k, v)
+		}
+
+		res[kHash] = vHash
+	}
+
+	v.Storage = res
+
+	return nil
+}
+
+func InsertKnownAccounts[T common.Hash | map[common.Hash]common.Hash](accounts KnownAccounts, k common.Address, v T) {
 	switch typedV := any(v).(type) {
-	case string:
-		accounts[k] = Value{Str: typedV}
-	case map[string]string:
-		accounts[k] = Value{Map: typedV}
+	case common.Hash:
+		accounts[k] = Value{Single: typedV}
+	case map[common.Hash]common.Hash:
+		accounts[k] = Value{Storage: typedV}
 	}
 }
 
@@ -57,6 +104,7 @@ type OptionsAA4337 struct {
 }
 
 var ErrEmptyKnownAccounts = errors.New("knownAccounts cannot be nil")
+var ErrKnownAccounts = errors.New("an incorrect list of knownAccounts")
 
 func (ka KnownAccounts) ValidateLength() error {
 	if ka == nil {
@@ -67,10 +115,10 @@ func (ka KnownAccounts) ValidateLength() error {
 
 	for _, v := range ka {
 		// check if the value is hex string or an object
-		if v.IsString() {
+		if v.IsSingle() {
 			length += 1
 		} else {
-			length += len(v.Map)
+			length += len(v.Storage)
 		}
 	}
 

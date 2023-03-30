@@ -1054,15 +1054,15 @@ func (s *StateDB) ValidateKnownAccounts(knownAccounts types.KnownAccounts) error
 
 	for k, v := range knownAccounts {
 		// check if the value is hex string or an object
-		if v.IsString() {
+		if v.IsSingle() {
 			actualRootHash := s.StorageTrie(k).Hash()
-			if common.HexToHash(v.Str) != actualRootHash {
-				return fmt.Errorf("invalid root hash for: %v root hash: %v actual root hash: %v", k, common.HexToHash(v.Str), actualRootHash)
+			if v.Single != actualRootHash {
+				return fmt.Errorf("invalid root hash for: %v root hash: %v actual root hash: %v", k, v.Single, actualRootHash)
 			}
 		} else {
-			for slot, value := range v.Map {
-				actualValue := s.GetState(k, common.HexToHash(slot))
-				if common.HexToHash(value) != actualValue {
+			for slot, value := range v.Storage {
+				actualValue := s.GetState(k, slot)
+				if value != actualValue {
 					return fmt.Errorf("invalid slot value at address: %v slot: %v value: %v actual value: %v", k, slot, value, actualValue)
 				}
 			}

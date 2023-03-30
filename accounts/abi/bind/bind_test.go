@@ -158,7 +158,7 @@ var bindTests = []struct {
 				{"type":"function","name":"namedOutput","constant":true,"inputs":[],"outputs":[{"name":"str","type":"string"}]},
 				{"type":"function","name":"anonOutput","constant":true,"inputs":[],"outputs":[{"name":"","type":"string"}]},
 				{"type":"function","name":"namedOutputs","constant":true,"inputs":[],"outputs":[{"name":"str1","type":"string"},{"name":"str2","type":"string"}]},
-				{"type":"function","name":"collidingOutputs","constant":true,"inputs":[],"outputs":[{"name":"str","type":"string"},{"name":"Str","type":"string"}]},
+				{"type":"function","name":"collidingOutputs","constant":true,"inputs":[],"outputs":[{"name":"str","type":"string"},{"name":"Single","type":"string"}]},
 				{"type":"function","name":"anonOutputs","constant":true,"inputs":[],"outputs":[{"name":"","type":"string"},{"name":"","type":"string"}]},
 				{"type":"function","name":"mixedOutputs","constant":true,"inputs":[],"outputs":[{"name":"","type":"string"},{"name":"str","type":"string"}]}
 			]
@@ -234,7 +234,7 @@ var bindTests = []struct {
 
 			 dit, err := e.FilterDynamic(nil, []string{}, [][]byte{})
 
-			 str  = dit.Event.Str    // Make sure non-indexed strings retain their type
+			 str  = dit.Event.Single    // Make sure non-indexed strings retain their type
 			 dat  = dit.Event.Dat    // Make sure non-indexed bytes retain their type
 			 hash = dit.Event.IdxStr // Make sure indexed strings turn into hashes
 			 hash = dit.Event.IdxDat // Make sure indexed bytes turn into hashes

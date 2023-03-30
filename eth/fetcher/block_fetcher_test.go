@@ -83,7 +83,7 @@ type fetcherTester struct {
 	hashes  []common.Hash                 // Hash chain belonging to the tester
 	headers map[common.Hash]*types.Header // Headers belonging to the tester
 	blocks  map[common.Hash]*types.Block  // Blocks belonging to the tester
-	drops   map[string]bool               // Map of peers dropped by the fetcher
+	drops   map[string]bool               // Storage of peers dropped by the fetcher
 
 	lock sync.RWMutex
 }
