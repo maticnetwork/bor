@@ -1056,7 +1056,7 @@ func (s *StateDB) ValidateKnownAccounts(knownAccounts types.KnownAccounts) error
 		// check if the value is hex string or an object
 		if v.IsSingle() {
 			actualRootHash := s.StorageTrie(k).Hash()
-			if v.Single != actualRootHash {
+			if *v.Single != actualRootHash {
 				return fmt.Errorf("invalid root hash for: %v root hash: %v actual root hash: %v", k, v.Single, actualRootHash)
 			}
 		} else {
