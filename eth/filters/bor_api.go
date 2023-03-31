@@ -1,7 +1,6 @@
 package filters
 
 import (
-	"bytes"
 	"context"
 	"errors"
 
@@ -67,7 +66,7 @@ func (api *PublicFilterAPI) NewDeposits(ctx context.Context, crit ethereum.State
 		for {
 			select {
 			case h := <-stateSyncData:
-				if crit.ID == h.ID || bytes.Compare(crit.Contract.Bytes(), h.Contract.Bytes()) == 0 ||
+				if crit.ID == h.ID || crit.Contract == h.Contract ||
 					(crit.ID == 0 && crit.Contract == common.Address{}) {
 					notifier.Notify(rpcSub.ID, h)
 				}

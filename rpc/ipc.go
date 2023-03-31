@@ -30,11 +30,14 @@ func (s *Server) ServeListener(l net.Listener) error {
 		conn, err := l.Accept()
 		if netutil.IsTemporaryError(err) {
 			log.Warn("RPC accept error", "err", err)
+
 			continue
 		} else if err != nil {
 			return err
 		}
+
 		log.Trace("Accepted RPC connection", "conn", conn.RemoteAddr())
+
 		go s.ServeCodec(NewCodec(conn), 0)
 	}
 }
