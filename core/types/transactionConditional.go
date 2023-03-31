@@ -23,7 +23,6 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 )
 
 type KnownAccounts map[common.Address]Value
@@ -41,7 +40,7 @@ func (v *Value) IsStorage() bool {
 	return v.Storage == nil
 }
 
-func (v *Value) MarshalJSON() ([]byte, error) {
+func (v Value) MarshalJSON() ([]byte, error) {
 	if v.IsSingle() {
 		return json.Marshal(v.Single)
 	}
@@ -51,38 +50,55 @@ func (v *Value) MarshalJSON() ([]byte, error) {
 
 const hashTypeName = "Hash"
 
+// func (v Value) UnmarshalJSON(data []byte) error {
+// 	var m map[string]json.RawMessage
+
+// 	err := json.Unmarshal(data, m)
+// 	if err != nil {
+// 		// single Hash value case
+// 		return json.Unmarshal(data, v.Single)
+// 	}
+
+// 	res := make(map[common.Hash]common.Hash, len(m))
+
+// 	for k, v := range m {
+// 		// check k if it is a Hex value
+// 		var kHash common.Hash
+
+// 		err = hexutil.UnmarshalFixedText(hashTypeName, []byte(k), kHash[:])
+// 		if err != nil {
+// 			return fmt.Errorf("%w: %s with key %v and value %v", ErrKnownAccounts, err, k, v)
+// 		}
+
+// 		// check v if it is a Hex value
+// 		var vHash common.Hash
+
+// 		err = hexutil.UnmarshalFixedText("hashTypeName", v, vHash[:])
+// 		if err != nil {
+// 			return fmt.Errorf("%w: %s with key %v and value %v", ErrKnownAccounts, err, k, v)
+// 		}
+
+// 		res[kHash] = vHash
+// 	}
+
+// 	v.Storage = res
+
+// 	return nil
+// }
+
 func (v *Value) UnmarshalJSON(data []byte) error {
-	var m map[string]json.RawMessage
-
-	err := json.Unmarshal(data, m)
-	if err != nil {
-		// single Hash value case
-		return json.Unmarshal(data, v.Single)
+	var hash common.Hash
+	if err := json.Unmarshal(data, &hash); err == nil {
+		v.Single = hash
+		v.Storage = make(map[common.Hash]common.Hash)
+		return nil
 	}
 
-	res := make(map[common.Hash]common.Hash, len(m))
-
-	for k, v := range m {
-		// check k if it is a Hex value
-		var kHash common.Hash
-
-		err = hexutil.UnmarshalFixedText(hashTypeName, []byte(k), kHash[:])
-		if err != nil {
-			return fmt.Errorf("%w: %s with key %v and value %v", ErrKnownAccounts, err, k, v)
-		}
-
-		// check v if it is a Hex value
-		var vHash common.Hash
-
-		err = hexutil.UnmarshalFixedText("hashTypeName", v, vHash[:])
-		if err != nil {
-			return fmt.Errorf("%w: %s with key %v and value %v", ErrKnownAccounts, err, k, v)
-		}
-
-		res[kHash] = vHash
+	var mapping map[common.Hash]common.Hash
+	if err := json.Unmarshal(data, &mapping); err != nil {
+		return err
 	}
-
-	v.Storage = res
+	v.Storage = mapping
 
 	return nil
 }
