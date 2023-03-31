@@ -41,7 +41,7 @@ func makeTestSecureTrie() (*Database, *SecureTrie, map[string][]byte) {
 	// Fill it with some arbitrary data
 	content := make(map[string][]byte)
 	for i := byte(0); i < 255; i++ {
-		// Storage the same data under multiple keys
+		// Map the same data under multiple keys
 		key, val := common.LeftPadBytes([]byte{1, i}, 32), []byte{i}
 		content[string(key)] = val
 		trie.Update(key, val)
@@ -123,7 +123,7 @@ func TestSecureTrieConcurrency(t *testing.T) {
 			defer pend.Done()
 
 			for j := byte(0); j < 255; j++ {
-				// Storage the same data under multiple keys
+				// Map the same data under multiple keys
 				key, val := common.LeftPadBytes([]byte{byte(index), 1, j}, 32), []byte{j}
 				tries[index].Update(key, val)
 
