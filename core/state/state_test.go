@@ -22,8 +22,6 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/davecgh/go-spew/spew"
-
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -266,8 +264,6 @@ func TestValidateKnownAccounts(t *testing.T) {
 		common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000aaa"): common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000bbb"),
 		common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000ccc"): common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000ddd"),
 	})
-
-	spew.Dump(knownAccounts)
 
 	stateobjaddr1 := common.HexToAddress("0xadd1add1add1add1add1add1add1add1add1add1")
 	stateobjaddr2 := common.HexToAddress("0xadd2add2add2add2add2add2add2add2add2add2")

@@ -34,11 +34,11 @@ type Value struct {
 }
 
 func (v Value) IsSingle() bool {
-	return !v.IsStorage() && v.Single != nil
+	return v.Single != nil && !v.IsStorage()
 }
 
 func (v Value) IsStorage() bool {
-	return v.Storage == nil
+	return v.Storage != nil
 }
 
 const EmptyValue = "{}"
