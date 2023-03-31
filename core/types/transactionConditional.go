@@ -64,7 +64,7 @@ func (v *Value) UnmarshalJSON(data []byte) error {
 
 	var m map[string]json.RawMessage
 
-	err := json.Unmarshal(data, m)
+	err := json.Unmarshal(data, m) //nolint: govet,staticcheck
 	if err != nil {
 		// single Hash value case
 		v.Single = new(common.Hash)
@@ -136,7 +136,7 @@ func (ka KnownAccounts) ValidateLength() error {
 	}
 
 	if length >= 1000 {
-		fmt.Errorf("number of slots/accounts in KnownAccounts %v exceeds the limit of 1000", length)
+		return fmt.Errorf("number of slots/accounts in KnownAccounts %v exceeds the limit of 1000", length)
 	}
 
 	return nil

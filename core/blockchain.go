@@ -1363,14 +1363,18 @@ func (bc *BlockChain) WriteBlockAndSetHead(block *types.Block, receipts []*types
 // the chain mutex to be held.
 func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool) (status WriteStatus, err error) {
 	var stateSyncLogs []*types.Log
+
 	if stateSyncLogs, err = bc.writeBlockWithState(block, receipts, logs, state); err != nil {
 		return NonStatTy, err
 	}
+
 	currentBlock := bc.CurrentBlock()
+
 	reorg, err := bc.forker.ReorgNeeded(currentBlock.Header(), block.Header())
 	if err != nil {
 		return NonStatTy, err
 	}
+
 	if reorg {
 		// Reorganise the chain if the parent is not the head block
 		if block.ParentHash() != currentBlock.Hash() {
@@ -1378,14 +1382,17 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 				return NonStatTy, err
 			}
 		}
+
 		status = CanonStatTy
 	} else {
 		status = SideStatTy
 	}
+
 	// Set new head.
 	if status == CanonStatTy {
 		bc.writeHeadBlock(block)
 	}
+
 	bc.futureBlocks.Remove(block.Hash())
 
 	if status == CanonStatTy {

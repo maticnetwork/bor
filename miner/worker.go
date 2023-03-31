@@ -1003,6 +1003,8 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 		from, _ := types.Sender(env.signer, tx)
 
 		// not prioritising conditional transaction, yet.
+
+		//nolint:nestif
 		if options := tx.GetOptions(); options != nil {
 			if options.BlockNumberMax.Cmp(big.NewInt(0)) != 0 {
 				if err := env.header.ValidateBlockNumberOptions4337(options.BlockNumberMin, options.BlockNumberMax); err != nil {

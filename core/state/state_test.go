@@ -321,5 +321,4 @@ func TestValidateKnownAccounts(t *testing.T) {
 	if err := s.state.ValidateKnownAccounts(knownAccounts); err == nil {
 		t.Fatalf("should have been an error")
 	}
-
 }
