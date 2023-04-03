@@ -636,6 +636,72 @@ func TestCommitInterruptExperimentBor(t *testing.T) {
 	testCommitInterruptExperimentBor(t, 100, 10)
 }
 
+func TestCommitInterruptExperimentBorContract(t *testing.T) {
+	t.Parallel()
+	// with 1 sec block time and 200 millisec tx delay we should get 5 txs per block
+	testCommitInterruptExperimentBorContract(t, 200, 5)
+
+	// with 1 sec block time and 100 millisec tx delay we should get 10 txs per block
+	testCommitInterruptExperimentBorContract(t, 100, 10)
+}
+
+func testCommitInterruptExperimentBorContract(t *testing.T, delay uint, txCount int) {
+	t.Helper()
+
+	var (
+		engine      consensus.Engine
+		chainConfig *params.ChainConfig
+		db          = rawdb.NewMemoryDatabase()
+		ctrl        *gomock.Controller
+	)
+
+	chainConfig = params.BorUnittestChainConfig
+
+	log.Root().SetHandler(log.LvlFilterHandler(4, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
+
+	engine, ctrl = getFakeBorFromConfig(t, chainConfig)
+	defer func() {
+		engine.Close()
+		ctrl.Finish()
+	}()
+
+	w, b, _ := NewTestWorker(t, chainConfig, engine, db, 0, 1, delay)
+	defer w.close()
+
+	// nonce 0 tx
+	tx, addr := b.newStorageCreateContractTx()
+	if err := b.TxPool().AddRemote(tx); err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(4 * time.Second)
+
+	wg := new(sync.WaitGroup)
+	wg.Add(1)
+
+	go func() {
+		wg.Done()
+		// nonce starts from 1 because we already have one tx
+		nonce := uint64(1)
+		for {
+			tx := b.newStorageContractCallTx(addr, nonce)
+			if err := b.TxPool().AddRemote(tx); err != nil {
+				t.Log(err)
+			}
+			nonce++
+			time.Sleep(20 * time.Millisecond)
+		}
+	}()
+
+	wg.Wait()
+
+	// Start mining!
+	w.start()
+	time.Sleep(5 * time.Second)
+	w.stop()
+
+}
+
 func testCommitInterruptExperimentBor(t *testing.T, delay uint, txCount int) {
 	t.Helper()
 
@@ -664,14 +730,15 @@ func testCommitInterruptExperimentBor(t *testing.T, delay uint, txCount int) {
 
 	go func() {
 		wg.Done()
-
+		nonce := uint64(0)
 		for {
-			tx := b.newRandomTx(false)
+
+			tx := b.newRandomTxWithNonce(false, nonce)
 			if err := b.TxPool().AddRemote(tx); err != nil {
 				t.Log(err)
 			}
-
-			time.Sleep(20 * time.Millisecond)
+			nonce++
+			time.Sleep(10 * time.Millisecond)
 		}
 	}()
 
