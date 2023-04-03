@@ -323,10 +323,9 @@ func (m *txSortedMap) flatten() types.Transactions {
 			cache = append(cache, tx)
 		}
 
-		m.m.RUnlock()
-
-		// exclude sorting from locks
 		sort.Sort(types.TxByNonce(cache))
+
+		m.m.RUnlock()
 
 		m.cacheMu.Lock()
 		m.cache = cache
