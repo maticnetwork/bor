@@ -17,6 +17,7 @@
 package vm
 
 import (
+	"context"
 	"hash"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -117,7 +118,7 @@ func NewEVMInterpreter(evm *EVM, cfg Config) *EVMInterpreter {
 // considered a revert-and-consume-all-gas operation except for
 // ErrExecutionReverted which means revert-and-keep-gas-left.
 // nolint: gocognit
-func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool, interruptCh *chan struct{}) (ret []byte, err error) {
+func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool, interruptCtx context.Context) (ret []byte, err error) {
 	// Increment the call depth which is restricted to 1024
 	in.evm.depth++
 	defer func() { in.evm.depth-- }()
@@ -183,10 +184,10 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool, i
 	// parent context.
 mainloop:
 	for {
-		if interruptCh != nil {
+		if interruptCtx != nil {
 			// case of interrupting by timeout
 			select {
-			case <-*interruptCh:
+			case <-interruptCtx.Done():
 				commitInterruptCounter.Inc(1)
 				break mainloop
 			default:

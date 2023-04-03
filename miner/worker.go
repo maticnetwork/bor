@@ -653,8 +653,8 @@ func (w *worker) mainLoop(ctx context.Context) {
 				txset := types.NewTransactionsByPriceAndNonce(w.current.signer, txs, cmath.FromBig(w.current.header.BaseFee))
 				tcount := w.current.tcount
 
-				interruptCh, stopFn := getInterruptTimer(ctx, w.current, w.chain.CurrentBlock())
-				w.commitTransactions(w.current, txset, nil, interruptCh)
+				interruptCtx, stopFn := getInterruptTimer(ctx, w.current, w.chain.CurrentBlock())
+				w.commitTransactions(w.current, txset, nil, interruptCtx)
 
 				// Only update the snapshot if any new transactions were added
 				// to the pending block
@@ -930,10 +930,10 @@ func (w *worker) updateSnapshot(env *environment) {
 	w.snapshotState = env.state.Copy()
 }
 
-func (w *worker) commitTransaction(env *environment, tx *types.Transaction, interruptCh chan struct{}) ([]*types.Log, error) {
+func (w *worker) commitTransaction(env *environment, tx *types.Transaction, interruptCtx context.Context) ([]*types.Log, error) {
 	snap := env.state.Snapshot()
 
-	receipt, err := core.ApplyTransaction(w.chainConfig, w.chain, &env.coinbase, env.gasPool, env.state, env.header, tx, &env.header.GasUsed, *w.chain.GetVMConfig(), &interruptCh)
+	receipt, err := core.ApplyTransaction(w.chainConfig, w.chain, &env.coinbase, env.gasPool, env.state, env.header, tx, &env.header.GasUsed, *w.chain.GetVMConfig(), interruptCtx)
 	if err != nil {
 		env.state.RevertToSnapshot(snap)
 		return nil, err
@@ -945,7 +945,7 @@ func (w *worker) commitTransaction(env *environment, tx *types.Transaction, inte
 }
 
 //nolint:gocognit
-func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByPriceAndNonce, interrupt *int32, interruptCh chan struct{}) bool {
+func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByPriceAndNonce, interrupt *int32, interruptCtx context.Context) bool {
 	gasLimit := env.header.GasLimit
 	if env.gasPool == nil {
 		env.gasPool = new(core.GasPool).AddGas(gasLimit)
@@ -968,7 +968,16 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 		})
 	}()
 
+mainloop:
 	for {
+		if interruptCtx != nil {
+			// case of interrupting by timeout
+			select {
+			case <-interruptCtx.Done():
+				break mainloop
+			default:
+			}
+		}
 
 		// In the following three cases, we will interrupt the execution of the transaction.
 		// (1) new head block event arrival, the interrupt signal is 1
@@ -1027,7 +1036,7 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 			start = time.Now()
 		})
 
-		logs, err := w.commitTransaction(env, tx, interruptCh)
+		logs, err := w.commitTransaction(env, tx, interruptCtx)
 
 		switch {
 		case errors.Is(err, core.ErrGasLimitReached):
@@ -1258,7 +1267,7 @@ func startProfiler(profile string, filepath string, number uint64) (func() error
 // be customized with the plugin in the future.
 //
 //nolint:gocognit
-func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *environment, interruptCh chan struct{}) {
+func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *environment, interruptCtx context.Context) {
 	ctx, span := tracing.StartSpan(ctx, "fillTransactions")
 	defer tracing.EndSpan(span)
 
@@ -1382,7 +1391,7 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		})
 
 		tracing.Exec(ctx, "", "worker.LocalCommitTransactions", func(ctx context.Context, span trace.Span) {
-			committed = w.commitTransactions(env, txs, interrupt, interruptCh)
+			committed = w.commitTransactions(env, txs, interrupt, interruptCtx)
 		})
 
 		if committed {
@@ -1405,7 +1414,7 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		})
 
 		tracing.Exec(ctx, "", "worker.RemoteCommitTransactions", func(ctx context.Context, span trace.Span) {
-			committed = w.commitTransactions(env, txs, interrupt, interruptCh)
+			committed = w.commitTransactions(env, txs, interrupt, interruptCtx)
 		})
 
 		if committed {
@@ -1430,10 +1439,10 @@ func (w *worker) generateWork(ctx context.Context, params *generateParams) (*typ
 	}
 	defer work.discard()
 
-	interruptCh, stopFn := getInterruptTimer(ctx, work, w.chain.CurrentBlock())
+	interruptCtx, stopFn := getInterruptTimer(ctx, work, w.chain.CurrentBlock())
 	defer stopFn()
 
-	w.fillTransactions(ctx, nil, work, interruptCh)
+	w.fillTransactions(ctx, nil, work, interruptCtx)
 
 	return w.engine.FinalizeAndAssemble(ctx, w.chain, work.header, work.state, work.txs, work.unclelist(), work.receipts)
 }
@@ -1471,7 +1480,7 @@ func (w *worker) commitWork(ctx context.Context, interrupt *int32, noempty bool,
 		return
 	}
 
-	var interruptCh chan struct{}
+	var interruptCtx context.Context
 
 	stopFn := func() {}
 	defer func() {
@@ -1479,7 +1488,7 @@ func (w *worker) commitWork(ctx context.Context, interrupt *int32, noempty bool,
 	}()
 
 	if !noempty {
-		interruptCh, stopFn = getInterruptTimer(ctx, work, w.chain.CurrentBlock())
+		interruptCtx, stopFn = getInterruptTimer(ctx, work, w.chain.CurrentBlock())
 	}
 
 	ctx, span := tracing.StartSpan(ctx, "commitWork")
@@ -1500,7 +1509,7 @@ func (w *worker) commitWork(ctx context.Context, interrupt *int32, noempty bool,
 	}
 
 	// Fill pending transactions from the txpool
-	w.fillTransactions(ctx, interrupt, work, interruptCh)
+	w.fillTransactions(ctx, interrupt, work, interruptCtx)
 
 	err = w.commit(ctx, work.copy(), w.fullTaskHook, true, start)
 	if err != nil {
@@ -1516,28 +1525,23 @@ func (w *worker) commitWork(ctx context.Context, interrupt *int32, noempty bool,
 	w.current = work
 }
 
-func getInterruptTimer(ctx context.Context, work *environment, current *types.Block) (chan struct{}, func()) {
+func getInterruptTimer(ctx context.Context, work *environment, current *types.Block) (context.Context, func()) {
 	delay := time.Until(time.Unix(int64(work.header.Time), 0))
 
-	timeoutTimer := time.NewTimer(delay)
-	stopFn := func() {
-		timeoutTimer.Stop()
-	}
+	interruptCtx, cancel := context.WithTimeout(context.Background(), delay)
 
 	blockNumber := current.NumberU64() + 1
-	interruptCh := make(chan struct{})
 
 	go func() {
 		select {
-		case <-timeoutTimer.C:
+		case <-interruptCtx.Done():
 			log.Info("Commit Interrupt. Pre-committing the current block", "block", blockNumber)
-
-			close(interruptCh)
+			cancel()
 		case <-ctx.Done(): // nothing to do
 		}
 	}()
 
-	return interruptCh, stopFn
+	return interruptCtx, cancel
 }
 
 // commit runs any post-transaction state modifications, assembles the final block
