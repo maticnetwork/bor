@@ -158,8 +158,16 @@ func (m *txSortedMap) Filter(filter func(*types.Transaction) bool) types.Transac
 func (m *txSortedMap) reheap(withRlock bool) {
 	index := make(nonceHeap, 0, len(m.items))
 
+	if withRlock {
+		m.m.RLock()
+	}
+
 	for nonce := range m.items {
 		index = append(index, nonce)
+	}
+
+	if withRlock {
+		m.m.RUnlock()
 	}
 
 	heap.Init(&index)
