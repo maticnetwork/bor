@@ -549,6 +549,7 @@ func (l *txList) Filter(costLimit *uint256.Int, gasLimit uint64) (types.Transact
 	l.subTotalCost(invalids)
 
 	l.txs.reheap(true)
+
 	return removed, invalids
 }
 
