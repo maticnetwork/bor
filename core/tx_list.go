@@ -172,9 +172,13 @@ func (m *txSortedMap) reheap(withRlock bool) {
 	heap.Init(&index)
 
 	if withRlock {
-		m.m.RLock()
-		m.index = &index
-		m.m.RUnlock()
+		m.m.Lock()
+	}
+
+	m.index = &index
+
+	if withRlock {
+		m.m.Unlock()
 	}
 
 	m.cacheMu.Lock()
