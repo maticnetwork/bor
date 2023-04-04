@@ -506,8 +506,12 @@ func (l *txList) Filter(costLimit *uint256.Int, gasLimit uint64) (types.Transact
 				lowest = nonce
 			}
 		}
+		l.txs.m.Lock()
 		invalids = l.txs.filter(func(tx *types.Transaction) bool { return tx.Nonce() > lowest })
+		l.txs.m.Unlock()
 	}
+	l.txs.m.RLock()
+	defer l.txs.m.RUnlock()
 	l.txs.reheap()
 	return removed, invalids
 }
