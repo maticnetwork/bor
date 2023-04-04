@@ -529,7 +529,7 @@ mainloop:
 			start = time.Now()
 		})
 
-		logs, err := w.commitTransaction(env, tx, nil)
+		logs, err := w.commitTransaction(env, tx, interruptCtx)
 
 		time.Sleep(time.Duration(delay) * time.Millisecond)
 
