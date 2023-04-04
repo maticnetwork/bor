@@ -319,7 +319,7 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 			shouldDelayFeeCal = false
 		}
 
-		if len(header.TxDependency) > 0 {
+		if len(header.TxDependency) != len(block.Transactions()) {
 			task := &ExecutionTask{
 				msg:               msg,
 				config:            p.config,

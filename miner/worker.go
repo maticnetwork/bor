@@ -1137,13 +1137,28 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 				tempDeps[0] = append(tempDeps[0], uint64(j))
 			}
 
+			delayFlag := true
+
 			for i := 1; i <= len(mvReadMapList)-1; i++ {
+				reads := mvReadMapList[i-1]
+
+				_, ok1 := reads[blockstm.NewSubpathKey(env.coinbase, state.BalancePath)]
+				_, ok2 := reads[blockstm.NewSubpathKey(common.HexToAddress(w.chainConfig.Bor.CalculateBurntContract(env.header.Number.Uint64())), state.BalancePath)]
+
+				if ok1 || ok2 {
+					delayFlag = false
+				}
+
 				for j := range deps[i] {
 					tempDeps[i] = append(tempDeps[i], uint64(j))
 				}
 			}
 
-			env.header.TxDependency = tempDeps
+			if delayFlag {
+				env.header.TxDependency = tempDeps
+			} else {
+				env.header.TxDependency = nil
+			}
 		} else {
 			env.header.TxDependency = nil
 		}
