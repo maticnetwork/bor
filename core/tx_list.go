@@ -149,19 +149,25 @@ func (m *txSortedMap) Filter(filter func(*types.Transaction) bool) types.Transac
 	removed := m.filter(filter)
 	// If transactions were removed, the heap and cache are ruined
 	if len(removed) > 0 {
-		m.reheap()
+		m.reheap(false)
 	}
 	return removed
 }
 
-func (m *txSortedMap) reheap() {
-	*m.index = make([]uint64, 0, len(m.items))
+func (m *txSortedMap) reheap(withRlock bool) {
+	index := make(nonceHeap, 0, len(m.items))
 
 	for nonce := range m.items {
-		*m.index = append(*m.index, nonce)
+		index = append(index, nonce)
 	}
 
-	heap.Init(m.index)
+	heap.Init(&index)
+
+	if withRlock {
+		m.m.RLock()
+		m.index = &index
+		m.m.RUnlock()
+	}
 
 	m.cacheMu.Lock()
 	m.cache = nil
@@ -510,9 +516,12 @@ func (l *txList) Filter(costLimit *uint256.Int, gasLimit uint64) (types.Transact
 				lowest = nonce
 			}
 		}
+
+		l.txs.m.Lock()
 		invalids = l.txs.filter(func(tx *types.Transaction) bool { return tx.Nonce() > lowest })
+		l.txs.m.Unlock()
 	}
-	l.txs.reheap()
+	l.txs.reheap(true)
 	return removed, invalids
 }
 
