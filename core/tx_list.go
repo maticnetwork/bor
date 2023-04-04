@@ -30,6 +30,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	cmath "github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 // nonceHeap is a heap.Interface implementation over 64bit unsigned integers for
@@ -160,6 +161,7 @@ func (m *txSortedMap) reheap(withRlock bool) {
 
 	if withRlock {
 		m.m.RLock()
+		log.Info("[DEBUG] Acquired lock over txpool map while performing reheap")
 	}
 
 	for nonce := range m.items {
