@@ -461,7 +461,7 @@ func (w *worker) commitWorkWithDelay(ctx context.Context, interrupt *int32, noem
 		return
 	}
 
-	var interruptCtx context.Context
+	var interruptCtx = context.Background()
 
 	stopFn := func() {}
 	defer func() {

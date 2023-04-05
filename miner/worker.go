@@ -1481,7 +1481,7 @@ func (w *worker) commitWork(ctx context.Context, interrupt *int32, noempty bool,
 		return
 	}
 
-	var interruptCtx context.Context
+	var interruptCtx = context.Background()
 
 	stopFn := func() {}
 	defer func() {

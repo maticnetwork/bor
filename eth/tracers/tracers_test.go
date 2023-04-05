@@ -114,7 +114,7 @@ func BenchmarkTransactionTrace(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		snap := statedb.Snapshot()
 		st := core.NewStateTransition(evm, msg, new(core.GasPool).AddGas(tx.Gas()))
-		_, err = st.TransitionDb(context.TODO())
+		_, err = st.TransitionDb(context.Background())
 		if err != nil {
 			b.Fatal(err)
 		}
