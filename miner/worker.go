@@ -1481,6 +1481,7 @@ func (w *worker) commitWork(ctx context.Context, interrupt *int32, noempty bool,
 		return
 	}
 
+	// nolint : contextcheck
 	var interruptCtx = context.Background()
 
 	stopFn := func() {}

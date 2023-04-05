@@ -643,6 +643,7 @@ func (api *API) IntermediateRoots(ctx context.Context, hash common.Hash, config 
 				break
 			}
 		} else {
+			// nolint : contextcheck
 			if _, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(msg.Gas()), context.Background()); err != nil {
 				log.Warn("Tracing intermediate roots did not complete", "txindex", i, "txhash", tx.Hash(), "err", err)
 				// We intentionally don't return the error here: if we do, then the RPC server will not
@@ -779,6 +780,7 @@ func (api *API) traceBlock(ctx context.Context, block *types.Block, config *Trac
 				break
 			}
 		} else {
+			// nolint : contextcheck
 			if _, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(msg.Gas()), context.Background()); err != nil {
 				failed = err
 				break
@@ -926,6 +928,7 @@ func (api *API) standardTraceBlockToFile(ctx context.Context, block *types.Block
 				}
 			}
 		} else {
+			// nolint : contextcheck
 			_, err = core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(msg.Gas()), context.Background())
 			if writer != nil {
 				writer.Flush()
@@ -1138,6 +1141,7 @@ func (api *API) traceTx(ctx context.Context, message core.Message, txctx *Contex
 			return nil, fmt.Errorf("tracing failed: %w", err)
 		}
 	} else {
+		// nolint : contextcheck
 		result, err = core.ApplyMessage(vmenv, message, new(core.GasPool).AddGas(message.Gas()), context.Background())
 		if err != nil {
 			return nil, fmt.Errorf("tracing failed: %w", err)
