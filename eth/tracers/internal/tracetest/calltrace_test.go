@@ -17,6 +17,7 @@
 package tracetest
 
 import (
+	"context"
 	"encoding/json"
 	"io/ioutil"
 	"math/big"
@@ -168,7 +169,7 @@ func testCallTracer(tracerName string, dirPath string, t *testing.T) {
 					Origin:   origin,
 					GasPrice: tx.GasPrice(),
 				}
-				context = vm.BlockContext{
+				blockContext = vm.BlockContext{
 					CanTransfer: core.CanTransfer,
 					Transfer:    core.Transfer,
 					Coinbase:    test.Context.Miner,
@@ -183,13 +184,13 @@ func testCallTracer(tracerName string, dirPath string, t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to create call tracer: %v", err)
 			}
-			evm := vm.NewEVM(context, txContext, statedb, test.Genesis.Config, vm.Config{Debug: true, Tracer: tracer})
+			evm := vm.NewEVM(blockContext, txContext, statedb, test.Genesis.Config, vm.Config{Debug: true, Tracer: tracer})
 			msg, err := tx.AsMessage(signer, nil)
 			if err != nil {
 				t.Fatalf("failed to prepare transaction for tracing: %v", err)
 			}
 			st := core.NewStateTransition(evm, msg, new(core.GasPool).AddGas(tx.Gas()))
-			if _, err = st.TransitionDb(nil); err != nil {
+			if _, err = st.TransitionDb(context.TODO()); err != nil {
 				t.Fatalf("failed to execute transaction: %v", err)
 			}
 			// Retrieve the trace result and compare against the etalon
@@ -279,7 +280,7 @@ func benchTracer(tracerName string, test *callTracerTest, b *testing.B) {
 		Origin:   origin,
 		GasPrice: tx.GasPrice(),
 	}
-	context := vm.BlockContext{
+	blockContext := vm.BlockContext{
 		CanTransfer: core.CanTransfer,
 		Transfer:    core.Transfer,
 		Coinbase:    test.Context.Miner,
@@ -297,11 +298,12 @@ func benchTracer(tracerName string, test *callTracerTest, b *testing.B) {
 		if err != nil {
 			b.Fatalf("failed to create call tracer: %v", err)
 		}
-		evm := vm.NewEVM(context, txContext, statedb, test.Genesis.Config, vm.Config{Debug: true, Tracer: tracer})
+
+		evm := vm.NewEVM(blockContext, txContext, statedb, test.Genesis.Config, vm.Config{Debug: true, Tracer: tracer})
 		snap := statedb.Snapshot()
 		st := core.NewStateTransition(evm, msg, new(core.GasPool).AddGas(tx.Gas()))
 
-		if _, err = st.TransitionDb(nil); err != nil {
+		if _, err = st.TransitionDb(context.TODO()); err != nil {
 			b.Fatalf("failed to execute transaction: %v", err)
 		}
 
@@ -336,7 +338,7 @@ func TestZeroValueToNotExitCall(t *testing.T) {
 		Origin:   origin,
 		GasPrice: big.NewInt(1),
 	}
-	context := vm.BlockContext{
+	blockContext := vm.BlockContext{
 		CanTransfer: core.CanTransfer,
 		Transfer:    core.Transfer,
 		Coinbase:    common.Address{},
@@ -366,14 +368,15 @@ func TestZeroValueToNotExitCall(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create call tracer: %v", err)
 	}
-	evm := vm.NewEVM(context, txContext, statedb, params.MainnetChainConfig, vm.Config{Debug: true, Tracer: tracer})
+
+	evm := vm.NewEVM(blockContext, txContext, statedb, params.MainnetChainConfig, vm.Config{Debug: true, Tracer: tracer})
 	msg, err := tx.AsMessage(signer, nil)
 	if err != nil {
 		t.Fatalf("failed to prepare transaction for tracing: %v", err)
 	}
 	st := core.NewStateTransition(evm, msg, new(core.GasPool).AddGas(tx.Gas()))
 
-	if _, err = st.TransitionDb(nil); err != nil {
+	if _, err = st.TransitionDb(context.TODO()); err != nil {
 		t.Fatalf("failed to execute transaction: %v", err)
 	}
 

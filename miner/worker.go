@@ -974,6 +974,7 @@ mainloop:
 			// case of interrupting by timeout
 			select {
 			case <-interruptCtx.Done():
+				log.Warn("Interrupt")
 				break mainloop
 			default:
 			}

@@ -105,6 +105,10 @@ func applyTransaction(msg types.Message, config *params.ChainConfig, bc ChainCon
 		return nil, err
 	}
 
+	if result.Err == vm.ErrInterrupt {
+		return nil, result.Err
+	}
+
 	// Update the state with pending changes.
 	var root []byte
 	if config.IsByzantium(blockNumber) {

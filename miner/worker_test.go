@@ -90,7 +90,7 @@ func testGenerateBlockAndImport(t *testing.T, isClique bool, isBor bool) {
 
 	chainConfig.LondonBlock = big.NewInt(0)
 
-	w, b, _ := NewTestWorker(t, chainConfig, engine, db, 0, 0, 0)
+	w, b, _ := NewTestWorker(t, chainConfig, engine, db, 0, 0, 0, 0)
 	defer w.close()
 
 	// This test chain imports the mined blocks.
@@ -196,7 +196,7 @@ func TestEmptyWorkClique(t *testing.T) {
 func testEmptyWork(t *testing.T, chainConfig *params.ChainConfig, engine consensus.Engine) {
 	defer engine.Close()
 
-	w, _, _ := NewTestWorker(t, chainConfig, engine, rawdb.NewMemoryDatabase(), 0, 0, 0)
+	w, _, _ := NewTestWorker(t, chainConfig, engine, rawdb.NewMemoryDatabase(), 0, 0, 0, 0)
 	defer w.close()
 
 	var (
@@ -250,7 +250,7 @@ func TestStreamUncleBlock(t *testing.T) {
 	ethash := ethash.NewFaker()
 	defer ethash.Close()
 
-	w, b, _ := NewTestWorker(t, ethashChainConfig, ethash, rawdb.NewMemoryDatabase(), 1, 0, 0)
+	w, b, _ := NewTestWorker(t, ethashChainConfig, ethash, rawdb.NewMemoryDatabase(), 1, 0, 0, 0)
 	defer w.close()
 
 	var taskCh = make(chan struct{})
@@ -312,7 +312,7 @@ func TestRegenerateMiningBlockClique(t *testing.T) {
 func testRegenerateMiningBlock(t *testing.T, chainConfig *params.ChainConfig, engine consensus.Engine) {
 	defer engine.Close()
 
-	w, b, _ := NewTestWorker(t, chainConfig, engine, rawdb.NewMemoryDatabase(), 0, 0, 0)
+	w, b, _ := NewTestWorker(t, chainConfig, engine, rawdb.NewMemoryDatabase(), 0, 0, 0, 0)
 	defer w.close()
 
 	var taskCh = make(chan struct{}, 3)
@@ -383,7 +383,7 @@ func TestAdjustIntervalClique(t *testing.T) {
 func testAdjustInterval(t *testing.T, chainConfig *params.ChainConfig, engine consensus.Engine) {
 	defer engine.Close()
 
-	w, _, _ := NewTestWorker(t, chainConfig, engine, rawdb.NewMemoryDatabase(), 0, 0, 0)
+	w, _, _ := NewTestWorker(t, chainConfig, engine, rawdb.NewMemoryDatabase(), 0, 0, 0, 0)
 	defer w.close()
 
 	w.skipSealHook = func(task *task) bool {
@@ -491,7 +491,7 @@ func TestGetSealingWorkPostMerge(t *testing.T) {
 func testGetSealingWork(t *testing.T, chainConfig *params.ChainConfig, engine consensus.Engine, postMerge bool) {
 	defer engine.Close()
 
-	w, b, _ := NewTestWorker(t, chainConfig, engine, rawdb.NewMemoryDatabase(), 0, 0, 0)
+	w, b, _ := NewTestWorker(t, chainConfig, engine, rawdb.NewMemoryDatabase(), 0, 0, 0, 0)
 	defer w.close()
 
 	w.setExtra([]byte{0x01, 0x02})
@@ -630,24 +630,25 @@ func testGetSealingWork(t *testing.T, chainConfig *params.ChainConfig, engine co
 func TestCommitInterruptExperimentBor(t *testing.T) {
 	t.Parallel()
 	// with 1 sec block time and 200 millisec tx delay we should get 5 txs per block
-	testCommitInterruptExperimentBor(t, 200, 5)
+	testCommitInterruptExperimentBor(t, 200, 5, 0)
 
 	// with 1 sec block time and 100 millisec tx delay we should get 10 txs per block
-	testCommitInterruptExperimentBor(t, 100, 10)
+	testCommitInterruptExperimentBor(t, 100, 10, 0)
 }
 
 func TestCommitInterruptExperimentBorContract(t *testing.T) {
-	// Skipping till full implementation
-	t.Skip()
 	t.Parallel()
-	// with 1 sec block time and 200 millisec tx delay we should get 5 txs per block
-	testCommitInterruptExperimentBorContract(t, 220, 4)
-
-	// with 1 sec block time and 100 millisec tx delay we should get 10 txs per block
-	testCommitInterruptExperimentBorContract(t, 100, 10)
+	// pre-calculated number of OPCODES = 123. 7*123=861 < 1000, 1 tx is possible but 2 tx per block will not be possible.
+	testCommitInterruptExperimentBorContract(t, 0, 1, 7)
+	time.Sleep(2 * time.Second)
+	// pre-calculated number of OPCODES = 123. 2*123=246 < 1000, 4 tx is possible but 5 tx per block will not be possible. But 3 happen due to other overheads.
+	testCommitInterruptExperimentBorContract(t, 0, 3, 2)
+	time.Sleep(2 * time.Second)
+	// pre-calculated number of OPCODES = 123. 3*123=369 < 1000, 2 tx is possible but 3 tx per block will not be possible.
+	testCommitInterruptExperimentBorContract(t, 0, 2, 3)
 }
 
-func testCommitInterruptExperimentBorContract(t *testing.T, delay uint, txCount int) {
+func testCommitInterruptExperimentBorContract(t *testing.T, delay uint, txCount int, opcodeDelay uint) {
 	t.Helper()
 
 	var (
@@ -664,10 +665,11 @@ func testCommitInterruptExperimentBorContract(t *testing.T, delay uint, txCount 
 	engine, ctrl = getFakeBorFromConfig(t, chainConfig)
 	defer func() {
 		engine.Close()
+		db.Close()
 		ctrl.Finish()
 	}()
 
-	w, b, _ := NewTestWorker(t, chainConfig, engine, db, 0, 1, delay)
+	w, b, _ := NewTestWorker(t, chainConfig, engine, db, 0, 1, delay, opcodeDelay)
 	defer w.close()
 
 	// nonce 0 tx
@@ -685,12 +687,14 @@ func testCommitInterruptExperimentBorContract(t *testing.T, delay uint, txCount 
 		wg.Done()
 		// nonce starts from 1 because we already have one tx
 		nonce := uint64(1)
+
 		for {
 			tx := b.newStorageContractCallTx(addr, nonce)
 			if err := b.TxPool().AddRemote(tx); err != nil {
 				t.Log(err)
 			}
 			nonce++
+
 			time.Sleep(10 * time.Millisecond)
 		}
 	}()
@@ -702,9 +706,10 @@ func testCommitInterruptExperimentBorContract(t *testing.T, delay uint, txCount 
 	time.Sleep(5 * time.Second)
 	w.stop()
 
+	assert.Equal(t, txCount, w.chain.CurrentBlock().Transactions().Len())
 }
 
-func testCommitInterruptExperimentBor(t *testing.T, delay uint, txCount int) {
+func testCommitInterruptExperimentBor(t *testing.T, delay uint, txCount int, opcodeDelay uint) {
 	t.Helper()
 
 	var (
@@ -724,7 +729,7 @@ func testCommitInterruptExperimentBor(t *testing.T, delay uint, txCount int) {
 		ctrl.Finish()
 	}()
 
-	w, b, _ := NewTestWorker(t, chainConfig, engine, db, 0, 1, delay)
+	w, b, _ := NewTestWorker(t, chainConfig, engine, db, 0, 1, delay, opcodeDelay)
 	defer w.close()
 
 	wg := new(sync.WaitGroup)
@@ -732,14 +737,16 @@ func testCommitInterruptExperimentBor(t *testing.T, delay uint, txCount int) {
 
 	go func() {
 		wg.Done()
-		nonce := uint64(0)
-		for {
 
+		nonce := uint64(0)
+
+		for {
 			tx := b.newRandomTxWithNonce(false, nonce)
 			if err := b.TxPool().AddRemote(tx); err != nil {
 				t.Log(err)
 			}
 			nonce++
+
 			time.Sleep(10 * time.Millisecond)
 		}
 	}()
@@ -785,7 +792,7 @@ func BenchmarkBorMining(b *testing.B) {
 
 	chainConfig.LondonBlock = big.NewInt(0)
 
-	w, back, _ := NewTestWorker(b, chainConfig, engine, db, 0, 0, 0)
+	w, back, _ := NewTestWorker(b, chainConfig, engine, db, 0, 0, 0, 0)
 	defer w.close()
 
 	// This test chain imports the mined blocks.
