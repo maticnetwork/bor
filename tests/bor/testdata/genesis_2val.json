@@ -16,6 +16,7 @@
       "bor": {
         "jaipurBlock": 2,
         "delhiBlock" :3,
+        "indoreBlock": 4,
         "period": {
           "0": 1
         },
@@ -24,6 +25,10 @@
         },
         "sprint": {
           "0": 8
+        },
+        "stateSyncConfirmationMultiplyer": {
+          "0": 1,
+          "4": 8
         },
         "backupMultiplier": {
           "0": 1

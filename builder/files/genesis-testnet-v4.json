@@ -16,6 +16,7 @@
     "bor": {
       "jaipurBlock": 22770000,
       "delhiBlock": 29638656,
+      "indoreBlock": 35400000,
       "period": {
         "0": 2,
         "25275000": 5,
@@ -28,6 +29,10 @@
       "sprint": {
         "0": 64,
         "29638656": 16
+      },
+      "stateSyncConfirmationMultiplyer": {
+        "0":        1,
+        "35400000": 8
       },
       "backupMultiplier": {
         "0": 2,

@@ -31,6 +31,7 @@ var mumbaiTestnet = &Chain{
 			Bor: &params.BorConfig{
 				JaipurBlock: big.NewInt(22770000),
 				DelhiBlock:  big.NewInt(29638656),
+				IndoreBlock: big.NewInt(35400000),
 				Period: map[string]uint64{
 					"0":        2,
 					"25275000": 5,
@@ -43,6 +44,10 @@ var mumbaiTestnet = &Chain{
 				Sprint: map[string]uint64{
 					"0":        64,
 					"29638656": 16,
+				},
+				StateSyncConfirmationMultiplyer: map[string]uint64{
+					"0":        1,
+					"35400000": 8,
 				},
 				BackupMultiplier: map[string]uint64{
 					"0":        2,

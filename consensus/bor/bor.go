@@ -1154,7 +1154,9 @@ func (c *Bor) CommitStates(
 		return nil, err
 	}
 
-	to := time.Unix(int64(chain.Chain.GetHeaderByNumber(number-c.config.CalculateSprint(number)).Time), 0)
+	stateSyncMultiplyer := c.config.FetchStateSyncMultiplyer(number)
+
+	to := time.Unix(int64(chain.Chain.GetHeaderByNumber(number-(stateSyncMultiplyer*c.config.CalculateSprint(number))).Time), 0)
 	lastStateID := _lastStateID.Uint64()
 
 	log.Info(
