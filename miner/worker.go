@@ -1537,8 +1537,10 @@ func getInterruptTimer(ctx context.Context, work *environment, current *types.Bl
 	go func() {
 		select {
 		case <-interruptCtx.Done():
-			log.Info("Commit Interrupt. Pre-committing the current block", "block", blockNumber)
-			cancel()
+			if interruptCtx.Err() != context.Canceled {
+				log.Info("Commit Interrupt. Pre-committing the current block", "block", blockNumber)
+				cancel()
+			}
 		case <-ctx.Done(): // nothing to do
 		}
 	}()
