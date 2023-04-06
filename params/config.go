@@ -351,7 +351,7 @@ var (
 		Bor: &BorConfig{
 			JaipurBlock: big.NewInt(22770000),
 			DelhiBlock:  big.NewInt(29638656),
-			IndoreBlock: big.NewInt(35400000),
+			IndoreBlock: big.NewInt(35400000), // TODO - update the block number (35400000) once finalised. Update the JSON genesis files as well
 			Period: map[string]uint64{
 				"0":        2,
 				"25275000": 5,
@@ -367,7 +367,7 @@ var (
 			},
 			StateSyncConfirmationMultiplyer: map[string]uint64{
 				"0":        1,
-				"35400000": 8,
+				"35400000": 8, // TODO - update the block number (35400000) once finalised. Update the JSON genesis files as well
 			},
 			BackupMultiplier: map[string]uint64{
 				"0":        2,
