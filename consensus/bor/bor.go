@@ -754,6 +754,12 @@ func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, 
 		err           error
 	)
 
+	if c.chainConfig.Bor.IsIndore(header.Number) {
+		fmt.Println("PSP - in Finalize - post Indore. current block", header.Number, "Indore block", c.chainConfig.Bor.IndoreBlock)
+	} else {
+		fmt.Println("PSP - in Finalize - pre Indore", header.Number, "Indore block", c.chainConfig.Bor.IndoreBlock)
+	}
+
 	headerNumber := header.Number.Uint64()
 
 	if IsSprintStart(headerNumber, c.config.CalculateSprint(headerNumber)) {
@@ -1154,7 +1160,15 @@ func (c *Bor) CommitStates(
 		return nil, err
 	}
 
+	if c.chainConfig.Bor.IsIndore(header.Number) {
+		fmt.Println("PSP - post Indore. current block", number, "Indore block", c.chainConfig.Bor.IndoreBlock)
+	} else {
+		fmt.Println("PSP - pre Indore", number, "Indore block", c.chainConfig.Bor.IndoreBlock)
+	}
+
 	stateSyncMultiplyer := c.config.FetchStateSyncMultiplyer(number)
+
+	fmt.Println("PSP - stateSyncMultiplyer", stateSyncMultiplyer)
 
 	to := time.Unix(int64(chain.Chain.GetHeaderByNumber(number-(stateSyncMultiplyer*c.config.CalculateSprint(number))).Time), 0)
 	lastStateID := _lastStateID.Uint64()
