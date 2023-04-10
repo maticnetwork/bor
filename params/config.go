@@ -656,11 +656,14 @@ func (c *BorConfig) calculateBorConfigHelper(field map[string]uint64, number uin
 func helperToRetriveKeyValue(field map[string]uint64, number uint64) uint64 {
 	fmt.Println("PSP - field", field, "len(field)", len(field))
 	keys := make([]string, 0, len(field))
+	fmt.Println("PSP - keys", keys, "len(keys)", len(keys))
 	for k := range field {
 		keys = append(keys, k)
+		fmt.Println("PSP - keys", keys, "len(keys)", len(keys))
 	}
 
 	sort.Strings(keys)
+	fmt.Println("PSP - after sorting - keys", keys, "len(keys)", len(keys))
 
 	for i := 0; i < len(keys)-1; i++ {
 		valUint, _ := strconv.ParseUint(keys[i], 10, 64)
