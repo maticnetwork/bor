@@ -609,6 +609,7 @@ func (c *BorConfig) CalculateSprint(number uint64) uint64 {
 }
 
 func (c *BorConfig) FetchStateSyncMultiplyer(number uint64) uint64 {
+	fmt.Println("PSP - c.StateSyncConfirmationMultiplyer", c.StateSyncConfirmationMultiplyer)
 	return c.fetchStateSyncMultiplyerHelper(c.StateSyncConfirmationMultiplyer, number)
 }
 
@@ -653,6 +654,7 @@ func (c *BorConfig) calculateBorConfigHelper(field map[string]uint64, number uin
 }
 
 func helperToRetriveKeyValue(field map[string]uint64, number uint64) uint64 {
+	fmt.Println("PSP - field", field, "len(field)", len(field))
 	keys := make([]string, 0, len(field))
 	for k := range field {
 		keys = append(keys, k)
