@@ -73,7 +73,6 @@ func (st *insertStats) report(chain []*types.Block, index int, dirty common.Stor
 		}
 		if setHead {
 			log.Info("Imported new chain segment", context...)
-			log.Info("PSP - Imported new chain segment", context...)
 		} else {
 			log.Info("Imported new potential chain segment", context...)
 		}
