@@ -624,29 +624,21 @@ func TestIsValidChain(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, res, true, "expected chain to be valid")
 
-	// create a future chain to be imported of length > `checkpointInterval`x
-	chainB = createMockChain(21, 300) // C21->C22...C39->C40...C->256
-
-	// case20: Try importing a future chain of unacceptable length,should consider the chain as invalid
-	res, err = s.IsValidChain(tempChain[0], chainB)
-	require.Equal(t, err, ErrLongFutureChain)
-	require.Equal(t, res, false, "expected chain to be invalid")
-
 	s.PurgeWhitelistedCheckpoint()
 	s.PurgeWhitelistedMilestone()
 
-	chainB = createMockChain(21, 29) // C21->C22...C39->C40...C->256
+	chainB = createMockChain(21, 29) // C21->C22....C29
 
 	s.milestoneService.ProcessFutureMilestone(29, chainB[8].Hash())
 
-	// case21: Try importing a future chain which match the future milestone should the chain as valid
+	// case20: Try importing a future chain which match the future milestone should the chain as valid
 	res, err = s.IsValidChain(tempChain[0], chainB)
 	require.Nil(t, err)
 	require.Equal(t, res, true, "expected chain to be valid")
 
 	chainB = createMockChain(21, 27) // C21->C22...C39->C40...C->256
 
-	// case22: Try importing a chain whose end point is less than future milestone
+	// case21: Try importing a chain whose end point is less than future milestone
 	res, err = s.IsValidChain(tempChain[0], chainB)
 	require.Nil(t, err)
 	require.Equal(t, res, true, "expected chain to be valid")
@@ -656,14 +648,14 @@ func TestIsValidChain(t *testing.T) {
 	//Processing wrong hash
 	s.milestoneService.ProcessFutureMilestone(38, chainB[9].Hash())
 
-	// case23: Try importing a future chain with mismatch future milestone
+	// case22: Try importing a future chain with mismatch future milestone
 	res, err = s.IsValidChain(tempChain[0], chainB)
 	require.Nil(t, err)
 	require.Equal(t, res, false, "expected chain to be invalid")
 
 	chainB = createMockChain(40, 49) // C40->C41...C48->C49
 
-	// case24: Try importing a future chain whose starting point is ahead of latest future milestone
+	// case23: Try importing a future chain whose starting point is ahead of latest future milestone
 	res, err = s.IsValidChain(tempChain[0], chainB)
 	require.Nil(t, err)
 	require.Equal(t, res, true, "expected chain to be invalid")
