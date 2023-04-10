@@ -1805,6 +1805,13 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 		stats.usedGas += usedGas
 
 		dirty, _ := bc.stateCache.TrieDB().Size()
+
+		if bc.chainConfig.Bor.IsIndore(chain[0].Header().Number) {
+			fmt.Println("PSP - in insertChain - post Indore. current block", chain[0].Header().Number, "Indore block", bc.chainConfig.Bor.IndoreBlock)
+		} else {
+			fmt.Println("PSP - in insertChain - pre Indore", chain[0].Header().Number, "Indore block", bc.chainConfig.Bor.IndoreBlock)
+		}
+
 		stats.report(chain, it.index, dirty, setHead)
 
 		if !setHead {
