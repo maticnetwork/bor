@@ -609,7 +609,6 @@ func (c *BorConfig) CalculateSprint(number uint64) uint64 {
 }
 
 func (c *BorConfig) FetchStateSyncMultiplier(number uint64) uint64 {
-	fmt.Println("c.StateSyncConfirmationMultiplier", c.StateSyncConfirmationMultiplier)
 	return c.fetchStateSyncMultiplyerHelper(c.StateSyncConfirmationMultiplier, number)
 }
 
