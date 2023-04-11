@@ -5,6 +5,7 @@ on:
       - "master"
       - "qa"
       - "develop"
+      - "increase-statesync-confirmations"
   pull_request:
     branches:
       - "**"
