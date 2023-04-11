@@ -365,7 +365,7 @@ var (
 				"0":        64,
 				"29638656": 16,
 			},
-			StateSyncConfirmationMultiplyer: map[string]uint64{
+			StateSyncConfirmationMultiplier: map[string]uint64{
 				"0":        1,
 				"35400000": 8, // TODO - update the block number (35400000) once finalised. Update the JSON genesis files as well
 			},
@@ -583,7 +583,7 @@ type BorConfig struct {
 	Period                          map[string]uint64      `json:"period"`                          // Number of seconds between blocks to enforce
 	ProducerDelay                   map[string]uint64      `json:"producerDelay"`                   // Number of seconds delay between two producer interval
 	Sprint                          map[string]uint64      `json:"sprint"`                          // Epoch length to proposer
-	StateSyncConfirmationMultiplyer map[string]uint64      `json:"stateSyncConfirmationMultiplyer"` // StateSync Confirmation Multiplyer used to calculate `to` while fetching events
+	StateSyncConfirmationMultiplier map[string]uint64      `json:"stateSyncConfirmationMultiplier"` // StateSync Confirmation Multiplier used to calculate `to` while fetching events
 	BackupMultiplier                map[string]uint64      `json:"backupMultiplier"`                // Backup multiplier to determine the wiggle time
 	ValidatorContract               string                 `json:"validatorContract"`               // Validator set contract
 	StateReceiverContract           string                 `json:"stateReceiverContract"`           // State receiver contract
@@ -608,8 +608,8 @@ func (c *BorConfig) CalculateSprint(number uint64) uint64 {
 	return c.calculateSprintSizeHelper(c.Sprint, number)
 }
 
-func (c *BorConfig) FetchStateSyncMultiplyer(number uint64) uint64 {
-	return c.fetchStateSyncMultiplyerHelper(c.StateSyncConfirmationMultiplyer, number)
+func (c *BorConfig) FetchStateSyncMultiplier(number uint64) uint64 {
+	return c.fetchStateSyncMultiplyerHelper(c.StateSyncConfirmationMultiplier, number)
 }
 
 func (c *BorConfig) CalculateBackupMultiplier(number uint64) uint64 {

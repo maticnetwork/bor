@@ -45,7 +45,7 @@ var mumbaiTestnet = &Chain{
 					"0":        64,
 					"29638656": 16,
 				},
-				StateSyncConfirmationMultiplyer: map[string]uint64{
+				StateSyncConfirmationMultiplier: map[string]uint64{
 					"0":        1,
 					"35400000": 8, // TODO - update the block number (35400000) once finalised. Update the JSON genesis files as well
 				},
