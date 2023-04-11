@@ -1156,6 +1156,8 @@ func (c *Bor) CommitStates(
 
 	stateSyncMultiplier := c.config.FetchStateSyncMultiplier(number)
 
+	fmt.Println("stateSyncMultiplier", stateSyncMultiplier)
+
 	to := time.Unix(int64(chain.Chain.GetHeaderByNumber(number-(stateSyncMultiplier*c.config.CalculateSprint(number))).Time), 0)
 	lastStateID := _lastStateID.Uint64()
 
