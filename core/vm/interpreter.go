@@ -29,8 +29,8 @@ import (
 )
 
 var (
-	commitInterruptCounter = metrics.NewRegisteredCounter("worker/commitInterrupt", nil)
-	ErrInterrupt           = errors.New("EVM execution interrupted")
+	opcodeCommitInterruptCounter = metrics.NewRegisteredCounter("worker/opcodeCommitInterrupt", nil)
+	ErrInterrupt                 = errors.New("EVM execution interrupted")
 )
 
 const (
@@ -121,6 +121,7 @@ func NewEVMInterpreter(evm *EVM, cfg Config) *EVMInterpreter {
 	}
 }
 
+// PreRun is a wrapper around Run that allows for a delay to be injected before each opcode when induced by tests else it calls the lagace Run() method
 func (in *EVMInterpreter) PreRun(contract *Contract, input []byte, readOnly bool, interruptCtx context.Context) (ret []byte, err error) {
 	var opcodeDelay interface{}
 
@@ -214,8 +215,8 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool, i
 			// case of interrupting by timeout
 			select {
 			case <-interruptCtx.Done():
-				commitInterruptCounter.Inc(1)
-				log.Warn("OPCODE-Level interrupt")
+				opcodeCommitInterruptCounter.Inc(1)
+				log.Warn("OPCODE Level interrupt")
 
 				return nil, ErrInterrupt
 			default:
@@ -364,8 +365,8 @@ func (in *EVMInterpreter) RunWithDelay(contract *Contract, input []byte, readOnl
 			// case of interrupting by timeout
 			select {
 			case <-interruptCtx.Done():
-				commitInterruptCounter.Inc(1)
-				log.Warn("OPCODE-Level interrupt")
+				opcodeCommitInterruptCounter.Inc(1)
+				log.Warn("OPCODE Level interrupt")
 
 				return nil, ErrInterrupt
 			default:

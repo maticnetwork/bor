@@ -627,6 +627,7 @@ func testGetSealingWork(t *testing.T, chainConfig *params.ChainConfig, engine co
 	}
 }
 
+// TestCommitInterruptExperimentBor tests the commit interrupt experiment for bor consensus by inducing an artificial delay at transaction level.
 func TestCommitInterruptExperimentBor(t *testing.T) {
 	t.Parallel()
 	// with 1 sec block time and 200 millisec tx delay we should get 5 txs per block
@@ -636,6 +637,7 @@ func TestCommitInterruptExperimentBor(t *testing.T) {
 	testCommitInterruptExperimentBor(t, 100, 10, 0)
 }
 
+// TestCommitInterruptExperimentBorContract tests the commit interrupt experiment for bor consensus by inducing an artificial delay at OPCODE level.
 func TestCommitInterruptExperimentBorContract(t *testing.T) {
 	t.Parallel()
 	// pre-calculated number of OPCODES = 123. 7*123=861 < 1000, 1 tx is possible but 2 tx per block will not be possible.
@@ -648,6 +650,7 @@ func TestCommitInterruptExperimentBorContract(t *testing.T) {
 	testCommitInterruptExperimentBorContract(t, 0, 2, 3)
 }
 
+// testCommitInterruptExperimentBorContract is a helper function for testing the commit interrupt experiment for bor consensus.
 func testCommitInterruptExperimentBorContract(t *testing.T, delay uint, txCount int, opcodeDelay uint) {
 	t.Helper()
 
@@ -709,6 +712,7 @@ func testCommitInterruptExperimentBorContract(t *testing.T, delay uint, txCount 
 	assert.Equal(t, txCount, w.chain.CurrentBlock().Transactions().Len())
 }
 
+// testCommitInterruptExperimentBor is a helper function for testing the commit interrupt experiment for bor consensus.
 func testCommitInterruptExperimentBor(t *testing.T, delay uint, txCount int, opcodeDelay uint) {
 	t.Helper()
 

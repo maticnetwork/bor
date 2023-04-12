@@ -171,6 +171,7 @@ func (b *testWorkerBackend) newRandomUncle() (*types.Block, error) {
 	return blocks[0], err
 }
 
+// newRandomTx creates a new transaction.
 func (b *testWorkerBackend) newRandomTx(creation bool) *types.Transaction {
 	var tx *types.Transaction
 
@@ -185,6 +186,7 @@ func (b *testWorkerBackend) newRandomTx(creation bool) *types.Transaction {
 	return tx
 }
 
+// newRandomTxWithNonce creates a new transaction with the given nonce.
 func (b *testWorkerBackend) newRandomTxWithNonce(creation bool, nonce uint64) *types.Transaction {
 	var tx *types.Transaction
 
@@ -199,6 +201,7 @@ func (b *testWorkerBackend) newRandomTxWithNonce(creation bool, nonce uint64) *t
 	return tx
 }
 
+// newRandomTxWithGas creates a new transactionto deploy a storage smart contract.
 func (b *testWorkerBackend) newStorageCreateContractTx() (*types.Transaction, common.Address) {
 	var tx *types.Transaction
 
@@ -210,6 +213,7 @@ func (b *testWorkerBackend) newStorageCreateContractTx() (*types.Transaction, co
 	return tx, contractAddr
 }
 
+// newStorageContractCallTx creates a new transaction to call a storage smart contract.
 func (b *testWorkerBackend) newStorageContractCallTx(to common.Address, nonce uint64) *types.Transaction {
 	var tx *types.Transaction
 
@@ -220,6 +224,7 @@ func (b *testWorkerBackend) newStorageContractCallTx(to common.Address, nonce ui
 	return tx
 }
 
+// NewTestWorker creates a new test worker with the given parameters.
 func NewTestWorker(t TensingObject, chainConfig *params.ChainConfig, engine consensus.Engine, db ethdb.Database, blocks int, noempty uint32, delay uint, opcodeDelay uint) (*worker, *testWorkerBackend, func()) {
 	backend := newTestWorkerBackend(t, chainConfig, engine, db, blocks)
 	backend.txPool.AddLocals(pendingTxs)
@@ -242,7 +247,8 @@ func NewTestWorker(t TensingObject, chainConfig *params.ChainConfig, engine cons
 	return w, backend, w.close
 }
 
-//nolint:staticcheck
+// newWorkerWithDelay is newWorker() with extra params to induce artficial delays for tests such as commit-interrupt.
+// nolint:staticcheck
 func newWorkerWithDelay(config *Config, chainConfig *params.ChainConfig, engine consensus.Engine, eth Backend, mux *event.TypeMux, isLocalBlock func(header *types.Header) bool, init bool, delay uint, opcodeDelay uint) *worker {
 	worker := &worker{
 		config:             config,
@@ -300,6 +306,7 @@ func newWorkerWithDelay(config *Config, chainConfig *params.ChainConfig, engine 
 	return worker
 }
 
+// mainLoopWithDelay is mainLoop() with extra params to induce artficial delays for tests such as commit-interrupt.
 // nolint:gocognit
 func (w *worker) mainLoopWithDelay(ctx context.Context, delay uint, opcodeDelay uint) {
 	defer w.wg.Done()
@@ -431,6 +438,7 @@ func (w *worker) mainLoopWithDelay(ctx context.Context, delay uint, opcodeDelay 
 	}
 }
 
+// commitWorkWithDelay is commitWork() with extra params to induce artficial delays for tests such as commit-interrupt.
 func (w *worker) commitWorkWithDelay(ctx context.Context, interrupt *int32, noempty bool, timestamp int64, delay uint, opcodeDelay uint) {
 	start := time.Now()
 
@@ -511,6 +519,7 @@ func (w *worker) commitWorkWithDelay(ctx context.Context, interrupt *int32, noem
 	w.current = work
 }
 
+// fillTransactionsWithDelay is fillTransactions() with extra params to induce artficial delays for tests such as commit-interrupt.
 // nolint:gocognit
 func (w *worker) fillTransactionsWithDelay(ctx context.Context, interrupt *int32, env *environment, interruptCtx context.Context) {
 	ctx, span := tracing.StartSpan(ctx, "fillTransactions")
@@ -676,6 +685,7 @@ func (w *worker) fillTransactionsWithDelay(ctx context.Context, interrupt *int32
 	)
 }
 
+// commitTransactionsWithDelay is commitTransactions() with extra params to induce artficial delays for tests such as commit-interrupt.
 // nolint:gocognit, unparam
 func (w *worker) commitTransactionsWithDelay(env *environment, txs *types.TransactionsByPriceAndNonce, interrupt *int32, interruptCtx context.Context) bool {
 	gasLimit := env.header.GasLimit

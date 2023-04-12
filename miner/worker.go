@@ -95,6 +95,7 @@ const (
 var (
 	sealedBlocksCounter      = metrics.NewRegisteredCounter("worker/sealedBlocks", nil)
 	sealedEmptyBlocksCounter = metrics.NewRegisteredCounter("worker/sealedEmptyBlocks", nil)
+	txCommitInterruptCounter = metrics.NewRegisteredCounter("worker/txCommitInterrupt", nil)
 )
 
 // environment is the worker's current environment and holds all
@@ -974,7 +975,8 @@ mainloop:
 			// case of interrupting by timeout
 			select {
 			case <-interruptCtx.Done():
-				log.Warn("Interrupt")
+				txCommitInterruptCounter.Inc(1)
+				log.Warn("Tx Level Interrupt")
 				break mainloop
 			default:
 			}
