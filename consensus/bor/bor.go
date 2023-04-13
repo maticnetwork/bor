@@ -1189,7 +1189,15 @@ func (c *Bor) CommitStates(
 		return nil, err
 	}
 
-	to := time.Unix(int64(chain.Chain.GetHeaderByNumber(number-c.config.CalculateSprint(number)).Time), 0)
+	var to time.Time
+
+	if c.config.IsIndore(header.Number) {
+		stateSyncDelay := c.config.FetchStateSyncDelay()
+		to = time.Unix(int64(header.Time-stateSyncDelay), 0)
+	} else {
+		to = time.Unix(int64(chain.Chain.GetHeaderByNumber(number-c.config.CalculateSprint(number)).Time), 0)
+	}
+
 	lastStateID := _lastStateID.Uint64()
 
 	log.Info(

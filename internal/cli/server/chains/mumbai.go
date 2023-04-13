@@ -29,8 +29,10 @@ var mumbaiTestnet = &Chain{
 			BerlinBlock:         big.NewInt(13996000),
 			LondonBlock:         big.NewInt(22640000),
 			Bor: &params.BorConfig{
-				JaipurBlock: big.NewInt(22770000),
-				DelhiBlock:  big.NewInt(29638656),
+				JaipurBlock:                big.NewInt(22770000),
+				DelhiBlock:                 big.NewInt(29638656),
+				IndoreBlock:                big.NewInt(35400000), // TODO - update block number
+				StateSyncConfirmationDelay: 128,
 				Period: map[string]uint64{
 					"0":        2,
 					"25275000": 5,

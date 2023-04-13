@@ -16,6 +16,8 @@
       "bor": {
         "jaipurBlock": 2,
         "delhiBlock" :3,
+        "indoreBlock": 64,
+        "stateSyncConfirmationDelay": 128,
         "period": {
           "0": 1
         },
