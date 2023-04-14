@@ -2279,6 +2279,8 @@ func (bc *BlockChain) reorg(oldBlock, newBlock *types.Block) error {
 	// Insert the new chain(except the head block(reverse order)),
 	// taking care of the proper incremental order.
 	for i := len(newChain) - 1; i >= 1; i-- {
+		log.Info("PSP - Inserting reorg block", "number", newChain[i], "hash", newChain[i].Hash())
+
 		// Insert the block in the canonical way, re-writing history
 		bc.writeHeadBlock(newChain[i])
 
