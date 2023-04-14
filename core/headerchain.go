@@ -508,6 +508,7 @@ func (hc *HeaderChain) GetHeaderByNumber(number uint64) *types.Header {
 	if hash == (common.Hash{}) {
 		return nil
 	}
+	fmt.Println("PSP - in GetHeaderByNumber - hash", hash, "number", number)
 	return hc.GetHeader(hash, number)
 }
 
