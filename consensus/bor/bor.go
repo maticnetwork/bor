@@ -1192,7 +1192,7 @@ func (c *Bor) CommitStates(
 	to := time.Unix(int64(chain.Chain.GetHeaderByNumber(number-c.config.CalculateSprint(number)).Time), 0)
 	lastStateID := _lastStateID.Uint64()
 
-	fmt.Println("PSP - to", to)
+	fmt.Println("PSP - current block", number, "to", to)
 
 	log.Info(
 		"Fetching state updates from Heimdall",
