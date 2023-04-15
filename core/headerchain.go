@@ -137,6 +137,8 @@ type headerWriteResult struct {
 // can be classified into two cases: (a) extend the local chain (b) switch the
 // head to the given header.
 func (hc *HeaderChain) Reorg(headers []*types.Header) error {
+	// PSP
+
 	// Short circuit if nothing to reorg.
 	if len(headers) == 0 {
 		return nil
@@ -508,7 +510,6 @@ func (hc *HeaderChain) GetHeaderByNumber(number uint64) *types.Header {
 	if hash == (common.Hash{}) {
 		return nil
 	}
-	fmt.Println("PSP - in GetHeaderByNumber - hash", hash, "number", number)
 	return hc.GetHeader(hash, number)
 }
 
