@@ -157,17 +157,35 @@ func (h *Header) EmptyReceipts() bool {
 
 func (h *Header) ValidateBlockNumberOptions4337(minBlockNumber *big.Int, maxBlockNumber *big.Int) error {
 	currentBlockNumber := h.Number
-	if currentBlockNumber.Cmp(maxBlockNumber) == 1 || currentBlockNumber.Cmp(minBlockNumber) == -1 {
-		return fmt.Errorf("current block number %v does not fall in the block number range of: %v to: %v", currentBlockNumber, minBlockNumber, maxBlockNumber)
+
+	if minBlockNumber != nil {
+		if currentBlockNumber.Cmp(minBlockNumber) == -1 {
+			return fmt.Errorf("current block number %v is less than minimum block number: %v", currentBlockNumber, minBlockNumber)
+		}
+	}
+
+	if maxBlockNumber != nil {
+		if currentBlockNumber.Cmp(maxBlockNumber) == 1 {
+			return fmt.Errorf("current block number %v is greater than maximum block number: %v", currentBlockNumber, maxBlockNumber)
+		}
 	}
 
 	return nil
 }
 
-func (h *Header) ValidateTimestampOptions4337(minTimestamp uint64, maxTimestamp uint64) error {
+func (h *Header) ValidateTimestampOptions4337(minTimestamp *uint64, maxTimestamp *uint64) error {
 	currentBlockTime := h.Time
-	if currentBlockTime > maxTimestamp || currentBlockTime < minTimestamp {
-		return fmt.Errorf("current block time %v does not fall in the block time range of: %v to: %v", currentBlockTime, minTimestamp, maxTimestamp)
+
+	if minTimestamp != nil {
+		if currentBlockTime < *minTimestamp {
+			return fmt.Errorf("current block time %v is less than minimum timestamp: %v", currentBlockTime, minTimestamp)
+		}
+	}
+
+	if maxTimestamp != nil {
+		if currentBlockTime > *maxTimestamp {
+			return fmt.Errorf("current block time %v is greater than maximum timestamp: %v", currentBlockTime, maxTimestamp)
+		}
 	}
 
 	return nil

@@ -132,8 +132,8 @@ type OptionsAA4337 struct {
 	KnownAccounts  KnownAccounts `json:"knownAccounts"`
 	BlockNumberMin *big.Int      `json:"blockNumberMin"`
 	BlockNumberMax *big.Int      `json:"blockNumberMax"`
-	TimestampMin   uint64        `json:"timestampMin"`
-	TimestampMax   uint64        `json:"timestampMax"`
+	TimestampMin   *uint64       `json:"timestampMin"`
+	TimestampMax   *uint64       `json:"timestampMax"`
 }
 
 var ErrEmptyKnownAccounts = errors.New("knownAccounts cannot be nil")

@@ -1940,17 +1940,13 @@ func (s *PublicTransactionPoolAPI) SendRawTransactionConditional(ctx context.Con
 	currentState, _, _ := s.b.StateAndHeaderByNumber(ctx, rpc.BlockNumber(currentHeader.Number.Int64()))
 
 	// check block number range
-	if options.BlockNumberMax.Cmp(big.NewInt(0)) != 0 {
-		if err := currentHeader.ValidateBlockNumberOptions4337(options.BlockNumberMin, options.BlockNumberMax); err != nil {
-			return common.Hash{}, &rpc.OptionsValidateError{Message: "out of block range. err: " + err.Error()}
-		}
+	if err := currentHeader.ValidateBlockNumberOptions4337(options.BlockNumberMin, options.BlockNumberMax); err != nil {
+		return common.Hash{}, &rpc.OptionsValidateError{Message: "out of block range. err: " + err.Error()}
 	}
 
 	// check timestamp range
-	if options.TimestampMax != 0 {
-		if err := currentHeader.ValidateTimestampOptions4337(options.TimestampMin, options.TimestampMax); err != nil {
-			return common.Hash{}, &rpc.OptionsValidateError{Message: "out of time range. err: " + err.Error()}
-		}
+	if err := currentHeader.ValidateTimestampOptions4337(options.TimestampMin, options.TimestampMax); err != nil {
+		return common.Hash{}, &rpc.OptionsValidateError{Message: "out of time range. err: " + err.Error()}
 	}
 
 	// check knownAccounts length (number of slots/accounts) should be less than 1000

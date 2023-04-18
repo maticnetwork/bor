@@ -426,67 +426,71 @@ func TestValidateBlockNumberOptions4337(t *testing.T) {
 func TestValidateTimestampOptions4337(t *testing.T) {
 	t.Parallel()
 
+	u64Ptr := func(n uint64) *uint64 {
+		return &n
+	}
+
 	testsPass := []struct {
 		number       string
 		header       Header
-		minTimestamp uint64
-		maxTimestamp uint64
+		minTimestamp *uint64
+		maxTimestamp *uint64
 	}{
 		{
 			"1",
 			Header{Time: 1600000000},
-			1500000000,
-			1700000000,
+			u64Ptr(1500000000),
+			u64Ptr(1700000000),
 		},
 		{
 			"2",
 			Header{Time: 1600000000},
-			1600000000,
-			1600000000,
+			u64Ptr(1600000000),
+			u64Ptr(1600000000),
 		},
 		{
 			"3",
 			Header{Time: 1600000000},
-			1600000000,
-			1700000000,
+			u64Ptr(1600000000),
+			u64Ptr(1700000000),
 		},
 		{
 			"4",
 			Header{Time: 1600000000},
-			1500000000,
-			1600000000,
+			u64Ptr(1500000000),
+			u64Ptr(1600000000),
 		},
 	}
 
 	testsFail := []struct {
 		number       string
 		header       Header
-		minTimestamp uint64
-		maxTimestamp uint64
+		minTimestamp *uint64
+		maxTimestamp *uint64
 	}{
 		{
 			"5",
 			Header{Time: 1600000000},
-			1500000000,
-			1500000000,
+			u64Ptr(1500000000),
+			u64Ptr(1500000000),
 		},
 		{
 			"6",
 			Header{Time: 1600000000},
-			1400000000,
-			1500000000,
+			u64Ptr(1400000000),
+			u64Ptr(1500000000),
 		},
 		{
 			"7",
 			Header{Time: 1600000000},
-			1700000000,
-			1500000000,
+			u64Ptr(1700000000),
+			u64Ptr(1500000000),
 		},
 		{
 			"8",
 			Header{Time: 1600000000},
-			1700000000,
-			1800000000,
+			u64Ptr(1700000000),
+			u64Ptr(1800000000),
 		},
 	}
 

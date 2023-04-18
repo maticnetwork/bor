@@ -1006,22 +1006,18 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 
 		//nolint:nestif
 		if options := tx.GetOptions(); options != nil {
-			if options.BlockNumberMax.Cmp(big.NewInt(0)) != 0 {
-				if err := env.header.ValidateBlockNumberOptions4337(options.BlockNumberMin, options.BlockNumberMax); err != nil {
-					log.Trace("Dropping conditional transaction from", from, "with hash", tx.Hash(), "reason", err)
-					txs.Pop()
+			if err := env.header.ValidateBlockNumberOptions4337(options.BlockNumberMin, options.BlockNumberMax); err != nil {
+				log.Trace("Dropping conditional transaction from", from, "with hash", tx.Hash(), "reason", err)
+				txs.Pop()
 
-					continue
-				}
+				continue
 			}
 
-			if options.TimestampMax != 0 {
-				if err := env.header.ValidateTimestampOptions4337(options.TimestampMin, options.TimestampMax); err != nil {
-					log.Trace("Dropping conditional transaction from", from, "with hash", tx.Hash(), "reason", err)
-					txs.Pop()
+			if err := env.header.ValidateTimestampOptions4337(options.TimestampMin, options.TimestampMax); err != nil {
+				log.Trace("Dropping conditional transaction from", from, "with hash", tx.Hash(), "reason", err)
+				txs.Pop()
 
-					continue
-				}
+				continue
 			}
 
 			if err := env.state.ValidateKnownAccounts(options.KnownAccounts); err != nil {
