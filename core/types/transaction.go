@@ -54,6 +54,9 @@ type Transaction struct {
 	inner TxData    // Consensus contents of a transaction
 	time  time.Time // Time first seen locally (spam avoidance)
 
+	// knownAccounts (EIP-4337)
+	optionsAA4337 *OptionsAA4337
+
 	// caches
 	hash atomic.Pointer[common.Hash]
 	size atomic.Pointer[common.StorageSize]
@@ -90,6 +93,14 @@ type TxData interface {
 
 	rawSignatureValues() (v, r, s *big.Int)
 	setSignatureValues(chainID, v, r, s *big.Int)
+}
+
+func (tx *Transaction) PutOptions(options *OptionsAA4337) {
+	tx.optionsAA4337 = options
+}
+
+func (tx *Transaction) GetOptions() *OptionsAA4337 {
+	return tx.optionsAA4337
 }
 
 // EncodeRLP implements rlp.Encoder

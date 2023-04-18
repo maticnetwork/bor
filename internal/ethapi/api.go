@@ -21,7 +21,6 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"reflect"
 	"runtime"
 	"strings"
 	"time"
@@ -1931,34 +1930,37 @@ func (s *PublicTransactionPoolAPI) SendRawTransaction(ctx context.Context, input
 
 // SendRawTransactionConditional will add the signed transaction to the transaction pool.
 // The sender/bundler is responsible for signing the transaction
-func (s *PublicTransactionPoolAPI) SendRawTransactionConditional(ctx context.Context, input hexutil.Bytes, knownAccounts map[string]map[common.Address]interface{}) (common.Hash, error) {
+func (s *PublicTransactionPoolAPI) SendRawTransactionConditional(ctx context.Context, input hexutil.Bytes, options types.OptionsAA4337) (common.Hash, error) {
 	tx := new(types.Transaction)
 	if err := tx.UnmarshalBinary(input); err != nil {
 		return common.Hash{}, err
 	}
 
-	// check knownAccounts
-	currentBlock := s.b.CurrentBlock()
-	currentState, _, _ := s.b.StateAndHeaderByNumber(ctx, rpc.BlockNumber(currentBlock.Number().Int64()))
+	currentHeader := s.b.CurrentHeader()
+	currentState, _, _ := s.b.StateAndHeaderByNumber(ctx, rpc.BlockNumber(currentHeader.Number.Int64()))
 
-	for k, v := range knownAccounts["knownAccounts"] {
-		// check if the value is hex string or an object
-		if object, ok := v.(string); ok {
-			actualRootHash := currentState.StorageTrie(k).Hash()
-			if common.HexToHash(object) != actualRootHash {
-				return common.Hash{}, fmt.Errorf("invalid root hash for: %v root hash: %v actual root hash: %v", k, common.HexToHash(object), actualRootHash)
-			}
-		} else if object, ok := v.(map[string]interface{}); ok {
-			for slot, value := range object {
-				actualValue := currentState.GetState(k, common.HexToHash(slot))
-				if common.HexToHash(value.(string)) != actualValue {
-					return common.Hash{}, fmt.Errorf("invalid slot value at address: %v slot: %v value: %v actual value: %v", k, slot, value, actualValue)
-				}
-			}
-		} else {
-			return common.Hash{}, fmt.Errorf("invalid type in knownAccounts %v", reflect.TypeOf(v))
-		}
+	// check block number range
+	if err := currentHeader.ValidateBlockNumberOptions4337(options.BlockNumberMin, options.BlockNumberMax); err != nil {
+		return common.Hash{}, &rpc.OptionsValidateError{Message: "out of block range. err: " + err.Error()}
 	}
+
+	// check timestamp range
+	if err := currentHeader.ValidateTimestampOptions4337(options.TimestampMin, options.TimestampMax); err != nil {
+		return common.Hash{}, &rpc.OptionsValidateError{Message: "out of time range. err: " + err.Error()}
+	}
+
+	// check knownAccounts length (number of slots/accounts) should be less than 1000
+	if err := options.KnownAccounts.ValidateLength(); err != nil {
+		return common.Hash{}, &rpc.KnownAccountsLimitExceededError{Message: "limit exceeded. err: " + err.Error()}
+	}
+
+	// check knownAccounts
+	if err := currentState.ValidateKnownAccounts(options.KnownAccounts); err != nil {
+		return common.Hash{}, &rpc.OptionsValidateError{Message: "storage error. err: " + err.Error()}
+	}
+
+	// put options data in Tx, to use it later while block building
+	tx.PutOptions(&options)
 
 	return SubmitTransaction(ctx, s.b, tx)
 }

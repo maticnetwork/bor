@@ -22,6 +22,7 @@ import (
 	"sync/atomic"
 
 	mapset "github.com/deckarep/golang-set"
+
 	"github.com/ethereum/go-ethereum/log"
 )
 
@@ -105,11 +106,16 @@ func (s *Server) serveSingleRequest(ctx context.Context, codec ServerCodec) {
 	reqs, batch, err := codec.readBatch()
 	if err != nil {
 		if err != io.EOF {
-			codec.writeJSON(ctx, errorMessage(&invalidMessageError{"parse error"}))
+			innerErr := codec.writeJSON(ctx, errorMessage(&invalidMessageError{"parse error"})) //nolint:errcheck
+			if innerErr != nil {
+				log.Warn("got error while returning a response error", "originalErr", err, "returnErr", innerErr)
+			}
 		}
 		return
 	}
 	if batch {
+		//fixme: it should take context with timeout and cancellation
+		//nolint: contextcheck
 		h.handleBatch(reqs)
 	} else {
 		h.handleMsg(reqs[0])
