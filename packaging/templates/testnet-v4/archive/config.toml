@@ -1,15 +1,25 @@
 chain = "mumbai"
 # identity = "node_name"
-# log-level = "INFO"
+# verbosity = 3
+# vmdebug = false
 datadir = "/var/lib/bor/data"
 # ancient = ""
 # keystore = ""
+# "rpc.batchlimit" = 100
+# "rpc.returndatalimit" = 100000
 syncmode = "full"
 gcmode = "archive"
 # snapshot = true
 # ethstats = ""
+# devfakeauthor = false
 
 # ["eth.requiredblocks"]
+
+# [log]
+    # vmodule = ""
+    # json = false
+    # backtrace = ""
+    # debug = true
 
 [p2p]
     maxpeers = 50
@@ -18,6 +28,9 @@ gcmode = "archive"
     # bind = "0.0.0.0"
     # nodiscover = false
     # nat = "any"
+    # netrestrict = ""
+    # nodekey = ""
+    # nodekeyhex = ""
     # [p2p.discovery]
         # v5disc = false
         # bootnodes = []
@@ -51,12 +64,15 @@ gcmode = "archive"
     # mine = false
     # etherbase = ""
     # extradata = ""
+    # recommit = "2m5s"
 
 [jsonrpc]
     ipcpath = "/var/lib/bor/bor.ipc"
     # ipcdisable = false
     # gascap = 50000000
+    # evmtimeout = "5s"
     # txfeecap = 5.0
+    # allow-unprotected-txs = false
     [jsonrpc.http]
         enabled = true
         port = 8545
@@ -65,6 +81,8 @@ gcmode = "archive"
         vhosts = ["*"]
         corsdomain = ["*"]
         # prefix = ""
+        # ep-size = 40
+        # ep-requesttimeout = "0s"
     [jsonrpc.ws]
         enabled = true
         port = 8546
@@ -72,6 +90,8 @@ gcmode = "archive"
         # host = "localhost"
         # api = ["web3", "net"]
         origins = ["*"]
+        # ep-size = 40
+        # ep-requesttimeout = "0s"
     # [jsonrpc.graphql]
         # enabled = false
         # port = 0
@@ -79,14 +99,21 @@ gcmode = "archive"
         # host = ""
         # vhosts = ["*"]
         # corsdomain = ["*"]
+    # [jsonrpc.auth]
+        # jwtsecret = ""
+        # addr = "localhost"
+        # port = 8551
+        # vhosts = ["localhost"]
     # [jsonrpc.timeouts]
-        # read = "30s"
+        # read = "10s"
         # write = "30s"
         # idle = "2m0s"
 
 # [gpo]
     # blocks = 20
     # percentile = 60
+    # maxheaderhistory = 1024
+    # maxblockhistory = 1024
     # maxprice = "5000000000000"
     # ignoreprice = "2"
 
@@ -119,6 +146,7 @@ gcmode = "archive"
     # preimages = false
     # txlookuplimit = 2350000
     # timeout = "1h0m0s"
+    # fdlimit = 0
 
 # [accounts]
     # unlock = []
@@ -133,3 +161,11 @@ gcmode = "archive"
 # [developer]
     # dev = false
     # period = 0
+    # gaslimit = 11500000
+
+# [pprof]
+#   pprof = false
+#   port = 6060
+#   addr = "127.0.0.1"
+#   memprofilerate = 524288
+#   blockprofilerate = 0
