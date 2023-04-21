@@ -26,6 +26,8 @@ import (
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
+
+	lru "github.com/hashicorp/golang-lru"
 )
 
 var (
@@ -34,8 +36,18 @@ var (
 )
 
 const (
+	// These are keys for the interruptCtx
 	InterruptCtxDelayKey       = "delay"
 	InterruptCtxOpcodeDelayKey = "opcodeDelay"
+
+	// InterruptedTxCacheSize is size of lru cache for interrupted txs
+	InterruptedTxCacheSize = 90000
+
+	// InterruptedTxCacheKey gets you the pointer to lru cache storing the interrupted txs
+	InterruptedTxCacheKey = "interruptedTxCache"
+
+	// InterruptedTxContext_currenttxKey gets you the hash of the current tx being executed
+	InterruptedTxContext_currenttxKey = "currenttx"
 )
 
 // Config are the configuration options for the Interpreter
@@ -215,10 +227,20 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool, i
 			// case of interrupting by timeout
 			select {
 			case <-interruptCtx.Done():
-				opcodeCommitInterruptCounter.Inc(1)
-				log.Warn("OPCODE Level interrupt")
+				txHash := interruptCtx.Value(InterruptedTxContext_currenttxKey).(common.Hash)
+				interruptedTxCache := interruptCtx.Value(InterruptedTxCacheKey).(*lru.Cache)
 
-				return nil, ErrInterrupt
+				// if the tx is already in the cache, it means that it has been interrupted before and we will not interrupt it again
+				found, _ := interruptedTxCache.ContainsOrAdd(txHash, true)
+				if found {
+					interruptedTxCache.Remove(txHash)
+				} else {
+					// if the tx is not in the cache, it means that it has not been interrupted before and we will interrupt it
+					opcodeCommitInterruptCounter.Inc(1)
+					log.Warn("OPCODE Level interrupt")
+
+					return nil, ErrInterrupt
+				}
 			default:
 			}
 		}
@@ -365,10 +387,20 @@ func (in *EVMInterpreter) RunWithDelay(contract *Contract, input []byte, readOnl
 			// case of interrupting by timeout
 			select {
 			case <-interruptCtx.Done():
-				opcodeCommitInterruptCounter.Inc(1)
-				log.Warn("OPCODE Level interrupt")
+				txHash := interruptCtx.Value(InterruptedTxContext_currenttxKey).(common.Hash)
+				interruptedTxCache := interruptCtx.Value(InterruptedTxCacheKey).(*lru.Cache)
 
-				return nil, ErrInterrupt
+				// if the tx is already in the cache, it means that it has been interrupted before and we will not interrupt it again
+				found, _ := interruptedTxCache.ContainsOrAdd(txHash, true)
+				if found {
+					interruptedTxCache.Remove(txHash)
+				} else {
+					// if the tx is not in the cache, it means that it has not been interrupted before and we will interrupt it
+					opcodeCommitInterruptCounter.Inc(1)
+					log.Warn("OPCODE Level interrupt")
+
+					return nil, ErrInterrupt
+				}
 			default:
 			}
 		}

@@ -31,6 +31,7 @@ import (
 	"time"
 
 	mapset "github.com/deckarep/golang-set"
+	lru "github.com/hashicorp/golang-lru"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -44,6 +45,7 @@ import (
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
@@ -275,6 +277,7 @@ type worker struct {
 
 	profileCount        *int32 // Global count for profiling
 	interruptCommitFlag bool   // Interrupt commit ( Default true )
+	interruptedTxCache  *lru.Cache
 }
 
 //nolint:staticcheck
@@ -311,6 +314,12 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 	// Subscribe events for blockchain
 	worker.chainHeadSub = eth.BlockChain().SubscribeChainHeadEvent(worker.chainHeadCh)
 	worker.chainSideSub = eth.BlockChain().SubscribeChainSideEvent(worker.chainSideCh)
+
+	worker.interruptedTxCache, _ = lru.New(vm.InterruptedTxCacheSize)
+
+	if !worker.interruptCommitFlag {
+		worker.noempty = 0
+	}
 
 	// Sanitize recommit interval if the user-specified one is too short.
 	recommit := worker.config.Recommit
@@ -668,6 +677,8 @@ func (w *worker) mainLoop(ctx context.Context) {
 
 				if w.interruptCommitFlag {
 					interruptCtx, stopFn = getInterruptTimer(ctx, w.current, w.chain.CurrentBlock())
+					// nolint : staticcheck
+					interruptCtx = context.WithValue(interruptCtx, vm.InterruptedTxCacheKey, w.interruptedTxCache)
 				}
 
 				w.commitTransactions(w.current, txset, nil, interruptCtx)
@@ -949,6 +960,8 @@ func (w *worker) updateSnapshot(env *environment) {
 func (w *worker) commitTransaction(env *environment, tx *types.Transaction, interruptCtx context.Context) ([]*types.Log, error) {
 	snap := env.state.Snapshot()
 
+	// nolint : staticcheck
+	interruptCtx = context.WithValue(interruptCtx, vm.InterruptedTxContext_currenttxKey, tx.Hash())
 	receipt, err := core.ApplyTransaction(w.chainConfig, w.chain, &env.coinbase, env.gasPool, env.state, env.header, tx, &env.header.GasUsed, *w.chain.GetVMConfig(), interruptCtx)
 	if err != nil {
 		env.state.RevertToSnapshot(snap)
@@ -1467,6 +1480,8 @@ func (w *worker) generateWork(ctx context.Context, params *generateParams) (*typ
 
 	if w.interruptCommitFlag {
 		interruptCtx, stopFn = getInterruptTimer(ctx, work, w.chain.CurrentBlock())
+		// nolint : staticcheck
+		interruptCtx = context.WithValue(interruptCtx, vm.InterruptedTxCacheKey, w.interruptedTxCache)
 	}
 
 	w.fillTransactions(ctx, nil, work, interruptCtx)
@@ -1517,6 +1532,8 @@ func (w *worker) commitWork(ctx context.Context, interrupt *int32, noempty bool,
 
 	if !noempty && w.interruptCommitFlag {
 		interruptCtx, stopFn = getInterruptTimer(ctx, work, w.chain.CurrentBlock())
+		// nolint : staticcheck
+		interruptCtx = context.WithValue(interruptCtx, vm.InterruptedTxCacheKey, w.interruptedTxCache)
 	}
 
 	ctx, span := tracing.StartSpan(ctx, "commitWork")

@@ -31,6 +31,8 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+
+	lru "github.com/hashicorp/golang-lru"
 )
 
 const (
@@ -283,6 +285,12 @@ func newWorkerWithDelay(config *Config, chainConfig *params.ChainConfig, engine 
 	worker.chainHeadSub = eth.BlockChain().SubscribeChainHeadEvent(worker.chainHeadCh)
 	worker.chainSideSub = eth.BlockChain().SubscribeChainSideEvent(worker.chainSideCh)
 
+	worker.interruptedTxCache, _ = lru.New(vm.InterruptedTxCacheSize)
+
+	if !worker.interruptCommitFlag {
+		worker.noempty = 0
+	}
+
 	// Sanitize recommit interval if the user-specified one is too short.
 	recommit := worker.config.Recommit
 	if recommit < minRecommitInterval {
@@ -414,6 +422,8 @@ func (w *worker) mainLoopWithDelay(ctx context.Context, delay uint, opcodeDelay 
 
 				if w.interruptCommitFlag {
 					interruptCtx, stopFn = getInterruptTimer(ctx, w.current, w.chain.CurrentBlock())
+					// nolint : staticcheck
+					interruptCtx = context.WithValue(interruptCtx, vm.InterruptedTxCacheKey, w.interruptedTxCache)
 				}
 
 				w.commitTransactionsWithDelay(w.current, txset, nil, interruptCtx)
@@ -490,6 +500,8 @@ func (w *worker) commitWorkWithDelay(ctx context.Context, interrupt *int32, noem
 
 	if !noempty && w.interruptCommitFlag {
 		interruptCtx, stopFn = getInterruptTimer(ctx, work, w.chain.CurrentBlock())
+		// nolint : staticcheck
+		interruptCtx = context.WithValue(interruptCtx, vm.InterruptedTxCacheKey, w.interruptedTxCache)
 		// nolint : staticcheck
 		interruptCtx = context.WithValue(interruptCtx, vm.InterruptCtxDelayKey, delay)
 		// nolint : staticcheck

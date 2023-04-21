@@ -54,7 +54,7 @@ type Config struct {
 	GasPrice            *big.Int       // Minimum gas price for mining a transaction
 	Recommit            time.Duration  // The time interval for miner to re-create mining work.
 	Noverify            bool           // Disable remote mining solution verification(only useful in ethash).
-	CommitInterruptFlag bool           // Interrupt commit when time is up
+	CommitInterruptFlag bool           // Interrupt commit when time is up ( default = true)
 }
 
 // Miner creates blocks and searches for proof-of-work values.
