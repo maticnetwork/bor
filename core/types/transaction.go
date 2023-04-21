@@ -44,9 +44,10 @@ var (
 
 // Transaction types.
 const (
-	LegacyTxType = iota
-	AccessListTxType
-	DynamicFeeTxType
+	LegacyTxType     = 0x00
+	AccessListTxType = 0x01
+	DynamicFeeTxType = 0x02
+	BlobTxType       = 0x03
 )
 
 // Transaction is an Ethereum transaction.
@@ -88,6 +89,9 @@ type TxData interface {
 	value() *big.Int
 	nonce() uint64
 	to() *common.Address
+	blobGas() uint64
+	blobGasFeeCap() *big.Int
+	blobHashes() []common.Hash
 
 	rawSignatureValues() (v, r, s *big.Int)
 	setSignatureValues(chainID, v, r, s *big.Int)
@@ -216,6 +220,10 @@ func (tx *Transaction) decodeTyped(b []byte) (TxData, error) {
 		err := rlp.DecodeBytes(b[1:], &inner)
 
 		return &inner, err
+	case BlobTxType:
+		var inner BlobTx
+		err := rlp.DecodeBytes(b[1:], &inner) // TODO(karalabe): This needs to be ssz
+		return &inner, err
 	default:
 		return nil, ErrTxTypeNotSupported
 	}
@@ -314,6 +322,15 @@ func (tx *Transaction) GasFeeCap() *big.Int         { return new(big.Int).Set(tx
 func (tx *Transaction) GasFeeCapRef() *big.Int      { return tx.inner.gasFeeCap() }
 func (tx *Transaction) GasFeeCapUint() *uint256.Int { return tx.inner.gasFeeCapU256() }
 
+// BlobGas returns the data gas limit of the transaction for blob transactions, 0 otherwise.
+func (tx *Transaction) BlobGas() uint64 { return tx.inner.blobGas() }
+
+// BlobGasFeeCap returns the data gas fee cap per data gas of the transaction for blob transactions, nil otherwise.
+func (tx *Transaction) BlobGasFeeCap() *big.Int { return tx.inner.blobGasFeeCap() }
+
+// BlobHashes returns the hases of the blob commitments for blob transactions, nil otherwise.
+func (tx *Transaction) BlobHashes() []common.Hash { return tx.inner.blobHashes() }
+
 // Value returns the ether amount of the transaction.
 func (tx *Transaction) Value() *big.Int    { return new(big.Int).Set(tx.inner.value()) }
 func (tx *Transaction) ValueRef() *big.Int { return tx.inner.value() }
@@ -327,11 +344,17 @@ func (tx *Transaction) To() *common.Address {
 	return copyAddressPtr(tx.inner.to())
 }
 
-// Cost returns gas * gasPrice + value.
+// Cost returns (gas * gasPrice) + (blobGas * blobGasPrice) + value.
 func (tx *Transaction) Cost() *big.Int {
 	gasPrice, _ := uint256.FromBig(tx.GasPriceRef())
 	gasPrice.Mul(gasPrice, uint256.NewInt(tx.Gas()))
 	value, _ := uint256.FromBig(tx.ValueRef())
+
+	blobGas256, _ := uint256.FromBig(new(big.Int).Mul(tx.BlobGasFeeCap(), new(big.Int).SetUint64(tx.BlobGas())))
+
+	if tx.Type() == BlobTxType {
+		gasPrice.Add(gasPrice, blobGas256)
+	}
 
 	return gasPrice.Add(gasPrice, value).ToBig()
 }
@@ -492,6 +515,16 @@ func (tx *Transaction) EffectiveGasTipUnit(baseFee *uint256.Int) (*uint256.Int, 
 	return gasFeeCap, err
 }
 
+// BlobGasFeeCapCmp compares the blob fee cap of two transactions.
+func (tx *Transaction) BlobGasFeeCapCmp(other *Transaction) int {
+	return tx.inner.blobGasFeeCap().Cmp(other.inner.blobGasFeeCap())
+}
+
+// BlobGasFeeCapIntCmp compares the blob fee cap of the transaction against the given blob fee cap.
+func (tx *Transaction) BlobGasFeeCapIntCmp(other *big.Int) int {
+	return tx.inner.blobGasFeeCap().Cmp(other)
+}
+
 // Hash returns the transaction hash.
 func (tx *Transaction) Hash() common.Hash {
 	if hash := tx.hash.Load(); hash != nil {
@@ -518,7 +551,11 @@ func (tx *Transaction) Size() uint64 {
 	}
 
 	c := writeCounter(0)
-	rlp.Encode(&c, &tx.inner)
+	if tx.Type() == BlobTxType {
+		rlp.Encode(&c, &tx.inner) // TODO(karalabe): Replace with SSZ encoding
+	} else {
+		rlp.Encode(&c, &tx.inner)
+	}
 
 	size := uint64(c)
 	if tx.Type() != LegacyTxType {

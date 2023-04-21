@@ -24,7 +24,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
-// LegacyTx is the transaction data of regular Ethereum transactions.
+// LegacyTx is the transaction data of the original Ethereum transactions.
 type LegacyTx struct {
 	Nonce           uint64          // nonce of sender account
 	GasPrice        *big.Int        // wei per gas
@@ -140,9 +140,12 @@ func (tx *LegacyTx) gasFeeCapU256() *uint256.Int {
 
 	return tx.gasPriceUint256
 }
-func (tx *LegacyTx) value() *big.Int     { return tx.Value }
-func (tx *LegacyTx) nonce() uint64       { return tx.Nonce }
-func (tx *LegacyTx) to() *common.Address { return tx.To }
+func (tx *LegacyTx) value() *big.Int           { return tx.Value }
+func (tx *LegacyTx) nonce() uint64             { return tx.Nonce }
+func (tx *LegacyTx) to() *common.Address       { return tx.To }
+func (tx *LegacyTx) blobGas() uint64           { return 0 }
+func (tx *LegacyTx) blobGasFeeCap() *big.Int   { return nil }
+func (tx *LegacyTx) blobHashes() []common.Hash { return nil }
 
 func (tx *LegacyTx) effectiveGasPrice(dst *big.Int, baseFee *big.Int) *big.Int {
 	return dst.Set(tx.GasPrice)

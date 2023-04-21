@@ -1641,8 +1641,8 @@ type RPCTransaction struct {
 
 // newRPCTransaction returns a transaction that will serialize to the RPC
 // representation, with the given location metadata set (if available).
-func newRPCTransaction(tx *types.Transaction, blockHash common.Hash, blockNumber uint64, index uint64, baseFee *big.Int, config *params.ChainConfig) *RPCTransaction {
-	signer := types.MakeSigner(config, new(big.Int).SetUint64(blockNumber))
+func newRPCTransaction(tx *types.Transaction, blockHash common.Hash, blockNumber uint64, blockTime uint64, index uint64, baseFee *big.Int, config *params.ChainConfig) *RPCTransaction {
+	signer := types.MakeSigner(config, new(big.Int).SetUint64(blockNumber), blockTime)
 	from, _ := types.Sender(signer, tx)
 	v, r, s := tx.RawSignatureValues()
 
@@ -1697,16 +1697,17 @@ func newRPCTransaction(tx *types.Transaction, blockHash common.Hash, blockNumber
 
 // NewRPCPendingTransaction returns a pending transaction that will serialize to the RPC representation
 func NewRPCPendingTransaction(tx *types.Transaction, current *types.Header, config *params.ChainConfig) *RPCTransaction {
-	var baseFee *big.Int
-
-	blockNumber := uint64(0)
-
+	var (
+		baseFee     *big.Int
+		blockNumber = uint64(0)
+		blockTime   = uint64(0)
+	)
 	if current != nil {
 		baseFee = misc.CalcBaseFee(config, current)
 		blockNumber = current.Number.Uint64()
+		blockTime = current.Time
 	}
-
-	return newRPCTransaction(tx, common.Hash{}, blockNumber, 0, baseFee, config)
+	return newRPCTransaction(tx, common.Hash{}, blockNumber, blockTime, 0, baseFee, config)
 }
 
 // newRPCTransactionFromBlockIndex returns a transaction that will serialize to the RPC representation.
@@ -1736,15 +1737,7 @@ func newRPCTransactionFromBlockIndex(b *types.Block, index uint64, config *param
 	if index >= uint64(len(txs)) {
 		return nil
 	}
-
-	rpcTx := newRPCTransaction(txs[index], b.Hash(), b.NumberU64(), index, b.BaseFee(), config)
-
-	// If the transaction is a bor transaction, we need to set the hash to the derived bor tx hash. BorTx is always the last index.
-	if borReceipt != nil && index == uint64(len(txs)-1) {
-		rpcTx.Hash = borReceipt.TxHash
-	}
-
-	return rpcTx
+	return newRPCTransaction(txs[index], b.Hash(), b.NumberU64(), b.Time(), index, b.BaseFee(), config)
 }
 
 // newRPCRawTransactionFromBlockIndex returns the bytes of a transaction given a block and a transaction index.
@@ -2015,7 +2008,7 @@ func (s *TransactionAPI) GetTransactionByHash(ctx context.Context, hash common.H
 			return nil, err
 		}
 
-		resultTx := newRPCTransaction(tx, blockHash, blockNumber, index, header.BaseFee, s.b.ChainConfig())
+		resultTx := newRPCTransaction(tx, blockHash, blockNumber, header.Time, index, header.BaseFee, s.b.ChainConfig())
 
 		if borTx {
 			// newRPCTransaction calculates hash based on RLP of the transaction data.
@@ -2067,11 +2060,17 @@ func (s *TransactionAPI) GetTransactionReceipt(ctx context.Context, hash common.
 	}
 
 	var receipt *types.Receipt
+	var header *types.Header
 
 	if borTx {
 		// Fetch bor block receipt
 		receipt = rawdb.ReadBorReceipt(s.b.ChainDb(), blockHash, blockNumber, s.b.ChainConfig())
 	} else {
+		var err error
+		header, err = s.b.HeaderByHash(ctx, blockHash)
+		if err != nil {
+			return nil, err
+		}
 		receipts, err := s.b.GetReceipts(ctx, blockHash)
 		if err != nil {
 			return nil, err
@@ -2085,8 +2084,7 @@ func (s *TransactionAPI) GetTransactionReceipt(ctx context.Context, hash common.
 	}
 
 	// Derive the sender.
-	bigblock := new(big.Int).SetUint64(blockNumber)
-	signer := types.MakeSigner(s.b.ChainConfig(), bigblock)
+	signer := types.MakeSigner(s.b.ChainConfig(), header.Number, header.Time)
 	from, _ := types.Sender(signer, tx)
 
 	fields := map[string]interface{}{
@@ -2154,7 +2152,8 @@ func SubmitTransaction(ctx context.Context, b Backend, tx *types.Transaction) (c
 		return common.Hash{}, err
 	}
 	// Print a log with full tx details for manual investigations and interventions
-	signer := types.MakeSigner(b.ChainConfig(), b.CurrentBlock().Number)
+	head := b.CurrentBlock()
+	signer := types.MakeSigner(b.ChainConfig(), head.Number, head.Time)
 	from, err := types.Sender(signer, tx)
 
 	if err != nil && (!b.UnprotectedAllowed() || (b.UnprotectedAllowed() && err != types.ErrInvalidChainId)) {

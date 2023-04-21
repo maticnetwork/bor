@@ -24,6 +24,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
+// DynamicFeeTx represents an EIP-1559 transaction.
 type DynamicFeeTx struct {
 	ChainID          *big.Int
 	Nonce            uint64
@@ -141,9 +142,12 @@ func (tx *DynamicFeeTx) gasPriceU256() *uint256.Int {
 
 	return tx.gasFeeCapUint256
 }
-func (tx *DynamicFeeTx) value() *big.Int     { return tx.Value }
-func (tx *DynamicFeeTx) nonce() uint64       { return tx.Nonce }
-func (tx *DynamicFeeTx) to() *common.Address { return tx.To }
+func (tx *DynamicFeeTx) value() *big.Int           { return tx.Value }
+func (tx *DynamicFeeTx) nonce() uint64             { return tx.Nonce }
+func (tx *DynamicFeeTx) to() *common.Address       { return tx.To }
+func (tx *DynamicFeeTx) blobGas() uint64           { return 0 }
+func (tx *DynamicFeeTx) blobGasFeeCap() *big.Int   { return nil }
+func (tx *DynamicFeeTx) blobHashes() []common.Hash { return nil }
 
 func (tx *DynamicFeeTx) effectiveGasPrice(dst *big.Int, baseFee *big.Int) *big.Int {
 	if baseFee == nil {

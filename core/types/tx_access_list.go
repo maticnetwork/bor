@@ -147,9 +147,12 @@ func (tx *AccessListTx) gasFeeCapU256() *uint256.Int {
 
 	return tx.gasPriceUint256
 }
-func (tx *AccessListTx) value() *big.Int     { return tx.Value }
-func (tx *AccessListTx) nonce() uint64       { return tx.Nonce }
-func (tx *AccessListTx) to() *common.Address { return tx.To }
+func (tx *AccessListTx) value() *big.Int           { return tx.Value }
+func (tx *AccessListTx) nonce() uint64             { return tx.Nonce }
+func (tx *AccessListTx) to() *common.Address       { return tx.To }
+func (tx *AccessListTx) blobGas() uint64           { return 0 }
+func (tx *AccessListTx) blobGasFeeCap() *big.Int   { return nil }
+func (tx *AccessListTx) blobHashes() []common.Hash { return nil }
 
 func (tx *AccessListTx) effectiveGasPrice(dst *big.Int, baseFee *big.Int) *big.Int {
 	return dst.Set(tx.GasPrice)

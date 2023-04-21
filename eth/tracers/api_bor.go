@@ -71,7 +71,7 @@ func (api *API) traceBorBlock(ctx context.Context, block *types.Block, config *T
 
 	// Execute all the transaction contained within the block concurrently
 	var (
-		signer                = types.MakeSigner(api.backend.ChainConfig(), block.Number())
+		signer                = types.MakeSigner(api.backend.ChainConfig(), block.Number(), block.Time())
 		txs, stateSyncPresent = api.getAllBlockTransactions(ctx, block)
 		deleteEmptyObjects    = api.backend.ChainConfig().IsEIP158(block.Number())
 	)

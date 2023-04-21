@@ -694,7 +694,7 @@ func ReadRawReceipts(db ethdb.Reader, hash common.Hash, number uint64) types.Rec
 // The current implementation populates these metadata fields by reading the receipts'
 // corresponding block body, so if the block body is not found it will return nil even
 // if the receipt itself is stored.
-func ReadReceipts(db ethdb.Reader, hash common.Hash, number uint64, config *params.ChainConfig) types.Receipts {
+func ReadReceipts(db ethdb.Reader, hash common.Hash, number uint64, time uint64, config *params.ChainConfig) types.Receipts {
 	// We're deriving many fields from the block body, retrieve beside the receipt
 	receipts := ReadRawReceipts(db, hash, number)
 	if receipts == nil {
@@ -716,8 +716,7 @@ func ReadReceipts(db ethdb.Reader, hash common.Hash, number uint64, config *para
 	} else {
 		baseFee = header.BaseFee
 	}
-
-	if err := receipts.DeriveFields(config, hash, number, baseFee, body.Transactions); err != nil {
+	if err := receipts.DeriveFields(config, hash, number, time, baseFee, body.Transactions); err != nil {
 		log.Error("Failed to derive block receipts fields", "hash", hash, "number", number, "err", err)
 		return nil
 	}
@@ -837,7 +836,12 @@ func ReadLogs(db ethdb.Reader, hash common.Hash, number uint64, config *params.C
 // from a block which has its receipt stored in the legacy format. It'll
 // be removed after users have migrated their freezer databases.
 func readLegacyLogs(db ethdb.Reader, hash common.Hash, number uint64, config *params.ChainConfig) [][]*types.Log {
-	receipts := ReadReceipts(db, hash, number, config)
+	blockHeader := ReadHeader(db, hash, number)
+	if blockHeader == nil {
+		return nil
+	}
+
+	receipts := ReadReceipts(db, hash, number, blockHeader.Time, config)
 	if receipts == nil {
 		return nil
 	}
