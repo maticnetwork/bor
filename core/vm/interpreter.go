@@ -26,13 +26,14 @@ import (
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
+
 	lru "github.com/hashicorp/golang-lru"
 )
 
 var (
 	opcodeCommitInterruptCounter = metrics.NewRegisteredCounter("worker/opcodeCommitInterrupt", nil)
 	ErrInterrupt                 = errors.New("EVM execution interrupted")
-	NoCache                      = errors.New("no tx cache found")
+	ErrNoCache                   = errors.New("no tx cache found")
 )
 
 const (
@@ -87,26 +88,29 @@ type EVMInterpreter struct {
 	returnData []byte // Last CALL's return data for subsequent reuse
 }
 
+// TxCacher is an wrapper of lru.cache for caching transactions that get interrupted
 type TxCache struct {
 	Cache *lru.Cache
 }
 
 type txCacheKey struct{}
 
+// GetCache returns the txCache from the context
 func GetCache(ctx context.Context) (*TxCache, error) {
 	val := ctx.Value(txCacheKey{})
 	if val == nil {
-		return nil, NoCache
+		return nil, ErrNoCache
 	}
 
 	c, ok := val.(*TxCache)
 	if !ok {
-		return nil, NoCache
+		return nil, ErrNoCache
 	}
 
 	return c, nil
 }
 
+// PutCache puts the txCache into the context
 func PutCache(ctx context.Context, cache *TxCache) context.Context {
 	return context.WithValue(ctx, txCacheKey{}, cache)
 }
@@ -413,6 +417,7 @@ func (in *EVMInterpreter) RunWithDelay(contract *Contract, input []byte, readOnl
 				// if the tx is already in the cache, it means that it has been interrupted before and we will not interrupt it again
 				found, _ := interruptedTxCache.Cache.ContainsOrAdd(txHash, true)
 				log.Info("FOUND", "found", found, "txHash", txHash)
+
 				if found {
 					interruptedTxCache.Cache.Remove(txHash)
 				} else {

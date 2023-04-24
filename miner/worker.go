@@ -674,6 +674,7 @@ func (w *worker) mainLoop(ctx context.Context) {
 				txset := types.NewTransactionsByPriceAndNonce(w.current.signer, txs, cmath.FromBig(w.current.header.BaseFee))
 				tcount := w.current.tcount
 
+				// nolint : contextcheck
 				var interruptCtx = context.Background()
 
 				stopFn := func() {}
@@ -1477,6 +1478,7 @@ func (w *worker) generateWork(ctx context.Context, params *generateParams) (*typ
 	}
 	defer work.discard()
 
+	// nolint : contextcheck
 	var interruptCtx = context.Background()
 
 	stopFn := func() {}
