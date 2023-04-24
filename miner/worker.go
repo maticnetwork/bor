@@ -277,7 +277,7 @@ type worker struct {
 
 	profileCount        *int32 // Global count for profiling
 	interruptCommitFlag bool   // Interrupt commit ( Default true )
-	interruptedTxCache  *lru.Cache
+	interruptedTxCache  *vm.TxCache
 }
 
 //nolint:staticcheck
@@ -315,7 +315,14 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 	worker.chainHeadSub = eth.BlockChain().SubscribeChainHeadEvent(worker.chainHeadCh)
 	worker.chainSideSub = eth.BlockChain().SubscribeChainSideEvent(worker.chainSideCh)
 
-	worker.interruptedTxCache, _ = lru.New(vm.InterruptedTxCacheSize)
+	interruptedTxCache, err := lru.New(vm.InterruptedTxCacheSize)
+	if err != nil {
+		log.Warn("Failed to create interrupted tx cache", "err", err)
+	}
+
+	worker.interruptedTxCache = &vm.TxCache{
+		Cache: interruptedTxCache,
+	}
 
 	if !worker.interruptCommitFlag {
 		worker.noempty = 0
@@ -678,7 +685,7 @@ func (w *worker) mainLoop(ctx context.Context) {
 				if w.interruptCommitFlag {
 					interruptCtx, stopFn = getInterruptTimer(ctx, w.current, w.chain.CurrentBlock())
 					// nolint : staticcheck
-					interruptCtx = context.WithValue(interruptCtx, vm.InterruptedTxCacheKey, w.interruptedTxCache)
+					interruptCtx = vm.PutCache(interruptCtx, w.interruptedTxCache)
 				}
 
 				w.commitTransactions(w.current, txset, nil, interruptCtx)
@@ -1481,7 +1488,7 @@ func (w *worker) generateWork(ctx context.Context, params *generateParams) (*typ
 	if w.interruptCommitFlag {
 		interruptCtx, stopFn = getInterruptTimer(ctx, work, w.chain.CurrentBlock())
 		// nolint : staticcheck
-		interruptCtx = context.WithValue(interruptCtx, vm.InterruptedTxCacheKey, w.interruptedTxCache)
+		interruptCtx = vm.PutCache(interruptCtx, w.interruptedTxCache)
 	}
 
 	w.fillTransactions(ctx, nil, work, interruptCtx)
@@ -1533,7 +1540,7 @@ func (w *worker) commitWork(ctx context.Context, interrupt *int32, noempty bool,
 	if !noempty && w.interruptCommitFlag {
 		interruptCtx, stopFn = getInterruptTimer(ctx, work, w.chain.CurrentBlock())
 		// nolint : staticcheck
-		interruptCtx = context.WithValue(interruptCtx, vm.InterruptedTxCacheKey, w.interruptedTxCache)
+		interruptCtx = vm.PutCache(interruptCtx, w.interruptedTxCache)
 	}
 
 	ctx, span := tracing.StartSpan(ctx, "commitWork")

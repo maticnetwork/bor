@@ -26,13 +26,13 @@ import (
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
-
 	lru "github.com/hashicorp/golang-lru"
 )
 
 var (
 	opcodeCommitInterruptCounter = metrics.NewRegisteredCounter("worker/opcodeCommitInterrupt", nil)
 	ErrInterrupt                 = errors.New("EVM execution interrupted")
+	NoCache                      = errors.New("no tx cache found")
 )
 
 const (
@@ -42,9 +42,6 @@ const (
 
 	// InterruptedTxCacheSize is size of lru cache for interrupted txs
 	InterruptedTxCacheSize = 90000
-
-	// InterruptedTxCacheKey gets you the pointer to lru cache storing the interrupted txs
-	InterruptedTxCacheKey = "interruptedTxCache"
 
 	// InterruptedTxContext_currenttxKey gets you the hash of the current tx being executed
 	InterruptedTxContext_currenttxKey = "currenttx"
@@ -88,6 +85,30 @@ type EVMInterpreter struct {
 
 	readOnly   bool   // Whether to throw on stateful modifications
 	returnData []byte // Last CALL's return data for subsequent reuse
+}
+
+type TxCache struct {
+	Cache *lru.Cache
+}
+
+type txCacheKey struct{}
+
+func GetCache(ctx context.Context) (*TxCache, error) {
+	val := ctx.Value(txCacheKey{})
+	if val == nil {
+		return nil, NoCache
+	}
+
+	c, ok := val.(*TxCache)
+	if !ok {
+		return nil, NoCache
+	}
+
+	return c, nil
+}
+
+func PutCache(ctx context.Context, cache *TxCache) context.Context {
+	return context.WithValue(ctx, txCacheKey{}, cache)
 }
 
 // NewEVMInterpreter returns a new instance of the Interpreter.
@@ -228,12 +249,12 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool, i
 			select {
 			case <-interruptCtx.Done():
 				txHash := interruptCtx.Value(InterruptedTxContext_currenttxKey).(common.Hash)
-				interruptedTxCache := interruptCtx.Value(InterruptedTxCacheKey).(*lru.Cache)
+				interruptedTxCache, _ := GetCache(interruptCtx)
 
 				// if the tx is already in the cache, it means that it has been interrupted before and we will not interrupt it again
-				found, _ := interruptedTxCache.ContainsOrAdd(txHash, true)
+				found, _ := interruptedTxCache.Cache.ContainsOrAdd(txHash, true)
 				if found {
-					interruptedTxCache.Remove(txHash)
+					interruptedTxCache.Cache.Remove(txHash)
 				} else {
 					// if the tx is not in the cache, it means that it has not been interrupted before and we will interrupt it
 					opcodeCommitInterruptCounter.Inc(1)
@@ -388,12 +409,12 @@ func (in *EVMInterpreter) RunWithDelay(contract *Contract, input []byte, readOnl
 			select {
 			case <-interruptCtx.Done():
 				txHash := interruptCtx.Value(InterruptedTxContext_currenttxKey).(common.Hash)
-				interruptedTxCache := interruptCtx.Value(InterruptedTxCacheKey).(*lru.Cache)
-
+				interruptedTxCache, _ := GetCache(interruptCtx)
 				// if the tx is already in the cache, it means that it has been interrupted before and we will not interrupt it again
-				found, _ := interruptedTxCache.ContainsOrAdd(txHash, true)
+				found, _ := interruptedTxCache.Cache.ContainsOrAdd(txHash, true)
+				log.Info("FOUND", "found", found, "txHash", txHash)
 				if found {
-					interruptedTxCache.Remove(txHash)
+					interruptedTxCache.Cache.Remove(txHash)
 				} else {
 					// if the tx is not in the cache, it means that it has not been interrupted before and we will interrupt it
 					opcodeCommitInterruptCounter.Inc(1)
