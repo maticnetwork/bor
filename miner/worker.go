@@ -969,7 +969,7 @@ func (w *worker) commitTransaction(env *environment, tx *types.Transaction, inte
 	snap := env.state.Snapshot()
 
 	// nolint : staticcheck
-	interruptCtx = context.WithValue(interruptCtx, vm.InterruptedTxContext_currenttxKey, tx.Hash())
+	interruptCtx = vm.SetCurrentTxOnContext(interruptCtx, tx.Hash())
 	receipt, err := core.ApplyTransaction(w.chainConfig, w.chain, &env.coinbase, env.gasPool, env.state, env.header, tx, &env.header.GasUsed, *w.chain.GetVMConfig(), interruptCtx)
 	if err != nil {
 		env.state.RevertToSnapshot(snap)

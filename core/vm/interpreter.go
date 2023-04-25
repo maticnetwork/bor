@@ -34,6 +34,7 @@ var (
 	opcodeCommitInterruptCounter = metrics.NewRegisteredCounter("worker/opcodeCommitInterrupt", nil)
 	ErrInterrupt                 = errors.New("EVM execution interrupted")
 	ErrNoCache                   = errors.New("no tx cache found")
+	ErrNoCurrentTx               = errors.New("no current tx found in interruptCtx")
 )
 
 const (
@@ -43,9 +44,6 @@ const (
 
 	// InterruptedTxCacheSize is size of lru cache for interrupted txs
 	InterruptedTxCacheSize = 90000
-
-	// InterruptedTxContext_currenttxKey gets you the hash of the current tx being executed
-	InterruptedTxContext_currenttxKey = "currenttx"
 )
 
 // Config are the configuration options for the Interpreter
@@ -94,6 +92,27 @@ type TxCache struct {
 }
 
 type txCacheKey struct{}
+type InterruptedTxContext_currenttxKey struct{}
+
+// SetCurrentTxOnContext sets the current tx on the context
+func SetCurrentTxOnContext(ctx context.Context, txHash common.Hash) context.Context {
+	return context.WithValue(ctx, InterruptedTxContext_currenttxKey{}, txHash)
+}
+
+// GetCurrentTxFromContext gets the current tx from the context
+func GetCurrentTxFromContext(ctx context.Context) (common.Hash, error) {
+	val := ctx.Value(InterruptedTxContext_currenttxKey{})
+	if val == nil {
+		return common.Hash{}, ErrNoCurrentTx
+	}
+
+	c, ok := val.(common.Hash)
+	if !ok {
+		return common.Hash{}, ErrNoCurrentTx
+	}
+
+	return c, nil
+}
 
 // GetCache returns the txCache from the context
 func GetCache(ctx context.Context) (*TxCache, error) {
@@ -252,7 +271,7 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool, i
 			// case of interrupting by timeout
 			select {
 			case <-interruptCtx.Done():
-				txHash := interruptCtx.Value(InterruptedTxContext_currenttxKey).(common.Hash)
+				txHash, _ := GetCurrentTxFromContext(interruptCtx)
 				interruptedTxCache, _ := GetCache(interruptCtx)
 
 				// if the tx is already in the cache, it means that it has been interrupted before and we will not interrupt it again
@@ -412,7 +431,7 @@ func (in *EVMInterpreter) RunWithDelay(contract *Contract, input []byte, readOnl
 			// case of interrupting by timeout
 			select {
 			case <-interruptCtx.Done():
-				txHash := interruptCtx.Value(InterruptedTxContext_currenttxKey).(common.Hash)
+				txHash, _ := GetCurrentTxFromContext(interruptCtx)
 				interruptedTxCache, _ := GetCache(interruptCtx)
 				// if the tx is already in the cache, it means that it has been interrupted before and we will not interrupt it again
 				found, _ := interruptedTxCache.Cache.ContainsOrAdd(txHash, true)
