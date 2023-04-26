@@ -192,7 +192,7 @@ func (b *testWorkerBackend) newRandomTx(creation bool) *types.Transaction {
 func (b *testWorkerBackend) newRandomTxWithNonce(creation bool, nonce uint64) *types.Transaction {
 	var tx *types.Transaction
 
-	gasPrice := big.NewInt(10 * params.InitialBaseFee)
+	gasPrice := big.NewInt(100 * params.InitialBaseFee)
 
 	if creation {
 		tx, _ = types.SignTx(types.NewContractCreation(b.txPool.Nonce(TestBankAddress), big.NewInt(0), testGas, gasPrice, common.FromHex(testCode)), types.HomesteadSigner{}, testBankKey)

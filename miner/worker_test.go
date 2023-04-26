@@ -19,7 +19,6 @@ package miner
 import (
 	"math/big"
 	"os"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -659,6 +658,8 @@ func testCommitInterruptExperimentBorContract(t *testing.T, delay uint, txCount 
 		chainConfig *params.ChainConfig
 		db          = rawdb.NewMemoryDatabase()
 		ctrl        *gomock.Controller
+		txInTxpool  = 200
+		txs         = make([]*types.Transaction, 0, txInTxpool)
 	)
 
 	chainConfig = params.BorUnittestChainConfig
@@ -683,26 +684,17 @@ func testCommitInterruptExperimentBorContract(t *testing.T, delay uint, txCount 
 
 	time.Sleep(4 * time.Second)
 
-	wg := new(sync.WaitGroup)
-	wg.Add(1)
+	// nonce starts from 1 because we already have one tx
+	initNonce := uint64(1)
 
-	go func() {
-		wg.Done()
-		// nonce starts from 1 because we already have one tx
-		nonce := uint64(1)
+	for i := 0; i < txInTxpool; i++ {
+		tx := b.newStorageContractCallTx(addr, initNonce+uint64(i))
+		txs = append(txs, tx)
+	}
 
-		for {
-			tx := b.newStorageContractCallTx(addr, nonce)
-			if err := b.TxPool().AddRemote(tx); err != nil {
-				t.Log(err)
-			}
-			nonce++
-
-			time.Sleep(10 * time.Millisecond)
-		}
-	}()
-
-	wg.Wait()
+	if err := b.TxPool().AddRemotes(txs); err != nil {
+		t.Fatal(err)
+	}
 
 	// Start mining!
 	w.start()
@@ -721,6 +713,8 @@ func testCommitInterruptExperimentBor(t *testing.T, delay uint, txCount int, opc
 		chainConfig *params.ChainConfig
 		db          = rawdb.NewMemoryDatabase()
 		ctrl        *gomock.Controller
+		txInTxpool  = 400
+		txs         = make([]*types.Transaction, 0, txInTxpool)
 	)
 
 	chainConfig = params.BorUnittestChainConfig
@@ -736,26 +730,17 @@ func testCommitInterruptExperimentBor(t *testing.T, delay uint, txCount int, opc
 	w, b, _ := NewTestWorker(t, chainConfig, engine, db, 0, 1, delay, opcodeDelay)
 	defer w.close()
 
-	wg := new(sync.WaitGroup)
-	wg.Add(1)
+	// nonce starts from 0 because have no txs yet
+	initNonce := uint64(0)
 
-	go func() {
-		wg.Done()
+	for i := 0; i < txInTxpool; i++ {
+		tx := b.newRandomTxWithNonce(false, initNonce+uint64(i))
+		txs = append(txs, tx)
+	}
 
-		nonce := uint64(0)
-
-		for {
-			tx := b.newRandomTxWithNonce(false, nonce)
-			if err := b.TxPool().AddRemote(tx); err != nil {
-				t.Log(err)
-			}
-			nonce++
-
-			time.Sleep(10 * time.Millisecond)
-		}
-	}()
-
-	wg.Wait()
+	if err := b.TxPool().AddRemotes(txs); err != nil {
+		t.Fatal(err)
+	}
 
 	// Start mining!
 	w.start()
