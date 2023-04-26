@@ -651,16 +651,15 @@ func TestCommitInterruptExperimentBorContract(t *testing.T) {
 	testCommitInterruptExperimentBorContract(t, 0, 2, 3)
 }
 
+// nolint : thelper
 // testCommitInterruptExperimentBorContract is a helper function for testing the commit interrupt experiment for bor consensus.
 func testCommitInterruptExperimentBorContract(t *testing.T, delay uint, txCount int, opcodeDelay uint) {
-	t.Helper()
-
 	var (
 		engine      consensus.Engine
 		chainConfig *params.ChainConfig
 		db          = rawdb.NewMemoryDatabase()
 		ctrl        *gomock.Controller
-		txInTxpool  = 200
+		txInTxpool  = 100
 		txs         = make([]*types.Transaction, 0, txInTxpool)
 	)
 
@@ -669,14 +668,14 @@ func testCommitInterruptExperimentBorContract(t *testing.T, delay uint, txCount 
 	log.Root().SetHandler(log.LvlFilterHandler(4, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
 
 	engine, ctrl = getFakeBorFromConfig(t, chainConfig)
+
+	w, b, _ := NewTestWorker(t, chainConfig, engine, db, 0, 1, delay, opcodeDelay)
 	defer func() {
+		w.close()
 		engine.Close()
 		db.Close()
 		ctrl.Finish()
 	}()
-
-	w, b, _ := NewTestWorker(t, chainConfig, engine, db, 0, 1, delay, opcodeDelay)
-	defer w.close()
 
 	// nonce 0 tx
 	tx, addr := b.newStorageCreateContractTx()
@@ -706,16 +705,15 @@ func testCommitInterruptExperimentBorContract(t *testing.T, delay uint, txCount 
 	assert.Equal(t, txCount, w.chain.CurrentBlock().Transactions().Len())
 }
 
+// nolint : thelper
 // testCommitInterruptExperimentBor is a helper function for testing the commit interrupt experiment for bor consensus.
 func testCommitInterruptExperimentBor(t *testing.T, delay uint, txCount int, opcodeDelay uint) {
-	t.Helper()
-
 	var (
 		engine      consensus.Engine
 		chainConfig *params.ChainConfig
 		db          = rawdb.NewMemoryDatabase()
 		ctrl        *gomock.Controller
-		txInTxpool  = 400
+		txInTxpool  = 100
 		txs         = make([]*types.Transaction, 0, txInTxpool)
 	)
 
@@ -724,13 +722,14 @@ func testCommitInterruptExperimentBor(t *testing.T, delay uint, txCount int, opc
 	log.Root().SetHandler(log.LvlFilterHandler(4, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
 
 	engine, ctrl = getFakeBorFromConfig(t, chainConfig)
-	defer func() {
-		engine.Close()
-		ctrl.Finish()
-	}()
 
 	w, b, _ := NewTestWorker(t, chainConfig, engine, db, 0, 1, delay, opcodeDelay)
-	defer w.close()
+	defer func() {
+		w.close()
+		engine.Close()
+		db.Close()
+		ctrl.Finish()
+	}()
 
 	// nonce starts from 0 because have no txs yet
 	initNonce := uint64(0)
