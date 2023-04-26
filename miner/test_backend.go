@@ -31,6 +31,8 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+
+	lru "github.com/hashicorp/golang-lru"
 )
 
 const (
@@ -251,29 +253,30 @@ func NewTestWorker(t TensingObject, chainConfig *params.ChainConfig, engine cons
 // nolint:staticcheck
 func newWorkerWithDelay(config *Config, chainConfig *params.ChainConfig, engine consensus.Engine, eth Backend, mux *event.TypeMux, isLocalBlock func(header *types.Header) bool, init bool, delay uint, opcodeDelay uint) *worker {
 	worker := &worker{
-		config:             config,
-		chainConfig:        chainConfig,
-		engine:             engine,
-		eth:                eth,
-		mux:                mux,
-		chain:              eth.BlockChain(),
-		isLocalBlock:       isLocalBlock,
-		localUncles:        make(map[common.Hash]*types.Block),
-		remoteUncles:       make(map[common.Hash]*types.Block),
-		unconfirmed:        newUnconfirmedBlocks(eth.BlockChain(), sealingLogAtDepth),
-		pendingTasks:       make(map[common.Hash]*task),
-		txsCh:              make(chan core.NewTxsEvent, txChanSize),
-		chainHeadCh:        make(chan core.ChainHeadEvent, chainHeadChanSize),
-		chainSideCh:        make(chan core.ChainSideEvent, chainSideChanSize),
-		newWorkCh:          make(chan *newWorkReq),
-		getWorkCh:          make(chan *getWorkReq),
-		taskCh:             make(chan *task),
-		resultCh:           make(chan *types.Block, resultQueueSize),
-		exitCh:             make(chan struct{}),
-		startCh:            make(chan struct{}, 1),
-		resubmitIntervalCh: make(chan time.Duration),
-		resubmitAdjustCh:   make(chan *intervalAdjust, resubmitAdjustChanSize),
-		noempty:            1,
+		config:              config,
+		chainConfig:         chainConfig,
+		engine:              engine,
+		eth:                 eth,
+		mux:                 mux,
+		chain:               eth.BlockChain(),
+		isLocalBlock:        isLocalBlock,
+		localUncles:         make(map[common.Hash]*types.Block),
+		remoteUncles:        make(map[common.Hash]*types.Block),
+		unconfirmed:         newUnconfirmedBlocks(eth.BlockChain(), sealingLogAtDepth),
+		pendingTasks:        make(map[common.Hash]*task),
+		txsCh:               make(chan core.NewTxsEvent, txChanSize),
+		chainHeadCh:         make(chan core.ChainHeadEvent, chainHeadChanSize),
+		chainSideCh:         make(chan core.ChainSideEvent, chainSideChanSize),
+		newWorkCh:           make(chan *newWorkReq),
+		getWorkCh:           make(chan *getWorkReq),
+		taskCh:              make(chan *task),
+		resultCh:            make(chan *types.Block, resultQueueSize),
+		exitCh:              make(chan struct{}),
+		startCh:             make(chan struct{}, 1),
+		resubmitIntervalCh:  make(chan time.Duration),
+		resubmitAdjustCh:    make(chan *intervalAdjust, resubmitAdjustChanSize),
+		noempty:             1,
+		interruptCommitFlag: config.CommitInterruptFlag,
 	}
 	worker.profileCount = new(int32)
 	// Subscribe NewTxsEvent for tx pool
@@ -281,6 +284,19 @@ func newWorkerWithDelay(config *Config, chainConfig *params.ChainConfig, engine 
 	// Subscribe events for blockchain
 	worker.chainHeadSub = eth.BlockChain().SubscribeChainHeadEvent(worker.chainHeadCh)
 	worker.chainSideSub = eth.BlockChain().SubscribeChainSideEvent(worker.chainSideCh)
+
+	interruptedTxCache, err := lru.New(vm.InterruptedTxCacheSize)
+	if err != nil {
+		log.Warn("Failed to create interrupted tx cache", "err", err)
+	}
+
+	worker.interruptedTxCache = &vm.TxCache{
+		Cache: interruptedTxCache,
+	}
+
+	if !worker.interruptCommitFlag {
+		worker.noempty = 0
+	}
 
 	// Sanitize recommit interval if the user-specified one is too short.
 	recommit := worker.config.Recommit
@@ -388,6 +404,7 @@ func (w *worker) mainLoopWithDelay(ctx context.Context, delay uint, opcodeDelay 
 			// Note all transactions received may not be continuous with transactions
 			// already included in the current sealing block. These transactions will
 			// be automatically eliminated.
+			// nolint : nestif
 			if !w.isRunning() && w.current != nil {
 				// If block is already full, abort
 				if gp := w.current.gasPool; gp != nil && gp.Gas() < params.TxGas {
@@ -404,7 +421,18 @@ func (w *worker) mainLoopWithDelay(ctx context.Context, delay uint, opcodeDelay 
 				txset := types.NewTransactionsByPriceAndNonce(w.current.signer, txs, cmath.FromBig(w.current.header.BaseFee))
 				tcount := w.current.tcount
 
-				interruptCtx, stopFn := getInterruptTimer(ctx, w.current, w.chain.CurrentBlock())
+				var interruptCtx = context.Background()
+				stopFn := func() {}
+				defer func() {
+					stopFn()
+				}()
+
+				if w.interruptCommitFlag {
+					interruptCtx, stopFn = getInterruptTimer(ctx, w.current, w.chain.CurrentBlock())
+					// nolint : staticcheck
+					interruptCtx = vm.PutCache(interruptCtx, w.interruptedTxCache)
+				}
+
 				w.commitTransactionsWithDelay(w.current, txset, nil, interruptCtx)
 
 				// Only update the snapshot if any new transactions were added
@@ -477,8 +505,10 @@ func (w *worker) commitWorkWithDelay(ctx context.Context, interrupt *int32, noem
 		stopFn()
 	}()
 
-	if !noempty {
+	if !noempty && w.interruptCommitFlag {
 		interruptCtx, stopFn = getInterruptTimer(ctx, work, w.chain.CurrentBlock())
+		// nolint : staticcheck
+		interruptCtx = vm.PutCache(interruptCtx, w.interruptedTxCache)
 		// nolint : staticcheck
 		interruptCtx = context.WithValue(interruptCtx, vm.InterruptCtxDelayKey, delay)
 		// nolint : staticcheck

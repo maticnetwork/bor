@@ -26,16 +26,24 @@ import (
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
+
+	lru "github.com/hashicorp/golang-lru"
 )
 
 var (
 	opcodeCommitInterruptCounter = metrics.NewRegisteredCounter("worker/opcodeCommitInterrupt", nil)
 	ErrInterrupt                 = errors.New("EVM execution interrupted")
+	ErrNoCache                   = errors.New("no tx cache found")
+	ErrNoCurrentTx               = errors.New("no current tx found in interruptCtx")
 )
 
 const (
+	// These are keys for the interruptCtx
 	InterruptCtxDelayKey       = "delay"
 	InterruptCtxOpcodeDelayKey = "opcodeDelay"
+
+	// InterruptedTxCacheSize is size of lru cache for interrupted txs
+	InterruptedTxCacheSize = 90000
 )
 
 // Config are the configuration options for the Interpreter
@@ -76,6 +84,54 @@ type EVMInterpreter struct {
 
 	readOnly   bool   // Whether to throw on stateful modifications
 	returnData []byte // Last CALL's return data for subsequent reuse
+}
+
+// TxCacher is an wrapper of lru.cache for caching transactions that get interrupted
+type TxCache struct {
+	Cache *lru.Cache
+}
+
+type txCacheKey struct{}
+type InterruptedTxContext_currenttxKey struct{}
+
+// SetCurrentTxOnContext sets the current tx on the context
+func SetCurrentTxOnContext(ctx context.Context, txHash common.Hash) context.Context {
+	return context.WithValue(ctx, InterruptedTxContext_currenttxKey{}, txHash)
+}
+
+// GetCurrentTxFromContext gets the current tx from the context
+func GetCurrentTxFromContext(ctx context.Context) (common.Hash, error) {
+	val := ctx.Value(InterruptedTxContext_currenttxKey{})
+	if val == nil {
+		return common.Hash{}, ErrNoCurrentTx
+	}
+
+	c, ok := val.(common.Hash)
+	if !ok {
+		return common.Hash{}, ErrNoCurrentTx
+	}
+
+	return c, nil
+}
+
+// GetCache returns the txCache from the context
+func GetCache(ctx context.Context) (*TxCache, error) {
+	val := ctx.Value(txCacheKey{})
+	if val == nil {
+		return nil, ErrNoCache
+	}
+
+	c, ok := val.(*TxCache)
+	if !ok {
+		return nil, ErrNoCache
+	}
+
+	return c, nil
+}
+
+// PutCache puts the txCache into the context
+func PutCache(ctx context.Context, cache *TxCache) context.Context {
+	return context.WithValue(ctx, txCacheKey{}, cache)
 }
 
 // NewEVMInterpreter returns a new instance of the Interpreter.
@@ -215,10 +271,20 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool, i
 			// case of interrupting by timeout
 			select {
 			case <-interruptCtx.Done():
-				opcodeCommitInterruptCounter.Inc(1)
-				log.Warn("OPCODE Level interrupt")
+				txHash, _ := GetCurrentTxFromContext(interruptCtx)
+				interruptedTxCache, _ := GetCache(interruptCtx)
 
-				return nil, ErrInterrupt
+				// if the tx is already in the cache, it means that it has been interrupted before and we will not interrupt it again
+				found, _ := interruptedTxCache.Cache.ContainsOrAdd(txHash, true)
+				if found {
+					interruptedTxCache.Cache.Remove(txHash)
+				} else {
+					// if the tx is not in the cache, it means that it has not been interrupted before and we will interrupt it
+					opcodeCommitInterruptCounter.Inc(1)
+					log.Warn("OPCODE Level interrupt")
+
+					return nil, ErrInterrupt
+				}
 			default:
 			}
 		}
@@ -365,10 +431,21 @@ func (in *EVMInterpreter) RunWithDelay(contract *Contract, input []byte, readOnl
 			// case of interrupting by timeout
 			select {
 			case <-interruptCtx.Done():
-				opcodeCommitInterruptCounter.Inc(1)
-				log.Warn("OPCODE Level interrupt")
+				txHash, _ := GetCurrentTxFromContext(interruptCtx)
+				interruptedTxCache, _ := GetCache(interruptCtx)
+				// if the tx is already in the cache, it means that it has been interrupted before and we will not interrupt it again
+				found, _ := interruptedTxCache.Cache.ContainsOrAdd(txHash, true)
+				log.Info("FOUND", "found", found, "txHash", txHash)
 
-				return nil, ErrInterrupt
+				if found {
+					interruptedTxCache.Cache.Remove(txHash)
+				} else {
+					// if the tx is not in the cache, it means that it has not been interrupted before and we will interrupt it
+					opcodeCommitInterruptCounter.Inc(1)
+					log.Warn("OPCODE Level interrupt")
+
+					return nil, ErrInterrupt
+				}
 			default:
 			}
 		}
