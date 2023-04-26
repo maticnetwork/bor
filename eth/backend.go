@@ -191,8 +191,8 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 	// Override the chain config with provided settings.
 	var overrides core.ChainOverrides
-	if config.OverrideShanghai != nil {
-		overrides.OverrideShanghai = config.OverrideShanghai
+	if config.OverrideCancun != nil {
+		overrides.OverrideCancun = config.OverrideCancun
 	}
 
 	chainConfig, _, genesisErr := core.SetupGenesisBlockWithOverride(chainDb, trie.NewDatabase(chainDb), config.Genesis, &overrides)

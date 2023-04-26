@@ -147,10 +147,16 @@ func makeConfigNode(ctx *cli.Context) (*node.Node, gethConfig) {
 // makeFullNode loads geth configuration and creates the Ethereum backend.
 func makeFullNode(ctx *cli.Context) (*node.Node, ethapi.Backend) {
 	stack, cfg := makeConfigNode(ctx)
+<<<<<<< HEAD
 	// TODO marcello double check
 	if ctx.IsSet(utils.OverrideShanghai.Name) {
 		v := ctx.Uint64(utils.OverrideShanghai.Name)
 		cfg.Eth.OverrideShanghai = &v
+=======
+	if ctx.IsSet(utils.OverrideCancun.Name) {
+		v := ctx.Uint64(utils.OverrideCancun.Name)
+		cfg.Eth.OverrideCancun = &v
+>>>>>>> 66c0c4e51 (cmd, eth, les: replace Shanghai override flag with Cancun (#27171))
 	}
 
 	backend, eth := utils.RegisterEthService(stack, &cfg.Eth)

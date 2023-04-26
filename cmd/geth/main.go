@@ -70,8 +70,7 @@ var (
 		utils.NoUSBFlag,
 		utils.USBFlag,
 		utils.SmartCardDaemonPathFlag,
-		// TODO marcello double check
-		utils.OverrideShanghai,
+		utils.OverrideCancun,
 		utils.EnablePersonal,
 		utils.TxPoolLocalsFlag,
 		utils.TxPoolNoLocalsFlag,

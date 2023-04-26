@@ -97,9 +97,8 @@ func New(stack *node.Node, config *ethconfig.Config) (*LightEthereum, error) {
 	}
 
 	var overrides core.ChainOverrides
-
-	if config.OverrideShanghai != nil {
-		overrides.OverrideShanghai = config.OverrideShanghai
+	if config.OverrideCancun != nil {
+		overrides.OverrideCancun = config.OverrideCancun
 	}
 
 	chainConfig, genesisHash, genesisErr := core.SetupGenesisBlockWithOverride(chainDb, trie.NewDatabase(chainDb), config.Genesis, &overrides)

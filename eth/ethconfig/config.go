@@ -195,6 +195,9 @@ type Config struct {
 
 	// Develop Fake Author mode to produce blocks without authorisation
 	DevFakeAuthor bool `hcl:"devfakeauthor,optional" toml:"devfakeauthor,optional"`
+
+	// OverrideCancun (TODO: remove after the fork)
+	OverrideCancun *uint64 `toml:",omitempty"`
 }
 
 // CreateConsensusEngine creates a consensus engine for the given chain configuration.

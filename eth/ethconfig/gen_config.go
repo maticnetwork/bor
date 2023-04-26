@@ -52,7 +52,7 @@ func (c Config) MarshalTOML() (interface{}, error) {
 		RPCGasCap               uint64
 		RPCEVMTimeout           time.Duration
 		RPCTxFeeCap             float64
-		OverrideShanghai        *uint64 `toml:",omitempty"`
+		OverrideCancun          *uint64 `toml:",omitempty"`
 	}
 
 	var enc Config
@@ -92,8 +92,7 @@ func (c Config) MarshalTOML() (interface{}, error) {
 	enc.RPCGasCap = c.RPCGasCap
 	enc.RPCEVMTimeout = c.RPCEVMTimeout
 	enc.RPCTxFeeCap = c.RPCTxFeeCap
-	enc.OverrideShanghai = c.OverrideShanghai
-
+	enc.OverrideCancun = c.OverrideCancun
 	return &enc, nil
 }
 
@@ -136,7 +135,7 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 		RPCGasCap               *uint64
 		RPCEVMTimeout           *time.Duration
 		RPCTxFeeCap             *float64
-		OverrideShanghai        *uint64 `toml:",omitempty"`
+		OverrideCancun        *uint64 `toml:",omitempty"`
 	}
 
 	var dec Config
@@ -285,8 +284,8 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 	if dec.RPCTxFeeCap != nil {
 		c.RPCTxFeeCap = *dec.RPCTxFeeCap
 	}
-	if dec.OverrideShanghai != nil {
-		c.OverrideShanghai = dec.OverrideShanghai
+	if dec.OverrideCancun != nil {
+		c.OverrideCancun = dec.OverrideCancun
 	}
 
 	return nil
