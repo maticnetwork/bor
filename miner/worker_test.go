@@ -626,19 +626,21 @@ func testGetSealingWork(t *testing.T, chainConfig *params.ChainConfig, engine co
 	}
 }
 
+// nolint : paralleltest
 // TestCommitInterruptExperimentBor tests the commit interrupt experiment for bor consensus by inducing an artificial delay at transaction level.
 func TestCommitInterruptExperimentBor(t *testing.T) {
-	t.Parallel()
 	// with 1 sec block time and 200 millisec tx delay we should get 5 txs per block
 	testCommitInterruptExperimentBor(t, 200, 5, 0)
+
+	time.Sleep(2 * time.Second)
 
 	// with 1 sec block time and 100 millisec tx delay we should get 10 txs per block
 	testCommitInterruptExperimentBor(t, 100, 10, 0)
 }
 
+// nolint : paralleltest
 // TestCommitInterruptExperimentBorContract tests the commit interrupt experiment for bor consensus by inducing an artificial delay at OPCODE level.
 func TestCommitInterruptExperimentBorContract(t *testing.T) {
-	t.Parallel()
 	// pre-calculated number of OPCODES = 123. 7*123=861 < 1000, 1 tx is possible but 2 tx per block will not be possible.
 	testCommitInterruptExperimentBorContract(t, 0, 1, 7)
 	time.Sleep(2 * time.Second)
