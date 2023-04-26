@@ -626,7 +626,7 @@ func (t *Trie) Hash() common.Hash {
 func (t *Trie) Commit(collectLeaf bool) (common.Hash, *NodeSet) {
 	defer t.tracer.reset()
 
-	nodes := NewNodeSet(t.owner, t.tracer.accessList)
+	nodes := NewNodeSet(t.owner)
 	t.tracer.markDeletions(nodes)
 
 	// Trie is empty and can be classified into two types of situations:
@@ -647,9 +647,7 @@ func (t *Trie) Commit(collectLeaf bool) (common.Hash, *NodeSet) {
 		t.root = hashedNode
 		return rootHash, nil
 	}
-
-	t.root = newCommitter(nodes, collectLeaf).Commit(t.root)
-
+	t.root = newCommitter(nodes, t.tracer, collectLeaf).Commit(t.root)
 	return rootHash, nodes
 }
 
