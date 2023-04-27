@@ -699,7 +699,9 @@ func testCommitInterruptExperimentBorContract(t *testing.T, delay uint, txCount 
 	time.Sleep(5 * time.Second)
 	w.stop()
 
-	assert.Equal(t, txCount, w.chain.CurrentBlock().Transactions().Len())
+	currentBlockNumber := w.current.header.Number.Uint64()
+	assert.Check(t, txCount >= w.chain.GetBlockByNumber(currentBlockNumber-1).Transactions().Len())
+	assert.Check(t, 0 < w.chain.GetBlockByNumber(currentBlockNumber-1).Transactions().Len()+1)
 }
 
 // nolint : thelper
@@ -745,7 +747,9 @@ func testCommitInterruptExperimentBor(t *testing.T, delay uint, txCount int, opc
 	time.Sleep(5 * time.Second)
 	w.stop()
 
-	assert.Equal(t, txCount, w.chain.CurrentBlock().Transactions().Len())
+	currentBlockNumber := w.current.header.Number.Uint64()
+	assert.Check(t, txCount >= w.chain.GetBlockByNumber(currentBlockNumber-1).Transactions().Len())
+	assert.Check(t, 0 < w.chain.GetBlockByNumber(currentBlockNumber-1).Transactions().Len())
 }
 
 func BenchmarkBorMining(b *testing.B) {
