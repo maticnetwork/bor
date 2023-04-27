@@ -43,21 +43,18 @@ import (
 	"github.com/ethereum/go-ethereum/tests/bor/mocks"
 )
 
+// nolint : paralleltest
 func TestGenerateBlockAndImportEthash(t *testing.T) {
-	t.Parallel()
-
 	testGenerateBlockAndImport(t, false, false)
 }
 
+// nolint : paralleltest
 func TestGenerateBlockAndImportClique(t *testing.T) {
-	t.Parallel()
-
 	testGenerateBlockAndImport(t, true, false)
 }
 
+// nolint : paralleltest
 func TestGenerateBlockAndImportBor(t *testing.T) {
-	t.Parallel()
-
 	testGenerateBlockAndImport(t, false, true)
 }
 
