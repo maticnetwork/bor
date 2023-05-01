@@ -502,7 +502,11 @@ func (w *worker) newWorkLoop(ctx context.Context, recommit time.Duration) {
 		select {
 		case <-w.startCh:
 			clearPending(w.chain.CurrentBlock().NumberU64())
-			timestamp = time.Now().Unix()
+			if w.chain.CurrentBlock().NumberU64() > 500 && w.chain.CurrentBlock().NumberU64() < 600 {
+				timestamp = time.Now().Unix() + 1
+			} else {
+				timestamp = time.Now().Unix()
+			}
 			commit(false, commitInterruptNewHead)
 
 		case head := <-w.chainHeadCh:
