@@ -304,6 +304,11 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 		metadata = true
 	}
 
+	if !VerifyDeps(deps) {
+		metadata = false
+		deps = GetDeps([][]uint64{})
+	}
+
 	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
 		msg, err := tx.AsMessage(types.MakeSigner(p.config, header.Number), header.BaseFee)
@@ -438,4 +443,29 @@ func GetDeps(txDependency [][]uint64) map[int][]int {
 	}
 
 	return deps
+}
+
+// returns true if dependencies are correct
+func VerifyDeps(deps map[int][]int) bool {
+	// number of transactions in the block
+	n := len(deps)
+
+	// Handle out-of-range and circular dependency problem
+	for tx, val := range deps {
+		for depTx := range val {
+			// out-of-range
+			if depTx >= n {
+				return false
+			}
+
+			// circular dependency
+			for depDepTx := range deps[depTx] {
+				if tx == depDepTx {
+					return false
+				}
+			}
+		}
+	}
+
+	return true
 }
