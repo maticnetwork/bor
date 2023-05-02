@@ -45,7 +45,7 @@ func NewBorDefaultMiner(t *testing.T) *DefaultBorMiner {
 	ctrl := gomock.NewController(t)
 
 	ethAPI := api.NewMockCaller(ctrl)
-	ethAPI.EXPECT().Call(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	ethAPI.EXPECT().Call(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	spanner := bor.NewMockSpanner(ctrl)
 	spanner.EXPECT().GetCurrentValidatorsByHash(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*valset.Validator{
