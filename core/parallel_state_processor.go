@@ -453,16 +453,8 @@ func VerifyDeps(deps map[int][]int) bool {
 	// Handle out-of-range and circular dependency problem
 	for tx, val := range deps {
 		for depTx := range val {
-			// out-of-range
-			if depTx >= n {
+			if depTx >= n && depTx < tx {
 				return false
-			}
-
-			// circular dependency
-			for depDepTx := range deps[depTx] {
-				if tx == depDepTx {
-					return false
-				}
 			}
 		}
 	}
