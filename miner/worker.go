@@ -654,6 +654,7 @@ func (w *worker) mainLoop(ctx context.Context) {
 				txset := types.NewTransactionsByPriceAndNonce(w.current.signer, txs, cmath.FromBig(w.current.header.BaseFee))
 				tcount := w.current.tcount
 
+				log.Info("###############", "getInterruptTimer", 1)
 				interruptCh, stopFn := getInterruptTimer(ctx, w.current, w.chain.CurrentBlock())
 				w.commitTransactions(w.current, txset, nil, interruptCh)
 
@@ -1439,6 +1440,7 @@ func (w *worker) generateWork(ctx context.Context, params *generateParams) (*typ
 	}
 	defer work.discard()
 
+	log.Info("###############", "getInterruptTimer", 2)
 	interruptCh, stopFn := getInterruptTimer(ctx, work, w.chain.CurrentBlock())
 	defer stopFn()
 
@@ -1488,6 +1490,7 @@ func (w *worker) commitWork(ctx context.Context, interrupt *int32, noempty bool,
 	}()
 
 	if !noempty {
+		log.Info("###############", "getInterruptTimer", 3)
 		interruptCh, stopFn = getInterruptTimer(ctx, work, w.chain.CurrentBlock())
 	}
 
@@ -1526,6 +1529,8 @@ func (w *worker) commitWork(ctx context.Context, interrupt *int32, noempty bool,
 }
 
 func getInterruptTimer(ctx context.Context, work *environment, current *types.Block) (chan struct{}, func()) {
+	log.Info("###############", "getInterruptTimer", 4)
+
 	delay := time.Until(time.Unix(int64(work.header.Time), 0))
 
 	timeoutTimer := time.NewTimer(delay)
@@ -1537,12 +1542,18 @@ func getInterruptTimer(ctx context.Context, work *environment, current *types.Bl
 	interruptCh := make(chan struct{})
 
 	go func() {
+		log.Info("###############", "getInterruptTimer", 5)
+
 		select {
 		case <-timeoutTimer.C:
+			log.Info("###############", "getInterruptTimer", 6)
+
 			log.Info("Commit Interrupt. Pre-committing the current block", "block", blockNumber)
 
 			close(interruptCh)
 		case <-ctx.Done(): // nothing to do
+			log.Info("###############", "getInterruptTimer", 7)
+
 		}
 	}()
 
