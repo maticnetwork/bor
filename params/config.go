@@ -356,7 +356,7 @@ var (
 		CancunTime:                    nil,
 		PragueTime:                    nil,
 		TerminalTotalDifficulty:       nil,
-		TerminalTotalDifficultyPassed: false,
+		TerminalTotalDifficultyPassed: true,
 		Ethash:                        new(EthashConfig),
 		Clique:                        nil,
 		Bor:                           &BorConfig{BurntContract: map[string]string{"0": "0x000000000000000000000000000000000000dead"}},

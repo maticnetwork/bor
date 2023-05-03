@@ -415,10 +415,7 @@ func newGQLService(t *testing.T, stack *node.Node, gspec *core.Genesis, genBlock
 	t.Helper()
 
 	ethConf := &ethconfig.Config{
-		Genesis: gspec,
-		Ethash: ethash.Config{
-			PowMode: ethash.ModeFake,
-		},
+		Genesis:                 gspec,
 		NetworkId:               1337,
 		TrieCleanCache:          5,
 		TrieCleanCacheJournal:   "triecache",

@@ -102,12 +102,6 @@ func newTestWorker(t TensingObject, chainConfig *params.ChainConfig, engine cons
 	return w, backend, w.close
 }
 
-// nolint : paralleltest
-func TestGenerateBlockAndImportEthash(t *testing.T) {
-	testGenerateBlockAndImport(t, false, false)
-}
-
-// nolint : paralleltest
 func TestGenerateBlockAndImportClique(t *testing.T) {
 	testGenerateBlockAndImport(t, true, false)
 }
