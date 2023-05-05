@@ -358,6 +358,7 @@ func (w *worker) mainLoopWithDelay(ctx context.Context, delay uint) {
 				txset := types.NewTransactionsByPriceAndNonce(w.current.signer, txs, cmath.FromBig(w.current.header.BaseFee))
 				tcount := w.current.tcount
 
+				//nolint:contextcheck
 				w.commitTransactions(w.current, txset, nil, context.Background())
 
 				// Only update the snapshot if any new transactions were added
@@ -582,6 +583,7 @@ func (w *worker) commitWorkWithDelay(ctx context.Context, interrupt *int32, noem
 		return
 	}
 
+	//nolint:contextcheck
 	var interruptCtx = context.Background()
 
 	stopFn := func() {}
