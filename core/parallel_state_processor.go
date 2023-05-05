@@ -302,11 +302,11 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 
 	if block.Header().TxDependency != nil {
 		metadata = true
-	}
 
-	if !VerifyDeps(deps) {
-		metadata = false
-		deps = GetDeps([][]uint64{})
+		if !VerifyDeps(deps) {
+			metadata = false
+			deps = GetDeps([][]uint64{})
+		}
 	}
 
 	// Iterate over and process the individual transactions
@@ -453,7 +453,7 @@ func VerifyDeps(deps map[int][]int) bool {
 	// Handle out-of-range and circular dependency problem
 	for tx, val := range deps {
 		for depTx := range val {
-			if depTx >= n && depTx < tx {
+			if depTx >= n || depTx < tx {
 				return false
 			}
 		}
