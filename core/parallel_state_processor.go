@@ -88,6 +88,7 @@ type ExecutionTask struct {
 	// next k elements in dependencies -> transaction indexes on which transaction i is dependent on
 	dependencies []int
 	coinbase     common.Address
+	blockContext vm.BlockContext
 }
 
 func (task *ExecutionTask) Execute(mvh *blockstm.MVHashMap, incarnation int) (err error) {
@@ -96,9 +97,7 @@ func (task *ExecutionTask) Execute(mvh *blockstm.MVHashMap, incarnation int) (er
 	task.statedb.SetMVHashmap(mvh)
 	task.statedb.SetIncarnation(incarnation)
 
-	blockContext := NewEVMBlockContext(task.header, task.blockChain, nil)
-
-	evm := vm.NewEVM(blockContext, vm.TxContext{}, task.statedb, task.config, task.evmConfig)
+	evm := vm.NewEVM(task.blockContext, vm.TxContext{}, task.statedb, task.config, task.evmConfig)
 
 	// Create a new context to be used in the EVM environment.
 	txContext := NewEVMTxContext(task.msg)
@@ -117,7 +116,7 @@ func (task *ExecutionTask) Execute(mvh *blockstm.MVHashMap, incarnation int) (er
 
 	// Apply the transaction to the current state (included in the env).
 	if *task.shouldDelayFeeCal {
-		task.result, err = ApplyMessageNoFeeBurnOrTip(evm, task.msg, new(GasPool).AddGas(task.gasLimit))
+		task.result, err = ApplyMessageNoFeeBurnOrTip(evm, task.msg, new(GasPool).AddGas(task.gasLimit), nil)
 
 		if task.result == nil || err != nil {
 			return blockstm.ErrExecAbortError{Dependency: task.statedb.DepTxIndex(), OriginError: err}
@@ -125,8 +124,8 @@ func (task *ExecutionTask) Execute(mvh *blockstm.MVHashMap, incarnation int) (er
 
 		reads := task.statedb.MVReadMap()
 
-		if _, ok := reads[blockstm.NewSubpathKey(blockContext.Coinbase, state.BalancePath)]; ok {
-			log.Info("Coinbase is in MVReadMap", "address", blockContext.Coinbase)
+		if _, ok := reads[blockstm.NewSubpathKey(task.blockContext.Coinbase, state.BalancePath)]; ok {
+			log.Info("Coinbase is in MVReadMap", "address", task.blockContext.Coinbase)
 
 			task.shouldRerunWithoutFeeDelay = true
 		}
@@ -137,7 +136,7 @@ func (task *ExecutionTask) Execute(mvh *blockstm.MVHashMap, incarnation int) (er
 			task.shouldRerunWithoutFeeDelay = true
 		}
 	} else {
-		task.result, err = ApplyMessage(evm, task.msg, new(GasPool).AddGas(task.gasLimit))
+		task.result, err = ApplyMessage(evm, task.msg, new(GasPool).AddGas(task.gasLimit), nil)
 	}
 
 	if task.statedb.HadInvalidRead() || err != nil {
@@ -175,17 +174,6 @@ func (task *ExecutionTask) Dependencies() []int {
 }
 
 func (task *ExecutionTask) Settle() {
-	defer func() {
-		if r := recover(); r != nil {
-			// In some rare cases, ApplyMVWriteSet will panic due to an index out of range error when calculating the
-			// address hash in sha3 module. Recover from panic and continue the execution.
-			// After recovery, block receipts or merckle root will be incorrect, but this is fine, because the block
-			// will be rejected and re-synced.
-			log.Info("Recovered from error", "Error:", r)
-			return
-		}
-	}()
-
 	task.finalStateDB.Prepare(task.tx.Hash(), task.index)
 
 	coinbaseBalance := task.finalStateDB.GetBalance(task.coinbase)
@@ -309,6 +297,8 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 		}
 	}
 
+	blockContext := NewEVMBlockContext(header, p.bc, nil)
+
 	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
 		msg, err := tx.AsMessage(types.MakeSigner(p.config, header.Number), header.BaseFee)
@@ -344,6 +334,7 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 				allLogs:           &allLogs,
 				dependencies:      deps[i],
 				coinbase:          coinbase,
+				blockContext:      blockContext,
 			}
 
 			tasks = append(tasks, task)
@@ -368,6 +359,7 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 				allLogs:           &allLogs,
 				dependencies:      nil,
 				coinbase:          coinbase,
+				blockContext:      blockContext,
 			}
 
 			tasks = append(tasks, task)

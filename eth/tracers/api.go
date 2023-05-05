@@ -654,7 +654,8 @@ func (api *API) IntermediateRoots(ctx context.Context, hash common.Hash, config 
 				break
 			}
 		} else {
-			if _, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(msg.Gas())); err != nil {
+			// nolint : contextcheck
+			if _, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(msg.Gas()), context.Background()); err != nil {
 				log.Warn("Tracing intermediate roots did not complete", "txindex", i, "txhash", tx.Hash(), "err", err)
 				// We intentionally don't return the error here: if we do, then the RPC server will not
 				// return the roots. Most likely, the caller already knows that a certain transaction fails to
@@ -825,6 +826,7 @@ func (api *API) traceBlock(ctx context.Context, block *types.Block, config *Trac
 			if stateSyncPresent && i == len(txs)-1 {
 				if *config.BorTraceEnabled {
 					callmsg := prepareCallMessage(msg)
+					// nolint : contextcheck
 					if _, err := statefull.ApplyBorMessage(*vmenv, callmsg); err != nil {
 						failed = err
 						break
@@ -833,7 +835,8 @@ func (api *API) traceBlock(ctx context.Context, block *types.Block, config *Trac
 					break
 				}
 			} else {
-				if _, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(msg.Gas())); err != nil {
+				// nolint : contextcheck
+				if _, err := core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(msg.Gas()), context.Background()); err != nil {
 					failed = err
 					break
 				}
@@ -843,8 +846,8 @@ func (api *API) traceBlock(ctx context.Context, block *types.Block, config *Trac
 			}
 		} else {
 			coinbaseBalance := statedb.GetBalance(blockCtx.Coinbase)
-
-			result, err := core.ApplyMessageNoFeeBurnOrTip(vmenv, msg, new(core.GasPool).AddGas(msg.Gas()))
+			// nolint : contextcheck
+			result, err := core.ApplyMessageNoFeeBurnOrTip(vmenv, msg, new(core.GasPool).AddGas(msg.Gas()), context.Background())
 
 			if err != nil {
 				failed = err
@@ -1036,7 +1039,8 @@ func (api *API) standardTraceBlockToFile(ctx context.Context, block *types.Block
 				}
 			}
 		} else {
-			_, err = core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(msg.Gas()))
+			// nolint : contextcheck
+			_, err = core.ApplyMessage(vmenv, msg, new(core.GasPool).AddGas(msg.Gas()), context.Background())
 			if writer != nil {
 				writer.Flush()
 			}
@@ -1248,7 +1252,8 @@ func (api *API) traceTx(ctx context.Context, message core.Message, txctx *Contex
 			return nil, fmt.Errorf("tracing failed: %w", err)
 		}
 	} else {
-		result, err = core.ApplyMessage(vmenv, message, new(core.GasPool).AddGas(message.Gas()))
+		// nolint : contextcheck
+		result, err = core.ApplyMessage(vmenv, message, new(core.GasPool).AddGas(message.Gas()), context.Background())
 		if err != nil {
 			return nil, fmt.Errorf("tracing failed: %w", err)
 		}
