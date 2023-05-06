@@ -624,18 +624,18 @@ func testGetSealingWork(t *testing.T, chainConfig *params.ChainConfig, engine co
 	}
 }
 
+// nolint:paralleltest
 func TestCommitInterruptExperimentBor(t *testing.T) {
-	t.Parallel()
 	// with 1 sec block time and 200 millisec tx delay we should get 5 txs per block
 	testCommitInterruptExperimentBor(t, 200, 5)
 
+	time.Sleep(3 * time.Second)
 	// with 1 sec block time and 100 millisec tx delay we should get 10 txs per block
 	testCommitInterruptExperimentBor(t, 100, 10)
 }
 
+// nolint:thelper
 func testCommitInterruptExperimentBor(t *testing.T, delay uint, txCount int) {
-	t.Helper()
-
 	var (
 		engine      consensus.Engine
 		chainConfig *params.ChainConfig
