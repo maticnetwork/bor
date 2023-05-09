@@ -30,6 +30,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
+	"github.com/ethereum/go-ethereum/trie/trienode"
 	"golang.org/x/crypto/sha3"
 )
 
@@ -150,7 +151,7 @@ type testHelper struct {
 	diskdb  ethdb.Database
 	triedb  *trie.Database
 	accTrie *trie.StateTrie
-	nodes   *trie.MergedNodeSet
+	nodes   *trienode.MergedNodeSet
 }
 
 func newHelper() *testHelper {
@@ -162,7 +163,7 @@ func newHelper() *testHelper {
 		diskdb:  diskdb,
 		triedb:  triedb,
 		accTrie: accTrie,
-		nodes:   trie.NewMergedNodeSet(),
+		nodes:   trienode.NewMergedNodeSet(),
 	}
 }
 
@@ -216,10 +217,8 @@ func (t *testHelper) Commit() common.Hash {
 	if nodes != nil {
 		_ = t.nodes.Merge(nodes)
 	}
-
-	_ = t.triedb.Update(t.nodes)
-	_ = t.triedb.Commit(root, false)
-
+	t.triedb.Update(root, types.EmptyRootHash, t.nodes)
+	t.triedb.Commit(root, false)
 	return root
 }
 
