@@ -80,7 +80,9 @@ func (g *GoToolchain) Install(gobin string, args ...string) *exec.Cmd {
 	// the install command.
 	pathTool := g.goTool("env", "GOPATH")
 	output, _ := pathTool.Output()
-	tool.Env = append(tool.Env, "GOPATH="+string(output))
+	// CKZG by default is not portable, append the necessary build flags to make
+	// it not rely on modern CPU instructions and enable linking against
+	tool.Env = append(tool.Env, "CGO_CFLAGS=-D__BLST_PORTABLE__")
 
 	return tool
 }
