@@ -208,11 +208,11 @@ The ```bor server``` command runs the Bor client.
 
 - ```netrestrict```: Restricts network communication to the given IP networks (CIDR masks)
 
-- ```nodekey```:  P2P node key file
+- ```maxpendpeers```: Maximum number of pending connection attempts (defaults used if set to 0)
 
-- ```nodekeyhex```: P2P node key as hex
+- ```nat```: NAT port mapping mechanism (any|none|upnp|pmp|extip:<IP>)
 
-- ```nodiscover```: Disables the peer discovery mechanism (manual peer addition) (default: false)
+- ```nodiscover```: Disables the peer discovery mechanism (manual peer addition)
 
 - ```v5disc```: Enables the experimental RLPx V5 (Topic Discovery) mechanism (default: false)
 

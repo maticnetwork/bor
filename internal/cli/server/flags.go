@@ -472,6 +472,13 @@ func (c *Command) Flags() *flagset.Flagset {
 		Group:   "JsonRPC",
 	})
 	f.BoolFlag(&flagset.BoolFlag{
+		Name:    "rpc.allow-unprotected-txs",
+		Usage:   "Allow for unprotected (non EIP155 signed) transactions to be submitted via RPC",
+		Value:   &c.cliConfig.JsonRPC.AllowUnprotectedTxs,
+		Default: c.cliConfig.JsonRPC.AllowUnprotectedTxs,
+		Group:   "JsonRPC",
+	})
+	f.BoolFlag(&flagset.BoolFlag{
 		Name:    "ipcdisable",
 		Usage:   "Disable the IPC-RPC server",
 		Value:   &c.cliConfig.JsonRPC.IPCDisable,
@@ -701,6 +708,27 @@ func (c *Command) Flags() *flagset.Flagset {
 		Usage:   "NAT port mapping mechanism (any|none|upnp|pmp|extip:<IP>)",
 		Value:   &c.cliConfig.P2P.NAT,
 		Default: c.cliConfig.P2P.NAT,
+		Group:   "P2P",
+	})
+	f.StringFlag(&flagset.StringFlag{
+		Name:    "netrestrict",
+		Usage:   "Restricts network communication to the given IP networks (CIDR masks)",
+		Value:   &c.cliConfig.P2P.NetRestrict,
+		Default: c.cliConfig.P2P.NetRestrict,
+		Group:   "P2P",
+	})
+	f.StringFlag(&flagset.StringFlag{
+		Name:    "nodekey",
+		Usage:   " P2P node key file",
+		Value:   &c.cliConfig.P2P.NodeKey,
+		Default: c.cliConfig.P2P.NodeKey,
+		Group:   "P2P",
+	})
+	f.StringFlag(&flagset.StringFlag{
+		Name:    "nodekeyhex",
+		Usage:   "P2P node key as hex",
+		Value:   &c.cliConfig.P2P.NodeKeyHex,
+		Default: c.cliConfig.P2P.NodeKeyHex,
 		Group:   "P2P",
 	})
 	f.StringFlag(&flagset.StringFlag{

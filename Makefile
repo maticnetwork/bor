@@ -14,6 +14,8 @@ GORUN = env GO111MODULE=on go run
 GOPATH = $(shell go env GOPATH)
 
 GIT_COMMIT ?= $(shell git rev-list -1 HEAD)
+GIT_BRANCH ?= $(shell git rev-parse --abbrev-ref HEAD)
+GIT_TAG    ?= $(shell git describe --tags `git rev-list --tags="v*" --max-count=1`)
 
 PACKAGE = github.com/ethereum/go-ethereum
 GO_FLAGS += -buildvcs=false
@@ -25,7 +27,7 @@ GOTEST = GODEBUG=cgocheck=0 go test $(GO_FLAGS) $(GO_LDFLAGS) -p 1
 
 bor:
 	mkdir -p $(GOPATH)/bin/
-	go build -o $(GOBIN)/bor $(GO_LDFLAGS) ./cmd/cli/main.go 
+	go build -o $(GOBIN)/bor $(GO_LDFLAGS) ./cmd/cli/main.go
 	cp $(GOBIN)/bor $(GOPATH)/bin/
 	@echo "Done building."
 
