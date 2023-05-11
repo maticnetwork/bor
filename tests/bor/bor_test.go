@@ -625,10 +625,6 @@ func TestOutOfTurnSigning(t *testing.T) {
 		enodes = append(enodes, stack.Server().Self())
 	}
 
-	spanner := getMockedSpanner(t, heimdallSpan.ValidatorSet.Validators)
-	_bor.SetSpanner(spanner)
-	_bor.SetHeimdallClient(h)
-
 	// Iterate over all the nodes and start mining
 	time.Sleep(3 * time.Second)
 	for _, node := range nodes {
