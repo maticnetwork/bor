@@ -24,7 +24,7 @@ require (
 	github.com/docker/docker v1.6.2
 	github.com/dop251/goja v0.0.0-20230122112309-96b1610dd4f7
 	github.com/emirpasic/gods v1.18.1
-	github.com/ethereum/c-kzg-4844 v0.1.0
+	github.com/ethereum/c-kzg-4844 v0.2.0
 	github.com/fatih/color v1.9.0
 	github.com/fjl/gencodec v0.0.0-20220412091415-8bb9e558978c
 	github.com/fjl/memsize v0.0.0-20190710130421-bcb5799ab5e5
