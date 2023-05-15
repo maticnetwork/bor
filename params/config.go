@@ -349,10 +349,12 @@ var (
 		BerlinBlock:         big.NewInt(13996000),
 		LondonBlock:         big.NewInt(22640000),
 		Bor: &BorConfig{
-			JaipurBlock:                big.NewInt(22770000),
-			DelhiBlock:                 big.NewInt(29638656),
-			IndoreBlock:                big.NewInt(35400000), // TODO - update block number
-			StateSyncConfirmationDelay: 128,
+			JaipurBlock: big.NewInt(22770000),
+			DelhiBlock:  big.NewInt(29638656),
+			IndoreBlock: big.NewInt(354000000), // TODO - update block number
+			StateSyncConfirmationDelay: map[string]uint64{
+				"354000000": 128,
+			},
 			Period: map[string]uint64{
 				"0":        2,
 				"25275000": 5,
@@ -405,10 +407,12 @@ var (
 		BerlinBlock:         big.NewInt(14750000),
 		LondonBlock:         big.NewInt(23850000),
 		Bor: &BorConfig{
-			JaipurBlock:                big.NewInt(23850000),
-			DelhiBlock:                 big.NewInt(38189056),
-			IndoreBlock:                big.NewInt(42500032), // TODO - update block number
-			StateSyncConfirmationDelay: 128,
+			JaipurBlock: big.NewInt(23850000),
+			DelhiBlock:  big.NewInt(38189056),
+			IndoreBlock: big.NewInt(425000320), // TODO - update block number
+			StateSyncConfirmationDelay: map[string]uint64{
+				"425000320": 128,
+			},
 			Period: map[string]uint64{
 				"0": 2,
 			},
@@ -591,7 +595,7 @@ type BorConfig struct {
 	JaipurBlock                *big.Int               `json:"jaipurBlock"`                // Jaipur switch block (nil = no fork, 0 = already on jaipur)
 	DelhiBlock                 *big.Int               `json:"delhiBlock"`                 // Delhi switch block (nil = no fork, 0 = already on delhi)
 	IndoreBlock                *big.Int               `json:"indoreBlock"`                // Indore switch block (nil = no fork, 0 = already on indore)
-	StateSyncConfirmationDelay uint64                 `json:"stateSyncConfirmationDelay"` // StateSync Confirmation Delay, in seconds, to calculate `to`
+	StateSyncConfirmationDelay map[string]uint64      `json:"stateSyncConfirmationDelay"` // StateSync Confirmation Delay, in seconds, to calculate `to`
 }
 
 // String implements the stringer interface, returning the consensus engine details.
@@ -627,8 +631,8 @@ func (c *BorConfig) IsIndore(number *big.Int) bool {
 	return isForked(c.IndoreBlock, number)
 }
 
-func (c *BorConfig) FetchStateSyncDelay() uint64 {
-	return c.StateSyncConfirmationDelay
+func (c *BorConfig) FetchStateSyncDelay(number uint64) uint64 {
+	return c.fetchStateSyncDelayHelper(c.StateSyncConfirmationDelay, number)
 }
 
 func (c *BorConfig) IsSprintStart(number uint64) bool {
@@ -655,7 +659,7 @@ func (c *BorConfig) calculateBorConfigHelper(field map[string]uint64, number uin
 	return field[keys[len(keys)-1]]
 }
 
-func (c *BorConfig) calculateSprintSizeHelper(field map[string]uint64, number uint64) uint64 {
+func helperToRetriveKeyValue(field map[string]uint64, number uint64) uint64 {
 	keys := make([]string, 0, len(field))
 	for k := range field {
 		keys = append(keys, k)
@@ -673,6 +677,14 @@ func (c *BorConfig) calculateSprintSizeHelper(field map[string]uint64, number ui
 	}
 
 	return field[keys[len(keys)-1]]
+}
+
+func (c *BorConfig) calculateSprintSizeHelper(field map[string]uint64, number uint64) uint64 {
+	return helperToRetriveKeyValue(field, number)
+}
+
+func (c *BorConfig) fetchStateSyncDelayHelper(field map[string]uint64, number uint64) uint64 {
+	return helperToRetriveKeyValue(field, number)
 }
 
 func (c *BorConfig) CalculateBurntContract(number uint64) string {

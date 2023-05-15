@@ -1192,7 +1192,7 @@ func (c *Bor) CommitStates(
 	var to time.Time
 
 	if c.config.IsIndore(header.Number) {
-		stateSyncDelay := c.config.FetchStateSyncDelay()
+		stateSyncDelay := c.config.FetchStateSyncDelay(number)
 		to = time.Unix(int64(header.Time-stateSyncDelay), 0)
 	} else {
 		to = time.Unix(int64(chain.Chain.GetHeaderByNumber(number-c.config.CalculateSprint(number)).Time), 0)

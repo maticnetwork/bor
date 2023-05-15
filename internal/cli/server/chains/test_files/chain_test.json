@@ -50,9 +50,7 @@
             "22640000":"0x70bcA57F4579f58670aB2d18Ef16e02C17553C38"
           },
           "jaipurBlock":22770000,
-          "delhiBlock": 29638656,
-          "indoreBlock": 35400000,
-          "stateSyncConfirmationDelay": 128
+          "delhiBlock": 29638656
         }
       },
       "nonce":"0x0",
