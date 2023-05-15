@@ -72,6 +72,7 @@ func (eth *Ethereum) StateAtBlock(block *types.Block, reexec uint64, base *state
 		// The optional base statedb is given, mark the start point as parent block
 		statedb, database, report = base, base.Database(), false
 		current = eth.blockchain.GetBlock(block.ParentHash(), block.NumberU64()-1)
+
 		if current == nil {
 			return nil, fmt.Errorf("missing parent block %v %d", block.ParentHash(), block.NumberU64()-1)
 		}

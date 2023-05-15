@@ -344,6 +344,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, chainConfig *par
 	}
 
 	// Ensure that a previous crash in SetHead doesn't leave extra ancients
+	//nolint:nestif
 	if frozen, err := bc.db.ItemAmountInAncient(); err == nil && frozen > 0 {
 		frozen, err = bc.db.Ancients()
 		if err != nil {

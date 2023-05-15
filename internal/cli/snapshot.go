@@ -18,6 +18,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/trie"
+
 	"github.com/prometheus/tsdb/fileutil"
 
 	"github.com/mitchellh/cli"
@@ -303,7 +304,7 @@ func (c *PruneBlockCommand) Run(args []string) int {
 	}
 	defer node.Close()
 
-	dbHandles, err := server.MakeDatabaseHandles()
+	dbHandles, err := server.MakeDatabaseHandles(0)
 	if err != nil {
 		c.UI.Error(err.Error())
 		return 1
@@ -320,6 +321,7 @@ func (c *PruneBlockCommand) Run(args []string) int {
 		c.UI.Error(err.Error())
 		return 1
 	}
+
 	return 0
 }
 
@@ -333,10 +335,12 @@ func (c *PruneBlockCommand) accessDb(stack *node.Node, dbHandles int) error {
 	if !c.checkSnapshotWithMPT {
 		return nil
 	}
+
 	headBlock := rawdb.ReadHeadBlock(chaindb)
 	if headBlock == nil {
 		return errors.New("failed to load head block")
 	}
+
 	headHeader := headBlock.Header()
 	//Make sure the MPT and snapshot matches before pruning, otherwise the node can not start.
 	snaptree, err := snapshot.New(chaindb, trie.NewDatabase(chaindb), 256, headBlock.Root(), false, false, false)
@@ -368,6 +372,7 @@ func (c *PruneBlockCommand) accessDb(stack *node.Node, dbHandles int) error {
 	// Ensure the root is really present. The weak assumption
 	// is the presence of root can indicate the presence of the
 	// entire trie.
+	//nolint:nestif
 	if blob := rawdb.ReadTrieNode(chaindb, targetRoot); len(blob) == 0 {
 		// The special case is for clique based networks(rinkeby, goerli
 		// and some other private networks), it's possible that two
@@ -381,26 +386,33 @@ func (c *PruneBlockCommand) accessDb(stack *node.Node, dbHandles int) error {
 		// state available, but we don't want to use the topmost state
 		// as the pruning target.
 		var found bool
+
 		for i := len(layers) - 2; i >= 1; i-- {
 			if blob := rawdb.ReadTrieNode(chaindb, layers[i].Root()); len(blob) != 0 {
 				targetRoot = layers[i].Root()
 				found = true
+
 				log.Info("Selecting middle-layer as the pruning target", "root", targetRoot, "depth", i)
+
 				break
 			}
 		}
+
 		if !found {
 			if blob := rawdb.ReadTrieNode(chaindb, snaptree.DiskRoot()); len(blob) != 0 {
 				targetRoot = snaptree.DiskRoot()
 				found = true
+
 				log.Info("Selecting disk-layer as the pruning target", "root", targetRoot)
 			}
 		}
+
 		if !found {
 			if len(layers) > 0 {
 				log.Error("no snapshot paired state")
 				return errors.New("no snapshot paired state")
 			}
+
 			return fmt.Errorf("associated state[%x] is not present", targetRoot)
 		}
 	} else {
@@ -410,6 +422,7 @@ func (c *PruneBlockCommand) accessDb(stack *node.Node, dbHandles int) error {
 			log.Info("Selecting user-specified state as the pruning target", "root", targetRoot)
 		}
 	}
+
 	return nil
 }
 
@@ -417,6 +430,7 @@ func (c *PruneBlockCommand) pruneBlock(stack *node.Node, fdHandles int) error {
 	name := "chaindata"
 
 	oldAncientPath := c.datadirAncient
+
 	switch {
 	case oldAncientPath == "":
 		oldAncientPath = filepath.Join(stack.ResolvePath(name), "ancient")
@@ -428,8 +442,8 @@ func (c *PruneBlockCommand) pruneBlock(stack *node.Node, fdHandles int) error {
 	if path == "" {
 		return errors.New("prune failed, did not specify the AncientPath")
 	}
-	newAncientPath := filepath.Join(path, "ancient_back")
 
+	newAncientPath := filepath.Join(path, "ancient_back")
 	blockpruner := pruner.NewBlockPruner(stack, oldAncientPath, newAncientPath, c.blockAmountReserved)
 
 	lock, exist, err := fileutil.Flock(filepath.Join(oldAncientPath, "PRUNEFLOCK"))
@@ -437,16 +451,20 @@ func (c *PruneBlockCommand) pruneBlock(stack *node.Node, fdHandles int) error {
 		log.Error("file lock error", "err", err)
 		return err
 	}
+
 	if exist {
 		defer func() {
 			_ = lock.Release()
 		}()
 		log.Info("File lock existed, waiting for prune recovery and continue", "err", err)
+
 		if err := blockpruner.RecoverInterruption("chaindata", c.cache, fdHandles, "", false); err != nil {
 			log.Error("Pruning failed", "err", err)
 			return err
 		}
+
 		log.Info("Block prune successfully")
+
 		return nil
 	}
 
@@ -456,9 +474,12 @@ func (c *PruneBlockCommand) pruneBlock(stack *node.Node, fdHandles int) error {
 		if err := blockpruner.AncientDbReplacer(); err != nil {
 			return err
 		}
+
 		log.Info("Block prune successfully")
+
 		return nil
 	}
+
 	if err := blockpruner.BlockPruneBackup(name, c.cache, fdHandles, "", false, false); err != nil {
 		return err
 	}
@@ -470,7 +491,12 @@ func (c *PruneBlockCommand) pruneBlock(stack *node.Node, fdHandles int) error {
 		return err
 	}
 
-	lock.Release()
+	if err = lock.Release(); err != nil {
+		log.Error("Unable to release lock on file", "err", err)
+
+		return err
+	}
+
 	log.Info("Block prune successfully")
 
 	return nil

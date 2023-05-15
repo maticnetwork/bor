@@ -45,6 +45,7 @@ func InitDatabaseFromFreezer(db ethdb.Database) {
 		hash   common.Hash
 		offset = db.AncientOffSet()
 	)
+
 	for i := uint64(0) + offset; i < frozen+offset; {
 		// We read 100K hashes at a time, for a total of 3.2M
 		count := uint64(100_000)
@@ -99,9 +100,11 @@ func iterateTransactions(db ethdb.Database, from uint64, to uint64, reverse bool
 		number uint64
 		rlp    rlp.RawValue
 	}
+
 	if offset := db.AncientOffSet(); offset > from {
 		from = offset
 	}
+
 	if to <= from {
 		return nil
 	}

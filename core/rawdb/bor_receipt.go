@@ -64,7 +64,7 @@ func ReadBorReceiptRLP(db ethdb.Reader, hash common.Hash, number uint64) rlp.Raw
 func ReadRawBorReceipt(db ethdb.Reader, hash common.Hash, number uint64) *types.Receipt {
 	// Retrieve the flattened receipt slice
 	data := ReadBorReceiptRLP(db, hash, number)
-	if data == nil || len(data) == 0 {
+	if len(data) == 0 {
 		return nil
 	}
 
@@ -76,10 +76,12 @@ func ReadRawBorReceipt(db ethdb.Reader, hash common.Hash, number uint64) *types.
 			log.Error("Invalid bor receipt array RLP", "number", number, "hash", hash, "err", err)
 			return nil
 		}
+
 		if nReceipts := len(storageReceipts); nReceipts != 1 {
 			log.Error("Invalid bor receipt array RLP length", "number", number, "hash", hash, "nReceipts", nReceipts)
 			return nil
 		}
+
 		return (*types.Receipt)(storageReceipts[0])
 	}
 

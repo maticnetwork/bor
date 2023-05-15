@@ -173,6 +173,7 @@ func ReadOffsetOfCurrentAncientFreezer(db ethdb.KeyValueReader) uint64 {
 	if offset == nil {
 		return 0
 	}
+
 	return new(big.Int).SetBytes(offset).Uint64()
 }
 
@@ -182,6 +183,7 @@ func ReadOffsetOfLastAncientFreezer(db ethdb.KeyValueReader) uint64 {
 	if offset == nil {
 		return 0
 	}
+
 	return new(big.Int).SetBytes(offset).Uint64()
 }
 
@@ -206,6 +208,7 @@ func NewFreezerDb(db ethdb.KeyValueStore, frz, namespace string, readonly bool, 
 	if err != nil {
 		return nil, err
 	}
+
 	return frdb, nil
 }
 
@@ -249,6 +252,7 @@ func NewDatabaseWithFreezer(db ethdb.KeyValueStore, freezer string, namespace st
 	// If the genesis hash is empty, we have a new key-value store, so nothing to
 	// validate in this method. If, however, the genesis hash is not nil, compare
 	// it to the freezer content.
+	//nolint:nestif
 	if kvgenesis, _ := db.Get(headerHashKey(0)); offset == 0 && len(kvgenesis) > 0 {
 		if frozen, _ := frdb.Ancients(); frozen > 0 {
 			// If the freezer already contains something, ensure that the genesis blocks
@@ -335,6 +339,7 @@ func NewLevelDBDatabaseWithFreezer(file string, cache int, handles int, freezer 
 	if err != nil {
 		return nil, err
 	}
+
 	frdb, err := NewDatabaseWithFreezer(kvdb, freezer, namespace, readonly, disableFreeze, isLastOffset)
 	if err != nil {
 		kvdb.Close()
@@ -377,18 +382,22 @@ func AncientInspect(db ethdb.Database) error {
 	offset := counter(ReadOffsetOfCurrentAncientFreezer(db))
 	// Get number of ancient rows inside the freezer.
 	ancients := counter(0)
+
 	if count, err := db.ItemAmountInAncient(); err != nil {
 		log.Error("failed to get the items amount in ancientDB", "err", err)
 		return err
 	} else {
 		ancients = counter(count)
 	}
+
 	var endNumber counter
+
 	if offset+ancients <= 0 {
 		endNumber = 0
 	} else {
 		endNumber = offset + ancients - 1
 	}
+
 	stats := [][]string{
 		{"Offset/StartBlockNumber", "Offset/StartBlockNumber of ancientDB", offset.String()},
 		{"Amount of remained items in AncientStore", "Remaining items of ancientDB", ancients.String()},

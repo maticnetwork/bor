@@ -268,11 +268,13 @@ func TestFreezerReadonlyValidate(t *testing.T) {
 		t.Fatal("can't open freezer", err)
 	}
 	var item = make([]byte, 1024)
+
 	aBatch := f.tables["a"].newBatch(0)
 	require.NoError(t, aBatch.AppendRaw(0, item))
 	require.NoError(t, aBatch.AppendRaw(1, item))
 	require.NoError(t, aBatch.AppendRaw(2, item))
 	require.NoError(t, aBatch.commit())
+
 	bBatch := f.tables["b"].newBatch(0)
 	require.NoError(t, bBatch.AppendRaw(0, item))
 	require.NoError(t, bBatch.commit())
@@ -286,7 +288,7 @@ func TestFreezerReadonlyValidate(t *testing.T) {
 
 	// Re-openening as readonly should fail when validating
 	// table lengths.
-	f, err = newFreezer(dir, "", true, 0, 2049, tables)
+	_, err = newFreezer(dir, "", true, 0, 2049, tables)
 	if err == nil {
 		t.Fatal("readonly freezer should fail with differing table lengths")
 	}
