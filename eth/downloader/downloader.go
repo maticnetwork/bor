@@ -640,6 +640,7 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td, ttd *
 				d.ancientLimit = 0
 			}
 		}
+
 		frozen, _ := d.stateDB.ItemAmountInAncient() // Ignore the error here since light client can also hit here.
 
 		// If a part of blockchain data has already been written into active store,

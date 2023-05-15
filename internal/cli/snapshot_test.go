@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
-	"io/ioutil"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -20,7 +19,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/eth"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/internal/cli/server"
 	"github.com/ethereum/go-ethereum/node"
@@ -47,6 +45,8 @@ var (
 )
 
 func TestOfflineBlockPrune(t *testing.T) {
+	t.Parallel()
+
 	// Corner case for 0 remain in ancinetStore.
 	testOfflineBlockPruneWithAmountReserved(t, 0)
 	// General case.
@@ -54,29 +54,32 @@ func TestOfflineBlockPrune(t *testing.T) {
 }
 
 func testOfflineBlockPruneWithAmountReserved(t *testing.T, amountReserved uint64) {
-	datadir, err := ioutil.TempDir("", "")
+	t.Helper()
+
+	datadir, err := os.MkdirTemp("", "")
 	if err != nil {
 		t.Fatalf("Failed to create temporary datadir: %v", err)
 	}
+
 	os.RemoveAll(datadir)
 
 	chaindbPath := filepath.Join(datadir, "chaindata")
 	oldAncientPath := filepath.Join(chaindbPath, "ancient")
 	newAncientPath := filepath.Join(chaindbPath, "ancient_back")
 
-	_, blocks, blockList, receiptsList, externTdList, startBlockNumber, _ := BlockchainCreator(t, chaindbPath, oldAncientPath, amountReserved)
-	node, _ := startEthService(t, gspec, blocks, chaindbPath)
+	_, _, blockList, receiptsList, externTdList, startBlockNumber, _ := BlockchainCreator(t, chaindbPath, oldAncientPath, amountReserved)
+
+	node := startEthService(t, chaindbPath)
 	defer node.Close()
 
 	// Initialize a block pruner for pruning, only remain amountReserved blocks backward.
 	testBlockPruner := pruner.NewBlockPruner(node, oldAncientPath, newAncientPath, amountReserved)
-	if err != nil {
-		t.Fatalf("failed to make new blockpruner: %v", err)
-	}
-	dbHandles, err := server.MakeDatabaseHandles()
+	dbHandles, err := server.MakeDatabaseHandles(0)
+
 	if err != nil {
 		t.Fatalf("failed to create db handles: %v", err)
 	}
+
 	if err := testBlockPruner.BlockPruneBackup(chaindbPath, 512, dbHandles, "", false, false); err != nil {
 		t.Fatalf("Failed to back up block: %v", err)
 	}
@@ -95,6 +98,7 @@ func testOfflineBlockPruneWithAmountReserved(t *testing.T, amountReserved uint64
 		if block.Hash() != blockHash {
 			t.Fatalf("block data did not match between oldDb and backupDb")
 		}
+
 		if blockList[blockNumber-startBlockNumber].Hash() != blockHash {
 			t.Fatalf("block data did not match between oldDb and backupDb")
 		}
@@ -108,24 +112,31 @@ func testOfflineBlockPruneWithAmountReserved(t *testing.T, amountReserved uint64
 		if td == nil {
 			t.Fatalf("Failed to ReadTd: %v", consensus.ErrUnknownAncestor)
 		}
+
 		if td.Cmp(externTdList[blockNumber-startBlockNumber]) != 0 {
 			t.Fatalf("externTd did not match between oldDb and backupDb")
 		}
 	}
 
-	//check if ancientDb freezer replaced successfully
-	testBlockPruner.AncientDbReplacer()
+	// Check if ancientDb freezer replaced successfully
+	if err = testBlockPruner.AncientDbReplacer(); err != nil {
+		t.Fatalf("error in replacing ancient db")
+	}
+
 	if _, err := os.Stat(newAncientPath); err != nil {
 		if !os.IsNotExist(err) {
 			t.Fatalf("ancientDb replaced unsuccessfully")
 		}
 	}
+
 	if _, err := os.Stat(oldAncientPath); err != nil {
 		t.Fatalf("ancientDb replaced unsuccessfully")
 	}
 }
 
 func BlockchainCreator(t *testing.T, chaindbPath, AncientPath string, blockRemain uint64) (ethdb.Database, []*types.Block, []*types.Block, []types.Receipts, []*big.Int, uint64, *core.BlockChain) {
+	t.Helper()
+
 	// Create a database with ancient freezer
 	db, err := rawdb.NewLevelDBDatabaseWithFreezer(chaindbPath, 0, 0, AncientPath, "", false, false, false)
 	if err != nil {
@@ -159,13 +170,17 @@ func BlockchainCreator(t *testing.T, chaindbPath, AncientPath string, blockRemai
 		Freeze(threshold uint64) error
 		Ancients() (uint64, error)
 	}
-	db.(freezer).Freeze(10)
+
+	if err = db.(freezer).Freeze(10); err != nil {
+		t.Fatalf("Error in freeze operation: %v", err)
+	}
 
 	frozen, err := db.Ancients()
 	//make sure there're frozen items
 	if err != nil || frozen == 0 {
 		t.Fatalf("Failed to import canonical chain start: %v", err)
 	}
+
 	if frozen < blockRemain {
 		t.Fatalf("block amount is not enough for pruning: %v", err)
 	}
@@ -189,6 +204,7 @@ func BlockchainCreator(t *testing.T, chaindbPath, AncientPath string, blockRemai
 		if td == nil {
 			t.Fatalf("Failed to ReadTd: %v", consensus.ErrUnknownAncestor)
 		}
+
 		externTdList = append(externTdList, td)
 	}
 
@@ -199,25 +215,30 @@ func checkReceiptsRLP(have, want types.Receipts) error {
 	if len(have) != len(want) {
 		return fmt.Errorf("receipts sizes mismatch: have %d, want %d", len(have), len(want))
 	}
+
 	for i := 0; i < len(want); i++ {
 		rlpHave, err := rlp.EncodeToBytes(have[i])
 		if err != nil {
 			return err
 		}
+
 		rlpWant, err := rlp.EncodeToBytes(want[i])
 		if err != nil {
 			return err
 		}
+
 		if !bytes.Equal(rlpHave, rlpWant) {
 			return fmt.Errorf("receipt #%d: receipt mismatch: have %s, want %s", i, hex.EncodeToString(rlpHave), hex.EncodeToString(rlpWant))
 		}
 	}
+
 	return nil
 }
 
 // startEthService creates a full node instance for testing.
-func startEthService(t *testing.T, genesis *core.Genesis, blocks []*types.Block, chaindbPath string) (*node.Node, *eth.Ethereum) {
+func startEthService(t *testing.T, chaindbPath string) *node.Node {
 	t.Helper()
+
 	n, err := node.New(&node.Config{DataDir: chaindbPath})
 	if err != nil {
 		t.Fatal("can't create node:", err)
@@ -227,5 +248,5 @@ func startEthService(t *testing.T, genesis *core.Genesis, blocks []*types.Block,
 		t.Fatal("can't start node:", err)
 	}
 
-	return n, nil
+	return n
 }

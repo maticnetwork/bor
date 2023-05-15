@@ -407,6 +407,7 @@ func (p *BlockPruner) backupOldDb(name string, cache, handles int, namespace str
 	offsetBatch := chainDb.NewBatch()
 	rawdb.WriteOffsetOfCurrentAncientFreezer(offsetBatch, startBlockNumber)
 	rawdb.WriteOffsetOfLastAncientFreezer(offsetBatch, oldOffset)
+
 	if err := offsetBatch.Write(); err != nil {
 		log.Crit("Failed to write offset into disk", "err", err)
 	}
@@ -442,13 +443,16 @@ func (p *BlockPruner) backupOldDb(name string, cache, handles int, namespace str
 		// Print the log every 5s for better trace.
 		if time.Since(start) > 5*time.Second {
 			log.Info("Block backup process running successfully", "current blockNumber for backup", blockNumber)
+
 			start = time.Now()
 		}
 	}
 	if err := lock.Unlock(); err != nil {
 		return fmt.Errorf("failed to release file lock: %v", err)
 	}
+
 	log.Info("Backup old ancientDB done", "current start blockNumber in ancientDB", startBlockNumber)
+
 	return nil
 }
 
@@ -462,18 +466,22 @@ func (p *BlockPruner) BlockPruneBackup(name string, cache, handles int, namespac
 	}
 
 	log.Info("Block pruning backup successfully", "time duration since start is", common.PrettyDuration(time.Since(start)))
+
 	return nil
 }
 
 func (p *BlockPruner) RecoverInterruption(name string, cache, handles int, namespace string, readonly bool) error {
 	log.Info("RecoverInterruption for block prune")
+
 	newExist, err := checkFileExist(p.newAncientPath)
 	if err != nil {
 		return fmt.Errorf("newAncientDB path error %v", err)
 	}
 
+	//nolint:nestif
 	if newExist {
 		log.Info("New ancientDB_backup existed in interruption scenario")
+
 		flockOfAncientBack, err := checkFileExist(filepath.Join(p.newAncientPath, "PRUNEFLOCKBACK"))
 		if err != nil {
 			return fmt.Errorf("failed to check flock of ancientDB_Back %v", err)
@@ -484,6 +492,7 @@ func (p *BlockPruner) RecoverInterruption(name string, cache, handles int, names
 		if err := os.RemoveAll(p.newAncientPath); err != nil {
 			return fmt.Errorf("failed to remove old ancient directory %v", err)
 		}
+
 		if flockOfAncientBack {
 			// Indicating the oldOffset/newOffset have already been updated.
 			if err := p.BlockPruneBackup(name, cache, handles, namespace, readonly, true); err != nil {
@@ -520,8 +529,10 @@ func checkFileExist(path string) (bool, error) {
 			// Indicating the file didn't exist.
 			return false, nil
 		}
+
 		return true, err
 	}
+
 	return true, nil
 }
 
@@ -535,6 +546,7 @@ func (p *BlockPruner) AncientDbReplacer() error {
 	if err := os.Rename(p.newAncientPath, p.oldAncientPath); err != nil {
 		return fmt.Errorf("failed to rename new ancient directory %v", err)
 	}
+
 	return nil
 }
 
