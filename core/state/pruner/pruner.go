@@ -356,7 +356,7 @@ func (p *BlockPruner) backupOldDb(name string, cache, handles int, namespace str
 	// Open old db wrapper.
 	chainDb, err := p.node.OpenDatabaseWithFreezer(name, cache, handles, p.oldAncientPath, namespace, readonly, true, interrupt)
 	if err != nil {
-		return fmt.Errorf("Failed to open ancient database %v", err)
+		return fmt.Errorf("failed to open ancient database: %v", err)
 	}
 	defer chainDb.Close()
 
@@ -364,9 +364,14 @@ func (p *BlockPruner) backupOldDb(name string, cache, handles int, namespace str
 	itemsOfAncient, err := chainDb.ItemAmountInAncient()
 	log.Info("ChainDB opened successfully", "itemsOfAncient", itemsOfAncient)
 
-	// If we can't access the freezer or it's empty, abort.
-	if err != nil || itemsOfAncient == 0 {
-		return errors.New("can't access the freezer or it's empty, abort")
+	// Abort if we can't access the freezer
+	if err != nil {
+		return fmt.Errorf("failed to access the freezer: %v", err)
+	}
+
+	// Also abort if it's empty
+	if itemsOfAncient == 0 {
+		return errors.New("freezer is empty, abort")
 	}
 
 	// If the items in freezer is less than the block amount that we want to reserve, it is not enough, should stop.
@@ -395,7 +400,7 @@ func (p *BlockPruner) backupOldDb(name string, cache, handles int, namespace str
 	// For every round, newoffset actually equals to the startBlockNumber in ancient backup db.
 	frdbBack, err := rawdb.NewChainFreezer(p.newAncientPath, namespace, readonly, startBlockNumber)
 	if err != nil {
-		return fmt.Errorf("Failed to create ancient freezer backup: %v", err)
+		return fmt.Errorf("failed to create ancient freezer backup: %v", err)
 	}
 	defer frdbBack.Close()
 
@@ -440,7 +445,9 @@ func (p *BlockPruner) backupOldDb(name string, cache, handles int, namespace str
 			start = time.Now()
 		}
 	}
-	lock.Unlock()
+	if err := lock.Unlock(); err != nil {
+		return fmt.Errorf("failed to release file lock: %v", err)
+	}
 	log.Info("Backup old ancientDB done", "current start blockNumber in ancientDB", startBlockNumber)
 	return nil
 }

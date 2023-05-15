@@ -346,7 +346,7 @@ func (c *PruneBlockCommand) accessDb(stack *node.Node, dbHandles int) error {
 	// Make sure the MPT and snapshot matches before pruning, otherwise the node can not start.
 	snaptree, err := snapshot.New(snapshot.Config{CacheSize: 256}, chaindb, trie.NewDatabase(chaindb, nil), headBlock.Root())
 	if err != nil {
-		log.Error("snaptree error", "err", err)
+		log.Error("Unable to load snapshot", "err", err)
 		return err // The relevant snapshot(s) might not exist
 	}
 
@@ -354,6 +354,8 @@ func (c *PruneBlockCommand) accessDb(stack *node.Node, dbHandles int) error {
 	// - in most of the normal cases, the related state is available
 	// - the probability of this layer being reorg is very low
 
+	// Note that here (n) refers to `c.triesInMemory` which is a
+	// configurable parameter.
 	// Retrieve all snapshot layers from the current HEAD.
 	// In theory there are n difflayers + 1 disk layer present,
 	// so n diff layers are expected to be returned.
@@ -441,7 +443,7 @@ func (c *PruneBlockCommand) pruneBlock(stack *node.Node, fdHandles int) error {
 		log.Error("file lock error", "err", err)
 		return err
 	}
-	defer lock.Close()
+	defer func() { _ = lock.Close() }()
 
 	if !locked {
 		log.Info("file lock existed, waiting for prune recovery and continue")
