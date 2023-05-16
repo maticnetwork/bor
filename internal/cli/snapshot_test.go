@@ -22,6 +22,7 @@ import (
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -80,6 +81,7 @@ func testOfflineBlockPruneWithAmountReserved(t *testing.T, amountReserved uint64
 
 	dbBack, err := rawdb.NewLevelDBDatabaseWithFreezer(chaindbPath, 0, 0, newAncientPath, "", false, true, false)
 	require.NoError(t, err, "failed to create db with ancient backend")
+
 	defer dbBack.Close()
 
 	//check against if the backup data matched original one
@@ -120,6 +122,7 @@ func BlockchainCreator(t *testing.T, chaindbPath, AncientPath string, blockRemai
 	// Create a database with ancient freezer
 	db, err := rawdb.NewLevelDBDatabaseWithFreezer(chaindbPath, 0, 0, AncientPath, "", false, false, false)
 	require.NoError(t, err, "failed to create db with ancient backend")
+
 	defer db.Close()
 
 	genesis := gspec.MustCommit(db)
