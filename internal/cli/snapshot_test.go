@@ -2,8 +2,6 @@ package cli
 
 import (
 	"bytes"
-	"encoding/hex"
-	"fmt"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -24,6 +22,7 @@ import (
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/stretchr/testify/require"
 )
 
 var (
@@ -49,6 +48,7 @@ func TestOfflineBlockPrune(t *testing.T) {
 
 	// Corner case for 0 remain in ancinetStore.
 	testOfflineBlockPruneWithAmountReserved(t, 0)
+
 	// General case.
 	testOfflineBlockPruneWithAmountReserved(t, 100)
 }
@@ -57,9 +57,7 @@ func testOfflineBlockPruneWithAmountReserved(t *testing.T, amountReserved uint64
 	t.Helper()
 
 	datadir, err := os.MkdirTemp("", "")
-	if err != nil {
-		t.Fatalf("Failed to create temporary datadir: %v", err)
-	}
+	require.NoError(t, err, "failed to create temporary datadir")
 
 	os.RemoveAll(datadir)
 
@@ -75,19 +73,13 @@ func testOfflineBlockPruneWithAmountReserved(t *testing.T, amountReserved uint64
 	// Initialize a block pruner for pruning, only remain amountReserved blocks backward.
 	testBlockPruner := pruner.NewBlockPruner(node, oldAncientPath, newAncientPath, amountReserved)
 	dbHandles, err := server.MakeDatabaseHandles(0)
+	require.NoError(t, err, "failed to create database handles")
 
-	if err != nil {
-		t.Fatalf("failed to create db handles: %v", err)
-	}
-
-	if err := testBlockPruner.BlockPruneBackup(chaindbPath, 512, dbHandles, "", false, false); err != nil {
-		t.Fatalf("Failed to back up block: %v", err)
-	}
+	err = testBlockPruner.BlockPruneBackup(chaindbPath, 512, dbHandles, "", false, false)
+	require.NoError(t, err, "failed to backup block")
 
 	dbBack, err := rawdb.NewLevelDBDatabaseWithFreezer(chaindbPath, 0, 0, newAncientPath, "", false, true, false)
-	if err != nil {
-		t.Fatalf("failed to create database with ancient backend")
-	}
+	require.NoError(t, err, "failed to create db with ancient backend")
 	defer dbBack.Close()
 
 	//check against if the backup data matched original one
@@ -95,33 +87,22 @@ func testOfflineBlockPruneWithAmountReserved(t *testing.T, amountReserved uint64
 		blockHash := rawdb.ReadCanonicalHash(dbBack, blockNumber)
 		block := rawdb.ReadBlock(dbBack, blockHash, blockNumber)
 
-		if block.Hash() != blockHash {
-			t.Fatalf("block data did not match between oldDb and backupDb")
-		}
-
-		if blockList[blockNumber-startBlockNumber].Hash() != blockHash {
-			t.Fatalf("block data did not match between oldDb and backupDb")
-		}
+		require.Equal(t, block.Hash(), blockHash, "block data mismatch between oldDb and backupDb")
+		require.Equal(t, blockList[blockNumber-startBlockNumber].Hash(), blockHash, "block data mismatch between oldDb and backupDb")
 
 		receipts := rawdb.ReadRawReceipts(dbBack, blockHash, blockNumber)
-		if err := checkReceiptsRLP(receipts, receiptsList[blockNumber-startBlockNumber]); err != nil {
-			t.Fatalf("receipts did not match between oldDb and backupDb")
-		}
-		// // Calculate the total difficulty of the block
-		td := rawdb.ReadTd(dbBack, blockHash, blockNumber)
-		if td == nil {
-			t.Fatalf("Failed to ReadTd: %v", consensus.ErrUnknownAncestor)
-		}
+		checkReceiptsRLP(t, receipts, receiptsList[blockNumber-startBlockNumber])
 
-		if td.Cmp(externTdList[blockNumber-startBlockNumber]) != 0 {
-			t.Fatalf("externTd did not match between oldDb and backupDb")
-		}
+		// Calculate the total difficulty of the block
+		td := rawdb.ReadTd(dbBack, blockHash, blockNumber)
+		require.NotNil(t, td, "failed to read td", consensus.ErrUnknownAncestor)
+
+		require.Equal(t, td.Cmp(externTdList[blockNumber-startBlockNumber]), 0, "Td mismatch between oldDb and backupDb")
 	}
 
 	// Check if ancientDb freezer replaced successfully
-	if err = testBlockPruner.AncientDbReplacer(); err != nil {
-		t.Fatalf("error in replacing ancient db")
-	}
+	err = testBlockPruner.AncientDbReplacer()
+	require.NoError(t, err, "error replacing ancient db")
 
 	if _, err := os.Stat(newAncientPath); err != nil {
 		if !os.IsNotExist(err) {
@@ -129,9 +110,8 @@ func testOfflineBlockPruneWithAmountReserved(t *testing.T, amountReserved uint64
 		}
 	}
 
-	if _, err := os.Stat(oldAncientPath); err != nil {
-		t.Fatalf("ancientDb replaced unsuccessfully")
-	}
+	_, err = os.Stat(oldAncientPath)
+	require.NoError(t, err, "failed to replace ancientDb")
 }
 
 func BlockchainCreator(t *testing.T, chaindbPath, AncientPath string, blockRemain uint64) (ethdb.Database, []*types.Block, []*types.Block, []types.Receipts, []*big.Int, uint64, *core.BlockChain) {
@@ -139,31 +119,27 @@ func BlockchainCreator(t *testing.T, chaindbPath, AncientPath string, blockRemai
 
 	// Create a database with ancient freezer
 	db, err := rawdb.NewLevelDBDatabaseWithFreezer(chaindbPath, 0, 0, AncientPath, "", false, false, false)
-	if err != nil {
-		t.Fatalf("failed to create database with ancient backend: %v", err)
-	}
+	require.NoError(t, err, "failed to create db with ancient backend")
 	defer db.Close()
 
 	genesis := gspec.MustCommit(db)
 	// Initialize a fresh chain with only a genesis block
 	blockchain, err := core.NewBlockChain(db, config, gspec.Config, engine, vm.Config{}, nil, nil, nil)
-	if err != nil {
-		t.Fatalf("Failed to create chain: %v", err)
-	}
+	require.NoError(t, err, "failed to create chain")
 
 	// Make chain starting from genesis
 	blocks, _ := core.GenerateChain(gspec.Config, genesis, ethash.NewFaker(), db, 500, func(i int, block *core.BlockGen) {
 		block.SetCoinbase(common.Address{0: byte(canonicalSeed), 19: byte(i)})
 		tx, err := types.SignTx(types.NewTransaction(block.TxNonce(address), common.Address{0x00}, big.NewInt(1), params.TxGas, big.NewInt(8750000000), nil), signer, key)
 		if err != nil {
-			panic(err)
+			require.NoError(t, err, "failed to sign tx")
 		}
 		block.AddTx(tx)
 		block.SetDifficulty(big.NewInt(1000000))
 	})
-	if _, err := blockchain.InsertChain(blocks); err != nil {
-		t.Fatalf("Failed to import canonical chain start: %v", err)
-	}
+
+	_, err = blockchain.InsertChain(blocks)
+	require.NoError(t, err, "failed to insert chain")
 
 	// Force run a freeze cycle
 	type freezer interface {
@@ -171,19 +147,14 @@ func BlockchainCreator(t *testing.T, chaindbPath, AncientPath string, blockRemai
 		Ancients() (uint64, error)
 	}
 
-	if err = db.(freezer).Freeze(10); err != nil {
-		t.Fatalf("Error in freeze operation: %v", err)
-	}
+	err = db.(freezer).Freeze(10)
+	require.NoError(t, err, "failed to perform freeze operation")
 
+	// make sure there're frozen items
 	frozen, err := db.Ancients()
-	//make sure there're frozen items
-	if err != nil || frozen == 0 {
-		t.Fatalf("Failed to import canonical chain start: %v", err)
-	}
-
-	if frozen < blockRemain {
-		t.Fatalf("block amount is not enough for pruning: %v", err)
-	}
+	require.NoError(t, err, "failed to fetch ancients items from db")
+	require.NotEqual(t, frozen, 0, "no elements in freezer db")
+	require.GreaterOrEqual(t, frozen, blockRemain, "block amount is not enough for pruning")
 
 	oldOffSet := rawdb.ReadOffsetOfCurrentAncientFreezer(db)
 	// Get the actual start block number.
@@ -201,9 +172,7 @@ func BlockchainCreator(t *testing.T, chaindbPath, AncientPath string, blockRemai
 		receiptsList = append(receiptsList, receipts)
 		// Calculate the total difficulty of the block
 		td := rawdb.ReadTd(db, blockHash, blockNumber)
-		if td == nil {
-			t.Fatalf("Failed to ReadTd: %v", consensus.ErrUnknownAncestor)
-		}
+		require.NotNil(t, td, "failed to read td", consensus.ErrUnknownAncestor)
 
 		externTdList = append(externTdList, td)
 	}
@@ -211,28 +180,20 @@ func BlockchainCreator(t *testing.T, chaindbPath, AncientPath string, blockRemai
 	return db, blocks, blockList, receiptsList, externTdList, startBlockNumber, blockchain
 }
 
-func checkReceiptsRLP(have, want types.Receipts) error {
-	if len(have) != len(want) {
-		return fmt.Errorf("receipts sizes mismatch: have %d, want %d", len(have), len(want))
-	}
+func checkReceiptsRLP(t *testing.T, have, want types.Receipts) {
+	t.Helper()
+
+	require.Equal(t, len(want), len(have), "receipts sizes mismatch")
 
 	for i := 0; i < len(want); i++ {
 		rlpHave, err := rlp.EncodeToBytes(have[i])
-		if err != nil {
-			return err
-		}
+		require.NoError(t, err, "error in rlp encoding")
 
 		rlpWant, err := rlp.EncodeToBytes(want[i])
-		if err != nil {
-			return err
-		}
+		require.NoError(t, err, "error in rlp encoding")
 
-		if !bytes.Equal(rlpHave, rlpWant) {
-			return fmt.Errorf("receipt #%d: receipt mismatch: have %s, want %s", i, hex.EncodeToString(rlpHave), hex.EncodeToString(rlpWant))
-		}
+		require.Equal(t, true, bytes.Equal(rlpHave, rlpWant), "receipt rlp mismatch")
 	}
-
-	return nil
 }
 
 // startEthService creates a full node instance for testing.
@@ -240,13 +201,10 @@ func startEthService(t *testing.T, chaindbPath string) *node.Node {
 	t.Helper()
 
 	n, err := node.New(&node.Config{DataDir: chaindbPath})
-	if err != nil {
-		t.Fatal("can't create node:", err)
-	}
+	require.NoError(t, err, "failed to create node")
 
-	if err := n.Start(); err != nil {
-		t.Fatal("can't start node:", err)
-	}
+	err = n.Start()
+	require.NoError(t, err, "failed to start node")
 
 	return n
 }
