@@ -204,6 +204,11 @@ func Commands() map[string]MarkDownCommandFactory {
 				Meta: meta,
 			}, nil
 		},
+		"inspect-ancient-db": func() (MarkDownCommand, error) {
+			return &InspectAncientDbCommand{
+				Meta: meta,
+			}, nil
+		},
 	}
 }
 
