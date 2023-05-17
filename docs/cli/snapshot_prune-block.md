@@ -13,17 +13,17 @@ The purpose of doing it is because the block data will be moved into the ancient
 
 ## Options
 
-- ```datadir```: Path of the data directory to store information
-
-- ```keystore```: Path of the data directory to store keys
-
-- ```datadir.ancient```: Path of the old ancient data directory
-
 - ```block-amount-reserved```: Sets the expected reserved number of blocks for offline block prune (default: 1024)
 
 - ```cache.triesinmemory```: Number of block states (tries) to keep in memory (default = 128) (default: 128)
 
 - ```check-snapshot-with-mpt```: Enable checking between snapshot and MPT (default: false)
+
+- ```datadir```: Path of the data directory to store information
+
+- ```datadir.ancient```: Path of the old ancient data directory
+
+- ```keystore```: Path of the data directory to store keys
 
 ### Cache Options
 

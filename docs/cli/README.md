@@ -30,6 +30,8 @@
 
 - [```fingerprint```](./fingerprint.md)
 
+- [```inspect-ancient-db```](./inspect-ancient-db.md)
+
 - [```peers```](./peers.md)
 
 - [```peers add```](./peers_add.md)
