@@ -84,19 +84,32 @@ func testOfflineBlockPruneWithAmountReserved(t *testing.T, amountReserved uint64
 
 	defer dbBack.Close()
 
-	//check against if the backup data matched original one
+	// Check the absence of genesis
+	genesis, err := dbBack.Ancient("hashes", 0)
+	require.Equal(t, []byte(nil), genesis, "got genesis but should be absent")
+	require.NotNil(t, err, "not-nill error expected")
+
+	// Check against if the backup data matched original one
 	for blockNumber := startBlockNumber; blockNumber < startBlockNumber+amountReserved; blockNumber++ {
-		blockHash := rawdb.ReadCanonicalHash(dbBack, blockNumber)
-		block := rawdb.ReadBlock(dbBack, blockHash, blockNumber)
+		// Fetch the data explicitly from ancient db instead of `ReadCanonicalHash` because it
+		// will pull data from leveldb if not found in ancient.
+		blockHash, err := dbBack.Ancient("hashes", blockNumber)
+		require.NoError(t, err, "error fetching block hash from ancient db")
 
-		require.Equal(t, block.Hash(), blockHash, "block data mismatch between oldDb and backupDb")
-		require.Equal(t, blockList[blockNumber-startBlockNumber].Hash(), blockHash, "block data mismatch between oldDb and backupDb")
+		// We can proceed with fetching other things via generic functions because if
+		// the block wouldn't have been there in ancient db, the function above to get
+		// block hash itself would've thrown error.
+		hash := common.BytesToHash(blockHash)
+		block := rawdb.ReadBlock(dbBack, hash, blockNumber)
 
-		receipts := rawdb.ReadRawReceipts(dbBack, blockHash, blockNumber)
+		require.Equal(t, block.Hash(), hash, "block data mismatch between oldDb and backupDb")
+		require.Equal(t, blockList[blockNumber-startBlockNumber].Hash(), hash, "block data mismatch between oldDb and backupDb")
+
+		receipts := rawdb.ReadRawReceipts(dbBack, hash, blockNumber)
 		checkReceiptsRLP(t, receipts, receiptsList[blockNumber-startBlockNumber])
 
 		// Calculate the total difficulty of the block
-		td := rawdb.ReadTd(dbBack, blockHash, blockNumber)
+		td := rawdb.ReadTd(dbBack, hash, blockNumber)
 		require.NotNil(t, td, "failed to read td", consensus.ErrUnknownAncestor)
 
 		require.Equal(t, td.Cmp(externTdList[blockNumber-startBlockNumber]), 0, "Td mismatch between oldDb and backupDb")
