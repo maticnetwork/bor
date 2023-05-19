@@ -423,9 +423,8 @@ func (p *BlockPruner) backupOldDb(name string, cache, handles int, namespace str
 	log.Info("Prune info", "old offset", oldOffset, "number of items in ancientDB", itemsOfAncient, "number of blocks to reserve", p.BlockAmountReserved)
 	log.Info("Record newOffset/newStartBlockNumber successfully", "newOffset", startBlockNumber)
 
-	start := time.Now()
-	// All ancient data after and including startBlockNumber should write into new ancientDB ancient_back.
-	for blockNumber := startBlockNumber; blockNumber < itemsOfAncient+oldOffset; blockNumber++ {
+	writeBlock := func(blockNumber uint64) error {
+		// Read all block data
 		blockHash := rawdb.ReadCanonicalHash(chainDb, blockNumber)
 		block := rawdb.ReadBlock(chainDb, blockHash, blockNumber)
 		receipts := rawdb.ReadRawReceipts(chainDb, blockHash, blockNumber)
@@ -436,10 +435,23 @@ func (p *BlockPruner) backupOldDb(name string, cache, handles int, namespace str
 		if td == nil {
 			return consensus.ErrUnknownAncestor
 		}
+
 		// Write into new ancient_back db.
 		if _, err := rawdb.WriteAncientBlocks(frdbBack, []*types.Block{block}, []types.Receipts{receipts}, []types.Receipts{borReceipts}, td); err != nil {
 			return fmt.Errorf("failed to write new ancient error: %v", err)
 		}
+
+		return nil
+	}
+
+	start := time.Now()
+	// All ancient data after and including startBlockNumber should write into new ancientDB ancient_back.
+	for blockNumber := startBlockNumber; blockNumber < itemsOfAncient+oldOffset; blockNumber++ {
+		err := writeBlock(blockNumber)
+		if err != nil {
+			return err
+		}
+
 		// Print the log every 5s for better trace.
 		if time.Since(start) > 5*time.Second {
 			log.Info("Block backup process running successfully", "current blockNumber for backup", blockNumber)
@@ -546,6 +558,8 @@ func (p *BlockPruner) AncientDbReplacer() error {
 	if err := os.Rename(p.newAncientPath, p.oldAncientPath); err != nil {
 		return fmt.Errorf("failed to rename new ancient directory %v", err)
 	}
+
+	log.Info("Replaced existing ancient db with pruned one")
 
 	return nil
 }
