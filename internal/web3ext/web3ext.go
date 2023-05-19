@@ -201,7 +201,7 @@ web3._extend({
 			call: 'admin_setMaxPeers',
 			params: 1
 		}),
-		new web3._extend.Method({			
+		new web3._extend.Method({
 			name: 'getExecutionPoolSize',
 			call: 'admin_getExecutionPoolSize'
 		}),
@@ -524,6 +524,11 @@ web3._extend({
 			name: 'getTraceStack',
 			call: 'debug_getTraceStack',
 			params: 0,
+		}),
+        new web3._extend.Method({
+			name: 'setTrieFlushInterval',
+			call: 'debug_setTrieFlushInterval',
+			params: 1,
 		}),
 	],
 	properties: []
