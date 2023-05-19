@@ -56,9 +56,9 @@ func (c *SnapshotCommand) Help() string {
 
     $ bor snapshot prune-block
 
-	Inspect ancient DB pruning related fields:
+  Inspect ancient DB pruning related fields:
 
-		$ bor snapshot inspect-ancient-db`
+    $ bor snapshot inspect-ancient-db`
 }
 
 // Synopsis implements the cli.Command interface
