@@ -17,6 +17,7 @@
 package core
 
 import (
+	"bytes"
 	"errors"
 	"math/big"
 
@@ -104,7 +105,7 @@ func (f *ForkChoice) ReorgNeeded(current *types.Header, header *types.Header) (b
 			if f.preserve != nil {
 				currentPreserve, externPreserve = f.preserve(current), f.preserve(header)
 			}
-			reorg = !currentPreserve && (externPreserve || f.rand.Float64() < 0.5)
+			reorg = !currentPreserve && (externPreserve || bytes.Compare(current.Hash().Bytes(), header.Hash().Bytes()) < 0)
 		}
 	}
 	return reorg, nil
