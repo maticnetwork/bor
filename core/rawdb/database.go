@@ -541,17 +541,21 @@ func AncientInspect(db ethdb.Database) error {
 	if offset+ancients <= 0 {
 		endNumber = 0
 	} else {
-		endNumber = offset + ancients - 1
+		sum := counter(0)
+		if ancients != 0 {
+			sum = counter(ancients) - 1
+		}
+		endNumber = offset + sum
 	}
 
 	stats := [][]string{
-		{"Offset/StartBlockNumber", "Offset/StartBlockNumber of ancientDB", offset.String()},
-		{"Amount of remained items in AncientStore", "Remaining items of ancientDB", ancients.String()},
-		{"The last BlockNumber within ancientDB", "The last BlockNumber", endNumber.String()},
+		{"Start block number of ancientDB (offset)", offset.String()},
+		{"End block number of ancientDB", endNumber.String()},
+		{"Remaining items in ancientDB", ancients.String()},
 	}
 	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader([]string{"Database", "Category", "Items"})
-	table.SetFooter([]string{"", "AncientStore information", ""})
+	table.SetHeader([]string{"Field", "Items"})
+	table.SetFooter([]string{"AncientStore information", ""})
 	table.AppendBulk(stats)
 	table.Render()
 
