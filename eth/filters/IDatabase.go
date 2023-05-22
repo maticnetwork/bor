@@ -64,6 +64,20 @@ func (mr *MockDatabaseMockRecorder) AncientDatadir() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AncientDatadir", reflect.TypeOf((*MockDatabase)(nil).AncientDatadir))
 }
 
+// AncientOffSet mocks base method.
+func (m *MockDatabase) AncientOffSet() uint64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AncientOffSet")
+	ret0, _ := ret[0].(uint64)
+	return ret0
+}
+
+// AncientOffSet indicates an expected call of AncientOffSet.
+func (mr *MockDatabaseMockRecorder) AncientOffSet() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AncientOffSet", reflect.TypeOf((*MockDatabase)(nil).AncientOffSet))
+}
+
 // AncientRange mocks base method.
 func (m *MockDatabase) AncientRange(arg0 string, arg1, arg2, arg3 uint64) ([][]byte, error) {
 	m.ctrl.T.Helper()
@@ -194,6 +208,21 @@ func (m *MockDatabase) HasAncient(arg0 string, arg1 uint64) (bool, error) {
 func (mr *MockDatabaseMockRecorder) HasAncient(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasAncient", reflect.TypeOf((*MockDatabase)(nil).HasAncient), arg0, arg1)
+}
+
+// ItemAmountInAncient mocks base method.
+func (m *MockDatabase) ItemAmountInAncient() (uint64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ItemAmountInAncient")
+	ret0, _ := ret[0].(uint64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ItemAmountInAncient indicates an expected call of ItemAmountInAncient.
+func (mr *MockDatabaseMockRecorder) ItemAmountInAncient() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ItemAmountInAncient", reflect.TypeOf((*MockDatabase)(nil).ItemAmountInAncient))
 }
 
 // MigrateTable mocks base method.
