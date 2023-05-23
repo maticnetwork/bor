@@ -30,8 +30,6 @@
 
 - [```fingerprint```](./fingerprint.md)
 
-- [```inspect-ancient-db```](./inspect-ancient-db.md)
-
 - [```peers```](./peers.md)
 
 - [```peers add```](./peers_add.md)
@@ -47,6 +45,8 @@
 - [```server```](./server.md)
 
 - [```snapshot```](./snapshot.md)
+
+- [```snapshot inspect-ancient-db```](./snapshot_inspect-ancient-db.md)
 
 - [```snapshot prune-block```](./snapshot_prune-block.md)
 
