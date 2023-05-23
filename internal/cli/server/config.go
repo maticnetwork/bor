@@ -703,7 +703,7 @@ func DefaultConfig() *Config {
 			Enabled:               false,
 			Expensive:             false,
 			PrometheusAddr:        "127.0.0.1:7071",
-			OpenCollectorEndpoint: "127.0.0.1:4317",
+			OpenCollectorEndpoint: "",
 			InfluxDB: &InfluxDBConfig{
 				V1Enabled:    false,
 				Endpoint:     "",
@@ -757,7 +757,7 @@ func DefaultConfig() *Config {
 			// CPUProfile:       "",
 		},
 		ParallelEVM: &ParallelEVMConfig{
-			Enable:               false,
+			Enable:               true,
 			SpeculativeProcesses: 8,
 		},
 	}

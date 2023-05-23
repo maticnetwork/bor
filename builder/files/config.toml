@@ -71,6 +71,7 @@ syncmode = "full"
   # etherbase = "VALIDATOR ADDRESS"
   # extradata = ""
   # recommit = "2m5s"
+  # commitinterrupt = true
 
 
 # [jsonrpc]
@@ -128,7 +129,7 @@ syncmode = "full"
   metrics = true
   # expensive = false
   # prometheus-addr = "127.0.0.1:7071"
-  # opencollector-endpoint = "127.0.0.1:4317"
+  # opencollector-endpoint = ""
   # [telemetry.influx]
     # influxdb = false
     # endpoint = ""
@@ -172,7 +173,7 @@ syncmode = "full"
   # gaslimit = 11500000
 
 # [parallelevm]
-  # enable = false
+  # enable = true
   # procs = 8
 
 # [pprof]
