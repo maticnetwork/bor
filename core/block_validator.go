@@ -17,6 +17,7 @@
 package core
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/ethereum/go-ethereum/consensus"
@@ -75,7 +76,7 @@ func (v *BlockValidator) ValidateBody(block *types.Block) error {
 	if header.WithdrawalsHash != nil {
 		// Withdrawals list must be present in body after Shanghai.
 		if block.Withdrawals() == nil {
-			return fmt.Errorf("missing withdrawals in block body")
+			return errors.New("missing withdrawals in block body")
 		}
 
 		if hash := types.DeriveSha(block.Withdrawals(), trie.NewStackTrie(nil)); hash != *header.WithdrawalsHash {
@@ -83,7 +84,7 @@ func (v *BlockValidator) ValidateBody(block *types.Block) error {
 		}
 	} else if block.Withdrawals() != nil {
 		// Withdrawals are not allowed prior to shanghai fork
-		return fmt.Errorf("withdrawals present in block body")
+		return errors.New("withdrawals present in block body")
 	}
 
 	if !v.bc.HasBlockAndState(block.ParentHash(), block.NumberU64()-1) {

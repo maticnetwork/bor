@@ -595,7 +595,7 @@ func assertEqual(orig *Transaction, cpy *Transaction) error {
 
 	if orig.AccessList() != nil {
 		if !reflect.DeepEqual(orig.AccessList(), cpy.AccessList()) {
-			return fmt.Errorf("access list wrong!")
+			return errors.New("access list wrong!")
 		}
 	}
 

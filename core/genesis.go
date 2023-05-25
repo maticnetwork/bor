@@ -81,7 +81,7 @@ func ReadGenesis(db ethdb.Database) (*Genesis, error) {
 	blob := rawdb.ReadGenesisStateSpec(db, stored)
 
 	if blob == nil {
-		return nil, fmt.Errorf("genesis state missing from db")
+		return nil, errors.New("genesis state missing from db")
 	}
 
 	if len(blob) != 0 {
@@ -93,13 +93,13 @@ func ReadGenesis(db ethdb.Database) (*Genesis, error) {
 	genesis.Config = rawdb.ReadChainConfig(db, stored)
 
 	if genesis.Config == nil {
-		return nil, fmt.Errorf("genesis config missing from db")
+		return nil, errors.New("genesis config missing from db")
 	}
 
 	genesisBlock := rawdb.ReadBlock(db, stored, 0)
 
 	if genesisBlock == nil {
-		return nil, fmt.Errorf("genesis block missing from db")
+		return nil, errors.New("genesis block missing from db")
 	}
 
 	genesisHeader := genesisBlock.Header()
@@ -411,7 +411,7 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 	// are returned to the caller unless we're already at block zero.
 	head := rawdb.ReadHeadHeader(db)
 	if head == nil {
-		return newcfg, stored, fmt.Errorf("missing head header")
+		return newcfg, stored, errors.New("missing head header")
 	}
 
 	compatErr := storedcfg.CheckCompatible(newcfg, head.Number.Uint64(), head.Time)
