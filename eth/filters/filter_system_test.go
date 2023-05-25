@@ -50,12 +50,8 @@ type testBackend struct {
 	rmLogsFeed      event.Feed
 	pendingLogsFeed event.Feed
 	chainFeed       event.Feed
-
-	stateSyncFeed event.Feed
-}
-
-func (b *testBackend) SubscribeStateSyncEvent(ch chan<- core.StateSyncEvent) event.Subscription {
-	return b.stateSyncFeed.Subscribe(ch)
+	pendingBlock    *types.Block
+	pendingReceipts types.Receipts
 }
 
 func (b *testBackend) ChainConfig() *params.ChainConfig {
@@ -143,7 +139,7 @@ func (b *testBackend) GetLogs(ctx context.Context, hash common.Hash, number uint
 }
 
 func (b *testBackend) PendingBlockAndReceipts() (*types.Block, types.Receipts) {
-	return nil, nil
+	return b.pendingBlock, b.pendingReceipts
 }
 
 func (b *testBackend) SubscribeNewTxsEvent(ch chan<- core.NewTxsEvent) event.Subscription {
