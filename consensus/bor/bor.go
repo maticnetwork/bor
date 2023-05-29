@@ -1191,11 +1191,14 @@ func (c *Bor) CommitStates(
 
 	var to time.Time
 
+	fmt.Println("PSP - in commit state")
 	if c.config.IsIndore(header.Number) {
 		stateSyncDelay := c.config.FetchStateSyncDelay(number)
 		to = time.Unix(int64(header.Time-stateSyncDelay), 0)
+		fmt.Println("PSP - Post Indore", c.config.IndoreBlock, header.Number, to)
 	} else {
 		to = time.Unix(int64(chain.Chain.GetHeaderByNumber(number-c.config.CalculateSprint(number)).Time), 0)
+		fmt.Println("PSP - Pre Indore", c.config.IndoreBlock, header.Number, to)
 	}
 
 	lastStateID := _lastStateID.Uint64()
