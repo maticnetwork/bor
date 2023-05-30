@@ -1197,7 +1197,7 @@ func (c *Bor) CommitStates(
 		log.Info("John - Post Indore", "Indore Block", c.config.IndoreBlock, "Current Block", header.Number, "to", to)
 	} else {
 		to = time.Unix(int64(chain.Chain.GetHeaderByNumber(number-c.config.CalculateSprint(number)).Time), 0)
-		log.Info("John - Post Indore", "Indore Block", c.config.IndoreBlock, "Current Block", header.Number, "to", to)
+		log.Info("John - Pre Indore", "Indore Block", c.config.IndoreBlock, "Current Block", header.Number, "to", to)
 	}
 
 	lastStateID := _lastStateID.Uint64()
