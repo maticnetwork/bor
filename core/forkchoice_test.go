@@ -241,8 +241,12 @@ func (w *chainValidatorFake) GetWhitelistedCheckpoint() (bool, uint64, common.Ha
 func (w *chainValidatorFake) GetWhitelistedMilestone() (bool, uint64, common.Hash) {
 	return false, 0, common.Hash{}
 }
-func (w *chainValidatorFake) PurgeWhitelistedCheckpoint() {}
-func (w *chainValidatorFake) PurgeWhitelistedMilestone()  {}
+func (w *chainValidatorFake) PurgeWhitelistedCheckpoint() error {
+	return nil
+}
+func (w *chainValidatorFake) PurgeWhitelistedMilestone() error {
+	return nil
+}
 func (w *chainValidatorFake) GetCheckpoints(current, sidechainHeader *types.Header, sidechainCheckpoints []*types.Header) (map[uint64]*types.Header, error) {
 	return map[uint64]*types.Header{}, nil
 }

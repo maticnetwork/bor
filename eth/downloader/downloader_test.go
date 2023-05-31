@@ -1434,14 +1434,18 @@ func (w *whitelistFake) ProcessCheckpoint(_ uint64, _ common.Hash) {}
 func (w *whitelistFake) GetWhitelistedCheckpoint() (bool, uint64, common.Hash) {
 	return false, 0, common.Hash{}
 }
-func (w *whitelistFake) PurgeWhitelistedCheckpoint() {}
+func (w *whitelistFake) PurgeWhitelistedCheckpoint() error {
+	return nil
+}
 
 func (w *whitelistFake) ProcessMilestone(_ uint64, _ common.Hash)       {}
 func (w *whitelistFake) ProcessFutureMilestone(_ uint64, _ common.Hash) {}
 func (w *whitelistFake) GetWhitelistedMilestone() (bool, uint64, common.Hash) {
 	return false, 0, common.Hash{}
 }
-func (w *whitelistFake) PurgeWhitelistedMilestone() {}
+func (w *whitelistFake) PurgeWhitelistedMilestone() error {
+	return nil
+}
 
 func (w *whitelistFake) GetCheckpoints(current, sidechainHeader *types.Header, sidechainCheckpoints []*types.Header) (map[uint64]*types.Header, error) {
 	return map[uint64]*types.Header{}, nil

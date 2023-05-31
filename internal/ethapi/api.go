@@ -2210,8 +2210,9 @@ func (api *PrivateDebugAPI) GetWhitelistedCheckpoint() (bool, uint64, common.Has
 }
 
 // PurgeCheckpointWhitelist purges the current checkpoint whitelist entry
-func (api *PrivateDebugAPI) PurgeWhitelistedCheckpoint() {
-	api.b.PurgeWhitelistedCheckpoint()
+func (api *PrivateDebugAPI) PurgeWhitelistedCheckpoint() error {
+	err := api.b.PurgeWhitelistedCheckpoint()
+	return err
 }
 
 // GetWhitelistedMilestone retrieves the current milestone whitelist
@@ -2221,8 +2222,9 @@ func (api *PrivateDebugAPI) GetWhitelistedMilestone() (bool, uint64, common.Hash
 }
 
 // PurgeMilestoneList purges the current milestones entry
-func (api *PrivateDebugAPI) PurgeWhitelistedMilestone() {
-	api.b.PurgeWhitelistedMilestone()
+func (api *PrivateDebugAPI) PurgeWhitelistedMilestone() error {
+	err := api.b.PurgeWhitelistedMilestone()
+	return err
 }
 
 // GetTraceStack returns the current trace stack

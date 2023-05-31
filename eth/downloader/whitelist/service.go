@@ -99,12 +99,14 @@ func (s *Service) IsValidPeer(fetchHeadersByNumber func(number uint64, amount in
 	return true, nil
 }
 
-func (s *Service) PurgeWhitelistedCheckpoint() {
+func (s *Service) PurgeWhitelistedCheckpoint() error {
 	s.checkpointService.Purge()
+	return nil
 }
 
-func (s *Service) PurgeWhitelistedMilestone() {
+func (s *Service) PurgeWhitelistedMilestone() error {
 	s.milestoneService.Purge()
+	return nil
 }
 
 func (s *Service) GetWhitelistedCheckpoint() (bool, uint64, common.Hash) {

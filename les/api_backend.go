@@ -359,12 +359,14 @@ func (b *LesApiBackend) GetWhitelistedCheckpoint() (bool, uint64, common.Hash) {
 	return false, 0, common.Hash{}
 }
 
-func (b *LesApiBackend) PurgeWhitelistedCheckpoint() {
+func (b *LesApiBackend) PurgeWhitelistedCheckpoint() error {
+	return nil
 }
 
 func (b *LesApiBackend) GetWhitelistedMilestone() (bool, uint64, common.Hash) {
 	return false, 0, common.Hash{}
 }
 
-func (b *LesApiBackend) PurgeWhitelistedMilestone() {
+func (b *LesApiBackend) PurgeWhitelistedMilestone() error {
+	return nil
 }

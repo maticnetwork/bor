@@ -65,7 +65,7 @@ func TestWhitelistedCheckpoint(t *testing.T) {
 	require.Equal(t, cp.doExist, true, "expected true as cp exist")
 
 	//Removing the checkpoint
-	s.PurgeWhitelistedCheckpoint()
+	_ = s.PurgeWhitelistedCheckpoint()
 
 	require.Equal(t, cp.doExist, false, "expected false as no cp exist at this point")
 
@@ -83,7 +83,7 @@ func TestWhitelistedCheckpoint(t *testing.T) {
 
 	c1 := s.checkpointService.(*checkpoint)
 	fmt.Println("!!!-0", c1.doExist)
-	s.PurgeWhitelistedCheckpoint()
+	_ = s.PurgeWhitelistedCheckpoint()
 	fmt.Println("!!!-1", c1.doExist)
 	doExist, number, hash = s.GetWhitelistedCheckpoint()
 	fmt.Println("!!!-2", c1.doExist)
@@ -196,7 +196,7 @@ func TestMilestone(t *testing.T) {
 	require.Equal(t, len(lockedMilestoneIDs), 0, "expected 0 as milestoneID exist in the map")
 
 	//Removing the milestone
-	s.PurgeWhitelistedMilestone()
+	_ = s.PurgeWhitelistedMilestone()
 
 	require.Equal(t, milestone.doExist, false, "expected false as no milestone exist at this point")
 
@@ -210,7 +210,7 @@ func TestMilestone(t *testing.T) {
 	require.Equal(t, number, uint64(11), "expected number to be 11 but got", number)
 	require.Equal(t, hash, common.Hash{1}, "expected the 1 hash but got", hash)
 
-	s.PurgeWhitelistedMilestone()
+	_ = s.PurgeWhitelistedMilestone()
 	doExist, number, hash = s.GetWhitelistedMilestone()
 
 	//Validating the values received from the db, not memory
@@ -485,7 +485,7 @@ func TestIsValidChain(t *testing.T) {
 	require.Equal(t, res, false, "expected chain to be invalid")
 
 	//Remove the whitelisted checkpoint
-	s.PurgeWhitelistedCheckpoint()
+	_ = s.PurgeWhitelistedCheckpoint()
 
 	//Case5: As the received chain is still invalid after removing the checkpoint as it is
 	//still behind the whitelisted milestone
@@ -494,7 +494,7 @@ func TestIsValidChain(t *testing.T) {
 	require.Equal(t, res, false, "expected chain to be invalid")
 
 	//Remove the whitelisted milestone
-	s.PurgeWhitelistedMilestone()
+	_ = s.PurgeWhitelistedMilestone()
 
 	//At this stage there is no whitelisted milestone and checkpoint
 
@@ -542,7 +542,7 @@ func TestIsValidChain(t *testing.T) {
 	milestone.UnlockSprint(uint64(21))
 
 	// Clear checkpoint whitelist and add block A15 in whitelist
-	s.PurgeWhitelistedCheckpoint()
+	_ = s.PurgeWhitelistedCheckpoint()
 	s.ProcessCheckpoint(chainA[15].Number.Uint64(), chainA[15].Hash())
 
 	require.Equal(t, checkpoint.doExist, true, "expected true as checkpoint exists.")
@@ -600,7 +600,7 @@ func TestIsValidChain(t *testing.T) {
 	// Clear checkpoint whitelist and mock blocks in whitelist
 	tempChain = createMockChain(20, 20) // A20
 
-	s.PurgeWhitelistedCheckpoint()
+	_ = s.PurgeWhitelistedCheckpoint()
 	s.ProcessCheckpoint(tempChain[0].Number.Uint64(), tempChain[0].Hash())
 
 	require.Equal(t, checkpoint.doExist, true, "expected true")
@@ -624,8 +624,8 @@ func TestIsValidChain(t *testing.T) {
 	require.Nil(t, err)
 	require.Equal(t, res, true, "expected chain to be valid")
 
-	s.PurgeWhitelistedCheckpoint()
-	s.PurgeWhitelistedMilestone()
+	_ = s.PurgeWhitelistedCheckpoint()
+	_ = s.PurgeWhitelistedMilestone()
 
 	chainB = createMockChain(21, 29) // C21->C22....C29
 
