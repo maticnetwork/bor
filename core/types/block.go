@@ -95,7 +95,10 @@ type Header struct {
 	WithdrawalsHash *common.Hash `json:"withdrawalsRoot" rlp:"optional"`
 
 	// ExcessDataGas was added by EIP-4844 and is ignored in legacy headers.
-	ExcessDataGas *big.Int `json:"excessDataGas" rlp:"optional"`
+	ExcessDataGas *uint64 `json:"excessDataGas" rlp:"optional"`
+
+	// DataGasUsed was added by EIP-4844 and is ignored in legacy headers.
+	DataGasUsed *uint64 `json:"dataGasUsed" rlp:"optional"`
 
 	/*
 		TODO (MariusVanDerWijden) Add this field once needed
@@ -116,14 +119,16 @@ type BlockExtraData struct {
 
 // field type overrides for gencodec
 type headerMarshaling struct {
-	Difficulty *hexutil.Big
-	Number     *hexutil.Big
-	GasLimit   hexutil.Uint64
-	GasUsed    hexutil.Uint64
-	Time       hexutil.Uint64
-	Extra      hexutil.Bytes
-	BaseFee    *hexutil.Big
-	Hash       common.Hash `json:"hash"` // adds call to Hash() in MarshalJSON
+	Difficulty    *hexutil.Big
+	Number        *hexutil.Big
+	GasLimit      hexutil.Uint64
+	GasUsed       hexutil.Uint64
+	Time          hexutil.Uint64
+	Extra         hexutil.Bytes
+	BaseFee       *hexutil.Big
+	Hash          common.Hash `json:"hash"` // adds call to Hash() in MarshalJSON
+	ExcessDataGas *hexutil.Uint64
+	DataGasUsed   *hexutil.Uint64
 }
 
 // Hash returns the block hash of the header, which is simply the keccak256 hash of its
@@ -176,11 +181,10 @@ func (h *Header) SanityCheck() error {
 // EmptyBody returns true if there is no additional 'body' to complete the header
 // that is: no transactions, no uncles and no withdrawals.
 func (h *Header) EmptyBody() bool {
-	if h.WithdrawalsHash == nil {
-		return h.TxHash == EmptyTxsHash && h.UncleHash == EmptyUncleHash
+	if h.WithdrawalsHash != nil {
+		return h.TxHash == EmptyTxsHash && *h.WithdrawalsHash == EmptyWithdrawalsHash
 	}
-
-	return h.TxHash == EmptyTxsHash && h.UncleHash == EmptyUncleHash && *h.WithdrawalsHash == EmptyWithdrawalsHash
+	return h.TxHash == EmptyTxsHash && h.UncleHash == EmptyUncleHash
 }
 
 // EmptyReceipts returns true if there are no receipts for this header/block.
@@ -422,6 +426,24 @@ func (b *Block) BaseFee() *big.Int {
 
 func (b *Block) Withdrawals() Withdrawals {
 	return b.withdrawals
+}
+
+func (b *Block) ExcessDataGas() *uint64 {
+	var excessDataGas *uint64
+	if b.header.ExcessDataGas != nil {
+		excessDataGas = new(uint64)
+		*excessDataGas = *b.header.ExcessDataGas
+	}
+	return excessDataGas
+}
+
+func (b *Block) DataGasUsed() *uint64 {
+	var dataGasUsed *uint64
+	if b.header.DataGasUsed != nil {
+		dataGasUsed = new(uint64)
+		*dataGasUsed = *b.header.DataGasUsed
+	}
+	return dataGasUsed
 }
 
 func (b *Block) Header() *Header { return CopyHeader(b.header) }
