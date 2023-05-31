@@ -214,7 +214,6 @@ func isValidPeer(fetchHeadersByNumber func(number uint64, amount int, skip int, 
 		return true, nil
 	}
 
-	// todo: we can extract this as an interface and mock as well or just test IsValidChain in isolation from downloader passing fake fetchHeadersByNumber functions
 	headers, hashes, err := fetchHeadersByNumber(number, 1, 0, false)
 	if err != nil {
 		return false, fmt.Errorf("%w: last whitelisted block number %d, err %v", ErrNoRemote, number, err)

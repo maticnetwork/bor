@@ -130,7 +130,6 @@ func (m *milestone) Process(block uint64, hash common.Hash) {
 }
 
 // This function will Lock the mutex at the time of voting
-// fixme: get rid of it
 func (m *milestone) LockMutex(endBlockNum uint64) bool {
 	m.finality.Lock()
 
@@ -157,7 +156,6 @@ func (m *milestone) LockMutex(endBlockNum uint64) bool {
 }
 
 // This function will unlock the mutex locked in LockMutex
-// fixme: get rid of it
 func (m *milestone) UnlockMutex(doLock bool, milestoneId string, endBlockHash common.Hash) {
 	m.Locked = m.Locked || doLock
 

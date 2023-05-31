@@ -795,7 +795,6 @@ func (s *Ethereum) handleNoAckMilestoneByID(ctx context.Context, ethHandler *eth
 	milestoneIDs := ethHandler.downloader.GetMilestoneIDsList()
 
 	for _, milestoneID := range milestoneIDs {
-		// todo: check if we can ignore the error
 		err := ethHandler.fetchNoAckMilestoneByID(ctx, bor, milestoneID)
 		if err == nil {
 			ethHandler.downloader.RemoveMilestoneID(milestoneID)
