@@ -96,9 +96,6 @@ func newTestWorker(t TensingObject, chainConfig *params.ChainConfig, engine cons
 
 	w.setEtherbase(TestBankAddress)
 
-	// enable empty blocks
-	w.noempty.Store(noempty)
-
 	return w, backend, w.close
 }
 
@@ -158,8 +155,7 @@ func testGenerateBlockAndImport(t *testing.T, isClique bool, isBor bool) {
 	w.start()
 
 	var (
-		err   error
-		uncle *types.Block
+		err error
 	)
 
 	for i := 0; i < 5; i++ {
@@ -172,20 +168,6 @@ func testGenerateBlockAndImport(t *testing.T, isClique bool, isBor bool) {
 		if err != nil {
 			t.Fatal("while adding a remote transaction", err)
 		}
-
-		uncle, err = b.newRandomUncle()
-		if err != nil {
-			t.Fatal("while making an uncle block", err)
-		}
-
-		w.postSideBlock(core.ChainSideEvent{Block: uncle})
-
-		uncle, err = b.newRandomUncle()
-		if err != nil {
-			t.Fatal("while making an uncle block", err)
-		}
-
-		w.postSideBlock(core.ChainSideEvent{Block: uncle})
 
 		select {
 		case ev := <-sub.Chan():
@@ -205,7 +187,7 @@ func getFakeBorFromConfig(t *testing.T, chainConfig *params.ChainConfig) (consen
 	ctrl := gomock.NewController(t)
 
 	ethAPIMock := api.NewMockCaller(ctrl)
-	ethAPIMock.EXPECT().Call(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	ethAPIMock.EXPECT().Call(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	spanner := bor.NewMockSpanner(ctrl)
 	spanner.EXPECT().GetCurrentValidatorsByHash(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*valset.Validator{
@@ -270,7 +252,6 @@ func testEmptyWork(t *testing.T, chainConfig *params.ChainConfig, engine consens
 	w.newTaskHook = func(task *task) {
 		if task.block.NumberU64() == 1 {
 			checkEqual(t, task, taskIndex)
-			taskIndex += 1
 			taskCh <- struct{}{}
 		}
 	}
@@ -333,8 +314,6 @@ func TestStreamUncleBlock(t *testing.T) {
 			t.Error("new task timeout")
 		}
 	}
-
-	w.postSideBlock(core.ChainSideEvent{Block: b.uncleBlock})
 
 	select {
 	case <-taskCh:
@@ -533,7 +512,6 @@ func testGetSealingWork(t *testing.T, chainConfig *params.ChainConfig, engine co
 	defer w.close()
 
 	w.setExtra([]byte{0x01, 0x02})
-	w.postSideBlock(core.ChainSideEvent{Block: b.uncleBlock})
 
 	w.skipSealHook = func(task *task) bool {
 		return true
@@ -548,11 +526,6 @@ func testGetSealingWork(t *testing.T, chainConfig *params.ChainConfig, engine co
 			// is even smaller than parent block's. It's OK.
 			t.Logf("Invalid timestamp, want %d, get %d", timestamp, block.Time())
 		}
-
-		if len(block.Uncles()) != 0 {
-			t.Error("Unexpected uncle block")
-		}
-
 		_, isClique := engine.(*clique.Clique)
 		if !isClique {
 			if len(block.Extra()) != 2 {
@@ -794,7 +767,7 @@ func BenchmarkBorMining(b *testing.B) {
 	defer ctrl.Finish()
 
 	ethAPIMock := api.NewMockCaller(ctrl)
-	ethAPIMock.EXPECT().Call(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	ethAPIMock.EXPECT().Call(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	spanner := bor.NewMockSpanner(ctrl)
 	spanner.EXPECT().GetCurrentValidatorsByHash(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*valset.Validator{
@@ -891,7 +864,7 @@ func BenchmarkBorMiningBlockSTMMetadata(b *testing.B) {
 	defer ctrl.Finish()
 
 	ethAPIMock := api.NewMockCaller(ctrl)
-	ethAPIMock.EXPECT().Call(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	ethAPIMock.EXPECT().Call(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	spanner := bor.NewMockSpanner(ctrl)
 	spanner.EXPECT().GetCurrentValidatorsByHash(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*valset.Validator{

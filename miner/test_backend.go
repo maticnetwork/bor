@@ -254,9 +254,6 @@ func NewTestWorker(t TensingObject, chainConfig *params.ChainConfig, engine cons
 
 	w.setEtherbase(TestBankAddress)
 
-	// enable empty blocks
-	w.noempty.Store(noempty)
-
 	return w, backend, w.close
 }
 
@@ -271,13 +268,9 @@ func newWorkerWithDelay(config *Config, chainConfig *params.ChainConfig, engine 
 		mux:                 mux,
 		chain:               eth.BlockChain(),
 		isLocalBlock:        isLocalBlock,
-		localUncles:         make(map[common.Hash]*types.Block),
-		remoteUncles:        make(map[common.Hash]*types.Block),
-		unconfirmed:         newUnconfirmedBlocks(eth.BlockChain(), sealingLogAtDepth),
 		pendingTasks:        make(map[common.Hash]*task),
 		txsCh:               make(chan core.NewTxsEvent, txChanSize),
 		chainHeadCh:         make(chan core.ChainHeadEvent, chainHeadChanSize),
-		chainSideCh:         make(chan core.ChainSideEvent, chainSideChanSize),
 		newWorkCh:           make(chan *newWorkReq),
 		getWorkCh:           make(chan *getWorkReq),
 		taskCh:              make(chan *task),
@@ -288,13 +281,11 @@ func newWorkerWithDelay(config *Config, chainConfig *params.ChainConfig, engine 
 		resubmitAdjustCh:    make(chan *intervalAdjust, resubmitAdjustChanSize),
 		interruptCommitFlag: config.CommitInterruptFlag,
 	}
-	worker.noempty.Store(true)
 	worker.profileCount = new(int32)
 	// Subscribe NewTxsEvent for tx pool
 	worker.txsSub = eth.TxPool().SubscribeNewTxsEvent(worker.txsCh)
 	// Subscribe events for blockchain
 	worker.chainHeadSub = eth.BlockChain().SubscribeChainHeadEvent(worker.chainHeadCh)
-	worker.chainSideSub = eth.BlockChain().SubscribeChainSideEvent(worker.chainSideCh)
 
 	interruptedTxCache, err := lru.New(vm.InterruptedTxCacheSize)
 	if err != nil {
@@ -303,10 +294,6 @@ func newWorkerWithDelay(config *Config, chainConfig *params.ChainConfig, engine 
 
 	worker.interruptedTxCache = &vm.TxCache{
 		Cache: interruptedTxCache,
-	}
-
-	if !worker.interruptCommitFlag {
-		worker.noempty.Store(false)
 	}
 
 	// Sanitize recommit interval if the user-specified one is too short.
@@ -339,7 +326,6 @@ func (w *worker) mainLoopWithDelay(ctx context.Context, delay uint, opcodeDelay 
 	defer w.wg.Done()
 	defer w.txsSub.Unsubscribe()
 	defer w.chainHeadSub.Unsubscribe()
-	defer w.chainSideSub.Unsubscribe()
 	defer func() {
 		if w.current != nil {
 			w.current.discard()
@@ -354,7 +340,7 @@ func (w *worker) mainLoopWithDelay(ctx context.Context, delay uint, opcodeDelay 
 		case req := <-w.newWorkCh:
 			i := req.interrupt.Load()
 			//nolint:contextcheck
-			w.commitWorkWithDelay(req.ctx, &i, req.noempty, req.timestamp, delay, opcodeDelay)
+			w.commitWorkWithDelay(req.ctx, &i, req.timestamp, delay, opcodeDelay)
 
 		case req := <-w.getWorkCh:
 			//nolint:contextcheck
@@ -368,50 +354,6 @@ func (w *worker) mainLoopWithDelay(ctx context.Context, delay uint, opcodeDelay 
 					fees:  block.BaseFee(),
 				}
 				req.result <- &payload
-			}
-
-		case ev := <-w.chainSideCh:
-			// Short circuit for duplicate side blocks
-			if _, exist := w.localUncles[ev.Block.Hash()]; exist {
-				continue
-			}
-
-			if _, exist := w.remoteUncles[ev.Block.Hash()]; exist {
-				continue
-			}
-
-			// Add side block to possible uncle block set depending on the author.
-			if w.isLocalBlock != nil && w.isLocalBlock(ev.Block.Header()) {
-				w.localUncles[ev.Block.Hash()] = ev.Block
-			} else {
-				w.remoteUncles[ev.Block.Hash()] = ev.Block
-			}
-
-			// If our sealing block contains less than 2 uncle blocks,
-			// add the new uncle block if valid and regenerate a new
-			// sealing block for higher profit.
-			if w.isRunning() && w.current != nil && len(w.current.uncles) < 2 {
-				start := time.Now()
-				if err := w.commitUncle(w.current, ev.Block.Header()); err == nil {
-					commitErr := w.commit(ctx, w.current.copy(), nil, true, start)
-					if commitErr != nil {
-						log.Error("error while committing work for mining", "err", commitErr)
-					}
-				}
-			}
-
-		case <-cleanTicker.C:
-			chainHead := w.chain.CurrentBlock()
-			for hash, uncle := range w.localUncles {
-				if uncle.NumberU64()+staleThreshold <= chainHead.Number.Uint64() {
-					delete(w.localUncles, hash)
-				}
-			}
-
-			for hash, uncle := range w.remoteUncles {
-				if uncle.NumberU64()+staleThreshold <= chainHead.Number.Uint64() {
-					delete(w.remoteUncles, hash)
-				}
 			}
 
 		case ev := <-w.txsCh:
@@ -449,7 +391,7 @@ func (w *worker) mainLoopWithDelay(ctx context.Context, delay uint, opcodeDelay 
 				// submit sealing work here since all empty submission will be rejected
 				// by clique. Of course the advance sealing(empty submission) is disabled.
 				if w.chainConfig.Clique != nil && w.chainConfig.Clique.Period == 0 {
-					w.commitWork(ctx, nil, true, time.Now().Unix())
+					w.commitWork(ctx, nil, time.Now().Unix())
 				}
 			}
 
@@ -461,14 +403,12 @@ func (w *worker) mainLoopWithDelay(ctx context.Context, delay uint, opcodeDelay 
 			return
 		case <-w.chainHeadSub.Err():
 			return
-		case <-w.chainSideSub.Err():
-			return
 		}
 	}
 }
 
 // commitWorkWithDelay is commitWork() with extra params to induce artficial delays for tests such as commit-interrupt.
-func (w *worker) commitWorkWithDelay(ctx context.Context, interrupt *int32, noempty bool, timestamp int64, delay uint, opcodeDelay uint) {
+func (w *worker) commitWorkWithDelay(ctx context.Context, interrupt *int32, timestamp int64, delay uint, opcodeDelay uint) {
 	start := time.Now()
 
 	var (
@@ -506,7 +446,7 @@ func (w *worker) commitWorkWithDelay(ctx context.Context, interrupt *int32, noem
 		stopFn()
 	}()
 
-	if !noempty && w.interruptCommitFlag {
+	if w.interruptCommitFlag {
 		block := w.chain.GetBlockByHash(w.chain.CurrentBlock().Hash())
 		interruptCtx, stopFn = getInterruptTimer(ctx, work, block)
 		// nolint : staticcheck
@@ -524,15 +464,6 @@ func (w *worker) commitWorkWithDelay(ctx context.Context, interrupt *int32, noem
 		span,
 		attribute.Int("number", int(work.header.Number.Uint64())),
 	)
-
-	// Create an empty block based on temporary copied state for
-	// sealing in advance without waiting block execution finished.
-	if !noempty && !w.noempty.Load() {
-		err = w.commit(ctx, work.copy(), nil, false, start)
-		if err != nil {
-			return
-		}
-	}
 
 	// Fill pending transactions from the txpool
 	w.fillTransactionsWithDelay(ctx, interrupt, work, interruptCtx)
