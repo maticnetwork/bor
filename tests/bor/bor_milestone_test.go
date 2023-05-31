@@ -474,7 +474,7 @@ func TestPeerConnectionAfterWhitelisting(t *testing.T) {
 			nodes[1].Downloader().ChainValidator.ProcessMilestone(uint64(12), block12Hash)
 		}
 
-		if blockHeaderVal0.Number.Uint64() > 12 && blockHeaderVal0.Number.Uint64() > 12 {
+		if blockHeaderVal0.Number.Uint64() > 12 && blockHeaderVal1.Number.Uint64() > 12 {
 			stacks[0].Server().AddPeer(enodes[1])
 			stacks[1].Server().AddPeer(enodes[0])
 		}
