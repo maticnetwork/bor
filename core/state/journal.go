@@ -92,6 +92,7 @@ type (
 		account *common.Address
 	}
 	resetObjectChange struct {
+		account      *common.Address
 		prev         *stateObject
 		prevdestruct bool
 	}
@@ -167,7 +168,7 @@ func (ch resetObjectChange) revert(s *StateDB) {
 }
 
 func (ch resetObjectChange) dirtied() *common.Address {
-	return nil
+	return ch.account
 }
 
 func (ch suicideChange) revert(s *StateDB) {
