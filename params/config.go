@@ -608,11 +608,11 @@ func (b *BorConfig) String() string {
 }
 
 func (c *BorConfig) CalculateProducerDelay(number uint64) uint64 {
-	return c.calculateSprintSizeHelper(c.ProducerDelay, number)
+	return borKeyValueConfigHelper(c.ProducerDelay, number)
 }
 
 func (c *BorConfig) CalculateSprint(number uint64) uint64 {
-	return c.calculateSprintSizeHelper(c.Sprint, number)
+	return borKeyValueConfigHelper(c.Sprint, number)
 }
 
 func (c *BorConfig) CalculateBackupMultiplier(number uint64) uint64 {
@@ -635,8 +635,8 @@ func (c *BorConfig) IsIndore(number *big.Int) bool {
 	return isForked(c.IndoreBlock, number)
 }
 
-func (c *BorConfig) FetchStateSyncDelay(number uint64) uint64 {
-	return c.fetchStateSyncDelayHelper(c.StateSyncConfirmationDelay, number)
+func (c *BorConfig) CalculateStateSyncDelay(number uint64) uint64 {
+	return borKeyValueConfigHelper(c.StateSyncConfirmationDelay, number)
 }
 
 // TODO: modify this function once the block number is finalized
@@ -672,7 +672,7 @@ func (c *BorConfig) calculateBorConfigHelper(field map[string]uint64, number uin
 	return field[keys[len(keys)-1]]
 }
 
-func helperToRetriveKeyValue(field map[string]uint64, number uint64) uint64 {
+func borKeyValueConfigHelper(field map[string]uint64, number uint64) uint64 {
 	keys := make([]string, 0, len(field))
 	for k := range field {
 		keys = append(keys, k)
@@ -690,14 +690,6 @@ func helperToRetriveKeyValue(field map[string]uint64, number uint64) uint64 {
 	}
 
 	return field[keys[len(keys)-1]]
-}
-
-func (c *BorConfig) calculateSprintSizeHelper(field map[string]uint64, number uint64) uint64 {
-	return helperToRetriveKeyValue(field, number)
-}
-
-func (c *BorConfig) fetchStateSyncDelayHelper(field map[string]uint64, number uint64) uint64 {
-	return helperToRetriveKeyValue(field, number)
 }
 
 func (c *BorConfig) CalculateBurntContract(number uint64) string {
