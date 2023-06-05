@@ -31,10 +31,6 @@ var mumbaiTestnet = &Chain{
 			Bor: &params.BorConfig{
 				JaipurBlock: big.NewInt(22770000),
 				DelhiBlock:  big.NewInt(29638656),
-				IndoreBlock: big.NewInt(354000000), // TODO - update block number
-				StateSyncConfirmationDelay: map[string]uint64{
-					"354000000": 128,
-				},
 				Period: map[string]uint64{
 					"0":        2,
 					"25275000": 5,

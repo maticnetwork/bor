@@ -353,10 +353,6 @@ var (
 			JaipurBlock:           big.NewInt(22770000),
 			DelhiBlock:            big.NewInt(29638656),
 			ParallelUniverseBlock: big.NewInt(0),
-			IndoreBlock:           big.NewInt(354000000), // TODO - update block number
-			StateSyncConfirmationDelay: map[string]uint64{
-				"354000000": 128,
-			},
 			Period: map[string]uint64{
 				"0":        2,
 				"25275000": 5,
@@ -412,10 +408,6 @@ var (
 			JaipurBlock:           big.NewInt(23850000),
 			DelhiBlock:            big.NewInt(38189056),
 			ParallelUniverseBlock: big.NewInt(0),
-			IndoreBlock:           big.NewInt(425000320), // TODO - update block number
-			StateSyncConfirmationDelay: map[string]uint64{
-				"425000320": 128,
-			},
 			Period: map[string]uint64{
 				"0": 2,
 			},
