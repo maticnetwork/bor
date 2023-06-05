@@ -136,6 +136,7 @@ func runCmd(ctx *cli.Context) error {
 		receiver      = common.BytesToAddress([]byte("receiver"))
 		genesisConfig *core.Genesis
 		preimages     = ctx.Bool(DumpFlag.Name)
+		blobHashes    []common.Hash // TODO (MariusVanDerWijden) implement blob hashes in state tests
 	)
 
 	if ctx.Bool(MachineFlag.Name) {
@@ -237,6 +238,7 @@ func runCmd(ctx *cli.Context) error {
 		Time:        genesisConfig.Timestamp,
 		Coinbase:    genesisConfig.Coinbase,
 		BlockNumber: new(big.Int).SetUint64(genesisConfig.Number),
+		BlobHashes:  blobHashes,
 		EVMConfig: vm.Config{
 			Tracer: tracer,
 		},
