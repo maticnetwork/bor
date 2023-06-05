@@ -1441,9 +1441,6 @@ var (
 
 	// errEndBlock is returned when we're unable to fetch a block locally.
 	errEndBlock = errors.New("failed to get end block")
-
-	// errBlockNumberConversion is returned when we get err in parsing hexautil block number
-	errBlockNumberConversion = errors.New("failed to parse the block number")
 )
 
 func borVerify(eth *eth.Ethereum, start uint64, end uint64, rootHash string, localHash string, head uint64, lastMilestone uint64) (string, error) {
