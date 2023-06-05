@@ -1193,7 +1193,7 @@ func (c *Bor) CommitStates(
 
 	if c.config.IsIndore(header.Number) {
 		// Fetch the LastStateId from contract via current state instance
-		_lastStateID, err = c.GenesisContractsClient.LastStateId(state, number-1, header.ParentHash)
+		_lastStateID, err = c.GenesisContractsClient.LastStateId(state.Copy(), number-1, header.ParentHash)
 		if err != nil {
 			return nil, err
 		}
