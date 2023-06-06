@@ -594,7 +594,7 @@ func dumpState(ctx *cli.Context) error {
 	}{root})
 
 	for accIt.Next() {
-		account, err := snapshot.FullAccount(accIt.Account())
+		account, err := types.FullAccount(accIt.Account())
 		if err != nil {
 			return err
 		}
@@ -602,7 +602,7 @@ func dumpState(ctx *cli.Context) error {
 		da := &state.DumpAccount{
 			Balance:   account.Balance.String(),
 			Nonce:     account.Nonce,
-			Root:      account.Root,
+			Root:      account.Root.Bytes(),
 			CodeHash:  account.CodeHash,
 			SecureKey: accIt.Hash().Bytes(),
 		}
