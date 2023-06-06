@@ -1104,25 +1104,13 @@ func (e *revertError) ErrorData() interface{} {
 // Note, this function doesn't make and changes in the state/blockchain and is
 // useful to execute and retrieve values.
 func (s *PublicBlockChainAPI) Call(ctx context.Context, args TransactionArgs, blockNrOrHash rpc.BlockNumberOrHash, overrides *StateOverride) (hexutil.Bytes, error) {
-	result, err := DoCall(ctx, s.b, args, blockNrOrHash, nil, overrides, s.b.RPCEVMTimeout(), s.b.RPCGasCap())
-	if err != nil {
-		return nil, err
-	}
-
-	if int(s.b.RPCRpcReturnDataLimit()) > 0 && len(result.ReturnData) > int(s.b.RPCRpcReturnDataLimit()) {
-		return nil, fmt.Errorf("call returned result of length %d exceeding limit %d", len(result.ReturnData), int(s.b.RPCRpcReturnDataLimit()))
-	}
-
-	// If the result contains a revert reason, try to unpack and return it.
-	if len(result.Revert()) > 0 {
-		return nil, newRevertError(result)
-	}
-
-	return result.Return(), result.Err
+	return s.CallWithState(ctx, args, blockNrOrHash, nil, overrides)
 }
 
 // CallWithState executes the given transaction on the given state for
-// the given block number.
+// the given block number. Note that as it does an EVM call, fields in
+// the underlying state will change. Make sure to handle it outside of
+// this function (ideally by sending a copy of state).
 //
 // Additionally, the caller can specify a batch of contract for fields overriding.
 //
