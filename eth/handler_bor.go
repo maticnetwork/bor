@@ -18,7 +18,7 @@ var (
 	// latest milestone from the local heimdall.
 	errMilestone = errors.New("failed to fetch latest milestone")
 
-	ErrNotInRejectedList = errors.New("MilestoneID not in rejected list")
+	ErrNotInRejectedList = errors.New("milestoneID doesn't exist in rejected list")
 )
 
 // fetchWhitelistCheckpoint fetches the latest checkpoint from it's local heimdall
