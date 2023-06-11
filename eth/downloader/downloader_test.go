@@ -1408,11 +1408,11 @@ type whitelistFake struct {
 	count int
 
 	// validate is the dynamic function to be called while syncing
-	validate func(count int) (bool, error)
+	validate func(count int) bool
 }
 
 // newWhitelistFake returns a new mock whitelist
-func newWhitelistFake(validate func(count int) (bool, error)) *whitelistFake {
+func newWhitelistFake(validate func(count int) bool) *whitelistFake {
 	return &whitelistFake{0, validate}
 }
 
@@ -1423,11 +1423,11 @@ func (w *whitelistFake) IsValidPeer(_ func(number uint64, amount int, skip int, 
 		w.count++
 	}()
 
-	return w.validate(w.count)
+	return w.validate(w.count), nil
 }
 
-func (w *whitelistFake) IsValidChain(current *types.Header, headers []*types.Header) (bool, error) {
-	return true, nil
+func (w *whitelistFake) IsValidChain(current *types.Header, headers []*types.Header) bool {
+	return true
 }
 func (w *whitelistFake) ProcessCheckpoint(_ uint64, _ common.Hash) {}
 
@@ -1472,8 +1472,8 @@ func TestFakedSyncProgress66WhitelistMismatch(t *testing.T) {
 	mode := FullSync
 
 	tester := newTester()
-	validate := func(count int) (bool, error) {
-		return false, whitelist.ErrMismatch
+	validate := func(count int) bool {
+		return false
 	}
 	tester.downloader.ChainValidator = newWhitelistFake(validate)
 
@@ -1497,8 +1497,8 @@ func TestFakedSyncProgress66WhitelistMatch(t *testing.T) {
 	mode := FullSync
 
 	tester := newTester()
-	validate := func(count int) (bool, error) {
-		return true, nil
+	validate := func(count int) bool {
+		return true
 	}
 	tester.downloader.ChainValidator = newWhitelistFake(validate)
 
@@ -1523,13 +1523,13 @@ func TestFakedSyncProgress66NoRemoteCheckpoint(t *testing.T) {
 	mode := FullSync
 
 	tester := newTester()
-	validate := func(count int) (bool, error) {
+	validate := func(count int) bool {
 		// only return the `ErrNoRemoteCheckoint` error for the first call
 		if count == 0 {
-			return false, whitelist.ErrNoRemote
+			return false
 		}
 
-		return true, nil
+		return true
 	}
 
 	tester.downloader.ChainValidator = newWhitelistFake(validate)
