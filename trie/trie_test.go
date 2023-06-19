@@ -524,8 +524,7 @@ func runRandTest(rt randTest) bool {
 			}
 
 			proofDb := rawdb.NewMemoryDatabase()
-			err := tr.Prove(step.key, 0, proofDb)
-
+			err := tr.Prove(step.key, proofDb)
 			if err != nil {
 				rt[i].err = fmt.Errorf("failed for proving key %#x, %v", step.key, err)
 			}

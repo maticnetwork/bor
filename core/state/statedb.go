@@ -664,8 +664,7 @@ func (s *StateDB) GetProof(addr common.Address) ([][]byte, error) {
 // GetProofByHash returns the Merkle proof for a given account.
 func (s *StateDB) GetProofByHash(addrHash common.Hash) ([][]byte, error) {
 	var proof proofList
-	err := s.trie.Prove(addrHash[:], 0, &proof)
-
+	err := s.trie.Prove(addrHash[:], &proof)
 	return proof, err
 }
 
@@ -681,8 +680,7 @@ func (s *StateDB) GetStorageProof(a common.Address, key common.Hash) ([][]byte, 
 	}
 
 	var proof proofList
-	err = trie.Prove(crypto.Keccak256(key.Bytes()), 0, &proof)
-
+	err = trie.Prove(crypto.Keccak256(key.Bytes()), &proof)
 	if err != nil {
 		return nil, err
 	}

@@ -196,7 +196,7 @@ func runRandTest(rt randTest) error {
 				return fmt.Errorf("hash mismatch in opItercheckhash")
 			}
 		case opProve:
-			rt[i].err = tr.Prove(step.key, 0, proofDb{})
+			rt[i].err = tr.Prove(step.key, proofDb{})
 		}
 		// Abort the test on error.
 		if rt[i].err != nil {
