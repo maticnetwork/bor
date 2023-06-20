@@ -120,8 +120,7 @@ func checkTrieConsistency(db ethdb.Database, root common.Hash) error {
 	if err != nil {
 		return err
 	}
-
-	it := t.NodeIterator(nil)
+	it := trie.MustNodeIterator(nil)
 	for it.Next(true) {
 	}
 
@@ -651,7 +650,10 @@ func TestIncompleteStateSync(t *testing.T) {
 		addedPaths  []string
 		addedHashes []common.Hash
 	)
-
+	reader, err := srcDb.TrieDB().Reader(srcRoot)
+	if err != nil {
+		t.Fatalf("state is not available %x", srcRoot)
+	}
 	nodeQueue := make(map[string]stateElement)
 	codeQueue := make(map[common.Hash]struct{})
 	paths, nodes, codes := sched.Missing(1)
@@ -697,7 +699,7 @@ func TestIncompleteStateSync(t *testing.T) {
 
 			for path, element := range nodeQueue {
 				owner, inner := trie.ResolvePath([]byte(element.path))
-				data, err := srcDb.TrieDB().Reader(srcRoot).Node(owner, inner, element.hash)
+				data, err := reader.Node(owner, inner, element.hash)
 				if err != nil {
 					t.Fatalf("failed to retrieve node data for %x", element.hash)
 				}
