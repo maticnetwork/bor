@@ -144,6 +144,15 @@ type (
 func (ch createObjectChange) revert(s *StateDB) {
 	delete(s.stateObjects, *ch.account)
 	delete(s.stateObjectsDirty, *ch.account)
+
+	if s.writeMap != nil {
+		for key := range s.writeMap {
+			if key.GetAddress() == *ch.account {
+				delete(s.writeMap, key)
+			}
+		}
+	}
+
 	RevertWrite(s, blockstm.NewAddressKey(*ch.account))
 }
 

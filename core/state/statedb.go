@@ -356,29 +356,31 @@ func (sw *StateDB) ApplyMVWriteSet(writes []blockstm.WriteDescriptor) {
 		path := writes[i].Path
 		sr := writes[i].Val.(*StateDB)
 
-		if path.IsState() {
-			addr := path.GetAddress()
-			stateKey := path.GetStateKey()
-			state := sr.GetState(addr, stateKey)
-			sw.SetState(addr, stateKey, state)
-		} else if path.IsAddress() {
-			continue
-		} else {
-			addr := path.GetAddress()
-			switch path.GetSubpath() {
-			case BalancePath:
-				sw.SetBalance(addr, sr.GetBalance(addr))
-			case NoncePath:
-				sw.SetNonce(addr, sr.GetNonce(addr))
-			case CodePath:
-				sw.SetCode(addr, sr.GetCode(addr))
-			case SuicidePath:
-				stateObject := sr.getDeletedStateObject(addr)
-				if stateObject != nil && stateObject.deleted {
-					sw.Suicide(addr)
+		if sr.getDeletedStateObject(path.GetAddress()) != nil {
+			if path.IsState() {
+				addr := path.GetAddress()
+				stateKey := path.GetStateKey()
+				state := sr.GetState(addr, stateKey)
+				sw.SetState(addr, stateKey, state)
+			} else if path.IsAddress() {
+				continue
+			} else {
+				addr := path.GetAddress()
+				switch path.GetSubpath() {
+				case BalancePath:
+					sw.SetBalance(addr, sr.GetBalance(addr))
+				case NoncePath:
+					sw.SetNonce(addr, sr.GetNonce(addr))
+				case CodePath:
+					sw.SetCode(addr, sr.GetCode(addr))
+				case SuicidePath:
+					stateObject := sr.getDeletedStateObject(addr)
+					if stateObject != nil && stateObject.deleted {
+						sw.Suicide(addr)
+					}
+				default:
+					panic(fmt.Errorf("unknown key type: %d", path.GetSubpath()))
 				}
-			default:
-				panic(fmt.Errorf("unknown key type: %d", path.GetSubpath()))
 			}
 		}
 	}
