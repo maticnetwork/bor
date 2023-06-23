@@ -189,8 +189,6 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		gpoParams.Default = config.Miner.GasPrice
 	}
 
-	ethereum.APIBackend.gpo = gasprice.NewOracle(ethereum.APIBackend, gpoParams)
-
 	// Override the chain config with provided settings.
 	var overrides core.ChainOverrides
 	if config.OverrideShanghai != nil {
@@ -264,6 +262,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 	_ = ethereum.engine.VerifyHeader(ethereum.blockchain, ethereum.blockchain.CurrentHeader(), true) // TODO think on it
 
+	ethereum.APIBackend.gpo = gasprice.NewOracle(ethereum.APIBackend, gpoParams)
 	// BOR changes
 	ethereum.APIBackend.gpo.ProcessCache()
 	// BOR changes

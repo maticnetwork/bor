@@ -804,13 +804,9 @@ func (pool *TxPool) validateTxBasics(tx *types.Transaction, local bool) error {
 
 	// Drop non-local transactions under our own minimal accepted gas price or tip
 	pool.gasPriceMu.RLock()
-
 	if !local && tx.GasTipCapUIntLt(pool.gasPriceUint) {
-		pool.gasPriceMu.RUnlock()
-
 		return ErrUnderpriced
 	}
-
 	pool.gasPriceMu.RUnlock()
 
 	// Ensure the transaction adheres to nonce ordering
@@ -818,12 +814,8 @@ func (pool *TxPool) validateTxBasics(tx *types.Transaction, local bool) error {
 		return core.ErrNonceTooLow
 	}
 
-	// Transactor should have enough funds to cover the costs
-	// cost == V + GP * GL
 	balance := pool.currentState.GetBalance(from)
-	if balance.Cmp(tx.Cost()) < 0 {
-		return core.ErrInsufficientFunds
-	}
+
 	// Verify that replacing transactions will not result in overdraft
 	list := pool.pending[from]
 	if list != nil { // Sender already has pending txs
@@ -1205,14 +1197,15 @@ func (pool *TxPool) addRemoteSync(tx *types.Transaction) error {
 // AddRemote enqueues a single transaction into the pool if it is valid. This is a convenience
 // wrapper around AddRemotes.
 func (pool *TxPool) AddRemote(tx *types.Transaction) error {
-	return pool.addTx(tx, false, false)
+	errs := pool.AddRemotes([]*types.Transaction{tx})
+	return errs[0]
 }
 
 // addTxs attempts to queue a batch of transactions if they are valid.
 func (pool *TxPool) addTxs(txs []*types.Transaction, local, sync bool) []error {
 	// Filter out known ones without obtaining the pool lock or recovering signatures
 	var (
-		errs []error
+		errs = make([]error, len(txs))
 		news = make([]*types.Transaction, 0, len(txs))
 
 		hash common.Hash
@@ -1235,7 +1228,7 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local, sync bool) []error {
 		// in transactions before obtaining lock
 
 		if err := pool.validateTxBasics(tx, local); err != nil {
-			errs = append(errs, ErrAlreadyKnown)
+			errs = append(errs, err)
 
 			invalidTxMeter.Mark(1)
 
