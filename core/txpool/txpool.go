@@ -420,6 +420,7 @@ func (pool *TxPool) loop() {
 
 		// Handle stats reporting ticks
 		case <-report.C:
+			pool.mu.RLock()
 			pending, queued := pool.stats()
 			pool.mu.RUnlock()
 			stales := int(pool.priced.stales.Load())
@@ -1168,7 +1169,8 @@ func (pool *TxPool) AddLocals(txs []*types.Transaction) []error {
 // AddLocal enqueues a single local transaction into the pool if it is valid. This is
 // a convenience wrapper around AddLocals.
 func (pool *TxPool) AddLocal(tx *types.Transaction) error {
-	return pool.addTx(tx, !pool.config.NoLocals, true)
+	errs := pool.AddLocals([]*types.Transaction{tx})
+	return errs[0]
 }
 
 // AddRemotes enqueues a batch of transactions into the pool if they are valid. If the
@@ -1211,12 +1213,12 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local, sync bool) []error {
 		hash common.Hash
 	)
 
-	for _, tx := range txs {
+	for i, tx := range txs {
 		// If the transaction is known, pre-set the error slot
 		hash = tx.Hash()
 
 		if pool.all.Get(hash) != nil {
-			errs = append(errs, ErrAlreadyKnown)
+			errs[i] = ErrAlreadyKnown
 
 			knownTxMeter.Mark(1)
 
@@ -1228,7 +1230,7 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local, sync bool) []error {
 		// in transactions before obtaining lock
 
 		if err := pool.validateTxBasics(tx, local); err != nil {
-			errs = append(errs, err)
+			errs[i] = err
 
 			invalidTxMeter.Mark(1)
 
@@ -1249,8 +1251,17 @@ func (pool *TxPool) addTxs(txs []*types.Transaction, local, sync bool) []error {
 
 	// Process all the new transaction and merge any errors into the original slice
 	pool.mu.Lock()
-	errs, dirtyAddrs := pool.addTxsLocked(news, local)
+	newErrs, dirtyAddrs := pool.addTxsLocked(news, local)
 	pool.mu.Unlock()
+
+	var nilSlot = 0
+	for _, err := range newErrs {
+		for errs[nilSlot] != nil {
+			nilSlot++
+		}
+		errs[nilSlot] = err
+		nilSlot++
+	}
 
 	// Reorg the pool internals if needed and return
 	done := pool.requestPromoteExecutables(dirtyAddrs)
@@ -1320,16 +1331,12 @@ func (pool *TxPool) addTx(tx *types.Transaction, local, sync bool) error {
 // The transaction pool lock must be held.
 func (pool *TxPool) addTxsLocked(txs []*types.Transaction, local bool) ([]error, *accountSet) {
 	dirty := newAccountSet(pool.signer)
-
-	var (
-		replaced bool
-		errs     []error
-	)
+	errs := make([]error, len(txs))
 
 	for _, tx := range txs {
 		var err error
 
-		replaced, err = pool.add(tx, local)
+		replaced, err := pool.add(tx, local)
 		if err == nil && !replaced {
 			dirty.addTx(tx)
 		}

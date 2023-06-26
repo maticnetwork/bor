@@ -477,6 +477,7 @@ var (
 		TerminalTotalDifficultyPassed: false,
 		Ethash:                        nil,
 		Clique:                        &CliqueConfig{Period: 0, Epoch: 30000},
+		Bor:                           &BorConfig{BurntContract: map[string]string{"0": "0x000000000000000000000000000000000000dead"}},
 	}
 
 	// TestChainConfig contains every protocol change (EIPs) introduced

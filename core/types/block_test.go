@@ -73,6 +73,7 @@ func TestBlockEncoding(t *testing.T) {
 	}
 }
 
+// FIXME: Fix after finalising block structure
 func TestTxDependencyBlockEncoding(t *testing.T) {
 	t.Parallel()
 
