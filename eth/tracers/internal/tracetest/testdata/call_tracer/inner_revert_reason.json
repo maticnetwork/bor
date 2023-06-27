@@ -37,6 +37,25 @@
       "clique": {
         "period": 0,
         "epoch": 30000
+      },
+      "bor": {
+        "jaipurBlock": 0,
+        "delhiBlock": 0,
+        "period": {
+          "0": 2
+        },
+        "producerDelay": {
+          "0": 4
+        },
+        "sprint": {
+          "0": 16
+        },
+        "backupMultiplier": {
+          "0": 2
+        },
+        "burntContract": {
+          "0": "0x000000000000000000000000000000000000dead"
+        }
       }
     }
   },

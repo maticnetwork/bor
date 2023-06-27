@@ -110,6 +110,7 @@ func testCallTracer(tracerName string, dirPath string, t *testing.T) {
 		file := file // capture range variable
 		t.Run(camel(strings.TrimSuffix(file.Name(), ".json")), func(t *testing.T) {
 			t.Parallel()
+			t.Log("FILE!!", file.Name())
 
 			var (
 				test = new(callTracerTest)

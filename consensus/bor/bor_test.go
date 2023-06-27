@@ -60,6 +60,7 @@ func TestGenesisContractChange(t *testing.T) {
 	statedb, err := state.New(genesis.Root(), state.NewDatabase(db), nil)
 	require.NoError(t, err)
 
+	genspec.Config = &params.ChainConfig{}
 	chain, err := core.NewBlockChain(rawdb.NewMemoryDatabase(), nil, genspec, nil, b, vm.Config{}, nil, nil, nil)
 	require.NoError(t, err)
 
