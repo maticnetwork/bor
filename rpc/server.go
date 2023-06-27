@@ -68,6 +68,10 @@ func NewServer(executionPoolSize uint64, executionPoolRequesttimeout time.Durati
 	// as the services and methods it offers.
 	rpcService := &RPCService{server}
 	server.RegisterName(MetadataApi, rpcService)
+
+	// Start reporting metrics for the execution pool
+	go server.executionPool.reportMetrics(5 * time.Second)
+
 	return server
 }
 

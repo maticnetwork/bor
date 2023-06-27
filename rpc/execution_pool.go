@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/JekaMas/workerpool"
+	"github.com/ethereum/go-ethereum/metrics"
 )
 
 type SafePool struct {
@@ -16,6 +17,8 @@ type SafePool struct {
 
 	timeout time.Duration
 	size    int
+
+	processed atomic.Int64
 
 	// Skip sending task to execution pool
 	fastPath bool
@@ -96,4 +99,20 @@ func (s *SafePool) Size() int {
 	defer s.RUnlock()
 
 	return s.size
+}
+
+// reportMetrics reports the metrics after every `refresh` time interval
+// regarding the execution pool.
+func (s *SafePool) reportMetrics(refresh time.Duration) {
+	if !metrics.Enabled {
+		return
+	}
+
+	for {
+		epWorkerCountGuage.Update(s.executionPool.Load().GetWorkerCount())
+		epWaitingQueueGuage.Update(int64(s.executionPool.Load().WaitingQueueSize()))
+		epProcessedRequestsMeter.Mark(s.processed.Load())
+
+		time.Sleep(refresh)
+	}
 }
