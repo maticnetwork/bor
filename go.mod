@@ -225,3 +225,5 @@ replace github.com/tendermint/tendermint => github.com/maticnetwork/tendermint v
 replace github.com/ethereum/go-ethereum => github.com/maticnetwork/bor v0.2.18-0.20220922050621-c91d4ca1fa4f
 
 replace github.com/Masterminds/goutils => github.com/Masterminds/goutils v1.1.1
+
+replace github.com/JekaMas/workerpool => github.com/manav2401/workerpool v0.0.0-20230627195019-8a467ee3fea6

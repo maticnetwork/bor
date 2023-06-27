@@ -15,9 +15,9 @@ type SafePool struct {
 
 	sync.RWMutex
 
-	timeout time.Duration
-	size    int
-
+	timeout   time.Duration
+	size      int
+	close     chan struct{}
 	processed atomic.Int64
 
 	// Skip sending task to execution pool
@@ -28,6 +28,7 @@ func NewExecutionPool(initialSize int, timeout time.Duration) *SafePool {
 	sp := &SafePool{
 		size:    initialSize,
 		timeout: timeout,
+		close:   make(chan struct{}),
 	}
 
 	if initialSize == 0 {
@@ -101,6 +102,11 @@ func (s *SafePool) Size() int {
 	return s.size
 }
 
+func (s *SafePool) Stop() {
+	close(s.close)
+	s.executionPool.Load().Stop()
+}
+
 // reportMetrics reports the metrics after every `refresh` time interval
 // regarding the execution pool.
 func (s *SafePool) reportMetrics(refresh time.Duration) {
@@ -108,11 +114,19 @@ func (s *SafePool) reportMetrics(refresh time.Duration) {
 		return
 	}
 
+	ticker := time.NewTicker(refresh)
 	for {
-		epWorkerCountGuage.Update(s.executionPool.Load().GetWorkerCount())
-		epWaitingQueueGuage.Update(int64(s.executionPool.Load().WaitingQueueSize()))
-		epProcessedRequestsMeter.Mark(s.processed.Load())
+		select {
+		case <-ticker.C:
+			epWorkerCountGuage.Update(s.executionPool.Load().GetWorkerCount())
+			epWaitingQueueGuage.Update(int64(s.executionPool.Load().WaitingQueueSize()))
+			epProcessedRequestsMeter.Mark(s.processed.Load())
 
-		time.Sleep(refresh)
+			s.processed.Store(0)
+		case <-s.close:
+			ticker.Stop()
+
+			return
+		}
 	}
 }

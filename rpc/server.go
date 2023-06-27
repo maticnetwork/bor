@@ -170,6 +170,9 @@ func (s *Server) serveSingleRequest(ctx context.Context, codec ServerCodec) {
 // requests to finish, then closes all codecs which will cancel pending requests and
 // subscriptions.
 func (s *Server) Stop() {
+	// Stop the execution pool
+	s.executionPool.Stop()
+
 	if atomic.CompareAndSwapInt32(&s.run, 1, 0) {
 		log.Debug("RPC server shutting down")
 		s.codecs.Each(func(c interface{}) bool {
