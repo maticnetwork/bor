@@ -1546,7 +1546,7 @@ func makeAccountTrieNoStorage(n int) (string, *trie.Trie, []*kv) {
 
 	// Commit the state changes into db and re-create the trie
 	// for accessing later.
-	root, nodes := accTrie.Commit(false)
+	root, nodes, _ := accTrie.Commit(false)
 	db.Update(root, types.EmptyRootHash, trienode.NewWithNodeSet(nodes))
 
 	accTrie, _ = trie.New(trie.StateTrieID(root), db)
@@ -1611,7 +1611,7 @@ func makeBoundaryAccountTrie(n int) (string, *trie.Trie, []*kv) {
 
 	// Commit the state changes into db and re-create the trie
 	// for accessing later.
-	root, nodes := accTrie.Commit(false)
+	root, nodes, _ := accTrie.Commit(false)
 	db.Update(root, types.EmptyRootHash, trienode.NewWithNodeSet(nodes))
 
 	accTrie, _ = trie.New(trie.StateTrieID(root), db)
@@ -1659,8 +1659,8 @@ func makeAccountTrieWithStorageWithUniqueStorage(accounts, slots int, code bool)
 	slices.SortFunc(entries, (*kv).less)
 
 	// Commit account trie
-	root, set := accTrie.Commit(true)
-	_ = nodes.Merge(set)
+	root, set, _ := accTrie.Commit(true)
+	nodes.Merge(set)
 
 	// Commit gathered dirty nodes into database
 	db.Update(root, types.EmptyRootHash, nodes)
@@ -1729,8 +1729,8 @@ func makeAccountTrieWithStorage(accounts, slots int, code, boundary bool) (strin
 	slices.SortFunc(entries, (*kv).less)
 
 	// Commit account trie
-	root, set := accTrie.Commit(true)
-	_ = nodes.Merge(set)
+	root, set, _ := accTrie.Commit(true)
+	nodes.Merge(set)
 
 	// Commit gathered dirty nodes into database
 	db.Update(root, types.EmptyRootHash, nodes)
@@ -1775,8 +1775,7 @@ func makeStorageTrieWithSeed(owner common.Hash, n, seed uint64, db *trie.Databas
 		entries = append(entries, elem)
 	}
 	slices.SortFunc(entries, (*kv).less)
-	root, nodes := trie.Commit(false)
-
+	root, nodes, _ := trie.Commit(false)
 	return root, nodes, entries
 }
 
@@ -1829,8 +1828,7 @@ func makeBoundaryStorageTrie(owner common.Hash, n int, db *trie.Database) (commo
 		entries = append(entries, elem)
 	}
 	slices.SortFunc(entries, (*kv).less)
-	root, nodes := trie.Commit(false)
-
+	root, nodes, _ := trie.Commit(false)
 	return root, nodes, entries
 }
 
