@@ -115,6 +115,7 @@ func (s *SafePool) reportMetrics(refresh time.Duration) {
 	}
 
 	ticker := time.NewTicker(refresh)
+
 	for {
 		select {
 		case <-ticker.C:
