@@ -21,6 +21,9 @@ var (
 
 const (
 	borTxLookupPrefixStr = "matic-bor-tx-lookup-"
+
+	// freezerBorReceiptTable indicates the name of the freezer bor receipts table.
+	freezerBorReceiptTable = "matic-bor-receipts"
 )
 
 // borTxLookupKey = borTxLookupPrefix + bor tx hash
@@ -34,7 +37,7 @@ func ReadBorReceiptRLP(db ethdb.Reader, hash common.Hash, number uint64) rlp.Raw
 	err := db.ReadAncients(func(reader ethdb.AncientReaderOp) error {
 		// Check if the data is in ancients
 		if isCanon(reader, number, hash) {
-			data, _ = reader.Ancient(ChainFreezerBorReceiptTable, number)
+			data, _ = reader.Ancient(freezerBorReceiptTable, number)
 
 			return nil
 		}

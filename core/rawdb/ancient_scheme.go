@@ -30,9 +30,6 @@ const (
 	// ChainFreezerReceiptTable indicates the name of the freezer receipts table.
 	ChainFreezerReceiptTable = "receipts"
 
-	// ChainFreezerBorReceiptTable indicates the name of the freezer bor receipts table.
-	ChainFreezerBorReceiptTable = "matic-bor-receipts"
-
 	// ChainFreezerDifficultyTable indicates the name of the freezer total difficulty table.
 	ChainFreezerDifficultyTable = "diffs"
 )
@@ -44,7 +41,6 @@ var chainFreezerNoSnappy = map[string]bool{
 	ChainFreezerHashTable:       true,
 	ChainFreezerBodiesTable:     false,
 	ChainFreezerReceiptTable:    false,
-	ChainFreezerBorReceiptTable: false,
 	ChainFreezerDifficultyTable: true,
 }
 

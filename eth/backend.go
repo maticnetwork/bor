@@ -264,7 +264,6 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 	_ = ethereum.engine.VerifyHeader(ethereum.blockchain, ethereum.blockchain.CurrentHeader(), true) // TODO think on it
 
-	ethereum.APIBackend.gpo = gasprice.NewOracle(ethereum.APIBackend, gpoParams)
 	// BOR changes
 	ethereum.APIBackend.gpo.ProcessCache()
 	// BOR changes
