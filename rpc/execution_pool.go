@@ -96,6 +96,7 @@ func (s *SafePool) Size() int {
 
 func (s *SafePool) Stop() {
 	close(s.close)
+
 	if s.executionPool.Load() != nil {
 		s.executionPool.Load().Stop()
 	}
