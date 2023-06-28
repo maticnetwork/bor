@@ -11,7 +11,7 @@ import (
 )
 
 type SafePool struct {
-	executionPool *atomic.Pointer[workerpool.WorkerPool]
+	executionPool atomic.Pointer[workerpool.WorkerPool]
 
 	sync.RWMutex
 
@@ -37,11 +37,7 @@ func NewExecutionPool(initialSize int, timeout time.Duration) *SafePool {
 		return sp
 	}
 
-	var ptr atomic.Pointer[workerpool.WorkerPool]
-
-	p := workerpool.New(initialSize)
-	ptr.Store(p)
-	sp.executionPool = &ptr
+	sp.executionPool.Store(workerpool.New(initialSize))
 
 	return sp
 }
@@ -53,10 +49,6 @@ func (s *SafePool) Submit(ctx context.Context, fn func() error) (<-chan error, b
 		}()
 
 		return nil, true
-	}
-
-	if s.executionPool == nil {
-		return nil, false
 	}
 
 	pool := s.executionPool.Load()
@@ -104,13 +96,15 @@ func (s *SafePool) Size() int {
 
 func (s *SafePool) Stop() {
 	close(s.close)
-	s.executionPool.Load().Stop()
+	if s.executionPool.Load() != nil {
+		s.executionPool.Load().Stop()
+	}
 }
 
 // reportMetrics reports the metrics after every `refresh` time interval
 // regarding the execution pool.
 func (s *SafePool) reportMetrics(refresh time.Duration) {
-	if !metrics.Enabled {
+	if !metrics.Enabled || s.executionPool.Load() == nil {
 		return
 	}
 
@@ -119,8 +113,10 @@ func (s *SafePool) reportMetrics(refresh time.Duration) {
 	for {
 		select {
 		case <-ticker.C:
-			epWorkerCountGuage.Update(s.executionPool.Load().GetWorkerCount())
-			epWaitingQueueGuage.Update(int64(s.executionPool.Load().WaitingQueueSize()))
+			ep := s.executionPool.Load()
+
+			epWorkerCountGuage.Update(ep.GetWorkerCount())
+			epWaitingQueueGuage.Update(int64(ep.WaitingQueueSize()))
 			epProcessedRequestsMeter.Mark(s.processed.Load())
 
 			s.processed.Store(0)
