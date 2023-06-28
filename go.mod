@@ -7,7 +7,7 @@ require (
 	github.com/BurntSushi/toml v1.1.0
 	github.com/JekaMas/crand v1.0.1
 	github.com/JekaMas/go-grpc-net-conn v0.0.0-20220708155319-6aff21f2d13d
-	github.com/JekaMas/workerpool v1.1.5
+	github.com/JekaMas/workerpool v1.1.8
 	github.com/VictoriaMetrics/fastcache v1.6.0
 	github.com/aws/aws-sdk-go-v2 v1.2.0
 	github.com/aws/aws-sdk-go-v2/config v1.1.1
@@ -225,5 +225,3 @@ replace github.com/tendermint/tendermint => github.com/maticnetwork/tendermint v
 replace github.com/ethereum/go-ethereum => github.com/maticnetwork/bor v0.2.18-0.20220922050621-c91d4ca1fa4f
 
 replace github.com/Masterminds/goutils => github.com/Masterminds/goutils v1.1.1
-
-replace github.com/JekaMas/workerpool => github.com/manav2401/workerpool v0.0.0-20230627195019-8a467ee3fea6
