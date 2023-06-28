@@ -256,6 +256,10 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 	ethereum.APIBackend.gpo = gasprice.NewOracle(ethereum.APIBackend, gpoParams)
 
+	if config.OverrideVerkle != nil {
+		overrides.OverrideVerkle = config.OverrideVerkle
+	}
+	ethereum.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, config.Genesis, &overrides, ethereum.engine, vmConfig, ethereum.shouldPreserve, &config.TxLookupLimit, checker)
 	if err != nil {
 		return nil, err
 	}

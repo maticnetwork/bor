@@ -1377,6 +1377,10 @@ func overrideConfig(original *params.ChainConfig, override *params.ChainConfig) 
 		chainConfigCopy.BerlinBlock = block
 		canon = false
 	}
+	if timestamp := override.VerkleTime; timestamp != nil {
+		chainConfigCopy.VerkleTime = timestamp
+		canon = false
+	}
 
 	if block := override.LondonBlock; block != nil {
 		chainConfigCopy.LondonBlock = block
