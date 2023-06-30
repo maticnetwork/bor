@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/JekaMas/workerpool"
-	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 )
 
@@ -126,8 +125,6 @@ func (s *SafePool) reportMetrics(refresh time.Duration) {
 		select {
 		case <-ticker.C:
 			ep := s.executionPool.Load()
-
-			log.Info("*** Reporting metrics", "service", s.service, "wc", ep.GetWorkerCount(), "queue", ep.WaitingQueueSize(), "processed", s.processed.Load())
 
 			epWorkerCountGuage, epWaitingQueueGuage, epProcessedRequestsMeter = newEpMetrics(s.service)
 
