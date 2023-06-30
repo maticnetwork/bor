@@ -27,10 +27,6 @@ var (
 	successfulRequestGauge = metrics.NewRegisteredGauge("rpc/success", nil)
 	failedReqeustGauge     = metrics.NewRegisteredGauge("rpc/failure", nil)
 	rpcServingTimer        = metrics.NewRegisteredTimer("rpc/duration/all", nil)
-
-	epWorkerCountGuage       = metrics.NewRegisteredGauge("rpc/ep/workers", nil)
-	epWaitingQueueGuage      = metrics.NewRegisteredGauge("rpc/ep/queue", nil)
-	epProcessedRequestsMeter = metrics.NewRegisteredMeter("rpc/ep/processed", nil)
 )
 
 func newRPCServingTimer(method string, valid bool) metrics.Timer {
@@ -40,4 +36,12 @@ func newRPCServingTimer(method string, valid bool) metrics.Timer {
 	}
 	m := fmt.Sprintf("rpc/duration/%s/%s", method, flag)
 	return metrics.GetOrRegisterTimer(m, nil)
+}
+
+func newEpMetrics(service string) (metrics.Gauge, metrics.Gauge, metrics.Meter) {
+	epWorkerCount := fmt.Sprintf("rpc/ep/workers/%s", service)
+	epWaitingQueue := fmt.Sprintf("rpc/ep/queue/%s", service)
+	epProcessedRequests := fmt.Sprintf("rpc/ep/processed/%s", service)
+
+	return metrics.GetOrRegisterGauge(epWorkerCount, nil), metrics.GetOrRegisterGauge(epWaitingQueue, nil), metrics.GetOrRegisterMeter(epProcessedRequests, nil)
 }

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/JekaMas/workerpool"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 )
 
@@ -15,19 +16,23 @@ type SafePool struct {
 
 	sync.RWMutex
 
-	timeout   time.Duration
-	size      int
-	close     chan struct{}
-	processed atomic.Int64
+	size    int
+	timeout time.Duration
+
+	service   string       // the service using ep
+	processed atomic.Int64 // keeps count of total processed requests
+
+	close chan struct{}
 
 	// Skip sending task to execution pool
 	fastPath bool
 }
 
-func NewExecutionPool(initialSize int, timeout time.Duration) *SafePool {
+func NewExecutionPool(initialSize int, timeout time.Duration, service string, report bool) *SafePool {
 	sp := &SafePool{
 		size:    initialSize,
 		timeout: timeout,
+		service: service,
 		close:   make(chan struct{}),
 	}
 
@@ -38,6 +43,10 @@ func NewExecutionPool(initialSize int, timeout time.Duration) *SafePool {
 	}
 
 	sp.executionPool.Store(workerpool.New(initialSize))
+
+	if metrics.Enabled && report {
+		go sp.reportMetrics(3 * time.Second)
+	}
 
 	return sp
 }
@@ -105,9 +114,11 @@ func (s *SafePool) Stop() {
 // reportMetrics reports the metrics after every `refresh` time interval
 // regarding the execution pool.
 func (s *SafePool) reportMetrics(refresh time.Duration) {
-	if !metrics.Enabled || s.executionPool.Load() == nil {
-		return
-	}
+	var (
+		epWorkerCountGuage       metrics.Gauge
+		epWaitingQueueGuage      metrics.Gauge
+		epProcessedRequestsMeter metrics.Meter
+	)
 
 	ticker := time.NewTicker(refresh)
 
@@ -115,6 +126,10 @@ func (s *SafePool) reportMetrics(refresh time.Duration) {
 		select {
 		case <-ticker.C:
 			ep := s.executionPool.Load()
+
+			log.Info("*** Reporting metrics", "service", s.service, "wc", ep.GetWorkerCount(), "queue", ep.WaitingQueueSize(), "processed", s.processed.Load())
+
+			epWorkerCountGuage, epWaitingQueueGuage, epProcessedRequestsMeter = newEpMetrics(s.service)
 
 			epWorkerCountGuage.Update(ep.GetWorkerCount())
 			epWaitingQueueGuage.Update(int64(ep.WaitingQueueSize()))

@@ -56,21 +56,23 @@ type Server struct {
 }
 
 // NewServer creates a new server instance with no registered handlers.
-func NewServer(executionPoolSize uint64, executionPoolRequesttimeout time.Duration) *Server {
+func NewServer(service string, executionPoolSize uint64, executionPoolRequesttimeout time.Duration) *Server {
+	reportEpStats := true
+	if service == "" || service == "test" {
+		reportEpStats = false
+	}
+
 	server := &Server{
 		idgen:         randomIDGenerator(),
 		codecs:        mapset.NewSet(),
 		run:           1,
-		executionPool: NewExecutionPool(int(executionPoolSize), executionPoolRequesttimeout),
+		executionPool: NewExecutionPool(int(executionPoolSize), executionPoolRequesttimeout, service, reportEpStats),
 	}
 
 	// Register the default service providing meta information about the RPC service such
 	// as the services and methods it offers.
 	rpcService := &RPCService{server}
 	server.RegisterName(MetadataApi, rpcService)
-
-	// Start reporting metrics for the execution pool
-	go server.executionPool.reportMetrics(3 * time.Second)
 
 	return server
 }
