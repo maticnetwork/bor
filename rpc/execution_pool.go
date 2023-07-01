@@ -114,9 +114,9 @@ func (s *SafePool) Stop() {
 // regarding the execution pool.
 func (s *SafePool) reportMetrics(refresh time.Duration) {
 	var (
-		epWorkerCountGuage       metrics.Gauge
-		epWaitingQueueGuage      metrics.Gauge
-		epProcessedRequestsMeter metrics.Meter
+		epWorkerCountGuage           metrics.Gauge
+		epWaitingQueueGuage          metrics.Gauge
+		epProcessedRequestsHistogram metrics.Histogram
 	)
 
 	ticker := time.NewTicker(refresh)
@@ -126,11 +126,11 @@ func (s *SafePool) reportMetrics(refresh time.Duration) {
 		case <-ticker.C:
 			ep := s.executionPool.Load()
 
-			epWorkerCountGuage, epWaitingQueueGuage, epProcessedRequestsMeter = newEpMetrics(s.service)
+			epWorkerCountGuage, epWaitingQueueGuage, epProcessedRequestsHistogram = newEpMetrics(s.service)
 
 			epWorkerCountGuage.Update(ep.GetWorkerCount())
 			epWaitingQueueGuage.Update(int64(ep.WaitingQueueSize()))
-			epProcessedRequestsMeter.Mark(s.processed.Load())
+			epProcessedRequestsHistogram.Update(s.processed.Load())
 
 			s.processed.Store(0)
 		case <-s.close:
