@@ -174,7 +174,9 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	// START: Bor changes
 	eth.APIBackend = &EthAPIBackend{stack.Config().ExtRPCEnabled(), stack.Config().AllowUnprotectedTxs, eth, nil}
 	if eth.APIBackend.allowUnprotectedTxs {
-		log.Info("Unprotected transactions allowed")
+		log.Debug(" ###########", "Unprotected transactions allowed")
+
+		config.TxPool.AllowUnprotectedTxs = true
 	}
 	gpoParams := config.GPO
 	if gpoParams.Default == nil {
@@ -206,7 +208,9 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	}
 	var (
 		vmConfig = vm.Config{
-			EnablePreimageRecording: config.EnablePreimageRecording,
+			EnablePreimageRecording:      config.EnablePreimageRecording,
+			ParallelEnable:               config.ParallelEVM.Enable,
+			ParallelSpeculativeProcesses: config.ParallelEVM.SpeculativeProcesses,
 		}
 		cacheConfig = &core.CacheConfig{
 			TrieCleanLimit:      config.TrieCleanCache,
@@ -224,7 +228,14 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 	checker := whitelist.NewService(10)
 
-	eth.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, chainConfig, eth.engine, vmConfig, eth.shouldPreserve, &config.TxLookupLimit, checker)
+	// check if Parallel EVM is enabled
+	// if enabled, use parallel state processor
+	if config.ParallelEVM.Enable {
+		eth.blockchain, err = core.NewParallelBlockChain(chainDb, cacheConfig, chainConfig, eth.engine, vmConfig, eth.shouldPreserve, &config.TxLookupLimit, checker)
+	} else {
+		eth.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, chainConfig, eth.engine, vmConfig, eth.shouldPreserve, &config.TxLookupLimit, checker)
+	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -266,6 +277,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		EthAPI:             ethAPI,
 		PeerRequiredBlocks: config.PeerRequiredBlocks,
 		checker:            checker,
+		txArrivalWait:      eth.p2pServer.TxArrivalWait,
 	}); err != nil {
 		return nil, err
 	}

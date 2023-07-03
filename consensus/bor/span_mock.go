@@ -14,6 +14,7 @@ import (
 	core "github.com/ethereum/go-ethereum/core"
 	state "github.com/ethereum/go-ethereum/core/state"
 	types "github.com/ethereum/go-ethereum/core/types"
+	rpc "github.com/ethereum/go-ethereum/rpc"
 	gomock "github.com/golang/mock/gomock"
 )
 
@@ -69,17 +70,32 @@ func (mr *MockSpannerMockRecorder) GetCurrentSpan(arg0, arg1 interface{}) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentSpan", reflect.TypeOf((*MockSpanner)(nil).GetCurrentSpan), arg0, arg1)
 }
 
-// GetCurrentValidators mocks base method.
-func (m *MockSpanner) GetCurrentValidators(arg0 context.Context, arg1 common.Hash, arg2 uint64) ([]*valset.Validator, error) {
+// GetCurrentValidatorsByBlockNrOrHash mocks base method.
+func (m *MockSpanner) GetCurrentValidatorsByBlockNrOrHash(arg0 context.Context, arg1 rpc.BlockNumberOrHash, arg2 uint64) ([]*valset.Validator, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetCurrentValidators", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "GetCurrentValidatorsByBlockNrOrHash", arg0, arg1, arg2)
 	ret0, _ := ret[0].([]*valset.Validator)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetCurrentValidators indicates an expected call of GetCurrentValidators.
-func (mr *MockSpannerMockRecorder) GetCurrentValidators(arg0, arg1, arg2 interface{}) *gomock.Call {
+// GetCurrentValidatorsByBlockNrOrHash indicates an expected call of GetCurrentValidatorsByBlockNrOrHash.
+func (mr *MockSpannerMockRecorder) GetCurrentValidatorsByBlockNrOrHash(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentValidators", reflect.TypeOf((*MockSpanner)(nil).GetCurrentValidators), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentValidatorsByBlockNrOrHash", reflect.TypeOf((*MockSpanner)(nil).GetCurrentValidatorsByBlockNrOrHash), arg0, arg1, arg2)
+}
+
+// GetCurrentValidatorsByHash mocks base method.
+func (m *MockSpanner) GetCurrentValidatorsByHash(arg0 context.Context, arg1 common.Hash, arg2 uint64) ([]*valset.Validator, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCurrentValidatorsByHash", arg0, arg1, arg2)
+	ret0, _ := ret[0].([]*valset.Validator)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetCurrentValidatorsByHash indicates an expected call of GetCurrentValidatorsByHash.
+func (mr *MockSpannerMockRecorder) GetCurrentValidatorsByHash(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentValidatorsByHash", reflect.TypeOf((*MockSpanner)(nil).GetCurrentValidatorsByHash), arg0, arg1, arg2)
 }
