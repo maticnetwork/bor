@@ -1,6 +1,7 @@
 package server
 
 import (
+	"crypto/ecdsa"
 	"fmt"
 	"io/ioutil"
 	"math"
@@ -24,6 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/fdlimit"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/ethereum/go-ethereum/eth/gasprice"
@@ -33,6 +35,7 @@ import (
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/nat"
+	"github.com/ethereum/go-ethereum/p2p/netutil"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
 )
@@ -49,8 +52,14 @@ type Config struct {
 	// RequiredBlocks is a list of required (block number, hash) pairs to accept
 	RequiredBlocks map[string]string `hcl:"eth.requiredblocks,optional" toml:"eth.requiredblocks,optional"`
 
+	// Verbosity is the level of the logs to put out
+	Verbosity int `hcl:"verbosity,optional" toml:"verbosity,optional"`
+
 	// LogLevel is the level of the logs to put out
 	LogLevel string `hcl:"log-level,optional" toml:"log-level,optional"`
+
+	// Record information useful for VM and contract debugging
+	EnablePreimageRecording bool `hcl:"vmdebug,optional" toml:"vmdebug,optional"`
 
 	// DataDir is the directory to store the state in
 	DataDir string `hcl:"datadir,optional" toml:"datadir,optional"`
@@ -60,6 +69,12 @@ type Config struct {
 
 	// KeyStoreDir is the directory to store keystores
 	KeyStoreDir string `hcl:"keystore,optional" toml:"keystore,optional"`
+
+	// Maximum number of messages in a batch (default=100, use 0 for no limits)
+	RPCBatchLimit uint64 `hcl:"rpc.batchlimit,optional" toml:"rpc.batchlimit,optional"`
+
+	// Maximum size (in bytes) a result of an rpc request could have (default=100000, use 0 for no limits)
+	RPCReturnDataLimit uint64 `hcl:"rpc.returndatalimit,optional" toml:"rpc.returndatalimit,optional"`
 
 	// SyncMode selects the sync protocol
 	SyncMode string `hcl:"syncmode,optional" toml:"syncmode,optional"`
@@ -75,6 +90,9 @@ type Config struct {
 
 	// Ethstats is the address of the ethstats server to send telemetry
 	Ethstats string `hcl:"ethstats,optional" toml:"ethstats,optional"`
+
+	// Logging has the logging related settings
+	Logging *LoggingConfig `hcl:"log,block" toml:"log,block"`
 
 	// P2P has the p2p network related settings
 	P2P *P2PConfig `hcl:"p2p,block" toml:"p2p,block"`
@@ -108,6 +126,53 @@ type Config struct {
 
 	// Developer has the developer mode related settings
 	Developer *DeveloperConfig `hcl:"developer,block" toml:"developer,block"`
+
+	// ParallelEVM has the parallel evm related settings
+	ParallelEVM *ParallelEVMConfig `hcl:"parallelevm,block" toml:"parallelevm,block"`
+
+	// Develop Fake Author mode to produce blocks without authorisation
+	DevFakeAuthor bool `hcl:"devfakeauthor,optional" toml:"devfakeauthor,optional"`
+
+	// Pprof has the pprof related settings
+	Pprof *PprofConfig `hcl:"pprof,block" toml:"pprof,block"`
+}
+
+type LoggingConfig struct {
+	// Per-module verbosity: comma-separated list of <pattern>=<level> (e.g. eth/*=5,p2p=4)
+	Vmodule string `hcl:"vmodule,optional" toml:"vmodule,optional"`
+
+	// Format logs with JSON
+	Json bool `hcl:"json,optional" toml:"json,optional"`
+
+	// Request a stack trace at a specific logging statement (e.g. "block.go:271")
+	Backtrace string `hcl:"backtrace,optional" toml:"backtrace,optional"`
+
+	// Prepends log messages with call-site location (file and line number)
+	Debug bool `hcl:"debug,optional" toml:"debug,optional"`
+
+	// TODO - implement this
+	// // Write execution trace to the given file
+	// Trace string `hcl:"trace,optional" toml:"trace,optional"`
+}
+
+type PprofConfig struct {
+	// Enableed enable the pprof HTTP server
+	Enabled bool `hcl:"pprof,optional" toml:"pprof,optional"`
+
+	// pprof HTTP server listening port
+	Port int `hcl:"port,optional" toml:"port,optional"`
+
+	// pprof HTTP server listening interface
+	Addr string `hcl:"addr,optional" toml:"addr,optional"`
+
+	// Turn on memory profiling with the given rate
+	MemProfileRate int `hcl:"memprofilerate,optional" toml:"memprofilerate,optional"`
+
+	// Turn on block profiling with the given rate
+	BlockProfileRate int `hcl:"blockprofilerate,optional" toml:"blockprofilerate,optional"`
+
+	// // Write CPU profile to the given file
+	// CPUProfile string `hcl:"cpuprofile,optional" toml:"cpuprofile,optional"`
 }
 
 type P2PConfig struct {
@@ -129,8 +194,24 @@ type P2PConfig struct {
 	// NAT it used to set NAT options
 	NAT string `hcl:"nat,optional" toml:"nat,optional"`
 
+	// Connectivity can be restricted to certain IP networks.
+	// If this option is set to a non-nil value, only hosts which match one of the
+	// IP networks contained in the list are considered.
+	NetRestrict string `hcl:"netrestrict,optional" toml:"netrestrict,optional"`
+
+	// P2P node key file
+	NodeKey string `hcl:"nodekey,optional" toml:"nodekey,optional"`
+
+	// P2P node key as hex
+	NodeKeyHex string `hcl:"nodekeyhex,optional" toml:"nodekeyhex,optional"`
+
 	// Discovery has the p2p discovery related settings
 	Discovery *P2PDiscovery `hcl:"discovery,block" toml:"discovery,block"`
+
+	// TxArrivalWait sets the maximum duration the transaction fetcher will wait for
+	// an announced transaction to arrive before explicitly requesting it
+	TxArrivalWait    time.Duration `hcl:"-,optional" toml:"-"`
+	TxArrivalWaitRaw string        `hcl:"txarrivalwait,optional" toml:"txarrivalwait,optional"`
 }
 
 type P2PDiscovery struct {
@@ -171,6 +252,9 @@ type HeimdallConfig struct {
 
 	// RunHeimdal args are the arguments to run heimdall with
 	RunHeimdallArgs string `hcl:"bor.runheimdallargs,optional" toml:"bor.runheimdallargs,optional"`
+
+	// UseHeimdallApp is used to fetch data from heimdall app when running heimdall as a child process
+	UseHeimdallApp bool `hcl:"bor.useheimdallapp,optional" toml:"bor.useheimdallapp,optional"`
 }
 
 type TxPoolConfig struct {
@@ -226,6 +310,12 @@ type SealerConfig struct {
 	// GasPrice is the minimum gas price for mining a transaction
 	GasPrice    *big.Int `hcl:"-,optional" toml:"-"`
 	GasPriceRaw string   `hcl:"gasprice,optional" toml:"gasprice,optional"`
+
+	// The time interval for miner to re-create mining work.
+	Recommit    time.Duration `hcl:"-,optional" toml:"-"`
+	RecommitRaw string        `hcl:"recommit,optional" toml:"recommit,optional"`
+
+	CommitInterruptFlag bool `hcl:"commitinterrupt,optional" toml:"commitinterrupt,optional"`
 }
 
 type JsonRPCConfig struct {
@@ -237,6 +327,10 @@ type JsonRPCConfig struct {
 
 	// GasCap is the global gas cap for eth-call variants.
 	GasCap uint64 `hcl:"gascap,optional" toml:"gascap,optional"`
+
+	// Sets a timeout used for eth_call (0=infinite)
+	RPCEVMTimeout    time.Duration `hcl:"-,optional" toml:"-"`
+	RPCEVMTimeoutRaw string        `hcl:"evmtimeout,optional" toml:"evmtimeout,optional"`
 
 	// TxFeeCap is the global transaction fee cap for send-transaction variants
 	TxFeeCap float64 `hcl:"txfeecap,optional" toml:"txfeecap,optional"`
@@ -250,7 +344,27 @@ type JsonRPCConfig struct {
 	// Graphql has the json-rpc graphql related settings
 	Graphql *APIConfig `hcl:"graphql,block" toml:"graphql,block"`
 
+	// AUTH RPC related settings
+	Auth *AUTHConfig `hcl:"auth,block" toml:"auth,block"`
+
 	HttpTimeout *HttpTimeouts `hcl:"timeouts,block" toml:"timeouts,block"`
+
+	AllowUnprotectedTxs bool `hcl:"allow-unprotected-txs,optional" toml:"allow-unprotected-txs,optional"`
+}
+
+type AUTHConfig struct {
+	// JWTSecret is the hex-encoded jwt secret.
+	JWTSecret string `hcl:"jwtsecret,optional" toml:"jwtsecret,optional"`
+
+	// Addr is the listening address on which authenticated APIs are provided.
+	Addr string `hcl:"addr,optional" toml:"addr,optional"`
+
+	// Port is the port number on which authenticated APIs are provided.
+	Port uint64 `hcl:"port,optional" toml:"port,optional"`
+
+	// VHosts is the list of virtual hostnames which are allowed on incoming requests
+	// for the authenticated api. This is by default {'localhost'}.
+	VHosts []string `hcl:"vhosts,optional" toml:"vhosts,optional"`
 }
 
 type GRPCConfig struct {
@@ -282,6 +396,13 @@ type APIConfig struct {
 
 	// Origins is the list of endpoints to accept requests from (only consumed for websockets)
 	Origins []string `hcl:"origins,optional" toml:"origins,optional"`
+
+	// ExecutionPoolSize is max size of workers to be used for rpc execution
+	ExecutionPoolSize uint64 `hcl:"ep-size,optional" toml:"ep-size,optional"`
+
+	// ExecutionPoolRequestTimeout is timeout used by execution pool for rpc execution
+	ExecutionPoolRequestTimeout    time.Duration `hcl:"-,optional" toml:"-"`
+	ExecutionPoolRequestTimeoutRaw string        `hcl:"ep-requesttimeout,optional" toml:"ep-requesttimeout,optional"`
 }
 
 // Used from rpc.HTTPTimeouts
@@ -317,6 +438,12 @@ type GpoConfig struct {
 
 	// Percentile sets the weights to new blocks
 	Percentile uint64 `hcl:"percentile,optional" toml:"percentile,optional"`
+
+	// Maximum header history of gasprice oracle
+	MaxHeaderHistory int `hcl:"maxheaderhistory,optional" toml:"maxheaderhistory,optional"`
+
+	// Maximum block history of gasprice oracle
+	MaxBlockHistory int `hcl:"maxblockhistory,optional" toml:"maxblockhistory,optional"`
 
 	// MaxPrice is an upper bound gas price
 	MaxPrice    *big.Int `hcl:"-,optional" toml:"-"`
@@ -413,6 +540,9 @@ type CacheConfig struct {
 	// Time after which the Merkle Patricia Trie is stored to disc from memory
 	TrieTimeout    time.Duration `hcl:"-,optional" toml:"-"`
 	TrieTimeoutRaw string        `hcl:"timeout,optional" toml:"timeout,optional"`
+
+	// Raise the open file descriptor resource limit (default = system fd limit)
+	FDLimit int `hcl:"fdlimit,optional" toml:"fdlimit,optional"`
 }
 
 type AccountsConfig struct {
@@ -438,23 +568,44 @@ type DeveloperConfig struct {
 
 	// Period is the block period to use in developer mode
 	Period uint64 `hcl:"period,optional" toml:"period,optional"`
+
+	// Initial block gas limit
+	GasLimit uint64 `hcl:"gaslimit,optional" toml:"gaslimit,optional"`
+}
+
+type ParallelEVMConfig struct {
+	Enable bool `hcl:"enable,optional" toml:"enable,optional"`
+
+	SpeculativeProcesses int `hcl:"procs,optional" toml:"procs,optional"`
 }
 
 func DefaultConfig() *Config {
 	return &Config{
-		Chain:          "mainnet",
-		Identity:       Hostname(),
-		RequiredBlocks: map[string]string{},
-		LogLevel:       "INFO",
-		DataDir:        DefaultDataDir(),
-		Ancient:        "",
+		Chain:                   "mainnet",
+		Identity:                Hostname(),
+		RequiredBlocks:          map[string]string{},
+		Verbosity:               3,
+		LogLevel:                "",
+		EnablePreimageRecording: false,
+		DataDir:                 DefaultDataDir(),
+		Ancient:                 "",
+		Logging: &LoggingConfig{
+			Vmodule:   "",
+			Json:      false,
+			Backtrace: "",
+			Debug:     false,
+		},
+		RPCBatchLimit:      100,
+		RPCReturnDataLimit: 100000,
 		P2P: &P2PConfig{
-			MaxPeers:     50,
-			MaxPendPeers: 50,
-			Bind:         "0.0.0.0",
-			Port:         30303,
-			NoDiscover:   false,
-			NAT:          "any",
+			MaxPeers:      50,
+			MaxPendPeers:  50,
+			Bind:          "0.0.0.0",
+			Port:          30303,
+			NoDiscover:    false,
+			NAT:           "any",
+			NetRestrict:   "",
+			TxArrivalWait: 500 * time.Millisecond,
 			Discovery: &P2PDiscovery{
 				V5Enabled:    false,
 				Bootnodes:    []string{},
@@ -488,39 +639,49 @@ func DefaultConfig() *Config {
 			LifeTime:     3 * time.Hour,
 		},
 		Sealer: &SealerConfig{
-			Enabled:   false,
-			Etherbase: "",
-			GasCeil:   30_000_000,                  // geth's default
-			GasPrice:  big.NewInt(1 * params.GWei), // geth's default
-			ExtraData: "",
+			Enabled:             false,
+			Etherbase:           "",
+			GasCeil:             30_000_000,                  // geth's default
+			GasPrice:            big.NewInt(1 * params.GWei), // geth's default
+			ExtraData:           "",
+			Recommit:            125 * time.Second,
+			CommitInterruptFlag: true,
 		},
 		Gpo: &GpoConfig{
-			Blocks:      20,
-			Percentile:  60,
-			MaxPrice:    gasprice.DefaultMaxPrice,
-			IgnorePrice: gasprice.DefaultIgnorePrice,
+			Blocks:           20,
+			Percentile:       60,
+			MaxHeaderHistory: 1024,
+			MaxBlockHistory:  1024,
+			MaxPrice:         gasprice.DefaultMaxPrice,
+			IgnorePrice:      gasprice.DefaultIgnorePrice,
 		},
 		JsonRPC: &JsonRPCConfig{
-			IPCDisable: false,
-			IPCPath:    "",
-			GasCap:     ethconfig.Defaults.RPCGasCap,
-			TxFeeCap:   ethconfig.Defaults.RPCTxFeeCap,
+			IPCDisable:          false,
+			IPCPath:             "",
+			GasCap:              ethconfig.Defaults.RPCGasCap,
+			TxFeeCap:            ethconfig.Defaults.RPCTxFeeCap,
+			RPCEVMTimeout:       ethconfig.Defaults.RPCEVMTimeout,
+			AllowUnprotectedTxs: false,
 			Http: &APIConfig{
-				Enabled: false,
-				Port:    8545,
-				Prefix:  "",
-				Host:    "localhost",
-				API:     []string{"eth", "net", "web3", "txpool", "bor"},
-				Cors:    []string{"localhost"},
-				VHost:   []string{"localhost"},
+				Enabled:                     false,
+				Port:                        8545,
+				Prefix:                      "",
+				Host:                        "localhost",
+				API:                         []string{"eth", "net", "web3", "txpool", "bor"},
+				Cors:                        []string{"localhost"},
+				VHost:                       []string{"localhost"},
+				ExecutionPoolSize:           40,
+				ExecutionPoolRequestTimeout: 0,
 			},
 			Ws: &APIConfig{
-				Enabled: false,
-				Port:    8546,
-				Prefix:  "",
-				Host:    "localhost",
-				API:     []string{"net", "web3"},
-				Origins: []string{"localhost"},
+				Enabled:                     false,
+				Port:                        8546,
+				Prefix:                      "",
+				Host:                        "localhost",
+				API:                         []string{"net", "web3"},
+				Origins:                     []string{"localhost"},
+				ExecutionPoolSize:           40,
+				ExecutionPoolRequestTimeout: 0,
 			},
 			Graphql: &APIConfig{
 				Enabled: false,
@@ -528,9 +689,15 @@ func DefaultConfig() *Config {
 				VHost:   []string{"localhost"},
 			},
 			HttpTimeout: &HttpTimeouts{
-				ReadTimeout:  30 * time.Second,
+				ReadTimeout:  10 * time.Second,
 				WriteTimeout: 30 * time.Second,
 				IdleTimeout:  120 * time.Second,
+			},
+			Auth: &AUTHConfig{
+				JWTSecret: "",
+				Port:      node.DefaultAuthPort,
+				Addr:      node.DefaultAuthHost,
+				VHosts:    node.DefaultAuthVhosts,
 			},
 		},
 		Ethstats: "",
@@ -538,7 +705,7 @@ func DefaultConfig() *Config {
 			Enabled:               false,
 			Expensive:             false,
 			PrometheusAddr:        "127.0.0.1:7071",
-			OpenCollectorEndpoint: "127.0.0.1:4317",
+			OpenCollectorEndpoint: "",
 			InfluxDB: &InfluxDBConfig{
 				V1Enabled:    false,
 				Endpoint:     "",
@@ -565,6 +732,7 @@ func DefaultConfig() *Config {
 			TxLookupLimit: 2350000,
 			TriesInMemory: 128,
 			TrieTimeout:   60 * time.Minute,
+			FDLimit:       0,
 		},
 		Accounts: &AccountsConfig{
 			Unlock:              []string{},
@@ -577,8 +745,22 @@ func DefaultConfig() *Config {
 			Addr: ":3131",
 		},
 		Developer: &DeveloperConfig{
-			Enabled: false,
-			Period:  0,
+			Enabled:  false,
+			Period:   0,
+			GasLimit: 11500000,
+		},
+		DevFakeAuthor: false,
+		Pprof: &PprofConfig{
+			Enabled:          false,
+			Port:             6060,
+			Addr:             "127.0.0.1",
+			MemProfileRate:   512 * 1024,
+			BlockProfileRate: 0,
+			// CPUProfile:       "",
+		},
+		ParallelEVM: &ParallelEVMConfig{
+			Enable:               true,
+			SpeculativeProcesses: 8,
 		},
 	}
 }
@@ -624,13 +806,18 @@ func (c *Config) fillTimeDurations() error {
 		td   *time.Duration
 		str  *string
 	}{
+		{"jsonrpc.evmtimeout", &c.JsonRPC.RPCEVMTimeout, &c.JsonRPC.RPCEVMTimeoutRaw},
+		{"miner.recommit", &c.Sealer.Recommit, &c.Sealer.RecommitRaw},
 		{"jsonrpc.timeouts.read", &c.JsonRPC.HttpTimeout.ReadTimeout, &c.JsonRPC.HttpTimeout.ReadTimeoutRaw},
 		{"jsonrpc.timeouts.write", &c.JsonRPC.HttpTimeout.WriteTimeout, &c.JsonRPC.HttpTimeout.WriteTimeoutRaw},
 		{"jsonrpc.timeouts.idle", &c.JsonRPC.HttpTimeout.IdleTimeout, &c.JsonRPC.HttpTimeout.IdleTimeoutRaw},
+		{"jsonrpc.ws.ep-requesttimeout", &c.JsonRPC.Ws.ExecutionPoolRequestTimeout, &c.JsonRPC.Ws.ExecutionPoolRequestTimeoutRaw},
+		{"jsonrpc.http.ep-requesttimeout", &c.JsonRPC.Http.ExecutionPoolRequestTimeout, &c.JsonRPC.Http.ExecutionPoolRequestTimeoutRaw},
 		{"txpool.lifetime", &c.TxPool.LifeTime, &c.TxPool.LifeTimeRaw},
 		{"txpool.rejournal", &c.TxPool.Rejournal, &c.TxPool.RejournalRaw},
 		{"cache.rejournal", &c.Cache.Rejournal, &c.Cache.RejournalRaw},
 		{"cache.timeout", &c.Cache.TrieTimeout, &c.Cache.TrieTimeoutRaw},
+		{"p2p.txarrivalwait", &c.P2P.TxArrivalWait, &c.P2P.TxArrivalWaitRaw},
 	}
 
 	for _, x := range tds {
@@ -693,7 +880,7 @@ func (c *Config) loadChain() error {
 
 //nolint:gocognit
 func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*ethconfig.Config, error) {
-	dbHandles, err := MakeDatabaseHandles()
+	dbHandles, err := MakeDatabaseHandles(c.Cache.FDLimit)
 	if err != nil {
 		return nil, err
 	}
@@ -712,14 +899,25 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 	n.HeimdallgRPCAddress = c.Heimdall.GRPCAddress
 	n.RunHeimdall = c.Heimdall.RunHeimdall
 	n.RunHeimdallArgs = c.Heimdall.RunHeimdallArgs
+	n.UseHeimdallApp = c.Heimdall.UseHeimdallApp
+
+	// Developer Fake Author for producing blocks without authorisation on bor consensus
+	n.DevFakeAuthor = c.DevFakeAuthor
+
+	// Developer Fake Author for producing blocks without authorisation on bor consensus
+	n.DevFakeAuthor = c.DevFakeAuthor
 
 	// gas price oracle
 	{
 		n.GPO.Blocks = int(c.Gpo.Blocks)
 		n.GPO.Percentile = int(c.Gpo.Percentile)
+		n.GPO.MaxHeaderHistory = c.Gpo.MaxHeaderHistory
+		n.GPO.MaxBlockHistory = c.Gpo.MaxBlockHistory
 		n.GPO.MaxPrice = c.Gpo.MaxPrice
 		n.GPO.IgnorePrice = c.Gpo.IgnorePrice
 	}
+
+	n.EnablePreimageRecording = c.EnablePreimageRecording
 
 	// txpool options
 	{
@@ -737,9 +935,11 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 
 	// miner options
 	{
+		n.Miner.Recommit = c.Sealer.Recommit
 		n.Miner.GasPrice = c.Sealer.GasPrice
 		n.Miner.GasCeil = c.Sealer.GasCeil
 		n.Miner.ExtraData = []byte(c.Sealer.ExtraData)
+		n.Miner.CommitInterruptFlag = c.Sealer.CommitInterruptFlag
 
 		if etherbase := c.Sealer.Etherbase; etherbase != "" {
 			if !common.IsHexAddress(etherbase) {
@@ -810,7 +1010,7 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 		n.Miner.Etherbase = developer.Address
 
 		// get developer mode chain config
-		c.chain = chains.GetDeveloperChain(c.Developer.Period, developer.Address)
+		c.chain = chains.GetDeveloperChain(c.Developer.Period, c.Developer.GasLimit, developer.Address)
 
 		// update the parameters
 		n.NetworkId = c.chain.NetworkId
@@ -899,6 +1099,8 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 		log.Info("Global gas cap disabled")
 	}
 
+	n.RPCEVMTimeout = c.JsonRPC.RPCEVMTimeout
+
 	n.RPCTxFeeCap = c.JsonRPC.TxFeeCap
 
 	// sync mode. It can either be "fast", "full" or "snap". We disable
@@ -942,6 +1144,10 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 
 	n.BorLogs = c.BorLogs
 	n.DatabaseHandles = dbHandles
+
+	n.ParallelEVM.Enable = c.ParallelEVM.Enable
+	n.ParallelEVM.SpeculativeProcesses = c.ParallelEVM.SpeculativeProcesses
+	n.RPCReturnDataLimit = c.RPCReturnDataLimit
 
 	if c.Ancient != "" {
 		n.DatabaseFreezer = c.Ancient
@@ -1025,6 +1231,35 @@ func ambiguousAddrRecovery(ks *keystore.KeyStore, err *keystore.AmbiguousAddrErr
 	return *match
 }
 
+// setNodeKey creates a node key from set command line flags, either loading it
+// from a file or as a specified hex value. If neither flags were provided, this
+// method returns nil and an emphemeral key is to be generated.
+func getNodeKey(hex string, file string) *ecdsa.PrivateKey {
+	var (
+		key *ecdsa.PrivateKey
+		err error
+	)
+
+	switch {
+	case file != "" && hex != "":
+		utils.Fatalf("Options %q and %q are mutually exclusive", file, hex)
+	case file != "":
+		if key, err = crypto.LoadECDSA(file); err != nil {
+			utils.Fatalf("Option %q: %v", file, err)
+		}
+
+		return key
+	case hex != "":
+		if key, err = crypto.HexToECDSA(hex); err != nil {
+			utils.Fatalf("Option %q: %v", hex, err)
+		}
+
+		return key
+	}
+
+	return nil
+}
+
 func (c *Config) buildNode() (*node.Config, error) {
 	ipcPath := ""
 	if !c.JsonRPC.IPCDisable {
@@ -1042,11 +1277,13 @@ func (c *Config) buildNode() (*node.Config, error) {
 		InsecureUnlockAllowed: c.Accounts.AllowInsecureUnlock,
 		Version:               params.VersionWithCommit(gitCommit, gitDate),
 		IPCPath:               ipcPath,
+		AllowUnprotectedTxs:   c.JsonRPC.AllowUnprotectedTxs,
 		P2P: p2p.Config{
 			MaxPeers:        int(c.P2P.MaxPeers),
 			MaxPendingPeers: int(c.P2P.MaxPendPeers),
 			ListenAddr:      c.P2P.Bind + ":" + strconv.Itoa(int(c.P2P.Port)),
 			DiscoveryV5:     c.P2P.Discovery.V5Enabled,
+			TxArrivalWait:   c.P2P.TxArrivalWait,
 		},
 		HTTPModules:         c.JsonRPC.Http.API,
 		HTTPCors:            c.JsonRPC.Http.Cors,
@@ -1062,6 +1299,29 @@ func (c *Config) buildNode() (*node.Config, error) {
 			WriteTimeout: c.JsonRPC.HttpTimeout.WriteTimeout,
 			IdleTimeout:  c.JsonRPC.HttpTimeout.IdleTimeout,
 		},
+		JWTSecret:                              c.JsonRPC.Auth.JWTSecret,
+		AuthPort:                               int(c.JsonRPC.Auth.Port),
+		AuthAddr:                               c.JsonRPC.Auth.Addr,
+		AuthVirtualHosts:                       c.JsonRPC.Auth.VHosts,
+		RPCBatchLimit:                          c.RPCBatchLimit,
+		WSJsonRPCExecutionPoolSize:             c.JsonRPC.Ws.ExecutionPoolSize,
+		WSJsonRPCExecutionPoolRequestTimeout:   c.JsonRPC.Ws.ExecutionPoolRequestTimeout,
+		HTTPJsonRPCExecutionPoolSize:           c.JsonRPC.Http.ExecutionPoolSize,
+		HTTPJsonRPCExecutionPoolRequestTimeout: c.JsonRPC.Http.ExecutionPoolRequestTimeout,
+	}
+
+	if c.P2P.NetRestrict != "" {
+		list, err := netutil.ParseNetlist(c.P2P.NetRestrict)
+		if err != nil {
+			utils.Fatalf("Option %q: %v", c.P2P.NetRestrict, err)
+		}
+
+		cfg.P2P.NetRestrict = list
+	}
+
+	key := getNodeKey(c.P2P.NodeKeyHex, c.P2P.NodeKey)
+	if key != nil {
+		cfg.P2P.PrivateKey = key
 	}
 
 	// dev mode
@@ -1151,10 +1411,24 @@ func (c *Config) Merge(cc ...*Config) error {
 	return nil
 }
 
-func MakeDatabaseHandles() (int, error) {
+func MakeDatabaseHandles(max int) (int, error) {
 	limit, err := fdlimit.Maximum()
 	if err != nil {
 		return -1, err
+	}
+
+	switch {
+	case max == 0:
+		// User didn't specify a meaningful value, use system limits
+	case max < 128:
+		// User specified something unhealthy, just use system defaults
+		log.Error("File descriptor limit invalid (<128)", "had", max, "updated", limit)
+	case max > limit:
+		// User requested more than the OS allows, notify that we can't allocate it
+		log.Warn("Requested file descriptors denied by OS", "req", max, "limit", limit)
+	default:
+		// User limit is meaningful and within allowed range, use that
+		limit = max
 	}
 
 	raised, err := fdlimit.Raise(uint64(limit))
@@ -1162,7 +1436,7 @@ func MakeDatabaseHandles() (int, error) {
 		return -1, err
 	}
 
-	return int(raised / 2), nil
+	return int(raised / 2), nil // Leave half for networking and other stuff
 }
 
 func parseBootnodes(urls []string) ([]*enode.Node, error) {

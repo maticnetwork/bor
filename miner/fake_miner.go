@@ -47,7 +47,7 @@ func NewBorDefaultMiner(t *testing.T) *DefaultBorMiner {
 	ethAPI.EXPECT().Call(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	spanner := bor.NewMockSpanner(ctrl)
-	spanner.EXPECT().GetCurrentValidators(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*valset.Validator{
+	spanner.EXPECT().GetCurrentValidatorsByHash(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*valset.Validator{
 		{
 			ID:               0,
 			Address:          common.Address{0x1},
@@ -152,7 +152,7 @@ func NewFakeBor(t TensingObject, chainDB ethdb.Database, chainConfig *params.Cha
 		chainConfig.Bor = params.BorUnittestChainConfig.Bor
 	}
 
-	return bor.New(chainConfig, chainDB, ethAPIMock, spanner, heimdallClientMock, contractMock)
+	return bor.New(chainConfig, chainDB, ethAPIMock, spanner, heimdallClientMock, contractMock, false)
 }
 
 type mockBackend struct {
@@ -212,7 +212,7 @@ var (
 	// Test accounts
 	testBankKey, _  = crypto.GenerateKey()
 	TestBankAddress = crypto.PubkeyToAddress(testBankKey.PublicKey)
-	testBankFunds   = big.NewInt(1000000000000000000)
+	testBankFunds   = big.NewInt(9000000000000000000)
 
 	testUserKey, _  = crypto.GenerateKey()
 	testUserAddress = crypto.PubkeyToAddress(testUserKey.PublicKey)
@@ -222,8 +222,9 @@ var (
 	newTxs     []*types.Transaction
 
 	testConfig = &Config{
-		Recommit: time.Second,
-		GasCeil:  params.GenesisGasLimit,
+		Recommit:            time.Second,
+		GasCeil:             params.GenesisGasLimit,
+		CommitInterruptFlag: true,
 	}
 )
 
