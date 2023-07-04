@@ -22,6 +22,9 @@ import (
 
 	"github.com/holiman/uint256"
 
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 )
@@ -73,5 +76,68 @@ func BenchmarkTxListAdd(b *testing.B) {
 			list.Add(txs[v], DefaultTxPoolConfig.PriceBump)
 			list.Filter(priceLimit, DefaultTxPoolConfig.PriceBump)
 		}
+	}
+}
+
+func TestFilterTxConditional(t *testing.T) {
+	// Create an in memory state db to test against.
+	memDb := rawdb.NewMemoryDatabase()
+	db := state.NewDatabase(memDb)
+	state, _ := state.New(common.Hash{}, db, nil)
+
+	// Create a private key to sign transactions.
+	key, _ := crypto.GenerateKey()
+
+	// Create a list.
+	list := newTxList(true)
+
+	// Create a transaction with no defined tx options
+	// and add to the list.
+	tx := transaction(0, 1000, key)
+	list.Add(tx, DefaultTxPoolConfig.PriceBump)
+
+	// There should be no drops at this point.
+	// No state has been modified.
+	drops := list.FilterTxConditional(state)
+
+	if count := len(drops); count != 0 {
+		t.Fatalf("got %d filtered by TxOptions when there should not be any", count)
+	}
+
+	// Create another transaction with a known account storage root tx option
+	// and add to the list.
+	tx2 := transaction(1, 1000, key)
+
+	var options types.OptionsAA4337
+
+	options.KnownAccounts = types.KnownAccounts{
+		common.Address{19: 1}: &types.Value{
+			Single: common.HexToRefHash("0xe734938daf39aae1fa4ee64dc3155d7c049f28b57a8ada8ad9e86832e0253bef"),
+		},
+	}
+
+	state.SetState(common.Address{19: 1}, common.Hash{}, common.Hash{30: 1})
+	tx2.PutOptions(&options)
+	list.Add(tx2, DefaultTxPoolConfig.PriceBump)
+
+	// There should still be no drops as no state has been modified.
+	drops = list.FilterTxConditional(state)
+
+	if count := len(drops); count != 0 {
+		t.Fatalf("got %d filtered by TxOptions when there should not be any", count)
+	}
+
+	// Set state that conflicts with tx2's policy
+	state.SetState(common.Address{19: 1}, common.Hash{}, common.Hash{31: 1})
+
+	// tx2 should be the single transaction filtered out
+	drops = list.FilterTxConditional(state)
+
+	if count := len(drops); count != 1 {
+		t.Fatalf("got %d filtered by TxOptions when there should be a single one", count)
+	}
+
+	if drops[0] != tx2 {
+		t.Fatalf("Got %x, expected %x", drops[0].Hash(), tx2.Hash())
 	}
 }

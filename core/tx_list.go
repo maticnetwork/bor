@@ -29,6 +29,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	cmath "github.com/ethereum/go-ethereum/common/math"
+	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 )
@@ -553,6 +554,32 @@ func (l *txList) Filter(costLimit *uint256.Int, gasLimit uint64) (types.Transact
 	l.txs.reheap(true)
 
 	return removed, invalids
+}
+
+// Returns the conditional transactions with invalid KnownAccounts
+// TODO - We will also have to check block range and time stamp range!
+func (l *txList) FilterTxConditional(state *state.StateDB) types.Transactions {
+	removed := l.txs.filter(func(tx *types.Transaction) bool {
+		if options := tx.GetOptions(); options != nil {
+			err := state.ValidateKnownAccounts(options.KnownAccounts)
+			if err != nil {
+				log.Error("Error while Filtering Tx Conditional", "err", err)
+				return true
+			}
+
+			return false
+		}
+
+		return false
+	})
+
+	if len(removed) == 0 {
+		return nil
+	}
+
+	l.txs.reheap()
+
+	return removed
 }
 
 // Cap places a hard limit on the number of items, returning all transactions
