@@ -415,14 +415,12 @@ func newGQLService(t *testing.T, stack *node.Node, gspec *core.Genesis, genBlock
 	t.Helper()
 
 	ethConf := &ethconfig.Config{
-		Genesis:                 gspec,
-		NetworkId:               1337,
-		TrieCleanCache:          5,
-		TrieCleanCacheJournal:   "triecache",
-		TrieCleanCacheRejournal: 60 * time.Minute,
-		TrieDirtyCache:          5,
-		TrieTimeout:             60 * time.Minute,
-		SnapshotCache:           5,
+		Genesis:        gspec,
+		NetworkId:      1337,
+		TrieCleanCache: 5,
+		TrieDirtyCache: 5,
+		TrieTimeout:    60 * time.Minute,
+		SnapshotCache:  5,
 	}
 
 	ethBackend, err := eth.New(stack, ethConf)
