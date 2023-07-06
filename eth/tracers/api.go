@@ -222,6 +222,8 @@ type TraceCallConfig struct {
 	Timeout        *string
 	Reexec         *uint64
 	StateOverrides *ethapi.StateOverride
+	// Config specific to given tracer.
+	TracerConfig json.RawMessage
 }
 
 // StdTraceConfig holds extra parameters to standard-json trace functions.
@@ -230,6 +232,8 @@ type StdTraceConfig struct {
 	Reexec          *uint64
 	TxHash          common.Hash
 	BorTraceEnabled *bool
+	// Config specific to given tracer.
+	TracerConfig json.RawMessage
 }
 
 // txTraceResult is the result of a single transaction trace.
@@ -1178,10 +1182,11 @@ func (api *API) TraceCall(ctx context.Context, args ethapi.TransactionArgs, bloc
 	var traceConfig *TraceConfig
 	if config != nil {
 		traceConfig = &TraceConfig{
-			Config:  config.Config,
-			Tracer:  config.Tracer,
-			Timeout: config.Timeout,
-			Reexec:  config.Reexec,
+			Config:       config.Config,
+			Tracer:       config.Tracer,
+			Timeout:      config.Timeout,
+			Reexec:       config.Reexec,
+			TracerConfig: config.TracerConfig,
 		}
 	}
 
