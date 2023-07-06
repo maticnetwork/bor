@@ -26,12 +26,19 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/eth/tracers"
 )
 
 func init() {
 	register("callTracer", newCallTracer)
+}
+
+type callLog struct {
+	Address common.Address `json:"address"`
+	Topics  []common.Hash  `json:"topics"`
+	Data    hexutil.Bytes  `json:"data"`
 }
 
 type callFrame struct {
@@ -45,13 +52,20 @@ type callFrame struct {
 	Output  string      `json:"output,omitempty"`
 	Error   string      `json:"error,omitempty"`
 	Calls   []callFrame `json:"calls,omitempty"`
+	Logs    []callLog   `json:"logs,omitempty" rlp:"optional"`
 }
 
 type callTracer struct {
 	env       *vm.EVM
 	callstack []callFrame
+	config    callTracerConfig
 	interrupt uint32 // Atomic flag to signal execution interruption
 	reason    error  // Textual reason for the interruption
+}
+
+type callTracerConfig struct {
+	OnlyTopCall bool `json:"onlyTopCall"` // If true, call tracer won't collect any subcalls
+	WithLog     bool `json:"withLog"`     // If true, call tracer will collect event logs
 }
 
 // newCallTracer returns a native go tracer which tracks
@@ -93,10 +107,39 @@ func (t *callTracer) CaptureEnd(output []byte, gasUsed uint64, _ time.Duration, 
 
 // CaptureState implements the EVMLogger interface to trace a single step of VM execution.
 func (t *callTracer) CaptureState(pc uint64, op vm.OpCode, gas, cost uint64, scope *vm.ScopeContext, rData []byte, depth int, err error) {
+	if !t.config.WithLog {
+		return
+	}
+
+	// Avoid processing nested calls when only caring about top call
+	if t.config.OnlyTopCall && depth > 0 {
+		return
+	}
+
+	switch op {
+	case vm.LOG0, vm.LOG1, vm.LOG2, vm.LOG3, vm.LOG4:
+		size := int(op - vm.LOG0)
+
+		stack := scope.Stack
+		stackData := stack.Data()
+
+		// Don't modify the stack
+		mStart := stackData[len(stackData)-1]
+		mSize := stackData[len(stackData)-2]
+		topics := make([]common.Hash, size)
+		for i := 0; i < size; i++ {
+			topic := stackData[len(stackData)-2-(i+1)]
+			topics[i] = common.Hash(topic.Bytes32())
+		}
+
+		data := scope.Memory.GetCopy(int64(mStart.Uint64()), int64(mSize.Uint64()))
+		log := callLog{Address: scope.Contract.Address(), Topics: topics, Data: hexutil.Bytes(data)}
+		t.callstack[len(t.callstack)-1].Logs = append(t.callstack[len(t.callstack)-1].Logs, log)
+	}
 }
 
 // CaptureFault implements the EVMLogger interface to trace an execution fault.
-func (t *callTracer) CaptureFault(pc uint64, op vm.OpCode, gas, cost uint64, _ *vm.ScopeContext, depth int, err error) {
+func (t *callTracer) CaptureFault(pc uint64, op vm.OpCode, gas, cost uint64, scope *vm.ScopeContext, depth int, err error) {
 }
 
 // CaptureEnter is called when EVM enters a new scope (via call, create or selfdestruct).
