@@ -424,7 +424,7 @@ type jsTracer struct {
 // New instantiates a new tracer instance. code specifies a Javascript snippet,
 // which must evaluate to an expression returning an object with 'step', 'fault'
 // and 'result' functions.
-func newJsTracer(code string, ctx *tracers2.Context) (tracers2.Tracer, error) {
+func newJsTracer(code string, ctx *tracers2.Context, _ json.RawMessage) (tracers2.Tracer, error) {
 	if c, ok := assetTracers[code]; ok {
 		code = c
 	}

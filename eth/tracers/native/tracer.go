@@ -27,14 +27,17 @@ Aside from implementing the tracer, it also needs to register itself, using the
 Example:
 
 ```golang
-func init() {
-	register("noopTracerNative", newNoopTracer)
-}
+
+	func init() {
+		register("noopTracerNative", newNoopTracer)
+	}
+
 ```
 */
 package native
 
 import (
+	"encoding/json"
 	"errors"
 
 	"github.com/ethereum/go-ethereum/eth/tracers"
@@ -57,23 +60,25 @@ The go spec (https://golang.org/ref/spec#Package_initialization) says
 
 Hence, we cannot make the map in init, but must make it upon first use.
 */
-var ctors map[string]func() tracers.Tracer
+var ctors map[string]constructor
+
+type constructor func(*tracers.Context, json.RawMessage) (tracers.Tracer, error)
 
 // register is used by native tracers to register their presence.
-func register(name string, ctor func() tracers.Tracer) {
+func register(name string, ctor constructor) {
 	if ctors == nil {
-		ctors = make(map[string]func() tracers.Tracer)
+		ctors = make(map[string]constructor)
 	}
 	ctors[name] = ctor
 }
 
 // lookup returns a tracer, if one can be matched to the given name.
-func lookup(name string, ctx *tracers.Context) (tracers.Tracer, error) {
+func lookup(name string, ctx *tracers.Context, cfg json.RawMessage) (tracers.Tracer, error) {
 	if ctors == nil {
-		ctors = make(map[string]func() tracers.Tracer)
+		ctors = make(map[string]constructor)
 	}
 	if ctor, ok := ctors[name]; ok {
-		return ctor(), nil
+		return ctor(ctx, cfg)
 	}
 	return nil, errors.New("no tracer found")
 }
