@@ -51,6 +51,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
 )
 
@@ -1170,6 +1171,11 @@ mainloop:
 		close(chDeps)
 		depsWg.Wait()
 
+		var blockExtraData types.BlockExtraData
+
+		tempVanity := env.header.Extra[:types.GetExtraVanity()]
+		tempSeal := env.header.Extra[types.GetExtraVanity() : len(env.header.Extra)-types.GetExtraSeal()]
+
 		if len(mvReadMapList) > 0 {
 			tempDeps := make([][]uint64, len(mvReadMapList))
 
@@ -1194,14 +1200,30 @@ mainloop:
 				}
 			}
 
+			if err := rlp.DecodeBytes(env.header.Extra[types.GetExtraVanity():len(env.header.Extra)-types.GetExtraSeal()], &blockExtraData); err != nil {
+				log.Error("error while decoding block extra data: %v", err)
+				return false
+			}
+
 			if delayFlag {
-				env.header.TxDependency = tempDeps
+				blockExtraData.TxDependency = tempDeps
 			} else {
-				env.header.TxDependency = nil
+				blockExtraData.TxDependency = nil
 			}
 		} else {
-			env.header.TxDependency = nil
+			blockExtraData.TxDependency = nil
 		}
+
+		blockExtraDataBytes, err := rlp.EncodeToBytes(blockExtraData)
+		if err != nil {
+			log.Error("error while encoding block extra data: %v", err)
+			return false
+		}
+
+		env.header.Extra = []byte{}
+		env.header.Extra = append(tempVanity, blockExtraDataBytes...)
+		env.header.Extra = append(env.header.Extra, tempSeal...)
+
 	}
 
 	if !w.isRunning() && len(coalescedLogs) > 0 {

@@ -54,9 +54,6 @@ var (
 		"0": 64,
 	} // Default number of blocks after which to checkpoint and reset the pending votes
 
-	extraVanity = 32 // Fixed number of extra-data prefix bytes reserved for signer vanity
-	extraSeal   = 65 // Fixed number of extra-data suffix bytes reserved for signer seal
-
 	uncleHash = types.CalcUncleHash(nil) // Always Keccak256(RLP([])) as uncles are meaningless outside of PoW.
 
 	validatorHeaderBytesLength = common.AddressLength + 20 // address + power
@@ -120,11 +117,11 @@ func ecrecover(header *types.Header, sigcache *lru.ARCCache, c *params.BorConfig
 		return address.(common.Address), nil
 	}
 	// Retrieve the signature from the header extra-data
-	if len(header.Extra) < extraSeal {
+	if len(header.Extra) < types.GetExtraSeal() {
 		return common.Address{}, errMissingSignature
 	}
 
-	signature := header.Extra[len(header.Extra)-extraSeal:]
+	signature := header.Extra[len(header.Extra)-types.GetExtraSeal():]
 
 	// Recover the public key and the Ethereum address
 	pubkey, err := crypto.Ecrecover(SealHash(header, c).Bytes(), signature)
@@ -355,7 +352,7 @@ func (c *Bor) verifyHeader(chain consensus.ChainHeaderReader, header *types.Head
 	isSprintEnd := IsSprintStart(number+1, c.config.CalculateSprint(number))
 
 	// Ensure that the extra-data contains a signer list on checkpoint, but none otherwise
-	signersBytes := len(header.Extra) - extraVanity - extraSeal
+	signersBytes := len(header.Extra) - types.GetExtraVanity() - types.GetExtraSeal()
 	if !isSprintEnd && signersBytes != 0 {
 		return errExtraValidators
 	}
@@ -400,11 +397,11 @@ func (c *Bor) verifyHeader(chain consensus.ChainHeaderReader, header *types.Head
 // validateHeaderExtraField validates that the extra-data contains both the vanity and signature.
 // header.Extra = header.Vanity + header.ProducerBytes (optional) + header.Seal
 func validateHeaderExtraField(extraBytes []byte) error {
-	if len(extraBytes) < extraVanity {
+	if len(extraBytes) < types.GetExtraVanity() {
 		return errMissingVanity
 	}
 
-	if len(extraBytes) < extraVanity+extraSeal {
+	if len(extraBytes) < types.GetExtraVanity()+types.GetExtraSeal() {
 		return errMissingSignature
 	}
 
@@ -475,7 +472,13 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 
 		sort.Sort(valset.ValidatorsByAddress(newValidators))
 
-		headerVals, err := valset.ParseValidators(header.Extra[extraVanity : len(header.Extra)-extraSeal])
+		var blockExtraData types.BlockExtraData
+		if err := rlp.DecodeBytes(header.Extra[types.GetExtraVanity():len(header.Extra)-types.GetExtraSeal()], &blockExtraData); err != nil {
+			log.Error("error while decoding block extra data: %v", err)
+			return fmt.Errorf("error while decoding block extra data: %v", err)
+		}
+
+		headerVals, err := valset.ParseValidators(blockExtraData.ValidatorBytes)
 
 		if err != nil {
 			return err
@@ -494,7 +497,7 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 
 	// verify the validator list in the last sprint block
 	if IsSprintStart(number, c.config.CalculateSprint(number)) {
-		parentValidatorBytes := parent.Extra[extraVanity : len(parent.Extra)-extraSeal]
+		parentValidatorBytes := parent.GetValidatorBytes()
 		validatorsBytes := make([]byte, len(snap.ValidatorSet.Validators)*validatorHeaderBytesLength)
 
 		currentValidators := snap.ValidatorSet.Copy().Validators
@@ -731,11 +734,11 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 	header.Difficulty = new(big.Int).SetUint64(Difficulty(snap.ValidatorSet, currentSigner.signer))
 
 	// Ensure the extra data has all it's components
-	if len(header.Extra) < extraVanity {
-		header.Extra = append(header.Extra, bytes.Repeat([]byte{0x00}, extraVanity-len(header.Extra))...)
+	if len(header.Extra) < types.GetExtraVanity() {
+		header.Extra = append(header.Extra, bytes.Repeat([]byte{0x00}, types.GetExtraVanity()-len(header.Extra))...)
 	}
 
-	header.Extra = header.Extra[:extraVanity]
+	header.Extra = header.Extra[:types.GetExtraVanity()]
 
 	// get validator set if number
 	if IsSprintStart(number+1, c.config.CalculateSprint(number)) {
@@ -747,13 +750,28 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 		// sort validator by address
 		sort.Sort(valset.ValidatorsByAddress(newValidators))
 
+		var tempValidatorBytes []byte
+
 		for _, validator := range newValidators {
-			header.Extra = append(header.Extra, validator.HeaderBytes()...)
+			tempValidatorBytes = append(tempValidatorBytes, validator.HeaderBytes()...)
 		}
+
+		blockExtraData := &types.BlockExtraData{
+			ValidatorBytes: tempValidatorBytes,
+			TxDependency:   nil,
+		}
+
+		blockExtraDataBytes, err := rlp.EncodeToBytes(blockExtraData)
+		if err != nil {
+			log.Error("error while encoding block extra data: %v", err)
+			return fmt.Errorf("error while encoding block extra data: %v", err)
+		}
+
+		header.Extra = append(header.Extra, blockExtraDataBytes...)
 	}
 
 	// add extra seal space
-	header.Extra = append(header.Extra, make([]byte, extraSeal)...)
+	header.Extra = append(header.Extra, make([]byte, types.GetExtraSeal())...)
 
 	// Mix digest is reserved for now, set to empty
 	header.MixDigest = common.Hash{}
@@ -1053,7 +1071,7 @@ func Sign(signFn SignerFn, signer common.Address, header *types.Header, c *param
 		return err
 	}
 
-	copy(header.Extra[len(header.Extra)-extraSeal:], sighash)
+	copy(header.Extra[len(header.Extra)-types.GetExtraSeal():], sighash)
 
 	return nil
 }

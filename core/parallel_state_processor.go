@@ -286,9 +286,9 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 
 	coinbase, _ := p.bc.Engine().Author(header)
 
-	deps := GetDeps(block.Header().TxDependency)
+	deps := GetDeps(block.GetTxDependency())
 
-	if block.Header().TxDependency != nil {
+	if block.GetTxDependency() != nil {
 		metadata = true
 	}
 
@@ -308,7 +308,7 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 			shouldDelayFeeCal = false
 		}
 
-		if len(header.TxDependency) != len(block.Transactions()) {
+		if len(block.GetTxDependency()) != len(block.Transactions()) {
 			task := &ExecutionTask{
 				msg:               msg,
 				config:            p.config,

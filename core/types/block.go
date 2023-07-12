@@ -28,13 +28,25 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
 var (
 	EmptyRootHash  = common.HexToHash("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
 	EmptyUncleHash = rlpHash([]*Header(nil))
+
+	extraVanity = 32 // Fixed number of extra-data prefix bytes reserved for signer vanity
+	extraSeal   = 65 // Fixed number of extra-data suffix bytes reserved for signer seal
 )
+
+func GetExtraVanity() int {
+	return extraVanity
+}
+
+func GetExtraSeal() int {
+	return extraSeal
+}
 
 // A BlockNonce is a 64-bit hash which proves (combined with the
 // mix-hash) that a sufficient amount of computation has been carried
@@ -87,16 +99,21 @@ type Header struct {
 	// BaseFee was added by EIP-1559 and is ignored in legacy headers.
 	BaseFee *big.Int `json:"baseFeePerGas" rlp:"optional"`
 
-	// length of TxDependency          ->   n (n = number of transactions in the block)
-	// length of TxDependency[i]       ->   k (k = a whole number)
-	// k elements in TxDependency[i]   ->   transaction indexes on which transaction i is dependent on
-	TxDependency [][]uint64 `json:"txDependency" rlp:"optional"`
-
 	/*
 		TODO (MariusVanDerWijden) Add this field once needed
 		// Random was added during the merge and contains the BeaconState randomness
 		Random common.Hash `json:"random" rlp:"optional"`
 	*/
+}
+
+// Used for Encoding and Decoding of the Extra Data Field
+type BlockExtraData struct {
+	ValidatorBytes []byte
+
+	// length of TxDependency          ->   n (n = number of transactions in the block)
+	// length of TxDependency[i]       ->   k (k = a whole number)
+	// k elements in TxDependency[i]   ->   transaction indexes on which transaction i is dependent on
+	TxDependency [][]uint64
 }
 
 // field type overrides for gencodec
@@ -258,14 +275,6 @@ func CopyHeader(h *Header) *Header {
 		copy(cpy.Extra, h.Extra)
 	}
 
-	if len(h.TxDependency) > 0 {
-		cpy.TxDependency = make([][]uint64, len(h.TxDependency))
-
-		for i, dep := range h.TxDependency {
-			cpy.TxDependency[i] = make([]uint64, len(dep))
-			copy(cpy.TxDependency[i], dep)
-		}
-	}
 	return &cpy
 }
 
@@ -321,7 +330,26 @@ func (b *Block) TxHash() common.Hash      { return b.header.TxHash }
 func (b *Block) ReceiptHash() common.Hash { return b.header.ReceiptHash }
 func (b *Block) UncleHash() common.Hash   { return b.header.UncleHash }
 func (b *Block) Extra() []byte            { return common.CopyBytes(b.header.Extra) }
-func (b *Block) TxDependency() [][]uint64 { return b.header.TxDependency }
+
+func (b *Block) GetTxDependency() [][]uint64 {
+	var blockExtraData BlockExtraData
+	if err := rlp.DecodeBytes(b.header.Extra[extraVanity:len(b.header.Extra)-extraSeal], &blockExtraData); err != nil {
+		log.Error("error while decoding block extra data: %v", err)
+		return nil
+	}
+
+	return blockExtraData.TxDependency
+}
+
+func (h *Header) GetValidatorBytes() []byte {
+	var blockExtraData BlockExtraData
+	if err := rlp.DecodeBytes(h.Extra[extraVanity:len(h.Extra)-extraSeal], &blockExtraData); err != nil {
+		log.Error("error while decoding block extra data: %v", err)
+		return nil
+	}
+
+	return blockExtraData.ValidatorBytes
+}
 
 func (b *Block) BaseFee() *big.Int {
 	if b.header.BaseFee == nil {
