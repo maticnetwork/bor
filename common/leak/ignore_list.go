@@ -23,6 +23,5 @@ func IgnoreList() []goleak.Option {
 		goleak.IgnoreTopFunction("github.com/ethereum/go-ethereum/event.NewSubscription.func1"),
 		goleak.IgnoreTopFunction("github.com/ethereum/go-ethereum/event.NewSubscription"),
 		goleak.IgnoreTopFunction("github.com/ethereum/go-ethereum/metrics.(*meterArbiter).tick"),
-
 	}
 }
