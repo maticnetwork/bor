@@ -19,5 +19,7 @@ func IgnoreList() []goleak.Option {
 		goleak.IgnoreTopFunction("github.com/ethereum/go-ethereum/core/state/snapshot.(*diskLayer).generate"),
 		goleak.IgnoreTopFunction("github.com/ethereum/go-ethereum/accounts/abi/bind/backends.nullSubscription.func1"),
 		goleak.IgnoreTopFunction("github.com/ethereum/go-ethereum/eth/filters.(*EventSystem).eventLoop"),
+		goleak.IgnoreTopFunction("github.com/ethereum/go-ethereum/event.NewSubscription.func1"),
+		goleak.IgnoreTopFunction("github.com/ethereum/go-ethereum/event.NewSubscription"),
 	}
 }
