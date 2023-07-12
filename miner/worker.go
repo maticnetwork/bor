@@ -1221,7 +1221,9 @@ mainloop:
 		}
 
 		env.header.Extra = []byte{}
+
 		env.header.Extra = append(tempVanity, blockExtraDataBytes...)
+
 		env.header.Extra = append(env.header.Extra, tempSeal...)
 
 	}
