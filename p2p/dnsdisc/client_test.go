@@ -20,13 +20,13 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"errors"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"math/rand"
 	"reflect"
 	"testing"
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/internal/testlog"
@@ -471,7 +471,6 @@ func (mr mapResolver) LookupTXT(ctx context.Context, name string) ([]string, err
 	}
 	return nil, errors.New("not found")
 }
-
 
 func parseNodes(rec []string) []*enode.Node {
 	ns := make([]*enode.Node, 0, len(rec))
