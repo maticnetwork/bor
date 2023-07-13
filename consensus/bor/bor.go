@@ -352,7 +352,7 @@ func (c *Bor) verifyHeader(chain consensus.ChainHeaderReader, header *types.Head
 	isSprintEnd := IsSprintStart(number+1, c.config.CalculateSprint(number))
 
 	// Ensure that the extra-data contains a signer list on checkpoint, but none otherwise
-	signersBytes := len(header.Extra) - types.GetExtraVanity() - types.GetExtraSeal()
+	signersBytes := len(header.GetValidatorBytes())
 	if !isSprintEnd && signersBytes != 0 {
 		return errExtraValidators
 	}
@@ -472,13 +472,7 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 
 		sort.Sort(valset.ValidatorsByAddress(newValidators))
 
-		var blockExtraData types.BlockExtraData
-		if err := rlp.DecodeBytes(header.Extra[types.GetExtraVanity():len(header.Extra)-types.GetExtraSeal()], &blockExtraData); err != nil {
-			log.Error("error while decoding block extra data: %v", err)
-			return fmt.Errorf("error while decoding block extra data: %v", err)
-		}
-
-		headerVals, err := valset.ParseValidators(blockExtraData.ValidatorBytes)
+		headerVals, err := valset.ParseValidators(header.GetValidatorBytes())
 
 		if err != nil {
 			return err

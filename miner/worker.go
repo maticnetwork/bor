@@ -1201,7 +1201,7 @@ mainloop:
 			}
 
 			if err := rlp.DecodeBytes(env.header.Extra[types.GetExtraVanity():len(env.header.Extra)-types.GetExtraSeal()], &blockExtraData); err != nil {
-				log.Error("error while decoding block extra data: %v", err)
+				log.Error("error while decoding block extra data", "err", err)
 				return false
 			}
 
