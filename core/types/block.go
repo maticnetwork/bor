@@ -332,6 +332,11 @@ func (b *Block) UncleHash() common.Hash   { return b.header.UncleHash }
 func (b *Block) Extra() []byte            { return common.CopyBytes(b.header.Extra) }
 
 func (b *Block) GetTxDependency() [][]uint64 {
+	if len(b.header.Extra) < extraVanity+extraSeal {
+		log.Error("length of extra less is than vanity and seal")
+		return nil
+	}
+
 	var blockExtraData BlockExtraData
 	if err := rlp.DecodeBytes(b.header.Extra[extraVanity:len(b.header.Extra)-extraSeal], &blockExtraData); err != nil {
 		log.Error("error while decoding block extra data", "err", err)
@@ -342,6 +347,11 @@ func (b *Block) GetTxDependency() [][]uint64 {
 }
 
 func (h *Header) GetValidatorBytes() []byte {
+	if len(h.Extra) < extraVanity+extraSeal {
+		log.Error("length of extra less is than vanity and seal")
+		return nil
+	}
+
 	var blockExtraData BlockExtraData
 	if err := rlp.DecodeBytes(h.Extra[extraVanity:len(h.Extra)-extraSeal], &blockExtraData); err != nil {
 		log.Error("error while decoding block extra data", "err", err)
