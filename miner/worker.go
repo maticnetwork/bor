@@ -1173,8 +1173,8 @@ mainloop:
 
 		var blockExtraData types.BlockExtraData
 
-		tempVanity := env.header.Extra[:types.GetExtraVanity()]
-		tempSeal := env.header.Extra[types.GetExtraVanity() : len(env.header.Extra)-types.GetExtraSeal()]
+		tempVanity := env.header.Extra[:types.ExtraVanityLength]
+		tempSeal := env.header.Extra[types.ExtraVanityLength : len(env.header.Extra)-types.ExtraSealLength]
 
 		if len(mvReadMapList) > 0 {
 			tempDeps := make([][]uint64, len(mvReadMapList))
@@ -1200,7 +1200,7 @@ mainloop:
 				}
 			}
 
-			if err := rlp.DecodeBytes(env.header.Extra[types.GetExtraVanity():len(env.header.Extra)-types.GetExtraSeal()], &blockExtraData); err != nil {
+			if err := rlp.DecodeBytes(env.header.Extra[types.ExtraVanityLength:len(env.header.Extra)-types.ExtraSealLength], &blockExtraData); err != nil {
 				log.Error("error while decoding block extra data", "err", err)
 				return false
 			}

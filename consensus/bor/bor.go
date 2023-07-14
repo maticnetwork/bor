@@ -117,11 +117,11 @@ func ecrecover(header *types.Header, sigcache *lru.ARCCache, c *params.BorConfig
 		return address.(common.Address), nil
 	}
 	// Retrieve the signature from the header extra-data
-	if len(header.Extra) < types.GetExtraSeal() {
+	if len(header.Extra) < types.ExtraSealLength {
 		return common.Address{}, errMissingSignature
 	}
 
-	signature := header.Extra[len(header.Extra)-types.GetExtraSeal():]
+	signature := header.Extra[len(header.Extra)-types.ExtraSealLength:]
 
 	// Recover the public key and the Ethereum address
 	pubkey, err := crypto.Ecrecover(SealHash(header, c).Bytes(), signature)
@@ -397,11 +397,11 @@ func (c *Bor) verifyHeader(chain consensus.ChainHeaderReader, header *types.Head
 // validateHeaderExtraField validates that the extra-data contains both the vanity and signature.
 // header.Extra = header.Vanity + header.ProducerBytes (optional) + header.Seal
 func validateHeaderExtraField(extraBytes []byte) error {
-	if len(extraBytes) < types.GetExtraVanity() {
+	if len(extraBytes) < types.ExtraVanityLength {
 		return errMissingVanity
 	}
 
-	if len(extraBytes) < types.GetExtraVanity()+types.GetExtraSeal() {
+	if len(extraBytes) < types.ExtraVanityLength+types.ExtraSealLength {
 		return errMissingSignature
 	}
 
@@ -728,11 +728,11 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 	header.Difficulty = new(big.Int).SetUint64(Difficulty(snap.ValidatorSet, currentSigner.signer))
 
 	// Ensure the extra data has all it's components
-	if len(header.Extra) < types.GetExtraVanity() {
-		header.Extra = append(header.Extra, bytes.Repeat([]byte{0x00}, types.GetExtraVanity()-len(header.Extra))...)
+	if len(header.Extra) < types.ExtraVanityLength {
+		header.Extra = append(header.Extra, bytes.Repeat([]byte{0x00}, types.ExtraVanityLength-len(header.Extra))...)
 	}
 
-	header.Extra = header.Extra[:types.GetExtraVanity()]
+	header.Extra = header.Extra[:types.ExtraVanityLength]
 
 	// get validator set if number
 	if IsSprintStart(number+1, c.config.CalculateSprint(number)) {
@@ -765,7 +765,7 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 	}
 
 	// add extra seal space
-	header.Extra = append(header.Extra, make([]byte, types.GetExtraSeal())...)
+	header.Extra = append(header.Extra, make([]byte, types.ExtraSealLength)...)
 
 	// Mix digest is reserved for now, set to empty
 	header.MixDigest = common.Hash{}
@@ -1065,7 +1065,7 @@ func Sign(signFn SignerFn, signer common.Address, header *types.Header, c *param
 		return err
 	}
 
-	copy(header.Extra[len(header.Extra)-types.GetExtraSeal():], sighash)
+	copy(header.Extra[len(header.Extra)-types.ExtraSealLength:], sighash)
 
 	return nil
 }

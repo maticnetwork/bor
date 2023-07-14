@@ -36,17 +36,9 @@ var (
 	EmptyRootHash  = common.HexToHash("56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
 	EmptyUncleHash = rlpHash([]*Header(nil))
 
-	extraVanity = 32 // Fixed number of extra-data prefix bytes reserved for signer vanity
-	extraSeal   = 65 // Fixed number of extra-data suffix bytes reserved for signer seal
+	ExtraVanityLength = 32 // Fixed number of extra-data prefix bytes reserved for signer vanity
+	ExtraSealLength   = 65 // Fixed number of extra-data suffix bytes reserved for signer seal
 )
-
-func GetExtraVanity() int {
-	return extraVanity
-}
-
-func GetExtraSeal() int {
-	return extraSeal
-}
 
 // A BlockNonce is a 64-bit hash which proves (combined with the
 // mix-hash) that a sufficient amount of computation has been carried
@@ -332,13 +324,13 @@ func (b *Block) UncleHash() common.Hash   { return b.header.UncleHash }
 func (b *Block) Extra() []byte            { return common.CopyBytes(b.header.Extra) }
 
 func (b *Block) GetTxDependency() [][]uint64 {
-	if len(b.header.Extra) < extraVanity+extraSeal {
+	if len(b.header.Extra) < ExtraVanityLength+ExtraSealLength {
 		log.Error("length of extra less is than vanity and seal")
 		return nil
 	}
 
 	var blockExtraData BlockExtraData
-	if err := rlp.DecodeBytes(b.header.Extra[extraVanity:len(b.header.Extra)-extraSeal], &blockExtraData); err != nil {
+	if err := rlp.DecodeBytes(b.header.Extra[ExtraVanityLength:len(b.header.Extra)-ExtraSealLength], &blockExtraData); err != nil {
 		log.Error("error while decoding block extra data", "err", err)
 		return nil
 	}
@@ -347,13 +339,13 @@ func (b *Block) GetTxDependency() [][]uint64 {
 }
 
 func (h *Header) GetValidatorBytes() []byte {
-	if len(h.Extra) < extraVanity+extraSeal {
+	if len(h.Extra) < ExtraVanityLength+ExtraSealLength {
 		log.Error("length of extra less is than vanity and seal")
 		return nil
 	}
 
 	var blockExtraData BlockExtraData
-	if err := rlp.DecodeBytes(h.Extra[extraVanity:len(h.Extra)-extraSeal], &blockExtraData); err != nil {
+	if err := rlp.DecodeBytes(h.Extra[ExtraVanityLength:len(h.Extra)-ExtraSealLength], &blockExtraData); err != nil {
 		log.Error("error while decoding block extra data", "err", err)
 		return nil
 	}
