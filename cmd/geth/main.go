@@ -48,6 +48,9 @@ import (
 	_ "github.com/ethereum/go-ethereum/eth/tracers/native"
 
 	"github.com/maticnetwork/heimdall/cmd/heimdalld/service"
+	// Automatically set GOMAXPROCS to match Linux container CPU quota.
+	_ "go.uber.org/automaxprocs"
+
 	"github.com/urfave/cli/v2"
 )
 
