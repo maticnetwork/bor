@@ -317,8 +317,10 @@ func handleNewBlockhashes(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(ann); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
+	log.Info("[DEBUG] Received block hashes from peer")
 	// Mark the hashes as present at the remote node
 	for _, block := range *ann {
+		log.Info("[DEBUG] Block", "number", block.Number, "hash", block.Hash)
 		peer.markBlock(block.Hash)
 	}
 	// Deliver them all to the backend for queuing

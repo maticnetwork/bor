@@ -1599,6 +1599,8 @@ func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 	bc.blockProcFeed.Send(true)
 	defer bc.blockProcFeed.Send(false)
 
+	log.Info("[DEBUG] Inserting chain", "first number", chain[0].Number(), "first hash", chain[0].Hash(), "last number", chain[len(chain)-1].Number(), "last hash", chain[len(chain)-1].Hash())
+
 	// Do a sanity check that the provided chain is actually ordered and linked.
 	for i := 1; i < len(chain); i++ {
 		block, prev := chain[i], chain[i-1]
