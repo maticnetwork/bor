@@ -107,13 +107,8 @@ func (b *TestBackend) GetVoteOnHash(ctx context.Context, starBlockNr uint64, end
 	return false, nil
 }
 
-func (b *TestBackend) GetLogs(ctx context.Context, hash common.Hash) ([][]*types.Log, error) {
-	number := rawdb.ReadHeaderNumber(b.DB, hash)
-	if number == nil {
-		return nil, nil
-	}
-
-	receipts := rawdb.ReadReceipts(b.DB, hash, *number, params.TestChainConfig)
+func (b *TestBackend) GetLogs(ctx context.Context, hash common.Hash, number uint64) ([][]*types.Log, error) {
+	receipts := rawdb.ReadReceipts(b.DB, hash, number, params.TestChainConfig)
 
 	logs := make([][]*types.Log, len(receipts))
 	for i, receipt := range receipts {
