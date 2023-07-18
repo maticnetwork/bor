@@ -32,6 +32,7 @@ import (
 
 	mapset "github.com/deckarep/golang-set"
 	lru "github.com/hashicorp/golang-lru"
+	"github.com/holiman/uint256"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -599,9 +600,7 @@ func (w *worker) mainLoop(ctx context.Context) {
 		select {
 		case req := <-w.newWorkCh:
 			//nolint:contextcheck
-			if w.isRunning() {
-				w.commitWork(req.ctx, req.interrupt, req.noempty, req.timestamp)
-			}
+			w.commitWork(req.ctx, req.interrupt, req.noempty, req.timestamp)
 
 		case req := <-w.getWorkCh:
 			//nolint:contextcheck
@@ -672,7 +671,12 @@ func (w *worker) mainLoop(ctx context.Context) {
 					txs[acc] = append(txs[acc], tx)
 				}
 
-				txset := types.NewTransactionsByPriceAndNonce(w.current.signer, txs, cmath.FromBig(w.current.header.BaseFee))
+				var baseFee *uint256.Int
+				if w.current.header.BaseFee != nil {
+					baseFee = cmath.FromBig(w.current.header.BaseFee)
+				}
+
+				txset := types.NewTransactionsByPriceAndNonce(w.current.signer, txs, baseFee)
 				tcount := w.current.tcount
 
 				//nolint:contextcheck
@@ -988,13 +992,7 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 
 	var depsWg sync.WaitGroup
 
-	var EnableMVHashMap bool
-
-	if w.chainConfig.Bor.IsParallelUniverse(env.header.Number) {
-		EnableMVHashMap = true
-	} else {
-		EnableMVHashMap = false
-	}
+	EnableMVHashMap := false
 
 	// create and add empty mvHashMap in statedb
 	if EnableMVHashMap {
@@ -1174,7 +1172,7 @@ mainloop:
 	}
 
 	// nolint:nestif
-	if EnableMVHashMap {
+	if EnableMVHashMap && w.isRunning() {
 		close(chDeps)
 		depsWg.Wait()
 
@@ -1517,7 +1515,12 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		var txs *types.TransactionsByPriceAndNonce
 
 		tracing.Exec(ctx, "", "worker.LocalTransactionsByPriceAndNonce", func(ctx context.Context, span trace.Span) {
-			txs = types.NewTransactionsByPriceAndNonce(env.signer, localTxs, cmath.FromBig(env.header.BaseFee))
+			var baseFee *uint256.Int
+			if env.header.BaseFee != nil {
+				baseFee = cmath.FromBig(env.header.BaseFee)
+			}
+
+			txs = types.NewTransactionsByPriceAndNonce(env.signer, localTxs, baseFee)
 
 			tracing.SetAttributes(
 				span,
@@ -1540,7 +1543,12 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		var txs *types.TransactionsByPriceAndNonce
 
 		tracing.Exec(ctx, "", "worker.RemoteTransactionsByPriceAndNonce", func(ctx context.Context, span trace.Span) {
-			txs = types.NewTransactionsByPriceAndNonce(env.signer, remoteTxs, cmath.FromBig(env.header.BaseFee))
+			var baseFee *uint256.Int
+			if env.header.BaseFee != nil {
+				baseFee = cmath.FromBig(env.header.BaseFee)
+			}
+
+			txs = types.NewTransactionsByPriceAndNonce(env.signer, remoteTxs, baseFee)
 
 			tracing.SetAttributes(
 				span,
