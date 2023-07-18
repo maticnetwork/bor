@@ -26,6 +26,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"golang.org/x/crypto/sha3"
@@ -68,6 +69,23 @@ func TestBlockEncoding(t *testing.T) {
 	}
 }
 
+// This is a replica of `(h *Header) GetValidatorBytes` function
+// This was needed because currently, `IsParallelUniverse` will always return false.
+func GetValidatorBytesTest(h *Header) []byte {
+	if len(h.Extra) < ExtraVanityLength+ExtraSealLength {
+		log.Error("length of extra less is than vanity and seal")
+		return nil
+	}
+
+	var blockExtraData BlockExtraData
+	if err := rlp.DecodeBytes(h.Extra[ExtraVanityLength:len(h.Extra)-ExtraSealLength], &blockExtraData); err != nil {
+		log.Debug("error while decoding block extra data", "err", err)
+		return nil
+	}
+
+	return blockExtraData.ValidatorBytes
+}
+
 func TestTxDependencyBlockDecoding(t *testing.T) {
 	t.Parallel()
 
@@ -93,9 +111,7 @@ func TestTxDependencyBlockDecoding(t *testing.T) {
 	check("Root", block.Root(), common.HexToHash("ef1552a40b7165c3cd773806b9e0c165b75356e0314bf0706f279c729f51e017"))
 	check("Time", block.Time(), uint64(1426516743))
 
-	validatorBytes := block.header.GetValidatorBytes(&params.BorConfig{
-		ParallelUniverseBlock: big.NewInt(0),
-	})
+	validatorBytes := GetValidatorBytesTest(block.header)
 	txDependency := block.GetTxDependency()
 
 	check("validatorBytes", validatorBytes, []byte("val set"))
