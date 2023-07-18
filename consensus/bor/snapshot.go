@@ -150,12 +150,7 @@ func (s *Snapshot) apply(headers []*types.Header) (*Snapshot, error) {
 				return nil, err
 			}
 
-			var validatorBytes []byte
-			if s.config.IsParallelUniverse(header.Number) {
-				validatorBytes = header.GetValidatorBytes()
-			} else {
-				validatorBytes = header.Extra[types.ExtraVanityLength : len(header.Extra)-types.ExtraSealLength]
-			}
+			validatorBytes := header.GetValidatorBytes(s.config)
 
 			// get validators from headers and use that for new validator set
 			newVals, _ := valset.ParseValidators(validatorBytes)
