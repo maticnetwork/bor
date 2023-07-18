@@ -331,7 +331,7 @@ func (b *Block) GetTxDependency() [][]uint64 {
 
 	var blockExtraData BlockExtraData
 	if err := rlp.DecodeBytes(b.header.Extra[ExtraVanityLength:len(b.header.Extra)-ExtraSealLength], &blockExtraData); err != nil {
-		log.Error("error while decoding block extra data", "err", err)
+		log.Debug("error while decoding block extra data", "err", err)
 		return nil
 	}
 
@@ -346,7 +346,7 @@ func (h *Header) GetValidatorBytes() []byte {
 
 	var blockExtraData BlockExtraData
 	if err := rlp.DecodeBytes(h.Extra[ExtraVanityLength:len(h.Extra)-ExtraSealLength], &blockExtraData); err != nil {
-		log.Error("error while decoding block extra data", "err", err)
+		log.Debug("error while decoding block extra data", "err", err)
 		return nil
 	}
 

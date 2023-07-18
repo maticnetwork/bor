@@ -352,7 +352,12 @@ func (c *Bor) verifyHeader(chain consensus.ChainHeaderReader, header *types.Head
 	isSprintEnd := IsSprintStart(number+1, c.config.CalculateSprint(number))
 
 	// Ensure that the extra-data contains a signer list on checkpoint, but none otherwise
-	signersBytes := len(header.GetValidatorBytes())
+	var signersBytes int
+	if c.config.IsParallelUniverse(header.Number) {
+		signersBytes = len(header.GetValidatorBytes())
+	} else {
+		signersBytes = len(header.Extra) - types.ExtraVanityLength - types.ExtraSealLength
+	}
 	if !isSprintEnd && signersBytes != 0 {
 		return errExtraValidators
 	}
@@ -472,7 +477,12 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 
 		sort.Sort(valset.ValidatorsByAddress(newValidators))
 
-		headerVals, err := valset.ParseValidators(header.GetValidatorBytes())
+		var headerVals []*valset.Validator
+		if c.config.IsParallelUniverse(header.Number) {
+			headerVals, err = valset.ParseValidators(header.GetValidatorBytes())
+		} else {
+			headerVals, err = valset.ParseValidators(header.Extra[types.ExtraVanityLength : len(header.Extra)-types.ExtraSealLength])
+		}
 
 		if err != nil {
 			return err
@@ -491,7 +501,13 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 
 	// verify the validator list in the last sprint block
 	if IsSprintStart(number, c.config.CalculateSprint(number)) {
-		parentValidatorBytes := parent.GetValidatorBytes()
+		var parentValidatorBytes []byte
+		if c.config.IsParallelUniverse(parent.Number) {
+			parentValidatorBytes = parent.GetValidatorBytes()
+		} else {
+			parentValidatorBytes = parent.Extra[types.ExtraVanityLength : len(parent.Extra)-types.ExtraSealLength]
+		}
+
 		validatorsBytes := make([]byte, len(snap.ValidatorSet.Validators)*validatorHeaderBytesLength)
 
 		currentValidators := snap.ValidatorSet.Copy().Validators
@@ -744,24 +760,30 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 		// sort validator by address
 		sort.Sort(valset.ValidatorsByAddress(newValidators))
 
-		var tempValidatorBytes []byte
+		if c.config.IsParallelUniverse(header.Number) {
+			var tempValidatorBytes []byte
 
-		for _, validator := range newValidators {
-			tempValidatorBytes = append(tempValidatorBytes, validator.HeaderBytes()...)
+			for _, validator := range newValidators {
+				tempValidatorBytes = append(tempValidatorBytes, validator.HeaderBytes()...)
+			}
+
+			blockExtraData := &types.BlockExtraData{
+				ValidatorBytes: tempValidatorBytes,
+				TxDependency:   nil,
+			}
+
+			blockExtraDataBytes, err := rlp.EncodeToBytes(blockExtraData)
+			if err != nil {
+				log.Error("error while encoding block extra data: %v", err)
+				return fmt.Errorf("error while encoding block extra data: %v", err)
+			}
+
+			header.Extra = append(header.Extra, blockExtraDataBytes...)
+		} else {
+			for _, validator := range newValidators {
+				header.Extra = append(header.Extra, validator.HeaderBytes()...)
+			}
 		}
-
-		blockExtraData := &types.BlockExtraData{
-			ValidatorBytes: tempValidatorBytes,
-			TxDependency:   nil,
-		}
-
-		blockExtraDataBytes, err := rlp.EncodeToBytes(blockExtraData)
-		if err != nil {
-			log.Error("error while encoding block extra data: %v", err)
-			return fmt.Errorf("error while encoding block extra data: %v", err)
-		}
-
-		header.Extra = append(header.Extra, blockExtraDataBytes...)
 	}
 
 	// add extra seal space
