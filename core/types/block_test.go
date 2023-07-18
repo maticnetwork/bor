@@ -93,7 +93,9 @@ func TestTxDependencyBlockDecoding(t *testing.T) {
 	check("Root", block.Root(), common.HexToHash("ef1552a40b7165c3cd773806b9e0c165b75356e0314bf0706f279c729f51e017"))
 	check("Time", block.Time(), uint64(1426516743))
 
-	validatorBytes := block.header.GetValidatorBytes()
+	validatorBytes := block.header.GetValidatorBytes(&params.BorConfig{
+		ParallelUniverseBlock: big.NewInt(0),
+	})
 	txDependency := block.GetTxDependency()
 
 	check("validatorBytes", validatorBytes, []byte("val set"))

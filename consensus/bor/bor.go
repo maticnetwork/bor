@@ -352,12 +352,8 @@ func (c *Bor) verifyHeader(chain consensus.ChainHeaderReader, header *types.Head
 	isSprintEnd := IsSprintStart(number+1, c.config.CalculateSprint(number))
 
 	// Ensure that the extra-data contains a signer list on checkpoint, but none otherwise
-	var signersBytes int
-	if c.config.IsParallelUniverse(header.Number) {
-		signersBytes = len(header.GetValidatorBytes())
-	} else {
-		signersBytes = len(header.Extra) - types.ExtraVanityLength - types.ExtraSealLength
-	}
+	signersBytes := len(header.GetValidatorBytes(c.config))
+
 	if !isSprintEnd && signersBytes != 0 {
 		return errExtraValidators
 	}
@@ -477,13 +473,7 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 
 		sort.Sort(valset.ValidatorsByAddress(newValidators))
 
-		var headerVals []*valset.Validator
-		if c.config.IsParallelUniverse(header.Number) {
-			headerVals, err = valset.ParseValidators(header.GetValidatorBytes())
-		} else {
-			headerVals, err = valset.ParseValidators(header.Extra[types.ExtraVanityLength : len(header.Extra)-types.ExtraSealLength])
-		}
-
+		headerVals, err := valset.ParseValidators(header.GetValidatorBytes(c.config))
 		if err != nil {
 			return err
 		}
@@ -501,13 +491,7 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 
 	// verify the validator list in the last sprint block
 	if IsSprintStart(number, c.config.CalculateSprint(number)) {
-		var parentValidatorBytes []byte
-		if c.config.IsParallelUniverse(parent.Number) {
-			parentValidatorBytes = parent.GetValidatorBytes()
-		} else {
-			parentValidatorBytes = parent.Extra[types.ExtraVanityLength : len(parent.Extra)-types.ExtraSealLength]
-		}
-
+		parentValidatorBytes := parent.GetValidatorBytes(c.config)
 		validatorsBytes := make([]byte, len(snap.ValidatorSet.Validators)*validatorHeaderBytesLength)
 
 		currentValidators := snap.ValidatorSet.Copy().Validators

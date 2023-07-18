@@ -29,6 +29,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
@@ -338,7 +339,11 @@ func (b *Block) GetTxDependency() [][]uint64 {
 	return blockExtraData.TxDependency
 }
 
-func (h *Header) GetValidatorBytes() []byte {
+func (h *Header) GetValidatorBytes(config *params.BorConfig) []byte {
+	if config.IsParallelUniverse(h.Number) {
+		return h.Extra[ExtraVanityLength : len(h.Extra)-ExtraSealLength]
+	}
+
 	if len(h.Extra) < ExtraVanityLength+ExtraSealLength {
 		log.Error("length of extra less is than vanity and seal")
 		return nil
