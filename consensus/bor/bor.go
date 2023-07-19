@@ -768,6 +768,19 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 				header.Extra = append(header.Extra, validator.HeaderBytes()...)
 			}
 		}
+	} else if c.config.IsParallelUniverse(header.Number) {
+		blockExtraData := &types.BlockExtraData{
+			ValidatorBytes: nil,
+			TxDependency:   nil,
+		}
+
+		blockExtraDataBytes, err := rlp.EncodeToBytes(blockExtraData)
+		if err != nil {
+			log.Error("error while encoding block extra data: %v", err)
+			return fmt.Errorf("error while encoding block extra data: %v", err)
+		}
+
+		header.Extra = append(header.Extra, blockExtraDataBytes...)
 	}
 
 	// add extra seal space
