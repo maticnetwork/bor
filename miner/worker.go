@@ -1174,7 +1174,7 @@ mainloop:
 		var blockExtraData types.BlockExtraData
 
 		tempVanity := env.header.Extra[:types.ExtraVanityLength]
-		tempSeal := env.header.Extra[types.ExtraVanityLength : len(env.header.Extra)-types.ExtraSealLength]
+		tempSeal := env.header.Extra[len(env.header.Extra)-types.ExtraSealLength:]
 
 		if len(mvReadMapList) > 0 {
 			tempDeps := make([][]uint64, len(mvReadMapList))
