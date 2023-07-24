@@ -630,7 +630,7 @@ func (s *StateDB) GetCode(addr common.Address) []byte {
 	return MVRead(s, blockstm.NewSubpathKey(addr, CodePath), nil, func(s *StateDB) []byte {
 		stateObject := s.getStateObject(addr)
 		if stateObject != nil {
-			return stateObject.Code(s.db)
+			return stateObject.Code()
 		}
 
 		return nil
@@ -641,9 +641,8 @@ func (s *StateDB) GetCodeSize(addr common.Address) int {
 	return MVRead(s, blockstm.NewSubpathKey(addr, CodePath), 0, func(s *StateDB) int {
 		stateObject := s.getStateObject(addr)
 		if stateObject != nil {
-			return stateObject.CodeSize(s.db)
+			return stateObject.CodeSize()
 		}
-
 		return 0
 	})
 }
@@ -664,9 +663,8 @@ func (s *StateDB) GetState(addr common.Address, hash common.Hash) common.Hash {
 	return MVRead(s, blockstm.NewStateKey(addr, hash), common.Hash{}, func(s *StateDB) common.Hash {
 		stateObject := s.getStateObject(addr)
 		if stateObject != nil {
-			return stateObject.GetState(s.db, hash)
+			return stateObject.GetState(hash)
 		}
-
 		return common.Hash{}
 	})
 }
@@ -708,9 +706,8 @@ func (s *StateDB) GetCommittedState(addr common.Address, hash common.Hash) commo
 	return MVRead(s, blockstm.NewStateKey(addr, hash), common.Hash{}, func(s *StateDB) common.Hash {
 		stateObject := s.getStateObject(addr)
 		if stateObject != nil {
-			return stateObject.GetCommittedState(s.db, hash)
+			return stateObject.GetCommittedState(hash)
 		}
-
 		return common.Hash{}
 	})
 }
@@ -731,12 +728,10 @@ func (s *StateDB) StorageTrie(addr common.Address) (Trie, error) {
 	}
 
 	cpy := stateObject.deepCopy(s)
-
-	if _, err := cpy.updateTrie(s.db); err != nil {
+	if _, err := cpy.updateTrie(); err != nil {
 		return nil, err
 	}
-
-	return cpy.getTrie(s.db)
+	return cpy.getTrie()
 }
 
 func (s *StateDB) HasSuicided(addr common.Address) bool {
@@ -817,7 +812,7 @@ func (s *StateDB) SetState(addr common.Address, key, value common.Hash) {
 	stateObject := s.GetOrNewStateObject(addr)
 	if stateObject != nil {
 		stateObject = s.mvRecordWritten(stateObject)
-		stateObject.SetState(s.db, key, value)
+		stateObject.SetState(key, value)
 		MVWrite(s, blockstm.NewStateKey(addr, key))
 	}
 }
@@ -840,7 +835,7 @@ func (s *StateDB) SetStorage(addr common.Address, storage map[common.Hash]common
 	stateObject := s.GetOrNewStateObject(addr)
 
 	for k, v := range storage {
-		stateObject.SetState(s.db, k, v)
+		stateObject.SetState(k, v)
 	}
 }
 
@@ -1125,7 +1120,7 @@ func (s *StateDB) ForEachStorage(addr common.Address, cb func(key, value common.
 	if so == nil {
 		return nil
 	}
-	tr, err := so.getTrie(s.db)
+	tr, err := so.getTrie()
 	if err != nil {
 		return err
 	}
@@ -1388,7 +1383,7 @@ func (s *StateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
 	// to pull useful data from disk.
 	for addr := range s.stateObjectsPending {
 		if obj := s.stateObjects[addr]; !obj.deleted {
-			obj.updateRoot(s.db)
+			obj.updateRoot()
 		}
 	}
 	// Now we're about to start to write changes to the trie. The trie is so far
@@ -1582,7 +1577,10 @@ func (s *StateDB) handleDestruction(nodes *trienode.MergedNodeSet) (map[common.H
 // trie, storage tries) will no longer be functional. A new state instance
 // must be created with new root and updated database for accessing post-
 // commit states.
-func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
+//
+// The associated block number of the state transition is also provided
+// for more chain context.
+func (s *StateDB) Commit(block uint64, deleteEmptyObjects bool) (common.Hash, error) {
 	// Short circuit in case any database failure occurred earlier.
 	if s.dbErr != nil {
 		return common.Hash{}, fmt.Errorf("commit aborted due to earlier error: %v", s.dbErr)
@@ -1617,7 +1615,7 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 			obj.dirtyCode = false
 		}
 		// Write any storage changes in the state object to its storage trie
-		set, err := obj.commit(s.db)
+		set, err := obj.commit()
 		if err != nil {
 			return common.Hash{}, err
 		}
@@ -1712,7 +1710,7 @@ func (s *StateDB) Commit(deleteEmptyObjects bool) (common.Hash, error) {
 			Storages:   s.storagesOrigin,
 			Incomplete: incomplete,
 		}
-		if err := s.db.TrieDB().Update(root, origin, nodes, set); err != nil {
+		if err := s.db.TrieDB().Update(root, origin, block, nodes, set); err != nil {
 			return common.Hash{}, err
 		}
 

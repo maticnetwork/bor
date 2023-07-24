@@ -1547,7 +1547,7 @@ func makeAccountTrieNoStorage(n int) (string, *trie.Trie, []*kv) {
 	// Commit the state changes into db and re-create the trie
 	// for accessing later.
 	root, nodes, _ := accTrie.Commit(false)
-	db.Update(root, types.EmptyRootHash, trienode.NewWithNodeSet(nodes), nil)
+	db.Update(root, types.EmptyRootHash, 0, trienode.NewWithNodeSet(nodes), nil)
 
 	accTrie, _ = trie.New(trie.StateTrieID(root), db)
 
@@ -1612,7 +1612,7 @@ func makeBoundaryAccountTrie(n int) (string, *trie.Trie, []*kv) {
 	// Commit the state changes into db and re-create the trie
 	// for accessing later.
 	root, nodes, _ := accTrie.Commit(false)
-	db.Update(root, types.EmptyRootHash, trienode.NewWithNodeSet(nodes), nil)
+	db.Update(root, types.EmptyRootHash, 0, trienode.NewWithNodeSet(nodes), nil)
 
 	accTrie, _ = trie.New(trie.StateTrieID(root), db)
 
@@ -1663,7 +1663,7 @@ func makeAccountTrieWithStorageWithUniqueStorage(accounts, slots int, code bool)
 	nodes.Merge(set)
 
 	// Commit gathered dirty nodes into database
-	db.Update(root, types.EmptyRootHash, nodes, nil)
+	db.Update(root, types.EmptyRootHash, 0, nodes, nil)
 
 	// Re-create tries with new root
 	accTrie, _ = trie.New(trie.StateTrieID(root), db)
@@ -1733,7 +1733,7 @@ func makeAccountTrieWithStorage(accounts, slots int, code, boundary bool) (strin
 	nodes.Merge(set)
 
 	// Commit gathered dirty nodes into database
-	db.Update(root, types.EmptyRootHash, nodes, nil)
+	db.Update(root, types.EmptyRootHash, 0, nodes, nil)
 
 	// Re-create tries with new root
 	accTrie, err := trie.New(trie.StateTrieID(root), db)

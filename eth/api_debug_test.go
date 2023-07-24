@@ -82,7 +82,7 @@ func TestAccountRange(t *testing.T) {
 			m[addr] = true
 		}
 	}
-	root, _ := sdb.Commit(true)
+	root, _ := sdb.Commit(0, true)
 	sdb, _ = state.New(root, statedb, nil)
 
 	trie, err := statedb.OpenTrie(root)
@@ -146,7 +146,7 @@ func TestEmptyAccountRange(t *testing.T) {
 		st, _   = state.New(types.EmptyRootHash, statedb, nil)
 	)
 	// Commit(although nothing to flush) and re-init the statedb
-	st.Commit(true)
+	st.Commit(0, true)
 	st, _ = state.New(types.EmptyRootHash, statedb, nil)
 
 	results := st.IteratorDump(&state.DumpConfig{

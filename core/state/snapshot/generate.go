@@ -396,7 +396,7 @@ func (dl *diskLayer) generateRange(ctx *generatorContext, trieId *trie.ID, prefi
 			return false, nil, err
 		}
 		if nodes != nil {
-			tdb.Update(root, types.EmptyRootHash, trienode.NewWithNodeSet(nodes), nil)
+			tdb.Update(root, types.EmptyRootHash, 0, trienode.NewWithNodeSet(nodes), nil)
 			tdb.Commit(root, false)
 		}
 
