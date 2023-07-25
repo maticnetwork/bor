@@ -577,7 +577,7 @@ func (l *txList) FilterTxConditional(state *state.StateDB) types.Transactions {
 		return nil
 	}
 
-	l.txs.reheap()
+	l.txs.reheap(true)
 
 	return removed
 }
