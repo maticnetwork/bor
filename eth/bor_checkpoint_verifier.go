@@ -27,6 +27,9 @@ var (
 	// errEndBlock is returned when we're unable to fetch a block locally.
 	errEndBlock = errors.New("failed to get end block")
 
+	// errEndBlock is returned when we're unable to fetch a block locally.
+	errTipConfirmationBlock = errors.New("failed to get tip confirmation block")
+
 	// errBlockNumberConversion is returned when we get err in parsing hexautil block number
 	errBlockNumberConversion = errors.New("failed to parse the block number")
 
