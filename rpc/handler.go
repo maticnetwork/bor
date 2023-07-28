@@ -232,6 +232,8 @@ func (h *handler) startCallProc(fn func(*callProc)) {
 
 		fn(&callProc{ctx: ctx})
 
+		h.executionPool.processed.Add(1)
+
 		return nil
 	})
 }
@@ -270,7 +272,6 @@ func (h *handler) handleSubscriptionResult(msg *jsonrpcMessage) {
 
 // handleResponse processes method call responses.
 func (h *handler) handleResponse(msg *jsonrpcMessage) {
-
 	op := h.respWait[string(msg.ID)]
 	if op == nil {
 		h.log.Debug("Unsolicited RPC response", "reqid", idForLog{msg.ID})
@@ -293,6 +294,7 @@ func (h *handler) handleResponse(msg *jsonrpcMessage) {
 	if op.err = json.Unmarshal(msg.Result, &op.sub.subid); op.err == nil {
 		h.executionPool.Submit(context.Background(), func() error {
 			op.sub.run()
+			h.executionPool.processed.Add(1)
 			return nil
 		})
 

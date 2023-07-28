@@ -148,7 +148,7 @@ var (
 	// This is the version of go that will be downloaded by
 	//
 	//     go run ci.go install -dlgo
-	dlgoVersion = "1.18"
+	dlgoVersion = "1.20"
 )
 
 var GOBIN, _ = filepath.Abs(filepath.Join("build", "bin"))
@@ -593,7 +593,7 @@ func doDocker(cmdline []string) {
 			}
 			if mismatch {
 				// Build numbers mismatching, retry in a short time to
-				// avoid concurrent failes in both publisher images. If
+				// avoid concurrent fails in both publisher images. If
 				// however the retry failed too, it means the concurrent
 				// builder is still crunching, let that do the publish.
 				if i == 0 {
