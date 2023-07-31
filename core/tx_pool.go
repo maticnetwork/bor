@@ -2207,6 +2207,7 @@ func (pool *TxPool) demoteUnexecutables() {
 			log.Trace("Removed invalid conditional transaction", "hash", hash)
 			pool.all.Remove(hash)
 		}
+
 		pendingGauge.Dec(int64(oldsLen + dropsLen + invalidsLen + len(txConditionalsRemoved)))
 
 		if pool.locals.contains(addr) {

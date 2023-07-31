@@ -80,6 +80,8 @@ func BenchmarkTxListAdd(b *testing.B) {
 }
 
 func TestFilterTxConditional(t *testing.T) {
+	t.Parallel()
+
 	// Create an in memory state db to test against.
 	memDb := rawdb.NewMemoryDatabase()
 	db := state.NewDatabase(memDb)
