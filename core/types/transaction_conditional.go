@@ -136,12 +136,11 @@ type OptionsAA4337 struct {
 	TimestampMax   *uint64       `json:"timestampMax"`
 }
 
-var ErrEmptyKnownAccounts = errors.New("knownAccounts cannot be nil")
 var ErrKnownAccounts = errors.New("an incorrect list of knownAccounts")
 
 func (ka KnownAccounts) ValidateLength() error {
 	if ka == nil {
-		return ErrEmptyKnownAccounts
+		return nil
 	}
 
 	length := 0

@@ -1432,7 +1432,7 @@ func (s *StateDB) SlotInAccessList(addr common.Address, slot common.Hash) (addre
 
 func (s *StateDB) ValidateKnownAccounts(knownAccounts types.KnownAccounts) error {
 	if knownAccounts == nil {
-		return types.ErrEmptyKnownAccounts
+		return nil
 	}
 
 	for k, v := range knownAccounts {
