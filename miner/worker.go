@@ -1038,8 +1038,6 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 		})
 	}()
 
-	start := time.Now()
-
 mainloop:
 	for {
 		if interruptCtx != nil {
@@ -1175,9 +1173,6 @@ mainloop:
 			env.state.ClearWriteMap()
 		}
 	}
-
-	execTime := time.Since(start)
-	go dumpMetrics(env.header.Number.Uint64(), env.header.GasUsed, execTime)
 
 	// nolint:nestif
 	if EnableMVHashMap && w.isRunning() {
@@ -1568,6 +1563,8 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		committed       bool
 	)
 
+	var execTime time.Duration
+
 	if localTxsCount > 0 {
 		var txs *types.TransactionsByPriceAndNonce
 
@@ -1586,7 +1583,9 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		})
 
 		tracing.Exec(ctx, "", "worker.LocalCommitTransactions", func(ctx context.Context, span trace.Span) {
+			start := time.Now()
 			committed = w.commitTransactions(env, txs, interrupt, interruptCtx)
+			execTime += time.Since(start)
 		})
 
 		if committed {
@@ -1614,7 +1613,9 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 		})
 
 		tracing.Exec(ctx, "", "worker.RemoteCommitTransactions", func(ctx context.Context, span trace.Span) {
+			start := time.Now()
 			committed = w.commitTransactions(env, txs, interrupt, interruptCtx)
+			execTime += time.Since(start)
 		})
 
 		if committed {
@@ -1623,6 +1624,8 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *int32, env *en
 
 		remoteEnvTCount = env.tcount
 	}
+
+	go dumpMetrics(env.header.Number.Uint64(), env.header.GasUsed, execTime)
 
 	tracing.SetAttributes(
 		span,
