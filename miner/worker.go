@@ -1422,6 +1422,8 @@ func startProfiler(profile string, filepath string, number uint64) (func() error
 }
 
 func dumpMetrics(number, gasLimit uint64, timeTaken time.Duration) {
+	log.Info("[DEBUG] Dumping metrics", "number", number)
+
 	// Open the CSV file in append-only mode or create it if it doesn't exist
 	file, err := os.OpenFile("bor_metrics.csv", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
 	if err != nil {
