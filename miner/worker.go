@@ -19,6 +19,7 @@ package miner
 import (
 	"bytes"
 	"context"
+	"encoding/csv"
 	"errors"
 	"fmt"
 	"math/big"
@@ -26,6 +27,7 @@ import (
 	"runtime"
 	"runtime/pprof"
 	ptrace "runtime/trace"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -1036,6 +1038,8 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 		})
 	}()
 
+	start := time.Now()
+
 mainloop:
 	for {
 		if interruptCtx != nil {
@@ -1171,6 +1175,9 @@ mainloop:
 			env.state.ClearWriteMap()
 		}
 	}
+
+	execTime := time.Since(start)
+	go dumpMetrics(env.header.Number.Uint64(), env.header.GasUsed, execTime)
 
 	// nolint:nestif
 	if EnableMVHashMap && w.isRunning() {
@@ -1417,6 +1424,32 @@ func startProfiler(profile string, filepath string, number uint64) (func() error
 	}
 
 	return closeFnNew, nil
+}
+
+func dumpMetrics(number, gasLimit uint64, timeTaken time.Duration) {
+	// Open the CSV file in append-only mode or create it if it doesn't exist
+	file, err := os.OpenFile("bor_metrics.csv", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+	if err != nil {
+		log.Info("*** Error opening metrics file", "err", err)
+		return
+	}
+	defer file.Close()
+
+	// Data to be appended
+	newData := []string{strconv.FormatUint(number, 10), strconv.FormatUint(gasLimit, 10), timeTaken.String()}
+
+	// Append the data to the CSV file
+	if err := appendDataToFile(file, newData); err != nil {
+		log.Info("*** Error writing metrics", "err", err)
+		return
+	}
+}
+
+func appendDataToFile(file *os.File, data []string) error {
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
+
+	return writer.Write(data)
 }
 
 // fillTransactions retrieves the pending transactions from the txpool and fills them
