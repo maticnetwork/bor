@@ -117,7 +117,7 @@ func TestMiningAfterLocking(t *testing.T) {
 			block8Hash := blockHeaderVal0.Hash()
 
 			nodes[0].Downloader().ChainValidator.LockMutex(uint64(8))
-			nodes[0].Downloader().ChainValidator.UnlockMutex(true, "MilestoneID1", block8Hash)
+			nodes[0].Downloader().ChainValidator.UnlockMutex(true, "MilestoneID1", uint64(8), block8Hash)
 		}
 
 		//Unlock the locked sprint
@@ -128,7 +128,7 @@ func TestMiningAfterLocking(t *testing.T) {
 		if blockHeaderVal1.Number.Uint64() == 16 {
 			block16Hash := blockHeaderVal1.Hash()
 			nodes[1].Downloader().ChainValidator.LockMutex(uint64(16))
-			nodes[1].Downloader().ChainValidator.UnlockMutex(true, "MilestoneID2", block16Hash)
+			nodes[1].Downloader().ChainValidator.UnlockMutex(true, "MilestoneID2", uint64(16), block16Hash)
 		}
 
 		if blockHeaderVal1.Number.Uint64() == 20 {
@@ -231,7 +231,7 @@ func TestReorgingAfterLockingSprint(t *testing.T) {
 		if blockHeaderVal0.Number.Uint64() == 12 {
 			block12Hash := blockHeaderVal0.Hash()
 			nodes[0].Downloader().ChainValidator.LockMutex(uint64(12))
-			nodes[0].Downloader().ChainValidator.UnlockMutex(true, "MilestoneID1", block12Hash)
+			nodes[0].Downloader().ChainValidator.UnlockMutex(true, "MilestoneID1", uint64(12), block12Hash)
 		}
 
 		//Connect both the nodes
@@ -350,7 +350,7 @@ func TestReorgingAfterWhitelisting(t *testing.T) {
 			block12Hash := blockHeaderVal0.Hash()
 
 			nodes[0].Downloader().ChainValidator.LockMutex(uint64(12))
-			nodes[0].Downloader().ChainValidator.UnlockMutex(true, "MilestoneID1", block12Hash)
+			nodes[0].Downloader().ChainValidator.UnlockMutex(true, "MilestoneID1", uint64(12), block12Hash)
 		}
 
 		if blockHeaderVal0.Number.Uint64() == 13 {
@@ -577,7 +577,7 @@ func TestReorgingFutureSprintAfterLocking(t *testing.T) {
 		if blockHeaderVal0.Number.Uint64() == 8 {
 			block8Hash := blockHeaderVal0.Hash()
 			nodes[0].Downloader().ChainValidator.LockMutex(uint64(8))
-			nodes[0].Downloader().ChainValidator.UnlockMutex(true, "milestoneID1", block8Hash)
+			nodes[0].Downloader().ChainValidator.UnlockMutex(true, "milestoneID1", uint64(8), block8Hash)
 		}
 
 		if blockHeaderVal0.Number.Uint64() == 30 {
@@ -665,7 +665,7 @@ func TestReorgingFutureSprintAfterLockingOnSameHash(t *testing.T) {
 		if blockHeaderVal0.Number.Uint64() == 8 {
 			block8Hash := blockHeaderVal0.Hash()
 			nodes[0].Downloader().ChainValidator.LockMutex(uint64(8))
-			nodes[0].Downloader().ChainValidator.UnlockMutex(true, "milestoneID1", block8Hash)
+			nodes[0].Downloader().ChainValidator.UnlockMutex(true, "milestoneID1", uint64(8), block8Hash)
 		}
 
 		if blockHeaderVal0.Number.Uint64() == 30 {
@@ -768,13 +768,13 @@ func TestReorgingAfterLockingOnDifferentHash(t *testing.T) {
 		if blockHeaderVal0.Number.Uint64() == 7 {
 			block7Hash := blockHeaderVal0.Hash()
 			nodes[0].Downloader().ChainValidator.LockMutex(uint64(7))
-			nodes[0].Downloader().ChainValidator.UnlockMutex(true, "milestoneID1", block7Hash)
+			nodes[0].Downloader().ChainValidator.UnlockMutex(true, "milestoneID1", uint64(7), block7Hash)
 		}
 
 		if blockHeaderVal1.Number.Uint64() == 7 {
 			block7Hash := blockHeaderVal1.Hash()
 			nodes[1].Downloader().ChainValidator.LockMutex(uint64(7))
-			nodes[1].Downloader().ChainValidator.UnlockMutex(true, "milestoneID1", block7Hash)
+			nodes[1].Downloader().ChainValidator.UnlockMutex(true, "milestoneID1", uint64(7), block7Hash)
 		}
 
 		if blockHeaderVal0.Number.Uint64() > 15 && blockHeaderVal1.Number.Uint64() > 15 {
