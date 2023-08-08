@@ -166,13 +166,13 @@ func newHandler(config *handlerConfig) (*handler, error) {
 		fullBlock, snapBlock := h.chain.CurrentBlock(), h.chain.CurrentSnapBlock()
 
 		if fullBlock.Number.Uint64() == 0 && snapBlock.Number.Uint64() > 0 {
-			log.Warn("Preventing switching sync mode from full sync to snap sync")
+			// log.Warn("Preventing switching sync mode from full sync to snap sync")
 			// Note: Ideally this should never happen with bor, but to be extra
 			// preventive we won't allow it to roll over to snap sync until
 			// we have it working
 			// TODO(snap): Uncomment when we have snap sync working
-			// h.snapSync = uint32(1)
-			// log.Warn("Switch sync mode from full sync to snap sync")
+			h.snapSync = uint32(1)
+			log.Warn("Switch sync mode from full sync to snap sync")
 		}
 	} else {
 		if h.chain.CurrentBlock().Number.Uint64() > 0 {
