@@ -267,6 +267,19 @@ func (m *milestone) ProcessFutureMilestone(num uint64, hash common.Hash) {
 	if len(m.FutureMilestoneOrder) < m.MaxCapacity {
 		m.enqueueFutureMilestone(num, hash)
 	}
+
+	if num < m.LockedMilestoneNumber {
+		return
+	}
+
+	m.Locked = false
+	m.purgeMilestoneIDsList()
+
+	err := rawdb.WriteLockField(m.db, m.Locked, m.LockedMilestoneNumber, m.LockedMilestoneHash, m.LockedMilestoneIDs)
+
+	if err != nil {
+		log.Error("Error in writing lock data of milestone to db", "err", err)
+	}
 }
 
 // EnqueueFutureMilestone add the future milestone to the list
