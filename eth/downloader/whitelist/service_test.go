@@ -889,6 +889,26 @@ func TestPropertyBasedTestingMilestone(t *testing.T) {
 				}
 			}
 		}
+
+		var (
+			futureMilestoneNum = rapid.Uint64Min(milestoneNum.(uint64)).Draw(t, "future milestone Number")
+		)
+
+		isChainLocked = milestone.Locked
+
+		milestone.ProcessFutureMilestone(futureMilestoneNum.(uint64), common.Hash{})
+
+		if isChainLocked {
+			if futureMilestoneNum.(uint64) < lockedValue {
+				if !milestone.Locked {
+					t.Error("Milestone is expected to be locked")
+				}
+			} else {
+				if milestone.Locked {
+					t.Error("Milestone is expected not to be locked")
+				}
+			}
+		}
 	})
 }
 
