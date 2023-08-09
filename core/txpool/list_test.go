@@ -94,12 +94,12 @@ func TestFilterTxConditional(t *testing.T) {
 	key, _ := crypto.GenerateKey()
 
 	// Create a list.
-	list := newTxList(true)
+	list := newList(true)
 
 	// Create a transaction with no defined tx options
 	// and add to the list.
 	tx := transaction(0, 1000, key)
-	list.Add(tx, DefaultTxPoolConfig.PriceBump)
+	list.Add(tx, DefaultConfig.PriceBump)
 
 	// There should be no drops at this point.
 	// No state has been modified.
@@ -123,7 +123,7 @@ func TestFilterTxConditional(t *testing.T) {
 
 	state.SetState(common.Address{19: 1}, common.Hash{}, common.Hash{30: 1})
 	tx2.PutOptions(&options)
-	list.Add(tx2, DefaultTxPoolConfig.PriceBump)
+	list.Add(tx2, DefaultConfig.PriceBump)
 
 	// There should still be no drops as no state has been modified.
 	drops = list.FilterTxConditional(state)

@@ -566,7 +566,7 @@ func (l *list) Filter(costLimit *uint256.Int, gasLimit uint64) (types.Transactio
 
 // Returns the conditional transactions with invalid KnownAccounts
 // TODO - We will also have to check block range and time stamp range!
-func (l *txList) FilterTxConditional(state *state.StateDB) types.Transactions {
+func (l *list) FilterTxConditional(state *state.StateDB) types.Transactions {
 	removed := l.txs.filter(func(tx *types.Transaction) bool {
 		if options := tx.GetOptions(); options != nil {
 			err := state.ValidateKnownAccounts(options.KnownAccounts)

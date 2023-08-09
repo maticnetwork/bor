@@ -2236,7 +2236,7 @@ func (s *TransactionAPI) SendRawTransaction(ctx context.Context, input hexutil.B
 
 // SendRawTransactionConditional will add the signed transaction to the transaction pool.
 // The sender/bundler is responsible for signing the transaction
-func (s *PublicTransactionPoolAPI) SendRawTransactionConditional(ctx context.Context, input hexutil.Bytes, options types.OptionsAA4337) (common.Hash, error) {
+func (s *TransactionAPI) SendRawTransactionConditional(ctx context.Context, input hexutil.Bytes, options types.OptionsAA4337) (common.Hash, error) {
 	tx := new(types.Transaction)
 	if err := tx.UnmarshalBinary(input); err != nil {
 		return common.Hash{}, err

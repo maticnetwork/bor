@@ -305,7 +305,8 @@ func TestValidateKnownAccounts(t *testing.T) {
 	s.state.SetState(stateobjaddr2, storageaddr21, data21)
 	s.state.SetState(stateobjaddr2, storageaddr22, data22)
 
-	fmt.Println("\nStorageTrie.Hash()", s.state.StorageTrie(stateobjaddr1).Hash())
+	trieTemp, _ := s.state.StorageTrie(stateobjaddr1)
+	fmt.Println("\nStorageTrie.Hash()", trieTemp.Hash())
 
 	if err := s.state.ValidateKnownAccounts(knownAccounts); err != nil {
 		t.Fatalf(err.Error())
