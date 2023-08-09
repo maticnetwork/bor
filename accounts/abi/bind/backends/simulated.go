@@ -761,6 +761,7 @@ func (b *SimulatedBackend) SendTransactionConditional(ctx context.Context, tx *t
 		if object, ok := v.(string); ok {
 			trie, _ := currentState.StorageTrie(k)
 			actualRootHash := trie.Hash()
+
 			if common.HexToHash(object) != actualRootHash {
 				return fmt.Errorf("invalid root hash for: %v root hash: %v actual root hash: %v", k, common.HexToHash(object), actualRootHash)
 			}
