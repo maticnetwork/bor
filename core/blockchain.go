@@ -960,11 +960,8 @@ func (bc *BlockChain) InsertReceiptChain(blockChain types.Blocks, receiptChain [
 				return false
 			}
 
-			isValid, err := bc.forker.ValidateReorg(bc.CurrentFastBlock().Header(), headers)
-			if err != nil {
-				log.Warn("Reorg failed", "err", err)
-				return false
-			} else if !isValid {
+			isValid := bc.forker.ValidateReorg(bc.CurrentFastBlock().Header(), headers)
+			if !isValid {
 				return false
 			}
 			rawdb.WriteHeadFastBlockHash(bc.db, head.Hash())
@@ -1529,10 +1526,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 	blockImportTimer.Mark(int64(len(headers)))
 
 	// Check the validity of incoming chain
-	isValid, err1 := bc.forker.ValidateReorg(bc.CurrentBlock().Header(), headers)
-	if err1 != nil {
-		return it.index, err1
-	}
+	isValid := bc.forker.ValidateReorg(bc.CurrentBlock().Header(), headers)
 
 	if !isValid {
 		// The chain to be imported is invalid as the blocks doesn't match with
@@ -1947,10 +1941,7 @@ func (bc *BlockChain) insertSideChain(block *types.Block, it *insertIterator) (i
 		return it.index, err
 	}
 
-	isValid, err := bc.forker.ValidateReorg(current.Header(), headers)
-	if err != nil {
-		return it.index, err
-	}
+	isValid := bc.forker.ValidateReorg(current.Header(), headers)
 
 	if !reorg || !isValid {
 		localTd := bc.GetTd(current.Hash(), current.NumberU64())
