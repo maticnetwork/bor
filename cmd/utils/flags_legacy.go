@@ -19,9 +19,9 @@ package utils
 import (
 	"fmt"
 
-	"github.com/urfave/cli/v2"
-
+	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/ethereum/go-ethereum/internal/flags"
+	"github.com/urfave/cli/v2"
 )
 
 var ShowDeprecated = &cli.Command{
@@ -55,6 +55,13 @@ var (
 		Name:     "cache.trie.rejournal",
 		Usage:    "Time interval to regenerate the trie cache journal",
 		Category: flags.PerfCategory,
+	}
+	// Deprecated August 2023
+	TxLookupLimitFlag = &cli.Uint64Flag{
+		Name:     "txlookuplimit",
+		Usage:    "Number of recent blocks to maintain transactions index for (default = about one year, 0 = entire chain) (deprecated, use history.transactions instead)",
+		Value:    ethconfig.Defaults.TransactionHistory,
+		Category: flags.DeprecatedCategory,
 	}
 )
 

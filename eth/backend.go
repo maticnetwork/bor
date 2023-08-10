@@ -144,9 +144,13 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := pruner.RecoverPruning(stack.ResolvePath(""), chainDb); err != nil {
-		log.Error("Failed to recover state", "error", err)
+	// Try to recover offline state pruning only in hash-based.
+	if config.StateScheme == rawdb.HashScheme {
+		if err := pruner.RecoverPruning(stack.ResolvePath(""), chainDb); err != nil {
+			log.Error("Failed to recover state", "error", err)
+		}
 	}
+
 	// Transfer mining-related config to the ethash config.
 	chainConfig, err := core.LoadChainConfig(chainDb, config.Genesis)
 	if err != nil {
@@ -183,6 +187,26 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		config.TxPool.AllowUnprotectedTxs = true
 	}
 
+	var (
+		vmConfig = vm.Config{
+			EnablePreimageRecording:      config.EnablePreimageRecording,
+			ParallelEnable:               config.ParallelEVM.Enable,
+			ParallelSpeculativeProcesses: config.ParallelEVM.SpeculativeProcesses,
+		}
+		cacheConfig = &core.CacheConfig{
+			TrieCleanLimit:      config.TrieCleanCache,
+			TrieCleanNoPrefetch: config.NoPrefetch,
+			TrieDirtyLimit:      config.TrieDirtyCache,
+			TrieDirtyDisabled:   config.NoPruning,
+			TrieTimeLimit:       config.TrieTimeout,
+			SnapshotLimit:       config.SnapshotCache,
+			Preimages:           config.Preimages,
+			TriesInMemory:       config.TriesInMemory,
+			StateHistory:        config.StateHistory,
+			StateScheme:         config.StateScheme,
+		}
+	)
+
 	gpoParams := config.GPO
 	if gpoParams.Default == nil {
 		gpoParams.Default = config.Miner.GasPrice
@@ -194,7 +218,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		overrides.OverrideCancun = config.OverrideCancun
 	}
 
-	chainConfig, _, genesisErr := core.SetupGenesisBlockWithOverride(chainDb, trie.NewDatabase(chainDb), config.Genesis, &overrides)
+	chainConfig, _, genesisErr := core.SetupGenesisBlockWithOverride(chainDb, trie.NewDatabase(chainDb, cacheConfig.TriedbConfig()), config.Genesis, &overrides)
 	if _, isCompat := genesisErr.(*params.ConfigCompatError); genesisErr != nil && !isCompat {
 		return nil, genesisErr
 	}
@@ -224,24 +248,6 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			rawdb.WriteDatabaseVersion(chainDb, core.BlockChainVersion)
 		}
 	}
-
-	var (
-		vmConfig = vm.Config{
-			EnablePreimageRecording:      config.EnablePreimageRecording,
-			ParallelEnable:               config.ParallelEVM.Enable,
-			ParallelSpeculativeProcesses: config.ParallelEVM.SpeculativeProcesses,
-		}
-		cacheConfig = &core.CacheConfig{
-			TrieCleanLimit:      config.TrieCleanCache,
-			TrieCleanNoPrefetch: config.NoPrefetch,
-			TrieDirtyLimit:      config.TrieDirtyCache,
-			TrieDirtyDisabled:   config.NoPruning,
-			TrieTimeLimit:       config.TrieTimeout,
-			SnapshotLimit:       config.SnapshotCache,
-			Preimages:           config.Preimages,
-			TriesInMemory:       config.TriesInMemory,
-		}
-	)
 
 	checker := whitelist.NewService(10)
 

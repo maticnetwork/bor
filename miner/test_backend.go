@@ -17,6 +17,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/txpool"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/trie"
 
 	"github.com/ethereum/go-ethereum/common"
 	cmath "github.com/ethereum/go-ethereum/common/math"
@@ -118,7 +119,7 @@ func newTestWorkerBackend(t TensingObject, chainConfig *params.ChainConfig, engi
 		t.Fatalf("unexpected consensus engine type: %T", engine)
 	}
 
-	genesis := gspec.MustCommit(db)
+	genesis := gspec.MustCommit(db, trie.NewDatabase(db, trie.HashDefaults))
 
 	chain, _ := core.NewBlockChain(db, &core.CacheConfig{TrieDirtyDisabled: true}, &gspec, nil, engine, vm.Config{}, nil, nil, nil)
 	txpool := txpool.NewTxPool(testTxPoolConfig, chainConfig, chain)

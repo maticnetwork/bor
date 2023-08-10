@@ -325,10 +325,8 @@ func handleGetCode(msg Decoder) (serveRequestFn, uint64, uint64, error) {
 
 				continue
 			}
-
-			triedb := bc.StateCache().TrieDB()
 			address := common.BytesToAddress(request.AccountAddress)
-			account, err := getAccount(triedb, header.Root, address)
+			account, err := getAccount(bc.TrieDB(), header.Root, address)
 			if err != nil {
 				p.Log().Warn("Failed to retrieve account for code", "block", header.Number, "hash", header.Hash(), "account", address, "err", err)
 				p.bumpInvalid()
@@ -460,7 +458,7 @@ func handleGetProofs(msg Decoder) (serveRequestFn, uint64, uint64, error) {
 			default:
 				// Account key specified, open a storage trie
 				address := common.BytesToAddress(request.AccountAddress)
-				account, err := getAccount(statedb.TrieDB(), root, address)
+				account, err := getAccount(bc.TrieDB(), root, address)
 				if err != nil {
 					p.Log().Warn("Failed to retrieve account for proof", "block", header.Number, "hash", header.Hash(), "account", address, "err", err)
 					p.bumpInvalid()
