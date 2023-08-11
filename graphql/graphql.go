@@ -1350,6 +1350,7 @@ func (r *Resolver) Blocks(ctx context.Context, args struct {
 		return []*Block{}, nil
 	}
 
+	// nolint:prealloc
 	var ret []*Block
 
 	for i := from; i <= to; i++ {
@@ -1370,6 +1371,7 @@ func (r *Resolver) Blocks(ctx context.Context, args struct {
 		}
 
 		ret = append(ret, block)
+
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
