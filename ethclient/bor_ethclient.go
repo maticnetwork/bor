@@ -14,6 +14,7 @@ func (ec *Client) GetRootHash(ctx context.Context, startBlockNumber uint64, endB
 	if err := ec.c.CallContext(ctx, &rootHash, "eth_getRootHash", startBlockNumber, endBlockNumber); err != nil {
 		return "", err
 	}
+
 	return rootHash, nil
 }
 
@@ -30,9 +31,11 @@ func (ec *Client) GetVoteOnHash(ctx context.Context, startBlockNumber uint64, en
 // GetBorBlockReceipt returns bor block receipt
 func (ec *Client) GetBorBlockReceipt(ctx context.Context, hash common.Hash) (*types.Receipt, error) {
 	var r *types.Receipt
+
 	err := ec.c.CallContext(ctx, &r, "eth_getBorBlockReceipt", hash)
 	if err == nil && r == nil {
 		return nil, ethereum.NotFound
 	}
+
 	return r, err
 }

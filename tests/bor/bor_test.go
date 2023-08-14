@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"encoding/hex"
+	"fmt"
 	"io"
 	"math/big"
 	"os"
@@ -398,17 +399,22 @@ func TestInsertingSpanSizeBlocks(t *testing.T) {
 
 	_bor.SetHeimdallClient(h)
 
-	db := init.ethereum.ChainDb()
-	block := init.genesis.ToBlock(db)
+	block := init.genesis.ToBlock()
 	// to := int64(block.Header().Time)
 
 	currentValidators := []*valset.Validator{valset.NewValidator(addr, 10)}
+
+	spanner := getMockedSpanner(t, currentValidators)
+	_bor.SetSpanner(spanner)
 
 	// Insert sprintSize # of blocks so that span is fetched at the start of a new sprint
 	for i := uint64(1); i <= spanSize; i++ {
 		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators)
 		insertNewBlock(t, chain, block)
 	}
+
+	spanner = getMockedSpanner(t, currentSpan.ValidatorSet.Validators)
+	_bor.SetSpanner(spanner)
 
 	validators, err := _bor.GetCurrentValidators(context.Background(), block.Hash(), spanSize) // check validator set at the first block of new span
 	if err != nil {
@@ -431,13 +437,15 @@ func TestFetchStateSyncEvents(t *testing.T) {
 	defer _bor.Close()
 
 	// A. Insert blocks for 0th sprint
-	db := init.ethereum.ChainDb()
-	block := init.genesis.ToBlock(db)
+	block := init.genesis.ToBlock()
 
 	// B.1 Mock /bor/span/1
 	res, _ := loadSpanFromFile(t)
 
 	currentValidators := []*valset.Validator{valset.NewValidator(addr, 10)}
+
+	spanner := getMockedSpanner(t, currentValidators)
+	_bor.SetSpanner(spanner)
 
 	// Insert sprintSize # of blocks so that span is fetched at the start of a new sprint
 	for i := uint64(1); i < sprintSize; i++ {
@@ -480,7 +488,19 @@ func TestFetchStateSyncEvents(t *testing.T) {
 	_bor.SetHeimdallClient(h)
 
 	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, res.Result.ValidatorSet.Validators)
+
+	// Validate the state sync transactions set by consensus
+	validateStateSyncEvents(t, eventRecords, chain.GetStateSync())
+
 	insertNewBlock(t, chain, block)
+}
+
+func validateStateSyncEvents(t *testing.T, expected []*clerk.EventRecordWithTime, got []*types.StateSyncData) {
+	require.Equal(t, len(expected), len(got), "number of state sync events should be equal")
+
+	for i := 0; i < len(expected); i++ {
+		require.Equal(t, expected[i].ID, got[i].ID, fmt.Sprintf("state sync ids should be equal - index: %d, expected: %d, got: %d", i, expected[i].ID, got[i].ID))
+	}
 }
 
 func TestFetchStateSyncEvents_2(t *testing.T) {
@@ -534,8 +554,7 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 	_bor.SetHeimdallClient(h)
 
 	// Insert blocks for 0th sprint
-	db := init.ethereum.ChainDb()
-	block := init.genesis.ToBlock(db)
+	block := init.genesis.ToBlock()
 
 	var currentValidators []*valset.Validator
 
@@ -546,11 +565,14 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 			currentValidators = []*valset.Validator{valset.NewValidator(addr, 10)}
 		}
 
+		spanner := getMockedSpanner(t, currentValidators)
+		_bor.SetSpanner(spanner)
+
 		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators)
 		insertNewBlock(t, chain, block)
 	}
 
-	lastStateID, _ := _bor.GenesisContractsClient.LastStateId(sprintSize)
+	lastStateID, _ := _bor.GenesisContractsClient.LastStateId(nil, sprintSize, block.Hash())
 
 	// state 6 was not written
 	require.Equal(t, uint64(4), lastStateID.Uint64())
@@ -572,11 +594,14 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 			currentValidators = []*valset.Validator{valset.NewValidator(addr, 10)}
 		}
 
+		spanner := getMockedSpanner(t, currentValidators)
+		_bor.SetSpanner(spanner)
+
 		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, res.Result.ValidatorSet.Validators)
 		insertNewBlock(t, chain, block)
 	}
 
-	lastStateID, _ = _bor.GenesisContractsClient.LastStateId(spanSize)
+	lastStateID, _ = _bor.GenesisContractsClient.LastStateId(nil, spanSize, block.Hash())
 	require.Equal(t, uint64(6), lastStateID.Uint64())
 }
 
@@ -608,8 +633,7 @@ func TestOutOfTurnSigning(t *testing.T) {
 
 	_bor.SetHeimdallClient(h)
 
-	db := init.ethereum.ChainDb()
-	block := init.genesis.ToBlock(db)
+	block := init.genesis.ToBlock()
 
 	setDifficulty := func(header *types.Header) {
 		if IsSprintStart(header.Number.Uint64()) {
@@ -696,8 +720,7 @@ func TestSignerNotFound(t *testing.T) {
 
 	_bor.SetHeimdallClient(h)
 
-	db := init.ethereum.ChainDb()
-	block := init.genesis.ToBlock(db)
+	block := init.genesis.ToBlock()
 
 	// random signer account that is not a part of the validator set
 	const signer = "3714d99058cd64541433d59c6b391555b2fd9b54629c2b717a6c9c00d1127b6b"
@@ -796,7 +819,7 @@ func TestEIP1559Transition(t *testing.T) {
 	diskdb := rawdb.NewMemoryDatabase()
 	gspec.MustCommit(diskdb)
 
-	chain, err := core.NewBlockChain(diskdb, nil, gspec.Config, engine, vm.Config{}, nil, nil, nil)
+	chain, err := core.NewBlockChain(diskdb, nil, gspec, nil, engine, vm.Config{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("failed to create tester chain: %v", err)
 	}
@@ -1089,7 +1112,7 @@ func TestTransitionWithoutEIP155(t *testing.T) {
 	diskdb := rawdb.NewMemoryDatabase()
 	gspec.MustCommit(diskdb)
 
-	chain, err := core.NewBlockChain(diskdb, nil, gspec.Config, engine, vm.Config{}, nil, nil, nil)
+	chain, err := core.NewBlockChain(diskdb, nil, gspec, nil, engine, vm.Config{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("failed to create tester chain: %v", err)
 	}
@@ -1110,10 +1133,12 @@ func TestJaipurFork(t *testing.T) {
 	_bor := engine.(*bor.Bor)
 	defer _bor.Close()
 
-	db := init.ethereum.ChainDb()
-	block := init.genesis.ToBlock(db)
+	block := init.genesis.ToBlock()
 
 	res, _ := loadSpanFromFile(t)
+
+	spanner := getMockedSpanner(t, res.Result.ValidatorSet.Validators)
+	_bor.SetSpanner(spanner)
 
 	for i := uint64(1); i < sprintSize; i++ {
 		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, res.Result.ValidatorSet.Validators)

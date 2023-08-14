@@ -8,19 +8,20 @@ import (
 )
 
 // GetRootHash returns root hash for given start and end block
-func (s *PublicBlockChainAPI) GetRootHash(ctx context.Context, starBlockNr uint64, endBlockNr uint64) (string, error) {
+func (s *BlockChainAPI) GetRootHash(ctx context.Context, starBlockNr uint64, endBlockNr uint64) (string, error) {
 	root, err := s.b.GetRootHash(ctx, starBlockNr, endBlockNr)
 	if err != nil {
 		return "", err
 	}
+
 	return root, nil
 }
 
-func (s *PublicBlockChainAPI) GetBorBlockReceipt(ctx context.Context, hash common.Hash) (*types.Receipt, error) {
+func (s *BlockChainAPI) GetBorBlockReceipt(ctx context.Context, hash common.Hash) (*types.Receipt, error) {
 	return s.b.GetBorBlockReceipt(ctx, hash)
 }
 
-func (s *PublicBlockChainAPI) GetVoteOnHash(ctx context.Context, starBlockNr uint64, endBlockNr uint64, hash string, milestoneId string) (bool, error) {
+func (s *BlockChainAPI) GetVoteOnHash(ctx context.Context, starBlockNr uint64, endBlockNr uint64, hash string, milestoneId string) (bool, error) {
 	return s.b.GetVoteOnHash(ctx, starBlockNr, endBlockNr, hash, milestoneId)
 }
 
@@ -28,12 +29,14 @@ func (s *PublicBlockChainAPI) GetVoteOnHash(ctx context.Context, starBlockNr uin
 // Bor transaction utils
 //
 
-func (s *PublicBlockChainAPI) appendRPCMarshalBorTransaction(ctx context.Context, block *types.Block, fields map[string]interface{}, fullTx bool) map[string]interface{} {
+func (s *BlockChainAPI) appendRPCMarshalBorTransaction(ctx context.Context, block *types.Block, fields map[string]interface{}, fullTx bool) map[string]interface{} {
 	if block != nil {
 		txHash := types.GetDerivedBorTxHash(types.BorReceiptKey(block.Number().Uint64(), block.Hash()))
+
 		borTx, blockHash, blockNumber, txIndex, _ := s.b.GetBorBlockTransactionWithBlockHash(ctx, txHash, block.Hash())
 		if borTx != nil {
 			formattedTxs := fields["transactions"].([]interface{})
+
 			if fullTx {
 				marshalledTx := newRPCTransaction(borTx, blockHash, blockNumber, txIndex, block.BaseFee(), s.b.ChainConfig())
 				// newRPCTransaction calculates hash based on RLP of the transaction data.
@@ -45,5 +48,6 @@ func (s *PublicBlockChainAPI) appendRPCMarshalBorTransaction(ctx context.Context
 			}
 		}
 	}
+
 	return fields
 }

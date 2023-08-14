@@ -17,7 +17,6 @@ var mumbaiTestnet = &Chain{
 			HomesteadBlock:      big.NewInt(0),
 			DAOForkBlock:        nil,
 			DAOForkSupport:      true,
-			EIP150Hash:          common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000"),
 			EIP150Block:         big.NewInt(0),
 			EIP155Block:         big.NewInt(0),
 			EIP158Block:         big.NewInt(0),
@@ -29,8 +28,13 @@ var mumbaiTestnet = &Chain{
 			BerlinBlock:         big.NewInt(13996000),
 			LondonBlock:         big.NewInt(22640000),
 			Bor: &params.BorConfig{
-				JaipurBlock: big.NewInt(22770000),
-				DelhiBlock:  big.NewInt(29638656),
+				JaipurBlock:           big.NewInt(22770000),
+				DelhiBlock:            big.NewInt(29638656),
+				ParallelUniverseBlock: big.NewInt(0),
+				IndoreBlock:           big.NewInt(37075456),
+				StateSyncConfirmationDelay: map[string]uint64{
+					"37075456": 128,
+				},
 				Period: map[string]uint64{
 					"0":        2,
 					"25275000": 5,

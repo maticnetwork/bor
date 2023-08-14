@@ -29,6 +29,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/core/txpool"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -219,7 +220,7 @@ func buildNextBlock(t *testing.T, _bor consensus.Engine, chain *core.BlockChain,
 	ctx := context.Background()
 
 	// Finalize and seal the block
-	block, _ := _bor.FinalizeAndAssemble(ctx, chain, b.header, state, b.txs, nil, b.receipts)
+	block, _ := _bor.FinalizeAndAssemble(ctx, chain, b.header, state, b.txs, nil, b.receipts, []*types.Withdrawal{})
 
 	// Write state changes to db
 	root, err := state.Commit(chain.Config().IsEIP158(b.header.Number))
@@ -227,7 +228,7 @@ func buildNextBlock(t *testing.T, _bor consensus.Engine, chain *core.BlockChain,
 		panic(fmt.Sprintf("state write error: %v", err))
 	}
 
-	if err := state.Database().TrieDB().Commit(root, false, nil); err != nil {
+	if err := state.Database().TrieDB().Commit(root, false); err != nil {
 		panic(fmt.Sprintf("trie write error: %v", err))
 	}
 
@@ -255,9 +256,9 @@ func (b *blockGen) addTxWithChain(bc *core.BlockChain, statedb *state.StateDB, t
 		b.setCoinbase(coinbase)
 	}
 
-	statedb.Prepare(tx.Hash(), len(b.txs))
+	statedb.SetTxContext(tx.Hash(), len(b.txs))
 
-	receipt, err := core.ApplyTransaction(bc.Config(), bc, &b.header.Coinbase, b.gasPool, statedb, b.header, tx, &b.header.GasUsed, vm.Config{})
+	receipt, err := core.ApplyTransaction(bc.Config(), bc, &b.header.Coinbase, b.gasPool, statedb, b.header, tx, &b.header.GasUsed, vm.Config{}, nil)
 	if err != nil {
 		panic(err)
 	}
@@ -352,6 +353,17 @@ func getMockedHeimdallClient(t *testing.T, heimdallSpan *span.HeimdallSpan) (*mo
 	return h, ctrl
 }
 
+func getMockedSpanner(t *testing.T, validators []*valset.Validator) *bor.MockSpanner {
+	t.Helper()
+
+	spanner := bor.NewMockSpanner(gomock.NewController(t))
+	spanner.EXPECT().GetCurrentValidatorsByHash(gomock.Any(), gomock.Any(), gomock.Any()).Return(validators, nil).AnyTimes()
+	spanner.EXPECT().GetCurrentValidatorsByBlockNrOrHash(gomock.Any(), gomock.Any(), gomock.Any()).Return(validators, nil).AnyTimes()
+	spanner.EXPECT().GetCurrentSpan(gomock.Any(), gomock.Any()).Return(&span.Span{0, 0, 0}, nil).AnyTimes()
+	spanner.EXPECT().CommitSpan(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	return spanner
+}
+
 func generateFakeStateSyncEvents(sample *clerk.EventRecordWithTime, count int) []*clerk.EventRecordWithTime {
 	events := make([]*clerk.EventRecordWithTime, count)
 	event := *sample
@@ -360,7 +372,7 @@ func generateFakeStateSyncEvents(sample *clerk.EventRecordWithTime, count int) [
 	*events[0] = event
 
 	for i := 1; i < count; i++ {
-		event.ID = uint64(i)
+		event.ID = uint64(i + 1)
 		event.Time = event.Time.Add(1 * time.Second)
 		events[i] = &clerk.EventRecordWithTime{}
 		*events[i] = event
@@ -422,7 +434,8 @@ func InitGenesis(t *testing.T, faucets []*ecdsa.PrivateKey, fileLocation string,
 	}
 
 	genesis.Config.ChainID = big.NewInt(15001)
-	genesis.Config.EIP150Hash = common.Hash{}
+	genesis.Config.EIP150Block = big.NewInt(0)
+
 	genesis.Config.Bor.Sprint["0"] = sprintSize
 
 	return genesis
@@ -455,7 +468,7 @@ func InitMiner(genesis *core.Genesis, privKey *ecdsa.PrivateKey, withoutHeimdall
 		SyncMode:        downloader.FullSync,
 		DatabaseCache:   256,
 		DatabaseHandles: 256,
-		TxPool:          core.DefaultTxPoolConfig,
+		TxPool:          txpool.DefaultConfig,
 		GPO:             ethconfig.Defaults.GPO,
 		Ethash:          ethconfig.Defaults.Ethash,
 		Miner: miner.Config{

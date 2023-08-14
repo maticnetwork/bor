@@ -58,6 +58,18 @@ func (c *Command) Flags() *flagset.Flagset {
 		Usage: "Path of the directory where keystores are located",
 		Value: &c.cliConfig.KeyStoreDir,
 	})
+	f.Uint64Flag(&flagset.Uint64Flag{
+		Name:    "rpc.batchlimit",
+		Usage:   "Maximum number of messages in a batch (default=100, use 0 for no limits)",
+		Value:   &c.cliConfig.RPCBatchLimit,
+		Default: c.cliConfig.RPCBatchLimit,
+	})
+	f.Uint64Flag(&flagset.Uint64Flag{
+		Name:    "rpc.returndatalimit",
+		Usage:   "Maximum size (in bytes) a result of an rpc request could have (default=100000, use 0 for no limits)",
+		Value:   &c.cliConfig.RPCReturnDataLimit,
+		Default: c.cliConfig.RPCReturnDataLimit,
+	})
 	f.StringFlag(&flagset.StringFlag{
 		Name:  "config",
 		Usage: "Path to the TOML configuration file",
@@ -290,6 +302,13 @@ func (c *Command) Flags() *flagset.Flagset {
 		Default: c.cliConfig.Sealer.Recommit,
 		Group:   "Sealer",
 	})
+	f.BoolFlag(&flagset.BoolFlag{
+		Name:    "miner.interruptcommit",
+		Usage:   "Interrupt block commit when block creation time is passed",
+		Value:   &c.cliConfig.Sealer.CommitInterruptFlag,
+		Default: c.cliConfig.Sealer.CommitInterruptFlag,
+		Group:   "Sealer",
+	})
 
 	// ethstats
 	f.StringFlag(&flagset.StringFlag{
@@ -453,6 +472,13 @@ func (c *Command) Flags() *flagset.Flagset {
 		Group:   "JsonRPC",
 	})
 	f.BoolFlag(&flagset.BoolFlag{
+		Name:    "rpc.enabledeprecatedpersonal",
+		Usage:   "Enables the (deprecated) personal namespace",
+		Value:   &c.cliConfig.JsonRPC.EnablePersonal,
+		Default: c.cliConfig.JsonRPC.EnablePersonal,
+		Group:   "JsonRPC",
+	})
+	f.BoolFlag(&flagset.BoolFlag{
 		Name:    "ipcdisable",
 		Usage:   "Disable the IPC-RPC server",
 		Value:   &c.cliConfig.JsonRPC.IPCDisable,
@@ -566,6 +592,20 @@ func (c *Command) Flags() *flagset.Flagset {
 		Default: c.cliConfig.JsonRPC.Http.API,
 		Group:   "JsonRPC",
 	})
+	f.Uint64Flag(&flagset.Uint64Flag{
+		Name:    "http.ep-size",
+		Usage:   "Maximum size of workers to run in rpc execution pool for HTTP requests",
+		Value:   &c.cliConfig.JsonRPC.Http.ExecutionPoolSize,
+		Default: c.cliConfig.JsonRPC.Http.ExecutionPoolSize,
+		Group:   "JsonRPC",
+	})
+	f.DurationFlag(&flagset.DurationFlag{
+		Name:    "http.ep-requesttimeout",
+		Usage:   "Request Timeout for rpc execution pool for HTTP requests",
+		Value:   &c.cliConfig.JsonRPC.Http.ExecutionPoolRequestTimeout,
+		Default: c.cliConfig.JsonRPC.Http.ExecutionPoolRequestTimeout,
+		Group:   "JsonRPC",
+	})
 
 	// ws options
 	f.BoolFlag(&flagset.BoolFlag{
@@ -601,6 +641,20 @@ func (c *Command) Flags() *flagset.Flagset {
 		Usage:   "API's offered over the WS-RPC interface",
 		Value:   &c.cliConfig.JsonRPC.Ws.API,
 		Default: c.cliConfig.JsonRPC.Ws.API,
+		Group:   "JsonRPC",
+	})
+	f.Uint64Flag(&flagset.Uint64Flag{
+		Name:    "ws.ep-size",
+		Usage:   "Maximum size of workers to run in rpc execution pool for WS requests",
+		Value:   &c.cliConfig.JsonRPC.Ws.ExecutionPoolSize,
+		Default: c.cliConfig.JsonRPC.Ws.ExecutionPoolSize,
+		Group:   "JsonRPC",
+	})
+	f.DurationFlag(&flagset.DurationFlag{
+		Name:    "ws.ep-requesttimeout",
+		Usage:   "Request Timeout for rpc execution pool for WS requests",
+		Value:   &c.cliConfig.JsonRPC.Ws.ExecutionPoolRequestTimeout,
+		Default: c.cliConfig.JsonRPC.Ws.ExecutionPoolRequestTimeout,
 		Group:   "JsonRPC",
 	})
 
@@ -689,6 +743,13 @@ func (c *Command) Flags() *flagset.Flagset {
 		Usage:   "Enables the experimental RLPx V5 (Topic Discovery) mechanism",
 		Value:   &c.cliConfig.P2P.Discovery.V5Enabled,
 		Default: c.cliConfig.P2P.Discovery.V5Enabled,
+		Group:   "P2P",
+	})
+	f.DurationFlag(&flagset.DurationFlag{
+		Name:    "txarrivalwait",
+		Usage:   "Maximum duration to wait for a transaction before explicitly requesting it (defaults to 500ms)",
+		Value:   &c.cliConfig.P2P.TxArrivalWait,
+		Default: c.cliConfig.P2P.TxArrivalWait,
 		Group:   "P2P",
 	})
 
@@ -849,6 +910,20 @@ func (c *Command) Flags() *flagset.Flagset {
 		Usage:   "Block period to use in developer mode (0 = mine only if transaction pending)",
 		Value:   &c.cliConfig.Developer.Period,
 		Default: c.cliConfig.Developer.Period,
+	})
+
+	// parallelevm
+	f.BoolFlag(&flagset.BoolFlag{
+		Name:    "parallelevm.enable",
+		Usage:   "Enable Block STM",
+		Value:   &c.cliConfig.ParallelEVM.Enable,
+		Default: c.cliConfig.ParallelEVM.Enable,
+	})
+	f.IntFlag(&flagset.IntFlag{
+		Name:    "parallelevm.procs",
+		Usage:   "Number of speculative processes (cores) in Block STM",
+		Value:   &c.cliConfig.ParallelEVM.SpeculativeProcesses,
+		Default: c.cliConfig.ParallelEVM.SpeculativeProcesses,
 	})
 	f.Uint64Flag(&flagset.Uint64Flag{
 		Name:    "dev.gaslimit",

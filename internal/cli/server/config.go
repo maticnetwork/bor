@@ -70,6 +70,12 @@ type Config struct {
 	// KeyStoreDir is the directory to store keystores
 	KeyStoreDir string `hcl:"keystore,optional" toml:"keystore,optional"`
 
+	// Maximum number of messages in a batch (default=100, use 0 for no limits)
+	RPCBatchLimit uint64 `hcl:"rpc.batchlimit,optional" toml:"rpc.batchlimit,optional"`
+
+	// Maximum size (in bytes) a result of an rpc request could have (default=100000, use 0 for no limits)
+	RPCReturnDataLimit uint64 `hcl:"rpc.returndatalimit,optional" toml:"rpc.returndatalimit,optional"`
+
 	// SyncMode selects the sync protocol
 	SyncMode string `hcl:"syncmode,optional" toml:"syncmode,optional"`
 
@@ -120,6 +126,9 @@ type Config struct {
 
 	// Developer has the developer mode related settings
 	Developer *DeveloperConfig `hcl:"developer,block" toml:"developer,block"`
+
+	// ParallelEVM has the parallel evm related settings
+	ParallelEVM *ParallelEVMConfig `hcl:"parallelevm,block" toml:"parallelevm,block"`
 
 	// Develop Fake Author mode to produce blocks without authorisation
 	DevFakeAuthor bool `hcl:"devfakeauthor,optional" toml:"devfakeauthor,optional"`
@@ -198,6 +207,11 @@ type P2PConfig struct {
 
 	// Discovery has the p2p discovery related settings
 	Discovery *P2PDiscovery `hcl:"discovery,block" toml:"discovery,block"`
+
+	// TxArrivalWait sets the maximum duration the transaction fetcher will wait for
+	// an announced transaction to arrive before explicitly requesting it
+	TxArrivalWait    time.Duration `hcl:"-,optional" toml:"-"`
+	TxArrivalWaitRaw string        `hcl:"txarrivalwait,optional" toml:"txarrivalwait,optional"`
 }
 
 type P2PDiscovery struct {
@@ -300,6 +314,8 @@ type SealerConfig struct {
 	// The time interval for miner to re-create mining work.
 	Recommit    time.Duration `hcl:"-,optional" toml:"-"`
 	RecommitRaw string        `hcl:"recommit,optional" toml:"recommit,optional"`
+
+	CommitInterruptFlag bool `hcl:"commitinterrupt,optional" toml:"commitinterrupt,optional"`
 }
 
 type JsonRPCConfig struct {
@@ -334,6 +350,9 @@ type JsonRPCConfig struct {
 	HttpTimeout *HttpTimeouts `hcl:"timeouts,block" toml:"timeouts,block"`
 
 	AllowUnprotectedTxs bool `hcl:"allow-unprotected-txs,optional" toml:"allow-unprotected-txs,optional"`
+
+	// EnablePersonal enables the deprecated personal namespace.
+	EnablePersonal bool `hcl:"enabledeprecatedpersonal,optional" toml:"enabledeprecatedpersonal,optional"`
 }
 
 type AUTHConfig struct {
@@ -380,6 +399,13 @@ type APIConfig struct {
 
 	// Origins is the list of endpoints to accept requests from (only consumed for websockets)
 	Origins []string `hcl:"origins,optional" toml:"origins,optional"`
+
+	// ExecutionPoolSize is max size of workers to be used for rpc execution
+	ExecutionPoolSize uint64 `hcl:"ep-size,optional" toml:"ep-size,optional"`
+
+	// ExecutionPoolRequestTimeout is timeout used by execution pool for rpc execution
+	ExecutionPoolRequestTimeout    time.Duration `hcl:"-,optional" toml:"-"`
+	ExecutionPoolRequestTimeoutRaw string        `hcl:"ep-requesttimeout,optional" toml:"ep-requesttimeout,optional"`
 }
 
 // Used from rpc.HTTPTimeouts
@@ -550,6 +576,12 @@ type DeveloperConfig struct {
 	GasLimit uint64 `hcl:"gaslimit,optional" toml:"gaslimit,optional"`
 }
 
+type ParallelEVMConfig struct {
+	Enable bool `hcl:"enable,optional" toml:"enable,optional"`
+
+	SpeculativeProcesses int `hcl:"procs,optional" toml:"procs,optional"`
+}
+
 func DefaultConfig() *Config {
 	return &Config{
 		Chain:                   "mainnet",
@@ -566,14 +598,17 @@ func DefaultConfig() *Config {
 			Backtrace: "",
 			Debug:     false,
 		},
+		RPCBatchLimit:      100,
+		RPCReturnDataLimit: 100000,
 		P2P: &P2PConfig{
-			MaxPeers:     50,
-			MaxPendPeers: 50,
-			Bind:         "0.0.0.0",
-			Port:         30303,
-			NoDiscover:   false,
-			NAT:          "any",
-			NetRestrict:  "",
+			MaxPeers:      50,
+			MaxPendPeers:  50,
+			Bind:          "0.0.0.0",
+			Port:          30303,
+			NoDiscover:    false,
+			NAT:           "any",
+			NetRestrict:   "",
+			TxArrivalWait: 500 * time.Millisecond,
 			Discovery: &P2PDiscovery{
 				V5Enabled:    false,
 				Bootnodes:    []string{},
@@ -607,12 +642,13 @@ func DefaultConfig() *Config {
 			LifeTime:     3 * time.Hour,
 		},
 		Sealer: &SealerConfig{
-			Enabled:   false,
-			Etherbase: "",
-			GasCeil:   30_000_000,                  // geth's default
-			GasPrice:  big.NewInt(1 * params.GWei), // geth's default
-			ExtraData: "",
-			Recommit:  125 * time.Second,
+			Enabled:             false,
+			Etherbase:           "",
+			GasCeil:             30_000_000,                  // geth's default
+			GasPrice:            big.NewInt(1 * params.GWei), // geth's default
+			ExtraData:           "",
+			Recommit:            125 * time.Second,
+			CommitInterruptFlag: true,
 		},
 		Gpo: &GpoConfig{
 			Blocks:           20,
@@ -629,22 +665,27 @@ func DefaultConfig() *Config {
 			TxFeeCap:            ethconfig.Defaults.RPCTxFeeCap,
 			RPCEVMTimeout:       ethconfig.Defaults.RPCEVMTimeout,
 			AllowUnprotectedTxs: false,
+			EnablePersonal:      false,
 			Http: &APIConfig{
-				Enabled: false,
-				Port:    8545,
-				Prefix:  "",
-				Host:    "localhost",
-				API:     []string{"eth", "net", "web3", "txpool", "bor"},
-				Cors:    []string{"localhost"},
-				VHost:   []string{"localhost"},
+				Enabled:                     false,
+				Port:                        8545,
+				Prefix:                      "",
+				Host:                        "localhost",
+				API:                         []string{"eth", "net", "web3", "txpool", "bor"},
+				Cors:                        []string{"localhost"},
+				VHost:                       []string{"localhost"},
+				ExecutionPoolSize:           40,
+				ExecutionPoolRequestTimeout: 0,
 			},
 			Ws: &APIConfig{
-				Enabled: false,
-				Port:    8546,
-				Prefix:  "",
-				Host:    "localhost",
-				API:     []string{"net", "web3"},
-				Origins: []string{"localhost"},
+				Enabled:                     false,
+				Port:                        8546,
+				Prefix:                      "",
+				Host:                        "localhost",
+				API:                         []string{"net", "web3"},
+				Origins:                     []string{"localhost"},
+				ExecutionPoolSize:           40,
+				ExecutionPoolRequestTimeout: 0,
 			},
 			Graphql: &APIConfig{
 				Enabled: false,
@@ -652,7 +693,7 @@ func DefaultConfig() *Config {
 				VHost:   []string{"localhost"},
 			},
 			HttpTimeout: &HttpTimeouts{
-				ReadTimeout:  30 * time.Second,
+				ReadTimeout:  10 * time.Second,
 				WriteTimeout: 30 * time.Second,
 				IdleTimeout:  120 * time.Second,
 			},
@@ -668,7 +709,7 @@ func DefaultConfig() *Config {
 			Enabled:               false,
 			Expensive:             false,
 			PrometheusAddr:        "127.0.0.1:7071",
-			OpenCollectorEndpoint: "127.0.0.1:4317",
+			OpenCollectorEndpoint: "",
 			InfluxDB: &InfluxDBConfig{
 				V1Enabled:    false,
 				Endpoint:     "",
@@ -721,6 +762,10 @@ func DefaultConfig() *Config {
 			BlockProfileRate: 0,
 			// CPUProfile:       "",
 		},
+		ParallelEVM: &ParallelEVMConfig{
+			Enable:               true,
+			SpeculativeProcesses: 8,
+		},
 	}
 }
 
@@ -770,10 +815,13 @@ func (c *Config) fillTimeDurations() error {
 		{"jsonrpc.timeouts.read", &c.JsonRPC.HttpTimeout.ReadTimeout, &c.JsonRPC.HttpTimeout.ReadTimeoutRaw},
 		{"jsonrpc.timeouts.write", &c.JsonRPC.HttpTimeout.WriteTimeout, &c.JsonRPC.HttpTimeout.WriteTimeoutRaw},
 		{"jsonrpc.timeouts.idle", &c.JsonRPC.HttpTimeout.IdleTimeout, &c.JsonRPC.HttpTimeout.IdleTimeoutRaw},
+		{"jsonrpc.ws.ep-requesttimeout", &c.JsonRPC.Ws.ExecutionPoolRequestTimeout, &c.JsonRPC.Ws.ExecutionPoolRequestTimeoutRaw},
+		{"jsonrpc.http.ep-requesttimeout", &c.JsonRPC.Http.ExecutionPoolRequestTimeout, &c.JsonRPC.Http.ExecutionPoolRequestTimeoutRaw},
 		{"txpool.lifetime", &c.TxPool.LifeTime, &c.TxPool.LifeTimeRaw},
 		{"txpool.rejournal", &c.TxPool.Rejournal, &c.TxPool.RejournalRaw},
 		{"cache.rejournal", &c.Cache.Rejournal, &c.Cache.RejournalRaw},
 		{"cache.timeout", &c.Cache.TrieTimeout, &c.Cache.TrieTimeoutRaw},
+		{"p2p.txarrivalwait", &c.P2P.TxArrivalWait, &c.P2P.TxArrivalWaitRaw},
 	}
 
 	for _, x := range tds {
@@ -867,8 +915,8 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 	{
 		n.GPO.Blocks = int(c.Gpo.Blocks)
 		n.GPO.Percentile = int(c.Gpo.Percentile)
-		n.GPO.MaxHeaderHistory = c.Gpo.MaxHeaderHistory
-		n.GPO.MaxBlockHistory = c.Gpo.MaxBlockHistory
+		n.GPO.MaxHeaderHistory = uint64(c.Gpo.MaxHeaderHistory)
+		n.GPO.MaxBlockHistory = uint64(c.Gpo.MaxBlockHistory)
 		n.GPO.MaxPrice = c.Gpo.MaxPrice
 		n.GPO.IgnorePrice = c.Gpo.IgnorePrice
 	}
@@ -895,6 +943,7 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 		n.Miner.GasPrice = c.Sealer.GasPrice
 		n.Miner.GasCeil = c.Sealer.GasCeil
 		n.Miner.ExtraData = []byte(c.Sealer.ExtraData)
+		n.Miner.CommitInterruptFlag = c.Sealer.CommitInterruptFlag
 
 		if etherbase := c.Sealer.Etherbase; etherbase != "" {
 			if !common.IsHexAddress(etherbase) {
@@ -991,7 +1040,8 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 
 	// RequiredBlocks
 	{
-		n.PeerRequiredBlocks = map[uint64]common.Hash{}
+		n.RequiredBlocks = map[uint64]common.Hash{}
+
 		for k, v := range c.RequiredBlocks {
 			number, err := strconv.ParseUint(k, 0, 64)
 			if err != nil {
@@ -1003,7 +1053,7 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 				return nil, fmt.Errorf("invalid required block hash %s: %v", v, err)
 			}
 
-			n.PeerRequiredBlocks[number] = hash
+			n.RequiredBlocks[number] = hash
 		}
 	}
 
@@ -1080,6 +1130,7 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 		n.NoPruning = true
 		if !n.Preimages {
 			n.Preimages = true
+
 			log.Info("Enabling recording of key preimages since archive mode is used")
 		}
 	default:
@@ -1099,6 +1150,10 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 
 	n.BorLogs = c.BorLogs
 	n.DatabaseHandles = dbHandles
+
+	n.ParallelEVM.Enable = c.ParallelEVM.Enable
+	n.ParallelEVM.SpeculativeProcesses = c.ParallelEVM.SpeculativeProcesses
+	n.RPCReturnDataLimit = c.RPCReturnDataLimit
 
 	if c.Ancient != "" {
 		n.DatabaseFreezer = c.Ancient
@@ -1229,11 +1284,13 @@ func (c *Config) buildNode() (*node.Config, error) {
 		Version:               params.VersionWithCommit(gitCommit, gitDate),
 		IPCPath:               ipcPath,
 		AllowUnprotectedTxs:   c.JsonRPC.AllowUnprotectedTxs,
+		EnablePersonal:        c.JsonRPC.EnablePersonal,
 		P2P: p2p.Config{
 			MaxPeers:        int(c.P2P.MaxPeers),
 			MaxPendingPeers: int(c.P2P.MaxPendPeers),
 			ListenAddr:      c.P2P.Bind + ":" + strconv.Itoa(int(c.P2P.Port)),
 			DiscoveryV5:     c.P2P.Discovery.V5Enabled,
+			TxArrivalWait:   c.P2P.TxArrivalWait,
 		},
 		HTTPModules:         c.JsonRPC.Http.API,
 		HTTPCors:            c.JsonRPC.Http.Cors,
@@ -1249,10 +1306,15 @@ func (c *Config) buildNode() (*node.Config, error) {
 			WriteTimeout: c.JsonRPC.HttpTimeout.WriteTimeout,
 			IdleTimeout:  c.JsonRPC.HttpTimeout.IdleTimeout,
 		},
-		JWTSecret:        c.JsonRPC.Auth.JWTSecret,
-		AuthPort:         int(c.JsonRPC.Auth.Port),
-		AuthAddr:         c.JsonRPC.Auth.Addr,
-		AuthVirtualHosts: c.JsonRPC.Auth.VHosts,
+		JWTSecret:                              c.JsonRPC.Auth.JWTSecret,
+		AuthPort:                               int(c.JsonRPC.Auth.Port),
+		AuthAddr:                               c.JsonRPC.Auth.Addr,
+		AuthVirtualHosts:                       c.JsonRPC.Auth.VHosts,
+		RPCBatchLimit:                          c.RPCBatchLimit,
+		WSJsonRPCExecutionPoolSize:             c.JsonRPC.Ws.ExecutionPoolSize,
+		WSJsonRPCExecutionPoolRequestTimeout:   c.JsonRPC.Ws.ExecutionPoolRequestTimeout,
+		HTTPJsonRPCExecutionPoolSize:           c.JsonRPC.Http.ExecutionPoolSize,
+		HTTPJsonRPCExecutionPoolRequestTimeout: c.JsonRPC.Http.ExecutionPoolRequestTimeout,
 	}
 
 	if c.P2P.NetRestrict != "" {
@@ -1386,12 +1448,14 @@ func MakeDatabaseHandles(max int) (int, error) {
 
 func parseBootnodes(urls []string) ([]*enode.Node, error) {
 	dst := []*enode.Node{}
+
 	for _, url := range urls {
 		if url != "" {
 			node, err := enode.Parse(enode.ValidSchemes, url)
 			if err != nil {
 				return nil, fmt.Errorf("invalid bootstrap url '%s': %v", url, err)
 			}
+
 			dst = append(dst, node)
 		}
 	}

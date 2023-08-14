@@ -20,6 +20,10 @@ The ```bor server``` command runs the Bor client.
 
 - ```keystore```: Path of the directory where keystores are located
 
+- ```rpc.batchlimit```: Maximum number of messages in a batch (default=100, use 0 for no limits) (default: 100)
+
+- ```rpc.returndatalimit```: Maximum size (in bytes) a result of an rpc request could have (default=100000, use 0 for no limits) (default: 100000)
+
 - ```config```: Path to the TOML configuration file
 
 - ```syncmode```: Blockchain sync mode (only "full" sync supported) (default: full)
@@ -44,6 +48,8 @@ The ```bor server``` command runs the Bor client.
 
 - ```bor.runheimdallargs```: Arguments to pass to Heimdall service
 
+- ```bor.useheimdallapp```: Use child heimdall process to fetch data, Only works when bor.runheimdall is true (default: false)
+
 - ```ethstats```: Reporting URL of a ethstats service (nodename:secret@host:port)
 
 - ```gpo.blocks```: Number of recent blocks to check for gas prices (default: 20)
@@ -54,7 +60,7 @@ The ```bor server``` command runs the Bor client.
 
 - ```gpo.maxblockhistory```: Maximum block history of gasprice oracle (default: 1024)
 
-- ```gpo.maxprice```: Maximum gas price will be recommended by gpo (default: 5000000000000)
+- ```gpo.maxprice```: Maximum gas price will be recommended by gpo (default: 500000000000)
 
 - ```gpo.ignoreprice```: Gas price below which gpo will ignore transactions (default: 2)
 
@@ -65,6 +71,10 @@ The ```bor server``` command runs the Bor client.
 - ```dev```: Enable developer mode with ephemeral proof-of-authority network and a pre-funded developer account, mining enabled (default: false)
 
 - ```dev.period```: Block period to use in developer mode (0 = mine only if transaction pending) (default: 0)
+
+- ```parallelevm.enable```: Enable Block STM (default: true)
+
+- ```parallelevm.procs```: Number of speculative processes (cores) in Block STM (default: 8)
 
 - ```dev.gaslimit```: Initial block gas limit (default: 11500000)
 
@@ -124,6 +134,8 @@ The ```bor server``` command runs the Bor client.
 
 - ```rpc.allow-unprotected-txs```: Allow for unprotected (non EIP155 signed) transactions to be submitted via RPC (default: false)
 
+- ```rpc.enabledeprecatedpersonal```: Enables the (deprecated) personal namespace (default: false)
+
 - ```ipcdisable```: Disable the IPC-RPC server (default: false)
 
 - ```ipcpath```: Filename for IPC socket/pipe within the datadir (explicit paths escape it)
@@ -156,6 +168,10 @@ The ```bor server``` command runs the Bor client.
 
 - ```http.api```: API's offered over the HTTP-RPC interface (default: eth,net,web3,txpool,bor)
 
+- ```http.ep-size```: Maximum size of workers to run in rpc execution pool for HTTP requests (default: 40)
+
+- ```http.ep-requesttimeout```: Request Timeout for rpc execution pool for HTTP requests (default: 0s)
+
 - ```ws```: Enable the WS-RPC server (default: false)
 
 - ```ws.addr```: WS-RPC server listening interface (default: localhost)
@@ -165,6 +181,10 @@ The ```bor server``` command runs the Bor client.
 - ```ws.rpcprefix```: HTTP path prefix on which JSON-RPC is served. Use '/' to serve on all paths.
 
 - ```ws.api```: API's offered over the WS-RPC interface (default: net,web3)
+
+- ```ws.ep-size```: Maximum size of workers to run in rpc execution pool for WS requests (default: 40)
+
+- ```ws.ep-requesttimeout```: Request Timeout for rpc execution pool for WS requests (default: 0s)
 
 - ```graphql```: Enable GraphQL on the HTTP-RPC server. Note that GraphQL can only be started if an HTTP server is started as well. (default: false)
 
@@ -202,6 +222,8 @@ The ```bor server``` command runs the Bor client.
 
 - ```v5disc```: Enables the experimental RLPx V5 (Topic Discovery) mechanism (default: false)
 
+- ```txarrivalwait```: Maximum duration to wait for a transaction before explicitly requesting it (defaults to 500ms) (default: 500ms)
+
 ### Sealer Options
 
 - ```mine```: Enable mining (default: false)
@@ -215,6 +237,8 @@ The ```bor server``` command runs the Bor client.
 - ```miner.gasprice```: Minimum gas price for mining a transaction (default: 1000000000)
 
 - ```miner.recommit```: The time interval for miner to re-create mining work (default: 2m5s)
+
+- ```miner.interruptcommit```: Interrupt block commit when block creation time is passed (default: true)
 
 ### Telemetry Options
 
@@ -236,7 +260,7 @@ The ```bor server``` command runs the Bor client.
 
 - ```metrics.prometheus-addr```: Address for Prometheus Server (default: 127.0.0.1:7071)
 
-- ```metrics.opencollector-endpoint```: OpenCollector Endpoint (host:port) (default: 127.0.0.1:4317)
+- ```metrics.opencollector-endpoint```: OpenCollector Endpoint (host:port)
 
 - ```metrics.influxdbv2```: Enable metrics export/push to an external InfluxDB v2 database (default: false)
 

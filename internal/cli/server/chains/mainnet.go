@@ -17,7 +17,6 @@ var mainnetBor = &Chain{
 			HomesteadBlock:      big.NewInt(0),
 			DAOForkBlock:        nil,
 			DAOForkSupport:      true,
-			EIP150Hash:          common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000"),
 			EIP150Block:         big.NewInt(0),
 			EIP155Block:         big.NewInt(0),
 			EIP158Block:         big.NewInt(0),
@@ -29,8 +28,13 @@ var mainnetBor = &Chain{
 			BerlinBlock:         big.NewInt(14750000),
 			LondonBlock:         big.NewInt(23850000),
 			Bor: &params.BorConfig{
-				JaipurBlock: big.NewInt(23850000),
-				DelhiBlock:  big.NewInt(38189056),
+				JaipurBlock:           big.NewInt(23850000),
+				DelhiBlock:            big.NewInt(38189056),
+				ParallelUniverseBlock: big.NewInt(0),
+				IndoreBlock:           big.NewInt(44934656),
+				StateSyncConfirmationDelay: map[string]uint64{
+					"44934656": 128,
+				},
 				Period: map[string]uint64{
 					"0": 2,
 				},

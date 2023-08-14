@@ -39,10 +39,7 @@ var flagMap = map[string][]string{
 	"goerli":                           {"BoolFlag", "No"},
 	"bor-mumbai":                       {"BoolFlag", "No"},
 	"bor-mainnet":                      {"BoolFlag", "No"},
-	"rinkeby":                          {"BoolFlag", "No"},
-	"ropsten":                          {"BoolFlag", "No"},
 	"sepolia":                          {"BoolFlag", "No"},
-	"kiln":                             {"BoolFlag", "No"},
 	"exitwhensynced":                   {"BoolFlag", "No"},
 	"light.serve":                      {"notABoolFlag", "No"},
 	"light.ingress":                    {"notABoolFlag", "No"},
@@ -172,6 +169,7 @@ var nameTagMap = map[string]string{
 	"bootnodes":               "bootnodes",
 	"maxpeers":                "maxpeers",
 	"maxpendpeers":            "maxpendpeers",
+	"txarrivalwait":           "txarrivalwait",
 	"nat":                     "nat",
 	"nodiscover":              "nodiscover",
 	"v5disc":                  "v5disc",
@@ -411,6 +409,7 @@ func getStaticTrustedNodes(args []string) {
 		if !checkFileExists(path) {
 			return
 		}
+
 		writeTempStaticJSON(path)
 	}
 }

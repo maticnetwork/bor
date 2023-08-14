@@ -16,7 +16,7 @@ var (
 
 	ErrCheckpointMismatch = errors.New("checkpoint mismatch")
 	ErrLongFutureChain    = errors.New("received future chain of unacceptable length")
-	ErrNoRemoteCheckoint  = errors.New("remote peer doesn't have a checkoint")
+	ErrNoRemoteCheckpoint = errors.New("remote peer doesn't have a checkpoint")
 )
 
 type Service struct {

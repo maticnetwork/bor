@@ -201,6 +201,33 @@ web3._extend({
 			call: 'admin_setMaxPeers',
 			params: 1
 		}),
+		new web3._extend.Method({			
+			name: 'getExecutionPoolSize',
+			call: 'admin_getExecutionPoolSize'
+		}),
+		new web3._extend.Method({
+			name: 'getExecutionPoolRequestTimeout',
+			call: 'admin_getExecutionPoolRequestTimeout'
+		}),
+		// new web3._extend.Method({
+		// 	name: 'setWSExecutionPoolRequestTimeout',
+		// 	call: 'admin_setWSExecutionPoolRequestTimeout',
+		// 	params: 1
+		// }),
+		// new web3._extend.Method({
+		// 	name: 'setHttpExecutionPoolRequestTimeout',
+		// 	call: 'admin_setHttpExecutionPoolRequestTimeout',
+		// 	params: 1
+		// }),
+		new web3._extend.Method({
+			name: 'setWSExecutionPoolSize',
+			call: 'admin_setWSExecutionPoolSize',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'setHttpExecutionPoolSize',
+			call: 'admin_setHttpExecutionPoolSize',
+		}),
 	],
 	properties: [
 		new web3._extend.Property({
@@ -236,20 +263,24 @@ web3._extend({
 			outputFormatter: console.log
 		}),
 		new web3._extend.Method({
-			name: 'getHeaderRlp',
-			call: 'debug_getHeaderRlp',
+			name: 'getRawHeader',
+			call: 'debug_getRawHeader',
 			params: 1
 		}),
 		new web3._extend.Method({
-			name: 'getBlockRlp',
-			call: 'debug_getBlockRlp',
+			name: 'getRawBlock',
+			call: 'debug_getRawBlock',
 			params: 1
 		}),
 		new web3._extend.Method({
-			name: 'testSignCliqueBlock',
-			call: 'debug_testSignCliqueBlock',
-			params: 2,
-			inputFormatter: [web3._extend.formatters.inputAddressFormatter, null],
+			name: 'getRawReceipts',
+			call: 'debug_getRawReceipts',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'getRawTransaction',
+			call: 'debug_getRawTransaction',
+			params: 1
 		}),
 		new web3._extend.Method({
 			name: 'setHead',
@@ -508,6 +539,26 @@ web3._extend({
 			call: 'debug_getTraceStack',
 			params: 0,
 		}),
+		new web3._extend.Method({
+			name: 'dbGet',
+			call: 'debug_dbGet',
+			params: 1
+		}),
+		new web3._extend.Method({
+			name: 'dbAncient',
+			call: 'debug_dbAncient',
+			params: 2
+		}),
+		new web3._extend.Method({
+			name: 'dbAncients',
+			call: 'debug_dbAncients',
+			params: 0
+		}),
+		new web3._extend.Method({
+			name: 'setTrieFlushInterval',
+			call: 'debug_setTrieFlushInterval',
+			params: 1
+		}),
 	],
 	properties: []
 });
@@ -622,6 +673,12 @@ web3._extend({
 			name: 'getLogs',
 			call: 'eth_getLogs',
 			params: 1,
+		}),
+		new web3._extend.Method({
+			name: 'call',
+			call: 'eth_call',
+			params: 3,
+			inputFormatter: [web3._extend.formatters.inputCallFormatter, web3._extend.formatters.inputDefaultBlockNumberFormatter, null],
 		}),
 	],
 	properties: [

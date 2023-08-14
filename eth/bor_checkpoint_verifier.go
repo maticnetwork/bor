@@ -55,7 +55,7 @@ func borVerify(ctx context.Context, eth *Ethereum, handler *ethHandler, start ui
 		return hash, errMissingBlocks
 	}
 
-	head := currentBlock.Number().Uint64()
+	head := currentBlock.Number.Uint64()
 
 	if head < end {
 		log.Debug(fmt.Sprintf("Current head block behind incoming %s block", str), "head", head, "end block", end)
@@ -144,7 +144,7 @@ func rewindBack(eth *Ethereum, head uint64, rewindTo uint64) {
 		<-ch
 		rewind(eth, head, rewindTo)
 
-		eth.Miner().Start(eth.etherbase)
+		eth.Miner().Start()
 	} else {
 		rewind(eth, head, rewindTo)
 	}
