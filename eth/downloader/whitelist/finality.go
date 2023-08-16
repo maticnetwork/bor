@@ -52,7 +52,7 @@ func (f *finality[T]) IsValidChain(currentHeader *types.Header, chain []*types.H
 		return false, nil
 	}
 
-	res, err := isValidChain(currentHeader, chain, f.doExist, f.Number, f.Hash, f.interval)
+	res, err := isValidChain(currentHeader, chain, f.doExist, f.Number, f.Hash)
 
 	return res, err
 }

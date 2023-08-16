@@ -168,7 +168,7 @@ func splitChain(current uint64, chain []*types.Header) ([]*types.Header, []*type
 	return pastChain, futureChain
 }
 
-func isValidChain(currentHeader *types.Header, chain []*types.Header, doExist bool, number uint64, hash common.Hash, interval uint64) (bool, error) {
+func isValidChain(currentHeader *types.Header, chain []*types.Header, doExist bool, number uint64, hash common.Hash) (bool, error) {
 	// Check if we have milestone to validate incoming chain in memory
 	if !doExist {
 		// We don't have any entry, no additional validation will be possible

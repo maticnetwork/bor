@@ -89,6 +89,7 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 	}
 
 	isValid = true
+
 	return isValid, nil
 }
 
