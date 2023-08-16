@@ -2073,6 +2073,11 @@ func TestLowDiffLongChain(t *testing.T) {
 		Config:  params.TestChainConfig,
 		BaseFee: big.NewInt(params.InitialBaseFee),
 	}
+
+	//Using TempTriesInMemory variable instead of DefaultTempInTries because changing the
+	//value of DefaultTempInTries to 1024 is failing the test.
+	TempTriesInMemory := 128
+
 	// We must use a pretty long chain to ensure that the fork doesn't overtake us
 	// until after at least 128 blocks post tip
 	genDb, blocks, _ := GenerateChainWithGenesis(genesis, engine, 6*TempTriesInMemory, func(i int, b *BlockGen) {
