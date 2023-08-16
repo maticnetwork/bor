@@ -1996,7 +1996,7 @@ func (w *whitelistFake) GetCheckpoints(current, sidechainHeader *types.Header, s
 func (w *whitelistFake) LockMutex(endBlockNum uint64) bool {
 	return false
 }
-func (w *whitelistFake) UnlockMutex(doLock bool, milestoneId string, endBlockHash common.Hash) {
+func (w *whitelistFake) UnlockMutex(doLock bool, milestoneId string, endBlockNum uint64, endBlockHash common.Hash) {
 }
 func (w *whitelistFake) UnlockSprint(endBlockNum uint64) {
 }

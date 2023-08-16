@@ -53,6 +53,16 @@ func (b *EthAPIBackend) GetVoteOnHash(ctx context.Context, starBlockNr uint64, e
 		return false, errBorEngineNotAvailable
 	}
 
+	//Confirmation of 16 blocks on the endblock
+	tipConfirmationBlockNr := endBlockNr + uint64(16)
+
+	//Check if tipConfirmation block exit
+	_, err := b.BlockByNumber(ctx, rpc.BlockNumber(tipConfirmationBlockNr))
+	if err != nil {
+		return false, errTipConfirmationBlock
+	}
+
+	//Check if end block exist
 	localEndBlock, err := b.BlockByNumber(ctx, rpc.BlockNumber(endBlockNr))
 	if err != nil {
 		return false, errEndBlock
@@ -64,12 +74,12 @@ func (b *EthAPIBackend) GetVoteOnHash(ctx context.Context, starBlockNr uint64, e
 	isLocked := downloader.LockMutex(endBlockNr)
 
 	if !isLocked {
-		downloader.UnlockMutex(false, "", common.Hash{})
+		downloader.UnlockMutex(false, "", endBlockNr, common.Hash{})
 		return false, errors.New("Whitelisted number or locked sprint number is more than the received end block number")
 	}
 
 	if localEndBlockHash != hash {
-		downloader.UnlockMutex(false, "", common.Hash{})
+		downloader.UnlockMutex(false, "", endBlockNr, common.Hash{})
 		return false, fmt.Errorf("Hash mismatch: localChainHash %s, milestoneHash %s", localEndBlockHash, hash)
 	}
 
@@ -84,11 +94,11 @@ func (b *EthAPIBackend) GetVoteOnHash(ctx context.Context, starBlockNr uint64, e
 	err = bor.HeimdallClient.FetchMilestoneID(ctx, milestoneId)
 
 	if err != nil {
-		downloader.UnlockMutex(false, "", common.Hash{})
+		downloader.UnlockMutex(false, "", endBlockNr, common.Hash{})
 		return false, fmt.Errorf("Milestone ID doesn't exist in Heimdall")
 	}
 
-	downloader.UnlockMutex(true, milestoneId, localEndBlock.Hash())
+	downloader.UnlockMutex(true, milestoneId, endBlockNr, localEndBlock.Hash())
 
 	return true, nil
 }

@@ -256,7 +256,7 @@ func (w *chainValidatorFake) GetCheckpoints(current, sidechainHeader *types.Head
 func (w *chainValidatorFake) LockMutex(endBlockNum uint64) bool {
 	return false
 }
-func (w *chainValidatorFake) UnlockMutex(doLock bool, milestoneId string, endBlockHash common.Hash) {
+func (w *chainValidatorFake) UnlockMutex(doLock bool, milestoneId string, endBlockNum uint64, endBlockHash common.Hash) {
 }
 func (w *chainValidatorFake) UnlockSprint(endBlockNum uint64) {
 }
