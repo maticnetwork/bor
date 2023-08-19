@@ -19,7 +19,6 @@ package rpc
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -30,6 +29,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	jsoniter "github.com/json-iterator/go"
 )
 
 const (
@@ -181,7 +182,7 @@ func (c *Client) sendHTTP(ctx context.Context, op *requestOp, msg interface{}) e
 	defer respBody.Close()
 
 	var respmsg jsonrpcMessage
-	if err := json.NewDecoder(respBody).Decode(&respmsg); err != nil {
+	if err := jsoniter.ConfigFastest.NewDecoder(respBody).Decode(&respmsg); err != nil {
 		return err
 	}
 	op.resp <- &respmsg
@@ -200,7 +201,7 @@ func (c *Client) sendBatchHTTP(ctx context.Context, op *requestOp, msgs []*jsonr
 	defer respBody.Close()
 
 	var respmsgs []jsonrpcMessage
-	if err := json.NewDecoder(respBody).Decode(&respmsgs); err != nil {
+	if err := jsoniter.ConfigFastest.NewDecoder(respBody).Decode(&respmsgs); err != nil {
 		return err
 	}
 
@@ -216,7 +217,7 @@ func (c *Client) sendBatchHTTP(ctx context.Context, op *requestOp, msgs []*jsonr
 }
 
 func (hc *httpConn) doRequest(ctx context.Context, msg interface{}) (io.ReadCloser, error) {
-	body, err := json.Marshal(msg)
+	body, err := jsoniter.ConfigFastest.Marshal(msg)
 	if err != nil {
 		return nil, err
 	}
@@ -278,7 +279,7 @@ func newHTTPServerConn(r *http.Request, w http.ResponseWriter) ServerCodec {
 
 	encoder := func(v any, isErrorResponse bool) error {
 		if !isErrorResponse {
-			return json.NewEncoder(conn).Encode(v)
+			return jsoniter.ConfigFastest.NewEncoder(conn).Encode(v)
 		}
 
 		// It's an error response and requires special treatment.
@@ -287,7 +288,7 @@ func newHTTPServerConn(r *http.Request, w http.ResponseWriter) ServerCodec {
 		// server's write timeout occurs. So we need to flush the response. The
 		// Content-Length header also needs to be set to ensure the client knows
 		// when it has the full response.
-		encdata, err := json.Marshal(v)
+		encdata, err := jsoniter.ConfigFastest.Marshal(v)
 		if err != nil {
 			return err
 		}
@@ -310,7 +311,7 @@ func newHTTPServerConn(r *http.Request, w http.ResponseWriter) ServerCodec {
 		return err
 	}
 
-	dec := json.NewDecoder(conn)
+	dec := jsoniter.ConfigFastest.NewDecoder(conn)
 	dec.UseNumber()
 
 	return NewFuncCodec(conn, encoder, dec.Decode)

@@ -22,13 +22,14 @@ import (
 	crand "crypto/rand"
 	"encoding/binary"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"math/rand"
 	"reflect"
 	"strings"
 	"sync"
 	"time"
+
+	jsoniter "github.com/json-iterator/go"
 )
 
 var (
@@ -102,7 +103,7 @@ type Notifier struct {
 
 	mu           sync.Mutex
 	sub          *Subscription
-	buffer       []json.RawMessage
+	buffer       []jsoniter.RawMessage
 	callReturned bool
 	activated    bool
 }
@@ -129,7 +130,7 @@ func (n *Notifier) CreateSubscription() *Subscription {
 // Notify sends a notification to the client with the given data as payload.
 // If an error occurs the RPC connection is closed and the error is returned.
 func (n *Notifier) Notify(id ID, data interface{}) error {
-	enc, err := json.Marshal(data)
+	enc, err := jsoniter.ConfigFastest.Marshal(data)
 	if err != nil {
 		return err
 	}
@@ -186,8 +187,8 @@ func (n *Notifier) activate() error {
 	return nil
 }
 
-func (n *Notifier) send(sub *Subscription, data json.RawMessage) error {
-	params, _ := json.Marshal(&subscriptionResult{ID: string(sub.ID), Result: data})
+func (n *Notifier) send(sub *Subscription, data jsoniter.RawMessage) error {
+	params, _ := jsoniter.ConfigFastest.Marshal(&subscriptionResult{ID: string(sub.ID), Result: data})
 	ctx := context.Background()
 
 	msg := &jsonrpcMessage{
@@ -214,7 +215,7 @@ func (s *Subscription) Err() <-chan error {
 
 // MarshalJSON marshals a subscription as its ID.
 func (s *Subscription) MarshalJSON() ([]byte, error) {
-	return json.Marshal(s.ID)
+	return jsoniter.ConfigFastest.Marshal(s.ID)
 }
 
 // ClientSubscription is a subscription established through the Client's Subscribe or
@@ -227,7 +228,7 @@ type ClientSubscription struct {
 	subid     string
 
 	// The in channel receives notification values from client dispatcher.
-	in chan json.RawMessage
+	in chan jsoniter.RawMessage
 
 	// The error channel receives the error from the forwarding loop.
 	// It is closed by Unsubscribe.
@@ -251,7 +252,7 @@ func newClientSubscription(c *Client, namespace string, channel reflect.Value) *
 		namespace:   namespace,
 		etype:       channel.Type().Elem(),
 		channel:     channel,
-		in:          make(chan json.RawMessage),
+		in:          make(chan jsoniter.RawMessage),
 		quit:        make(chan error),
 		forwardDone: make(chan struct{}),
 		unsubDone:   make(chan struct{}),
@@ -287,7 +288,7 @@ func (sub *ClientSubscription) Unsubscribe() {
 }
 
 // deliver is called by the client's message dispatcher to send a notification value.
-func (sub *ClientSubscription) deliver(result json.RawMessage) (ok bool) {
+func (sub *ClientSubscription) deliver(result jsoniter.RawMessage) (ok bool) {
 	select {
 	case sub.in <- result:
 		return true
@@ -368,7 +369,7 @@ func (sub *ClientSubscription) forward() (unsubscribeServer bool, err error) {
 			return false, err
 
 		case 1: // <-sub.in
-			val, err := sub.unmarshal(recv.Interface().(json.RawMessage))
+			val, err := sub.unmarshal(recv.Interface().(jsoniter.RawMessage))
 			if err != nil {
 				return true, err
 			}
@@ -387,9 +388,9 @@ func (sub *ClientSubscription) forward() (unsubscribeServer bool, err error) {
 	}
 }
 
-func (sub *ClientSubscription) unmarshal(result json.RawMessage) (interface{}, error) {
+func (sub *ClientSubscription) unmarshal(result jsoniter.RawMessage) (interface{}, error) {
 	val := reflect.New(sub.etype)
-	err := json.Unmarshal(result, val.Interface())
+	err := jsoniter.ConfigFastest.Unmarshal(result, val.Interface())
 
 	return val.Elem().Interface(), err
 }

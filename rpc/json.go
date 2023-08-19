@@ -27,6 +27,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	jsoniter "github.com/json-iterator/go"
 )
 
 const (
@@ -39,22 +41,22 @@ const (
 	defaultWriteTimeout = 10 * time.Second // used if context has no deadline
 )
 
-var null = json.RawMessage("null")
+var null = jsoniter.RawMessage("null")
 
 type subscriptionResult struct {
-	ID     string          `json:"subscription"`
-	Result json.RawMessage `json:"result,omitempty"`
+	ID     string              `json:"subscription"`
+	Result jsoniter.RawMessage `json:"result,omitempty"`
 }
 
 // A value of this type can a JSON-RPC request, notification, successful response or
 // error response. Which one it is depends on the fields.
 type jsonrpcMessage struct {
-	Version string          `json:"jsonrpc,omitempty"`
-	ID      json.RawMessage `json:"id,omitempty"`
-	Method  string          `json:"method,omitempty"`
-	Params  json.RawMessage `json:"params,omitempty"`
-	Error   *jsonError      `json:"error,omitempty"`
-	Result  json.RawMessage `json:"result,omitempty"`
+	Version string              `json:"jsonrpc,omitempty"`
+	ID      jsoniter.RawMessage `json:"id,omitempty"`
+	Method  string              `json:"method,omitempty"`
+	Params  jsoniter.RawMessage `json:"params,omitempty"`
+	Error   *jsonError          `json:"error,omitempty"`
+	Result  jsoniter.RawMessage `json:"result,omitempty"`
 }
 
 func (msg *jsonrpcMessage) isNotification() bool {
@@ -91,7 +93,7 @@ func (msg *jsonrpcMessage) namespace() string {
 }
 
 func (msg *jsonrpcMessage) String() string {
-	b, _ := json.Marshal(msg)
+	b, _ := jsoniter.ConfigFastest.Marshal(msg)
 	return string(b)
 }
 
@@ -103,7 +105,7 @@ func (msg *jsonrpcMessage) errorResponse(err error) *jsonrpcMessage {
 }
 
 func (msg *jsonrpcMessage) response(result interface{}) *jsonrpcMessage {
-	enc, err := json.Marshal(result)
+	enc, err := jsoniter.ConfigFastest.Marshal(result)
 	if err != nil {
 		return msg.errorResponse(&internalServerError{errcodeMarshalError, err.Error()})
 	}
@@ -206,8 +208,8 @@ func NewFuncCodec(conn deadlineCloser, encode encodeFunc, decode decodeFunc) Ser
 // NewCodec creates a codec on the given connection. If conn implements ConnRemoteAddr, log
 // messages will use it to include the remote address of the connection.
 func NewCodec(conn Conn) ServerCodec {
-	enc := json.NewEncoder(conn)
-	dec := json.NewDecoder(conn)
+	enc := jsoniter.ConfigFastest.NewEncoder(conn)
+	dec := jsoniter.ConfigFastest.NewDecoder(conn)
 	dec.UseNumber()
 
 	encode := func(v interface{}, isErrorResponse bool) error {
@@ -229,7 +231,7 @@ func (c *jsonCodec) remoteAddr() string {
 func (c *jsonCodec) readBatch() (messages []*jsonrpcMessage, batch bool, err error) {
 	// Decode the next JSON object in the input stream.
 	// This verifies basic syntax, etc.
-	var rawmsg json.RawMessage
+	var rawmsg jsoniter.RawMessage
 	if err := c.decode(&rawmsg); err != nil {
 		return nil, false, err
 	}
@@ -276,14 +278,15 @@ func (c *jsonCodec) closed() <-chan interface{} {
 // checks in this function because the raw message has already been syntax-checked when it
 // is called. Any non-JSON-RPC messages in the input return the zero value of
 // jsonrpcMessage.
-func parseMessage(raw json.RawMessage) ([]*jsonrpcMessage, bool) {
+func parseMessage(raw jsoniter.RawMessage) ([]*jsonrpcMessage, bool) {
 	if !isBatch(raw) {
 		msgs := []*jsonrpcMessage{{}}
-		json.Unmarshal(raw, &msgs[0])
+		jsoniter.ConfigFastest.Unmarshal(raw, &msgs[0])
 
 		return msgs, false
 	}
 
+	// TODO(raneet10): Anything equivalent in jsoniter ?
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.Token() // skip '['
 
@@ -297,7 +300,7 @@ func parseMessage(raw json.RawMessage) ([]*jsonrpcMessage, bool) {
 }
 
 // isBatch returns true when the first non-whitespace characters is '['
-func isBatch(raw json.RawMessage) bool {
+func isBatch(raw jsoniter.RawMessage) bool {
 	for _, c := range raw {
 		// skip insignificant whitespace (http://www.ietf.org/rfc/rfc4627.txt)
 		if c == 0x20 || c == 0x09 || c == 0x0a || c == 0x0d {
@@ -313,11 +316,12 @@ func isBatch(raw json.RawMessage) bool {
 // parsePositionalArguments tries to parse the given args to an array of values with the
 // given types. It returns the parsed values or an error when the args could not be
 // parsed. Missing optional arguments are returned as reflect.Zero values.
-func parsePositionalArguments(rawArgs json.RawMessage, types []reflect.Type) ([]reflect.Value, error) {
+func parsePositionalArguments(rawArgs jsoniter.RawMessage, types []reflect.Type) ([]reflect.Value, error) {
 	dec := json.NewDecoder(bytes.NewReader(rawArgs))
 
 	var args []reflect.Value
 
+	// TODO(raneet10): Anything equivalent in jsoniter ?
 	tok, err := dec.Token()
 
 	switch {
@@ -326,6 +330,7 @@ func parsePositionalArguments(rawArgs json.RawMessage, types []reflect.Type) ([]
 		// not in the spec because our own client used to send it.
 	case err != nil:
 		return nil, err
+		// TODO(raneet10): is there anything equivalent in jsoniter
 	case tok == json.Delim('['):
 		// Read argument array.
 		if args, err = parseArgumentArray(dec, types); err != nil {
@@ -366,13 +371,15 @@ func parseArgumentArray(dec *json.Decoder, types []reflect.Type) ([]reflect.Valu
 		args = append(args, argval.Elem())
 	}
 	// Read end of args array.
+	// TODO(raneet10): Anything equivalent in jsoniter ?
 	_, err := dec.Token()
 
 	return args, err
 }
 
 // parseSubscriptionName extracts the subscription name from an encoded argument array.
-func parseSubscriptionName(rawArgs json.RawMessage) (string, error) {
+func parseSubscriptionName(rawArgs jsoniter.RawMessage) (string, error) {
+	// TODO(raneet10): Anything equivalent in jsoniter ?
 	dec := json.NewDecoder(bytes.NewReader(rawArgs))
 	if tok, _ := dec.Token(); tok != json.Delim('[') {
 		return "", errors.New("non-array args")

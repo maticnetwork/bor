@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -9,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	jsoniter "github.com/json-iterator/go"
 	"github.com/pelletier/go-toml"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -314,7 +314,7 @@ func writeTempStaticJSON(path string) {
 	}
 
 	var conf interface{}
-	if err := json.Unmarshal(data, &conf); err != nil {
+	if err := jsoniter.ConfigFastest.Unmarshal(data, &conf); err != nil {
 		log.Fatal(err)
 	}
 

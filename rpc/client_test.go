@@ -18,7 +18,6 @@ package rpc
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -34,6 +33,7 @@ import (
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
+	jsoniter "github.com/json-iterator/go"
 
 	"github.com/ethereum/go-ethereum/log"
 )
@@ -84,7 +84,8 @@ func TestClientNullResponse(t *testing.T) {
 	client := DialInProc(server)
 	defer client.Close()
 
-	var result json.RawMessage
+	var result jsoniter.RawMessage
+	// var result json.RawMessage
 	if err := client.Call(&result, "test_null"); err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +94,7 @@ func TestClientNullResponse(t *testing.T) {
 		t.Fatal("Expected non-nil result")
 	}
 
-	if !reflect.DeepEqual(result, json.RawMessage("null")) {
+	if !reflect.DeepEqual(result, jsoniter.RawMessage("null")) {
 		t.Errorf("Expected null, got %s", result)
 	}
 }
@@ -187,9 +188,9 @@ func TestClientBatchRequest(t *testing.T) {
 func TestClientBatchRequest_len(t *testing.T) {
 	t.Parallel()
 
-	b, err := json.Marshal([]jsonrpcMessage{
-		{Version: "2.0", ID: json.RawMessage("1"), Method: "foo", Result: json.RawMessage(`"0x1"`)},
-		{Version: "2.0", ID: json.RawMessage("2"), Method: "bar", Result: json.RawMessage(`"0x2"`)},
+	b, err := jsoniter.ConfigFastest.Marshal([]jsonrpcMessage{
+		{Version: "2.0", ID: jsoniter.RawMessage("1"), Method: "foo", Result: jsoniter.RawMessage(`"0x1"`)},
+		{Version: "2.0", ID: jsoniter.RawMessage("2"), Method: "bar", Result: jsoniter.RawMessage(`"0x2"`)},
 	})
 	if err != nil {
 		t.Fatal("failed to encode jsonrpc message:", err)
@@ -514,7 +515,7 @@ func (r *unsubscribeRecorder) readBatch() ([]*jsonrpcMessage, bool, error) {
 	for _, msg := range msgs {
 		if msg.isUnsubscribe() {
 			var params []string
-			if err := json.Unmarshal(msg.Params, &params); err != nil {
+			if err := jsoniter.ConfigFastest.Unmarshal(msg.Params, &params); err != nil {
 				panic("unsubscribe decode error: " + err.Error())
 			}
 

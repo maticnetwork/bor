@@ -17,12 +17,12 @@
 package rpc
 
 import (
-	"encoding/json"
 	"reflect"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
+	jsoniter "github.com/json-iterator/go"
 )
 
 func TestBlockNumberJSONUnmarshal(t *testing.T) {
@@ -53,7 +53,7 @@ func TestBlockNumberJSONUnmarshal(t *testing.T) {
 	for i, test := range tests {
 		var num BlockNumber
 
-		err := json.Unmarshal([]byte(test.input), &num)
+		err := jsoniter.ConfigFastest.Unmarshal([]byte(test.input), &num)
 		if test.mustFail && err == nil {
 			t.Errorf("Test %d should fail", i)
 			continue
@@ -107,7 +107,7 @@ func TestBlockNumberOrHash_UnmarshalJSON(t *testing.T) {
 	for i, test := range tests {
 		var bnh BlockNumberOrHash
 
-		err := json.Unmarshal([]byte(test.input), &bnh)
+		err := jsoniter.ConfigFastest.Unmarshal([]byte(test.input), &bnh)
 		if test.mustFail && err == nil {
 			t.Errorf("Test %d should fail", i)
 			continue
@@ -146,14 +146,14 @@ func TestBlockNumberOrHash_WithNumber_MarshalAndUnmarshal(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			bnh := BlockNumberOrHashWithNumber(BlockNumber(test.number))
 
-			marshalled, err := json.Marshal(bnh)
+			marshalled, err := jsoniter.ConfigFastest.Marshal(bnh)
 			if err != nil {
 				t.Fatal("cannot marshal:", err)
 			}
 
 			var unmarshalled BlockNumberOrHash
 
-			err = json.Unmarshal(marshalled, &unmarshalled)
+			err = jsoniter.ConfigFastest.Unmarshal(marshalled, &unmarshalled)
 			if err != nil {
 				t.Fatal("cannot unmarshal:", err)
 			}

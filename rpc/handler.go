@@ -18,7 +18,6 @@ package rpc
 
 import (
 	"context"
-	"encoding/json"
 	"reflect"
 	"strconv"
 	"strings"
@@ -26,6 +25,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/log"
+	jsoniter "github.com/json-iterator/go"
 )
 
 // nolint: gofmt
@@ -409,7 +409,7 @@ func (h *handler) handleImmediate(msg *jsonrpcMessage) bool {
 // handleSubscriptionResult processes subscription notifications.
 func (h *handler) handleSubscriptionResult(msg *jsonrpcMessage) {
 	var result subscriptionResult
-	if err := json.Unmarshal(msg.Params, &result); err != nil {
+	if err := jsoniter.ConfigFastest.Unmarshal(msg.Params, &result); err != nil {
 		h.log.Debug("Dropping invalid subscription message")
 		return
 	}
@@ -443,7 +443,7 @@ func (h *handler) handleResponse(msg *jsonrpcMessage) {
 		return
 	}
 
-	if op.err = json.Unmarshal(msg.Result, &op.sub.subid); op.err == nil {
+	if op.err = jsoniter.ConfigFastest.Unmarshal(msg.Result, &op.sub.subid); op.err == nil {
 		h.executionPool.Submit(context.Background(), func() error {
 			op.sub.run()
 			h.executionPool.processed.Add(1)
@@ -597,7 +597,7 @@ func (h *handler) unsubscribe(ctx context.Context, id ID) (bool, error) {
 	return true, nil
 }
 
-type idForLog struct{ json.RawMessage }
+type idForLog struct{ jsoniter.RawMessage }
 
 func (id idForLog) String() string {
 	if s, err := strconv.Unquote(string(id.RawMessage)); err == nil {

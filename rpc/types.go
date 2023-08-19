@@ -18,7 +18,6 @@ package rpc
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math"
 	"strconv"
@@ -26,6 +25,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	jsoniter "github.com/json-iterator/go"
 )
 
 // API describes the set of methods offered over the RPC interface
@@ -149,7 +149,7 @@ func (bnh *BlockNumberOrHash) UnmarshalJSON(data []byte) error {
 	type erased BlockNumberOrHash
 
 	e := erased{}
-	err := json.Unmarshal(data, &e)
+	err := jsoniter.ConfigFastest.Unmarshal(data, &e)
 
 	if err == nil {
 		if e.BlockNumber != nil && e.BlockHash != nil {
@@ -165,7 +165,7 @@ func (bnh *BlockNumberOrHash) UnmarshalJSON(data []byte) error {
 
 	var input string
 
-	err = json.Unmarshal(data, &input)
+	err = jsoniter.ConfigFastest.Unmarshal(data, &input)
 	if err != nil {
 		return err
 	}

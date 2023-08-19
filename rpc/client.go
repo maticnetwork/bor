@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/log"
+	jsoniter "github.com/json-iterator/go"
 )
 
 var (
@@ -129,7 +130,7 @@ type readOp struct {
 }
 
 type requestOp struct {
-	ids  []json.RawMessage
+	ids  []jsoniter.RawMessage
 	err  error
 	resp chan *jsonrpcMessage // receives up to len(ids) responses
 	sub  *ClientSubscription  // only set for EthSubscribe requests
@@ -269,7 +270,7 @@ func (c *Client) RegisterName(name string, receiver interface{}) error {
 	return c.services.registerName(name, receiver)
 }
 
-func (c *Client) nextID() json.RawMessage {
+func (c *Client) nextID() jsoniter.RawMessage {
 	id := atomic.AddUint32(&c.idCounter, 1)
 	return strconv.AppendUint(nil, uint64(id), 10)
 }
@@ -338,7 +339,7 @@ func (c *Client) CallContext(ctx context.Context, result interface{}, method str
 		return err
 	}
 
-	op := &requestOp{ids: []json.RawMessage{msg.ID}, resp: make(chan *jsonrpcMessage, 1)}
+	op := &requestOp{ids: []jsoniter.RawMessage{msg.ID}, resp: make(chan *jsonrpcMessage, 1)}
 
 	if c.isHTTP {
 		err = c.sendHTTP(ctx, op, msg)
@@ -363,7 +364,7 @@ func (c *Client) CallContext(ctx context.Context, result interface{}, method str
 			return nil
 		}
 
-		return json.Unmarshal(resp.Result, result)
+		return jsoniter.ConfigFastest.Unmarshal(resp.Result, result)
 	}
 }
 
@@ -395,7 +396,7 @@ func (c *Client) BatchCallContext(ctx context.Context, b []BatchElem) error {
 	)
 
 	op := &requestOp{
-		ids:  make([]json.RawMessage, len(b)),
+		ids:  make([]jsoniter.RawMessage, len(b)),
 		resp: make(chan *jsonrpcMessage, len(b)),
 	}
 
@@ -439,7 +440,7 @@ func (c *Client) BatchCallContext(ctx context.Context, b []BatchElem) error {
 			continue
 		}
 
-		elem.Error = json.Unmarshal(resp.Result, elem.Result)
+		elem.Error = jsoniter.ConfigFastest.Unmarshal(resp.Result, elem.Result)
 	}
 
 	return err
@@ -507,7 +508,7 @@ func (c *Client) Subscribe(ctx context.Context, namespace string, channel interf
 	}
 
 	op := &requestOp{
-		ids:  []json.RawMessage{msg.ID},
+		ids:  []jsoniter.RawMessage{msg.ID},
 		resp: make(chan *jsonrpcMessage),
 		sub:  newClientSubscription(c, namespace, chanVal),
 	}
@@ -530,7 +531,7 @@ func (c *Client) newMessage(method string, paramsIn ...interface{}) (*jsonrpcMes
 
 	if paramsIn != nil { // prevent sending "params":null
 		var err error
-		if msg.Params, err = json.Marshal(paramsIn); err != nil {
+		if msg.Params, err = jsoniter.ConfigFastest.Marshal(paramsIn); err != nil {
 			return nil, err
 		}
 	}
@@ -705,6 +706,7 @@ func (c *Client) drainRead() {
 func (c *Client) read(codec ServerCodec) {
 	for {
 		msgs, batch, err := codec.readBatch()
+		// TODO(raneet10): Does jsoniter have anything equivalent to SyntaxError ?
 		if _, ok := err.(*json.SyntaxError); ok {
 			msg := errorMessage(&parseError{err.Error()})
 			_ = codec.writeJSON(context.Background(), msg, true)
