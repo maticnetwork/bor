@@ -704,20 +704,28 @@ func getFinalizedBlockNumber(eth *Ethereum) (uint64, error) {
 	currentBlockNum := eth.BlockChain().CurrentBlock()
 
 	doExist, number, hash := eth.Downloader().GetWhitelistedMilestone()
+	fmt.Println("### Milestone", doExist, number, hash, currentBlockNum.Number.Uint64())
 	if doExist && number <= currentBlockNum.Number.Uint64() {
 		block := eth.BlockChain().GetBlockByNumber(number)
 
 		if block.Hash() == hash {
+			fmt.Println("### Returning finalized 1, ", number)
 			return number, nil
+		} else {
+			fmt.Println("### Hash mismatch 1, ", number)
 		}
 	}
 
 	doExist, number, hash = eth.Downloader().GetWhitelistedCheckpoint()
+	fmt.Println("### Checkpoint", doExist, number, hash, currentBlockNum.Number.Uint64())
 	if doExist && number <= currentBlockNum.Number.Uint64() {
 		block := eth.BlockChain().GetBlockByNumber(number)
 
 		if block.Hash() == hash {
+			fmt.Println("### Returning finalized 2, ", number)
 			return number, nil
+		} else {
+			fmt.Println("### Hash mismatch 2, ", number)
 		}
 	}
 

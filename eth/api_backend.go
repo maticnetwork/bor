@@ -19,6 +19,7 @@ package eth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math/big"
 	"time"
 
@@ -145,7 +146,9 @@ func (b *EthAPIBackend) BlockByNumber(ctx context.Context, number rpc.BlockNumbe
 	}
 
 	if number == rpc.FinalizedBlockNumber {
+		fmt.Println("#### FinalizedBlockNumber ####")
 		finalBlocknumber, err := getFinalizedBlockNumber(b.eth)
+		fmt.Println("#### Result ####", finalBlocknumber, err)
 		if err != nil {
 			return nil, errors.New("finalized block not found")
 		}
