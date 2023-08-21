@@ -28,6 +28,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/ethdb/leveldb"
 	"github.com/ethereum/go-ethereum/node"
 )
 
@@ -68,7 +69,7 @@ func benchmarkBloomBits(b *testing.B, sectionSize uint64) {
 
 	b.Log("Running bloombits benchmark   section size:", sectionSize)
 
-	db, err := rawdb.NewLevelDBDatabase(benchDataDir, 128, 1024, "", false)
+	db, err := rawdb.NewLevelDBDatabase(benchDataDir, 128, 1024, "", false, leveldb.LevelDBConfig{})
 	if err != nil {
 		b.Fatalf("error opening database at %v: %v", benchDataDir, err)
 	}
@@ -145,7 +146,7 @@ func benchmarkBloomBits(b *testing.B, sectionSize uint64) {
 	for i := 0; i < benchFilterCnt; i++ {
 		if i%20 == 0 {
 			db.Close()
-			db, _ = rawdb.NewLevelDBDatabase(benchDataDir, 128, 1024, "", false)
+			db, _ = rawdb.NewLevelDBDatabase(benchDataDir, 128, 1024, "", false, leveldb.LevelDBConfig{})
 			backend = &testBackend{db: db, sections: cnt}
 			sys = NewFilterSystem(backend, Config{})
 		}
@@ -187,7 +188,7 @@ func BenchmarkNoBloomBits(b *testing.B) {
 
 	b.Log("Running benchmark without bloombits")
 
-	db, err := rawdb.NewLevelDBDatabase(benchDataDir, 128, 1024, "", false)
+	db, err := rawdb.NewLevelDBDatabase(benchDataDir, 128, 1024, "", false, leveldb.LevelDBConfig{})
 	if err != nil {
 		b.Fatalf("error opening database at %v: %v", benchDataDir, err)
 	}

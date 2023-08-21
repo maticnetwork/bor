@@ -321,8 +321,8 @@ func NewMemoryDatabaseWithCap(size int) ethdb.Database {
 
 // NewLevelDBDatabase creates a persistent key-value database without a freezer
 // moving immutable chain segments into cold storage.
-func NewLevelDBDatabase(file string, cache int, handles int, namespace string, readonly bool) (ethdb.Database, error) {
-	db, err := leveldb.New(file, cache, handles, namespace, readonly)
+func NewLevelDBDatabase(file string, cache int, handles int, namespace string, readonly bool, config leveldb.LevelDBConfig) (ethdb.Database, error) {
+	db, err := leveldb.New(file, cache, handles, namespace, readonly, config)
 	if err != nil {
 		return nil, err
 	}
@@ -366,6 +366,7 @@ type OpenOptions struct {
 	Cache             int    // the capacity(in megabytes) of the data caching
 	Handles           int    // number of files to be open simultaneously
 	ReadOnly          bool
+	DbOptions         map[string]interface{} // specific options for LevelDB or Pebble
 }
 
 // openKeyValueDatabase opens a disk-based key-value database, e.g. leveldb or pebble.
@@ -394,8 +395,35 @@ func openKeyValueDatabase(o OpenOptions) (ethdb.Database, error) {
 	}
 
 	log.Info("Using leveldb as the backing database")
+	leveldbConfig := resolveLevelDbConfig(o.DbOptions)
 	// Use leveldb, either as default (no explicit choice), or pre-existing, or chosen explicitly
-	return NewLevelDBDatabase(o.Directory, o.Cache, o.Handles, o.Namespace, o.ReadOnly)
+	return NewLevelDBDatabase(o.Directory, o.Cache, o.Handles, o.Namespace, o.ReadOnly, leveldbConfig)
+}
+
+func resolveLevelDbConfig(dbOptions map[string]interface{}) leveldb.LevelDBConfig {
+	levelDbConfig := leveldb.LevelDBConfig{}
+
+	levelDbCompactionTableSize, ok := dbOptions["levelDbCompactionTableSize"].(uint64)
+	if ok {
+		levelDbConfig.CompactionTableSize = levelDbCompactionTableSize
+	}
+
+	levelDbCompactionTableSizeMultiplier, ok := dbOptions["levelDbCompactionTableSizeMultiplier"].(float64)
+	if ok {
+		levelDbConfig.CompactionTableSizeMultiplier = levelDbCompactionTableSizeMultiplier
+	}
+
+	levelDbCompactionTotalSize, ok := dbOptions["levelDbCompactionTotalSize"].(uint64)
+	if ok {
+		levelDbConfig.CompactionTotalSize = levelDbCompactionTotalSize
+	}
+
+	levelDbCompactionTotalSizeMultiplier, ok := dbOptions["levelDbCompactionTotalSizeMultiplier"].(float64)
+	if ok {
+		levelDbConfig.CompactionTotalSizeMultiplier = levelDbCompactionTotalSizeMultiplier
+	}
+
+	return levelDbConfig
 }
 
 // Open opens both a disk-based key-value database such as leveldb or pebble, but also

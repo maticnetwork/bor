@@ -86,12 +86,14 @@ type LightEthereum struct {
 
 // New creates an instance of the light client.
 func New(stack *node.Node, config *ethconfig.Config) (*LightEthereum, error) {
-	chainDb, err := stack.OpenDatabase("lightchaindata", config.DatabaseCache, config.DatabaseHandles, "eth/db/chaindata/", false)
+	dbOptions := resolveDbOptions(config)
+
+	chainDb, err := stack.OpenDatabase("lightchaindata", config.DatabaseCache, config.DatabaseHandles, "eth/db/chaindata/", false, dbOptions)
 	if err != nil {
 		return nil, err
 	}
 
-	lesDb, err := stack.OpenDatabase("les.client", 0, 0, "eth/db/lesclient/", false)
+	lesDb, err := stack.OpenDatabase("les.client", 0, 0, "eth/db/lesclient/", false, dbOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -222,6 +224,18 @@ func New(stack *node.Node, config *ethconfig.Config) (*LightEthereum, error) {
 	leth.shutdownTracker.MarkStartup()
 
 	return leth, nil
+}
+
+func resolveDbOptions(config *ethconfig.Config) map[string]interface{} {
+	dbOptions := map[string]interface{}{}
+
+	// Set LevelDB options
+	dbOptions["levelDbCompactionTableSize"] = config.LevelDbCompactionTableSize
+	dbOptions["levelDbCompactionTableSizeMultiplier"] = config.LevelDbCompactionTableSizeMultiplier
+	dbOptions["levelDbCompactionTotalSize"] = config.LevelDbCompactionTotalSize
+	dbOptions["levelDbCompactionTotalSizeMultiplier"] = config.LevelDbCompactionTotalSizeMultiplier
+
+	return dbOptions
 }
 
 // VfluxRequest sends a batch of requests to the given node through discv5 UDP TalkRequest and returns the responses

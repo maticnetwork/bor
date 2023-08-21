@@ -28,6 +28,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/ethdb/leveldb"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/rpc"
 
@@ -157,7 +158,7 @@ func TestNodeCloseClosesDB(t *testing.T) {
 	stack, _ := New(testNodeConfig())
 	defer stack.Close()
 
-	db, err := stack.OpenDatabase("mydb", 0, 0, "", false)
+	db, err := stack.OpenDatabase("mydb", 0, leveldb.LevelDBConfig{}, 0, "", false)
 	if err != nil {
 		t.Fatal("can't open DB:", err)
 	}
@@ -184,7 +185,7 @@ func TestNodeOpenDatabaseFromLifecycleStart(t *testing.T) {
 
 	stack.RegisterLifecycle(&InstrumentedService{
 		startHook: func() {
-			db, err = stack.OpenDatabase("mydb", 0, 0, "", false)
+			db, err = stack.OpenDatabase("mydb", 0, leveldb.LevelDBConfig{}, 0, "", false)
 			if err != nil {
 				t.Fatal("can't open DB:", err)
 			}
@@ -205,7 +206,7 @@ func TestNodeOpenDatabaseFromLifecycleStop(t *testing.T) {
 
 	stack.RegisterLifecycle(&InstrumentedService{
 		stopHook: func() {
-			db, err := stack.OpenDatabase("mydb", 0, 0, "", false)
+			db, err := stack.OpenDatabase("mydb", 0, leveldb.LevelDBConfig{}, 0, "", false)
 			if err != nil {
 				t.Fatal("can't open DB:", err)
 			}

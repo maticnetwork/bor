@@ -461,6 +461,31 @@ var (
 		Value:    50,
 		Category: flags.PerfCategory,
 	}
+
+	LevelDbCompactionTableSizeFlag = &cli.Uint64Flag{
+		Name:     "leveldb.compaction.table.size",
+		Usage:    "LevelDB SSTable/file size in mebibytes",
+		Category: flags.PerfCategory,
+	}
+
+	LevelDbCompactionTableSizeMultiplierFlag = &cli.Float64Flag{
+		Name:     "leveldb.compaction.table.size.multiplier",
+		Usage:    "Multiplier on LevelDB SSTable/file size. Size for a level is determined by: `leveldb.compaction.table.size * (leveldb.compaction.table.size.multiplier ^ Level)`",
+		Category: flags.PerfCategory,
+	}
+
+	LevelDbCompactionTotalSizeFlag = &cli.Uint64Flag{
+		Name:     "leveldb.compaction.total.size",
+		Usage:    "Total size in mebibytes of SSTables in a given LevelDB level. Size for a level is determined by: `leveldb.compaction.total.size * (leveldb.compaction.total.size.multiplier ^ Level)`",
+		Category: flags.PerfCategory,
+	}
+
+	LevelDbCompactionTotalSizeMultiplierFlag = &cli.Float64Flag{
+		Name:     "leveldb.compaction.total.size.multiplier",
+		Usage:    "Multiplier on level size on LevelDB levels. Size for a level is determined by: `leveldb.compaction.total.size * (leveldb.compaction.total.size.multiplier ^ Level)`",
+		Category: flags.PerfCategory,
+	}
+
 	CacheTrieFlag = &cli.IntFlag{
 		Name:     "cache.trie",
 		Usage:    "Percentage of cache memory allowance to use for trie caching (default = 15% full mode, 30% archive mode)",
@@ -2287,6 +2312,8 @@ func MakeChainDatabase(ctx *cli.Context, stack *node.Node, readonly bool) ethdb.
 
 		err     error
 		chainDb ethdb.Database
+
+		dbOptions = resolveDbOptions(ctx)
 	)
 
 	switch {
@@ -2300,9 +2327,9 @@ func MakeChainDatabase(ctx *cli.Context, stack *node.Node, readonly bool) ethdb.
 
 		chainDb = remotedb.New(client)
 	case ctx.String(SyncModeFlag.Name) == "light":
-		chainDb, err = stack.OpenDatabase("lightchaindata", cache, handles, "", readonly)
+		chainDb, err = stack.OpenDatabase("lightchaindata", cache, handles, "", readonly, dbOptions)
 	default:
-		chainDb, err = stack.OpenDatabaseWithFreezer("chaindata", cache, handles, ctx.String(AncientFlag.Name), "", readonly)
+		chainDb, err = stack.OpenDatabaseWithFreezer("chaindata", cache, handles, ctx.String(AncientFlag.Name), "", readonly, dbOptions)
 	}
 
 	if err != nil {
@@ -2310,6 +2337,18 @@ func MakeChainDatabase(ctx *cli.Context, stack *node.Node, readonly bool) ethdb.
 	}
 
 	return chainDb
+}
+
+func resolveDbOptions(ctx *cli.Context) map[string]interface{} {
+	dbOptions := map[string]interface{}{}
+
+	// Set LevelDB options
+	dbOptions["levelDbCompactionTableSize"] = ctx.Uint64(LevelDbCompactionTableSizeFlag.Name)
+	dbOptions["levelDbCompactionTableSizeMultiplier"] = ctx.Float64(LevelDbCompactionTableSizeMultiplierFlag.Name)
+	dbOptions["levelDbCompactionTotalSize"] = ctx.Uint64(LevelDbCompactionTotalSizeFlag.Name)
+	dbOptions["levelDbCompactionTotalSizeMultiplier"] = ctx.Float64(LevelDbCompactionTotalSizeMultiplierFlag.Name)
+
+	return dbOptions
 }
 
 func IsNetworkPreset(ctx *cli.Context) bool {

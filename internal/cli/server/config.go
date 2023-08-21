@@ -121,6 +121,8 @@ type Config struct {
 	// Cache has the cache related settings
 	Cache *CacheConfig `hcl:"cache,block" toml:"cache,block"`
 
+	LevelDb *LevelDbConfig `hcl:"leveldb,block" toml:"leveldb,block"`
+
 	// Account has the validator account related settings
 	Accounts *AccountsConfig `hcl:"accounts,block" toml:"accounts,block"`
 
@@ -551,6 +553,13 @@ type CacheConfig struct {
 	FDLimit int `hcl:"fdlimit,optional" toml:"fdlimit,optional"`
 }
 
+type LevelDbConfig struct {
+	LevelDbCompactionTableSize           uint64  `hcl:"compactiontablesize,optional" toml:"compactiontablesize,optional"`
+	LevelDbCompactionTableSizeMultiplier float64 `hcl:"compactiontablesizemultiplier,optional" toml:"compactiontablesizemultiplier,optional"`
+	LevelDbCompactionTotalSize           uint64  `hcl:"compactiontotalsize,optional" toml:"compactiontotalsize,optional"`
+	LevelDbCompactionTotalSizeMultiplier float64 `hcl:"compactiontotalsizemultiplier,optional" toml:"compactiontotalsizemultiplier,optional"`
+}
+
 type AccountsConfig struct {
 	// Unlock is the list of addresses to unlock in the node
 	Unlock []string `hcl:"unlock,optional" toml:"unlock,optional"`
@@ -741,6 +750,14 @@ func DefaultConfig() *Config {
 			TriesInMemory: 128,
 			TrieTimeout:   60 * time.Minute,
 			FDLimit:       0,
+		},
+		LevelDb: &LevelDbConfig{
+			// These are LevelDB defaults, specifying here for clarity in code and in logging.
+			// See: https://github.com/syndtr/goleveldb/blob/126854af5e6d8295ef8e8bee3040dd8380ae72e8/leveldb/opt/options.go
+			LevelDbCompactionTableSize:           2, // MiB
+			LevelDbCompactionTableSizeMultiplier: 1,
+			LevelDbCompactionTotalSize:           10, // MiB
+			LevelDbCompactionTotalSizeMultiplier: 10,
 		},
 		Accounts: &AccountsConfig{
 			Unlock:              []string{},
@@ -1099,6 +1116,14 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 		n.TxLookupLimit = c.Cache.TxLookupLimit
 		n.TrieTimeout = c.Cache.TrieTimeout
 		n.TriesInMemory = c.Cache.TriesInMemory
+	}
+
+	// LevelDB
+	{
+		n.LevelDbCompactionTableSize = c.LevelDb.LevelDbCompactionTableSize
+		n.LevelDbCompactionTableSizeMultiplier = c.LevelDb.LevelDbCompactionTableSizeMultiplier
+		n.LevelDbCompactionTotalSize = c.LevelDb.LevelDbCompactionTotalSize
+		n.LevelDbCompactionTotalSizeMultiplier = c.LevelDb.LevelDbCompactionTotalSizeMultiplier
 	}
 
 	n.RPCGasCap = c.JsonRPC.GasCap

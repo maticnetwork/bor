@@ -771,7 +771,7 @@ func (n *Node) EventMux() *event.TypeMux {
 // OpenDatabase opens an existing database with the given name (or creates one if no
 // previous can be found) from within the node's instance directory. If the node is
 // ephemeral, a memory database is returned.
-func (n *Node) OpenDatabase(name string, cache, handles int, namespace string, readonly bool) (ethdb.Database, error) {
+func (n *Node) OpenDatabase(name string, cache, handles int, namespace string, readonly bool, dbOptions map[string]interface{}) (ethdb.Database, error) {
 	n.lock.Lock()
 	defer n.lock.Unlock()
 
@@ -793,6 +793,7 @@ func (n *Node) OpenDatabase(name string, cache, handles int, namespace string, r
 			Cache:     cache,
 			Handles:   handles,
 			ReadOnly:  readonly,
+			DbOptions: dbOptions,
 		})
 	}
 
@@ -808,7 +809,7 @@ func (n *Node) OpenDatabase(name string, cache, handles int, namespace string, r
 // also attaching a chain freezer to it that moves ancient chain data from the
 // database to immutable append-only files. If the node is an ephemeral one, a
 // memory database is returned.
-func (n *Node) OpenDatabaseWithFreezer(name string, cache, handles int, ancient string, namespace string, readonly bool) (ethdb.Database, error) {
+func (n *Node) OpenDatabaseWithFreezer(name string, cache int, handles int, ancient string, namespace string, readonly bool, dbOptions map[string]interface{}) (ethdb.Database, error) {
 	n.lock.Lock()
 	defer n.lock.Unlock()
 
@@ -831,6 +832,7 @@ func (n *Node) OpenDatabaseWithFreezer(name string, cache, handles int, ancient 
 			Cache:             cache,
 			Handles:           handles,
 			ReadOnly:          readonly,
+			DbOptions:         dbOptions,
 		})
 	}
 

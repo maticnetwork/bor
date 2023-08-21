@@ -29,6 +29,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/ethdb/leveldb"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -193,7 +194,7 @@ func benchInsertChain(b *testing.B, disk bool, gen func(int, *BlockGen)) {
 	} else {
 		dir := b.TempDir()
 
-		db, err = rawdb.NewLevelDBDatabase(dir, 128, 128, "", false)
+		db, err = rawdb.NewLevelDBDatabase(dir, 128, 128, "", false, leveldb.LevelDBConfig{})
 		if err != nil {
 			b.Fatalf("cannot create temporary database: %v", err)
 		}
@@ -296,7 +297,7 @@ func makeChainForBench(db ethdb.Database, full bool, count uint64) {
 func benchWriteChain(b *testing.B, full bool, count uint64) {
 	for i := 0; i < b.N; i++ {
 		dir := b.TempDir()
-		db, err := rawdb.NewLevelDBDatabase(dir, 128, 1024, "", false)
+		db, err := rawdb.NewLevelDBDatabase(dir, 128, 1024, "", false, leveldb.LevelDBConfig{})
 
 		if err != nil {
 			b.Fatalf("error opening database at %v: %v", dir, err)
@@ -310,7 +311,7 @@ func benchWriteChain(b *testing.B, full bool, count uint64) {
 func benchReadChain(b *testing.B, full bool, count uint64) {
 	dir := b.TempDir()
 
-	db, err := rawdb.NewLevelDBDatabase(dir, 128, 1024, "", false)
+	db, err := rawdb.NewLevelDBDatabase(dir, 128, 1024, "", false, leveldb.LevelDBConfig{})
 	if err != nil {
 		b.Fatalf("error opening database at %v: %v", dir, err)
 	}
@@ -325,7 +326,7 @@ func benchReadChain(b *testing.B, full bool, count uint64) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		db, err := rawdb.NewLevelDBDatabase(dir, 128, 1024, "", false)
+		db, err := rawdb.NewLevelDBDatabase(dir, 128, 1024, "", false, leveldb.LevelDBConfig{})
 		if err != nil {
 			b.Fatalf("error opening database at %v: %v", dir, err)
 		}
