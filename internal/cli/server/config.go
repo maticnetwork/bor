@@ -595,7 +595,7 @@ func DefaultConfig() *Config {
 		EnablePreimageRecording: false,
 		DataDir:                 DefaultDataDir(),
 		Ancient:                 "",
-		DBEngine:                "leveldb",
+		DBEngine:                "pebble",
 		Logging: &LoggingConfig{
 			Vmodule:   "",
 			Json:      false,
