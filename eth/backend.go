@@ -798,6 +798,8 @@ func (s *Ethereum) handleNoAckMilestone(ctx context.Context, ethHandler *ethHand
 func (s *Ethereum) handleNoAckMilestoneByID(ctx context.Context, ethHandler *ethHandler, bor *bor.Bor) error {
 	milestoneIDs := ethHandler.downloader.GetMilestoneIDsList()
 
+	fmt.Println("### in handleNoAckMilestoneByID", milestoneIDs)
+
 	for _, milestoneID := range milestoneIDs {
 		// todo: check if we can ignore the error
 		err := ethHandler.fetchNoAckMilestoneByID(ctx, bor, milestoneID)

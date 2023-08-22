@@ -105,6 +105,7 @@ func (h *ethHandler) fetchNoAckMilestone(ctx context.Context, bor *bor.Bor) (str
 func (h *ethHandler) fetchNoAckMilestoneByID(ctx context.Context, bor *bor.Bor, milestoneID string) error {
 	// fetch latest milestone
 	err := bor.HeimdallClient.FetchNoAckMilestone(ctx, milestoneID)
+	fmt.Println("### fetchNoAckMilestoneByID ###", milestoneID, err)
 
 	// fixme: handle different types of errors
 	if errors.Is(err, ErrNotInRejectedList) {
