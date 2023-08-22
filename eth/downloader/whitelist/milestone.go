@@ -156,7 +156,7 @@ func (m *milestone) UnlockMutex(doLock bool, milestoneId string, endBlockNum uin
 	m.Locked = m.Locked || doLock
 
 	if doLock {
-		m.UnlockSprint(m.LockedMilestoneNumber)
+		// m.UnlockSprint(m.LockedMilestoneNumber)
 		m.Locked = true
 		m.LockedMilestoneHash = endBlockHash
 		m.LockedMilestoneNumber = endBlockNum
