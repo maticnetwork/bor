@@ -36,6 +36,8 @@ func (h *ethHandler) fetchWhitelistCheckpoint(ctx context.Context, bor *bor.Bor,
 		return blockNum, blockHash, errCheckpoint
 	}
 
+	log.Info("Got new checkpoint from heimdall", "start", checkpoint.StartBlock.Uint64(), "end", checkpoint.EndBlock.Uint64(), "rootHash", checkpoint.RootHash.String())
+
 	// Verify if the checkpoint fetched can be added to the local whitelist entry or not
 	// If verified, it returns the hash of the end block of the checkpoint. If not,
 	// it will return appropriate error.
@@ -68,6 +70,8 @@ func (h *ethHandler) fetchWhitelistMilestone(ctx context.Context, bor *bor.Bor, 
 
 	num = milestone.EndBlock.Uint64()
 	hash = milestone.Hash
+
+	log.Info("Got new milestone from heimdall", "start", milestone.StartBlock.Uint64(), "end", milestone.EndBlock.Uint64(), "hash", milestone.Hash.String())
 
 	// Verify if the milestone fetched can be added to the local whitelist entry or not
 	// If verified, it returns the hash of the end block of the milestone. If not,

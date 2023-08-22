@@ -121,6 +121,12 @@ func borVerify(ctx context.Context, eth *Ethereum, handler *ethHandler, start ui
 			rewindTo = head - 255
 		}
 
+		if isCheckpoint {
+			log.Warn("Rewinding chain due to checkpoint root hash mismatch", "number", rewindTo)
+		} else {
+			log.Warn("Rewinding chain due to milestone endblock hash mismatch", "number", rewindTo)
+		}
+
 		rewindBack(eth, head, rewindTo)
 
 		return hash, errHashMismatch
@@ -154,7 +160,6 @@ func rewindBack(eth *Ethereum, head uint64, rewindTo uint64) {
 }
 
 func rewind(eth *Ethereum, head uint64, rewindTo uint64) {
-	log.Warn("Rewinding chain because it doesn't match the received milestone", "to", rewindTo)
 	err := eth.blockchain.SetHead(rewindTo)
 
 	if err != nil {
