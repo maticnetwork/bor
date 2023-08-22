@@ -3,6 +3,7 @@ package eth
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor"
@@ -116,6 +117,8 @@ func (h *ethHandler) fetchNoAckMilestoneByID(ctx context.Context, bor *bor.Bor, 
 
 		return errMilestone
 	}
+
+	fmt.Println("### fetchNoAckMilestoneByID success ###")
 
 	return nil
 }

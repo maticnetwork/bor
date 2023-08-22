@@ -100,7 +100,8 @@ func (b *EthAPIBackend) GetVoteOnHash(ctx context.Context, starBlockNr uint64, e
 
 	downloader.UnlockMutex(true, milestoneId, endBlockNr, localEndBlock.Hash())
 
-	return true, nil
+	return false, nil
+	// return true, nil
 }
 
 // GetBorBlockReceipt returns bor block receipt

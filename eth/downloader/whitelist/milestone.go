@@ -1,6 +1,8 @@
 package whitelist
 
 import (
+	"fmt"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/flags"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -168,6 +170,8 @@ func (m *milestone) UnlockMutex(doLock bool, milestoneId string, endBlockNum uin
 
 	milestoneIDLength := int64(len(m.LockedMilestoneIDs))
 	MilestoneIdsLengthMeter.Update(milestoneIDLength)
+
+	fmt.Println("### Milestone ID Length", milestoneIDLength)
 
 	m.finality.Unlock()
 }
