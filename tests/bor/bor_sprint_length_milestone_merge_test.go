@@ -1,34 +1,27 @@
+//go:build integration
+
 // nolint
 package bor
 
 import (
 	"crypto/ecdsa"
 	"encoding/csv"
-	"encoding/json"
-	"fmt"
-	"io/ioutil" // nolint: staticcheck
+	"fmt" // nolint: staticcheck
 	_log "log"
 	"math"
-	"math/big"
 	"os"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/fdlimit"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/eth"
-	"github.com/ethereum/go-ethereum/eth/downloader"
-	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/miner"
 	"github.com/ethereum/go-ethereum/node"
-	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/enode"
-	"github.com/ethereum/go-ethereum/params"
 )
 
 var (
@@ -342,7 +335,7 @@ func SetupValidatorsAndTest2NodesSprintLengthMilestone(t *testing.T, tt map[stri
 
 	// Create an Ethash network based off of the Ropsten config
 	// Generate a batch of accounts to seal and fund with
-	genesis := InitGenesisSprintLengthMilestone(t, faucets, "./testdata/genesis_7val.json", tt["sprintSize"].(uint64))
+	genesis := InitGenesis(t, faucets, "./testdata/genesis_7val.json", tt["sprintSize"].(uint64))
 
 	nodes := make([]*eth.Ethereum, len(keys_21val))
 	enodes := make([]*enode.Node, len(keys_21val))
@@ -356,7 +349,7 @@ func SetupValidatorsAndTest2NodesSprintLengthMilestone(t *testing.T, tt map[stri
 
 	for i := 0; i < len(keys_21val); i++ {
 		// Start the node and wait until it's up
-		stack, ethBackend, err := InitMinerSprintLengthMiner(genesis, pkeys_21val[i], true)
+		stack, ethBackend, err := InitMiner(genesis, pkeys_21val[i], true)
 		if err != nil {
 			panic(err)
 		}
@@ -484,7 +477,7 @@ func SetupValidatorsAndTestSprintLengthMilestone(t *testing.T, tt map[string]uin
 
 	// Create an Ethash network based off of the Ropsten config
 	// Generate a batch of accounts to seal and fund with
-	genesis := InitGenesisSprintLengthMilestone(t, faucets, "./testdata/genesis_7val.json", tt["sprintSize"])
+	genesis := InitGenesis(t, faucets, "./testdata/genesis_7val.json", tt["sprintSize"])
 
 	nodes := make([]*eth.Ethereum, len(keys_21val))
 	enodes := make([]*enode.Node, len(keys_21val))
@@ -498,7 +491,7 @@ func SetupValidatorsAndTestSprintLengthMilestone(t *testing.T, tt map[string]uin
 
 	for i := 0; i < len(keys_21val); i++ {
 		// Start the node and wait until it's up
-		stack, ethBackend, err := InitMinerSprintLengthMiner(genesis, pkeys_21val[i], true)
+		stack, ethBackend, err := InitMiner(genesis, pkeys_21val[i], true)
 		if err != nil {
 			panic(err)
 		}
@@ -627,98 +620,6 @@ func SetupValidatorsAndTestSprintLengthMilestone(t *testing.T, tt map[string]uin
 	return 0, 0
 }
 
-func InitGenesisSprintLengthMilestone(t *testing.T, faucets []*ecdsa.PrivateKey, fileLocation string, sprintSize uint64) *core.Genesis {
-	t.Helper()
-
-	// sprint size = 8 in genesis
-	genesisData, err := ioutil.ReadFile(fileLocation)
-	if err != nil {
-		t.Fatalf("%s", err)
-	}
-
-	genesis := &core.Genesis{}
-
-	if err := json.Unmarshal(genesisData, genesis); err != nil {
-		t.Fatalf("%s", err)
-	}
-
-	genesis.Config.ChainID = big.NewInt(15001)
-	genesis.Config.EIP150Hash = common.Hash{}
-	genesis.Config.Bor.Sprint["0"] = sprintSize
-
-	return genesis
-}
-
-func InitMinerSprintLengthMiner(genesis *core.Genesis, privKey *ecdsa.PrivateKey, withoutHeimdall bool) (*node.Node, *eth.Ethereum, error) {
-	// Define the basic configurations for the Ethereum node
-	datadir, _ := ioutil.TempDir("", "")
-
-	config := &node.Config{
-		Name:    "geth",
-		Version: params.Version,
-		DataDir: datadir,
-		P2P: p2p.Config{
-			ListenAddr:  "0.0.0.0:0",
-			NoDiscovery: true,
-			MaxPeers:    25,
-		},
-		UseLightweightKDF: true,
-	}
-	// Create the node and configure a full Ethereum node on it
-	stack, err := node.New(config)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	ethBackend, err := eth.New(stack, &ethconfig.Config{
-		Genesis:         genesis,
-		NetworkId:       genesis.Config.ChainID.Uint64(),
-		SyncMode:        downloader.FullSync,
-		DatabaseCache:   256,
-		DatabaseHandles: 256,
-		TxPool:          core.DefaultTxPoolConfig,
-		GPO:             ethconfig.Defaults.GPO,
-		Ethash:          ethconfig.Defaults.Ethash,
-		Miner: miner.Config{
-			Etherbase: crypto.PubkeyToAddress(privKey.PublicKey),
-			GasCeil:   genesis.GasLimit * 11 / 10,
-			GasPrice:  big.NewInt(1),
-			Recommit:  time.Second,
-		},
-		WithoutHeimdall: withoutHeimdall,
-	})
-
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// register backend to account manager with keystore for signing
-	keydir := stack.KeyStoreDir()
-
-	n, p := keystore.StandardScryptN, keystore.StandardScryptP
-	kStore := keystore.NewKeyStore(keydir, n, p)
-
-	_, err = kStore.ImportECDSA(privKey, "")
-
-	if err != nil {
-		return nil, nil, err
-	}
-
-	acc := kStore.Accounts()[0]
-	err = kStore.Unlock(acc, "")
-
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// proceed to authorize the local account manager in any case
-	ethBackend.AccountManager().AddBackend(kStore)
-
-	err = stack.Start()
-
-	return stack, ethBackend, err
-}
-
 func borVerifyTemP(eth *eth.Ethereum, start uint64, end uint64, hash string) (string, uint64, error) {
 	// check if we have the given blocks
 	currentBlock := eth.BlockChain().CurrentBlock()
@@ -728,8 +629,7 @@ func borVerifyTemP(eth *eth.Ethereum, start uint64, end uint64, hash string) (st
 		return hash, 0, errMissingBlocks
 	}
 
-	head := currentBlock.Number().Uint64()
-
+	head := currentBlock.Number.Uint64()
 	if head < end {
 		log.Debug("Current head block behind incoming milestone block", "head", head, "end block", end)
 		return hash, 0, errMissingBlocks
