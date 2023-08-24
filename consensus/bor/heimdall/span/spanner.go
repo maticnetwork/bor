@@ -93,8 +93,6 @@ func (c *ChainSpanner) GetCurrentValidatorsByBlockNrOrHash(ctx context.Context, 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	log.Info("### performing contract call to fetch validators", "blockNrOrHash", blockNrOrHash, "blockNumber", blockNumber)
-
 	// method
 	const method = "getBorValidators"
 
