@@ -21,6 +21,7 @@ GO_LDFLAGS += -ldflags "-X ${PACKAGE}/params.GitCommit=${GIT_COMMIT}"
 
 TESTALL = $$(go list ./... | grep -v go-ethereum/cmd/)
 TESTE2E = ./tests/...
+TESTBORFILTER = ./tests/bor/bor_filter_test.go
 GOTEST = GODEBUG=cgocheck=0 go test $(GO_FLAGS) $(GO_LDFLAGS) -p 1
 
 bor:
@@ -68,6 +69,9 @@ test-race:
 
 test-integration:
 	$(GOTEST) --timeout 60m -tags integration $(TESTE2E)
+
+test-bor-filters:
+	$(GOTEST) --timeout 60m -tags integration $(TESTBORFILTER)
 
 escape:
 	cd $(path) && go test -gcflags "-m -m" -run none -bench=BenchmarkJumpdest* -benchmem -memprofile mem.out

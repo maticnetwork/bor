@@ -102,6 +102,8 @@ func TestBorFilters(t *testing.T) {
 		}
 	})
 
+	t.Log("DEBUG chain length", len(chain))
+
 	for i, block := range chain {
 		// write the block to database
 		rawdb.WriteBlock(db, block)
@@ -131,6 +133,8 @@ func TestBorFilters(t *testing.T) {
 			})
 
 			rawdb.WriteBorTxLookupEntry(blockBatch, block.Hash(), block.NumberU64())
+
+			t.Log("Writing bor receipt", "block", block.NumberU64())
 		}
 
 		if err := blockBatch.Write(); err != nil {
@@ -141,6 +145,7 @@ func TestBorFilters(t *testing.T) {
 	filter := filters.NewBorBlockLogsRangeFilter(backend, testBorConfig, 0, -1, []common.Address{addr}, [][]common.Hash{{hash1, hash2, hash3, hash4, hash5}})
 
 	logs, _ := filter.Logs(context.Background())
+	t.Log("logs1 - ", len(logs))
 	if len(logs) != 5 {
 		t.Error("expected 5 log, got", len(logs))
 	}
@@ -148,6 +153,7 @@ func TestBorFilters(t *testing.T) {
 	filter = filters.NewBorBlockLogsRangeFilter(backend, testBorConfig, 900, 999, []common.Address{addr}, [][]common.Hash{{hash3}})
 	logs, _ = filter.Logs(context.Background())
 
+	t.Log("logs2 - ", len(logs))
 	if len(logs) != 1 {
 		t.Error("expected 1 log, got", len(logs))
 	}
