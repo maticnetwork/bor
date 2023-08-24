@@ -359,6 +359,7 @@ func (c *Bor) verifyHeader(chain consensus.ChainHeaderReader, header *types.Head
 	}
 
 	if isSprintEnd && signersBytes%validatorHeaderBytesLength != 0 {
+		log.Info("### Invalid span in verifyHeader")
 		return errInvalidSpanValidators
 	}
 
@@ -460,9 +461,11 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 
 	// Verify the validator list match the local contract
 	if IsSprintStart(number+1, c.config.CalculateSprint(number)) {
+		log.Info("### verifyCascadingFields: IsSprintStart", "number", number)
 		newValidators, err := c.spanner.GetCurrentValidatorsByBlockNrOrHash(context.Background(), rpc.BlockNumberOrHashWithNumber(rpc.LatestBlockNumber), number+1)
 
 		if err != nil {
+			log.Info("### verifyCascadingFields: error in fetching current vals", "err", err)
 			return err
 		}
 
@@ -470,15 +473,20 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 
 		headerVals, err := valset.ParseValidators(header.GetValidatorBytes(c.config))
 		if err != nil {
+			log.Info("### verifyCascadingFields: error in parsing header vals", "err", err)
 			return err
 		}
 
+		log.Info("### verifyCascadingFields: comparision", "local vals", fmt.Sprintf("%+v", newValidators), "header vals", fmt.Sprintf("%+v", headerVals))
+
 		if len(newValidators) != len(headerVals) {
+			log.Info("### verifyCascadingFields: len mismatch", "len(newValidators)", len(newValidators), "len(headerVals)", len(headerVals))
 			return errInvalidSpanValidators
 		}
 
 		for i, val := range newValidators {
 			if !bytes.Equal(val.HeaderBytes(), headerVals[i].HeaderBytes()) {
+				log.Info("### verifyCascadingFields: header mismatch", "val", fmt.Sprintf("%+v", val), "header val", fmt.Sprintf("%+v", headerVals[i]))
 				return errInvalidSpanValidators
 			}
 		}
