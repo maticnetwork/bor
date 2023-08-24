@@ -19,8 +19,6 @@ import (
 )
 
 func TestBorFilters(t *testing.T) {
-	t.Parallel()
-
 	var (
 		db      = rawdb.NewMemoryDatabase()
 		backend = &filters.TestBackend{DB: db}
