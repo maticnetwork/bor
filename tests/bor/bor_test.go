@@ -631,6 +631,9 @@ func TestOutOfTurnSigning(t *testing.T) {
 
 	h.EXPECT().FetchNoAckMilestone(gomock.Any(), string("test")).Return(nil).AnyTimes()
 
+	spanner := getMockedSpanner(t, heimdallSpan.ValidatorSet.Validators)
+	_bor.SetSpanner(spanner)
+
 	_bor.SetHeimdallClient(h)
 
 	block := init.genesis.ToBlock()
