@@ -18,6 +18,8 @@ The ```bor server``` command runs the Bor client.
 
 - ```datadir.ancient```: Data directory for ancient chain segments (default = inside chaindata)
 
+- ```db.engine```: Backing database implementation to use ('leveldb' or 'pebble') (default: leveldb)
+
 - ```keystore```: Path of the directory where keystores are located
 
 - ```rpc.batchlimit```: Maximum number of messages in a batch (default=100, use 0 for no limits) (default: 100)
@@ -60,7 +62,7 @@ The ```bor server``` command runs the Bor client.
 
 - ```gpo.maxblockhistory```: Maximum block history of gasprice oracle (default: 1024)
 
-- ```gpo.maxprice```: Maximum gas price will be recommended by gpo (default: 5000000000000)
+- ```gpo.maxprice```: Maximum gas price will be recommended by gpo (default: 500000000000)
 
 - ```gpo.ignoreprice```: Gas price below which gpo will ignore transactions (default: 2)
 
@@ -133,6 +135,8 @@ The ```bor server``` command runs the Bor client.
 - ```rpc.txfeecap```: Sets a cap on transaction fee (in ether) that can be sent via the RPC APIs (0 = no cap) (default: 5)
 
 - ```rpc.allow-unprotected-txs```: Allow for unprotected (non EIP155 signed) transactions to be submitted via RPC (default: false)
+
+- ```rpc.enabledeprecatedpersonal```: Enables the (deprecated) personal namespace (default: false)
 
 - ```ipcdisable```: Disable the IPC-RPC server (default: false)
 
@@ -258,7 +262,7 @@ The ```bor server``` command runs the Bor client.
 
 - ```metrics.prometheus-addr```: Address for Prometheus Server (default: 127.0.0.1:7071)
 
-- ```metrics.opencollector-endpoint```: OpenCollector Endpoint (host:port) (default: 127.0.0.1:4317)
+- ```metrics.opencollector-endpoint```: OpenCollector Endpoint (host:port)
 
 - ```metrics.influxdbv2```: Enable metrics export/push to an external InfluxDB v2 database (default: false)
 

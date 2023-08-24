@@ -8,6 +8,7 @@ chain = "mainnet"
 # vmdebug = false
 datadir = "/var/lib/bor/data"
 # ancient = ""
+# db.engine = "leveldb"
 # keystore = "/var/lib/bor/keystore"
 # "rpc.batchlimit" = 100
 # "rpc.returndatalimit" = 100000
@@ -81,6 +82,7 @@ syncmode = "full"
 #   evmtimeout = "5s"
 #   txfeecap = 5.0
 #   allow-unprotected-txs = false
+#   enabledeprecatedpersonal = false
 #   [jsonrpc.http]
 #     enabled = false
 #     port = 8545

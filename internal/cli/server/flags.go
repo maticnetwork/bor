@@ -54,6 +54,12 @@ func (c *Command) Flags() *flagset.Flagset {
 		Default: c.cliConfig.Ancient,
 	})
 	f.StringFlag(&flagset.StringFlag{
+		Name:    "db.engine",
+		Usage:   "Backing database implementation to use ('leveldb' or 'pebble')",
+		Value:   &c.cliConfig.DBEngine,
+		Default: c.cliConfig.DBEngine,
+	})
+	f.StringFlag(&flagset.StringFlag{
 		Name:  "keystore",
 		Usage: "Path of the directory where keystores are located",
 		Value: &c.cliConfig.KeyStoreDir,
@@ -469,6 +475,13 @@ func (c *Command) Flags() *flagset.Flagset {
 		Usage:   "Allow for unprotected (non EIP155 signed) transactions to be submitted via RPC",
 		Value:   &c.cliConfig.JsonRPC.AllowUnprotectedTxs,
 		Default: c.cliConfig.JsonRPC.AllowUnprotectedTxs,
+		Group:   "JsonRPC",
+	})
+	f.BoolFlag(&flagset.BoolFlag{
+		Name:    "rpc.enabledeprecatedpersonal",
+		Usage:   "Enables the (deprecated) personal namespace",
+		Value:   &c.cliConfig.JsonRPC.EnablePersonal,
+		Default: c.cliConfig.JsonRPC.EnablePersonal,
 		Group:   "JsonRPC",
 	})
 	f.BoolFlag(&flagset.BoolFlag{

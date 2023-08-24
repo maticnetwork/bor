@@ -8,6 +8,7 @@ verbosity = 3                   # Logging verbosity for the server (5=trace|4=de
 vmdebug = false                 # Record information useful for VM and contract debugging
 datadir = "var/lib/bor"         # Path of the data directory to store information
 ancient = ""                    # Data directory for ancient chain segments (default = inside chaindata)
+db.engine = "leveldb"           # Used to select leveldb or pebble as database (default = leveldb)
 keystore = ""                   # Path of the directory where keystores are located
 "rpc.batchlimit" = 100          # Maximum number of messages in a batch (default=100, use 0 for no limits)
 "rpc.returndatalimit" = 100000  # Maximum size (in bytes) a result of an rpc request could have (default=100000, use 0 for no limits)
@@ -82,6 +83,7 @@ devfakeauthor = false           # Run miner without validator set authorization 
   evmtimeout = "5s"                                # Sets a timeout used for eth_call (0=infinite)
   txfeecap = 5.0                                   # Sets a cap on transaction fee (in ether) that can be sent via the RPC APIs (0 = no cap)
   allow-unprotected-txs = false                    # Allow for unprotected (non EIP155 signed) transactions to be submitted via RPC (default: false)
+  enabledeprecatedpersonal = false                 # Enables the (deprecated) personal namespace
   [jsonrpc.http]
     enabled = false                                # Enable the HTTP-RPC server
     port = 8545                                    # http.port
