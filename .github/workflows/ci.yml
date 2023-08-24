@@ -43,10 +43,7 @@ jobs:
               ~/go/pkg/mod
             key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
             restore-keys: ${{ runner.os }}-go-
-
-        - name: Build
-          run: make all
-
+   
         - name: test-bor-fllters
           run: make test-bor-filters
 
