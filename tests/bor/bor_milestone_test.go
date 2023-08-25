@@ -149,7 +149,7 @@ func TestMiningAfterLocking(t *testing.T) {
 
 func TestReorgingAfterLockingSprint(t *testing.T) {
 	t.Skip()
-	t.Parallel()
+	// t.Parallel()
 
 	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
 
@@ -269,7 +269,7 @@ func TestReorgingAfterLockingSprint(t *testing.T) {
 
 func TestReorgingAfterWhitelisting(t *testing.T) {
 	t.Skip()
-	t.Parallel()
+	// t.Parallel()
 
 	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
 
@@ -382,7 +382,7 @@ func TestReorgingAfterWhitelisting(t *testing.T) {
 
 func TestPeerConnectionAfterWhitelisting(t *testing.T) {
 	t.Skip()
-	t.Parallel()
+	// t.Parallel()
 
 	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
 
@@ -504,7 +504,7 @@ func TestPeerConnectionAfterWhitelisting(t *testing.T) {
 
 func TestReorgingFutureSprintAfterLocking(t *testing.T) {
 	t.Skip()
-	t.Parallel()
+	// t.Parallel()
 
 	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
 
@@ -592,7 +592,7 @@ func TestReorgingFutureSprintAfterLocking(t *testing.T) {
 
 func TestReorgingFutureSprintAfterLockingOnSameHash(t *testing.T) {
 	t.Skip()
-	t.Parallel()
+	// t.Parallel()
 
 	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
 
@@ -681,7 +681,7 @@ func TestReorgingFutureSprintAfterLockingOnSameHash(t *testing.T) {
 
 func TestReorgingAfterLockingOnDifferentHash(t *testing.T) {
 	t.Skip()
-	t.Parallel()
+	// t.Parallel()
 
 	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
 
@@ -801,7 +801,7 @@ func TestReorgingAfterLockingOnDifferentHash(t *testing.T) {
 
 func TestReorgingAfterWhitelistingOnDifferentHash(t *testing.T) {
 	t.Skip()
-	t.Parallel()
+	// t.Parallel()
 
 	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
 
@@ -923,7 +923,7 @@ func TestReorgingAfterWhitelistingOnDifferentHash(t *testing.T) {
 
 func TestNonMinerNodeWithWhitelisting(t *testing.T) {
 	t.Skip()
-	t.Parallel()
+	// t.Parallel()
 
 	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
 
@@ -1020,7 +1020,7 @@ func TestNonMinerNodeWithWhitelisting(t *testing.T) {
 
 func TestNonMinerNodeWithTryToLock(t *testing.T) {
 	t.Skip()
-	t.Parallel()
+	// t.Parallel()
 
 	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
 
@@ -1112,7 +1112,7 @@ func TestNonMinerNodeWithTryToLock(t *testing.T) {
 
 func TestRewind(t *testing.T) {
 	t.Skip()
-	t.Parallel()
+	// t.Parallel()
 
 	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
 
@@ -1228,7 +1228,7 @@ func TestRewind(t *testing.T) {
 
 func TestRewinding(t *testing.T) {
 	t.Skip()
-	t.Parallel()
+	// t.Parallel()
 
 	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
 

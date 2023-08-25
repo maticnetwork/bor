@@ -193,7 +193,7 @@ func SprintLengthMilestoneReorgIndividual2Nodes(t *testing.T, index int, tt map[
 
 func TestSprintLengthMilestoneReorg2Nodes(t *testing.T) {
 	t.Skip()
-	t.Parallel()
+	// t.Parallel()
 
 	log.Root().SetHandler(log.LvlFilterHandler(3, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
 
@@ -240,7 +240,7 @@ func TestSprintLengthMilestoneReorg2Nodes(t *testing.T) {
 
 func TestSprintLengthMilestoneReorg(t *testing.T) {
 	t.Skip()
-	t.Parallel()
+	// t.Parallel()
 
 	log.Root().SetHandler(log.LvlFilterHandler(3, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
 
