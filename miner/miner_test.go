@@ -18,6 +18,7 @@
 package miner
 
 import (
+	"math/big"
 	"testing"
 	"time"
 
@@ -28,8 +29,10 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/txpool"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/event"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/trie"
 )
 
@@ -270,6 +273,35 @@ func waitForMiningState(t *testing.T, m *Miner, mining bool) {
 	t.Fatalf("Mining() == %t, want %t", state, mining)
 }
 
+func minerTestGenesisBlock(period uint64, gasLimit uint64, faucet common.Address) *core.Genesis {
+	config := *params.AllCliqueProtocolChanges
+	config.Clique = &params.CliqueConfig{
+		Period: period,
+		Epoch:  config.Clique.Epoch,
+	}
+
+	// Assemble and return the genesis with the precompiles and faucet pre-funded
+	return &core.Genesis{
+		Config:     &config,
+		ExtraData:  append(append(make([]byte, 32), faucet[:]...), make([]byte, crypto.SignatureLength)...),
+		GasLimit:   gasLimit,
+		BaseFee:    big.NewInt(params.InitialBaseFee),
+		Difficulty: big.NewInt(1),
+		Alloc: map[common.Address]core.GenesisAccount{
+			common.BytesToAddress([]byte{1}): {Balance: big.NewInt(1)}, // ECRecover
+			common.BytesToAddress([]byte{2}): {Balance: big.NewInt(1)}, // SHA256
+			common.BytesToAddress([]byte{3}): {Balance: big.NewInt(1)}, // RIPEMD
+			common.BytesToAddress([]byte{4}): {Balance: big.NewInt(1)}, // Identity
+			common.BytesToAddress([]byte{5}): {Balance: big.NewInt(1)}, // ModExp
+			common.BytesToAddress([]byte{6}): {Balance: big.NewInt(1)}, // ECAdd
+			common.BytesToAddress([]byte{7}): {Balance: big.NewInt(1)}, // ECScalarMul
+			common.BytesToAddress([]byte{8}): {Balance: big.NewInt(1)}, // ECPairing
+			common.BytesToAddress([]byte{9}): {Balance: big.NewInt(1)}, // BLAKE2b
+			faucet:                           {Balance: new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(9))},
+		},
+	}
+}
+
 // createMiner is not used in bor as NewBorDefaultMiner replaces it
 // nolint:staticcheck
 func createMiner(t *testing.T) (*Miner, *event.TypeMux, func(skipMiner bool)) {
@@ -295,7 +327,7 @@ func createMiner(t *testing.T) (*Miner, *event.TypeMux, func(skipMiner bool)) {
 		t.Fatalf("can't create new chain %v", err)
 	}
 	statedb, _ := state.New(bc.Genesis().Root(), bc.StateCache(), nil)
-	blockchain := &testBlockChain{chainConfig, statedb, 10000000, new(event.Feed)}
+	blockchain := &testBlockChain{statedb, 10000000, new(event.Feed)}
 
 	pool := txpool.NewTxPool(testTxPoolConfig, chainConfig, blockchain)
 	backend := NewMockBackend(bc, pool)

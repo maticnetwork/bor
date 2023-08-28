@@ -13,6 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts" // nolint:typecheck
 	"github.com/ethereum/go-ethereum/consensus/bor"
 	"github.com/ethereum/go-ethereum/consensus/clique"
+	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/txpool"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -115,6 +116,7 @@ func newTestWorkerBackend(t TensingObject, chainConfig *params.ChainConfig, engi
 		e.Authorize(TestBankAddress, func(account accounts.Account, s string, data []byte) ([]byte, error) {
 			return crypto.Sign(crypto.Keccak256(data), testBankKey)
 		})
+	case *ethash.Ethash:
 	default:
 		t.Fatalf("unexpected consensus engine type: %T", engine)
 	}
@@ -392,7 +394,7 @@ func (w *worker) mainLoopWithDelay(ctx context.Context, delay uint, opcodeDelay 
 				// submit sealing work here since all empty submission will be rejected
 				// by clique. Of course the advance sealing(empty submission) is disabled.
 				if w.chainConfig.Clique != nil && w.chainConfig.Clique.Period == 0 {
-					w.commitWork(ctx, nil, time.Now().Unix())
+					w.commitWork(ctx, nil, true, time.Now().Unix())
 				}
 			}
 

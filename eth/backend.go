@@ -157,6 +157,8 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		return nil, err
 	}
 
+	cliqueConfig, err := core.LoadCliqueConfig(chainDb, config.Genesis)
+
 	if err != nil {
 		return nil, err
 	}
@@ -218,13 +220,18 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		overrides.OverrideCancun = config.OverrideCancun
 	}
 
-	chainConfig, _, genesisErr := core.SetupGenesisBlockWithOverride(chainDb, trie.NewDatabase(chainDb, cacheConfig.TriedbConfig()), config.Genesis, &overrides)
+	triedb := trie.NewDatabase(chainDb, cacheConfig.TriedbConfig())
+
+	chainConfig, _, genesisErr := core.SetupGenesisBlockWithOverride(chainDb, triedb, config.Genesis, &overrides)
+
+	triedb.Close()
+
 	if _, isCompat := genesisErr.(*params.ConfigCompatError); genesisErr != nil && !isCompat {
 		return nil, genesisErr
 	}
 
 	blockChainAPI := ethapi.NewBlockChainAPI(ethereum.APIBackend)
-	engine := ethconfig.CreateConsensusEngine(chainConfig, config, chainDb, blockChainAPI)
+	engine := ethconfig.CreateConsensusEngine(chainConfig, config, cliqueConfig, chainDb, blockChainAPI)
 	ethereum.engine = engine
 	// END: Bor changes
 
@@ -264,7 +271,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	if config.OverrideVerkle != nil {
 		overrides.OverrideVerkle = config.OverrideVerkle
 	}
-	ethereum.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, config.Genesis, &overrides, ethereum.engine, vmConfig, ethereum.shouldPreserve, &config.TxLookupLimit, checker)
+	// ethereum.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, config.Genesis, &overrides, ethereum.engine, vmConfig, ethereum.shouldPreserve, &config.TxLookupLimit, checker)
 	if err != nil {
 		return nil, err
 	}

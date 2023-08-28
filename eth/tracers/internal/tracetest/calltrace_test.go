@@ -296,7 +296,7 @@ func TestInternals(t *testing.T) {
 			Origin:   origin,
 			GasPrice: big.NewInt(1),
 		}
-		blockContext = vm.BlockContext{
+		context = vm.BlockContext{
 			CanTransfer: core.CanTransfer,
 			Transfer:    core.Transfer,
 			Coinbase:    common.Address{},
@@ -417,7 +417,7 @@ func TestInternals(t *testing.T) {
 				SkipAccountChecks: false,
 			}
 			st := core.NewStateTransition(evm, msg, new(core.GasPool).AddGas(msg.GasLimit))
-			if _, err := st.TransitionDb(); err != nil {
+			if _, err := st.TransitionDb(nil); err != nil {
 				t.Fatalf("test %v: failed to execute transaction: %v", tc.name, err)
 			}
 			// Retrieve the trace result and compare against the expected

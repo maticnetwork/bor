@@ -29,6 +29,8 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdallapp"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdallgrpc"
+	"github.com/ethereum/go-ethereum/consensus/clique"
+	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/txpool"
@@ -212,10 +214,12 @@ type Config struct {
 }
 
 // CreateConsensusEngine creates a consensus engine for the given chain configuration.
-func CreateConsensusEngine(chainConfig *params.ChainConfig, ethConfig *Config, db ethdb.Database, blockchainAPI *ethapi.BlockChainAPI) consensus.Engine {
-	var engine consensus.Engine
+func CreateConsensusEngine(chainConfig *params.ChainConfig, ethConfig *Config, cliqueConfig *params.CliqueConfig, db ethdb.Database, blockchainAPI *ethapi.BlockChainAPI) consensus.Engine {
 	// nolint:nestif
-	if chainConfig.Bor != nil && chainConfig.Bor.ValidatorContract != "" {
+	if cliqueConfig != nil {
+		// If proof-of-authority is requested, set it up
+		return beacon.New(clique.New(cliqueConfig, db))
+	} else if chainConfig.Bor != nil && chainConfig.Bor.ValidatorContract != "" {
 		// If Matic bor consensus is requested, set it up
 		// In order to pass the ethereum transaction tests, we need to set the burn contract which is in the bor config
 		// Then, bor != nil will also be enabled for ethash and clique. Only enable Bor for real if there is a validator contract present.
@@ -242,5 +246,5 @@ func CreateConsensusEngine(chainConfig *params.ChainConfig, ethConfig *Config, d
 		}
 	}
 
-	return beacon.New(engine)
+	return beacon.New(ethash.NewFaker())
 }

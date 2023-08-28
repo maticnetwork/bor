@@ -25,6 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/fdlimit"
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
@@ -1093,6 +1094,8 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 		n.TxLookupLimit = c.Cache.TxLookupLimit
 		n.TrieTimeout = c.Cache.TrieTimeout
 		n.TriesInMemory = c.Cache.TriesInMemory
+		n.StateScheme = rawdb.PathScheme
+		n.StateHistory = ethconfig.Defaults.StateHistory
 	}
 
 	n.RPCGasCap = c.JsonRPC.GasCap

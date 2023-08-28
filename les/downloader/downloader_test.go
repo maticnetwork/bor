@@ -243,7 +243,7 @@ func (dl *downloadTester) CurrentFastBlock() *types.Block {
 func (dl *downloadTester) FastSyncCommitHead(hash common.Hash) error {
 	// For now only check that the state trie is correct
 	if block := dl.GetBlockByHash(hash); block != nil {
-		_, err := trie.NewStateTrie(trie.StateTrieID(block.Root()), trie.NewDatabase(dl.stateDb))
+		_, err := trie.NewStateTrie(trie.StateTrieID(block.Root()), trie.NewDatabase(dl.stateDb, trie.HashDefaults))
 		return err
 	}
 

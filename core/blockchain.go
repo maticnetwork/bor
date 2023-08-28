@@ -294,8 +294,11 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 	if cacheConfig.TriesInMemory <= 0 {
 		cacheConfig.TriesInMemory = DefaultCacheConfig.TriesInMemory
 	}
+
+	log.Info("Before")
 	// Open trie database with provided config
 	triedb := trie.NewDatabase(db, cacheConfig.TriedbConfig())
+	log.Info("After")
 
 	// Setup the genesis block, commit the provided genesis specification
 	// to database if the genesis block is not present yet, or load the
@@ -436,7 +439,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 	// The first thing the node will do is reconstruct the verification data for
 	// the head block (ethash cache or clique voting snapshot). Might as well do
 	// it in advance.
-	bc.engine.VerifyHeader(bc, bc.CurrentHeader())
+	// bc.engine.VerifyHeader(bc, bc.CurrentHeader())
 
 	// Check the current state of the block hashes and make sure that we do not have any of the bad blocks in our chain
 	for hash := range BadHashes {
@@ -1139,7 +1142,7 @@ func (bc *BlockChain) writeHeadBlock(block *types.Block) {
 // OBS! It is generally recommended to use the Stop method!
 // This method has been exposed to allow tests to stop the blockchain while simulating
 // a crash.
-func (bc *BlockChain) stopWithoutSaving() {
+func (bc *BlockChain) StopWithoutSaving() {
 	if !bc.stopping.CompareAndSwap(false, true) {
 		return
 	}
@@ -1164,7 +1167,7 @@ func (bc *BlockChain) stopWithoutSaving() {
 // Stop stops the blockchain service. If any imports are currently in progress
 // it will abort them using the procInterrupt.
 func (bc *BlockChain) Stop() {
-	bc.stopWithoutSaving()
+	bc.StopWithoutSaving()
 
 	// Ensure that the entirety of the state snapshot is journalled to disk.
 	var snapBase common.Hash

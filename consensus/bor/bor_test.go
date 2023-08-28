@@ -14,6 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/trie"
 )
 
 func TestGenesisContractChange(t *testing.T) {
@@ -55,7 +56,7 @@ func TestGenesisContractChange(t *testing.T) {
 	}
 
 	db := rawdb.NewMemoryDatabase()
-	genesis := genspec.MustCommit(db)
+	genesis := genspec.MustCommit(db, trie.NewDatabase(db, trie.HashDefaults))
 
 	statedb, err := state.New(genesis.Root(), state.NewDatabase(db), nil)
 	require.NoError(t, err)
@@ -71,7 +72,7 @@ func TestGenesisContractChange(t *testing.T) {
 		b.Finalize(chain, h, statedb, nil, nil, nil)
 
 		// write state to database
-		root, err := statedb.Commit(false)
+		root, err := statedb.Commit(h.Number.Uint64(), false)
 		require.NoError(t, err)
 		require.NoError(t, statedb.Database().TrieDB().Commit(root, true))
 

@@ -52,6 +52,12 @@ type testBackend struct {
 	chainFeed       event.Feed
 	pendingBlock    *types.Block
 	pendingReceipts types.Receipts
+
+	stateSyncFeed event.Feed
+}
+
+func (b *testBackend) SubscribeStateSyncEvent(ch chan<- core.StateSyncEvent) event.Subscription {
+	return b.stateSyncFeed.Subscribe(ch)
 }
 
 func (b *testBackend) ChainConfig() *params.ChainConfig {
@@ -806,6 +812,7 @@ func TestPendingLogsSubscription(t *testing.T) {
 		<-testCases[i].sub.Err()
 	}
 }
+
 // nolint:gocognit
 func TestLightFilterLogs(t *testing.T) {
 	t.Parallel()

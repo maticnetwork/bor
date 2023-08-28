@@ -145,7 +145,7 @@ func setupPool() (*TxPool, *ecdsa.PrivateKey) {
 	return setupPoolWithConfig(params.TestChainConfig, testTxPoolConfig, txPoolGasLimit)
 }
 
-func setupPoolWithConfig(config *params.ChainConfig) (*TxPool, *ecdsa.PrivateKey) {
+func setupPoolWithConfig(config *params.ChainConfig, txPoolConfig Config, _ uint64, options ...func(pool *TxPool)) (*TxPool, *ecdsa.PrivateKey) {
 	statedb, _ := state.New(types.EmptyRootHash, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
 	blockchain := newTestBlockChain(10000000, statedb, new(event.Feed))
 

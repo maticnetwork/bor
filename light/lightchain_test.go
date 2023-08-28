@@ -59,7 +59,7 @@ func newCanonical(n int) (ethdb.Database, *LightChain, error) {
 	db := rawdb.NewMemoryDatabase()
 	gspec := core.Genesis{Config: params.TestChainConfig}
 	genesis := gspec.MustCommit(db, trie.NewDatabase(db, trie.HashDefaults))
-	blockchain, _ := NewLightChain(&dummyOdr{db: db, indexerConfig: TestClientIndexerConfig}, gspec.Config, ethash.NewFaker())
+	blockchain, _ := NewLightChain(&dummyOdr{db: db, indexerConfig: TestClientIndexerConfig}, gspec.Config, ethash.NewFaker(), nil)
 
 	// Create and inject the requested chain
 	if n == 0 {
@@ -79,7 +79,7 @@ func newTestLightChain() *LightChain {
 		Config:     params.TestChainConfig,
 	}
 	gspec.MustCommit(db, trie.NewDatabase(db, trie.HashDefaults))
-	lc, err := NewLightChain(&dummyOdr{db: db}, gspec.Config, ethash.NewFullFaker())
+	lc, err := NewLightChain(&dummyOdr{db: db}, gspec.Config, ethash.NewFullFaker(), nil)
 	if err != nil {
 		panic(err)
 	}

@@ -35,7 +35,8 @@ protoc:
 generate-mocks:
 	go generate mockgen -destination=./tests/bor/mocks/IHeimdallClient.go -package=mocks ./consensus/bor IHeimdallClient
 	go generate mockgen -destination=./eth/filters/IBackend.go -package=filters ./eth/filters Backend
-	go generate mockgen -destination=../eth/filters/IDatabase.go -package=filters . Database
+	go generate mockgen -destination=./eth/filters/IDatabase.go -package=filters ./ethdb Database
+	go generate mockgen -destination=./consensus/bor/api/caller_mock.go -package=api ./consensus/bor/api Caller
 
 geth:
 	$(GORUN) build/ci.go install ./cmd/geth

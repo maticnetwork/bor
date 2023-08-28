@@ -26,8 +26,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
-
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor"
 	"github.com/ethereum/go-ethereum/consensus/bor/api"
@@ -41,6 +39,7 @@ import (
 	"github.com/ethereum/go-ethereum/miner"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/tests/bor/mocks"
+	"github.com/golang/mock/gomock"
 )
 
 // Tests a recovery for a short canonical chain where a recent block was already
@@ -1790,21 +1789,30 @@ func testRepairWithScheme(t *testing.T, tt *rewindTest, snapshots bool, scheme s
 	}
 	defer db.Close() // Might double close, should be fine
 
-	// Initialize a fresh chain
-	var (
-		gspec = &Genesis{
-			BaseFee: big.NewInt(params.InitialBaseFee),
-			Config:  params.AllEthashProtocolChanges,
-		}
-		engine = ethash.NewFullFaker()
-		config = &CacheConfig{
-			TrieCleanLimit: 256,
-			TrieDirtyLimit: 256,
-			TrieTimeLimit:  5 * time.Minute,
-			SnapshotLimit:  0, // Disable snapshot by default
-			StateScheme:    scheme,
-		}
-	)
+	chainConfig := params.BorUnittestChainConfig
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	ethAPIMock := api.NewMockCaller(ctrl)
+	ethAPIMock.EXPECT().Call(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	spanner := bor.NewMockSpanner(ctrl)
+	spanner.EXPECT().GetCurrentValidatorsByHash(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*valset.Validator{
+		{
+			ID:               0,
+			Address:          miner.TestBankAddress,
+			VotingPower:      100,
+			ProposerPriority: 0,
+		},
+	}, nil).AnyTimes()
+
+	heimdallClientMock := mocks.NewMockIHeimdallClient(ctrl)
+	heimdallClientMock.EXPECT().Close().Times(1)
+
+	contractMock := bor.NewMockGenesisContract(ctrl)
+
+	engine := miner.NewFakeBor(t, db, chainConfig, ethAPIMock, spanner, heimdallClientMock, contractMock)
 	defer engine.Close()
 
 	chainConfig.LondonBlock = big.NewInt(0)
@@ -1846,7 +1854,7 @@ func testRepairWithScheme(t *testing.T, tt *rewindTest, snapshots bool, scheme s
 	}
 
 	if tt.commitBlock > 0 {
-		if err := chain.triedb.Commit(canonblocks[tt.commitBlock-1].Root(), false); err != nil {
+		if err := back.BlockChain().StateCache().TrieDB().Commit(canonblocks[tt.commitBlock-1].Root(), false); err != nil {
 			t.Fatalf("Failed to flush trie state: %v", err)
 		}
 		if snapshots {
@@ -1874,7 +1882,6 @@ func testRepairWithScheme(t *testing.T, tt *rewindTest, snapshots bool, scheme s
 	}
 
 	// Pull the plug on the database, simulating a hard crash
-	chain.triedb.Close()
 	db.Close()
 
 	// Start a new blockchain back up and see where the repair leads us
@@ -1888,7 +1895,21 @@ func testRepairWithScheme(t *testing.T, tt *rewindTest, snapshots bool, scheme s
 
 	defer db.Close()
 
-	newChain, err := NewBlockChain(db, config, gspec, nil, engine, vm.Config{}, nil, nil)
+	var (
+		gspec = &core.Genesis{
+			Config:  params.TestChainConfig,
+			BaseFee: big.NewInt(params.InitialBaseFee),
+		}
+		config = &core.CacheConfig{
+			TrieCleanLimit: 256,
+			TrieDirtyLimit: 256,
+			TrieTimeLimit:  5 * time.Minute,
+			SnapshotLimit:  256,
+			SnapshotWait:   true,
+		}
+	)
+
+	newChain, err := core.NewBlockChain(db, config, gspec, nil, engine, vm.Config{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("Failed to recreate chain: %v", err)
 	}
@@ -1964,7 +1985,7 @@ func testIssue23496(t *testing.T, scheme string) {
 		}
 		engine = ethash.NewFullFaker()
 	)
-	chain, err := NewBlockChain(db, DefaultCacheConfigWithScheme(scheme), gspec, nil, engine, vm.Config{}, nil, nil)
+	chain, err := core.NewBlockChain(db, core.DefaultCacheConfigWithScheme(scheme), gspec, nil, engine, vm.Config{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("Failed to create chain: %v", err)
 	}
@@ -1978,7 +1999,7 @@ func testIssue23496(t *testing.T, scheme string) {
 	if _, err := chain.InsertChain(blocks[:1]); err != nil {
 		t.Fatalf("Failed to import canonical chain start: %v", err)
 	}
-	chain.triedb.Commit(blocks[0].Root(), false)
+	chain.StateCache().TrieDB().Commit(blocks[0].Root(), false)
 
 	// Insert block B2 and commit the snapshot into disk
 	if _, err := chain.InsertChain(blocks[1:2]); err != nil {
@@ -1993,7 +2014,7 @@ func testIssue23496(t *testing.T, scheme string) {
 	if _, err := chain.InsertChain(blocks[2:3]); err != nil {
 		t.Fatalf("Failed to import canonical chain start: %v", err)
 	}
-	chain.triedb.Commit(blocks[2].Root(), false)
+	chain.StateCache().TrieDB().Commit(blocks[2].Root(), false)
 
 	// Insert the remaining blocks
 	if _, err := chain.InsertChain(blocks[3:]); err != nil {
@@ -2005,7 +2026,7 @@ func testIssue23496(t *testing.T, scheme string) {
 		t.Fatal("on trieDB.Commit", err)
 	}
 	// Pull the plug on the database, simulating a hard crash
-	chain.triedb.Close()
+	chain.StateCache().TrieDB().Close()
 	db.Close()
 
 	// Start a new blockchain back up and see where the repair leads us
@@ -2019,7 +2040,7 @@ func testIssue23496(t *testing.T, scheme string) {
 
 	defer db.Close()
 
-	chain, err = NewBlockChain(db, DefaultCacheConfigWithScheme(scheme), gspec, nil, engine, vm.Config{}, nil, nil)
+	chain, err = core.NewBlockChain(db, core.DefaultCacheConfigWithScheme(scheme), gspec, nil, engine, vm.Config{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("Failed to recreate chain: %v", err)
 	}

@@ -98,7 +98,7 @@ func TestValidatorsBlockProduction(t *testing.T) {
 	time.Sleep(3 * time.Second)
 
 	for _, node := range nodes {
-		if err := node.StartMining(1); err != nil {
+		if err := node.StartMining(); err != nil {
 			panic(err)
 		}
 	}
@@ -549,7 +549,7 @@ func SetupValidatorsAndTest(t *testing.T, tt map[string]uint64) (uint64, uint64)
 	time.Sleep(3 * time.Second)
 
 	for _, node := range nodes {
-		if err := node.StartMining(1); err != nil {
+		if err := node.StartMining(); err != nil {
 			panic(err)
 		}
 	}
@@ -685,7 +685,7 @@ func SetupValidatorsAndTest2Nodes(t *testing.T, tt map[string]interface{}) (uint
 	time.Sleep(3 * time.Second)
 
 	for _, node := range nodes {
-		if err := node.StartMining(1); err != nil {
+		if err := node.StartMining(); err != nil {
 			panic(err)
 		}
 	}
@@ -812,7 +812,6 @@ func InitMinerSprintLength(genesis *core.Genesis, privKey *ecdsa.PrivateKey, wit
 		DatabaseHandles: 256,
 		TxPool:          txpool.DefaultConfig,
 		GPO:             ethconfig.Defaults.GPO,
-		Ethash:          ethconfig.Defaults.Ethash,
 		Miner: miner.Config{
 			Etherbase: crypto.PubkeyToAddress(privKey.PublicKey),
 			GasCeil:   genesis.GasLimit * 11 / 10,

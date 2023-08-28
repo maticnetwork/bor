@@ -17,7 +17,6 @@
 package t8ntool
 
 import (
-	"context"
 	"crypto/ecdsa"
 	"encoding/json"
 	"errors"

@@ -52,7 +52,7 @@ func testHeaderVerification(t *testing.T, scheme string) {
 		headers[i] = block.Header()
 	}
 	// Run the header checker for blocks one-by-one, checking for both valid and invalid nonces
-	chain, _ := NewBlockChain(rawdb.NewMemoryDatabase(), DefaultCacheConfigWithScheme(scheme), gspec, nil, ethash.NewFaker(), vm.Config{}, nil, nil)
+	chain, _ := NewBlockChain(rawdb.NewMemoryDatabase(), DefaultCacheConfigWithScheme(scheme), gspec, nil, ethash.NewFaker(), vm.Config{}, nil, nil, nil)
 	defer chain.Stop()
 
 	for i := 0; i < len(blocks); i++ {
@@ -277,11 +277,11 @@ func testHeaderConcurrentVerification(t *testing.T, threads int) {
 		var results <-chan error
 
 		if valid {
-			chain, _ := NewBlockChain(rawdb.NewMemoryDatabase(), nil, gspec, nil, ethash.NewFaker(), vm.Config{}, nil, nil)
+			chain, _ := NewBlockChain(rawdb.NewMemoryDatabase(), nil, gspec, nil, ethash.NewFaker(), vm.Config{}, nil, nil, nil)
 			_, results = chain.engine.VerifyHeaders(chain, headers)
 			chain.Stop()
 		} else {
-			chain, _ := NewBlockChain(rawdb.NewMemoryDatabase(), nil, gspec, nil, ethash.NewFakeFailer(uint64(len(headers)-1)), vm.Config{}, nil, nil)
+			chain, _ := NewBlockChain(rawdb.NewMemoryDatabase(), nil, gspec, nil, ethash.NewFakeFailer(uint64(len(headers)-1)), vm.Config{}, nil, nil, nil)
 			_, results = chain.engine.VerifyHeaders(chain, headers)
 			chain.Stop()
 		}

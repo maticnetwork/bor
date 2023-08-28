@@ -44,6 +44,7 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/tests/bor/mocks"
+	"github.com/ethereum/go-ethereum/trie"
 )
 
 var (
@@ -127,14 +128,14 @@ func buildEthereumInstance(t *testing.T, db ethdb.Database) *initializeData {
 		BorLogs: true,
 	}
 
-	ethConf.Genesis.MustCommit(db)
+	ethConf.Genesis.MustCommit(db, trie.NewDatabase(db, trie.HashDefaults))
 
 	ethereum := utils.CreateBorEthereum(ethConf)
 	if err != nil {
 		t.Fatalf("failed to register Ethereum protocol: %v", err)
 	}
 
-	ethConf.Genesis.MustCommit(ethereum.ChainDb())
+	ethConf.Genesis.MustCommit(ethereum.ChainDb(), trie.NewDatabase(ethereum.ChainDb(), trie.HashDefaults))
 
 	ethereum.Engine().(*bor.Bor).Authorize(addr, func(account accounts.Account, s string, data []byte) ([]byte, error) {
 		return crypto.Sign(crypto.Keccak256(data), key)
@@ -223,7 +224,7 @@ func buildNextBlock(t *testing.T, _bor consensus.Engine, chain *core.BlockChain,
 	block, _ := _bor.FinalizeAndAssemble(ctx, chain, b.header, state, b.txs, nil, b.receipts, []*types.Withdrawal{})
 
 	// Write state changes to db
-	root, err := state.Commit(chain.Config().IsEIP158(b.header.Number))
+	root, err := state.Commit(b.header.Number.Uint64(), chain.Config().IsEIP158(b.header.Number))
 	if err != nil {
 		panic(fmt.Sprintf("state write error: %v", err))
 	}
@@ -470,7 +471,6 @@ func InitMiner(genesis *core.Genesis, privKey *ecdsa.PrivateKey, withoutHeimdall
 		DatabaseHandles: 256,
 		TxPool:          txpool.DefaultConfig,
 		GPO:             ethconfig.Defaults.GPO,
-		Ethash:          ethconfig.Defaults.Ethash,
 		Miner: miner.Config{
 			Etherbase: crypto.PubkeyToAddress(privKey.PublicKey),
 			GasCeil:   genesis.GasLimit * 11 / 10,

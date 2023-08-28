@@ -40,6 +40,7 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/tests/bor/mocks"
+	"github.com/ethereum/go-ethereum/trie"
 )
 
 var (
@@ -93,7 +94,7 @@ func TestValidatorWentOffline(t *testing.T) {
 	// Iterate over all the nodes and start mining
 	time.Sleep(3 * time.Second)
 	for _, node := range nodes {
-		if err := node.StartMining(1); err != nil {
+		if err := node.StartMining(); err != nil {
 			panic(err)
 		}
 	}
@@ -296,7 +297,7 @@ func TestForkWithBlockTime(t *testing.T) {
 
 			// Iterate over all the nodes and start mining
 			for _, node := range nodes {
-				if err := node.StartMining(1); err != nil {
+				if err := node.StartMining(); err != nil {
 					t.Fatal("Error occured while starting miner", "node", node, "error", err)
 				}
 			}
@@ -745,7 +746,7 @@ func TestEIP1559Transition(t *testing.T) {
 
 	gspec.Config.BerlinBlock = common.Big0
 	gspec.Config.LondonBlock = common.Big0
-	genesis := gspec.MustCommit(db)
+	genesis := gspec.MustCommit(db, trie.NewDatabase(db, trie.HashDefaults))
 	signer := types.LatestSigner(gspec.Config)
 
 	blocks, _ := core.GenerateChain(gspec.Config, genesis, engine, db, 1, func(i int, b *core.BlockGen) {
@@ -773,7 +774,7 @@ func TestEIP1559Transition(t *testing.T) {
 	})
 
 	diskdb := rawdb.NewMemoryDatabase()
-	gspec.MustCommit(diskdb)
+	gspec.MustCommit(diskdb, trie.NewDatabase(diskdb, trie.HashDefaults))
 
 	chain, err := core.NewBlockChain(diskdb, nil, gspec, nil, engine, vm.Config{}, nil, nil, nil)
 	if err != nil {
@@ -961,7 +962,7 @@ func TestEIP1559TransitionWithEIP155(t *testing.T) {
 		}
 	)
 
-	genesis := gspec.MustCommit(db)
+	genesis := gspec.MustCommit(db, trie.NewDatabase(db, trie.HashDefaults))
 
 	// Use signer without chain ID
 	signer := types.HomesteadSigner{}
@@ -1034,7 +1035,7 @@ func TestTransitionWithoutEIP155(t *testing.T) {
 		}
 	)
 
-	genesis := gspec.MustCommit(db)
+	genesis := gspec.MustCommit(db, trie.NewDatabase(db, trie.HashDefaults))
 
 	// Use signer without chain ID
 	signer := types.HomesteadSigner{}
@@ -1066,7 +1067,7 @@ func TestTransitionWithoutEIP155(t *testing.T) {
 	})
 
 	diskdb := rawdb.NewMemoryDatabase()
-	gspec.MustCommit(diskdb)
+	gspec.MustCommit(diskdb, trie.NewDatabase(diskdb, trie.HashDefaults))
 
 	chain, err := core.NewBlockChain(diskdb, nil, gspec, nil, engine, vm.Config{}, nil, nil, nil)
 	if err != nil {

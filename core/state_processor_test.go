@@ -21,8 +21,6 @@ import (
 	"math/big"
 	"testing"
 
-	"golang.org/x/crypto/sha3"
-
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/consensus"
@@ -48,9 +46,8 @@ func u64(val uint64) *uint64 { return &val }
 func TestStateProcessorErrors(t *testing.T) {
 	var (
 		cacheConfig = &CacheConfig{
-			TrieCleanLimit:   154,
-			TrieCleanJournal: "triecache",
-			Preimages:        true,
+			TrieCleanLimit: 154,
+			Preimages:      true,
 		}
 
 		config = &params.ChainConfig{
@@ -67,6 +64,7 @@ func TestStateProcessorErrors(t *testing.T) {
 			BerlinBlock:                   big.NewInt(0),
 			LondonBlock:                   big.NewInt(0),
 			Ethash:                        new(params.EthashConfig),
+			Bor:                           &params.BorConfig{BurntContract: map[string]string{"0": "0x000000000000000000000000000000000000dead"}},
 			TerminalTotalDifficulty:       big.NewInt(0),
 			TerminalTotalDifficultyPassed: true,
 			ShanghaiTime:                  new(uint64),
@@ -111,7 +109,7 @@ func TestStateProcessorErrors(t *testing.T) {
 			GasTipCap:  uint256.MustFromBig(gasTipCap),
 			GasFeeCap:  uint256.MustFromBig(gasFeeCap),
 			Gas:        gasLimit,
-			To:         to,
+			To:         &to,
 			BlobHashes: hashes,
 			Value:      new(uint256.Int),
 		}), signer, key1)
@@ -137,7 +135,7 @@ func TestStateProcessorErrors(t *testing.T) {
 					},
 				},
 			}
-			blockchain, _  = NewBlockChain(db, nil, gspec, nil, beacon.New(ethash.NewFaker()), vm.Config{}, nil, nil)
+			blockchain, _  = NewBlockChain(db, nil, gspec, nil, beacon.New(ethash.NewFaker()), vm.Config{}, nil, nil, nil)
 			tooBigInitCode = [params.MaxInitCodeSize + 1]byte{}
 		)
 
@@ -347,7 +345,8 @@ func TestStateProcessorErrors(t *testing.T) {
 					},
 				},
 			}
-			blockchain, _ = NewBlockChain(db, nil, gspec, nil, beacon.New(ethash.NewFaker()), vm.Config{}, nil, nil)
+			blockchain, _         = NewBlockChain(db, nil, gspec, nil, beacon.New(ethash.NewFaker()), vm.Config{}, nil, nil, nil)
+			parallelBlockchain, _ = NewParallelBlockChain(db, cacheConfig, gspec, nil, beacon.New(ethash.NewFaker()), vm.Config{ParallelEnable: true, ParallelSpeculativeProcesses: 8}, nil, nil, nil)
 		)
 
 		defer blockchain.Stop()
@@ -364,16 +363,15 @@ func TestStateProcessorErrors(t *testing.T) {
 					},
 					want: "could not apply tx 0 [0x88626ac0d53cb65308f2416103c62bb1f18b805573d4f96a3640bbbfff13c14f]: sender not an eoa: address 0x71562b71999873DB5b286dF957af199Ec94617F7, codehash: 0x9280914443471259d4570a8661015ae4a5b80186dbc619658fb494bebc3da3d1",
 				},
-				want: "could not apply tx 0 [0x88626ac0d53cb65308f2416103c62bb1f18b805573d4f96a3640bbbfff13c14f]: sender not an eoa: address 0x71562b71999873DB5b286dF957af199Ec94617F7, codehash: 0x9280914443471259d4570a8661015ae4a5b80186dbc619658fb494bebc3da3d1",
-			},
-		} {
-			block := GenerateBadBlock(gspec.ToBlock(), beacon.New(ethash.NewFaker()), tt.txs, gspec.Config)
-			_, err := blockchain.InsertChain(types.Blocks{block})
-			if err == nil {
-				t.Fatal("block imported without errors")
-			}
-			if have, want := err.Error(), tt.want; have != want {
-				t.Errorf("test %d:\nhave \"%v\"\nwant \"%v\"\n", i, have, want)
+			} {
+				block := GenerateBadBlock(gspec.ToBlock(), beacon.New(ethash.NewFaker()), tt.txs, gspec.Config)
+				_, err := bc.InsertChain(types.Blocks{block})
+				if err == nil {
+					t.Fatal("block imported without errors")
+				}
+				if have, want := err.Error(), tt.want; have != want {
+					t.Errorf("test %d:\nhave \"%v\"\nwant \"%v\"\n", i, have, want)
+				}
 			}
 		}
 	}

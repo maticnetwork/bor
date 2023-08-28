@@ -482,3 +482,15 @@ func (bc *BlockChain) GetStateSync() []*types.StateSyncData {
 func (bc *BlockChain) SubscribeStateSyncEvent(ch chan<- StateSyncEvent) event.Subscription {
 	return bc.scope.Track(bc.stateSyncFeed.Subscribe(ch))
 }
+
+func (bc *BlockChain) SetDB(db ethdb.Database) {
+	bc.db = db
+}
+
+func (bc *BlockChain) SetStateCache(stateCache state.Database) {
+	bc.stateCache = stateCache
+}
+
+func (bc *BlockChain) SetTrieDB(triedb *trie.Database) {
+	bc.triedb = triedb
+}

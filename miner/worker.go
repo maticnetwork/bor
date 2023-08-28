@@ -166,6 +166,7 @@ type newWorkReq struct {
 	//nolint:containedctx
 	ctx       context.Context
 	interrupt *atomic.Int32
+	noempty   bool
 	timestamp int64
 }
 
@@ -240,6 +241,13 @@ type worker struct {
 	newTxs  atomic.Int32 // New arrival transaction count since last sealing work submitting.
 	syncing atomic.Bool  // The indicator whether the node is still syncing.
 
+	// noempty is the flag used to control whether the feature of pre-seal empty
+	// block is enabled. The default value is false(pre-seal is enabled by default).
+	// But in some special scenario the consensus engine will seal blocks instantaneously,
+	// in this case this feature will add all empty blocks into canonical chain
+	// non-stop and no real transaction will be included.
+	noempty atomic.Bool
+
 	// newpayloadTimeout is the maximum timeout allowance for creating payload.
 	// The default value is 2 seconds but node operator can set it to arbitrary
 	// large value. A large timeout allowance may cause Geth to fail creating
@@ -290,6 +298,7 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 		resubmitAdjustCh:    make(chan *intervalAdjust, resubmitAdjustChanSize),
 		interruptCommitFlag: config.CommitInterruptFlag,
 	}
+	worker.noempty.Store(true)
 	worker.profileCount = new(int32)
 	// Subscribe NewTxsEvent for tx pool
 	worker.txsSub = eth.TxPool().SubscribeNewTxsEvent(worker.txsCh)
@@ -303,6 +312,10 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 
 	worker.interruptedTxCache = &vm.TxCache{
 		Cache: interruptedTxCache,
+	}
+
+	if !worker.interruptCommitFlag {
+		worker.noempty.Store(false)
 	}
 
 	// Sanitize recommit interval if the user-specified one is too short.
@@ -474,7 +487,7 @@ func (w *worker) newWorkLoop(ctx context.Context, recommit time.Duration) {
 	<-timer.C // discard the initial tick
 
 	// commit aborts in-flight transaction execution with given signal and resubmits a new one.
-	commit := func(s int32) {
+	commit := func(noempty bool, s int32) {
 		// we close spans only by the place we created them
 		ctx, span := tracing.Trace(ctx, "worker.newWorkLoop.commit")
 		tracing.EndSpan(span)
@@ -485,7 +498,7 @@ func (w *worker) newWorkLoop(ctx context.Context, recommit time.Duration) {
 
 		interrupt = new(atomic.Int32)
 		select {
-		case w.newWorkCh <- &newWorkReq{interrupt: interrupt, timestamp: timestamp, ctx: ctx}:
+		case w.newWorkCh <- &newWorkReq{interrupt: interrupt, noempty: noempty, timestamp: timestamp, ctx: ctx}:
 		case <-w.exitCh:
 			return
 		}
@@ -513,14 +526,14 @@ func (w *worker) newWorkLoop(ctx context.Context, recommit time.Duration) {
 
 			timestamp = time.Now().Unix()
 
-			commit(commitInterruptNewHead)
+			commit(false, commitInterruptNewHead)
 
 		case head := <-w.chainHeadCh:
 			clearPending(head.Block.NumberU64())
 
 			timestamp = time.Now().Unix()
 
-			commit(commitInterruptNewHead)
+			commit(false, commitInterruptNewHead)
 
 		case <-timer.C:
 			// If sealing is running resubmit a new work cycle periodically to pull in
@@ -532,7 +545,7 @@ func (w *worker) newWorkLoop(ctx context.Context, recommit time.Duration) {
 					continue
 				}
 
-				commit(commitInterruptResubmit)
+				commit(true, commitInterruptResubmit)
 			}
 
 		case interval := <-w.resubmitIntervalCh:
@@ -590,7 +603,7 @@ func (w *worker) mainLoop(ctx context.Context) {
 		select {
 		case req := <-w.newWorkCh:
 			//nolint:contextcheck
-			w.commitWork(req.ctx, req.interrupt, req.timestamp)
+			w.commitWork(req.ctx, req.interrupt, req.noempty, req.timestamp)
 
 		case req := <-w.getWorkCh:
 			block, fees, err := w.generateWork(req.ctx, req.params)
@@ -640,7 +653,7 @@ func (w *worker) mainLoop(ctx context.Context) {
 				// submit sealing work here since all empty submission will be rejected
 				// by clique. Of course the advance sealing(empty submission) is disabled.
 				if w.chainConfig.Clique != nil && w.chainConfig.Clique.Period == 0 {
-					w.commitWork(ctx, nil, time.Now().Unix())
+					w.commitWork(ctx, nil, true, time.Now().Unix())
 				}
 			}
 
@@ -1494,7 +1507,7 @@ func (w *worker) generateWork(ctx context.Context, params *generateParams) (*typ
 
 // commitWork generates several new sealing tasks based on the parent block
 // and submit them to the sealer.
-func (w *worker) commitWork(ctx context.Context, interrupt *atomic.Int32, timestamp int64) {
+func (w *worker) commitWork(ctx context.Context, interrupt *atomic.Int32, noempty bool, timestamp int64) {
 	start := time.Now()
 
 	var (
@@ -1531,7 +1544,7 @@ func (w *worker) commitWork(ctx context.Context, interrupt *atomic.Int32, timest
 		stopFn()
 	}()
 
-	if w.interruptCommitFlag {
+	if !noempty && w.interruptCommitFlag {
 		block := w.chain.GetBlockByHash(w.chain.CurrentBlock().Hash())
 		interruptCtx, stopFn = getInterruptTimer(ctx, work, block)
 		// nolint : staticcheck
@@ -1546,6 +1559,11 @@ func (w *worker) commitWork(ctx context.Context, interrupt *atomic.Int32, timest
 		attribute.Int("number", int(work.header.Number.Uint64())),
 	)
 
+	// Create an empty block based on temporary copied state for
+	// sealing in advance without waiting block execution finished.
+	if !noempty && !w.noempty.Load() {
+		_ = w.commit(ctx, work.copy(), nil, false, start)
+	}
 	// Fill pending transactions from the txpool into the block.
 	err = w.fillTransactions(ctx, interrupt, work, interruptCtx)
 

@@ -208,30 +208,30 @@ var testTx2 = types.MustSignNewTx(testKey, types.LatestSigner(genesis.Config), &
 	To:       &common.Address{2},
 })
 
-func newTestBackend(t *testing.T) (*node.Node, []*types.Block) {
-	// Generate test chain.
-	blocks := generateTestChain()
+// func newTestBackend(t *testing.T) (*node.Node, []*types.Block) {
+// 	// Generate test chain.
+// 	blocks := generateTestChain()
 
-	// Create node
-	n, err := node.New(&node.Config{})
-	if err != nil {
-		t.Fatalf("can't create new node: %v", err)
-	}
-	// Create Ethereum Service
-	config := &ethconfig.Config{Genesis: genesis}
-	ethservice, err := eth.New(n, config)
-	if err != nil {
-		t.Fatalf("can't create new ethereum service: %v", err)
-	}
-	// Import the test chain.
-	if err := n.Start(); err != nil {
-		t.Fatalf("can't start test node: %v", err)
-	}
-	if _, err := ethservice.BlockChain().InsertChain(blocks[1:]); err != nil {
-		t.Fatalf("can't import test blocks: %v", err)
-	}
-	return n, blocks
-}
+// 	// Create node
+// 	n, err := node.New(&node.Config{})
+// 	if err != nil {
+// 		t.Fatalf("can't create new node: %v", err)
+// 	}
+// 	// Create Ethereum Service
+// 	config := &ethconfig.Config{Genesis: genesis}
+// 	ethservice, err := eth.New(n, config)
+// 	if err != nil {
+// 		t.Fatalf("can't create new ethereum service: %v", err)
+// 	}
+// 	// Import the test chain.
+// 	if err := n.Start(); err != nil {
+// 		t.Fatalf("can't start test node: %v", err)
+// 	}
+// 	if _, err := ethservice.BlockChain().InsertChain(blocks[1:]); err != nil {
+// 		t.Fatalf("can't import test blocks: %v", err)
+// 	}
+// 	return n, blocks
+// }
 
 func generateTestChain() []*types.Block {
 	generate := func(i int, g *core.BlockGen) {

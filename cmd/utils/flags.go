@@ -2308,7 +2308,7 @@ func MakeChain(ctx *cli.Context, stack *node.Node, readonly bool) (*core.BlockCh
 	}
 	_ = CreateBorEthereum(configs)
 
-	engine := ethconfig.CreateConsensusEngine(config, configs, chainDb, nil)
+	engine := ethconfig.CreateConsensusEngine(config, configs, nil, chainDb, nil)
 	if err != nil {
 		Fatalf("%v", err)
 	}

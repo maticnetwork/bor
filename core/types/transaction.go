@@ -350,9 +350,8 @@ func (tx *Transaction) Cost() *big.Int {
 	gasPrice.Mul(gasPrice, uint256.NewInt(tx.Gas()))
 	value, _ := uint256.FromBig(tx.ValueRef())
 
-	blobGas256, _ := uint256.FromBig(new(big.Int).Mul(tx.BlobGasFeeCap(), new(big.Int).SetUint64(tx.BlobGas())))
-
 	if tx.Type() == BlobTxType {
+		blobGas256, _ := uint256.FromBig(new(big.Int).Mul(tx.BlobGasFeeCap(), new(big.Int).SetUint64(tx.BlobGas())))
 		gasPrice.Add(gasPrice, blobGas256)
 	}
 
