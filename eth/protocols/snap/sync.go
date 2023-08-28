@@ -660,10 +660,14 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 		bytecodeHealResps    = make(chan *bytecodeHealResponse)
 	)
 
+	log.Debug("Starting to loop over task processing")
+
 	for {
 		// Remove all completed tasks and terminate sync if everything's done
 		s.cleanStorageTasks()
 		s.cleanAccountTasks()
+
+		log.Debug("#1", "len(s.tasks)", len(s.tasks), "pending", s.healer.scheduler.Pending())
 
 		if len(s.tasks) == 0 && s.healer.scheduler.Pending() == 0 {
 			return nil
@@ -672,6 +676,8 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 		s.assignAccountTasks(accountResps, accountReqFails, cancel)
 		s.assignBytecodeTasks(bytecodeResps, bytecodeReqFails, cancel)
 		s.assignStorageTasks(storageResps, storageReqFails, cancel)
+
+		log.Debug("Assigned all tasks")
 
 		if len(s.tasks) == 0 {
 			// Sync phase done, run heal phase
@@ -727,6 +733,7 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 			s.processBytecodeHealResponse(res)
 		}
 		// Report stats if something meaningful happened
+		log.Debug("Something meaningful happened, about to report stats")
 		s.report(false)
 	}
 }
@@ -774,6 +781,8 @@ func (s *Syncer) loadSyncStatus() {
 					}
 				}
 			}
+
+			log.Debug("Loaded snapshot sync status", "len(s.tasks)", len(s.tasks))
 
 			s.lock.Lock()
 			defer s.lock.Unlock()
