@@ -711,6 +711,7 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 			return ErrCancelled
 
 		case req := <-accountReqFails:
+			log.Debug("*** Account reponse failure received")
 			s.revertAccountRequest(req)
 		case req := <-bytecodeReqFails:
 			s.revertBytecodeRequest(req)
@@ -722,6 +723,7 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 			s.revertBytecodeHealRequest(req)
 
 		case res := <-accountResps:
+			log.Debug("*** Account response success received")
 			s.processAccountResponse(res)
 		case res := <-bytecodeResps:
 			s.processBytecodeResponse(res)
@@ -992,6 +994,7 @@ func (s *Syncer) assignAccountTasks(success chan *accountResponse, fail chan *ac
 
 	sort.Sort(sort.Reverse(idlers))
 
+	log.Debug("*** Iterating over account tasks", "s.tasks", len(s.tasks))
 	// Iterate over all the tasks and try to find a pending one
 	for _, task := range s.tasks {
 		// Skip any tasks already filling
@@ -1051,6 +1054,8 @@ func (s *Syncer) assignAccountTasks(success chan *accountResponse, fail chan *ac
 
 		s.pend.Add(1)
 
+		// log.Debug("*** Trying to send request", "id", reqid, "origin", task.Next, "limit", task.Last)
+
 		go func(root common.Hash) {
 			defer s.pend.Done()
 
@@ -1063,7 +1068,9 @@ func (s *Syncer) assignAccountTasks(success chan *accountResponse, fail chan *ac
 				cap = minRequestSize
 			}
 
+			log.Info("*** Sent request", "id", reqid, "origin", task.Next, "limit", task.Last)
 			if err := peer.RequestAccountRange(reqid, root, req.origin, req.limit, uint64(cap)); err != nil {
+				log.Debug("*** Failed to request account range", "err", err)
 				peer.Log().Debug("Failed to request account range", "err", err)
 				s.scheduleRevertAccountRequest(req)
 			}
@@ -2510,7 +2517,7 @@ func (s *Syncer) OnAccounts(peer SyncPeer, id uint64, hashes []common.Hash, acco
 	}
 
 	logger := peer.Log().New("reqid", id)
-	logger.Trace("Delivering range of accounts", "hashes", len(hashes), "accounts", len(accounts), "proofs", len(proof), "bytes", size)
+	logger.Debug("Delivering range of accounts", "hashes", len(hashes), "accounts", len(accounts), "proofs", len(proof), "bytes", size)
 
 	// Whether or not the response is valid, we can mark the peer as idle and
 	// notify the scheduler to assign a new task. If the response is invalid,
