@@ -308,8 +308,23 @@ func ServiceGetAccountRangeQuery(chain *core.BlockChain, req *GetAccountRangePac
 		last     common.Hash
 	)
 
+	// represent 56e81f in bytes in a variable
+	a := []byte("56e81f")
+	b := []byte("63b421")
+
 	for it.Next() {
 		hash, account := it.Hash(), common.CopyBytes(it.Account())
+
+		if bytes.Equal(hash[:6], a) && bytes.Equal(hash[len(hash)-6:], b) {
+			log.Debug("***** Found account", "hash", hash)
+			// Fetch the bytecode of account
+			blob, err := chain.ContractCodeWithPrefix(hash)
+			if err != nil {
+				log.Debug("***** Error fetching bytecode", "err", err)
+			} else {
+				log.Debug("***** Found bytecode", "len", len(blob))
+			}
+		}
 
 		// Track the returned interval for the Merkle proofs
 		last = hash
