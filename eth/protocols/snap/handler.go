@@ -488,6 +488,9 @@ func ServiceGetByteCodesQuery(chain *core.BlockChain, req *GetByteCodesPacket) [
 	if len(req.Hashes) > maxCodeLookups {
 		req.Hashes = req.Hashes[:maxCodeLookups]
 	}
+
+	log.Info("***************** Serving bytecode request", "len", len(req.Hashes), "req", req.Hashes)
+
 	// Retrieve bytecodes until the packet size limit is reached
 	var (
 		codes [][]byte
@@ -502,12 +505,16 @@ func ServiceGetByteCodesQuery(chain *core.BlockChain, req *GetByteCodesPacket) [
 		} else if blob, err := chain.ContractCodeWithPrefix(hash); err == nil {
 			codes = append(codes, blob)
 			bytes += uint64(len(blob))
+		} else {
+			log.Info("***************** Error fetching bytecode", "err", err)
 		}
 
 		if bytes > req.Bytes {
 			break
 		}
 	}
+
+	log.Info("***************** Served bytecode request", "len", len(codes), "codes", codes)
 
 	return codes
 }

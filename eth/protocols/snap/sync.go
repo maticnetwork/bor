@@ -677,7 +677,7 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 		s.assignBytecodeTasks(bytecodeResps, bytecodeReqFails, cancel)
 		s.assignStorageTasks(storageResps, storageReqFails, cancel)
 
-		log.Debug("Assigned all tasks")
+		log.Debug("*** Assigned all tasks in loop")
 
 		if len(s.tasks) == 0 {
 			// Sync phase done, run heal phase
@@ -1971,6 +1971,9 @@ func (s *Syncer) processAccountResponse(res *accountResponse) {
 	resumed := make(map[common.Hash]struct{})
 
 	res.task.pend = 0
+
+	log.Debug("*** Processing accounts", "len", len(res.accounts))
+
 	for i, account := range res.accounts {
 		// Check if the account is a contract with an unknown code
 		if !bytes.Equal(account.CodeHash, types.EmptyCodeHash.Bytes()) {
@@ -2016,6 +2019,9 @@ func (s *Syncer) processAccountResponse(res *accountResponse) {
 			delete(res.task.SubTasks, hash)
 		}
 	}
+
+	log.Debug("*** Processed accounts", "pending", res.task.pend)
+
 	// If the account range contained no contracts, or all have been fully filled
 	// beforehand, short circuit storage filling and forward to the next task
 	if res.task.pend == 0 {
