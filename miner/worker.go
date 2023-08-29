@@ -658,7 +658,7 @@ func (w *worker) mainLoop(ctx context.Context) {
 		select {
 		case req := <-w.newWorkCh:
 			//nolint:contextcheck
-			if w.chainConfig.ChainID.Cmp(params.BorMainnetChainConfig.ChainID) == 0 || w.chainConfig.ChainID.Cmp(params.BorTestChainConfig.ChainID) == 0 {
+			if w.chainConfig.ChainID.Cmp(params.BorMainnetChainConfig.ChainID) == 0 || w.chainConfig.ChainID.Cmp(params.MumbaiChainConfig.ChainID) == 0 {
 				if w.eth.PeerCount() > 0 {
 					w.commitWork(req.ctx, req.interrupt, req.noempty, req.timestamp)
 				}
