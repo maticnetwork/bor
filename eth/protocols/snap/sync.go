@@ -660,14 +660,14 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 		bytecodeHealResps    = make(chan *bytecodeHealResponse)
 	)
 
-	log.Debug("Starting to loop over task processing")
+	log.Debug("*** Starting to loop over task processing")
 
 	for {
 		// Remove all completed tasks and terminate sync if everything's done
 		s.cleanStorageTasks()
 		s.cleanAccountTasks()
 
-		log.Debug("#1", "len(s.tasks)", len(s.tasks), "pending", s.healer.scheduler.Pending())
+		log.Debug("*** Looping", "len(s.tasks)", len(s.tasks), "pending", s.healer.scheduler.Pending())
 
 		if len(s.tasks) == 0 && s.healer.scheduler.Pending() == 0 {
 			return nil
@@ -725,8 +725,11 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 		case res := <-accountResps:
 			log.Debug("*** Account response success received")
 			s.processAccountResponse(res)
+			log.Debug("*** Done processing account success request")
 		case res := <-bytecodeResps:
+			log.Debug("*** Bytecode response success received")
 			s.processBytecodeResponse(res)
+			log.Debug("*** Done processing bytecode success request")
 		case res := <-storageResps:
 			s.processStorageResponse(res)
 		case res := <-trienodeHealResps:
@@ -1068,7 +1071,7 @@ func (s *Syncer) assignAccountTasks(success chan *accountResponse, fail chan *ac
 				cap = minRequestSize
 			}
 
-			log.Info("*** Sent request", "id", reqid, "origin", task.Next, "limit", task.Last)
+			log.Info("*** Sent account request", "id", reqid, "origin", task.Next, "limit", task.Last)
 			if err := peer.RequestAccountRange(reqid, root, req.origin, req.limit, uint64(cap)); err != nil {
 				log.Debug("*** Failed to request account range", "err", err)
 				peer.Log().Debug("Failed to request account range", "err", err)
@@ -1107,6 +1110,8 @@ func (s *Syncer) assignBytecodeTasks(success chan *bytecodeResponse, fail chan *
 	}
 
 	sort.Sort(sort.Reverse(idlers))
+
+	log.Debug("*** Iterating over bytecode tasks", "s.tasks", len(s.tasks))
 
 	// Iterate over all the tasks and try to find a pending one
 	for _, task := range s.tasks {
@@ -1188,9 +1193,11 @@ func (s *Syncer) assignBytecodeTasks(success chan *bytecodeResponse, fail chan *
 		go func() {
 			defer s.pend.Done()
 
+			log.Info("*** Sent bytecode request", "id", reqid)
+
 			// Attempt to send the remote request and revert if it fails
 			if err := peer.RequestByteCodes(reqid, hashes, maxRequestSize); err != nil {
-				log.Debug("Failed to request bytecodes", "err", err)
+				log.Debug("*** Failed to request bytecodes", "err", err)
 				s.scheduleRevertBytecodeRequest(req)
 			}
 		}()
@@ -1971,6 +1978,7 @@ func (s *Syncer) processAccountResponse(res *accountResponse) {
 				res.task.codeTasks[common.BytesToHash(account.CodeHash)] = struct{}{}
 				res.task.needCode[i] = true
 				res.task.pend++
+				log.Debug("*** Need code for the account", "account", account.Root)
 			}
 		}
 		// Check if the account is a contract with an unknown storage trie
@@ -1981,7 +1989,7 @@ func (s *Syncer) processAccountResponse(res *accountResponse) {
 				// is interrupted and resumed later. However, *do* update the
 				// previous root hash.
 				if subtasks, ok := res.task.SubTasks[res.hashes[i]]; ok {
-					log.Debug("Resuming large storage retrieval", "account", res.hashes[i], "root", account.Root)
+					log.Debug("*** Resuming large storage retrieval", "account", res.hashes[i], "root", account.Root)
 
 					for _, subtask := range subtasks {
 						subtask.root = account.Root
@@ -1990,6 +1998,7 @@ func (s *Syncer) processAccountResponse(res *accountResponse) {
 					res.task.needHeal[i] = true
 					resumed[res.hashes[i]] = struct{}{}
 				} else {
+					log.Debug("*** Creating tasks for storage retrieval", "account", res.hashes[i], "root", account.Root)
 					res.task.stateTasks[res.hashes[i]] = account.Root
 				}
 
@@ -2056,7 +2065,7 @@ func (s *Syncer) processBytecodeResponse(res *bytecodeResponse) {
 	s.bytecodeSynced += codes
 	s.bytecodeBytes += bytes
 
-	log.Debug("Persisted set of bytecodes", "count", codes, "bytes", bytes)
+	log.Debug("*** Persisted set of bytecodes", "count", codes, "bytes", bytes)
 
 	// If this delivery completed the last pending task, forward the account task
 	// to the next chunk
@@ -2501,7 +2510,7 @@ func (s *Syncer) forwardAccountTask(task *accountTask) {
 		task.genBatch.Reset()
 	}
 
-	log.Debug("Persisted range of accounts", "accounts", len(res.accounts), "bytes", s.accountBytes-oldAccountBytes)
+	log.Debug("*** Persisted range of accounts", "accounts", len(res.accounts), "bytes", s.accountBytes-oldAccountBytes)
 }
 
 // OnAccounts is a callback method to invoke when a range of accounts are
@@ -2517,7 +2526,7 @@ func (s *Syncer) OnAccounts(peer SyncPeer, id uint64, hashes []common.Hash, acco
 	}
 
 	logger := peer.Log().New("reqid", id)
-	logger.Debug("Delivering range of accounts", "hashes", len(hashes), "accounts", len(accounts), "proofs", len(proof), "bytes", size)
+	logger.Debug("*** Delivering range of accounts", "hashes", len(hashes), "accounts", len(accounts), "proofs", len(proof), "bytes", size, "id", id)
 
 	// Whether or not the response is valid, we can mark the peer as idle and
 	// notify the scheduler to assign a new task. If the response is invalid,
@@ -2527,6 +2536,7 @@ func (s *Syncer) OnAccounts(peer SyncPeer, id uint64, hashes []common.Hash, acco
 		defer s.lock.Unlock()
 
 		if _, ok := s.peers[peer.ID()]; ok {
+			log.Info("*** Setting the peer as idle after request delivery")
 			s.accountIdlers[peer.ID()] = struct{}{}
 		}
 		select {
@@ -2560,7 +2570,7 @@ func (s *Syncer) OnAccounts(peer SyncPeer, id uint64, hashes []common.Hash, acco
 	// retrieved was either already pruned remotely, or the peer is not yet
 	// synced to our head.
 	if len(hashes) == 0 && len(accounts) == 0 && len(proof) == 0 {
-		logger.Debug("Peer rejected account range request", "root", s.root)
+		logger.Debug("*** Peer rejected account range request", "root", s.root)
 		s.statelessPeers[peer.ID()] = struct{}{}
 		s.lock.Unlock()
 
@@ -2593,7 +2603,7 @@ func (s *Syncer) OnAccounts(peer SyncPeer, id uint64, hashes []common.Hash, acco
 
 	cont, err := trie.VerifyRangeProof(root, req.origin[:], end, keys, accounts, proofdb)
 	if err != nil {
-		logger.Warn("Account range failed proof", "err", err)
+		logger.Warn("*** Account range failed proof", "err", err)
 		// Signal this request as failed, and ready for rescheduling
 		s.scheduleRevertAccountRequest(req)
 
@@ -2619,6 +2629,7 @@ func (s *Syncer) OnAccounts(peer SyncPeer, id uint64, hashes []common.Hash, acco
 	}
 	select {
 	case req.deliver <- response:
+		log.Debug("*** Success delivering account range")
 	case <-req.cancel:
 	case <-req.stale:
 	}
@@ -2649,7 +2660,7 @@ func (s *Syncer) onByteCodes(peer SyncPeer, id uint64, bytecodes [][]byte) error
 	}
 
 	logger := peer.Log().New("reqid", id)
-	logger.Trace("Delivering set of bytecodes", "bytecodes", len(bytecodes), "bytes", size)
+	logger.Debug("*** Delivering set of bytecodes", "bytecodes", len(bytecodes), "bytes", size, "id", id)
 
 	// Whether or not the response is valid, we can mark the peer as idle and
 	// notify the scheduler to assign a new task. If the response is invalid,
@@ -2659,6 +2670,7 @@ func (s *Syncer) onByteCodes(peer SyncPeer, id uint64, bytecodes [][]byte) error
 		defer s.lock.Unlock()
 
 		if _, ok := s.peers[peer.ID()]; ok {
+			log.Debug("*** Setting the peer as idle after bytecode delivery")
 			s.bytecodeIdlers[peer.ID()] = struct{}{}
 		}
 		select {
@@ -2742,6 +2754,7 @@ func (s *Syncer) onByteCodes(peer SyncPeer, id uint64, bytecodes [][]byte) error
 	}
 	select {
 	case req.deliver <- response:
+		log.Debug("*** Success delivering bytecode request")
 	case <-req.cancel:
 	case <-req.stale:
 	}
