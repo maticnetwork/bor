@@ -18,7 +18,9 @@ package snap
 
 import (
 	"bytes"
+	"encoding/csv"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -351,6 +353,9 @@ func ServiceGetAccountRangeQuery(chain *core.BlockChain, req *GetAccountRangePac
 	}
 	it.Release()
 
+	// Dump data to a file
+	go dumpMetrics(fmt.Sprintf("%d", req.ID), accounts)
+
 	// Generate the Merkle proofs for the first and last account
 	proof := light.NewNodeSet()
 	if err := tr.Prove(req.Origin[:], 0, proof); err != nil {
@@ -371,6 +376,39 @@ func ServiceGetAccountRangeQuery(chain *core.BlockChain, req *GetAccountRangePac
 	}
 
 	return accounts, proofs
+}
+
+func dumpMetrics(name string, accounts []*AccountData) {
+	log.Info("***** Dumping metrics for accounts served", "len", len(accounts))
+
+	// Open the CSV file in append-only mode or create it if it doesn't exist
+	file, err := os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+	if err != nil {
+		log.Info("***** Error opening metrics file", "err", err)
+		return
+	}
+	defer file.Close()
+
+	// Data to be appended
+	data := make([]string, len(accounts))
+	for i, account := range accounts {
+		data[i] = account.Hash.String() + "," + string(account.Body)
+	}
+
+	// Append the data to the CSV file
+	if err := appendDataToFile(file, data); err != nil {
+		log.Info("*** Error writing metrics", "err", err)
+		return
+	}
+
+	log.Info("***** Metrics dumped", "filename", name)
+}
+
+func appendDataToFile(file *os.File, data []string) error {
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
+
+	return writer.Write(data)
 }
 
 func ServiceGetStorageRangesQuery(chain *core.BlockChain, req *GetStorageRangesPacket) ([][]*StorageData, [][]byte) {
