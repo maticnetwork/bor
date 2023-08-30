@@ -228,6 +228,7 @@ func HandleMessage(backend Backend, peer *Peer) error {
 		return backend.Handle(peer, res)
 
 	case msg.Code == GetByteCodesMsg:
+		log.Debug("***** Got new bytecode request")
 		// Decode bytecode retrieval request
 		var req GetByteCodesPacket
 		if err := msg.Decode(&req); err != nil {
