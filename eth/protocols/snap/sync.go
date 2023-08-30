@@ -2577,7 +2577,7 @@ func (s *Syncer) OnAccounts(peer SyncPeer, id uint64, hashes []common.Hash, acco
 	// synced to our head.
 	if len(hashes) == 0 && len(accounts) == 0 && len(proof) == 0 {
 		logger.Debug("*** Peer rejected account range request", "root", s.root)
-		s.statelessPeers[peer.ID()] = struct{}{}
+		// s.statelessPeers[peer.ID()] = struct{}{}
 		s.lock.Unlock()
 
 		// Signal this request as failed, and ready for rescheduling
@@ -2712,7 +2712,7 @@ func (s *Syncer) onByteCodes(peer SyncPeer, id uint64, bytecodes [][]byte) error
 	if len(bytecodes) == 0 {
 		logger.Debug("Peer rejected bytecode request")
 
-		s.statelessPeers[peer.ID()] = struct{}{}
+		// s.statelessPeers[peer.ID()] = struct{}{}
 		s.lock.Unlock()
 
 		// Signal this request as failed, and ready for rescheduling
@@ -2859,7 +2859,7 @@ func (s *Syncer) OnStorage(peer SyncPeer, id uint64, hashes [][]common.Hash, slo
 	if len(hashes) == 0 {
 		logger.Debug("Peer rejected storage request")
 
-		s.statelessPeers[peer.ID()] = struct{}{}
+		// s.statelessPeers[peer.ID()] = struct{}{}
 		s.lock.Unlock()
 		s.scheduleRevertStorageRequest(req) // reschedule request
 
@@ -2988,7 +2988,7 @@ func (s *Syncer) OnTrieNodes(peer SyncPeer, id uint64, trienodes [][]byte) error
 	if len(trienodes) == 0 {
 		logger.Debug("Peer rejected trienode heal request")
 
-		s.statelessPeers[peer.ID()] = struct{}{}
+		// s.statelessPeers[peer.ID()] = struct{}{}
 		s.lock.Unlock()
 
 		// Signal this request as failed, and ready for rescheduling
@@ -3108,7 +3108,7 @@ func (s *Syncer) onHealByteCodes(peer SyncPeer, id uint64, bytecodes [][]byte) e
 	if len(bytecodes) == 0 {
 		logger.Debug("Peer rejected bytecode heal request")
 
-		s.statelessPeers[peer.ID()] = struct{}{}
+		// s.statelessPeers[peer.ID()] = struct{}{}
 		s.lock.Unlock()
 
 		// Signal this request as failed, and ready for rescheduling
