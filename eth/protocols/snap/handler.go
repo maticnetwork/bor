@@ -160,6 +160,7 @@ func HandleMessage(backend Backend, peer *Peer) error {
 	// Handle the message depending on its contents
 	switch {
 	case msg.Code == GetAccountRangeMsg:
+		log.Debug("***** Got Account Range Request Message")
 		// Decode the account retrieval request
 		var req GetAccountRangePacket
 		if err := msg.Decode(&req); err != nil {
@@ -294,11 +295,13 @@ func ServiceGetAccountRangeQuery(chain *core.BlockChain, req *GetAccountRangePac
 	// Retrieve the requested state and bail out if non existent
 	tr, err := trie.New(trie.StateTrieID(req.Root), chain.StateCache().TrieDB())
 	if err != nil {
+		log.Debug("***** Error creating new trie", "err", err)
 		return nil, nil
 	}
 
 	it, err := chain.Snapshots().AccountIterator(req.Root, req.Origin)
 	if err != nil {
+		log.Debug("***** Error getting account iterator", "err", err)
 		return nil, nil
 	}
 	// Iterate over the requested range and pile accounts up
@@ -307,6 +310,8 @@ func ServiceGetAccountRangeQuery(chain *core.BlockChain, req *GetAccountRangePac
 		size     uint64
 		last     common.Hash
 	)
+
+	log.Debug("***** Starting to iterate over accounts for serving request", "id", req.ID)
 
 	a := common.HexToHash("0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
 
