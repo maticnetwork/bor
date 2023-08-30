@@ -160,7 +160,7 @@ func HandleMessage(backend Backend, peer *Peer) error {
 	// Handle the message depending on its contents
 	switch {
 	case msg.Code == GetAccountRangeMsg:
-		log.Debug("***** Got Account Range Request Message")
+		log.Info("***** Got Account Range Request Message")
 		// Decode the account retrieval request
 		var req GetAccountRangePacket
 		if err := msg.Decode(&req); err != nil {
@@ -228,7 +228,7 @@ func HandleMessage(backend Backend, peer *Peer) error {
 		return backend.Handle(peer, res)
 
 	case msg.Code == GetByteCodesMsg:
-		log.Debug("***** Got new bytecode request")
+		log.Info("***** Got new bytecode request")
 		// Decode bytecode retrieval request
 		var req GetByteCodesPacket
 		if err := msg.Decode(&req); err != nil {
@@ -296,13 +296,13 @@ func ServiceGetAccountRangeQuery(chain *core.BlockChain, req *GetAccountRangePac
 	// Retrieve the requested state and bail out if non existent
 	tr, err := trie.New(trie.StateTrieID(req.Root), chain.StateCache().TrieDB())
 	if err != nil {
-		log.Debug("***** Error creating new trie", "err", err)
+		log.Info("***** Error creating new trie", "err", err)
 		return nil, nil
 	}
 
 	it, err := chain.Snapshots().AccountIterator(req.Root, req.Origin)
 	if err != nil {
-		log.Debug("***** Error getting account iterator", "err", err)
+		log.Info("***** Error getting account iterator", "err", err)
 		return nil, nil
 	}
 	// Iterate over the requested range and pile accounts up
@@ -312,22 +312,22 @@ func ServiceGetAccountRangeQuery(chain *core.BlockChain, req *GetAccountRangePac
 		last     common.Hash
 	)
 
-	log.Debug("***** Starting to iterate over accounts for serving request", "id", req.ID)
+	log.Info("***** Starting to iterate over accounts for serving request", "id", req.ID)
 
 	a := common.HexToHash("0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
 
 	for it.Next() {
 		hash, account := it.Hash(), common.CopyBytes(it.Account())
 
-		log.Debug("***** Iterating accounts", "hash", hash.String(), "a", a.String())
+		log.Info("***** Iterating accounts", "hash", hash.String(), "a", a.String())
 
 		if hash.String() == a.String() {
-			log.Debug("***** Found account", "hash", hash)
+			log.Info("***** Found account", "hash", hash)
 			blob, err := chain.ContractCodeWithPrefix(hash)
 			if err != nil {
-				log.Debug("***** Error fetching bytecode", "err", err)
+				log.Info("***** Error fetching bytecode", "err", err)
 			} else {
-				log.Debug("***** Found bytecode", "len", len(blob))
+				log.Info("***** Found bytecode", "len", len(blob))
 			}
 		}
 
