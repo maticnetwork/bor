@@ -313,9 +313,10 @@ func ServiceGetAccountRangeQuery(chain *core.BlockChain, req *GetAccountRangePac
 	for it.Next() {
 		hash, account := it.Hash(), common.CopyBytes(it.Account())
 
-		if bytes.Equal(hash.Bytes(), a.Bytes()) {
+		log.Debug("***** Iterating accounts", "hash", hash.String(), "a", a.String())
+
+		if hash.String() == a.String() {
 			log.Debug("***** Found account", "hash", hash)
-			// Fetch the bytecode of account
 			blob, err := chain.ContractCodeWithPrefix(hash)
 			if err != nil {
 				log.Debug("***** Error fetching bytecode", "err", err)
