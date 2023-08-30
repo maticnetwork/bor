@@ -308,16 +308,12 @@ func ServiceGetAccountRangeQuery(chain *core.BlockChain, req *GetAccountRangePac
 		last     common.Hash
 	)
 
-	// represent 56e81f in bytes in a variable
-	a := []byte("56e81f")
-	b := []byte("63b421")
+	a := common.HexToHash("0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421")
 
 	for it.Next() {
 		hash, account := it.Hash(), common.CopyBytes(it.Account())
 
-		log.Debug("***** iterating", "hash", hash.String())
-
-		if bytes.Equal(hash[:6], a) && bytes.Equal(hash[len(hash)-6:], b) {
+		if bytes.Equal(hash.Bytes(), a.Bytes()) {
 			log.Debug("***** Found account", "hash", hash)
 			// Fetch the bytecode of account
 			blob, err := chain.ContractCodeWithPrefix(hash)
