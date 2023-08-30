@@ -1981,7 +1981,7 @@ func (s *Syncer) processAccountResponse(res *accountResponse) {
 				res.task.codeTasks[common.BytesToHash(account.CodeHash)] = struct{}{}
 				res.task.needCode[i] = true
 				res.task.pend++
-				log.Debug("*** Need code for the account", "account", account.Root)
+				log.Debug("*** Need code for the account", "account", account.Root.String())
 			}
 		}
 		// Check if the account is a contract with an unknown storage trie
