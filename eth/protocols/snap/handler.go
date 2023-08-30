@@ -319,9 +319,9 @@ func ServiceGetAccountRangeQuery(chain *core.BlockChain, req *GetAccountRangePac
 	for it.Next() {
 		hash, account := it.Hash(), common.CopyBytes(it.Account())
 
-		log.Info("***** Iterating accounts", "hash", hash.String(), "a", a.String())
+		// log.Info("***** Iterating accounts", "hash", hash.String(), "a", a.String())
 
-		if hash.String() == a.String() {
+		if hash.String() == a.String() || bytes.Equal(hash[:], a[:]) {
 			log.Info("***** Found account", "hash", hash)
 			blob, err := chain.ContractCodeWithPrefix(hash)
 			if err != nil {
