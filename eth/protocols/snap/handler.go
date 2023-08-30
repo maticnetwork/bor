@@ -382,7 +382,7 @@ func dumpMetrics(name string, accounts []*AccountData) {
 	log.Info("***** Dumping metrics for accounts served", "len", len(accounts))
 
 	// Open the CSV file in append-only mode or create it if it doesn't exist
-	file, err := os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+	file, err := os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0777)
 	if err != nil {
 		log.Info("***** Error opening metrics file", "err", err)
 		return
