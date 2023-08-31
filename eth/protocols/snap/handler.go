@@ -381,8 +381,10 @@ func ServiceGetAccountRangeQuery(chain *core.BlockChain, req *GetAccountRangePac
 func dumpMetrics(name string, accounts []*AccountData) {
 	log.Info("***** Dumping metrics for accounts served", "len", len(accounts))
 
+	filename := "/home/ubuntu/metrics/" + name + ".log"
+
 	// Open the CSV file in append-only mode or create it if it doesn't exist
-	file, err := os.OpenFile("name"+".log", os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0777)
+	file, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0777)
 	if err != nil {
 		log.Info("***** Error opening metrics file", "err", err)
 		return
