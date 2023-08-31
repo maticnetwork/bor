@@ -394,9 +394,11 @@ func openKeyValueDatabase(o OpenOptions) (ethdb.Database, error) {
 		return nil, fmt.Errorf("unknown db.engine %v", o.Type)
 	}
 
-	log.Info("Using leveldb as the backing database")
-	leveldbConfig := resolveLevelDbConfig(o.DbOptions)
 	// Use leveldb, either as default (no explicit choice), or pre-existing, or chosen explicitly
+	log.Info("Using leveldb as the backing database")
+	
+	leveldbConfig := resolveLevelDbConfig(o.DbOptions)
+
 	return NewLevelDBDatabase(o.Directory, o.Cache, o.Handles, o.Namespace, o.ReadOnly, leveldbConfig)
 }
 
