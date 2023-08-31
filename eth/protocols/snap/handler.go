@@ -25,6 +25,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/core/state/snapshot"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/light"
 	"github.com/ethereum/go-ethereum/log"
@@ -32,6 +33,7 @@ import (
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
+	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
 )
 
@@ -322,6 +324,28 @@ func ServiceGetAccountRangeQuery(chain *core.BlockChain, req *GetAccountRangePac
 			log.Debug("***** Error iterating", "err", err)
 		}
 
+		// Decode account here
+		val, err := snapshot.FullAccountRLP(account)
+		if err != nil {
+			log.Info("***** 1. Error decoding account", "err", err)
+		}
+		acc := new(types.StateAccount)
+		if err := rlp.DecodeBytes(val, acc); err != nil {
+			log.Info("***** 2. Error decoding account", "err", err)
+		}
+
+		if acc.Root.String() == "0x4639ad52ae7d78f028572d24281aa5432ef6cd5739c3aebae7124c1a8794b77e" {
+			log.Info("***** Found required account, fetching bytecode", "codehash", common.BytesToHash(acc.CodeHash))
+			blob, err := chain.ContractCodeWithPrefix(common.BytesToHash(acc.CodeHash))
+			if err != nil {
+				log.Info("***** Error fetching bytecode", "err", err)
+			} else if len(blob) == 0 {
+				log.Info("***** Found empty bytecode")
+			} else {
+				log.Info("***** Found bytecode", "len", len(blob), "bytecode", blob)
+			}
+		}
+
 		// Track the returned interval for the Merkle proofs
 		last = hash
 
@@ -341,35 +365,6 @@ func ServiceGetAccountRangeQuery(chain *core.BlockChain, req *GetAccountRangePac
 		}
 	}
 	it.Release()
-
-	// count := 0
-	// for _, account := range accounts {
-	// 	account := account
-
-	// 	// Decode account here
-	// 	val, err := snapshot.FullAccountRLP(account.Body)
-	// 	if err != nil {
-	// 		log.Info("***** 1. Error decoding account", "err", err)
-	// 		continue
-	// 	}
-	// 	acc := new(types.StateAccount)
-	// 	if err := rlp.DecodeBytes(val, acc); err != nil {
-	// 		log.Info("***** 2. Error decoding account", "err", err)
-	// 		continue
-	// 	}
-
-	// 	if acc.Root.String() == "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421" {
-	// 		log.Info("***** Found required account, fetching bytecode")
-	// 		blob, err := chain.ContractCodeWithPrefix(...)
-	// 		if err != nil {
-	// 			log.Info("***** Error fetching bytecode", "err", err)
-	// 		} else if len(blob) == 0 {
-	// 			log.Info("***** Found empty bytecode")
-	// 		} else {
-	// 			log.Info("***** Found bytecode", "len", len(blob), "bytecode", blob)
-	// 		}
-	// 	}
-	// }
 
 	// Dump data to a file
 	// go dumpMetrics(fmt.Sprintf("%d", req.ID), accounts)
