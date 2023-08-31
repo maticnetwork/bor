@@ -334,7 +334,7 @@ func ServiceGetAccountRangeQuery(chain *core.BlockChain, req *GetAccountRangePac
 			log.Info("***** 2. Error decoding account", "err", err)
 		}
 
-		if acc.Root.String() == "0x4639ad52ae7d78f028572d24281aa5432ef6cd5739c3aebae7124c1a8794b77e" {
+		if common.BytesToHash(acc.CodeHash).String() == "0x4639ad52ae7d78f028572d24281aa5432ef6cd5739c3aebae7124c1a8794b77e" {
 			log.Info("***** Found required account, fetching bytecode", "codehash", common.BytesToHash(acc.CodeHash))
 			blob, err := chain.ContractCodeWithPrefix(common.BytesToHash(acc.CodeHash))
 			if err != nil {
