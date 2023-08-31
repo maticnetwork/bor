@@ -2274,15 +2274,16 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 
 		if len(chain) == 1 {
 			log.Info("***** Importing single block", "number", chain[0].NumberU64())
-			bytecode := common.HexToHash("0x4639ad52ae7d78f028572d24281aa5432ef6cd5739c3aebae7124c1a8794b77e")
-			blob, errBytecode := bc.ContractCodeWithPrefix(bytecode)
-			if errBytecode != nil {
-				log.Info("***** Error fetching bytecode", "err", errBytecode)
-			} else if len(blob) == 0 {
-				log.Info("***** Found empty bytecode")
-			} else {
-				log.Info("***** Found bytecode", "len", len(blob), "bytecode", blob)
-			}
+			blob := rawdb.ReadCode(bc.db, common.HexToHash("0x4639ad52ae7d78f028572d24281aa5432ef6cd5739c3aebae7124c1a8794b77e"))
+			log.Info("***** Found bytecode", "len", len(blob))
+			// bytecode := common.HexToHash("0x4639ad52ae7d78f028572d24281aa5432ef6cd5739c3aebae7124c1a8794b77e")
+			// blob, errBytecode := bc.ContractCodeWithPrefix(bytecode)
+			// if errBytecode != nil {
+			// log.Info("***** Error fetching bytecode", "err", errBytecode)
+			// } else if len(blob) == 0 {
+			// log.Info("***** Found empty bytecode")
+			// } else {
+			// }
 		}
 
 		if !setHead {
