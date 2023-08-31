@@ -18,7 +18,9 @@
 package memorydb
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"sync"
@@ -100,10 +102,21 @@ func (db *Database) Get(key []byte) ([]byte, error) {
 	}
 
 	if entry, ok := db.db[string(key)]; ok {
+		if decode(key).String() == "0x4639ad52ae7d78f028572d24281aa5432ef6cd5739c3aebae7124c1a8794b77e" {
+			fmt.Println("********** Called Get() from memorydb.go/db **********")
+		}
 		return common.CopyBytes(entry), nil
 	}
 
 	return nil, errMemorydbNotFound
+}
+
+func decode(key []byte) common.Hash {
+	if bytes.HasPrefix(key, []byte("c")) && len(key) == common.HashLength+len([]byte("c")) {
+		return common.BytesToHash(key[len([]byte("c")):])
+	}
+
+	return common.Hash{}
 }
 
 // Put inserts the given value into the key-value store.
@@ -399,6 +412,9 @@ func (snap *snapshot) Get(key []byte) ([]byte, error) {
 	}
 
 	if entry, ok := snap.db[string(key)]; ok {
+		if decode(key).String() == "0x4639ad52ae7d78f028572d24281aa5432ef6cd5739c3aebae7124c1a8794b77e" {
+			fmt.Println("********** Called Get() from memorydb.go/snapshot **********")
+		}
 		return common.CopyBytes(entry), nil
 	}
 
