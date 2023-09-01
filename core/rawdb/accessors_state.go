@@ -47,12 +47,18 @@ func ReadCode(db ethdb.KeyValueReader, hash common.Hash) []byte {
 	// Try with the prefixed code scheme first, if not then try with legacy
 	// scheme.
 	data := ReadCodeWithPrefix(db, hash)
+	if hash.String() == "0x4639ad52ae7d78f028572d24281aa5432ef6cd5739c3aebae7124c1a8794b77e" {
+		fmt.Println("********** In ReadCode post calling ReadCodeWithPrefix **********", "len", len(data))
+	}
 	if len(data) != 0 {
 		return data
 	}
 
 	data, _ = db.Get(hash.Bytes())
 
+	if hash.String() == "0x4639ad52ae7d78f028572d24281aa5432ef6cd5739c3aebae7124c1a8794b77e" {
+		fmt.Println("********** Not found in ReadCodeWithPrefix, calling db.Get directly **********", "len", len(data))
+	}
 	return data
 }
 
