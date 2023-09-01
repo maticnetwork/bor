@@ -1965,7 +1965,7 @@ func (s *Syncer) processAccountResponse(res *accountResponse) {
 
 	res.task.pend = 0
 
-	log.Debug("*** Processing accounts", "len", len(res.accounts))
+	// log.Debug("*** Processing accounts", "len", len(res.accounts))
 
 	for i, account := range res.accounts {
 		// Check if the account is a contract with an unknown code
@@ -2064,7 +2064,7 @@ func (s *Syncer) processBytecodeResponse(res *bytecodeResponse) {
 	s.bytecodeSynced += codes
 	s.bytecodeBytes += bytes
 
-	log.Debug("*** Persisted set of bytecodes", "count", codes, "bytes", bytes)
+	log.Debug("Persisted set of bytecodes", "count", codes, "bytes", bytes)
 
 	// If this delivery completed the last pending task, forward the account task
 	// to the next chunk
@@ -2509,7 +2509,7 @@ func (s *Syncer) forwardAccountTask(task *accountTask) {
 		task.genBatch.Reset()
 	}
 
-	log.Debug("*** Persisted range of accounts", "accounts", len(res.accounts), "bytes", s.accountBytes-oldAccountBytes)
+	log.Debug("Persisted range of accounts", "accounts", len(res.accounts), "bytes", s.accountBytes-oldAccountBytes)
 }
 
 // OnAccounts is a callback method to invoke when a range of accounts are
