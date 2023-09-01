@@ -3244,7 +3244,7 @@ func (s *Syncer) reportSyncProgress(force bool) {
 		bytecode = fmt.Sprintf("%v@%v", log.FormatLogfmtUint64(s.bytecodeSynced), s.bytecodeBytes.TerminalString())
 	)
 
-	log.Info("Syncing: state download in progress", "synced", progress, "state", synced,
+	log.Info("✅ Syncing: state download in progress", "synced", progress, "state", synced,
 		"accounts", accounts, "slots", storage, "codes", bytecode, "eta", common.PrettyDuration(estTime-elapsed))
 }
 
@@ -3265,7 +3265,7 @@ func (s *Syncer) reportHealProgress(force bool) {
 		storage  = fmt.Sprintf("%v@%v", log.FormatLogfmtUint64(s.storageHealed), s.storageHealedBytes.TerminalString())
 	)
 
-	log.Info("Syncing: state healing in progress", "accounts", accounts, "slots", storage,
+	log.Info("✅ Syncing: state healing in progress", "accounts", accounts, "slots", storage,
 		"codes", bytecode, "nodes", trienode, "pending", s.healer.scheduler.Pending())
 }
 
