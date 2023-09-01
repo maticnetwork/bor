@@ -237,7 +237,7 @@ func (s *Sync) AddCodeEntry(hash common.Hash, path []byte, parent common.Hash, p
 	// sync is expected to run with a fresh new node. Even there
 	// exists the code with legacy format, fetch and store with
 	// new scheme anyway.
-	if rawdb.HasCodeWithPrefix(s.database, hash) {
+	if rawdb.HasCode(s.database, hash) {
 		return
 	}
 	// Assemble the new sub-trie sync request

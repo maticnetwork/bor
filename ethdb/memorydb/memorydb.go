@@ -18,9 +18,7 @@
 package memorydb
 
 import (
-	"bytes"
 	"errors"
-	"fmt"
 	"sort"
 	"strings"
 	"sync"
@@ -97,10 +95,6 @@ func (db *Database) Get(key []byte) ([]byte, error) {
 	db.lock.RLock()
 	defer db.lock.RUnlock()
 
-	if decode(key).String() == "0x4639ad52ae7d78f028572d24281aa5432ef6cd5739c3aebae7124c1a8794b77e" {
-		fmt.Println("********** Called Get() from memorydb.go/db **********")
-	}
-
 	if db.db == nil {
 		return nil, errMemorydbClosed
 	}
@@ -111,13 +105,6 @@ func (db *Database) Get(key []byte) ([]byte, error) {
 	}
 
 	return nil, errMemorydbNotFound
-}
-
-func decode(key []byte) common.Hash {
-	if bytes.HasPrefix(key, []byte("c")) && len(key) == common.HashLength+len([]byte("c")) {
-		return common.BytesToHash(key[len([]byte("c")):])
-	}
-	return common.BytesToHash(key)
 }
 
 // Put inserts the given value into the key-value store.
@@ -407,10 +394,6 @@ func (snap *snapshot) Has(key []byte) (bool, error) {
 func (snap *snapshot) Get(key []byte) ([]byte, error) {
 	snap.lock.RLock()
 	defer snap.lock.RUnlock()
-
-	if decode(key).String() == "0x4639ad52ae7d78f028572d24281aa5432ef6cd5739c3aebae7124c1a8794b77e" {
-		fmt.Println("********** Called Get() from memorydb.go/snapshot **********")
-	}
 
 	if snap.db == nil {
 		return nil, errSnapshotReleased

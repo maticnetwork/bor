@@ -290,7 +290,7 @@ func ServiceGetNodeDataQuery(chain *core.BlockChain, query GetNodeDataPacket) []
 		entry, err := chain.TrieNode(hash)
 		if len(entry) == 0 || err != nil {
 			// Read the contract code with prefix only to save unnecessary lookups.
-			entry, err = chain.ContractCodeWithPrefix(hash)
+			entry, err = chain.ContractCode(hash)
 		}
 
 		if err == nil && len(entry) > 0 {

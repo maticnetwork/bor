@@ -18,14 +18,11 @@ package snap
 
 import (
 	"bytes"
-	"encoding/csv"
 	"fmt"
-	"os"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/core/state/snapshot"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/light"
 	"github.com/ethereum/go-ethereum/log"
@@ -33,7 +30,6 @@ import (
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
-	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
 )
 
@@ -164,7 +160,6 @@ func HandleMessage(backend Backend, peer *Peer) error {
 	// Handle the message depending on its contents
 	switch {
 	case msg.Code == GetAccountRangeMsg:
-		log.Info("***** Got Account Range Request Message")
 		// Decode the account retrieval request
 		var req GetAccountRangePacket
 		if err := msg.Decode(&req); err != nil {
@@ -232,7 +227,6 @@ func HandleMessage(backend Backend, peer *Peer) error {
 		return backend.Handle(peer, res)
 
 	case msg.Code == GetByteCodesMsg:
-		log.Info("***** Got new bytecode request")
 		// Decode bytecode retrieval request
 		var req GetByteCodesPacket
 		if err := msg.Decode(&req); err != nil {
@@ -316,8 +310,6 @@ func ServiceGetAccountRangeQuery(chain *core.BlockChain, req *GetAccountRangePac
 		last     common.Hash
 	)
 
-	log.Info("***** Starting to iterate over accounts for serving request", "id", req.ID)
-
 	for it.Next() {
 		hash, account := it.Hash(), common.CopyBytes(it.Account())
 		if err := it.Error(); err != nil {
@@ -325,26 +317,26 @@ func ServiceGetAccountRangeQuery(chain *core.BlockChain, req *GetAccountRangePac
 		}
 
 		// Decode account here
-		val, err := snapshot.FullAccountRLP(account)
-		if err != nil {
-			log.Info("***** 1. Error decoding account", "err", err)
-		}
-		acc := new(types.StateAccount)
-		if err := rlp.DecodeBytes(val, acc); err != nil {
-			log.Info("***** 2. Error decoding account", "err", err)
-		}
+		// val, err := snapshot.FullAccountRLP(account)
+		// if err != nil {
+		// 	log.Info("***** 1. Error decoding account", "err", err)
+		// }
+		// acc := new(types.StateAccount)
+		// if err := rlp.DecodeBytes(val, acc); err != nil {
+		// 	log.Info("***** 2. Error decoding account", "err", err)
+		// }
 
-		if common.BytesToHash(acc.CodeHash).String() == "0x4639ad52ae7d78f028572d24281aa5432ef6cd5739c3aebae7124c1a8794b77e" {
-			log.Info("***** Found required account, fetching bytecode", "codehash", common.BytesToHash(acc.CodeHash))
-			blob, err := chain.ContractCodeWithPrefix(common.BytesToHash(acc.CodeHash))
-			if err != nil {
-				log.Info("***** Error fetching bytecode", "err", err)
-			} else if len(blob) == 0 {
-				log.Info("***** Found empty bytecode")
-			} else {
-				log.Info("***** Found bytecode", "len", len(blob), "bytecode", blob)
-			}
-		}
+		// if common.BytesToHash(acc.CodeHash).String() == "0x4639ad52ae7d78f028572d24281aa5432ef6cd5739c3aebae7124c1a8794b77e" {
+		// 	log.Info("***** Found required account, fetching bytecode", "codehash", common.BytesToHash(acc.CodeHash))
+		// 	blob, err := chain.ContractCodeWithPrefix(common.BytesToHash(acc.CodeHash))
+		// 	if err != nil {
+		// 		log.Info("***** Error fetching bytecode", "err", err)
+		// 	} else if len(blob) == 0 {
+		// 		log.Info("***** Found empty bytecode")
+		// 	} else {
+		// 		log.Info("***** Found bytecode", "len", len(blob), "bytecode", blob)
+		// 	}
+		// }
 
 		// Track the returned interval for the Merkle proofs
 		last = hash
@@ -391,40 +383,40 @@ func ServiceGetAccountRangeQuery(chain *core.BlockChain, req *GetAccountRangePac
 	return accounts, proofs
 }
 
-func dumpMetrics(name string, accounts []*AccountData) {
-	log.Info("***** Dumping metrics for accounts served", "len", len(accounts))
+// func dumpMetrics(name string, accounts []*AccountData) {
+// 	log.Info("***** Dumping metrics for accounts served", "len", len(accounts))
 
-	filename := "/home/ubuntu/metrics/" + name + ".log"
+// 	filename := "/home/ubuntu/metrics/" + name + ".log"
 
-	// Open the CSV file in append-only mode or create it if it doesn't exist
-	file, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0777)
-	if err != nil {
-		log.Info("***** Error opening metrics file", "err", err)
-		return
-	}
-	defer file.Close()
+// 	// Open the CSV file in append-only mode or create it if it doesn't exist
+// 	file, err := os.OpenFile(filename, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0777)
+// 	if err != nil {
+// 		log.Info("***** Error opening metrics file", "err", err)
+// 		return
+// 	}
+// 	defer file.Close()
 
-	// Data to be appended
-	data := make([]string, len(accounts))
-	for i, account := range accounts {
-		data[i] = account.Hash.String() + "," + string(account.Body)
-	}
+// 	// Data to be appended
+// 	data := make([]string, len(accounts))
+// 	for i, account := range accounts {
+// 		data[i] = account.Hash.String() + "," + string(account.Body)
+// 	}
 
-	// Append the data to the CSV file
-	if err := appendDataToFile(file, data); err != nil {
-		log.Info("*** Error writing metrics", "err", err)
-		return
-	}
+// 	// Append the data to the CSV file
+// 	if err := appendDataToFile(file, data); err != nil {
+// 		log.Info("*** Error writing metrics", "err", err)
+// 		return
+// 	}
 
-	log.Info("***** Metrics dumped", "filename", name)
-}
+// 	log.Info("***** Metrics dumped", "filename", name)
+// }
 
-func appendDataToFile(file *os.File, data []string) error {
-	writer := csv.NewWriter(file)
-	defer writer.Flush()
+// func appendDataToFile(file *os.File, data []string) error {
+// 	writer := csv.NewWriter(file)
+// 	defer writer.Flush()
 
-	return writer.Write(data)
-}
+// 	return writer.Write(data)
+// }
 
 func ServiceGetStorageRangesQuery(chain *core.BlockChain, req *GetStorageRangesPacket) ([][]*StorageData, [][]byte) {
 	if req.Bytes > softResponseLimit {
@@ -562,8 +554,6 @@ func ServiceGetByteCodesQuery(chain *core.BlockChain, req *GetByteCodesPacket) [
 		req.Hashes = req.Hashes[:maxCodeLookups]
 	}
 
-	log.Info("***************** Serving bytecode request", "len", len(req.Hashes), "req", req.Hashes)
-
 	// Retrieve bytecodes until the packet size limit is reached
 	var (
 		codes [][]byte
@@ -575,7 +565,7 @@ func ServiceGetByteCodesQuery(chain *core.BlockChain, req *GetByteCodesPacket) [
 			// Peers should not request the empty code, but if they do, at
 			// least sent them back a correct response without db lookups
 			codes = append(codes, []byte{})
-		} else if blob, err := chain.ContractCodeWithPrefix(hash); err == nil {
+		} else if blob, err := chain.ContractCode(hash); err == nil {
 			codes = append(codes, blob)
 			bytes += uint64(len(blob))
 		} else {
@@ -586,8 +576,6 @@ func ServiceGetByteCodesQuery(chain *core.BlockChain, req *GetByteCodesPacket) [
 			break
 		}
 	}
-
-	log.Info("***************** Served bytecode request", "len", len(codes), "codes", codes)
 
 	return codes
 }

@@ -711,7 +711,6 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 			return ErrCancelled
 
 		case req := <-accountReqFails:
-			log.Debug("*** Account reponse failure received")
 			s.revertAccountRequest(req)
 		case req := <-bytecodeReqFails:
 			s.revertBytecodeRequest(req)
@@ -723,13 +722,9 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 			s.revertBytecodeHealRequest(req)
 
 		case res := <-accountResps:
-			log.Debug("*** Account response success received")
 			s.processAccountResponse(res)
-			log.Debug("*** Done processing account success request")
 		case res := <-bytecodeResps:
-			log.Debug("*** Bytecode response success received")
 			s.processBytecodeResponse(res)
-			log.Debug("*** Done processing bytecode success request")
 		case res := <-storageResps:
 			s.processStorageResponse(res)
 		case res := <-trienodeHealResps:
@@ -1192,8 +1187,6 @@ func (s *Syncer) assignBytecodeTasks(success chan *bytecodeResponse, fail chan *
 
 		go func() {
 			defer s.pend.Done()
-
-			log.Info("*** Sent bytecode request", "id", reqid)
 
 			// Attempt to send the remote request and revert if it fails
 			if err := peer.RequestByteCodes(reqid, hashes, maxRequestSize); err != nil {
@@ -1977,11 +1970,11 @@ func (s *Syncer) processAccountResponse(res *accountResponse) {
 	for i, account := range res.accounts {
 		// Check if the account is a contract with an unknown code
 		if !bytes.Equal(account.CodeHash, types.EmptyCodeHash.Bytes()) {
-			if !rawdb.HasCodeWithPrefix(s.db, common.BytesToHash(account.CodeHash)) {
+			if !rawdb.HasCode(s.db, common.BytesToHash(account.CodeHash)) {
 				res.task.codeTasks[common.BytesToHash(account.CodeHash)] = struct{}{}
 				res.task.needCode[i] = true
 				res.task.pend++
-				log.Debug("*** Need code for the account", "account.CodeHash", common.BytesToHash(account.CodeHash).String(), "account.Root", account.Root.String(), "hash", res.hashes[i].String())
+				// log.Debug("*** Need code for the account", "account.CodeHash", common.BytesToHash(account.CodeHash).String(), "account.Root", account.Root.String(), "hash", res.hashes[i].String())
 			}
 		}
 		// Check if the account is a contract with an unknown storage trie
@@ -1992,7 +1985,7 @@ func (s *Syncer) processAccountResponse(res *accountResponse) {
 				// is interrupted and resumed later. However, *do* update the
 				// previous root hash.
 				if subtasks, ok := res.task.SubTasks[res.hashes[i]]; ok {
-					log.Debug("*** Resuming large storage retrieval", "account", res.hashes[i], "root", account.Root)
+					// log.Debug("*** Resuming large storage retrieval", "account", res.hashes[i], "root", account.Root)
 
 					for _, subtask := range subtasks {
 						subtask.root = account.Root
@@ -2001,7 +1994,7 @@ func (s *Syncer) processAccountResponse(res *accountResponse) {
 					res.task.needHeal[i] = true
 					resumed[res.hashes[i]] = struct{}{}
 				} else {
-					log.Debug("*** Creating tasks for storage retrieval", "account", res.hashes[i], "root", account.Root)
+					// log.Debug("*** Creating tasks for storage retrieval", "account", res.hashes[i], "root", account.Root)
 					res.task.stateTasks[res.hashes[i]] = account.Root
 				}
 
@@ -2542,7 +2535,7 @@ func (s *Syncer) OnAccounts(peer SyncPeer, id uint64, hashes []common.Hash, acco
 		defer s.lock.Unlock()
 
 		if _, ok := s.peers[peer.ID()]; ok {
-			log.Info("*** Setting the peer as idle after request delivery")
+			// log.Info("*** Setting the peer as idle after request delivery")
 			s.accountIdlers[peer.ID()] = struct{}{}
 		}
 		select {
@@ -2635,7 +2628,7 @@ func (s *Syncer) OnAccounts(peer SyncPeer, id uint64, hashes []common.Hash, acco
 	}
 	select {
 	case req.deliver <- response:
-		log.Debug("*** Success delivering account range")
+		// log.Debug("*** Success delivering account range")
 	case <-req.cancel:
 	case <-req.stale:
 	}
@@ -2676,7 +2669,7 @@ func (s *Syncer) onByteCodes(peer SyncPeer, id uint64, bytecodes [][]byte) error
 		defer s.lock.Unlock()
 
 		if _, ok := s.peers[peer.ID()]; ok {
-			log.Debug("*** Setting the peer as idle after bytecode delivery")
+			// log.Debug("*** Setting the peer as idle after bytecode delivery")
 			s.bytecodeIdlers[peer.ID()] = struct{}{}
 		}
 		select {
@@ -2760,7 +2753,7 @@ func (s *Syncer) onByteCodes(peer SyncPeer, id uint64, bytecodes [][]byte) error
 	}
 	select {
 	case req.deliver <- response:
-		log.Debug("*** Success delivering bytecode request")
+		// log.Debug("*** Success delivering bytecode request")
 	case <-req.cancel:
 	case <-req.stale:
 	}

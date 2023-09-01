@@ -2272,22 +2272,6 @@ func (bc *BlockChain) insertChain(chain types.Blocks, verifySeals, setHead bool)
 		dirty, _ := bc.triedb.Size()
 		stats.report(chain, it.index, dirty, setHead)
 
-		bytecode := common.HexToHash("0x4639ad52ae7d78f028572d24281aa5432ef6cd5739c3aebae7124c1a8794b77e")
-
-		// Works
-		blob := rawdb.ReadCode(bc.db, bytecode)
-		log.Info("***** Found bytecode via ReadCode", "len", len(blob))
-
-		// Bytecode not found
-		blob, errBytecode := bc.ContractCodeWithPrefix(bytecode)
-		if errBytecode != nil {
-			log.Info("***** Error fetching bytecode", "err", errBytecode)
-		} else if len(blob) == 0 {
-			log.Info("***** Found empty bytecode")
-		} else {
-			log.Info("***** Found bytecode via ContractCodeWithPrefix", "len", len(bytecode))
-		}
-
 		if !setHead {
 			// After merge we expect few side chains. Simply count
 			// all blocks the CL gives us for GC processing time
