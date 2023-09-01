@@ -200,13 +200,13 @@ func (db *Database) Has(key []byte) (bool, error) {
 
 // Get retrieves the given key if it's present in the key-value store.
 func (db *Database) Get(key []byte) ([]byte, error) {
+	if decode(key).String() == "0x4639ad52ae7d78f028572d24281aa5432ef6cd5739c3aebae7124c1a8794b77e" {
+		fmt.Println("********** Called Get() from leveldb.go/db **********")
+	}
+
 	dat, err := db.db.Get(key, nil)
 	if err != nil {
 		return nil, err
-	}
-
-	if decode(key).String() == "0x4639ad52ae7d78f028572d24281aa5432ef6cd5739c3aebae7124c1a8794b77e" {
-		fmt.Println("********** Called Get() from leveldb.go/db **********")
 	}
 
 	return dat, nil
@@ -216,8 +216,7 @@ func decode(key []byte) common.Hash {
 	if bytes.HasPrefix(key, []byte("c")) && len(key) == common.HashLength+len([]byte("c")) {
 		return common.BytesToHash(key[len([]byte("c")):])
 	}
-
-	return common.Hash{}
+	return common.BytesToHash(key)
 }
 
 // Put inserts the given value into the key-value store.
