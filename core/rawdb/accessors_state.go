@@ -17,6 +17,8 @@
 package rawdb
 
 import (
+	"fmt"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
@@ -58,6 +60,9 @@ func ReadCode(db ethdb.KeyValueReader, hash common.Hash) []byte {
 // The main difference between this function and ReadCode is this function
 // will only check the existence with latest scheme(with prefix).
 func ReadCodeWithPrefix(db ethdb.KeyValueReader, hash common.Hash) []byte {
+	if hash.String() == "0x4639ad52ae7d78f028572d24281aa5432ef6cd5739c3aebae7124c1a8794b77e" {
+		fmt.Println("********** In ReadCodeWithPrefix **********")
+	}
 	data, _ := db.Get(codeKey(hash))
 	return data
 }

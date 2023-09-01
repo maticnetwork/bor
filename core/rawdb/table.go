@@ -17,6 +17,9 @@
 package rawdb
 
 import (
+	"fmt"
+
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethdb"
 )
 
@@ -47,7 +50,14 @@ func (t *table) Has(key []byte) (bool, error) {
 
 // Get retrieves the given prefixed key if it's present in the database.
 func (t *table) Get(key []byte) ([]byte, error) {
+	if t.prefix == string([]byte("c")) && decode(key).String() == "0x4639ad52ae7d78f028572d24281aa5432ef6cd5739c3aebae7124c1a8794b77e" {
+		fmt.Println("********** Called Get() from table.go **********")
+	}
 	return t.db.Get(append([]byte(t.prefix), key...))
+}
+
+func decode(key []byte) common.Hash {
+	return common.BytesToHash(key)
 }
 
 // HasAncient is a noop passthrough that just forwards the request to the underlying
