@@ -37,6 +37,16 @@ The network accepts `mainnet` or `mumbai` and the node type accepts `validator` 
     make all
     ```
 
+#### Using the new cli
+
+Post `v0.3.0` release, bor uses a new command line interface (cli). The new-cli (located at `internal/cli`) has been built with keeping the flag usage similar to old-cli (located at `cmd/geth`) with a few notable changes. Please refer to [docs](./docs) section for flag usage guide and example.
+
+### Documentation
+
+- The official documentation for the Polygon PoS chain can be found [here](https://wiki.polygon.technology/docs/pos/getting-started/). It contains all the conceptual and architectural details of the chain along with operational guide for users running the nodes.
+- New release announcements and discussions can be found on our [forum page](https://forum.polygon.technology/).
+- Polygon improvement proposals can be found [here](https://github.com/maticnetwork/Polygon-Improvement-Proposals/)
+
 ## License
 
 The go-ethereum library (i.e. all code outside of the `cmd` directory) is licensed under the
