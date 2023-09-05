@@ -2,8 +2,10 @@ package ethapi
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 )
 
@@ -46,4 +48,12 @@ func (s *BlockChainAPI) appendRPCMarshalBorTransaction(ctx context.Context, bloc
 	}
 
 	return fields
+}
+
+// SendRawTransactionConditional will add the signed transaction to the transaction pool.
+// The sender/bundler is responsible for signing the transaction
+func (s *BlockChainAPI) SendRawTransactionConditional(ctx context.Context, input hexutil.Bytes, options types.OptionsAA4337) (common.Hash, error) {
+	fmt.Println("PSP - SendRawTransactionConditional - 2")
+
+	return s.b.SendRawTransactionConditional(ctx, input, options)
 }
