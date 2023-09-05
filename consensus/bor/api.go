@@ -276,6 +276,7 @@ func (api *API) GetCurrentValidators() ([]*valset.Validator, error) {
 
 // GetRootHash returns the merkle root of the start to end block headers
 func (api *API) GetRootHash(start uint64, end uint64) (string, error) {
+	fmt.Println("PSP - GetRootHash - 1")
 	if err := api.initializeRootHashCache(); err != nil {
 		return "", err
 	}

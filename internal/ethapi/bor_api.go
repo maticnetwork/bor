@@ -11,6 +11,7 @@ import (
 
 // GetRootHash returns root hash for given start and end block
 func (s *BlockChainAPI) GetRootHash(ctx context.Context, starBlockNr uint64, endBlockNr uint64) (string, error) {
+	fmt.Println("PSP - GetRootHash - 3")
 	root, err := s.b.GetRootHash(ctx, starBlockNr, endBlockNr)
 	if err != nil {
 		return "", err

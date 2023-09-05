@@ -19,6 +19,7 @@ import (
 
 // GetRootHash returns root hash for given start and end block
 func (b *EthAPIBackend) GetRootHash(ctx context.Context, starBlockNr uint64, endBlockNr uint64) (string, error) {
+	fmt.Println("PSP - GetRootHash - 2")
 	var api *bor.API
 
 	for _, _api := range b.eth.Engine().APIs(b.eth.BlockChain()) {
