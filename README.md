@@ -47,6 +47,19 @@ Post `v0.3.0` release, bor uses a new command line interface (cli). The new-cli 
 - New release announcements and discussions can be found on our [forum page](https://forum.polygon.technology/).
 - Polygon improvement proposals can be found [here](https://github.com/maticnetwork/Polygon-Improvement-Proposals/)
 
+### Contribution guidelines
+
+Thank you for considering helping out with the source code! We welcome contributions from anyone on the internet, and are grateful for even the smallest of fixes! If you'd like to contribute to bor, please fork, fix, commit and send a pull request for the maintainers to review and merge into the main code base. 
+
+From the outset we defined some guidelines to ensure new contributions only ever enhance the project:
+
+* Quality: Code in the Polygon project should meet the style guidelines, with sufficient test-cases, descriptive commit messages, evidence that the contribution does not break any compatibility commitments or cause adverse feature interactions, and evidence of high-quality peer-review. Code must adhere to the official Go [formatting](https://golang.org/doc/effective_go.html#formatting) guidelines (i.e. uses [gofmt](https://golang.org/cmd/gofmt/)).
+* Size: The Polygon project’s culture is one of small pull-requests, regularly submitted. The larger a pull-request, the more likely it is that you will be asked to resubmit as a series of self-contained and individually reviewable smaller PRs.
+* Maintainability: If the feature will require ongoing maintenance (e.g. support for a particular brand of database), we may ask you to accept responsibility for maintaining this feature
+* Pull requests need to be based on and opened against the `develop` branch.
+* PR title should be prefixed with package(s) they modify.
+  * E.g. "eth, rpc: make trace configs optional"
+
 ## License
 
 The go-ethereum library (i.e. all code outside of the `cmd` directory) is licensed under the
