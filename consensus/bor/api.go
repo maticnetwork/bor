@@ -1,7 +1,9 @@
 package bor
 
 import (
+	"context"
 	"encoding/hex"
+	"fmt"
 	"math"
 	"math/big"
 	"sort"
@@ -9,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/bor/valset"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -348,6 +351,11 @@ func (api *API) initializeRootHashCache() error {
 	}
 
 	return err
+}
+
+func (api *API) SendRawTransactionConditional(ctx context.Context, input hexutil.Bytes, options types.OptionsAA4337) (common.Hash, error) {
+	fmt.Println("PSP - SendRawTransactionConditional - 4")
+	return common.Hash{}, nil
 }
 
 func getRootHashKey(start uint64, end uint64) string {
