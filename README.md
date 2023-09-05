@@ -12,9 +12,8 @@ https://camo.githubusercontent.com/915b7be44ada53c290eb157634330494ebe3e30a/6874
 ### Installing bor using packaging
 
 The easiest way to get started with bor is to install the packages using the command below. Refer to the [releases](https://github.com/maticnetwork/bor/releases) section to find the latest stable version of bor.
-    ```shell
+    
     curl -L https://raw.githubusercontent.com/maticnetwork/install/main/bor.sh | bash -s -- v0.4.0 <network> <node_type>
-    ```
 
 The network accepts `mainnet` or `mumbai` and the node type accepts `validator` or `sentry` or `archive`. The installation script does the following things:
 - Create a new user named `bor`.
