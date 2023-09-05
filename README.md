@@ -1,37 +1,41 @@
 # Bor Overview
 Bor is the Official Golang implementation of the Polygon PoS blockchain. It is a fork of [geth](https://github.com/ethereum/go-ethereum) and is EVM compatible (upto London fork).
 
-![Forks](https://img.shields.io/github/forks/maticnetwork/bor?style=social)
-![Stars](https://img.shields.io/github/stars/maticnetwork/bor?style=social)
-![Languages](https://img.shields.io/github/languages/count/maticnetwork/bor)
-![Issues](https://img.shields.io/github/issues/maticnetwork/bor)
-![PRs](https://img.shields.io/github/issues-pr-raw/maticnetwork/bor)
+[![API Reference](
+https://camo.githubusercontent.com/915b7be44ada53c290eb157634330494ebe3e30a/68747470733a2f2f676f646f632e6f72672f6769746875622e636f6d2f676f6c616e672f6764646f3f7374617475732e737667
+)](https://pkg.go.dev/github.com/maticnetwork/bor)
+[![Go Report Card](https://goreportcard.com/badge/github.com/maticnetwork/bor)](https://goreportcard.com/report/github.com/maticnetwork/bor)
 ![MIT License](https://img.shields.io/github/license/maticnetwork/bor)
-![contributors](https://img.shields.io/github/contributors-anon/maticnetwork/bor)
-![size](https://img.shields.io/github/languages/code-size/maticnetwork/bor)
-![lines](https://img.shields.io/tokei/lines/github/maticnetwork/bor)
 [![Discord](https://img.shields.io/discord/714888181740339261?color=1C1CE1&label=Polygon%20%7C%20Discord%20%F0%9F%91%8B%20&style=flat-square)](https://discord.gg/zdwkdvMNY2)
 [![Twitter Follow](https://img.shields.io/twitter/follow/0xPolygon.svg?style=social)](https://twitter.com/0xPolygon)
 
 ### Installing bor using packaging
 
-The easiest way to get started with bor is to install the packages using the command below. Refer to the [releases](https://github.com/maticnetwork/bor/releases) to find the latest stable version of bor.
+The easiest way to get started with bor is to install the packages using the command below. Refer to the [releases](https://github.com/maticnetwork/bor/releases) section to find the latest stable version of bor.
     ```shell
     curl -L https://raw.githubusercontent.com/maticnetwork/install/main/bor.sh | bash -s -- v0.4.0 <network> <node_type>
     ```
 
-The network accepts `mainnet` or `mumbai` and the node type accepts `validator` or `sentry` or `archive`.
+The network accepts `mainnet` or `mumbai` and the node type accepts `validator` or `sentry` or `archive`. The installation script does the following things:
+- Create a new user named `bor`.
+- Install the bor binary at `/usr/bin/bor`.
+- Dump the suitable config file (based on the network and node type provided) at `/var/lib/bor` and uses it as the home dir.
+- Create a systemd service named `bor` at `/lib/systemd/system/bor.service` which starts bor using the config file as `bor` user.
 
 ### Building from source
 
-- Install Go (version 1.19 or later)
+- Install Go (version 1.19 or later) and a C compiler.
 - Clone the repository and build the binary using the following commands:
     ```shell
     make bor
     ```
-- Start bor using the config files for validator and sentry provided in the `packaging` folder.
+- Start bor using the ideal config files for validator and sentry provided in the `packaging` folder.
     ```shell
     ./build/bin/bor server --config ./packaging/templates/mainnet-v1/sentry/sentry/bor/config.toml
+    ```
+- To build full set of utilities, run:
+    ```shell
+    make all
     ```
 
 ## License
@@ -43,8 +47,6 @@ also included in our repository in the `COPYING.LESSER` file.
 The go-ethereum binaries (i.e. all code inside of the `cmd` directory) are licensed under the
 [GNU General Public License v3.0](https://www.gnu.org/licenses/gpl-3.0.en.html), also
 included in our repository in the `COPYING` file.
-
-<hr style="margin-top: 3em; margin-bottom: 3em;">
 
 ## Join our Discord server
 
