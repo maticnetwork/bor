@@ -412,7 +412,3 @@ func (b *backendMock) PurgeCheckpointWhitelist() {
 	//nolint: staticcheck
 	b.PurgeCheckpointWhitelist()
 }
-
-func (b *backendMock) SendRawTransactionConditional(ctx context.Context, input hexutil.Bytes, options types.OptionsAA4337) (common.Hash, error) {
-	return common.Hash{}, nil
-}

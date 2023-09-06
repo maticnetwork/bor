@@ -25,7 +25,6 @@ import (
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/bloombits"
@@ -389,8 +388,4 @@ func (b *LesApiBackend) GetCheckpointWhitelist() map[uint64]common.Hash {
 }
 
 func (b *LesApiBackend) PurgeCheckpointWhitelist() {
-}
-
-func (b *LesApiBackend) SendRawTransactionConditional(ctx context.Context, input hexutil.Bytes, options types.OptionsAA4337) (common.Hash, error) {
-	return common.Hash{}, nil
 }

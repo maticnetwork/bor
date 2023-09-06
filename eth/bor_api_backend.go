@@ -3,23 +3,18 @@ package eth
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus/bor"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/event"
-	"github.com/ethereum/go-ethereum/internal/ethapi"
-	"github.com/ethereum/go-ethereum/rpc"
 )
 
 // GetRootHash returns root hash for given start and end block
 func (b *EthAPIBackend) GetRootHash(ctx context.Context, starBlockNr uint64, endBlockNr uint64) (string, error) {
-	fmt.Println("PSP - GetRootHash - 2")
 	var api *bor.API
 
 	for _, _api := range b.eth.Engine().APIs(b.eth.BlockChain()) {
@@ -79,41 +74,4 @@ func (b *EthAPIBackend) SubscribeStateSyncEvent(ch chan<- core.StateSyncEvent) e
 // SubscribeChain2HeadEvent subscribes to reorg/head/fork event
 func (b *EthAPIBackend) SubscribeChain2HeadEvent(ch chan<- core.Chain2HeadEvent) event.Subscription {
 	return b.eth.BlockChain().SubscribeChain2HeadEvent(ch)
-}
-
-func (b *EthAPIBackend) SendRawTransactionConditional(ctx context.Context, input hexutil.Bytes, options types.OptionsAA4337) (common.Hash, error) {
-	fmt.Println("PSP - SendRawTransactionConditional - 3")
-
-	tx := new(types.Transaction)
-	if err := tx.UnmarshalBinary(input); err != nil {
-		return common.Hash{}, err
-	}
-
-	currentHeader := b.CurrentHeader()
-	currentState, _, _ := b.StateAndHeaderByNumber(ctx, rpc.BlockNumber(currentHeader.Number.Int64()))
-
-	// check block number range
-	if err := currentHeader.ValidateBlockNumberOptions4337(options.BlockNumberMin, options.BlockNumberMax); err != nil {
-		return common.Hash{}, &rpc.OptionsValidateError{Message: "out of block range. err: " + err.Error()}
-	}
-
-	// check timestamp range
-	if err := currentHeader.ValidateTimestampOptions4337(options.TimestampMin, options.TimestampMax); err != nil {
-		return common.Hash{}, &rpc.OptionsValidateError{Message: "out of time range. err: " + err.Error()}
-	}
-
-	// check knownAccounts length (number of slots/accounts) should be less than 1000
-	if err := options.KnownAccounts.ValidateLength(); err != nil {
-		return common.Hash{}, &rpc.KnownAccountsLimitExceededError{Message: "limit exceeded. err: " + err.Error()}
-	}
-
-	// check knownAccounts
-	if err := currentState.ValidateKnownAccounts(options.KnownAccounts); err != nil {
-		return common.Hash{}, &rpc.OptionsValidateError{Message: "storage error. err: " + err.Error()}
-	}
-
-	// put options data in Tx, to use it later while block building
-	tx.PutOptions(&options)
-
-	return ethapi.SubmitTransaction(ctx, b, tx)
 }
