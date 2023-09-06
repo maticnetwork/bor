@@ -353,23 +353,19 @@ func (c *Client) CallContext(ctx context.Context, result interface{}, method str
 	// dispatch has accepted the request and will close the channel when it quits.
 	switch resp, err := op.wait(ctx, c); {
 	case err != nil:
-		fmt.Printf(">>>>>>>>>>>>>>>>>>>>>>>>>>> CASE 1")
 		return err
 	case resp.Error != nil:
-		fmt.Printf(">>>>>>>>>>>>>>>>>>>>>>>>>>> CASE 2")
 		return resp.Error
 	case len(resp.Result) == 0:
-		fmt.Printf(">>>>>>>>>>>>>>>>>>>>>>>>>>> CASE 3")
 		return ErrNoResult
 	default:
-		fmt.Printf(">>>>>>>>>>>>>>>>>>>>>>>>>>> CASE DEF")
 		if result == nil {
 			return nil
 		}
 
 		err := json.Unmarshal(resp.Result, result)
-		fmt.Printf(">>>>>>>>>>>>>>>>>>>>>>>>>>> %#v", err)
-		fmt.Printf(">>>>>>>>>>>>>>>>>>>>>>>>>>> %#v", result)
+		fmt.Printf(">>>>>>>>>>>>>>>>>>>>>>>>>>> CallContextERR %#v", err)
+		fmt.Printf(">>>>>>>>>>>>>>>>>>>>>>>>>>> CallContextRESULT %#v", result)
 		return err
 	}
 }

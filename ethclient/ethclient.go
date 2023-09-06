@@ -321,10 +321,9 @@ func (ec *Client) TransactionReceipt(ctx context.Context, txHash common.Hash) (*
 
 
 	err := ec.c.CallContext(ctx, &r, "eth_getTransactionReceipt", txHash)
-	fmt.Printf(">>>>>>>>>>>>>>>>>>>>>>>>>>> %#v", r)
+	fmt.Printf(">>>>>>>>>>>>>>>>>>>>>>>>>>> TransactionReceipt %#v", r)
 	if err == nil {
 		if r == nil {
-			fmt.Printf(">>>>>>>>>>>>>>>>>>>>>>>>>>> THIS IS NIL FORREAL")
 			return nil, ethereum.NotFound
 		}
 	}
