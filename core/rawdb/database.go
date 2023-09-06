@@ -321,8 +321,8 @@ func NewMemoryDatabaseWithCap(size int) ethdb.Database {
 
 // NewLevelDBDatabase creates a persistent key-value database without a freezer
 // moving immutable chain segments into cold storage.
-func NewLevelDBDatabase(file string, cache int, handles int, namespace string, readonly bool, config leveldb.LevelDBConfig) (ethdb.Database, error) {
-	db, err := leveldb.New(file, cache, handles, namespace, readonly, config)
+func NewLevelDBDatabase(file string, cache int, handles int, namespace string, readonly bool, extraDBConfig ExtraDBConfig) (ethdb.Database, error) {
+	db, err := leveldb.New(file, cache, handles, namespace, readonly, resolveLevelDBConfig(extraDBConfig))
 	if err != nil {
 		return nil, err
 	}
@@ -330,6 +330,15 @@ func NewLevelDBDatabase(file string, cache int, handles int, namespace string, r
 	log.Info("Using LevelDB as the backing database")
 
 	return NewDatabase(db), nil
+}
+
+func resolveLevelDBConfig(config ExtraDBConfig) leveldb.LevelDBConfig {
+	return leveldb.LevelDBConfig{
+		CompactionTableSize:           config.LevelDBCompactionTableSize,
+		CompactionTableSizeMultiplier: config.LevelDBCompactionTableSizeMultiplier,
+		CompactionTotalSize:           config.LevelDBCompactionTotalSize,
+		CompactionTotalSizeMultiplier: config.LevelDBCompactionTotalSizeMultiplier,
+	}
 }
 
 const (
@@ -366,7 +375,14 @@ type OpenOptions struct {
 	Cache             int    // the capacity(in megabytes) of the data caching
 	Handles           int    // number of files to be open simultaneously
 	ReadOnly          bool
-	DbOptions         map[string]interface{} // specific options for LevelDB or Pebble
+	ExtraDBConfig     ExtraDBConfig
+}
+
+type ExtraDBConfig struct {
+	LevelDBCompactionTableSize           uint64  // LevelDB SSTable/file size in mebibytes
+	LevelDBCompactionTableSizeMultiplier float64 // Multiplier on LevelDB SSTable/file size
+	LevelDBCompactionTotalSize           uint64  // Total size in mebibytes of SSTables in a given LevelDB level
+	LevelDBCompactionTotalSizeMultiplier float64 // Multiplier on level size on LevelDB levels
 }
 
 // openKeyValueDatabase opens a disk-based key-value database, e.g. leveldb or pebble.
@@ -396,36 +412,8 @@ func openKeyValueDatabase(o OpenOptions) (ethdb.Database, error) {
 
 	// Use leveldb, either as default (no explicit choice), or pre-existing, or chosen explicitly
 	log.Info("Using leveldb as the backing database")
-	
-	leveldbConfig := resolveLevelDbConfig(o.DbOptions)
 
-	return NewLevelDBDatabase(o.Directory, o.Cache, o.Handles, o.Namespace, o.ReadOnly, leveldbConfig)
-}
-
-func resolveLevelDbConfig(dbOptions map[string]interface{}) leveldb.LevelDBConfig {
-	levelDbConfig := leveldb.LevelDBConfig{}
-
-	levelDbCompactionTableSize, ok := dbOptions["levelDbCompactionTableSize"].(uint64)
-	if ok {
-		levelDbConfig.CompactionTableSize = levelDbCompactionTableSize
-	}
-
-	levelDbCompactionTableSizeMultiplier, ok := dbOptions["levelDbCompactionTableSizeMultiplier"].(float64)
-	if ok {
-		levelDbConfig.CompactionTableSizeMultiplier = levelDbCompactionTableSizeMultiplier
-	}
-
-	levelDbCompactionTotalSize, ok := dbOptions["levelDbCompactionTotalSize"].(uint64)
-	if ok {
-		levelDbConfig.CompactionTotalSize = levelDbCompactionTotalSize
-	}
-
-	levelDbCompactionTotalSizeMultiplier, ok := dbOptions["levelDbCompactionTotalSizeMultiplier"].(float64)
-	if ok {
-		levelDbConfig.CompactionTotalSizeMultiplier = levelDbCompactionTotalSizeMultiplier
-	}
-
-	return levelDbConfig
+	return NewLevelDBDatabase(o.Directory, o.Cache, o.Handles, o.Namespace, o.ReadOnly, o.ExtraDBConfig)
 }
 
 // Open opens both a disk-based key-value database such as leveldb or pebble, but also

@@ -2313,7 +2313,7 @@ func MakeChainDatabase(ctx *cli.Context, stack *node.Node, readonly bool) ethdb.
 		err     error
 		chainDb ethdb.Database
 
-		dbOptions = resolveDbOptions(ctx)
+		dbOptions = resolveExtraDBConfig(ctx)
 	)
 
 	switch {
@@ -2339,16 +2339,13 @@ func MakeChainDatabase(ctx *cli.Context, stack *node.Node, readonly bool) ethdb.
 	return chainDb
 }
 
-func resolveDbOptions(ctx *cli.Context) map[string]interface{} {
-	dbOptions := map[string]interface{}{}
-
-	// Set LevelDB options
-	dbOptions["levelDbCompactionTableSize"] = ctx.Uint64(LevelDbCompactionTableSizeFlag.Name)
-	dbOptions["levelDbCompactionTableSizeMultiplier"] = ctx.Float64(LevelDbCompactionTableSizeMultiplierFlag.Name)
-	dbOptions["levelDbCompactionTotalSize"] = ctx.Uint64(LevelDbCompactionTotalSizeFlag.Name)
-	dbOptions["levelDbCompactionTotalSizeMultiplier"] = ctx.Float64(LevelDbCompactionTotalSizeMultiplierFlag.Name)
-
-	return dbOptions
+func resolveExtraDBConfig(ctx *cli.Context) rawdb.ExtraDBConfig {
+	return rawdb.ExtraDBConfig{
+		LevelDBCompactionTableSize:           ctx.Uint64(LevelDbCompactionTableSizeFlag.Name),
+		LevelDBCompactionTableSizeMultiplier: ctx.Float64(LevelDbCompactionTableSizeMultiplierFlag.Name),
+		LevelDBCompactionTotalSize:           ctx.Uint64(LevelDbCompactionTotalSizeFlag.Name),
+		LevelDBCompactionTotalSizeMultiplier: ctx.Float64(LevelDbCompactionTotalSizeMultiplierFlag.Name),
+	}
 }
 
 func IsNetworkPreset(ctx *cli.Context) bool {

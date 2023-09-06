@@ -84,10 +84,10 @@ type Database struct {
 }
 
 type LevelDBConfig struct {
-	CompactionTableSize           uint64
-	CompactionTableSizeMultiplier float64
-	CompactionTotalSize           uint64
-	CompactionTotalSizeMultiplier float64
+	CompactionTableSize           uint64  // LevelDB SSTable/file size in mebibytes
+	CompactionTableSizeMultiplier float64 // Multiplier on LevelDB SSTable/file size
+	CompactionTotalSize           uint64  // Total size in mebibytes of SSTables in a given LevelDB level
+	CompactionTotalSizeMultiplier float64 // Multiplier on level size on LevelDB levels
 }
 
 // New returns a wrapped LevelDB object. The namespace is the prefix that the

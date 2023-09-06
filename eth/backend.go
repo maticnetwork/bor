@@ -141,8 +141,8 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	log.Info("Allocated trie memory caches", "clean", common.StorageSize(config.TrieCleanCache)*1024*1024, "dirty", common.StorageSize(config.TrieDirtyCache)*1024*1024)
 
 	// Assemble the Ethereum object
-	dbOptions := resolveDbOptions(config)
-	chainDb, err := stack.OpenDatabaseWithFreezer("chaindata", config.DatabaseCache, config.DatabaseHandles, config.DatabaseFreezer, "ethereum/db/chaindata/", false, dbOptions)
+	extraDBConfig := resolveExtraDBConfig(config)
+	chainDb, err := stack.OpenDatabaseWithFreezer("chaindata", config.DatabaseCache, config.DatabaseHandles, config.DatabaseFreezer, "ethereum/db/chaindata/", false, extraDBConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -333,16 +333,13 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	return ethereum, nil
 }
 
-func resolveDbOptions(config *ethconfig.Config) map[string]interface{} {
-	dbOptions := map[string]interface{}{}
-
-	// Set LevelDB options
-	dbOptions["levelDbCompactionTableSize"] = config.LevelDbCompactionTableSize
-	dbOptions["levelDbCompactionTableSizeMultiplier"] = config.LevelDbCompactionTableSizeMultiplier
-	dbOptions["levelDbCompactionTotalSize"] = config.LevelDbCompactionTotalSize
-	dbOptions["levelDbCompactionTotalSizeMultiplier"] = config.LevelDbCompactionTotalSizeMultiplier
-
-	return dbOptions
+func resolveExtraDBConfig(config *ethconfig.Config) rawdb.ExtraDBConfig {
+	return rawdb.ExtraDBConfig{
+		LevelDBCompactionTableSize:           config.LevelDbCompactionTableSize,
+		LevelDBCompactionTableSizeMultiplier: config.LevelDbCompactionTableSizeMultiplier,
+		LevelDBCompactionTotalSize:           config.LevelDbCompactionTotalSize,
+		LevelDBCompactionTotalSizeMultiplier: config.LevelDbCompactionTotalSizeMultiplier,
+	}
 }
 
 func makeExtraData(extra []byte) []byte {
