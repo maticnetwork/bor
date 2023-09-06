@@ -2234,43 +2234,6 @@ func (s *TransactionAPI) SendRawTransaction(ctx context.Context, input hexutil.B
 	return SubmitTransaction(ctx, s.b, tx)
 }
 
-// SendRawTransactionConditional will add the signed transaction to the transaction pool.
-// The sender/bundler is responsible for signing the transaction
-func (s *TransactionAPI) SendRawTransactionConditional(ctx context.Context, input hexutil.Bytes, options types.OptionsAA4337) (common.Hash, error) {
-	tx := new(types.Transaction)
-	if err := tx.UnmarshalBinary(input); err != nil {
-		return common.Hash{}, err
-	}
-
-	currentHeader := s.b.CurrentHeader()
-	currentState, _, _ := s.b.StateAndHeaderByNumber(ctx, rpc.BlockNumber(currentHeader.Number.Int64()))
-
-	// check block number range
-	if err := currentHeader.ValidateBlockNumberOptions4337(options.BlockNumberMin, options.BlockNumberMax); err != nil {
-		return common.Hash{}, &rpc.OptionsValidateError{Message: "out of block range. err: " + err.Error()}
-	}
-
-	// check timestamp range
-	if err := currentHeader.ValidateTimestampOptions4337(options.TimestampMin, options.TimestampMax); err != nil {
-		return common.Hash{}, &rpc.OptionsValidateError{Message: "out of time range. err: " + err.Error()}
-	}
-
-	// check knownAccounts length (number of slots/accounts) should be less than 1000
-	if err := options.KnownAccounts.ValidateLength(); err != nil {
-		return common.Hash{}, &rpc.KnownAccountsLimitExceededError{Message: "limit exceeded. err: " + err.Error()}
-	}
-
-	// check knownAccounts
-	if err := currentState.ValidateKnownAccounts(options.KnownAccounts); err != nil {
-		return common.Hash{}, &rpc.OptionsValidateError{Message: "storage error. err: " + err.Error()}
-	}
-
-	// put options data in Tx, to use it later while block building
-	tx.PutOptions(&options)
-
-	return SubmitTransaction(ctx, s.b, tx)
-}
-
 // Sign calculates an ECDSA signature for:
 // keccak256("\x19Ethereum Signed Message:\n" + len(message) + message).
 //
