@@ -138,7 +138,7 @@ func GetAPIs(apiBackend Backend) []rpc.API {
 			Service:   NewPersonalAccountAPI(apiBackend, nonceLock),
 		}, {
 			Namespace: "bor",
-			Service:   NewBorNewAPI(apiBackend),
+			Service:   NewBorAPI(apiBackend),
 		},
 	}
 }

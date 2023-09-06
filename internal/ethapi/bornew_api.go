@@ -18,7 +18,6 @@ package ethapi
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -27,18 +26,18 @@ import (
 )
 
 // EthereumAPI provides an API to access Ethereum related information.
-type BorNewAPI struct {
+type BorAPI struct {
 	b Backend
 }
 
 // NewEthereumAPI creates a new Ethereum protocol API.
-func NewBorNewAPI(b Backend) *BorNewAPI {
-	return &BorNewAPI{b}
+func NewBorAPI(b Backend) *BorAPI {
+	return &BorAPI{b}
 }
 
-func (api *BorNewAPI) SendRawTransactionConditional(ctx context.Context, input hexutil.Bytes, options types.OptionsAA4337) (common.Hash, error) {
-	fmt.Println("PSP - SendRawTransactionConditional - 2")
-
+// SendRawTransactionConditional will add the signed transaction to the transaction pool.
+// The sender/bundler is responsible for signing the transaction
+func (api *BorAPI) SendRawTransactionConditional(ctx context.Context, input hexutil.Bytes, options types.OptionsAA4337) (common.Hash, error) {
 	tx := new(types.Transaction)
 	if err := tx.UnmarshalBinary(input); err != nil {
 		return common.Hash{}, err
