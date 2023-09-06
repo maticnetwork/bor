@@ -319,9 +319,12 @@ func (ec *Client) TransactionInBlock(ctx context.Context, blockHash common.Hash,
 func (ec *Client) TransactionReceipt(ctx context.Context, txHash common.Hash) (*types.Receipt, error) {
 	var r *types.Receipt
 
+
 	err := ec.c.CallContext(ctx, &r, "eth_getTransactionReceipt", txHash)
+	fmt.Printf(">>>>>>>>>>>>>>>>>>>>>>>>>>> %#v", r)
 	if err == nil {
 		if r == nil {
+			fmt.Printf(">>>>>>>>>>>>>>>>>>>>>>>>>>> THIS IS NIL FORREAL")
 			return nil, ethereum.NotFound
 		}
 	}
