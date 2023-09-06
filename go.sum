@@ -934,7 +934,7 @@ github.com/mailru/easyjson v0.0.0-20190626092158-b2ccc519800e/go.mod h1:C1wdFJiN
 github.com/mailru/easyjson v0.7.7/go.mod h1:xzfreul335JAWq5oZzymOObrkdz5UnU4kGfJJLY9Nlc=
 github.com/markbates/oncer v0.0.0-20181203154359-bf2de49a0be2/go.mod h1:Ld9puTsIW75CHf65OeIOkyKbteujpZVXDpWK6YGZbxE=
 github.com/markbates/safe v1.0.1/go.mod h1:nAqgmRi7cY2nqMc92/bSEeQA+R4OheNU2T1kNSCBdG0=
-github.com/maticnetwork/bor v1.0.0-beta/go.mod h1:TkpS7fb13DIsvi3yaPf4abOK1FhJo6Ad5tpKkOOUkp0=
+github.com/maticnetwork/bor v1.0.0-beta.0.20230830115110-1beedc7441c8/go.mod h1:TkpS7fb13DIsvi3yaPf4abOK1FhJo6Ad5tpKkOOUkp0=
 github.com/maticnetwork/cosmos-sdk v0.37.5-0.20230807085601-ca7913a29f46 h1:Guqj6kiNJ26fmoT9Iw8JxJE8C1ts94JR82bnHQMWHUM=
 github.com/maticnetwork/cosmos-sdk v0.37.5-0.20230807085601-ca7913a29f46/go.mod h1:I1eh/lc///p4wO8kJAHh5rd6P6XSYw9TnURLIu7y1n0=
 github.com/maticnetwork/crand v1.0.2 h1:Af0tAivC8zrxXDpGWNWVT/0s1fOz8w0eRbahZgURS8I=
