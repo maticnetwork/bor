@@ -251,7 +251,7 @@ replace github.com/cosmos/cosmos-sdk => github.com/maticnetwork/cosmos-sdk v0.37
 
 replace github.com/tendermint/tendermint => github.com/maticnetwork/tendermint v0.26.0-dev0.0.20230831062110-a7e9709ba003
 
-replace github.com/ethereum/go-ethereum => github.com/maticnetwork/bor v1.0.0-beta.0.20230906141154-e7064c5fa47b
+replace github.com/ethereum/go-ethereum => github.com/maticnetwork/bor v0.5.0
 
 replace github.com/Masterminds/goutils => github.com/Masterminds/goutils v1.1.1
 
