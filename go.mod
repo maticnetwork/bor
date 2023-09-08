@@ -183,8 +183,6 @@ require (
 	github.com/cosmos/ledger-cosmos-go v0.11.1 // indirect
 	github.com/cosmos/ledger-go v0.9.2 // indirect
 	github.com/etcd-io/bbolt v1.3.3 // indirect
-	github.com/facebookgo/ensure v0.0.0-20200202191622-63f1cf65ac4c // indirect
-	github.com/facebookgo/subset v0.0.0-20200203212716-c811ad88dec4 // indirect
 	github.com/gammazero/deque v0.2.1 // indirect
 	github.com/go-kit/kit v0.12.0 // indirect
 	github.com/go-kit/log v0.2.1 // indirect
@@ -251,11 +249,11 @@ require (
 	google.golang.org/genproto v0.0.0-20220926220553-6981cbe3cfce // indirect
 )
 
-replace github.com/cosmos/cosmos-sdk => github.com/maticnetwork/cosmos-sdk v0.37.5-0.20230904102129-a617ec1cbfcf
+replace github.com/cosmos/cosmos-sdk => github.com/maticnetwork/cosmos-sdk v0.37.5-0.20230908044248-efcc63210ab4
 
-replace github.com/tendermint/tendermint => github.com/maticnetwork/tendermint v0.26.0-dev0.0.20230904102903-788a681dc63c
+replace github.com/tendermint/tendermint => github.com/maticnetwork/tendermint v0.26.0-dev0.0.20230908043840-c0733aeed2ce
 
-replace github.com/ethereum/go-ethereum => github.com/maticnetwork/bor v1.0.0-beta
+replace github.com/ethereum/go-ethereum => github.com/maticnetwork/bor v1.0.0-beta.0.20230908040206-9ed4c9e57d53
 
 replace github.com/Masterminds/goutils => github.com/Masterminds/goutils v1.1.1
 
