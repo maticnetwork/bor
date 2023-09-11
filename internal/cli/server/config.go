@@ -121,7 +121,7 @@ type Config struct {
 	// Cache has the cache related settings
 	Cache *CacheConfig `hcl:"cache,block" toml:"cache,block"`
 
-	LevelDb *LevelDbConfig `hcl:"leveldb,block" toml:"leveldb,block"`
+	ExtraDB *ExtraDBConfig `hcl:"leveldb,block" toml:"leveldb,block"`
 
 	// Account has the validator account related settings
 	Accounts *AccountsConfig `hcl:"accounts,block" toml:"accounts,block"`
@@ -553,7 +553,7 @@ type CacheConfig struct {
 	FDLimit int `hcl:"fdlimit,optional" toml:"fdlimit,optional"`
 }
 
-type LevelDbConfig struct {
+type ExtraDBConfig struct {
 	LevelDbCompactionTableSize           uint64  `hcl:"compactiontablesize,optional" toml:"compactiontablesize,optional"`
 	LevelDbCompactionTableSizeMultiplier float64 `hcl:"compactiontablesizemultiplier,optional" toml:"compactiontablesizemultiplier,optional"`
 	LevelDbCompactionTotalSize           uint64  `hcl:"compactiontotalsize,optional" toml:"compactiontotalsize,optional"`
@@ -751,7 +751,7 @@ func DefaultConfig() *Config {
 			TrieTimeout:   60 * time.Minute,
 			FDLimit:       0,
 		},
-		LevelDb: &LevelDbConfig{
+		ExtraDB: &ExtraDBConfig{
 			// These are LevelDB defaults, specifying here for clarity in code and in logging.
 			// See: https://github.com/syndtr/goleveldb/blob/126854af5e6d8295ef8e8bee3040dd8380ae72e8/leveldb/opt/options.go
 			LevelDbCompactionTableSize:           2, // MiB
@@ -1120,10 +1120,10 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 
 	// LevelDB
 	{
-		n.LevelDbCompactionTableSize = c.LevelDb.LevelDbCompactionTableSize
-		n.LevelDbCompactionTableSizeMultiplier = c.LevelDb.LevelDbCompactionTableSizeMultiplier
-		n.LevelDbCompactionTotalSize = c.LevelDb.LevelDbCompactionTotalSize
-		n.LevelDbCompactionTotalSizeMultiplier = c.LevelDb.LevelDbCompactionTotalSizeMultiplier
+		n.LevelDbCompactionTableSize = c.ExtraDB.LevelDbCompactionTableSize
+		n.LevelDbCompactionTableSizeMultiplier = c.ExtraDB.LevelDbCompactionTableSizeMultiplier
+		n.LevelDbCompactionTotalSize = c.ExtraDB.LevelDbCompactionTotalSize
+		n.LevelDbCompactionTotalSizeMultiplier = c.ExtraDB.LevelDbCompactionTotalSizeMultiplier
 	}
 
 	n.RPCGasCap = c.JsonRPC.GasCap
