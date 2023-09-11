@@ -36,6 +36,10 @@ The network accepts `mainnet` or `mumbai` and the node type accepts `validator` 
     ```shell
     make all
     ```
+- Run unit and integration tests
+    ```shell
+    make test && make test-integration
+    ```
 
 #### Using the new cli
 
@@ -54,6 +58,7 @@ Thank you for considering helping out with the source code! We welcome contribut
 From the outset we defined some guidelines to ensure new contributions only ever enhance the project:
 
 * Quality: Code in the Polygon project should meet the style guidelines, with sufficient test-cases, descriptive commit messages, evidence that the contribution does not break any compatibility commitments or cause adverse feature interactions, and evidence of high-quality peer-review. Code must adhere to the official Go [formatting](https://golang.org/doc/effective_go.html#formatting) guidelines (i.e. uses [gofmt](https://golang.org/cmd/gofmt/)).
+* Testing: Please ensure that the updated code passes all the tests locally before submitting a pull request. In order to run unit tests, run `make test` and to run integration tests, run `make test-integration`.
 * Size: The Polygon project’s culture is one of small pull-requests, regularly submitted. The larger a pull-request, the more likely it is that you will be asked to resubmit as a series of self-contained and individually reviewable smaller PRs.
 * Maintainability: If the feature will require ongoing maintenance (e.g. support for a particular brand of database), we may ask you to accept responsibility for maintaining this feature
 * Pull requests need to be based on and opened against the `develop` branch.
