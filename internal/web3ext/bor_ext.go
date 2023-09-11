@@ -61,6 +61,11 @@ web3._extend({
 			params: 2,
 		}),
 		new web3._extend.Method({
+			name: 'getVoteOnHash',
+			call: 'bor_getVoteOnHash',
+			params: 4,
+		}),
+		new web3._extend.Method({
 			name: 'sendRawTransactionConditional',
 			call: 'bor_sendRawTransactionConditional',
 			params: 2,
