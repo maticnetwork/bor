@@ -1666,8 +1666,7 @@ func (s *StateDB) ValidateKnownAccounts(knownAccounts types.KnownAccounts) error
 				}
 			}
 		default:
-			trie, _ := s.StorageTrie(k)
-			return fmt.Errorf("invalid root hash for: %v root hash: %v actual root hash: %v", k, v.Single, trie.Hash())
+			return fmt.Errorf("impossible to validate known accounts: %v", k)
 		}
 	}
 
