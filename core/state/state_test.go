@@ -21,13 +21,14 @@ import (
 	"math/big"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/trie"
-	"github.com/stretchr/testify/require"
 )
 
 type stateTest struct {
@@ -337,5 +338,4 @@ func TestValidateKnownAccounts(t *testing.T) {
 	// expected error
 	err = s.state.ValidateKnownAccounts(knownAccounts)
 	require.Error(t, err, "should have been an error")
-
 }
