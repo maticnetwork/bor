@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/holiman/uint256"
+	"github.com/stretchr/testify/require"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -105,9 +106,8 @@ func TestFilterTxConditional(t *testing.T) {
 	// No state has been modified.
 	drops := list.FilterTxConditional(state)
 
-	if count := len(drops); count != 0 {
-		t.Fatalf("got %d filtered by TxOptions when there should not be any", count)
-	}
+	count := len(drops)
+	require.Equal(t, 0, count, "got %d filtered by TxOptions when there should not be any", count)
 
 	// Create another transaction with a known account storage root tx option
 	// and add to the list.
@@ -128,9 +128,8 @@ func TestFilterTxConditional(t *testing.T) {
 	// There should still be no drops as no state has been modified.
 	drops = list.FilterTxConditional(state)
 
-	if count := len(drops); count != 0 {
-		t.Fatalf("got %d filtered by TxOptions when there should not be any", count)
-	}
+	count = len(drops)
+	require.Equal(t, 0, count, "got %d filtered by TxOptions when there should not be any", count)
 
 	// Set state that conflicts with tx2's policy
 	state.SetState(common.Address{19: 1}, common.Hash{}, common.Hash{31: 1})
@@ -138,11 +137,8 @@ func TestFilterTxConditional(t *testing.T) {
 	// tx2 should be the single transaction filtered out
 	drops = list.FilterTxConditional(state)
 
-	if count := len(drops); count != 1 {
-		t.Fatalf("got %d filtered by TxOptions when there should be a single one", count)
-	}
+	count = len(drops)
+	require.Equal(t, 1, count, "got %d filtered by TxOptions when there should be a single one", count)
 
-	if drops[0] != tx2 {
-		t.Fatalf("Got %x, expected %x", drops[0].Hash(), tx2.Hash())
-	}
+	require.Equal(t, tx2, drops[0], "Got %x, expected %x", drops[0].Hash(), tx2.Hash())
 }

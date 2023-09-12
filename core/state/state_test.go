@@ -18,7 +18,6 @@ package state
 
 import (
 	"bytes"
-	"fmt"
 	"math/big"
 	"testing"
 
@@ -28,6 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/trie"
+	"github.com/stretchr/testify/require"
 )
 
 type stateTest struct {
@@ -305,12 +305,7 @@ func TestValidateKnownAccounts(t *testing.T) {
 	s.state.SetState(stateobjaddr2, storageaddr21, data21)
 	s.state.SetState(stateobjaddr2, storageaddr22, data22)
 
-	trieTemp, _ := s.state.StorageTrie(stateobjaddr1)
-	fmt.Println("\nStorageTrie.Hash()", trieTemp.Hash())
-
-	if err := s.state.ValidateKnownAccounts(knownAccounts); err != nil {
-		t.Fatalf(err.Error())
-	}
+	require.NoError(t, s.state.ValidateKnownAccounts(knownAccounts))
 
 	types.InsertKnownAccounts(knownAccounts, common.HexToAddress("0xadd1add1add1add1add1add1add1add1add1add2"), common.HexToHash("0x2d6f8a898e7dec0bb7a50e8c142be32d7c98c096ff68ed57b9b08280d9aca1cf"))
 
@@ -321,9 +316,8 @@ func TestValidateKnownAccounts(t *testing.T) {
 	s.state.SetState(stateobjaddr3, storageaddr3, data3)
 
 	// expected error
-	if err := s.state.ValidateKnownAccounts(knownAccounts); err == nil {
-		t.Fatalf("should have been an error")
-	}
+	err := s.state.ValidateKnownAccounts(knownAccounts)
+	require.Error(t, err, "should have been an error")
 
 	// correct the previous mistake "0x2d6f8a898e7dec0bb7a50e8c142be32d7c98c096ff68ed57b9b08280d9aca1cf" -> "0x2d6f8a898e7dec0bb7a50e8c142be32d7c98c096ff68ed57b9b08280d9aca1ce"
 	types.InsertKnownAccounts(knownAccounts, common.HexToAddress("0xadd1add1add1add1add1add1add1add1add1add2"), common.HexToHash("0x2d6f8a898e7dec0bb7a50e8c142be32d7c98c096ff68ed57b9b08280d9aca1ce"))
@@ -341,7 +335,7 @@ func TestValidateKnownAccounts(t *testing.T) {
 	s.state.SetState(stateobjaddr4, storageaddr42, data4)
 
 	// expected error
-	if err := s.state.ValidateKnownAccounts(knownAccounts); err == nil {
-		t.Fatalf("should have been an error")
-	}
+	err = s.state.ValidateKnownAccounts(knownAccounts)
+	require.Error(t, err, "should have been an error")
+
 }
