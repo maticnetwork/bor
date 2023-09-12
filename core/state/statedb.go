@@ -1649,10 +1649,11 @@ func (s *StateDB) ValidateKnownAccounts(knownAccounts types.KnownAccounts) error
 		// check if the value is hex string or an object
 		switch {
 		case v.IsSingle():
-			acc, _ := s.trie.GetAccount(k)
-			if acc != nil {
-				if *v.Single != acc.Root {
-					return fmt.Errorf("invalid root hash for: %v root hash: %v actual root hash: %v", k, v.Single, acc.Root)
+			trie, _ := s.StorageTrie(k)
+			if trie != nil {
+				actualRootHash := trie.Hash()
+				if *v.Single != actualRootHash {
+					return fmt.Errorf("invalid root hash for: %v root hash: %v actual root hash: %v", k, v.Single, actualRootHash)
 				}
 			} else {
 				return fmt.Errorf("Storage Trie is nil for: %v", k)
