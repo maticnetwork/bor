@@ -100,3 +100,7 @@ func (api *BorAPI) SendRawTransactionConditional(ctx context.Context, input hexu
 
 	return SubmitTransaction(ctx, api.b, tx)
 }
+
+func (api *BorAPI) GetVoteOnHash(ctx context.Context, starBlockNr uint64, endBlockNr uint64, hash string, milestoneId string) (bool, error) {
+	return api.b.GetVoteOnHash(ctx, starBlockNr, endBlockNr, hash, milestoneId)
+}
