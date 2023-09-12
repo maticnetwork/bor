@@ -2,6 +2,7 @@ package ethapi
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -63,5 +64,6 @@ func NewBorAPI(b Backend) *BorAPI {
 }
 
 func (api *BorAPI) GetVoteOnHash(ctx context.Context, starBlockNr uint64, endBlockNr uint64, hash string, milestoneId string) (bool, error) {
+	fmt.Println("####################Entered Here################")
 	return api.b.GetVoteOnHash(ctx, starBlockNr, endBlockNr, hash, milestoneId)
 }

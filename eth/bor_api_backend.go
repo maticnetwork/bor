@@ -42,6 +42,7 @@ func (b *EthAPIBackend) GetRootHash(ctx context.Context, starBlockNr uint64, end
 // GetRootHash returns root hash for given start and end block
 func (b *EthAPIBackend) GetVoteOnHash(ctx context.Context, starBlockNr uint64, endBlockNr uint64, hash string, milestoneId string) (bool, error) {
 	var api *bor.API
+	fmt.Println("####################Entered Here 2################")
 
 	for _, _api := range b.eth.Engine().APIs(b.eth.BlockChain()) {
 		if _api.Namespace == "bor" {
@@ -52,6 +53,8 @@ func (b *EthAPIBackend) GetVoteOnHash(ctx context.Context, starBlockNr uint64, e
 	if api == nil {
 		return false, errBorEngineNotAvailable
 	}
+
+	fmt.Println("####################Entered Here 3################")
 
 	//Confirmation of 16 blocks on the endblock
 	tipConfirmationBlockNr := endBlockNr + uint64(16)
