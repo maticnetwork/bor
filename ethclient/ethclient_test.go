@@ -612,10 +612,6 @@ func testCallContract(t *testing.T, client *rpc.Client) {
 func testAtFunctions(t *testing.T, client *rpc.Client) {
 	ec := NewClient(client)
 
-	if err := sendTransactionConditional(ec); err != nil {
-		t.Fatalf("error: %v", err)
-	}
-
 	// send a transaction for some interesting pending status
 	sendTransaction(ec)
 	time.Sleep(100 * time.Millisecond)
@@ -757,36 +753,4 @@ func sendTransaction(ec *Client) error {
 	}
 
 	return ec.SendTransaction(context.Background(), tx)
-}
-
-func sendTransactionConditional(ec *Client) error {
-	chainID, err := ec.ChainID(context.Background())
-	if err != nil {
-		return err
-	}
-
-	nonce, err := ec.PendingNonceAt(context.Background(), testAddr)
-	if err != nil {
-		return err
-	}
-
-	signer := types.LatestSignerForChainID(chainID)
-
-	tx, err := types.SignNewTx(testKey, signer, &types.LegacyTx{
-		Nonce:    nonce,
-		To:       &common.Address{2},
-		Value:    big.NewInt(1),
-		Gas:      22000,
-		GasPrice: big.NewInt(params.InitialBaseFee),
-	})
-	if err != nil {
-		return err
-	}
-
-	return ec.SendTransactionConditional(context.Background(), tx, map[string]map[common.Address]interface{}{
-		"knownAccounts": {
-			common.HexToAddress("0xadd1add1add1add1add1add1add1add1add1add1"): "0x313AaDcA1750CaadC7BCB26FF08175c95DCf8E38",
-			common.HexToAddress("0xadd2add2add2add2add2add2add2add2add2add2"): "0x413AaDcA1750CaadC7BCB26FF08175c95DCf8E38",
-		},
-	})
 }

@@ -104,10 +104,12 @@ type TxData interface {
 	effectiveGasPrice(dst *big.Int, baseFee *big.Int) *big.Int
 }
 
+// PutOptions stores the optionsAA4337 field of the conditional transaction (EIP-4337)
 func (tx *Transaction) PutOptions(options *OptionsAA4337) {
 	tx.optionsAA4337 = options
 }
 
+// GetOptions returns the optionsAA4337 field of the conditional transaction (EIP-4337)
 func (tx *Transaction) GetOptions() *OptionsAA4337 {
 	return tx.optionsAA4337
 }

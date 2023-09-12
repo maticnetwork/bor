@@ -633,15 +633,6 @@ func (ec *Client) SendTransaction(ctx context.Context, tx *types.Transaction) er
 	return ec.c.CallContext(ctx, nil, "eth_sendRawTransaction", hexutil.Encode(data))
 }
 
-func (ec *Client) SendTransactionConditional(ctx context.Context, tx *types.Transaction, knownAccounts map[string]map[common.Address]interface{}) error {
-	data, err := tx.MarshalBinary()
-	if err != nil {
-		return err
-	}
-
-	return ec.c.CallContext(ctx, nil, "eth_sendRawTransactionConditional", hexutil.Encode(data), knownAccounts)
-}
-
 func toBlockNumArg(number *big.Int) string {
 	if number == nil {
 		return "latest"

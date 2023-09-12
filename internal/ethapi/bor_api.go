@@ -54,12 +54,12 @@ func (s *BlockChainAPI) appendRPCMarshalBorTransaction(ctx context.Context, bloc
 	return fields
 }
 
-// EthereumAPI provides an API to access Ethereum related information.
+// BorAPI provides an API to access Bor related information.
 type BorAPI struct {
 	b Backend
 }
 
-// NewEthereumAPI creates a new Ethereum protocol API.
+// NewBorAPI creates a new Bor protocol API.
 func NewBorAPI(b Backend) *BorAPI {
 	return &BorAPI{b}
 }

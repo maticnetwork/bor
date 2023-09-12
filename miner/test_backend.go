@@ -95,7 +95,7 @@ type testWorkerBackend struct {
 	uncleBlock *types.Block
 }
 
-// PeerCount implements Backend.
+// PeerCount implements testWorkerBackend.
 func (*testWorkerBackend) PeerCount() int {
 	panic("unimplemented")
 }

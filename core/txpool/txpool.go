@@ -2308,8 +2308,8 @@ func (pool *TxPool) demoteUnexecutables() {
 
 		for _, tx := range txConditionalsRemoved {
 			hash := tx.Hash()
-			log.Trace("Removed invalid conditional transaction", "hash", hash)
 			pool.all.Remove(hash)
+			log.Trace("Removed invalid conditional transaction", "hash", hash)
 		}
 
 		pendingGauge.Dec(int64(oldsLen + dropsLen + invalidsLen + len(txConditionalsRemoved)))

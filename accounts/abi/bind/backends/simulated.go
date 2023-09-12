@@ -750,11 +750,6 @@ func (b *SimulatedBackend) SendTransaction(ctx context.Context, tx *types.Transa
 	return nil
 }
 
-// a replica of above `SendTransaction` function
-func (b *SimulatedBackend) SendTransactionConditional(ctx context.Context, tx *types.Transaction, knownAccounts map[string]map[common.Address]interface{}) error {
-	return b.SendTransaction(ctx, tx)
-}
-
 // FilterLogs executes a log filter operation, blocking during execution and
 // returning all the results in one batch.
 //
