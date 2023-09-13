@@ -58,7 +58,7 @@ var (
 	fsHeaderSafetyNet      = 2048            // Number of headers to discard in case a chain violation is detected
 	fsHeaderForceVerify    = 24              // Number of headers to verify before and after the pivot to accept it
 	fsHeaderContCheck      = 3 * time.Second // Time interval to check for header continuations during state download
-	fsMinFullBlocks        = 64              // Number of blocks to retrieve fully even in snap sync
+	fsMinFullBlocks        = 512             // Number of blocks to retrieve fully even in snap sync
 )
 
 var (
@@ -804,6 +804,7 @@ func (d *Downloader) fetchHead(p *peerConnection) (head *types.Header, pivot *ty
 
 	if len(headers) == 1 {
 		if mode == SnapSync && head.Number.Uint64() > uint64(fsMinFullBlocks) {
+			log.Debug("***** Failed in fetchHead, no pivot included along head header")
 			return nil, nil, fmt.Errorf("%w: no pivot included along head header", errBadPeer)
 		}
 
@@ -815,6 +816,7 @@ func (d *Downloader) fetchHead(p *peerConnection) (head *types.Header, pivot *ty
 	// validated head of the chain. Check the pivot number and return,
 	pivot = headers[1]
 	if pivot.Number.Uint64() != head.Number.Uint64()-uint64(fsMinFullBlocks) {
+		log.Debug("***** Failed in fetchHead, different pivot received from what was requested")
 		return nil, nil, fmt.Errorf("%w: remote pivot %d != requested %d", errInvalidChain, pivot.Number, head.Number.Uint64()-uint64(fsMinFullBlocks))
 	}
 
@@ -1833,6 +1835,7 @@ func (d *Downloader) processSnapSyncContent() error {
 			if height := latest.Number.Uint64(); height >= pivot.Number.Uint64()+2*uint64(fsMinFullBlocks)-uint64(reorgProtHeaderDelay) {
 				log.Warn("Pivot became stale, moving", "old", pivot.Number.Uint64(), "new", height-uint64(fsMinFullBlocks)+uint64(reorgProtHeaderDelay))
 				pivot = results[len(results)-1-fsMinFullBlocks+reorgProtHeaderDelay].Header // must exist as lower old pivot is uncommitted
+				log.Warn("Updated pivot", "pivot", pivot.Number.Uint64())
 
 				d.pivotLock.Lock()
 				d.pivotHeader = pivot
