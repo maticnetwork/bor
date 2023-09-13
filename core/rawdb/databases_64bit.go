@@ -20,6 +20,7 @@ package rawdb
 
 import (
 	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/ethdb/cleveldb"
 	"github.com/ethereum/go-ethereum/ethdb/pebble"
 )
 
@@ -30,6 +31,15 @@ const PebbleEnabled = true
 // moving immutable chain segments into cold storage.
 func NewPebbleDBDatabase(file string, cache int, handles int, namespace string, readonly bool) (ethdb.Database, error) {
 	db, err := pebble.New(file, cache, handles, namespace, readonly)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewDatabase(db), nil
+}
+
+func NewCLevelDBDatabase(file string, cache int, handles int, namespace string, readonly bool) (ethdb.Database, error) {
+	db, err := cleveldb.New(file, cache, handles, namespace, readonly)
 	if err != nil {
 		return nil, err
 	}

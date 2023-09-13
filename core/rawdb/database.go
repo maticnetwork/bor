@@ -333,8 +333,9 @@ func NewLevelDBDatabase(file string, cache int, handles int, namespace string, r
 }
 
 const (
-	dbPebble  = "pebble"
-	dbLeveldb = "leveldb"
+	dbPebble   = "pebble"
+	dbLeveldb  = "leveldb"
+	dbClevelDB = "cleveldb"
 )
 
 // hasPreexistingDb checks the given data directory whether a database is already
@@ -345,7 +346,10 @@ func hasPreexistingDb(path string) string {
 		return "" // No pre-existing db
 	}
 
-	if matches, err := filepath.Glob(filepath.Join(path, "OPTIONS*")); len(matches) > 0 || err != nil {
+	matches, err := filepath.Glob(filepath.Join(path, "OPTIONS*"))
+	fmt.Println(matches)
+
+	if len(matches) > 0 || err != nil {
 		if err != nil {
 			panic(err) // only possible if the pattern is malformed
 		}
@@ -375,12 +379,19 @@ type OpenOptions struct {
 //	db is non-existent |  leveldb default  |  specified type
 //	db is existent     |  from db          |  specified type (if compatible)
 func openKeyValueDatabase(o OpenOptions) (ethdb.Database, error) {
-	existingDb := hasPreexistingDb(o.Directory)
-	if len(existingDb) != 0 && len(o.Type) != 0 && o.Type != existingDb {
-		return nil, fmt.Errorf("db.engine choice was %v but found pre-existing %v database in specified data directory", o.Type, existingDb)
+	// existingDb := hasPreexistingDb(o.Directory)
+	// fmt.Println("&&&&&&& ", o.Type)
+	// fmt.Println("^^^^^^^ ", o)
+	// if len(existingDb) != 0 && len(o.Type) != 0 && o.Type != existingDb {
+	// 	return nil, fmt.Errorf("db.engine choice was %v but found pre-existing %v database in specified data directory", o.Type, existingDb)
+	// }
+
+	if o.Type == dbClevelDB {
+		log.Info("Using cleveldb as the backing database")
+		return NewCLevelDBDatabase(o.Directory, o.Cache, o.Handles, o.Namespace, o.ReadOnly)
 	}
 
-	if o.Type == dbPebble || existingDb == dbPebble {
+	if o.Type == dbPebble {
 		if PebbleEnabled {
 			log.Info("Using pebble as the backing database")
 			return NewPebbleDBDatabase(o.Directory, o.Cache, o.Handles, o.Namespace, o.ReadOnly)
