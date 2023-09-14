@@ -21,6 +21,8 @@ The network accepts `mainnet` or `mumbai` and the node type accepts `validator` 
 - Dump the suitable config file (based on the network and node type provided) at `/var/lib/bor` and uses it as the home dir.
 - Create a systemd service named `bor` at `/lib/systemd/system/bor.service` which starts bor using the config file as `bor` user.
 
+The releases supports both the networks i.e. Polygon Mainnet and Mumbai (Testnet) unless explicitly specified. Before the stable release for mainnet, pre-releases will be available marked with `beta` tag for deploying on Mumbai (testnet). On sufficient testing, stable release for mainnet will be announced with a forum post.
+
 ### Building from source
 
 - Install Go (version 1.19 or later) and a C compiler.
