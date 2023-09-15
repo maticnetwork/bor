@@ -197,9 +197,6 @@ type ParallelExecutor struct {
 	// A priority queue that stores the transaction index of results, so we can validate the results in order
 	resultQueue SafeQueue
 
-	// A wait group to wait for all settling tasks to finish
-	settleWg sync.WaitGroup
-
 	// An integer that tracks the index of last settled transaction
 	lastSettled int
 
@@ -397,10 +394,6 @@ func (pe *ParallelExecutor) Close(wait bool) {
 
 	if wait {
 		pe.workerWg.Wait()
-	}
-
-	if wait {
-		pe.settleWg.Wait()
 	}
 }
 
