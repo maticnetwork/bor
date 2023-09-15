@@ -376,16 +376,6 @@ func (pe *ParallelExecutor) Prepare() error {
 		}(i)
 	}
 
-	pe.settleWg.Add(1)
-
-	go func() {
-		for t := range pe.chSettle {
-			pe.tasks[t].Settle()
-		}
-
-		pe.settleWg.Done()
-	}()
-
 	// bootstrap first execution
 	tx := pe.execTasks.takeNextPending()
 
