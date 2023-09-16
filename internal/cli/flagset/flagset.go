@@ -4,19 +4,23 @@ import (
 	"flag"
 	"fmt"
 	"math/big"
+	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
+
+	"github.com/ethereum/go-ethereum/log"
 )
 
 type Flagset struct {
-	flags []*FlagVar
+	flags map[string]*FlagVar
 	set   *flag.FlagSet
 }
 
 func NewFlagSet(name string) *Flagset {
 	f := &Flagset{
-		flags: []*FlagVar{},
+		flags: make(map[string]*FlagVar, 0),
 		set:   flag.NewFlagSet(name, flag.ContinueOnError),
 	}
 
@@ -28,10 +32,11 @@ type FlagVar struct {
 	Usage   string
 	Group   string
 	Default any
+	Value   any
 }
 
 func (f *Flagset) addFlag(fl *FlagVar) {
-	f.flags = append(f.flags, fl)
+	f.flags[fl.Name] = fl
 }
 
 func (f *Flagset) Help() string {
@@ -51,9 +56,11 @@ func (f *Flagset) Help() string {
 }
 
 func (f *Flagset) GetAllFlags() []string {
-	flags := []string{}
-	for _, flag := range f.flags {
-		flags = append(flags, flag.Name)
+	i := 0
+	flags := make([]string, 0, len(f.flags))
+	for name := range f.flags {
+		flags[i] = name
+		i++
 	}
 
 	return flags
@@ -110,6 +117,73 @@ func (f *Flagset) Args() []string {
 	return f.set.Args()
 }
 
+// UpdateValue updates the underlying value of a flag
+// given the flag name and value to update using pointer.
+func (f *Flagset) UpdateValue(names []string, values []string) {
+	for i, name := range names {
+		if flag, ok := f.flags[name]; ok {
+			value := values[i]
+
+			// Get the underlying value set in flag
+			old := reflect.ValueOf(flag.Value).Elem()
+			oldType := old.Type()
+
+			// Create the new value to set based on the kind of old value. Each
+			// type of flag supported needs to be parsed individually because
+			// we receive the value to set (in `values`) as string and it's
+			// not possible to convert them to the underlying type directly
+			// at runtime.
+			var new any
+
+			switch oldType.Kind() {
+			// Handle default data types first
+			case reflect.Bool:
+				new = GetBool(value)
+			case reflect.String:
+				new = value
+			case reflect.Int:
+				new = GetInt(value)
+			case reflect.Uint64:
+				new = GetUint64(value)
+			case reflect.Float64:
+				new = GetFloat64(value)
+			default:
+				// Handle custom data types
+				if oldType == reflect.TypeOf(big.Int{}) {
+					new = GetBigInt(value)
+				} else if oldType == reflect.TypeOf([]string{}) {
+					new = GetSliceString(value)
+				} else if oldType == reflect.TypeOf(time.Second) {
+					new = GetDuration(value)
+				} else if oldType == reflect.TypeOf(map[string]string{}) {
+					new = GetMapString(value)
+				} else {
+					log.Trace("Unable to parse the type while overriding flag, skipping", "got", old.Kind())
+					continue
+				}
+			}
+
+			// Now that both old and new values are of same type, set the
+			// new value.
+			old.Set(reflect.ValueOf(new))
+		}
+	}
+}
+
+// Visit visits all the set flags and returns the name and value
+// in string to set later.
+func (f *Flagset) Visit() ([]string, []string) {
+	names := make([]string, 0, len(f.flags))
+	values := make([]string, 0, len(f.flags))
+
+	f.set.Visit(func(flag *flag.Flag) {
+		names = append(names, flag.Name)
+		values = append(values, flag.Value.String())
+	})
+
+	return names, values
+}
+
 type BoolFlag struct {
 	Name    string
 	Usage   string
@@ -118,12 +192,19 @@ type BoolFlag struct {
 	Group   string
 }
 
+func GetBool(value string) bool {
+	v, _ := strconv.ParseBool(value)
+
+	return v
+}
+
 func (f *Flagset) BoolFlag(b *BoolFlag) {
 	f.addFlag(&FlagVar{
 		Name:    b.Name,
 		Usage:   b.Usage,
 		Group:   b.Group,
 		Default: b.Default,
+		Value:   b.Value,
 	})
 	f.set.BoolVar(b.Value, b.Name, b.Default, b.Usage)
 }
@@ -144,6 +225,7 @@ func (f *Flagset) StringFlag(b *StringFlag) {
 			Usage:   b.Usage,
 			Group:   b.Group,
 			Default: nil,
+			Value:   b.Value,
 		})
 	} else {
 		f.addFlag(&FlagVar{
@@ -151,6 +233,7 @@ func (f *Flagset) StringFlag(b *StringFlag) {
 			Usage:   b.Usage,
 			Group:   b.Group,
 			Default: b.Default,
+			Value:   b.Value,
 		})
 	}
 
@@ -165,12 +248,19 @@ type IntFlag struct {
 	Group   string
 }
 
+func GetInt(value string) int {
+	v, _ := strconv.ParseInt(value, 10, 64)
+
+	return int(v)
+}
+
 func (f *Flagset) IntFlag(i *IntFlag) {
 	f.addFlag(&FlagVar{
 		Name:    i.Name,
 		Usage:   i.Usage,
 		Group:   i.Group,
 		Default: i.Default,
+		Value:   i.Value,
 	})
 	f.set.IntVar(i.Value, i.Name, i.Default, i.Usage)
 }
@@ -183,12 +273,19 @@ type Uint64Flag struct {
 	Group   string
 }
 
+func GetUint64(value string) uint64 {
+	v, _ := strconv.ParseUint(value, 10, 64)
+
+	return v
+}
+
 func (f *Flagset) Uint64Flag(i *Uint64Flag) {
 	f.addFlag(&FlagVar{
 		Name:    i.Name,
 		Usage:   i.Usage,
 		Group:   i.Group,
 		Default: fmt.Sprintf("%d", i.Default),
+		Value:   i.Value,
 	})
 	f.set.Uint64Var(i.Value, i.Name, i.Default, i.Usage)
 }
@@ -228,12 +325,20 @@ func (b *BigIntFlag) Set(value string) error {
 	return nil
 }
 
+func GetBigInt(value string) *big.Int {
+	v := new(big.Int)
+	v.SetString(value, 10)
+
+	return v
+}
+
 func (f *Flagset) BigIntFlag(b *BigIntFlag) {
 	f.addFlag(&FlagVar{
 		Name:    b.Name,
 		Usage:   b.Usage,
 		Group:   b.Group,
 		Default: b.Default,
+		Value:   b.Value,
 	})
 	f.set.Var(b, b.Name, b.Usage)
 }
@@ -273,6 +378,10 @@ func (i *SliceStringFlag) Set(value string) error {
 	return nil
 }
 
+func GetSliceString(value string) []string {
+	return SplitAndTrim(value)
+}
+
 func (f *Flagset) SliceStringFlag(s *SliceStringFlag) {
 	if s.Default == nil || len(s.Default) == 0 {
 		f.addFlag(&FlagVar{
@@ -280,6 +389,7 @@ func (f *Flagset) SliceStringFlag(s *SliceStringFlag) {
 			Usage:   s.Usage,
 			Group:   s.Group,
 			Default: nil,
+			Value:   s.Value,
 		})
 	} else {
 		f.addFlag(&FlagVar{
@@ -287,6 +397,7 @@ func (f *Flagset) SliceStringFlag(s *SliceStringFlag) {
 			Usage:   s.Usage,
 			Group:   s.Group,
 			Default: strings.Join(s.Default, ","),
+			Value:   s.Value,
 		})
 	}
 
@@ -301,12 +412,19 @@ type DurationFlag struct {
 	Group   string
 }
 
+func GetDuration(value string) time.Duration {
+	v, _ := time.ParseDuration(value)
+
+	return v
+}
+
 func (f *Flagset) DurationFlag(d *DurationFlag) {
 	f.addFlag(&FlagVar{
 		Name:    d.Name,
 		Usage:   d.Usage,
 		Group:   d.Group,
 		Default: d.Default,
+		Value:   d.Value,
 	})
 	f.set.DurationVar(d.Value, d.Name, d.Default, "")
 }
@@ -354,6 +472,22 @@ func (m *MapStringFlag) Set(value string) error {
 	return nil
 }
 
+func GetMapString(value string) map[string]string {
+	m := make(map[string]string)
+
+	for _, t := range strings.Split(value, ",") {
+		if t != "" {
+			kv := strings.Split(t, "=")
+
+			if len(kv) == 2 {
+				m[kv[0]] = kv[1]
+			}
+		}
+	}
+
+	return m
+}
+
 func (f *Flagset) MapStringFlag(m *MapStringFlag) {
 	if m.Default == nil || len(m.Default) == 0 {
 		f.addFlag(&FlagVar{
@@ -361,6 +495,7 @@ func (f *Flagset) MapStringFlag(m *MapStringFlag) {
 			Usage:   m.Usage,
 			Group:   m.Group,
 			Default: nil,
+			Value:   m.Value,
 		})
 	} else {
 		f.addFlag(&FlagVar{
@@ -368,6 +503,7 @@ func (f *Flagset) MapStringFlag(m *MapStringFlag) {
 			Usage:   m.Usage,
 			Group:   m.Group,
 			Default: formatMapString(m.Default),
+			Value:   m.Value,
 		})
 	}
 
@@ -382,12 +518,19 @@ type Float64Flag struct {
 	Group   string
 }
 
+func GetFloat64(value string) float64 {
+	v, _ := strconv.ParseFloat(value, 64)
+
+	return v
+}
+
 func (f *Flagset) Float64Flag(i *Float64Flag) {
 	f.addFlag(&FlagVar{
 		Name:    i.Name,
 		Usage:   i.Usage,
 		Group:   i.Group,
 		Default: i.Default,
+		Value:   i.Value,
 	})
 	f.set.Float64Var(i.Value, i.Name, i.Default, "")
 }
