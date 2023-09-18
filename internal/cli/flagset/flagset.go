@@ -161,7 +161,7 @@ func (f *Flagset) UpdateValue(names []string, values []string) {
 				case reflect.TypeOf(map[string]string{}):
 					newValue = GetMapString(value)
 				default:
-					log.Trace("Unable to parse the type while overriding flag, skipping", "flag", name, "got type", oldType)
+					log.Info("Unable to parse the type while overriding flag, skipping", "flag", name, "got type", oldType)
 					continue
 				}
 			}
