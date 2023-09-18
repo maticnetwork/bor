@@ -58,6 +58,7 @@ func (f *Flagset) Help() string {
 func (f *Flagset) GetAllFlags() []string {
 	i := 0
 	flags := make([]string, 0, len(f.flags))
+
 	for name := range f.flags {
 		flags[i] = name
 		i++
@@ -133,39 +134,41 @@ func (f *Flagset) UpdateValue(names []string, values []string) {
 			// we receive the value to set (in `values`) as string and it's
 			// not possible to convert them to the underlying type directly
 			// at runtime.
-			var new any
+			var newValue any
 
+			// nolint:exhaustive
 			switch oldType.Kind() {
 			// Handle default data types first
 			case reflect.Bool:
-				new = GetBool(value)
+				newValue = GetBool(value)
 			case reflect.String:
-				new = value
+				newValue = value
 			case reflect.Int:
-				new = GetInt(value)
+				newValue = GetInt(value)
 			case reflect.Uint64:
-				new = GetUint64(value)
+				newValue = GetUint64(value)
 			case reflect.Float64:
-				new = GetFloat64(value)
+				newValue = GetFloat64(value)
 			default:
 				// Handle custom data types
-				if oldType == reflect.TypeOf(big.Int{}) {
-					new = GetBigInt(value)
-				} else if oldType == reflect.TypeOf([]string{}) {
-					new = GetSliceString(value)
-				} else if oldType == reflect.TypeOf(time.Second) {
-					new = GetDuration(value)
-				} else if oldType == reflect.TypeOf(map[string]string{}) {
-					new = GetMapString(value)
-				} else {
-					log.Trace("Unable to parse the type while overriding flag, skipping", "got", old.Kind())
+				switch oldType {
+				case reflect.TypeOf(big.Int{}):
+					newValue = GetBigInt(value)
+				case reflect.TypeOf([]string{}):
+					newValue = GetSliceString(value)
+				case reflect.TypeOf(time.Second):
+					newValue = GetDuration(value)
+				case reflect.TypeOf(map[string]string{}):
+					newValue = GetMapString(value)
+				default:
+					log.Trace("Unable to parse the type while overriding flag, skipping", "flag", name, "got type", old.Kind())
 					continue
 				}
 			}
 
 			// Now that both old and new values are of same type, set the
 			// new value.
-			old.Set(reflect.ValueOf(new))
+			old.Set(reflect.ValueOf(newValue))
 		}
 	}
 }

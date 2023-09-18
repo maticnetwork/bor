@@ -99,6 +99,7 @@ func (c *Command) extractFlags(args []string) error {
 
 		// Check for explicit cli args
 		cmd := Command{} // use a new variable to keep the original config intact
+
 		cliFlags := cmd.Flags(nil)
 		if err := cliFlags.Parse(args); err != nil {
 			c.UI.Error(err.Error())
