@@ -161,7 +161,7 @@ func (f *Flagset) UpdateValue(names []string, values []string) {
 				case reflect.TypeOf(map[string]string{}):
 					newValue = GetMapString(value)
 				default:
-					log.Trace("Unable to parse the type while overriding flag, skipping", "flag", name, "got type", old.Kind())
+					log.Trace("Unable to parse the type while overriding flag, skipping", "flag", name, "got type", oldType)
 					continue
 				}
 			}
@@ -328,11 +328,11 @@ func (b *BigIntFlag) Set(value string) error {
 	return nil
 }
 
-func GetBigInt(value string) *big.Int {
+func GetBigInt(value string) big.Int {
 	v := new(big.Int)
 	v.SetString(value, 10)
 
-	return v
+	return *v
 }
 
 func (f *Flagset) BigIntFlag(b *BigIntFlag) {
