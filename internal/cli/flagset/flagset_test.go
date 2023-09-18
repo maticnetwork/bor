@@ -9,6 +9,8 @@ import (
 )
 
 func TestFlagsetBool(t *testing.T) {
+	t.Parallel()
+
 	f := NewFlagSet("")
 
 	value := true
@@ -43,6 +45,8 @@ func TestFlagsetBool(t *testing.T) {
 }
 
 func TestFlagsetString(t *testing.T) {
+	t.Parallel()
+
 	f := NewFlagSet("")
 
 	value := "hello"
@@ -72,6 +76,8 @@ func TestFlagsetString(t *testing.T) {
 }
 
 func TestFlagsetInt(t *testing.T) {
+	t.Parallel()
+
 	f := NewFlagSet("")
 
 	value := 10
@@ -101,6 +107,8 @@ func TestFlagsetInt(t *testing.T) {
 }
 
 func TestFlagsetFloat64(t *testing.T) {
+	t.Parallel()
+
 	f := NewFlagSet("")
 
 	value := 10.0
@@ -134,6 +142,8 @@ func TestFlagsetFloat64(t *testing.T) {
 }
 
 func TestFlagsetBigInt(t *testing.T) {
+	t.Parallel()
+
 	f := NewFlagSet("")
 
 	value := big.NewInt(0)
@@ -159,6 +169,8 @@ func TestFlagsetBigInt(t *testing.T) {
 }
 
 func TestFlagsetSliceString(t *testing.T) {
+	t.Parallel()
+
 	f := NewFlagSet("")
 
 	value := []string{"a", "b", "c"}
@@ -185,6 +197,8 @@ func TestFlagsetSliceString(t *testing.T) {
 }
 
 func TestFlagsetDuration(t *testing.T) {
+	t.Parallel()
+
 	f := NewFlagSet("")
 
 	value := time.Duration(0)
@@ -210,6 +224,8 @@ func TestFlagsetDuration(t *testing.T) {
 }
 
 func TestFlagsetMapString(t *testing.T) {
+	t.Parallel()
+
 	f := NewFlagSet("")
 
 	value := map[string]string{}
