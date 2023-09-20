@@ -244,7 +244,7 @@ func TestFlagsetMapString(t *testing.T) {
 
 	// Parse --flag=x=y
 	require.NoError(t, f.Parse([]string{"--flag=x=y"}))
-	require.Equal(t, map[string]string{"a": "b", "c": "d", "x": "y"}, value)
+	require.Equal(t, map[string]string{"x": "y"}, value)
 
 	// Parse --flag: should fail due to no args
 	require.Error(t, f.Parse([]string{"--flag"}))
