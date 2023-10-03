@@ -159,10 +159,7 @@ jobs:
       matrix:
         os: [ ubuntu-20.04 ] # list of os: https://github.com/actions/virtual-environments
     runs-on: ${{ matrix.os }}
-    dependencies:
-      - build
-      - unit-tests
-      - integration-tests
+    needs: [unit-tests, integration-tests]
     steps:
         - name: Upload coverage to Codecov
           uses: codecov/codecov-action@v1
