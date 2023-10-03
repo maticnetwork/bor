@@ -160,6 +160,11 @@ jobs:
         os: [ ubuntu-20.04 ] # list of os: https://github.com/actions/virtual-environments
     runs-on: ${{ matrix.os }}
     steps:
+        - uses: actions/checkout@v3
+        - run: |
+            git submodule update --init --recursive --force
+            git fetch --no-tags --prune --depth=1 origin +refs/heads/master:refs/remotes/origin/master
+            
         - name: Install gocovmerge
           run: make gocovmerge-deps
 
