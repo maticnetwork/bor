@@ -161,7 +161,7 @@ jobs:
         - uses: actions/upload-artifact@v2
           with:
             name: integrationTest-coverage
-            path: cover_integration.out
+            path: cover.out
 
   codecov:
     if: (github.event.action != 'closed' || github.event.pull_request.merged == true)
