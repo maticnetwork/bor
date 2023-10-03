@@ -58,7 +58,7 @@ var (
 	fsHeaderSafetyNet      = 2048            // Number of headers to discard in case a chain violation is detected
 	fsHeaderForceVerify    = 24              // Number of headers to verify before and after the pivot to accept it
 	fsHeaderContCheck      = 3 * time.Second // Time interval to check for header continuations during state download
-	fsMinFullBlocks        = 2048            // Number of blocks to retrieve fully even in snap sync (triesInMemory/2)
+	fsMinFullBlocks        = 24576           // (1024 * 48 / 2) // Number of blocks to retrieve fully even in snap sync (triesInMemory/2)
 )
 
 var (
