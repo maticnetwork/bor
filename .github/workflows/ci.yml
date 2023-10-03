@@ -160,10 +160,21 @@ jobs:
         os: [ ubuntu-20.04 ] # list of os: https://github.com/actions/virtual-environments
     runs-on: ${{ matrix.os }}
     steps:
+        - name: Install gocovmerge
+          run: make gocovmerge-deps
+
+        - name: Merge coverage files
+          run: gocovmerge ./*.out > ./merged.out
+
         - name: Upload coverage to Codecov
           uses: codecov/codecov-action@v1
           with:
             file: ./cover.out
+        
+        - name: Upload combined coverage to Codecov
+          uses: codecov/codecov-action@v1
+          with:
+            file: ./merged.out
 
   e2e-tests:
     if: (github.event.action != 'closed' || github.event.pull_request.merged == true)
