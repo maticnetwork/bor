@@ -1,6 +1,6 @@
 module github.com/ethereum/go-ethereum
 
-go 1.20
+go 1.21
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v0.3.0
@@ -255,7 +255,7 @@ require (
 	google.golang.org/genproto v0.0.0-20230711160842-782d3b101e98 // indirect
 )
 
-replace github.com/cosmos/cosmos-sdk => github.com/maticnetwork/cosmos-sdk v0.37.5-0.20231004081539-707dacfd45c1
+replace github.com/cosmos/cosmos-sdk => github.com/maticnetwork/cosmos-sdk v0.37.5-0.20231004115613-901b7765a929
 
 replace github.com/tendermint/tendermint => github.com/maticnetwork/tendermint v0.26.0-dev0.0.20231004080423-ab02946e7b7d
 
