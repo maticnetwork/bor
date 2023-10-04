@@ -66,7 +66,7 @@ func (h *ethHandler) fetchWhitelistMilestone(ctx context.Context, bor *bor.Bor, 
 	milestone, err := bor.HeimdallClient.FetchMilestone(ctx)
 	if errors.Is(err, heimdall.ErrServiceUnavailable) {
 		log.Debug("Failed to fetch latest milestone for whitelisting", "err", err)
-		return num, hash, errMilestone
+		return num, hash, err
 	}
 
 	if err != nil {
@@ -100,7 +100,7 @@ func (h *ethHandler) fetchNoAckMilestone(ctx context.Context, bor *bor.Bor) (str
 	milestoneID, err := bor.HeimdallClient.FetchLastNoAckMilestone(ctx)
 	if errors.Is(err, heimdall.ErrServiceUnavailable) {
 		log.Debug("Failed to fetch latest no-ack milestone", "err", err)
-		return milestoneID, errMilestone
+		return milestoneID, err
 	}
 
 	if err != nil {
