@@ -115,7 +115,7 @@ func (h *ethHandler) fetchNoAckMilestoneByID(ctx context.Context, bor *bor.Bor, 
 	// fetch latest milestone
 	err := bor.HeimdallClient.FetchNoAckMilestone(ctx, milestoneID)
 	if errors.Is(err, heimdall.ErrServiceUnavailable) {
-		log.Debug("Failed to fetch no-ack milestone by ID", "err", err)
+		log.Debug("Failed to fetch no-ack milestone by ID", "milestoneID", milestoneID, "err", err)
 		return err
 	}
 
