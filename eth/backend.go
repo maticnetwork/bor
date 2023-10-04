@@ -790,6 +790,7 @@ func (s *Ethereum) handleMilestone(ctx context.Context, ethHandler *ethHandler, 
 	}
 
 	if errors.Is(err, heimdall.ErrServiceUnavailable) {
+		log.Info("***** Heimdall service unavailable *****")
 		return nil
 	}
 
@@ -806,6 +807,7 @@ func (s *Ethereum) handleNoAckMilestone(ctx context.Context, ethHandler *ethHand
 	milestoneID, err := ethHandler.fetchNoAckMilestone(ctx, bor)
 
 	if errors.Is(err, heimdall.ErrServiceUnavailable) {
+		log.Info("***** Heimdall service unavailable *****")
 		return nil
 	}
 
