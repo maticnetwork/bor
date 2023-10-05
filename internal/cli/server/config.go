@@ -1399,11 +1399,9 @@ func (c *Config) buildNode() (*node.Config, error) {
 	// only check for non-developer modes
 	if !c.Developer.Enabled {
 		// Discovery
-		// if no bootnodes are defined, use the ones from the chain file.
+		// Append the bootnodes defined with those hardcoded in the config file
 		bootnodes := c.P2P.Discovery.Bootnodes
-		if len(bootnodes) == 0 {
-			bootnodes = c.chain.Bootnodes
-		}
+		bootnodes = append(bootnodes, c.chain.Bootnodes...)
 
 		if cfg.P2P.BootstrapNodes, err = parseBootnodes(bootnodes); err != nil {
 			return nil, err
