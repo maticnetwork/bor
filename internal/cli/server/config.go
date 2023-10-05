@@ -1401,7 +1401,9 @@ func (c *Config) buildNode() (*node.Config, error) {
 		// Discovery
 		// Append the bootnodes defined with those hardcoded in the config file
 		bootnodes := c.P2P.Discovery.Bootnodes
-		bootnodes = append(bootnodes, c.chain.Bootnodes...)
+		if c.chain != nil {
+			bootnodes = append(bootnodes, c.chain.Bootnodes...)
+		}
 
 		if cfg.P2P.BootstrapNodes, err = parseBootnodes(bootnodes); err != nil {
 			return nil, err
