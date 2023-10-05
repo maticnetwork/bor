@@ -176,7 +176,7 @@ jobs:
         - name: Download artifacts
           uses: actions/download-artifact@v2
         - name: Upload coverage to Codecov
-          uses: codecov/codecov-action@v1
+          uses: codecov/codecov-action@v3
 
   e2e-tests:
     if: (github.event.action != 'closed' || github.event.pull_request.merged == true)
