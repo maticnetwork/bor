@@ -286,6 +286,12 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 
 	blockTxDependency := block.GetTxDependency()
 
+	fmt.Println("PSP - ----------------------------------------------------------------------------------------------------------------------------------------------------------------------")
+	fmt.Println("PSP - in Process")
+	fmt.Println("PSP - block number      - ", block.Number())
+	fmt.Println("PSP - blockTxDependency - ", blockTxDependency)
+	fmt.Println("PSP - ----------------------------------------------------------------------------------------------------------------------------------------------------------------------")
+
 	deps := GetDeps(blockTxDependency)
 
 	if blockTxDependency != nil {

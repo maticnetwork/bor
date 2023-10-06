@@ -1070,7 +1070,15 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 
 	var depsWg sync.WaitGroup
 
-	EnableMVHashMap := false
+	var EnableMVHashMap bool
+
+	if w.chainConfig.Bor.IsParallelUniverse(env.header.Number) {
+		fmt.Println("PSP - post HF")
+		EnableMVHashMap = true
+	} else {
+		fmt.Println("PSP - pre HF")
+		EnableMVHashMap = false
+	}
 
 	// create and add empty mvHashMap in statedb
 	if EnableMVHashMap {
@@ -1283,11 +1291,26 @@ mainloop:
 
 			if delayFlag {
 				blockExtraData.TxDependency = tempDeps
+				fmt.Println("PSP - ----------------------------------------------------------------------------------------------------------------------------------------------------------------------")
+				fmt.Println("PSP - in Worker")
+				fmt.Println("PSP - block number      - ", env.header.Number)
+				fmt.Println("PSP - blockTxDependency - ", tempDeps)
+				fmt.Println("PSP - ----------------------------------------------------------------------------------------------------------------------------------------------------------------------")
 			} else {
 				blockExtraData.TxDependency = nil
+				fmt.Println("PSP - ----------------------------------------------------------------------------------------------------------------------------------------------------------------------")
+				fmt.Println("PSP - in Worker")
+				fmt.Println("PSP - block number      - ", env.header.Number)
+				fmt.Println("PSP - blockTxDependency - ", nil)
+				fmt.Println("PSP - ----------------------------------------------------------------------------------------------------------------------------------------------------------------------")
 			}
 		} else {
 			blockExtraData.TxDependency = nil
+			fmt.Println("PSP - ----------------------------------------------------------------------------------------------------------------------------------------------------------------------")
+			fmt.Println("PSP - in Worker")
+			fmt.Println("PSP - block number      - ", env.header.Number)
+			fmt.Println("PSP - blockTxDependency - ", nil)
+			fmt.Println("PSP - ----------------------------------------------------------------------------------------------------------------------------------------------------------------------")
 		}
 
 		blockExtraDataBytes, err := rlp.EncodeToBytes(blockExtraData)
