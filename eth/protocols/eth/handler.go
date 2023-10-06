@@ -24,6 +24,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/enode"
@@ -154,6 +155,7 @@ func nodeInfo(chain *core.BlockChain, network uint64) *NodeInfo {
 // the protocol handshake. This method will keep processing messages until the
 // connection is torn down.
 func Handle(backend Backend, peer *Peer) error {
+	log.Info("***** In handle message", "peer.id", peer.id)
 	for {
 		if err := handleMessage(backend, peer); err != nil {
 			peer.Log().Debug("Message handling failed in `eth`", "err", err)
@@ -238,6 +240,8 @@ func handleMessage(backend Backend, peer *Peer) error {
 	if peer.Version() >= ETH68 {
 		handlers = eth68
 	}
+
+	log.Info("***** In handle message", "peer.version", peer.Version())
 
 	// Track the amount of time it takes to serve the request and run the handler
 	if metrics.Enabled {

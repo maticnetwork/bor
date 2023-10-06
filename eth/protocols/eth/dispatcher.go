@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
 )
 
@@ -215,7 +216,8 @@ func (p *Peer) dispatcher() {
 			}
 			// Stop tracking the request
 			delete(pending, cancelOp.id)
-			requestTracker.Fulfil(p.id, p.version, req.code, cancelOp.id)
+			log.Info("***** Cancelled request", "peer.id", p.id, "version", p.version, "code", req.code, "req.id", req.id)
+			requestTracker.Fulfil(p.id, p.version, req.code, req.id)
 			cancelOp.fail <- nil
 
 		case resOp := <-p.resDispatch:

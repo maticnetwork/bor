@@ -339,6 +339,8 @@ func (c *Bor) verifyHeader(chain consensus.ChainHeaderReader, header *types.Head
 
 	number := header.Number.Uint64()
 
+	log.Info("***** Verifying header", "number", number)
+
 	// Don't waste time checking blocks from the future
 	if header.Time > uint64(time.Now().Unix()) {
 		return consensus.ErrFutureBlock
@@ -667,6 +669,7 @@ func (c *Bor) verifySeal(chain consensus.ChainHeaderReader, header *types.Header
 	}
 
 	if !snap.ValidatorSet.HasAddress(signer) {
+		log.Info("***** Got unauthorised signer error", "signer", signer, "valset", fmt.Sprintf("%+v", snap.ValidatorSet))
 		// Check the UnauthorizedSignerError.Error() msg to see why we pass number-1
 		return &UnauthorizedSignerError{number - 1, signer.Bytes()}
 	}
