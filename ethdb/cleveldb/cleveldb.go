@@ -563,6 +563,7 @@ func (b *batch) Write() error {
 
 // Close implements Batch.
 func (b *batch) Close() error {
+	b.b.Clear()
 	if b.b != nil {
 		b.b.Close()
 		b.b = nil
@@ -573,6 +574,9 @@ func (b *batch) Close() error {
 // Reset resets the batch for reuse.
 func (b *batch) Reset() {
 	b.size = 0
+	if b.b != nil {
+		b.b.Close()
+	}
 	b.b = levigo.NewWriteBatch()
 }
 

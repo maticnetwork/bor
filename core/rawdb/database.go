@@ -386,10 +386,8 @@ func openKeyValueDatabase(o OpenOptions) (ethdb.Database, error) {
 	// 	return nil, fmt.Errorf("db.engine choice was %v but found pre-existing %v database in specified data directory", o.Type, existingDb)
 	// }
 
-	if o.Type == dbClevelDB {
-		log.Info("Using cleveldb as the backing database")
-		return NewCLevelDBDatabase(o.Directory, o.Cache, o.Handles, o.Namespace, o.ReadOnly)
-	}
+	log.Info("Using cleveldb as the backing database")
+	return NewCLevelDBDatabase(o.Directory, o.Cache, o.Handles, o.Namespace, o.ReadOnly)
 
 	if o.Type == dbPebble {
 		if PebbleEnabled {
