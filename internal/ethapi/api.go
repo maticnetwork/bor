@@ -2021,6 +2021,7 @@ func (s *TransactionAPI) GetTransactionByHash(ctx context.Context, hash common.H
 			// newRPCTransaction calculates hash based on RLP of the transaction data.
 			// In case of bor block tx, we need simple derived tx hash (same as function argument) instead of RLP hash
 			resultTx.Hash = hash
+			resultTx.ChainID = nil
 		}
 
 		return resultTx, nil
@@ -2103,6 +2104,10 @@ func (s *TransactionAPI) GetTransactionReceipt(ctx context.Context, hash common.
 		"logsBloom":         receipt.Bloom,
 		"type":              hexutil.Uint(tx.Type()),
 		"effectiveGasPrice": (*hexutil.Big)(receipt.EffectiveGasPrice),
+	}
+
+	if receipt.EffectiveGasPrice == nil {
+		fields["effectiveGasPrice"] = new(hexutil.Big)
 	}
 
 	// Assign receipt status or post state.
@@ -2556,17 +2561,6 @@ func (api *DebugAPI) ChaindbCompact() error {
 // SetHead rewinds the head of the blockchain to a previous block.
 func (api *DebugAPI) SetHead(number hexutil.Uint64) {
 	api.b.SetHead(uint64(number))
-}
-
-// GetCheckpointWhitelist retrieves the current checkpoint whitelist
-// entries (of the form block number -> block hash)
-func (api *DebugAPI) GetCheckpointWhitelist() map[uint64]common.Hash {
-	return api.b.GetCheckpointWhitelist()
-}
-
-// PurgeCheckpointWhitelist purges the current checkpoint whitelist entries
-func (api *DebugAPI) PurgeCheckpointWhitelist() {
-	api.b.PurgeCheckpointWhitelist()
 }
 
 // GetTraceStack returns the current trace stack
