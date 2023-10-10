@@ -33,12 +33,15 @@ func handleGetBlockHeaders66(backend Backend, msg Decoder, peer *Peer) error {
 	// Decode the complex header query
 	var query GetBlockHeadersPacket66
 	if err := msg.Decode(&query); err != nil {
+		log.Info("***** Failed to decode GetBlockHeadersPacket66", "msg", msg, "err", err)
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
 
 	response := ServiceGetBlockHeadersQuery(backend.Chain(), query.GetBlockHeadersPacket, peer)
 
-	return peer.ReplyBlockHeadersRLP(query.RequestId, response)
+	err := peer.ReplyBlockHeadersRLP(query.RequestId, response)
+	log.Info("***** Returning from handleGetBlockHeaders66", "err", err)
+	return err
 }
 
 // ServiceGetBlockHeadersQuery assembles the response to a header query. It is
