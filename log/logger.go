@@ -215,11 +215,6 @@ func (l *logger) New(ctx ...interface{}) Logger {
 
 func newContext(prefix []interface{}, suffix []interface{}) []interface{} {
 	normalizedSuffix := normalize(suffix)
-
-	if len(prefix)+len(normalizedSuffix) > 64*1024*1024 {
-		return make([]interface{}, 0)
-	}
-
 	newCtx := make([]interface{}, len(prefix)+len(normalizedSuffix))
 	n := copy(newCtx, prefix)
 	copy(newCtx[n:], normalizedSuffix)
@@ -331,10 +326,6 @@ type Lazy struct {
 type Ctx map[string]interface{}
 
 func (c Ctx) toArray() []interface{} {
-	if len(c)*2 > 64*1024*1024 {
-		return make([]interface{}, 0)
-	}
-
 	arr := make([]interface{}, len(c)*2)
 
 	i := 0

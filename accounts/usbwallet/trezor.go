@@ -308,7 +308,7 @@ func (w *trezorDriver) trezorExchange(req proto.Message, results ...proto.Messag
 
 	var payload []byte
 
-	if 8+len(data) < 64*1024*1024 {
+	if len(data) < 64*1024*1024 {
 		payload = make([]byte, 8+len(data))
 	} else {
 		return 0, errors.New("data too large")
