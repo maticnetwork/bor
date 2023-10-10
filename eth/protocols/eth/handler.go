@@ -241,7 +241,7 @@ func handleMessage(backend Backend, peer *Peer) error {
 		handlers = eth68
 	}
 
-	log.Info("***** In handle message", "peer.version", peer.Version())
+	log.Info("***** In handle message", "peer.version", peer.Version(), "msg.code", msg.Code)
 
 	// Track the amount of time it takes to serve the request and run the handler
 	if metrics.Enabled {
@@ -257,7 +257,8 @@ func handleMessage(backend Backend, peer *Peer) error {
 	}
 
 	if handler := handlers[msg.Code]; handler != nil {
-		return handler(backend, msg, peer)
+		err := handler(backend, msg, peer)
+		log.Info("***** Message handling failed", "err", err)
 	}
 
 	return fmt.Errorf("%w: %v", errInvalidMsgCode, msg.Code)
