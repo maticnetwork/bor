@@ -147,11 +147,8 @@ func (c *Contract) AsDelegate() *Contract {
 
 // GetOp returns the n'th element in the contract's byte array
 func (c *Contract) GetOp(n uint64) OpCode {
-	if n > 0 && n <= math.MaxUint16 {
-		if n < uint64(len(c.Code)) {
+	if len(c.Code) > 0 && len(c.Code) <= math.MaxUint16 && n < uint64(len(c.Code)) {
 			return OpCode(c.Code[n])
-		}
-
 	}
 
 	return STOP
