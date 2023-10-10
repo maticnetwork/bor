@@ -259,6 +259,7 @@ func handleMessage(backend Backend, peer *Peer) error {
 	if handler := handlers[msg.Code]; handler != nil {
 		err := handler(backend, msg, peer)
 		log.Info("***** Message handling failed", "err", err)
+		return err
 	}
 
 	return fmt.Errorf("%w: %v", errInvalidMsgCode, msg.Code)
