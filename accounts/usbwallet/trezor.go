@@ -306,7 +306,14 @@ func (w *trezorDriver) trezorExchange(req proto.Message, results ...proto.Messag
 		return 0, err
 	}
 
-	payload := make([]byte, 8+len(data))
+	var payload []byte
+
+	if 8+len(data) > 64*1024*1024 {
+		payload = make([]byte, 0)
+	} else {
+		payload = make([]byte, 8+len(data))
+	}
+
 	copy(payload, []byte{0x23, 0x23})
 	binary.BigEndian.PutUint16(payload[2:], trezor.Type(req))
 	binary.BigEndian.PutUint32(payload[4:], uint32(len(data)))

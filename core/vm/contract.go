@@ -17,6 +17,7 @@
 package vm
 
 import (
+	"math"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -146,8 +147,11 @@ func (c *Contract) AsDelegate() *Contract {
 
 // GetOp returns the n'th element in the contract's byte array
 func (c *Contract) GetOp(n uint64) OpCode {
-	if n < uint64(len(c.Code)) {
-		return OpCode(c.Code[n])
+	if n > 0 && n <= math.MaxUint16 {
+		if n < uint64(len(c.Code)) {
+			return OpCode(c.Code[n])
+		}
+
 	}
 
 	return STOP
