@@ -1,4 +1,4 @@
-name: Security CI
+name: Govuln
 on: [ push, pull_request ]
 
 jobs:
