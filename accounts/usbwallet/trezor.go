@@ -25,7 +25,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/accounts"
@@ -309,7 +308,7 @@ func (w *trezorDriver) trezorExchange(req proto.Message, results ...proto.Messag
 
 	var payload []byte
 
-	if 8+len(data) < math.MaxInt {
+	if 8+len(data) < 64*1024*1024 {
 		payload = make([]byte, 8+len(data))
 	}
 
