@@ -477,7 +477,7 @@ func (f *BlockFetcher) loop() {
 			}
 			// Send out all block header requests
 			for peer, hashes := range request {
-				log.Trace("Fetching scheduled headers", "peer", peer, "list", hashes)
+				log.Debug("***** Fetching scheduled headers", "peer", peer, "list", hashes)
 
 				// Create a closure of the fetch and schedule in on a new thread
 				fetchHeader, hashes := f.fetching[hashes[0]].fetchHeader, hashes
@@ -503,6 +503,7 @@ func (f *BlockFetcher) loop() {
 
 							select {
 							case res := <-resCh:
+								log.Info("***** Got header response", "hash", hash)
 								res.Done <- nil
 								f.FilterHeaders(peer, *res.Res.(*eth.BlockHeadersPacket), time.Now().Add(res.Time))
 
@@ -511,6 +512,7 @@ func (f *BlockFetcher) loop() {
 								// was already rescheduled at this point, we were
 								// waiting for a catchup. With an unresponsive
 								// peer however, it's a protocol violation.
+								log.Info("***** calling dropPeer() due to 10s timeout in fetchHeader request", "hash", hash)
 								f.dropPeer(peer)
 							}
 						}(hash)
