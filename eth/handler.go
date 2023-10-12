@@ -396,6 +396,9 @@ func (h *handler) runEthPeer(peer *eth.Peer, handler eth.Handler) error {
 		return err
 	}
 	defer h.unregisterPeer(peer.ID())
+	defer peer.Log().Info("***** Trying to unregister peer", "id", peer.ID())
+
+	peer.Log().Info("***** Peer registration done", "id", peer.ID())
 
 	p := h.peers.peer(peer.ID())
 	if p == nil {
@@ -414,6 +417,8 @@ func (h *handler) runEthPeer(peer *eth.Peer, handler eth.Handler) error {
 		}
 	}
 
+	peer.Log().Info("***** Registered peer in downloader")
+
 	h.chainSync.handlePeerEvent(peer)
 
 	// Propagate existing transactions. new transactions appearing
@@ -426,6 +431,7 @@ func (h *handler) runEthPeer(peer *eth.Peer, handler eth.Handler) error {
 
 	// If we have a trusted CHT, reject all peers below that (avoid fast sync eclipse)
 	if h.checkpointHash != (common.Hash{}) {
+		log.Info("***** IF (1)")
 		// Request the peer's checkpoint header for chain height/weight validation
 		resCh := make(chan *eth.Response)
 
@@ -437,6 +443,7 @@ func (h *handler) runEthPeer(peer *eth.Peer, handler eth.Handler) error {
 		go func() {
 			// Ensure the request gets cancelled in case of error/drop
 			defer req.Close()
+			defer log.Info("***** About to close request in IF (1)")
 
 			timeout := time.NewTimer(syncChallengeTimeout)
 			defer timeout.Stop()
@@ -479,6 +486,9 @@ func (h *handler) runEthPeer(peer *eth.Peer, handler eth.Handler) error {
 			}
 		}()
 	}
+
+	log.Info("***** Done with IF (1)", "required blocks", len(h.requiredBlocks))
+
 	// If we have any explicit peer required block hashes, request them
 	for number, hash := range h.requiredBlocks {
 		resCh := make(chan *eth.Response)
@@ -491,6 +501,7 @@ func (h *handler) runEthPeer(peer *eth.Peer, handler eth.Handler) error {
 		go func(number uint64, hash common.Hash, req *eth.Request) {
 			// Ensure the request gets cancelled in case of error/drop
 			defer req.Close()
+			defer log.Info("***** Done with request in required blocks loop")
 
 			timeout := time.NewTimer(syncChallengeTimeout)
 			defer timeout.Stop()
@@ -525,6 +536,8 @@ func (h *handler) runEthPeer(peer *eth.Peer, handler eth.Handler) error {
 			}
 		}(number, hash, req)
 	}
+
+	log.Info("***** Done with processing required blocks, about to call handle peer")
 	// Handle incoming messages until the connection is torn down
 	return handler(peer)
 }

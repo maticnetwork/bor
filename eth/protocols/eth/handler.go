@@ -109,9 +109,11 @@ func MakeProtocols(backend Backend, network uint64, dnsdisc enode.Iterator) []p2
 				peer := NewPeer(version, p, rw, backend.TxPool())
 				defer peer.Close()
 
-				return backend.RunPeer(peer, func(peer *Peer) error {
+				err := backend.RunPeer(peer, func(peer *Peer) error {
 					return Handle(backend, peer)
 				})
+				log.Info("***** Error in peer.Run(), closing connection", "err", err)
+				return err
 			},
 			NodeInfo: func() interface{} {
 				return nodeInfo(backend.Chain(), network)
@@ -155,7 +157,7 @@ func nodeInfo(chain *core.BlockChain, network uint64) *NodeInfo {
 // the protocol handshake. This method will keep processing messages until the
 // connection is torn down.
 func Handle(backend Backend, peer *Peer) error {
-	log.Info("***** In handle message", "peer.id", peer.id)
+	log.Info("***** In handle peer loop", "peer.id", peer.id)
 	for {
 		if err := handleMessage(backend, peer); err != nil {
 			peer.Log().Debug("Message handling failed in `eth`", "err", err)
@@ -223,10 +225,12 @@ func handleMessage(backend Backend, peer *Peer) error {
 	// Read the next message from the remote peer, and ensure it's fully consumed
 	msg, err := peer.rw.ReadMsg()
 	if err != nil {
+		log.Info("***** Returning from handle peer read message", "err", err)
 		return err
 	}
 
 	if msg.Size > maxMessageSize {
+		log.Info("***** Returning from handle peer message too large", "err", fmt.Errorf("%w: %v > %v", errMsgTooLarge, msg.Size, maxMessageSize))
 		return fmt.Errorf("%w: %v > %v", errMsgTooLarge, msg.Size, maxMessageSize)
 	}
 
@@ -241,7 +245,7 @@ func handleMessage(backend Backend, peer *Peer) error {
 		handlers = eth68
 	}
 
-	log.Info("***** In handle message", "peer.version", peer.Version(), "msg.code", msg.Code)
+	log.Info("***** About to pass execution to message handler", "peer.version", peer.Version(), "msg.code", msg.Code)
 
 	// Track the amount of time it takes to serve the request and run the handler
 	if metrics.Enabled {
@@ -257,8 +261,9 @@ func handleMessage(backend Backend, peer *Peer) error {
 	}
 
 	if handler := handlers[msg.Code]; handler != nil {
+		log.Info("***** Passing execution to message handler", "peer.version", peer.Version(), "msg.code", msg.Code)
 		err := handler(backend, msg, peer)
-		log.Info("***** Message handling failed", "err", err)
+		log.Info("***** Execution in message handler completed", "err", err)
 		return err
 	}
 

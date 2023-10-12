@@ -70,6 +70,7 @@ func (r *Request) Close() error {
 	}
 	select {
 	case r.peer.reqCancel <- cancelOp:
+		log.Info("***** In request.Close(), sent cancel signal", "peer.id", r.peer.id, "version", r.peer.version, "code", r.code, "req.id", r.id)
 		if err := <-cancelOp.fail; err != nil {
 			return err
 		}

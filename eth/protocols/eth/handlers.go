@@ -30,6 +30,7 @@ import (
 
 // handleGetBlockHeaders66 is the eth/66 version of handleGetBlockHeaders
 func handleGetBlockHeaders66(backend Backend, msg Decoder, peer *Peer) error {
+	log.Info("***** In handleGetBlockHeaders66 handler")
 	// Decode the complex header query
 	var query GetBlockHeadersPacket66
 	if err := msg.Decode(&query); err != nil {
@@ -40,7 +41,9 @@ func handleGetBlockHeaders66(backend Backend, msg Decoder, peer *Peer) error {
 	response := ServiceGetBlockHeadersQuery(backend.Chain(), query.GetBlockHeadersPacket, peer)
 
 	err := peer.ReplyBlockHeadersRLP(query.RequestId, response)
-	log.Info("***** Returning from handleGetBlockHeaders66", "err", err)
+
+	log.Info("***** Returning from handleGetBlockHeaders66", "response", response, "err", err)
+
 	return err
 }
 
