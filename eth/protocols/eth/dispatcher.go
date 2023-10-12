@@ -19,6 +19,7 @@ package eth
 import (
 	"errors"
 	"fmt"
+	"runtime"
 	"time"
 
 	"github.com/ethereum/go-ethereum/log"
@@ -62,6 +63,17 @@ type Request struct {
 func (r *Request) Close() error {
 	if r.peer == nil { // Tests mock out the dispatcher, skip internal cancellation
 		return nil
+	}
+
+	// Get function caller details
+	pc, file, no, ok := runtime.Caller(1)
+	details := runtime.FuncForPC(pc)
+	if ok {
+		extra := ""
+		if details != nil {
+			extra = details.Name()
+		}
+		log.Info("***** request.Close() called from", "file", fmt.Sprintf("%s#%d", file, no), "name", extra)
 	}
 
 	cancelOp := &cancel{

@@ -42,7 +42,7 @@ func handleGetBlockHeaders66(backend Backend, msg Decoder, peer *Peer) error {
 
 	err := peer.ReplyBlockHeadersRLP(query.RequestId, response)
 
-	log.Info("***** Returning from handleGetBlockHeaders66", "response", response, "err", err)
+	log.Info("***** Returning from handleGetBlockHeaders66", "response.length", len(response), "err", err)
 
 	return err
 }
