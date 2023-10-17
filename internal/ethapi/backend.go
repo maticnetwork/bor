@@ -19,10 +19,10 @@ package ethapi
 
 import (
 	"context"
+	"github.com/ethereum/go-ethereum"
 	"math/big"
 	"time"
 
-	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
@@ -114,7 +114,7 @@ type Backend interface {
 	PurgeWhitelistedMilestone()
 }
 
-func GetAPIs(apiBackend Backend) []rpc.API {
+func GetAPIs(apiBackend Backend, chain *core.BlockChain) []rpc.API {
 	nonceLock := new(AddrLocker)
 
 	return []rpc.API{
@@ -124,6 +124,9 @@ func GetAPIs(apiBackend Backend) []rpc.API {
 		}, {
 			Namespace: "eth",
 			Service:   NewBlockChainAPI(apiBackend),
+		}, {
+			Namespace: "eth",
+			Service:   NewSearcherAPI(apiBackend, chain),
 		}, {
 			Namespace: "eth",
 			Service:   NewTransactionAPI(apiBackend, nonceLock),

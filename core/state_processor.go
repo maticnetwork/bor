@@ -91,7 +91,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 
 		statedb.SetTxContext(tx.Hash(), i)
 
-		receipt, err := applyTransaction(msg, p.config, gp, statedb, blockNumber, blockHash, tx, usedGas, vmenv, interruptCtx)
+		receipt, _, err := applyTransaction(msg, p.config, gp, statedb, blockNumber, blockHash, tx, usedGas, vmenv, interruptCtx)
 		if err != nil {
 			return nil, nil, 0, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
 		}
@@ -112,7 +112,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 }
 
 // nolint : unparam
-func applyTransaction(msg *Message, config *params.ChainConfig, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, tx *types.Transaction, usedGas *uint64, evm *vm.EVM, interruptCtx context.Context) (*types.Receipt, error) {
+func applyTransaction(msg *Message, config *params.ChainConfig, gp *GasPool, statedb *state.StateDB, blockNumber *big.Int, blockHash common.Hash, tx *types.Transaction, usedGas *uint64, evm *vm.EVM, interruptCtx context.Context) (*types.Receipt, *ExecutionResult, error) {
 	// Create a new context to be used in the EVM environment.
 	txContext := NewEVMTxContext(msg)
 	evm.Reset(txContext, statedb)
@@ -133,7 +133,7 @@ func applyTransaction(msg *Message, config *params.ChainConfig, gp *GasPool, sta
 
 	result, err = ApplyMessageNoFeeBurnOrTip(evm, *msg, gp, interruptCtx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// stop recording read and write
@@ -164,7 +164,7 @@ func applyTransaction(msg *Message, config *params.ChainConfig, gp *GasPool, sta
 	)
 
 	if result.Err == vm.ErrInterrupt {
-		return nil, result.Err
+		return nil, nil, result.Err
 	}
 
 	// Update the state with pending changes.
@@ -202,21 +202,20 @@ func applyTransaction(msg *Message, config *params.ChainConfig, gp *GasPool, sta
 	receipt.BlockNumber = blockNumber
 	receipt.TransactionIndex = uint(statedb.TxIndex())
 
-	return receipt, err
+	return receipt, result, err
 }
 
 // ApplyTransaction attempts to apply a transaction to the given state database
 // and uses the input parameters for its environment. It returns the receipt
 // for the transaction, gas used and an error if the transaction failed,
 // indicating the block was invalid.
-func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config, interruptCtx context.Context) (*types.Receipt, error) {
+func ApplyTransaction(config *params.ChainConfig, bc ChainContext, author *common.Address, gp *GasPool, statedb *state.StateDB, header *types.Header, tx *types.Transaction, usedGas *uint64, cfg vm.Config, interruptCtx context.Context) (*types.Receipt, *ExecutionResult, error) {
 	msg, err := TransactionToMessage(tx, types.MakeSigner(config, header.Number), header.BaseFee)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	// Create a new context to be used in the EVM environment
 	blockContext := NewEVMBlockContext(header, bc, author)
 	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, statedb, config, cfg)
-
 	return applyTransaction(msg, config, gp, statedb, header.Number, header.Hash(), tx, usedGas, vmenv, interruptCtx)
 }

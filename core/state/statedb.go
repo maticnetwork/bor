@@ -575,6 +575,13 @@ const NoncePath = 2
 const CodePath = 3
 const SuicidePath = 4
 
+// PrepareLegacy sets the current transaction hash and index which are
+// used when the EVM emits new state logs.
+func (s *StateDB) PrepareLegacy(thash common.Hash, ti int) {
+	s.thash = thash
+	s.txIndex = ti
+}
+
 // GetBalance retrieves the balance from the given address or 0 if object not found
 func (s *StateDB) GetBalance(addr common.Address) *big.Int {
 	return MVRead(s, blockstm.NewSubpathKey(addr, BalancePath), common.Big0, func(s *StateDB) *big.Int {
