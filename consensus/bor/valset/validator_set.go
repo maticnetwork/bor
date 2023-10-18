@@ -499,6 +499,7 @@ func (vals *ValidatorSet) applyUpdates(updates []*Validator) {
 		} else {
 			// Apply add or update.
 			merged[i] = updates[0]
+
 			if existing[0].Address == updates[0].Address {
 				// Validator is present in both, advance existing.
 				existing = existing[1:]
@@ -506,6 +507,7 @@ func (vals *ValidatorSet) applyUpdates(updates []*Validator) {
 
 			updates = updates[1:]
 		}
+
 		i++
 	}
 
@@ -704,6 +706,14 @@ func (vals *ValidatorSet) StringIndented(indent string) string {
 		indent,
 		indent, strings.Join(valStrings, "\n"+indent+"    "),
 		indent)
+}
+
+func (vals *ValidatorSet) SetTotalVotingPower(totalVotingPower int64) {
+	vals.totalVotingPower = totalVotingPower
+}
+
+func (vals *ValidatorSet) SetMap(validatorsMap map[common.Address]int) {
+	vals.validatorsMap = validatorsMap
 }
 
 //-------------------------------------

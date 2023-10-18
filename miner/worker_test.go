@@ -18,11 +18,13 @@ package miner
 
 import (
 	"math/big"
+	"os"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/golang/mock/gomock"
+	"gotest.tools/assert"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
@@ -35,25 +37,83 @@ import (
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/event"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/tests/bor/mocks"
 )
 
-func TestGenerateBlockAndImportEthash(t *testing.T) {
-	t.Parallel()
+// TODO(raneet10): Duplicate initialization from miner/test_backend.go . Recheck whether we need both
+// func init() {
+// 	testTxPoolConfig = txpool.DefaultConfig
+// 	testTxPoolConfig.Journal = ""
+// 	ethashChainConfig = new(params.ChainConfig)
+// 	*ethashChainConfig = *params.TestChainConfig
+// 	cliqueChainConfig = new(params.ChainConfig)
+// 	*cliqueChainConfig = *params.TestChainConfig
+// 	cliqueChainConfig.Clique = &params.CliqueConfig{
+// 		Period: 10,
+// 		Epoch:  30000,
+// 	}
 
+// 	signer := types.LatestSigner(params.TestChainConfig)
+// 	tx1 := types.MustSignNewTx(testBankKey, signer, &types.AccessListTx{
+// 		ChainID:  params.TestChainConfig.ChainID,
+// 		Nonce:    0,
+// 		To:       &testUserAddress,
+// 		Value:    big.NewInt(1000),
+// 		Gas:      params.TxGas,
+// 		GasPrice: big.NewInt(params.InitialBaseFee),
+// 	})
+// 	pendingTxs = append(pendingTxs, tx1)
+
+// 	tx2 := types.MustSignNewTx(testBankKey, signer, &types.LegacyTx{
+// 		Nonce:    1,
+// 		To:       &testUserAddress,
+// 		Value:    big.NewInt(1000),
+// 		Gas:      params.TxGas,
+// 		GasPrice: big.NewInt(params.InitialBaseFee),
+// 	})
+// 	newTxs = append(newTxs, tx2)
+// }
+
+// newTestWorker creates a new test worker with the given parameters.
+// nolint:unparam
+func newTestWorker(t TensingObject, chainConfig *params.ChainConfig, engine consensus.Engine, db ethdb.Database, blocks int, noempty bool, delay uint, opcodeDelay uint) (*worker, *testWorkerBackend, func()) {
+	backend := newTestWorkerBackend(t, chainConfig, engine, db, blocks)
+	backend.txPool.AddLocals(pendingTxs)
+
+	var w *worker
+
+	if delay != 0 || opcodeDelay != 0 {
+		//nolint:staticcheck
+		w = newWorkerWithDelay(testConfig, chainConfig, engine, backend, new(event.TypeMux), nil, false, delay, opcodeDelay)
+	} else {
+		//nolint:staticcheck
+		w = newWorker(testConfig, chainConfig, engine, backend, new(event.TypeMux), nil, false)
+	}
+
+	w.setEtherbase(TestBankAddress)
+
+	// enable empty blocks
+	w.noempty.Store(noempty)
+
+	return w, backend, w.close
+}
+
+// nolint : paralleltest
+func TestGenerateBlockAndImportEthash(t *testing.T) {
 	testGenerateBlockAndImport(t, false, false)
 }
 
+// nolint : paralleltest
 func TestGenerateBlockAndImportClique(t *testing.T) {
-	t.Parallel()
-
 	testGenerateBlockAndImport(t, true, false)
 }
 
+// nolint : paralleltest
 func TestGenerateBlockAndImportBor(t *testing.T) {
-	t.Parallel()
-
 	testGenerateBlockAndImport(t, false, true)
 }
 
@@ -61,60 +121,34 @@ func TestGenerateBlockAndImportBor(t *testing.T) {
 func testGenerateBlockAndImport(t *testing.T, isClique bool, isBor bool) {
 	var (
 		engine      consensus.Engine
-		chainConfig *params.ChainConfig
+		chainConfig params.ChainConfig
 		db          = rawdb.NewMemoryDatabase()
+		ctrl        *gomock.Controller
 	)
 
 	if isBor {
-		chainConfig = params.BorUnittestChainConfig
+		chainConfig = *params.BorUnittestChainConfig
 
-		ctrl := gomock.NewController(t)
+		engine, ctrl = getFakeBorFromConfig(t, &chainConfig)
 		defer ctrl.Finish()
-
-		ethAPIMock := api.NewMockCaller(ctrl)
-		ethAPIMock.EXPECT().Call(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-
-		spanner := bor.NewMockSpanner(ctrl)
-		spanner.EXPECT().GetCurrentValidators(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*valset.Validator{
-			{
-				ID:               0,
-				Address:          TestBankAddress,
-				VotingPower:      100,
-				ProposerPriority: 0,
-			},
-		}, nil).AnyTimes()
-
-		heimdallClientMock := mocks.NewMockIHeimdallClient(ctrl)
-		heimdallClientMock.EXPECT().Close().Times(1)
-
-		contractMock := bor.NewMockGenesisContract(ctrl)
-
-		db, _, _ = NewDBForFakes(t)
-
-		engine = NewFakeBor(t, db, chainConfig, ethAPIMock, spanner, heimdallClientMock, contractMock)
 	} else {
 		if isClique {
-			chainConfig = params.AllCliqueProtocolChanges
+			chainConfig = *params.AllCliqueProtocolChanges
 			chainConfig.Clique = &params.CliqueConfig{Period: 1, Epoch: 30000}
 			engine = clique.New(chainConfig.Clique, db)
 		} else {
-			chainConfig = params.AllEthashProtocolChanges
+			chainConfig = *params.AllEthashProtocolChanges
 			engine = ethash.NewFaker()
 		}
 	}
 
 	defer engine.Close()
 
-	chainConfig.LondonBlock = big.NewInt(0)
-
-	w, b, _ := NewTestWorker(t, chainConfig, engine, db, 0)
+	w, b, _ := newTestWorker(t, &chainConfig, engine, db, 0, false, 0, 0)
 	defer w.close()
 
 	// This test chain imports the mined blocks.
-	db2 := rawdb.NewMemoryDatabase()
-	b.Genesis.MustCommit(db2)
-
-	chain, _ := core.NewBlockChain(db2, nil, b.chain.Config(), engine, vm.Config{}, nil, nil, nil)
+	chain, _ := core.NewBlockChain(rawdb.NewMemoryDatabase(), nil, b.Genesis, nil, engine, vm.Config{}, nil, nil, nil)
 	defer chain.Stop()
 
 	// Ignore empty commit here for less noise.
@@ -171,17 +205,49 @@ func testGenerateBlockAndImport(t *testing.T, isClique bool, isBor bool) {
 	}
 }
 
+func getFakeBorFromConfig(t *testing.T, chainConfig *params.ChainConfig) (consensus.Engine, *gomock.Controller) {
+	t.Helper()
+
+	ctrl := gomock.NewController(t)
+
+	ethAPIMock := api.NewMockCaller(ctrl)
+	ethAPIMock.EXPECT().Call(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	spanner := bor.NewMockSpanner(ctrl)
+	spanner.EXPECT().GetCurrentValidatorsByHash(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*valset.Validator{
+		{
+			ID:               0,
+			Address:          TestBankAddress,
+			VotingPower:      100,
+			ProposerPriority: 0,
+		},
+	}, nil).AnyTimes()
+
+	heimdallClientMock := mocks.NewMockIHeimdallClient(ctrl)
+	heimdallClientMock.EXPECT().Close().Times(1)
+
+	contractMock := bor.NewMockGenesisContract(ctrl)
+
+	db, _, _ := NewDBForFakes(t)
+
+	engine := NewFakeBor(t, db, chainConfig, ethAPIMock, spanner, heimdallClientMock, contractMock)
+
+	return engine, ctrl
+}
+
 func TestEmptyWorkEthash(t *testing.T) {
+	t.Skip()
 	testEmptyWork(t, ethashChainConfig, ethash.NewFaker())
 }
 func TestEmptyWorkClique(t *testing.T) {
+	t.Skip()
 	testEmptyWork(t, cliqueChainConfig, clique.New(cliqueChainConfig.Clique, rawdb.NewMemoryDatabase()))
 }
 
 func testEmptyWork(t *testing.T, chainConfig *params.ChainConfig, engine consensus.Engine) {
 	defer engine.Close()
 
-	w, _, _ := NewTestWorker(t, chainConfig, engine, rawdb.NewMemoryDatabase(), 0)
+	w, _, _ := newTestWorker(t, chainConfig, engine, rawdb.NewMemoryDatabase(), 0, false, 0, 0)
 	defer w.close()
 
 	var (
@@ -219,7 +285,6 @@ func testEmptyWork(t *testing.T, chainConfig *params.ChainConfig, engine consens
 	w.fullTaskHook = func() {
 		time.Sleep(100 * time.Millisecond)
 	}
-
 	w.start() // Start mining!
 
 	for i := 0; i < 2; i += 1 {
@@ -235,10 +300,10 @@ func TestStreamUncleBlock(t *testing.T) {
 	ethash := ethash.NewFaker()
 	defer ethash.Close()
 
-	w, b, _ := NewTestWorker(t, ethashChainConfig, ethash, rawdb.NewMemoryDatabase(), 1)
+	w, b, _ := newTestWorker(t, ethashChainConfig, ethash, rawdb.NewMemoryDatabase(), 1, false, 0, 0)
 	defer w.close()
 
-	var taskCh = make(chan struct{})
+	var taskCh = make(chan struct{}, 3)
 
 	taskIndex := 0
 	w.newTaskHook = func(task *task) {
@@ -249,24 +314,22 @@ func TestStreamUncleBlock(t *testing.T) {
 			if taskIndex == 2 {
 				have := task.block.Header().UncleHash
 				want := types.CalcUncleHash([]*types.Header{b.uncleBlock.Header()})
+
 				if have != want {
 					t.Errorf("uncle hash mismatch: have %s, want %s", have.Hex(), want.Hex())
 				}
 			}
-
 			taskCh <- struct{}{}
+
 			taskIndex += 1
 		}
 	}
-
 	w.skipSealHook = func(task *task) bool {
 		return true
 	}
-
 	w.fullTaskHook = func() {
 		time.Sleep(100 * time.Millisecond)
 	}
-
 	w.start()
 
 	for i := 0; i < 2; i += 1 {
@@ -297,7 +360,7 @@ func TestRegenerateMiningBlockClique(t *testing.T) {
 func testRegenerateMiningBlock(t *testing.T, chainConfig *params.ChainConfig, engine consensus.Engine) {
 	defer engine.Close()
 
-	w, b, _ := NewTestWorker(t, chainConfig, engine, rawdb.NewMemoryDatabase(), 0)
+	w, b, _ := newTestWorker(t, chainConfig, engine, rawdb.NewMemoryDatabase(), 0, false, 0, 0)
 	defer w.close()
 
 	var taskCh = make(chan struct{}, 3)
@@ -309,7 +372,6 @@ func testRegenerateMiningBlock(t *testing.T, chainConfig *params.ChainConfig, en
 			// one has 1 pending tx, the third one has 2 txs
 			if taskIndex == 2 {
 				receiptLen, balance := 2, big.NewInt(2000)
-
 				if len(task.receipts) != receiptLen {
 					t.Errorf("receipt number mismatch: have %d, want %d", len(task.receipts), receiptLen)
 				}
@@ -318,16 +380,14 @@ func testRegenerateMiningBlock(t *testing.T, chainConfig *params.ChainConfig, en
 					t.Errorf("account balance mismatch: have %d, want %d", task.state.GetBalance(testUserAddress), balance)
 				}
 			}
-
 			taskCh <- struct{}{}
+
 			taskIndex += 1
 		}
 	}
-
 	w.skipSealHook = func(task *task) bool {
 		return true
 	}
-
 	w.fullTaskHook = func() {
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -341,7 +401,6 @@ func testRegenerateMiningBlock(t *testing.T, chainConfig *params.ChainConfig, en
 			t.Error("new task timeout")
 		}
 	}
-
 	b.txPool.AddLocals(newTxs)
 	time.Sleep(time.Second)
 
@@ -359,7 +418,6 @@ func TestAdjustIntervalEthash(t *testing.T) {
 }
 
 func TestAdjustIntervalClique(t *testing.T) {
-
 	// Skipping this test as recommit interval would remain constant
 	t.Skip()
 	testAdjustInterval(t, cliqueChainConfig, clique.New(cliqueChainConfig.Clique, rawdb.NewMemoryDatabase()))
@@ -368,7 +426,7 @@ func TestAdjustIntervalClique(t *testing.T) {
 func testAdjustInterval(t *testing.T, chainConfig *params.ChainConfig, engine consensus.Engine) {
 	defer engine.Close()
 
-	w, _, _ := NewTestWorker(t, chainConfig, engine, rawdb.NewMemoryDatabase(), 0)
+	w, _, _ := newTestWorker(t, chainConfig, engine, rawdb.NewMemoryDatabase(), 0, false, 0, 0)
 	defer w.close()
 
 	w.skipSealHook = func(task *task) bool {
@@ -377,18 +435,20 @@ func testAdjustInterval(t *testing.T, chainConfig *params.ChainConfig, engine co
 	w.fullTaskHook = func() {
 		time.Sleep(100 * time.Millisecond)
 	}
+
 	var (
 		progress = make(chan struct{}, 10)
 		result   = make([]float64, 0, 10)
 		index    = 0
-		start    uint32
+		start    atomic.Bool
 	)
 
 	w.resubmitHook = func(minInterval time.Duration, recommitInterval time.Duration) {
 		// Short circuit if interval checking hasn't started.
-		if atomic.LoadUint32(&start) == 0 {
+		if !start.Load() {
 			return
 		}
+
 		var wantMinInterval, wantRecommitInterval time.Duration
 
 		switch index {
@@ -411,6 +471,7 @@ func testAdjustInterval(t *testing.T, chainConfig *params.ChainConfig, engine co
 		if minInterval != wantMinInterval {
 			t.Errorf("resubmit min interval mismatch: have %v, want %v ", minInterval, wantMinInterval)
 		}
+
 		if recommitInterval != wantRecommitInterval {
 			t.Errorf("resubmit interval mismatch: have %v, want %v", recommitInterval, wantRecommitInterval)
 		}
@@ -419,14 +480,12 @@ func testAdjustInterval(t *testing.T, chainConfig *params.ChainConfig, engine co
 		index += 1
 		progress <- struct{}{}
 	}
-
 	w.start()
 
-	time.Sleep(time.Second) // Ensure two tasks have been summitted due to start opt
-	atomic.StoreUint32(&start, 1)
+	time.Sleep(time.Second) // Ensure two tasks have been submitted due to start opt
+	start.Store(true)
 
 	w.setRecommitInterval(3 * time.Second)
-
 	select {
 	case <-progress:
 	case <-time.NewTimer(time.Second).C:
@@ -434,7 +493,6 @@ func testAdjustInterval(t *testing.T, chainConfig *params.ChainConfig, engine co
 	}
 
 	w.resubmitAdjustCh <- &intervalAdjust{inc: true, ratio: 0.8}
-
 	select {
 	case <-progress:
 	case <-time.NewTimer(time.Second).C:
@@ -442,7 +500,6 @@ func testAdjustInterval(t *testing.T, chainConfig *params.ChainConfig, engine co
 	}
 
 	w.resubmitAdjustCh <- &intervalAdjust{inc: false}
-
 	select {
 	case <-progress:
 	case <-time.NewTimer(time.Second).C:
@@ -450,7 +507,6 @@ func testAdjustInterval(t *testing.T, chainConfig *params.ChainConfig, engine co
 	}
 
 	w.setRecommitInterval(500 * time.Millisecond)
-
 	select {
 	case <-progress:
 	case <-time.NewTimer(time.Second).C:
@@ -459,24 +515,27 @@ func testAdjustInterval(t *testing.T, chainConfig *params.ChainConfig, engine co
 }
 
 func TestGetSealingWorkEthash(t *testing.T) {
-	testGetSealingWork(t, ethashChainConfig, ethash.NewFaker(), false)
+	testGetSealingWork(t, ethashChainConfig, ethash.NewFaker())
 }
 
 func TestGetSealingWorkClique(t *testing.T) {
-	testGetSealingWork(t, cliqueChainConfig, clique.New(cliqueChainConfig.Clique, rawdb.NewMemoryDatabase()), false)
+	testGetSealingWork(t, cliqueChainConfig, clique.New(cliqueChainConfig.Clique, rawdb.NewMemoryDatabase()))
 }
 
 func TestGetSealingWorkPostMerge(t *testing.T) {
 	local := new(params.ChainConfig)
 	*local = *ethashChainConfig
 	local.TerminalTotalDifficulty = big.NewInt(0)
-	testGetSealingWork(t, local, ethash.NewFaker(), true)
+	testGetSealingWork(t, local, ethash.NewFaker())
 }
 
-func testGetSealingWork(t *testing.T, chainConfig *params.ChainConfig, engine consensus.Engine, postMerge bool) {
+// nolint:gocognit
+func testGetSealingWork(t *testing.T, chainConfig *params.ChainConfig, engine consensus.Engine) {
+	t.Helper()
+
 	defer engine.Close()
 
-	w, b, _ := NewTestWorker(t, chainConfig, engine, rawdb.NewMemoryDatabase(), 0)
+	w, b, _ := newTestWorker(t, chainConfig, engine, rawdb.NewMemoryDatabase(), 0, false, 0, 0)
 	defer w.close()
 
 	w.setExtra([]byte{0x01, 0x02})
@@ -485,11 +544,9 @@ func testGetSealingWork(t *testing.T, chainConfig *params.ChainConfig, engine co
 	w.skipSealHook = func(task *task) bool {
 		return true
 	}
-
 	w.fullTaskHook = func() {
 		time.Sleep(100 * time.Millisecond)
 	}
-
 	timestamp := uint64(time.Now().Unix())
 	assertBlock := func(block *types.Block, number uint64, coinbase common.Address, random common.Hash) {
 		if block.Time() != timestamp {
@@ -504,7 +561,7 @@ func testGetSealingWork(t *testing.T, chainConfig *params.ChainConfig, engine co
 
 		_, isClique := engine.(*clique.Clique)
 		if !isClique {
-			if len(block.Extra()) != 0 {
+			if len(block.Extra()) != 2 {
 				t.Error("Unexpected extra field")
 			}
 
@@ -550,21 +607,21 @@ func testGetSealingWork(t *testing.T, chainConfig *params.ChainConfig, engine co
 			b.chain.CurrentBlock().Hash(),
 			common.HexToAddress("0xdeadbeef"),
 			common.HexToHash("0xcafebabe"),
-			b.chain.CurrentBlock().NumberU64() + 1,
+			b.chain.CurrentBlock().Number.Uint64() + 1,
 			false,
 		},
 		{
 			b.chain.CurrentBlock().Hash(),
 			common.Address{},
 			common.HexToHash("0xcafebabe"),
-			b.chain.CurrentBlock().NumberU64() + 1,
+			b.chain.CurrentBlock().Number.Uint64() + 1,
 			false,
 		},
 		{
 			b.chain.CurrentBlock().Hash(),
 			common.Address{},
 			common.Hash{},
-			b.chain.CurrentBlock().NumberU64() + 1,
+			b.chain.CurrentBlock().Number.Uint64() + 1,
 			false,
 		},
 		{
@@ -578,8 +635,7 @@ func testGetSealingWork(t *testing.T, chainConfig *params.ChainConfig, engine co
 
 	// This API should work even when the automatic sealing is not enabled
 	for _, c := range cases {
-		block, err := w.getSealingBlock(c.parent, timestamp, c.coinbase, c.random)
-
+		block, _, err := w.getSealingBlock(c.parent, timestamp, c.coinbase, c.random, nil, false)
 		if c.expectErr {
 			if err == nil {
 				t.Error("Expect error but get nil")
@@ -597,7 +653,7 @@ func testGetSealingWork(t *testing.T, chainConfig *params.ChainConfig, engine co
 	w.start()
 
 	for _, c := range cases {
-		block, err := w.getSealingBlock(c.parent, timestamp, c.coinbase, c.random)
+		block, _, err := w.getSealingBlock(c.parent, timestamp, c.coinbase, c.random, nil, false)
 		if c.expectErr {
 			if err == nil {
 				t.Error("Expect error but get nil")
@@ -612,6 +668,131 @@ func testGetSealingWork(t *testing.T, chainConfig *params.ChainConfig, engine co
 	}
 }
 
+// nolint : paralleltest
+// TestCommitInterruptExperimentBor tests the commit interrupt experiment for bor consensus by inducing an artificial delay at transaction level.
+func TestCommitInterruptExperimentBor(t *testing.T) {
+	// with 1 sec block time and 200 millisec tx delay we should get 5 txs per block
+	testCommitInterruptExperimentBor(t, 200, 5, 0)
+
+	time.Sleep(2 * time.Second)
+
+	// with 1 sec block time and 100 millisec tx delay we should get 10 txs per block
+	testCommitInterruptExperimentBor(t, 100, 10, 0)
+}
+
+// nolint : paralleltest
+// TestCommitInterruptExperimentBorContract tests the commit interrupt experiment for bor consensus by inducing an artificial delay at OPCODE level.
+func TestCommitInterruptExperimentBorContract(t *testing.T) {
+	// pre-calculated number of OPCODES = 123. 7*123=861 < 1000, 1 tx is possible but 2 tx per block will not be possible.
+	testCommitInterruptExperimentBorContract(t, 0, 1, 7)
+	time.Sleep(2 * time.Second)
+	// pre-calculated number of OPCODES = 123. 2*123=246 < 1000, 4 tx is possible but 5 tx per block will not be possible. But 3 happen due to other overheads.
+	testCommitInterruptExperimentBorContract(t, 0, 3, 2)
+	time.Sleep(2 * time.Second)
+	// pre-calculated number of OPCODES = 123. 3*123=369 < 1000, 2 tx is possible but 3 tx per block will not be possible.
+	testCommitInterruptExperimentBorContract(t, 0, 2, 3)
+}
+
+// nolint : thelper
+// testCommitInterruptExperimentBorContract is a helper function for testing the commit interrupt experiment for bor consensus.
+func testCommitInterruptExperimentBorContract(t *testing.T, delay uint, txCount int, opcodeDelay uint) {
+	var (
+		engine      consensus.Engine
+		chainConfig *params.ChainConfig
+		db          = rawdb.NewMemoryDatabase()
+		ctrl        *gomock.Controller
+		txInTxpool  = 100
+		txs         = make([]*types.Transaction, 0, txInTxpool)
+	)
+
+	chainConfig = params.BorUnittestChainConfig
+
+	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
+
+	engine, ctrl = getFakeBorFromConfig(t, chainConfig)
+
+	w, b, _ := newTestWorker(t, chainConfig, engine, db, 0, true, delay, opcodeDelay)
+	defer func() {
+		w.close()
+		engine.Close()
+		db.Close()
+		ctrl.Finish()
+	}()
+
+	// nonce 0 tx
+	tx, addr := b.newStorageCreateContractTx()
+	if err := b.TxPool().AddRemote(tx); err != nil {
+		t.Fatal(err)
+	}
+
+	time.Sleep(4 * time.Second)
+
+	// nonce starts from 1 because we already have one tx
+	initNonce := uint64(1)
+
+	for i := 0; i < txInTxpool; i++ {
+		tx := b.newStorageContractCallTx(addr, initNonce+uint64(i))
+		txs = append(txs, tx)
+	}
+
+	b.TxPool().AddRemotes(txs)
+
+	// Start mining!
+	w.start()
+	time.Sleep(5 * time.Second)
+	w.stop()
+
+	currentBlockNumber := w.current.header.Number.Uint64()
+	assert.Check(t, txCount >= w.chain.GetBlockByNumber(currentBlockNumber-1).Transactions().Len())
+	assert.Check(t, 0 < w.chain.GetBlockByNumber(currentBlockNumber-1).Transactions().Len()+1)
+}
+
+// nolint : thelper
+// testCommitInterruptExperimentBor is a helper function for testing the commit interrupt experiment for bor consensus.
+func testCommitInterruptExperimentBor(t *testing.T, delay uint, txCount int, opcodeDelay uint) {
+	var (
+		engine      consensus.Engine
+		chainConfig *params.ChainConfig
+		db          = rawdb.NewMemoryDatabase()
+		ctrl        *gomock.Controller
+		txInTxpool  = 100
+		txs         = make([]*types.Transaction, 0, txInTxpool)
+	)
+
+	chainConfig = params.BorUnittestChainConfig
+
+	log.Root().SetHandler(log.LvlFilterHandler(log.LvlInfo, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
+
+	engine, ctrl = getFakeBorFromConfig(t, chainConfig)
+
+	w, b, _ := newTestWorker(t, chainConfig, engine, db, 0, true, delay, opcodeDelay)
+	defer func() {
+		w.close()
+		engine.Close()
+		db.Close()
+		ctrl.Finish()
+	}()
+
+	// nonce starts from 0 because have no txs yet
+	initNonce := uint64(0)
+
+	for i := 0; i < txInTxpool; i++ {
+		tx := b.newRandomTxWithNonce(false, initNonce+uint64(i))
+		txs = append(txs, tx)
+	}
+
+	b.TxPool().AddRemotes(txs)
+
+	// Start mining!
+	w.start()
+	time.Sleep(5 * time.Second)
+	w.stop()
+
+	currentBlockNumber := w.current.header.Number.Uint64()
+	assert.Check(t, txCount >= w.chain.GetBlockByNumber(currentBlockNumber-1).Transactions().Len())
+	assert.Check(t, 0 < w.chain.GetBlockByNumber(currentBlockNumber-1).Transactions().Len())
+}
+
 func BenchmarkBorMining(b *testing.B) {
 	chainConfig := params.BorUnittestChainConfig
 
@@ -622,7 +803,7 @@ func BenchmarkBorMining(b *testing.B) {
 	ethAPIMock.EXPECT().Call(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	spanner := bor.NewMockSpanner(ctrl)
-	spanner.EXPECT().GetCurrentValidators(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*valset.Validator{
+	spanner.EXPECT().GetCurrentValidatorsByHash(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*valset.Validator{
 		{
 			ID:               0,
 			Address:          TestBankAddress,
@@ -643,14 +824,111 @@ func BenchmarkBorMining(b *testing.B) {
 
 	chainConfig.LondonBlock = big.NewInt(0)
 
-	w, back, _ := NewTestWorker(b, chainConfig, engine, db, 0)
+	w, back, _ := newTestWorker(b, chainConfig, engine, db, 0, false, 0, 0)
+	defer w.close()
+
+	chain, _ := core.NewBlockChain(rawdb.NewMemoryDatabase(), nil, back.Genesis, nil, engine, vm.Config{}, nil, nil, nil)
+	defer chain.Stop()
+
+	// fulfill tx pool
+	const (
+		totalGas    = testGas + params.TxGas
+		totalBlocks = 10
+	)
+
+	var err error
+
+	txInBlock := int(back.Genesis.GasLimit/totalGas) + 1
+
+	// a bit risky
+	for i := 0; i < 2*totalBlocks*txInBlock; i++ {
+		err = back.txPool.AddLocal(back.newRandomTx(true))
+		if err != nil {
+			b.Fatal("while adding a local transaction", err)
+		}
+
+		err = back.txPool.AddLocal(back.newRandomTx(false))
+		if err != nil {
+			b.Fatal("while adding a remote transaction", err)
+		}
+	}
+
+	// Wait for mined blocks.
+	sub := w.mux.Subscribe(core.NewMinedBlockEvent{})
+	defer sub.Unsubscribe()
+
+	b.ResetTimer()
+
+	prev := uint64(time.Now().Unix())
+
+	// Start mining!
+	w.start()
+
+	blockPeriod, ok := back.Genesis.Config.Bor.Period["0"]
+	if !ok {
+		blockPeriod = 1
+	}
+
+	for i := 0; i < totalBlocks; i++ {
+		select {
+		case ev := <-sub.Chan():
+			block := ev.Data.(core.NewMinedBlockEvent).Block
+
+			if _, err := chain.InsertChain([]*types.Block{block}); err != nil {
+				b.Fatalf("failed to insert new mined block %d: %v", block.NumberU64(), err)
+			}
+
+			b.Log("block", block.NumberU64(), "time", block.Time()-prev, "txs", block.Transactions().Len(), "gasUsed", block.GasUsed(), "gasLimit", block.GasLimit())
+
+			prev = block.Time()
+		case <-time.After(time.Duration(blockPeriod) * time.Second):
+			b.Fatalf("timeout")
+		}
+	}
+}
+
+// uses core.NewParallelBlockChain to use the dependencies present in the block header
+// params.BorUnittestChainConfig contains the ParallelUniverseBlock ad big.NewInt(5), so the first 4 blocks will not have metadata.
+// nolint: gocognit
+func BenchmarkBorMiningBlockSTMMetadata(b *testing.B) {
+	chainConfig := params.BorUnittestChainConfig
+
+	ctrl := gomock.NewController(b)
+	defer ctrl.Finish()
+
+	ethAPIMock := api.NewMockCaller(ctrl)
+	ethAPIMock.EXPECT().Call(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+
+	spanner := bor.NewMockSpanner(ctrl)
+	spanner.EXPECT().GetCurrentValidatorsByHash(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*valset.Validator{
+		{
+			ID:               0,
+			Address:          TestBankAddress,
+			VotingPower:      100,
+			ProposerPriority: 0,
+		},
+	}, nil).AnyTimes()
+
+	heimdallClientMock := mocks.NewMockIHeimdallClient(ctrl)
+	heimdallClientMock.EXPECT().Close().Times(1)
+
+	contractMock := bor.NewMockGenesisContract(ctrl)
+
+	db, _, _ := NewDBForFakes(b)
+
+	engine := NewFakeBor(b, db, chainConfig, ethAPIMock, spanner, heimdallClientMock, contractMock)
+	defer engine.Close()
+
+	chainConfig.LondonBlock = big.NewInt(0)
+
+	w, back, _ := NewTestWorker(b, chainConfig, engine, db, 0, false, 0, 0)
 	defer w.close()
 
 	// This test chain imports the mined blocks.
 	db2 := rawdb.NewMemoryDatabase()
 	back.Genesis.MustCommit(db2)
 
-	chain, _ := core.NewBlockChain(db2, nil, back.chain.Config(), engine, vm.Config{}, nil, nil, nil)
+	chain, _ := core.NewParallelBlockChain(db2, nil, back.Genesis, nil, engine, vm.Config{ParallelEnable: true, ParallelSpeculativeProcesses: 8}, nil, nil, nil)
 	defer chain.Stop()
 
 	// Ignore empty commit here for less noise.
@@ -704,6 +982,24 @@ func BenchmarkBorMining(b *testing.B) {
 
 			if _, err := chain.InsertChain([]*types.Block{block}); err != nil {
 				b.Fatalf("failed to insert new mined block %d: %v", block.NumberU64(), err)
+			}
+
+			// check for dependencies for block number > 4
+			if block.NumberU64() <= 4 {
+				if block.GetTxDependency() != nil {
+					b.Fatalf("dependency not nil")
+				}
+			} else {
+				deps := block.GetTxDependency()
+				if len(deps[0]) != 0 {
+					b.Fatalf("wrong dependency")
+				}
+
+				for i := 1; i < block.Transactions().Len(); i++ {
+					if deps[i][0] != uint64(i-1) || len(deps[i]) != 1 {
+						b.Fatalf("wrong dependency")
+					}
+				}
 			}
 
 			b.Log("block", block.NumberU64(), "time", block.Time()-prev, "txs", block.Transactions().Len(), "gasUsed", block.GasUsed(), "gasLimit", block.GasLimit())

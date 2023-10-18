@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state/pruner"
 	"github.com/ethereum/go-ethereum/internal/cli/flagset"
 	"github.com/ethereum/go-ethereum/internal/cli/server"
@@ -155,20 +156,26 @@ func (c *PruneStateCommand) Run(args []string) int {
 		return 1
 	}
 
-	dbHandles, err := server.MakeDatabaseHandles()
+	dbHandles, err := server.MakeDatabaseHandles(0)
 	if err != nil {
 		c.UI.Error(err.Error())
 		return 1
 	}
 
-	chaindb, err := node.OpenDatabaseWithFreezer(chaindataPath, int(c.cache), dbHandles, c.datadirAncient, "", false)
+	chaindb, err := node.OpenDatabaseWithFreezer(chaindataPath, int(c.cache), dbHandles, c.datadirAncient, "", false, rawdb.ExtraDBConfig{})
 
 	if err != nil {
 		c.UI.Error(err.Error())
 		return 1
 	}
 
-	pruner, err := pruner.NewPruner(chaindb, node.ResolvePath(""), node.ResolvePath(c.cacheTrieJournal), c.bloomfilterSize)
+	prunerconfig := pruner.Config{
+		Datadir:   node.ResolvePath(""),
+		Cachedir:  node.ResolvePath(c.cacheTrieJournal),
+		BloomSize: c.bloomfilterSize,
+	}
+
+	pruner, err := pruner.NewPruner(chaindb, prunerconfig)
 	if err != nil {
 		log.Error("Failed to open snapshot tree", "err", err)
 		return 1

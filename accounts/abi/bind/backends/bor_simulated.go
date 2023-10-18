@@ -15,12 +15,17 @@ func (fb *filterBackend) GetBorBlockReceipt(ctx context.Context, hash common.Has
 	if number == nil {
 		return nil, nil
 	}
+
 	receipt := rawdb.ReadRawBorReceipt(fb.db, hash, *number)
 	if receipt == nil {
 		return nil, nil
 	}
 
 	return receipt, nil
+}
+
+func (fb *filterBackend) GetVoteOnHash(ctx context.Context, starBlockNr uint64, endBlockNr uint64, hash string, milestoneId string) (bool, error) {
+	return false, nil
 }
 
 func (fb *filterBackend) GetBorBlockLogs(ctx context.Context, hash common.Hash) ([]*types.Log, error) {

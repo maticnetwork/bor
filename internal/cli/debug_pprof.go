@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 
+	"google.golang.org/grpc"
+
 	"github.com/ethereum/go-ethereum/internal/cli/flagset"
 	"github.com/ethereum/go-ethereum/internal/cli/server/proto"
 )
@@ -111,7 +113,7 @@ func (d *DebugPprofCommand) Run(args []string) int {
 			req.Profile = profile
 		}
 
-		stream, err := clt.DebugPprof(ctx, req)
+		stream, err := clt.DebugPprof(ctx, req, grpc.MaxCallRecvMsgSize(1024*1024*1024))
 
 		if err != nil {
 			return err
@@ -152,6 +154,7 @@ func (d *DebugPprofCommand) Run(args []string) int {
 			d.UI.Output(fmt.Sprintf("Failed to get status: %v", err))
 			return 1
 		}
+
 		if err := dEnv.writeJSON("status.json", statusResp); err != nil {
 			d.UI.Error(err.Error())
 			return 1

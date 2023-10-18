@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/http"
 	"runtime"
 	"runtime/pprof"
 	"runtime/trace"
 	"time"
+
+	"github.com/ethereum/go-ethereum/log"
 )
 
 // Profile generates a pprof.Profile report for the given profile name.
@@ -35,6 +38,7 @@ func Profile(profile string, debug, gc int) ([]byte, map[string]string, error) {
 		headers["Content-Type"] = "application/octet-stream"
 		headers["Content-Disposition"] = fmt.Sprintf(`attachment; filename="%s"`, profile)
 	}
+
 	return buf.Bytes(), headers, nil
 }
 
@@ -112,4 +116,23 @@ func sleep(ctx context.Context, d time.Duration) {
 	case <-time.After(d):
 	case <-ctx.Done():
 	}
+}
+
+func SetMemProfileRate(rate int) {
+	runtime.MemProfileRate = rate
+}
+
+func SetSetBlockProfileRate(rate int) {
+	runtime.SetBlockProfileRate(rate)
+}
+
+func StartPProf(address string) {
+	log.Info("Starting pprof server", "addr", fmt.Sprintf("http://%s/debug/pprof", address))
+
+	go func() {
+		// nolint: gosec
+		if err := http.ListenAndServe(address, nil); err != nil {
+			log.Error("Failure in running pprof server", "err", err)
+		}
+	}()
 }
