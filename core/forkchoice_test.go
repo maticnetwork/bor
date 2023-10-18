@@ -61,7 +61,6 @@ func TestForkChoice(t *testing.T) {
 	headerD := createHeader(4, []byte("D")) // 0x96b0f70c01f4d2b1ee2df5b0202c099776f24c9375ffc89d94b880007633961b (hash)
 	headerE := createHeader(4, []byte("E")) // 0xdc0acf54354ff86194baeaab983098a49a40218cffcc77a583726fc06c429685 (hash)
 
-	// Create test cases
 	testCases := []struct {
 		name     string
 		current  *types.Header
@@ -75,7 +74,6 @@ func TestForkChoice(t *testing.T) {
 		{"tdd(current) = tdd(incoming), number(current) = number(incoming), hash(current) > hash(incoming)", headerE, headerD, false},
 		{"tdd(current) = tdd(incoming), number(current) = number(incoming), hash(incoming) > hash(current)", headerD, headerE, true},
 	}
-	_ = testCases
 
 	// nolint: paralleltest
 	for _, tc := range testCases {
