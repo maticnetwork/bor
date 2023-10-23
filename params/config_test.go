@@ -149,6 +149,8 @@ func TestConfigRules(t *testing.T) {
 }
 
 func TestBorKeyValueConfigHelper(t *testing.T) {
+	t.Parallel()
+
 	backupMultiplier := map[string]uint64{
 		"0":        2,
 		"25275000": 5,

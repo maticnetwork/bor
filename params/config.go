@@ -752,12 +752,14 @@ func (c *BorConfig) IsSprintStart(number uint64) bool {
 func borKeyValueConfigHelper[T uint64 | string](field map[string]T, number uint64) T {
 	keys := make([]uint64, 0, len(field))
 	fieldUint := make(map[uint64]T)
+
 	for k, v := range field {
 		keyUint, err := strconv.ParseUint(k, 10, 64)
 		if err != nil {
 			panic(err)
 		}
 		keys = append(keys, keyUint)
+
 		fieldUint[keyUint] = v
 	}
 
