@@ -711,11 +711,11 @@ func (c *BorConfig) CalculateSprint(number uint64) uint64 {
 }
 
 func (c *BorConfig) CalculateBackupMultiplier(number uint64) uint64 {
-	return c.calculateBorConfigHelper(c.BackupMultiplier, number)
+	return borKeyValueConfigHelper(c.BackupMultiplier, number)
 }
 
 func (c *BorConfig) CalculatePeriod(number uint64) uint64 {
-	return c.calculateBorConfigHelper(c.Period, number)
+	return borKeyValueConfigHelper(c.Period, number)
 }
 
 func (c *BorConfig) IsJaipur(number *big.Int) bool {
@@ -747,26 +747,6 @@ func (c *BorConfig) IsParallelUniverse(number *big.Int) bool {
 
 func (c *BorConfig) IsSprintStart(number uint64) bool {
 	return number%c.CalculateSprint(number) == 0
-}
-
-func (c *BorConfig) calculateBorConfigHelper(field map[string]uint64, number uint64) uint64 {
-	keys := make([]string, 0, len(field))
-	for k := range field {
-		keys = append(keys, k)
-	}
-
-	sort.Strings(keys)
-
-	for i := 0; i < len(keys)-1; i++ {
-		valUint, _ := strconv.ParseUint(keys[i], 10, 64)
-		valUintNext, _ := strconv.ParseUint(keys[i+1], 10, 64)
-
-		if number > valUint && number < valUintNext {
-			return field[keys[i]]
-		}
-	}
-
-	return field[keys[len(keys)-1]]
 }
 
 func borKeyValueConfigHelper(field map[string]uint64, number uint64) uint64 {

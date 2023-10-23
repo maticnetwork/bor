@@ -22,6 +22,8 @@ import (
 	"testing"
 	"time"
 
+	"gotest.tools/assert"
+
 	"github.com/ethereum/go-ethereum/common/math"
 )
 
@@ -144,4 +146,20 @@ func TestConfigRules(t *testing.T) {
 	if r := c.Rules(big.NewInt(0), true, stamp); !r.IsShanghai {
 		t.Errorf("expected %v to be shanghai", stamp)
 	}
+}
+
+func TestBorKeyValueConfigHelper(t *testing.T) {
+	backupMultiplier := map[string]uint64{
+		"0":        2,
+		"25275000": 5,
+		"29638656": 2,
+	}
+	assert.Equal(t, borKeyValueConfigHelper(backupMultiplier, 0), uint64(2))
+	assert.Equal(t, borKeyValueConfigHelper(backupMultiplier, 1), uint64(2))
+	assert.Equal(t, borKeyValueConfigHelper(backupMultiplier, 25275000-1), uint64(2))
+	assert.Equal(t, borKeyValueConfigHelper(backupMultiplier, 25275000), uint64(5))
+	assert.Equal(t, borKeyValueConfigHelper(backupMultiplier, 25275000+1), uint64(5))
+	assert.Equal(t, borKeyValueConfigHelper(backupMultiplier, 29638656-1), uint64(5))
+	assert.Equal(t, borKeyValueConfigHelper(backupMultiplier, 29638656), uint64(2))
+	assert.Equal(t, borKeyValueConfigHelper(backupMultiplier, 29638656+1), uint64(2))
 }
