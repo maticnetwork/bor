@@ -162,4 +162,18 @@ func TestBorKeyValueConfigHelper(t *testing.T) {
 	assert.Equal(t, borKeyValueConfigHelper(backupMultiplier, 29638656-1), uint64(5))
 	assert.Equal(t, borKeyValueConfigHelper(backupMultiplier, 29638656), uint64(2))
 	assert.Equal(t, borKeyValueConfigHelper(backupMultiplier, 29638656+1), uint64(2))
+
+	config := map[string]uint64{
+		"0":         1,
+		"90000000":  2,
+		"100000000": 3,
+	}
+	assert.Equal(t, borKeyValueConfigHelper(config, 0), uint64(1))
+	assert.Equal(t, borKeyValueConfigHelper(config, 1), uint64(1))
+	assert.Equal(t, borKeyValueConfigHelper(config, 90000000-1), uint64(1))
+	assert.Equal(t, borKeyValueConfigHelper(config, 90000000), uint64(2))
+	assert.Equal(t, borKeyValueConfigHelper(config, 90000000+1), uint64(2))
+	assert.Equal(t, borKeyValueConfigHelper(config, 100000000-1), uint64(2))
+	assert.Equal(t, borKeyValueConfigHelper(config, 100000000), uint64(3))
+	assert.Equal(t, borKeyValueConfigHelper(config, 100000000+1), uint64(3))
 }
