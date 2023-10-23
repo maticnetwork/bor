@@ -176,4 +176,14 @@ func TestBorKeyValueConfigHelper(t *testing.T) {
 	assert.Equal(t, borKeyValueConfigHelper(config, 100000000-1), uint64(2))
 	assert.Equal(t, borKeyValueConfigHelper(config, 100000000), uint64(3))
 	assert.Equal(t, borKeyValueConfigHelper(config, 100000000+1), uint64(3))
+
+	burntContract := map[string]string{
+		"22640000": "0x70bcA57F4579f58670aB2d18Ef16e02C17553C38",
+		"41824608": "0x617b94CCCC2511808A3C9478ebb96f455CF167aA",
+	}
+	assert.Equal(t, borKeyValueConfigHelper(burntContract, 22640000), "0x70bcA57F4579f58670aB2d18Ef16e02C17553C38")
+	assert.Equal(t, borKeyValueConfigHelper(burntContract, 22640000+1), "0x70bcA57F4579f58670aB2d18Ef16e02C17553C38")
+	assert.Equal(t, borKeyValueConfigHelper(burntContract, 41824608-1), "0x70bcA57F4579f58670aB2d18Ef16e02C17553C38")
+	assert.Equal(t, borKeyValueConfigHelper(burntContract, 41824608), "0x617b94CCCC2511808A3C9478ebb96f455CF167aA")
+	assert.Equal(t, borKeyValueConfigHelper(burntContract, 41824608+1), "0x617b94CCCC2511808A3C9478ebb96f455CF167aA")
 }
