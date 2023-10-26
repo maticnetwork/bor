@@ -787,7 +787,7 @@ func (c *Command) Flags(config *Config) *flagset.Flagset {
 	})
 	f.DurationFlag(&flagset.DurationFlag{
 		Name:    "txarrivalwait",
-		Usage:   "Maximum duration to wait for a transaction before explicitly requesting it (defaults to 500ms)",
+		Usage:   "Maximum duration to wait for a transaction before explicitly requesting it",
 		Value:   &c.cliConfig.P2P.TxArrivalWait,
 		Default: c.cliConfig.P2P.TxArrivalWait,
 		Group:   "P2P",
