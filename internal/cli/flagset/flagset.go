@@ -55,7 +55,13 @@ func (f *Flagset) Help() string {
 
 	items := []string{}
 
+	var flags []*FlagVar
 	for _, item := range f.flags {
+		flags = append(flags, item)
+	}
+	sort.Sort(ByName(flags))
+
+	for _, item := range flags {
 		if item.Default != nil {
 			items = append(items, fmt.Sprintf("  -%s\n    %s (default: %v)", item.Name, item.Usage, item.Default))
 		} else {
