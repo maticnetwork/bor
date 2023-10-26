@@ -55,7 +55,7 @@ func (f *Flagset) Help() string {
 
 	items := []string{}
 
-	var flags []*FlagVar
+	flags := make([]*FlagVar, len(f.flags))
 	for _, item := range f.flags {
 		flags = append(flags, item)
 	}
