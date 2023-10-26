@@ -55,10 +55,11 @@ func (f *Flagset) Help() string {
 
 	items := []string{}
 
-	flags := make([]*FlagVar, len(f.flags))
+	flags := []*FlagVar{}
 	for _, item := range f.flags {
 		flags = append(flags, item)
 	}
+	//nolint: wsl
 	sort.Sort(ByName(flags))
 
 	for _, item := range flags {
