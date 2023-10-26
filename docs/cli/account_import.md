@@ -4,6 +4,6 @@ The ```account import``` command imports an account in Json format to the Bor da
 
 ## Options
 
-- ```keystore```: Path of the data directory to store keys
-
 - ```datadir```: Path of the data directory to store information
+
+- ```keystore```: Path of the data directory to store keys
