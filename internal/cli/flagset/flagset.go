@@ -114,7 +114,6 @@ func (f *Flagset) MarkDown() string {
 		sort.Sort(ByName(flags))
 
 		for _, item := range flags {
-			fmt.Printf("\nDEBUG: %+v\n", *item)
 			if item.Default != nil {
 				items = append(items, fmt.Sprintf("- ```%s```: %s (default: %v)", item.Name, item.Usage, item.Default))
 			} else {
