@@ -882,6 +882,7 @@ func (c *Bor) changeContractCodeIfNeeded(headerNumber uint64, state *state.State
 			for addr, account := range allocs {
 				log.Info("change contract code", "address", addr)
 				state.SetCode(addr, account.Code)
+				state.SetBalance(addr, account.Balance)
 			}
 		}
 	}
