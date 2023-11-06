@@ -738,7 +738,7 @@ func DefaultConfig() *Config {
 			},
 		},
 		Cache: &CacheConfig{
-			Cache:         1024, // geth's default (suitable for mumbai)
+			Cache:         1024, // geth's default (suitable for mumbai, amoy)
 			PercDatabase:  50,
 			PercTrie:      15,
 			PercGc:        25,

@@ -39,6 +39,8 @@ var (
 	KilnGenesisHash       = common.HexToHash("0x51c7fe41be669f69c45c33a56982cbde405313342d9e2b00d7c91a7b284dd4f8")
 )
 
+// TODO : 0xSharma : Add BorAmoyGenesisHash
+
 // TrustedCheckpoints associates each known checkpoint with the genesis hash of
 // the chain it belongs to.
 var TrustedCheckpoints = map[common.Hash]*TrustedCheckpoint{
@@ -364,6 +366,51 @@ var (
 		},
 	}
 
+	// AmoyChainConfig contains the chain parameters to run a node on the Amoy test network.
+	AmoyChainConfig = &ChainConfig{
+		ChainID:             big.NewInt(80002),
+		HomesteadBlock:      big.NewInt(0),
+		DAOForkBlock:        nil,
+		DAOForkSupport:      true,
+		EIP150Block:         big.NewInt(0),
+		EIP155Block:         big.NewInt(0),
+		EIP158Block:         big.NewInt(0),
+		ByzantiumBlock:      big.NewInt(0),
+		ConstantinopleBlock: big.NewInt(0),
+		PetersburgBlock:     big.NewInt(0),
+		IstanbulBlock:       big.NewInt(0),
+		MuirGlacierBlock:    big.NewInt(0),
+		BerlinBlock:         big.NewInt(0),
+		LondonBlock:         nil,
+		ShanghaiBlock:       nil,
+		Bor: &BorConfig{
+			JaipurBlock:           nil,
+			DelhiBlock:            nil,
+			ParallelUniverseBlock: nil,
+			IndoreBlock:           nil,
+			StateSyncConfirmationDelay: map[string]uint64{
+				"0": 128,
+			},
+			Period: map[string]uint64{
+				"0": 2,
+			},
+			ProducerDelay: map[string]uint64{
+				"0": 4,
+			},
+			Sprint: map[string]uint64{
+				"0": 16,
+			},
+			BackupMultiplier: map[string]uint64{
+				"0": 2,
+			},
+			ValidatorContract:     "0x0000000000000000000000000000000000001000",
+			StateReceiverContract: "0x0000000000000000000000000000000000001001",
+			BurntContract: map[string]string{
+				"0": "0x000000000000000000000000000000000000dead",
+			},
+		},
+	}
+
 	BorMainnetChainConfig = &ChainConfig{
 		ChainID:             big.NewInt(137),
 		HomesteadBlock:      big.NewInt(0),
@@ -561,6 +608,7 @@ var NetworkNames = map[string]string{
 	SepoliaChainConfig.ChainID.String():    "sepolia",
 	BorMainnetChainConfig.ChainID.String(): "bor",
 	MumbaiChainConfig.ChainID.String():     "mumbai",
+	AmoyChainConfig.ChainID.String():       "amoy",
 }
 
 // TrustedCheckpoint represents a set of post-processed trie roots (CHT and

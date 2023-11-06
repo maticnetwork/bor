@@ -4,7 +4,7 @@ The ```bor server``` command runs the Bor client.
 
 ## Options
 
-- ```chain```: Name of the chain to sync ('mumbai', 'mainnet') or path to a genesis file (default: mainnet)
+- ```chain```: Name of the chain to sync ('amoy', 'mumbai', 'mainnet') or path to a genesis file (default: mainnet)
 
 - ```identity```: Name/Identity of the node
 

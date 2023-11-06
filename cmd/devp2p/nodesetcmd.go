@@ -254,6 +254,8 @@ func minAgeFilter(args []string) (nodeFilter, error) {
 	return f, nil
 }
 
+// TODO : 0xSharma : Add amoy genesis hash
+
 func ethFilter(args []string) (nodeFilter, error) {
 	var filter forkid.Filter
 
