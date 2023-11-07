@@ -362,7 +362,7 @@ func setDefaultAmoyGethConfig(ctx *cli.Context, config *gethConfig) {
 	config.Node.IPCPath = utils.MakeDataDir(ctx) + "/bor.ipc"
 	config.Node.HTTPModules = []string{"eth", "net", "web3", "txpool", "bor"}
 	config.Eth.SyncMode = downloader.FullSync
-	config.Eth.NetworkId = 80001
+	config.Eth.NetworkId = 80002
 	config.Eth.Miner.GasCeil = 20000000
 	//--miner.gastarget is deprecated, No longed used
 	config.Eth.TxPool.NoLocals = true
