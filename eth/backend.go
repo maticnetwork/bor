@@ -388,7 +388,8 @@ func (s *Ethereum) APIs() []rpc.API {
 		{
 			Namespace: "eth",
 			Service:   NewEthereumAPI(s),
-		}, {
+		},
+		{
 			Namespace: "miner",
 			Service:   NewMinerAPI(s),
 		}, {

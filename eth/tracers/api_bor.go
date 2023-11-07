@@ -103,6 +103,9 @@ func (api *API) traceBorBlock(ctx context.Context, block *types.Block, config *T
 		if err != nil {
 			return &TxTraceResult{
 				Error: err.Error(),
+				Result: &ethapi.ExecutionResult{
+					StructLogs: ethapi.FormatLogs(tracer.StructLogs()),
+				},
 			}
 		}
 
@@ -143,7 +146,7 @@ type TraceBlockRequest struct {
 	Config     *TraceConfig
 }
 
-// If you use context as first parameter this function gets exposed automaticall on rpc endpoint
+// TraceBorBlock If you use context as first parameter this function gets exposed automaticall on rpc endpoint
 func (api *API) TraceBorBlock(req *TraceBlockRequest) (*BlockTraceResult, error) {
 	ctx := context.Background()
 
