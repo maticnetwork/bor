@@ -725,6 +725,8 @@ func (h *handler) minedBroadcastLoop() {
 
 	for obj := range h.minedBlockSub.Chan() {
 		if ev, ok := obj.Data.(core.NewMinedBlockEvent); ok {
+			delayInMs := uint64(time.Now().UnixMilli()) - uint64(ev.Block.Time()*1000)
+			log.Info("Broadcasting mined block", "number", ev.Block.NumberU64(), "hash", ev.Block.Hash(), "delay", delayInMs)
 			h.BroadcastBlock(ev.Block, true)  // First propagate block to peers
 			h.BroadcastBlock(ev.Block, false) // Only then announce to the rest
 		}
