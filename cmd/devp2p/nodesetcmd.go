@@ -254,8 +254,6 @@ func minAgeFilter(args []string) (nodeFilter, error) {
 	return f, nil
 }
 
-// TODO : 0xSharma : Add amoy genesis hash
-
 func ethFilter(args []string) (nodeFilter, error) {
 	var filter forkid.Filter
 
@@ -268,6 +266,8 @@ func ethFilter(args []string) (nodeFilter, error) {
 		filter = forkid.NewStaticFilter(params.SepoliaChainConfig, params.SepoliaGenesisHash)
 	case "bor-mumbai":
 		filter = forkid.NewStaticFilter(params.MumbaiChainConfig, params.MumbaiGenesisHash)
+	case "bor-amoy":
+		filter = forkid.NewStaticFilter(params.AmoyChainConfig, params.AmoyGenesisHash)
 	case "bor-mainnet":
 		filter = forkid.NewStaticFilter(params.BorMainnetChainConfig, params.BorMainnetGenesisHash)
 	default:
