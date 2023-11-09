@@ -200,9 +200,7 @@ func (p *TxPool) loop(head *types.Header, chain BlockChain) {
 			case resetBusy <- struct{}{}:
 				// Busy marker injected, start a new subpool reset
 				go func(oldHead, newHead *types.Header) {
-					fmt.Println("-------------- subpools length", len(p.subpools))
 					for _, subpool := range p.subpools {
-						fmt.Println("--------------- in subpools", subpool)
 						subpool.Reset(oldHead, newHead)
 					}
 					resetDone <- newHead
