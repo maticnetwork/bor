@@ -937,11 +937,11 @@ func (f *BlockFetcher) importBlocks(peer string, block *types.Block) {
 		)
 
 		if block.AnnouncedAt != nil {
-			msg = "Inserted new block with announcement"
+			msg = "p2p debug: Inserted new block with announcement"
 			delayInMs = uint64(time.Since(*block.AnnouncedAt).Milliseconds())
 			prettyDelay = common.PrettyDuration(time.Since(*block.AnnouncedAt))
 		} else {
-			msg = "Inserted new block without announcement"
+			msg = "p2p debug: Inserted new block without announcement"
 			delayInMs = uint64(time.Since(block.ReceivedAt).Milliseconds())
 			prettyDelay = common.PrettyDuration(time.Since(block.ReceivedAt))
 		}
