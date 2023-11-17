@@ -466,6 +466,8 @@ func LoadCliqueConfig(db ethdb.Database, genesis *Genesis) (*params.CliqueConfig
 	return nil, nil
 }
 
+// TODO : 0xSharma : add : Amoy Genesis Hash
+
 func (g *Genesis) configOrDefault(ghash common.Hash) *params.ChainConfig {
 	switch {
 	case g != nil:
@@ -480,8 +482,6 @@ func (g *Genesis) configOrDefault(ghash common.Hash) *params.ChainConfig {
 		return params.GoerliChainConfig
 	case ghash == params.MumbaiGenesisHash:
 		return params.MumbaiChainConfig
-	case ghash == params.AmoyGenesisHash:
-		return params.AmoyChainConfig
 	case ghash == params.BorMainnetGenesisHash:
 		return params.BorMainnetChainConfig
 	case ghash == params.KilnGenesisHash:
@@ -667,7 +667,7 @@ func DefaultAmoyGenesisBlock() *Genesis {
 	return &Genesis{
 		Config:     params.AmoyChainConfig,
 		Nonce:      0,
-		Timestamp:  1558348305,
+		Timestamp:  1700225065,
 		GasLimit:   10000000,
 		Difficulty: big.NewInt(1),
 		Mixhash:    common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000"),

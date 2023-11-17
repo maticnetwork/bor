@@ -55,7 +55,7 @@ var amoyTestnet = &Chain{
 			},
 		},
 		Nonce:      0,
-		Timestamp:  1558348305,
+		Timestamp:  1700225065,
 		GasLimit:   10000000,
 		Difficulty: big.NewInt(1),
 		Mixhash:    common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000"),
