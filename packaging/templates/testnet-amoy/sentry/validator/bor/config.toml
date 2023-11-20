@@ -1,6 +1,6 @@
 # NOTE: Update and uncomment: `keystore`, `password`, and `unlock` fields.
 
-chain = "mumbai"
+chain = "amoy"
 # identity = "node_name"
 # verbosity = 3
 # vmdebug = false
