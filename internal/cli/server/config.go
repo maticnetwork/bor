@@ -542,7 +542,7 @@ type CacheConfig struct {
 	TriesInMemory uint64 `hcl:"triesinmemory,optional" toml:"triesinmemory,optional"`
 
 	// This is the number of blocks for which logs will be cached in the filter system.
-	FilterLogCacheSize int `hc:"blocklogs,optional" toml:"blocklogs,optional"`
+	FilterLogCacheSize int `hcl:"blocklogs,optional" toml:"blocklogs,optional"`
 
 	// Time after which the Merkle Patricia Trie is stored to disc from memory
 	TrieTimeout    time.Duration `hcl:"-,optional" toml:"-"`
