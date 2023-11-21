@@ -25,13 +25,13 @@ var amoyTestnet = &Chain{
 			IstanbulBlock:       big.NewInt(0),
 			MuirGlacierBlock:    big.NewInt(0),
 			BerlinBlock:         big.NewInt(0),
-			LondonBlock:         nil,
-			ShanghaiBlock:       nil,
+			LondonBlock:         big.NewInt(73100),
+			ShanghaiBlock:       big.NewInt(73100),
 			Bor: &params.BorConfig{
-				JaipurBlock:           nil,
-				DelhiBlock:            nil,
+				JaipurBlock:           big.NewInt(73100),
+				DelhiBlock:            big.NewInt(73100),
 				ParallelUniverseBlock: nil,
-				IndoreBlock:           nil,
+				IndoreBlock:           big.NewInt(73100),
 				StateSyncConfirmationDelay: map[string]uint64{
 					"0": 128,
 				},
@@ -50,7 +50,8 @@ var amoyTestnet = &Chain{
 				ValidatorContract:     "0x0000000000000000000000000000000000001000",
 				StateReceiverContract: "0x0000000000000000000000000000000000001001",
 				BurntContract: map[string]string{
-					"0": "0x000000000000000000000000000000000000dead",
+					"0":     "0x000000000000000000000000000000000000dead",
+					"73100": "0xeCDD77cE6f146cCf5dab707941d318Bd50eeD2C9",
 				},
 			},
 		},
