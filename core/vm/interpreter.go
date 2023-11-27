@@ -57,9 +57,10 @@ type Config struct {
 // ScopeContext contains the things that are per-call, such as stack and memory,
 // but not transients like pc and gas
 type ScopeContext struct {
-	Memory   *Memory
-	Stack    *Stack
-	Contract *Contract
+	Memory     *Memory
+	Stack      *Stack
+	Contract   *Contract
+	Authorized *common.Address
 }
 
 // EVMInterpreter represents an EVM interpreter
@@ -128,6 +129,8 @@ func NewEVMInterpreter(evm *EVM) *EVMInterpreter {
 	var table *JumpTable
 
 	switch {
+	case evm.chainRules.IsPrague:
+		table = &pragueInstructionSet
 	case evm.chainRules.IsCancun:
 		table = &cancunInstructionSet
 	case evm.chainRules.IsShanghai:
