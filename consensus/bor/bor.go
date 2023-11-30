@@ -883,7 +883,7 @@ func (c *Bor) changeContractCodeIfNeeded(headerNumber uint64, state *state.State
 				log.Info("change contract code", "address", addr)
 				state.SetCode(addr, account.Code)
 
-				if account.Balance == big.NewInt(0) {
+				if state.GetBalance(addr).Cmp(big.NewInt(0)) == 0 {
 					state.SetBalance(addr, account.Balance)
 				}
 			}
