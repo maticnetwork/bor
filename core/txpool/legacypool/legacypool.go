@@ -19,6 +19,7 @@ package legacypool
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"math/big"
 	"sort"
@@ -603,6 +604,8 @@ func (pool *LegacyPool) validateTxBasics(tx *types.Transaction, local bool) erro
 	if local {
 		opts.MinTip = new(big.Int)
 	}
+	fmt.Println("------------- pool.config.AllowUnprotectedTxs", pool.config.AllowUnprotectedTxs)
+	fmt.Println("------------- pool.config", pool.config)
 	if err := txpool.ValidateTransaction(tx, nil, nil, nil, pool.currentHead.Load(), pool.signer, opts); err != nil {
 		return err
 	}
