@@ -18,6 +18,8 @@
 package ethconfig
 
 import (
+	"errors"
+	"math/big"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -32,8 +34,8 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/clique"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/core/rawdb"
-	"github.com/ethereum/go-ethereum/core/txpool"
+	"github.com/ethereum/go-ethereum/core/txpool/blobpool"
+	"github.com/ethereum/go-ethereum/core/txpool/legacypool"
 	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/eth/gasprice"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -68,11 +70,7 @@ var Defaults = Config{
 	SyncMode:           downloader.SnapSync,
 	NetworkId:          1,
 	TxLookupLimit:      2350000,
-	TransactionHistory: 2350000,
-	StateHistory:       params.FullImmutabilityThreshold,
-	StateScheme:        rawdb.HashScheme,
 	LightPeers:         100,
-	UltraLightFraction: 75,
 	DatabaseCache:      512,
 	TrieCleanCache:     154,
 	TrieDirtyCache:     256,
@@ -80,12 +78,12 @@ var Defaults = Config{
 	SnapshotCache:      102,
 	FilterLogCacheSize: 32,
 	Miner:              miner.DefaultConfig,
-	TxPool:             txpool.DefaultConfig,
+	TxPool:             legacypool.DefaultConfig,
+	BlobPool:           blobpool.DefaultConfig,
 	RPCGasCap:          50000000,
-	RPCReturnDataLimit: 100000,
 	RPCEVMTimeout:      5 * time.Second,
 	GPO:                FullNodeGPO,
-	RPCTxFeeCap:        5, // 1 ether
+	RPCTxFeeCap:        1, // 1 ether
 }
 
 //go:generate go run github.com/fjl/gencodec -type Config -formats toml -out gen_config.go
@@ -127,16 +125,17 @@ type Config struct {
 	LightNoPrune     bool `toml:",omitempty"` // Whether to disable light chain pruning
 	LightNoSyncServe bool `toml:",omitempty"` // Whether to serve light clients before syncing
 
-	// Ultra Light client options
-	UltraLightServers      []string `toml:",omitempty"` // List of trusted ultra light servers
-	UltraLightFraction     int      `toml:",omitempty"` // Percentage of trusted servers to accept an announcement
-	UltraLightOnlyAnnounce bool     `toml:",omitempty"` // Whether to only announce headers, or also serve them
-
 	// Database options
 	SkipBcVersionCheck bool `toml:"-"`
 	DatabaseHandles    int  `toml:"-"`
 	DatabaseCache      int
 	DatabaseFreezer    string
+
+	// Database - LevelDB options
+	LevelDbCompactionTableSize           uint64
+	LevelDbCompactionTableSizeMultiplier float64
+	LevelDbCompactionTotalSize           uint64
+	LevelDbCompactionTotalSizeMultiplier float64
 
 	TrieCleanCache int
 	TrieDirtyCache int
@@ -152,7 +151,8 @@ type Config struct {
 	Miner miner.Config
 
 	// Transaction pool options
-	TxPool txpool.Config
+	TxPool   legacypool.Config
+	BlobPool blobpool.Config
 
 	// Gas Price Oracle options
 	GPO gasprice.Config
@@ -176,8 +176,8 @@ type Config struct {
 	// send-transaction variants. The unit is ether.
 	RPCTxFeeCap float64
 
-	// OverrideShanghai (TODO: remove after the fork)
-	OverrideShanghai *uint64 `toml:",omitempty"`
+	// OverrideCancun (TODO: remove after the fork)
+	OverrideCancun *big.Int `toml:",omitempty"`
 
 	// URL to connect to Heimdall node
 	HeimdallURL string
@@ -206,19 +206,15 @@ type Config struct {
 	// Develop Fake Author mode to produce blocks without authorisation
 	DevFakeAuthor bool `hcl:"devfakeauthor,optional" toml:"devfakeauthor,optional"`
 
-	// OverrideCancun (TODO: remove after the fork)
-	OverrideCancun *uint64 `toml:",omitempty"`
-
 	// OverrideVerkle (TODO: remove after the fork)
-	OverrideVerkle *uint64 `toml:",omitempty"`
+	OverrideVerkle *big.Int `toml:",omitempty"`
 }
 
 // CreateConsensusEngine creates a consensus engine for the given chain configuration.
-func CreateConsensusEngine(chainConfig *params.ChainConfig, ethConfig *Config, cliqueConfig *params.CliqueConfig, db ethdb.Database, blockchainAPI *ethapi.BlockChainAPI) consensus.Engine {
+func CreateConsensusEngine(chainConfig *params.ChainConfig, ethConfig *Config, db ethdb.Database, blockchainAPI *ethapi.BlockChainAPI) (consensus.Engine, error) {
 	// nolint:nestif
-	if cliqueConfig != nil {
-		// If proof-of-authority is requested, set it up
-		return beacon.New(clique.New(cliqueConfig, db))
+	if chainConfig.Clique != nil {
+		return beacon.New(clique.New(chainConfig.Clique, db)), nil
 	} else if chainConfig.Bor != nil && chainConfig.Bor.ValidatorContract != "" {
 		// If Matic bor consensus is requested, set it up
 		// In order to pass the ethereum transaction tests, we need to set the burn contract which is in the bor config
@@ -227,7 +223,7 @@ func CreateConsensusEngine(chainConfig *params.ChainConfig, ethConfig *Config, c
 		spanner := span.NewChainSpanner(blockchainAPI, contract.ValidatorSet(), chainConfig, common.HexToAddress(chainConfig.Bor.ValidatorContract))
 
 		if ethConfig.WithoutHeimdall {
-			return bor.New(chainConfig, db, blockchainAPI, spanner, nil, genesisContractsClient, ethConfig.DevFakeAuthor)
+			return bor.New(chainConfig, db, blockchainAPI, spanner, nil, genesisContractsClient, ethConfig.DevFakeAuthor), nil
 		} else {
 			if ethConfig.DevFakeAuthor {
 				log.Warn("Sanitizing DevFakeAuthor", "Use DevFakeAuthor with", "--bor.withoutheimdall")
@@ -242,9 +238,11 @@ func CreateConsensusEngine(chainConfig *params.ChainConfig, ethConfig *Config, c
 				heimdallClient = heimdall.NewHeimdallClient(ethConfig.HeimdallURL)
 			}
 
-			return bor.New(chainConfig, db, blockchainAPI, spanner, heimdallClient, genesisContractsClient, false)
+			return bor.New(chainConfig, db, blockchainAPI, spanner, heimdallClient, genesisContractsClient, false), nil
 		}
 	}
-
-	return beacon.New(ethash.NewFaker())
+	if !chainConfig.TerminalTotalDifficultyPassed {
+		return nil, errors.New("ethash is only supported as a historical component of already merged networks")
+	}
+	return beacon.New(ethash.NewFaker()), nil
 }

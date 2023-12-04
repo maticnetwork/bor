@@ -103,6 +103,7 @@ func TestEncodeDecodeHistory(t *testing.T) {
 }
 
 func checkHistory(t *testing.T, db ethdb.KeyValueReader, freezer *rawdb.ResettableFreezer, id uint64, root common.Hash, exist bool) {
+	t.Helper()
 	blob := rawdb.ReadStateHistoryMeta(freezer, id)
 	if exist && len(blob) == 0 {
 		t.Fatalf("Failed to load trie history, %d", id)
@@ -119,6 +120,7 @@ func checkHistory(t *testing.T, db ethdb.KeyValueReader, freezer *rawdb.Resettab
 }
 
 func checkHistoriesInRange(t *testing.T, db ethdb.KeyValueReader, freezer *rawdb.ResettableFreezer, from, to uint64, roots []common.Hash, exist bool) {
+	t.Helper()
 	for i, j := from, 0; i <= to; i, j = i+1, j+1 {
 		checkHistory(t, db, freezer, i, roots[j], exist)
 	}
@@ -226,7 +228,7 @@ func TestTruncateTailHistories(t *testing.T) {
 
 // openFreezer initializes the freezer instance for storing state histories.
 func openFreezer(datadir string, readOnly bool) (*rawdb.ResettableFreezer, error) {
-	return rawdb.NewStateFreezer(datadir, readOnly)
+	return rawdb.NewStateHistoryFreezer(datadir, readOnly)
 }
 
 func compareSet[k comparable](a, b map[k][]byte) bool {

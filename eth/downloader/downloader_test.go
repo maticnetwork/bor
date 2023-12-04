@@ -92,12 +92,11 @@ func newTesterWithNotification(t *testing.T, success func()) *downloadTester {
 		chain:   chain,
 		peers:   make(map[string]*downloadTesterPeer),
 	}
-	tester.downloader = New(db, new(event.TypeMux), tester.chain, nil, tester.dropPeer, success, whitelist.NewService(10))
-	return tester
-}
 
-func (dl *downloadTester) setWhitelist(w ethereum.ChainValidator) {
-	dl.downloader.ChainValidator = w
+	//nolint: staticcheck
+	tester.downloader = New(db, new(event.TypeMux), tester.chain, nil, tester.dropPeer, success, whitelist.NewService(db))
+
+	return tester
 }
 
 // terminate aborts any operations on the embedded downloader and releases all
@@ -1901,7 +1900,7 @@ func newWhitelistFake(validate func(count int) (bool, error)) *whitelistFake {
 
 // IsValidPeer is the mock function which the downloader will use to validate the chain
 // to be received from a peer.
-func (w *whitelistFake) IsValidPeer(_ *types.Header, _ func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error) {
+func (w *whitelistFake) IsValidPeer(_ func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error) {
 	defer func() {
 		w.count++
 	}()
@@ -1914,12 +1913,32 @@ func (w *whitelistFake) IsValidChain(current *types.Header, headers []*types.Hea
 }
 func (w *whitelistFake) ProcessCheckpoint(_ uint64, _ common.Hash) {}
 
-func (w *whitelistFake) GetCheckpointWhitelist() map[uint64]common.Hash {
-	return nil
+func (w *whitelistFake) GetWhitelistedCheckpoint() (bool, uint64, common.Hash) {
+	return false, 0, common.Hash{}
 }
-func (w *whitelistFake) PurgeCheckpointWhitelist() {}
+func (w *whitelistFake) PurgeWhitelistedCheckpoint() {}
+
+func (w *whitelistFake) ProcessMilestone(_ uint64, _ common.Hash)       {}
+func (w *whitelistFake) ProcessFutureMilestone(_ uint64, _ common.Hash) {}
+func (w *whitelistFake) GetWhitelistedMilestone() (bool, uint64, common.Hash) {
+	return false, 0, common.Hash{}
+}
+func (w *whitelistFake) PurgeWhitelistedMilestone() {}
+
 func (w *whitelistFake) GetCheckpoints(current, sidechainHeader *types.Header, sidechainCheckpoints []*types.Header) (map[uint64]*types.Header, error) {
 	return map[uint64]*types.Header{}, nil
+}
+func (w *whitelistFake) LockMutex(endBlockNum uint64) bool {
+	return false
+}
+func (w *whitelistFake) UnlockMutex(doLock bool, milestoneId string, endBlockNum uint64, endBlockHash common.Hash) {
+}
+func (w *whitelistFake) UnlockSprint(endBlockNum uint64) {
+}
+func (w *whitelistFake) RemoveMilestoneID(milestoneId string) {
+}
+func (w *whitelistFake) GetMilestoneIDsList() []string {
+	return nil
 }
 
 // TestFakedSyncProgress66WhitelistMismatch tests if in case of whitelisted
@@ -1932,7 +1951,7 @@ func TestFakedSyncProgress66WhitelistMismatch(t *testing.T) {
 
 	tester := newTester(t)
 	validate := func(count int) (bool, error) {
-		return false, whitelist.ErrCheckpointMismatch
+		return false, whitelist.ErrMismatch
 	}
 	tester.downloader.ChainValidator = newWhitelistFake(validate)
 
@@ -1985,7 +2004,7 @@ func TestFakedSyncProgress66NoRemoteCheckpoint(t *testing.T) {
 	validate := func(count int) (bool, error) {
 		// only return the `ErrNoRemoteCheckpoint` error for the first call
 		if count == 0 {
-			return false, whitelist.ErrNoRemoteCheckpoint
+			return false, whitelist.ErrNoRemote
 		}
 
 		return true, nil
@@ -2001,7 +2020,7 @@ func TestFakedSyncProgress66NoRemoteCheckpoint(t *testing.T) {
 	// Synchronise with the peer and make sure all blocks were retrieved
 	// Should fail in first attempt
 	if err := tester.sync("light", nil, mode); err != nil {
-		assert.Equal(t, whitelist.ErrNoRemoteCheckpoint, err, "failed synchronisation")
+		assert.Equal(t, whitelist.ErrNoRemote, err, "failed synchronisation")
 	}
 
 	// Try syncing again, should succeed

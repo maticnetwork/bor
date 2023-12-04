@@ -67,8 +67,8 @@ type Genesis struct {
 	GasUsed       uint64      `json:"gasUsed"`
 	ParentHash    common.Hash `json:"parentHash"`
 	BaseFee       *big.Int    `json:"baseFeePerGas"` // EIP-1559
-	ExcessDataGas *uint64     `json:"excessDataGas"` // EIP-4844
-	DataGasUsed   *uint64     `json:"dataGasUsed"`   // EIP-4844
+	ExcessBlobGas *uint64     `json:"excessBlobGas"` // EIP-4844
+	BlobGasUsed   *uint64     `json:"blobGasUsed"`   // EIP-4844
 }
 
 func ReadGenesis(db ethdb.Database) (*Genesis, error) {
@@ -113,8 +113,8 @@ func ReadGenesis(db ethdb.Database) (*Genesis, error) {
 	genesis.Mixhash = genesisHeader.MixDigest
 	genesis.Coinbase = genesisHeader.Coinbase
 	genesis.BaseFee = genesisHeader.BaseFee
-	genesis.ExcessDataGas = genesisHeader.ExcessDataGas
-	genesis.DataGasUsed = genesisHeader.DataGasUsed
+	genesis.ExcessBlobGas = genesisHeader.ExcessBlobGas
+	genesis.BlobGasUsed = genesisHeader.BlobGasUsed
 
 	return &genesis, nil
 }
@@ -218,8 +218,6 @@ func CommitGenesisState(db ethdb.Database, triedb *trie.Database, blockhash comm
 		switch blockhash {
 		case params.MainnetGenesisHash:
 			genesis = DefaultGenesisBlock()
-		case params.RinkebyGenesisHash:
-			genesis = DefaultRinkebyGenesisBlock()
 		case params.GoerliGenesisHash:
 			genesis = DefaultGoerliGenesisBlock()
 		case params.SepoliaGenesisHash:
@@ -256,8 +254,8 @@ type genesisSpecMarshaling struct {
 	Difficulty    *math.HexOrDecimal256
 	Alloc         map[common.UnprefixedAddress]GenesisAccount
 	BaseFee       *math.HexOrDecimal256
-	ExcessDataGas *math.HexOrDecimal64
-	DataGasUsed   *math.HexOrDecimal64
+	ExcessBlobGas *math.HexOrDecimal64
+	BlobGasUsed   *math.HexOrDecimal64
 }
 
 type genesisAccountMarshaling struct {
@@ -302,8 +300,8 @@ func (e *GenesisMismatchError) Error() string {
 
 // ChainOverrides contains the changes to chain config.
 type ChainOverrides struct {
-	OverrideCancun *uint64
-	OverrideVerkle *uint64
+	OverrideCancun *big.Int
+	OverrideVerkle *big.Int
 }
 
 // SetupGenesisBlock writes or updates the genesis block in db.
@@ -332,10 +330,10 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 	applyOverrides := func(config *params.ChainConfig) {
 		if config != nil {
 			if overrides != nil && overrides.OverrideCancun != nil {
-				config.CancunTime = overrides.OverrideCancun
+				config.CancunBlock = overrides.OverrideCancun
 			}
 			if overrides != nil && overrides.OverrideVerkle != nil {
-				config.VerkleTime = overrides.OverrideVerkle
+				config.VerkleBlock = overrides.OverrideVerkle
 			}
 		}
 	}
@@ -471,44 +469,6 @@ func LoadChainConfig(db ethdb.Database, genesis *Genesis) (*params.ChainConfig, 
 	return params.MainnetChainConfig, nil
 }
 
-// LoadCliqueConfig loads the stored clique config if the chain config
-// is already present in database, otherwise, return the config in the
-// provided genesis specification. Note the returned clique config can
-// be nil if we are not in the clique network.
-func LoadCliqueConfig(db ethdb.Database, genesis *Genesis) (*params.CliqueConfig, error) {
-	// Load the stored chain config from the database. It can be nil
-	// in case the database is empty. Notably, we only care about the
-	// chain config corresponds to the canonical chain.
-	stored := rawdb.ReadCanonicalHash(db, 0)
-	if stored != (common.Hash{}) {
-		storedcfg := rawdb.ReadChainConfig(db, stored)
-		if storedcfg != nil {
-			return storedcfg.Clique, nil
-		}
-	}
-	// Load the clique config from the provided genesis specification.
-	if genesis != nil {
-		// Reject invalid genesis spec without valid chain config
-		if genesis.Config == nil {
-			return nil, errGenesisNoConfig
-		}
-		// If the canonical genesis header is present, but the chain
-		// config is missing(initialize the empty leveldb with an
-		// external ancient chain segment), ensure the provided genesis
-		// is matched.
-		if stored != (common.Hash{}) && genesis.ToBlock().Hash() != stored {
-			return nil, &GenesisMismatchError{stored, genesis.ToBlock().Hash()}
-		}
-
-		return genesis.Config.Clique, nil
-	}
-	// There is no stored chain config and no new config provided,
-	// In this case the default chain config(mainnet) will be used,
-	// namely ethash is the specified consensus engine, return nil.
-	//nolint:nilnil
-	return nil, nil
-}
-
 func (g *Genesis) configOrDefault(ghash common.Hash) *params.ChainConfig {
 	switch {
 	case g != nil:
@@ -517,16 +477,12 @@ func (g *Genesis) configOrDefault(ghash common.Hash) *params.ChainConfig {
 		return params.MainnetChainConfig
 	case ghash == params.SepoliaGenesisHash:
 		return params.SepoliaChainConfig
-	case ghash == params.RinkebyGenesisHash:
-		return params.RinkebyChainConfig
 	case ghash == params.GoerliGenesisHash:
 		return params.GoerliChainConfig
 	case ghash == params.MumbaiGenesisHash:
 		return params.MumbaiChainConfig
 	case ghash == params.BorMainnetGenesisHash:
 		return params.BorMainnetChainConfig
-	case ghash == params.KilnGenesisHash:
-		return DefaultKilnGenesisBlock().Config
 	default:
 		return params.AllEthashProtocolChanges
 	}
@@ -572,19 +528,13 @@ func (g *Genesis) ToBlock() *types.Block {
 	var withdrawals []*types.Withdrawal
 	if conf := g.Config; conf != nil {
 		num := big.NewInt(int64(g.Number))
-		if conf.IsShanghai(num, g.Timestamp) {
-			head.WithdrawalsHash = &types.EmptyWithdrawalsHash
-			withdrawals = make([]*types.Withdrawal, 0)
+		if conf.IsShanghai(num) {
+			head.WithdrawalsHash = nil
+			withdrawals = nil
 		}
-		if conf.IsCancun(num, g.Timestamp) {
-			head.ExcessDataGas = g.ExcessDataGas
-			head.DataGasUsed = g.DataGasUsed
-			if head.ExcessDataGas == nil {
-				head.ExcessDataGas = new(uint64)
-			}
-			if head.DataGasUsed == nil {
-				head.DataGasUsed = new(uint64)
-			}
+		if conf.IsCancun(num) {
+			head.ExcessBlobGas = nil
+			head.BlobGasUsed = nil
 		}
 	}
 
@@ -598,16 +548,13 @@ func (g *Genesis) Commit(db ethdb.Database, triedb *trie.Database) (*types.Block
 	if block.Number().Sign() != 0 {
 		return nil, errors.New("can't commit genesis block with number > 0")
 	}
-
 	config := g.Config
 	if config == nil {
 		config = params.AllEthashProtocolChanges
 	}
-
 	if err := config.CheckConfigForkOrder(); err != nil {
 		return nil, err
 	}
-
 	if config.Clique != nil && len(block.Extra()) < 32+crypto.SignatureLength {
 		return nil, errors.New("can't start clique chain without signers")
 	}
@@ -617,7 +564,6 @@ func (g *Genesis) Commit(db ethdb.Database, triedb *trie.Database) (*types.Block
 	if err := g.Alloc.flush(db, triedb, block.Hash()); err != nil {
 		return nil, err
 	}
-
 	rawdb.WriteTd(db, block.Hash(), block.NumberU64(), block.Difficulty())
 	rawdb.WriteBlock(db, block)
 	rawdb.WriteReceipts(db, block.Hash(), block.NumberU64(), nil)
@@ -626,7 +572,6 @@ func (g *Genesis) Commit(db ethdb.Database, triedb *trie.Database) (*types.Block
 	rawdb.WriteHeadFastBlockHash(db, block.Hash())
 	rawdb.WriteHeadHeaderHash(db, block.Hash())
 	rawdb.WriteChainConfig(db, block.Hash(), config)
-
 	return block, nil
 }
 
@@ -659,18 +604,6 @@ func DefaultGenesisBlock() *Genesis {
 		GasLimit:   5000,
 		Difficulty: big.NewInt(17179869184),
 		Alloc:      decodePrealloc(mainnetAllocData),
-	}
-}
-
-// DefaultRinkebyGenesisBlock returns the Rinkeby network genesis block.
-func DefaultRinkebyGenesisBlock() *Genesis {
-	return &Genesis{
-		Config:     params.RinkebyChainConfig,
-		Timestamp:  1492009146,
-		ExtraData:  hexutil.MustDecode("0x52657370656374206d7920617574686f7269746168207e452e436172746d616e42eb768f2244c8811c63729a21a3569731535f067ffc57839b00206d1ad20c69a1981b489f772031b279182d99e65703f0076e4812653aab85fca0f00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
-		GasLimit:   4700000,
-		Difficulty: big.NewInt(1),
-		Alloc:      decodePrealloc(rinkebyAllocData),
 	}
 }
 
@@ -727,33 +660,17 @@ func DefaultBorMainnetGenesisBlock() *Genesis {
 	}
 }
 
-func DefaultKilnGenesisBlock() *Genesis {
-	g := new(Genesis)
-	reader := strings.NewReader(KilnAllocData)
-
-	if err := json.NewDecoder(reader).Decode(g); err != nil {
-		panic(err)
-	}
-
-	return g
-}
-
 // DeveloperGenesisBlock returns the 'geth --dev' genesis block.
-func DeveloperGenesisBlock(period uint64, gasLimit uint64, faucet common.Address) *Genesis {
+func DeveloperGenesisBlock(gasLimit uint64, faucet common.Address) *Genesis {
 	// Override the default period to the user requested one
-	config := *params.AllCliqueProtocolChanges
-	config.Clique = &params.CliqueConfig{
-		Period: period,
-		Epoch:  config.Clique.Epoch,
-	}
+	config := *params.AllDevChainProtocolChanges
 
 	// Assemble and return the genesis with the precompiles and faucet pre-funded
 	return &Genesis{
 		Config:     &config,
-		ExtraData:  append(append(make([]byte, 32), faucet[:]...), make([]byte, crypto.SignatureLength)...),
 		GasLimit:   gasLimit,
 		BaseFee:    big.NewInt(params.InitialBaseFee),
-		Difficulty: big.NewInt(1),
+		Difficulty: big.NewInt(0),
 		Alloc: map[common.Address]GenesisAccount{
 			common.BytesToAddress([]byte{1}): {Balance: big.NewInt(1)}, // ECRecover
 			common.BytesToAddress([]byte{2}): {Balance: big.NewInt(1)}, // SHA256

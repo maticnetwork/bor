@@ -26,20 +26,17 @@ import (
 
 // BlobTx represents an EIP-4844 transaction.
 type BlobTx struct {
-	ChainID          *uint256.Int
-	Nonce            uint64
-	GasTipCap        *uint256.Int // a.k.a. maxPriorityFeePerGas
-	gasTipCapUint256 *uint256.Int
-	GasFeeCap        *uint256.Int // a.k.a. maxFeePerGas
-	gasFeeCapUint256 *uint256.Int
-	Gas              uint64
-	gasPriceUint256  *uint256.Int    // wei per gas
-	To               *common.Address // `rlp:"nil"` // nil means contract creation
-	Value            *uint256.Int
-	Data             []byte
-	AccessList       AccessList
-	BlobFeeCap       *uint256.Int // a.k.a. maxFeePerDataGas
-	BlobHashes       []common.Hash
+	ChainID    *uint256.Int
+	Nonce      uint64
+	GasTipCap  *uint256.Int // a.k.a. maxPriorityFeePerGas
+	GasFeeCap  *uint256.Int // a.k.a. maxFeePerGas
+	Gas        uint64
+	To         common.Address
+	Value      *uint256.Int
+	Data       []byte
+	AccessList AccessList
+	BlobFeeCap *uint256.Int // a.k.a. maxFeePerBlobGas
+	BlobHashes []common.Hash
 
 	// Signature values
 	V *uint256.Int `json:"v" gencodec:"required"`
@@ -51,7 +48,7 @@ type BlobTx struct {
 func (tx *BlobTx) copy() TxData {
 	cpy := &BlobTx{
 		Nonce: tx.Nonce,
-		To:    copyAddressPtr(tx.To),
+		To:    tx.To,
 		Data:  common.CopyBytes(tx.Data),
 		Gas:   tx.Gas,
 		// These are copied below.
@@ -97,51 +94,18 @@ func (tx *BlobTx) copy() TxData {
 }
 
 // accessors for innerTx.
-func (tx *BlobTx) txType() byte           { return BlobTxType }
-func (tx *BlobTx) chainID() *big.Int      { return tx.ChainID.ToBig() }
-func (tx *BlobTx) accessList() AccessList { return tx.AccessList }
-func (tx *BlobTx) data() []byte           { return tx.Data }
-func (tx *BlobTx) gas() uint64            { return tx.Gas }
-func (tx *BlobTx) gasFeeCap() *big.Int    { return tx.GasFeeCap.ToBig() }
-
-func (tx *BlobTx) gasFeeCapU256() *uint256.Int {
-	if tx.gasFeeCapUint256 != nil {
-		return tx.gasFeeCapUint256
-	}
-
-	tx.gasFeeCapUint256, _ = uint256.FromBig(tx.gasFeeCap())
-
-	return tx.gasFeeCapUint256
-}
-
-func (tx *BlobTx) gasTipCap() *big.Int { return tx.GasTipCap.ToBig() }
-
-func (tx *BlobTx) gasTipCapU256() *uint256.Int {
-	if tx.gasTipCapUint256 != nil {
-		return tx.gasTipCapUint256
-	}
-
-	tx.gasTipCapUint256, _ = uint256.FromBig(tx.gasTipCap())
-
-	return tx.gasTipCapUint256
-}
-
-func (tx *BlobTx) gasPrice() *big.Int { return tx.GasFeeCap.ToBig() }
-
-func (tx *BlobTx) gasPriceU256() *uint256.Int {
-	if tx.gasFeeCapUint256 != nil {
-		return tx.gasFeeCapUint256
-	}
-
-	tx.gasFeeCapUint256, _ = uint256.FromBig(tx.gasFeeCap())
-
-	return tx.gasFeeCapUint256
-}
-
+func (tx *BlobTx) txType() byte              { return BlobTxType }
+func (tx *BlobTx) chainID() *big.Int         { return tx.ChainID.ToBig() }
+func (tx *BlobTx) accessList() AccessList    { return tx.AccessList }
+func (tx *BlobTx) data() []byte              { return tx.Data }
+func (tx *BlobTx) gas() uint64               { return tx.Gas }
+func (tx *BlobTx) gasFeeCap() *big.Int       { return tx.GasFeeCap.ToBig() }
+func (tx *BlobTx) gasTipCap() *big.Int       { return tx.GasTipCap.ToBig() }
+func (tx *BlobTx) gasPrice() *big.Int        { return tx.GasFeeCap.ToBig() }
 func (tx *BlobTx) value() *big.Int           { return tx.Value.ToBig() }
 func (tx *BlobTx) nonce() uint64             { return tx.Nonce }
-func (tx *BlobTx) to() *common.Address       { return tx.To }
-func (tx *BlobTx) blobGas() uint64           { return params.BlobTxDataGasPerBlob * uint64(len(tx.BlobHashes)) }
+func (tx *BlobTx) to() *common.Address       { tmp := tx.To; return &tmp }
+func (tx *BlobTx) blobGas() uint64           { return params.BlobTxBlobGasPerBlob * uint64(len(tx.BlobHashes)) }
 func (tx *BlobTx) blobGasFeeCap() *big.Int   { return tx.BlobFeeCap.ToBig() }
 func (tx *BlobTx) blobHashes() []common.Hash { return tx.BlobHashes }
 

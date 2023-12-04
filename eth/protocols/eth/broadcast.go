@@ -46,14 +46,12 @@ func (p *Peer) broadcastBlocks() {
 			if err := p.SendNewBlock(prop.block, prop.td); err != nil {
 				return
 			}
-
 			p.Log().Trace("Propagated block", "number", prop.block.Number(), "hash", prop.block.Hash(), "td", prop.td)
 
 		case block := <-p.queuedBlockAnns:
 			if err := p.SendNewBlockHashes([]common.Hash{block.Hash()}, []uint64{block.NumberU64()}); err != nil {
 				return
 			}
-
 			p.Log().Trace("Announced block", "number", block.Number(), "hash", block.Hash())
 
 		case <-p.term:
@@ -72,7 +70,6 @@ func (p *Peer) broadcastTransactions() {
 		fail   = make(chan error, 1) // Channel used to receive network error
 		failed bool                  // Flag whether a send failed, discard everything onward
 	)
-
 	for {
 		// If there's no in-flight broadcast running, check if a new one is needed
 		if done == nil && len(queue) > 0 {
@@ -82,16 +79,17 @@ func (p *Peer) broadcastTransactions() {
 				txs         []*types.Transaction
 				size        common.StorageSize
 			)
-
 			for i := 0; i < len(queue) && size < maxTxPacketSize; i++ {
-				if tx := p.txpool.Get(queue[i]); tx != nil {
-					txs = append(txs, tx)
-					size += common.StorageSize(tx.Size())
+				tx := p.txpool.Get(queue[i])
+
+				// Skip EIP-4337 bundled transactions
+				if tx != nil && tx.Tx.GetOptions() == nil {
+					txs = append(txs, tx.Tx)
+					size += common.StorageSize(tx.Tx.Size())
 				}
 
 				hashesCount++
 			}
-
 			queue = queue[:copy(queue, queue[hashesCount:])]
 
 			// If there's anything available to transfer, fire up an async writer
@@ -102,7 +100,6 @@ func (p *Peer) broadcastTransactions() {
 						fail <- err
 						return
 					}
-
 					close(done)
 					p.Log().Trace("Sent transactions", "count", len(txs))
 				}()
@@ -144,7 +141,6 @@ func (p *Peer) announceTransactions() {
 		fail   = make(chan error, 1) // Channel used to receive network error
 		failed bool                  // Flag whether a send failed, discard everything onward
 	)
-
 	for {
 		// If there's no in-flight announce running, check if a new one is needed
 		if done == nil && len(queue) > 0 {
@@ -156,12 +152,13 @@ func (p *Peer) announceTransactions() {
 				pendingSizes []uint32
 				size         common.StorageSize
 			)
-
 			for count = 0; count < len(queue) && size < maxTxPacketSize; count++ {
-				if tx := p.txpool.Get(queue[count]); tx != nil {
+				tx := p.txpool.Get(queue[count])
+				// Skip EIP-4337 bundled transactions
+				if tx != nil && tx.Tx.GetOptions() == nil {
 					pending = append(pending, queue[count])
-					pendingTypes = append(pendingTypes, tx.Type())
-					pendingSizes = append(pendingSizes, uint32(tx.Size()))
+					pendingTypes = append(pendingTypes, tx.Tx.Type())
+					pendingSizes = append(pendingSizes, uint32(tx.Tx.Size()))
 					size += common.HashLength
 				}
 			}
@@ -183,7 +180,6 @@ func (p *Peer) announceTransactions() {
 							return
 						}
 					}
-
 					close(done)
 					p.Log().Trace("Sent transaction announcements", "count", len(pending))
 				}()

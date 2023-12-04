@@ -39,19 +39,14 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/trie"
-	"github.com/ethereum/go-ethereum/trie/triedb/hashdb"
-	"github.com/ethereum/go-ethereum/trie/triedb/pathdb"
 )
 
 // Tests that updating a state trie does not leak any database writes prior to
 // actually committing the state.
 func TestUpdateLeaks(t *testing.T) {
 	// Create an empty state database
-	var (
-		db  = rawdb.NewMemoryDatabase()
-		tdb = trie.NewDatabase(db, nil)
-	)
-	state, _ := New(types.EmptyRootHash, NewDatabaseWithNodeDB(db, tdb), nil)
+	db := rawdb.NewMemoryDatabase()
+	state, _ := New(types.EmptyRootHash, NewDatabase(db), nil)
 
 	// Update it with some accounts
 	for i := byte(0); i < 255; i++ {
@@ -87,10 +82,8 @@ func TestIntermediateLeaks(t *testing.T) {
 	// Create two state databases, one transitioning to the final state, the other final from the beginning
 	transDb := rawdb.NewMemoryDatabase()
 	finalDb := rawdb.NewMemoryDatabase()
-	transNdb := trie.NewDatabase(transDb, nil)
-	finalNdb := trie.NewDatabase(finalDb, nil)
-	transState, _ := New(types.EmptyRootHash, NewDatabaseWithNodeDB(transDb, transNdb), nil)
-	finalState, _ := New(types.EmptyRootHash, NewDatabaseWithNodeDB(finalDb, finalNdb), nil)
+	transState, _ := New(types.EmptyRootHash, NewDatabase(transDb), nil)
+	finalState, _ := New(types.EmptyRootHash, NewDatabase(finalDb), nil)
 
 	modify := func(state *StateDB, addr common.Address, i, tweak byte) {
 		state.SetBalance(addr, big.NewInt(int64(11*i)+int64(tweak)))
@@ -324,9 +317,9 @@ func newTestAction(addr common.Address, r *rand.Rand) testAction {
 			},
 		},
 		{
-			name: "Suicide",
+			name: "SelfDestruct",
 			fn: func(a testAction, s *StateDB) {
-				s.Suicide(addr)
+				s.SelfDestruct(addr)
 			},
 		},
 		{
@@ -496,7 +489,7 @@ func (test *snapshotTest) checkEqual(state, checkstate *StateDB) error {
 		}
 		// Check basic accessor methods.
 		checkeq("Exist", state.Exist(addr), checkstate.Exist(addr))
-		checkeq("HasSuicided", state.HasSuicided(addr), checkstate.HasSuicided(addr))
+		checkeq("HasSelfdestructed", state.HasSelfDestructed(addr), checkstate.HasSelfDestructed(addr))
 		checkeq("GetBalance", state.GetBalance(addr), checkstate.GetBalance(addr))
 		checkeq("GetNonce", state.GetNonce(addr), checkstate.GetNonce(addr))
 		checkeq("GetCode", state.GetCode(addr), checkstate.GetCode(addr))
@@ -597,7 +590,7 @@ func TestMVHashMapReadWriteDelete(t *testing.T) {
 	assert.Equal(t, balance, b)
 
 	// Tx3 delete
-	states[3].Suicide(addr)
+	states[3].SelfDestruct(addr)
 
 	// Within Tx 3, the state should not change before finalize
 	v = states[3].GetState(addr, key)
@@ -653,7 +646,7 @@ func TestMVHashMapRevert(t *testing.T) {
 	assert.Equal(t, new(big.Int).SetUint64(uint64(200)), b)
 	assert.Equal(t, common.HexToHash("0x02"), v)
 
-	states[1].Suicide(addr)
+	states[1].SelfDestruct(addr)
 
 	states[1].RevertToSnapshot(snapshot)
 
@@ -988,12 +981,12 @@ func TestApplyMVWriteSet(t *testing.T) {
 	assert.Equal(t, sSingleProcess.IntermediateRoot(true), sClean.IntermediateRoot(true))
 
 	// Tx3 write
-	states[3].Suicide(addr2)
+	states[3].SelfDestruct(addr2)
 	states[3].SetCode(addr1, code)
 	states[3].Finalise(true)
 	states[3].FlushMVWriteSet()
 
-	sSingleProcess.Suicide(addr2)
+	sSingleProcess.SelfDestruct(addr2)
 	sSingleProcess.SetCode(addr1, code)
 
 	sClean.ApplyMVWriteSet(states[3].MVWriteList())
@@ -1246,7 +1239,7 @@ func TestDeleteCreateRevert(t *testing.T) {
 	state, _ = New(root, state.db, state.snaps)
 
 	// Simulate self-destructing in one transaction, then create-reverting in another
-	state.Suicide(addr)
+	state.SelfDestruct(addr)
 	state.Finalise(true)
 
 	id := state.Snapshot()
@@ -1539,8 +1532,7 @@ func TestFlushOrderDataLoss(t *testing.T) {
 	// Create a state trie with many accounts and slots
 	var (
 		memdb    = rawdb.NewMemoryDatabase()
-		triedb   = trie.NewDatabase(memdb, nil)
-		statedb  = NewDatabaseWithNodeDB(memdb, triedb)
+		statedb  = NewDatabase(memdb)
 		state, _ = New(types.EmptyRootHash, statedb, nil)
 	)
 
@@ -1619,7 +1611,7 @@ func TestStateDBTransientStorage(t *testing.T) {
 func TestResetObject(t *testing.T) {
 	var (
 		disk     = rawdb.NewMemoryDatabase()
-		tdb      = trie.NewDatabase(disk, nil)
+		tdb      = trie.NewDatabase(disk)
 		db       = NewDatabaseWithNodeDB(disk, tdb)
 		snaps, _ = snapshot.New(snapshot.Config{CacheSize: 10}, disk, tdb, types.EmptyRootHash)
 		state, _ = New(types.EmptyRootHash, db, snaps)

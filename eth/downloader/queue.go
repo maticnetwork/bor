@@ -858,14 +858,11 @@ func (q *queue) DeliverBodies(id string, txLists [][]*types.Transaction, txListH
 		// and zero before the Cancun hardfork
 		var blobs int
 		for _, tx := range txLists[index] {
-			// Count the number of blobs to validate against the header's dataGasUsed
+			// Count the number of blobs to validate against the header's blobGasUsed
 			blobs += len(tx.BlobHashes())
 
 			// Validate the data blobs individually too
 			if tx.Type() == types.BlobTxType {
-				if tx.To() == nil {
-					return errInvalidBody // TODO(karalabe): Why not make the field non-nil-able
-				}
 				if len(tx.BlobHashes()) == 0 {
 					return errInvalidBody
 				}
@@ -876,8 +873,8 @@ func (q *queue) DeliverBodies(id string, txLists [][]*types.Transaction, txListH
 				}
 			}
 		}
-		if header.DataGasUsed != nil {
-			if want := *header.DataGasUsed / params.BlobTxDataGasPerBlob; uint64(blobs) != want { // div because the header is surely good vs the body might be bloated
+		if header.BlobGasUsed != nil {
+			if want := *header.BlobGasUsed / params.BlobTxBlobGasPerBlob; uint64(blobs) != want { // div because the header is surely good vs the body might be bloated
 				return errInvalidBody
 			}
 		} else {

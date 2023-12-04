@@ -107,41 +107,14 @@ func (tx *DynamicFeeTx) copy() TxData {
 }
 
 // accessors for innerTx.
-func (tx *DynamicFeeTx) txType() byte           { return DynamicFeeTxType }
-func (tx *DynamicFeeTx) chainID() *big.Int      { return tx.ChainID }
-func (tx *DynamicFeeTx) accessList() AccessList { return tx.AccessList }
-func (tx *DynamicFeeTx) data() []byte           { return tx.Data }
-func (tx *DynamicFeeTx) gas() uint64            { return tx.Gas }
-func (tx *DynamicFeeTx) gasFeeCap() *big.Int    { return tx.GasFeeCap }
-func (tx *DynamicFeeTx) gasFeeCapU256() *uint256.Int {
-	if tx.gasFeeCapUint256 != nil {
-		return tx.gasFeeCapUint256
-	}
-
-	tx.gasFeeCapUint256, _ = uint256.FromBig(tx.GasFeeCap)
-
-	return tx.gasFeeCapUint256
-}
-func (tx *DynamicFeeTx) gasTipCap() *big.Int { return tx.GasTipCap }
-func (tx *DynamicFeeTx) gasTipCapU256() *uint256.Int {
-	if tx.gasTipCapUint256 != nil {
-		return tx.gasTipCapUint256
-	}
-
-	tx.gasTipCapUint256, _ = uint256.FromBig(tx.GasTipCap)
-
-	return tx.gasTipCapUint256
-}
-func (tx *DynamicFeeTx) gasPrice() *big.Int { return tx.GasFeeCap }
-func (tx *DynamicFeeTx) gasPriceU256() *uint256.Int {
-	if tx.gasFeeCapUint256 != nil {
-		return tx.gasTipCapUint256
-	}
-
-	tx.gasFeeCapUint256, _ = uint256.FromBig(tx.GasFeeCap)
-
-	return tx.gasFeeCapUint256
-}
+func (tx *DynamicFeeTx) txType() byte              { return DynamicFeeTxType }
+func (tx *DynamicFeeTx) chainID() *big.Int         { return tx.ChainID }
+func (tx *DynamicFeeTx) accessList() AccessList    { return tx.AccessList }
+func (tx *DynamicFeeTx) data() []byte              { return tx.Data }
+func (tx *DynamicFeeTx) gas() uint64               { return tx.Gas }
+func (tx *DynamicFeeTx) gasFeeCap() *big.Int       { return tx.GasFeeCap }
+func (tx *DynamicFeeTx) gasTipCap() *big.Int       { return tx.GasTipCap }
+func (tx *DynamicFeeTx) gasPrice() *big.Int        { return tx.GasFeeCap }
 func (tx *DynamicFeeTx) value() *big.Int           { return tx.Value }
 func (tx *DynamicFeeTx) nonce() uint64             { return tx.Nonce }
 func (tx *DynamicFeeTx) to() *common.Address       { return tx.To }

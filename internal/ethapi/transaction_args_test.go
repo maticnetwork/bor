@@ -18,7 +18,7 @@ package ethapi
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"math/big"
 	"reflect"
 	"testing"
@@ -140,28 +140,28 @@ func TestSetFeeDefaults(t *testing.T) {
 			false,
 			&TransactionArgs{MaxFeePerGas: maxFee},
 			nil,
-			fmt.Errorf("maxFeePerGas and maxPriorityFeePerGas are not valid before London is active"),
+			errors.New("maxFeePerGas and maxPriorityFeePerGas are not valid before London is active"),
 		},
 		{
 			"dynamic fee tx pre-London, priorityFee set",
 			false,
 			&TransactionArgs{MaxPriorityFeePerGas: fortytwo},
 			nil,
-			fmt.Errorf("maxFeePerGas and maxPriorityFeePerGas are not valid before London is active"),
+			errors.New("maxFeePerGas and maxPriorityFeePerGas are not valid before London is active"),
 		},
 		{
 			"dynamic fee tx, maxFee < priorityFee",
 			true,
 			&TransactionArgs{MaxFeePerGas: maxFee, MaxPriorityFeePerGas: (*hexutil.Big)(big.NewInt(1000))},
 			nil,
-			fmt.Errorf("maxFeePerGas (0x3e) < maxPriorityFeePerGas (0x3e8)"),
+			errors.New("maxFeePerGas (0x3e) < maxPriorityFeePerGas (0x3e8)"),
 		},
 		{
 			"dynamic fee tx, maxFee < priorityFee while setting default",
 			true,
 			&TransactionArgs{MaxFeePerGas: (*hexutil.Big)(big.NewInt(7))},
 			nil,
-			fmt.Errorf("maxFeePerGas (0x7) < maxPriorityFeePerGas (0x2a)"),
+			errors.New("maxFeePerGas (0x7) < maxPriorityFeePerGas (0x2a)"),
 		},
 
 		// Misc
@@ -170,21 +170,21 @@ func TestSetFeeDefaults(t *testing.T) {
 			false,
 			&TransactionArgs{GasPrice: fortytwo, MaxFeePerGas: maxFee, MaxPriorityFeePerGas: fortytwo},
 			nil,
-			fmt.Errorf("both gasPrice and (maxFeePerGas or maxPriorityFeePerGas) specified"),
+			errors.New("both gasPrice and (maxFeePerGas or maxPriorityFeePerGas) specified"),
 		},
 		{
 			"set gas price and maxPriorityFee",
 			false,
 			&TransactionArgs{GasPrice: fortytwo, MaxPriorityFeePerGas: fortytwo},
 			nil,
-			fmt.Errorf("both gasPrice and (maxFeePerGas or maxPriorityFeePerGas) specified"),
+			errors.New("both gasPrice and (maxFeePerGas or maxPriorityFeePerGas) specified"),
 		},
 		{
 			"set gas price and maxFee",
 			true,
 			&TransactionArgs{GasPrice: fortytwo, MaxFeePerGas: maxFee},
 			nil,
-			fmt.Errorf("both gasPrice and (maxFeePerGas or maxPriorityFeePerGas) specified"),
+			errors.New("both gasPrice and (maxFeePerGas or maxPriorityFeePerGas) specified"),
 		},
 	}
 
@@ -344,10 +344,10 @@ func (b *backendMock) GetPoolNonce(ctx context.Context, addr common.Address) (ui
 	return 0, nil
 }
 func (b *backendMock) Stats() (pending int, queued int) { return 0, 0 }
-func (b *backendMock) TxPoolContent() (map[common.Address]types.Transactions, map[common.Address]types.Transactions) {
+func (b *backendMock) TxPoolContent() (map[common.Address][]*types.Transaction, map[common.Address][]*types.Transaction) {
 	return nil, nil
 }
-func (b *backendMock) TxPoolContentFrom(addr common.Address) (types.Transactions, types.Transactions) {
+func (b *backendMock) TxPoolContentFrom(addr common.Address) ([]*types.Transaction, []*types.Transaction) {
 	return nil, nil
 }
 func (b *backendMock) SubscribeNewTxsEvent(chan<- core.NewTxsEvent) event.Subscription      { return nil }
@@ -364,51 +364,51 @@ func (b *backendMock) SubscribeRemovedLogsEvent(ch chan<- core.RemovedLogsEvent)
 func (b *backendMock) Engine() consensus.Engine { return nil }
 
 func (b *backendMock) RPCRpcReturnDataLimit() uint64 {
-	//nolint: staticcheck
-	return b.RPCRpcReturnDataLimit()
+	return 0
 }
 
 func (b *backendMock) SubscribeStateSyncEvent(ch chan<- core.StateSyncEvent) event.Subscription {
-	//nolint: staticcheck
-	return b.SubscribeStateSyncEvent(ch)
+	return nil
 }
 
 func (b *backendMock) GetRootHash(ctx context.Context, starBlockNr uint64, endBlockNr uint64) (string, error) {
-	//nolint: staticcheck
-	return b.GetRootHash(ctx, starBlockNr, endBlockNr)
+	return "", nil
+}
+
+func (b *backendMock) GetVoteOnHash(ctx context.Context, starBlockNr uint64, endBlockNr uint64, hash string, milestoneId string) (bool, error) {
+	return false, nil
 }
 
 func (b *backendMock) GetBorBlockReceipt(ctx context.Context, hash common.Hash) (*types.Receipt, error) {
-	//nolint: staticcheck
-	return b.GetBorBlockReceipt(ctx, hash)
+	//nolint: nilnil
+	return nil, nil
 }
 
 func (b *backendMock) GetBorBlockLogs(ctx context.Context, hash common.Hash) ([]*types.Log, error) {
-	//nolint: staticcheck
-	return b.GetBorBlockLogs(ctx, hash)
+	// nolint: nilnil
+	return nil, nil
 }
 
 func (b *backendMock) GetBorBlockTransaction(ctx context.Context, txHash common.Hash) (*types.Transaction, common.Hash, uint64, uint64, error) {
-	//nolint: staticcheck
-	return b.GetBorBlockTransaction(ctx, txHash)
+	return nil, common.Hash{}, 0, 0, nil
 }
 
 func (b *backendMock) GetBorBlockTransactionWithBlockHash(ctx context.Context, txHash common.Hash, blockHash common.Hash) (*types.Transaction, common.Hash, uint64, uint64, error) {
-	//nolint: staticcheck
-	return b.GetBorBlockTransactionWithBlockHash(ctx, txHash, blockHash)
+	return nil, common.Hash{}, 0, 0, nil
 }
 
 func (b *backendMock) SubscribeChain2HeadEvent(ch chan<- core.Chain2HeadEvent) event.Subscription {
-	//nolint: staticcheck
-	return b.SubscribeChain2HeadEvent(ch)
+	return nil
 }
 
-func (b *backendMock) GetCheckpointWhitelist() map[uint64]common.Hash {
-	//nolint: staticcheck
-	return b.GetCheckpointWhitelist()
+func (b *backendMock) GetWhitelistedCheckpoint() (bool, uint64, common.Hash) {
+	return false, 0, common.Hash{}
 }
 
-func (b *backendMock) PurgeCheckpointWhitelist() {
-	//nolint: staticcheck
-	b.PurgeCheckpointWhitelist()
+func (b *backendMock) GetWhitelistedMilestone() (bool, uint64, common.Hash) {
+	return false, 0, common.Hash{}
 }
+
+func (b *backendMock) PurgeWhitelistedCheckpoint() {}
+
+func (b *backendMock) PurgeWhitelistedMilestone() {}

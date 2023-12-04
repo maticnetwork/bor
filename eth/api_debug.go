@@ -62,13 +62,14 @@ func (api *DebugAPI) DumpBlock(blockNr rpc.BlockNumber) (state.Dump, error) {
 		return stateDb.RawDump(opts), nil
 	}
 	var header *types.Header
-	if blockNr == rpc.LatestBlockNumber {
+	switch blockNr {
+	case rpc.LatestBlockNumber:
 		header = api.eth.blockchain.CurrentBlock()
-	} else if blockNr == rpc.FinalizedBlockNumber {
+	case rpc.FinalizedBlockNumber:
 		header = api.eth.blockchain.CurrentFinalBlock()
-	} else if blockNr == rpc.SafeBlockNumber {
+	case rpc.SafeBlockNumber:
 		header = api.eth.blockchain.CurrentSafeBlock()
-	} else {
+	default:
 		block := api.eth.blockchain.GetBlockByNumber(uint64(blockNr))
 		if block == nil {
 			return state.Dump{}, fmt.Errorf("block #%d not found", blockNr)
@@ -104,7 +105,6 @@ type BadBlockArgs struct {
 // and returns them as a JSON list of block hashes.
 func (api *DebugAPI) GetBadBlocks(ctx context.Context) ([]*BadBlockArgs, error) {
 	var (
-		err     error
 		blocks  = rawdb.ReadAllBadBlocks(api.eth.chainDb)
 		results = make([]*BadBlockArgs, 0, len(blocks))
 	)
@@ -118,9 +118,7 @@ func (api *DebugAPI) GetBadBlocks(ctx context.Context) ([]*BadBlockArgs, error) 
 		} else {
 			blockRlp = fmt.Sprintf("%#x", rlpBytes)
 		}
-		if blockJSON, err = ethapi.RPCMarshalBlock(block, true, true, api.eth.APIBackend.ChainConfig(), api.eth.chainDb); err != nil {
-			blockJSON = map[string]interface{}{"error": err.Error()}
-		}
+		blockJSON = ethapi.RPCMarshalBlock(block, true, true, api.eth.APIBackend.ChainConfig(), api.eth.chainDb)
 		results = append(results, &BadBlockArgs{
 			Hash:  block.Hash(),
 			RLP:   blockRlp,
@@ -149,13 +147,14 @@ func (api *DebugAPI) AccountRange(blockNrOrHash rpc.BlockNumberOrHash, start hex
 			}
 		} else {
 			var header *types.Header
-			if number == rpc.LatestBlockNumber {
+			switch number {
+			case rpc.LatestBlockNumber:
 				header = api.eth.blockchain.CurrentBlock()
-			} else if number == rpc.FinalizedBlockNumber {
+			case rpc.FinalizedBlockNumber:
 				header = api.eth.blockchain.CurrentFinalBlock()
-			} else if number == rpc.SafeBlockNumber {
+			case rpc.SafeBlockNumber:
 				header = api.eth.blockchain.CurrentSafeBlock()
-			} else {
+			default:
 				block := api.eth.blockchain.GetBlockByNumber(uint64(number))
 				if block == nil {
 					return state.IteratorDump{}, fmt.Errorf("block #%d not found", number)
@@ -210,11 +209,16 @@ type storageEntry struct {
 }
 
 // StorageRangeAt returns the storage at the given block height and transaction index.
-func (api *DebugAPI) StorageRangeAt(ctx context.Context, blockHash common.Hash, txIndex int, contractAddress common.Address, keyStart hexutil.Bytes, maxResult int) (StorageRangeResult, error) {
-	// Retrieve the block
-	block := api.eth.blockchain.GetBlockByHash(blockHash)
+func (api *DebugAPI) StorageRangeAt(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash, txIndex int, contractAddress common.Address, keyStart hexutil.Bytes, maxResult int) (StorageRangeResult, error) {
+	var block *types.Block
+
+	block, err := api.eth.APIBackend.BlockByNumberOrHash(ctx, blockNrOrHash)
+	if err != nil {
+		return StorageRangeResult{}, err
+	}
+
 	if block == nil {
-		return StorageRangeResult{}, fmt.Errorf("block %#x not found", blockHash)
+		return StorageRangeResult{}, fmt.Errorf("block %v not found", blockNrOrHash)
 	}
 	_, _, statedb, release, err := api.eth.stateAtTransaction(ctx, block, txIndex, 0)
 	if err != nil {
@@ -318,7 +322,7 @@ func (api *DebugAPI) getModifiedAccounts(startBlock, endBlock *types.Block) ([]c
 	if startBlock.Number().Uint64() >= endBlock.Number().Uint64() {
 		return nil, fmt.Errorf("start block height (%d) must be less than end block height (%d)", startBlock.Number().Uint64(), endBlock.Number().Uint64())
 	}
-	triedb := api.eth.BlockChain().TrieDB()
+	triedb := api.eth.BlockChain().StateCache().TrieDB()
 
 	oldTrie, err := trie.NewStateTrie(trie.StateTrieID(startBlock.Root()), triedb)
 	if err != nil {
@@ -413,6 +417,8 @@ func (api *DebugAPI) GetAccessibleState(from, to rpc.BlockNumber) (uint64, error
 
 // SetTrieFlushInterval configures how often in-memory tries are persisted
 // to disk. The value is in terms of block processing time, not wall clock.
+// If the value is shorter than the block generation time, or even 0 or negative,
+// the node will flush trie after processing each block (effectively archive mode).
 func (api *DebugAPI) SetTrieFlushInterval(interval string) error {
 	t, err := time.ParseDuration(interval)
 	if err != nil {
@@ -420,4 +426,9 @@ func (api *DebugAPI) SetTrieFlushInterval(interval string) error {
 	}
 	api.eth.blockchain.SetTrieFlushInterval(t)
 	return nil
+}
+
+// GetTrieFlushInterval gets the current value of in-memory trie flush interval
+func (api *DebugAPI) GetTrieFlushInterval() string {
+	return api.eth.blockchain.GetTrieFlushInterval().String()
 }

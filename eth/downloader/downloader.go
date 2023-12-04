@@ -213,12 +213,15 @@ type BlockChain interface {
 	// Snapshots returns the blockchain snapshot tree to paused it during sync.
 	Snapshots() *snapshot.Tree
 
+	GetChainConfig() *params.ChainConfig
+
 	// TrieDB retrieves the low level trie database used for interacting
 	// with trie nodes.
 	TrieDB() *trie.Database
 }
 
 // New creates a new downloader to fetch hashes and blocks from remote peers.
+// nolint: staticcheck
 func New(stateDb ethdb.Database, mux *event.TypeMux, chain BlockChain, lightchain LightChain, dropPeer peerDropFn, success func(), whitelistService ethereum.ChainValidator) *Downloader {
 	if lightchain == nil {
 		lightchain = chain
@@ -362,8 +365,7 @@ func (d *Downloader) LegacySync(id string, head common.Hash, td, ttd *big.Int, m
 
 	if errors.Is(err, errInvalidChain) || errors.Is(err, errBadPeer) || errors.Is(err, errTimeout) ||
 		errors.Is(err, errStallingPeer) || errors.Is(err, errUnsyncedPeer) || errors.Is(err, errEmptyHeaderSet) ||
-		errors.Is(err, errPeersUnavailable) || errors.Is(err, errTooOld) || errors.Is(err, errInvalidAncestor) ||
-		errors.Is(err, whitelist.ErrCheckpointMismatch) {
+		errors.Is(err, errPeersUnavailable) || errors.Is(err, errTooOld) || errors.Is(err, errInvalidAncestor) {
 		log.Warn("Synchronisation failed, dropping peer", "peer", id, "err", err)
 
 		if d.dropPeer == nil {
@@ -381,7 +383,13 @@ func (d *Downloader) LegacySync(id string, head common.Hash, td, ttd *big.Int, m
 		return err // This is an expected fault, don't keep printing it in a spin-loop
 	}
 
-	log.Warn("Synchronisation failed, retrying", "err", err)
+	// Warn in case of any error thrown by whitelisting module
+	if errors.Is(err, whitelist.ErrNoRemote) || errors.Is(err, whitelist.ErrMismatch) {
+		log.Warn("Synchronisation failed due to whitelist validation", "peer", id, "err", err)
+		return err
+	}
+
+	log.Warn("Synchronisation failed, retrying", "peer", id, "err", err)
 
 	return err
 }
@@ -709,9 +717,11 @@ func (d *Downloader) spawnSync(fetchers []func() error) error {
 			// it has processed the queue.
 			d.queue.Close()
 		}
-
-		if err = <-errc; err != nil && err != errCanceled {
-			break
+		if got := <-errc; got != nil {
+			err = got
+			if got != errCanceled {
+				break // receive a meaningful error, bubble it up
+			}
 		}
 	}
 	d.queue.Close()
@@ -886,7 +896,7 @@ func (d *Downloader) getFetchHeadersByNumber(p *peerConnection) func(number uint
 func (d *Downloader) findAncestor(p *peerConnection, remoteHeader *types.Header) (uint64, error) {
 	// Check the validity of peer from which the chain is to be downloaded
 	if d.ChainValidator != nil {
-		if _, err := d.IsValidPeer(remoteHeader, d.getFetchHeadersByNumber(p)); err != nil {
+		if _, err := d.IsValidPeer(d.getFetchHeadersByNumber(p)); err != nil {
 			return 0, err
 		}
 	}
@@ -1963,6 +1973,11 @@ func (d *Downloader) DeliverSnapPacket(peer *snap.Peer, packet snap.Packet) erro
 	default:
 		return fmt.Errorf("unexpected snap packet type: %T", packet)
 	}
+}
+
+// GetWhitelistService returns the pointer to the whitelist service
+func (d *Downloader) GetWhitelistService() ethereum.ChainValidator {
+	return d.ChainValidator
 }
 
 // readHeaderRange returns a list of headers, using the given last header as the base,

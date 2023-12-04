@@ -32,12 +32,14 @@ import (
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/beacon"
 	"github.com/ethereum/go-ethereum/consensus/bor"
+	"github.com/ethereum/go-ethereum/consensus/bor/heimdall"
 	"github.com/ethereum/go-ethereum/consensus/clique"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/bloombits"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state/pruner"
 	"github.com/ethereum/go-ethereum/core/txpool"
+	"github.com/ethereum/go-ethereum/core/txpool/legacypool"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/eth/downloader"
@@ -72,7 +74,8 @@ type Ethereum struct {
 	config *ethconfig.Config
 
 	// Handlers
-	txPool             *txpool.TxPool
+	txPool *txpool.TxPool
+
 	blockchain         *core.BlockChain
 	handler            *handler
 	ethDialCandidates  enode.Iterator
@@ -114,18 +117,15 @@ type Ethereum struct {
 func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	// Ensure configuration values are compatible and sane
 	if config.SyncMode == downloader.LightSync {
-		return nil, errors.New("can't run ethereum.Ethereum in light sync mode, use les.LightEthereum")
+		return nil, errors.New("can't run eth.Ethereum in light sync mode, use les.LightEthereum")
 	}
-
 	if !config.SyncMode.IsValid() {
 		return nil, fmt.Errorf("invalid sync mode %d", config.SyncMode)
 	}
-
 	if config.Miner.GasPrice == nil || config.Miner.GasPrice.Cmp(common.Big0) <= 0 {
 		log.Warn("Sanitizing invalid miner gas price", "provided", config.Miner.GasPrice, "updated", ethconfig.Defaults.Miner.GasPrice)
 		config.Miner.GasPrice = new(big.Int).Set(ethconfig.Defaults.Miner.GasPrice)
 	}
-
 	if config.NoPruning && config.TrieDirtyCache > 0 {
 		if config.SnapshotCache > 0 {
 			config.TrieCleanCache += config.TrieDirtyCache * 3 / 5
@@ -133,38 +133,22 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		} else {
 			config.TrieCleanCache += config.TrieDirtyCache
 		}
-
 		config.TrieDirtyCache = 0
 	}
-
 	log.Info("Allocated trie memory caches", "clean", common.StorageSize(config.TrieCleanCache)*1024*1024, "dirty", common.StorageSize(config.TrieDirtyCache)*1024*1024)
 
+	extraDBConfig := resolveExtraDBConfig(config)
 	// Assemble the Ethereum object
-	chainDb, err := stack.OpenDatabaseWithFreezer("chaindata", config.DatabaseCache, config.DatabaseHandles, config.DatabaseFreezer, "ethereum/db/chaindata/", false)
+	chainDb, err := stack.OpenDatabaseWithFreezer("chaindata", config.DatabaseCache, config.DatabaseHandles, config.DatabaseFreezer, "ethereum/db/chaindata/", false, extraDBConfig)
 	if err != nil {
 		return nil, err
 	}
-	// Try to recover offline state pruning only in hash-based.
-	if config.StateScheme == rawdb.HashScheme {
-		if err := pruner.RecoverPruning(stack.ResolvePath(""), chainDb); err != nil {
-			log.Error("Failed to recover state", "error", err)
-		}
-	}
-
-	// Transfer mining-related config to the ethash config.
-	chainConfig, err := core.LoadChainConfig(chainDb, config.Genesis)
-	if err != nil {
-		return nil, err
-	}
-
-	cliqueConfig, err := core.LoadCliqueConfig(chainDb, config.Genesis)
-
-	if err != nil {
-		return nil, err
+	if err := pruner.RecoverPruning(stack.ResolvePath(""), chainDb); err != nil {
+		log.Error("Failed to recover state", "error", err)
 	}
 
 	// START: Bor changes
-	ethereum := &Ethereum{
+	eth := &Ethereum{
 		config:            config,
 		merger:            consensus.NewMerger(chainDb),
 		chainDb:           chainDb,
@@ -178,12 +162,12 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		bloomRequests:     make(chan chan *bloombits.Retrieval),
 		bloomIndexer:      core.NewBloomIndexer(chainDb, params.BloomBitsBlocks, params.BloomConfirms),
 		p2pServer:         stack.Server(),
-		closeCh:           make(chan struct{}),
 		shutdownTracker:   shutdowncheck.NewShutdownTracker(chainDb),
+		closeCh:           make(chan struct{}),
 	}
 
-	ethereum.APIBackend = &EthAPIBackend{stack.Config().ExtRPCEnabled(), stack.Config().AllowUnprotectedTxs, ethereum, nil}
-	if ethereum.APIBackend.allowUnprotectedTxs {
+	eth.APIBackend = &EthAPIBackend{stack.Config().ExtRPCEnabled(), stack.Config().AllowUnprotectedTxs, eth, nil}
+	if eth.APIBackend.allowUnprotectedTxs {
 		log.Debug(" ###########", "Unprotected transactions allowed")
 
 		config.TxPool.AllowUnprotectedTxs = true
@@ -219,6 +203,9 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	if config.OverrideCancun != nil {
 		overrides.OverrideCancun = config.OverrideCancun
 	}
+	if config.OverrideVerkle != nil {
+		overrides.OverrideVerkle = config.OverrideVerkle
+	}
 
 	triedb := trie.NewDatabase(chainDb, cacheConfig.TriedbConfig())
 
@@ -230,18 +217,19 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		return nil, genesisErr
 	}
 
-	blockChainAPI := ethapi.NewBlockChainAPI(ethereum.APIBackend)
-	engine := ethconfig.CreateConsensusEngine(chainConfig, config, cliqueConfig, chainDb, blockChainAPI)
-	ethereum.engine = engine
+	blockChainAPI := ethapi.NewBlockChainAPI(eth.APIBackend)
+	engine, err := ethconfig.CreateConsensusEngine(chainConfig, config, chainDb, blockChainAPI)
+	eth.engine = engine
+	if err != nil {
+		return nil, err
+	}
 	// END: Bor changes
 
 	bcVersion := rawdb.ReadDatabaseVersion(chainDb)
-
 	var dbVer = "<nil>"
 	if bcVersion != nil {
 		dbVer = fmt.Sprintf("%d", *bcVersion)
 	}
-
 	log.Info("Initialising Ethereum protocol", "network", config.NetworkId, "dbversion", dbVer)
 
 	if !config.SkipBcVersionCheck {
@@ -251,92 +239,114 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 			if bcVersion != nil { // only print warning on upgrade, not on init
 				log.Warn("Upgrade blockchain database version", "from", dbVer, "to", core.BlockChainVersion)
 			}
-
 			rawdb.WriteDatabaseVersion(chainDb, core.BlockChainVersion)
 		}
 	}
+	var (
+		vmConfig = vm.Config{
+			EnablePreimageRecording: config.EnablePreimageRecording,
+		}
+		cacheConfig = &core.CacheConfig{
+			TrieCleanLimit:      config.TrieCleanCache,
+			TrieCleanNoPrefetch: config.NoPrefetch,
+			TrieDirtyLimit:      config.TrieDirtyCache,
+			TrieDirtyDisabled:   config.NoPruning,
+			TrieTimeLimit:       config.TrieTimeout,
+			SnapshotLimit:       config.SnapshotCache,
+			Preimages:           config.Preimages,
+		}
+	)
 
-	checker := whitelist.NewService(10)
+	checker := whitelist.NewService(chainDb)
 
 	// check if Parallel EVM is enabled
 	// if enabled, use parallel state processor
 	if config.ParallelEVM.Enable {
-		ethereum.blockchain, err = core.NewParallelBlockChain(chainDb, cacheConfig, config.Genesis, &overrides, ethereum.engine, vmConfig, ethereum.shouldPreserve, &config.TxLookupLimit, checker)
+		eth.blockchain, err = core.NewParallelBlockChain(chainDb, cacheConfig, config.Genesis, &overrides, eth.engine, vmConfig, eth.shouldPreserve, &config.TxLookupLimit, checker)
 	} else {
-		ethereum.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, config.Genesis, &overrides, ethereum.engine, vmConfig, ethereum.shouldPreserve, &config.TxLookupLimit, checker)
+		eth.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, config.Genesis, &overrides, eth.engine, vmConfig, eth.shouldPreserve, &config.TxLookupLimit, checker)
 	}
 
-	ethereum.APIBackend.gpo = gasprice.NewOracle(ethereum.APIBackend, gpoParams)
-
-	if config.OverrideVerkle != nil {
-		overrides.OverrideVerkle = config.OverrideVerkle
-	}
-	// ethereum.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, config.Genesis, &overrides, ethereum.engine, vmConfig, ethereum.shouldPreserve, &config.TxLookupLimit, checker)
+	eth.APIBackend.gpo = gasprice.NewOracle(eth.APIBackend, gpoParams)
 	if err != nil {
 		return nil, err
 	}
 
-	_ = ethereum.engine.VerifyHeader(ethereum.blockchain, ethereum.blockchain.CurrentHeader()) // TODO think on it
+	_ = eth.engine.VerifyHeader(eth.blockchain, eth.blockchain.CurrentHeader()) // TODO think on it
 
 	// BOR changes
-	ethereum.APIBackend.gpo.ProcessCache()
+	eth.APIBackend.gpo.ProcessCache()
 	// BOR changes
 
-	ethereum.bloomIndexer.Start(ethereum.blockchain)
+	eth.bloomIndexer.Start(eth.blockchain)
+
+	if config.BlobPool.Datadir != "" {
+		config.BlobPool.Datadir = stack.ResolvePath(config.BlobPool.Datadir)
+	}
 
 	if config.TxPool.Journal != "" {
 		config.TxPool.Journal = stack.ResolvePath(config.TxPool.Journal)
 	}
+	legacyPool := legacypool.New(config.TxPool, eth.blockchain)
 
-	ethereum.txPool = txpool.NewTxPool(config.TxPool, ethereum.blockchain.Config(), ethereum.blockchain)
-
+	eth.txPool, err = txpool.New(new(big.Int).SetUint64(config.TxPool.PriceLimit), eth.blockchain, []txpool.SubPool{legacyPool})
+	if err != nil {
+		return nil, err
+	}
 	// Permit the downloader to use the trie cache allowance during fast sync
 	cacheLimit := cacheConfig.TrieCleanLimit + cacheConfig.TrieDirtyLimit + cacheConfig.SnapshotLimit
-	if ethereum.handler, err = newHandler(&handlerConfig{
+	if eth.handler, err = newHandler(&handlerConfig{
 		Database:       chainDb,
-		Chain:          ethereum.blockchain,
-		TxPool:         ethereum.txPool,
-		Merger:         ethereum.merger,
+		Chain:          eth.blockchain,
+		TxPool:         eth.txPool,
+		Merger:         eth.merger,
 		Network:        config.NetworkId,
 		Sync:           config.SyncMode,
 		BloomCache:     uint64(cacheLimit),
-		EventMux:       ethereum.eventMux,
+		EventMux:       eth.eventMux,
 		RequiredBlocks: config.RequiredBlocks,
 		EthAPI:         blockChainAPI,
 		checker:        checker,
-		txArrivalWait:  ethereum.p2pServer.TxArrivalWait,
+		txArrivalWait:  eth.p2pServer.TxArrivalWait,
 	}); err != nil {
 		return nil, err
 	}
 
-	ethereum.miner = miner.New(ethereum, &config.Miner, ethereum.blockchain.Config(), ethereum.EventMux(), ethereum.engine, ethereum.isLocalBlock)
-	_ = ethereum.miner.SetExtra(makeExtraData(config.Miner.ExtraData))
+	eth.miner = miner.New(eth, &config.Miner, eth.blockchain.Config(), eth.EventMux(), eth.engine, eth.isLocalBlock)
+	eth.miner.SetExtra(makeExtraData(config.Miner.ExtraData))
 
 	// Setup DNS discovery iterators.
 	dnsclient := dnsdisc.NewClient(dnsdisc.Config{})
-
-	ethereum.ethDialCandidates, err = dnsclient.NewIterator(ethereum.config.EthDiscoveryURLs...)
+	eth.ethDialCandidates, err = dnsclient.NewIterator(eth.config.EthDiscoveryURLs...)
 	if err != nil {
 		return nil, err
 	}
-
-	ethereum.snapDialCandidates, err = dnsclient.NewIterator(ethereum.config.SnapDiscoveryURLs...)
+	eth.snapDialCandidates, err = dnsclient.NewIterator(eth.config.SnapDiscoveryURLs...)
 	if err != nil {
 		return nil, err
 	}
 
 	// Start the RPC service
-	ethereum.netRPCService = ethapi.NewNetAPI(ethereum.p2pServer, config.NetworkId)
+	eth.netRPCService = ethapi.NewNetAPI(eth.p2pServer, config.NetworkId)
 
 	// Register the backend on the node
-	stack.RegisterAPIs(ethereum.APIs())
-	stack.RegisterProtocols(ethereum.Protocols())
-	stack.RegisterLifecycle(ethereum)
+	stack.RegisterAPIs(eth.APIs())
+	stack.RegisterProtocols(eth.Protocols())
+	stack.RegisterLifecycle(eth)
 
 	// Successful startup; push a marker and check previous unclean shutdowns.
-	ethereum.shutdownTracker.MarkStartup()
+	eth.shutdownTracker.MarkStartup()
 
-	return ethereum, nil
+	return eth, nil
+}
+
+func resolveExtraDBConfig(config *ethconfig.Config) rawdb.ExtraDBConfig {
+	return rawdb.ExtraDBConfig{
+		LevelDBCompactionTableSize:           config.LevelDbCompactionTableSize,
+		LevelDBCompactionTableSizeMultiplier: config.LevelDbCompactionTableSizeMultiplier,
+		LevelDBCompactionTotalSize:           config.LevelDbCompactionTotalSize,
+		LevelDBCompactionTotalSizeMultiplier: config.LevelDbCompactionTotalSizeMultiplier,
+	}
 }
 
 func makeExtraData(extra []byte) []byte {
@@ -356,6 +366,11 @@ func makeExtraData(extra []byte) []byte {
 	}
 
 	return extra
+}
+
+// PeerCount returns the number of connected peers.
+func (s *Ethereum) PeerCount() int {
+	return s.p2pServer.PeerCount()
 }
 
 // APIs return the collection of RPC services the ethereum package offers.
@@ -487,15 +502,13 @@ func (s *Ethereum) SetEtherbase(etherbase common.Address) {
 // is already running, this method adjust the number of threads allowed to use
 // and updates the minimum price required by the transaction pool.
 func (s *Ethereum) StartMining() error {
-	// Update the thread count within the consensus engine
-
 	// If the miner was not running, initialize it
 	if !s.IsMining() {
 		// Propagate the initial price point to the transaction pool
 		s.lock.RLock()
 		price := s.gasPrice
 		s.lock.RUnlock()
-		s.txPool.SetGasPrice(price)
+		s.txPool.SetGasTip(price)
 
 		// Configure the local mining address
 		eb, err := s.Etherbase()
@@ -559,18 +572,21 @@ func (s *Ethereum) StopMining() {
 		th.SetThreads(-1)
 	}
 	// Stop the block creating itself
-	s.miner.Stop()
+	ch := make(chan struct{})
+	s.miner.Stop(ch)
 }
 
 func (s *Ethereum) IsMining() bool      { return s.miner.Mining() }
 func (s *Ethereum) Miner() *miner.Miner { return s.miner }
 
-func (s *Ethereum) AccountManager() *accounts.Manager  { return s.accountManager }
-func (s *Ethereum) BlockChain() *core.BlockChain       { return s.blockchain }
-func (s *Ethereum) TxPool() *txpool.TxPool             { return s.txPool }
-func (s *Ethereum) EventMux() *event.TypeMux           { return s.eventMux }
-func (s *Ethereum) Engine() consensus.Engine           { return s.engine }
-func (s *Ethereum) ChainDb() ethdb.Database            { return s.chainDb }
+func (s *Ethereum) AccountManager() *accounts.Manager { return s.accountManager }
+func (s *Ethereum) BlockChain() *core.BlockChain      { return s.blockchain }
+func (s *Ethereum) TxPool() *txpool.TxPool            { return s.txPool }
+func (s *Ethereum) EventMux() *event.TypeMux          { return s.eventMux }
+func (s *Ethereum) Engine() consensus.Engine          { return s.engine }
+func (s *Ethereum) ChainDb() ethdb.Database {
+	return s.chainDb
+}
 func (s *Ethereum) IsListening() bool                  { return true } // Always listening
 func (s *Ethereum) Downloader() *downloader.Downloader { return s.handler.downloader }
 func (s *Ethereum) Synced() bool                       { return s.handler.acceptTxs.Load() }
@@ -628,6 +644,9 @@ func (s *Ethereum) Start() error {
 	s.handler.Start(maxPeers)
 
 	go s.startCheckpointWhitelistService()
+	go s.startMilestoneWhitelistService()
+	go s.startNoAckMilestoneService()
+	go s.startNoAckMilestoneByIDService()
 
 	return nil
 }
@@ -635,83 +654,190 @@ func (s *Ethereum) Start() error {
 var (
 	ErrNotBorConsensus             = errors.New("not bor consensus was given")
 	ErrBorConsensusWithoutHeimdall = errors.New("bor consensus without heimdall")
+)
 
-	whitelistTimeout = 30 * time.Second
+const (
+	whitelistTimeout      = 30 * time.Second
+	noAckMilestoneTimeout = 4 * time.Second
 )
 
 // StartCheckpointWhitelistService starts the goroutine to fetch checkpoints and update the
 // checkpoint whitelist map.
 func (s *Ethereum) startCheckpointWhitelistService() {
+	const (
+		tickerDuration = 100 * time.Second
+		fnName         = "whitelist checkpoint"
+	)
+
+	s.retryHeimdallHandler(s.handleWhitelistCheckpoint, tickerDuration, whitelistTimeout, fnName)
+}
+
+// startMilestoneWhitelistService starts the goroutine to fetch milestiones and update the
+// milestone whitelist map.
+func (s *Ethereum) startMilestoneWhitelistService() {
+	const (
+		tickerDuration = 12 * time.Second
+		fnName         = "whitelist milestone"
+	)
+
+	s.retryHeimdallHandler(s.handleMilestone, tickerDuration, whitelistTimeout, fnName)
+}
+
+func (s *Ethereum) startNoAckMilestoneService() {
+	const (
+		tickerDuration = 6 * time.Second
+		fnName         = "no-ack-milestone service"
+	)
+
+	s.retryHeimdallHandler(s.handleNoAckMilestone, tickerDuration, noAckMilestoneTimeout, fnName)
+}
+
+func (s *Ethereum) startNoAckMilestoneByIDService() {
+	const (
+		tickerDuration = 1 * time.Minute
+		fnName         = "no-ack-milestone-by-id service"
+	)
+
+	s.retryHeimdallHandler(s.handleNoAckMilestoneByID, tickerDuration, noAckMilestoneTimeout, fnName)
+}
+
+func (s *Ethereum) retryHeimdallHandler(fn heimdallHandler, tickerDuration time.Duration, timeout time.Duration, fnName string) {
+	retryHeimdallHandler(fn, tickerDuration, timeout, fnName, s.closeCh, s.getHandler)
+}
+
+func retryHeimdallHandler(fn heimdallHandler, tickerDuration time.Duration, timeout time.Duration, fnName string, closeCh chan struct{}, getHandler func() (*ethHandler, *bor.Bor, error)) {
 	// a shortcut helps with tests and early exit
 	select {
-	case <-s.closeCh:
+	case <-closeCh:
 		return
 	default:
 	}
 
-	// first run the checkpoint whitelist
-	firstCtx, cancel := context.WithTimeout(context.Background(), whitelistTimeout)
-	err := s.handleWhitelistCheckpoint(firstCtx, true)
+	ethHandler, bor, err := getHandler()
+	if err != nil {
+		log.Error("error while getting the ethHandler", "err", err)
+		return
+	}
+
+	// first run for fetching milestones
+	firstCtx, cancel := context.WithTimeout(context.Background(), timeout)
+	err = fn(firstCtx, ethHandler, bor)
 
 	cancel()
 
 	if err != nil {
-		if errors.Is(err, ErrBorConsensusWithoutHeimdall) || errors.Is(err, ErrNotBorConsensus) {
-			return
-		}
-
-		log.Warn("unable to whitelist checkpoint - first run", "err", err)
+		log.Warn(fmt.Sprintf("unable to start the %s service - first run", fnName), "err", err)
 	}
 
-	ticker := time.NewTicker(100 * time.Second)
+	ticker := time.NewTicker(tickerDuration)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ticker.C:
-			ctx, cancel := context.WithTimeout(context.Background(), whitelistTimeout)
-			err := s.handleWhitelistCheckpoint(ctx, false)
+			ctx, cancel := context.WithTimeout(context.Background(), timeout)
+			err := fn(ctx, ethHandler, bor)
 
 			cancel()
 
 			if err != nil {
-				log.Warn("unable to whitelist checkpoint", "err", err)
+				log.Warn(fmt.Sprintf("unable to handle %s", fnName), "err", err)
 			}
-		case <-s.closeCh:
+		case <-closeCh:
 			return
 		}
 	}
 }
 
 // handleWhitelistCheckpoint handles the checkpoint whitelist mechanism.
-func (s *Ethereum) handleWhitelistCheckpoint(ctx context.Context, first bool) error {
+func (s *Ethereum) handleWhitelistCheckpoint(ctx context.Context, ethHandler *ethHandler, bor *bor.Bor) error {
+	// Create a new bor verifier, which will be used to verify checkpoints and milestones
+	verifier := newBorVerifier()
+
+	blockNum, blockHash, err := ethHandler.fetchWhitelistCheckpoint(ctx, bor, s, verifier)
+	// If the array is empty, we're bound to receive an error. Non-nill error and non-empty array
+	// means that array has partial elements and it failed for some block. We'll add those partial
+	// elements anyway.
+	if err != nil {
+		return err
+	}
+
+	ethHandler.downloader.ProcessCheckpoint(blockNum, blockHash)
+
+	return nil
+}
+
+type heimdallHandler func(ctx context.Context, ethHandler *ethHandler, bor *bor.Bor) error
+
+// handleMilestone handles the milestone mechanism.
+func (s *Ethereum) handleMilestone(ctx context.Context, ethHandler *ethHandler, bor *bor.Bor) error {
+	// Create a new bor verifier, which will be used to verify checkpoints and milestones
+	verifier := newBorVerifier()
+	num, hash, err := ethHandler.fetchWhitelistMilestone(ctx, bor, s, verifier)
+
+	// If the current chain head is behind the received milestone, add it to the future milestone
+	// list. Also, the hash mismatch (end block hash) error will lead to rewind so also
+	// add that milestone to the future milestone list.
+	if errors.Is(err, errMissingBlocks) || errors.Is(err, errHashMismatch) {
+		ethHandler.downloader.ProcessFutureMilestone(num, hash)
+	}
+
+	if errors.Is(err, heimdall.ErrServiceUnavailable) {
+		return nil
+	}
+
+	if err != nil {
+		return err
+	}
+
+	ethHandler.downloader.ProcessMilestone(num, hash)
+
+	return nil
+}
+
+func (s *Ethereum) handleNoAckMilestone(ctx context.Context, ethHandler *ethHandler, bor *bor.Bor) error {
+	milestoneID, err := ethHandler.fetchNoAckMilestone(ctx, bor)
+
+	if errors.Is(err, heimdall.ErrServiceUnavailable) {
+		return nil
+	}
+
+	if err != nil {
+		return err
+	}
+
+	ethHandler.downloader.RemoveMilestoneID(milestoneID)
+
+	return nil
+}
+
+func (s *Ethereum) handleNoAckMilestoneByID(ctx context.Context, ethHandler *ethHandler, bor *bor.Bor) error {
+	milestoneIDs := ethHandler.downloader.GetMilestoneIDsList()
+
+	for _, milestoneID := range milestoneIDs {
+		// todo: check if we can ignore the error
+		err := ethHandler.fetchNoAckMilestoneByID(ctx, bor, milestoneID)
+		if err == nil {
+			ethHandler.downloader.RemoveMilestoneID(milestoneID)
+		}
+	}
+
+	return nil
+}
+
+func (s *Ethereum) getHandler() (*ethHandler, *bor.Bor, error) {
 	ethHandler := (*ethHandler)(s.handler)
 
 	bor, ok := ethHandler.chain.Engine().(*bor.Bor)
 	if !ok {
-		return ErrNotBorConsensus
+		return nil, nil, ErrNotBorConsensus
 	}
 
 	if bor.HeimdallClient == nil {
-		return ErrBorConsensusWithoutHeimdall
+		return nil, nil, ErrBorConsensusWithoutHeimdall
 	}
 
-	// Create a new checkpoint verifier
-	verifier := newCheckpointVerifier(nil)
-	blockNums, blockHashes, err := ethHandler.fetchWhitelistCheckpoints(ctx, bor, verifier, first)
-	// If the array is empty, we're bound to receive an error. Non-nill error and non-empty array
-	// means that array has partial elements and it failed for some block. We'll add those partial
-	// elements anyway.
-	if len(blockNums) == 0 {
-		return err
-	}
-
-	// Update the checkpoint whitelist map.
-	for i := 0; i < len(blockNums); i++ {
-		ethHandler.downloader.ProcessCheckpoint(blockNums[i], blockHashes[i])
-	}
-
-	return nil
+	return ethHandler, bor, nil
 }
 
 // Stop implements node.Lifecycle, terminating all internal goroutines used by the
@@ -729,9 +855,7 @@ func (s *Ethereum) Stop() error {
 	// Close all bg processes
 	close(s.closeCh)
 
-	// closing consensus engine first, as miner has deps on it
-	s.engine.Close()
-	s.txPool.Stop()
+	s.txPool.Close()
 	s.miner.Close()
 	s.blockchain.Stop()
 	s.engine.Close()

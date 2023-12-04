@@ -24,7 +24,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -223,6 +222,7 @@ type StdTraceConfig struct {
 
 // txTraceResult is the result of a single transaction trace.
 type txTraceResult struct {
+	TxHash common.Hash `json:"txHash"`           // transaction hash
 	Result interface{} `json:"result,omitempty"` // Trace results produced by the tracer
 	Error  string      `json:"error,omitempty"`  // Trace failure produced by the tracer
 }
@@ -365,14 +365,14 @@ func (api *API) traceChain(start, end *types.Block, config *TraceConfig, closed 
 
 					res, err = api.traceTx(ctx, msg, txctx, blockCtx, task.statedb, config)
 					if err != nil {
-						task.results[i] = &txTraceResult{Error: err.Error()}
+						task.results[i] = &txTraceResult{TxHash: tx.Hash(), Error: err.Error()}
 						log.Warn("Tracing failed", "hash", tx.Hash(), "block", task.block.NumberU64(), "err", err)
 
 						break
 					}
 					// Only delete empty objects if EIP158/161 (a.k.a Spurious Dragon) is in effect
 					task.statedb.Finalise(api.backend.ChainConfig().IsEIP158(task.block.Number()))
-					task.results[i] = &txTraceResult{Result: res}
+					task.results[i] = &txTraceResult{TxHash: tx.Hash(), Result: res}
 				}
 				// Tracing state is used up, queue it for de-referencing. Note the
 				// state is the parent state of trace block, use block.number-1 as
@@ -834,11 +834,10 @@ func (api *API) traceBlock(ctx context.Context, block *types.Block, config *Trac
 				}
 
 				if err != nil {
-					results[task.index] = &txTraceResult{Error: err.Error()}
+					results[task.index] = &txTraceResult{TxHash: txs[task.index].Hash(), Error: err.Error()}
 					continue
 				}
-
-				results[task.index] = &txTraceResult{Result: res}
+				results[task.index] = &txTraceResult{TxHash: txs[task.index].Hash(), Result: res}
 			}
 		}()
 	}
@@ -888,7 +887,7 @@ txloop:
 				if *config.BorTraceEnabled {
 					callmsg := prepareCallMessage(*msg)
 					// nolint : contextcheck
-					if _, err := statefull.ApplyBorMessage(*vmenv, callmsg); err != nil {
+					if _, err := statefull.ApplyBorMessage(vmenv, callmsg); err != nil {
 						failed = err
 						break txloop
 					}
@@ -957,7 +956,7 @@ txloop:
 		}
 
 		// make sure that the file exists and write IOdump
-		err = ioutil.WriteFile(filepath.Join(path, "data.csv"), []byte(fmt.Sprint(IOdump)), 0600)
+		err = os.WriteFile(filepath.Join(path, "data.csv"), []byte(fmt.Sprint(IOdump)), 0600)
 		if err != nil {
 			return nil, err
 		}
@@ -1095,7 +1094,7 @@ func (api *API) standardTraceBlockToFile(ctx context.Context, block *types.Block
 		if stateSyncPresent && i == len(txs)-1 {
 			if *config.BorTraceEnabled {
 				callmsg := prepareCallMessage(*msg)
-				_, err = statefull.ApplyBorMessage(*vmenv, callmsg)
+				_, err = statefull.ApplyBorMessage(vmenv, callmsg)
 
 				if writer != nil {
 					writer.Flush()
@@ -1340,7 +1339,7 @@ func (api *API) traceTx(ctx context.Context, message *core.Message, txctx *Conte
 	if *config.BorTx {
 		callmsg := prepareCallMessage(*message)
 		// nolint : contextcheck
-		if _, err := statefull.ApplyBorMessage(*vmenv, callmsg); err != nil {
+		if _, err := statefull.ApplyBorMessage(vmenv, callmsg); err != nil {
 			return nil, fmt.Errorf("tracing failed: %w", err)
 		}
 	} else {
@@ -1377,8 +1376,8 @@ func overrideConfig(original *params.ChainConfig, override *params.ChainConfig) 
 		chainConfigCopy.BerlinBlock = block
 		canon = false
 	}
-	if timestamp := override.VerkleTime; timestamp != nil {
-		chainConfigCopy.VerkleTime = timestamp
+	if timestamp := override.VerkleBlock; timestamp != nil {
+		chainConfigCopy.VerkleBlock = timestamp
 		canon = false
 	}
 
@@ -1402,18 +1401,23 @@ func overrideConfig(original *params.ChainConfig, override *params.ChainConfig) 
 		canon = false
 	}
 
-	if timestamp := override.ShanghaiTime; timestamp != nil {
-		chainConfigCopy.ShanghaiTime = timestamp
+	if timestamp := override.ShanghaiBlock; timestamp != nil {
+		chainConfigCopy.ShanghaiBlock = timestamp
 		canon = false
 	}
 
-	if timestamp := override.CancunTime; timestamp != nil {
-		chainConfigCopy.CancunTime = timestamp
+	if timestamp := override.CancunBlock; timestamp != nil {
+		chainConfigCopy.CancunBlock = timestamp
 		canon = false
 	}
 
-	if timestamp := override.PragueTime; timestamp != nil {
-		chainConfigCopy.PragueTime = timestamp
+	if timestamp := override.PragueBlock; timestamp != nil {
+		chainConfigCopy.PragueBlock = timestamp
+		canon = false
+	}
+
+	if timestamp := override.VerkleBlock; timestamp != nil {
+		chainConfigCopy.VerkleBlock = timestamp
 		canon = false
 	}
 

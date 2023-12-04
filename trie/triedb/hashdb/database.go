@@ -65,20 +65,6 @@ type ChildResolver interface {
 	ForEach(node []byte, onChild func(common.Hash))
 }
 
-// Config contains the settings for database.
-type Config struct {
-	CleanCacheSize int // Maximum memory allowance (in bytes) for caching clean nodes
-}
-
-// Defaults is the default setting for database if it's not specified.
-// Notably, clean cache is disabled explicitly,
-var Defaults = &Config{
-	// Explicitly set clean cache size to 0 to avoid creating fastcache,
-	// otherwise database must be closed when it's no longer needed to
-	// prevent memory leak.
-	CleanCacheSize: 0,
-}
-
 // Database is an intermediate write layer between the trie data structures and
 // the disk database. The aim is to accumulate trie writes in-memory and only
 // periodically flush a couple tries to disk, garbage collecting the remainder.
@@ -136,13 +122,12 @@ func (n *cachedNode) forChildren(resolver ChildResolver, onChild func(hash commo
 }
 
 // New initializes the hash-based node database.
-func New(diskdb ethdb.Database, config *Config, resolver ChildResolver) *Database {
-	if config == nil {
-		config = Defaults
-	}
+func New(diskdb ethdb.Database, size int, resolver ChildResolver) *Database {
+	// Initialize the clean cache if the specified cache allowance
+	// is non-zero. Note, the size is in bytes.
 	var cleans *fastcache.Cache
-	if config.CleanCacheSize > 0 {
-		cleans = fastcache.New(config.CleanCacheSize)
+	if size > 0 {
+		cleans = fastcache.New(size)
 	}
 	return &Database{
 		diskdb:   diskdb,
@@ -172,7 +157,6 @@ func (db *Database) insert(hash common.Hash, node []byte) {
 			c.parents++
 		}
 	})
-
 	db.dirties[hash] = entry
 
 	// Update the flush-list endpoints
@@ -196,7 +180,6 @@ func (db *Database) Node(hash common.Hash) ([]byte, error) {
 		if enc := db.cleans.Get(nil, hash[:]); enc != nil {
 			memcacheCleanHitMeter.Mark(1)
 			memcacheCleanReadMeter.Mark(int64(len(enc)))
-
 			return enc, nil
 		}
 	}
@@ -210,7 +193,6 @@ func (db *Database) Node(hash common.Hash) ([]byte, error) {
 		memcacheDirtyReadMeter.Mark(int64(len(dirty.node)))
 		return dirty.node, nil
 	}
-
 	memcacheDirtyMissMeter.Mark(1)
 
 	// Content unavailable in memory, attempt to retrieve from disk
@@ -221,10 +203,8 @@ func (db *Database) Node(hash common.Hash) ([]byte, error) {
 			memcacheCleanMissMeter.Mark(1)
 			memcacheCleanWriteMeter.Mark(int64(len(enc)))
 		}
-
 		return enc, nil
 	}
-
 	return nil, errors.New("not found")
 }
 
@@ -236,11 +216,9 @@ func (db *Database) Nodes() []common.Hash {
 	defer db.lock.RUnlock()
 
 	var hashes = make([]common.Hash, 0, len(db.dirties))
-
 	for hash := range db.dirties {
 		hashes = append(hashes, hash)
 	}
-
 	return hashes
 }
 
@@ -275,7 +253,6 @@ func (db *Database) reference(child common.Hash, parent common.Hash) {
 	if _, ok := db.dirties[parent].external[child]; ok {
 		return
 	}
-
 	node.parents++
 	db.dirties[parent].external[child] = struct{}{}
 	db.childrenSize += common.HashLength
@@ -288,7 +265,6 @@ func (db *Database) Dereference(root common.Hash) {
 		log.Error("Attempted to dereference the trie cache meta root")
 		return
 	}
-
 	db.lock.Lock()
 	defer db.lock.Unlock()
 
@@ -322,7 +298,6 @@ func (db *Database) dereference(hash common.Hash) {
 		// no problem in itself, but don't make maxint parents out of it.
 		node.parents--
 	}
-
 	if node.parents == 0 {
 		// Remove the node from the flush-list
 		switch hash {
@@ -384,7 +359,6 @@ func (db *Database) Cap(limit common.StorageSize) error {
 				log.Error("Failed to write flush list to disk", "err", err)
 				return err
 			}
-
 			batch.Reset()
 		}
 		// Iterate to the next flush item, or abort if the size cap was achieved. Size
@@ -394,7 +368,6 @@ func (db *Database) Cap(limit common.StorageSize) error {
 		if node.external != nil {
 			size -= common.StorageSize(len(node.external) * common.HashLength)
 		}
-
 		oldest = node.flushNext
 	}
 	// Flush out any remainder data from the last batch
@@ -416,11 +389,9 @@ func (db *Database) Cap(limit common.StorageSize) error {
 			db.childrenSize -= common.StorageSize(len(node.external) * common.HashLength)
 		}
 	}
-
 	if db.oldest != (common.Hash{}) {
 		db.dirties[db.oldest].flushPrev = common.Hash{}
 	}
-
 	db.flushnodes += uint64(nodes - len(db.dirties))
 	db.flushsize += storage - db.dirtiesSize
 	db.flushtime += time.Since(start)
@@ -465,11 +436,9 @@ func (db *Database) Commit(node common.Hash, report bool) error {
 	// Uncache any leftovers in the last batch
 	db.lock.Lock()
 	defer db.lock.Unlock()
-
 	if err := batch.Replay(uncacher); err != nil {
 		return err
 	}
-
 	batch.Reset()
 
 	// Reset the storage counters and bumped metrics
@@ -481,7 +450,6 @@ func (db *Database) Commit(node common.Hash, report bool) error {
 	if !report {
 		logger = log.Debug
 	}
-
 	logger("Persisted trie from memory database", "nodes", nodes-len(db.dirties)+int(db.flushnodes), "size", storage-db.dirtiesSize+db.flushsize, "time", time.Since(start)+db.flushtime,
 		"gcnodes", db.gcnodes, "gcsize", db.gcsize, "gctime", db.gctime, "livenodes", len(db.dirties), "livesize", db.dirtiesSize)
 
@@ -499,7 +467,6 @@ func (db *Database) commit(hash common.Hash, batch ethdb.Batch, uncacher *cleane
 	if !ok {
 		return nil
 	}
-
 	var err error
 
 	// Dereference all children and delete the node
@@ -508,7 +475,6 @@ func (db *Database) commit(hash common.Hash, batch ethdb.Batch, uncacher *cleane
 			err = db.commit(child, batch, uncacher)
 		}
 	})
-
 	if err != nil {
 		return err
 	}
@@ -518,17 +484,14 @@ func (db *Database) commit(hash common.Hash, batch ethdb.Batch, uncacher *cleane
 		if err := batch.Write(); err != nil {
 			return err
 		}
-
 		db.lock.Lock()
 		err := batch.Replay(uncacher)
 		batch.Reset()
 		db.lock.Unlock()
-
 		if err != nil {
 			return err
 		}
 	}
-
 	return nil
 }
 
@@ -578,7 +541,6 @@ func (c *cleaner) Put(key []byte, rlp []byte) error {
 		c.db.cleans.Set(hash[:], rlp)
 		memcacheCleanWriteMeter.Mark(int64(len(rlp)))
 	}
-
 	return nil
 }
 
@@ -615,13 +577,11 @@ func (db *Database) Update(root common.Hash, parent common.Hash, block uint64, n
 		if owner == (common.Hash{}) {
 			continue
 		}
-
 		order = append(order, owner)
 	}
 	if _, ok := nodes.Sets[common.Hash{}]; ok {
 		order = append(order, common.Hash{})
 	}
-
 	for _, owner := range order {
 		subset := nodes.Sets[owner]
 		subset.ForEachWithOrder(func(path string, n *trienode.Node) {
@@ -639,13 +599,11 @@ func (db *Database) Update(root common.Hash, parent common.Hash, block uint64, n
 			if err := rlp.DecodeBytes(n.Blob, &account); err != nil {
 				return err
 			}
-
 			if account.Root != types.EmptyRootHash {
 				db.reference(account.Root, n.Parent)
 			}
 		}
 	}
-
 	return nil
 }
 
@@ -663,13 +621,7 @@ func (db *Database) Size() common.StorageSize {
 }
 
 // Close closes the trie database and releases all held resources.
-func (db *Database) Close() error {
-	if db.cleans != nil {
-		db.cleans.Reset()
-		db.cleans = nil
-	}
-	return nil
-}
+func (db *Database) Close() error { return nil }
 
 // Scheme returns the node scheme used in the database.
 func (db *Database) Scheme() string {

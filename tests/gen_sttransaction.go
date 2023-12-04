@@ -28,7 +28,7 @@ func (s stTransaction) MarshalJSON() ([]byte, error) {
 		Value                []string              `json:"value"`
 		PrivateKey           hexutil.Bytes         `json:"secretKey"`
 		BlobVersionedHashes  []common.Hash         `json:"blobVersionedHashes,omitempty"`
-		BlobGasFeeCap        *math.HexOrDecimal256 `json:"maxFeePerDataGas,omitempty"`
+		BlobGasFeeCap        *math.HexOrDecimal256 `json:"maxFeePerBlobGas,omitempty"`
 	}
 
 	var enc stTransaction
@@ -68,7 +68,7 @@ func (s *stTransaction) UnmarshalJSON(input []byte) error {
 		Value                []string              `json:"value"`
 		PrivateKey           *hexutil.Bytes        `json:"secretKey"`
 		BlobVersionedHashes  []common.Hash         `json:"blobVersionedHashes,omitempty"`
-		BlobGasFeeCap        *math.HexOrDecimal256 `json:"maxFeePerDataGas,omitempty"`
+		BlobGasFeeCap        *math.HexOrDecimal256 `json:"maxFeePerBlobGas,omitempty"`
 	}
 
 	var dec stTransaction

@@ -30,6 +30,7 @@ func (s *Server) ServeListener(l net.Listener) error {
 		conn, err := l.Accept()
 		if netutil.IsTemporaryError(err) {
 			log.Warn("RPC accept error", "err", err)
+
 			continue
 		} else if err != nil {
 			return err
@@ -52,7 +53,8 @@ func (s *Server) ServeListener(l net.Listener) error {
 // The context is used for the initial connection establishment. It does not
 // affect subsequent interactions with the client.
 func DialIPC(ctx context.Context, endpoint string) (*Client, error) {
-	return newClient(ctx, newClientTransportIPC(endpoint))
+	cfg := new(clientConfig)
+	return newClient(ctx, cfg, newClientTransportIPC(endpoint))
 }
 
 func newClientTransportIPC(endpoint string) reconnectFunc {

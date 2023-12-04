@@ -97,14 +97,20 @@ func (b *TestBackend) HeaderByHash(ctx context.Context, hash common.Hash) (*type
 
 func (b *TestBackend) GetReceipts(ctx context.Context, hash common.Hash) (types.Receipts, error) {
 	if number := rawdb.ReadHeaderNumber(b.DB, hash); number != nil {
-		return rawdb.ReadReceipts(b.DB, hash, *number, 0, params.TestChainConfig), nil
+		block := rawdb.ReadBlock(b.DB, hash, *number)
+		return rawdb.ReadReceipts(b.DB, hash, *number, block.Time(), params.TestChainConfig), nil
 	}
 
 	return nil, nil
 }
 
+func (b *TestBackend) GetVoteOnHash(ctx context.Context, starBlockNr uint64, endBlockNr uint64, hash string, milestoneId string) (bool, error) {
+	return false, nil
+}
+
 func (b *TestBackend) GetLogs(ctx context.Context, hash common.Hash, number uint64) ([][]*types.Log, error) {
-	receipts := rawdb.ReadReceipts(b.DB, hash, number, 0, params.TestChainConfig)
+	block := rawdb.ReadBlock(b.DB, hash, number)
+	receipts := rawdb.ReadReceipts(b.DB, hash, number, block.Time(), params.TestChainConfig)
 
 	logs := make([][]*types.Log, len(receipts))
 	for i, receipt := range receipts {

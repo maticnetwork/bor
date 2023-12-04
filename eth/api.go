@@ -17,6 +17,8 @@
 package eth
 
 import (
+	"fmt"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 )
@@ -31,12 +33,12 @@ func NewEthereumAPI(e *Ethereum) *EthereumAPI {
 	return &EthereumAPI{e}
 }
 
-// Etherbase is the address that mining rewards will be send to.
+// Etherbase is the address that mining rewards will be sent to.
 func (api *EthereumAPI) Etherbase() (common.Address, error) {
 	return api.e.Etherbase()
 }
 
-// Coinbase is the address that mining rewards will be send to (alias for Etherbase).
+// Coinbase is the address that mining rewards will be sent to (alias for Etherbase).
 func (api *EthereumAPI) Coinbase() (common.Address, error) {
 	return api.Etherbase()
 }
@@ -49,4 +51,28 @@ func (api *EthereumAPI) Hashrate() hexutil.Uint64 {
 // Mining returns an indication if this node is currently mining.
 func (api *EthereumAPI) Mining() bool {
 	return api.e.IsMining()
+}
+
+func getFinalizedBlockNumber(eth *Ethereum) (uint64, error) {
+	currentBlockNum := eth.BlockChain().CurrentBlock()
+
+	doExist, number, hash := eth.Downloader().GetWhitelistedMilestone()
+	if doExist && number <= currentBlockNum.Number.Uint64() {
+		block := eth.BlockChain().GetBlockByNumber(number)
+
+		if block.Hash() == hash {
+			return number, nil
+		}
+	}
+
+	doExist, number, hash = eth.Downloader().GetWhitelistedCheckpoint()
+	if doExist && number <= currentBlockNum.Number.Uint64() {
+		block := eth.BlockChain().GetBlockByNumber(number)
+
+		if block.Hash() == hash {
+			return number, nil
+		}
+	}
+
+	return 0, fmt.Errorf("No finalized block")
 }

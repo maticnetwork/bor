@@ -57,7 +57,6 @@ func (b *LesApiBackend) CurrentBlock() *types.Header {
 }
 
 func (b *LesApiBackend) SetHead(number uint64) {
-	b.eth.handler.downloader.Cancel()
 	b.eth.blockchain.SetHead(number)
 }
 
@@ -68,11 +67,9 @@ func (b *LesApiBackend) HeaderByNumber(ctx context.Context, number rpc.BlockNumb
 	if number == rpc.PendingBlockNumber {
 		return b.eth.blockchain.CurrentHeader(), nil
 	}
-
 	if number == rpc.LatestBlockNumber {
 		return b.eth.blockchain.CurrentHeader(), nil
 	}
-
 	return b.eth.blockchain.GetHeaderByNumberOdr(ctx, uint64(number))
 }
 
@@ -80,24 +77,19 @@ func (b *LesApiBackend) HeaderByNumberOrHash(ctx context.Context, blockNrOrHash 
 	if blockNr, ok := blockNrOrHash.Number(); ok {
 		return b.HeaderByNumber(ctx, blockNr)
 	}
-
 	if hash, ok := blockNrOrHash.Hash(); ok {
 		header, err := b.HeaderByHash(ctx, hash)
 		if err != nil {
 			return nil, err
 		}
-
 		if header == nil {
 			return nil, errors.New("header for hash not found")
 		}
-
 		if blockNrOrHash.RequireCanonical && b.eth.blockchain.GetCanonicalHash(header.Number.Uint64()) != hash {
 			return nil, errors.New("hash is not currently canonical")
 		}
-
 		return header, nil
 	}
-
 	return nil, errors.New("invalid arguments; neither block nor hash specified")
 }
 
@@ -110,7 +102,6 @@ func (b *LesApiBackend) BlockByNumber(ctx context.Context, number rpc.BlockNumbe
 	if header == nil || err != nil {
 		return nil, err
 	}
-
 	return b.BlockByHash(ctx, header.Hash())
 }
 
@@ -122,24 +113,19 @@ func (b *LesApiBackend) BlockByNumberOrHash(ctx context.Context, blockNrOrHash r
 	if blockNr, ok := blockNrOrHash.Number(); ok {
 		return b.BlockByNumber(ctx, blockNr)
 	}
-
 	if hash, ok := blockNrOrHash.Hash(); ok {
 		block, err := b.BlockByHash(ctx, hash)
 		if err != nil {
 			return nil, err
 		}
-
 		if block == nil {
 			return nil, errors.New("header found, but block body is missing")
 		}
-
 		if blockNrOrHash.RequireCanonical && b.eth.blockchain.GetCanonicalHash(block.NumberU64()) != hash {
 			return nil, errors.New("hash is not currently canonical")
 		}
-
 		return block, nil
 	}
-
 	return nil, errors.New("invalid arguments; neither block nor hash specified")
 }
 
@@ -156,11 +142,9 @@ func (b *LesApiBackend) StateAndHeaderByNumber(ctx context.Context, number rpc.B
 	if err != nil {
 		return nil, nil, err
 	}
-
 	if header == nil {
 		return nil, nil, errors.New("header not found")
 	}
-
 	return light.NewState(ctx, header, b.eth.odr), header, nil
 }
 
@@ -168,20 +152,16 @@ func (b *LesApiBackend) StateAndHeaderByNumberOrHash(ctx context.Context, blockN
 	if blockNr, ok := blockNrOrHash.Number(); ok {
 		return b.StateAndHeaderByNumber(ctx, blockNr)
 	}
-
 	if hash, ok := blockNrOrHash.Hash(); ok {
 		header := b.eth.blockchain.GetHeaderByHash(hash)
 		if header == nil {
 			return nil, nil, errors.New("header for hash not found")
 		}
-
 		if blockNrOrHash.RequireCanonical && b.eth.blockchain.GetCanonicalHash(header.Number.Uint64()) != hash {
 			return nil, nil, errors.New("hash is not currently canonical")
 		}
-
 		return light.NewState(ctx, header, b.eth.odr), header, nil
 	}
-
 	return nil, nil, errors.New("invalid arguments; neither block nor hash specified")
 }
 
@@ -189,7 +169,6 @@ func (b *LesApiBackend) GetReceipts(ctx context.Context, hash common.Hash) (type
 	if number := rawdb.ReadHeaderNumber(b.eth.chainDb, hash); number != nil {
 		return light.GetBlockReceipts(ctx, b.eth.odr, hash, *number)
 	}
-
 	return nil, nil
 }
 
@@ -201,7 +180,6 @@ func (b *LesApiBackend) GetTd(ctx context.Context, hash common.Hash) *big.Int {
 	if number := rawdb.ReadHeaderNumber(b.eth.chainDb, hash); number != nil {
 		return b.eth.blockchain.GetTdOdr(ctx, hash, *number)
 	}
-
 	return nil
 }
 
@@ -209,7 +187,6 @@ func (b *LesApiBackend) GetEVM(ctx context.Context, msg *core.Message, state *st
 	if vmConfig == nil {
 		vmConfig = new(vm.Config)
 	}
-
 	txContext := core.NewEVMTxContext(msg)
 	context := core.NewEVMBlockContext(header, b.eth.blockchain, nil)
 	if blockCtx != nil {
@@ -246,11 +223,11 @@ func (b *LesApiBackend) Stats() (pending int, queued int) {
 	return b.eth.txPool.Stats(), 0
 }
 
-func (b *LesApiBackend) TxPoolContent() (map[common.Address]types.Transactions, map[common.Address]types.Transactions) {
+func (b *LesApiBackend) TxPoolContent() (map[common.Address][]*types.Transaction, map[common.Address][]*types.Transaction) {
 	return b.eth.txPool.Content()
 }
 
-func (b *LesApiBackend) TxPoolContentFrom(addr common.Address) (types.Transactions, types.Transactions) {
+func (b *LesApiBackend) TxPoolContentFrom(addr common.Address) ([]*types.Transaction, []*types.Transaction) {
 	return b.eth.txPool.ContentFrom(addr)
 }
 
@@ -286,7 +263,7 @@ func (b *LesApiBackend) SubscribeRemovedLogsEvent(ch chan<- core.RemovedLogsEven
 }
 
 func (b *LesApiBackend) SyncProgress() ethereum.SyncProgress {
-	return b.eth.Downloader().Progress()
+	return ethereum.SyncProgress{}
 }
 
 func (b *LesApiBackend) ProtocolVersion() int {
@@ -321,10 +298,6 @@ func (b *LesApiBackend) RPCGasCap() uint64 {
 	return b.eth.config.RPCGasCap
 }
 
-func (b *LesApiBackend) RPCRpcReturnDataLimit() uint64 {
-	return b.eth.config.RPCReturnDataLimit
-}
-
 func (b *LesApiBackend) RPCEVMTimeout() time.Duration {
 	return b.eth.config.RPCEVMTimeout
 }
@@ -337,9 +310,7 @@ func (b *LesApiBackend) BloomStatus() (uint64, uint64) {
 	if b.eth.bloomIndexer == nil {
 		return 0, 0
 	}
-
 	sections, _, _ := b.eth.bloomIndexer.Sections()
-
 	return params.BloomBitsBlocksClient, sections
 }
 
@@ -365,12 +336,19 @@ func (b *LesApiBackend) StateAtTransaction(ctx context.Context, block *types.Blo
 	return b.eth.stateAtTransaction(ctx, block, txIndex, reexec)
 }
 
+func (b *LesApiBackend) RPCRpcReturnDataLimit() uint64 {
+	return b.eth.config.RPCReturnDataLimit
+}
+
 //
 // Bor related functions
 //
 
 func (b *LesApiBackend) GetBorBlockReceipt(ctx context.Context, hash common.Hash) (*types.Receipt, error) {
 	return nil, errors.New("not implemented")
+}
+func (b *LesApiBackend) GetVoteOnHash(ctx context.Context, starBlockNr uint64, endBlockNr uint64, hash string, milestoneId string) (bool, error) {
+	return false, errors.New("not implemented")
 }
 
 func (b *LesApiBackend) GetBorBlockLogs(ctx context.Context, hash common.Hash) ([]*types.Log, error) {
@@ -385,9 +363,16 @@ func (b *LesApiBackend) GetBorBlockTransactionWithBlockHash(ctx context.Context,
 	return nil, common.Hash{}, 0, 0, errors.New("not implemented")
 }
 
-func (b *LesApiBackend) GetCheckpointWhitelist() map[uint64]common.Hash {
-	return nil
+func (b *LesApiBackend) GetWhitelistedCheckpoint() (bool, uint64, common.Hash) {
+	return false, 0, common.Hash{}
 }
 
-func (b *LesApiBackend) PurgeCheckpointWhitelist() {
+func (b *LesApiBackend) PurgeWhitelistedCheckpoint() {
+}
+
+func (b *LesApiBackend) GetWhitelistedMilestone() (bool, uint64, common.Hash) {
+	return false, 0, common.Hash{}
+}
+
+func (b *LesApiBackend) PurgeWhitelistedMilestone() {
 }

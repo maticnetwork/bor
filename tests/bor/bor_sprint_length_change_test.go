@@ -18,7 +18,6 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/common/fdlimit"
 	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/core/txpool"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/eth"
 	"github.com/ethereum/go-ethereum/eth/downloader"
@@ -49,7 +48,7 @@ const (
 
 // Sprint length change tests
 func TestValidatorsBlockProduction(t *testing.T) {
-	t.Parallel()
+	// t.Parallel()
 
 	log.Root().SetHandler(log.LvlFilterHandler(3, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
 
@@ -201,7 +200,7 @@ func TestValidatorsBlockProduction(t *testing.T) {
 }
 
 func TestSprintLengths(t *testing.T) {
-	t.Parallel()
+	// t.Parallel()
 
 	testBorConfig := params.TestChainConfig.Bor
 	testBorConfig.Sprint = map[string]uint64{
@@ -214,7 +213,7 @@ func TestSprintLengths(t *testing.T) {
 }
 
 func TestProducerDelay(t *testing.T) {
-	t.Parallel()
+	// t.Parallel()
 
 	testBorConfig := params.TestChainConfig.Bor
 	testBorConfig.ProducerDelay = map[string]uint64{
@@ -376,7 +375,7 @@ func SprintLengthReorgIndividual2Nodes(t *testing.T, index int, tt map[string]in
 
 func TestSprintLengthReorg2Nodes(t *testing.T) {
 	t.Skip()
-	t.Parallel()
+	// t.Parallel()
 
 	log.Root().SetHandler(log.LvlFilterHandler(3, log.StreamHandler(os.Stderr, log.TerminalFormat(true))))
 
@@ -424,7 +423,7 @@ func TestSprintLengthReorg2Nodes(t *testing.T) {
 
 func TestSprintLengthReorg(t *testing.T) {
 	t.Skip()
-	t.Parallel()
+	// t.Parallel()
 
 	reorgsLengthTests := getTestSprintLengthReorgCases()
 	f, err := os.Create("sprintReorg.csv")
@@ -810,7 +809,6 @@ func InitMinerSprintLength(genesis *core.Genesis, privKey *ecdsa.PrivateKey, wit
 		SyncMode:        downloader.FullSync,
 		DatabaseCache:   256,
 		DatabaseHandles: 256,
-		TxPool:          txpool.DefaultConfig,
 		GPO:             ethconfig.Defaults.GPO,
 		Miner: miner.Config{
 			Etherbase: crypto.PubkeyToAddress(privKey.PublicKey),

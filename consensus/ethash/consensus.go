@@ -24,17 +24,17 @@ import (
 	"time"
 
 	mapset "github.com/deckarep/golang-set/v2"
-	"golang.org/x/crypto/sha3"
-
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/misc"
+	"github.com/ethereum/go-ethereum/consensus/misc/eip1559"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
+	"golang.org/x/crypto/sha3"
 )
 
 // Ethash proof-of-work protocol constants.
@@ -105,7 +105,6 @@ func (ethash *Ethash) VerifyHeader(chain consensus.ChainHeaderReader, header *ty
 	if chain.GetHeader(header.Hash(), number) != nil {
 		return nil
 	}
-
 	parent := chain.GetHeader(header.ParentHash, number-1)
 	if parent == nil {
 		return consensus.ErrUnknownAncestor
@@ -124,7 +123,6 @@ func (ethash *Ethash) VerifyHeaders(chain consensus.ChainHeaderReader, headers [
 		for i := 0; i < len(headers); i++ {
 			results <- nil
 		}
-
 		return abort, results
 	}
 	abort := make(chan struct{})
@@ -166,7 +164,6 @@ func (ethash *Ethash) VerifyUncles(chain consensus.ChainReader, block *types.Blo
 	if len(block.Uncles()) > maxUncles {
 		return errTooManyUncles
 	}
-
 	if len(block.Uncles()) == 0 {
 		return nil
 	}
@@ -179,7 +176,6 @@ func (ethash *Ethash) VerifyUncles(chain consensus.ChainReader, block *types.Blo
 		if ancestorHeader == nil {
 			break
 		}
-
 		ancestors[parent] = ancestorHeader
 		// If the ancestor doesn't have any uncles, we don't have to iterate them
 		if ancestorHeader.UncleHash != types.EmptyUncleHash {
@@ -188,15 +184,12 @@ func (ethash *Ethash) VerifyUncles(chain consensus.ChainReader, block *types.Blo
 			if ancestor == nil {
 				break
 			}
-
 			for _, uncle := range ancestor.Uncles() {
 				uncles.Add(uncle.Hash())
 			}
 		}
-
 		parent, number = ancestorHeader.ParentHash, number-1
 	}
-
 	ancestors[block.Hash()] = block.Header()
 	uncles.Add(block.Hash())
 
@@ -207,14 +200,12 @@ func (ethash *Ethash) VerifyUncles(chain consensus.ChainReader, block *types.Blo
 		if uncles.Contains(hash) {
 			return errDuplicateUncle
 		}
-
 		uncles.Add(hash)
 
 		// Make sure the uncle has a valid ancestry
 		if ancestors[hash] != nil {
 			return errUncleIsAncestor
 		}
-
 		if ancestors[uncle.ParentHash] == nil || uncle.ParentHash == block.ParentHash() {
 			return errDanglingUncle
 		}
@@ -222,7 +213,6 @@ func (ethash *Ethash) VerifyUncles(chain consensus.ChainReader, block *types.Blo
 			return err
 		}
 	}
-
 	return nil
 }
 
@@ -240,7 +230,6 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainHeaderReader, header, pa
 			return consensus.ErrFutureBlock
 		}
 	}
-
 	if header.Time <= parent.Time {
 		return errOlderBlockTime
 	}
@@ -264,11 +253,10 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainHeaderReader, header, pa
 		if header.BaseFee != nil {
 			return fmt.Errorf("invalid baseFee before fork: have %d, expected 'nil'", header.BaseFee)
 		}
-
 		if err := misc.VerifyGaslimit(parent.GasLimit, header.GasLimit); err != nil {
 			return err
 		}
-	} else if err := misc.VerifyEIP1559Header(chain.Config(), parent, header); err != nil {
+	} else if err := eip1559.VerifyEIP1559Header(chain.Config(), parent, header); err != nil {
 		// Verify the header's EIP-1559 attributes.
 		return err
 	}
@@ -276,10 +264,12 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainHeaderReader, header, pa
 	if diff := new(big.Int).Sub(header.Number, parent.Number); diff.Cmp(big.NewInt(1)) != 0 {
 		return consensus.ErrInvalidNumber
 	}
-	if chain.Config().IsShanghai(header.Number, header.Time) {
+
+	if chain.Config().IsShanghai(header.Number) {
 		return errors.New("ethash does not support shanghai fork")
 	}
-	if chain.Config().IsCancun(header.Number, header.Time) {
+
+	if chain.Config().IsCancun(header.Number) {
 		return errors.New("ethash does not support cancun fork")
 	}
 	// Add some fake checks for tests
@@ -293,7 +283,6 @@ func (ethash *Ethash) verifyHeader(chain consensus.ChainHeaderReader, header, pa
 	if err := misc.VerifyDAOHeaderExtraData(chain.Config(), header); err != nil {
 		return err
 	}
-
 	return nil
 }
 
@@ -309,7 +298,6 @@ func (ethash *Ethash) CalcDifficulty(chain consensus.ChainHeaderReader, time uin
 // given the parent block's time and difficulty.
 func CalcDifficulty(config *params.ChainConfig, time uint64, parent *types.Header) *big.Int {
 	next := new(big.Int).Add(parent.Number, big1)
-
 	switch {
 	case config.IsGrayGlacier(next):
 		return calcDifficultyEip5133(time, parent)
@@ -347,13 +335,13 @@ func makeDifficultyCalculator(bombDelay *big.Int) func(time uint64, parent *type
 	// Note, the calculations below looks at the parent number, which is 1 below
 	// the block number. Thus we remove one from the delay given
 	bombDelayFromParent := new(big.Int).Sub(bombDelay, big1)
-
 	return func(time uint64, parent *types.Header) *big.Int {
 		// https://github.com/ethereum/EIPs/issues/100.
 		// algorithm:
 		// diff = (parent_diff +
 		//         (parent_diff / 2048 * max((2 if len(parent.uncles) else 1) - ((timestamp - parent.timestamp) // 9), -99))
 		//        ) + 2^(periodCount - 2)
+
 		bigTime := new(big.Int).SetUint64(time)
 		bigParentTime := new(big.Int).SetUint64(parent.Time)
 
@@ -364,7 +352,6 @@ func makeDifficultyCalculator(bombDelay *big.Int) func(time uint64, parent *type
 		// (2 if len(parent_uncles) else 1) - (block_timestamp - parent_timestamp) // 9
 		x.Sub(bigTime, bigParentTime)
 		x.Div(x, big9)
-
 		if parent.UncleHash == types.EmptyUncleHash {
 			x.Sub(big1, x)
 		} else {
@@ -400,7 +387,6 @@ func makeDifficultyCalculator(bombDelay *big.Int) func(time uint64, parent *type
 			y.Exp(big2, y, nil)
 			x.Add(x, y)
 		}
-
 		return x
 	}
 }
@@ -414,6 +400,7 @@ func calcDifficultyHomestead(time uint64, parent *types.Header) *big.Int {
 	// diff = (parent_diff +
 	//         (parent_diff / 2048 * max(1 - (block_timestamp - parent_timestamp) // 10, -99))
 	//        ) + 2^(periodCount - 2)
+
 	bigTime := new(big.Int).SetUint64(time)
 	bigParentTime := new(big.Int).SetUint64(parent.Time)
 
@@ -450,7 +437,6 @@ func calcDifficultyHomestead(time uint64, parent *types.Header) *big.Int {
 		y.Exp(big2, y, nil)
 		x.Add(x, y)
 	}
-
 	return x
 }
 
@@ -471,14 +457,12 @@ func calcDifficultyFrontier(time uint64, parent *types.Header) *big.Int {
 	} else {
 		diff.Sub(parent.Difficulty, adjust)
 	}
-
 	if diff.Cmp(params.MinimumDifficulty) < 0 {
 		diff.Set(params.MinimumDifficulty)
 	}
 
 	periodCount := new(big.Int).Add(parent.Number, big1)
 	periodCount.Div(periodCount, expDiffPeriod)
-
 	if periodCount.Cmp(big1) > 0 {
 		// diff = diff + 2^(periodCount - 2)
 		expDiff := periodCount.Sub(periodCount, big2)
@@ -486,7 +470,6 @@ func calcDifficultyFrontier(time uint64, parent *types.Header) *big.Int {
 		diff.Add(diff, expDiff)
 		diff = math.BigMax(diff, params.MinimumDifficulty)
 	}
-
 	return diff
 }
 
@@ -502,9 +485,7 @@ func (ethash *Ethash) Prepare(chain consensus.ChainHeaderReader, header *types.H
 	if parent == nil {
 		return consensus.ErrUnknownAncestor
 	}
-
 	header.Difficulty = ethash.CalcDifficulty(chain, header.Time, parent)
-
 	return nil
 }
 
@@ -552,14 +533,11 @@ func (ethash *Ethash) SealHash(header *types.Header) (hash common.Hash) {
 	if header.BaseFee != nil {
 		enc = append(enc, header.BaseFee)
 	}
-
 	if header.WithdrawalsHash != nil {
 		panic("withdrawal hash set on ethash")
 	}
-
 	rlp.Encode(hasher, enc)
 	hasher.Sum(hash[:0])
-
 	return hash
 }
 
@@ -578,13 +556,11 @@ func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header 
 	if config.IsByzantium(header.Number) {
 		blockReward = ByzantiumBlockReward
 	}
-
 	if config.IsConstantinople(header.Number) {
 		blockReward = ConstantinopleBlockReward
 	}
 	// Accumulate the rewards for the miner and any included uncles
 	reward := new(big.Int).Set(blockReward)
-
 	r := new(big.Int)
 	for _, uncle := range uncles {
 		r.Add(uncle.Number, big8)
@@ -596,6 +572,5 @@ func accumulateRewards(config *params.ChainConfig, state *state.StateDB, header 
 		r.Div(blockReward, big32)
 		reward.Add(reward, r)
 	}
-
 	state.AddBalance(header.Coinbase, reward)
 }

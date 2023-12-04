@@ -73,7 +73,6 @@ func (t *servingTask) start() bool {
 	if t.peer.isFrozen() {
 		return false
 	}
-
 	t.tokenCh = make(chan runToken, 1)
 	select {
 	case t.sq.queueAddCh <- t:
@@ -85,13 +84,10 @@ func (t *servingTask) start() bool {
 	case <-t.sq.quit:
 		return false
 	}
-
 	if t.token == nil {
 		return false
 	}
-
 	t.servingTime -= uint64(mclock.Now())
-
 	return true
 }
 
@@ -102,14 +98,12 @@ func (t *servingTask) done() uint64 {
 	close(t.token)
 	diff := t.servingTime - t.timeAdded
 	t.timeAdded = t.servingTime
-
 	if t.expTime > diff {
 		t.expTime -= diff
 		atomic.AddUint64(&t.sq.servingTimeDiff, t.expTime)
 	} else {
 		t.expTime = 0
 	}
-
 	return t.servingTime
 }
 
@@ -119,12 +113,10 @@ func (t *servingTask) done() uint64 {
 // means the task should be cancelled.
 func (t *servingTask) waitOrStop() bool {
 	t.done()
-
 	if !t.biasAdded {
 		t.priority += t.sq.suspendBias
 		t.biasAdded = true
 	}
-
 	return t.start()
 }
 
@@ -144,10 +136,8 @@ func newServingQueue(suspendBias int64, utilTarget float64) *servingQueue {
 		lastUpdate:     mclock.Now(),
 	}
 	sq.wg.Add(2)
-
 	go sq.queueLoop()
 	go sq.threadCountLoop()
-
 	return sq
 }
 
@@ -170,7 +160,6 @@ func (sq *servingQueue) newTask(peer *clientPeer, maxTime uint64, priority int64
 // without entering the priority queue.
 func (sq *servingQueue) threadController() {
 	defer sq.wg.Done()
-
 	for {
 		token := make(runToken)
 		select {
@@ -207,18 +196,15 @@ func (sq *servingQueue) freezePeers() {
 	if sq.best != nil {
 		sq.queue.Push(sq.best, sq.best.priority)
 	}
-
 	sq.best = nil
 	for sq.queue.Size() > 0 {
 		task := sq.queue.PopItem()
 		tasks := peerMap[task.peer]
-
 		if tasks == nil {
 			bufValue, bufLimit := task.peer.fcClient.BufferStatus()
 			if bufLimit < 1 {
 				bufLimit = 1
 			}
-
 			tasks = &peerTasks{
 				peer:     task.peer,
 				priority: float64(bufValue) / float64(bufLimit), // lower value comes first
@@ -226,12 +212,17 @@ func (sq *servingQueue) freezePeers() {
 			peerMap[task.peer] = tasks
 			peerList = append(peerList, tasks)
 		}
-
 		tasks.list = append(tasks.list, task)
 		tasks.sumTime += task.expTime
 	}
-	slices.SortFunc(peerList, func(a, b *peerTasks) bool {
-		return a.priority < b.priority
+	slices.SortFunc(peerList, func(a, b *peerTasks) int {
+		if a.priority < b.priority {
+			return -1
+		}
+		if a.priority > b.priority {
+			return 1
+		}
+		return 0
 	})
 	drop := true
 	for _, tasks := range peerList {
@@ -241,9 +232,7 @@ func (sq *servingQueue) freezePeers() {
 			sq.queuedTime -= tasks.sumTime
 			sqQueuedGauge.Update(int64(sq.queuedTime))
 			clientFreezeMeter.Mark(1)
-
 			drop = sq.recentTime+sq.queuedTime > sq.burstDropLimit
-
 			for _, task := range tasks.list {
 				task.tokenCh <- nil
 			}
@@ -253,7 +242,6 @@ func (sq *servingQueue) freezePeers() {
 			}
 		}
 	}
-
 	if sq.queue.Size() > 0 {
 		sq.best = sq.queue.PopItem()
 	}
@@ -265,11 +253,9 @@ func (sq *servingQueue) updateRecentTime() {
 	now := mclock.Now()
 	dt := now - sq.lastUpdate
 	sq.lastUpdate = now
-
 	if dt > 0 {
 		subTime += uint64(float64(dt) * sq.burstDecRate)
 	}
-
 	if sq.recentTime > subTime {
 		sq.recentTime -= subTime
 	} else {
@@ -287,12 +273,10 @@ func (sq *servingQueue) addTask(task *servingTask) {
 	} else {
 		sq.queue.Push(task, task.priority)
 	}
-
 	sq.updateRecentTime()
 	sq.queuedTime += task.expTime
 	sqServedGauge.Update(int64(sq.recentTime))
 	sqQueuedGauge.Update(int64(sq.queuedTime))
-
 	if sq.recentTime+sq.queuedTime > sq.burstLimit {
 		sq.freezePeers()
 	}
@@ -303,7 +287,6 @@ func (sq *servingQueue) addTask(task *servingTask) {
 // tasks are removed from the queue.
 func (sq *servingQueue) queueLoop() {
 	defer sq.wg.Done()
-
 	for {
 		if sq.best != nil {
 			expTime := sq.best.expTime
@@ -316,7 +299,6 @@ func (sq *servingQueue) queueLoop() {
 				sq.recentTime += expTime
 				sqServedGauge.Update(int64(sq.recentTime))
 				sqQueuedGauge.Update(int64(sq.queuedTime))
-
 				if sq.queue.Size() == 0 {
 					sq.best = nil
 				} else {
@@ -340,17 +322,13 @@ func (sq *servingQueue) queueLoop() {
 // of active thread controller goroutines.
 func (sq *servingQueue) threadCountLoop() {
 	var threadCountTarget int
-
 	defer sq.wg.Done()
-
 	for {
 		for threadCountTarget > sq.threadCount {
 			sq.wg.Add(1)
 			go sq.threadController()
-
 			sq.threadCount++
 		}
-
 		if threadCountTarget < sq.threadCount {
 			select {
 			case threadCountTarget = <-sq.setThreadsCh:

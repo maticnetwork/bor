@@ -36,17 +36,14 @@ import (
 // ReadCanonicalHash retrieves the hash assigned to a canonical block number.
 func ReadCanonicalHash(db ethdb.Reader, number uint64) common.Hash {
 	var data []byte
-
-	_ = db.ReadAncients(func(reader ethdb.AncientReaderOp) error {
+	db.ReadAncients(func(reader ethdb.AncientReaderOp) error {
 		data, _ = reader.Ancient(ChainFreezerHashTable, number)
 		if len(data) == 0 {
 			// Get it by hash from leveldb
 			data, _ = db.Get(headerHashKey(number))
 		}
-
 		return nil
 	})
-
 	return common.BytesToHash(data)
 }
 
@@ -716,7 +713,12 @@ func ReadReceipts(db ethdb.Reader, hash common.Hash, number uint64, time uint64,
 	} else {
 		baseFee = header.BaseFee
 	}
-	if err := receipts.DeriveFields(config, hash, number, time, baseFee, body.Transactions); err != nil {
+	// Compute effective blob gas price.
+	var blobGasPrice *big.Int
+	if header != nil && header.ExcessBlobGas != nil {
+		blobGasPrice = nil
+	}
+	if err := receipts.DeriveFields(config, hash, number, time, baseFee, blobGasPrice, body.Transactions); err != nil {
 		log.Error("Failed to derive block receipts fields", "hash", hash, "number", number, "err", err)
 		return nil
 	}
@@ -810,17 +812,9 @@ func ReadLogs(db ethdb.Reader, hash common.Hash, number uint64, config *params.C
 	if len(data) == 0 {
 		return nil
 	}
-
 	receipts := []*receiptLogs{}
 	if err := rlp.DecodeBytes(data, &receipts); err != nil {
-		// Receipts might be in the legacy format, try decoding that.
-		// TODO: to be removed after users migrated
-		if logs := readLegacyLogs(db, hash, number, config); logs != nil {
-			return logs
-		}
-
 		log.Error("Invalid receipt array RLP", "hash", hash, "err", err)
-
 		return nil
 	}
 
@@ -828,29 +822,6 @@ func ReadLogs(db ethdb.Reader, hash common.Hash, number uint64, config *params.C
 	for i, receipt := range receipts {
 		logs[i] = receipt.Logs
 	}
-
-	return logs
-}
-
-// readLegacyLogs is a temporary workaround for when trying to read logs
-// from a block which has its receipt stored in the legacy format. It'll
-// be removed after users have migrated their freezer databases.
-func readLegacyLogs(db ethdb.Reader, hash common.Hash, number uint64, config *params.ChainConfig) [][]*types.Log {
-	blockHeader := ReadHeader(db, hash, number)
-	if blockHeader == nil {
-		return nil
-	}
-
-	receipts := ReadReceipts(db, hash, number, blockHeader.Time, config)
-	if receipts == nil {
-		return nil
-	}
-
-	logs := make([][]*types.Log, len(receipts))
-	for i, receipt := range receipts {
-		logs[i] = receipt.Logs
-	}
-
 	return logs
 }
 
@@ -1040,9 +1011,9 @@ func WriteBadBlock(db ethdb.KeyValueStore, block *types.Block) {
 		Header: block.Header(),
 		Body:   block.Body(),
 	})
-	slices.SortFunc(badBlocks, func(a, b *badBlock) bool {
+	slices.SortFunc(badBlocks, func(a, b *badBlock) int {
 		// Note: sorting in descending number order.
-		return a.Header.Number.Uint64() >= b.Header.Number.Uint64()
+		return -a.Header.Number.Cmp(b.Header.Number)
 	})
 	if len(badBlocks) > badBlockToKeep {
 		badBlocks = badBlocks[:badBlockToKeep]

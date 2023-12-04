@@ -72,6 +72,7 @@ func makeTestTrie(scheme string) (ethdb.Database, *Database, *StateTrie, map[str
 // checkTrieContents cross references a reconstructed trie with an expected data
 // content map.
 func checkTrieContents(t *testing.T, db ethdb.Database, scheme string, root []byte, content map[string][]byte) {
+	t.Helper()
 	// Check root availability and trie contents
 	ndb := newTestDatabase(db, scheme)
 	trie, err := NewStateTrie(TrieID(common.BytesToHash(root)), ndb)
@@ -112,8 +113,8 @@ type trieElement struct {
 
 // Tests that an empty trie is not scheduled for syncing.
 func TestEmptySync(t *testing.T) {
-	dbA := newTestDatabase(rawdb.NewMemoryDatabase(), rawdb.HashScheme)
-	dbB := newTestDatabase(rawdb.NewMemoryDatabase(), rawdb.HashScheme)
+	dbA := NewDatabase(rawdb.NewMemoryDatabase())
+	dbB := NewDatabase(rawdb.NewMemoryDatabase())
 	dbC := newTestDatabase(rawdb.NewMemoryDatabase(), rawdb.PathScheme)
 	dbD := newTestDatabase(rawdb.NewMemoryDatabase(), rawdb.PathScheme)
 
@@ -144,6 +145,7 @@ func TestIterativeSync(t *testing.T) {
 }
 
 func testIterativeSync(t *testing.T, count int, bypath bool, scheme string) {
+	t.Helper()
 	// Create a random trie to copy
 	_, srcDb, srcTrie, srcData := makeTestTrie(scheme)
 
@@ -229,6 +231,7 @@ func TestIterativeDelayedSync(t *testing.T) {
 }
 
 func testIterativeDelayedSync(t *testing.T, scheme string) {
+	t.Helper()
 	// Create a random trie to copy
 	_, srcDb, srcTrie, srcData := makeTestTrie(scheme)
 
@@ -305,6 +308,7 @@ func TestIterativeRandomSyncIndividual(t *testing.T) {
 }
 
 func testIterativeRandomSync(t *testing.T, count int, scheme string) {
+	t.Helper()
 	// Create a random trie to copy
 	_, srcDb, srcTrie, srcData := makeTestTrie(scheme)
 
@@ -378,6 +382,7 @@ func TestIterativeRandomDelayedSync(t *testing.T) {
 }
 
 func testIterativeRandomDelayedSync(t *testing.T, scheme string) {
+	t.Helper()
 	// Create a random trie to copy
 	_, srcDb, srcTrie, srcData := makeTestTrie(scheme)
 
@@ -458,6 +463,7 @@ func TestDuplicateAvoidanceSync(t *testing.T) {
 }
 
 func testDuplicateAvoidanceSync(t *testing.T, scheme string) {
+	t.Helper()
 	// Create a random trie to copy
 	_, srcDb, srcTrie, srcData := makeTestTrie(scheme)
 
@@ -538,6 +544,7 @@ func TestIncompleteSyncHash(t *testing.T) {
 }
 
 func testIncompleteSync(t *testing.T, scheme string) {
+	t.Helper()
 	// Create a random trie to copy
 	_, srcDb, srcTrie, _ := makeTestTrie(scheme)
 
@@ -634,6 +641,7 @@ func TestSyncOrdering(t *testing.T) {
 }
 
 func testSyncOrdering(t *testing.T, scheme string) {
+	t.Helper()
 	// Create a random trie to copy
 	_, srcDb, srcTrie, srcData := makeTestTrie(scheme)
 
@@ -720,6 +728,7 @@ func testSyncOrdering(t *testing.T, scheme string) {
 }
 
 func syncWith(t *testing.T, root common.Hash, db ethdb.Database, srcDb *Database) {
+	t.Helper()
 	// Create a destination trie and sync with the scheduler
 	sched := NewSync(root, db, nil, srcDb.Scheme())
 
@@ -779,6 +788,7 @@ func TestSyncMovingTarget(t *testing.T) {
 }
 
 func testSyncMovingTarget(t *testing.T, scheme string) {
+	t.Helper()
 	// Create a random trie to copy
 	_, srcDb, srcTrie, srcData := makeTestTrie(scheme)
 

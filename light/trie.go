@@ -66,7 +66,6 @@ func (db *odrDatabase) CopyTrie(t state.Trie) state.Trie {
 		if t.trie != nil {
 			cpy.trie = t.trie.Copy()
 		}
-
 		return cpy
 	default:
 		panic(fmt.Errorf("unknown trie type %T", t))
@@ -77,17 +76,14 @@ func (db *odrDatabase) ContractCode(addr common.Address, codeHash common.Hash) (
 	if codeHash == sha3Nil {
 		return nil, nil
 	}
-
 	code := rawdb.ReadCode(db.backend.Database(), codeHash)
 	if len(code) != 0 {
 		return code, nil
 	}
-
 	id := *db.id
 	id.AccountAddress = addr[:]
 	req := &CodeRequest{Id: &id, Hash: codeHash}
 	err := db.backend.Retrieve(db.ctx, req)
-
 	return req.Data, err
 }
 
@@ -145,12 +141,10 @@ func (t *odrTrie) GetAccount(address common.Address) (*types.StateAccount, error
 
 func (t *odrTrie) UpdateAccount(address common.Address, acc *types.StateAccount) error {
 	key := crypto.Keccak256(address.Bytes())
-
 	value, err := rlp.EncodeToBytes(acc)
 	if err != nil {
 		return fmt.Errorf("decoding error in account update: %w", err)
 	}
-
 	return t.do(key, func() error {
 		return t.trie.Update(key, value)
 	})
@@ -170,7 +164,6 @@ func (t *odrTrie) UpdateStorage(_ common.Address, key, value []byte) error {
 
 func (t *odrTrie) DeleteStorage(_ common.Address, key []byte) error {
 	key = crypto.Keccak256(key)
-
 	return t.do(key, func() error {
 		return t.trie.Delete(key)
 	})
@@ -179,7 +172,6 @@ func (t *odrTrie) DeleteStorage(_ common.Address, key []byte) error {
 // DeleteAccount abstracts an account deletion from the trie.
 func (t *odrTrie) DeleteAccount(address common.Address) error {
 	key := crypto.Keccak256(address.Bytes())
-
 	return t.do(key, func() error {
 		return t.trie.Delete(key)
 	})
@@ -189,7 +181,6 @@ func (t *odrTrie) Commit(collectLeaf bool) (common.Hash, *trienode.NodeSet, erro
 	if t.trie == nil {
 		return t.id.Root, nil, nil
 	}
-
 	return t.trie.Commit(collectLeaf)
 }
 
@@ -197,7 +188,6 @@ func (t *odrTrie) Hash() common.Hash {
 	if t.trie == nil {
 		return t.id.Root
 	}
-
 	return t.trie.Hash()
 }
 
@@ -218,7 +208,6 @@ func (t *odrTrie) Prove(key []byte, proofDb ethdb.KeyValueWriter) error {
 func (t *odrTrie) do(key []byte, fn func() error) error {
 	for {
 		var err error
-
 		if t.trie == nil {
 			var id *trie.ID
 			if len(t.id.AccountAddress) > 0 {
@@ -226,18 +215,14 @@ func (t *odrTrie) do(key []byte, fn func() error) error {
 			} else {
 				id = trie.StateTrieID(t.id.StateRoot)
 			}
-			triedb := trie.NewDatabase(t.db.backend.Database(), trie.HashDefaults)
-			t.trie, err = trie.New(id, triedb)
+			t.trie, err = trie.New(id, trie.NewDatabase(t.db.backend.Database()))
 		}
-
 		if err == nil {
 			err = fn()
 		}
-
 		if _, ok := err.(*trie.MissingNodeError); !ok {
 			return err
 		}
-
 		r := &TrieRequest{Id: t.id, Key: key}
 		if err := t.db.backend.Retrieve(t.db.ctx, r); err != nil {
 			return err
@@ -262,16 +247,13 @@ func newNodeIterator(t *odrTrie, startkey []byte) trie.NodeIterator {
 			} else {
 				id = trie.StateTrieID(t.id.StateRoot)
 			}
-			triedb := trie.NewDatabase(t.db.backend.Database(), trie.HashDefaults)
-			t, err := trie.New(id, triedb)
+			t, err := trie.New(id, trie.NewDatabase(t.db.backend.Database()))
 			if err == nil {
 				it.t.trie = t
 			}
-
 			return err
 		})
 	}
-
 	it.do(func() error {
 		var err error
 		it.NodeIterator, err = it.t.trie.NodeIterator(startkey)
@@ -280,40 +262,32 @@ func newNodeIterator(t *odrTrie, startkey []byte) trie.NodeIterator {
 		}
 		return it.NodeIterator.Error()
 	})
-
 	return it
 }
 
 func (it *nodeIterator) Next(descend bool) bool {
 	var ok bool
-
 	it.do(func() error {
 		ok = it.NodeIterator.Next(descend)
 		return it.NodeIterator.Error()
 	})
-
 	return ok
 }
 
 // do runs fn and attempts to fill in missing nodes by retrieving.
 func (it *nodeIterator) do(fn func() error) {
 	var lasthash common.Hash
-
 	for {
 		it.err = fn()
-
 		missing, ok := it.err.(*trie.MissingNodeError)
 		if !ok {
 			return
 		}
-
 		if missing.NodeHash == lasthash {
 			it.err = fmt.Errorf("retrieve loop for trie node %x", missing.NodeHash)
 			return
 		}
-
 		lasthash = missing.NodeHash
-
 		r := &TrieRequest{Id: it.t.id, Key: nibblesToKey(missing.Path)}
 		if it.err = it.t.db.backend.Retrieve(it.t.db.ctx, r); it.err != nil {
 			return
@@ -325,7 +299,6 @@ func (it *nodeIterator) Error() error {
 	if it.err != nil {
 		return it.err
 	}
-
 	return it.NodeIterator.Error()
 }
 
@@ -333,15 +306,12 @@ func nibblesToKey(nib []byte) []byte {
 	if len(nib) > 0 && nib[len(nib)-1] == 0x10 {
 		nib = nib[:len(nib)-1] // drop terminator
 	}
-
 	if len(nib)&1 == 1 {
 		nib = append(nib, 0) // make even
 	}
-
 	key := make([]byte, len(nib)/2)
 	for bi, ni := 0, 0; ni < len(nib); bi, ni = bi+1, ni+2 {
 		key[bi] = nib[ni]<<4 | nib[ni+1]
 	}
-
 	return key
 }

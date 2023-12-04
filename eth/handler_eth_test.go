@@ -28,6 +28,7 @@ import (
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/forkid"
 	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/core/txpool"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/eth/downloader"
@@ -322,36 +323,26 @@ func testRecvTransactions(t *testing.T, protocol uint) {
 }
 
 // This test checks that pending transactions are sent.
-func TestSendTransactions66(t *testing.T) {
-	t.Parallel()
-	testSendTransactions(t, eth.ETH66)
-}
-func TestSendTransactions67(t *testing.T) {
-	t.Parallel()
-	testSendTransactions(t, eth.ETH67)
-}
-func TestSendTransactions68(t *testing.T) {
-	t.Parallel()
-	testSendTransactions(t, eth.ETH68)
-}
+func TestSendTransactions66(t *testing.T) { testSendTransactions(t, eth.ETH66) }
+func TestSendTransactions67(t *testing.T) { testSendTransactions(t, eth.ETH67) }
+func TestSendTransactions68(t *testing.T) { testSendTransactions(t, eth.ETH68) }
 
 func testSendTransactions(t *testing.T, protocol uint) {
-	t.Helper()
+	t.Parallel()
 
 	// Create a message handler and fill the pool with big transactions
 	handler := newTestHandler()
 	defer handler.close()
 
-	insert := make([]*types.Transaction, 100)
+	insert := make([]*txpool.Transaction, 100)
 	for nonce := range insert {
 		tx := types.NewTransaction(uint64(nonce), common.Address{}, big.NewInt(0), 100000, big.NewInt(0), make([]byte, 10240))
 		tx, _ = types.SignTx(tx, types.HomesteadSigner{}, testKey)
 
-		insert[nonce] = tx
+		insert[nonce] = &txpool.Transaction{Tx: tx}
 	}
-
-	go handler.txpool.AddRemotes(insert) // Need goroutine to not block on feed
-	time.Sleep(250 * time.Millisecond)   // Wait until tx events get out of the system (can't use events, tx broadcaster races with peer join)
+	go handler.txpool.Add(insert, false, false) // Need goroutine to not block on feed
+	time.Sleep(250 * time.Millisecond)          // Wait until tx events get out of the system (can't use events, tx broadcaster races with peer join)
 
 	// Create a source handler to send messages through and a sink peer to receive them
 	p2pSrc, p2pSink := p2p.MsgPipe()
@@ -360,7 +351,6 @@ func testSendTransactions(t *testing.T, protocol uint) {
 
 	src := eth.NewPeer(protocol, p2p.NewPeerPipe(enode.ID{1}, "", nil, p2pSrc), p2pSrc, handler.txpool)
 	sink := eth.NewPeer(protocol, p2p.NewPeerPipe(enode.ID{2}, "", nil, p2pSink), p2pSink, handler.txpool)
-
 	defer src.Close()
 	defer sink.Close()
 
@@ -373,7 +363,6 @@ func testSendTransactions(t *testing.T, protocol uint) {
 		head    = handler.chain.CurrentBlock()
 		td      = handler.chain.GetTd(head.Hash(), head.Number.Uint64())
 	)
-
 	if err := sink.Handshake(1, td, head.Hash(), genesis.Hash(), forkid.NewIDWithChain(handler.chain), forkid.NewFilter(handler.chain)); err != nil {
 		t.Fatalf("failed to run protocol handshake")
 	}
@@ -382,12 +371,10 @@ func testSendTransactions(t *testing.T, protocol uint) {
 	backend := new(testEthHandler)
 
 	anns := make(chan []common.Hash)
-
 	annSub := backend.txAnnounces.Subscribe(anns)
 	defer annSub.Unsubscribe()
 
 	bcasts := make(chan []*types.Transaction)
-
 	bcastSub := backend.txBroadcasts.Subscribe(bcasts)
 	defer bcastSub.Unsubscribe()
 
@@ -404,7 +391,6 @@ func testSendTransactions(t *testing.T, protocol uint) {
 					if _, ok := seen[hash]; ok {
 						t.Errorf("duplicate transaction announced: %x", hash)
 					}
-
 					seen[hash] = struct{}{}
 				}
 			case <-bcasts:
@@ -415,31 +401,21 @@ func testSendTransactions(t *testing.T, protocol uint) {
 			panic("unsupported protocol, please extend test")
 		}
 	}
-
 	for _, tx := range insert {
-		if _, ok := seen[tx.Hash()]; !ok {
-			t.Errorf("missing transaction: %x", tx.Hash())
+		if _, ok := seen[tx.Tx.Hash()]; !ok {
+			t.Errorf("missing transaction: %x", tx.Tx.Hash())
 		}
 	}
 }
 
 // Tests that transactions get propagated to all attached peers, either via direct
 // broadcasts or via announcements/retrievals.
-func TestTransactionPropagation66(t *testing.T) {
-	t.Parallel()
-	testTransactionPropagation(t, eth.ETH66)
-}
-func TestTransactionPropagation67(t *testing.T) {
-	t.Parallel()
-	testTransactionPropagation(t, eth.ETH67)
-}
-func TestTransactionPropagation68(t *testing.T) {
-	t.Parallel()
-	testTransactionPropagation(t, eth.ETH68)
-}
+func TestTransactionPropagation66(t *testing.T) { testTransactionPropagation(t, eth.ETH66) }
+func TestTransactionPropagation67(t *testing.T) { testTransactionPropagation(t, eth.ETH67) }
+func TestTransactionPropagation68(t *testing.T) { testTransactionPropagation(t, eth.ETH68) }
 
 func testTransactionPropagation(t *testing.T, protocol uint) {
-	t.Helper()
+	t.Parallel()
 
 	// Create a source handler to send transactions from and a number of sinks
 	// to receive them. We need multiple sinks since a one-to-one peering would
@@ -457,7 +433,7 @@ func testTransactionPropagation(t *testing.T, protocol uint) {
 	}
 	// Interconnect all the sink handlers with the source handler
 	for i, sink := range sinks {
-		sink := sink // Closure for gorotuine below
+		sink := sink // Closure for goroutine below
 
 		sourcePipe, sinkPipe := p2p.MsgPipe()
 		defer sourcePipe.Close()
@@ -465,7 +441,6 @@ func testTransactionPropagation(t *testing.T, protocol uint) {
 
 		sourcePeer := eth.NewPeer(protocol, p2p.NewPeerPipe(enode.ID{byte(i + 1)}, "", nil, sourcePipe), sourcePipe, source.txpool)
 		sinkPeer := eth.NewPeer(protocol, p2p.NewPeerPipe(enode.ID{0}, "", nil, sinkPipe), sinkPipe, sink.txpool)
-
 		defer sourcePeer.Close()
 		defer sinkPeer.Close()
 
@@ -485,15 +460,14 @@ func testTransactionPropagation(t *testing.T, protocol uint) {
 		defer sub.Unsubscribe()
 	}
 	// Fill the source pool with transactions and wait for them at the sinks
-	txs := make([]*types.Transaction, 1024)
+	txs := make([]*txpool.Transaction, 1024)
 	for nonce := range txs {
 		tx := types.NewTransaction(uint64(nonce), common.Address{}, big.NewInt(0), 100000, big.NewInt(0), nil)
 		tx, _ = types.SignTx(tx, types.HomesteadSigner{}, testKey)
 
-		txs[nonce] = tx
+		txs[nonce] = &txpool.Transaction{Tx: tx}
 	}
-
-	source.txpool.AddRemotes(txs)
+	source.txpool.Add(txs, false, false)
 
 	// Iterate through all the sinks and ensure they all got the transactions
 	for i := range sinks {
@@ -503,7 +477,6 @@ func testTransactionPropagation(t *testing.T, protocol uint) {
 				arrived += len(event.Txs)
 			case <-time.After(2 * time.Second):
 				t.Errorf("sink %d: transaction propagation timed out: have %d, want %d", i, arrived, len(txs))
-
 				timeout = true
 			}
 		}

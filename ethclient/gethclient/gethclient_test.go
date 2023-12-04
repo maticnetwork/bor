@@ -47,6 +47,7 @@ var (
 )
 
 func newTestBackend(t *testing.T) (*node.Node, []*types.Block) {
+	t.Helper()
 	// Generate test chain.
 	genesis, blocks := generateTestChain()
 	// Create node
@@ -102,12 +103,7 @@ func TestGethClient(t *testing.T) {
 	t.Skip("bor due to burn contract")
 
 	backend, _ := newTestBackend(t)
-
-	client, err := backend.Attach()
-	if err != nil {
-		t.Fatal(err)
-	}
-
+	client := backend.Attach()
 	defer backend.Close()
 	defer client.Close()
 
@@ -118,6 +114,9 @@ func TestGethClient(t *testing.T) {
 		{
 			"TestGetProof",
 			func(t *testing.T) { testGetProof(t, client) },
+		}, {
+			"TestGetProofCanonicalizeKeys",
+			func(t *testing.T) { testGetProofCanonicalizeKeys(t, client) },
 		}, {
 			"TestGCStats",
 			func(t *testing.T) { testGCStats(t, client) },
@@ -170,6 +169,7 @@ func TestGethClient(t *testing.T) {
 }
 
 func testAccessList(t *testing.T, client *rpc.Client) {
+	t.Helper()
 	ec := New(client)
 	// Test transfer
 	msg := ethereum.CallMsg{
@@ -254,6 +254,7 @@ func testGetProof(t *testing.T, client *rpc.Client) {
 	if result.Balance.Cmp(balance) != 0 {
 		t.Fatalf("invalid balance, want: %v got: %v", balance, result.Balance)
 	}
+
 	// test storage
 	if len(result.StorageProof) != 1 {
 		t.Fatalf("invalid storage proof, want 1 proof, got %v proof(s)", len(result.StorageProof))
@@ -267,7 +268,38 @@ func testGetProof(t *testing.T, client *rpc.Client) {
 	}
 
 	if proof.Key != testSlot.String() {
-		t.Fatalf("invalid storage proof key, want: %v, got: %v", testSlot.String(), proof.Key)
+		t.Fatalf("invalid storage proof key, want: %q, got: %q", testSlot.String(), proof.Key)
+	}
+}
+
+func testGetProofCanonicalizeKeys(t *testing.T, client *rpc.Client) {
+	t.Helper()
+	ec := New(client)
+
+	// Tests with non-canon input for storage keys.
+	// Here we check that the storage key is canonicalized.
+	result, err := ec.GetProof(context.Background(), testAddr, []string{"0x0dEadbeef"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.StorageProof[0].Key != "0xdeadbeef" {
+		t.Fatalf("wrong storage key encoding in proof: %q", result.StorageProof[0].Key)
+	}
+	if result, err = ec.GetProof(context.Background(), testAddr, []string{"0x000deadbeef"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if result.StorageProof[0].Key != "0xdeadbeef" {
+		t.Fatalf("wrong storage key encoding in proof: %q", result.StorageProof[0].Key)
+	}
+
+	// If the requested storage key is 32 bytes long, it will be returned as is.
+	hashSizedKey := "0x00000000000000000000000000000000000000000000000000000000deadbeef"
+	result, err = ec.GetProof(context.Background(), testAddr, []string{hashSizedKey}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.StorageProof[0].Key != hashSizedKey {
+		t.Fatalf("wrong storage key encoding in proof: %q", result.StorageProof[0].Key)
 	}
 }
 
@@ -504,6 +536,7 @@ func TestBlockOverridesMarshal(t *testing.T) {
 }
 
 func testCallContractWithBlockOverrides(t *testing.T, client *rpc.Client) {
+	t.Helper()
 	ec := New(client)
 	msg := ethereum.CallMsg{
 		From:     testAddr,

@@ -90,6 +90,7 @@ func TestMissingNode(t *testing.T) {
 }
 
 func testMissingNode(t *testing.T, memonly bool, scheme string) {
+	t.Helper()
 	diskdb := rawdb.NewMemoryDatabase()
 	triedb := newTestDatabase(diskdb, scheme)
 
@@ -282,7 +283,7 @@ func TestEmptyValues(t *testing.T) {
 }
 
 func TestReplication(t *testing.T) {
-	db := NewDatabase(rawdb.NewMemoryDatabase(), nil)
+	db := NewDatabase(rawdb.NewMemoryDatabase())
 	trie := NewEmpty(db)
 	vals := []struct{ k, v string }{
 		{"do", "verb"},
@@ -776,7 +777,8 @@ func TestTinyTrie(t *testing.T) {
 	if exp, root := common.HexToHash("0608c1d1dc3905fa22204c7a0e43644831c3b6d3def0f274be623a948197e64a"), trie.Hash(); exp != root {
 		t.Errorf("3: got %x, exp %x", root, exp)
 	}
-	checktr := NewEmpty(NewDatabase(rawdb.NewMemoryDatabase(), nil))
+
+	checktr := NewEmpty(NewDatabase(rawdb.NewMemoryDatabase()))
 	it := NewIterator(trie.MustNodeIterator(nil))
 	for it.Next() {
 		checktr.MustUpdate(it.Key, it.Value)

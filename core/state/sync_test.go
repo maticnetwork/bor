@@ -50,8 +50,7 @@ func makeTestState(scheme string) (ethdb.Database, Database, *trie.Database, com
 		config.HashDB = hashdb.Defaults
 	}
 	db := rawdb.NewMemoryDatabase()
-	nodeDb := trie.NewDatabase(db, config)
-	sdb := NewDatabaseWithNodeDB(db, nodeDb)
+	sdb := NewDatabaseWithConfig(db, &trie.Config{Preimages: true})
 	state, _ := New(types.EmptyRootHash, sdb, nil)
 
 	// Fill it with some arbitrary data
@@ -118,12 +117,8 @@ func checkStateAccounts(t *testing.T, db ethdb.Database, scheme string, root com
 }
 
 // checkStateConsistency checks that all data of a state root is present.
-func checkStateConsistency(db ethdb.Database, scheme string, root common.Hash) error {
-	config := &trie.Config{Preimages: true}
-	if scheme == rawdb.PathScheme {
-		config.PathDB = pathdb.Defaults
-	}
-	state, err := New(root, NewDatabaseWithConfig(db, config), nil)
+func checkStateConsistency(db ethdb.Database, root common.Hash) error {
+	state, err := New(root, NewDatabaseWithConfig(db, &trie.Config{Preimages: true}), nil)
 	if err != nil {
 		return err
 	}
@@ -186,7 +181,7 @@ type stateElement struct {
 
 func testIterativeStateSync(t *testing.T, count int, commit bool, bypath bool, scheme string) {
 	// Create a random state to copy
-	srcDisk, srcDb, ndb, srcRoot, srcAccounts := makeTestState(scheme)
+	srcDisk, srcDb, srcRoot, srcAccounts := makeTestState()
 	if commit {
 		ndb.Commit(srcRoot, false)
 	}
@@ -329,7 +324,7 @@ func TestIterativeDelayedStateSync(t *testing.T) {
 
 func testIterativeDelayedStateSync(t *testing.T, scheme string) {
 	// Create a random state to copy
-	srcDisk, srcDb, ndb, srcRoot, srcAccounts := makeTestState(scheme)
+	srcDisk, srcDb, srcRoot, srcAccounts := makeTestState()
 
 	// Create a destination state and sync with the scheduler
 	dstDb := rawdb.NewMemoryDatabase()
@@ -453,7 +448,7 @@ func TestIterativeRandomStateSyncBatched(t *testing.T) {
 
 func testIterativeRandomStateSync(t *testing.T, count int, scheme string) {
 	// Create a random state to copy
-	srcDisk, srcDb, ndb, srcRoot, srcAccounts := makeTestState(scheme)
+	srcDisk, srcDb, srcRoot, srcAccounts := makeTestState()
 
 	// Create a destination state and sync with the scheduler
 	dstDb := rawdb.NewMemoryDatabase()
@@ -546,7 +541,7 @@ func testIterativeRandomStateSync(t *testing.T, count int, scheme string) {
 	copyPreimages(srcDisk, dstDb)
 
 	// Cross check that the two states are in sync
-	checkStateAccounts(t, dstDb, ndb.Scheme(), srcRoot, srcAccounts)
+	checkStateAccounts(t, dstDb, srcRoot, srcAccounts)
 }
 
 // Tests that the trie scheduler can correctly reconstruct the state even if only
@@ -558,7 +553,7 @@ func TestIterativeRandomDelayedStateSync(t *testing.T) {
 
 func testIterativeRandomDelayedStateSync(t *testing.T, scheme string) {
 	// Create a random state to copy
-	srcDisk, srcDb, ndb, srcRoot, srcAccounts := makeTestState(scheme)
+	srcDisk, srcDb, srcRoot, srcAccounts := makeTestState()
 
 	// Create a destination state and sync with the scheduler
 	dstDb := rawdb.NewMemoryDatabase()
@@ -661,7 +656,7 @@ func testIterativeRandomDelayedStateSync(t *testing.T, scheme string) {
 	copyPreimages(srcDisk, dstDb)
 
 	// Cross check that the two states are in sync
-	checkStateAccounts(t, dstDb, ndb.Scheme(), srcRoot, srcAccounts)
+	checkStateAccounts(t, dstDb, srcRoot, srcAccounts)
 }
 
 // Tests that at any point in time during a sync, only complete sub-tries are in
@@ -695,7 +690,7 @@ func testIncompleteStateSync(t *testing.T, scheme string) {
 		addedPaths  []string
 		addedHashes []common.Hash
 	)
-	reader, err := ndb.Reader(srcRoot)
+	reader, err := srcDb.TrieDB().Reader(srcRoot)
 	if err != nil {
 		t.Fatalf("state is not available %x", srcRoot)
 	}

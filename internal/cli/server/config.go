@@ -3,7 +3,6 @@ package server
 import (
 	"crypto/ecdsa"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"math/big"
 	"os"
@@ -68,6 +67,9 @@ type Config struct {
 	// Ancient is the directory to store the state in
 	Ancient string `hcl:"ancient,optional" toml:"ancient,optional"`
 
+	// DBEngine is used to select leveldb or pebble as database
+	DBEngine string `hcl:"db.engine,optional" toml:"db.engine,optional"`
+
 	// KeyStoreDir is the directory to store keystores
 	KeyStoreDir string `hcl:"keystore,optional" toml:"keystore,optional"`
 
@@ -118,6 +120,8 @@ type Config struct {
 
 	// Cache has the cache related settings
 	Cache *CacheConfig `hcl:"cache,block" toml:"cache,block"`
+
+	ExtraDB *ExtraDBConfig `hcl:"leveldb,block" toml:"leveldb,block"`
 
 	// Account has the validator account related settings
 	Accounts *AccountsConfig `hcl:"accounts,block" toml:"accounts,block"`
@@ -216,6 +220,9 @@ type P2PConfig struct {
 }
 
 type P2PDiscovery struct {
+	// DiscoveryV4 specifies whether V4 discovery should be started.
+	DiscoveryV4 bool `hcl:"v4disc,optional" toml:"v4disc,optional"`
+
 	// V5Enabled is used to enable disc v5 discovery mode
 	V5Enabled bool `hcl:"v5disc,optional" toml:"v5disc,optional"`
 
@@ -523,13 +530,6 @@ type CacheConfig struct {
 	// PercTrie is percentage of cache used for the trie
 	PercTrie uint64 `hcl:"trie,optional" toml:"trie,optional"`
 
-	// Journal is the disk journal directory for trie cache to survive node restarts
-	Journal string `hcl:"journal,optional" toml:"journal,optional"`
-
-	// Rejournal is the time interval to regenerate the journal for clean cache
-	Rejournal    time.Duration `hcl:"-,optional" toml:"-"`
-	RejournalRaw string        `hcl:"rejournal,optional" toml:"rejournal,optional"`
-
 	// NoPrefetch is used to disable prefetch of tries
 	NoPrefetch bool `hcl:"noprefetch,optional" toml:"noprefetch,optional"`
 
@@ -541,12 +541,23 @@ type CacheConfig struct {
 
 	// Number of block states to keep in memory (default = 128)
 	TriesInMemory uint64 `hcl:"triesinmemory,optional" toml:"triesinmemory,optional"`
+
+	// This is the number of blocks for which logs will be cached in the filter system.
+	FilterLogCacheSize int `hcl:"blocklogs,optional" toml:"blocklogs,optional"`
+
 	// Time after which the Merkle Patricia Trie is stored to disc from memory
 	TrieTimeout    time.Duration `hcl:"-,optional" toml:"-"`
 	TrieTimeoutRaw string        `hcl:"timeout,optional" toml:"timeout,optional"`
 
 	// Raise the open file descriptor resource limit (default = system fd limit)
 	FDLimit int `hcl:"fdlimit,optional" toml:"fdlimit,optional"`
+}
+
+type ExtraDBConfig struct {
+	LevelDbCompactionTableSize           uint64  `hcl:"compactiontablesize,optional" toml:"compactiontablesize,optional"`
+	LevelDbCompactionTableSizeMultiplier float64 `hcl:"compactiontablesizemultiplier,optional" toml:"compactiontablesizemultiplier,optional"`
+	LevelDbCompactionTotalSize           uint64  `hcl:"compactiontotalsize,optional" toml:"compactiontotalsize,optional"`
+	LevelDbCompactionTotalSizeMultiplier float64 `hcl:"compactiontotalsizemultiplier,optional" toml:"compactiontotalsizemultiplier,optional"`
 }
 
 type AccountsConfig struct {
@@ -593,6 +604,8 @@ func DefaultConfig() *Config {
 		EnablePreimageRecording: false,
 		DataDir:                 DefaultDataDir(),
 		Ancient:                 "",
+		DBEngine:                "leveldb",
+		KeyStoreDir:             "",
 		Logging: &LoggingConfig{
 			Vmodule:   "",
 			Json:      false,
@@ -611,6 +624,7 @@ func DefaultConfig() *Config {
 			NetRestrict:   "",
 			TxArrivalWait: 500 * time.Millisecond,
 			Discovery: &P2PDiscovery{
+				DiscoveryV4:  true,
 				V5Enabled:    false,
 				Bootnodes:    []string{},
 				BootnodesV4:  []string{},
@@ -725,19 +739,26 @@ func DefaultConfig() *Config {
 			},
 		},
 		Cache: &CacheConfig{
-			Cache:         1024, // geth's default (suitable for mumbai)
-			PercDatabase:  50,
-			PercTrie:      15,
-			PercGc:        25,
-			PercSnapshot:  10,
-			Journal:       "triecache",
-			Rejournal:     60 * time.Minute,
-			NoPrefetch:    false,
-			Preimages:     false,
-			TxLookupLimit: 2350000,
-			TriesInMemory: 128,
-			TrieTimeout:   60 * time.Minute,
-			FDLimit:       0,
+			Cache:              1024, // geth's default (suitable for mumbai)
+			PercDatabase:       50,
+			PercTrie:           15,
+			PercGc:             25,
+			PercSnapshot:       10,
+			NoPrefetch:         false,
+			Preimages:          false,
+			TxLookupLimit:      2350000,
+			TriesInMemory:      128,
+			FilterLogCacheSize: ethconfig.Defaults.FilterLogCacheSize,
+			TrieTimeout:        60 * time.Minute,
+			FDLimit:            0,
+		},
+		ExtraDB: &ExtraDBConfig{
+			// These are LevelDB defaults, specifying here for clarity in code and in logging.
+			// See: https://github.com/syndtr/goleveldb/blob/126854af5e6d8295ef8e8bee3040dd8380ae72e8/leveldb/opt/options.go
+			LevelDbCompactionTableSize:           2, // MiB
+			LevelDbCompactionTableSizeMultiplier: 1,
+			LevelDbCompactionTotalSize:           10, // MiB
+			LevelDbCompactionTotalSizeMultiplier: 10,
 		},
 		Accounts: &AccountsConfig{
 			Unlock:              []string{},
@@ -820,7 +841,6 @@ func (c *Config) fillTimeDurations() error {
 		{"jsonrpc.http.ep-requesttimeout", &c.JsonRPC.Http.ExecutionPoolRequestTimeout, &c.JsonRPC.Http.ExecutionPoolRequestTimeoutRaw},
 		{"txpool.lifetime", &c.TxPool.LifeTime, &c.TxPool.LifeTimeRaw},
 		{"txpool.rejournal", &c.TxPool.Rejournal, &c.TxPool.RejournalRaw},
-		{"cache.rejournal", &c.Cache.Rejournal, &c.Cache.RejournalRaw},
 		{"cache.timeout", &c.Cache.TrieTimeout, &c.Cache.TrieTimeoutRaw},
 		{"p2p.txarrivalwait", &c.P2P.TxArrivalWait, &c.P2P.TxArrivalWaitRaw},
 	}
@@ -1073,7 +1093,7 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 				mem.Total = 2 * 1024 * 1024 * 1024
 			}
 
-			allowance := uint64(mem.Total / 1024 / 1024 / 3)
+			allowance := mem.Total / 1024 / 1024 / 3
 			if cache > allowance {
 				log.Warn("Sanitizing cache to Go's GC limits", "provided", cache, "updated", allowance)
 				cache = allowance
@@ -1094,8 +1114,15 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 		n.TxLookupLimit = c.Cache.TxLookupLimit
 		n.TrieTimeout = c.Cache.TrieTimeout
 		n.TriesInMemory = c.Cache.TriesInMemory
-		n.StateScheme = rawdb.PathScheme
-		n.StateHistory = ethconfig.Defaults.StateHistory
+		n.FilterLogCacheSize = c.Cache.FilterLogCacheSize
+	}
+
+	// LevelDB
+	{
+		n.LevelDbCompactionTableSize = c.ExtraDB.LevelDbCompactionTableSize
+		n.LevelDbCompactionTableSizeMultiplier = c.ExtraDB.LevelDbCompactionTableSizeMultiplier
+		n.LevelDbCompactionTotalSize = c.ExtraDB.LevelDbCompactionTotalSize
+		n.LevelDbCompactionTotalSizeMultiplier = c.ExtraDB.LevelDbCompactionTotalSizeMultiplier
 	}
 
 	n.RPCGasCap = c.JsonRPC.GasCap
@@ -1279,6 +1306,7 @@ func (c *Config) buildNode() (*node.Config, error) {
 	cfg := &node.Config{
 		Name:                  clientIdentifier,
 		DataDir:               c.DataDir,
+		DBEngine:              c.DBEngine,
 		KeyStoreDir:           c.KeyStoreDir,
 		UseLightweightKDF:     c.Accounts.UseLightweightKDF,
 		InsecureUnlockAllowed: c.Accounts.AllowInsecureUnlock,
@@ -1290,6 +1318,7 @@ func (c *Config) buildNode() (*node.Config, error) {
 			MaxPeers:        int(c.P2P.MaxPeers),
 			MaxPendingPeers: int(c.P2P.MaxPendPeers),
 			ListenAddr:      c.P2P.Bind + ":" + strconv.Itoa(int(c.P2P.Port)),
+			DiscoveryV4:     c.P2P.Discovery.DiscoveryV4,
 			DiscoveryV5:     c.P2P.Discovery.V5Enabled,
 			TxArrivalWait:   c.P2P.TxArrivalWait,
 		},
@@ -1370,10 +1399,10 @@ func (c *Config) buildNode() (*node.Config, error) {
 	// only check for non-developer modes
 	if !c.Developer.Enabled {
 		// Discovery
-		// if no bootnodes are defined, use the ones from the chain file.
+		// Append the bootnodes defined with those hardcoded in the config file
 		bootnodes := c.P2P.Discovery.Bootnodes
-		if len(bootnodes) == 0 {
-			bootnodes = c.chain.Bootnodes
+		if c.chain != nil {
+			bootnodes = append(bootnodes, c.chain.Bootnodes...)
 		}
 
 		if cfg.P2P.BootstrapNodes, err = parseBootnodes(bootnodes); err != nil {
@@ -1498,7 +1527,7 @@ func Hostname() string {
 }
 
 func MakePasswordListFromFile(path string) ([]string, error) {
-	text, err := ioutil.ReadFile(path)
+	text, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read password file: %v", err)
 	}

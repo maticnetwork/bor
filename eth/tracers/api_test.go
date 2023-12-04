@@ -422,12 +422,14 @@ func TestTraceBlock(t *testing.T) {
 	}
 	genBlocks := 10
 	signer := types.HomesteadSigner{}
+	var txHash common.Hash
 	backend := newTestBackend(t, genBlocks, genesis, func(i int, b *core.BlockGen) {
 		// Transfer from account[0] to account[1]
 		//    value: 1000 wei
 		//    fee:   0 wei
 		tx, _ := types.SignTx(types.NewTransaction(uint64(i), accounts[1].addr, big.NewInt(1000), params.TxGas, b.BaseFee(), nil), signer, accounts[0].key)
 		b.AddTx(tx)
+		txHash = tx.Hash()
 	})
 
 	defer backend.chain.Stop()
@@ -447,7 +449,7 @@ func TestTraceBlock(t *testing.T) {
 		// Trace head block
 		{
 			blockNumber: rpc.BlockNumber(genBlocks),
-			want:        `[{"result":{"gas":21000,"failed":false,"returnValue":"","structLogs":[]}}]`,
+			want:        fmt.Sprintf(`[{"txHash":"%v","result":{"gas":21000,"failed":false,"returnValue":"","structLogs":[]}}]`, txHash),
 		},
 		// Trace non-existent block
 		{
@@ -457,12 +459,12 @@ func TestTraceBlock(t *testing.T) {
 		// Trace latest block
 		{
 			blockNumber: rpc.LatestBlockNumber,
-			want:        `[{"result":{"gas":21000,"failed":false,"returnValue":"","structLogs":[]}}]`,
+			want:        fmt.Sprintf(`[{"txHash":"%v","result":{"gas":21000,"failed":false,"returnValue":"","structLogs":[]}}]`, txHash),
 		},
 		// Trace pending block
 		{
 			blockNumber: rpc.PendingBlockNumber,
-			want:        `[{"result":{"gas":21000,"failed":false,"returnValue":"","structLogs":[]}}]`,
+			want:        fmt.Sprintf(`[{"txHash":"%v","result":{"gas":21000,"failed":false,"returnValue":"","structLogs":[]}}]`, txHash),
 		},
 	}
 
@@ -493,6 +495,12 @@ func TestTraceBlock(t *testing.T) {
 			t.Errorf("test %d, result mismatch, have\n%v\n, want\n%v\n", i, string(have), want)
 		}
 	}
+}
+
+// txTraceResult is the result of a single transaction trace.
+type txTraceResultTest struct {
+	Result interface{} `json:"result,omitempty"` // Trace results produced by the tracer
+	Error  string      `json:"error,omitempty"`  // Trace failure produced by the tracer
 }
 
 func TestIOdump(t *testing.T) {
@@ -556,12 +564,22 @@ func TestIOdump(t *testing.T) {
 			continue
 		}
 
+		// Done As txTraceResult struct was changed during Cancun changes
+		resArr := make([]*txTraceResultTest, 0)
+		for _, res := range result {
+			res := &txTraceResultTest{
+				Result: res.Result,
+				Error:  res.Error,
+			}
+			resArr = append(resArr, res)
+		}
+
 		if err != nil {
 			t.Errorf("test %d, want no error, have %v", i, err)
 			continue
 		}
 
-		have, err := json.Marshal(result)
+		have, err := json.Marshal(resArr)
 		if err != nil {
 			t.Errorf("Error in Marshal: %v", err)
 		}
@@ -922,7 +940,7 @@ func newAccounts(n int) (accounts []Account) {
 		addr := crypto.PubkeyToAddress(key.PublicKey)
 		accounts = append(accounts, Account{key: key, addr: addr})
 	}
-	slices.SortFunc(accounts, func(a, b Account) bool { return a.addr.Less(b.addr) })
+	slices.SortFunc(accounts, func(a, b Account) int { return a.addr.Cmp(b.addr) })
 	return accounts
 }
 
@@ -987,8 +1005,7 @@ func TestTraceChain(t *testing.T) {
 	backend.relHook = func() { rel.Add(1) }
 	api := NewAPI(backend)
 
-	single := `{"result":{"gas":21000,"failed":false,"returnValue":"","structLogs":[]}}`
-
+	single := `{"txHash":"0x0000000000000000000000000000000000000000000000000000000000000000","result":{"gas":21000,"failed":false,"returnValue":"","structLogs":[]}}`
 	var cases = []struct {
 		start  uint64
 		end    uint64
@@ -1008,19 +1025,18 @@ func TestTraceChain(t *testing.T) {
 
 		next := c.start + 1
 		for result := range resCh {
-			if next != uint64(result.Block) {
-				t.Error("Unexpected tracing block")
+			if have, want := uint64(result.Block), next; have != want {
+				t.Fatalf("unexpected tracing block, have %d want %d", have, want)
 			}
-
-			if len(result.Traces) != int(next) {
-				t.Error("Unexpected tracing result")
+			if have, want := len(result.Traces), int(next); have != want {
+				t.Fatalf("unexpected result length, have %d want %d", have, want)
 			}
 
 			for _, trace := range result.Traces {
-				// nolint : errchkjson
+				trace.TxHash = common.Hash{}
 				blob, _ := json.Marshal(trace)
-				if string(blob) != single {
-					t.Error("Unexpected tracing result")
+				if have, want := string(blob), single; have != want {
+					t.Fatalf("unexpected tracing result, have\n%v\nwant:\n%v", have, want)
 				}
 			}
 

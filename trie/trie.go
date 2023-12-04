@@ -745,7 +745,6 @@ func (t *Trie) Reset() {
 
 	t.tracerMutex.Lock()
 	t.tracer.reset()
-	t.tracerMutex.Unlock()
-
 	t.committed = false
+	t.tracerMutex.Unlock()
 }

@@ -83,7 +83,11 @@ func validate(jt JumpTable) JumpTable {
 
 func newCancunInstructionSet() JumpTable {
 	instructionSet := newShanghaiInstructionSet()
-	enable4844(&instructionSet) // BLOBHASH opcode
+	// Disabled in bor
+	// enable4844(&instructionSet) // EIP-4844 (DATAHASH opcode)
+	enable1153(&instructionSet) // EIP-1153 "Transient Storage"
+	enable5656(&instructionSet) // EIP-5656 (MCOPY opcode)
+	enable6780(&instructionSet) // EIP-6780 SELFDESTRUCT only in same transaction
 	return validate(instructionSet)
 }
 
@@ -97,12 +101,15 @@ func newShanghaiInstructionSet() JumpTable {
 
 func newMergeInstructionSet() JumpTable {
 	instructionSet := newLondonInstructionSet()
-	instructionSet[PREVRANDAO] = &operation{
-		execute:     opRandom,
-		constantGas: GasQuickStep,
-		minStack:    minStack(0, 1),
-		maxStack:    maxStack(0, 1),
-	}
+
+	// disabling in pos due to incompatibility with prevrandao
+
+	// instructionSet[PREVRANDAO] = &operation{
+	// 	execute:     opRandom,
+	// 	constantGas: GasQuickStep,
+	// 	minStack:    minStack(0, 1),
+	// 	maxStack:    maxStack(0, 1),
+	// }
 
 	return validate(instructionSet)
 }

@@ -48,7 +48,6 @@ func parseNode(node string) (enode.ID, error) {
 	if id, err := enode.ParseID(node); err == nil {
 		return id, nil
 	}
-
 	if node, err := enode.Parse(enode.ValidSchemes, node); err == nil {
 		return node.ID(), nil
 	} else {
@@ -64,14 +63,12 @@ func (api *LightServerAPI) ServerInfo() map[string]interface{} {
 	_, res["totalCapacity"] = api.server.clientPool.Limits()
 	_, res["totalConnectedCapacity"] = api.server.clientPool.Active()
 	res["priorityConnectedCapacity"] = 0 //TODO connect when token sale module is added
-
 	return res
 }
 
 // ClientInfo returns information about clients listed in the ids list or matching the given tags
 func (api *LightServerAPI) ClientInfo(nodes []string) map[enode.ID]map[string]interface{} {
 	var ids []enode.ID
-
 	for _, node := range nodes {
 		if id, err := parseNode(node); err == nil {
 			ids = append(ids, id)
@@ -79,11 +76,9 @@ func (api *LightServerAPI) ClientInfo(nodes []string) map[enode.ID]map[string]in
 	}
 
 	res := make(map[enode.ID]map[string]interface{})
-
 	if len(ids) == 0 {
 		ids = api.server.peers.ids()
 	}
-
 	for _, id := range ids {
 		if peer := api.server.peers.peer(id); peer != nil {
 			res[id] = api.clientInfo(peer, peer.balance)
@@ -93,7 +88,6 @@ func (api *LightServerAPI) ClientInfo(nodes []string) map[enode.ID]map[string]in
 			})
 		}
 	}
-
 	return res
 }
 
@@ -106,12 +100,10 @@ func (api *LightServerAPI) ClientInfo(nodes []string) map[enode.ID]map[string]in
 func (api *LightServerAPI) PriorityClientInfo(start, stop enode.ID, maxCount int) map[enode.ID]map[string]interface{} {
 	res := make(map[enode.ID]map[string]interface{})
 	ids := api.server.clientPool.GetPosBalanceIDs(start, stop, maxCount+1)
-
 	if len(ids) > maxCount {
 		res[ids[maxCount]] = make(map[string]interface{})
 		ids = ids[:maxCount]
 	}
-
 	for _, id := range ids {
 		if peer := api.server.peers.peer(id); peer != nil {
 			res[id] = api.clientInfo(peer, peer.balance)
@@ -121,7 +113,6 @@ func (api *LightServerAPI) PriorityClientInfo(start, stop enode.ID, maxCount int
 			})
 		}
 	}
-
 	return res
 }
 
@@ -139,7 +130,6 @@ func (api *LightServerAPI) clientInfo(peer *clientPeer, balance vfs.ReadOnlyBala
 		info["capacity"] = peer.getCapacity()
 		info["pricing/negBalance"] = nb
 	}
-
 	return info
 }
 
@@ -147,7 +137,6 @@ func (api *LightServerAPI) clientInfo(peer *clientPeer, balance vfs.ReadOnlyBala
 // or the default parameters applicable to clients connected in the future
 func (api *LightServerAPI) setParams(params map[string]interface{}, client *clientPeer, posFactors, negFactors *vfs.PriceFactors) (updateFactors bool, err error) {
 	defParams := client == nil
-
 	for name, value := range params {
 		errValue := func() error {
 			return fmt.Errorf("invalid value for parameter '%s'", name)
@@ -188,12 +177,10 @@ func (api *LightServerAPI) setParams(params map[string]interface{}, client *clie
 				err = fmt.Errorf("invalid client parameter '%s'", name)
 			}
 		}
-
 		if err != nil {
 			return
 		}
 	}
-
 	return
 }
 
@@ -201,22 +188,17 @@ func (api *LightServerAPI) setParams(params map[string]interface{}, client *clie
 // or all connected clients if the list is empty
 func (api *LightServerAPI) SetClientParams(nodes []string, params map[string]interface{}) error {
 	var err error
-
 	for _, node := range nodes {
 		var id enode.ID
-
 		if id, err = parseNode(node); err != nil {
 			return err
 		}
-
 		if peer := api.server.peers.peer(id); peer != nil {
 			posFactors, negFactors := peer.balance.GetPriceFactors()
 			update, e := api.setParams(params, peer, &posFactors, &negFactors)
-
 			if update {
 				peer.balance.SetPriceFactors(posFactors, negFactors)
 			}
-
 			if e != nil {
 				err = e
 			}
@@ -224,7 +206,6 @@ func (api *LightServerAPI) SetClientParams(nodes []string, params map[string]int
 			err = fmt.Errorf("client %064x is not connected", id)
 		}
 	}
-
 	return err
 }
 
@@ -234,7 +215,6 @@ func (api *LightServerAPI) SetDefaultParams(params map[string]interface{}) error
 	if update {
 		api.server.clientPool.SetDefaultFactors(api.defaultPosFactors, api.defaultNegFactors)
 	}
-
 	return err
 }
 
@@ -246,9 +226,7 @@ func (api *LightServerAPI) SetConnectedBias(bias time.Duration) error {
 	if bias < time.Duration(0) {
 		return fmt.Errorf("bias illegal: %v less than 0", bias)
 	}
-
 	api.server.clientPool.SetConnectedBias(bias)
-
 	return nil
 }
 
@@ -256,15 +234,12 @@ func (api *LightServerAPI) SetConnectedBias(bias time.Duration) error {
 // the balance before and after the operation
 func (api *LightServerAPI) AddBalance(node string, amount int64) (balance [2]uint64, err error) {
 	var id enode.ID
-
 	if id, err = parseNode(node); err != nil {
 		return
 	}
-
 	api.server.clientPool.BalanceOperation(id, "", func(nb vfs.AtomicBalanceOperator) {
 		balance[0], balance[1], err = nb.AddBalance(amount)
 	})
-
 	return
 }
 
@@ -276,24 +251,20 @@ func (api *LightServerAPI) AddBalance(node string, amount int64) (balance [2]uin
 // Therefore a controlled total measurement time is achievable in multiple passes.
 func (api *LightServerAPI) Benchmark(setups []map[string]interface{}, passCount, length int) ([]map[string]interface{}, error) {
 	benchmarks := make([]requestBenchmark, len(setups))
-
 	for i, setup := range setups {
 		if t, ok := setup["type"].(string); ok {
 			getInt := func(field string, def int) int {
 				if value, ok := setup[field].(float64); ok {
 					return int(value)
 				}
-
 				return def
 			}
 			getBool := func(field string, def bool) bool {
 				if value, ok := setup[field].(bool); ok {
 					return value
 				}
-
 				return def
 			}
-
 			switch t {
 			case "header":
 				benchmarks[i] = &benchmarkBlockHeaders{
@@ -331,10 +302,8 @@ func (api *LightServerAPI) Benchmark(setups []map[string]interface{}, passCount,
 			return nil, errUnknownBenchmarkType
 		}
 	}
-
 	rs := api.server.handler.runBenchmark(benchmarks, passCount, time.Millisecond*time.Duration(length))
 	result := make([]map[string]interface{}, len(setups))
-
 	for i, r := range rs {
 		res := make(map[string]interface{})
 		if r.err == nil {
@@ -345,10 +314,8 @@ func (api *LightServerAPI) Benchmark(setups []map[string]interface{}, passCount,
 		} else {
 			res["error"] = r.err.Error()
 		}
-
 		result[i] = res
 	}
-
 	return result, nil
 }
 
@@ -370,11 +337,9 @@ func (api *DebugAPI) FreezeClient(node string) error {
 		id  enode.ID
 		err error
 	)
-
 	if id, err = parseNode(node); err != nil {
 		return err
 	}
-
 	if peer := api.server.peers.peer(id); peer != nil {
 		peer.freeze()
 		return nil

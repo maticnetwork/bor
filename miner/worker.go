@@ -30,15 +30,22 @@ import (
 	"sync/atomic"
 	"time"
 
+	lru "github.com/hashicorp/golang-lru"
+	"github.com/holiman/uint256"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/ethereum/go-ethereum/common"
 	cmath "github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/common/tracing"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/bor"
-	"github.com/ethereum/go-ethereum/consensus/misc"
+	"github.com/ethereum/go-ethereum/consensus/misc/eip1559"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/blockstm"
 	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/core/txpool"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/event"
@@ -71,10 +78,6 @@ const (
 	// minRecommitInterval is the minimal time interval to recreate the sealing block with
 	// any newly arrived transactions.
 	minRecommitInterval = 1 * time.Second
-
-	// maxRecommitInterval is the maximum time interval to recreate the sealing block with
-	// any newly arrived transactions.
-	maxRecommitInterval = 15 * time.Second
 
 	// intervalAdjustRatio is the impact a single interval adjustment has on sealing work
 	// resubmitting interval.
@@ -241,13 +244,6 @@ type worker struct {
 	newTxs  atomic.Int32 // New arrival transaction count since last sealing work submitting.
 	syncing atomic.Bool  // The indicator whether the node is still syncing.
 
-	// noempty is the flag used to control whether the feature of pre-seal empty
-	// block is enabled. The default value is false(pre-seal is enabled by default).
-	// But in some special scenario the consensus engine will seal blocks instantaneously,
-	// in this case this feature will add all empty blocks into canonical chain
-	// non-stop and no real transaction will be included.
-	noempty atomic.Bool
-
 	// newpayloadTimeout is the maximum timeout allowance for creating payload.
 	// The default value is 2 seconds but node operator can set it to arbitrary
 	// large value. A large timeout allowance may cause Geth to fail creating
@@ -271,6 +267,13 @@ type worker struct {
 	profileCount        *int32 // Global count for profiling
 	interruptCommitFlag bool   // Interrupt commit ( Default true )
 	interruptedTxCache  *vm.TxCache
+
+	// noempty is the flag used to control whether the feature of pre-seal empty
+	// block is enabled. The default value is false(pre-seal is enabled by default).
+	// But in some special scenario the consensus engine will seal blocks instantaneously,
+	// in this case this feature will add all empty blocks into canonical chain
+	// non-stop and no real transaction will be included.
+	noempty atomic.Bool
 }
 
 //nolint:staticcheck
@@ -436,7 +439,7 @@ func (w *worker) stop() {
 }
 
 // isRunning returns an indicator whether worker is running or not.
-func (w *worker) isRunning() bool {
+func (w *worker) IsRunning() bool {
 	return w.running.Load()
 }
 
@@ -488,17 +491,15 @@ func (w *worker) newWorkLoop(ctx context.Context, recommit time.Duration) {
 
 	// commit aborts in-flight transaction execution with given signal and resubmits a new one.
 	commit := func(noempty bool, s int32) {
-		// we close spans only by the place we created them
 		ctx, span := tracing.Trace(ctx, "worker.newWorkLoop.commit")
 		tracing.EndSpan(span)
-
 		if interrupt != nil {
 			interrupt.Store(s)
 		}
 
 		interrupt = new(atomic.Int32)
 		select {
-		case w.newWorkCh <- &newWorkReq{interrupt: interrupt, noempty: noempty, timestamp: timestamp, ctx: ctx}:
+		case w.newWorkCh <- &newWorkReq{interrupt: interrupt, timestamp: timestamp, ctx: ctx, noempty: noempty}:
 		case <-w.exitCh:
 			return
 		}
@@ -525,26 +526,23 @@ func (w *worker) newWorkLoop(ctx context.Context, recommit time.Duration) {
 			clearPending(w.chain.CurrentBlock().Number.Uint64())
 
 			timestamp = time.Now().Unix()
-
 			commit(false, commitInterruptNewHead)
 
 		case head := <-w.chainHeadCh:
 			clearPending(head.Block.NumberU64())
 
 			timestamp = time.Now().Unix()
-
 			commit(false, commitInterruptNewHead)
 
 		case <-timer.C:
 			// If sealing is running resubmit a new work cycle periodically to pull in
 			// higher priced transactions. Disable this overhead for pending blocks.
-			if w.isRunning() && (w.chainConfig.Clique == nil || w.chainConfig.Clique.Period > 0) {
+			if w.IsRunning() && (w.chainConfig.Clique == nil || w.chainConfig.Clique.Period > 0) {
 				// Short circuit if no new transaction arrives.
 				if w.newTxs.Load() == 0 {
 					timer.Reset(recommit)
 					continue
 				}
-
 				commit(true, commitInterruptResubmit)
 			}
 
@@ -602,8 +600,15 @@ func (w *worker) mainLoop(ctx context.Context) {
 	for {
 		select {
 		case req := <-w.newWorkCh:
-			//nolint:contextcheck
-			w.commitWork(req.ctx, req.interrupt, req.noempty, req.timestamp)
+			if w.chainConfig.ChainID.Cmp(params.BorMainnetChainConfig.ChainID) == 0 || w.chainConfig.ChainID.Cmp(params.MumbaiChainConfig.ChainID) == 0 {
+				if w.eth.PeerCount() > 0 {
+					//nolint:contextcheck
+					w.commitWork(req.ctx, req.interrupt, req.noempty, req.timestamp)
+				}
+			} else {
+				//nolint:contextcheck
+				w.commitWork(req.ctx, req.interrupt, req.noempty, req.timestamp)
+			}
 
 		case req := <-w.getWorkCh:
 			block, fees, err := w.generateWork(req.ctx, req.params)
@@ -619,28 +624,25 @@ func (w *worker) mainLoop(ctx context.Context) {
 			// Note all transactions received may not be continuous with transactions
 			// already included in the current sealing block. These transactions will
 			// be automatically eliminated.
-			if !w.isRunning() && w.current != nil {
+			// nolint : nestif
+			if !w.IsRunning() && w.current != nil {
 				// If block is already full, abort
 				if gp := w.current.gasPool; gp != nil && gp.Gas() < params.TxGas {
 					continue
 				}
-
-				txs := make(map[common.Address]types.Transactions)
-
+				txs := make(map[common.Address][]*txpool.LazyTransaction, len(ev.Txs))
 				for _, tx := range ev.Txs {
 					acc, _ := types.Sender(w.current.signer, tx)
-					txs[acc] = append(txs[acc], tx)
+					txs[acc] = append(txs[acc], &txpool.LazyTransaction{
+						Hash:      tx.Hash(),
+						Tx:        &txpool.Transaction{Tx: tx},
+						Time:      tx.Time(),
+						GasFeeCap: tx.GasFeeCap(),
+						GasTipCap: tx.GasTipCap(),
+					})
 				}
-
-				var baseFee *uint256.Int
-				if w.current.header.BaseFee != nil {
-					baseFee = cmath.FromBig(w.current.header.BaseFee)
-				}
-
-				txset := types.NewTransactionsByPriceAndNonce(w.current.signer, txs, baseFee)
+				txset := newTransactionsByPriceAndNonce(w.current.signer, txs, w.current.header.BaseFee)
 				tcount := w.current.tcount
-
-				//nolint:contextcheck
 				w.commitTransactions(w.current, txset, nil, context.Background())
 
 				// Only update the snapshot if any new transactons were added
@@ -824,6 +826,12 @@ func (w *worker) resultLoop() {
 			// Broadcast the block and announce chain insertion event
 			w.mux.Post(core.NewMinedBlockEvent{Block: block})
 
+			sealedBlocksCounter.Inc(1)
+
+			if block.Transactions().Len() == 0 {
+				sealedEmptyBlocksCounter.Inc(1)
+			}
+
 		case <-w.exitCh:
 			return
 		}
@@ -886,15 +894,13 @@ func (w *worker) commitTransaction(env *environment, tx *types.Transaction, inte
 
 		return nil, err
 	}
-
 	env.txs = append(env.txs, tx)
 	env.receipts = append(env.receipts, receipt)
 
 	return receipt.Logs, nil
 }
 
-//nolint:gocognit
-func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByPriceAndNonce, interrupt *atomic.Int32, interruptCtx context.Context) error {
+func (w *worker) commitTransactions(env *environment, txs *transactionsByPriceAndNonce, interrupt *atomic.Int32, interruptCtx context.Context) error {
 	gasLimit := env.header.GasLimit
 	if env.gasPool == nil {
 		env.gasPool = new(core.GasPool).AddGas(gasLimit)
@@ -916,7 +922,7 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 
 	var depsWg sync.WaitGroup
 
-	EnableMVHashMap := false
+	EnableMVHashMap := w.chainConfig.Bor.IsParallelUniverse(env.header.Number)
 
 	// create and add empty mvHashMap in statedb
 	if EnableMVHashMap {
@@ -944,6 +950,7 @@ func (w *worker) commitTransactions(env *environment, txs *types.TransactionsByP
 	}
 
 	initialGasLimit := env.gasPool.Gas()
+
 	initialTxs := txs.GetTxs()
 
 	var breakCause string
@@ -990,25 +997,57 @@ mainloop:
 			break
 		}
 		// Retrieve the next transaction and abort if all done.
-		tx := txs.Peek()
-		if tx == nil {
+		ltx := txs.Peek()
+		if ltx == nil {
 			breakCause = "all transactions has been included"
 			break
 		}
+		tx := ltx.Resolve()
+		if tx == nil {
+			log.Warn("Ignoring evicted transaction")
+
+			txs.Pop()
+			continue
+		}
 		// Error may be ignored here. The error has already been checked
 		// during transaction acceptance is the transaction pool.
-		from, _ := types.Sender(env.signer, tx)
+		from, _ := types.Sender(env.signer, tx.Tx)
+
+		// not prioritising conditional transaction, yet.
+		//nolint:nestif
+		if options := tx.Tx.GetOptions(); options != nil {
+			if err := env.header.ValidateBlockNumberOptions4337(options.BlockNumberMin, options.BlockNumberMax); err != nil {
+				log.Trace("Dropping conditional transaction", "from", from, "hash", tx.Tx.Hash(), "reason", err)
+				txs.Pop()
+
+				continue
+			}
+
+			if err := env.header.ValidateTimestampOptions4337(options.TimestampMin, options.TimestampMax); err != nil {
+				log.Trace("Dropping conditional transaction", "from", from, "hash", tx.Tx.Hash(), "reason", err)
+				txs.Pop()
+
+				continue
+			}
+
+			if err := env.state.ValidateKnownAccounts(options.KnownAccounts); err != nil {
+				log.Trace("Dropping conditional transaction", "from", from, "hash", tx.Tx.Hash(), "reason", err)
+				txs.Pop()
+
+				continue
+			}
+		}
 
 		// Check whether the tx is replay protected. If we're not in the EIP155 hf
 		// phase, start ignoring the sender until we do.
-		if tx.Protected() && !w.chainConfig.IsEIP155(env.header.Number) {
-			log.Trace("Ignoring reply protected transaction", "hash", tx.Hash(), "eip155", w.chainConfig.EIP155Block)
+		if tx.Tx.Protected() && !w.chainConfig.IsEIP155(env.header.Number) {
+			log.Trace("Ignoring reply protected transaction", "hash", tx.Tx.Hash(), "eip155", w.chainConfig.EIP155Block)
 
 			txs.Pop()
 			continue
 		}
 		// Start executing the transaction
-		env.state.SetTxContext(tx.Hash(), env.tcount)
+		env.state.SetTxContext(tx.Tx.Hash(), env.tcount)
 
 		var start time.Time
 
@@ -1016,12 +1055,12 @@ mainloop:
 			start = time.Now()
 		})
 
-		logs, err := w.commitTransaction(env, tx, interruptCtx)
+		logs, err := w.commitTransaction(env, tx.Tx, interruptCtx)
 
 		switch {
 		case errors.Is(err, core.ErrNonceTooLow):
 			// New head notification data race between the transaction pool and miner, shift
-			log.Trace("Skipping transaction with low nonce", "sender", from, "nonce", tx.Nonce())
+			log.Trace("Skipping transaction with low nonce", "sender", from, "nonce", tx.Tx.Nonce())
 			txs.Shift()
 
 		case errors.Is(err, nil):
@@ -1047,13 +1086,13 @@ mainloop:
 			txs.Shift()
 
 			log.OnDebug(func(lg log.Logging) {
-				lg("Committed new tx", "tx hash", tx.Hash(), "from", from, "to", tx.To(), "nonce", tx.Nonce(), "gas", tx.Gas(), "gasPrice", tx.GasPrice(), "value", tx.Value(), "time spent", time.Since(start))
+				lg("Committed new tx", "tx hash", tx.Tx.Hash(), "from", from, "to", tx.Tx.To(), "nonce", tx.Tx.Nonce(), "gas", tx.Tx.Gas(), "gasPrice", tx.Tx.GasPrice(), "value", tx.Tx.Value(), "time spent", time.Since(start))
 			})
 
 		default:
 			// Transaction is regarded as invalid, drop all consecutive transactions from
 			// the same sender because of `nonce-too-high` clause.
-			log.Debug("Transaction failed, account skipped", "hash", tx.Hash(), "err", err)
+			log.Debug("Transaction failed, account skipped", "hash", tx.Tx.Hash(), "err", err)
 			txs.Pop()
 		}
 
@@ -1064,7 +1103,7 @@ mainloop:
 	}
 
 	// nolint:nestif
-	if EnableMVHashMap && w.isRunning() {
+	if EnableMVHashMap && w.IsRunning() {
 		close(chDeps)
 		depsWg.Wait()
 
@@ -1122,10 +1161,9 @@ mainloop:
 		env.header.Extra = append(tempVanity, blockExtraDataBytes...)
 
 		env.header.Extra = append(env.header.Extra, tempSeal...)
-
 	}
 
-	if !w.isRunning() && len(coalescedLogs) > 0 {
+	if !w.IsRunning() && len(coalescedLogs) > 0 {
 		// We don't push the pendingLogsEvent while we are sealing. The reason is that
 		// when we are sealing, the worker will regenerate a sealing block every 3 seconds.
 		// In order to avoid pushing the repeated pendingLog, we disable the pending log pushing.
@@ -1201,8 +1239,7 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 	}
 	// Set baseFee and GasLimit if we are on an EIP-1559 chain
 	if w.chainConfig.IsLondon(header.Number) {
-		header.BaseFee = misc.CalcBaseFeeUint(w.chainConfig, parent).ToBig()
-
+		header.BaseFee = eip1559.CalcBaseFee(w.chainConfig, parent)
 		if !w.chainConfig.IsLondon(parent.Number) {
 			parentGasLimit := parent.GasLimit * w.chainConfig.ElasticityMultiplier()
 			header.GasLimit = core.CalcGasLimit(parentGasLimit, w.config.GasCeil)
@@ -1305,8 +1342,8 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *atomic.Int32, 
 
 	// Split the pending transactions into locals and remotes
 	// Fill the block with all available pending transactions.
-	pending := w.eth.TxPool().Pending(ctx, true)
-	localTxs, remoteTxs := make(map[common.Address]types.Transactions), pending
+	pending := w.eth.TxPool().Pending(true)
+	localTxs, remoteTxs := make(map[common.Address][]*txpool.LazyTransaction), pending
 
 	var (
 		localTxsCount  int
@@ -1377,7 +1414,7 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *atomic.Int32, 
 	tracing.Exec(ctx, "", "worker.SplittingTransactions", func(ctx context.Context, span trace.Span) {
 		prePendingTime := time.Now()
 
-		pending := w.eth.TxPool().Pending(ctx, true)
+		pending := w.eth.TxPool().Pending(true)
 		remoteTxs = pending
 
 		postPendingTime := time.Now()
@@ -1408,7 +1445,7 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *atomic.Int32, 
 	)
 
 	if len(localTxs) > 0 {
-		var txs *types.TransactionsByPriceAndNonce
+		var txs *transactionsByPriceAndNonce
 
 		tracing.Exec(ctx, "", "worker.LocalTransactionsByPriceAndNonce", func(ctx context.Context, span trace.Span) {
 			var baseFee *uint256.Int
@@ -1416,7 +1453,7 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *atomic.Int32, 
 				baseFee = cmath.FromBig(env.header.BaseFee)
 			}
 
-			txs = types.NewTransactionsByPriceAndNonce(env.signer, localTxs, baseFee)
+			txs = newTransactionsByPriceAndNonce(env.signer, localTxs, baseFee.ToBig())
 
 			tracing.SetAttributes(
 				span,
@@ -1436,7 +1473,7 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *atomic.Int32, 
 	}
 
 	if len(remoteTxs) > 0 {
-		var txs *types.TransactionsByPriceAndNonce
+		var txs *transactionsByPriceAndNonce
 
 		tracing.Exec(ctx, "", "worker.RemoteTransactionsByPriceAndNonce", func(ctx context.Context, span trace.Span) {
 			var baseFee *uint256.Int
@@ -1444,7 +1481,7 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *atomic.Int32, 
 				baseFee = cmath.FromBig(env.header.BaseFee)
 			}
 
-			txs = types.NewTransactionsByPriceAndNonce(env.signer, remoteTxs, baseFee)
+			txs = newTransactionsByPriceAndNonce(env.signer, remoteTxs, baseFee.ToBig())
 
 			tracing.SetAttributes(
 				span,
@@ -1496,7 +1533,6 @@ func (w *worker) generateWork(ctx context.Context, params *generateParams) (*typ
 			log.Warn("Block building is interrupted", "allowance", common.PrettyDuration(w.newpayloadTimeout))
 		}
 	}
-
 	block, err := w.engine.FinalizeAndAssemble(ctx, w.chain, work.header, work.state, work.txs, nil, work.receipts, params.withdrawals)
 	if err != nil {
 		return nil, nil, err
@@ -1508,6 +1544,10 @@ func (w *worker) generateWork(ctx context.Context, params *generateParams) (*typ
 // commitWork generates several new sealing tasks based on the parent block
 // and submit them to the sealer.
 func (w *worker) commitWork(ctx context.Context, interrupt *atomic.Int32, noempty bool, timestamp int64) {
+	// Abort committing if node is still syncing
+	if w.syncing.Load() {
+		return
+	}
 	start := time.Now()
 
 	var (
@@ -1518,7 +1558,7 @@ func (w *worker) commitWork(ctx context.Context, interrupt *atomic.Int32, noempt
 	tracing.Exec(ctx, "", "worker.prepareWork", func(ctx context.Context, span trace.Span) {
 		// Set the coinbase if the worker is running or it's required
 		var coinbase common.Address
-		if w.isRunning() {
+		if w.IsRunning() {
 			coinbase = w.etherbase()
 			if coinbase == (common.Address{}) {
 				log.Error("Refusing to mine without etherbase")
@@ -1633,7 +1673,7 @@ func getInterruptTimer(ctx context.Context, work *environment, current *types.Bl
 // Note the assumption is held that the mutation is allowed to the passed env, do
 // the deep copy first.
 func (w *worker) commit(ctx context.Context, env *environment, interval func(), update bool, start time.Time) error {
-	if w.isRunning() {
+	if w.IsRunning() {
 		ctx, span := tracing.StartSpan(ctx, "commit")
 		defer tracing.EndSpan(span)
 
@@ -1645,7 +1685,6 @@ func (w *worker) commit(ctx context.Context, env *environment, interval func(), 
 		env := env.copy()
 		// Withdrawals are set to nil here, because this is only called in PoW.
 		block, err := w.engine.FinalizeAndAssemble(ctx, w.chain, env.header, env.state, env.txs, nil, env.receipts, nil)
-
 		tracing.SetAttributes(
 			span,
 			attribute.Int("number", int(env.header.Number.Uint64())),
@@ -1663,7 +1702,6 @@ func (w *worker) commit(ctx context.Context, env *environment, interval func(), 
 		if !w.isTTDReached(block.Header()) {
 			select {
 			case w.taskCh <- &task{ctx: ctx, receipts: env.receipts, state: env.state, block: block, createdAt: time.Now()}:
-
 				fees := totalFees(block, env.receipts)
 				feesInEther := new(big.Float).Quo(new(big.Float).SetInt(fees), big.NewFloat(params.Ether))
 				log.Info("Commit new sealing work", "number", block.Number(), "sealhash", w.engine.SealHash(block.Header()),

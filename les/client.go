@@ -18,7 +18,7 @@
 package les
 
 import (
-	"fmt"
+	"errors"
 	"strings"
 	"time"
 
@@ -31,13 +31,11 @@ import (
 	"github.com/ethereum/go-ethereum/core/bloombits"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/eth/downloader/whitelist"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/ethereum/go-ethereum/eth/gasprice"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/internal/shutdowncheck"
-	"github.com/ethereum/go-ethereum/les/downloader"
 	"github.com/ethereum/go-ethereum/les/vflux"
 	vfc "github.com/ethereum/go-ethereum/les/vflux/client"
 	"github.com/ethereum/go-ethereum/light"
@@ -65,7 +63,6 @@ type LightEthereum struct {
 	blockchain         *light.LightChain
 	serverPool         *vfc.ServerPool
 	serverPoolIterator enode.Iterator
-	pruner             *pruner
 	merger             *consensus.Merger
 
 	bloomRequests chan chan *bloombits.Retrieval // Channel receiving bloom data retrieval requests
@@ -86,16 +83,15 @@ type LightEthereum struct {
 
 // New creates an instance of the light client.
 func New(stack *node.Node, config *ethconfig.Config) (*LightEthereum, error) {
-	chainDb, err := stack.OpenDatabase("lightchaindata", config.DatabaseCache, config.DatabaseHandles, "eth/db/chaindata/", false)
+	extraDBConfig := resolveExtraDBConfig(config)
+	chainDb, err := stack.OpenDatabase("lightchaindata", config.DatabaseCache, config.DatabaseHandles, "eth/db/chaindata/", false, extraDBConfig)
 	if err != nil {
 		return nil, err
 	}
-
-	lesDb, err := stack.OpenDatabase("les.client", 0, 0, "eth/db/lesclient/", false)
+	lesDb, err := stack.OpenDatabase("les.client", 0, 0, "eth/db/lesclient/", false, extraDBConfig)
 	if err != nil {
 		return nil, err
 	}
-
 	var overrides core.ChainOverrides
 	if config.OverrideCancun != nil {
 		overrides.OverrideCancun = config.OverrideCancun
@@ -103,22 +99,19 @@ func New(stack *node.Node, config *ethconfig.Config) (*LightEthereum, error) {
 	if config.OverrideVerkle != nil {
 		overrides.OverrideVerkle = config.OverrideVerkle
 	}
-	triedb := trie.NewDatabase(chainDb, trie.HashDefaults)
-	chainConfig, genesisHash, genesisErr := core.SetupGenesisBlockWithOverride(chainDb, triedb, config.Genesis, &overrides)
+	chainConfig, genesisHash, genesisErr := core.SetupGenesisBlockWithOverride(chainDb, trie.NewDatabase(chainDb), config.Genesis, &overrides)
 	if _, isCompat := genesisErr.(*params.ConfigCompatError); genesisErr != nil && !isCompat {
 		return nil, genesisErr
 	}
-	engine := ethconfig.CreateConsensusEngine(chainConfig, config, nil, chainDb, nil)
+	engine, err := ethconfig.CreateConsensusEngine(chainConfig, config, chainDb, nil)
 	if err != nil {
 		return nil, err
 	}
 	log.Info("")
 	log.Info(strings.Repeat("-", 153))
-
 	for _, line := range strings.Split(chainConfig.Description(), "\n") {
 		log.Info(line)
 	}
-
 	log.Info(strings.Repeat("-", 153))
 	log.Info("")
 
@@ -152,8 +145,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*LightEthereum, error) {
 	if leth.udpEnabled {
 		prenegQuery = leth.prenegQuery
 	}
-
-	leth.serverPool, leth.serverPoolIterator = vfc.NewServerPool(lesDb, []byte("serverpool:"), time.Second, prenegQuery, &mclock.System{}, config.UltraLightServers, requestList)
+	leth.serverPool, leth.serverPoolIterator = vfc.NewServerPool(lesDb, []byte("serverpool:"), time.Second, prenegQuery, &mclock.System{}, nil, requestList)
 	leth.serverPool.AddMetrics(suggestedTimeoutGauge, totalValueGauge, serverSelectableGauge, serverConnectedGauge, sessionValueMeter, serverDialedMeter)
 
 	leth.retriever = newRetrieveManager(peers, leth.reqDist, leth.serverPool.GetTimeout)
@@ -166,10 +158,12 @@ func New(stack *node.Node, config *ethconfig.Config) (*LightEthereum, error) {
 
 	// Note: NewLightChain adds the trusted checkpoint so it needs an ODR with
 	// indexers already set but not started yet
-	if leth.blockchain, err = light.NewLightChain(leth.odr, leth.chainConfig, leth.engine, whitelist.NewService(10)); err != nil {
+
+	// checker := whitelist.NewService(chainDb)
+
+	if leth.blockchain, err = light.NewLightChain(leth.odr, leth.chainConfig, leth.engine, nil); err != nil {
 		return nil, err
 	}
-
 	leth.chainReader = leth.blockchain
 	leth.txPool = light.NewTxPool(leth.chainConfig, leth.blockchain, leth.relay)
 
@@ -178,32 +172,25 @@ func New(stack *node.Node, config *ethconfig.Config) (*LightEthereum, error) {
 	leth.chtIndexer.Start(leth.blockchain)
 	leth.bloomIndexer.Start(leth.blockchain)
 
-	// Start a light chain pruner to delete useless historical data.
-	leth.pruner = newPruner(chainDb, leth.chtIndexer, leth.bloomTrieIndexer)
-
 	// Rewind the chain in case of an incompatible config upgrade.
 	if compat, ok := genesisErr.(*params.ConfigCompatError); ok {
 		log.Warn("Rewinding chain to upgrade configuration", "err", compat)
-
 		if compat.RewindToTime > 0 {
-			_ = leth.blockchain.SetHeadWithTimestamp(compat.RewindToTime)
+			leth.blockchain.SetHeadWithTimestamp(compat.RewindToTime)
 		} else {
-			_ = leth.blockchain.SetHead(compat.RewindToBlock)
+			leth.blockchain.SetHead(compat.RewindToBlock)
 		}
-
 		rawdb.WriteChainConfig(chainDb, genesisHash, chainConfig)
 	}
 
 	leth.ApiBackend = &LesApiBackend{stack.Config().ExtRPCEnabled(), stack.Config().AllowUnprotectedTxs, leth, nil}
-
 	gpoParams := config.GPO
 	if gpoParams.Default == nil {
 		gpoParams.Default = config.Miner.GasPrice
 	}
-
 	leth.ApiBackend.gpo = gasprice.NewOracle(leth.ApiBackend, gpoParams)
 
-	leth.handler = newClientHandler(config.UltraLightServers, config.UltraLightFraction, leth)
+	leth.handler = newClientHandler(leth)
 	leth.netRPCService = ethapi.NewNetAPI(leth.p2pServer, leth.config.NetworkId)
 
 	// Register the backend on the node
@@ -217,21 +204,26 @@ func New(stack *node.Node, config *ethconfig.Config) (*LightEthereum, error) {
 	return leth, nil
 }
 
+func resolveExtraDBConfig(config *ethconfig.Config) rawdb.ExtraDBConfig {
+	return rawdb.ExtraDBConfig{
+		LevelDBCompactionTableSize:           config.LevelDbCompactionTableSize,
+		LevelDBCompactionTableSizeMultiplier: config.LevelDbCompactionTableSizeMultiplier,
+		LevelDBCompactionTotalSize:           config.LevelDbCompactionTotalSize,
+		LevelDBCompactionTotalSizeMultiplier: config.LevelDbCompactionTotalSizeMultiplier,
+	}
+}
+
 // VfluxRequest sends a batch of requests to the given node through discv5 UDP TalkRequest and returns the responses
 func (s *LightEthereum) VfluxRequest(n *enode.Node, reqs vflux.Requests) vflux.Replies {
 	if !s.udpEnabled {
 		return nil
 	}
-
 	reqsEnc, _ := rlp.EncodeToBytes(&reqs)
 	repliesEnc, _ := s.p2pServer.DiscV5.TalkRequest(s.serverPool.DialNode(n), "vfx", reqsEnc)
-
 	var replies vflux.Replies
-
 	if len(repliesEnc) == 0 || rlp.DecodeBytes(repliesEnc, &replies) != nil {
 		return nil
 	}
-
 	return replies
 }
 
@@ -240,11 +232,9 @@ func (s *LightEthereum) VfluxRequest(n *enode.Node, reqs vflux.Requests) vflux.R
 func (s *LightEthereum) vfxVersion(n *enode.Node) uint {
 	if n.Seq() == 0 {
 		var err error
-
 		if !s.udpEnabled {
 			return 0
 		}
-
 		if n, err = s.p2pServer.DiscV5.RequestENR(n); n != nil && err == nil && n.Seq() != 0 {
 			s.serverPool.Persist(n)
 		} else {
@@ -256,11 +246,8 @@ func (s *LightEthereum) vfxVersion(n *enode.Node) uint {
 	if err := n.Load(enr.WithEntry("les", &les)); err != nil || len(les) < 1 {
 		return 0
 	}
-
 	var version uint
-
 	rlp.DecodeBytes(les[0], &version) // Ignore additional fields (for forward compatibility).
-
 	return version
 }
 
@@ -273,37 +260,31 @@ func (s *LightEthereum) prenegQuery(n *enode.Node) int {
 	}
 
 	var requests vflux.Requests
-
 	requests.Add("les", vflux.CapacityQueryName, vflux.CapacityQueryReq{
 		Bias:      180,
 		AddTokens: []vflux.IntOrInf{{}},
 	})
-
 	replies := s.VfluxRequest(n, requests)
-
 	var cqr vflux.CapacityQueryReply
-
 	if replies.Get(0, &cqr) != nil || len(cqr) != 1 { // Note: Get returns an error if replies is nil
 		return -1
 	}
-
 	if cqr[0] > 0 {
 		return 1
 	}
-
 	return 0
 }
 
 type LightDummyAPI struct{}
 
-// Etherbase is the address that mining rewards will be send to
+// Etherbase is the address that mining rewards will be sent to
 func (s *LightDummyAPI) Etherbase() (common.Address, error) {
-	return common.Address{}, fmt.Errorf("mining is not supported in light mode")
+	return common.Address{}, errors.New("mining is not supported in light mode")
 }
 
-// Coinbase is the address that mining rewards will be send to (alias for Etherbase)
+// Coinbase is the address that mining rewards will be sent to (alias for Etherbase)
 func (s *LightDummyAPI) Coinbase() (common.Address, error) {
-	return common.Address{}, fmt.Errorf("mining is not supported in light mode")
+	return common.Address{}, errors.New("mining is not supported in light mode")
 }
 
 // Hashrate returns the POW hashrate
@@ -321,14 +302,10 @@ func (s *LightDummyAPI) Mining() bool {
 func (s *LightEthereum) APIs() []rpc.API {
 	apis := ethapi.GetAPIs(s.ApiBackend)
 	apis = append(apis, s.engine.APIs(s.BlockChain().HeaderChain())...)
-
 	return append(apis, []rpc.API{
 		{
 			Namespace: "eth",
 			Service:   &LightDummyAPI{},
-		}, {
-			Namespace: "eth",
-			Service:   downloader.NewDownloaderAPI(s.handler.downloader, s.eventMux),
 		}, {
 			Namespace: "net",
 			Service:   s.netRPCService,
@@ -343,13 +320,12 @@ func (s *LightEthereum) ResetWithGenesisBlock(gb *types.Block) {
 	s.blockchain.ResetWithGenesisBlock(gb)
 }
 
-func (s *LightEthereum) BlockChain() *light.LightChain      { return s.blockchain }
-func (s *LightEthereum) TxPool() *light.TxPool              { return s.txPool }
-func (s *LightEthereum) Engine() consensus.Engine           { return s.engine }
-func (s *LightEthereum) LesVersion() int                    { return int(ClientProtocolVersions[0]) }
-func (s *LightEthereum) Downloader() *downloader.Downloader { return s.handler.downloader }
-func (s *LightEthereum) EventMux() *event.TypeMux           { return s.eventMux }
-func (s *LightEthereum) Merger() *consensus.Merger          { return s.merger }
+func (s *LightEthereum) BlockChain() *light.LightChain { return s.blockchain }
+func (s *LightEthereum) TxPool() *light.TxPool         { return s.txPool }
+func (s *LightEthereum) Engine() consensus.Engine      { return s.engine }
+func (s *LightEthereum) LesVersion() int               { return int(ClientProtocolVersions[0]) }
+func (s *LightEthereum) EventMux() *event.TypeMux      { return s.eventMux }
+func (s *LightEthereum) Merger() *consensus.Merger     { return s.merger }
 
 // Protocols returns all the currently configured network protocols to start.
 func (s *LightEthereum) Protocols() []p2p.Protocol {
@@ -357,7 +333,6 @@ func (s *LightEthereum) Protocols() []p2p.Protocol {
 		if p := s.peers.peer(id.String()); p != nil {
 			return p.Info()
 		}
-
 		return nil
 	}, s.serverPoolIterator)
 }
@@ -372,21 +347,17 @@ func (s *LightEthereum) Start() error {
 
 	if s.udpEnabled && s.p2pServer.DiscV5 == nil {
 		s.udpEnabled = false
-
 		log.Error("Discovery v5 is not initialized")
 	}
-
 	discovery, err := s.setupDiscovery()
 	if err != nil {
 		return err
 	}
-
 	s.serverPool.AddSource(discovery)
 	s.serverPool.Start()
 	// Start bloom request workers.
 	s.wg.Add(bloomServiceThreads)
 	s.startBloomHandlers(params.BloomBitsBlocksClient)
-	s.handler.start()
 
 	return nil
 }
@@ -406,7 +377,6 @@ func (s *LightEthereum) Stop() error {
 	s.handler.stop()
 	s.txPool.Stop()
 	s.engine.Close()
-	s.pruner.close()
 	s.eventMux.Stop()
 	// Clean shutdown marker as the last thing before closing db
 	s.shutdownTracker.Stop()
@@ -415,6 +385,5 @@ func (s *LightEthereum) Stop() error {
 	s.lesDb.Close()
 	s.wg.Wait()
 	log.Info("Light ethereum stopped")
-
 	return nil
 }

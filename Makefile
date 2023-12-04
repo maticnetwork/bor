@@ -35,8 +35,7 @@ protoc:
 generate-mocks:
 	go generate mockgen -destination=./tests/bor/mocks/IHeimdallClient.go -package=mocks ./consensus/bor IHeimdallClient
 	go generate mockgen -destination=./eth/filters/IBackend.go -package=filters ./eth/filters Backend
-	go generate mockgen -destination=./eth/filters/IDatabase.go -package=filters ./ethdb Database
-	go generate mockgen -destination=./consensus/bor/api/caller_mock.go -package=api ./consensus/bor/api Caller
+	go generate mockgen -destination=../eth/filters/IDatabase.go -package=filters ./ethdb Database
 
 geth:
 	$(GORUN) build/ci.go install ./cmd/geth
@@ -59,16 +58,19 @@ ios:
 	@echo "Import \"$(GOBIN)/Geth.framework\" to use the library."
 
 test:
-	$(GOTEST) --timeout 5m -cover -short -coverprofile=cover.out -covermode=atomic $(TESTALL)
+	$(GOTEST) --timeout 15m -cover -short -coverprofile=cover.out -covermode=atomic $(TESTALL)
 
 test-txpool-race:
 	$(GOTEST) -run=TestPoolMiningDataRaces --timeout 600m -race -v ./core/
 
 test-race:
 	$(GOTEST) --timeout 15m -race -shuffle=on $(TESTALL)
+	
+gocovmerge-deps:
+	$(GOBUILD) -o $(GOBIN)/gocovmerge github.com/wadey/gocovmerge
 
 test-integration:
-	$(GOTEST) --timeout 60m -tags integration $(TESTE2E)
+	$(GOTEST) --timeout 60m -cover -coverprofile=cover.out -covermode=atomic -tags integration $(TESTE2E)
 
 escape:
 	cd $(path) && go test -gcflags "-m -m" -run none -bench=BenchmarkJumpdest* -benchmem -memprofile mem.out
@@ -214,7 +216,7 @@ release-dry-run:
 		-v `pwd`:/go/src/$(PACKAGE_NAME) \
 		-w /go/src/$(PACKAGE_NAME) \
 		goreleaser/goreleaser-cross:${GOLANG_CROSS_VERSION} \
-		--rm-dist --skip-validate --skip-publish
+		--clean --skip-validate --skip-publish
 
 .PHONY: release
 release:
@@ -231,4 +233,4 @@ release:
 		-v `pwd`:/go/src/$(PACKAGE_NAME) \
 		-w /go/src/$(PACKAGE_NAME) \
 		goreleaser/goreleaser-cross:${GOLANG_CROSS_VERSION} \
-		--rm-dist --skip-validate
+		--clean --skip-validate

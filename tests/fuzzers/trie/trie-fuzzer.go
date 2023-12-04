@@ -19,6 +19,7 @@ package trie
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -147,7 +148,7 @@ func Fuzz(input []byte) int {
 
 func runRandTest(rt randTest) error {
 	var (
-		triedb = trie.NewDatabase(rawdb.NewMemoryDatabase(), nil)
+		triedb = trie.NewDatabase(rawdb.NewMemoryDatabase())
 		tr     = trie.NewEmpty(triedb)
 		origin = types.EmptyRootHash
 		values = make(map[string]string) // tracks content of the trie
@@ -195,7 +196,7 @@ func runRandTest(rt randTest) error {
 			}
 
 			if tr.Hash() != checktr.Hash() {
-				return fmt.Errorf("hash mismatch in opItercheckhash")
+				return errors.New("hash mismatch in opItercheckhash")
 			}
 		case opProve:
 			rt[i].err = tr.Prove(step.key, proofDb{})

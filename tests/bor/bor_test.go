@@ -26,6 +26,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/bor"
 	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
+	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
 	"github.com/ethereum/go-ethereum/consensus/bor/valset"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core"
@@ -371,19 +372,31 @@ func TestInsertingSpanSizeBlocks(t *testing.T) {
 	engine := init.ethereum.Engine()
 	_bor := engine.(*bor.Bor)
 
-	defer _bor.Close()
-
 	_, currentSpan := loadSpanFromFile(t)
 
 	h, ctrl := getMockedHeimdallClient(t, currentSpan)
-	defer ctrl.Finish()
+	defer func() {
+		_bor.Close()
+		ctrl.Finish()
+	}()
 
 	h.EXPECT().Close().AnyTimes()
+
 	h.EXPECT().FetchCheckpoint(gomock.Any(), int64(-1)).Return(&checkpoint.Checkpoint{
 		Proposer:   currentSpan.SelectedProducers[0].Address,
 		StartBlock: big.NewInt(0),
 		EndBlock:   big.NewInt(int64(spanSize)),
 	}, nil).AnyTimes()
+
+	h.EXPECT().FetchMilestone(gomock.Any()).Return(&milestone.Milestone{
+		Proposer:   currentSpan.SelectedProducers[0].Address,
+		StartBlock: big.NewInt(0),
+		EndBlock:   big.NewInt(int64(spanSize)),
+	}, nil).AnyTimes()
+
+	h.EXPECT().FetchLastNoAckMilestone(gomock.Any()).Return("", nil).AnyTimes()
+
+	h.EXPECT().FetchNoAckMilestone(gomock.Any(), string("test")).Return(nil).AnyTimes()
 
 	_bor.SetHeimdallClient(h)
 
@@ -451,7 +464,16 @@ func TestFetchStateSyncEvents(t *testing.T) {
 
 	h := mocks.NewMockIHeimdallClient(ctrl)
 	h.EXPECT().Close().AnyTimes()
+
 	h.EXPECT().Span(gomock.Any(), uint64(1)).Return(&res.Result, nil).AnyTimes()
+
+	h.EXPECT().FetchCheckpoint(gomock.Any(), int64(-1)).Return(&checkpoint.Checkpoint{}, nil).AnyTimes()
+
+	h.EXPECT().FetchMilestone(gomock.Any()).Return(&milestone.Milestone{}, nil).AnyTimes()
+
+	h.EXPECT().FetchLastNoAckMilestone(gomock.Any()).Return("", nil).AnyTimes()
+
+	h.EXPECT().FetchNoAckMilestone(gomock.Any(), string("test")).Return(nil).AnyTimes()
 
 	// B.2 Mock State Sync events
 	fromID := uint64(1)
@@ -501,7 +523,16 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 
 	h := mocks.NewMockIHeimdallClient(ctrl)
 	h.EXPECT().Close().AnyTimes()
+
 	h.EXPECT().Span(gomock.Any(), uint64(1)).Return(&res.Result, nil).AnyTimes()
+
+	h.EXPECT().FetchCheckpoint(gomock.Any(), int64(-1)).Return(&checkpoint.Checkpoint{}, nil).AnyTimes()
+
+	h.EXPECT().FetchMilestone(gomock.Any()).Return(&milestone.Milestone{}, nil).AnyTimes()
+
+	h.EXPECT().FetchLastNoAckMilestone(gomock.Any()).Return("", nil).AnyTimes()
+
+	h.EXPECT().FetchNoAckMilestone(gomock.Any(), string("test")).Return(nil).AnyTimes()
 
 	// Mock State Sync events
 	// at # sprintSize, events are fetched for [fromID, (block-sprint).Time)
@@ -593,8 +624,17 @@ func TestOutOfTurnSigning(t *testing.T) {
 
 	h.EXPECT().Close().AnyTimes()
 
+	h.EXPECT().FetchCheckpoint(gomock.Any(), int64(-1)).Return(&checkpoint.Checkpoint{}, nil).AnyTimes()
+
+	h.EXPECT().FetchMilestone(gomock.Any()).Return(&milestone.Milestone{}, nil).AnyTimes()
+
+	h.EXPECT().FetchLastNoAckMilestone(gomock.Any()).Return("", nil).AnyTimes()
+
+	h.EXPECT().FetchNoAckMilestone(gomock.Any(), string("test")).Return(nil).AnyTimes()
+
 	spanner := getMockedSpanner(t, heimdallSpan.ValidatorSet.Validators)
 	_bor.SetSpanner(spanner)
+
 	_bor.SetHeimdallClient(h)
 
 	block := init.genesis.ToBlock()
@@ -674,6 +714,13 @@ func TestSignerNotFound(t *testing.T) {
 	defer ctrl.Finish()
 
 	h.EXPECT().Close().AnyTimes()
+	h.EXPECT().FetchCheckpoint(gomock.Any(), int64(-1)).Return(&checkpoint.Checkpoint{}, nil).AnyTimes()
+
+	h.EXPECT().FetchMilestone(gomock.Any()).Return(&milestone.Milestone{}, nil).AnyTimes()
+
+	h.EXPECT().FetchLastNoAckMilestone(gomock.Any()).Return("", nil).AnyTimes()
+
+	h.EXPECT().FetchNoAckMilestone(gomock.Any(), string("test")).Return(nil).AnyTimes()
 
 	_bor.SetHeimdallClient(h)
 
@@ -920,6 +967,290 @@ func TestEIP1559Transition(t *testing.T) {
 	expected = new(big.Int).Add(burntContractBalance, burntAmount)
 	if actual.Cmp(expected) != 0 {
 		t.Fatalf("burnt contract balance incorrect: expected %d, got %d", expected, actual)
+	}
+}
+
+func TestBurnContract(t *testing.T) {
+	var (
+		aa = common.HexToAddress("0x000000000000000000000000000000000000aaaa")
+
+		// Generate a canonical chain to act as the main dataset
+		db     = rawdb.NewMemoryDatabase()
+		engine = ethash.NewFaker()
+
+		// A sender who makes transactions, has some funds
+		key1, _ = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+		key2, _ = crypto.HexToECDSA("8a1f9a8f95be41cd7ccb6168179afb4504aefe388d1e14474d32c45c72ce7b7a")
+		key3, _ = crypto.HexToECDSA("225171aed3793cba1c029832886d69785b7e77a54a44211226b447aa2d16b058")
+
+		addr1 = crypto.PubkeyToAddress(key1.PublicKey)
+		addr2 = crypto.PubkeyToAddress(key2.PublicKey)
+		addr3 = crypto.PubkeyToAddress(key3.PublicKey)
+		funds = new(big.Int).Mul(common.Big1, big.NewInt(params.Ether))
+		gspec = &core.Genesis{
+			Config: params.BorUnittestChainConfig,
+			Alloc: core.GenesisAlloc{
+				addr1: {Balance: funds},
+				addr2: {Balance: funds},
+				addr3: {Balance: funds},
+				// The address 0xAAAA sloads 0x00 and 0x01
+				aa: {
+					Code: []byte{
+						byte(vm.PC),
+						byte(vm.PC),
+						byte(vm.SLOAD),
+						byte(vm.SLOAD),
+					},
+					Nonce:   0,
+					Balance: big.NewInt(0),
+				},
+			},
+		}
+	)
+
+	gspec.Config.BerlinBlock = common.Big0
+	gspec.Config.LondonBlock = common.Big0
+	gspec.Config.Bor.BurntContract = map[string]string{
+		"0": "0x000000000000000000000000000000000000aaab",
+		"1": "0x000000000000000000000000000000000000aaac",
+		"2": "0x000000000000000000000000000000000000aaad",
+		"3": "0x000000000000000000000000000000000000aaae",
+	}
+	genesis := gspec.MustCommit(db)
+	signer := types.LatestSigner(gspec.Config)
+
+	blocks, _ := core.GenerateChain(gspec.Config, genesis, engine, db, 1, func(i int, b *core.BlockGen) {
+		b.SetCoinbase(common.Address{1})
+		// One transaction to 0xAAAA
+		accesses := types.AccessList{types.AccessTuple{
+			Address:     aa,
+			StorageKeys: []common.Hash{{0}},
+		}}
+
+		txdata := &types.DynamicFeeTx{
+			ChainID:    gspec.Config.ChainID,
+			Nonce:      0,
+			To:         &aa,
+			Gas:        30000,
+			GasFeeCap:  newGwei(5),
+			GasTipCap:  big.NewInt(2),
+			AccessList: accesses,
+			Data:       []byte{},
+		}
+		tx := types.NewTx(txdata)
+		tx, _ = types.SignTx(tx, signer, key1)
+
+		b.AddTx(tx)
+	})
+
+	diskdb := rawdb.NewMemoryDatabase()
+	gspec.MustCommit(diskdb)
+
+	chain, err := core.NewBlockChain(diskdb, nil, gspec, nil, engine, vm.Config{}, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("failed to create tester chain: %v", err)
+	}
+	if n, err := chain.InsertChain(blocks); err != nil {
+		t.Fatalf("block %d: failed to insert into chain: %v", n, err)
+	}
+
+	block := chain.GetBlockByNumber(1)
+
+	// 1+2: Ensure EIP-1559 access lists are accounted for via gas usage.
+	expectedGas := params.TxGas + params.TxAccessListAddressGas + params.TxAccessListStorageKeyGas +
+		vm.GasQuickStep*2 + params.WarmStorageReadCostEIP2929 + params.ColdSloadCostEIP2929
+	if block.GasUsed() != expectedGas {
+		t.Fatalf("incorrect amount of gas spent: expected %d, got %d", expectedGas, block.GasUsed())
+	}
+
+	state, _ := chain.State()
+
+	// 3: Ensure that miner received only the tx's tip.
+	actual := state.GetBalance(block.Coinbase())
+	expected := new(big.Int).Add(
+		new(big.Int).SetUint64(block.GasUsed()*block.Transactions()[0].GasTipCap().Uint64()),
+		ethash.ConstantinopleBlockReward,
+	)
+	if actual.Cmp(expected) != 0 {
+		t.Fatalf("miner balance incorrect: expected %d, got %d", expected, actual)
+	}
+
+	// check burnt contract balance
+	actual = state.GetBalance(common.HexToAddress(gspec.Config.Bor.CalculateBurntContract(block.NumberU64())))
+	expected = new(big.Int).Mul(new(big.Int).SetUint64(block.GasUsed()), block.BaseFee())
+	if actual.Cmp(expected) != 0 {
+		t.Fatalf("burnt contract balance incorrect: expected %d, got %d", expected, actual)
+	}
+
+	// 4: Ensure the tx sender paid for the gasUsed * (tip + block baseFee).
+	actual = new(big.Int).Sub(funds, state.GetBalance(addr1))
+	expected = new(big.Int).SetUint64(block.GasUsed() * (block.Transactions()[0].GasTipCap().Uint64() + block.BaseFee().Uint64()))
+	if actual.Cmp(expected) != 0 {
+		t.Fatalf("sender balance incorrect: expected %d, got %d", expected, actual)
+	}
+
+	blocks, _ = core.GenerateChain(gspec.Config, block, engine, db, 1, func(i int, b *core.BlockGen) {
+		b.SetCoinbase(common.Address{2})
+
+		txdata := &types.LegacyTx{
+			Nonce:    0,
+			To:       &aa,
+			Gas:      30000,
+			GasPrice: newGwei(5),
+		}
+		tx := types.NewTx(txdata)
+		tx, _ = types.SignTx(tx, signer, key2)
+
+		b.AddTx(tx)
+	})
+
+	if n, err := chain.InsertChain(blocks); err != nil {
+		t.Fatalf("block %d: failed to insert into chain: %v", n, err)
+	}
+
+	block = chain.GetBlockByNumber(2)
+	state, _ = chain.State()
+	effectiveTip := block.Transactions()[0].GasTipCap().Uint64() - block.BaseFee().Uint64()
+
+	// 6+5: Ensure that miner received only the tx's effective tip.
+	actual = state.GetBalance(block.Coinbase())
+	expected = new(big.Int).Add(
+		new(big.Int).SetUint64(block.GasUsed()*effectiveTip),
+		ethash.ConstantinopleBlockReward,
+	)
+	if actual.Cmp(expected) != 0 {
+		t.Fatalf("miner balance incorrect: expected %d, got %d", expected, actual)
+	}
+
+	// check burnt contract balance
+	actual = state.GetBalance(common.HexToAddress(gspec.Config.Bor.CalculateBurntContract(block.NumberU64())))
+	expected = new(big.Int).Mul(new(big.Int).SetUint64(block.GasUsed()), block.BaseFee())
+	if actual.Cmp(expected) != 0 {
+		t.Fatalf("burnt contract balance incorrect: expected %d, got %d", expected, actual)
+	}
+
+	// 4: Ensure the tx sender paid for the gasUsed * (effectiveTip + block baseFee).
+	actual = new(big.Int).Sub(funds, state.GetBalance(addr2))
+	expected = new(big.Int).SetUint64(block.GasUsed() * (effectiveTip + block.BaseFee().Uint64()))
+	if actual.Cmp(expected) != 0 {
+		t.Fatalf("sender balance incorrect: expected %d, got %d", expected, actual)
+	}
+
+	blocks, _ = core.GenerateChain(gspec.Config, block, engine, db, 1, func(i int, b *core.BlockGen) {
+		b.SetCoinbase(common.Address{3})
+
+		txdata := &types.LegacyTx{
+			Nonce:    0,
+			To:       &aa,
+			Gas:      30000,
+			GasPrice: newGwei(5),
+		}
+		tx := types.NewTx(txdata)
+		tx, _ = types.SignTx(tx, signer, key3)
+
+		b.AddTx(tx)
+	})
+
+	if n, err := chain.InsertChain(blocks); err != nil {
+		t.Fatalf("block %d: failed to insert into chain: %v", n, err)
+	}
+
+	block = chain.GetBlockByNumber(3)
+	state, _ = chain.State()
+	effectiveTip = block.Transactions()[0].GasTipCap().Uint64() - block.BaseFee().Uint64()
+
+	// 6+5: Ensure that miner received only the tx's effective tip.
+	actual = state.GetBalance(block.Coinbase())
+	expected = new(big.Int).Add(
+		new(big.Int).SetUint64(block.GasUsed()*effectiveTip),
+		ethash.ConstantinopleBlockReward,
+	)
+	if actual.Cmp(expected) != 0 {
+		t.Fatalf("miner balance incorrect: expected %d, got %d", expected, actual)
+	}
+
+	// check burnt contract balance
+	actual = state.GetBalance(common.HexToAddress(gspec.Config.Bor.CalculateBurntContract(block.NumberU64())))
+	expected = new(big.Int).Mul(new(big.Int).SetUint64(block.GasUsed()), block.BaseFee())
+	if actual.Cmp(expected) != 0 {
+		t.Fatalf("burnt contract balance incorrect: expected %d, got %d", expected, actual)
+	}
+
+	// 4: Ensure the tx sender paid for the gasUsed * (effectiveTip + block baseFee).
+	actual = new(big.Int).Sub(funds, state.GetBalance(addr3))
+	expected = new(big.Int).SetUint64(block.GasUsed() * (effectiveTip + block.BaseFee().Uint64()))
+	if actual.Cmp(expected) != 0 {
+		t.Fatalf("sender balance incorrect: expected %d, got %d", expected, actual)
+	}
+}
+
+func TestBurnContractContractFetch(t *testing.T) {
+	config := params.BorUnittestChainConfig
+	config.Bor.BurntContract = map[string]string{
+		"10":  "0x000000000000000000000000000000000000aaab",
+		"100": "0x000000000000000000000000000000000000aaad",
+	}
+
+	burnContractAddr10 := config.Bor.CalculateBurntContract(10)
+	burnContractAddr11 := config.Bor.CalculateBurntContract(11)
+	burnContractAddr99 := config.Bor.CalculateBurntContract(99)
+	burnContractAddr100 := config.Bor.CalculateBurntContract(100)
+	burnContractAddr101 := config.Bor.CalculateBurntContract(101)
+
+	if burnContractAddr10 != "0x000000000000000000000000000000000000aaab" {
+		t.Fatalf("incorrect burnt contract address: expected %s, got %s", "0x000000000000000000000000000000000000aaab", burnContractAddr10)
+	}
+	if burnContractAddr11 != "0x000000000000000000000000000000000000aaab" {
+		t.Fatalf("incorrect burnt contract address: expected %s, got %s", "0x000000000000000000000000000000000000aaab", burnContractAddr11)
+	}
+	if burnContractAddr99 != "0x000000000000000000000000000000000000aaab" {
+		t.Fatalf("incorrect burnt contract address: expected %s, got %s", "0x000000000000000000000000000000000000aaab", burnContractAddr99)
+	}
+	if burnContractAddr100 != "0x000000000000000000000000000000000000aaad" {
+		t.Fatalf("incorrect burnt contract address: expected %s, got %s", "0x000000000000000000000000000000000000aaad", burnContractAddr100)
+	}
+	if burnContractAddr101 != "0x000000000000000000000000000000000000aaad" {
+		t.Fatalf("incorrect burnt contract address: expected %s, got %s", "0x000000000000000000000000000000000000aaad", burnContractAddr101)
+	}
+
+	config.Bor.BurntContract = map[string]string{
+		"10":   "0x000000000000000000000000000000000000aaab",
+		"100":  "0x000000000000000000000000000000000000aaad",
+		"1000": "0x000000000000000000000000000000000000aaae",
+	}
+
+	burnContractAddr10 = config.Bor.CalculateBurntContract(10)
+	burnContractAddr11 = config.Bor.CalculateBurntContract(11)
+	burnContractAddr99 = config.Bor.CalculateBurntContract(99)
+	burnContractAddr100 = config.Bor.CalculateBurntContract(100)
+	burnContractAddr101 = config.Bor.CalculateBurntContract(101)
+	burnContractAddr999 := config.Bor.CalculateBurntContract(999)
+	burnContractAddr1000 := config.Bor.CalculateBurntContract(1000)
+	burnContractAddr1001 := config.Bor.CalculateBurntContract(1001)
+
+	if burnContractAddr10 != "0x000000000000000000000000000000000000aaab" {
+		t.Fatalf("incorrect burnt contract address: expected %s, got %s", "0x000000000000000000000000000000000000aaab", burnContractAddr10)
+	}
+	if burnContractAddr11 != "0x000000000000000000000000000000000000aaab" {
+		t.Fatalf("incorrect burnt contract address: expected %s, got %s", "0x000000000000000000000000000000000000aaab", burnContractAddr11)
+	}
+	if burnContractAddr99 != "0x000000000000000000000000000000000000aaab" {
+		t.Fatalf("incorrect burnt contract address: expected %s, got %s", "0x000000000000000000000000000000000000aaab", burnContractAddr99)
+	}
+	if burnContractAddr100 != "0x000000000000000000000000000000000000aaad" {
+		t.Fatalf("incorrect burnt contract address: expected %s, got %s", "0x000000000000000000000000000000000000aaad", burnContractAddr100)
+	}
+	if burnContractAddr101 != "0x000000000000000000000000000000000000aaad" {
+		t.Fatalf("incorrect burnt contract address: expected %s, got %s", "0x000000000000000000000000000000000000aaad", burnContractAddr101)
+	}
+	if burnContractAddr999 != "0x000000000000000000000000000000000000aaad" {
+		t.Fatalf("incorrect burnt contract address: expected %s, got %s", "0x000000000000000000000000000000000000aaad", burnContractAddr999)
+	}
+	if burnContractAddr1000 != "0x000000000000000000000000000000000000aaae" {
+		t.Fatalf("incorrect burnt contract address: expected %s, got %s", "0x000000000000000000000000000000000000aaae", burnContractAddr1000)
+	}
+	if burnContractAddr1001 != "0x000000000000000000000000000000000000aaae" {
+		t.Fatalf("incorrect burnt contract address: expected %s, got %s", "0x000000000000000000000000000000000000aaae", burnContractAddr1001)
 	}
 }
 

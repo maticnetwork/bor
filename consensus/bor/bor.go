@@ -30,6 +30,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/bor/statefull"
 	"github.com/ethereum/go-ethereum/consensus/bor/valset"
 	"github.com/ethereum/go-ethereum/consensus/misc"
+	"github.com/ethereum/go-ethereum/consensus/misc/eip1559"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -381,9 +382,12 @@ func (c *Bor) verifyHeader(chain consensus.ChainHeaderReader, header *types.Head
 
 	// Verify that the gas limit is <= 2^63-1
 	gasCap := uint64(0x7fffffffffffffff)
-
 	if header.GasLimit > gasCap {
 		return fmt.Errorf("invalid gasLimit: have %v, max %v", header.GasLimit, gasCap)
+	}
+
+	if header.WithdrawalsHash != nil {
+		return consensus.ErrUnexpectedWithdrawals
 	}
 
 	// All basic checks passed, verify cascading fields
@@ -443,7 +447,7 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 		if err := misc.VerifyGaslimit(parent.GasLimit, header.GasLimit); err != nil {
 			return err
 		}
-	} else if err := misc.VerifyEIP1559Header(chain.Config(), parent, header); err != nil {
+	} else if err := eip1559.VerifyEIP1559Header(chain.Config(), parent, header); err != nil {
 		// Verify the header's EIP-1559 attributes.
 		return err
 	}
@@ -816,6 +820,10 @@ func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, 
 
 	headerNumber := header.Number.Uint64()
 
+	if withdrawals != nil || header.WithdrawalsHash != nil {
+		return
+	}
+
 	if IsSprintStart(headerNumber, c.config.CalculateSprint(headerNumber)) {
 		ctx := context.Background()
 		cx := statefull.ChainContext{Chain: chain, Bor: c}
@@ -875,6 +883,10 @@ func (c *Bor) changeContractCodeIfNeeded(headerNumber uint64, state *state.State
 			for addr, account := range allocs {
 				log.Info("change contract code", "address", addr)
 				state.SetCode(addr, account.Code)
+
+				if state.GetBalance(addr).Cmp(big.NewInt(0)) == 0 {
+					state.SetBalance(addr, account.Balance)
+				}
 			}
 		}
 	}
@@ -888,9 +900,13 @@ func (c *Bor) FinalizeAndAssemble(ctx context.Context, chain consensus.ChainHead
 	finalizeCtx, finalizeSpan := tracing.StartSpan(ctx, "bor.FinalizeAndAssemble")
 	defer tracing.EndSpan(finalizeSpan)
 
-	stateSyncData := []*types.StateSyncData{}
-
 	headerNumber := header.Number.Uint64()
+
+	if withdrawals != nil || header.WithdrawalsHash != nil {
+		return nil, consensus.ErrUnexpectedWithdrawals
+	}
+
+	stateSyncData := []*types.StateSyncData{}
 
 	var err error
 
@@ -1225,7 +1241,6 @@ func (c *Bor) CommitStates(
 
 		stateSyncDelay := c.config.CalculateStateSyncDelay(number)
 		to = time.Unix(int64(header.Time-stateSyncDelay), 0)
-		log.Debug("Post Indore", "lastStateIDBig", lastStateIDBig, "to", to, "stateSyncDelay", stateSyncDelay)
 	} else {
 		lastStateIDBig, err = c.GenesisContractsClient.LastStateId(nil, number-1, header.ParentHash)
 		if err != nil {
@@ -1233,7 +1248,6 @@ func (c *Bor) CommitStates(
 		}
 
 		to = time.Unix(int64(chain.Chain.GetHeaderByNumber(number-c.config.CalculateSprint(number)).Time), 0)
-		log.Debug("Pre Indore", "lastStateIDBig", lastStateIDBig, "to", to)
 	}
 
 	lastStateID := lastStateIDBig.Uint64()

@@ -30,8 +30,6 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
-	"github.com/ethereum/go-ethereum/trie/triedb/hashdb"
-	"github.com/ethereum/go-ethereum/trie/triedb/pathdb"
 	"github.com/ethereum/go-ethereum/trie/trienode"
 	"golang.org/x/crypto/sha3"
 )
@@ -58,7 +56,7 @@ func testGeneration(t *testing.T, scheme string) {
 	// We can't use statedb to make a test trie (circular dependency), so make
 	// a fake one manually. We're going with a small account trie of 3 accounts,
 	// two of which also has the same 3-slot storage trie attached.
-	var helper = newHelper(scheme)
+	var helper = newHelper()
 	stRoot := helper.makeStorageTrie(common.Hash{}, []string{"key-1", "key-2", "key-3"}, []string{"val-1", "val-2", "val-3"}, false)
 
 	helper.addTrieAccount("acc-1", &types.StateAccount{Balance: big.NewInt(1), Root: stRoot, CodeHash: types.EmptyCodeHash.Bytes()})
@@ -168,13 +166,7 @@ type testHelper struct {
 
 func newHelper(scheme string) *testHelper {
 	diskdb := rawdb.NewMemoryDatabase()
-	config := &trie.Config{}
-	if scheme == rawdb.PathScheme {
-		config.PathDB = &pathdb.Config{} // disable caching
-	} else {
-		config.HashDB = &hashdb.Config{} // disable caching
-	}
-	triedb := trie.NewDatabase(diskdb, config)
+	triedb := trie.NewDatabase(diskdb)
 	accTrie, _ := trie.NewStateTrie(trie.StateTrieID(types.EmptyRootHash), triedb)
 	return &testHelper{
 		diskdb:  diskdb,
@@ -360,9 +352,6 @@ func TestGenerateExistentStateWithWrongAccounts(t *testing.T) {
 	testGenerateExistentStateWithWrongAccounts(t, rawdb.PathScheme)
 }
 
-func testGenerateExistentStateWithWrongAccounts(t *testing.T, scheme string) {
-	helper := newHelper(scheme)
-
 	helper.makeStorageTrie(hashData([]byte("acc-1")), []string{"key-1", "key-2", "key-3"}, []string{"val-1", "val-2", "val-3"}, true)
 	helper.makeStorageTrie(hashData([]byte("acc-2")), []string{"key-1", "key-2", "key-3"}, []string{"val-1", "val-2", "val-3"}, true)
 	helper.makeStorageTrie(hashData([]byte("acc-3")), []string{"key-1", "key-2", "key-3"}, []string{"val-1", "val-2", "val-3"}, true)
@@ -465,11 +454,8 @@ func testGenerateMissingStorageTrie(t *testing.T, scheme string) {
 	// We can't use statedb to make a test trie (circular dependency), so make
 	// a fake one manually. We're going with a small account trie of 3 accounts,
 	// two of which also has the same 3-slot storage trie attached.
-	var (
-		acc1   = hashData([]byte("acc-1"))
-		acc3   = hashData([]byte("acc-3"))
-		helper = newHelper(scheme)
-	)
+	helper := newHelper()
+
 	stRoot := helper.makeStorageTrie(hashData([]byte("acc-1")), []string{"key-1", "key-2", "key-3"}, []string{"val-1", "val-2", "val-3"}, true)   // 0xddefcd9376dd029653ef384bd2f0a126bb755fe84fdcc9e7cf421ba454f2bc67
 	helper.addTrieAccount("acc-1", &types.StateAccount{Balance: big.NewInt(1), Root: stRoot, CodeHash: types.EmptyCodeHash.Bytes()})              // 0x9250573b9c18c664139f3b6a7a8081b7d8f8916a8fcc5d94feec6c29f5fd4e9e
 	helper.addTrieAccount("acc-2", &types.StateAccount{Balance: big.NewInt(2), Root: types.EmptyRootHash, CodeHash: types.EmptyCodeHash.Bytes()}) // 0x65145f923027566669a1ae5ccac66f945b55ff6eaeb17d2ea8e048b7d381f2d7
@@ -478,9 +464,8 @@ func testGenerateMissingStorageTrie(t *testing.T, scheme string) {
 
 	root := helper.Commit()
 
-	// Delete storage trie root of account one and three.
-	rawdb.DeleteTrieNode(helper.diskdb, acc1, nil, stRoot, scheme)
-	rawdb.DeleteTrieNode(helper.diskdb, acc3, nil, stRoot, scheme)
+	// Delete a storage trie root and ensure the generator chokes
+	helper.diskdb.Delete(stRoot.Bytes())
 
 	snap := generateSnapshot(helper.diskdb, helper.triedb, 16, root)
 	select {

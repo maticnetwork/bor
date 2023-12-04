@@ -394,7 +394,7 @@ func TestInternals(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			triedb, _, statedb := tests.MakePreState(rawdb.NewMemoryDatabase(),
+			_, statedb := tests.MakePreState(rawdb.NewMemoryDatabase(),
 				core.GenesisAlloc{
 					to: core.GenesisAccount{
 						Code: tc.code,
@@ -402,10 +402,8 @@ func TestInternals(t *testing.T) {
 					origin: core.GenesisAccount{
 						Balance: big.NewInt(500000000000000),
 					},
-				}, false, rawdb.HashScheme)
-			defer triedb.Close()
-
-			evm := vm.NewEVM(context, txContext, statedb, params.MainnetChainConfig, vm.Config{Tracer: tc.tracer})
+				}, false)
+			evm := vm.NewEVM(blockContext, txContext, statedb, params.MainnetChainConfig, vm.Config{Tracer: tc.tracer})
 			msg := &core.Message{
 				To:                &to,
 				From:              origin,
@@ -417,7 +415,7 @@ func TestInternals(t *testing.T) {
 				SkipAccountChecks: false,
 			}
 			st := core.NewStateTransition(evm, msg, new(core.GasPool).AddGas(msg.GasLimit))
-			if _, err := st.TransitionDb(nil); err != nil {
+			if _, err := st.TransitionDb(context.Background()); err != nil {
 				t.Fatalf("test %v: failed to execute transaction: %v", tc.name, err)
 			}
 			// Retrieve the trace result and compare against the expected

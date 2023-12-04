@@ -26,7 +26,8 @@ import (
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/beacon"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
-	"github.com/ethereum/go-ethereum/consensus/misc"
+	"github.com/ethereum/go-ethereum/consensus/misc/eip1559"
+	"github.com/ethereum/go-ethereum/consensus/misc/eip4844"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
@@ -34,10 +35,7 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/holiman/uint256"
-	"golang.org/x/crypto/sha3"
 )
-
-func u64(val uint64) *uint64 { return &val }
 
 // TestStateProcessorErrors tests the output from the 'core' errors
 // as defined in core/error.go. These errors are generated when the
@@ -45,11 +43,6 @@ func u64(val uint64) *uint64 { return &val }
 // contain invalid transactions
 func TestStateProcessorErrors(t *testing.T) {
 	var (
-		cacheConfig = &CacheConfig{
-			TrieCleanLimit: 154,
-			Preimages:      true,
-		}
-
 		config = &params.ChainConfig{
 			ChainID:                       big.NewInt(1),
 			HomesteadBlock:                big.NewInt(0),
@@ -64,22 +57,22 @@ func TestStateProcessorErrors(t *testing.T) {
 			BerlinBlock:                   big.NewInt(0),
 			LondonBlock:                   big.NewInt(0),
 			Ethash:                        new(params.EthashConfig),
-			Bor:                           &params.BorConfig{BurntContract: map[string]string{"0": "0x000000000000000000000000000000000000dead"}},
 			TerminalTotalDifficulty:       big.NewInt(0),
 			TerminalTotalDifficultyPassed: true,
-			ShanghaiTime:                  new(uint64),
-			CancunTime:                    new(uint64),
+			ShanghaiBlock:                 big.NewInt(0),
+			CancunBlock:                   big.NewInt(0),
+			PragueBlock:                   big.NewInt(0),
+			VerkleBlock:                   big.NewInt(0),
+			Bor:                           &params.BorConfig{BurntContract: map[string]string{"0": "0x000000000000000000000000000000000000dead"}},
 		}
 		signer  = types.LatestSigner(config)
 		key1, _ = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
 		key2, _ = crypto.HexToECDSA("0202020202020202020202020202020202020202020202020202002020202020")
 	)
-
 	var makeTx = func(key *ecdsa.PrivateKey, nonce uint64, to common.Address, amount *big.Int, gasLimit uint64, gasPrice *big.Int, data []byte) *types.Transaction {
 		tx, _ := types.SignTx(types.NewTransaction(nonce, to, amount, gasLimit, gasPrice, data), signer, key)
 		return tx
 	}
-
 	var mkDynamicTx = func(nonce uint64, to common.Address, gasLimit uint64, gasTipCap, gasFeeCap *big.Int) *types.Transaction {
 		tx, _ := types.SignTx(types.NewTx(&types.DynamicFeeTx{
 			Nonce:     nonce,
@@ -91,7 +84,6 @@ func TestStateProcessorErrors(t *testing.T) {
 		}), signer, key1)
 		return tx
 	}
-
 	var mkDynamicCreationTx = func(nonce uint64, gasLimit uint64, gasTipCap, gasFeeCap *big.Int, data []byte) *types.Transaction {
 		tx, _ := types.SignTx(types.NewTx(&types.DynamicFeeTx{
 			Nonce:     nonce,
@@ -109,7 +101,7 @@ func TestStateProcessorErrors(t *testing.T) {
 			GasTipCap:  uint256.MustFromBig(gasTipCap),
 			GasFeeCap:  uint256.MustFromBig(gasFeeCap),
 			Gas:        gasLimit,
-			To:         &to,
+			To:         to,
 			BlobHashes: hashes,
 			Value:      new(uint256.Int),
 		}), signer, key1)
@@ -140,11 +132,9 @@ func TestStateProcessorErrors(t *testing.T) {
 		)
 
 		defer blockchain.Stop()
-
 		bigNumber := new(big.Int).SetBytes(common.FromHex("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"))
 		tooBigNumber := new(big.Int).Set(bigNumber)
 		tooBigNumber.Add(tooBigNumber, common.Big1)
-
 		for i, tt := range []struct {
 			txs  []*types.Transaction
 			want string
@@ -267,7 +257,6 @@ func TestStateProcessorErrors(t *testing.T) {
 			if err == nil {
 				t.Fatal("block imported without errors")
 			}
-
 			if have, want := err.Error(), tt.want; have != want {
 				t.Errorf("test %d:\nhave \"%v\"\nwant \"%v\"\n", i, have, want)
 			}
@@ -298,35 +287,27 @@ func TestStateProcessorErrors(t *testing.T) {
 					},
 				},
 			}
-			blockchain, _         = NewBlockChain(db, nil, gspec, nil, ethash.NewFaker(), vm.Config{}, nil, nil, nil)
-			parallelBlockchain, _ = NewParallelBlockChain(db, cacheConfig, gspec, nil, ethash.NewFaker(), vm.Config{ParallelEnable: true, ParallelSpeculativeProcesses: 8}, nil, nil, nil)
+			blockchain, _ = NewBlockChain(db, nil, gspec, nil, ethash.NewFaker(), vm.Config{}, nil, nil, nil)
 		)
-
 		defer blockchain.Stop()
-		defer parallelBlockchain.Stop()
-
-		for _, bc := range []*BlockChain{blockchain, parallelBlockchain} {
-			for i, tt := range []struct {
-				txs  []*types.Transaction
-				want string
-			}{
-				{ // ErrTxTypeNotSupported
-					txs: []*types.Transaction{
-						mkDynamicTx(0, common.Address{}, params.TxGas-1000, big.NewInt(0), big.NewInt(0)),
-					},
-					want: "could not apply tx 0 [0x88626ac0d53cb65308f2416103c62bb1f18b805573d4f96a3640bbbfff13c14f]: transaction type not supported",
+		for i, tt := range []struct {
+			txs  []*types.Transaction
+			want string
+		}{
+			{ // ErrTxTypeNotSupported
+				txs: []*types.Transaction{
+					mkDynamicTx(0, common.Address{}, params.TxGas-1000, big.NewInt(0), big.NewInt(0)),
 				},
-			} {
-				block := GenerateBadBlock(gspec.ToBlock(), ethash.NewFaker(), tt.txs, gspec.Config)
-
-				_, err := bc.InsertChain(types.Blocks{block})
-				if err == nil {
-					t.Fatal("block imported without errors")
-				}
-
-				if have, want := err.Error(), tt.want; have != want {
-					t.Errorf("test %d:\nhave \"%v\"\nwant \"%v\"\n", i, have, want)
-				}
+				want: "could not apply tx 0 [0x88626ac0d53cb65308f2416103c62bb1f18b805573d4f96a3640bbbfff13c14f]: transaction type not supported",
+			},
+		} {
+			block := GenerateBadBlock(gspec.ToBlock(), ethash.NewFaker(), tt.txs, gspec.Config)
+			_, err := blockchain.InsertChain(types.Blocks{block})
+			if err == nil {
+				t.Fatal("block imported without errors")
+			}
+			if have, want := err.Error(), tt.want; have != want {
+				t.Errorf("test %d:\nhave \"%v\"\nwant \"%v\"\n", i, have, want)
 			}
 		}
 	}
@@ -345,33 +326,27 @@ func TestStateProcessorErrors(t *testing.T) {
 					},
 				},
 			}
-			blockchain, _         = NewBlockChain(db, nil, gspec, nil, beacon.New(ethash.NewFaker()), vm.Config{}, nil, nil, nil)
-			parallelBlockchain, _ = NewParallelBlockChain(db, cacheConfig, gspec, nil, beacon.New(ethash.NewFaker()), vm.Config{ParallelEnable: true, ParallelSpeculativeProcesses: 8}, nil, nil, nil)
+			blockchain, _ = NewBlockChain(db, nil, gspec, nil, beacon.New(ethash.NewFaker()), vm.Config{}, nil, nil, nil)
 		)
-
 		defer blockchain.Stop()
-		defer parallelBlockchain.Stop()
-
-		for _, bc := range []*BlockChain{blockchain, parallelBlockchain} {
-			for i, tt := range []struct {
-				txs  []*types.Transaction
-				want string
-			}{
-				{ // ErrSenderNoEOA
-					txs: []*types.Transaction{
-						mkDynamicTx(0, common.Address{}, params.TxGas-1000, big.NewInt(0), big.NewInt(0)),
-					},
-					want: "could not apply tx 0 [0x88626ac0d53cb65308f2416103c62bb1f18b805573d4f96a3640bbbfff13c14f]: sender not an eoa: address 0x71562b71999873DB5b286dF957af199Ec94617F7, codehash: 0x9280914443471259d4570a8661015ae4a5b80186dbc619658fb494bebc3da3d1",
+		for i, tt := range []struct {
+			txs  []*types.Transaction
+			want string
+		}{
+			{ // ErrSenderNoEOA
+				txs: []*types.Transaction{
+					mkDynamicTx(0, common.Address{}, params.TxGas-1000, big.NewInt(0), big.NewInt(0)),
 				},
-			} {
-				block := GenerateBadBlock(gspec.ToBlock(), beacon.New(ethash.NewFaker()), tt.txs, gspec.Config)
-				_, err := bc.InsertChain(types.Blocks{block})
-				if err == nil {
-					t.Fatal("block imported without errors")
-				}
-				if have, want := err.Error(), tt.want; have != want {
-					t.Errorf("test %d:\nhave \"%v\"\nwant \"%v\"\n", i, have, want)
-				}
+				want: "could not apply tx 0 [0x88626ac0d53cb65308f2416103c62bb1f18b805573d4f96a3640bbbfff13c14f]: sender not an eoa: address 0x71562b71999873DB5b286dF957af199Ec94617F7, codehash: 0x9280914443471259d4570a8661015ae4a5b80186dbc619658fb494bebc3da3d1",
+			},
+		} {
+			block := GenerateBadBlock(gspec.ToBlock(), beacon.New(ethash.NewFaker()), tt.txs, gspec.Config)
+			_, err := blockchain.InsertChain(types.Blocks{block})
+			if err == nil {
+				t.Fatal("block imported without errors")
+			}
+			if have, want := err.Error(), tt.want; have != want {
+				t.Errorf("test %d:\nhave \"%v\"\nwant \"%v\"\n", i, have, want)
 			}
 		}
 	}
@@ -401,10 +376,11 @@ func GenerateBadBlock(parent *types.Block, engine consensus.Engine, txs types.Tr
 		Time:       parent.Time() + 10,
 		UncleHash:  types.EmptyUncleHash,
 	}
+
 	if config.IsLondon(header.Number) {
-		header.BaseFee = misc.CalcBaseFee(config, parent.Header())
+		header.BaseFee = eip1559.CalcBaseFee(config, parent.Header())
 	}
-	if config.IsShanghai(header.Number, header.Time) {
+	if config.IsShanghai(header.Number) {
 		header.WithdrawalsHash = &types.EmptyWithdrawalsHash
 	}
 
@@ -429,19 +405,19 @@ func GenerateBadBlock(parent *types.Block, engine consensus.Engine, txs types.Tr
 	}
 
 	header.Root = common.BytesToHash(hasher.Sum(nil))
-	if config.IsCancun(header.Number, header.Time) {
+	if config.IsCancun(header.Number) {
 		var pExcess, pUsed = uint64(0), uint64(0)
-		if parent.ExcessDataGas() != nil {
-			pExcess = *parent.ExcessDataGas()
-			pUsed = *parent.DataGasUsed()
+		if parent.ExcessBlobGas() != nil {
+			pExcess = *parent.ExcessBlobGas()
+			pUsed = *parent.BlobGasUsed()
 		}
-		excess := misc.CalcExcessDataGas(pExcess, pUsed)
-		used := uint64(nBlobs * params.BlobTxDataGasPerBlob)
-		header.ExcessDataGas = &excess
-		header.DataGasUsed = &used
+		excess := eip4844.CalcExcessBlobGas(pExcess, pUsed)
+		used := uint64(nBlobs * params.BlobTxBlobGasPerBlob)
+		header.ExcessBlobGas = &excess
+		header.BlobGasUsed = &used
 	}
 	// Assemble and return the final block for sealing
-	if config.IsShanghai(header.Number, header.Time) {
+	if config.IsShanghai(header.Number) {
 		return types.NewBlockWithWithdrawals(header, txs, nil, receipts, []*types.Withdrawal{}, trie.NewStackTrie(nil))
 	}
 

@@ -19,6 +19,7 @@ package tests
 import (
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"strconv"
@@ -116,7 +117,7 @@ type stTransaction struct {
 	Value                []string            `json:"value"`
 	PrivateKey           []byte              `json:"secretKey"`
 	BlobVersionedHashes  []common.Hash       `json:"blobVersionedHashes,omitempty"`
-	BlobGasFeeCap        *big.Int            `json:"maxFeePerDataGas,omitempty"`
+	BlobGasFeeCap        *big.Int            `json:"maxFeePerBlobGas,omitempty"`
 }
 
 type stTransactionMarshaling struct {
@@ -223,7 +224,7 @@ func (t *StateTest) Run(subtest StateSubtest, vmconfig vm.Config, snapshotter bo
 
 	post := t.json.Post[subtest.Fork][subtest.Index]
 	// N.B: We need to do this in a two-step process, because the first Commit takes care
-	// of suicides, and we need to touch the coinbase _after_ it has potentially suicided.
+	// of self-destructs, and we need to touch the coinbase _after_ it has potentially self-destructed.
 	if root != common.Hash(post.Root) {
 		return fmt.Errorf("post state root mismatch: got %x, want %x", root, post.Root)
 	}
@@ -231,8 +232,12 @@ func (t *StateTest) Run(subtest StateSubtest, vmconfig vm.Config, snapshotter bo
 	if logs := rlpHash(statedb.Logs()); logs != common.Hash(post.Logs) {
 		return fmt.Errorf("post state logs hash mismatch: got %x, want %x", logs, post.Logs)
 	}
-	statedb, _ = state.New(root, statedb.Database(), snaps)
-	return nil
+	// Re-init the post-state instance for further operation
+	statedb, err = state.New(root, statedb.Database(), snaps)
+	if err != nil {
+		return nil, nil, err
+	}
+	return snaps, statedb, nil
 }
 
 // RunNoVerify runs a specific subtest and returns the statedb and post-state root
@@ -311,29 +316,22 @@ func (t *StateTest) RunNoVerify(subtest StateSubtest, vmconfig vm.Config, snapsh
 	}
 	// Add 0-value mining reward. This only makes a difference in the cases
 	// where
-	// - the coinbase suicided, or
+	// - the coinbase self-destructed, or
 	// - there are only 'bad' transactions, which aren't executed. In those cases,
 	//   the coinbase gets no txfee, so isn't created, and thus needs to be touched
 	statedb.AddBalance(block.Coinbase(), new(big.Int))
-
-	// Commit state mutations into database.
+	// Commit block
 	root, _ := statedb.Commit(block.NumberU64(), config.IsEIP158(block.Number()))
-	return triedb, snaps, statedb, root, err
+	return snaps, statedb, root, err
 }
 
+// nolint:unused
 func (t *StateTest) gasLimit(subtest StateSubtest) uint64 {
 	return t.json.Tx.GasLimit[t.json.Post[subtest.Fork][subtest.Index].Indexes.Gas]
 }
 
-func MakePreState(db ethdb.Database, accounts core.GenesisAlloc, snapshotter bool, scheme string) (*trie.Database, *snapshot.Tree, *state.StateDB) {
-	tconf := &trie.Config{Preimages: true}
-	if scheme == rawdb.HashScheme {
-		tconf.HashDB = hashdb.Defaults
-	} else {
-		tconf.PathDB = pathdb.Defaults
-	}
-	triedb := trie.NewDatabase(db, tconf)
-	sdb := state.NewDatabaseWithNodeDB(db, triedb)
+func MakePreState(db ethdb.Database, accounts core.GenesisAlloc, snapshotter bool) (*snapshot.Tree, *state.StateDB) {
+	sdb := state.NewDatabaseWithConfig(db, &trie.Config{Preimages: true})
 	statedb, _ := state.New(types.EmptyRootHash, sdb, nil)
 	for addr, a := range accounts {
 		statedb.SetCode(addr, a.Code)
@@ -461,7 +459,7 @@ func (tx *stTransaction) toMessage(ps stPostState, baseFee *big.Int) (*core.Mess
 	}
 
 	if gasPrice == nil {
-		return nil, fmt.Errorf("no gas price provided")
+		return nil, errors.New("no gas price provided")
 	}
 
 	msg := &core.Message{

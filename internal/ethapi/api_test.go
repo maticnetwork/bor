@@ -21,6 +21,7 @@ import (
 	"crypto/ecdsa"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math/big"
 	"reflect"
 	"testing"
@@ -44,9 +45,50 @@ import (
 	"github.com/ethereum/go-ethereum/internal/blocktest"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/slices"
 )
+
+func testTransactionMarshal(t *testing.T, tests []txData, config *params.ChainConfig) {
+	t.Helper()
+	t.Parallel()
+
+	var (
+		signer = types.LatestSigner(config)
+		key, _ = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+	)
+
+	for i, tt := range tests {
+		var tx2 types.Transaction
+
+		tx, err := types.SignNewTx(key, signer, tt.Tx)
+		if err != nil {
+			t.Fatalf("test %d: signing failed: %v", i, err)
+		}
+		// Regular transaction
+		if data, err := json.Marshal(tx); err != nil {
+			t.Fatalf("test %d: marshalling failed; %v", i, err)
+		} else if err = tx2.UnmarshalJSON(data); err != nil {
+			t.Fatalf("test %d: sunmarshal failed: %v", i, err)
+		} else if want, have := tx.Hash(), tx2.Hash(); want != have {
+			t.Fatalf("test %d: stx changed, want %x have %x", i, want, have)
+		}
+
+		// rpcTransaction
+		rpcTx := newRPCTransaction(tx, common.Hash{}, 0, 0, 0, big.NewInt(0), config)
+		if data, err := json.Marshal(rpcTx); err != nil {
+			t.Fatalf("test %d: marshalling failed; %v", i, err)
+		} else if err = tx2.UnmarshalJSON(data); err != nil {
+			t.Fatalf("test %d: unmarshal failed: %v", i, err)
+		} else if want, have := tx.Hash(), tx2.Hash(); want != have {
+			t.Fatalf("test %d: tx changed, want %x have %x", i, want, have)
+		} else {
+			want, have := tt.Want, string(data)
+			require.JSONEqf(t, want, have, "test %d: rpc json not match, want %s have %s", i, want, have)
+		}
+	}
+}
 
 func TestTransaction_RoundTripRpcJSON(t *testing.T) {
 	var (
@@ -56,7 +98,7 @@ func TestTransaction_RoundTripRpcJSON(t *testing.T) {
 		tests  = allTransactionTypes(common.Address{0xde, 0xad}, config)
 	)
 
-	t.Parallel()
+	testTransactionMarshal(t, tests, config)
 
 	for i, tt := range tests {
 		var tx2 types.Transaction
@@ -107,7 +149,24 @@ func allTransactionTypes(addr common.Address, config *params.ChainConfig) []txDa
 				R:        big.NewInt(10),
 				S:        big.NewInt(11),
 			},
-			Want: `{"blockHash":null,"blockNumber":null,"from":"0x71562b71999873db5b286df957af199ec94617f7","gas":"0x7","gasPrice":"0x6","hash":"0x5f3240454cd09a5d8b1c5d651eefae7a339262875bcd2d0e6676f3d989967008","input":"0x0001020304","nonce":"0x5","to":"0xdead000000000000000000000000000000000000","transactionIndex":null,"value":"0x8","type":"0x0","chainId":"0x539","v":"0xa96","r":"0xbc85e96592b95f7160825d837abb407f009df9ebe8f1b9158a4b8dd093377f75","s":"0x1b55ea3af5574c536967b039ba6999ef6c89cf22fc04bcb296e0e8b0b9b576f5"}`,
+			Want: `{
+				"blockHash": null,
+				"blockNumber": null,
+				"from": "0x71562b71999873db5b286df957af199ec94617f7",
+				"gas": "0x7",
+				"gasPrice": "0x6",
+				"hash": "0x5f3240454cd09a5d8b1c5d651eefae7a339262875bcd2d0e6676f3d989967008",
+				"input": "0x0001020304",
+				"nonce": "0x5",
+				"to": "0xdead000000000000000000000000000000000000",
+				"transactionIndex": null,
+				"value": "0x8",
+				"type": "0x0",
+				"chainId": "0x539",
+				"v": "0xa96",
+				"r": "0xbc85e96592b95f7160825d837abb407f009df9ebe8f1b9158a4b8dd093377f75",
+				"s": "0x1b55ea3af5574c536967b039ba6999ef6c89cf22fc04bcb296e0e8b0b9b576f5"
+			}`,
 		}, {
 			Tx: &types.LegacyTx{
 				Nonce:    5,
@@ -120,7 +179,24 @@ func allTransactionTypes(addr common.Address, config *params.ChainConfig) []txDa
 				R:        big.NewInt(10),
 				S:        big.NewInt(11),
 			},
-			Want: `{"blockHash":null,"blockNumber":null,"from":"0x71562b71999873db5b286df957af199ec94617f7","gas":"0x7","gasPrice":"0x6","hash":"0x806e97f9d712b6cb7e781122001380a2837531b0fc1e5f5d78174ad4cb699873","input":"0x0001020304","nonce":"0x5","to":null,"transactionIndex":null,"value":"0x8","type":"0x0","chainId":"0x539","v":"0xa96","r":"0x9dc28b267b6ad4e4af6fe9289668f9305c2eb7a3241567860699e478af06835a","s":"0xa0b51a071aa9bed2cd70aedea859779dff039e3630ea38497d95202e9b1fec7"}`,
+			Want: `{
+				"blockHash": null,
+				"blockNumber": null,
+				"from": "0x71562b71999873db5b286df957af199ec94617f7",
+				"gas": "0x7",
+				"gasPrice": "0x6",
+				"hash": "0x806e97f9d712b6cb7e781122001380a2837531b0fc1e5f5d78174ad4cb699873",
+				"input": "0x0001020304",
+				"nonce": "0x5",
+				"to": null,
+				"transactionIndex": null,
+				"value": "0x8",
+				"type": "0x0",
+				"chainId": "0x539",
+				"v": "0xa96",
+				"r": "0x9dc28b267b6ad4e4af6fe9289668f9305c2eb7a3241567860699e478af06835a",
+				"s": "0xa0b51a071aa9bed2cd70aedea859779dff039e3630ea38497d95202e9b1fec7"
+			}`,
 		},
 		{
 			Tx: &types.AccessListTx{
@@ -141,7 +217,33 @@ func allTransactionTypes(addr common.Address, config *params.ChainConfig) []txDa
 				R: big.NewInt(10),
 				S: big.NewInt(11),
 			},
-			Want: `{"blockHash":null,"blockNumber":null,"from":"0x71562b71999873db5b286df957af199ec94617f7","gas":"0x7","gasPrice":"0x6","hash":"0x121347468ee5fe0a29f02b49b4ffd1c8342bc4255146bb686cd07117f79e7129","input":"0x0001020304","nonce":"0x5","to":"0xdead000000000000000000000000000000000000","transactionIndex":null,"value":"0x8","type":"0x1","accessList":[{"address":"0x0200000000000000000000000000000000000000","storageKeys":["0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"]}],"chainId":"0x539","v":"0x0","r":"0xf372ad499239ae11d91d34c559ffc5dab4daffc0069e03afcabdcdf231a0c16b","s":"0x28573161d1f9472fa0fd4752533609e72f06414f7ab5588699a7141f65d2abf"}`,
+			Want: `{
+				"blockHash": null,
+				"blockNumber": null,
+				"from": "0x71562b71999873db5b286df957af199ec94617f7",
+				"gas": "0x7",
+				"gasPrice": "0x6",
+				"hash": "0x121347468ee5fe0a29f02b49b4ffd1c8342bc4255146bb686cd07117f79e7129",
+				"input": "0x0001020304",
+				"nonce": "0x5",
+				"to": "0xdead000000000000000000000000000000000000",
+				"transactionIndex": null,
+				"value": "0x8",
+				"type": "0x1",
+				"accessList": [
+					{
+						"address": "0x0200000000000000000000000000000000000000",
+						"storageKeys": [
+							"0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
+						]
+					}
+				],
+				"chainId": "0x539",
+				"v": "0x0",
+				"r": "0xf372ad499239ae11d91d34c559ffc5dab4daffc0069e03afcabdcdf231a0c16b",
+				"s": "0x28573161d1f9472fa0fd4752533609e72f06414f7ab5588699a7141f65d2abf",
+				"yParity": "0x0"
+			}`,
 		}, {
 			Tx: &types.AccessListTx{
 				ChainID:  config.ChainID,
@@ -161,7 +263,33 @@ func allTransactionTypes(addr common.Address, config *params.ChainConfig) []txDa
 				R: big.NewInt(10),
 				S: big.NewInt(11),
 			},
-			Want: `{"blockHash":null,"blockNumber":null,"from":"0x71562b71999873db5b286df957af199ec94617f7","gas":"0x7","gasPrice":"0x6","hash":"0x067c3baebede8027b0f828a9d933be545f7caaec623b00684ac0659726e2055b","input":"0x0001020304","nonce":"0x5","to":null,"transactionIndex":null,"value":"0x8","type":"0x1","accessList":[{"address":"0x0200000000000000000000000000000000000000","storageKeys":["0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"]}],"chainId":"0x539","v":"0x1","r":"0x542981b5130d4613897fbab144796cb36d3cb3d7807d47d9c7f89ca7745b085c","s":"0x7425b9dd6c5deaa42e4ede35d0c4570c4624f68c28d812c10d806ffdf86ce63"}`,
+			Want: `{
+				"blockHash": null,
+				"blockNumber": null,
+				"from": "0x71562b71999873db5b286df957af199ec94617f7",
+				"gas": "0x7",
+				"gasPrice": "0x6",
+				"hash": "0x067c3baebede8027b0f828a9d933be545f7caaec623b00684ac0659726e2055b",
+				"input": "0x0001020304",
+				"nonce": "0x5",
+				"to": null,
+				"transactionIndex": null,
+				"value": "0x8",
+				"type": "0x1",
+				"accessList": [
+					{
+						"address": "0x0200000000000000000000000000000000000000",
+						"storageKeys": [
+							"0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
+						]
+					}
+				],
+				"chainId": "0x539",
+				"v": "0x1",
+				"r": "0x542981b5130d4613897fbab144796cb36d3cb3d7807d47d9c7f89ca7745b085c",
+				"s": "0x7425b9dd6c5deaa42e4ede35d0c4570c4624f68c28d812c10d806ffdf86ce63",
+				"yParity": "0x1"
+			}`,
 		}, {
 			Tx: &types.DynamicFeeTx{
 				ChainID:   config.ChainID,
@@ -182,7 +310,35 @@ func allTransactionTypes(addr common.Address, config *params.ChainConfig) []txDa
 				R: big.NewInt(10),
 				S: big.NewInt(11),
 			},
-			Want: `{"blockHash":null,"blockNumber":null,"from":"0x71562b71999873db5b286df957af199ec94617f7","gas":"0x7","gasPrice":"0x9","maxFeePerGas":"0x9","maxPriorityFeePerGas":"0x6","hash":"0xb63e0b146b34c3e9cb7fbabb5b3c081254a7ded6f1b65324b5898cc0545d79ff","input":"0x0001020304","nonce":"0x5","to":"0xdead000000000000000000000000000000000000","transactionIndex":null,"value":"0x8","type":"0x2","accessList":[{"address":"0x0200000000000000000000000000000000000000","storageKeys":["0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"]}],"chainId":"0x539","v":"0x1","r":"0x3b167e05418a8932cd53d7578711fe1a76b9b96c48642402bb94978b7a107e80","s":"0x22f98a332d15ea2cc80386c1ebaa31b0afebfa79ebc7d039a1e0074418301fef"}`,
+			Want: `{
+				"blockHash": null,
+				"blockNumber": null,
+				"from": "0x71562b71999873db5b286df957af199ec94617f7",
+				"gas": "0x7",
+				"gasPrice": "0x9",
+				"maxFeePerGas": "0x9",
+				"maxPriorityFeePerGas": "0x6",
+				"hash": "0xb63e0b146b34c3e9cb7fbabb5b3c081254a7ded6f1b65324b5898cc0545d79ff",
+				"input": "0x0001020304",
+				"nonce": "0x5",
+				"to": "0xdead000000000000000000000000000000000000",
+				"transactionIndex": null,
+				"value": "0x8",
+				"type": "0x2",
+				"accessList": [
+					{
+						"address": "0x0200000000000000000000000000000000000000",
+						"storageKeys": [
+							"0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
+						]
+					}
+				],
+				"chainId": "0x539",
+				"v": "0x1",
+				"r": "0x3b167e05418a8932cd53d7578711fe1a76b9b96c48642402bb94978b7a107e80",
+				"s": "0x22f98a332d15ea2cc80386c1ebaa31b0afebfa79ebc7d039a1e0074418301fef",
+				"yParity": "0x1"
+			}`,
 		}, {
 			Tx: &types.DynamicFeeTx{
 				ChainID:    config.ChainID,
@@ -198,7 +354,28 @@ func allTransactionTypes(addr common.Address, config *params.ChainConfig) []txDa
 				R:          big.NewInt(10),
 				S:          big.NewInt(11),
 			},
-			Want: `{"blockHash":null,"blockNumber":null,"from":"0x71562b71999873db5b286df957af199ec94617f7","gas":"0x7","gasPrice":"0x9","maxFeePerGas":"0x9","maxPriorityFeePerGas":"0x6","hash":"0xcbab17ee031a9d5b5a09dff909f0a28aedb9b295ac0635d8710d11c7b806ec68","input":"0x0001020304","nonce":"0x5","to":null,"transactionIndex":null,"value":"0x8","type":"0x2","accessList":[],"chainId":"0x539","v":"0x0","r":"0x6446b8a682db7e619fc6b4f6d1f708f6a17351a41c7fbd63665f469bc78b41b9","s":"0x7626abc15834f391a117c63450047309dbf84c5ce3e8e609b607062641e2de43"}`,
+			Want: `{
+				"blockHash": null,
+				"blockNumber": null,
+				"from": "0x71562b71999873db5b286df957af199ec94617f7",
+				"gas": "0x7",
+				"gasPrice": "0x9",
+				"maxFeePerGas": "0x9",
+				"maxPriorityFeePerGas": "0x6",
+				"hash": "0xcbab17ee031a9d5b5a09dff909f0a28aedb9b295ac0635d8710d11c7b806ec68",
+				"input": "0x0001020304",
+				"nonce": "0x5",
+				"to": null,
+				"transactionIndex": null,
+				"value": "0x8",
+				"type": "0x2",
+				"accessList": [],
+				"chainId": "0x539",
+				"v": "0x0",
+				"r": "0x6446b8a682db7e619fc6b4f6d1f708f6a17351a41c7fbd63665f469bc78b41b9",
+				"s": "0x7626abc15834f391a117c63450047309dbf84c5ce3e8e609b607062641e2de43",
+				"yParity": "0x0"
+			}`,
 		},
 	}
 }
@@ -210,11 +387,9 @@ type testBackend struct {
 }
 
 func newTestBackend(t *testing.T, n int, gspec *core.Genesis, generator func(i int, b *core.BlockGen)) *testBackend {
+	t.Helper()
 	var (
-		engine  = ethash.NewFaker()
-		backend = &testBackend{
-			db: rawdb.NewMemoryDatabase(),
-		}
+		engine      = ethash.NewFaker()
 		cacheConfig = &core.CacheConfig{
 			TrieCleanLimit:    256,
 			TrieDirtyLimit:    256,
@@ -224,15 +399,17 @@ func newTestBackend(t *testing.T, n int, gspec *core.Genesis, generator func(i i
 		}
 	)
 	// Generate blocks for testing
-	_, blocks, _ := core.GenerateChainWithGenesis(gspec, engine, n, generator)
-	chain, err := core.NewBlockChain(backend.db, cacheConfig, gspec, nil, engine, vm.Config{}, nil, nil, nil)
+	db, blocks, _ := core.GenerateChainWithGenesis(gspec, engine, n, generator)
+	txlookupLimit := uint64(0)
+	chain, err := core.NewBlockChain(db, cacheConfig, gspec, nil, engine, vm.Config{}, nil, &txlookupLimit, nil)
 	if err != nil {
 		t.Fatalf("failed to create tester chain: %v", err)
 	}
 	if n, err := chain.InsertChain(blocks); err != nil {
 		t.Fatalf("block %d: failed to insert into chain: %v", n, err)
 	}
-	backend.chain = chain
+
+	backend := &testBackend{db: db, chain: chain}
 	return backend
 }
 
@@ -325,7 +502,12 @@ func (b testBackend) StateAndHeaderByNumberOrHash(ctx context.Context, blockNrOr
 }
 func (b testBackend) PendingBlockAndReceipts() (*types.Block, types.Receipts) { panic("implement me") }
 func (b testBackend) GetReceipts(ctx context.Context, hash common.Hash) (types.Receipts, error) {
-	panic("implement me")
+	header, err := b.HeaderByHash(ctx, hash)
+	if header == nil || err != nil {
+		return nil, err
+	}
+	receipts := rawdb.ReadReceipts(b.db, hash, header.Number.Uint64(), header.Time, b.chain.Config())
+	return receipts, nil
 }
 func (b testBackend) GetTd(ctx context.Context, hash common.Hash) *big.Int {
 	if b.pending != nil && hash == b.pending.Hash() {
@@ -358,7 +540,8 @@ func (b testBackend) SendTx(ctx context.Context, signedTx *types.Transaction) er
 	panic("implement me")
 }
 func (b testBackend) GetTransaction(ctx context.Context, txHash common.Hash) (*types.Transaction, common.Hash, uint64, uint64, error) {
-	panic("implement me")
+	tx, blockHash, blockNumber, index := rawdb.ReadTransaction(b.db, txHash)
+	return tx, blockHash, blockNumber, index, nil
 }
 func (b testBackend) GetPoolTransactions() (types.Transactions, error)         { panic("implement me") }
 func (b testBackend) GetPoolTransaction(txHash common.Hash) *types.Transaction { panic("implement me") }
@@ -366,10 +549,10 @@ func (b testBackend) GetPoolNonce(ctx context.Context, addr common.Address) (uin
 	panic("implement me")
 }
 func (b testBackend) Stats() (pending int, queued int) { panic("implement me") }
-func (b testBackend) TxPoolContent() (map[common.Address]types.Transactions, map[common.Address]types.Transactions) {
+func (b testBackend) TxPoolContent() (map[common.Address][]*types.Transaction, map[common.Address][]*types.Transaction) {
 	panic("implement me")
 }
-func (b testBackend) TxPoolContentFrom(addr common.Address) (types.Transactions, types.Transactions) {
+func (b testBackend) TxPoolContentFrom(addr common.Address) ([]*types.Transaction, []*types.Transaction) {
 	panic("implement me")
 }
 func (b testBackend) SubscribeNewTxsEvent(events chan<- core.NewTxsEvent) event.Subscription {
@@ -394,38 +577,42 @@ func (b testBackend) ServiceFilter(ctx context.Context, session *bloombits.Match
 	panic("implement me")
 }
 
-func (b testBackend) GetBorBlockLogs(ctx context.Context, hash common.Hash) ([]*types.Log, error) {
-	panic("implement me")
-}
-
-func (b testBackend) GetBorBlockReceipt(ctx context.Context, hash common.Hash) (*types.Receipt, error) {
-	panic("implement me")
-}
-
+// GetBorBlockTransaction returns bor block tx
 func (b testBackend) GetBorBlockTransaction(ctx context.Context, hash common.Hash) (*types.Transaction, common.Hash, uint64, uint64, error) {
 	panic("implement me")
 }
 
-func (b testBackend) GetBorBlockTransactionWithBlockHash(ctx context.Context, hash common.Hash, blockHash common.Hash) (*types.Transaction, common.Hash, uint64, uint64, error) {
+func (b testBackend) GetBorBlockTransactionWithBlockHash(ctx context.Context, txHash common.Hash, blockHash common.Hash) (*types.Transaction, common.Hash, uint64, uint64, error) {
+	tx, blockHash, blockNumber, index := rawdb.ReadBorTransactionWithBlockHash(b.ChainDb(), txHash, blockHash)
+	return tx, blockHash, blockNumber, index, nil
+}
+
+func (b testBackend) GetRootHash(ctx context.Context, starBlockNr uint64, endBlockNr uint64) (string, error) {
 	panic("implement me")
 }
 
-func (b testBackend) GetCheckpointWhitelist() map[uint64]common.Hash {
+func (b testBackend) GetVoteOnHash(ctx context.Context, starBlockNr uint64, endBlockNr uint64, hash string, milestoneId string) (bool, error) {
 	panic("implement me")
 }
 
-func (b testBackend) GetRootHash(ctx context.Context, startBlockNumber uint64, endBlockNumber uint64) (string, error) {
+func (b testBackend) GetWhitelistedCheckpoint() (bool, uint64, common.Hash) {
 	panic("implement me")
 }
 
-func (b testBackend) PurgeCheckpointWhitelist() {}
+func (b testBackend) GetWhitelistedMilestone() (bool, uint64, common.Hash) {
+	panic("implement me")
+}
 
-func (b testBackend) GetCheckpoints(current, sidechainHeader *types.Header, sidechainCheckpoints []*types.Header) (map[uint64]*types.Header, error) {
-	return map[uint64]*types.Header{}, nil
+func (b testBackend) PurgeWhitelistedMilestone() {
+	panic("implement me")
+}
+
+func (b testBackend) PurgeWhitelistedCheckpoint() {
+	panic("implement me")
 }
 
 func (b testBackend) RPCRpcReturnDataLimit() uint64 {
-	return 100000
+	return 0
 }
 
 func (b testBackend) SubscribeChain2HeadEvent(ch chan<- core.Chain2HeadEvent) event.Subscription {
@@ -434,6 +621,29 @@ func (b testBackend) SubscribeChain2HeadEvent(ch chan<- core.Chain2HeadEvent) ev
 
 func (b testBackend) SubscribeStateSyncEvent(ch chan<- core.StateSyncEvent) event.Subscription {
 	panic("implement me")
+}
+
+func (b testBackend) GetBorBlockLogs(ctx context.Context, hash common.Hash) ([]*types.Log, error) {
+	receipt, err := b.GetBorBlockReceipt(ctx, hash)
+	if err != nil || receipt == nil {
+		return nil, err
+	}
+
+	return receipt.Logs, nil
+}
+
+func (b testBackend) GetBorBlockReceipt(ctx context.Context, hash common.Hash) (*types.Receipt, error) {
+	number := rawdb.ReadHeaderNumber(b.db, hash)
+	if number == nil {
+		return nil, nil
+	}
+
+	receipt := rawdb.ReadRawBorReceipt(b.db, hash, *number)
+	if receipt == nil {
+		return nil, nil
+	}
+
+	return receipt, nil
 }
 
 func TestEstimateGas(t *testing.T) {
@@ -462,6 +672,7 @@ func TestEstimateGas(t *testing.T) {
 	var testSuite = []struct {
 		blockNumber rpc.BlockNumber
 		call        TransactionArgs
+		overrides   StateOverride
 		expectErr   error
 		want        uint64
 	}{
@@ -494,9 +705,30 @@ func TestEstimateGas(t *testing.T) {
 			expectErr:   nil,
 			want:        53000,
 		},
+		{
+			blockNumber: rpc.LatestBlockNumber,
+			call:        TransactionArgs{},
+			overrides: StateOverride{
+				randomAccounts[0].addr: OverrideAccount{Balance: newRPCBalance(new(big.Int).Mul(big.NewInt(1), big.NewInt(params.Ether)))},
+			},
+			expectErr: nil,
+			want:      53000,
+		},
+		{
+			blockNumber: rpc.LatestBlockNumber,
+			call: TransactionArgs{
+				From:  &randomAccounts[0].addr,
+				To:    &randomAccounts[1].addr,
+				Value: (*hexutil.Big)(big.NewInt(1000)),
+			},
+			overrides: StateOverride{
+				randomAccounts[0].addr: OverrideAccount{Balance: newRPCBalance(big.NewInt(0))},
+			},
+			expectErr: core.ErrInsufficientFunds,
+		},
 	}
 	for i, tc := range testSuite {
-		result, err := api.EstimateGas(context.Background(), tc.call, &rpc.BlockNumberOrHash{BlockNumber: &tc.blockNumber})
+		result, err := api.EstimateGas(context.Background(), tc.call, &rpc.BlockNumberOrHash{BlockNumber: &tc.blockNumber}, &tc.overrides)
 		if tc.expectErr != nil {
 			if err == nil {
 				t.Errorf("test %d: want error %v, have nothing", i, tc.expectErr)
@@ -697,7 +929,7 @@ func newAccounts(n int) (accounts []Account) {
 		addr := crypto.PubkeyToAddress(key.PublicKey)
 		accounts = append(accounts, Account{key: key, addr: addr})
 	}
-	slices.SortFunc(accounts, func(a, b Account) bool { return a.addr.Less(b.addr) })
+	slices.SortFunc(accounts, func(a, b Account) int { return a.addr.Cmp(b.addr) })
 	return accounts
 }
 
@@ -752,36 +984,171 @@ func TestRPCMarshalBlock(t *testing.T) {
 		{
 			inclTx: false,
 			fullTx: false,
-			want:   `{"difficulty":"0x0","extraData":"0x","gasLimit":"0x0","gasUsed":"0x0","hash":"0x9b73c83b25d0faf7eab854e3684c7e394336d6e135625aafa5c183f27baa8fee","logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000","miner":"0x0000000000000000000000000000000000000000","mixHash":"0x0000000000000000000000000000000000000000000000000000000000000000","nonce":"0x0000000000000000","number":"0x64","parentHash":"0x0000000000000000000000000000000000000000000000000000000000000000","receiptsRoot":"0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421","sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347","size":"0x296","stateRoot":"0x0000000000000000000000000000000000000000000000000000000000000000","timestamp":"0x0","transactionsRoot":"0x661a9febcfa8f1890af549b874faf9fa274aede26ef489d9db0b25daa569450e","uncles":[]}`,
+			want: `{
+				"difficulty": "0x0",
+				"extraData": "0x",
+				"gasLimit": "0x0",
+				"gasUsed": "0x0",
+				"hash": "0x9b73c83b25d0faf7eab854e3684c7e394336d6e135625aafa5c183f27baa8fee",
+				"logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+				"miner": "0x0000000000000000000000000000000000000000",
+				"mixHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+				"nonce": "0x0000000000000000",
+				"number": "0x64",
+				"parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+				"receiptsRoot": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+				"sha3Uncles": "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347",
+				"size": "0x296",
+				"stateRoot": "0x0000000000000000000000000000000000000000000000000000000000000000",
+				"timestamp": "0x0",
+				"transactionsRoot": "0x661a9febcfa8f1890af549b874faf9fa274aede26ef489d9db0b25daa569450e",
+				"uncles": []
+			}`,
 		},
 		// only tx hashes
 		{
 			inclTx: true,
 			fullTx: false,
-			want:   `{"difficulty":"0x0","extraData":"0x","gasLimit":"0x0","gasUsed":"0x0","hash":"0x9b73c83b25d0faf7eab854e3684c7e394336d6e135625aafa5c183f27baa8fee","logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000","miner":"0x0000000000000000000000000000000000000000","mixHash":"0x0000000000000000000000000000000000000000000000000000000000000000","nonce":"0x0000000000000000","number":"0x64","parentHash":"0x0000000000000000000000000000000000000000000000000000000000000000","receiptsRoot":"0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421","sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347","size":"0x296","stateRoot":"0x0000000000000000000000000000000000000000000000000000000000000000","timestamp":"0x0","transactions":["0x7d39df979e34172322c64983a9ad48302c2b889e55bda35324afecf043a77605","0x9bba4c34e57c875ff57ac8d172805a26ae912006985395dc1bdf8f44140a7bf4","0x98909ea1ff040da6be56bc4231d484de1414b3c1dac372d69293a4beb9032cb5","0x12e1f81207b40c3bdcc13c0ee18f5f86af6d31754d57a0ea1b0d4cfef21abef1"],"transactionsRoot":"0x661a9febcfa8f1890af549b874faf9fa274aede26ef489d9db0b25daa569450e","uncles":[]}`,
+			want: `{
+				"difficulty": "0x0",
+				"extraData": "0x",
+				"gasLimit": "0x0",
+				"gasUsed": "0x0",
+				"hash": "0x9b73c83b25d0faf7eab854e3684c7e394336d6e135625aafa5c183f27baa8fee",
+				"logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+				"miner": "0x0000000000000000000000000000000000000000",
+				"mixHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+				"nonce": "0x0000000000000000",
+				"number": "0x64",
+				"parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+				"receiptsRoot": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+				"sha3Uncles": "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347",
+				"size": "0x296",
+				"stateRoot": "0x0000000000000000000000000000000000000000000000000000000000000000",
+				"timestamp": "0x0",
+				"transactions": [
+					"0x7d39df979e34172322c64983a9ad48302c2b889e55bda35324afecf043a77605",
+					"0x9bba4c34e57c875ff57ac8d172805a26ae912006985395dc1bdf8f44140a7bf4",
+					"0x98909ea1ff040da6be56bc4231d484de1414b3c1dac372d69293a4beb9032cb5",
+					"0x12e1f81207b40c3bdcc13c0ee18f5f86af6d31754d57a0ea1b0d4cfef21abef1"
+				],
+				"transactionsRoot": "0x661a9febcfa8f1890af549b874faf9fa274aede26ef489d9db0b25daa569450e",
+				"uncles": []
+			}`,
 		},
 		// full tx details
 		{
 			inclTx: true,
 			fullTx: true,
-			want:   `{"difficulty":"0x0","extraData":"0x","gasLimit":"0x0","gasUsed":"0x0","hash":"0x9b73c83b25d0faf7eab854e3684c7e394336d6e135625aafa5c183f27baa8fee","logsBloom":"0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000","miner":"0x0000000000000000000000000000000000000000","mixHash":"0x0000000000000000000000000000000000000000000000000000000000000000","nonce":"0x0000000000000000","number":"0x64","parentHash":"0x0000000000000000000000000000000000000000000000000000000000000000","receiptsRoot":"0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421","sha3Uncles":"0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347","size":"0x296","stateRoot":"0x0000000000000000000000000000000000000000000000000000000000000000","timestamp":"0x0","transactions":[{"blockHash":"0x9b73c83b25d0faf7eab854e3684c7e394336d6e135625aafa5c183f27baa8fee","blockNumber":"0x64","from":"0x0000000000000000000000000000000000000000","gas":"0x457","gasPrice":"0x2b67","hash":"0x7d39df979e34172322c64983a9ad48302c2b889e55bda35324afecf043a77605","input":"0x111111","nonce":"0x1","to":"0x0000000000000000000000000000000000000011","transactionIndex":"0x0","value":"0x6f","type":"0x1","accessList":[],"chainId":"0x539","v":"0x0","r":"0x0","s":"0x0"},{"blockHash":"0x9b73c83b25d0faf7eab854e3684c7e394336d6e135625aafa5c183f27baa8fee","blockNumber":"0x64","from":"0x0000000000000000000000000000000000000000","gas":"0x457","gasPrice":"0x2b67","hash":"0x9bba4c34e57c875ff57ac8d172805a26ae912006985395dc1bdf8f44140a7bf4","input":"0x111111","nonce":"0x2","to":"0x0000000000000000000000000000000000000011","transactionIndex":"0x1","value":"0x6f","type":"0x0","chainId":"0x7fffffffffffffee","v":"0x0","r":"0x0","s":"0x0"},{"blockHash":"0x9b73c83b25d0faf7eab854e3684c7e394336d6e135625aafa5c183f27baa8fee","blockNumber":"0x64","from":"0x0000000000000000000000000000000000000000","gas":"0x457","gasPrice":"0x2b67","hash":"0x98909ea1ff040da6be56bc4231d484de1414b3c1dac372d69293a4beb9032cb5","input":"0x111111","nonce":"0x3","to":"0x0000000000000000000000000000000000000011","transactionIndex":"0x2","value":"0x6f","type":"0x1","accessList":[],"chainId":"0x539","v":"0x0","r":"0x0","s":"0x0"},{"blockHash":"0x9b73c83b25d0faf7eab854e3684c7e394336d6e135625aafa5c183f27baa8fee","blockNumber":"0x64","from":"0x0000000000000000000000000000000000000000","gas":"0x457","gasPrice":"0x2b67","hash":"0x12e1f81207b40c3bdcc13c0ee18f5f86af6d31754d57a0ea1b0d4cfef21abef1","input":"0x111111","nonce":"0x4","to":"0x0000000000000000000000000000000000000011","transactionIndex":"0x3","value":"0x6f","type":"0x0","chainId":"0x7fffffffffffffee","v":"0x0","r":"0x0","s":"0x0"}],"transactionsRoot":"0x661a9febcfa8f1890af549b874faf9fa274aede26ef489d9db0b25daa569450e","uncles":[]}`,
+			want: `{
+				"difficulty": "0x0",
+				"extraData": "0x",
+				"gasLimit": "0x0",
+				"gasUsed": "0x0",
+				"hash": "0x9b73c83b25d0faf7eab854e3684c7e394336d6e135625aafa5c183f27baa8fee",
+				"logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+				"miner": "0x0000000000000000000000000000000000000000",
+				"mixHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+				"nonce": "0x0000000000000000",
+				"number": "0x64",
+				"parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+				"receiptsRoot": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+				"sha3Uncles": "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347",
+				"size": "0x296",
+				"stateRoot": "0x0000000000000000000000000000000000000000000000000000000000000000",
+				"timestamp": "0x0",
+				"transactions": [
+					{
+						"blockHash": "0x9b73c83b25d0faf7eab854e3684c7e394336d6e135625aafa5c183f27baa8fee",
+						"blockNumber": "0x64",
+						"from": "0x0000000000000000000000000000000000000000",
+						"gas": "0x457",
+						"gasPrice": "0x2b67",
+						"hash": "0x7d39df979e34172322c64983a9ad48302c2b889e55bda35324afecf043a77605",
+						"input": "0x111111",
+						"nonce": "0x1",
+						"to": "0x0000000000000000000000000000000000000011",
+						"transactionIndex": "0x0",
+						"value": "0x6f",
+						"type": "0x1",
+						"accessList": [],
+						"chainId": "0x539",
+						"v": "0x0",
+						"r": "0x0",
+						"s": "0x0",
+						"yParity": "0x0"
+					},
+					{
+						"blockHash": "0x9b73c83b25d0faf7eab854e3684c7e394336d6e135625aafa5c183f27baa8fee",
+						"blockNumber": "0x64",
+						"from": "0x0000000000000000000000000000000000000000",
+						"gas": "0x457",
+						"gasPrice": "0x2b67",
+						"hash": "0x9bba4c34e57c875ff57ac8d172805a26ae912006985395dc1bdf8f44140a7bf4",
+						"input": "0x111111",
+						"nonce": "0x2",
+						"to": "0x0000000000000000000000000000000000000011",
+						"transactionIndex": "0x1",
+						"value": "0x6f",
+						"type": "0x0",
+						"chainId": "0x7fffffffffffffee",
+						"v": "0x0",
+						"r": "0x0",
+						"s": "0x0"
+					},
+					{
+						"blockHash": "0x9b73c83b25d0faf7eab854e3684c7e394336d6e135625aafa5c183f27baa8fee",
+						"blockNumber": "0x64",
+						"from": "0x0000000000000000000000000000000000000000",
+						"gas": "0x457",
+						"gasPrice": "0x2b67",
+						"hash": "0x98909ea1ff040da6be56bc4231d484de1414b3c1dac372d69293a4beb9032cb5",
+						"input": "0x111111",
+						"nonce": "0x3",
+						"to": "0x0000000000000000000000000000000000000011",
+						"transactionIndex": "0x2",
+						"value": "0x6f",
+						"type": "0x1",
+						"accessList": [],
+						"chainId": "0x539",
+						"v": "0x0",
+						"r": "0x0",
+						"s": "0x0",
+						"yParity": "0x0"
+					},
+					{
+						"blockHash": "0x9b73c83b25d0faf7eab854e3684c7e394336d6e135625aafa5c183f27baa8fee",
+						"blockNumber": "0x64",
+						"from": "0x0000000000000000000000000000000000000000",
+						"gas": "0x457",
+						"gasPrice": "0x2b67",
+						"hash": "0x12e1f81207b40c3bdcc13c0ee18f5f86af6d31754d57a0ea1b0d4cfef21abef1",
+						"input": "0x111111",
+						"nonce": "0x4",
+						"to": "0x0000000000000000000000000000000000000011",
+						"transactionIndex": "0x3",
+						"value": "0x6f",
+						"type": "0x0",
+						"chainId": "0x7fffffffffffffee",
+						"v": "0x0",
+						"r": "0x0",
+						"s": "0x0"
+					}
+				],
+				"transactionsRoot": "0x661a9febcfa8f1890af549b874faf9fa274aede26ef489d9db0b25daa569450e",
+				"uncles": []
+			}`,
 		},
 	}
 
 	for i, tc := range testSuite {
-		resp, err := RPCMarshalBlock(block, tc.inclTx, tc.fullTx, params.MainnetChainConfig, nil)
-		if err != nil {
-			t.Errorf("test %d: got error %v", i, err)
-			continue
-		}
+		resp := RPCMarshalBlock(block, tc.inclTx, tc.fullTx, params.MainnetChainConfig, nil)
 		out, err := json.Marshal(resp)
 		if err != nil {
 			t.Errorf("test %d: json marshal error: %v", i, err)
 			continue
 		}
-		if have := string(out); have != tc.want {
-			t.Errorf("test %d: want: %s have: %s", i, tc.want, have)
-		}
+		assert.JSONEqf(t, tc.want, string(out), "test %d", i)
 	}
 }
 
@@ -837,7 +1204,7 @@ func TestRPCGetBlockOrHeader(t *testing.T) {
 		}
 		blockHashes[i] = header.Hash()
 	}
-	// pendingHash := pending.Hash()
+	pendingHash := pending.Hash()
 
 	var testSuite = []struct {
 		blockNumber rpc.BlockNumber
@@ -846,7 +1213,628 @@ func TestRPCGetBlockOrHeader(t *testing.T) {
 		reqHeader   bool
 		want        string
 		expectErr   error
-	}{}
+	}{
+		// 0. latest header
+		{
+			blockNumber: rpc.LatestBlockNumber,
+			reqHeader:   true,
+			want: `{
+				"baseFeePerGas": "0xfdc7303",
+				"difficulty": "0x20000",
+				"extraData": "0x",
+				"gasLimit": "0x47e7c4",
+				"gasUsed": "0x5208",
+				"hash": "0x872ee27d64627520cf93483c9b43d6710a33814ad56b42cb6a3f318a67ae3d4b",
+				"logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000808000000000000000000000000000000000000000000000000000000000800000000000000000000100000020000000000000000000000000000000000802000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004000000000000000000000800000000000000000000000800000108000000000000000000000000000000000000000000000000020000000000000000000100000",
+				"miner": "0x0000000000000000000000000000000000000000",
+				"mixHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+				"nonce": "0x0000000000000000",
+				"number": "0xa",
+				"parentHash": "0xf72973d179c425bcc46a56d1f90fc9ae036e09895bc732d238ecc776ad513671",
+				"receiptsRoot": "0xaa293d21b2dd99a4fafcba16c6ad824b09ec42a927c68456bc8209a76bc3e433",
+				"sha3Uncles": "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347",
+				"stateRoot": "0x1776127ce43163b6a16fc9d03b1f90f097768d3175c98ff38ccaf6e22b51dc31",
+				"timestamp": "0x64",
+				"totalDifficulty": "0x1",
+				"transactionsRoot": "0xb0893d21a4a44dc26a962a6e91abae66df87fb61ac9c60e936aee89c76331445"
+			}`,
+		},
+		// 1. genesis header
+		{
+			blockNumber: rpc.BlockNumber(0),
+			reqHeader:   true,
+			want: `{
+				"baseFeePerGas": "0x3b9aca00",
+				"difficulty": "0x20000",
+				"extraData": "0x",
+				"gasLimit": "0x47e7c4",
+				"gasUsed": "0x0",
+				"hash": "0xbdc7d83b8f876938810462fe8d053263a482e44201e3883d4ae204ff4de7eff5",
+				"logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+				"miner": "0x0000000000000000000000000000000000000000",
+				"mixHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+				"nonce": "0x0000000000000000",
+				"number": "0x0",
+				"parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+				"receiptsRoot": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+				"sha3Uncles": "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347",
+				"stateRoot": "0xfe168c5e9584a85927212e5bea5304bb7d0d8a893453b4b2c52176a72f585ae2",
+				"timestamp": "0x0",
+				"totalDifficulty": "0x1",
+				"transactionsRoot": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
+			}`,
+		},
+		// 2. #1 header
+		{
+			blockNumber: rpc.BlockNumber(1),
+			reqHeader:   true,
+			want: `{
+				"baseFeePerGas": "0x342770c0",
+				"difficulty": "0x20000",
+				"extraData": "0x",
+				"gasLimit": "0x47e7c4",
+				"gasUsed": "0x5208",
+				"hash": "0xc2050a588d6c8a355ad62275fa97132b7becc03f7626ddd2b17d49a0ae62beb7",
+				"logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000808000000000000000000000000000000000000000000000000000000000800000000000000000000100000020000000000000000000000000000000000802000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004000000000000000000000800000000000000000000000800000108000000000000000000000000000000000000000000000000020000000000000000000100000",
+				"miner": "0x0000000000000000000000000000000000000000",
+				"mixHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+				"nonce": "0x0000000000000000",
+				"number": "0x1",
+				"parentHash": "0xbdc7d83b8f876938810462fe8d053263a482e44201e3883d4ae204ff4de7eff5",
+				"receiptsRoot": "0x3794d9c550fc8ed2060bff730acc48524aaa4b87b272c43e034b100d3da4f1b8",
+				"sha3Uncles": "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347",
+				"stateRoot": "0x00337febf454e9e7c16ac80678d5408a674e3b7404ecccaaffceec6cf2d803fa",
+				"timestamp": "0xa",
+				"totalDifficulty": "0x1",
+				"transactionsRoot": "0xca0ebcce920d2cdfbf9e1dbe90ed3441a1a576f344bd80e60508da814916f4e7"
+			}`,
+		},
+		// 3. latest-1 header
+		{
+			blockNumber: rpc.BlockNumber(9),
+			reqHeader:   true,
+			want: `{
+				"baseFeePerGas": "0x121a9cca",
+				"difficulty": "0x20000",
+				"extraData": "0x",
+				"gasLimit": "0x47e7c4",
+				"gasUsed": "0x5208",
+				"hash": "0xf72973d179c425bcc46a56d1f90fc9ae036e09895bc732d238ecc776ad513671",
+				"logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000808000000000000000000000000000000000000000000000000000000000800000000000000000000100000020000000000000000000000000000000000802000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004000000000000000000000800000000000000000000000800000108000000000000000000000000000000000000000000000000020000000000000000000100000",
+				"miner": "0x0000000000000000000000000000000000000000",
+				"mixHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+				"nonce": "0x0000000000000000",
+				"number": "0x9",
+				"parentHash": "0x6f572ecb5694ea18c1ba005c40708a66d495e682d6780ee74d3fd3d5ea8bc4be",
+				"receiptsRoot": "0xfd13763f8f5b1115449da3a892d7208f551b15bceda5509b1d6aa35d65a9a2ed",
+				"sha3Uncles": "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347",
+				"stateRoot": "0x93818d689d9a3d71eddc80c3687bcbb1f45c8204d52614e1377921d389c62249",
+				"timestamp": "0x5a",
+				"totalDifficulty": "0x1",
+				"transactionsRoot": "0x0767ed8359337dc6a8fdc77fe52db611bed1be87aac73c4556b1bf1dd3d190a5"
+			}`,
+		},
+		// 4. latest+1 header
+		{
+			blockNumber: rpc.BlockNumber(11),
+			reqHeader:   true,
+			want:        "null",
+		},
+		// 5. pending header
+		{
+			blockNumber: rpc.PendingBlockNumber,
+			reqHeader:   true,
+			want: `{
+				"difficulty": "0x0",
+				"extraData": "0x",
+				"gasLimit": "0x0",
+				"gasUsed": "0x0",
+				"hash": null,
+				"logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+				"miner": null,
+				"mixHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+				"nonce": null,
+				"number": "0xb",
+				"parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+				"receiptsRoot": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+				"sha3Uncles": "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347",
+				"stateRoot": "0x0000000000000000000000000000000000000000000000000000000000000000",
+				"timestamp": "0x2a",
+				"totalDifficulty": null,
+				"transactionsRoot": "0x98d9f6dd0aa479c0fb448f2627e9f1964aca699fccab8f6e95861547a4699e37",
+				"withdrawalsRoot": "0x73d756269cdfc22e7e17a3548e36f42f750ca06d7e3cd98d1b6d0eb5add9dc84"
+			}`,
+		},
+		// 6. latest block
+		{
+			blockNumber: rpc.LatestBlockNumber,
+			want: `{
+				"baseFeePerGas": "0xfdc7303",
+				"difficulty": "0x20000",
+				"extraData": "0x",
+				"gasLimit": "0x47e7c4",
+				"gasUsed": "0x5208",
+				"hash": "0x872ee27d64627520cf93483c9b43d6710a33814ad56b42cb6a3f318a67ae3d4b",
+				"logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000808000000000000000000000000000000000000000000000000000000000800000000000000000000100000020000000000000000000000000000000000802000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004000000000000000000000800000000000000000000000800000108000000000000000000000000000000000000000000000000020000000000000000000100000",
+				"miner": "0x0000000000000000000000000000000000000000",
+				"mixHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+				"nonce": "0x0000000000000000",
+				"number": "0xa",
+				"parentHash": "0xf72973d179c425bcc46a56d1f90fc9ae036e09895bc732d238ecc776ad513671",
+				"receiptsRoot": "0xaa293d21b2dd99a4fafcba16c6ad824b09ec42a927c68456bc8209a76bc3e433",
+				"sha3Uncles": "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347",
+				"size": "0x26a",
+				"stateRoot": "0x1776127ce43163b6a16fc9d03b1f90f097768d3175c98ff38ccaf6e22b51dc31",
+				"timestamp": "0x64",
+				"totalDifficulty": "0x1",
+				"transactions": [
+					"0x3ee4094ca1e0b07a66dd616a057e081e53144ca7e9685a126fd4dda9ca042644"
+				],
+				"transactionsRoot": "0xb0893d21a4a44dc26a962a6e91abae66df87fb61ac9c60e936aee89c76331445",
+				"uncles": []
+			}`,
+		},
+		// 7. genesis block
+		{
+			blockNumber: rpc.BlockNumber(0),
+			want: `{
+				"baseFeePerGas": "0x3b9aca00",
+				"difficulty": "0x20000",
+				"extraData": "0x",
+				"gasLimit": "0x47e7c4",
+				"gasUsed": "0x0",
+				"hash": "0xbdc7d83b8f876938810462fe8d053263a482e44201e3883d4ae204ff4de7eff5",
+				"logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+				"miner": "0x0000000000000000000000000000000000000000",
+				"mixHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+				"nonce": "0x0000000000000000",
+				"number": "0x0",
+				"parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+				"receiptsRoot": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+				"sha3Uncles": "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347",
+				"size": "0x200",
+				"stateRoot": "0xfe168c5e9584a85927212e5bea5304bb7d0d8a893453b4b2c52176a72f585ae2",
+				"timestamp": "0x0",
+				"totalDifficulty": "0x1",
+				"transactions": [],
+				"transactionsRoot": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+				"uncles": []
+			}`,
+		},
+		// 8. #1 block
+		{
+			blockNumber: rpc.BlockNumber(1),
+			want: `{
+				"baseFeePerGas": "0x342770c0",
+				"difficulty": "0x20000",
+				"extraData": "0x",
+				"gasLimit": "0x47e7c4",
+				"gasUsed": "0x5208",
+				"hash": "0xc2050a588d6c8a355ad62275fa97132b7becc03f7626ddd2b17d49a0ae62beb7",
+				"logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000808000000000000000000000000000000000000000000000000000000000800000000000000000000100000020000000000000000000000000000000000802000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004000000000000000000000800000000000000000000000800000108000000000000000000000000000000000000000000000000020000000000000000000100000",
+				"miner": "0x0000000000000000000000000000000000000000",
+				"mixHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+				"nonce": "0x0000000000000000",
+				"number": "0x1",
+				"parentHash": "0xbdc7d83b8f876938810462fe8d053263a482e44201e3883d4ae204ff4de7eff5",
+				"receiptsRoot": "0x3794d9c550fc8ed2060bff730acc48524aaa4b87b272c43e034b100d3da4f1b8",
+				"sha3Uncles": "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347",
+				"size": "0x26a",
+				"stateRoot": "0x00337febf454e9e7c16ac80678d5408a674e3b7404ecccaaffceec6cf2d803fa",
+				"timestamp": "0xa",
+				"totalDifficulty": "0x1",
+				"transactions": [
+					"0x644a31c354391520d00e95b9affbbb010fc79ac268144ab8e28207f4cf51097e"
+				],
+				"transactionsRoot": "0xca0ebcce920d2cdfbf9e1dbe90ed3441a1a576f344bd80e60508da814916f4e7",
+				"uncles": []
+			}`,
+		},
+		// 9. latest-1 block
+		{
+			blockNumber: rpc.BlockNumber(9),
+			fullTx:      true,
+			want: `{
+				"baseFeePerGas": "0x121a9cca",
+				"difficulty": "0x20000",
+				"extraData": "0x",
+				"gasLimit": "0x47e7c4",
+				"gasUsed": "0x5208",
+				"hash": "0xf72973d179c425bcc46a56d1f90fc9ae036e09895bc732d238ecc776ad513671",
+				"logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000808000000000000000000000000000000000000000000000000000000000800000000000000000000100000020000000000000000000000000000000000802000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004000000000000000000000800000000000000000000000800000108000000000000000000000000000000000000000000000000020000000000000000000100000",
+				"miner": "0x0000000000000000000000000000000000000000",
+				"mixHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+				"nonce": "0x0000000000000000",
+				"number": "0x9",
+				"parentHash": "0x6f572ecb5694ea18c1ba005c40708a66d495e682d6780ee74d3fd3d5ea8bc4be",
+				"receiptsRoot": "0xfd13763f8f5b1115449da3a892d7208f551b15bceda5509b1d6aa35d65a9a2ed",
+				"sha3Uncles": "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347",
+				"size": "0x26a",
+				"stateRoot": "0x93818d689d9a3d71eddc80c3687bcbb1f45c8204d52614e1377921d389c62249",
+				"timestamp": "0x5a",
+				"totalDifficulty": "0x1",
+				"transactions": [
+					{
+						"blockHash": "0xf72973d179c425bcc46a56d1f90fc9ae036e09895bc732d238ecc776ad513671",
+						"blockNumber": "0x9",
+						"from": "0x703c4b2bd70c169f5717101caee543299fc946c7",
+						"gas": "0x5208",
+						"gasPrice": "0x121a9cca",
+						"hash": "0xecd155a61a5734b3efab75924e3ae34026c7c4133d8c2a46122bd03d7d199725",
+						"input": "0x",
+						"nonce": "0x8",
+						"to": "0x0d3ab14bbad3d99f4203bd7a11acb94882050e7e",
+						"transactionIndex": "0x0",
+						"value": "0x3e8",
+						"type": "0x0",
+						"v": "0x1b",
+						"r": "0xc6028b8e983d62fa8542f8a7633fb23cc941be2c897134352d95a7d9b19feafd",
+						"s": "0xeb6adcaaae3bed489c6cce4435f9db05d23a52820c78bd350e31eec65ed809d"
+					}
+				],
+				"transactionsRoot": "0x0767ed8359337dc6a8fdc77fe52db611bed1be87aac73c4556b1bf1dd3d190a5",
+				"uncles": []
+			}`,
+		},
+		// 10. latest+1 block
+		{
+			blockNumber: rpc.BlockNumber(11),
+			fullTx:      true,
+			want:        "null",
+		},
+		// 11. pending block
+		{
+			blockNumber: rpc.PendingBlockNumber,
+			want: `{
+				"difficulty": "0x0",
+				"extraData": "0x",
+				"gasLimit": "0x0",
+				"gasUsed": "0x0",
+				"hash": null,
+				"logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+				"miner": null,
+				"mixHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+				"nonce": null,
+				"number": "0xb",
+				"parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+				"receiptsRoot": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+				"sha3Uncles": "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347",
+				"size": "0x256",
+				"stateRoot": "0x0000000000000000000000000000000000000000000000000000000000000000",
+				"timestamp": "0x2a",
+				"totalDifficulty": null,
+				"transactions": [
+					"0x4afee081df5dff7a025964032871f7d4ba4d21baf5f6376a2f4a9f79fc506298"
+				],
+				"transactionsRoot": "0x98d9f6dd0aa479c0fb448f2627e9f1964aca699fccab8f6e95861547a4699e37",
+				"withdrawals": [
+					{
+						"index": "0x0",
+						"validatorIndex": "0x1",
+						"address": "0x1234000000000000000000000000000000000000",
+						"amount": "0xa"
+					}
+				],
+				"withdrawalsRoot": "0x73d756269cdfc22e7e17a3548e36f42f750ca06d7e3cd98d1b6d0eb5add9dc84",
+				"uncles": []
+			}`,
+		},
+		// 12. pending block + fullTx
+		{
+			blockNumber: rpc.PendingBlockNumber,
+			fullTx:      true,
+			want: `{
+				"difficulty": "0x0",
+				"extraData": "0x",
+				"gasLimit": "0x0",
+				"gasUsed": "0x0",
+				"hash": null,
+				"logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+				"miner": null,
+				"mixHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+				"nonce": null,
+				"number": "0xb",
+				"parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+				"receiptsRoot": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+				"sha3Uncles": "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347",
+				"size": "0x256",
+				"stateRoot": "0x0000000000000000000000000000000000000000000000000000000000000000",
+				"timestamp": "0x2a",
+				"totalDifficulty": null,
+				"transactions": [
+					{
+						"blockHash": "0x6cebd9f966ea686f44b981685e3f0eacea28591a7a86d7fbbe521a86e9f81165",
+						"blockNumber": "0xb",
+						"from": "0x0000000000000000000000000000000000000000",
+						"gas": "0x457",
+						"gasPrice": "0x2b67",
+						"hash": "0x4afee081df5dff7a025964032871f7d4ba4d21baf5f6376a2f4a9f79fc506298",
+						"input": "0x111111",
+						"nonce": "0xb",
+						"to": "0x0d3ab14bbad3d99f4203bd7a11acb94882050e7e",
+						"transactionIndex": "0x0",
+						"value": "0x6f",
+						"type": "0x0",
+						"chainId": "0x7fffffffffffffee",
+						"v": "0x0",
+						"r": "0x0",
+						"s": "0x0"
+					}
+				],
+				"transactionsRoot": "0x98d9f6dd0aa479c0fb448f2627e9f1964aca699fccab8f6e95861547a4699e37",
+				"uncles": [],
+				"withdrawals": [
+					{
+						"index": "0x0",
+						"validatorIndex": "0x1",
+						"address": "0x1234000000000000000000000000000000000000",
+						"amount": "0xa"
+					}
+				],
+				"withdrawalsRoot": "0x73d756269cdfc22e7e17a3548e36f42f750ca06d7e3cd98d1b6d0eb5add9dc84"
+			}`,
+		},
+		// 13. latest header by hash
+		{
+			blockHash: &blockHashes[len(blockHashes)-1],
+			reqHeader: true,
+			want: `{
+				"baseFeePerGas": "0xfdc7303",
+				"difficulty": "0x20000",
+				"extraData": "0x",
+				"gasLimit": "0x47e7c4",
+				"gasUsed": "0x5208",
+				"hash": "0x872ee27d64627520cf93483c9b43d6710a33814ad56b42cb6a3f318a67ae3d4b",
+				"logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000808000000000000000000000000000000000000000000000000000000000800000000000000000000100000020000000000000000000000000000000000802000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004000000000000000000000800000000000000000000000800000108000000000000000000000000000000000000000000000000020000000000000000000100000",
+				"miner": "0x0000000000000000000000000000000000000000",
+				"mixHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+				"nonce": "0x0000000000000000",
+				"number": "0xa",
+				"parentHash": "0xf72973d179c425bcc46a56d1f90fc9ae036e09895bc732d238ecc776ad513671",
+				"receiptsRoot": "0xaa293d21b2dd99a4fafcba16c6ad824b09ec42a927c68456bc8209a76bc3e433",
+				"sha3Uncles": "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347",
+				"stateRoot": "0x1776127ce43163b6a16fc9d03b1f90f097768d3175c98ff38ccaf6e22b51dc31",
+				"timestamp": "0x64",
+				"totalDifficulty": "0x1",
+				"transactionsRoot": "0xb0893d21a4a44dc26a962a6e91abae66df87fb61ac9c60e936aee89c76331445"
+			}`,
+		},
+		// 14. genesis header by hash
+		{
+			blockHash: &blockHashes[0],
+			reqHeader: true,
+			want: `{
+				"baseFeePerGas": "0x3b9aca00",
+				"difficulty": "0x20000",
+				"extraData": "0x",
+				"gasLimit": "0x47e7c4",
+				"gasUsed": "0x0",
+				"hash": "0xbdc7d83b8f876938810462fe8d053263a482e44201e3883d4ae204ff4de7eff5",
+				"logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+				"miner": "0x0000000000000000000000000000000000000000",
+				"mixHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+				"nonce": "0x0000000000000000",
+				"number": "0x0",
+				"parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+				"receiptsRoot": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+				"sha3Uncles": "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347",
+				"stateRoot": "0xfe168c5e9584a85927212e5bea5304bb7d0d8a893453b4b2c52176a72f585ae2",
+				"timestamp": "0x0",
+				"totalDifficulty": "0x1",
+				"transactionsRoot": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421"
+			}`,
+		},
+		// 15. #1 header
+		{
+			blockHash: &blockHashes[1],
+			reqHeader: true,
+			want: `{
+				"baseFeePerGas": "0x342770c0",
+				"difficulty": "0x20000",
+				"extraData": "0x",
+				"gasLimit": "0x47e7c4",
+				"gasUsed": "0x5208",
+				"hash": "0xc2050a588d6c8a355ad62275fa97132b7becc03f7626ddd2b17d49a0ae62beb7",
+				"logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000808000000000000000000000000000000000000000000000000000000000800000000000000000000100000020000000000000000000000000000000000802000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004000000000000000000000800000000000000000000000800000108000000000000000000000000000000000000000000000000020000000000000000000100000",
+				"miner": "0x0000000000000000000000000000000000000000",
+				"mixHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+				"nonce": "0x0000000000000000",
+				"number": "0x1",
+				"parentHash": "0xbdc7d83b8f876938810462fe8d053263a482e44201e3883d4ae204ff4de7eff5",
+				"receiptsRoot": "0x3794d9c550fc8ed2060bff730acc48524aaa4b87b272c43e034b100d3da4f1b8",
+				"sha3Uncles": "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347",
+				"stateRoot": "0x00337febf454e9e7c16ac80678d5408a674e3b7404ecccaaffceec6cf2d803fa",
+				"timestamp": "0xa",
+				"totalDifficulty": "0x1",
+				"transactionsRoot": "0xca0ebcce920d2cdfbf9e1dbe90ed3441a1a576f344bd80e60508da814916f4e7"
+			}`,
+		},
+		// 16. latest-1 header
+		{
+			blockHash: &blockHashes[len(blockHashes)-2],
+			reqHeader: true,
+			want: `{
+				"baseFeePerGas": "0x121a9cca",
+				"difficulty": "0x20000",
+				"extraData": "0x",
+				"gasLimit": "0x47e7c4",
+				"gasUsed": "0x5208",
+				"hash": "0xf72973d179c425bcc46a56d1f90fc9ae036e09895bc732d238ecc776ad513671",
+				"logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000808000000000000000000000000000000000000000000000000000000000800000000000000000000100000020000000000000000000000000000000000802000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004000000000000000000000800000000000000000000000800000108000000000000000000000000000000000000000000000000020000000000000000000100000",
+				"miner": "0x0000000000000000000000000000000000000000",
+				"mixHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+				"nonce": "0x0000000000000000",
+				"number": "0x9",
+				"parentHash": "0x6f572ecb5694ea18c1ba005c40708a66d495e682d6780ee74d3fd3d5ea8bc4be",
+				"receiptsRoot": "0xfd13763f8f5b1115449da3a892d7208f551b15bceda5509b1d6aa35d65a9a2ed",
+				"sha3Uncles": "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347",
+				"stateRoot": "0x93818d689d9a3d71eddc80c3687bcbb1f45c8204d52614e1377921d389c62249",
+				"timestamp": "0x5a",
+				"totalDifficulty": "0x1",
+				"transactionsRoot": "0x0767ed8359337dc6a8fdc77fe52db611bed1be87aac73c4556b1bf1dd3d190a5"
+			}`,
+		},
+		// 17. empty hash
+		{
+			blockHash: &common.Hash{},
+			reqHeader: true,
+			want:      "null",
+		},
+		// 18. pending hash
+		{
+			blockHash: &pendingHash,
+			reqHeader: true,
+			want:      `null`,
+		},
+		// 19. latest block
+		{
+			blockHash: &blockHashes[len(blockHashes)-1],
+			want: `{
+				"baseFeePerGas": "0xfdc7303",
+				"difficulty": "0x20000",
+				"extraData": "0x",
+				"gasLimit": "0x47e7c4",
+				"gasUsed": "0x5208",
+				"hash": "0x872ee27d64627520cf93483c9b43d6710a33814ad56b42cb6a3f318a67ae3d4b",
+				"logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000808000000000000000000000000000000000000000000000000000000000800000000000000000000100000020000000000000000000000000000000000802000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004000000000000000000000800000000000000000000000800000108000000000000000000000000000000000000000000000000020000000000000000000100000",
+				"miner": "0x0000000000000000000000000000000000000000",
+				"mixHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+				"nonce": "0x0000000000000000",
+				"number": "0xa",
+				"parentHash": "0xf72973d179c425bcc46a56d1f90fc9ae036e09895bc732d238ecc776ad513671",
+				"receiptsRoot": "0xaa293d21b2dd99a4fafcba16c6ad824b09ec42a927c68456bc8209a76bc3e433",
+				"sha3Uncles": "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347",
+				"size": "0x26a",
+				"stateRoot": "0x1776127ce43163b6a16fc9d03b1f90f097768d3175c98ff38ccaf6e22b51dc31",
+				"timestamp": "0x64",
+				"totalDifficulty": "0x1",
+				"transactions": [
+					"0x3ee4094ca1e0b07a66dd616a057e081e53144ca7e9685a126fd4dda9ca042644"
+				],
+				"transactionsRoot": "0xb0893d21a4a44dc26a962a6e91abae66df87fb61ac9c60e936aee89c76331445",
+				"uncles": []
+			}`,
+		},
+		// 20. genesis block
+		{
+			blockHash: &blockHashes[0],
+			want: `{
+				"baseFeePerGas": "0x3b9aca00",
+				"difficulty": "0x20000",
+				"extraData": "0x",
+				"gasLimit": "0x47e7c4",
+				"gasUsed": "0x0",
+				"hash": "0xbdc7d83b8f876938810462fe8d053263a482e44201e3883d4ae204ff4de7eff5",
+				"logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+				"miner": "0x0000000000000000000000000000000000000000",
+				"mixHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+				"nonce": "0x0000000000000000",
+				"number": "0x0",
+				"parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+				"receiptsRoot": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+				"sha3Uncles": "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347",
+				"size": "0x200",
+				"stateRoot": "0xfe168c5e9584a85927212e5bea5304bb7d0d8a893453b4b2c52176a72f585ae2",
+				"timestamp": "0x0",
+				"totalDifficulty": "0x1",
+				"transactions": [],
+				"transactionsRoot": "0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421",
+				"uncles": []
+			}`,
+		},
+		// 21. #1 block
+		{
+			blockHash: &blockHashes[1],
+			want: `{
+				"baseFeePerGas": "0x342770c0",
+				"difficulty": "0x20000",
+				"extraData": "0x",
+				"gasLimit": "0x47e7c4",
+				"gasUsed": "0x5208",
+				"hash": "0xc2050a588d6c8a355ad62275fa97132b7becc03f7626ddd2b17d49a0ae62beb7",
+				"logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000808000000000000000000000000000000000000000000000000000000000800000000000000000000100000020000000000000000000000000000000000802000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004000000000000000000000800000000000000000000000800000108000000000000000000000000000000000000000000000000020000000000000000000100000",
+				"miner": "0x0000000000000000000000000000000000000000",
+				"mixHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+				"nonce": "0x0000000000000000",
+				"number": "0x1",
+				"parentHash": "0xbdc7d83b8f876938810462fe8d053263a482e44201e3883d4ae204ff4de7eff5",
+				"receiptsRoot": "0x3794d9c550fc8ed2060bff730acc48524aaa4b87b272c43e034b100d3da4f1b8",
+				"sha3Uncles": "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347",
+				"size": "0x26a",
+				"stateRoot": "0x00337febf454e9e7c16ac80678d5408a674e3b7404ecccaaffceec6cf2d803fa",
+				"timestamp": "0xa",
+				"totalDifficulty": "0x1",
+				"transactions": [
+					"0x644a31c354391520d00e95b9affbbb010fc79ac268144ab8e28207f4cf51097e"
+				],
+				"transactionsRoot": "0xca0ebcce920d2cdfbf9e1dbe90ed3441a1a576f344bd80e60508da814916f4e7",
+				"uncles": []
+			}`,
+		},
+		// 22. latest-1 block
+		{
+			blockHash: &blockHashes[len(blockHashes)-2],
+			fullTx:    true,
+			want: `{
+				"baseFeePerGas": "0x121a9cca",
+				"difficulty": "0x20000",
+				"extraData": "0x",
+				"gasLimit": "0x47e7c4",
+				"gasUsed": "0x5208",
+				"hash": "0xf72973d179c425bcc46a56d1f90fc9ae036e09895bc732d238ecc776ad513671",
+				"logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000808000000000000000000000000000000000000000000000000000000000800000000000000000000100000020000000000000000000000000000000000802000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004000000000000000000000800000000000000000000000800000108000000000000000000000000000000000000000000000000020000000000000000000100000",
+				"miner": "0x0000000000000000000000000000000000000000",
+				"mixHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+				"nonce": "0x0000000000000000",
+				"number": "0x9",
+				"parentHash": "0x6f572ecb5694ea18c1ba005c40708a66d495e682d6780ee74d3fd3d5ea8bc4be",
+				"receiptsRoot": "0xfd13763f8f5b1115449da3a892d7208f551b15bceda5509b1d6aa35d65a9a2ed",
+				"sha3Uncles": "0x1dcc4de8dec75d7aab85b567b6ccd41ad312451b948a7413f0a142fd40d49347",
+				"size": "0x26a",
+				"stateRoot": "0x93818d689d9a3d71eddc80c3687bcbb1f45c8204d52614e1377921d389c62249",
+				"timestamp": "0x5a",
+				"totalDifficulty": "0x1",
+				"transactions": [
+					{
+						"blockHash": "0xf72973d179c425bcc46a56d1f90fc9ae036e09895bc732d238ecc776ad513671",
+						"blockNumber": "0x9",
+						"from": "0x703c4b2bd70c169f5717101caee543299fc946c7",
+						"gas": "0x5208",
+						"gasPrice": "0x121a9cca",
+						"hash": "0xecd155a61a5734b3efab75924e3ae34026c7c4133d8c2a46122bd03d7d199725",
+						"input": "0x",
+						"nonce": "0x8",
+						"to": "0x0d3ab14bbad3d99f4203bd7a11acb94882050e7e",
+						"transactionIndex": "0x0",
+						"value": "0x3e8",
+						"type": "0x0",
+						"v": "0x1b",
+						"r": "0xc6028b8e983d62fa8542f8a7633fb23cc941be2c897134352d95a7d9b19feafd",
+						"s": "0xeb6adcaaae3bed489c6cce4435f9db05d23a52820c78bd350e31eec65ed809d"
+					}
+				],
+				"transactionsRoot": "0x0767ed8359337dc6a8fdc77fe52db611bed1be87aac73c4556b1bf1dd3d190a5",
+				"uncles": []
+			}`,
+		},
+		// 23. empty hash + body
+		{
+			blockHash: &common.Hash{},
+			fullTx:    true,
+			want:      "null",
+		},
+		// 24. pending block
+		{
+			blockHash: &pendingHash,
+			want:      `null`,
+		},
+		// 25. pending block + fullTx
+		{
+			blockHash: &pendingHash,
+			fullTx:    true,
+			want:      `null`,
+		},
+	}
 
 	for i, tt := range testSuite {
 		var (
@@ -876,6 +1864,275 @@ func TestRPCGetBlockOrHeader(t *testing.T) {
 			}
 			continue
 		}
+		if err != nil {
+			t.Errorf("test %d: want no error, have %v", i, err)
+			continue
+		}
+		data, err := json.Marshal(result)
+		if err != nil {
+			t.Errorf("test %d: json marshal error", i)
+			continue
+		}
+		want, have := tt.want, string(data)
+		require.JSONEqf(t, want, have, "test %d: json not match, want: %s, have: %s", i, want, have)
+	}
+}
+
+func TestRPCGetTransactionReceipt(t *testing.T) {
+	t.Parallel()
+
+	// Initialize test accounts
+	var (
+		acc1Key, _ = crypto.HexToECDSA("8a1f9a8f95be41cd7ccb6168179afb4504aefe388d1e14474d32c45c72ce7b7a")
+		acc2Key, _ = crypto.HexToECDSA("49a7b37aa6f6645917e7b807e9d1c00d4fa71f18343b0d4122a4d2df64dd6fee")
+		acc1Addr   = crypto.PubkeyToAddress(acc1Key.PublicKey)
+		acc2Addr   = crypto.PubkeyToAddress(acc2Key.PublicKey)
+		contract   = common.HexToAddress("0000000000000000000000000000000000031ec7")
+		genesis    = &core.Genesis{
+			Config: params.TestChainConfig,
+			Alloc: core.GenesisAlloc{
+				acc1Addr: {Balance: big.NewInt(params.Ether)},
+				acc2Addr: {Balance: big.NewInt(params.Ether)},
+				// // SPDX-License-Identifier: GPL-3.0
+				// pragma solidity >=0.7.0 <0.9.0;
+				//
+				// contract Token {
+				//     event Transfer(address indexed from, address indexed to, uint256 value);
+				//     function transfer(address to, uint256 value) public returns (bool) {
+				//         emit Transfer(msg.sender, to, value);
+				//         return true;
+				//     }
+				// }
+				contract: {Balance: big.NewInt(params.Ether), Code: common.FromHex("0x608060405234801561001057600080fd5b506004361061002b5760003560e01c8063a9059cbb14610030575b600080fd5b61004a6004803603810190610045919061016a565b610060565b60405161005791906101c5565b60405180910390f35b60008273ffffffffffffffffffffffffffffffffffffffff163373ffffffffffffffffffffffffffffffffffffffff167fddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef846040516100bf91906101ef565b60405180910390a36001905092915050565b600080fd5b600073ffffffffffffffffffffffffffffffffffffffff82169050919050565b6000610101826100d6565b9050919050565b610111816100f6565b811461011c57600080fd5b50565b60008135905061012e81610108565b92915050565b6000819050919050565b61014781610134565b811461015257600080fd5b50565b6000813590506101648161013e565b92915050565b60008060408385031215610181576101806100d1565b5b600061018f8582860161011f565b92505060206101a085828601610155565b9150509250929050565b60008115159050919050565b6101bf816101aa565b82525050565b60006020820190506101da60008301846101b6565b92915050565b6101e981610134565b82525050565b600060208201905061020460008301846101e0565b9291505056fea2646970667358221220b469033f4b77b9565ee84e0a2f04d496b18160d26034d54f9487e57788fd36d564736f6c63430008120033")},
+			},
+		}
+		genBlocks = 5
+		signer    = types.LatestSignerForChainID(params.TestChainConfig.ChainID)
+		txHashes  = make([]common.Hash, genBlocks)
+	)
+	backend := newTestBackend(t, genBlocks, genesis, func(i int, b *core.BlockGen) {
+		var (
+			tx  *types.Transaction
+			err error
+		)
+		switch i {
+		case 0:
+			// transfer 1000wei
+			tx, err = types.SignTx(types.NewTx(&types.LegacyTx{Nonce: uint64(i), To: &acc2Addr, Value: big.NewInt(1000), Gas: params.TxGas, GasPrice: b.BaseFee(), Data: nil}), types.HomesteadSigner{}, acc1Key)
+		case 1:
+			// create contract
+			tx, err = types.SignTx(types.NewTx(&types.LegacyTx{Nonce: uint64(i), To: nil, Gas: 53100, GasPrice: b.BaseFee(), Data: common.FromHex("0x60806040")}), signer, acc1Key)
+		case 2:
+			// with logs
+			// transfer(address to, uint256 value)
+			data := fmt.Sprintf("0xa9059cbb%s%s", common.HexToHash(common.BigToAddress(big.NewInt(int64(i + 1))).Hex()).String()[2:], common.BytesToHash([]byte{byte(i + 11)}).String()[2:])
+			tx, err = types.SignTx(types.NewTx(&types.LegacyTx{Nonce: uint64(i), To: &contract, Gas: 60000, GasPrice: b.BaseFee(), Data: common.FromHex(data)}), signer, acc1Key)
+		case 3:
+			// dynamic fee with logs
+			// transfer(address to, uint256 value)
+			data := fmt.Sprintf("0xa9059cbb%s%s", common.HexToHash(common.BigToAddress(big.NewInt(int64(i + 1))).Hex()).String()[2:], common.BytesToHash([]byte{byte(i + 11)}).String()[2:])
+			fee := big.NewInt(500)
+			fee.Add(fee, b.BaseFee())
+			tx, err = types.SignTx(types.NewTx(&types.DynamicFeeTx{Nonce: uint64(i), To: &contract, Gas: 60000, Value: big.NewInt(1), GasTipCap: big.NewInt(500), GasFeeCap: fee, Data: common.FromHex(data)}), signer, acc1Key)
+		case 4:
+			// access list with contract create
+			accessList := types.AccessList{{
+				Address:     contract,
+				StorageKeys: []common.Hash{{0}},
+			}}
+			tx, err = types.SignTx(types.NewTx(&types.AccessListTx{Nonce: uint64(i), To: nil, Gas: 58100, GasPrice: b.BaseFee(), Data: common.FromHex("0x60806040"), AccessList: accessList}), signer, acc1Key)
+		}
+		if err != nil {
+			t.Errorf("failed to sign tx: %v", err)
+		}
+		if tx != nil {
+			b.AddTx(tx)
+			txHashes[i] = tx.Hash()
+		}
+	})
+	api := NewTransactionAPI(backend, new(AddrLocker))
+	blockHashes := make([]common.Hash, genBlocks+1)
+	ctx := context.Background()
+	for i := 0; i <= genBlocks; i++ {
+		header, err := backend.HeaderByNumber(ctx, rpc.BlockNumber(i))
+		if err != nil {
+			t.Errorf("failed to get block: %d err: %v", i, err)
+		}
+		blockHashes[i] = header.Hash()
+	}
+
+	var testSuite = []struct {
+		txHash common.Hash
+		want   string
+	}{
+		// 0. normal success
+		{
+			txHash: txHashes[0],
+			want: `{
+				"blockHash": "0x15175c01ed33eee8fbfd1a053a5781ba64acb0cffd5aabc8df0c6cd795e5b68c",
+				"blockNumber": "0x1",
+				"contractAddress": null,
+				"cumulativeGasUsed": "0x5208",
+				"effectiveGasPrice": "0x342770c0",
+				"from": "0x703c4b2bd70c169f5717101caee543299fc946c7",
+				"gasUsed": "0x5208",
+				"logs": [
+					{
+						"address": "0x0000000000000000000000000000000000001010",
+						"topics": [
+							"0xe6497e3ee548a3372136af2fcb0696db31fc6cf20260707645068bd3fe97f3c4",
+							"0x0000000000000000000000000000000000000000000000000000000000001010",
+							"0x000000000000000000000000703c4b2bd70c169f5717101caee543299fc946c7",
+							"0x0000000000000000000000000d3ab14bbad3d99f4203bd7a11acb94882050e7e"
+						],
+						"data": "0x00000000000000000000000000000000000000000000000000000000000003e80000000000000000000000000000000000000000000000000de0a5fd640afa000000000000000000000000000000000000000000000000000de0b6b3a76400000000000000000000000000000000000000000000000000000de0a5fd640af6180000000000000000000000000000000000000000000000000de0b6b3a76403e8",
+						"blockNumber": "0x1",
+						"transactionHash": "0x644a31c354391520d00e95b9affbbb010fc79ac268144ab8e28207f4cf51097e",
+						"transactionIndex": "0x0",
+						"blockHash": "0x15175c01ed33eee8fbfd1a053a5781ba64acb0cffd5aabc8df0c6cd795e5b68c",
+						"logIndex": "0x0",
+						"removed": false
+					}
+				],
+				"logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000100000000000808000000000000000000000000000000000000000000000000000000000800000000000000000000100000020000000000000000000000000000000000802000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000004000000000000000000000800000000000000000000000800000108000000000000000000000000000000000000000000000000020000000000000000000100000",
+				"status": "0x1",
+				"to": "0x0d3ab14bbad3d99f4203bd7a11acb94882050e7e",
+				"transactionHash": "0x644a31c354391520d00e95b9affbbb010fc79ac268144ab8e28207f4cf51097e",
+				"transactionIndex": "0x0",
+				"type": "0x0"
+			}`,
+		},
+		// 1. create contract
+		{
+			txHash: txHashes[1],
+			want: `{
+				"blockHash": "0x2ee38a63ba02740d7adfe3e71e3a4141796246c03561a0ee62fddb7f686794fa",
+				"blockNumber": "0x2",
+				"contractAddress": "0xae9bea628c4ce503dcfd7e305cab4e29e7476592",
+				"cumulativeGasUsed": "0xcf4e",
+				"effectiveGasPrice": "0x2db16291",
+				"from": "0x703c4b2bd70c169f5717101caee543299fc946c7",
+				"gasUsed": "0xcf4e",
+				"logs": [],
+				"logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+				"status": "0x1",
+				"to": null,
+				"transactionHash": "0x340e58cda5086495010b571fe25067fecc9954dc4ee3cedece00691fa3f5904a",
+				"transactionIndex": "0x0",
+				"type": "0x0"
+			}`,
+		},
+		// 2. with logs success
+		{
+			txHash: txHashes[2],
+			want: `{
+				"blockHash": "0x75cce8ee1112222095374f623fdfbffabbe9f6995065df6245d2884fc89dea21",
+				"blockNumber": "0x3",
+				"contractAddress": null,
+				"cumulativeGasUsed": "0x5e28",
+				"effectiveGasPrice": "0x281c2534",
+				"from": "0x703c4b2bd70c169f5717101caee543299fc946c7",
+				"gasUsed": "0x5e28",
+				"logs": [
+					{
+						"address": "0x0000000000000000000000000000000000031ec7",
+						"topics": [
+							"0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+							"0x000000000000000000000000703c4b2bd70c169f5717101caee543299fc946c7",
+							"0x0000000000000000000000000000000000000000000000000000000000000003"
+						],
+						"data": "0x000000000000000000000000000000000000000000000000000000000000000d",
+						"blockNumber": "0x3",
+						"transactionHash": "0x9dbf43ec9afc8d711932618616471088f66ba4f25fd5c672d97473d02dae967f",
+						"transactionIndex": "0x0",
+						"blockHash": "0x75cce8ee1112222095374f623fdfbffabbe9f6995065df6245d2884fc89dea21",
+						"logIndex": "0x0",
+						"removed": false
+					}
+				],
+				"logsBloom": "0x00000000000000000000008000000000000000000000000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000800000000000000008000000000000000000000000000000000020000000080000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000800000000000000000400000000002000000000000800000000000000000000000000000000000000000000000000000000000000000000000000000000020000000000000000000000000",
+				"status": "0x1",
+				"to": "0x0000000000000000000000000000000000031ec7",
+				"transactionHash": "0x9dbf43ec9afc8d711932618616471088f66ba4f25fd5c672d97473d02dae967f",
+				"transactionIndex": "0x0",
+				"type": "0x0"
+			}`,
+		},
+		// 3. dynamic tx with logs success
+		{
+			txHash: txHashes[3],
+			want: `{
+				"blockHash": "0x147086a6eccb1e3a05aa00ab21b7daf63b5f8b2d6b25e9cfbb14663aa0234440",
+				"blockNumber": "0x4",
+				"contractAddress": null,
+				"cumulativeGasUsed": "0x538d",
+				"effectiveGasPrice": "0x2325c3e8",
+				"from": "0x703c4b2bd70c169f5717101caee543299fc946c7",
+				"gasUsed": "0x538d",
+				"logs": [
+					{
+						"address": "0x0000000000000000000000000000000000001010",
+						"topics": [
+							"0x4dfe1bbbcf077ddc3e01291eea2d5c70c2b422b415d95645b9adcfd678cb1d63",
+							"0x0000000000000000000000000000000000000000000000000000000000001010",
+							"0x000000000000000000000000703c4b2bd70c169f5717101caee543299fc946c7",
+							"0x0000000000000000000000000000000000000000000000000000000000000000"
+						],
+						"data": "0x0000000000000000000000000000000000000000000000000000000000a32f640000000000000000000000000000000000000000000000000de0723c6f3cc6ca00000000000000000000000000000000000000000000000053444835ec5800000000000000000000000000000000000000000000000000000de0723c6e99976600000000000000000000000000000000000000000000000053444835ecfb2f64",
+						"blockNumber": "0x4",
+						"transactionHash": "0x672e3e39adf23b5656989b7a36e54d54004b1866f53871113bc52e137edb9faf",
+						"transactionIndex": "0x0",
+						"blockHash": "0x147086a6eccb1e3a05aa00ab21b7daf63b5f8b2d6b25e9cfbb14663aa0234440",
+						"logIndex": "0x0",
+						"removed": false
+					}
+				],
+				"logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008000000000000000000000000000000000000000000000000000000000800000000000000000000100000020000000000000020000000000000000000800000000000000000080000000000000000000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000004000000000000000000001800000000000000000000000000000100000000020000000000000000000000000000000000000000020000000000000000000100000",
+				"status": "0x0",
+				"to": "0x0000000000000000000000000000000000031ec7",
+				"transactionHash": "0x672e3e39adf23b5656989b7a36e54d54004b1866f53871113bc52e137edb9faf",
+				"transactionIndex": "0x0",
+				"type": "0x2"
+			}`,
+		},
+		// 4. access list tx with create contract
+		{
+			txHash: txHashes[4],
+			want: `{
+				"blockHash": "0x870b06306bdf507c3fcd8ddda890f7dd95c7b55d3246d61661be03dcf7c58648",
+				"blockNumber": "0x5",
+				"contractAddress": "0xfdaa97661a584d977b4d3abb5370766ff5b86a18",
+				"cumulativeGasUsed": "0xe01a",
+				"effectiveGasPrice": "0x1ecb3f75",
+				"from": "0x703c4b2bd70c169f5717101caee543299fc946c7",
+				"gasUsed": "0xe01a",
+				"logs": [],
+				"logsBloom": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+				"status": "0x1",
+				"to": null,
+				"transactionHash": "0x8f3c4e2663af0312d508ebd8587f0c88dccbbc8a9bcc322421ff4bc28c456a92",
+				"transactionIndex": "0x0",
+				"type": "0x1"
+			}`,
+		},
+		// 5. txhash empty
+		{
+			txHash: common.Hash{},
+			want:   `null`,
+		},
+		// 6. txhash not found
+		{
+			txHash: common.HexToHash("deadbeef"),
+			want:   `null`,
+		},
+	}
+
+	for i, tt := range testSuite {
+		var (
+			result interface{}
+			err    error
+		)
+		result, err = api.GetTransactionReceipt(context.Background(), tt.txHash)
 		if err != nil {
 			t.Errorf("test %d: want no error, have %v", i, err)
 			continue

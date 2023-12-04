@@ -172,8 +172,8 @@ func New(root common.Hash, db Database, snaps *snapshot.Tree) (*StateDB, error) 
 		stateObjects:         make(map[common.Address]*stateObject),
 		stateObjectsPending:  make(map[common.Address]struct{}),
 		stateObjectsDirty:    make(map[common.Address]struct{}),
-		stateObjectsDestruct: make(map[common.Address]*types.StateAccount),
 		revertedKeys:         make(map[blockstm.Key]struct{}),
+		stateObjectsDestruct: make(map[common.Address]*types.StateAccount),
 		logs:                 make(map[common.Hash][]*types.Log),
 		preimages:            make(map[common.Hash][]byte),
 		journal:              newJournal(),
@@ -401,7 +401,7 @@ func (s *StateDB) ApplyMVWriteSet(writes []blockstm.WriteDescriptor) {
 			case SuicidePath:
 				stateObject := sr.getDeletedStateObject(addr)
 				if stateObject != nil && stateObject.deleted {
-					s.Suicide(addr)
+					s.SelfDestruct(addr)
 				}
 			default:
 				panic(fmt.Errorf("unknown key type: %d", path.GetSubpath()))
@@ -566,7 +566,7 @@ func (s *StateDB) SubRefund(gas uint64) {
 }
 
 // Exist reports whether the given account address exists in the state.
-// Notably this also returns true for suicided accounts.
+// Notably this also returns true for self-destructed accounts.
 func (s *StateDB) Exist(addr common.Address) bool {
 	return s.getStateObject(addr) != nil
 }
@@ -728,17 +728,19 @@ func (s *StateDB) StorageTrie(addr common.Address) (Trie, error) {
 	}
 
 	cpy := stateObject.deepCopy(s)
+
 	if _, err := cpy.updateTrie(); err != nil {
 		return nil, err
 	}
+
 	return cpy.getTrie()
 }
 
-func (s *StateDB) HasSuicided(addr common.Address) bool {
+func (s *StateDB) HasSelfDestructed(addr common.Address) bool {
 	return MVRead(s, blockstm.NewSubpathKey(addr, SuicidePath), false, func(s *StateDB) bool {
 		stateObject := s.getStateObject(addr)
 		if stateObject != nil {
-			return stateObject.suicided
+			return stateObject.selfDestructed
 		}
 
 		return false
@@ -839,30 +841,39 @@ func (s *StateDB) SetStorage(addr common.Address, storage map[common.Hash]common
 	}
 }
 
-// Suicide marks the given account as suicided.
+// SelfDestruct marks the given account as selfdestructed.
 // This clears the account balance.
 //
 // The account's state object is still available until the state is committed,
-// getStateObject will return a non-nil account after Suicide.
-func (s *StateDB) Suicide(addr common.Address) bool {
+// getStateObject will return a non-nil account after SelfDestruct.
+func (s *StateDB) SelfDestruct(addr common.Address) {
 	stateObject := s.getStateObject(addr)
 	if stateObject == nil {
-		return false
+		return
 	}
 
 	stateObject = s.mvRecordWritten(stateObject)
-	s.journal.append(suicideChange{
+	s.journal.append(selfDestructChange{
 		account:     &addr,
-		prev:        stateObject.suicided,
+		prev:        stateObject.selfDestructed,
 		prevbalance: new(big.Int).Set(stateObject.Balance()),
 	})
-	stateObject.markSuicided()
+	stateObject.markSelfdestructed()
 	stateObject.data.Balance = new(big.Int)
 
 	MVWrite(s, blockstm.NewSubpathKey(addr, SuicidePath))
 	MVWrite(s, blockstm.NewSubpathKey(addr, BalancePath))
+}
 
-	return true
+func (s *StateDB) Selfdestruct6780(addr common.Address) {
+	stateObject := s.getStateObject(addr)
+	if stateObject == nil {
+		return
+	}
+
+	if stateObject.created {
+		s.SelfDestruct(addr)
+	}
 }
 
 // SetTransientState sets transient storage for a given account. It
@@ -907,6 +918,9 @@ func (s *StateDB) updateStateObject(obj *stateObject) {
 	addr := obj.Address()
 	if err := s.trie.UpdateAccount(addr, &obj.data); err != nil {
 		s.setError(fmt.Errorf("updateStateObject (%x) error: %v", addr[:], err))
+	}
+	if obj.dirtyCode {
+		s.trie.UpdateContractCode(obj.Address(), common.BytesToHash(obj.CodeHash()), obj.code)
 	}
 	// Cache the data until commit. Note, this update mechanism is not symmetric
 	// to the deletion, because whereas it is enough to track account updates
@@ -1007,6 +1021,22 @@ func (s *StateDB) getDeletedStateObject(addr common.Address) *stateObject {
 				return nil
 			}
 		}
+		// If snapshot unavailable or reading from it failed, load from the database
+		if data == nil {
+			start := time.Now()
+			var err error
+			data, err = s.trie.GetAccount(addr)
+			if metrics.EnabledExpensive {
+				s.AccountReads += time.Since(start)
+			}
+			if err != nil {
+				s.setError(fmt.Errorf("getDeleteStateObject (%x) error: %w", addr.Bytes(), err))
+				return nil
+			}
+			if data == nil {
+				return nil
+			}
+		}
 		// Insert into the live set
 		obj := newObject(s, addr, data)
 		s.setStateObject(obj)
@@ -1085,6 +1115,8 @@ func (s *StateDB) createObject(addr common.Address) (newobj, prev *stateObject) 
 		delete(s.accountsOrigin, prev.address)
 		delete(s.storagesOrigin, prev.address)
 	}
+
+	newobj.created = true
 
 	s.setStateObject(newobj)
 
@@ -1170,8 +1202,8 @@ func (s *StateDB) Copy() *StateDB {
 		stateObjects:         make(map[common.Address]*stateObject, len(s.journal.dirties)),
 		stateObjectsPending:  make(map[common.Address]struct{}, len(s.stateObjectsPending)),
 		stateObjectsDirty:    make(map[common.Address]struct{}, len(s.journal.dirties)),
-		stateObjectsDestruct: make(map[common.Address]*types.StateAccount, len(s.stateObjectsDestruct)),
 		revertedKeys:         make(map[blockstm.Key]struct{}),
+		stateObjectsDestruct: make(map[common.Address]*types.StateAccount, len(s.stateObjectsDestruct)),
 		refund:               s.refund,
 		logs:                 make(map[common.Hash][]*types.Log, len(s.logs)),
 		logSize:              s.logSize,
@@ -1242,7 +1274,6 @@ func (s *StateDB) Copy() *StateDB {
 
 		state.logs[hash] = cpy
 	}
-
 	// Deep copy the preimages occurred in the scope of block
 	for hash, preimage := range s.preimages {
 		state.preimages[hash] = preimage
@@ -1266,7 +1297,6 @@ func (s *StateDB) Copy() *StateDB {
 	if s.mvHashmap != nil {
 		state.mvHashmap = s.mvHashmap
 	}
-
 	return state
 }
 
@@ -1319,7 +1349,7 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 			continue
 		}
 
-		if obj.suicided || (deleteEmptyObjects && obj.empty()) {
+		if obj.selfDestructed || (deleteEmptyObjects && obj.empty()) {
 			obj.deleted = true
 
 			// We need to maintain account deletions explicitly (will remain
@@ -1338,7 +1368,7 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 		} else {
 			obj.finalise(true) // Prefetch slots in the background
 		}
-
+		obj.created = false
 		s.stateObjectsPending[addr] = struct{}{}
 		s.stateObjectsDirty[addr] = struct{}{}
 
@@ -1611,7 +1641,6 @@ func (s *StateDB) Commit(block uint64, deleteEmptyObjects bool) (common.Hash, er
 		// Write any contract code associated with the state object
 		if obj.code != nil && obj.dirtyCode {
 			rawdb.WriteCode(codeWriter, common.BytesToHash(obj.CodeHash()), obj.code)
-			s.trie.UpdateContractCode(obj.Address(), common.BytesToHash(obj.CodeHash()), obj.code)
 			obj.dirtyCode = false
 		}
 		// Write any storage changes in the state object to its storage trie
@@ -1762,7 +1791,6 @@ func (s *StateDB) Prepare(rules params.Rules, sender, coinbase common.Address, d
 				al.AddSlot(el.Address, key)
 			}
 		}
-		// TODO marcello double check
 		if rules.IsShanghai { // EIP-3651: warm coinbase
 			al.AddAddress(coinbase)
 		}
@@ -1805,6 +1833,39 @@ func (s *StateDB) AddressInAccessList(addr common.Address) bool {
 // SlotInAccessList returns true if the given (address, slot)-tuple is in the access list.
 func (s *StateDB) SlotInAccessList(addr common.Address, slot common.Hash) (addressPresent bool, slotPresent bool) {
 	return s.accessList.Contains(addr, slot)
+}
+
+func (s *StateDB) ValidateKnownAccounts(knownAccounts types.KnownAccounts) error {
+	if knownAccounts == nil {
+		return nil
+	}
+
+	for k, v := range knownAccounts {
+		// check if the value is hex string or an object
+		switch {
+		case v.IsSingle():
+			trie, _ := s.StorageTrie(k)
+			if trie != nil {
+				actualRootHash := trie.Hash()
+				if *v.Single != actualRootHash {
+					return fmt.Errorf("invalid root hash for: %v root hash: %v actual root hash: %v", k, v.Single, actualRootHash)
+				}
+			} else {
+				return fmt.Errorf("Storage Trie is nil for: %v", k)
+			}
+		case v.IsStorage():
+			for slot, value := range v.Storage {
+				actualValue := s.GetState(k, slot)
+				if value != actualValue {
+					return fmt.Errorf("invalid slot value at address: %v slot: %v value: %v actual value: %v", k, slot, value, actualValue)
+				}
+			}
+		default:
+			return fmt.Errorf("impossible to validate known accounts: %v", k)
+		}
+	}
+
+	return nil
 }
 
 // convertAccountSet converts a provided account set from address keyed to hash keyed.

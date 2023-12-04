@@ -58,7 +58,7 @@ type lesCommons struct {
 // NodeInfo represents a short summary of the Ethereum sub-protocol metadata
 // known about the host peer.
 type NodeInfo struct {
-	Network    uint64              `json:"network"`    // Ethereum network ID (1=Mainnet, Rinkeby=4, Goerli=5)
+	Network    uint64              `json:"network"`    // Ethereum network ID (1=Mainnet, Goerli=5)
 	Difficulty *big.Int            `json:"difficulty"` // Total difficulty of the host's blockchain
 	Genesis    common.Hash         `json:"genesis"`    // SHA3 hash of the host's genesis block
 	Config     *params.ChainConfig `json:"config"`     // Chain configuration for the fork rules
@@ -68,7 +68,6 @@ type NodeInfo struct {
 // makeProtocols creates protocol descriptors for the given LES versions.
 func (c *lesCommons) makeProtocols(versions []uint, runPeer func(version uint, p *p2p.Peer, rw p2p.MsgReadWriter) error, peerInfo func(id enode.ID) interface{}, dialCandidates enode.Iterator) []p2p.Protocol {
 	protos := make([]p2p.Protocol, len(versions))
-
 	for i, version := range versions {
 		version := version
 		protos[i] = p2p.Protocol{
@@ -83,7 +82,6 @@ func (c *lesCommons) makeProtocols(versions []uint, runPeer func(version uint, p
 			DialCandidates: dialCandidates,
 		}
 	}
-
 	return protos
 }
 
@@ -91,7 +89,6 @@ func (c *lesCommons) makeProtocols(versions []uint, runPeer func(version uint, p
 func (c *lesCommons) nodeInfo() interface{} {
 	head := c.chainReader.CurrentHeader()
 	hash := head.Hash()
-
 	return &NodeInfo{
 		Network:    c.config.NetworkId,
 		Difficulty: rawdb.ReadTd(c.chainDb, hash, head.Number.Uint64()),

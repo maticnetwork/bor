@@ -30,6 +30,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/txpool"
+	"github.com/ethereum/go-ethereum/core/txpool/legacypool"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -46,8 +47,6 @@ var (
 	// testAddr is the Ethereum address of the tester account.
 	testAddr = crypto.PubkeyToAddress(testKey.PublicKey)
 )
-
-func u64(val uint64) *uint64 { return &val }
 
 // testBackend is a mock implementation of the live Ethereum message handler. Its
 // purpose is to allow testing the request/reply workflows and wire serialization
@@ -74,7 +73,6 @@ func newTestBackendWithGenerator(blocks int, shanghai bool, generator func(int, 
 		engine consensus.Engine = ethash.NewFaker()
 	)
 
-	// TODO marcello double check
 	if shanghai {
 		config = &params.ChainConfig{
 			ChainID:                       big.NewInt(1),
@@ -94,7 +92,7 @@ func newTestBackendWithGenerator(blocks int, shanghai bool, generator func(int, 
 			ArrowGlacierBlock:             big.NewInt(0),
 			GrayGlacierBlock:              big.NewInt(0),
 			MergeNetsplitBlock:            big.NewInt(0),
-			ShanghaiTime:                  u64(0),
+			ShanghaiBlock:                 big.NewInt(0),
 			TerminalTotalDifficulty:       big.NewInt(0),
 			TerminalTotalDifficultyPassed: true,
 			Ethash:                        new(params.EthashConfig),
@@ -122,17 +120,22 @@ func newTestBackendWithGenerator(blocks int, shanghai bool, generator func(int, 
 	for _, block := range bs {
 		_ = chain.StateCache().TrieDB().Commit(block.Root(), false)
 	}
+	txconfig := legacypool.DefaultConfig
+	txconfig.Journal = "" // Don't litter the disk with test journals
+
+	pool := legacypool.New(txconfig, chain)
+	txpool, _ := txpool.New(new(big.Int).SetUint64(txconfig.PriceLimit), chain, []txpool.SubPool{pool})
 
 	return &testBackend{
 		db:     db,
 		chain:  chain,
-		txpool: txpool.NewTxPool(txconfig, params.TestChainConfig, chain),
+		txpool: txpool,
 	}
 }
 
 // close tears down the transaction pool and chain behind the mock backend.
 func (b *testBackend) close() {
-	b.txpool.Stop()
+	b.txpool.Close()
 	b.chain.Stop()
 }
 
@@ -370,11 +373,7 @@ func TestGetBlockBodies68(t *testing.T) {
 func testGetBlockBodies(t *testing.T, protocol uint) {
 	gen := func(n int, g *core.BlockGen) {
 		if n%2 == 0 {
-			w := &types.Withdrawal{
-				Address: common.Address{0xaa},
-				Amount:  42,
-			}
-			g.AddWithdrawal(w)
+			g.AddWithdrawal(&types.Withdrawal{})
 		}
 	}
 
