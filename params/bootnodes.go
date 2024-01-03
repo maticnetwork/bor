@@ -18,8 +18,6 @@ package params
 
 import "github.com/ethereum/go-ethereum/common"
 
-// TODO : 0xSharma : Add amoy bootnodes
-
 // MainnetBootnodes are the enode URLs of the P2P bootstrap nodes running on
 // the main Ethereum network.
 var MainnetBootnodes = []string{
@@ -74,6 +72,13 @@ var GoerliBootnodes = []string{
 var MumbaiBootnodes = []string{
 	"enode://bdcd4786a616a853b8a041f53496d853c68d99d54ff305615cd91c03cd56895e0a7f6e9f35dbf89131044e2114a9a782b792b5661e3aff07faf125a98606a071@43.200.206.40:30303",
 	"enode://209aaf7ed549cf4a5700fd833da25413f80a1248bd3aa7fe2a87203e3f7b236dd729579e5c8df61c97bf508281bae4969d6de76a7393bcbd04a0af70270333b3@54.216.248.9:30303",
+}
+
+// AmoyBootnodes are the enode URLs of the P2P bootstrap nodes running on the
+// Amoy test network.
+var AmoyBootnodes = []string{
+	"enode://bce861be777e91b0a5a49d58a51e14f32f201b4c6c2d1fbea6c7a1f14756cbb3f931f3188d6b65de8b07b53ff28d03b6e366d09e56360d2124a9fc5a15a0913d@54.217.171.196:30303",
+	"enode://4a3dc0081a346d26a73d79dd88216a9402d2292318e2db9947dbc97ea9c4afb2498dc519c0af04420dc13a238c279062da0320181e7c1461216ce4513bfd40bf@13.251.184.185:30303",
 }
 
 // BorMainnetBootnodes are the enode URLs of the P2P bootstrap nodes running on the
