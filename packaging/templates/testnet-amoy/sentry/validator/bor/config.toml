@@ -25,7 +25,7 @@ syncmode = "full"
     # debug = true
 
 [p2p]
-    maxpeers = 1
+    maxpeers = 3
     port = 30303
     nodiscover = true
     # maxpendpeers = 50
