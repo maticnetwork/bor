@@ -421,6 +421,7 @@ func makeURL(urlString, rawPath, rawQuery string) (*url.URL, error) {
 	}
 
 	u.Path = rawPath
+	u.Path = path.Join(u.Path, rawPath)
 	u.RawQuery = rawQuery
 
 	return u, err
