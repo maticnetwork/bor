@@ -506,7 +506,7 @@ func (f *BlockFetcher) loop() {
 							select {
 							case res := <-resCh:
 								res.Done <- nil
-								f.FilterHeaders(peer, *res.Res.(*eth.BlockHeadersPacket), time.Now().Add(res.Time), announcedAt)
+								f.FilterHeaders(peer, *res.Res.(*eth.BlockHeadersPacket), time.Now(), announcedAt)
 
 							case <-timeout.C:
 								// The peer didn't respond in time. The request
