@@ -2167,6 +2167,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		pstart := time.Now()
 		log.Info("[CANCUN DEBUG] Processing block in insert chain", "block", block.NumberU64(), "hash", block.Hash(), "parent", parent.Number.Uint64(), "parentHash", parent.Hash())
 		receipts, logs, usedGas, statedb, err := bc.ProcessBlock(block, parent)
+		log.Info("[CANCUN DEBUG] Processed block in insert chain", "block", block.NumberU64(), "err", err)
 		activeState = statedb
 
 		if err != nil {
@@ -3028,7 +3029,7 @@ func (bc *BlockChain) maintainTxIndex() {
 func (bc *BlockChain) reportBlock(block *types.Block, receipts types.Receipts, err error) {
 	rawdb.WriteBadBlock(bc.db, block)
 
-	log.Error("[CANCUN DEBUG] Reporting bad block", "local", block.NumberU64(), "localHash", bc.GetHeaderByNumber(block.NumberU64()), "parent", block.NumberU64()-1, "parentHash", bc.GetHeaderByNumber(block.NumberU64()-1))
+	log.Error("[CANCUN DEBUG] Reporting bad block", "local", block.NumberU64(), "localHash", bc.GetHeaderByNumber(block.NumberU64()).Hash(), "parent", block.NumberU64()-1, "parentHash", bc.GetHeaderByNumber(block.NumberU64()-1).Hash())
 
 	log.Error(summarizeBadBlock(block, receipts, bc.Config(), err))
 }
