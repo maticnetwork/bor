@@ -525,6 +525,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (ty
 	processorCount := 0
 
 	if bc.parallelProcessor != nil {
+		log.Info("[CANCUN DEBUG] parallel state processor is enabled")
 		parallelStatedb, err := state.New(parent.Root, bc.stateCache, bc.snaps)
 		if err != nil {
 			return nil, nil, 0, nil, err
