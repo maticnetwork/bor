@@ -1237,7 +1237,9 @@ func (c *Bor) CommitStates(
 
 		stateSyncDelay := c.config.CalculateStateSyncDelay(number)
 		to = time.Unix(int64(header.Time-stateSyncDelay), 0)
+		log.Info("[CANCUN DEBUG] CommitState", "header", header.Number.Uint64(), "hash", header.Hash(), "time", header.Time)
 	} else {
+		log.Info("[CANCUN DEBUG] Not indore")
 		lastStateIDBig, err = c.GenesisContractsClient.LastStateId(nil, number-1, header.ParentHash)
 		if err != nil {
 			return nil, err
