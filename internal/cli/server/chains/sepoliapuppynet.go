@@ -42,6 +42,7 @@ var sepoliapuppynetTestnet = &Chain{
 				StateReceiverContract: "0x0000000000000000000000000000000000001001",
 				BurntContract: map[string]string{
 					"0": "0x8B066912dCDA9c9001A84b28F1aBD06e9E19114B",
+					"586000": "0x0335c046f8317C0FAa8f76C77D5d1Da98a976181",
 				},
 				BlockAlloc: map[string]interface{}{
 				},
