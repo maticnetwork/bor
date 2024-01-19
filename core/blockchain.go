@@ -2187,6 +2187,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		vstart := time.Now()
 
 		if err := bc.validator.ValidateState(block, statedb, receipts, usedGas); err != nil {
+			log.Info("[CANCUN DEBUG] ValidateState failed, reporting", "block", block.NumberU64(), "err", err)
 			bc.reportBlock(block, receipts, err)
 			followupInterrupt.Store(true)
 
@@ -2330,6 +2331,7 @@ func (bc *BlockChain) insertSideChain(block *types.Block, it *insertIterator) (i
 		current   = bc.CurrentBlock()
 		headers   []*types.Header
 	)
+	log.Info("[CANCUN DEBUG] InsertSideChain", "block", block.NumberU64(), "hash", block.Hash(), "len", len(it.chain))
 	// The first sidechain block error is already verified to be ErrPrunedAncestor.
 	// Since we don't import them here, we expect ErrUnknownAncestor for the remaining
 	// ones. Any other errors means that the block is invalid, and should not be written
@@ -2379,7 +2381,7 @@ func (bc *BlockChain) insertSideChain(block *types.Block, it *insertIterator) (i
 				return it.index, err
 			}
 
-			log.Debug("Injected sidechain block", "number", block.Number(), "hash", block.Hash(),
+			log.Info("Injected sidechain block", "number", block.Number(), "hash", block.Hash(),
 				"diff", block.Difficulty(), "elapsed", common.PrettyDuration(time.Since(start)),
 				"txs", len(block.Transactions()), "gas", block.GasUsed(), "uncles", len(block.Uncles()),
 				"root", block.Root())
@@ -2393,6 +2395,7 @@ func (bc *BlockChain) insertSideChain(block *types.Block, it *insertIterator) (i
 	//
 	// If the externTd was larger than our local TD, we now need to reimport the previous
 	// blocks to regenerate the required state
+	log.Info("[CANCUN DEBUG] About to call ReorgNeeded", "current", current.Number.Uint64(), "lastBlock", lastBlock.NumberU64())
 	reorg, err := bc.forker.ReorgNeeded(current, lastBlock.Header())
 	if err != nil {
 		return it.index, err
