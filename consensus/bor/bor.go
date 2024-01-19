@@ -742,7 +742,7 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 		// sort validator by address
 		sort.Sort(valset.ValidatorsByAddress(newValidators))
 
-		if c.config.IsParallelUniverse(header.Number) {
+		if c.config.IsNapoli(header.Number) {
 			var tempValidatorBytes []byte
 
 			for _, validator := range newValidators {
@@ -766,7 +766,7 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 				header.Extra = append(header.Extra, validator.HeaderBytes()...)
 			}
 		}
-	} else if c.config.IsParallelUniverse(header.Number) {
+	} else if c.config.IsNapoli(header.Number) {
 		blockExtraData := &types.BlockExtraData{
 			ValidatorBytes: nil,
 			TxDependency:   nil,

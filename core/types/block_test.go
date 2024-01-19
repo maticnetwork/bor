@@ -74,7 +74,7 @@ func TestBlockEncoding(t *testing.T) {
 }
 
 // This is a replica of `(h *Header) GetValidatorBytes` function
-// This was needed because currently, `IsParallelUniverse` will always return false.
+// This was needed because currently, `IsNapoli` will always return false.
 func GetValidatorBytesTest(h *Header) []byte {
 	if len(h.Extra) < ExtraVanityLength+ExtraSealLength {
 		log.Error("length of extra less is than vanity and seal")

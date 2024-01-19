@@ -457,7 +457,7 @@ func (b *Block) GetTxDependency() [][]uint64 {
 }
 
 func (h *Header) GetValidatorBytes(config *params.BorConfig) []byte {
-	if !config.IsParallelUniverse(h.Number) {
+	if !config.IsNapoli(h.Number) {
 		return h.Extra[ExtraVanityLength : len(h.Extra)-ExtraSealLength]
 	}
 
