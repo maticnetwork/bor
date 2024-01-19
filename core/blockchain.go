@@ -2193,6 +2193,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 
 			return it.index, err
 		}
+		log.Info("[CANCUN DEBUG] ValidateState passed", "block", block.NumberU64(), "hash", block.Hash())
 
 		vtime := time.Since(vstart)
 		proctime := time.Since(start) // processing + validation
