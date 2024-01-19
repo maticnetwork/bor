@@ -33,7 +33,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/ethereum/go-ethereum"
@@ -1727,14 +1726,15 @@ func (bc *BlockChain) writeBlockAndSetHead(ctx context.Context, block *types.Blo
 
 	var stateSyncLogs []*types.Log
 
-	tracing.Exec(writeBlockAndSetHeadCtx, "", "blockchain.writeBlockWithState", func(_ context.Context, span trace.Span) {
-		stateSyncLogs, err = bc.writeBlockWithState(block, receipts, logs, state)
-		tracing.SetAttributes(
-			span,
-			attribute.Int("number", int(block.Number().Uint64())),
-			attribute.Bool("error", err != nil),
-		)
-	})
+	// tracing.Exec(writeBlockAndSetHeadCtx, "", "blockchain.writeBlockWithState", func(_ context.Context, span trace.Span) {
+	log.Info("[CANCUN DEBUG] writeBlockAndSetHead", "number", block.Number(), "hash", block.Hash(), "parent", block.ParentHash())
+	stateSyncLogs, err = bc.writeBlockWithState(block, receipts, logs, state)
+	// tracing.SetAttributes(
+	// span,
+	// attribute.Int("number", int(block.Number().Uint64())),
+	// attribute.Bool("error", err != nil),
+	// )
+	// })
 
 	if err != nil {
 		return NonStatTy, err
@@ -1744,44 +1744,44 @@ func (bc *BlockChain) writeBlockAndSetHead(ctx context.Context, block *types.Blo
 
 	var reorg bool
 
-	tracing.Exec(writeBlockAndSetHeadCtx, "", "blockchain.ReorgNeeded", func(_ context.Context, span trace.Span) {
-		reorg, err = bc.forker.ReorgNeeded(currentBlock, block.Header())
-		tracing.SetAttributes(
-			span,
-			attribute.Int("number", int(block.Number().Uint64())),
-			attribute.Int("current block", int(currentBlock.Number.Uint64())),
-			attribute.Bool("reorg needed", reorg),
-			attribute.Bool("error", err != nil),
-		)
-	})
+	// tracing.Exec(writeBlockAndSetHeadCtx, "", "blockchain.ReorgNeeded", func(_ context.Context, span trace.Span) {
+	reorg, err = bc.forker.ReorgNeeded(currentBlock, block.Header())
+	// tracing.SetAttributes(
+	// 	span,
+	// 	attribute.Int("number", int(block.Number().Uint64())),
+	// 	attribute.Int("current block", int(currentBlock.Number.Uint64())),
+	// 	attribute.Bool("reorg needed", reorg),
+	// 	attribute.Bool("error", err != nil),
+	// )
+	// })
 
 	if err != nil {
 		return NonStatTy, err
 	}
 
-	tracing.Exec(writeBlockAndSetHeadCtx, "", "blockchain.reorg", func(_ context.Context, span trace.Span) {
-		if reorg {
-			// Reorganise the chain if the parent is not the head block
-			if block.ParentHash() != currentBlock.Hash() {
-				if err = bc.reorg(currentBlock, block); err != nil {
-					status = NonStatTy
-				}
+	// tracing.Exec(writeBlockAndSetHeadCtx, "", "blockchain.reorg", func(_ context.Context, span trace.Span) {
+	if reorg {
+		// Reorganise the chain if the parent is not the head block
+		if block.ParentHash() != currentBlock.Hash() {
+			if err = bc.reorg(currentBlock, block); err != nil {
+				status = NonStatTy
 			}
-
-			status = CanonStatTy
-		} else {
-			status = SideStatTy
 		}
 
-		tracing.SetAttributes(
-			span,
-			attribute.Int("number", int(block.Number().Uint64())),
-			attribute.Int("current block", int(currentBlock.Number.Uint64())),
-			attribute.Bool("reorg needed", reorg),
-			attribute.Bool("error", err != nil),
-			attribute.String("status", string(status)),
-		)
-	})
+		status = CanonStatTy
+	} else {
+		status = SideStatTy
+	}
+
+	// tracing.SetAttributes(
+	// 	span,
+	// 	attribute.Int("number", int(block.Number().Uint64())),
+	// 	attribute.Int("current block", int(currentBlock.Number.Uint64())),
+	// 	attribute.Bool("reorg needed", reorg),
+	// 	attribute.Bool("error", err != nil),
+	// 	attribute.String("status", string(status)),
+	// )
+	// })
 
 	if status == NonStatTy {
 		return
@@ -2011,7 +2011,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 	case errors.Is(err, consensus.ErrPrunedAncestor):
 		if setHead {
 			// First block is pruned, insert as sidechain and reorg only if TD grows enough
-			log.Debug("Pruned ancestor, inserting as sidechain", "number", block.Number(), "hash", block.Hash())
+			log.Info("Pruned ancestor, inserting as sidechain", "number", block.Number(), "hash", block.Hash())
 			return bc.insertSideChain(block, it)
 		} else {
 			// We're post-merge and the parent is pruned, try to recover the parent state
@@ -2424,6 +2424,13 @@ func (bc *BlockChain) insertSideChain(block *types.Block, it *insertIterator) (i
 		numbers = append(numbers, parent.Number.Uint64())
 
 		parent = bc.GetHeader(parent.ParentHash, parent.Number.Uint64()-1)
+	}
+
+	tempBlock := bc.GetHeader(common.HexToHash("0xb0d2b2f1ee5aaf216437655da04159bbde32446bde3f6a198b77d473ead3bcc2"), 52410381)
+	if tempBlock != nil {
+		log.Info("[CANCUN DEBUG] Block #381", "block", tempBlock.Hash())
+	} else {
+		log.Info("[CANCUN DEBUG] Block #381 nil")
 	}
 
 	if parent == nil {
