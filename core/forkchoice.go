@@ -26,6 +26,7 @@ import (
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -97,8 +98,10 @@ func (f *ForkChoice) ReorgNeeded(current *types.Header, extern *types.Header) (b
 
 	// If the total difficulty is higher than our known, add it to the canonical chain
 	if diff := externTd.Cmp(localTD); diff > 0 {
+		log.Info("[ForkChoice] Reorg true, high diff", "current", current.Number.Uint64(), "extern", extern.Number.Uint64(), "localTd", localTD.Uint64(), "externTd", externTd.Uint64())
 		return true, nil
 	} else if diff < 0 {
+		log.Info("[ForkChoice] Reorg false, low diff", "current", current.Number.Uint64(), "extern", extern.Number.Uint64(), "localTd", localTD.Uint64(), "externTd", externTd.Uint64())
 		return false, nil
 	}
 	// Local and external difficulty is identical.
@@ -108,6 +111,7 @@ func (f *ForkChoice) ReorgNeeded(current *types.Header, extern *types.Header) (b
 	externNum, localNum := extern.Number.Uint64(), current.Number.Uint64()
 
 	if externNum < localNum {
+		log.Info("[ForkChoice] Reorg true, low num", "current", current.Number.Uint64(), "extern", extern.Number.Uint64(), "localTd", localTD.Uint64(), "externTd", externTd.Uint64())
 		reorg = true
 	} else if externNum == localNum {
 		var currentPreserve, externPreserve bool
@@ -117,7 +121,10 @@ func (f *ForkChoice) ReorgNeeded(current *types.Header, extern *types.Header) (b
 
 		// Compare hashes of block in case of tie breaker. Lexicographically larger hash wins.
 		reorg = !currentPreserve && (externPreserve || bytes.Compare(current.Hash().Bytes(), extern.Hash().Bytes()) < 0)
+		log.Info("[ForkChoice] Tie breaker", "current", current.Number.Uint64(), "extern", extern.Number.Uint64(), "currentHash", current.Hash(), "externHash", extern.Hash(), "localTd", localTD.Uint64(), "externTd", externTd.Uint64(), "currentPreserve", currentPreserve, "externPreserve", externPreserve)
 	}
+
+	log.Info("[ForkChoice] Exiting", "reorg", reorg, "current", current.Number.Uint64(), "extern", extern.Number.Uint64())
 
 	return reorg, nil
 }

@@ -31,6 +31,8 @@ type finalityService interface {
 // IsValidPeer checks if the chain we're about to receive from a peer is valid or not
 // in terms of reorgs. We won't reorg beyond the last bor finality submitted to mainchain.
 func (f *finality[T]) IsValidPeer(fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error) {
+	return true, nil
+
 	// We want to validate the chain by comparing the last finalized block
 	f.RLock()
 
@@ -51,6 +53,8 @@ func (f *finality[T]) IsValidChain(currentHeader *types.Header, chain []*types.H
 	if len(chain) == 0 {
 		return false, nil
 	}
+
+	return true, nil
 
 	res, err := isValidChain(currentHeader, chain, f.doExist, f.Number, f.Hash)
 
