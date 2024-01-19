@@ -1889,6 +1889,7 @@ func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 		return 0, errChainStopped
 	}
 	defer bc.chainmu.Unlock()
+	log.Info("[CANCUN DEBUG] InsertChain", "first", chain[0].NumberU64(), "firstHash", chain[0].Hash(), "last", chain[len(chain)-1].NumberU64(), "lastHash", chain[len(chain)-1].Hash(), "len", len(chain))
 	return bc.insertChain(chain, true)
 }
 
@@ -2164,6 +2165,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 
 		// Process block using the parent state as reference point
 		pstart := time.Now()
+		log.Info("[CANCUN DEBUG] Processing block in insert chain", "block", block.NumberU64(), "hash", block.Hash(), "parent", parent.Number.Uint64(), "parentHash", parent.Hash())
 		receipts, logs, usedGas, statedb, err := bc.ProcessBlock(block, parent)
 		activeState = statedb
 
@@ -3025,6 +3027,9 @@ func (bc *BlockChain) maintainTxIndex() {
 // reportBlock logs a bad block error.
 func (bc *BlockChain) reportBlock(block *types.Block, receipts types.Receipts, err error) {
 	rawdb.WriteBadBlock(bc.db, block)
+
+	log.Error("[CANCUN DEBUG] Reporting bad block", "local", block.NumberU64(), "localHash", bc.GetHeaderByNumber(block.NumberU64()), "parent", block.NumberU64()-1, "parentHash", bc.GetHeaderByNumber(block.NumberU64()-1))
+
 	log.Error(summarizeBadBlock(block, receipts, bc.Config(), err))
 }
 
@@ -3048,12 +3053,12 @@ func summarizeBadBlock(block *types.Block, receipts []*types.Receipt, config *pa
 	return fmt.Sprintf(`
 ########## BAD BLOCK #########
 Block: %v (%#x)
+Parent: %v (%#x)
 Error: %v
 Platform: %v%v
 Chain config: %#v
-Receipts: %v
 ##############################
-`, block.Number(), block.Hash(), err, platform, vcs, config, receiptString)
+`, block.Number(), block.Hash(), block.Number().Uint64()-1, block.ParentHash(), err, platform, vcs, config)
 }
 
 // InsertHeaderChain attempts to insert the given header chain in to the local
