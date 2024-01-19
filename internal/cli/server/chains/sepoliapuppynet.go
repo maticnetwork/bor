@@ -8,7 +8,7 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 )
 
-var mumbaiTestnet = &Chain{
+var sepoliapuppynetTestnet = &Chain{
 	Hash:      common.HexToHash("0x5be2e21ae365a45dc256f34acb11953a5dca432730d325f0d084775be8dfcd0f"),
 	NetworkId: 157,
 	Genesis: &core.Genesis{

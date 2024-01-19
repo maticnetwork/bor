@@ -8,7 +8,7 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 )
 
-var mainnetBor = &Chain{
+var shibmainnetBor = &Chain{
 	Hash:      common.HexToHash("0x80c9851317f242906f0d5d42038029fbdbe7df64e700bdc8b8eaabcc349969f4"),
 	NetworkId: 109,
 	Genesis: &core.Genesis{
