@@ -312,57 +312,30 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 			shouldDelayFeeCal = false
 		}
 
-		if len(blockTxDependency) == len(block.Transactions()) {
-			task := &ExecutionTask{
-				msg:               *msg,
-				config:            p.config,
-				gasLimit:          block.GasLimit(),
-				blockNumber:       blockNumber,
-				blockHash:         blockHash,
-				tx:                tx,
-				index:             i,
-				cleanStateDB:      cleansdb,
-				finalStateDB:      statedb,
-				blockChain:        p.bc,
-				header:            header,
-				evmConfig:         cfg,
-				shouldDelayFeeCal: &shouldDelayFeeCal,
-				sender:            msg.From,
-				totalUsedGas:      usedGas,
-				receipts:          &receipts,
-				allLogs:           &allLogs,
-				dependencies:      deps[i],
-				coinbase:          coinbase,
-				blockContext:      blockContext,
-			}
-
-			tasks = append(tasks, task)
-		} else {
-			task := &ExecutionTask{
-				msg:               *msg,
-				config:            p.config,
-				gasLimit:          block.GasLimit(),
-				blockNumber:       blockNumber,
-				blockHash:         blockHash,
-				tx:                tx,
-				index:             i,
-				cleanStateDB:      cleansdb,
-				finalStateDB:      statedb,
-				blockChain:        p.bc,
-				header:            header,
-				evmConfig:         cfg,
-				shouldDelayFeeCal: &shouldDelayFeeCal,
-				sender:            msg.From,
-				totalUsedGas:      usedGas,
-				receipts:          &receipts,
-				allLogs:           &allLogs,
-				dependencies:      nil,
-				coinbase:          coinbase,
-				blockContext:      blockContext,
-			}
-
-			tasks = append(tasks, task)
+		task := &ExecutionTask{
+			msg:               *msg,
+			config:            p.config,
+			gasLimit:          block.GasLimit(),
+			blockNumber:       blockNumber,
+			blockHash:         blockHash,
+			tx:                tx,
+			index:             i,
+			cleanStateDB:      cleansdb,
+			finalStateDB:      statedb,
+			blockChain:        p.bc,
+			header:            header,
+			evmConfig:         cfg,
+			shouldDelayFeeCal: &shouldDelayFeeCal,
+			sender:            msg.From,
+			totalUsedGas:      usedGas,
+			receipts:          &receipts,
+			allLogs:           &allLogs,
+			dependencies:      deps[i],
+			coinbase:          coinbase,
+			blockContext:      blockContext,
 		}
+
+		tasks = append(tasks, task)
 	}
 
 	backupStateDB := statedb.Copy()
