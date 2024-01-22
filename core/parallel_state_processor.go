@@ -288,6 +288,10 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 
 	deps := GetDeps(blockTxDependency)
 
+	if !VerifyDeps(deps) {
+		blockTxDependency = nil
+	}
+
 	if blockTxDependency != nil {
 		metadata = true
 	}
@@ -308,7 +312,7 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 			shouldDelayFeeCal = false
 		}
 
-		if len(blockTxDependency) != len(block.Transactions()) {
+		if len(blockTxDependency) == len(block.Transactions()) {
 			task := &ExecutionTask{
 				msg:               *msg,
 				config:            p.config,
@@ -426,4 +430,22 @@ func GetDeps(txDependency [][]uint64) map[int][]int {
 	}
 
 	return deps
+}
+
+// returns true if dependencies are correct
+func VerifyDeps(deps map[int][]int) bool {
+	// number of transactions in the block
+	n := len(deps)
+
+	// Handle out-of-range and circular dependency problem
+	for i := 0; i <= n-1; i++ {
+		val := deps[i]
+		for _, depTx := range val {
+			if depTx >= n || depTx >= i {
+				return false
+			}
+		}
+	}
+
+	return true
 }
