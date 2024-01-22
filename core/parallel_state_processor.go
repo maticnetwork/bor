@@ -288,8 +288,9 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 
 	deps := GetDeps(blockTxDependency)
 
-	if !VerifyDeps(deps) {
+	if !VerifyDeps(deps) || len(blockTxDependency) != len(block.Transactions()) {
 		blockTxDependency = nil
+		deps = make(map[int][]int)
 	}
 
 	if blockTxDependency != nil {
