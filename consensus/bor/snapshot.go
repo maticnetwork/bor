@@ -51,7 +51,7 @@ func newSnapshot(
 }
 
 // loadSnapshot loads an existing snapshot from the database.
-func loadSnapshot(config *params.BorConfig, sigcache *lru.ARCCache, db ethdb.Database, hash common.Hash) (*Snapshot, error) {
+func loadSnapshot(chainConfig *params.ChainConfig, config *params.BorConfig, sigcache *lru.ARCCache, db ethdb.Database, hash common.Hash) (*Snapshot, error) {
 	blob, err := db.Get(append([]byte("bor-"), hash[:]...))
 	if err != nil {
 		return nil, err
@@ -65,6 +65,7 @@ func loadSnapshot(config *params.BorConfig, sigcache *lru.ARCCache, db ethdb.Dat
 
 	snap.ValidatorSet.UpdateValidatorMap()
 
+	snap.chainConfig = chainConfig
 	snap.config = config
 	snap.sigcache = sigcache
 
@@ -89,6 +90,7 @@ func (s *Snapshot) store(db ethdb.Database) error {
 // copy creates a deep copy of the snapshot, though not the individual votes.
 func (s *Snapshot) copy() *Snapshot {
 	cpy := &Snapshot{
+		chainConfig:  s.chainConfig,
 		config:       s.config,
 		sigcache:     s.sigcache,
 		Number:       s.Number,
