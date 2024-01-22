@@ -15,6 +15,8 @@ import (
 
 // Snapshot is the state of the authorization voting at a given point in time.
 type Snapshot struct {
+	chainConfig *params.ChainConfig
+
 	config   *params.BorConfig // Consensus engine parameters to fine tune behavior
 	sigcache *lru.ARCCache     // Cache of recent block signatures to speed up ecrecover
 
@@ -28,6 +30,7 @@ type Snapshot struct {
 // method does not initialize the set of recent signers, so only ever use if for
 // the genesis block.
 func newSnapshot(
+	chainConfig *params.ChainConfig,
 	config *params.BorConfig,
 	sigcache *lru.ARCCache,
 	number uint64,
@@ -35,6 +38,7 @@ func newSnapshot(
 	validators []*valset.Validator,
 ) *Snapshot {
 	snap := &Snapshot{
+		chainConfig:  chainConfig,
 		config:       config,
 		sigcache:     sigcache,
 		Number:       number,
@@ -150,7 +154,7 @@ func (s *Snapshot) apply(headers []*types.Header) (*Snapshot, error) {
 				return nil, err
 			}
 
-			validatorBytes := header.GetValidatorBytes(s.config)
+			validatorBytes := header.GetValidatorBytes(s.chainConfig)
 
 			// get validators from headers and use that for new validator set
 			newVals, _ := valset.ParseValidators(validatorBytes)

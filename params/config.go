@@ -159,7 +159,6 @@ var (
 		BerlinBlock:         big.NewInt(0),
 		LondonBlock:         big.NewInt(0),
 		Bor: &BorConfig{
-			NapoliBlock: big.NewInt(5),
 			Period: map[string]uint64{
 				"0": 1,
 			},
@@ -200,7 +199,6 @@ var (
 		Bor: &BorConfig{
 			JaipurBlock: big.NewInt(22770000),
 			DelhiBlock:  big.NewInt(29638656),
-			NapoliBlock: big.NewInt(0),
 			IndoreBlock: big.NewInt(37075456),
 			StateSyncConfirmationDelay: map[string]uint64{
 				"37075456": 128,
@@ -266,7 +264,6 @@ var (
 		Bor: &BorConfig{
 			JaipurBlock: big.NewInt(23850000),
 			DelhiBlock:  big.NewInt(38189056),
-			NapoliBlock: big.NewInt(0),
 			IndoreBlock: big.NewInt(44934656),
 			StateSyncConfirmationDelay: map[string]uint64{
 				"44934656": 128,
@@ -567,7 +564,6 @@ type BorConfig struct {
 	BurntContract              map[string]string      `json:"burntContract"`              // governance contract where the token will be sent to and burnt in london fork
 	JaipurBlock                *big.Int               `json:"jaipurBlock"`                // Jaipur switch block (nil = no fork, 0 = already on jaipur)
 	DelhiBlock                 *big.Int               `json:"delhiBlock"`                 // Delhi switch block (nil = no fork, 0 = already on delhi)
-	NapoliBlock                *big.Int               `json:"napoliBlock"`                // TODO: update all occurrence, change name and finalize number (hardfork for block-stm related changes)
 	IndoreBlock                *big.Int               `json:"indoreBlock"`                // Indore switch block (nil = no fork, 0 = already on indore)
 	StateSyncConfirmationDelay map[string]uint64      `json:"stateSyncConfirmationDelay"` // StateSync Confirmation Delay, in seconds, to calculate `to`
 }
@@ -609,16 +605,16 @@ func (c *BorConfig) CalculateStateSyncDelay(number uint64) uint64 {
 	return borKeyValueConfigHelper(c.StateSyncConfirmationDelay, number)
 }
 
-// TODO: modify this function once the block number is finalized
-func (c *BorConfig) IsNapoli(number *big.Int) bool {
-	if c.NapoliBlock != nil {
-		if c.NapoliBlock.Cmp(big.NewInt(0)) == 0 {
-			return false
-		}
-	}
+// // TODO: modify this function once the block number is finalized
+// func (c *BorConfig) IsNapoli(number *big.Int) bool {
+// 	if c.NapoliBlock != nil {
+// 		if c.NapoliBlock.Cmp(big.NewInt(0)) == 0 {
+// 			return false
+// 		}
+// 	}
 
-	return isBlockForked(c.NapoliBlock, number)
-}
+// 	return isBlockForked(c.NapoliBlock, number)
+// }
 
 func (c *BorConfig) IsSprintStart(number uint64) bool {
 	return number%c.CalculateSprint(number) == 0
