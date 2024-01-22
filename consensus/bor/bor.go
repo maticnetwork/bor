@@ -521,7 +521,7 @@ func (c *Bor) snapshot(chain consensus.ChainHeaderReader, number uint64, hash co
 		val := valset.NewValidator(signer, 1000)
 		validatorset := valset.NewValidatorSet([]*valset.Validator{val})
 
-		snapshot := newSnapshot(c.chainConfig, c.config, c.signatures, number, hash, validatorset.Validators)
+		snapshot := newSnapshot(c.chainConfig, c.signatures, number, hash, validatorset.Validators)
 
 		return snapshot, nil
 	}
@@ -570,7 +570,7 @@ func (c *Bor) snapshot(chain consensus.ChainHeaderReader, number uint64, hash co
 				}
 
 				// new snap shot
-				snap = newSnapshot(c.chainConfig, c.config, c.signatures, number, hash, validators)
+				snap = newSnapshot(c.chainConfig, c.signatures, number, hash, validators)
 				if err := snap.store(c.db); err != nil {
 					return nil, err
 				}

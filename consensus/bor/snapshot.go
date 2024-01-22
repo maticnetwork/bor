@@ -17,8 +17,7 @@ import (
 type Snapshot struct {
 	chainConfig *params.ChainConfig
 
-	config   *params.BorConfig // Consensus engine parameters to fine tune behavior
-	sigcache *lru.ARCCache     // Cache of recent block signatures to speed up ecrecover
+	sigcache *lru.ARCCache // Cache of recent block signatures to speed up ecrecover
 
 	Number       uint64                    `json:"number"`       // Block number where the snapshot was created
 	Hash         common.Hash               `json:"hash"`         // Block hash where the snapshot was created
@@ -31,7 +30,6 @@ type Snapshot struct {
 // the genesis block.
 func newSnapshot(
 	chainConfig *params.ChainConfig,
-	config *params.BorConfig,
 	sigcache *lru.ARCCache,
 	number uint64,
 	hash common.Hash,
@@ -39,7 +37,6 @@ func newSnapshot(
 ) *Snapshot {
 	snap := &Snapshot{
 		chainConfig:  chainConfig,
-		config:       config,
 		sigcache:     sigcache,
 		Number:       number,
 		Hash:         hash,
@@ -66,7 +63,6 @@ func loadSnapshot(chainConfig *params.ChainConfig, config *params.BorConfig, sig
 	snap.ValidatorSet.UpdateValidatorMap()
 
 	snap.chainConfig = chainConfig
-	snap.config = config
 	snap.sigcache = sigcache
 
 	// update total voting power
@@ -91,7 +87,6 @@ func (s *Snapshot) store(db ethdb.Database) error {
 func (s *Snapshot) copy() *Snapshot {
 	cpy := &Snapshot{
 		chainConfig:  s.chainConfig,
-		config:       s.config,
 		sigcache:     s.sigcache,
 		Number:       s.Number,
 		Hash:         s.Hash,
@@ -128,12 +123,12 @@ func (s *Snapshot) apply(headers []*types.Header) (*Snapshot, error) {
 		number := header.Number.Uint64()
 
 		// Delete the oldest signer from the recent list to allow it signing again
-		if number >= s.config.CalculateSprint(number) {
-			delete(snap.Recents, number-s.config.CalculateSprint(number))
+		if number >= s.chainConfig.Bor.CalculateSprint(number) {
+			delete(snap.Recents, number-s.chainConfig.Bor.CalculateSprint(number))
 		}
 
 		// Resolve the authorization key and check against signers
-		signer, err := ecrecover(header, s.sigcache, s.config)
+		signer, err := ecrecover(header, s.sigcache, s.chainConfig.Bor)
 		if err != nil {
 			return nil, err
 		}
@@ -151,7 +146,7 @@ func (s *Snapshot) apply(headers []*types.Header) (*Snapshot, error) {
 		snap.Recents[number] = signer
 
 		// change validator set and change proposer
-		if number > 0 && (number+1)%s.config.CalculateSprint(number) == 0 {
+		if number > 0 && (number+1)%s.chainConfig.Bor.CalculateSprint(number) == 0 {
 			if err := validateHeaderExtraField(header.Extra); err != nil {
 				return nil, err
 			}
