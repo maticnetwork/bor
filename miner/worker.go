@@ -1068,8 +1068,12 @@ mainloop:
 				depsMVFullWriteList = append(depsMVFullWriteList, env.state.MVFullWriteList())
 				mvReadMapList = append(mvReadMapList, env.state.MVReadMap())
 
+				if env.tcount > len(depsMVFullWriteList) {
+					log.Warn("blockstm - env.tcount > len(depsMVFullWriteList)", "env.tcount", env.tcount, "len(depsMVFullWriteList)", len(depsMVFullWriteList))
+				}
+
 				temp := blockstm.TxDep{
-					Index:         env.tcount - 1,
+					Index:         count,
 					ReadList:      depsMVReadList[count],
 					FullWriteList: depsMVFullWriteList,
 				}
