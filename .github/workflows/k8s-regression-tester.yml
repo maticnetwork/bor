@@ -29,7 +29,6 @@ jobs:
       run: |
         eval `ssh-agent -s`
         ssh-add - <<< '${{ secrets.SSH_PRIVATE_KEY }}'
-        pip install -r requirements.txt
         git clone https://github.com/maticnetwork/polygon-devnets
         cd polygon-devnets/docker/pos
         make all DEV=true K8S_ENV=true K8S_NS=test
