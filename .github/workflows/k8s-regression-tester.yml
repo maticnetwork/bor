@@ -1,0 +1,66 @@
+name: Deploy Devnet
+
+on:
+  pull_request:
+  push:
+    branches:
+      - '*'
+
+jobs:
+  deploy_devnet:
+    runs-on: ubuntu-latest
+    
+    services:
+      kind:
+        image: kindest/node:v1.22.2
+        ports:
+          - 11111:11111
+        options: --config .github/workflows/kind-config.yaml
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v2
+      with:
+        ref: ${{ github.event.before }}
+
+    - name: Set up Go
+      uses: actions/setup-go@v2
+      with:
+        go-version: 1.17
+        
+    - name: Install Python 3.9.6
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.9.6
+
+    - name: Install kubectl
+      run: |
+        curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" \
+        && sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl \
+        && kubectl version --client
+
+    - name: Install kind
+      run: go install sigs.k8s.io/kind@v0.20.0
+
+    - name: Create local k8s cluster
+      run: |
+        kind create cluster --name regression-tester --config kind-config.yaml
+        kubectl cluster-info --context kind-regression-tester
+
+    - name: Clone and build devnet images
+      run: |
+        git clone https://github.com/maticnetwork/polygon-devnets
+        cd polygon-devnets/docker/pos
+        make all DEV=true K8S_ENV=true K8S_NS=test
+        
+      env:
+        PRIVATE_REPO_TOKEN: ${{ secrets.CI_PAT }}        
+
+    - name: Load images into cluster
+      run: kind load docker-image ganache:latest heimdall:latest bor:latest workload:latest status:latest --name regression-tester
+
+    - name: Deploy devnet
+      run: kubectl apply -k . --context kind-regression-tester
+
+    - name: Check deployed resources
+      run: kubectl get pods -n test
