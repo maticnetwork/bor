@@ -32,8 +32,10 @@ jobs:
         git clone https://github.com/maticnetwork/polygon-devnets
         cd polygon-devnets/docker/pos
         make all DEV=true K8S_ENV=true K8S_NS=test
+
       env:
-        PRIVATE_REPO_TOKEN: ${{ secrets.CI_PAT }}        
+        PRIVATE_REPO_TOKEN: ${{ secrets.CI_PAT }}
+        GIT_ASKPASS: echo 
     - name: Load images into cluster
       run: kind load docker-image ganache:latest heimdall:latest bor:latest workload:latest status:latest --name regression-tester
     - name: Deploy devnet
