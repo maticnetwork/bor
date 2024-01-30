@@ -29,7 +29,7 @@ jobs:
       run: |
         eval `ssh-agent -s`
         ssh-add - <<< '${{ secrets.SSH_PRIVATE_KEY }}'
-        git clone https://github.com/maticnetwork/polygon-devnets
+        git clone git@github.com:maticnetwork/polygon-devnets.git
         cd polygon-devnets/docker/pos
         make all DEV=true K8S_ENV=true K8S_NS=test
     - name: Load images into cluster
