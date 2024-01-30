@@ -13,12 +13,10 @@ jobs:
       uses: actions/setup-go@v2
       with:
         go-version: 1.17
-    - name: Install Python
-      uses: actions/setup-python@v2
-      with:
-        python-version: 3.9.6-117960
     - name: Install kubectl
       run: |
+        python --version 
+        python3 --version
         curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" \
         && sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl \
         && kubectl version --client
