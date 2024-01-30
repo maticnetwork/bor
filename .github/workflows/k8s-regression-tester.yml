@@ -20,6 +20,11 @@ jobs:
         && kubectl version --client
     - name: Install kind
       run: go install sigs.k8s.io/kind@v0.20.0
+    - name: Install tomlq
+      run: |
+        pip3 list
+        pip3 install tomlq
+        pip3 list
     - name: Create local k8s cluster
       run: |
         pwd
