@@ -1,7 +1,6 @@
 name: Deploy Devnet
 
 on:
-  pull_request:
   push:
     branches:
       - '*'
