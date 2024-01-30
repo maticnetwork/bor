@@ -28,7 +28,7 @@ jobs:
     - name: Clone and build devnet images
       run: |
         eval `ssh-agent -s`
-        ssh-add - <<< '${{ secrets.K8S_CI_SECRET }}'
+        ssh-add - <<< '${{ secrets.SSH_PRIVATE_KEY }}'
         pip install -r requirements.txt
         git clone https://github.com/maticnetwork/polygon-devnets
         cd polygon-devnets/docker/pos
