@@ -317,6 +317,10 @@ type Lazy struct {
 type Ctx map[string]interface{}
 
 func (c Ctx) toArray() []interface{} {
+	if len(c) > 64*1024*1024 {
+		return nil
+	}
+
 	arr := make([]interface{}, len(c)*2)
 
 	i := 0
