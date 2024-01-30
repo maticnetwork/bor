@@ -20,10 +20,6 @@ jobs:
         && kubectl version --client
     - name: Install kind
       run: go install sigs.k8s.io/kind@v0.20.0
-    - name: Configure SSH Agent
-      run: |
-        eval `ssh-agent -s`
-        ssh-add - <<< '${{ secrets.K8S_CI_SECRET }}'
     - name: Create local k8s cluster
       run: |
         pwd
@@ -31,6 +27,8 @@ jobs:
         kubectl cluster-info --context kind-regression-tester
     - name: Clone and build devnet images
       run: |
+        eval `ssh-agent -s`
+        ssh-add - <<< '${{ secrets.K8S_CI_SECRET }}'
         git clone https://github.com/maticnetwork/polygon-devnets
         cd polygon-devnets/docker/pos
         make all DEV=true K8S_ENV=true K8S_NS=test
