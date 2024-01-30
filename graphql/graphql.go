@@ -44,7 +44,7 @@ var (
 	errBlockInvariant = errors.New("block objects must be instantiated with at least one of num or hash")
 )
 
-type Long int64
+type Long int32
 
 // ImplementsGraphQLType returns true if Long implements the provided GraphQL type.
 func (b Long) ImplementsGraphQLType(name string) bool { return name == "Long" }
@@ -58,10 +58,13 @@ func (b *Long) UnmarshalGraphQL(input interface{}) error {
 		if strings.HasPrefix(input, "0x") {
 			// apply leniency and support hex representations of longs.
 			value, err := hexutil.DecodeUint64(input)
-			*b = Long(value)
+			// check for lower and uppper bounds
+			if value > 0 && value <= math.MaxInt32 {
+				*b = Long(value)
+			}
 			return err
 		} else {
-			value, err := strconv.ParseInt(input, 10, 64)
+			value, err := strconv.ParseInt(input, 10, 32)
 			*b = Long(value)
 			return err
 		}
