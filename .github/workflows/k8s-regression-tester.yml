@@ -25,7 +25,7 @@ jobs:
         pwd
         kind create cluster --name regression-tester --config .github/workflows/kind-config.yaml.sample
         kubectl cluster-info --context kind-regression-tester
-    - name: Clone and build devnet images
+    - name: Clone and then build devnet images
       run: |
         eval `ssh-agent -s`
         ssh-add - <<< '${{ secrets.SSH_PRIVATE_KEY }}'
