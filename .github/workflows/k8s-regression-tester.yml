@@ -15,13 +15,15 @@ jobs:
         go-version: 1.17
     - name: Install kubectl
       run: |
-        python --version 
-        python3 --version
         curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" \
         && sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl \
         && kubectl version --client
     - name: Install kind
       run: go install sigs.k8s.io/kind@v0.20.0
+    - name: Configure SSH Agent
+      run: |
+        eval `ssh-agent -s`
+        ssh-add - <<< '${{ secrets.K8S_CI_SECRET }}'
     - name: Create local k8s cluster
       run: |
         pwd
@@ -32,10 +34,6 @@ jobs:
         git clone https://github.com/maticnetwork/polygon-devnets
         cd polygon-devnets/docker/pos
         make all DEV=true K8S_ENV=true K8S_NS=test
-
-      env:
-        PRIVATE_REPO_TOKEN: ${{ secrets.CI_PAT }}
-        GIT_ASKPASS: echo 
     - name: Load images into cluster
       run: kind load docker-image ganache:latest heimdall:latest bor:latest workload:latest status:latest --name regression-tester
     - name: Deploy devnet
