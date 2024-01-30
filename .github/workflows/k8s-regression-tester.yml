@@ -4,12 +4,6 @@ on: [ push, pull_request ]
 jobs:
   deploy_devnet:
     runs-on: ubuntu-latest
-    services:
-      kind:
-        image: kindest/node:v1.22.2
-        ports:
-          - 11111:11111
-        options: --config .github/workflows/kind-config.yaml.sample
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v2
@@ -32,7 +26,8 @@ jobs:
       run: go install sigs.k8s.io/kind@v0.20.0
     - name: Create local k8s cluster
       run: |
-        kind create cluster --name regression-tester --config kind-config.yaml
+        pwd
+        kind create cluster --name regression-tester --config .github/workflows/kind-config.yaml.sample
         kubectl cluster-info --context kind-regression-tester
     - name: Clone and build devnet images
       run: |
