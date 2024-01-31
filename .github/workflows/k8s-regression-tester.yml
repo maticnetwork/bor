@@ -29,7 +29,7 @@ jobs:
         echo "List 100 largest packages"
         dpkg-query -Wf '${Installed-Size}\t${Package}\n' | sort -n | tail -n 100
         df -h
-        sudo apt-get remove -y azure-cli google-cloud-cli google-cloud-sdk microsoft-edge-stable hhvm google-chrome-stable firefox powershell mono-devel
+        sudo apt-get remove -y azure-cli google-cloud-cli microsoft-edge-stable google-chrome-stable firefox
         sudo apt-get autoremove -y
         sudo apt-get clean
         df -h
