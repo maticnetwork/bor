@@ -47,7 +47,8 @@ jobs:
         ssh-add - <<< '${{ secrets.SSH_PRIVATE_KEY }}'
         git clone git@github.com:maticnetwork/polygon-devnets.git
         cd polygon-devnets/docker/pos
-        cd polygon-devnets/docker/pos/k8s
+        ls
+        cd k8s
         ls
     #     make all DEV=true K8S_ENV=true K8S_NS=test
     #     cd polygon-devnets/docker/pos/k8s
