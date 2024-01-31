@@ -48,12 +48,12 @@ jobs:
         git clone git@github.com:maticnetwork/polygon-devnets.git
         cd polygon-devnets/docker/pos
         # make all DEV=true K8S_ENV=true K8S_NS=test
-        cd k8s
         pwd
     # - name: Load images into cluster
     #   run: kind load docker-image ganache:latest heimdall:latest bor:latest workload:latest status:latest --name regression-tester
     - name: Deploy devnet
       run: |
+        cd polygon-devnets/docker/pos/k8s
         pwd
         kubectl apply -k . --context kind-regression-tester
     - name: Check deployed resources
