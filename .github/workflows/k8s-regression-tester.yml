@@ -9,6 +9,10 @@ jobs:
       uses: AdityaGarg8/remove-unwanted-software@v2
       with:
         remove-android: 'true'
+        remove-dotnet: 'true'
+        remove-haskell: 'true'
+        remove-codeql: 'true'
+        remove-docker-images: 'true'
     - name: Checkout Repository
       uses: actions/checkout@v2
       with:
@@ -29,17 +33,9 @@ jobs:
         pip3 install tomlq
     - name: Free github runner disk space for k8s image building
       run: |
-        # echo "Freeing up disk space on CI system..."
-        # echo "List 100 largest packages"
-        # dpkg-query -Wf '${Installed-Size}\t${Package}\n' | sort -n | tail -n 100
-        # df -h
-        # sudo apt-get remove -y azure-cli google-cloud-cli microsoft-edge-stable google-chrome-stable firefox
-        # sudo apt-get autoremove -y
-        # sudo apt-get clean
-        # df -h
-        # echo "Removing large directories"
-        # rm -rf /usr/share/dotnet/
-        # rm -rf /opt/hostedtoolcache
+        df -h
+        rm -rf /usr/share/dotnet/
+        rm -rf /opt/hostedtoolcache
         df -h
     - name: Create local k8s cluster
       run: |
