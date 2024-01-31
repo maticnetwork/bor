@@ -47,17 +47,14 @@ jobs:
         ssh-add - <<< '${{ secrets.SSH_PRIVATE_KEY }}'
         git clone git@github.com:maticnetwork/polygon-devnets.git
         cd polygon-devnets/docker/pos
-        ls
+        # make all DEV=true K8S_ENV=true K8S_NS=test
         cd k8s
+        pwd
+    - name: Load images into cluster
+      run: kind load docker-image ganache:latest heimdall:latest bor:latest workload:latest status:latest --name regression-tester
+    - name: Deploy devnet
+      run: |
         ls
-    #     make all DEV=true K8S_ENV=true K8S_NS=test
-    #     cd polygon-devnets/docker/pos/k8s
-    #     ls
-    # - name: Load images into cluster
-    #   run: kind load docker-image ganache:latest heimdall:latest bor:latest workload:latest status:latest --name regression-tester
-    # - name: Deploy devnet
-    #   run: |
-    #     cd polygon-devnets/docker/pos/k8s
-    #     kubectl apply -k . --context kind-regression-tester
-    # - name: Check deployed resources
-    #   run: kubectl get pods -n test
+        kubectl apply -k . --context kind-regression-tester
+    - name: Check deployed resources
+      run: kubectl get pods -n test
