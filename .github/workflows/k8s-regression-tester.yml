@@ -35,30 +35,33 @@ jobs:
       run: |
         rm -rf /usr/share/dotnet/
         rm -rf /opt/hostedtoolcache
-    - name: Create local k8s cluster
-      run: |
-        kind create cluster --name regression-tester --config .github/workflows/kind-config.yaml.sample
-        kubectl cluster-info --context kind-regression-tester
-    - name: Clone and then build devnet images
-      run: |
-        eval `ssh-agent -s`
-        ssh-add - <<< '${{ secrets.SSH_PRIVATE_KEY }}'
-        git clone git@github.com:maticnetwork/polygon-devnets.git
-        cd polygon-devnets/docker/pos
-        make all DEV=true K8S_ENV=true K8S_NS=test
-    - name: Load images into cluster
-      run: kind load docker-image ganache:latest heimdall:latest bor:latest workload:latest status:latest --name regression-tester
-    - name: Deploy devnet
-      run: |
-        cd polygon-devnets/docker/pos/k8s
-        kubectl apply -k . --context kind-regression-tester
-    - name: Check deployed resources
-      run: |
-        current_minute=$(date +'%M')
-        end_minute=$((current_minute + 60)) # Run for the next hour as test
-
-        while [ $current_minute -lt $end_minute ]; do
-          kubectl get pods -n test
-          sleep 600 # Sleep for 10 minutes
-          current_minute=$(date +'%M')
-        done
+    - uses: 'google-github-actions/auth@v2'
+      with:
+        credentials_json: '${{ secrets.GOOGLE_CREDENTIALS }}'
+    # - name: Create local k8s cluster
+    #   run: |
+    #     kind create cluster --name regression-tester --config .github/workflows/kind-config.yaml.sample
+    #     kubectl cluster-info --context kind-regression-tester
+    # - name: Clone and then build devnet images
+    #   run: |
+    #     eval `ssh-agent -s`
+    #     ssh-add - <<< '${{ secrets.SSH_PRIVATE_KEY }}'
+    #     git clone git@github.com:maticnetwork/polygon-devnets.git
+    #     cd polygon-devnets/docker/pos
+    #     make all DEV=true K8S_ENV=true K8S_NS=test
+    # - name: Load images into cluster
+    #   run: kind load docker-image ganache:latest heimdall:latest bor:latest workload:latest status:latest --name regression-tester
+    # - name: Deploy devnet
+    #   run: |
+    #     cd polygon-devnets/docker/pos/k8s
+    #     kubectl apply -k . --context kind-regression-tester
+    # - name: Check deployed resources
+    #   run: |
+    #     current_minute=$(date +'%M')
+    #     end_minute=$((current_minute + 60)) # Run for the next hour as test
+    # 
+    #     while [ $current_minute -lt $end_minute ]; do
+    #       kubectl get pods -n test
+    #       sleep 600 # Sleep for 10 minutes
+    #       current_minute=$(date +'%M')
+    #     done
