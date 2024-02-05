@@ -40,6 +40,7 @@ jobs:
         credentials_json: '${{ secrets.GOOGLE_CREDENTIALS }}'
     - name: Install tomlq
       run: |
+        gcloud container clusters get-credentials CLUSTER_NAME --zone=COMPUTE_ZONE
         gcloud container clusters list
     # - name: Create local k8s cluster
     #   run: |
