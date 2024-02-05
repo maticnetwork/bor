@@ -22,12 +22,12 @@ jobs:
     - name: Fetch Repos and Sync Images
       run: |
         while IFS= read -r repo; do
-          latest_tag=$(curl -s "https://api.github.com/repos/${repo}/releases/latest" | jq -r .tag_name)
+          latest_tag=$(curl -s "https://api.github.com/repos/0xpolygon/${repo}/releases/latest" | jq -r .tag_name)
           if [ -n "$latest_tag" ]; then
             # Check if the image version already exists in GCP Container Registry
-            if ! docker pull "gcr.io/prj-polygonlabs-devtools-dev/${repo}:${latest_tag}" 2>/dev/null; then
-              docker tag "${repo}:${latest_tag}" "gcr.io/prj-polygonlabs-devtools-dev/${repo}:${latest_tag}"
-              docker push "gcr.io/prj-polygonlabs-devtools-dev/${repo}:${latest_tag}"
+            if ! docker pull "0xpolygon/${repo}:${latest_tag}" 2>/dev/null; then
+              docker tag "0xpolygon/${repo}:${latest_tag}" "gcr.io/prj-polygonlabs-devtools-dev/0xpolygon/${repo}:${latest_tag}"
+              docker push "gcr.io/prj-polygonlabs-devtools-dev/0xpolygon/${repo}:${latest_tag}"
             else
               echo "Image version already exists for ${repo}:${latest_tag}. Skipping upload."
             fi
