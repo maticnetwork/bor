@@ -38,6 +38,9 @@ jobs:
     - uses: 'google-github-actions/auth@v2'
       with:
         credentials_json: '${{ secrets.GOOGLE_CREDENTIALS }}'
+    - name: Install tomlq
+      run: |
+        gcloud container clusters list
     # - name: Create local k8s cluster
     #   run: |
     #     kind create cluster --name regression-tester --config .github/workflows/kind-config.yaml.sample
