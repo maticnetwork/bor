@@ -34,4 +34,4 @@ jobs:
               echo "Image version already exists for ${repo}:${latest_tag}. Skipping upload."
             fi
           fi
-        done < repo-list.txt
+        done < repo-list.txt.sample
