@@ -1,7 +1,5 @@
 name: Image Sync
-on:
-  schedule:
-    - cron: '*/2 * * * *'  # Run every 2 mins for testing...
+on: [ push, pull_request ]
 
 jobs:
   sync-images:
