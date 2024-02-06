@@ -26,7 +26,7 @@ jobs:
             if ! gcloud container images list-tags eu.gcr.io/prj-polygonlabs-devtools-dev/${image_path} --filter="tags=${latest_tag}" --format="value(tags)" | grep -q "${latest_tag}"; then
               docker pull "${image_path}:${latest_tag}"
               docker tag "${image_path}:${latest_tag}" "eu.gcr.io/prj-polygonlabs-devtools-dev/${image_path}:${latest_tag}"
-              docker push "eu.gcr.io/prj-polygonlabs-devtools-dev/${image_path}:${latest_tag}"
+              sudo -u $USER docker push "eu.gcr.io/prj-polygonlabs-devtools-dev/${image_path}:${latest_tag}"
             else
               echo "Image version already exists for ${image_path}:${latest_tag} in GCR. Skipping upload."
             fi
