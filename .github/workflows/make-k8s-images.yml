@@ -25,7 +25,7 @@ jobs:
         version: '>= 363.0.0'
     - name: Fetch Repos and Sync Images
       run: |
-        gcloud auth configure-docker gcr.io
+        gcloud auth configure-docker gcr.io -q
         while IFS= read -r image_path; do
           latest_tag=$(curl -s "https://registry.hub.docker.com/v2/repositories/${image_path}/tags/?page_size=1" | jq -r '.results[0].name')
           if [ -n "$latest_tag" ]; then
