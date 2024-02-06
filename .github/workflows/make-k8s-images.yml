@@ -12,24 +12,18 @@ jobs:
     - uses: 'google-github-actions/auth@v2'
       with:
         credentials_json: '${{ secrets.GOOGLE_CREDENTIALS }}'
-    - name: Clone and then build devnet images
-      run: |
-        eval `ssh-agent -s`
-        ssh-add - <<< '${{ secrets.SSH_PRIVATE_KEY }}'
-        git clone git@github.com:maticnetwork/polygon-devnets.git
-        # cd polygon-devnets/docker/pos
-        # make all DEV=true K8S_ENV=true K8S_NS=test
     - name: Fetch Repos and Sync Images
       run: |
-        while IFS= read -r repo; do
-          latest_tag=$(curl -s "https://api.github.com/repos/0xpolygon/${repo}/releases/latest" | jq -r .tag_name)
+        while IFS= read -r image_path; do
+          latest_tag=$(curl -s "https://registry.hub.docker.com/v2/repositories/${image_path}/tags/?page_size=1" | jq -r '.results[0].name')
           if [ -n "$latest_tag" ]; then
             # Check if the image version already exists in GCP Container Registry
-            if ! docker pull "0xpolygon/${repo}:${latest_tag}" 2>/dev/null; then
-              docker tag "0xpolygon/${repo}:${latest_tag}" "gcr.io/prj-polygonlabs-devtools-dev/0xpolygon/${repo}:${latest_tag}"
-              docker push "gcr.io/prj-polygonlabs-devtools-dev/0xpolygon/${repo}:${latest_tag}"
+            if ! gcloud container images list-tags gcr.io/prj-polygonlabs-devtools-dev/${image_path} --filter="tags=${latest_tag}" --format="value(tags)" | grep -q "${latest_tag}"; then
+              docker pull "${image_path}:${latest_tag}"
+              docker tag "${image_path}:${latest_tag}" "gcr.io/prj-polygonlabs-devtools-dev/${image_path}:${latest_tag}"
+              docker push "gcr.io/prj-polygonlabs-devtools-dev/${image_path}:${latest_tag}"
             else
-              echo "Image version already exists for ${repo}:${latest_tag}. Skipping upload."
+              echo "Image version already exists for ${image_path}:${latest_tag} in GCR. Skipping upload."
             fi
           fi
         done < .github/workflows/repo-list.txt.sample
