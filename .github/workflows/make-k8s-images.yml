@@ -20,7 +20,7 @@ jobs:
       uses: 'google-github-actions/setup-gcloud@v2'
       with:
         version: '>= 363.0.0'
-    - name: Fetch Repos and Sync Images
+    - name: Fetch repos, rebuild for k8s, push to internal artifact registry
       run: |
         gcloud auth configure-docker europe-west2-docker.pkg.dev -q
         while IFS= read -r image_path; do
@@ -38,5 +38,3 @@ jobs:
             fi
           fi
         done < .github/workflows/repo-list.txt.sample
-        
-        
