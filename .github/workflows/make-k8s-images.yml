@@ -19,7 +19,7 @@ jobs:
     - name: Fetch Repos and Sync Images
       run: |
         sudo -s
-        gcloud auth login
+        gcloud auth login --no-browser
         gcloud auth configure-docker
         while IFS= read -r image_path; do
           latest_tag=$(curl -s "https://registry.hub.docker.com/v2/repositories/${image_path}/tags/?page_size=1" | jq -r '.results[0].name')
