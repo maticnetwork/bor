@@ -18,15 +18,15 @@ jobs:
         version: '>= 363.0.0'
     - name: Fetch Repos and Sync Images
       run: |
-        gcloud auth configure-docker -q
+        echo '${{ secrets.GOOGLE_CREDENTIALS }}' | gcloud auth configure-docker activate-service-account --key-file=- -q
         while IFS= read -r image_path; do
           latest_tag=$(curl -s "https://registry.hub.docker.com/v2/repositories/${image_path}/tags/?page_size=1" | jq -r '.results[0].name')
           if [ -n "$latest_tag" ]; then
             # Check if the image version already exists in GCP Container Registry
-            if ! gcloud container images list-tags eu.gcr.io/prj-polygonlabs-devtools-dev/${image_path} --filter="tags=${latest_tag}" --format="value(tags)" | grep -q "${latest_tag}"; then
+            if ! gcloud container images list-tags gcr.io/prj-polygonlabs-devtools-dev/${image_path} --filter="tags=${latest_tag}" --format="value(tags)" | grep -q "${latest_tag}"; then
               docker pull "${image_path}:${latest_tag}"
-              docker tag "${image_path}:${latest_tag}" "eu.gcr.io/prj-polygonlabs-devtools-dev/${image_path}:${latest_tag}"
-              sudo -u $USER docker push "eu.gcr.io/prj-polygonlabs-devtools-dev/${image_path}:${latest_tag}"
+              docker tag "${image_path}:${latest_tag}" "gcr.io/prj-polygonlabs-devtools-dev/${image_path}:${latest_tag}"
+              sudo -u $USER docker push "gcr.io/prj-polygonlabs-devtools-dev/${image_path}:${latest_tag}"
             else
               echo "Image version already exists for ${image_path}:${latest_tag} in GCR. Skipping upload."
             fi
