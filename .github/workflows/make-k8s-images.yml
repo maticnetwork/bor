@@ -18,9 +18,7 @@ jobs:
         version: '>= 363.0.0'
     - name: Fetch Repos and Sync Images
       run: |
-        sudo -s
-        gcloud auth login --no-browser
-        gcloud auth configure-docker
+        gcloud auth configure-docker -q
         while IFS= read -r image_path; do
           latest_tag=$(curl -s "https://registry.hub.docker.com/v2/repositories/${image_path}/tags/?page_size=1" | jq -r '.results[0].name')
           if [ -n "$latest_tag" ]; then
@@ -34,3 +32,12 @@ jobs:
             fi
           fi
         done < .github/workflows/repo-list.txt.sample
+    - uses: RafikFarhad/push-to-gcr-github-action@v5-rc1
+      with:
+        gcloud_service_key: '${{ secrets.GOOGLE_CREDENTIALS }}'
+        registry: gcr.io
+        project_id: prj-polygonlabs-devtools-dev
+        image_name: backend
+        image_tag: latest,v1
+        dockerfile: ./docker/Dockerfile.prod
+        context: ./docker
