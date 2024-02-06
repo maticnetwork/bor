@@ -13,12 +13,6 @@ jobs:
       id: auth
       with:
         credentials_json: '${{ secrets.GOOGLE_CREDENTIALS }}'
-    - name: Extract credentials file path
-      id: extract
-      run: |
-        CREDENTIALS_PATH=$(echo "${{ steps.auth.outputs.credentials_file_path }}")
-        echo "Credentials file path: $CREDENTIALS_PATH"
-        echo "::set-output name=credentials_path::$CREDENTIALS_PATH"
     - name: 'Set up Cloud SDK'
       uses: 'google-github-actions/setup-gcloud@v2'
       with:
@@ -27,7 +21,7 @@ jobs:
       run: |
         gcloud auth configure-docker europe-west2-docker.pkg.dev -q
         while IFS= read -r image_path; do
-          latest_tag=$(curl -s "https://registry.hub.docker.com/v2/repositories/${image_path}/tags/?page_size=1" | jq -r '.results[0].name')
+          latest_tag=$(curl -s "https://registry.hub.docker.com/v2/repositories/${image_path}/tags/" | jq -r '.results[].name | select(test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))' | sort -V | tail -n 1)
           if [ -n "$latest_tag" ]; then
             # Check if the image version already exists in GCP Container Registry
             if ! gcloud container images list-tags europe-west2-docker.pkg.dev/prj-polygonlabs-devtools-dev/container/${image_path} --filter="tags=${latest_tag}" --format="value(tags)" | grep -q "${latest_tag}"; then
