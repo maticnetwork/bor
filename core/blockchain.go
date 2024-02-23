@@ -1891,6 +1891,7 @@ func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 	if !bc.chainmu.TryLock() {
 		return 0, errChainStopped
 	}
+	defer log.Info("[sync debug] blockchain.InsertChain: exiting and unlocking chain mutex")
 	defer bc.chainmu.Unlock()
 	return bc.insertChain(chain, true)
 }
@@ -2188,7 +2189,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		receipts, logs, usedGas, statedb, err := bc.ProcessBlock(block, parent)
 		activeState = statedb
 
-		log.Info("[sync debug] done processing block", "number", block.Number().Uint64(), "hash", block.Hash(), "err", err)
+		log.Info("[sync debug] blockchain.insertChain: done processing block", "number", block.Number().Uint64(), "hash", block.Hash(), "err", err)
 
 		if err != nil {
 			bc.reportBlock(block, receipts, err)
@@ -2213,7 +2214,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 			return it.index, err
 		}
 
-		log.Info("[sync debug] done validating state", "number", block.Number().Uint64(), "hash", block.Hash(), "err", err)
+		log.Info("[sync debug]blockchain.insertChain: done validating state", "number", block.Number().Uint64(), "hash", block.Hash(), "err", err)
 
 		vtime := time.Since(vstart)
 		proctime := time.Since(start) // processing + validation
@@ -2247,7 +2248,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 			status, err = bc.writeBlockAndSetHead(context.Background(), block, receipts, logs, statedb, false)
 		}
 
-		log.Info("[sync debug] done writing block", "number", block.Number().Uint64(), "hash", block.Hash(), "status", status, "err", err)
+		log.Info("[sync debug] blockchain.insertChain: done writing block", "number", block.Number().Uint64(), "hash", block.Hash(), "status", status, "err", err)
 
 		followupInterrupt.Store(true)
 
@@ -2314,6 +2315,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		}
 	}
 
+	log.Info("[sync debug] blockchain.insertChain: done processing all blocks", "err", err)
+
 	// BOR
 	emitAccum()
 	// BOR
@@ -2336,6 +2339,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 	}
 
 	stats.ignored += it.remaining()
+
+	log.Info("[sync debug] blockchain.insertChain: exiting", "index", it.index, "err", err)
 
 	return it.index, err
 }
