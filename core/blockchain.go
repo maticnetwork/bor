@@ -1765,6 +1765,7 @@ func (bc *BlockChain) writeBlockAndSetHead(ctx context.Context, block *types.Blo
 			if block.ParentHash() != currentBlock.Hash() {
 				if err = bc.reorg(currentBlock, block); err != nil {
 					status = NonStatTy
+					log.Info("blockchain.writeBlockAndSetHead: reorg failed", "err", err)
 				}
 			}
 
@@ -1868,6 +1869,8 @@ func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 
 	defer bc.blockProcFeed.Send(false)
 
+	log.Info("[sync debug] blockchain.InsertChain", "len", len(chain), "first", chain[0].Number().Uint64(), "last", chain[len(chain)-1].Number().Uint64())
+
 	// Do a sanity check that the provided chain is actually ordered and linked.
 	for i := 1; i < len(chain); i++ {
 		block, prev := chain[i], chain[i-1]
@@ -1906,6 +1909,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		return 0, nil
 	}
 
+	log.Info("[sync debug] blockchain.insertChain", "setHead", setHead)
+
 	// Start a parallel signature recovery (signer will fluke on fork transition, minimal perf loss)
 	SenderCacher.RecoverFromBlocks(types.MakeSigner(bc.chainConfig, chain[0].Number(), chain[0].Time()), chain)
 
@@ -1917,6 +1922,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 	defer func() {
 		if lastCanon != nil && bc.CurrentBlock().Hash() == lastCanon.Hash() {
 			bc.chainHeadFeed.Send(ChainHeadEvent{lastCanon})
+			log.Info("[sync debug] blockchain.insertChain: fired ChainHeadEvent", "number", lastCanon.Number(), "hash", lastCanon.Hash())
 		}
 	}()
 	// Start the parallel header verifier
@@ -1931,6 +1937,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 	it := newInsertIterator(chain, results, bc.validator)
 	block, err := it.next()
 
+	log.Info("[sync debug] blockchain.insertChain: verify header and created itetator", "err", err)
+
 	// Update the block import meter; it will just record chains we've received
 	// from other peers. (Note that the actual chain which gets imported would be
 	// quite low).
@@ -1938,6 +1946,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 
 	// Check the validity of incoming chain
 	isValid, err1 := bc.forker.ValidateReorg(bc.CurrentBlock(), headers)
+	log.Info("[sync debug] blockchain.insertChain: validate reorg", "current", bc.CurrentBlock().Number.Uint64(), "incoming first", headers[0].Number.Uint64(), "incoming last", headers[len(headers)-1].Number.Uint64(), "valid", isValid, "err", err1)
 	if err1 != nil {
 		return it.index, err1
 	}
@@ -1962,6 +1971,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 
 		for block != nil && bc.skipBlock(err, it) {
 			reorg, err = bc.forker.ReorgNeeded(current, block.Header())
+			log.Info("[sync debug] blockchain.insertChain: reorg needed", "current", current.Number.Uint64(), "incoming", block.Header().Number.Uint64(), "reorg", reorg, "err", err)
 			if err != nil {
 				return it.index, err
 			}
@@ -1973,6 +1983,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 				// the external consensus engine), but in order to prevent the unnecessary
 				// reorgs when importing known blocks, the special case is handled here.
 				if block.NumberU64() > current.Number.Uint64() || bc.GetCanonicalHash(block.NumberU64()) != block.Hash() {
+					log.Info("[sync debug] blockchain.insertChain: reorg needed, switch to import mode", "number", block.Number(), "hash", block.Hash(), "current", current.Number.Uint64())
 					break
 				}
 			}
@@ -2004,6 +2015,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		}
 		// Falls through to the block import
 	}
+
+	log.Info("[sync debug] blockchain.insertChain: left trimmed the chain", "next block", block.Number().Uint64(), "err", err)
 
 	switch {
 	// First block is pruned
@@ -2041,6 +2054,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 	// ErrKnownBlock is allowed here since some known blocks
 	// still need re-execution to generate snapshots that are missing
 	case err != nil && !errors.Is(err, ErrKnownBlock):
+		log.Debug("Aborting block processing", "err", err)
 		bc.futureBlocks.Remove(block.Hash())
 
 		stats.ignored += len(it.chain)
@@ -2049,6 +2063,9 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 
 		return it.index, err
 	}
+
+	log.Info("[sync debug] blockchain.insertChain: done acting upon error", "number", block.Number().Uint64(), "hash", block.Hash())
+
 	// No validation errors for the first block (or chain prefix skipped)
 	var activeState *state.StateDB
 	defer func() {
@@ -2080,6 +2097,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 	}
 
 	for ; block != nil && err == nil || errors.Is(err, ErrKnownBlock); block, err = it.next() {
+		log.Info("[sync debug] blockchain.insertChain: processing block", "number", block.Number().Uint64(), "hash", block.Hash(), "err", err)
+
 		// If the chain is terminating, stop processing blocks
 		if bc.insertStopped() {
 			log.Debug("Abort during block processing")
@@ -2125,6 +2144,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 				return it.index, err
 			}
 
+			log.Info("[sync debug] blockchain.insertChain: writing known block", "number", block.Number(), "hash", block.Hash())
+
 			stats.processed++
 
 			// We can assume that logs are empty here, since the only way for consecutive
@@ -2167,6 +2188,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		receipts, logs, usedGas, statedb, err := bc.ProcessBlock(block, parent)
 		activeState = statedb
 
+		log.Info("[sync debug] done processing block", "number", block.Number().Uint64(), "hash", block.Hash(), "err", err)
+
 		if err != nil {
 			bc.reportBlock(block, receipts, err)
 			followupInterrupt.Store(true)
@@ -2189,6 +2212,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 
 			return it.index, err
 		}
+
+		log.Info("[sync debug] done validating state", "number", block.Number().Uint64(), "hash", block.Hash(), "err", err)
 
 		vtime := time.Since(vstart)
 		proctime := time.Since(start) // processing + validation
@@ -2221,6 +2246,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		} else {
 			status, err = bc.writeBlockAndSetHead(context.Background(), block, receipts, logs, statedb, false)
 		}
+
+		log.Info("[sync debug] done writing block", "number", block.Number().Uint64(), "hash", block.Hash(), "status", status, "err", err)
 
 		followupInterrupt.Store(true)
 
