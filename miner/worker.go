@@ -497,7 +497,7 @@ func (w *worker) newWorkLoop(ctx context.Context, recommit time.Duration) {
 			interrupt.Store(s)
 		}
 
-		log.Info("[sync debug] worker.newWorkLoop: about to commit")
+		log.Info("[sync debug] worker.newWorkLoop: about to commit", "len", len(w.newWorkCh))
 		interrupt = new(atomic.Int32)
 		select {
 		case w.newWorkCh <- &newWorkReq{interrupt: interrupt, timestamp: timestamp, ctx: ctx, noempty: noempty}:
@@ -565,6 +565,7 @@ func (w *worker) newWorkLoop(ctx context.Context, recommit time.Duration) {
 			}
 
 		case adjust := <-w.resubmitAdjustCh:
+			log.Info("[sync debug] worker.newWorkLoop: received resubmit adjustment", "len", len(w.resubmitAdjustCh))
 			// Adjust resubmit interval by feedback.
 			if adjust.inc {
 				before := recommit
@@ -604,7 +605,7 @@ func (w *worker) mainLoop(ctx context.Context) {
 	for {
 		select {
 		case req := <-w.newWorkCh:
-			log.Info("[sync debug] worker.mainLoop: received new work request")
+			log.Info("[sync debug] worker.mainLoop: received new work request", "len", len(w.newWorkCh))
 			if w.chainConfig.ChainID.Cmp(params.BorMainnetChainConfig.ChainID) == 0 || w.chainConfig.ChainID.Cmp(params.MumbaiChainConfig.ChainID) == 0 {
 				if w.eth.PeerCount() > 0 {
 					//nolint:contextcheck
@@ -1611,8 +1612,8 @@ func (w *worker) commitWork(ctx context.Context, interrupt *atomic.Int32, noempt
 	case err == nil:
 		// The entire block is filled, decrease resubmit interval in case
 		// of current interval is larger than the user-specified one.
+		log.Info("[sync debug] worker.commitWork: sending to resubmitAdjustCh", "len", len(w.resubmitAdjustCh))
 		w.resubmitAdjustCh <- &intervalAdjust{inc: false}
-		log.Info("[sync debug] worker.commitWork: done sending to resubmitAdjustCh")
 
 	case errors.Is(err, errBlockInterruptedByRecommit):
 		// Notify resubmit loop to increase resubmitting interval if the
@@ -1644,6 +1645,8 @@ func (w *worker) commitWork(ctx context.Context, interrupt *atomic.Int32, noempt
 	if w.current != nil {
 		w.current.discard()
 	}
+
+	log.Info("[sync debug] worker.commitWork: exiting from commitWork", "number", work.header.Number.Uint64())
 
 	w.current = work
 }
