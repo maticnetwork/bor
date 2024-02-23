@@ -497,6 +497,7 @@ func (w *worker) newWorkLoop(ctx context.Context, recommit time.Duration) {
 			interrupt.Store(s)
 		}
 
+		log.Info("[sync debug] worker.newWorkLoop: about to commit", "len", len(w.newWorkCh))
 		interrupt = new(atomic.Int32)
 		select {
 		case w.newWorkCh <- &newWorkReq{interrupt: interrupt, timestamp: timestamp, ctx: ctx, noempty: noempty}:
@@ -505,6 +506,7 @@ func (w *worker) newWorkLoop(ctx context.Context, recommit time.Duration) {
 		}
 		timer.Reset(recommit)
 		w.newTxs.Store(0)
+		log.Info("[sync debug] worker.newWorkLoop: done commit")
 	}
 	// clearPending cleans the stale pending tasks.
 	clearPending := func(number uint64) {
@@ -529,10 +531,12 @@ func (w *worker) newWorkLoop(ctx context.Context, recommit time.Duration) {
 			commit(false, commitInterruptNewHead)
 
 		case head := <-w.chainHeadCh:
+			log.Info("[sync debug] worker.newWorkLoop: received new head in chain head channel", "head", head.Block.Number().Uint64(), "hash", head.Block.Hash())
 			clearPending(head.Block.NumberU64())
 
 			timestamp = time.Now().Unix()
 			commit(false, commitInterruptNewHead)
+			log.Info("[sync debug] worker.newWorkLoop: done committing", "head", head.Block.Number().Uint64(), "hash", head.Block.Hash())
 
 		case <-timer.C:
 			// If sealing is running resubmit a new work cycle periodically to pull in
@@ -561,6 +565,7 @@ func (w *worker) newWorkLoop(ctx context.Context, recommit time.Duration) {
 			}
 
 		case adjust := <-w.resubmitAdjustCh:
+			log.Info("[sync debug] worker.newWorkLoop: received resubmit adjustment", "len", len(w.resubmitAdjustCh))
 			// Adjust resubmit interval by feedback.
 			if adjust.inc {
 				before := recommit
@@ -600,6 +605,7 @@ func (w *worker) mainLoop(ctx context.Context) {
 	for {
 		select {
 		case req := <-w.newWorkCh:
+			log.Info("[sync debug] worker.mainLoop: received new work request", "len", len(w.newWorkCh))
 			if w.chainConfig.ChainID.Cmp(params.BorMainnetChainConfig.ChainID) == 0 || w.chainConfig.ChainID.Cmp(params.MumbaiChainConfig.ChainID) == 0 {
 				if w.eth.PeerCount() > 0 {
 					//nolint:contextcheck
@@ -609,6 +615,7 @@ func (w *worker) mainLoop(ctx context.Context) {
 				//nolint:contextcheck
 				w.commitWork(req.ctx, req.interrupt, req.noempty, req.timestamp)
 			}
+			log.Info("[sync debug] worker.mainLoop: done acting upon new work request")
 
 		case req := <-w.getWorkCh:
 			block, fees, err := w.generateWork(req.ctx, req.params)
@@ -1566,6 +1573,8 @@ func (w *worker) commitWork(ctx context.Context, interrupt *atomic.Int32, noempt
 		return
 	}
 
+	log.Info("[sync debug] worker.commitWork: done preparing work", "number", work.header.Number.Uint64())
+
 	// nolint:contextcheck
 	var interruptCtx = context.Background()
 
@@ -1597,10 +1606,13 @@ func (w *worker) commitWork(ctx context.Context, interrupt *atomic.Int32, noempt
 	// Fill pending transactions from the txpool into the block.
 	err = w.fillTransactions(ctx, interrupt, work, interruptCtx)
 
+	log.Info("[sync debug] worker.commitWork: fill transactions completed", "err", err)
+
 	switch {
 	case err == nil:
 		// The entire block is filled, decrease resubmit interval in case
 		// of current interval is larger than the user-specified one.
+		log.Info("[sync debug] worker.commitWork: sending to resubmitAdjustCh", "len", len(w.resubmitAdjustCh))
 		w.resubmitAdjustCh <- &intervalAdjust{inc: false}
 
 	case errors.Is(err, errBlockInterruptedByRecommit):
@@ -1633,6 +1645,8 @@ func (w *worker) commitWork(ctx context.Context, interrupt *atomic.Int32, noempt
 	if w.current != nil {
 		w.current.discard()
 	}
+
+	log.Info("[sync debug] worker.commitWork: exiting from commitWork", "number", work.header.Number.Uint64())
 
 	w.current = work
 }
