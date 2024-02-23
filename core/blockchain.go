@@ -1947,7 +1947,11 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 
 	// Check the validity of incoming chain
 	isValid, err1 := bc.forker.ValidateReorg(bc.CurrentBlock(), headers)
-	log.Info("[sync debug] blockchain.insertChain: validate reorg", "current", bc.CurrentBlock().Number.Uint64(), "incoming first", headers[0].Number.Uint64(), "incoming last", headers[len(headers)-1].Number.Uint64(), "valid", isValid, "err", err1)
+	if len(headers) == 0 {
+		log.Info("[sync debug] blockchain.insertChain: validate reorg, empty headers", "current", bc.CurrentBlock().Number.Uint64(), "valid", isValid, "err", err1)
+	} else {
+		log.Info("[sync debug] blockchain.insertChain: validate reorg", "current", bc.CurrentBlock().Number.Uint64(), "incoming first", headers[0].Number.Uint64(), "incoming last", headers[len(headers)-1].Number.Uint64(), "valid", isValid, "err", err1)
+	}
 	if err1 != nil {
 		return it.index, err1
 	}
@@ -2017,7 +2021,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		// Falls through to the block import
 	}
 
-	log.Info("[sync debug] blockchain.insertChain: left trimmed the chain", "next block", block.Number().Uint64(), "err", err)
+	log.Info("[sync debug] blockchain.insertChain: left trimmed the chain", "err", err)
 
 	switch {
 	// First block is pruned
@@ -2065,7 +2069,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		return it.index, err
 	}
 
-	log.Info("[sync debug] blockchain.insertChain: done acting upon error", "number", block.Number().Uint64(), "hash", block.Hash())
+	log.Info("[sync debug] blockchain.insertChain: done acting upon error")
 
 	// No validation errors for the first block (or chain prefix skipped)
 	var activeState *state.StateDB
