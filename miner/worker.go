@@ -536,7 +536,7 @@ func (w *worker) newWorkLoop(ctx context.Context, recommit time.Duration) {
 
 			timestamp = time.Now().Unix()
 			commit(false, commitInterruptNewHead)
-			log.Info("[sync debug] worker.newWorkLoop: done commiting", "head", head.Block.Number().Uint64(), "hash", head.Block.Hash())
+			log.Info("[sync debug] worker.newWorkLoop: done committing", "head", head.Block.Number().Uint64(), "hash", head.Block.Hash())
 
 		case <-timer.C:
 			// If sealing is running resubmit a new work cycle periodically to pull in
