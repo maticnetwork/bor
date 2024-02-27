@@ -21,11 +21,11 @@ jobs:
       with:
         version: '>= 363.0.0'
 
-    # - uses: 'google-github-actions/auth@v2'
-    #   with:
-    #     credentials_json: '${{ secrets.GOOGLE_CREDENTIALS }}'
-    #     project_id: 'prj-polygonlabs-devtools-dev'
-    #     service_account: 'ci-k8s-cluster@prj-polygonlabs-devtools-dev.iam.gserviceaccount.com'
+    - uses: 'google-github-actions/auth@v2'
+      with:
+        credentials_json: '${{ secrets.GOOGLE_CREDENTIALS }}'
+        project_id: 'prj-polygonlabs-devtools-dev'
+        service_account: 'ci-k8s-cluster@prj-polygonlabs-devtools-dev.iam.gserviceaccount.com'
 
     - name: Install kubectl
       run: |
