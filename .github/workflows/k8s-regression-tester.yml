@@ -25,7 +25,6 @@ jobs:
       with:
         credentials_json: '${{ secrets.GOOGLE_CREDENTIALS }}'
         project_id: 'prj-polygonlabs-devtools-dev'
-        service_account: 'ci-k8s-cluster@prj-polygonlabs-devtools-dev.iam.gserviceaccount.com'
 
     - name: Install kubectl and gcloud kubectl auth plugin
       run: |
