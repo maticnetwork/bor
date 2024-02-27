@@ -45,8 +45,6 @@ jobs:
     - name: Deploy PoS devnet to isolated GKE namespace
       run: |
         cd polygon-devnets/kubernetes/pos
-        echo "${{ secrets.GOOGLE_CREDENTIALS }}" > /tmp/credentials.json
-        gcloud auth activate-service-account ci-k8s-cluster@prj-polygonlabs-devtools-dev.iam.gserviceaccount.com --key-file=/tmp/credentials.json --project=prj-polygonlabs-devtools-dev
         gcloud container clusters get-credentials ci-cluster-1 --region europe-west2
         # metrics must be tagged by unique namespace (devnet name / pre-release id)
         # deployment must also create custom monitors by namespace
