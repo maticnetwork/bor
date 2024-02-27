@@ -27,10 +27,10 @@ jobs:
         project_id: 'prj-polygonlabs-devtools-dev'
         service_account: 'ci-k8s-cluster@prj-polygonlabs-devtools-dev.iam.gserviceaccount.com'
 
-    - name: Install kubectl
+    - name: Install kubectl and gcloud kubectl auth plugin
       run: |
         curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" \
-        && sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+        && sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl && gcloud components install gke-gcloud-auth-plugin
 
     - name: Install tomlq for config file preparation
       run: |
