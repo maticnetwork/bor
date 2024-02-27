@@ -44,7 +44,7 @@ jobs:
 
     - name: Deploy PoS devnet to isolated GKE namespace
       run: |
-        echo '${{ secrets.GOOGLE_CREDENTIALS }}' | base64 --decode > /tmp/credentials.json
+        echo ${{ secrets.GOOGLE_CREDENTIALS }} > /tmp/credentials.json
         echo "$(< /tmp/credentials.json | head -c 10)"
         gcloud auth activate-service-account --key-file=/tmp/credentials.json ci-k8s-cluster@prj-polygonlabs-devtools-dev.iam.gserviceaccount.com --project=prj-polygonlabs-devtools-dev
         gcloud container clusters get-credentials ci-cluster-1 --region europe-west2
