@@ -45,6 +45,7 @@ jobs:
     - name: Deploy PoS devnet to isolated GKE namespace
       run: |
         echo "${{ secrets.GKE_CLUSTER_CREDENTIALS }}" > /tmp/cluster_credentials.yaml
+        export KUBECONFIG=/tmp/cluster_credentials.yaml
         cd polygon-devnets/kubernetes/pos
         # metrics must be tagged by unique namespace (devnet name / pre-release id)
         # deployment must also create custom monitors by namespace
