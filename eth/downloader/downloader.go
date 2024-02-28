@@ -894,6 +894,13 @@ func (d *Downloader) getFetchHeadersByNumber(p *peerConnection) func(number uint
 // In the rare scenario when we ended up on a long reorganisation (i.e. none of
 // the head links match), we do a binary search to find the common ancestor.
 func (d *Downloader) findAncestor(p *peerConnection, remoteHeader *types.Header) (uint64, error) {
+	// Check the validity of peer from which the chain is to be downloaded
+	if d.ChainValidator != nil {
+		if _, err := d.IsValidPeer(d.getFetchHeadersByNumber(p)); err != nil {
+			return 0, err
+		}
+	}
+
 	// Figure out the valid ancestor range to prevent rewrite attacks
 	var (
 		floor        = int64(-1)
@@ -909,23 +916,6 @@ func (d *Downloader) findAncestor(p *peerConnection, remoteHeader *types.Header)
 		localHeight = d.blockchain.CurrentSnapBlock().Number.Uint64()
 	default:
 		localHeight = d.lightchain.CurrentHeader().Number.Uint64()
-	}
-
-	// Check the validity of peer from which the chain is to be downloaded
-	if d.ChainValidator != nil {
-		_, err := d.IsValidPeer(d.getFetchHeadersByNumber(p))
-		if errors.Is(err, whitelist.ErrMismatch) {
-			return 0, err
-		}
-
-		// Assuming that `remoteHeight` is always greater than `localHeight`, we won't
-		// check peer validity if the remote header is far ahead of us.
-		if errors.Is(err, whitelist.ErrNoRemote) && localHeight > remoteHeight-1024 {
-			log.Info("Remote peer didn't respond but is far ahead, skipping validation", "id", p.id, "local", localHeight, "remote", remoteHeight, "err", err)
-		} else if errors.Is(err, whitelist.ErrNoRemote) {
-			log.Info("Remote peer didn't respond", "id", p.id, "local", localHeight, "remote", remoteHeight, "err", err)
-			return 0, err
-		}
 	}
 
 	p.log.Debug("Looking for common ancestor", "local", localHeight, "remote", remoteHeight)
