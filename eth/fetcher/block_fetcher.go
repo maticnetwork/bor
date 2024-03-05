@@ -117,7 +117,7 @@ type headerFilterTask struct {
 	peer          string          // The source peer of block headers
 	headers       []*types.Header // Collection of headers to filter
 	time          time.Time       // Arrival time of the headers
-	announcedTime time.Time
+	announcedTime time.Time       // Announcement time of the headers
 }
 
 // bodyFilterTask represents a batch of block bodies (transactions and uncles)
@@ -199,34 +199,38 @@ type BlockFetcher struct {
 	fetchingHook       func([]common.Hash)               // Method to call upon starting a block (eth/61) or header (eth/62) fetch
 	completingHook     func([]common.Hash)               // Method to call upon starting a block body fetch (eth/62)
 	importedHook       func(*types.Header, *types.Block) // Method to call upon successful header or block import (both eth/61 and eth/62)
+
+	// Logging
+	enableBlockTracking bool // Whether to log block tracking information
 }
 
 // NewBlockFetcher creates a block fetcher to retrieve blocks based on hash announcements.
-func NewBlockFetcher(light bool, getHeader HeaderRetrievalFn, getBlock blockRetrievalFn, verifyHeader headerVerifierFn, broadcastBlock blockBroadcasterFn, chainHeight chainHeightFn, insertHeaders headersInsertFn, insertChain chainInsertFn, dropPeer peerDropFn) *BlockFetcher {
+func NewBlockFetcher(light bool, getHeader HeaderRetrievalFn, getBlock blockRetrievalFn, verifyHeader headerVerifierFn, broadcastBlock blockBroadcasterFn, chainHeight chainHeightFn, insertHeaders headersInsertFn, insertChain chainInsertFn, dropPeer peerDropFn, enableBlockTracking bool) *BlockFetcher {
 	return &BlockFetcher{
-		light:          light,
-		notify:         make(chan *blockAnnounce),
-		inject:         make(chan *blockOrHeaderInject),
-		headerFilter:   make(chan chan *headerFilterTask),
-		bodyFilter:     make(chan chan *bodyFilterTask),
-		done:           make(chan common.Hash),
-		quit:           make(chan struct{}),
-		announces:      make(map[string]int),
-		announced:      make(map[common.Hash][]*blockAnnounce),
-		fetching:       make(map[common.Hash]*blockAnnounce),
-		fetched:        make(map[common.Hash][]*blockAnnounce),
-		completing:     make(map[common.Hash]*blockAnnounce),
-		queue:          prque.New[int64, *blockOrHeaderInject](nil),
-		queues:         make(map[string]int),
-		queued:         make(map[common.Hash]*blockOrHeaderInject),
-		getHeader:      getHeader,
-		getBlock:       getBlock,
-		verifyHeader:   verifyHeader,
-		broadcastBlock: broadcastBlock,
-		chainHeight:    chainHeight,
-		insertHeaders:  insertHeaders,
-		insertChain:    insertChain,
-		dropPeer:       dropPeer,
+		light:               light,
+		notify:              make(chan *blockAnnounce),
+		inject:              make(chan *blockOrHeaderInject),
+		headerFilter:        make(chan chan *headerFilterTask),
+		bodyFilter:          make(chan chan *bodyFilterTask),
+		done:                make(chan common.Hash),
+		quit:                make(chan struct{}),
+		announces:           make(map[string]int),
+		announced:           make(map[common.Hash][]*blockAnnounce),
+		fetching:            make(map[common.Hash]*blockAnnounce),
+		fetched:             make(map[common.Hash][]*blockAnnounce),
+		completing:          make(map[common.Hash]*blockAnnounce),
+		queue:               prque.New[int64, *blockOrHeaderInject](nil),
+		queues:              make(map[string]int),
+		queued:              make(map[common.Hash]*blockOrHeaderInject),
+		getHeader:           getHeader,
+		getBlock:            getBlock,
+		verifyHeader:        verifyHeader,
+		broadcastBlock:      broadcastBlock,
+		chainHeight:         chainHeight,
+		insertHeaders:       insertHeaders,
+		insertChain:         insertChain,
+		dropPeer:            dropPeer,
+		enableBlockTracking: enableBlockTracking,
 	}
 }
 
@@ -929,26 +933,28 @@ func (f *BlockFetcher) importBlocks(peer string, block *types.Block) {
 			return
 		}
 
-		// Log the insertion event
-		var (
-			msg         string
-			delayInMs   uint64
-			prettyDelay common.PrettyDuration
-		)
+		if f.enableBlockTracking {
+			// Log the insertion event
+			var (
+				msg         string
+				delayInMs   uint64
+				prettyDelay common.PrettyDuration
+			)
 
-		if block.AnnouncedAt != nil {
-			msg = "p2p debug: Inserted new block with announcement"
-			delayInMs = uint64(time.Since(*block.AnnouncedAt).Milliseconds())
-			prettyDelay = common.PrettyDuration(time.Since(*block.AnnouncedAt))
-		} else {
-			msg = "p2p debug: Inserted new block without announcement"
-			delayInMs = uint64(time.Since(block.ReceivedAt).Milliseconds())
-			prettyDelay = common.PrettyDuration(time.Since(block.ReceivedAt))
+			if block.AnnouncedAt != nil {
+				msg = "[block tracker] Inserted new block with announcement"
+				delayInMs = uint64(time.Since(*block.AnnouncedAt).Milliseconds())
+				prettyDelay = common.PrettyDuration(time.Since(*block.AnnouncedAt))
+			} else {
+				msg = "[block tracker] Inserted new block without announcement"
+				delayInMs = uint64(time.Since(block.ReceivedAt).Milliseconds())
+				prettyDelay = common.PrettyDuration(time.Since(block.ReceivedAt))
+			}
+
+			totalDelay := uint64(time.Now().UnixMilli()) - uint64(block.Time()*1000)
+
+			log.Info(msg, "number", block.Number().Uint64(), "hash", hash, "delayInMs", delayInMs, "delay", prettyDelay, "totalDelay", totalDelay)
 		}
-
-		totalDelay := uint64(time.Now().UnixMilli()) - uint64(block.Time()*1000)
-
-		log.Info(msg, "number", block.Number().Uint64(), "hash", hash, "delay", delayInMs, "prettyDelay", prettyDelay, "totalDelay", totalDelay)
 
 		// If import succeeded, broadcast the block
 		blockAnnounceOutTimer.UpdateSince(block.ReceivedAt)
