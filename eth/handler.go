@@ -693,8 +693,8 @@ func (h *handler) minedBroadcastLoop() {
 	for obj := range h.minedBlockSub.Chan() {
 		if ev, ok := obj.Data.(core.NewMinedBlockEvent); ok {
 			if h.enableBlockTracking {
-				delayInMs := uint64(time.Now().UnixMilli()) - uint64(ev.Block.Time()*1000)
-				delayInNs := uint64(time.Now().UnixNano()) - uint64(ev.Block.Time()*1000000000)
+				delayInMs := uint64(time.Now().UnixMilli()) - ev.Block.Time()*1000
+				delayInNs := uint64(time.Now().UnixNano()) - ev.Block.Time()*1000000000
 				log.Info("[block tracker] Broadcasting mined block", "number", ev.Block.NumberU64(), "hash", ev.Block.Hash(), "delayInMs", delayInMs, "delayInNs", delayInNs, "blockTime", ev.Block.Time(), "now", time.Now().Unix())
 			}
 			h.BroadcastBlock(ev.Block, true)  // First propagate block to peers
