@@ -1638,7 +1638,7 @@ github.com/mailgun/raymond/v2 v2.0.46/go.mod h1:lsgvL50kgt1ylcFJYZiULi5fjPBkkhNf
 github.com/mailru/easyjson v0.0.0-20190614124828-94de47d64c63/go.mod h1:C1wdFJiN94OJF2b5HbByQZoLdCWB1Yqtg26g4irojpc=
 github.com/mailru/easyjson v0.0.0-20190626092158-b2ccc519800e/go.mod h1:C1wdFJiN94OJF2b5HbByQZoLdCWB1Yqtg26g4irojpc=
 github.com/mailru/easyjson v0.7.7/go.mod h1:xzfreul335JAWq5oZzymOObrkdz5UnU4kGfJJLY9Nlc=
-github.com/maticnetwork/bor v1.2.6-beta/go.mod h1:84m4hX8Ru+n3p/WedvrPpmrjdweSMwGJlB1SjCZiP/M=
+github.com/maticnetwork/bor v1.2.7/go.mod h1:84m4hX8Ru+n3p/WedvrPpmrjdweSMwGJlB1SjCZiP/M=
 github.com/maticnetwork/cosmos-sdk v0.38.4 h1:PAfkMXzHDHJoAf4bXQL4UWgwbu/U3yYuXoXxPhXdpBw=
 github.com/maticnetwork/cosmos-sdk v0.38.4/go.mod h1:NbuVdUoqlRF6RrFJp27hpbqSoRB8cJJfUxCzUJWtaLA=
 github.com/maticnetwork/crand v1.0.2 h1:Af0tAivC8zrxXDpGWNWVT/0s1fOz8w0eRbahZgURS8I=
