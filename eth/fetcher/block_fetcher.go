@@ -117,7 +117,7 @@ type headerFilterTask struct {
 	peer          string          // The source peer of block headers
 	headers       []*types.Header // Collection of headers to filter
 	time          time.Time       // Arrival time of the headers
-	announcedTime time.Time       // Announcement time of the headers
+	announcedTime time.Time       // Announcement time of the availability of the block
 }
 
 // bodyFilterTask represents a batch of block bodies (transactions and uncles)
@@ -127,7 +127,7 @@ type bodyFilterTask struct {
 	transactions  [][]*types.Transaction // Collection of transactions per block bodies
 	uncles        [][]*types.Header      // Collection of uncles per block bodies
 	time          time.Time              // Arrival time of the blocks' contents
-	announcedTime time.Time
+	announcedTime time.Time              // Announcement time of the availability of the block
 }
 
 // blockOrHeaderInject represents a schedules import operation.
