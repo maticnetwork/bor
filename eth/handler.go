@@ -97,7 +97,7 @@ type handlerConfig struct {
 	checker             ethereum.ChainValidator
 	RequiredBlocks      map[uint64]common.Hash // Hard coded map of required block hashes for sync challenges
 	EthAPI              *ethapi.BlockChainAPI  // EthAPI to interact
-	enableBlockTracking bool                   // Whether to log block tracking information
+	enableBlockTracking bool                   // Whether to log information collected while tracking block lifecycle
 }
 
 type handler struct {

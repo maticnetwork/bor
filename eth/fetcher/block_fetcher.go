@@ -201,7 +201,7 @@ type BlockFetcher struct {
 	importedHook       func(*types.Header, *types.Block) // Method to call upon successful header or block import (both eth/61 and eth/62)
 
 	// Logging
-	enableBlockTracking bool // Whether to log block tracking information
+	enableBlockTracking bool // Whether to log information collected while tracking block lifecycle
 }
 
 // NewBlockFetcher creates a block fetcher to retrieve blocks based on hash announcements.
