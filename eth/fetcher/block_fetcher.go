@@ -951,9 +951,10 @@ func (f *BlockFetcher) importBlocks(peer string, block *types.Block) {
 				prettyDelay = common.PrettyDuration(time.Since(block.ReceivedAt))
 			}
 
-			totalDelay := uint64(time.Now().UnixMilli()) - block.Time()*1000
+			totalDelayInMs := uint64(time.Now().UnixMilli()) - block.Time()*1000
+			totalDelay := common.PrettyDuration(time.Millisecond * time.Duration(totalDelayInMs))
 
-			log.Info(msg, "number", block.Number().Uint64(), "hash", hash, "delayInMs", delayInMs, "delay", prettyDelay, "totalDelay", totalDelay)
+			log.Info(msg, "number", block.Number().Uint64(), "hash", hash, "delay", prettyDelay, "delayInMs", delayInMs, "totalDelay", totalDelay, "totalDelayInMs", totalDelayInMs)
 		}
 
 		// If import succeeded, broadcast the block
