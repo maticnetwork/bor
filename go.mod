@@ -61,7 +61,7 @@ require (
 	github.com/karalabe/usb v0.0.3-0.20230711191512-61db3e06439c
 	github.com/kylelemons/godebug v1.1.0
 	github.com/maticnetwork/crand v1.0.2
-	github.com/maticnetwork/heimdall v1.0.3
+	github.com/maticnetwork/heimdall v1.0.4
 	github.com/maticnetwork/polyproto v0.0.3-0.20230216113155-340ea926ca53
 	github.com/mattn/go-colorable v0.1.13
 	github.com/mattn/go-isatty v0.0.20
@@ -172,7 +172,7 @@ require (
 	google.golang.org/protobuf v1.31.0
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gotest.tools v2.2.0+incompatible
-	pgregory.net/rapid v0.4.8
+	pgregory.net/rapid v1.1.0
 	rsc.io/tmplfunc v0.0.3 // indirect
 )
 
