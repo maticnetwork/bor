@@ -85,4 +85,5 @@ jobs:
                     | jq -r '.overall_state')
           echo "K8S DEVNET HEALTH STATUS: $STATUS"
           current_minute=$(date +'%M')
+          sleep 60
         done
