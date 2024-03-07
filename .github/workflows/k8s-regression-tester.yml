@@ -40,24 +40,49 @@ jobs:
         eval `ssh-agent -s`
         ssh-add - <<< '${{ secrets.SSH_PRIVATE_KEY }}'
         git clone -b fix/pos_k8s_devnets git@github.com:maticnetwork/polygon-devnets.git
+        
+    - name: Clone private panoptichain repo
+      run: |
+        eval `ssh-agent -s`
+        ssh-add - <<< '${{ secrets.SSH_PRIVATE_KEY_PANOPTICHAIN }}'
+        git clone -b dan/k8s_panoptichain git@github.com:0xPolygon/panoptichain.git
 
     - name: Deploy PoS devnet to isolated GKE namespace
       run: |
-        echo "${{ secrets.GKE_CLUSTER_CREDENTIALS }}" > /tmp/cluster_credentials.yaml
-        export KUBECONFIG=/tmp/cluster_credentials.yaml
+        mkdir -p ~/.kube
+        echo "${{ secrets.GKE_CLUSTER_CREDENTIALS }}" > ~/.kube/regression-cluster.yaml
+        export KUBECONFIG=~/.kube/regression-cluster.yaml
         cd polygon-devnets/kubernetes/pos
-        # metrics must be tagged by unique namespace (devnet name / pre-release id)
-        # deployment must also create custom monitors by namespace
         kubectl apply -k overlays/gcr --namespace=pos --context=gke_prj-polygonlabs-devtools-dev_europe-west2_ci-cluster-1
+        
+    - name: Deploy panoptichain, prometheus, grafana stack for metric tracking
+      run: |
+        cd panoptichain
+        export KUBECONFIG=~/.kube/regression-cluster.yaml
+        kubectl apply -f grafana-service.yaml,panoptichain-service.yaml,prometheus-service.yaml,grafana-deployment.yaml,grafana-claim0-persistentvolumeclaim.yaml,panoptichain-deployment.yaml,prometheus-deployment.yaml,prometheus-claim0-persistentvolumeclaim.yaml --namespace=pos --context=gke_prj-polygonlabs-devtools-dev_europe-west2_ci-cluster-1
+        
+    - name: Finally, deploy datadog-agent via helm chart
+      run: |
+        cd panoptichain/terraform
+        terraform init
+        terraform apply -target=helm_release.datadog_agent -var="datadog_api_key=${{ secrets.DATADOG_API_KEY }}" -var="coralogix_api_key=${{ secrets.CORALOGIX_API_KEY }}"
 
     - name: Auto-apply load and report any regressions here
       run: |
+        MONITOR_ID="140974014"  # K8S DEVNET: COMPOSITE MONITOR ID
+        DATADOG_API_KEY="${{ secrets.DATADOG_API_KEY }}"
+        DATADOG_APP_KEY="${{ secrets.DATADOG_APP_KEY }}"
+
         current_minute=$(date +'%M')
-        end_minute=$((current_minute + 60)) # Corrected the missing closing parenthesis
+        end_minute=$((current_minute + 60))
         
         while [ $current_minute -lt $end_minute ]; do
-          # TODO: call datadog API and get composite monitor status
-          echo "REGRESSION TESTING RESULTS... PRINTED HERE... "
-          sleep 600
+          STATUS=$(curl -X GET "https://api.datadoghq.com/api/v1/monitor/${MONITOR_ID}" \
+                    -H "Content-Type: application/json" \
+                    -H "DD-API-KEY: ${DATADOG_API_KEY}" \
+                    -H "DD-APPLICATION-KEY: ${DATADOG_APP_KEY}" \
+                    -s \
+                    | jq -r '.overall_state')
+          echo "K8S DEVNET HEALTH STATUS: $STATUS"
           current_minute=$(date +'%M')
         done
