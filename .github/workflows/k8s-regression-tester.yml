@@ -48,60 +48,62 @@ jobs:
         ssh-add - <<< '${{ secrets.SSH_PRIVATE_KEY_PANOPTICHAIN }}'
         git clone -b dan/k8s_panoptichain git@github.com:0xPolygon/panoptichain.git
 
-    - name: Deploy PoS devnet to isolated GKE namespace
-      run: |
-        mkdir -p ~/.kube
-        echo "${{ secrets.GKE_CLUSTER_CREDENTIALS }}" > ~/.kube/regression-cluster.yaml
-        export KUBECONFIG=~/.kube/regression-cluster.yaml
-        cd polygon-devnets/kubernetes/pos
-        kubectl apply -k overlays/gcr --namespace=pos --context=gke_prj-polygonlabs-devtools-dev_europe-west2_ci-cluster-1
-        
-    - name: Deploy panoptichain, prometheus, grafana stack for metric tracking
-      run: |
-        cd panoptichain
-        export KUBECONFIG=~/.kube/regression-cluster.yaml
-        kubectl apply -f grafana-service.yaml,panoptichain-service.yaml,prometheus-service.yaml,grafana-deployment.yaml,grafana-claim0-persistentvolumeclaim.yaml,panoptichain-deployment.yaml,prometheus-deployment.yaml,prometheus-claim0-persistentvolumeclaim.yaml --namespace=pos --context=gke_prj-polygonlabs-devtools-dev_europe-west2_ci-cluster-1
-        
-    - name: Finally, deploy datadog-agent via helm chart
-      run: |
-        cd panoptichain/terraform
-        terraform init
-        terraform apply -target=helm_release.datadog_agent -var="datadog_api_key=${{ secrets.DATADOG_API_KEY }}" -var="coralogix_api_key=${{ secrets.CORALOGIX_API_KEY }}"
+    # - name: Deploy PoS devnet to isolated GKE namespace
+    #   run: |
+    #     mkdir -p ~/.kube
+    #     echo "${{ secrets.GKE_CLUSTER_CREDENTIALS }}" > ~/.kube/regression-cluster.yaml
+    #     export KUBECONFIG=~/.kube/regression-cluster.yaml
+    #     cd polygon-devnets/kubernetes/pos
+    #     kubectl apply -k overlays/gcr --namespace=pos --context=gke_prj-polygonlabs-devtools-dev_europe-west2_ci-cluster-1
+    # 
+    # - name: Deploy panoptichain, prometheus, grafana stack for metric tracking
+    #   run: |
+    #     cd panoptichain
+    #     export KUBECONFIG=~/.kube/regression-cluster.yaml
+    #     kubectl apply -f grafana-service.yaml,panoptichain-service.yaml,prometheus-service.yaml,grafana-deployment.yaml,grafana-claim0-persistentvolumeclaim.yaml,panoptichain-deployment.yaml,prometheus-deployment.yaml,prometheus-claim0-persistentvolumeclaim.yaml --namespace=pos --context=gke_prj-polygonlabs-devtools-dev_europe-west2_ci-cluster-1
+    # 
+    # - name: Finally, deploy datadog-agent via helm chart
+    #   run: |
+    #     cd panoptichain/terraform
+    #     terraform init
+    #     terraform apply -target=helm_release.datadog_agent -var="datadog_api_key=${{ secrets.DATADOG_API_KEY }}" -var="coralogix_api_key=${{ secrets.CORALOGIX_API_KEY }}"
+    # 
+    # - name: Auto-apply load and report any regressions here
+    #   run: |
+    #     MONITOR_ID="140974014"  # K8S DEVNET: COMPOSITE MONITOR ID
+    #     DATADOG_API_KEY="${{ secrets.DATADOG_API_KEY }}"
+    #     DATADOG_APP_KEY="${{ secrets.DATADOG_APP_KEY }}"
+    # 
+    #     end_minute=$(( $(date +'%M') + 1))  # Calculate the end minute
+    # 
+    #     while [ $(date +'%M') -lt $end_minute ]; do
+    #       STATUS=$(curl -X GET "https://api.datadoghq.com/api/v1/monitor/${MONITOR_ID}" \
+    #                 -H "Content-Type: application/json" \
+    #                 -H "DD-API-KEY: ${DATADOG_API_KEY}" \
+    #                 -H "DD-APPLICATION-KEY: ${DATADOG_APP_KEY}" \
+    #                 -s \
+    #                 | jq -r '.overall_state')
+    #       echo "K8S DEVNET HEALTH STATUS: $STATUS"
+    #       echo "Review your devnet health dashboard here: https://app.datadoghq.com/dashboard/fqu-nh2-bzd?fromUser=false&refresh_mode=sliding&view=spans&from_ts=1709886652761&to_ts=1709890252761&live=true"
+    #       sleep 60
+    #     done
+    # 
+    #   # After stress tests, cleanup all ephemeral K8S devnet resources    
+    # - name: Remove panoptichain, prometheus, and grafana resources
+    #   run: |
+    #     cd panoptichain
+    #     export KUBECONFIG=~/.kube/regression-cluster.yaml
+    #     kubectl delete -f grafana-service.yaml,panoptichain-service.yaml,prometheus-service.yaml,grafana-deployment.yaml,grafana-claim0-persistentvolumeclaim.yaml,panoptichain-deployment.yaml,prometheus-deployment.yaml,prometheus-claim0-persistentvolumeclaim.yaml --namespace=pos --context=gke_prj-polygonlabs-devtools-dev_europe-west2_ci-cluster-1
 
-    - name: Auto-apply load and report any regressions here
-      run: |
-        MONITOR_ID="140974014"  # K8S DEVNET: COMPOSITE MONITOR ID
-        DATADOG_API_KEY="${{ secrets.DATADOG_API_KEY }}"
-        DATADOG_APP_KEY="${{ secrets.DATADOG_APP_KEY }}"
-
-        end_minute=$(( $(date +'%M') + 1))  # Calculate the end minute
-
-        while [ $(date +'%M') -lt $end_minute ]; do
-          STATUS=$(curl -X GET "https://api.datadoghq.com/api/v1/monitor/${MONITOR_ID}" \
-                    -H "Content-Type: application/json" \
-                    -H "DD-API-KEY: ${DATADOG_API_KEY}" \
-                    -H "DD-APPLICATION-KEY: ${DATADOG_APP_KEY}" \
-                    -s \
-                    | jq -r '.overall_state')
-          echo "K8S DEVNET HEALTH STATUS: $STATUS"
-          echo "Review your devnet health dashboard here: https://app.datadoghq.com/dashboard/fqu-nh2-bzd?fromUser=false&refresh_mode=sliding&view=spans&from_ts=1709886652761&to_ts=1709890252761&live=true"
-          sleep 60
-        done
-        
-    - name: After stress tests, cleanup all ephemeral K8S devnet resources
-      run: |
-        # remove panoptichain, prometheus, and grafana resources
-        cd panoptichain
-        export KUBECONFIG=~/.kube/regression-cluster.yaml
-        kubectl delete -f grafana-service.yaml,panoptichain-service.yaml,prometheus-service.yaml,grafana-deployment.yaml,grafana-claim0-persistentvolumeclaim.yaml,panoptichain-deployment.yaml,prometheus-deployment.yaml,prometheus-claim0-persistentvolumeclaim.yaml --namespace=pos --context=gke_prj-polygonlabs-devtools-dev_europe-west2_ci-cluster-1
-        
-        # remove all datadog agent resources
+    - name: Remove all datadog agent resources
+      run: |        
         cd panoptichain/terraform
         terraform init
         terraform delete -target=helm_release.datadog_agent -var="datadog_api_key=${{ secrets.DATADOG_API_KEY }}" -var="coralogix_api_key=${{ secrets.CORALOGIX_API_KEY }}"
-        
-        # finally, remove all pos devnet resources to return to clean slate GKE environment
-        export KUBECONFIG=~/.kube/regression-cluster.yaml
+
+    - name: Finally, remove pos devnet resources and return to clean slate GKE environment
+      run: |     
         cd polygon-devnets/kubernetes/pos
+        export KUBECONFIG=~/.kube/regression-cluster.yaml
         kubectl delete -k overlays/gcr --namespace=pos --context=gke_prj-polygonlabs-devtools-dev_europe-west2_ci-cluster-1
 
