@@ -52,7 +52,7 @@ jobs:
       run: |
         mkdir -p ~/.kube
         echo "${{ secrets.GKE_CLUSTER_CREDENTIALS }}" > ~/.kube/regression-cluster.yaml
-        export KUBECONFIG=~/.kube/regression-cluster.yaml
+    #     export KUBECONFIG=~/.kube/regression-cluster.yaml
     #     cd polygon-devnets/kubernetes/pos
     #     kubectl apply -k overlays/gcr --namespace=pos --context=gke_prj-polygonlabs-devtools-dev_europe-west2_ci-cluster-1
     # 
@@ -102,16 +102,22 @@ jobs:
       run: |
         cd panoptichain/terraform
         retries=3
-        delay=5
+        delay=180
         count=0
         while [ $count -lt $retries ]; do
           terraform init
-          terraform destroy -auto-approve -target=helm_release.datadog_agent -var="datadog_api_key=${DATADOG_API_KEY}" -var="coralogix_api_key=${CORALOGIX_API_KEY}"
-          if [ $? -eq 0 ]; then
+          destroy_output=$(terraform destroy -auto-approve -target=helm_release.datadog_agent -var="datadog_api_key=${DATADOG_API_KEY}" -var="coralogix_api_key=${CORALOGIX_API_KEY}" 2>&1)
+          if echo "$destroy_output" | grep -q "Still destroying"; then
+            echo "Destroy operation is still in progress. Retrying in $delay seconds..."
+            sleep $delay
+          elif echo "$destroy_output" | grep -q "Apply complete! Resources: 0 added, 0 changed, 1 destroyed"; then
+            echo "Datadog agent resources successfully destroyed."
             break
+          else
+            echo "Destroy operation failed. Retrying in $delay seconds..."
+            count=$((count+1))
+            sleep $delay
           fi
-          count=$((count+1))
-          sleep $delay
         done
     
     - name: Finally, remove pos devnet resources and return to clean slate GKE environment
