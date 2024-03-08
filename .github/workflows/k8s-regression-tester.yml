@@ -100,14 +100,13 @@ jobs:
       retries: 3
       delay: 5
       until: tf_result is not failed
-      ansible.builtin.shell:
-        cmd: |
+      run: |    
           cd panoptichain/terraform
           terraform init
           terraform destroy -auto-approve -target=helm_release.datadog_agent -var="datadog_api_key=${{ secrets.DATADOG_API_KEY }}" -var="coralogix_api_key=${{ secrets.CORALOGIX_API_KEY }}"
 
     - name: Finally, remove pos devnet resources and return to clean slate GKE environment
-      run: |     
+      run: |
         cd polygon-devnets/kubernetes/pos
         export KUBECONFIG=~/.kube/regression-cluster.yaml
         kubectl delete -k overlays/gcr --namespace=pos --context=gke_prj-polygonlabs-devtools-dev_europe-west2_ci-cluster-1
