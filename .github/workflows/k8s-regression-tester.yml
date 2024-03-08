@@ -66,7 +66,7 @@ jobs:
     #   run: |
     #     cd panoptichain/terraform
     #     terraform init
-    #     terraform apply -target=helm_release.datadog_agent -var="datadog_api_key=${{ secrets.DATADOG_API_KEY }}" -var="coralogix_api_key=${{ secrets.CORALOGIX_API_KEY }}"
+    #     terraform apply -auto-approve -target=helm_release.datadog_agent -var="datadog_api_key=${{ secrets.DATADOG_API_KEY }}" -var="coralogix_api_key=${{ secrets.CORALOGIX_API_KEY }}"
     # 
     # - name: Auto-apply load and report any regressions here
     #   run: |
@@ -99,7 +99,7 @@ jobs:
       run: |        
         cd panoptichain/terraform
         terraform init
-        terraform destroy -target=helm_release.datadog_agent -var="datadog_api_key=${{ secrets.DATADOG_API_KEY }}" -var="coralogix_api_key=${{ secrets.CORALOGIX_API_KEY }}"
+        terraform destroy -auto-approve -target=helm_release.datadog_agent -var="datadog_api_key=${{ secrets.DATADOG_API_KEY }}" -var="coralogix_api_key=${{ secrets.CORALOGIX_API_KEY }}"
 
     - name: Finally, remove pos devnet resources and return to clean slate GKE environment
       run: |     
