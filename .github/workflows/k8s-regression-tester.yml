@@ -62,12 +62,12 @@ jobs:
     #     export KUBECONFIG=~/.kube/regression-cluster.yaml
     #     kubectl apply -f grafana-service.yaml,panoptichain-service.yaml,prometheus-service.yaml,grafana-deployment.yaml,grafana-claim0-persistentvolumeclaim.yaml,panoptichain-deployment.yaml,prometheus-deployment.yaml,prometheus-claim0-persistentvolumeclaim.yaml --namespace=pos --context=gke_prj-polygonlabs-devtools-dev_europe-west2_ci-cluster-1
     # 
-    # - name: Finally, deploy datadog-agent via helm chart
-    #   run: |
-    #     cd panoptichain/terraform
-    #     terraform init
-    #     terraform apply -auto-approve -target=helm_release.datadog_agent -var="datadog_api_key=${{ secrets.DATADOG_API_KEY }}" -var="coralogix_api_key=${{ secrets.CORALOGIX_API_KEY }}"
-    # 
+    - name: Finally, deploy datadog-agent via helm chart
+      run: |
+        cd panoptichain/terraform
+        terraform init
+        terraform apply -auto-approve -target=helm_release.datadog_agent -var="datadog_api_key=${{ secrets.DATADOG_API_KEY }}" -var="coralogix_api_key=${{ secrets.CORALOGIX_API_KEY }}"
+    
     # - name: Auto-apply load and report any regressions here
     #   run: |
     #     MONITOR_ID="140974014"  # K8S DEVNET: COMPOSITE MONITOR ID
@@ -87,7 +87,7 @@ jobs:
     #       echo "Review your devnet health dashboard here: https://app.datadoghq.com/dashboard/fqu-nh2-bzd?fromUser=false&refresh_mode=sliding&view=spans&from_ts=1709886652761&to_ts=1709890252761&live=true"
     #       sleep 60
     #     done
-    # 
+    
     #   # After stress tests, cleanup all ephemeral K8S devnet resources    
     # - name: Remove panoptichain, prometheus, and grafana resources
     #   run: |
@@ -102,22 +102,16 @@ jobs:
       run: |
         cd panoptichain/terraform
         retries=3
-        delay=180
+        delay=5
         count=0
         while [ $count -lt $retries ]; do
           terraform init
-          destroy_output=$(terraform destroy -auto-approve -target=helm_release.datadog_agent -var="datadog_api_key=${DATADOG_API_KEY}" -var="coralogix_api_key=${CORALOGIX_API_KEY}" 2>&1)
-          if echo "$destroy_output" | grep -q "Still destroying"; then
-            echo "Destroy operation is still in progress. Retrying in $delay seconds..."
-            sleep $delay
-          elif echo "$destroy_output" | grep -q "Apply complete! Resources: 0 added, 0 changed, 1 destroyed"; then
-            echo "Datadog agent resources successfully destroyed."
+          terraform destroy -auto-approve -target=helm_release.datadog_agent -var="datadog_api_key=${DATADOG_API_KEY}" -var="coralogix_api_key=${CORALOGIX_API_KEY}"
+          if [ $? -eq 0 ]; then
             break
-          else
-            echo "Destroy operation failed. Retrying in $delay seconds..."
-            count=$((count+1))
-            sleep $delay
           fi
+          count=$((count+1))
+          sleep $delay
         done
     
     - name: Finally, remove pos devnet resources and return to clean slate GKE environment
