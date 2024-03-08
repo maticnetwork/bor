@@ -20,15 +20,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 )
-
-// MakeName creates a node name that follows the ethereum convention
-// for such names. It adds the operation system name and Go runtime version
-// the name.
-func MakeName(name, version string) string {
-	return fmt.Sprintf("%s/v%s/%s/%s", name, version, runtime.GOOS, runtime.Version())
-}
 
 // FileExist checks if a file exists at filePath.
 func FileExist(filePath string) bool {
@@ -45,5 +37,35 @@ func AbsolutePath(datadir string, filename string) string {
 	if filepath.IsAbs(filename) {
 		return filename
 	}
+
 	return filepath.Join(datadir, filename)
+}
+
+// VerifyPath sanitizes the path to avoid Path Traversal vulnerability
+func VerifyPath(path string) (string, error) {
+	c := filepath.Clean(path)
+
+	r, err := filepath.EvalSymlinks(c)
+	if err != nil {
+		return c, fmt.Errorf("unsafe or invalid path specified: %s", path)
+	} else {
+		return r, nil
+	}
+}
+
+// VerifyCrasher sanitizes the path to avoid Path Traversal vulnerability and reads the file from that path, returning its content
+func VerifyCrasher(crasher string) []byte {
+	canonicalPath, err := VerifyPath(crasher)
+	if err != nil {
+		fmt.Println("path not verified: " + err.Error())
+		return nil
+	}
+
+	data, err := os.ReadFile(canonicalPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error loading crasher %v: %v", canonicalPath, err)
+		os.Exit(1)
+	}
+
+	return data
 }

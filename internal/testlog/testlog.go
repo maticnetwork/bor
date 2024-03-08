@@ -26,17 +26,22 @@ import (
 
 // Handler returns a log handler which logs to the unit test log of t.
 func Handler(t *testing.T, level log.Lvl) log.Handler {
-	return log.LvlFilterHandler(level, &handler{t, log.TerminalFormat(false)})
+	return log.LvlFilterHandler(level, &handler{t, log.TerminalFormat(false), level})
 }
 
 type handler struct {
 	t   *testing.T
 	fmt log.Format
+	lvl log.Lvl
 }
 
 func (h *handler) Log(r *log.Record) error {
 	h.t.Logf("%s", h.fmt.Format(r))
 	return nil
+}
+
+func (h *handler) Level() log.Lvl {
+	return h.lvl
 }
 
 // logger implements log.Logger such that all output goes to the unit test log via
@@ -59,6 +64,9 @@ func (h *bufHandler) Log(r *log.Record) error {
 	h.buf = append(h.buf, r)
 	return nil
 }
+func (h *bufHandler) Level() log.Lvl {
+	return log.LvlTrace
+}
 
 // Logger returns a logger which logs to the unit test log of t.
 func Logger(t *testing.T, level log.Lvl) log.Logger {
@@ -69,6 +77,7 @@ func Logger(t *testing.T, level log.Lvl) log.Logger {
 		h:  &bufHandler{fmt: log.TerminalFormat(false)},
 	}
 	l.l.SetHandler(log.LvlFilterHandler(level, l.h))
+
 	return l
 }
 
@@ -135,8 +144,42 @@ func (l *logger) SetHandler(h log.Handler) {
 // flush writes all buffered messages and clears the buffer.
 func (l *logger) flush() {
 	l.t.Helper()
+
 	for _, r := range l.h.buf {
 		l.t.Logf("%s", l.h.fmt.Format(r))
 	}
+
 	l.h.buf = nil
+}
+
+func (l *logger) OnTrace(fn func(l log.Logging)) {
+	if l.GetHandler().Level() >= log.LvlTrace {
+		fn(l.Trace)
+	}
+}
+
+func (l *logger) OnDebug(fn func(l log.Logging)) {
+	if l.GetHandler().Level() >= log.LvlDebug {
+		fn(l.Debug)
+	}
+}
+func (l *logger) OnInfo(fn func(l log.Logging)) {
+	if l.GetHandler().Level() >= log.LvlInfo {
+		fn(l.Info)
+	}
+}
+func (l *logger) OnWarn(fn func(l log.Logging)) {
+	if l.GetHandler().Level() >= log.LvlWarn {
+		fn(l.Warn)
+	}
+}
+func (l *logger) OnError(fn func(l log.Logging)) {
+	if l.GetHandler().Level() >= log.LvlError {
+		fn(l.Error)
+	}
+}
+func (l *logger) OnCrit(fn func(l log.Logging)) {
+	if l.GetHandler().Level() >= log.LvlCrit {
+		fn(l.Crit)
+	}
 }

@@ -1,7 +1,7 @@
 # This file configures github.com/golangci/golangci-lint.
 
 run:
-  go: '1.18'
+  go: '1.20'
   timeout: 20m
   tests: true
   # default is true. Enables skipping of directories:
@@ -30,7 +30,7 @@ linters:
     - gocognit
     - gofmt
     # - gomnd
-    - gomoddirectives
+    # - gomoddirectives
     - gosec
     - makezero
     - nestif
@@ -50,6 +50,7 @@ linters:
     - unconvert
     - unparam
     - wsl
+    - asasalint
     #- errorlint causes stack overflow. TODO: recheck after each golangci update
 
 linters-settings:
@@ -64,10 +65,10 @@ linters-settings:
 
   goimports:
     local-prefixes: github.com/ethereum/go-ethereum
-  
+
   nestif:
     min-complexity: 5
-  
+
   prealloc:
     for-loops: true
 
@@ -78,7 +79,7 @@ linters-settings:
     # By default list of stable checks is used.
     enabled-checks:
       - badLock
-      - filepathJoin	
+      - filepathJoin
       - sortSlice
       - sprintfQuotedString
       - syncMapLoadAndDelete
@@ -145,7 +146,7 @@ linters-settings:
 
 issues:
   exclude-rules:
-    - path: crypto/blake2b/
+    - path: crypto/bn256/cloudflare/optate.go
       linters:
         - deadcode
     - path: crypto/bn256/cloudflare

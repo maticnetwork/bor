@@ -3,124 +3,233 @@ package whitelist
 import (
 	"errors"
 	"fmt"
-	"sync"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/ethdb"
 )
 
-// Checkpoint whitelist
+var (
+	ErrMismatch = errors.New("mismatch error")
+	ErrNoRemote = errors.New("remote peer doesn't have a target block number")
+
+	ErrCheckpointMismatch = errors.New("checkpoint mismatch")
+	ErrLongFutureChain    = errors.New("received future chain of unacceptable length")
+	ErrNoRemoteCheckpoint = errors.New("remote peer doesn't have a checkpoint")
+)
+
 type Service struct {
-	m                   sync.Mutex
-	checkpointWhitelist map[uint64]common.Hash // Checkpoint whitelist, populated by reaching out to heimdall
-	checkpointOrder     []uint64               // Checkpoint order, populated by reaching out to heimdall
-	maxCapacity         uint
+	checkpointService
+	milestoneService
 }
 
-func NewService(maxCapacity uint) *Service {
+func NewService(db ethdb.Database) *Service {
+	var checkpointDoExist = true
+
+	checkpointNumber, checkpointHash, err := rawdb.ReadFinality[*rawdb.Checkpoint](db)
+
+	if err != nil {
+		checkpointDoExist = false
+	}
+
+	var milestoneDoExist = true
+
+	milestoneNumber, milestoneHash, err := rawdb.ReadFinality[*rawdb.Milestone](db)
+	if err != nil {
+		milestoneDoExist = false
+	}
+
+	locked, lockedMilestoneNumber, lockedMilestoneHash, lockedMilestoneIDs, err := rawdb.ReadLockField(db)
+	if err != nil || !locked {
+		locked = false
+		lockedMilestoneIDs = make(map[string]struct{})
+	}
+
+	order, list, err := rawdb.ReadFutureMilestoneList(db)
+	if err != nil {
+		order = make([]uint64, 0)
+		list = make(map[uint64]common.Hash)
+	}
+
 	return &Service{
-		checkpointWhitelist: make(map[uint64]common.Hash),
-		checkpointOrder:     []uint64{},
-		maxCapacity:         maxCapacity,
+		&checkpoint{
+			finality[*rawdb.Checkpoint]{
+				doExist:  checkpointDoExist,
+				Number:   checkpointNumber,
+				Hash:     checkpointHash,
+				interval: 256,
+				db:       db,
+			},
+		},
+
+		&milestone{
+			finality: finality[*rawdb.Milestone]{
+				doExist:  milestoneDoExist,
+				Number:   milestoneNumber,
+				Hash:     milestoneHash,
+				interval: 256,
+				db:       db,
+			},
+
+			Locked:                locked,
+			LockedMilestoneNumber: lockedMilestoneNumber,
+			LockedMilestoneHash:   lockedMilestoneHash,
+			LockedMilestoneIDs:    lockedMilestoneIDs,
+			FutureMilestoneList:   list,
+			FutureMilestoneOrder:  order,
+			MaxCapacity:           10,
+		},
 	}
 }
 
-var (
-	ErrCheckpointMismatch = errors.New("checkpoint mismatch")
-	ErrNoRemoteCheckoint  = errors.New("remote peer doesn't have a checkoint")
-)
+// IsValidPeer checks if the chain we're about to receive from a peer is valid or not
+// in terms of reorgs. We won't reorg beyond the last bor checkpoint submitted to mainchain and last milestone voted in the heimdall
+func (s *Service) IsValidPeer(fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error) {
+	checkpointBool, err := s.checkpointService.IsValidPeer(fetchHeadersByNumber)
+	if !checkpointBool {
+		return checkpointBool, err
+	}
 
-// IsValidChain checks if the chain we're about to receive from this peer is valid or not
-// in terms of reorgs. We won't reorg beyond the last bor checkpoint submitted to mainchain.
-func (w *Service) IsValidChain(remoteHeader *types.Header, fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error) {
-	// We want to validate the chain by comparing the last checkpointed block
-	// we're storing in `checkpointWhitelist` with the peer's block.
-	//
-	// Check for availaibility of the last checkpointed block.
-	// This can be also be empty if our heimdall is not responding
-	// or we're running without it.
-	if len(w.checkpointWhitelist) == 0 {
-		// worst case, we don't have the checkpoints in memory
+	milestoneBool, err := s.milestoneService.IsValidPeer(fetchHeadersByNumber)
+	if !milestoneBool {
+		return milestoneBool, err
+	}
+
+	return true, nil
+}
+
+func (s *Service) PurgeWhitelistedCheckpoint() {
+	s.checkpointService.Purge()
+}
+
+func (s *Service) PurgeWhitelistedMilestone() {
+	s.milestoneService.Purge()
+}
+
+func (s *Service) GetWhitelistedCheckpoint() (bool, uint64, common.Hash) {
+	return s.checkpointService.Get()
+}
+
+func (s *Service) GetWhitelistedMilestone() (bool, uint64, common.Hash) {
+	return s.milestoneService.Get()
+}
+
+func (s *Service) ProcessMilestone(endBlockNum uint64, endBlockHash common.Hash) {
+	s.milestoneService.Process(endBlockNum, endBlockHash)
+}
+
+func (s *Service) ProcessCheckpoint(endBlockNum uint64, endBlockHash common.Hash) {
+	s.checkpointService.Process(endBlockNum, endBlockHash)
+}
+
+func (s *Service) IsValidChain(currentHeader *types.Header, chain []*types.Header) (bool, error) {
+	checkpointBool, err := s.checkpointService.IsValidChain(currentHeader, chain)
+	if !checkpointBool {
+		return checkpointBool, err
+	}
+
+	milestoneBool, err := s.milestoneService.IsValidChain(currentHeader, chain)
+	if !milestoneBool {
+		return milestoneBool, err
+	}
+
+	return true, nil
+}
+
+func (s *Service) GetMilestoneIDsList() []string {
+	return s.milestoneService.GetMilestoneIDsList()
+}
+
+func splitChain(current uint64, chain []*types.Header) ([]*types.Header, []*types.Header) {
+	var (
+		pastChain   []*types.Header
+		futureChain []*types.Header
+		first       = chain[0].Number.Uint64()
+		last        = chain[len(chain)-1].Number.Uint64()
+	)
+
+	if current >= first {
+		if len(chain) == 1 || current >= last {
+			pastChain = chain
+		} else {
+			pastChain = chain[:current-first+1]
+		}
+	}
+
+	if current < last {
+		if len(chain) == 1 || current < first {
+			futureChain = chain
+		} else {
+			futureChain = chain[current-first+1:]
+		}
+	}
+
+	return pastChain, futureChain
+}
+
+//nolint:unparam
+func isValidChain(currentHeader *types.Header, chain []*types.Header, doExist bool, number uint64, hash common.Hash) (bool, error) {
+	// Check if we have milestone to validate incoming chain in memory
+	if !doExist {
+		// We don't have any entry, no additional validation will be possible
 		return true, nil
 	}
 
-	// Fetch the last checkpoint entry
-	lastCheckpointBlockNum := w.checkpointOrder[len(w.checkpointOrder)-1]
-	lastCheckpointBlockHash := w.checkpointWhitelist[lastCheckpointBlockNum]
+	current := currentHeader.Number.Uint64()
+
+	// Check if imported chain is less than whitelisted number
+	if chain[len(chain)-1].Number.Uint64() < number {
+		if current >= number { //If current tip of the chain is greater than whitelist number then return false
+			return false, nil
+		} else {
+			return true, nil
+		}
+	}
+
+	// Split the chain into past and future chain
+	pastChain, _ := splitChain(current, chain)
+
+	// Iterate over the chain and validate against the last milestone
+	// It will handle all cases when the incoming chain has atleast one milestone
+	for i := len(pastChain) - 1; i >= 0; i-- {
+		if pastChain[i].Number.Uint64() == number {
+			res := pastChain[i].Hash() == hash
+
+			return res, nil
+		}
+	}
+
+	return true, nil
+}
+
+// FIXME: remoteHeader is not used
+func isValidPeer(fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error), doExist bool, number uint64, hash common.Hash) (bool, error) {
+	// Check for availaibility of the last milestone block.
+	// This can be also be empty if our heimdall is not responding
+	// or we're running without it.
+	if !doExist {
+		// worst case, we don't have the milestone in memory
+		return true, nil
+	}
 
 	// todo: we can extract this as an interface and mock as well or just test IsValidChain in isolation from downloader passing fake fetchHeadersByNumber functions
-	headers, hashes, err := fetchHeadersByNumber(lastCheckpointBlockNum, 1, 0, false)
+	headers, hashes, err := fetchHeadersByNumber(number, 1, 0, false)
 	if err != nil {
-		return false, fmt.Errorf("%w: last checkpoint %d, err %v", ErrNoRemoteCheckoint, lastCheckpointBlockNum, err)
+		return false, fmt.Errorf("%w: last whitelisted block number %d, err %v", ErrNoRemote, number, err)
 	}
 
 	if len(headers) == 0 {
-		return false, fmt.Errorf("%w: last checkpoint %d", ErrNoRemoteCheckoint, lastCheckpointBlockNum)
+		return false, fmt.Errorf("%w: last whitlisted block number %d", ErrNoRemote, number)
 	}
 
 	reqBlockNum := headers[0].Number.Uint64()
 	reqBlockHash := hashes[0]
 
-	// Check against the checkpointed blocks
-	if reqBlockNum == lastCheckpointBlockNum && reqBlockHash == lastCheckpointBlockHash {
+	// Check against the whitelisted blocks
+	if reqBlockNum == number && reqBlockHash == hash {
 		return true, nil
 	}
 
-	return false, ErrCheckpointMismatch
-}
-
-func (w *Service) ProcessCheckpoint(endBlockNum uint64, endBlockHash common.Hash) {
-	w.m.Lock()
-	defer w.m.Unlock()
-
-	w.enqueueCheckpointWhitelist(endBlockNum, endBlockHash)
-	// If size of checkpoint whitelist map is greater than 10, remove the oldest entry.
-
-	if w.length() > int(w.maxCapacity) {
-		w.dequeueCheckpointWhitelist()
-	}
-}
-
-// GetCheckpointWhitelist returns the existing whitelisted
-// entries of checkpoint of the form block number -> block hash.
-func (w *Service) GetCheckpointWhitelist() map[uint64]common.Hash {
-	w.m.Lock()
-	defer w.m.Unlock()
-
-	return w.checkpointWhitelist
-}
-
-// PurgeCheckpointWhitelist purges data from checkpoint whitelist map
-func (w *Service) PurgeCheckpointWhitelist() {
-	w.m.Lock()
-	defer w.m.Unlock()
-
-	w.checkpointWhitelist = make(map[uint64]common.Hash)
-	w.checkpointOrder = make([]uint64, 0)
-}
-
-// EnqueueWhitelistBlock enqueues blockNumber, blockHash to the checkpoint whitelist map
-func (w *Service) enqueueCheckpointWhitelist(key uint64, val common.Hash) {
-	if _, ok := w.checkpointWhitelist[key]; !ok {
-		log.Debug("Enqueing new checkpoint whitelist", "block number", key, "block hash", val)
-
-		w.checkpointWhitelist[key] = val
-		w.checkpointOrder = append(w.checkpointOrder, key)
-	}
-}
-
-// DequeueWhitelistBlock dequeues block, blockhash from the checkpoint whitelist map
-func (w *Service) dequeueCheckpointWhitelist() {
-	if len(w.checkpointOrder) > 0 {
-		log.Debug("Dequeing checkpoint whitelist", "block number", w.checkpointOrder[0], "block hash", w.checkpointWhitelist[w.checkpointOrder[0]])
-
-		delete(w.checkpointWhitelist, w.checkpointOrder[0])
-		w.checkpointOrder = w.checkpointOrder[1:]
-	}
-}
-
-// length returns the len of the whitelist.
-func (w *Service) length() int {
-	return len(w.checkpointWhitelist)
+	return false, ErrMismatch
 }

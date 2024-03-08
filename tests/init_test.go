@@ -23,7 +23,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -48,7 +47,7 @@ var (
 )
 
 func readJSON(reader io.Reader, value interface{}) error {
-	data, err := ioutil.ReadAll(reader)
+	data, err := io.ReadAll(reader)
 	if err != nil {
 		return fmt.Errorf("error reading JSON file: %v", err)
 	}
@@ -120,6 +119,8 @@ func (tm *testMatcher) skipLoad(pattern string) {
 }
 
 // fails adds an expected failure for tests matching the pattern.
+//
+//nolint:unused
 func (tm *testMatcher) fails(pattern string, reason string) {
 	if reason == "" {
 		panic("empty fail reason")
@@ -141,9 +142,6 @@ func (tm *testMatcher) findSkip(name string) (reason string, skipload bool) {
 	isWin32 := runtime.GOARCH == "386" && runtime.GOOS == "windows"
 	for _, re := range tm.slowpat {
 		if re.MatchString(name) {
-			if testing.Short() {
-				return "skipped in -short mode", false
-			}
 			if isWin32 {
 				return "skipped on 32bit windows", false
 			}
@@ -285,7 +283,7 @@ func TestMatcherRunonlylist(t *testing.T) {
 	tm.runonly("invalid*")
 	tm.walk(t, rlpTestDir, func(t *testing.T, name string, test *RLPTest) {
 		if name[:len("invalidRLPTest.json")] != "invalidRLPTest.json" {
-			t.Fatalf("invalid test found: %s != invalidRLPTest.json", name)
+			t.Fatalf("in 'init_test.go' invalid test found: %s != invalidRLPTest.json", name)
 		}
 	})
 }

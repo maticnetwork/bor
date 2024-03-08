@@ -20,6 +20,8 @@ package math
 import (
 	"fmt"
 	"math/big"
+
+	"github.com/holiman/uint256"
 )
 
 // Various big integer limit values.
@@ -46,7 +48,20 @@ type HexOrDecimal256 big.Int
 func NewHexOrDecimal256(x int64) *HexOrDecimal256 {
 	b := big.NewInt(x)
 	h := HexOrDecimal256(*b)
+
 	return &h
+}
+
+// UnmarshalJSON implements json.Unmarshaler.
+//
+// It is similar to UnmarshalText, but allows parsing real decimals too, not just
+// quoted decimal strings.
+func (i *HexOrDecimal256) UnmarshalJSON(input []byte) error {
+	if len(input) > 0 && input[0] == '"' {
+		input = input[1 : len(input)-1]
+	}
+
+	return i.UnmarshalText(input)
 }
 
 // UnmarshalText implements encoding.TextUnmarshaler.
@@ -55,7 +70,9 @@ func (i *HexOrDecimal256) UnmarshalText(input []byte) error {
 	if !ok {
 		return fmt.Errorf("invalid hex or decimal integer %q", input)
 	}
+
 	*i = HexOrDecimal256(*bigint)
+
 	return nil
 }
 
@@ -64,6 +81,7 @@ func (i *HexOrDecimal256) MarshalText() ([]byte, error) {
 	if i == nil {
 		return []byte("0x0"), nil
 	}
+
 	return []byte(fmt.Sprintf("%#x", (*big.Int)(i))), nil
 }
 
@@ -75,6 +93,7 @@ type Decimal256 big.Int
 func NewDecimal256(x int64) *Decimal256 {
 	b := big.NewInt(x)
 	d := Decimal256(*b)
+
 	return &d
 }
 
@@ -84,7 +103,9 @@ func (i *Decimal256) UnmarshalText(input []byte) error {
 	if !ok {
 		return fmt.Errorf("invalid hex or decimal integer %q", input)
 	}
+
 	*i = Decimal256(*bigint)
+
 	return nil
 }
 
@@ -98,6 +119,7 @@ func (i *Decimal256) String() string {
 	if i == nil {
 		return "0"
 	}
+
 	return fmt.Sprintf("%#d", (*big.Int)(i))
 }
 
@@ -107,16 +129,20 @@ func ParseBig256(s string) (*big.Int, bool) {
 	if s == "" {
 		return new(big.Int), true
 	}
+
 	var bigint *big.Int
+
 	var ok bool
 	if len(s) >= 2 && (s[:2] == "0x" || s[:2] == "0X") {
 		bigint, ok = new(big.Int).SetString(s[2:], 16)
 	} else {
 		bigint, ok = new(big.Int).SetString(s, 10)
 	}
+
 	if ok && bigint.BitLen() > 256 {
 		bigint, ok = nil, false
 	}
+
 	return bigint, ok
 }
 
@@ -126,12 +152,14 @@ func MustParseBig256(s string) *big.Int {
 	if !ok {
 		panic("invalid 256 bit integer: " + s)
 	}
+
 	return v
 }
 
 // BigPow returns a ** b as a big integer.
 func BigPow(a, b int64) *big.Int {
 	r := big.NewInt(a)
+
 	return r.Exp(r, big.NewInt(b), nil)
 }
 
@@ -140,6 +168,15 @@ func BigMax(x, y *big.Int) *big.Int {
 	if x.Cmp(y) < 0 {
 		return y
 	}
+
+	return x
+}
+
+func BigMaxUint(x, y *uint256.Int) *uint256.Int {
+	if x.Lt(y) {
+		return y
+	}
+
 	return x
 }
 
@@ -148,6 +185,15 @@ func BigMin(x, y *big.Int) *big.Int {
 	if x.Cmp(y) > 0 {
 		return y
 	}
+
+	return x
+}
+
+func BigMinUint256(x, y *uint256.Int) *uint256.Int {
+	if x.Gt(y) {
+		return y
+	}
+
 	return x
 }
 
@@ -158,6 +204,7 @@ func FirstBitSet(v *big.Int) int {
 			return i
 		}
 	}
+
 	return v.BitLen()
 }
 
@@ -167,8 +214,10 @@ func PaddedBigBytes(bigint *big.Int, n int) []byte {
 	if bigint.BitLen()/8 >= n {
 		return bigint.Bytes()
 	}
+
 	ret := make([]byte, n)
 	ReadBits(bigint, ret)
+
 	return ret
 }
 
@@ -182,6 +231,7 @@ func bigEndianByteAt(bigint *big.Int, n int) byte {
 	if i >= len(words) {
 		return byte(0)
 	}
+
 	word := words[i]
 	// Offset of the byte
 	shift := 8 * uint(n%wordBytes)
@@ -197,6 +247,7 @@ func Byte(bigint *big.Int, padlength, n int) byte {
 	if n >= padlength {
 		return byte(0)
 	}
+
 	return bigEndianByteAt(bigint, padlength-1-n)
 }
 
@@ -227,14 +278,15 @@ func U256Bytes(n *big.Int) []byte {
 // S256 interprets x as a two's complement number.
 // x must not exceed 256 bits (the result is undefined if it does) and is not modified.
 //
-//   S256(0)        = 0
-//   S256(1)        = 1
-//   S256(2**255)   = -2**255
-//   S256(2**256-1) = -1
+//	S256(0)        = 0
+//	S256(1)        = 1
+//	S256(2**255)   = -2**255
+//	S256(2**256-1) = -1
 func S256(x *big.Int) *big.Int {
 	if x.Cmp(tt255) < 0 {
 		return x
 	}
+
 	return new(big.Int).Sub(x, tt256)
 }
 
@@ -251,9 +303,12 @@ func Exp(base, exponent *big.Int) *big.Int {
 			if word&1 == 1 {
 				U256(result.Mul(result, base))
 			}
+
 			U256(base.Mul(base, base))
+
 			word >>= 1
 		}
 	}
+
 	return result
 }

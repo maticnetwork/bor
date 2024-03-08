@@ -14,25 +14,28 @@ GORUN = env GO111MODULE=on go run
 GOPATH = $(shell go env GOPATH)
 
 GIT_COMMIT ?= $(shell git rev-list -1 HEAD)
-GIT_BRANCH ?= $(shell git rev-parse --abbrev-ref HEAD)
-GIT_TAG    ?= $(shell git describe --tags `git rev-list --tags="v*" --max-count=1`)
 
 PACKAGE = github.com/ethereum/go-ethereum
 GO_FLAGS += -buildvcs=false
-GO_FLAGS += -ldflags "-X ${PACKAGE}/params.GitCommit=${GIT_COMMIT} -X ${PACKAGE}/params.GitBranch=${GIT_BRANCH} -X ${PACKAGE}/params.GitTag=${GIT_TAG}"
+GO_LDFLAGS += -ldflags "-X ${PACKAGE}/params.GitCommit=${GIT_COMMIT}"
 
 TESTALL = $$(go list ./... | grep -v go-ethereum/cmd/)
 TESTE2E = ./tests/...
-GOTEST = GODEBUG=cgocheck=0 go test $(GO_FLAGS) -p 1
+GOTEST = GODEBUG=cgocheck=0 go test $(GO_FLAGS) $(GO_LDFLAGS) -p 1
 
 bor:
 	mkdir -p $(GOPATH)/bin/
-	go build -o $(GOBIN)/bor ./cmd/cli/main.go
+	go build -o $(GOBIN)/bor $(GO_LDFLAGS) ./cmd/cli/main.go
 	cp $(GOBIN)/bor $(GOPATH)/bin/
 	@echo "Done building."
 
 protoc:
 	protoc --go_out=. --go-grpc_out=. ./internal/cli/server/proto/*.proto
+
+generate-mocks:
+	go generate mockgen -destination=./tests/bor/mocks/IHeimdallClient.go -package=mocks ./consensus/bor IHeimdallClient
+	go generate mockgen -destination=./eth/filters/IBackend.go -package=filters ./eth/filters Backend
+	go generate mockgen -destination=../eth/filters/IDatabase.go -package=filters . Database
 
 geth:
 	$(GORUN) build/ci.go install ./cmd/geth
@@ -55,13 +58,19 @@ ios:
 	@echo "Import \"$(GOBIN)/Geth.framework\" to use the library."
 
 test:
-	$(GOTEST) --timeout 5m -shuffle=on -cover -coverprofile=cover.out $(TESTALL)
+	$(GOTEST) --timeout 5m -cover -short -coverprofile=cover.out -covermode=atomic $(TESTALL)
+
+test-txpool-race:
+	$(GOTEST) -run=TestPoolMiningDataRaces --timeout 600m -race -v ./core/
 
 test-race:
 	$(GOTEST) --timeout 15m -race -shuffle=on $(TESTALL)
+	
+gocovmerge-deps:
+	$(GOBUILD) -o $(GOBIN)/gocovmerge github.com/wadey/gocovmerge
 
 test-integration:
-	$(GOTEST) --timeout 30m -tags integration $(TESTE2E)
+	$(GOTEST) --timeout 60m -cover -coverprofile=cover.out -covermode=atomic -tags integration $(TESTE2E)
 
 escape:
 	cd $(path) && go test -gcflags "-m -m" -run none -bench=BenchmarkJumpdest* -benchmem -memprofile mem.out
@@ -71,7 +80,7 @@ lint:
 
 lintci-deps:
 	rm -f ./build/bin/golangci-lint
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b ./build/bin v1.46.0
+	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b ./build/bin v1.53.3
 
 goimports:
 	goimports -local "$(PACKAGE)" -w .
@@ -93,7 +102,7 @@ devtools:
 	$(GOBUILD) -o $(GOBIN)/codecgen github.com/ugorji/go/codec/codecgen
 	$(GOBUILD) -o $(GOBIN)/abigen ./cmd/abigen
 	$(GOBUILD) -o $(GOBIN)/mockgen github.com/golang/mock/mockgen
-	$(GOBUILD) -o $(GOBIN)/protoc-gen-go github.com/golang/protobuf/protoc-gen-go
+	$(GOBUILD) -o $(GOBIN)/protoc-gen-go google.golang.org/protobuf/cmd/protoc-gen-go
 	PATH=$(GOBIN):$(PATH) go generate ./common
 	PATH=$(GOBIN):$(PATH) go generate ./core/types
 	PATH=$(GOBIN):$(PATH) go generate ./consensus/bor
@@ -192,7 +201,7 @@ geth-windows-amd64:
 	@ls -ld $(GOBIN)/geth-windows-* | grep amd64
 
 PACKAGE_NAME          := github.com/maticnetwork/bor
-GOLANG_CROSS_VERSION  ?= v1.18.1
+GOLANG_CROSS_VERSION  ?= v1.20.5
 
 .PHONY: release-dry-run
 release-dry-run:
@@ -207,7 +216,7 @@ release-dry-run:
 		-v `pwd`:/go/src/$(PACKAGE_NAME) \
 		-w /go/src/$(PACKAGE_NAME) \
 		goreleaser/goreleaser-cross:${GOLANG_CROSS_VERSION} \
-		--rm-dist --skip-validate --skip-publish
+		--clean --skip-validate --skip-publish
 
 .PHONY: release
 release:
@@ -220,7 +229,8 @@ release:
 		-e DOCKER_PASSWORD \
 		-e SLACK_WEBHOOK \
 		-v /var/run/docker.sock:/var/run/docker.sock \
+		-v $(HOME)/.docker/config.json:/root/.docker/config.json \
 		-v `pwd`:/go/src/$(PACKAGE_NAME) \
 		-w /go/src/$(PACKAGE_NAME) \
 		goreleaser/goreleaser-cross:${GOLANG_CROSS_VERSION} \
-		--rm-dist --skip-validate
+		--clean --skip-validate

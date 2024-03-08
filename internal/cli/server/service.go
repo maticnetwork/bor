@@ -3,14 +3,14 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"reflect"
 	"strings"
+	"time"
 
-	gproto "github.com/golang/protobuf/proto" //nolint:staticcheck,typecheck
-	"github.com/golang/protobuf/ptypes/empty"
-	grpc_net_conn "github.com/mitchellh/go-grpc-net-conn"
+	grpc_net_conn "github.com/JekaMas/go-grpc-net-conn"
 
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -23,6 +23,9 @@ import (
 )
 
 const chunkSize = 1024 * 1024 * 1024
+
+var ErrUnavailable = errors.New("bor service is currently unavailable, try again later")
+var ErrUnavailable2 = errors.New("bor service unavailable even after waiting for 10 seconds, make sure bor is running")
 
 func sendStreamDebugFile(stream proto.Bor_DebugPprofServer, headers map[string]string, data []byte) error {
 	// open the stream and send the headers
@@ -38,10 +41,11 @@ func sendStreamDebugFile(stream proto.Bor_DebugPprofServer, headers map[string]s
 	}
 
 	// Wrap our conn around the response.
-	encoder := grpc_net_conn.SimpleEncoder(func(msg gproto.Message) *[]byte {
-		return &msg.(*proto.DebugFileResponse_Input).Data
+	encoder := grpc_net_conn.SimpleEncoder(func(msg *proto.DebugFileResponse_Input) *[]byte {
+		return &msg.Data
 	})
-	conn := &grpc_net_conn.Conn{
+
+	conn := &grpc_net_conn.Conn[*proto.DebugFileResponse_Input, *proto.DebugFileResponse_Input]{
 		Stream:  stream,
 		Request: &proto.DebugFileResponse_Input{},
 		Encode:  grpc_net_conn.ChunkedEncoder(encoder, chunkSize),
@@ -97,12 +101,14 @@ func (s *Server) PeersAdd(ctx context.Context, req *proto.PeersAddRequest) (*pro
 	if err != nil {
 		return nil, fmt.Errorf("invalid enode: %v", err)
 	}
+
 	srv := s.node.Server()
 	if req.Trusted {
 		srv.AddTrustedPeer(node)
 	} else {
 		srv.AddPeer(node)
 	}
+
 	return &proto.PeersAddResponse{}, nil
 }
 
@@ -111,12 +117,14 @@ func (s *Server) PeersRemove(ctx context.Context, req *proto.PeersRemoveRequest)
 	if err != nil {
 		return nil, fmt.Errorf("invalid enode: %v", err)
 	}
+
 	srv := s.node.Server()
 	if req.Trusted {
 		srv.RemoveTrustedPeer(node)
 	} else {
 		srv.RemovePeer(node)
 	}
+
 	return &proto.PeersRemoveResponse{}, nil
 }
 
@@ -127,23 +135,28 @@ func (s *Server) PeersList(ctx context.Context, req *proto.PeersListRequest) (*p
 	for _, p := range peers {
 		resp.Peers = append(resp.Peers, peerInfoToPeer(p))
 	}
+
 	return resp, nil
 }
 
 func (s *Server) PeersStatus(ctx context.Context, req *proto.PeersStatusRequest) (*proto.PeersStatusResponse, error) {
 	var peerInfo *p2p.PeerInfo
+
 	for _, p := range s.node.Server().PeersInfo() {
 		if strings.HasPrefix(p.ID, req.Enode) {
 			if peerInfo != nil {
 				return nil, fmt.Errorf("more than one peer with the same prefix")
 			}
+
 			peerInfo = p
 		}
 	}
+
 	resp := &proto.PeersStatusResponse{}
 	if peerInfo != nil {
 		resp.Peer = peerInfoToPeer(peerInfo)
 	}
+
 	return resp, nil
 }
 
@@ -164,13 +177,37 @@ func (s *Server) ChainSetHead(ctx context.Context, req *proto.ChainSetHeadReques
 	return &proto.ChainSetHeadResponse{}, nil
 }
 
-func (s *Server) Status(ctx context.Context, _ *empty.Empty) (*proto.StatusResponse, error) {
+func (s *Server) Status(ctx context.Context, in *proto.StatusRequest) (*proto.StatusResponse, error) {
+	if s.backend == nil && !in.Wait {
+		return nil, ErrUnavailable
+	}
+
+	// check for s.backend at an interval of 2 seconds
+	// wait for a maximum of 10 seconds (5 iterations)
+	if s.backend == nil && in.Wait {
+		i := 1
+
+		for {
+			time.Sleep(2 * time.Second)
+
+			if s.backend == nil {
+				if i == 5 {
+					return nil, ErrUnavailable2
+				}
+			} else {
+				break
+			}
+
+			i++
+		}
+	}
+
 	apiBackend := s.backend.APIBackend
 	syncProgress := apiBackend.SyncProgress()
 
 	resp := &proto.StatusResponse{
 		CurrentHeader: headerToProtoHeader(apiBackend.CurrentHeader()),
-		CurrentBlock:  headerToProtoHeader(apiBackend.CurrentBlock().Header()),
+		CurrentBlock:  headerToProtoHeader(apiBackend.CurrentBlock()),
 		NumPeers:      int64(len(s.node.Server().PeersInfo())),
 		SyncMode:      s.config.SyncMode,
 		Syncing: &proto.StatusResponse_Syncing{
@@ -180,6 +217,7 @@ func (s *Server) Status(ctx context.Context, _ *empty.Empty) (*proto.StatusRespo
 		},
 		Forks: gatherForks(s.config.chain.Genesis.Config, s.config.chain.Genesis.Config.Bor),
 	}
+
 	return resp, nil
 }
 
@@ -233,12 +271,14 @@ func gatherForks(configList ...interface{}) []*proto.StatusResponse_Fork {
 		skip := "DAOForkBlock"
 
 		conf := reflect.ValueOf(config).Elem()
+
 		for i := 0; i < kind.NumField(); i++ {
 			// Fetch the next field and skip non-fork rules
 			field := kind.Field(i)
 			if strings.Contains(field.Name, skip) {
 				continue
 			}
+
 			if !strings.HasSuffix(field.Name, "Block") {
 				continue
 			}
@@ -248,6 +288,7 @@ func gatherForks(configList ...interface{}) []*proto.StatusResponse_Fork {
 			}
 
 			val := conf.Field(i)
+
 			switch field.Type.Kind() {
 			case bigIntT:
 				rule := val.Interface().(*big.Int)
@@ -266,11 +307,11 @@ func gatherForks(configList ...interface{}) []*proto.StatusResponse_Fork {
 			forks = append(forks, fork)
 		}
 	}
+
 	return forks
 }
 
 func convertBlockToBlockStub(blocks []*types.Block) []*proto.BlockStub {
-
 	var blockStubs []*proto.BlockStub
 
 	for _, block := range blocks {
@@ -285,10 +326,10 @@ func convertBlockToBlockStub(blocks []*types.Block) []*proto.BlockStub {
 }
 
 func (s *Server) ChainWatch(req *proto.ChainWatchRequest, reply proto.Bor_ChainWatchServer) error {
-
 	chain2HeadChanSize := 10
 
 	chain2HeadCh := make(chan core.Chain2HeadEvent, chain2HeadChanSize)
+
 	headSub := s.backend.APIBackend.SubscribeChain2HeadEvent(chain2HeadCh)
 	defer headSub.Unsubscribe()
 

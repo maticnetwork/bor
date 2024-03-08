@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/http"
 	"runtime"
 	"runtime/pprof"
 	"runtime/trace"
 	"time"
+
+	"github.com/ethereum/go-ethereum/log"
 )
 
 // Profile generates a pprof.Profile report for the given profile name.
@@ -35,6 +38,7 @@ func Profile(profile string, debug, gc int) ([]byte, map[string]string, error) {
 		headers["Content-Type"] = "application/octet-stream"
 		headers["Content-Disposition"] = fmt.Sprintf(`attachment; filename="%s"`, profile)
 	}
+
 	return buf.Bytes(), headers, nil
 }
 
@@ -50,6 +54,28 @@ func CPUProfile(ctx context.Context, sec int) ([]byte, map[string]string, error)
 	}
 
 	sleep(ctx, time.Duration(sec)*time.Second)
+
+	pprof.StopCPUProfile()
+
+	return buf.Bytes(),
+		map[string]string{
+			"X-Content-Type-Options": "nosniff",
+			"Content-Type":           "application/octet-stream",
+			"Content-Disposition":    `attachment; filename="profile"`,
+		}, nil
+}
+
+// CPUProfile generates a CPU Profile for a given duration
+func CPUProfileWithChannel(done chan bool) ([]byte, map[string]string, error) {
+	var buf bytes.Buffer
+	if err := pprof.StartCPUProfile(&buf); err != nil {
+		return nil, nil, err
+	}
+
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
+	}
 
 	pprof.StopCPUProfile()
 
@@ -90,4 +116,23 @@ func sleep(ctx context.Context, d time.Duration) {
 	case <-time.After(d):
 	case <-ctx.Done():
 	}
+}
+
+func SetMemProfileRate(rate int) {
+	runtime.MemProfileRate = rate
+}
+
+func SetSetBlockProfileRate(rate int) {
+	runtime.SetBlockProfileRate(rate)
+}
+
+func StartPProf(address string) {
+	log.Info("Starting pprof server", "addr", fmt.Sprintf("http://%s/debug/pprof", address))
+
+	go func() {
+		// nolint: gosec
+		if err := http.ListenAndServe(address, nil); err != nil {
+			log.Error("Failure in running pprof server", "err", err)
+		}
+	}()
 }

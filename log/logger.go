@@ -24,6 +24,7 @@ const (
 	LvlInfo
 	LvlDebug
 	LvlTrace
+	LvlDiscard Lvl = -1
 )
 
 // AlignedString returns a 5-character string containing the name of a Lvl.
@@ -46,7 +47,7 @@ func (l Lvl) AlignedString() string {
 	}
 }
 
-// Strings returns the name of a Lvl.
+// String returns the name of a Lvl.
 func (l Lvl) String() string {
 	switch l {
 	case LvlTrace:
@@ -105,6 +106,8 @@ type RecordKeyNames struct {
 	Ctx  string
 }
 
+type Logging func(msg string, ctx ...interface{})
+
 // A Logger writes key/value pairs to a Handler
 type Logger interface {
 	// New returns a new Logger that has this logger's context plus the given context
@@ -116,13 +119,66 @@ type Logger interface {
 	// SetHandler updates the logger to write records to the specified handler.
 	SetHandler(h Handler)
 
-	// Log a message at the given level with context key/value pairs
+	// Log a message at the trace level with context key/value pairs
+	//
+	// # Usage
+	//
+	//	log.Trace("msg")
+	//	log.Trace("msg", "key1", val1)
+	//	log.Trace("msg", "key1", val1, "key2", val2)
 	Trace(msg string, ctx ...interface{})
+
+	// Log a message at the debug level with context key/value pairs
+	//
+	// # Usage Examples
+	//
+	//	log.Debug("msg")
+	//	log.Debug("msg", "key1", val1)
+	//	log.Debug("msg", "key1", val1, "key2", val2)
 	Debug(msg string, ctx ...interface{})
+
+	// Log a message at the info level with context key/value pairs
+	//
+	// # Usage Examples
+	//
+	//	log.Info("msg")
+	//	log.Info("msg", "key1", val1)
+	//	log.Info("msg", "key1", val1, "key2", val2)
 	Info(msg string, ctx ...interface{})
+
+	// Log a message at the warn level with context key/value pairs
+	//
+	// # Usage Examples
+	//
+	//	log.Warn("msg")
+	//	log.Warn("msg", "key1", val1)
+	//	log.Warn("msg", "key1", val1, "key2", val2)
 	Warn(msg string, ctx ...interface{})
+
+	// Log a message at the error level with context key/value pairs
+	//
+	// # Usage Examples
+	//
+	//	log.Error("msg")
+	//	log.Error("msg", "key1", val1)
+	//	log.Error("msg", "key1", val1, "key2", val2)
 	Error(msg string, ctx ...interface{})
+
+	// Log a message at the crit level with context key/value pairs, and then exit.
+	//
+	// # Usage Examples
+	//
+	//	log.Crit("msg")
+	//	log.Crit("msg", "key1", val1)
+	//	log.Crit("msg", "key1", val1, "key2", val2)
 	Crit(msg string, ctx ...interface{})
+
+	OnTrace(func(l Logging))
+	OnDebug(func(l Logging))
+	OnInfo(func(l Logging))
+	OnWarn(func(l Logging))
+	OnError(func(l Logging))
+	OnCrit(func(l Logging))
 }
 
 type logger struct {
@@ -131,6 +187,10 @@ type logger struct {
 }
 
 func (l *logger) write(msg string, lvl Lvl, ctx []interface{}, skip int) {
+	if l.h.Level() < lvl {
+		return
+	}
+
 	l.h.Log(&Record{
 		Time: time.Now(),
 		Lvl:  lvl,
@@ -149,6 +209,7 @@ func (l *logger) write(msg string, lvl Lvl, ctx []interface{}, skip int) {
 func (l *logger) New(ctx ...interface{}) Logger {
 	child := &logger{newContext(l.ctx, ctx), new(swapHandler)}
 	child.SetHandler(l.h)
+
 	return child
 }
 
@@ -157,6 +218,7 @@ func newContext(prefix []interface{}, suffix []interface{}) []interface{} {
 	newCtx := make([]interface{}, len(prefix)+len(normalizedSuffix))
 	n := copy(newCtx, prefix)
 	copy(newCtx[n:], normalizedSuffix)
+
 	return newCtx
 }
 
@@ -191,6 +253,38 @@ func (l *logger) GetHandler() Handler {
 
 func (l *logger) SetHandler(h Handler) {
 	l.h.Swap(h)
+}
+
+func (l *logger) OnTrace(fn func(l Logging)) {
+	if l.GetHandler().Level() >= LvlTrace {
+		fn(l.Trace)
+	}
+}
+
+func (l *logger) OnDebug(fn func(l Logging)) {
+	if l.GetHandler().Level() >= LvlDebug {
+		fn(l.Debug)
+	}
+}
+func (l *logger) OnInfo(fn func(l Logging)) {
+	if l.GetHandler().Level() >= LvlInfo {
+		fn(l.Info)
+	}
+}
+func (l *logger) OnWarn(fn func(l Logging)) {
+	if l.GetHandler().Level() >= LvlWarn {
+		fn(l.Warn)
+	}
+}
+func (l *logger) OnError(fn func(l Logging)) {
+	if l.GetHandler().Level() >= LvlError {
+		fn(l.Error)
+	}
+}
+func (l *logger) OnCrit(fn func(l Logging)) {
+	if l.GetHandler().Level() >= LvlCrit {
+		fn(l.Crit)
+	}
 }
 
 func normalize(ctx []interface{}) []interface{} {
@@ -235,6 +329,7 @@ func (c Ctx) toArray() []interface{} {
 	arr := make([]interface{}, len(c)*2)
 
 	i := 0
+
 	for k, v := range c {
 		arr[i] = k
 		arr[i+1] = v

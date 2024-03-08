@@ -1,4 +1,4 @@
-// Copyright 2017 The go-ethereum Authors
+// Copyright 2021 The go-ethereum Authors
 // This file is part of the go-ethereum library.
 //
 // The go-ethereum library is free software: you can redistribute it and/or modify
@@ -30,11 +30,14 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/beacon"
 	"github.com/ethereum/go-ethereum/consensus/bor"
 	"github.com/ethereum/go-ethereum/consensus/bor/contract"
-	"github.com/ethereum/go-ethereum/consensus/bor/heimdall"
+	"github.com/ethereum/go-ethereum/consensus/bor/heimdall" //nolint:typecheck
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
+	"github.com/ethereum/go-ethereum/consensus/bor/heimdallapp"
+	"github.com/ethereum/go-ethereum/consensus/bor/heimdallgrpc"
 	"github.com/ethereum/go-ethereum/consensus/clique"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/core/txpool"
 	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/eth/gasprice"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -88,16 +91,14 @@ var Defaults = Config{
 	TrieDirtyCache:          256,
 	TrieTimeout:             60 * time.Minute,
 	SnapshotCache:           102,
-	Miner: miner.Config{
-		GasCeil:  8000000,
-		GasPrice: big.NewInt(params.GWei),
-		Recommit: 125 * time.Second,
-	},
-	TxPool:        core.DefaultTxPoolConfig,
-	RPCGasCap:     50000000,
-	RPCEVMTimeout: 5 * time.Second,
-	GPO:           FullNodeGPO,
-	RPCTxFeeCap:   5, // 5 matic
+	FilterLogCacheSize:      32,
+	Miner:                   miner.DefaultConfig,
+	TxPool:                  txpool.DefaultConfig,
+	RPCGasCap:               50000000,
+	RPCReturnDataLimit:      100000,
+	RPCEVMTimeout:           5 * time.Second,
+	GPO:                     FullNodeGPO,
+	RPCTxFeeCap:             5, // 1 ether
 }
 
 func init() {
@@ -107,6 +108,7 @@ func init() {
 			home = user.HomeDir
 		}
 	}
+
 	if runtime.GOOS == "darwin" {
 		Defaults.Ethash.DatasetDir = filepath.Join(home, "Library", "Ethash")
 	} else if runtime.GOOS == "windows" {
@@ -121,7 +123,7 @@ func init() {
 	}
 }
 
-//go:generate gencodec -type Config -formats toml -out gen_config.go
+//go:generate go run github.com/fjl/gencodec -type Config -formats toml -out gen_config.go
 
 // Config contains configuration options for of the ETH and LES protocols.
 type Config struct {
@@ -143,10 +145,10 @@ type Config struct {
 
 	TxLookupLimit uint64 `toml:",omitempty"` // The maximum number of blocks from head whose tx indices are reserved.
 
-	// PeerRequiredBlocks is a set of block number -> hash mappings which must be in the
+	// RequiredBlocks is a set of block number -> hash mappings which must be in the
 	// canonical chain of all remote peers. Setting the option makes geth verify the
 	// presence of these blocks for every new peer connection.
-	PeerRequiredBlocks map[uint64]common.Hash `toml:"-"`
+	RequiredBlocks map[uint64]common.Hash `toml:"-"`
 
 	// Light client options
 	LightServ          int  `toml:",omitempty"` // Maximum percentage of time allowed for serving LES requests
@@ -168,6 +170,12 @@ type Config struct {
 	DatabaseCache      int
 	DatabaseFreezer    string
 
+	// Database - LevelDB options
+	LevelDbCompactionTableSize           uint64
+	LevelDbCompactionTableSizeMultiplier float64
+	LevelDbCompactionTotalSize           uint64
+	LevelDbCompactionTotalSizeMultiplier float64
+
 	TrieCleanCache          int
 	TrieCleanCacheJournal   string        `toml:",omitempty"` // Disk journal directory for trie cache to survive node restarts
 	TrieCleanCacheRejournal time.Duration `toml:",omitempty"` // Time interval to regenerate the journal for clean cache
@@ -175,6 +183,10 @@ type Config struct {
 	TrieTimeout             time.Duration
 	SnapshotCache           int
 	Preimages               bool
+	TriesInMemory           uint64
+
+	// This is the number of blocks for which logs will be cached in the filter system.
+	FilterLogCacheSize int
 
 	// Mining options
 	Miner miner.Config
@@ -183,7 +195,7 @@ type Config struct {
 	Ethash ethash.Config
 
 	// Transaction pool options
-	TxPool core.TxPoolConfig
+	TxPool txpool.Config
 
 	// Gas Price Oracle options
 	GPO gasprice.Config
@@ -197,11 +209,14 @@ type Config struct {
 	// RPCGasCap is the global gas cap for eth-call variants.
 	RPCGasCap uint64
 
+	// Maximum size (in bytes) a result of an rpc request could have
+	RPCReturnDataLimit uint64
+
 	// RPCEVMTimeout is the global timeout for eth-call.
 	RPCEVMTimeout time.Duration
 
 	// RPCTxFeeCap is the global transaction fee(price * gaslimit) cap for
-	// send-transction variants. The unit is ether.
+	// send-transaction variants. The unit is ether.
 	RPCTxFeeCap float64
 
 	// Checkpoint is a hardcoded checkpoint which can be nil.
@@ -210,46 +225,72 @@ type Config struct {
 	// CheckpointOracle is the configuration for checkpoint oracle.
 	CheckpointOracle *params.CheckpointOracleConfig `toml:",omitempty"`
 
+	// OverrideShanghai (TODO: remove after the fork)
+	OverrideShanghai *big.Int `toml:",omitempty"`
+
 	// URL to connect to Heimdall node
 	HeimdallURL string
 
 	// No heimdall service
 	WithoutHeimdall bool
 
+	// Address to connect to Heimdall gRPC server
+	HeimdallgRPCAddress string
+
+	// Run heimdall service as a child process
+	RunHeimdall bool
+
+	// Arguments to pass to heimdall service
+	RunHeimdallArgs string
+
+	// Use child heimdall process to fetch data, Only works when RunHeimdall is true
+	UseHeimdallApp bool
+
 	// Bor logs flag
 	BorLogs bool
 
-	// Arrow Glacier block override (TODO: remove after the fork)
-	OverrideArrowGlacier *big.Int `toml:",omitempty"`
+	// Parallel EVM (Block-STM) related config
+	ParallelEVM core.ParallelEVMConfig `toml:",omitempty"`
 
-	// OverrideTerminalTotalDifficulty (TODO: remove after the fork)
-	OverrideTerminalTotalDifficulty *big.Int `toml:",omitempty"`
+	// Develop Fake Author mode to produce blocks without authorisation
+	DevFakeAuthor bool `hcl:"devfakeauthor,optional" toml:"devfakeauthor,optional"`
 }
 
 // CreateConsensusEngine creates a consensus engine for the given chain configuration.
-func CreateConsensusEngine(stack *node.Node, chainConfig *params.ChainConfig, ethConfig *Config, notify []string, noverify bool, db ethdb.Database, blockchainAPI *ethapi.PublicBlockChainAPI) consensus.Engine {
-	config := &ethConfig.Ethash
-
-	// If proof-of-authority is requested, set it up
+func CreateConsensusEngine(stack *node.Node, chainConfig *params.ChainConfig, ethConfig *Config, ethashConfig *ethash.Config, cliqueConfig *params.CliqueConfig, notify []string, noverify bool, db ethdb.Database, blockchainAPI *ethapi.BlockChainAPI) consensus.Engine {
 	var engine consensus.Engine
-	if chainConfig.Clique != nil {
-		return clique.New(chainConfig.Clique, db)
-	}
-
-	// If Matic bor consensus is requested, set it up
-	// In order to pass the ethereum transaction tests, we need to set the burn contract which is in the bor config
-	// Then, bor != nil will also be enabled for ethash and clique. Only enable Bor for real if there is a validator contract present.
-	if chainConfig.Bor != nil && chainConfig.Bor.ValidatorContract != "" {
+	// nolint:nestif
+	if cliqueConfig != nil {
+		// If proof-of-authority is requested, set it up
+		engine = clique.New(cliqueConfig, db)
+	} else if chainConfig.Bor != nil && chainConfig.Bor.ValidatorContract != "" {
+		// If Matic bor consensus is requested, set it up
+		// In order to pass the ethereum transaction tests, we need to set the burn contract which is in the bor config
+		// Then, bor != nil will also be enabled for ethash and clique. Only enable Bor for real if there is a validator contract present.
 		genesisContractsClient := contract.NewGenesisContractsClient(chainConfig, chainConfig.Bor.ValidatorContract, chainConfig.Bor.StateReceiverContract, blockchainAPI)
 		spanner := span.NewChainSpanner(blockchainAPI, contract.ValidatorSet(), chainConfig, common.HexToAddress(chainConfig.Bor.ValidatorContract))
 
 		if ethConfig.WithoutHeimdall {
-			return bor.New(chainConfig, db, blockchainAPI, spanner, nil, genesisContractsClient)
+			return bor.New(chainConfig, db, blockchainAPI, spanner, nil, genesisContractsClient, ethConfig.DevFakeAuthor)
 		} else {
-			return bor.New(chainConfig, db, blockchainAPI, spanner, heimdall.NewHeimdallClient(ethConfig.HeimdallURL), genesisContractsClient)
+			if ethConfig.DevFakeAuthor {
+				log.Warn("Sanitizing DevFakeAuthor", "Use DevFakeAuthor with", "--bor.withoutheimdall")
+			}
+
+			var heimdallClient bor.IHeimdallClient
+			if ethConfig.RunHeimdall && ethConfig.UseHeimdallApp {
+				heimdallClient = heimdallapp.NewHeimdallAppClient()
+			} else if ethConfig.HeimdallgRPCAddress != "" {
+				heimdallClient = heimdallgrpc.NewHeimdallGRPCClient(ethConfig.HeimdallgRPCAddress)
+			} else {
+				heimdallClient = heimdall.NewHeimdallClient(ethConfig.HeimdallURL)
+			}
+
+			return bor.New(chainConfig, db, blockchainAPI, spanner, heimdallClient, genesisContractsClient, false)
 		}
 	} else {
-		switch config.PowMode {
+		// nolint : exhaustive
+		switch ethashConfig.PowMode {
 		case ethash.ModeFake:
 			log.Warn("Ethash used in fake mode")
 		case ethash.ModeTest:
@@ -257,19 +298,21 @@ func CreateConsensusEngine(stack *node.Node, chainConfig *params.ChainConfig, et
 		case ethash.ModeShared:
 			log.Warn("Ethash used in shared mode")
 		}
+
 		engine = ethash.New(ethash.Config{
-			PowMode:          config.PowMode,
-			CacheDir:         stack.ResolvePath(config.CacheDir),
-			CachesInMem:      config.CachesInMem,
-			CachesOnDisk:     config.CachesOnDisk,
-			CachesLockMmap:   config.CachesLockMmap,
-			DatasetDir:       config.DatasetDir,
-			DatasetsInMem:    config.DatasetsInMem,
-			DatasetsOnDisk:   config.DatasetsOnDisk,
-			DatasetsLockMmap: config.DatasetsLockMmap,
-			NotifyFull:       config.NotifyFull,
+			PowMode:          ethashConfig.PowMode,
+			CacheDir:         stack.ResolvePath(ethashConfig.CacheDir),
+			CachesInMem:      ethashConfig.CachesInMem,
+			CachesOnDisk:     ethashConfig.CachesOnDisk,
+			CachesLockMmap:   ethashConfig.CachesLockMmap,
+			DatasetDir:       ethashConfig.DatasetDir,
+			DatasetsInMem:    ethashConfig.DatasetsInMem,
+			DatasetsOnDisk:   ethashConfig.DatasetsOnDisk,
+			DatasetsLockMmap: ethashConfig.DatasetsLockMmap,
+			NotifyFull:       ethashConfig.NotifyFull,
 		}, notify, noverify)
 		engine.(*ethash.Ethash).SetThreads(-1) // Disable CPU mining
 	}
+
 	return beacon.New(engine)
 }

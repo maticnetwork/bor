@@ -17,6 +17,7 @@
 package eth
 
 import (
+	"context"
 	"math/big"
 	"sort"
 	"sync"
@@ -87,23 +88,28 @@ func (p *testTxPool) AddRemotes(txs []*types.Transaction) []error {
 	for _, tx := range txs {
 		p.pool[tx.Hash()] = tx
 	}
+
 	p.txFeed.Send(core.NewTxsEvent{Txs: txs})
+
 	return make([]error, len(txs))
 }
 
 // Pending returns all the transactions known to the pool
-func (p *testTxPool) Pending(enforceTips bool) map[common.Address]types.Transactions {
+func (p *testTxPool) Pending(ctx context.Context, enforceTips bool) map[common.Address]types.Transactions {
 	p.lock.RLock()
 	defer p.lock.RUnlock()
 
 	batches := make(map[common.Address]types.Transactions)
+
 	for _, tx := range p.pool {
 		from, _ := types.Sender(types.HomesteadSigner{}, tx)
 		batches[from] = append(batches[from], tx)
 	}
+
 	for _, batch := range batches {
 		sort.Sort(types.TxByNonce(batch))
 	}
+
 	return batches
 }
 
@@ -133,17 +139,17 @@ func newTestHandler() *testHandler {
 func newTestHandlerWithBlocks(blocks int) *testHandler {
 	// Create a database pre-initialize with a genesis block
 	db := rawdb.NewMemoryDatabase()
-	(&core.Genesis{
+	gspec := &core.Genesis{
 		Config: params.TestChainConfig,
 		Alloc:  core.GenesisAlloc{testAddr: {Balance: big.NewInt(1000000)}},
-	}).MustCommit(db)
+	}
+	chain, _ := core.NewBlockChain(db, nil, gspec, nil, ethash.NewFaker(), vm.Config{}, nil, nil, nil)
 
-	chain, _ := core.NewBlockChain(db, nil, params.TestChainConfig, ethash.NewFaker(), vm.Config{}, nil, nil)
-
-	bs, _ := core.GenerateChain(params.TestChainConfig, chain.Genesis(), ethash.NewFaker(), db, blocks, nil)
+	_, bs, _ := core.GenerateChainWithGenesis(gspec, ethash.NewFaker(), blocks, nil)
 	if _, err := chain.InsertChain(bs); err != nil {
 		panic(err)
 	}
+
 	txpool := newTestTxPool()
 
 	handler, _ := newHandler(&handlerConfig{
