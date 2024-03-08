@@ -74,7 +74,7 @@ jobs:
         DATADOG_APP_KEY="${{ secrets.DATADOG_APP_KEY }}"
 
         current_minute=$(date +'%M')
-        end_minute=$((current_minute + 60))
+        end_minute=$((current_minute + 10))
         
         while [ $current_minute -lt $end_minute ]; do
           STATUS=$(curl -X GET "https://api.datadoghq.com/api/v1/monitor/${MONITOR_ID}" \
@@ -84,6 +84,25 @@ jobs:
                     -s \
                     | jq -r '.overall_state')
           echo "K8S DEVNET HEALTH STATUS: $STATUS"
+          echo "Review your devnet health dashboard here: https://app.datadoghq.com/dashboard/fqu-nh2-bzd?fromUser=false&refresh_mode=sliding&view=spans&from_ts=1709886652761&to_ts=1709890252761&live=true"
           current_minute=$(date +'%M')
           sleep 60
         done
+        
+    - name: After stress tests, cleanup all ephemeral K8S devnet resources
+      run: |
+        # remove panoptichain, prometheus, and grafana resources
+        cd panoptichain
+        export KUBECONFIG=~/.kube/regression-cluster.yaml
+        kubectl delete -f grafana-service.yaml,panoptichain-service.yaml,prometheus-service.yaml,grafana-deployment.yaml,grafana-claim0-persistentvolumeclaim.yaml,panoptichain-deployment.yaml,prometheus-deployment.yaml,prometheus-claim0-persistentvolumeclaim.yaml --namespace=pos --context=gke_prj-polygonlabs-devtools-dev_europe-west2_ci-cluster-1
+        
+        # remove all datadog agent resources
+        cd panoptichain/terraform
+        terraform init
+        terraform delete -target=helm_release.datadog_agent -var="datadog_api_key=${{ secrets.DATADOG_API_KEY }}" -var="coralogix_api_key=${{ secrets.CORALOGIX_API_KEY }}"
+        
+        # finally, remove all pos devnet resources to return to clean slate GKE environment
+        export KUBECONFIG=~/.kube/regression-cluster.yaml
+        cd polygon-devnets/kubernetes/pos
+        kubectl delete -k overlays/gcr --namespace=pos --context=gke_prj-polygonlabs-devtools-dev_europe-west2_ci-cluster-1
+
