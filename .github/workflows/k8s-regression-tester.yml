@@ -48,11 +48,11 @@ jobs:
         ssh-add - <<< '${{ secrets.SSH_PRIVATE_KEY_PANOPTICHAIN }}'
         git clone -b dan/k8s_panoptichain git@github.com:0xPolygon/panoptichain.git
 
-    # - name: Deploy PoS devnet to isolated GKE namespace
-    #   run: |
-    #     mkdir -p ~/.kube
-    #     echo "${{ secrets.GKE_CLUSTER_CREDENTIALS }}" > ~/.kube/regression-cluster.yaml
-    #     export KUBECONFIG=~/.kube/regression-cluster.yaml
+    - name: Deploy PoS devnet to isolated GKE namespace
+      run: |
+        mkdir -p ~/.kube
+        echo "${{ secrets.GKE_CLUSTER_CREDENTIALS }}" > ~/.kube/regression-cluster.yaml
+        export KUBECONFIG=~/.kube/regression-cluster.yaml
     #     cd polygon-devnets/kubernetes/pos
     #     kubectl apply -k overlays/gcr --namespace=pos --context=gke_prj-polygonlabs-devtools-dev_europe-west2_ci-cluster-1
     # 
