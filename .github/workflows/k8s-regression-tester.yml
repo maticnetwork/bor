@@ -4,6 +4,7 @@ on:
   release:
     types: [prereleased]
 
+# forward-looking, devs could manually trigger this action (via github UI) and easily spin up / stress test devnets for ad hoc testing
 jobs:
   deploy_devnet:
     runs-on: ubuntu-latest
@@ -73,10 +74,9 @@ jobs:
         DATADOG_API_KEY="${{ secrets.DATADOG_API_KEY }}"
         DATADOG_APP_KEY="${{ secrets.DATADOG_APP_KEY }}"
 
-        current_minute=$(date +'%M')
-        end_minute=$((current_minute + 10))
-        
-        while [ $current_minute -lt $end_minute ]; do
+        end_minute=$(( $(date +'%M') + 1))  # Calculate the end minute
+
+        while [ $(date +'%M') -lt $end_minute ]; do
           STATUS=$(curl -X GET "https://api.datadoghq.com/api/v1/monitor/${MONITOR_ID}" \
                     -H "Content-Type: application/json" \
                     -H "DD-API-KEY: ${DATADOG_API_KEY}" \
@@ -85,7 +85,6 @@ jobs:
                     | jq -r '.overall_state')
           echo "K8S DEVNET HEALTH STATUS: $STATUS"
           echo "Review your devnet health dashboard here: https://app.datadoghq.com/dashboard/fqu-nh2-bzd?fromUser=false&refresh_mode=sliding&view=spans&from_ts=1709886652761&to_ts=1709890252761&live=true"
-          current_minute=$(date +'%M')
           sleep 60
         done
         
