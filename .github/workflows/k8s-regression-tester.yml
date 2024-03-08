@@ -77,7 +77,7 @@ jobs:
         DATADOG_API_KEY="${{ secrets.DATADOG_API_KEY }}"
         DATADOG_APP_KEY="${{ secrets.DATADOG_APP_KEY }}"
     
-        end_minute=$(( $(date +'%M') + 1))  # Calculate the end minute
+        end_minute=$(( $(date +'%M') + 10))  # Calculate the end minute, bake time, make configurable..
     
         while [ $(date +'%M') -lt $end_minute ]; do
           STATUS=$(curl -X GET "https://api.datadoghq.com/api/v1/monitor/${MONITOR_ID}" \
