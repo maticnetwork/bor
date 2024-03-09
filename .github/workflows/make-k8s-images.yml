@@ -2,7 +2,7 @@ name: Image Sync
 
 on:
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '*/30 * * * *'
 
 jobs:
   sync-images:

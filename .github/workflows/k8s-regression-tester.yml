@@ -10,7 +10,6 @@ on:
         description: 'bake time in minutes'
         required: true
 
-# forward-looking, devs could manually trigger this action (via github UI) and easily spin up / stress test devnets for ad hoc testing
 jobs:
   deploy_devnet:
     runs-on: ubuntu-latest
