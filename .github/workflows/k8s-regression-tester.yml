@@ -1,4 +1,4 @@
-name: K8S DEVNET - REGRESSION DETECTOR
+name: K8S DEVNETS - REGRESSION DETECTOR
 on:
   workflow_dispatch:
     inputs:
