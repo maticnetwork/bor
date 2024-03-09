@@ -1,8 +1,14 @@
 name: K8S DEVNET - REGRESSION DETECTOR
 on:
-  push:
-  release:
-    types: [prereleased]
+  workflow_dispatch:
+    inputs:
+      bor_version:
+        description: 'bor version (default: latest)'
+        required: false
+        default: 'latest'
+      bake_time:
+        description: 'bake time in minutes'
+        required: true
 
 # forward-looking, devs could manually trigger this action (via github UI) and easily spin up / stress test devnets for ad hoc testing
 jobs:
@@ -76,9 +82,10 @@ jobs:
         MONITOR_ID="140974014"  # K8S DEVNET: COMPOSITE MONITOR ID
         DATADOG_API_KEY="${{ secrets.DATADOG_API_KEY }}"
         DATADOG_APP_KEY="${{ secrets.DATADOG_APP_KEY }}"
-    
-        end_minute=$(( $(date +'%M') + 10))  # Calculate the end minute, bake time, make configurable..
-    
+
+        bake_time="${{ github.event.inputs.bake_time }}"
+        end_minute=$(( $(date +'%M') + bake_time))
+
         while [ $(date +'%M') -lt $end_minute ]; do
           STATUS=$(curl -X GET "https://api.datadoghq.com/api/v1/monitor/${MONITOR_ID}" \
                     -H "Content-Type: application/json" \
