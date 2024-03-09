@@ -17,7 +17,6 @@ var sepoliapuppynetTestnet = &Chain{
 			HomesteadBlock:      big.NewInt(0),
 			DAOForkBlock:        nil,
 			DAOForkSupport:      true,
-			EIP150Hash:          common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000"),
 			EIP150Block:         big.NewInt(0),
 			EIP155Block:         big.NewInt(0),
 			EIP158Block:         big.NewInt(0),
@@ -29,23 +28,26 @@ var sepoliapuppynetTestnet = &Chain{
 			BerlinBlock:         big.NewInt(0),
 			LondonBlock:         big.NewInt(0),
 			Bor: &params.BorConfig{
-				JaipurBlock: 0,
+				JaipurBlock: big.NewInt(0),
 				Period: map[string]uint64{
-					"0":        5,
+					"0": 5,
 				},
-				ProducerDelay: 6,
-				Sprint:        64,
+				ProducerDelay: map[string]uint64{
+					"0": 6,
+				},
+				Sprint: map[string]uint64{
+					"0": 64,
+				},
 				BackupMultiplier: map[string]uint64{
-					"0":        5,
+					"0": 5,
 				},
 				ValidatorContract:     "0x0000000000000000000000000000000000001000",
 				StateReceiverContract: "0x0000000000000000000000000000000000001001",
 				BurntContract: map[string]string{
-					"0": "0x8B066912dCDA9c9001A84b28F1aBD06e9E19114B",
+					"0":      "0x8B066912dCDA9c9001A84b28F1aBD06e9E19114B",
 					"586000": "0x0335c046f8317C0FAa8f76C77D5d1Da98a976181",
 				},
-				BlockAlloc: map[string]interface{}{
-				},
+				BlockAlloc: map[string]interface{}{},
 			},
 		},
 		Nonce:      0,

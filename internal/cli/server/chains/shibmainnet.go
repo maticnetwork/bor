@@ -17,7 +17,6 @@ var shibmainnetBor = &Chain{
 			HomesteadBlock:      big.NewInt(0),
 			DAOForkBlock:        nil,
 			DAOForkSupport:      true,
-			EIP150Hash:          common.HexToHash("0x0000000000000000000000000000000000000000000000000000000000000000"),
 			EIP150Block:         big.NewInt(0),
 			EIP155Block:         big.NewInt(0),
 			EIP158Block:         big.NewInt(0),
@@ -29,12 +28,16 @@ var shibmainnetBor = &Chain{
 			BerlinBlock:         big.NewInt(0),
 			LondonBlock:         big.NewInt(0),
 			Bor: &params.BorConfig{
-				JaipurBlock: 0,
+				JaipurBlock: big.NewInt(0),
 				Period: map[string]uint64{
 					"0": 5,
 				},
-				ProducerDelay: 6,
-				Sprint:        64,
+				ProducerDelay: map[string]uint64{
+					"0": 6,
+				},
+				Sprint: map[string]uint64{
+					"0": 64,
+				},
 				BackupMultiplier: map[string]uint64{
 					"0": 5,
 				},
@@ -42,18 +45,17 @@ var shibmainnetBor = &Chain{
 				StateReceiverContract: "0x0000000000000000000000000000000000001001",
 				OverrideStateSyncRecords: map[string]int{
 					"189888": 0,
-        			"189952": 0,
-        			"190016": 0,
-        			"190080": 0,
-        			"190144": 0,
-        			"190208": 0,
+					"189952": 0,
+					"190016": 0,
+					"190080": 0,
+					"190144": 0,
+					"190208": 0,
 				},
 				BurntContract: map[string]string{
-					"0": "0x000000000000000000000000000000000000dead",
-        			"1962000": "0xc7D0445ac2947760b3dD388B8586Adf079972Bf3",
+					"0":       "0x000000000000000000000000000000000000dead",
+					"1962000": "0xc7D0445ac2947760b3dD388B8586Adf079972Bf3",
 				},
-				BlockAlloc: map[string]interface{}{
-				},
+				BlockAlloc: map[string]interface{}{},
 			},
 		},
 		Nonce:      0,
