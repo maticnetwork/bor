@@ -19,6 +19,8 @@ package vm
 import (
 	"errors"
 	"fmt"
+
+	"github.com/zama-ai/fhevm-go/fhevm"
 )
 
 // List evm execution errors
@@ -71,3 +73,10 @@ type ErrInvalidOpCode struct {
 }
 
 func (e *ErrInvalidOpCode) Error() string { return fmt.Sprintf("invalid opcode: %s", e.opcode) }
+
+func init() {
+	fhevm.RegisterErrors(ErrOutOfGas, ErrCodeStoreOutOfGas, ErrDepth, ErrInsufficientBalance,
+		ErrContractAddressCollision, ErrExecutionReverted, ErrMaxInitCodeSizeExceeded, ErrMaxCodeSizeExceeded,
+		ErrInvalidJump, ErrWriteProtection, ErrReturnDataOutOfBounds, ErrGasUintOverflow, ErrInvalidCode,
+		ErrNonceUintOverflow, nil, nil, nil)
+}
