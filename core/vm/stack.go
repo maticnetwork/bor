@@ -81,3 +81,11 @@ func (st *Stack) peek() *uint256.Int {
 func (st *Stack) Back(n int) *uint256.Int {
 	return &st.data[st.len()-n-1]
 }
+
+func (st *Stack) Pop() uint256.Int {
+	return st.pop()
+}
+
+func (st *Stack) Peek() *uint256.Int {
+	return st.peek()
+}
