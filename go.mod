@@ -21,7 +21,7 @@ require (
 	github.com/crate-crypto/go-kzg-4844 v0.3.0
 	github.com/davecgh/go-spew v1.1.1
 	github.com/deckarep/golang-set/v2 v2.1.0
-	github.com/docker/docker v24.0.7+incompatible
+	github.com/docker/docker v24.0.9+incompatible
 	github.com/dop251/goja v0.0.0-20230605162241-28ee0ee714f3
 	github.com/emirpasic/gods v1.18.1
 	github.com/ethereum/c-kzg-4844 v0.3.1
