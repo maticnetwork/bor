@@ -14,4 +14,4 @@ kurtosis-clusters:
     config:
       kubernetes-cluster-name: "gke_prj-polygonlabs-devtools-dev_europe-west2_ci-cluster-1"
       storage-class: "standard"
-      enclave-size-in-megabytes: 5000
+      enclave-size-in-megabytes: 500
