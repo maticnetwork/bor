@@ -59,20 +59,15 @@ jobs:
 
     - name: Run kurtosis agent in background
       run: |  
-        kurtosis gateway &  # Run the command in the background
-        sleep 30
-        
-    - name: TEMP remove all devnet resources
-      run: |
-        cd kurtosis-cdk
-        kurtosis clean -a
+        kurtosis gateway &  # Run cmd in background
+        sleep 10
 
     - name: Deploy CDK devnet to isolated GKE namespace
       run: |
         cd kurtosis-cdk
         kurtosis engine restart
-        kurtosis run --enclave cdk --args-file cdk/params.yml cdk
-        sleep 60
+        kurtosis run --enclave cdk-v1 --args-file params.yml .
+        sleep 600
     
     - name: Finally, remove all devnet resources
       run: |
