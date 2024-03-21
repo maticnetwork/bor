@@ -49,8 +49,6 @@ jobs:
     - name: Setup necessary gke custom kurtosis netorking configs
       run: |        
         export KURTOSIS_CONFIG_PATH="$(kurtosis config path)"
-        pwd
-        ls -a
         cp /home/runner/work/bor/bor/kurtosis-config.yml $KURTOSIS_CONFIG_PATH
         
     - name: Set kurtosis cloud env
@@ -67,6 +65,7 @@ jobs:
     - name: Deploy CDK devnet to isolated GKE namespace
       run: |
         cd kurtosis-cdk
+        kurtosis engine restart
         kurtosis run --enclave cdk --args-file cdk/params.yml cdk
         sleep 60
     
