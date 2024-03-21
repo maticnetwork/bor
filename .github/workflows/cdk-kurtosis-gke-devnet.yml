@@ -49,6 +49,10 @@ jobs:
     - name: Setup necessary gke custom kurtosis netorking configs
       run: |        
         export KURTOSIS_CONFIG_PATH="$(kurtosis config path)"
+        pwd
+        ls -a
+        cd bor
+        ls -a
         cp /home/runner/work/bor/kurtosis-config.yaml $KURTOSIS_CONFIG_PATH
         
     - name: Set kurtosis cloud env
