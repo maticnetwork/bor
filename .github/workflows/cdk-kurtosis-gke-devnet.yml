@@ -51,8 +51,6 @@ jobs:
         export KURTOSIS_CONFIG_PATH="$(kurtosis config path)"
         pwd
         ls -a
-        cd bor
-        ls -a
         cp /home/runner/work/bor/bor/kurtosis-config.yaml $KURTOSIS_CONFIG_PATH
         
     - name: Set kurtosis cloud env
