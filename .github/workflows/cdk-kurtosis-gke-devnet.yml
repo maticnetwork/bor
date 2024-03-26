@@ -37,7 +37,7 @@ jobs:
       run: |
         eval `ssh-agent -s`
         ssh-add - <<< '${{ secrets.SSH_PRIVATE_KEY }}'
-        git clone -b main git@github.com:0xPolygon/kurtosis-cdk.git
+        git clone -b dan/contracts_running_state git@github.com:0xPolygon/kurtosis-cdk.git
         
 ## add necessary manipulation steps here...
     - name: Install kurtosis

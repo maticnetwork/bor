@@ -8,10 +8,10 @@ kurtosis-clusters:
     config:
       kubernetes-cluster-name: "minikube"
       storage-class: "standard"
-      enclave-size-in-megabytes: 10
+      enclave-size-in-megabytes: 2000
   cloud:
     type: "kubernetes"
     config:
       kubernetes-cluster-name: "gke_prj-polygonlabs-devtools-dev_europe-west2_ci-cluster-1"
       storage-class: "standard"
-      enclave-size-in-megabytes: 500
+      enclave-size-in-megabytes: 2000
