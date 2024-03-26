@@ -1,0 +1,17 @@
+config-version: 2
+should-send-metrics: true
+kurtosis-clusters:
+  docker:
+    type: "docker"
+  minikube:
+    type: "kubernetes"
+    config:
+      kubernetes-cluster-name: "minikube"
+      storage-class: "standard"
+      enclave-size-in-megabytes: 400
+  cloud:
+    type: "kubernetes"
+    config:
+      kubernetes-cluster-name: "gke_prj-polygonlabs-devtools-dev_europe-west2_ci-cluster-1"
+      storage-class: "standard"
+      enclave-size-in-megabytes: 400
