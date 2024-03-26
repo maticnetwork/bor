@@ -61,6 +61,11 @@ jobs:
       run: |  
         kurtosis gateway &  # Run cmd in background
         sleep 10
+        
+    - name: REMOVE, for CI testing, remove all devnet resources
+      run: |
+        cd kurtosis-cdk
+        kurtosis clean -a
 
     - name: Deploy CDK devnet to isolated GKE namespace
       run: |
