@@ -1,5 +1,5 @@
 Source: bor
-Version: 1.1.0
+Version: 1.1.0--bone-puppynet-beta-1
 Section: develop
 Priority: standard
 Maintainer: Polygon <release-team@polygon.technology>
@@ -9,5 +9,4 @@ Package: bor
 Architecture: arm64
 Multi-Arch: foreign
 Depends:
-Description: This is the bor package from Polygon Technology.
-
+Description: This is the bor package from Shibarium.

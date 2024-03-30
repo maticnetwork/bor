@@ -20,6 +20,6 @@ ethURL: http://ganache:9545
 ethHostUser: ubuntu
 devnetType: docker
 borDockerBuildContext: "../../bor"
-heimdallDockerBuildContext: "https://github.com/maticnetwork/heimdall.git#develop"
+heimdallDockerBuildContext: "https://github.com/shibaone/heimdall.git#develop"
 sprintSizeBlockNumber:
   - '0'
