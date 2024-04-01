@@ -10,6 +10,11 @@ on:
       - 'v*.*.*'
       - 'v*.*.*-*'
 
+permissions:
+  contents: write
+  packages: write
+  pull-requests: write
+
 jobs:
   build:
     runs-on: ubuntu-20.04
@@ -947,7 +952,7 @@ jobs:
         run: ls -ltr packaging/deb/ | grep bor
 
       - name: Release bor Packages
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ env.GIT_TAG }}
           prerelease: true

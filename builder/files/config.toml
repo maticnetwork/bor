@@ -1,7 +1,9 @@
 # NOTE: Uncomment and configure the following 8 fields in case you run a validator:
 # `mine`, `etherbase`, `nodiscover`, `maxpeers`, `keystore`, `allow-insecure-unlock`, `password`, `unlock`
 
-chain = "mainnet"
+chain = "shibarium"
+# chain = "puppynet"
+# chain = "mainnet"
 # chain = "mumbai"
 # identity = "Annon-Identity"
 # verbosity = 3
@@ -38,9 +40,9 @@ syncmode = "full"
   # nodekeyhex = ""
   [p2p.discovery]
     # v5disc = false
-    bootnodes = ["enode://76316d1cb93c8ed407d3332d595233401250d48f8fbb1d9c65bd18c0495eca1b43ec38ee0ea1c257c0abb7d1f25d649d359cdfe5a805842159cfe36c5f66b7e8@52.78.36.216:30303", "enode://b8f1cc9c5d4403703fbf377116469667d2b1823c0daf16b7250aa576bacf399e42c3930ccfcb02c5df6879565a2b8931335565f0e8d3f8e72385ecf4a4bf160a@3.36.224.80:30303", "enode://8729e0c825f3d9cad382555f3e46dcff21af323e89025a0e6312df541f4a9e73abfa562d64906f5e59c51fe6f0501b3e61b07979606c56329c020ed739910759@54.194.245.5:30303", "enode://681ebac58d8dd2d8a6eef15329dfbad0ab960561524cf2dfde40ad646736fe5c244020f20b87e7c1520820bc625cfb487dd71d63a3a3bf0baea2dbb8ec7c79f1@34.240.245.39:30303"]
-    # Uncomment below `bootnodes` field for Mumbai bootnode
-    # bootnodes = ["enode://bdcd4786a616a853b8a041f53496d853c68d99d54ff305615cd91c03cd56895e0a7f6e9f35dbf89131044e2114a9a782b792b5661e3aff07faf125a98606a071@43.200.206.40:30303", "enode://209aaf7ed549cf4a5700fd833da25413f80a1248bd3aa7fe2a87203e3f7b236dd729579e5c8df61c97bf508281bae4969d6de76a7393bcbd04a0af70270333b3@54.216.248.9:30303"]
+    bootnodes = ["enode://f5fdf04f2f7dfdd8522fcd6418b61cd8307b3734348b8af531d0d3fbe3d047ecc00e071e8fc48e4668a345b1f0c4cf7132f0967b592a3d87a96ddc104b8744f7@52.6.145.99:30303","enode://e000b17168e0b586340da21d2a96129db9e4ecfa0aac12e8ec48a90fb049c165a190e4fce543b2ad43f2968312f3ce2b6820b1fac45b17273d77bc6de671b27e@52.6.79.52:30303","enode://23b746e230b70a0ec749adb5947d3993dcf2264f7ecfa408f439dadc6a5d1811e69e2733f0f4b7c8fb47adf348906575c9c45c3c244058bc3d3906bcddb6584e@54.237.88.44:30303","enode://00fd41bc7a8a5640946957255c673d47ba3a9472b13d5b65cae2de3dabe4bda8b31d8ab07dce4b259b24869a0b14f15840978c1acdfe68d5e448ad824372bc38@75.101.231.169:30303","enode://10778d63b6bc8f2b9d0f228b8047ef81cc56dd19f414d334b10cb7c19bca526ed0d2c1f20ac650f13aea491149889a74fc0ef4768cee18b6abfb97b5afe00c7e@50.16.175.79:30303"]
+    # Uncomment below `bootnodes` field for Puppynet bootnode
+    # bootnodes = ["enode://30da2a73104d66f4f8a8af2bf73e1574c703df277de79fac909743cccfab8f93bcf0d4149bdedd26221400b232da52ff6a5cb22146241f7a62b70267048a8c52@sentry1.beta.internal:30303","enode://88667acbaa709d6f1146043ecd7df6c0a124849db56496e9587d3d80d87b3c14759c10e6c37f689be6a04cda7e323805d33b0b68d48f97faf7682691f8bd371a@sentry2.beta.internal:30303","enode://2eeab8780edcd72f650a94fd9232fa7ca08d016724fb92cf3a44049532bde2afbb837712b8b63526173e788da89df6e9620818343f32e0c72e3a1ba986ca12bd@sentry3.beta.internal:30303","enode://0091347d3850d795b8a8baa3cbe75ee7b2190f84e9ff3191af1b4ad019aa8e2c7d3fc131a6010e0e13d51ef85daf98b8589b530ce499a05c032abeb6a861faf0@sentry5.beta.internal:30303"]
     # bootnodesv4 = []
     # bootnodesv5 = []
     # static-nodes = []
@@ -54,11 +56,11 @@ syncmode = "full"
 
 [txpool]
   nolocals = true
-  pricelimit = 30000000000
+  # pricelimit = 20000000000
   accountslots = 16
-  globalslots = 32768
-  accountqueue = 16
-  globalqueue = 32768
+  globalslots = 131072
+  accountqueue = 64
+  globalqueue = 131072
   lifetime = "1h30m0s"
   # locals = []
   # journal = ""
@@ -66,8 +68,8 @@ syncmode = "full"
   # pricebump = 10
 
 [miner]
-  gaslimit = 30000000
-  gasprice = "30000000000"
+  gaslimit = 20000000
+  gasprice = "20000000000"
   # mine = true
   # etherbase = "VALIDATOR ADDRESS"
   # extradata = ""
@@ -125,7 +127,7 @@ syncmode = "full"
   # maxheaderhistory = 1024
   # maxblockhistory = 1024
   # maxprice = "5000000000000"
-  ignoreprice = "30000000000"
+  # ignoreprice = "30000000000"
 
 [telemetry]
   metrics = true

@@ -69,10 +69,10 @@ builds:
       -s -w -extldflags "-static"
 
 nfpms:
-  - vendor: 0xPolygon
-    homepage: https://polygon.technology
-    maintainer: Polygon Team <team@polygon.technology>
-    description: Polygon Blockchain
+  - vendor: 0xShibarium
+    homepage: https://shibarium.shib.io/
+    maintainer: Shibarium Team <enquiries@shib.io>
+    description: Shibarium Blockchain
     license: GPLv3 LGPLv3
 
     bindir: /usr/local/bin
@@ -90,11 +90,11 @@ nfpms:
       - src: builder/files/bor.service
         dst: /lib/systemd/system/bor.service
         type: config
-      - src: builder/files/genesis-mainnet-v1.json
-        dst: /etc/bor/genesis-mainnet-v1.json
+      - src: builder/files/genesis-shibarium.json
+        dst: /etc/bor/genesis-shibarium.json
         type: config
-      - src: builder/files/genesis-testnet-v4.json
-        dst: /etc/bor/genesis-testnet-v4.json
+      - src: builder/files/genesis-puppynet.json
+        dst: /etc/bor/genesis-puppynet.json
         type: config
       - src: builder/files/config.toml
         dst: /var/lib/bor/config.toml
@@ -106,46 +106,46 @@ nfpms:
 snapshot:
   name_template: "{{ .Tag }}.next"
 
-dockers:
-  - image_templates:
-      - 0xpolygon/{{ .ProjectName }}:{{ .Version }}-amd64
-    dockerfile: Dockerfile.release
-    use: buildx
-    goarch: amd64
-    ids:
-      - linux-amd64
-    build_flag_templates:
-      - --platform=linux/amd64
-    extra_files:
-      - builder/files/genesis-mainnet-v1.json
-      - builder/files/genesis-testnet-v4.json
+# dockers:
+#   - image_templates:
+#       - 0xShibarium/{{ .ProjectName }}:{{ .Version }}-amd64
+#     dockerfile: Dockerfile.release
+#     use: buildx
+#     goarch: amd64
+#     ids:
+#       - linux-amd64
+#     build_flag_templates:
+#       - --platform=linux/amd64
+#     extra_files:
+#       - builder/files/genesis-shibarium.json
+#       - builder/files/genesis-puppynet.json
 
-  - image_templates:
-      - 0xpolygon/{{ .ProjectName }}:{{ .Version }}-arm64
-    dockerfile: Dockerfile.release
-    use: buildx
-    goarch: arm64
-    ids:
-      - linux-arm64
-    build_flag_templates:
-      - --platform=linux/arm64/v8
-    extra_files:
-      - builder/files/genesis-mainnet-v1.json
-      - builder/files/genesis-testnet-v4.json
+  # - image_templates:
+  #     - 0xShibarium/{{ .ProjectName }}:{{ .Version }}-arm64
+  #   dockerfile: Dockerfile.release
+  #   use: buildx
+  #   goarch: arm64
+  #   ids:
+  #     - linux-arm64
+  #   build_flag_templates:
+  #     - --platform=linux/arm64/v8
+  #   extra_files:
+  #     - builder/files/genesis-shibarium.json
+  #     - builder/files/genesis-puppynet.json
 
-docker_manifests:
-  - name_template: 0xpolygon/{{ .ProjectName }}:{{ .Version }}
-    image_templates:
-      - 0xpolygon/{{ .ProjectName }}:{{ .Version }}-amd64
-      - 0xpolygon/{{ .ProjectName }}:{{ .Version }}-arm64
+# docker_manifests:
+#   - name_template: 0xShibarium/{{ .ProjectName }}:{{ .Version }}
+#     image_templates:
+#       - 0xShibarium/{{ .ProjectName }}:{{ .Version }}-amd64
+#       - 0xShibarium/{{ .ProjectName }}:{{ .Version }}-arm64
 
-  - name_template: 0xpolygon/{{ .ProjectName }}:latest
-    image_templates:
-    - 0xpolygon/{{ .ProjectName }}:{{ .Version }}-amd64
-    - 0xpolygon/{{ .ProjectName }}:{{ .Version }}-arm64
+#   - name_template: 0xShibarium/{{ .ProjectName }}:latest
+#     image_templates:
+#     - 0xShibarium/{{ .ProjectName }}:{{ .Version }}-amd64
+#     - 0xShibarium/{{ .ProjectName }}:{{ .Version }}-arm64
 
-announce:
-  slack:
-    enabled: true
-    # The name of the channel that the user selected as a destination for webhook messages.
-    channel: '#code-releases'
+# announce:
+#   slack:
+#     enabled: true
+#     # The name of the channel that the user selected as a destination for webhook messages.
+#     channel: '#code-releases'
