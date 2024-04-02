@@ -106,43 +106,43 @@ nfpms:
 snapshot:
   name_template: "{{ .Tag }}.next"
 
-# dockers:
-#   - image_templates:
-#       - 0xShibarium/{{ .ProjectName }}:{{ .Version }}-amd64
-#     dockerfile: Dockerfile.release
-#     use: buildx
-#     goarch: amd64
-#     ids:
-#       - linux-amd64
-#     build_flag_templates:
-#       - --platform=linux/amd64
-#     extra_files:
-#       - builder/files/genesis-shibarium.json
-#       - builder/files/genesis-puppynet.json
+dockers:
+  - image_templates:
+      - public.ecr.aws/c0g9b1k8/{{ .ProjectName }}:{{ .Version }}-amd64
+    dockerfile: Dockerfile.release
+    use: buildx
+    goarch: amd64
+    ids:
+      - linux-amd64
+    build_flag_templates:
+      - --platform=linux/amd64
+    extra_files:
+      - builder/files/genesis-shibarium.json
+      - builder/files/genesis-puppynet.json
 
-  # - image_templates:
-  #     - 0xShibarium/{{ .ProjectName }}:{{ .Version }}-arm64
-  #   dockerfile: Dockerfile.release
-  #   use: buildx
-  #   goarch: arm64
-  #   ids:
-  #     - linux-arm64
-  #   build_flag_templates:
-  #     - --platform=linux/arm64/v8
-  #   extra_files:
-  #     - builder/files/genesis-shibarium.json
-  #     - builder/files/genesis-puppynet.json
+  - image_templates:
+      - public.ecr.aws/c0g9b1k8/{{ .ProjectName }}:{{ .Version }}-arm64
+    dockerfile: Dockerfile.release
+    use: buildx
+    goarch: arm64
+    ids:
+      - linux-arm64
+    build_flag_templates:
+      - --platform=linux/arm64/v8
+    extra_files:
+      - builder/files/genesis-shibarium.json
+      - builder/files/genesis-puppynet.json
 
-# docker_manifests:
-#   - name_template: 0xShibarium/{{ .ProjectName }}:{{ .Version }}
-#     image_templates:
-#       - 0xShibarium/{{ .ProjectName }}:{{ .Version }}-amd64
-#       - 0xShibarium/{{ .ProjectName }}:{{ .Version }}-arm64
+docker_manifests:
+  - name_template: public.ecr.aws/c0g9b1k8/{{ .ProjectName }}:{{ .Version }}
+    image_templates:
+      - public.ecr.aws/c0g9b1k8/{{ .ProjectName }}:{{ .Version }}-amd64
+      - public.ecr.aws/c0g9b1k8/{{ .ProjectName }}:{{ .Version }}-arm64
 
-#   - name_template: 0xShibarium/{{ .ProjectName }}:latest
-#     image_templates:
-#     - 0xShibarium/{{ .ProjectName }}:{{ .Version }}-amd64
-#     - 0xShibarium/{{ .ProjectName }}:{{ .Version }}-arm64
+  - name_template: public.ecr.aws/c0g9b1k8/{{ .ProjectName }}:latest
+    image_templates:
+    - public.ecr.aws/c0g9b1k8/{{ .ProjectName }}:{{ .Version }}-amd64
+    - public.ecr.aws/c0g9b1k8/{{ .ProjectName }}:{{ .Version }}-arm64
 
 # announce:
 #   slack:
