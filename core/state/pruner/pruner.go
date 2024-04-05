@@ -37,7 +37,7 @@ import (
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
-	"github.com/prometheus/tsdb/fileutil"
+	"github.com/gofrs/flock"
 )
 
 const (
@@ -397,7 +397,7 @@ func (p *BlockPruner) backUpOldDb(name string, cache, handles int, namespace str
 
 	// Create new ancientdb backup and record the new and last version of offset in kvDB as well.
 	// For every round, newoffset actually equals to the startBlockNumber in ancient backup db.
-	frdbBack, err := rawdb.NewFreezerDb(chainDb, p.newAncientPath, namespace, readonly, startBlockNumber)
+	frdbBack, err := rawdb.NewChainFreezer(p.newAncientPath, namespace, readonly, startBlockNumber)
 	if err != nil {
 		log.Error("Failed to create ancient freezer backup", "err=", err)
 		return err
@@ -412,10 +412,11 @@ func (p *BlockPruner) backUpOldDb(name string, cache, handles int, namespace str
 	}
 
 	// It's guaranteed that the old/new offsets are updated as well as the new ancientDB are created if this flock exist.
-	lock, _, err := fileutil.Flock(filepath.Join(p.newAncientPath, "PRUNEFLOCKBACK"))
-	if err != nil {
-		log.Error("file lock error", "err", err)
+	lock := flock.New(filepath.Join(p.newAncientPath, "PRUNEFLOCKBACK"))
+	if locked, err := lock.TryLock(); err != nil {
 		return err
+	} else if !locked {
+		return errors.New("datadir already used by another process")
 	}
 
 	log.Info("prune info", "old offset", oldOffSet, "number of items in ancientDB", itemsOfAncient, "amount to reserve", p.BlockAmountReserved)
@@ -427,7 +428,8 @@ func (p *BlockPruner) backUpOldDb(name string, cache, handles int, namespace str
 		blockHash := rawdb.ReadCanonicalHash(chainDb, blockNumber)
 		block := rawdb.ReadBlock(chainDb, blockHash, blockNumber)
 		receipts := rawdb.ReadRawReceipts(chainDb, blockHash, blockNumber)
-		borReceipts := []*types.Receipt{rawdb.ReadBorReceipt(chainDb, blockHash, blockNumber)}
+		// TODO: pass the chain config
+		borReceipts := []*types.Receipt{rawdb.ReadBorReceipt(chainDb, blockHash, blockNumber, nil)}
 
 		// Calculate the total difficulty of the block
 		td := rawdb.ReadTd(chainDb, blockHash, blockNumber)
@@ -445,7 +447,7 @@ func (p *BlockPruner) backUpOldDb(name string, cache, handles int, namespace str
 			start = time.Now()
 		}
 	}
-	lock.Release()
+	lock.Unlock()
 	log.Info("block back up done", "current start blockNumber in ancientDB", startBlockNumber)
 	return nil
 }
