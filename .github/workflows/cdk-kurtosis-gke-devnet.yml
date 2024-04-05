@@ -1,4 +1,4 @@
-name: K8S DEVNETS - CDK
+name: Regression Detector - Ephemeral CDK Devnet
 on:
   push
 

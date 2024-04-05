@@ -1,13 +1,12 @@
-name: K8S DEVNETS - REGRESSION DETECTOR
+name: REGRESSION DETECTOR - EPHEMERAL DEVNETS
 on:
   workflow_dispatch:
     inputs:
-      bor_version:
-        description: 'bor version (default: latest)'
-        required: false
-        default: 'latest'
+      commit_id:
+        description: 'agglayer version (commit id)'
+        required: true
       bake_time:
-        description: 'bake time in minutes'
+        description: 'bake time (minutes)'
         required: true
 
 jobs:
@@ -41,90 +40,53 @@ jobs:
       run: |
         pip3 install tomlq
 
-    - name: Clone private polygon-devnets repo
+    - name: Clone internal kurtosis-cdk repo
       run: |
-        eval `ssh-agent -s`
-        ssh-add - <<< '${{ secrets.SSH_PRIVATE_KEY }}'
-        git clone -b fix/pos_k8s_devnets git@github.com:maticnetwork/polygon-devnets.git
+        git clone git@github.com:0xPolygon/kurtosis-cdk.git
+        cd kurtosis-cdk
+        git checkout dan/contracts_running_state
         
-    - name: Clone private panoptichain repo
+    - name: Clone internal agglayer repo
       run: |
-        eval `ssh-agent -s`
-        ssh-add - <<< '${{ secrets.SSH_PRIVATE_KEY_PANOPTICHAIN }}'
-        git clone -b dan/k8s_panoptichain git@github.com:0xPolygon/panoptichain.git
+        git clone git@github.com:0xPolygon/agglayer.git
+        cd agglayer
+        git checkout "${{ github.event.inputs.commit_id }}"
+        
+    - name: Build JIT agglayer image to be used in ephemeral devnet
+      run: |
+        cd agglayer
+        make build-docker
+        
+    - name: Install kurtosis
+      run: |
+        echo "deb [trusted=yes] https://apt.fury.io/kurtosis-tech/ /" | sudo tee /etc/apt/sources.list.d/kurtosis.list
+        sudo apt update
+        sudo apt install kurtosis-cli
 
-    - name: Deploy PoS devnet to isolated GKE namespace
-      run: |
+    - name: Setup necessary gke custom kurtosis netorking configs
+      run: |        
+        export KURTOSIS_CONFIG_PATH="$(kurtosis config path)"
+        cp /home/runner/work/bor/bor/kurtosis-config.yml $KURTOSIS_CONFIG_PATH
+        
+    - name: Set kurtosis cloud env
+      run: |       
         mkdir -p ~/.kube
-        echo "${{ secrets.GKE_CLUSTER_CREDENTIALS }}" > ~/.kube/regression-cluster.yaml
-        export KUBECONFIG=~/.kube/regression-cluster.yaml
-        cd polygon-devnets/kubernetes/pos
-        kubectl apply -k overlays/gcr --namespace=pos --context=gke_prj-polygonlabs-devtools-dev_europe-west2_ci-cluster-1
-        sleep 60
-    
-    - name: Deploy panoptichain, prometheus, grafana stack for metric tracking
-      run: |
-        cd panoptichain
-        export KUBECONFIG=~/.kube/regression-cluster.yaml
-        kubectl apply -f grafana-service.yaml,panoptichain-service.yaml,prometheus-service.yaml,grafana-deployment.yaml,grafana-claim0-persistentvolumeclaim.yaml,panoptichain-deployment.yaml,prometheus-deployment.yaml,prometheus-claim0-persistentvolumeclaim.yaml --namespace=pos --context=gke_prj-polygonlabs-devtools-dev_europe-west2_ci-cluster-1
-        sleep 60
-    
-    - name: Finally, deploy datadog-agent via helm chart
-      run: |
-        cd panoptichain/terraform
-        terraform init
-        terraform apply -auto-approve -target=helm_release.datadog_agent -var="datadog_api_key=${{ secrets.DATADOG_API_KEY }}" -var="coralogix_api_key=${{ secrets.CORALOGIX_API_KEY }}"
-        sleep 60
-    
-    - name: Auto-apply load and report any regressions here
-      run: |
-        MONITOR_ID="140974014"  # K8S DEVNET: COMPOSITE MONITOR ID
-        DATADOG_API_KEY="${{ secrets.DATADOG_API_KEY }}"
-        DATADOG_APP_KEY="${{ secrets.DATADOG_APP_KEY }}"
+        echo "${{ secrets.GKE_CLUSTER_CREDENTIALS }}" > ~/.kube/config     
+        export KUBECONFIG=~/.kube/config && kurtosis cluster set cloud
 
-        bake_time="${{ github.event.inputs.bake_time }}"
-        end_minute=$(( $(date +'%M') + bake_time))
+    - name: Run kurtosis agent in background
+      run: |  
+        kurtosis gateway &  # Run cmd in background
+        sleep 10
 
-        while [ $(date +'%M') -lt $end_minute ]; do
-          STATUS=$(curl -X GET "https://api.datadoghq.com/api/v1/monitor/${MONITOR_ID}" \
-                    -H "Content-Type: application/json" \
-                    -H "DD-API-KEY: ${DATADOG_API_KEY}" \
-                    -H "DD-APPLICATION-KEY: ${DATADOG_APP_KEY}" \
-                    -s \
-                    | jq -r '.overall_state')
-          echo "K8S DEVNET HEALTH STATUS: $STATUS"
-          echo "Review your devnet health dashboard here: https://app.datadoghq.com/dashboard/fqu-nh2-bzd?fromUser=false&refresh_mode=sliding&view=spans&from_ts=1709886652761&to_ts=1709890252761&live=true"
-          sleep 60
-        done
+    - name: Deploy CDK devnet to isolated GKE namespace
+      run: |
+        cd kurtosis-cdk
+        kurtosis engine restart
+        kurtosis run --enclave cdk-v1 --args-file params.yml .
+        sleep 300
     
-      # After stress tests, cleanup all ephemeral K8S devnet resources    
-    - name: Remove panoptichain, prometheus, and grafana resources
+    - name: Finally, remove all devnet resources
       run: |
-        cd panoptichain
-        export KUBECONFIG=~/.kube/regression-cluster.yaml
-        kubectl delete -f grafana-service.yaml,panoptichain-service.yaml,prometheus-service.yaml,grafana-deployment.yaml,grafana-claim0-persistentvolumeclaim.yaml,panoptichain-deployment.yaml,prometheus-deployment.yaml,prometheus-claim0-persistentvolumeclaim.yaml --namespace=pos --context=gke_prj-polygonlabs-devtools-dev_europe-west2_ci-cluster-1
-
-    - name: Remove all Datadog agent resources 
-      env:
-        DATADOG_API_KEY: ${{ secrets.DATADOG_API_KEY }}
-        CORALOGIX_API_KEY: ${{ secrets.CORALOGIX_API_KEY }}
-      run: |
-        cd panoptichain/terraform
-        retries=3
-        delay=5
-        count=0
-        while [ $count -lt $retries ]; do
-          terraform init
-          terraform destroy -auto-approve -target=helm_release.datadog_agent -var="datadog_api_key=${DATADOG_API_KEY}" -var="coralogix_api_key=${CORALOGIX_API_KEY}"
-          if [ $? -eq 0 ]; then
-            break
-          fi
-          count=$((count+1))
-          sleep $delay
-        done
-    
-    - name: Finally, remove pos devnet resources and return to clean slate GKE environment
-      run: |
-        cd polygon-devnets/kubernetes/pos
-        export KUBECONFIG=~/.kube/regression-cluster.yaml
-        kubectl delete -k overlays/gcr --namespace=pos --context=gke_prj-polygonlabs-devtools-dev_europe-west2_ci-cluster-1
+        cd kurtosis-cdk
+        kurtosis clean -a
