@@ -1,4 +1,4 @@
-name: REGRESSION DETECTOR - EPHEMERAL DEVNETS
+name: REGRESSION DETECTOR - DEVNET
 on:
   workflow_dispatch:
     inputs:
@@ -63,16 +63,16 @@ jobs:
         sudo apt update
         sudo apt install kurtosis-cli
 
-    - name: Setup necessary gke custom kurtosis netorking configs
-      run: |        
-        export KURTOSIS_CONFIG_PATH="$(kurtosis config path)"
-        cp /home/runner/work/bor/bor/kurtosis-config.yml $KURTOSIS_CONFIG_PATH
-        
-    - name: Set kurtosis cloud env
-      run: |       
-        mkdir -p ~/.kube
-        echo "${{ secrets.GKE_CLUSTER_CREDENTIALS }}" > ~/.kube/config     
-        export KUBECONFIG=~/.kube/config && kurtosis cluster set cloud
+    # - name: Setup necessary gke custom kurtosis netorking configs
+    #   run: |        
+    #     export KURTOSIS_CONFIG_PATH="$(kurtosis config path)"
+    #     cp /home/runner/work/bor/bor/kurtosis-config.yml $KURTOSIS_CONFIG_PATH
+    # 
+    # - name: Set kurtosis cloud env
+    #   run: |       
+    #     mkdir -p ~/.kube
+    #     echo "${{ secrets.GKE_CLUSTER_CREDENTIALS }}" > ~/.kube/config     
+    #     export KUBECONFIG=~/.kube/config && kurtosis cluster set cloud
 
     - name: Run kurtosis agent in background
       run: |  
