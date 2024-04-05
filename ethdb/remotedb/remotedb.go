@@ -96,8 +96,8 @@ func (db *Database) ItemAmountInAncient() (uint64, error) {
 	panic("not supported")
 }
 
-// AncientOffSet returns an error as we don't have a backing chain freezer.
-func (db *Database) AncientOffSet() uint64 {
+// AncientOffset returns an error as we don't have a backing chain freezer.
+func (db *Database) AncientOffset() uint64 {
 	panic("not supported")
 }
 

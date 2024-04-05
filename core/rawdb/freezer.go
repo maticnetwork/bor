@@ -225,11 +225,11 @@ func (f *Freezer) Ancients() (uint64, error) {
 
 // ItemAmountInAncient returns the actual length of current ancientDB.
 func (f *Freezer) ItemAmountInAncient() (uint64, error) {
-	return f.frozen.Load() - f.AncientOffSet(), nil
+	return f.frozen.Load() - f.AncientOffset(), nil
 }
 
-// AncientOffSet returns the offset of current ancientDB.
-func (f *Freezer) AncientOffSet() uint64 {
+// AncientOffset returns the offset of current ancientDB.
+func (f *Freezer) AncientOffset() uint64 {
 	return atomic.LoadUint64(&f.offset)
 }
 

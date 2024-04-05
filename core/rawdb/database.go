@@ -143,8 +143,8 @@ func (db *nofreezedb) ItemAmountInAncient() (uint64, error) {
 	return 0, errNotSupported
 }
 
-// AncientOffSet returns an error as we don't have a backing chain freezer.
-func (db *nofreezedb) AncientOffSet() uint64 {
+// AncientOffset returns an error as we don't have a backing chain freezer.
+func (db *nofreezedb) AncientOffset() uint64 {
 	return 0
 }
 
@@ -203,14 +203,14 @@ func ReadOffsetOfLastAncientFreezer(db ethdb.KeyValueReader) uint64 {
 // WriteOffsetOfCurrentAncientFreezer writes current offset of ancient freezer into ethdb
 func WriteOffsetOfCurrentAncientFreezer(db ethdb.KeyValueWriter, offset uint64) {
 	if err := db.Put(offsetOfCurrentAncientFreezer, new(big.Int).SetUint64(offset).Bytes()); err != nil {
-		log.Crit("Failed to store offSetOfAncientFreezer", "err", err)
+		log.Crit("Failed to store offsetOfAncientFreezer", "err", err)
 	}
 }
 
 // WriteOffsetOfLastAncientFreezer writes the last offset of ancient freezer into ethdb
 func WriteOffsetOfLastAncientFreezer(db ethdb.KeyValueWriter, offset uint64) {
 	if err := db.Put(offsetOfLastAncientFreezer, new(big.Int).SetUint64(offset).Bytes()); err != nil {
-		log.Crit("Failed to store offSetOfAncientFreezer", "err", err)
+		log.Crit("Failed to store offsetOfAncientFreezer", "err", err)
 	}
 }
 

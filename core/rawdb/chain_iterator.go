@@ -44,7 +44,7 @@ func InitDatabaseFromFreezer(db ethdb.Database) {
 		start  = time.Now()
 		logged = start.Add(-7 * time.Second) // Unindex during import is fast, don't double log
 		hash   common.Hash
-		offset = db.AncientOffSet()
+		offset = db.AncientOffset()
 	)
 
 	for i := uint64(0) + offset; i < frozen+offset; {
@@ -108,7 +108,7 @@ func iterateTransactions(db ethdb.Database, from uint64, to uint64, reverse bool
 		rlp    rlp.RawValue
 	}
 
-	if offset := db.AncientOffSet(); offset > from {
+	if offset := db.AncientOffset(); offset > from {
 		from = offset
 	}
 
@@ -207,7 +207,7 @@ func iterateTransactions(db ethdb.Database, from uint64, to uint64, reverse bool
 // signal received.
 func indexTransactions(db ethdb.Database, from uint64, to uint64, interrupt chan struct{}, hook func(uint64) bool) {
 	// adjust range boundary for pruned block
-	if offset := db.AncientOffSet(); offset > from {
+	if offset := db.AncientOffset(); offset > from {
 		from = offset
 	}
 	// short circuit for invalid range
@@ -310,7 +310,7 @@ func indexTransactionsForTesting(db ethdb.Database, from uint64, to uint64, inte
 // signal received.
 func unindexTransactions(db ethdb.Database, from uint64, to uint64, interrupt chan struct{}, hook func(uint64) bool) {
 	// adjust range boundary for pruned block
-	if offset := db.AncientOffSet(); offset > from {
+	if offset := db.AncientOffset(); offset > from {
 		from = offset
 	}
 	// short circuit for invalid range

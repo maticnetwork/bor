@@ -98,8 +98,8 @@ type AncientReaderOp interface {
 	// ItemAmountInAncient returns the actual length of current ancientDB.
 	ItemAmountInAncient() (uint64, error)
 
-	// AncientOffSet returns the offset of current ancientDB.
-	AncientOffSet() uint64
+	// AncientOffset returns the offset of current ancientDB.
+	AncientOffset() uint64
 }
 
 // AncientReader is the extended ancient reader interface including 'batched' or 'atomic' reading.

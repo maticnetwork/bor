@@ -151,8 +151,8 @@ func (f *ResettableFreezer) ItemAmountInAncient() (uint64, error) {
 	return f.Ancients()
 }
 
-// AncientOffSet returns the offset of current ancientDB.
-func (f *ResettableFreezer) AncientOffSet() uint64 {
+// AncientOffset returns the offset of current ancientDB.
+func (f *ResettableFreezer) AncientOffset() uint64 {
 	return 0
 }
 

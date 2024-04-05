@@ -64,18 +64,18 @@ func (mr *MockDatabaseMockRecorder) AncientDatadir() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AncientDatadir", reflect.TypeOf((*MockDatabase)(nil).AncientDatadir))
 }
 
-// AncientOffSet mocks base method.
-func (m *MockDatabase) AncientOffSet() uint64 {
+// AncientOffset mocks base method.
+func (m *MockDatabase) AncientOffset() uint64 {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AncientOffSet")
+	ret := m.ctrl.Call(m, "AncientOffset")
 	ret0, _ := ret[0].(uint64)
 	return ret0
 }
 
-// AncientOffSet indicates an expected call of AncientOffSet.
-func (mr *MockDatabaseMockRecorder) AncientOffSet() *gomock.Call {
+// AncientOffset indicates an expected call of AncientOffset.
+func (mr *MockDatabaseMockRecorder) AncientOffset() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AncientOffSet", reflect.TypeOf((*MockDatabase)(nil).AncientOffSet))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AncientOffset", reflect.TypeOf((*MockDatabase)(nil).AncientOffset))
 }
 
 // AncientRange mocks base method.

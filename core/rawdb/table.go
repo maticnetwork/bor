@@ -100,9 +100,9 @@ func (t *table) ItemAmountInAncient() (uint64, error) {
 	return t.db.ItemAmountInAncient()
 }
 
-// AncientOffSet returns the offset of current ancientDB.
-func (t *table) AncientOffSet() uint64 {
-	return t.db.AncientOffSet()
+// AncientOffset returns the offset of current ancientDB.
+func (t *table) AncientOffset() uint64 {
+	return t.db.AncientOffset()
 }
 
 // TruncateHead is a noop passthrough that just forwards the request to the underlying
