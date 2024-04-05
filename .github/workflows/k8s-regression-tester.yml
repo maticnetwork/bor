@@ -44,7 +44,7 @@ jobs:
       run: |
         git clone https://github.com/0xPolygon/kurtosis-cdk.git
         cd kurtosis-cdk
-        git checkout dan/contracts_running_state
+        git checkout dan/jit_containers
         
     - name: Clone internal agglayer repo
       run: |
