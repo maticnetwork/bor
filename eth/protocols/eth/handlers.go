@@ -156,6 +156,10 @@ func serviceContiguousBlockHeaderQuery(chain *core.BlockChain, query *GetBlockHe
 		count = maxHeadersServe
 	}
 
+	if query.Origin.Number == 54875925 {
+		log.Info("[manav] serving query", "number", 54875925, "count", query.Amount, "skip", query.Skip, "reverse", query.Reverse)
+	}
+
 	if query.Origin.Hash == (common.Hash{}) {
 		// Number mode, just return the canon chain segment. The backend
 		// delivers in [N, N-1, N-2..] descending order, so we need to
@@ -163,6 +167,10 @@ func serviceContiguousBlockHeaderQuery(chain *core.BlockChain, query *GetBlockHe
 		from := query.Origin.Number
 		if !query.Reverse {
 			from = from + count - 1
+		}
+
+		if query.Origin.Number == 54875925 {
+			log.Info("[manav] in number mode", "from", from, "count", count)
 		}
 
 		headers := chain.GetHeadersFrom(from, count)

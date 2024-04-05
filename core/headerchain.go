@@ -544,6 +544,7 @@ func (hc *HeaderChain) GetHeaderByNumber(number uint64) *types.Header {
 func (hc *HeaderChain) GetHeadersFrom(number, count uint64) []rlp.RawValue {
 	// If the request is for future headers, we still return the portion of
 	// headers that we are able to serve
+	original := number
 	if current := hc.CurrentHeader().Number.Uint64(); current < number {
 		if count > number-current {
 			count -= number - current
@@ -551,6 +552,10 @@ func (hc *HeaderChain) GetHeadersFrom(number, count uint64) []rlp.RawValue {
 		} else {
 			return nil
 		}
+	}
+
+	if original == 54875925 {
+		log.Info("[manav] about to read headers", "number", number, "count", count)
 	}
 
 	var headers []rlp.RawValue
@@ -572,9 +577,21 @@ func (hc *HeaderChain) GetHeadersFrom(number, count uint64) []rlp.RawValue {
 		count--
 		number--
 	}
+
+	if original == 54875925 {
+		log.Info("[manav] read some headers from cache", "len", len(headers), "left", count)
+	}
+
 	// Read remaining from db
 	if count > 0 {
 		headers = append(headers, rawdb.ReadHeaderRange(hc.chainDb, number, count)...)
+		if original == 54875925 {
+			log.Info("[manav] read some headers from db", "len", len(headers), "left", count)
+		}
+	}
+
+	if original == 54875925 {
+		log.Info("[manav] returning", "len", len(headers))
 	}
 
 	return headers
