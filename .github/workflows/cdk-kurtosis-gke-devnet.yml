@@ -1,6 +1,4 @@
 name: Regression Detector - Ephemeral CDK Devnet
-on:
-  push
 
 jobs:
   deploy_devnet:
