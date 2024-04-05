@@ -554,7 +554,7 @@ func (hc *HeaderChain) GetHeadersFrom(number, count uint64) []rlp.RawValue {
 		}
 	}
 
-	if original == 54875925 {
+	if original == 54876116 {
 		log.Info("[manav] about to read headers", "number", number, "count", count)
 	}
 
@@ -578,19 +578,19 @@ func (hc *HeaderChain) GetHeadersFrom(number, count uint64) []rlp.RawValue {
 		number--
 	}
 
-	if original == 54875925 {
+	if original == 54876116 {
 		log.Info("[manav] read some headers from cache", "len", len(headers), "left", count)
 	}
 
 	// Read remaining from db
 	if count > 0 {
 		headers = append(headers, rawdb.ReadHeaderRange(hc.chainDb, number, count)...)
-		if original == 54875925 {
+		if original == 54876116 {
 			log.Info("[manav] read some headers from db", "len", len(headers), "left", count)
 		}
 	}
 
-	if original == 54875925 {
+	if original == 54876116 {
 		log.Info("[manav] returning", "len", len(headers))
 	}
 
