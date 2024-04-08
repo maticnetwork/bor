@@ -51,7 +51,8 @@ jobs:
       run: |
         git clone https://github.com/0xPolygon/agglayer.git
         cd agglayer
-        git checkout "${{ github.event.inputs.commit_id }}"
+        # git checkout "${{ github.event.inputs.commit_id }}"
+        git checkout c0a88f1
         
     - name: Build JIT agglayer image to be used in ephemeral devnet
       run: |
