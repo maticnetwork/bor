@@ -42,63 +42,51 @@ jobs:
         cd kurtosis-cdk
         git checkout dan/jit_containers_superusers
         
-    - name: Clone internal agglayer repo
+    - name: Clone and build agglayer
       run: |
         git clone https://github.com/0xPolygon/agglayer.git
         cd agglayer
         git checkout "${{ github.event.inputs.zkevm_agglayer_commit_id }}"
-    - name: Build JIT agglayer image for ephemeral devnet
-      run: |
         docker compose -f agglayer/docker/docker-compose.yaml build --no-cache agglayer
         sleep 10
         
-    - name: Clone internal bridge service repo
+    - name: Clone and build zkevm-bridge-service
       run: |
         git clone https://github.com/0xPolygonHermez/zkevm-bridge-service.git
         cd zkevm-bridge-service
         git checkout "${{ github.event.inputs.zkevm_bridge_service_commit_id }}"
-    - name: Build JIT zkevm-bridge-service image for ephemeral devnet
-      run: |
         docker build -t zkevm-bridge-service:local -f ./Dockerfile .
         sleep 10
         
-    - name: Clone internal bridge ui repo
+    - name: Clone and build zkevm-bridge-ui
       run: |
         git clone https://github.com/0xPolygonHermez/zkevm-bridge-ui.git
         cd zkevm-bridge-ui
         git checkout "${{ github.event.inputs.zkevm_bridge_ui_commit_id }}"
-    - name: Build JIT zkevm-bridge-ui image for ephemeral devnet
-      run: |
         docker build -t zkevm-bridge-ui:local -f ./Dockerfile .
         sleep 10
         
-    - name: Clone internal dac repo
+    - name: Clone and build cdk-data-availability
       run: |
         git clone https://github.com/0xPolygon/cdk-data-availability.git
         cd cdk-data-availability
         git checkout "${{ github.event.inputs.zkevm_dac_commit_id }}"
-    - name: Build JIT cdk-data-availability image for ephemeral devnet
-      run: |
         docker build -t cdk-data-availability:local -f ./Dockerfile .
         sleep 10      
         
-    - name: Clone internal validium node repo
+    - name: Clone and build cdk-validium-node
       run: |
         git clone https://github.com/0xPolygon/cdk-validium-node.git
         cd cdk-validium-node
         git checkout "${{ github.event.inputs.zkevm_node_commit_id }}"
-    - name: Build JIT cdk-validium-node image for ephemeral devnet
-      run: |
         docker build -t cdk-validium-node:local -f ./Dockerfile .
         sleep 10       
 
-    - name: Clone internal zk prover repo
+    - name: Clone and build zkevm-prover
       run: |
         git clone https://github.com/0xPolygonHermez/zkevm-prover.git
         cd zkevm-prover
         git checkout "${{ github.event.inputs.zkevm_prover_commit_id }}"
-    - name: Build JIT zkevm-prover image for ephemeral devnet
-      run: |
         docker build -t zkevm-prover:local -f ./Dockerfile-GHA .
         sleep 10
         
