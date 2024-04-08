@@ -32,7 +32,7 @@ jobs:
         git clone https://github.com/0xPolygon/agglayer.git
         cd agglayer
         git checkout "${{ github.event.inputs.zkevm_agglayer_commit_id }}"
-        docker compose -f agglayer/docker/docker-compose.yaml build --no-cache agglayer
+        docker compose -f docker/docker-compose.yaml build --no-cache agglayer
         sleep 10
         
     - name: Install kurtosis
