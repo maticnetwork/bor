@@ -54,7 +54,7 @@ jobs:
         # git checkout "${{ github.event.inputs.commit_id }}"
         git checkout c0a88f1
         
-    - name: Build JIT agglayer image to be used in ephemeral devnet
+    - name: Build JIT agglayer image to be used in ephemeral devnets
       run: |
         docker compose -f agglayer/docker/docker-compose.yaml build --no-cache agglayer
         sleep 10
