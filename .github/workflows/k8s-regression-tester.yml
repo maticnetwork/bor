@@ -1,13 +1,14 @@
 name: REGRESSION DETECTOR - DEVNET
 on:
-  workflow_dispatch:
-    inputs:
-      commit_id:
-        description: 'agglayer version (commit id)'
-        required: true
-      bake_time:
-        description: 'bake time (minutes)'
-        required: true
+  push:
+  # workflow_dispatch:
+  #   inputs:
+  #     commit_id:
+  #       description: 'agglayer version (commit id)'
+  #       required: true
+  #     bake_time:
+  #       description: 'bake time (minutes)'
+  #       required: true
 
 jobs:
   deploy_devnet:
