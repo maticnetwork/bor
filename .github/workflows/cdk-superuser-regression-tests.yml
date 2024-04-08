@@ -1,28 +1,29 @@
 name: REGRESSION TESTER - SUPERUSERS
 on:
-  workflow_dispatch:
-    inputs:
-      zkevm_agglayer_commit_id:
-        description: '0xPolygon/agglayer (commit id)'
-        required: true
-      zkevm_bridge_service_commit_id:
-        description: '0xPolygonHermez/zkevm-bridge-service (commit id)'
-        required: true
-      zkevm_bridge_ui_commit_id:
-        description: '0xPolygonHermez/zkevm-bridge-ui (commit id)'
-        required: true
-      zkevm_dac_commit_id:
-        description: '0xPolygon/cdk-data-availability (commit id)'
-        required: true
-      zkevm_node_commit_id:
-        description: '0xPolygon/cdk-validium-node (commit id)'
-        required: true
-      zkevm_prover_commit_id:
-        description: '0xPolygonHermez/zkevm-prover (commit id)'
-        required: true
-      bake_time:
-        description: 'bake time (minutes)'
-        required: true
+  push:
+  # workflow_dispatch:
+  #   inputs:
+  #     zkevm_agglayer_commit_id:
+  #       description: '0xPolygon/agglayer (commit id)'
+  #       required: true
+  #     zkevm_bridge_service_commit_id:
+  #       description: '0xPolygonHermez/zkevm-bridge-service (commit id)'
+  #       required: true
+  #     zkevm_bridge_ui_commit_id:
+  #       description: '0xPolygonHermez/zkevm-bridge-ui (commit id)'
+  #       required: true
+  #     zkevm_dac_commit_id:
+  #       description: '0xPolygon/cdk-data-availability (commit id)'
+  #       required: true
+  #     zkevm_node_commit_id:
+  #       description: '0xPolygon/cdk-validium-node (commit id)'
+  #       required: true
+  #     zkevm_prover_commit_id:
+  #       description: '0xPolygonHermez/zkevm-prover (commit id)'
+  #       required: true
+  #     bake_time:
+  #       description: 'bake time (minutes)'
+  #       required: true
 
 jobs:
   deploy_devnet:
@@ -41,52 +42,56 @@ jobs:
         git clone https://github.com/0xPolygon/kurtosis-cdk.git
         cd kurtosis-cdk
         git checkout dan/jit_containers_superusers
-        
-    - name: Clone and build agglayer
-      run: |
-        git clone https://github.com/0xPolygon/agglayer.git
-        cd agglayer
-        git checkout "${{ github.event.inputs.zkevm_agglayer_commit_id }}"
-        docker compose -f docker/docker-compose.yaml build --no-cache agglayer
-        sleep 10
-        
-    - name: Clone and build zkevm-bridge-service
-      run: |
-        git clone https://github.com/0xPolygonHermez/zkevm-bridge-service.git
-        cd zkevm-bridge-service
-        git checkout "${{ github.event.inputs.zkevm_bridge_service_commit_id }}"
-        docker build -t zkevm-bridge-service:local -f ./Dockerfile .
-        sleep 10
-        
-    - name: Clone and build zkevm-bridge-ui
-      run: |
-        git clone https://github.com/0xPolygonHermez/zkevm-bridge-ui.git
-        cd zkevm-bridge-ui
-        git checkout "${{ github.event.inputs.zkevm_bridge_ui_commit_id }}"
-        docker build -t zkevm-bridge-ui:local -f ./Dockerfile .
-        sleep 10
-        
-    - name: Clone and build cdk-data-availability
-      run: |
-        git clone https://github.com/0xPolygon/cdk-data-availability.git
-        cd cdk-data-availability
-        git checkout "${{ github.event.inputs.zkevm_dac_commit_id }}"
-        docker build -t cdk-data-availability:local -f ./Dockerfile .
-        sleep 10      
-        
-    - name: Clone and build cdk-validium-node
-      run: |
-        git clone https://github.com/0xPolygon/cdk-validium-node.git
-        cd cdk-validium-node
-        git checkout "${{ github.event.inputs.zkevm_node_commit_id }}"
-        docker build -t cdk-validium-node:local -f ./Dockerfile .
-        sleep 10       
+
+    # - name: Clone and build agglayer
+    #   run: |
+    #     git clone https://github.com/0xPolygon/agglayer.git
+    #     cd agglayer
+    #     git checkout "${{ github.event.inputs.zkevm_agglayer_commit_id }}"
+    #     docker compose -f docker/docker-compose.yaml build --no-cache agglayer
+    #     sleep 10
+    # 
+    # - name: Clone and build zkevm-bridge-service
+    #   run: |
+    #     git clone https://github.com/0xPolygonHermez/zkevm-bridge-service.git
+    #     cd zkevm-bridge-service
+    #     git checkout "${{ github.event.inputs.zkevm_bridge_service_commit_id }}"
+    #     docker build -t zkevm-bridge-service:local -f ./Dockerfile .
+    #     sleep 10
+    # 
+    # - name: Clone and build zkevm-bridge-ui
+    #   run: |
+    #     git clone https://github.com/0xPolygonHermez/zkevm-bridge-ui.git
+    #     cd zkevm-bridge-ui
+    #     git checkout "${{ github.event.inputs.zkevm_bridge_ui_commit_id }}"
+    #     docker build -t zkevm-bridge-ui:local -f ./Dockerfile .
+    #     sleep 10
+    # 
+    # - name: Clone and build cdk-data-availability
+    #   run: |
+    #     git clone https://github.com/0xPolygon/cdk-data-availability.git
+    #     cd cdk-data-availability
+    #     git checkout "${{ github.event.inputs.zkevm_dac_commit_id }}"
+    #     docker build -t cdk-data-availability:local -f ./Dockerfile .
+    #     sleep 10      
+    # 
+    # - name: Clone and build cdk-validium-node
+    #   run: |
+    #     git clone https://github.com/0xPolygon/cdk-validium-node.git
+    #     cd cdk-validium-node
+    #     git checkout "${{ github.event.inputs.zkevm_node_commit_id }}"
+    #     docker build -t cdk-validium-node:local -f ./Dockerfile .
+    #     sleep 10       
 
     - name: Clone and build zkevm-prover
       run: |
         git clone https://github.com/0xPolygonHermez/zkevm-prover.git
         cd zkevm-prover
-        git checkout "${{ github.event.inputs.zkevm_prover_commit_id }}"
+        # git checkout "${{ github.event.inputs.zkevm_prover_commit_id }}"
+        git checkout d37e826
+        sudo apt-get install libgtest-dev
+        g++ tests/tests.cpp src/* -lgtest -lgmp -lomp -o test -g  -Wall -pthread -fopenmp -mavx2 -L$(find /usr/lib/llvm-* -name "libomp.so" | sed 's/libomp.so//')
+        g++ benchs/bench.cpp src/* -lbenchmark -lomp -lpthread -lgmp  -std=c++17 -Wall -pthread -fopenmp -mavx2 -L$(find /usr/lib/llvm-* -name "libomp.so" | sed 's/libomp.so//') -O3 -o bench
         docker build -t zkevm-prover:local -f ./Dockerfile-GHA .
         sleep 10
         
