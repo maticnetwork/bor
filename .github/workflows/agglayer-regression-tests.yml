@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       zkevm_agglayer_commit_id:
-        description: 'zkevm agglayer repo (commit id)'
+        description: '0xPolygon/agglayer (commit id)'
         required: true
       bake_time:
         description: 'bake time (minutes)'
