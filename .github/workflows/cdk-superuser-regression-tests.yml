@@ -1,0 +1,168 @@
+name: REGRESSION TESTER - SUPERUSERS
+on:
+  workflow_dispatch:
+    inputs:
+      zkevm_agglayer_commit_id:
+        description: 'zkevm agglayer repo (commit id)'
+        required: true
+      zkevm_bridge_service_commit_id:
+        description: 'zkevm bridge service repo (commit id)'
+        required: true
+      zkevm_bridge_ui_commit_id:
+        description: 'zkevm bridge ui repo (commit id)'
+        required: true
+      zkevm_contracts_commit_id:
+        description: 'zkevm contracts repo (commit id)'
+        required: true
+      zkevm_dac_commit_id:
+        description: 'zkevm dac repo (commit id)'
+        required: true
+      zkevm_node_commit_id:
+        description: 'zkevm node repo (commit id)'
+        required: true
+      zkevm_prover_commit_id:
+        description: 'zkevm prover repo (commit id)'
+        required: true
+      bake_time:
+        description: 'bake time (minutes)'
+        required: true
+
+jobs:
+  deploy_devnet:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        ref: ${{ github.event.before }}
+
+    - name: Set up Docker
+      uses: docker/setup-buildx-action@v1
+
+    - name: Setup Google Cloud SDK
+      uses: 'google-github-actions/setup-gcloud@v2'
+      with:
+        version: '>= 363.0.0'
+
+    - uses: 'google-github-actions/auth@v2'
+      with:
+        credentials_json: '${{ secrets.GOOGLE_CREDENTIALS }}'
+        project_id: 'prj-polygonlabs-devtools-dev'
+
+    - name: Install kubectl and gcloud kubectl auth plugin
+      run: |
+        curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" \
+        && sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl && gcloud components install gke-gcloud-auth-plugin
+
+    - name: Install tomlq for config file preparation
+      run: |
+        pip3 install tomlq
+
+    - name: Clone internal kurtosis-cdk repo
+      run: |
+        git clone https://github.com/0xPolygon/kurtosis-cdk.git
+        cd kurtosis-cdk
+        git checkout dan/jit_containers_superusers
+        
+    - name: Clone internal agglayer repo
+      run: |
+        git clone https://github.com/0xPolygon/agglayer.git
+        cd agglayer
+        git checkout "${{ github.event.inputs.zkevm_agglayer_commit_id }}"
+    - name: Build JIT agglayer image for ephemeral devnet
+      run: |
+        docker compose -f agglayer/docker/docker-compose.yaml build --no-cache agglayer
+        sleep 10
+        
+    - name: Clone internal bridge service repo
+      run: |
+        git clone https://github.com/0xPolygonHermez/zkevm-bridge-service.git
+        cd zkevm-bridge-service
+        git checkout "${{ github.event.inputs.zkevm_bridge_service_commit_id }}"
+    - name: Build JIT zkevm-bridge-service image for ephemeral devnet
+      run: |
+        docker build -t zkevm-bridge-service:local -f ./Dockerfile .
+        sleep 10
+        
+    - name: Clone internal bridge ui repo
+      run: |
+        git clone https://github.com/0xPolygonHermez/zkevm-bridge-ui.git
+        cd zkevm-bridge-ui
+        git checkout "${{ github.event.inputs.zkevm_bridge_ui_commit_id }}"
+    - name: Build JIT zkevm-bridge-ui image for ephemeral devnet
+      run: |
+        docker build -t zkevm-bridge-ui:local -f ./Dockerfile .
+        sleep 10
+        
+    - name: Clone internal dac repo
+      run: |
+        git clone https://github.com/0xPolygon/cdk-data-availability.git
+        cd cdk-data-availability
+        git checkout "${{ github.event.inputs.zkevm_dac_commit_id }}"
+    - name: Build JIT cdk-data-availability image for ephemeral devnet
+      run: |
+        docker build -t cdk-data-availability:local -f ./Dockerfile .
+        sleep 10      
+        
+    - name: Clone internal validium node repo
+      run: |
+        git clone https://github.com/0xPolygon/cdk-validium-node.git
+        cd cdk-validium-node
+        git checkout "${{ github.event.inputs.zkevm_node_commit_id }}"
+    - name: Build JIT cdk-validium-node image for ephemeral devnet
+      run: |
+        docker build -t cdk-validium-node:local -f ./Dockerfile .
+        sleep 10       
+
+    - name: Clone internal zk prover repo
+      run: |
+        git clone https://github.com/0xPolygonHermez/zkevm-prover.git
+        cd zkevm-prover
+        git checkout "${{ github.event.inputs.zkevm_prover_commit_id }}"
+    - name: Build JIT zkevm-prover image for ephemeral devnet
+      run: |
+        docker build -t zkevm-prover:local -f ./Dockerfile-GHA .
+        sleep 10
+        
+    - name: Install kurtosis
+      run: |
+        echo "deb [trusted=yes] https://apt.fury.io/kurtosis-tech/ /" | sudo tee /etc/apt/sources.list.d/kurtosis.list
+        sudo apt update
+        sudo apt install kurtosis-cli
+
+    - name: Run kurtosis agent in background
+      run: |  
+        kurtosis gateway &  # Run cmd in background
+        sleep 10
+
+    - name: Deploy CDK devnet on local github runner
+      run: |
+        cd kurtosis-cdk
+        kurtosis engine restart
+        kurtosis run --enclave cdk-v1 --args-file params.yml .
+
+    - name: Auto-apply load and report any regressions here
+      run: |
+        MONITOR_ID="140974014"  # K8S DEVNET: COMPOSITE MONITOR ID
+        DATADOG_API_KEY="${{ secrets.DATADOG_API_KEY }}"
+        DATADOG_APP_KEY="${{ secrets.DATADOG_APP_KEY }}"
+
+        bake_time="${{ github.event.inputs.bake_time }}"
+        end_minute=$(( $(date +'%M') + bake_time))
+
+        while [ $(date +'%M') -lt $end_minute ]; do
+          STATUS=$(curl -X GET "https://api.datadoghq.com/api/v1/monitor/${MONITOR_ID}" \
+                    -H "Content-Type: application/json" \
+                    -H "DD-API-KEY: ${DATADOG_API_KEY}" \
+                    -H "DD-APPLICATION-KEY: ${DATADOG_APP_KEY}" \
+                    -s \
+                    | jq -r '.overall_state')
+          echo "K8S DEVNET HEALTH STATUS: $STATUS"
+          echo "Review your devnet health dashboard here: https://app.datadoghq.com/dashboard/fqu-nh2-bzd?fromUser=false&refresh_mode=sliding&view=spans&from_ts=1709886652761&to_ts=1709890252761&live=true"
+          sleep 60
+        done
+    
+    - name: Finally, remove all devnet resources locally
+      run: |
+        cd kurtosis-cdk
+        kurtosis clean -a

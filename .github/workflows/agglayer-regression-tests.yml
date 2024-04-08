@@ -1,14 +1,13 @@
-name: REGRESSION DETECTOR - DEVNET
+name: REGRESSION TESTER - AGGLAYER SPECIFIC
 on:
-  push:
-  # workflow_dispatch:
-  #   inputs:
-  #     commit_id:
-  #       description: 'agglayer version (commit id)'
-  #       required: true
-  #     bake_time:
-  #       description: 'bake time (minutes)'
-  #       required: true
+  workflow_dispatch:
+    inputs:
+      commit_id:
+        description: 'agglayer version (commit id)'
+        required: true
+      bake_time:
+        description: 'bake time (minutes)'
+        required: true
 
 jobs:
   deploy_devnet:
@@ -51,8 +50,7 @@ jobs:
       run: |
         git clone https://github.com/0xPolygon/agglayer.git
         cd agglayer
-        # git checkout "${{ github.event.inputs.commit_id }}"
-        git checkout c0a88f1
+        git checkout "${{ github.event.inputs.commit_id }}"
         
     - name: Build JIT agglayer image to be used in ephemeral devnets
       run: |
@@ -75,8 +73,28 @@ jobs:
         cd kurtosis-cdk
         kurtosis engine restart
         kurtosis run --enclave cdk-v1 --args-file params.yml .
-        sleep 300
-    
+
+    - name: Auto-apply load and report any regressions here
+      run: |
+        MONITOR_ID="140974014"  # K8S DEVNET: COMPOSITE MONITOR ID
+        DATADOG_API_KEY="${{ secrets.DATADOG_API_KEY }}"
+        DATADOG_APP_KEY="${{ secrets.DATADOG_APP_KEY }}"
+
+        bake_time="${{ github.event.inputs.bake_time }}"
+        end_minute=$(( $(date +'%M') + bake_time))
+
+        while [ $(date +'%M') -lt $end_minute ]; do
+          STATUS=$(curl -X GET "https://api.datadoghq.com/api/v1/monitor/${MONITOR_ID}" \
+                    -H "Content-Type: application/json" \
+                    -H "DD-API-KEY: ${DATADOG_API_KEY}" \
+                    -H "DD-APPLICATION-KEY: ${DATADOG_APP_KEY}" \
+                    -s \
+                    | jq -r '.overall_state')
+          echo "K8S DEVNET HEALTH STATUS: $STATUS"
+          echo "Review your devnet health dashboard here: https://app.datadoghq.com/dashboard/fqu-nh2-bzd?fromUser=false&refresh_mode=sliding&view=spans&from_ts=1709886652761&to_ts=1709890252761&live=true"
+          sleep 60
+        done
+
     - name: Finally, remove all devnet resources locally
       run: |
         cd kurtosis-cdk
