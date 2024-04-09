@@ -1,115 +1,91 @@
 name: REGRESSION TESTER - SUPERUSERS
 on:
   push:
-  # workflow_dispatch:
-  #   inputs:
-  #     zkevm_agglayer_commit_id:
-  #       description: '0xPolygon/agglayer (commit id)'
-  #       required: true
-  #     zkevm_bridge_service_commit_id:
-  #       description: '0xPolygonHermez/zkevm-bridge-service (commit id)'
-  #       required: true
-  #     zkevm_bridge_ui_commit_id:
-  #       description: '0xPolygonHermez/zkevm-bridge-ui (commit id)'
-  #       required: true
-  #     zkevm_dac_commit_id:
-  #       description: '0xPolygon/cdk-data-availability (commit id)'
-  #       required: true
-  #     zkevm_node_commit_id:
-  #       description: '0xPolygon/cdk-validium-node (commit id)'
-  #       required: true
-  #     zkevm_prover_commit_id:
-  #       description: '0xPolygonHermez/zkevm-prover (commit id)'
-  #       required: true
-  #     bake_time:
-  #       description: 'bake time (minutes)'
-  #       required: true
+#   workflow_dispatch:
+#     inputs:
+#       zkevm_agglayer_commit_id:
+#         description: '0xPolygon/agglayer (commit id)'
+#         required: true
+#       zkevm_bridge_service_commit_id:
+#         description: '0xPolygonHermez/zkevm-bridge-service (commit id)'
+#         required: true
+#       zkevm_bridge_ui_commit_id:
+#         description: '0xPolygonHermez/zkevm-bridge-ui (commit id)'
+#         required: true
+#       zkevm_dac_commit_id:
+#         description: '0xPolygon/cdk-data-availability (commit id)'
+#         required: true
+#       zkevm_node_commit_id:
+#         description: '0xPolygon/cdk-validium-node (commit id)'
+#         required: true
+#       bake_time:
+#         description: 'bake time (minutes)'
+#         required: true
+# 
+# jobs:
+#   deploy_devnet:
+#     runs-on: ubuntu-latest
+#     steps:
+#     - name: Checkout repository
+#       uses: actions/checkout@v2
+#       with:
+#         ref: ${{ github.event.before }}
+# 
+#     - name: Set up Docker
+#       uses: docker/setup-buildx-action@v1
+# 
+#     - name: Clone internal kurtosis-cdk repo
+#       run: |
+#         git clone https://github.com/0xPolygon/kurtosis-cdk.git
+#         cd kurtosis-cdk
+#         git checkout dan/jit_containers_superusers
+# 
+#     - name: Clone and build agglayer
+#       run: |
+#         git clone https://github.com/0xPolygon/agglayer.git
+#         cd agglayer
+#         git checkout "${{ github.event.inputs.zkevm_agglayer_commit_id }}"
+#         docker compose -f docker/docker-compose.yaml build --no-cache agglayer
+#         sleep 10
+# 
+#     - name: Clone and build zkevm-bridge-service
+#       run: |
+#         git clone https://github.com/0xPolygonHermez/zkevm-bridge-service.git
+#         cd zkevm-bridge-service
+#         git checkout "${{ github.event.inputs.zkevm_bridge_service_commit_id }}"
+#         docker build -t zkevm-bridge-service:local -f ./Dockerfile .
+#         sleep 10
+# 
+#     - name: Clone and build zkevm-bridge-ui
+#       run: |
+#         git clone https://github.com/0xPolygonHermez/zkevm-bridge-ui.git
+#         cd zkevm-bridge-ui
+#         git checkout "${{ github.event.inputs.zkevm_bridge_ui_commit_id }}"
+#         docker build -t zkevm-bridge-ui:local -f ./Dockerfile .
+#         sleep 10
+# 
+#     - name: Clone and build cdk-data-availability
+#       run: |
+#         git clone https://github.com/0xPolygon/cdk-data-availability.git
+#         cd cdk-data-availability
+#         git checkout "${{ github.event.inputs.zkevm_dac_commit_id }}"
+#         docker build -t cdk-data-availability:local -f ./Dockerfile .
+#         sleep 10      
+# 
+#     - name: Clone and build cdk-validium-node
+#       run: |
+#         git clone https://github.com/0xPolygon/cdk-validium-node.git
+#         cd cdk-validium-node
+#         git checkout "${{ github.event.inputs.zkevm_node_commit_id }}"
+#         docker build -t cdk-validium-node:local -f ./Dockerfile .
+#         sleep 10
 
-jobs:
-  deploy_devnet:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v2
-      with:
-        ref: ${{ github.event.before }}
-
-    - name: Set up Docker
-      uses: docker/setup-buildx-action@v1
-
-    - name: Clone internal kurtosis-cdk repo
-      run: |
-        git clone https://github.com/0xPolygon/kurtosis-cdk.git
-        cd kurtosis-cdk
-        git checkout dan/jit_containers_superusers
-
-    # - name: Clone and build agglayer
-    #   run: |
-    #     git clone https://github.com/0xPolygon/agglayer.git
-    #     cd agglayer
-    #     git checkout "${{ github.event.inputs.zkevm_agglayer_commit_id }}"
-    #     docker compose -f docker/docker-compose.yaml build --no-cache agglayer
-    #     sleep 10
-    # 
-    # - name: Clone and build zkevm-bridge-service
-    #   run: |
-    #     git clone https://github.com/0xPolygonHermez/zkevm-bridge-service.git
-    #     cd zkevm-bridge-service
-    #     git checkout "${{ github.event.inputs.zkevm_bridge_service_commit_id }}"
-    #     docker build -t zkevm-bridge-service:local -f ./Dockerfile .
-    #     sleep 10
-    # 
-    # - name: Clone and build zkevm-bridge-ui
-    #   run: |
-    #     git clone https://github.com/0xPolygonHermez/zkevm-bridge-ui.git
-    #     cd zkevm-bridge-ui
-    #     git checkout "${{ github.event.inputs.zkevm_bridge_ui_commit_id }}"
-    #     docker build -t zkevm-bridge-ui:local -f ./Dockerfile .
-    #     sleep 10
-    # 
-    # - name: Clone and build cdk-data-availability
-    #   run: |
-    #     git clone https://github.com/0xPolygon/cdk-data-availability.git
-    #     cd cdk-data-availability
-    #     git checkout "${{ github.event.inputs.zkevm_dac_commit_id }}"
-    #     docker build -t cdk-data-availability:local -f ./Dockerfile .
-    #     sleep 10      
-    # 
-    # - name: Clone and build cdk-validium-node
-    #   run: |
-    #     git clone https://github.com/0xPolygon/cdk-validium-node.git
-    #     cd cdk-validium-node
-    #     git checkout "${{ github.event.inputs.zkevm_node_commit_id }}"
-    #     docker build -t cdk-validium-node:local -f ./Dockerfile .
-    #     sleep 10       
-
-    - name: Clone and build zkevm-prover
-      run: |
-        git clone --recursive https://github.com/0xPolygonHermez/zkevm-prover.git
-        cd zkevm-prover
-        # git checkout "${{ github.event.inputs.zkevm_prover_commit_id }}"
-        git checkout d37e826
-        # install archive deps
-        pwd
-        ARCHIVE_NAME="v3.0.0-RC3-fork.6"
-        ARCHIVE_EXTENSION=".tgz"
-        ARCHIVE_URL="https://storage.googleapis.com/zkevm/zkproverc/${ARCHIVE_NAME}${ARCHIVE_EXTENSION}"
-        wget -c ${ARCHIVE_URL}
-        tar -xzvf ${ARCHIVE_NAME}${ARCHIVE_EXTENSION}
-        rm -rf config
-        cp -R ${ARCHIVE_NAME}/config .
-        rm ${ARCHIVE_NAME}${ARCHIVE_EXTENSION}
-        pwd
-        # install pkg deps
-        apt update
-        apt install -y build-essential libbenchmark-dev libomp-dev libgmp-dev nlohmann-json3-dev postgresql libpqxx-dev libpqxx-doc nasm libsecp256k1-dev grpc-proto libsodium-dev libprotobuf-dev libssl-dev cmake libgrpc++-dev protobuf-compiler protobuf-compiler-grpc uuid-dev
-        cd src/grpc
-        pwd
-        make
-        cd ../..
-        pwd
-        docker build -t zkevm-prover:local -f ./Dockerfile .
-        sleep 10
+    - name: Install foundry (i.e. cast)
+      run: |    
+        curl -L https://foundry.paradigm.xyz | bash 
+        . .bashrc
+        foundryup
+        cast
         
     - name: Install kurtosis
       run: |
@@ -130,10 +106,6 @@ jobs:
 
     - name: Auto-apply load and report any regressions here
       run: |
-        MONITOR_ID="140974014"  # K8S DEVNET: COMPOSITE MONITOR ID
-        DATADOG_API_KEY="${{ secrets.DATADOG_API_KEY }}"
-        DATADOG_APP_KEY="${{ secrets.DATADOG_APP_KEY }}"
-
         bake_time="${{ github.event.inputs.bake_time }}"
         end_minute=$(( $(date +'%M') + bake_time))
 
@@ -144,8 +116,7 @@ jobs:
                     -H "DD-APPLICATION-KEY: ${DATADOG_APP_KEY}" \
                     -s \
                     | jq -r '.overall_state')
-          echo "K8S DEVNET HEALTH STATUS: $STATUS"
-          echo "Review your devnet health dashboard here: https://app.datadoghq.com/dashboard/fqu-nh2-bzd?fromUser=false&refresh_mode=sliding&view=spans&from_ts=1709886652761&to_ts=1709890252761&live=true"
+          echo "ZKEVM_VERIFIED_BATCH_NUMBER: $STATUS"
           sleep 60
         done
     
