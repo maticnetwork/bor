@@ -111,7 +111,7 @@ jobs:
           else
             # If connection fails, wait and retry after some time
             echo "Failed to connect, waiting and retrying..."
-            sleep 10
+            sleep 20
             continue
           fi
           sleep 60
