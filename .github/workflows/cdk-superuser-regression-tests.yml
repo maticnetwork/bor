@@ -83,7 +83,7 @@ jobs:
     - name: Install foundry (i.e. cast)
       run: |    
         curl -L https://foundry.paradigm.xyz | bash 
-        . .bashrc
+        source /home/runner/.bashrc
         foundryup
         cast
     # 
