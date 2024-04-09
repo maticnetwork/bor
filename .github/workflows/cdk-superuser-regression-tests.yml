@@ -22,23 +22,23 @@ on:
 #         description: 'bake time (minutes)'
 #         required: true
 # 
-# jobs:
-#   deploy_devnet:
-#     runs-on: ubuntu-latest
-#     steps:
-#     - name: Checkout repository
-#       uses: actions/checkout@v2
-#       with:
-#         ref: ${{ github.event.before }}
-# 
-#     - name: Set up Docker
-#       uses: docker/setup-buildx-action@v1
-# 
-#     - name: Clone internal kurtosis-cdk repo
-#       run: |
-#         git clone https://github.com/0xPolygon/kurtosis-cdk.git
-#         cd kurtosis-cdk
-#         git checkout dan/jit_containers_superusers
+jobs:
+  deploy_devnet:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v2
+      with:
+        ref: ${{ github.event.before }}
+
+    - name: Set up Docker
+      uses: docker/setup-buildx-action@v1
+
+    - name: Clone internal kurtosis-cdk repo
+      run: |
+        git clone https://github.com/0xPolygon/kurtosis-cdk.git
+        cd kurtosis-cdk
+        git checkout dan/jit_containers_superusers
 # 
 #     - name: Clone and build agglayer
 #       run: |
@@ -86,41 +86,41 @@ on:
         . .bashrc
         foundryup
         cast
-        
-    - name: Install kurtosis
-      run: |
-        echo "deb [trusted=yes] https://apt.fury.io/kurtosis-tech/ /" | sudo tee /etc/apt/sources.list.d/kurtosis.list
-        sudo apt update
-        sudo apt install kurtosis-cli
-
-    - name: Run kurtosis agent in background
-      run: |  
-        kurtosis gateway &  # Run cmd in background
-        sleep 10
-
-    - name: Deploy CDK devnet on local github runner
-      run: |
-        cd kurtosis-cdk
-        kurtosis engine restart
-        kurtosis run --enclave cdk-v1 --args-file params.yml .
-
-    - name: Auto-apply load and report any regressions here
-      run: |
-        bake_time="${{ github.event.inputs.bake_time }}"
-        end_minute=$(( $(date +'%M') + bake_time))
-
-        while [ $(date +'%M') -lt $end_minute ]; do
-          STATUS=$(curl -X GET "https://api.datadoghq.com/api/v1/monitor/${MONITOR_ID}" \
-                    -H "Content-Type: application/json" \
-                    -H "DD-API-KEY: ${DATADOG_API_KEY}" \
-                    -H "DD-APPLICATION-KEY: ${DATADOG_APP_KEY}" \
-                    -s \
-                    | jq -r '.overall_state')
-          echo "ZKEVM_VERIFIED_BATCH_NUMBER: $STATUS"
-          sleep 60
-        done
-    
-    - name: Finally, remove all devnet resources locally
-      run: |
-        cd kurtosis-cdk
-        kurtosis clean -a
+    # 
+    # - name: Install kurtosis
+    #   run: |
+    #     echo "deb [trusted=yes] https://apt.fury.io/kurtosis-tech/ /" | sudo tee /etc/apt/sources.list.d/kurtosis.list
+    #     sudo apt update
+    #     sudo apt install kurtosis-cli
+    # 
+    # - name: Run kurtosis agent in background
+    #   run: |  
+    #     kurtosis gateway &  # Run cmd in background
+    #     sleep 10
+    # 
+    # - name: Deploy CDK devnet on local github runner
+    #   run: |
+    #     cd kurtosis-cdk
+    #     kurtosis engine restart
+    #     kurtosis run --enclave cdk-v1 --args-file params.yml .
+    # 
+    # - name: Auto-apply load and report any regressions here
+    #   run: |
+    #     bake_time="${{ github.event.inputs.bake_time }}"
+    #     end_minute=$(( $(date +'%M') + bake_time))
+    # 
+    #     while [ $(date +'%M') -lt $end_minute ]; do
+    #       STATUS=$(curl -X GET "https://api.datadoghq.com/api/v1/monitor/${MONITOR_ID}" \
+    #                 -H "Content-Type: application/json" \
+    #                 -H "DD-API-KEY: ${DATADOG_API_KEY}" \
+    #                 -H "DD-APPLICATION-KEY: ${DATADOG_APP_KEY}" \
+    #                 -s \
+    #                 | jq -r '.overall_state')
+    #       echo "ZKEVM_VERIFIED_BATCH_NUMBER: $STATUS"
+    #       sleep 60
+    #     done
+    # 
+    # - name: Finally, remove all devnet resources locally
+    #   run: |
+    #     cd kurtosis-cdk
+    #     kurtosis clean -a
