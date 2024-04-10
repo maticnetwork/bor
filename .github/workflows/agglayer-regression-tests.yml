@@ -1,4 +1,4 @@
-name: REGRESSION TESTER - AGGLAYER
+name: Regression Tests
 'on':
   workflow_dispatch:
     inputs:
@@ -20,6 +20,12 @@ jobs:
           ref: '${{ github.event.before }}'
       - name: Set up Docker
         uses: docker/setup-buildx-action@v1
+      - name: Clone and build agglayer image locally
+        run: |
+          git clone https://github.com/0xPolygon/agglayer.git
+          cd agglayer
+          git checkout "${{ github.event.inputs.zkevm_agglayer_commit_id }}"
+          docker compose -f docker/docker-compose.yaml build --no-cache agglayer
       - name: Install Foundry
         uses: foundry-rs/foundry-toolchain@v1
       - name: Clone internal kurtosis-cdk repo
@@ -27,19 +33,11 @@ jobs:
           git clone https://github.com/0xPolygon/kurtosis-cdk.git
           cd kurtosis-cdk
           git checkout dan/jit_containers
-      - name: Clone and build agglayer
-        run: |
-          git clone https://github.com/0xPolygon/agglayer.git
-          cd agglayer
-          git checkout "${{ github.event.inputs.zkevm_agglayer_commit_id }}"
-          docker compose -f docker/docker-compose.yaml build --no-cache agglayer
       - name: Install kurtosis
-        run: >
+        run: |
           echo "deb [trusted=yes] https://apt.fury.io/kurtosis-tech/ /" | sudo
           tee /etc/apt/sources.list.d/kurtosis.list
-
           sudo apt update
-
           sudo apt install kurtosis-cli
       - name: Run kurtosis agent in background
         run: |
@@ -50,18 +48,14 @@ jobs:
           kurtosis engine restart
           kurtosis run --enclave cdk-v1 --args-file params.yml .
       - name: Monitor and report any potential regressions to CI logs
-        run: >
+        run: |
           bake_time="${{ github.event.inputs.bake_time }}"
-
           end_minute=$(( $(date +'%M') + bake_time))
 
           export ETH_RPC_URL="$(kurtosis port print cdk-v1 zkevm-node-rpc-001
           http-rpc)"
-
           INITIAL_STATUS=$(cast rpc zkevm_verifiedBatchNumber 2>/dev/null)
-
           incremented=false
-
 
           while [ $(date +'%M') -lt $end_minute ]; do
             # Attempt to connect to the service
@@ -71,15 +65,16 @@ jobs:
               # Check if STATUS has incremented
               if [ "$STATUS" != "$INITIAL_STATUS" ]; then
                 incremented=true
+                echo "ZKEVM_VERIFIED_BATCH_NUMBER successfully incremented to $STATUS. Exiting..."
+                exit 0
               fi
             else
               echo "Failed to connect, waiting and retrying..."
-              sleep 30
+              sleep 60
               continue
             fi
-            sleep 30
+            sleep 60
           done
-
 
           if ! $incremented; then
             echo "ZKEVM_VERIFIED_BATCH_NUMBER did not increment. This may indicate chain experienced a regression. Please investigate."

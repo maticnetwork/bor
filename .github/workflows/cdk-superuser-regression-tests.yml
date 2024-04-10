@@ -115,6 +115,8 @@ jobs:
             # Check if STATUS has incremented
             if [ "$STATUS" != "$INITIAL_STATUS" ]; then
               incremented=true
+              echo "ZKEVM_VERIFIED_BATCH_NUMBER successfully incremented to $STATUS. Exiting..."
+              exit 0
             fi
           else
             echo "Failed to connect, waiting and retrying..."
