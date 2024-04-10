@@ -104,6 +104,7 @@ jobs:
         bake_time="${{ github.event.inputs.bake_time }}"
         end_minute=$(( $(date +'%M') + bake_time))
         export ETH_RPC_URL="$(kurtosis port print cdk-v1 zkevm-node-rpc-001 http-rpc)"
+        INITIAL_STATUS=$(cast rpc zkevm_verifiedBatchNumber 2>/dev/null)
         incremented=false
         
         while [ $(date +'%M') -lt $end_minute ]; do
@@ -111,8 +112,8 @@ jobs:
           if STATUS=$(cast rpc zkevm_verifiedBatchNumber 2>/dev/null); then
             echo "ZKEVM_VERIFIED_BATCH_NUMBER: $STATUS"
             
-            # Check if STATUS is not 0x0
-            if [ "$STATUS" != "0x0" ]; then
+            # Check if STATUS has incremented
+            if [ "$STATUS" != "$INITIAL_STATUS" ]; then
               incremented=true
               echo "ZKEVM_VERIFIED_BATCH_NUMBER successfully incremented to $STATUS. Exiting..."
               exit 0
