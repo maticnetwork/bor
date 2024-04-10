@@ -4,12 +4,25 @@ name: Regression Tests
     inputs:
       zkevm_agglayer_commit_id:
         description: 0xPolygon/agglayer (commit id)
-        required: false
-        default: b9d79c6
+        required: true
       bake_time:
         description: bake time (minutes)
         required: false
         default: 30
+  push:
+    branches:
+      - main
+    paths:
+      - 'agglayer/**'
+    inputs:
+      zkevm_agglayer_commit_id:
+        description: 0xPolygon/agglayer commit id
+        required: false
+        default: '${{ github.event.before }}' # Set default value to commit ID being merged to main
+      bake_time:
+        description: bake time (minutes)
+        required: false
+        default: 20
 jobs:
   deploy_devnet:
     runs-on: ubuntu-latest
