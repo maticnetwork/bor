@@ -1,4 +1,4 @@
-name: REGRESSION TESTER - AGGLAYER SPECIFIC
+name: REGRESSION TESTER - AGGLAYER
 on:
   workflow_dispatch:
     inputs:
@@ -20,13 +20,16 @@ jobs:
 
     - name: Set up Docker
       uses: docker/setup-buildx-action@v1
+      
+    - name: Install Foundry
+      uses: foundry-rs/foundry-toolchain@v1
 
     - name: Clone internal kurtosis-cdk repo
       run: |
         git clone https://github.com/0xPolygon/kurtosis-cdk.git
         cd kurtosis-cdk
         git checkout dan/jit_containers
-        
+
     - name: Clone and build agglayer
       run: |
         git clone https://github.com/0xPolygon/agglayer.git
@@ -34,45 +37,56 @@ jobs:
         git checkout "${{ github.event.inputs.zkevm_agglayer_commit_id }}"
         docker compose -f docker/docker-compose.yaml build --no-cache agglayer
         sleep 10
-        
+
     - name: Install kurtosis
       run: |
         echo "deb [trusted=yes] https://apt.fury.io/kurtosis-tech/ /" | sudo tee /etc/apt/sources.list.d/kurtosis.list
         sudo apt update
         sudo apt install kurtosis-cli
-
+    
     - name: Run kurtosis agent in background
       run: |  
         kurtosis gateway &  # Run cmd in background
         sleep 10
-
+    
     - name: Deploy CDK devnet on local github runner
       run: |
         cd kurtosis-cdk
         kurtosis engine restart
         kurtosis run --enclave cdk-v1 --args-file params.yml .
-
-    - name: Auto-apply load and report any regressions here
+    
+    - name: Monitor and report any potential regressions to CI logs
       run: |
-        MONITOR_ID="140974014"  # K8S DEVNET: COMPOSITE MONITOR ID
-        DATADOG_API_KEY="${{ secrets.DATADOG_API_KEY }}"
-        DATADOG_APP_KEY="${{ secrets.DATADOG_APP_KEY }}"
-
         bake_time="${{ github.event.inputs.bake_time }}"
         end_minute=$(( $(date +'%M') + bake_time))
-
+        export ETH_RPC_URL="$(kurtosis port print cdk-v1 zkevm-node-rpc-001 http-rpc)"
+        greater_than_zero=false
+        
         while [ $(date +'%M') -lt $end_minute ]; do
-          STATUS=$(curl -X GET "https://api.datadoghq.com/api/v1/monitor/${MONITOR_ID}" \
-                    -H "Content-Type: application/json" \
-                    -H "DD-API-KEY: ${DATADOG_API_KEY}" \
-                    -H "DD-APPLICATION-KEY: ${DATADOG_APP_KEY}" \
-                    -s \
-                    | jq -r '.overall_state')
-          echo "K8S DEVNET HEALTH STATUS: $STATUS"
-          echo "Review your devnet health dashboard here: https://app.datadoghq.com/dashboard/fqu-nh2-bzd?fromUser=false&refresh_mode=sliding&view=spans&from_ts=1709886652761&to_ts=1709890252761&live=true"
+          # Attempt connecting to service
+          if STATUS=$(cast rpc zkevm_verifiedBatchNumber 2>/dev/null); then
+            # Convert hexadecimal to decimal
+            DEC_STATUS=$(printf "%d" "$STATUS")
+            echo "ZKEVM_VERIFIED_BATCH_NUMBER: $DEC_STATUS"
+            
+            # Check if STATUS is greater than 0
+            if [ $DEC_STATUS -gt 0 ]; then
+              greater_than_zero=true
+            fi
+          else
+            echo "Failed to connect, waiting and retrying..."
+            sleep 60
+            continue
+          fi
           sleep 60
         done
-
+        
+        # Check that zkevm_verifiedBatchNumber increments, indicating e2e success
+        if ! $greater_than_zero; then
+          echo "zkevm_verifiedBatchNumber failed to increment past 0. marking CI job failed accordingly"
+          exit 1
+        fi
+    
     - name: Finally, remove all devnet resources locally
       run: |
         cd kurtosis-cdk
