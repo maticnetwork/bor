@@ -51,8 +51,7 @@ jobs:
           bake_time="${{ github.event.inputs.bake_time }}"
           end_minute=$(( $(date +'%M') + bake_time))
 
-          export ETH_RPC_URL="$(kurtosis port print cdk-v1 zkevm-node-rpc-001
-          http-rpc)"
+          export ETH_RPC_URL="$(kurtosis port print cdk-v1 zkevm-node-rpc-001 http-rpc)"
           INITIAL_STATUS=$(cast rpc zkevm_verifiedBatchNumber 2>/dev/null)
           incremented=false
 
