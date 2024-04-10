@@ -12,8 +12,6 @@ name: Regression Tests
   push:
     branches:
       - main
-    paths:
-      - 'agglayer/**'
     inputs:
       zkevm_agglayer_commit_id:
         description: 0xPolygon/agglayer commit id
