@@ -99,7 +99,7 @@ jobs:
         kurtosis engine restart
         kurtosis run --enclave cdk-v1 --args-file params.yml .
     
-    - name: Auto-apply load and report any regressions here
+    - name: Monitor and report any potential regressions to CI logs
       run: |
         bake_time="${{ github.event.inputs.bake_time }}"
         end_minute=$(( $(date +'%M') + bake_time))
