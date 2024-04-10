@@ -60,18 +60,18 @@ jobs:
         bake_time="${{ github.event.inputs.bake_time }}"
         end_minute=$(( $(date +'%M') + bake_time))
         export ETH_RPC_URL="$(kurtosis port print cdk-v1 zkevm-node-rpc-001 http-rpc)"
-        greater_than_zero=false
+        incremented=false
         
         while [ $(date +'%M') -lt $end_minute ]; do
           # Attempt to connect to the service
           if STATUS=$(cast rpc zkevm_verifiedBatchNumber 2>/dev/null); then
-            # Convert hexadecimal to decimal
-            DEC_STATUS=$((16#$STATUS))
-            echo "ZKEVM_VERIFIED_BATCH_NUMBER: $DEC_STATUS"
+            echo "ZKEVM_VERIFIED_BATCH_NUMBER: $STATUS"
             
-            # Check if STATUS is greater than 0
-            if [ $DEC_STATUS -gt 0 ]; then
-              greater_than_zero=true
+            # Check if STATUS is not 0x0
+            if [ "$STATUS" != "0x0" ]; then
+              incremented=true
+              echo "ZKEVM_VERIFIED_BATCH_NUMBER successfully incremented to $STATUS. Exiting..."
+              exit 0
             fi
           else
             # If connection fails, wait and retry after some time
@@ -82,9 +82,8 @@ jobs:
           sleep 60
         done
         
-        # Check if STATUS field never becomes greater than 0
-        if ! $greater_than_zero; then
-          echo "STATUS field never becomes greater than 0. CI job failed."
+        if ! $incremented; then
+          echo "ZKEVM_VERIFIED_BATCH_NUMBER remained at 0x0 till the end. CI job failed."
           exit 1
         fi
     
