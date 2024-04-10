@@ -4,14 +4,18 @@ import (
 	"github.com/ethereum/go-ethereum/internal/cli/flagset"
 )
 
-func (c *Command) Flags() *flagset.Flagset {
-	c.cliConfig = DefaultConfig()
+func (c *Command) Flags(config *Config) *flagset.Flagset {
+	if config != nil {
+		c.cliConfig = config
+	} else {
+		c.cliConfig = DefaultConfig()
+	}
 
 	f := flagset.NewFlagSet("server")
 
 	f.StringFlag(&flagset.StringFlag{
 		Name:    "chain",
-		Usage:   "Name of the chain to sync ('mumbai', 'mainnet') or path to a genesis file",
+		Usage:   "Name of the chain to sync ('amoy', 'mumbai', 'mainnet') or path to a genesis file",
 		Value:   &c.cliConfig.Chain,
 		Default: c.cliConfig.Chain,
 	})
@@ -24,7 +28,7 @@ func (c *Command) Flags() *flagset.Flagset {
 	})
 	f.IntFlag(&flagset.IntFlag{
 		Name:    "verbosity",
-		Usage:   "Logging verbosity for the server (5=trace|4=debug|3=info|2=warn|1=error|0=crit), default = 3",
+		Usage:   "Logging verbosity for the server (5=trace|4=debug|3=info|2=warn|1=error|0=crit)",
 		Value:   &c.cliConfig.Verbosity,
 		Default: c.cliConfig.Verbosity,
 	})
@@ -54,19 +58,26 @@ func (c *Command) Flags() *flagset.Flagset {
 		Default: c.cliConfig.Ancient,
 	})
 	f.StringFlag(&flagset.StringFlag{
-		Name:  "keystore",
-		Usage: "Path of the directory where keystores are located",
-		Value: &c.cliConfig.KeyStoreDir,
+		Name:    "db.engine",
+		Usage:   "Backing database implementation to use ('leveldb' or 'pebble')",
+		Value:   &c.cliConfig.DBEngine,
+		Default: c.cliConfig.DBEngine,
+	})
+	f.StringFlag(&flagset.StringFlag{
+		Name:    "keystore",
+		Usage:   "Path of the directory where keystores are located",
+		Value:   &c.cliConfig.KeyStoreDir,
+		Default: c.cliConfig.KeyStoreDir,
 	})
 	f.Uint64Flag(&flagset.Uint64Flag{
 		Name:    "rpc.batchlimit",
-		Usage:   "Maximum number of messages in a batch (default=100, use 0 for no limits)",
+		Usage:   "Maximum number of messages in a batch (use 0 for no limits)",
 		Value:   &c.cliConfig.RPCBatchLimit,
 		Default: c.cliConfig.RPCBatchLimit,
 	})
 	f.Uint64Flag(&flagset.Uint64Flag{
 		Name:    "rpc.returndatalimit",
-		Usage:   "Maximum size (in bytes) a result of an rpc request could have (default=100000, use 0 for no limits)",
+		Usage:   "Maximum size (in bytes) a result of an rpc request could have (use 0 for no limits)",
 		Value:   &c.cliConfig.RPCReturnDataLimit,
 		Default: c.cliConfig.RPCReturnDataLimit,
 	})
@@ -86,6 +97,12 @@ func (c *Command) Flags() *flagset.Flagset {
 		Usage:   `Blockchain garbage collection mode ("full", "archive")`,
 		Value:   &c.cliConfig.GcMode,
 		Default: c.cliConfig.GcMode,
+	})
+	f.StringFlag(&flagset.StringFlag{
+		Name:    "state.scheme",
+		Usage:   "Scheme to use for storing ethereum state ('hash' or 'path')",
+		Value:   &c.cliConfig.StateScheme,
+		Default: c.cliConfig.StateScheme,
 	})
 	f.MapStringFlag(&flagset.MapStringFlag{
 		Name:    "eth.requiredblocks",
@@ -133,6 +150,13 @@ func (c *Command) Flags() *flagset.Flagset {
 		Usage:   "Prepends log messages with call-site location (file and line number)",
 		Value:   &c.cliConfig.Logging.Debug,
 		Default: c.cliConfig.Logging.Debug,
+		Group:   "Logging",
+	})
+	f.BoolFlag(&flagset.BoolFlag{
+		Name:    "log.enable-block-tracking",
+		Usage:   "Enables additional logging of information collected while tracking block lifecycle",
+		Value:   &c.cliConfig.Logging.EnableBlockTracking,
+		Default: c.cliConfig.Logging.EnableBlockTracking,
 		Group:   "Logging",
 	})
 
@@ -378,20 +402,6 @@ func (c *Command) Flags() *flagset.Flagset {
 		Default: c.cliConfig.Cache.PercTrie,
 		Group:   "Cache",
 	})
-	f.StringFlag(&flagset.StringFlag{
-		Name:    "cache.trie.journal",
-		Usage:   "Disk journal directory for trie cache to survive node restarts",
-		Value:   &c.cliConfig.Cache.Journal,
-		Default: c.cliConfig.Cache.Journal,
-		Group:   "Cache",
-	})
-	f.DurationFlag(&flagset.DurationFlag{
-		Name:    "cache.trie.rejournal",
-		Usage:   "Time interval to regenerate the trie cache journal",
-		Value:   &c.cliConfig.Cache.Rejournal,
-		Default: c.cliConfig.Cache.Rejournal,
-		Group:   "Cache",
-	})
 	f.Uint64Flag(&flagset.Uint64Flag{
 		Name:    "cache.gc",
 		Usage:   "Percentage of cache memory allowance to use for trie pruning",
@@ -422,9 +432,16 @@ func (c *Command) Flags() *flagset.Flagset {
 	})
 	f.Uint64Flag(&flagset.Uint64Flag{
 		Name:    "cache.triesinmemory",
-		Usage:   "Number of block states (tries) to keep in memory (default = 128)",
+		Usage:   "Number of block states (tries) to keep in memory",
 		Value:   &c.cliConfig.Cache.TriesInMemory,
 		Default: c.cliConfig.Cache.TriesInMemory,
+		Group:   "Cache",
+	})
+	f.IntFlag(&flagset.IntFlag{
+		Name:    "cache.blocklogs",
+		Usage:   "Size (in number of blocks) of the log cache for filtering",
+		Value:   &c.cliConfig.Cache.FilterLogCacheSize,
+		Default: c.cliConfig.Cache.FilterLogCacheSize,
 		Group:   "Cache",
 	})
 	f.Uint64Flag(&flagset.Uint64Flag{
@@ -440,6 +457,36 @@ func (c *Command) Flags() *flagset.Flagset {
 		Value:   &c.cliConfig.Cache.FDLimit,
 		Default: c.cliConfig.Cache.FDLimit,
 		Group:   "Cache",
+	})
+
+	// LevelDB options
+	f.Uint64Flag(&flagset.Uint64Flag{
+		Name:    "leveldb.compaction.table.size",
+		Usage:   "LevelDB SSTable/file size in mebibytes",
+		Value:   &c.cliConfig.ExtraDB.LevelDbCompactionTableSize,
+		Default: c.cliConfig.ExtraDB.LevelDbCompactionTableSize,
+		Group:   "ExtraDB",
+	})
+	f.Float64Flag(&flagset.Float64Flag{
+		Name:    "leveldb.compaction.table.size.multiplier",
+		Usage:   "Multiplier on LevelDB SSTable/file size. Size for a level is determined by: `leveldb.compaction.table.size * (leveldb.compaction.table.size.multiplier ^ Level)`",
+		Value:   &c.cliConfig.ExtraDB.LevelDbCompactionTableSizeMultiplier,
+		Default: c.cliConfig.ExtraDB.LevelDbCompactionTableSizeMultiplier,
+		Group:   "ExtraDB",
+	})
+	f.Uint64Flag(&flagset.Uint64Flag{
+		Name:    "leveldb.compaction.total.size",
+		Usage:   "Total size in mebibytes of SSTables in a given LevelDB level. Size for a level is determined by: `leveldb.compaction.total.size * (leveldb.compaction.total.size.multiplier ^ Level)`",
+		Value:   &c.cliConfig.ExtraDB.LevelDbCompactionTotalSize,
+		Default: c.cliConfig.ExtraDB.LevelDbCompactionTotalSize,
+		Group:   "ExtraDB",
+	})
+	f.Float64Flag(&flagset.Float64Flag{
+		Name:    "leveldb.compaction.total.size.multiplier",
+		Usage:   "Multiplier on level size on LevelDB levels. Size for a level is determined by: `leveldb.compaction.total.size * (leveldb.compaction.total.size.multiplier ^ Level)`",
+		Value:   &c.cliConfig.ExtraDB.LevelDbCompactionTotalSizeMultiplier,
+		Default: c.cliConfig.ExtraDB.LevelDbCompactionTotalSizeMultiplier,
+		Group:   "ExtraDB",
 	})
 
 	// rpc options
@@ -469,6 +516,13 @@ func (c *Command) Flags() *flagset.Flagset {
 		Usage:   "Allow for unprotected (non EIP155 signed) transactions to be submitted via RPC",
 		Value:   &c.cliConfig.JsonRPC.AllowUnprotectedTxs,
 		Default: c.cliConfig.JsonRPC.AllowUnprotectedTxs,
+		Group:   "JsonRPC",
+	})
+	f.BoolFlag(&flagset.BoolFlag{
+		Name:    "rpc.enabledeprecatedpersonal",
+		Usage:   "Enables the (deprecated) personal namespace",
+		Value:   &c.cliConfig.JsonRPC.EnablePersonal,
+		Default: c.cliConfig.JsonRPC.EnablePersonal,
 		Group:   "JsonRPC",
 	})
 	f.BoolFlag(&flagset.BoolFlag{
@@ -732,6 +786,13 @@ func (c *Command) Flags() *flagset.Flagset {
 		Group:   "P2P",
 	})
 	f.BoolFlag(&flagset.BoolFlag{
+		Name:    "v4disc",
+		Usage:   "Enables the V4 discovery mechanism",
+		Value:   &c.cliConfig.P2P.Discovery.DiscoveryV4,
+		Default: c.cliConfig.P2P.Discovery.DiscoveryV4,
+		Group:   "P2P",
+	})
+	f.BoolFlag(&flagset.BoolFlag{
 		Name:    "v5disc",
 		Usage:   "Enables the experimental RLPx V5 (Topic Discovery) mechanism",
 		Value:   &c.cliConfig.P2P.Discovery.V5Enabled,
@@ -740,7 +801,7 @@ func (c *Command) Flags() *flagset.Flagset {
 	})
 	f.DurationFlag(&flagset.DurationFlag{
 		Name:    "txarrivalwait",
-		Usage:   "Maximum duration to wait for a transaction before explicitly requesting it (defaults to 500ms)",
+		Usage:   "Maximum duration to wait for a transaction before explicitly requesting it",
 		Value:   &c.cliConfig.P2P.TxArrivalWait,
 		Default: c.cliConfig.P2P.TxArrivalWait,
 		Group:   "P2P",

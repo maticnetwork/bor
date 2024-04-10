@@ -97,10 +97,12 @@ func NewMethod(name string, rawName string, funType FunctionType, mutability str
 		inputNames  = make([]string, len(inputs))
 		outputNames = make([]string, len(outputs))
 	)
+
 	for i, input := range inputs {
 		inputNames[i] = fmt.Sprintf("%v %v", input.Type, input.Name)
 		types[i] = input.Type.String()
 	}
+
 	for i, output := range outputs {
 		outputNames[i] = output.Type.String()
 		if len(output.Name) > 0 {
@@ -113,6 +115,7 @@ func NewMethod(name string, rawName string, funType FunctionType, mutability str
 		sig string
 		id  []byte
 	)
+
 	if funType == Function {
 		sig = fmt.Sprintf("%v(%v)", rawName, strings.Join(types, ","))
 		id = crypto.Keccak256([]byte(sig))[:4]
@@ -123,17 +126,21 @@ func NewMethod(name string, rawName string, funType FunctionType, mutability str
 	if state == "nonpayable" {
 		state = ""
 	}
+
 	if state != "" {
 		state = state + " "
 	}
+
 	identity := fmt.Sprintf("function %v", rawName)
-	if funType == Fallback {
+	switch funType {
+	case Fallback:
 		identity = "fallback"
-	} else if funType == Receive {
+	case Receive:
 		identity = "receive"
-	} else if funType == Constructor {
+	case Constructor:
 		identity = "constructor"
 	}
+
 	str := fmt.Sprintf("%v(%v) %sreturns(%v)", identity, strings.Join(inputNames, ", "), state, strings.Join(outputNames, ", "))
 
 	return Method{

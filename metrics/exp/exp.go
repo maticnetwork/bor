@@ -25,12 +25,16 @@ func (exp *exp) expHandler(w http.ResponseWriter, r *http.Request) {
 	// now just run the official expvar handler code (which is not publicly callable, so pasted inline)
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	fmt.Fprintf(w, "{\n")
+
 	first := true
+
 	expvar.Do(func(kv expvar.KeyValue) {
 		if !first {
 			fmt.Fprintf(w, ",\n")
 		}
+
 		first = false
+
 		fmt.Fprintf(w, "%q: %s", kv.Key, kv.Value)
 	})
 	fmt.Fprintf(w, "\n}\n")
@@ -60,6 +64,7 @@ func Setup(address string) {
 	m.Handle("/debug/metrics", ExpHandler(metrics.DefaultRegistry))
 	m.Handle("/debug/metrics/prometheus", prometheus.Handler(metrics.DefaultRegistry))
 	log.Info("Starting metrics server", "addr", fmt.Sprintf("http://%s/debug/metrics", address))
+
 	go func() {
 		if err := http.ListenAndServe(address, m); err != nil {
 			log.Error("Failure in running metrics server", "err", err)
@@ -69,7 +74,9 @@ func Setup(address string) {
 
 func (exp *exp) getInt(name string) *expvar.Int {
 	var v *expvar.Int
+
 	exp.expvarLock.Lock()
+
 	p := expvar.Get(name)
 	if p != nil {
 		v = p.(*expvar.Int)
@@ -78,12 +85,15 @@ func (exp *exp) getInt(name string) *expvar.Int {
 		expvar.Publish(name, v)
 	}
 	exp.expvarLock.Unlock()
+
 	return v
 }
 
 func (exp *exp) getFloat(name string) *expvar.Float {
 	var v *expvar.Float
+
 	exp.expvarLock.Lock()
+
 	p := expvar.Get(name)
 	if p != nil {
 		v = p.(*expvar.Float)
@@ -92,20 +102,44 @@ func (exp *exp) getFloat(name string) *expvar.Float {
 		expvar.Publish(name, v)
 	}
 	exp.expvarLock.Unlock()
+
 	return v
 }
 
-func (exp *exp) publishCounter(name string, metric metrics.Counter) {
+func (exp *exp) getInfo(name string) *expvar.String {
+	var v *expvar.String
+	exp.expvarLock.Lock()
+	p := expvar.Get(name)
+	if p != nil {
+		v = p.(*expvar.String)
+	} else {
+		v = new(expvar.String)
+		expvar.Publish(name, v)
+	}
+	exp.expvarLock.Unlock()
+	return v
+}
+
+func (exp *exp) publishCounter(name string, metric metrics.CounterSnapshot) {
 	v := exp.getInt(name)
 	v.Set(metric.Count())
 }
 
-func (exp *exp) publishGauge(name string, metric metrics.Gauge) {
+func (exp *exp) publishCounterFloat64(name string, metric metrics.CounterFloat64Snapshot) {
+	v := exp.getFloat(name)
+	v.Set(metric.Count())
+}
+
+func (exp *exp) publishGauge(name string, metric metrics.GaugeSnapshot) {
 	v := exp.getInt(name)
 	v.Set(metric.Value())
 }
-func (exp *exp) publishGaugeFloat64(name string, metric metrics.GaugeFloat64) {
+func (exp *exp) publishGaugeFloat64(name string, metric metrics.GaugeFloat64Snapshot) {
 	exp.getFloat(name).Set(metric.Value())
+}
+
+func (exp *exp) publishGaugeInfo(name string, metric metrics.GaugeInfoSnapshot) {
+	exp.getInfo(name).Set(metric.Value().String())
 }
 
 func (exp *exp) publishHistogram(name string, metric metrics.Histogram) {
@@ -153,24 +187,28 @@ func (exp *exp) publishTimer(name string, metric metrics.Timer) {
 
 func (exp *exp) publishResettingTimer(name string, metric metrics.ResettingTimer) {
 	t := metric.Snapshot()
-	ps := t.Percentiles([]float64{50, 75, 95, 99})
-	exp.getInt(name + ".count").Set(int64(len(t.Values())))
+	ps := t.Percentiles([]float64{0.50, 0.75, 0.95, 0.99})
+	exp.getInt(name + ".count").Set(int64(t.Count()))
 	exp.getFloat(name + ".mean").Set(t.Mean())
-	exp.getInt(name + ".50-percentile").Set(ps[0])
-	exp.getInt(name + ".75-percentile").Set(ps[1])
-	exp.getInt(name + ".95-percentile").Set(ps[2])
-	exp.getInt(name + ".99-percentile").Set(ps[3])
+	exp.getFloat(name + ".50-percentile").Set(ps[0])
+	exp.getFloat(name + ".75-percentile").Set(ps[1])
+	exp.getFloat(name + ".95-percentile").Set(ps[2])
+	exp.getFloat(name + ".99-percentile").Set(ps[3])
 }
 
 func (exp *exp) syncToExpvar() {
 	exp.registry.Each(func(name string, i interface{}) {
 		switch i := i.(type) {
 		case metrics.Counter:
-			exp.publishCounter(name, i)
+			exp.publishCounter(name, i.Snapshot())
+		case metrics.CounterFloat64:
+			exp.publishCounterFloat64(name, i.Snapshot())
 		case metrics.Gauge:
-			exp.publishGauge(name, i)
+			exp.publishGauge(name, i.Snapshot())
 		case metrics.GaugeFloat64:
-			exp.publishGaugeFloat64(name, i)
+			exp.publishGaugeFloat64(name, i.Snapshot())
+		case metrics.GaugeInfo:
+			exp.publishGaugeInfo(name, i.Snapshot())
 		case metrics.Histogram:
 			exp.publishHistogram(name, i)
 		case metrics.Meter:

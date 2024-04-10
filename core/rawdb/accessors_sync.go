@@ -1,4 +1,4 @@
-// Copyright 2021 The go-ethereum Authors
+// Copyright 2022 The go-ethereum Authors
 // This file is part of the go-ethereum library.
 //
 // The go-ethereum library is free software: you can redistribute it and/or modify
@@ -17,8 +17,6 @@
 package rawdb
 
 import (
-	"bytes"
-
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
@@ -52,11 +50,13 @@ func ReadSkeletonHeader(db ethdb.KeyValueReader, number uint64) *types.Header {
 	if len(data) == 0 {
 		return nil
 	}
+
 	header := new(types.Header)
-	if err := rlp.Decode(bytes.NewReader(data), header); err != nil {
+	if err := rlp.DecodeBytes(data, header); err != nil {
 		log.Error("Invalid skeleton header RLP", "number", number, "err", err)
 		return nil
 	}
+
 	return header
 }
 
@@ -66,6 +66,7 @@ func WriteSkeletonHeader(db ethdb.KeyValueWriter, header *types.Header) {
 	if err != nil {
 		log.Crit("Failed to RLP encode header", "err", err)
 	}
+
 	key := skeletonHeaderKey(header.Number.Uint64())
 	if err := db.Put(key, data); err != nil {
 		log.Crit("Failed to store skeleton header", "err", err)
@@ -76,5 +77,27 @@ func WriteSkeletonHeader(db ethdb.KeyValueWriter, header *types.Header) {
 func DeleteSkeletonHeader(db ethdb.KeyValueWriter, number uint64) {
 	if err := db.Delete(skeletonHeaderKey(number)); err != nil {
 		log.Crit("Failed to delete skeleton header", "err", err)
+	}
+}
+
+const (
+	StateSyncUnknown  = uint8(0) // flags the state snap sync is unknown
+	StateSyncRunning  = uint8(1) // flags the state snap sync is not completed yet
+	StateSyncFinished = uint8(2) // flags the state snap sync is completed
+)
+
+// ReadSnapSyncStatusFlag retrieves the state snap sync status flag.
+func ReadSnapSyncStatusFlag(db ethdb.KeyValueReader) uint8 {
+	blob, err := db.Get(snapSyncStatusFlagKey)
+	if err != nil || len(blob) != 1 {
+		return StateSyncUnknown
+	}
+	return blob[0]
+}
+
+// WriteSnapSyncStatusFlag stores the state snap sync status flag into database.
+func WriteSnapSyncStatusFlag(db ethdb.KeyValueWriter, flag uint8) {
+	if err := db.Put(snapSyncStatusFlagKey, []byte{flag}); err != nil {
+		log.Crit("Failed to store sync status flag", "err", err)
 	}
 }

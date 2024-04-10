@@ -12,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/trie"
 )
 
 func TestChain2HeadEvent(t *testing.T) {
@@ -23,11 +24,11 @@ func TestChain2HeadEvent(t *testing.T) {
 			Config: params.TestChainConfig,
 			Alloc:  GenesisAlloc{addr1: {Balance: big.NewInt(10000000000000000)}},
 		}
-		genesis = gspec.MustCommit(db)
+		genesis = gspec.MustCommit(db, trie.NewDatabase(db, trie.HashDefaults))
 		signer  = types.LatestSigner(gspec.Config)
 	)
 
-	blockchain, _ := NewBlockChain(db, nil, gspec.Config, ethash.NewFaker(), vm.Config{}, nil, nil, nil)
+	blockchain, _ := NewBlockChain(db, nil, gspec, nil, ethash.NewFaker(), vm.Config{}, nil, nil, nil)
 	defer blockchain.Stop()
 
 	chain2HeadCh := make(chan Chain2HeadEvent, 64)
@@ -40,12 +41,15 @@ func TestChain2HeadEvent(t *testing.T) {
 
 	replacementBlocks, _ := GenerateChain(gspec.Config, genesis, ethash.NewFaker(), db, 4, func(i int, gen *BlockGen) {
 		tx, err := types.SignTx(types.NewContractCreation(gen.TxNonce(addr1), new(big.Int), 1000000, gen.header.BaseFee, nil), signer, key1)
+
 		if i == 2 {
 			gen.OffsetTime(-9)
 		}
+
 		if err != nil {
 			t.Fatalf("failed to create tx: %v", err)
 		}
+
 		gen.AddTx(tx)
 	})
 
@@ -69,6 +73,7 @@ func TestChain2HeadEvent(t *testing.T) {
 			if len(ev.NewChain) != len(expect.Added) {
 				t.Fatal("Newchain and Added Array Size don't match")
 			}
+
 			if len(ev.OldChain) != len(expect.Removed) {
 				t.Fatal("Oldchain and Removed Array Size don't match")
 			}
@@ -78,6 +83,7 @@ func TestChain2HeadEvent(t *testing.T) {
 					t.Fatal("Oldchain hashes Do Not Match")
 				}
 			}
+
 			for j := 0; j < len(ev.NewChain); j++ {
 				if ev.NewChain[j].Hash() != expect.Added[j] {
 					t.Fatalf("Newchain hashes Do Not Match %s %s", ev.NewChain[j].Hash(), expect.Added[j])
@@ -112,7 +118,7 @@ func TestChain2HeadEvent(t *testing.T) {
 		}})
 
 	// reorg event
-	//In this event the channel recieves an array of Blocks in NewChain and OldChain
+	//In this event the channel receives an array of Blocks in NewChain and OldChain
 	readEvent(&eventTest{
 		Type: Chain2HeadReorgEvent,
 		Added: []common.Hash{
@@ -134,5 +140,4 @@ func TestChain2HeadEvent(t *testing.T) {
 			replacementBlocks[2].Hash(),
 			replacementBlocks[3].Hash(),
 		}})
-
 }

@@ -15,9 +15,6 @@ var (
 	// bor receipt key
 	borReceiptKey = types.BorReceiptKey
 
-	// bor derived tx hash
-	getDerivedBorTxHash = types.GetDerivedBorTxHash
-
 	// borTxLookupPrefix + hash -> transaction/receipt lookup metadata
 	borTxLookupPrefix = []byte(borTxLookupPrefixStr)
 )
@@ -37,7 +34,7 @@ func borTxLookupKey(hash common.Hash) []byte {
 func ReadBorReceiptRLP(db ethdb.Reader, hash common.Hash, number uint64) rlp.RawValue {
 	var data []byte
 
-	err := db.ReadAncients(func(reader ethdb.AncientReader) error {
+	err := db.ReadAncients(func(reader ethdb.AncientReaderOp) error {
 		// Check if the data is in ancients
 		if isCanon(reader, number, hash) {
 			data, _ = reader.Ancient(freezerBorReceiptTable, number)
@@ -89,7 +86,7 @@ func ReadRawBorReceipt(db ethdb.Reader, hash common.Hash, number uint64) *types.
 }
 
 // ReadBorReceipt retrieves all the bor block receipts belonging to a block, including
-// its correspoinding metadata fields. If it is unable to populate these metadata
+// its corresponding metadata fields. If it is unable to populate these metadata
 // fields then nil is returned.
 func ReadBorReceipt(db ethdb.Reader, hash common.Hash, number uint64, config *params.ChainConfig) *types.Receipt {
 	if config != nil && config.Bor != nil && config.Bor.Sprint != nil && !config.Bor.IsSprintStart(number) {
@@ -118,6 +115,7 @@ func ReadBorReceipt(db ethdb.Reader, hash common.Hash, number uint64, config *pa
 		log.Error("Failed to derive bor receipt fields", "hash", hash, "number", number, "err", err)
 		return nil
 	}
+
 	return borReceipt
 }
 
@@ -198,6 +196,7 @@ func ReadBorTxLookupEntry(db ethdb.Reader, txHash common.Hash) *uint64 {
 	}
 
 	number := new(big.Int).SetBytes(data).Uint64()
+
 	return &number
 }
 

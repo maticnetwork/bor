@@ -22,7 +22,6 @@ package leveldb
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -63,23 +62,33 @@ type Database struct {
 	fn string      // filename for reporting
 	db *leveldb.DB // LevelDB instance
 
-	compTimeMeter      metrics.Meter // Meter for measuring the total time spent in database compaction
-	compReadMeter      metrics.Meter // Meter for measuring the data read during compaction
-	compWriteMeter     metrics.Meter // Meter for measuring the data written during compaction
-	writeDelayNMeter   metrics.Meter // Meter for measuring the write delay number due to database compaction
-	writeDelayMeter    metrics.Meter // Meter for measuring the write delay duration due to database compaction
-	diskSizeGauge      metrics.Gauge // Gauge for tracking the size of all the levels in the database
-	diskReadMeter      metrics.Meter // Meter for measuring the effective amount of data read
-	diskWriteMeter     metrics.Meter // Meter for measuring the effective amount of data written
-	memCompGauge       metrics.Gauge // Gauge for tracking the number of memory compaction
-	level0CompGauge    metrics.Gauge // Gauge for tracking the number of table compaction in level0
-	nonlevel0CompGauge metrics.Gauge // Gauge for tracking the number of table compaction in non0 level
-	seekCompGauge      metrics.Gauge // Gauge for tracking the number of table compaction caused by read opt
+	compTimeMeter       metrics.Meter // Meter for measuring the total time spent in database compaction
+	compReadMeter       metrics.Meter // Meter for measuring the data read during compaction
+	compWriteMeter      metrics.Meter // Meter for measuring the data written during compaction
+	writeDelayNMeter    metrics.Meter // Meter for measuring the write delay number due to database compaction
+	writeDelayMeter     metrics.Meter // Meter for measuring the write delay duration due to database compaction
+	diskSizeGauge       metrics.Gauge // Gauge for tracking the size of all the levels in the database
+	diskReadMeter       metrics.Meter // Meter for measuring the effective amount of data read
+	diskWriteMeter      metrics.Meter // Meter for measuring the effective amount of data written
+	memCompGauge        metrics.Gauge // Gauge for tracking the number of memory compaction
+	level0CompGauge     metrics.Gauge // Gauge for tracking the number of table compaction in level0
+	nonlevel0CompGauge  metrics.Gauge // Gauge for tracking the number of table compaction in non0 level
+	seekCompGauge       metrics.Gauge // Gauge for tracking the number of table compaction caused by read opt
+	manualMemAllocGauge metrics.Gauge // Gauge to track the amount of memory that has been manually allocated (not a part of runtime/GC)
+
+	levelsGauge []metrics.Gauge // Gauge for tracking the number of tables in levels
 
 	quitLock sync.Mutex      // Mutex protecting the quit channel access
 	quitChan chan chan error // Quit channel to stop the metrics collection before closing the database
 
 	log log.Logger // Contextual logger tracking the database path
+}
+
+type LevelDBConfig struct {
+	CompactionTableSize           uint64  // LevelDB SSTable/file size in mebibytes
+	CompactionTableSizeMultiplier float64 // Multiplier on LevelDB SSTable/file size
+	CompactionTotalSize           uint64  // Total size in mebibytes of SSTables in a given LevelDB level
+	CompactionTotalSizeMultiplier float64 // Multiplier on level size on LevelDB levels
 }
 
 // New returns a wrapped LevelDB object. The namespace is the prefix that the
@@ -110,10 +119,19 @@ func NewCustom(file string, namespace string, customize func(options *opt.Option
 	options := configureOptions(customize)
 	logger := log.New("database", file)
 	usedCache := options.GetBlockCacheCapacity() + options.GetWriteBuffer()*2
-	logCtx := []interface{}{"cache", common.StorageSize(usedCache), "handles", options.GetOpenFilesCacheCapacity()}
+
+	logCtx := []interface{}{
+		"cache", common.StorageSize(usedCache),
+		"handles", options.GetOpenFilesCacheCapacity(),
+		"compactionTableSize", options.CompactionTableSize,
+		"compactionTableSizeMultiplier", options.CompactionTableSizeMultiplier,
+		"compactionTotalSize", options.CompactionTotalSize,
+		"compactionTotalSizeMultiplier", options.CompactionTotalSizeMultiplier}
+
 	if options.ReadOnly {
 		logCtx = append(logCtx, "readonly", "true")
 	}
+
 	logger.Info("Allocated cache and file handles", logCtx...)
 
 	// Open the db and recover any potential corruptions
@@ -121,6 +139,7 @@ func NewCustom(file string, namespace string, customize func(options *opt.Option
 	if _, corrupted := err.(*errors.ErrCorrupted); corrupted {
 		db, err = leveldb.RecoverFile(file, nil)
 	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -143,9 +162,10 @@ func NewCustom(file string, namespace string, customize func(options *opt.Option
 	ldb.level0CompGauge = metrics.NewRegisteredGauge(namespace+"compact/level0", nil)
 	ldb.nonlevel0CompGauge = metrics.NewRegisteredGauge(namespace+"compact/nonlevel0", nil)
 	ldb.seekCompGauge = metrics.NewRegisteredGauge(namespace+"compact/seek", nil)
+	ldb.manualMemAllocGauge = metrics.NewRegisteredGauge(namespace+"memory/manualalloc", nil)
 
 	// Start up the metrics gathering and return
-	go ldb.meter(metricsGatheringInterval)
+	go ldb.meter(metricsGatheringInterval, namespace)
 	return ldb, nil
 }
 
@@ -160,6 +180,7 @@ func configureOptions(customizeFn func(*opt.Options)) *opt.Options {
 	if customizeFn != nil {
 		customizeFn(options)
 	}
+
 	return options
 }
 
@@ -172,11 +193,14 @@ func (db *Database) Close() error {
 	if db.quitChan != nil {
 		errc := make(chan error)
 		db.quitChan <- errc
+
 		if err := <-errc; err != nil {
 			db.log.Error("Metrics collection failed", "err", err)
 		}
+
 		db.quitChan = nil
 	}
+
 	return db.db.Close()
 }
 
@@ -191,6 +215,7 @@ func (db *Database) Get(key []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return dat, nil
 }
 
@@ -238,11 +263,17 @@ func (db *Database) NewSnapshot() (ethdb.Snapshot, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return &snapshot{db: snap}, nil
 }
 
 // Stat returns a particular internal stat of the database.
 func (db *Database) Stat(property string) (string, error) {
+	if property == "" {
+		property = "leveldb.stats"
+	} else if !strings.HasPrefix(property, "leveldb.") {
+		property = "leveldb." + property
+	}
 	return db.db.GetProperty(property)
 }
 
@@ -264,124 +295,72 @@ func (db *Database) Path() string {
 
 // meter periodically retrieves internal leveldb counters and reports them to
 // the metrics subsystem.
-//
-// This is how a LevelDB stats table looks like (currently):
-//   Compactions
-//    Level |   Tables   |    Size(MB)   |    Time(sec)  |    Read(MB)   |   Write(MB)
-//   -------+------------+---------------+---------------+---------------+---------------
-//      0   |          0 |       0.00000 |       1.27969 |       0.00000 |      12.31098
-//      1   |         85 |     109.27913 |      28.09293 |     213.92493 |     214.26294
-//      2   |        523 |    1000.37159 |       7.26059 |      66.86342 |      66.77884
-//      3   |        570 |    1113.18458 |       0.00000 |       0.00000 |       0.00000
-//
-// This is how the write delay look like (currently):
-// DelayN:5 Delay:406.604657ms Paused: false
-//
-// This is how the iostats look like (currently):
-// Read(MB):3895.04860 Write(MB):3654.64712
-func (db *Database) meter(refresh time.Duration) {
+func (db *Database) meter(refresh time.Duration, namespace string) {
 	// Create the counters to store current and previous compaction values
-	compactions := make([][]float64, 2)
+	compactions := make([][]int64, 2)
 	for i := 0; i < 2; i++ {
-		compactions[i] = make([]float64, 4)
+		compactions[i] = make([]int64, 4)
 	}
-	// Create storage for iostats.
-	var iostats [2]float64
-
-	// Create storage and warning log tracer for write delay.
-	var (
-		delaystats      [2]int64
-		lastWritePaused time.Time
-	)
-
+	// Create storages for states and warning log tracer.
 	var (
 		errc chan error
 		merr error
-	)
 
+		stats           leveldb.DBStats
+		iostats         [2]int64
+		delaystats      [2]int64
+		lastWritePaused time.Time
+	)
 	timer := time.NewTimer(refresh)
 	defer timer.Stop()
 
 	// Iterate ad infinitum and collect the stats
 	for i := 1; errc == nil && merr == nil; i++ {
 		// Retrieve the database stats
-		stats, err := db.db.GetProperty("leveldb.stats")
+		// Stats method resets buffers inside therefore it's okay to just pass the struct.
+		err := db.db.Stats(&stats)
 		if err != nil {
 			db.log.Error("Failed to read database stats", "err", err)
 			merr = err
-			continue
-		}
-		// Find the compaction table, skip the header
-		lines := strings.Split(stats, "\n")
-		for len(lines) > 0 && strings.TrimSpace(lines[0]) != "Compactions" {
-			lines = lines[1:]
-		}
-		if len(lines) <= 3 {
-			db.log.Error("Compaction leveldbTable not found")
-			merr = errors.New("compaction leveldbTable not found")
-			continue
-		}
-		lines = lines[3:]
 
+			continue
+		}
 		// Iterate over all the leveldbTable rows, and accumulate the entries
 		for j := 0; j < len(compactions[i%2]); j++ {
 			compactions[i%2][j] = 0
 		}
-		for _, line := range lines {
-			parts := strings.Split(line, "|")
-			if len(parts) != 6 {
-				break
-			}
-			for idx, counter := range parts[2:] {
-				value, err := strconv.ParseFloat(strings.TrimSpace(counter), 64)
-				if err != nil {
-					db.log.Error("Compaction entry parsing failed", "err", err)
-					merr = err
-					continue
-				}
-				compactions[i%2][idx] += value
-			}
+		compactions[i%2][0] = stats.LevelSizes.Sum()
+		for _, t := range stats.LevelDurations {
+			compactions[i%2][1] += t.Nanoseconds()
 		}
+		compactions[i%2][2] = stats.LevelRead.Sum()
+		compactions[i%2][3] = stats.LevelWrite.Sum()
 		// Update all the requested meters
 		if db.diskSizeGauge != nil {
-			db.diskSizeGauge.Update(int64(compactions[i%2][0] * 1024 * 1024))
+			db.diskSizeGauge.Update(compactions[i%2][0])
 		}
+
 		if db.compTimeMeter != nil {
-			db.compTimeMeter.Mark(int64((compactions[i%2][1] - compactions[(i-1)%2][1]) * 1000 * 1000 * 1000))
+			db.compTimeMeter.Mark(compactions[i%2][1] - compactions[(i-1)%2][1])
 		}
+
 		if db.compReadMeter != nil {
-			db.compReadMeter.Mark(int64((compactions[i%2][2] - compactions[(i-1)%2][2]) * 1024 * 1024))
+			db.compReadMeter.Mark(compactions[i%2][2] - compactions[(i-1)%2][2])
 		}
+
 		if db.compWriteMeter != nil {
-			db.compWriteMeter.Mark(int64((compactions[i%2][3] - compactions[(i-1)%2][3]) * 1024 * 1024))
+			db.compWriteMeter.Mark(compactions[i%2][3] - compactions[(i-1)%2][3])
 		}
-		// Retrieve the write delay statistic
-		writedelay, err := db.db.GetProperty("leveldb.writedelay")
-		if err != nil {
-			db.log.Error("Failed to read database write delay statistic", "err", err)
-			merr = err
-			continue
-		}
+
 		var (
-			delayN        int64
-			delayDuration string
-			duration      time.Duration
-			paused        bool
+			delayN   = int64(stats.WriteDelayCount)
+			duration = stats.WriteDelayDuration
+			paused   = stats.WritePaused
 		)
-		if n, err := fmt.Sscanf(writedelay, "DelayN:%d Delay:%s Paused:%t", &delayN, &delayDuration, &paused); n != 3 || err != nil {
-			db.log.Error("Write delay statistic not found")
-			merr = err
-			continue
-		}
-		duration, err = time.ParseDuration(delayDuration)
-		if err != nil {
-			db.log.Error("Failed to parse delay duration", "err", err)
-			merr = err
-			continue
-		}
 		if db.writeDelayNMeter != nil {
 			db.writeDelayNMeter.Mark(delayN - delaystats[0])
 		}
+
 		if db.writeDelayMeter != nil {
 			db.writeDelayMeter.Mark(duration.Nanoseconds() - delaystats[1])
 		}
@@ -390,64 +369,38 @@ func (db *Database) meter(refresh time.Duration) {
 		if paused && delayN-delaystats[0] == 0 && duration.Nanoseconds()-delaystats[1] == 0 &&
 			time.Now().After(lastWritePaused.Add(degradationWarnInterval)) {
 			db.log.Warn("Database compacting, degraded performance")
+
 			lastWritePaused = time.Now()
 		}
+
 		delaystats[0], delaystats[1] = delayN, duration.Nanoseconds()
 
-		// Retrieve the database iostats.
-		ioStats, err := db.db.GetProperty("leveldb.iostats")
-		if err != nil {
-			db.log.Error("Failed to read database iostats", "err", err)
-			merr = err
-			continue
-		}
-		var nRead, nWrite float64
-		parts := strings.Split(ioStats, " ")
-		if len(parts) < 2 {
-			db.log.Error("Bad syntax of ioStats", "ioStats", ioStats)
-			merr = fmt.Errorf("bad syntax of ioStats %s", ioStats)
-			continue
-		}
-		if n, err := fmt.Sscanf(parts[0], "Read(MB):%f", &nRead); n != 1 || err != nil {
-			db.log.Error("Bad syntax of read entry", "entry", parts[0])
-			merr = err
-			continue
-		}
-		if n, err := fmt.Sscanf(parts[1], "Write(MB):%f", &nWrite); n != 1 || err != nil {
-			db.log.Error("Bad syntax of write entry", "entry", parts[1])
-			merr = err
-			continue
-		}
+		var (
+			nRead  = int64(stats.IORead)
+			nWrite = int64(stats.IOWrite)
+		)
 		if db.diskReadMeter != nil {
-			db.diskReadMeter.Mark(int64((nRead - iostats[0]) * 1024 * 1024))
+			db.diskReadMeter.Mark(nRead - iostats[0])
 		}
+
 		if db.diskWriteMeter != nil {
-			db.diskWriteMeter.Mark(int64((nWrite - iostats[1]) * 1024 * 1024))
+			db.diskWriteMeter.Mark(nWrite - iostats[1])
 		}
+
 		iostats[0], iostats[1] = nRead, nWrite
 
-		compCount, err := db.db.GetProperty("leveldb.compcount")
-		if err != nil {
-			db.log.Error("Failed to read database iostats", "err", err)
-			merr = err
-			continue
-		}
+		db.memCompGauge.Update(int64(stats.MemComp))
+		db.level0CompGauge.Update(int64(stats.Level0Comp))
+		db.nonlevel0CompGauge.Update(int64(stats.NonLevel0Comp))
+		db.seekCompGauge.Update(int64(stats.SeekComp))
 
-		var (
-			memComp       uint32
-			level0Comp    uint32
-			nonLevel0Comp uint32
-			seekComp      uint32
-		)
-		if n, err := fmt.Sscanf(compCount, "MemComp:%d Level0Comp:%d NonLevel0Comp:%d SeekComp:%d", &memComp, &level0Comp, &nonLevel0Comp, &seekComp); n != 4 || err != nil {
-			db.log.Error("Compaction count statistic not found")
-			merr = err
-			continue
+		for i, tables := range stats.LevelTablesCounts {
+			// Append metrics for additional layers
+			if i >= len(db.levelsGauge) {
+				db.levelsGauge = append(db.levelsGauge, metrics.NewRegisteredGauge(namespace+fmt.Sprintf("tables/level%v", i), nil))
+			}
+			db.levelsGauge[i].Update(int64(tables))
 		}
-		db.memCompGauge.Update(int64(memComp))
-		db.level0CompGauge.Update(int64(level0Comp))
-		db.nonlevel0CompGauge.Update(int64(nonLevel0Comp))
-		db.seekCompGauge.Update(int64(seekComp))
 
 		// Sleep a bit, then repeat the stats collection
 		select {
@@ -477,6 +430,7 @@ type batch struct {
 func (b *batch) Put(key, value []byte) error {
 	b.b.Put(key, value)
 	b.size += len(key) + len(value)
+
 	return nil
 }
 
@@ -484,6 +438,7 @@ func (b *batch) Put(key, value []byte) error {
 func (b *batch) Delete(key []byte) error {
 	b.b.Delete(key)
 	b.size += len(key)
+
 	return nil
 }
 
@@ -520,6 +475,7 @@ func (r *replayer) Put(key, value []byte) {
 	if r.failure != nil {
 		return
 	}
+
 	r.failure = r.writer.Put(key, value)
 }
 
@@ -529,6 +485,7 @@ func (r *replayer) Delete(key []byte) {
 	if r.failure != nil {
 		return
 	}
+
 	r.failure = r.writer.Delete(key)
 }
 
@@ -538,6 +495,7 @@ func (r *replayer) Delete(key []byte) {
 func bytesPrefixRange(prefix, start []byte) *util.Range {
 	r := util.BytesPrefix(prefix)
 	r.Start = append(r.Start, start...)
+
 	return r
 }
 

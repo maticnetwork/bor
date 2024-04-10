@@ -23,12 +23,16 @@ import (
 	"fmt"
 	"hash"
 	"io"
-	"sort"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/trie"
+	"github.com/ethereum/go-ethereum/trie/trienode"
 	"golang.org/x/crypto/sha3"
+	"golang.org/x/exp/slices"
 )
 
 type fuzzer struct {
@@ -42,17 +46,21 @@ func (f *fuzzer) read(size int) []byte {
 	if _, err := f.input.Read(out); err != nil {
 		f.exhausted = true
 	}
+
 	return out
 }
 
 func (f *fuzzer) readSlice(min, max int) []byte {
 	var a uint16
+
 	binary.Read(f.input, binary.LittleEndian, &a)
 	size := min + int(a)%(max-min)
+
 	out := make([]byte, size)
 	if _, err := f.input.Read(out); err != nil {
 		f.exhausted = true
 	}
+
 	return out
 }
 
@@ -76,8 +84,10 @@ func (s *spongeDb) Put(key []byte, value []byte) error {
 	if s.debug {
 		fmt.Printf("db.Put %x : %x\n", key, value)
 	}
+
 	s.sponge.Write(key)
 	s.sponge.Write(value)
+
 	return nil
 }
 func (s *spongeDb) NewIterator(prefix []byte, start []byte) ethdb.Iterator { panic("implement me") }
@@ -100,32 +110,23 @@ func (b *spongeBatch) Replay(w ethdb.KeyValueWriter) error { return nil }
 type kv struct {
 	k, v []byte
 }
-type kvs []kv
 
-func (k kvs) Len() int {
-	return len(k)
-}
-
-func (k kvs) Less(i, j int) bool {
-	return bytes.Compare(k[i].k, k[j].k) < 0
-}
-
-func (k kvs) Swap(i, j int) {
-	k[j], k[i] = k[i], k[j]
-}
-
+// Fuzz is the fuzzing entry-point.
 // The function must return
-// 1 if the fuzzer should increase priority of the
-//    given input during subsequent fuzzing (for example, the input is lexically
-//    correct and was parsed successfully);
-// -1 if the input must not be added to corpus even if gives new coverage; and
-// 0  otherwise
+//
+//   - 1 if the fuzzer should increase priority of the
+//     given input during subsequent fuzzing (for example, the input is lexically
+//     correct and was parsed successfully);
+//   - -1 if the input must not be added to corpus even if gives new coverage; and
+//   - 0 otherwise
+//
 // other values are reserved for future use.
-func Fuzz(data []byte) int {
+func fuzz(data []byte) int {
 	f := fuzzer{
 		input:     bytes.NewReader(data),
 		exhausted: false,
 	}
+
 	return f.fuzz()
 }
 
@@ -135,19 +136,24 @@ func Debug(data []byte) int {
 		exhausted: false,
 		debugging: true,
 	}
+
 	return f.fuzz()
 }
 
 func (f *fuzzer) fuzz() int {
-
 	// This spongeDb is used to check the sequence of disk-db-writes
 	var (
-		spongeA     = &spongeDb{sponge: sha3.NewLegacyKeccak256()}
-		dbA         = trie.NewDatabase(spongeA)
-		trieA, _    = trie.New(common.Hash{}, dbA)
-		spongeB     = &spongeDb{sponge: sha3.NewLegacyKeccak256()}
-		trieB       = trie.NewStackTrie(spongeB)
-		vals        kvs
+		spongeA = &spongeDb{sponge: sha3.NewLegacyKeccak256()}
+		dbA     = trie.NewDatabase(rawdb.NewDatabase(spongeA), nil)
+		trieA   = trie.NewEmpty(dbA)
+		spongeB = &spongeDb{sponge: sha3.NewLegacyKeccak256()}
+		dbB     = trie.NewDatabase(rawdb.NewDatabase(spongeB), nil)
+
+		options = trie.NewStackTrieOptions().WithWriter(func(path []byte, hash common.Hash, blob []byte) {
+			rawdb.WriteTrieNode(spongeB, common.Hash{}, path, hash, blob, dbB.Scheme())
+		})
+		trieB       = trie.NewStackTrie(options)
+		vals        []kv
 		useful      bool
 		maxElements = 10000
 		// operate on unique keys only
@@ -157,50 +163,114 @@ func (f *fuzzer) fuzz() int {
 	for i := 0; !f.exhausted && i < maxElements; i++ {
 		k := f.read(32)
 		v := f.readSlice(1, 500)
+
 		if f.exhausted {
 			// If it was exhausted while reading, the value may be all zeroes,
 			// thus 'deletion' which is not supported on stacktrie
 			break
 		}
+
 		if _, present := keys[string(k)]; present {
 			// This key is a duplicate, ignore it
 			continue
 		}
+
 		keys[string(k)] = struct{}{}
+
 		vals = append(vals, kv{k: k, v: v})
-		trieA.Update(k, v)
+
+		trieA.MustUpdate(k, v)
+
 		useful = true
 	}
+
 	if !useful {
 		return 0
 	}
 	// Flush trie -> database
-	rootA, _, err := trieA.Commit(nil)
+	rootA, nodes, err := trieA.Commit(false)
 	if err != nil {
 		panic(err)
 	}
+	if nodes != nil {
+		dbA.Update(rootA, types.EmptyRootHash, 0, trienode.NewWithNodeSet(nodes), nil)
+	}
 	// Flush memdb -> disk (sponge)
-	dbA.Commit(rootA, false, nil)
+	_ = dbA.Commit(rootA, false)
 
 	// Stacktrie requires sorted insertion
-	sort.Sort(vals)
+	slices.SortFunc(vals, func(a, b kv) int {
+		return bytes.Compare(a.k, b.k)
+	})
 	for _, kv := range vals {
 		if f.debugging {
-			fmt.Printf("{\"0x%x\" , \"0x%x\"} // stacktrie.Update\n", kv.k, kv.v)
+			fmt.Printf("{\"%#x\" , \"%#x\"} // stacktrie.Update\n", kv.k, kv.v)
 		}
-		trieB.Update(kv.k, kv.v)
+
+		trieB.MustUpdate(kv.k, kv.v)
 	}
+
 	rootB := trieB.Hash()
-	if _, err := trieB.Commit(); err != nil {
-		panic(err)
-	}
+	trieB.Commit()
+
 	if rootA != rootB {
 		panic(fmt.Sprintf("roots differ: (trie) %x != %x (stacktrie)", rootA, rootB))
 	}
+
 	sumA := spongeA.sponge.Sum(nil)
 	sumB := spongeB.sponge.Sum(nil)
+
 	if !bytes.Equal(sumA, sumB) {
 		panic(fmt.Sprintf("sequence differ: (trie) %x != %x (stacktrie)", sumA, sumB))
 	}
+
+	// Ensure all the nodes are persisted correctly
+	var (
+		nodeset  = make(map[string][]byte) // path -> blob
+		optionsC = trie.NewStackTrieOptions().WithWriter(func(path []byte, hash common.Hash, blob []byte) {
+			if crypto.Keccak256Hash(blob) != hash {
+				panic("invalid node blob")
+			}
+			nodeset[string(path)] = common.CopyBytes(blob)
+		})
+		trieC   = trie.NewStackTrie(optionsC)
+		checked int
+	)
+
+	for _, kv := range vals {
+		trieC.MustUpdate(kv.k, kv.v)
+	}
+	rootC := trieC.Commit()
+	if rootA != rootC {
+		panic(fmt.Sprintf("roots differ: (trie) %x != %x (stacktrie)", rootA, rootC))
+	}
+
+	trieA, _ = trie.New(trie.TrieID(rootA), dbA)
+	iterA := trieA.MustNodeIterator(nil)
+	for iterA.Next(true) {
+		if iterA.Hash() == (common.Hash{}) {
+			if _, present := nodeset[string(iterA.Path())]; present {
+				panic("unexpected tiny node")
+			}
+
+			continue
+		}
+
+		nodeBlob, present := nodeset[string(iterA.Path())]
+		if !present {
+			panic("missing node")
+		}
+
+		if !bytes.Equal(nodeBlob, iterA.NodeBlob()) {
+			panic("node blob is not matched")
+		}
+
+		checked += 1
+	}
+
+	if checked != len(nodeset) {
+		panic("node number is not matched")
+	}
+
 	return 1
 }

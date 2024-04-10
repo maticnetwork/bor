@@ -1,4 +1,4 @@
-// Copyright 2015 The go-ethereum Authors
+// Copyright 2020 The go-ethereum Authors
 // This file is part of the go-ethereum library.
 //
 // The go-ethereum library is free software: you can redistribute it and/or modify
@@ -17,9 +17,9 @@
 package eth
 
 import (
+	"errors"
 	"fmt"
 	"math/big"
-	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -46,13 +46,14 @@ func (h *ethHandler) PeerInfo(id enode.ID) interface{} {
 	if p := h.peers.peer(id.String()); p != nil {
 		return p.info()
 	}
+
 	return nil
 }
 
 // AcceptTxs retrieves whether transaction processing is enabled on the node
 // or if inbound transactions should simply be dropped.
 func (h *ethHandler) AcceptTxs() bool {
-	return atomic.LoadUint32(&h.acceptTxs) == 1
+	return h.synced.Load()
 }
 
 // Handle is invoked from a peer's message handler when it receives a new remote
@@ -67,13 +68,21 @@ func (h *ethHandler) Handle(peer *eth.Peer, packet eth.Packet) error {
 	case *eth.NewBlockPacket:
 		return h.handleBlockBroadcast(peer, packet.Block, packet.TD)
 
-	case *eth.NewPooledTransactionHashesPacket:
-		return h.txFetcher.Notify(peer.ID(), *packet)
+	case *eth.NewPooledTransactionHashesPacket67:
+		return h.txFetcher.Notify(peer.ID(), nil, nil, *packet)
+
+	case *eth.NewPooledTransactionHashesPacket68:
+		return h.txFetcher.Notify(peer.ID(), packet.Types, packet.Sizes, packet.Hashes)
 
 	case *eth.TransactionsPacket:
+		for _, tx := range *packet {
+			if tx.Type() == types.BlobTxType {
+				return errors.New("disallowed broadcast blob transaction")
+			}
+		}
 		return h.txFetcher.Enqueue(peer.ID(), *packet, false)
 
-	case *eth.PooledTransactionsPacket:
+	case *eth.PooledTransactionsResponse:
 		return h.txFetcher.Enqueue(peer.ID(), *packet, true)
 
 	default:
@@ -88,24 +97,25 @@ func (h *ethHandler) handleBlockAnnounces(peer *eth.Peer, hashes []common.Hash, 
 	// the chain already entered the pos stage and disconnect the
 	// remote peer.
 	if h.merger.PoSFinalized() {
-		// TODO (MariusVanDerWijden) drop non-updated peers after the merge
-		return nil
-		// return errors.New("unexpected block announces")
+		return errors.New("disallowed block announcement")
 	}
 	// Schedule all the unknown hashes for retrieval
 	var (
 		unknownHashes  = make([]common.Hash, 0, len(hashes))
 		unknownNumbers = make([]uint64, 0, len(numbers))
 	)
+
 	for i := 0; i < len(hashes); i++ {
 		if !h.chain.HasBlock(hashes[i], numbers[i]) {
 			unknownHashes = append(unknownHashes, hashes[i])
 			unknownNumbers = append(unknownNumbers, numbers[i])
 		}
 	}
+
 	for i := 0; i < len(unknownHashes); i++ {
 		h.blockFetcher.Notify(peer.ID(), unknownHashes[i], unknownNumbers[i], time.Now(), peer.RequestOneHeader, peer.RequestBodies)
 	}
+
 	return nil
 }
 
@@ -116,9 +126,7 @@ func (h *ethHandler) handleBlockBroadcast(peer *eth.Peer, block *types.Block, td
 	// the chain already entered the pos stage and disconnect the
 	// remote peer.
 	if h.merger.PoSFinalized() {
-		// TODO (MariusVanDerWijden) drop non-updated peers after the merge
-		return nil
-		// return errors.New("unexpected block announces")
+		return errors.New("disallowed block broadcast")
 	}
 	// Schedule the block for import
 	h.blockFetcher.Enqueue(peer.ID(), block)
@@ -132,7 +140,8 @@ func (h *ethHandler) handleBlockBroadcast(peer *eth.Peer, block *types.Block, td
 	// Update the peer's total difficulty if better than the previous
 	if _, td := peer.Head(); trueTD.Cmp(td) > 0 {
 		peer.SetHead(trueHead, trueTD)
-		h.chainSync.handlePeerEvent(peer)
+		h.chainSync.handlePeerEvent()
 	}
+
 	return nil
 }

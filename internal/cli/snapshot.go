@@ -187,7 +187,12 @@ func (c *PruneStateCommand) Run(args []string) int {
 		return 1
 	}
 
-	pruner, err := pruner.NewPruner(chaindb, node.ResolvePath(""), node.ResolvePath(c.cacheTrieJournal), c.bloomfilterSize)
+	prunerconfig := pruner.Config{
+		Datadir:   node.ResolvePath(""),
+		BloomSize: c.bloomfilterSize,
+	}
+
+	pruner, err := pruner.NewPruner(chaindb, prunerconfig)
 	if err != nil {
 		log.Error("Failed to open snapshot tree", "err", err)
 		return 1

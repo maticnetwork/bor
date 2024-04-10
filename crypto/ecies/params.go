@@ -39,6 +39,7 @@ import (
 	"crypto/elliptic"
 	"crypto/sha256"
 	"crypto/sha512"
+	"errors"
 	"fmt"
 	"hash"
 
@@ -47,8 +48,8 @@ import (
 
 var (
 	DefaultCurve                  = ethcrypto.S256()
-	ErrUnsupportedECDHAlgorithm   = fmt.Errorf("ecies: unsupported ECDH algorithm")
-	ErrUnsupportedECIESParameters = fmt.Errorf("ecies: unsupported ECIES parameters")
+	ErrUnsupportedECDHAlgorithm   = errors.New("ecies: unsupported ECDH algorithm")
+	ErrUnsupportedECIESParameters = errors.New("ecies: unsupported ECIES parameters")
 	ErrInvalidKeyLen              = fmt.Errorf("ecies: invalid key size (> %d) in ECIESParams", maxKeyLen)
 )
 
@@ -137,8 +138,10 @@ func pubkeyParams(key *PublicKey) (*ECIESParams, error) {
 			return nil, ErrUnsupportedECIESParameters
 		}
 	}
+
 	if params.KeyLen > maxKeyLen {
 		return nil, ErrInvalidKeyLen
 	}
+
 	return params, nil
 }

@@ -60,6 +60,8 @@ const (
 
 	// chain2HeadChanSize is the size of channel listening to Chain2HeadEvent.
 	chain2HeadChanSize = 10
+
+	messageSizeLimit = 15 * 1024 * 1024
 )
 
 // backend encompasses the bare-minimum functionality needed for ethstats reporting
@@ -80,9 +82,8 @@ type backend interface {
 // reporting to ethstats
 type fullNodeBackend interface {
 	backend
-	Miner() *miner.Miner
 	BlockByNumber(ctx context.Context, number rpc.BlockNumber) (*types.Block, error)
-	CurrentBlock() *types.Block
+	CurrentBlock() *types.Header
 	SuggestGasTipCap(ctx context.Context) (*big.Int, error)
 }
 
@@ -98,6 +99,13 @@ func (e *EthstatsDataType) AddKV(key, val string) {
 // Arbitrary Data that can be included
 var EthstatsData = &EthstatsDataType{
 	kv: make(map[string]string),
+}
+
+// miningNodeBackend encompasses the functionality necessary for a mining node
+// reporting to ethstats
+type miningNodeBackend interface {
+	fullNodeBackend
+	Miner() *miner.Miner
 }
 
 // Service implements an Ethereum netstats reporting daemon that pushes local
@@ -125,13 +133,17 @@ type Service struct {
 // websocket.
 //
 // From Gorilla websocket docs:
-//   Connections support one concurrent reader and one concurrent writer.
-//   Applications are responsible for ensuring that no more than one goroutine calls the write methods
-//     - NextWriter, SetWriteDeadline, WriteMessage, WriteJSON, EnableWriteCompression, SetCompressionLevel
-//   concurrently and that no more than one goroutine calls the read methods
-//     - NextReader, SetReadDeadline, ReadMessage, ReadJSON, SetPongHandler, SetPingHandler
-//   concurrently.
-//   The Close and WriteControl methods can be called concurrently with all other methods.
+//
+// Connections support one concurrent reader and one concurrent writer. Applications are
+// responsible for ensuring that
+//   - no more than one goroutine calls the write methods
+//     NextWriter, SetWriteDeadline, WriteMessage, WriteJSON, EnableWriteCompression,
+//     SetCompressionLevel concurrently; and
+//   - that no more than one goroutine calls the
+//     read methods NextReader, SetReadDeadline, ReadMessage, ReadJSON, SetPongHandler,
+//     SetPingHandler concurrently.
+//
+// The Close and WriteControl methods can be called concurrently with all other methods.
 type connWrapper struct {
 	conn *websocket.Conn
 
@@ -140,6 +152,7 @@ type connWrapper struct {
 }
 
 func newConnectionWrapper(conn *websocket.Conn) *connWrapper {
+	conn.SetReadLimit(messageSizeLimit)
 	return &connWrapper{conn: conn}
 }
 
@@ -176,12 +189,14 @@ func parseEthstatsURL(url string) (parts []string, err error) {
 	if hostIndex == -1 || hostIndex == len(url)-1 {
 		return nil, err
 	}
+
 	preHost, host := url[:hostIndex], url[hostIndex+1:]
 
 	passIndex := strings.LastIndex(preHost, ":")
 	if passIndex == -1 {
 		return []string{preHost, "", host}, nil
 	}
+
 	nodename, pass := preHost[:passIndex], ""
 	if passIndex != len(preHost)-1 {
 		pass = preHost[passIndex+1:]
@@ -196,6 +211,7 @@ func New(node *node.Node, backend backend, engine consensus.Engine, url string) 
 	if err != nil {
 		return err
 	}
+
 	ethstats := &Service{
 		backend: backend,
 		engine:  engine,
@@ -208,6 +224,7 @@ func New(node *node.Node, backend backend, engine consensus.Engine, url string) 
 	}
 
 	node.RegisterLifecycle(ethstats)
+
 	return nil
 }
 
@@ -220,9 +237,11 @@ func (s *Service) Start() error {
 	s.txSub = s.backend.SubscribeNewTxsEvent(txEventCh)
 	chain2HeadCh := make(chan core.Chain2HeadEvent, chain2HeadChanSize)
 	s.chain2headSub = s.backend.SubscribeChain2HeadEvent(chain2HeadCh)
+
 	go s.loop(chainHeadCh, chain2HeadCh, txEventCh)
 
 	log.Info("Stats daemon started")
+
 	return nil
 }
 
@@ -231,6 +250,7 @@ func (s *Service) Stop() error {
 	s.headSub.Unsubscribe()
 	s.txSub.Unsubscribe()
 	log.Info("Stats daemon stopped")
+
 	return nil
 }
 
@@ -244,6 +264,7 @@ func (s *Service) loop(chainHeadCh chan core.ChainHeadEvent, chain2HeadCh chan c
 		txCh    = make(chan struct{}, 1)
 		head2Ch = make(chan core.Chain2HeadEvent, 100)
 	)
+
 	go func() {
 		var lastTx mclock.AbsTime
 
@@ -308,20 +329,25 @@ func (s *Service) loop(chainHeadCh chan core.ChainHeadEvent, chain2HeadCh chan c
 				conn *connWrapper
 				err  error
 			)
+
 			dialer := websocket.Dialer{HandshakeTimeout: 5 * time.Second}
 			header := make(http.Header)
 			header.Set("origin", "http://localhost")
+
 			for _, url := range urls {
 				c, _, e := dialer.Dial(url, header)
 				err = e
+
 				if err == nil {
 					conn = newConnectionWrapper(c)
 					break
 				}
 			}
+
 			if err != nil {
 				log.Warn("Stats server unreachable", "err", err)
 				errTimer.Reset(10 * time.Second)
+
 				continue
 			}
 			// Authenticate the client with the server
@@ -329,8 +355,10 @@ func (s *Service) loop(chainHeadCh chan core.ChainHeadEvent, chain2HeadCh chan c
 				log.Warn("Stats login failed", "err", err)
 				conn.Close()
 				errTimer.Reset(10 * time.Second)
+
 				continue
 			}
+
 			go s.readLoop(conn)
 
 			// Send the initial stats so our node looks decent from the get go
@@ -338,6 +366,7 @@ func (s *Service) loop(chainHeadCh chan core.ChainHeadEvent, chain2HeadCh chan c
 				log.Warn("Initial stats report failed", "err", err)
 				conn.Close()
 				errTimer.Reset(0)
+
 				continue
 			}
 			// Keep sending status updates until the connection breaks
@@ -349,6 +378,7 @@ func (s *Service) loop(chainHeadCh chan core.ChainHeadEvent, chain2HeadCh chan c
 					fullReport.Stop()
 					// Make sure the connection is closed
 					conn.Close()
+
 					return
 
 				case <-fullReport.C:
@@ -363,6 +393,7 @@ func (s *Service) loop(chainHeadCh chan core.ChainHeadEvent, chain2HeadCh chan c
 					if err = s.reportBlock(conn, head); err != nil {
 						log.Warn("Block stats report failed", "err", err)
 					}
+
 					if err = s.reportPending(conn); err != nil {
 						log.Warn("Post-block transaction stats report failed", "err", err)
 					}
@@ -405,10 +436,11 @@ func (s *Service) readLoop(conn *connWrapper) {
 		// If the network packet is a system ping, respond to it directly
 		var ping string
 		if err := json.Unmarshal(blob, &ping); err == nil && strings.HasPrefix(ping, "primus::ping::") {
-			if err := conn.WriteJSON(strings.Replace(ping, "ping", "pong", -1)); err != nil {
+			if err := conn.WriteJSON(strings.ReplaceAll(ping, "ping", "pong")); err != nil {
 				log.Warn("Failed to respond to system ping message", "err", err)
 				return
 			}
+
 			continue
 		}
 		// Not a system ping, try to decode an actual state message
@@ -417,11 +449,14 @@ func (s *Service) readLoop(conn *connWrapper) {
 			log.Warn("Failed to decode stats server message", "err", err)
 			return
 		}
+
 		log.Trace("Received message from stats server", "msg", msg)
+
 		if len(msg["emit"]) == 0 {
 			log.Warn("Stats server sent non-broadcast", "msg", msg)
 			return
 		}
+
 		command, ok := msg["emit"][0].(string)
 		if !ok {
 			log.Warn("Invalid stats server message type", "type", msg["emit"][0])
@@ -449,8 +484,10 @@ func (s *Service) readLoop(conn *connWrapper) {
 				case s.histCh <- nil: // Treat it as an no indexes request
 				default:
 				}
+
 				continue
 			}
+
 			list, ok := request["list"].([]interface{})
 			if !ok {
 				log.Warn("Invalid stats history block list", "list", request["list"])
@@ -458,12 +495,14 @@ func (s *Service) readLoop(conn *connWrapper) {
 			}
 			// Convert the block number list to an integer list
 			numbers := make([]uint64, len(list))
+
 			for i, num := range list {
 				n, ok := num.(float64)
 				if !ok {
 					log.Warn("Invalid stats history block number", "number", num)
 					return
 				}
+
 				numbers[i] = uint64(n)
 			}
 			select {
@@ -509,12 +548,14 @@ func (s *Service) login(conn *connWrapper) error {
 	for _, proto := range s.server.Protocols {
 		protocols = append(protocols, fmt.Sprintf("%s/%d", proto.Name, proto.Version))
 	}
+
 	var network string
 	if info := infos.Protocols["eth"]; info != nil {
 		network = fmt.Sprintf("%d", info.(*ethproto.NodeInfo).Network)
 	} else {
 		network = fmt.Sprintf("%d", infos.Protocols["les"].(*les.NodeInfo).Network)
 	}
+
 	auth := &authMsg{
 		ID: s.node,
 		Info: nodeInfo{
@@ -532,6 +573,7 @@ func (s *Service) login(conn *connWrapper) error {
 		},
 		Secret: s.pass,
 	}
+
 	login := map[string][]interface{}{
 		"emit": {"hello", auth},
 	}
@@ -543,6 +585,7 @@ func (s *Service) login(conn *connWrapper) error {
 	if err := conn.ReadJSON(&ack); err != nil || len(ack["emit"]) != 1 || ack["emit"][0] != "ready" {
 		return errors.New("unauthorized")
 	}
+
 	return nil
 }
 
@@ -553,15 +596,19 @@ func (s *Service) report(conn *connWrapper) error {
 	if err := s.reportLatency(conn); err != nil {
 		return err
 	}
+
 	if err := s.reportBlock(conn, nil); err != nil {
 		return err
 	}
+
 	if err := s.reportPending(conn); err != nil {
 		return err
 	}
+
 	if err := s.reportStats(conn); err != nil {
 		return err
 	}
+
 	return nil
 }
 
@@ -588,6 +635,7 @@ func (s *Service) reportLatency(conn *connWrapper) error {
 		// Ping timeout, abort
 		return errors.New("ping timed out")
 	}
+
 	latency := strconv.Itoa(int((time.Since(start) / time.Duration(2)).Nanoseconds() / 1000000))
 
 	// Send back the measured latency
@@ -599,6 +647,7 @@ func (s *Service) reportLatency(conn *connWrapper) error {
 			"latency": latency,
 		}},
 	}
+
 	return conn.WriteJSON(stats)
 }
 
@@ -632,6 +681,7 @@ func (s uncleStats) MarshalJSON() ([]byte, error) {
 	if uncles := ([]*types.Header)(s); len(uncles) > 0 {
 		return json.Marshal(uncles)
 	}
+
 	return []byte("[]"), nil
 }
 
@@ -650,6 +700,7 @@ func (s *Service) reportBlock(conn *connWrapper, block *types.Block) error {
 	report := map[string][]interface{}{
 		"emit": {"block", stats},
 	}
+
 	return conn.WriteJSON(report)
 }
 
@@ -668,8 +719,10 @@ func (s *Service) assembleBlockStats(block *types.Block) *blockStats {
 	fullBackend, ok := s.backend.(fullNodeBackend)
 	if ok {
 		if block == nil {
-			block = fullBackend.CurrentBlock()
+			head := fullBackend.CurrentBlock()
+			block, _ = fullBackend.BlockByNumber(context.Background(), rpc.BlockNumber(head.Number.Uint64()))
 		}
+
 		header = block.Header()
 		td = fullBackend.GetTd(context.Background(), header.Hash())
 
@@ -677,6 +730,7 @@ func (s *Service) assembleBlockStats(block *types.Block) *blockStats {
 		for i, tx := range block.Transactions() {
 			txs[i].Hash = tx.Hash()
 		}
+
 		uncles = block.Uncles()
 	} else {
 		// Light nodes would need on-demand lookups for transactions/uncles, skip
@@ -685,6 +739,7 @@ func (s *Service) assembleBlockStats(block *types.Block) *blockStats {
 		} else {
 			header = s.backend.CurrentHeader()
 		}
+
 		td = s.backend.GetTd(context.Background(), header.Hash())
 		txs = []txStats{}
 	}
@@ -720,16 +775,19 @@ func (s *Service) reportHistory(conn *connWrapper, list []uint64) error {
 	} else {
 		// No indexes requested, send back the top ones
 		head := s.backend.CurrentHeader().Number.Int64()
+
 		start := head - historyUpdateRange + 1
 		if start < 0 {
 			start = 0
 		}
+
 		for i := uint64(start); i <= uint64(head); i++ {
 			indexes = append(indexes, i)
 		}
 	}
 	// Gather the batch of blocks to report
 	history := make([]*blockStats, len(indexes))
+
 	for i, number := range indexes {
 		fullBackend, ok := s.backend.(fullNodeBackend)
 		// Retrieve the next block if it's known to us
@@ -748,6 +806,7 @@ func (s *Service) reportHistory(conn *connWrapper, list []uint64) error {
 		}
 		// Ran out of blocks, cut the report short and send
 		history = history[len(history)-i:]
+
 		break
 	}
 	// Assemble the history report and send it to the server
@@ -756,6 +815,7 @@ func (s *Service) reportHistory(conn *connWrapper, list []uint64) error {
 	} else {
 		log.Trace("No history to send to stats server")
 	}
+
 	stats := map[string]interface{}{
 		"id":      s.node,
 		"history": history,
@@ -763,6 +823,7 @@ func (s *Service) reportHistory(conn *connWrapper, list []uint64) error {
 	report := map[string][]interface{}{
 		"emit": {"history", stats},
 	}
+
 	return conn.WriteJSON(report)
 }
 
@@ -788,6 +849,7 @@ func (s *Service) reportPending(conn *connWrapper) error {
 	report := map[string][]interface{}{
 		"emit": {"pending", stats},
 	}
+
 	return conn.WriteJSON(report)
 }
 
@@ -803,6 +865,7 @@ func createStub(b *types.Block) *blockStub {
 		ParentHash: b.ParentHash().String(),
 		Number:     b.NumberU64(),
 	}
+
 	return s
 }
 
@@ -820,6 +883,7 @@ func (s *Service) reportChain2Head(conn *connWrapper, chain2HeadData *core.Chain
 	for _, block := range chain2HeadData.NewChain {
 		chainHeadEvent.NewChain = append(chainHeadEvent.NewChain, createStub(block))
 	}
+
 	for _, block := range chain2HeadData.OldChain {
 		chainHeadEvent.OldChain = append(chainHeadEvent.OldChain, createStub(block))
 	}
@@ -831,6 +895,7 @@ func (s *Service) reportChain2Head(conn *connWrapper, chain2HeadData *core.Chain
 	report := map[string][]interface{}{
 		"emit": {"headEvent", stats},
 	}
+
 	return conn.WriteJSON(report)
 }
 
@@ -856,15 +921,17 @@ func (s *Service) reportStats(conn *connWrapper) error {
 		gasprice int
 	)
 	// check if backend is a full node
-	fullBackend, ok := s.backend.(fullNodeBackend)
-	if ok {
-		mining = fullBackend.Miner().Mining()
-		hashrate = int(fullBackend.Miner().Hashrate())
+	if fullBackend, ok := s.backend.(fullNodeBackend); ok {
+		if miningBackend, ok := s.backend.(miningNodeBackend); ok {
+			mining = miningBackend.Miner().Mining()
+			hashrate = int(miningBackend.Miner().Hashrate())
+		}
 
 		sync := fullBackend.SyncProgress()
 		syncing = fullBackend.CurrentHeader().Number.Uint64() >= sync.HighestBlock
 
 		price, _ := fullBackend.SuggestGasTipCap(context.Background())
+
 		gasprice = int(price.Uint64())
 		if basefee := fullBackend.CurrentHeader().BaseFee; basefee != nil {
 			gasprice += int(basefee.Uint64())
@@ -891,5 +958,6 @@ func (s *Service) reportStats(conn *connWrapper) error {
 	report := map[string][]interface{}{
 		"emit": {"stats", stats},
 	}
+
 	return conn.WriteJSON(report)
 }

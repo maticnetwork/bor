@@ -63,26 +63,36 @@ type Hub struct {
 	stateLock sync.RWMutex // Protects the internals of the hub from racey access
 
 	// TODO(karalabe): remove if hotplug lands on Windows
-	commsPend int        // Number of operations blocking enumeration
-	commsLock sync.Mutex // Lock protecting the pending counter and enumeration
-	enumFails uint32     // Number of times enumeration has failed
+	commsPend int           // Number of operations blocking enumeration
+	commsLock sync.Mutex    // Lock protecting the pending counter and enumeration
+	enumFails atomic.Uint32 // Number of times enumeration has failed
 }
 
 // NewLedgerHub creates a new hardware wallet manager for Ledger devices.
 func NewLedgerHub() (*Hub, error) {
 	return newHub(LedgerScheme, 0x2c97, []uint16{
+
+		// Device definitions taken from
+		// https://github.com/LedgerHQ/ledger-live/blob/38012bc8899e0f07149ea9cfe7e64b2c146bc92b/libs/ledgerjs/packages/devices/src/index.ts
+
 		// Original product IDs
 		0x0000, /* Ledger Blue */
 		0x0001, /* Ledger Nano S */
 		0x0004, /* Ledger Nano X */
+		0x0005, /* Ledger Nano S Plus */
+		0x0006, /* Ledger Nano FTS */
 
-		// Upcoming product IDs: https://www.ledger.com/2019/05/17/windows-10-update-sunsetting-u2f-tunnel-transport-for-ledger-devices/
 		0x0015, /* HID + U2F + WebUSB Ledger Blue */
 		0x1015, /* HID + U2F + WebUSB Ledger Nano S */
 		0x4015, /* HID + U2F + WebUSB Ledger Nano X */
+		0x5015, /* HID + U2F + WebUSB Ledger Nano S Plus */
+		0x6015, /* HID + U2F + WebUSB Ledger Nano FTS */
+
 		0x0011, /* HID + WebUSB Ledger Blue */
 		0x1011, /* HID + WebUSB Ledger Nano S */
 		0x4011, /* HID + WebUSB Ledger Nano X */
+		0x5011, /* HID + WebUSB Ledger Nano S Plus */
+		0x6011, /* HID + WebUSB Ledger Nano FTS */
 	}, 0xffa0, 0, newLedgerDriver)
 }
 
@@ -102,6 +112,7 @@ func newHub(scheme string, vendorID uint16, productIDs []uint16, usageID uint16,
 	if !usb.Supported() {
 		return nil, errors.New("unsupported platform")
 	}
+
 	hub := &Hub{
 		scheme:     scheme,
 		vendorID:   vendorID,
@@ -112,6 +123,7 @@ func newHub(scheme string, vendorID uint16, productIDs []uint16, usageID uint16,
 		quit:       make(chan chan error),
 	}
 	hub.refreshWallets()
+
 	return hub, nil
 }
 
@@ -126,6 +138,7 @@ func (hub *Hub) Wallets() []accounts.Wallet {
 
 	cpy := make([]accounts.Wallet, len(hub.wallets))
 	copy(cpy, hub.wallets)
+
 	return cpy
 }
 
@@ -141,7 +154,7 @@ func (hub *Hub) refreshWallets() {
 		return
 	}
 	// If USB enumeration is continually failing, don't keep trying indefinitely
-	if atomic.LoadUint32(&hub.enumFails) > 2 {
+	if hub.enumFails.Load() > 2 {
 		return
 	}
 	// Retrieve the current list of USB wallet devices
@@ -160,18 +173,21 @@ func (hub *Hub) refreshWallets() {
 			return
 		}
 	}
+
 	infos, err := usb.Enumerate(hub.vendorID, 0)
 	if err != nil {
-		failcount := atomic.AddUint32(&hub.enumFails, 1)
+		failcount := hub.enumFails.Add(1)
 		if runtime.GOOS == "linux" {
 			// See rationale before the enumeration why this is needed and only on Linux.
 			hub.commsLock.Unlock()
 		}
+
 		log.Error("Failed to enumerate USB devices", "hub", hub.scheme,
 			"vendor", hub.vendorID, "failcount", failcount, "err", err)
+
 		return
 	}
-	atomic.StoreUint32(&hub.enumFails, 0)
+	hub.enumFails.Store(0)
 
 	for _, info := range infos {
 		for _, id := range hub.productIDs {
@@ -182,6 +198,7 @@ func (hub *Hub) refreshWallets() {
 			}
 		}
 	}
+
 	if runtime.GOOS == "linux" {
 		// See rationale before the enumeration why this is needed and only on Linux.
 		hub.commsLock.Unlock()
@@ -215,12 +232,14 @@ func (hub *Hub) refreshWallets() {
 
 			events = append(events, accounts.WalletEvent{Wallet: wallet, Kind: accounts.WalletArrived})
 			wallets = append(wallets, wallet)
+
 			continue
 		}
 		// If the device is the same as the first wallet, keep it
 		if hub.wallets[0].URL().Cmp(url) == 0 {
 			wallets = append(wallets, hub.wallets[0])
 			hub.wallets = hub.wallets[1:]
+
 			continue
 		}
 	}
@@ -228,6 +247,7 @@ func (hub *Hub) refreshWallets() {
 	for _, wallet := range hub.wallets {
 		events = append(events, accounts.WalletEvent{Wallet: wallet, Kind: accounts.WalletDropped})
 	}
+
 	hub.refreshed = time.Now()
 	hub.wallets = wallets
 	hub.stateLock.Unlock()
@@ -253,6 +273,7 @@ func (hub *Hub) Subscribe(sink chan<- accounts.WalletEvent) event.Subscription {
 		hub.updating = true
 		go hub.updater()
 	}
+
 	return sub
 }
 
@@ -272,6 +293,7 @@ func (hub *Hub) updater() {
 		if hub.updateScope.Count() == 0 {
 			hub.updating = false
 			hub.stateLock.Unlock()
+
 			return
 		}
 		hub.stateLock.Unlock()

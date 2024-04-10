@@ -88,10 +88,13 @@ func (gc *GenesisContractsClient) CommitState(
 	}
 
 	msg := statefull.GetSystemMessage(common.HexToAddress(gc.StateReceiverContract), data)
+
+	log.Info("→ committing new state", "eventRecord", event.ID)
+
 	gasUsed, err := statefull.ApplyMessage(context.Background(), msg, state, header, gc.chainConfig, chCtx)
 
 	// Logging event log with time and individual gasUsed
-	log.Info("→ committing new state", "eventRecord", event.String(gasUsed))
+	log.Info("→ committed new state", "eventRecord", event.String(gasUsed))
 
 	if err != nil {
 		return 0, err
@@ -118,11 +121,11 @@ func (gc *GenesisContractsClient) LastStateId(state *state.StateDB, number uint6
 
 	// Do a call with state so that we can fetch the last state ID from a given (incoming)
 	// state instead of local(canonical) chain.
-	result, err := gc.ethAPI.CallWithState(context.Background(), ethapi.TransactionArgs{
+	result, err := gc.ethAPI.Call(context.Background(), ethapi.TransactionArgs{
 		Gas:  &gas,
 		To:   &toAddress,
 		Data: &msgData,
-	}, rpc.BlockNumberOrHash{BlockNumber: &blockNr, BlockHash: &hash}, state, nil)
+	}, &rpc.BlockNumberOrHash{BlockNumber: &blockNr, BlockHash: &hash}, nil, nil)
 	if err != nil {
 		return nil, err
 	}

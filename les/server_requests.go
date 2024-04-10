@@ -23,12 +23,14 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/core/txpool"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/light"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/trie"
+	"github.com/ethereum/go-ethereum/trie/trienode"
 )
 
 // serverBackend defines the backend functions needed for serving LES requests
@@ -36,7 +38,7 @@ type serverBackend interface {
 	ArchiveMode() bool
 	AddTxsSync() bool
 	BlockChain() *core.BlockChain
-	TxPool() *core.TxPool
+	TxPool() *txpool.TxPool
 	GetHelperTrie(typ uint, index uint64) *trie.Trie
 }
 
@@ -302,17 +304,16 @@ func handleGetCode(msg Decoder) (serveRequestFn, uint64, uint64, error) {
 				p.bumpInvalid()
 				continue
 			}
-			triedb := bc.StateCache().TrieDB()
-
-			account, err := getAccount(triedb, header.Root, common.BytesToHash(request.AccKey))
+			address := common.BytesToAddress(request.AccountAddress)
+			account, err := getAccount(bc.TrieDB(), header.Root, address)
 			if err != nil {
-				p.Log().Warn("Failed to retrieve account for code", "block", header.Number, "hash", header.Hash(), "account", common.BytesToHash(request.AccKey), "err", err)
+				p.Log().Warn("Failed to retrieve account for code", "block", header.Number, "hash", header.Hash(), "account", address, "err", err)
 				p.bumpInvalid()
 				continue
 			}
-			code, err := bc.StateCache().ContractCode(common.BytesToHash(request.AccKey), common.BytesToHash(account.CodeHash))
+			code, err := bc.StateCache().ContractCode(address, common.BytesToHash(account.CodeHash))
 			if err != nil {
-				p.Log().Warn("Failed to retrieve account code", "block", header.Number, "hash", header.Hash(), "account", common.BytesToHash(request.AccKey), "codehash", common.BytesToHash(account.CodeHash), "err", err)
+				p.Log().Warn("Failed to retrieve account code", "block", header.Number, "hash", header.Hash(), "account", address, "codehash", common.BytesToHash(account.CodeHash), "err", err)
 				continue
 			}
 			// Accumulate the code and abort if enough data was retrieved
@@ -347,7 +348,7 @@ func handleGetReceipts(msg Decoder) (serveRequestFn, uint64, uint64, error) {
 			// Retrieve the requested block's receipts, skipping if unknown to us
 			results := bc.GetReceiptsByHash(hash)
 			if results == nil {
-				if header := bc.GetHeaderByHash(hash); header == nil || header.ReceiptHash != types.EmptyRootHash {
+				if header := bc.GetHeaderByHash(hash); header == nil || header.ReceiptHash != types.EmptyReceiptsHash {
 					p.bumpInvalid()
 					continue
 				}
@@ -378,7 +379,7 @@ func handleGetProofs(msg Decoder) (serveRequestFn, uint64, uint64, error) {
 			err       error
 		)
 		bc := backend.BlockChain()
-		nodes := light.NewNodeSet()
+		nodes := trienode.NewProofSet()
 
 		for i, request := range r.Reqs {
 			if i != 0 && !waitOrStop() {
@@ -412,7 +413,7 @@ func handleGetProofs(msg Decoder) (serveRequestFn, uint64, uint64, error) {
 			statedb := bc.StateCache()
 
 			var trie state.Trie
-			switch len(request.AccKey) {
+			switch len(request.AccountAddress) {
 			case 0:
 				// No account key specified, open an account trie
 				trie, err = statedb.OpenTrie(root)
@@ -422,20 +423,21 @@ func handleGetProofs(msg Decoder) (serveRequestFn, uint64, uint64, error) {
 				}
 			default:
 				// Account key specified, open a storage trie
-				account, err := getAccount(statedb.TrieDB(), root, common.BytesToHash(request.AccKey))
+				address := common.BytesToAddress(request.AccountAddress)
+				account, err := getAccount(bc.TrieDB(), root, address)
 				if err != nil {
-					p.Log().Warn("Failed to retrieve account for proof", "block", header.Number, "hash", header.Hash(), "account", common.BytesToHash(request.AccKey), "err", err)
+					p.Log().Warn("Failed to retrieve account for proof", "block", header.Number, "hash", header.Hash(), "account", address, "err", err)
 					p.bumpInvalid()
 					continue
 				}
-				trie, err = statedb.OpenStorageTrie(common.BytesToHash(request.AccKey), account.Root)
+				trie, err = statedb.OpenStorageTrie(root, address, account.Root)
 				if trie == nil || err != nil {
-					p.Log().Warn("Failed to open storage trie for proof", "block", header.Number, "hash", header.Hash(), "account", common.BytesToHash(request.AccKey), "root", account.Root, "err", err)
+					p.Log().Warn("Failed to open storage trie for proof", "block", header.Number, "hash", header.Hash(), "account", address, "root", account.Root, "err", err)
 					continue
 				}
 			}
-			// Prove the user's request from the account or stroage trie
-			if err := trie.Prove(request.Key, request.FromLevel, nodes); err != nil {
+			// Prove the user's request from the account or storage trie
+			if err := trie.Prove(request.Key, nodes); err != nil {
 				p.Log().Warn("Failed to prove state request", "block", header.Number, "hash", header.Hash(), "err", err)
 				continue
 			}
@@ -443,7 +445,7 @@ func handleGetProofs(msg Decoder) (serveRequestFn, uint64, uint64, error) {
 				break
 			}
 		}
-		return p.replyProofsV2(r.ReqID, nodes.NodeList())
+		return p.replyProofsV2(r.ReqID, nodes.List())
 	}, r.ReqID, uint64(len(r.Reqs)), nil
 }
 
@@ -462,7 +464,7 @@ func handleGetHelperTrieProofs(msg Decoder) (serveRequestFn, uint64, uint64, err
 			auxData  [][]byte
 		)
 		bc := backend.BlockChain()
-		nodes := light.NewNodeSet()
+		nodes := trienode.NewProofSet()
 		for i, request := range r.Reqs {
 			if i != 0 && !waitOrStop() {
 				return nil
@@ -479,7 +481,7 @@ func handleGetHelperTrieProofs(msg Decoder) (serveRequestFn, uint64, uint64, err
 			// the headers with no valid proof. Keep the compatibility for
 			// legacy les protocol and drop this hack when the les2/3 are
 			// not supported.
-			err := auxTrie.Prove(request.Key, request.FromLevel, nodes)
+			err := auxTrie.Prove(request.Key, nodes)
 			if p.version >= lpv4 && err != nil {
 				return nil
 			}
@@ -497,7 +499,7 @@ func handleGetHelperTrieProofs(msg Decoder) (serveRequestFn, uint64, uint64, err
 				break
 			}
 		}
-		return p.replyHelperTrieProofs(r.ReqID, HelperTrieResps{Proofs: nodes.NodeList(), AuxData: auxData})
+		return p.replyHelperTrieProofs(r.ReqID, HelperTrieResps{Proofs: nodes.List(), AuxData: auxData})
 	}, r.ReqID, uint64(len(r.Reqs)), nil
 }
 
@@ -507,39 +509,20 @@ func handleSendTx(msg Decoder) (serveRequestFn, uint64, uint64, error) {
 	if err := msg.Decode(&r); err != nil {
 		return nil, 0, 0, err
 	}
-
 	amount := uint64(len(r.Txs))
-
 	return func(backend serverBackend, p *clientPeer, waitOrStop func() bool) *reply {
 		stats := make([]light.TxStatus, len(r.Txs))
-
-		var (
-			err   error
-			addFn func(transaction *types.Transaction) error
-		)
-
 		for i, tx := range r.Txs {
 			if i != 0 && !waitOrStop() {
 				return nil
 			}
-
 			hash := tx.Hash()
 			stats[i] = txStatus(backend, hash)
-
-			if stats[i].Status == core.TxStatusUnknown {
-				addFn = backend.TxPool().AddRemote
-
-				// Add txs synchronously for testing purpose
-				if backend.AddTxsSync() {
-					addFn = backend.TxPool().AddRemoteSync
-				}
-
-				if err = addFn(tx); err != nil {
-					stats[i].Error = err.Error()
-
+			if stats[i].Status == txpool.TxStatusUnknown {
+				if errs := backend.TxPool().Add([]*types.Transaction{tx}, false, backend.AddTxsSync()); errs[0] != nil {
+					stats[i].Error = errs[0].Error()
 					continue
 				}
-
 				stats[i] = txStatus(backend, hash)
 			}
 		}
@@ -569,13 +552,13 @@ func handleGetTxStatus(msg Decoder) (serveRequestFn, uint64, uint64, error) {
 func txStatus(b serverBackend, hash common.Hash) light.TxStatus {
 	var stat light.TxStatus
 	// Looking the transaction in txpool first.
-	stat.Status = b.TxPool().Status([]common.Hash{hash})[0]
+	stat.Status = b.TxPool().Status(hash)
 
 	// If the transaction is unknown to the pool, try looking it up locally.
-	if stat.Status == core.TxStatusUnknown {
+	if stat.Status == txpool.TxStatusUnknown {
 		lookup := b.BlockChain().GetTransactionLookup(hash)
 		if lookup != nil {
-			stat.Status = core.TxStatusIncluded
+			stat.Status = txpool.TxStatusIncluded
 			stat.Lookup = lookup
 		}
 	}

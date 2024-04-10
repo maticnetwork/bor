@@ -41,7 +41,7 @@ var (
 // Request is a pending request to allow tracking it and delivering a response
 // back to the requester on their chosen channel.
 type Request struct {
-	peer *Peer  // Peer to which this request belogs for untracking
+	peer *Peer  // Peer to which this request belongs for untracking
 	id   uint64 // Request ID to match up replies to
 
 	sink   chan *Response // Channel to deliver the response on
@@ -62,6 +62,7 @@ func (r *Request) Close() error {
 	if r.peer == nil { // Tests mock out the dispatcher, skip internal cancellation
 		return nil
 	}
+
 	cancelOp := &cancel{
 		id:   r.id,
 		fail: make(chan error),
@@ -71,7 +72,9 @@ func (r *Request) Close() error {
 		if err := <-cancelOp.fail; err != nil {
 			return err
 		}
+
 		close(r.cancel)
+
 		return nil
 	case <-r.peer.term:
 		return errDisconnected
@@ -203,7 +206,7 @@ func (p *Peer) dispatcher() {
 			}
 
 		case cancelOp := <-p.reqCancel:
-			// Retrieve the pendign request to cancel and short circuit if it
+			// Retrieve the pending request to cancel and short circuit if it
 			// has already been serviced and is not available anymore
 			req := pending[cancelOp.id]
 			if req == nil {
@@ -225,7 +228,7 @@ func (p *Peer) dispatcher() {
 			switch {
 			case res.Req == nil:
 				// Response arrived with an untracked ID. Since even cancelled
-				// requests are tracked until fulfilment, a dangling repsponse
+				// requests are tracked until fulfillment, a dangling response
 				// means the remote peer implements the protocol badly.
 				resOp.fail <- errDanglingResponse
 

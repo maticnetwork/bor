@@ -17,6 +17,7 @@
 package event
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"sync"
@@ -27,7 +28,9 @@ import (
 func TestFeedPanics(t *testing.T) {
 	{
 		var f Feed
+
 		f.Send(2)
+
 		want := feedTypeError{op: "Send", got: reflect.TypeOf(uint64(0)), want: reflect.TypeOf(0)}
 		if err := checkPanic(want, func() { f.Send(uint64(2)) }); err != nil {
 			t.Error(err)
@@ -35,8 +38,10 @@ func TestFeedPanics(t *testing.T) {
 	}
 	{
 		var f Feed
+
 		ch := make(chan int)
 		f.Subscribe(ch)
+
 		want := feedTypeError{op: "Send", got: reflect.TypeOf(uint64(0)), want: reflect.TypeOf(0)}
 		if err := checkPanic(want, func() { f.Send(uint64(2)) }); err != nil {
 			t.Error(err)
@@ -44,7 +49,9 @@ func TestFeedPanics(t *testing.T) {
 	}
 	{
 		var f Feed
+
 		f.Send(2)
+
 		want := feedTypeError{op: "Subscribe", got: reflect.TypeOf(make(chan uint64)), want: reflect.TypeOf(make(chan<- int))}
 		if err := checkPanic(want, func() { f.Subscribe(make(chan uint64)) }); err != nil {
 			t.Error(err)
@@ -52,12 +59,14 @@ func TestFeedPanics(t *testing.T) {
 	}
 	{
 		var f Feed
+
 		if err := checkPanic(errBadChannel, func() { f.Subscribe(make(<-chan int)) }); err != nil {
 			t.Error(err)
 		}
 	}
 	{
 		var f Feed
+
 		if err := checkPanic(errBadChannel, func() { f.Subscribe(0) }); err != nil {
 			t.Error(err)
 		}
@@ -68,23 +77,27 @@ func checkPanic(want error, fn func()) (err error) {
 	defer func() {
 		panic := recover()
 		if panic == nil {
-			err = fmt.Errorf("didn't panic")
+			err = errors.New("didn't panic")
 		} else if !reflect.DeepEqual(panic, want) {
 			err = fmt.Errorf("panicked with wrong error: got %q, want %q", panic, want)
 		}
 	}()
 	fn()
+
 	return nil
 }
 
 func TestFeed(t *testing.T) {
 	var feed Feed
+
 	var done, subscribed sync.WaitGroup
+
 	subscriber := func(i int) {
 		defer done.Done()
 
 		subchan := make(chan int)
 		sub := feed.Subscribe(subchan)
+
 		timeout := time.NewTimer(2 * time.Second)
 		defer timeout.Stop()
 		subscribed.Done()
@@ -110,18 +123,23 @@ func TestFeed(t *testing.T) {
 	}
 
 	const n = 1000
+
 	done.Add(n)
 	subscribed.Add(n)
+
 	for i := 0; i < n; i++ {
 		go subscriber(i)
 	}
 	subscribed.Wait()
+
 	if nsent := feed.Send(1); nsent != n {
 		t.Errorf("first send delivered %d times, want %d", nsent, n)
 	}
+
 	if nsent := feed.Send(2); nsent != 0 {
 		t.Errorf("second send delivered %d times, want 0", nsent)
 	}
+
 	done.Wait()
 }
 
@@ -134,10 +152,12 @@ func TestFeedSubscribeSameChannel(t *testing.T) {
 		sub2 = feed.Subscribe(ch)
 		_    = feed.Subscribe(ch)
 	)
+
 	expectSends := func(value, n int) {
 		if nsent := feed.Send(value); nsent != n {
 			t.Errorf("send delivered %d times, want %d", nsent, n)
 		}
+
 		done.Done()
 	}
 	expectRecv := func(wantValue, n int) {
@@ -149,6 +169,7 @@ func TestFeedSubscribeSameChannel(t *testing.T) {
 	}
 
 	done.Add(1)
+
 	go expectSends(1, 3)
 	expectRecv(1, 3)
 	done.Wait()
@@ -156,6 +177,7 @@ func TestFeedSubscribeSameChannel(t *testing.T) {
 	sub1.Unsubscribe()
 
 	done.Add(1)
+
 	go expectSends(2, 2)
 	expectRecv(2, 2)
 	done.Wait()
@@ -163,6 +185,7 @@ func TestFeedSubscribeSameChannel(t *testing.T) {
 	sub2.Unsubscribe()
 
 	done.Add(1)
+
 	go expectSends(3, 1)
 	expectRecv(3, 1)
 	done.Wait()
@@ -176,10 +199,12 @@ func TestFeedSubscribeBlockedPost(t *testing.T) {
 		ch2    = make(chan int)
 		wg     sync.WaitGroup
 	)
+
 	defer wg.Wait()
 
 	feed.Subscribe(ch1)
 	wg.Add(nsends)
+
 	for i := 0; i < nsends; i++ {
 		go func() {
 			feed.Send(99)
@@ -211,12 +236,14 @@ func TestFeedUnsubscribeBlockedPost(t *testing.T) {
 		bsub   = feed.Subscribe(bchan)
 		wg     sync.WaitGroup
 	)
+
 	for i := range chans {
 		chans[i] = make(chan int, nsends)
 	}
 
 	// Queue up some Sends. None of these can make progress while bchan isn't read.
 	wg.Add(nsends)
+
 	for i := 0; i < nsends; i++ {
 		go func() {
 			feed.Send(99)
@@ -247,9 +274,11 @@ func TestFeedUnsubscribeSentChan(t *testing.T) {
 		sub2 = feed.Subscribe(ch2)
 		wg   sync.WaitGroup
 	)
+
 	defer sub2.Unsubscribe()
 
 	wg.Add(1)
+
 	go func() {
 		feed.Send(0)
 		wg.Done()
@@ -267,6 +296,7 @@ func TestFeedUnsubscribeSentChan(t *testing.T) {
 	// Send again. This should send to ch2 only, so the wait group will unblock
 	// as soon as a value is received on ch2.
 	wg.Add(1)
+
 	go func() {
 		feed.Send(0)
 		wg.Done()
@@ -284,9 +314,11 @@ func TestFeedUnsubscribeFromInbox(t *testing.T) {
 		sub2 = feed.Subscribe(ch1)
 		sub3 = feed.Subscribe(ch2)
 	)
+
 	if len(feed.inbox) != 3 {
 		t.Errorf("inbox length != 3 after subscribe")
 	}
+
 	if len(feed.sendCases) != 1 {
 		t.Errorf("sendCases is non-empty after unsubscribe")
 	}
@@ -294,9 +326,11 @@ func TestFeedUnsubscribeFromInbox(t *testing.T) {
 	sub1.Unsubscribe()
 	sub2.Unsubscribe()
 	sub3.Unsubscribe()
+
 	if len(feed.inbox) != 0 {
 		t.Errorf("inbox is non-empty after unsubscribe")
 	}
+
 	if len(feed.sendCases) != 1 {
 		t.Errorf("sendCases is non-empty after unsubscribe")
 	}
@@ -308,21 +342,26 @@ func BenchmarkFeedSend1000(b *testing.B) {
 		feed  Feed
 		nsubs = 1000
 	)
+
 	subscriber := func(ch <-chan int) {
 		for i := 0; i < b.N; i++ {
 			<-ch
 		}
 		done.Done()
 	}
+
 	done.Add(nsubs)
+
 	for i := 0; i < nsubs; i++ {
 		ch := make(chan int, 200)
 		feed.Subscribe(ch)
+
 		go subscriber(ch)
 	}
 
 	// The actual benchmark.
 	b.ResetTimer()
+
 	for i := 0; i < b.N; i++ {
 		if feed.Send(i) != nsubs {
 			panic("wrong number of sends")

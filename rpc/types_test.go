@@ -52,15 +52,18 @@ func TestBlockNumberJSONUnmarshal(t *testing.T) {
 
 	for i, test := range tests {
 		var num BlockNumber
+
 		err := json.Unmarshal([]byte(test.input), &num)
 		if test.mustFail && err == nil {
 			t.Errorf("Test %d should fail", i)
 			continue
 		}
+
 		if !test.mustFail && err != nil {
 			t.Errorf("Test %d should pass but got err: %v", i, err)
 			continue
 		}
+
 		if num != test.expected {
 			t.Errorf("Test %d got unexpected value, want %d, got %d", i, test.expected, num)
 		}
@@ -103,19 +106,23 @@ func TestBlockNumberOrHash_UnmarshalJSON(t *testing.T) {
 
 	for i, test := range tests {
 		var bnh BlockNumberOrHash
+
 		err := json.Unmarshal([]byte(test.input), &bnh)
 		if test.mustFail && err == nil {
 			t.Errorf("Test %d should fail", i)
 			continue
 		}
+
 		if !test.mustFail && err != nil {
 			t.Errorf("Test %d should pass but got err: %v", i, err)
 			continue
 		}
+
 		hash, hashOk := bnh.Hash()
 		expectedHash, expectedHashOk := test.expected.Hash()
 		num, numOk := bnh.Number()
 		expectedNum, expectedNumOk := test.expected.Number()
+
 		if bnh.RequireCanonical != test.expected.RequireCanonical ||
 			hash != expectedHash || hashOk != expectedHashOk ||
 			num != expectedNum || numOk != expectedNumOk {
@@ -138,18 +145,43 @@ func TestBlockNumberOrHash_WithNumber_MarshalAndUnmarshal(t *testing.T) {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			bnh := BlockNumberOrHashWithNumber(BlockNumber(test.number))
+
 			marshalled, err := json.Marshal(bnh)
 			if err != nil {
 				t.Fatal("cannot marshal:", err)
 			}
+
 			var unmarshalled BlockNumberOrHash
+
 			err = json.Unmarshal(marshalled, &unmarshalled)
 			if err != nil {
 				t.Fatal("cannot unmarshal:", err)
 			}
+
 			if !reflect.DeepEqual(bnh, unmarshalled) {
 				t.Fatalf("wrong result: expected %v, got %v", bnh, unmarshalled)
 			}
 		})
+	}
+}
+
+func TestBlockNumberOrHash_StringAndUnmarshal(t *testing.T) {
+	tests := []BlockNumberOrHash{
+		BlockNumberOrHashWithNumber(math.MaxInt64),
+		BlockNumberOrHashWithNumber(PendingBlockNumber),
+		BlockNumberOrHashWithNumber(LatestBlockNumber),
+		BlockNumberOrHashWithNumber(EarliestBlockNumber),
+		BlockNumberOrHashWithNumber(32),
+		BlockNumberOrHashWithHash(common.Hash{0xaa}, false),
+	}
+	for _, want := range tests {
+		marshalled, _ := json.Marshal(want.String())
+		var have BlockNumberOrHash
+		if err := json.Unmarshal(marshalled, &have); err != nil {
+			t.Fatalf("cannot unmarshal (%v): %v", string(marshalled), err)
+		}
+		if !reflect.DeepEqual(want, have) {
+			t.Fatalf("wrong result: have %v, want %v", have, want)
+		}
 	}
 }

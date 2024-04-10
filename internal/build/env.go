@@ -28,12 +28,13 @@ import (
 
 var (
 	// These flags override values in build env.
-	GitCommitFlag   = flag.String("git-commit", "", `Overrides git commit hash embedded into executables`)
-	GitBranchFlag   = flag.String("git-branch", "", `Overrides git branch being built`)
-	GitTagFlag      = flag.String("git-tag", "", `Overrides git tag being built`)
-	BuildnumFlag    = flag.String("buildnum", "", `Overrides CI build number`)
-	PullRequestFlag = flag.Bool("pull-request", false, `Overrides pull request status of the build`)
-	CronJobFlag     = flag.Bool("cron-job", false, `Overrides cron job status of the build`)
+	GitCommitFlag     = flag.String("git-commit", "", `Overrides git commit hash embedded into executables`)
+	GitBranchFlag     = flag.String("git-branch", "", `Overrides git branch being built`)
+	GitTagFlag        = flag.String("git-tag", "", `Overrides git tag being built`)
+	BuildnumFlag      = flag.String("buildnum", "", `Overrides CI build number`)
+	PullRequestFlag   = flag.Bool("pull-request", false, `Overrides pull request status of the build`)
+	CronJobFlag       = flag.Bool("cron-job", false, `Overrides cron job status of the build`)
+	UbuntuVersionFlag = flag.String("ubuntu", "", `Sets the ubuntu version being built for`)
 )
 
 // Environment contains metadata provided by the build environment.
@@ -43,6 +44,7 @@ type Environment struct {
 	Repo                      string // name of GitHub repo
 	Commit, Date, Branch, Tag string // Git info
 	Buildnum                  string
+	UbuntuVersion             string // Ubuntu version being built for
 	IsPullRequest             bool
 	IsCronJob                 bool
 }
@@ -61,6 +63,7 @@ func Env() Environment {
 		if commit == "" {
 			commit = os.Getenv("TRAVIS_COMMIT")
 		}
+
 		return Environment{
 			CI:            true,
 			Name:          "travis",
@@ -78,6 +81,7 @@ func Env() Environment {
 		if commit == "" {
 			commit = os.Getenv("APPVEYOR_REPO_COMMIT")
 		}
+
 		return Environment{
 			CI:            true,
 			Name:          "appveyor",
@@ -110,20 +114,25 @@ func LocalEnv() Environment {
 		if commit := commitRe.FindString(head); commit != "" && env.Commit == "" {
 			env.Commit = commit
 		}
+
 		return env
 	}
+
 	if env.Commit == "" {
 		env.Commit = readGitFile(head)
 	}
+
 	env.Date = getDate(env.Commit)
 	if env.Branch == "" {
 		if head != "HEAD" {
 			env.Branch = strings.TrimPrefix(head, "refs/heads/")
 		}
 	}
+
 	if info, err := os.Stat(".git/objects"); err == nil && info.IsDir() && env.Tag == "" {
 		env.Tag = firstLine(RunGit("tag", "-l", "--points-at", "HEAD"))
 	}
+
 	return env
 }
 
@@ -135,14 +144,17 @@ func getDate(commit string) string {
 	if commit == "" {
 		return ""
 	}
+
 	out := RunGit("show", "-s", "--format=%ct", commit)
 	if out == "" {
 		return ""
 	}
+
 	date, err := strconv.ParseInt(strings.TrimSpace(out), 10, 64)
 	if err != nil {
 		panic(fmt.Sprintf("failed to parse git commit date: %v", err))
 	}
+
 	return time.Unix(date, 0).Format("20060102")
 }
 
@@ -150,23 +162,32 @@ func applyEnvFlags(env Environment) Environment {
 	if !flag.Parsed() {
 		panic("you need to call flag.Parse before Env or LocalEnv")
 	}
+
 	if *GitCommitFlag != "" {
 		env.Commit = *GitCommitFlag
 	}
+
 	if *GitBranchFlag != "" {
 		env.Branch = *GitBranchFlag
 	}
+
 	if *GitTagFlag != "" {
 		env.Tag = *GitTagFlag
 	}
+
 	if *BuildnumFlag != "" {
 		env.Buildnum = *BuildnumFlag
 	}
+
 	if *PullRequestFlag {
 		env.IsPullRequest = true
 	}
+
 	if *CronJobFlag {
 		env.IsCronJob = true
+	}
+	if *UbuntuVersionFlag != "" {
+		env.UbuntuVersion = *UbuntuVersionFlag
 	}
 	return env
 }

@@ -4,7 +4,6 @@ import (
 	"errors"
 	"math/big"
 	"testing"
-	"time"
 
 	"github.com/golang/mock/gomock"
 
@@ -16,9 +15,10 @@ import (
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/core/txpool"
+	"github.com/ethereum/go-ethereum/core/txpool/legacypool"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/ethdb/memorydb"
 	"github.com/ethereum/go-ethereum/event"
@@ -44,7 +44,7 @@ func NewBorDefaultMiner(t *testing.T) *DefaultBorMiner {
 	ctrl := gomock.NewController(t)
 
 	ethAPI := api.NewMockCaller(ctrl)
-	ethAPI.EXPECT().Call(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
+	ethAPI.EXPECT().Call(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
 	spanner := bor.NewMockSpanner(ctrl)
 	spanner.EXPECT().GetCurrentValidatorsByHash(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*valset.Validator{
@@ -74,26 +74,28 @@ func NewBorDefaultMiner(t *testing.T) *DefaultBorMiner {
 	}
 }
 
-//nolint:staticcheck
+// //nolint:staticcheck
 func createBorMiner(t *testing.T, ethAPIMock api.Caller, spanner bor.Spanner, heimdallClientMock bor.IHeimdallClient, contractMock bor.GenesisContract) (*Miner, *event.TypeMux, func(skipMiner bool)) {
 	t.Helper()
 
 	// Create Ethash config
-	chainDB, _, chainConfig := NewDBForFakes(t)
+	chainDB, genspec, chainConfig := NewDBForFakes(t)
 
 	engine := NewFakeBor(t, chainDB, chainConfig, ethAPIMock, spanner, heimdallClientMock, contractMock)
 
 	// Create Ethereum backend
-	bc, err := core.NewBlockChain(chainDB, nil, chainConfig, engine, vm.Config{}, nil, nil, nil)
+	bc, err := core.NewBlockChain(chainDB, nil, genspec, nil, engine, vm.Config{}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("can't create new chain %v", err)
 	}
 
 	statedb, _ := state.New(common.Hash{}, state.NewDatabase(chainDB), nil)
-	blockchain := &testBlockChain{statedb, 10000000, new(event.Feed)}
+	blockchain := &testBlockChainBor{chainConfig, statedb, 10000000, new(event.Feed)}
 
-	pool := core.NewTxPool(testTxPoolConfig, chainConfig, blockchain)
-	backend := NewMockBackend(bc, pool)
+	pool := legacypool.New(testTxPoolConfigBor, blockchain)
+	txpool, _ := txpool.New(new(big.Int).SetUint64(testTxPoolConfigBor.PriceLimit), blockchain, []txpool.SubPool{pool})
+
+	backend := NewMockBackendBor(bc, txpool)
 
 	// Create event Mux
 	mux := new(event.TypeMux)
@@ -108,7 +110,6 @@ func createBorMiner(t *testing.T, ethAPIMock api.Caller, spanner bor.Spanner, he
 	cleanup := func(skipMiner bool) {
 		bc.Stop()
 		engine.Close()
-		pool.Stop()
 
 		if !skipMiner {
 			miner.Close()
@@ -128,9 +129,9 @@ func NewDBForFakes(t TensingObject) (ethdb.Database, *core.Genesis, *params.Chai
 
 	memdb := memorydb.New()
 	chainDB := rawdb.NewDatabase(memdb)
-	genesis := core.DeveloperGenesisBlock(2, 11_500_000, common.HexToAddress("12345"))
+	genesis := core.DeveloperGenesisBlock(11_500_000, common.HexToAddress("12345"))
 
-	chainConfig, _, err := core.SetupGenesisBlock(chainDB, genesis)
+	chainConfig, _, err := core.SetupGenesisBlock(chainDB, trie.NewDatabase(chainDB, trie.HashDefaults), genesis)
 	if err != nil {
 		t.Fatalf("can't create new chain config: %v", err)
 	}
@@ -155,88 +156,68 @@ func NewFakeBor(t TensingObject, chainDB ethdb.Database, chainConfig *params.Cha
 	return bor.New(chainConfig, chainDB, ethAPIMock, spanner, heimdallClientMock, contractMock, false)
 }
 
-type mockBackend struct {
+var (
+	// Test chain configurations
+	testTxPoolConfigBor legacypool.Config
+)
+
+// TODO - Arpit, Duplicate Functions
+type mockBackendBor struct {
 	bc     *core.BlockChain
-	txPool *core.TxPool
+	txPool *txpool.TxPool
 }
 
-func NewMockBackend(bc *core.BlockChain, txPool *core.TxPool) *mockBackend {
-	return &mockBackend{
+func NewMockBackendBor(bc *core.BlockChain, txPool *txpool.TxPool) *mockBackendBor {
+	return &mockBackendBor{
 		bc:     bc,
 		txPool: txPool,
 	}
 }
 
-func (m *mockBackend) BlockChain() *core.BlockChain {
+func (m *mockBackendBor) BlockChain() *core.BlockChain {
 	return m.bc
 }
 
-func (m *mockBackend) TxPool() *core.TxPool {
+// PeerCount implements Backend.
+func (*mockBackendBor) PeerCount() int {
+	panic("unimplemented")
+}
+
+func (m *mockBackendBor) TxPool() *txpool.TxPool {
 	return m.txPool
 }
 
-func (m *mockBackend) StateAtBlock(block *types.Block, reexec uint64, base *state.StateDB, checkLive bool, preferDisk bool) (statedb *state.StateDB, err error) {
+func (m *mockBackendBor) StateAtBlock(block *types.Block, reexec uint64, base *state.StateDB, checkLive bool, preferDisk bool) (statedb *state.StateDB, err error) {
 	return nil, errors.New("not supported")
 }
 
-type testBlockChain struct {
+// TODO - Arpit, Duplicate Functions
+type testBlockChainBor struct {
+	config        *params.ChainConfig
 	statedb       *state.StateDB
 	gasLimit      uint64
 	chainHeadFeed *event.Feed
 }
 
-func (bc *testBlockChain) CurrentBlock() *types.Block {
-	return types.NewBlock(&types.Header{
+func (bc *testBlockChainBor) Config() *params.ChainConfig {
+	return bc.config
+}
+
+func (bc *testBlockChainBor) CurrentBlock() *types.Header {
+	return &types.Header{
+		Number:   new(big.Int),
 		GasLimit: bc.gasLimit,
-	}, nil, nil, nil, trie.NewStackTrie(nil))
+	}
 }
 
-func (bc *testBlockChain) GetBlock(hash common.Hash, number uint64) *types.Block {
-	return bc.CurrentBlock()
+func (bc *testBlockChainBor) GetBlock(hash common.Hash, number uint64) *types.Block {
+	return types.NewBlock(bc.CurrentBlock(), nil, nil, nil, trie.NewStackTrie(nil))
 }
 
-func (bc *testBlockChain) StateAt(common.Hash) (*state.StateDB, error) {
+func (bc *testBlockChainBor) StateAt(common.Hash) (*state.StateDB, error) {
 	return bc.statedb, nil
 }
 
-func (bc *testBlockChain) SubscribeChainHeadEvent(ch chan<- core.ChainHeadEvent) event.Subscription {
+func (bc *testBlockChainBor) SubscribeChainHeadEvent(ch chan<- core.ChainHeadEvent) event.Subscription {
 	return bc.chainHeadFeed.Subscribe(ch)
-}
-
-var (
-	// Test chain configurations
-	testTxPoolConfig  core.TxPoolConfig
-	ethashChainConfig *params.ChainConfig
-	cliqueChainConfig *params.ChainConfig
-
-	// Test accounts
-	testBankKey, _  = crypto.GenerateKey()
-	TestBankAddress = crypto.PubkeyToAddress(testBankKey.PublicKey)
-	testBankFunds   = big.NewInt(9000000000000000000)
-
-	testUserKey, _  = crypto.GenerateKey()
-	testUserAddress = crypto.PubkeyToAddress(testUserKey.PublicKey)
-
-	// Test transactions
-	pendingTxs []*types.Transaction
-	newTxs     []*types.Transaction
-
-	testConfig = &Config{
-		Recommit:            time.Second,
-		GasCeil:             params.GenesisGasLimit,
-		CommitInterruptFlag: true,
-	}
-)
-
-func init() {
-	testTxPoolConfig = core.DefaultTxPoolConfig
-	testTxPoolConfig.Journal = ""
-	ethashChainConfig = new(params.ChainConfig)
-	*ethashChainConfig = *params.TestChainConfig
-	cliqueChainConfig = new(params.ChainConfig)
-	*cliqueChainConfig = *params.TestChainConfig
-	cliqueChainConfig.Clique = &params.CliqueConfig{
-		Period: 10,
-		Epoch:  30000,
-	}
 }

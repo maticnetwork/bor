@@ -38,11 +38,9 @@ var flagMap = map[string][]string{
 	"mainnet":                          {"BoolFlag", "No"},
 	"goerli":                           {"BoolFlag", "No"},
 	"bor-mumbai":                       {"BoolFlag", "No"},
+	"bor-amoy":                         {"BoolFlag", "No"},
 	"bor-mainnet":                      {"BoolFlag", "No"},
-	"rinkeby":                          {"BoolFlag", "No"},
-	"ropsten":                          {"BoolFlag", "No"},
 	"sepolia":                          {"BoolFlag", "No"},
-	"kiln":                             {"BoolFlag", "No"},
 	"exitwhensynced":                   {"BoolFlag", "No"},
 	"light.serve":                      {"notABoolFlag", "No"},
 	"light.ingress":                    {"notABoolFlag", "No"},
@@ -212,6 +210,8 @@ var replacedFlagsMapFlagAndValue = map[string]map[string]map[string]string{
 			"137":     "mainnet",
 			"'80001'": "mumbai",
 			"80001":   "mumbai",
+			"'80002'": "amoy",
+			"80002":   "amoy",
 		},
 	},
 	"verbosity": {
@@ -412,6 +412,7 @@ func getStaticTrustedNodes(args []string) {
 		if !checkFileExists(path) {
 			return
 		}
+
 		writeTempStaticJSON(path)
 	}
 }
@@ -701,7 +702,7 @@ func main() {
 	args, ignoreForNow := beautifyArgs(args)
 
 	c := server.Command{}
-	flags := c.Flags()
+	flags := c.Flags(nil)
 	allFlags := flags.GetAllFlags()
 	flagsToCheck := getFlagsToCheck(args)
 

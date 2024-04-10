@@ -17,8 +17,6 @@
 package vm
 
 import (
-	"fmt"
-
 	"github.com/holiman/uint256"
 )
 
@@ -43,6 +41,7 @@ func (m *Memory) Set(offset, size uint64, value []byte) {
 		if offset+size > uint64(len(m.store)) {
 			panic("invalid memory: store empty")
 		}
+
 		copy(m.store[offset:offset+size], value)
 	}
 }
@@ -55,10 +54,9 @@ func (m *Memory) Set32(offset uint64, val *uint256.Int) {
 	if offset+32 > uint64(len(m.store)) {
 		panic("invalid memory: store empty")
 	}
-	// Zero the memory area
-	copy(m.store[offset:offset+32], []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0})
 	// Fill in relevant bits
-	val.WriteToSlice(m.store[offset:])
+	b32 := val.Bytes32()
+	copy(m.store[offset:], b32[:])
 }
 
 // Resize resizes the memory to size
@@ -68,7 +66,7 @@ func (m *Memory) Resize(size uint64) {
 	}
 }
 
-// Get returns offset + size as a new slice
+// GetCopy returns offset + size as a new slice
 func (m *Memory) GetCopy(offset, size int64) (cpy []byte) {
 	if size == 0 {
 		return nil
@@ -107,17 +105,13 @@ func (m *Memory) Data() []byte {
 	return m.store
 }
 
-// Print dumps the content of the memory.
-func (m *Memory) Print() {
-	fmt.Printf("### mem %d bytes ###\n", len(m.store))
-	if len(m.store) > 0 {
-		addr := 0
-		for i := 0; i+32 <= len(m.store); i += 32 {
-			fmt.Printf("%03d: % x\n", addr, m.store[i:i+32])
-			addr++
-		}
-	} else {
-		fmt.Println("-- empty --")
+// Copy copies data from the src position slice into the dst position.
+// The source and destination may overlap.
+// OBS: This operation assumes that any necessary memory expansion has already been performed,
+// and this method may panic otherwise.
+func (m *Memory) Copy(dst, src, length uint64) {
+	if length == 0 {
+		return
 	}
-	fmt.Println("####################")
+	copy(m.store[dst:], m.store[src:src+length])
 }

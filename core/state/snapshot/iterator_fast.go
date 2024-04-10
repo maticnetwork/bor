@@ -22,6 +22,7 @@ import (
 	"sort"
 
 	"github.com/ethereum/go-ethereum/common"
+	"golang.org/x/exp/slices"
 )
 
 // weightedIterator is a iterator with an assigned weight. It is used to prioritise
@@ -32,32 +33,25 @@ type weightedIterator struct {
 	priority int
 }
 
-// weightedIterators is a set of iterators implementing the sort.Interface.
-type weightedIterators []*weightedIterator
-
-// Len implements sort.Interface, returning the number of active iterators.
-func (its weightedIterators) Len() int { return len(its) }
-
-// Less implements sort.Interface, returning which of two iterators in the stack
-// is before the other.
-func (its weightedIterators) Less(i, j int) bool {
+func (it *weightedIterator) Cmp(other *weightedIterator) int {
 	// Order the iterators primarily by the account hashes
-	hashI := its[i].it.Hash()
-	hashJ := its[j].it.Hash()
+	hashI := it.it.Hash()
+	hashJ := other.it.Hash()
 
 	switch bytes.Compare(hashI[:], hashJ[:]) {
 	case -1:
-		return true
+		return -1
 	case 1:
-		return false
+		return 1
 	}
 	// Same account/storage-slot in multiple layers, split by priority
-	return its[i].priority < its[j].priority
-}
-
-// Swap implements sort.Interface, swapping two entries in the iterator stack.
-func (its weightedIterators) Swap(i, j int) {
-	its[i], its[j] = its[j], its[i]
+	if it.priority < other.priority {
+		return -1
+	}
+	if it.priority > other.priority {
+		return 1
+	}
+	return 0
 }
 
 // fastIterator is a more optimized multi-layer iterator which maintains a
@@ -69,7 +63,7 @@ type fastIterator struct {
 	curAccount []byte
 	curSlot    []byte
 
-	iterators weightedIterators
+	iterators []*weightedIterator
 	initiated bool
 	account   bool
 	fail      error
@@ -83,11 +77,13 @@ func newFastIterator(tree *Tree, root common.Hash, account common.Hash, seek com
 	if snap == nil {
 		return nil, fmt.Errorf("unknown snapshot: %x", root)
 	}
+
 	fi := &fastIterator{
 		tree:    tree,
 		root:    root,
 		account: accountIterator,
 	}
+
 	current := snap.(snapshot)
 	for depth := 0; current != nil; depth++ {
 		if accountIterator {
@@ -105,13 +101,16 @@ func newFastIterator(tree *Tree, root common.Hash, account common.Hash, seek com
 				it:       it,
 				priority: depth,
 			})
+
 			if destructed {
 				break
 			}
 		}
+
 		current = current.Parent()
 	}
 	fi.init()
+
 	return fi, nil
 }
 
@@ -127,10 +126,12 @@ func (fi *fastIterator) init() {
 		// advance either the current one or the old one. Repeat until nothing is
 		// clashing any more.
 		it := fi.iterators[i]
+
 		for {
 			// If the iterator is exhausted, drop it off the end
 			if !it.it.Next() {
 				it.it.Release()
+
 				last := len(fi.iterators) - 1
 
 				fi.iterators[i] = fi.iterators[last]
@@ -138,6 +139,7 @@ func (fi *fastIterator) init() {
 				fi.iterators = fi.iterators[:last]
 
 				i--
+
 				break
 			}
 			// The iterator is still alive, check for collisions with previous ones
@@ -161,13 +163,14 @@ func (fi *fastIterator) init() {
 					// The 'other' should be progressed, swap them
 					it = fi.iterators[other]
 					fi.iterators[other], fi.iterators[i] = fi.iterators[i], fi.iterators[other]
+
 					continue
 				}
 			}
 		}
 	}
 	// Re-sort the entire list
-	sort.Sort(fi.iterators)
+	slices.SortFunc(fi.iterators, func(a, b *weightedIterator) int { return a.Cmp(b) })
 	fi.initiated = false
 }
 
@@ -176,6 +179,7 @@ func (fi *fastIterator) Next() bool {
 	if len(fi.iterators) == 0 {
 		return false
 	}
+
 	if !fi.initiated {
 		// Don't forward first time -- we had to 'Next' once in order to
 		// do the sorting already
@@ -185,10 +189,12 @@ func (fi *fastIterator) Next() bool {
 		} else {
 			fi.curSlot = fi.iterators[0].it.(StorageIterator).Slot()
 		}
+
 		if innerErr := fi.iterators[0].it.Error(); innerErr != nil {
 			fi.fail = innerErr
 			return false
 		}
+
 		if fi.curAccount != nil || fi.curSlot != nil {
 			return true
 		}
@@ -206,19 +212,23 @@ func (fi *fastIterator) Next() bool {
 		if !fi.next(0) {
 			return false // exhausted
 		}
+
 		if fi.account {
 			fi.curAccount = fi.iterators[0].it.(AccountIterator).Account()
 		} else {
 			fi.curSlot = fi.iterators[0].it.(StorageIterator).Slot()
 		}
+
 		if innerErr := fi.iterators[0].it.Error(); innerErr != nil {
 			fi.fail = innerErr
 			return false // error
 		}
+
 		if fi.curAccount != nil || fi.curSlot != nil {
 			break // non-nil value found
 		}
 	}
+
 	return true
 }
 
@@ -236,6 +246,7 @@ func (fi *fastIterator) next(idx int) bool {
 		it.Release()
 
 		fi.iterators = append(fi.iterators[:idx], fi.iterators[idx+1:]...)
+
 		return len(fi.iterators) > 0
 	}
 	// If there's no one left to cascade into, return
@@ -247,6 +258,7 @@ func (fi *fastIterator) next(idx int) bool {
 		cur, next         = fi.iterators[idx], fi.iterators[idx+1]
 		curHash, nextHash = cur.it.Hash(), next.it.Hash()
 	)
+
 	if diff := bytes.Compare(curHash[:], nextHash[:]); diff < 0 {
 		// It is still in correct place
 		return true
@@ -265,10 +277,12 @@ func (fi *fastIterator) next(idx int) bool {
 		if n < idx {
 			return false
 		}
+
 		if n == len(fi.iterators)-1 {
 			// Can always place an elem last
 			return true
 		}
+
 		nextHash := fi.iterators[n+1].it.Hash()
 		if diff := bytes.Compare(curHash[:], nextHash[:]); diff < 0 {
 			return true
@@ -276,15 +290,17 @@ func (fi *fastIterator) next(idx int) bool {
 			return false
 		}
 		// The elem we're placing it next to has the same value,
-		// so whichever winds up on n+1 will need further iteraton
+		// so whichever winds up on n+1 will need further iteration
 		clash = n + 1
 
 		return cur.priority < fi.iterators[n+1].priority
 	})
 	fi.move(idx, index)
+
 	if clash != -1 {
 		fi.next(clash)
 	}
+
 	return true
 }
 
@@ -319,19 +335,21 @@ func (fi *fastIterator) Slot() []byte {
 }
 
 // Release iterates over all the remaining live layer iterators and releases each
-// of thme individually.
+// of them individually.
 func (fi *fastIterator) Release() {
 	for _, it := range fi.iterators {
 		it.it.Release()
 	}
+
 	fi.iterators = nil
 }
 
-// Debug is a convencience helper during testing
+// Debug is a convenience helper during testing
 func (fi *fastIterator) Debug() {
 	for _, it := range fi.iterators {
 		fmt.Printf("[p=%v v=%v] ", it.priority, it.it.Hash()[0])
 	}
+
 	fmt.Println()
 }
 

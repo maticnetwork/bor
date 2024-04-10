@@ -17,7 +17,6 @@
 package misc
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/ethereum/go-ethereum/params"
@@ -31,12 +30,15 @@ func VerifyGaslimit(parentGasLimit, headerGasLimit uint64) error {
 	if diff < 0 {
 		diff *= -1
 	}
+
 	limit := parentGasLimit / params.GasLimitBoundDivisor
 	if uint64(diff) >= limit {
 		return fmt.Errorf("invalid gas limit: have %d, want %d +-= %d", headerGasLimit, parentGasLimit, limit-1)
 	}
+
 	if headerGasLimit < params.MinGasLimit {
-		return errors.New("invalid gas limit below 5000")
+		return fmt.Errorf("invalid gas limit below %d", params.MinGasLimit)
 	}
+
 	return nil
 }

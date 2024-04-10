@@ -6,6 +6,7 @@ chain = "mumbai"
 # vmdebug = false
 datadir = "/var/lib/bor/data"
 # ancient = ""
+# "db.engine" = "leveldb"
 # keystore = "$BOR_DIR/keystore"
 # "rpc.batchlimit" = 100
 # "rpc.returndatalimit" = 100000
@@ -22,6 +23,7 @@ syncmode = "full"
     # json = false
     # backtrace = ""
     # debug = true
+    # enable-block-tracking = false
 
 [p2p]
     maxpeers = 1
@@ -35,6 +37,7 @@ syncmode = "full"
     # nodekeyhex = ""
     # txarrivalwait = "500ms"
     # [p2p.discovery]
+        # v4disc = true
         # v5disc = false
         # bootnodes = []
         # bootnodesv4 = []
@@ -77,6 +80,7 @@ syncmode = "full"
     # evmtimeout = "5s"
     # txfeecap = 5.0
     # allow-unprotected-txs = false
+    # enabledeprecatedpersonal = false
     [jsonrpc.http]
         enabled = true
         port = 8545
@@ -144,11 +148,10 @@ syncmode = "full"
     # snapshot = 10
     # database = 50
     # trie = 15
-    # journal = "triecache"
-    # rejournal = "1h0m0s"
     # noprefetch = false
     # preimages = false
     # txlookuplimit = 2350000
+    # blocklogs = 32
     # timeout = "1h0m0s"
     # fdlimit = 0
 

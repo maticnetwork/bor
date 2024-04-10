@@ -70,6 +70,7 @@ func (j *journal) revert(statedb *StateDB, snapshot int) {
 			}
 		}
 	}
+
 	j.entries = j.entries[:snapshot]
 }
 
@@ -91,12 +92,19 @@ type (
 		account *common.Address
 	}
 	resetObjectChange struct {
+		account      *common.Address
 		prev         *stateObject
 		prevdestruct bool
+		prevAccount  []byte
+		prevStorage  map[common.Hash][]byte
+
+		prevAccountOriginExist bool
+		prevAccountOrigin      []byte
+		prevStorageOrigin      map[common.Hash][]byte
 	}
-	suicideChange struct {
+	selfDestructChange struct {
 		account     *common.Address
-		prev        bool // whether account had already suicided
+		prev        bool // whether account had already self-destructed
 		prevbalance *big.Int
 	}
 
@@ -139,6 +147,11 @@ type (
 		address *common.Address
 		slot    *common.Hash
 	}
+
+	transientStorageChange struct {
+		account       *common.Address
+		key, prevalue common.Hash
+	}
 )
 
 func (ch createObjectChange) revert(s *StateDB) {
@@ -154,25 +167,38 @@ func (ch createObjectChange) dirtied() *common.Address {
 func (ch resetObjectChange) revert(s *StateDB) {
 	s.setStateObject(ch.prev)
 	RevertWrite(s, blockstm.NewAddressKey(ch.prev.address))
-	if !ch.prevdestruct && s.snap != nil {
-		delete(s.snapDestructs, ch.prev.addrHash)
+
+	if !ch.prevdestruct {
+		delete(s.stateObjectsDestruct, ch.prev.address)
+	}
+	if ch.prevAccount != nil {
+		s.accounts[ch.prev.addrHash] = ch.prevAccount
+	}
+	if ch.prevStorage != nil {
+		s.storages[ch.prev.addrHash] = ch.prevStorage
+	}
+	if ch.prevAccountOriginExist {
+		s.accountsOrigin[ch.prev.address] = ch.prevAccountOrigin
+	}
+	if ch.prevStorageOrigin != nil {
+		s.storagesOrigin[ch.prev.address] = ch.prevStorageOrigin
 	}
 }
 
 func (ch resetObjectChange) dirtied() *common.Address {
-	return nil
+	return ch.account
 }
 
-func (ch suicideChange) revert(s *StateDB) {
+func (ch selfDestructChange) revert(s *StateDB) {
 	obj := s.getStateObject(*ch.account)
 	if obj != nil {
-		obj.suicided = ch.prev
+		obj.selfDestructed = ch.prev
 		obj.setBalance(ch.prevbalance)
 		RevertWrite(s, blockstm.NewSubpathKey(*ch.account, SuicidePath))
 	}
 }
 
-func (ch suicideChange) dirtied() *common.Address {
+func (ch selfDestructChange) dirtied() *common.Address {
 	return ch.account
 }
 
@@ -219,6 +245,14 @@ func (ch storageChange) dirtied() *common.Address {
 	return ch.account
 }
 
+func (ch transientStorageChange) revert(s *StateDB) {
+	s.setTransientState(*ch.account, ch.key, ch.prevalue)
+}
+
+func (ch transientStorageChange) dirtied() *common.Address {
+	return nil
+}
+
 func (ch refundChange) revert(s *StateDB) {
 	s.refund = ch.prev
 }
@@ -234,6 +268,7 @@ func (ch addLogChange) revert(s *StateDB) {
 	} else {
 		s.logs[ch.txhash] = logs[:len(logs)-1]
 	}
+
 	s.logSize--
 }
 

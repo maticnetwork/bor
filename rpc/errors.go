@@ -30,6 +30,7 @@ func (err HTTPError) Error() string {
 	if len(err.Body) == 0 {
 		return err.Status
 	}
+
 	return fmt.Sprintf("%v: %s", err.Status, err.Body)
 }
 
@@ -54,10 +55,25 @@ var (
 	_ Error = new(invalidRequestError)
 	_ Error = new(invalidMessageError)
 	_ Error = new(invalidParamsError)
+	_ Error = new(internalServerError)
 	_ Error = new(CustomError)
 )
 
-const defaultErrorCode = -32000
+const (
+	errcodeDefault          = -32000
+	errcodeTimeout          = -32002
+	errcodeResponseTooLarge = -32003
+	errcodePanic            = -32603
+	errcodeMarshalError     = -32603
+
+	legacyErrcodeNotificationsUnsupported = -32001
+)
+
+const (
+	errMsgTimeout          = "request timed out"
+	errMsgResponseTooLarge = "response too large"
+	errMsgBatchTooLarge    = "batch too large"
+)
 
 type methodNotFoundError struct{ method string }
 
@@ -65,6 +81,34 @@ func (e *methodNotFoundError) ErrorCode() int { return -32601 }
 
 func (e *methodNotFoundError) Error() string {
 	return fmt.Sprintf("the method %s does not exist/is not available", e.method)
+}
+
+type notificationsUnsupportedError struct{}
+
+func (e notificationsUnsupportedError) Error() string {
+	return "notifications not supported"
+}
+
+func (e notificationsUnsupportedError) ErrorCode() int { return -32601 }
+
+// Is checks for equivalence to another error. Here we define that all errors with code
+// -32601 (method not found) are equivalent to notificationsUnsupportedError. This is
+// done to enable the following pattern:
+//
+//	sub, err := client.Subscribe(...)
+//	if errors.Is(err, rpc.ErrNotificationsUnsupported) {
+//		// server doesn't support subscriptions
+//	}
+func (e notificationsUnsupportedError) Is(other error) bool {
+	if other == (notificationsUnsupportedError{}) {
+		return true
+	}
+	rpcErr, ok := other.(Error)
+	if ok {
+		code := rpcErr.ErrorCode()
+		return code == -32601 || code == legacyErrcodeNotificationsUnsupported
+	}
+	return false
 }
 
 type subscriptionNotFoundError struct{ namespace, subscription string }
@@ -103,6 +147,16 @@ func (e *invalidParamsError) ErrorCode() int { return -32602 }
 
 func (e *invalidParamsError) Error() string { return e.message }
 
+// internalServerError is used for server errors during request processing.
+type internalServerError struct {
+	code    int
+	message string
+}
+
+func (e *internalServerError) ErrorCode() int { return e.code }
+
+func (e *internalServerError) Error() string { return e.message }
+
 type CustomError struct {
 	Code            int
 	ValidationError string
@@ -111,3 +165,15 @@ type CustomError struct {
 func (e *CustomError) ErrorCode() int { return e.Code }
 
 func (e *CustomError) Error() string { return e.ValidationError }
+
+type OptionsValidateError struct{ Message string }
+
+func (e *OptionsValidateError) ErrorCode() int { return -32003 }
+
+func (e *OptionsValidateError) Error() string { return e.Message }
+
+type KnownAccountsLimitExceededError struct{ Message string }
+
+func (e *KnownAccountsLimitExceededError) ErrorCode() int { return -32005 }
+
+func (e *KnownAccountsLimitExceededError) Error() string { return e.Message }

@@ -24,6 +24,8 @@ import (
 	"math/rand"
 	"net"
 	"reflect"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -49,6 +51,7 @@ func newTestTransport(rpub *ecdsa.PublicKey, fd net.Conn, dialDest *ecdsa.Public
 		EgressMAC:  sha256.New(),
 		IngressMAC: sha256.New(),
 	})
+
 	return &testTransport{rpub: rpub, rlpxTransport: wrapped}
 }
 
@@ -75,6 +78,7 @@ func startTestServer(t *testing.T, remoteKey *ecdsa.PublicKey, pf func(*Peer)) *
 		PrivateKey:  newkey(),
 		Logger:      testlog.Logger(t, log.LvlTrace),
 	}
+
 	server := &Server{
 		Config:      config,
 		newPeerHook: pf,
@@ -85,6 +89,7 @@ func startTestServer(t *testing.T, remoteKey *ecdsa.PublicKey, pf func(*Peer)) *
 	if err := server.Start(); err != nil {
 		t.Fatalf("Could not start server: %v", err)
 	}
+
 	return server
 }
 
@@ -98,6 +103,7 @@ func TestServerListen(t *testing.T) {
 		}
 		connected <- p
 	})
+
 	defer close(connected)
 	defer srv.Stop()
 
@@ -114,6 +120,7 @@ func TestServerListen(t *testing.T) {
 			t.Errorf("peer started with wrong conn: got %v, want %v",
 				peer.LocalAddr(), conn.RemoteAddr())
 		}
+
 		peers := srv.Peers()
 		if !reflect.DeepEqual(peers, []*Peer{peer}) {
 			t.Errorf("Peers mismatch: got %v, want %v", peers, []*Peer{peer})
@@ -129,8 +136,11 @@ func TestServerDial(t *testing.T) {
 	if err != nil {
 		t.Fatalf("could not setup listener: %v", err)
 	}
+
 	defer listener.Close()
+
 	accepted := make(chan net.Conn, 1)
+
 	go func() {
 		conn, err := listener.Accept()
 		if err != nil {
@@ -143,6 +153,7 @@ func TestServerDial(t *testing.T) {
 	connected := make(chan *Peer)
 	remid := &newkey().PublicKey
 	srv := startTestServer(t, remid, func(p *Peer) { connected <- p })
+
 	defer close(connected)
 	defer srv.Stop()
 
@@ -160,13 +171,16 @@ func TestServerDial(t *testing.T) {
 			if peer.ID() != enode.PubkeyToIDV4(remid) {
 				t.Errorf("peer has wrong id")
 			}
+
 			if peer.Name() != "test" {
 				t.Errorf("peer has wrong name")
 			}
+
 			if peer.RemoteAddr().String() != conn.LocalAddr().String() {
 				t.Errorf("peer started with wrong conn: got %v, want %v",
 					peer.RemoteAddr(), conn.LocalAddr())
 			}
+
 			peers := srv.Peers()
 			if !reflect.DeepEqual(peers, []*Peer{peer}) {
 				t.Errorf("Peers mismatch: got %v, want %v", peers, []*Peer{peer})
@@ -177,13 +191,18 @@ func TestServerDial(t *testing.T) {
 			if peer := srv.Peers()[0]; peer.Info().Network.Trusted {
 				t.Errorf("peer is trusted prematurely: %v", peer)
 			}
+
 			done := make(chan bool)
+
 			go func() {
 				srv.AddTrustedPeer(node)
+
 				if peer := srv.Peers()[0]; !peer.Info().Network.Trusted {
 					t.Errorf("peer is not trusted after AddTrustedPeer: %v", peer)
 				}
+
 				srv.RemoveTrustedPeer(node)
+
 				if peer := srv.Peers()[0]; peer.Info().Network.Trusted {
 					t.Errorf("peer is trusted after RemoveTrustedPeer: %v", peer)
 				}
@@ -193,6 +212,7 @@ func TestServerDial(t *testing.T) {
 			peer = srv.Peers()[0]
 			_ = peer.Inbound()
 			_ = peer.Info()
+
 			<-done
 		case <-time.After(1 * time.Second):
 			t.Error("server did not launch peer within one second")
@@ -219,15 +239,28 @@ func TestServerRemovePeerDisconnect(t *testing.T) {
 		ListenAddr:  "127.0.0.1:0",
 		Logger:      testlog.Logger(t, log.LvlTrace).New("server", "2"),
 	}}
+
 	srv1.Start()
+
 	defer srv1.Stop()
 	srv2.Start()
+
 	defer srv2.Stop()
+
+	s := strings.Split(srv2.ListenAddr, ":")
+	if len(s) != 2 {
+		t.Fatal("invalid ListenAddr")
+	}
+	if port, err := strconv.Atoi(s[1]); err == nil {
+		srv2.localnode.Set(enr.TCP(uint16(port)))
+	}
 
 	if !syncAddPeer(srv1, srv2.Self()) {
 		t.Fatal("peer not connected")
 	}
+
 	srv1.RemovePeer(srv2.Self())
+
 	if srv1.PeerCount() > 0 {
 		t.Fatal("removed peer still connected")
 	}
@@ -238,6 +271,7 @@ func TestServerRemovePeerDisconnect(t *testing.T) {
 func TestServerAtCap(t *testing.T) {
 	trustedNode := newkey()
 	trustedID := enode.PubkeyToIDV4(&trustedNode.PublicKey)
+
 	srv := &Server{
 		Config: Config{
 			PrivateKey:   newkey(),
@@ -251,12 +285,14 @@ func TestServerAtCap(t *testing.T) {
 	if err := srv.Start(); err != nil {
 		t.Fatalf("could not start: %v", err)
 	}
+
 	defer srv.Stop()
 
 	newconn := func(id enode.ID) *conn {
 		fd, _ := net.Pipe()
 		tx := newTestTransport(&trustedNode.PublicKey, fd, nil)
 		node := enode.SignNull(new(enr.Record), id)
+
 		return &conn{fd: fd, transport: tx, flags: inboundConn, node: node, cont: make(chan error)}
 	}
 
@@ -269,6 +305,7 @@ func TestServerAtCap(t *testing.T) {
 	}
 	// Try inserting a non-trusted connection.
 	anotherID := randomID()
+
 	c := newconn(anotherID)
 	if err := srv.checkpoint(c, srv.checkpointPostHandshake); err != DiscTooManyPeers {
 		t.Error("wrong error for insert:", err)
@@ -278,12 +315,14 @@ func TestServerAtCap(t *testing.T) {
 	if err := srv.checkpoint(c, srv.checkpointPostHandshake); err != nil {
 		t.Error("unexpected error for trusted conn @posthandshake:", err)
 	}
+
 	if !c.is(trustedConn) {
 		t.Error("Server did not set trusted flag")
 	}
 
 	// Remove from trusted set and try again
 	srv.RemoveTrustedPeer(newNode(trustedID, ""))
+
 	c = newconn(trustedID)
 	if err := srv.checkpoint(c, srv.checkpointPostHandshake); err != DiscTooManyPeers {
 		t.Error("wrong error for insert:", err)
@@ -291,10 +330,12 @@ func TestServerAtCap(t *testing.T) {
 
 	// Add anotherID to trusted set and try again
 	srv.AddTrustedPeer(newNode(anotherID, ""))
+
 	c = newconn(anotherID)
 	if err := srv.checkpoint(c, srv.checkpointPostHandshake); err != nil {
 		t.Error("unexpected error for trusted conn @posthandshake:", err)
 	}
+
 	if !c.is(trustedConn) {
 		t.Error("Server did not set trusted flag")
 	}
@@ -335,9 +376,11 @@ func TestServerPeerLimits(t *testing.T) {
 	dialDest := clientnode
 	conn, _ := net.Pipe()
 	srv.SetupConn(conn, flags, dialDest)
+
 	if tp.closeErr != DiscTooManyPeers {
 		t.Errorf("unexpected close error: %q", tp.closeErr)
 	}
+
 	conn.Close()
 
 	srv.AddTrustedPeer(clientnode)
@@ -345,6 +388,7 @@ func TestServerPeerLimits(t *testing.T) {
 	// Check that server allows a trusted peer despite being full.
 	conn, _ = net.Pipe()
 	srv.SetupConn(conn, flags, dialDest)
+
 	if tp.closeErr == DiscTooManyPeers {
 		t.Errorf("failed to bypass MaxPeers with trusted node: %q", tp.closeErr)
 	}
@@ -352,6 +396,7 @@ func TestServerPeerLimits(t *testing.T) {
 	if tp.closeErr != DiscUselessPeer {
 		t.Errorf("unexpected close error: %q", tp.closeErr)
 	}
+
 	conn.Close()
 
 	srv.RemoveTrustedPeer(clientnode)
@@ -359,9 +404,11 @@ func TestServerPeerLimits(t *testing.T) {
 	// Check that server is full again.
 	conn, _ = net.Pipe()
 	srv.SetupConn(conn, flags, dialDest)
+
 	if tp.closeErr != DiscTooManyPeers {
 		t.Errorf("unexpected close error: %q", tp.closeErr)
 	}
+
 	conn.Close()
 }
 
@@ -370,9 +417,8 @@ func TestServerSetupConn(t *testing.T) {
 		clientkey, srvkey = newkey(), newkey()
 		clientpub         = &clientkey.PublicKey
 		srvpub            = &srvkey.PublicKey
-		fooErr            = errors.New("foo")
-		readErr           = errors.New("read error")
 	)
+
 	tests := []struct {
 		dontstart bool
 		tt        *setupTransport
@@ -389,10 +435,10 @@ func TestServerSetupConn(t *testing.T) {
 			wantCloseErr: errServerStopped,
 		},
 		{
-			tt:           &setupTransport{pubkey: clientpub, encHandshakeErr: readErr},
+			tt:           &setupTransport{pubkey: clientpub, encHandshakeErr: errEncHandshakeError},
 			flags:        inboundConn,
 			wantCalls:    "doEncHandshake,close,",
-			wantCloseErr: readErr,
+			wantCloseErr: errEncHandshakeError,
 		},
 		{
 			tt:           &setupTransport{pubkey: clientpub, phs: protoHandshake{ID: randomID().Bytes()}},
@@ -402,11 +448,11 @@ func TestServerSetupConn(t *testing.T) {
 			wantCloseErr: DiscUnexpectedIdentity,
 		},
 		{
-			tt:           &setupTransport{pubkey: clientpub, protoHandshakeErr: fooErr},
+			tt:           &setupTransport{pubkey: clientpub, protoHandshakeErr: errProtoHandshakeError},
 			dialDest:     enode.NewV4(clientpub, nil, 0, 0),
 			flags:        dynDialedConn,
 			wantCalls:    "doEncHandshake,doProtoHandshake,close,",
-			wantCloseErr: fooErr,
+			wantCloseErr: errProtoHandshakeError,
 		},
 		{
 			tt:           &setupTransport{pubkey: srvpub, phs: protoHandshake{ID: crypto.FromECDSAPub(srvpub)[1:]}},
@@ -432,6 +478,7 @@ func TestServerSetupConn(t *testing.T) {
 				Protocols:   []Protocol{discard},
 				Logger:      testlog.Logger(t, log.LvlTrace),
 			}
+
 			srv := &Server{
 				Config:       cfg,
 				newTransport: func(fd net.Conn, dialDest *ecdsa.PublicKey) transport { return test.tt },
@@ -443,11 +490,14 @@ func TestServerSetupConn(t *testing.T) {
 				}
 				defer srv.Stop()
 			}
+
 			p1, _ := net.Pipe()
 			srv.SetupConn(p1, test.flags, test.dialDest)
+
 			if !errors.Is(test.tt.closeErr, test.wantCloseErr) {
 				t.Errorf("test %d: close error mismatch: got %q, want %q", i, test.tt.closeErr, test.wantCloseErr)
 			}
+
 			if test.tt.calls != test.wantCalls {
 				t.Errorf("test %d: calls mismatch: got %q, want %q", i, test.tt.calls, test.wantCalls)
 			}
@@ -475,6 +525,7 @@ func (c *setupTransport) doProtoHandshake(our *protoHandshake) (*protoHandshake,
 	if c.protoHandshakeErr != nil {
 		return nil, c.protoHandshakeErr
 	}
+
 	return &c.phs, nil
 }
 func (c *setupTransport) close(err error) {
@@ -495,6 +546,7 @@ func newkey() *ecdsa.PrivateKey {
 	if err != nil {
 		panic("couldn't generate key: " + err.Error())
 	}
+
 	return key
 }
 
@@ -502,13 +554,16 @@ func randomID() (id enode.ID) {
 	for i := range id {
 		id[i] = byte(rand.Intn(255))
 	}
+
 	return id
 }
 
 // This test checks that inbound connections are throttled by IP.
 func TestServerInboundThrottle(t *testing.T) {
 	const timeout = 5 * time.Second
+
 	newTransportCalled := make(chan struct{})
+
 	srv := &Server{
 		Config: Config{
 			PrivateKey:  newkey(),
@@ -531,6 +586,7 @@ func TestServerInboundThrottle(t *testing.T) {
 	if err := srv.Start(); err != nil {
 		t.Fatal("can't start: ", err)
 	}
+
 	defer srv.Stop()
 
 	// Dial the test server.
@@ -548,13 +604,17 @@ func TestServerInboundThrottle(t *testing.T) {
 
 	// Dial again. This time the server should close the connection immediately.
 	connClosed := make(chan struct{}, 1)
+
 	conn, err = net.DialTimeout("tcp", srv.ListenAddr, timeout)
 	if err != nil {
 		t.Fatalf("could not dial: %v", err)
 	}
+
 	defer conn.Close()
+
 	go func() {
 		conn.SetDeadline(time.Now().Add(timeout))
+
 		buf := make([]byte, 10)
 		if n, err := conn.Read(buf); err != io.EOF || n != 0 {
 			t.Errorf("expected io.EOF and n == 0, got error %q and n == %d", err, n)
@@ -576,6 +636,7 @@ func listenFakeAddr(network, laddr string, remoteAddr net.Addr) (net.Listener, e
 	if err == nil {
 		l = &fakeAddrListener{l, remoteAddr}
 	}
+
 	return l, err
 }
 
@@ -595,6 +656,7 @@ func (l *fakeAddrListener) Accept() (net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	return &fakeAddrConn{c, l.remoteAddr}, nil
 }
 
@@ -608,8 +670,10 @@ func syncAddPeer(srv *Server, node *enode.Node) bool {
 		sub     = srv.SubscribeEvents(ch)
 		timeout = time.After(2 * time.Second)
 	)
+
 	defer sub.Unsubscribe()
 	srv.AddPeer(node)
+
 	for {
 		select {
 		case ev := <-ch:

@@ -29,12 +29,16 @@ import (
 var (
 	// ErrNoCode is returned by call and transact operations for which the requested
 	// recipient contract to operate on does not exist in the state db or does not
-	// have any code associated with it (i.e. suicided).
+	// have any code associated with it (i.e. self-destructed).
 	ErrNoCode = errors.New("no contract code at given address")
 
 	// ErrNoPendingState is raised when attempting to perform a pending state action
 	// on a backend that doesn't implement PendingContractCaller.
 	ErrNoPendingState = errors.New("backend does not support pending state")
+
+	// ErrNoBlockHashState is raised when attempting to perform a block hash action
+	// on a backend that doesn't implement BlockHashContractCaller.
+	ErrNoBlockHashState = errors.New("backend does not support block hash state")
 
 	// ErrNoCodeAfterDeploy is returned by WaitDeployed if contract creation leaves
 	// an empty contract behind.
@@ -62,6 +66,17 @@ type PendingContractCaller interface {
 
 	// PendingCallContract executes an Ethereum contract call against the pending state.
 	PendingCallContract(ctx context.Context, call ethereum.CallMsg) ([]byte, error)
+}
+
+// BlockHashContractCaller defines methods to perform contract calls on a specific block hash.
+// Call will try to discover this interface when access to a block by hash is requested.
+// If the backend does not support the block hash state, Call returns ErrNoBlockHashState.
+type BlockHashContractCaller interface {
+	// CodeAtHash returns the code of the given account in the state at the specified block hash.
+	CodeAtHash(ctx context.Context, contract common.Address, blockHash common.Hash) ([]byte, error)
+
+	// CallContractAtHash executes an Ethereum contract all against the state at the specified block hash.
+	CallContractAtHash(ctx context.Context, call ethereum.CallMsg, blockHash common.Hash) ([]byte, error)
 }
 
 // ContractTransactor defines the methods needed to allow operating with a contract

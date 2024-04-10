@@ -18,12 +18,92 @@
 package miner
 
 import (
+	"errors"
+	"math/big"
 	"testing"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/core/txpool"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/downloader"
+	"github.com/ethereum/go-ethereum/event"
+	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/trie"
 )
+
+type mockBackend struct {
+	bc     *core.BlockChain
+	txPool *txpool.TxPool
+}
+
+func NewMockBackend(bc *core.BlockChain, txPool *txpool.TxPool) *mockBackend {
+	return &mockBackend{
+		bc:     bc,
+		txPool: txPool,
+	}
+}
+
+func (m *mockBackend) BlockChain() *core.BlockChain {
+	return m.bc
+}
+
+// PeerCount implements Backend.
+func (*mockBackend) PeerCount() int {
+	panic("unimplemented")
+}
+
+func (m *mockBackend) TxPool() *txpool.TxPool {
+	return m.txPool
+}
+
+func (m *mockBackend) StateAtBlock(block *types.Block, reexec uint64, base *state.StateDB, checkLive bool, preferDisk bool) (statedb *state.StateDB, err error) {
+	return nil, errors.New("not supported")
+}
+
+// nolint : unused
+type testBlockChain struct {
+	root          common.Hash
+	config        *params.ChainConfig
+	statedb       *state.StateDB
+	gasLimit      uint64
+	chainHeadFeed *event.Feed
+}
+
+// nolint : unused
+func (bc *testBlockChain) Config() *params.ChainConfig {
+	return bc.config
+}
+
+// nolint : unused
+func (bc *testBlockChain) CurrentBlock() *types.Header {
+	return &types.Header{
+		Number:   new(big.Int),
+		GasLimit: bc.gasLimit,
+	}
+}
+
+// nolint : unused
+func (bc *testBlockChain) GetBlock(hash common.Hash, number uint64) *types.Block {
+	return types.NewBlock(bc.CurrentBlock(), nil, nil, nil, trie.NewStackTrie(nil))
+}
+
+// nolint : unused
+func (bc *testBlockChain) StateAt(common.Hash) (*state.StateDB, error) {
+	return bc.statedb, nil
+}
+
+// nolint : unused
+func (bc *testBlockChain) HasState(root common.Hash) bool {
+	return bc.root == root
+}
+
+// nolint : unused
+func (bc *testBlockChain) SubscribeChainHeadEvent(ch chan<- core.ChainHeadEvent) event.Subscription {
+	return bc.chainHeadFeed.Subscribe(ch)
+}
 
 func TestMiner(t *testing.T) {
 	t.Parallel()
@@ -37,7 +117,7 @@ func TestMiner(t *testing.T) {
 	miner := minerBor.Miner
 	mux := minerBor.Mux
 
-	miner.Start(common.HexToAddress("0x12345"))
+	miner.Start()
 	waitForMiningState(t, miner, true)
 
 	// Start the downloader
@@ -76,7 +156,7 @@ func TestMinerDownloaderFirstFails(t *testing.T) {
 	miner := minerBor.Miner
 	mux := minerBor.Mux
 
-	miner.Start(common.HexToAddress("0x12345"))
+	miner.Start()
 	waitForMiningState(t, miner, true)
 
 	// Start the downloader
@@ -118,7 +198,7 @@ func TestMinerStartStopAfterDownloaderEvents(t *testing.T) {
 	miner := minerBor.Miner
 	mux := minerBor.Mux
 
-	miner.Start(common.HexToAddress("0x12345"))
+	miner.Start()
 	waitForMiningState(t, miner, true)
 
 	// Start the downloader
@@ -129,13 +209,15 @@ func TestMinerStartStopAfterDownloaderEvents(t *testing.T) {
 	mux.Post(downloader.DoneEvent{})
 	waitForMiningState(t, miner, true)
 
-	miner.Stop()
+	ch := make(chan struct{})
+	miner.Stop(ch)
 	waitForMiningState(t, miner, false)
 
-	miner.Start(common.HexToAddress("0x678910"))
+	miner.Start()
 	waitForMiningState(t, miner, true)
 
-	miner.Stop()
+	ch = make(chan struct{})
+	miner.Stop(ch)
 	waitForMiningState(t, miner, false)
 }
 
@@ -152,7 +234,7 @@ func TestStartWhileDownload(t *testing.T) {
 	mux := minerBor.Mux
 
 	waitForMiningState(t, miner, false)
-	miner.Start(common.HexToAddress("0x12345"))
+	miner.Start()
 	waitForMiningState(t, miner, true)
 
 	// Stop the downloader and wait for the update loop to run
@@ -160,7 +242,7 @@ func TestStartWhileDownload(t *testing.T) {
 	waitForMiningState(t, miner, false)
 
 	// Starting the miner after the downloader should not work
-	miner.Start(common.HexToAddress("0x12345"))
+	miner.Start()
 	waitForMiningState(t, miner, false)
 }
 
@@ -176,11 +258,11 @@ func TestStartStopMiner(t *testing.T) {
 	miner := minerBor.Miner
 
 	waitForMiningState(t, miner, false)
-	miner.Start(common.HexToAddress("0x12345"))
-
+	miner.Start()
 	waitForMiningState(t, miner, true)
 
-	miner.Stop()
+	ch := make(chan struct{})
+	miner.Stop(ch)
 
 	waitForMiningState(t, miner, false)
 }
@@ -197,8 +279,9 @@ func TestCloseMiner(t *testing.T) {
 	miner := minerBor.Miner
 
 	waitForMiningState(t, miner, false)
+	miner.Start()
 
-	miner.Start(common.HexToAddress("0x12345"))
+	miner.Start()
 
 	waitForMiningState(t, miner, true)
 
@@ -208,8 +291,8 @@ func TestCloseMiner(t *testing.T) {
 	waitForMiningState(t, miner, false)
 }
 
-// TestMinerSetEtherbase checks that etherbase becomes set even if mining isn't
-// possible at the moment
+// // TestMinerSetEtherbase checks that etherbase becomes set even if mining isn't
+// // possible at the moment
 func TestMinerSetEtherbase(t *testing.T) {
 	t.Parallel()
 
@@ -223,7 +306,7 @@ func TestMinerSetEtherbase(t *testing.T) {
 	mux := minerBor.Mux
 
 	// Start with a 'bad' mining address
-	miner.Start(common.HexToAddress("0xdead"))
+	miner.Start()
 	waitForMiningState(t, miner, true)
 
 	// Start the downloader
@@ -231,16 +314,16 @@ func TestMinerSetEtherbase(t *testing.T) {
 	waitForMiningState(t, miner, false)
 
 	// Now user tries to configure proper mining address
-	miner.Start(common.HexToAddress("0x1337"))
-
+	miner.Start()
 	// Stop the downloader and wait for the update loop to run
 	mux.Post(downloader.DoneEvent{})
-
 	waitForMiningState(t, miner, true)
 
-	// The miner should now be using the good address
-	if got, exp := miner.coinbase, common.HexToAddress("0x1337"); got != exp {
-		t.Fatalf("Wrong coinbase, got %x expected %x", got, exp)
+	coinbase := common.HexToAddress("0xdeedbeef")
+	miner.SetEtherbase(coinbase)
+
+	if addr := miner.worker.etherbase(); addr != coinbase {
+		t.Fatalf("Unexpected etherbase want %x got %x", coinbase, addr)
 	}
 }
 
@@ -251,12 +334,87 @@ func waitForMiningState(t *testing.T, m *Miner, mining bool) {
 	t.Helper()
 
 	var state bool
+
 	for i := 0; i < 100; i++ {
 		time.Sleep(10 * time.Millisecond)
+
 		if state = m.Mining(); state == mining {
 			return
 		}
 	}
-
 	t.Fatalf("Mining() == %t, want %t", state, mining)
 }
+
+// func minerTestGenesisBlock(period uint64, gasLimit uint64, faucet common.Address) *core.Genesis {
+// 	config := *params.AllCliqueProtocolChanges
+// 	config.Clique = &params.CliqueConfig{
+// 		Period: period,
+// 		Epoch:  config.Clique.Epoch,
+// 	}
+
+// 	// Assemble and return the genesis with the precompiles and faucet pre-funded
+// 	return &core.Genesis{
+// 		Config:     &config,
+// 		ExtraData:  append(append(make([]byte, 32), faucet[:]...), make([]byte, crypto.SignatureLength)...),
+// 		GasLimit:   gasLimit,
+// 		BaseFee:    big.NewInt(params.InitialBaseFee),
+// 		Difficulty: big.NewInt(1),
+// 		Alloc: map[common.Address]core.GenesisAccount{
+// 			common.BytesToAddress([]byte{1}): {Balance: big.NewInt(1)}, // ECRecover
+// 			common.BytesToAddress([]byte{2}): {Balance: big.NewInt(1)}, // SHA256
+// 			common.BytesToAddress([]byte{3}): {Balance: big.NewInt(1)}, // RIPEMD
+// 			common.BytesToAddress([]byte{4}): {Balance: big.NewInt(1)}, // Identity
+// 			common.BytesToAddress([]byte{5}): {Balance: big.NewInt(1)}, // ModExp
+// 			common.BytesToAddress([]byte{6}): {Balance: big.NewInt(1)}, // ECAdd
+// 			common.BytesToAddress([]byte{7}): {Balance: big.NewInt(1)}, // ECScalarMul
+// 			common.BytesToAddress([]byte{8}): {Balance: big.NewInt(1)}, // ECPairing
+// 			common.BytesToAddress([]byte{9}): {Balance: big.NewInt(1)}, // BLAKE2b
+// 			faucet:                           {Balance: new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(9))},
+// 		},
+// 	}
+// }
+
+// func createMiner(t *testing.T) (*Miner, *event.TypeMux, func(skipMiner bool)) {
+// 	t.Helper()
+
+// 	// Create Ethash config
+// 	config := Config{
+// 		Etherbase: common.HexToAddress("123456789"),
+// 	}
+// 	// Create chainConfig
+// 	chainDB := rawdb.NewMemoryDatabase()
+// 	genesis := minerTestGenesisBlock(15, 11_500_000, common.HexToAddress("12345"))
+// 	chainConfig, _, err := core.SetupGenesisBlock(chainDB, trie.NewDatabase(chainDB), genesis)
+// 	if err != nil {
+// 		t.Fatalf("can't create new chain config: %v", err)
+// 	}
+// 	// Create consensus engine
+// 	engine := clique.New(chainConfig.Clique, chainDB)
+// 	// Create Ethereum backend
+// 	bc, err := core.NewBlockChain(chainDB, nil, genesis, nil, engine, vm.Config{}, nil, nil, nil)
+// 	if err != nil {
+// 		t.Fatalf("can't create new chain %v", err)
+// 	}
+// 	statedb, _ := state.New(types.EmptyRootHash, state.NewDatabase(chainDB), nil)
+// 	blockchain := &testBlockChain{chainConfig, statedb, 10000000, new(event.Feed)}
+
+// 	pool := legacypool.New(testTxPoolConfig, blockchain)
+// 	txpool, _ := txpool.New(new(big.Int).SetUint64(testTxPoolConfig.PriceLimit), blockchain, []txpool.SubPool{pool})
+
+// 	backend := NewMockBackend(bc, txpool)
+// 	// Create event Mux
+// 	// nolint:staticcheck
+// 	mux := new(event.TypeMux)
+// 	// Create Miner
+// 	miner := New(backend, &config, chainConfig, mux, engine, nil)
+// 	cleanup := func(skipMiner bool) {
+// 		bc.Stop()
+// 		engine.Close()
+// 		txpool.Close()
+// 		if !skipMiner {
+// 			miner.Close()
+// 		}
+// 	}
+
+// 	return miner, mux, cleanup
+// }

@@ -20,79 +20,177 @@ import (
 	"math/big"
 	"reflect"
 	"testing"
+	"time"
+
+	"gotest.tools/assert"
+
+	"github.com/ethereum/go-ethereum/common/math"
 )
 
 func TestCheckCompatible(t *testing.T) {
 	type test struct {
-		stored, new *ChainConfig
-		head        uint64
-		wantErr     *ConfigCompatError
+		stored, new   *ChainConfig
+		headBlock     uint64
+		headTimestamp uint64
+		wantErr       *ConfigCompatError
 	}
+
 	tests := []test{
-		{stored: AllEthashProtocolChanges, new: AllEthashProtocolChanges, head: 0, wantErr: nil},
-		{stored: AllEthashProtocolChanges, new: AllEthashProtocolChanges, head: 100, wantErr: nil},
+		{stored: AllEthashProtocolChanges, new: AllEthashProtocolChanges, headBlock: 0, headTimestamp: 0, wantErr: nil},
+		{stored: AllEthashProtocolChanges, new: AllEthashProtocolChanges, headBlock: 0, headTimestamp: uint64(time.Now().Unix()), wantErr: nil},
+		{stored: AllEthashProtocolChanges, new: AllEthashProtocolChanges, headBlock: 100, wantErr: nil},
 		{
-			stored:  &ChainConfig{EIP150Block: big.NewInt(10)},
-			new:     &ChainConfig{EIP150Block: big.NewInt(20)},
-			head:    9,
-			wantErr: nil,
+			stored:    &ChainConfig{EIP150Block: big.NewInt(10)},
+			new:       &ChainConfig{EIP150Block: big.NewInt(20)},
+			headBlock: 9,
+			wantErr:   nil,
 		},
 		{
-			stored: AllEthashProtocolChanges,
-			new:    &ChainConfig{HomesteadBlock: nil},
-			head:   3,
+			stored:    AllEthashProtocolChanges,
+			new:       &ChainConfig{HomesteadBlock: nil},
+			headBlock: 3,
 			wantErr: &ConfigCompatError{
-				What:         "Homestead fork block",
-				StoredConfig: big.NewInt(0),
-				NewConfig:    nil,
-				RewindTo:     0,
+				What:          "Homestead fork block",
+				StoredBlock:   big.NewInt(0),
+				NewBlock:      nil,
+				RewindToBlock: 0,
 			},
 		},
 		{
-			stored: AllEthashProtocolChanges,
-			new:    &ChainConfig{HomesteadBlock: big.NewInt(1)},
-			head:   3,
+			stored:    AllEthashProtocolChanges,
+			new:       &ChainConfig{HomesteadBlock: big.NewInt(1)},
+			headBlock: 3,
 			wantErr: &ConfigCompatError{
-				What:         "Homestead fork block",
-				StoredConfig: big.NewInt(0),
-				NewConfig:    big.NewInt(1),
-				RewindTo:     0,
+				What:          "Homestead fork block",
+				StoredBlock:   big.NewInt(0),
+				NewBlock:      big.NewInt(1),
+				RewindToBlock: 0,
 			},
 		},
 		{
-			stored: &ChainConfig{HomesteadBlock: big.NewInt(30), EIP150Block: big.NewInt(10)},
-			new:    &ChainConfig{HomesteadBlock: big.NewInt(25), EIP150Block: big.NewInt(20)},
-			head:   25,
+			stored:    &ChainConfig{HomesteadBlock: big.NewInt(30), EIP150Block: big.NewInt(10)},
+			new:       &ChainConfig{HomesteadBlock: big.NewInt(25), EIP150Block: big.NewInt(20)},
+			headBlock: 25,
 			wantErr: &ConfigCompatError{
-				What:         "EIP150 fork block",
-				StoredConfig: big.NewInt(10),
-				NewConfig:    big.NewInt(20),
-				RewindTo:     9,
+				What:          "EIP150 fork block",
+				StoredBlock:   big.NewInt(10),
+				NewBlock:      big.NewInt(20),
+				RewindToBlock: 9,
 			},
 		},
 		{
-			stored:  &ChainConfig{ConstantinopleBlock: big.NewInt(30)},
-			new:     &ChainConfig{ConstantinopleBlock: big.NewInt(30), PetersburgBlock: big.NewInt(30)},
-			head:    40,
-			wantErr: nil,
+			stored:    &ChainConfig{ConstantinopleBlock: big.NewInt(30)},
+			new:       &ChainConfig{ConstantinopleBlock: big.NewInt(30), PetersburgBlock: big.NewInt(30)},
+			headBlock: 40,
+			wantErr:   nil,
 		},
 		{
-			stored: &ChainConfig{ConstantinopleBlock: big.NewInt(30)},
-			new:    &ChainConfig{ConstantinopleBlock: big.NewInt(30), PetersburgBlock: big.NewInt(31)},
-			head:   40,
+			stored:    &ChainConfig{ConstantinopleBlock: big.NewInt(30)},
+			new:       &ChainConfig{ConstantinopleBlock: big.NewInt(30), PetersburgBlock: big.NewInt(31)},
+			headBlock: 40,
 			wantErr: &ConfigCompatError{
-				What:         "Petersburg fork block",
-				StoredConfig: nil,
-				NewConfig:    big.NewInt(31),
-				RewindTo:     30,
+				What:          "Petersburg fork block",
+				StoredBlock:   nil,
+				NewBlock:      big.NewInt(31),
+				RewindToBlock: 30,
 			},
+		},
+		{
+			stored:        &ChainConfig{ShanghaiBlock: big.NewInt(30)},
+			new:           &ChainConfig{ShanghaiBlock: big.NewInt(30)},
+			headTimestamp: 9,
+			wantErr:       nil,
 		},
 	}
 
 	for _, test := range tests {
-		err := test.stored.CheckCompatible(test.new, test.head)
+		err := test.stored.CheckCompatible(test.new, test.headBlock, test.headTimestamp)
 		if !reflect.DeepEqual(err, test.wantErr) {
-			t.Errorf("error mismatch:\nstored: %v\nnew: %v\nhead: %v\nerr: %v\nwant: %v", test.stored, test.new, test.head, err, test.wantErr)
+			t.Errorf("error mismatch:\nstored: %v\nnew: %v\nheadBlock: %v\nheadTimestamp: %v\nerr: %v\nwant: %v", test.stored, test.new, test.headBlock, test.headTimestamp, err, test.wantErr)
 		}
 	}
+}
+
+func TestConfigRules(t *testing.T) {
+	t.Parallel()
+
+	c := &ChainConfig{
+		LondonBlock:   new(big.Int),
+		ShanghaiBlock: big.NewInt(10),
+		CancunBlock:   big.NewInt(20),
+		PragueBlock:   big.NewInt(30),
+		VerkleBlock:   big.NewInt(40),
+	}
+
+	block := new(big.Int)
+
+	if r := c.Rules(block, true, 0); r.IsShanghai {
+		t.Errorf("expected %v to not be shanghai", 0)
+	}
+
+	block.SetInt64(10)
+
+	if r := c.Rules(block, true, 0); !r.IsShanghai {
+		t.Errorf("expected %v to be shanghai", 10)
+	}
+
+	block.SetInt64(20)
+
+	if r := c.Rules(block, true, 0); !r.IsCancun {
+		t.Errorf("expected %v to be cancun", 20)
+	}
+
+	block.SetInt64(30)
+
+	if r := c.Rules(block, true, 0); !r.IsPrague {
+		t.Errorf("expected %v to be prague", 30)
+	}
+
+	block = block.SetInt64(math.MaxInt64)
+
+	if r := c.Rules(block, true, 0); !r.IsShanghai {
+		t.Errorf("expected %v to be shanghai", 0)
+	}
+}
+
+func TestBorKeyValueConfigHelper(t *testing.T) {
+	t.Parallel()
+
+	backupMultiplier := map[string]uint64{
+		"0":        2,
+		"25275000": 5,
+		"29638656": 2,
+	}
+	assert.Equal(t, borKeyValueConfigHelper(backupMultiplier, 0), uint64(2))
+	assert.Equal(t, borKeyValueConfigHelper(backupMultiplier, 1), uint64(2))
+	assert.Equal(t, borKeyValueConfigHelper(backupMultiplier, 25275000-1), uint64(2))
+	assert.Equal(t, borKeyValueConfigHelper(backupMultiplier, 25275000), uint64(5))
+	assert.Equal(t, borKeyValueConfigHelper(backupMultiplier, 25275000+1), uint64(5))
+	assert.Equal(t, borKeyValueConfigHelper(backupMultiplier, 29638656-1), uint64(5))
+	assert.Equal(t, borKeyValueConfigHelper(backupMultiplier, 29638656), uint64(2))
+	assert.Equal(t, borKeyValueConfigHelper(backupMultiplier, 29638656+1), uint64(2))
+
+	config := map[string]uint64{
+		"0":         1,
+		"90000000":  2,
+		"100000000": 3,
+	}
+	assert.Equal(t, borKeyValueConfigHelper(config, 0), uint64(1))
+	assert.Equal(t, borKeyValueConfigHelper(config, 1), uint64(1))
+	assert.Equal(t, borKeyValueConfigHelper(config, 90000000-1), uint64(1))
+	assert.Equal(t, borKeyValueConfigHelper(config, 90000000), uint64(2))
+	assert.Equal(t, borKeyValueConfigHelper(config, 90000000+1), uint64(2))
+	assert.Equal(t, borKeyValueConfigHelper(config, 100000000-1), uint64(2))
+	assert.Equal(t, borKeyValueConfigHelper(config, 100000000), uint64(3))
+	assert.Equal(t, borKeyValueConfigHelper(config, 100000000+1), uint64(3))
+
+	burntContract := map[string]string{
+		"22640000": "0x70bcA57F4579f58670aB2d18Ef16e02C17553C38",
+		"41824608": "0x617b94CCCC2511808A3C9478ebb96f455CF167aA",
+	}
+	assert.Equal(t, borKeyValueConfigHelper(burntContract, 22640000), "0x70bcA57F4579f58670aB2d18Ef16e02C17553C38")
+	assert.Equal(t, borKeyValueConfigHelper(burntContract, 22640000+1), "0x70bcA57F4579f58670aB2d18Ef16e02C17553C38")
+	assert.Equal(t, borKeyValueConfigHelper(burntContract, 41824608-1), "0x70bcA57F4579f58670aB2d18Ef16e02C17553C38")
+	assert.Equal(t, borKeyValueConfigHelper(burntContract, 41824608), "0x617b94CCCC2511808A3C9478ebb96f455CF167aA")
+	assert.Equal(t, borKeyValueConfigHelper(burntContract, 41824608+1), "0x617b94CCCC2511808A3C9478ebb96f455CF167aA")
 }

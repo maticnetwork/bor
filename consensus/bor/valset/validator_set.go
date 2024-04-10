@@ -435,7 +435,7 @@ func verifyUpdates(updates []*Validator, vals *ValidatorSet) (updatedTotalVoting
 		_, val := vals.GetByAddress(address)
 
 		if val == nil {
-			// New validator, add its voting power the the total.
+			// New validator, add its voting power the total.
 			updatedTotalVotingPower += valUpdate.VotingPower
 			numNewValidators++
 		} else {
@@ -499,6 +499,7 @@ func (vals *ValidatorSet) applyUpdates(updates []*Validator) {
 		} else {
 			// Apply add or update.
 			merged[i] = updates[0]
+
 			if existing[0].Address == updates[0].Address {
 				// Validator is present in both, advance existing.
 				existing = existing[1:]
@@ -506,6 +507,7 @@ func (vals *ValidatorSet) applyUpdates(updates []*Validator) {
 
 			updates = updates[1:]
 		}
+
 		i++
 	}
 

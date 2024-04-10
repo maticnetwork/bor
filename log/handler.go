@@ -11,7 +11,7 @@ import (
 	"github.com/go-stack/stack"
 )
 
-// Handler defines where and how log records are written.
+// / Handler defines where and how log records are written.
 // A Logger prints its log records by writing to a Handler.
 // Handlers are composable, providing you great flexibility in combining
 // them to achieve the logging structure that suits your applications.
@@ -60,8 +60,9 @@ func StreamHandler(wr io.Writer, fmtr Format) Handler {
 func SyncHandler(h Handler) Handler {
 	var mu sync.Mutex
 	return FuncHandler(func(r *Record) error {
-		defer mu.Unlock()
 		mu.Lock()
+		defer mu.Unlock()
+
 		return h.Log(r)
 	}, h.Level())
 }
@@ -268,7 +269,6 @@ func BufferedHandler(bufSize int, h Handler) Handler {
 			_ = h.Log(m)
 		}
 	}()
-
 	return ChannelHandler(recs, h.Level())
 }
 

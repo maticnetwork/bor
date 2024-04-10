@@ -18,41 +18,18 @@ package rawdb
 
 import (
 	"bytes"
-	"hash"
 	"math/big"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/internal/blocktest"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
-	"golang.org/x/crypto/sha3"
 )
 
-// testHasher is the helper tool for transaction/receipt list hashing.
-// The original hasher is trie, in order to get rid of import cycle,
-// use the testing hasher instead.
-type testHasher struct {
-	hasher hash.Hash
-}
-
-func newHasher() *testHasher {
-	return &testHasher{hasher: sha3.NewLegacyKeccak256()}
-}
-
-func (h *testHasher) Reset() {
-	h.hasher.Reset()
-}
-
-func (h *testHasher) Update(key, val []byte) {
-	h.hasher.Write(key)
-	h.hasher.Write(val)
-}
-
-func (h *testHasher) Hash() common.Hash {
-	return common.BytesToHash(h.hasher.Sum(nil))
-}
+var newTestHasher = blocktest.NewHasher
 
 // Tests that positional lookup metadata can be stored and retrieved.
 func TestLookupStorage(t *testing.T) {
@@ -99,7 +76,7 @@ func TestLookupStorage(t *testing.T) {
 			tx3 := types.NewTransaction(3, common.BytesToAddress([]byte{0x33}), big.NewInt(333), 3333, big.NewInt(33333), []byte{0x33, 0x33, 0x33})
 			txs := []*types.Transaction{tx1, tx2, tx3}
 
-			block := types.NewBlock(&types.Header{Number: big.NewInt(314)}, txs, nil, nil, newHasher())
+			block := types.NewBlock(&types.Header{Number: big.NewInt(314)}, txs, nil, nil, newTestHasher())
 
 			// Check that no transactions entries are in a pristine database
 			for i, tx := range txs {
@@ -119,6 +96,7 @@ func TestLookupStorage(t *testing.T) {
 					if hash != block.Hash() || number != block.NumberU64() || index != uint64(i) {
 						t.Fatalf("tx #%d [%x]: positional metadata mismatch: have %x/%d/%d, want %x/%v/%v", i, tx.Hash(), hash, number, index, block.Hash(), block.NumberU64(), i)
 					}
+
 					if tx.Hash() != txn.Hash() {
 						t.Fatalf("tx #%d [%x]: transaction mismatch: have %v, want %v", i, tx.Hash(), txn, tx)
 					}
@@ -127,6 +105,7 @@ func TestLookupStorage(t *testing.T) {
 			// Delete the transactions and check purge
 			for i, tx := range txs {
 				DeleteTxLookupEntry(db, tx.Hash())
+
 				if txn, _, _, _ := ReadTransaction(db, tx.Hash()); txn != nil {
 					t.Fatalf("tx #%d [%x]: deleted transaction returned: %v", i, tx.Hash(), txn)
 				}
@@ -138,42 +117,45 @@ func TestLookupStorage(t *testing.T) {
 func TestDeleteBloomBits(t *testing.T) {
 	// Prepare testing data
 	db := NewMemoryDatabase()
+
 	for i := uint(0); i < 2; i++ {
 		for s := uint64(0); s < 2; s++ {
 			WriteBloomBits(db, i, s, params.MainnetGenesisHash, []byte{0x01, 0x02})
-			WriteBloomBits(db, i, s, params.RinkebyGenesisHash, []byte{0x01, 0x02})
+			WriteBloomBits(db, i, s, params.SepoliaGenesisHash, []byte{0x01, 0x02})
 		}
 	}
+
 	check := func(bit uint, section uint64, head common.Hash, exist bool) {
 		bits, _ := ReadBloomBits(db, bit, section, head)
 		if exist && !bytes.Equal(bits, []byte{0x01, 0x02}) {
 			t.Fatalf("Bloombits mismatch")
 		}
+
 		if !exist && len(bits) > 0 {
 			t.Fatalf("Bloombits should be removed")
 		}
 	}
 	// Check the existence of written data.
 	check(0, 0, params.MainnetGenesisHash, true)
-	check(0, 0, params.RinkebyGenesisHash, true)
+	check(0, 0, params.SepoliaGenesisHash, true)
 
 	// Check the existence of deleted data.
 	DeleteBloombits(db, 0, 0, 1)
 	check(0, 0, params.MainnetGenesisHash, false)
-	check(0, 0, params.RinkebyGenesisHash, false)
+	check(0, 0, params.SepoliaGenesisHash, false)
 	check(0, 1, params.MainnetGenesisHash, true)
-	check(0, 1, params.RinkebyGenesisHash, true)
+	check(0, 1, params.SepoliaGenesisHash, true)
 
 	// Check the existence of deleted data.
 	DeleteBloombits(db, 0, 0, 2)
 	check(0, 0, params.MainnetGenesisHash, false)
-	check(0, 0, params.RinkebyGenesisHash, false)
+	check(0, 0, params.SepoliaGenesisHash, false)
 	check(0, 1, params.MainnetGenesisHash, false)
-	check(0, 1, params.RinkebyGenesisHash, false)
+	check(0, 1, params.SepoliaGenesisHash, false)
 
 	// Bit1 shouldn't be affect.
 	check(1, 0, params.MainnetGenesisHash, true)
-	check(1, 0, params.RinkebyGenesisHash, true)
+	check(1, 0, params.SepoliaGenesisHash, true)
 	check(1, 1, params.MainnetGenesisHash, true)
-	check(1, 1, params.RinkebyGenesisHash, true)
+	check(1, 1, params.SepoliaGenesisHash, true)
 }

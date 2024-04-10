@@ -44,6 +44,7 @@ func (g *GoToolchain) Go(command string, args ...string) *exec.Cmd {
 		tool.Env = append(tool.Env, "CGO_ENABLED=1")
 		tool.Env = append(tool.Env, "GOARCH="+g.GOARCH)
 	}
+
 	if g.GOOS != "" && g.GOOS != runtime.GOOS {
 		tool.Env = append(tool.Env, "GOOS="+g.GOOS)
 	}
@@ -53,31 +54,10 @@ func (g *GoToolchain) Go(command string, args ...string) *exec.Cmd {
 	} else if os.Getenv("CC") != "" {
 		tool.Env = append(tool.Env, "CC="+os.Getenv("CC"))
 	}
-	return tool
-}
+	// CKZG by default is not portable, append the necessary build flags to make
+	// it not rely on modern CPU instructions and enable linking against.
+	tool.Env = append(tool.Env, "CGO_CFLAGS=-O2 -g -D__BLST_PORTABLE__")
 
-// Install creates an invocation of 'go install'. The command is configured to output
-// executables to the given 'gobin' directory.
-//
-// This can be used to install auxiliary build tools without modifying the local go.mod and
-// go.sum files. To install tools which are not required by go.mod, ensure that all module
-// paths in 'args' contain a module version suffix (e.g. "...@latest").
-func (g *GoToolchain) Install(gobin string, args ...string) *exec.Cmd {
-	if !filepath.IsAbs(gobin) {
-		panic("GOBIN must be an absolute path")
-	}
-	tool := g.goTool("install")
-	tool.Env = append(tool.Env, "GOBIN="+gobin)
-	tool.Args = append(tool.Args, "-mod=readonly")
-	tool.Args = append(tool.Args, args...)
-
-	// Ensure GOPATH is set because go install seems to absolutely require it. This uses
-	// 'go env' because it resolves the default value when GOPATH is not set in the
-	// environment. Ignore errors running go env and leave any complaining about GOPATH to
-	// the install command.
-	pathTool := g.goTool("env", "GOPATH")
-	output, _ := pathTool.Output()
-	tool.Env = append(tool.Env, "GOPATH="+string(output))
 	return tool
 }
 
@@ -85,27 +65,35 @@ func (g *GoToolchain) goTool(command string, args ...string) *exec.Cmd {
 	if g.Root == "" {
 		g.Root = runtime.GOROOT()
 	}
-	tool := exec.Command(filepath.Join(g.Root, "bin", "go"), command)
+
+	tool := exec.Command(filepath.Join(g.Root, "bin", "go"), command) // nolint: gosec
 	tool.Args = append(tool.Args, args...)
 	tool.Env = append(tool.Env, "GOROOT="+g.Root)
 
 	// Forward environment variables to the tool, but skip compiler target settings.
 	// TODO: what about GOARM?
 	skip := map[string]struct{}{"GOROOT": {}, "GOARCH": {}, "GOOS": {}, "GOBIN": {}, "CC": {}}
+
 	for _, e := range os.Environ() {
 		if i := strings.IndexByte(e, '='); i >= 0 {
 			if _, ok := skip[e[:i]]; ok {
 				continue
 			}
 		}
+
 		tool.Env = append(tool.Env, e)
 	}
+
 	return tool
 }
 
 // DownloadGo downloads the Go binary distribution and unpacks it into a temporary
 // directory. It returns the GOROOT of the unpacked toolchain.
-func DownloadGo(csdb *ChecksumDB, version string) string {
+func DownloadGo(csdb *ChecksumDB) string {
+	version, err := Version(csdb, "golang")
+	if err != nil {
+		log.Fatal(err)
+	}
 	// Shortcut: if the Go version that runs this script matches the
 	// requested version exactly, there is no need to download anything.
 	activeGo := strings.TrimPrefix(runtime.Version(), "go")
@@ -121,18 +109,22 @@ func DownloadGo(csdb *ChecksumDB, version string) string {
 
 	// For Arm architecture, GOARCH includes ISA version.
 	os := runtime.GOOS
+
 	arch := runtime.GOARCH
 	if arch == "arm" {
 		arch = "armv6l"
 	}
+
 	file := fmt.Sprintf("go%s.%s-%s", version, os, arch)
 	if os == "windows" {
 		file += ".zip"
 	} else {
 		file += ".tar.gz"
 	}
+
 	url := "https://golang.org/dl/" + file
 	dst := filepath.Join(ucache, file)
+
 	if err := csdb.DownloadFile(url, dst); err != nil {
 		log.Fatal(err)
 	}
@@ -141,9 +133,60 @@ func DownloadGo(csdb *ChecksumDB, version string) string {
 	if err := ExtractArchive(dst, godir); err != nil {
 		log.Fatal(err)
 	}
+
 	goroot, err := filepath.Abs(filepath.Join(godir, "go"))
 	if err != nil {
 		log.Fatal(err)
 	}
+
 	return goroot
+}
+
+// Version returns the versions defined in the checksumdb.
+func Version(csdb *ChecksumDB, version string) (string, error) {
+	for _, l := range csdb.allChecksums {
+		if !strings.HasPrefix(l, "# version:") {
+			continue
+		}
+		v := strings.Split(l, ":")[1]
+		parts := strings.Split(v, " ")
+		if len(parts) != 2 {
+			log.Print("Erroneous version-string", "v", l)
+			continue
+		}
+		if parts[0] == version {
+			log.Printf("Found version %q", parts[1])
+			return parts[1], nil
+		}
+	}
+	return "", fmt.Errorf("no version found for '%v'", version)
+}
+
+// DownloadAndVerifyChecksums downloads all files and checks that they match
+// the checksum given in checksums.txt.
+// This task can be used to sanity-check new checksums.
+func DownloadAndVerifyChecksums(csdb *ChecksumDB) {
+	var (
+		base   = ""
+		ucache = os.TempDir()
+	)
+	for _, l := range csdb.allChecksums {
+		if strings.HasPrefix(l, "# https://") {
+			base = l[2:]
+			continue
+		}
+		if strings.HasPrefix(l, "#") {
+			continue
+		}
+		hashFile := strings.Split(l, "  ")
+		if len(hashFile) != 2 {
+			continue
+		}
+		file := hashFile[1]
+		url := base + file
+		dst := filepath.Join(ucache, file)
+		if err := csdb.DownloadFile(url, dst); err != nil {
+			log.Print(err)
+		}
+	}
 }

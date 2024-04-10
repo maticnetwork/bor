@@ -5,17 +5,22 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
+	"github.com/ethereum/go-ethereum/cmd/bootnode"
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/internal/cli/flagset"
 	"github.com/ethereum/go-ethereum/internal/cli/server"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/metrics"
+	"github.com/ethereum/go-ethereum/metrics/prometheus"
 	"github.com/ethereum/go-ethereum/p2p/discover"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/nat"
@@ -26,14 +31,16 @@ import (
 type BootnodeCommand struct {
 	UI cli.Ui
 
-	listenAddr string
-	v5         bool
-	verbosity  int
-	logLevel   string
-	nat        string
-	nodeKey    string
-	saveKey    string
-	dryRun     bool
+	listenAddr     string
+	enableMetrics  bool
+	prometheusAddr string
+	v5             bool
+	verbosity      int
+	logLevel       string
+	nat            string
+	nodeKey        string
+	saveKey        string
+	dryRun         bool
 }
 
 // Help implements the cli.Command interface
@@ -59,6 +66,18 @@ func (b *BootnodeCommand) Flags() *flagset.Flagset {
 		Default: "0.0.0.0:30303",
 		Usage:   "listening address of bootnode (<ip>:<port>)",
 		Value:   &b.listenAddr,
+	})
+	flags.BoolFlag(&flagset.BoolFlag{
+		Name:    "metrics",
+		Usage:   "Enable metrics collection and reporting",
+		Value:   &b.enableMetrics,
+		Default: true,
+	})
+	flags.StringFlag(&flagset.StringFlag{
+		Name:    "prometheus-addr",
+		Default: "127.0.0.1:7071",
+		Usage:   "listening address of bootnode (<ip>:<port>)",
+		Value:   &b.prometheusAddr,
 	})
 	flags.BoolFlag(&flagset.BoolFlag{
 		Name:    "v5",
@@ -170,6 +189,7 @@ func (b *BootnodeCommand) Run(args []string) int {
 			b.UI.Error(fmt.Sprintf("could not generate key: %v", err))
 			return 1
 		}
+
 		if b.saveKey != "" {
 			path := b.saveKey
 
@@ -194,33 +214,25 @@ func (b *BootnodeCommand) Run(args []string) int {
 	}
 
 	conn, err := net.ListenUDP("udp", addr)
-
 	if err != nil {
 		b.UI.Error(fmt.Sprintf("failed to listen udp addr '%s': %v", b.listenAddr, err))
 		return 1
 	}
-
-	realaddr := conn.LocalAddr().(*net.UDPAddr)
-	if natm != nil {
-		if !realaddr.IP.IsLoopback() {
-			go nat.Map(natm, nil, "udp", realaddr.Port, realaddr.Port, "ethereum discovery")
-		}
-
-		if ext, err := natm.ExternalIP(); err == nil {
-			// nolint: govet
-			realaddr = &net.UDPAddr{IP: ext, Port: realaddr.Port}
-		}
-	}
-
-	n := enode.NewV4(&nodeKey.PublicKey, addr.IP, addr.Port, addr.Port)
-	b.UI.Info(n.String())
-
-	if b.dryRun {
-		return 0
-	}
+	defer conn.Close()
 
 	db, _ := enode.OpenDB("")
 	ln := enode.NewLocalNode(db, nodeKey)
+
+	listenerAddr := conn.LocalAddr().(*net.UDPAddr)
+	if natm != nil {
+		natAddr := bootnode.DoPortMapping(natm, ln, listenerAddr)
+		if natAddr != nil {
+			listenerAddr = natAddr
+		}
+	}
+
+	bootnode.PrintNotice(&nodeKey.PublicKey, *listenerAddr)
+
 	cfg := discover.Config{
 		PrivateKey: nodeKey,
 		Log:        log.Root(),
@@ -234,6 +246,26 @@ func (b *BootnodeCommand) Run(args []string) int {
 		if _, err := discover.ListenUDP(conn, ln, cfg); err != nil {
 			utils.Fatalf("%v", err)
 		}
+	}
+
+	if b.enableMetrics {
+		prometheusMux := http.NewServeMux()
+
+		prometheusMux.Handle("/debug/metrics/prometheus", prometheus.Handler(metrics.DefaultRegistry))
+
+		promServer := &http.Server{
+			Addr:              b.prometheusAddr,
+			Handler:           prometheusMux,
+			ReadHeaderTimeout: 30 * time.Second,
+		}
+
+		go func() {
+			if err := promServer.ListenAndServe(); err != nil {
+				log.Error("Failure in running Prometheus server", "err", err)
+			}
+		}()
+
+		log.Info("Enabling metrics export to prometheus", "path", fmt.Sprintf("http://%s/debug/metrics/prometheus", b.prometheusAddr))
 	}
 
 	signalCh := make(chan os.Signal, 4)
