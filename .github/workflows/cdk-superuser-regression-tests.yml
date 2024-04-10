@@ -103,6 +103,7 @@ jobs:
       run: |
         bake_time="${{ github.event.inputs.bake_time }}"
         end_minute=$(( $(date +'%M') + bake_time))
+        export ETH_RPC_URL="$(kurtosis port print cdk-v1 zkevm-node-rpc-001 http-rpc)"
     
         while [ $(date +'%M') -lt $end_minute ]; do
           # Attempt to connect to the service
