@@ -107,10 +107,10 @@ jobs:
         greater_than_zero=false
         
         while [ $(date +'%M') -lt $end_minute ]; do
-          # Attempt connecting to service
+          # Attempt to connect to the service
           if STATUS=$(cast rpc zkevm_verifiedBatchNumber 2>/dev/null); then
             # Convert hexadecimal to decimal
-            DEC_STATUS=$(printf "%d" "$STATUS")
+            DEC_STATUS=$((16#$STATUS))
             echo "ZKEVM_VERIFIED_BATCH_NUMBER: $DEC_STATUS"
             
             # Check if STATUS is greater than 0
@@ -118,6 +118,7 @@ jobs:
               greater_than_zero=true
             fi
           else
+            # If connection fails, wait and retry after some time
             echo "Failed to connect, waiting and retrying..."
             sleep 60
             continue
@@ -125,9 +126,9 @@ jobs:
           sleep 60
         done
         
-        # Check if zkevm_verifiedBatchNumber becomes greater than 0, indicating e2e success
+        # Check if STATUS field never becomes greater than 0
         if ! $greater_than_zero; then
-          echo "zkevm_verifiedBatchNumber failed to increment past 0. marking CI job failed accordingly"
+          echo "STATUS field never becomes greater than 0. CI job failed."
           exit 1
         fi
     
