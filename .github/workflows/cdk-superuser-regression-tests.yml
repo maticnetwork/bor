@@ -115,11 +115,8 @@ jobs:
             # Check if STATUS has incremented
             if [ "$STATUS" != "$INITIAL_STATUS" ]; then
               incremented=true
-              echo "ZKEVM_VERIFIED_BATCH_NUMBER successfully incremented to $STATUS. Exiting..."
-              exit 0
             fi
           else
-            # If connection fails, wait and retry after some time
             echo "Failed to connect, waiting and retrying..."
             sleep 60
             continue
@@ -128,7 +125,7 @@ jobs:
         done
         
         if ! $incremented; then
-          echo "ZKEVM_VERIFIED_BATCH_NUMBER remained at 0x0 till the end. CI job failed."
+          echo "ZKEVM_VERIFIED_BATCH_NUMBER did not increment. This may indicate chain experienced a regression. Please investigate."
           exit 1
         fi
     
