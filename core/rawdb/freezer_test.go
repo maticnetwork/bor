@@ -313,7 +313,7 @@ func TestFreezerReadonlyValidate(t *testing.T) {
 
 	// Re-openening as readonly should fail when validating
 	// table lengths.
-	_, err = newFreezer(dir, "", true, 0, 2049, tables)
+	_, err = NewFreezer(dir, "", true, 0, 2049, tables)
 	if err == nil {
 		t.Fatal("readonly freezer should fail with differing table lengths")
 	}
@@ -330,7 +330,7 @@ func TestFreezerConcurrentReadonly(t *testing.T) {
 		t.Fatal("can't open freezer", err)
 	}
 	var item = make([]byte, 1024)
-	batch := f.tables["a"].newBatch()
+	batch := f.tables["a"].newBatch(0)
 	items := uint64(10)
 	for i := uint64(0); i < items; i++ {
 		require.NoError(t, batch.AppendRaw(i, item))
@@ -351,7 +351,7 @@ func TestFreezerConcurrentReadonly(t *testing.T) {
 		go func(i int) {
 			defer wg.Done()
 
-			f, err := NewFreezer(dir, "", true, 2049, tables)
+			f, err := NewFreezer(dir, "", true, 0, 2049, tables)
 			if err == nil {
 				fs[i] = f
 			} else {
@@ -376,7 +376,7 @@ func newFreezerForTesting(t *testing.T, tables map[string]bool) (*Freezer, strin
 	dir := t.TempDir()
 	// note: using low max table size here to ensure the tests actually
 	// switch between multiple files.
-	f, err := NewFreezer(dir, "", false, 2049, tables)
+	f, err := NewFreezer(dir, "", false, 0, 2049, tables)
 	if err != nil {
 		t.Fatal("can't open freezer", err)
 	}

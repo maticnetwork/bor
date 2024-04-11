@@ -219,6 +219,17 @@ func WriteOffsetOfLastAncientFreezer(db ethdb.KeyValueWriter, offset uint64) {
 	}
 }
 
+// NewDatabaseWithOnlyFreezer create a freezer db without state
+func NewDatabaseWithOnlyFreezer(db ethdb.KeyValueStore, frz, namespace string, readonly bool, newOffSet uint64) (*Freezer, error) {
+	// Create the idle freezer instance, this operation should be atomic to avoid mismatch between offset and acientDB.
+	frdb, err := NewChainFreezer(frz, namespace, readonly, newOffSet)
+	if err != nil {
+		return nil, err
+	}
+
+	return frdb, nil
+}
+
 // resolveChainFreezerDir is a helper function which resolves the absolute path
 // of chain freezer by considering backward compatibility.
 func resolveChainFreezerDir(ancient string) string {
@@ -243,22 +254,25 @@ func resolveChainFreezerDir(ancient string) string {
 	return freezer
 }
 
+func resolveOffset(db ethdb.KeyValueStore, isLastOffset bool) uint64 {
+	// The offset of ancientDB should be handled differently in different scenarios.
+	if isLastOffset {
+		return ReadOffsetOfLastAncientFreezer(db)
+	} else {
+		return ReadOffsetOfCurrentAncientFreezer(db)
+	}
+}
+
 // NewDatabaseWithFreezer creates a high level database on top of a given key-
 // value data store with a freezer moving immutable chain segments into cold
 // storage.
 //
 //nolint:gocognit
-func NewDatabaseWithFreezer(db ethdb.KeyValueStore, freezer string, namespace string, readonly, disableFreeze, isLastOffset bool) (ethdb.Database, error) {
-	var offset uint64
-	// The offset of ancientDB should be handled differently in different scenarios.
-	if isLastOffset {
-		offset = ReadOffsetOfLastAncientFreezer(db)
-	} else {
-		offset = ReadOffsetOfCurrentAncientFreezer(db)
-	}
+func NewDatabaseWithFreezer(db ethdb.KeyValueStore, ancient string, namespace string, readonly, disableFreeze, isLastOffset bool) (ethdb.Database, error) {
+	offset := resolveOffset(db, isLastOffset)
 
 	// Create the idle freezer instance
-	frdb, err := NewFreezer(freezer, namespace, readonly, offset, freezerTableSize, FreezerNoSnappy)
+	frdb, err := newChainFreezer(resolveChainFreezerDir(ancient), namespace, readonly, offset)
 	if err != nil {
 		return nil, err
 	}
@@ -295,7 +309,7 @@ func NewDatabaseWithFreezer(db ethdb.KeyValueStore, freezer string, namespace st
 			// hasn't happened yet. If the pruning would've happened, genesis would have been wiped
 			// from ancient db.
 			if offset == 0 {
-				frgenesis, err := frdb.Ancient(freezerHashTable, 0)
+				frgenesis, err := frdb.Ancient(ChainFreezerHashTable, 0)
 				if err != nil {
 					printChainMetadata(db)
 					return nil, fmt.Errorf("failed to retrieve genesis from ancient %v", err)
@@ -717,19 +731,6 @@ func InspectDatabase(db ethdb.Database, keyPrefix, keyStart []byte) error {
 			log.Info("Inspecting database", "count", count, "elapsed", common.PrettyDuration(time.Since(start)))
 			logged = time.Now()
 		}
-	}
-	// Inspect append-only file store then.
-	ancientSizes := []*common.StorageSize{&ancientHeadersSize, &ancientBodiesSize, &ancientReceiptsSize, &ancientHashesSize, &ancientTdsSize}
-	for i, category := range []string{freezerHeaderTable, freezerBodiesTable, freezerReceiptTable, freezerHashTable, freezerDifficultyTable} {
-		if size, err := db.AncientSize(category); err == nil {
-			*ancientSizes[i] += common.StorageSize(size)
-			total += common.StorageSize(size)
-		}
-	}
-	// Get number of ancient rows inside the freezer
-	ancients := counter(0)
-	if count, err := db.ItemAmountInAncient(); err == nil {
-		ancients = counter(count)
 	}
 	// Display the database statistic of key-value store.
 	stats := [][]string{

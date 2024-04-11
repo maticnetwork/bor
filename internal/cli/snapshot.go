@@ -350,10 +350,17 @@ func (c *PruneBlockCommand) accessDb(stack *node.Node, dbHandles int) error {
 	if headBlock == nil {
 		return errors.New("failed to load head block")
 	}
-
 	headHeader := headBlock.Header()
-	//Make sure the MPT and snapshot matches before pruning, otherwise the node can not start.
-	snaptree, err := snapshot.New(chaindb, trie.NewDatabase(chaindb), 256, headBlock.Root(), false, false, false)
+
+	snapconfig := snapshot.Config{
+		CacheSize:  256,
+		Recovery:   false,
+		NoBuild:    true,
+		AsyncBuild: false,
+	}
+
+	// Make sure the MPT and snapshot matches before pruning, otherwise the node can not start.
+	snaptree, err := snapshot.New(snapconfig, chaindb, trie.NewDatabase(chaindb, trie.HashDefaults), headBlock.Root())
 	if err != nil {
 		log.Error("Unable to load snapshot", "err", err)
 		return err // The relevant snapshot(s) might not exist

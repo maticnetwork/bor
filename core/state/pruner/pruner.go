@@ -399,7 +399,7 @@ func (p *BlockPruner) backupOldDb(name string, cache, handles int, namespace str
 
 	// Create new ancientDB backup and record the new and last version of offset in kvDB as well.
 	// For every round, newoffset actually equals to the startBlockNumber in ancient backup db.
-	frdbBack, err := rawdb.NewFreezerDb(chainDb, p.newAncientPath, namespace, readonly, startBlockNumber)
+	frdbBack, err := rawdb.NewDatabaseWithOnlyFreezer(chainDb, p.newAncientPath, namespace, readonly, startBlockNumber)
 	if err != nil {
 		return fmt.Errorf("failed to create ancient freezer backup: %v", err)
 	}
