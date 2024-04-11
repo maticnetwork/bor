@@ -70,6 +70,7 @@ require (
 	github.com/olekukonko/tablewriter v0.0.5
 	github.com/pelletier/go-toml v1.9.5
 	github.com/peterh/liner v1.2.2
+	github.com/prometheus/tsdb v0.10.0
 	github.com/protolambda/bls12-381-util v0.1.0
 	github.com/rs/cors v1.10.1
 	github.com/ryanuber/columnize v2.1.2+incompatible
