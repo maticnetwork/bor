@@ -147,7 +147,9 @@ type Downloader struct {
 	quitCh   chan struct{} // Quit channel to signal termination
 	quitLock sync.Mutex    // Lock to prevent double closes
 
+	// Validation
 	ethereum.ChainValidator
+	maxValidationThreshold uint64 // Number of block difference from remote peer to start validation
 
 	// Testing hooks
 	syncInitHook     func(uint64, uint64)  // Method to call upon initiating a new sync run
@@ -228,19 +230,20 @@ func New(stateDb ethdb.Database, mux *event.TypeMux, chain BlockChain, lightchai
 	}
 
 	dl := &Downloader{
-		stateDB:        stateDb,
-		mux:            mux,
-		queue:          newQueue(blockCacheMaxItems, blockCacheInitialItems),
-		peers:          newPeerSet(),
-		blockchain:     chain,
-		lightchain:     lightchain,
-		dropPeer:       dropPeer,
-		headerProcCh:   make(chan *headerTask, 1),
-		quitCh:         make(chan struct{}),
-		SnapSyncer:     snap.NewSyncer(stateDb, chain.TrieDB().Scheme()),
-		stateSyncStart: make(chan *stateSync),
-		syncStartBlock: chain.CurrentSnapBlock().Number.Uint64(),
-		ChainValidator: whitelistService,
+		stateDB:                stateDb,
+		mux:                    mux,
+		queue:                  newQueue(blockCacheMaxItems, blockCacheInitialItems),
+		peers:                  newPeerSet(),
+		blockchain:             chain,
+		lightchain:             lightchain,
+		dropPeer:               dropPeer,
+		headerProcCh:           make(chan *headerTask, 1),
+		quitCh:                 make(chan struct{}),
+		SnapSyncer:             snap.NewSyncer(stateDb, chain.TrieDB().Scheme()),
+		stateSyncStart:         make(chan *stateSync),
+		syncStartBlock:         chain.CurrentSnapBlock().Number.Uint64(),
+		ChainValidator:         whitelistService,
+		maxValidationThreshold: 1024,
 	}
 	// Create the post-merge skeleton syncer and start the process
 	dl.skeleton = newSkeleton(stateDb, dl.peers, dropPeer, newBeaconBackfiller(dl, success))
@@ -917,13 +920,13 @@ func (d *Downloader) findAncestor(p *peerConnection, remoteHeader *types.Header)
 			return 0, err
 		}
 
-		// Assuming that `remoteHeight` is always greater than `localHeight`, we won't
-		// check peer validity if the remote header is far ahead of us.
-		if errors.Is(err, whitelist.ErrNoRemote) && localHeight > remoteHeight-1024 {
-			log.Info("Remote peer didn't respond but is far ahead, skipping validation", "id", p.id, "local", localHeight, "remote", remoteHeight, "err", err)
-		} else if errors.Is(err, whitelist.ErrNoRemote) {
+		// Don't validate the peer against whitelisted milestones until the different of
+		// our local height and remote peer's height is less than `maxValidationThreshold`
+		if errors.Is(err, whitelist.ErrNoRemote) && localHeight >= remoteHeight-d.maxValidationThreshold {
 			log.Info("Remote peer didn't respond", "id", p.id, "local", localHeight, "remote", remoteHeight, "err", err)
 			return 0, err
+		} else if errors.Is(err, whitelist.ErrNoRemote) {
+			log.Info("Remote peer didn't respond but is far ahead, skipping validation", "id", p.id, "local", localHeight, "remote", remoteHeight, "err", err)
 		}
 	}
 
