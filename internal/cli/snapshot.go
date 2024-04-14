@@ -389,7 +389,6 @@ func (c *PruneBlockCommand) accessDb(stack *node.Node, dbHandles int) error {
 	// Ensure the root is really present. The weak assumption
 	// is the presence of root can indicate the presence of the
 	// entire trie.
-	//nolint:nestif
 	if blob := rawdb.ReadTrieNode(chaindb, targetRoot); len(blob) == 0 {
 		// The special case is for clique based networks(rinkeby, goerli
 		// and some other private networks), it's possible that two
@@ -402,36 +401,26 @@ func (c *PruneBlockCommand) accessDb(stack *node.Node, dbHandles int) error {
 		// Note HEAD is ignored. Usually there is the associated
 		// state available, but we don't want to use the topmost state
 		// as the pruning target.
-		var found bool
-
 		for i := len(layers) - 2; i >= 1; i-- {
 			if blob := rawdb.ReadTrieNode(chaindb, layers[i].Root()); len(blob) != 0 {
 				targetRoot = layers[i].Root()
-				found = true
-
 				log.Info("Selecting middle-layer as the pruning target", "root", targetRoot, "depth", i)
-
-				break
+				return nil
 			}
 		}
 
-		if !found {
-			if blob := rawdb.ReadTrieNode(chaindb, snaptree.DiskRoot()); len(blob) != 0 {
-				targetRoot = snaptree.DiskRoot()
-				found = true
-
-				log.Info("Selecting disk-layer as the pruning target", "root", targetRoot)
-			}
+		if blob := rawdb.ReadTrieNode(chaindb, snaptree.DiskRoot()); len(blob) != 0 {
+			targetRoot = snaptree.DiskRoot()
+			log.Info("Selecting disk-layer as the pruning target", "root", targetRoot)
+			return nil
 		}
 
-		if !found {
-			if len(layers) > 0 {
-				log.Error("no snapshot paired state")
-				return errors.New("no snapshot paired state")
-			}
-
-			return fmt.Errorf("associated state[%x] is not present", targetRoot)
+		if len(layers) > 0 {
+			log.Error("no snapshot paired state")
+			return errors.New("no snapshot paired state")
 		}
+
+		return fmt.Errorf("associated state[%x] is not present", targetRoot)
 	} else {
 		if len(layers) > 0 {
 			log.Info("Selecting bottom-most difflayer as the pruning target", "root", targetRoot, "height", headHeader.Number.Uint64()-uint64(len(layers)-1))
