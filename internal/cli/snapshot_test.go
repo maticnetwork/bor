@@ -22,6 +22,7 @@ import (
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/ethereum/go-ethereum/trie"
 
 	"github.com/stretchr/testify/require"
 )
@@ -79,7 +80,17 @@ func testOfflineBlockPruneWithAmountReserved(t *testing.T, amountReserved uint64
 	err = testBlockPruner.BlockPruneBackup(chaindbPath, 512, dbHandles, "", false, false)
 	require.NoError(t, err, "failed to backup block")
 
-	dbBack, err := rawdb.NewLevelDBDatabaseWithFreezer(chaindbPath, 0, 0, newAncientPath, "", false, true, false)
+	dbBack, err := rawdb.Open(rawdb.OpenOptions{
+		Type:              node.Config().DBEngine,
+		Directory:         chaindbPath,
+		AncientsDirectory: newAncientPath,
+		Namespace:         "",
+		Cache:             0,
+		Handles:           0,
+		ReadOnly:          false,
+		DisableFreeze:     true,
+		IsLastOffset:      false,
+	})
 	require.NoError(t, err, "failed to create db with ancient backend")
 
 	defer dbBack.Close()
@@ -133,14 +144,23 @@ func BlockchainCreator(t *testing.T, chaindbPath, AncientPath string, blockRemai
 	t.Helper()
 
 	// Create a database with ancient freezer
-	db, err := rawdb.NewLevelDBDatabaseWithFreezer(chaindbPath, 0, 0, AncientPath, "", false, false, false)
+	db, err := rawdb.Open(rawdb.OpenOptions{
+		Directory:         chaindbPath,
+		AncientsDirectory: AncientPath,
+		Namespace:         "",
+		Cache:             0,
+		Handles:           0,
+		ReadOnly:          false,
+		DisableFreeze:     false,
+		IsLastOffset:      false,
+	})
 	require.NoError(t, err, "failed to create db with ancient backend")
 
 	defer db.Close()
 
-	genesis := gspec.MustCommit(db)
+	genesis := gspec.MustCommit(db, trie.NewDatabase(db, trie.HashDefaults))
 	// Initialize a fresh chain with only a genesis block
-	blockchain, err := core.NewBlockChain(db, config, gspec.Config, engine, vm.Config{}, nil, nil, nil)
+	blockchain, err := core.NewBlockChain(db, config, gspec, nil, engine, vm.Config{}, nil, nil, nil)
 	require.NoError(t, err, "failed to create chain")
 
 	// Make chain starting from genesis

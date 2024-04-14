@@ -346,6 +346,12 @@ func (c *PruneBlockCommand) accessDb(stack *node.Node, dbHandles int) error {
 		return nil
 	}
 
+	// Check if we're in hash scheme and not path scheme
+	if rawdb.ReadStateScheme(chaindb) != rawdb.HashScheme {
+		log.Warn("Snapshot and MPT check is only supported for hash scheme, skipping")
+		return nil
+	}
+
 	headBlock := rawdb.ReadHeadBlock(chaindb)
 	if headBlock == nil {
 		return errors.New("failed to load head block")
