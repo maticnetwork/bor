@@ -78,7 +78,7 @@ func (eth *Ethereum) hashState(ctx context.Context, block *types.Block, reexec u
 		current = eth.blockchain.GetBlock(block.ParentHash(), block.NumberU64()-1)
 
 		if current == nil {
-			return nil, fmt.Errorf("missing parent block %v %d", block.ParentHash(), block.NumberU64()-1)
+			return nil, nil, fmt.Errorf("missing parent block %v %d", block.ParentHash(), block.NumberU64()-1)
 		}
 	} else {
 		// Otherwise, try to reexec blocks until we find a state or reach our limit

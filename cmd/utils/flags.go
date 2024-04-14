@@ -2224,7 +2224,7 @@ func tryMakeReadOnlyDatabase(ctx *cli.Context, stack *node.Node) ethdb.Database 
 	if rawdb.PreexistingDatabase(stack.ResolvePath("chaindata")) == "" {
 		readonly = false
 	}
-	return MakeChainDatabase(ctx, stack, readonly)
+	return MakeChainDatabase(ctx, stack, readonly, false)
 }
 
 func IsNetworkPreset(ctx *cli.Context) bool {
