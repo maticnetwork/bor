@@ -389,7 +389,7 @@ func (c *PruneBlockCommand) accessDb(stack *node.Node, dbHandles int) error {
 	// Ensure the root is really present. The weak assumption
 	// is the presence of root can indicate the presence of the
 	// entire trie.
-	if blob := rawdb.ReadTrieNode(chaindb, targetRoot); len(blob) == 0 {
+	if blob := rawdb.ReadTrieNode(chaindb, common.Hash{}, nil, targetRoot, rawdb.HashScheme); len(blob) == 0 {
 		// The special case is for clique based networks(rinkeby, goerli
 		// and some other private networks), it's possible that two
 		// consecutive blocks will have same root. In this case snapshot
@@ -402,14 +402,14 @@ func (c *PruneBlockCommand) accessDb(stack *node.Node, dbHandles int) error {
 		// state available, but we don't want to use the topmost state
 		// as the pruning target.
 		for i := len(layers) - 2; i >= 1; i-- {
-			if blob := rawdb.ReadTrieNode(chaindb, layers[i].Root()); len(blob) != 0 {
+			if blob := rawdb.ReadTrieNode(chaindb, common.Hash{}, nil, layers[i].Root(), rawdb.HashScheme); len(blob) != 0 {
 				targetRoot = layers[i].Root()
 				log.Info("Selecting middle-layer as the pruning target", "root", targetRoot, "depth", i)
 				return nil
 			}
 		}
 
-		if blob := rawdb.ReadTrieNode(chaindb, snaptree.DiskRoot()); len(blob) != 0 {
+		if blob := rawdb.ReadTrieNode(chaindb, common.Hash{}, nil, snaptree.DiskRoot(), rawdb.HashScheme); len(blob) != 0 {
 			targetRoot = snaptree.DiskRoot()
 			log.Info("Selecting disk-layer as the pruning target", "root", targetRoot)
 			return nil
