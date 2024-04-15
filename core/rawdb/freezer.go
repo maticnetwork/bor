@@ -201,6 +201,10 @@ func (f *Freezer) HasAncient(kind string, number uint64) (bool, error) {
 }
 
 func (f *Freezer) FreezerInfo() {
+	log.Info("Printing all tables")
+	for tableName, _ := range f.tables {
+		log.Info("table found", "name", tableName)
+	}
 	if table := f.tables["headers"]; table != nil {
 		log.Info("********** ********** **********")
 		log.Info("Headers table", "items", table.items.Load(), "hidden", table.itemHidden.Load(), "removed", table.itemOffset.Load(), "offset", f.offset.Load())
