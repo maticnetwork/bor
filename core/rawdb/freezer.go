@@ -200,6 +200,17 @@ func (f *Freezer) HasAncient(kind string, number uint64) (bool, error) {
 	return false, nil
 }
 
+func (f *Freezer) FreezerInfo() {
+	if table := f.tables["headers"]; table != nil {
+		log.Info("********** ********** **********")
+		log.Info("Headers table", "items", table.items.Load(), "hidden", table.itemHidden.Load(), "removed", table.itemOffset.Load(), "offset", f.offset.Load())
+		log.Info("********** ********** **********")
+		// table.has(number - f.offset.Load()), nil
+	} else {
+		log.Info("Freezer table 'headers' not found")
+	}
+}
+
 // Ancient retrieves an ancient binary blob from the append-only immutable files.
 func (f *Freezer) Ancient(kind string, number uint64) ([]byte, error) {
 	if table := f.tables[kind]; table != nil {

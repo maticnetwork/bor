@@ -117,6 +117,13 @@ func (f *ResettableFreezer) HasAncient(kind string, number uint64) (bool, error)
 	return f.freezer.HasAncient(kind, number)
 }
 
+func (f *ResettableFreezer) FreezerInfo() {
+	f.lock.RLock()
+	defer f.lock.RUnlock()
+
+	f.freezer.FreezerInfo()
+}
+
 // Ancient retrieves an ancient binary blob from the append-only immutable files.
 func (f *ResettableFreezer) Ancient(kind string, number uint64) ([]byte, error) {
 	f.lock.RLock()
