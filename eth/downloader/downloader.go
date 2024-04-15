@@ -57,6 +57,8 @@ var (
 	fsHeaderSafetyNet = 2048            // Number of headers to discard in case a chain violation is detected
 	fsHeaderContCheck = 3 * time.Second // Time interval to check for header continuations during state download
 	fsMinFullBlocks   = 64              // Number of blocks to retrieve fully even in snap sync
+
+	maxValidationThreshold = uint64(1024) // Number of block difference from remote peer to start validation
 )
 
 var (
@@ -243,7 +245,7 @@ func New(stateDb ethdb.Database, mux *event.TypeMux, chain BlockChain, lightchai
 		stateSyncStart:         make(chan *stateSync),
 		syncStartBlock:         chain.CurrentSnapBlock().Number.Uint64(),
 		ChainValidator:         whitelistService,
-		maxValidationThreshold: 1024,
+		maxValidationThreshold: maxValidationThreshold,
 	}
 	// Create the post-merge skeleton syncer and start the process
 	dl.skeleton = newSkeleton(stateDb, dl.peers, dropPeer, newBeaconBackfiller(dl, success))
