@@ -928,9 +928,9 @@ func (d *Downloader) findAncestor(p *peerConnection, remoteHeader *types.Header)
 			if localHeight >= remoteHeight-d.maxValidationThreshold {
 				log.Info("Remote peer didn't respond", "id", p.id, "local", localHeight, "remote", remoteHeight, "err", err)
 				return 0, err
-			} else {
-				log.Info("Remote peer didn't respond but is far ahead, skipping validation", "id", p.id, "local", localHeight, "remote", remoteHeight, "err", err)
 			}
+
+			log.Info("Remote peer didn't respond but is far ahead, skipping validation", "id", p.id, "local", localHeight, "remote", remoteHeight, "err", err)
 		}
 	}
 
