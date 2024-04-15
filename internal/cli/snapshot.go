@@ -388,6 +388,10 @@ func (c *PruneBlockCommand) accessDb(stack *node.Node, dbHandles int) error {
 	// In theory there are n difflayers + 1 disk layer present,
 	// so n diff layers are expected to be returned.
 	layers := snaptree.Snapshots(headHeader.Root, c.triesInMemory, true)
+	log.Info("Checking snapshot layers", "triesInMemory", c.triesInMemory, "layers", len(layers), "head", headHeader.Number.Uint64(), "root", headHeader.Root, "hash", headHeader.Hash())
+	if len(layers) > 0 {
+		log.Info("Found snapshot layers", "first", layers[0].Root(), "last", layers[len(layers)-1].Root())
+	}
 	if len(layers) != c.triesInMemory {
 		// Reject if the accumulated diff layers are less than n. It
 		// means in most of normal cases, there is no associated state
