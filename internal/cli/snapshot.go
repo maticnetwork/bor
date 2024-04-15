@@ -84,8 +84,14 @@ type PruneStateCommand struct {
 // MarkDown implements cli.MarkDown interface
 func (c *PruneStateCommand) MarkDown() string {
 	items := []string{
-		"# Prune state",
-		"The ```bor snapshot prune-state``` command will prune historical state data with the help of the state snapshot. All trie nodes and contract codes that do not belong to the specified	version state will be deleted from the database. After pruning, only two version states are available: genesis and the specific one.",
+		`# Prune state`,
+		`The ` + "```" + "bor snapshot prune-state" + "```" + ` command will prune historical state data
+with the help of the state snapshot. All trie nodes and contract codes that do not belong to the
+specified	version state will be deleted from the database. After pruning, only two version states
+are available: genesis and the specific one.
+
+Warning: This command only works with hash based storage scheme and doesn't work with path based
+storage scheme.`,
 		c.Flags().MarkDown(),
 	}
 

@@ -14,6 +14,6 @@ This command prints the following information which is useful for block-pruning 
 
 - ```datadir```: Path of the data directory to store information
 
-- ```keystore```: Path of the data directory to store keys
-
 - ```datadir.ancient```: Path of the old ancient data directory
+
+- ```keystore```: Path of the data directory to store keys
