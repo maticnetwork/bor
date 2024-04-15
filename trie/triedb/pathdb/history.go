@@ -575,6 +575,9 @@ func truncateFromHead(db ethdb.Batcher, freezer *rawdb.ResettableFreezer, nhead 
 	if err != nil {
 		return 0, err
 	}
+	offset := freezer.AncientOffSet()
+	log.Info("Freezer info", "total frozen", ohead, "first item in freezer", otail, "offset", offset)
+
 	// Ensure that the truncation target falls within the specified range.
 	if ohead < nhead || nhead < otail {
 		return 0, fmt.Errorf("out of range, tail: %d, head: %d, target: %d", otail, ohead, nhead)
