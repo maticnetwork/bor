@@ -327,23 +327,17 @@ func (c *PruneBlockCommand) Run(args []string) int {
 		return 1
 	}
 
-	err = c.temp(node, dbHandles)
+	err = c.accessDb(node, dbHandles)
 	if err != nil {
 		c.UI.Error(err.Error())
 		return 1
 	}
 
-	// err = c.accessDb(node, dbHandles)
-	// if err != nil {
-	// 	c.UI.Error(err.Error())
-	// 	return 1
-	// }
-
-	// err = c.pruneBlock(node, dbHandles)
-	// if err != nil {
-	// 	c.UI.Error(err.Error())
-	// 	return 1
-	// }
+	err = c.pruneBlock(node, dbHandles)
+	if err != nil {
+		c.UI.Error(err.Error())
+		return 1
+	}
 
 	return 0
 }
