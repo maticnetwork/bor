@@ -1,137 +1,110 @@
-name: REGRESSION TESTER - SUPERUSERS
-on:
+name: Regression Tests
+'on':
   workflow_dispatch:
     inputs:
       zkevm_agglayer_commit_id:
-        description: '0xPolygon/agglayer (commit id)'
+        description: 0xPolygon/agglayer (commit id)
         required: true
       zkevm_bridge_service_commit_id:
-        description: '0xPolygonHermez/zkevm-bridge-service (commit id)'
+        description: 0xPolygonHermez/zkevm-bridge-service (commit id)
         required: true
       zkevm_bridge_ui_commit_id:
-        description: '0xPolygonHermez/zkevm-bridge-ui (commit id)'
+        description: 0xPolygonHermez/zkevm-bridge-ui (commit id)
         required: true
       zkevm_dac_commit_id:
-        description: '0xPolygon/cdk-data-availability (commit id)'
+        description: 0xPolygon/cdk-data-availability (commit id)
         required: true
       zkevm_node_commit_id:
-        description: '0xPolygon/cdk-validium-node (commit id)'
+        description: 0xPolygon/cdk-validium-node (commit id)
         required: true
       bake_time:
-        description: 'bake time (minutes)'
-        required: true
-
+        description: bake time (minutes)
+        required: false
+        default: 30
 jobs:
   deploy_devnet:
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v2
-      with:
-        ref: ${{ github.event.before }}
+      - name: Checkout repository
+        uses: actions/checkout@v2
+      - name: Set up Docker
+        uses: docker/setup-buildx-action@v1
+      - name: Clone and build agglayer
+        run: |
+          git clone https://github.com/0xPolygon/agglayer.git
+          cd agglayer
+          git checkout "${{ github.event.inputs.zkevm_agglayer_commit_id }}"
+          docker compose -f docker/docker-compose.yaml build --no-cache agglayer
+      - name: Clone and build zkevm-bridge-service
+        run: |
+          git clone https://github.com/0xPolygonHermez/zkevm-bridge-service.git
+          cd zkevm-bridge-service
+          git checkout "${{ github.event.inputs.zkevm_bridge_service_commit_id }}"
+          docker build -t zkevm-bridge-service:local -f ./Dockerfile .
+      - name: Clone and build zkevm-bridge-ui
+        run: |
+          git clone https://github.com/0xPolygonHermez/zkevm-bridge-ui.git
+          cd zkevm-bridge-ui
+          git checkout "${{ github.event.inputs.zkevm_bridge_ui_commit_id }}"
+          docker build -t zkevm-bridge-ui:local -f ./Dockerfile .
+      - name: Clone and build cdk-data-availability
+        run: |
+          git clone https://github.com/0xPolygon/cdk-data-availability.git
+          cd cdk-data-availability
+          git checkout "${{ github.event.inputs.zkevm_dac_commit_id }}"
+          docker build -t cdk-data-availability:local -f ./Dockerfile .    
+      - name: Clone and build cdk-validium-node
+        run: |
+          git clone https://github.com/0xPolygon/cdk-validium-node.git
+          cd cdk-validium-node
+          git checkout "${{ github.event.inputs.zkevm_node_commit_id }}"
+          docker build -t cdk-validium-node:local -f ./Dockerfile .
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+      - name: Clone internal kurtosis-cdk repo
+        run: |
+          git clone https://github.com/0xPolygon/kurtosis-cdk.git
+          cd kurtosis-cdk
+          git checkout dan/jit_containers_superusers
+      - name: Install kurtosis
+        run: |
+          echo "deb [trusted=yes] https://apt.fury.io/kurtosis-tech/ /" | sudo tee /etc/apt/sources.list.d/kurtosis.list
+          sudo apt update
+          sudo apt install kurtosis-cli
+          kurtosis analytics disable
+      - name: Deploy CDK devnet on local github runner
+        run: |
+          cd kurtosis-cdk
+          kurtosis run --enclave cdk-v1 --args-file params.yml .
+      - name: Monitor and report any potential regressions to CI logs
+        run: |
+          bake_time="${{ github.event.inputs.bake_time }}"
+          end_minute=$(( $(date +'%M') + bake_time))
 
-    - name: Set up Docker
-      uses: docker/setup-buildx-action@v1
-      
-    - name: Install Foundry
-      uses: foundry-rs/foundry-toolchain@v1
+          export ETH_RPC_URL="$(kurtosis port print cdk-v1 zkevm-node-rpc-001 http-rpc)"
+          INITIAL_STATUS=$(cast rpc zkevm_verifiedBatchNumber 2>/dev/null)
+          incremented=false
 
-    - name: Clone internal kurtosis-cdk repo
-      run: |
-        git clone https://github.com/0xPolygon/kurtosis-cdk.git
-        cd kurtosis-cdk
-        git checkout dan/jit_containers_superusers
-
-    - name: Clone and build agglayer
-      run: |
-        git clone https://github.com/0xPolygon/agglayer.git
-        cd agglayer
-        git checkout "${{ github.event.inputs.zkevm_agglayer_commit_id }}"
-        docker compose -f docker/docker-compose.yaml build --no-cache agglayer
-        sleep 10
-
-    - name: Clone and build zkevm-bridge-service
-      run: |
-        git clone https://github.com/0xPolygonHermez/zkevm-bridge-service.git
-        cd zkevm-bridge-service
-        git checkout "${{ github.event.inputs.zkevm_bridge_service_commit_id }}"
-        docker build -t zkevm-bridge-service:local -f ./Dockerfile .
-        sleep 10
-
-    - name: Clone and build zkevm-bridge-ui
-      run: |
-        git clone https://github.com/0xPolygonHermez/zkevm-bridge-ui.git
-        cd zkevm-bridge-ui
-        git checkout "${{ github.event.inputs.zkevm_bridge_ui_commit_id }}"
-        docker build -t zkevm-bridge-ui:local -f ./Dockerfile .
-        sleep 10
-
-    - name: Clone and build cdk-data-availability
-      run: |
-        git clone https://github.com/0xPolygon/cdk-data-availability.git
-        cd cdk-data-availability
-        git checkout "${{ github.event.inputs.zkevm_dac_commit_id }}"
-        docker build -t cdk-data-availability:local -f ./Dockerfile .
-        sleep 10      
-
-    - name: Clone and build cdk-validium-node
-      run: |
-        git clone https://github.com/0xPolygon/cdk-validium-node.git
-        cd cdk-validium-node
-        git checkout "${{ github.event.inputs.zkevm_node_commit_id }}"
-        docker build -t cdk-validium-node:local -f ./Dockerfile .
-        sleep 10
-    
-    - name: Install kurtosis
-      run: |
-        echo "deb [trusted=yes] https://apt.fury.io/kurtosis-tech/ /" | sudo tee /etc/apt/sources.list.d/kurtosis.list
-        sudo apt update
-        sudo apt install kurtosis-cli
-    
-    - name: Run kurtosis agent in background
-      run: |  
-        kurtosis gateway &  # Run cmd in background
-        sleep 10
-    
-    - name: Deploy CDK devnet on local github runner
-      run: |
-        cd kurtosis-cdk
-        kurtosis engine restart
-        kurtosis run --enclave cdk-v1 --args-file params.yml .
-    
-    - name: Monitor and report any potential regressions to CI logs
-      run: |
-        bake_time="${{ github.event.inputs.bake_time }}"
-        end_minute=$(( $(date +'%M') + bake_time))
-        export ETH_RPC_URL="$(kurtosis port print cdk-v1 zkevm-node-rpc-001 http-rpc)"
-        INITIAL_STATUS=$(cast rpc zkevm_verifiedBatchNumber 2>/dev/null)
-        incremented=false
-        
-        while [ $(date +'%M') -lt $end_minute ]; do
-          # Attempt to connect to the service
-          if STATUS=$(cast rpc zkevm_verifiedBatchNumber 2>/dev/null); then
-            echo "ZKEVM_VERIFIED_BATCH_NUMBER: $STATUS"
-            
-            # Check if STATUS has incremented
-            if [ "$STATUS" != "$INITIAL_STATUS" ]; then
-              incremented=true
-              echo "ZKEVM_VERIFIED_BATCH_NUMBER successfully incremented to $STATUS. Exiting..."
-              exit 0
+          while [ $(date +'%M') -lt $end_minute ]; do
+            # Attempt to connect to the service
+            if STATUS=$(cast rpc zkevm_verifiedBatchNumber 2>/dev/null); then
+              echo "ZKEVM_VERIFIED_BATCH_NUMBER: $STATUS"
+              
+              # Check if STATUS has incremented
+              if [ "$STATUS" != "$INITIAL_STATUS" ]; then
+                incremented=true
+                echo "ZKEVM_VERIFIED_BATCH_NUMBER successfully incremented to $STATUS. Exiting..."
+                exit 0
+              fi
+            else
+              echo "Failed to connect, waiting and retrying..."
+              sleep 60
+              continue
             fi
-          else
-            echo "Failed to connect, waiting and retrying..."
             sleep 60
-            continue
+          done
+
+          if ! $incremented; then
+            echo "ZKEVM_VERIFIED_BATCH_NUMBER did not increment. This may indicate chain experienced a regression. Please investigate."
+            exit 1
           fi
-          sleep 60
-        done
-        
-        if ! $incremented; then
-          echo "ZKEVM_VERIFIED_BATCH_NUMBER did not increment. This may indicate chain experienced a regression. Please investigate."
-          exit 1
-        fi
-    
-    - name: Finally, remove all devnet resources locally
-      run: |
-        cd kurtosis-cdk
-        kurtosis clean -a
