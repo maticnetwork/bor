@@ -430,6 +430,7 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 	}
 
 	if parent == nil || parent.Number.Uint64() != number-1 || parent.Hash() != header.ParentHash {
+		log.Info("In bor.verifyCascadingFields: parent not found", "number", number-1, "parent hash", header.ParentHash, "current", number)
 		return consensus.ErrUnknownAncestor
 	}
 
@@ -587,6 +588,7 @@ func (c *Bor) snapshot(chain consensus.ChainHeaderReader, number uint64, hash co
 			// If we have explicit parents, pick from there (enforced)
 			header = parents[len(parents)-1]
 			if header.Hash() != hash || header.Number.Uint64() != number {
+				log.Info("In bor.snapshot #1: parent not found", "expected hash", hash, "expected number", number, "got number", header.Number.Uint64(), "got hash", header.Hash())
 				return nil, consensus.ErrUnknownAncestor
 			}
 
@@ -595,6 +597,7 @@ func (c *Bor) snapshot(chain consensus.ChainHeaderReader, number uint64, hash co
 			// No explicit parents (or no more left), reach out to the database
 			header = chain.GetHeader(hash, number)
 			if header == nil {
+				log.Info("In bor.snapshot #2: parent not found", "number", number, "hash", hash)
 				return nil, consensus.ErrUnknownAncestor
 			}
 		}
