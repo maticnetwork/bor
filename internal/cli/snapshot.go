@@ -326,19 +326,56 @@ func (c *PruneBlockCommand) Run(args []string) int {
 		return 1
 	}
 
-	err = c.accessDb(node, dbHandles)
+	err = c.temp(node, dbHandles)
 	if err != nil {
 		c.UI.Error(err.Error())
 		return 1
 	}
 
-	err = c.pruneBlock(node, dbHandles)
-	if err != nil {
-		c.UI.Error(err.Error())
-		return 1
-	}
+	// err = c.accessDb(node, dbHandles)
+	// if err != nil {
+	// 	c.UI.Error(err.Error())
+	// 	return 1
+	// }
+
+	// err = c.pruneBlock(node, dbHandles)
+	// if err != nil {
+	// 	c.UI.Error(err.Error())
+	// 	return 1
+	// }
 
 	return 0
+}
+
+func (c *PruneBlockCommand) temp(stack *node.Node, dbHandles int) error {
+	chaindb, err := stack.OpenDatabaseWithFreezer(chaindataPath, c.cache, dbHandles, c.datadirAncient, "", false, true, false)
+	if err != nil {
+		return fmt.Errorf("failed to accessdb %v", err)
+	}
+	defer chaindb.Close()
+
+	headBlock := rawdb.ReadHeadBlock(chaindb)
+	if headBlock == nil {
+		return errors.New("failed to load head block")
+	}
+
+	log.Info("Head block from leveldb", "number", headBlock.Number().Uint64(), "hash", headBlock.Hash())
+
+	header := rawdb.ReadHeader(chaindb, headBlock.Hash(), headBlock.Number().Uint64())
+	if header == nil {
+		return errors.New("failed to load head header")
+	}
+
+	log.Info("Head header", "number", header.Number.Uint64(), "hash", header.Hash())
+
+	parent := rawdb.ReadHeader(chaindb, header.ParentHash, header.Number.Uint64()-1)
+	if parent == nil {
+		return errors.New("failed to load parent header")
+	}
+
+	log.Info("Parent header", "number", parent.Number.Uint64(), "hash", parent.Hash())
+
+	return nil
 }
 
 func (c *PruneBlockCommand) accessDb(stack *node.Node, dbHandles int) error {
