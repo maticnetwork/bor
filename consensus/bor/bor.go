@@ -787,9 +787,12 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 	// Mix digest is reserved for now, set to empty
 	header.MixDigest = common.Hash{}
 
+	log.Info("In bor.Prepare", "number", number, "hash", header.Hash(), "parent", header.ParentHash)
+
 	// Ensure the timestamp has the correct delay
 	parent := chain.GetHeader(header.ParentHash, number-1)
 	if parent == nil {
+		log.Info("Parent not found", "number", number-1, "hash", header.ParentHash)
 		return consensus.ErrUnknownAncestor
 	}
 
