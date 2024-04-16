@@ -1,4 +1,4 @@
-name: Regression Tests
+name: Regression Tests - Agglayer
 'on':
   workflow_dispatch:
     inputs:
