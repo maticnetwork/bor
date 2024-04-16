@@ -24,6 +24,8 @@ import (
 	"github.com/mitchellh/cli"
 )
 
+var errPbssNotSupported = errors.New("ancient block pruning is not supporeted on path based storage scheme")
+
 // SnapshotCommand is the command to group the snapshot commands
 type SnapshotCommand struct {
 	UI cli.Ui
@@ -88,10 +90,7 @@ func (c *PruneStateCommand) MarkDown() string {
 		`The ` + "```" + "bor snapshot prune-state" + "```" + ` command will prune historical state data
 with the help of the state snapshot. All trie nodes and contract codes that do not belong to the
 specified	version state will be deleted from the database. After pruning, only two version states
-are available: genesis and the specific one.
-
-Warning: This command only works with hash based storage scheme and doesn't work with path based
-storage scheme.`,
+are available: genesis and the specific one.`,
 		c.Flags().MarkDown(),
 	}
 
@@ -234,7 +233,9 @@ The brief workflow as below:
 2. then delete the original ancientdb dir and rename the ancient_backup to original one for replacement,
 3. finally assemble the statedb and new ancientdb together.
 
-The purpose of doing it is because the block data will be moved into the ancient store when it becomes old enough(exceed the Threshold 90000), the disk usage will be very large over time, and is occupied mainly by ancientdb, so it's very necessary to do block data pruning, this feature will handle it.`,
+The purpose of doing it is because the block data will be moved into the ancient store when it becomes old enough (exceed the Threshold 90000), the disk usage will be very large over time, and is occupied mainly by ancientdb, so it's very necessary to do block data pruning, this feature will handle it.
+
+Warning: This command only works with hash based storage scheme and doesn't work with path based storage scheme.`,
 		c.Flags().MarkDown(),
 	}
 
@@ -385,13 +386,12 @@ func (c *PruneBlockCommand) accessDb(stack *node.Node, dbHandles int) error {
 	}
 	defer chaindb.Close()
 
-	if !c.checkSnapshotWithMPT {
-		return nil
+	// Check if we're using hash based scheme and not path based
+	if rawdb.ReadStateScheme(chaindb) != rawdb.HashScheme {
+		return errPbssNotSupported
 	}
 
-	// Check if we're in hash scheme and not path scheme
-	if rawdb.ReadStateScheme(chaindb) != rawdb.HashScheme {
-		log.Warn("Snapshot and MPT check is only supported for hash scheme, skipping")
+	if !c.checkSnapshotWithMPT {
 		return nil
 	}
 

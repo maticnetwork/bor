@@ -5,9 +5,6 @@ with the help of the state snapshot. All trie nodes and contract codes that do n
 specified	version state will be deleted from the database. After pruning, only two version states
 are available: genesis and the specific one.
 
-Warning: This command only works with hash based storage scheme and doesn't work with path based
-storage scheme.
-
 ## Options
 
 - ```bloomfilter.size```: Size of the bloom filter (default: 2048)

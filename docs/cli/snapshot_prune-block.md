@@ -9,7 +9,9 @@ The brief workflow as below:
 2. then delete the original ancientdb dir and rename the ancient_backup to original one for replacement,
 3. finally assemble the statedb and new ancientdb together.
 
-The purpose of doing it is because the block data will be moved into the ancient store when it becomes old enough(exceed the Threshold 90000), the disk usage will be very large over time, and is occupied mainly by ancientdb, so it's very necessary to do block data pruning, this feature will handle it.
+The purpose of doing it is because the block data will be moved into the ancient store when it becomes old enough (exceed the Threshold 90000), the disk usage will be very large over time, and is occupied mainly by ancientdb, so it's very necessary to do block data pruning, this feature will handle it.
+
+Warning: This command only works with hash based storage scheme and doesn't work with path based storage scheme.
 
 ## Options
 
