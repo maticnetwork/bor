@@ -300,6 +300,7 @@ func NewDatabaseWithFreezer(db ethdb.KeyValueStore, ancient string, namespace st
 	// validate in this method. If, however, the genesis hash is not nil, compare
 	// it to the freezer content.
 	//nolint:nestif
+	fmt.Println("--- about to verify db")
 	if kvgenesis, _ := db.Get(headerHashKey(0)); len(kvgenesis) > 0 {
 		if frozen, _ := frdb.Ancients(); frozen > 0 {
 			// If the freezer already contains something, ensure that the genesis blocks
@@ -351,6 +352,7 @@ func NewDatabaseWithFreezer(db ethdb.KeyValueStore, ancient string, namespace st
 			// We might have duplicate blocks (crash after freezer write but before key-value
 			// store deletion, but that's fine).
 		} else {
+			fmt.Println("--- freezer empty case")
 			// This case means the freezer is empty. Either nothing is moved from the
 			// key-value store or we've pruned all data.
 
@@ -372,6 +374,7 @@ func NewDatabaseWithFreezer(db ethdb.KeyValueStore, ancient string, namespace st
 				// Otherwise, the head header is still the genesis, we're allowed to init a new
 				// freezer.
 			} else {
+				fmt.Println("--- full pruning case", offset)
 				// Full pruning case. Check if the key-value store isn't missing any block.
 				if kvhash, _ := db.Get(headerHashKey(offset)); len(kvhash) == 0 {
 					printChainMetadata(db)
