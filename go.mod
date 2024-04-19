@@ -167,7 +167,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.19.0
 	go.uber.org/goleak v1.2.1
 	golang.org/x/mod v0.16.0 // indirect
-	golang.org/x/net v0.22.0 // indirect
+	golang.org/x/net v0.23.0 // indirect
 	google.golang.org/grpc v1.58.3
 	google.golang.org/protobuf v1.33.0
 	gopkg.in/yaml.v2 v2.4.0 // indirect
