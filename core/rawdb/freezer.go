@@ -125,7 +125,6 @@ func NewFreezer(datadir string, namespace string, readonly bool, offset uint64, 
 		readonly:     readonly,
 		tables:       make(map[string]*freezerTable),
 		instanceLock: lock,
-		offset:       atomic.Uint64{},
 	}
 	freezer.offset.Store(offset)
 

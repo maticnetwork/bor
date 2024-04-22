@@ -83,10 +83,10 @@ var (
 	fastTxLookupLimitKey = []byte("FastTransactionLookupLimit")
 
 	// offset of the new updated ancientDB.
-	offsetOfCurrentAncientFreezer = []byte("offSetOfCurrentAncientFreezer")
+	offsetOfCurrentAncientFreezer = []byte("offsetOfCurrentAncientFreezer")
 
 	// offset of the ancientDB before updated version.
-	offsetOfLastAncientFreezer = []byte("offSetOfLastAncientFreezer")
+	offsetOfLastAncientFreezer = []byte("offsetOfLastAncientFreezer")
 
 	// badBlockKey tracks the list of bad blocks seen by local
 	badBlockKey = []byte("InvalidBlock")

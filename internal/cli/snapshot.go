@@ -327,7 +327,7 @@ func (c *PruneBlockCommand) Run(args []string) int {
 		return 1
 	}
 
-	err = c.accessDb(node, dbHandles)
+	err = c.validateAgainstSnapshot(node, dbHandles)
 	if err != nil {
 		c.UI.Error(err.Error())
 		return 1
@@ -342,7 +342,8 @@ func (c *PruneBlockCommand) Run(args []string) int {
 	return 0
 }
 
-func (c *PruneBlockCommand) accessDb(stack *node.Node, dbHandles int) error {
+// validateAgainstSnapshot checks if the MPT data and snapshot data matches with each other or not
+func (c *PruneBlockCommand) validateAgainstSnapshot(stack *node.Node, dbHandles int) error {
 	chaindb, err := stack.OpenDatabaseWithFreezer(chaindataPath, c.cache, dbHandles, c.datadirAncient, "", false, true, false)
 	if err != nil {
 		return fmt.Errorf("failed to accessdb %v", err)
@@ -444,6 +445,9 @@ func (c *PruneBlockCommand) accessDb(stack *node.Node, dbHandles int) error {
 	return nil
 }
 
+// pruneBlock is the entry point for the ancient pruning process. Based on the user specified
+// params, it will prune the ancient data. It also handles the case where the pruning process
+// was interrupted earlier.
 func (c *PruneBlockCommand) pruneBlock(stack *node.Node, fdHandles int) error {
 	name := "chaindata"
 

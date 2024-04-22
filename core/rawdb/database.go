@@ -138,11 +138,12 @@ func (db *nofreezedb) TruncateTail(items uint64) (uint64, error) {
 	return 0, errNotSupported
 }
 
-// Ancients returns an error as we don't have a backing chain freezer.
+// ItemAmountInAncient returns an error as we don't have a backing chain freezer.
 func (db *nofreezedb) ItemAmountInAncient() (uint64, error) {
 	return 0, errNotSupported
 }
 
+// AncientOffSet returns 0 as we don't have a backing chain freezer.
 func (db *nofreezedb) AncientOffSet() uint64 {
 	return 0
 }
@@ -254,6 +255,8 @@ func resolveChainFreezerDir(ancient string) string {
 	return freezer
 }
 
+// resolveOffset is a helper function which resolves the value of offset to use
+// while opening a chain freezer.
 func resolveOffset(db ethdb.KeyValueStore, isLastOffset bool) uint64 {
 	// The offset of ancientDB should be handled differently in different scenarios.
 	if isLastOffset {
@@ -340,7 +343,6 @@ func NewDatabaseWithFreezer(db ethdb.KeyValueStore, ancient string, namespace st
 					}
 					// We are about to exit on error. Print database metadata before exiting
 					printChainMetadata(db)
-					// return nil, fmt.Errorf("gap (#%d) in the chain between ancients and leveldb", startBlock)
 					return nil, fmt.Errorf("gap in the chain between ancients [0 - #%d] and leveldb [#%d - #%d]",
 						startBlock-1, number, head)
 				}
@@ -562,6 +564,8 @@ func (s *stat) Count() string {
 	return s.count.String()
 }
 
+// AncientInspect inspects the underlying freezer db and prints stats relevant
+// for ancient data pruning. It prints the start and end blocks of freezer db.
 func AncientInspect(db ethdb.Database) error {
 	offset := counter(ReadOffsetOfCurrentAncientFreezer(db))
 	// Get number of ancient rows inside the freezer.

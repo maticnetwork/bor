@@ -352,6 +352,8 @@ func NewBlockPruner(n *node.Node, oldAncientPath, newAncientPath string, BlockAm
 	}
 }
 
+// backupOldDb takes a backup of the old ancient db to a new ancient db. It moves the contents based on the
+// value of number of blocks to be reserved.
 func (p *BlockPruner) backupOldDb(name string, cache, handles int, namespace string, readonly, interrupt bool) error {
 	log.Info("Backup old ancientDB", "oldAncientPath", p.oldAncientPath, "newAncientPath", p.newAncientPath)
 	// Open old db wrapper.
@@ -482,6 +484,7 @@ func (p *BlockPruner) BlockPruneBackup(name string, cache, handles int, namespac
 	return nil
 }
 
+// RecoverInterruption handles the case when the block prune process was interrupted.
 func (p *BlockPruner) RecoverInterruption(name string, cache, handles int, namespace string, readonly bool) error {
 	log.Info("RecoverInterruption for block prune")
 
@@ -548,6 +551,8 @@ func checkFileExist(path string) (bool, error) {
 	return true, nil
 }
 
+// AncientDbReplacer deletes the old ancient db and points the new db
+// to the old path.
 func (p *BlockPruner) AncientDbReplacer() error {
 	// Delete directly for the old ancientDB, e.g.: path ../chaindb/ancient
 	if err := os.RemoveAll(p.oldAncientPath); err != nil {
