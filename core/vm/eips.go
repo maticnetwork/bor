@@ -371,6 +371,12 @@ func opAuth(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byt
 		copy(commit[:], data[65:])
 	}
 
+	// Verify if the provided authority address isn't a contract
+	if code := interpreter.evm.StateDB.GetCode(authority); len(code) != 0 {
+		scope.Stack.push(uint256.NewInt(0))
+		return nil, ErrAuthorizedIsContract
+	}
+
 	// Build original auth message.
 	msg := []byte{params.AuthMagic}
 	msg = append(msg, common.LeftPadBytes(interpreter.evm.chainConfig.ChainID.Bytes(), 32)...)
