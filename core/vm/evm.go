@@ -429,7 +429,7 @@ func (evm *EVM) StaticCall(caller ContractRef, addr common.Address, input []byte
 }
 
 // AuthCall mimic Call except it sets the caller to the Authorized addres$ in Scope.
-func (evm *EVM) AuthCall(invoker ContractRef, caller, addr common.Address, input []byte, gas uint64, value *big.Int) (ret []byte, leftOverGas uint64, err error) {
+func (evm *EVM) AuthCall(invoker ContractRef, caller, addr common.Address, input []byte, gas uint64, value *big.Int, interruptCtx context.Context) (ret []byte, leftOverGas uint64, err error) {
 	// Fail if we're trying to execute above the call depth limit
 	if evm.depth > int(params.CallCreateDepth) {
 		return nil, gas, ErrDepth
@@ -491,7 +491,7 @@ func (evm *EVM) AuthCall(invoker ContractRef, caller, addr common.Address, input
 			// The depth-check is already done, and precompiles handled above
 			contract := NewContract(AccountRef(callerCopy), AccountRef(addrCopy), value, gas)
 			contract.SetCallCode(&addrCopy, evm.StateDB.GetCodeHash(addrCopy), code)
-			ret, err = evm.interpreter.Run(contract, input, false)
+			ret, err = evm.interpreter.PreRun(contract, input, false, interruptCtx)
 			gas = contract.Gas
 		}
 	}

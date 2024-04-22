@@ -5182,9 +5182,10 @@ func TestEIP3074(t *testing.T) {
 	gspec.Config.LondonBlock = common.Big0
 	gspec.Config.TerminalTotalDifficulty = common.Big0
 	gspec.Config.TerminalTotalDifficultyPassed = true
-	gspec.Config.ShanghaiTime = u64(0)
-	gspec.Config.CancunTime = u64(0)
-	gspec.Config.PragueTime = u64(0)
+	gspec.Config.ShanghaiBlock = common.Big0
+	gspec.Config.CancunBlock = common.Big0
+	// TODO(manav2401): Add HF name whenever decided
+	// gspec.Config.PragueTime = u64(0)
 	signer := types.LatestSigner(gspec.Config)
 
 	_, blocks, _ := GenerateChainWithGenesis(gspec, engine, 1, func(i int, b *BlockGen) {
@@ -5212,7 +5213,7 @@ func TestEIP3074(t *testing.T) {
 
 		b.AddTx(tx)
 	})
-	chain, err := NewBlockChain(rawdb.NewMemoryDatabase(), nil, gspec, nil, engine, vm.Config{Tracer: logger.NewMarkdownLogger(&logger.Config{}, os.Stderr)}, nil, nil)
+	chain, err := NewBlockChain(rawdb.NewMemoryDatabase(), nil, gspec, nil, engine, vm.Config{Tracer: logger.NewMarkdownLogger(&logger.Config{}, os.Stderr)}, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("failed to create tester chain: %v", err)
 	}

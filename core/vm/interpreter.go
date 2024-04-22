@@ -178,7 +178,7 @@ func NewEVMInterpreter(evm *EVM) *EVMInterpreter {
 	return &EVMInterpreter{evm: evm, table: table}
 }
 
-// PreRun is a wrapper around Run that allows for a delay to be injected before each opcode when induced by tests else it calls the lagace Run() method
+// PreRun is a wrapper around Run that allows for a delay to be injected before each opcode when induced by tests else it calls the legacy Run() method
 func (in *EVMInterpreter) PreRun(contract *Contract, input []byte, readOnly bool, interruptCtx context.Context) (ret []byte, err error) {
 	var opcodeDelay interface{}
 

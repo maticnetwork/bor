@@ -417,7 +417,7 @@ func opAuthCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([
 		bigVal = value.ToBig()
 	}
 
-	ret, returnGas, err := interpreter.evm.AuthCall(scope.Contract, *scope.Authorized, toAddr, args, gas, bigVal)
+	ret, returnGas, err := interpreter.evm.AuthCall(scope.Contract, *scope.Authorized, toAddr, args, gas, bigVal, nil)
 
 	if err != nil {
 		temp.Clear()
