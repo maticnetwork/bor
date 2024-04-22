@@ -197,7 +197,8 @@ var (
 	// SystemAddress is where the system-transaction is sent from as per EIP-4788
 	SystemAddress common.Address = common.HexToAddress("0xfffffffffffffffffffffffffffffffffffffffe")
 
-	AuthMagic = byte(0x03)
+	// AuthMagic is used for signing EIP-3074 signatures to prevent signature collisions with other signing formats.
+	AuthMagic = byte(0x04)
 )
 
 func BaseFeeChangeDenominator(borConfig *BorConfig, number *big.Int) uint64 {
