@@ -18,6 +18,7 @@ package vm
 
 import (
 	"fmt"
+	"math/big"
 	"sort"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -356,13 +357,14 @@ func enable3074(jt *JumpTable) {
 
 func opAuth(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 	var (
-		tmp       = scope.Stack.pop()
-		authority = common.Address(tmp.Bytes20())
-		offset    = scope.Stack.pop()
-		length    = scope.Stack.pop()
-		data      = scope.Memory.GetPtr(int64(offset.Uint64()), int64(length.Uint64()))
-		sig       = make([]byte, 65)
-		commit    common.Hash
+		tmp            = scope.Stack.pop()
+		authority      = common.Address(tmp.Bytes20())
+		offset         = scope.Stack.pop()
+		length         = scope.Stack.pop()
+		data           = scope.Memory.GetPtr(int64(offset.Uint64()), int64(length.Uint64()))
+		authorityNonce = big.NewInt(int64(interpreter.evm.StateDB.GetNonce(authority)))
+		sig            = make([]byte, 65)
+		commit         common.Hash
 	)
 	copy(sig, data)
 	if len(data) > 65 {
@@ -372,6 +374,7 @@ func opAuth(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byt
 	// Build original auth message.
 	msg := []byte{params.AuthMagic}
 	msg = append(msg, common.LeftPadBytes(interpreter.evm.chainConfig.ChainID.Bytes(), 32)...)
+	msg = append(msg, common.LeftPadBytes(authorityNonce.Bytes(), 32)...)
 	msg = append(msg, common.LeftPadBytes(scope.Contract.Address().Bytes(), 32)...)
 	msg = append(msg, commit.Bytes()...)
 	msg = crypto.Keccak256(msg)
