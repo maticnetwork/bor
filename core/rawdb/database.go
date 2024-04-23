@@ -329,7 +329,8 @@ func NewDatabaseWithFreezer(db ethdb.KeyValueStore, ancient string, namespace st
 			// be less and hence we need to calculate the first block of leveldb by adding
 			// the offset to it i.e. start block of leveldb = frozen + offset.
 			startBlock := frozen + offset
-			if kvhash, _ := db.Get(headerHashKey(startBlock)); len(kvhash) == 0 {
+			var kvhash []byte
+			if kvhash, _ = db.Get(headerHashKey(startBlock)); len(kvhash) == 0 {
 				// Subsequent header after the freezer limit is missing from the database.
 				// Reject startup if the database has a more recent head.
 				if head := *ReadHeaderNumber(db, ReadHeadHeaderHash(db)); head > startBlock-1 {
@@ -351,7 +352,21 @@ func NewDatabaseWithFreezer(db ethdb.KeyValueStore, ancient string, namespace st
 			}
 			// Otherwise, key-value store continues where the freezer left off, all is fine.
 			// We might have duplicate blocks (crash after freezer write but before key-value
-			// store deletion, but that's fine).
+			// store deletion, but that's fine). Still, check if the first block of key-value
+			// store points to last block in freezer.
+			if head := ReadHeaderFromKvStore(db, common.BytesToHash(kvhash), startBlock); head != nil {
+				parentHash := head.ParentHash.Bytes()
+				ancientParentHash, _ := frdb.Ancient(ChainFreezerHashTable, startBlock-1)
+				if ancientParentHash == nil {
+					printChainMetadata(db)
+					return nil, fmt.Errorf("missing parent hash for block #%d in ancient", startBlock-1)
+				}
+				if !bytes.Equal(parentHash, ancientParentHash) {
+					printChainMetadata(db)
+					return nil, fmt.Errorf("broken chain due to parent hash mismatch: %#x (leveldb) != %#x (ancients) for block #%d, please set --datadir.ancient to the correct path", parentHash, ancientParentHash, startBlock-1)
+				}
+				// First block of key-value store points back to correct parent in ancient
+			}
 		} else {
 			// This case means the freezer is empty. Either nothing is moved from the
 			// key-value store or we've pruned all data.
