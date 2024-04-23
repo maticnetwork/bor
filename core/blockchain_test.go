@@ -5184,8 +5184,7 @@ func TestEIP3074(t *testing.T) {
 	gspec.Config.TerminalTotalDifficultyPassed = true
 	gspec.Config.ShanghaiBlock = common.Big0
 	gspec.Config.CancunBlock = common.Big0
-	// TODO(manav2401): Add HF name whenever decided
-	// gspec.Config.PragueTime = u64(0)
+	gspec.Config.PragueBlock = common.Big0
 	signer := types.LatestSigner(gspec.Config)
 
 	_, blocks, _ := GenerateChainWithGenesis(gspec, engine, 1, func(i int, b *BlockGen) {
