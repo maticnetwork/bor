@@ -5173,7 +5173,7 @@ func TestEIP3074(t *testing.T) {
 	)
 
 	// Set the invoker's code.
-	if entry, _ := gspec.Alloc[aa]; true {
+	if entry := gspec.Alloc[aa]; true {
 		entry.Code = invoker
 		gspec.Alloc[aa] = entry
 	}
@@ -5191,6 +5191,7 @@ func TestEIP3074(t *testing.T) {
 		commit := common.Hash{0x42}
 		msg := []byte{params.AuthMagic}
 		msg = append(msg, common.LeftPadBytes(gspec.Config.ChainID.Bytes(), 32)...)
+		msg = append(msg, common.LeftPadBytes(big.NewInt(1).Bytes(), 32)...) // nonce: 1
 		msg = append(msg, common.LeftPadBytes(aa.Bytes(), 32)...)
 		msg = append(msg, commit.Bytes()...)
 		msg = crypto.Keccak256(msg)
