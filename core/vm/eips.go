@@ -373,6 +373,7 @@ func opAuth(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byt
 
 	// Verify if the provided authority address isn't a contract
 	if code := interpreter.evm.StateDB.GetCode(authority); len(code) != 0 {
+		scope.Authorized = nil
 		scope.Stack.push(uint256.NewInt(0))
 		return nil, ErrAuthorizedIsContract
 	}

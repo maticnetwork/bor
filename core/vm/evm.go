@@ -428,7 +428,7 @@ func (evm *EVM) StaticCall(caller ContractRef, addr common.Address, input []byte
 	return ret, gas, err
 }
 
-// AuthCall mimic Call except it sets the caller to the Authorized addres$ in Scope.
+// AuthCall mimic Call except it sets the caller to the Authorized address in Scope.
 func (evm *EVM) AuthCall(invoker ContractRef, caller, addr common.Address, input []byte, gas uint64, value *big.Int, interruptCtx context.Context) (ret []byte, leftOverGas uint64, err error) {
 	// Fail if we're trying to execute above the call depth limit
 	if evm.depth > int(params.CallCreateDepth) {
