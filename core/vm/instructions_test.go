@@ -18,6 +18,7 @@ package vm
 
 import (
 	"bytes"
+	"crypto/ecdsa"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -33,6 +34,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/holiman/uint256"
+	"github.com/stretchr/testify/require"
 )
 
 type TwoOperandTestcase struct {
@@ -972,4 +974,101 @@ func TestOpMCopy(t *testing.T) {
 			t.Errorf("case %d: gas wrong, want %d have %d\n", i, wantGas, haveGas)
 		}
 	}
+}
+
+func TestOpAuth(t *testing.T) {
+	var (
+		aa             = common.HexToAddress("0x000000000000000000000000000000000000aaaa") // invoker
+		contract       = NewContract(AccountRef(aa), AccountRef(aa), big.NewInt(0), 0)
+		key, _         = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+		addr           = crypto.PubkeyToAddress(key.PublicKey)
+		statedb, _     = state.New(types.EmptyRootHash, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
+		env            = NewEVM(BlockContext{}, TxContext{}, statedb, params.AllDevChainProtocolChanges, Config{})
+		stack          = newstack()
+		pc             = uint64(0)
+		evmInterpreter = env.interpreter
+		commit         = make([]byte, 32)
+	)
+
+	// Setup stack (with length = 97, offset = 0, and invoker address)
+	setupAuthStack(stack, 97, 0, addr)
+
+	// Generate message as per EIP-3074 and sign it
+	msg := composeAuthMessage(params.AllDevChainProtocolChanges.ChainID, big.NewInt(0), aa, commit)
+	sig, err := signMessage(msg, key)
+	require.NoError(t, err, "failed to sign message")
+	require.Equal(t, 65, len(sig.sig), "invalid signature length")
+
+	// Setup memory and scope for the AUTH call
+	memory := setupAuthMemory(sig, commit)
+	scope := &ScopeContext{memory, stack, contract, nil}
+
+	// Call AUTH
+	res, err := opAuth(&pc, evmInterpreter, scope)
+	require.NoError(t, err, "failed to execute AUTH")
+	require.Equal(t, 0, len(res), "unexpected return value")
+
+	// Check the stack for response and scope for authorized
+	actual := stack.pop()
+	require.Equal(t, uint64(1), actual.Uint64(), "unexpected value in stack")
+	require.Equal(t, addr, *scope.Authorized, "unexpected authorized address in scope")
+}
+
+type Signature struct {
+	sig []byte
+	r   *big.Int
+	s   *big.Int
+	v   *big.Int
+}
+
+// signMessage signs the givem message with ecdsa private key. It returns the
+// v, r, and s values of the signature.
+func signMessage(msg []byte, key *ecdsa.PrivateKey) (*Signature, error) {
+	sig, err := crypto.Sign(msg[:], key)
+	if err != nil {
+		return nil, err
+	}
+	if len(sig) != crypto.SignatureLength {
+		return nil, fmt.Errorf("invalid signature length")
+	}
+	fmt.Println("sig", len(sig))
+	r := new(big.Int).SetBytes(sig[:32])
+	s := new(big.Int).SetBytes(sig[32:64])
+	v := big.NewInt(int64(sig[64]))
+	fmt.Println(v, r, s)
+	return &Signature{sig, r, s, v}, nil
+}
+
+// setupAuthStack pushes values expected by the AUTH instruction to the stack
+func setupAuthStack(stack *Stack, length, offset uint64, addr common.Address) {
+	stack.push(uint256.NewInt(length))
+	stack.push(uint256.NewInt(offset))
+	stack.push(uint256.NewInt(0).SetBytes(addr.Bytes()))
+}
+
+// setupAuthMemory sets the values expected by the AUTH instruction in memory
+func setupAuthMemory(sig *Signature, commit []byte) *Memory {
+	memory := NewMemory()
+	memory.Resize(100)
+
+	// Set signature (yParity, r, s)
+	memory.Set(0, 1, big.NewInt(int64(sig.v.Sign())).Bytes()) // [0]
+	memory.Set(1, 32, sig.r.Bytes())                          // [1:33]
+	memory.Set(33, 32, sig.s.Bytes())                         // [33:65]
+
+	// Set `commit` for remaining bytes
+	memory.Set(65, 32, commit) // [65:97]
+	return memory
+}
+
+// composeAuthMessage composes the message expected by the AUTH instruction in this format
+// `keccak256(MAGIC || chainId || nonce || invokerAddress || commit)`
+func composeAuthMessage(chainId, nonce *big.Int, invokerAddress common.Address, commit []byte) []byte {
+	msg := []byte{params.AuthMagic}
+	msg = append(msg, common.LeftPadBytes(chainId.Bytes(), 32)...)
+	msg = append(msg, common.LeftPadBytes(nonce.Bytes(), 32)...)
+	msg = append(msg, common.LeftPadBytes(invokerAddress.Bytes(), 32)...)
+	msg = append(msg, commit...)
+	msg = crypto.Keccak256(msg)
+	return msg
 }
