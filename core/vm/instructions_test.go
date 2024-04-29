@@ -20,6 +20,7 @@ import (
 	"bytes"
 	"crypto/ecdsa"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"os"
@@ -1070,20 +1071,28 @@ func TestOpAuth(t *testing.T) {
 		name               string
 		key                *ecdsa.PrivateKey
 		addcode            bool
+		changeSignature    bool
 		expectedResult     int
 		expectedError      error
 		expectedStack      uint64
 		expectedAuthorized *common.Address
 	}
 	for _, tt := range []testcase{
-		{name: "happy case", key: key, addcode: false, expectedResult: 0, expectedError: nil, expectedStack: 1, expectedAuthorized: &addr},
-		{name: "invalid signature", key: key2, addcode: false, expectedResult: 0, expectedError: ErrInvalidAuthSignature, expectedStack: 0, expectedAuthorized: nil},
-		{name: "invalid authority", key: key, addcode: true, expectedResult: 0, expectedError: ErrAuthorizedIsContract, expectedStack: 0, expectedAuthorized: nil},
+		{name: "happy case", key: key, addcode: false, changeSignature: false, expectedResult: 0, expectedError: nil, expectedStack: 1, expectedAuthorized: &addr},
+		{name: "invalid key", key: key2, addcode: false, changeSignature: false, expectedResult: 0, expectedError: ErrInvalidAuthSignature, expectedStack: 0, expectedAuthorized: nil},
+		{name: "invalid signature", key: key, addcode: false, changeSignature: true, expectedResult: 0, expectedError: errors.New("recovery failed"), expectedStack: 0, expectedAuthorized: nil},
+		{name: "invalid authority", key: key, addcode: true, changeSignature: false, expectedResult: 0, expectedError: ErrAuthorizedIsContract, expectedStack: 0, expectedAuthorized: nil},
 	} {
 		pc := uint64(0)
 
 		// Setup for AUTH test
 		evm, scope, stack := setupAuthTest(t, addr, aa, tt.key)
+
+		if tt.changeSignature {
+			// Change the `s` portion of signature to make it invalid
+			temp := make([]byte, 32)
+			scope.Memory.Set(33, 32, temp) // [33:65]
+		}
 
 		if tt.addcode {
 			// Set code in authority
