@@ -976,11 +976,11 @@ func TestOpMCopy(t *testing.T) {
 	}
 }
 
-func TestOpAuth(t *testing.T) {
+func TestOpAuthHappyCase(t *testing.T) {
 	var (
 		aa             = common.HexToAddress("0x000000000000000000000000000000000000aaaa") // invoker
 		contract       = NewContract(AccountRef(aa), AccountRef(aa), big.NewInt(0), 0)
-		key, _         = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+		key, _         = crypto.GenerateKey()
 		addr           = crypto.PubkeyToAddress(key.PublicKey)
 		statedb, _     = state.New(types.EmptyRootHash, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
 		env            = NewEVM(BlockContext{}, TxContext{}, statedb, params.AllDevChainProtocolChanges, Config{})
@@ -1014,6 +1014,86 @@ func TestOpAuth(t *testing.T) {
 	require.Equal(t, addr, *scope.Authorized, "unexpected authorized address in scope")
 }
 
+func TestOpAuthInvalidSignature(t *testing.T) {
+	var (
+		aa             = common.HexToAddress("0x000000000000000000000000000000000000aaaa") // invoker
+		contract       = NewContract(AccountRef(aa), AccountRef(aa), big.NewInt(0), 0)
+		key, _         = crypto.GenerateKey()
+		addr           = crypto.PubkeyToAddress(key.PublicKey)
+		key2, _        = crypto.GenerateKey()
+		statedb, _     = state.New(types.EmptyRootHash, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
+		env            = NewEVM(BlockContext{}, TxContext{}, statedb, params.AllDevChainProtocolChanges, Config{})
+		stack          = newstack()
+		pc             = uint64(0)
+		evmInterpreter = env.interpreter
+		commit         = make([]byte, 32)
+	)
+
+	// Setup stack (with length = 97, offset = 0, and invoker address)
+	setupAuthStack(stack, 97, 0, addr)
+
+	// Generate message as per EIP-3074 and sign it
+	msg := composeAuthMessage(params.AllDevChainProtocolChanges.ChainID, big.NewInt(0), aa, commit)
+	sig, err := signMessage(msg, key2)
+	require.NoError(t, err, "failed to sign message")
+	require.Equal(t, 65, len(sig.sig), "invalid signature length")
+
+	// Setup memory and scope for the AUTH call
+	memory := setupAuthMemory(sig, commit)
+	scope := &ScopeContext{memory, stack, contract, nil}
+
+	// Call AUTH
+	res, err := opAuth(&pc, evmInterpreter, scope)
+	require.ErrorIs(t, err, ErrInvalidAuthSignature, "unexpected error executing AUTH")
+	require.Equal(t, 0, len(res), "unexpected return value")
+
+	// Check the stack for response and scope for authorized
+	actual := stack.pop()
+	require.Equal(t, uint64(0), actual.Uint64(), "unexpected value in stack")
+	require.Empty(t, scope.Authorized, "unexpected authorized address in scope")
+}
+
+func TestOpAuthInvalidAuthority(t *testing.T) {
+	var (
+		aa             = common.HexToAddress("0x000000000000000000000000000000000000aaaa") // invoker
+		contract       = NewContract(AccountRef(aa), AccountRef(aa), big.NewInt(0), 0)
+		key, _         = crypto.GenerateKey()
+		addr           = crypto.PubkeyToAddress(key.PublicKey)
+		statedb, _     = state.New(types.EmptyRootHash, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
+		env            = NewEVM(BlockContext{}, TxContext{}, statedb, params.AllDevChainProtocolChanges, Config{})
+		stack          = newstack()
+		pc             = uint64(0)
+		evmInterpreter = env.interpreter
+		commit         = make([]byte, 32)
+	)
+
+	// Setup stack (with length = 97, offset = 0, and invoker address)
+	setupAuthStack(stack, 97, 0, addr)
+
+	// Assign a code to the authority address
+	statedb.SetCode(addr, []byte{0x01})
+
+	// Generate message as per EIP-3074 and sign it
+	msg := composeAuthMessage(params.AllDevChainProtocolChanges.ChainID, big.NewInt(0), aa, commit)
+	sig, err := signMessage(msg, key)
+	require.NoError(t, err, "failed to sign message")
+	require.Equal(t, 65, len(sig.sig), "invalid signature length")
+
+	// Setup memory and scope for the AUTH call
+	memory := setupAuthMemory(sig, commit)
+	scope := &ScopeContext{memory, stack, contract, nil}
+
+	// Call AUTH
+	res, err := opAuth(&pc, evmInterpreter, scope)
+	require.ErrorIs(t, err, ErrAuthorizedIsContract, "unexpected error executing AUTH")
+	require.Equal(t, 0, len(res), "unexpected return value")
+
+	// Check the stack for response and scope for authorized
+	actual := stack.pop()
+	require.Equal(t, uint64(0), actual.Uint64(), "unexpected value in stack")
+	require.Empty(t, scope.Authorized, "unexpected authorized address in scope")
+}
+
 type Signature struct {
 	sig []byte
 	r   *big.Int
@@ -1031,11 +1111,9 @@ func signMessage(msg []byte, key *ecdsa.PrivateKey) (*Signature, error) {
 	if len(sig) != crypto.SignatureLength {
 		return nil, fmt.Errorf("invalid signature length")
 	}
-	fmt.Println("sig", len(sig))
 	r := new(big.Int).SetBytes(sig[:32])
 	s := new(big.Int).SetBytes(sig[32:64])
 	v := big.NewInt(int64(sig[64]))
-	fmt.Println(v, r, s)
 	return &Signature{sig, r, s, v}, nil
 }
 

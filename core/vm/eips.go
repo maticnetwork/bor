@@ -389,15 +389,22 @@ func opAuth(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byt
 	// Verify signature against provided address.
 	sig = append(sig[1:], sig[0])
 	pub, err := crypto.Ecrecover(msg, sig)
+	if err != nil {
+		scope.Authorized = nil
+		scope.Stack.push(uint256.NewInt(0))
+		return nil, err
+	}
+
 	var recovered common.Address
 	copy(recovered[:], crypto.Keccak256(pub[1:])[12:])
 
 	fmt.Println(recovered)
 	fmt.Println(authority)
 
-	if err != nil || recovered != authority {
+	if recovered != authority {
+		scope.Authorized = nil
 		scope.Stack.push(uint256.NewInt(0))
-		return nil, err
+		return nil, ErrInvalidAuthSignature
 	}
 
 	scope.Stack.push(uint256.NewInt(1))
