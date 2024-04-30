@@ -5104,7 +5104,9 @@ func TestEIP3651(t *testing.T) {
 
 func TestEIP3074(t *testing.T) {
 	var (
-		aa     = common.HexToAddress("0x000000000000000000000000000000000000aaaa")
+		// Invoker contract (which uses `auth` and `authcall` and calls destination contract)
+		aa = common.HexToAddress("0x000000000000000000000000000000000000aaaa")
+		// Destination contract which will be ultimately called
 		bb     = common.HexToAddress("0x000000000000000000000000000000000000bbbb")
 		engine = beacon.NewFaker()
 
@@ -5117,18 +5119,16 @@ func TestEIP3074(t *testing.T) {
 			Config: &config,
 			Alloc: GenesisAlloc{
 				addr: {Balance: funds},
-				// The address 0xAAAA sloads 0x00 and 0x01
 				aa: {
 					Code:    nil, // added below
 					Nonce:   0,
 					Balance: big.NewInt(0),
 				},
-				// The address 0xBBBB calls 0xAAAA
 				bb: {
 					Code: []byte{
-						byte(vm.CALLER),
-						byte(vm.PUSH0),
-						byte(vm.SSTORE),
+						byte(vm.CALLER), // pushes the caller to stack [caller]
+						byte(vm.PUSH0),  // pushes 0 to stack [caller, 0]
+						byte(vm.SSTORE), // stores caller in slot 0 (to verify caller later)
 						byte(vm.STOP),
 					},
 					Nonce:   0,
@@ -5139,35 +5139,34 @@ func TestEIP3074(t *testing.T) {
 	)
 
 	invoker := []byte{
-		// copy sig to memory
-		byte(vm.CALLDATASIZE),
-		byte(vm.PUSH0),
-		byte(vm.PUSH0),
-		byte(vm.CALLDATACOPY),
+		// for `auth`, signature needs to be in memory (which will be passed via calldata)
+		// copy the signature from calldata to memory
+		byte(vm.CALLDATASIZE), // pushes calldata size to stack [len(calldata)] (size)
+		byte(vm.PUSH0),        // pushes 0 to stack [len(calldata), 0] (offset)
+		byte(vm.PUSH0),        // pushes 0 to stack [len(calldata), 0, 0] (destOffset)
+		byte(vm.CALLDATACOPY), // copy calldata to memory (based on destOffset, offset, size above)
 
 		// set up auth
-		byte(vm.CALLDATASIZE),
-		byte(vm.PUSH0),
+		byte(vm.CALLDATASIZE), // pushes calldata size to stack [len(calldata)] (length)
+		byte(vm.PUSH0),        // pushes 0 to stack [len(calldata), 0] (offset)
 	}
-	// push authority to stack
+	// push authority to stack [len(calldata), 0, authority] (authority)
 	invoker = append(invoker, append([]byte{byte(vm.PUSH20)}, addr.Bytes()...)...)
 	invoker = append(invoker, []byte{
-
-		byte(vm.AUTH),
-		byte(vm.POP),
+		byte(vm.AUTH), // call auth (based on authority, offset, length above)
+		byte(vm.POP),  // pop result of auth
 
 		// execute authcall
-		byte(vm.PUSH0), // out size
-		byte(vm.DUP1),  // out offset
-		byte(vm.DUP1),  // out insize
-		byte(vm.DUP1),  // in offset
-		byte(vm.DUP1),  // valueExt
-		byte(vm.DUP1),  // value
-		byte(vm.PUSH2), // address
-		byte(0xbb),
-		byte(0xbb),
-		byte(vm.GAS), // gas
-		byte(vm.AUTHCALL),
+		byte(vm.PUSH0),    // [0] (retLength)
+		byte(vm.DUP1),     // [0, 0] (retOffset)
+		byte(vm.DUP1),     // [0, 0, 0] (argsLength)
+		byte(vm.DUP1),     // [0, 0, 0, 0] (argsOffset)
+		byte(vm.DUP1),     // [0, 0, 0, 0, 0] (value)
+		byte(vm.PUSH2),    // push the destination contract address
+		byte(0xbb),        // [0, 0, 0, 0, 0, 0xbb]
+		byte(0xbb),        // [0, 0, 0, 0, 0, 0xbbbb] (addr)
+		byte(vm.GAS),      // [0, 0, 0, 0, 0, 0xbbbb, gas] (gas)
+		byte(vm.AUTHCALL), // call authcall (based on 7 values above)
 		byte(vm.STOP),
 	}...,
 	)
@@ -5198,6 +5197,8 @@ func TestEIP3074(t *testing.T) {
 
 		sig, _ := crypto.Sign(msg, key)
 		sig = append([]byte{sig[len(sig)-1]}, sig[0:len(sig)-1]...)
+
+		// Send a tx to the invoker contract (which will perform auth and authcall)
 		txdata := &types.DynamicFeeTx{
 			ChainID:    gspec.Config.ChainID,
 			Nonce:      0,

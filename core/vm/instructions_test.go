@@ -1101,12 +1101,12 @@ func TestOpAuth(t *testing.T) {
 
 		// Call AUTH
 		res, err := opAuth(&pc, evm.interpreter, scope)
-		require.Equal(t, tt.expectedError, err, "unexpected error executing AUTH")
-		require.Equal(t, tt.expectedResult, len(res), "unexpected return value")
+		require.Equal(t, tt.expectedError, err, tt.name, "unexpected error executing AUTH")
+		require.Equal(t, tt.expectedResult, len(res), tt.name, "unexpected return value")
 
 		// Check the stack for response and scope for authorized
 		actual := stack.pop()
-		require.Equal(t, tt.expectedStack, actual.Uint64(), "unexpected value in stack")
-		require.Equal(t, tt.expectedAuthorized, scope.Authorized, "unexpected authorized address in scope")
+		require.Equal(t, tt.expectedStack, actual.Uint64(), tt.name, "unexpected value in stack")
+		require.Equal(t, tt.expectedAuthorized, scope.Authorized, tt.name, "unexpected authorized address in scope")
 	}
 }

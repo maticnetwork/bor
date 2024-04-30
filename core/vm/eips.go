@@ -349,8 +349,8 @@ func enable3074(jt *JumpTable) {
 		execute:     opAuthCall,
 		constantGas: params.CallGasEIP150,
 		dynamicGas:  gasCallEIP2929,
-		minStack:    minStack(8, 1),
-		maxStack:    maxStack(8, 1),
+		minStack:    minStack(7, 1),
+		maxStack:    maxStack(7, 1),
 		memorySize:  memoryCall,
 	}
 }
@@ -417,12 +417,12 @@ func opAuthCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([
 		return nil, ErrAuthorizedNotSet
 	}
 	var (
-		stack                                                = scope.Stack
-		temp                                                 = stack.pop()
-		gas                                                  = interpreter.evm.callGasTemp
-		addr, value, _, inOffset, inSize, retOffset, retSize = stack.pop(), stack.pop(), stack.pop(), stack.pop(), stack.pop(), stack.pop(), stack.pop()
-		toAddr                                               = common.Address(addr.Bytes20())
-		args                                                 = scope.Memory.GetPtr(int64(inOffset.Uint64()), int64(inSize.Uint64()))
+		stack                                             = scope.Stack
+		temp                                              = stack.pop()
+		gas                                               = interpreter.evm.callGasTemp
+		addr, value, inOffset, inSize, retOffset, retSize = stack.pop(), stack.pop(), stack.pop(), stack.pop(), stack.pop(), stack.pop()
+		toAddr                                            = common.Address(addr.Bytes20())
+		args                                              = scope.Memory.GetPtr(int64(inOffset.Uint64()), int64(inSize.Uint64()))
 	)
 
 	if interpreter.readOnly && !value.IsZero() {
