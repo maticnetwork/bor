@@ -437,7 +437,7 @@ func (evm *EVM) AuthCall(invoker ContractRef, caller, addr common.Address, input
 		return nil, gas, ErrDepth
 	}
 	// Fail if we're trying to transfer more than the available balance
-	if value.Sign() != 0 && !evm.Context.CanTransfer(evm.StateDB, invoker.Address(), value) {
+	if value.Sign() != 0 && !evm.Context.CanTransfer(evm.StateDB, caller, value) {
 		return nil, gas, ErrInsufficientBalance
 	}
 	snapshot := evm.StateDB.Snapshot()
@@ -460,7 +460,7 @@ func (evm *EVM) AuthCall(invoker ContractRef, caller, addr common.Address, input
 		}
 		evm.StateDB.CreateAccount(addr)
 	}
-	evm.Context.Transfer(evm.StateDB, invoker.Address(), addr, value)
+	evm.Context.Transfer(evm.StateDB, caller, addr, value)
 
 	// Capture the tracer start/end events in debug mode
 	if debug {
