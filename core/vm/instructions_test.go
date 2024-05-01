@@ -1110,3 +1110,120 @@ func TestOpAuth(t *testing.T) {
 		require.Equal(t, tt.expectedAuthorized, scope.Authorized, tt.name, "unexpected authorized address in scope")
 	}
 }
+
+// CanTransferTest mimics CanTransfer from core/evm.go
+func CanTransferTest(db StateDB, addr common.Address, amount *big.Int) bool {
+	return db.GetBalance(addr).Cmp(amount) >= 0
+}
+
+// TransferTest mimics Transfer from core/evm.go
+func TransferTest(db StateDB, sender, recipient common.Address, amount *big.Int) {
+	db.SubBalance(sender, amount)
+	db.AddBalance(recipient, amount)
+}
+
+func setupAuthCallTest(authority *common.Address, dest common.Address, value uint64) (*EVM, *ScopeContext, *Stack) {
+	var (
+		// Invoker contract
+		cc           = common.HexToAddress("0x000000000000000000000000000000000000cccc")
+		invoker      = NewContract(AccountRef(cc), AccountRef(cc), big.NewInt(0), 0)
+		statedb, _   = state.New(types.EmptyRootHash, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
+		blockContext = BlockContext{
+			CanTransfer: CanTransferTest,
+			Transfer:    TransferTest,
+			BlockNumber: big.NewInt(0),
+		}
+		env   = NewEVM(blockContext, TxContext{}, statedb, params.AllDevChainProtocolChanges, Config{})
+		stack = newstack()
+	)
+
+	// Create destination contract and assign the code to address `bb`
+	destCode := []byte{
+		byte(CALLER), // pushes the caller to stack [caller]
+		byte(PUSH0),  // pushes 0 to stack [caller, 0]
+		byte(SSTORE), // stores caller in slot 0 (to verify caller later)
+		byte(STOP),
+	}
+	statedb.CreateAccount(dest)
+	statedb.SetCode(dest, destCode)
+
+	// Prepare stack
+	stack.push(uint256.NewInt(0))                        // retLength
+	stack.push(uint256.NewInt(0))                        // retOffset
+	stack.push(uint256.NewInt(0))                        // argsLength
+	stack.push(uint256.NewInt(0))                        // argsOffset
+	stack.push(uint256.NewInt(value))                    // value
+	stack.push(uint256.NewInt(0).SetBytes(dest.Bytes())) // addr
+	stack.push(uint256.NewInt(0))                        // gas
+
+	memory := NewMemory()
+	memory.Resize(0)
+
+	// Used by SSTORE
+	statedb.AddAddressToAccessList(dest)
+
+	scope := &ScopeContext{memory, stack, invoker, authority}
+	env.interpreter.evm.callGasTemp = 10000000
+
+	return env, scope, stack
+}
+
+func TestOpAuthCall(t *testing.T) {
+	var (
+		authority = common.HexToAddress("0x000000000000000000000000000000000000aaaa")
+		dest      = common.HexToAddress("0x000000000000000000000000000000000000bbbb")
+	)
+
+	type testcase struct {
+		name                 string
+		setAuthority         bool
+		value                uint64
+		expectedResultLength int
+		expectedError        error
+		expectedStack        uint64
+		expectedStackLength  int
+		expectedAuthority    []byte
+	}
+	for _, tt := range []testcase{
+		{name: "happy case", setAuthority: true, value: 0, expectedResultLength: 0, expectedError: nil, expectedStack: 1, expectedStackLength: 1, expectedAuthority: common.LeftPadBytes(authority.Bytes(), 32)},
+		{name: "authorized not set", setAuthority: false, value: 0, expectedResultLength: 0, expectedError: ErrAuthorizedNotSet, expectedStack: 0, expectedStackLength: 1, expectedAuthority: common.LeftPadBytes(common.Hash{}.Bytes(), 32)},
+		{name: "consume value", setAuthority: true, value: 100, expectedResultLength: 0, expectedError: nil, expectedStack: 1, expectedStackLength: 1, expectedAuthority: common.LeftPadBytes(authority.Bytes(), 32)},
+	} {
+		var (
+			env   *EVM
+			scope *ScopeContext
+			stack *Stack
+		)
+		if tt.setAuthority {
+			env, scope, stack = setupAuthCallTest(&authority, dest, tt.value)
+		} else {
+			env, scope, stack = setupAuthCallTest(nil, dest, tt.value)
+		}
+
+		// Add some funds to authority if required
+		env.StateDB.AddBalance(authority, big.NewInt(0).SetUint64(tt.value))
+
+		// Execute AUTHCALL
+		pc := uint64(0)
+		res, err := opAuthCall(&pc, env.interpreter, scope)
+		require.Equal(t, tt.expectedResultLength, len(res), tt.name, "unexpected return value executing AUTHCALL")
+		require.Equal(t, tt.expectedError, err, tt.name, "unexpected error executing AUTHCALL")
+
+		if err != ErrAuthorizedNotSet {
+			// Check stack
+			require.Equal(t, tt.expectedStackLength, stack.len(), tt.name, "unexpected stack length after AUTHCALL")
+			actual := stack.pop()
+			require.Equal(t, tt.expectedStack, actual.Uint64(), tt.name, "unexpected stack length after AUTHCALL")
+
+			// Check if balance transfer has happened or not
+			authorityBalance := env.StateDB.GetBalance(authority)
+			destBalance := env.StateDB.GetBalance(dest)
+			require.Equal(t, uint64(0), authorityBalance.Uint64(), tt.name, "unexpected balance in authority after AUTHCALL")
+			require.Equal(t, tt.value, destBalance.Uint64(), tt.name, "unexpected balance in desination contract after AUTHCALL")
+		}
+
+		// Check if authority has been set in dest contract
+		got := env.StateDB.GetState(dest, common.Hash{})
+		require.Equal(t, tt.expectedAuthority, got.Bytes(), tt.name, "incorrect sender in AUTHCALL")
+	}
+}
