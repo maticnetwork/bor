@@ -1033,7 +1033,7 @@ var formatOutputInt = function (param) {
  *
  * @method formatOutputUInt
  * @param {SolidityParam}
- * @returns {BigNumeber} right-aligned output bytes formatted to uint
+ * @returns {BigNumber} right-aligned output bytes formatted to uint
  */
 var formatOutputUInt = function (param) {
     var value = param.staticPart() || "0";
@@ -1405,7 +1405,7 @@ var SolidityType = function (config) {
  * @return {Bool} true if type match this SolidityType, otherwise false
  */
 SolidityType.prototype.isType = function (name) {
-    throw "this method should be overrwritten for type " + name;
+    throw "this method should be overwritten for type " + name;
 };
 
 /**

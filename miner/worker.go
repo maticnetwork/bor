@@ -237,6 +237,7 @@ type worker struct {
 	mu       sync.RWMutex // The lock used to protect the coinbase and extra fields
 	coinbase common.Address
 	extra    []byte
+	tip      *big.Int // Minimum tip needed for non-local transaction to include them
 
 	pendingMu    sync.RWMutex
 	pendingTasks map[common.Hash]*task
@@ -295,6 +296,7 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 		isLocalBlock:        isLocalBlock,
 		coinbase:            config.Etherbase,
 		extra:               config.ExtraData,
+		tip:                 config.GasPrice,
 		pendingTasks:        make(map[common.Hash]*task),
 		txsCh:               make(chan core.NewTxsEvent, txChanSize),
 		chainHeadCh:         make(chan core.ChainHeadEvent, chainHeadChanSize),
@@ -393,6 +395,13 @@ func (w *worker) setExtra(extra []byte) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.extra = extra
+}
+
+// setGasTip sets the minimum miner tip needed to include a non-local transaction.
+func (w *worker) setGasTip(tip *big.Int) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.tip = tip
 }
 
 // setRecommitInterval updates the interval for miner sealing work recommitting.
@@ -648,7 +657,7 @@ func (w *worker) mainLoop(ctx context.Context) {
 				}
 				txset := newTransactionsByPriceAndNonce(w.current.signer, txs, w.current.header.BaseFee)
 				tcount := w.current.tcount
-				w.commitTransactions(w.current, txset, nil, context.Background())
+				w.commitTransactions(w.current, txset, nil, new(big.Int), context.Background())
 
 				// Only update the snapshot if any new transactons were added
 				// to the pending block
@@ -908,7 +917,7 @@ func (w *worker) commitTransaction(env *environment, tx *types.Transaction, inte
 	return receipt.Logs, nil
 }
 
-func (w *worker) commitTransactions(env *environment, txs *transactionsByPriceAndNonce, interrupt *atomic.Int32, interruptCtx context.Context) error {
+func (w *worker) commitTransactions(env *environment, txs *transactionsByPriceAndNonce, interrupt *atomic.Int32, minTip *big.Int, interruptCtx context.Context) error {
 	gasLimit := env.header.GasLimit
 	if env.gasPool == nil {
 		env.gasPool = new(core.GasPool).AddGas(gasLimit)
@@ -921,6 +930,7 @@ func (w *worker) commitTransactions(env *environment, txs *transactionsByPriceAn
 	chDeps := make(chan blockstm.TxDep)
 
 	var depsWg sync.WaitGroup
+	var once sync.Once
 
 	EnableMVHashMap := w.chainConfig.IsCancun(env.header.Number)
 
@@ -929,6 +939,11 @@ func (w *worker) commitTransactions(env *environment, txs *transactionsByPriceAn
 		deps = map[int]map[int]bool{}
 
 		chDeps = make(chan blockstm.TxDep)
+
+		// Make sure we safely close the channel in case of interrupt
+		defer once.Do(func() {
+			close(chDeps)
+		})
 
 		depsWg.Add(1)
 
@@ -941,29 +956,11 @@ func (w *worker) commitTransactions(env *environment, txs *transactionsByPriceAn
 		}(chDeps)
 	}
 
-	initialGasLimit := env.gasPool.Gas()
-
-	initialTxs := txs.GetTxs()
-
-	var breakCause string
-
-	defer func() {
-		log.OnDebug(func(lg log.Logging) {
-			lg("commitTransactions-stats",
-				"initialTxsCount", initialTxs,
-				"initialGasLimit", initialGasLimit,
-				"resultTxsCount", txs.GetTxs(),
-				"resultGapPool", env.gasPool.Gas(),
-				"exitCause", breakCause)
-		})
-	}()
-
 mainloop:
 	for {
 		// Check interruption signal and abort building if it's fired.
 		if interrupt != nil {
 			if signal := interrupt.Load(); signal != commitInterruptNone {
-				breakCause = "interrupt"
 				return signalToErr(signal)
 			}
 		}
@@ -985,14 +982,12 @@ mainloop:
 
 		// If we don't have enough gas for any further transactions then we're done.
 		if env.gasPool.Gas() < params.TxGas {
-			breakCause = "Not enough gas for further transactions"
 			log.Trace("Not enough gas for further transactions", "have", env.gasPool, "want", params.TxGas)
 			break
 		}
 		// Retrieve the next transaction and abort if all done.
-		ltx := txs.Peek()
+		ltx, tip := txs.Peek()
 		if ltx == nil {
-			breakCause = "all transactions has been included"
 			break
 		}
 		// If we don't have enough space for the next transaction, skip the account.
@@ -1005,6 +1000,11 @@ mainloop:
 			log.Trace("Not enough blob gas left for transaction", "hash", ltx.Hash, "left", left, "needed", ltx.BlobGas)
 			txs.Pop()
 			continue
+		}
+		// If we don't receive enough tip for the next transaction, skip the account
+		if tip.Cmp(minTip) < 0 {
+			log.Trace("Not enough tip for transaction", "hash", ltx.Hash, "tip", tip, "needed", minTip)
+			break // If the next-best is too low, surely no better will be available
 		}
 		// Transaction seems to fit, pull it up from the pool
 		tx := ltx.Resolve()
@@ -1052,12 +1052,6 @@ mainloop:
 		// Start executing the transaction
 		env.state.SetTxContext(tx.Hash(), env.tcount)
 
-		var start time.Time
-
-		log.OnDebug(func(log.Logging) {
-			start = time.Now()
-		})
-
 		logs, err := w.commitTransaction(env, tx, interruptCtx)
 
 		switch {
@@ -1090,10 +1084,6 @@ mainloop:
 
 			txs.Shift()
 
-			log.OnDebug(func(lg log.Logging) {
-				lg("Committed new tx", "tx hash", tx.Hash(), "from", from, "to", tx.To(), "nonce", tx.Nonce(), "gas", tx.Gas(), "gasPrice", tx.GasPrice(), "value", tx.Value(), "time spent", time.Since(start))
-			})
-
 		default:
 			// Transaction is regarded as invalid, drop all consecutive transactions from
 			// the same sender because of `nonce-too-high` clause.
@@ -1109,7 +1099,9 @@ mainloop:
 
 	// nolint:nestif
 	if EnableMVHashMap && w.IsRunning() {
-		close(chDeps)
+		once.Do(func() {
+			close(chDeps)
+		})
 		depsWg.Wait()
 
 		var blockExtraData types.BlockExtraData
@@ -1461,6 +1453,10 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *atomic.Int32, 
 		err             error
 	)
 
+	w.mu.RLock()
+	tip := w.tip
+	w.mu.RUnlock()
+
 	if len(localTxs) > 0 {
 		var txs *transactionsByPriceAndNonce
 
@@ -1479,7 +1475,7 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *atomic.Int32, 
 		})
 
 		tracing.Exec(ctx, "", "worker.LocalCommitTransactions", func(ctx context.Context, span trace.Span) {
-			err = w.commitTransactions(env, txs, interrupt, interruptCtx)
+			err = w.commitTransactions(env, txs, interrupt, new(big.Int), interruptCtx)
 		})
 
 		if err != nil {
@@ -1507,7 +1503,7 @@ func (w *worker) fillTransactions(ctx context.Context, interrupt *atomic.Int32, 
 		})
 
 		tracing.Exec(ctx, "", "worker.RemoteCommitTransactions", func(ctx context.Context, span trace.Span) {
-			err = w.commitTransactions(env, txs, interrupt, interruptCtx)
+			err = w.commitTransactions(env, txs, interrupt, tip, interruptCtx)
 		})
 
 		if err != nil {
@@ -1631,7 +1627,7 @@ func (w *worker) commitWork(ctx context.Context, interrupt *atomic.Int32, noempt
 	case err == nil:
 		// The entire block is filled, decrease resubmit interval in case
 		// of current interval is larger than the user-specified one.
-		w.resubmitAdjustCh <- &intervalAdjust{inc: false}
+		w.adjustResubmitInterval(&intervalAdjust{inc: false})
 
 	case errors.Is(err, errBlockInterruptedByRecommit):
 		// Notify resubmit loop to increase resubmitting interval if the
@@ -1642,10 +1638,10 @@ func (w *worker) commitWork(ctx context.Context, interrupt *atomic.Int32, noempt
 		if ratio < 0.1 {
 			ratio = 0.1
 		}
-		w.resubmitAdjustCh <- &intervalAdjust{
+		w.adjustResubmitInterval(&intervalAdjust{
 			ratio: ratio,
 			inc:   true,
-		}
+		})
 
 	case errors.Is(err, errBlockInterruptedByNewHead):
 		// If the block building is interrupted by newhead event, discard it
@@ -1765,6 +1761,15 @@ func (w *worker) getSealingBlock(params *generateParams) *newPayloadResult {
 func (w *worker) isTTDReached(header *types.Header) bool {
 	td, ttd := w.chain.GetTd(header.ParentHash, header.Number.Uint64()-1), w.chain.Config().TerminalTotalDifficulty
 	return td != nil && ttd != nil && td.Cmp(ttd) >= 0
+}
+
+// adjustResubmitInterval adjusts the resubmit interval.
+func (w *worker) adjustResubmitInterval(message *intervalAdjust) {
+	select {
+	case w.resubmitAdjustCh <- message:
+	default:
+		log.Warn("the resubmitAdjustCh is full, discard the message")
+	}
 }
 
 // copyReceipts makes a deep copy of the given receipts.

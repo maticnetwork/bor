@@ -905,6 +905,11 @@ func (c *ChainConfig) IsPrague(num *big.Int) bool {
 	return isBlockForked(c.PragueBlock, num)
 }
 
+// IsVerkle returns whether num is either equal to the Verkle fork time or greater.
+func (c *ChainConfig) IsVerkle(num *big.Int) bool {
+	return c.IsLondon(num) && isBlockForked(c.VerkleBlock, num)
+}
+
 // CheckCompatible checks whether scheduled fork transitions have been imported
 // with a mismatching chain configuration.
 func (c *ChainConfig) CheckCompatible(newcfg *ChainConfig, height uint64, time uint64) *ConfigCompatError {
@@ -960,9 +965,9 @@ func (c *ChainConfig) CheckConfigForkOrder() error {
 		{name: "arrowGlacierBlock", block: c.ArrowGlacierBlock, optional: true},
 		{name: "grayGlacierBlock", block: c.GrayGlacierBlock, optional: true},
 		{name: "mergeNetsplitBlock", block: c.MergeNetsplitBlock, optional: true},
-		{name: "ShanghaiBlock", block: c.ShanghaiBlock},
-		{name: "CancunBlock", block: c.CancunBlock, optional: true},
-		{name: "pragueTime", block: c.PragueBlock, optional: true},
+		{name: "shanghaiBlock", block: c.ShanghaiBlock},
+		{name: "cancunBlock", block: c.CancunBlock, optional: true},
+		{name: "pragueBlock", block: c.PragueBlock, optional: true},
 	} {
 		if lastFork.name != "" {
 			switch {
