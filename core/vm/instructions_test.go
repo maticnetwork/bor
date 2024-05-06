@@ -1079,9 +1079,9 @@ func TestOpAuth(t *testing.T) {
 	}
 	for _, tt := range []testcase{
 		{name: "happy case", key: key, addcode: false, changeSignature: false, expectedResult: 0, expectedError: nil, expectedStack: 1, expectedAuthorized: &addr},
-		{name: "invalid key", key: key2, addcode: false, changeSignature: false, expectedResult: 0, expectedError: ErrInvalidAuthSignature, expectedStack: 0, expectedAuthorized: nil},
+		{name: "invalid key", key: key2, addcode: false, changeSignature: false, expectedResult: 0, expectedError: nil, expectedStack: 0, expectedAuthorized: nil},
 		{name: "invalid signature", key: key, addcode: false, changeSignature: true, expectedResult: 0, expectedError: errors.New("recovery failed"), expectedStack: 0, expectedAuthorized: nil},
-		{name: "invalid authority", key: key, addcode: true, changeSignature: false, expectedResult: 0, expectedError: ErrAuthorizedIsContract, expectedStack: 0, expectedAuthorized: nil},
+		{name: "invalid authority", key: key, addcode: true, changeSignature: false, expectedResult: 0, expectedError: nil, expectedStack: 0, expectedAuthorized: nil},
 	} {
 		pc := uint64(0)
 

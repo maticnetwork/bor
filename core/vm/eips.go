@@ -18,7 +18,6 @@ package vm
 
 import (
 	"fmt"
-	"math/big"
 	"sort"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -355,56 +354,52 @@ func enable3074(jt *JumpTable) {
 	}
 }
 
+// opAuth implements the EIP-3074 AUTH instruction.
 func opAuth(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 	var (
-		tmp            = scope.Stack.pop()
-		authority      = common.Address(tmp.Bytes20())
-		offset         = scope.Stack.pop()
-		length         = scope.Stack.pop()
-		data           = scope.Memory.GetPtr(int64(offset.Uint64()), int64(length.Uint64()))
-		authorityNonce = big.NewInt(int64(interpreter.evm.StateDB.GetNonce(authority)))
-		sig            = make([]byte, 65)
-		commit         common.Hash
+		tmp       = scope.Stack.pop()
+		authority = common.Address(tmp.Bytes20())
+		offset    = scope.Stack.pop()
+		length    = scope.Stack.pop()
+		data      = scope.Memory.GetPtr(int64(offset.Uint64()), int64(length.Uint64()))
+		sig       = make([]byte, 65)
+		commit    common.Hash
 	)
 	copy(sig, data)
 	if len(data) > 65 {
 		copy(commit[:], data[65:])
 	}
 
-	// Verify if the provided authority address isn't a contract
-	if code := interpreter.evm.StateDB.GetCode(authority); len(code) != 0 {
+	// If the desired authority has code, the operation must be considered
+	// unsuccessful.
+	statedb := interpreter.evm.StateDB
+	if statedb.GetCodeSize(authority) != 0 {
 		scope.Authorized = nil
 		scope.Stack.push(uint256.NewInt(0))
-		return nil, ErrAuthorizedIsContract
+		return nil, nil
 	}
 
 	// Build original auth message.
 	msg := []byte{params.AuthMagic}
 	msg = append(msg, common.LeftPadBytes(interpreter.evm.chainConfig.ChainID.Bytes(), 32)...)
-	msg = append(msg, common.LeftPadBytes(authorityNonce.Bytes(), 32)...)
+	msg = append(msg, common.LeftPadBytes(uint256.NewInt(statedb.GetNonce(authority)).Bytes(), 32)...)
 	msg = append(msg, common.LeftPadBytes(scope.Contract.Address().Bytes(), 32)...)
 	msg = append(msg, commit.Bytes()...)
 	msg = crypto.Keccak256(msg)
 
 	// Verify signature against provided address.
-	sig = append(sig[1:], sig[0])
+	sig = append(sig[1:], sig[0]) // send y parity to back
 	pub, err := crypto.Ecrecover(msg, sig)
-	if err != nil {
+
+	var recovered common.Address
+	if err == nil {
+		copy(recovered[:], crypto.Keccak256(pub[1:])[12:])
+	}
+
+	if err != nil || recovered != authority {
 		scope.Authorized = nil
 		scope.Stack.push(uint256.NewInt(0))
 		return nil, err
-	}
-
-	var recovered common.Address
-	copy(recovered[:], crypto.Keccak256(pub[1:])[12:])
-
-	fmt.Println(recovered)
-	fmt.Println(authority)
-
-	if recovered != authority {
-		scope.Authorized = nil
-		scope.Stack.push(uint256.NewInt(0))
-		return nil, ErrInvalidAuthSignature
 	}
 
 	scope.Stack.push(uint256.NewInt(1))
@@ -412,6 +407,7 @@ func opAuth(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byt
 	return nil, nil
 }
 
+// opAuthCall implements the EIP-3074 AUTHCALL instruction.
 func opAuthCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 	if scope.Authorized == nil {
 		return nil, ErrAuthorizedNotSet
@@ -449,5 +445,4 @@ func opAuthCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([
 
 	interpreter.returnData = ret
 	return ret, nil
-
 }
