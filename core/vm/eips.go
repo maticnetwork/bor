@@ -415,6 +415,7 @@ func opAuth(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byt
 
 // opAuthCall implements the EIP-3074 AUTHCALL instruction.
 func opAuthCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
+	log.Info("--- AUTHCALL #1")
 	if scope.Authorized == nil {
 		log.Info("--- AUTHCALL - return because authorized not set")
 		return nil, ErrAuthorizedNotSet
