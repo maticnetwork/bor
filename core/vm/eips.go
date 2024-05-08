@@ -22,6 +22,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/holiman/uint256"
 )
@@ -370,12 +371,15 @@ func opAuth(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byt
 		copy(commit[:], data[65:])
 	}
 
+	log.Info("--- AUTH", "authority", authority)
+
 	// If the desired authority has code, the operation must be considered
 	// unsuccessful.
 	statedb := interpreter.evm.StateDB
 	if statedb.GetCodeSize(authority) != 0 {
 		scope.Authorized = nil
 		scope.Stack.push(uint256.NewInt(0))
+		log.Info("--- AUTH, return because authority has code")
 		return nil, nil
 	}
 
@@ -399,9 +403,11 @@ func opAuth(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byt
 	if err != nil || recovered != authority {
 		scope.Authorized = nil
 		scope.Stack.push(uint256.NewInt(0))
+		log.Info("--- AUTH, return because invalid sig", "err", err)
 		return nil, err
 	}
 
+	log.Info("--- AUTH, set authority", "authority", authority)
 	scope.Stack.push(uint256.NewInt(1))
 	scope.Authorized = &authority
 	return nil, nil
@@ -410,8 +416,10 @@ func opAuth(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byt
 // opAuthCall implements the EIP-3074 AUTHCALL instruction.
 func opAuthCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([]byte, error) {
 	if scope.Authorized == nil {
+		log.Info("--- AUTHCALL - return because authorized not set")
 		return nil, ErrAuthorizedNotSet
 	}
+	log.Info("--- AUTHCALL", "authorized", scope.Authorized)
 	var (
 		stack                                             = scope.Stack
 		temp                                              = stack.pop()
@@ -422,6 +430,7 @@ func opAuthCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([
 	)
 
 	if interpreter.readOnly && !value.IsZero() {
+		log.Info("--- AUTHCALL - return because write protection")
 		return nil, ErrWriteProtection
 	}
 
@@ -432,6 +441,8 @@ func opAuthCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([
 
 	ret, returnGas, err := interpreter.evm.AuthCall(scope.Contract, *scope.Authorized, toAddr, args, gas, bigVal, nil)
 
+	log.Info("--- AUTHCALL - return values", "ret", ret, "returnGas", returnGas, "err", err)
+
 	if err != nil {
 		temp.Clear()
 	} else {
@@ -439,10 +450,12 @@ func opAuthCall(pc *uint64, interpreter *EVMInterpreter, scope *ScopeContext) ([
 	}
 	stack.push(&temp)
 	if err == nil || err == ErrExecutionReverted {
+		log.Info("--- AUTHCALL - set memory", "temp", temp)
 		scope.Memory.Set(retOffset.Uint64(), retSize.Uint64(), ret)
 	}
 	scope.Contract.Gas += returnGas
 
 	interpreter.returnData = ret
+	log.Info("--- AUTHCALL - return success")
 	return ret, nil
 }
