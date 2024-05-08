@@ -683,7 +683,7 @@ func snapshotExportPreimages(ctx *cli.Context) error {
 	stack, _ := makeConfigNode(ctx)
 	defer stack.Close()
 
-	chaindb := utils.MakeChainDatabase(ctx, stack, true)
+	chaindb := utils.MakeChainDatabase(ctx, stack, true, false)
 	defer chaindb.Close()
 
 	triedb := utils.MakeTrieDatabase(ctx, chaindb, false, true, false)
