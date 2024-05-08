@@ -155,7 +155,8 @@ var DefaultConfig = Config{
 	AccountQueue: 64,
 	GlobalQueue:  1024,
 
-	Lifetime: 3 * time.Hour,
+	Lifetime:            3 * time.Hour,
+	AllowUnprotectedTxs: false,
 }
 
 // sanitize checks the provided user configurations and changes anything that's
@@ -601,7 +602,8 @@ func (pool *LegacyPool) local() map[common.Address]types.Transactions {
 // and does not require the pool mutex to be held.
 func (pool *LegacyPool) validateTxBasics(tx *types.Transaction, local bool) error {
 	opts := &txpool.ValidationOptions{
-		Config: pool.chainconfig,
+		Config:              pool.chainconfig,
+		AllowUnprotectedTxs: pool.config.AllowUnprotectedTxs,
 		Accept: 0 |
 			1<<types.LegacyTxType |
 			1<<types.AccessListTxType |
@@ -671,6 +673,11 @@ func (pool *LegacyPool) add(tx *types.Transaction, local bool) (replaced bool, e
 		knownTxMeter.Mark(1)
 		return false, txpool.ErrAlreadyKnown
 	}
+
+	if pool.config.AllowUnprotectedTxs {
+		pool.signer = types.NewFakeSigner(tx.ChainId())
+	}
+
 	// Make the local flag. If it's from local source or it's from the network but
 	// the sender is marked as local previously, treat it as the local transaction.
 	isLocal := local || pool.locals.containsTx(tx)
@@ -936,8 +943,7 @@ func (pool *LegacyPool) addLocals(txs []*types.Transaction) []error {
 // addLocal enqueues a single local transaction into the pool if it is valid. This is
 // a convenience wrapper around addLocals.
 func (pool *LegacyPool) addLocal(tx *types.Transaction) error {
-	errs := pool.addLocals([]*types.Transaction{tx})
-	return errs[0]
+	return pool.addLocals([]*types.Transaction{tx})[0]
 }
 
 // addRemotes enqueues a batch of transactions into the pool if they are valid. If the
@@ -952,8 +958,7 @@ func (pool *LegacyPool) addRemotes(txs []*types.Transaction) []error {
 // addRemote enqueues a single transaction into the pool if it is valid. This is a convenience
 // wrapper around addRemotes.
 func (pool *LegacyPool) addRemote(tx *types.Transaction) error {
-	errs := pool.addRemotes([]*types.Transaction{tx})
-	return errs[0]
+	return pool.addRemotes([]*types.Transaction{tx})[0]
 }
 
 // addRemotesSync is like addRemotes, but waits for pool reorganization. Tests use this method.
@@ -972,6 +977,9 @@ func (pool *LegacyPool) addRemoteSync(tx *types.Transaction) error {
 // If sync is set, the method will block until all internal maintenance related
 // to the add is finished. Only use this during tests for determinism!
 func (pool *LegacyPool) Add(txs []*types.Transaction, local, sync bool) []error {
+	// Do not treat as local if local transactions have been disabled
+	local = local && !pool.config.NoLocals
+
 	// Filter out known ones without obtaining the pool lock or recovering signatures
 	var (
 		errs = make([]error, len(txs))
@@ -984,6 +992,11 @@ func (pool *LegacyPool) Add(txs []*types.Transaction, local, sync bool) []error 
 			knownTxMeter.Mark(1)
 			continue
 		}
+
+		if pool.config.AllowUnprotectedTxs {
+			pool.signer = types.NewFakeSigner(tx.ChainId())
+		}
+
 		// Exclude transactions with basic errors, e.g invalid signatures and
 		// insufficient intrinsic gas as soon as possible and cache senders
 		// in transactions before obtaining lock
