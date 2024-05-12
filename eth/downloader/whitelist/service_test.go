@@ -182,7 +182,7 @@ func TestMilestone(t *testing.T) {
 	require.True(t, ok, "expected true as milestoneIDList should contain 'milestoneID4'")
 
 	//Asking the lock for sprintNumber less than last whitelisted milestone
-	require.False(t, milestone.LockMutex(11), "Cant lock the sprintNumber less than equal to latest whitelisted milestone")
+	require.False(t, milestone.LockMutex(11), "Can't lock the sprintNumber less than equal to latest whitelisted milestone")
 	milestone.UnlockMutex(false, "", uint64(11), common.Hash{}) //Unlock is required after every lock to release the mutex
 
 	//Adding the milestone
