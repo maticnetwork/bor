@@ -56,7 +56,7 @@ var stackEnabled atomic.Bool
 var locationEnabled atomic.Bool
 
 // locationLength is the maximum path length encountered, which all logs are
-// padded to to aid in alignment.
+// padded to the aid in alignment.
 var locationLength atomic.Uint32
 
 // fieldPadding is a global map with maximum field value lengths seen until now
