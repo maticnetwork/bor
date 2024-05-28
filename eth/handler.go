@@ -729,11 +729,12 @@ func (h *handler) enableSyncedFeatures() {
 // peer. Specifically, it contains details about the head hash and total difficulty
 // of a peer which makes it a bit different from the PeerInfo.
 type PeerStats struct {
-	Enode string `json:"enode"` // Node URL
-	ID    string `json:"id"`    // Unique node identifier
-	Name  string `json:"name"`  // Name of the node, including client type, version, OS, custom data
-	Hash  string `json:"hash"`  // Head hash of the peer
-	Td    uint64 `json:"td"`    // Total difficulty of the peer
+	Enode  string `json:"enode"`  // Node URL
+	ID     string `json:"id"`     // Unique node identifier
+	Name   string `json:"name"`   // Name of the node, including client type, version, OS, custom data
+	Hash   string `json:"hash"`   // Head hash of the peer
+	Number uint64 `json:"number"` // Head number of the peer
+	Td     uint64 `json:"td"`     // Total difficulty of the peer
 }
 
 // PeerStats returns the current head height and td of all the connected peers
@@ -743,12 +744,18 @@ func (h *handler) GetPeerStats() []*PeerStats {
 
 	for _, peer := range h.peers.peers {
 		hash, td := peer.Head()
+		block := h.chain.GetBlockByHash(hash)
+		number := uint64(0)
+		if block != nil {
+			number = block.NumberU64()
+		}
 		info = append(info, &PeerStats{
-			Enode: peer.Node().URLv4(),
-			ID:    peer.ID(),
-			Name:  peer.Name(),
-			Hash:  hash.String(),
-			Td:    td.Uint64(),
+			Enode:  peer.Node().URLv4(),
+			ID:     peer.ID(),
+			Name:   peer.Name(),
+			Hash:   hash.String(),
+			Number: number,
+			Td:     td.Uint64(),
 		})
 	}
 
