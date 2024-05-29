@@ -172,15 +172,19 @@ func newHandler(config *handlerConfig) (*handler, error) {
 		// * the last snap sync is not finished while user specifies a full sync this
 		//   time. But we don't have any recent state for full sync.
 		// In these cases however it's safe to reenable snap sync.
-		fullBlock, snapBlock := h.chain.CurrentBlock(), h.chain.CurrentSnapBlock()
 
-		if fullBlock.Number.Uint64() == 0 && snapBlock.Number.Uint64() > 0 {
-			h.snapSync.Store(true)
-			log.Warn("Switch sync mode from full sync to snap sync", "reason", "snap sync incomplete")
-		} else if !h.chain.HasState(fullBlock.Root) {
-			h.snapSync.Store(true)
-			log.Warn("Switch sync mode from full sync to snap sync", "reason", "head state missing")
-		}
+		// TODO - uncomment when we (Polygon-PoS, bor) have snap sync/pbss
+		// fullBlock, snapBlock := h.chain.CurrentBlock(), h.chain.CurrentSnapBlock()
+
+		// TODO - uncomment when we (Polygon-PoS, bor) have snap sync/pbss
+		// For more info - https://github.com/ethereum/go-ethereum/pull/28171
+		// if fullBlock.Number.Uint64() == 0 && snapBlock.Number.Uint64() > 0 {
+		// 	h.snapSync.Store(true)
+		// 	log.Warn("Switch sync mode from full sync to snap sync", "reason", "snap sync incomplete")
+		// } else if !h.chain.HasState(fullBlock.Root) {
+		// 	h.snapSync.Store(true)
+		// 	log.Warn("Switch sync mode from full sync to snap sync", "reason", "head state missing")
+		// }
 	} else {
 		head := h.chain.CurrentBlock()
 		if head.Number.Uint64() > 0 && h.chain.HasState(head.Root) {
@@ -727,4 +731,41 @@ func (h *handler) enableSyncedFeatures() {
 	if h.chain.TrieDB().Scheme() == rawdb.PathScheme {
 		h.chain.TrieDB().SetBufferSize(pathdb.DefaultBufferSize)
 	}
+}
+
+// PeerStats represents a short summary of the information known about a connected
+// peer. Specifically, it contains details about the head hash and total difficulty
+// of a peer which makes it a bit different from the PeerInfo.
+type PeerStats struct {
+	Enode  string `json:"enode"`  // Node URL
+	ID     string `json:"id"`     // Unique node identifier
+	Name   string `json:"name"`   // Name of the node, including client type, version, OS, custom data
+	Hash   string `json:"hash"`   // Head hash of the peer
+	Number uint64 `json:"number"` // Head number of the peer
+	Td     uint64 `json:"td"`     // Total difficulty of the peer
+}
+
+// PeerStats returns the current head height and td of all the connected peers
+// along with few additional identifiers.
+func (h *handler) GetPeerStats() []*PeerStats {
+	info := make([]*PeerStats, 0, len(h.peers.peers))
+
+	for _, peer := range h.peers.peers {
+		hash, td := peer.Head()
+		block := h.chain.GetBlockByHash(hash)
+		number := uint64(0)
+		if block != nil {
+			number = block.NumberU64()
+		}
+		info = append(info, &PeerStats{
+			Enode:  peer.Node().URLv4(),
+			ID:     peer.ID(),
+			Name:   peer.Name(),
+			Hash:   hash.String(),
+			Number: number,
+			Td:     td.Uint64(),
+		})
+	}
+
+	return info
 }
