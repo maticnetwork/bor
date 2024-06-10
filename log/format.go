@@ -238,7 +238,7 @@ func appendBigInt(dst []byte, n *big.Int) []byte {
 	}
 
 	if len(n.String()) > 64*1024*1024 {
-		fmt.Errorf("%s value in appendBigInt is too large to format", n.String())
+		_ = fmt.Errorf("%s value in appendBigInt is too large to format", n.String())
 	}
 
 	var (
