@@ -27,7 +27,7 @@ require (
 	github.com/deckarep/golang-set/v2 v2.6.0
 	github.com/dop251/goja v0.0.0-20240516125602-ccbae20bcec2
 	github.com/emirpasic/gods v1.18.1
-	github.com/ethereum/c-kzg-4844 v1.0.2
+	github.com/ethereum/c-kzg-4844 v0.4.3
 	github.com/fatih/color v1.17.0
 	github.com/fjl/gencodec v0.0.0-20230517082657-f9840df7b83e
 	github.com/fjl/memsize v0.0.2
