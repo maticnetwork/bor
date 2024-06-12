@@ -62,11 +62,11 @@ func init() {
 	testTxPoolConfig = DefaultConfig
 	testTxPoolConfig.Journal = ""
 	/*
-	Given the introduction of `BorDefaultTxPoolPriceLimit=30gwei`,
-	we set `testTxPoolConfig.PriceLimit = 1` to avoid rewriting all `legacypool_test.go` tests,
-	causing code divergence from geth, as this has been widely tested on different networks.
-	Also, `worker_test.go` has been adapted to reflect such changes.
-	Furthermore, config test can be found in `TestTxPoolDefaultPriceLimit`
+		Given the introduction of `BorDefaultTxPoolPriceLimit=30gwei`,
+		we set `testTxPoolConfig.PriceLimit = 1` to avoid rewriting all `legacypool_test.go` tests,
+		causing code divergence from geth, as this has been widely tested on different networks.
+		Also, `worker_test.go` has been adapted to reflect such changes.
+		Furthermore, config test can be found in `TestTxPoolDefaultPriceLimit`
 	*/
 	testTxPoolConfig.PriceLimit = 1
 
