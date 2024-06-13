@@ -119,10 +119,12 @@ func reportCommonErrors(msg string, err error, wrapError error, ctx ...interface
 	// We're skipping extra check to the `heimdall.ErrServiceUnavailable` error as it should not
 	// occur post HF (in heimdall). If it does, we'll anyways warn below as a normal error.
 
+	ctx = append(ctx, "err", err)
+
 	if strings.Contains(err.Error(), "context deadline exceeded") {
-		log.Warn(fmt.Sprintf("Failed to fetch %s, please check the heimdall endpoint and status of your heimdall node", msg), "err", err, ctx)
+		log.Warn(fmt.Sprintf("Failed to fetch %s, please check the heimdall endpoint and status of your heimdall node", msg), ctx...)
 	} else {
-		log.Warn(fmt.Sprintf("Failed to fetch %s", msg), "err", err, ctx)
+		log.Warn(fmt.Sprintf("Failed to fetch %s", msg), ctx...)
 	}
 
 	if wrapError != nil {
