@@ -20,7 +20,7 @@ The ```bor server``` command runs the Bor client.
 
 - ```bor.withoutheimdall```: Run without Heimdall service (for testing purpose) (default: false)
 
-- ```chain```: Name of the chain to sync ('mumbai', 'mainnet', 'amoy') or path to a genesis file (default: mainnet)
+- ```chain```: Name of the chain to sync ('amoy', 'mumbai', 'mainnet') or path to a genesis file (default: mainnet)
 
 - ```config```: Path to the TOML configuration file
 
@@ -46,7 +46,7 @@ The ```bor server``` command runs the Bor client.
 
 - ```gpo.blocks```: Number of recent blocks to check for gas prices (default: 20)
 
-- ```gpo.ignoreprice```: Gas price below which gpo will ignore transactions (default: 2)
+- ```gpo.ignoreprice```: Gas price below which gpo will ignore transactions (default: 30000000000). It's set to 30gwei in bor
 
 - ```gpo.maxblockhistory```: Maximum block history of gasprice oracle (default: 1024)
 
@@ -83,6 +83,8 @@ The ```bor server``` command runs the Bor client.
 - ```rpc.returndatalimit```: Maximum size (in bytes) a result of an rpc request could have (use 0 for no limits) (default: 100000)
 
 - ```snapshot```: Enables the snapshot-database mode (default: true)
+
+- ```state.scheme```: Scheme to use for storing ethereum state ('hash' or 'path') (default: hash)
 
 - ```syncmode```: Blockchain sync mode (only "full" sync supported) (default: full)
 
@@ -248,7 +250,7 @@ The ```bor server``` command runs the Bor client.
 
 - ```miner.gaslimit```: Target gas ceiling (gas limit) for mined blocks (default: 30000000)
 
-- ```miner.gasprice```: Minimum gas price for mining a transaction (default: 1000000000)
+- ```miner.gasprice```: Minimum gas price for mining a transaction (default: 30000000000). It's set to 30gwei in bor
 
 - ```miner.interruptcommit```: Interrupt block commit when block creation time is passed (default: true)
 
@@ -304,6 +306,6 @@ The ```bor server``` command runs the Bor client.
 
 - ```txpool.pricebump```: Price bump percentage to replace an already existing transaction (default: 10)
 
-- ```txpool.pricelimit```: Minimum gas price limit to enforce for acceptance into the pool (default: 1)
+- ```txpool.pricelimit```: Minimum gas price limit to enforce the acceptance of txs into the pool (default: 30000000000). It's set to 30gwei in bor
 
 - ```txpool.rejournal```: Time interval to regenerate the local transaction journal (default: 1h0m0s)

@@ -147,7 +147,7 @@ var DefaultConfig = Config{
 	Journal:   "transactions.rlp",
 	Rejournal: time.Hour,
 
-	PriceLimit: 1,
+	PriceLimit: params.BorDefaultTxPoolPriceLimit,
 	PriceBump:  10,
 
 	AccountSlots: 16,
@@ -167,7 +167,8 @@ func (config *Config) sanitize() Config {
 		log.Warn("Sanitizing invalid txpool journal time", "provided", conf.Rejournal, "updated", time.Second)
 		conf.Rejournal = time.Second
 	}
-	if conf.PriceLimit < 1 {
+	// enforce txpool price limit to 30gwei in bor
+	if conf.PriceLimit != params.BorDefaultTxPoolPriceLimit {
 		log.Warn("Sanitizing invalid txpool price limit", "provided", conf.PriceLimit, "updated", DefaultConfig.PriceLimit)
 		conf.PriceLimit = DefaultConfig.PriceLimit
 	}
@@ -943,8 +944,7 @@ func (pool *LegacyPool) addLocals(txs []*types.Transaction) []error {
 // addLocal enqueues a single local transaction into the pool if it is valid. This is
 // a convenience wrapper around addLocals.
 func (pool *LegacyPool) addLocal(tx *types.Transaction) error {
-	errs := pool.addLocals([]*types.Transaction{tx})
-	return errs[0]
+	return pool.addLocals([]*types.Transaction{tx})[0]
 }
 
 // addRemotes enqueues a batch of transactions into the pool if they are valid. If the
@@ -959,8 +959,7 @@ func (pool *LegacyPool) addRemotes(txs []*types.Transaction) []error {
 // addRemote enqueues a single transaction into the pool if it is valid. This is a convenience
 // wrapper around addRemotes.
 func (pool *LegacyPool) addRemote(tx *types.Transaction) error {
-	errs := pool.addRemotes([]*types.Transaction{tx})
-	return errs[0]
+	return pool.addRemotes([]*types.Transaction{tx})[0]
 }
 
 // addRemotesSync is like addRemotes, but waits for pool reorganization. Tests use this method.
