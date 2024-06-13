@@ -31,7 +31,7 @@ var (
 	// errEndBlock is returned when we're unable to fetch a block locally.
 	errEndBlock = errors.New("failed to get end block")
 
-	// errEndBlock is returned when we're unable to fetch a block locally.
+	// errEndBlock is returned when we're unable to fetch the tip confirmation block locally.
 	errTipConfirmationBlock = errors.New("failed to get tip confirmation block")
 
 	// rewindLengthMeter for collecting info about the length of chain rewinded
