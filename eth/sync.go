@@ -19,6 +19,7 @@ package eth
 import (
 	"errors"
 	"math/big"
+	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -272,6 +273,7 @@ func (h *handler) doSync(op *chainSyncOp) error {
 	// Run the sync cycle, and disable snap sync if we're past the pivot block
 	err := h.downloader.LegacySync(op.peer.ID(), op.head, op.td, h.chain.Config().TerminalTotalDifficulty, op.mode)
 	if err != nil {
+		reportPeerStatusDuringTimeout(err, h)
 		return err
 	}
 	h.enableSyncedFeatures()
@@ -289,4 +291,15 @@ func (h *handler) doSync(op *chainSyncOp) error {
 		}
 	}
 	return nil
+}
+
+// reportPeerStatusDuringTimeout reports the status of remaining peers when a
+// peer is dropped due to header request timeout.
+func reportPeerStatusDuringTimeout(err error, h *handler) {
+	// Only act on errBadPeer (which happens due to request timeout)
+	if !strings.Contains(err.Error(), "action from bad peer ignored") {
+		return
+	}
+
+	h.peers.logPeerStatus()
 }

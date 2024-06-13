@@ -1148,6 +1148,14 @@ func (d *Downloader) fetchHeaders(p *peerConnection, from uint64, head uint64) e
 			err     error
 		)
 
+		var (
+			number uint64
+			amount int
+			skip   int
+		)
+
+		start := time.Now()
+
 		switch {
 		case pivoting:
 			d.pivotLock.RLock()
@@ -1155,14 +1163,23 @@ func (d *Downloader) fetchHeaders(p *peerConnection, from uint64, head uint64) e
 			d.pivotLock.RUnlock()
 
 			p.log.Trace("Fetching next pivot header", "number", pivot+uint64(fsMinFullBlocks))
+			number = pivot + uint64(fsMinFullBlocks)
+			amount = 2
+			skip = fsMinFullBlocks - 9
 			headers, hashes, err = d.fetchHeadersByNumber(p, pivot+uint64(fsMinFullBlocks), 2, fsMinFullBlocks-9, false) // move +64 when it's 2x64-8 deep
 
 		case skeleton:
 			p.log.Trace("Fetching skeleton headers", "count", MaxHeaderFetch, "from", from)
+			number = from + uint64(MaxHeaderFetch) - 1
+			amount = MaxSkeletonSize
+			skip = MaxHeaderFetch - 1
 			headers, hashes, err = d.fetchHeadersByNumber(p, from+uint64(MaxHeaderFetch)-1, MaxSkeletonSize, MaxHeaderFetch-1, false)
 
 		default:
 			p.log.Trace("Fetching full headers", "count", MaxHeaderFetch, "from", from)
+			number = from
+			amount = MaxHeaderFetch
+			skip = 0
 			headers, hashes, err = d.fetchHeadersByNumber(p, from, MaxHeaderFetch, 0, false)
 		}
 
@@ -1177,6 +1194,9 @@ func (d *Downloader) fetchHeaders(p *peerConnection, from uint64, head uint64) e
 		default:
 			// Header retrieval either timed out, or the peer failed in some strange way
 			// (e.g. disconnect). Consider the master peer bad and drop
+			log.Info("[p2p debug] dropping peer due to header request timeout", "peer", p.id, "err", err)
+			log.Info("[p2p debug] request info", "pivoting", pivoting, "skeleton", skeleton, "number", number, "amount", amount, "skip", skip, "elapsed", common.PrettyDuration(time.Since(start)))
+
 			d.dropPeer(p.id)
 
 			// Finish the sync gracefully instead of dumping the gathered data though

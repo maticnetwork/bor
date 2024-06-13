@@ -25,6 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/eth/protocols/snap"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
 )
 
@@ -265,6 +266,29 @@ func (ps *peerSet) peerWithHighestTD() *eth.Peer {
 	}
 
 	return bestPeer
+}
+
+func (ps *peerSet) logPeerStatus() {
+	ps.lock.RLock()
+	defer ps.lock.RUnlock()
+
+	log.Info("[p2p debug] about to log latest status of all peers", "len", len(ps.peers))
+
+	var (
+		bestPeer *eth.Peer
+		bestTd   *big.Int
+	)
+
+	for _, p := range ps.peers {
+		head, td := p.Head()
+		log.Info("[p2p debug] peer status", "peer", p.ID(), "head", head, "td", td.Uint64())
+		if bestPeer == nil || td.Cmp(bestTd) > 0 {
+			bestPeer, bestTd = p.Peer, td
+		}
+	}
+
+	bestPeerHeadHash, bestPeerTd := bestPeer.Head()
+	log.Info("[p2p debug] best peer status", "peer", bestPeer.ID(), "head", bestPeerHeadHash, "td", bestPeerTd.Uint64())
 }
 
 // close disconnects all peers.
