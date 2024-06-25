@@ -394,8 +394,7 @@ func NewDatabaseWithFreezer(db ethdb.KeyValueStore, ancient string, namespace st
 				if kvhash, _ := db.Get(headerHashKey(offset)); len(kvhash) == 0 {
 					printChainMetadata(db)
 					log.Error("Missing blocks from leveldb post ancientdb pruning", "block", offset)
-					kvhash, _ = db.Get(headerHashKey(offset + 1))
-					log.Info("Next block in leveldb", "block", offset+1, "hash", common.Bytes2Hex(kvhash))
+					loopOverLevelDb(db, offset, offset+10000, 100)
 					// return nil, fmt.Errorf("missing blocks from leveldb post ancientdb pruning, block: %d", offset)
 				}
 			}
@@ -416,6 +415,18 @@ func NewDatabaseWithFreezer(db ethdb.KeyValueStore, ancient string, namespace st
 		KeyValueStore: db,
 		AncientStore:  frdb,
 	}, nil
+}
+
+func loopOverLevelDb(db ethdb.KeyValueStore, start uint64, end uint64, skip uint64) {
+	log.Info("Iterating over leveldb", "start", start, "end", end, "skip", skip)
+	for i := start; i <= end; i += skip {
+		key := headerHashKey(i)
+		value, _ := db.Get(key)
+		log.Info("Block", "number", i, "hash", common.Bytes2Hex(value))
+		if len(value) != 0 {
+			return
+		}
+	}
 }
 
 // NewMemoryDatabase creates an ephemeral in-memory key-value database without a
