@@ -663,7 +663,7 @@ func (c *InspectAncientDbCommand) inspectAncientDb(stack *node.Node, dbHandles i
 type DbCommand struct {
 	*Meta
 
-	datadirAncient
+	datadirAncient string
 }
 
 // Flags: datadir, datadir.ancient, cache.trie.journal, bloomfilter.size
