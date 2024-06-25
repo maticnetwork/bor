@@ -657,3 +657,102 @@ func (c *InspectAncientDbCommand) inspectAncientDb(stack *node.Node, dbHandles i
 
 	return rawdb.AncientInspect(chaindb)
 }
+
+////
+
+type DbCommand struct {
+	*Meta
+
+	datadirAncient
+}
+
+// Flags: datadir, datadir.ancient, cache.trie.journal, bloomfilter.size
+func (c *DbCommand) Flags() *flagset.Flagset {
+	flags := c.NewFlagSet("db")
+
+	flags.StringFlag(&flagset.StringFlag{
+		Name:    "datadir.ancient",
+		Value:   &c.datadirAncient,
+		Usage:   "Path of the old ancient data directory",
+		Default: "",
+	})
+
+	return flags
+}
+
+// Run implements the cli.Command interface
+func (c *DbCommand) Run(args []string) int {
+	flags := c.Flags()
+
+	if err := flags.Parse(args); err != nil {
+		c.UI.Error(err.Error())
+		return 1
+	}
+
+	datadir := c.dataDir
+	if datadir == "" {
+		c.UI.Error("datadir is required")
+		return 1
+	}
+
+	// Create the node
+	node, err := node.New(&node.Config{
+		DataDir: datadir,
+	})
+
+	if err != nil {
+		c.UI.Error(err.Error())
+		return 1
+	}
+	defer node.Close()
+
+	dbHandles, err := server.MakeDatabaseHandles(0)
+	if err != nil {
+		c.UI.Error(err.Error())
+		return 1
+	}
+
+	c.inspect(node, dbHandles)
+
+	return 0
+}
+
+func (c *DbCommand) inspect(stack *node.Node, dbHandles int) error {
+	chaindb, err := stack.OpenDatabaseWithFreezer(chaindataPath, 1024, dbHandles, c.datadirAncient, "", false, true, false)
+	if err != nil {
+		return err
+	}
+	defer chaindb.Close()
+
+	return rawdb.InspectDatabase(chaindb, []byte{}, []byte{})
+}
+
+// MarkDown implements cli.MarkDown interface
+func (c *DbCommand) MarkDown() string {
+	items := []string{
+		"# Inspect ancient DB for block pruning",
+		"The ```bor snapshot inspect-ancient-db``` command will inspect few fields in the ancient datastore using the given datadir location.",
+		`
+This command prints the following information which is useful for block-pruning rounds:
+
+1. Offset / Start block number (from kvDB).
+2. Amount of items in the ancientdb.
+3. Last block number written in ancientdb.
+`,
+		c.Flags().MarkDown(),
+	}
+
+	return strings.Join(items, "\n\n")
+}
+
+// Help implements the cli.Command interface
+func (c *DbCommand) Help() string {
+	return `Usage: bor snapshot inspect-ancient-db <datadir>
+
+  This command will inspect few fields in the ancient datastore using the given datadir location` + c.Flags().Help()
+}
+
+// Synopsis implements the cli.Command interface
+func (c *DbCommand) Synopsis() string {
+	return "Inspect fields in the ancient blockchain data"
+}

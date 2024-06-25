@@ -210,6 +210,11 @@ func Commands() map[string]MarkDownCommandFactory {
 				Meta: meta,
 			}, nil
 		},
+		"snapshot db": func() (MarkDownCommand, error) {
+			return &DbCommand{
+				Meta: meta,
+			}, nil
+		},
 	}
 }
 
