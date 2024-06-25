@@ -393,7 +393,8 @@ func NewDatabaseWithFreezer(db ethdb.KeyValueStore, ancient string, namespace st
 				// Full pruning case. Check if the key-value store isn't missing any block.
 				if kvhash, _ := db.Get(headerHashKey(offset)); len(kvhash) == 0 {
 					printChainMetadata(db)
-					return nil, fmt.Errorf("missing blocks from leveldb post ancientdb pruning, block: %d", offset)
+					log.Error("Missing blocks from leveldb post ancientdb pruning", "block", offset)
+					// return nil, fmt.Errorf("missing blocks from leveldb post ancientdb pruning, block: %d", offset)
 				}
 			}
 		}
