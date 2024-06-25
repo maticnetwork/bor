@@ -394,7 +394,7 @@ func NewDatabaseWithFreezer(db ethdb.KeyValueStore, ancient string, namespace st
 				if kvhash, _ := db.Get(headerHashKey(offset)); len(kvhash) == 0 {
 					printChainMetadata(db)
 					log.Error("Missing blocks from leveldb post ancientdb pruning", "block", offset)
-					loopOverLevelDb(db, offset, offset+10000, 100)
+					loopOverLevelDb(db, offset, offset+1000000, 1000)
 					// return nil, fmt.Errorf("missing blocks from leveldb post ancientdb pruning, block: %d", offset)
 				}
 			}
@@ -422,8 +422,8 @@ func loopOverLevelDb(db ethdb.KeyValueStore, start uint64, end uint64, skip uint
 	for i := start; i <= end; i += skip {
 		key := headerHashKey(i)
 		value, _ := db.Get(key)
-		log.Info("Block", "number", i, "hash", common.Bytes2Hex(value))
 		if len(value) != 0 {
+			log.Info("Block", "number", i, "hash", common.Bytes2Hex(value))
 			return
 		}
 	}
