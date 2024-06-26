@@ -18,7 +18,6 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/trie"
-	"github.com/olekukonko/tablewriter"
 
 	"github.com/prometheus/tsdb/fileutil"
 
@@ -713,47 +712,22 @@ func (c *DbCommand) Run(args []string) int {
 		return 1
 	}
 
-	db, err := node.OpenDatabaseWithFreezer(chaindataPath, 1024, dbHandles, c.datadirAncient, "", false, true, false)
-	if err != nil {
+	if err := c.inspect(node, dbHandles); err != nil {
 		c.UI.Error(err.Error())
-		return 0
+		return 1
 	}
-	defer db.Close()
-
-	ancients, err := db.Ancients()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error accessing ancients: %v", err)
-	}
-
-	data := rawdb.ReadChainMetadata(db)
-	data = append(data, []string{"frozen", fmt.Sprintf("%d items", ancients)})
-	data = append(data, []string{"snapshotGenerator", snapshot.ParseGeneratorStatus(rawdb.ReadSnapshotGenerator(db))})
-
-	if b := rawdb.ReadHeadBlock(db); b != nil {
-		data = append(data, []string{"headBlock.Hash", fmt.Sprintf("%v", b.Hash())})
-		data = append(data, []string{"headBlock.Root", fmt.Sprintf("%v", b.Root())})
-		data = append(data, []string{"headBlock.Number", fmt.Sprintf("%d (%#x)", b.Number(), b.Number())})
-	}
-
-	if h := rawdb.ReadHeadHeader(db); h != nil {
-		data = append(data, []string{"headHeader.Hash", fmt.Sprintf("%v", h.Hash())})
-		data = append(data, []string{"headHeader.Root", fmt.Sprintf("%v", h.Root)})
-		data = append(data, []string{"headHeader.Number", fmt.Sprintf("%d (%#x)", h.Number, h.Number)})
-	}
-
-	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader([]string{"Field", "Value"})
-	table.AppendBulk(data)
-	table.Render()
-	// return nil
 
 	return 0
 }
 
-// func (c *DbCommand) inspect(stack *node.Node, dbHandles int) error {
-
-// 	return rawdb.InspectDatabase(chaindb, []byte{}, []byte{})
-// }
+func (c *DbCommand) inspect(stack *node.Node, dbHandles int) error {
+	chaindb, err := stack.OpenDatabaseWithFreezer(chaindataPath, 1024, dbHandles, c.datadirAncient, "", false, true, false)
+	if err != nil {
+		return err
+	}
+	defer chaindb.Close()
+	return rawdb.InspectDatabase(chaindb, []byte("h"), []byte{})
+}
 
 // MarkDown implements cli.MarkDown interface
 func (c *DbCommand) MarkDown() string {
