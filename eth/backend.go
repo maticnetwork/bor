@@ -486,6 +486,7 @@ func (s *Ethereum) StartMining() error {
 		s.lock.RLock()
 		price := s.gasPrice
 		s.lock.RUnlock()
+		log.Info("[30gwei debug] updating gas tip while start mining", "price", price.Uint64())
 		s.txPool.SetGasTip(price)
 
 		// Configure the local mining address
