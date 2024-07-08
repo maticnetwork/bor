@@ -251,6 +251,8 @@ func New(config Config, chain BlockChain, options ...func(pool *LegacyPool)) *Le
 	// Sanitize the input to ensure no vulnerable gas prices are set
 	config = (&config).sanitize()
 
+	log.Info("[manav] sanitized config", "pricelimit", config.PriceLimit)
+
 	// Create the transaction pool with its initial settings
 	pool := &LegacyPool{
 		config:          config,
@@ -448,6 +450,7 @@ func (pool *LegacyPool) SetGasTip(tip *big.Int) {
 	defer pool.mu.Unlock()
 
 	old := pool.gasTip.Load()
+	log.Info("[manav] updating gas limit", "old", old.Uint64(), "new", tip.Uint64())
 	pool.gasTip.Store(new(big.Int).Set(tip))
 
 	// If the min miner fee increased, remove transactions below the new threshold

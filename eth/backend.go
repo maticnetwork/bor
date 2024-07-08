@@ -270,6 +270,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	if config.TxPool.Journal != "" {
 		config.TxPool.Journal = stack.ResolvePath(config.TxPool.Journal)
 	}
+	log.Info("[manav] before initialising legacy pool", "pricelimit", config.TxPool.PriceLimit)
 	legacyPool := legacypool.New(config.TxPool, eth.blockchain)
 
 	eth.txPool, err = txpool.New(new(big.Int).SetUint64(config.TxPool.PriceLimit), eth.blockchain, []txpool.SubPool{legacyPool})
@@ -483,6 +484,7 @@ func (s *Ethereum) StartMining() error {
 		s.lock.RLock()
 		price := s.gasPrice
 		s.lock.RUnlock()
+		log.Info("[manav] setting gas tip while starting mining", "value", price.Uint64())
 		s.txPool.SetGasTip(price)
 
 		// Configure the local mining address
