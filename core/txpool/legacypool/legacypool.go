@@ -614,7 +614,9 @@ func (pool *LegacyPool) validateTxBasics(tx *types.Transaction, local bool) erro
 		MaxSize: txMaxSize,
 		MinTip:  pool.gasTip.Load(),
 	}
+	log.Info("[manav] validating transaction", "minTip", opts.MinTip.Uint64(), "tx minTip", tx.GasTipCap().Uint64())
 	if local {
+		log.Info("[manav] setting mintip to 0 as it's local tx")
 		opts.MinTip = new(big.Int)
 	}
 	if err := txpool.ValidateTransaction(tx, pool.currentHead.Load(), pool.signer, opts); err != nil {
