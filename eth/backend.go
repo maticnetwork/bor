@@ -123,7 +123,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		return nil, fmt.Errorf("invalid sync mode %d", config.SyncMode)
 	}
 	// enforce minimum gas price of 30 gwei in bor
-	if config.Genesis.Config.ChainID.Cmp(params.AmoyChainConfig.ChainID) == 0 {
+	if config.Genesis.Config.ChainID.Cmp(big.NewInt(10992)) == 0 {
 		log.Info("[manav] enforcing minimum miner gas price of 30 gwei for selected network")
 		if config.Miner.GasPrice == nil || config.Miner.GasPrice.Cmp(big.NewInt(params.BorDefaultMinerGasPrice)) != 0 {
 			log.Warn("Sanitizing invalid miner gas price", "provided", config.Miner.GasPrice, "updated", params.BorDefaultMinerGasPrice)
@@ -260,11 +260,11 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		eth.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, config.Genesis, &overrides, eth.engine, vmConfig, eth.shouldPreserve, &config.TxLookupLimit, checker)
 	}
 
-	if chainConfig.ChainID.Cmp(params.AmoyChainConfig.ChainID) == 0 {
+	if chainConfig.ChainID.Cmp(big.NewInt(10992)) == 0 {
 		gasprice.DefaultIgnorePrice = big.NewInt(params.BorDefaultGpoIgnorePrice)
-		log.Info("[manav] only applying txpool price limit changes for selected network", "ignoreprice", gasprice.DefaultIgnorePrice)
+		log.Info("[manav] only applying gpo limit for selected network", "ignoreprice", gasprice.DefaultIgnorePrice)
 	} else {
-		log.Info("[manav] skipping applying txpool price limit changes due to different network")
+		log.Info("[manav] skipping applying gpo limit changes due to different network")
 	}
 	eth.APIBackend.gpo = gasprice.NewOracle(eth.APIBackend, gpoParams)
 	if err != nil {
@@ -294,7 +294,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	if err != nil {
 		return nil, err
 	}
-	if eth.blockchain.Config().ChainID.Cmp(params.AmoyChainConfig.ChainID) == 0 {
+	if eth.blockchain.Config().ChainID.Cmp(big.NewInt(10992)) == 0 {
 		log.Info("[manav] only applying txpool price limit changes for selected network", "pricelimit", params.BorDefaultTxPoolPriceLimit)
 		eth.txPool.SetGasTip(new(big.Int).SetUint64(params.BorDefaultTxPoolPriceLimit))
 	} else {
