@@ -123,7 +123,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		return nil, fmt.Errorf("invalid sync mode %d", config.SyncMode)
 	}
 	// (PIP-35): Only enforce the minimum gas price of 25 gwei for amoy
-	if config.Genesis.Config.ChainID.Cmp(params.AmoyChainConfig.ChainID) == 0 {
+	if config.Genesis != nil && config.Genesis.Config.ChainID.Cmp(params.AmoyChainConfig.ChainID) == 0 {
 		if config.Miner.GasPrice == nil || config.Miner.GasPrice.Cmp(big.NewInt(params.BorDefaultMinerGasPrice)) != 0 {
 			log.Warn("Sanitizing invalid miner gas price", "provided", config.Miner.GasPrice, "updated", params.BorDefaultMinerGasPrice)
 			config.Miner.GasPrice = new(big.Int).SetUint64(params.BorDefaultMinerGasPrice)
