@@ -449,6 +449,7 @@ func (pool *LegacyPool) SetGasTip(tip *big.Int) {
 	defer pool.mu.Unlock()
 
 	old := pool.gasTip.Load()
+	log.Info("[30gwei debug] updating gas tip", "old", old.Uint64(), "new", tip.Uint64())
 	pool.gasTip.Store(new(big.Int).Set(tip))
 
 	// If the min miner fee increased, remove transactions below the new threshold
