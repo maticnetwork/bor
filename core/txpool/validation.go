@@ -107,6 +107,7 @@ func ValidateTransaction(tx *types.Transaction, head *types.Header, signer types
 	}
 	// Ensure the gasprice is high enough to cover the requirement of the calling
 	// pool and/or block producer
+	log.Info("[30 gwei debug] validating txs", "mintip", opts.MinTip, "tx mintip", tx.GasTipCap())
 	if tx.GasTipCapIntCmp(opts.MinTip) < 0 {
 		return fmt.Errorf("%w: tip needed %v, tip permitted %v", ErrUnderpriced, opts.MinTip, tx.GasTipCap())
 	}
