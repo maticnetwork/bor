@@ -123,9 +123,18 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		return nil, fmt.Errorf("invalid sync mode %d", config.SyncMode)
 	}
 	// enforce minimum gas price of 30 gwei in bor
-	if config.Miner.GasPrice == nil || config.Miner.GasPrice.Cmp(big.NewInt(params.BorDefaultMinerGasPrice)) != 0 {
-		log.Warn("Sanitizing invalid miner gas price", "provided", config.Miner.GasPrice, "updated", ethconfig.Defaults.Miner.GasPrice)
-		config.Miner.GasPrice = new(big.Int).Set(ethconfig.Defaults.Miner.GasPrice)
+	if config.Genesis.Config.ChainID.Cmp(params.AmoyChainConfig.ChainID) == 0 {
+		log.Info("[manav] enforcing minimum miner gas price of 30 gwei for selected network")
+		if config.Miner.GasPrice == nil || config.Miner.GasPrice.Cmp(big.NewInt(params.BorDefaultMinerGasPrice)) != 0 {
+			log.Warn("Sanitizing invalid miner gas price", "provided", config.Miner.GasPrice, "updated", params.BorDefaultMinerGasPrice)
+			config.Miner.GasPrice = new(big.Int).SetUint64(params.BorDefaultMinerGasPrice)
+		}
+	} else {
+		log.Info("[manav] skipping enforcing minimum miner gas price for different network")
+		if config.Miner.GasPrice == nil || config.Miner.GasPrice.Cmp(common.Big0) <= 0 {
+			log.Warn("Sanitizing invalid miner gas price", "provided", config.Miner.GasPrice, "updated", ethconfig.Defaults.Miner.GasPrice)
+			config.Miner.GasPrice = new(big.Int).Set(ethconfig.Defaults.Miner.GasPrice)
+		}
 	}
 	if config.NoPruning && config.TrieDirtyCache > 0 {
 		if config.SnapshotCache > 0 {
@@ -251,6 +260,12 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		eth.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, config.Genesis, &overrides, eth.engine, vmConfig, eth.shouldPreserve, &config.TxLookupLimit, checker)
 	}
 
+	if chainConfig.ChainID.Cmp(params.AmoyChainConfig.ChainID) == 0 {
+		gasprice.DefaultIgnorePrice = big.NewInt(params.BorDefaultGpoIgnorePrice)
+		log.Info("[manav] only applying txpool price limit changes for selected network", "ignoreprice", gasprice.DefaultIgnorePrice)
+	} else {
+		log.Info("[manav] skipping applying txpool price limit changes due to different network")
+	}
 	eth.APIBackend.gpo = gasprice.NewOracle(eth.APIBackend, gpoParams)
 	if err != nil {
 		return nil, err
@@ -279,7 +294,12 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	if err != nil {
 		return nil, err
 	}
-	eth.txPool.SetGasTip(new(big.Int).SetUint64(params.BorDefaultTxPoolPriceLimit))
+	if eth.blockchain.Config().ChainID.Cmp(params.AmoyChainConfig.ChainID) == 0 {
+		log.Info("[manav] only applying txpool price limit changes for selected network", "pricelimit", params.BorDefaultTxPoolPriceLimit)
+		eth.txPool.SetGasTip(new(big.Int).SetUint64(params.BorDefaultTxPoolPriceLimit))
+	} else {
+		log.Info("[manav] skipping applying txpool price limit changes due to different network")
+	}
 
 	// Permit the downloader to use the trie cache allowance during fast sync
 	cacheLimit := cacheConfig.TrieCleanLimit + cacheConfig.TrieDirtyLimit + cacheConfig.SnapshotLimit

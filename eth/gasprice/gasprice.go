@@ -36,7 +36,7 @@ const sampleNumber = 3 // Number of transactions sampled in a block
 
 var (
 	DefaultMaxPrice    = big.NewInt(500 * params.GWei)
-	DefaultIgnorePrice = big.NewInt(params.BorDefaultGpoIgnorePrice)
+	DefaultIgnorePrice = big.NewInt(2 * params.Wei)
 )
 
 type Config struct {
