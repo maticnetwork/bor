@@ -271,7 +271,9 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	if config.TxPool.Journal != "" {
 		config.TxPool.Journal = stack.ResolvePath(config.TxPool.Journal)
 	}
+	log.Info("[30gewi debug] before initialising legacypool", "pricelimit", config.TxPool.PriceLimit)
 	legacyPool := legacypool.New(config.TxPool, eth.blockchain)
+	log.Info("[30gewi debug] after initialising legacypool", "pricelimit", config.TxPool.PriceLimit)
 
 	eth.txPool, err = txpool.New(new(big.Int).SetUint64(config.TxPool.PriceLimit), eth.blockchain, []txpool.SubPool{legacyPool})
 	if err != nil {

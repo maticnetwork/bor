@@ -82,6 +82,8 @@ func New(gasTip *big.Int, chain BlockChain, subpools []SubPool) (*TxPool, error)
 	// during initialization.
 	head := chain.CurrentBlock()
 
+	log.Info("[30gwei debug] initialising txpool", "gastip", gasTip.Uint64())
+
 	pool := &TxPool{
 		subpools:     subpools,
 		reservations: make(map[common.Address]SubPool),
