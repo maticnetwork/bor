@@ -105,7 +105,7 @@ func NewOracle(backend OracleBackend, params Config) *Oracle {
 	if ignorePrice == nil || ignorePrice.Int64() != DefaultIgnorePrice.Int64() {
 		ignorePrice = DefaultIgnorePrice
 		log.Warn("Sanitizing invalid gasprice oracle ignore price", "provided", params.IgnorePrice, "updated", ignorePrice)
-	} else if ignorePrice.Int64() > 0 {
+	} else {
 		log.Info("Gasprice oracle is ignoring threshold set", "threshold", ignorePrice)
 	}
 
