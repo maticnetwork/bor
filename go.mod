@@ -37,7 +37,6 @@ require (
 	github.com/gofrs/flock v0.8.1
 	github.com/golang-jwt/jwt/v4 v4.5.0
 	github.com/golang/mock v1.6.0
-	github.com/golang/protobuf v1.5.4
 	github.com/golang/snappy v0.0.5-0.20220116011046-fa5810519dcb
 	github.com/google/gofuzz v1.2.0
 	github.com/google/uuid v1.6.0
@@ -209,6 +208,7 @@ require (
 	github.com/go-redsync/redsync/v4 v4.0.4 // indirect
 	github.com/goccy/go-json v0.10.3 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
+	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/gomodule/redigo v2.0.0+incompatible // indirect
 	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/google/s2a-go v0.1.7 // indirect
