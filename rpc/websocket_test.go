@@ -198,6 +198,7 @@ func TestWebsocketPeerInfo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer c.Close()
 
 	// Request peer information.
 	var connInfo PeerInfo
@@ -276,7 +277,7 @@ func TestClientWebsocketPing(t *testing.T) {
 // This checks that the websocket transport can deal with large messages.
 func TestClientWebsocketLargeMessage(t *testing.T) {
 	var (
-		srv     = NewServer()
+		srv     = NewServer("", 0, 0)
 		httpsrv = httptest.NewServer(srv.WebsocketHandler(nil))
 		wsURL   = "ws:" + strings.TrimPrefix(httpsrv.URL, "http:")
 	)
@@ -291,6 +292,7 @@ func TestClientWebsocketLargeMessage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer c.Close()
 
 	var r string
 	if err := c.Call(&r, "test_largeResp"); err != nil {

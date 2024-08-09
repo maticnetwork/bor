@@ -600,7 +600,7 @@ func listWallets(c *cli.Context) error {
 // accountImport imports a raw hexadecimal private key via CLI.
 func accountImport(c *cli.Context) error {
 	if c.Args().Len() != 1 {
-		return errors.New("<keyfile> must be given as first argument.")
+		return errors.New("<keyfile> must be given as first argument")
 	}
 
 	internalApi, ui, err := initInternalApi(c)
@@ -818,7 +818,7 @@ func signer(c *cli.Context) error {
 		vhosts := utils.SplitAndTrim(c.String(utils.HTTPVirtualHostsFlag.Name))
 		cors := utils.SplitAndTrim(c.String(utils.HTTPCORSDomainFlag.Name))
 
-		srv := rpc.NewServer()
+		srv := rpc.NewServer("", 0, 0)
 		srv.SetBatchLimits(node.DefaultConfig.BatchRequestLimit, node.DefaultConfig.BatchResponseMaxSize)
 		err := node.RegisterApis(rpcAPI, []string{"account"}, srv)
 		if err != nil {

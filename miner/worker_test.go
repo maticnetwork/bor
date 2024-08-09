@@ -227,7 +227,7 @@ type testWorkerBackend struct {
 func newTestWorkerBackend(t TensingObject, chainConfig *params.ChainConfig, engine consensus.Engine, db ethdb.Database) *testWorkerBackend {
 	var gspec = &core.Genesis{
 		Config: chainConfig,
-		Alloc:  types.GenesisAlloc{testBankAddress: {Balance: testBankFunds}},
+		Alloc:  core.GenesisAlloc{testBankAddress: {Balance: testBankFunds}},
 	}
 	switch e := engine.(type) {
 	case *bor.Bor:
@@ -270,7 +270,7 @@ func (b *testWorkerBackend) PeerCount() int {
 
 func (b *testWorkerBackend) newRandomTx(creation bool) *types.Transaction {
 	var tx *types.Transaction
-	gasPrice := big.NewInt(10 * params.InitialBaseFee)
+	gasPrice := big.NewInt(26 * params.InitialBaseFee)
 	if creation {
 		tx, _ = types.SignTx(types.NewContractCreation(b.txPool.Nonce(testBankAddress), big.NewInt(0), testGas, gasPrice, common.FromHex(testCode)), types.HomesteadSigner{}, testBankKey)
 	} else {
@@ -298,7 +298,7 @@ func (b *testWorkerBackend) newRandomTxWithNonce(creation bool, nonce uint64) *t
 func (b *testWorkerBackend) newStorageCreateContractTx() (*types.Transaction, common.Address) {
 	var tx *types.Transaction
 
-	gasPrice := big.NewInt(30 * params.InitialBaseFee)
+	gasPrice := big.NewInt(26 * params.InitialBaseFee)
 
 	tx, _ = types.SignTx(types.NewContractCreation(b.txPool.Nonce(TestBankAddress), big.NewInt(0), testGas, gasPrice, common.FromHex(storageContractByteCode)), types.HomesteadSigner{}, testBankKey)
 	contractAddr := crypto.CreateAddress(TestBankAddress, b.txPool.Nonce(TestBankAddress))
@@ -310,7 +310,7 @@ func (b *testWorkerBackend) newStorageCreateContractTx() (*types.Transaction, co
 func (b *testWorkerBackend) newStorageContractCallTx(to common.Address, nonce uint64) *types.Transaction {
 	var tx *types.Transaction
 
-	gasPrice := big.NewInt(10 * params.InitialBaseFee)
+	gasPrice := big.NewInt(26 * params.InitialBaseFee)
 
 	tx, _ = types.SignTx(types.NewTransaction(nonce, to, nil, storageCallTxGas, gasPrice, common.FromHex(storageContractTxCallData)), types.HomesteadSigner{}, testBankKey)
 
@@ -427,11 +427,11 @@ func testEmptyWork(t *testing.T, chainConfig *params.ChainConfig, engine consens
 	taskCh := make(chan struct{}, 2)
 	checkEqual := func(t *testing.T, task *task) {
 		// The work should contain 1 tx
-		receiptLen, balance := 1, uint256.NewInt(1000)
+		receiptLen, balance := 1, big.NewInt(1000)
 		if len(task.receipts) != receiptLen {
 			t.Fatalf("receipt number mismatch: have %d, want %d", len(task.receipts), receiptLen)
 		}
-		if task.state.GetBalance(testUserAddress).Cmp(balance) != 0 {
+		if task.state.GetBalance(testUserAddress).Cmp(uint256.NewInt(balance.Uint64())) != 0 {
 			t.Fatalf("account balance mismatch: have %d, want %d", task.state.GetBalance(testUserAddress), balance)
 		}
 	}
