@@ -496,7 +496,7 @@ func (evm *EVM) create(caller ContractRef, codeAndHash *codeAndHash, gas uint64,
 
 	// Check whether the max code size has been exceeded, assign err if the case.
 	if err == nil && evm.chainRules.IsEIP158 {
-		if evm.chainConfig.Bor.IsAhmedabad(evm.Context.BlockNumber) {
+		if evm.chainConfig.Bor != nil && evm.chainConfig.Bor.IsAhmedabad(evm.Context.BlockNumber) {
 			if len(ret) > params.MaxCodeSizePostAhmedabad {
 				err = ErrMaxCodeSizeExceeded
 			}
