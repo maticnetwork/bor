@@ -1655,7 +1655,7 @@ func (pool *LegacyPool) truncateQueue() {
 // to trigger a re-heap is this function
 func (pool *LegacyPool) demoteUnexecutables() {
 	// Iterate over all accounts and demote any non-executable transactions
-	gasLimit := pool.currentHead.Load().GasLimit
+	currentHeader := pool.currentHead.Load()
 	for addr, list := range pool.pending {
 		nonce := pool.currentState.GetNonce(addr)
 
@@ -1667,7 +1667,7 @@ func (pool *LegacyPool) demoteUnexecutables() {
 			log.Trace("Removed old pending transaction", "hash", hash)
 		}
 		// Drop all transactions that are too costly (low balance or out of gas), and queue any invalids back for later
-		drops, invalids := list.Filter(pool.currentState.GetBalance(addr), gasLimit)
+		drops, invalids := list.Filter(pool.currentState.GetBalance(addr), currentHeader.GasLimit)
 		for _, tx := range drops {
 			hash := tx.Hash()
 			log.Trace("Removed unpayable pending transaction", "hash", hash)
@@ -1683,7 +1683,7 @@ func (pool *LegacyPool) demoteUnexecutables() {
 			pool.enqueueTx(hash, tx, false, false)
 		}
 		// Drop all transactions that no longer have valid TxOptions
-		txConditionalsRemoved := list.FilterTxConditional(pool.currentState)
+		txConditionalsRemoved := list.FilterTxConditional(pool.currentState, currentHeader)
 
 		for _, tx := range txConditionalsRemoved {
 			hash := tx.Hash()
