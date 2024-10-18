@@ -2,6 +2,7 @@ package bor
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/ethereum/go-ethereum/consensus/bor/valset"
 
@@ -147,6 +148,7 @@ func (s *Snapshot) apply(headers []*types.Header) (*Snapshot, error) {
 
 		// change validator set and change proposer
 		if number > 0 && (number+1)%s.chainConfig.Bor.CalculateSprint(number) == 0 {
+			fmt.Println("BLOCK NUMBER!!: ", number, "SPRINT STARTS!!: ", number+1)
 			if err := validateHeaderExtraField(header.Extra); err != nil {
 				return nil, err
 			}
@@ -156,7 +158,18 @@ func (s *Snapshot) apply(headers []*types.Header) (*Snapshot, error) {
 			// get validators from headers and use that for new validator set
 			newVals, _ := valset.ParseValidators(validatorBytes)
 			v := getUpdatedValidatorSet(snap.ValidatorSet.Copy(), newVals)
+
+			for _, v := range v.Validators {
+				fmt.Println("UPDATED VALIDATOR BEFORE IncrementProposerPriority: ", v.ID, v.Address.Hex(), v.VotingPower, v.ProposerPriority)
+			}
 			v.IncrementProposerPriority(1)
+
+			for _, v := range v.Validators {
+				fmt.Println("UPDATED VALIDATOR AFTER IncrementProposerPriority: ", v.ID, v.Address.Hex(), v.VotingPower, v.ProposerPriority)
+			}
+
+			fmt.Println("PROPOSER!!: ", v.GetProposer().Address.Hex())
+
 			snap.ValidatorSet = v
 		}
 	}
