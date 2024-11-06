@@ -73,6 +73,7 @@ func CalcBaseFee(config *params.ChainConfig, parent *types.Header) *big.Int {
 		num                            = new(big.Int)
 		denom                          = new(big.Int)
 		baseFeeChangeDenominatorUint64 = params.BaseFeeChangeDenominator(config.Bor, parent.Number)
+		minBaseFee                     = params.GetMinBaseFee(config.Bor, parent.Number)
 	)
 
 	if parent.GasUsed > parentGasTarget {
@@ -94,7 +95,13 @@ func CalcBaseFee(config *params.ChainConfig, parent *types.Header) *big.Int {
 		num.Div(num, denom.SetUint64(baseFeeChangeDenominatorUint64))
 		baseFee := num.Sub(parent.BaseFee, num)
 
-		return math.BigMax(baseFee, common.Big0)
+		// Because the min base fee is enforced on polygon pos, use that as the minimum
+		if config.Bor != nil {
+			return math.BigMax(baseFee, minBaseFee)
+		} else {
+			return math.BigMax(baseFee, common.Big0)
+		}
+
 	}
 }
 

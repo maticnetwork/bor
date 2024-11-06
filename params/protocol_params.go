@@ -128,8 +128,9 @@ const (
 	BaseFeeChangeDenominatorPreDelhi  = 8  // Bounds the amount the base fee can change between blocks before Delhi Hard Fork.
 	BaseFeeChangeDenominatorPostDelhi = 16 // Bounds the amount the base fee can change between blocks after Delhi Hard Fork.
 
-	ElasticityMultiplier = 2          // Bounds the maximum gas limit an EIP-1559 block may have.
-	InitialBaseFee       = 1000000000 // Initial base fee for EIP-1559 blocks.
+	ElasticityMultiplier = 2           // Bounds the maximum gas limit an EIP-1559 block may have.
+	InitialBaseFee       = 25000000000 // Initial base fee for EIP-1559 blocks.
+	MinBaseFee           = 25000000000 // Mininum enforced base fee for EIP-1559 blocks (for polygon)
 
 	DefaultBaseFeeChangeDenominator = 8 // Bounds the amount the base fee can change between blocks.
 	DefaultElasticityMultiplier     = 2 // Bounds the maximum gas limit an EIP-1559 block may have.
@@ -218,4 +219,9 @@ func BaseFeeChangeDenominator(borConfig *BorConfig, number *big.Int) uint64 {
 	} else {
 		return BaseFeeChangeDenominatorPreDelhi
 	}
+}
+
+func GetMinBaseFee(borConfig *BorConfig, number *big.Int) *big.Int {
+	// TODO: Check for HF here
+	return big.NewInt(MinBaseFee)
 }
