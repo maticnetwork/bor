@@ -609,7 +609,7 @@ func DefaultConfig() *Config {
 		EnablePreimageRecording: false,
 		DataDir:                 DefaultDataDir(),
 		Ancient:                 "",
-		DBEngine:                "leveldb",
+		DBEngine:                "pebble",
 		KeyStoreDir:             "",
 		Logging: &LoggingConfig{
 			Vmodule:             "",
@@ -647,7 +647,7 @@ func DefaultConfig() *Config {
 		},
 		SyncMode:    "full",
 		GcMode:      "full",
-		StateScheme: "hash",
+		StateScheme: "path",
 		Snapshot:    true,
 		BorLogs:     false,
 		TxPool: &TxPoolConfig{
