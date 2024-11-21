@@ -103,7 +103,7 @@ func NewOracle(backend OracleBackend, params Config) *Oracle {
 
 	// PIP-35: Enforce the ignore price to 25 gwei
 	ignorePrice := params.IgnorePrice
-	if ignorePrice == nil || ignorePrice.Int64() != DefaultIgnorePrice.Int64() {
+	if ignorePrice == nil || ignorePrice.Int64() < DefaultIgnorePrice.Int64() {
 		ignorePrice = DefaultIgnorePrice
 		log.Warn("Sanitizing invalid gasprice oracle ignore price", "provided", params.IgnorePrice, "updated", ignorePrice)
 	} else {
