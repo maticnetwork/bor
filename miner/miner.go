@@ -49,7 +49,8 @@ type Config struct {
 	Etherbase           common.Address `toml:",omitempty"` // Public address for block mining rewards
 	ExtraData           hexutil.Bytes  `toml:",omitempty"` // Block extra data set by the miner
 	GasCeil             uint64         // Target gas ceiling for mined blocks.
-	GasPrice            *big.Int       // Minimum gas price for mining a transaction
+	GasPrice            *big.Int       // Default gas price for mining a transaction
+	MinGasPrice         *big.Int       // Minium gas price for mining a transaction
 	Recommit            time.Duration  // The time interval for miner to re-create mining work.
 	CommitInterruptFlag bool           // Interrupt commit when time is up ( default = true)
 
@@ -58,8 +59,9 @@ type Config struct {
 
 // DefaultConfig contains default settings for miner.
 var DefaultConfig = Config{
-	GasCeil:  30_000_000,
-	GasPrice: big.NewInt(params.BorDefaultMinerGasPrice), // enforces minimum gas price of 25 gwei in bor
+	GasCeil:     30_000_000,
+	GasPrice:    big.NewInt(params.BorDefaultMinerGasPrice), // enforces default gas price of 25 gwei in bor
+	MinGasPrice: big.NewInt(params.BorMinimumMinerGasPrice), // It sets a threshold of 1 gwei, ensuring that the gas price cannot go below this value.
 
 	// The default recommit time is chosen as two seconds since
 	// consensus-layer usually will wait a half slot of time(6s)
