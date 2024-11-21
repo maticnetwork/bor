@@ -186,23 +186,11 @@ const (
 	// BorDefaultMinerGasPrice defines the minimum gas price for bor validators to mine a transaction.
 	BorDefaultMinerGasPrice = 25 * GWei
 
-	// BorMinimumMinerGasPrice defines the minimum gas price allowed for Bor validators.
-	// If the provided gas price is lower than this value, the default gas price will be used instead.
-	BorMinimumMinerGasPrice = 1 * GWei
-
 	// BorDefaultTxPoolPriceLimit defines the minimum gas price limit for bor to enforce txs acceptance into the pool.
 	BorDefaultTxPoolPriceLimit = 25 * GWei
 
-	// BorDefaultGpoIgnorePrice defines the default gas price below which bor gpo will ignore transactions.
+	// BorDefaultGpoIgnorePrice defines the gas price below which bor gpo will ignore transactions.
 	BorDefaultGpoIgnorePrice = 25 * GWei
-
-	// BorMinimumGpoIgnorePrice defines the minimum gas price threshold below which Bor's Gas Price Oracle (GPO)
-	// will ignore the provided gas price and instead use the default gas price.
-	BorMinimumGpoIgnorePrice = 1 * GWei
-
-	// BorMinimumTxPoolPriceLimit defines the minimum gas price limit for the transaction pool.
-	// Any gas price below this threshold will trigger the use of the default gas price instead.
-	BorMinimumTxPoolPriceLimit = 1 * GWei
 )
 
 // Gas discount table for BLS12-381 G1 and G2 multi exponentiation operations

@@ -131,9 +131,8 @@ type Config struct {
 	Journal   string           // Journal of local transactions to survive node restarts
 	Rejournal time.Duration    // Time interval to regenerate the local transaction journal
 
-	PriceLimit    uint64 // Minimum gas price to enforce for acceptance into the pool
-	PriceBump     uint64 // Minimum price bump percentage to replace an already existing transaction (nonce)
-	MinPriceLimit uint64 // MinPriceLimit is the minimum allowed price.
+	PriceLimit uint64 // Minimum gas price to enforce for acceptance into the pool
+	PriceBump  uint64 // Minimum price bump percentage to replace an already existing transaction (nonce)
 
 	AccountSlots uint64 // Number of executable transaction slots guaranteed per account
 	GlobalSlots  uint64 // Maximum number of executable transaction slots for all accounts
@@ -149,9 +148,8 @@ var DefaultConfig = Config{
 	Journal:   "transactions.rlp",
 	Rejournal: time.Hour,
 
-	PriceLimit:    params.BorDefaultTxPoolPriceLimit,
-	PriceBump:     10,
-	MinPriceLimit: params.BorMinimumTxPoolPriceLimit,
+	PriceLimit: params.BorDefaultTxPoolPriceLimit,
+	PriceBump:  10,
 
 	AccountSlots: 16,
 	GlobalSlots:  4096 + 1024, // urgent + floating queue capacity with 4:1 ratio
@@ -170,9 +168,8 @@ func (config *Config) sanitize() Config {
 		log.Warn("Sanitizing invalid txpool journal time", "provided", conf.Rejournal, "updated", time.Second)
 		conf.Rejournal = time.Second
 	}
-	// PIP-35: Enforce default price limit to 25 gwei
-	if conf.PriceLimit < params.BorMinimumTxPoolPriceLimit {
-		log.Warn("Provided price limit is below the minimum threshold", "provided", conf.PriceLimit, "minimum", DefaultConfig.MinPriceLimit)
+	// PIP-35: Enforce min price limit to 25 gwei
+	if conf.PriceLimit < params.BorDefaultTxPoolPriceLimit {
 		log.Warn("Sanitizing invalid txpool price limit", "provided", conf.PriceLimit, "updated", DefaultConfig.PriceLimit)
 		conf.PriceLimit = DefaultConfig.PriceLimit
 	}

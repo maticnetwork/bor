@@ -121,9 +121,8 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		return nil, fmt.Errorf("invalid sync mode %d", config.SyncMode)
 	}
 
-	// PIP-35: Enforce default gas price to 25 gwei
-	if config.Miner.GasPrice == nil || config.Miner.GasPrice.Cmp(big.NewInt(params.BorMinimumMinerGasPrice)) != 0 {
-		log.Warn("Provided miner gas price is below the minimum limit", "provided", config.Miner.GasPrice, "minimum", ethconfig.Defaults.Miner.MinGasPrice)
+	// PIP-35: Enforce min gas price to 25 gwei
+	if config.Miner.GasPrice == nil || config.Miner.GasPrice.Cmp(big.NewInt(params.BorDefaultMinerGasPrice)) < 0 {
 		log.Warn("Sanitizing invalid miner gas price", "provided", config.Miner.GasPrice, "updated", ethconfig.Defaults.Miner.GasPrice)
 		config.Miner.GasPrice = ethconfig.Defaults.Miner.GasPrice
 	}
