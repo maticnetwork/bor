@@ -189,7 +189,7 @@ const (
 	// BorDefaultTxPoolPriceLimit defines the minimum gas price limit for bor to enforce txs acceptance into the pool.
 	BorDefaultTxPoolPriceLimit = 25 * GWei
 
-	// BorDefaultGpoIgnorePrice defines the gas price below which bor gpo will ignore transactions.
+	// BorDefaultGpoIgnorePrice defines the minimum gas price below which bor gpo will ignore transactions.
 	BorDefaultGpoIgnorePrice = 25 * GWei
 )
 
