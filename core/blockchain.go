@@ -599,7 +599,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 		counter  metrics.Counter
 	}
 
-	resultChan := make(chan Result, 2)
+	resultChan := make(chan Result, 1)
 
 	processorCount := 0
 
@@ -619,21 +619,21 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 		}()
 	}
 
-	if bc.processor != nil {
-		statedb, err := state.New(parent.Root, bc.stateCache, bc.snaps)
-		if err != nil {
-			return nil, nil, 0, nil, err
-		}
-		statedb.SetLogger(bc.logger)
+	// if bc.processor != nil {
+	// 	statedb, err := state.New(parent.Root, bc.stateCache, bc.snaps)
+	// 	if err != nil {
+	// 		return nil, nil, 0, nil, err
+	// 	}
+	// 	statedb.SetLogger(bc.logger)
 
-		processorCount++
+	// 	processorCount++
 
-		go func() {
-			statedb.StartPrefetcher("chain", nil)
-			receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig, ctx)
-			resultChan <- Result{receipts, logs, usedGas, err, statedb, blockExecutionSerialCounter}
-		}()
-	}
+	// 	go func() {
+	// 		statedb.StartPrefetcher("chain", nil)
+	// 		receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig, ctx)
+	// 		resultChan <- Result{receipts, logs, usedGas, err, statedb, blockExecutionSerialCounter}
+	// 	}()
+	// }
 
 	result := <-resultChan
 
