@@ -19,6 +19,7 @@ package eth
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
@@ -49,6 +50,7 @@ import (
 	"github.com/ethereum/go-ethereum/eth/gasprice"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/eth/protocols/snap"
+	"github.com/ethereum/go-ethereum/eth/tracers/native"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
@@ -240,11 +242,11 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	)
 
 	// Setup a prestate tracer
-	// t, err := native.NewPrestateTracer(nil, json.RawMessage("{\"diffMode\": true}"))
-	// if err != nil {
-	// 	return nil, fmt.Errorf("failed to create pre-state tracer: %v", err)
-	// }
-	// vmConfig.Tracer = t.Hooks
+	t, err := native.NewPrestateTracer(nil, json.RawMessage("{\"diffMode\": true}"))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create pre-state tracer: %v", err)
+	}
+	vmConfig.Tracer = t.Hooks
 
 	checker := whitelist.NewService(chainDb)
 
