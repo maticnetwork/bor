@@ -2324,10 +2324,15 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 			}
 		}
 
+		if block.NumberU64() >= 64710916 {
+			return it.index, errors.New("do not proceed, debugging")
+		}
+
 		// Process block using the parent state as reference point
 		pstart := time.Now()
 		receipts, logs, usedGas, statedb, err := bc.ProcessBlock(block, parent)
 		activeState = statedb
+		log.Info("Done processing block...")
 
 		if err != nil {
 			bc.reportBlock(block, receipts, err)
@@ -2376,6 +2381,11 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 			wstart = time.Now()
 			status WriteStatus
 		)
+
+		// This is a wrong block, don't set this as head to be safe
+		if block.Number().Uint64() == 64710915 {
+			setHead = false
+		}
 
 		if !setHead {
 			// Don't set the head, only insert the block
