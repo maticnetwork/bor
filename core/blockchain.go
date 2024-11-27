@@ -603,6 +603,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 
 	processorCount := 0
 
+	log.Info("About to execute block paralelly", "number", block.NumberU64())
 	if bc.parallelProcessor != nil {
 		parallelStatedb, err := state.New(parent.Root, bc.stateCache, bc.snaps)
 		if err != nil {
@@ -635,7 +636,9 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 	// 	}()
 	// }
 
+	log.Info("Waiting for result...")
 	result := <-resultChan
+	log.Info("Got result...")
 
 	if _, ok := result.err.(blockstm.ParallelExecFailedError); ok {
 		log.Warn("Parallel state processor failed", "err", result.err)

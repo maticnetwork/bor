@@ -50,7 +50,7 @@ import (
 	"github.com/ethereum/go-ethereum/eth/gasprice"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/eth/protocols/snap"
-	"github.com/ethereum/go-ethereum/eth/tracers"
+	"github.com/ethereum/go-ethereum/eth/tracers/native"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
@@ -241,17 +241,12 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		}
 	)
 
-	if config.VMTrace != "" {
-		var traceConfig json.RawMessage
-		if config.VMTraceJsonConfig != "" {
-			traceConfig = json.RawMessage(config.VMTraceJsonConfig)
-		}
-		t, err := tracers.LiveDirectory.New(config.VMTrace, traceConfig)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create tracer %s: %v", config.VMTrace, err)
-		}
-		vmConfig.Tracer = t
+	// Setup a prestate tracer
+	t, err := native.NewPrestateTracer(nil, json.RawMessage("{\"diffMode\": true}"))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create pre-state tracer: %v", err)
 	}
+	vmConfig.Tracer = t.Hooks
 
 	checker := whitelist.NewService(chainDb)
 
