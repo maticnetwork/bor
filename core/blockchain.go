@@ -2057,6 +2057,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		return 0, nil
 	}
 
+	log.Info("Inserting chain", "count", len(chain), "first", chain[0].NumberU64(), "last", chain[len(chain)-1].NumberU64())
+
 	// Start a parallel signature recovery (signer will fluke on fork transition, minimal perf loss)
 	SenderCacher.RecoverFromBlocks(types.MakeSigner(bc.chainConfig, chain[0].Number(), chain[0].Time()), chain)
 
