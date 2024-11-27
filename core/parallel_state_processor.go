@@ -94,6 +94,12 @@ type ExecutionTask struct {
 }
 
 func (task *ExecutionTask) Execute(mvh *blockstm.MVHashMap, incarnation int) (err error) {
+	idx := task.index
+	hash := task.Hash()
+	fmt.Println("--- executing task", "index", idx, "hash", hash)
+	defer func() {
+		fmt.Println("--- done executing task", "index", idx, "hash", hash)
+	}()
 	task.statedb = task.cleanStateDB.Copy()
 	task.statedb.SetTxContext(task.tx.Hash(), task.index)
 	task.statedb.SetMVHashmap(mvh)
