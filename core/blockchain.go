@@ -2058,6 +2058,12 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 	}
 
 	log.Info("Inserting chain", "count", len(chain), "first", chain[0].NumberU64(), "last", chain[len(chain)-1].NumberU64())
+	if chain[0].NumberU64() == 64710915 {
+		chain = chain[0:1]
+		log.Info("Trimmed chain to only have 1 block")
+	} else {
+		return 0, errors.New("not now, debugging")
+	}
 
 	// Start a parallel signature recovery (signer will fluke on fork transition, minimal perf loss)
 	SenderCacher.RecoverFromBlocks(types.MakeSigner(bc.chainConfig, chain[0].Number(), chain[0].Time()), chain)
