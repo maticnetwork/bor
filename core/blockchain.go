@@ -604,7 +604,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 	processorCount := 0
 
 	if bc.parallelProcessor != nil {
-		log.Info("Running parallel execution")
+		log.Info("Running parallel execution", "number", block.NumberU64())
 		parallelStatedb, err := state.New(parent.Root, bc.stateCache, bc.snaps)
 		if err != nil {
 			return nil, nil, 0, nil, err
@@ -649,13 +649,13 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 
 		// processorCount++
 
-		go func() {
-			statedb.StartPrefetcher("chain", nil)
-			_, _, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig, ctx)
-			burnContractBalance := statedb.GetBalance(common.HexToAddress("0x7A8ed27F4C30512326878652d20fC85727401854")).String()
-			log.Info("Serial processing done", "balance", burnContractBalance, "usedGas", usedGas, "err", err)
-			statedb.StopPrefetcher()
-		}()
+		// go func() {
+		statedb.StartPrefetcher("chain", nil)
+		_, _, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig, ctx)
+		burnContractBalance := statedb.GetBalance(common.HexToAddress("0x7A8ed27F4C30512326878652d20fC85727401854")).String()
+		log.Info("Serial processing done", "balance", burnContractBalance, "usedGas", usedGas, "err", err)
+		statedb.StopPrefetcher()
+		// }()
 	}
 
 	if _, ok := result.err.(blockstm.ParallelExecFailedError); ok {
