@@ -618,10 +618,11 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 	receipts, logs, usedGas, err := bc.parallelProcessor.Process(block, parallelStatedb, bc.vmConfig, ctx)
 	result := Result{receipts, logs, usedGas, err, parallelStatedb, blockExecutionParallelCounter}
 	writeList := parallelStatedb.MVFullWriteList()
+	writeList2 := parallelStatedb.MVWriteList()
 	if len(writeList) != 0 {
 		key := writeList[0].Path.GetAddress()
 		balance := parallelStatedb.GetBalance(key)
-		log.Info("Parallel processing done", "addr", key, "balance", balance.String(), "len", len(writeList))
+		log.Info("Parallel processing done", "addr", key, "balance", balance.String(), "len", len(writeList), "len2", len(writeList2))
 		statedb, err := state.New(parent.Root, bc.stateCache, bc.snaps)
 		if err == nil {
 			prevBalance := statedb.GetBalance(key)
