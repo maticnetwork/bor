@@ -603,73 +603,61 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 
 	processorCount := 0
 
-	// if bc.parallelProcessor != nil {
 	log.Info("Running parallel execution", "number", block.NumberU64())
 	parallelStatedb, err := state.New(parent.Root, bc.stateCache, bc.snaps)
 	if err != nil {
 		return nil, nil, 0, nil, err
 	}
 
+	preStatedb, err := state.New(parent.Root, bc.stateCache, bc.snaps)
+	if err != nil {
+		return nil, nil, 0, nil, err
+	}
+
 	processorCount++
 
-	// go func() {
+	keysToTrack := make([]common.Address, 0)
+
 	parallelStatedb.StartPrefetcher("chain", nil)
 	parallelStatedb.AddEmptyMVHashMap()
 	receipts, logs, usedGas, err := bc.parallelProcessor.Process(block, parallelStatedb, bc.vmConfig, ctx)
 	result := Result{receipts, logs, usedGas, err, parallelStatedb, blockExecutionParallelCounter}
 	writeList := parallelStatedb.MVFullWriteList()
-	writeList2 := parallelStatedb.MVWriteList()
-	if len(writeList) != 0 {
-		key := writeList[0].Path.GetAddress()
-		balance := parallelStatedb.GetBalance(key)
-		log.Info("Parallel processing done", "addr", key, "balance", balance.String(), "len", len(writeList), "len2", len(writeList2))
-		statedb, err := state.New(parent.Root, bc.stateCache, bc.snaps)
-		if err == nil {
-			prevBalance := statedb.GetBalance(key)
-			log.Info("Prev balance", "addr", key, "balance", prevBalance.String())
+	if len(writeList) > 0 {
+		for i := 0; i < len(writeList); i++ {
+			key := writeList[i].Path.GetAddress()
+			postBalance := parallelStatedb.GetBalance(key)
+			preBalance := preStatedb.GetBalance(key)
+			if !postBalance.Eq(preBalance) {
+				keysToTrack = append(keysToTrack, key)
+				log.Info("Balance change", "addr", key, "pre", preBalance.String(), "post", postBalance.String())
+			}
 		}
 	} else {
 		log.Info("Empty write list...")
 	}
-	// }()
-	// }
 
-	// if bc.processor != nil {
-	// 	statedb, err := state.New(parent.Root, bc.stateCache, bc.snaps)
-	// 	if err != nil {
-	// 		return nil, nil, 0, nil, err
-	// 	}
-	// 	statedb.SetLogger(bc.logger)
+	log.Info("Parallel execution done...Strating serial...")
+	if block.NumberU64() == 64710915 {
+		statedb, err := state.New(parent.Root, bc.stateCache, bc.snaps)
+		if err != nil {
+			return nil, nil, 0, nil, err
+		}
+		statedb.SetLogger(bc.logger)
 
-	// 	processorCount++
+		// processorCount++
 
-	// 	go func() {
-	// 		statedb.StartPrefetcher("chain", nil)
-	// 		receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig, ctx)
-	// 		resultChan <- Result{receipts, logs, usedGas, err, statedb, blockExecutionSerialCounter}
-	// 	}()
-	// }
-
-	// result := <-resultChan
-
-	// if block.NumberU64() == 64710915 {
-	// 	log.Info("Running serial execution for buggy block")
-	// 	statedb, err := state.New(parent.Root, bc.stateCache, bc.snaps)
-	// 	if err != nil {
-	// 		return nil, nil, 0, nil, err
-	// 	}
-	// 	statedb.SetLogger(bc.logger)
-
-	// 	// processorCount++
-
-	// 	// go func() {
-	// 	statedb.StartPrefetcher("chain", nil)
-	// 	_, _, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig, ctx)
-	// 	burnContractBalance := statedb.GetBalance(common.HexToAddress("0x7A8ed27F4C30512326878652d20fC85727401854")).String()
-	// 	log.Info("Serial processing done", "balance", burnContractBalance, "usedGas", usedGas, "err", err)
-	// 	statedb.StopPrefetcher()
-	// 	// }()
-	// }
+		// go func() {
+		statedb.StartPrefetcher("chain", nil)
+		bc.processor.Process(block, statedb, bc.vmConfig, ctx)
+		for _, key := range keysToTrack {
+			postBalance := statedb.GetBalance(key)
+			preBalance := preStatedb.GetBalance(key)
+			log.Info("Balance change", "addr", key, "pre", preBalance.String(), "post", postBalance.String())
+		}
+		statedb.StopPrefetcher()
+		// }()
+	}
 
 	if _, ok := result.err.(blockstm.ParallelExecFailedError); ok {
 		log.Warn("Parallel state processor failed", "err", result.err)
@@ -3262,9 +3250,8 @@ Block: %v (%#x)
 Error: %v
 Platform: %v%v
 Chain config: %#v
-Receipts: %v
 ##############################
-`, block.Number(), block.Hash(), err, platform, vcs, config, receiptString)
+`, block.Number(), block.Hash(), err, platform, vcs, config)
 }
 
 // InsertHeaderChain attempts to insert the given header chain in to the local
