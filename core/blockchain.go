@@ -616,14 +616,18 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 			parallelStatedb.StartPrefetcher("chain", nil)
 			receipts, logs, usedGas, err := bc.parallelProcessor.Process(block, parallelStatedb, bc.vmConfig, ctx)
 			resultChan <- Result{receipts, logs, usedGas, err, parallelStatedb, blockExecutionParallelCounter}
-			writeList := parallelStatedb.MVWriteList()
-			key := writeList[0].Path.GetAddress()
-			balance := parallelStatedb.GetBalance(key)
-			log.Info("Parallel processing done", "addr", key, "balance", balance.String())
-			statedb, err := state.New(parent.Root, bc.stateCache, bc.snaps)
-			if err == nil {
-				prevBalance := statedb.GetBalance(key)
-				log.Info("Prev balance", "addr", key, "balance", prevBalance.String())
+			writeList := parallelStatedb.MVFullWriteList()
+			if len(writeList) != 0 {
+				key := writeList[0].Path.GetAddress()
+				balance := parallelStatedb.GetBalance(key)
+				log.Info("Parallel processing done", "addr", key, "balance", balance.String())
+				statedb, err := state.New(parent.Root, bc.stateCache, bc.snaps)
+				if err == nil {
+					prevBalance := statedb.GetBalance(key)
+					log.Info("Prev balance", "addr", key, "balance", prevBalance.String())
+				}
+			} else {
+				log.Info("Empty write list...")
 			}
 		}()
 	}
