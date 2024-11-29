@@ -629,11 +629,11 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 	if len(writeList) > 0 {
 		for i := 0; i < len(writeList); i++ {
 			key := writeList[i].Path.GetAddress()
-			postBalance := parallelStatedb.GetBalance(key)
-			preBalance := preStatedb.GetBalance(key)
-			if !postBalance.Eq(preBalance) {
+			postBalance := parallelStatedb.GetStorageRoot(key)
+			preBalance := preStatedb.GetStorageRoot(key)
+			if postBalance.Cmp(preBalance) != 0 {
 				keysToTrack = append(keysToTrack, key)
-				log.Info("Balance change", "addr", key, "pre", preBalance.String(), "post", postBalance.String())
+				// log.Info("Balance change", "addr", key, "pre", preBalance.String(), "post", postBalance.String())
 				parallelEntries = append(parallelEntries, Entry{
 					Address: key.Hex(),
 					Pre:     preBalance.String(),
@@ -659,9 +659,9 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 		statedb.StartPrefetcher("chain", nil)
 		bc.processor.Process(block, statedb, bc.vmConfig, ctx)
 		for _, key := range keysToTrack {
-			postBalance := statedb.GetBalance(key)
-			preBalance := preStatedb.GetBalance(key)
-			log.Info("Balance change", "addr", key, "pre", preBalance.String(), "post", postBalance.String())
+			postBalance := statedb.GetStorageRoot(key)
+			preBalance := preStatedb.GetStorageRoot(key)
+			// log.Info("Balance change", "addr", key, "pre", preBalance.String(), "post", postBalance.String())
 			serialEntries = append(serialEntries, Entry{
 				Address: key.Hex(),
 				Pre:     preBalance.String(),
