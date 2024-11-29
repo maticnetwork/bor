@@ -617,9 +617,6 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 
 	processorCount++
 
-	keysToTrack := make([]common.Address, 0)
-	parallelEntries := make([]Entry, 0)
-	serialEntries := make([]Entry, 0)
 	addressToTrack := []common.Address{
 		common.HexToAddress("0x0000000000000000000000000000000000001000"), // child chain
 		common.HexToAddress("0x0000000000000000000000000000000000001001"), // child chain
