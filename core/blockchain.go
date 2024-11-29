@@ -20,6 +20,7 @@ package core
 import (
 	"compress/gzip"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -617,6 +618,8 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 	processorCount++
 
 	keysToTrack := make([]common.Address, 0)
+	parallelEntries := make([]Entry, 0)
+	serialEntries := make([]Entry, 0)
 
 	parallelStatedb.StartPrefetcher("chain", nil)
 	parallelStatedb.AddEmptyMVHashMap()
@@ -631,6 +634,11 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 			if !postBalance.Eq(preBalance) {
 				keysToTrack = append(keysToTrack, key)
 				log.Info("Balance change", "addr", key, "pre", preBalance.String(), "post", postBalance.String())
+				parallelEntries = append(parallelEntries, Entry{
+					Address: key.Hex(),
+					Pre:     preBalance.String(),
+					Post:    postBalance.String(),
+				})
 			}
 		}
 	} else {
@@ -654,10 +662,19 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 			postBalance := statedb.GetBalance(key)
 			preBalance := preStatedb.GetBalance(key)
 			log.Info("Balance change", "addr", key, "pre", preBalance.String(), "post", postBalance.String())
+			serialEntries = append(serialEntries, Entry{
+				Address: key.Hex(),
+				Pre:     preBalance.String(),
+				Post:    postBalance.String(),
+			})
 		}
 		statedb.StopPrefetcher()
 		// }()
 	}
+
+	AddEntriesToFile("parallel.json", parallelEntries)
+	AddEntriesToFile("serial.json", serialEntries)
+	log.Info("Written both entries to file...")
 
 	if _, ok := result.err.(blockstm.ParallelExecFailedError); ok {
 		log.Warn("Parallel state processor failed", "err", result.err)
@@ -681,6 +698,38 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 	}
 
 	return result.receipts, result.logs, result.usedGas, result.statedb, result.err
+}
+
+// Entry represents a single data entry with address, pre, and post fields.
+type Entry struct {
+	Address string `json:"address"`
+	Pre     string `json:"pre"`
+	Post    string `json:"post"`
+}
+
+// AddEntriesToFile writes all entries from a map to a JSON file.
+func AddEntriesToFile(filePath string, entries []Entry) error {
+	// Open the file in read-write mode or create it if it doesn't exist
+	file, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to open file: %w", err)
+	}
+	defer file.Close()
+
+	// Truncate the file and write the updated data
+	if err := file.Truncate(0); err != nil {
+		return fmt.Errorf("failed to truncate file: %w", err)
+	}
+	if _, err := file.Seek(0, 0); err != nil {
+		return fmt.Errorf("failed to seek file: %w", err)
+	}
+	encoder := json.NewEncoder(file)
+	encoder.SetIndent("", "  ") // Pretty-print JSON
+	if err := encoder.Encode(entries); err != nil {
+		return fmt.Errorf("failed to encode data: %w", err)
+	}
+
+	return nil
 }
 
 // empty returns an indicator whether the blockchain is empty.
