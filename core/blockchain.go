@@ -621,7 +621,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 	if len(writeList) != 0 {
 		key := writeList[0].Path.GetAddress()
 		balance := parallelStatedb.GetBalance(key)
-		log.Info("Parallel processing done", "addr", key, "balance", balance.String())
+		log.Info("Parallel processing done", "addr", key, "balance", balance.String(), "len", len(writeList))
 		statedb, err := state.New(parent.Root, bc.stateCache, bc.snaps)
 		if err == nil {
 			prevBalance := statedb.GetBalance(key)
