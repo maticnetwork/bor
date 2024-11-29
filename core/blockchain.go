@@ -616,8 +616,15 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 			parallelStatedb.StartPrefetcher("chain", nil)
 			receipts, logs, usedGas, err := bc.parallelProcessor.Process(block, parallelStatedb, bc.vmConfig, ctx)
 			resultChan <- Result{receipts, logs, usedGas, err, parallelStatedb, blockExecutionParallelCounter}
-			burnContractBalance := parallelStatedb.GetBalance(common.HexToAddress("0x7A8ed27F4C30512326878652d20fC85727401854")).String()
-			log.Info("Parallel processing done", "balance", burnContractBalance, "usedGas", usedGas)
+			writeList := parallelStatedb.MVWriteList()
+			key := writeList[0].Path.GetAddress()
+			balance := parallelStatedb.GetBalance(key)
+			log.Info("Parallel processing done", "addr", key, "balance", balance.String())
+			statedb, err := state.New(parent.Root, bc.stateCache, bc.snaps)
+			if err == nil {
+				prevBalance := statedb.GetBalance(key)
+				log.Info("Prev balance", "addr", key, "balance", prevBalance.String())
+			}
 		}()
 	}
 
@@ -639,24 +646,24 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 
 	result := <-resultChan
 
-	if block.NumberU64() == 64710915 {
-		log.Info("Running serial execution for buggy block")
-		statedb, err := state.New(parent.Root, bc.stateCache, bc.snaps)
-		if err != nil {
-			return nil, nil, 0, nil, err
-		}
-		statedb.SetLogger(bc.logger)
+	// if block.NumberU64() == 64710915 {
+	// 	log.Info("Running serial execution for buggy block")
+	// 	statedb, err := state.New(parent.Root, bc.stateCache, bc.snaps)
+	// 	if err != nil {
+	// 		return nil, nil, 0, nil, err
+	// 	}
+	// 	statedb.SetLogger(bc.logger)
 
-		// processorCount++
+	// 	// processorCount++
 
-		// go func() {
-		statedb.StartPrefetcher("chain", nil)
-		_, _, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig, ctx)
-		burnContractBalance := statedb.GetBalance(common.HexToAddress("0x7A8ed27F4C30512326878652d20fC85727401854")).String()
-		log.Info("Serial processing done", "balance", burnContractBalance, "usedGas", usedGas, "err", err)
-		statedb.StopPrefetcher()
-		// }()
-	}
+	// 	// go func() {
+	// 	statedb.StartPrefetcher("chain", nil)
+	// 	_, _, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig, ctx)
+	// 	burnContractBalance := statedb.GetBalance(common.HexToAddress("0x7A8ed27F4C30512326878652d20fC85727401854")).String()
+	// 	log.Info("Serial processing done", "balance", burnContractBalance, "usedGas", usedGas, "err", err)
+	// 	statedb.StopPrefetcher()
+	// 	// }()
+	// }
 
 	if _, ok := result.err.(blockstm.ParallelExecFailedError); ok {
 		log.Warn("Parallel state processor failed", "err", result.err)
