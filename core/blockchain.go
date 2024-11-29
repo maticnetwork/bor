@@ -603,34 +603,35 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 
 	processorCount := 0
 
-	if bc.parallelProcessor != nil {
-		log.Info("Running parallel execution", "number", block.NumberU64())
-		parallelStatedb, err := state.New(parent.Root, bc.stateCache, bc.snaps)
-		if err != nil {
-			return nil, nil, 0, nil, err
-		}
-
-		processorCount++
-
-		go func() {
-			parallelStatedb.StartPrefetcher("chain", nil)
-			receipts, logs, usedGas, err := bc.parallelProcessor.Process(block, parallelStatedb, bc.vmConfig, ctx)
-			resultChan <- Result{receipts, logs, usedGas, err, parallelStatedb, blockExecutionParallelCounter}
-			writeList := parallelStatedb.MVFullWriteList()
-			if len(writeList) != 0 {
-				key := writeList[0].Path.GetAddress()
-				balance := parallelStatedb.GetBalance(key)
-				log.Info("Parallel processing done", "addr", key, "balance", balance.String())
-				statedb, err := state.New(parent.Root, bc.stateCache, bc.snaps)
-				if err == nil {
-					prevBalance := statedb.GetBalance(key)
-					log.Info("Prev balance", "addr", key, "balance", prevBalance.String())
-				}
-			} else {
-				log.Info("Empty write list...")
-			}
-		}()
+	// if bc.parallelProcessor != nil {
+	log.Info("Running parallel execution", "number", block.NumberU64())
+	parallelStatedb, err := state.New(parent.Root, bc.stateCache, bc.snaps)
+	if err != nil {
+		return nil, nil, 0, nil, err
 	}
+
+	processorCount++
+
+	// go func() {
+	parallelStatedb.StartPrefetcher("chain", nil)
+	parallelStatedb.AddEmptyMVHashMap()
+	receipts, logs, usedGas, err := bc.parallelProcessor.Process(block, parallelStatedb, bc.vmConfig, ctx)
+	result := Result{receipts, logs, usedGas, err, parallelStatedb, blockExecutionParallelCounter}
+	writeList := parallelStatedb.MVFullWriteList()
+	if len(writeList) != 0 {
+		key := writeList[0].Path.GetAddress()
+		balance := parallelStatedb.GetBalance(key)
+		log.Info("Parallel processing done", "addr", key, "balance", balance.String())
+		statedb, err := state.New(parent.Root, bc.stateCache, bc.snaps)
+		if err == nil {
+			prevBalance := statedb.GetBalance(key)
+			log.Info("Prev balance", "addr", key, "balance", prevBalance.String())
+		}
+	} else {
+		log.Info("Empty write list...")
+	}
+	// }()
+	// }
 
 	// if bc.processor != nil {
 	// 	statedb, err := state.New(parent.Root, bc.stateCache, bc.snaps)
@@ -648,7 +649,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 	// 	}()
 	// }
 
-	result := <-resultChan
+	// result := <-resultChan
 
 	// if block.NumberU64() == 64710915 {
 	// 	log.Info("Running serial execution for buggy block")
