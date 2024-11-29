@@ -620,29 +620,25 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 	keysToTrack := make([]common.Address, 0)
 	parallelEntries := make([]Entry, 0)
 	serialEntries := make([]Entry, 0)
+	addressToTrack := []common.Address{
+		common.HexToAddress("0x0000000000000000000000000000000000001000"), // child chain
+		common.HexToAddress("0x0000000000000000000000000000000000001001"), // child chain
+		common.HexToAddress("0x0000000000000000000000000000000000001010"), // child chain
+		common.HexToAddress("0x7A8ed27F4C30512326878652d20fC85727401854"), // burn contract
+		common.HexToAddress("0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270"), // wmatic
+		common.HexToAddress("0xeEDBa2484aAF940f37cd3CD21a5D7C4A7DAfbfC0"), // coinbase/miner
+	}
 
 	parallelStatedb.StartPrefetcher("chain", nil)
-	parallelStatedb.AddEmptyMVHashMap()
+	// parallelStatedb.AddEmptyMVHashMap()
 	receipts, logs, usedGas, err := bc.parallelProcessor.Process(block, parallelStatedb, bc.vmConfig, ctx)
 	result := Result{receipts, logs, usedGas, err, parallelStatedb, blockExecutionParallelCounter}
-	writeList := parallelStatedb.MVFullWriteList()
-	if len(writeList) > 0 {
-		for i := 0; i < len(writeList); i++ {
-			key := writeList[i].Path.GetAddress()
-			postBalance := parallelStatedb.GetStorageRoot(key)
-			preBalance := preStatedb.GetStorageRoot(key)
-			if postBalance.Cmp(preBalance) != 0 {
-				keysToTrack = append(keysToTrack, key)
-				// log.Info("Balance change", "addr", key, "pre", preBalance.String(), "post", postBalance.String())
-				parallelEntries = append(parallelEntries, Entry{
-					Address: key.Hex(),
-					Pre:     preBalance.String(),
-					Post:    postBalance.String(),
-				})
-			}
-		}
-	} else {
-		log.Info("Empty write list...")
+	for _, addr := range addressToTrack {
+		preBalance := preStatedb.GetBalance(addr)
+		postBalance := parallelStatedb.GetBalance(addr)
+		preStorageRoot := preStatedb.GetStorageRoot(addr)
+		postStorageRoot := parallelStatedb.GetStorageRoot(addr)
+		log.Info("Tracking addresses in parallel execution", "addr", addr, "preBalance", preBalance.String(), "postBalance", postBalance.String(), "preStorageRoot", preStorageRoot.String(), "postStorageRoot", postStorageRoot.String())
 	}
 
 	log.Info("Parallel execution done...Strating serial...")
@@ -658,23 +654,17 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 		// go func() {
 		statedb.StartPrefetcher("chain", nil)
 		bc.processor.Process(block, statedb, bc.vmConfig, ctx)
-		for _, key := range keysToTrack {
-			postBalance := statedb.GetStorageRoot(key)
-			preBalance := preStatedb.GetStorageRoot(key)
-			// log.Info("Balance change", "addr", key, "pre", preBalance.String(), "post", postBalance.String())
-			serialEntries = append(serialEntries, Entry{
-				Address: key.Hex(),
-				Pre:     preBalance.String(),
-				Post:    postBalance.String(),
-			})
+		for _, addr := range addressToTrack {
+			preBalance := preStatedb.GetBalance(addr)
+			postBalance := statedb.GetBalance(addr)
+			preStorageRoot := preStatedb.GetStorageRoot(addr)
+			postStorageRoot := statedb.GetStorageRoot(addr)
+			log.Info("Tracking addresses in serial execution", "addr", addr, "preBalance", preBalance.String(), "postBalance", postBalance.String(), "preStorageRoot", preStorageRoot.String(), "postStorageRoot", postStorageRoot.String())
 		}
+		log.Info("Serial execution done...")
 		statedb.StopPrefetcher()
 		// }()
 	}
-
-	AddEntriesToFile("parallel.json", parallelEntries)
-	AddEntriesToFile("serial.json", serialEntries)
-	log.Info("Written both entries to file...")
 
 	if _, ok := result.err.(blockstm.ParallelExecFailedError); ok {
 		log.Warn("Parallel state processor failed", "err", result.err)
