@@ -638,7 +638,8 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 		log.Info("Tracking addresses in parallel execution", "addr", addr, "preBalance", preBalance.String(), "postBalance", postBalance.String(), "preStorageRoot", preStorageRoot.String(), "postStorageRoot", postStorageRoot.String())
 	}
 
-	log.Info("Parallel execution done...Strating serial...")
+	root := parallelStatedb.IntermediateRoot(false)
+	log.Info("Parallel execution done...Strating serial...", "root", root.String())
 	if block.NumberU64() == 64710915 {
 		statedb, err := state.New(parent.Root, bc.stateCache, bc.snaps)
 		if err != nil {
