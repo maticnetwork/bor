@@ -418,7 +418,6 @@ func (s *StateDB) ApplyMVWriteSet(writes []blockstm.WriteDescriptor) {
 
 			switch path.GetSubpath() {
 			case BalancePath:
-				// todo: @anshalshukla || @cffls - check balance change reason
 				s.SetBalance(addr, sr.GetBalance(addr), tracing.BalanceChangeUnspecified)
 			case NoncePath:
 				s.SetNonce(addr, sr.GetNonce(addr))
@@ -1082,6 +1081,10 @@ func (s *StateDB) mvRecordWritten(object *stateObject) *stateObject {
 // createObject creates a new state object. The assumption is held there is no
 // existing account with the given address, otherwise it will be silently overwritten.
 func (s *StateDB) createObject(addr common.Address) *stateObject {
+	prev := s.getStateObject(addr)
+	if prev != nil {
+		MVWrite(s, blockstm.NewSubpathKey(addr, BalancePath))
+	}
 	obj := newObject(s, addr, nil)
 	s.journal.append(createObjectChange{account: &addr})
 	s.setStateObject(obj)
@@ -1097,7 +1100,7 @@ func (s *StateDB) CreateAccount(addr common.Address) {
 	s.createObject(addr)
 	// todo: @anshalshukla || @cffls
 	// Check the below MV Write, balance path change have been removed
-	MVWrite(s, blockstm.NewAddressKey(addr))
+	// MVWrite(s, blockstm.NewAddressKey(addr))
 }
 
 // CreateContract is used whenever a contract is created. This may be preceded
