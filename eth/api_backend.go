@@ -38,6 +38,7 @@ import (
 	"github.com/ethereum/go-ethereum/eth/tracers"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/miner"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -235,6 +236,7 @@ func (b *EthAPIBackend) StateAndHeaderByNumber(ctx context.Context, number rpc.B
 
 	stateDb, err := b.eth.BlockChain().StateAt(header.Root)
 	if err != nil {
+		log.Info("[debugging] failed to get state", "number", header.Number.Uint64(), "err", err)
 		return nil, nil, err
 	}
 	return stateDb, header, nil

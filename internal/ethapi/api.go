@@ -1334,9 +1334,16 @@ func DoCall(ctx context.Context, b Backend, args TransactionArgs, blockNrOrHash 
 	// BOR: This is used by bor consensus to fetch data from genesis contracts for state-sync
 	// Fetch the state and header from blockNumberOrHash if it's coming from normal eth_call path.
 	if state == nil {
+		if args.To.Cmp(common.HexToAddress("0x0000000000000000000000000000000000001000")) == 0 {
+			log.Info("[debugging] in eth_call to fetch validator info", "number", header.Number.Uint64())
+			log.Info("[debugging] trying to fetch state")
+		}
 		state, header, err = b.StateAndHeaderByNumberOrHash(ctx, blockNrOrHash)
 		if state == nil || err != nil {
 			return nil, err
+		}
+		if args.To.Cmp(common.HexToAddress("0x0000000000000000000000000000000000001000")) == 0 {
+			log.Info("[debugging] got state")
 		}
 	} else {
 		// Fetch the header from the given blockNumberOrHash. Note that this path is only taken
