@@ -1335,8 +1335,7 @@ func DoCall(ctx context.Context, b Backend, args TransactionArgs, blockNrOrHash 
 	// Fetch the state and header from blockNumberOrHash if it's coming from normal eth_call path.
 	if state == nil {
 		if args.To.Cmp(common.HexToAddress("0x0000000000000000000000000000000000001000")) == 0 {
-			log.Info("[debugging] in eth_call to fetch validator info", "number", header.Number.Uint64())
-			log.Info("[debugging] trying to fetch state")
+			log.Info("[debugging] in eth_call to fetch validator info")
 		}
 		state, header, err = b.StateAndHeaderByNumberOrHash(ctx, blockNrOrHash)
 		if state == nil || err != nil {
