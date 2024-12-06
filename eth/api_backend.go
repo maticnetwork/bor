@@ -248,21 +248,26 @@ func (b *EthAPIBackend) StateAndHeaderByNumberOrHash(ctx context.Context, blockN
 	}
 
 	if hash, ok := blockNrOrHash.Hash(); ok {
+		log.Info("[debugging] get state by hash", "hash", hash)
 		header, err := b.HeaderByHash(ctx, hash)
 		if err != nil {
+			log.Info("[debugging] unable to find header", "err", err)
 			return nil, nil, err
 		}
 
 		if header == nil {
+			log.Info("[debugging] unable to find header")
 			return nil, nil, errors.New("header for hash not found")
 		}
 
-		if blockNrOrHash.RequireCanonical && b.eth.blockchain.GetCanonicalHash(header.Number.Uint64()) != hash {
-			return nil, nil, errors.New("hash is not currently canonical")
+		if chash := b.eth.blockchain.GetCanonicalHash(header.Number.Uint64()); chash != hash {
+			log.Info("[debugging] canonical hash found but not matching", "chash", chash, "hash", hash)
+			// return nil, nil, errors.New("hash is not currently canonical")
 		}
 
 		stateDb, err := b.eth.BlockChain().StateAt(header.Root)
 		if err != nil {
+			log.Info("[debugging] failed to get state at this header", "err", err)
 			return nil, nil, err
 		}
 		return stateDb, header, nil
