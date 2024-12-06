@@ -1107,6 +1107,9 @@ func (s *StateDB) CreateAccount(addr common.Address) {
 // correctly handle EIP-6780 'delete-in-same-transaction' logic.
 func (s *StateDB) CreateContract(addr common.Address) {
 	obj := s.getStateObject(addr)
+	if obj != nil {
+		obj = s.mvRecordWritten(obj)
+	}
 	if !obj.newContract {
 		obj.newContract = true
 		s.journal.append(createContractChange{account: addr})
