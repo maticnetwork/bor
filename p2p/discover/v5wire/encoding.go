@@ -735,7 +735,7 @@ func bytesCopy(r *bytes.Buffer) []byte {
 	return b
 }
 
-// isValid checks if handshakeAuthData is valid
+// isHandshakeAuthDataValid checks if handshakeAuthData is valid
 func (auth *handshakeAuthData) isHandshakeAuthDataValid() bool {
 	// Conditions for the auth to be considered valid
 	return auth != nil && len(auth.signature) > 0 && len(auth.pubkey) > 0 && auth.h.SrcID != (enode.ID{})
