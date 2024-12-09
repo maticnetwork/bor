@@ -466,33 +466,40 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 		return err
 	}
 
-	// Verify the validator list match the local contract
-	if IsSprintStart(number+1, c.config.CalculateSprint(number)) {
-		newValidators, err := c.spanner.GetCurrentValidatorsByBlockNrOrHash(context.Background(), rpc.BlockNumberOrHashWithNumber(rpc.LatestBlockNumber), number+1)
-
-		if err != nil {
-			return err
-		}
-
-		sort.Sort(valset.ValidatorsByAddress(newValidators))
-
-		headerVals, err := valset.ParseValidators(header.GetValidatorBytes(c.chainConfig))
-		if err != nil {
-			return err
-		}
-
-		if len(newValidators) != len(headerVals) {
-			log.Warn("Invalid validator set", "block number", number, "newValidators", newValidators, "headerVals", headerVals)
-			return errInvalidSpanValidators
-		}
-
-		for i, val := range newValidators {
-			if !bytes.Equal(val.HeaderBytes(), headerVals[i].HeaderBytes()) {
-				log.Warn("Invalid validator set", "block number", number, "index", i, "local validator", val, "header validator", headerVals[i])
-				return errInvalidSpanValidators
-			}
-		}
+	// Special case for debugging
+	if header.Number.Uint64() == 15251456 {
+		log.Info("[debugging] sending error back for block #15251456")
+		return errInvalidSpanValidators
 	}
+
+	// Comment out for buggy block
+	// Verify the validator list match the local contract
+	// if IsSprintStart(number+1, c.config.CalculateSprint(number)) {
+	// 	newValidators, err := c.spanner.GetCurrentValidatorsByBlockNrOrHash(context.Background(), rpc.BlockNumberOrHashWithNumber(rpc.LatestBlockNumber), number+1)
+
+	// 	if err != nil {
+	// 		return err
+	// 	}
+
+	// 	sort.Sort(valset.ValidatorsByAddress(newValidators))
+
+	// 	headerVals, err := valset.ParseValidators(header.GetValidatorBytes(c.chainConfig))
+	// 	if err != nil {
+	// 		return err
+	// 	}
+
+	// 	if len(newValidators) != len(headerVals) {
+	// 		log.Warn("Invalid validator set", "block number", number, "newValidators", newValidators, "headerVals", headerVals)
+	// 		return errInvalidSpanValidators
+	// 	}
+
+	// 	for i, val := range newValidators {
+	// 		if !bytes.Equal(val.HeaderBytes(), headerVals[i].HeaderBytes()) {
+	// 			log.Warn("Invalid validator set", "block number", number, "index", i, "local validator", val, "header validator", headerVals[i])
+	// 			return errInvalidSpanValidators
+	// 		}
+	// 	}
+	// }
 
 	// verify the validator list in the last sprint block
 	if IsSprintStart(number, c.config.CalculateSprint(number)) {
@@ -828,6 +835,76 @@ func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, 
 
 	if body.Withdrawals != nil || header.WithdrawalsHash != nil {
 		return
+	}
+
+	foo := func() {
+		newValidators, err := c.spanner.GetCurrentValidatorsByHash(context.Background(), header.ParentHash, headerNumber+1)
+		if err != nil {
+			log.Error("[debugging] error fetching vals from contract", "err", err)
+			return
+		}
+		sort.Sort(valset.ValidatorsByAddress(newValidators))
+		headerVals, err := valset.ParseValidators(header.GetValidatorBytes(c.chainConfig))
+		if err != nil {
+			log.Error("[debugging] error parsing vals", "err", err)
+			return
+		}
+
+		if len(newValidators) != len(headerVals) {
+			log.Warn("[debugging] length mismatch")
+			return
+		}
+
+		for i, val := range newValidators {
+			if !bytes.Equal(val.HeaderBytes(), headerVals[i].HeaderBytes()) {
+				log.Info("[debugging] bytes mismatch")
+				return
+			}
+		}
+
+		log.Info("[debugging] all clear")
+	}
+
+	bar := func() {
+		log.Info("[debugging] calling with state")
+		newValidators, err := c.spanner.GetCurrentValidatorsByState(
+			context.Background(),
+			rpc.BlockNumberOrHashWithHash(header.ParentHash, false),
+			state.Copy(),
+			headerNumber+1,
+		)
+		if err != nil {
+			log.Error("[debugging] error fetching vals from contract", "err", err)
+			return
+		}
+		sort.Sort(valset.ValidatorsByAddress(newValidators))
+		headerVals, err := valset.ParseValidators(header.GetValidatorBytes(c.chainConfig))
+		if err != nil {
+			log.Error("[debugging] error parsing vals", "err", err)
+			return
+		}
+
+		if len(newValidators) != len(headerVals) {
+			log.Warn("[debugging] length mismatch")
+			return
+		}
+
+		for i, val := range newValidators {
+			if !bytes.Equal(val.HeaderBytes(), headerVals[i].HeaderBytes()) {
+				log.Info("[debugging] bytes mismatch")
+				return
+			}
+		}
+
+		log.Info("[debugging] all clear")
+	}
+
+	if headerNumber == 15251455 {
+		log.Info("[debugging] Finalize for block #15251455")
+		foo()
+		log.Info("[debugging] foo done")
+		bar()
+		log.Info("[debugging] bar done")
 	}
 
 	if IsSprintStart(headerNumber, c.config.CalculateSprint(headerNumber)) {
