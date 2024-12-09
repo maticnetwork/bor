@@ -467,10 +467,10 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 	}
 
 	// Special case for debugging
-	if header.Number.Uint64() == 15251457 {
-		log.Info("[debugging] sending error back for block #15251457")
-		return errInvalidSpanValidators
-	}
+	// if header.Number.Uint64() == 15251457 {
+	// 	log.Info("[debugging] sending error back for block #15251457")
+	// 	return errInvalidSpanValidators
+	// }
 
 	// Comment out for buggy block
 	// Verify the validator list match the local contract
