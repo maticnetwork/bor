@@ -467,8 +467,8 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 	}
 
 	// Special case for debugging
-	if header.Number.Uint64() == 15251456 {
-		log.Info("[debugging] sending error back for block #15251456")
+	if header.Number.Uint64() == 15251457 {
+		log.Info("[debugging] sending error back for block #15251457")
 		return errInvalidSpanValidators
 	}
 
@@ -899,8 +899,8 @@ func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, 
 		log.Info("[debugging] all clear")
 	}
 
-	if headerNumber == 15251455 {
-		log.Info("[debugging] Finalize for block #15251455")
+	if headerNumber == 15251455 || headerNumber == 15251456 {
+		log.Info("[debugging] Finalize for block", "number", headerNumber)
 		foo()
 		log.Info("[debugging] foo done")
 		bar()
@@ -1052,8 +1052,8 @@ func (c *Bor) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *typ
 		log.Info("[debugging] all clear")
 	}
 
-	if headerNumber == 15251455 {
-		log.Info("[debugging] FinalizeAndAssemble for block #15251455")
+	if headerNumber == 15251455 || headerNumber == 15251456 {
+		log.Info("[debugging] FinalizeAndAssemble for block", "number", headerNumber)
 		foo()
 		log.Info("[debugging] foo done")
 		bar()
