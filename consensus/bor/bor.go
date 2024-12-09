@@ -990,6 +990,76 @@ func (c *Bor) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *typ
 		return nil, consensus.ErrUnexpectedWithdrawals
 	}
 
+	foo := func() {
+		newValidators, err := c.spanner.GetCurrentValidatorsByHash(context.Background(), header.ParentHash, headerNumber+1)
+		if err != nil {
+			log.Error("[debugging] error fetching vals from contract", "err", err)
+			return
+		}
+		sort.Sort(valset.ValidatorsByAddress(newValidators))
+		headerVals, err := valset.ParseValidators(header.GetValidatorBytes(c.chainConfig))
+		if err != nil {
+			log.Error("[debugging] error parsing vals", "err", err)
+			return
+		}
+
+		if len(newValidators) != len(headerVals) {
+			log.Warn("[debugging] length mismatch")
+			return
+		}
+
+		for i, val := range newValidators {
+			if !bytes.Equal(val.HeaderBytes(), headerVals[i].HeaderBytes()) {
+				log.Info("[debugging] bytes mismatch")
+				return
+			}
+		}
+
+		log.Info("[debugging] all clear")
+	}
+
+	bar := func() {
+		log.Info("[debugging] calling with state")
+		newValidators, err := c.spanner.GetCurrentValidatorsByState(
+			context.Background(),
+			rpc.BlockNumberOrHashWithHash(header.ParentHash, false),
+			state.Copy(),
+			headerNumber+1,
+		)
+		if err != nil {
+			log.Error("[debugging] error fetching vals from contract", "err", err)
+			return
+		}
+		sort.Sort(valset.ValidatorsByAddress(newValidators))
+		headerVals, err := valset.ParseValidators(header.GetValidatorBytes(c.chainConfig))
+		if err != nil {
+			log.Error("[debugging] error parsing vals", "err", err)
+			return
+		}
+
+		if len(newValidators) != len(headerVals) {
+			log.Warn("[debugging] length mismatch")
+			return
+		}
+
+		for i, val := range newValidators {
+			if !bytes.Equal(val.HeaderBytes(), headerVals[i].HeaderBytes()) {
+				log.Info("[debugging] bytes mismatch")
+				return
+			}
+		}
+
+		log.Info("[debugging] all clear")
+	}
+
+	if headerNumber == 15251455 {
+		log.Info("[debugging] FinalizeAndAssemble for block #15251455")
+		foo()
+		log.Info("[debugging] foo done")
+		bar()
+		log.Info("[debugging] bar done")
+	}
+
 	stateSyncData := []*types.StateSyncData{}
 
 	var err error
