@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/0xPolygon/heimdall-v2/x/bor/types"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -32,6 +33,11 @@ func (m *mockHeimdall) Span(ctx context.Context, spanID uint64) (*span.HeimdallS
 	//nolint:nilnil
 	return nil, nil
 }
+
+func (m *mockHeimdall) GetSpan(ctx context.Context, spanID uint64) (*types.Span, error) {
+	panic("Not implemented!")
+}
+
 func (m *mockHeimdall) FetchCheckpoint(ctx context.Context, number int64) (*checkpoint.Checkpoint, error) {
 	return m.fetchCheckpoint(ctx, number)
 }

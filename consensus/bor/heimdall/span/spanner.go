@@ -6,6 +6,8 @@ import (
 	"math"
 	"math/big"
 
+	borTypes "github.com/0xPolygon/heimdall-v2/x/bor/types"
+	stakeTypes "github.com/0xPolygon/heimdall-v2/x/stake/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus/bor/abi"
@@ -182,6 +184,61 @@ func (c *ChainSpanner) CommitSpan(ctx context.Context, heimdallSpan HeimdallSpan
 
 	data, err := c.validatorSet.Pack(method,
 		big.NewInt(0).SetUint64(heimdallSpan.ID),
+		big.NewInt(0).SetUint64(heimdallSpan.StartBlock),
+		big.NewInt(0).SetUint64(heimdallSpan.EndBlock),
+		validatorBytes,
+		producerBytes,
+	)
+	if err != nil {
+		log.Error("Unable to pack tx for commitSpan", "error", err)
+
+		return err
+	}
+
+	// get system message
+	msg := statefull.GetSystemMessage(c.validatorContractAddress, data)
+
+	// apply message
+	_, err = statefull.ApplyMessage(ctx, msg, state, header, c.chainConfig, chainContext)
+
+	return err
+}
+
+// V2
+
+func (c *ChainSpanner) CommitSpanV2(ctx context.Context, heimdallSpan borTypes.Span, state *state.StateDB, header *types.Header, chainContext core.ChainContext) error {
+	// get validators bytes
+	validators := make([]stakeTypes.MinimalVal, 0, len(heimdallSpan.ValidatorSet.Validators))
+	for _, val := range heimdallSpan.ValidatorSet.Validators {
+		validators = append(validators, val.MinimalVal())
+	}
+
+	validatorBytes, err := rlp.EncodeToBytes(validators)
+	if err != nil {
+		return err
+	}
+
+	// get producers bytes
+	producers := make([]stakeTypes.MinimalVal, 0, len(heimdallSpan.SelectedProducers))
+	for _, val := range heimdallSpan.SelectedProducers {
+		producers = append(producers, val.MinimalVal())
+	}
+
+	producerBytes, err := rlp.EncodeToBytes(producers)
+	if err != nil {
+		return err
+	}
+
+	log.Info("✅ Committing new span",
+		"id", heimdallSpan.Id,
+		"startBlock", heimdallSpan.StartBlock,
+		"endBlock", heimdallSpan.EndBlock,
+		"validatorBytes", hex.EncodeToString(validatorBytes),
+		"producerBytes", hex.EncodeToString(producerBytes),
+	)
+
+	data, err := c.validatorSet.Pack(method,
+		big.NewInt(0).SetUint64(heimdallSpan.Id),
 		big.NewInt(0).SetUint64(heimdallSpan.StartBlock),
 		big.NewInt(0).SetUint64(heimdallSpan.EndBlock),
 		validatorBytes,

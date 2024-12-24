@@ -21,6 +21,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/crypto/sha3"
 
+	borTypes "github.com/0xPolygon/heimdall-v2/x/bor/types"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/tracing"
@@ -1192,7 +1193,12 @@ func (c *Bor) FetchAndCommitSpan(
 	header *types.Header,
 	chain core.ChainContext,
 ) error {
-	var heimdallSpan span.HeimdallSpan
+	var (
+		heimdallSpan span.HeimdallSpan
+		span         borTypes.Span
+		old          bool
+		chainId      string
+	)
 
 	if c.HeimdallClient == nil {
 		// fixme: move to a new mock or fake and remove c.HeimdallClient completely
@@ -1202,25 +1208,32 @@ func (c *Bor) FetchAndCommitSpan(
 		}
 
 		heimdallSpan = *s
+		chainId = heimdallSpan.ChainID
+		old = true
 	} else {
-		response, err := c.HeimdallClient.Span(ctx, newSpanID)
+		response, err := c.HeimdallClient.GetSpan(ctx, newSpanID)
 		if err != nil {
 			return err
 		}
 
-		heimdallSpan = *response
+		span = *response
+		chainId = span.BorChainId
 	}
 
 	// check if chain id matches with Heimdall span
-	if heimdallSpan.ChainID != c.chainConfig.ChainID.String() {
+	if chainId != c.chainConfig.ChainID.String() {
 		return fmt.Errorf(
 			"chain id proposed span, %s, and bor chain id, %s, doesn't match",
-			heimdallSpan.ChainID,
+			chainId,
 			c.chainConfig.ChainID,
 		)
 	}
 
-	return c.spanner.CommitSpan(ctx, heimdallSpan, state, header, chain)
+	if old {
+		return c.spanner.CommitSpan(ctx, heimdallSpan, state, header, chain)
+	}
+
+	return c.spanner.CommitSpanV2(ctx, span, state, header, chain)
 }
 
 // CommitStates commit states

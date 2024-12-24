@@ -8,6 +8,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	types "github.com/0xPolygon/heimdall-v2/x/bor/types"
 	clerk "github.com/ethereum/go-ethereum/consensus/bor/clerk"
 	checkpoint "github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
 	milestone "github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
@@ -151,6 +152,21 @@ func (m *MockIHeimdallClient) FetchNoAckMilestone(arg0 context.Context, arg1 str
 func (mr *MockIHeimdallClientMockRecorder) FetchNoAckMilestone(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchNoAckMilestone", reflect.TypeOf((*MockIHeimdallClient)(nil).FetchNoAckMilestone), arg0, arg1)
+}
+
+// GetSpan mocks base method.
+func (m *MockIHeimdallClient) GetSpan(arg0 context.Context, arg1 uint64) (*types.Span, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetSpan", arg0, arg1)
+	ret0, _ := ret[0].(*types.Span)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetSpan indicates an expected call of GetSpan.
+func (mr *MockIHeimdallClientMockRecorder) GetSpan(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSpan", reflect.TypeOf((*MockIHeimdallClient)(nil).GetSpan), arg0, arg1)
 }
 
 // Span mocks base method.

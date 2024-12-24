@@ -7,6 +7,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/bor/valset"
 	"github.com/ethereum/go-ethereum/log"
 
+	"github.com/0xPolygon/heimdall-v2/x/bor/types"
 	proto "github.com/maticnetwork/polyproto/heimdall"
 	protoutils "github.com/maticnetwork/polyproto/utils"
 )
@@ -26,6 +27,10 @@ func (h *HeimdallGRPCClient) Span(ctx context.Context, spanID uint64) (*span.Hei
 	log.Info("Fetched span", "spanID", spanID)
 
 	return parseSpan(res.Result), nil
+}
+
+func (h *HeimdallGRPCClient) GetSpan(ctx context.Context, spanID uint64) (*types.Span, error) {
+	panic("Not implemented!")
 }
 
 func parseSpan(protoSpan *proto.Span) *span.HeimdallSpan {

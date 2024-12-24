@@ -8,7 +8,6 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/maticnetwork/heimdall/cmd/heimdalld/service"
 	"github.com/mitchellh/cli"
 	"github.com/pelletier/go-toml"
 
@@ -164,12 +163,12 @@ func (c *Command) Run(args []string) int {
 	}
 
 	if c.config.Heimdall.RunHeimdall {
-		shutdownCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+		_, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
 
-		go func() {
-			service.NewHeimdallService(shutdownCtx, c.getHeimdallArgs())
-		}()
+		// go func() {
+		// 	service.NewHeimdallService(shutdownCtx, c.getHeimdallArgs())
+		// }()
 	}
 
 	srv, err := NewServer(c.config, WithGRPCAddress())

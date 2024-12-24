@@ -12,6 +12,10 @@ import (
 	"sort"
 	"time"
 
+	"github.com/0xPolygon/heimdall-v2/x/bor/types"
+	"github.com/cosmos/cosmos-sdk/codec"
+	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
+	cryptocodec "github.com/cosmos/cosmos-sdk/crypto/codec"
 	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
@@ -139,6 +143,29 @@ func (h *HeimdallClient) Span(ctx context.Context, spanID uint64) (*span.Heimdal
 	}
 
 	return &response.Result, nil
+}
+
+func (h *HeimdallClient) GetSpan(ctx context.Context, spanID uint64) (*types.Span, error) {
+	url, err := spanURL(h.urlString, spanID)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx = withRequestType(ctx, spanRequest)
+
+	// response, err := FetchWithRetry[SpanResponse](ctx, h.client, url, h.closeCh)
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	request := &Request{client: h.client, url: url, start: time.Now()}
+
+	response, err := FetchSpan(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
 }
 
 // FetchCheckpoint fetches the checkpoint from heimdall
@@ -365,6 +392,42 @@ func Fetch[T any](ctx context.Context, request *Request) (*T, error) {
 	isSuccessful = true
 
 	return result, nil
+}
+
+func FetchSpan(ctx context.Context, request *Request) (*types.Span, error) {
+	isSuccessful := false
+
+	defer func() {
+		if metrics.Enabled {
+			sendMetrics(ctx, request.start, isSuccessful)
+		}
+	}()
+
+	var res types.QuerySpanByIdResponse
+
+	body, err := internalFetchWithTimeout(ctx, request.client, request.url)
+	if err != nil {
+		return nil, err
+	}
+
+	if body == nil {
+		return nil, ErrNoResponse
+	}
+
+	// err = json.Unmarshal(body, result)
+	interfaceRegistry := codectypes.NewInterfaceRegistry()
+	cryptocodec.RegisterInterfaces(interfaceRegistry)
+	var cdc codec.Codec
+	cdc = codec.NewProtoCodec(interfaceRegistry)
+
+	err = cdc.UnmarshalJSON(body, &res)
+	if err != nil {
+		return nil, err
+	}
+
+	isSuccessful = true
+
+	return res.Span, nil
 }
 
 func spanURL(urlString string, spanID uint64) (*url.URL, error) {

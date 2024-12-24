@@ -49,7 +49,6 @@ import (
 	_ "github.com/ethereum/go-ethereum/eth/tracers/live"
 	_ "github.com/ethereum/go-ethereum/eth/tracers/native"
 
-	"github.com/maticnetwork/heimdall/cmd/heimdalld/service"
 	"github.com/urfave/cli/v2"
 )
 
@@ -367,12 +366,12 @@ func geth(ctx *cli.Context) error {
 	}
 
 	if ctx.Bool(utils.RunHeimdallFlag.Name) {
-		shutdownCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+		_, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
 
-		go func() {
-			service.NewHeimdallService(shutdownCtx, getHeimdallArgs(ctx))
-		}()
+		// go func() {
+		// 	service.NewHeimdallService(shutdownCtx, getHeimdallArgs(ctx))
+		// }()
 	}
 
 	prepare(ctx)

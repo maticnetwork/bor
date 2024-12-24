@@ -8,12 +8,13 @@ import (
 	context "context"
 	reflect "reflect"
 
+	types "github.com/0xPolygon/heimdall-v2/x/bor/types"
 	common "github.com/ethereum/go-ethereum/common"
 	span "github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
 	valset "github.com/ethereum/go-ethereum/consensus/bor/valset"
 	core "github.com/ethereum/go-ethereum/core"
 	state "github.com/ethereum/go-ethereum/core/state"
-	types "github.com/ethereum/go-ethereum/core/types"
+	types0 "github.com/ethereum/go-ethereum/core/types"
 	rpc "github.com/ethereum/go-ethereum/rpc"
 	gomock "github.com/golang/mock/gomock"
 )
@@ -42,7 +43,7 @@ func (m *MockSpanner) EXPECT() *MockSpannerMockRecorder {
 }
 
 // CommitSpan mocks base method.
-func (m *MockSpanner) CommitSpan(arg0 context.Context, arg1 span.HeimdallSpan, arg2 *state.StateDB, arg3 *types.Header, arg4 core.ChainContext) error {
+func (m *MockSpanner) CommitSpan(arg0 context.Context, arg1 span.HeimdallSpan, arg2 *state.StateDB, arg3 *types0.Header, arg4 core.ChainContext) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CommitSpan", arg0, arg1, arg2, arg3, arg4)
 	ret0, _ := ret[0].(error)
@@ -53,6 +54,20 @@ func (m *MockSpanner) CommitSpan(arg0 context.Context, arg1 span.HeimdallSpan, a
 func (mr *MockSpannerMockRecorder) CommitSpan(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CommitSpan", reflect.TypeOf((*MockSpanner)(nil).CommitSpan), arg0, arg1, arg2, arg3, arg4)
+}
+
+// CommitSpanV2 mocks base method.
+func (m *MockSpanner) CommitSpanV2(arg0 context.Context, arg1 types.Span, arg2 *state.StateDB, arg3 *types0.Header, arg4 core.ChainContext) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CommitSpanV2", arg0, arg1, arg2, arg3, arg4)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CommitSpanV2 indicates an expected call of CommitSpanV2.
+func (mr *MockSpannerMockRecorder) CommitSpanV2(arg0, arg1, arg2, arg3, arg4 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CommitSpanV2", reflect.TypeOf((*MockSpanner)(nil).CommitSpanV2), arg0, arg1, arg2, arg3, arg4)
 }
 
 // GetCurrentSpan mocks base method.
