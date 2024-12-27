@@ -18,6 +18,7 @@ type HeimdallAppClient struct {
 
 func NewHeimdallAppClient() *HeimdallAppClient {
 	return &HeimdallAppClient{
+		// TODO HV2: Implement according to the new setup
 		// hApp: service.GetHeimdallApp(),
 	}
 }

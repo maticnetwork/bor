@@ -13,6 +13,7 @@ import (
 //go:generate mockgen -destination=../../tests/bor/mocks/IHeimdallClient.go -package=mocks . IHeimdallClient
 type IHeimdallClient interface {
 	StateSyncEvents(ctx context.Context, fromID uint64, to int64) ([]*clerk.EventRecordWithTime, error)
+	// TODO HV2: remove this or adapt according to GetSpan method
 	Span(ctx context.Context, spanID uint64) (*span.HeimdallSpan, error)
 	GetSpan(ctx context.Context, spanID uint64) (*types.Span, error)
 	FetchCheckpoint(ctx context.Context, number int64) (*checkpoint.Checkpoint, error)

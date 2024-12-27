@@ -11,6 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
+// TODO HV2: Consider aligning the struct with the one defined in x/stake/types/validator.go
 // Validator represents Volatile state for each Validator
 type Validator struct {
 	ID               uint64         `json:"ID"`

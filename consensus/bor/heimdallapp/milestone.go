@@ -2,6 +2,7 @@ package heimdallapp
 
 import (
 	"context"
+	"fmt"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -39,17 +40,21 @@ func (h *HeimdallAppClient) FetchMilestone(_ context.Context) (*milestone.Milest
 	return milestone, nil
 }
 
-// func (h *HeimdallAppClient) FetchNoAckMilestone(_ context.Context, milestoneID string) error {
-// 	log.Debug("Fetching No Ack Milestone By MilestoneID", "MilestoneID", milestoneID)
+func (h *HeimdallAppClient) FetchNoAckMilestone(_ context.Context, milestoneID string) error {
+	log.Debug("Fetching No Ack Milestone By MilestoneID", "MilestoneID", milestoneID)
 
-// 	res := h.hApp.CheckpointKeeper.GetNoAckMilestone(h.NewContext(), milestoneID)
-// 	if res {
-// 		log.Info("Fetched No Ack By MilestoneID", "MilestoneID", milestoneID)
-// 		return nil
-// 	}
+	res, err := h.hApp.MilestoneKeeper.HasNoAckMilestone(h.NewContext(), milestoneID)
+	if err != nil {
+		return err
+	}
 
-// 	return fmt.Errorf("still no-ack milestone exist corresponding to milestoneID: %v", milestoneID)
-// }
+	if res {
+		log.Info("Fetched No Ack By MilestoneID", "MilestoneID", milestoneID)
+		return nil
+	}
+
+	return fmt.Errorf("still no-ack milestone exist corresponding to milestoneID: %v", milestoneID)
+}
 
 func (h *HeimdallAppClient) FetchLastNoAckMilestone(_ context.Context) (string, error) {
 	log.Debug("Fetching Latest No Ack Milestone ID")
@@ -64,6 +69,7 @@ func (h *HeimdallAppClient) FetchLastNoAckMilestone(_ context.Context) (string, 
 	return res, nil
 }
 
+// TODO HV2: Uncomment once the implementation is done
 // func (h *HeimdallAppClient) FetchMilestoneID(_ context.Context, milestoneID string) error {
 // 	log.Debug("Fetching Milestone ID ", "MilestoneID", milestoneID)
 

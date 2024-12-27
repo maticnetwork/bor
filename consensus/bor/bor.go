@@ -21,7 +21,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/crypto/sha3"
 
-	borTypes "github.com/0xPolygon/heimdall-v2/x/bor/types"
+	stakeTypes "github.com/0xPolygon/heimdall-v2/x/stake/types"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/tracing"
@@ -1194,10 +1194,10 @@ func (c *Bor) FetchAndCommitSpan(
 	chain core.ChainContext,
 ) error {
 	var (
-		heimdallSpan span.HeimdallSpan
-		span         borTypes.Span
-		old          bool
-		chainId      string
+		minSpan    span.Span
+		chainId    string
+		validators []stakeTypes.MinimalVal
+		producers  []stakeTypes.MinimalVal
 	)
 
 	if c.HeimdallClient == nil {
@@ -1207,17 +1207,51 @@ func (c *Bor) FetchAndCommitSpan(
 			return err
 		}
 
-		heimdallSpan = *s
-		chainId = heimdallSpan.ChainID
-		old = true
+		minSpan = span.Span{
+			ID:         s.ID,
+			StartBlock: s.StartBlock,
+			EndBlock:   s.EndBlock,
+		}
+		chainId = s.ChainID
+
+		for _, val := range s.ValidatorSet.Validators {
+			m := stakeTypes.MinimalVal{
+				ID:          val.ID,
+				VotingPower: uint64(val.VotingPower),
+				Signer:      val.Address.String(),
+			}
+			validators = append(validators, m)
+		}
+
+		for _, val := range s.SelectedProducers {
+			m := stakeTypes.MinimalVal{
+				ID:          val.ID,
+				VotingPower: uint64(val.VotingPower),
+				Signer:      val.Address.String(),
+			}
+			producers = append(producers, m)
+		}
+
 	} else {
 		response, err := c.HeimdallClient.GetSpan(ctx, newSpanID)
 		if err != nil {
 			return err
 		}
 
-		span = *response
-		chainId = span.BorChainId
+		minSpan = span.Span{
+			ID:         response.Id,
+			StartBlock: response.StartBlock,
+			EndBlock:   response.EndBlock,
+		}
+		chainId = response.BorChainId
+
+		for _, val := range response.ValidatorSet.Validators {
+			validators = append(validators, val.MinimalVal())
+		}
+
+		for _, val := range response.SelectedProducers {
+			producers = append(producers, val.MinimalVal())
+		}
 	}
 
 	// check if chain id matches with Heimdall span
@@ -1229,11 +1263,7 @@ func (c *Bor) FetchAndCommitSpan(
 		)
 	}
 
-	if old {
-		return c.spanner.CommitSpan(ctx, heimdallSpan, state, header, chain)
-	}
-
-	return c.spanner.CommitSpanV2(ctx, span, state, header, chain)
+	return c.spanner.CommitSpan(ctx, minSpan, validators, producers, state, header, chain)
 }
 
 // CommitStates commit states

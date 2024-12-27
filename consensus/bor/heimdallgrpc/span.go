@@ -12,6 +12,8 @@ import (
 	protoutils "github.com/maticnetwork/polyproto/utils"
 )
 
+// TODO HV2: Implement the IHeimdallClient interface according to heimdall-v2 changes
+
 func (h *HeimdallGRPCClient) Span(ctx context.Context, spanID uint64) (*span.HeimdallSpan, error) {
 	req := &proto.SpanRequest{
 		ID: spanID,

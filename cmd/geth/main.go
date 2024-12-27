@@ -28,6 +28,9 @@ import (
 	"syscall"
 	"time"
 
+	heimdallApp "github.com/0xPolygon/heimdall-v2/app"
+	heimdalld "github.com/0xPolygon/heimdall-v2/cmd/heimdalld/cmd"
+	svrcmd "github.com/cosmos/cosmos-sdk/server/cmd"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/cmd/utils"
@@ -369,9 +372,14 @@ func geth(ctx *cli.Context) error {
 		_, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
 
-		// go func() {
-		// 	service.NewHeimdallService(shutdownCtx, getHeimdallArgs(ctx))
-		// }()
+		// TODO HV2: needs to be tested!
+		go func() {
+			rootCmd := heimdalld.NewRootCmd()
+			if err := svrcmd.Execute(rootCmd, "HD", heimdallApp.DefaultNodeHome); err != nil {
+				_, _ = fmt.Fprintln(rootCmd.OutOrStderr(), err)
+				os.Exit(1)
+			}
+		}()
 	}
 
 	prepare(ctx)
