@@ -390,7 +390,7 @@ func Fetch[T any](ctx context.Context, request *Request) (*T, error) {
 			return nil, err
 		}
 
-		tValue := reflect.ValueOf(&result).Elem()
+		tValue := reflect.ValueOf(result).Elem()
 		tValue.Set(reflect.ValueOf(p).Elem())
 
 		return result, nil
