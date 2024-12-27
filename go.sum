@@ -49,8 +49,6 @@ cloud.google.com/go/storage v1.38.0 h1:Az68ZRGlnNTpIBbLjSMIV2BDcwwXYlRlQzis0llkp
 cloud.google.com/go/storage v1.38.0/go.mod h1:tlUADB0mAb9BgYls9lq+8MGkfzOXuLrnHXlpHmvFJoY=
 cosmossdk.io/api v0.7.5 h1:eMPTReoNmGUm8DeiQL9DyM8sYDjEhWzL1+nLbI9DqtQ=
 cosmossdk.io/api v0.7.5/go.mod h1:IcxpYS5fMemZGqyYtErK7OqvdM0C8kdW3dq8Q/XIG38=
-cosmossdk.io/client/v2 v2.0.0-beta.4.0.20240918122632-1879050ca719 h1:w57wGtZYx1O24WIaFLMK+ZEjQuZzLFUN3hiYf/+H4mk=
-cosmossdk.io/client/v2 v2.0.0-beta.4.0.20240918122632-1879050ca719/go.mod h1:4p0P6o0ro+FizakJUYS9SeM94RNbv0thLmkHRw5o5as=
 cosmossdk.io/collections v0.4.0 h1:PFmwj2W8szgpD5nOd8GWH6AbYNi1f2J6akWXJ7P5t9s=
 cosmossdk.io/collections v0.4.0/go.mod h1:oa5lUING2dP+gdDquow+QjlF45eL1t4TJDypgGd+tv0=
 cosmossdk.io/core v0.11.1 h1:h9WfBey7NAiFfIcUhDVNS503I2P2HdZLebJlUIs8LPA=
@@ -88,6 +86,8 @@ github.com/0xPolygon/cometbft v0.1.2-beta-polygon h1:RCqznvAI7UA7jrsaTuGhxpAudFN
 github.com/0xPolygon/cometbft v0.1.2-beta-polygon/go.mod h1:lixtaAtgMJY6x8w4X2/rtQiLC0bdtzHgPbyHg8ggBJs=
 github.com/0xPolygon/cosmos-sdk v0.1.7-beta-polygon h1:c49jBMzsTChCfUa/ID7qZ/r3AAMWawrPTg8QJgyS/Xo=
 github.com/0xPolygon/cosmos-sdk v0.1.7-beta-polygon/go.mod h1:5FoQEICKOgSWbKG1eMAI9dKzi0Gvlu2vTMDakiBK0SI=
+github.com/0xPolygon/cosmos-sdk/client/v2 v2.0.0-beta.1 h1:XV7f44uAJ1p1w9j15uzm2S8VOSusHFJ1UWvkUj0EK7g=
+github.com/0xPolygon/cosmos-sdk/client/v2 v2.0.0-beta.1/go.mod h1:JEUSu9moNZQ4kU3ir1DKD5eU4bllmAexrGWjmb9k8qU=
 github.com/0xPolygon/heimdall-v2 v0.0.0-20241223112457-d6d02498fc6b h1:TdBGUM30OJtF3M25VlKdhUa5acVmNlKvT9XsXqaPTk4=
 github.com/0xPolygon/heimdall-v2 v0.0.0-20241223112457-d6d02498fc6b/go.mod h1:LdqHmJXcPaELo1IfP0RwL8M5UsNmvwpG4+4jlF70/os=
 github.com/99designs/go-keychain v0.0.0-20191008050251-8e49817e8af4 h1:/vQbFIOMbk2FiG/kXiLl8BRyzTWDw7gX/Hz7Dd5eDMs=
