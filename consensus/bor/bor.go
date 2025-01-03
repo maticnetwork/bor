@@ -1252,8 +1252,6 @@ func (c *Bor) FetchAndCommitSpan(
 		for _, val := range response.SelectedProducers {
 			producers = append(producers, val.MinimalVal())
 		}
-
-		log.Error("Fetched span", "span", minSpan, "validators", validators, "producers", producers, "span", fmt.Sprintf("response: %+v", response))
 	}
 
 	// check if chain id matches with Heimdall span
