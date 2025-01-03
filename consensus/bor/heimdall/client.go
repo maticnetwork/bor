@@ -85,8 +85,8 @@ const (
 	fetchMilestone      = "/milestone/latest"
 	fetchMilestoneCount = "/milestone/count"
 
-	fetchLastNoAckMilestone = "/milestone/lastNoAck"
-	fetchNoAckMilestone     = "/milestone/noAck/%s"
+	fetchLastNoAckMilestone = "/milestone/last-no-ack"
+	fetchNoAckMilestone     = "/milestone/no-ack/%s"
 	fetchMilestoneID        = "/milestone/ID/%s"
 
 	fetchSpanFormat = "bor/span/%d"
@@ -244,7 +244,7 @@ func (h *HeimdallClient) FetchLastNoAckMilestone(ctx context.Context) (string, e
 		return "", err
 	}
 
-	return response.Result.Result, nil
+	return response.Result, nil
 }
 
 // FetchNoAckMilestone fetches the last no-ack-milestone from heimdall
@@ -261,7 +261,7 @@ func (h *HeimdallClient) FetchNoAckMilestone(ctx context.Context, milestoneID st
 		return err
 	}
 
-	if !response.Result.Result {
+	if !response.Result {
 		return fmt.Errorf("%w: milestoneID %q", ErrNotInRejectedList, milestoneID)
 	}
 

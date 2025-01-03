@@ -3,7 +3,6 @@ package heimdallapp
 import (
 	"context"
 	"fmt"
-	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
@@ -85,8 +84,8 @@ func (h *HeimdallAppClient) FetchLastNoAckMilestone(_ context.Context) (string, 
 func toBorMilestone(hdMilestone *milestoneTypes.Milestone) *milestone.Milestone {
 	return &milestone.Milestone{
 		Proposer:   common.HexToAddress(hdMilestone.Proposer),
-		StartBlock: big.NewInt(int64(hdMilestone.StartBlock)),
-		EndBlock:   big.NewInt(int64(hdMilestone.EndBlock)),
+		StartBlock: hdMilestone.StartBlock,
+		EndBlock:   hdMilestone.EndBlock,
 		Hash:       common.BytesToHash(hdMilestone.Hash),
 		BorChainID: hdMilestone.BorChainId,
 		Timestamp:  hdMilestone.Timestamp,
