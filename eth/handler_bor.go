@@ -73,21 +73,21 @@ func (h *ethHandler) fetchWhitelistMilestone(ctx context.Context, bor *bor.Bor, 
 		return num, hash, err
 	}
 
-	num = milestone.EndBlock.Uint64()
+	num = milestone.EndBlock
 	hash = milestone.Hash
 
-	log.Debug("Got new milestone from heimdall", "start", milestone.StartBlock.Uint64(), "end", milestone.EndBlock.Uint64(), "hash", milestone.Hash.String())
+	log.Debug("Got new milestone from heimdall", "start", milestone.StartBlock, "end", milestone.EndBlock, "hash", milestone.Hash.String())
 
 	// Verify if the milestone fetched can be added to the local whitelist entry or not. If verified,
 	// the hash of the end block of the milestone is returned else appropriate error is returned.
-	_, err = verifier.verify(ctx, eth, h, milestone.StartBlock.Uint64(), milestone.EndBlock.Uint64(), milestone.Hash.String()[2:], false)
+	_, err = verifier.verify(ctx, eth, h, milestone.StartBlock, milestone.EndBlock, milestone.Hash.String()[2:], false)
 	if err != nil {
 		if errors.Is(err, errChainOutOfSync) {
 			log.Info("Whitelisting milestone deferred", "err", err)
 		} else {
 			log.Warn("Failed to whitelist milestone", "err", err)
 		}
-		h.downloader.UnlockSprint(milestone.EndBlock.Uint64())
+		h.downloader.UnlockSprint(milestone.EndBlock)
 	}
 
 	return num, hash, err

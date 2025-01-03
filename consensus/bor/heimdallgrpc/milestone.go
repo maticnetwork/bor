@@ -3,7 +3,6 @@ package heimdallgrpc
 import (
 	"context"
 	"fmt"
-	"math/big"
 
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
@@ -37,8 +36,8 @@ func (h *HeimdallGRPCClient) FetchMilestone(ctx context.Context) (*milestone.Mil
 	log.Info("Fetched milestone")
 
 	milestone := &milestone.Milestone{
-		StartBlock: new(big.Int).SetUint64(res.Result.StartBlock),
-		EndBlock:   new(big.Int).SetUint64(res.Result.EndBlock),
+		StartBlock: res.Result.StartBlock,
+		EndBlock:   res.Result.EndBlock,
 		Hash:       protoutils.ConvertH256ToHash(res.Result.RootHash),
 		Proposer:   protoutils.ConvertH160toAddress(res.Result.Proposer),
 		BorChainID: res.Result.BorChainID,

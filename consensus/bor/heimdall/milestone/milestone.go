@@ -1,16 +1,14 @@
 package milestone
 
 import (
-	"math/big"
-
 	"github.com/ethereum/go-ethereum/common"
 )
 
 // milestone defines a response object type of bor milestone
 type Milestone struct {
 	Proposer    common.Address `json:"proposer"`
-	StartBlock  *big.Int       `json:"start_block"`
-	EndBlock    *big.Int       `json:"end_block"`
+	StartBlock  uint64         `json:"start_block"`
+	EndBlock    uint64         `json:"end_block"`
 	Hash        common.Hash    `json:"hash"`
 	BorChainID  string         `json:"bor_chain_id"`
 	MilestoneID string         `json:"milestone_id"`
