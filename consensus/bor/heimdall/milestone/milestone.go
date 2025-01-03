@@ -1,6 +1,10 @@
 package milestone
 
 import (
+	"encoding/json"
+	"fmt"
+	"strconv"
+
 	"github.com/ethereum/go-ethereum/common"
 )
 
@@ -13,6 +17,35 @@ type Milestone struct {
 	BorChainID  string         `json:"bor_chain_id"`
 	MilestoneID string         `json:"milestone_id"`
 	Timestamp   uint64         `json:"timestamp"`
+}
+
+func (m *Milestone) UnmarshalJSON(data []byte) error {
+	type Alias Milestone
+	temp := &struct {
+		StartBlock string `json:"start_block"`
+		EndBlock   string `json:"end_block"`
+		*Alias
+	}{
+		Alias: (*Alias)(m),
+	}
+
+	if err := json.Unmarshal(data, temp); err != nil {
+		return err
+	}
+
+	startBlock, err := strconv.ParseUint(temp.StartBlock, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid start_block: %w", err)
+	}
+	m.StartBlock = startBlock
+
+	endBlock, err := strconv.ParseUint(temp.EndBlock, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid end_block: %w", err)
+	}
+	m.EndBlock = endBlock
+
+	return nil
 }
 
 type MilestoneResponse struct {
