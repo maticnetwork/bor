@@ -8,17 +8,17 @@ import (
 
 // milestone defines a response object type of bor milestone
 type Milestone struct {
-	Proposer   common.Address `json:"proposer"`
-	StartBlock *big.Int       `json:"start_block"`
-	EndBlock   *big.Int       `json:"end_block"`
-	Hash       common.Hash    `json:"hash"`
-	BorChainID string         `json:"bor_chain_id"`
-	Timestamp  uint64         `json:"timestamp"`
+	Proposer    common.Address `json:"proposer"`
+	StartBlock  *big.Int       `json:"start_block"`
+	EndBlock    *big.Int       `json:"end_block"`
+	Hash        common.Hash    `json:"hash"`
+	BorChainID  string         `json:"bor_chain_id"`
+	MilestoneID string         `json:"milestone_id"`
+	Timestamp   uint64         `json:"timestamp"`
 }
 
 type MilestoneResponse struct {
-	Height string    `json:"height"`
-	Result Milestone `json:"result"`
+	Result Milestone `json:"milestone"`
 }
 
 type MilestoneCount struct {
