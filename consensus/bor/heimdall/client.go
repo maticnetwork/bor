@@ -86,7 +86,7 @@ const (
 	fetchMilestoneCount = "/milestone/count"
 
 	fetchLastNoAckMilestone = "/milestone/last-no-ack"
-	fetchNoAckMilestone     = "/milestone/noAck/%s"
+	fetchNoAckMilestone     = "/milestone/no-ack/%s"
 	fetchMilestoneID        = "/milestone/ID/%s"
 
 	fetchSpanFormat = "bor/span/%d"
