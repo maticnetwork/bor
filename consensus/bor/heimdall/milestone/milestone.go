@@ -26,6 +26,7 @@ func (m *Milestone) UnmarshalJSON(data []byte) error {
 		StartBlock string `json:"start_block"`
 		EndBlock   string `json:"end_block"`
 		Hash       string `json:"hash"`
+		Timestamp  string `json:"timestamp"`
 		*Alias
 	}{
 		Alias: (*Alias)(m),
@@ -52,6 +53,12 @@ func (m *Milestone) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("failed to decode hash: %w", err)
 	}
 	m.Hash = common.BytesToHash(decodedHash)
+
+	timestamp, err := strconv.ParseUint(temp.Timestamp, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid timestamp: %w", err)
+	}
+	m.Timestamp = timestamp
 
 	return nil
 }
