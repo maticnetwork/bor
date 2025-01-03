@@ -1201,6 +1201,7 @@ func (c *Bor) FetchAndCommitSpan(
 	)
 
 	if c.HeimdallClient == nil {
+		log.Error("Heimdall client is nil")
 		// fixme: move to a new mock or fake and remove c.HeimdallClient completely
 		s, err := c.getNextHeimdallSpanForTest(ctx, newSpanID, header, chain)
 		if err != nil {
