@@ -1,6 +1,7 @@
 package milestone
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -24,6 +25,7 @@ func (m *Milestone) UnmarshalJSON(data []byte) error {
 	temp := &struct {
 		StartBlock string `json:"start_block"`
 		EndBlock   string `json:"end_block"`
+		Hash       string `json:"hash"`
 		*Alias
 	}{
 		Alias: (*Alias)(m),
@@ -44,6 +46,12 @@ func (m *Milestone) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("invalid end_block: %w", err)
 	}
 	m.EndBlock = endBlock
+
+	decodedHash, err := base64.StdEncoding.DecodeString(temp.Hash)
+	if err != nil {
+		return fmt.Errorf("failed to decode hash: %w", err)
+	}
+	m.Hash = common.BytesToHash(decodedHash)
 
 	return nil
 }
