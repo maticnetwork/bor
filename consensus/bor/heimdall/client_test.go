@@ -169,11 +169,10 @@ func TestFetchMilestoneFromMockHeimdall(t *testing.T) {
 	handler := &HttpHandlerFake{}
 	handler.handleFetchMilestone = func(w http.ResponseWriter, _ *http.Request) {
 		err := json.NewEncoder(w).Encode(milestone.MilestoneResponse{
-			Height: "0",
 			Result: milestone.Milestone{
 				Proposer:   common.Address{},
-				StartBlock: big.NewInt(0),
-				EndBlock:   big.NewInt(512),
+				StartBlock: 0,
+				EndBlock:   512,
 				Hash:       common.Hash{},
 				BorChainID: "15001",
 				Timestamp:  0,
