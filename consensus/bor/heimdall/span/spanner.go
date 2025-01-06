@@ -3,8 +3,11 @@ package span
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
 	"math"
 	"math/big"
+
+	"runtime/debug"
 
 	stakeTypes "github.com/0xPolygon/heimdall-v2/x/stake/types"
 	"github.com/ethereum/go-ethereum/common"
@@ -170,6 +173,8 @@ func (c *ChainSpanner) CommitSpan(ctx context.Context, minimalSpan Span, validat
 		"validatorBytes", hex.EncodeToString(validatorBytes),
 		"producerBytes", hex.EncodeToString(producerBytes),
 	)
+
+	log.Error(fmt.Sprintf("Span commit called from %s", string(debug.Stack())))
 
 	data, err := c.validatorSet.Pack(method,
 		big.NewInt(0).SetUint64(minimalSpan.ID),
