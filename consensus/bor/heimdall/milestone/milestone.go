@@ -1,24 +1,70 @@
 package milestone
 
 import (
-	"math/big"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"strconv"
 
 	"github.com/ethereum/go-ethereum/common"
 )
 
 // milestone defines a response object type of bor milestone
 type Milestone struct {
-	Proposer   common.Address `json:"proposer"`
-	StartBlock *big.Int       `json:"start_block"`
-	EndBlock   *big.Int       `json:"end_block"`
-	Hash       common.Hash    `json:"hash"`
-	BorChainID string         `json:"bor_chain_id"`
-	Timestamp  uint64         `json:"timestamp"`
+	Proposer    common.Address `json:"proposer"`
+	StartBlock  uint64         `json:"start_block"`
+	EndBlock    uint64         `json:"end_block"`
+	Hash        common.Hash    `json:"hash"`
+	BorChainID  string         `json:"bor_chain_id"`
+	MilestoneID string         `json:"milestone_id"`
+	Timestamp   uint64         `json:"timestamp"`
+}
+
+func (m *Milestone) UnmarshalJSON(data []byte) error {
+	type Alias Milestone
+	temp := &struct {
+		StartBlock string `json:"start_block"`
+		EndBlock   string `json:"end_block"`
+		Hash       string `json:"hash"`
+		Timestamp  string `json:"timestamp"`
+		*Alias
+	}{
+		Alias: (*Alias)(m),
+	}
+
+	if err := json.Unmarshal(data, temp); err != nil {
+		return err
+	}
+
+	startBlock, err := strconv.ParseUint(temp.StartBlock, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid start_block: %w", err)
+	}
+	m.StartBlock = startBlock
+
+	endBlock, err := strconv.ParseUint(temp.EndBlock, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid end_block: %w", err)
+	}
+	m.EndBlock = endBlock
+
+	decodedHash, err := base64.StdEncoding.DecodeString(temp.Hash)
+	if err != nil {
+		return fmt.Errorf("failed to decode hash: %w", err)
+	}
+	m.Hash = common.BytesToHash(decodedHash)
+
+	timestamp, err := strconv.ParseUint(temp.Timestamp, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid timestamp: %w", err)
+	}
+	m.Timestamp = timestamp
+
+	return nil
 }
 
 type MilestoneResponse struct {
-	Height string    `json:"height"`
-	Result Milestone `json:"result"`
+	Result Milestone `json:"milestone"`
 }
 
 type MilestoneCount struct {
@@ -30,22 +76,12 @@ type MilestoneCountResponse struct {
 	Result MilestoneCount `json:"result"`
 }
 
-type MilestoneLastNoAck struct {
+type MilestoneLastNoAckResponse struct {
 	Result string `json:"result"`
 }
 
-type MilestoneLastNoAckResponse struct {
-	Height string             `json:"height"`
-	Result MilestoneLastNoAck `json:"result"`
-}
-
-type MilestoneNoAck struct {
-	Result bool `json:"result"`
-}
-
 type MilestoneNoAckResponse struct {
-	Height string         `json:"height"`
-	Result MilestoneNoAck `json:"result"`
+	Result bool `json:"result"`
 }
 
 type MilestoneID struct {
