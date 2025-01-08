@@ -279,6 +279,7 @@ type BlockChain struct {
 	processor                    Processor // Block transaction processor interface
 	parallelProcessor            Processor // Parallel block transaction processor interface
 	parallelSpeculativeProcesses int       // Number of parallel speculative processes
+	enforceParallelProcessor     bool
 	forker                       *ForkChoice
 	vmConfig                     vm.Config
 	logger                       *tracing.Hooks
@@ -549,7 +550,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 }
 
 // NewParallelBlockChain , similar to NewBlockChain, creates a new blockchain object, but with a parallel state processor
-func NewParallelBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis, overrides *ChainOverrides, engine consensus.Engine, vmConfig vm.Config, shouldPreserve func(header *types.Header) bool, txLookupLimit *uint64, checker ethereum.ChainValidator, numprocs int) (*BlockChain, error) {
+func NewParallelBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis, overrides *ChainOverrides, engine consensus.Engine, vmConfig vm.Config, shouldPreserve func(header *types.Header) bool, txLookupLimit *uint64, checker ethereum.ChainValidator, numprocs int, enforce bool) (*BlockChain, error) {
 	bc, err := NewBlockChain(db, cacheConfig, genesis, overrides, engine, vmConfig, shouldPreserve, txLookupLimit, checker)
 
 	if err != nil {
@@ -567,6 +568,7 @@ func NewParallelBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis 
 
 	bc.parallelProcessor = NewParallelStateProcessor(chainConfig, bc, engine)
 	bc.parallelSpeculativeProcesses = numprocs
+	bc.enforceParallelProcessor = enforce
 
 	return bc, nil
 }
@@ -602,7 +604,12 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 		parallel bool
 	}
 
-	resultChan := make(chan Result, 2)
+	var resultChanLen int = 2
+	if bc.enforceParallelProcessor {
+		log.Info("Processing block using Block STM only", "number", block.NumberU64())
+		resultChanLen = 1
+	}
+	resultChan := make(chan Result, resultChanLen)
 
 	processorCount := 0
 
@@ -629,7 +636,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 		}()
 	}
 
-	if bc.processor != nil {
+	if bc.processor != nil && !bc.enforceParallelProcessor {
 		statedb, err := state.New(parent.Root, bc.stateCache, bc.snaps)
 		if err != nil {
 			return nil, nil, 0, nil, 0, err
