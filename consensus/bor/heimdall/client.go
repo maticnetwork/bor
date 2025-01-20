@@ -87,7 +87,6 @@ const (
 
 	fetchLastNoAckMilestone = "/milestone/last-no-ack"
 	fetchNoAckMilestone     = "/milestone/no-ack/%s"
-	fetchMilestoneByID      = "/milestone/%s"
 
 	fetchSpanFormat = "bor/span/%d"
 )
@@ -268,29 +267,6 @@ func (h *HeimdallClient) FetchNoAckMilestone(ctx context.Context, milestoneID st
 	return nil
 }
 
-// FetchMilestoneByID fetches the bool result from Heimdal whether the ID corresponding
-// to the given milestone is in process in Heimdall
-func (h *HeimdallClient) FetchMilestoneByID(ctx context.Context, milestoneID string) error {
-	url, err := milestoneIDURL(h.urlString, milestoneID)
-	if err != nil {
-		return err
-	}
-
-	ctx = withRequestType(ctx, milestoneIDRequest)
-
-	response, err := FetchWithRetry[milestone.MilestoneResponse](ctx, h.client, url, h.closeCh)
-
-	if err != nil {
-		return err
-	}
-
-	if response.Result.EndBlock == 0 {
-		return fmt.Errorf("%w: milestoneID %q", ErrNotInMilestoneList, milestoneID)
-	}
-
-	return nil
-}
-
 // FetchWithRetry returns data from heimdall with retry
 func FetchWithRetry[T any](ctx context.Context, client http.Client, url *url.URL, closeCh chan struct{}) (*T, error) {
 	// request data once
@@ -447,11 +423,6 @@ func lastNoAckMilestoneURL(urlString string) (*url.URL, error) {
 
 func noAckMilestoneURL(urlString string, id string) (*url.URL, error) {
 	url := fmt.Sprintf(fetchNoAckMilestone, id)
-	return makeURL(urlString, url, "")
-}
-
-func milestoneIDURL(urlString string, id string) (*url.URL, error) {
-	url := fmt.Sprintf(fetchMilestoneByID, id)
 	return makeURL(urlString, url, "")
 }
 
