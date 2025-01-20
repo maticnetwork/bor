@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/big"
 	"net"
 	"net/http"
 	"sync"
@@ -118,11 +117,10 @@ func TestFetchCheckpointFromMockHeimdall(t *testing.T) {
 	handler := &HttpHandlerFake{}
 	handler.handleFetchCheckpoint = func(w http.ResponseWriter, _ *http.Request) {
 		err := json.NewEncoder(w).Encode(checkpoint.CheckpointResponse{
-			Height: "0",
 			Result: checkpoint.Checkpoint{
 				Proposer:   common.Address{},
-				StartBlock: big.NewInt(0),
-				EndBlock:   big.NewInt(512),
+				StartBlock: 0,
+				EndBlock:   512,
 				RootHash:   common.Hash{},
 				BorChainID: "15001",
 				Timestamp:  0,
@@ -224,11 +222,10 @@ func TestFetchShutdown(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 
 		err := json.NewEncoder(w).Encode(checkpoint.CheckpointResponse{
-			Height: "0",
 			Result: checkpoint.Checkpoint{
 				Proposer:   common.Address{},
-				StartBlock: big.NewInt(0),
-				EndBlock:   big.NewInt(512),
+				StartBlock: 0,
+				EndBlock:   512,
 				RootHash:   common.Hash{},
 				BorChainID: "15001",
 				Timestamp:  0,

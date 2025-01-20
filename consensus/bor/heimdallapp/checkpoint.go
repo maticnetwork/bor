@@ -2,7 +2,6 @@ package heimdallapp
 
 import (
 	"context"
-	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
@@ -40,8 +39,8 @@ func (h *HeimdallAppClient) FetchCheckpoint(_ context.Context, number int64) (*c
 func toBorCheckpoint(hdCheckpoint hmTypes.Checkpoint) *checkpoint.Checkpoint {
 	return &checkpoint.Checkpoint{
 		Proposer:   common.HexToAddress(hdCheckpoint.Proposer),
-		StartBlock: big.NewInt(int64(hdCheckpoint.StartBlock)),
-		EndBlock:   big.NewInt(int64(hdCheckpoint.EndBlock)),
+		StartBlock: hdCheckpoint.StartBlock,
+		EndBlock:   hdCheckpoint.EndBlock,
 		RootHash:   common.BytesToHash(hdCheckpoint.RootHash),
 		BorChainID: hdCheckpoint.BorChainId,
 		Timestamp:  hdCheckpoint.Timestamp,

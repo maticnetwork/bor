@@ -2,7 +2,6 @@ package heimdallgrpc
 
 import (
 	"context"
-	"math/big"
 
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
 	"github.com/ethereum/go-ethereum/log"
@@ -39,8 +38,8 @@ func (h *HeimdallGRPCClient) FetchCheckpoint(ctx context.Context, number int64) 
 	log.Info("Fetched checkpoint", "number", number)
 
 	checkpoint := &checkpoint.Checkpoint{
-		StartBlock: new(big.Int).SetUint64(res.Result.StartBlock),
-		EndBlock:   new(big.Int).SetUint64(res.Result.EndBlock),
+		StartBlock: res.Result.StartBlock,
+		EndBlock:   res.Result.EndBlock,
 		RootHash:   protoutils.ConvertH256ToHash(res.Result.RootHash),
 		Proposer:   protoutils.ConvertH160toAddress(res.Result.Proposer),
 		BorChainID: res.Result.BorChainID,

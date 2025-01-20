@@ -179,7 +179,7 @@ func (h *HeimdallClient) FetchCheckpoint(ctx context.Context, number int64) (*ch
 	return &response.Result, nil
 }
 
-// FetchMilestone fetches the checkpoint from heimdall
+// FetchMilestone fetches the milestone from heimdall
 func (h *HeimdallClient) FetchMilestone(ctx context.Context) (*milestone.Milestone, error) {
 	url, err := milestoneURL(h.urlString)
 	if err != nil {
@@ -210,7 +210,7 @@ func (h *HeimdallClient) FetchCheckpointCount(ctx context.Context) (int64, error
 		return 0, err
 	}
 
-	return response.Result.Result, nil
+	return response.Result, nil
 }
 
 // FetchMilestoneCount fetches the milestone count from heimdall
