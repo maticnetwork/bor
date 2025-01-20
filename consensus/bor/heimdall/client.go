@@ -87,7 +87,7 @@ const (
 
 	fetchLastNoAckMilestone = "/milestone/last-no-ack"
 	fetchNoAckMilestone     = "/milestone/no-ack/%s"
-	fetchMilestoneID        = "/milestone/ID/%s"
+	fetchMilestoneByID      = "/milestone/%s"
 
 	fetchSpanFormat = "bor/span/%d"
 )
@@ -227,7 +227,7 @@ func (h *HeimdallClient) FetchMilestoneCount(ctx context.Context) (int64, error)
 		return 0, err
 	}
 
-	return response.Result.Count, nil
+	return response.Count, nil
 }
 
 // FetchLastNoAckMilestone fetches the last no-ack-milestone from heimdall
@@ -268,9 +268,9 @@ func (h *HeimdallClient) FetchNoAckMilestone(ctx context.Context, milestoneID st
 	return nil
 }
 
-// FetchMilestoneID fetches the bool result from Heimdal whether the ID corresponding
+// FetchMilestoneByID fetches the bool result from Heimdal whether the ID corresponding
 // to the given milestone is in process in Heimdall
-func (h *HeimdallClient) FetchMilestoneID(ctx context.Context, milestoneID string) error {
+func (h *HeimdallClient) FetchMilestoneByID(ctx context.Context, milestoneID string) error {
 	url, err := milestoneIDURL(h.urlString, milestoneID)
 	if err != nil {
 		return err
@@ -278,13 +278,13 @@ func (h *HeimdallClient) FetchMilestoneID(ctx context.Context, milestoneID strin
 
 	ctx = withRequestType(ctx, milestoneIDRequest)
 
-	response, err := FetchWithRetry[milestone.MilestoneIDResponse](ctx, h.client, url, h.closeCh)
+	response, err := FetchWithRetry[milestone.MilestoneResponse](ctx, h.client, url, h.closeCh)
 
 	if err != nil {
 		return err
 	}
 
-	if !response.Result.Result {
+	if response.Result.EndBlock == 0 {
 		return fmt.Errorf("%w: milestoneID %q", ErrNotInMilestoneList, milestoneID)
 	}
 
@@ -451,7 +451,7 @@ func noAckMilestoneURL(urlString string, id string) (*url.URL, error) {
 }
 
 func milestoneIDURL(urlString string, id string) (*url.URL, error) {
-	url := fmt.Sprintf(fetchMilestoneID, id)
+	url := fmt.Sprintf(fetchMilestoneByID, id)
 	return makeURL(urlString, url, "")
 }
 
