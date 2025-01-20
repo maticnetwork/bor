@@ -63,9 +63,9 @@ func (m *Checkpoint) UnmarshalJSON(data []byte) error {
 }
 
 type CheckpointResponse struct {
-	Result Checkpoint `json:"result"`
+	Result Checkpoint `json:"checkpoint"`
 }
 
 type CheckpointCountResponse struct {
-	Result int64 `json:"result"`
+	Result int64 `json:"ack_count"`
 }
