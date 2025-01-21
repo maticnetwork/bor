@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/ethereum/go-ethereum/consensus/bor/valset"
+	"github.com/ethereum/go-ethereum/log"
 
 	lru "github.com/hashicorp/golang-lru"
 
@@ -152,7 +153,7 @@ func (s *Snapshot) apply(headers []*types.Header) (*Snapshot, error) {
 			}
 
 			validatorBytes := header.GetValidatorBytes(s.chainConfig)
-
+			log.Error("ValidatorBytes", "header", number, "validatorBytes", validatorBytes)
 			// get validators from headers and use that for new validator set
 			newVals, _ := valset.ParseValidators(validatorBytes)
 			v := getUpdatedValidatorSet(snap.ValidatorSet.Copy(), newVals)

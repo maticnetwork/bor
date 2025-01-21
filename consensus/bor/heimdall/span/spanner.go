@@ -188,6 +188,7 @@ func (c *ChainSpanner) CommitSpan(ctx context.Context, minimalSpan Span, validat
 	msg := statefull.GetSystemMessage(c.validatorContractAddress, data)
 
 	// apply message
+	log.Error("ApplyMessage", "header", header.Number)
 	_, err = statefull.ApplyMessage(ctx, msg, state, header, c.chainConfig, chainContext)
 
 	return err
