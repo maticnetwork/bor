@@ -1436,6 +1436,7 @@ func (c *Bor) getNextHeimdallSpanForTest(
 
 func validatorContains(a []*valset.Validator, x *valset.Validator) (*valset.Validator, bool) {
 	for _, n := range a {
+		log.Error("validatorContains", "n.Address", n.Address, "x.Address", x.Address)
 		if n.Address == x.Address {
 			return n, true
 		}
@@ -1449,7 +1450,7 @@ func getUpdatedValidatorSet(oldValidatorSet *valset.ValidatorSet, newVals []*val
 	oldVals := v.Validators
 
 	changes := make([]*valset.Validator, 0, len(oldVals))
-
+	log.Error("getUpdatedValidatorSet", "oldVals", oldVals, "newVals", newVals)
 	for _, ov := range oldVals {
 		if f, ok := validatorContains(newVals, ov); ok {
 			ov.VotingPower = f.VotingPower
