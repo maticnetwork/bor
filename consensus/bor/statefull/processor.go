@@ -102,10 +102,13 @@ func ApplyMessage(
 
 	// Update the state with pending changes
 	if err != nil {
+		log.Error("message execution failed", "error", err)
 		state.Finalise(true)
 	}
 
 	gasUsed := initialGas - gasLeft
+
+	log.Error("gasUsed", "gasUsed", gasUsed)
 
 	return gasUsed, nil
 }

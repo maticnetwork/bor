@@ -184,6 +184,7 @@ func (c *ChainSpanner) CommitSpan(ctx context.Context, minimalSpan Span, validat
 		return err
 	}
 
+	log.Error("ApplyMessage", "data", data)
 	// get system message
 	msg := statefull.GetSystemMessage(c.validatorContractAddress, data)
 
