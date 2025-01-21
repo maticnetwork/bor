@@ -67,13 +67,8 @@ type MilestoneResponse struct {
 	Result Milestone `json:"milestone"`
 }
 
-type MilestoneCount struct {
-	Count int64 `json:"count"`
-}
-
 type MilestoneCountResponse struct {
-	Height string         `json:"height"`
-	Result MilestoneCount `json:"result"`
+	Count int64 `json:"count"`
 }
 
 type MilestoneLastNoAckResponse struct {
@@ -82,13 +77,4 @@ type MilestoneLastNoAckResponse struct {
 
 type MilestoneNoAckResponse struct {
 	Result bool `json:"result"`
-}
-
-type MilestoneID struct {
-	Result bool `json:"result"`
-}
-
-type MilestoneIDResponse struct {
-	Height string      `json:"height"`
-	Result MilestoneID `json:"result"`
 }

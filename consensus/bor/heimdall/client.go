@@ -87,7 +87,6 @@ const (
 
 	fetchLastNoAckMilestone = "/milestone/last-no-ack"
 	fetchNoAckMilestone     = "/milestone/no-ack/%s"
-	fetchMilestoneID        = "/milestone/ID/%s"
 
 	fetchSpanFormat = "bor/span/%d"
 )
@@ -179,7 +178,7 @@ func (h *HeimdallClient) FetchCheckpoint(ctx context.Context, number int64) (*ch
 	return &response.Result, nil
 }
 
-// FetchMilestone fetches the checkpoint from heimdall
+// FetchMilestone fetches the milestone from heimdall
 func (h *HeimdallClient) FetchMilestone(ctx context.Context) (*milestone.Milestone, error) {
 	url, err := milestoneURL(h.urlString)
 	if err != nil {
@@ -210,7 +209,7 @@ func (h *HeimdallClient) FetchCheckpointCount(ctx context.Context) (int64, error
 		return 0, err
 	}
 
-	return response.Result.Result, nil
+	return response.Result, nil
 }
 
 // FetchMilestoneCount fetches the milestone count from heimdall
@@ -227,7 +226,7 @@ func (h *HeimdallClient) FetchMilestoneCount(ctx context.Context) (int64, error)
 		return 0, err
 	}
 
-	return response.Result.Count, nil
+	return response.Count, nil
 }
 
 // FetchLastNoAckMilestone fetches the last no-ack-milestone from heimdall
@@ -263,29 +262,6 @@ func (h *HeimdallClient) FetchNoAckMilestone(ctx context.Context, milestoneID st
 
 	if !response.Result {
 		return fmt.Errorf("%w: milestoneID %q", ErrNotInRejectedList, milestoneID)
-	}
-
-	return nil
-}
-
-// FetchMilestoneID fetches the bool result from Heimdal whether the ID corresponding
-// to the given milestone is in process in Heimdall
-func (h *HeimdallClient) FetchMilestoneID(ctx context.Context, milestoneID string) error {
-	url, err := milestoneIDURL(h.urlString, milestoneID)
-	if err != nil {
-		return err
-	}
-
-	ctx = withRequestType(ctx, milestoneIDRequest)
-
-	response, err := FetchWithRetry[milestone.MilestoneIDResponse](ctx, h.client, url, h.closeCh)
-
-	if err != nil {
-		return err
-	}
-
-	if !response.Result.Result {
-		return fmt.Errorf("%w: milestoneID %q", ErrNotInMilestoneList, milestoneID)
 	}
 
 	return nil
@@ -447,11 +423,6 @@ func lastNoAckMilestoneURL(urlString string) (*url.URL, error) {
 
 func noAckMilestoneURL(urlString string, id string) (*url.URL, error) {
 	url := fmt.Sprintf(fetchNoAckMilestone, id)
-	return makeURL(urlString, url, "")
-}
-
-func milestoneIDURL(urlString string, id string) (*url.URL, error) {
-	url := fmt.Sprintf(fetchMilestoneID, id)
 	return makeURL(urlString, url, "")
 }
 

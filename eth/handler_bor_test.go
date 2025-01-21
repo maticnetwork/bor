@@ -2,7 +2,6 @@ package eth
 
 import (
 	"context"
-	"math/big"
 	"testing"
 	"time"
 
@@ -118,7 +117,7 @@ func fetchCheckpointTest(t *testing.T, heimdall *mockHeimdall, bor *bor.Bor, han
 
 	// Check if we have expected result
 	require.Equal(t, err, nil)
-	require.Equal(t, checkpoints[len(checkpoints)-1].EndBlock.Uint64(), blockNum)
+	require.Equal(t, checkpoints[len(checkpoints)-1].EndBlock, blockNum)
 	require.Equal(t, checkpoints[len(checkpoints)-1].RootHash, blockHash)
 }
 
@@ -155,14 +154,14 @@ func fetchMilestoneTest(t *testing.T, heimdall *mockHeimdall, bor *bor.Bor, hand
 func createMockCheckpoints(count int) []*checkpoint.Checkpoint {
 	var (
 		checkpoints []*checkpoint.Checkpoint = make([]*checkpoint.Checkpoint, count)
-		startBlock  int64                    = 257 // any number can be used
+		startBlock  uint64                   = 257 // any number can be used
 	)
 
 	for i := 0; i < count; i++ {
 		checkpoints[i] = &checkpoint.Checkpoint{
 			Proposer:   common.Address{},
-			StartBlock: big.NewInt(startBlock),
-			EndBlock:   big.NewInt(startBlock + 255),
+			StartBlock: startBlock,
+			EndBlock:   startBlock + 255,
 			RootHash:   common.Hash{},
 			BorChainID: "137",
 			Timestamp:  uint64(time.Now().Unix()),

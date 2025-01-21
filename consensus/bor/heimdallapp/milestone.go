@@ -68,19 +68,6 @@ func (h *HeimdallAppClient) FetchLastNoAckMilestone(_ context.Context) (string, 
 	return res, nil
 }
 
-// TODO HV2: Uncomment once the implementation is done
-// func (h *HeimdallAppClient) FetchMilestoneID(_ context.Context, milestoneID string) error {
-// 	log.Debug("Fetching Milestone ID ", "MilestoneID", milestoneID)
-
-// 	res := milestoneTypes.GetMilestoneID()
-
-// 	if res == milestoneID {
-// 		return nil
-// 	}
-
-// 	return fmt.Errorf("milestone corresponding to milestoneID: %v doesn't exist in heimdall", milestoneID)
-// }
-
 func toBorMilestone(hdMilestone *milestoneTypes.Milestone) *milestone.Milestone {
 	return &milestone.Milestone{
 		Proposer:   common.HexToAddress(hdMilestone.Proposer),

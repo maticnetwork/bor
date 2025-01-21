@@ -37,12 +37,12 @@ func (h *ethHandler) fetchWhitelistCheckpoint(ctx context.Context, bor *bor.Bor,
 		return blockNum, blockHash, err
 	}
 
-	log.Debug("Got new checkpoint from heimdall", "start", checkpoint.StartBlock.Uint64(), "end", checkpoint.EndBlock.Uint64(), "rootHash", checkpoint.RootHash.String())
+	log.Debug("Got new checkpoint from heimdall", "start", checkpoint.StartBlock, "end", checkpoint.EndBlock, "rootHash", checkpoint.RootHash.String())
 
 	// Verify if the checkpoint fetched can be added to the local whitelist entry or not
 	// If verified, it returns the hash of the end block of the checkpoint. If not,
 	// it will return appropriate error.
-	hash, err := verifier.verify(ctx, eth, h, checkpoint.StartBlock.Uint64(), checkpoint.EndBlock.Uint64(), checkpoint.RootHash.String()[2:], true)
+	hash, err := verifier.verify(ctx, eth, h, checkpoint.StartBlock, checkpoint.EndBlock, checkpoint.RootHash.String()[2:], true)
 	if err != nil {
 		if errors.Is(err, errChainOutOfSync) {
 			log.Info("Whitelisting checkpoint deferred", "err", err)
@@ -52,7 +52,7 @@ func (h *ethHandler) fetchWhitelistCheckpoint(ctx context.Context, bor *bor.Bor,
 		return blockNum, blockHash, err
 	}
 
-	blockNum = checkpoint.EndBlock.Uint64()
+	blockNum = checkpoint.EndBlock
 	blockHash = common.HexToHash(hash)
 
 	return blockNum, blockHash, nil
