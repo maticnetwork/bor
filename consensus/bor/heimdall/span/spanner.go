@@ -95,7 +95,7 @@ func (c *ChainSpanner) GetCurrentValidatorsByBlockNrOrHash(ctx context.Context, 
 	toAddress := c.validatorContractAddress
 	gas := (hexutil.Uint64)(uint64(math.MaxUint64 / 2))
 
-	firstEndBlock, err := c.getFirstEndBlock(ctx, blockNrOrHash, blockNumber, toAddress, gas)
+	firstEndBlock, err := c.getFirstEndBlock(ctx, blockNrOrHash, toAddress, gas)
 	if err != nil {
 		return nil, err
 	}
@@ -178,9 +178,9 @@ func (c *ChainSpanner) getSpanByBlock(ctx context.Context, blockNrOrHash rpc.Blo
 	return spanNumber, nil
 }
 
-func (c *ChainSpanner) getFirstEndBlock(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash, blockNumber uint64, toAddress common.Address, gas hexutil.Uint64) (*big.Int, error) {
+func (c *ChainSpanner) getFirstEndBlock(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash, toAddress common.Address, gas hexutil.Uint64) (*big.Int, error) {
 	const getFirstEndBlockMethod = "FIRST_END_BLOCK"
-	firstEndBlockData, err := c.validatorSet.Pack(getFirstEndBlockMethod, big.NewInt(0).SetUint64(blockNumber))
+	firstEndBlockData, err := c.validatorSet.Pack(getFirstEndBlockMethod)
 	if err != nil {
 		log.Error("Unable to pack tx for getFirstEndBlock", "error", err)
 		return nil, err
