@@ -157,7 +157,7 @@ func (c *ChainSpanner) GetCurrentValidatorsByBlockNrOrHash(ctx context.Context, 
 			// Log parameters for getBorValidators
 			log.Info("🖥️🖥️ Calling getBorValidators with params: blockNrOrHash=%v, blockNumber=%v, toAddress=%v, gas=%v", blockNrOrHash, blockNumber, toAddress, gas)
 
-			valz, err := c.getBorValidators(ctx, blockNrOrHash, blockNumber, toAddress, gas)
+			valz, err := c.getBorValidators(ctx, blockNrOrHash, blockNumber, toAddress, gas, spanNumber, true)
 			if err != nil {
 				log.Info("🖥️🖥️ Error in getBorValidators: %v", err)
 				return nil, err
@@ -263,7 +263,7 @@ func (c *ChainSpanner) getFirstEndBlock(ctx context.Context, blockNrOrHash rpc.B
 }
 
 func (c *ChainSpanner) getProducersCount(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash, blockNumber uint64, toAddress common.Address, gas hexutil.Uint64) (*int, error) {
-	valz, err := c.getBorValidators(ctx, blockNrOrHash, blockNumber, toAddress, gas)
+	valz, err := c.getBorValidators(ctx, blockNrOrHash, blockNumber, toAddress, gas, big.NewInt(1), false)
 	if err != nil {
 		return nil, err
 	}
@@ -271,7 +271,7 @@ func (c *ChainSpanner) getProducersCount(ctx context.Context, blockNrOrHash rpc.
 	return &count, nil
 }
 
-func (c *ChainSpanner) getBorValidators(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash, blockNumber uint64, toAddress common.Address, gas hexutil.Uint64) ([]*valset.Validator, error) {
+func (c *ChainSpanner) getBorValidators(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash, blockNumber uint64, toAddress common.Address, gas hexutil.Uint64, spanNumber *big.Int, failedGetOnProducers bool) ([]*valset.Validator, error) {
 
 	// method
 	const method = "getBorValidators"
@@ -312,6 +312,11 @@ func (c *ChainSpanner) getBorValidators(ctx context.Context, blockNrOrHash rpc.B
 		valz[i] = &valset.Validator{
 			Address:     a,
 			VotingPower: (*ret1)[i].Int64(),
+		}
+
+		// when setInitialValidators() was not yet called on validatorSetContract, set id manually following the same behaviour on contract
+		if failedGetOnProducers && spanNumber.Cmp(big.NewInt(0)) == 0 {
+			valz[i].ID = big.NewInt(int64(i + 1)).Uint64()
 		}
 	}
 
