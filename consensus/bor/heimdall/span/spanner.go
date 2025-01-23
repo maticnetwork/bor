@@ -185,11 +185,10 @@ func (c *ChainSpanner) CommitSpan(ctx context.Context, minimalSpan Span, validat
 	}
 
 	// Get current span number
-	{
+	func() {
 		data, err := c.validatorSet.Pack("currentSpanNumber")
 		if err != nil {
 			log.Error("Unable to pack tx for currentSpanNumber", "error", err)
-			return err
 		}
 
 		// call
@@ -205,18 +204,17 @@ func (c *ChainSpanner) CommitSpan(ctx context.Context, minimalSpan Span, validat
 			Data: &msgData,
 		}, &blockNrOrHash, nil, nil)
 		if err != nil {
-			return err
+			log.Error("currentSpanNumber", "error", err)
 		}
 
 		log.Error("currentSpanNumber", "result", result)
-	}
+	}()
 
 	// Get Sprint size
-	{
+	func() {
 		data, err := c.validatorSet.Pack("SPRINT")
 		if err != nil {
 			log.Error("Unable to pack tx for SPRINT", "error", err)
-			return err
 		}
 
 		// call
@@ -232,11 +230,11 @@ func (c *ChainSpanner) CommitSpan(ctx context.Context, minimalSpan Span, validat
 			Data: &msgData,
 		}, &blockNrOrHash, nil, nil)
 		if err != nil {
-			return err
+			log.Error("SPRINT", "error", err)
 		}
 
 		log.Error("SPRINT", "result", result)
-	}
+	}()
 
 	log.Error("ApplyMessage", "data", data)
 	// get system message
