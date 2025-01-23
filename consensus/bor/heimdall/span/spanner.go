@@ -196,7 +196,10 @@ func (c *ChainSpanner) CommitSpan(ctx context.Context, minimalSpan Span, validat
 		toAddress := c.validatorContractAddress
 		gas := (hexutil.Uint64)(uint64(math.MaxUint64 / 2))
 
-		var blockNrOrHash rpc.BlockNumberOrHash
+		blockNumber := rpc.BlockNumber(header.Number.Int64())
+		blockNrOrHash := rpc.BlockNumberOrHash{
+			BlockNumber: &blockNumber,
+		}
 
 		result, err := c.ethAPI.Call(ctx, ethapi.TransactionArgs{
 			Gas:  &gas,
@@ -222,7 +225,10 @@ func (c *ChainSpanner) CommitSpan(ctx context.Context, minimalSpan Span, validat
 		toAddress := c.validatorContractAddress
 		gas := (hexutil.Uint64)(uint64(math.MaxUint64 / 2))
 
-		var blockNrOrHash rpc.BlockNumberOrHash
+		blockNumber := rpc.BlockNumber(header.Number.Int64())
+		blockNrOrHash := rpc.BlockNumberOrHash{
+			BlockNumber: &blockNumber,
+		}
 
 		result, err := c.ethAPI.Call(ctx, ethapi.TransactionArgs{
 			Gas:  &gas,
