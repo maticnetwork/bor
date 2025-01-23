@@ -92,53 +92,116 @@ func (c *ChainSpanner) GetCurrentSpan(ctx context.Context, headerHash common.Has
 func (c *ChainSpanner) GetCurrentValidatorsByBlockNrOrHash(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash, blockNumber uint64) ([]*valset.Validator, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	toAddress := c.validatorContractAddress
+	gas := (hexutil.Uint64)(uint64(math.MaxUint64 / 2))
 
-	// method
-	const method = "getBorValidators"
-
-	data, err := c.validatorSet.Pack(method, big.NewInt(0).SetUint64(blockNumber))
+	firstEndBlock, err := c.getFirstEndBlock(ctx, blockNrOrHash, blockNumber, toAddress, gas)
 	if err != nil {
-		log.Error("Unable to pack tx for getValidator", "error", err)
 		return nil, err
 	}
 
-	// call
-	msgData := (hexutil.Bytes)(data)
-	toAddress := c.validatorContractAddress
-	gas := (hexutil.Uint64)(uint64(math.MaxUint64 / 2))
+	var spanNumber *big.Int
+	if big.NewInt(int64(blockNumber)).Cmp(firstEndBlock) <= 0 {
+		spanNumber = big.NewInt(0) // get initial validators
+	} else {
+		spanNumber, err = c.getSpanByBlock(ctx, blockNrOrHash, blockNumber, toAddress, gas)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Get producers for the specific span
+	const getProducersBySpanMethod = "getProducersBySpan"
+	producerData, err := c.validatorSet.Pack(getProducersBySpanMethod, spanNumber)
+	if err != nil {
+		log.Error("Unable to pack tx for getProducersBySpan", "error", err)
+		return nil, err
+	}
+
+	producerMsgData := (hexutil.Bytes)(producerData)
 
 	result, err := c.ethAPI.Call(ctx, ethapi.TransactionArgs{
 		Gas:  &gas,
 		To:   &toAddress,
-		Data: &msgData,
+		Data: &producerMsgData,
 	}, &blockNrOrHash, nil, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	var (
-		ret0 = new([]common.Address)
-		ret1 = new([]*big.Int)
-	)
-
-	out := &[]interface{}{
-		ret0,
-		ret1,
+	type ContractValidator struct {
+		ID     *big.Int
+		Power  *big.Int
+		Signer common.Address
 	}
 
-	if err := c.validatorSet.UnpackIntoInterface(out, method, result); err != nil {
+	var producers []ContractValidator
+	if err := c.validatorSet.UnpackIntoInterface(&producers, getProducersBySpanMethod, result); err != nil {
 		return nil, err
 	}
 
-	valz := make([]*valset.Validator, len(*ret0))
-	for i, a := range *ret0 {
+	valz := make([]*valset.Validator, len(producers))
+	for i, p := range producers {
 		valz[i] = &valset.Validator{
-			Address:     a,
-			VotingPower: (*ret1)[i].Int64(),
+			ID:          p.ID.Uint64(),
+			Address:     p.Signer,
+			VotingPower: p.Power.Int64(),
 		}
 	}
 
 	return valz, nil
+}
+
+func (c *ChainSpanner) getSpanByBlock(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash, blockNumber uint64, toAddress common.Address, gas hexutil.Uint64) (*big.Int, error) {
+	const getSpanByBlockMethod = "getSpanByBlock"
+	spanData, err := c.validatorSet.Pack(getSpanByBlockMethod, big.NewInt(0).SetUint64(blockNumber))
+	if err != nil {
+		log.Error("Unable to pack tx for getSpanByBlock", "error", err)
+		return nil, err
+	}
+
+	spanMsgData := (hexutil.Bytes)(spanData)
+
+	spanResult, err := c.ethAPI.Call(ctx, ethapi.TransactionArgs{
+		Gas:  &gas,
+		To:   &toAddress,
+		Data: &spanMsgData,
+	}, &blockNrOrHash, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var spanNumber *big.Int
+	if err := c.validatorSet.UnpackIntoInterface(&spanNumber, getSpanByBlockMethod, spanResult); err != nil {
+		return nil, err
+	}
+	return spanNumber, nil
+}
+
+func (c *ChainSpanner) getFirstEndBlock(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash, blockNumber uint64, toAddress common.Address, gas hexutil.Uint64) (*big.Int, error) {
+	const getFirstEndBlockMethod = "FIRST_END_BLOCK"
+	firstEndBlockData, err := c.validatorSet.Pack(getFirstEndBlockMethod, big.NewInt(0).SetUint64(blockNumber))
+	if err != nil {
+		log.Error("Unable to pack tx for getFirstEndBlock", "error", err)
+		return nil, err
+	}
+
+	firstEndBlockMsgData := (hexutil.Bytes)(firstEndBlockData)
+
+	firstEndBlockResult, err := c.ethAPI.Call(ctx, ethapi.TransactionArgs{
+		Gas:  &gas,
+		To:   &toAddress,
+		Data: &firstEndBlockMsgData,
+	}, &blockNrOrHash, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var firstEndBlockNumber *big.Int
+	if err := c.validatorSet.UnpackIntoInterface(&firstEndBlockNumber, getFirstEndBlockMethod, firstEndBlockResult); err != nil {
+		return nil, err
+	}
+	return firstEndBlockNumber, nil
 }
 
 func (c *ChainSpanner) GetCurrentValidatorsByHash(ctx context.Context, headerHash common.Hash, blockNumber uint64) ([]*valset.Validator, error) {
