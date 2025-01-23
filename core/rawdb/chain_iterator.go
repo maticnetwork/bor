@@ -168,6 +168,7 @@ func iterateTransactions(db ethdb.Database, from uint64, to uint64, reverse bool
 			var body types.Body
 			if err := rlp.DecodeBytes(data.rlp, &body); err != nil {
 				log.Warn("Failed to decode block body", "block", data.number, "error", err)
+				log.Warn("[indexer] Failed to decode block body", "block", data.number, "error", err)
 				return
 			}
 
@@ -300,6 +301,7 @@ func indexTransactions(db ethdb.Database, from uint64, to uint64, interrupt chan
 func IndexTransactions(db ethdb.Database, from uint64, to uint64, interrupt chan struct{}, report bool) {
 	log.Info("[indexer] indexing tx", "from", from, "to", to)
 	indexTransactions(db, from, to, interrupt, nil, report)
+	log.Info("[indexer] exiting index tx")
 }
 
 // indexTransactionsForTesting is the internal debug version with an additional hook.
@@ -399,6 +401,7 @@ func unindexTransactions(db ethdb.Database, from uint64, to uint64, interrupt ch
 func UnindexTransactions(db ethdb.Database, from uint64, to uint64, interrupt chan struct{}, report bool) {
 	log.Info("[indexer] unindexing tx", "from", from, "to", to)
 	unindexTransactions(db, from, to, interrupt, nil, report)
+	log.Info("[indexer] exiting unindex tx")
 }
 
 // unindexTransactionsForTesting is the internal debug version with an additional hook.
