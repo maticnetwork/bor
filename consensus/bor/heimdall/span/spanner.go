@@ -31,7 +31,7 @@ type ChainSpanner struct {
 
 // validator response on ValidatorSet contract
 type contractValidator struct {
-	ID     *big.Int
+	Id     *big.Int
 	Power  *big.Int
 	Signer common.Address
 }
@@ -109,34 +109,34 @@ func (c *ChainSpanner) GetCurrentValidatorsByBlockNrOrHash(ctx context.Context, 
 
 	var spanNumber *big.Int
 	if big.NewInt(int64(blockNumber)).Cmp(firstEndBlock) <= 0 {
-		spanNumber = big.NewInt(0) // get initial validators
+		return c.getBorValidators(ctx, blockNrOrHash, blockNumber, toAddress, gas) // returns without id
 	} else {
 		spanNumber, err = c.getSpanByBlock(ctx, blockNrOrHash, blockNumber, toAddress, gas)
 		if err != nil {
 			return nil, err
 		}
-	}
 
-	producersCount, err := c.getProducersCount(ctx, blockNrOrHash, blockNumber, toAddress, gas)
-	if err != nil {
-		return nil, err
-	}
-
-	valz := make([]*valset.Validator, *producersCount)
-
-	for i := 0; i < *producersCount; i++ {
-		p, err := c.getProducersBySpanAndIndexMethod(ctx, blockNrOrHash, blockNumber, toAddress, gas, spanNumber, i)
+		producersCount, err := c.getProducersCount(ctx, blockNrOrHash, blockNumber, toAddress, gas)
 		if err != nil {
 			return nil, err
 		}
-		valz[i] = &valset.Validator{
-			ID:          p.ID.Uint64(),
-			Address:     p.Signer,
-			VotingPower: p.Power.Int64(),
-		}
-	}
 
-	return valz, nil
+		valz := make([]*valset.Validator, *producersCount)
+
+		for i := 0; i < *producersCount; i++ {
+			p, err := c.getProducersBySpanAndIndexMethod(ctx, blockNrOrHash, blockNumber, toAddress, gas, spanNumber, i)
+			if err != nil {
+				return nil, err
+			}
+			valz[i] = &valset.Validator{
+				ID:          p.Id.Uint64(),
+				Address:     p.Signer,
+				VotingPower: p.Power.Int64(),
+			}
+		}
+
+		return valz, nil
+	}
 }
 
 func (c *ChainSpanner) getSpanByBlock(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash, blockNumber uint64, toAddress common.Address, gas hexutil.Uint64) (*big.Int, error) {
@@ -219,6 +219,15 @@ func (c *ChainSpanner) getFirstEndBlock(ctx context.Context, blockNrOrHash rpc.B
 }
 
 func (c *ChainSpanner) getProducersCount(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash, blockNumber uint64, toAddress common.Address, gas hexutil.Uint64) (*int, error) {
+	valz, err := c.getBorValidators(ctx, blockNrOrHash, blockNumber, toAddress, gas)
+	if err != nil {
+		return nil, err
+	}
+	count := len(valz)
+	return &count, nil
+}
+
+func (c *ChainSpanner) getBorValidators(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash, blockNumber uint64, toAddress common.Address, gas hexutil.Uint64) ([]*valset.Validator, error) {
 
 	// method
 	const method = "getBorValidators"
@@ -254,8 +263,15 @@ func (c *ChainSpanner) getProducersCount(ctx context.Context, blockNrOrHash rpc.
 	if err := c.validatorSet.UnpackIntoInterface(out, method, result); err != nil {
 		return nil, err
 	}
-	count := len(*ret0)
-	return &count, nil
+	valz := make([]*valset.Validator, len(*ret0))
+	for i, a := range *ret0 {
+		valz[i] = &valset.Validator{
+			Address:     a,
+			VotingPower: (*ret1)[i].Int64(),
+		}
+	}
+
+	return valz, nil
 }
 
 func (c *ChainSpanner) GetCurrentValidatorsByHash(ctx context.Context, headerHash common.Hash, blockNumber uint64) ([]*valset.Validator, error) {
