@@ -95,39 +95,80 @@ func (c *ChainSpanner) GetCurrentSpan(ctx context.Context, headerHash common.Has
 	return &span, nil
 }
 
-// GetCurrentValidators get current validators
 func (c *ChainSpanner) GetCurrentValidatorsByBlockNrOrHash(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash, blockNumber uint64) ([]*valset.Validator, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
+
 	toAddress := c.validatorContractAddress
 	gas := (hexutil.Uint64)(uint64(math.MaxUint64 / 2))
 
+	// Log parameters for getFirstEndBlock
+	log.Info("🖥️🖥️ Calling getFirstEndBlock with params: blockNrOrHash=%v, toAddress=%v, gas=%v", blockNrOrHash, toAddress, gas)
+
 	firstEndBlock, err := c.getFirstEndBlock(ctx, blockNrOrHash, toAddress, gas)
 	if err != nil {
+		log.Info("🖥️🖥️ Error in getFirstEndBlock: %v", err)
 		return nil, err
 	}
 
+	// Log response for getFirstEndBlock
+	log.Info("🖥️🖥️ Response from getFirstEndBlock: %v", firstEndBlock)
+
 	var spanNumber *big.Int
 	if big.NewInt(int64(blockNumber)).Cmp(firstEndBlock) <= 0 {
-		return c.getBorValidators(ctx, blockNrOrHash, blockNumber, toAddress, gas) // returns without id
-	} else {
-		spanNumber, err = c.getSpanByBlock(ctx, blockNrOrHash, blockNumber, toAddress, gas)
+		// Log parameters for getBorValidators
+		log.Info("🖥️🖥️ Calling getBorValidators with params: blockNrOrHash=%v, blockNumber=%v, toAddress=%v, gas=%v", blockNrOrHash, blockNumber, toAddress, gas)
+
+		valz, err := c.getBorValidators(ctx, blockNrOrHash, blockNumber, toAddress, gas)
 		if err != nil {
+			log.Info("🖥️🖥️ Error in getBorValidators: %v", err)
 			return nil, err
 		}
 
-		producersCount, err := c.getProducersCount(ctx, blockNrOrHash, blockNumber, toAddress, gas)
+		// Log response for getBorValidators
+		log.Info("🖥️🖥️ Response from getBorValidators: %v", valz)
+
+		return valz, nil
+	} else {
+		// Log parameters for getSpanByBlock
+		log.Info("🖥️🖥️ Calling getSpanByBlock with params: blockNrOrHash=%v, blockNumber=%v, toAddress=%v, gas=%v", blockNrOrHash, blockNumber, toAddress, gas)
+
+		spanNumber, err = c.getSpanByBlock(ctx, blockNrOrHash, blockNumber, toAddress, gas)
 		if err != nil {
+			log.Info("🖥️🖥️ Error in getSpanByBlock: %v", err)
 			return nil, err
 		}
+
+		// Log response for getSpanByBlock
+		log.Info("🖥️🖥️ Response from getSpanByBlock: %v", spanNumber)
+
+		// Log parameters for getProducersCount
+		log.Info("🖥️🖥️ Calling getProducersCount with params: blockNrOrHash=%v, blockNumber=%v, toAddress=%v, gas=%v", blockNrOrHash, blockNumber, toAddress, gas)
+
+		producersCount, err := c.getProducersCount(ctx, blockNrOrHash, blockNumber, toAddress, gas)
+		if err != nil {
+			log.Info("🖥️🖥️ Error in getProducersCount: %v", err)
+			return nil, err
+		}
+
+		// Log response for getProducersCount
+		log.Info("🖥️🖥️ Response from getProducersCount: %v", *producersCount)
 
 		valz := make([]*valset.Validator, *producersCount)
 
 		for i := 0; i < *producersCount; i++ {
+			// Log parameters for getProducersBySpanAndIndexMethod
+			log.Info("🖥️🖥️ Calling getProducersBySpanAndIndexMethod with params: blockNrOrHash=%v, blockNumber=%v, toAddress=%v, gas=%v, spanNumber=%v, index=%v", blockNrOrHash, blockNumber, toAddress, gas, spanNumber, i)
+
 			p, err := c.getProducersBySpanAndIndexMethod(ctx, blockNrOrHash, blockNumber, toAddress, gas, spanNumber, i)
 			if err != nil {
+				log.Info("🖥️🖥️ Error in getProducersBySpanAndIndexMethod: %v", err)
 				return nil, err
 			}
+
+			// Log response for getProducersBySpanAndIndexMethod
+			log.Info("🖥️🖥️ Response from getProducersBySpanAndIndexMethod: %v", p)
+
 			valz[i] = &valset.Validator{
 				ID:          p.Id.Uint64(),
 				Address:     p.Signer,
@@ -305,7 +346,7 @@ func (c *ChainSpanner) CommitSpan(ctx context.Context, heimdallSpan HeimdallSpan
 		return err
 	}
 
-	log.Info("✅ Committing new span",
+	log.Info("🖥️🖥️ ✅ Committing new span",
 		"id", heimdallSpan.ID,
 		"startBlock", heimdallSpan.StartBlock,
 		"endBlock", heimdallSpan.EndBlock,
