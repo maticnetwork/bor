@@ -106,14 +106,14 @@ func (l *jsonLogger) OnOpcode(pc uint64, op byte, gas, cost uint64, scope tracin
 	stack := scope.StackData()
 
 	log := StructLog{
-		Pc:            pc,
-		Op:            vm.OpCode(op),
-		Gas:           gas,
-		GasCost:       cost,
-		MemorySize:    len(memory),
-		Depth:         depth,
-		RefundCounter: l.env.StateDB.GetRefund(),
-		Err:           err,
+		Pc:         pc,
+		Op:         vm.OpCode(op),
+		Gas:        gas,
+		GasCost:    cost,
+		MemorySize: len(memory),
+		Depth:      depth,
+		// RefundCounter: l.env.StateDB.GetRefund(),
+		Err: err,
 	}
 	if l.cfg.EnableMemory {
 		log.Memory = memory
