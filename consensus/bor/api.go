@@ -13,6 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/bor/valset"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rpc"
 
 	lru "github.com/hashicorp/golang-lru"
@@ -35,6 +36,8 @@ type API struct {
 
 // GetSnapshot retrieves the state snapshot at a given block.
 func (api *API) GetSnapshot(number *rpc.BlockNumber) (*Snapshot, error) {
+	log.Info("🖥️🖥️ GetSnapshot(number *rpc.BlockNumber)")
+
 	// Retrieve the requested block number (or current if none requested)
 	var header *types.Header
 	if number == nil || *number == rpc.LatestBlockNumber {
@@ -263,6 +266,8 @@ func (api *API) GetCurrentProposer() (common.Address, error) {
 
 // GetCurrentValidators gets the current validators
 func (api *API) GetCurrentValidators() ([]*valset.Validator, error) {
+	log.Info("🖥️🖥️ Called GetCurrentValidators")
+
 	snap, err := api.GetSnapshot(nil)
 	if err != nil {
 		return make([]*valset.Validator, 0), err

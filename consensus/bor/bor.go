@@ -520,6 +520,8 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 // snapshot retrieves the authorization snapshot at a given point in time.
 // nolint: gocognit
 func (c *Bor) snapshot(chain consensus.ChainHeaderReader, number uint64, hash common.Hash, parents []*types.Header) (*Snapshot, error) {
+	log.Info("🖥️🖥️ (c *Bor) snapshot(chain consensus.ChainHeaderReader, number uint64, hash common.Hash, parents []*types.Header)")
+
 	// Search for a snapshot in memory or on disk for checkpoints
 	signer := common.BytesToAddress(c.authorizedSigner.Load().signer.Bytes())
 	if c.devFakeAuthor && signer.String() != "0x0000000000000000000000000000000000000000" {
@@ -571,7 +573,9 @@ func (c *Bor) snapshot(chain consensus.ChainHeaderReader, number uint64, hash co
 				hash := checkpoint.Hash()
 
 				// get validators and current span
+				log.Info("🖥️🖥️ Calling c.spanner.GetCurrentValidatorsByHash(context.Background(), hash, number+1)")
 				validators, err := c.spanner.GetCurrentValidatorsByHash(context.Background(), hash, number+1)
+				log.Info("🖥️🖥️ Response from c.spanner.GetCurrentValidatorsByHash(context.Background(), hash, number+1)", "response", validators)
 				if err != nil {
 					return nil, err
 				}
