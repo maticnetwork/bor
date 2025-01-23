@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"math"
 	"math/big"
-	"runtime"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -125,44 +124,18 @@ func (c *ChainSpanner) GetCurrentValidatorsByBlockNrOrHash(ctx context.Context, 
 
 	valz := make([]*valset.Validator, *producersCount)
 
-	results := make(chan struct {
-		index int
-		val   *valset.Validator
-		err   error
-	}, *producersCount)
-
-	// limit goroutines
-	semaphore := make(chan struct{}, runtime.NumCPU())
-
 	for i := 0; i < *producersCount; i++ {
-		go func(index int) {
-			semaphore <- struct{}{}        // Acquire
-			defer func() { <-semaphore }() // Release
-
-			p, err := c.getProducersBySpanAndIndexMethod(ctx, blockNrOrHash, blockNumber, toAddress, gas, spanNumber, index)
-			results <- struct {
-				index int
-				val   *valset.Validator
-				err   error
-			}{
-				index: index,
-				val: &valset.Validator{
-					ID:          p.ID.Uint64(),
-					Address:     p.Signer,
-					VotingPower: p.Power.Int64(),
-				},
-				err: err,
-			}
-		}(i)
-	}
-
-	for i := 0; i < *producersCount; i++ {
-		result := <-results
-		if result.err != nil {
-			return nil, result.err
+		p, err := c.getProducersBySpanAndIndexMethod(ctx, blockNrOrHash, blockNumber, toAddress, gas, spanNumber, i)
+		if err != nil {
+			return nil, err
 		}
-		valz[result.index] = result.val
+		valz[i] = &valset.Validator{
+			ID:          p.ID.Uint64(),
+			Address:     p.Signer,
+			VotingPower: p.Power.Int64(),
+		}
 	}
+
 	return valz, nil
 }
 
