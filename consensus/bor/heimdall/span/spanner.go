@@ -184,6 +184,60 @@ func (c *ChainSpanner) CommitSpan(ctx context.Context, minimalSpan Span, validat
 		return err
 	}
 
+	// Get current span number
+	{
+		data, err := c.validatorSet.Pack("currentSpanNumber")
+		if err != nil {
+			log.Error("Unable to pack tx for currentSpanNumber", "error", err)
+			return err
+		}
+
+		// call
+		msgData := (hexutil.Bytes)(data)
+		toAddress := c.validatorContractAddress
+		gas := (hexutil.Uint64)(uint64(math.MaxUint64 / 2))
+
+		var blockNrOrHash rpc.BlockNumberOrHash
+
+		result, err := c.ethAPI.Call(ctx, ethapi.TransactionArgs{
+			Gas:  &gas,
+			To:   &toAddress,
+			Data: &msgData,
+		}, &blockNrOrHash, nil, nil)
+		if err != nil {
+			return err
+		}
+
+		log.Error("currentSpanNumber", "result", result)
+	}
+
+	// Get Sprint size
+	{
+		data, err := c.validatorSet.Pack("SPRINT")
+		if err != nil {
+			log.Error("Unable to pack tx for SPRINT", "error", err)
+			return err
+		}
+
+		// call
+		msgData := (hexutil.Bytes)(data)
+		toAddress := c.validatorContractAddress
+		gas := (hexutil.Uint64)(uint64(math.MaxUint64 / 2))
+
+		var blockNrOrHash rpc.BlockNumberOrHash
+
+		result, err := c.ethAPI.Call(ctx, ethapi.TransactionArgs{
+			Gas:  &gas,
+			To:   &toAddress,
+			Data: &msgData,
+		}, &blockNrOrHash, nil, nil)
+		if err != nil {
+			return err
+		}
+
+		log.Error("SPRINT", "result", result)
+	}
+
 	log.Error("ApplyMessage", "data", data)
 	// get system message
 	msg := statefull.GetSystemMessage(c.validatorContractAddress, data)
