@@ -114,7 +114,7 @@ func iterateTransactions(db ethdb.Database, from uint64, to uint64, reverse bool
 	}
 
 	if to <= from {
-		log.Info("[indexer] short circuit during indexing, from=to")
+		log.Info("[indexer] short circuit during indexing, to <= from", "from", from, "to", to)
 		return nil
 	}
 
@@ -229,7 +229,7 @@ func indexTransactions(db ethdb.Database, from uint64, to uint64, interrupt chan
 		blocks, txs = 0, 0 // for stats reporting
 	)
 
-	log.Info("[indexer] starting to loop", "nil channel", hashesCh == nil)
+	log.Info("[indexer] starting to loop for indexing", "nil channel", hashesCh == nil)
 
 	for chanDelivery := range hashesCh {
 		// Push the delivery into the queue and process contiguous ranges.
@@ -334,6 +334,9 @@ func unindexTransactions(db ethdb.Database, from uint64, to uint64, interrupt ch
 		queue       = prque.New[int64, *blockTxHashes](nil)
 		blocks, txs = 0, 0 // for stats reporting
 	)
+
+	log.Info("[indexer] starting to loop for unindexing", "nil channel", hashesCh == nil)
+
 	// Otherwise spin up the concurrent iterator and unindexer
 	for delivery := range hashesCh {
 		// Push the delivery into the queue and process contiguous ranges.
