@@ -108,16 +108,6 @@ func iterateTransactions(db ethdb.Database, from uint64, to uint64, reverse bool
 		rlp    rlp.RawValue
 	}
 
-	if offset := db.AncientOffSet(); offset > from {
-		log.Info("[indexer] pruned data during indexing", "offset", offset, "from", from)
-		from = offset
-	}
-
-	if to <= from {
-		log.Info("[indexer] short circuit during indexing, to <= from", "from", from, "to", to)
-		return nil
-	}
-
 	threads := to - from
 	if cpus := runtime.NumCPU(); threads > uint64(cpus) {
 		threads = uint64(cpus)
@@ -209,6 +199,11 @@ func iterateTransactions(db ethdb.Database, from uint64, to uint64, reverse bool
 // There is a passed channel, the whole procedure will be interrupted if any
 // signal received.
 func indexTransactions(db ethdb.Database, from uint64, to uint64, interrupt chan struct{}, hook func(uint64) bool, report bool) {
+	if offset := db.AncientOffSet(); offset > from {
+		log.Info("[indexer] pruned data during indexing", "offset", offset, "from", from)
+		from = offset
+	}
+
 	// short circuit for invalid range
 	if from >= to {
 		log.Info("[indexer] short circuit during indexing", "from", from, "to", to)
@@ -317,8 +312,14 @@ func indexTransactionsForTesting(db ethdb.Database, from uint64, to uint64, inte
 // There is a passed channel, the whole procedure will be interrupted if any
 // signal received.
 func unindexTransactions(db ethdb.Database, from uint64, to uint64, interrupt chan struct{}, hook func(uint64) bool, report bool) {
+	if offset := db.AncientOffSet(); offset > from {
+		log.Info("[indexer] pruned data during indexing", "offset", offset, "from", from)
+		from = offset
+	}
+
 	// short circuit for invalid range
 	if from >= to {
+		log.Info("[indexer] short circuit during indexing, to <= from", "from", from, "to", to)
 		return
 	}
 
