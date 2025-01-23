@@ -116,19 +116,7 @@ func (c *ChainSpanner) GetCurrentValidatorsByBlockNrOrHash(ctx context.Context, 
 
 	var spanNumber *big.Int
 	if big.NewInt(int64(blockNumber)).Cmp(firstEndBlock) <= 0 {
-		// Log parameters for getBorValidators
-		log.Info("🖥️🖥️ Calling getBorValidators with params: blockNrOrHash=%v, blockNumber=%v, toAddress=%v, gas=%v", blockNrOrHash, blockNumber, toAddress, gas)
-
-		valz, err := c.getBorValidators(ctx, blockNrOrHash, blockNumber, toAddress, gas)
-		if err != nil {
-			log.Info("🖥️🖥️ Error in getBorValidators: %v", err)
-			return nil, err
-		}
-
-		// Log response for getBorValidators
-		log.Info("🖥️🖥️ Response from getBorValidators: %v", valz)
-
-		return valz, nil
+		spanNumber = big.NewInt(0)
 	} else {
 		// Log parameters for getSpanByBlock
 		log.Info("🖥️🖥️ Calling getSpanByBlock with params: blockNrOrHash=%v, blockNumber=%v, toAddress=%v, gas=%v", blockNrOrHash, blockNumber, toAddress, gas)
@@ -142,42 +130,57 @@ func (c *ChainSpanner) GetCurrentValidatorsByBlockNrOrHash(ctx context.Context, 
 		// Log response for getSpanByBlock
 		log.Info("🖥️🖥️ Response from getSpanByBlock: %v", spanNumber)
 
-		// Log parameters for getProducersCount
-		log.Info("🖥️🖥️ Calling getProducersCount with params: blockNrOrHash=%v, blockNumber=%v, toAddress=%v, gas=%v", blockNrOrHash, blockNumber, toAddress, gas)
+	}
+	// Log parameters for getProducersCount
+	log.Info("🖥️🖥️ Calling getProducersCount with params: blockNrOrHash=%v, blockNumber=%v, toAddress=%v, gas=%v", blockNrOrHash, blockNumber, toAddress, gas)
 
-		producersCount, err := c.getProducersCount(ctx, blockNrOrHash, blockNumber, toAddress, gas)
+	producersCount, err := c.getProducersCount(ctx, blockNrOrHash, blockNumber, toAddress, gas)
+	if err != nil {
+		log.Info("🖥️🖥️ Error in getProducersCount: %v", err)
+		return nil, err
+	}
+
+	// Log response for getProducersCount
+	log.Info("🖥️🖥️ Response from getProducersCount: %v", *producersCount)
+
+	valz := make([]*valset.Validator, *producersCount)
+
+	for i := 0; i < *producersCount; i++ {
+		// Log parameters for getProducersBySpanAndIndexMethod
+		log.Info("🖥️🖥️ Calling getProducersBySpanAndIndexMethod with params: blockNrOrHash=%v, blockNumber=%v, toAddress=%v, gas=%v, spanNumber=%v, index=%v", blockNrOrHash, blockNumber, toAddress, gas, spanNumber, i)
+
+		p, err := c.getProducersBySpanAndIndexMethod(ctx, blockNrOrHash, blockNumber, toAddress, gas, spanNumber, i)
 		if err != nil {
-			log.Info("🖥️🖥️ Error in getProducersCount: %v", err)
-			return nil, err
-		}
+			log.Info("🖥️🖥️ Error in getProducersBySpanAndIndexMethod: %v", err)
 
-		// Log response for getProducersCount
-		log.Info("🖥️🖥️ Response from getProducersCount: %v", *producersCount)
+			// try old way
+			// Log parameters for getBorValidators
+			log.Info("🖥️🖥️ Calling getBorValidators with params: blockNrOrHash=%v, blockNumber=%v, toAddress=%v, gas=%v", blockNrOrHash, blockNumber, toAddress, gas)
 
-		valz := make([]*valset.Validator, *producersCount)
-
-		for i := 0; i < *producersCount; i++ {
-			// Log parameters for getProducersBySpanAndIndexMethod
-			log.Info("🖥️🖥️ Calling getProducersBySpanAndIndexMethod with params: blockNrOrHash=%v, blockNumber=%v, toAddress=%v, gas=%v, spanNumber=%v, index=%v", blockNrOrHash, blockNumber, toAddress, gas, spanNumber, i)
-
-			p, err := c.getProducersBySpanAndIndexMethod(ctx, blockNrOrHash, blockNumber, toAddress, gas, spanNumber, i)
+			valz, err := c.getBorValidators(ctx, blockNrOrHash, blockNumber, toAddress, gas)
 			if err != nil {
-				log.Info("🖥️🖥️ Error in getProducersBySpanAndIndexMethod: %v", err)
+				log.Info("🖥️🖥️ Error in getBorValidators: %v", err)
 				return nil, err
 			}
 
-			// Log response for getProducersBySpanAndIndexMethod
-			log.Info("🖥️🖥️ Response from getProducersBySpanAndIndexMethod: %v", p)
+			// Log response for getBorValidators
+			log.Info("🖥️🖥️ Response from getBorValidators: %v", valz)
 
-			valz[i] = &valset.Validator{
-				ID:          p.Id.Uint64(),
-				Address:     p.Signer,
-				VotingPower: p.Power.Int64(),
-			}
+			return valz, nil
+
 		}
 
-		return valz, nil
+		// Log response for getProducersBySpanAndIndexMethod
+		log.Info("🖥️🖥️ Response from getProducersBySpanAndIndexMethod: %v", p)
+
+		valz[i] = &valset.Validator{
+			ID:          p.Id.Uint64(),
+			Address:     p.Signer,
+			VotingPower: p.Power.Int64(),
+		}
 	}
+
+	return valz, nil
 }
 
 func (c *ChainSpanner) getSpanByBlock(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash, blockNumber uint64, toAddress common.Address, gas hexutil.Uint64) (*big.Int, error) {
