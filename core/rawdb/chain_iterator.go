@@ -108,10 +108,6 @@ func iterateTransactions(db ethdb.Database, from uint64, to uint64, reverse bool
 		rlp    rlp.RawValue
 	}
 
-	if offset := db.AncientOffSet(); offset > from {
-		from = offset
-	}
-
 	if to <= from {
 		return nil
 	}
@@ -206,6 +202,11 @@ func iterateTransactions(db ethdb.Database, from uint64, to uint64, reverse bool
 // There is a passed channel, the whole procedure will be interrupted if any
 // signal received.
 func indexTransactions(db ethdb.Database, from uint64, to uint64, interrupt chan struct{}, hook func(uint64) bool, report bool) {
+	// Bor: If ancient data was pruned, adjust range accordingly.
+	if offset := db.AncientOffSet(); offset > from {
+		from = offset
+	}
+
 	// short circuit for invalid range
 	if from >= to {
 		return
@@ -309,6 +310,11 @@ func indexTransactionsForTesting(db ethdb.Database, from uint64, to uint64, inte
 // There is a passed channel, the whole procedure will be interrupted if any
 // signal received.
 func unindexTransactions(db ethdb.Database, from uint64, to uint64, interrupt chan struct{}, hook func(uint64) bool, report bool) {
+	// Bor: If ancient data was pruned, adjust range accordingly.
+	if offset := db.AncientOffSet(); offset > from {
+		from = offset
+	}
+
 	// short circuit for invalid range
 	if from >= to {
 		return
