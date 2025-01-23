@@ -124,6 +124,10 @@ func (indexer *txIndexer) run(tail *uint64, head uint64, stop chan struct{}, don
 // on the received chain event.
 func (indexer *txIndexer) loop(chain *BlockChain) {
 	defer close(indexer.closed)
+	log.Info("[indexer] starting loop for tx indexer")
+	defer func() {
+		log.Info("[indexer] exiting loop for tx indexer")
+	}()
 
 	// Listening to chain events and manipulate the transaction indexes.
 	var (
@@ -151,6 +155,7 @@ func (indexer *txIndexer) loop(chain *BlockChain) {
 			if done == nil {
 				stop = make(chan struct{})
 				done = make(chan struct{})
+				log.Info("[indexer] received new head, indexing", "number", head.Block.NumberU64())
 				go indexer.run(rawdb.ReadTxIndexTail(indexer.db), head.Block.NumberU64(), stop, done)
 			}
 			lastHead = head.Block.NumberU64()
@@ -190,6 +195,7 @@ func (indexer *txIndexer) report(head uint64, tail *uint64) TxIndexProgress {
 	if indexed < total {
 		remaining = total - indexed
 	}
+	log.Info("[indexer] progress", "indexed", indexed, "remaining", remaining)
 	return TxIndexProgress{
 		Indexed:   indexed,
 		Remaining: remaining,
@@ -210,6 +216,7 @@ func (indexer *txIndexer) txIndexProgress() (TxIndexProgress, error) {
 
 // close shutdown the indexer. Safe to be called for multiple times.
 func (indexer *txIndexer) close() {
+	log.Info("[indexer] about to close tx indxer")
 	ch := make(chan struct{})
 	select {
 	case indexer.term <- ch:
