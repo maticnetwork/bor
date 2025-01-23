@@ -196,7 +196,7 @@ func (c *ChainSpanner) CommitSpan(ctx context.Context, minimalSpan Span, validat
 		toAddress := c.validatorContractAddress
 		gas := (hexutil.Uint64)(uint64(math.MaxUint64 / 2))
 
-		blockNumber := rpc.BlockNumber(header.Number.Int64())
+		blockNumber := rpc.BlockNumber(header.Number.Int64() - 1)
 		blockNrOrHash := rpc.BlockNumberOrHash{
 			BlockNumber: &blockNumber,
 		}
@@ -225,7 +225,7 @@ func (c *ChainSpanner) CommitSpan(ctx context.Context, minimalSpan Span, validat
 		toAddress := c.validatorContractAddress
 		gas := (hexutil.Uint64)(uint64(math.MaxUint64 / 2))
 
-		blockNumber := rpc.BlockNumber(header.Number.Int64())
+		blockNumber := rpc.BlockNumber(header.Number.Int64() - 1)
 		blockNrOrHash := rpc.BlockNumberOrHash{
 			BlockNumber: &blockNumber,
 		}
