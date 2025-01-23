@@ -114,6 +114,7 @@ func iterateTransactions(db ethdb.Database, from uint64, to uint64, reverse bool
 	}
 
 	if to <= from {
+		log.Info("[indexer] short circuit during indexing, from=to")
 		return nil
 	}
 
@@ -228,6 +229,8 @@ func indexTransactions(db ethdb.Database, from uint64, to uint64, interrupt chan
 		blocks, txs = 0, 0 // for stats reporting
 	)
 
+	log.Info("[indexer] starting to loop", "nil channel", hashesCh == nil)
+
 	for chanDelivery := range hashesCh {
 		// Push the delivery into the queue and process contiguous ranges.
 		// Since we iterate in reverse, so lower numbers have lower prio, and
@@ -277,10 +280,10 @@ func indexTransactions(db ethdb.Database, from uint64, to uint64, interrupt chan
 		log.Crit("Failed writing batch to db", "error", err)
 		return
 	}
-	logger := log.Debug
-	if report {
-		logger = log.Info
-	}
+	// logger := log.Debug
+	// if report {
+	logger := log.Info
+	// }
 	select {
 	case <-interrupt:
 		logger("Transaction indexing interrupted", "blocks", blocks, "txs", txs, "tail", lastNum, "elapsed", common.PrettyDuration(time.Since(start)))
