@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"math"
 	"math/big"
+	"strings"
 
 	stakeTypes "github.com/0xPolygon/heimdall-v2/x/stake/types"
 	"github.com/ethereum/go-ethereum/common"
@@ -151,6 +152,13 @@ func (c *ChainSpanner) GetCurrentValidatorsByHash(ctx context.Context, headerHas
 const method = "commitSpan"
 
 func (c *ChainSpanner) CommitSpan(ctx context.Context, minimalSpan Span, validators, producers []stakeTypes.MinimalVal, state *state.StateDB, header *types.Header, chainContext core.ChainContext) error {
+	// Trim 0x prefix from signer
+	for i := range validators {
+		validators[i].Signer = strings.TrimPrefix("0x", validators[i].Signer)
+	}
+	for i := range producers {
+		producers[i].Signer = strings.TrimPrefix("0x", producers[i].Signer)
+	}
 	// get validators bytes
 	validatorBytes, err := rlp.EncodeToBytes(validators)
 	if err != nil {
@@ -246,7 +254,7 @@ func (c *ChainSpanner) CommitSpan(ctx context.Context, minimalSpan Span, validat
 
 	// Get span
 	func() {
-		data, err := c.validatorSet.Pack("span", big.NewInt(0))
+		data, err := c.validatorSet.Pack("spans", big.NewInt(0))
 		if err != nil {
 			log.Error("Unable to pack tx for span", "error", err)
 		}
