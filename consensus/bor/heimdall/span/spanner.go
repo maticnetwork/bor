@@ -163,6 +163,8 @@ func (c *ChainSpanner) CommitSpan(ctx context.Context, minimalSpan Span, validat
 		return err
 	}
 
+	log.Error("CommitSpan", "minimalValidators", validators, "minimalProducers", producers)
+
 	log.Info("✅ Committing new span",
 		"id", minimalSpan.ID,
 		"startBlock", minimalSpan.StartBlock,
@@ -240,6 +242,53 @@ func (c *ChainSpanner) CommitSpan(ctx context.Context, minimalSpan Span, validat
 		}
 
 		log.Error("SPRINT", "result", result)
+	}()
+
+	// Get span
+	func() {
+		data, err := c.validatorSet.Pack("span", big.NewInt(0))
+		if err != nil {
+			log.Error("Unable to pack tx for span", "error", err)
+		}
+
+		// call
+		msgData := (hexutil.Bytes)(data)
+		toAddress := c.validatorContractAddress
+		gas := (hexutil.Uint64)(uint64(math.MaxUint64 / 2))
+
+		blockNumber := rpc.BlockNumber(header.Number.Int64() - 1)
+		blockNrOrHash := rpc.BlockNumberOrHash{
+			BlockNumber: &blockNumber,
+		}
+
+		result, err := c.ethAPI.Call(ctx, ethapi.TransactionArgs{
+			Gas:  &gas,
+			To:   &toAddress,
+			Data: &msgData,
+		}, &blockNrOrHash, nil, nil)
+		if err != nil {
+			log.Error("span", "error", err)
+		}
+
+		log.Error("span", "result", result)
+
+		var (
+			ret0 = big.NewInt(0)
+			ret1 = big.NewInt(0)
+			ret2 = big.NewInt(0)
+		)
+
+		out := &[]interface{}{
+			ret0,
+			ret1,
+			ret2,
+		}
+
+		if err := c.validatorSet.UnpackIntoInterface(out, method, result); err != nil {
+			log.Error("span unpack", "error", err)
+		}
+
+		log.Error("span", "ret0", ret0.String(), "ret1", ret1.String(), "ret2", ret2.String())
 	}()
 
 	log.Error("ApplyMessage", "data", data)
