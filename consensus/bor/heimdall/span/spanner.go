@@ -332,7 +332,10 @@ func (c *ChainSpanner) CommitSpan(ctx context.Context, heimdallSpan HeimdallSpan
 	for _, val := range heimdallSpan.ValidatorSet.Validators {
 		validators = append(validators, val.MinimalVal())
 	}
-
+	log.Info("🖥️🖥️ ✅ Committing new span",
+		"validators", validators,
+	)
+	// olhar aqui
 	validatorBytes, err := rlp.EncodeToBytes(validators)
 	if err != nil {
 		return err
