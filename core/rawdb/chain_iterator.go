@@ -92,6 +92,16 @@ func InitDatabaseFromFreezer(db ethdb.Database) {
 	log.Info("Initialized database from freezer", "blocks", frozen, "elapsed", common.PrettyDuration(time.Since(start)))
 }
 
+// adjustRangeForBor updates the range to index transactions if the ancient data was pruned before. This is
+// to avoid indexing/unindexing data which is already pruned (i.e. before the `offset` block number).
+func adjustRangeForBor(db ethdb.Database, from uint64) uint64 {
+	if offset := db.AncientOffSet(); offset > from {
+		from = offset
+	}
+
+	return from
+}
+
 type blockTxHashes struct {
 	number uint64
 	hashes []common.Hash
@@ -202,10 +212,8 @@ func iterateTransactions(db ethdb.Database, from uint64, to uint64, reverse bool
 // There is a passed channel, the whole procedure will be interrupted if any
 // signal received.
 func indexTransactions(db ethdb.Database, from uint64, to uint64, interrupt chan struct{}, hook func(uint64) bool, report bool) {
-	// Bor: If ancient data was pruned, adjust range accordingly.
-	if offset := db.AncientOffSet(); offset > from {
-		from = offset
-	}
+	// Adjust range if needed
+	from = adjustRangeForBor(db, from)
 
 	// short circuit for invalid range
 	if from >= to {
@@ -310,10 +318,8 @@ func indexTransactionsForTesting(db ethdb.Database, from uint64, to uint64, inte
 // There is a passed channel, the whole procedure will be interrupted if any
 // signal received.
 func unindexTransactions(db ethdb.Database, from uint64, to uint64, interrupt chan struct{}, hook func(uint64) bool, report bool) {
-	// Bor: If ancient data was pruned, adjust range accordingly.
-	if offset := db.AncientOffSet(); offset > from {
-		from = offset
-	}
+	// Adjust range if needed
+	from = adjustRangeForBor(db, from)
 
 	// short circuit for invalid range
 	if from >= to {
