@@ -5,17 +5,14 @@ import (
 	"context"
 	"math"
 	"math/big"
-	"os"
 
 	ethereum "github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/state"
-	"github.com/ethereum/go-ethereum/core/tracing"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
-	"github.com/ethereum/go-ethereum/eth/tracers/logger"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/holiman/uint256"
@@ -80,18 +77,18 @@ func ApplyMessage(
 
 	// Create a new environment which holds all relevant information
 	// about the transaction and calling mechanisms.
-	var tracer *tracing.Hooks
-	// Configure the EVM logger
+	// var tracer *tracing.Hooks
+	// // Configure the EVM logger
 
-	tracer = logger.NewJSONLogger(&logger.Config{
-		EnableMemory:     true,
-		DisableStack:     false,
-		DisableStorage:   false,
-		EnableReturnData: true,
-		Debug:            true,
-	}, os.Stderr)
+	// tracer = logger.NewJSONLogger(&logger.Config{
+	// 	EnableMemory:     true,
+	// 	DisableStack:     false,
+	// 	DisableStorage:   false,
+	// 	EnableReturnData: true,
+	// 	Debug:            true,
+	// }, os.Stderr)
 	vmenv := vm.NewEVM(blockContext, vm.TxContext{}, state, chainConfig, vm.Config{
-		Tracer: tracer,
+		// 	Tracer: tracer,
 	})
 
 	// nolint : contextcheck
