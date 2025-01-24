@@ -1,6 +1,7 @@
 package bor
 
 import (
+	"context"
 	"encoding/hex"
 	"math"
 	"math/big"
@@ -265,15 +266,16 @@ func (api *API) GetCurrentProposer() (common.Address, error) {
 }
 
 // GetCurrentValidators gets the current validators
-func (api *API) GetCurrentValidators() ([]*valset.Validator, error) {
+func (api *API) GetCurrentValidators(ctx context.Context) ([]*valset.Validator, error) {
 	log.Info("🖥️🖥️ Called GetCurrentValidators")
 
-	snap, err := api.GetSnapshot(nil)
-	if err != nil {
-		return make([]*valset.Validator, 0), err
+	// Retrieve the requested block number (or current if none requested)
+	header := api.chain.CurrentHeader()
+	if header == nil {
+		return nil, errUnknownBlock
 	}
 
-	return snap.ValidatorSet.Validators, nil
+	return api.bor.GetCurrentValidators(ctx, header.Hash(), header.Number.Uint64())
 }
 
 // GetRootHash returns the merkle root of the start to end block headers
