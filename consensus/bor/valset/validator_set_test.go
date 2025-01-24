@@ -1,6 +1,7 @@
 package valset
 
 import (
+	"math/rand/v2"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -13,7 +14,7 @@ import (
 func NewValidatorFromKey(key string, votingPower int64) *Validator {
 	privKey, _ := crypto.HexToECDSA(key)
 
-	return NewValidator(crypto.PubkeyToAddress(privKey.PublicKey), votingPower)
+	return NewValidator(rand.Uint64(), crypto.PubkeyToAddress(privKey.PublicKey), votingPower)
 }
 
 func GetValidators() [4]*Validator {

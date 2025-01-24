@@ -525,7 +525,7 @@ func (c *Bor) snapshot(chain consensus.ChainHeaderReader, number uint64, hash co
 	if c.devFakeAuthor && signer.String() != "0x0000000000000000000000000000000000000000" {
 		log.Info("👨‍💻Using DevFakeAuthor", "signer", signer)
 
-		val := valset.NewValidator(signer, 1000)
+		val := valset.NewValidator(0, signer, 1000)
 		validatorset := valset.NewValidatorSet([]*valset.Validator{val})
 
 		snapshot := newSnapshot(c.chainConfig, c.signatures, number, hash, validatorset.Validators)

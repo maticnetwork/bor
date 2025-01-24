@@ -2,9 +2,9 @@ package valset
 
 import (
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
-	"math/big"
 	"sort"
 	"strings"
 
@@ -20,7 +20,7 @@ type Validator struct {
 }
 
 // NewValidator creates new validator
-func NewValidator(address common.Address, votingPower int64) *Validator {
+func NewValidator(id uint64, address common.Address, votingPower int64) *Validator {
 	return &Validator{
 		Address:          address,
 		VotingPower:      votingPower,
@@ -74,7 +74,8 @@ func (v *Validator) String() string {
 		return "nil-Validator"
 	}
 
-	return fmt.Sprintf("Validator{%v Power:%v Priority:%v}",
+	return fmt.Sprintf("Validator{ID: %v,Address:%v Power:%v Priority:%v}",
+		v.ID,
 		v.Address.Hex(),
 		v.VotingPower,
 		v.ProposerPriority)
@@ -94,18 +95,24 @@ func ValidatorListString(vals []*Validator) string {
 func (v *Validator) HeaderBytes() []byte {
 	result := make([]byte, 40)
 	copy(result[:20], v.Address.Bytes())
-	copy(result[20:], v.PowerBytes())
+	copy(result[20:28], v.PowerBytes())
+	copy(result[28:36], v.IdBytes())
 
 	return result
 }
 
-// PowerBytes return power bytes
+// PowerBytes returns the VotingPower of the Validator as an 8-byte slice ([]byte) in Big-Endian format.
 func (v *Validator) PowerBytes() []byte {
-	powerBytes := big.NewInt(0).SetInt64(v.VotingPower).Bytes()
-	result := make([]byte, 20)
-	copy(result[20-len(powerBytes):], powerBytes)
+	buf := new(bytes.Buffer)
+	binary.Write(buf, binary.BigEndian, v.VotingPower)
+	return buf.Bytes()
+}
 
-	return result
+// IdBytes returns the ID of the Validator as an 8-byte slice ([]byte) in Big-Endian format.
+func (v *Validator) IdBytes() []byte {
+	buf := new(bytes.Buffer)
+	binary.Write(buf, binary.BigEndian, v.ID)
+	return buf.Bytes()
 }
 
 // MinimalVal returns block number of last validator update
@@ -120,19 +127,21 @@ func (v *Validator) MinimalVal() MinimalVal {
 // ParseValidators returns validator set bytes
 func ParseValidators(validatorsBytes []byte) ([]*Validator, error) {
 	if len(validatorsBytes)%40 != 0 {
-		return nil, errors.New("Invalid validators bytes")
+		return nil, errors.New("invalid validators bytes")
 	}
 
 	result := make([]*Validator, len(validatorsBytes)/40)
 
 	for i := 0; i < len(validatorsBytes); i += 40 {
 		address := make([]byte, 20)
-		power := make([]byte, 20)
+		power := make([]byte, 8)
+		id := make([]byte, 8)
 
 		copy(address, validatorsBytes[i:i+20])
-		copy(power, validatorsBytes[i+20:i+40])
+		copy(power, validatorsBytes[i+20:i+28])
+		copy(id, validatorsBytes[i+28:i+36])
 
-		result[i/40] = NewValidator(common.BytesToAddress(address), big.NewInt(0).SetBytes(power).Int64())
+		result[i/40] = NewValidator(binary.BigEndian.Uint64(id), common.BytesToAddress(address), int64(binary.BigEndian.Uint64(power)))
 	}
 
 	return result, nil
