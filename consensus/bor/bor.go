@@ -1218,7 +1218,7 @@ func (c *Bor) FetchAndCommitSpan(
 			m := stakeTypes.MinimalVal{
 				ID:          val.ID,
 				VotingPower: uint64(val.VotingPower),
-				Signer:      val.Address.String(),
+				Signer:      val.Address,
 			}
 			validators = append(validators, m)
 		}
@@ -1227,7 +1227,7 @@ func (c *Bor) FetchAndCommitSpan(
 			m := stakeTypes.MinimalVal{
 				ID:          val.ID,
 				VotingPower: uint64(val.VotingPower),
-				Signer:      val.Address.String(),
+				Signer:      val.Address,
 			}
 			producers = append(producers, m)
 		}
