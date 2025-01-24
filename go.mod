@@ -5,7 +5,7 @@ go 1.23.2
 toolchain go1.23.4
 
 require (
-	github.com/0xPolygon/heimdall-v2 v0.0.0-20241223112457-d6d02498fc6b
+	github.com/0xPolygon/heimdall-v2 v0.0.0-20250124090128-bc0afd1d5e6d
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.3.2
 	github.com/BurntSushi/toml v1.4.0
 	github.com/JekaMas/go-grpc-net-conn v0.0.0-20220708155319-6aff21f2d13d
