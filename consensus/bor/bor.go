@@ -1413,6 +1413,7 @@ func getUpdatedValidatorSet(oldValidatorSet *valset.ValidatorSet, newVals []*val
 	for _, ov := range oldVals {
 		if f, ok := validatorContains(newVals, ov); ok {
 			ov.VotingPower = f.VotingPower
+			ov.ID = f.ID // forces keep id updated with heimdall
 		} else {
 			ov.VotingPower = 0
 		}
@@ -1429,7 +1430,7 @@ func getUpdatedValidatorSet(oldValidatorSet *valset.ValidatorSet, newVals []*val
 	if err := v.UpdateWithChangeSet(changes); err != nil {
 		changesStr := ""
 		for _, change := range changes {
-			changesStr += fmt.Sprintf("Address: %s, VotingPower: %d\n", change.Address, change.VotingPower)
+			changesStr += fmt.Sprintf("ID: %d, Address: %s, VotingPower: %d\n", change.ID, change.Address, change.VotingPower)
 		}
 		log.Warn("Changes in validator set", "changes", changesStr)
 		log.Error("Error while updating change set", "error", err)
