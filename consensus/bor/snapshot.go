@@ -1,6 +1,7 @@
 package bor
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/ethereum/go-ethereum/consensus/bor/valset"
@@ -100,7 +101,7 @@ func (s *Snapshot) copy() *Snapshot {
 	return cpy
 }
 
-func (s *Snapshot) apply(headers []*types.Header) (*Snapshot, error) {
+func (s *Snapshot) apply(headers []*types.Header, c *Bor) (*Snapshot, error) {
 	// Allow passing in no headers for cleaner code
 	if len(headers) == 0 {
 		return s, nil
@@ -158,6 +159,10 @@ func (s *Snapshot) apply(headers []*types.Header) (*Snapshot, error) {
 			v := getUpdatedValidatorSet(snap.ValidatorSet.Copy(), newVals)
 			v.IncrementProposerPriority(1)
 			snap.ValidatorSet = v
+
+			// get ids from validatorSet to set
+			valsWithIId, _ := c.spanner.GetCurrentValidatorsByHash(context.Background(), header.Hash(), header.Number.Uint64())
+			v.ApplyIds(valsWithIId)
 		}
 	}
 
