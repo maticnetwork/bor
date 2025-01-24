@@ -95,27 +95,27 @@ func (c *ChainSpanner) GetCurrentSpan(ctx context.Context, headerHash common.Has
 	return &span, nil
 }
 
-func (c *ChainSpanner) GetCurrentValidatorsByBlockNrOrHash(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash, blockNumber uint64) ([]*valset.Validator, error) {
+func (c *ChainSpanner) GetCurrentValidatorsByBlockNrOrHash(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash, blockNumber uint64) ([]*valset.Validator, *big.Int, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	toAddress := c.validatorContractAddress
 	gas := (hexutil.Uint64)(uint64(math.MaxUint64 / 2))
 
-	valz, err := c.tryGetBorValidatorsWithId(ctx, blockNrOrHash, blockNumber, toAddress, gas)
+	valz, spanNumber, err := c.tryGetBorValidatorsWithId(ctx, blockNrOrHash, blockNumber, toAddress, gas)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return valz, nil
+	return valz, spanNumber, nil
 }
 
 // Try to get bor validators with Id from ValidatorSet contract by querying each element on mapping(uint256 => Validator[]) public producers
 // If fails then returns GetBorValidators without id
-func (c *ChainSpanner) tryGetBorValidatorsWithId(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash, blockNumber uint64, toAddress common.Address, gas hexutil.Uint64) ([]*valset.Validator, error) {
+func (c *ChainSpanner) tryGetBorValidatorsWithId(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash, blockNumber uint64, toAddress common.Address, gas hexutil.Uint64) ([]*valset.Validator, *big.Int, error) {
 	firstEndBlock, err := c.getFirstEndBlock(ctx, blockNrOrHash, toAddress, gas)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var spanNumber *big.Int
 	if big.NewInt(int64(blockNumber)).Cmp(firstEndBlock) <= 0 {
@@ -123,14 +123,14 @@ func (c *ChainSpanner) tryGetBorValidatorsWithId(ctx context.Context, blockNrOrH
 	} else {
 		spanNumber, err = c.getSpanByBlock(ctx, blockNrOrHash, blockNumber, toAddress, gas)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 	}
 
 	borValidatorsWithoutId, err := c.getBorValidatorsWithoutId(ctx, blockNrOrHash, blockNumber, toAddress, gas)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	producersCount := len(borValidatorsWithoutId)
@@ -141,7 +141,7 @@ func (c *ChainSpanner) tryGetBorValidatorsWithId(ctx context.Context, blockNrOrH
 		p, err := c.getProducersBySpanAndIndexMethod(ctx, blockNrOrHash, blockNumber, toAddress, gas, spanNumber, i)
 		// if fails, return validators without id
 		if err != nil {
-			return borValidatorsWithoutId, nil
+			return borValidatorsWithoutId, spanNumber, nil
 		}
 
 		valz[i] = &valset.Validator{
@@ -151,7 +151,7 @@ func (c *ChainSpanner) tryGetBorValidatorsWithId(ctx context.Context, blockNrOrH
 		}
 	}
 
-	return valz, nil
+	return valz, spanNumber, nil
 }
 
 func (c *ChainSpanner) getSpanByBlock(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash, blockNumber uint64, toAddress common.Address, gas hexutil.Uint64) (*big.Int, error) {
@@ -280,7 +280,7 @@ func (c *ChainSpanner) getBorValidatorsWithoutId(ctx context.Context, blockNrOrH
 	return valz, nil
 }
 
-func (c *ChainSpanner) GetCurrentValidatorsByHash(ctx context.Context, headerHash common.Hash, blockNumber uint64) ([]*valset.Validator, error) {
+func (c *ChainSpanner) GetCurrentValidatorsByHash(ctx context.Context, headerHash common.Hash, blockNumber uint64) ([]*valset.Validator, *big.Int, error) {
 	blockNr := rpc.BlockNumberOrHashWithHash(headerHash, false)
 
 	return c.GetCurrentValidatorsByBlockNrOrHash(ctx, blockNr, blockNumber)

@@ -6,6 +6,7 @@ package bor
 
 import (
 	context "context"
+	big "math/big"
 	reflect "reflect"
 
 	common "github.com/ethereum/go-ethereum/common"
@@ -71,12 +72,13 @@ func (mr *MockSpannerMockRecorder) GetCurrentSpan(arg0, arg1 interface{}) *gomoc
 }
 
 // GetCurrentValidatorsByBlockNrOrHash mocks base method.
-func (m *MockSpanner) GetCurrentValidatorsByBlockNrOrHash(arg0 context.Context, arg1 rpc.BlockNumberOrHash, arg2 uint64) ([]*valset.Validator, error) {
+func (m *MockSpanner) GetCurrentValidatorsByBlockNrOrHash(arg0 context.Context, arg1 rpc.BlockNumberOrHash, arg2 uint64) ([]*valset.Validator, *big.Int, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetCurrentValidatorsByBlockNrOrHash", arg0, arg1, arg2)
 	ret0, _ := ret[0].([]*valset.Validator)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(*big.Int)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // GetCurrentValidatorsByBlockNrOrHash indicates an expected call of GetCurrentValidatorsByBlockNrOrHash.
@@ -86,12 +88,13 @@ func (mr *MockSpannerMockRecorder) GetCurrentValidatorsByBlockNrOrHash(arg0, arg
 }
 
 // GetCurrentValidatorsByHash mocks base method.
-func (m *MockSpanner) GetCurrentValidatorsByHash(arg0 context.Context, arg1 common.Hash, arg2 uint64) ([]*valset.Validator, error) {
+func (m *MockSpanner) GetCurrentValidatorsByHash(arg0 context.Context, arg1 common.Hash, arg2 uint64) ([]*valset.Validator, *big.Int, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetCurrentValidatorsByHash", arg0, arg1, arg2)
 	ret0, _ := ret[0].([]*valset.Validator)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(*big.Int)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
 // GetCurrentValidatorsByHash indicates an expected call of GetCurrentValidatorsByHash.

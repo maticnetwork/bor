@@ -470,7 +470,7 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 	if IsSprintStart(number+1, c.config.CalculateSprint(number)) {
 		// Use parent block's hash to make the eth_call to fetch validators so that the state being
 		// used to make the call is of the same fork.
-		newValidators, err := c.spanner.GetCurrentValidatorsByBlockNrOrHash(context.Background(), rpc.BlockNumberOrHashWithHash(header.ParentHash, false), number+1)
+		newValidators, spanNumber, err := c.spanner.GetCurrentValidatorsByBlockNrOrHash(context.Background(), rpc.BlockNumberOrHashWithHash(header.ParentHash, false), number+1)
 		if err != nil {
 			return err
 		}
@@ -488,6 +488,10 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 		}
 
 		for i, val := range newValidators {
+			// on SPAN 0 the validator set not properly store the right ids
+			if spanNumber.Cmp(big.NewInt(0)) == 0 {
+				headerVals[i].ID = val.ID
+			}
 			if !bytes.Equal(val.HeaderBytes(), headerVals[i].HeaderBytes()) {
 				log.Warn("Invalid validator set", "block number", number, "index", i, "local validator", val, "header validator", headerVals[i])
 				return errInvalidSpanValidators
@@ -571,7 +575,7 @@ func (c *Bor) snapshot(chain consensus.ChainHeaderReader, number uint64, hash co
 				hash := checkpoint.Hash()
 
 				// get validators and current span
-				validators, err := c.spanner.GetCurrentValidatorsByHash(context.Background(), hash, number+1)
+				validators, _, err := c.spanner.GetCurrentValidatorsByHash(context.Background(), hash, number+1)
 				if err != nil {
 					return nil, err
 				}
@@ -741,7 +745,7 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 
 	// get validator set if number
 	if IsSprintStart(number+1, c.config.CalculateSprint(number)) {
-		newValidators, err := c.spanner.GetCurrentValidatorsByHash(context.Background(), header.ParentHash, number+1)
+		newValidators, _, err := c.spanner.GetCurrentValidatorsByHash(context.Background(), header.ParentHash, number+1)
 		if err != nil {
 			return errUnknownValidators
 		}
@@ -1341,7 +1345,8 @@ func (c *Bor) SetHeimdallClient(h IHeimdallClient) {
 }
 
 func (c *Bor) GetCurrentValidators(ctx context.Context, headerHash common.Hash, blockNumber uint64) ([]*valset.Validator, error) {
-	return c.spanner.GetCurrentValidatorsByHash(ctx, headerHash, blockNumber)
+	valz, _, err := c.spanner.GetCurrentValidatorsByHash(ctx, headerHash, blockNumber)
+	return valz, err
 }
 
 //
