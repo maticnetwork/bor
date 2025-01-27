@@ -100,7 +100,7 @@ func ApplyMessage(
 		log.Error("message execution failed on contract", "msgData", msg.Data)
 	}
 
-	// If there's error commiting span, log it here. It won't be reported before because the return value is empty.
+	// If there's error committing span, log it here. It won't be reported before because the return value is empty.
 	if bytes.Equal(msg.To().Bytes(), validatorContract.Bytes()) && err != nil {
 		log.Error("message execution failed on contract", "err", err)
 	}
