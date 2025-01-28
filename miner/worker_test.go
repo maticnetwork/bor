@@ -320,13 +320,10 @@ func (b *testWorkerBackend) newStorageContractCallTx(to common.Address, nonce ui
 func newTestWorker(t TensingObject, chainConfig *params.ChainConfig, engine consensus.Engine, db ethdb.Database, noempty bool, delay uint, opcodeDelay uint) (*worker, *testWorkerBackend, func()) {
 	backend := newTestWorkerBackend(t, chainConfig, engine, db)
 	backend.txPool.Add(pendingTxs, true, false)
-	var w *worker
+	w := newWorker(testConfig, chainConfig, engine, backend, new(event.TypeMux), nil, false)
 	if delay != 0 || opcodeDelay != 0 {
-		//nolint:staticcheck
-		w = newWorkerWithDelay(testConfig, chainConfig, engine, backend, new(event.TypeMux), nil, false, delay, opcodeDelay)
-	} else {
-		//nolint:staticcheck
-		w = newWorker(testConfig, chainConfig, engine, backend, new(event.TypeMux), nil, false)
+		w.setInterruptCtx(vm.InterruptCtxDelayKey, delay)
+		w.setInterruptCtx(vm.InterruptCtxOpcodeDelayKey, opcodeDelay)
 	}
 	w.setEtherbase(testBankAddress)
 	// enable empty blocks
