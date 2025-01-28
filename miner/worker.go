@@ -17,15 +17,10 @@
 package miner
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"math/big"
-	"os"
-	"runtime"
-	"runtime/pprof"
-	ptrace "runtime/trace"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -1274,70 +1269,6 @@ func (w *worker) prepareWork(genParams *generateParams) (*environment, error) {
 	return env, nil
 }
 
-func startProfiler(profile string, filepath string, number uint64) (func() error, error) {
-	var (
-		buf bytes.Buffer
-		err error
-	)
-
-	closeFn := func() {}
-
-	switch profile {
-	case "cpu":
-		err = pprof.StartCPUProfile(&buf)
-
-		if err == nil {
-			closeFn = func() {
-				pprof.StopCPUProfile()
-			}
-		}
-	case "trace":
-		err = ptrace.Start(&buf)
-
-		if err == nil {
-			closeFn = func() {
-				ptrace.Stop()
-			}
-		}
-	case "heap":
-		runtime.GC()
-
-		err = pprof.WriteHeapProfile(&buf)
-	default:
-		log.Info("Incorrect profile name")
-	}
-
-	if err != nil {
-		return func() error {
-			closeFn()
-			return nil
-		}, err
-	}
-
-	closeFnNew := func() error {
-		var err error
-
-		closeFn()
-
-		if buf.Len() == 0 {
-			return nil
-		}
-
-		f, err := os.Create(filepath + "/" + profile + "-" + fmt.Sprint(number) + ".prof")
-		if err != nil {
-			return err
-		}
-
-		defer f.Close()
-
-		_, err = f.Write(buf.Bytes())
-
-		return err
-	}
-
-	return closeFnNew, nil
-}
-
 // fillTransactions retrieves the pending transactions from the txpool and fills them
 // into the given sealing block. The transaction selection and ordering strategy can
 // be customized with the plugin in the future.
@@ -1556,12 +1487,10 @@ func getInterruptTimer(work *environment, current *types.Block) (context.Context
 	blockNumber := current.NumberU64() + 1
 
 	go func() {
-		select {
-		case <-interruptCtx.Done():
-			if interruptCtx.Err() != context.Canceled {
-				log.Info("Commit Interrupt. Pre-committing the current block", "block", blockNumber)
-				cancel()
-			}
+		<-interruptCtx.Done()
+		if interruptCtx.Err() != context.Canceled {
+			log.Info("Commit Interrupt. Pre-committing the current block", "block", blockNumber)
+			cancel()
 		}
 	}()
 
