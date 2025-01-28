@@ -1046,6 +1046,14 @@ mainloop:
 
 		logs, err := w.commitTransaction(env, tx)
 
+		// Check if we have a `delay` set in interrup context. It's only set during tests.
+		if w.interruptCtx != nil {
+			if delay := w.interruptCtx.Value(vm.InterruptCtxDelayKey); delay != nil {
+				// nolint : durationcheck
+				time.Sleep(time.Duration(delay.(uint)) * time.Millisecond)
+			}
+		}
+
 		switch {
 		case errors.Is(err, core.ErrNonceTooLow):
 			// New head notification data race between the transaction pool and miner, shift
