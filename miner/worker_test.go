@@ -768,9 +768,7 @@ func testCommitInterruptExperimentBorContract(t *testing.T, delay uint, txCount 
 	}
 
 	wrapped := make([]*types.Transaction, len(txs))
-	for i, tx := range txs {
-		wrapped[i] = tx
-	}
+	copy(wrapped, txs)
 
 	b.TxPool().Add(wrapped, false, false)
 
@@ -780,8 +778,9 @@ func testCommitInterruptExperimentBorContract(t *testing.T, delay uint, txCount 
 	w.stop()
 
 	currentBlockNumber := w.current.header.Number.Uint64()
-	assert.Check(t, txCount >= w.chain.GetBlockByNumber(currentBlockNumber-1).Transactions().Len())
-	assert.Check(t, 0 < w.chain.GetBlockByNumber(currentBlockNumber-1).Transactions().Len()+1)
+	prevBlockTxCount := w.chain.GetBlockByNumber(currentBlockNumber - 1).Transactions().Len()
+	assert.Check(t, prevBlockTxCount > 0)
+	assert.Check(t, prevBlockTxCount <= txCount)
 }
 
 // // nolint : thelper
