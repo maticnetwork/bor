@@ -1359,7 +1359,7 @@ func (w *worker) generateWork(params *generateParams) *newPayloadResult {
 	}
 	defer work.discard()
 
-	w.interruptCtx = context.Background()
+	w.interruptCtx = resetAndCopyInterruptCtx(w.interruptCtx)
 	if !params.noTxs {
 		interrupt := new(atomic.Int32)
 
@@ -1421,7 +1421,7 @@ func (w *worker) commitWork(interrupt *atomic.Int32, noempty bool, timestamp int
 		return
 	}
 
-	w.interruptCtx = context.Background()
+	w.interruptCtx = resetAndCopyInterruptCtx(w.interruptCtx)
 	stopFn := func() {}
 	defer func() {
 		stopFn()
@@ -1429,7 +1429,7 @@ func (w *worker) commitWork(interrupt *atomic.Int32, noempty bool, timestamp int
 
 	if !noempty && w.interruptCommitFlag {
 		block := w.chain.GetBlockByHash(w.chain.CurrentBlock().Hash())
-		w.interruptCtx, stopFn = getInterruptTimer(work, block)
+		w.interruptCtx, stopFn = getInterruptTimer(w.interruptCtx, work, block)
 		w.interruptCtx = vm.PutCache(w.interruptCtx, w.interruptedTxCache)
 	}
 
@@ -1481,11 +1481,26 @@ func (w *worker) commitWork(interrupt *atomic.Int32, noempty bool, timestamp int
 	w.current = work
 }
 
-func getInterruptTimer(work *environment, current *types.Block) (context.Context, func()) {
+// resetAndCopyInterruptCtx resets the interrupt context and copies the values set
+// from the old one to newly created one. It is necessary to reset context in this way
+// to get rid of the older parent timeout context.
+func resetAndCopyInterruptCtx(interruptCtx context.Context) context.Context {
+	// Create a fresh new context and copy values from old one
+	newCtx := context.Background()
+	if delay := interruptCtx.Value(vm.InterruptCtxDelayKey); delay != nil {
+		newCtx = context.WithValue(newCtx, vm.InterruptCtxDelayKey, delay)
+	}
+	if opcodeDelay := interruptCtx.Value(vm.InterruptCtxOpcodeDelayKey); opcodeDelay != nil {
+		newCtx = context.WithValue(newCtx, vm.InterruptCtxOpcodeDelayKey, opcodeDelay)
+	}
+
+	return newCtx
+}
+
+func getInterruptTimer(interruptCtx context.Context, work *environment, current *types.Block) (context.Context, func()) {
 	delay := time.Until(time.Unix(int64(work.header.Time), 0))
 
-	interruptCtx, cancel := context.WithTimeout(context.Background(), delay)
-
+	interruptCtx, cancel := context.WithTimeout(interruptCtx, delay)
 	blockNumber := current.NumberU64() + 1
 
 	go func() {
