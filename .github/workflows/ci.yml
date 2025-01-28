@@ -236,7 +236,7 @@ jobs:
         - name: Launch devnet
           run: |
             cd matic-cli/devnet
-            chmod +x ../docker_devnet.sh && ../docker_devnet.sh
+            bash ../docker_devnet.sh
             cd -
             timeout 2m bash bor/integration-tests/bor_health.sh
 
