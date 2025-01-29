@@ -608,7 +608,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 
 	var resultChanLen int = 2
 	if bc.enforceParallelProcessor {
-		log.Info("Processing block using Block STM only", "number", block.NumberU64())
+		log.Debug("Processing block using Block STM only", "number", block.NumberU64())
 		resultChanLen = 1
 	}
 	resultChan := make(chan Result, resultChanLen)
