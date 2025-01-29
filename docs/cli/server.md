@@ -40,7 +40,7 @@ The ```bor server``` command runs the Bor client.
 
 - ```eth.requiredblocks```: Comma separated block number-to-hash mappings to require for peering (<number>=<hash>)
 
-- ```ethstats```: Reporting URL of an ethstats service (nodename:secret@host:port)
+- ```ethstats```: Reporting URL of a ethstats service (nodename:secret@host:port)
 
 - ```gcmode```: Blockchain garbage collection mode ("full", "archive") (default: full)
 
@@ -65,6 +65,8 @@ The ```bor server``` command runs the Bor client.
 - ```log-level```: Log level for the server (trace|debug|info|warn|error|crit), will be deprecated soon. Use verbosity instead
 
 - ```parallelevm.enable```: Enable Block STM (default: true)
+
+- ```parallelevm.enforce```: Enforce block processing via Block STM (default: false)
 
 - ```parallelevm.procs```: Number of speculative processes (cores) in Block STM (default: 8)
 
@@ -148,7 +150,7 @@ The ```bor server``` command runs the Bor client.
 
 - ```graphql```: Enable GraphQL on the HTTP-RPC server. Note that GraphQL can only be started if an HTTP server is started as well. (default: false)
 
-- ```graphql.corsdomain```: Comma separated list of domains from which to accept cross-origin requests (browser enforced) (default: localhost)
+- ```graphql.corsdomain```: Comma separated list of domains from which to accept cross origin requests (browser enforced) (default: localhost)
 
 - ```graphql.vhosts```: Comma separated list of virtual hostnames from which to accept requests (server enforced). Accepts '*' wildcard. (default: localhost)
 
@@ -158,7 +160,7 @@ The ```bor server``` command runs the Bor client.
 
 - ```http.api```: API's offered over the HTTP-RPC interface (default: eth,net,web3,txpool,bor)
 
-- ```http.corsdomain```: Comma separated list of domains from which to accept cross-origin requests (browser enforced) (default: localhost)
+- ```http.corsdomain```: Comma separated list of domains from which to accept cross origin requests (browser enforced) (default: localhost)
 
 - ```http.ep-requesttimeout```: Request Timeout for rpc execution pool for HTTP requests (default: 0s)
 
