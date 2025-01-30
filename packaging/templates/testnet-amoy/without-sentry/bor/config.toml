@@ -6,7 +6,7 @@ chain = "amoy"
 # vmdebug = false
 datadir = "/var/lib/bor/data"
 # ancient = ""
-# db.engine = "leveldb"
+# db.engine = "pebble"
 # keystore = "$BOR_DIR/keystore"
 # "rpc.batchlimit" = 100
 # "rpc.returndatalimit" = 100000
@@ -168,6 +168,11 @@ syncmode = "full"
     # dev = false
     # period = 0
     # gaslimit = 11500000
+
+# [parallelevm]
+  # enable = true
+  # procs = 8
+  # enforce = false
 
 # [pprof]
 #   pprof = false

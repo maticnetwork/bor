@@ -4,7 +4,8 @@ chain = "mainnet"
 # vmdebug = false
 datadir = "/var/lib/bor/data"
 # ancient = ""
-# "db.engine" = "leveldb"
+# "db.engine" = "pebble"
+state.scheme = "hash"
 # keystore = ""
 # "rpc.batchlimit" = 100
 # "rpc.returndatalimit" = 100000
@@ -53,9 +54,9 @@ gcmode = "archive"
     nolocals = true
     pricelimit = 25000000000
     accountslots = 16
-    globalslots = 32768
-    accountqueue = 16
-    globalqueue = 32768
+    globalslots = 131072
+    accountqueue = 64
+    globalqueue = 131072
     lifetime = "1h30m0s"
     # locals = []
     # journal = ""
@@ -167,6 +168,11 @@ gcmode = "archive"
     # dev = false
     # period = 0
     # gaslimit = 11500000
+
+# [parallelevm]
+  # enable = true
+  # procs = 8
+  # enforce = false
 
 # [pprof]
 #   pprof = false
