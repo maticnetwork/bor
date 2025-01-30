@@ -197,6 +197,7 @@ func (c *CacheConfig) triedbConfig(isVerkle bool) *triedb.Config {
 			StateHistory:    c.StateHistory,
 			CleanCacheSize:  c.TrieCleanLimit * 1024 * 1024,
 			WriteBufferSize: c.TrieDirtyLimit * 1024 * 1024,
+			MaxDiffLayers:   c.TriesInMemory,
 		}
 	}
 	return config
@@ -577,7 +578,6 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 // NewParallelBlockChain , similar to NewBlockChain, creates a new blockchain object, but with a parallel state processor
 func NewParallelBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis, overrides *ChainOverrides, engine consensus.Engine, vmConfig vm.Config, shouldPreserve func(header *types.Header) bool, txLookupLimit *uint64, checker ethereum.ChainValidator, numprocs int, enforce bool) (*BlockChain, error) {
 	bc, err := NewBlockChain(db, cacheConfig, genesis, overrides, engine, vmConfig, shouldPreserve, txLookupLimit, checker)
-
 	if err != nil {
 		return nil, err
 	}
@@ -1475,7 +1475,7 @@ func (bc *BlockChain) Stop() {
 		if !bc.cacheConfig.TrieDirtyDisabled {
 			triedb := bc.triedb
 
-			for _, offset := range []uint64{0, 1, state.TriesInMemory - 1} {
+			for _, offset := range []uint64{0, 1, bc.cacheConfig.TriesInMemory - 1} {
 				if number := bc.CurrentBlock().Number.Uint64(); number > offset {
 					recent := bc.GetBlockByNumber(number - offset)
 
@@ -1710,9 +1710,10 @@ func (bc *BlockChain) InsertReceiptChain(blockChain types.Blocks, receiptChain [
 		}
 
 		// Delete block data from the main database.
-		var (
-			canonHashes = make(map[common.Hash]struct{}, len(blockChain))
-		)
+        var (
+		    canonHashes = make(map[common.Hash]struct{}, len(blockChain))
+        )
+
 		batch = bc.db.NewBatch()
 		for _, block := range blockChain {
 			canonHashes[block.Hash()] = struct{}{}
@@ -1954,7 +1955,7 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 
 	// Flush limits are not considered for the first TriesInMemory blocks.
 	current := block.NumberU64()
-	if current <= state.TriesInMemory {
+	if current <= bc.cacheConfig.TriesInMemory {
 		return []*types.Log{}, nil
 	}
 	// If we exceeded our memory allowance, flush matured singleton nodes to disk
@@ -1967,7 +1968,7 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 		_ = bc.triedb.Cap(limit - ethdb.IdealBatchSize)
 	}
 	// Find the next state trie we need to commit
-	chosen := current - state.TriesInMemory
+	chosen := current - bc.cacheConfig.TriesInMemory
 	flushInterval := time.Duration(bc.flushInterval.Load())
 	// If we exceeded time allowance, flush an entire trie to disk
 	if bc.gcproc > flushInterval {
@@ -1979,8 +1980,8 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 		} else {
 			// If we're exceeding limits but haven't reached a large enough memory gap,
 			// warn the user that the system is becoming unstable.
-			if chosen < bc.lastWrite+state.TriesInMemory && bc.gcproc >= 2*flushInterval {
-				log.Info("State in memory for too long, committing", "time", bc.gcproc, "allowance", flushInterval, "optimum", float64(chosen-bc.lastWrite)/state.TriesInMemory)
+			if chosen < bc.lastWrite+bc.cacheConfig.TriesInMemory && bc.gcproc >= 2*flushInterval {
+				log.Info("State in memory for too long, committing", "time", bc.gcproc, "allowance", flushInterval, "optimum", float64(chosen-bc.lastWrite)/float64(bc.cacheConfig.TriesInMemory))
 			}
 			// Flush an entire trie and restart the counters
 			_ = bc.triedb.Commit(header.Root, true)
