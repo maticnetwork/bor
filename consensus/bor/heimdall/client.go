@@ -105,10 +105,19 @@ func (h *HeimdallClient) StateSyncEvents(ctx context.Context, fromID uint64, to 
 
 		ctx = withRequestType(ctx, stateSyncRequest)
 
-		response, err := FetchWithRetry[StateSyncEventsResponse](ctx, h.client, url, h.closeCh)
+		// response, err := FetchWithRetry[StateSyncEventsResponse](ctx, h.client, url, h.closeCh)
+		// if err != nil {
+		// 	return nil, err
+		// }
+
+		request := &Request{client: h.client, url: url, start: time.Now()}
+		response, err := Fetch[StateSyncEventsResponse](ctx, request)
+
 		if err != nil {
-			return nil, err
+			fmt.Println("ERROR: ", err)
 		}
+
+		fmt.Println("RESULT: ", response)
 
 		if response == nil || response.Result == nil {
 			// status 204
