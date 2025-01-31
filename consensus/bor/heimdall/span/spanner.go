@@ -184,6 +184,35 @@ func (c *ChainSpanner) CommitSpan(ctx context.Context, minimalSpan Span, validat
 		return err
 	}
 
+	// Get Sprint size
+	func() {
+		data, err := c.validatorSet.Pack("SPRINT")
+		if err != nil {
+			log.Error("Unable to pack tx for SPRINT", "error", err)
+		}
+
+		// call
+		msgData := (hexutil.Bytes)(data)
+		toAddress := c.validatorContractAddress
+		gas := (hexutil.Uint64)(uint64(math.MaxUint64 / 2))
+
+		blockNumber := rpc.BlockNumber(header.Number.Int64() - 1)
+		blockNrOrHash := rpc.BlockNumberOrHash{
+			BlockNumber: &blockNumber,
+		}
+
+		result, err := c.ethAPI.Call(ctx, ethapi.TransactionArgs{
+			Gas:  &gas,
+			To:   &toAddress,
+			Data: &msgData,
+		}, &blockNrOrHash, nil, nil)
+		if err != nil {
+			log.Error("SPRINT", "error", err)
+		}
+
+		log.Error("SPRINT", "result", result)
+	}()
+
 	// get system message
 	msg := statefull.GetSystemMessage(c.validatorContractAddress, data)
 
