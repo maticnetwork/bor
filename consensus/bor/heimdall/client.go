@@ -38,6 +38,7 @@ var (
 
 const (
 	heimdallAPIBodyLimit = 128 * 1024 * 1024 // 128 MB
+	page                 = 1
 	stateFetchLimit      = 50
 	apiHeimdallTimeout   = 5 * time.Second
 	retryCall            = 5 * time.Second
@@ -387,7 +388,7 @@ func spanURL(urlString string, spanID uint64) (*url.URL, error) {
 }
 
 func stateSyncURL(urlString string, fromID uint64, to int64) (*url.URL, error) {
-	queryParams := fmt.Sprintf(fetchStateSyncEventsFormat, fromID, to, stateFetchLimit)
+	queryParams := fmt.Sprintf(fetchStateSyncEventsFormat, fromID, to, page, stateFetchLimit)
 
 	return makeURL(urlString, fetchStateSyncEventsPath, queryParams)
 }
