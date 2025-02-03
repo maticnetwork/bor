@@ -556,7 +556,7 @@ func (evm *EVM) initNewContract(contract *Contract, address common.Address, valu
 	}
 
 	// Check whether the max code size has been exceeded, assign err if the case.
-	if err == nil && evm.chainRules.IsEIP158 {
+	if evm.chainRules.IsEIP158 {
 		if evm.chainConfig.Bor != nil && evm.chainConfig.Bor.IsAhmedabad(evm.Context.BlockNumber) {
 			if len(ret) > params.MaxCodeSizePostAhmedabad {
 				err = ErrMaxCodeSizeExceeded
@@ -583,7 +583,7 @@ func (evm *EVM) initNewContract(contract *Contract, address common.Address, valu
 	}
 
 	evm.StateDB.SetCode(address, ret)
-	return ret, nil
+	return ret, err
 }
 
 // Create creates a new contract using code as deployment code.

@@ -78,8 +78,8 @@ var (
 	storageUpdateTimer = metrics.NewRegisteredResettingTimer("chain/storage/updates", nil)
 	storageCommitTimer = metrics.NewRegisteredResettingTimer("chain/storage/commits", nil)
 
-	accountReadSingleTimer = metrics.NewRegisteredResettingTimer("chain/account/single/reads", nil)
-	storageReadSingleTimer = metrics.NewRegisteredResettingTimer("chain/storage/single/reads", nil)
+	accountReadSingleTimer = metrics.NewRegisteredResettingTimer("chain/account/single/reads", nil) //nolint:golint,unused
+	storageReadSingleTimer = metrics.NewRegisteredResettingTimer("chain/storage/single/reads", nil) //nolint:golint,unused
 
 	snapshotCommitTimer      = metrics.NewRegisteredResettingTimer("chain/snapshot/commits", nil)
 	triedbCommitTimer        = metrics.NewRegisteredResettingTimer("chain/triedb/commits", nil)
@@ -92,7 +92,7 @@ var (
 
 	blockInsertTimer                   = metrics.NewRegisteredTimer("chain/inserts", nil)
 	blockValidationTimer               = metrics.NewRegisteredTimer("chain/validation", nil)
-	blockCrossValidationTimer          = metrics.NewRegisteredResettingTimer("chain/crossvalidation", nil)
+	blockCrossValidationTimer          = metrics.NewRegisteredResettingTimer("chain/crossvalidation", nil) //nolint:golint,unused
 	blockExecutionTimer                = metrics.NewRegisteredTimer("chain/execution", nil)
 	blockWriteTimer                    = metrics.NewRegisteredTimer("chain/write", nil)
 	blockExecutionParallelCounter      = metrics.NewRegisteredCounter("chain/execution/parallel", nil)
