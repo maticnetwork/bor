@@ -62,6 +62,7 @@ var (
 		GrayGlacierBlock:              big.NewInt(15_050_000),
 		TerminalTotalDifficulty:       MainnetTerminalTotalDifficulty, // 58_750_000_000_000_000_000_000
 		TerminalTotalDifficultyPassed: true,
+		DepositContractAddress:        common.HexToAddress("0x00000000219ab540356cbb839cbe05303d7705fa"),
 		Ethash:                        new(EthashConfig),
 	}
 	// HoleskyChainConfig contains the chain parameters to run a node on the Holesky test network.
@@ -485,7 +486,6 @@ var (
 		ShanghaiBlock:                 big.NewInt(0),
 		CancunBlock:                   big.NewInt(0),
 		PragueBlock:                   big.NewInt(0),
-		VerkleBlock:                   big.NewInt(0),
 		TerminalTotalDifficulty:       big.NewInt(0),
 		TerminalTotalDifficultyPassed: true,
 		IsDevMode:                     true,
@@ -627,6 +627,7 @@ var NetworkNames = map[string]string{
 	BorMainnetChainConfig.ChainID.String(): "bor",
 	MumbaiChainConfig.ChainID.String():     "mumbai",
 	AmoyChainConfig.ChainID.String():       "amoy",
+	HoleskyChainConfig.ChainID.String():    "holesky",
 }
 
 // ChainConfig is the core config which determines the blockchain settings.
@@ -675,6 +676,8 @@ type ChainConfig struct {
 	//
 	// TODO(karalabe): Drop this field eventually (always assuming PoS mode)
 	TerminalTotalDifficultyPassed bool `json:"terminalTotalDifficultyPassed,omitempty"`
+
+	DepositContractAddress common.Address `json:"depositContractAddress,omitempty"`
 
 	// Various consensus engines
 	Bor       *BorConfig    `json:"bor,omitempty"`
