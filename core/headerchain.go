@@ -302,8 +302,21 @@ func (hc *HeaderChain) writeHeadersAndSetHead(headers []*types.Header, forker *F
 		if inserted != 0 {
 			result.status = SideStatTy
 		}
+
 		return result, nil
 	}
+
+	isValid, err := forker.ValidateReorg(hc.CurrentHeader(), headers)
+	if err != nil {
+		return nil, err
+	} else if !isValid {
+		if inserted != 0 {
+			result.status = SideStatTy
+		}
+
+		return result, nil
+	}
+
 	// Special case, all the inserted headers are already on the canonical
 	// header chain, skip the reorg operation.
 	if hc.GetCanonicalHash(lastHeader.Number.Uint64()) == lastHash && lastHeader.Number.Uint64() <= hc.CurrentHeader().Number.Uint64() {
@@ -367,6 +380,7 @@ func (hc *HeaderChain) InsertHeaderChain(chain []*types.Header, start time.Time,
 	if hc.procInterrupt() {
 		return 0, errors.New("aborted")
 	}
+
 	res, err := hc.writeHeadersAndSetHead(chain, forker)
 	if err != nil {
 		return 0, err

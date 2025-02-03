@@ -628,6 +628,9 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 				err = bc.validator.ValidateState(block, parallelStatedb, res, false)
 				vtime = time.Since(vstart)
 			}
+			if res == nil {
+				res = &ProcessResult{}
+			}
 			resultChan <- Result{res.Receipts, res.Logs, res.GasUsed, err, parallelStatedb, blockExecutionParallelCounter, true}
 		}()
 	}
@@ -650,6 +653,9 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 				vstart := time.Now()
 				err = bc.validator.ValidateState(block, statedb, res, false)
 				vtime = time.Since(vstart)
+			}
+			if res == nil {
+				res = &ProcessResult{}
 			}
 			resultChan <- Result{res.Receipts, res.Logs, res.GasUsed, err, statedb, blockExecutionSerialCounter, false}
 		}()
