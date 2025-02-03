@@ -56,16 +56,6 @@ func TestBlockchain(t *testing.T) {
 	bt.skipLoad(`.*ValidBlocks*`)
 	bt.skipLoad(`.*InvalidBlocks*`)
 	bt.skipLoad(`.*TransitionTests*`)
-	// After the merge we would accept side chains as canonical even if they have lower td
-	bt.skipLoad(`.*bcMultiChainTest/ChainAtoChainB_difficultyB.json`)
-	bt.skipLoad(`.*bcMultiChainTest/CallContractFromNotBestBlock.json`)
-	bt.skipLoad(`.*bcTotalDifficultyTest/uncleBlockAtBlock3afterBlock4.json`)
-	bt.skipLoad(`.*bcTotalDifficultyTest/lotsOfBranchesOverrideAtTheMiddle.json`)
-	bt.skipLoad(`.*bcTotalDifficultyTest/sideChainWithMoreTransactions.json`)
-	bt.skipLoad(`.*bcForkStressTest/ForkStressTest.json`)
-	bt.skipLoad(`.*bcMultiChainTest/lotsOfLeafs.json`)
-	bt.skipLoad(`.*bcFrontierToHomestead/blockChainFrontierWithLargerTDvsHomesteadBlockchain.json`)
-	bt.skipLoad(`.*bcFrontierToHomestead/blockChainFrontierWithLargerTDvsHomesteadBlockchain2.json`)
 
 	bt.walk(t, blockTestDir, func(t *testing.T, name string, test *BlockTest) {
 		execBlockTest(t, bt, test)

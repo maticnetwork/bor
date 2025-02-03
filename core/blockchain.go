@@ -2075,6 +2075,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool, makeWitness 
 	if bc.insertStopped() {
 		return nil, 0, nil
 	}
+
 	// Start a parallel signature recovery (signer will fluke on fork transition, minimal perf loss)
 	SenderCacher.RecoverFromBlocks(types.MakeSigner(bc.chainConfig, chain[0].Number(), chain[0].Time()), chain)
 
@@ -3326,8 +3327,7 @@ func (bc *BlockChain) InsertHeaderChain(chain []*types.Header) (int, error) {
 		return 0, errChainStopped
 	}
 	defer bc.chainmu.Unlock()
-	_, err := bc.hc.InsertHeaderChain(chain, start)
-
+	_, err := bc.hc.InsertHeaderChain(chain, start, bc.forker)
 	return 0, err
 }
 

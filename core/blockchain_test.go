@@ -1576,7 +1576,7 @@ done:
 			timeout.Reset(timeoutDura)
 
 		case <-timeout.C:
-			t.Fatalf("Timeout. Possibly not all blocks were triggered for sideevent: %v", i)
+			t.Fatal("Timeout. Possibly not all blocks were triggered for sideevent")
 		}
 	}
 
@@ -1996,15 +1996,18 @@ func testLargeReorgTrieGC(t *testing.T, scheme string) {
 	if chain.HasState(shared[len(shared)-1].Root()) {
 		t.Fatalf("common-but-old ancestor still cache")
 	}
-	// Import the competitor chain without exceeding the canonical's TD.
-	// Post-merge the side chain should be executed
+	// Import the competitor chain without exceeding the canonical's TD and ensure
+	// we have not processed any of the blocks (protection against malicious blocks)
 	if _, err := chain.InsertChain(competitor[:len(competitor)-2]); err != nil {
 		t.Fatalf("failed to insert competitor chain: %v", err)
 	}
-	if !chain.HasState(competitor[len(competitor)-3].Root()) {
-		t.Fatalf("failed to insert low-TD chain")
+	for i, block := range competitor[:len(competitor)-2] {
+		if chain.HasState(block.Root()) {
+			t.Fatalf("competitor %d: low TD chain became processed", i)
+		}
 	}
-	// Import the head of the competitor chain.
+	// Import the head of the competitor chain, triggering the reorg and ensure we
+	// successfully reprocess all the stashed away blocks.
 	if _, err := chain.InsertChain(competitor[len(competitor)-2:]); err != nil {
 		t.Fatalf("failed to finalize competitor chain: %v", err)
 	}
@@ -2523,10 +2526,10 @@ func testInsertKnownChainData(t *testing.T, typ string, scheme string) {
 	if err := inserter(append(blocks, blocks2...), append(receipts, receipts2...)); err != nil {
 		t.Fatalf("failed to insert chain data: %v", err)
 	}
-	// Post-merge the chain should change even if td is lower.
-	asserter(t, blocks2[len(blocks2)-1])
+	// The head shouldn't change.
+	asserter(t, blocks3[len(blocks3)-1])
 
-	// Rollback the heavier chain and re-insert the longer chain again.
+	// Rollback the heavier chain and re-insert the longer chain again
 	chain.SetHead(rollback - 1)
 
 	if err := inserter(append(blocks, blocks2...), append(receipts, receipts2...)); err != nil {
@@ -3086,6 +3089,7 @@ func testSideImportPrunedBlocks(t *testing.T, scheme string) {
 	if !chain.HasBlockAndState(firstNonPrunedBlock.Hash(), firstNonPrunedBlock.NumberU64()) {
 		t.Errorf("Block %d pruned, scheme : %s", firstNonPrunedBlock.NumberU64(), scheme)
 	}
+	// Now re-import some old blocks
 	blockToReimport := blocks[5:8]
 
 	_, err = chain.InsertChain(blockToReimport)

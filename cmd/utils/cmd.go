@@ -285,6 +285,7 @@ func ImportHistory(chain *core.BlockChain, db ethdb.Database, dir string, networ
 		start    = time.Now()
 		reported = time.Now()
 		imported = 0
+		forker   = core.NewForkChoice(chain, nil, nil)
 		h        = sha256.New()
 		buf      = bytes.NewBuffer(nil)
 	)
@@ -327,7 +328,7 @@ func ImportHistory(chain *core.BlockChain, db ethdb.Database, dir string, networ
 				if err != nil {
 					return fmt.Errorf("error reading receipts %d: %w", it.Number(), err)
 				}
-				if status, err := chain.HeaderChain().InsertHeaderChain([]*types.Header{block.Header()}, start); err != nil {
+				if status, err := chain.HeaderChain().InsertHeaderChain([]*types.Header{block.Header()}, start, forker); err != nil {
 					return fmt.Errorf("error inserting header %d: %w", it.Number(), err)
 				} else if status != core.CanonStatTy {
 					return fmt.Errorf("error inserting header %d, not canon: %v", it.Number(), status)
