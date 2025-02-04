@@ -940,7 +940,7 @@ mainloop:
 			select {
 			case <-w.interruptCtx.Done():
 				txCommitInterruptCounter.Inc(1)
-				log.Warn("Tx Level Interrupt", "hash", lastTxHash)
+				log.Warn("Tx Level Interrupt", "hash", lastTxHash, "err", w.interruptCtx.Err())
 				break mainloop
 			default:
 			}
