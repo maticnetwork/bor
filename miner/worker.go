@@ -1047,7 +1047,7 @@ mainloop:
 
 		logs, err := w.commitTransaction(env, tx)
 
-		// Check if we have a `delay` set in interrup context. It's only set during tests.
+		// Check if we have a `delay` set in interrupt context. It's only set during tests.
 		if w.interruptCtx != nil {
 			if delay := w.interruptCtx.Value(vm.InterruptCtxDelayKey); delay != nil {
 				// nolint : durationcheck
