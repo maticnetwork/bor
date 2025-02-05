@@ -634,6 +634,7 @@ func (w *worker) mainLoop() {
 
 				tcount := w.current.tcount
 
+				w.interruptCtx = resetAndCopyInterruptCtx(w.interruptCtx)
 				w.commitTransactions(w.current, plainTxs, blobTxs, nil, new(uint256.Int))
 
 				// Only update the snapshot if any new transactons were added
