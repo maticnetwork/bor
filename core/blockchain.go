@@ -2101,6 +2101,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 	abort, results := bc.engine.VerifyHeaders(bc, headers)
 	defer close(abort)
 
+	log.Info("[debug] verify headers done")
+
 	// Peek the error for the first block to decide the directing import logic
 	it := newInsertIterator(chain, results, bc.validator)
 	block, err := it.next()
@@ -2121,6 +2123,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		// the whitelisted block number.
 		return it.index, whitelist.ErrMismatch
 	}
+
+	log.Info("[debug] validate reorg done")
 
 	// Left-trim all the known blocks that don't need to build snapshot
 	if bc.skipBlock(err, it) {
@@ -2352,6 +2356,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		receipts, logs, usedGas, statedb, vtime, err := bc.ProcessBlock(block, parent)
 		activeState = statedb
 
+		log.Info("[debug] process block done", "number", block.NumberU64())
+
 		if err != nil {
 			bc.reportBlock(block, receipts, err)
 			followupInterrupt.Store(true)
@@ -2410,6 +2416,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		} else {
 			status, err = bc.writeBlockAndSetHead(block, receipts, logs, statedb, false)
 		}
+
+		log.Info("[debug] write block done", "number", block.NumberU64())
 
 		followupInterrupt.Store(true)
 

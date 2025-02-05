@@ -38,6 +38,7 @@ import (
 	"github.com/ethereum/go-ethereum/eth/tracers"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/miner"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -113,6 +114,8 @@ func (b *EthAPIBackend) HeaderByNumberOrHash(ctx context.Context, blockNrOrHash 
 	if hash, ok := blockNrOrHash.Hash(); ok {
 		header := b.eth.blockchain.GetHeaderByHash(hash)
 		if header == nil {
+			number, _ := blockNrOrHash.Number()
+			log.Info("[debug] header for hash not found in HeaderByNumberOrHash", "hash", hash, "number", number.Int64())
 			return nil, errors.New("header for hash not found")
 		}
 
@@ -192,6 +195,8 @@ func (b *EthAPIBackend) BlockByNumberOrHash(ctx context.Context, blockNrOrHash r
 	if hash, ok := blockNrOrHash.Hash(); ok {
 		header := b.eth.blockchain.GetHeaderByHash(hash)
 		if header == nil {
+			number, _ := blockNrOrHash.Number()
+			log.Info("[debug] header for hash not found in BlockByNumberOrHash", "hash", hash, "number", number.Int64())
 			return nil, errors.New("header for hash not found")
 		}
 
@@ -252,6 +257,8 @@ func (b *EthAPIBackend) StateAndHeaderByNumberOrHash(ctx context.Context, blockN
 		}
 
 		if header == nil {
+			number, _ := blockNrOrHash.Number()
+			log.Info("[debug] header for hash not found in BlockByNumberOrHash", "hash", hash, "number", number.Int64())
 			return nil, nil, errors.New("header for hash not found")
 		}
 
