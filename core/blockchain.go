@@ -2037,6 +2037,9 @@ func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 	if len(chain) == 0 {
 		return 0, nil
 	}
+	start := chain[0].NumberU64()
+	end := chain[len(chain)-1].NumberU64()
+	log.Info("[debug] InsertChain entry point", "start", start, "end", end)
 
 	bc.blockProcFeed.Send(true)
 
@@ -2063,7 +2066,9 @@ func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 		return 0, errChainStopped
 	}
 	defer bc.chainmu.Unlock()
-	return bc.insertChain(chain, true)
+	index, err := bc.insertChain(chain, true)
+	log.Info("[debug] InsertChain exiting", "start", start, "end", end, "err", err)
+	return index, err
 }
 
 // insertChain is the internal implementation of InsertChain, which assumes that
