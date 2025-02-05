@@ -606,39 +606,39 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 		parallel bool
 	}
 
-	var resultChanLen int = 2
-	if bc.enforceParallelProcessor {
-		log.Debug("Processing block using Block STM only", "number", block.NumberU64())
-		resultChanLen = 1
-	}
+	var resultChanLen int = 1
+	// if bc.enforceParallelProcessor {
+	// 	log.Debug("Processing block using Block STM only", "number", block.NumberU64())
+	// 	resultChanLen = 1
+	// }
 	resultChan := make(chan Result, resultChanLen)
 
 	processorCount := 0
 
-	if bc.parallelProcessor != nil {
-		parallelStatedb, err := state.New(parent.Root, bc.stateCache, bc.snaps)
-		if err != nil {
-			return nil, nil, 0, nil, 0, err
-		}
-		parallelStatedb.SetLogger(bc.logger)
+	// if bc.parallelProcessor != nil {
+	// 	parallelStatedb, err := state.New(parent.Root, bc.stateCache, bc.snaps)
+	// 	if err != nil {
+	// 		return nil, nil, 0, nil, 0, err
+	// 	}
+	// 	parallelStatedb.SetLogger(bc.logger)
 
-		processorCount++
+	// 	processorCount++
 
-		go func() {
-			parallelStatedb.StartPrefetcher("chain", nil)
-			pstart := time.Now()
-			receipts, logs, usedGas, err := bc.parallelProcessor.Process(block, parallelStatedb, bc.vmConfig, ctx)
-			blockExecutionParallelTimer.UpdateSince(pstart)
-			if err == nil {
-				vstart := time.Now()
-				err = bc.validator.ValidateState(block, parallelStatedb, receipts, usedGas, false)
-				vtime = time.Since(vstart)
-			}
-			resultChan <- Result{receipts, logs, usedGas, err, parallelStatedb, blockExecutionParallelCounter, true}
-		}()
-	}
+	// 	go func() {
+	// 		parallelStatedb.StartPrefetcher("chain", nil)
+	// 		pstart := time.Now()
+	// 		receipts, logs, usedGas, err := bc.parallelProcessor.Process(block, parallelStatedb, bc.vmConfig, ctx)
+	// 		blockExecutionParallelTimer.UpdateSince(pstart)
+	// 		if err == nil {
+	// 			vstart := time.Now()
+	// 			err = bc.validator.ValidateState(block, parallelStatedb, receipts, usedGas, false)
+	// 			vtime = time.Since(vstart)
+	// 		}
+	// 		resultChan <- Result{receipts, logs, usedGas, err, parallelStatedb, blockExecutionParallelCounter, true}
+	// 	}()
+	// }
 
-	if bc.processor != nil && !bc.enforceParallelProcessor {
+	if bc.processor != nil {
 		statedb, err := state.New(parent.Root, bc.stateCache, bc.snaps)
 		if err != nil {
 			return nil, nil, 0, nil, 0, err
@@ -2365,10 +2365,10 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 
 		// Process block using the parent state as reference point
 		pstart := time.Now()
+		log.Info("[debug] process block start", "number", block.NumberU64())
 		receipts, logs, usedGas, statedb, vtime, err := bc.ProcessBlock(block, parent)
+		log.Info("[debug] process block done", "number", block.NumberU64(), "err", err)
 		activeState = statedb
-
-		log.Info("[debug] process block done", "number", block.NumberU64())
 
 		if err != nil {
 			bc.reportBlock(block, receipts, err)
