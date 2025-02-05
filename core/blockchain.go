@@ -2424,11 +2424,12 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 			status, err = bc.writeBlockAndSetHead(block, receipts, logs, statedb, false)
 		}
 
-		log.Info("[debug] write block done", "number", block.NumberU64())
+		log.Info("[debug] write block done", "number", block.NumberU64(), "err", err)
 
 		followupInterrupt.Store(true)
 
 		if err != nil {
+			log.Info("[debug] error in write block", "err", err)
 			return it.index, err
 		}
 
@@ -2465,6 +2466,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		} else {
 			emitAccum()
 		}
+		log.Info("[debug] emit updates done", "number", block.NumberU64())
 		// BOR
 
 		switch status {
@@ -2493,6 +2495,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 				"txs", len(block.Transactions()), "gas", block.GasUsed(), "uncles", len(block.Uncles()),
 				"root", block.Root())
 		}
+		log.Info("[debug] insert complete", "number", block.NumberU64())
 	}
 
 	// BOR
