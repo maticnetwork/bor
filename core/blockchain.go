@@ -2101,7 +2101,9 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 	abort, results := bc.engine.VerifyHeaders(bc, headers)
 	defer close(abort)
 
-	log.Info("[debug] verify headers done")
+	start := headers[0].Number.Uint64()
+	end := headers[len(headers)-1].Number.Uint64()
+	log.Info("[debug] verify headers done", "start", start, "end", end)
 
 	// Peek the error for the first block to decide the directing import logic
 	it := newInsertIterator(chain, results, bc.validator)
@@ -2124,7 +2126,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		return it.index, whitelist.ErrMismatch
 	}
 
-	log.Info("[debug] validate reorg done")
+	log.Info("[debug] validate reorg done", "start", start, "end", end)
 
 	// Left-trim all the known blocks that don't need to build snapshot
 	if bc.skipBlock(err, it) {
@@ -2256,6 +2258,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 	}
 
 	for ; block != nil && err == nil || errors.Is(err, ErrKnownBlock); block, err = it.next() {
+		log.Info("[debug] starting to process block", "number", block.NumberU64())
 		// If the chain is terminating, stop processing blocks
 		if bc.insertStopped() {
 			log.Debug("Abort during block processing")
@@ -2317,6 +2320,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 			// Clique blocks to have the same state is if there are no transactions.
 			lastCanon = block
 
+			log.Info("[debug] skipping block while processing", "number", block.NumberU64())
+
 			continue
 		}
 
@@ -2327,6 +2332,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		if parent == nil {
 			parent = bc.GetHeader(block.ParentHash(), block.NumberU64()-1)
 		}
+
+		log.Info("[debug] got parent block", "number", block.NumberU64(), "parent nil?", parent == nil)
 
 		// If we have a followup block, run that against the current state to pre-cache
 		// transactions and probabilistically some of the account/storage trie nodes.
