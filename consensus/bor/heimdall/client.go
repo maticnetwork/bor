@@ -77,7 +77,7 @@ func NewHeimdallClient(urlString string) *HeimdallClient {
 }
 
 const (
-	fetchStateSyncEventsFormat = "from-id=%d&to-time=%d&page=%d&limit=%d"
+	fetchStateSyncEventsFormat = "from_id=%d&to_time=%d&page=%d&limit=%d"
 	fetchStateSyncEventsPath   = "clerk/time"
 
 	fetchCheckpoint      = "/checkpoints/%s"
