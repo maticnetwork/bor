@@ -92,6 +92,8 @@ github.com/0xPolygon/heimdall-v2 v0.0.0-20241223112457-d6d02498fc6b h1:TdBGUM30O
 github.com/0xPolygon/heimdall-v2 v0.0.0-20241223112457-d6d02498fc6b/go.mod h1:LdqHmJXcPaELo1IfP0RwL8M5UsNmvwpG4+4jlF70/os=
 github.com/0xPolygon/heimdall-v2 v0.0.0-20250124090128-bc0afd1d5e6d h1:UJA175jWMXBKRP67wsQEDQEvSqZZ9WgYtLyqZY8ayCw=
 github.com/0xPolygon/heimdall-v2 v0.0.0-20250124090128-bc0afd1d5e6d/go.mod h1:LdqHmJXcPaELo1IfP0RwL8M5UsNmvwpG4+4jlF70/os=
+github.com/0xPolygon/heimdall-v2 v0.0.0-20250206060755-5ff54cfa4cdc h1:tNuqe892hNl/4r178Sxj6WZs2jsSCwlp/YAltqgg7j0=
+github.com/0xPolygon/heimdall-v2 v0.0.0-20250206060755-5ff54cfa4cdc/go.mod h1:LdqHmJXcPaELo1IfP0RwL8M5UsNmvwpG4+4jlF70/os=
 github.com/99designs/go-keychain v0.0.0-20191008050251-8e49817e8af4 h1:/vQbFIOMbk2FiG/kXiLl8BRyzTWDw7gX/Hz7Dd5eDMs=
 github.com/99designs/go-keychain v0.0.0-20191008050251-8e49817e8af4/go.mod h1:hN7oaIRCjzsZ2dE+yG5k+rsdt3qcwykqK6HVGcKwsw4=
 github.com/99designs/keyring v1.2.1 h1:tYLp1ULvO7i3fI5vE21ReQuj99QFSs7lGm0xWyJo87o=
