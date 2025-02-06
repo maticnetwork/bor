@@ -460,6 +460,7 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 	// Retrieve the snapshot needed to verify this header and cache it
 	snap, err := c.snapshot(chain, number-1, header.ParentHash, parents)
 	if err != nil {
+		log.Error("[debug] error loading snapshot", "number", number, "err", err)
 		return err
 	}
 
@@ -469,6 +470,7 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 		// used to make the call is of the same fork.
 		newValidators, err := c.spanner.GetCurrentValidatorsByBlockNrOrHash(context.Background(), rpc.BlockNumberOrHashWithHash(header.ParentHash, false), number+1)
 		if err != nil {
+			log.Error("[debug] err in fetching vals in bor ", "err", err)
 			return err
 		}
 
@@ -665,6 +667,7 @@ func (c *Bor) verifySeal(chain consensus.ChainHeaderReader, header *types.Header
 	// Retrieve the snapshot needed to verify this header and cache it
 	snap, err := c.snapshot(chain, number-1, header.ParentHash, parents)
 	if err != nil {
+		log.Info("[debug] err loading snapshot in verify seal", "err", err, "number", number)
 		return err
 	}
 
