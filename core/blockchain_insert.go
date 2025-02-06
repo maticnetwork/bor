@@ -131,10 +131,15 @@ func (it *insertIterator) next() (*types.Block, error) {
 	}
 
 	if it.errors[it.index] != nil {
+		log.Info("[debug] err in it.next() channel", "err", it.errors[it.index])
 		return it.chain[it.index], it.errors[it.index]
 	}
 	// Block header valid, run body validation and return
-	return it.chain[it.index], it.validator.ValidateBody(it.chain[it.index])
+	validErr := it.validator.ValidateBody(it.chain[it.index])
+	if validErr != nil {
+		log.Info("[debug] err in it.next() validate", "err", validErr)
+	}
+	return it.chain[it.index], validErr
 }
 
 // peek returns the next block in the iterator, along with any potential validation
