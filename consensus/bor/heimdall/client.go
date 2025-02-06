@@ -361,8 +361,6 @@ func Fetch[T any](ctx context.Context, request *Request) (*T, error) {
 		return nil, err
 	}
 
-	fmt.Println("BODY!!: ", body, "REQUEST!!: ", request.url)
-
 	if body == nil {
 		return nil, ErrNoResponse
 	}
