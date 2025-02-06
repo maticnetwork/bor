@@ -2122,12 +2122,14 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 	// Check the validity of incoming chain
 	isValid, err1 := bc.forker.ValidateReorg(bc.CurrentBlock(), headers)
 	if err1 != nil {
+		log.Error("[debug] err in validate reorg #1", "err", err1)
 		return it.index, err1
 	}
 
 	if !isValid {
 		// The chain to be imported is invalid as the blocks doesn't match with
 		// the whitelisted block number.
+		log.Error("[debug] err in validate reorg #2", "err", whitelist.ErrMismatch)
 		return it.index, whitelist.ErrMismatch
 	}
 
@@ -2148,6 +2150,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		for block != nil && bc.skipBlock(err, it) {
 			reorg, err = bc.forker.ReorgNeeded(current, block.Header())
 			if err != nil {
+				log.Error("[debug] err in reorg needed", "err", err)
 				return it.index, err
 			}
 
@@ -2180,6 +2183,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 			log.Debug("Writing previously known block", "number", block.Number(), "hash", block.Hash())
 
 			if err := bc.writeKnownBlock(block); err != nil {
+				log.Error("[debug] err in writeKnownBlock #1", "err", err)
 				return it.index, err
 			}
 
@@ -2196,11 +2200,18 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		if setHead {
 			// First block is pruned, insert as sidechain and reorg only if TD grows enough
 			log.Debug("Pruned ancestor, inserting as sidechain", "number", block.Number(), "hash", block.Hash())
-			return bc.insertSideChain(block, it)
+			index, err := bc.insertSideChain(block, it)
+			if err != nil {
+				log.Error("[debug] err in insertSideChain", "number", block.NumberU64(), "err", err)
+			}
+			return index, err
 		} else {
 			// We're post-merge and the parent is pruned, try to recover the parent state
 			log.Debug("Pruned ancestor", "number", block.Number(), "hash", block.Hash())
 			_, err := bc.recoverAncestors(block)
+			if err != nil {
+				log.Error("[debug] err in recoverAncestors", "number", block.NumberU64(), "err", err)
+			}
 
 			return it.index, err
 		}
@@ -2210,6 +2221,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 			log.Debug("Future block, postponing import", "number", block.Number(), "hash", block.Hash())
 
 			if err := bc.addFutureBlock(block); err != nil {
+				log.Error("[debug] err in addFutureBlock #1", "number", block.NumberU64(), "err", err)
 				return it.index, err
 			}
 
@@ -2220,6 +2232,9 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		stats.ignored += it.remaining()
 
 		// If there are any still remaining, mark as ignored
+		if err != nil {
+			log.Error("[debug] err in future block", "number", block.NumberU64(), "err", err)
+		}
 		return it.index, err
 
 	// Some other error(except ErrKnownBlock) occurred, abort.
@@ -2229,6 +2244,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		stats.ignored += len(it.chain)
 
 		bc.reportBlock(block, nil, err)
+
+		log.Error("[debug] err unknown", "err", err)
 
 		return it.index, err
 	}
@@ -2273,6 +2290,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		// If the header is a banned one, straight out abort
 		if BadHashes[block.Hash()] {
 			bc.reportBlock(block, nil, ErrBannedHash)
+			log.Error("[debug] err due to bad hashes", "number", block.NumberU64(), "hash", block.Hash(), "err", ErrBannedHash)
 			return it.index, ErrBannedHash
 		}
 
@@ -2308,6 +2326,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 			}
 
 			if err := bc.writeKnownBlock(block); err != nil {
+				log.Error("[debug] err in writeKnownBlock #2", "err", err)
 				return it.index, err
 			}
 
@@ -2373,6 +2392,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		if err != nil {
 			bc.reportBlock(block, receipts, err)
 			followupInterrupt.Store(true)
+			log.Error("[debug] err in process block", "err", err)
 
 			return it.index, err
 		}
@@ -2416,9 +2436,11 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		// so that it's considered as a `past` chain and the validation doesn't get bypassed.
 		isValid, err = bc.forker.ValidateReorg(block.Header(), []*types.Header{block.Header()})
 		if err != nil {
+			log.Error("[debug] err in validateReorg #2", "err", err)
 			return it.index, err
 		}
 		if !isValid {
+			log.Error("[debug] err in validateReorg #3", "err", err)
 			return it.index, whitelist.ErrMismatch
 		}
 
@@ -2434,7 +2456,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		followupInterrupt.Store(true)
 
 		if err != nil {
-			log.Info("[debug] error in write block", "err", err)
+			log.Info("[debug] err in write block", "setHead", setHead, "err", err)
 			return it.index, err
 		}
 
@@ -2462,6 +2484,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 			// After merge we expect few side chains. Simply count
 			// all blocks the CL gives us for GC processing time
 			bc.gcproc += proctime
+			log.Error("[debug] returning without error #1")
 			return it.index, nil // Direct block insertion of a single block
 		}
 
@@ -2510,6 +2533,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 	// Any blocks remaining here? The only ones we care about are the future ones
 	if block != nil && errors.Is(err, consensus.ErrFutureBlock) {
 		if err := bc.addFutureBlock(block); err != nil {
+			log.Error("[debug] err in addFutureBlock #2", "err", err)
 			return it.index, err
 		}
 
@@ -2517,6 +2541,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 
 		for ; block != nil && errors.Is(err, consensus.ErrUnknownAncestor); block, err = it.next() {
 			if err := bc.addFutureBlock(block); err != nil {
+				log.Error("[debug] err in addFutureBlock #3", "err", err)
 				return it.index, err
 			}
 
@@ -2525,6 +2550,9 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 	}
 
 	stats.ignored += it.remaining()
+	if err != nil {
+		log.Error("[debug] err in final exit", "err", err)
+	}
 	return it.index, err
 }
 
