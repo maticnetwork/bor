@@ -14,10 +14,12 @@ import (
 	"time"
 
 	"github.com/0xPolygon/heimdall-v2/x/bor/types"
+	clerkTypes "github.com/0xPolygon/heimdall-v2/x/clerk/types"
 	"github.com/cosmos/cosmos-sdk/codec"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	cryptocodec "github.com/cosmos/cosmos-sdk/crypto/codec"
 	"github.com/cosmos/gogoproto/proto"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
@@ -77,7 +79,7 @@ func NewHeimdallClient(urlString string) *HeimdallClient {
 }
 
 const (
-	fetchStateSyncEventsFormat = "from_id=%d&to_time=%d&page=%d&limit=%d"
+	fetchStateSyncEventsFormat = "from-id=%d&to-time=%d"
 	fetchStateSyncEventsPath   = "clerk/time"
 
 	fetchCheckpoint      = "/checkpoints/%s"
@@ -105,28 +107,27 @@ func (h *HeimdallClient) StateSyncEvents(ctx context.Context, fromID uint64, to 
 
 		ctx = withRequestType(ctx, stateSyncRequest)
 
-		// response, err := FetchWithRetry[StateSyncEventsResponse](ctx, h.client, url, h.closeCh)
-		// if err != nil {
-		// 	return nil, err
-		// }
-
-		request := &Request{client: h.client, url: url, start: time.Now()}
-		response, err := Fetch[StateSyncEventsResponse](ctx, request)
-
+		response, err := FetchWithRetry[clerkTypes.RecordListWithTimeResponse](ctx, h.client, url, h.closeCh)
 		if err != nil {
-			fmt.Println("ERROR: ", err)
+			return nil, err
 		}
 
-		fmt.Println("RESULT: ", response)
-
-		if response == nil || response.Result == nil {
-			// status 204
-			break
+		for _, e := range response.EventRecords {
+			record := &clerk.EventRecordWithTime{
+				EventRecord: clerk.EventRecord{
+					ID:       e.Id,
+					ChainID:  e.BorChainId,
+					Contract: common.HexToAddress(e.Contract),
+					Data:     e.Data,
+					LogIndex: e.LogIndex,
+					TxHash:   common.HexToHash(e.TxHash),
+				},
+				Time: e.RecordTime,
+			}
+			eventRecords = append(eventRecords, record)
 		}
 
-		eventRecords = append(eventRecords, response.Result...)
-
-		if len(response.Result) < stateFetchLimit {
+		if len(response.EventRecords) < stateFetchLimit {
 			break
 		}
 
@@ -360,6 +361,8 @@ func Fetch[T any](ctx context.Context, request *Request) (*T, error) {
 		return nil, err
 	}
 
+	fmt.Println("BODY!!: ", body, "REQUEST!!: ", request.url)
+
 	if body == nil {
 		return nil, ErrNoResponse
 	}
@@ -397,7 +400,7 @@ func spanURL(urlString string, spanID uint64) (*url.URL, error) {
 }
 
 func stateSyncURL(urlString string, fromID uint64, to int64) (*url.URL, error) {
-	queryParams := fmt.Sprintf(fetchStateSyncEventsFormat, fromID, to, page, stateFetchLimit)
+	queryParams := fmt.Sprintf(fetchStateSyncEventsFormat, fromID, to)
 
 	return makeURL(urlString, fetchStateSyncEventsPath, queryParams)
 }
