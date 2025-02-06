@@ -503,9 +503,11 @@ func (ethash *Ethash) Prepare(chain consensus.ChainHeaderReader, header *types.H
 }
 
 // Finalize implements consensus.Engine, accumulating the block and uncle rewards.
-func (ethash *Ethash) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, body *types.Body) {
+func (ethash *Ethash) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, body *types.Body) error {
 	// Accumulate any block and uncle rewards
 	accumulateRewards(chain.Config(), state, header, body.Uncles)
+
+	return nil
 }
 
 // FinalizeAndAssemble implements consensus.Engine, accumulating the block and

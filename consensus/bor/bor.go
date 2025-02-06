@@ -464,36 +464,6 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 		return err
 	}
 
-	// Verify the validator list match the local contract
-	if IsSprintStart(number+1, c.config.CalculateSprint(number)) {
-		// Use parent block's hash to make the eth_call to fetch validators so that the state being
-		// used to make the call is of the same fork.
-		newValidators, err := c.spanner.GetCurrentValidatorsByBlockNrOrHash(context.Background(), rpc.BlockNumberOrHashWithHash(header.ParentHash, false), number+1)
-		if err != nil {
-			log.Error("[debug] err in fetching vals in bor ", "err", err)
-			return err
-		}
-
-		sort.Sort(valset.ValidatorsByAddress(newValidators))
-
-		headerVals, err := valset.ParseValidators(header.GetValidatorBytes(c.chainConfig))
-		if err != nil {
-			return err
-		}
-
-		if len(newValidators) != len(headerVals) {
-			log.Warn("Invalid validator set", "block number", number, "newValidators", newValidators, "headerVals", headerVals)
-			return errInvalidSpanValidators
-		}
-
-		for i, val := range newValidators {
-			if !bytes.Equal(val.HeaderBytes(), headerVals[i].HeaderBytes()) {
-				log.Warn("Invalid validator set", "block number", number, "index", i, "local validator", val, "header validator", headerVals[i])
-				return errInvalidSpanValidators
-			}
-		}
-	}
-
 	// verify the validator list in the last sprint block
 	if IsSprintStart(number, c.config.CalculateSprint(number)) {
 		parentValidatorBytes := parent.GetValidatorBytes(c.chainConfig)
@@ -819,10 +789,10 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 
 // Finalize implements consensus.Engine, ensuring no uncles are set, nor block
 // rewards given.
-func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, body *types.Body) {
+func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, body *types.Body) error {
 	headerNumber := header.Number.Uint64()
 	if body.Withdrawals != nil || header.WithdrawalsHash != nil {
-		return
+		return consensus.ErrUnexpectedWithdrawals
 	}
 
 	var (
@@ -830,13 +800,44 @@ func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, 
 		err           error
 	)
 
+	number := header.Number.Uint64()
+	// Verify the validator list match the local contract
+	if IsSprintStart(number+1, c.config.CalculateSprint(number)) {
+		// Use parent block's hash to make the eth_call to fetch validators so that the state being
+		// used to make the call is of the same fork.
+		newValidators, err := c.spanner.GetCurrentValidatorsByBlockNrOrHash(context.Background(), rpc.BlockNumberOrHashWithHash(header.ParentHash, false), number+1)
+		if err != nil {
+			log.Error("[debug] err in fetching vals in bor ", "err", err)
+			return err
+		}
+
+		sort.Sort(valset.ValidatorsByAddress(newValidators))
+
+		headerVals, err := valset.ParseValidators(header.GetValidatorBytes(c.chainConfig))
+		if err != nil {
+			return err
+		}
+
+		if len(newValidators) != len(headerVals) {
+			log.Warn("Invalid validator set", "block number", number, "newValidators", newValidators, "headerVals", headerVals)
+			return errInvalidSpanValidators
+		}
+
+		for i, val := range newValidators {
+			if !bytes.Equal(val.HeaderBytes(), headerVals[i].HeaderBytes()) {
+				log.Warn("Invalid validator set", "block number", number, "index", i, "local validator", val, "header validator", headerVals[i])
+				return errInvalidSpanValidators
+			}
+		}
+	}
+
 	if IsSprintStart(headerNumber, c.config.CalculateSprint(headerNumber)) {
 		start := time.Now()
 		cx := statefull.ChainContext{Chain: chain, Bor: c}
 		// check and commit span
 		if err := c.checkAndCommitSpan(state, header, cx); err != nil {
 			log.Error("Error while committing span", "error", err)
-			return
+			return err
 		}
 
 		if c.HeimdallClient != nil {
@@ -844,7 +845,7 @@ func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, 
 			stateSyncData, err = c.CommitStates(state, header, cx)
 			if err != nil {
 				log.Error("Error while committing states", "error", err)
-				return
+				return err
 			}
 		}
 
@@ -853,7 +854,7 @@ func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, 
 
 	if err = c.changeContractCodeIfNeeded(headerNumber, state); err != nil {
 		log.Error("Error changing contract code", "error", err)
-		return
+		return err
 	}
 
 	// No block rewards in PoA, so the state remains as is and uncles are dropped
@@ -863,6 +864,8 @@ func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, 
 	// Set state sync data to blockchain
 	bc := chain.(*core.BlockChain)
 	bc.SetStateSync(stateSyncData)
+
+	return nil
 }
 
 func decodeGenesisAlloc(i interface{}) (types.GenesisAlloc, error) {
