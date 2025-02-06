@@ -2523,8 +2523,10 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 				"txs", len(block.Transactions()), "gas", block.GasUsed(), "uncles", len(block.Uncles()),
 				"root", block.Root())
 		}
-		log.Info("[debug] insert complete", "number", block.NumberU64())
+		log.Info("[debug] insert complete", "number", block.NumberU64(), "err", err)
 	}
+
+	log.Info("[debug] ending loop", "err", err)
 
 	// BOR
 	emitAccum()
@@ -2538,6 +2540,9 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		}
 
 		block, err = it.next()
+		if err != nil {
+			log.Info("[debug] err in it.Next()", "err", err)
+		}
 
 		for ; block != nil && errors.Is(err, consensus.ErrUnknownAncestor); block, err = it.next() {
 			if err := bc.addFutureBlock(block); err != nil {
