@@ -206,6 +206,7 @@ func NewServer(config *Config, opts ...serverOption) (*Server, error) {
 
 		// authorize only if mining or in developer mode
 		if config.Sealer.Enabled || config.Developer.Enabled {
+			log.Info("[debug] sealer enabled")
 			// get the etherbase
 			eb, err := srv.backend.Etherbase()
 			if err != nil {
@@ -245,6 +246,7 @@ func NewServer(config *Config, opts ...serverOption) (*Server, error) {
 				}
 
 				bor.Authorize(eb, wallet.SignData)
+				log.Info("[debug] authorizing bor consensus to sign")
 
 				authorized = true
 			}

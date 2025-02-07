@@ -492,6 +492,7 @@ func (s *Ethereum) SetEtherbase(etherbase common.Address) {
 // is already running, this method adjust the number of threads allowed to use
 // and updates the minimum price required by the transaction pool.
 func (s *Ethereum) StartMining() error {
+	log.Info("[debug] in start mining", "is mining", s.IsMining())
 	// If the miner was not running, initialize it
 	if !s.IsMining() {
 		// Propagate the initial price point to the transaction pool
@@ -544,6 +545,7 @@ func (s *Ethereum) StartMining() error {
 		// introduced to speed sync times.
 		s.handler.enableSyncedFeatures()
 
+		log.Info("[debug] starting miner in separate routine")
 		go s.miner.Start()
 	}
 
