@@ -609,6 +609,7 @@ func (w *worker) mainLoop(ctx context.Context) {
 		case req := <-w.newWorkCh:
 			if w.chainConfig.ChainID.Cmp(params.BorMainnetChainConfig.ChainID) == 0 || w.chainConfig.ChainID.Cmp(params.MumbaiChainConfig.ChainID) == 0 || w.chainConfig.ChainID.Cmp(params.AmoyChainConfig.ChainID) == 0 {
 				if w.eth.PeerCount() > 0 {
+					log.Info("[debug] commitWork called from newWorkCh")
 					//nolint:contextcheck
 					w.commitWork(req.ctx, req.interrupt, req.noempty, req.timestamp)
 				}
@@ -621,7 +622,6 @@ func (w *worker) mainLoop(ctx context.Context) {
 			req.result <- w.generateWork(ctx, req.params)
 
 		case ev := <-w.txsCh:
-			log.Info("[debug] received new tx event", "w.current != nil", w.current != nil, "w.IsRunning", w.IsRunning())
 			// Apply transactions to the pending state if we're not sealing
 			//
 			// Note all transactions received may not be continuous with transactions
@@ -629,7 +629,6 @@ func (w *worker) mainLoop(ctx context.Context) {
 			// be automatically eliminated.
 			// nolint : nestif
 			if !w.IsRunning() && w.current != nil {
-				log.Info("[debug] commiting new txs")
 				// If block is already full, abort
 				if gp := w.current.gasPool; gp != nil && gp.Gas() < params.TxGas {
 					continue
@@ -1709,6 +1708,7 @@ func (w *worker) commitWork(ctx context.Context, interrupt *atomic.Int32, noempt
 	}
 
 	w.current = work
+	log.Info("[debug] assigning work to w.current in commit work")
 }
 
 func getInterruptTimer(ctx context.Context, work *environment, current *types.Block) (context.Context, func()) {
