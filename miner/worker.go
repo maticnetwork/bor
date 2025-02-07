@@ -621,6 +621,7 @@ func (w *worker) mainLoop(ctx context.Context) {
 			req.result <- w.generateWork(ctx, req.params)
 
 		case ev := <-w.txsCh:
+			log.Info("[debug] received new tx event", "w.current != nil", w.current != nil, "w.IsRunning", w.IsRunning())
 			// Apply transactions to the pending state if we're not sealing
 			//
 			// Note all transactions received may not be continuous with transactions
@@ -628,6 +629,7 @@ func (w *worker) mainLoop(ctx context.Context) {
 			// be automatically eliminated.
 			// nolint : nestif
 			if !w.IsRunning() && w.current != nil {
+				log.Info("[debug] commiting new txs")
 				// If block is already full, abort
 				if gp := w.current.gasPool; gp != nil && gp.Gas() < params.TxGas {
 					continue
