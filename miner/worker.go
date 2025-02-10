@@ -619,8 +619,9 @@ func (w *worker) mainLoop() {
 					continue
 				}
 				// If we don't have any time, abort
-				if w.current.header.Time >= uint64(time.Now().Unix()) {
-					log.Info("Skip new tx as we're out of time for this block...")
+				delay := time.Until(time.Unix(int64(w.current.header.Time), 0))
+				if delay <= 0 {
+					log.Info("[debug] Skip new tx as we're out of time for this block...")
 					continue
 				}
 				txs := make(map[common.Address][]*txpool.LazyTransaction, len(ev.Txs))
@@ -645,7 +646,7 @@ func (w *worker) mainLoop() {
 				w.interruptCtx = resetAndCopyInterruptCtx(w.interruptCtx)
 				stopFn := func() {}
 				if w.interruptCommitFlag {
-					log.Info("Commiting transactions on new tx notif", "delay", time.Until(time.Unix(int64(w.current.header.Time), 0)), "number", w.current.header.Number.Uint64())
+					log.Info("[debug] committing transactions on new tx notif", "delay", delay, "number", w.current.header.Number.Uint64())
 					// Setting commit interrupt timeout stop execution if it takes longer.
 					// The number sent is current number - 1 as the log inside getInterruptTimer uses `number+1`.
 					w.interruptCtx, stopFn = getInterruptTimer(w.interruptCtx, w.current.header.Number.Uint64()-1, w.current.header.Time)
