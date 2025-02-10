@@ -1519,6 +1519,7 @@ func resetAndCopyInterruptCtx(interruptCtx context.Context) context.Context {
 func getInterruptTimer(interruptCtx context.Context, number uint64, timestamp uint64) (context.Context, func()) {
 	delay := time.Until(time.Unix(int64(timestamp), 0))
 	interruptCtx, cancel := context.WithTimeout(interruptCtx, delay)
+	log.Info("[debug] setting interrupt timeout", "delay", delay, "block", number)
 
 	go func() {
 		<-interruptCtx.Done()
