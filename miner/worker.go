@@ -613,7 +613,6 @@ func (w *worker) mainLoop() {
 			// be automatically eliminated.
 			// nolint : nestif
 			if !w.IsRunning() && w.current != nil {
-				log.Info("[debug] commiting new work")
 				// If block is already full, abort
 				if gp := w.current.gasPool; gp != nil && gp.Gas() < params.TxGas {
 					continue
@@ -643,17 +642,18 @@ func (w *worker) mainLoop() {
 
 				tcount := w.current.tcount
 
-				w.interruptCtx = resetAndCopyInterruptCtx(w.interruptCtx)
-				stopFn := func() {}
-				if w.interruptCommitFlag {
-					log.Info("[debug] committing transactions on new tx notif", "delay", delay, "number", w.current.header.Number.Uint64())
-					// Setting commit interrupt timeout stop execution if it takes longer.
-					// The number sent is current number - 1 as the log inside getInterruptTimer uses `number+1`.
-					w.interruptCtx, stopFn = getInterruptTimer(w.interruptCtx, w.current.header.Number.Uint64()-1, w.current.header.Time)
-					w.interruptCtx = vm.PutCache(w.interruptCtx, w.interruptedTxCache)
-				}
+				// w.interruptCtx = resetAndCopyInterruptCtx(w.interruptCtx)
+				// stopFn := func() {}
+				// if w.interruptCommitFlag {
+				// log.Info("[debug] committing transactions on new tx notif", "delay", delay, "number", w.current.header.Number.Uint64())
+				// Setting commit interrupt timeout stop execution if it takes longer.
+				// The number sent is current number - 1 as the log inside getInterruptTimer uses `number+1`.
+				// w.interruptCtx, stopFn = getInterruptTimer(w.interruptCtx, w.current.header.Number.Uint64()-1, w.current.header.Time)
+				// w.interruptCtx = vm.PutCache(w.interruptCtx, w.interruptedTxCache)
+				// }
 				w.commitTransactions(w.current, plainTxs, blobTxs, nil, new(uint256.Int))
-				stopFn()
+				// stopFn()
+				log.Info("[debug] done committing new work in new tx notif channel")
 
 				// Only update the snapshot if any new transactons were added
 				// to the pending block
@@ -1447,9 +1447,8 @@ func (w *worker) commitWork(interrupt *atomic.Int32, noempty bool, timestamp int
 	}()
 
 	if !noempty && w.interruptCommitFlag {
-		block := w.chain.GetBlockByHash(w.chain.CurrentBlock().Hash())
-		log.Info("[debug] setting interrupt timeout in main loop", "delay", time.Until(time.Unix(int64(work.header.Time), 0)), "block", block.NumberU64())
-		w.interruptCtx, stopFn = getInterruptTimer(w.interruptCtx, block.NumberU64(), work.header.Time)
+		log.Info("[debug] setting interrupt timeout in main loop", "delay", time.Until(time.Unix(int64(work.header.Time), 0)), "block", work.header.Number.Uint64())
+		w.interruptCtx, stopFn = getInterruptTimer(w.interruptCtx, work.header.Number.Uint64(), work.header.Time)
 		w.interruptCtx = vm.PutCache(w.interruptCtx, w.interruptedTxCache)
 	}
 
@@ -1491,6 +1490,7 @@ func (w *worker) commitWork(interrupt *atomic.Int32, noempty bool, timestamp int
 	}
 	// Submit the generated block for consensus sealing.
 	_ = w.commit(work.copy(), w.fullTaskHook, true, start)
+	log.Info("[debug] done commiting new work in main loop")
 
 	// Swap out the old work with the new one, terminating any leftover
 	// prefetcher processes in the mean time and starting a new one.
@@ -1524,7 +1524,7 @@ func getInterruptTimer(interruptCtx context.Context, number uint64, timestamp ui
 	go func() {
 		<-interruptCtx.Done()
 		if interruptCtx.Err() != context.Canceled {
-			log.Info("Commit Interrupt. Pre-committing the current block", "block", number+1)
+			log.Info("Commit Interrupt. Pre-committing the current block", "block", number)
 			cancel()
 		}
 	}()
