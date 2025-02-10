@@ -1449,7 +1449,7 @@ func (w *worker) commitWork(interrupt *atomic.Int32, noempty bool, timestamp int
 	if !noempty && w.interruptCommitFlag {
 		block := w.chain.GetBlockByHash(w.chain.CurrentBlock().Hash())
 		log.Info("[debug] setting interrupt timeout in main loop", "delay", time.Until(time.Unix(int64(work.header.Time), 0)), "block", block.NumberU64())
-		w.interruptCtx, stopFn = getInterruptTimer(w.interruptCtx, work.header.Time, block.NumberU64())
+		w.interruptCtx, stopFn = getInterruptTimer(w.interruptCtx, block.NumberU64(), work.header.Time)
 		w.interruptCtx = vm.PutCache(w.interruptCtx, w.interruptedTxCache)
 	}
 
