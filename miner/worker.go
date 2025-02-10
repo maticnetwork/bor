@@ -622,6 +622,8 @@ func (w *worker) mainLoop() {
 				if delay <= 0 {
 					log.Info("[debug] Skip new tx as we're out of time for this block...")
 					continue
+				} else {
+					log.Info("[debug] committing transactions on new tx notif", "delay", delay, "number", w.current.header.Number.Uint64())
 				}
 				txs := make(map[common.Address][]*txpool.LazyTransaction, len(ev.Txs))
 				for _, tx := range ev.Txs {
