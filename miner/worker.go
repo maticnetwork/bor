@@ -644,17 +644,17 @@ func (w *worker) mainLoop() {
 
 				tcount := w.current.tcount
 
-				// w.interruptCtx = resetAndCopyInterruptCtx(w.interruptCtx)
-				// stopFn := func() {}
-				// if w.interruptCommitFlag {
-				// log.Info("[debug] committing transactions on new tx notif", "delay", delay, "number", w.current.header.Number.Uint64())
-				// Setting commit interrupt timeout stop execution if it takes longer.
-				// The number sent is current number - 1 as the log inside getInterruptTimer uses `number+1`.
-				// w.interruptCtx, stopFn = getInterruptTimer(w.interruptCtx, w.current.header.Number.Uint64()-1, w.current.header.Time)
-				// w.interruptCtx = vm.PutCache(w.interruptCtx, w.interruptedTxCache)
-				// }
+				w.interruptCtx = resetAndCopyInterruptCtx(w.interruptCtx)
+				stopFn := func() {}
+				if w.interruptCommitFlag {
+					log.Info("[debug] committing transactions on new tx notif", "delay", delay, "number", w.current.header.Number.Uint64())
+					// Setting commit interrupt timeout stop execution if it takes longer.
+					// The number sent is current number - 1 as the log inside getInterruptTimer uses `number+1`.
+					w.interruptCtx, stopFn = getInterruptTimer(w.interruptCtx, w.current.header.Number.Uint64(), w.current.header.Time)
+					w.interruptCtx = vm.PutCache(w.interruptCtx, w.interruptedTxCache)
+				}
 				w.commitTransactions(w.current, plainTxs, blobTxs, nil, new(uint256.Int))
-				// stopFn()
+				stopFn()
 				log.Info("[debug] done committing new work in new tx notif channel")
 
 				// Only update the snapshot if any new transactons were added
