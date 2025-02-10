@@ -895,8 +895,8 @@ func TestCommitInterruptExperimentBor_NewTxFlow(t *testing.T) {
 
 				// Case 1: This transaction should not be included due to commit interrupt
 				// at opcode level. It will start the EVM execution but will end in between.
-				// select {
 				<-time.After(delay)
+
 				// Set an artificial delay at opcode level
 				w.setInterruptCtx(vm.InterruptCtxOpcodeDelayKey, uint(500))
 
@@ -904,15 +904,14 @@ func TestCommitInterruptExperimentBor_NewTxFlow(t *testing.T) {
 				txs = make([]*types.Transaction, 0, 1)
 				txs = append(txs, tx2)
 				b.TxPool().Add(txs, false, false)
-				// }
 
 				// Reset the delay again. By this time, we're sure that it has timed out.
 				delay = time.Until(time.Unix(int64(w.current.header.Time), 0))
 
 				// Case 2: This transaction should not be included because the miner loop
 				// won't accept any transactions post the deadline (i.e. header.Timestamp).
-				// select {
 				<-time.After(delay)
+
 				// Reset the artificial opcode delay just to be sure of the exclusion of tx
 				w.setInterruptCtx(vm.InterruptCtxOpcodeDelayKey, uint(0))
 
@@ -920,7 +919,6 @@ func TestCommitInterruptExperimentBor_NewTxFlow(t *testing.T) {
 				txs = make([]*types.Transaction, 0, 1)
 				txs = append(txs, tx3)
 				b.TxPool().Add(txs, false, false)
-				// }
 			}
 		}
 	}()
