@@ -639,6 +639,7 @@ func (w *worker) mainLoop() {
 				w.interruptCtx = resetAndCopyInterruptCtx(w.interruptCtx)
 				stopFn := func() {}
 				if w.interruptCommitFlag {
+					log.Info("Commiting transactions on new tx notif", "delay", time.Until(time.Unix(int64(w.current.header.Time), 0)))
 					// Setting commit interrupt timeout stop execution if it takes longer.
 					// The number sent is current number - 1 as the log inside getInterruptTimer uses `number+1`.
 					w.interruptCtx, stopFn = getInterruptTimer(w.interruptCtx, w.current.header.Number.Uint64()-1, w.current.header.Time)
