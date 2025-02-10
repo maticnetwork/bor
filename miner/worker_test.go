@@ -875,54 +875,48 @@ func TestCommitInterruptExperimentBor_NewTxFlow(t *testing.T) {
 	// Start mining!
 	w.start()
 	go func() {
-		for {
-			select {
-			case head := <-chainHeadCh:
-				// We skip the initial 2 blocks as the mining timings are a bit skewed up
-				if head.Block.NumberU64() == 2 {
-					// Stop the miner so that worker assumes it's a sentry and not a validator
-					w.stop()
+		for head := range chainHeadCh {
+			// We skip the initial 2 blocks as the mining timings are a bit skewed up
+			if head.Block.NumberU64() == 2 {
+				// Stop the miner so that worker assumes it's a sentry and not a validator
+				w.stop()
 
-					// Add the first transaction to be mined normally via `txsCh`
-					b.TxPool().Add(txs, false, false)
+				// Add the first transaction to be mined normally via `txsCh`
+				b.TxPool().Add(txs, false, false)
 
-					// Set it to syncing mode so that it doesn't mine via the `commitWork` flow
-					w.syncing.Store(true)
+				// Set it to syncing mode so that it doesn't mine via the `commitWork` flow
+				w.syncing.Store(true)
 
-					// Wait until the mining window (2s) is almost about to reach leaving
-					// a very small time (~10ms) to try to commit transaction before timing out.
-					delay := time.Until(time.Unix(int64(w.current.header.Time), 0))
-					delay -= 10 * time.Millisecond
+				// Wait until the mining window (2s) is almost about to reach leaving
+				// a very small time (~10ms) to try to commit transaction before timing out.
+				delay := time.Until(time.Unix(int64(w.current.header.Time), 0))
+				delay -= 10 * time.Millisecond
 
-					// Case 1: This transaction should not be included due to commit interrupt
-					// at opcode level. It will start the EVM execution but will end in between.
-					select {
-					case <-time.After(delay):
-						// Set an artificial delay at opcode level
-						w.setInterruptCtx(vm.InterruptCtxOpcodeDelayKey, uint(500))
+				// Case 1: This transaction should not be included due to commit interrupt
+				// at opcode level. It will start the EVM execution but will end in between.
+				<-time.After(delay)
 
-						// Send the second transaction
-						txs = make([]*types.Transaction, 0, 1)
-						txs = append(txs, tx2)
-						b.TxPool().Add(txs, false, false)
-					}
+				// Set an artificial delay at opcode level
+				w.setInterruptCtx(vm.InterruptCtxOpcodeDelayKey, uint(500))
 
-					// Reset the delay again. By this time, we're sure that it has timed out.
-					delay = time.Until(time.Unix(int64(w.current.header.Time), 0))
+				// Send the second transaction
+				txs = make([]*types.Transaction, 0, 1)
+				txs = append(txs, tx2)
+				b.TxPool().Add(txs, false, false)
 
-					// Case 2: This transaction should not be included because the miner loop
-					// won't accept any transactions post the deadline (i.e. header.Timestamp).
-					select {
-					case <-time.After(delay):
-						// Reset the artificial opcode delay just to be sure of the exclusion of tx
-						w.setInterruptCtx(vm.InterruptCtxOpcodeDelayKey, uint(0))
+				// Reset the delay again. By this time, we're sure that it has timed out.
+				delay = time.Until(time.Unix(int64(w.current.header.Time), 0))
 
-						// Send the third transaction
-						txs = make([]*types.Transaction, 0, 1)
-						txs = append(txs, tx3)
-						b.TxPool().Add(txs, false, false)
-					}
-				}
+				// Case 2: This transaction should not be included because the miner loop
+				// won't accept any transactions post the deadline (i.e. header.Timestamp).
+				time.After(delay)
+				// Reset the artificial opcode delay just to be sure of the exclusion of tx
+				w.setInterruptCtx(vm.InterruptCtxOpcodeDelayKey, uint(0))
+
+				// Send the third transaction
+				txs = make([]*types.Transaction, 0, 1)
+				txs = append(txs, tx3)
+				b.TxPool().Add(txs, false, false)
 			}
 		}
 	}()
