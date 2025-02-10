@@ -615,6 +615,11 @@ func (w *worker) mainLoop() {
 				if gp := w.current.gasPool; gp != nil && gp.Gas() < params.TxGas {
 					continue
 				}
+				// If we don't have time to execute (i.e. we're past header timestamp), abort
+				delay := time.Until(time.Unix(int64(w.current.header.Time), 0))
+				if delay <= 0 {
+					continue
+				}
 				txs := make(map[common.Address][]*txpool.LazyTransaction, len(ev.Txs))
 				for _, tx := range ev.Txs {
 					acc, _ := types.Sender(w.current.signer, tx)
@@ -635,7 +640,13 @@ func (w *worker) mainLoop() {
 				tcount := w.current.tcount
 
 				w.interruptCtx = resetAndCopyInterruptCtx(w.interruptCtx)
+				stopFn := func() {}
+				if w.interruptCommitFlag {
+					w.interruptCtx, stopFn = getInterruptTimer(w.interruptCtx, w.current.header.Number.Uint64(), w.current.header.Time)
+					w.interruptCtx = vm.PutCache(w.interruptCtx, w.interruptedTxCache)
+				}
 				w.commitTransactions(w.current, plainTxs, blobTxs, nil, new(uint256.Int))
+				stopFn()
 
 				// Only update the snapshot if any new transactons were added
 				// to the pending block
@@ -1429,8 +1440,7 @@ func (w *worker) commitWork(interrupt *atomic.Int32, noempty bool, timestamp int
 	}()
 
 	if !noempty && w.interruptCommitFlag {
-		block := w.chain.GetBlockByHash(w.chain.CurrentBlock().Hash())
-		w.interruptCtx, stopFn = getInterruptTimer(w.interruptCtx, work, block)
+		w.interruptCtx, stopFn = getInterruptTimer(w.interruptCtx, work.header.Number.Uint64(), work.header.Time)
 		w.interruptCtx = vm.PutCache(w.interruptCtx, w.interruptedTxCache)
 	}
 
@@ -1498,16 +1508,14 @@ func resetAndCopyInterruptCtx(interruptCtx context.Context) context.Context {
 	return newCtx
 }
 
-func getInterruptTimer(interruptCtx context.Context, work *environment, current *types.Block) (context.Context, func()) {
-	delay := time.Until(time.Unix(int64(work.header.Time), 0))
-
+func getInterruptTimer(interruptCtx context.Context, number, timestamp uint64) (context.Context, func()) {
+	delay := time.Until(time.Unix(int64(timestamp), 0))
 	interruptCtx, cancel := context.WithTimeout(interruptCtx, delay)
-	blockNumber := current.NumberU64() + 1
 
 	go func() {
 		<-interruptCtx.Done()
 		if interruptCtx.Err() != context.Canceled {
-			log.Info("Commit Interrupt. Pre-committing the current block", "block", blockNumber)
+			log.Info("Commit Interrupt. Pre-committing the current block", "block", number)
 			cancel()
 		}
 	}()
