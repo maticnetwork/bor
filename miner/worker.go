@@ -618,6 +618,11 @@ func (w *worker) mainLoop() {
 				if gp := w.current.gasPool; gp != nil && gp.Gas() < params.TxGas {
 					continue
 				}
+				// If we don't have any time, abort
+				if w.current.header.Time >= uint64(time.Now().Unix()) {
+					log.Info("Skip new tx as we're out of time for this block...")
+					continue
+				}
 				txs := make(map[common.Address][]*txpool.LazyTransaction, len(ev.Txs))
 				for _, tx := range ev.Txs {
 					acc, _ := types.Sender(w.current.signer, tx)
