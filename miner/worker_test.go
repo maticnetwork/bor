@@ -844,7 +844,7 @@ func TestCommitInterruptExperimentBor_NewTxFlow(t *testing.T) {
 		chainConfig *params.ChainConfig
 		db          = rawdb.NewMemoryDatabase()
 		ctrl        *gomock.Controller
-		txs         = make([]*types.Transaction, 0, 1)
+		// txs         = make([]*types.Transaction, 0, 1)
 	)
 
 	chainConfig = params.BorUnittestChainConfig
@@ -865,7 +865,6 @@ func TestCommitInterruptExperimentBor_NewTxFlow(t *testing.T) {
 	tx1, addr := b.newStorageCreateContractTx()
 	tx2 := b.newStorageContractCallTx(addr, 1)
 	tx3 := b.newStorageContractCallTx(addr, 2)
-	txs = append(txs, tx1)
 
 	// Create a chain head subscription for tests
 	chainHeadCh := make(chan core.ChainHeadEvent, 10)
@@ -882,7 +881,7 @@ func TestCommitInterruptExperimentBor_NewTxFlow(t *testing.T) {
 				w.stop()
 
 				// Add the first transaction to be mined normally via `txsCh`
-				b.TxPool().Add(txs, false, false)
+				b.TxPool().Add([]*types.Transaction{tx1}, false, false)
 
 				// Set it to syncing mode so that it doesn't mine via the `commitWork` flow
 				w.syncing.Store(true)
@@ -900,9 +899,7 @@ func TestCommitInterruptExperimentBor_NewTxFlow(t *testing.T) {
 				w.setInterruptCtx(vm.InterruptCtxOpcodeDelayKey, uint(500))
 
 				// Send the second transaction
-				txs = make([]*types.Transaction, 0, 1)
-				txs = append(txs, tx2)
-				b.TxPool().Add(txs, false, false)
+				b.TxPool().Add([]*types.Transaction{tx2}, false, false)
 
 				// Reset the delay again. By this time, we're sure that it has timed out.
 				delay = time.Until(time.Unix(int64(w.current.header.Time), 0))
@@ -915,9 +912,7 @@ func TestCommitInterruptExperimentBor_NewTxFlow(t *testing.T) {
 				w.setInterruptCtx(vm.InterruptCtxOpcodeDelayKey, uint(0))
 
 				// Send the third transaction
-				txs = make([]*types.Transaction, 0, 1)
-				txs = append(txs, tx3)
-				b.TxPool().Add(txs, false, false)
+				b.TxPool().Add([]*types.Transaction{tx3}, false, false)
 			}
 		}
 	}()
