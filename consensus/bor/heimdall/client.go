@@ -81,6 +81,7 @@ func NewHeimdallClient(urlString string) *HeimdallClient {
 const (
 	fetchStateSyncEventsFormat = "from-id=%d&to-time=%d"
 	fetchStateSyncEventsPath   = "clerk/time"
+	fetchStateSyncList         = "clerk/event-record/list"
 
 	fetchCheckpoint      = "/checkpoints/%s"
 	fetchCheckpointCount = "/checkpoints/count"
@@ -98,7 +99,7 @@ func (h *HeimdallClient) StateSyncEvents(ctx context.Context, fromID uint64, to 
 	eventRecords := make([]*clerk.EventRecordWithTime, 0)
 
 	for {
-		url, err := stateSyncURL(h.urlString, fromID, to)
+		url, err := stateSyncListURL(h.urlString)
 		if err != nil {
 			return nil, err
 		}
@@ -107,24 +108,28 @@ func (h *HeimdallClient) StateSyncEvents(ctx context.Context, fromID uint64, to 
 
 		ctx = withRequestType(ctx, stateSyncRequest)
 
-		response, err := FetchWithRetry[clerkTypes.RecordListWithTimeResponse](ctx, h.client, url, h.closeCh)
+		response, err := FetchWithRetry[clerkTypes.RecordListResponse](ctx, h.client, url, h.closeCh)
 		if err != nil {
 			return nil, err
 		}
 
+		var record *clerk.EventRecordWithTime
+
 		for _, e := range response.EventRecords {
-			record := &clerk.EventRecordWithTime{
-				EventRecord: clerk.EventRecord{
-					ID:       e.Id,
-					ChainID:  e.BorChainId,
-					Contract: common.HexToAddress(e.Contract),
-					Data:     e.Data,
-					LogIndex: e.LogIndex,
-					TxHash:   common.HexToHash(e.TxHash),
-				},
-				Time: e.RecordTime,
+			if e.Id >= fromID && e.RecordTime.Before(time.Unix(to, 0)) {
+				record = &clerk.EventRecordWithTime{
+					EventRecord: clerk.EventRecord{
+						ID:       e.Id,
+						ChainID:  e.BorChainId,
+						Contract: common.HexToAddress(e.Contract),
+						Data:     e.Data,
+						LogIndex: e.LogIndex,
+						TxHash:   common.HexToHash(e.TxHash),
+					},
+					Time: e.RecordTime,
+				}
+				eventRecords = append(eventRecords, record)
 			}
-			eventRecords = append(eventRecords, record)
 		}
 
 		if len(response.EventRecords) < stateFetchLimit {
@@ -401,6 +406,10 @@ func stateSyncURL(urlString string, fromID uint64, to int64) (*url.URL, error) {
 	queryParams := fmt.Sprintf(fetchStateSyncEventsFormat, fromID, to)
 
 	return makeURL(urlString, fetchStateSyncEventsPath, queryParams)
+}
+
+func stateSyncListURL(urlString string) (*url.URL, error) {
+	return makeURL(urlString, fetchStateSyncList, "")
 }
 
 func checkpointURL(urlString string, number int64) (*url.URL, error) {
