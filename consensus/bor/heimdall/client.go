@@ -40,7 +40,6 @@ var (
 
 const (
 	heimdallAPIBodyLimit = 128 * 1024 * 1024 // 128 MB
-	page                 = 1
 	stateFetchLimit      = 50
 	apiHeimdallTimeout   = 5 * time.Second
 	retryCall            = 5 * time.Second
