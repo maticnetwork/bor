@@ -844,7 +844,6 @@ func TestCommitInterruptExperimentBor_NewTxFlow(t *testing.T) {
 		chainConfig *params.ChainConfig
 		db          = rawdb.NewMemoryDatabase()
 		ctrl        *gomock.Controller
-		// txs         = make([]*types.Transaction, 0, 1)
 	)
 
 	chainConfig = params.BorUnittestChainConfig
