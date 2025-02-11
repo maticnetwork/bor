@@ -46,7 +46,6 @@ import (
 	"github.com/ethereum/go-ethereum/triedb"
 	"github.com/golang/mock/gomock"
 	"github.com/holiman/uint256"
-	"github.com/stretchr/testify/require"
 	"gotest.tools/assert"
 )
 
@@ -928,8 +927,8 @@ func TestCommitInterruptExperimentBor_NewTxFlow(t *testing.T) {
 
 	// Ensure that the last block was 3 and only 1 transactions out of 3 were included
 	assert.Equal(t, w.current.header.Number.Uint64(), uint64(3))
-	require.Equal(t, w.current.tcount, 1)
-	require.Equal(t, len(w.current.txs), 1)
+	assert.Equal(t, w.current.tcount, 1)
+	assert.Equal(t, len(w.current.txs), 1)
 }
 
 func BenchmarkBorMining(b *testing.B) {
