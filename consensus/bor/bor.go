@@ -49,6 +49,11 @@ const (
 	inmemorySignatures = 4096 // Number of recent block signatures to keep in memory
 )
 
+const (
+	spanLength    = 6400 // Number of blocks in a span
+	zerothSpanEnd = 255  // End block of 0th span
+)
+
 // Bor protocol constants.
 var (
 	defaultSprintLength = map[string]uint64{
@@ -1094,11 +1099,6 @@ func (c *Bor) Close() error {
 	return nil
 }
 
-const (
-	spanLength    = 6400 // Number of blocks in a span
-	zerothSpanEnd = 255  // End block of 0th span
-)
-
 // SpanIdAt returns the corresponding span id for the given block number.
 func SpanIdAt(blockNum uint64) uint64 {
 	if blockNum > zerothSpanEnd {
@@ -1117,66 +1117,29 @@ func SpanEndBlockNum(spanId uint64) uint64 {
 
 func (c *Bor) checkAndCommitSpan(state *state.StateDB, header *types.Header, chain core.ChainContext) error {
 	// Find the current span at parent block
-	// TODO: Find out if we can use current block instead of parent
-	spanId := SpanIdAt(header.Number.Uint64() - 1)
+	headerNumber := header.Number.Uint64()
+	spanId := SpanIdAt(headerNumber)
 
 	// Find the end block of that span
 	spanEndBlock := SpanEndBlockNum(spanId)
 
 	// Fetch the next span if required
-	if c.needToCommitSpan(spanEndBlock, header.Number.Uint64()) {
+	if c.needToCommitSpan(spanEndBlock, headerNumber) {
 		return c.FetchAndCommitSpan(context.Background(), spanId+1, state, header, chain)
 	}
 
 	return nil
 }
 
-func (c *Bor) needToCommitSpan(spanEndBlock uint64, headerNumber uint64) bool {
+func (c *Bor) needToCommitSpan(spanId, headerNumber uint64) bool {
+	// Find the end block of the given span
+	spanEndBlock := SpanEndBlockNum(spanId)
 	sprint := c.config.CalculateSprint(headerNumber)
-	if spanEndBlock == 0 && headerNumber == sprint {
+	if spanId == 0 && headerNumber == sprint {
+		// when in span 0 we fetch the next span (span 1) at the beginning of sprint 2 (block 16)
 		return true
 	} else if spanEndBlock-sprint+1 == headerNumber {
-		return true
-	}
-
-	return false
-}
-
-// TODO: Remove this later (kept for reference)
-func (c *Bor) checkAndCommitSpan2(
-	state *state.StateDB,
-	header *types.Header,
-	chain core.ChainContext,
-) error {
-	var ctx = context.Background()
-	headerNumber := header.Number.Uint64()
-
-	span, err := c.spanner.GetCurrentSpan(ctx, header.ParentHash)
-	if err != nil {
-		return err
-	}
-
-	if c.needToCommitSpan2(span, headerNumber) {
-		return c.FetchAndCommitSpan(ctx, span.ID+1, state, header, chain)
-	}
-
-	return nil
-}
-
-// TODO: Remove this later (kept for reference)
-func (c *Bor) needToCommitSpan2(currentSpan *span.Span, headerNumber uint64) bool {
-	// if span is nil
-	if currentSpan == nil {
-		return false
-	}
-
-	// check span is not set initially
-	if currentSpan.EndBlock == 0 {
-		return true
-	}
-
-	// if current block is first block of last sprint in current span
-	if currentSpan.EndBlock > c.config.CalculateSprint(headerNumber) && currentSpan.EndBlock-c.config.CalculateSprint(headerNumber)+1 == headerNumber {
+		// for subsequent spans, we always fetch the next span at the beginning of the last sprint of current span
 		return true
 	}
 
