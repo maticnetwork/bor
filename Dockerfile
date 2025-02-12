@@ -9,7 +9,12 @@ RUN apt-get update -y && apt-get upgrade -y \
 
 WORKDIR ${BOR_DIR}
 COPY . .
-RUN make bor
+
+# Allow to clone private repositories.
+RUN --mount=type=ssh git config --global url."git@github.com:".insteadOf "https://github.com/" \
+  && mkdir -p ~/.ssh \
+  && ssh-keyscan github.com >> ~/.ssh/known_hosts
+RUN --mount=type=ssh make bor
 
 RUN cp build/bin/bor /usr/bin/
 
