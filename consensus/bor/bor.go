@@ -1119,23 +1119,23 @@ func (c *Bor) checkAndCommitSpan(state *state.StateDB, header *types.Header, cha
 	// Find the current span at parent block
 	headerNumber := header.Number.Uint64()
 	spanId := SpanIdAt(headerNumber)
+	sprintLength := c.config.CalculateSprint(headerNumber)
 
 	// Fetch the next span if required
-	if c.needToCommitSpan(spanId, headerNumber) {
+	if needToCommitSpan(spanId, headerNumber, sprintLength) {
 		return c.FetchAndCommitSpan(context.Background(), spanId+1, state, header, chain)
 	}
 
 	return nil
 }
 
-func (c *Bor) needToCommitSpan(spanId, headerNumber uint64) bool {
+func needToCommitSpan(spanId, headerNumber, sprintLength uint64) bool {
 	// Find the end block of the given span
 	spanEndBlock := SpanEndBlockNum(spanId)
-	sprint := c.config.CalculateSprint(headerNumber)
-	if spanId == 0 && headerNumber == sprint {
+	if spanId == 0 && headerNumber == sprintLength {
 		// when in span 0 we fetch the next span (span 1) at the beginning of sprint 2 (block 16)
 		return true
-	} else if spanEndBlock-sprint+1 == headerNumber {
+	} else if spanEndBlock-sprintLength+1 == headerNumber {
 		// for subsequent spans, we always fetch the next span at the beginning of the last sprint of current span
 		return true
 	}

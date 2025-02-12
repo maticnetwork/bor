@@ -2,6 +2,7 @@ package bor
 
 import (
 	"math/big"
+	"strconv"
 	"testing"
 
 	"github.com/holiman/uint256"
@@ -161,4 +162,37 @@ func TestEncodeSigHeaderJaipur(t *testing.T) {
 	// Jaipur NOT enabled and BaseFee set
 	hash = SealHash(h, &params.BorConfig{JaipurBlock: big.NewInt(10)})
 	require.Equal(t, hash, hashWithoutBaseFee)
+}
+
+func TestNeedToCommitSpan(t *testing.T) {
+	type test struct {
+		spanId       uint64
+		headerNumber uint64
+		want         bool
+	}
+
+	tests := []test{
+		{spanId: 0, headerNumber: 1, want: false},
+		{spanId: 0, headerNumber: 15, want: false},
+		{spanId: 0, headerNumber: 16, want: true}, // Second sprint start
+		{spanId: 0, headerNumber: 17, want: false},
+		{spanId: 1, headerNumber: 256, want: false},
+		{spanId: 1, headerNumber: 6639, want: false},
+		{spanId: 1, headerNumber: 6640, want: true}, // First block of last sprint of span 1
+		{spanId: 1, headerNumber: 6641, want: false},
+		{spanId: 1, headerNumber: 6655, want: false},
+		{spanId: 100, headerNumber: 633856, want: false},
+		{spanId: 100, headerNumber: 640239, want: false},
+		{spanId: 100, headerNumber: 640240, want: true}, // First block of last sprint of span 100
+		{spanId: 100, headerNumber: 640241, want: false},
+	}
+
+	for _, test := range tests {
+		test := test
+		name := "id=" + strconv.FormatUint(test.spanId, 10) + ",number=" + strconv.FormatUint(test.headerNumber, 10)
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, test.want, needToCommitSpan(test.spanId, test.headerNumber, 16))
+		})
+	}
 }
