@@ -1223,6 +1223,7 @@ func (api *API) TraceTransaction(ctx context.Context, hash common.Hash, config *
 	if err != nil {
 		return nil, err
 	}
+	log.Info("🐞🐞🐞 Calling State at Transaction", "reexec", reexec)
 	tx, vmctx, statedb, release, err := api.backend.StateAtTransaction(ctx, block, int(index), reexec)
 	if err != nil {
 		return nil, err

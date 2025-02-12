@@ -186,11 +186,14 @@ func (db *Database) node(hash common.Hash) ([]byte, error) {
 	if hash == (common.Hash{}) {
 		return nil, errors.New("not found")
 	}
+	log.Info("🐞🐞🐞 Try to found trie node", "hash", hash)
+
 	// Retrieve the node from the clean cache if available
 	if db.cleans != nil {
 		if enc := db.cleans.Get(nil, hash[:]); enc != nil {
 			memcacheCleanHitMeter.Mark(1)
 			memcacheCleanReadMeter.Mark(int64(len(enc)))
+			log.Info("🐞🐞🐞 Found on clean cache", "hash", hash)
 			return enc, nil
 		}
 	}
@@ -205,6 +208,7 @@ func (db *Database) node(hash common.Hash) ([]byte, error) {
 	if dirty != nil {
 		memcacheDirtyHitMeter.Mark(1)
 		memcacheDirtyReadMeter.Mark(int64(len(dirty.node)))
+		log.Info("🐞🐞🐞 Found on dirties", "hash", hash)
 		return dirty.node, nil
 	}
 	memcacheDirtyMissMeter.Mark(1)
@@ -217,6 +221,7 @@ func (db *Database) node(hash common.Hash) ([]byte, error) {
 			memcacheCleanMissMeter.Mark(1)
 			memcacheCleanWriteMeter.Mark(int64(len(enc)))
 		}
+		log.Info("🐞🐞🐞 Found on disk", "hash", hash)
 		return enc, nil
 	}
 	return nil, errors.New("not found")

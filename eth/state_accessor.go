@@ -54,6 +54,7 @@ func (eth *Ethereum) hashState(ctx context.Context, block *types.Block, reexec u
 		// function to deref it.
 		if statedb, err = eth.blockchain.StateAt(block.Root()); err == nil {
 			eth.blockchain.TrieDB().Reference(block.Root(), common.Hash{})
+			log.Info("🐞🐞🐞 State available in live database", "reexec", reexec)
 			return statedb, func() {
 				eth.blockchain.TrieDB().Dereference(block.Root())
 			}, nil
@@ -63,6 +64,7 @@ func (eth *Ethereum) hashState(ctx context.Context, block *types.Block, reexec u
 	// try to construct/recover the state over an ephemeral trie.Database for
 	// isolating the live one.
 	if base != nil {
+		log.Info("🐞🐞🐞 Not Inside Else", "reexec", reexec)
 		if preferDisk {
 			// Create an ephemeral trie.Database for isolating the live one. Otherwise
 			// the internal junks created by tracing will be persisted into the disk.
@@ -82,6 +84,8 @@ func (eth *Ethereum) hashState(ctx context.Context, block *types.Block, reexec u
 			return nil, nil, fmt.Errorf("missing parent block %v %d", block.ParentHash(), block.NumberU64()-1)
 		}
 	} else {
+		log.Info("🐞🐞🐞 Inside Else", "reexec", reexec)
+
 		// Otherwise, try to reexec blocks until we find a state or reach our limit
 		current = block
 
@@ -226,6 +230,7 @@ func (eth *Ethereum) pathState(block *types.Block) (*state.StateDB, func(), erro
 //     on disk.
 func (eth *Ethereum) stateAtBlock(ctx context.Context, block *types.Block, reexec uint64, base *state.StateDB, readOnly bool, preferDisk bool) (statedb *state.StateDB, release tracers.StateReleaseFunc, err error) {
 	if eth.blockchain.TrieDB().Scheme() == rawdb.HashScheme {
+		log.Info("🐞🐞🐞 if eth.blockchain.TrieDB().Scheme() == rawdb.HashScheme {", "reexec", reexec)
 		return eth.hashState(ctx, block, reexec, base, readOnly, preferDisk)
 	}
 	return eth.pathState(block)
