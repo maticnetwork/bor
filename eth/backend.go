@@ -56,6 +56,7 @@ import (
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/internal/shutdowncheck"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/miner"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/p2p"
@@ -65,6 +66,10 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/ethereum/go-ethereum/triedb"
+)
+
+var (
+	MilestoneWhitelistedDelayTimer = metrics.NewRegisteredTimer("chain/milestone/whitelisteddelay", nil)
 )
 
 // Config contains the configuration options of the ETH protocol.
@@ -258,7 +263,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	// check if Parallel EVM is enabled
 	// if enabled, use parallel state processor
 	if config.ParallelEVM.Enable {
-		eth.blockchain, err = core.NewParallelBlockChain(chainDb, cacheConfig, config.Genesis, &overrides, eth.engine, vmConfig, eth.shouldPreserve, &config.TxLookupLimit, checker, config.ParallelEVM.SpeculativeProcesses)
+		eth.blockchain, err = core.NewParallelBlockChain(chainDb, cacheConfig, config.Genesis, &overrides, eth.engine, vmConfig, eth.shouldPreserve, &config.TxLookupLimit, checker, config.ParallelEVM.SpeculativeProcesses, config.ParallelEVM.Enforce)
 	} else {
 		eth.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, config.Genesis, &overrides, eth.engine, vmConfig, eth.shouldPreserve, &config.TxLookupLimit, checker)
 	}
@@ -661,7 +666,7 @@ func (s *Ethereum) startCheckpointWhitelistService() {
 // milestone whitelist map.
 func (s *Ethereum) startMilestoneWhitelistService() {
 	const (
-		tickerDuration = 12 * time.Second
+		tickerDuration = 50 * time.Millisecond
 		fnName         = "whitelist milestone"
 	)
 
@@ -670,7 +675,7 @@ func (s *Ethereum) startMilestoneWhitelistService() {
 
 func (s *Ethereum) startNoAckMilestoneService() {
 	const (
-		tickerDuration = 6 * time.Second
+		tickerDuration = 1 * time.Second
 		fnName         = "no-ack-milestone service"
 	)
 
@@ -748,6 +753,8 @@ func (s *Ethereum) handleWhitelistCheckpoint(ctx context.Context, ethHandler *et
 
 type heimdallHandler func(ctx context.Context, ethHandler *ethHandler, bor *bor.Bor) error
 
+var lastSeenMilestoneBlockNumber uint64
+
 // handleMilestone handles the milestone mechanism.
 func (s *Ethereum) handleMilestone(ctx context.Context, ethHandler *ethHandler, bor *bor.Bor) error {
 	// Create a new bor verifier, which will be used to verify checkpoints and milestones
@@ -767,6 +774,12 @@ func (s *Ethereum) handleMilestone(ctx context.Context, ethHandler *ethHandler, 
 
 	if err != nil {
 		return err
+	}
+
+	for lastSeenMilestoneBlockNumber < num {
+		lastSeenMilestoneBlockNumber += 1
+		blockTime := s.blockchain.GetBlockByNumber(lastSeenMilestoneBlockNumber).Time()
+		MilestoneWhitelistedDelayTimer.UpdateSince(time.Unix(int64(blockTime), 0))
 	}
 
 	ethHandler.downloader.ProcessMilestone(num, hash)
