@@ -1120,11 +1120,8 @@ func (c *Bor) checkAndCommitSpan(state *state.StateDB, header *types.Header, cha
 	headerNumber := header.Number.Uint64()
 	spanId := SpanIdAt(headerNumber)
 
-	// Find the end block of that span
-	spanEndBlock := SpanEndBlockNum(spanId)
-
 	// Fetch the next span if required
-	if c.needToCommitSpan(spanEndBlock, headerNumber) {
+	if c.needToCommitSpan(spanId, headerNumber) {
 		return c.FetchAndCommitSpan(context.Background(), spanId+1, state, header, chain)
 	}
 
