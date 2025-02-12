@@ -1182,6 +1182,7 @@ func (api *API) containsTx(ctx context.Context, block *types.Block, hash common.
 // and returns them as a JSON object.
 func (api *API) TraceTransaction(ctx context.Context, hash common.Hash, config *TraceConfig) (interface{}, error) {
 	if config == nil {
+		log.Info("🐞🐞🐞 Config null in API call")
 		config = &TraceConfig{
 			BorTraceEnabled: defaultBorTraceEnabled,
 			BorTx:           newBoolPtr(false),
@@ -1215,8 +1216,11 @@ func (api *API) TraceTransaction(ctx context.Context, hash common.Hash, config *
 	}
 
 	reexec := defaultTraceReexec
+	log.Info("🐞🐞🐞 Default reexec value set", "reexec", reexec)
+	log.Info("🐞🐞🐞 Checking config")
 	if config != nil && config.Reexec != nil {
 		reexec = *config.Reexec
+		log.Info("🐞🐞🐞 Config value", "config.Reexec", *config.Reexec)
 	}
 
 	block, err := api.blockByNumberAndHash(ctx, rpc.BlockNumber(blockNumber), blockHash)
