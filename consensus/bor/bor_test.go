@@ -196,3 +196,56 @@ func TestNeedToCommitSpan(t *testing.T) {
 		})
 	}
 }
+
+func TestSpanIdAt(t *testing.T) {
+	type test struct {
+		blockNumber uint64
+		want        uint64
+	}
+
+	tests := []test{
+		{blockNumber: 0, want: 0},
+		{blockNumber: 1, want: 0},
+		{blockNumber: 255, want: 0},
+		{blockNumber: 256, want: 1},
+		{blockNumber: 6655, want: 1},
+		{blockNumber: 6656, want: 2},
+		{blockNumber: 1632256, want: 256},
+		{blockNumber: 1638655, want: 256},
+		{blockNumber: 1635456, want: 256},
+	}
+
+	for _, test := range tests {
+		test := test
+		name := "number=" + strconv.FormatUint(test.blockNumber, 10)
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, test.want, SpanIdAt(test.blockNumber))
+		})
+	}
+}
+
+func TestSpanEndBlockNum(t *testing.T) {
+	type test struct {
+		spanId uint64
+		want   uint64
+	}
+
+	tests := []test{
+		{spanId: 0, want: 255},
+		{spanId: 1, want: 6655},
+		{spanId: 2, want: 13055},
+		{spanId: 100, want: 640255},
+		{spanId: 256, want: 1638655},
+		{spanId: 1000, want: 6400255},
+	}
+
+	for _, test := range tests {
+		test := test
+		name := "number=" + strconv.FormatUint(test.spanId, 10)
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, test.want, SpanEndBlockNum(test.spanId))
+		})
+	}
+}
