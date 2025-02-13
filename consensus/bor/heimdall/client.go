@@ -15,6 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
+	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/params"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
@@ -84,7 +85,25 @@ const (
 	fetchMilestoneID        = "/milestone/ID/%s"
 
 	fetchSpanFormat = "bor/span/%d"
+
+	fetchBorParams = "bor/params"
 )
+
+func (h *HeimdallClient) BorParams(ctx context.Context) (*params.BorParams, error) {
+	url, err := borParamsURL(h.urlString)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx = withRequestType(ctx, borParamsRequest)
+
+	response, err := FetchWithRetry[params.BorParamsResponse](ctx, h.client, url, h.closeCh)
+	if err != nil {
+		return nil, err
+	}
+
+	return &response.Result, nil
+}
 
 func (h *HeimdallClient) StateSyncEvents(ctx context.Context, fromID uint64, to int64) ([]*clerk.EventRecordWithTime, error) {
 	eventRecords := make([]*clerk.EventRecordWithTime, 0)
@@ -365,6 +384,10 @@ func Fetch[T any](ctx context.Context, request *Request) (*T, error) {
 	isSuccessful = true
 
 	return result, nil
+}
+
+func borParamsURL(urlString string) (*url.URL, error) {
+	return makeURL(urlString, fetchBorParams, "")
 }
 
 func spanURL(urlString string, spanID uint64) (*url.URL, error) {

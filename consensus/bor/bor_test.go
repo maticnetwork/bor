@@ -171,6 +171,9 @@ func TestNeedToCommitSpan(t *testing.T) {
 		want         bool
 	}
 
+	// Create a minimalistic fake bor consensus instance
+	bor := &Bor{spanLength: 6400}
+
 	tests := []test{
 		{spanId: 0, headerNumber: 1, want: false},
 		{spanId: 0, headerNumber: 15, want: false},
@@ -192,7 +195,7 @@ func TestNeedToCommitSpan(t *testing.T) {
 		name := "id=" + strconv.FormatUint(test.spanId, 10) + ",number=" + strconv.FormatUint(test.headerNumber, 10)
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, test.want, needToCommitSpan(test.spanId, test.headerNumber, 16))
+			require.Equal(t, test.want, bor.needToCommitSpan(test.spanId, test.headerNumber, 16))
 		})
 	}
 }
@@ -202,6 +205,9 @@ func TestSpanIdAt(t *testing.T) {
 		blockNumber uint64
 		want        uint64
 	}
+
+	// Create a minimalistic fake bor consensus instance
+	bor := &Bor{spanLength: 6400}
 
 	tests := []test{
 		{blockNumber: 0, want: 0},
@@ -220,7 +226,7 @@ func TestSpanIdAt(t *testing.T) {
 		name := "number=" + strconv.FormatUint(test.blockNumber, 10)
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, test.want, SpanIdAt(test.blockNumber))
+			require.Equal(t, test.want, bor.SpanIdAt(test.blockNumber))
 		})
 	}
 }
@@ -230,6 +236,9 @@ func TestSpanEndBlockNum(t *testing.T) {
 		spanId uint64
 		want   uint64
 	}
+
+	// Create a minimalistic fake bor consensus instance
+	bor := &Bor{spanLength: 6400}
 
 	tests := []test{
 		{spanId: 0, want: 255},
@@ -245,7 +254,7 @@ func TestSpanEndBlockNum(t *testing.T) {
 		name := "number=" + strconv.FormatUint(test.spanId, 10)
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, test.want, SpanEndBlockNum(test.spanId))
+			require.Equal(t, test.want, bor.SpanEndBlockNum(test.spanId))
 		})
 	}
 }
