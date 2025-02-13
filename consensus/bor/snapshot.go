@@ -147,6 +147,9 @@ func (s *Snapshot) apply(headers []*types.Header, c *Bor) (*Snapshot, error) {
 		// add recents
 		snap.Recents[number] = signer
 
+		// TODO
+		// Can't we do this step for the last header only?
+
 		// change validator set and change proposer
 		if number > 0 && (number+1)%s.chainConfig.Bor.CalculateSprint(number) == 0 {
 			if err := validateHeaderExtraField(header.Extra); err != nil {

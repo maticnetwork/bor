@@ -2,6 +2,7 @@ package bor
 
 import (
 	"math/big"
+	"strconv"
 	"testing"
 
 	"github.com/holiman/uint256"
@@ -161,4 +162,99 @@ func TestEncodeSigHeaderJaipur(t *testing.T) {
 	// Jaipur NOT enabled and BaseFee set
 	hash = SealHash(h, &params.BorConfig{JaipurBlock: big.NewInt(10)})
 	require.Equal(t, hash, hashWithoutBaseFee)
+}
+
+func TestNeedToCommitSpan(t *testing.T) {
+	type test struct {
+		spanId       uint64
+		headerNumber uint64
+		want         bool
+	}
+
+	// Create a minimalistic fake bor consensus instance
+	bor := &Bor{spanLength: 6400}
+
+	tests := []test{
+		{spanId: 0, headerNumber: 1, want: false},
+		{spanId: 0, headerNumber: 15, want: false},
+		{spanId: 0, headerNumber: 16, want: true}, // Second sprint start
+		{spanId: 0, headerNumber: 17, want: false},
+		{spanId: 1, headerNumber: 256, want: false},
+		{spanId: 1, headerNumber: 6639, want: false},
+		{spanId: 1, headerNumber: 6640, want: true}, // First block of last sprint of span 1
+		{spanId: 1, headerNumber: 6641, want: false},
+		{spanId: 1, headerNumber: 6655, want: false},
+		{spanId: 100, headerNumber: 633856, want: false},
+		{spanId: 100, headerNumber: 640239, want: false},
+		{spanId: 100, headerNumber: 640240, want: true}, // First block of last sprint of span 100
+		{spanId: 100, headerNumber: 640241, want: false},
+	}
+
+	for _, test := range tests {
+		test := test
+		name := "id=" + strconv.FormatUint(test.spanId, 10) + ",number=" + strconv.FormatUint(test.headerNumber, 10)
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, test.want, bor.needToCommitSpan(test.spanId, test.headerNumber, 16))
+		})
+	}
+}
+
+func TestSpanIdAt(t *testing.T) {
+	type test struct {
+		blockNumber uint64
+		want        uint64
+	}
+
+	// Create a minimalistic fake bor consensus instance
+	bor := &Bor{spanLength: 6400}
+
+	tests := []test{
+		{blockNumber: 0, want: 0},
+		{blockNumber: 1, want: 0},
+		{blockNumber: 255, want: 0},
+		{blockNumber: 256, want: 1},
+		{blockNumber: 6655, want: 1},
+		{blockNumber: 6656, want: 2},
+		{blockNumber: 1632256, want: 256},
+		{blockNumber: 1638655, want: 256},
+		{blockNumber: 1635456, want: 256},
+	}
+
+	for _, test := range tests {
+		test := test
+		name := "number=" + strconv.FormatUint(test.blockNumber, 10)
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, test.want, bor.SpanIdAt(test.blockNumber))
+		})
+	}
+}
+
+func TestSpanEndBlockNum(t *testing.T) {
+	type test struct {
+		spanId uint64
+		want   uint64
+	}
+
+	// Create a minimalistic fake bor consensus instance
+	bor := &Bor{spanLength: 6400}
+
+	tests := []test{
+		{spanId: 0, want: 255},
+		{spanId: 1, want: 6655},
+		{spanId: 2, want: 13055},
+		{spanId: 100, want: 640255},
+		{spanId: 256, want: 1638655},
+		{spanId: 1000, want: 6400255},
+	}
+
+	for _, test := range tests {
+		test := test
+		name := "number=" + strconv.FormatUint(test.spanId, 10)
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, test.want, bor.SpanEndBlockNum(test.spanId))
+		})
+	}
 }

@@ -18,6 +18,7 @@ type (
 )
 
 const (
+	borParamsRequest          requestType = "bor-params"
 	stateSyncRequest          requestType = "state-sync"
 	spanRequest               requestType = "span"
 	checkpointRequest         requestType = "checkpoint"

@@ -49,6 +49,11 @@ const (
 	inmemorySignatures = 4096 // Number of recent block signatures to keep in memory
 )
 
+const (
+	defaultSpanLength = 6400 // Default span length i.e. number of bor blocks in a span
+	zerothSpanEnd     = 255  // End block of 0th span
+)
+
 // Bor protocol constants.
 var (
 	defaultSprintLength = map[string]uint64{
@@ -228,6 +233,8 @@ type Bor struct {
 	fakeDiff      bool // Skip difficulty verifications
 	devFakeAuthor bool
 
+	spanLength uint64 // Span length populated by heimdall
+
 	closeOnce sync.Once
 }
 
@@ -283,6 +290,16 @@ func New(
 		if _, err := decodeGenesisAlloc(genesisAlloc); err != nil {
 			panic(fmt.Sprintf("BUG: Block alloc '%s' in genesis is not correct: %v", key, err))
 		}
+	}
+
+	// Fetch bor params from heimdall to populate span length
+	borParams, err := heimdallClient.BorParams(context.Background())
+	if err != nil || borParams == nil || borParams.SpanLength == 0 {
+		log.Warn("Unable to fetch bor params or invalid params received, using default span length", "length", defaultSpanLength)
+		c.spanLength = defaultSpanLength
+	} else {
+		c.spanLength = borParams.SpanLength
+		log.Debug("Populated span length from heimdall", "length", c.spanLength)
 	}
 
 	return c
@@ -1094,39 +1111,44 @@ func (c *Bor) Close() error {
 	return nil
 }
 
-func (c *Bor) checkAndCommitSpan(
-	state *state.StateDB,
-	header *types.Header,
-	chain core.ChainContext,
-) error {
-	var ctx = context.Background()
-	headerNumber := header.Number.Uint64()
-
-	span, err := c.spanner.GetCurrentSpan(ctx, header.ParentHash)
-	if err != nil {
-		return err
+// SpanIdAt returns the corresponding span id for the given block number.
+func (c *Bor) SpanIdAt(blockNum uint64) uint64 {
+	if blockNum > zerothSpanEnd {
+		return 1 + (blockNum-zerothSpanEnd-1)/c.spanLength
 	}
+	return 0
+}
 
-	if c.needToCommitSpan(span, headerNumber) {
-		return c.FetchAndCommitSpan(ctx, span.ID+1, state, header, chain)
+// SpanEndBlockNum returns the number of the last block in the given span.
+func (c *Bor) SpanEndBlockNum(spanId uint64) uint64 {
+	if spanId > 0 {
+		return spanId*c.spanLength + zerothSpanEnd
+	}
+	return zerothSpanEnd
+}
+
+func (c *Bor) checkAndCommitSpan(state *state.StateDB, header *types.Header, chain core.ChainContext) error {
+	// Find the current span at parent block
+	headerNumber := header.Number.Uint64()
+	spanId := c.SpanIdAt(headerNumber)
+	sprintLength := c.config.CalculateSprint(headerNumber)
+
+	// Fetch the next span if required
+	if c.needToCommitSpan(spanId, headerNumber, sprintLength) {
+		return c.FetchAndCommitSpan(context.Background(), spanId+1, state, header, chain)
 	}
 
 	return nil
 }
 
-func (c *Bor) needToCommitSpan(currentSpan *span.Span, headerNumber uint64) bool {
-	// if span is nil
-	if currentSpan == nil {
-		return false
-	}
-
-	// check span is not set initially
-	if currentSpan.EndBlock == 0 {
+func (c *Bor) needToCommitSpan(spanId, headerNumber, sprintLength uint64) bool {
+	// Find the end block of the given span
+	spanEndBlock := c.SpanEndBlockNum(spanId)
+	if spanId == 0 && headerNumber == sprintLength {
+		// when in span 0 we fetch the next span (span 1) at the beginning of sprint 2 (block 16)
 		return true
-	}
-
-	// if current block is first block of last sprint in current span
-	if currentSpan.EndBlock > c.config.CalculateSprint(headerNumber) && currentSpan.EndBlock-c.config.CalculateSprint(headerNumber)+1 == headerNumber {
+	} else if spanEndBlock-sprintLength+1 == headerNumber {
+		// for subsequent spans, we always fetch the next span at the beginning of the last sprint of current span
 		return true
 	}
 
