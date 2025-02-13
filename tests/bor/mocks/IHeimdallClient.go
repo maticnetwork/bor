@@ -11,6 +11,7 @@ import (
 	clerk "github.com/ethereum/go-ethereum/consensus/bor/clerk"
 	checkpoint "github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
 	milestone "github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
+	params "github.com/ethereum/go-ethereum/consensus/bor/heimdall/params"
 	span "github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
 	gomock "github.com/golang/mock/gomock"
 )
@@ -36,6 +37,21 @@ func NewMockIHeimdallClient(ctrl *gomock.Controller) *MockIHeimdallClient {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockIHeimdallClient) EXPECT() *MockIHeimdallClientMockRecorder {
 	return m.recorder
+}
+
+// BorParams mocks base method.
+func (m *MockIHeimdallClient) BorParams(arg0 context.Context) (*params.BorParams, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BorParams", arg0)
+	ret0, _ := ret[0].(*params.BorParams)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// BorParams indicates an expected call of BorParams.
+func (mr *MockIHeimdallClientMockRecorder) BorParams(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BorParams", reflect.TypeOf((*MockIHeimdallClient)(nil).BorParams), arg0)
 }
 
 // Close mocks base method.
