@@ -236,19 +236,15 @@ jobs:
         - name: Launch devnet
           run: |
             cd matic-cli/devnet
-            bash ../docker_devnet.sh
-            cd -
+            bash ../util-scripts/docker/devnet_setup.sh
+              cd -
             timeout 2m bash bor/integration-tests/bor_health.sh
 
         - name: Run smoke tests
           run: |
-            echo "Funding ganache accounts..."
-            timeout 10m bash bor/integration-tests/fund_ganache_accounts.sh
-            echo "Deposit 100 matic for each account to bor network"
-            cd matic-cli/devnet/code/contracts
-            npm run truffle exec scripts/deposit.js -- --network development $(jq -r .root.tokens.MaticToken contractAddresses.json) 100000000000000000000
-            cd -
-            timeout 60m bash bor/integration-tests/smoke_test.sh
+            cd matic-cli/devnet
+            timeout 10m bash ../util-scripts/docker/fund_ganache_accounts.sh
+            timeout 60m bash ../util-scripts/docker/smoke_test.sh
 
         - name: Upload logs
           if: always()
