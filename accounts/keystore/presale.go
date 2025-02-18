@@ -123,7 +123,7 @@ func aesCTRXOR(key, inText, iv []byte) ([]byte, error) {
 	outText := make([]byte, len(inText))
 	stream.XORKeyStream(outText, inText)
 
-	return outText, err
+	return outText, nil
 }
 
 func aesCBCDecrypt(key, cipherText, iv []byte) ([]byte, error) {
@@ -141,7 +141,7 @@ func aesCBCDecrypt(key, cipherText, iv []byte) ([]byte, error) {
 		return nil, ErrDecrypt
 	}
 
-	return plaintext, err
+	return plaintext, nil
 }
 
 // From https://leanpub.com/gocrypto/read#leanpub-auto-block-cipher-modes
