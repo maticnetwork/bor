@@ -463,34 +463,6 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 		return err
 	}
 
-	// Verify the validator list match the local contract
-	if IsSprintStart(number+1, c.config.CalculateSprint(number)) {
-		newValidators, err := c.spanner.GetCurrentValidatorsByBlockNrOrHash(context.Background(), rpc.BlockNumberOrHashWithNumber(rpc.LatestBlockNumber), number+1)
-
-		if err != nil {
-			return err
-		}
-
-		sort.Sort(valset.ValidatorsByAddress(newValidators))
-
-		headerVals, err := valset.ParseValidators(header.GetValidatorBytes(c.chainConfig))
-		if err != nil {
-			return err
-		}
-
-		if len(newValidators) != len(headerVals) {
-			log.Warn("Invalid validator set", "block number", number, "newValidators", newValidators, "headerVals", headerVals)
-			return errInvalidSpanValidators
-		}
-
-		for i, val := range newValidators {
-			if !bytes.Equal(val.HeaderBytes(), headerVals[i].HeaderBytes()) {
-				log.Warn("Invalid validator set", "block number", number, "index", i, "local validator", val, "header validator", headerVals[i])
-				return errInvalidSpanValidators
-			}
-		}
-	}
-
 	// verify the validator list in the last sprint block
 	if IsSprintStart(number, c.config.CalculateSprint(number)) {
 		parentValidatorBytes := parent.GetValidatorBytes(c.chainConfig)
