@@ -262,6 +262,9 @@ func newHandler(config *handlerConfig) (*handler, error) {
 	h.txFetcher = fetcher.NewTxFetcher(h.txpool.Has, addTxs, fetchTx, h.removePeer)
 	h.chainSync = newChainSyncer(h)
 
+	mode, _ := h.chainSync.modeAndLocalHead()
+	log.Info("Init handler done", "mode", mode.String())
+
 	return h, nil
 }
 
