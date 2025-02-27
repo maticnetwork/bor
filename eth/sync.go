@@ -201,10 +201,13 @@ func peerToSyncOp(mode downloader.SyncMode, p *eth.Peer) *chainSyncOp {
 }
 
 func (cs *chainSyncer) modeAndLocalHead() (downloader.SyncMode, *big.Int) {
+	log.Info("--- modeAndLocalHead", "handler in snap sync", cs.handler.snapSync.Load())
+
 	// If we're in snap sync mode, return that directly
 	if cs.handler.snapSync.Load() {
 		block := cs.handler.chain.CurrentSnapBlock()
 		td := cs.handler.chain.GetTd(block.Hash(), block.Number.Uint64())
+		log.Info("--- modeAndLocalHead #1", "mode", "snap")
 		return downloader.SnapSync, td
 	}
 
@@ -215,6 +218,7 @@ func (cs *chainSyncer) modeAndLocalHead() (downloader.SyncMode, *big.Int) {
 		if head.Number.Uint64() < *pivot {
 			block := cs.handler.chain.CurrentSnapBlock()
 			td := cs.handler.chain.GetTd(block.Hash(), block.Number.Uint64())
+			log.Info("--- modeAndLocalHead #2", "mode", "snap")
 			return downloader.SnapSync, td
 		}
 	}
@@ -226,12 +230,14 @@ func (cs *chainSyncer) modeAndLocalHead() (downloader.SyncMode, *big.Int) {
 		block := cs.handler.chain.CurrentSnapBlock()
 		td := cs.handler.chain.GetTd(block.Hash(), block.Number.Uint64())
 		log.Info("Reenabled snap sync as chain is stateless")
+		log.Info("--- modeAndLocalHead #3", "mode", "snap")
 		return downloader.SnapSync, td
 	}
 
 	// Nope, we're really full syncing
 	td := cs.handler.chain.GetTd(head.Hash(), head.Number.Uint64())
 
+	log.Info("--- modeAndLocalHead #4", "mode", "full")
 	return downloader.FullSync, td
 }
 
