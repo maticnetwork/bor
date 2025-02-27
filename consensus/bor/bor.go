@@ -317,6 +317,9 @@ func (c *Bor) VerifyHeaders(chain consensus.ChainHeaderReader, headers []*types.
 	go func() {
 		for i, header := range headers {
 			err := c.verifyHeader(chain, header, headers[:i])
+			if err != nil {
+				log.Warn("--- header verification failed", "err", err)
+			}
 
 			select {
 			case <-abort:
