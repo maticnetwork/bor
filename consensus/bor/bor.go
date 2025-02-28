@@ -49,6 +49,11 @@ const (
 	inmemorySignatures = 4096 // Number of recent block signatures to keep in memory
 )
 
+const (
+	defaultSpanLength = 6400 // Default span length i.e. number of bor blocks in a span
+	zerothSpanEnd     = 255  // End block of 0th span
+)
+
 // Bor protocol constants.
 var (
 	defaultSprintLength = map[string]uint64{
@@ -217,6 +222,8 @@ type Bor struct {
 	recents    *lru.ARCCache // Snapshots for recent block to speed up reorgs
 	signatures *lru.ARCCache // Signatures of recent blocks to speed up mining
 
+	spans *lru.ARCCache
+
 	authorizedSigner atomic.Pointer[signer] // Ethereum address and sign function of the signing key
 
 	ethAPI                 api.Caller
@@ -256,6 +263,7 @@ func New(
 	// Allocate the snapshot caches and create the engine
 	recents, _ := lru.NewARC(inmemorySnapshots)
 	signatures, _ := lru.NewARC(inmemorySignatures)
+	spans, _ := lru.NewARC(100)
 
 	c := &Bor{
 		chainConfig:            chainConfig,
@@ -264,6 +272,7 @@ func New(
 		ethAPI:                 ethAPI,
 		recents:                recents,
 		signatures:             signatures,
+		spans:                  spans,
 		spanner:                spanner,
 		GenesisContractsClient: genesisContracts,
 		HeimdallClient:         heimdallClient,
@@ -397,7 +406,7 @@ func (c *Bor) verifyHeader(chain consensus.ChainHeaderReader, header *types.Head
 	// All basic checks passed, verify cascading fields
 	err := c.verifyCascadingFields(chain, header, parents)
 	if err != nil {
-		log.Info("Error in verifyCascadingFields", "number", header.Number.Uint64(), "err", err)
+		log.Info("--- verifyCascadingFields error", "number", header.Number.Uint64(), "err", err)
 	}
 	return err
 }
@@ -466,7 +475,7 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 	// Retrieve the snapshot needed to verify this header and cache it
 	snap, err := c.snapshot(chain, number-1, header.ParentHash, parents)
 	if err != nil {
-		log.Info("Error fetching snapshot in verifyCascadingFields", "number", number, "err", err)
+		log.Info("--- verifyCascadingFields: snapshot error", "number", number, "err", err)
 		return err
 	}
 
@@ -491,9 +500,41 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 	// All basic checks passed, verify the seal and return
 	err = c.verifySeal(chain, header, parents)
 	if err != nil {
-		log.Info("Error in verifySeal", "number", number, "err", err)
+		log.Info("verifySeal error", "number", number, "err", err)
 	}
 	return err
+}
+
+// SpanIdAt returns the corresponding span id for the given block number.
+func spanIdAt(blockNum uint64) uint64 {
+	if blockNum > zerothSpanEnd {
+		return 1 + (blockNum-zerothSpanEnd-1)/defaultSpanLength
+	}
+	return 0
+}
+
+// getValidatorSet fetches the producer set from span. It can be used in constructing snapshots
+// directly from heimdall data instead of making a contract call.
+func (c *Bor) getValidatorSet(number uint64) ([]*valset.Validator, error) {
+	spanId := spanIdAt(number)
+	var currentSpan *span.HeimdallSpan
+	if value, ok := c.spans.Get(spanId); ok {
+		currentSpan = value.(*span.HeimdallSpan)
+	} else {
+		var err error
+		currentSpan, err = c.HeimdallClient.Span(context.Background(), spanId)
+		if err != nil {
+			log.Info("--- getValidatorSet: unable to fetch span", "err", err)
+			return nil, err
+		}
+		if currentSpan == nil {
+			log.Info("--- getValidatorSet: got empty span from heimdall")
+			return nil, fmt.Errorf("getValidatorSet: failed to fetch span from heimdall, id: %d", spanId)
+		}
+		c.spans.Add(spanId, currentSpan)
+	}
+
+	return currentSpan.ValidatorSet.Validators, nil
 }
 
 // snapshot retrieves the authorization snapshot at a given point in time.
@@ -549,8 +590,12 @@ func (c *Bor) snapshot(chain consensus.ChainHeaderReader, number uint64, hash co
 				// get checkpoint data
 				hash := checkpoint.Hash()
 
-				// get validators and current span
-				validators, err := c.spanner.GetCurrentValidatorsByHash(context.Background(), hash, number+1)
+				// // get validators and current span
+				// validators, err := c.spanner.GetCurrentValidatorsByHash(context.Background(), hash, number+1)
+				// if err != nil {
+				// 	return nil, err
+				// }
+				validators, err := c.getValidatorSet(number + 1)
 				if err != nil {
 					return nil, err
 				}
@@ -647,6 +692,7 @@ func (c *Bor) verifySeal(chain consensus.ChainHeaderReader, header *types.Header
 	// Retrieve the snapshot needed to verify this header and cache it
 	snap, err := c.snapshot(chain, number-1, header.ParentHash, parents)
 	if err != nil {
+		log.Info("--- verifySeal: snapshot error", "number", number, "err", err)
 		return err
 	}
 
