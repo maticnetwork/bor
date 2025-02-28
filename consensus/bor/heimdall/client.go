@@ -85,9 +85,6 @@ const (
 	fetchMilestone      = "/milestone/latest"
 	fetchMilestoneCount = "/milestone/count"
 
-	fetchLastNoAckMilestone = "/milestone/last-no-ack"
-	fetchNoAckMilestone     = "/milestone/no-ack/%s"
-
 	fetchSpanFormat = "bor/span/%d"
 )
 
@@ -227,44 +224,6 @@ func (h *HeimdallClient) FetchMilestoneCount(ctx context.Context) (int64, error)
 	}
 
 	return response.Count, nil
-}
-
-// FetchLastNoAckMilestone fetches the last no-ack-milestone from heimdall
-func (h *HeimdallClient) FetchLastNoAckMilestone(ctx context.Context) (string, error) {
-	url, err := lastNoAckMilestoneURL(h.urlString)
-	if err != nil {
-		return "", err
-	}
-
-	ctx = withRequestType(ctx, milestoneLastNoAckRequest)
-
-	response, err := FetchWithRetry[milestone.MilestoneLastNoAckResponse](ctx, h.client, url, h.closeCh)
-	if err != nil {
-		return "", err
-	}
-
-	return response.Result, nil
-}
-
-// FetchNoAckMilestone fetches the last no-ack-milestone from heimdall
-func (h *HeimdallClient) FetchNoAckMilestone(ctx context.Context, milestoneID string) error {
-	url, err := noAckMilestoneURL(h.urlString, milestoneID)
-	if err != nil {
-		return err
-	}
-
-	ctx = withRequestType(ctx, milestoneNoAckRequest)
-
-	response, err := FetchWithRetry[milestone.MilestoneNoAckResponse](ctx, h.client, url, h.closeCh)
-	if err != nil {
-		return err
-	}
-
-	if !response.Result {
-		return fmt.Errorf("%w: milestoneID %q", ErrNotInRejectedList, milestoneID)
-	}
-
-	return nil
 }
 
 // FetchWithRetry returns data from heimdall with retry
@@ -415,15 +374,6 @@ func checkpointCountURL(urlString string) (*url.URL, error) {
 
 func milestoneCountURL(urlString string) (*url.URL, error) {
 	return makeURL(urlString, fetchMilestoneCount, "")
-}
-
-func lastNoAckMilestoneURL(urlString string) (*url.URL, error) {
-	return makeURL(urlString, fetchLastNoAckMilestone, "")
-}
-
-func noAckMilestoneURL(urlString string, id string) (*url.URL, error) {
-	url := fmt.Sprintf(fetchNoAckMilestone, id)
-	return makeURL(urlString, url, "")
 }
 
 func makeURL(urlString, rawPath, rawQuery string) (*url.URL, error) {
