@@ -39,7 +39,6 @@ import (
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/common/prque"
 	"github.com/ethereum/go-ethereum/consensus"
-	"github.com/ethereum/go-ethereum/core/blockstm"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/state/snapshot"
@@ -83,15 +82,20 @@ var (
 	snapshotStorageReadTimer = metrics.NewRegisteredResettingTimer("chain/snapshot/storage/reads", nil)
 	snapshotCommitTimer      = metrics.NewRegisteredResettingTimer("chain/snapshot/commits", nil)
 
+	borConsensusTime = metrics.NewRegisteredTimer("chain/bor/consensus", nil)
+
 	blockImportTimer  = metrics.NewRegisteredMeter("chain/imports", nil)
 	triedbCommitTimer = metrics.NewRegisteredTimer("chain/triedb/commits", nil)
 
-	blockInsertTimer              = metrics.NewRegisteredTimer("chain/inserts", nil)
-	blockValidationTimer          = metrics.NewRegisteredTimer("chain/validation", nil)
-	blockExecutionTimer           = metrics.NewRegisteredTimer("chain/execution", nil)
-	blockWriteTimer               = metrics.NewRegisteredTimer("chain/write", nil)
-	blockExecutionParallelCounter = metrics.NewRegisteredCounter("chain/execution/parallel", nil)
-	blockExecutionSerialCounter   = metrics.NewRegisteredCounter("chain/execution/serial", nil)
+	blockInsertTimer                   = metrics.NewRegisteredTimer("chain/inserts", nil)
+	blockValidationTimer               = metrics.NewRegisteredTimer("chain/validation", nil)
+	blockExecutionTimer                = metrics.NewRegisteredTimer("chain/execution", nil)
+	blockWriteTimer                    = metrics.NewRegisteredTimer("chain/write", nil)
+	blockExecutionParallelCounter      = metrics.NewRegisteredCounter("chain/execution/parallel", nil)
+	blockExecutionSerialCounter        = metrics.NewRegisteredCounter("chain/execution/serial", nil)
+	blockExecutionParallelErrorCounter = metrics.NewRegisteredCounter("chain/execution/parallel/error", nil)
+	blockExecutionParallelTimer        = metrics.NewRegisteredTimer("chain/execution/parallel/timer", nil)
+	blockExecutionSerialTimer          = metrics.NewRegisteredTimer("chain/execution/serial/timer", nil)
 
 	blockReorgMeter     = metrics.NewRegisteredMeter("chain/reorg/executes", nil)
 	blockReorgAddMeter  = metrics.NewRegisteredMeter("chain/reorg/add", nil)
@@ -277,6 +281,7 @@ type BlockChain struct {
 	processor                    Processor // Block transaction processor interface
 	parallelProcessor            Processor // Parallel block transaction processor interface
 	parallelSpeculativeProcesses int       // Number of parallel speculative processes
+	enforceParallelProcessor     bool
 	forker                       *ForkChoice
 	vmConfig                     vm.Config
 	logger                       *tracing.Hooks
@@ -547,7 +552,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 }
 
 // NewParallelBlockChain , similar to NewBlockChain, creates a new blockchain object, but with a parallel state processor
-func NewParallelBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis, overrides *ChainOverrides, engine consensus.Engine, vmConfig vm.Config, shouldPreserve func(header *types.Header) bool, txLookupLimit *uint64, checker ethereum.ChainValidator, numprocs int) (*BlockChain, error) {
+func NewParallelBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis, overrides *ChainOverrides, engine consensus.Engine, vmConfig vm.Config, shouldPreserve func(header *types.Header) bool, txLookupLimit *uint64, checker ethereum.ChainValidator, numprocs int, enforce bool) (*BlockChain, error) {
 	bc, err := NewBlockChain(db, cacheConfig, genesis, overrides, engine, vmConfig, shouldPreserve, txLookupLimit, checker)
 
 	if err != nil {
@@ -565,11 +570,12 @@ func NewParallelBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis 
 
 	bc.parallelProcessor = NewParallelStateProcessor(chainConfig, bc, engine)
 	bc.parallelSpeculativeProcesses = numprocs
+	bc.enforceParallelProcessor = enforce
 
 	return bc, nil
 }
 
-func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ types.Receipts, _ []*types.Log, _ uint64, _ *state.StateDB, blockEndErr error) {
+func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ types.Receipts, _ []*types.Log, _ uint64, _ *state.StateDB, vtime time.Duration, blockEndErr error) {
 	// Process the block using processor and parallelProcessor at the same time, take the one which finishes first, cancel the other, and return the result
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -597,16 +603,22 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 		err      error
 		statedb  *state.StateDB
 		counter  metrics.Counter
+		parallel bool
 	}
 
-	resultChan := make(chan Result, 2)
+	var resultChanLen int = 2
+	if bc.enforceParallelProcessor {
+		log.Debug("Processing block using Block STM only", "number", block.NumberU64())
+		resultChanLen = 1
+	}
+	resultChan := make(chan Result, resultChanLen)
 
 	processorCount := 0
 
 	if bc.parallelProcessor != nil {
 		parallelStatedb, err := state.New(parent.Root, bc.stateCache, bc.snaps)
 		if err != nil {
-			return nil, nil, 0, nil, err
+			return nil, nil, 0, nil, 0, err
 		}
 		parallelStatedb.SetLogger(bc.logger)
 
@@ -614,15 +626,22 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 
 		go func() {
 			parallelStatedb.StartPrefetcher("chain", nil)
+			pstart := time.Now()
 			receipts, logs, usedGas, err := bc.parallelProcessor.Process(block, parallelStatedb, bc.vmConfig, ctx)
-			resultChan <- Result{receipts, logs, usedGas, err, parallelStatedb, blockExecutionParallelCounter}
+			blockExecutionParallelTimer.UpdateSince(pstart)
+			if err == nil {
+				vstart := time.Now()
+				err = bc.validator.ValidateState(block, parallelStatedb, receipts, usedGas, false)
+				vtime = time.Since(vstart)
+			}
+			resultChan <- Result{receipts, logs, usedGas, err, parallelStatedb, blockExecutionParallelCounter, true}
 		}()
 	}
 
-	if bc.processor != nil {
+	if bc.processor != nil && !bc.enforceParallelProcessor {
 		statedb, err := state.New(parent.Root, bc.stateCache, bc.snaps)
 		if err != nil {
-			return nil, nil, 0, nil, err
+			return nil, nil, 0, nil, 0, err
 		}
 		statedb.SetLogger(bc.logger)
 
@@ -630,20 +649,27 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 
 		go func() {
 			statedb.StartPrefetcher("chain", nil)
+			pstart := time.Now()
 			receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig, ctx)
-			resultChan <- Result{receipts, logs, usedGas, err, statedb, blockExecutionSerialCounter}
+			blockExecutionSerialTimer.UpdateSince(pstart)
+			if err == nil {
+				vstart := time.Now()
+				err = bc.validator.ValidateState(block, statedb, receipts, usedGas, false)
+				vtime = time.Since(vstart)
+			}
+			resultChan <- Result{receipts, logs, usedGas, err, statedb, blockExecutionSerialCounter, false}
 		}()
 	}
 
 	result := <-resultChan
 
-	if _, ok := result.err.(blockstm.ParallelExecFailedError); ok {
+	if result.parallel && result.err != nil {
 		log.Warn("Parallel state processor failed", "err", result.err)
-
+		blockExecutionParallelErrorCounter.Inc(1)
 		// If the parallel processor failed, we will fallback to the serial processor if enabled
 		if processorCount == 2 {
-			result.statedb.StopPrefetcher()
 			result = <-resultChan
+			result.statedb.StopPrefetcher()
 			processorCount--
 		}
 	}
@@ -658,7 +684,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 		}()
 	}
 
-	return result.receipts, result.logs, result.usedGas, result.statedb, result.err
+	return result.receipts, result.logs, result.usedGas, result.statedb, vtime, result.err
 }
 
 // empty returns an indicator whether the blockchain is empty.
@@ -1903,18 +1929,18 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 
 // WriteBlockAndSetHead writes the given block and all associated state to the database,
 // and applies the block as the new chain head.
-func (bc *BlockChain) WriteBlockAndSetHead(ctx context.Context, block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool) (status WriteStatus, err error) {
+func (bc *BlockChain) WriteBlockAndSetHead(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool) (status WriteStatus, err error) {
 	if !bc.chainmu.TryLock() {
 		return NonStatTy, errChainStopped
 	}
 	defer bc.chainmu.Unlock()
 
-	return bc.writeBlockAndSetHead(ctx, block, receipts, logs, state, emitHeadEvent)
+	return bc.writeBlockAndSetHead(block, receipts, logs, state, emitHeadEvent)
 }
 
 // writeBlockAndSetHead is the internal implementation of WriteBlockAndSetHead.
 // This function expects the chain mutex to be held.
-func (bc *BlockChain) writeBlockAndSetHead(ctx context.Context, block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool) (status WriteStatus, err error) {
+func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool) (status WriteStatus, err error) {
 	stateSyncLogs, err := bc.writeBlockWithState(block, receipts, logs, state)
 	if err != nil {
 		return NonStatTy, err
@@ -2323,7 +2349,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 
 		// Process block using the parent state as reference point
 		pstart := time.Now()
-		receipts, logs, usedGas, statedb, err := bc.ProcessBlock(block, parent)
+		receipts, logs, usedGas, statedb, vtime, err := bc.ProcessBlock(block, parent)
 		activeState = statedb
 
 		if err != nil {
@@ -2338,18 +2364,8 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 			bc.stateSyncFeed.Send(StateSyncEvent{Data: data})
 		}
 		// BOR
-		ptime := time.Since(pstart)
+		ptime := time.Since(pstart) - vtime - statedb.BorConsensusTime
 
-		vstart := time.Now()
-
-		if err := bc.validator.ValidateState(block, statedb, receipts, usedGas, false); err != nil {
-			bc.reportBlock(block, receipts, err)
-			followupInterrupt.Store(true)
-
-			return it.index, err
-		}
-
-		vtime := time.Since(vstart)
 		proctime := time.Since(start) // processing + validation
 
 		// Update the metrics touched during block processing and validation
@@ -2367,7 +2383,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		trieRead += statedb.SnapshotStorageReads + statedb.StorageReads // The time spent on storage read
 		blockExecutionTimer.Update(ptime - trieRead)                    // The time spent on EVM processing
 		blockValidationTimer.Update(vtime - (triehash + trieUpdate))    // The time spent on block validation
-
+		borConsensusTime.Update(statedb.BorConsensusTime)               // The time spent on bor consensus (span + state sync)
 		// Write the block to the chain and get the status.
 		var (
 			wstart = time.Now()
@@ -2377,7 +2393,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		// Before the actual db insertion happens, verify the block against the whitelisted
 		// milestone and checkpoint. This is to prevent a race condition where a milestone
 		// or checkpoint was whitelisted while the block execution happened (and wasn't
-		// available sometime before) and the block turns out to be inavlid (i.e. not
+		// available sometime before) and the block turns out to be invalid (i.e. not
 		// honouring the milestone or checkpoint). Use the block itself as current block
 		// so that it's considered as a `past` chain and the validation doesn't get bypassed.
 		isValid, err = bc.forker.ValidateReorg(block.Header(), []*types.Header{block.Header()})
@@ -2392,7 +2408,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 			// Don't set the head, only insert the block
 			_, err = bc.writeBlockWithState(block, receipts, logs, statedb)
 		} else {
-			status, err = bc.writeBlockAndSetHead(context.Background(), block, receipts, logs, statedb, false)
+			status, err = bc.writeBlockAndSetHead(block, receipts, logs, statedb, false)
 		}
 
 		followupInterrupt.Store(true)
@@ -2565,7 +2581,7 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 		// Don't set the head, only insert the block
 		_, err = bc.writeBlockWithState(block, receipts, logs, statedb)
 	} else {
-		status, err = bc.writeBlockAndSetHead(context.Background(), block, receipts, logs, statedb, false)
+		status, err = bc.writeBlockAndSetHead(block, receipts, logs, statedb, false)
 	}
 	if err != nil {
 		return nil, err

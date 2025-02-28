@@ -17,7 +17,6 @@
 package beacon
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"math/big"
@@ -230,7 +229,7 @@ func (beacon *Beacon) VerifyUncles(chain consensus.ChainReader, block *types.Blo
 // (c) the extradata is limited to 32 bytes
 func (beacon *Beacon) verifyHeader(chain consensus.ChainHeaderReader, header, parent *types.Header) error {
 	// Ensure that the header's extra-data section is of a reasonable size
-	if len(header.Extra) > 32 {
+	if len(header.Extra) > int(params.MaximumExtraDataSize) {
 		return fmt.Errorf("extra-data longer than 32 bytes (%d)", len(header.Extra))
 	}
 	// Verify the seal parts. Ensure the nonce and uncle hash are the expected value.
@@ -398,9 +397,9 @@ func (beacon *Beacon) FinalizeAndAssemble(chain consensus.ChainHeaderReader, hea
 //
 // Note, the method returns immediately and will send the result async. More
 // than one result may also be returned depending on the consensus algorithm.
-func (beacon *Beacon) Seal(ctx context.Context, chain consensus.ChainHeaderReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
+func (beacon *Beacon) Seal(chain consensus.ChainHeaderReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
 	if !beacon.IsPoSHeader(block.Header()) {
-		return beacon.ethone.Seal(ctx, chain, block, results, stop)
+		return beacon.ethone.Seal(chain, block, results, stop)
 	}
 	// The seal verification is done by the external consensus engine,
 	// return directly without pushing any block back. In another word

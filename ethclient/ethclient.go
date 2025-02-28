@@ -163,7 +163,13 @@ func (ec *Client) getBlock(ctx context.Context, method string, args ...interface
 		return nil, errors.New("server returned empty uncle list but block header indicates uncles")
 	}
 	if head.TxHash == types.EmptyTxsHash && len(body.Transactions) > 0 {
-		return nil, errors.New("server returned non-empty transaction list but block header indicates no transactions")
+		// If there is only one transaction in the block and the header's txHash is `EmptyTxsHash`,
+		// it indicates a state-sync transaction. No error handling is required in this case.
+		tx := body.Transactions[0]
+		if (tx.From != nil && *tx.From != common.HexToAddress(zeroAddress)) ||
+			(tx.tx.To() != nil && *tx.tx.To() != common.HexToAddress(zeroAddress)) {
+			return nil, errors.New("server returned non-empty transaction list but block header indicates no transactions")
+		}
 	}
 	if head.TxHash != types.EmptyTxsHash && len(body.Transactions) == 0 {
 		return nil, errors.New("server returned empty transaction list but block header indicates transactions")
@@ -387,8 +393,7 @@ func (ec *Client) NetworkID(ctx context.Context) (*big.Int, error) {
 	if err := ec.c.CallContext(ctx, &ver, "net_version"); err != nil {
 		return nil, err
 	}
-
-	if _, ok := version.SetString(ver, 10); !ok {
+	if _, ok := version.SetString(ver, 0); !ok {
 		return nil, fmt.Errorf("invalid net_version result %q", ver)
 	}
 

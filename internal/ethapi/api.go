@@ -29,6 +29,7 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/tyler-smith/go-bip39"
 
+	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/accounts/scwallet"
@@ -704,7 +705,10 @@ func (api *BlockChainAPI) GetTransactionReceiptsByBlock(ctx context.Context, blo
 
 	var txHash common.Hash
 
-	borReceipt := rawdb.ReadBorReceipt(api.b.ChainDb(), block.Hash(), block.NumberU64(), api.b.ChainConfig())
+	borReceipt, err := api.b.GetBorBlockReceipt(ctx, block.Hash())
+	if err != nil && err != ethereum.NotFound {
+		return nil, err
+	}
 	if borReceipt != nil {
 		receipts = append(receipts, borReceipt)
 
@@ -1115,7 +1119,10 @@ func (api *BlockChainAPI) GetBlockReceipts(ctx context.Context, blockNrOrHash rp
 		result[i] = marshalReceipt(receipt, block.Hash(), block.NumberU64(), signer, txs[i], i, false)
 	}
 
-	stateSyncReceipt := rawdb.ReadBorReceipt(api.b.ChainDb(), block.Hash(), block.NumberU64(), api.b.ChainConfig())
+	stateSyncReceipt, err := api.b.GetBorBlockReceipt(ctx, block.Hash())
+	if err != nil && err != ethereum.NotFound {
+		return nil, err
+	}
 	if stateSyncReceipt != nil {
 		tx, _, _, _ := rawdb.ReadBorTransaction(api.b.ChainDb(), stateSyncReceipt.TxHash)
 		result = append(result, marshalReceipt(stateSyncReceipt, block.Hash(), block.NumberU64(), signer, tx, len(result), true))
@@ -1131,11 +1138,11 @@ func (api *BlockChainAPI) GetBlockReceipts(ctx context.Context, blockNrOrHash rp
 // if stateDiff is set, all diff will be applied first and then execute the call
 // message.
 type OverrideAccount struct {
-	Nonce     *hexutil.Uint64              `json:"nonce"`
-	Code      *hexutil.Bytes               `json:"code"`
-	Balance   **hexutil.Big                `json:"balance"`
-	State     *map[common.Hash]common.Hash `json:"state"`
-	StateDiff *map[common.Hash]common.Hash `json:"stateDiff"`
+	Nonce     *hexutil.Uint64             `json:"nonce"`
+	Code      *hexutil.Bytes              `json:"code"`
+	Balance   *hexutil.Big                `json:"balance"`
+	State     map[common.Hash]common.Hash `json:"state"`
+	StateDiff map[common.Hash]common.Hash `json:"stateDiff"`
 }
 
 // StateOverride is the collection of overridden accounts.
@@ -1158,7 +1165,7 @@ func (diff *StateOverride) Apply(statedb *state.StateDB) error {
 		}
 		// Override account balance.
 		if account.Balance != nil {
-			u256Balance, _ := uint256.FromBig((*big.Int)(*account.Balance))
+			u256Balance, _ := uint256.FromBig((*big.Int)(account.Balance))
 			statedb.SetBalance(addr, u256Balance, tracing.BalanceChangeUnspecified)
 		}
 
@@ -1167,11 +1174,11 @@ func (diff *StateOverride) Apply(statedb *state.StateDB) error {
 		}
 		// Replace entire state if caller requires.
 		if account.State != nil {
-			statedb.SetStorage(addr, *account.State)
+			statedb.SetStorage(addr, account.State)
 		}
 		// Apply state diff into specified accounts.
 		if account.StateDiff != nil {
-			for key, value := range *account.StateDiff {
+			for key, value := range account.StateDiff {
 				statedb.SetState(addr, key, value)
 			}
 		}
@@ -1901,7 +1908,7 @@ func (api *TransactionAPI) getAllBlockTransactions(ctx context.Context, block *t
 
 	stateSyncPresent := false
 
-	borReceipt := rawdb.ReadBorReceipt(api.b.ChainDb(), block.Hash(), block.NumberU64(), api.b.ChainConfig())
+	borReceipt, _ := api.b.GetBorBlockReceipt(ctx, block.Hash())
 	if borReceipt != nil {
 		txHash := types.GetDerivedBorTxHash(types.BorReceiptKey(block.Number().Uint64(), block.Hash()))
 		if txHash != (common.Hash{}) {
@@ -2074,7 +2081,10 @@ func (api *TransactionAPI) GetTransactionReceipt(ctx context.Context, hash commo
 	}
 
 	if !found {
-		tx, blockHash, blockNumber, index = rawdb.ReadBorTransaction(api.b.ChainDb(), hash)
+		tx, blockHash, blockNumber, index, err = api.b.GetBorBlockTransaction(ctx, hash)
+		if err != nil {
+			return nil, err
+		}
 		borTx = true
 	}
 
@@ -2086,7 +2096,10 @@ func (api *TransactionAPI) GetTransactionReceipt(ctx context.Context, hash commo
 
 	if borTx {
 		// Fetch bor block receipt
-		receipt = rawdb.ReadBorReceipt(api.b.ChainDb(), blockHash, blockNumber, api.b.ChainConfig())
+		receipt, err = api.b.GetBorBlockReceipt(ctx, blockHash)
+		if err != nil && err != ethereum.NotFound {
+			return nil, err
+		}
 	} else {
 		receipts, err := api.b.GetReceipts(ctx, blockHash)
 		if err != nil {

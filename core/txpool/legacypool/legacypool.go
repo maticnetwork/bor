@@ -38,6 +38,7 @@ import (
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/holiman/uint256"
+	"golang.org/x/exp/maps"
 )
 
 const (
@@ -100,12 +101,8 @@ var (
 	localGauge   = metrics.NewRegisteredGauge("txpool/local", nil)
 	slotsGauge   = metrics.NewRegisteredGauge("txpool/slots", nil)
 
-	resetCacheGauge  = metrics.NewRegisteredGauge("txpool/resetcache", nil)
-	reinitCacheGauge = metrics.NewRegisteredGauge("txpool/reinittcache", nil)
-	hitCacheCounter  = metrics.NewRegisteredCounter("txpool/cachehit", nil)
-	missCacheCounter = metrics.NewRegisteredCounter("txpool/cachemiss", nil)
-
-	reheapTimer = metrics.NewRegisteredTimer("txpool/reheap", nil)
+	resetCacheGauge = metrics.NewRegisteredGauge("txpool/resetcache", nil)
+	reheapTimer     = metrics.NewRegisteredTimer("txpool/reheap", nil)
 )
 
 // BlockChain defines the minimal set of methods needed to back a tx pool with
@@ -1752,7 +1749,7 @@ func (a addressesByHeartbeat) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
 type accountSet struct {
 	accounts map[common.Address]struct{}
 	signer   types.Signer
-	cache    *[]common.Address
+	cache    []common.Address
 }
 
 // newAccountSet creates a new address set with an associated signer for sender
@@ -1800,20 +1797,14 @@ func (as *accountSet) addTx(tx *types.Transaction) {
 // reuse. The returned slice should not be changed!
 func (as *accountSet) flatten() []common.Address {
 	if as.cache == nil {
-		accounts := make([]common.Address, 0, len(as.accounts))
-		for account := range as.accounts {
-			accounts = append(accounts, account)
-		}
-		as.cache = &accounts
+		as.cache = maps.Keys(as.accounts)
 	}
-	return *as.cache
+	return as.cache
 }
 
 // merge adds all addresses from the 'other' set into 'as'.
 func (as *accountSet) merge(other *accountSet) {
-	for addr := range other.accounts {
-		as.accounts[addr] = struct{}{}
-	}
+	maps.Copy(as.accounts, other.accounts)
 	as.cache = nil
 }
 
