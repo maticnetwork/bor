@@ -395,7 +395,11 @@ func (c *Bor) verifyHeader(chain consensus.ChainHeaderReader, header *types.Head
 	}
 
 	// All basic checks passed, verify cascading fields
-	return c.verifyCascadingFields(chain, header, parents)
+	err := c.verifyCascadingFields(chain, header, parents)
+	if err != nil {
+		log.Info("Error in verifyCascadingFields", "number", header.Number.Uint64(), "err", err)
+	}
+	return err
 }
 
 // validateHeaderExtraField validates that the extra-data contains both the vanity and signature.
@@ -419,7 +423,6 @@ func validateHeaderExtraField(extraBytes []byte) error {
 func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *types.Header, parents []*types.Header) error {
 	// The genesis block is the always valid dead-end
 	number := header.Number.Uint64()
-
 	if number == 0 {
 		return nil
 	}
@@ -463,6 +466,7 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 	// Retrieve the snapshot needed to verify this header and cache it
 	snap, err := c.snapshot(chain, number-1, header.ParentHash, parents)
 	if err != nil {
+		log.Info("Error fetching snapshot in verifyCascadingFields", "number", number, "err", err)
 		return err
 	}
 
@@ -485,7 +489,11 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 	}
 
 	// All basic checks passed, verify the seal and return
-	return c.verifySeal(chain, header, parents)
+	err = c.verifySeal(chain, header, parents)
+	if err != nil {
+		log.Info("Error in verifySeal", "number", number, "err", err)
+	}
+	return err
 }
 
 // snapshot retrieves the authorization snapshot at a given point in time.
