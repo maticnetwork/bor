@@ -14,10 +14,12 @@ import (
 	"time"
 
 	"github.com/0xPolygon/heimdall-v2/x/bor/types"
+	clerkTypes "github.com/0xPolygon/heimdall-v2/x/clerk/types"
 	"github.com/cosmos/cosmos-sdk/codec"
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	cryptocodec "github.com/cosmos/cosmos-sdk/crypto/codec"
 	"github.com/cosmos/gogoproto/proto"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
@@ -76,8 +78,9 @@ func NewHeimdallClient(urlString string) *HeimdallClient {
 }
 
 const (
-	fetchStateSyncEventsFormat = "from-id=%d&to-time=%d&limit=%d"
-	fetchStateSyncEventsPath   = "clerk/event-record/list"
+	fetchStateSyncEventsFormat = "from-id=%d&to-time=%d"
+	fetchStateSyncEventsPath   = "clerk/time"
+	fetchStateSyncList         = "clerk/event-record/list"
 
 	fetchCheckpoint      = "/checkpoints/%s"
 	fetchCheckpointCount = "/checkpoints/count"
@@ -95,7 +98,7 @@ func (h *HeimdallClient) StateSyncEvents(ctx context.Context, fromID uint64, to 
 	eventRecords := make([]*clerk.EventRecordWithTime, 0)
 
 	for {
-		url, err := stateSyncURL(h.urlString, fromID, to)
+		url, err := stateSyncListURL(h.urlString)
 		if err != nil {
 			return nil, err
 		}
@@ -104,19 +107,31 @@ func (h *HeimdallClient) StateSyncEvents(ctx context.Context, fromID uint64, to 
 
 		ctx = withRequestType(ctx, stateSyncRequest)
 
-		response, err := FetchWithRetry[StateSyncEventsResponse](ctx, h.client, url, h.closeCh)
+		response, err := FetchWithRetry[clerkTypes.RecordListResponse](ctx, h.client, url, h.closeCh)
 		if err != nil {
 			return nil, err
 		}
 
-		if response == nil || response.Result == nil {
-			// status 204
-			break
+		var record *clerk.EventRecordWithTime
+
+		for _, e := range response.EventRecords {
+			if e.Id >= fromID && e.RecordTime.Before(time.Unix(to, 0)) {
+				record = &clerk.EventRecordWithTime{
+					EventRecord: clerk.EventRecord{
+						ID:       e.Id,
+						ChainID:  e.BorChainId,
+						Contract: common.HexToAddress(e.Contract),
+						Data:     e.Data,
+						LogIndex: e.LogIndex,
+						TxHash:   common.HexToHash(e.TxHash),
+					},
+					Time: e.RecordTime,
+				}
+				eventRecords = append(eventRecords, record)
+			}
 		}
 
-		eventRecords = append(eventRecords, response.Result...)
-
-		if len(response.Result) < stateFetchLimit {
+		if len(response.EventRecords) < stateFetchLimit {
 			break
 		}
 
@@ -387,9 +402,13 @@ func spanURL(urlString string, spanID uint64) (*url.URL, error) {
 }
 
 func stateSyncURL(urlString string, fromID uint64, to int64) (*url.URL, error) {
-	queryParams := fmt.Sprintf(fetchStateSyncEventsFormat, fromID, to, stateFetchLimit)
+	queryParams := fmt.Sprintf(fetchStateSyncEventsFormat, fromID, to)
 
 	return makeURL(urlString, fetchStateSyncEventsPath, queryParams)
+}
+
+func stateSyncListURL(urlString string) (*url.URL, error) {
+	return makeURL(urlString, fetchStateSyncList, "")
 }
 
 func checkpointURL(urlString string, number int64) (*url.URL, error) {
