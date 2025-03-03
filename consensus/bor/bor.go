@@ -476,6 +476,9 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 	// Verify the validator list match the local contract
 	if IsSprintStart(number+1, c.config.CalculateSprint(number)) {
 		span, err := c.spanStore.spanByBlockNumber(context.Background(), number+1)
+		if err != nil {
+			return err
+		}
 		newValidators := span.ValidatorSet.Validators
 
 		sort.Sort(valset.ValidatorsByAddress(newValidators))
