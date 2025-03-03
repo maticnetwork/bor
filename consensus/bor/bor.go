@@ -224,6 +224,8 @@ type Bor struct {
 	GenesisContractsClient GenesisContract
 	HeimdallClient         IHeimdallClient
 
+	spanStore SpanStore // Store to save previous span data from heimdall
+
 	// The fields below are for testing only
 	fakeDiff      bool // Skip difficulty verifications
 	devFakeAuthor bool
@@ -257,6 +259,9 @@ func New(
 	recents, _ := lru.NewARC(inmemorySnapshots)
 	signatures, _ := lru.NewARC(inmemorySignatures)
 
+	// Create a new span store
+	spanStore := NewSpanStore(heimdallClient)
+
 	c := &Bor{
 		chainConfig:            chainConfig,
 		config:                 borConfig,
@@ -267,6 +272,7 @@ func New(
 		spanner:                spanner,
 		GenesisContractsClient: genesisContracts,
 		HeimdallClient:         heimdallClient,
+		spanStore:              spanStore,
 		devFakeAuthor:          devFakeAuthor,
 	}
 
@@ -469,11 +475,8 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 
 	// Verify the validator list match the local contract
 	if IsSprintStart(number+1, c.config.CalculateSprint(number)) {
-		newValidators, err := c.spanner.GetCurrentValidatorsByBlockNrOrHash(context.Background(), rpc.BlockNumberOrHashWithNumber(rpc.LatestBlockNumber), number+1)
-
-		if err != nil {
-			return err
-		}
+		span, err := c.spanStore.spanByBlockNumber(context.Background(), number+1)
+		newValidators := span.ValidatorSet.Validators
 
 		sort.Sort(valset.ValidatorsByAddress(newValidators))
 
@@ -561,8 +564,6 @@ func (c *Bor) snapshot(chain consensus.ChainHeaderReader, number uint64, hash co
 		// at a checkpoint block without a parent (light client CHT), or we have piled
 		// up more headers than allowed to be reorged (chain reinit from a freezer),
 		// consider the checkpoint trusted and snapshot it.
-
-		// TODO fix this
 		// nolint:nestif
 		if number == 0 {
 			checkpoint := chain.GetHeaderByNumber(number)
@@ -570,14 +571,14 @@ func (c *Bor) snapshot(chain consensus.ChainHeaderReader, number uint64, hash co
 				// get checkpoint data
 				hash := checkpoint.Hash()
 
-				// get validators and current span
-				validators, err := c.spanner.GetCurrentValidatorsByHash(context.Background(), hash, number+1)
+				// get validators from span
+				span, err := c.spanStore.spanByBlockNumber(context.Background(), number+1)
 				if err != nil {
 					return nil, err
 				}
 
 				// new snap shot
-				snap = newSnapshot(c.chainConfig, c.signatures, number, hash, validators)
+				snap = newSnapshot(c.chainConfig, c.signatures, number, hash, span.ValidatorSet.Validators)
 				if err := snap.store(c.db); err != nil {
 					return nil, err
 				}
@@ -1161,7 +1162,7 @@ func (c *Bor) FetchAndCommitSpan(
 
 		heimdallSpan = *s
 	} else {
-		response, err := c.HeimdallClient.Span(ctx, newSpanID)
+		response, err := c.spanStore.spanById(ctx, newSpanID)
 		if err != nil {
 			return err
 		}
