@@ -778,11 +778,20 @@ func (s *Ethereum) subscribeAndHandleMilestone(ctx context.Context, ethHandler *
 	if err != nil {
 		return err
 	}
+	log.Info("##############Successfully subscribed to milestone events")
 
 	for {
 		select {
 		case m := <-milestoneEvents:
-			ethHandler.handleMilestone(ctx, s, m, newBorVerifier())
+			log.Info("##############Successfully received milestone event")
+
+			err := ethHandler.handleMilestone(ctx, s, m, newBorVerifier())
+			if err != nil {
+				log.Error("##############Error handling ws event", "errorReceived", err)
+			} else {
+				log.Info("##############Successfully handling milestone event")
+			}
+
 		case <-ctx.Done():
 			return nil
 		}
