@@ -83,6 +83,7 @@ func (h *ethHandler) fetchWhitelistMilestone(ctx context.Context, bor *bor.Bor) 
 func (h *ethHandler) handleMilestone(ctx context.Context, eth *Ethereum, milestone *milestone.Milestone, verifier *borVerifier) error {
 	// Verify if the milestone fetched can be added to the local whitelist entry or not. If verified,
 	// the hash of the end block of the milestone is returned else appropriate error is returned.
+	log.Info("################## milestone to be handled", "milestoneToBeHandled", milestone)
 	_, err := verifier.verify(ctx, eth, h, milestone.StartBlock, milestone.EndBlock, milestone.Hash.String()[2:], false)
 	if err != nil {
 		if errors.Is(err, errChainOutOfSync) {
