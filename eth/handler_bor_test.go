@@ -107,16 +107,19 @@ func fetchCheckpointTest(t *testing.T, heimdall *mockHeimdall, bor *bor.Bor, han
 	// create a background context
 	ctx := context.Background()
 
-	_, _, err := handler.fetchWhitelistCheckpoint(ctx, bor, nil, verifier)
+	_, err := handler.fetchWhitelistCheckpoint(ctx, bor)
 	require.ErrorIs(t, err, errCheckpoint)
 
 	// create 4 mock checkpoints
 	checkpoints = createMockCheckpoints(4)
 
-	blockNum, blockHash, err := handler.fetchWhitelistCheckpoint(ctx, bor, nil, verifier)
+	checkpoint, err := handler.fetchWhitelistCheckpoint(ctx, bor)
+	blockHash, err2 := handler.handleWhitelistCheckpoint(ctx, checkpoint, nil, verifier, false)
+	blockNum := checkpoint.EndBlock
 
 	// Check if we have expected result
 	require.Equal(t, err, nil)
+	require.Equal(t, err2, nil)
 	require.Equal(t, checkpoints[len(checkpoints)-1].EndBlock, blockNum)
 	require.Equal(t, checkpoints[len(checkpoints)-1].RootHash, blockHash)
 }
@@ -137,13 +140,15 @@ func fetchMilestoneTest(t *testing.T, heimdall *mockHeimdall, bor *bor.Bor, hand
 	// create a background context
 	ctx := context.Background()
 
-	_, _, err := handler.fetchWhitelistMilestone(ctx, bor, nil, verifier)
+	_, err := handler.fetchWhitelistMilestone(ctx, bor)
 	require.ErrorIs(t, err, errMilestone)
 
 	// create 4 mock checkpoints
 	milestones = createMockMilestones(4)
 
-	num, hash, err := handler.fetchWhitelistMilestone(ctx, bor, nil, verifier)
+	milestone, err := handler.fetchWhitelistMilestone(ctx, bor)
+	num := milestone.EndBlock
+	hash := milestone.Hash
 
 	// Check if we have expected result
 	require.Equal(t, err, nil)

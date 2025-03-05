@@ -394,13 +394,15 @@ func getFakeBorFromConfig(t *testing.T, chainConfig *params.ChainConfig) (consen
 	}, nil).AnyTimes()
 
 	heimdallClientMock := mocks.NewMockIHeimdallClient(ctrl)
+	heimdallWSClient := mocks.NewMockIHeimdallWSClient(ctrl)
+
 	heimdallClientMock.EXPECT().Close().AnyTimes()
 
 	contractMock := bor.NewMockGenesisContract(ctrl)
 
 	db, _, _ := NewDBForFakes(t)
 
-	engine := NewFakeBor(t, db, chainConfig, ethAPIMock, spanner, heimdallClientMock, contractMock)
+	engine := NewFakeBor(t, db, chainConfig, ethAPIMock, spanner, heimdallClientMock, heimdallWSClient, contractMock)
 
 	return engine, ctrl
 }
@@ -854,13 +856,15 @@ func BenchmarkBorMining(b *testing.B) {
 	}, nil).AnyTimes()
 
 	heimdallClientMock := mocks.NewMockIHeimdallClient(ctrl)
+	heimdallWSClient := mocks.NewMockIHeimdallWSClient(ctrl)
+
 	heimdallClientMock.EXPECT().Close().Times(1)
 
 	contractMock := bor.NewMockGenesisContract(ctrl)
 
 	db, _, _ := NewDBForFakes(b)
 
-	engine := NewFakeBor(b, db, chainConfig, ethAPIMock, spanner, heimdallClientMock, contractMock)
+	engine := NewFakeBor(b, db, chainConfig, ethAPIMock, spanner, heimdallClientMock, heimdallWSClient, contractMock)
 	defer engine.Close()
 
 	chainConfig.LondonBlock = big.NewInt(0)
@@ -951,13 +955,15 @@ func BenchmarkBorMiningBlockSTMMetadata(b *testing.B) {
 	}, nil).AnyTimes()
 
 	heimdallClientMock := mocks.NewMockIHeimdallClient(ctrl)
+	heimdallWSClient := mocks.NewMockIHeimdallWSClient(ctrl)
+
 	heimdallClientMock.EXPECT().Close().Times(1)
 
 	contractMock := bor.NewMockGenesisContract(ctrl)
 
 	db, _, _ := NewDBForFakes(b)
 
-	engine := NewFakeBor(b, db, chainConfig, ethAPIMock, spanner, heimdallClientMock, contractMock)
+	engine := NewFakeBor(b, db, chainConfig, ethAPIMock, spanner, heimdallClientMock, heimdallWSClient, contractMock)
 	defer engine.Close()
 
 	chainConfig.LondonBlock = big.NewInt(0)

@@ -88,8 +88,6 @@ github.com/0xPolygon/cosmos-sdk v0.1.7-beta-polygon h1:c49jBMzsTChCfUa/ID7qZ/r3A
 github.com/0xPolygon/cosmos-sdk v0.1.7-beta-polygon/go.mod h1:5FoQEICKOgSWbKG1eMAI9dKzi0Gvlu2vTMDakiBK0SI=
 github.com/0xPolygon/cosmos-sdk/client/v2 v2.0.0-beta.1 h1:XV7f44uAJ1p1w9j15uzm2S8VOSusHFJ1UWvkUj0EK7g=
 github.com/0xPolygon/cosmos-sdk/client/v2 v2.0.0-beta.1/go.mod h1:JEUSu9moNZQ4kU3ir1DKD5eU4bllmAexrGWjmb9k8qU=
-github.com/0xPolygon/heimdall-v2 v0.0.0-20250124090128-bc0afd1d5e6d h1:UJA175jWMXBKRP67wsQEDQEvSqZZ9WgYtLyqZY8ayCw=
-github.com/0xPolygon/heimdall-v2 v0.0.0-20250124090128-bc0afd1d5e6d/go.mod h1:LdqHmJXcPaELo1IfP0RwL8M5UsNmvwpG4+4jlF70/os=
 github.com/0xPolygon/heimdall-v2 v0.0.0-20250206060755-5ff54cfa4cdc h1:tNuqe892hNl/4r178Sxj6WZs2jsSCwlp/YAltqgg7j0=
 github.com/0xPolygon/heimdall-v2 v0.0.0-20250206060755-5ff54cfa4cdc/go.mod h1:LdqHmJXcPaELo1IfP0RwL8M5UsNmvwpG4+4jlF70/os=
 github.com/99designs/go-keychain v0.0.0-20191008050251-8e49817e8af4 h1:/vQbFIOMbk2FiG/kXiLl8BRyzTWDw7gX/Hz7Dd5eDMs=
