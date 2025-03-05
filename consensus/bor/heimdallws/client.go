@@ -60,13 +60,16 @@ func (c *HeimdallWSClient) readMessages(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
+			log.Info("#################### Context Done")
 			return
 		case <-c.done:
+			log.Info("#################### Client Done")
 			return
 		default:
 			c.conn.SetReadDeadline(time.Now().Add(30 * time.Second))
 			_, message, err := c.conn.ReadMessage()
 			if err != nil {
+				log.Info("#################### Error in WS connection!", "receivedErr", err)
 				// In production, consider logging or handling reconnection.
 				return
 			}
