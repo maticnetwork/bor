@@ -522,13 +522,22 @@ func (c *Bor) getValidatorSet(number uint64) ([]*valset.Validator, error) {
 		currentSpan = value.(*span.HeimdallSpan)
 	} else {
 		var err error
+		if spanId == 0 {
+			// Call against genesis state...
+			valset, err := c.spanner.GetCurrentValidatorsByBlockNrOrHash(context.Background(), rpc.BlockNumberOrHashWithNumber(0), number)
+			if err != nil {
+				log.Info("--- [getValidatorSet] error fetching valset", "spanId", spanId, "number", number, "err", err)
+			} else {
+				log.Info("--- [getValidatorSet] fetched valset from genesis state", "spanId", spanId, "number", number)
+				return valset, nil
+			}
+		}
+		log.Info("---- [getValidatorSet] fetching span from heimdall", "spanId", spanId)
 		currentSpan, err = c.HeimdallClient.Span(context.Background(), spanId)
 		if err != nil {
-			log.Info("--- getValidatorSet: unable to fetch span", "err", err)
 			return nil, err
 		}
 		if currentSpan == nil {
-			log.Info("--- getValidatorSet: got empty span from heimdall")
 			return nil, fmt.Errorf("getValidatorSet: failed to fetch span from heimdall, id: %d", spanId)
 		}
 		c.spans.Add(spanId, currentSpan)
@@ -595,6 +604,15 @@ func (c *Bor) snapshot(chain consensus.ChainHeaderReader, number uint64, hash co
 				// if err != nil {
 				// 	return nil, err
 				// }
+				// use genesis state (for snap sync)
+				// validatorsFromContract, err := c.spanner.GetCurrentValidatorsByHash(context.Background(), hash, number)
+				// if err != nil {
+				// 	log.Info("--- error in fetching valset from genesis state", "err", err)
+				// } else {
+				// 	log.Info("--- fetched valset from genesis state in snapshot at block 0", "len", len(validatorsFromContract))
+				// }
+
+				// Don't use the validators actually...
 				validators, err := c.getValidatorSet(number + 1)
 				if err != nil {
 					return nil, err

@@ -162,7 +162,14 @@ func (s *Snapshot) apply(headers []*types.Header, c *Bor) (*Snapshot, error) {
 
 			if v.CheckEmptyId() {
 				log.Warn("Empty id found on validator set. Querying on the validatorSet contract")
-				valsWithId, _ := c.spanner.GetCurrentValidatorsByHash(context.Background(), header.Hash(), number+1)
+				valsWithId, err := c.spanner.GetCurrentValidatorsByHash(context.Background(), header.Hash(), number+1)
+				if err != nil {
+					log.Info("--- [snapshot apply] error fetching vals by hash but ignored", "err", err)
+					valsWithId, err = c.getValidatorSet(number)
+					if err != nil {
+						log.Info("--- [snapshot apply] found valset hopefully from genesis state", "err", err)
+					}
+				}
 				v.IncludeIds(valsWithId)
 			}
 			snap.ValidatorSet = v
