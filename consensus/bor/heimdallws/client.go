@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
-	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
@@ -66,7 +65,6 @@ func (c *HeimdallWSClient) readMessages(ctx context.Context) {
 			log.Info("#################### Client Done")
 			return
 		default:
-			c.conn.SetReadDeadline(time.Now().Add(30 * time.Second))
 			_, message, err := c.conn.ReadMessage()
 			if err != nil {
 				log.Info("#################### Error in WS connection!", "receivedErr", err)
