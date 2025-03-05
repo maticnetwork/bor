@@ -10,6 +10,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/gorilla/websocket"
 )
 
@@ -93,6 +94,8 @@ func (c *HeimdallWSClient) readMessages(ctx context.Context) {
 			attrs := make(map[string]string)
 			for _, attr := range milestoneEvent.Attributes {
 				attrs[attr.Key] = attr.Value
+				log.Info("############## New attribute!!!", "attribKey", attr.Key, "attribValue", attr.Value)
+
 			}
 
 			// Build the Milestone object from attributes.
