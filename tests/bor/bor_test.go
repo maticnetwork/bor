@@ -402,10 +402,6 @@ func TestInsertingSpanSizeBlocks(t *testing.T) {
 		EndBlock:   big.NewInt(int64(spanSize)),
 	}, nil).AnyTimes()
 
-	h.EXPECT().FetchLastNoAckMilestone(gomock.Any()).Return("", nil).AnyTimes()
-
-	h.EXPECT().FetchNoAckMilestone(gomock.Any(), string("test")).Return(nil).AnyTimes()
-
 	_bor.SetHeimdallClient(h)
 
 	block := init.genesis.ToBlock()
@@ -483,10 +479,6 @@ func TestFetchStateSyncEvents(t *testing.T) {
 
 	h.EXPECT().FetchMilestone(gomock.Any()).Return(&milestone.Milestone{}, nil).AnyTimes()
 
-	h.EXPECT().FetchLastNoAckMilestone(gomock.Any()).Return("", nil).AnyTimes()
-
-	h.EXPECT().FetchNoAckMilestone(gomock.Any(), string("test")).Return(nil).AnyTimes()
-
 	// B.2 Mock State Sync events
 	fromID := uint64(1)
 	// at # sprintSize, events are fetched for [fromID, (block-sprint).Time)
@@ -545,10 +537,6 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 	h.EXPECT().FetchCheckpoint(gomock.Any(), int64(-1)).Return(&checkpoint.Checkpoint{}, nil).AnyTimes()
 
 	h.EXPECT().FetchMilestone(gomock.Any()).Return(&milestone.Milestone{}, nil).AnyTimes()
-
-	h.EXPECT().FetchLastNoAckMilestone(gomock.Any()).Return("", nil).AnyTimes()
-
-	h.EXPECT().FetchNoAckMilestone(gomock.Any(), string("test")).Return(nil).AnyTimes()
 
 	// Mock State Sync events
 	// at # sprintSize, events are fetched for [fromID, (block-sprint).Time)
@@ -648,10 +636,6 @@ func TestOutOfTurnSigning(t *testing.T) {
 
 	h.EXPECT().FetchMilestone(gomock.Any()).Return(&milestone.Milestone{}, nil).AnyTimes()
 
-	h.EXPECT().FetchLastNoAckMilestone(gomock.Any()).Return("", nil).AnyTimes()
-
-	h.EXPECT().FetchNoAckMilestone(gomock.Any(), string("test")).Return(nil).AnyTimes()
-
 	spanner := getMockedSpanner(t, heimdallSpan.ValidatorSet.Validators)
 	_bor.SetSpanner(spanner)
 
@@ -740,10 +724,6 @@ func TestSignerNotFound(t *testing.T) {
 	h.EXPECT().FetchCheckpoint(gomock.Any(), int64(-1)).Return(&checkpoint.Checkpoint{}, nil).AnyTimes()
 
 	h.EXPECT().FetchMilestone(gomock.Any()).Return(&milestone.Milestone{}, nil).AnyTimes()
-
-	h.EXPECT().FetchLastNoAckMilestone(gomock.Any()).Return("", nil).AnyTimes()
-
-	h.EXPECT().FetchNoAckMilestone(gomock.Any(), string("test")).Return(nil).AnyTimes()
 
 	_bor.SetHeimdallClient(h)
 

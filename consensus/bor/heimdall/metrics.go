@@ -18,15 +18,13 @@ type (
 )
 
 const (
-	stateSyncRequest          requestType = "state-sync"
-	spanRequest               requestType = "span"
-	checkpointRequest         requestType = "checkpoint"
-	checkpointCountRequest    requestType = "checkpoint-count"
-	milestoneRequest          requestType = "milestone"
-	milestoneCountRequest     requestType = "milestone-count"
-	milestoneNoAckRequest     requestType = "milestone-no-ack"
-	milestoneLastNoAckRequest requestType = "milestone-last-no-ack"
-	milestoneIDRequest        requestType = "milestone-id"
+	stateSyncRequest       requestType = "state-sync"
+	spanRequest            requestType = "span"
+	checkpointRequest      requestType = "checkpoint"
+	checkpointCountRequest requestType = "checkpoint-count"
+	milestoneRequest       requestType = "milestone"
+	milestoneCountRequest  requestType = "milestone-count"
+	milestoneIDRequest     requestType = "milestone-id"
 )
 
 func withRequestType(ctx context.Context, reqType requestType) context.Context {
@@ -81,20 +79,6 @@ var (
 				false: metrics.NewRegisteredMeter("client/requests/milestonecount/invalid", nil),
 			},
 			timer: metrics.NewRegisteredTimer("client/requests/milestonecount/duration", nil),
-		},
-		milestoneNoAckRequest: {
-			request: map[bool]metrics.Meter{
-				true:  metrics.NewRegisteredMeter("client/requests/milestonenoack/valid", nil),
-				false: metrics.NewRegisteredMeter("client/requests/milestonenoack/invalid", nil),
-			},
-			timer: metrics.NewRegisteredTimer("client/requests/milestonenoack/duration", nil),
-		},
-		milestoneLastNoAckRequest: {
-			request: map[bool]metrics.Meter{
-				true:  metrics.NewRegisteredMeter("client/requests/milestonelastnoack/valid", nil),
-				false: metrics.NewRegisteredMeter("client/requests/milestonelastnoack/invalid", nil),
-			},
-			timer: metrics.NewRegisteredTimer("client/requests/milestonelastnoack/duration", nil),
 		},
 		milestoneIDRequest: {
 			request: map[bool]metrics.Meter{

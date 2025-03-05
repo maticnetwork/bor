@@ -8,7 +8,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor"
-	"github.com/ethereum/go-ethereum/consensus/bor/heimdall"
 	"github.com/ethereum/go-ethereum/log"
 )
 
@@ -91,22 +90,6 @@ func (h *ethHandler) fetchWhitelistMilestone(ctx context.Context, bor *bor.Bor, 
 	}
 
 	return num, hash, err
-}
-
-func (h *ethHandler) fetchNoAckMilestone(ctx context.Context, bor *bor.Bor) (string, error) {
-	milestoneID, err := bor.HeimdallClient.FetchLastNoAckMilestone(ctx)
-	err = reportCommonErrors("latest no-ack milestone", err, nil)
-
-	return milestoneID, err
-}
-
-func (h *ethHandler) fetchNoAckMilestoneByID(ctx context.Context, bor *bor.Bor, milestoneID string) error {
-	err := bor.HeimdallClient.FetchNoAckMilestone(ctx, milestoneID)
-	if errors.Is(err, heimdall.ErrNotInRejectedList) {
-		log.Debug("MilestoneID not in rejected list", "milestoneID", milestoneID)
-	}
-	err = reportCommonErrors("no-ack milestone by ID", err, nil, "milestoneID", milestoneID)
-	return err
 }
 
 // reportCommonErrors reports common errors which can occur while fetching data from heimdall. It also

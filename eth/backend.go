@@ -635,8 +635,6 @@ func (s *Ethereum) Start() error {
 
 	go s.startCheckpointWhitelistService()
 	go s.startMilestoneWhitelistService()
-	go s.startNoAckMilestoneService()
-	go s.startNoAckMilestoneByIDService()
 
 	return nil
 }
@@ -647,8 +645,7 @@ var (
 )
 
 const (
-	whitelistTimeout      = 30 * time.Second
-	noAckMilestoneTimeout = 4 * time.Second
+	whitelistTimeout = 30 * time.Second
 )
 
 // StartCheckpointWhitelistService starts the goroutine to fetch checkpoints and update the
@@ -671,24 +668,6 @@ func (s *Ethereum) startMilestoneWhitelistService() {
 	)
 
 	s.retryHeimdallHandler(s.handleMilestone, tickerDuration, whitelistTimeout, fnName)
-}
-
-func (s *Ethereum) startNoAckMilestoneService() {
-	const (
-		tickerDuration = 1 * time.Second
-		fnName         = "no-ack-milestone service"
-	)
-
-	s.retryHeimdallHandler(s.handleNoAckMilestone, tickerDuration, noAckMilestoneTimeout, fnName)
-}
-
-func (s *Ethereum) startNoAckMilestoneByIDService() {
-	const (
-		tickerDuration = 1 * time.Minute
-		fnName         = "no-ack-milestone-by-id service"
-	)
-
-	s.retryHeimdallHandler(s.handleNoAckMilestoneByID, tickerDuration, noAckMilestoneTimeout, fnName)
 }
 
 func (s *Ethereum) retryHeimdallHandler(fn heimdallHandler, tickerDuration time.Duration, timeout time.Duration, fnName string) {
@@ -783,36 +762,6 @@ func (s *Ethereum) handleMilestone(ctx context.Context, ethHandler *ethHandler, 
 	}
 
 	ethHandler.downloader.ProcessMilestone(num, hash)
-
-	return nil
-}
-
-func (s *Ethereum) handleNoAckMilestone(ctx context.Context, ethHandler *ethHandler, bor *bor.Bor) error {
-	milestoneID, err := ethHandler.fetchNoAckMilestone(ctx, bor)
-
-	if errors.Is(err, heimdall.ErrServiceUnavailable) {
-		return nil
-	}
-
-	if err != nil {
-		return err
-	}
-
-	ethHandler.downloader.RemoveMilestoneID(milestoneID)
-
-	return nil
-}
-
-func (s *Ethereum) handleNoAckMilestoneByID(ctx context.Context, ethHandler *ethHandler, bor *bor.Bor) error {
-	milestoneIDs := ethHandler.downloader.GetMilestoneIDsList()
-
-	for _, milestoneID := range milestoneIDs {
-		// todo: check if we can ignore the error
-		err := ethHandler.fetchNoAckMilestoneByID(ctx, bor, milestoneID)
-		if err == nil {
-			ethHandler.downloader.RemoveMilestoneID(milestoneID)
-		}
-	}
 
 	return nil
 }
