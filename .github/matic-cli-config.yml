@@ -22,17 +22,13 @@ numOfBorValidators: 3
 numOfBorSentries: 0
 numOfBorArchiveNodes: 0
 
-devnetBorFlags: config,config,config
-
 numOfErigonValidators: 0
 numOfErigonSentries: 0
 numOfErigonArchiveNodes: 0
+
 ethURL: http://anvil:9545
 ethHostUser: ubuntu
-devnetType: docker
 borDockerBuildContext: "../../bor"
 heimdallDockerBuildContext: "https://github.com/maticnetwork/heimdall.git#develop"
-sprintSizeBlockNumber:
-  - '0'
 devnetBorFlags: config,config,config
 mnemonic: 'clock radar mass judge dismiss just intact mind resemble fringe diary casino'
