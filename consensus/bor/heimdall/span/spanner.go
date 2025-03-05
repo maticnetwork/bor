@@ -100,12 +100,49 @@ func (c *ChainSpanner) GetCurrentValidatorsByBlockNrOrHash(ctx context.Context, 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	// method
+	const method = "getBorValidators"
+
+	data, err := c.validatorSet.Pack(method, big.NewInt(0).SetUint64(blockNumber))
+	if err != nil {
+		log.Error("Unable to pack tx for getValidator", "error", err)
+		return nil, err
+	}
+
+	// call
+	msgData := (hexutil.Bytes)(data)
 	toAddress := c.validatorContractAddress
 	gas := (hexutil.Uint64)(uint64(math.MaxUint64 / 2))
 
-	valz, err := c.tryGetBorValidatorsWithId(ctx, blockNrOrHash, blockNumber, toAddress, gas)
+	result, err := c.ethAPI.Call(ctx, ethapi.TransactionArgs{
+		Gas:  &gas,
+		To:   &toAddress,
+		Data: &msgData,
+	}, &blockNrOrHash, nil, nil)
 	if err != nil {
 		return nil, err
+	}
+
+	var (
+		ret0 = new([]common.Address)
+		ret1 = new([]*big.Int)
+	)
+
+	out := &[]interface{}{
+		ret0,
+		ret1,
+	}
+
+	if err := c.validatorSet.UnpackIntoInterface(out, method, result); err != nil {
+		return nil, err
+	}
+
+	valz := make([]*valset.Validator, len(*ret0))
+	for i, a := range *ret0 {
+		valz[i] = &valset.Validator{
+			Address:     a,
+			VotingPower: (*ret1)[i].Int64(),
+		}
 	}
 
 	return valz, nil
