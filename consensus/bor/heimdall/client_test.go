@@ -23,10 +23,8 @@ import (
 // requests to the mock heimdal server for specific functions. Add more handlers
 // according to requirements.
 type HttpHandlerFake struct {
-	handleFetchCheckpoint         http.HandlerFunc
-	handleFetchMilestone          http.HandlerFunc
-	handleFetchNoAckMilestone     http.HandlerFunc
-	handleFetchLastNoAckMilestone http.HandlerFunc
+	handleFetchCheckpoint http.HandlerFunc
+	handleFetchMilestone  http.HandlerFunc
 }
 
 func (h *HttpHandlerFake) GetCheckpointHandler() http.HandlerFunc {
@@ -38,18 +36,6 @@ func (h *HttpHandlerFake) GetCheckpointHandler() http.HandlerFunc {
 func (h *HttpHandlerFake) GetMilestoneHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		h.handleFetchMilestone.ServeHTTP(w, r)
-	}
-}
-
-func (h *HttpHandlerFake) GetNoAckMilestoneHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		h.handleFetchNoAckMilestone.ServeHTTP(w, r)
-	}
-}
-
-func (h *HttpHandlerFake) GetLastNoAckMilestoneHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		h.handleFetchLastNoAckMilestone.ServeHTTP(w, r)
 	}
 }
 
@@ -65,16 +51,6 @@ func CreateMockHeimdallServer(wg *sync.WaitGroup, port int, listener net.Listene
 	// Create a route for fetching milestone
 	mux.HandleFunc("/milestone/latest", func(w http.ResponseWriter, r *http.Request) {
 		handler.GetMilestoneHandler()(w, r)
-	})
-
-	// Create a route for fetching milestone
-	mux.HandleFunc("/milestone/noAck/{id}", func(w http.ResponseWriter, r *http.Request) {
-		handler.GetNoAckMilestoneHandler()(w, r)
-	})
-
-	// Create a route for fetching milestone
-	mux.HandleFunc("/milestone/lastNoAck", func(w http.ResponseWriter, r *http.Request) {
-		handler.GetLastNoAckMilestoneHandler()(w, r)
 	})
 
 	// Add other routes as per requirement

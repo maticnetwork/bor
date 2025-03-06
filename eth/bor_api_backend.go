@@ -12,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/event"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
@@ -74,8 +75,9 @@ func (b *EthAPIBackend) GetVoteOnHash(ctx context.Context, starBlockNr uint64, e
 	isLocked := downloader.LockMutex(endBlockNr)
 
 	if !isLocked {
-		downloader.UnlockMutex(false, "", endBlockNr, common.Hash{})
-		return false, errors.New("whitelisted number or locked sprint number is more than the received end block number")
+		// downloader.UnlockMutex(false, "", endBlockNr, common.Hash{})
+		log.Warn("whitelisted number or locked sprint number is more than the received end block number", "endBlockNr", endBlockNr)
+		// return false, errors.New("whitelisted number or locked sprint number is more than the received end block number")
 	}
 
 	if localEndBlockHash != hash {

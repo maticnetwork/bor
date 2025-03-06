@@ -3,7 +3,7 @@ module github.com/ethereum/go-ethereum
 go 1.23.6
 
 require (
-	github.com/0xPolygon/heimdall-v2 v0.1.3
+	github.com/0xPolygon/heimdall-v2 v0.1.4
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.3.2
 	github.com/BurntSushi/toml v1.4.0
 	github.com/JekaMas/go-grpc-net-conn v0.0.0-20220708155319-6aff21f2d13d
@@ -354,7 +354,7 @@ replace (
 	cosmossdk.io/client/v2 => github.com/0xPolygon/cosmos-sdk/client/v2 v2.0.0-beta.1
 	github.com/Masterminds/goutils => github.com/Masterminds/goutils v1.1.1
 	github.com/cometbft/cometbft => github.com/0xPolygon/cometbft v0.1.3-beta-polygon
-	github.com/cosmos/cosmos-sdk => github.com/0xPolygon/cosmos-sdk v0.1.13-beta-polygon
+	github.com/cosmos/cosmos-sdk => github.com/0xPolygon/cosmos-sdk v0.1.15-beta-polygon
 	github.com/ethereum/go-ethereum => github.com/maticnetwork/bor v1.5.5
 	github.com/tendermint/tendermint => github.com/maticnetwork/tendermint v0.33.0
 	github.com/tendermint/tm-db => github.com/tendermint/tm-db v0.2.0
