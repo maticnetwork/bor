@@ -63,10 +63,8 @@ func (c *HeimdallWSClient) readMessages(ctx context.Context) {
 		// Check if the context or unsubscribe signal is set.
 		select {
 		case <-ctx.Done():
-			log.Info("#################### Context Done")
 			return
 		case <-c.done:
-			log.Info("#################### Client Done")
 			return
 		default:
 			// continue to process messages
@@ -75,7 +73,6 @@ func (c *HeimdallWSClient) readMessages(ctx context.Context) {
 		_, message, err := c.conn.ReadMessage()
 		if err != nil {
 			log.Error("Connection lost; will attempt to reconnect on Heimdall WS subscription", "error", err)
-			log.Info("#################### Error in WS connection!", "receivedErr", err)
 
 			c.Reconnect(ctx)
 			continue
@@ -103,7 +100,6 @@ func (c *HeimdallWSClient) readMessages(ctx context.Context) {
 		attrs := make(map[string]string)
 		for _, attr := range milestoneEvent.Attributes {
 			attrs[attr.Key] = attr.Value
-			log.Info("############## New attribute!!!", "attribKey", attr.Key, "attribValue", attr.Value)
 		}
 
 		// Build the Milestone object from attributes.
@@ -171,7 +167,6 @@ func (c *HeimdallWSClient) Reconnect(ctx context.Context) {
 		newConn, _, err := websocket.DefaultDialer.Dial(c.url, nil)
 		if err != nil {
 			log.Error("Reconnection attempt failed on Heimdall WS subscription", "error", err)
-			log.Info("#################### Failed to recover connection!", "receivedErr", err)
 			continue
 		}
 
@@ -180,7 +175,6 @@ func (c *HeimdallWSClient) Reconnect(ctx context.Context) {
 		c.conn = newConn
 		c.mu.Unlock()
 		log.Info("Successfully reconnected on Heimdall WS subscription")
-		log.Info("#################### Successfully recovered connection!", "receivedErr", err)
 
 		// Re-send the subscription request.
 		req := subscriptionRequest{
