@@ -70,11 +70,3 @@ type MilestoneResponse struct {
 type MilestoneCountResponse struct {
 	Count int64 `json:"count"`
 }
-
-type MilestoneLastNoAckResponse struct {
-	Result string `json:"result"`
-}
-
-type MilestoneNoAckResponse struct {
-	Result bool `json:"result"`
-}

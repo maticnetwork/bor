@@ -184,9 +184,6 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	}
 
 	gpoParams := config.GPO
-	if gpoParams.Default == nil {
-		gpoParams.Default = config.Miner.GasPrice
-	}
 
 	// Override the chain config with provided settings.
 	var overrides core.ChainOverrides
@@ -268,7 +265,8 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		eth.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, config.Genesis, &overrides, eth.engine, vmConfig, eth.shouldPreserve, &config.TxLookupLimit, checker)
 	}
 
-	eth.APIBackend.gpo = gasprice.NewOracle(eth.APIBackend, gpoParams)
+	// 1.14.8: NewOracle function definition was changed to accept (startPrice *big.Int) param.
+	eth.APIBackend.gpo = gasprice.NewOracle(eth.APIBackend, gpoParams, config.Miner.GasPrice)
 	if err != nil {
 		return nil, err
 	}
@@ -321,6 +319,13 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 	eth.miner = miner.New(eth, &config.Miner, eth.blockchain.Config(), eth.EventMux(), eth.engine, eth.isLocalBlock)
 	eth.miner.SetExtra(makeExtraData(config.Miner.ExtraData))
+
+	eth.APIBackend = &EthAPIBackend{stack.Config().ExtRPCEnabled(), stack.Config().AllowUnprotectedTxs, eth, nil}
+	if eth.APIBackend.allowUnprotectedTxs {
+		log.Info("Unprotected transactions allowed")
+	}
+	// 1.14.8: NewOracle function definition was changed to accept (startPrice *big.Int) param.
+	eth.APIBackend.gpo = gasprice.NewOracle(eth.APIBackend, config.GPO, config.Miner.GasPrice)
 
 	// Setup DNS discovery iterators.
 	dnsclient := dnsdisc.NewClient(dnsdisc.Config{})
@@ -635,8 +640,6 @@ func (s *Ethereum) Start() error {
 
 	go s.startCheckpointWhitelistService()
 	go s.startMilestoneWhitelistService()
-	go s.startNoAckMilestoneService()
-	go s.startNoAckMilestoneByIDService()
 
 	return nil
 }
@@ -647,8 +650,7 @@ var (
 )
 
 const (
-	whitelistTimeout      = 30 * time.Second
-	noAckMilestoneTimeout = 4 * time.Second
+	whitelistTimeout = 30 * time.Second
 )
 
 // StartCheckpointWhitelistService starts the goroutine to fetch checkpoints and update the
@@ -678,24 +680,6 @@ func (s *Ethereum) startMilestoneWhitelistService() {
 
 		s.retryHeimdallHandler(s.fetchAndHandleMilestone, tickerDuration, whitelistTimeout, fnName)
 	}
-}
-
-func (s *Ethereum) startNoAckMilestoneService() {
-	const (
-		tickerDuration = 1 * time.Second
-		fnName         = "no-ack-milestone service"
-	)
-
-	s.retryHeimdallHandler(s.handleNoAckMilestone, tickerDuration, noAckMilestoneTimeout, fnName)
-}
-
-func (s *Ethereum) startNoAckMilestoneByIDService() {
-	const (
-		tickerDuration = 1 * time.Minute
-		fnName         = "no-ack-milestone-by-id service"
-	)
-
-	s.retryHeimdallHandler(s.handleNoAckMilestoneByID, tickerDuration, noAckMilestoneTimeout, fnName)
 }
 
 func (s *Ethereum) retryHeimdallHandler(fn heimdallHandler, tickerDuration time.Duration, timeout time.Duration, fnName string) {
@@ -800,36 +784,6 @@ func (s *Ethereum) subscribeAndHandleMilestone(ctx context.Context, ethHandler *
 			return nil
 		}
 	}
-}
-
-func (s *Ethereum) handleNoAckMilestone(ctx context.Context, ethHandler *ethHandler, bor *bor.Bor) error {
-	milestoneID, err := ethHandler.fetchNoAckMilestone(ctx, bor)
-
-	if errors.Is(err, heimdall.ErrServiceUnavailable) {
-		return nil
-	}
-
-	if err != nil {
-		return err
-	}
-
-	ethHandler.downloader.RemoveMilestoneID(milestoneID)
-
-	return nil
-}
-
-func (s *Ethereum) handleNoAckMilestoneByID(ctx context.Context, ethHandler *ethHandler, bor *bor.Bor) error {
-	milestoneIDs := ethHandler.downloader.GetMilestoneIDsList()
-
-	for _, milestoneID := range milestoneIDs {
-		// todo: check if we can ignore the error
-		err := ethHandler.fetchNoAckMilestoneByID(ctx, bor, milestoneID)
-		if err == nil {
-			ethHandler.downloader.RemoveMilestoneID(milestoneID)
-		}
-	}
-
-	return nil
 }
 
 func (s *Ethereum) getHandler() (*ethHandler, *bor.Bor, error) {

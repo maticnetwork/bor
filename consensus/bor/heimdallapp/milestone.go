@@ -2,7 +2,6 @@ package heimdallapp
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
@@ -37,35 +36,6 @@ func (h *HeimdallAppClient) FetchMilestone(_ context.Context) (*milestone.Milest
 	log.Debug("Fetched Latest Milestone", "milestone", milestone)
 
 	return milestone, nil
-}
-
-func (h *HeimdallAppClient) FetchNoAckMilestone(_ context.Context, milestoneID string) error {
-	log.Debug("Fetching No Ack Milestone By MilestoneID", "MilestoneID", milestoneID)
-
-	res, err := h.hApp.MilestoneKeeper.HasNoAckMilestone(h.NewContext(), milestoneID)
-	if err != nil {
-		return err
-	}
-
-	if res {
-		log.Info("Fetched No Ack By MilestoneID", "MilestoneID", milestoneID)
-		return nil
-	}
-
-	return fmt.Errorf("still no-ack milestone exist corresponding to milestoneID: %v", milestoneID)
-}
-
-func (h *HeimdallAppClient) FetchLastNoAckMilestone(_ context.Context) (string, error) {
-	log.Debug("Fetching Latest No Ack Milestone ID")
-
-	res, err := h.hApp.MilestoneKeeper.GetLastNoAckMilestone(h.NewContext())
-	if err != nil {
-		return "", err
-	}
-
-	log.Debug("Fetched Latest No Ack Milestone ID", "res", res)
-
-	return res, nil
 }
 
 func toBorMilestone(hdMilestone *milestoneTypes.Milestone) *milestone.Milestone {
