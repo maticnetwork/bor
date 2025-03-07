@@ -5,23 +5,32 @@ import (
 	"fmt"
 
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
+	"github.com/ethereum/go-ethereum/consensus/bor/valset"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/rpc"
 	lru "github.com/hashicorp/golang-lru"
 )
 
 // SpanStore acts as a simple middleware to cache span data populated from heimdall. It is used
 // in multiple places of bor consensus for verification.
 type SpanStore struct {
-	store             *lru.ARCCache
+	store *lru.ARCCache
+
+	heimdallClient IHeimdallClient
+	spanner        Spanner
+
 	latestKnownSpanId uint64
-	heimdallClient    IHeimdallClient
+	chainId           string
 }
 
-func NewSpanStore(heimdallClient IHeimdallClient) SpanStore {
+func NewSpanStore(heimdallClient IHeimdallClient, spanner Spanner, chainId string) SpanStore {
 	cache, _ := lru.NewARC(10)
 	return SpanStore{
-		store:          cache,
-		heimdallClient: heimdallClient,
+		store:             cache,
+		heimdallClient:    heimdallClient,
+		spanner:           spanner,
+		latestKnownSpanId: 0,
+		chainId:           chainId,
 	}
 }
 
@@ -34,10 +43,22 @@ func (s *SpanStore) spanById(ctx context.Context, spanId uint64) (*span.Heimdall
 
 	if currentSpan == nil {
 		var err error
-		currentSpan, err = s.heimdallClient.Span(ctx, spanId)
-		if err != nil {
-			log.Warn("Unable to fetch span from heimdall", "id", spanId, "err", err)
-			return nil, err
+		if s.heimdallClient == nil {
+			if spanId == 0 {
+				currentSpan, err = getMockSpan0(ctx, s.spanner, s.chainId)
+				if err != nil {
+					log.Warn("Unable to fetch span from heimdall", "id", spanId, "err", err)
+					return nil, err
+				}
+			} else {
+				return nil, fmt.Errorf("unable to create test span without heimdall client for id %d", spanId)
+			}
+		} else {
+			currentSpan, err = s.heimdallClient.Span(ctx, spanId)
+			if err != nil {
+				log.Warn("Unable to fetch span from heimdall", "id", spanId, "err", err)
+				return nil, err
+			}
 		}
 		s.store.Add(spanId, currentSpan)
 		if currentSpan.Span.ID > s.latestKnownSpanId {
@@ -57,8 +78,8 @@ func (s *SpanStore) spanByBlockNumber(ctx context.Context, blockNumber uint64) (
 	// https://github.com/maticnetwork/genesis-contracts/blob/master/contracts/BorValidatorSet.template#L118-L134
 	// This logic is independent of the span length (bit extra effort but maintains equivalence) and will work
 	// for all span lengths (even if we change it in future).
-	for id := s.latestKnownSpanId; id >= 0; id-- {
-		span, err := s.spanById(ctx, id)
+	for id := int(s.latestKnownSpanId); id >= 0; id-- {
+		span, err := s.spanById(ctx, uint64(id))
 		if err != nil {
 			return nil, err
 		}
@@ -66,10 +87,48 @@ func (s *SpanStore) spanByBlockNumber(ctx context.Context, blockNumber uint64) (
 			return span, nil
 		}
 		// Check if block number given is out of bounds
-		if id == s.latestKnownSpanId && blockNumber > span.EndBlock {
+		if id == int(s.latestKnownSpanId) && blockNumber > span.EndBlock {
 			break
 		}
 	}
 
 	return nil, fmt.Errorf("span not found for block %d", blockNumber)
+}
+
+// setHeimdallClient sets the underlying heimdall client to be used. It is useful in
+// tests where mock heimdall client is set after creation of bor instance explicitly.
+func (s *SpanStore) setHeimdallClient(client IHeimdallClient) {
+	s.heimdallClient = client
+}
+
+// getMockSpan0 constructs a mock span 0 by fetching validator set from genesis state. This should
+// only be used in tests where heimdall client is not available.
+func getMockSpan0(ctx context.Context, spanner Spanner, chainId string) (*span.HeimdallSpan, error) {
+	if spanner == nil {
+		return nil, fmt.Errorf("spanner not available to fetch validator set")
+	}
+
+	// Fetch validators from genesis state
+	vals, err := spanner.GetCurrentValidatorsByBlockNrOrHash(ctx, rpc.BlockNumberOrHashWithNumber(0), 0)
+	if err != nil {
+		return nil, err
+	}
+	validatorSet := valset.ValidatorSet{
+		Validators: vals,
+		Proposer:   vals[0],
+	}
+	selectedProducers := make([]valset.Validator, len(vals))
+	for _, v := range vals {
+		selectedProducers = append(selectedProducers, *v)
+	}
+	return &span.HeimdallSpan{
+		Span: span.Span{
+			ID:         0,
+			StartBlock: 0,
+			EndBlock:   255,
+		},
+		ValidatorSet:      validatorSet,
+		SelectedProducers: selectedProducers,
+		ChainID:           chainId,
+	}, nil
 }

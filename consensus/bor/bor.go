@@ -260,7 +260,7 @@ func New(
 	signatures, _ := lru.NewARC(inmemorySignatures)
 
 	// Create a new span store
-	spanStore := NewSpanStore(heimdallClient)
+	spanStore := NewSpanStore(heimdallClient, spanner, chainConfig.ChainID.String())
 
 	c := &Bor{
 		chainConfig:            chainConfig,
@@ -1296,6 +1296,8 @@ func validateEventRecord(eventRecord *clerk.EventRecordWithTime, number uint64, 
 
 func (c *Bor) SetHeimdallClient(h IHeimdallClient) {
 	c.HeimdallClient = h
+	// Update the heimdall client in span store
+	c.spanStore.setHeimdallClient(h)
 }
 
 func (c *Bor) GetCurrentValidators(ctx context.Context, headerHash common.Hash, blockNumber uint64) ([]*valset.Validator, error) {

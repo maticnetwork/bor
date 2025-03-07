@@ -42,7 +42,7 @@ func (h *MockHeimdallClient) Span(ctx context.Context, spanID uint64) (*span.Hei
 }
 
 func TestSpanStore_SpanById(t *testing.T) {
-	spanStore := NewSpanStore(&MockHeimdallClient{})
+	spanStore := NewSpanStore(&MockHeimdallClient{}, nil, "1337")
 	ctx := context.Background()
 
 	type Testcase struct {
@@ -105,7 +105,7 @@ func TestSpanStore_SpanById(t *testing.T) {
 }
 
 func TestSpanStore_SpanByBlockNumber(t *testing.T) {
-	spanStore := NewSpanStore(&MockHeimdallClient{})
+	spanStore := NewSpanStore(&MockHeimdallClient{}, nil, "1337")
 	ctx := context.Background()
 
 	type Testcase struct {
