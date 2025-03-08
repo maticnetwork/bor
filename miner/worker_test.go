@@ -387,7 +387,7 @@ func getFakeBorFromConfig(t *testing.T, chainConfig *params.ChainConfig) (consen
 	span0 := createMockSpanForTest(TestBankAddress, chainConfig.ChainID.String())
 
 	spanner := bor.NewMockSpanner(ctrl)
-	spanner.EXPECT().GetCurrentValidatorsByHash(gomock.Any(), gomock.Any(), gomock.Any()).Return(span0.ValidatorSet, nil).AnyTimes()
+	spanner.EXPECT().GetCurrentValidatorsByHash(gomock.Any(), gomock.Any(), gomock.Any()).Return(span0.ValidatorSet.Validators, nil).AnyTimes()
 
 	heimdallClientMock := mocks.NewMockIHeimdallClient(ctrl)
 	heimdallClientMock.EXPECT().Span(gomock.Any(), uint64(0)).Return(&span0, nil).AnyTimes()
