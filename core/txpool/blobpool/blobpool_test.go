@@ -324,8 +324,7 @@ func TestOpenDrops(t *testing.T) {
 	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelTrace, true)))
 
 	// Create a temporary folder for the persistent backend
-	storage, _ := os.MkdirTemp("", "blobpool-")
-	defer os.RemoveAll(storage)
+	storage := t.TempDir()
 
 	os.MkdirAll(filepath.Join(storage, pendingTransactionStore), 0700)
 	store, _ := billy.Open(billy.Options{Path: filepath.Join(storage, pendingTransactionStore)}, newSlotter(), nil)
@@ -647,8 +646,7 @@ func TestOpenIndex(t *testing.T) {
 	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelTrace, true)))
 
 	// Create a temporary folder for the persistent backend
-	storage, _ := os.MkdirTemp("", "blobpool-")
-	defer os.RemoveAll(storage)
+	storage := t.TempDir()
 
 	os.MkdirAll(filepath.Join(storage, pendingTransactionStore), 0700)
 	store, _ := billy.Open(billy.Options{Path: filepath.Join(storage, pendingTransactionStore)}, newSlotter(), nil)
@@ -736,8 +734,7 @@ func TestOpenHeap(t *testing.T) {
 	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelTrace, true)))
 
 	// Create a temporary folder for the persistent backend
-	storage, _ := os.MkdirTemp("", "blobpool-")
-	defer os.RemoveAll(storage)
+	storage := t.TempDir()
 
 	os.MkdirAll(filepath.Join(storage, pendingTransactionStore), 0700)
 	store, _ := billy.Open(billy.Options{Path: filepath.Join(storage, pendingTransactionStore)}, newSlotter(), nil)
@@ -823,8 +820,7 @@ func TestOpenCap(t *testing.T) {
 	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelTrace, true)))
 
 	// Create a temporary folder for the persistent backend
-	storage, _ := os.MkdirTemp("", "blobpool-")
-	defer os.RemoveAll(storage)
+	storage := t.TempDir()
 
 	os.MkdirAll(filepath.Join(storage, pendingTransactionStore), 0700)
 	store, _ := billy.Open(billy.Options{Path: filepath.Join(storage, pendingTransactionStore)}, newSlotter(), nil)
@@ -1259,9 +1255,8 @@ func TestAdd(t *testing.T) {
 	}
 	for i, tt := range tests {
 		// Create a temporary folder for the persistent backend
-		storage, _ := os.MkdirTemp("", "blobpool-")
-		defer os.RemoveAll(storage) // late defer, still ok
-
+		storage := t.TempDir()
+		
 		os.MkdirAll(filepath.Join(storage, pendingTransactionStore), 0700)
 		store, _ := billy.Open(billy.Options{Path: filepath.Join(storage, pendingTransactionStore)}, newSlotter(), nil)
 
