@@ -51,7 +51,7 @@ func NewBorDefaultMiner(t *testing.T) *DefaultBorMiner {
 	span0 := createMockSpanForTest(common.Address{0x1}, "1337")
 
 	spanner := bor.NewMockSpanner(ctrl)
-	spanner.EXPECT().GetCurrentValidatorsByHash(gomock.Any(), gomock.Any(), gomock.Any()).Return(span0.ValidatorSet, nil).AnyTimes()
+	spanner.EXPECT().GetCurrentValidatorsByHash(gomock.Any(), gomock.Any(), gomock.Any()).Return(span0.ValidatorSet.Validators, nil).AnyTimes()
 
 	heimdallClient := mocks.NewMockIHeimdallClient(ctrl)
 	heimdallClient.EXPECT().Span(gomock.Any(), uint64(0)).Return(&span0, nil).AnyTimes()
