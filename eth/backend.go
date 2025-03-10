@@ -757,10 +757,7 @@ func (s *Ethereum) fetchAndHandleMilestone(ctx context.Context, ethHandler *ethH
 }
 
 func (s *Ethereum) subscribeAndHandleMilestone(ctx context.Context, ethHandler *ethHandler, bor *bor.Bor) error {
-	milestoneEvents, err := bor.HeimdallWSClient.SubscribeMilestoneEvents(ctx)
-	if err != nil {
-		return err
-	}
+	milestoneEvents := bor.HeimdallWSClient.SubscribeMilestoneEvents(ctx)
 
 	for {
 		select {
@@ -771,7 +768,7 @@ func (s *Ethereum) subscribeAndHandleMilestone(ctx context.Context, ethHandler *
 
 			err := ethHandler.handleMilestone(ctx, s, m, newBorVerifier())
 			if err != nil {
-				log.Error("Error handling milestone ws event", "errorReceived", err)
+				log.Error("error handling milestone ws event", "err", err)
 			}
 
 		case <-ctx.Done():

@@ -194,12 +194,11 @@ func (mr *MockIHeimdallWSClientMockRecorder) Close() *gomock.Call {
 }
 
 // SubscribeMilestoneEvents mocks base method.
-func (m *MockIHeimdallWSClient) SubscribeMilestoneEvents(ctx context.Context) (<-chan *milestone.Milestone, error) {
+func (m *MockIHeimdallWSClient) SubscribeMilestoneEvents(ctx context.Context) <-chan *milestone.Milestone {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SubscribeMilestoneEvents", ctx)
 	ret0, _ := ret[0].(<-chan *milestone.Milestone)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	return ret0
 }
 
 // SubscribeMilestoneEvents indicates an expected call of SubscribeMilestoneEvents.

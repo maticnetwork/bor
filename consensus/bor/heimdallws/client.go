@@ -3,7 +3,6 @@ package heimdallws
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strconv"
 	"sync"
 	"time"
@@ -25,12 +24,8 @@ type HeimdallWSClient struct {
 
 // NewHeimdallWSClient creates a new WS client for Heimdall.
 func NewHeimdallWSClient(url string) (*HeimdallWSClient, error) {
-	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to dial websocket: %w", err)
-	}
 	return &HeimdallWSClient{
-		conn:   conn,
+		conn:   nil,
 		url:    url,
 		events: make(chan *milestone.Milestone),
 		done:   make(chan struct{}),
@@ -38,22 +33,58 @@ func NewHeimdallWSClient(url string) (*HeimdallWSClient, error) {
 }
 
 // SubscribeMilestoneEvents sends the subscription request and starts processing incoming messages.
-func (c *HeimdallWSClient) SubscribeMilestoneEvents(ctx context.Context) (<-chan *milestone.Milestone, error) {
-	// Build the subscription request.
-	req := subscriptionRequest{
-		JSONRPC: "2.0",
-		Method:  "subscribe",
-		ID:      0,
-	}
-	req.Params.Query = "tm.event='NewBlock' AND milestone.number>0"
-
-	if err := c.conn.WriteJSON(req); err != nil {
-		return nil, fmt.Errorf("failed to send subscription request: %w", err)
-	}
+func (c *HeimdallWSClient) SubscribeMilestoneEvents(ctx context.Context) <-chan *milestone.Milestone {
+	c.tryUntilSubscribeMilestoneEvents(ctx)
 
 	// Start the goroutine to read messages.
 	go c.readMessages(ctx)
-	return c.events, nil
+
+	return c.events
+}
+
+// retry until subscribe
+func (c *HeimdallWSClient) tryUntilSubscribeMilestoneEvents(ctx context.Context) {
+	firstTime := true
+	for {
+		if !firstTime {
+			time.Sleep(10 * time.Second)
+		}
+		firstTime = false
+
+		// Check for context cancellation.
+		select {
+		case <-ctx.Done():
+			log.Info("Context cancelled during reconnection")
+			return
+		case <-c.done:
+			log.Info("Client unsubscribed during reconnection")
+			return
+		default:
+		}
+
+		conn, _, err := websocket.DefaultDialer.Dial(c.url, nil)
+		if err != nil {
+			log.Error("failed to dial websocket on heimdall ws subscription", "err", err)
+		}
+		c.mu.Lock()
+		c.conn = conn
+		c.mu.Unlock()
+
+		// Build the subscription request.
+		req := subscriptionRequest{
+			JSONRPC: "2.0",
+			Method:  "subscribe",
+			ID:      0,
+		}
+		req.Params.Query = "tm.event='NewBlock' AND milestone.number>0"
+
+		if err := c.conn.WriteJSON(req); err != nil {
+			log.Error("failed to send subscription request on heimdall ws subscription", "err", err)
+			continue
+		}
+		log.Info("Successfully connected on heimdall ws subscription")
+		return
+	}
 }
 
 // readMessages continuously reads messages from the websocket, handling reconnections if necessary.
@@ -70,11 +101,12 @@ func (c *HeimdallWSClient) readMessages(ctx context.Context) {
 			// continue to process messages
 		}
 
+		c.conn.SetReadDeadline(time.Now().Add(30 * time.Second))
 		_, message, err := c.conn.ReadMessage()
 		if err != nil {
-			log.Error("Connection lost; will attempt to reconnect on Heimdall WS subscription", "error", err)
+			log.Error("connection lost; will attempt to reconnect on heimdall ws subscription", "error", err)
 
-			c.Reconnect(ctx)
+			c.tryUntilSubscribeMilestoneEvents(ctx)
 			continue
 		}
 
@@ -146,47 +178,4 @@ func (c *HeimdallWSClient) Close() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.conn.Close()
-}
-
-func (c *HeimdallWSClient) Reconnect(ctx context.Context) {
-	for {
-		// Check for context cancellation.
-		select {
-		case <-ctx.Done():
-			log.Info("Context cancelled during reconnection")
-			return
-		case <-c.done:
-			log.Info("Client unsubscribed during reconnection")
-			return
-		default:
-		}
-
-		time.Sleep(10 * time.Second)
-
-		// Attempt to reconnect.
-		newConn, _, err := websocket.DefaultDialer.Dial(c.url, nil)
-		if err != nil {
-			log.Error("Reconnection attempt failed on Heimdall WS subscription", "error", err)
-			continue
-		}
-
-		// Replace the connection.
-		c.mu.Lock()
-		c.conn = newConn
-		c.mu.Unlock()
-		log.Info("Successfully reconnected on Heimdall WS subscription")
-
-		// Re-send the subscription request.
-		req := subscriptionRequest{
-			JSONRPC: "2.0",
-			Method:  "subscribe",
-			ID:      0,
-		}
-		req.Params.Query = "tm.event='NewBlock' AND milestone.number>0"
-		if err := c.conn.WriteJSON(req); err != nil {
-			log.Error("Failed to re-send subscription request on Heimdall WS subscription", "error", err)
-			continue
-		}
-		break
-	}
 }
