@@ -98,9 +98,6 @@ func (s *SpanStore) spanByBlockNumber(ctx context.Context, blockNumber uint64) (
 		log.Info("Asked for a future span, trying to fetch it from heimdall", "number", blockNumber, "lastKnownSpanId", s.latestKnownSpanId)
 		id := s.latestKnownSpanId + 1
 		for {
-			if id > s.latestKnownSpanId+10 {
-				break
-			}
 			log.Info("Asking for span by id", "id", id)
 			span, err := s.spanById(ctx, uint64(id))
 			if err != nil {
