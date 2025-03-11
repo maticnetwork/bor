@@ -78,7 +78,9 @@ func (s *SpanStore) spanByBlockNumber(ctx context.Context, blockNumber uint64) (
 	// https://github.com/maticnetwork/genesis-contracts/blob/master/contracts/BorValidatorSet.template#L118-L134
 	// This logic is independent of the span length (bit extra effort but maintains equivalence) and will work
 	// for all span lengths (even if we change it in future).
-	for id := int(s.latestKnownSpanId); id >= 0; id-- {
+	isFutureSpan := false
+	var id int
+	for id = int(s.latestKnownSpanId); id >= 0; id-- {
 		span, err := s.spanById(ctx, uint64(id))
 		if err != nil {
 			return nil, err
@@ -88,7 +90,26 @@ func (s *SpanStore) spanByBlockNumber(ctx context.Context, blockNumber uint64) (
 		}
 		// Check if block number given is out of bounds
 		if id == int(s.latestKnownSpanId) && blockNumber > span.EndBlock {
+			isFutureSpan = true
 			break
+		}
+	}
+	if isFutureSpan {
+		log.Info("Asked for a future span, trying to fetch it from heimdall", "number", blockNumber, "lastKnownSpanId", s.latestKnownSpanId)
+		id := s.latestKnownSpanId + 1
+		for {
+			if id > s.latestKnownSpanId+10 {
+				break
+			}
+			log.Info("Asking for span by id", "id", id)
+			span, err := s.spanById(ctx, uint64(id))
+			if err != nil {
+				return nil, err
+			}
+			if blockNumber >= span.StartBlock && blockNumber <= span.EndBlock {
+				return span, nil
+			}
+			id++
 		}
 	}
 
