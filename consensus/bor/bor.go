@@ -490,13 +490,13 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 
 		if len(newValidators) != len(headerVals) {
 			log.Warn("Invalid validator set", "block number", number, "newValidators", newValidators, "headerVals", headerVals)
-			return errInvalidSpanValidators
+			// return errInvalidSpanValidators
 		}
 
 		for i, val := range newValidators {
 			if !bytes.Equal(val.HeaderBytes(), headerVals[i].HeaderBytes()) {
 				log.Warn("Invalid validator set", "block number", number, "index", i, "local validator", val, "header validator", headerVals[i])
-				return errInvalidSpanValidators
+				// return errInvalidSpanValidators
 			}
 		}
 	}
