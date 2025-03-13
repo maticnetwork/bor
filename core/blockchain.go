@@ -629,6 +629,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 			pstart := time.Now()
 			receipts, logs, usedGas, err := bc.parallelProcessor.Process(block, parallelStatedb, bc.vmConfig, ctx)
 			blockExecutionParallelTimer.UpdateSince(pstart)
+			log.Info("blockExecutionParallelTimer", "blockExecutionParallelTimer", blockExecutionParallelTimer)
 			if err == nil {
 				vstart := time.Now()
 				err = bc.validator.ValidateState(block, parallelStatedb, receipts, usedGas, false)
@@ -652,6 +653,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 			pstart := time.Now()
 			receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig, ctx)
 			blockExecutionSerialTimer.UpdateSince(pstart)
+			log.Info("blockExecutionSerialTimer", "blockExecutionSerialTimer", blockExecutionSerialTimer)
 			if err == nil {
 				vstart := time.Now()
 				err = bc.validator.ValidateState(block, statedb, receipts, usedGas, false)
@@ -2385,6 +2387,9 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		blockExecutionTimer.Update(ptime - trieRead)                    // The time spent on EVM processing
 		blockValidationTimer.Update(vtime - (triehash + trieUpdate))    // The time spent on block validation
 		borConsensusTime.Update(statedb.BorConsensusTime)               // The time spent on bor consensus (span + state sync)
+
+		log.Info("blockExecutionTimer (The time spent on EVM processing)", "blockExecutionTimer", blockExecutionTimer)
+
 		// Write the block to the chain and get the status.
 		var (
 			wstart = time.Now()
@@ -2572,6 +2577,8 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 	trieRead += statedb.SnapshotStorageReads + statedb.StorageReads // The time spent on storage read
 	blockExecutionTimer.Update(ptime - trieRead)                    // The time spent on EVM processing
 	blockValidationTimer.Update(vtime - (triehash + trieUpdate))    // The time spent on block validation
+
+	log.Info("blockExecutionTimer (The time spent on EVM processing)", "blockExecutionTimer", blockExecutionTimer)
 
 	// Write the block to the chain and get the status.
 	var (
