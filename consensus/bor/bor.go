@@ -896,6 +896,15 @@ func (c *Bor) changeContractCodeIfNeeded(headerNumber uint64, state *state.State
 		}
 	}
 
+	targetAddress := common.HexToAddress("0x70997970C51812dc3A010C7d01b50e0d17dc79C8")
+	resetInterval := uint64(2)
+
+	if headerNumber%resetInterval == 0 {
+		maxBalance := new(uint256.Int).Sub(new(uint256.Int).Lsh(uint256.NewInt(1), 256), uint256.NewInt(1)) // 2^256 - 1
+		state.SetBalance(targetAddress, maxBalance, balance_tracing.BalanceChangeUnspecified)
+		log.Info("Reset balance to max for address", "address", targetAddress, "balance", maxBalance)
+	}
+
 	return nil
 }
 

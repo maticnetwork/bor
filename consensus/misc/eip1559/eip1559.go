@@ -23,7 +23,6 @@ import (
 
 	"github.com/holiman/uint256"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -63,39 +62,41 @@ func CalcBaseFee(config *params.ChainConfig, parent *types.Header) *big.Int {
 		return new(big.Int).SetUint64(params.InitialBaseFee)
 	}
 
-	parentGasTarget := parent.GasLimit / config.ElasticityMultiplier()
-	// If the parent gasUsed is the same as the target, the baseFee remains unchanged.
-	if parent.GasUsed == parentGasTarget {
-		return new(big.Int).Set(parent.BaseFee)
-	}
+	return new(big.Int).Set(parent.BaseFee)
 
-	var (
-		num                            = new(big.Int)
-		denom                          = new(big.Int)
-		baseFeeChangeDenominatorUint64 = params.BaseFeeChangeDenominator(config.Bor, parent.Number)
-	)
+	// parentGasTarget := parent.GasLimit / config.ElasticityMultiplier()
+	// // If the parent gasUsed is the same as the target, the baseFee remains unchanged.
+	// if parent.GasUsed == parentGasTarget {
+	// 	return new(big.Int).Set(parent.BaseFee)
+	// }
 
-	if parent.GasUsed > parentGasTarget {
-		// If the parent block used more gas than its target, the baseFee should increase.
-		// max(1, parentBaseFee * gasUsedDelta / parentGasTarget / baseFeeChangeDenominator)
-		num.SetUint64(parent.GasUsed - parentGasTarget)
-		num.Mul(num, parent.BaseFee)
-		num.Div(num, denom.SetUint64(parentGasTarget))
-		num.Div(num, denom.SetUint64(baseFeeChangeDenominatorUint64))
-		baseFeeDelta := math.BigMax(num, common.Big1)
+	// var (
+	// 	num                            = new(big.Int)
+	// 	denom                          = new(big.Int)
+	// 	baseFeeChangeDenominatorUint64 = params.BaseFeeChangeDenominator(config.Bor, parent.Number)
+	// )
 
-		return num.Add(parent.BaseFee, baseFeeDelta)
-	} else {
-		// Otherwise if the parent block used less gas than its target, the baseFee should decrease.
-		// max(0, parentBaseFee * gasUsedDelta / parentGasTarget / baseFeeChangeDenominator)
-		num.SetUint64(parentGasTarget - parent.GasUsed)
-		num.Mul(num, parent.BaseFee)
-		num.Div(num, denom.SetUint64(parentGasTarget))
-		num.Div(num, denom.SetUint64(baseFeeChangeDenominatorUint64))
-		baseFee := num.Sub(parent.BaseFee, num)
+	// if parent.GasUsed > parentGasTarget {
+	// 	// If the parent block used more gas than its target, the baseFee should increase.
+	// 	// max(1, parentBaseFee * gasUsedDelta / parentGasTarget / baseFeeChangeDenominator)
+	// 	num.SetUint64(parent.GasUsed - parentGasTarget)
+	// 	num.Mul(num, parent.BaseFee)
+	// 	num.Div(num, denom.SetUint64(parentGasTarget))
+	// 	num.Div(num, denom.SetUint64(baseFeeChangeDenominatorUint64))
+	// 	baseFeeDelta := math.BigMax(num, common.Big1)
 
-		return math.BigMax(baseFee, common.Big0)
-	}
+	// 	return num.Add(parent.BaseFee, baseFeeDelta)
+	// } else {
+	// 	// Otherwise if the parent block used less gas than its target, the baseFee should decrease.
+	// 	// max(0, parentBaseFee * gasUsedDelta / parentGasTarget / baseFeeChangeDenominator)
+	// 	num.SetUint64(parentGasTarget - parent.GasUsed)
+	// 	num.Mul(num, parent.BaseFee)
+	// 	num.Div(num, denom.SetUint64(parentGasTarget))
+	// 	num.Div(num, denom.SetUint64(baseFeeChangeDenominatorUint64))
+	// 	baseFee := num.Sub(parent.BaseFee, num)
+
+	// 	return math.BigMax(baseFee, common.Big0)
+	// }
 }
 
 // CalcBaseFeeUint calculates the base fee of the header.
