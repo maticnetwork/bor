@@ -649,7 +649,7 @@ func DefaultConfig() *Config {
 			URL:         "http://localhost:1317",
 			Without:     false,
 			GRPCAddress: "",
-			WSAddress:   "ws://localhost:26657",
+			WSAddress:   "",
 		},
 		SyncMode:    "full",
 		GcMode:      "full",
