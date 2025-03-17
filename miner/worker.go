@@ -1365,17 +1365,10 @@ func (w *worker) fillTransactions(interrupt *atomic.Int32, env *environment) err
 	duration := time.Since(start)
 	core.BlockExecutionTimer.Update(duration)
 
-	// Log the raw duration
-	log.Info("fillTransactions | Block execution took: %v", duration)
-
 	snapshot := core.BlockExecutionTimer.Snapshot()
-	log.Info("fillTransactions | Timer metrics: Count=%d, Mean=%f, Max=%d, Min=%d, StdDev=%f",
-		snapshot.Count(),
-		snapshot.Mean(),
-		snapshot.Max(),
-		snapshot.Min(),
-		snapshot.StdDev(),
-	)
+
+	log.Info("fillTransactions", "executionTime", duration)
+	log.Info("fillTransactions", "timerCount", snapshot.Count(), "timerMean", snapshot.Mean(), "timerMax", snapshot.Max(), "timerMin", snapshot.Min(), "timerStdDev", snapshot.StdDev())
 
 	return nil
 }
