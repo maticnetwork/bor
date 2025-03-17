@@ -2388,7 +2388,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		blockValidationTimer.Update(vtime - (triehash + trieUpdate))    // The time spent on block validation
 		borConsensusTime.Update(statedb.BorConsensusTime)               // The time spent on bor consensus (span + state sync)
 
-		log.Info("blockExecutionTimer (The time spent on EVM processing)", "blockExecutionTimer", blockExecutionTimer)
+		log.Info("blockExecutionTimer", "blockExecutionTimer", blockExecutionTimer)
 
 		// Write the block to the chain and get the status.
 		var (
@@ -2578,7 +2578,7 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 	blockExecutionTimer.Update(ptime - trieRead)                    // The time spent on EVM processing
 	blockValidationTimer.Update(vtime - (triehash + trieUpdate))    // The time spent on block validation
 
-	log.Info("blockExecutionTimer (The time spent on EVM processing)", "blockExecutionTimer", blockExecutionTimer)
+	log.Info("blockExecutionTimer", "blockExecutionTimer", blockExecutionTimer)
 
 	// Write the block to the chain and get the status.
 	var (
