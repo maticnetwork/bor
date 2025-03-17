@@ -629,7 +629,6 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 			pstart := time.Now()
 			receipts, logs, usedGas, err := bc.parallelProcessor.Process(block, parallelStatedb, bc.vmConfig, ctx)
 			blockExecutionParallelTimer.UpdateSince(pstart)
-			log.Info("blockExecutionParallelTimer", "blockExecutionParallelTimer", blockExecutionParallelTimer)
 			if err == nil {
 				vstart := time.Now()
 				err = bc.validator.ValidateState(block, parallelStatedb, receipts, usedGas, false)
@@ -653,7 +652,6 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 			pstart := time.Now()
 			receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig, ctx)
 			blockExecutionSerialTimer.UpdateSince(pstart)
-			log.Info("blockExecutionSerialTimer", "blockExecutionSerialTimer", blockExecutionSerialTimer)
 			if err == nil {
 				vstart := time.Now()
 				err = bc.validator.ValidateState(block, statedb, receipts, usedGas, false)
@@ -685,6 +683,9 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 			second_result.statedb.StopPrefetcher()
 		}()
 	}
+
+	log.Info("blockExecutionParallelTimer", "blockExecutionParallelTimer", blockExecutionParallelTimer)
+	log.Info("blockExecutionSerialTimer", "blockExecutionSerialTimer", blockExecutionSerialTimer)
 
 	return result.receipts, result.logs, result.usedGas, result.statedb, vtime, result.err
 }
