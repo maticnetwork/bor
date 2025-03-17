@@ -1934,29 +1934,38 @@ func (bc *BlockChain) WriteBlockAndSetHead(block *types.Block, receipts []*types
 
 	parallelSnapshot := blockExecutionParallelTimer.Snapshot()
 
-	p50 := parallelSnapshot.Percentile(0.50) / 1e6
-	p95 := parallelSnapshot.Percentile(0.95) / 1e6
-	p99 := parallelSnapshot.Percentile(0.99) / 1e6
+	p50 := parallelSnapshot.Percentile(0.50)
+	p95 := parallelSnapshot.Percentile(0.95)
+	p99 := parallelSnapshot.Percentile(0.99)
 	count := parallelSnapshot.Count()
+	max := parallelSnapshot.Max()
+	mean := parallelSnapshot.Mean()
+	min := parallelSnapshot.Min()
 
 	log.Info("blockExecutionParallelTimer",
 		"p50_ms", p50,
 		"p95_ms", p95,
 		"p99_ms", p99,
-		"count", count)
+		"count", count,
+		"max", max,
+		"mean", mean,
+		"min", min)
 
 	serialSnapshot := blockExecutionSerialTimer.Snapshot()
 
-	p50_serial := serialSnapshot.Percentile(0.50) / 1e6
-	p95_serial := serialSnapshot.Percentile(0.95) / 1e6
-	p99_serial := serialSnapshot.Percentile(0.99) / 1e6
+	p50_serial := serialSnapshot.Percentile(0.50)
+	p95_serial := serialSnapshot.Percentile(0.95)
+	p99_serial := serialSnapshot.Percentile(0.99)
 	count_serial := serialSnapshot.Count()
 
 	log.Info("blockExecutionSerialTimer",
 		"p50_ms", p50_serial,
 		"p95_ms", p95_serial,
 		"p99_ms", p99_serial,
-		"count", count_serial)
+		"count", count_serial,
+		"max", max,
+		"mean", mean,
+		"min", min)
 
 	if !bc.chainmu.TryLock() {
 		return NonStatTy, errChainStopped
