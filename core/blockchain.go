@@ -1932,8 +1932,31 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 func (bc *BlockChain) WriteBlockAndSetHead(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool) (status WriteStatus, err error) {
 	log.Info("Block size", "size", block.Size())
 
-	log.Info("blockExecutionParallelTimer", "blockExecutionParallelTimer", blockExecutionParallelTimer)
-	log.Info("blockExecutionSerialTimer", "blockExecutionSerialTimer", blockExecutionSerialTimer)
+	parallelSnapshot := blockExecutionParallelTimer.Snapshot()
+
+	p50 := parallelSnapshot.Percentile(0.50) / 1e6
+	p95 := parallelSnapshot.Percentile(0.95) / 1e6
+	p99 := parallelSnapshot.Percentile(0.99) / 1e6
+	count := parallelSnapshot.Count()
+
+	log.Info("blockExecutionParallelTimer",
+		"p50_ms", p50,
+		"p95_ms", p95,
+		"p99_ms", p99,
+		"count", count)
+
+	serialSnapshot := blockExecutionSerialTimer.Snapshot()
+
+	p50_serial := serialSnapshot.Percentile(0.50) / 1e6
+	p95_serial := serialSnapshot.Percentile(0.95) / 1e6
+	p99_serial := serialSnapshot.Percentile(0.99) / 1e6
+	count_serial := serialSnapshot.Count()
+
+	log.Info("blockExecutionSerialTimer",
+		"p50_ms", p50_serial,
+		"p95_ms", p95_serial,
+		"p99_ms", p99_serial,
+		"count", count_serial)
 
 	if !bc.chainmu.TryLock() {
 		return NonStatTy, errChainStopped
