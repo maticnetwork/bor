@@ -576,18 +576,12 @@ func NewParallelBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis 
 }
 
 func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ types.Receipts, _ []*types.Log, _ uint64, _ *state.StateDB, vtime time.Duration, blockEndErr error) {
-	log.Info("ProcessBlock: started", "block_number", block.NumberU64())
-
-	// Create a WaitGroup to synchronize goroutines
-	var wg sync.WaitGroup
-
+	// Process the block using processor and parallelProcessor at the same time, take the one which finishes first, cancel the other, and return the result
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	log.Info("ProcessBlock: context created", "block_number", block.NumberU64())
 
 	if bc.logger != nil && bc.logger.OnBlockStart != nil {
 		td := bc.GetTd(block.ParentHash(), block.NumberU64()-1)
-		log.Info("ProcessBlock: OnBlockStart triggered", "block_number", block.NumberU64())
 		bc.logger.OnBlockStart(tracing.BlockEvent{
 			Block:     block,
 			TD:        td,
@@ -598,7 +592,6 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 
 	if bc.logger != nil && bc.logger.OnBlockEnd != nil {
 		defer func() {
-			log.Info("ProcessBlock: OnBlockEnd triggered", "block_number", block.NumberU64(), "error", blockEndErr)
 			bc.logger.OnBlockEnd(blockEndErr)
 		}()
 	}
@@ -615,7 +608,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 
 	var resultChanLen int = 2
 	if bc.enforceParallelProcessor {
-		log.Debug("ProcessBlock: Processing block using Block STM only", "block_number", block.NumberU64())
+		log.Debug("Processing block using Block STM only", "number", block.NumberU64())
 		resultChanLen = 1
 	}
 	resultChan := make(chan Result, resultChanLen)
@@ -623,19 +616,15 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 	processorCount := 0
 
 	if bc.parallelProcessor != nil {
-		log.Info("ProcessBlock: initializing parallel processor", "block_number", block.NumberU64())
 		parallelStatedb, err := state.New(parent.Root, bc.stateCache, bc.snaps)
 		if err != nil {
-			log.Error("ProcessBlock: failed to create parallel state database", "error", err, "block_number", block.NumberU64())
 			return nil, nil, 0, nil, 0, err
 		}
 		parallelStatedb.SetLogger(bc.logger)
+
 		processorCount++
 
-		wg.Add(1)
 		go func() {
-			defer wg.Done()
-			log.Info("ProcessBlock: starting parallel processor", "block_number", block.NumberU64())
 			parallelStatedb.StartPrefetcher("chain", nil)
 			pstart := time.Now()
 			receipts, logs, usedGas, err := bc.parallelProcessor.Process(block, parallelStatedb, bc.vmConfig, ctx)
@@ -644,29 +633,21 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 				vstart := time.Now()
 				err = bc.validator.ValidateState(block, parallelStatedb, receipts, usedGas, false)
 				vtime = time.Since(vstart)
-				log.Info("ProcessBlock: parallel state validation completed", "validation_time", vtime, "block_number", block.NumberU64())
-			} else {
-				log.Warn("ProcessBlock: parallel processor processing failed", "error", err, "block_number", block.NumberU64())
 			}
-			log.Info("ProcessBlock: parallel processor finished", "block_number", block.NumberU64())
 			resultChan <- Result{receipts, logs, usedGas, err, parallelStatedb, blockExecutionParallelCounter, true}
 		}()
 	}
 
 	if bc.processor != nil && !bc.enforceParallelProcessor {
-		log.Info("ProcessBlock: initializing serial processor", "block_number", block.NumberU64())
 		statedb, err := state.New(parent.Root, bc.stateCache, bc.snaps)
 		if err != nil {
-			log.Error("ProcessBlock: failed to create serial state database", "error", err, "block_number", block.NumberU64())
 			return nil, nil, 0, nil, 0, err
 		}
 		statedb.SetLogger(bc.logger)
+
 		processorCount++
 
-		wg.Add(1)
 		go func() {
-			defer wg.Done()
-			log.Info("ProcessBlock: starting serial processor", "block_number", block.NumberU64())
 			statedb.StartPrefetcher("chain", nil)
 			pstart := time.Now()
 			receipts, logs, usedGas, err := bc.processor.Process(block, statedb, bc.vmConfig, ctx)
@@ -675,25 +656,18 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 				vstart := time.Now()
 				err = bc.validator.ValidateState(block, statedb, receipts, usedGas, false)
 				vtime = time.Since(vstart)
-				log.Info("ProcessBlock: serial state validation completed", "validation_time", vtime, "block_number", block.NumberU64())
-			} else {
-				log.Warn("ProcessBlock: serial processor processing failed", "error", err, "block_number", block.NumberU64())
 			}
-			log.Info("ProcessBlock: serial processor finished", "block_number", block.NumberU64())
 			resultChan <- Result{receipts, logs, usedGas, err, statedb, blockExecutionSerialCounter, false}
 		}()
 	}
 
-	log.Info("ProcessBlock: waiting for first result", "block_number", block.NumberU64())
 	result := <-resultChan
-	log.Info("ProcessBlock: first result received", "parallel", result.parallel, "error", result.err, "block_number", block.NumberU64())
 
 	if result.parallel && result.err != nil {
-		log.Warn("ProcessBlock: parallel state processor failed", "error", result.err, "block_number", block.NumberU64())
+		log.Warn("Parallel state processor failed", "err", result.err)
 		blockExecutionParallelErrorCounter.Inc(1)
 		// If the parallel processor failed, we will fallback to the serial processor if enabled
 		if processorCount == 2 {
-			log.Info("ProcessBlock: waiting for serial fallback result", "block_number", block.NumberU64())
 			result = <-resultChan
 			result.statedb.StopPrefetcher()
 			processorCount--
@@ -701,22 +675,15 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 	}
 
 	result.counter.Inc(1)
-	log.Info("ProcessBlock: incremented counter", "block_number", block.NumberU64())
 
 	// Make sure we are not leaking any prefetchers
 	if processorCount == 2 {
-		wg.Add(1)
 		go func() {
-			defer wg.Done()
 			second_result := <-resultChan
 			second_result.statedb.StopPrefetcher()
-			log.Info("ProcessBlock: stopped second prefetcher", "block_number", block.NumberU64())
 		}()
 	}
 
-	// Wait for all goroutines to finish so their logs are flushed
-	wg.Wait()
-	log.Info("ProcessBlock: returning result", "block_number", block.NumberU64())
 	return result.receipts, result.logs, result.usedGas, result.statedb, vtime, result.err
 }
 
