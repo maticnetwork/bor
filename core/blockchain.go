@@ -89,7 +89,7 @@ var (
 
 	blockInsertTimer                   = metrics.NewRegisteredTimer("chain/inserts", nil)
 	blockValidationTimer               = metrics.NewRegisteredTimer("chain/validation", nil)
-	blockExecutionTimer                = metrics.NewRegisteredTimer("chain/execution", nil)
+	BlockExecutionTimer                = metrics.NewRegisteredTimer("chain/execution", nil)
 	blockWriteTimer                    = metrics.NewRegisteredTimer("chain/write", nil)
 	blockExecutionParallelCounter      = metrics.NewRegisteredCounter("chain/execution/parallel", nil)
 	blockExecutionSerialCounter        = metrics.NewRegisteredCounter("chain/execution/serial", nil)
@@ -1965,41 +1965,6 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 func (bc *BlockChain) WriteBlockAndSetHead(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool) (status WriteStatus, err error) {
 	log.Info("Block size", "size", block.Size())
 
-	parallelSnapshot := blockExecutionParallelTimer.Snapshot()
-
-	p50 := parallelSnapshot.Percentile(0.50)
-	p95 := parallelSnapshot.Percentile(0.95)
-	p99 := parallelSnapshot.Percentile(0.99)
-	count := parallelSnapshot.Count()
-	max := parallelSnapshot.Max()
-	mean := parallelSnapshot.Mean()
-	min := parallelSnapshot.Min()
-
-	log.Info("blockExecutionParallelTimer",
-		"p50_ms", p50,
-		"p95_ms", p95,
-		"p99_ms", p99,
-		"count", count,
-		"max", max,
-		"mean", mean,
-		"min", min)
-
-	serialSnapshot := blockExecutionSerialTimer.Snapshot()
-
-	p50_serial := serialSnapshot.Percentile(0.50)
-	p95_serial := serialSnapshot.Percentile(0.95)
-	p99_serial := serialSnapshot.Percentile(0.99)
-	count_serial := serialSnapshot.Count()
-
-	log.Info("blockExecutionSerialTimer",
-		"p50_ms", p50_serial,
-		"p95_ms", p95_serial,
-		"p99_ms", p99_serial,
-		"count", count_serial,
-		"max", max,
-		"mean", mean,
-		"min", min)
-
 	if !bc.chainmu.TryLock() {
 		return NonStatTy, errChainStopped
 	}
@@ -2451,11 +2416,9 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool) (int, error)
 		trieUpdate := statedb.AccountUpdates + statedb.StorageUpdates   // The time spent on tries update
 		trieRead := statedb.SnapshotAccountReads + statedb.AccountReads // The time spent on account read
 		trieRead += statedb.SnapshotStorageReads + statedb.StorageReads // The time spent on storage read
-		blockExecutionTimer.Update(ptime - trieRead)                    // The time spent on EVM processing
+		BlockExecutionTimer.Update(ptime - trieRead)                    // The time spent on EVM processing
 		blockValidationTimer.Update(vtime - (triehash + trieUpdate))    // The time spent on block validation
 		borConsensusTime.Update(statedb.BorConsensusTime)               // The time spent on bor consensus (span + state sync)
-
-		log.Info("blockExecutionTimer", "blockExecutionTimer", blockExecutionTimer)
 
 		// Write the block to the chain and get the status.
 		var (
@@ -2642,10 +2605,8 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 	trieUpdate := statedb.AccountUpdates + statedb.StorageUpdates   // The time spent on tries update
 	trieRead := statedb.SnapshotAccountReads + statedb.AccountReads // The time spent on account read
 	trieRead += statedb.SnapshotStorageReads + statedb.StorageReads // The time spent on storage read
-	blockExecutionTimer.Update(ptime - trieRead)                    // The time spent on EVM processing
+	BlockExecutionTimer.Update(ptime - trieRead)                    // The time spent on EVM processing
 	blockValidationTimer.Update(vtime - (triehash + trieUpdate))    // The time spent on block validation
-
-	log.Info("blockExecutionTimer", "blockExecutionTimer", blockExecutionTimer)
 
 	// Write the block to the chain and get the status.
 	var (

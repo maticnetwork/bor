@@ -1337,6 +1337,8 @@ func (w *worker) fillTransactions(interrupt *atomic.Int32, env *environment) err
 		}
 	}
 
+	start := time.Now()
+
 	// Fill the block with all available pending transactions.
 	if len(localPlainTxs) > 0 || len(localBlobTxs) > 0 {
 		var plainTxs, blobTxs *transactionsByPriceAndNonce
@@ -1359,6 +1361,21 @@ func (w *worker) fillTransactions(interrupt *atomic.Int32, env *environment) err
 			return err
 		}
 	}
+
+	duration := time.Since(start)
+	core.BlockExecutionTimer.Update(duration)
+
+	// Log the raw duration
+	log.Info("fillTransactions | Block execution took: %v", duration)
+
+	snapshot := core.BlockExecutionTimer.Snapshot()
+	log.Info("fillTransactions | Timer metrics: Count=%d, Mean=%f, Max=%d, Min=%d, StdDev=%f",
+		snapshot.Count(),
+		snapshot.Mean(),
+		snapshot.Max(),
+		snapshot.Min(),
+		snapshot.StdDev(),
+	)
 
 	return nil
 }
