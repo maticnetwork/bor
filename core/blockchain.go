@@ -684,9 +684,6 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 		}()
 	}
 
-	log.Info("blockExecutionParallelTimer", "blockExecutionParallelTimer", blockExecutionParallelTimer)
-	log.Info("blockExecutionSerialTimer", "blockExecutionSerialTimer", blockExecutionSerialTimer)
-
 	return result.receipts, result.logs, result.usedGas, result.statedb, vtime, result.err
 }
 
@@ -1934,6 +1931,10 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 // and applies the block as the new chain head.
 func (bc *BlockChain) WriteBlockAndSetHead(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool) (status WriteStatus, err error) {
 	log.Info("Block size", "size", block.Size())
+
+	log.Info("blockExecutionParallelTimer", "blockExecutionParallelTimer", blockExecutionParallelTimer)
+	log.Info("blockExecutionSerialTimer", "blockExecutionSerialTimer", blockExecutionSerialTimer)
+
 	if !bc.chainmu.TryLock() {
 		return NonStatTy, errChainStopped
 	}
