@@ -142,6 +142,13 @@ type Config struct {
 
 	// Pprof has the pprof related settings
 	Pprof *PprofConfig `hcl:"pprof,block" toml:"pprof,block"`
+
+	EngineAPI *EngineAPIConfig `hcl:"engineapi,block" toml:"engineapi,block"`
+}
+
+type EngineAPIConfig struct {
+	// Enabled selects whether the engine api is enabled
+	Enabled bool `hcl:"enabled,optional" toml:"enabled,optional"`
 }
 
 type LoggingConfig struct {
@@ -801,6 +808,9 @@ func DefaultConfig() *Config {
 			Enable:               true,
 			SpeculativeProcesses: 8,
 			Enforce:              false,
+		},
+		EngineAPI: &EngineAPIConfig{
+			Enabled: false,
 		},
 	}
 }

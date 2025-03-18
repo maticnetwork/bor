@@ -18,6 +18,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/bor"    //nolint:typecheck
 	"github.com/ethereum/go-ethereum/consensus/clique"
 	"github.com/ethereum/go-ethereum/eth"
+	"github.com/ethereum/go-ethereum/eth/catalyst"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/ethereum/go-ethereum/eth/tracers"
 	"github.com/ethereum/go-ethereum/ethstats"
@@ -274,8 +275,14 @@ func NewServer(config *Config, opts ...serverOption) (*Server, error) {
 		}
 	}
 
-	// sealing (if enabled) or in dev mode
-	if config.Sealer.Enabled || config.Developer.Enabled {
+	if config.EngineAPI.Enabled {
+		// Launch the engine API for interacting with external consensus client (Heimdall).
+		err := catalyst.Register(stack, srv.backend)
+		if err != nil {
+			utils.Fatalf("failed to register catalyst service: %v", err)
+		}
+	} else if config.Sealer.Enabled || config.Developer.Enabled {
+		// sealing (if enabled) or in dev mode
 		if err := srv.backend.StartMining(); err != nil {
 			return nil, err
 		}

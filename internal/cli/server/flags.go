@@ -979,6 +979,14 @@ func (c *Command) Flags(config *Config) *flagset.Flagset {
 		Default: c.cliConfig.Developer.Period,
 	})
 
+	//engine api
+	f.BoolFlag(&flagset.BoolFlag{
+		Name:    "engineapi.enable",
+		Usage:   "Enable Engine API",
+		Value:   &c.cliConfig.EngineAPI.Enabled,
+		Default: c.cliConfig.EngineAPI.Enabled,
+	})
+
 	// parallelevm
 	f.BoolFlag(&flagset.BoolFlag{
 		Name:    "parallelevm.enable",
