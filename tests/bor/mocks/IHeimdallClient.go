@@ -52,10 +52,10 @@ func (mr *MockIHeimdallClientMockRecorder) Close() *gomock.Call {
 }
 
 // FetchCheckpoint mocks base method.
-func (m *MockIHeimdallClient) FetchCheckpoint(arg0 context.Context, arg1 int64) (*checkpoint.Checkpoint, error) {
+func (m *MockIHeimdallClient) FetchCheckpoint(arg0 context.Context, arg1 int64) (*checkpoint.CheckpointV2, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FetchCheckpoint", arg0, arg1)
-	ret0, _ := ret[0].(*checkpoint.Checkpoint)
+	ret0, _ := ret[0].(*checkpoint.CheckpointV2)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -82,10 +82,10 @@ func (mr *MockIHeimdallClientMockRecorder) FetchCheckpointCount(arg0 interface{}
 }
 
 // FetchMilestone mocks base method.
-func (m *MockIHeimdallClient) FetchMilestone(arg0 context.Context) (*milestone.Milestone, error) {
+func (m *MockIHeimdallClient) FetchMilestone(arg0 context.Context) (*milestone.MilestoneV2, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "FetchMilestone", arg0)
-	ret0, _ := ret[0].(*milestone.Milestone)
+	ret0, _ := ret[0].(*milestone.MilestoneV2)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

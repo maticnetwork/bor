@@ -23,7 +23,7 @@ func (h *HeimdallGRPCClient) FetchCheckpointCount(ctx context.Context) (int64, e
 	return res.Result.Result, nil
 }
 
-func (h *HeimdallGRPCClient) FetchCheckpoint(ctx context.Context, number int64) (*checkpoint.Checkpoint, error) {
+func (h *HeimdallGRPCClient) FetchCheckpoint(ctx context.Context, number int64) (*checkpoint.CheckpointV2, error) {
 	req := &proto.FetchCheckpointRequest{
 		ID: number,
 	}
@@ -37,7 +37,7 @@ func (h *HeimdallGRPCClient) FetchCheckpoint(ctx context.Context, number int64) 
 
 	log.Info("Fetched checkpoint", "number", number)
 
-	checkpoint := &checkpoint.Checkpoint{
+	checkpoint := &checkpoint.CheckpointV2{
 		StartBlock: res.Result.StartBlock,
 		EndBlock:   res.Result.EndBlock,
 		RootHash:   protoutils.ConvertH256ToHash(res.Result.RootHash),

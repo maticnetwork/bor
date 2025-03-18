@@ -9,8 +9,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
-// Checkpoint defines a response object type of bor checkpoint
-type Checkpoint struct {
+// CheckpointV2 defines a response object type of bor checkpoint
+type CheckpointV2 struct {
 	Proposer   common.Address `json:"proposer"`
 	StartBlock uint64         `json:"start_block"`
 	EndBlock   uint64         `json:"end_block"`
@@ -19,8 +19,8 @@ type Checkpoint struct {
 	Timestamp  uint64         `json:"timestamp"`
 }
 
-func (m *Checkpoint) UnmarshalJSON(data []byte) error {
-	type Alias Checkpoint
+func (m *CheckpointV2) UnmarshalJSON(data []byte) error {
+	type Alias CheckpointV2
 	temp := &struct {
 		StartBlock string `json:"start_block"`
 		EndBlock   string `json:"end_block"`
@@ -62,10 +62,10 @@ func (m *Checkpoint) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-type CheckpointResponse struct {
-	Result Checkpoint `json:"checkpoint"`
+type CheckpointResponseV2 struct {
+	Result CheckpointV2 `json:"checkpoint"`
 }
 
-type CheckpointCountResponse struct {
+type CheckpointCountResponseV2 struct {
 	Result int64 `json:"ack_count"`
 }

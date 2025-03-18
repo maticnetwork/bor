@@ -22,7 +22,7 @@ func (h *HeimdallGRPCClient) FetchMilestoneCount(ctx context.Context) (int64, er
 	return res.Result.Count, nil
 }
 
-func (h *HeimdallGRPCClient) FetchMilestone(ctx context.Context) (*milestone.Milestone, error) {
+func (h *HeimdallGRPCClient) FetchMilestone(ctx context.Context) (*milestone.MilestoneV2, error) {
 	log.Info("Fetching milestone")
 
 	res, err := h.client.FetchMilestone(ctx, nil)
@@ -32,7 +32,7 @@ func (h *HeimdallGRPCClient) FetchMilestone(ctx context.Context) (*milestone.Mil
 
 	log.Info("Fetched milestone")
 
-	milestone := &milestone.Milestone{
+	milestone := &milestone.MilestoneV2{
 		StartBlock: res.Result.StartBlock,
 		EndBlock:   res.Result.EndBlock,
 		Hash:       protoutils.ConvertH256ToHash(res.Result.RootHash),

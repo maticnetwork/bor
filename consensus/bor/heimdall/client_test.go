@@ -92,8 +92,8 @@ func TestFetchCheckpointFromMockHeimdall(t *testing.T) {
 	// Initialize the fake handler and add a fake checkpoint handler function
 	handler := &HttpHandlerFake{}
 	handler.handleFetchCheckpoint = func(w http.ResponseWriter, _ *http.Request) {
-		err := json.NewEncoder(w).Encode(checkpoint.CheckpointResponse{
-			Result: checkpoint.Checkpoint{
+		err := json.NewEncoder(w).Encode(checkpoint.CheckpointResponseV2{
+			Result: checkpoint.CheckpointV2{
 				Proposer:   common.Address{},
 				StartBlock: 0,
 				EndBlock:   512,
@@ -142,8 +142,8 @@ func TestFetchMilestoneFromMockHeimdall(t *testing.T) {
 	// Initialize the fake handler and add a fake milestone handler function
 	handler := &HttpHandlerFake{}
 	handler.handleFetchMilestone = func(w http.ResponseWriter, _ *http.Request) {
-		err := json.NewEncoder(w).Encode(milestone.MilestoneResponse{
-			Result: milestone.Milestone{
+		err := json.NewEncoder(w).Encode(milestone.MilestoneResponseV2{
+			Result: milestone.MilestoneV2{
 				Proposer:   common.Address{},
 				StartBlock: 0,
 				EndBlock:   512,
@@ -197,8 +197,8 @@ func TestFetchShutdown(t *testing.T) {
 	handler.handleFetchCheckpoint = func(w http.ResponseWriter, _ *http.Request) {
 		time.Sleep(100 * time.Millisecond)
 
-		err := json.NewEncoder(w).Encode(checkpoint.CheckpointResponse{
-			Result: checkpoint.Checkpoint{
+		err := json.NewEncoder(w).Encode(checkpoint.CheckpointResponseV2{
+			Result: checkpoint.CheckpointV2{
 				Proposer:   common.Address{},
 				StartBlock: 0,
 				EndBlock:   512,

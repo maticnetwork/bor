@@ -23,6 +23,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
 	balance_tracing "github.com/ethereum/go-ethereum/core/tracing"
+	hmm "github.com/ethereum/go-ethereum/heimdall-migration-monitor"
 
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/bor/api"
@@ -1194,24 +1195,56 @@ func (c *Bor) FetchAndCommitSpan(
 		}
 
 	} else {
-		response, err := c.HeimdallClient.GetSpan(ctx, newSpanID)
-		if err != nil {
-			return err
-		}
+		if hmm.IsHeimdallV2 {
+			response, err := c.HeimdallClient.GetSpan(ctx, newSpanID)
+			if err != nil {
+				return err
+			}
 
-		minSpan = span.Span{
-			ID:         response.Id,
-			StartBlock: response.StartBlock,
-			EndBlock:   response.EndBlock,
-		}
-		chainId = response.BorChainId
+			minSpan = span.Span{
+				ID:         response.Id,
+				StartBlock: response.StartBlock,
+				EndBlock:   response.EndBlock,
+			}
+			chainId = response.BorChainId
 
-		for _, val := range response.ValidatorSet.Validators {
-			validators = append(validators, val.MinimalVal())
-		}
+			for _, val := range response.ValidatorSet.Validators {
+				validators = append(validators, val.MinimalVal())
+			}
 
-		for _, val := range response.SelectedProducers {
-			producers = append(producers, val.MinimalVal())
+			for _, val := range response.SelectedProducers {
+				producers = append(producers, val.MinimalVal())
+			}
+		} else {
+			response, err := c.HeimdallClient.Span(ctx, newSpanID)
+			if err != nil {
+				return err
+			}
+
+			minSpan = span.Span{
+				ID:         response.ID,
+				StartBlock: response.StartBlock,
+				EndBlock:   response.EndBlock,
+			}
+			chainId = response.ChainID
+
+			for _, val := range response.ValidatorSet.Validators {
+				m := stakeTypes.MinimalVal{
+					ID:          val.ID,
+					VotingPower: uint64(val.VotingPower),
+					Signer:      val.Address,
+				}
+				validators = append(validators, m)
+			}
+
+			for _, val := range response.SelectedProducers {
+				m := stakeTypes.MinimalVal{
+					ID:          val.ID,
+					VotingPower: uint64(val.VotingPower),
+					Signer:      val.Address,
+				}
+				producers = append(producers, m)
+			}
 		}
 	}
 
