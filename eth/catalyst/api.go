@@ -148,9 +148,9 @@ func NewConsensusAPI(eth *eth.Ethereum) *ConsensusAPI {
 
 // newConsensusAPIWithoutHeartbeat creates a new consensus api for the SimulatedBeacon Node.
 func newConsensusAPIWithoutHeartbeat(eth *eth.Ethereum) *ConsensusAPI {
-	if eth.BlockChain().Config().TerminalTotalDifficulty == nil {
-		log.Warn("Engine API started but chain not configured for merge yet")
-	}
+	// if eth.BlockChain().Config().TerminalTotalDifficulty == nil {
+	// 	log.Warn("Engine API started but chain not configured for merge yet")
+	// }
 	api := &ConsensusAPI{
 		eth:               eth,
 		remoteBlocks:      newHeaderQueue(),
@@ -192,21 +192,21 @@ func (api *ConsensusAPI) ForkchoiceUpdatedV1(update engine.ForkchoiceStateV1, pa
 // attributes. It supports both PayloadAttributesV1 and PayloadAttributesV2.
 func (api *ConsensusAPI) ForkchoiceUpdatedV2(update engine.ForkchoiceStateV1, params *engine.PayloadAttributes) (engine.ForkChoiceResponse, error) {
 	if params != nil {
-		if params.BeaconRoot != nil {
-			return engine.STATUS_INVALID, engine.InvalidPayloadAttributes.With(errors.New("unexpected beacon root"))
-		}
-		switch api.eth.BlockChain().Config().LatestFork(params.Timestamp) {
-		case forks.Paris:
-			if params.Withdrawals != nil {
-				return engine.STATUS_INVALID, engine.InvalidPayloadAttributes.With(errors.New("withdrawals before shanghai"))
-			}
-		case forks.Shanghai:
-			if params.Withdrawals == nil {
-				return engine.STATUS_INVALID, engine.InvalidPayloadAttributes.With(errors.New("missing withdrawals"))
-			}
-		default:
-			return engine.STATUS_INVALID, engine.UnsupportedFork.With(errors.New("forkchoiceUpdatedV2 must only be called with paris and shanghai payloads"))
-		}
+		// if params.BeaconRoot != nil {
+		// 	return engine.STATUS_INVALID, engine.InvalidPayloadAttributes.With(errors.New("unexpected beacon root"))
+		// }
+		// switch api.eth.BlockChain().Config().LatestFork(params.Timestamp) {
+		// case forks.Paris:
+		// 	if params.Withdrawals != nil {
+		// 		return engine.STATUS_INVALID, engine.InvalidPayloadAttributes.With(errors.New("withdrawals before shanghai"))
+		// 	}
+		// case forks.Shanghai:
+		// 	if params.Withdrawals == nil {
+		// 		return engine.STATUS_INVALID, engine.InvalidPayloadAttributes.With(errors.New("missing withdrawals"))
+		// 	}
+		// default:
+		// 	return engine.STATUS_INVALID, engine.UnsupportedFork.With(errors.New("forkchoiceUpdatedV2 must only be called with paris and shanghai payloads"))
+		// }
 	}
 	return api.forkchoiceUpdated(update, params, engine.PayloadV2, false)
 }
@@ -235,6 +235,10 @@ func (api *ConsensusAPI) ForkchoiceUpdatedV3(update engine.ForkchoiceStateV1, pa
 }
 
 func (api *ConsensusAPI) forkchoiceUpdated(update engine.ForkchoiceStateV1, payloadAttributes *engine.PayloadAttributes, payloadVersion engine.PayloadVersion, simulatorMode bool) (engine.ForkChoiceResponse, error) {
+	fmt.Println("PSP - 1")
+	fmt.Println("PSP - update.HeadBlockHash: ", update.HeadBlockHash)
+	fmt.Println("PSP - update.SafeBlockHash: ", update.SafeBlockHash)
+	fmt.Println("PSP - update.FinalizedBlockHash: ", update.FinalizedBlockHash)
 	api.forkchoiceLock.Lock()
 	defer api.forkchoiceLock.Unlock()
 
@@ -252,6 +256,7 @@ func (api *ConsensusAPI) forkchoiceUpdated(update engine.ForkchoiceStateV1, payl
 	// need to either trigger a sync, or to reject this forkchoice update for a
 	// reason.
 	block := api.eth.BlockChain().GetBlockByHash(update.HeadBlockHash)
+	fmt.Println("PSP - block.Number(): ", block.Number(), block == nil)
 	if block == nil {
 		// If this block was previously invalidated, keep rejecting it here too
 		if res := api.checkInvalidAncestor(update.HeadBlockHash, update.HeadBlockHash); res != nil {
@@ -288,46 +293,52 @@ func (api *ConsensusAPI) forkchoiceUpdated(update engine.ForkchoiceStateV1, payl
 	// Block is known locally, just sanity check that the beacon client does not
 	// attempt to push us back to before the merge.
 	if block.Difficulty().BitLen() > 0 || block.NumberU64() == 0 {
+		fmt.Println("PSP - 2")
 		var (
 			td  = api.eth.BlockChain().GetTd(update.HeadBlockHash, block.NumberU64())
 			ptd = api.eth.BlockChain().GetTd(block.ParentHash(), block.NumberU64()-1)
-			ttd = api.eth.BlockChain().Config().TerminalTotalDifficulty
+			// ttd = api.eth.BlockChain().Config().TerminalTotalDifficulty
 		)
+		fmt.Println("PSP - 3")
 		if td == nil || (block.NumberU64() > 0 && ptd == nil) {
 			log.Error("TDs unavailable for TTD check", "number", block.NumberU64(), "hash", update.HeadBlockHash, "td", td, "parent", block.ParentHash(), "ptd", ptd)
 			return engine.STATUS_INVALID, errors.New("TDs unavailable for TDD check")
 		}
-		if td.Cmp(ttd) < 0 {
-			log.Error("Refusing beacon update to pre-merge", "number", block.NumberU64(), "hash", update.HeadBlockHash, "diff", block.Difficulty(), "age", common.PrettyAge(time.Unix(int64(block.Time()), 0)))
-			return engine.ForkChoiceResponse{PayloadStatus: engine.INVALID_TERMINAL_BLOCK, PayloadID: nil}, nil
-		}
-		if block.NumberU64() > 0 && ptd.Cmp(ttd) >= 0 {
-			log.Error("Parent block is already post-ttd", "number", block.NumberU64(), "hash", update.HeadBlockHash, "diff", block.Difficulty(), "age", common.PrettyAge(time.Unix(int64(block.Time()), 0)))
-			return engine.ForkChoiceResponse{PayloadStatus: engine.INVALID_TERMINAL_BLOCK, PayloadID: nil}, nil
-		}
+		// if td.Cmp(ttd) < 0 {
+		// 	log.Error("Refusing beacon update to pre-merge", "number", block.NumberU64(), "hash", update.HeadBlockHash, "diff", block.Difficulty(), "age", common.PrettyAge(time.Unix(int64(block.Time()), 0)))
+		// 	return engine.ForkChoiceResponse{PayloadStatus: engine.INVALID_TERMINAL_BLOCK, PayloadID: nil}, nil
+		// }
+		fmt.Println("PSP - 4")
+		// if block.NumberU64() > 0 && ptd.Cmp(ttd) >= 0 {
+		// 	log.Error("Parent block is already post-ttd", "number", block.NumberU64(), "hash", update.HeadBlockHash, "diff", block.Difficulty(), "age", common.PrettyAge(time.Unix(int64(block.Time()), 0)))
+		// 	return engine.ForkChoiceResponse{PayloadStatus: engine.INVALID_TERMINAL_BLOCK, PayloadID: nil}, nil
+		// }
 	}
+	fmt.Println("PSP - 5")
 	valid := func(id *engine.PayloadID) engine.ForkChoiceResponse {
 		return engine.ForkChoiceResponse{
 			PayloadStatus: engine.PayloadStatusV1{Status: engine.VALID, LatestValidHash: &update.HeadBlockHash},
 			PayloadID:     id,
 		}
 	}
-	if rawdb.ReadCanonicalHash(api.eth.ChainDb(), block.NumberU64()) != update.HeadBlockHash {
-		// Block is not canonical, set head.
-		if latestValid, err := api.eth.BlockChain().SetCanonical(block); err != nil {
-			return engine.ForkChoiceResponse{PayloadStatus: engine.PayloadStatusV1{Status: engine.INVALID, LatestValidHash: &latestValid}}, err
-		}
-	} else if api.eth.BlockChain().CurrentBlock().Hash() == update.HeadBlockHash {
-		// If the specified head matches with our local head, do nothing and keep
-		// generating the payload. It's a special corner case that a few slots are
-		// missing and we are requested to generate the payload in slot.
-	} else {
-		// If the head block is already in our canonical chain, the beacon client is
-		// probably resyncing. Ignore the update.
-		log.Info("Ignoring beacon update to old head", "number", block.NumberU64(), "hash", update.HeadBlockHash, "age", common.PrettyAge(time.Unix(int64(block.Time()), 0)), "have", api.eth.BlockChain().CurrentBlock().Number)
-		return valid(nil), nil
-	}
+	fmt.Println("PSP - 6")
+	// if rawdb.ReadCanonicalHash(api.eth.ChainDb(), block.NumberU64()) != update.HeadBlockHash {
+	// 	// Block is not canonical, set head.
+	// 	if latestValid, err := api.eth.BlockChain().SetCanonical(block); err != nil {
+	// 		return engine.ForkChoiceResponse{PayloadStatus: engine.PayloadStatusV1{Status: engine.INVALID, LatestValidHash: &latestValid}}, err
+	// 	}
+	// } else if api.eth.BlockChain().CurrentBlock().Hash() == update.HeadBlockHash {
+	// 	// If the specified head matches with our local head, do nothing and keep
+	// 	// generating the payload. It's a special corner case that a few slots are
+	// 	// missing and we are requested to generate the payload in slot.
+	// } else {
+	// 	// If the head block is already in our canonical chain, the beacon client is
+	// 	// probably resyncing. Ignore the update.
+	// 	log.Info("Ignoring beacon update to old head", "number", block.NumberU64(), "hash", update.HeadBlockHash, "age", common.PrettyAge(time.Unix(int64(block.Time()), 0)), "have", api.eth.BlockChain().CurrentBlock().Number)
+	// 	return valid(nil), nil
+	// }
 	api.eth.SetSynced()
+	fmt.Println("PSP - 7")
 
 	// If the beacon client also advertised a finalized block, mark the local
 	// chain final and completely in PoS mode.
@@ -344,6 +355,7 @@ func (api *ConsensusAPI) forkchoiceUpdated(update engine.ForkchoiceStateV1, payl
 		// Set the finalized block
 		api.eth.BlockChain().SetFinalized(finalBlock.Header())
 	}
+	fmt.Println("PSP - 8")
 	// Check if the safe block hash is in our canonical tree, if not something is wrong
 	if update.SafeBlockHash != (common.Hash{}) {
 		safeBlock := api.eth.BlockChain().GetBlockByHash(update.SafeBlockHash)

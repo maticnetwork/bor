@@ -24,7 +24,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/trie"
 )
 
@@ -205,9 +204,9 @@ func ExecutableDataToBlock(data ExecutableData, versionedHashes []common.Hash, b
 	if err != nil {
 		return nil, err
 	}
-	if len(data.ExtraData) > int(params.MaximumExtraDataSize) {
-		return nil, fmt.Errorf("invalid extradata length: %v", len(data.ExtraData))
-	}
+	// if len(data.ExtraData) > int(params.MaximumExtraDataSize) {
+	// 	return nil, fmt.Errorf("invalid extradata length: %v", len(data.ExtraData))
+	// }
 	if len(data.LogsBloom) != 256 {
 		return nil, fmt.Errorf("invalid logsBloom length: %v", len(data.LogsBloom))
 	}
@@ -257,7 +256,28 @@ func ExecutableDataToBlock(data ExecutableData, versionedHashes []common.Hash, b
 		BlobGasUsed:      data.BlobGasUsed,
 		ParentBeaconRoot: beaconRoot,
 	}
-	block := types.NewBlockWithHeader(header).WithBody(types.Body{Transactions: txs, Uncles: nil, Withdrawals: data.Withdrawals})
+	block := types.NewBlockWithHeader(header).WithBody(types.Body{Transactions: txs, Uncles: nil, Withdrawals: nil})
+	// print each entry in the block and compare to the data
+	fmt.Println("ParentHash: ", block.ParentHash(), data.ParentHash, block.ParentHash() == data.ParentHash)
+	fmt.Println("UncleHash: ", block.UncleHash(), types.EmptyUncleHash, block.UncleHash() == types.EmptyUncleHash)
+	fmt.Println("Coinbase: ", block.Coinbase(), data.FeeRecipient, block.Coinbase() == data.FeeRecipient)
+	fmt.Println("Root: ", block.Root(), data.StateRoot, block.Root() == data.StateRoot)
+	fmt.Println("TxHash: ", block.TxHash(), types.DeriveSha(types.Transactions(txs), trie.NewStackTrie(nil)), block.TxHash() == types.DeriveSha(types.Transactions(txs), trie.NewStackTrie(nil)))
+	fmt.Println("ReceiptHash: ", block.ReceiptHash(), data.ReceiptsRoot, block.ReceiptHash() == data.ReceiptsRoot)
+	fmt.Println("Bloom: ", block.Bloom(), types.BytesToBloom(data.LogsBloom), block.Bloom() == types.BytesToBloom(data.LogsBloom))
+	fmt.Println("Difficulty: ", block.Difficulty(), common.Big0, block.Difficulty() == common.Big0)
+	fmt.Println("Number: ", block.Number(), new(big.Int).SetUint64(data.Number), block.Number() == new(big.Int).SetUint64(data.Number))
+	fmt.Println("GasLimit: ", block.GasLimit(), data.GasLimit, block.GasLimit() == data.GasLimit)
+	fmt.Println("GasUsed: ", block.GasUsed(), data.GasUsed, block.GasUsed() == data.GasUsed)
+	fmt.Println("Time: ", block.Time(), data.Timestamp, block.Time() == data.Timestamp)
+	fmt.Println("BaseFee: ", block.BaseFee(), data.BaseFeePerGas, block.BaseFee() == data.BaseFeePerGas)
+	fmt.Println("Extra: ", block.Extra(), data.ExtraData)
+	fmt.Println("MixDigest: ", block.MixDigest(), data.Random, block.MixDigest() == data.Random)
+	fmt.Println("WithdrawalsHash: ", block.Header().WithdrawalsHash, withdrawalsRoot, block.Header().WithdrawalsHash == withdrawalsRoot)
+	fmt.Println("ExcessBlobGas: ", block.ExcessBlobGas(), data.ExcessBlobGas, block.ExcessBlobGas() == data.ExcessBlobGas)
+	fmt.Println("BlobGasUsed: ", block.BlobGasUsed(), data.BlobGasUsed, block.BlobGasUsed() == data.BlobGasUsed)
+	fmt.Println("ParentBeaconRoot: ", block.BeaconRoot(), beaconRoot, block.BeaconRoot() == beaconRoot)
+
 	if block.Hash() != data.BlockHash {
 		return nil, fmt.Errorf("blockhash mismatch, want %x, got %x", data.BlockHash, block.Hash())
 	}
