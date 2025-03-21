@@ -219,7 +219,7 @@ func (abi *ABI) UnmarshalJSON(data []byte) error {
 }
 
 // MethodById looks up a method by the 4-byte id,
-// returns nil if none found.
+// returns nil if none is found.
 func (abi *ABI) MethodById(sigdata []byte) (*Method, error) {
 	if len(sigdata) < 4 {
 		return nil, fmt.Errorf("data too short (%d bytes) for abi method lookup", len(sigdata))
