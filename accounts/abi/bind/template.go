@@ -276,8 +276,8 @@ var (
 	}
 
 	// Call invokes the (constant) contract method with params as input values and
-	// sets the output to result. The result type might be a single field for simple
-	// returns, a slice of interfaces for anonymous returns and a struct for named
+	// sets the output to the result. The result type might be a single field for simple
+	// returns, a slice of interfaces for anonymous returns, and a struct for named
 	// returns.
 	func (_{{$contract.Type}} *{{$contract.Type}}Raw) Call(opts *bind.CallOpts, result *[]interface{}, method string, params ...interface{}) error {
 		return _{{$contract.Type}}.Contract.{{$contract.Type}}Caller.contract.Call(opts, result, method, params...)
