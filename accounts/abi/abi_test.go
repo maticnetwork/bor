@@ -155,7 +155,7 @@ func TestReader(t *testing.T) {
 
 func TestInvalidABI(t *testing.T) {
 	t.Parallel()
-	json := `[{ "type" : "function", "name" : "", "constant" : fals }]`
+	json := `[{ "type" : "function", "name" : "", "constant" : false }]`
 
 	_, err := JSON(strings.NewReader(json))
 	if err == nil {
