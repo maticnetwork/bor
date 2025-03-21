@@ -44,7 +44,7 @@ func formatSliceString(kind reflect.Kind, sliceSize int) string {
 	return fmt.Sprintf("[%d]%v", sliceSize, kind)
 }
 
-// sliceTypeCheck checks that the given slice can by assigned to the reflection
+// sliceTypeCheck checks that the given slice can be assigned to the reflection
 // type in t.
 func sliceTypeCheck(t Type, val reflect.Value) error {
 	if val.Kind() != reflect.Slice && val.Kind() != reflect.Array {
