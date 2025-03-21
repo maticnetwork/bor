@@ -71,7 +71,7 @@ type SimulatedBackend struct {
 
 	mu              sync.Mutex
 	pendingBlock    *types.Block   // Currently pending block that will be imported on request
-	pendingState    *state.StateDB // Currently pending state that will be the active on request
+	pendingState    *state.StateDB // Currently pending state that will be active on request
 	pendingReceipts types.Receipts // Currently receipts for the pending block
 
 	events       *filters.EventSystem  // for filtering log events live
@@ -513,7 +513,7 @@ func (b *SimulatedBackend) PendingCallContract(ctx context.Context, call ethereu
 }
 
 // PendingNonceAt implements PendingStateReader.PendingNonceAt, retrieving
-// the nonce currently pending for the account.
+// the nonce is currently pending for the account.
 func (b *SimulatedBackend) PendingNonceAt(ctx context.Context, account common.Address) (uint64, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
