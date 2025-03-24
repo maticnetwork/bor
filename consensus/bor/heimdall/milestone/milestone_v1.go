@@ -30,29 +30,29 @@ type MilestoneCountResponseV1 struct {
 	Result MilestoneCountV1 `json:"result"`
 }
 
-type MilestoneLastNoAckV1 struct {
+type MilestoneLastNoAck struct {
 	Result string `json:"result"`
 }
 
-type MilestoneLastNoAckResponseV1 struct {
-	Height string               `json:"height"`
-	Result MilestoneLastNoAckV1 `json:"result"`
+type MilestoneLastNoAckResponse struct {
+	Height string             `json:"height"`
+	Result MilestoneLastNoAck `json:"result"`
 }
 
-type MilestoneNoAckV1 struct {
+type MilestoneNoAck struct {
 	Result bool `json:"result"`
 }
 
-type MilestoneNoAckResponseV1 struct {
-	Height string           `json:"height"`
-	Result MilestoneNoAckV1 `json:"result"`
+type MilestoneNoAckResponse struct {
+	Height string         `json:"height"`
+	Result MilestoneNoAck `json:"result"`
 }
 
-type MilestoneIDV1 struct {
+type MilestoneID struct {
 	Result bool `json:"result"`
 }
 
-type MilestoneIDResponseV1 struct {
-	Height string        `json:"height"`
-	Result MilestoneIDV1 `json:"result"`
+type MilestoneIDResponse struct {
+	Height string      `json:"height"`
+	Result MilestoneID `json:"result"`
 }

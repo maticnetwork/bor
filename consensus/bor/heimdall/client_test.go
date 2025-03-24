@@ -23,13 +23,27 @@ import (
 // requests to the mock heimdal server for specific functions. Add more handlers
 // according to requirements.
 type HttpHandlerFake struct {
-	handleFetchCheckpoint http.HandlerFunc
-	handleFetchMilestone  http.HandlerFunc
+	handleFetchCheckpoint         http.HandlerFunc
+	handleFetchMilestone          http.HandlerFunc
+	handleFetchNoAckMilestone     http.HandlerFunc
+	handleFetchLastNoAckMilestone http.HandlerFunc
 }
 
 func (h *HttpHandlerFake) GetCheckpointHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		h.handleFetchCheckpoint.ServeHTTP(w, r)
+	}
+}
+
+func (h *HttpHandlerFake) GetNoAckMilestoneHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		h.handleFetchNoAckMilestone.ServeHTTP(w, r)
+	}
+}
+
+func (h *HttpHandlerFake) GetLastNoAckMilestoneHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		h.handleFetchLastNoAckMilestone.ServeHTTP(w, r)
 	}
 }
 
@@ -51,6 +65,16 @@ func CreateMockHeimdallServer(wg *sync.WaitGroup, port int, listener net.Listene
 	// Create a route for fetching milestone
 	mux.HandleFunc("/milestone/latest", func(w http.ResponseWriter, r *http.Request) {
 		handler.GetMilestoneHandler()(w, r)
+	})
+
+	// Create a route for fetching milestone
+	mux.HandleFunc("/milestone/noAck/{id}", func(w http.ResponseWriter, r *http.Request) {
+		handler.GetNoAckMilestoneHandler()(w, r)
+	})
+
+	// Create a route for fetching milestone
+	mux.HandleFunc("/milestone/lastNoAck", func(w http.ResponseWriter, r *http.Request) {
+		handler.GetLastNoAckMilestoneHandler()(w, r)
 	})
 
 	// Add other routes as per requirement
@@ -168,7 +192,7 @@ func TestFetchMilestoneFromMockHeimdall(t *testing.T) {
 
 	// Create a new heimdall client and use same port for connection
 	client := NewHeimdallClient(fmt.Sprintf("http://localhost:%d", port))
-	_, err = client.FetchMilestone(context.Background())
+	_, err = client.FetchMilestoneV1(context.Background())
 	require.NoError(t, err, "expect no error in fetching milestone")
 
 	// Shutdown the server
@@ -378,7 +402,7 @@ func TestSpanURL(t *testing.T) {
 func TestStateSyncURL(t *testing.T) {
 	t.Parallel()
 
-	url, err := stateSyncURL("http://bor0", 10, 100)
+	url, err := stateSyncURLV2("http://bor0", 10, 100)
 	if err != nil {
 		t.Fatal("got an error", err)
 	}

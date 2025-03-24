@@ -2,6 +2,7 @@ package heimdallapp
 
 import (
 	"context"
+	"errors"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
@@ -36,6 +37,14 @@ func (h *HeimdallAppClient) FetchMilestone(_ context.Context) (*milestone.Milest
 	log.Debug("Fetched Latest Milestone", "milestone", milestone)
 
 	return milestone, nil
+}
+
+func (h *HeimdallAppClient) FetchNoAckMilestone(_ context.Context, milestoneID string) error {
+	return errors.New("not implemented in heimdallv2")
+}
+
+func (h *HeimdallAppClient) FetchLastNoAckMilestone(_ context.Context) (string, error) {
+	return "", errors.New("not implemented in heimdallv2")
 }
 
 func toBorMilestone(hdMilestone *milestoneTypes.Milestone) *milestone.MilestoneV2 {

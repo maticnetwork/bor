@@ -18,13 +18,15 @@ type (
 )
 
 const (
-	stateSyncRequest       requestType = "state-sync"
-	spanRequest            requestType = "span"
-	checkpointRequest      requestType = "checkpoint"
-	checkpointCountRequest requestType = "checkpoint-count"
-	milestoneRequest       requestType = "milestone"
-	milestoneCountRequest  requestType = "milestone-count"
-	milestoneIDRequest     requestType = "milestone-id"
+	stateSyncRequest          requestType = "state-sync"
+	spanRequest               requestType = "span"
+	checkpointRequest         requestType = "checkpoint"
+	checkpointCountRequest    requestType = "checkpoint-count"
+	milestoneRequest          requestType = "milestone"
+	milestoneCountRequest     requestType = "milestone-count"
+	milestoneNoAckRequest     requestType = "milestone-no-ack"
+	milestoneLastNoAckRequest requestType = "milestone-last-no-ack"
+	milestoneIDRequest        requestType = "milestone-id"
 )
 
 func withRequestType(ctx context.Context, reqType requestType) context.Context {
