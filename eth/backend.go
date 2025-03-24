@@ -669,7 +669,7 @@ func (s *Ethereum) startMilestoneWhitelistService() {
 	ethHandler, bor, _ := s.getHandler()
 
 	// If heimdall ws is available use WS subscription to new milestone events instead of polling
-	if bor.HeimdallWSClient != nil {
+	if bor != nil && bor.HeimdallWSClient != nil {
 		s.subscribeAndHandleMilestone(context.Background(), ethHandler, bor)
 	} else {
 		const (
