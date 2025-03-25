@@ -1,6 +1,7 @@
 package heimdallgrpc
 
 import (
+	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/log"
@@ -23,6 +24,8 @@ type HeimdallGRPCClient struct {
 }
 
 func NewHeimdallGRPCClient(address string) *HeimdallGRPCClient {
+	address = removePrefix(address)
+
 	opts := []grpc_retry.CallOption{
 		grpc_retry.WithMax(10000),
 		grpc_retry.WithBackoff(grpc_retry.BackoffLinear(5 * time.Second)),
@@ -49,4 +52,12 @@ func NewHeimdallGRPCClient(address string) *HeimdallGRPCClient {
 func (h *HeimdallGRPCClient) Close() {
 	log.Debug("Shutdown detected, Closing Heimdall gRPC client")
 	h.conn.Close()
+}
+
+// removePrefix removes the http:// or https:// prefix from the address, if present.
+func removePrefix(address string) string {
+	if strings.HasPrefix(address, "http://") || strings.HasPrefix(address, "https://") {
+		return address[strings.Index(address, "//")+2:]
+	}
+	return address
 }
