@@ -30,11 +30,11 @@ import (
 	"github.com/ethereum/go-ethereum/triedb/database"
 )
 
-// Trie is a Merkle Patricia Trie. Use New to create a trie that sits on
-// top of a database. Whenever trie performs a commit operation, the generated
-// nodes will be gathered and returned in a set. Once the trie is committed,
-// it's not usable anymore. Callers have to re-create the trie with new root
-// based on the updated trie database.
+// Trie represents a Merkle Patricia Trie. Use New to create a trie that operates
+// on top of a node database. During a commit operation, the trie collects all
+// modified nodes into a set for return. After committing, the trie becomes
+// unusable, and callers must recreate it with the new root based on the updated
+// trie database.
 //
 // Trie is not safe for concurrent use.
 type Trie struct {
@@ -73,13 +73,13 @@ func (t *Trie) Copy() *Trie {
 	defer t.tracerMutex.Unlock()
 
 	return &Trie{
-		root:        t.root,
+		root:        copyNode(t.root),
 		owner:       t.owner,
 		committed:   t.committed,
+		unhashed:    t.unhashed,
+		uncommitted: t.uncommitted,
 		reader:      t.reader,
 		tracer:      t.tracer.copy(),
-		uncommitted: t.uncommitted,
-		unhashed:    t.unhashed,
 	}
 }
 
@@ -182,7 +182,6 @@ func (t *Trie) get(origNode node, key []byte, pos int) (value []byte, newnode no
 
 		value, newnode, didResolve, err = t.get(n.Val, key, pos+len(n.Key))
 		if err == nil && didResolve {
-			n = n.copy()
 			n.Val = newnode
 		}
 
@@ -190,7 +189,6 @@ func (t *Trie) get(origNode node, key []byte, pos int) (value []byte, newnode no
 	case *fullNode:
 		value, newnode, didResolve, err = t.get(n.Children[key[pos]], key, pos+1)
 		if err == nil && didResolve {
-			n = n.copy()
 			n.Children[key[pos]] = newnode
 		}
 
@@ -283,7 +281,6 @@ func (t *Trie) getNode(origNode node, path []byte, pos int) (item []byte, newnod
 
 		item, newnode, resolved, err = t.getNode(n.Val, path, pos+len(n.Key))
 		if err == nil && resolved > 0 {
-			n = n.copy()
 			n.Val = newnode
 		}
 
@@ -292,7 +289,6 @@ func (t *Trie) getNode(origNode node, path []byte, pos int) (item []byte, newnod
 	case *fullNode:
 		item, newnode, resolved, err = t.getNode(n.Children[path[pos]], path, pos+1)
 		if err == nil && resolved > 0 {
-			n = n.copy()
 			n.Children[path[pos]] = newnode
 		}
 
@@ -416,8 +412,6 @@ func (t *Trie) insert(n node, prefix, key []byte, value node) (bool, node, error
 		if !dirty || err != nil {
 			return false, n, err
 		}
-
-		n = n.copy()
 		n.flags = t.newFlag()
 		n.Children[key[0]] = nn
 
@@ -539,8 +533,6 @@ func (t *Trie) delete(n node, prefix, key []byte) (bool, node, error) {
 		if !dirty || err != nil {
 			return false, n, err
 		}
-
-		n = n.copy()
 		n.flags = t.newFlag()
 		n.Children[key[0]] = nn
 
@@ -642,6 +634,36 @@ func concat(s1 []byte, s2 ...byte) []byte {
 	return r
 }
 
+// copyNode deep-copies the supplied node along with its children recursively.
+func copyNode(n node) node {
+	switch n := (n).(type) {
+	case nil:
+		return nil
+	case valueNode:
+		return valueNode(common.CopyBytes(n))
+
+	case *shortNode:
+		return &shortNode{
+			flags: n.flags.copy(),
+			Key:   common.CopyBytes(n.Key),
+			Val:   copyNode(n.Val),
+		}
+	case *fullNode:
+		var children [17]node
+		for i, cn := range n.Children {
+			children[i] = copyNode(cn)
+		}
+		return &fullNode{
+			flags:    n.flags.copy(),
+			Children: children,
+		}
+	case hashNode:
+		return n
+	default:
+		panic(fmt.Sprintf("%T: unknown node type", n))
+	}
+}
+
 func (t *Trie) resolve(n node, prefix []byte) (node, error) {
 	if n, ok := n.(hashNode); ok {
 		return t.resolveAndTrack(n, prefix)
@@ -662,18 +684,16 @@ func (t *Trie) resolveAndTrack(n hashNode, prefix []byte) (node, error) {
 
 	t.tracerMutex.Lock()
 	t.tracer.onRead(prefix, blob)
-	t.tracerMutex.Unlock()
 
-	return mustDecodeNode(n, blob), nil
+	// The returned node blob won't be changed afterward. No need to
+	// deep-copy the slice.
+	return decodeNodeUnsafe(n, blob)
 }
 
 // Hash returns the root hash of the trie. It does not write to the
 // database and can be used even if the trie doesn't have one.
 func (t *Trie) Hash() common.Hash {
-	hash, cached := t.hashRoot()
-	t.root = cached
-
-	return common.BytesToHash(hash.(hashNode))
+	return common.BytesToHash(t.hashRoot().(hashNode))
 }
 
 // Commit collects all dirty nodes in the trie and replaces them with the
@@ -724,9 +744,9 @@ func (t *Trie) Commit(collectLeaf bool) (common.Hash, *trienode.NodeSet) {
 }
 
 // hashRoot calculates the root hash of the given trie
-func (t *Trie) hashRoot() (node, node) {
+func (t *Trie) hashRoot() node {
 	if t.root == nil {
-		return hashNode(types.EmptyRootHash.Bytes()), nil
+		return hashNode(types.EmptyRootHash.Bytes())
 	}
 	// If the number of changes is below 100, we let one thread handle it
 	h := newHasher(t.unhashed >= 100)
@@ -735,10 +755,7 @@ func (t *Trie) hashRoot() (node, node) {
 
 		t.unhashed = 0
 	}()
-
-	hashed, cached := h.hash(t.root, true)
-
-	return hashed, cached
+	return h.hash(t.root, true)
 }
 
 // Witness returns a set containing all trie nodes that have been accessed.
