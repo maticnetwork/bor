@@ -225,6 +225,7 @@ type Bor struct {
 	spanner                Spanner
 	GenesisContractsClient GenesisContract
 	HeimdallClient         IHeimdallClient
+	HeimdallWSClient       IHeimdallWSClient
 
 	// The fields below are for testing only
 	fakeDiff      bool // Skip difficulty verifications
@@ -245,6 +246,7 @@ func New(
 	ethAPI api.Caller,
 	spanner Spanner,
 	heimdallClient IHeimdallClient,
+	heimdallWSClient IHeimdallWSClient,
 	genesisContracts GenesisContract,
 	devFakeAuthor bool,
 ) *Bor {
@@ -269,6 +271,7 @@ func New(
 		spanner:                spanner,
 		GenesisContractsClient: genesisContracts,
 		HeimdallClient:         heimdallClient,
+		HeimdallWSClient:       heimdallWSClient,
 		devFakeAuthor:          devFakeAuthor,
 	}
 
@@ -1193,7 +1196,6 @@ func (c *Bor) FetchAndCommitSpan(
 			}
 			producers = append(producers, m)
 		}
-
 	} else {
 		if hmm.IsHeimdallV2 {
 			response, err := c.HeimdallClient.GetSpan(ctx, newSpanID)
