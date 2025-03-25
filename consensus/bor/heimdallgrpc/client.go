@@ -6,6 +6,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/log"
 
+	milestoneTypes "github.com/0xPolygon/heimdall-v2/x/milestone/types"
 	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	proto "github.com/maticnetwork/polyproto/heimdall"
 
@@ -19,8 +20,9 @@ const (
 )
 
 type HeimdallGRPCClient struct {
-	conn   *grpc.ClientConn
-	client proto.HeimdallClient
+	conn                 *grpc.ClientConn
+	client               proto.HeimdallClient
+	milestoneQueryClient milestoneTypes.QueryClient
 }
 
 func NewHeimdallGRPCClient(address string) *HeimdallGRPCClient {
@@ -44,8 +46,9 @@ func NewHeimdallGRPCClient(address string) *HeimdallGRPCClient {
 	log.Info("Connected to Heimdall gRPC server", "address", address)
 
 	return &HeimdallGRPCClient{
-		conn:   conn,
-		client: proto.NewHeimdallClient(conn),
+		conn:                 conn,
+		client:               proto.NewHeimdallClient(conn),
+		milestoneQueryClient: milestoneTypes.NewQueryClient(conn),
 	}
 }
 
