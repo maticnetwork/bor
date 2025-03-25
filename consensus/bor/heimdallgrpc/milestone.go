@@ -16,12 +16,11 @@ func (h *HeimdallGRPCClient) FetchMilestoneCount(ctx context.Context) (int64, er
 		return 0, err
 	}
 
-	// Get the count from the response
-	count := res.GetCount()
+	count := int64(res.GetCount())
 
 	log.Info("Fetched milestone count", "count", count)
 
-	return int64(count), nil
+	return count, nil
 }
 
 func (h *HeimdallGRPCClient) FetchMilestone(ctx context.Context) (*milestone.Milestone, error) {
@@ -37,12 +36,13 @@ func (h *HeimdallGRPCClient) FetchMilestone(ctx context.Context) (*milestone.Mil
 	log.Info("Fetched milestone")
 
 	milestone := &milestone.Milestone{
-		Proposer:   common.HexToAddress(resMilestone.Proposer),
-		StartBlock: resMilestone.StartBlock,
-		EndBlock:   resMilestone.EndBlock,
-		Hash:       common.BytesToHash(resMilestone.Hash),
-		BorChainID: resMilestone.BorChainId,
-		Timestamp:  resMilestone.Timestamp,
+		Proposer:    common.HexToAddress(resMilestone.Proposer),
+		StartBlock:  resMilestone.StartBlock,
+		EndBlock:    resMilestone.EndBlock,
+		Hash:        common.BytesToHash(resMilestone.Hash),
+		BorChainID:  resMilestone.BorChainId,
+		MilestoneID: resMilestone.MilestoneId,
+		Timestamp:   resMilestone.Timestamp,
 	}
 
 	return milestone, nil

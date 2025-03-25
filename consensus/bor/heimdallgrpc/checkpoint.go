@@ -3,47 +3,40 @@ package heimdallgrpc
 import (
 	"context"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
 	"github.com/ethereum/go-ethereum/log"
 
-	proto "github.com/maticnetwork/polyproto/heimdall"
-	protoutils "github.com/maticnetwork/polyproto/utils"
+	checkpointTypes "github.com/0xPolygon/heimdall-v2/x/checkpoint/types"
 )
 
 func (h *HeimdallGRPCClient) FetchCheckpointCount(ctx context.Context) (int64, error) {
-	log.Info("Fetching checkpoint count")
-
-	res, err := h.client.FetchCheckpointCount(ctx, nil)
-	if err != nil {
-		return 0, err
-	}
-
-	log.Info("Fetched checkpoint count")
-
-	return res.Result.Result, nil
+	panic("Not implemented!")
 }
 
 func (h *HeimdallGRPCClient) FetchCheckpoint(ctx context.Context, number int64) (*checkpoint.Checkpoint, error) {
-	req := &proto.FetchCheckpointRequest{
-		ID: number,
+	req := &checkpointTypes.QueryCheckpointRequest{
+		Number: uint64(number),
 	}
 
 	log.Info("Fetching checkpoint", "number", number)
 
-	res, err := h.client.FetchCheckpoint(ctx, req)
+	res, err := h.checkpointQueryClient.GetCheckpoint(ctx, req)
 	if err != nil {
 		return nil, err
 	}
 
+	resCheckpoint := res.GetCheckpoint()
+
 	log.Info("Fetched checkpoint", "number", number)
 
 	checkpoint := &checkpoint.Checkpoint{
-		StartBlock: res.Result.StartBlock,
-		EndBlock:   res.Result.EndBlock,
-		RootHash:   protoutils.ConvertH256ToHash(res.Result.RootHash),
-		Proposer:   protoutils.ConvertH160toAddress(res.Result.Proposer),
-		BorChainID: res.Result.BorChainID,
-		Timestamp:  uint64(res.Result.Timestamp.GetSeconds()),
+		Proposer:   common.HexToAddress(resCheckpoint.Proposer),
+		StartBlock: resCheckpoint.StartBlock,
+		EndBlock:   resCheckpoint.EndBlock,
+		RootHash:   common.BytesToHash(resCheckpoint.RootHash),
+		BorChainID: resCheckpoint.BorChainId,
+		Timestamp:  resCheckpoint.Timestamp,
 	}
 
 	return checkpoint, nil
