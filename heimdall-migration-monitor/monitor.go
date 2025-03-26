@@ -21,6 +21,7 @@ func WaitFirstSuccessfulCheck() {
 	// Wait for the first check to complete
 	for range 6 {
 		if firstSuccessfulCheckPassed {
+			log.Error("First successful check passed", IsHeimdallV2)
 			return
 		}
 		time.Sleep(10 * time.Second)
@@ -28,6 +29,7 @@ func WaitFirstSuccessfulCheck() {
 }
 
 func heimdallMigrationMonitor(heimdallUrl string) {
+	log.Error("Starting heimdall migration monitor", "heimdallUrl", heimdallUrl)
 	isFirstCheck := true
 	for {
 		if !isFirstCheck {
@@ -69,6 +71,7 @@ func heimdallMigrationMonitor(heimdallUrl string) {
 			continue
 		}
 
+		log.Error("heimdall version", "version", version, "minor", minor)
 		// Set flag to true if version is 0.38.x or above
 		if minor >= 38 {
 			IsHeimdallV2 = true

@@ -276,6 +276,7 @@ func NewServer(config *Config, opts ...serverOption) (*Server, error) {
 	}
 
 	if !config.Developer.Enabled {
+		log.Error("Developer mode is not enabled, heimdall migration monitor will not be started")
 		hmm.StartHeimdallMigrationMonitor(config.Heimdall.URL)
 		hmm.WaitFirstSuccessfulCheck()
 	}
