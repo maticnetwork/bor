@@ -671,10 +671,25 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 		processorCount++
 
 		go func() {
-			statedb.StartPrefetcher("chain", nil)
+			witness, err := stateless.NewWitness(block.Header(), bc)
+			if err != nil {
+				log.Error("error in witness generation", "caughterr", err)
+			}
+
+			statedb.StartPrefetcher("chain", witness)
 			pstart := time.Now()
 			res, err := bc.processor.Process(block, statedb, bc.vmConfig, ctx)
+			if err != nil {
+				log.Error("error processing with witness", "caughterr", err)
+			}
+
 			blockExecutionSerialTimer.UpdateSince(pstart)
+
+			witnessRlpEncoded, err := rlp.EncodeToBytes(witness)
+			if err != nil {
+				log.Error("error in witness encoding", "caughterr", err)
+			}
+
 			if err == nil {
 				vstart := time.Now()
 				err = bc.validator.ValidateState(block, statedb, res, false)
@@ -683,7 +698,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 			if res == nil {
 				res = &ProcessResult{}
 			}
-			resultChan <- Result{res.Receipts, res.Logs, res.GasUsed, err, statedb, blockExecutionSerialCounter, false, 0}
+			resultChan <- Result{res.Receipts, res.Logs, res.GasUsed, err, statedb, blockExecutionSerialCounter, false, len(witnessRlpEncoded)}
 		}()
 	}
 
