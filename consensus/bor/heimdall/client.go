@@ -85,7 +85,7 @@ const (
 	fetchLastNoAckMilestoneV1 = "/milestone/lastNoAck"
 	fetchNoAckMilestoneV1     = "/milestone/noAck/%s"
 
-	fetchStateSyncEventsFormatV2 = "from-id=%d&to-time=%d"
+	fetchStateSyncEventsFormatV2 = "from_id=%d&to_time=%s&limit=%d"
 	fetchStateSyncEventsPathV2   = "clerk/time"
 	fetchStateSyncListV2         = "clerk/event-record/list"
 
@@ -143,7 +143,7 @@ func (h *HeimdallClient) StateSyncEventsV2(ctx context.Context, fromID uint64, t
 	eventRecords := make([]*clerk.EventRecordWithTime, 0)
 
 	for {
-		url, err := stateSyncListURL(h.urlString)
+		url, err := stateSyncURLV2(h.urlString, fromID, to)
 		if err != nil {
 			return nil, err
 		}
@@ -221,8 +221,25 @@ func (h *HeimdallClient) GetSpanV2(ctx context.Context, spanID uint64) (*types.S
 	return response.Span, nil
 }
 
-// FetchCheckpoint fetches the checkpoint from heimdall
-func (h *HeimdallClient) FetchCheckpoint(ctx context.Context, number int64) (*checkpoint.CheckpointV2, error) {
+// FetchCheckpointV1 fetches the checkpoint from heimdall
+func (h *HeimdallClient) FetchCheckpointV1(ctx context.Context, number int64) (*checkpoint.CheckpointV1, error) {
+	url, err := checkpointURL(h.urlString, number)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx = withRequestType(ctx, checkpointRequest)
+
+	response, err := FetchWithRetry[checkpoint.CheckpointResponseV1](ctx, h.client, url, h.closeCh)
+	if err != nil {
+		return nil, err
+	}
+
+	return &response.Result, nil
+}
+
+// FetchCheckpointV2 fetches the checkpoint from heimdall
+func (h *HeimdallClient) FetchCheckpointV2(ctx context.Context, number int64) (*checkpoint.CheckpointV2, error) {
 	url, err := checkpointURL(h.urlString, number)
 	if err != nil {
 		return nil, err
@@ -485,13 +502,12 @@ func stateSyncURLV1(urlString string, fromID uint64, to int64) (*url.URL, error)
 }
 
 func stateSyncURLV2(urlString string, fromID uint64, to int64) (*url.URL, error) {
-	queryParams := fmt.Sprintf(fetchStateSyncEventsFormatV2, fromID, to)
+	t := time.Unix(to, 0).UTC()
+	formattedTime := t.Format(time.RFC3339Nano)
+
+	queryParams := fmt.Sprintf(fetchStateSyncEventsFormatV2, fromID, formattedTime, stateFetchLimit)
 
 	return makeURL(urlString, fetchStateSyncEventsPathV2, queryParams)
-}
-
-func stateSyncListURL(urlString string) (*url.URL, error) {
-	return makeURL(urlString, fetchStateSyncListV2, "")
 }
 
 func checkpointURL(urlString string, number int64) (*url.URL, error) {

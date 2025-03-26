@@ -1198,7 +1198,7 @@ func (c *Bor) FetchAndCommitSpan(
 		}
 	} else {
 		if hmm.IsHeimdallV2 {
-			response, err := c.HeimdallClient.GetSpan(ctx, newSpanID)
+			response, err := c.HeimdallClient.GetSpanV2(ctx, newSpanID)
 			if err != nil {
 				return err
 			}
@@ -1218,7 +1218,7 @@ func (c *Bor) FetchAndCommitSpan(
 				producers = append(producers, val.MinimalVal())
 			}
 		} else {
-			response, err := c.HeimdallClient.Span(ctx, newSpanID)
+			response, err := c.HeimdallClient.GetSpanV1(ctx, newSpanID)
 			if err != nil {
 				return err
 			}
@@ -1304,7 +1304,12 @@ func (c *Bor) CommitStates(
 		"fromID", from,
 		"to", to.Format(time.RFC3339))
 
-	eventRecords, err := c.HeimdallClient.StateSyncEvents(context.Background(), from, to.Unix())
+	var eventRecords []*clerk.EventRecordWithTime
+	if hmm.IsHeimdallV2 {
+		eventRecords, err = c.HeimdallClient.StateSyncEventsV2(context.Background(), from, to.Unix())
+	} else {
+		eventRecords, err = c.HeimdallClient.StateSyncEventsV1(context.Background(), from, to.Unix())
+	}
 	if err != nil {
 		log.Error("Error occurred when fetching state sync events", "fromID", from, "to", to.Unix(), "err", err)
 	}
