@@ -629,10 +629,26 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 		processorCount++
 
 		go func() {
-			parallelStatedb.StartPrefetcher("chain", nil)
+			log.Info("##### Including witness ######")
+			witness, err := stateless.NewWitness(block.Header(), bc)
+			if err != nil {
+				log.Error("error in witness generation", "caughterr", err)
+			}
+
+			parallelStatedb.StartPrefetcher("chain", witness)
 			pstart := time.Now()
 			res, err := bc.parallelProcessor.Process(block, parallelStatedb, bc.vmConfig, ctx)
+			if err != nil {
+				log.Error("error processing with witness", "caughterr", err)
+			}
 			blockExecutionParallelTimer.UpdateSince(pstart)
+
+			witnessRlpEncoded, err := rlp.EncodeToBytes(witness)
+			if err != nil {
+				log.Error("error in witness encoding", "caughterr", err)
+			}
+			log.Info("Witness generated", "witnessLenRlpEncoded", len(witnessRlpEncoded))
+
 			if err == nil {
 				vstart := time.Now()
 				err = bc.validator.ValidateState(block, parallelStatedb, res, false)
