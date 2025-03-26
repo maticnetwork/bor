@@ -579,7 +579,7 @@ func NewParallelBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis 
 	return bc, nil
 }
 
-func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ types.Receipts, _ []*types.Log, _ uint64, _ *state.StateDB, vtime time.Duration, blockEndErr error) {
+func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ types.Receipts, _ []*types.Log, _ uint64, _ *state.StateDB, vtime time.Duration, witnessLen int, blockEndErr error) {
 	// Process the block using processor and parallelProcessor at the same time, take the one which finishes first, cancel the other, and return the result
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -601,13 +601,14 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 	}
 
 	type Result struct {
-		receipts types.Receipts
-		logs     []*types.Log
-		usedGas  uint64
-		err      error
-		statedb  *state.StateDB
-		counter  metrics.Counter
-		parallel bool
+		receipts             types.Receipts
+		logs                 []*types.Log
+		usedGas              uint64
+		err                  error
+		statedb              *state.StateDB
+		counter              metrics.Counter
+		parallel             bool
+		witnessRlpEncodedLen int
 	}
 
 	var resultChanLen int = 2
@@ -622,7 +623,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 	if bc.parallelProcessor != nil {
 		parallelStatedb, err := state.New(parent.Root, bc.statedb)
 		if err != nil {
-			return nil, nil, 0, nil, 0, err
+			return nil, nil, 0, nil, 0, 0, err
 		}
 		parallelStatedb.SetLogger(bc.logger)
 
@@ -643,11 +644,10 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 			}
 			blockExecutionParallelTimer.UpdateSince(pstart)
 
-			// witnessRlpEncoded, err := rlp.EncodeToBytes(witness)
-			// if err != nil {
-			// 	log.Error("error in witness encoding", "caughterr", err)
-			// }
-			// log.Info("Witness generated", "witnessLenRlpEncoded", len(witnessRlpEncoded))
+			witnessRlpEncoded, err := rlp.EncodeToBytes(witness)
+			if err != nil {
+				log.Error("error in witness encoding", "caughterr", err)
+			}
 
 			if err == nil {
 				vstart := time.Now()
@@ -657,14 +657,14 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 			if res == nil {
 				res = &ProcessResult{}
 			}
-			resultChan <- Result{res.Receipts, res.Logs, res.GasUsed, err, parallelStatedb, blockExecutionParallelCounter, true}
+			resultChan <- Result{res.Receipts, res.Logs, res.GasUsed, err, parallelStatedb, blockExecutionParallelCounter, true, len(witnessRlpEncoded)}
 		}()
 	}
 
 	if bc.processor != nil && !bc.enforceParallelProcessor {
 		statedb, err := state.New(parent.Root, bc.statedb)
 		if err != nil {
-			return nil, nil, 0, nil, 0, err
+			return nil, nil, 0, nil, 0, 0, err
 		}
 		statedb.SetLogger(bc.logger)
 
@@ -683,7 +683,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 			if res == nil {
 				res = &ProcessResult{}
 			}
-			resultChan <- Result{res.Receipts, res.Logs, res.GasUsed, err, statedb, blockExecutionSerialCounter, false}
+			resultChan <- Result{res.Receipts, res.Logs, res.GasUsed, err, statedb, blockExecutionSerialCounter, false, 0}
 		}()
 	}
 
@@ -710,7 +710,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 		}()
 	}
 
-	return result.receipts, result.logs, result.usedGas, result.statedb, vtime, result.err
+	return result.receipts, result.logs, result.usedGas, result.statedb, vtime, result.witnessRlpEncodedLen, result.err
 }
 
 // empty returns an indicator whether the blockchain is empty.
@@ -2376,7 +2376,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool, makeWitness 
 
 		// Process block using the parent state as reference point
 		pstart := time.Now()
-		receipts, logs, usedGas, statedb, vtime, err := bc.ProcessBlock(block, parent)
+		receipts, logs, usedGas, statedb, vtime, witnessLenRlpEncoded, err := bc.ProcessBlock(block, parent)
 		activeState = statedb
 
 		if err != nil {
@@ -2463,7 +2463,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool, makeWitness 
 			snapDiffItems, snapBufItems = bc.snaps.Size()
 		}
 		trieDiffNodes, trieBufNodes, _ := bc.triedb.Size()
-		stats.report(chain, it.index, snapDiffItems, snapBufItems, trieDiffNodes, trieBufNodes, setHead, activeState.Witness())
+		stats.report(chain, it.index, snapDiffItems, snapBufItems, trieDiffNodes, trieBufNodes, setHead, witnessLenRlpEncoded)
 
 		if !setHead {
 			// After merge we expect few side chains. Simply count

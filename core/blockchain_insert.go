@@ -21,10 +21,8 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/mclock"
-	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/rlp"
 )
 
 // insertStats tracks and reports on block insertion.
@@ -41,7 +39,7 @@ const statsReportLimit = 8 * time.Second
 
 // report prints statistics if some number of blocks have been processed
 // or more than a few seconds have passed since the last message.
-func (st *insertStats) report(chain []*types.Block, index int, snapDiffItems, snapBufItems, trieDiffNodes, triebufNodes common.StorageSize, setHead bool, witness *stateless.Witness) {
+func (st *insertStats) report(chain []*types.Block, index int, snapDiffItems, snapBufItems, trieDiffNodes, triebufNodes common.StorageSize, setHead bool, witnessLenRlpEncoded int) {
 	// Fetch the timings for the batch
 	var (
 		now     = mclock.Now()
@@ -55,11 +53,6 @@ func (st *insertStats) report(chain []*types.Block, index int, snapDiffItems, sn
 			txs += len(block.Transactions())
 		}
 
-		witnessRlpEncoded, err := rlp.EncodeToBytes(witness)
-		if err != nil {
-			log.Error("error in witness encoding", "caughterr", err)
-		}
-
 		end := chain[index]
 
 		// Assemble the log context and send it to the logger
@@ -67,7 +60,7 @@ func (st *insertStats) report(chain []*types.Block, index int, snapDiffItems, sn
 			"number", end.Number(), "hash", end.Hash(),
 			"blocks", st.processed, "txs", txs, "mgas", float64(st.usedGas) / 1000000,
 			"elapsed", common.PrettyDuration(elapsed), "mgasps", float64(st.usedGas) * 1000 / float64(elapsed),
-			"witnessRlpEncodedSize", len(witnessRlpEncoded),
+			"witnessRlpEncodedSize", witnessLenRlpEncoded,
 		}
 		if timestamp := time.Unix(int64(end.Time()), 0); time.Since(timestamp) > time.Minute {
 			context = append(context, []interface{}{"age", common.PrettyAge(timestamp)}...)
