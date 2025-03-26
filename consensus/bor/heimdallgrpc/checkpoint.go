@@ -26,18 +26,35 @@ func (h *HeimdallGRPCClient) FetchCheckpointCount(ctx context.Context) (int64, e
 }
 
 func (h *HeimdallGRPCClient) FetchCheckpoint(ctx context.Context, number int64) (*checkpoint.Checkpoint, error) {
-	log.Info("Fetching checkpoint", "number", number)
+	var resCheckpoint checkpointTypes.Checkpoint
 
-	req := &checkpointTypes.QueryCheckpointRequest{
-		Number: uint64(number),
+	if number == -1 {
+		// If -1 is passed, we will fetch the latest checkpoint.
+		log.Info("Fetching latest checkpoint")
+
+		res, err := h.checkpointQueryClient.GetCheckpointLatest(ctx, nil)
+		if err != nil {
+			return nil, err
+		}
+		resCheckpoint = res.GetCheckpoint()
+
+		log.Info("Fetched latest checkpoint")
+
+	} else {
+		// Else, we will fetch the checkpoint by number.
+		log.Info("Fetching checkpoint", "number", number)
+
+		req := &checkpointTypes.QueryCheckpointRequest{
+			Number: uint64(number),
+		}
+		res, err := h.checkpointQueryClient.GetCheckpoint(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		resCheckpoint = res.GetCheckpoint()
+
+		log.Info("Fetched checkpoint", "number", number)
 	}
-
-	res, err := h.checkpointQueryClient.GetCheckpoint(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-
-	resCheckpoint := res.GetCheckpoint()
 
 	checkpoint := &checkpoint.Checkpoint{
 		Proposer:   common.HexToAddress(resCheckpoint.Proposer),
@@ -47,8 +64,6 @@ func (h *HeimdallGRPCClient) FetchCheckpoint(ctx context.Context, number int64) 
 		BorChainID: resCheckpoint.BorChainId,
 		Timestamp:  resCheckpoint.Timestamp,
 	}
-
-	log.Info("Fetched checkpoint", "number", number)
 
 	return checkpoint, nil
 }
