@@ -643,11 +643,11 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 			}
 			blockExecutionParallelTimer.UpdateSince(pstart)
 
-			witnessRlpEncoded, err := rlp.EncodeToBytes(witness)
-			if err != nil {
-				log.Error("error in witness encoding", "caughterr", err)
-			}
-			log.Info("Witness generated", "witnessLenRlpEncoded", len(witnessRlpEncoded))
+			// witnessRlpEncoded, err := rlp.EncodeToBytes(witness)
+			// if err != nil {
+			// 	log.Error("error in witness encoding", "caughterr", err)
+			// }
+			// log.Info("Witness generated", "witnessLenRlpEncoded", len(witnessRlpEncoded))
 
 			if err == nil {
 				vstart := time.Now()
@@ -2463,7 +2463,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool, makeWitness 
 			snapDiffItems, snapBufItems = bc.snaps.Size()
 		}
 		trieDiffNodes, trieBufNodes, _ := bc.triedb.Size()
-		stats.report(chain, it.index, snapDiffItems, snapBufItems, trieDiffNodes, trieBufNodes, setHead)
+		stats.report(chain, it.index, snapDiffItems, snapBufItems, trieDiffNodes, trieBufNodes, setHead, activeState.Witness())
 
 		if !setHead {
 			// After merge we expect few side chains. Simply count
