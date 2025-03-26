@@ -629,7 +629,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 		processorCount++
 
 		go func() {
-			log.Info("##### Including witness ######")
+			// log.Info("##### Including witness ######")
 			witness, err := stateless.NewWitness(block.Header(), bc)
 			if err != nil {
 				log.Error("error in witness generation", "caughterr", err)
