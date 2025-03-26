@@ -3,7 +3,9 @@ package hmm
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -29,7 +31,22 @@ func WaitFirstSuccessfulCheck() {
 }
 
 func heimdallMigrationMonitor(heimdallUrl string) {
-	log.Error("Starting heimdall migration monitor", "heimdallUrl", heimdallUrl)
+	log.Error("Starting heimdall migration monitor, heimdallUrl=%s", heimdallUrl)
+
+	// Attempt to parse the URL so we can inspect/modify the host/port
+	parsedURL, err := url.Parse(heimdallUrl)
+	if err != nil {
+		panic(fmt.Errorf("error parsing heimdallUrl: %w", err))
+	}
+
+	host, port, splitErr := net.SplitHostPort(parsedURL.Host)
+	// If net.SplitHostPort succeeds, it means there's a port. We replace it.
+	if splitErr == nil && port != "" {
+		parsedURL.Host = net.JoinHostPort(host, "26557")
+	}
+	heimdallUrl = parsedURL.String()
+	log.Error("Updated heimdallUrl after checking port: %s", heimdallUrl)
+
 	isFirstCheck := true
 	for {
 		if !isFirstCheck {
@@ -39,7 +56,7 @@ func heimdallMigrationMonitor(heimdallUrl string) {
 
 		resp, err := http.Get(fmt.Sprintf("%s/status", heimdallUrl))
 		if err != nil {
-			log.Error("Error fetching status", "err", err)
+			log.Error("Error fetching status: %v", err)
 			continue
 		}
 
@@ -54,25 +71,25 @@ func heimdallMigrationMonitor(heimdallUrl string) {
 		err = json.NewDecoder(resp.Body).Decode(&statusResponse)
 		resp.Body.Close()
 		if err != nil {
-			log.Error("Error decoding response", "err", err)
+			log.Error("Error decoding response: %v", err)
 			continue
 		}
 
 		version := statusResponse.Result.NodeInfo.Version
 		parts := strings.Split(version, ".")
 		if len(parts) < 2 {
-			log.Error("Unexpected version format", "version", version)
+			log.Error("Unexpected version format: %s", version)
 			continue
 		}
 
 		minor, err := strconv.Atoi(parts[1])
 		if err != nil {
-			log.Error("Error parsing minor version", "err", err)
+			log.Error("Error parsing minor version: %v", err)
 			continue
 		}
 
-		log.Error("heimdall version", "version", version, "minor", minor)
-		// Set flag to true if version is 0.38.x or above
+		log.Error("Heimdall version: %s, minor: %d", version, minor)
+		// Flag to true if version is 0.38.x or above
 		if minor >= 38 {
 			IsHeimdallV2 = true
 		} else {
