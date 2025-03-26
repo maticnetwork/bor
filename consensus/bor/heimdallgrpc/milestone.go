@@ -24,7 +24,7 @@ func (h *HeimdallGRPCClient) FetchMilestoneCount(ctx context.Context) (int64, er
 }
 
 func (h *HeimdallGRPCClient) FetchMilestone(ctx context.Context) (*milestone.Milestone, error) {
-	log.Info("Fetching milestone")
+	log.Debug("Fetching milestone")
 
 	res, err := h.milestoneQueryClient.GetLatestMilestone(ctx, nil)
 	if err != nil {
@@ -43,7 +43,7 @@ func (h *HeimdallGRPCClient) FetchMilestone(ctx context.Context) (*milestone.Mil
 		Timestamp:   resMilestone.Timestamp,
 	}
 
-	log.Info("Fetched milestone")
+	log.Debug("Fetched milestone")
 
 	return milestone, nil
 }
