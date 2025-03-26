@@ -605,7 +605,7 @@ func (w *worker) mainLoop() {
 			}
 
 		case req := <-w.getWorkCh:
-			req.result <- w.generateWork(req.params, false)
+			req.result <- w.generateWork(req.params, true)
 
 		case ev := <-w.txsCh:
 			// Apply transactions to the pending state if we're not sealing
@@ -1386,6 +1386,12 @@ func (w *worker) generateWork(params *generateParams, witness bool) *newPayloadR
 		return &newPayloadResult{err: err}
 	}
 	defer work.discard()
+
+	witnessRlpEncoded, err := rlp.EncodeToBytes(work.witness)
+	if err != nil {
+		log.Error("error in witness generation", "caughterr", err)
+	}
+	log.Info("Witness generated", "witnessLenRlpEncoded", len(witnessRlpEncoded))
 
 	w.interruptCtx = resetAndCopyInterruptCtx(w.interruptCtx)
 	if !params.noTxs {
