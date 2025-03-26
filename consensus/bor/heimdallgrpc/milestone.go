@@ -33,8 +33,6 @@ func (h *HeimdallGRPCClient) FetchMilestone(ctx context.Context) (*milestone.Mil
 
 	resMilestone := res.GetMilestone()
 
-	log.Info("Fetched milestone")
-
 	milestone := &milestone.Milestone{
 		Proposer:    common.HexToAddress(resMilestone.Proposer),
 		StartBlock:  resMilestone.StartBlock,
@@ -44,6 +42,8 @@ func (h *HeimdallGRPCClient) FetchMilestone(ctx context.Context) (*milestone.Mil
 		MilestoneID: resMilestone.MilestoneId,
 		Timestamp:   resMilestone.Timestamp,
 	}
+
+	log.Info("Fetched milestone")
 
 	return milestone, nil
 }

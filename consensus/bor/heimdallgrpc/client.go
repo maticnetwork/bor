@@ -4,16 +4,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ethereum/go-ethereum/log"
-
-	checkpointTypes "github.com/0xPolygon/heimdall-v2/x/checkpoint/types"
-	milestoneTypes "github.com/0xPolygon/heimdall-v2/x/milestone/types"
-	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
-	proto "github.com/maticnetwork/polyproto/heimdall"
-
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+
+	"github.com/ethereum/go-ethereum/log"
+
+	borTypes "github.com/0xPolygon/heimdall-v2/x/bor/types"
+	checkpointTypes "github.com/0xPolygon/heimdall-v2/x/checkpoint/types"
+	clerkTypes "github.com/0xPolygon/heimdall-v2/x/clerk/types"
+	milestoneTypes "github.com/0xPolygon/heimdall-v2/x/milestone/types"
+	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 )
 
 const (
@@ -22,8 +23,9 @@ const (
 
 type HeimdallGRPCClient struct {
 	conn                  *grpc.ClientConn
-	client                proto.HeimdallClient
+	borQueryClient        borTypes.QueryClient
 	checkpointQueryClient checkpointTypes.QueryClient
+	clerkQueryClient      clerkTypes.QueryClient
 	milestoneQueryClient  milestoneTypes.QueryClient
 }
 
@@ -49,8 +51,9 @@ func NewHeimdallGRPCClient(address string) *HeimdallGRPCClient {
 
 	return &HeimdallGRPCClient{
 		conn:                  conn,
-		client:                proto.NewHeimdallClient(conn),
+		borQueryClient:        borTypes.NewQueryClient(conn),
 		checkpointQueryClient: checkpointTypes.NewQueryClient(conn),
+		clerkQueryClient:      clerkTypes.NewQueryClient(conn),
 		milestoneQueryClient:  milestoneTypes.NewQueryClient(conn),
 	}
 }
