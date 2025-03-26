@@ -13,7 +13,7 @@ import (
 func (h *HeimdallGRPCClient) FetchCheckpointCount(ctx context.Context) (int64, error) {
 	log.Info("Fetching checkpoint count")
 
-	res, err := h.checkpointQueryClient.GetCheckpointList(ctx, &checkpointTypes.QueryCheckpointListRequest{})
+	res, err := h.checkpointQueryClient.GetCheckpointList(ctx, nil)
 	if err != nil {
 		return 0, err
 	}
