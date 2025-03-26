@@ -42,7 +42,7 @@ func heimdallMigrationMonitor(heimdallUrl string) {
 	host, port, splitErr := net.SplitHostPort(parsedURL.Host)
 	// If net.SplitHostPort succeeds, it means there's a port. We replace it.
 	if splitErr == nil && port != "" {
-		parsedURL.Host = net.JoinHostPort(host, "26557")
+		parsedURL.Host = net.JoinHostPort(host, "26657")
 	}
 	heimdallUrl = parsedURL.String()
 	log.Error("Updated heimdallUrl after checking port: %s", heimdallUrl)
