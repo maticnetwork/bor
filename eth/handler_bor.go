@@ -49,6 +49,10 @@ func (h *ethHandler) fetchWhitelistCheckpoint(ctx context.Context, bor *bor.Bor)
 		return nil, err
 	}
 
+	if resultV1 == nil || resultV1.StartBlock == nil || resultV1.EndBlock == nil {
+		return nil, fmt.Errorf("invalid checkpoint data: %v", resultV1)
+	}
+
 	return &checkpoint.CheckpointV2{
 		Proposer:   resultV1.Proposer,
 		StartBlock: resultV1.StartBlock.Uint64(),
@@ -104,6 +108,10 @@ func (h *ethHandler) fetchWhitelistMilestone(ctx context.Context, bor *bor.Bor) 
 	milestoneV1, err := bor.HeimdallClient.FetchMilestoneV1(ctx)
 	if err = reportCommonErrors("latest milestone", err, errMilestone); err != nil {
 		return nil, err
+	}
+
+	if milestoneV1 == nil || milestoneV1.StartBlock == nil || milestoneV1.EndBlock == nil {
+		return nil, fmt.Errorf("invalid milstone data: %v", milestoneV1)
 	}
 
 	result = &milestone.MilestoneV2{
