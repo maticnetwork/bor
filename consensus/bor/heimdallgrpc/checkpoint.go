@@ -13,12 +13,12 @@ import (
 func (h *HeimdallGRPCClient) FetchCheckpointCount(ctx context.Context) (int64, error) {
 	log.Info("Fetching checkpoint count")
 
-	res, err := h.checkpointQueryClient.GetCheckpointList(ctx, nil)
+	res, err := h.checkpointQueryClient.GetAckCount(ctx, nil)
 	if err != nil {
 		return 0, err
 	}
 
-	count := int64(len(res.GetCheckpointList()))
+	count := int64(res.GetAckCount())
 
 	log.Info("Fetched checkpoint count", "count", count)
 

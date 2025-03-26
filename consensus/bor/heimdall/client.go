@@ -142,22 +142,6 @@ func (h *HeimdallClient) StateSyncEvents(ctx context.Context, fromID uint64, to 
 	return eventRecords, nil
 }
 
-func (h *HeimdallClient) Span(ctx context.Context, spanID uint64) (*span.HeimdallSpan, error) {
-	url, err := spanURL(h.urlString, spanID)
-	if err != nil {
-		return nil, err
-	}
-
-	ctx = withRequestType(ctx, spanRequest)
-
-	response, err := FetchWithRetry[SpanResponse](ctx, h.client, url, h.closeCh)
-	if err != nil {
-		return nil, err
-	}
-
-	return &response.Result, nil
-}
-
 func (h *HeimdallClient) GetSpan(ctx context.Context, spanID uint64) (*types.Span, error) {
 	url, err := spanURL(h.urlString, spanID)
 	if err != nil {
@@ -332,8 +316,7 @@ func Fetch[T any](ctx context.Context, request *Request) (*T, error) {
 	if ok {
 		interfaceRegistry := codectypes.NewInterfaceRegistry()
 		cryptocodec.RegisterInterfaces(interfaceRegistry)
-		var cdc codec.Codec
-		cdc = codec.NewProtoCodec(interfaceRegistry)
+		cdc := codec.NewProtoCodec(interfaceRegistry)
 
 		err = cdc.UnmarshalJSON(body, p)
 		if err != nil {
