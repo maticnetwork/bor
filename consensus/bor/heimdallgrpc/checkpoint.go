@@ -39,7 +39,6 @@ func (h *HeimdallGRPCClient) FetchCheckpoint(ctx context.Context, number int64) 
 		resCheckpoint = res.GetCheckpoint()
 
 		log.Info("Fetched latest checkpoint")
-
 	} else {
 		// Else, we will fetch the checkpoint by number.
 		log.Info("Fetching checkpoint", "number", number)
