@@ -12,19 +12,12 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 )
 
-func (h *HeimdallAppClient) Span(ctx context.Context, spanID uint64) (*span.HeimdallSpan, error) {
-	log.Info("Fetching span", "spanID", spanID)
-
-	res, err := h.hApp.BorKeeper.GetSpan(h.NewContext(), spanID)
-	if err != nil {
-		return nil, err
-	}
-
-	log.Info("Fetched span", "spanID", spanID)
-
-	return toSpan(&res), nil
+func (h *HeimdallAppClient) GetSpan(ctx context.Context, spanID uint64) (*borTypes.Span, error) {
+	log.Info("GetSpan not implemented!")
+	return nil, nil
 }
 
+//nolint:unused
 func toSpan(hdSpan *borTypes.Span) *span.HeimdallSpan {
 	return &span.HeimdallSpan{
 		Span: span.Span{
@@ -38,6 +31,7 @@ func toSpan(hdSpan *borTypes.Span) *span.HeimdallSpan {
 	}
 }
 
+//nolint:unused
 func toValidatorSet(vs stakeTypes.ValidatorSet) valset.ValidatorSet {
 	return valset.ValidatorSet{
 		Validators: toValidatorsRef(vs.Validators),
@@ -45,6 +39,7 @@ func toValidatorSet(vs stakeTypes.ValidatorSet) valset.ValidatorSet {
 	}
 }
 
+//nolint:unused
 func toValidators(vs []stakeTypes.Validator) []valset.Validator {
 	newVS := make([]valset.Validator, len(vs))
 
@@ -55,6 +50,7 @@ func toValidators(vs []stakeTypes.Validator) []valset.Validator {
 	return newVS
 }
 
+//nolint:unused
 func toValidatorsRef(vs []*stakeTypes.Validator) []*valset.Validator {
 	newVS := make([]*valset.Validator, len(vs))
 
@@ -69,6 +65,7 @@ func toValidatorsRef(vs []*stakeTypes.Validator) []*valset.Validator {
 	return newVS
 }
 
+//nolint:unused
 func toValidatorRef(v *stakeTypes.Validator) *valset.Validator {
 	return &valset.Validator{
 		ID:               v.ValId,
@@ -78,6 +75,7 @@ func toValidatorRef(v *stakeTypes.Validator) *valset.Validator {
 	}
 }
 
+//nolint:unused
 func toValidator(v stakeTypes.Validator) valset.Validator {
 	return valset.Validator{
 		ID:               v.ValId,
