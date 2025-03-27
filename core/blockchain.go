@@ -659,8 +659,8 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 			if err == nil {
 				vstart := time.Now()
 				err = bc.validator.ValidateState(block, parallelStatedb, res, false)
-				if err != nil {
-					log.Info("Valid state on usual process flow")
+				if err == nil {
+					log.Info("Valid state on usual process flow (parallel)")
 				}
 				vtime = time.Since(vstart)
 			}
@@ -711,7 +711,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 			if err == nil {
 				vstart := time.Now()
 				err = bc.validator.ValidateState(block, statedb, res, false)
-				if err != nil {
+				if err == nil {
 					log.Info("Valid state on usual process flow")
 				}
 				vtime = time.Since(vstart)
