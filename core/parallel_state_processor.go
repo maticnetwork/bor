@@ -404,7 +404,7 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 	}
 
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
-	p.engine.Finalize(p.bc, header, statedb, block.Body())
+	p.engine.Finalize(p.bc.hc, header, statedb, block.Body())
 
 	return &ProcessResult{
 		Receipts: receipts,
