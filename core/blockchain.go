@@ -681,7 +681,15 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 
 			statedb.StartPrefetcher("chain", witness)
 			pstart := time.Now()
-			res, err := bc.processor.Process(block, statedb, bc.vmConfig, ctx)
+
+			log.Info("#### Forcing recalculation on processor")
+			context := block.Header()
+			context.Root = common.Hash{}
+			context.ReceiptHash = common.Hash{}
+
+			task := types.NewBlockWithHeader(context).WithBody(*block.Body())
+
+			res, err := bc.processor.Process(task, statedb, bc.vmConfig, ctx)
 			if err != nil {
 				log.Error("error processing with witness", "caughterr", err)
 			}
@@ -696,6 +704,9 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 			if err == nil {
 				vstart := time.Now()
 				err = bc.validator.ValidateState(block, statedb, res, false)
+				if err != nil {
+					log.Info("Valid state on usual process flow")
+				}
 				vtime = time.Since(vstart)
 			}
 			if res == nil {
