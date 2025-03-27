@@ -609,6 +609,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 		counter              metrics.Counter
 		parallel             bool
 		witnessRlpEncodedLen int
+		witness              *stateless.Witness
 	}
 
 	var resultChanLen int = 2
@@ -657,7 +658,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 			if res == nil {
 				res = &ProcessResult{}
 			}
-			resultChan <- Result{res.Receipts, res.Logs, res.GasUsed, err, parallelStatedb, blockExecutionParallelCounter, true, len(witnessRlpEncoded)}
+			resultChan <- Result{res.Receipts, res.Logs, res.GasUsed, err, parallelStatedb, blockExecutionParallelCounter, true, len(witnessRlpEncoded), witness.Copy()}
 		}()
 	}
 
@@ -698,7 +699,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 			if res == nil {
 				res = &ProcessResult{}
 			}
-			resultChan <- Result{res.Receipts, res.Logs, res.GasUsed, err, statedb, blockExecutionSerialCounter, false, len(witnessRlpEncoded)}
+			resultChan <- Result{res.Receipts, res.Logs, res.GasUsed, err, statedb, blockExecutionSerialCounter, false, len(witnessRlpEncoded), witness.Copy()}
 		}()
 	}
 
@@ -723,6 +724,30 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 			second_result := <-resultChan
 			second_result.statedb.StopPrefetcher()
 		}()
+	}
+
+	log.Info("##### Running stateless self-validation", "block", block.Number(), "hash", block.Hash())
+
+	// Remove critical computed fields from the block to force true recalculation
+	context := block.Header()
+	context.Root = common.Hash{}
+	context.ReceiptHash = common.Hash{}
+
+	task := types.NewBlockWithHeader(context).WithBody(*block.Body())
+
+	// Run the stateless self-cross-validation
+	crossStateRoot, crossReceiptRoot, err := ExecuteStateless(bc.chainConfig, task, result.witness)
+	if err != nil {
+		log.Error("stateless self-validation failed: %v", err)
+	}
+	if crossStateRoot != block.Root() {
+		log.Error("stateless self-validation root mismatch (cross: %x local: %x)", crossStateRoot, block.Root())
+	}
+	if crossReceiptRoot != block.ReceiptHash() {
+		log.Error("stateless self-validation receipt root mismatch (cross: %x local: %x)", crossReceiptRoot, block.ReceiptHash())
+	}
+	if !(err != nil || crossStateRoot != block.Root() || crossReceiptRoot != block.ReceiptHash()) {
+		log.Info("##### Successfully self validated the block", "block", block.Number(), "hash", block.Hash())
 	}
 
 	return result.receipts, result.logs, result.usedGas, result.statedb, vtime, result.witnessRlpEncodedLen, result.err
