@@ -519,15 +519,6 @@ type BorStateSyncer interface {
 	SubscribeStateSyncEvent(ch chan<- StateSyncEvent) event.Subscription
 }
 
-// SetStateSync set sync data in state_data
-func (bc *BlockChain) SetStateSync(stateData []*types.StateSyncData) {
-	bc.stateSyncData = stateData
-}
-
-func (bc *BlockChain) GetStateSync() []*types.StateSyncData {
-	return bc.stateSyncData
-}
-
 // SubscribeStateSyncEvent registers a subscription of StateSyncEvent.
 func (bc *BlockChain) SubscribeStateSyncEvent(ch chan<- StateSyncEvent) event.Subscription {
 	return bc.scope.Track(bc.stateSyncFeed.Subscribe(ch))

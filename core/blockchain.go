@@ -293,7 +293,6 @@ type BlockChain struct {
 
 	// Bor related changes
 	borReceiptsCache *lru.Cache[common.Hash, *types.Receipt] // Cache for the most recent bor receipt receipts per block
-	stateSyncData    []*types.StateSyncData                  // State sync data
 	stateSyncFeed    event.Feed                              // State sync feed
 	chain2HeadFeed   event.Feed                              // Reorg/NewHead/Fork data feed
 }
@@ -2055,7 +2054,7 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 		if emitHeadEvent {
 			bc.chainHeadFeed.Send(ChainHeadEvent{Block: block})
 			// BOR state sync feed related changes
-			for _, data := range bc.stateSyncData {
+			for _, data := range bc.hc.stateSyncData {
 				bc.stateSyncFeed.Send(StateSyncEvent{Data: data})
 			}
 			// BOR
@@ -2427,7 +2426,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool, makeWitness 
 		}
 
 		// BOR state sync feed related changes
-		for _, data := range bc.stateSyncData {
+		for _, data := range bc.hc.stateSyncData {
 			bc.stateSyncFeed.Send(StateSyncEvent{Data: data})
 		}
 		// BOR
