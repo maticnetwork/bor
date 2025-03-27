@@ -1324,7 +1324,10 @@ func doCallWithState(ctx context.Context, b Backend, args TransactionArgs, heade
 	}
 
 	if err != nil {
-		return result, fmt.Errorf("err: %w (supplied gas %d)", err, msg.GasLimit)
+		return nil, fmt.Errorf("err: %w (supplied gas %d)", err, msg.GasLimit)
+	}
+	if result == nil {
+		return nil, errors.New("EVM ApplyMessage returned nil result without error")
 	}
 
 	return result, nil
@@ -1387,6 +1390,9 @@ func (api *BlockChainAPI) CallWithState(ctx context.Context, args TransactionArg
 	result, err := DoCall(ctx, api.b, args, *blockNrOrHash, state, overrides, blockOverrides, api.b.RPCEVMTimeout(), api.b.RPCGasCap())
 	if err != nil {
 		return nil, err
+	}
+	if result == nil {
+		return nil, fmt.Errorf("DoCall returned nil result with no error (block=%v)", blockNrOrHash)
 	}
 
 	if int(api.b.RPCRpcReturnDataLimit()) > 0 && len(result.ReturnData) > int(api.b.RPCRpcReturnDataLimit()) {
