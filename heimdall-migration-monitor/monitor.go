@@ -3,7 +3,9 @@ package hmm
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -28,6 +30,18 @@ func WaitFirstSuccessfulCheck() {
 }
 
 func heimdallMigrationMonitor(heimdallUrl string) {
+	parsedURL, err := url.Parse(heimdallUrl)
+	if err != nil {
+		panic(fmt.Errorf("error parsing heimdallUrl: %w", err))
+	}
+
+	// TODO: Do we need special configuration for this port?
+	host, port, splitErr := net.SplitHostPort(parsedURL.Host)
+	if splitErr == nil && port != "" {
+		parsedURL.Host = net.JoinHostPort(host, "26657")
+	}
+	heimdallUrl = parsedURL.String()
+
 	isFirstCheck := true
 	for {
 		if !isFirstCheck {
