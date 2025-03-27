@@ -92,7 +92,7 @@ const (
 	fetchCheckpointV2      = "/checkpoints/%s"
 	fetchCheckpointCountV2 = "/checkpoints/count"
 
-	fetchMilestoneV2      = "/milestone/latest"
+	fetchMilestone        = "/milestone/latest"
 	fetchMilestoneCountV2 = "/milestone/count"
 
 	fetchSpanFormat = "bor/span/%d"
@@ -522,7 +522,7 @@ func checkpointURL(urlString string, number int64) (*url.URL, error) {
 }
 
 func milestoneURL(urlString string) (*url.URL, error) {
-	url := fetchMilestoneV2
+	url := fetchMilestone
 
 	return makeURL(urlString, url, "")
 }
