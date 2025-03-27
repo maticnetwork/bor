@@ -18,7 +18,6 @@ package core
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/lru"
@@ -43,7 +42,7 @@ import (
 //   - It cannot be placed outside of core, because it needs to construct a dud headerchain
 //
 // TODO(karalabe): Would be nice to resolve both issues above somehow and move it.
-func ExecuteStateless(config *params.ChainConfig, vmconfig vm.Config, block *types.Block, witness *stateless.Witness) (common.Hash, common.Hash, error) {
+func ExecuteStateless(config *params.ChainConfig, vmconfig vm.Config, block *types.Block, witness *stateless.Witness, receipts types.Receipts) (common.Hash, common.Hash, error) {
 	// Sanity check if the supplied block accidentally contains a set root or
 	// receipt hash. If so, be very loud, but still continue.
 	if block.Root() != (common.Hash{}) {
@@ -74,10 +73,19 @@ func ExecuteStateless(config *params.ChainConfig, vmconfig vm.Config, block *typ
 		return common.Hash{}, common.Hash{}, err
 	}
 
-	jsonData, err := json.Marshal(res.Receipts)
-	log.Info("Receipts for stateless verification", "block", block.Number(), "jsonData", string(jsonData))
-
 	if err = validator.ValidateState(block, db, res, true); err != nil {
+		log.Info("###################################")
+		log.Info("Debug logs for receipts in stateless")
+		log.Info("Block information", "blockHash", block.Hash().String(), "localGasUsed", res.GasUsed, "remoteGasUsed", block.GasUsed(), "localReceiptsLen", len(res.Receipts), "lenReceiptsRemote", len(receipts))
+		for i, _ := range res.Receipts {
+			log.Info("Receipt comparison:",
+				"txHashLocal", res.Receipts[i].TxHash.String(),
+				"txHashRemote", receipts[i].TxHash.String(),
+				"lenLogsLocal", len(res.Receipts[i].Logs),
+				"lenLogsRemote", len(receipts[i].Logs),
+				"gasUsedLocal", res.Receipts[i].GasUsed,
+				"gasUsedRemote", receipts[i].GasUsed)
+		}
 		return common.Hash{}, common.Hash{}, err
 	}
 	// Almost everything validated, but receipt and state root needs to be returned
