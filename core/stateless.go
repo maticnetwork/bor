@@ -18,6 +18,7 @@ package core
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/lru"
@@ -72,6 +73,10 @@ func ExecuteStateless(config *params.ChainConfig, vmconfig vm.Config, block *typ
 	if err != nil {
 		return common.Hash{}, common.Hash{}, err
 	}
+
+	jsonData, err := json.Marshal(res.Receipts)
+	log.Info("Receipts for stateless verification", "block", block.Number(), "jsonData", string(jsonData))
+
 	if err = validator.ValidateState(block, db, res, true); err != nil {
 		return common.Hash{}, common.Hash{}, err
 	}

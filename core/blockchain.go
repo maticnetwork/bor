@@ -749,14 +749,14 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 	log.Info("##### Running stateless self-validation", "block", block.Number(), "hash", block.Hash())
 
 	// Remove critical computed fields from the block to force true recalculation
-	// context := block.Header()
-	// context.Root = common.Hash{}
-	// context.ReceiptHash = common.Hash{}
+	context := block.Header()
+	context.Root = common.Hash{}
+	context.ReceiptHash = common.Hash{}
 
-	// task := types.NewBlockWithHeader(context).WithBody(*block.Body())
+	task := types.NewBlockWithHeader(context).WithBody(*block.Body())
 
 	// Run the stateless self-cross-validation
-	crossStateRoot, crossReceiptRoot, err := ExecuteStateless(bc.chainConfig, bc.vmConfig, block, result.witness)
+	crossStateRoot, crossReceiptRoot, err := ExecuteStateless(bc.chainConfig, bc.vmConfig, task, result.witness)
 	if err != nil {
 		log.Error("stateless self-validation failed: %v", err)
 	}
