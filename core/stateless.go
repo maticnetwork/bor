@@ -18,6 +18,7 @@ package core
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/lru"
@@ -85,6 +86,9 @@ func ExecuteStateless(config *params.ChainConfig, vmconfig vm.Config, block *typ
 				"lenLogsRemote", len(receipts[i].Logs),
 				"gasUsedLocal", res.Receipts[i].GasUsed,
 				"gasUsedRemote", receipts[i].GasUsed)
+			jsonData, _ := json.MarshalIndent(receipts, "", "  ")
+
+			log.Info("Local logs", "localLogs", string(jsonData))
 		}
 		return common.Hash{}, common.Hash{}, err
 	}
