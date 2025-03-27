@@ -652,6 +652,9 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 			if err == nil {
 				vstart := time.Now()
 				err = bc.validator.ValidateState(block, parallelStatedb, res, false)
+				if err != nil {
+					log.Info("Valid state on usual process flow")
+				}
 				vtime = time.Since(vstart)
 			}
 			if res == nil {
@@ -735,7 +738,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 	task := types.NewBlockWithHeader(context).WithBody(*block.Body())
 
 	// Run the stateless self-cross-validation
-	crossStateRoot, crossReceiptRoot, err := ExecuteStateless(bc.chainConfig, task, result.witness)
+	crossStateRoot, crossReceiptRoot, err := ExecuteStateless(bc.chainConfig, bc.vmConfig, task, result.witness)
 	if err != nil {
 		log.Error("stateless self-validation failed: %v", err)
 	}
@@ -2633,7 +2636,7 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 		task := types.NewBlockWithHeader(context).WithBody(*block.Body())
 
 		// Run the stateless self-cross-validation
-		crossStateRoot, crossReceiptRoot, err := ExecuteStateless(bc.chainConfig, task, witness)
+		crossStateRoot, crossReceiptRoot, err := ExecuteStateless(bc.chainConfig, bc.vmConfig, task, witness)
 		if err != nil {
 			return nil, fmt.Errorf("stateless self-validation failed: %v", err)
 		}
