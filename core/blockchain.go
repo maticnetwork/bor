@@ -638,14 +638,14 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 
 			parallelStatedb.StartPrefetcher("chain", witness)
 			pstart := time.Now()
-			log.Info("#### Forcing recalculation on processor")
-			context := block.Header()
-			context.Root = common.Hash{}
-			context.ReceiptHash = common.Hash{}
+			// log.Info("#### Forcing recalculation on processor")
+			// context := block.Header()
+			// context.Root = common.Hash{}
+			// context.ReceiptHash = common.Hash{}
 
-			task := types.NewBlockWithHeader(context).WithBody(*block.Body())
+			// task := types.NewBlockWithHeader(context).WithBody(*block.Body())
 
-			res, err := bc.parallelProcessor.Process(task, parallelStatedb, bc.vmConfig, ctx)
+			res, err := bc.parallelProcessor.Process(block, parallelStatedb, bc.vmConfig, ctx)
 			if err != nil {
 				log.Error("error processing with witness", "caughterr", err)
 			}
@@ -689,14 +689,14 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 			statedb.StartPrefetcher("chain", witness)
 			pstart := time.Now()
 
-			log.Info("#### Forcing recalculation on processor")
-			context := block.Header()
-			context.Root = common.Hash{}
-			context.ReceiptHash = common.Hash{}
+			// log.Info("#### Forcing recalculation on processor")
+			// context := block.Header()
+			// context.Root = common.Hash{}
+			// context.ReceiptHash = common.Hash{}
 
-			task := types.NewBlockWithHeader(context).WithBody(*block.Body())
+			// task := types.NewBlockWithHeader(context).WithBody(*block.Body())
 
-			res, err := bc.processor.Process(task, statedb, bc.vmConfig, ctx)
+			res, err := bc.processor.Process(block, statedb, bc.vmConfig, ctx)
 			if err != nil {
 				log.Error("error processing with witness", "caughterr", err)
 			}
@@ -749,14 +749,14 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 	log.Info("##### Running stateless self-validation", "block", block.Number(), "hash", block.Hash())
 
 	// Remove critical computed fields from the block to force true recalculation
-	context := block.Header()
-	context.Root = common.Hash{}
-	context.ReceiptHash = common.Hash{}
+	// context := block.Header()
+	// context.Root = common.Hash{}
+	// context.ReceiptHash = common.Hash{}
 
-	task := types.NewBlockWithHeader(context).WithBody(*block.Body())
+	// task := types.NewBlockWithHeader(context).WithBody(*block.Body())
 
 	// Run the stateless self-cross-validation
-	crossStateRoot, crossReceiptRoot, err := ExecuteStateless(bc.chainConfig, bc.vmConfig, task, result.witness)
+	crossStateRoot, crossReceiptRoot, err := ExecuteStateless(bc.chainConfig, bc.vmConfig, block, result.witness)
 	if err != nil {
 		log.Error("stateless self-validation failed: %v", err)
 	}
