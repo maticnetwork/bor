@@ -86,7 +86,7 @@ func ExecuteStateless(config *params.ChainConfig, vmconfig vm.Config, block *typ
 				"lenLogsRemote", len(receipts[i].Logs),
 				"gasUsedLocal", res.Receipts[i].GasUsed,
 				"gasUsedRemote", receipts[i].GasUsed)
-			jsonData, _ := json.MarshalIndent(receipts, "", "  ")
+			jsonData, _ := json.MarshalIndent(res.Receipts[i].Logs, "", "  ")
 
 			log.Info("Local logs", "localLogs", string(jsonData))
 		}
