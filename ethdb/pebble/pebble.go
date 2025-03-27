@@ -27,7 +27,6 @@ import (
 
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/bloom"
-	"github.com/cockroachdb/pebble/vfs"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -197,7 +196,7 @@ func New(file string, cache int, handles int, namespace string, readonly bool, e
 		writeOptions: &pebble.WriteOptions{Sync: !ephemeral},
 	}
 	opt := &pebble.Options{
-		FS: vfs.NewMem(),
+		// FS: vfs.NewMem(),
 		// Pebble has a single combined cache area and the write
 		// buffers are taken from this too. Assign all available
 		// memory allowance for cache.
