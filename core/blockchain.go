@@ -638,7 +638,14 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 
 			parallelStatedb.StartPrefetcher("chain", witness)
 			pstart := time.Now()
-			res, err := bc.parallelProcessor.Process(block, parallelStatedb, bc.vmConfig, ctx)
+			log.Info("#### Forcing recalculation on processor")
+			context := block.Header()
+			context.Root = common.Hash{}
+			context.ReceiptHash = common.Hash{}
+
+			task := types.NewBlockWithHeader(context).WithBody(*block.Body())
+
+			res, err := bc.parallelProcessor.Process(task, parallelStatedb, bc.vmConfig, ctx)
 			if err != nil {
 				log.Error("error processing with witness", "caughterr", err)
 			}
