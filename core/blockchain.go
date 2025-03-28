@@ -608,7 +608,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 		counter              metrics.Counter
 		parallel             bool
 		witnessRlpEncodedLen int
-		witness              *stateless.Witness
+		witnessRlpEncoded    []byte
 	}
 
 	var resultChanLen int = 2
@@ -657,7 +657,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 			if res == nil {
 				res = &ProcessResult{}
 			}
-			resultChan <- Result{res.Receipts, res.Logs, res.GasUsed, err, parallelStatedb, blockExecutionParallelCounter, true, len(witnessRlpEncoded), witness.Copy()}
+			resultChan <- Result{res.Receipts, res.Logs, res.GasUsed, err, parallelStatedb, blockExecutionParallelCounter, true, len(witnessRlpEncoded), witnessRlpEncoded}
 		}()
 	}
 
@@ -701,7 +701,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 			if res == nil {
 				res = &ProcessResult{}
 			}
-			resultChan <- Result{res.Receipts, res.Logs, res.GasUsed, err, statedb, blockExecutionSerialCounter, false, len(witnessRlpEncoded), witness.Copy()}
+			resultChan <- Result{res.Receipts, res.Logs, res.GasUsed, err, statedb, blockExecutionSerialCounter, false, len(witnessRlpEncoded), witnessRlpEncoded}
 		}()
 	}
 
@@ -737,8 +737,10 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 
 	// Bor: Calculate EvmBlockContext with Root and ReceiptHash to properly get the author
 	author := NewEVMBlockContext(block.Header(), bc.hc, nil).Coinbase
+	var decodedWitness *stateless.Witness
+	rlp.DecodeBytes(result.witnessRlpEncoded, decodedWitness)
 
-	crossStateRoot, crossReceiptRoot, err := ExecuteStateless(bc.chainConfig, bc.vmConfig, task, result.witness, result.receipts, &author, bc.engine)
+	crossStateRoot, crossReceiptRoot, err := ExecuteStateless(bc.chainConfig, bc.vmConfig, task, decodedWitness, result.receipts, &author, bc.engine)
 	if err != nil {
 		log.Error("stateless self-validation failed: %v", err)
 	}
