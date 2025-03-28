@@ -630,7 +630,6 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 		processorCount++
 
 		go func() {
-			// log.Info("##### Including witness ######")
 			witness, err := stateless.NewWitness(block.Header(), bc)
 			if err != nil {
 				log.Error("error in witness generation", "caughterr", err)
@@ -638,12 +637,6 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 
 			parallelStatedb.StartPrefetcher("chain", witness)
 			pstart := time.Now()
-			// log.Info("#### Forcing recalculation on processor")
-			// context := block.Header()
-			// context.Root = common.Hash{}
-			// context.ReceiptHash = common.Hash{}
-
-			// task := types.NewBlockWithHeader(context).WithBody(*block.Body())
 
 			res, err := bc.parallelProcessor.Process(block, parallelStatedb, bc.vmConfig, nil, ctx)
 			if err != nil {
@@ -659,9 +652,6 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 			if err == nil {
 				vstart := time.Now()
 				err = bc.validator.ValidateState(block, parallelStatedb, res, false)
-				if err == nil {
-					log.Info("Valid state on usual process flow (parallel)")
-				}
 				vtime = time.Since(vstart)
 			}
 			if res == nil {
@@ -689,13 +679,6 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 			statedb.StartPrefetcher("chain", witness)
 			pstart := time.Now()
 
-			// log.Info("#### Forcing recalculation on processor")
-			// context := block.Header()
-			// context.Root = common.Hash{}
-			// context.ReceiptHash = common.Hash{}
-
-			// task := types.NewBlockWithHeader(context).WithBody(*block.Body())
-
 			blockCtx := NewEVMBlockContext(block.Header(), bc.HeaderChain(), nil)
 			log.Info("Block being processed by stateful", "blockNumber", block.Number(), "coinbase", block.Header().Coinbase, "coinbaseFromContext", blockCtx.Coinbase)
 			res, err := bc.processor.Process(block, statedb, bc.vmConfig, nil, ctx)
@@ -713,9 +696,6 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 			if err == nil {
 				vstart := time.Now()
 				err = bc.validator.ValidateState(block, statedb, res, false)
-				if err == nil {
-					log.Info("Valid state on usual process flow")
-				}
 				vtime = time.Since(vstart)
 			}
 			if res == nil {
@@ -748,8 +728,6 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 		}()
 	}
 
-	log.Info("##### Running stateless self-validation", "block", block.Number(), "hash", block.Hash())
-
 	// Remove critical computed fields from the block to force true recalculation
 	context := block.Header()
 	context.Root = common.Hash{}
@@ -771,7 +749,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 		log.Error("stateless self-validation receipt root mismatch (cross: %x local: %x)", crossReceiptRoot, block.ReceiptHash())
 	}
 	if !(err != nil || crossStateRoot != block.Root() || crossReceiptRoot != block.ReceiptHash()) {
-		log.Info("##### Successfully self validated the block", "block", block.Number(), "hash", block.Hash())
+		log.Info("Successfully self validated the block", "block", block.Number(), "hash", block.Hash())
 	}
 
 	return result.receipts, result.logs, result.usedGas, result.statedb, vtime, result.witnessRlpEncodedLen, result.err
