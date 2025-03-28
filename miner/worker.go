@@ -605,7 +605,7 @@ func (w *worker) mainLoop() {
 			}
 
 		case req := <-w.getWorkCh:
-			req.result <- w.generateWork(req.params, false)
+			req.result <- w.generateWork(req.params, true)
 
 		case ev := <-w.txsCh:
 			// Apply transactions to the pending state if we're not sealing
@@ -1387,6 +1387,12 @@ func (w *worker) generateWork(params *generateParams, witness bool) *newPayloadR
 	}
 	defer work.discard()
 
+	witnessRlpEncoded, err := rlp.EncodeToBytes(work.witness)
+	if err != nil {
+		log.Error("error in witness generation", "caughterr", err)
+	}
+	log.Info("Witness generated", "witnessLenRlpEncoded", len(witnessRlpEncoded))
+
 	w.interruptCtx = resetAndCopyInterruptCtx(w.interruptCtx)
 	if !params.noTxs {
 		interrupt := new(atomic.Int32)
@@ -1415,7 +1421,7 @@ func (w *worker) generateWork(params *generateParams, witness bool) *newPayloadR
 		}
 		body.Requests = requests
 	}
-	block, err := w.engine.FinalizeAndAssemble(w.chain, work.header, work.state, &body, work.receipts)
+	block, err := w.engine.FinalizeAndAssemble(w.chain.HeaderChain(), work.header, work.state, &body, work.receipts)
 
 	if err != nil {
 		return &newPayloadResult{err: err}
@@ -1564,7 +1570,7 @@ func (w *worker) commit(env *environment, interval func(), update bool, start ti
 		// https://github.com/ethereum/go-ethereum/issues/24299
 		env := env.copy()
 		// Withdrawals are set to nil here, because this is only called in PoW.
-		block, err := w.engine.FinalizeAndAssemble(w.chain, env.header, env.state, &types.Body{
+		block, err := w.engine.FinalizeAndAssemble(w.chain.HeaderChain(), env.header, env.state, &types.Body{
 			Transactions: env.txs,
 		}, env.receipts)
 

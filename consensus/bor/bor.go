@@ -864,8 +864,8 @@ func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, 
 	header.UncleHash = types.CalcUncleHash(nil)
 
 	// Set state sync data to blockchain
-	bc := chain.(*core.BlockChain)
-	bc.SetStateSync(stateSyncData)
+	hc := chain.(*core.HeaderChain)
+	hc.SetStateSync(stateSyncData)
 }
 
 func decodeGenesisAlloc(i interface{}) (types.GenesisAlloc, error) {

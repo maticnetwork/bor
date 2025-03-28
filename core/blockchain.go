@@ -18,6 +18,7 @@
 package core
 
 import (
+	"bytes"
 	"compress/gzip"
 	"context"
 	"errors"
@@ -293,7 +294,6 @@ type BlockChain struct {
 
 	// Bor related changes
 	borReceiptsCache *lru.Cache[common.Hash, *types.Receipt] // Cache for the most recent bor receipt receipts per block
-	stateSyncData    []*types.StateSyncData                  // State sync data
 	stateSyncFeed    event.Feed                              // State sync feed
 	chain2HeadFeed   event.Feed                              // Reorg/NewHead/Fork data feed
 }
@@ -365,7 +365,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 	bc.statedb = state.NewDatabase(bc.triedb, nil)
 	bc.validator = NewBlockValidator(chainConfig, bc)
 	bc.prefetcher = newStatePrefetcher(chainConfig, bc.hc)
-	bc.processor = NewStateProcessor(chainConfig, bc, bc.hc)
+	bc.processor = NewStateProcessor(chainConfig, bc.hc)
 
 	bc.genesisBlock = bc.GetBlockByNumber(0)
 	if bc.genesisBlock == nil {
@@ -579,7 +579,7 @@ func NewParallelBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis 
 	return bc, nil
 }
 
-func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ types.Receipts, _ []*types.Log, _ uint64, _ *state.StateDB, vtime time.Duration, blockEndErr error) {
+func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ types.Receipts, _ []*types.Log, _ uint64, _ *state.StateDB, vtime time.Duration, witnessLen int, blockEndErr error) {
 	// Process the block using processor and parallelProcessor at the same time, take the one which finishes first, cancel the other, and return the result
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -601,13 +601,15 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 	}
 
 	type Result struct {
-		receipts types.Receipts
-		logs     []*types.Log
-		usedGas  uint64
-		err      error
-		statedb  *state.StateDB
-		counter  metrics.Counter
-		parallel bool
+		receipts             types.Receipts
+		logs                 []*types.Log
+		usedGas              uint64
+		err                  error
+		statedb              *state.StateDB
+		counter              metrics.Counter
+		parallel             bool
+		witnessRlpEncodedLen int
+		witnessRlpEncoded    []byte
 	}
 
 	var resultChanLen int = 2
@@ -622,17 +624,33 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 	if bc.parallelProcessor != nil {
 		parallelStatedb, err := state.New(parent.Root, bc.statedb)
 		if err != nil {
-			return nil, nil, 0, nil, 0, err
+			return nil, nil, 0, nil, 0, 0, err
 		}
 		parallelStatedb.SetLogger(bc.logger)
 
 		processorCount++
 
 		go func() {
-			parallelStatedb.StartPrefetcher("chain", nil)
+			witness, err := stateless.NewWitness(block.Header(), bc)
+			if err != nil {
+				log.Error("error in witness generation", "caughterr", err)
+			}
+
+			parallelStatedb.StartPrefetcher("chain", witness)
 			pstart := time.Now()
-			res, err := bc.parallelProcessor.Process(block, parallelStatedb, bc.vmConfig, ctx)
+
+			res, err := bc.parallelProcessor.Process(block, parallelStatedb, bc.vmConfig, nil, ctx)
+			if err != nil {
+				log.Error("error processing with witness", "caughterr", err)
+			}
 			blockExecutionParallelTimer.UpdateSince(pstart)
+
+			var buf bytes.Buffer
+			if err := witness.EncodeRLP(&buf); err != nil {
+				log.Error("error in witness encoding", "caughterr", err)
+			}
+			witnessRlpEncoded := buf.Bytes()
+
 			if err == nil {
 				vstart := time.Now()
 				err = bc.validator.ValidateState(block, parallelStatedb, res, false)
@@ -641,24 +659,41 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 			if res == nil {
 				res = &ProcessResult{}
 			}
-			resultChan <- Result{res.Receipts, res.Logs, res.GasUsed, err, parallelStatedb, blockExecutionParallelCounter, true}
+			resultChan <- Result{res.Receipts, res.Logs, res.GasUsed, err, parallelStatedb, blockExecutionParallelCounter, true, len(witnessRlpEncoded), witnessRlpEncoded}
 		}()
 	}
 
 	if bc.processor != nil && !bc.enforceParallelProcessor {
 		statedb, err := state.New(parent.Root, bc.statedb)
 		if err != nil {
-			return nil, nil, 0, nil, 0, err
+			return nil, nil, 0, nil, 0, 0, err
 		}
 		statedb.SetLogger(bc.logger)
 
 		processorCount++
 
 		go func() {
-			statedb.StartPrefetcher("chain", nil)
+			witness, err := stateless.NewWitness(block.Header(), bc)
+			if err != nil {
+				log.Error("error in witness generation", "caughterr", err)
+			}
+
+			statedb.StartPrefetcher("chain", witness)
 			pstart := time.Now()
-			res, err := bc.processor.Process(block, statedb, bc.vmConfig, ctx)
+
+			res, err := bc.processor.Process(block, statedb, bc.vmConfig, nil, ctx)
+			if err != nil {
+				log.Error("error processing with witness", "caughterr", err)
+			}
+
 			blockExecutionSerialTimer.UpdateSince(pstart)
+
+			var buf bytes.Buffer
+			if err := witness.EncodeRLP(&buf); err != nil {
+				log.Error("error in witness encoding", "caughterr", err)
+			}
+			witnessRlpEncoded := buf.Bytes()
+
 			if err == nil {
 				vstart := time.Now()
 				err = bc.validator.ValidateState(block, statedb, res, false)
@@ -667,7 +702,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 			if res == nil {
 				res = &ProcessResult{}
 			}
-			resultChan <- Result{res.Receipts, res.Logs, res.GasUsed, err, statedb, blockExecutionSerialCounter, false}
+			resultChan <- Result{res.Receipts, res.Logs, res.GasUsed, err, statedb, blockExecutionSerialCounter, false, len(witnessRlpEncoded), witnessRlpEncoded}
 		}()
 	}
 
@@ -694,7 +729,42 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 		}()
 	}
 
-	return result.receipts, result.logs, result.usedGas, result.statedb, vtime, result.err
+	// Remove critical computed fields from the block to force true recalculation
+	context := block.Header()
+	context.Root = common.Hash{}
+	context.ReceiptHash = common.Hash{}
+
+	task := types.NewBlockWithHeader(context).WithBody(*block.Body())
+
+	// Bor: Calculate EvmBlockContext with Root and ReceiptHash to properly get the author
+	author := NewEVMBlockContext(block.Header(), bc.hc, nil).Coinbase
+
+	// Decoding witness
+	var decodedWitness stateless.Witness
+
+	// Create an RLP stream from the encoded data.
+	stream := rlp.NewStream(bytes.NewReader(result.witnessRlpEncoded), 0)
+
+	// Decode the witness from the stream.
+	if err := decodedWitness.DecodeRLP(stream); err != nil {
+		log.Error("Failed to decode witness", "caughtErr", err)
+	}
+
+	crossStateRoot, crossReceiptRoot, err := ExecuteStateless(bc.chainConfig, bc.vmConfig, task, &decodedWitness, result.receipts, &author, bc.engine)
+	if err != nil {
+		log.Error("stateless self-validation failed: %v", err)
+	}
+	if crossStateRoot != block.Root() {
+		log.Error("stateless self-validation root mismatch (cross: %x local: %x)", crossStateRoot, block.Root())
+	}
+	if crossReceiptRoot != block.ReceiptHash() {
+		log.Error("stateless self-validation receipt root mismatch (cross: %x local: %x)", crossReceiptRoot, block.ReceiptHash())
+	}
+	if !(err != nil || crossStateRoot != block.Root() || crossReceiptRoot != block.ReceiptHash()) {
+		log.Info("Successfully self validated the block", "block", block.Number(), "hash", block.Hash())
+	}
+
+	return result.receipts, result.logs, result.usedGas, result.statedb, vtime, result.witnessRlpEncodedLen, result.err
 }
 
 // empty returns an indicator whether the blockchain is empty.
@@ -1999,7 +2069,7 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 		if emitHeadEvent {
 			bc.chainHeadFeed.Send(ChainHeadEvent{Block: block})
 			// BOR state sync feed related changes
-			for _, data := range bc.stateSyncData {
+			for _, data := range bc.hc.stateSyncData {
 				bc.stateSyncFeed.Send(StateSyncEvent{Data: data})
 			}
 			// BOR
@@ -2360,7 +2430,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool, makeWitness 
 
 		// Process block using the parent state as reference point
 		pstart := time.Now()
-		receipts, logs, usedGas, statedb, vtime, err := bc.ProcessBlock(block, parent)
+		receipts, logs, usedGas, statedb, vtime, witnessLenRlpEncoded, err := bc.ProcessBlock(block, parent)
 		activeState = statedb
 
 		if err != nil {
@@ -2371,7 +2441,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool, makeWitness 
 		}
 
 		// BOR state sync feed related changes
-		for _, data := range bc.stateSyncData {
+		for _, data := range bc.hc.stateSyncData {
 			bc.stateSyncFeed.Send(StateSyncEvent{Data: data})
 		}
 		// BOR
@@ -2447,7 +2517,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool, makeWitness 
 			snapDiffItems, snapBufItems = bc.snaps.Size()
 		}
 		trieDiffNodes, trieBufNodes, _ := bc.triedb.Size()
-		stats.report(chain, it.index, snapDiffItems, snapBufItems, trieDiffNodes, trieBufNodes, setHead)
+		stats.report(chain, it.index, snapDiffItems, snapBufItems, trieDiffNodes, trieBufNodes, setHead, witnessLenRlpEncoded)
 
 		if !setHead {
 			// After merge we expect few side chains. Simply count
@@ -2547,7 +2617,7 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 
 	// Process block using the parent state as reference point
 	pstart := time.Now()
-	res, err := bc.processor.Process(block, statedb, bc.vmConfig, context.Background())
+	res, err := bc.processor.Process(block, statedb, bc.vmConfig, nil, context.Background())
 	if err != nil {
 		bc.reportBlock(block, res, err)
 		return nil, err
@@ -2578,7 +2648,9 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 		task := types.NewBlockWithHeader(context).WithBody(*block.Body())
 
 		// Run the stateless self-cross-validation
-		crossStateRoot, crossReceiptRoot, err := ExecuteStateless(bc.chainConfig, task, witness)
+		var receipts types.Receipts
+		author := NewEVMBlockContext(block.Header(), bc.hc, nil).Coinbase
+		crossStateRoot, crossReceiptRoot, err := ExecuteStateless(bc.chainConfig, bc.vmConfig, task, witness, receipts, &author, bc.engine)
 		if err != nil {
 			return nil, fmt.Errorf("stateless self-validation failed: %v", err)
 		}

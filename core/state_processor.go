@@ -38,16 +38,14 @@ import (
 // StateProcessor implements Processor.
 type StateProcessor struct {
 	config *params.ChainConfig // Chain configuration options
-	bc     *BlockChain         // Canonical header chain
-	hc     *HeaderChain
+	chain  *HeaderChain        // Canonical header chain
 }
 
 // NewStateProcessor initialises a new StateProcessor.
-func NewStateProcessor(config *params.ChainConfig, bc *BlockChain, hc *HeaderChain) *StateProcessor {
+func NewStateProcessor(config *params.ChainConfig, chain *HeaderChain) *StateProcessor {
 	return &StateProcessor{
 		config: config,
-		bc:     bc,
-		hc:     hc,
+		chain:  chain,
 	}
 }
 
@@ -58,7 +56,7 @@ func NewStateProcessor(config *params.ChainConfig, bc *BlockChain, hc *HeaderCha
 // Process returns the receipts and logs accumulated during the process and
 // returns the amount of gas that was used in the process. If any of the
 // transactions failed to execute due to insufficient gas it will return an error.
-func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config, interruptCtx context.Context) (*ProcessResult, error) {
+func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config, author *common.Address, interruptCtx context.Context) (*ProcessResult, error) {
 	var (
 		receipts    types.Receipts
 		usedGas     = new(uint64)
@@ -77,7 +75,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		context vm.BlockContext
 		signer  = types.MakeSigner(p.config, header.Number, header.Time)
 	)
-	context = NewEVMBlockContext(header, p.hc, nil)
+	context = NewEVMBlockContext(header, p.chain, author)
 	vmenv := vm.NewEVM(context, vm.TxContext{}, statedb, p.config, cfg)
 	if beaconRoot := block.BeaconRoot(); beaconRoot != nil {
 		ProcessBeaconBlockRoot(*beaconRoot, vmenv, statedb)
@@ -111,7 +109,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	}
 
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
-	p.hc.engine.Finalize(p.bc, header, statedb, block.Body())
+	p.chain.engine.Finalize(p.chain, header, statedb, block.Body())
 
 	return &ProcessResult{
 		Receipts: receipts,
