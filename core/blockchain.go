@@ -18,6 +18,7 @@
 package core
 
 import (
+	"bytes"
 	"compress/gzip"
 	"context"
 	"errors"
@@ -644,10 +645,11 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 			}
 			blockExecutionParallelTimer.UpdateSince(pstart)
 
-			witnessRlpEncoded, err := rlp.EncodeToBytes(witness)
-			if err != nil {
+			var buf bytes.Buffer
+			if err := witness.EncodeRLP(&buf); err != nil {
 				log.Error("error in witness encoding", "caughterr", err)
 			}
+			witnessRlpEncoded := buf.Bytes()
 
 			if err == nil {
 				vstart := time.Now()
@@ -679,8 +681,6 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 			statedb.StartPrefetcher("chain", witness)
 			pstart := time.Now()
 
-			blockCtx := NewEVMBlockContext(block.Header(), bc.HeaderChain(), nil)
-			log.Info("Block being processed by stateful", "blockNumber", block.Number(), "coinbase", block.Header().Coinbase, "coinbaseFromContext", blockCtx.Coinbase)
 			res, err := bc.processor.Process(block, statedb, bc.vmConfig, nil, ctx)
 			if err != nil {
 				log.Error("error processing with witness", "caughterr", err)
@@ -688,10 +688,11 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 
 			blockExecutionSerialTimer.UpdateSince(pstart)
 
-			witnessRlpEncoded, err := rlp.EncodeToBytes(witness)
-			if err != nil {
+			var buf bytes.Buffer
+			if err := witness.EncodeRLP(&buf); err != nil {
 				log.Error("error in witness encoding", "caughterr", err)
 			}
+			witnessRlpEncoded := buf.Bytes()
 
 			if err == nil {
 				vstart := time.Now()
@@ -737,10 +738,19 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 
 	// Bor: Calculate EvmBlockContext with Root and ReceiptHash to properly get the author
 	author := NewEVMBlockContext(block.Header(), bc.hc, nil).Coinbase
-	var decodedWitness *stateless.Witness
-	rlp.DecodeBytes(result.witnessRlpEncoded, decodedWitness)
 
-	crossStateRoot, crossReceiptRoot, err := ExecuteStateless(bc.chainConfig, bc.vmConfig, task, decodedWitness, result.receipts, &author, bc.engine)
+	// Decoding witness
+	var decodedWitness stateless.Witness
+
+	// Create an RLP stream from the encoded data.
+	stream := rlp.NewStream(bytes.NewReader(result.witnessRlpEncoded), 0)
+
+	// Decode the witness from the stream.
+	if err := decodedWitness.DecodeRLP(stream); err != nil {
+		log.Error("Failed to decode witness", "caughtErr", err)
+	}
+
+	crossStateRoot, crossReceiptRoot, err := ExecuteStateless(bc.chainConfig, bc.vmConfig, task, &decodedWitness, result.receipts, &author, bc.engine)
 	if err != nil {
 		log.Error("stateless self-validation failed: %v", err)
 	}
