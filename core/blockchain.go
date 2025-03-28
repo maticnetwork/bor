@@ -645,7 +645,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 
 			// task := types.NewBlockWithHeader(context).WithBody(*block.Body())
 
-			res, err := bc.parallelProcessor.Process(block, parallelStatedb, bc.vmConfig, ctx)
+			res, err := bc.parallelProcessor.Process(block, parallelStatedb, bc.vmConfig, nil, ctx)
 			if err != nil {
 				log.Error("error processing with witness", "caughterr", err)
 			}
@@ -698,7 +698,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 
 			blockCtx := NewEVMBlockContext(block.Header(), bc.HeaderChain(), nil)
 			log.Info("Block being processed by stateful", "blockNumber", block.Number(), "coinbase", block.Header().Coinbase, "coinbaseFromContext", blockCtx.Coinbase)
-			res, err := bc.processor.Process(block, statedb, bc.vmConfig, ctx)
+			res, err := bc.processor.Process(block, statedb, bc.vmConfig, nil, ctx)
 			if err != nil {
 				log.Error("error processing with witness", "caughterr", err)
 			}
@@ -757,8 +757,10 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 
 	task := types.NewBlockWithHeader(context).WithBody(*block.Body())
 
-	// Run the stateless self-cross-validation
-	crossStateRoot, crossReceiptRoot, err := ExecuteStateless(bc.chainConfig, bc.vmConfig, task, result.witness, result.receipts, bc.engine)
+	// Bor: Calculate EvmBlockContext with Root and ReceiptHash to properly get the author
+	author := NewEVMBlockContext(block.Header(), bc.hc, nil).Coinbase
+
+	crossStateRoot, crossReceiptRoot, err := ExecuteStateless(bc.chainConfig, bc.vmConfig, task, result.witness, result.receipts, &author, bc.engine)
 	if err != nil {
 		log.Error("stateless self-validation failed: %v", err)
 	}
@@ -2625,7 +2627,7 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 
 	// Process block using the parent state as reference point
 	pstart := time.Now()
-	res, err := bc.processor.Process(block, statedb, bc.vmConfig, context.Background())
+	res, err := bc.processor.Process(block, statedb, bc.vmConfig, nil, context.Background())
 	if err != nil {
 		bc.reportBlock(block, res, err)
 		return nil, err
@@ -2657,7 +2659,8 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 
 		// Run the stateless self-cross-validation
 		var receipts types.Receipts
-		crossStateRoot, crossReceiptRoot, err := ExecuteStateless(bc.chainConfig, bc.vmConfig, task, witness, receipts, bc.engine)
+		author := NewEVMBlockContext(block.Header(), bc.hc, nil).Coinbase
+		crossStateRoot, crossReceiptRoot, err := ExecuteStateless(bc.chainConfig, bc.vmConfig, task, witness, receipts, &author, bc.engine)
 		if err != nil {
 			return nil, fmt.Errorf("stateless self-validation failed: %v", err)
 		}

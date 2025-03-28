@@ -41,7 +41,7 @@ import (
 //   - It cannot be placed outside of core, because it needs to construct a dud headerchain
 //
 // TODO(karalabe): Would be nice to resolve both issues above somehow and move it.
-func ExecuteStateless(config *params.ChainConfig, vmconfig vm.Config, block *types.Block, witness *stateless.Witness, receipts types.Receipts, consensus consensus.Engine) (common.Hash, common.Hash, error) {
+func ExecuteStateless(config *params.ChainConfig, vmconfig vm.Config, block *types.Block, witness *stateless.Witness, receipts types.Receipts, author *common.Address, consensus consensus.Engine) (common.Hash, common.Hash, error) {
 	// Sanity check if the supplied block accidentally contains a set root or
 	// receipt hash. If so, be very loud, but still continue.
 	if block.Root() != (common.Hash{}) {
@@ -66,11 +66,7 @@ func ExecuteStateless(config *params.ChainConfig, vmconfig vm.Config, block *typ
 	processor := NewStateProcessor(config, headerChain)
 	validator := NewBlockValidator(config, nil) // No chain, we only validate the state, not the block
 
-	// Run the stateless blocks processing and self-validate certain fields
-	blockCtx := NewEVMBlockContext(block.Header(), processor.chain, nil)
-	log.Info("Block being processed by stateless", "blockNumber", block.Number(), "coinbase", block.Header().Coinbase, "coinbaseFromContext", blockCtx.Coinbase)
-
-	res, err := processor.Process(block, db, vmconfig, context.Background())
+	res, err := processor.Process(block, db, vmconfig, author, context.Background())
 	if err != nil {
 		return common.Hash{}, common.Hash{}, err
 	}
