@@ -112,7 +112,8 @@ func (h *HeimdallClient) StateSyncEventsV1(ctx context.Context, fromID uint64, t
 
 		ctx = withRequestType(ctx, stateSyncRequest)
 
-		response, err := FetchWithRetry[StateSyncEventsResponseV1](ctx, h.client, url, h.closeCh)
+		request := &Request{client: h.client, url: url, start: time.Now()}
+		response, err := Fetch[StateSyncEventsResponseV1](ctx, request)
 		if err != nil {
 			return nil, err
 		}
@@ -152,7 +153,8 @@ func (h *HeimdallClient) StateSyncEventsV2(ctx context.Context, fromID uint64, t
 
 		ctx = withRequestType(ctx, stateSyncRequest)
 
-		response, err := FetchWithRetry[clerkTypes.RecordListResponse](ctx, h.client, url, h.closeCh)
+		request := &Request{client: h.client, url: url, start: time.Now()}
+		response, err := Fetch[clerkTypes.RecordListResponse](ctx, request)
 		if err != nil {
 			return nil, err
 		}

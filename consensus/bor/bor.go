@@ -1312,11 +1312,8 @@ func (c *Bor) CommitStates(
 	}
 	if err != nil {
 		log.Error("Error occurred when fetching state sync events", "fromID", from, "to", to.Unix(), "err", err)
-		// TODO: Is there a better way to detect if migration is in progress?
-		if !hmm.IsHeimdallV2 {
-			stateSyncs := make([]*types.StateSyncData, 0, len(eventRecords))
-			return stateSyncs, nil
-		}
+		stateSyncs := make([]*types.StateSyncData, 0)
+		return stateSyncs, nil
 	}
 
 	if c.config.OverrideStateSyncRecords != nil {
