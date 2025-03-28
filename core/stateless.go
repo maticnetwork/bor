@@ -18,7 +18,6 @@ package core
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/lru"
@@ -68,6 +67,9 @@ func ExecuteStateless(config *params.ChainConfig, vmconfig vm.Config, block *typ
 	validator := NewBlockValidator(config, nil) // No chain, we only validate the state, not the block
 
 	// Run the stateless blocks processing and self-validate certain fields
+	blockCtx := NewEVMBlockContext(block.Header(), processor.chain, nil)
+	log.Info("Block being processed by stateless", "blockNumber", block.Number(), "coinbase", block.Header().Coinbase, "coinbaseFromContext", blockCtx.Coinbase)
+
 	res, err := processor.Process(block, db, vmconfig, context.Background())
 	if err != nil {
 		return common.Hash{}, common.Hash{}, err
@@ -77,27 +79,27 @@ func ExecuteStateless(config *params.ChainConfig, vmconfig vm.Config, block *typ
 		log.Info("###################################")
 		log.Info("Debug logs for receipts in stateless")
 		log.Info("Block information", "blockHash", block.Hash().String(), "localGasUsed", res.GasUsed, "remoteGasUsed", block.GasUsed(), "localReceiptsLen", len(res.Receipts), "lenReceiptsRemote", len(receipts))
-		for i, _ := range res.Receipts {
-			statelessBloom := types.CreateBloom(res.Receipts[:i])
-			statefulBloom := types.CreateBloom(receipts[:i])
-			if statelessBloom != statefulBloom {
-				log.Info("Receipt comparison:",
-					"txHashLocal", res.Receipts[i].TxHash.String(),
-					"txHashRemote", receipts[i].TxHash.String(),
-					"lenLogsLocal", len(res.Receipts[i].Logs),
-					"lenLogsRemote", len(receipts[i].Logs),
-					"gasUsedLocal", res.Receipts[i].GasUsed,
-					"gasUsedRemote", receipts[i].GasUsed)
+		// for i, _ := range res.Receipts {
+		// 	statelessBloom := types.CreateBloom(res.Receipts[:i])
+		// 	statefulBloom := types.CreateBloom(receipts[:i])
+		// 	if statelessBloom != statefulBloom {
+		// 		log.Info("Receipt comparison:",
+		// 			"txHashLocal", res.Receipts[i].TxHash.String(),
+		// 			"txHashRemote", receipts[i].TxHash.String(),
+		// 			"lenLogsLocal", len(res.Receipts[i].Logs),
+		// 			"lenLogsRemote", len(receipts[i].Logs),
+		// 			"gasUsedLocal", res.Receipts[i].GasUsed,
+		// 			"gasUsedRemote", receipts[i].GasUsed)
 
-				jsonData, _ := json.MarshalIndent(res.Receipts[i], "", "  ")
-				log.Info("Stateless receipt", "receipt", string(jsonData))
+		// 		jsonData, _ := json.MarshalIndent(res.Receipts[i], "", "  ")
+		// 		log.Info("Stateless receipt", "receipt", string(jsonData))
 
-				jsonData2, _ := json.MarshalIndent(receipts[i], "", "  ")
-				log.Info("Stateful receipt", "receipt", string(jsonData2))
+		// 		jsonData2, _ := json.MarshalIndent(receipts[i], "", "  ")
+		// 		log.Info("Stateful receipt", "receipt", string(jsonData2))
 
-			}
+		// 	}
 
-		}
+		// }
 		return common.Hash{}, common.Hash{}, err
 	}
 	// Almost everything validated, but receipt and state root needs to be returned

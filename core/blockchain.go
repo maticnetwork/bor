@@ -696,6 +696,8 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 
 			// task := types.NewBlockWithHeader(context).WithBody(*block.Body())
 
+			blockCtx := NewEVMBlockContext(block.Header(), bc.HeaderChain(), nil)
+			log.Info("Block being processed by stateful", "blockNumber", block.Number(), "coinbase", block.Header().Coinbase, "coinbaseFromContext", blockCtx.Coinbase)
 			res, err := bc.processor.Process(block, statedb, bc.vmConfig, ctx)
 			if err != nil {
 				log.Error("error processing with witness", "caughterr", err)
