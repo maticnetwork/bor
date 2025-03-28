@@ -8,6 +8,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
+	"github.com/ethereum/go-ethereum/consensus/bor/heimdall"
 	"github.com/ethereum/go-ethereum/log"
 
 	"github.com/0xPolygon/heimdall-v2/x/clerk/types"
@@ -15,6 +16,16 @@ import (
 
 func (h *HeimdallGRPCClient) StateSyncEvents(ctx context.Context, fromID uint64, to int64) ([]*clerk.EventRecordWithTime, error) {
 	log.Info("Fetching state sync events", "fromID", fromID, "to", to)
+
+	var err error
+	// Start the timer and set the request type on the context.
+	start := time.Now()
+	ctx = heimdall.WithRequestType(ctx, heimdall.StateSyncRequest)
+
+	// Defer the metrics call.
+	defer func() {
+		heimdall.SendMetrics(ctx, start, err == nil)
+	}()
 
 	eventRecords := make([]*clerk.EventRecordWithTime, 0)
 

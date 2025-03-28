@@ -102,7 +102,7 @@ func (h *HeimdallClient) StateSyncEvents(ctx context.Context, fromID uint64, to 
 
 		log.Info("Fetching state sync events", "queryParams", url.RawQuery)
 
-		ctx = withRequestType(ctx, stateSyncRequest)
+		ctx = WithRequestType(ctx, StateSyncRequest)
 
 		response, err := FetchWithRetry[clerkTypes.RecordListResponse](ctx, h.client, url, h.closeCh)
 		if err != nil {
@@ -148,7 +148,7 @@ func (h *HeimdallClient) GetSpan(ctx context.Context, spanID uint64) (*types.Spa
 		return nil, err
 	}
 
-	ctx = withRequestType(ctx, spanRequest)
+	ctx = WithRequestType(ctx, SpanRequest)
 
 	response, err := FetchWithRetry[types.QuerySpanByIdResponse](ctx, h.client, url, h.closeCh)
 	if err != nil {
@@ -164,7 +164,7 @@ func (h *HeimdallClient) FetchCheckpoint(ctx context.Context, number int64) (*ch
 		return nil, err
 	}
 
-	ctx = withRequestType(ctx, checkpointRequest)
+	ctx = WithRequestType(ctx, CheckpointRequest)
 
 	response, err := FetchWithRetry[checkpoint.CheckpointResponse](ctx, h.client, url, h.closeCh)
 	if err != nil {
@@ -181,7 +181,7 @@ func (h *HeimdallClient) FetchMilestone(ctx context.Context) (*milestone.Milesto
 		return nil, err
 	}
 
-	ctx = withRequestType(ctx, milestoneRequest)
+	ctx = WithRequestType(ctx, MilestoneRequest)
 
 	response, err := FetchWithRetry[milestone.MilestoneResponse](ctx, h.client, url, h.closeCh)
 	if err != nil {
@@ -198,7 +198,7 @@ func (h *HeimdallClient) FetchCheckpointCount(ctx context.Context) (int64, error
 		return 0, err
 	}
 
-	ctx = withRequestType(ctx, checkpointCountRequest)
+	ctx = WithRequestType(ctx, CheckpointCountRequest)
 
 	response, err := FetchWithRetry[checkpoint.CheckpointCountResponse](ctx, h.client, url, h.closeCh)
 	if err != nil {
@@ -215,7 +215,7 @@ func (h *HeimdallClient) FetchMilestoneCount(ctx context.Context) (int64, error)
 		return 0, err
 	}
 
-	ctx = withRequestType(ctx, milestoneCountRequest)
+	ctx = WithRequestType(ctx, MilestoneCountRequest)
 
 	response, err := FetchWithRetry[milestone.MilestoneCountResponse](ctx, h.client, url, h.closeCh)
 	if err != nil {
@@ -297,7 +297,7 @@ func Fetch[T any](ctx context.Context, request *Request) (*T, error) {
 
 	defer func() {
 		if metrics.Enabled {
-			sendMetrics(ctx, request.start, isSuccessful)
+			SendMetrics(ctx, request.start, isSuccessful)
 		}
 	}()
 

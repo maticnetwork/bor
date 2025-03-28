@@ -2,8 +2,10 @@ package heimdallgrpc
 
 import (
 	"context"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/consensus/bor/heimdall"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
 	"github.com/ethereum/go-ethereum/log"
 
@@ -12,6 +14,17 @@ import (
 
 func (h *HeimdallGRPCClient) FetchCheckpointCount(ctx context.Context) (int64, error) {
 	log.Info("Fetching checkpoint count")
+
+	var err error
+
+	// Start the timer and set the request type on the context.
+	start := time.Now()
+	ctx = heimdall.WithRequestType(ctx, heimdall.CheckpointCountRequest)
+
+	// Defer the metrics call.
+	defer func() {
+		heimdall.SendMetrics(ctx, start, err == nil)
+	}()
 
 	res, err := h.checkpointQueryClient.GetAckCount(ctx, nil)
 	if err != nil {
@@ -27,6 +40,16 @@ func (h *HeimdallGRPCClient) FetchCheckpointCount(ctx context.Context) (int64, e
 
 func (h *HeimdallGRPCClient) FetchCheckpoint(ctx context.Context, number int64) (*checkpoint.Checkpoint, error) {
 	var resCheckpoint checkpointTypes.Checkpoint
+	var err error
+
+	// Start the timer and set the request type on the context.
+	start := time.Now()
+	ctx = heimdall.WithRequestType(ctx, heimdall.CheckpointRequest)
+
+	// Defer the metrics call.
+	defer func() {
+		heimdall.SendMetrics(ctx, start, err == nil)
+	}()
 
 	if number == -1 {
 		// If -1 is passed, we will fetch the latest checkpoint.
