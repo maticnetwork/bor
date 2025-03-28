@@ -13,7 +13,6 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
-	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
 )
 
 type mockHeimdall struct {
@@ -26,13 +25,9 @@ type mockHeimdall struct {
 func (m *mockHeimdall) StateSyncEvents(ctx context.Context, fromID uint64, to int64) ([]*clerk.EventRecordWithTime, error) {
 	return nil, nil
 }
-func (m *mockHeimdall) Span(ctx context.Context, spanID uint64) (*span.HeimdallSpan, error) {
-	//nolint:nilnil
-	return nil, nil
-}
 
 func (m *mockHeimdall) GetSpan(ctx context.Context, spanID uint64) (*types.Span, error) {
-	panic("Not implemented!")
+	return nil, nil
 }
 
 func (m *mockHeimdall) FetchCheckpoint(ctx context.Context, number int64) (*checkpoint.Checkpoint, error) {
