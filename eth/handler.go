@@ -107,8 +107,9 @@ type handler struct {
 	networkID  uint64
 	forkFilter forkid.Filter // Fork ID filter, constant across the lifetime of the node
 
-	snapSync atomic.Bool // Flag whether snap sync is enabled (gets disabled if we already have blocks)
-	synced   atomic.Bool // Flag whether we're considered synchronised (enables transaction processing)
+	snapSync      atomic.Bool // Flag whether snap sync is enabled (gets disabled if we already have blocks)
+	statelessSync atomic.Bool // Flag whether stateless sync is enabled
+	synced        atomic.Bool // Flag whether we're considered synchronised (enables transaction processing)
 
 	database ethdb.Database
 	txpool   txPool
@@ -166,7 +167,13 @@ func newHandler(config *handlerConfig) (*handler, error) {
 		handlerDoneCh:       make(chan struct{}),
 		handlerStartCh:      make(chan struct{}),
 	}
-	if config.Sync == downloader.FullSync {
+
+	if config.Sync == downloader.StatelessSync {
+		// For stateless sync, we don't need to check state availability since
+		// we'll be verifying blocks using witnesses
+		h.statelessSync.Store(true)
+		log.Info("Enabled stateless sync")
+	} else if config.Sync == downloader.FullSync {
 		// The database seems empty as the current block is the genesis. Yet the snap
 		// block is ahead, so snap sync was enabled for this node at a certain point.
 		// The scenarios where this can happen is
@@ -182,13 +189,14 @@ func newHandler(config *handlerConfig) (*handler, error) {
 		// TODO - uncomment when we (Polygon-PoS, bor) have snap sync/pbss
 		// For more info - https://github.com/ethereum/go-ethereum/pull/28171
 		// if fullBlock.Number.Uint64() == 0 && snapBlock.Number.Uint64() > 0 {
-		// 	h.snapSync.Store(true)
-		// 	log.Warn("Switch sync mode from full sync to snap sync", "reason", "snap sync incomplete")
+		//    h.snapSync.Store(true)
+		//    log.Warn("Switch sync mode from full sync to snap sync", "reason", "snap sync incomplete")
 		// } else if !h.chain.HasState(fullBlock.Root) {
-		// 	h.snapSync.Store(true)
-		// 	log.Warn("Switch sync mode from full sync to snap sync", "reason", "head state missing")
+		//    h.snapSync.Store(true)
+		//    log.Warn("Switch sync mode from full sync to snap sync", "reason", "head state missing")
 		// }
 	} else {
+		// This is snap sync mode
 		head := h.chain.CurrentBlock()
 		if head.Number.Uint64() > 0 && h.chain.HasState(head.Root) {
 			// Print warning log if database is not empty to run snap sync.
@@ -199,10 +207,12 @@ func newHandler(config *handlerConfig) (*handler, error) {
 			log.Info("Enabled snap sync", "head", head.Number, "hash", head.Hash())
 		}
 	}
+
 	// If snap sync is requested but snapshots are disabled, fail loudly
 	if h.snapSync.Load() && config.Chain.Snapshots() == nil {
 		return nil, errors.New("snap sync not supported with snapshots disabled")
 	}
+
 	// Construct the downloader (long sync)
 	h.downloader = downloader.New(config.Database, h.eventMux, h.chain, nil, h.removePeer, h.enableSyncedFeatures, config.checker)
 	if ttd := h.chain.Config().TerminalTotalDifficulty; ttd != nil {
@@ -236,16 +246,20 @@ func newHandler(config *handlerConfig) (*handler, error) {
 		return h.chain.CurrentBlock().Number.Uint64()
 	}
 	inserter := func(blocks types.Blocks) (int, error) {
-		// If snap sync is running, deny importing weird blocks. This is a problematic
-		// clause when starting up a new network, because snap-syncing miners might not
-		// accept each others' blocks until a restart. Unfortunately we haven't figured
-		// out a way yet where nodes can decide unilaterally whether the network is new
-		// or not. This should be fixed if we figure out a solution.
+		// If sync is running, deny importing weird blocks.
 		if !h.synced.Load() {
 			log.Warn("Syncing, discarded propagated block", "number", blocks[0].Number(), "hash", blocks[0].Hash())
 			return 0, nil
 		}
 
+		// When in stateless mode, use InsertChainStateless instead of InsertChain
+		if h.statelessSync.Load() {
+			// For now, we pass nil for witnesses as we don't have a way to get witnesses here
+			// A future enhancement would be to propagate witnesses along with blocks
+			return h.chain.InsertChainStateless(blocks, nil)
+		}
+
+		// Default behavior is to use regular InsertChain
 		return h.chain.InsertChain(blocks)
 	}
 

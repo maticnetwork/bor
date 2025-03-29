@@ -241,7 +241,11 @@ func (cs *chainSyncer) modeAndLocalHead() (downloader.SyncMode, *big.Int) {
 	// Nope, we're really full syncing
 	td := cs.handler.chain.GetTd(head.Hash(), head.Number.Uint64())
 
-	return downloader.FullSync, td
+	if cs.handler.statelessSync.Load() {
+		return downloader.StatelessSync, td
+	} else {
+		return downloader.FullSync, td
+	}
 }
 
 // startSync launches doSync in a new goroutine.

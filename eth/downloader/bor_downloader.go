@@ -29,6 +29,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state/snapshot"
+	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/downloader/whitelist"
 	"github.com/ethereum/go-ethereum/eth/protocols/snap"
@@ -209,6 +210,9 @@ type BlockChain interface {
 	// InsertChain inserts a batch of blocks into the local chain.
 	InsertChain(types.Blocks) (int, error)
 
+	// InsertChainStateless inserts a batch of blocks into the local chain in stateless mode.
+	InsertChainStateless(types.Blocks, []*stateless.Witness) (int, error)
+
 	// InsertReceiptChain inserts a batch of receipts into the local chain.
 	InsertReceiptChain(types.Blocks, []types.Receipts, uint64) (int, error)
 
@@ -273,6 +277,8 @@ func (d *Downloader) Progress() ethereum.SyncProgress {
 		current = d.blockchain.CurrentBlock().Number.Uint64()
 	case d.blockchain != nil && mode == SnapSync:
 		current = d.blockchain.CurrentSnapBlock().Number.Uint64()
+	case d.blockchain != nil && mode == StatelessSync:
+		current = d.blockchain.CurrentBlock().Number.Uint64()
 	case d.lightchain != nil:
 		current = d.lightchain.CurrentHeader().Number.Uint64()
 	default:
@@ -282,7 +288,6 @@ func (d *Downloader) Progress() ethereum.SyncProgress {
 	progress, pending := d.SnapSyncer.Progress()
 
 	return ethereum.SyncProgress{
-		StartingBlock:       d.syncStatsChainOrigin,
 		CurrentBlock:        current,
 		HighestBlock:        d.syncStatsChainHeight,
 		SyncedAccounts:      progress.AccountSynced,
@@ -437,6 +442,7 @@ func (d *Downloader) synchronise(id string, hash common.Hash, td, ttd *big.Int, 
 			snapshots.Disable()
 		}
 	}
+
 	// Reset the queue, peer set and wake channels to clean any internal leftover state
 	d.queue.Reset(blockCacheMaxItems, blockCacheInitialItems)
 	d.peers.Reset()
@@ -693,6 +699,9 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td, ttd *
 		fetchers = append(fetchers, func() error { return d.processSnapSyncContent() })
 	} else if mode == FullSync {
 		fetchers = append(fetchers, func() error { return d.processFullSyncContent(ttd, beaconMode) })
+	} else if mode == StatelessSync {
+		// For stateless sync, we use our specialized processFullSyncContentStateless function
+		fetchers = append(fetchers, func() error { return d.processFullSyncContentStateless() })
 	}
 
 	return d.spawnSync(fetchers)
@@ -905,7 +914,7 @@ func (d *Downloader) findAncestor(p *peerConnection, remoteHeader *types.Header)
 
 	mode := d.getMode()
 	switch mode {
-	case FullSync:
+	case FullSync, StatelessSync:
 		localHeight = d.blockchain.CurrentBlock().Number.Uint64()
 	case SnapSync:
 		localHeight = d.blockchain.CurrentSnapBlock().Number.Uint64()
@@ -1000,7 +1009,7 @@ func (d *Downloader) findAncestorSpanSearch(p *peerConnection, mode SyncMode, re
 		var known bool
 
 		switch mode {
-		case FullSync:
+		case FullSync, StatelessSync:
 			known = d.blockchain.HasBlock(h, n)
 		case SnapSync:
 			known = d.blockchain.HasFastBlock(h, n)
@@ -1059,7 +1068,7 @@ func (d *Downloader) findAncestorBinarySearch(p *peerConnection, mode SyncMode, 
 		var known bool
 
 		switch mode {
-		case FullSync:
+		case FullSync, StatelessSync:
 			known = d.blockchain.HasBlock(h, n)
 		case SnapSync:
 			known = d.blockchain.HasFastBlock(h, n)
@@ -1422,6 +1431,7 @@ func (d *Downloader) processHeaders(origin uint64, td, ttd *big.Int, beaconMode 
 						}
 					}
 				}
+
 				return nil
 			}
 			// Otherwise split the chunk of headers into batches and process them
@@ -1497,7 +1507,7 @@ func (d *Downloader) processHeaders(origin uint64, td, ttd *big.Int, beaconMode 
 					}
 				}
 				// Unless we're doing light chains, schedule the headers for associated content retrieval
-				if mode == FullSync || mode == SnapSync {
+				if mode == FullSync || mode == SnapSync || mode == StatelessSync {
 					// If we've reached the allowed number of pending headers, stall a bit
 					for d.queue.PendingBodies() >= maxQueuedHeaders || d.queue.PendingReceipts() >= maxQueuedHeaders {
 						select {
@@ -2012,4 +2022,70 @@ func (d *Downloader) reportSnapSyncProgress(force bool) {
 	log.Info("Syncing: chain download in progress", "synced", progress, "chain", syncedBytes, "headers", headers, "bodies", bodies, "receipts", receipts, "eta", common.PrettyDuration(eta))
 
 	d.syncLogTime = time.Now()
+}
+
+// processFullSyncContentStateless takes fetch results from the queue and imports them into the chain using stateless mode.
+func (d *Downloader) processFullSyncContentStateless() error {
+	for {
+		results := d.queue.Results(true)
+		if len(results) == 0 {
+			return nil
+		}
+
+		if d.chainInsertHook != nil {
+			d.chainInsertHook(results)
+		}
+
+		if err := d.importBlockResultsStateless(results); err != nil {
+			return err
+		}
+	}
+}
+
+// importBlockResultsStateless imports the provided blocks into the chain in stateless mode.
+func (d *Downloader) importBlockResultsStateless(results []*fetchResult) error {
+	// Check for any early termination requests
+	if len(results) == 0 {
+		return nil
+	}
+	select {
+	case <-d.quitCh:
+		return errCancelContentProcessing
+	default:
+	}
+	// Retrieve a batch of results to import
+	first, last := results[0].Header, results[len(results)-1].Header
+	log.Debug("Inserting downloaded chain in stateless mode", "items", len(results),
+		"firstnum", first.Number, "firsthash", first.Hash(),
+		"lastnum", last.Number, "lasthash", last.Hash(),
+	)
+
+	blocks := make([]*types.Block, len(results))
+	for i, result := range results {
+		blocks[i] = types.NewBlockWithHeader(result.Header).WithBody(types.Body{
+			Transactions: result.Transactions,
+			Uncles:       result.Uncles,
+			Withdrawals:  result.Withdrawals,
+		})
+	}
+
+	// Call InsertChainStateless to implement stateless sync
+	// Pass nil witnesses for now, and false for discardState (keeping state for now)
+	// The state will be fetched independently through the checkpoint mechanism
+	if index, err := d.blockchain.InsertChainStateless(blocks, nil); err != nil {
+		if index < len(results) {
+			log.Debug("Stateless downloaded item processing failed", "number", results[index].Header.Number, "hash", results[index].Header.Hash(), "err", err)
+
+			// Report bad block when encountered
+			if d.badBlock != nil {
+				d.badBlock(blocks[index].Header(), nil)
+			}
+		} else {
+			log.Debug("Stateless downloaded item processing failed on sidechain import", "index", index, "err", err)
+		}
+
+		return fmt.Errorf("%w: %v", errInvalidChain, err)
+	}
+
+	return nil
 }

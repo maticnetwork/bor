@@ -68,6 +68,9 @@ func (b *EthAPIBackend) SetHead(number uint64) {
 func (b *EthAPIBackend) HeaderByNumber(ctx context.Context, number rpc.BlockNumber) (*types.Header, error) {
 	// Pending block is only known by the miner
 	if number == rpc.PendingBlockNumber {
+		if b.eth.miner == nil {
+			return nil, errors.New("pending block is not available")
+		}
 		block := b.eth.miner.PendingBlock()
 		if block == nil {
 			return nil, errors.New("pending block is not available")
@@ -133,6 +136,9 @@ func (b *EthAPIBackend) HeaderByHash(ctx context.Context, hash common.Hash) (*ty
 func (b *EthAPIBackend) BlockByNumber(ctx context.Context, number rpc.BlockNumber) (*types.Block, error) {
 	// Pending block is only known by the miner
 	if number == rpc.PendingBlockNumber {
+		if b.eth.miner == nil {
+			return nil, errors.New("pending block is not available")
+		}
 		block := b.eth.miner.PendingBlock()
 		if block == nil {
 			return nil, errors.New("pending block is not available")
@@ -211,12 +217,18 @@ func (b *EthAPIBackend) BlockByNumberOrHash(ctx context.Context, blockNrOrHash r
 }
 
 func (b *EthAPIBackend) Pending() (*types.Block, types.Receipts, *state.StateDB) {
+	if b.eth.miner == nil {
+		return nil, nil, nil
+	}
 	return b.eth.miner.Pending()
 }
 
 func (b *EthAPIBackend) StateAndHeaderByNumber(ctx context.Context, number rpc.BlockNumber) (*state.StateDB, *types.Header, error) {
 	// Pending state is only known by the miner
 	if number == rpc.PendingBlockNumber {
+		if b.eth.miner == nil {
+			return nil, nil, errors.New("pending state is not available")
+		}
 		block, _, state := b.eth.miner.Pending()
 		if block == nil || state == nil {
 			return nil, nil, errors.New("pending state is not available")
@@ -305,7 +317,14 @@ func (b *EthAPIBackend) SubscribeRemovedLogsEvent(ch chan<- core.RemovedLogsEven
 }
 
 func (b *EthAPIBackend) SubscribePendingLogsEvent(ch chan<- []*types.Log) event.Subscription {
-	return b.eth.miner.SubscribePendingLogs(ch)
+	if b.eth.miner != nil {
+		return b.eth.miner.SubscribePendingLogs(ch)
+	} else {
+		return event.NewSubscription(func(quit <-chan struct{}) error {
+			<-quit
+			return nil
+		})
+	}
 }
 
 func (b *EthAPIBackend) SubscribeChainEvent(ch chan<- core.ChainEvent) event.Subscription {

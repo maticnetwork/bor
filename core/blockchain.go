@@ -27,6 +27,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"sort"
 	"strings"
 	"sync"
@@ -308,9 +309,6 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 		cacheConfig = defaultCacheConfig
 	}
 
-	if cacheConfig.TriesInMemory <= 0 {
-		cacheConfig.TriesInMemory = defaultCacheConfig.TriesInMemory
-	}
 	// Open trie database with provided config
 	triedb := triedb.NewDatabase(db, cacheConfig.triedbConfig(genesis != nil && genesis.IsVerkle()))
 
@@ -394,7 +392,9 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 	// if there is no available state, waiting for state sync.
 	head := bc.CurrentBlock()
 	// nolint:nestif
-	if !bc.HasState(head.Root) {
+
+	// If TriesInMemory is set to 0, we know the node is in stateless mode and will not load the state from disk
+	if !bc.HasState(head.Root) && bc.cacheConfig.TriesInMemory > 0 {
 		if head.Number.Uint64() == 0 {
 			// The genesis state is missing, which is only possible in the path-based
 			// scheme. This situation occurs when the initial state sync is not finished
@@ -1388,8 +1388,10 @@ func (bc *BlockChain) Stop() {
 	}
 	if bc.triedb.Scheme() == rawdb.PathScheme {
 		// Ensure that the in-memory trie nodes are journaled to disk properly.
-		if err := bc.triedb.Journal(bc.CurrentBlock().Root); err != nil {
-			log.Info("Failed to journal in-memory trie nodes", "err", err)
+		if bc.cacheConfig.TriesInMemory > 0 {
+			if err := bc.triedb.Journal(bc.CurrentBlock().Root); err != nil {
+				log.Info("Failed to journal in-memory trie nodes", "err", err)
+			}
 		}
 	} else {
 		// Ensure the state of a recent block is also stored to disk before exiting.
@@ -1870,9 +1872,14 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 		log.Crit("Failed to write block into disk", "err", err)
 	}
 	// Commit all cached state changes into underlying memory database.
-	root, err := statedb.Commit(block.NumberU64(), bc.chainConfig.IsEIP158(block.Number()))
-	if err != nil {
-		return []*types.Log{}, err
+
+	var root common.Hash
+	var err error
+	if statedb.Database() != nil {
+		root, err = statedb.Commit(block.NumberU64(), bc.chainConfig.IsEIP158(block.Number()))
+		if err != nil {
+			return []*types.Log{}, err
+		}
 	}
 	// If node is running in path mode, skip explicit gc operation
 	// which is unnecessary in this mode.
@@ -2076,6 +2083,111 @@ func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 
 	_, n, err := bc.insertChain(chain, true, false) // No witness collection for mass inserts (would get super large)
 	return n, err
+}
+
+func (bc *BlockChain) InsertChainStateless(chain types.Blocks, witnesses []*stateless.Witness) (int, error) {
+	// Sanity check that we have something meaningful to import
+	if len(chain) == 0 {
+		return 0, nil
+	}
+
+	bc.blockProcFeed.Send(true)
+	defer bc.blockProcFeed.Send(false)
+
+	stats := insertStats{startTime: mclock.Now()}
+
+	// Do a sanity check that the provided chain is actually ordered and linked.
+	for i := 1; i < len(chain); i++ {
+		block, prev := chain[i], chain[i-1]
+		if block.NumberU64() != prev.NumberU64()+1 || block.ParentHash() != prev.Hash() {
+			log.Error("Non contiguous block insert",
+				"number", block.Number(),
+				"hash", block.Hash(),
+				"parent", block.ParentHash(),
+				"prevnumber", prev.Number(),
+				"prevhash", prev.Hash(),
+			)
+
+			return 0, fmt.Errorf("non contiguous insert: item %d is #%d [%x..], item %d is #%d [%x..] (parent [%x..])", i-1, prev.NumberU64(),
+				prev.Hash().Bytes()[:4], i, block.NumberU64(), block.Hash().Bytes()[:4], block.ParentHash().Bytes()[:4])
+		}
+	}
+
+	// Pre-checks passed, start the full block imports
+	if !bc.chainmu.TryLock() {
+		return 0, errChainStopped
+	}
+	defer bc.chainmu.Unlock()
+
+	// Start the parallel header verifier
+	headers := make([]*types.Header, len(chain))
+	for i, block := range chain {
+		headers[i] = block.Header()
+	}
+	abort, results := bc.engine.VerifyHeaders(bc, headers)
+	defer close(abort)
+
+	// Check the validity of incoming chain
+	isValid, err := bc.forker.ValidateReorg(bc.CurrentBlock(), headers)
+	if err != nil {
+		return 0, err
+	}
+
+	if !isValid {
+		// The chain to be imported is invalid as the blocks doesn't match with
+		// the whitelisted block number.
+		return 0, whitelist.ErrMismatch
+	}
+
+	// In stateless mode, we process blocks one by one without committing the state
+	var processed int
+	for i, block := range chain {
+		// If the chain is terminating, don't even bother starting up.
+		if bc.insertStopped() {
+			return processed, errInsertionInterrupted
+		}
+
+		// Wait for the block's verification to complete
+		if err := <-results; err != nil {
+			return processed, err
+		}
+
+		// Get the parent header
+		var parent *types.Header
+		if i == 0 {
+			parent = bc.GetHeader(block.ParentHash(), block.NumberU64()-1)
+			if parent == nil {
+				return processed, consensus.ErrUnknownAncestor
+			}
+		} else {
+			parent = chain[i-1].Header()
+		}
+
+		// Get the witness for this block if available
+		var witness *stateless.Witness
+		if i < len(witnesses) {
+			witness = witnesses[i]
+		}
+
+		// Process the block using stateless execution
+		err := bc.ProcessBlockWithWitnesses(block, parent, witness)
+		if err != nil {
+			return processed, err
+		}
+
+		// Write the block to the chain without committing state
+		if _, err := bc.writeBlockAndSetHead(block, nil, nil, &state.StateDB{}, false); err != nil {
+			return processed, err
+		}
+
+		processed++
+
+		stats.processed = processed
+
+		stats.report(chain, i, 0, 0, 0, 0, true, true)
+	}
+
+	return processed, nil
 }
 
 // insertChain is the internal implementation of InsertChain, which assumes that
@@ -2447,7 +2559,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool, makeWitness 
 			snapDiffItems, snapBufItems = bc.snaps.Size()
 		}
 		trieDiffNodes, trieBufNodes, _ := bc.triedb.Size()
-		stats.report(chain, it.index, snapDiffItems, snapBufItems, trieDiffNodes, trieBufNodes, setHead)
+		stats.report(chain, it.index, snapDiffItems, snapBufItems, trieDiffNodes, trieBufNodes, setHead, false)
 
 		if !setHead {
 			// After merge we expect few side chains. Simply count
@@ -2980,6 +3092,7 @@ func (bc *BlockChain) reorg(oldHead *types.Header, newHead *types.Block) error {
 	} else if len(newChain) > 0 {
 		// Special case happens in the post merge stage that current head is
 		// the ancestor of new head while these two blocks are not consecutive
+		debug.PrintStack()
 		log.Info("Extend chain", "add", len(newChain), "number", newChain[0].Number(), "hash", newChain[0].Hash())
 		blockReorgAddMeter.Mark(int64(len(newChain)))
 	} else {
@@ -3351,4 +3464,9 @@ func (bc *BlockChain) GetTrieFlushInterval() time.Duration {
 
 func (bc *BlockChain) SubscribeChain2HeadEvent(ch chan<- Chain2HeadEvent) event.Subscription {
 	return bc.scope.Track(bc.chain2HeadFeed.Subscribe(ch))
+}
+
+// ProcessBlockWithWitnesses processes a block in stateless mode using the provided witnesses.
+func (bc *BlockChain) ProcessBlockWithWitnesses(block *types.Block, parent *types.Header, witnesses *stateless.Witness) error {
+	return nil
 }

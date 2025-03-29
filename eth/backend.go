@@ -236,6 +236,10 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		}
 	)
 
+	if config.SyncMode == downloader.StatelessSync {
+		cacheConfig.TriesInMemory = 0
+	}
+
 	if config.VMTrace != "" {
 		var traceConfig json.RawMessage
 		if config.VMTraceJsonConfig != "" {
@@ -311,8 +315,10 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		return nil, err
 	}
 
-	eth.miner = miner.New(eth, &config.Miner, eth.blockchain.Config(), eth.EventMux(), eth.engine, eth.isLocalBlock)
-	eth.miner.SetExtra(makeExtraData(config.Miner.ExtraData))
+	if config.SyncMode != downloader.StatelessSync {
+		eth.miner = miner.New(eth, &config.Miner, eth.blockchain.Config(), eth.EventMux(), eth.engine, eth.isLocalBlock)
+		eth.miner.SetExtra(makeExtraData(config.Miner.ExtraData))
+	}
 
 	eth.APIBackend = &EthAPIBackend{stack.Config().ExtRPCEnabled(), stack.Config().AllowUnprotectedTxs, eth, nil}
 	if eth.APIBackend.allowUnprotectedTxs {
@@ -854,7 +860,9 @@ func (s *Ethereum) Stop() error {
 	close(s.closeCh)
 
 	s.txPool.Close()
-	s.miner.Close()
+	if s.miner != nil {
+		s.miner.Close()
+	}
 	s.blockchain.Stop()
 
 	// Clean shutdown marker as the last thing before closing db

@@ -660,6 +660,7 @@ func DefaultConfig() *Config {
 		StateScheme: "path",
 		Snapshot:    true,
 		BorLogs:     false,
+
 		TxPool: &TxPoolConfig{
 			Locals:       []string{},
 			NoLocals:     false,
@@ -1155,7 +1156,7 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 
 	n.RPCTxFeeCap = c.JsonRPC.TxFeeCap
 
-	// sync mode. It can either be "fast", "full" or "snap". We disable
+	// sync mode. It can either be "full", "snap" or "stateless". We disable
 	// for now the "light" mode.
 	switch c.SyncMode {
 	case "full":
@@ -1165,6 +1166,9 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 		n.SyncMode = downloader.FullSync
 
 		log.Warn("Bor doesn't support Snap Sync yet, switching to Full Sync mode")
+	case "stateless":
+		n.SyncMode = downloader.StatelessSync
+		log.Info("Using Stateless Sync mode - syncing from latest checkpoint without history")
 	default:
 		return nil, fmt.Errorf("sync mode '%s' not found", c.SyncMode)
 	}
