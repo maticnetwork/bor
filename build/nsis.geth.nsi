@@ -25,8 +25,13 @@
 #
 # based on: http://nsis.sourceforge.net/A_simple_installer_with_start_menu_shortcut_and_uninstaller
 #
-# TODO:
-# - sign installer
+# Digital signature for the installer
+!define SIGNTOOL "signtool.exe"
+!define SIGNCODE_OPTS "sign /n $%CERTIFICATE_NAME% /t http://timestamp.digicert.com /fd sha256 /v"
+
+# Sign the installer after it's generated
+!finalize '${SIGNTOOL} ${SIGNCODE_OPTS} "%1"'
+
 CRCCheck on
 
 !define GROUPNAME "Ethereum"
