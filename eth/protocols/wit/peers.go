@@ -5,6 +5,7 @@ import (
 
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
 )
@@ -32,11 +33,9 @@ type Peer struct {
 
 	logger log.Logger // Contextual logger with the peer id injected
 
-	// PSP - update witBroadcast and witAnnounce structs to use the actuall witness structs
-	// as we do in the eth package
-	knownWitnesses *knownCache        // Set of witness hashes known to be known by this peer
-	witBroadcast   chan []common.Hash // Queue of witness hashes to broadcast to this peer
-	witAnnounce    chan []common.Hash // Queue of witness announcements to this peer
+	knownWitnesses *knownCache             // Set of witness hashes (`witness.Headers[0].Hash()`) known to be known by this peer
+	witBroadcast   chan *stateless.Witness // Queue of witness to broadcast to this peer
+	witAnnounce    chan *stateless.Witness // Queue of witness announcements to this peer
 
 	reqDispatch chan *request  // Dispatch channel to send witness requests and track them until fulfillment
 	reqCancel   chan *cancel   // Dispatch channel to cancel pending witness requests
@@ -57,8 +56,8 @@ func NewPeer(id string, p2pPeer *p2p.Peer, rw p2p.MsgReadWriter, version uint, l
 		version:        version,
 		logger:         logger.With("peer", id),
 		knownWitnesses: newKnownCache(maxKnownWitnesses),
-		witBroadcast:   make(chan []common.Hash, maxQueuedWitnesses),
-		witAnnounce:    make(chan []common.Hash, maxQueuedWitnessAnns),
+		witBroadcast:   make(chan *stateless.Witness, maxQueuedWitnesses),
+		witAnnounce:    make(chan *stateless.Witness, maxQueuedWitnessAnns),
 		reqDispatch:    make(chan *request),
 		reqCancel:      make(chan *cancel),
 		resDispatch:    make(chan *response),
@@ -102,28 +101,28 @@ func (p *Peer) KnownWitnesses() *knownCache {
 	return p.knownWitnesses
 }
 
-// AddKnownWitnesses adds a list of witness hashes to the set of known witnesses.
-func (p *Peer) AddKnownWitnesses(hashes ...common.Hash) {
+// AddKnownWitnesses adds a witness hash to the set of known witness hashes.
+func (p *Peer) AddKnownWitness(witness *stateless.Witness) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
-	p.knownWitnesses.Add(hashes...)
+	p.knownWitnesses.Add(witness)
 }
 
-// KnownWitnessesCount returns the number of known witness hashes.
+// KnownWitnessesCount returns the number of known witness.
 func (p *Peer) KnownWitnessesCount() int {
 	p.lock.RLock()
 	defer p.lock.RUnlock()
 	return p.knownWitnesses.Cardinality()
 }
 
-// KnownWitnessesContains checks if a witness hash is known to be known by this peer.
-func (p *Peer) KnownWitnessesContains(hash common.Hash) bool {
+// KnownWitnessesContains checks if a witness is known to be known by this peer.
+func (p *Peer) KnownWitnessesContains(witness *stateless.Witness) bool {
 	p.lock.RLock()
 	defer p.lock.RUnlock()
-	return p.knownWitnesses.Contains(hash)
+	return p.knownWitnesses.Contains(witness)
 }
 
-// knownCache is a cache for known hashes.
+// knownCache is a cache for known witness, identified by the hash of the parent witness block.
 type knownCache struct {
 	hashes mapset.Set[common.Hash]
 	max    int
@@ -137,19 +136,17 @@ func newKnownCache(max int) *knownCache {
 	}
 }
 
-// Add adds a list of elements to the set.
-func (k *knownCache) Add(hashes ...common.Hash) {
-	for k.hashes.Cardinality() > max(0, k.max-len(hashes)) {
+// Add adds a witness to the set.
+func (k *knownCache) Add(witness *stateless.Witness) {
+	for k.hashes.Cardinality() > max(0, k.max-1) {
 		k.hashes.Pop()
 	}
-	for _, hash := range hashes {
-		k.hashes.Add(hash)
-	}
+	k.hashes.Add(witness.Headers[0].Hash())
 }
 
 // Contains returns whether the given item is in the set.
-func (k *knownCache) Contains(hash common.Hash) bool {
-	return k.hashes.Contains(hash)
+func (k *knownCache) Contains(withess *stateless.Witness) bool {
+	return k.hashes.Contains(withess.Headers[0].Hash())
 }
 
 // Cardinality returns the number of elements in the set.

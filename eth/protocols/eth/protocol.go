@@ -63,7 +63,7 @@ const (
 	PooledTransactionsMsg         = 0x0a
 	GetReceiptsMsg                = 0x0f
 	ReceiptsMsg                   = 0x10
-	MsgWitnessHashes              = 0x11
+	MsgWitness                    = 0x11
 	MsgWitnessAnnounce            = 0x12
 	MsgWitnessRequest             = 0x13
 	MsgWitnessCancel              = 0x14

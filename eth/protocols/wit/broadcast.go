@@ -3,7 +3,7 @@ package wit
 import (
 	"errors"
 
-	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/p2p"
 )
@@ -14,17 +14,17 @@ func (p *Peer) witnessPropagator() {
 
 	for {
 		select {
-		case hashes := <-p.witBroadcast:
-			if err := p.sendWitnessHashes(hashes); err != nil {
+		case witness := <-p.witBroadcast:
+			if err := p.sendWitness(witness); err != nil {
 				return
 			}
-			p.logger.Trace("propagated witness hashes", "hashes", hashes)
+			p.logger.Trace("propagated witness", "witness", witness)
 
-		case hashes := <-p.witAnnounce:
-			if err := p.announceWitnesses(hashes); err != nil {
+		case witness := <-p.witAnnounce:
+			if err := p.announceWitness(witness); err != nil {
 				return
 			}
-			p.logger.Trace("announced witness hashes", "hashes", hashes)
+			p.logger.Trace("announced witness", "witness", witness)
 
 		case <-p.term:
 			return
@@ -32,36 +32,25 @@ func (p *Peer) witnessPropagator() {
 	}
 }
 
-// sendWitnessHashes sends witness hashes to the peer
-func (p *Peer) sendWitnessHashes(hashes []common.Hash) error {
+// sendWitness sends witness to the peer
+func (p *Peer) sendWitness(witness *stateless.Witness) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
-	// Filter out known hashes
-	var newHashes []common.Hash
-	for _, hash := range hashes {
-		p.knownWitnesses.Add(hash)
-		newHashes = append(newHashes, hash)
-	}
+	p.knownWitnesses.Add(witness)
 
-	// PSP - update the data (maybe?)
-	return p2p.Send(p.rw, eth.MsgWitnessHashes, newHashes)
+	return p2p.Send(p.rw, eth.MsgWitness, witness)
 }
 
-// announceWitnesses announces witness hashes to the peer
-func (p *Peer) announceWitnesses(hashes []common.Hash) error {
+// announceWitness announces witness to the peer
+func (p *Peer) announceWitness(witness *stateless.Witness) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
-	// Announce only new hashes
-	var newHashes []common.Hash
-	for _, hash := range hashes {
-		p.knownWitnesses.Add(hash)
-		newHashes = append(newHashes, hash)
-	}
+	// Announce only new witness
+	p.knownWitnesses.Add(witness)
 
-	// PSP - update the data
-	return p2p.Send(p.rw, eth.MsgWitnessAnnounce, newHashes)
+	return p2p.Send(p.rw, eth.MsgWitnessAnnounce, witness)
 }
 
 // requestHandler handles request dispatching and response processing
