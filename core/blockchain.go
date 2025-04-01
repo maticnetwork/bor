@@ -892,7 +892,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 		validateAndMeasureStateless(bc, block, &resultWithSingleBlockWitness)
 	}
 	if resultWithAccumBlockWitness.usedGas > 0 {
-		log.Info("########## Initiate Accum Block Stateless Validation")
+		log.Info("########## Initiate Accum Block Stateless Validation", "blockCount", resultWithAccumBlockWitness.witnessReport.blockCount)
 		validateAndMeasureStateless(bc, block, &resultWithAccumBlockWitness)
 	}
 	if resultWithoutWitness.usedGas > 0 {
