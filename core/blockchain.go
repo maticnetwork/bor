@@ -759,7 +759,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 
 			report := WitnessReport{
 				witness:                           witness.Copy(),
-				statefulProcessTimeWithWitnessGen: time.Until(pstart),
+				statefulProcessTimeWithWitnessGen: time.Since(pstart),
 				blockCount:                        1,
 			}
 			resultWithSingleBlockWitnessChan <- Result{res.Receipts, res.Logs, res.GasUsed, err, statedb, blockExecutionSerialCounter, false, &report}
@@ -807,7 +807,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 			}
 
 			bc.accumWitnessReport.witness = bc.accumWitnessReport.witness.Copy()
-			bc.accumWitnessReport.statefulProcessTimeWithWitnessGen = time.Until(pstart)
+			bc.accumWitnessReport.statefulProcessTimeWithWitnessGen = time.Since(pstart)
 			bc.accumWitnessReport.blockCount = bc.accumWitnessReport.blockCount + 1
 
 			// calculate the size to check if its bigger than 30 Mb if so, reset
@@ -856,7 +856,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 			}
 
 			report := WitnessReport{
-				statefulProcessTimeWithoutWitnessGen: time.Until(pstart),
+				statefulProcessTimeWithoutWitnessGen: time.Since(pstart),
 			}
 			resultWithoutWitnessChan <- Result{res.Receipts, res.Logs, res.GasUsed, err, statedb, blockExecutionSerialCounter, false, &report}
 		}()
@@ -888,9 +888,11 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 	// }
 
 	if resultWithSingleBlockWitness.usedGas > 0 {
+		log.Info("########## Initiate Single Block Stateless Validation")
 		validateAndMeasureStateless(bc, block, &resultWithSingleBlockWitness)
 	}
 	if resultWithAccumBlockWitness.usedGas > 0 {
+		log.Info("########## Initiate Accum Block Stateless Validation")
 		validateAndMeasureStateless(bc, block, &resultWithAccumBlockWitness)
 	}
 	if resultWithoutWitness.usedGas > 0 {
@@ -941,7 +943,7 @@ func validateAndMeasureStateless(bc *BlockChain, block *types.Block, result *Res
 		log.Info("Successfully self validated the block", "block", block.Number(), "hash", block.Hash())
 	}
 
-	result.witnessReport.statelessProcessTime = time.Until(statelessValidationStart)
+	result.witnessReport.statelessProcessTime = time.Since(statelessValidationStart)
 }
 
 // empty returns an indicator whether the blockchain is empty.
