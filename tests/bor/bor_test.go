@@ -392,14 +392,14 @@ func TestInsertingSpanSizeBlocks(t *testing.T) {
 
 	h.EXPECT().FetchCheckpoint(gomock.Any(), int64(-1)).Return(&checkpoint.Checkpoint{
 		Proposer:   currentSpan.SelectedProducers[0].Address,
-		StartBlock: big.NewInt(0),
-		EndBlock:   big.NewInt(int64(spanSize)),
+		StartBlock: 0,
+		EndBlock:   spanSize,
 	}, nil).AnyTimes()
 
 	h.EXPECT().FetchMilestone(gomock.Any()).Return(&milestone.Milestone{
 		Proposer:   currentSpan.SelectedProducers[0].Address,
-		StartBlock: big.NewInt(0),
-		EndBlock:   big.NewInt(int64(spanSize)),
+		StartBlock: 0,
+		EndBlock:   spanSize,
 	}, nil).AnyTimes()
 
 	_bor.SetHeimdallClient(h)
@@ -473,7 +473,7 @@ func TestFetchStateSyncEvents(t *testing.T) {
 	h := mocks.NewMockIHeimdallClient(ctrl)
 	h.EXPECT().Close().AnyTimes()
 
-	h.EXPECT().Span(gomock.Any(), uint64(1)).Return(&res.Result, nil).AnyTimes()
+	h.EXPECT().GetSpan(gomock.Any(), uint64(1)).Return(&res.Result, nil).AnyTimes()
 
 	h.EXPECT().FetchCheckpoint(gomock.Any(), int64(-1)).Return(&checkpoint.Checkpoint{}, nil).AnyTimes()
 
@@ -532,7 +532,7 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 	h := mocks.NewMockIHeimdallClient(ctrl)
 	h.EXPECT().Close().AnyTimes()
 
-	h.EXPECT().Span(gomock.Any(), uint64(1)).Return(&res.Result, nil).AnyTimes()
+	h.EXPECT().GetSpan(gomock.Any(), uint64(1)).Return(&res.Result, nil).AnyTimes()
 
 	h.EXPECT().FetchCheckpoint(gomock.Any(), int64(-1)).Return(&checkpoint.Checkpoint{}, nil).AnyTimes()
 

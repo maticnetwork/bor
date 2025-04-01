@@ -2,44 +2,72 @@ package heimdallgrpc
 
 import (
 	"context"
+	"time"
 
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/consensus/bor/heimdall"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
 	"github.com/ethereum/go-ethereum/log"
-
-	protoutils "github.com/maticnetwork/polyproto/utils"
 )
 
 func (h *HeimdallGRPCClient) FetchMilestoneCount(ctx context.Context) (int64, error) {
 	log.Info("Fetching milestone count")
 
-	res, err := h.client.FetchMilestoneCount(ctx, nil)
+	var err error
+
+	// Start the timer and set the request type on the context.
+	start := time.Now()
+	ctx = heimdall.WithRequestType(ctx, heimdall.MilestoneCountRequest)
+
+	// Defer the metrics call.
+	defer func() {
+		heimdall.SendMetrics(ctx, start, err == nil)
+	}()
+
+	res, err := h.milestoneQueryClient.GetMilestoneCount(ctx, nil)
 	if err != nil {
 		return 0, err
 	}
 
-	log.Info("Fetched milestone count")
+	count := int64(res.GetCount())
 
-	return res.Result.Count, nil
+	log.Info("Fetched milestone count", "count", count)
+
+	return count, nil
 }
 
 func (h *HeimdallGRPCClient) FetchMilestone(ctx context.Context) (*milestone.Milestone, error) {
-	log.Info("Fetching milestone")
+	log.Debug("Fetching milestone")
 
-	res, err := h.client.FetchMilestone(ctx, nil)
+	var err error
+
+	// Start the timer and set the request type on the context.
+	start := time.Now()
+	ctx = heimdall.WithRequestType(ctx, heimdall.StateSyncRequest)
+
+	// Defer the metrics call.
+	defer func() {
+		heimdall.SendMetrics(ctx, start, err == nil)
+	}()
+
+	res, err := h.milestoneQueryClient.GetLatestMilestone(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	log.Info("Fetched milestone")
+	fetchedMilestone := res.GetMilestone()
 
 	milestone := &milestone.Milestone{
-		StartBlock: res.Result.StartBlock,
-		EndBlock:   res.Result.EndBlock,
-		Hash:       protoutils.ConvertH256ToHash(res.Result.RootHash),
-		Proposer:   protoutils.ConvertH160toAddress(res.Result.Proposer),
-		BorChainID: res.Result.BorChainID,
-		Timestamp:  uint64(res.Result.Timestamp.GetSeconds()),
+		Proposer:    common.HexToAddress(fetchedMilestone.Proposer),
+		StartBlock:  fetchedMilestone.StartBlock,
+		EndBlock:    fetchedMilestone.EndBlock,
+		Hash:        common.BytesToHash(fetchedMilestone.Hash),
+		BorChainID:  fetchedMilestone.BorChainId,
+		MilestoneID: fetchedMilestone.MilestoneId,
+		Timestamp:   fetchedMilestone.Timestamp,
 	}
+
+	log.Debug("Fetched milestone")
 
 	return milestone, nil
 }
