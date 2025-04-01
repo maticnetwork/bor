@@ -24,6 +24,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -776,18 +777,21 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 		processorCount++
 
 		go func() {
+			witness, err := stateless.NewWitness(block.Header(), bc)
+			if err != nil {
+				log.Error("error in witness generation", "caughterr", err)
+			}
 			if bc.accumWitnessReport == nil || bc.accumWitnessReport.witness == nil {
-				witness, err := stateless.NewWitness(block.Header(), bc)
-				if err != nil {
-					log.Error("error in witness generation", "caughterr", err)
-				}
 				bc.accumWitnessReport = &WitnessReport{
-					witness:    witness,
 					blockCount: 1,
 				}
+			} else {
+				// Just copy code and state, generate new headers each time
+				witness.Codes = maps.Clone(bc.accumWitnessReport.witness.Codes)
+				witness.State = maps.Clone(bc.accumWitnessReport.witness.State)
 			}
 
-			statedb.StartPrefetcher("chain", bc.accumWitnessReport.witness)
+			statedb.StartPrefetcher("chain", witness)
 			pstart := time.Now()
 
 			res, err := bc.processorWithAccumBlockWitness.Process(block, statedb, bc.vmConfig, nil, ctx)
@@ -806,7 +810,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 				res = &ProcessResult{}
 			}
 
-			bc.accumWitnessReport.witness = bc.accumWitnessReport.witness.Copy()
+			bc.accumWitnessReport.witness = witness.Copy()
 			bc.accumWitnessReport.statefulProcessTimeWithWitnessGen = time.Since(pstart)
 			bc.accumWitnessReport.blockCount = bc.accumWitnessReport.blockCount + 1
 
