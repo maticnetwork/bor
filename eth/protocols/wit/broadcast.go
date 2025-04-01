@@ -97,5 +97,8 @@ func (p *Peer) processResponse(res *response) error {
 		return errors.New("response is nil")
 	}
 
+	p.knownWitnesses.Add(res.Res.Data.(*stateless.Witness))
+	p.logger.Info("added witness to known witnesses", "witness", res.Res.Data)
+
 	return nil
 }
