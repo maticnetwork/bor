@@ -392,14 +392,14 @@ func TestInsertingSpanSizeBlocks(t *testing.T) {
 
 	h.EXPECT().FetchCheckpoint(gomock.Any(), int64(-1)).Return(&checkpoint.Checkpoint{
 		Proposer:   currentSpan.SelectedProducers[0].Address,
-		StartBlock: big.NewInt(0),
-		EndBlock:   big.NewInt(int64(spanSize)),
+		StartBlock: 0,
+		EndBlock:   spanSize,
 	}, nil).AnyTimes()
 
 	h.EXPECT().FetchMilestone(gomock.Any()).Return(&milestone.Milestone{
 		Proposer:   currentSpan.SelectedProducers[0].Address,
-		StartBlock: big.NewInt(0),
-		EndBlock:   big.NewInt(int64(spanSize)),
+		StartBlock: 0,
+		EndBlock:   spanSize,
 	}, nil).AnyTimes()
 
 	_bor.SetHeimdallClient(h)
