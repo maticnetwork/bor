@@ -221,9 +221,3 @@ func (c *Command) handleSignals() int {
 func (c *Command) GetConfig() *Config {
 	return c.cliConfig
 }
-
-//nolint:unused
-func (c *Command) getHeimdallArgs() []string {
-	heimdallArgs := strings.Split(c.config.Heimdall.RunHeimdallArgs, ",")
-	return append([]string{"start"}, heimdallArgs...)
-}

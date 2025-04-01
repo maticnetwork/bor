@@ -31,7 +31,7 @@ func WithRequestType(ctx context.Context, reqType requestType) context.Context {
 	return context.WithValue(ctx, requestTypeKey{}, reqType)
 }
 
-func GetRequestType(ctx context.Context) (requestType, bool) {
+func getRequestType(ctx context.Context) (requestType, bool) {
 	reqType, ok := ctx.Value(requestTypeKey{}).(requestType)
 	return reqType, ok
 }
@@ -91,7 +91,7 @@ var (
 )
 
 func SendMetrics(ctx context.Context, start time.Time, isSuccessful bool) {
-	reqType, ok := GetRequestType(ctx)
+	reqType, ok := getRequestType(ctx)
 	if !ok {
 		return
 	}

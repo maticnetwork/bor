@@ -55,16 +55,16 @@ func (h *HeimdallGRPCClient) FetchMilestone(ctx context.Context) (*milestone.Mil
 		return nil, err
 	}
 
-	resMilestone := res.GetMilestone()
+	fetchedMilestone := res.GetMilestone()
 
 	milestone := &milestone.Milestone{
-		Proposer:    common.HexToAddress(resMilestone.Proposer),
-		StartBlock:  resMilestone.StartBlock,
-		EndBlock:    resMilestone.EndBlock,
-		Hash:        common.BytesToHash(resMilestone.Hash),
-		BorChainID:  resMilestone.BorChainId,
-		MilestoneID: resMilestone.MilestoneId,
-		Timestamp:   resMilestone.Timestamp,
+		Proposer:    common.HexToAddress(fetchedMilestone.Proposer),
+		StartBlock:  fetchedMilestone.StartBlock,
+		EndBlock:    fetchedMilestone.EndBlock,
+		Hash:        common.BytesToHash(fetchedMilestone.Hash),
+		BorChainID:  fetchedMilestone.BorChainId,
+		MilestoneID: fetchedMilestone.MilestoneId,
+		Timestamp:   fetchedMilestone.Timestamp,
 	}
 
 	log.Debug("Fetched milestone")

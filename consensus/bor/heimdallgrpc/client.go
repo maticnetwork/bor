@@ -8,13 +8,14 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 
+	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
+
 	"github.com/ethereum/go-ethereum/log"
 
 	borTypes "github.com/0xPolygon/heimdall-v2/x/bor/types"
 	checkpointTypes "github.com/0xPolygon/heimdall-v2/x/checkpoint/types"
 	clerkTypes "github.com/0xPolygon/heimdall-v2/x/clerk/types"
 	milestoneTypes "github.com/0xPolygon/heimdall-v2/x/milestone/types"
-	grpc_retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 )
 
 const (
@@ -32,15 +33,15 @@ type HeimdallGRPCClient struct {
 func NewHeimdallGRPCClient(address string) *HeimdallGRPCClient {
 	address = removePrefix(address)
 
-	opts := []grpc_retry.CallOption{
-		grpc_retry.WithMax(10000),
-		grpc_retry.WithBackoff(grpc_retry.BackoffLinear(5 * time.Second)),
-		grpc_retry.WithCodes(codes.Internal, codes.Unavailable, codes.Aborted, codes.NotFound),
+	opts := []grpcRetry.CallOption{
+		grpcRetry.WithMax(10000),
+		grpcRetry.WithBackoff(grpcRetry.BackoffLinear(5 * time.Second)),
+		grpcRetry.WithCodes(codes.Internal, codes.Unavailable, codes.Aborted, codes.NotFound),
 	}
 
 	conn, err := grpc.NewClient(address,
-		grpc.WithStreamInterceptor(grpc_retry.StreamClientInterceptor(opts...)),
-		grpc.WithUnaryInterceptor(grpc_retry.UnaryClientInterceptor(opts...)),
+		grpc.WithStreamInterceptor(grpcRetry.StreamClientInterceptor(opts...)),
+		grpc.WithUnaryInterceptor(grpcRetry.UnaryClientInterceptor(opts...)),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {

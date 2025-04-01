@@ -508,9 +508,3 @@ func unlockAccounts(ctx *cli.Context, stack *node.Node) {
 		unlockAccount(ks, account, i, passwords)
 	}
 }
-
-//nolint:unused
-func getHeimdallArgs(ctx *cli.Context) []string {
-	heimdallArgs := strings.Split(ctx.String(utils.RunHeimdallArgsFlag.Name), ",")
-	return append([]string{"start"}, heimdallArgs...)
-}
