@@ -13,10 +13,23 @@ import (
 	log "github.com/ethereum/go-ethereum/log"
 )
 
-var IsHeimdallV2, firstSuccessfulCheckPassed bool
+var IsHeimdallV2, IsHFApproaching, firstSuccessfulCheckPassed bool
 
 func StartHeimdallMigrationMonitor(heimdallUrl string) {
+	parsedURL, err := url.Parse(heimdallUrl)
+	if err != nil {
+		panic(fmt.Errorf("error parsing heimdallUrl: %w", err))
+	}
+
+	// TODO: Do we need special configuration for this port?
+	host, port, splitErr := net.SplitHostPort(parsedURL.Host)
+	if splitErr == nil && port != "" {
+		parsedURL.Host = net.JoinHostPort(host, "26657")
+	}
+	heimdallUrl = parsedURL.String()
+
 	go heimdallMigrationMonitor(heimdallUrl)
+	go heimdallHaltHeightMonitor(heimdallUrl)
 }
 
 func WaitFirstSuccessfulCheck() {
@@ -29,18 +42,41 @@ func WaitFirstSuccessfulCheck() {
 	}
 }
 
-func heimdallMigrationMonitor(heimdallUrl string) {
-	parsedURL, err := url.Parse(heimdallUrl)
-	if err != nil {
-		panic(fmt.Errorf("error parsing heimdallUrl: %w", err))
-	}
+func heimdallHaltHeightMonitor(heimdallUrl string) {
+	for {
+		resp, err := http.Get(fmt.Sprintf("%s/chainmanager/halt-height", heimdallUrl))
+		if err != nil {
+			// TODO: Better to not log error because after heimdallv2 runs the endpoint exist
+			continue
+		}
 
-	// TODO: Do we need special configuration for this port?
-	host, port, splitErr := net.SplitHostPort(parsedURL.Host)
-	if splitErr == nil && port != "" {
-		parsedURL.Host = net.JoinHostPort(host, "26657")
+		var haltHeightResponse struct {
+			Height string `json:"height"`
+			Result int    `json:"result"`
+		}
+
+		err = json.NewDecoder(resp.Body).Decode(&haltHeightResponse)
+		resp.Body.Close()
+		if err != nil {
+			log.Error("Error decoding response", "err", err)
+			continue
+		}
+
+		currentHeight, err := strconv.ParseInt(haltHeightResponse.Height, 10, 32)
+		if err != nil {
+			log.Error("Error parsing halt height", "err", err)
+			continue
+		}
+
+		if haltHeightResponse.Result > int(currentHeight) && haltHeightResponse.Result-int(currentHeight) < 100 {
+			IsHFApproaching = true
+		} else {
+			IsHFApproaching = false
+		}
 	}
-	heimdallUrl = parsedURL.String()
+}
+
+func heimdallMigrationMonitor(heimdallUrl string) {
 
 	isFirstCheck := true
 	for {
@@ -83,6 +119,7 @@ func heimdallMigrationMonitor(heimdallUrl string) {
 			continue
 		}
 
+		// TODO: We are not interested just in the version but if also the network is building blocks
 		// Set flag to true if version is 0.38.x or above
 		if minor >= 38 {
 			IsHeimdallV2 = true

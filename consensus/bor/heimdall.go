@@ -16,6 +16,8 @@ type IHeimdallClient interface {
 	StateSyncEventsV2(ctx context.Context, fromID uint64, to int64) ([]*clerk.EventRecordWithTime, error)
 	GetSpanV1(ctx context.Context, spanID uint64) (*span.HeimdallSpan, error)
 	GetSpanV2(ctx context.Context, spanID uint64) (*types.Span, error)
+	GetLatestSpanV1(ctx context.Context) (*span.HeimdallSpan, error)
+	GetLatestSpanV2(ctx context.Context) (*types.Span, error)
 	FetchCheckpointV1(ctx context.Context, number int64) (*checkpoint.CheckpointV1, error)
 	FetchCheckpointV2(ctx context.Context, number int64) (*checkpoint.CheckpointV2, error)
 	FetchCheckpointCount(ctx context.Context) (int64, error)

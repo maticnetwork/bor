@@ -96,6 +96,7 @@ const (
 	fetchMilestoneCountV2 = "/milestone/count"
 
 	fetchSpanFormat = "bor/span/%d"
+	fetchLatestSpan = "bor/span/latest-span"
 )
 
 // StateSyncEventsV1 fetches the state sync events from heimdall
@@ -221,6 +222,36 @@ func (h *HeimdallClient) GetSpanV2(ctx context.Context, spanID uint64) (*types.S
 		return nil, err
 	}
 	return response.Span, nil
+}
+
+func (h *HeimdallClient) GetLatestSpanV1(ctx context.Context) (*span.HeimdallSpan, error) {
+	url, err := latestSpanUrl(h.urlString)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx = withRequestType(ctx, spanRequest)
+	request := &Request{client: h.client, url: url, start: time.Now()}
+	response, err := Fetch[SpanResponseV1](ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	return &response.Result, nil
+}
+
+func (h *HeimdallClient) GetLatestSpanV2(ctx context.Context) (*types.Span, error) {
+	url, err := latestSpanUrl(h.urlString)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx = withRequestType(ctx, spanRequest)
+	request := &Request{client: h.client, url: url, start: time.Now()}
+	response, err := Fetch[types.QueryLatestSpanResponse](ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	return &response.Span, nil
 }
 
 // FetchCheckpointV1 fetches the checkpoint from heimdall
@@ -495,6 +526,10 @@ func Fetch[T any](ctx context.Context, request *Request) (*T, error) {
 
 func spanURL(urlString string, spanID uint64) (*url.URL, error) {
 	return makeURL(urlString, fmt.Sprintf(fetchSpanFormat, spanID), "")
+}
+
+func latestSpanUrl(urlString string) (*url.URL, error) {
+	return makeURL(urlString, fetchLatestSpan, "")
 }
 
 func stateSyncURLV1(urlString string, fromID uint64, to int64) (*url.URL, error) {

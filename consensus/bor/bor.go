@@ -22,6 +22,7 @@ import (
 	stakeTypes "github.com/0xPolygon/heimdall-v2/x/stake/types"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	balance_tracing "github.com/ethereum/go-ethereum/core/tracing"
 	hmm "github.com/ethereum/go-ethereum/heimdall-migration-monitor"
 
@@ -1117,6 +1118,10 @@ func (c *Bor) checkAndCommitSpan(
 	header *types.Header,
 	chain core.ChainContext,
 ) error {
+	if !hmm.IsHeimdallV2 && hmm.IsHFApproaching {
+		c.saveLatestHeimdallSpan()
+	}
+
 	var ctx = context.Background()
 	headerNumber := header.Number.Uint64()
 
@@ -1130,6 +1135,65 @@ func (c *Bor) checkAndCommitSpan(
 	}
 
 	return nil
+}
+
+func (c *Bor) getLatestHeimdallSpan() (*span.HeimdallSpan, error) {
+	storedSpanBytes, err := c.db.Get(rawdb.LastHeimdallSpanKey)
+	if err != nil {
+		log.Error("Error while fetching last heimdallv1 span from db", "error", err)
+		return nil, err
+	}
+
+	if len(storedSpanBytes) == 0 {
+		return nil, errors.New("no heimdall span found in db")
+	}
+
+	var storedSpan span.HeimdallSpan
+	if err := json.Unmarshal(storedSpanBytes, &storedSpan); err != nil {
+		log.Error("Error while unmarshalling heimdallv1 span", "error", err)
+		return nil, err
+	}
+
+	return &storedSpan, nil
+}
+
+func (c *Bor) saveLatestHeimdallSpan() {
+	if c.HeimdallClient == nil {
+		log.Info("saveLatestHeimdallSpan - heimdall client is nil")
+		return
+	}
+
+	ctxWithTimeout, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	respSpan, err := c.HeimdallClient.GetLatestSpanV1(ctxWithTimeout)
+	if err != nil {
+		log.Error("Error while fetching latest heimdallv1 span", "error", err)
+		return
+	}
+
+	storedSpan, err := c.getLatestHeimdallSpan()
+	if err != nil {
+		log.Error("Error while fetching last heimdallv1 span from db", "error", err)
+		return
+	}
+
+	if respSpan.ID <= storedSpan.ID {
+		log.Info("Latest heimdallv1 span is not updated", "storedSpanID", storedSpan.ID, "respSpanID", respSpan.ID)
+		return
+	}
+
+	respSpanBytes, err := json.Marshal(respSpan)
+	if err != nil {
+		log.Error("Error while marshalling heimdallv1 span", "error", err)
+		return
+	}
+
+	if err := c.db.Put(rawdb.LastHeimdallSpanKey, respSpanBytes); err != nil {
+		log.Error("Error while saving heimdallv1 span to db", "error", err)
+		return
+	}
+
+	log.Info("Latest heimdallv1 span is updated", "storedSpanID", storedSpan.ID, "respSpanID", respSpan.ID)
 }
 
 func (c *Bor) needToCommitSpan(currentSpan *span.Span, headerNumber uint64) bool {
@@ -1220,7 +1284,17 @@ func (c *Bor) FetchAndCommitSpan(
 		} else {
 			response, err := c.HeimdallClient.GetSpanV1(ctx, newSpanID)
 			if err != nil {
-				return err
+				if hmm.IsHFApproaching {
+					if response, err = c.getLatestHeimdallSpan(); err != nil {
+						return err
+					}
+					response.ID = newSpanID
+					// TODO: Is this correct?
+					response.StartBlock = header.Number.Uint64() + c.config.CalculateSprint(header.Number.Uint64()) + 1
+					response.EndBlock = response.StartBlock + (response.EndBlock - response.StartBlock)
+				} else {
+					return err
+				}
 			}
 
 			minSpan = span.Span{

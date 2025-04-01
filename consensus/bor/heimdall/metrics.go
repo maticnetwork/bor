@@ -20,6 +20,7 @@ type (
 const (
 	stateSyncRequest          requestType = "state-sync"
 	spanRequest               requestType = "span"
+	latestSpanRequest         requestType = "latest-span"
 	checkpointRequest         requestType = "checkpoint"
 	checkpointCountRequest    requestType = "checkpoint-count"
 	milestoneRequest          requestType = "milestone"
@@ -53,6 +54,13 @@ var (
 				false: metrics.NewRegisteredMeter("client/requests/span/invalid", nil),
 			},
 			timer: metrics.NewRegisteredTimer("client/requests/span/duration", nil),
+		},
+		latestSpanRequest: {
+			request: map[bool]metrics.Meter{
+				true:  metrics.NewRegisteredMeter("client/requests/latestspan/valid", nil),
+				false: metrics.NewRegisteredMeter("client/requests/latestspan/invalid", nil),
+			},
+			timer: metrics.NewRegisteredTimer("client/requests/latestspan/duration", nil),
 		},
 		checkpointRequest: {
 			request: map[bool]metrics.Meter{
