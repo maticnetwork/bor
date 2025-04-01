@@ -281,10 +281,16 @@ type BlockChain struct {
 	stopping      atomic.Bool   // false if chain is running, true when stopped
 	procInterrupt atomic.Bool   // interrupt signaler for block processing
 
-	engine                       consensus.Engine
-	validator                    Validator // Block and state validator interface
-	prefetcher                   Prefetcher
-	processor                    Processor // Block transaction processor interface
+	engine     consensus.Engine
+	validator  Validator // Block and state validator interface
+	prefetcher Prefetcher
+
+	// witness processor to evaluate
+	processorWithSingleBlockWitness Processor // Block transaction processor interface
+	processorWithAccumBlockWitness  Processor // Block transaction processor interface
+	processorWithoutWitness         Processor // Block transaction processor interface
+	accumWitnessReport              *WitnessReport
+
 	parallelProcessor            Processor // Parallel block transaction processor interface
 	parallelSpeculativeProcesses int       // Number of parallel speculative processes
 	enforceParallelProcessor     bool
@@ -365,7 +371,9 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 	bc.statedb = state.NewDatabase(bc.triedb, nil)
 	bc.validator = NewBlockValidator(chainConfig, bc)
 	bc.prefetcher = newStatePrefetcher(chainConfig, bc.hc)
-	bc.processor = NewStateProcessor(chainConfig, bc.hc)
+	bc.processorWithSingleBlockWitness = NewStateProcessor(chainConfig, bc.hc)
+	bc.processorWithAccumBlockWitness = NewStateProcessor(chainConfig, bc.hc)
+	bc.processorWithoutWitness = NewStateProcessor(chainConfig, bc.hc)
 
 	bc.genesisBlock = bc.GetBlockByNumber(0)
 	if bc.genesisBlock == nil {
@@ -579,7 +587,75 @@ func NewParallelBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis 
 	return bc, nil
 }
 
-func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ types.Receipts, _ []*types.Log, _ uint64, _ *state.StateDB, vtime time.Duration, witnessLen int, blockEndErr error) {
+type WitnessReport struct {
+	witness *stateless.Witness
+
+	statelessProcessTime                 time.Duration // time to process + validate using this witness
+	statefulProcessTimeWithoutWitnessGen time.Duration // time to stateful process + validate this block without generating witness
+	statefulProcessTimeWithWitnessGen    time.Duration // time to stateful process + validate this block with witness
+	witnessRlpEncodedTotalLen            int
+	witnessRlpEncodedHeadersLen          int
+	witnessRlpEncodedCodeLen             int
+	witnessRlpEncodedStateLen            int
+	blockCount                           int // for accumBlockWitness
+}
+
+type Result struct {
+	receipts      types.Receipts
+	logs          []*types.Log
+	usedGas       uint64
+	err           error
+	statedb       *state.StateDB
+	counter       metrics.Counter
+	parallel      bool
+	witnessReport *WitnessReport
+}
+
+// This function just validate if encoding and decoding are properly working to use on validate
+func encodeAndDecodeToACopy(witness *stateless.Witness) (result *stateless.Witness, rlpEncodedTotalSize int, rlpEncodedHeadersSize int, rlpEncodedCodeSize int, rlpEncodedStateSize int) {
+	var buf bytes.Buffer
+	if err := witness.EncodeRLP(&buf); err != nil {
+		log.Error("error in witness encoding", "caughterr", err)
+	}
+	witnessRlpEncoded := buf.Bytes()
+
+	var decodedWitness stateless.Witness
+	stream := rlp.NewStream(bytes.NewReader(witnessRlpEncoded), 0)
+	if err := decodedWitness.DecodeRLP(stream); err != nil {
+		log.Error("Failed to decode witness", "caughtErr", err)
+	}
+
+	justWitnessHeaders := witness.Copy()
+	justWitnessHeaders.Codes = map[string]struct{}{}
+	justWitnessHeaders.State = map[string]struct{}{}
+	var bufHeaders bytes.Buffer
+	if err := justWitnessHeaders.EncodeRLP(&bufHeaders); err != nil {
+		log.Error("error in witness encoding", "caughterr", err)
+	}
+	witnessHeadersRlpEncoded := bufHeaders.Bytes()
+
+	justWitnessCode := witness.Copy()
+	justWitnessCode.Headers = []*types.Header{}
+	justWitnessCode.State = map[string]struct{}{}
+	var bufCode bytes.Buffer
+	if err := justWitnessCode.EncodeRLP(&bufCode); err != nil {
+		log.Error("error in witness encoding", "caughterr", err)
+	}
+	witnessCodeRlpEncoded := bufCode.Bytes()
+
+	justWitnessState := witness.Copy()
+	justWitnessState.Headers = []*types.Header{}
+	justWitnessState.Codes = map[string]struct{}{}
+	var bufState bytes.Buffer
+	if err := justWitnessState.EncodeRLP(&bufState); err != nil {
+		log.Error("error in witness encoding", "caughterr", err)
+	}
+	witnessStateRlpEncoded := bufState.Bytes()
+
+	return &decodedWitness, len(witnessRlpEncoded), len(witnessHeadersRlpEncoded), len(witnessCodeRlpEncoded), len(witnessStateRlpEncoded)
+}
+
+func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ types.Receipts, _ []*types.Log, _ uint64, _ *state.StateDB, vtime time.Duration, singleBlockWitnessResult *WitnessReport, accumBlockWitnessResult *WitnessReport, blockEndErr error) {
 	// Process the block using processor and parallelProcessor at the same time, take the one which finishes first, cancel the other, and return the result
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -600,31 +676,21 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 		}()
 	}
 
-	type Result struct {
-		receipts             types.Receipts
-		logs                 []*types.Log
-		usedGas              uint64
-		err                  error
-		statedb              *state.StateDB
-		counter              metrics.Counter
-		parallel             bool
-		witnessRlpEncodedLen int
-		witnessRlpEncoded    []byte
-	}
-
-	var resultChanLen int = 2
-	if bc.enforceParallelProcessor {
-		log.Debug("Processing block using Block STM only", "number", block.NumberU64())
-		resultChanLen = 1
-	}
-	resultChan := make(chan Result, resultChanLen)
+	// var resultChanLen int = 2
+	// if bc.enforceParallelProcessor {
+	// 	log.Debug("Processing block using Block STM only", "number", block.NumberU64())
+	// 	resultChanLen = 1
+	// }
+	resultWithSingleBlockWitnessChan := make(chan Result, 1)
+	resultWithAccumBlockWitnessChan := make(chan Result, 1)
+	resultWithoutWitnessChan := make(chan Result, 1)
 
 	processorCount := 0
 
 	if bc.parallelProcessor != nil {
 		parallelStatedb, err := state.New(parent.Root, bc.statedb)
 		if err != nil {
-			return nil, nil, 0, nil, 0, 0, err
+			return nil, nil, 0, nil, 0, nil, nil, err
 		}
 		parallelStatedb.SetLogger(bc.logger)
 
@@ -645,12 +711,6 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 			}
 			blockExecutionParallelTimer.UpdateSince(pstart)
 
-			var buf bytes.Buffer
-			if err := witness.EncodeRLP(&buf); err != nil {
-				log.Error("error in witness encoding", "caughterr", err)
-			}
-			witnessRlpEncoded := buf.Bytes()
-
 			if err == nil {
 				vstart := time.Now()
 				err = bc.validator.ValidateState(block, parallelStatedb, res, false)
@@ -659,14 +719,14 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 			if res == nil {
 				res = &ProcessResult{}
 			}
-			resultChan <- Result{res.Receipts, res.Logs, res.GasUsed, err, parallelStatedb, blockExecutionParallelCounter, true, len(witnessRlpEncoded), witnessRlpEncoded}
+			resultWithSingleBlockWitnessChan <- Result{res.Receipts, res.Logs, res.GasUsed, err, parallelStatedb, blockExecutionParallelCounter, true, nil}
 		}()
 	}
 
-	if bc.processor != nil && !bc.enforceParallelProcessor {
+	if resultWithSingleBlockWitnessChan != nil {
 		statedb, err := state.New(parent.Root, bc.statedb)
 		if err != nil {
-			return nil, nil, 0, nil, 0, 0, err
+			return nil, nil, 0, nil, 0, nil, nil, err
 		}
 		statedb.SetLogger(bc.logger)
 
@@ -681,18 +741,12 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 			statedb.StartPrefetcher("chain", witness)
 			pstart := time.Now()
 
-			res, err := bc.processor.Process(block, statedb, bc.vmConfig, nil, ctx)
+			res, err := bc.processorWithSingleBlockWitness.Process(block, statedb, bc.vmConfig, nil, ctx)
 			if err != nil {
 				log.Error("error processing with witness", "caughterr", err)
 			}
 
 			blockExecutionSerialTimer.UpdateSince(pstart)
-
-			var buf bytes.Buffer
-			if err := witness.EncodeRLP(&buf); err != nil {
-				log.Error("error in witness encoding", "caughterr", err)
-			}
-			witnessRlpEncoded := buf.Bytes()
 
 			if err == nil {
 				vstart := time.Now()
@@ -702,33 +756,159 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 			if res == nil {
 				res = &ProcessResult{}
 			}
-			resultChan <- Result{res.Receipts, res.Logs, res.GasUsed, err, statedb, blockExecutionSerialCounter, false, len(witnessRlpEncoded), witnessRlpEncoded}
+
+			report := WitnessReport{
+				witness:                           witness.Copy(),
+				statefulProcessTimeWithWitnessGen: time.Until(pstart),
+				blockCount:                        1,
+			}
+			resultWithSingleBlockWitnessChan <- Result{res.Receipts, res.Logs, res.GasUsed, err, statedb, blockExecutionSerialCounter, false, &report}
 		}()
 	}
 
-	result := <-resultChan
+	if resultWithAccumBlockWitnessChan != nil {
+		statedb, err := state.New(parent.Root, bc.statedb)
+		if err != nil {
+			return nil, nil, 0, nil, 0, nil, nil, err
+		}
+		statedb.SetLogger(bc.logger)
 
-	if result.parallel && result.err != nil {
-		log.Warn("Parallel state processor failed", "err", result.err)
+		processorCount++
+
+		go func() {
+			if bc.accumWitnessReport == nil || bc.accumWitnessReport.witness == nil {
+				witness, err := stateless.NewWitness(block.Header(), bc)
+				if err != nil {
+					log.Error("error in witness generation", "caughterr", err)
+				}
+				bc.accumWitnessReport = &WitnessReport{
+					witness:    witness,
+					blockCount: 1,
+				}
+			}
+
+			statedb.StartPrefetcher("chain", bc.accumWitnessReport.witness)
+			pstart := time.Now()
+
+			res, err := bc.processorWithAccumBlockWitness.Process(block, statedb, bc.vmConfig, nil, ctx)
+			if err != nil {
+				log.Error("error processing with witness", "caughterr", err)
+			}
+
+			blockExecutionSerialTimer.UpdateSince(pstart)
+
+			if err == nil {
+				vstart := time.Now()
+				err = bc.validator.ValidateState(block, statedb, res, false)
+				vtime = time.Since(vstart)
+			}
+			if res == nil {
+				res = &ProcessResult{}
+			}
+
+			bc.accumWitnessReport.witness = bc.accumWitnessReport.witness.Copy()
+			bc.accumWitnessReport.statefulProcessTimeWithWitnessGen = time.Until(pstart)
+			bc.accumWitnessReport.blockCount = bc.accumWitnessReport.blockCount + 1
+
+			// calculate the size to check if its bigger than 30 Mb if so, reset
+			var buf bytes.Buffer
+			if err := bc.accumWitnessReport.witness.EncodeRLP(&buf); err != nil {
+				log.Error("error in witness encoding", "caughterr", err)
+			}
+			witnessRlpEncodedSize := len(buf.Bytes())
+			report := bc.accumWitnessReport
+
+			if witnessRlpEncodedSize > 30_000_000 {
+				bc.accumWitnessReport = nil // reset
+			}
+
+			resultWithAccumBlockWitnessChan <- Result{res.Receipts, res.Logs, res.GasUsed, err, statedb, blockExecutionSerialCounter, false, report}
+		}()
+	}
+
+	if resultWithoutWitnessChan != nil {
+		statedb, err := state.New(parent.Root, bc.statedb)
+		if err != nil {
+			return nil, nil, 0, nil, 0, nil, nil, err
+		}
+		statedb.SetLogger(bc.logger)
+
+		processorCount++
+
+		go func() {
+			statedb.StartPrefetcher("chain", nil)
+			pstart := time.Now()
+
+			res, err := bc.processorWithoutWitness.Process(block, statedb, bc.vmConfig, nil, ctx)
+			if err != nil {
+				log.Error("error processing with witness", "caughterr", err)
+			}
+
+			blockExecutionSerialTimer.UpdateSince(pstart)
+
+			if err == nil {
+				vstart := time.Now()
+				err = bc.validator.ValidateState(block, statedb, res, false)
+				vtime = time.Since(vstart)
+			}
+			if res == nil {
+				res = &ProcessResult{}
+			}
+
+			report := WitnessReport{
+				statefulProcessTimeWithoutWitnessGen: time.Until(pstart),
+			}
+			resultWithoutWitnessChan <- Result{res.Receipts, res.Logs, res.GasUsed, err, statedb, blockExecutionSerialCounter, false, &report}
+		}()
+	}
+
+	resultWithSingleBlockWitness := <-resultWithSingleBlockWitnessChan
+	resultWithAccumBlockWitness := <-resultWithAccumBlockWitnessChan
+	resultWithoutWitness := <-resultWithoutWitnessChan
+
+	if resultWithSingleBlockWitness.parallel && resultWithSingleBlockWitness.err != nil {
+		log.Warn("Parallel state processor failed", "err", resultWithSingleBlockWitness.err)
 		blockExecutionParallelErrorCounter.Inc(1)
 		// If the parallel processor failed, we will fallback to the serial processor if enabled
 		if processorCount == 2 {
-			result = <-resultChan
-			result.statedb.StopPrefetcher()
+			resultWithSingleBlockWitness = <-resultWithSingleBlockWitnessChan
+			resultWithSingleBlockWitness.statedb.StopPrefetcher()
 			processorCount--
 		}
 	}
 
-	result.counter.Inc(1)
+	resultWithSingleBlockWitness.counter.Inc(1)
 
-	// Make sure we are not leaking any prefetchers
-	if processorCount == 2 {
-		go func() {
-			second_result := <-resultChan
-			second_result.statedb.StopPrefetcher()
-		}()
+	// // Make sure we are not leaking any prefetchers
+	// if processorCount == 2 {
+	// 	go func() {
+	// 		second_result := <-resultWithSingleBlockWitnessChan
+	// 		second_result.statedb.StopPrefetcher()
+	// 	}()
+	// }
+
+	if resultWithSingleBlockWitness.usedGas > 0 {
+		validateAndMeasureStateless(bc, block, &resultWithSingleBlockWitness)
+	}
+	if resultWithAccumBlockWitness.usedGas > 0 {
+		validateAndMeasureStateless(bc, block, &resultWithAccumBlockWitness)
+	}
+	if resultWithoutWitness.usedGas > 0 {
+		resultWithAccumBlockWitness.witnessReport.statefulProcessTimeWithoutWitnessGen = resultWithoutWitness.witnessReport.statefulProcessTimeWithoutWitnessGen
+		resultWithSingleBlockWitness.witnessReport.statefulProcessTimeWithoutWitnessGen = resultWithoutWitness.witnessReport.statefulProcessTimeWithoutWitnessGen
 	}
 
+	return resultWithSingleBlockWitness.receipts,
+		resultWithSingleBlockWitness.logs,
+		resultWithSingleBlockWitness.usedGas,
+		resultWithSingleBlockWitness.statedb,
+		vtime,
+		resultWithSingleBlockWitness.witnessReport,
+		resultWithAccumBlockWitness.witnessReport,
+		resultWithSingleBlockWitness.err
+}
+
+func validateAndMeasureStateless(bc *BlockChain, block *types.Block, result *Result) {
 	// Remove critical computed fields from the block to force true recalculation
 	context := block.Header()
 	context.Root = common.Hash{}
@@ -739,18 +919,15 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 	// Bor: Calculate EvmBlockContext with Root and ReceiptHash to properly get the author
 	author := NewEVMBlockContext(block.Header(), bc.hc, nil).Coinbase
 
-	// Decoding witness
-	var decodedWitness stateless.Witness
+	statelessValidationStart := time.Now()
 
-	// Create an RLP stream from the encoded data.
-	stream := rlp.NewStream(bytes.NewReader(result.witnessRlpEncoded), 0)
+	witness, rlpEncodedTotalSize, rlpEncodedHeadersSize, rlpEncodedCodeSize, rlpEncodedStateSize := encodeAndDecodeToACopy(result.witnessReport.witness)
+	result.witnessReport.witnessRlpEncodedTotalLen = rlpEncodedTotalSize
+	result.witnessReport.witnessRlpEncodedCodeLen = rlpEncodedCodeSize
+	result.witnessReport.witnessRlpEncodedHeadersLen = rlpEncodedHeadersSize
+	result.witnessReport.witnessRlpEncodedStateLen = rlpEncodedStateSize
 
-	// Decode the witness from the stream.
-	if err := decodedWitness.DecodeRLP(stream); err != nil {
-		log.Error("Failed to decode witness", "caughtErr", err)
-	}
-
-	crossStateRoot, crossReceiptRoot, err := ExecuteStateless(bc.chainConfig, bc.vmConfig, task, &decodedWitness, result.receipts, &author, bc.engine)
+	crossStateRoot, crossReceiptRoot, err := ExecuteStateless(bc.chainConfig, bc.vmConfig, task, witness, result.receipts, &author, bc.engine)
 	if err != nil {
 		log.Error("stateless self-validation failed: %v", err)
 	}
@@ -764,7 +941,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 		log.Info("Successfully self validated the block", "block", block.Number(), "hash", block.Hash())
 	}
 
-	return result.receipts, result.logs, result.usedGas, result.statedb, vtime, result.witnessRlpEncodedLen, result.err
+	result.witnessReport.statelessProcessTime = time.Until(statelessValidationStart)
 }
 
 // empty returns an indicator whether the blockchain is empty.
@@ -2430,7 +2607,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool, makeWitness 
 
 		// Process block using the parent state as reference point
 		pstart := time.Now()
-		receipts, logs, usedGas, statedb, vtime, witnessLenRlpEncoded, err := bc.ProcessBlock(block, parent)
+		receipts, logs, usedGas, statedb, vtime, singleBlockWitnessResult, accumBlockWitnessResult, err := bc.ProcessBlock(block, parent)
 		activeState = statedb
 
 		if err != nil {
@@ -2517,7 +2694,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool, makeWitness 
 			snapDiffItems, snapBufItems = bc.snaps.Size()
 		}
 		trieDiffNodes, trieBufNodes, _ := bc.triedb.Size()
-		stats.report(chain, it.index, snapDiffItems, snapBufItems, trieDiffNodes, trieBufNodes, setHead, witnessLenRlpEncoded)
+		stats.report(chain, it.index, snapDiffItems, snapBufItems, trieDiffNodes, trieBufNodes, setHead, singleBlockWitnessResult, accumBlockWitnessResult)
 
 		if !setHead {
 			// After merge we expect few side chains. Simply count
@@ -2617,7 +2794,7 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 
 	// Process block using the parent state as reference point
 	pstart := time.Now()
-	res, err := bc.processor.Process(block, statedb, bc.vmConfig, nil, context.Background())
+	res, err := bc.processorWithSingleBlockWitness.Process(block, statedb, bc.vmConfig, nil, context.Background())
 	if err != nil {
 		bc.reportBlock(block, res, err)
 		return nil, err
@@ -3406,7 +3583,7 @@ func (bc *BlockChain) GetChainConfig() *params.ChainConfig {
 // This method is unsafe and should only be used before block import starts.
 func (bc *BlockChain) SetBlockValidatorAndProcessorForTesting(v Validator, p Processor) {
 	bc.validator = v
-	bc.processor = p
+	bc.processorWithSingleBlockWitness = p
 }
 
 // SetTrieFlushInterval configures how often in-memory tries are persisted to disk.

@@ -262,7 +262,7 @@ func testSuccessfulBlockImportParallelFailed(t *testing.T, scheme string) {
 	// Create a new blockchain with 10 initial blocks
 	db, _, blockchain, err := newCanonical(ethash.NewFaker(), 10, true, scheme)
 	blockchain.parallelProcessor = &AlwaysFailParallelStateProcessor{}
-	blockchain.processor = NewSlowSerialStateProcessor(blockchain.processor)
+	blockchain.processorWithSingleBlockWitness = NewSlowSerialStateProcessor(blockchain.processorWithSingleBlockWitness)
 	if err != nil {
 		t.Fatalf("failed to create canonical chain: %v", err)
 	}

@@ -39,7 +39,7 @@ const statsReportLimit = 8 * time.Second
 
 // report prints statistics if some number of blocks have been processed
 // or more than a few seconds have passed since the last message.
-func (st *insertStats) report(chain []*types.Block, index int, snapDiffItems, snapBufItems, trieDiffNodes, triebufNodes common.StorageSize, setHead bool, witnessLenRlpEncoded int) {
+func (st *insertStats) report(chain []*types.Block, index int, snapDiffItems, snapBufItems, trieDiffNodes, triebufNodes common.StorageSize, setHead bool, singleBlockWitnessResult *WitnessReport, accumBlockWitnessResult *WitnessReport) {
 	// Fetch the timings for the batch
 	var (
 		now     = mclock.Now()
@@ -60,7 +60,24 @@ func (st *insertStats) report(chain []*types.Block, index int, snapDiffItems, sn
 			"number", end.Number(), "hash", end.Hash(),
 			"blocks", st.processed, "txs", txs, "mgas", float64(st.usedGas) / 1000000,
 			"elapsed", common.PrettyDuration(elapsed), "mgasps", float64(st.usedGas) * 1000 / float64(elapsed),
-			"witnessRlpEncodedSize", witnessLenRlpEncoded,
+
+			"singleBlockWitnessResult_statelessProcessTime", singleBlockWitnessResult.statelessProcessTime,
+			"singleBlockWitnessResult_statefulProcessTimeWithoutWitnessGen", singleBlockWitnessResult.statefulProcessTimeWithoutWitnessGen,
+			"singleBlockWitnessResult_statefulProcessTimeWithWitnessGen", singleBlockWitnessResult.statefulProcessTimeWithWitnessGen,
+			"singleBlockWitnessResult_witnessRlpEncodedTotalLen", singleBlockWitnessResult.witnessRlpEncodedTotalLen,
+			"singleBlockWitnessResult_witnessRlpEncodedHeadersLen", singleBlockWitnessResult.witnessRlpEncodedHeadersLen,
+			"singleBlockWitnessResult_witnessRlpEncodedCodeLen", singleBlockWitnessResult.witnessRlpEncodedCodeLen,
+			"singleBlockWitnessResult_witnessRlpEncodedStateLen", singleBlockWitnessResult.witnessRlpEncodedStateLen,
+			"singleBlockWitnessResult_blockCount", singleBlockWitnessResult.blockCount,
+
+			"accumBlockWitnessResult_statelessProcessTime", accumBlockWitnessResult.statelessProcessTime,
+			"accumBlockWitnessResult_statefulProcessTimeWithoutWitnessGen", accumBlockWitnessResult.statefulProcessTimeWithoutWitnessGen,
+			"accumBlockWitnessResult_statefulProcessTimeWithWitnessGen", accumBlockWitnessResult.statefulProcessTimeWithWitnessGen,
+			"accumBlockWitnessResult_witnessRlpEncodedTotalLen", accumBlockWitnessResult.witnessRlpEncodedTotalLen,
+			"accumBlockWitnessResult_witnessRlpEncodedHeadersLen", accumBlockWitnessResult.witnessRlpEncodedHeadersLen,
+			"accumBlockWitnessResult_witnessRlpEncodedCodeLen", accumBlockWitnessResult.witnessRlpEncodedCodeLen,
+			"accumBlockWitnessResult_witnessRlpEncodedStateLen", accumBlockWitnessResult.witnessRlpEncodedStateLen,
+			"accumBlockWitnessResult_blockCount", accumBlockWitnessResult.blockCount,
 		}
 		if timestamp := time.Unix(int64(end.Time()), 0); time.Since(timestamp) > time.Minute {
 			context = append(context, []interface{}{"age", common.PrettyAge(timestamp)}...)

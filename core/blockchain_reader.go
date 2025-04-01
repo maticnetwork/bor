@@ -410,7 +410,7 @@ func (bc *BlockChain) Validator() Validator {
 
 // Processor returns the current processor.
 func (bc *BlockChain) Processor() Processor {
-	return bc.processor
+	return bc.processorWithSingleBlockWitness
 }
 
 // StateCache returns the caching database underpinning the blockchain instance.
