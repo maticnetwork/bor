@@ -37,6 +37,7 @@ import (
 	"github.com/ethereum/go-ethereum/eth/fetcher"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/eth/protocols/snap"
+	"github.com/ethereum/go-ethereum/eth/protocols/wit"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
@@ -458,6 +459,13 @@ func (h *handler) runSnapExtension(peer *snap.Peer, handler snap.Handler) error 
 	}
 
 	return handler(peer)
+}
+
+// PSP - complete this, and also verify
+// runWitPeer registers a `wit` peer into the joint eth/wit peerset and
+// starts handling inbound messages.
+func (h *handler) runWitPeer(peer *wit.Peer, handler wit.Handler) error {
+	return nil
 }
 
 // removePeer requests disconnection of a peer.
