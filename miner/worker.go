@@ -267,8 +267,8 @@ type worker struct {
 
 	// Interrupt commit to stop block building on time
 	interruptCommitFlag bool // Denotes whether interrupt commit is enabled or not
-	interruptCtx        context.Context
-	interruptedTxCache  *vm.TxCache
+	// interruptCtx        context.Context
+	interruptedTxCache *vm.TxCache
 
 	// noempty is the flag used to control whether the feature of pre-seal empty
 	// block is enabled. The default value is false(pre-seal is enabled by default).
@@ -315,7 +315,7 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 		log.Warn("Failed to create interrupted tx cache", "err", err)
 	}
 
-	worker.interruptCtx = context.Background()
+	// worker.interruptCtx = context.Background()
 	worker.interruptedTxCache = &vm.TxCache{
 		Cache: interruptedTxCache,
 	}
@@ -643,12 +643,12 @@ func (w *worker) mainLoop() {
 
 				tcount := w.current.tcount
 
-				w.interruptCtx = resetAndCopyInterruptCtx(w.interruptCtx)
+				// w.interruptCtx = resetAndCopyInterruptCtx(w.interruptCtx)
 				stopFn := func() {}
-				if w.interruptCommitFlag {
-					w.interruptCtx, stopFn = getInterruptTimer(w.interruptCtx, w.current.header.Number.Uint64(), w.current.header.Time)
-					w.interruptCtx = vm.PutCache(w.interruptCtx, w.interruptedTxCache)
-				}
+				// if w.interruptCommitFlag {
+				// 	w.interruptCtx, stopFn = getInterruptTimer(w.interruptCtx, w.current.header.Number.Uint64(), w.current.header.Time)
+				// 	w.interruptCtx = vm.PutCache(w.interruptCtx, w.interruptedTxCache)
+				// }
 				w.commitTransactions(w.current, plainTxs, blobTxs, nil, new(uint256.Int))
 				stopFn()
 
@@ -889,8 +889,8 @@ func (w *worker) commitTransaction(env *environment, tx *types.Transaction) ([]*
 		gp   = env.gasPool.Gas()
 	)
 
-	w.interruptCtx = vm.SetCurrentTxOnContext(w.interruptCtx, tx.Hash())
-	receipt, err := core.ApplyTransaction(w.chainConfig, w.chain, &env.coinbase, env.gasPool, env.state, env.header, tx, &env.header.GasUsed, *w.chain.GetVMConfig(), w.interruptCtx)
+	// w.interruptCtx = vm.SetCurrentTxOnContext(w.interruptCtx, tx.Hash())
+	receipt, err := core.ApplyTransaction(w.chainConfig, w.chain, &env.coinbase, env.gasPool, env.state, env.header, tx, &env.header.GasUsed, *w.chain.GetVMConfig(), nil)
 	if err != nil {
 		env.state.RevertToSnapshot(snap)
 		env.gasPool.SetGas(gp)
@@ -918,7 +918,8 @@ func (w *worker) commitTransactions(env *environment, plainTxs, blobTxs *transac
 	var depsWg sync.WaitGroup
 	var once sync.Once
 
-	EnableMVHashMap := w.chainConfig.IsCancun(env.header.Number)
+	EnableMVHashMap := false
+	// EnableMVHashMap := w.chainConfig.IsCancun(env.header.Number)
 
 	// create and add empty mvHashMap in statedb
 	if EnableMVHashMap && w.IsRunning() {
@@ -942,46 +943,55 @@ func (w *worker) commitTransactions(env *environment, plainTxs, blobTxs *transac
 		}(chDeps)
 	}
 
-	var lastTxHash common.Hash
+	// var lastTxHash common.Hash
 
-mainloop:
+	// mainloop:
 	for {
 		// Check interruption signal and abort building if it's fired.
 		if interrupt != nil {
+			start := time.Now()
 			if signal := interrupt.Load(); signal != commitInterruptNone {
 				return signalToErr(signal)
 			}
+
+			duration := time.Since(start)
+			fmt.Printf("Time taken in interrup.Load(): %.5f seconds\n", duration.Seconds())
 		}
 
-		if w.interruptCtx != nil {
-			if EnableMVHashMap && w.IsRunning() {
-				env.state.AddEmptyMVHashMap()
-			}
+		// if w.interruptCtx != nil {
+		// 	start := time.Now()
+		// 	if EnableMVHashMap && w.IsRunning() {
+		// 		env.state.AddEmptyMVHashMap()
+		// 	}
 
-			// case of interrupting by timeout
-			select {
-			case <-w.interruptCtx.Done():
-				txCommitInterruptCounter.Inc(1)
-				log.Warn("Tx Level Interrupt", "hash", lastTxHash, "err", w.interruptCtx.Err())
-				break mainloop
-			default:
-			}
-		}
+		// case of interrupting by timeout
+		// select {
+		// case <-w.interruptCtx.Done():
+		// 	txCommitInterruptCounter.Inc(1)
+		// 	log.Warn("Tx Level Interrupt", "hash", lastTxHash, "err", w.interruptCtx.Err())
+		// 	break mainloop
+		// default:
+		// }
+		// 	duration := time.Since(start)
+		// 	fmt.Printf("Time taken in iw.interruptCtx != nil : %.5f seconds\n", duration.Seconds())
+
+		// }
 
 		// If we don't have enough gas for any further transactions then we're done.
 		if env.gasPool.Gas() < params.TxGas {
-			log.Trace("Not enough gas for further transactions", "have", env.gasPool, "want", params.TxGas)
+			log.Info("Not enough gas for further transactions", "have", env.gasPool, "want", params.TxGas)
 			break
 		}
 		// If we don't have enough blob space for any further blob transactions,
 		// skip that list altogether
 		if !blobTxs.Empty() && env.blobs*params.BlobTxBlobGasPerBlob >= params.MaxBlobGasPerBlock {
-			log.Trace("Not enough blob space for further blob transactions")
+			log.Info("Not enough blob space for further blob transactions")
 			blobTxs.Clear()
 			// Fall though to pick up any plain txs
 		}
 		// Retrieve the next transaction and abort if all done.
 
+		start := time.Now()
 		var (
 			ltx *txpool.LazyTransaction
 			txs *transactionsByPriceAndNonce
@@ -1004,30 +1014,34 @@ mainloop:
 		if ltx == nil {
 			break
 		}
-		lastTxHash = ltx.Hash
+		// lastTxHash = ltx.Hash
 		// If we don't have enough space for the next transaction, skip the account.
 		if env.gasPool.Gas() < ltx.Gas {
-			log.Trace("Not enough gas left for transaction", "hash", ltx.Hash, "left", env.gasPool.Gas(), "needed", ltx.Gas)
+			log.Info("Not enough gas left for transaction", "hash", ltx.Hash, "left", env.gasPool.Gas(), "needed", ltx.Gas)
 			txs.Pop()
 			continue
 		}
 		if left := uint64(params.MaxBlobGasPerBlock - env.blobs*params.BlobTxBlobGasPerBlob); left < ltx.BlobGas {
-			log.Trace("Not enough blob gas left for transaction", "hash", ltx.Hash, "left", left, "needed", ltx.BlobGas)
+			log.Info("Not enough blob gas left for transaction", "hash", ltx.Hash, "left", left, "needed", ltx.BlobGas)
 			txs.Pop()
 			continue
 		}
 		// If we don't receive enough tip for the next transaction, skip the account
 		if ptip.Cmp(minTip) < 0 {
-			log.Trace("Not enough tip for transaction", "hash", ltx.Hash, "tip", ptip, "needed", minTip)
+			log.Info("Not enough tip for transaction", "hash", ltx.Hash, "tip", ptip, "needed", minTip)
 			break // If the next-best is too low, surely no better will be available
 		}
 		// Transaction seems to fit, pull it up from the pool
 		tx := ltx.Resolve()
 		if tx == nil {
-			log.Trace("Ignoring evicted transaction", "hash", ltx.Hash)
+			log.Info("Ignoring evicted transaction", "hash", ltx.Hash)
 			txs.Pop()
 			continue
 		}
+
+		duration := time.Since(start)
+		fmt.Printf("Time taken in plainTxs and blobTxs : %.5f seconds\n", duration.Seconds())
+
 		// Error may be ignored here. The error has already been checked
 		// during transaction acceptance in the transaction pool.
 		from, _ := types.Sender(env.signer, tx)
@@ -1035,52 +1049,60 @@ mainloop:
 		// not prioritising conditional transaction, yet.
 		//nolint:nestif
 		if options := tx.GetOptions(); options != nil {
+			start := time.Now()
 			if err := env.header.ValidateBlockNumberOptionsPIP15(options.BlockNumberMin, options.BlockNumberMax); err != nil {
-				log.Trace("Dropping conditional transaction", "from", from, "hash", tx.Hash(), "reason", err)
+				log.Info("Dropping conditional transaction", "from", from, "hash", tx.Hash(), "reason", err)
 				txs.Pop()
 
 				continue
 			}
 
 			if err := env.header.ValidateTimestampOptionsPIP15(options.TimestampMin, options.TimestampMax); err != nil {
-				log.Trace("Dropping conditional transaction", "from", from, "hash", tx.Hash(), "reason", err)
+				log.Info("Dropping conditional transaction", "from", from, "hash", tx.Hash(), "reason", err)
 				txs.Pop()
 
 				continue
 			}
 
 			if err := env.state.ValidateKnownAccounts(options.KnownAccounts); err != nil {
-				log.Trace("Dropping conditional transaction", "from", from, "hash", tx.Hash(), "reason", err)
+				log.Info("Dropping conditional transaction", "from", from, "hash", tx.Hash(), "reason", err)
 				txs.Pop()
 
 				continue
 			}
+			duration := time.Since(start)
+			fmt.Printf("Time taken in tx.GetOptions() != nil : %.5f seconds\n", duration.Seconds())
+
 		}
 
 		// Check whether the tx is replay protected. If we're not in the EIP155 hf
 		// phase, start ignoring the sender until we do.
 		if tx.Protected() && !w.chainConfig.IsEIP155(env.header.Number) {
-			log.Trace("Ignoring replay protected transaction", "hash", ltx.Hash, "eip155", w.chainConfig.EIP155Block)
+			log.Info("Ignoring replay protected transaction", "hash", ltx.Hash, "eip155", w.chainConfig.EIP155Block)
 			txs.Pop()
 			continue
 		}
+
+		start = time.Now()
 		// Start executing the transaction
 		env.state.SetTxContext(tx.Hash(), env.tcount)
+		duration = time.Since(start)
+		fmt.Printf("Time taken in env.state.SetTxContext() != nil : %.5f seconds\n", duration.Seconds())
 
 		logs, err := w.commitTransaction(env, tx)
 
 		// Check if we have a `delay` set in interrupt context. It's only set during tests.
-		if w.interruptCtx != nil {
-			if delay := w.interruptCtx.Value(vm.InterruptCtxDelayKey); delay != nil {
-				// nolint : durationcheck
-				time.Sleep(time.Duration(delay.(uint)) * time.Millisecond)
-			}
-		}
+		// if false && w.interruptCtx != nil {
+		// 	if delay := w.interruptCtx.Value(vm.InterruptCtxDelayKey); delay != nil {
+		// 		// nolint : durationcheck
+		// 		time.Sleep(time.Duration(delay.(uint)) * time.Millisecond)
+		// 	}
+		// }
 
 		switch {
 		case errors.Is(err, core.ErrNonceTooLow):
 			// New head notification data race between the transaction pool and miner, shift
-			log.Trace("Skipping transaction with low nonce", "hash", ltx.Hash, "sender", from, "nonce", tx.Nonce())
+			log.Info("Skipping transaction with low nonce", "hash", ltx.Hash, "sender", from, "nonce", tx.Nonce())
 			txs.Shift()
 
 		case errors.Is(err, nil):
@@ -1110,7 +1132,7 @@ mainloop:
 		default:
 			// Transaction is regarded as invalid, drop all consecutive transactions from
 			// the same sender because of `nonce-too-high` clause.
-			log.Debug("Transaction failed, account skipped", "hash", ltx.Hash, "err", err)
+			log.Info("Transaction failed, account skipped", "hash", ltx.Hash, "err", err)
 			txs.Pop()
 		}
 
@@ -1387,7 +1409,7 @@ func (w *worker) generateWork(params *generateParams, witness bool) *newPayloadR
 	}
 	defer work.discard()
 
-	w.interruptCtx = resetAndCopyInterruptCtx(w.interruptCtx)
+	// w.interruptCtx = resetAndCopyInterruptCtx(w.interruptCtx)
 	if !params.noTxs {
 		interrupt := new(atomic.Int32)
 
@@ -1461,16 +1483,16 @@ func (w *worker) commitWork(interrupt *atomic.Int32, noempty bool, timestamp int
 		return
 	}
 
-	w.interruptCtx = resetAndCopyInterruptCtx(w.interruptCtx)
+	// w.interruptCtx = resetAndCopyInterruptCtx(w.interruptCtx)
 	stopFn := func() {}
 	defer func() {
 		stopFn()
 	}()
 
-	if !noempty && w.interruptCommitFlag {
-		w.interruptCtx, stopFn = getInterruptTimer(w.interruptCtx, work.header.Number.Uint64(), work.header.Time)
-		w.interruptCtx = vm.PutCache(w.interruptCtx, w.interruptedTxCache)
-	}
+	// if !noempty && w.interruptCommitFlag {
+	// 	w.interruptCtx, stopFn = getInterruptTimer(w.interruptCtx, work.header.Number.Uint64(), work.header.Time)
+	// 	w.interruptCtx = vm.PutCache(w.interruptCtx, w.interruptedTxCache)
+	// }
 
 	// Create an empty block based on temporary copied state for
 	// sealing in advance without waiting block execution finished.
@@ -1623,7 +1645,7 @@ func (w *worker) adjustResubmitInterval(message *intervalAdjust) {
 // setInterruptCtx sets `value` for given `key` for interrupt commit logic. To be only
 // used for e2e unit tests.
 func (w *worker) setInterruptCtx(key any, value any) {
-	w.interruptCtx = context.WithValue(w.interruptCtx, key, value)
+	// w.interruptCtx = context.WithValue(w.interruptCtx, key, value)
 }
 
 // copyReceipts makes a deep copy of the given receipts.
