@@ -14,7 +14,7 @@ import (
 
 func setupPeer() *Peer {
 	logger := log.New()
-	return NewPeer("test-peer", &p2p.Peer{}, nil, 1, logger)
+	return NewPeer(1, &p2p.Peer{}, nil, logger)
 }
 
 var testHeader1 = &types.Header{

@@ -48,10 +48,11 @@ type Peer struct {
 }
 
 // NewPeer creates a new WIT peer and starts its background processes.
-func NewPeer(id string, p2pPeer *p2p.Peer, rw p2p.MsgReadWriter, version uint, logger log.Logger) *Peer {
+func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter, logger log.Logger) *Peer {
+	id := p.ID().String()
 	peer := &Peer{
 		id:             id,
-		Peer:           p2pPeer,
+		Peer:           p,
 		rw:             rw,
 		version:        version,
 		logger:         logger.With("peer", id),

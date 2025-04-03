@@ -4,7 +4,6 @@ import (
 	"errors"
 
 	"github.com/ethereum/go-ethereum/core/stateless"
-	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/p2p"
 )
 
@@ -39,7 +38,7 @@ func (p *Peer) sendWitness(witness *stateless.Witness) error {
 
 	p.knownWitnesses.Add(witness)
 
-	return p2p.Send(p.rw, eth.MsgWitness, witness)
+	return p2p.Send(p.rw, MsgWitness, witness)
 }
 
 // announceWitness announces witness to the peer
@@ -50,7 +49,7 @@ func (p *Peer) announceWitness(witness *stateless.Witness) error {
 	// Announce only new witness
 	p.knownWitnesses.Add(witness)
 
-	return p2p.Send(p.rw, eth.MsgWitnessAnnounce, witness)
+	return p2p.Send(p.rw, MsgWitnessAnnounce, witness)
 }
 
 // requestHandler handles request dispatching and response processing
@@ -82,12 +81,12 @@ func (p *Peer) requestHandler() {
 
 // sendRequest sends a witness request to the peer
 func (p *Peer) sendRequest(req *request) error {
-	return p2p.Send(p.rw, eth.MsgWitnessRequest, req)
+	return p2p.Send(p.rw, MsgWitnessRequest, req)
 }
 
 // cancelRequest cancels an outstanding witness request
 func (p *Peer) cancelRequest(cancel *cancel) error {
-	return p2p.Send(p.rw, eth.MsgWitnessCancel, cancel)
+	return p2p.Send(p.rw, MsgWitnessCancel, cancel)
 }
 
 // processResponse processes a received witness response
