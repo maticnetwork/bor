@@ -1,6 +1,10 @@
 package wit
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/ethereum/go-ethereum/rlp"
+)
 
 // Constants to match up protocol versions and messages
 const (
@@ -24,10 +28,8 @@ var protocolLengths = map[uint]uint64{WIT1: 0}
 const maxMessageSize = 10 * 1024 * 1024
 
 const (
-	MsgWitness         = 0x11
-	MsgWitnessAnnounce = 0x12
-	MsgWitnessRequest  = 0x13
-	MsgWitnessCancel   = 0x14
+	GetMsgWitness = 0x10
+	MsgWitness    = 0x11
 )
 
 var (
@@ -46,3 +48,20 @@ type Packet interface {
 	Name() string // Name returns a string corresponding to the message type.
 	Kind() byte   // Kind returns the message type.
 }
+
+// GetWitnessPacket is a packet requesting a witness.
+type GetWitnessPacket struct {
+	RequestId   uint64
+	OriginBlock uint64
+	TotalBlocks uint64
+}
+
+// WitnessPacketRLPPacket represents a witness response with request ID wrapping.
+type WitnessPacketRLPPacket struct {
+	RequestId uint64
+	WitnessPacketResponse
+}
+
+// WitnessPacketResponse represents a witness response, to use when we already
+// have the witness rlp encoded.
+type WitnessPacketResponse []rlp.RawValue

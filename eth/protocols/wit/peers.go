@@ -8,6 +8,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
+	"github.com/ethereum/go-ethereum/rlp"
 )
 
 const (
@@ -35,7 +36,7 @@ type Peer struct {
 
 	knownWitnesses *knownCache             // Set of witness hashes (`witness.Headers[0].Hash()`) known to be known by this peer
 	witBroadcast   chan *stateless.Witness // Queue of witness to broadcast to this peer
-	witAnnounce    chan *stateless.Witness // Queue of witness announcements to this peer
+	// witAnnounce    chan *stateless.Witness // Queue of witness announcements to this peer
 
 	reqDispatch chan *request  // Dispatch channel to send witness requests and track them until fulfillment
 	reqCancel   chan *cancel   // Dispatch channel to cancel pending witness requests
@@ -58,16 +59,16 @@ func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter, logger log.Logger)
 		logger:         logger.With("peer", id),
 		knownWitnesses: newKnownCache(maxKnownWitnesses),
 		witBroadcast:   make(chan *stateless.Witness, maxQueuedWitnesses),
-		witAnnounce:    make(chan *stateless.Witness, maxQueuedWitnessAnns),
-		reqDispatch:    make(chan *request),
-		reqCancel:      make(chan *cancel),
-		resDispatch:    make(chan *response),
+		// witAnnounce:    make(chan *stateless.Witness, maxQueuedWitnessAnns),
+		reqDispatch: make(chan *request),
+		reqCancel:   make(chan *cancel),
+		resDispatch: make(chan *response),
 
 		term: make(chan struct{}),
 	}
 
 	// Start background handlers
-	go peer.witnessPropagator()
+	go peer.broadcastWitness()
 	go peer.requestHandler()
 
 	return peer
@@ -121,6 +122,18 @@ func (p *Peer) KnownWitnessesContains(witness *stateless.Witness) bool {
 	p.lock.RLock()
 	defer p.lock.RUnlock()
 	return p.knownWitnesses.Contains(witness)
+}
+
+// ReplyWitnessRLP is the response to GetWitness
+func (p *Peer) ReplyWitnessRLP(requestID uint64, witnesses []rlp.RawValue) error {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
+	// Send the response
+	return p2p.Send(p.rw, MsgWitness, &WitnessPacketRLPPacket{
+		RequestId:             requestID,
+		WitnessPacketResponse: witnesses,
+	})
 }
 
 // knownCache is a cache for known witness, identified by the hash of the parent witness block.

@@ -7,8 +7,12 @@ import (
 	"github.com/ethereum/go-ethereum/p2p"
 )
 
-// witnessPropagator handles witness propagation
-func (p *Peer) witnessPropagator() {
+// PSP - TODO - in this file, check the data types passed to the p2p.Send function
+
+// broadcastWitness is a write loop that multiplexes witness and witness announcements
+// to the remote peer. The goal is to have an async writer that does not lock up
+// node internals and at the same time rate limits queued data.
+func (p *Peer) broadcastWitness() {
 	defer p.logger.Info("witness propagator stopped")
 
 	for {
@@ -18,12 +22,6 @@ func (p *Peer) witnessPropagator() {
 				return
 			}
 			p.logger.Trace("propagated witness", "witness", witness)
-
-		case witness := <-p.witAnnounce:
-			if err := p.announceWitness(witness); err != nil {
-				return
-			}
-			p.logger.Trace("announced witness", "witness", witness)
 
 		case <-p.term:
 			return
@@ -41,32 +39,24 @@ func (p *Peer) sendWitness(witness *stateless.Witness) error {
 	return p2p.Send(p.rw, MsgWitness, witness)
 }
 
-// announceWitness announces witness to the peer
-func (p *Peer) announceWitness(witness *stateless.Witness) error {
-	p.lock.Lock()
-	defer p.lock.Unlock()
-
-	// Announce only new witness
-	p.knownWitnesses.Add(witness)
-
-	return p2p.Send(p.rw, MsgWitnessAnnounce, witness)
-}
-
 // requestHandler handles request dispatching and response processing
 func (p *Peer) requestHandler() {
 	defer p.logger.Info("request handler stopped")
 
 	for {
 		select {
-		case req := <-p.reqDispatch:
-			if err := p.sendRequest(req); err != nil {
-				return
-			}
+		// PSP - confirm if we need this in the flow
+		/*
+			case req := <-p.reqDispatch:
+				if err := p.sendRequest(req); err != nil {
+					return
+				}
 
-		case cancel := <-p.reqCancel:
-			if err := p.cancelRequest(cancel); err != nil {
-				return
-			}
+			case cancel := <-p.reqCancel:
+				if err := p.cancelRequest(cancel); err != nil {
+					return
+				}
+		*/
 
 		case res := <-p.resDispatch:
 			if err := p.processResponse(res); err != nil {
@@ -79,6 +69,8 @@ func (p *Peer) requestHandler() {
 	}
 }
 
+// PSP - confirm if we need this in the flow
+/*
 // sendRequest sends a witness request to the peer
 func (p *Peer) sendRequest(req *request) error {
 	return p2p.Send(p.rw, MsgWitnessRequest, req)
@@ -88,6 +80,7 @@ func (p *Peer) sendRequest(req *request) error {
 func (p *Peer) cancelRequest(cancel *cancel) error {
 	return p2p.Send(p.rw, MsgWitnessCancel, cancel)
 }
+*/
 
 // processResponse processes a received witness response
 func (p *Peer) processResponse(res *response) error {
