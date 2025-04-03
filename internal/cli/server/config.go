@@ -96,6 +96,9 @@ type Config struct {
 	// Ethstats is the address of the ethstats server to send telemetry
 	Ethstats string `hcl:"ethstats,optional" toml:"ethstats,optional"`
 
+	// WitnessProtocol enables the wit/0 protocol
+	WitnessProtocol bool `hcl:"witnessprotocol,optional" toml:"witnessprotocol,optional"`
+
 	// Logging has the logging related settings
 	Logging *LoggingConfig `hcl:"log,block" toml:"log,block"`
 
@@ -619,6 +622,7 @@ func DefaultConfig() *Config {
 		Ancient:                 "",
 		DBEngine:                "pebble",
 		KeyStoreDir:             "",
+		WitnessProtocol:         false,
 		Logging: &LoggingConfig{
 			Vmodule:             "",
 			Json:                false,
@@ -1212,6 +1216,9 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 	n.ParallelEVM.Enable = c.ParallelEVM.Enable
 	n.ParallelEVM.SpeculativeProcesses = c.ParallelEVM.SpeculativeProcesses
 	n.ParallelEVM.Enforce = c.ParallelEVM.Enforce
+
+	n.WitnessProtocol = c.WitnessProtocol
+
 	n.RPCReturnDataLimit = c.RPCReturnDataLimit
 
 	if c.Ancient != "" {

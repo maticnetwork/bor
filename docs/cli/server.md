@@ -96,6 +96,8 @@ The ```bor server``` command runs the Bor client.
 
 - ```vmdebug```: Record information useful for VM and contract debugging (default: false)
 
+- ```witnessprotocol```: Enable witness protocol (default: false)
+
 ### Account Management Options
 
 - ```allow-insecure-unlock```: Allow insecure account unlocking when account-related RPCs are exposed by http (default: false)

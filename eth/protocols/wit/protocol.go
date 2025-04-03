@@ -28,8 +28,8 @@ var protocolLengths = map[uint]uint64{WIT1: 0}
 const maxMessageSize = 10 * 1024 * 1024
 
 const (
-	GetMsgWitness = 0x10
-	MsgWitness    = 0x11
+	GetMsgWitness = 0x00
+	MsgWitness    = 0x01
 )
 
 var (

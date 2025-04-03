@@ -18,6 +18,7 @@ gcmode = "full"                 # Blockchain garbage collection mode ("full", "a
 snapshot = true                 # Enables the snapshot-database mode
 "bor.logs" = false              # Enables bor log retrieval
 ethstats = ""                   # Reporting URL of a ethstats service (nodename:secret@host:port)
+witnessprotocol = false         # Enables the wit/0 protocol
 devfakeauthor = false           # Run miner without validator set authorization [dev mode] : Use with '--bor.withoutheimdall' (default: false)
 
 ["eth.requiredblocks"]  # Comma separated block number-to-hash mappings to require for peering (<number>=<hash>) (default = empty map)

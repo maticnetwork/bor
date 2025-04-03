@@ -50,7 +50,6 @@ func (c Config) MarshalTOML() (interface{}, error) {
 		BlobPool                             blobpool.Config
 		GPO                                  gasprice.Config
 		EnablePreimageRecording              bool
-		EnableWitnessCollection              bool `toml:"-"`
 		VMTrace                              string
 		VMTraceJsonConfig                    string
 		DocRoot                              string `toml:"-"`
@@ -68,8 +67,9 @@ func (c Config) MarshalTOML() (interface{}, error) {
 		UseHeimdallApp                       bool
 		BorLogs                              bool
 		ParallelEVM                          core.ParallelEVMConfig `toml:",omitempty"`
-		DevFakeAuthor                        bool                   `hcl:"devfakeauthor,optional" toml:"devfakeauthor,optional"`
-		OverrideVerkle                       *big.Int               `toml:",omitempty"`
+		WitnessProtocol                      bool
+		DevFakeAuthor                        bool     `hcl:"devfakeauthor,optional" toml:"devfakeauthor,optional"`
+		OverrideVerkle                       *big.Int `toml:",omitempty"`
 		EnableBlockTracking                  bool
 	}
 	var enc Config
@@ -122,6 +122,7 @@ func (c Config) MarshalTOML() (interface{}, error) {
 	enc.UseHeimdallApp = c.UseHeimdallApp
 	enc.BorLogs = c.BorLogs
 	enc.ParallelEVM = c.ParallelEVM
+	enc.WitnessProtocol = c.WitnessProtocol
 	enc.DevFakeAuthor = c.DevFakeAuthor
 	enc.OverrideVerkle = c.OverrideVerkle
 	enc.EnableBlockTracking = c.EnableBlockTracking
@@ -163,7 +164,6 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 		BlobPool                             *blobpool.Config
 		GPO                                  *gasprice.Config
 		EnablePreimageRecording              *bool
-		EnableWitnessCollection              *bool `toml:"-"`
 		VMTrace                              *string
 		VMTraceJsonConfig                    *string
 		DocRoot                              *string `toml:"-"`
@@ -181,8 +181,9 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 		UseHeimdallApp                       *bool
 		BorLogs                              *bool
 		ParallelEVM                          *core.ParallelEVMConfig `toml:",omitempty"`
-		DevFakeAuthor                        *bool                   `hcl:"devfakeauthor,optional" toml:"devfakeauthor,optional"`
-		OverrideVerkle                       *big.Int                `toml:",omitempty"`
+		WitnessProtocol                      *bool
+		DevFakeAuthor                        *bool    `hcl:"devfakeauthor,optional" toml:"devfakeauthor,optional"`
+		OverrideVerkle                       *big.Int `toml:",omitempty"`
 		EnableBlockTracking                  *bool
 	}
 	var dec Config
@@ -335,6 +336,9 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 	}
 	if dec.ParallelEVM != nil {
 		c.ParallelEVM = *dec.ParallelEVM
+	}
+	if dec.WitnessProtocol != nil {
+		c.WitnessProtocol = *dec.WitnessProtocol
 	}
 	if dec.DevFakeAuthor != nil {
 		c.DevFakeAuthor = *dec.DevFakeAuthor
