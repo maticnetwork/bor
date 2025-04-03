@@ -11,6 +11,11 @@ import (
 	lru "github.com/hashicorp/golang-lru"
 )
 
+// maxSpanFetchLimit denotes maximum number of future spans to fetch. During snap sync,
+// we verify very large batch of headers. The maximum range is not known as of now and
+// hence we set a very high limit. It can be reduced later.
+const maxSpanFetchLimit = 10_000
+
 // SpanStore acts as a simple middleware to cache span data populated from heimdall. It is used
 // in multiple places of bor consensus for verification.
 type SpanStore struct {
@@ -88,11 +93,29 @@ func (s *SpanStore) spanByBlockNumber(ctx context.Context, blockNumber uint64) (
 		}
 		// Check if block number given is out of bounds
 		if id == int(s.latestKnownSpanId) && blockNumber > span.EndBlock {
-			break
+			return getFutureSpan(ctx, uint64(id)+1, blockNumber, s)
 		}
 	}
 
 	return nil, fmt.Errorf("span not found for block %d", blockNumber)
+}
+
+// getFutureSpan fetches span for future block number. It is mostly needed during snap sync.
+func getFutureSpan(ctx context.Context, id uint64, blockNumber uint64, s *SpanStore) (*span.HeimdallSpan, error) {
+	latestKnownSpan := s.latestKnownSpanId
+	for {
+		if id > latestKnownSpan+maxSpanFetchLimit {
+			return nil, fmt.Errorf("span not found for block %d", blockNumber)
+		}
+		span, err := s.spanById(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if blockNumber >= span.StartBlock && blockNumber <= span.EndBlock {
+			return span, nil
+		}
+		id++
+	}
 }
 
 // setHeimdallClient sets the underlying heimdall client to be used. It is useful in
