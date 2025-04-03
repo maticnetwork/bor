@@ -58,7 +58,6 @@ func TestSpanStore_SpanById(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 		t.Run("", func(t *testing.T) {
 			span, err := spanStore.spanById(ctx, tc.id)
 			require.NoError(t, err, "err in spanById for id=%d", tc.id)
@@ -115,10 +114,6 @@ func TestSpanStore_SpanByBlockNumber(t *testing.T) {
 		endBlock    uint64
 	}
 
-	// Fetch a future span which should result in an error given the nature of the function
-	_, err := spanStore.spanByBlockNumber(ctx, 256) // block 256 belonds to span 1 (future span)
-	require.Error(t, err, "expected error in spanByBlockNumber for block 256")
-
 	// Insert a few spans
 	for i := spanStore.latestKnownSpanId; i < 3; i++ {
 		_, err := spanStore.spanById(ctx, i)
@@ -131,10 +126,6 @@ func TestSpanStore_SpanByBlockNumber(t *testing.T) {
 
 	// Ensure latest known span id is updated
 	require.Equal(t, uint64(2), spanStore.latestKnownSpanId, "invalid latest known span id in span store")
-
-	// Ask for a future span which should result in an error
-	_, err = spanStore.spanByBlockNumber(ctx, 19456) // block 19456 belongs to span 4 (future span)
-	require.Error(t, err, "expected error in spanByBlockNumber for block 21")
 
 	// Ask for current and past spans via block number
 	testcases := []Testcase{
@@ -151,7 +142,6 @@ func TestSpanStore_SpanByBlockNumber(t *testing.T) {
 	}
 
 	for _, tc := range testcases {
-		tc := tc
 		t.Run("", func(t *testing.T) {
 			span, err := spanStore.spanByBlockNumber(ctx, tc.blockNumber)
 			require.NoError(t, err, "err in spanByBlockNumber for block=%d", tc.blockNumber)
@@ -183,7 +173,6 @@ func TestSpanStore_SpanByBlockNumber(t *testing.T) {
 	testcases = append(testcases, Testcase{blockNumber: 128255, id: 20, startBlock: 121856, endBlock: 128255})
 
 	for _, tc := range testcases {
-		tc := tc
 		t.Run("", func(t *testing.T) {
 			span, err := spanStore.spanByBlockNumber(ctx, tc.blockNumber)
 			require.NoError(t, err, "err in spanByBlockNumber for block=%d", tc.blockNumber)
@@ -192,6 +181,13 @@ func TestSpanStore_SpanByBlockNumber(t *testing.T) {
 			require.Equal(t, tc.endBlock, span.EndBlock, "invalid end block in spanByBlockNumber for block=%d", tc.blockNumber)
 		})
 	}
+
+	// Asking for a future span
+	span, err := spanStore.spanByBlockNumber(ctx, 128256) // block 128256 belongs to span 21 (future span)
+	require.NoError(t, err, "err in spanByBlockNumber for future block 128256")
+	require.Equal(t, uint64(21), span.ID, "invalid id in spanByBlockNumber for future block 128256")
+	require.Equal(t, uint64(128256), span.StartBlock, "invalid start block in spanByBlockNumber for future block 128256")
+	require.Equal(t, uint64(134655), span.EndBlock, "invalid end block in spanByBlockNumber for future block 128256")
 }
 
 // Irrelevant to the tests above but necessary for interface compatibility
