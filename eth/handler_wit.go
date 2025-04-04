@@ -1,7 +1,10 @@
 package eth
 
 import (
+	"fmt"
+
 	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/eth/protocols/wit"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 )
@@ -32,5 +35,28 @@ func (h *witHandler) PeerInfo(id enode.ID) interface{} {
 // Handle is invoked from a peer's message handler when it receives a new remote
 // message that the handler couldn't consume and serve itself.
 func (h *witHandler) Handle(peer *wit.Peer, packet wit.Packet) error {
+	// Consume any broadcasts and announces, forwarding the rest to the downloader
+	switch packet := packet.(type) {
+	case *wit.NewWitnessPacket:
+		return h.handleWitnessBroadcast(peer, packet.Witness)
+
+	default:
+		return fmt.Errorf("unknown wit packet type %T", packet)
+	}
+}
+
+// handleWitnessBroadcast handles a witness broadcast from a peer.
+func (h *witHandler) handleWitnessBroadcast(_ *wit.Peer, _ *stateless.Witness) error {
+	//  PSP - implement this
+
+	// PSP - TODO
+	/*
+		// Store the witnes
+		if err := backend.StoreWitness(&witness); err != nil {
+			log.Error("Failed to store witness", "err", err)
+			return err
+		}
+	*/
+
 	return nil
 }

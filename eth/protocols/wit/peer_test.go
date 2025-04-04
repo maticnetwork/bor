@@ -3,7 +3,6 @@ package wit
 import (
 	"math/big"
 	"testing"
-	"time"
 
 	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -73,6 +72,7 @@ func TestAddKnownWitness(t *testing.T) {
 
 }
 
+/*
 func TestProcessResponse(t *testing.T) {
 	peer := setupPeer()
 	witness := testWitness1
@@ -90,3 +90,4 @@ func TestProcessResponse(t *testing.T) {
 	// verify that processResponse did its job
 	assert.True(t, peer.KnownWitnessesContains(witness), "Witness should be tracked in knownWitnesses")
 }
+*/

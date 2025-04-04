@@ -35,8 +35,8 @@ type Peer struct {
 	logger log.Logger // Contextual logger with the peer id injected
 
 	knownWitnesses *knownCache             // Set of witness hashes (`witness.Headers[0].Hash()`) known to be known by this peer
-	witBroadcast   chan *stateless.Witness // Queue of witness to broadcast to this peer
-	// witAnnounce    chan *stateless.Witness // Queue of witness announcements to this peer
+	queuedWitness  chan *stateless.Witness // Queue of witness to broadcast to this peer
+	// queuedWitnessAnns    chan *stateless.Witness // Queue of witness announcements to this peer
 
 	reqDispatch chan *request  // Dispatch channel to send witness requests and track them until fulfillment
 	reqCancel   chan *cancel   // Dispatch channel to cancel pending witness requests
@@ -58,8 +58,8 @@ func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter, logger log.Logger)
 		version:        version,
 		logger:         logger.With("peer", id),
 		knownWitnesses: newKnownCache(maxKnownWitnesses),
-		witBroadcast:   make(chan *stateless.Witness, maxQueuedWitnesses),
-		// witAnnounce:    make(chan *stateless.Witness, maxQueuedWitnessAnns),
+		queuedWitness:  make(chan *stateless.Witness, maxQueuedWitnesses),
+		// queuedWitnessAnns:    make(chan *stateless.Witness, maxQueuedWitnessAnns),
 		reqDispatch: make(chan *request),
 		reqCancel:   make(chan *cancel),
 		resDispatch: make(chan *response),
@@ -69,9 +69,21 @@ func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter, logger log.Logger)
 
 	// Start background handlers
 	go peer.broadcastWitness()
-	go peer.requestHandler()
+	go peer.dispatcher()
 
 	return peer
+}
+
+// sendWitness sends witness to the peer
+func (p *Peer) sendNewWitness(witness *stateless.Witness) error {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
+	p.knownWitnesses.Add(witness)
+
+	return p2p.Send(p.rw, MsgWitness, &NewWitnessPacket{
+		Witness: witness,
+	})
 }
 
 // Close signals the broadcast goroutine to terminate. Only ever call this if

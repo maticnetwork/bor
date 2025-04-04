@@ -3,7 +3,6 @@ package wit
 import (
 	"fmt"
 
-	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 )
@@ -38,23 +37,14 @@ func handleGetWitness(backend Backend, msg Decoder, peer *Peer) error {
 
 // handleWitness processes an incoming witness from a peer.
 func handleWitness(backend Backend, msg Decoder, peer *Peer) error {
-	var witness stateless.Witness
-	if err := msg.Decode(&witness); err != nil {
+	packet := new(NewWitnessPacket)
+	if err := msg.Decode(&packet); err != nil {
 		log.Error("Failed to decode witness", "err", err)
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
 
-	// PSP - TODO
-	/*
-		// Store the witnes
-		if err := backend.StoreWitness(&witness); err != nil {
-			log.Error("Failed to store witness", "err", err)
-			return err
-		}
-	*/
-
-	peer.AddKnownWitness(&witness)
+	peer.AddKnownWitness(packet.Witness)
 	log.Info("Processed witness", "peer", peer.ID())
 
-	return nil
+	return backend.Handle(peer, packet)
 }

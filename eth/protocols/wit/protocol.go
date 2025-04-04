@@ -3,6 +3,7 @@ package wit
 import (
 	"errors"
 
+	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
@@ -28,8 +29,8 @@ var protocolLengths = map[uint]uint64{WIT1: 0}
 const maxMessageSize = 10 * 1024 * 1024
 
 const (
-	GetMsgWitness = 0x00
-	MsgWitness    = 0x01
+	GetMsgWitness = 0x03
+	MsgWitness    = 0x04
 )
 
 var (
@@ -65,3 +66,10 @@ type WitnessPacketRLPPacket struct {
 // WitnessPacketResponse represents a witness response, to use when we already
 // have the witness rlp encoded.
 type WitnessPacketResponse []rlp.RawValue
+
+type NewWitnessPacket struct {
+	Witness *stateless.Witness
+}
+
+func (w *NewWitnessPacket) Name() string { return "NewWitness" }
+func (w *NewWitnessPacket) Kind() byte   { return MsgWitness }
