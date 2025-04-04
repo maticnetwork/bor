@@ -86,6 +86,22 @@ func (p *Peer) sendNewWitness(witness *stateless.Witness) error {
 	})
 }
 
+// AsyncSendNewWitness queues an entire witness for broadcast to the peer. The
+// witness will be sent in the background to avoid blocking the caller. If the
+// queue is full, the witness will be dropped.
+func (p *Peer) AsyncSendNewWitness(witness *stateless.Witness) {
+	p.lock.RLock()
+	defer p.lock.RUnlock()
+
+	// Queue the witness for broadcast
+	select {
+	case p.queuedWitness <- witness:
+		p.knownWitnesses.Add(witness)
+	default:
+		p.logger.Debug("Dropped witness propagation.", "witness", witness, "peer", p.id)
+	}
+}
+
 // Close signals the broadcast goroutine to terminate. Only ever call this if
 // you created the peer yourself via NewPeer. Otherwise let whoever created it
 // clean it up!
@@ -134,6 +150,12 @@ func (p *Peer) KnownWitnessesContains(witness *stateless.Witness) bool {
 	p.lock.RLock()
 	defer p.lock.RUnlock()
 	return p.knownWitnesses.Contains(witness)
+}
+
+func (p *Peer) KnownWitnessContainsHash(hash common.Hash) bool {
+	p.lock.RLock()
+	defer p.lock.RUnlock()
+	return p.knownWitnesses.hashes.Contains(hash)
 }
 
 // ReplyWitnessRLP is the response to GetWitness

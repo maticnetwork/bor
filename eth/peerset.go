@@ -205,6 +205,24 @@ func (ps *peerSet) peer(id string) *ethPeer {
 	return ps.peers[id]
 }
 
+// peersWithoutWitness retrives a list of peers that do nor have a given witness
+// in their set of known hashes so it might be propagated to them.
+// This is used to avoid sending the same witness to the same peer multiple times.
+func (ps *peerSet) peersWithoutWitness(hash common.Hash) []*witPeer {
+	ps.lock.RLock()
+	defer ps.lock.RUnlock()
+
+	list := make([]*witPeer, 0, len(ps.peers))
+
+	for _, p := range ps.peers {
+		if p.witPeer != nil && !p.witPeer.KnownWitnessContainsHash(hash) {
+			list = append(list, p.witPeer)
+		}
+	}
+
+	return list
+}
+
 // peersWithoutBlock retrieves a list of peers that do not have a given block in
 // their set of known hashes so it might be propagated to them.
 func (ps *peerSet) peersWithoutBlock(hash common.Hash) []*ethPeer {

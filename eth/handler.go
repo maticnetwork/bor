@@ -30,6 +30,7 @@ import (
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/forkid"
 	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/core/txpool"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -547,6 +548,16 @@ func (h *handler) Stop() {
 	h.wg.Wait()
 
 	log.Info("Ethereum protocol stopped")
+}
+
+// PSP - use this to broadcast the witness
+// BroadcastWitness broadcasts the witness to all peers
+func (h *handler) BroadcastWitness(witness *stateless.Witness) {
+	// broadcast the witness to all peers who are not
+	// aware of the witness
+	for _, peer := range h.peers.peersWithoutWitness(witness.Headers[0].Hash()) {
+		peer.AsyncSendNewWitness(witness)
+	}
 }
 
 // BroadcastBlock will either propagate a block to a subset of its peers, or

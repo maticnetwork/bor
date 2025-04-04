@@ -7,8 +7,7 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
-// PSP - TODO - add logic to all the handlers
-
+// handleGetWitness processes a GetWitnessPacket request from a peer.
 func handleGetWitness(backend Backend, msg Decoder, peer *Peer) error {
 	// Decode the GetWitnessPacket request
 	var req GetWitnessPacket

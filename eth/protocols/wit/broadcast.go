@@ -1,7 +1,5 @@
 package wit
 
-// PSP - TODO - in this file, check the data types passed to the p2p.Send function
-
 // broadcastWitness is a write loop that multiplexes witness and witness announcements
 // to the remote peer. The goal is to have an async writer that does not lock up
 // node internals and at the same time rate limits queued data.
