@@ -496,6 +496,7 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 		for i, val := range newValidators {
 			if !bytes.Equal(val.HeaderBytes(), headerVals[i].HeaderBytes()) {
 				log.Warn("Invalid validator set", "block number", number, "index", i, "local validator", val, "header validator", headerVals[i])
+				c.FetchAndCommitSpan(context.Background(), 229, nil, header, nil)
 				return errInvalidSpanValidators
 			}
 		}
@@ -1180,6 +1181,11 @@ func (c *Bor) FetchAndCommitSpan(
 			heimdallSpan.ChainID,
 			c.chainConfig.ChainID,
 		)
+	}
+
+	log.Info("[valset debug] fetched span from heimdall", "id", heimdallSpan.ID, "startBlock", heimdallSpan.StartBlock, "endBlock", heimdallSpan.EndBlock)
+	for _, v := range heimdallSpan.ValidatorSet.Validators {
+		log.Info("[valset debug]", "validator", v.String())
 	}
 
 	return c.spanner.CommitSpan(ctx, heimdallSpan, state, header, chain)

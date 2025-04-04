@@ -10,7 +10,6 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus/bor/abi"
 	"github.com/ethereum/go-ethereum/consensus/bor/api"
-	"github.com/ethereum/go-ethereum/consensus/bor/statefull"
 	"github.com/ethereum/go-ethereum/consensus/bor/valset"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/state"
@@ -292,6 +291,7 @@ func (c *ChainSpanner) CommitSpan(ctx context.Context, heimdallSpan HeimdallSpan
 	validators := make([]valset.MinimalVal, 0, len(heimdallSpan.ValidatorSet.Validators))
 	for _, val := range heimdallSpan.ValidatorSet.Validators {
 		validators = append(validators, val.MinimalVal())
+		log.Info("[valset debug] in commit span", "validator", val.MinimalVal())
 	}
 
 	validatorBytes, err := rlp.EncodeToBytes(validators)
@@ -303,6 +303,7 @@ func (c *ChainSpanner) CommitSpan(ctx context.Context, heimdallSpan HeimdallSpan
 	producers := make([]valset.MinimalVal, 0, len(heimdallSpan.SelectedProducers))
 	for _, val := range heimdallSpan.SelectedProducers {
 		producers = append(producers, val.MinimalVal())
+		log.Info("[valset debug] in commit span", "producer", val.MinimalVal())
 	}
 
 	producerBytes, err := rlp.EncodeToBytes(producers)
@@ -330,12 +331,13 @@ func (c *ChainSpanner) CommitSpan(ctx context.Context, heimdallSpan HeimdallSpan
 
 		return err
 	}
+	_ = data
 
 	// get system message
-	msg := statefull.GetSystemMessage(c.validatorContractAddress, data)
+	// msg := statefull.GetSystemMessage(c.validatorContractAddress, data)
 
 	// apply message
-	_, err = statefull.ApplyMessage(ctx, msg, state, header, c.chainConfig, chainContext)
+	// _, err = statefull.ApplyMessage(ctx, msg, state, header, c.chainConfig, chainContext)
 
-	return err
+	return nil
 }
