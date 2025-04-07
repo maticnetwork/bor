@@ -23,7 +23,7 @@ var ProtocolVersions = []uint{WIT1}
 // protocolLengths are the number of implemented message corresponding to
 // different protocol versions.
 // PSP - TODO: Add protocol lengths when implemented
-var protocolLengths = map[uint]uint64{WIT1: 0}
+var protocolLengths = map[uint]uint64{WIT1: 2}
 
 // maxMessageSize is the maximum cap on the size of a protocol message.
 const maxMessageSize = 10 * 1024 * 1024
@@ -50,11 +50,16 @@ type Packet interface {
 	Kind() byte   // Kind returns the message type.
 }
 
-// GetWitnessPacket is a packet requesting a witness.
-type GetWitnessPacket struct {
-	RequestId   uint64
+// GetWitnessRequest represents a witness query.
+type GetWitnessRequest struct {
 	OriginBlock uint64
 	TotalBlocks uint64
+}
+
+// GetWitnessPacket represents a witness query with request ID wrapping.
+type GetWitnessPacket struct {
+	RequestId uint64
+	*GetWitnessRequest
 }
 
 // WitnessPacketRLPPacket represents a witness response with request ID wrapping.
@@ -70,6 +75,9 @@ type WitnessPacketResponse []rlp.RawValue
 type NewWitnessPacket struct {
 	Witness *stateless.Witness
 }
+
+func (w *GetWitnessRequest) Name() string { return "GetWitness" }
+func (w *GetWitnessRequest) Kind() byte   { return GetMsgWitness }
 
 func (w *NewWitnessPacket) Name() string { return "NewWitness" }
 func (w *NewWitnessPacket) Kind() byte   { return MsgWitness }

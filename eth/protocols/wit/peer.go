@@ -1,6 +1,7 @@
 package wit
 
 import (
+	"math/rand"
 	"sync"
 
 	mapset "github.com/deckarep/golang-set/v2"
@@ -100,6 +101,33 @@ func (p *Peer) AsyncSendNewWitness(witness *stateless.Witness) {
 	default:
 		p.logger.Debug("Dropped witness propagation.", "witness", witness, "peer", p.id)
 	}
+}
+
+// RequestWitness sends a request to the peer for a witness
+func (p *Peer) RequestWitness(originBlock uint64, totalBlocks uint64, sink chan *Response) (*Request, error) {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
+	log.Debug("Requesting witness", "peer", p.id, "originBlock", originBlock, "totalBlocks", totalBlocks)
+	id := rand.Uint64()
+
+	req := &Request{
+		id:   id,
+		sink: sink,
+		code: GetMsgWitness,
+		want: MsgWitness,
+		data: &GetWitnessPacket{
+			RequestId: id,
+			GetWitnessRequest: &GetWitnessRequest{
+				OriginBlock: originBlock,
+				TotalBlocks: totalBlocks,
+			},
+		},
+	}
+	if err := p.dispatchRequest(req); err != nil {
+		return nil, err
+	}
+	return req, nil
 }
 
 // Close signals the broadcast goroutine to terminate. Only ever call this if

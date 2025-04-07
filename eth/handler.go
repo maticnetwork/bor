@@ -462,7 +462,7 @@ func (h *handler) runSnapExtension(peer *snap.Peer, handler snap.Handler) error 
 	return handler(peer)
 }
 
-// PSP - complete this, and also verify
+// PSP - complete this, and also verify (maybe we should also have a extension like we have for snap?)
 // runWitPeer registers a `wit` peer into the joint eth/wit peerset and
 // starts handling inbound messages.
 func (h *handler) runWitPeer(peer *wit.Peer, handler wit.Handler) error {

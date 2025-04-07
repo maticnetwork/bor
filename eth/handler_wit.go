@@ -39,6 +39,8 @@ func (h *witHandler) Handle(peer *wit.Peer, packet wit.Packet) error {
 	switch packet := packet.(type) {
 	case *wit.NewWitnessPacket:
 		return h.handleWitnessBroadcast(peer, packet.Witness)
+	case *wit.GetWitnessPacket:
+		return h.handleGetWitness(peer, packet)
 
 	default:
 		return fmt.Errorf("unknown wit packet type %T", packet)
@@ -56,6 +58,26 @@ func (h *witHandler) handleWitnessBroadcast(_ *wit.Peer, _ *stateless.Witness) e
 			log.Error("Failed to store witness", "err", err)
 			return err
 		}
+	*/
+
+	return nil
+}
+
+// handleGetWitness handles a GetWitnessPacket request from a peer.
+func (h *witHandler) handleGetWitness(_ *wit.Peer, _ *wit.GetWitnessPacket) error {
+	//  PSP - implement this
+
+	// PSP - TODO
+	/*
+		var witnesses []rlp.RawValue
+
+		// Fetch witnesses from the backend
+		witnesses, err := backend.GetWitnesses(req.OriginBlock, req.TotalBlocks)
+		if err != nil {
+			log.Error("Failed to fetch witnesses", "err", err)
+		}
+
+		return peer.ReplyWitnessRLP(req.RequestId, witnesses)
 	*/
 
 	return nil

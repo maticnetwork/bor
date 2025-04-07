@@ -4,13 +4,12 @@ import (
 	"fmt"
 
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/rlp"
 )
 
 // handleGetWitness processes a GetWitnessPacket request from a peer.
 func handleGetWitness(backend Backend, msg Decoder, peer *Peer) error {
 	// Decode the GetWitnessPacket request
-	var req GetWitnessPacket
+	req := new(GetWitnessPacket)
 	if err := msg.Decode(&req); err != nil {
 		return fmt.Errorf("failed to decode GetWitnessPacket: %w", err)
 	}
@@ -20,18 +19,7 @@ func handleGetWitness(backend Backend, msg Decoder, peer *Peer) error {
 		return fmt.Errorf("invalid GetWitnessPacket: TotalBlocks cannot be zero")
 	}
 
-	var witnesses []rlp.RawValue
-
-	// PSP - TODO
-	/*
-		// Fetch witnesses from the backend
-		witnesses, err := backend.GetWitnesses(req.OriginBlock, req.TotalBlocks)
-		if err != nil {
-			log.Error("Failed to fetch witnesses", "err", err)
-		}
-	*/
-
-	return peer.ReplyWitnessRLP(req.RequestId, witnesses)
+	return backend.Handle(peer, req)
 }
 
 // handleWitness processes an incoming witness from a peer.
