@@ -685,6 +685,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 	resultWithSingleBlockWitnessChan := make(chan Result, 1)
 	resultWithAccumBlockWitnessChan := make(chan Result, 1)
 	resultWithoutWitnessChan := make(chan Result, 1)
+	resultWithParallelProcessorChan := make(chan Result, 1)
 
 	processorCount := 0
 
@@ -720,7 +721,13 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 			if res == nil {
 				res = &ProcessResult{}
 			}
+			report := WitnessReport{
+				witness:                           witness.Copy(),
+				statefulProcessTimeWithWitnessGen: time.Since(pstart),
+				blockCount:                        1,
+			}
 			resultWithSingleBlockWitnessChan <- Result{res.Receipts, res.Logs, res.GasUsed, err, parallelStatedb, blockExecutionParallelCounter, true, nil}
+			resultWithParallelProcessorChan <- Result{res.Receipts, res.Logs, res.GasUsed, err, parallelStatedb, blockExecutionParallelCounter, true, &report}
 		}()
 	}
 
@@ -869,6 +876,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 	resultWithSingleBlockWitness := <-resultWithSingleBlockWitnessChan
 	resultWithAccumBlockWitness := <-resultWithAccumBlockWitnessChan
 	resultWithoutWitness := <-resultWithoutWitnessChan
+	resultWithParallelProcessor := <-resultWithParallelProcessorChan
 
 	if resultWithSingleBlockWitness.parallel && resultWithSingleBlockWitness.err != nil {
 		log.Warn("Parallel state processor failed", "err", resultWithSingleBlockWitness.err)
@@ -896,6 +904,9 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 	}
 	if resultWithAccumBlockWitness.usedGas > 0 {
 		validateAndMeasureStateless(bc, block, &resultWithAccumBlockWitness)
+	}
+	if resultWithParallelProcessor.usedGas > 0 {
+		validateAndMeasureStateless(bc, block, &resultWithParallelProcessor)
 	}
 	if resultWithoutWitness.usedGas > 0 {
 		resultWithAccumBlockWitness.witnessReport.statefulProcessTimeWithoutWitnessGen = resultWithoutWitness.witnessReport.statefulProcessTimeWithoutWitnessGen
