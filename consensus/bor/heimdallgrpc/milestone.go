@@ -2,82 +2,106 @@ package heimdallgrpc
 
 import (
 	"context"
-	"fmt"
-	"math/big"
+	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
 	"github.com/ethereum/go-ethereum/log"
-
-	proto "github.com/maticnetwork/polyproto/heimdall"
-	protoutils "github.com/maticnetwork/polyproto/utils"
 )
 
 func (h *HeimdallGRPCClient) FetchMilestoneCount(ctx context.Context) (int64, error) {
 	log.Info("Fetching milestone count")
 
-	res, err := h.client.FetchMilestoneCount(ctx, nil)
+	var err error
+
+	// Start the timer and set the request type on the context.
+	start := time.Now()
+	ctx = heimdall.WithRequestType(ctx, heimdall.MilestoneCountRequest)
+
+	// Defer the metrics call.
+	defer func() {
+		heimdall.SendMetrics(ctx, start, err == nil)
+	}()
+
+	res, err := h.milestoneQueryClient.GetMilestoneCount(ctx, nil)
 	if err != nil {
 		return 0, err
 	}
 
-	log.Info("Fetched milestone count")
+	count := int64(res.GetCount())
 
-	return res.Result.Count, nil
+	log.Info("Fetched milestone count", "count", count)
+
+	return count, nil
 }
 
-func (h *HeimdallGRPCClient) FetchMilestone(ctx context.Context) (*milestone.MilestoneV1, error) {
-	log.Info("Fetching milestone")
+func (h *HeimdallGRPCClient) FetchMilestone(ctx context.Context) (*milestone.MilestoneV2, error) {
+	log.Debug("Fetching milestone")
 
-	res, err := h.client.FetchMilestone(ctx, nil)
+	var err error
+
+	// Start the timer and set the request type on the context.
+	start := time.Now()
+	ctx = heimdall.WithRequestType(ctx, heimdall.StateSyncRequest)
+
+	// Defer the metrics call.
+	defer func() {
+		heimdall.SendMetrics(ctx, start, err == nil)
+	}()
+
+	res, err := h.milestoneQueryClient.GetLatestMilestone(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	log.Info("Fetched milestone")
+	fetchedMilestone := res.GetMilestone()
 
-	milestone := &milestone.MilestoneV1{
-		StartBlock: new(big.Int).SetUint64(res.Result.StartBlock),
-		EndBlock:   new(big.Int).SetUint64(res.Result.EndBlock),
-		Hash:       protoutils.ConvertH256ToHash(res.Result.RootHash),
-		Proposer:   protoutils.ConvertH160toAddress(res.Result.Proposer),
-		BorChainID: res.Result.BorChainID,
-		Timestamp:  uint64(res.Result.Timestamp.GetSeconds()),
+	milestone := &milestone.MilestoneV2{
+		Proposer:    common.HexToAddress(fetchedMilestone.Proposer),
+		StartBlock:  fetchedMilestone.StartBlock,
+		EndBlock:    fetchedMilestone.EndBlock,
+		Hash:        common.BytesToHash(fetchedMilestone.Hash),
+		BorChainID:  fetchedMilestone.BorChainId,
+		MilestoneID: fetchedMilestone.MilestoneId,
+		Timestamp:   fetchedMilestone.Timestamp,
 	}
+
+	log.Debug("Fetched milestone")
 
 	return milestone, nil
 }
 
-func (h *HeimdallGRPCClient) FetchLastNoAckMilestone(ctx context.Context) (string, error) {
-	log.Debug("Fetching latest no ack milestone Id")
+// func (h *HeimdallGRPCClient) FetchLastNoAckMilestone(ctx context.Context) (string, error) {
+// 	log.Debug("Fetching latest no ack milestone Id")
 
-	res, err := h.client.FetchLastNoAckMilestone(ctx, nil)
-	if err != nil {
-		return "", err
-	}
+// 	res, err := h.milestoneQueryClient.GetLatestNoAckMilestone(ctx, nil)
+// 	if err != nil {
+// 		return "", err
+// 	}
 
-	log.Debug("Fetched last no-ack milestone", "res", res.Result.Result)
+// 	log.Debug("Fetched last no-ack milestone", "res", res.Result)
 
-	return res.Result.Result, nil
-}
+// 	return res.Result, nil
+// }
 
-func (h *HeimdallGRPCClient) FetchNoAckMilestone(ctx context.Context, milestoneID string) error {
-	req := &proto.FetchMilestoneNoAckRequest{
-		MilestoneID: milestoneID,
-	}
+// func (h *HeimdallGRPCClient) FetchNoAckMilestone(ctx context.Context, milestoneID string) error {
+// 	req := &proto.FetchMilestoneNoAckRequest{
+// 		MilestoneID: milestoneID,
+// 	}
 
-	log.Debug("Fetching no ack milestone", "milestoneID", milestoneID)
+// 	log.Debug("Fetching no ack milestone", "milestoneID", milestoneID)
 
-	res, err := h.client.FetchNoAckMilestone(ctx, req)
-	if err != nil {
-		return err
-	}
+// 	res, err := h.milestoneQueryClient.GetNoAckMilestoneById(ctx, req)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	if !res.Result.Result {
-		return fmt.Errorf("%w: milestoneID %q", heimdall.ErrNotInRejectedList, milestoneID)
-	}
+// 	if !res.Result.Result {
+// 		return fmt.Errorf("%w: milestoneID %q", heimdall.ErrNotInRejectedList, milestoneID)
+// 	}
 
-	log.Debug("Fetched no ack milestone", "milestoneID", milestoneID)
+// 	log.Debug("Fetched no ack milestone", "milestoneID", milestoneID)
 
-	return nil
-}
+// 	return nil
+// }

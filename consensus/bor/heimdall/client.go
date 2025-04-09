@@ -111,7 +111,7 @@ func (h *HeimdallClient) StateSyncEventsV1(ctx context.Context, fromID uint64, t
 
 		log.Info("Fetching state sync events", "queryParams", url.RawQuery)
 
-		ctx = withRequestType(ctx, stateSyncRequest)
+		ctx = WithRequestType(ctx, StateSyncRequest)
 
 		request := &Request{client: h.client, url: url, start: time.Now()}
 		response, err := Fetch[StateSyncEventsResponseV1](ctx, request)
@@ -152,7 +152,7 @@ func (h *HeimdallClient) StateSyncEventsV2(ctx context.Context, fromID uint64, t
 
 		log.Info("Fetching state sync events", "queryParams", url.RawQuery)
 
-		ctx = withRequestType(ctx, stateSyncRequest)
+		ctx = WithRequestType(ctx, StateSyncRequest)
 
 		request := &Request{client: h.client, url: url, start: time.Now()}
 		response, err := Fetch[clerkTypes.RecordListResponse](ctx, request)
@@ -199,7 +199,7 @@ func (h *HeimdallClient) GetSpanV1(ctx context.Context, spanID uint64) (*span.He
 		return nil, err
 	}
 
-	ctx = withRequestType(ctx, spanRequest)
+	ctx = WithRequestType(ctx, SpanRequest)
 
 	response, err := FetchWithRetry[SpanResponseV1](ctx, h.client, url, h.closeCh)
 	if err != nil {
@@ -215,7 +215,7 @@ func (h *HeimdallClient) GetSpanV2(ctx context.Context, spanID uint64) (*types.S
 		return nil, err
 	}
 
-	ctx = withRequestType(ctx, spanRequest)
+	ctx = WithRequestType(ctx, SpanRequest)
 
 	response, err := FetchWithRetry[types.QuerySpanByIdResponse](ctx, h.client, url, h.closeCh)
 	if err != nil {
@@ -230,7 +230,7 @@ func (h *HeimdallClient) GetLatestSpanV1(ctx context.Context) (*span.HeimdallSpa
 		return nil, err
 	}
 
-	ctx = withRequestType(ctx, spanRequest)
+	ctx = WithRequestType(ctx, SpanRequest)
 	request := &Request{client: h.client, url: url, start: time.Now()}
 	response, err := Fetch[SpanResponseV1](ctx, request)
 	if err != nil {
@@ -245,7 +245,7 @@ func (h *HeimdallClient) GetLatestSpanV2(ctx context.Context) (*types.Span, erro
 		return nil, err
 	}
 
-	ctx = withRequestType(ctx, spanRequest)
+	ctx = WithRequestType(ctx, SpanRequest)
 	request := &Request{client: h.client, url: url, start: time.Now()}
 	response, err := Fetch[types.QueryLatestSpanResponse](ctx, request)
 	if err != nil {
@@ -261,7 +261,7 @@ func (h *HeimdallClient) FetchCheckpointV1(ctx context.Context, number int64) (*
 		return nil, err
 	}
 
-	ctx = withRequestType(ctx, checkpointRequest)
+	ctx = WithRequestType(ctx, CheckpointRequest)
 
 	response, err := FetchWithRetry[checkpoint.CheckpointResponseV1](ctx, h.client, url, h.closeCh)
 	if err != nil {
@@ -278,7 +278,7 @@ func (h *HeimdallClient) FetchCheckpointV2(ctx context.Context, number int64) (*
 		return nil, err
 	}
 
-	ctx = withRequestType(ctx, checkpointRequest)
+	ctx = WithRequestType(ctx, CheckpointRequest)
 
 	response, err := FetchWithRetry[checkpoint.CheckpointResponseV2](ctx, h.client, url, h.closeCh)
 	if err != nil {
@@ -295,7 +295,7 @@ func (h *HeimdallClient) FetchMilestoneV1(ctx context.Context) (*milestone.Miles
 		return nil, err
 	}
 
-	ctx = withRequestType(ctx, milestoneRequest)
+	ctx = WithRequestType(ctx, MilestoneRequest)
 
 	response, err := FetchWithRetry[milestone.MilestoneResponseV1](ctx, h.client, url, h.closeCh)
 	if err != nil {
@@ -312,7 +312,7 @@ func (h *HeimdallClient) FetchMilestoneV2(ctx context.Context) (*milestone.Miles
 		return nil, err
 	}
 
-	ctx = withRequestType(ctx, milestoneRequest)
+	ctx = WithRequestType(ctx, MilestoneRequest)
 
 	response, err := FetchWithRetry[milestone.MilestoneResponseV2](ctx, h.client, url, h.closeCh)
 	if err != nil {
@@ -329,7 +329,7 @@ func (h *HeimdallClient) FetchCheckpointCount(ctx context.Context) (int64, error
 		return 0, err
 	}
 
-	ctx = withRequestType(ctx, checkpointCountRequest)
+	ctx = WithRequestType(ctx, CheckpointCountRequest)
 
 	if hmm.IsHeimdallV2 {
 		response, err := FetchWithRetry[checkpoint.CheckpointCountResponseV2](ctx, h.client, url, h.closeCh)
@@ -353,7 +353,7 @@ func (h *HeimdallClient) FetchMilestoneCount(ctx context.Context) (int64, error)
 		return 0, err
 	}
 
-	ctx = withRequestType(ctx, milestoneCountRequest)
+	ctx = WithRequestType(ctx, MilestoneCountRequest)
 
 	if hmm.IsHeimdallV2 {
 		response, err := FetchWithRetry[milestone.MilestoneCountResponseV2](ctx, h.client, url, h.closeCh)
@@ -377,7 +377,7 @@ func (h *HeimdallClient) FetchLastNoAckMilestone(ctx context.Context) (string, e
 		return "", err
 	}
 
-	ctx = withRequestType(ctx, milestoneLastNoAckRequest)
+	ctx = WithRequestType(ctx, MilestoneLastNoAckRequest)
 
 	response, err := FetchWithRetry[milestone.MilestoneLastNoAckResponse](ctx, h.client, url, h.closeCh)
 	if err != nil {
@@ -394,7 +394,7 @@ func (h *HeimdallClient) FetchNoAckMilestone(ctx context.Context, milestoneID st
 		return err
 	}
 
-	ctx = withRequestType(ctx, milestoneNoAckRequest)
+	ctx = WithRequestType(ctx, MilestoneNoAckRequest)
 
 	response, err := FetchWithRetry[milestone.MilestoneNoAckResponse](ctx, h.client, url, h.closeCh)
 	if err != nil {
@@ -480,7 +480,7 @@ func Fetch[T any](ctx context.Context, request *Request) (*T, error) {
 
 	defer func() {
 		if metrics.Enabled {
-			sendMetrics(ctx, request.start, isSuccessful)
+			SendMetrics(ctx, request.start, isSuccessful)
 		}
 	}()
 

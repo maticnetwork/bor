@@ -120,7 +120,10 @@ func (c *HeimdallWSClient) readMessages(ctx context.Context) {
 		var milestoneEvent *wsEvent
 		for _, event := range resp.Result.Data.Value.FinalizeBlock.Events {
 			if event.Type == "milestone" {
-				milestoneEvent = &event
+				// In this case their types are set to the types of the respective iteration values
+				// and their scope is the block of the "for" statement; they are re-used in each iteration.
+				e := event
+				milestoneEvent = &e
 				break
 			}
 		}
