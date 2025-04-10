@@ -12,6 +12,7 @@ import (
 	clerk "github.com/ethereum/go-ethereum/consensus/bor/clerk"
 	checkpoint "github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
 	milestone "github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
+	span "github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
 	gomock "github.com/golang/mock/gomock"
 )
 
@@ -50,21 +51,6 @@ func (mr *MockIHeimdallClientMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockIHeimdallClient)(nil).Close))
 }
 
-// FetchCheckpoint mocks base method.
-func (m *MockIHeimdallClient) FetchCheckpoint(arg0 context.Context, arg1 int64) (*checkpoint.Checkpoint, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FetchCheckpoint", arg0, arg1)
-	ret0, _ := ret[0].(*checkpoint.Checkpoint)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// FetchCheckpoint indicates an expected call of FetchCheckpoint.
-func (mr *MockIHeimdallClientMockRecorder) FetchCheckpoint(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchCheckpoint", reflect.TypeOf((*MockIHeimdallClient)(nil).FetchCheckpoint), arg0, arg1)
-}
-
 // FetchCheckpointCount mocks base method.
 func (m *MockIHeimdallClient) FetchCheckpointCount(arg0 context.Context) (int64, error) {
 	m.ctrl.T.Helper()
@@ -80,19 +66,49 @@ func (mr *MockIHeimdallClientMockRecorder) FetchCheckpointCount(arg0 interface{}
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchCheckpointCount", reflect.TypeOf((*MockIHeimdallClient)(nil).FetchCheckpointCount), arg0)
 }
 
-// FetchMilestone mocks base method.
-func (m *MockIHeimdallClient) FetchMilestone(arg0 context.Context) (*milestone.Milestone, error) {
+// FetchCheckpointV1 mocks base method.
+func (m *MockIHeimdallClient) FetchCheckpointV1(arg0 context.Context, arg1 int64) (*checkpoint.CheckpointV1, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "FetchMilestone", arg0)
-	ret0, _ := ret[0].(*milestone.Milestone)
+	ret := m.ctrl.Call(m, "FetchCheckpointV1", arg0, arg1)
+	ret0, _ := ret[0].(*checkpoint.CheckpointV1)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// FetchMilestone indicates an expected call of FetchMilestone.
-func (mr *MockIHeimdallClientMockRecorder) FetchMilestone(arg0 interface{}) *gomock.Call {
+// FetchCheckpointV1 indicates an expected call of FetchCheckpointV1.
+func (mr *MockIHeimdallClientMockRecorder) FetchCheckpointV1(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchMilestone", reflect.TypeOf((*MockIHeimdallClient)(nil).FetchMilestone), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchCheckpointV1", reflect.TypeOf((*MockIHeimdallClient)(nil).FetchCheckpointV1), arg0, arg1)
+}
+
+// FetchCheckpointV2 mocks base method.
+func (m *MockIHeimdallClient) FetchCheckpointV2(arg0 context.Context, arg1 int64) (*checkpoint.CheckpointV2, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FetchCheckpointV2", arg0, arg1)
+	ret0, _ := ret[0].(*checkpoint.CheckpointV2)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FetchCheckpointV2 indicates an expected call of FetchCheckpointV2.
+func (mr *MockIHeimdallClientMockRecorder) FetchCheckpointV2(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchCheckpointV2", reflect.TypeOf((*MockIHeimdallClient)(nil).FetchCheckpointV2), arg0, arg1)
+}
+
+// FetchLastNoAckMilestone mocks base method.
+func (m *MockIHeimdallClient) FetchLastNoAckMilestone(arg0 context.Context) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FetchLastNoAckMilestone", arg0)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FetchLastNoAckMilestone indicates an expected call of FetchLastNoAckMilestone.
+func (mr *MockIHeimdallClientMockRecorder) FetchLastNoAckMilestone(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchLastNoAckMilestone", reflect.TypeOf((*MockIHeimdallClient)(nil).FetchLastNoAckMilestone), arg0)
 }
 
 // FetchMilestoneCount mocks base method.
@@ -110,32 +126,136 @@ func (mr *MockIHeimdallClientMockRecorder) FetchMilestoneCount(arg0 interface{})
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchMilestoneCount", reflect.TypeOf((*MockIHeimdallClient)(nil).FetchMilestoneCount), arg0)
 }
 
-// GetSpan mocks base method.
-func (m *MockIHeimdallClient) GetSpan(arg0 context.Context, arg1 uint64) (*types.Span, error) {
+// FetchMilestoneV1 mocks base method.
+func (m *MockIHeimdallClient) FetchMilestoneV1(arg0 context.Context) (*milestone.MilestoneV1, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSpan", arg0, arg1)
+	ret := m.ctrl.Call(m, "FetchMilestoneV1", arg0)
+	ret0, _ := ret[0].(*milestone.MilestoneV1)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FetchMilestoneV1 indicates an expected call of FetchMilestoneV1.
+func (mr *MockIHeimdallClientMockRecorder) FetchMilestoneV1(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchMilestoneV1", reflect.TypeOf((*MockIHeimdallClient)(nil).FetchMilestoneV1), arg0)
+}
+
+// FetchMilestoneV2 mocks base method.
+func (m *MockIHeimdallClient) FetchMilestoneV2(arg0 context.Context) (*milestone.MilestoneV2, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FetchMilestoneV2", arg0)
+	ret0, _ := ret[0].(*milestone.MilestoneV2)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FetchMilestoneV2 indicates an expected call of FetchMilestoneV2.
+func (mr *MockIHeimdallClientMockRecorder) FetchMilestoneV2(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchMilestoneV2", reflect.TypeOf((*MockIHeimdallClient)(nil).FetchMilestoneV2), arg0)
+}
+
+// FetchNoAckMilestone mocks base method.
+func (m *MockIHeimdallClient) FetchNoAckMilestone(arg0 context.Context, arg1 string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FetchNoAckMilestone", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// FetchNoAckMilestone indicates an expected call of FetchNoAckMilestone.
+func (mr *MockIHeimdallClientMockRecorder) FetchNoAckMilestone(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchNoAckMilestone", reflect.TypeOf((*MockIHeimdallClient)(nil).FetchNoAckMilestone), arg0, arg1)
+}
+
+// GetLatestSpanV1 mocks base method.
+func (m *MockIHeimdallClient) GetLatestSpanV1(arg0 context.Context) (*span.HeimdallSpan, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetLatestSpanV1", arg0)
+	ret0, _ := ret[0].(*span.HeimdallSpan)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetLatestSpanV1 indicates an expected call of GetLatestSpanV1.
+func (mr *MockIHeimdallClientMockRecorder) GetLatestSpanV1(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLatestSpanV1", reflect.TypeOf((*MockIHeimdallClient)(nil).GetLatestSpanV1), arg0)
+}
+
+// GetLatestSpanV2 mocks base method.
+func (m *MockIHeimdallClient) GetLatestSpanV2(arg0 context.Context) (*types.Span, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetLatestSpanV2", arg0)
 	ret0, _ := ret[0].(*types.Span)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetSpan indicates an expected call of GetSpan.
-func (mr *MockIHeimdallClientMockRecorder) GetSpan(arg0, arg1 interface{}) *gomock.Call {
+// GetLatestSpanV2 indicates an expected call of GetLatestSpanV2.
+func (mr *MockIHeimdallClientMockRecorder) GetLatestSpanV2(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSpan", reflect.TypeOf((*MockIHeimdallClient)(nil).GetSpan), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLatestSpanV2", reflect.TypeOf((*MockIHeimdallClient)(nil).GetLatestSpanV2), arg0)
 }
 
-// StateSyncEvents mocks base method.
-func (m *MockIHeimdallClient) StateSyncEvents(arg0 context.Context, arg1 uint64, arg2 int64) ([]*clerk.EventRecordWithTime, error) {
+// GetSpanV1 mocks base method.
+func (m *MockIHeimdallClient) GetSpanV1(arg0 context.Context, arg1 uint64) (*span.HeimdallSpan, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "StateSyncEvents", arg0, arg1, arg2)
+	ret := m.ctrl.Call(m, "GetSpanV1", arg0, arg1)
+	ret0, _ := ret[0].(*span.HeimdallSpan)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetSpanV1 indicates an expected call of GetSpanV1.
+func (mr *MockIHeimdallClientMockRecorder) GetSpanV1(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSpanV1", reflect.TypeOf((*MockIHeimdallClient)(nil).GetSpanV1), arg0, arg1)
+}
+
+// GetSpanV2 mocks base method.
+func (m *MockIHeimdallClient) GetSpanV2(arg0 context.Context, arg1 uint64) (*types.Span, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetSpanV2", arg0, arg1)
+	ret0, _ := ret[0].(*types.Span)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetSpanV2 indicates an expected call of GetSpanV2.
+func (mr *MockIHeimdallClientMockRecorder) GetSpanV2(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSpanV2", reflect.TypeOf((*MockIHeimdallClient)(nil).GetSpanV2), arg0, arg1)
+}
+
+// StateSyncEventsV1 mocks base method.
+func (m *MockIHeimdallClient) StateSyncEventsV1(arg0 context.Context, arg1 uint64, arg2 int64) ([]*clerk.EventRecordWithTime, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StateSyncEventsV1", arg0, arg1, arg2)
 	ret0, _ := ret[0].([]*clerk.EventRecordWithTime)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// StateSyncEvents indicates an expected call of StateSyncEvents.
-func (mr *MockIHeimdallClientMockRecorder) StateSyncEvents(arg0, arg1, arg2 interface{}) *gomock.Call {
+// StateSyncEventsV1 indicates an expected call of StateSyncEventsV1.
+func (mr *MockIHeimdallClientMockRecorder) StateSyncEventsV1(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StateSyncEvents", reflect.TypeOf((*MockIHeimdallClient)(nil).StateSyncEvents), arg0, arg1, arg2)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StateSyncEventsV1", reflect.TypeOf((*MockIHeimdallClient)(nil).StateSyncEventsV1), arg0, arg1, arg2)
+}
+
+// StateSyncEventsV2 mocks base method.
+func (m *MockIHeimdallClient) StateSyncEventsV2(arg0 context.Context, arg1 uint64, arg2 int64) ([]*clerk.EventRecordWithTime, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "StateSyncEventsV2", arg0, arg1, arg2)
+	ret0, _ := ret[0].([]*clerk.EventRecordWithTime)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// StateSyncEventsV2 indicates an expected call of StateSyncEventsV2.
+func (mr *MockIHeimdallClientMockRecorder) StateSyncEventsV2(arg0, arg1, arg2 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StateSyncEventsV2", reflect.TypeOf((*MockIHeimdallClient)(nil).StateSyncEventsV2), arg0, arg1, arg2)
 }
