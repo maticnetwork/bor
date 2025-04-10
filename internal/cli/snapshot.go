@@ -24,8 +24,6 @@ import (
 	"github.com/mitchellh/cli"
 )
 
-var errPbssNotSupported = errors.New("ancient block pruning is not supporeted on path based storage scheme")
-
 // SnapshotCommand is the command to group the snapshot commands
 type SnapshotCommand struct {
 	UI cli.Ui
@@ -350,13 +348,13 @@ func (c *PruneBlockCommand) validateAgainstSnapshot(stack *node.Node, dbHandles 
 	}
 	defer chaindb.Close()
 
-	// Check if we're using hash based scheme and not path based
-	if rawdb.ReadStateScheme(chaindb) != rawdb.HashScheme {
-		return errPbssNotSupported
-	}
-
 	if !c.checkSnapshotWithMPT {
 		return nil
+	}
+
+	// MPT verifiaction does not work PBSS
+	if rawdb.ReadStateScheme(chaindb) != rawdb.HashScheme {
+		return fmt.Errorf("unable to perform mpt verification with path based state scheme")
 	}
 
 	headBlock := rawdb.ReadHeadBlock(chaindb)
