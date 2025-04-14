@@ -29,6 +29,7 @@ import (
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/bloombits"
 	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -112,6 +113,10 @@ type Backend interface {
 	PurgeWhitelistedCheckpoint()
 	GetWhitelistedMilestone() (bool, uint64, common.Hash)
 	PurgeWhitelistedMilestone()
+
+	// Witness related APIs
+	GetWitnesses(ctx context.Context, originBlock uint64, totalBlocks uint64) ([]*stateless.Witness, error)
+	StoreWitness(ctx context.Context, blockHash common.Hash, witness *stateless.Witness) error
 
 	// Networking related APIs
 	PeerStats() interface{}

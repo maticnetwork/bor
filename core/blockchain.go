@@ -18,6 +18,7 @@
 package core
 
 import (
+	"bytes"
 	"compress/gzip"
 	"context"
 	"errors"
@@ -610,6 +611,11 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 		parallel bool
 	}
 
+	// temporary disabled block STM because witness not work on parallel.
+	// TODO: how to enable witness on parallel state processing
+	bc.parallelProcessor = nil
+	bc.enforceParallelProcessor = false
+
 	var resultChanLen int = 2
 	if bc.enforceParallelProcessor {
 		log.Debug("Processing block using Block STM only", "number", block.NumberU64())
@@ -655,7 +661,12 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 		processorCount++
 
 		go func() {
-			statedb.StartPrefetcher("chain", nil)
+			witness, err := stateless.NewWitness(block.Header(), bc)
+			if err != nil {
+				log.Error("error in witness generation", "caughterr", err)
+			}
+
+			statedb.StartPrefetcher("chain", witness)
 			pstart := time.Now()
 			res, err := bc.processor.Process(block, statedb, bc.vmConfig, ctx)
 			blockExecutionSerialTimer.UpdateSince(pstart)
@@ -1865,6 +1876,13 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	}
 
 	rawdb.WritePreimages(blockBatch, statedb.Preimages())
+
+	var witBuf bytes.Buffer
+	if err := statedb.Witness().EncodeRLP(&witBuf); err != nil {
+		log.Error("error in witness encoding", "caughterr", err)
+	}
+
+	rawdb.WriteWitness(blockBatch, block.Hash(), witBuf.Bytes())
 
 	if err := blockBatch.Write(); err != nil {
 		log.Crit("Failed to write block into disk", "err", err)
