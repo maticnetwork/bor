@@ -1006,6 +1006,14 @@ func (c *Command) Flags(config *Config) *flagset.Flagset {
 		Default: c.cliConfig.ParallelEVM.Enforce,
 	})
 
+	// WitnessProtocol
+	f.BoolFlag(&flagset.BoolFlag{
+		Name:    "witnessprotocol",
+		Usage:   "Enable witness protocol",
+		Value:   &c.cliConfig.WitnessProtocol,
+		Default: c.cliConfig.WitnessProtocol,
+	})
+
 	f.Uint64Flag(&flagset.Uint64Flag{
 		Name:    "dev.gaslimit",
 		Usage:   "Initial block gas limit",

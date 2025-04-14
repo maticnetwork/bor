@@ -30,6 +30,7 @@ import (
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/forkid"
 	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/core/txpool"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -37,6 +38,7 @@ import (
 	"github.com/ethereum/go-ethereum/eth/fetcher"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/eth/protocols/snap"
+	"github.com/ethereum/go-ethereum/eth/protocols/wit"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
@@ -474,6 +476,13 @@ func (h *handler) runSnapExtension(peer *snap.Peer, handler snap.Handler) error 
 	return handler(peer)
 }
 
+// PSP - complete this, and also verify (maybe we should also have a extension like we have for snap?)
+// runWitPeer registers a `wit` peer into the joint eth/wit peerset and
+// starts handling inbound messages.
+func (h *handler) runWitPeer(peer *wit.Peer, handler wit.Handler) error {
+	return nil
+}
+
 // removePeer requests disconnection of a peer.
 func (h *handler) removePeer(id string) {
 	peer := h.peers.peer(id)
@@ -553,6 +562,16 @@ func (h *handler) Stop() {
 	h.wg.Wait()
 
 	log.Info("Ethereum protocol stopped")
+}
+
+// PSP - use this to broadcast the witness
+// BroadcastWitness broadcasts the witness to all peers
+func (h *handler) BroadcastWitness(witness *stateless.Witness) {
+	// broadcast the witness to all peers who are not
+	// aware of the witness
+	for _, peer := range h.peers.peersWithoutWitness(witness.Headers[0].Hash()) {
+		peer.AsyncSendNewWitness(witness)
+	}
 }
 
 // BroadcastBlock will either propagate a block to a subset of its peers, or

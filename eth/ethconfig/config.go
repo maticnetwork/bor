@@ -200,6 +200,9 @@ type Config struct {
 	// Parallel EVM (Block-STM) related config
 	ParallelEVM core.ParallelEVMConfig `toml:",omitempty"`
 
+	// WitnessProtocol enabless the wit protocol
+	WitnessProtocol bool
+
 	// Develop Fake Author mode to produce blocks without authorisation
 	DevFakeAuthor bool `hcl:"devfakeauthor,optional" toml:"devfakeauthor,optional"`
 

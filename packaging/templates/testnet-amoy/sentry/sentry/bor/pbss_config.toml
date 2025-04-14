@@ -13,6 +13,7 @@ syncmode = "full"
 # gcmode = "full"
 # snapshot = true
 # ethstats = ""
+# witnessprotocol = false
 # devfakeauthor = false
 
 # ["eth.requiredblocks"]

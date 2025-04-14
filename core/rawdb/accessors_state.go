@@ -269,3 +269,14 @@ func WriteStateHistory(db ethdb.AncientWriter, id uint64, meta []byte, accountIn
 		return nil
 	})
 }
+
+func ReadWitness(db ethdb.KeyValueReader, blockHash common.Hash) []byte {
+	data, _ := db.Get(witnessKey(blockHash))
+	return data
+}
+
+func WriteWitness(db ethdb.KeyValueWriter, blockHash common.Hash, witness []byte) {
+	if err := db.Put(witnessKey(blockHash), witness); err != nil {
+		log.Crit("Failed to store witness", "err", err)
+	}
+}

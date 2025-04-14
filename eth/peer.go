@@ -19,6 +19,7 @@ package eth
 import (
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/eth/protocols/snap"
+	"github.com/ethereum/go-ethereum/eth/protocols/wit"
 )
 
 // ethPeerInfo represents a short summary of the `eth` sub-protocol metadata known
@@ -31,6 +32,7 @@ type ethPeerInfo struct {
 type ethPeer struct {
 	*eth.Peer
 	snapExt *snapPeer // Satellite `snap` connection
+	witPeer *witPeer
 }
 
 // info gathers and returns some `eth` protocol metadata known about a peer.
@@ -55,6 +57,22 @@ type snapPeer struct {
 // info gathers and returns some `snap` protocol metadata known about a peer.
 func (p *snapPeer) info() *snapPeerInfo {
 	return &snapPeerInfo{
+		Version: p.Version(),
+	}
+}
+
+type witPeerInfo struct {
+	Version uint `json:"version"` // Witness protocol version negotiated
+}
+
+// witPeer is wrapper around wit.Peer to maintain a few extra metadata.
+type witPeer struct {
+	*wit.Peer
+}
+
+// info gathers and returns some `wit` protocol metadata known about a peer.
+func (p *witPeer) info() *witPeerInfo {
+	return &witPeerInfo{
 		Version: p.Version(),
 	}
 }
