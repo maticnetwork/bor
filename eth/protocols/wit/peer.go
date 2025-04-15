@@ -44,7 +44,7 @@ type Peer struct {
 	resDispatch chan *response // Dispatch channel to fulfill witness requests
 
 	term chan struct{} // Termination channel to stop the broadcaster
-	// PSP - review all the instances of the lock and unlock
+	// TODO(@pratikspatil024) - review all the instances of the lock and unlock
 	// and see if we can use a more efficient locking strategy
 	lock sync.RWMutex // Mutex protecting the internal fields
 }

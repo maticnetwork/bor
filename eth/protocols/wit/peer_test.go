@@ -63,7 +63,7 @@ func TestAddKnownWitness(t *testing.T) {
 	peer.AddKnownWitness(testWitness3)
 	assert.True(t, peer.KnownWitnessesContains(testWitness3), "Witness should be known by the peer")
 
-	// PSP - TODO - this will fail bacause the way we calculate the hash of the witness is by getting the
+	// TODO(@pratikspatil024) - this will fail bacause the way we calculate the hash of the witness is by getting the
 	// hash of the first header, and beacuse the witness1 and witness3 have the same first header,
 	// they will be considered the same witness.
 	// So we need to change the way we calculate the hash of the witness
