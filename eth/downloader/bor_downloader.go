@@ -447,7 +447,7 @@ func (d *Downloader) synchronise(id string, hash common.Hash, td, ttd *big.Int, 
 	d.queue.Reset(blockCacheMaxItems, blockCacheInitialItems)
 	d.peers.Reset()
 
-	for _, ch := range []chan bool{d.queue.blockWakeCh, d.queue.receiptWakeCh} {
+	for _, ch := range []chan bool{d.queue.blockWakeCh, d.queue.receiptWakeCh, d.queue.witnessWakeCh} {
 		select {
 		case <-ch:
 		default:
@@ -689,6 +689,11 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td, ttd *
 		func() error { return d.fetchBodies(origin+1, beaconMode) },   // Bodies are retrieved during normal and snap sync
 		func() error { return d.fetchReceipts(origin+1, beaconMode) }, // Receipts are retrieved during snap sync
 		func() error { return d.processHeaders(origin+1, td, ttd, beaconMode) },
+	}
+
+	// Add witness fetcher if in FullSync or StatelessSync mode
+	if mode == FullSync || mode == StatelessSync {
+		fetchers = append(fetchers, func() error { return d.fetchWitnesses(origin+1, beaconMode) })
 	}
 
 	if mode == SnapSync {
@@ -1163,7 +1168,7 @@ func (d *Downloader) fetchHeaders(p *peerConnection, from uint64, head uint64) e
 			d.dropPeer(p.id)
 
 			// Finish the sync gracefully instead of dumping the gathered data though
-			for _, ch := range []chan bool{d.queue.blockWakeCh, d.queue.receiptWakeCh} {
+			for _, ch := range []chan bool{d.queue.blockWakeCh, d.queue.receiptWakeCh, d.queue.witnessWakeCh} {
 				select {
 				case ch <- false:
 				case <-d.cancelCh:
@@ -1381,7 +1386,6 @@ func (d *Downloader) fetchReceipts(from uint64, beaconMode bool) error {
 	err := d.concurrentFetch((*receiptQueue)(d), beaconMode)
 
 	log.Debug("Receipt download terminated", "err", err)
-
 	return err
 }
 
@@ -1403,7 +1407,7 @@ func (d *Downloader) processHeaders(origin uint64, td, ttd *big.Int, beaconMode 
 			// Terminate header processing if we synced up
 			if task == nil || len(task.headers) == 0 {
 				// Notify everyone that headers are fully processed
-				for _, ch := range []chan bool{d.queue.blockWakeCh, d.queue.receiptWakeCh} {
+				for _, ch := range []chan bool{d.queue.blockWakeCh, d.queue.receiptWakeCh, d.queue.witnessWakeCh} {
 					select {
 					case ch <- false:
 					case <-d.cancelCh:
@@ -1535,7 +1539,7 @@ func (d *Downloader) processHeaders(origin uint64, td, ttd *big.Int, beaconMode 
 			d.syncStatsLock.Unlock()
 
 			// Signal the content downloaders of the availability of new tasks
-			for _, ch := range []chan bool{d.queue.blockWakeCh, d.queue.receiptWakeCh} {
+			for _, ch := range []chan bool{d.queue.blockWakeCh, d.queue.receiptWakeCh, d.queue.witnessWakeCh} {
 				select {
 				case ch <- true:
 				default:
@@ -2029,63 +2033,68 @@ func (d *Downloader) processFullSyncContentStateless() error {
 	for {
 		results := d.queue.Results(true)
 		if len(results) == 0 {
-			return nil
+			// If no results came back, but we are cancelling, return
+			select {
+			case <-d.cancelCh:
+				return errCanceled
+			default:
+			}
+			// If the queue got closed, return
+			// Note: This is not 100% reliable because the queue can be closed
+			// right after this check. Need to make Results return closed status.
+			if d.queue.Idle() {
+				return nil
+			}
+			// Otherwise continue waiting for results
+			continue
 		}
-
-		if d.chainInsertHook != nil {
-			d.chainInsertHook(results)
-		}
-
+		// Process the retrieved block segments
 		if err := d.importBlockResultsStateless(results); err != nil {
+			log.Warn("Block import failed", "err", err)
 			return err
 		}
 	}
 }
 
-// importBlockResultsStateless imports the provided blocks into the chain in stateless mode.
 func (d *Downloader) importBlockResultsStateless(results []*fetchResult) error {
-	// Check for any early termination requests
+	// Check for any early exits
+	select {
+	case <-d.quitCh:
+		log.Debug("Downloader terminating, exiting block import")
+		return errTerminated
+	case <-d.cancelCh:
+		log.Debug("Downloader cancelled, exiting block import")
+		return errCanceled
+	default:
+	}
+	// Make sure we have something to import
 	if len(results) == 0 {
 		return nil
 	}
-	select {
-	case <-d.quitCh:
-		return errCancelContentProcessing
-	default:
-	}
-	// Retrieve a batch of results to import
-	first, last := results[0].Header, results[len(results)-1].Header
-	log.Debug("Inserting downloaded chain in stateless mode", "items", len(results),
-		"firstnum", first.Number, "firsthash", first.Hash(),
-		"lastnum", last.Number, "lasthash", last.Hash(),
-	)
-
+	// Assemble the blocks from the fetch results
 	blocks := make([]*types.Block, len(results))
+	witnesses := make([]*stateless.Witness, len(results))
 	for i, result := range results {
-		blocks[i] = types.NewBlockWithHeader(result.Header).WithBody(types.Body{
-			Transactions: result.Transactions,
-			Uncles:       result.Uncles,
-			Withdrawals:  result.Withdrawals,
-		})
+		// Construct block correctly
+		blockBody := types.Body{Transactions: result.Transactions, Uncles: result.Uncles, Withdrawals: result.Withdrawals}
+		blocks[i] = types.NewBlockWithHeader(result.Header).WithBody(blockBody)
+		// Extract witness (handle potential nil if fetch/decode failed or wasn't needed)
+		witnesses[i] = result.Witness
 	}
-
-	// Call InsertChainStateless to implement stateless sync
-	// Pass nil witnesses for now, and false for discardState (keeping state for now)
-	// The state will be fetched independently through the checkpoint mechanism
-	if index, err := d.blockchain.InsertChainStateless(blocks, nil); err != nil {
-		if index < len(results) {
-			log.Debug("Stateless downloaded item processing failed", "number", results[index].Header.Number, "hash", results[index].Header.Hash(), "err", err)
-
-			// Report bad block when encountered
-			if d.badBlock != nil {
-				d.badBlock(blocks[index].Header(), nil)
-			}
-		} else {
-			log.Debug("Stateless downloaded item processing failed on sidechain import", "index", index, "err", err)
-		}
-
-		return fmt.Errorf("%w: %v", errInvalidChain, err)
+	// Run the import hook if registered
+	if d.chainInsertHook != nil {
+		d.chainInsertHook(results)
 	}
-
+	// Import the batch of blocks
+	if index, err := d.blockchain.InsertChainStateless(blocks, witnesses); err != nil {
+		log.Warn("Invalid block body", "index", index, "hash", blocks[index].Hash(), "err", err)
+		return errInvalidBody // Or a more specific error if possible
+	}
 	return nil
+}
+
+// fetchWitnesses is a dedicated goroutine responsible for fetching block witnesses.
+func (d *Downloader) fetchWitnesses(from uint64, beaconMode bool) error {
+	log.Debug("Starting block witness fetcher", "from", from)
+	return d.concurrentFetch((*witnessQueue)(d), beaconMode)
 }

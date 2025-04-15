@@ -27,6 +27,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
+	"github.com/ethereum/go-ethereum/eth/protocols/wit"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/msgrate"
@@ -63,6 +64,7 @@ type Peer interface {
 
 	RequestBodies([]common.Hash, chan *eth.Response) (*eth.Request, error)
 	RequestReceipts([]common.Hash, chan *eth.Response) (*eth.Request, error)
+	RequestWitnesses([]common.Hash, chan *eth.Response) (*eth.Request, error)
 }
 
 // newPeerConnection creates a new downloader peer.
@@ -102,6 +104,12 @@ func (p *peerConnection) UpdateReceiptRate(delivered int, elapsed time.Duration)
 	p.rates.Update(eth.ReceiptsMsg, elapsed, delivered)
 }
 
+// UpdateWitnessRate updates the peer's estimated witness retrieval throughput
+// with the current measurement.
+func (p *peerConnection) UpdateWitnessRate(delivered int, elapsed time.Duration) {
+	p.rates.Update(wit.MsgWitness, elapsed, delivered)
+}
+
 // HeaderCapacity retrieves the peer's header download allowance based on its
 // previously discovered throughput.
 func (p *peerConnection) HeaderCapacity(targetRTT time.Duration) int {
@@ -132,6 +140,19 @@ func (p *peerConnection) ReceiptCapacity(targetRTT time.Duration) int {
 		cap = MaxReceiptFetch
 	}
 
+	return cap
+}
+
+// WitnessCapacity retrieves the peers witness download allowance based on its
+// previously discovered throughput.
+// TODO: Define MaxWitnessFetch constant if needed
+func (p *peerConnection) WitnessCapacity(targetRTT time.Duration) int {
+	cap := p.rates.Capacity(wit.MsgWitness, targetRTT)
+	// Placeholder limit, replace MaxWitnessFetch with actual constant if defined
+	const MaxWitnessFetch = 128 // Placeholder value
+	if cap > MaxWitnessFetch {
+		cap = MaxWitnessFetch
+	}
 	return cap
 }
 

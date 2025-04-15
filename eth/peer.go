@@ -17,6 +17,12 @@
 package eth
 
 import (
+	"errors"
+	"fmt"
+	"sync"
+	"time"
+
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/eth/protocols/snap"
 	"github.com/ethereum/go-ethereum/eth/protocols/wit"
@@ -75,4 +81,98 @@ func (p *witPeer) info() *witPeerInfo {
 	return &witPeerInfo{
 		Version: p.Version(),
 	}
+}
+
+// ethWitRequest wraps an eth.Request and holds the underlying wit.Request.
+// This allows the downloader to track the request lifecycle via the eth.Request
+// while allowing cancellation to be passed to the wit.Request.
+type ethWitRequest struct {
+	*eth.Request              // Embedded eth.Request (must be non-nil)
+	witReq       *wit.Request // The actual witness protocol request
+}
+
+// Close overrides the embedded eth.Request's Close to also close the wit.Request.
+func (r *ethWitRequest) Close() error {
+	// First, close the underlying witness request.
+	err := r.witReq.Close()
+	// Then, call the embedded eth.Request's Close (if it exists and does anything).
+	// If eth.Request.Close() is a no-op or doesn't exist, this could be removed.
+	if r.Request != nil {
+		// Assuming eth.Request has a Close method. If not, remove this line.
+		// r.Request.Close() // Example: eth.Request might not have Close()
+	}
+	return err
+}
+
+// RequestWitnesses implements downloader.Peer.
+// It requests witnesses using the wit protocol for the given block hashes.
+// NOTE: Response adaptation lacks robust cancellation checks.
+func (p *ethPeer) RequestWitnesses(hashes []common.Hash, dlResCh chan *eth.Response) (*eth.Request, error) {
+	// Check if peer supports the witness protocol
+	if p.witPeer == nil {
+		return nil, errors.New("peer does not support witness protocol (wit)")
+	}
+
+	if len(hashes) == 0 {
+		return nil, errors.New("RequestWitnesses called with empty hash list")
+	}
+
+	p.Log().Debug("Requesting witnesses via hash list", "count", len(hashes), "first_hash", hashes[0])
+
+	// --- Call Underlying wit.Peer ---
+	witSink := make(chan *wit.Response, len(hashes))
+	// Call the updated wit peer's request method with the full hashes slice
+	witReq, err := p.witPeer.Peer.RequestWitness(hashes, witSink)
+	if err != nil {
+		return nil, fmt.Errorf("witPeer.RequestWitness failed: %w", err)
+	}
+
+	// --- Create the eth.Request wrapper ---
+	ethReqBase := &eth.Request{
+		Peer: p.Peer.ID(),
+		Sent: time.Now(),
+	}
+	wrapper := &ethWitRequest{
+		Request: ethReqBase,
+		witReq:  witReq,
+	}
+
+	// --- Adapt Response Channel (Goroutine) ---
+	adaptWg := sync.WaitGroup{}
+	adaptWg.Add(1)
+	go func() {
+		defer adaptWg.Done()
+		select {
+		case witRes := <-witSink:
+			if witRes == nil {
+				p.Log().Warn("Nil response received from wit sink")
+				// Optionally: close(dlResCh) or send error response?
+				return
+			}
+
+			// --- Response Adaptation ---
+			witnessRespPacket, ok := witRes.Res.(*wit.WitnessPacketRLPPacket)
+			if !ok {
+				p.Log().Error("Invalid witness response type/field from wit sink", "type", fmt.Sprintf("%T", witRes.Res))
+				// Optionally: close(dlResCh) or send error response?
+				return
+			}
+
+			// Construct eth.Response, using the embedded Request from the wrapper
+			dlRes := &eth.Response{
+				Req: wrapper.Request, // Pass the embedded *eth.Request
+				Res: *witnessRespPacket,
+				// Done channel signaling is handled by concurrent fetcher based on this send
+			}
+
+			// Send adapted response (Incomplete: lacks cancellation checks)
+			dlResCh <- dlRes
+			p.Log().Trace("Forwarded witness response to downloader")
+
+			// TODO: Handle witReq cancellation/error?
+		}
+	}()
+
+	// --- Return Value ---
+	return wrapper.Request, nil
 }

@@ -3,6 +3,7 @@ package wit
 import (
 	"errors"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/rlp"
 )
@@ -50,10 +51,9 @@ type Packet interface {
 	Kind() byte   // Kind returns the message type.
 }
 
-// GetWitnessRequest represents a witness query.
+// GetWitnessRequest represents a list of witnesses query by block hashes.
 type GetWitnessRequest struct {
-	OriginBlock uint64
-	TotalBlocks uint64
+	Hashes []common.Hash // Request by list of block hashes
 }
 
 // GetWitnessPacket represents a witness query with request ID wrapping.
