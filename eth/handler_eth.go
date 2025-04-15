@@ -26,6 +26,7 @@ import (
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
+	"github.com/ethereum/go-ethereum/eth/protocols/wit"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 )
 
@@ -106,8 +107,25 @@ func (h *ethHandler) handleBlockAnnounces(peer *eth.Peer, hashes []common.Hash, 
 		}
 	}
 
+	// Get the ethPeer wrapper for witness support
+	ethPeer := h.peers.peer(peer.ID())
+	if ethPeer == nil {
+		return errors.New("peer not found")
+	}
+
+	// Create a witness requester that uses the wit.Peer's RequestWitness method
+	witnessRequester := func(hashes []common.Hash, sink chan *wit.Response) (*wit.Request, error) {
+		// Get the wit.Peer from the ethPeer
+		if ethPeer.witPeer == nil {
+			return nil, errors.New("peer does not support witness protocol")
+		}
+
+		// Request witnesses using the wit peer
+		return ethPeer.witPeer.RequestWitness(hashes, sink)
+	}
+
 	for i := 0; i < len(unknownHashes); i++ {
-		h.blockFetcher.Notify(peer.ID(), unknownHashes[i], unknownNumbers[i], time.Now(), peer.RequestOneHeader, peer.RequestBodies)
+		h.blockFetcher.Notify(peer.ID(), unknownHashes[i], unknownNumbers[i], time.Now(), peer.RequestOneHeader, peer.RequestBodies, witnessRequester)
 	}
 
 	return nil

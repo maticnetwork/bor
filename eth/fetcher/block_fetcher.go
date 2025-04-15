@@ -25,8 +25,10 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/prque"
 	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
+	"github.com/ethereum/go-ethereum/eth/protocols/wit"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/trie"
@@ -69,6 +71,10 @@ var (
 	headerFilterOutMeter = metrics.NewRegisteredMeter("eth/fetcher/block/filter/headers/out", nil)
 	bodyFilterInMeter    = metrics.NewRegisteredMeter("eth/fetcher/block/filter/bodies/in", nil)
 	bodyFilterOutMeter   = metrics.NewRegisteredMeter("eth/fetcher/block/filter/bodies/out", nil)
+
+	witnessFilterInMeter  = metrics.NewRegisteredMeter("eth/fetcher/block/filter/witnesses/in", nil)
+	witnessFilterOutMeter = metrics.NewRegisteredMeter("eth/fetcher/block/filter/witnesses/out", nil)
+	witnessFetchMeter     = metrics.NewRegisteredMeter("eth/fetcher/block/witnesses", nil)
 )
 
 var errTerminated = errors.New("terminated")
@@ -84,6 +90,9 @@ type headerRequesterFn func(common.Hash, chan *eth.Response) (*eth.Request, erro
 
 // bodyRequesterFn is a callback type for sending a body retrieval request.
 type bodyRequesterFn func([]common.Hash, chan *eth.Response) (*eth.Request, error)
+
+// witnessRequesterFn is a callback type for sending a witness retrieval request.
+type witnessRequesterFn func([]common.Hash, chan *wit.Response) (*wit.Request, error)
 
 // headerVerifierFn is a callback type to verify a block's header for fast propagation.
 type headerVerifierFn func(header *types.Header) error
@@ -113,8 +122,9 @@ type blockAnnounce struct {
 
 	origin string // Identifier of the peer originating the notification
 
-	fetchHeader headerRequesterFn // Fetcher function to retrieve the header of an announced block
-	fetchBodies bodyRequesterFn   // Fetcher function to retrieve the body of an announced block
+	fetchHeader  headerRequesterFn  // Fetcher function to retrieve the header of an announced block
+	fetchBodies  bodyRequesterFn    // Fetcher function to retrieve the body of an announced block
+	fetchWitness witnessRequesterFn // Fetcher function to retrieve the witness of an announced block
 }
 
 // headerFilterTask represents a batch of headers needing fetcher filtering.
@@ -133,6 +143,14 @@ type bodyFilterTask struct {
 	uncles        [][]*types.Header      // Collection of uncles per block bodies
 	time          time.Time              // Arrival time of the blocks' contents
 	announcedTime time.Time              // Announcement time of the availability of the block
+}
+
+// witnessFilterTask represents a batch of block witnesses needing fetcher filtering.
+type witnessFilterTask struct {
+	peer          string               // The source peer of block witnesses
+	witnesses     []*stateless.Witness // Collection of witnesses per block
+	time          time.Time            // Arrival time of the witnesses
+	announcedTime time.Time            // Announcement time of the availability of the block
 }
 
 // blockOrHeaderInject represents a schedules import operation.
@@ -170,8 +188,9 @@ type BlockFetcher struct {
 	notify chan *blockAnnounce
 	inject chan *blockOrHeaderInject
 
-	headerFilter chan chan *headerFilterTask
-	bodyFilter   chan chan *bodyFilterTask
+	headerFilter  chan chan *headerFilterTask
+	bodyFilter    chan chan *bodyFilterTask
+	witnessFilter chan chan *witnessFilterTask
 
 	done chan common.Hash
 	quit chan struct{}
@@ -182,6 +201,7 @@ type BlockFetcher struct {
 	fetching   map[common.Hash]*blockAnnounce   // Announced blocks, currently fetching
 	fetched    map[common.Hash][]*blockAnnounce // Blocks with headers fetched, scheduled for body retrieval
 	completing map[common.Hash]*blockAnnounce   // Blocks with headers, currently body-completing
+	witnessing map[common.Hash]*blockAnnounce   // Blocks with bodies, currently witness-completing
 
 	// Block cache
 	queue  *prque.Prque[int64, *blockOrHeaderInject] // Queue containing the import operations (block number sorted)
@@ -217,6 +237,7 @@ func NewBlockFetcher(light bool, getHeader HeaderRetrievalFn, getBlock blockRetr
 		inject:              make(chan *blockOrHeaderInject),
 		headerFilter:        make(chan chan *headerFilterTask),
 		bodyFilter:          make(chan chan *bodyFilterTask),
+		witnessFilter:       make(chan chan *witnessFilterTask),
 		done:                make(chan common.Hash),
 		quit:                make(chan struct{}),
 		announces:           make(map[string]int),
@@ -224,6 +245,7 @@ func NewBlockFetcher(light bool, getHeader HeaderRetrievalFn, getBlock blockRetr
 		fetching:            make(map[common.Hash]*blockAnnounce),
 		fetched:             make(map[common.Hash][]*blockAnnounce),
 		completing:          make(map[common.Hash]*blockAnnounce),
+		witnessing:          make(map[common.Hash]*blockAnnounce),
 		queue:               prque.New[int64, *blockOrHeaderInject](nil),
 		queues:              make(map[string]int),
 		queued:              make(map[common.Hash]*blockOrHeaderInject),
@@ -254,14 +276,15 @@ func (f *BlockFetcher) Stop() {
 // Notify announces the fetcher of the potential availability of a new block in
 // the network.
 func (f *BlockFetcher) Notify(peer string, hash common.Hash, number uint64, time time.Time,
-	headerFetcher headerRequesterFn, bodyFetcher bodyRequesterFn) error {
+	headerFetcher headerRequesterFn, bodyFetcher bodyRequesterFn, witnessFetcher witnessRequesterFn) error {
 	block := &blockAnnounce{
-		hash:        hash,
-		number:      number,
-		time:        time,
-		origin:      peer,
-		fetchHeader: headerFetcher,
-		fetchBodies: bodyFetcher,
+		hash:         hash,
+		number:       number,
+		time:         time,
+		origin:       peer,
+		fetchHeader:  headerFetcher,
+		fetchBodies:  bodyFetcher,
+		fetchWitness: witnessFetcher,
 	}
 	select {
 	case f.notify <- block:
@@ -341,6 +364,34 @@ func (f *BlockFetcher) FilterBodies(peer string, transactions [][]*types.Transac
 	}
 }
 
+// FilterWitnesses extracts all the block witnesses that were explicitly requested by the fetcher,
+// returning those that should be handled differently.
+func (f *BlockFetcher) FilterWitnesses(peer string, witnesses []*stateless.Witness, time time.Time, announcedAt time.Time) []*stateless.Witness {
+	log.Trace("Filtering witnesses", "peer", peer, "witnesses", len(witnesses))
+
+	// Send the filter channel to the fetcher
+	filter := make(chan *witnessFilterTask)
+
+	select {
+	case f.witnessFilter <- filter:
+	case <-f.quit:
+		return nil
+	}
+	// Request the filtering of the witness list
+	select {
+	case filter <- &witnessFilterTask{peer: peer, witnesses: witnesses, time: time, announcedTime: announcedAt}:
+	case <-f.quit:
+		return nil
+	}
+	// Retrieve the witnesses remaining after filtering
+	select {
+	case task := <-filter:
+		return task.witnesses
+	case <-f.quit:
+		return nil
+	}
+}
+
 // Loop is the main fetcher loop, checking and processing various notification
 // events.
 func (f *BlockFetcher) loop() {
@@ -348,13 +399,16 @@ func (f *BlockFetcher) loop() {
 	var (
 		fetchTimer    = time.NewTimer(0)
 		completeTimer = time.NewTimer(0)
+		witnessTimer  = time.NewTimer(0)
 	)
 
 	<-fetchTimer.C // clear out the channel
 	<-completeTimer.C
+	<-witnessTimer.C
 
 	defer fetchTimer.Stop()
 	defer completeTimer.Stop()
+	defer witnessTimer.Stop()
 
 	for {
 		// Clean up any expired block fetches
@@ -591,6 +645,60 @@ func (f *BlockFetcher) loop() {
 			// Schedule the next fetch if blocks are still pending
 			f.rescheduleComplete(completeTimer)
 
+		case <-witnessTimer.C:
+			// At least one body's timer ran out, retrieve everything
+			request := make(map[string][]common.Hash)
+
+			for hash, announce := range f.completing {
+				// If the block still didn't arrive, queue for witness completion
+				if f.getBlock(hash) == nil {
+					request[announce.origin] = append(request[announce.origin], hash)
+					f.witnessing[hash] = announce
+				}
+			}
+			// Send out all block witness requests
+			for peer, hashes := range request {
+				log.Trace("Fetching scheduled witnesses", "peer", peer, "list", hashes)
+
+				// Create a closure of the fetch and schedule in on a new thread
+				if f.completingHook != nil {
+					f.completingHook(hashes)
+				}
+
+				fetchWitnesses := f.witnessing[hashes[0]].fetchWitness
+				witnessFetchMeter.Mark(int64(len(hashes)))
+				announcedAt := f.witnessing[hashes[0]].time
+
+				go func(peer string, hashes []common.Hash) {
+					resCh := make(chan *wit.Response)
+
+					req, err := fetchWitnesses(hashes, resCh)
+					if err != nil {
+						return // Legacy code, yolo
+					}
+					defer req.Close()
+
+					timeout := time.NewTimer(2 * fetchTimeout) // 2x leeway before dropping the peer
+					defer timeout.Stop()
+
+					select {
+					case res := <-resCh:
+						res.Done <- nil
+						packet := res.Res.(*wit.NewWitnessPacket)
+						f.FilterWitnesses(peer, []*stateless.Witness{packet.Witness}, time.Now(), announcedAt)
+
+					case <-timeout.C:
+						// The peer didn't respond in time. The request
+						// was already rescheduled at this point, we were
+						// waiting for a catchup. With an unresponsive
+						// peer however, it's a protocol violation.
+						f.dropPeer(peer)
+					}
+				}(peer, hashes)
+			}
+			// Schedule the next fetch if blocks are still pending
+			f.rescheduleWitness(witnessTimer)
+
 		case filter := <-f.headerFilter:
 			// Headers arrived from a remote peer. Extract those that were explicitly
 			// requested by the fetcher, and return everything else so it's delivered
@@ -814,6 +922,23 @@ func (f *BlockFetcher) rescheduleComplete(complete *time.Timer) {
 	complete.Reset(gatherSlack - time.Since(earliest))
 }
 
+// rescheduleWitness resets the specified witness timer to the next fetch timeout.
+func (f *BlockFetcher) rescheduleWitness(witness *time.Timer) {
+	// Short circuit if no bodies are fetched
+	if len(f.completing) == 0 {
+		return
+	}
+	// Otherwise find the earliest expiring announcement
+	earliest := time.Now()
+	for _, announce := range f.completing {
+		if earliest.After(announce.time) {
+			earliest = announce.time
+		}
+	}
+
+	witness.Reset(gatherSlack - time.Since(earliest))
+}
+
 // enqueue schedules a new header or block import operation, if the component
 // to be imported has not yet been seen.
 func (f *BlockFetcher) enqueue(peer string, header *types.Header, block *types.Block) {
@@ -1023,6 +1148,16 @@ func (f *BlockFetcher) forgetHash(hash common.Hash) {
 		}
 
 		delete(f.completing, hash)
+	}
+
+	// Remove any pending witness requests and decrement the DOS counters
+	if announce := f.witnessing[hash]; announce != nil {
+		f.announces[announce.origin]--
+		if f.announces[announce.origin] <= 0 {
+			delete(f.announces, announce.origin)
+		}
+
+		delete(f.witnessing, hash)
 	}
 }
 

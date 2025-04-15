@@ -211,6 +211,10 @@ func (p *skeletonTestPeer) RequestReceipts([]common.Hash, chan *eth.Response) (*
 	panic("skeleton sync must not request receipts")
 }
 
+func (p *skeletonTestPeer) RequestWitnesses([]common.Hash, chan *eth.Response) (*eth.Request, error) {
+	panic("skeleton sync must not request witnesses")
+}
+
 // Tests various sync initializations based on previous leftovers in the database
 // and announced heads.
 func TestSkeletonSyncInit(t *testing.T) {

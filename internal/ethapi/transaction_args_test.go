@@ -32,6 +32,7 @@ import (
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/bloombits"
 	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -472,5 +473,13 @@ func (b *backendMock) PurgeWhitelistedCheckpoint() {}
 func (b *backendMock) PurgeWhitelistedMilestone() {}
 
 func (b backendMock) PeerStats() interface{} {
+	return nil
+}
+
+func (b *backendMock) GetWitnesses(ctx context.Context, startBlock uint64, endBlock uint64) ([]*stateless.Witness, error) {
+	return nil, nil
+}
+
+func (b *backendMock) StoreWitness(ctx context.Context, hash common.Hash, witness *stateless.Witness) error {
 	return nil
 }
