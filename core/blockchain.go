@@ -1879,12 +1879,14 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 
 	rawdb.WritePreimages(blockBatch, statedb.Preimages())
 
-	var witBuf bytes.Buffer
-	if err := statedb.Witness().EncodeRLP(&witBuf); err != nil {
-		log.Error("error in witness encoding", "caughterr", err)
-	}
+	if statedb.Witness() != nil {
+		var witBuf bytes.Buffer
+		if err := statedb.Witness().EncodeRLP(&witBuf); err != nil {
+			log.Error("error in witness encoding", "caughterr", err)
+		}
 
-	rawdb.WriteWitness(blockBatch, block.Hash(), witBuf.Bytes())
+		rawdb.WriteWitness(blockBatch, block.Hash(), witBuf.Bytes())
+	}
 
 	if err := blockBatch.Write(); err != nil {
 		log.Crit("Failed to write block into disk", "err", err)
