@@ -28,16 +28,19 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/prque"
+	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto/kzg4844"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/rlp"
 )
 
 const (
 	bodyType    = uint(0)
 	receiptType = uint(1)
+	witnessType = uint(2)
 )
 
 var (
@@ -70,9 +73,10 @@ type fetchResult struct {
 	Transactions types.Transactions
 	Receipts     types.Receipts
 	Withdrawals  types.Withdrawals
+	Witness      *stateless.Witness
 }
 
-func newFetchResult(header *types.Header, fastSync bool) *fetchResult {
+func newFetchResult(header *types.Header, syncMode SyncMode) *fetchResult {
 	item := &fetchResult{
 		Header: header,
 	}
@@ -82,8 +86,12 @@ func newFetchResult(header *types.Header, fastSync bool) *fetchResult {
 		item.Withdrawals = make(types.Withdrawals, 0)
 	}
 
-	if fastSync && !header.EmptyReceipts() {
+	if syncMode == SnapSync && !header.EmptyReceipts() {
 		item.pending.Store(item.pending.Load() | (1 << receiptType))
+	}
+
+	if syncMode == FullSync {
+		item.pending.Store(item.pending.Load() | (1 << witnessType))
 	}
 
 	return item
@@ -106,16 +114,23 @@ func (f *fetchResult) SetBodyDone() {
 	}
 }
 
-// AllDone checks if item is done.
-func (f *fetchResult) AllDone() bool {
-	return f.pending.Load() == 0
-}
-
 // SetReceiptsDone flags the receipts as finished.
 func (f *fetchResult) SetReceiptsDone() {
 	if v := f.pending.Load(); (v & (1 << receiptType)) != 0 {
 		f.pending.Add(-2)
 	}
+}
+
+// SetWitnessDone flags the witness as finished.
+func (f *fetchResult) SetWitnessDone() {
+	if v := f.pending.Load(); (v & (1 << witnessType)) != 0 {
+		f.pending.Add(-(1 << witnessType))
+	}
+}
+
+// AllDone checks if item is done.
+func (f *fetchResult) AllDone() bool {
+	return f.pending.Load() == 0
 }
 
 // Done checks if the given type is done already
@@ -151,6 +166,11 @@ type queue struct {
 	receiptPendPool  map[string]*fetchRequest           // Currently pending receipt retrieval operations
 	receiptWakeCh    chan bool                          // Channel to notify when receipt fetcher of new tasks
 
+	witnessTaskPool  map[common.Hash]*types.Header      // Pending witness retrieval tasks, mapping hashes to headers
+	witnessTaskQueue *prque.Prque[int64, *types.Header] // Priority queue of the headers to fetch the witnesses for
+	witnessPendPool  map[string]*fetchRequest           // Currently pending witness retrieval operations
+	witnessWakeCh    chan bool                          // Channel to notify when witness fetcher of new tasks
+
 	resultCache *resultStore       // Downloaded but not yet delivered fetch results
 	resultSize  common.StorageSize // Approximate size of a block (exponential moving average)
 
@@ -170,6 +190,8 @@ func newQueue(blockCacheLimit int, thresholdInitialSize int) *queue {
 		blockWakeCh:      make(chan bool, 1),
 		receiptTaskQueue: prque.New[int64, *types.Header](nil),
 		receiptWakeCh:    make(chan bool, 1),
+		witnessTaskQueue: prque.New[int64, *types.Header](nil),
+		witnessWakeCh:    make(chan bool, 1),
 		active:           sync.NewCond(lock),
 		lock:             lock,
 	}
@@ -196,6 +218,10 @@ func (q *queue) Reset(blockCacheLimit int, thresholdInitialSize int) {
 	q.receiptTaskPool = make(map[common.Hash]*types.Header)
 	q.receiptTaskQueue.Reset()
 	q.receiptPendPool = make(map[string]*fetchRequest)
+
+	q.witnessTaskPool = make(map[common.Hash]*types.Header)
+	q.witnessTaskQueue.Reset()
+	q.witnessPendPool = make(map[string]*fetchRequest)
 
 	q.resultCache = newResultStore(blockCacheLimit)
 	q.resultCache.SetThrottleThreshold(uint64(thresholdInitialSize))
@@ -234,6 +260,15 @@ func (q *queue) PendingReceipts() int {
 	return q.receiptTaskQueue.Size()
 }
 
+// PendingWitnesses retrieves the number of block witnesses pending for retrieval.
+func (q *queue) PendingWitnesses() int {
+	q.lock.Lock()
+	defer q.lock.Unlock()
+
+	// TODO: Return actual witness queue size if it's different from block queue
+	return q.witnessTaskQueue.Size() // Placeholder
+}
+
 // InFlightBlocks retrieves whether there are block fetch requests currently in
 // flight.
 func (q *queue) InFlightBlocks() bool {
@@ -252,13 +287,22 @@ func (q *queue) InFlightReceipts() bool {
 	return len(q.receiptPendPool) > 0
 }
 
+// InFlightWitnesses retrieves whether there are witness fetch requests currently
+// in flight.
+func (q *queue) InFlightWitnesses() bool {
+	q.lock.Lock()
+	defer q.lock.Unlock()
+
+	return len(q.witnessPendPool) > 0 // Placeholder
+}
+
 // Idle returns if the queue is fully idle or has some data still inside.
 func (q *queue) Idle() bool {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 
-	queued := q.blockTaskQueue.Size() + q.receiptTaskQueue.Size()
-	pending := len(q.blockPendPool) + len(q.receiptPendPool)
+	queued := q.blockTaskQueue.Size() + q.receiptTaskQueue.Size() + q.witnessTaskQueue.Size()
+	pending := len(q.blockPendPool) + len(q.receiptPendPool) + len(q.witnessPendPool)
 
 	return (queued + pending) == 0
 }
@@ -327,20 +371,28 @@ func (q *queue) Schedule(headers []*types.Header, hashes []common.Hash, from uin
 		// Make sure no duplicate requests are executed
 		// We cannot skip this, even if the block is empty, since this is
 		// what triggers the fetchResult creation.
-		if _, ok := q.blockTaskPool[hash]; ok {
-			log.Warn("Header already scheduled for block fetch", "number", header.Number, "hash", hash)
-		} else {
+		if _, ok := q.blockTaskPool[hash]; !ok {
 			q.blockTaskPool[hash] = header
 			q.blockTaskQueue.Push(header, -int64(header.Number.Uint64()))
+		} else {
+			log.Warn("Header already scheduled for block fetch", "number", header.Number, "hash", hash)
 		}
 		// Queue for receipt retrieval
 		if q.mode == SnapSync && !header.EmptyReceipts() {
-			if _, ok := q.receiptTaskPool[hash]; ok {
-				log.Warn("Header already scheduled for receipt fetch", "number", header.Number, "hash", hash)
-			} else {
+			if _, ok := q.receiptTaskPool[hash]; !ok {
 				q.receiptTaskPool[hash] = header
 				q.receiptTaskQueue.Push(header, -int64(header.Number.Uint64()))
+			} else {
+				log.Warn("Header already scheduled for receipt fetch", "number", header.Number, "hash", hash)
 			}
+		}
+		// Queue for witness retrieval (assuming witnesses are always needed or based on a condition)
+		// TODO: Add appropriate condition for witness scheduling if needed
+		if _, ok := q.witnessTaskPool[hash]; !ok {
+			q.witnessTaskPool[hash] = header
+			q.witnessTaskQueue.Push(header, -int64(header.Number.Uint64()))
+		} else {
+			log.Warn("Header already scheduled for witness fetch", "number", header.Number, "hash", hash)
 		}
 
 		inserts = append(inserts, header)
@@ -406,7 +458,7 @@ func (q *queue) Results(block bool) []*fetchResult {
 	throttleThreshold = q.resultCache.SetThrottleThreshold(throttleThreshold)
 
 	// With results removed from the cache, wake throttled fetchers
-	for _, ch := range []chan bool{q.blockWakeCh, q.receiptWakeCh} {
+	for _, ch := range []chan bool{q.blockWakeCh, q.receiptWakeCh, q.witnessWakeCh} {
 		select {
 		case ch <- true:
 		default:
@@ -435,6 +487,7 @@ func (q *queue) stats() []interface{} {
 	return []interface{}{
 		"receiptTasks", q.receiptTaskQueue.Size(),
 		"blockTasks", q.blockTaskQueue.Size(),
+		"witnessTasks", q.witnessTaskQueue.Size(),
 		"itemSize", q.resultSize,
 	}
 }
@@ -502,6 +555,16 @@ func (q *queue) ReserveReceipts(p *peerConnection, count int) (*fetchRequest, bo
 	return q.reserveHeaders(p, count, q.receiptTaskPool, q.receiptTaskQueue, q.receiptPendPool, receiptType)
 }
 
+// ReserveWitnesses reserves a set of witness fetches for the given peer, skipping
+// any previously failed downloads. Beside the next batch of needed fetches, it
+// also returns a flag indicating progress and whether the caller should throttle.
+func (q *queue) ReserveWitnesses(p *peerConnection, count int) (*fetchRequest, bool, bool) {
+	q.lock.Lock()
+	defer q.lock.Unlock()
+
+	return q.reserveHeaders(p, count, q.witnessTaskPool, q.witnessTaskQueue, q.witnessPendPool, witnessType)
+}
+
 // reserveHeaders reserves a set of data download operations for a given peer,
 // skipping any previously failed ones. This method is a generic version used
 // by the individual special reservation functions.
@@ -540,7 +603,7 @@ func (q *queue) reserveHeaders(p *peerConnection, count int, taskPool map[common
 		// we can ask the resultcache if this header is within the
 		// "prioritized" segment of blocks. If it is not, we need to throttle
 
-		stale, throttle, item, err := q.resultCache.AddFetch(header, q.mode == SnapSync)
+		stale, throttle, item, err := q.resultCache.AddFetch(header, q.mode)
 		if stale {
 			// Don't put back in the task queue, this item has already been
 			// delivered upstream
@@ -643,6 +706,13 @@ func (q *queue) Revoke(peerID string) {
 
 		delete(q.receiptPendPool, peerID)
 	}
+
+	if request, ok := q.witnessPendPool[peerID]; ok {
+		for _, header := range request.Headers {
+			q.witnessTaskQueue.Push(header, -int64(header.Number.Uint64()))
+		}
+		delete(q.witnessPendPool, peerID)
+	}
 }
 
 // ExpireHeaders cancels a request that timed out and moves the pending fetch
@@ -678,6 +748,25 @@ func (q *queue) ExpireReceipts(peer string) int {
 	return q.expire(peer, q.receiptPendPool, q.receiptTaskQueue)
 }
 
+var (
+	witnessReqTimer     = metrics.NewRegisteredTimer("downloader/witness/reqtime", nil)
+	witnessInMeter      = metrics.NewRegisteredMeter("downloader/witness/in", nil)
+	witnessDropMeter    = metrics.NewRegisteredMeter("downloader/witness/drop", nil)
+	witnessTimeoutMeter = metrics.NewRegisteredMeter("downloader/witness/timeout", nil)
+)
+
+// ExpireWitnesses checks for in flight witness requests that exceeded a timeout
+// allowance, canceling them and returning the responsible peers for penalisation.
+func (q *queue) ExpireWitnesses(peer string) int {
+	q.lock.Lock()
+	defer q.lock.Unlock()
+
+	// Use defined witnessTimeoutMeter
+	witnessTimeoutMeter.Mark(1)
+
+	return q.expire(peer, q.witnessPendPool, q.witnessTaskQueue)
+}
+
 // expire is the generic check that moves a specific expired task from a pending
 // pool back into a task pool. The syntax on the passed taskQueue is a bit weird
 // as we would need a generic expire method to handle both types, but that is not
@@ -699,13 +788,27 @@ func (q *queue) expire(peer string, pendPool map[string]*fetchRequest, taskQueue
 
 	// Return any non-satisfied requests to the pool
 	if req.From > 0 {
-		taskQueue.(*prque.Prque[int64, uint64]).Push(req.From, -int64(req.From))
+		// Handle header queue
+		if headerQueue, ok := taskQueue.(*prque.Prque[int64, uint64]); ok {
+			headerQueue.Push(req.From, -int64(req.From))
+		} else {
+			log.Error("Task queue type mismatch for header expiration", "peer", peer, "type", fmt.Sprintf("%T", taskQueue))
+		}
+	} else {
+		// Handle block, receipt, or witness queues
+		if headerTaskQueue, ok := taskQueue.(*prque.Prque[int64, *types.Header]); ok {
+			for _, header := range req.Headers {
+				headerTaskQueue.Push(header, -int64(header.Number.Uint64()))
+			}
+		} else {
+			log.Error("Task queue type mismatch for block/receipt/witness expiration", "peer", peer, "type", fmt.Sprintf("%T", taskQueue))
+		}
 	}
 
-	for _, header := range req.Headers {
-		taskQueue.(*prque.Prque[int64, *types.Header]).Push(header, -int64(header.Number.Uint64()))
+	// Return the number of items considered expired (headers or block parts)
+	if req.From > 0 {
+		return 1 // Header requests are treated as one item
 	}
-
 	return len(req.Headers)
 }
 
@@ -945,6 +1048,61 @@ func (q *queue) DeliverReceipts(id string, receiptList [][]*types.Receipt, recei
 
 	return q.deliver(id, q.receiptTaskPool, q.receiptTaskQueue, q.receiptPendPool,
 		receiptReqTimer, receiptInMeter, receiptDropMeter, len(receiptList), validate, reconstruct)
+}
+
+// DeliverWitnesses injects a witness retrieval response into the results cache.
+func (q *queue) DeliverWitnesses(id string, witnessData interface{}, meta interface{}) (int, error) {
+	q.lock.Lock()
+	defer q.lock.Unlock()
+
+	// Ensure the peer has a pending request
+	request := q.witnessPendPool[id]
+	if request == nil {
+		witnessDropMeter.Mark(1) // Assuming 1 witness per response drop
+		return 0, errNoFetchesPending
+	}
+	// Ensure we received the correct type of data ([]rlp.RawValue)
+	witnessRLP, ok := witnessData.([]rlp.RawValue)
+	if !ok {
+		witnessDropMeter.Mark(1)
+		log.Warn("DeliverWitnesses received unexpected data type", "type", fmt.Sprintf("%T", witnessData))
+		// We should probably return the request to the queue here
+		// q.expire(id, q.witnessPendPool, q.witnessTaskQueue)
+		return 0, fmt.Errorf("invalid witness data type: %T", witnessData)
+	}
+
+	// Mark incoming data and time
+	witnessInMeter.Mark(int64(len(witnessRLP)))
+	witnessReqTimer.UpdateSince(request.Time)
+
+	// Define validation logic (placeholder)
+	validateWitness := func(index int, header *types.Header) error {
+		// TODO: Add validation if witness can be checked against header
+		// e.g., if header contains a witness hash.
+		if index >= len(witnessRLP) {
+			return fmt.Errorf("witness index %d out of bounds (%d)", index, len(witnessRLP))
+		}
+		return nil
+	}
+
+	// Define reconstruction logic (decode RLP and assign)
+	reconstructWitness := func(index int, result *fetchResult) {
+		// Decode the RLP witness data
+		wit := new(stateless.Witness)
+		if err := rlp.DecodeBytes(witnessRLP[index], wit); err != nil {
+			log.Warn("Failed to decode witness RLP", "err", err, "peer", id, "header", result.Header.Hash())
+			// How to handle decode failure? Mark as incomplete? For now, just log.
+			return
+		}
+		// Assign decoded witness and mark as done
+		result.Witness = wit
+		result.SetWitnessDone()
+	}
+
+	// Call the generic deliver mechanism
+	return q.deliver(id, q.witnessTaskPool, q.witnessTaskQueue, q.witnessPendPool,
+		witnessReqTimer, witnessInMeter, witnessDropMeter,
+		len(request.Headers), validateWitness, reconstructWitness)
 }
 
 // deliver injects a data retrieval response into the results queue.

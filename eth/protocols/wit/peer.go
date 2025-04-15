@@ -103,12 +103,12 @@ func (p *Peer) AsyncSendNewWitness(witness *stateless.Witness) {
 	}
 }
 
-// RequestWitness sends a request to the peer for a witness
-func (p *Peer) RequestWitness(originBlock uint64, totalBlocks uint64, sink chan *Response) (*Request, error) {
+// RequestWitness sends a request to the peer for witnesses by block hashes.
+func (p *Peer) RequestWitness(hashes []common.Hash, sink chan *Response) (*Request, error) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
-	log.Debug("Requesting witness", "peer", p.id, "originBlock", originBlock, "totalBlocks", totalBlocks)
+	log.Debug("Requesting witnesses", "peer", p.id, "count", len(hashes))
 	id := rand.Uint64()
 
 	req := &Request{
@@ -119,8 +119,7 @@ func (p *Peer) RequestWitness(originBlock uint64, totalBlocks uint64, sink chan 
 		data: &GetWitnessPacket{
 			RequestId: id,
 			GetWitnessRequest: &GetWitnessRequest{
-				OriginBlock: originBlock,
-				TotalBlocks: totalBlocks,
+				Hashes: hashes,
 			},
 		},
 	}

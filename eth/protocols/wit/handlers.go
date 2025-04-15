@@ -15,8 +15,8 @@ func handleGetWitness(backend Backend, msg Decoder, peer *Peer) error {
 	}
 
 	// Validate request parameters
-	if req.TotalBlocks == 0 {
-		return fmt.Errorf("invalid GetWitnessPacket: TotalBlocks cannot be zero")
+	if len(req.Hashes) == 0 {
+		return fmt.Errorf("invalid GetWitnessPacket: Hashes cannot be empty")
 	}
 
 	return backend.Handle(peer, req)

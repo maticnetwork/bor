@@ -116,7 +116,7 @@ func (dl *downloadTester) sync(id string, td *big.Int, mode SyncMode) error {
 		td = dl.peers[id].chain.GetTd(head.Hash(), head.Number.Uint64())
 	}
 	// Synchronise with the chosen peer and ensure proper cleanup afterwards
-	err := dl.downloader.synchronise(id, head.Hash(), td, nil, mode, false, nil, 0, common.Hash{})
+	err := dl.downloader.synchronise(id, head.Hash(), td, nil, mode, false, nil)
 	select {
 	case <-dl.downloader.cancelCh:
 		// Ok, downloader fully cancelled after sync cycle
