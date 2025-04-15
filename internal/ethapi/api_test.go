@@ -45,6 +45,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/bloombits"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -693,6 +694,14 @@ func (b testBackend) GetBorBlockLogs(ctx context.Context, hash common.Hash) ([]*
 	}
 
 	return receipt.Logs, nil
+}
+
+func (b testBackend) GetWitnesses(ctx context.Context, startBlock uint64, endBlock uint64) ([]*stateless.Witness, error) {
+	return nil, nil
+}
+
+func (b testBackend) StoreWitness(ctx context.Context, hash common.Hash, witness *stateless.Witness) error {
+	return nil
 }
 
 func (b testBackend) GetBorBlockReceipt(ctx context.Context, hash common.Hash) (*types.Receipt, error) {
