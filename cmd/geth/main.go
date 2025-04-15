@@ -28,6 +28,9 @@ import (
 	"syscall"
 	"time"
 
+	heimdallApp "github.com/0xPolygon/heimdall-v2/app"
+	heimdalld "github.com/0xPolygon/heimdall-v2/cmd/heimdalld/cmd"
+	svrcmd "github.com/cosmos/cosmos-sdk/server/cmd"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/cmd/utils"
@@ -47,7 +50,6 @@ import (
 	_ "github.com/ethereum/go-ethereum/eth/tracers/live"
 	_ "github.com/ethereum/go-ethereum/eth/tracers/native"
 
-	"github.com/maticnetwork/heimdall/cmd/heimdalld/service"
 	"github.com/urfave/cli/v2"
 )
 
@@ -361,11 +363,16 @@ func geth(ctx *cli.Context) error {
 	}
 
 	if ctx.Bool(utils.RunHeimdallFlag.Name) {
-		shutdownCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+		_, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
 
+		// TODO HV2: needs to be tested!
 		go func() {
-			service.NewHeimdallService(shutdownCtx, getHeimdallArgs(ctx))
+			rootCmd := heimdalld.NewRootCmd()
+			if err := svrcmd.Execute(rootCmd, "HD", heimdallApp.DefaultNodeHome); err != nil {
+				_, _ = fmt.Fprintln(rootCmd.OutOrStderr(), err)
+				os.Exit(1)
+			}
 		}()
 	}
 
@@ -496,9 +503,4 @@ func unlockAccounts(ctx *cli.Context, stack *node.Node) {
 	for i, account := range unlocks {
 		unlockAccount(ks, account, i, passwords)
 	}
-}
-
-func getHeimdallArgs(ctx *cli.Context) []string {
-	heimdallArgs := strings.Split(ctx.String(utils.RunHeimdallArgsFlag.Name), ",")
-	return append([]string{"start"}, heimdallArgs...)
 }

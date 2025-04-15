@@ -8,7 +8,9 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/maticnetwork/heimdall/cmd/heimdalld/service"
+	"github.com/0xPolygon/heimdall-v2/app"
+	heimdalld "github.com/0xPolygon/heimdall-v2/cmd/heimdalld/cmd"
+	svrcmd "github.com/cosmos/cosmos-sdk/server/cmd"
 	"github.com/mitchellh/cli"
 	"github.com/pelletier/go-toml"
 
@@ -164,11 +166,16 @@ func (c *Command) Run(args []string) int {
 	}
 
 	if c.config.Heimdall.RunHeimdall {
-		shutdownCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+		// TODO HV2: Find a way to pass the shutdown ctx to heimdall process
+		_, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
 
 		go func() {
-			service.NewHeimdallService(shutdownCtx, c.getHeimdallArgs())
+			rootCmd := heimdalld.NewRootCmd()
+			if err := svrcmd.Execute(rootCmd, "HD", app.DefaultNodeHome); err != nil {
+				_, _ = fmt.Fprintln(rootCmd.OutOrStderr(), err)
+				os.Exit(1)
+			}
 		}()
 	}
 
@@ -213,9 +220,4 @@ func (c *Command) handleSignals() int {
 // GetConfig returns the user specified config
 func (c *Command) GetConfig() *Config {
 	return c.cliConfig
-}
-
-func (c *Command) getHeimdallArgs() []string {
-	heimdallArgs := strings.Split(c.config.Heimdall.RunHeimdallArgs, ",")
-	return append([]string{"start"}, heimdallArgs...)
 }

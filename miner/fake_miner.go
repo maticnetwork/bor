@@ -57,11 +57,12 @@ func NewBorDefaultMiner(t *testing.T) *DefaultBorMiner {
 	}, nil).AnyTimes()
 
 	heimdallClient := mocks.NewMockIHeimdallClient(ctrl)
+	heimdallWSClient := mocks.NewMockIHeimdallWSClient(ctrl)
 	heimdallClient.EXPECT().Close().Times(1)
 
 	genesisContracts := bor.NewMockGenesisContract(ctrl)
 
-	miner, mux, cleanup := createBorMiner(t, ethAPI, spanner, heimdallClient, genesisContracts)
+	miner, mux, cleanup := createBorMiner(t, ethAPI, spanner, heimdallClient, heimdallWSClient, genesisContracts)
 
 	return &DefaultBorMiner{
 		Miner:              miner,
@@ -75,13 +76,13 @@ func NewBorDefaultMiner(t *testing.T) *DefaultBorMiner {
 }
 
 // //nolint:staticcheck
-func createBorMiner(t *testing.T, ethAPIMock api.Caller, spanner bor.Spanner, heimdallClientMock bor.IHeimdallClient, contractMock bor.GenesisContract) (*Miner, *event.TypeMux, func(skipMiner bool)) {
+func createBorMiner(t *testing.T, ethAPIMock api.Caller, spanner bor.Spanner, heimdallClientMock bor.IHeimdallClient, heimdallClientWSMock bor.IHeimdallWSClient, contractMock bor.GenesisContract) (*Miner, *event.TypeMux, func(skipMiner bool)) {
 	t.Helper()
 
 	// Create Ethash config
 	chainDB, genspec, chainConfig := NewDBForFakes(t)
 
-	engine := NewFakeBor(t, chainDB, chainConfig, ethAPIMock, spanner, heimdallClientMock, contractMock)
+	engine := NewFakeBor(t, chainDB, chainConfig, ethAPIMock, spanner, heimdallClientMock, heimdallClientWSMock, contractMock)
 
 	// Create Ethereum backend
 	bc, err := core.NewBlockChain(chainDB, nil, genspec, nil, engine, vm.Config{}, nil, nil, nil)
@@ -147,14 +148,14 @@ func NewDBForFakes(t TensingObject) (ethdb.Database, *core.Genesis, *params.Chai
 	return chainDB, genesis, chainConfig
 }
 
-func NewFakeBor(t TensingObject, chainDB ethdb.Database, chainConfig *params.ChainConfig, ethAPIMock api.Caller, spanner bor.Spanner, heimdallClientMock bor.IHeimdallClient, contractMock bor.GenesisContract) consensus.Engine {
+func NewFakeBor(t TensingObject, chainDB ethdb.Database, chainConfig *params.ChainConfig, ethAPIMock api.Caller, spanner bor.Spanner, heimdallClientMock bor.IHeimdallClient, heimdallClientWSMock bor.IHeimdallWSClient, contractMock bor.GenesisContract) consensus.Engine {
 	t.Helper()
 
 	if chainConfig.Bor == nil {
 		chainConfig.Bor = params.BorUnittestChainConfig.Bor
 	}
 
-	return bor.New(chainConfig, chainDB, ethAPIMock, spanner, heimdallClientMock, contractMock, false)
+	return bor.New(chainConfig, chainDB, ethAPIMock, spanner, heimdallClientMock, heimdallClientWSMock, contractMock, false)
 }
 
 var (

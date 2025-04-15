@@ -380,7 +380,7 @@ func TestInsertingSpanSizeBlocks(t *testing.T) {
 	engine := init.ethereum.Engine()
 	_bor := engine.(*bor.Bor)
 
-	_, currentSpan := loadSpanFromFile(t)
+	currentSpan := loadSpanFromFile(t)
 
 	h, ctrl := getMockedHeimdallClient(t, currentSpan)
 	defer func() {
@@ -389,51 +389,47 @@ func TestInsertingSpanSizeBlocks(t *testing.T) {
 	}()
 
 	h.EXPECT().Close().AnyTimes()
-
 	h.EXPECT().FetchCheckpoint(gomock.Any(), int64(-1)).Return(&checkpoint.Checkpoint{
-		Proposer:   currentSpan.SelectedProducers[0].Address,
-		StartBlock: big.NewInt(0),
-		EndBlock:   big.NewInt(int64(spanSize)),
+		Proposer:   common.HexToAddress(currentSpan.SelectedProducers[0].Signer),
+		StartBlock: 0,
+		EndBlock:   spanSize,
 	}, nil).AnyTimes()
-
 	h.EXPECT().FetchMilestone(gomock.Any()).Return(&milestone.Milestone{
-		Proposer:   currentSpan.SelectedProducers[0].Address,
-		StartBlock: big.NewInt(0),
-		EndBlock:   big.NewInt(int64(spanSize)),
+		Proposer:   common.HexToAddress(currentSpan.SelectedProducers[0].Signer),
+		StartBlock: 0,
+		EndBlock:   spanSize,
 	}, nil).AnyTimes()
-
-	h.EXPECT().FetchLastNoAckMilestone(gomock.Any()).Return("", nil).AnyTimes()
-
-	h.EXPECT().FetchNoAckMilestone(gomock.Any(), string("test")).Return(nil).AnyTimes()
 
 	_bor.SetHeimdallClient(h)
 
 	block := init.genesis.ToBlock()
-	// to := int64(block.Header().Time)
 
 	currentValidators := []*valset.Validator{valset.NewValidator(addr, 10)}
 
 	spanner := getMockedSpanner(t, currentValidators)
 	_bor.SetSpanner(spanner)
 
-	// Insert sprintSize # of blocks so that span is fetched at the start of a new sprint
+	// Insert sprintSize # of blocks so that span is fetched at the start of a new sprint.
 	for i := uint64(1); i <= spanSize; i++ {
 		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators)
 		insertNewBlock(t, chain, block)
 	}
 
-	spanner = getMockedSpanner(t, currentSpan.ValidatorSet.Validators)
+	valsetVals := valset.HeimdallToValSetValidators(currentSpan.ValidatorSet.Validators)
+
+	spanner = getMockedSpanner(t, valsetVals)
 	_bor.SetSpanner(spanner)
 
-	validators, err := _bor.GetCurrentValidators(context.Background(), block.Hash(), spanSize) // check validator set at the first block of new span
+	// Check validator set at the first block of a new span.
+	validators, err := _bor.GetCurrentValidators(context.Background(), block.Hash(), spanSize)
 	if err != nil {
 		t.Fatalf("%s", err)
 	}
 
 	require.Equal(t, 3, len(validators))
 	for i, validator := range validators {
-		require.Equal(t, validator.Address.Bytes(), currentSpan.SelectedProducers[i].Address.Bytes())
-		require.Equal(t, validator.VotingPower, currentSpan.SelectedProducers[i].VotingPower)
+		require.Equal(t, validator.Address.Bytes(), valsetVals[i].Address.Bytes())
+		require.Equal(t, validator.VotingPower, valsetVals[i].VotingPower)
 	}
 }
 
@@ -449,60 +445,55 @@ func TestFetchStateSyncEvents(t *testing.T) {
 
 	defer _bor.Close()
 
-	// A. Insert blocks for 0th sprint
+	// A. Insert blocks for the 0th sprint.
 	block := init.genesis.ToBlock()
 
-	// B.1 Mock /bor/span/1
-	res, _ := loadSpanFromFile(t)
+	// B. Mock /bor/span/1
+	res := loadSpanFromFile(t)
+
+	valsetVals := valset.HeimdallToValSetValidators(res.ValidatorSet.Validators)
 
 	currentValidators := []*valset.Validator{valset.NewValidator(addr, 10)}
 
 	spanner := getMockedSpanner(t, currentValidators)
 	_bor.SetSpanner(spanner)
 
-	// Insert sprintSize # of blocks so that span is fetched at the start of a new sprint
+	// Insert the sprintSize # of blocks so that span is fetched at the start of a new sprint.
 	for i := uint64(1); i < sprintSize; i++ {
 		if IsSpanEnd(i) {
-			currentValidators = res.Result.ValidatorSet.Validators
+			currentValidators = valsetVals
 		}
 
 		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators)
 		insertNewBlock(t, chain, block)
 	}
 
-	// B. Before inserting 1st block of the next sprint, mock heimdall deps
+	// C. Before inserting the 1st block of the next sprint, mock the heimdall deps.
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	h := mocks.NewMockIHeimdallClient(ctrl)
 	h.EXPECT().Close().AnyTimes()
-
-	h.EXPECT().Span(gomock.Any(), uint64(1)).Return(&res.Result, nil).AnyTimes()
-
+	h.EXPECT().GetSpan(gomock.Any(), uint64(1)).Return(res, nil).AnyTimes()
 	h.EXPECT().FetchCheckpoint(gomock.Any(), int64(-1)).Return(&checkpoint.Checkpoint{}, nil).AnyTimes()
-
 	h.EXPECT().FetchMilestone(gomock.Any()).Return(&milestone.Milestone{}, nil).AnyTimes()
 
-	h.EXPECT().FetchLastNoAckMilestone(gomock.Any()).Return("", nil).AnyTimes()
-
-	h.EXPECT().FetchNoAckMilestone(gomock.Any(), string("test")).Return(nil).AnyTimes()
-
-	// B.2 Mock State Sync events
+	// D. Mock the state sync events.
 	fromID := uint64(1)
-	// at # sprintSize, events are fetched for [fromID, (block-sprint).Time)
+	// At # sprintSize, events are fetched for [fromID, (block-sprint).Time)
 	to := int64(chain.GetHeaderByNumber(0).Time)
 	eventCount := 50
 
 	sample := getSampleEventRecord(t)
-	sample.Time = time.Unix(to-int64(eventCount+1), 0) // last event.Time will be just < to
+	sample.Time = time.Unix(to-int64(eventCount+1), 0) // Last event.Time will be just < to
 	eventRecords := generateFakeStateSyncEvents(sample, eventCount)
 
 	h.EXPECT().StateSyncEvents(gomock.Any(), fromID, to).Return(eventRecords, nil).AnyTimes()
 	_bor.SetHeimdallClient(h)
 
-	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, res.Result.ValidatorSet.Validators)
+	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, valsetVals)
 
-	// Validate the state sync transactions set by consensus
+	// Validate the state sync transactions set by consensus.
 	validateStateSyncEvents(t, eventRecords, chain.GetStateSync())
 
 	insertNewBlock(t, chain, block)
@@ -529,55 +520,50 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 	defer _bor.Close()
 
 	// Mock /bor/span/1
-	res, _ := loadSpanFromFile(t)
+	res := loadSpanFromFile(t)
 
-	// add the block producer
-	res.Result.ValidatorSet.Validators = append(res.Result.ValidatorSet.Validators, valset.NewValidator(addr, 4500))
+	valsetVals := valset.HeimdallToValSetValidators(res.ValidatorSet.Validators)
+
+	// Add the block producer.
+	valsetVals = append(valsetVals, valset.NewValidator(addr, 4500))
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	h := mocks.NewMockIHeimdallClient(ctrl)
 	h.EXPECT().Close().AnyTimes()
-
-	h.EXPECT().Span(gomock.Any(), uint64(1)).Return(&res.Result, nil).AnyTimes()
-
+	h.EXPECT().GetSpan(gomock.Any(), uint64(1)).Return(res, nil).AnyTimes()
 	h.EXPECT().FetchCheckpoint(gomock.Any(), int64(-1)).Return(&checkpoint.Checkpoint{}, nil).AnyTimes()
-
 	h.EXPECT().FetchMilestone(gomock.Any()).Return(&milestone.Milestone{}, nil).AnyTimes()
 
-	h.EXPECT().FetchLastNoAckMilestone(gomock.Any()).Return("", nil).AnyTimes()
-
-	h.EXPECT().FetchNoAckMilestone(gomock.Any(), string("test")).Return(nil).AnyTimes()
-
-	// Mock State Sync events
-	// at # sprintSize, events are fetched for [fromID, (block-sprint).Time)
+	// Mock the state sync events.
+	// At # sprintSize, events are fetched for [fromID, (block-sprint).Time)
 	fromID := uint64(1)
 	to := int64(chain.GetHeaderByNumber(0).Time)
 	sample := getSampleEventRecord(t)
 
 	// First query will be from [id=1, (block-sprint).Time]
-	// Insert 5 events in this time range
+	// Insert 5 events in this time range.
 	eventRecords := []*clerk.EventRecordWithTime{
-		buildStateEvent(sample, 1, 3), // id = 1, time = 1
-		buildStateEvent(sample, 2, 1), // id = 2, time = 3
+		buildStateEvent(sample, 1, 1), // id = 1, time = 1
+		buildStateEvent(sample, 2, 3), // id = 2, time = 3
 		buildStateEvent(sample, 3, 2), // id = 3, time = 2
-		// event with id 5 is missing
 		buildStateEvent(sample, 4, 5), // id = 4, time = 5
+		// event with id 5 is missing
 		buildStateEvent(sample, 6, 4), // id = 6, time = 4
 	}
 
 	h.EXPECT().StateSyncEvents(gomock.Any(), fromID, to).Return(eventRecords, nil).AnyTimes()
 	_bor.SetHeimdallClient(h)
 
-	// Insert blocks for 0th sprint
+	// Insert the blocks for the 0th sprint.
 	block := init.genesis.ToBlock()
 
 	var currentValidators []*valset.Validator
 
 	for i := uint64(1); i <= sprintSize; i++ {
 		if IsSpanEnd(i) {
-			currentValidators = res.Result.ValidatorSet.Validators
+			currentValidators = valsetVals
 		} else {
 			currentValidators = []*valset.Validator{valset.NewValidator(addr, 10)}
 		}
@@ -591,10 +577,9 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 
 	lastStateID, _ := _bor.GenesisContractsClient.LastStateId(nil, sprintSize, block.Hash())
 
-	// state 6 was not written
+	// State 6 was not written.
 	require.Equal(t, uint64(4), lastStateID.Uint64())
 
-	//
 	fromID = uint64(5)
 	to = int64(chain.GetHeaderByNumber(sprintSize).Time)
 
@@ -606,7 +591,7 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 
 	for i := sprintSize + 1; i <= spanSize; i++ {
 		if IsSpanEnd(i) {
-			currentValidators = res.Result.ValidatorSet.Validators
+			currentValidators = valsetVals
 		} else {
 			currentValidators = []*valset.Validator{valset.NewValidator(addr, 10)}
 		}
@@ -614,7 +599,7 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 		spanner := getMockedSpanner(t, currentValidators)
 		_bor.SetSpanner(spanner)
 
-		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, res.Result.ValidatorSet.Validators)
+		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, valsetVals)
 		insertNewBlock(t, chain, block)
 	}
 
@@ -634,25 +619,22 @@ func TestOutOfTurnSigning(t *testing.T) {
 
 	defer _bor.Close()
 
-	_, heimdallSpan := loadSpanFromFile(t)
-	proposer := valset.NewValidator(addr, 10)
-	heimdallSpan.ValidatorSet.Validators = append(heimdallSpan.ValidatorSet.Validators, proposer)
+	heimdallSpan := loadSpanFromFile(t)
 
-	// add the block producer
+	valsetVals := valset.HeimdallToValSetValidators(heimdallSpan.ValidatorSet.Validators)
+
+	proposer := valset.NewValidator(addr, 10)
+	valsetVals = append(valsetVals, proposer)
+
+	// Add the block producer.
 	h, ctrl := getMockedHeimdallClient(t, heimdallSpan)
 	defer ctrl.Finish()
 
 	h.EXPECT().Close().AnyTimes()
-
 	h.EXPECT().FetchCheckpoint(gomock.Any(), int64(-1)).Return(&checkpoint.Checkpoint{}, nil).AnyTimes()
-
 	h.EXPECT().FetchMilestone(gomock.Any()).Return(&milestone.Milestone{}, nil).AnyTimes()
 
-	h.EXPECT().FetchLastNoAckMilestone(gomock.Any()).Return("", nil).AnyTimes()
-
-	h.EXPECT().FetchNoAckMilestone(gomock.Any(), string("test")).Return(nil).AnyTimes()
-
-	spanner := getMockedSpanner(t, heimdallSpan.ValidatorSet.Validators)
+	spanner := getMockedSpanner(t, valsetVals)
 	_bor.SetSpanner(spanner)
 
 	_bor.SetHeimdallClient(h)
@@ -661,17 +643,17 @@ func TestOutOfTurnSigning(t *testing.T) {
 
 	setDifficulty := func(header *types.Header) {
 		if IsSprintStart(header.Number.Uint64()) {
-			header.Difficulty = big.NewInt(int64(len(heimdallSpan.ValidatorSet.Validators)))
+			header.Difficulty = big.NewInt(int64(len(valsetVals)))
 		}
 	}
 
 	for i := uint64(1); i < spanSize; i++ {
-		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, heimdallSpan.ValidatorSet.Validators, setDifficulty)
+		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, valsetVals, setDifficulty)
 		insertNewBlock(t, chain, block)
 	}
 
-	// insert spanSize-th block
-	// This account is one the out-of-turn validators for 1st (0-indexed) span
+	// Insert the spanSize-th block.
+	// This account is one the out-of-turn validators for the 1st (0-indexed) span.
 	signer := "c8deb0bea5c41afe8e37b4d1bd84e31adff11b09c8c96ff4b605003cce067cd9"
 	signerKey, _ := hex.DecodeString(signer)
 	newKey, _ := crypto.HexToECDSA(signer)
@@ -687,16 +669,16 @@ func TestOutOfTurnSigning(t *testing.T) {
 	const turn = 1
 
 	setDifficulty = func(header *types.Header) {
-		header.Difficulty = big.NewInt(int64(len(heimdallSpan.ValidatorSet.Validators)) - turn)
+		header.Difficulty = big.NewInt(int64(len(valsetVals)) - turn)
 	}
 
-	block = buildNextBlock(t, _bor, chain, block, signerKey, init.genesis.Config.Bor, nil, heimdallSpan.ValidatorSet.Validators, setParentTime, setDifficulty)
+	block = buildNextBlock(t, _bor, chain, block, signerKey, init.genesis.Config.Bor, nil, valsetVals, setParentTime, setDifficulty)
 	_, err := chain.InsertChain([]*types.Block{block})
 	require.Equal(t,
 		bor.BlockTooSoonError{Number: spanSize, Succession: expectedSuccessionNumber},
 		*err.(*bor.BlockTooSoonError))
 
-	expectedDifficulty := uint64(len(heimdallSpan.ValidatorSet.Validators) - expectedSuccessionNumber - turn) // len(validators) - succession
+	expectedDifficulty := uint64(len(valsetVals) - expectedSuccessionNumber - turn) // len(validators) - succession
 	header := block.Header()
 
 	diff := bor.CalcProducerDelay(header.Number.Uint64(), expectedSuccessionNumber, init.genesis.Config.Bor)
@@ -731,25 +713,22 @@ func TestSignerNotFound(t *testing.T) {
 
 	defer _bor.Close()
 
-	_, heimdallSpan := loadSpanFromFile(t)
+	heimdallSpan := loadSpanFromFile(t)
+
+	valsetVals := valset.HeimdallToValSetValidators(heimdallSpan.ValidatorSet.Validators)
 
 	h, ctrl := getMockedHeimdallClient(t, heimdallSpan)
 	defer ctrl.Finish()
 
 	h.EXPECT().Close().AnyTimes()
 	h.EXPECT().FetchCheckpoint(gomock.Any(), int64(-1)).Return(&checkpoint.Checkpoint{}, nil).AnyTimes()
-
 	h.EXPECT().FetchMilestone(gomock.Any()).Return(&milestone.Milestone{}, nil).AnyTimes()
-
-	h.EXPECT().FetchLastNoAckMilestone(gomock.Any()).Return("", nil).AnyTimes()
-
-	h.EXPECT().FetchNoAckMilestone(gomock.Any(), string("test")).Return(nil).AnyTimes()
 
 	_bor.SetHeimdallClient(h)
 
 	block := init.genesis.ToBlock()
 
-	// random signer account that is not a part of the validator set
+	// Random signer account that is not a part of the validator set.
 	const signer = "3714d99058cd64541433d59c6b391555b2fd9b54629c2b717a6c9c00d1127b6b"
 	signerKey, _ := hex.DecodeString(signer)
 	newKey, _ := crypto.HexToECDSA(signer)
@@ -759,7 +738,7 @@ func TestSignerNotFound(t *testing.T) {
 		return crypto.Sign(crypto.Keccak256(data), newKey)
 	})
 
-	block = buildNextBlock(t, _bor, chain, block, signerKey, init.genesis.Config.Bor, nil, heimdallSpan.ValidatorSet.Validators)
+	block = buildNextBlock(t, _bor, chain, block, signerKey, init.genesis.Config.Bor, nil, valsetVals)
 
 	_, err := chain.InsertChain([]*types.Block{block})
 	require.Equal(t,
@@ -1449,13 +1428,15 @@ func TestJaipurFork(t *testing.T) {
 
 	block := init.genesis.ToBlock()
 
-	res, _ := loadSpanFromFile(t)
+	res := loadSpanFromFile(t)
 
-	spanner := getMockedSpanner(t, res.Result.ValidatorSet.Validators)
+	valsetVals := valset.HeimdallToValSetValidators(res.ValidatorSet.Validators)
+
+	spanner := getMockedSpanner(t, valsetVals)
 	_bor.SetSpanner(spanner)
 
 	for i := uint64(1); i < sprintSize; i++ {
-		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, res.Result.ValidatorSet.Validators)
+		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, valsetVals)
 		insertNewBlock(t, chain, block)
 
 		if block.Number().Uint64() == init.genesis.Config.Bor.JaipurBlock.Uint64()-1 {
@@ -1477,7 +1458,7 @@ func testSealHash(header *types.Header, c *params.BorConfig) (hash common.Hash) 
 }
 
 func testEncodeSigHeader(w io.Writer, header *types.Header, c *params.BorConfig) {
-	enc := []interface{}{
+	enc := []any{
 		header.ParentHash,
 		header.UncleHash,
 		header.Coinbase,
@@ -1490,7 +1471,7 @@ func testEncodeSigHeader(w io.Writer, header *types.Header, c *params.BorConfig)
 		header.GasLimit,
 		header.GasUsed,
 		header.Time,
-		header.Extra[:len(header.Extra)-65], // Yes, this will panic if extra is too short
+		header.Extra[:len(header.Extra)-65], // Yes, this will panic if extra is too short.
 		header.MixDigest,
 		header.Nonce,
 	}
