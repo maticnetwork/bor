@@ -604,6 +604,7 @@ func (h *handler) BroadcastBlock(block *types.Block, propagate bool) {
 
 	hash := block.Hash()
 	peers := h.peers.peersWithoutBlock(hash)
+	peersWithoutWitness := h.peers.peersWithoutWitness(hash)
 
 	// If propagation is requested, send to a subset of the peer
 	if propagate {
@@ -638,6 +639,17 @@ func (h *handler) BroadcastBlock(block *types.Block, propagate bool) {
 			peer.AsyncSendNewBlock(block, td)
 		}
 
+		sqrtN := int(math.Sqrt(float64(len(peers))))
+		count := 0
+		for _, peer := range peersWithoutWitness {
+			if count < sqrtN && !EthPeersContainsID(transfer, peer.ID()) {
+				// TODO(@pratikspatil024) - calculate the witness
+				// block.ExecutionWitness() is of type *types.ExecutionWitness and we need *stateless.Witness
+				// peer.AsyncSendNewWitness(block.ExecutionWitness())
+				count++
+			}
+		}
+
 		log.Debug("Propagated block", "hash", hash, "recipients", len(transfer), "static and trusted recipients", len(staticAndTrustedPeers), "duration", common.PrettyDuration(time.Since(block.ReceivedAt)))
 
 		return
@@ -650,6 +662,15 @@ func (h *handler) BroadcastBlock(block *types.Block, propagate bool) {
 
 		log.Debug("Announced block", "hash", hash, "recipients", len(peers), "duration", common.PrettyDuration(time.Since(block.ReceivedAt)))
 	}
+}
+
+func EthPeersContainsID(ethPeers []*ethPeer, id string) bool {
+	for _, peer := range ethPeers {
+		if peer.ID() == id {
+			return true
+		}
+	}
+	return false
 }
 
 // BroadcastTransactions will propagate a batch of transactions
