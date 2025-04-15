@@ -341,6 +341,14 @@ func (h *handler) runEthPeer(peer *eth.Peer, handler eth.Handler) error {
 		return err
 	}
 
+	// If the peer has a `wit` extension, wait for it to connect so we can have
+	// a uniform initialization/teardown mechanism
+	wit, err := h.peers.waitWitExtension(peer)
+	if err != nil {
+		peer.Log().Error("Witness extension barrier failed", "err", err)
+		return err
+	}
+
 	// Execute the Ethereum handshake
 	var (
 		genesis = h.chain.Genesis()
@@ -374,7 +382,7 @@ func (h *handler) runEthPeer(peer *eth.Peer, handler eth.Handler) error {
 	peer.Log().Debug("Ethereum peer connected", "name", peer.Name())
 
 	// Register the peer locally
-	if err := h.peers.registerPeer(peer, snap); err != nil {
+	if err := h.peers.registerPeer(peer, snap, wit); err != nil {
 		peer.Log().Error("Ethereum peer registration failed", "err", err)
 		return err
 	}
@@ -476,11 +484,22 @@ func (h *handler) runSnapExtension(peer *snap.Peer, handler snap.Handler) error 
 	return handler(peer)
 }
 
-// PSP - complete this, and also verify (maybe we should also have a extension like we have for snap?)
-// runWitPeer registers a `wit` peer into the joint eth/wit peerset and
-// starts handling inbound messages.
-func (h *handler) runWitPeer(peer *wit.Peer, handler wit.Handler) error {
-	return nil
+// runWitExtension registers a `wit` peer into the joint eth/wit peerset and
+// starts handling inbound messages. As `wit` is only a satellite protocol to
+// `eth`, all subsystem registrations and lifecycle management will be done by
+// the main `eth` handler to prevent strange races.
+func (h *handler) runWitExtension(peer *wit.Peer, handler wit.Handler) error {
+	if !h.incHandlers() {
+		return p2p.DiscQuitting
+	}
+	defer h.decHandlers()
+
+	if err := h.peers.registerWitExtension(peer); err != nil {
+		peer.Log().Debug("Witness extension registration failed", "err", err)
+		return err
+	}
+
+	return handler(peer)
 }
 
 // removePeer requests disconnection of a peer.
@@ -564,11 +583,10 @@ func (h *handler) Stop() {
 	log.Info("Ethereum protocol stopped")
 }
 
-// PSP - use this to broadcast the witness
-// BroadcastWitness broadcasts the witness to all peers
+// TODO(@pratikspatil024) - use this to broadcast the witness
+// BroadcastWitness broadcasts the witness to all peers who are not aware of it
 func (h *handler) BroadcastWitness(witness *stateless.Witness) {
-	// broadcast the witness to all peers who are not
-	// aware of the witness
+	// broadcast the witness to all peers who are not aware of it
 	for _, peer := range h.peers.peersWithoutWitness(witness.Headers[0].Hash()) {
 		peer.AsyncSendNewWitness(witness)
 	}

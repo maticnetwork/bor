@@ -226,7 +226,7 @@ func (c *Conn) ReadSnap() (any, error) {
 	}
 }
 
-// PSP - use this (not needed now, as this is just for the test suite)
+// TODO(@pratikspatil024) - use this (not needed now, as this is just for the test suite)
 // ReadWit reads a wit/0 response with the given id from the connection.
 func (c *Conn) ReadWit() (any, error) {
 	c.SetReadDeadline(time.Now().Add(timeout))

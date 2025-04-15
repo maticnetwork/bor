@@ -23,7 +23,6 @@ var ProtocolVersions = []uint{WIT1}
 
 // protocolLengths are the number of implemented message corresponding to
 // different protocol versions.
-// PSP - TODO: Add protocol lengths when implemented
 var protocolLengths = map[uint]uint64{WIT1: 2}
 
 // maxMessageSize is the maximum cap on the size of a protocol message.

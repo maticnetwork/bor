@@ -17,7 +17,7 @@ func (h *witHandler) Chain() *core.BlockChain { return h.chain }
 
 // RunPeer is invoked when a peer joins on the `wit` protocol.
 func (h *witHandler) RunPeer(peer *wit.Peer, hand wit.Handler) error {
-	return (*handler)(h).runWitPeer(peer, hand)
+	return (*handler)(h).runWitExtension(peer, hand)
 }
 
 // PeerInfo retrieves all known `wit` information about a peer.
@@ -31,7 +31,6 @@ func (h *witHandler) PeerInfo(id enode.ID) interface{} {
 	return nil
 }
 
-// PSP - implement this
 // Handle is invoked from a peer's message handler when it receives a new remote
 // message that the handler couldn't consume and serve itself.
 func (h *witHandler) Handle(peer *wit.Peer, packet wit.Packet) error {
@@ -49,9 +48,8 @@ func (h *witHandler) Handle(peer *wit.Peer, packet wit.Packet) error {
 
 // handleWitnessBroadcast handles a witness broadcast from a peer.
 func (h *witHandler) handleWitnessBroadcast(_ *wit.Peer, _ *stateless.Witness) error {
-	//  PSP - implement this
+	//  TODO(@pratikspatil024) - implement this
 
-	// PSP - TODO
 	/*
 		// Store the witnes
 		if err := backend.StoreWitness(&witness); err != nil {
@@ -65,9 +63,8 @@ func (h *witHandler) handleWitnessBroadcast(_ *wit.Peer, _ *stateless.Witness) e
 
 // handleGetWitness handles a GetWitnessPacket request from a peer.
 func (h *witHandler) handleGetWitness(_ *wit.Peer, _ *wit.GetWitnessPacket) error {
-	//  PSP - implement this
+	//  TODO(@pratikspatil024) - implement this
 
-	// PSP - TODO
 	/*
 		var witnesses []rlp.RawValue
 

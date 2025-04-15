@@ -15,7 +15,7 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 )
 
-// PSP - TODO - Once everything is working, check if need to set limits
+// TODO(@pratikspatil024) - Once everything is working, check if need to set limits
 // like we do in eth/handler.go
 
 // Handler is a callback to invoke from an outside runner after the boilerplate
@@ -65,8 +65,8 @@ func MakeProtocols(backend Backend, network uint64) []p2p.Protocol {
 			PeerInfo: func(id enode.ID) interface{} {
 				return backend.PeerInfo(id)
 			},
-			// PSP - check if we need DialCandidates (I think not)
-			// PSP - check if we need this
+			// TODO(@pratikspatil024) - check if we need DialCandidates (I think not)
+			// TODO(@pratikspatil024) - check if we need this
 			Attributes: []enr.Entry{currentENREntry(backend.Chain())},
 		})
 
@@ -77,7 +77,7 @@ func MakeProtocols(backend Backend, network uint64) []p2p.Protocol {
 
 // NodeInfo represents a short summary of the `wit` sub-protocol metadata
 // known about the host peer.
-// PSP - evaluate if we need all these fields
+// TODO(@pratikspatil024) - evaluate if we need all these fields
 type NodeInfo struct {
 	Network    uint64              `json:"network"`    // Ethereum network ID (1=Mainnet, Holesky=17000)
 	Difficulty *big.Int            `json:"difficulty"` // Total difficulty of the host's blockchain
