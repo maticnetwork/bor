@@ -2108,6 +2108,7 @@ func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 }
 
 func (bc *BlockChain) InsertChainStateless(chain types.Blocks, witnesses []*stateless.Witness) (int, error) {
+	log.Info("InsertChainStateless", "blocks", len(chain), "witnesses", len(witnesses))
 	// Sanity check that we have something meaningful to import
 	if len(chain) == 0 {
 		return 0, nil
@@ -3489,6 +3490,24 @@ func (bc *BlockChain) SubscribeChain2HeadEvent(ch chan<- Chain2HeadEvent) event.
 }
 
 // ProcessBlockWithWitnesses processes a block in stateless mode using the provided witnesses.
-func (bc *BlockChain) ProcessBlockWithWitnesses(block *types.Block, parent *types.Header, witnesses *stateless.Witness) error {
+func (bc *BlockChain) ProcessBlockWithWitnesses(block *types.Block, parent *types.Header, witness *stateless.Witness) error {
 	return nil
+	// context := block.Header()
+	// context.Root = common.Hash{}
+	// context.ReceiptHash = common.Hash{}
+
+	// task := types.NewBlockWithHeader(context).WithBody(*block.Body())
+
+	// // Run the stateless self-cross-validation
+	// crossStateRoot, crossReceiptRoot, err := ExecuteStateless(bc.chainConfig, task, witness)
+	// if err != nil {
+	// 	return fmt.Errorf("stateless self-validation failed: %v", err)
+	// }
+	// if crossStateRoot != block.Root() {
+	// 	return fmt.Errorf("stateless self-validation root mismatch (cross: %x local: %x)", crossStateRoot, block.Root())
+	// }
+	// if crossReceiptRoot != block.ReceiptHash() {
+	// 	return fmt.Errorf("stateless self-validation receipt root mismatch (cross: %x local: %x)", crossReceiptRoot, block.ReceiptHash())
+	// }
+	// return nil
 }

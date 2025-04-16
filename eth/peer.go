@@ -17,11 +17,6 @@
 package eth
 
 import (
-	"errors"
-	"fmt"
-	"sync"
-	"time"
-
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/eth/protocols/snap"
@@ -93,98 +88,74 @@ type ethWitRequest struct {
 
 // Close overrides the embedded eth.Request's Close to also close the wit.Request.
 func (r *ethWitRequest) Close() error {
-	// First, close the underlying witness request.
-	err := r.witReq.Close()
-	// Then, call the embedded eth.Request's Close (if it exists and does anything).
-	// If eth.Request.Close() is a no-op or doesn't exist, this could be removed.
-	if r.Request != nil {
-		// Assuming eth.Request has a Close method. If not, remove this line.
-		// r.Request.Close() // Example: eth.Request might not have Close()
-	}
-	return err
+	// Only close the underlying witness request.
+	// The embedded eth.Request shim doesn't need explicit closing here,
+	// as it's not registered with the eth dispatcher.
+	return r.witReq.Close()
 }
 
 // RequestWitnesses implements downloader.Peer.
 // It requests witnesses using the wit protocol for the given block hashes.
 // NOTE: Response adaptation lacks robust cancellation checks.
 func (p *ethPeer) RequestWitnesses(hashes []common.Hash, dlResCh chan *eth.Response) (*eth.Request, error) {
-	// Check if peer supports the witness protocol
-	if p.witPeer == nil {
-		return nil, errors.New("peer does not support witness protocol (wit)")
-	}
+	p.witPeer.Log().Trace("RequestWitnesses called", "peer", p.ID(), "hashes", len(hashes))
+	// Create a channel for the underlying witness protocol responses.
+	witResCh := make(chan *wit.Response)
 
-	if len(hashes) == 0 {
-		return nil, errors.New("RequestWitnesses called with empty hash list")
-	}
-
-	p.Log().Debug("Requesting witnesses via hash list", "count", len(hashes), "first_hash", hashes[0])
-
-	// --- Call Underlying wit.Peer ---
-	witSink := make(chan *wit.Response, 100)
-	// Call the updated wit peer's request method with the full hashes slice
-	witReq, err := p.witPeer.Peer.RequestWitness(hashes, witSink)
+	// Make the actual request via the witness protocol peer.
+	witReq, err := p.witPeer.Peer.RequestWitness(hashes, witResCh)
 	if err != nil {
-		return nil, fmt.Errorf("witPeer.RequestWitness failed: %w", err)
+		p.witPeer.Log().Error("RequestWitnesses failed to make wit request", "peer", p.ID(), "err", err)
+		return nil, err
 	}
+	p.witPeer.Log().Trace("RequestWitnesses made wit request", "peer", p.ID(), "hashes", len(hashes))
 
-	// --- Create the eth.Request wrapper ---
-	ethReqBase := &eth.Request{
-		Peer: p.Peer.ID(),
-		Sent: time.Now(),
+	// Create the wrapper request. Embed a minimal eth.Request shim.
+	// Its primary purpose is type compatibility for the return value.
+	// The ethWitRequest's Close method handles actual cancellation via witReq.
+	// *** Crucially, set the Peer field so the concurrent fetcher can find the peer ***
+	ethReqShim := &eth.Request{
+		Peer: p.ID(), // Set the Peer ID here
 	}
-	wrapper := &ethWitRequest{
-		Request: ethReqBase,
+	wrapperReq := &ethWitRequest{
+		Request: ethReqShim,
 		witReq:  witReq,
 	}
 
-	// --- Adapt Response Channel (Goroutine) ---
-	adaptWg := sync.WaitGroup{}
-	adaptWg.Add(1)
+	// Start a goroutine to adapt responses from the wit channel to the eth channel.
 	go func() {
-		defer adaptWg.Done()
-		p.Log().Trace("Witness response adapter goroutine started", "peer", p.ID())
-		select {
-		case witRes := <-witSink:
-			var reqID uint64
-			if witRes != nil {
-				switch resp := witRes.Res.(type) {
-				case *wit.WitnessPacketRLPPacket:
-					reqID = resp.RequestId
-				}
-			}
-			p.Log().Trace("Witness response received from witSink", "peer", p.ID(), "reqID", reqID, "is_nil", witRes == nil)
-			if witRes == nil {
-				p.Log().Warn("Nil response received from wit sink", "peer", p.ID(), "reqID", reqID)
-				return
-			}
+		p.witPeer.Log().Trace("RequestWitnesses adapter goroutine started", "peer", p.ID())
+		defer p.witPeer.Log().Trace("RequestWitnesses adapter goroutine finished", "peer", p.ID())
 
-			// --- Response Adaptation ---
-			p.Log().Trace("Adapting witness response", "peer", p.ID(), "reqID", reqID)
-			witnessRespPacket, ok := witRes.Res.(*wit.WitnessPacketRLPPacket)
-			if !ok {
-				p.Log().Error("Invalid witness response type/field from wit sink", "peer", p.ID(), "reqID", reqID, "type", fmt.Sprintf("%T", witRes.Res))
-				return
-			}
-			reqID = witnessRespPacket.RequestId
-
-			// Construct eth.Response, using the embedded Request from the wrapper
-			dlRes := &eth.Response{
-				Req: wrapper.Request,
-				Res: *witnessRespPacket,
+		for witRes := range witResCh {
+			p.witPeer.Log().Trace("RequestWitnesses adapter received wit response", "peer", p.ID())
+			// Adapt wit.Response to eth.Response.
+			// We can only copy exported fields. The unexported fields (id, recv, code)
+			// will have zero values in the ethRes sent to the caller.
+			// Correlation still works via the Req field.
+			ethRes := &eth.Response{
+				Req:  wrapperReq.Request, // Point back to the embedded shim request.
+				Res:  witRes.Res,
+				Meta: witRes.Meta,
+				Time: witRes.Time,
+				Done: witRes.Done,
 			}
 
-			dlRes.Done = make(chan error, 1)
-
-			// Send adapted response (Incomplete: lacks cancellation checks)
-			p.Log().Trace("Sending adapted witness response to dlResCh", "peer", p.ID(), "reqID", reqID)
+			// Forward the adapted response to the downloader's channel.
+			// This select assumes the downloader channel (dlResCh) remains open
+			// and readable. If the downloader calls Close() on the returned request,
+			// wrapperReq.Close() -> witReq.Close() should eventually cause
+			// witResCh to close, terminating this goroutine.
+			// TODO: Consider adding explicit cancellation check if dlResCh can block indefinitely.
 			select {
-			case dlResCh <- dlRes:
-				p.Log().Trace("Forwarded witness response to downloader", "peer", p.ID(), "reqID", reqID)
+			case dlResCh <- ethRes:
+				p.witPeer.Log().Trace("RequestWitnesses adapter forwarded eth response", "peer", p.ID())
 			}
 		}
-		p.Log().Trace("Witness response adapter goroutine finished", "peer", p.ID())
 	}()
 
-	// --- Return Value ---
-	return wrapper.Request, nil
+	// Return the embedded *eth.Request part of the wrapper.
+	// This satisfies the function signature.
+	p.witPeer.Log().Trace("RequestWitnesses returning ethReq shim", "peer", p.ID())
+	return wrapperReq.Request, nil
 }

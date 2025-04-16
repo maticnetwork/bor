@@ -109,16 +109,20 @@ func (q *witnessQueue) request(peer *peerConnection, req *fetchRequest, resCh ch
 // it to the downloader's queue.
 func (q *witnessQueue) deliver(peer *peerConnection, packet *eth.Response) (int, error) {
 	log.Trace("Delivering witness response", "peer", peer.id)
-	// Check the actual response type. Assuming it's wrapped like other eth responses.
-	// The actual type might depend on how the peer implementation handles wit responses.
-	witPacket, ok := packet.Res.(wit.WitnessPacketRLPPacket) // Use wit.WitnessPacketRLPPacket
+	// Check the actual response type. Should be a pointer to WitnessPacketRLPPacket.
+	witPacketPtr, ok := packet.Res.(*wit.WitnessPacketRLPPacket) // Expect pointer type
 	if !ok {
+		peer.log.Warn("Witness deliver unexpected response type", "type", fmt.Sprintf("%T", packet.Res))
 		return 0, fmt.Errorf("unexpected response type: %T", packet.Res)
 	}
 
 	// The witPacket.WitnessPacketResponse is []rlp.RawValue
 	// Need to decode this into actual witness structures or pass the raw data.
-	witnessData := witPacket.WitnessPacketResponse
+	witnessData := witPacketPtr.WitnessPacketResponse // Dereference pointer implicitly? Check definition
+	// If WitnessPacketResponse is a pointer type in the struct, no change needed here.
+	// If it's a value type, we access it via witPacketPtr.WitnessPacketResponse.
+	// Assuming value type based on common patterns.
+
 	numWitnesses := len(witnessData) // Number of raw witness blobs received
 
 	// Placeholder: Needs DeliverWitnesses method definition in queue struct
