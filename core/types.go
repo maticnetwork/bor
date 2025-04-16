@@ -20,6 +20,7 @@ import (
 	"context"
 	"sync/atomic"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
@@ -49,7 +50,7 @@ type Processor interface {
 	// Process processes the state changes according to the Ethereum rules by running
 	// the transaction messages using the statedb and applying any rewards to both
 	// the processor (coinbase) and any included uncles.
-	Process(block *types.Block, statedb *state.StateDB, cfg vm.Config, interruptCtx context.Context) (*ProcessResult, error)
+	Process(block *types.Block, statedb *state.StateDB, cfg vm.Config, author *common.Address, interruptCtx context.Context) (*ProcessResult, error)
 }
 
 // ProcessResult contains the values computed by Process.

@@ -973,7 +973,7 @@ func (api *ConsensusAPI) executeStatelessPayload(params engine.ExecutableData, v
 	api.lastNewPayloadLock.Unlock()
 
 	log.Trace("Executing block statelessly", "number", block.Number(), "hash", params.BlockHash)
-	stateRoot, receiptRoot, err := core.ExecuteStateless(api.eth.BlockChain().Config(), block, witness)
+	stateRoot, receiptRoot, err := core.ExecuteStateless(api.eth.BlockChain().Config(), *api.eth.BlockChain().GetVMConfig(), block, witness, nil, api.eth.Engine())
 	if err != nil {
 		log.Warn("ExecuteStatelessPayload: execution failed", "err", err)
 		errorMsg := err.Error()
