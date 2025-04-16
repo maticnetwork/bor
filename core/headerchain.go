@@ -70,6 +70,8 @@ type HeaderChain struct {
 
 	procInterrupt func() bool
 	engine        consensus.Engine
+
+	stateSyncData []*types.StateSyncData // State sync data
 }
 
 // NewHeaderChain creates a new HeaderChain structure. ProcInterrupt points
@@ -738,4 +740,13 @@ func (hc *HeaderChain) Engine() consensus.Engine { return hc.engine }
 // a header chain does not have blocks available for retrieval.
 func (hc *HeaderChain) GetBlock(hash common.Hash, number uint64) *types.Block {
 	return nil
+}
+
+// SetStateSync set sync data in state_data
+func (hc *HeaderChain) SetStateSync(stateData []*types.StateSyncData) {
+	hc.stateSyncData = stateData
+}
+
+func (hc *HeaderChain) GetStateSync() []*types.StateSyncData {
+	return hc.stateSyncData
 }
