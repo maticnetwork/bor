@@ -3492,6 +3492,9 @@ func (bc *BlockChain) SubscribeChain2HeadEvent(ch chan<- Chain2HeadEvent) event.
 
 // ProcessBlockWithWitnesses processes a block in stateless mode using the provided witnesses.
 func (bc *BlockChain) ProcessBlockWithWitnesses(block *types.Block, parent *types.Header, witness *stateless.Witness) error {
+	if witness == nil {
+		return errors.New("nil witness")
+	}
 	// Remove critical computed fields from the block to force true recalculation
 	context := block.Header()
 	context.Root = common.Hash{}
