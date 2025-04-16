@@ -120,3 +120,7 @@ func (w *Witness) Copy() *Witness {
 func (w *Witness) Root() common.Hash {
 	return w.Headers[0].Root
 }
+
+func (w *Witness) Header() *types.Header {
+	return w.context
+}

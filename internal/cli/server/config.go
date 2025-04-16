@@ -625,7 +625,7 @@ func DefaultConfig() *Config {
 		Ancient:                 "",
 		DBEngine:                "pebble",
 		KeyStoreDir:             "",
-		WitnessProtocol:         false,
+		WitnessProtocol:         true,
 		Logging: &LoggingConfig{
 			Vmodule:             "",
 			Json:                false,

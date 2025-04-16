@@ -18,6 +18,7 @@ package downloader
 
 import (
 	"errors"
+	"reflect"
 	"sort"
 	"time"
 
@@ -348,6 +349,9 @@ func (d *Downloader) concurrentFetch(queue typedQueue, beaconMode bool) error {
 			}
 
 		case res := <-responses:
+			if reflect.TypeOf(queue) == reflect.TypeOf(&witnessQueue{}) {
+				log.Debug("Received response", "queue type", reflect.TypeOf(queue), "res", res)
+			}
 			// Response arrived, it may be for an existing or an already timed
 			// out request. If the former, update the timeout heap and perhaps
 			// reschedule the timeout timer.
@@ -374,8 +378,22 @@ func (d *Downloader) concurrentFetch(queue typedQueue, beaconMode bool) error {
 
 			// Signal the dispatcher that the round trip is done. We'll drop the
 			// peer if the data turns out to be junk.
+			if reflect.TypeOf(queue) == reflect.TypeOf(&witnessQueue{}) {
+				log.Debug("Signal dispatcher", "queue type", reflect.TypeOf(queue), "res", res)
+			}
 			res.Done <- nil
+			if reflect.TypeOf(queue) == reflect.TypeOf(&witnessQueue{}) {
+				log.Debug("Close request", "queue type", reflect.TypeOf(queue), "res", res)
+			}
 			res.Req.Close()
+
+			if reflect.TypeOf(queue) == reflect.TypeOf(&witnessQueue{}) {
+				for _, peer := range d.peers.AllPeers() {
+					log.Debug("Peer", "peer", peer.id, "peer", peer.peer, "queue type", reflect.TypeOf(queue))
+				}
+
+				log.Debug("Peer", "peer1", res.Req.Peer, "peer2", d.peers.Peer(res.Req.Peer), "queue type", reflect.TypeOf(queue))
+			}
 
 			// If the peer was previously banned and failed to deliver its pack
 			// in a reasonable time frame, ignore its message.

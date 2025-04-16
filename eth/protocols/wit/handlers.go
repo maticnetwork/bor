@@ -22,16 +22,23 @@ func handleGetWitness(backend Backend, msg Decoder, peer *Peer) error {
 	return backend.Handle(peer, req)
 }
 
-// handleWitness processes an incoming witness from a peer.
+// handleWitness processes an incoming witness response from a peer.
 func handleWitness(backend Backend, msg Decoder, peer *Peer) error {
-	packet := new(NewWitnessPacket)
+	// Decode the WitnessPacketRLPPacket response
+	packet := new(WitnessPacketRLPPacket)
 	if err := msg.Decode(&packet); err != nil {
-		log.Error("Failed to decode witness", "err", err)
+		log.Error("Failed to decode witness response packet", "err", err)
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
 
-	peer.AddKnownWitness(packet.Witness)
-	log.Info("Processed witness", "peer", peer.ID())
+	// Construct the response object, putting the entire decoded packet into Res
+	res := &Response{
+		id:   packet.RequestId,
+		code: MsgWitness,
+		Res:  packet, // Assign the *entire* packet, not just packet.WitnessPacketResponse
+	}
 
-	return backend.Handle(peer, packet)
+	// Forward the response to the dispatcher
+	log.Debug("Dispatching witness response packet", "peer", peer.ID(), "reqID", packet.RequestId, "count", len(packet.WitnessPacketResponse))
+	return peer.dispatchResponse(res, nil)
 }

@@ -75,6 +75,8 @@ func newPeerSet() *peerSet {
 		peers:    make(map[string]*ethPeer),
 		snapWait: make(map[string]chan *snap.Peer),
 		snapPend: make(map[string]*snap.Peer),
+		witWait:  make(map[string]chan *wit.Peer),
+		witPend:  make(map[string]*wit.Peer),
 		quitCh:   make(chan struct{}),
 	}
 }

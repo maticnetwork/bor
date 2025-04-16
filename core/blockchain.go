@@ -1886,6 +1886,8 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 		}
 
 		rawdb.WriteWitness(blockBatch, block.Hash(), witBuf.Bytes())
+	} else {
+		log.Debug("No witness to write", "block", block.NumberU64())
 	}
 
 	if err := blockBatch.Write(); err != nil {

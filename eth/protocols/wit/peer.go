@@ -187,8 +187,10 @@ func (p *Peer) KnownWitnessContainsHash(hash common.Hash) bool {
 
 // ReplyWitnessRLP is the response to GetWitness
 func (p *Peer) ReplyWitnessRLP(requestID uint64, witnesses []rlp.RawValue) error {
+	log.Debug("ReplyWitnessRLP", "peer", p.id, "requestID", requestID, "witnesses", witnesses)
 	p.lock.Lock()
 	defer p.lock.Unlock()
+	log.Debug("After lock")
 
 	// Send the response
 	return p2p.Send(p.rw, MsgWitness, &WitnessPacketRLPPacket{

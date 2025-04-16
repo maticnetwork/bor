@@ -108,6 +108,7 @@ func (q *witnessQueue) request(peer *peerConnection, req *fetchRequest, resCh ch
 // fetcher, unpacking the witness data (using wit protocol definitions) and delivering
 // it to the downloader's queue.
 func (q *witnessQueue) deliver(peer *peerConnection, packet *eth.Response) (int, error) {
+	log.Trace("Delivering witness response", "peer", peer.id)
 	// Check the actual response type. Assuming it's wrapped like other eth responses.
 	// The actual type might depend on how the peer implementation handles wit responses.
 	witPacket, ok := packet.Res.(wit.WitnessPacketRLPPacket) // Use wit.WitnessPacketRLPPacket

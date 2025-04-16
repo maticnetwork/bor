@@ -110,6 +110,11 @@ type Response struct {
 	Done chan error    // Channel to signal message handling to the reader
 }
 
+func (r *Response) String() string {
+	return fmt.Sprintf("Response{id: %d, recv: %s, code: %d, Req: %v, Res: %v, Meta: %v, Time: %v, Done: %v}",
+		r.id, r.recv, r.code, r.Req, r.Res, r.Meta, r.Time, r.Done)
+}
+
 // response is a wrapper around a remote Response that has an error channel to
 // signal on if processing the response failed.
 type response struct {

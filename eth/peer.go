@@ -120,7 +120,7 @@ func (p *ethPeer) RequestWitnesses(hashes []common.Hash, dlResCh chan *eth.Respo
 	p.Log().Debug("Requesting witnesses via hash list", "count", len(hashes), "first_hash", hashes[0])
 
 	// --- Call Underlying wit.Peer ---
-	witSink := make(chan *wit.Response, len(hashes))
+	witSink := make(chan *wit.Response, 100)
 	// Call the updated wit peer's request method with the full hashes slice
 	witReq, err := p.witPeer.Peer.RequestWitness(hashes, witSink)
 	if err != nil {
@@ -142,35 +142,47 @@ func (p *ethPeer) RequestWitnesses(hashes []common.Hash, dlResCh chan *eth.Respo
 	adaptWg.Add(1)
 	go func() {
 		defer adaptWg.Done()
+		p.Log().Trace("Witness response adapter goroutine started", "peer", p.ID())
 		select {
 		case witRes := <-witSink:
+			var reqID uint64
+			if witRes != nil {
+				switch resp := witRes.Res.(type) {
+				case *wit.WitnessPacketRLPPacket:
+					reqID = resp.RequestId
+				}
+			}
+			p.Log().Trace("Witness response received from witSink", "peer", p.ID(), "reqID", reqID, "is_nil", witRes == nil)
 			if witRes == nil {
-				p.Log().Warn("Nil response received from wit sink")
-				// Optionally: close(dlResCh) or send error response?
+				p.Log().Warn("Nil response received from wit sink", "peer", p.ID(), "reqID", reqID)
 				return
 			}
 
 			// --- Response Adaptation ---
+			p.Log().Trace("Adapting witness response", "peer", p.ID(), "reqID", reqID)
 			witnessRespPacket, ok := witRes.Res.(*wit.WitnessPacketRLPPacket)
 			if !ok {
-				p.Log().Error("Invalid witness response type/field from wit sink", "type", fmt.Sprintf("%T", witRes.Res))
-				// Optionally: close(dlResCh) or send error response?
+				p.Log().Error("Invalid witness response type/field from wit sink", "peer", p.ID(), "reqID", reqID, "type", fmt.Sprintf("%T", witRes.Res))
 				return
 			}
+			reqID = witnessRespPacket.RequestId
 
 			// Construct eth.Response, using the embedded Request from the wrapper
 			dlRes := &eth.Response{
-				Req: wrapper.Request, // Pass the embedded *eth.Request
+				Req: wrapper.Request,
 				Res: *witnessRespPacket,
-				// Done channel signaling is handled by concurrent fetcher based on this send
 			}
 
-			// Send adapted response (Incomplete: lacks cancellation checks)
-			dlResCh <- dlRes
-			p.Log().Trace("Forwarded witness response to downloader")
+			dlRes.Done = make(chan error, 1)
 
-			// TODO: Handle witReq cancellation/error?
+			// Send adapted response (Incomplete: lacks cancellation checks)
+			p.Log().Trace("Sending adapted witness response to dlResCh", "peer", p.ID(), "reqID", reqID)
+			select {
+			case dlResCh <- dlRes:
+				p.Log().Trace("Forwarded witness response to downloader", "peer", p.ID(), "reqID", reqID)
+			}
 		}
+		p.Log().Trace("Witness response adapter goroutine finished", "peer", p.ID())
 	}()
 
 	// --- Return Value ---

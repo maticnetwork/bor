@@ -23,14 +23,15 @@ var ProtocolVersions = []uint{WIT1}
 
 // protocolLengths are the number of implemented message corresponding to
 // different protocol versions.
-var protocolLengths = map[uint]uint64{WIT1: 2}
+var protocolLengths = map[uint]uint64{WIT1: 3}
 
 // maxMessageSize is the maximum cap on the size of a protocol message.
 const maxMessageSize = 10 * 1024 * 1024
 
 const (
-	GetMsgWitness = 0x03
-	MsgWitness    = 0x04
+	GetMsgWitness = 0x00
+	MsgWitness    = 0x01
+	NewWitnessMsg = 0x02
 )
 
 var (
@@ -78,5 +79,8 @@ type NewWitnessPacket struct {
 func (w *GetWitnessRequest) Name() string { return "GetWitness" }
 func (w *GetWitnessRequest) Kind() byte   { return GetMsgWitness }
 
+func (*WitnessPacketRLPPacket) Name() string { return "Witness" }
+func (*WitnessPacketRLPPacket) Kind() byte   { return MsgWitness }
+
 func (w *NewWitnessPacket) Name() string { return "NewWitness" }
-func (w *NewWitnessPacket) Kind() byte   { return MsgWitness }
+func (w *NewWitnessPacket) Kind() byte   { return NewWitnessMsg }

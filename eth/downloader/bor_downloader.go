@@ -692,7 +692,7 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td, ttd *
 	}
 
 	// Add witness fetcher if in FullSync or StatelessSync mode
-	if mode == FullSync || mode == StatelessSync {
+	if mode == StatelessSync {
 		fetchers = append(fetchers, func() error { return d.fetchWitnesses(origin+1, beaconMode) })
 	}
 
@@ -1168,9 +1168,15 @@ func (d *Downloader) fetchHeaders(p *peerConnection, from uint64, head uint64) e
 			d.dropPeer(p.id)
 
 			// Finish the sync gracefully instead of dumping the gathered data though
-			for _, ch := range []chan bool{d.queue.blockWakeCh, d.queue.receiptWakeCh, d.queue.witnessWakeCh} {
+			for _, ch := range []chan bool{d.queue.blockWakeCh, d.queue.receiptWakeCh} {
 				select {
 				case ch <- false:
+				case <-d.cancelCh:
+				}
+			}
+			if d.getMode() == StatelessSync {
+				select {
+				case d.queue.witnessWakeCh <- false:
 				case <-d.cancelCh:
 				}
 			}
@@ -1407,9 +1413,15 @@ func (d *Downloader) processHeaders(origin uint64, td, ttd *big.Int, beaconMode 
 			// Terminate header processing if we synced up
 			if task == nil || len(task.headers) == 0 {
 				// Notify everyone that headers are fully processed
-				for _, ch := range []chan bool{d.queue.blockWakeCh, d.queue.receiptWakeCh, d.queue.witnessWakeCh} {
+				for _, ch := range []chan bool{d.queue.blockWakeCh, d.queue.receiptWakeCh} {
 					select {
 					case ch <- false:
+					case <-d.cancelCh:
+					}
+				}
+				if mode == StatelessSync {
+					select {
+					case d.queue.witnessWakeCh <- false:
 					case <-d.cancelCh:
 					}
 				}
@@ -1539,9 +1551,15 @@ func (d *Downloader) processHeaders(origin uint64, td, ttd *big.Int, beaconMode 
 			d.syncStatsLock.Unlock()
 
 			// Signal the content downloaders of the availability of new tasks
-			for _, ch := range []chan bool{d.queue.blockWakeCh, d.queue.receiptWakeCh, d.queue.witnessWakeCh} {
+			for _, ch := range []chan bool{d.queue.blockWakeCh, d.queue.receiptWakeCh} {
 				select {
 				case ch <- true:
+				default:
+				}
+			}
+			if mode == StatelessSync {
+				select {
+				case d.queue.witnessWakeCh <- true:
 				default:
 				}
 			}
@@ -2096,5 +2114,7 @@ func (d *Downloader) importBlockResultsStateless(results []*fetchResult) error {
 // fetchWitnesses is a dedicated goroutine responsible for fetching block witnesses.
 func (d *Downloader) fetchWitnesses(from uint64, beaconMode bool) error {
 	log.Debug("Starting block witness fetcher", "from", from)
-	return d.concurrentFetch((*witnessQueue)(d), beaconMode)
+	err := d.concurrentFetch((*witnessQueue)(d), beaconMode)
+	log.Debug("Block witness fetcher terminated", "from", from, "err", err)
+	return err
 }
