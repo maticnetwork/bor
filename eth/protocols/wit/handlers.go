@@ -42,3 +42,13 @@ func handleWitness(backend Backend, msg Decoder, peer *Peer) error {
 	log.Debug("Dispatching witness response packet", "peer", peer.ID(), "reqID", packet.RequestId, "count", len(packet.WitnessPacketResponse))
 	return peer.dispatchResponse(res, nil)
 }
+
+func handleNewWitness(backend Backend, msg Decoder, peer *Peer) error {
+	// Decode the NewWitnessPacket request
+	req := new(NewWitnessPacket)
+	if err := msg.Decode(&req); err != nil {
+		return fmt.Errorf("failed to decode NewWitnessPacket: %w", err)
+	}
+
+	return backend.Handle(peer, req)
+}

@@ -86,17 +86,22 @@ type ethWitRequest struct {
 	witReq       *wit.Request // The actual witness protocol request
 }
 
-// Close overrides the embedded eth.Request's Close to also close the wit.Request.
+// Close overrides the embedded eth.Request's Close to also close the wit.Request
+// and signal cancellation via the embedded request's cancel channel.
 func (r *ethWitRequest) Close() error {
-	// Only close the underlying witness request.
-	// The embedded eth.Request shim doesn't need explicit closing here,
+	// Signal cancellation on the embedded request's channel first.
+	// Note: This assumes r.Request and r.Request.cancel are non-nil.
+	// The channel is initialized in RequestWitnesses.
+	close(r.Request.Cancel)
+
+	// Then close the underlying witness request.
+	// The eth.Request shim doesn't need explicit closing here,
 	// as it's not registered with the eth dispatcher.
 	return r.witReq.Close()
 }
 
 // RequestWitnesses implements downloader.Peer.
 // It requests witnesses using the wit protocol for the given block hashes.
-// NOTE: Response adaptation lacks robust cancellation checks.
 func (p *ethPeer) RequestWitnesses(hashes []common.Hash, dlResCh chan *eth.Response) (*eth.Request, error) {
 	p.witPeer.Log().Trace("RequestWitnesses called", "peer", p.ID(), "hashes", len(hashes))
 	// Create a channel for the underlying witness protocol responses.
@@ -115,7 +120,8 @@ func (p *ethPeer) RequestWitnesses(hashes []common.Hash, dlResCh chan *eth.Respo
 	// The ethWitRequest's Close method handles actual cancellation via witReq.
 	// *** Crucially, set the Peer field so the concurrent fetcher can find the peer ***
 	ethReqShim := &eth.Request{
-		Peer: p.ID(), // Set the Peer ID here
+		Peer:   p.ID(),              // Set the Peer ID here
+		Cancel: make(chan struct{}), // Initialize the cancel channel
 	}
 	wrapperReq := &ethWitRequest{
 		Request: ethReqShim,
@@ -141,15 +147,17 @@ func (p *ethPeer) RequestWitnesses(hashes []common.Hash, dlResCh chan *eth.Respo
 				Done: witRes.Done,
 			}
 
-			// Forward the adapted response to the downloader's channel.
-			// This select assumes the downloader channel (dlResCh) remains open
-			// and readable. If the downloader calls Close() on the returned request,
-			// wrapperReq.Close() -> witReq.Close() should eventually cause
-			// witResCh to close, terminating this goroutine.
-			// TODO: Consider adding explicit cancellation check if dlResCh can block indefinitely.
+			// Forward the adapted response to the downloader's channel,
+			// or stop if the request has been cancelled.
 			select {
 			case dlResCh <- ethRes:
 				p.witPeer.Log().Trace("RequestWitnesses adapter forwarded eth response", "peer", p.ID())
+			case <-wrapperReq.Request.Cancel:
+				p.witPeer.Log().Trace("RequestWitnesses adapter cancelled before forwarding response", "peer", p.ID())
+				// If cancelled, exit the goroutine. The closing of witResCh
+				// will also eventually terminate the loop, but returning
+				// here ensures we don't block trying to send after cancellation.
+				return
 			}
 		}
 	}()

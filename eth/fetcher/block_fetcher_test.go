@@ -667,7 +667,7 @@ func TestImportDeduplication(t *testing.T) {
 	witnessFetcher := tester.makeWitnessFetcher("valid", blocks, 0)
 
 	var counter atomic.Uint32
-	tester.fetcher.insertChain = func(blocks types.Blocks) (int, error) {
+	tester.fetcher.insertChain = func(blocks types.Blocks, witnesses []*stateless.Witness) (int, error) {
 		counter.Add(uint32(len(blocks)))
 		return tester.insertChain(blocks)
 	}

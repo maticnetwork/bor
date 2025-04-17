@@ -58,7 +58,17 @@ func (h *witHandler) handleWitnessBroadcast(peer *wit.Peer, witness *stateless.W
 		log.Error("error in witness encoding", "caughterr", err)
 	}
 
-	rawdb.WriteWitness(h.database, witness.Header().Hash(), witBuf.Bytes())
+	// Inject the witness into the block fetcher's cache
+	if h.blockFetcher != nil {
+		log.Info("Injecting witness into block fetcher", "hash", witness.Header().Hash())
+		if err := h.blockFetcher.InjectWitness(peer.ID(), witness); err != nil {
+			peer.Log().Warn("Failed to inject broadcast witness into fetcher", "hash", witness.Header().Hash(), "err", err)
+			// Don't return error, just log, as block might still be importable via other means
+		}
+	} else {
+		// This shouldn't happen in normal operation, but log if it does
+		peer.Log().Warn("Block fetcher nil in witHandler, cannot inject witness")
+	}
 
 	return nil
 }
@@ -71,7 +81,11 @@ func (h *witHandler) handleGetWitness(peer *wit.Peer, req *wit.GetWitnessPacket)
 
 	// Fetch witnesses from the backend
 	for _, hash := range req.Hashes {
-		witnesses = append(witnesses, rawdb.ReadWitness(h.database, hash))
+		witness := rawdb.ReadWitness(h.database, hash)
+		if witness == nil {
+			log.Debug("handleGetWitness: witness not found", "hash", hash)
+		}
+		witnesses = append(witnesses, witness)
 	}
 
 	return peer.ReplyWitnessRLP(req.RequestId, witnesses)

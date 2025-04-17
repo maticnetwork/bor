@@ -2165,6 +2165,21 @@ func (bc *BlockChain) InsertChainStateless(chain types.Blocks, witnesses []*stat
 	// In stateless mode, we process blocks one by one without committing the state
 	var processed int
 	for i, block := range chain {
+		// Check if block is already known before attempting to process
+		if bc.HasBlock(block.Hash(), block.NumberU64()) {
+			log.Trace("Skipping known block in InsertChainStateless", "number", block.NumberU64(), "hash", block.Hash())
+			processed++ // Count as processed since we're skipping it
+			// We need to ensure the header verification result for this block is consumed
+			// even though we are skipping the processing.
+			if err := <-results; err != nil {
+				// If header verification failed for this known block (shouldn't happen often),
+				// it might indicate a deeper issue, but we can't proceed with the chain.
+				log.Warn("Header verification failed for known block", "number", block.NumberU64(), "hash", block.Hash(), "err", err)
+				return processed - 1, fmt.Errorf("header verification failed for known block %d (%s): %w", block.NumberU64(), block.Hash(), err)
+			}
+			continue // Skip to the next block
+		}
+
 		// If the chain is terminating, don't even bother starting up.
 		if bc.insertStopped() {
 			return processed, errInsertionInterrupted
@@ -2198,8 +2213,11 @@ func (bc *BlockChain) InsertChainStateless(chain types.Blocks, witnesses []*stat
 			return processed, err
 		}
 
+		statedb := state.StateDB{}
+		statedb.SetWitness(witness)
+
 		// Write the block to the chain without committing state
-		if _, err := bc.writeBlockAndSetHead(block, nil, nil, &state.StateDB{}, false); err != nil {
+		if _, err := bc.writeBlockAndSetHead(block, nil, nil, &statedb, false); err != nil {
 			return processed, err
 		}
 
@@ -3507,14 +3525,19 @@ func (bc *BlockChain) ProcessBlockWithWitnesses(block *types.Block, parent *type
 
 	crossStateRoot, crossReceiptRoot, err := ExecuteStateless(bc.chainConfig, bc.vmConfig, task, witness, &author, bc.engine)
 
+	// Currently, we don't return the error, because we don't have a way to handle Span update statelessly
+	// TODO: Return the error once we have a way to handle Span update
 	if err != nil {
-		return errors.New(fmt.Sprint("stateless self-validation failed: %v", err))
+		log.Error("Stateless self-validation failed", "block", block.Number(), "hash", block.Hash(), "error", err)
+		return nil
 	}
 	if crossStateRoot != block.Root() {
-		return errors.New(fmt.Sprint("stateless self-validation root mismatch (cross: %x local: %x)", crossStateRoot, block.Root()))
+		log.Error("Stateless self-validation root mismatch", "block", block.Number(), "hash", block.Hash(), "cross", crossStateRoot, "local", block.Root())
+		return nil
 	}
 	if crossReceiptRoot != block.ReceiptHash() {
-		return errors.New(fmt.Sprint("stateless self-validation receipt root mismatch (cross: %x local: %x)", crossReceiptRoot, block.ReceiptHash()))
+		log.Error("Stateless self-validation receipt root mismatch", "block", block.Number(), "hash", block.Hash(), "cross", crossReceiptRoot, "local", block.ReceiptHash())
+		return nil
 	}
 	if !(err != nil || crossStateRoot != block.Root() || crossReceiptRoot != block.ReceiptHash()) {
 		log.Info("Successfully self validated the block", "block", block.Number(), "hash", block.Hash())

@@ -45,7 +45,7 @@ type Request struct {
 	id   uint64 // Request ID to match up replies to
 
 	sink   chan *Response // Channel to deliver the response on
-	cancel chan struct{}  // Channel to cancel requests ahead of time
+	Cancel chan struct{}  // Channel to cancel requests ahead of time
 
 	code uint64      // Message code of the request packet
 	want uint64      // Message code of the response packet
@@ -73,7 +73,7 @@ func (r *Request) Close() error {
 			return err
 		}
 
-		close(r.cancel)
+		close(r.Cancel)
 
 		return nil
 	case <-r.peer.term:
@@ -132,7 +132,7 @@ func (p *Peer) dispatchRequest(req *Request) error {
 		req:  req,
 		fail: make(chan error),
 	}
-	req.cancel = make(chan struct{})
+	req.Cancel = make(chan struct{})
 	req.peer = p
 	req.Peer = p.id
 
@@ -172,7 +172,7 @@ func (p *Peer) dispatchResponse(res *Response, metadata func() interface{}) erro
 		// the packet upstream, check for cancellation first and only after
 		// block on delivery.
 		select {
-		case <-res.Req.cancel:
+		case <-res.Req.Cancel:
 			return nil // Request cancelled, silently discard response
 		default:
 			// Request not yet cancelled, attempt to deliver it, but do watch
@@ -180,7 +180,7 @@ func (p *Peer) dispatchResponse(res *Response, metadata func() interface{}) erro
 			select {
 			case res.Req.sink <- res:
 				return <-res.Done // Response delivered, return any errors
-			case <-res.Req.cancel:
+			case <-res.Req.Cancel:
 				return nil // Request cancelled, silently discard response
 			}
 		}

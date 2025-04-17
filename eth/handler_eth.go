@@ -27,6 +27,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/eth/protocols/wit"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 )
 
@@ -124,6 +125,11 @@ func (h *ethHandler) handleBlockAnnounces(peer *eth.Peer, hashes []common.Hash, 
 		return ethPeer.witPeer.RequestWitness(hashes, sink)
 	}
 
+	if !h.statelessSync.Load() {
+		log.Debug("Stateless sync is disabled, skipping witness requests")
+		witnessRequester = nil
+	}
+
 	for i := 0; i < len(unknownHashes); i++ {
 		h.blockFetcher.Notify(peer.ID(), unknownHashes[i], unknownNumbers[i], time.Now(), peer.RequestOneHeader, peer.RequestBodies, witnessRequester)
 	}
@@ -134,8 +140,47 @@ func (h *ethHandler) handleBlockAnnounces(peer *eth.Peer, hashes []common.Hash, 
 // handleBlockBroadcast is invoked from a peer's message handler when it transmits a
 // block broadcast for the local node to process.
 func (h *ethHandler) handleBlockBroadcast(peer *eth.Peer, block *types.Block, td *big.Int) error {
-	// Schedule the block for import
-	h.blockFetcher.Enqueue(peer.ID(), block)
+	// If stateless sync is enabled, use the dedicated injectNeedWitness channel.
+	// Otherwise, use the original Enqueue optimization.
+	if h.statelessSync.Load() {
+		// Get the ethPeer wrapper for witness support
+		ethPeer := h.peers.peer(peer.ID())
+		if ethPeer == nil {
+			log.Error("Peer not found in peerset during block broadcast handling", "peer", peer.ID())
+			return fmt.Errorf("peer %s not found in peerset", peer.ID())
+		}
+
+		// Create a witness requester closure *only if* the peer supports the protocol.
+		var witnessRequester func(hashes []common.Hash, sink chan *wit.Response) (*wit.Request, error)
+		if ethPeer.witPeer != nil {
+			witnessRequester = func(hashes []common.Hash, sink chan *wit.Response) (*wit.Request, error) {
+				// Re-check witPeer inside closure in case it disconnects?
+				if ethPeer.witPeer == nil {
+					return nil, errors.New("peer disconnected from witness protocol")
+				}
+				// Request witnesses using the wit peer
+				return ethPeer.witPeer.RequestWitness(hashes, sink)
+			}
+		} else {
+			// If stateless sync is required, but the peer doesn't support witness,
+			// we cannot proceed. Log and drop the block.
+			log.Warn("Stateless sync enabled, but peer does not support witness protocol; dropping block broadcast", "peer", peer.ID(), "hash", block.Hash())
+			// Return nil because dropping is not a protocol error from the peer's side.
+			return nil
+		}
+
+		// Call the new fetcher method to inject the block
+		if err := h.blockFetcher.InjectBlockWithWitnessRequirement(peer.ID(), block, witnessRequester); err != nil {
+			// Log the error if injection failed (e.g., channel full)
+			log.Warn("Failed to inject block requiring witness", "hash", block.Hash(), "peer", peer.ID(), "err", err)
+			// Return nil? Or the error? Let's return nil as dropping isn't a peer protocol error.
+			return nil
+		}
+
+	} else {
+		// Not in stateless mode, use the direct Enqueue optimization.
+		h.blockFetcher.Enqueue(peer.ID(), block)
+	}
 
 	// Assuming the block is importable by the peer, but possibly not yet done so,
 	// calculate the head hash and TD that the peer truly must have.

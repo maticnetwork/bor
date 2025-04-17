@@ -122,6 +122,7 @@ type Decoder interface {
 var wit0 = map[uint64]msgHandler{
 	GetMsgWitness: handleGetWitness,
 	MsgWitness:    handleWitness,
+	NewWitnessMsg: handleNewWitness,
 }
 
 // HandleMessage is invoked whenever an inbound message is received from a

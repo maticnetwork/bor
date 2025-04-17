@@ -247,7 +247,7 @@ func newHandler(config *handlerConfig) (*handler, error) {
 	heighter := func() uint64 {
 		return h.chain.CurrentBlock().Number.Uint64()
 	}
-	inserter := func(blocks types.Blocks) (int, error) {
+	inserter := func(blocks types.Blocks, witnesses []*stateless.Witness) (int, error) {
 		// If sync is running, deny importing weird blocks.
 		if !h.synced.Load() {
 			log.Warn("Syncing, discarded propagated block", "number", blocks[0].Number(), "hash", blocks[0].Hash())
@@ -258,7 +258,7 @@ func newHandler(config *handlerConfig) (*handler, error) {
 		if h.statelessSync.Load() {
 			// For now, we pass nil for witnesses as we don't have a way to get witnesses here
 			// A future enhancement would be to propagate witnesses along with blocks
-			return h.chain.InsertChainStateless(blocks, nil)
+			return h.chain.InsertChainStateless(blocks, witnesses)
 		}
 
 		// Default behavior is to use regular InsertChain
@@ -270,7 +270,7 @@ func newHandler(config *handlerConfig) (*handler, error) {
 		return nil, errors.New("snap sync not supported with snapshots disabled")
 	}
 
-	h.blockFetcher = fetcher.NewBlockFetcher(false, nil, h.chain.GetBlockByHash, validator, h.BroadcastBlock, heighter, nil, inserter, h.removePeer, h.enableBlockTracking)
+	h.blockFetcher = fetcher.NewBlockFetcher(false, nil, h.chain.GetBlockByHash, validator, h.BroadcastBlock, heighter, nil, inserter, h.removePeer, h.enableBlockTracking, h.statelessSync.Load())
 
 	fetchTx := func(peer string, hashes []common.Hash) error {
 		p := h.peers.peer(peer)
