@@ -364,7 +364,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 	bc.statedb = state.NewDatabase(bc.triedb, nil)
 	bc.validator = NewBlockValidator(chainConfig, bc)
 	bc.prefetcher = newStatePrefetcher(chainConfig, bc.hc)
-	bc.processor = NewStateProcessor(chainConfig, bc, bc.hc)
+	bc.processor = NewStateProcessor(chainConfig, bc.hc)
 
 	bc.genesisBlock = bc.GetBlockByNumber(0)
 	if bc.genesisBlock == nil {
@@ -637,7 +637,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 		go func() {
 			parallelStatedb.StartPrefetcher("chain", nil)
 			pstart := time.Now()
-			res, err := bc.parallelProcessor.Process(block, parallelStatedb, bc.vmConfig, ctx)
+			res, err := bc.parallelProcessor.Process(block, parallelStatedb, bc.vmConfig, nil, ctx)
 			blockExecutionParallelTimer.UpdateSince(pstart)
 			if err == nil {
 				vstart := time.Now()
@@ -668,7 +668,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 
 			statedb.StartPrefetcher("chain", witness)
 			pstart := time.Now()
-			res, err := bc.processor.Process(block, statedb, bc.vmConfig, ctx)
+			res, err := bc.processor.Process(block, statedb, bc.vmConfig, nil, ctx)
 			blockExecutionSerialTimer.UpdateSince(pstart)
 			if err == nil {
 				vstart := time.Now()
@@ -2682,7 +2682,7 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 
 	// Process block using the parent state as reference point
 	pstart := time.Now()
-	res, err := bc.processor.Process(block, statedb, bc.vmConfig, context.Background())
+	res, err := bc.processor.Process(block, statedb, bc.vmConfig, nil, context.Background())
 	if err != nil {
 		bc.reportBlock(block, res, err)
 		return nil, err
@@ -2711,9 +2711,10 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 		context.ReceiptHash = common.Hash{}
 
 		task := types.NewBlockWithHeader(context).WithBody(*block.Body())
+		author := NewEVMBlockContext(block.Header(), bc.hc, nil).Coinbase
 
 		// Run the stateless self-cross-validation
-		crossStateRoot, crossReceiptRoot, err := ExecuteStateless(bc.chainConfig, task, witness)
+		crossStateRoot, crossReceiptRoot, err := ExecuteStateless(bc.chainConfig, bc.vmConfig, task, witness, &author, bc.engine)
 		if err != nil {
 			return nil, fmt.Errorf("stateless self-validation failed: %v", err)
 		}
@@ -3491,23 +3492,32 @@ func (bc *BlockChain) SubscribeChain2HeadEvent(ch chan<- Chain2HeadEvent) event.
 
 // ProcessBlockWithWitnesses processes a block in stateless mode using the provided witnesses.
 func (bc *BlockChain) ProcessBlockWithWitnesses(block *types.Block, parent *types.Header, witness *stateless.Witness) error {
+	if witness == nil {
+		return errors.New("nil witness")
+	}
+	// Remove critical computed fields from the block to force true recalculation
+	context := block.Header()
+	context.Root = common.Hash{}
+	context.ReceiptHash = common.Hash{}
+
+	task := types.NewBlockWithHeader(context).WithBody(*block.Body())
+
+	// Bor: Calculate EvmBlockContext with Root and ReceiptHash to properly get the author
+	author := NewEVMBlockContext(block.Header(), bc.hc, nil).Coinbase
+
+	crossStateRoot, crossReceiptRoot, err := ExecuteStateless(bc.chainConfig, bc.vmConfig, task, witness, &author, bc.engine)
+
+	if err != nil {
+		return errors.New(fmt.Sprint("stateless self-validation failed: %v", err))
+	}
+	if crossStateRoot != block.Root() {
+		return errors.New(fmt.Sprint("stateless self-validation root mismatch (cross: %x local: %x)", crossStateRoot, block.Root()))
+	}
+	if crossReceiptRoot != block.ReceiptHash() {
+		return errors.New(fmt.Sprint("stateless self-validation receipt root mismatch (cross: %x local: %x)", crossReceiptRoot, block.ReceiptHash()))
+	}
+	if !(err != nil || crossStateRoot != block.Root() || crossReceiptRoot != block.ReceiptHash()) {
+		log.Info("Successfully self validated the block", "block", block.Number(), "hash", block.Hash())
+	}
 	return nil
-	// context := block.Header()
-	// context.Root = common.Hash{}
-	// context.ReceiptHash = common.Hash{}
-
-	// task := types.NewBlockWithHeader(context).WithBody(*block.Body())
-
-	// // Run the stateless self-cross-validation
-	// crossStateRoot, crossReceiptRoot, err := ExecuteStateless(bc.chainConfig, task, witness)
-	// if err != nil {
-	// 	return fmt.Errorf("stateless self-validation failed: %v", err)
-	// }
-	// if crossStateRoot != block.Root() {
-	// 	return fmt.Errorf("stateless self-validation root mismatch (cross: %x local: %x)", crossStateRoot, block.Root())
-	// }
-	// if crossReceiptRoot != block.ReceiptHash() {
-	// 	return fmt.Errorf("stateless self-validation receipt root mismatch (cross: %x local: %x)", crossReceiptRoot, block.ReceiptHash())
-	// }
-	// return nil
 }
