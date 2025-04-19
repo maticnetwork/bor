@@ -82,7 +82,7 @@ func (p *Peer) sendNewWitness(witness *stateless.Witness) error {
 
 	p.knownWitnesses.Add(witness)
 
-	return p2p.Send(p.rw, MsgWitness, &NewWitnessPacket{
+	return p2p.Send(p.rw, NewWitnessMsg, &NewWitnessPacket{
 		Witness: witness,
 	})
 }

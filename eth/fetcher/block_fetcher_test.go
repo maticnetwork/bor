@@ -109,7 +109,7 @@ func newTester(light bool) *fetcherTester {
 		blocks:  map[common.Hash]*types.Block{genesis.Hash(): genesis},
 		drops:   make(map[string]bool),
 	}
-	tester.fetcher = NewBlockFetcher(light, tester.getHeader, tester.getBlock, tester.verifyHeader, tester.broadcastBlock, tester.chainHeight, tester.insertHeaders, tester.insertChain, tester.dropPeer, false)
+	tester.fetcher = NewBlockFetcher(light, tester.getHeader, tester.getBlock, tester.verifyHeader, tester.broadcastBlock, tester.chainHeight, tester.insertHeaders, tester.insertChain, tester.dropPeer, false, false)
 	tester.fetcher.Start()
 
 	return tester
@@ -175,7 +175,7 @@ func (f *fetcherTester) insertHeaders(headers []*types.Header) (int, error) {
 }
 
 // insertChain injects a new blocks into the simulated chain.
-func (f *fetcherTester) insertChain(blocks types.Blocks) (int, error) {
+func (f *fetcherTester) insertChain(blocks types.Blocks, witnesses []*stateless.Witness) (int, error) {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 
@@ -669,7 +669,7 @@ func TestImportDeduplication(t *testing.T) {
 	var counter atomic.Uint32
 	tester.fetcher.insertChain = func(blocks types.Blocks, witnesses []*stateless.Witness) (int, error) {
 		counter.Add(uint32(len(blocks)))
-		return tester.insertChain(blocks)
+		return tester.insertChain(blocks, witnesses)
 	}
 	// Instrument the fetching and imported events
 	fetching := make(chan []common.Hash)

@@ -97,7 +97,7 @@ type witnessRequesterFn func([]common.Hash, chan *wit.Response) (*wit.Request, e
 type headerVerifierFn func(header *types.Header) error
 
 // blockBroadcasterFn is a callback type for broadcasting a block to connected peers.
-type blockBroadcasterFn func(block *types.Block, propagate bool)
+type blockBroadcasterFn func(block *types.Block, witness *stateless.Witness, propagate bool)
 
 // chainHeightFn is a callback type to retrieve the current chain height.
 type chainHeightFn func() uint64
@@ -975,8 +975,8 @@ func (f *BlockFetcher) loop() {
 								// If it can contain multiple, this logic needs adjustment.
 								packet := res.Res.(*wit.WitnessPacketRLPPacket)
 
-								if len(packet.WitnessPacketResponse) != 1 {
-									log.Warn("Received multiple witnesses for a single block", "peer", peer, "hash", hash, "count", len(packet.WitnessPacketResponse))
+								if len(packet.WitnessPacketResponse) == 0 {
+									log.Warn("Received empty witness response from peer", "peer", peer, "hash", hash)
 									return
 								}
 
@@ -1296,6 +1296,7 @@ func (f *BlockFetcher) loop() {
 								// Move announce from completing to witnessing state
 								f.witnessing[blockHash] = announce
 								delete(f.completing, blockHash)
+								f.rescheduleWitness(witnessTimer)
 								// Don't add to 'blocks' list yet
 							} else {
 								log.Trace("Block body received, queuing for import", "peer", announce.origin, "number", block.NumberU64(), "hash", blockHash)
@@ -1528,7 +1529,7 @@ func (f *BlockFetcher) importBlocks(peer string, block *types.Block, witness *st
 			// All ok, quickly propagate to our peers
 			blockBroadcastOutTimer.UpdateSince(block.ReceivedAt)
 
-			go f.broadcastBlock(block, true)
+			go f.broadcastBlock(block, witness, true)
 
 		case consensus.ErrFutureBlock:
 			// Weird future block, don't fail, but neither propagate
@@ -1575,7 +1576,7 @@ func (f *BlockFetcher) importBlocks(peer string, block *types.Block, witness *st
 		// If import succeeded, broadcast the block
 		blockAnnounceOutTimer.UpdateSince(block.ReceivedAt)
 
-		go f.broadcastBlock(block, false)
+		go f.broadcastBlock(block, witness, false)
 
 		// Invoke the testing hook if needed
 		if f.importedHook != nil {
@@ -1630,16 +1631,6 @@ func (f *BlockFetcher) forgetHash(hash common.Hash) {
 		}
 
 		delete(f.completing, hash)
-	}
-
-	// Remove any pending witness requests and decrement the DOS counters
-	if announce := f.witnessing[hash]; announce != nil {
-		f.announces[announce.origin]--
-		if f.announces[announce.origin] <= 0 {
-			delete(f.announces, announce.origin)
-		}
-
-		delete(f.witnessing, hash)
 	}
 
 	// Remove from received witness cache as it's no longer needed

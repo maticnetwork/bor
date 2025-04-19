@@ -25,7 +25,6 @@ import (
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/eth/protocols/snap"
@@ -246,7 +245,9 @@ func (c *Conn) ReadWit() (any, error) {
 		case wit.GetMsgWitness:
 			msg = new(wit.GetWitnessPacket)
 		case wit.MsgWitness:
-			msg = new(stateless.Witness)
+			msg = new(wit.WitnessPacketRLPPacket)
+		case wit.NewWitnessMsg:
+			msg = new(wit.NewWitnessPacket)
 		default:
 			panic(fmt.Sprintf("unhandled wit msg code %d", code))
 		}

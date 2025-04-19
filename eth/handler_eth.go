@@ -143,7 +143,7 @@ func (h *ethHandler) handleBlockBroadcast(peer *eth.Peer, block *types.Block, td
 	// If stateless sync is enabled, use the dedicated injectNeedWitness channel.
 	// Otherwise, use the original Enqueue optimization.
 	if h.statelessSync.Load() {
-		// Get the ethPeer wrapper for witness support
+		log.Debug("Received block broadcast during stateless sync", "blockNumber", block.NumberU64(), "blockHash", block.Hash())
 		ethPeer := h.peers.peer(peer.ID())
 		if ethPeer == nil {
 			log.Error("Peer not found in peerset during block broadcast handling", "peer", peer.ID())

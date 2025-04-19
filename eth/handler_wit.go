@@ -3,14 +3,25 @@ package eth
 import (
 	"bytes"
 	"fmt"
+	"time"
 
 	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/eth/protocols/wit"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/rlp"
+)
+
+const (
+	// softResponseLimit is the target maximum size of replies to data retrievals.
+	softResponseLimit = 2 * 1024 * 1024
+
+	// estWitnessPacketSize is the estimated size of a witness response packet per witness.
+	estWitnessPacketSize = 1024 // Rough estimate, adjust as needed
+
+	// witnessRequestTimeout defines how long to wait for an in-flight witness computation.
+	witnessRequestTimeout = 5 * time.Second
 )
 
 // witHandler implements the eth.Backend interface to handle the various network
@@ -44,7 +55,18 @@ func (h *witHandler) Handle(peer *wit.Peer, packet wit.Packet) error {
 	case *wit.NewWitnessPacket:
 		return h.handleWitnessBroadcast(peer, packet.Witness)
 	case *wit.GetWitnessPacket:
-		return h.handleGetWitness(peer, packet)
+		// Call handleGetWitness which returns the raw RLP data
+		witnessesRLPBytes, err := h.handleGetWitness(peer, packet)
+		if err != nil {
+			return fmt.Errorf("failed to handle GetWitnessPacket: %w", err)
+		}
+		// Convert [][]byte to []rlp.RawValue before replying
+		witnessesRLP := make([]rlp.RawValue, len(witnessesRLPBytes))
+		for i, b := range witnessesRLPBytes {
+			witnessesRLP[i] = rlp.RawValue(b)
+		}
+		// Reply using the retrieved RLP data
+		return peer.ReplyWitnessRLP(packet.RequestId, witnessesRLP)
 
 	default:
 		return fmt.Errorf("unknown wit packet type %T", packet)
@@ -73,20 +95,25 @@ func (h *witHandler) handleWitnessBroadcast(peer *wit.Peer, witness *stateless.W
 	return nil
 }
 
-// handleGetWitness handles a GetWitnessPacket request from a peer.
-func (h *witHandler) handleGetWitness(peer *wit.Peer, req *wit.GetWitnessPacket) error {
-	var witnesses []rlp.RawValue
+// handleGetWitness retrieves witnesses for the requested block hashes and returns them as raw RLP data.
+// It now returns the data and error, rather than sending the reply directly.
+// The returned data is [][]byte, as rlp.RawValue is essentially []byte.
+func (h *witHandler) handleGetWitness(peer *wit.Peer, req *wit.GetWitnessPacket) ([][]byte, error) {
+	witnessesRLPBytes := make([][]byte, 0, len(req.Hashes))
 
-	log.Debug("handleGetWitness", "req", req)
+	log.Debug("handleGetWitness processing request", "peer", peer.ID(), "reqID", req.RequestId, "hashes", len(req.Hashes))
 
 	// Fetch witnesses from the backend
 	for _, hash := range req.Hashes {
-		witness := rawdb.ReadWitness(h.database, hash)
-		if witness == nil {
-			log.Debug("handleGetWitness: witness not found", "hash", hash)
+		// Call the blockchain method which now returns raw RLP bytes
+		witnessBytes, err := h.Chain().GetWitnessOrWait(hash, witnessRequestTimeout)
+		if err != nil || witnessBytes == nil {
+			log.Debug("handleGetWitness: error getting witness", "hash", hash, "err", err)
 		}
-		witnesses = append(witnesses, witness)
-	}
 
-	return peer.ReplyWitnessRLP(req.RequestId, witnesses)
+		witnessesRLPBytes = append(witnessesRLPBytes, witnessBytes)
+	}
+	// Return the collected RLP data
+	log.Debug("handleGetWitness returning witnesses", "peer", peer.ID(), "reqID", req.RequestId, "count", len(witnessesRLPBytes))
+	return witnessesRLPBytes, nil
 }

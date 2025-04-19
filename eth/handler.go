@@ -594,7 +594,7 @@ func (h *handler) BroadcastWitness(witness *stateless.Witness) {
 
 // BroadcastBlock will either propagate a block to a subset of its peers, or
 // will only announce its availability (depending what's requested).
-func (h *handler) BroadcastBlock(block *types.Block, propagate bool) {
+func (h *handler) BroadcastBlock(block *types.Block, witness *stateless.Witness, propagate bool) {
 	// Disable the block propagation if it's the post-merge block.
 	if beacon, ok := h.chain.Engine().(*beacon.Beacon); ok {
 		if beacon.IsPoSHeader(block.Header()) {
@@ -605,6 +605,13 @@ func (h *handler) BroadcastBlock(block *types.Block, propagate bool) {
 	hash := block.Hash()
 	peers := h.peers.peersWithoutBlock(hash)
 	peersWithoutWitness := h.peers.peersWithoutWitness(hash)
+
+	if witness != nil {
+		transfer := peersWithoutWitness[:int(math.Sqrt(float64(len(peersWithoutWitness))))]
+		for _, peer := range transfer {
+			peer.AsyncSendNewWitness(witness)
+		}
+	}
 
 	// If propagation is requested, send to a subset of the peer
 	if propagate {
@@ -637,17 +644,6 @@ func (h *handler) BroadcastBlock(block *types.Block, propagate bool) {
 		for _, peer := range staticAndTrustedPeers {
 			log.Trace("Propagating block to static and trusted peer", "hash", hash, "peerID", peer.ID())
 			peer.AsyncSendNewBlock(block, td)
-		}
-
-		sqrtN := int(math.Sqrt(float64(len(peers))))
-		count := 0
-		for _, peer := range peersWithoutWitness {
-			if count < sqrtN && !EthPeersContainsID(transfer, peer.ID()) {
-				// TODO(@pratikspatil024) - calculate the witness
-				// block.ExecutionWitness() is of type *types.ExecutionWitness and we need *stateless.Witness
-				// peer.AsyncSendNewWitness(block.ExecutionWitness())
-				count++
-			}
 		}
 
 		log.Debug("Propagated block", "hash", hash, "recipients", len(transfer), "static and trusted recipients", len(staticAndTrustedPeers), "duration", common.PrettyDuration(time.Since(block.ReceivedAt)))
@@ -764,8 +760,8 @@ func (h *handler) minedBroadcastLoop() {
 				delay := common.PrettyDuration(time.Millisecond * time.Duration(delayInMs))
 				log.Info("[block tracker] Broadcasting mined block", "number", ev.Block.NumberU64(), "hash", ev.Block.Hash(), "blockTime", ev.Block.Time(), "now", time.Now().Unix(), "delay", delay, "delayInMs", delayInMs)
 			}
-			h.BroadcastBlock(ev.Block, true)  // First propagate block to peers
-			h.BroadcastBlock(ev.Block, false) // Only then announce to the rest
+			h.BroadcastBlock(ev.Block, nil, true)  // First propagate block to peers
+			h.BroadcastBlock(ev.Block, nil, false) // Only then announce to the rest
 		}
 	}
 }
