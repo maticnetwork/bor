@@ -54,6 +54,8 @@ const (
 	blockLimit = 64 * 3 // Maximum number of unique blocks a peer may have delivered
 )
 
+const witnessTimeoutDropThreshold = 3 // Number of witness timeouts before dropping a peer
+
 var (
 	blockAnnounceInMeter   = metrics.NewRegisteredMeter("eth/fetcher/block/announces/in", nil)
 	blockAnnounceOutTimer  = metrics.NewRegisteredTimer("eth/fetcher/block/announces/out", nil)
@@ -202,17 +204,24 @@ type enqueueRequest struct {
 	op *blockOrHeaderInject
 }
 
+// Define the witnessTimeoutInfo struct outside the BlockFetcher
+type witnessTimeoutInfo struct {
+	hash common.Hash
+	peer string
+}
+
 // BlockFetcher is responsible for accumulating block announcements from various peers
 // and scheduling them for retrieval.
 type BlockFetcher struct {
 	light bool // The indicator whether it's a light fetcher or normal one.
 
 	// Various event channels
-	notify            chan *blockAnnounce
-	inject            chan *blockOrHeaderInject
-	injectNeedWitness chan *injectBlockNeedWitnessMsg // New channel
-	injectWitnessCh   chan *injectedWitnessMsg        // Channel for injected witnesses
-	enqueueCh         chan *enqueueRequest            // Channel for safe enqueue calls
+	notify             chan *blockAnnounce
+	inject             chan *blockOrHeaderInject
+	injectNeedWitness  chan *injectBlockNeedWitnessMsg // New channel
+	injectWitnessCh    chan *injectedWitnessMsg        // Channel for injected witnesses
+	enqueueCh          chan *enqueueRequest            // Channel for safe enqueue calls
+	witnessTimeoutChan chan witnessTimeoutInfo         // Channel to signal witness fetch timeouts
 
 	headerFilter  chan chan *headerFilterTask
 	bodyFilter    chan chan *bodyFilterTask
@@ -256,43 +265,47 @@ type BlockFetcher struct {
 	// Logging
 	enableBlockTracking bool // Whether to log information collected while tracking block lifecycle
 	requireWitness      bool // Whether operating in a mode where witnesses are strictly required for block imports
+
+	failedWitnessAttempts map[string]int // Track witness fetch failures per peer
 }
 
 // NewBlockFetcher creates a block fetcher to retrieve blocks based on hash announcements.
 func NewBlockFetcher(light bool, getHeader HeaderRetrievalFn, getBlock blockRetrievalFn, verifyHeader headerVerifierFn, broadcastBlock blockBroadcasterFn, chainHeight chainHeightFn, insertHeaders headersInsertFn, insertChain chainInsertFn, dropPeer peerDropFn, enableBlockTracking bool, requireWitness bool) *BlockFetcher {
 	return &BlockFetcher{
-		light:               light,
-		notify:              make(chan *blockAnnounce),
-		inject:              make(chan *blockOrHeaderInject),
-		injectNeedWitness:   make(chan *injectBlockNeedWitnessMsg, 100),
-		injectWitnessCh:     make(chan *injectedWitnessMsg, 100),
-		enqueueCh:           make(chan *enqueueRequest, 100),
-		headerFilter:        make(chan chan *headerFilterTask),
-		bodyFilter:          make(chan chan *bodyFilterTask),
-		witnessFilter:       make(chan chan *witnessFilterTask),
-		done:                make(chan common.Hash),
-		quit:                make(chan struct{}),
-		announces:           make(map[string]int),
-		announced:           make(map[common.Hash][]*blockAnnounce),
-		fetching:            make(map[common.Hash]*blockAnnounce),
-		fetched:             make(map[common.Hash][]*blockAnnounce),
-		completing:          make(map[common.Hash]*blockAnnounce),
-		witnessing:          make(map[common.Hash]*blockAnnounce),
-		queue:               prque.New[int64, *blockOrHeaderInject](nil),
-		queues:              make(map[string]int),
-		queued:              make(map[common.Hash]*blockOrHeaderInject),
-		pendingWitness:      make(map[common.Hash]*blockOrHeaderInject),
-		receivedWitnesses:   make(map[common.Hash]*injectedWitnessMsg),
-		getHeader:           getHeader,
-		getBlock:            getBlock,
-		verifyHeader:        verifyHeader,
-		broadcastBlock:      broadcastBlock,
-		chainHeight:         chainHeight,
-		insertHeaders:       insertHeaders,
-		insertChain:         insertChain,
-		dropPeer:            dropPeer,
-		enableBlockTracking: enableBlockTracking,
-		requireWitness:      requireWitness,
+		light:                 light,
+		notify:                make(chan *blockAnnounce),
+		inject:                make(chan *blockOrHeaderInject),
+		injectNeedWitness:     make(chan *injectBlockNeedWitnessMsg, 100),
+		injectWitnessCh:       make(chan *injectedWitnessMsg, 100),
+		enqueueCh:             make(chan *enqueueRequest, 100),
+		headerFilter:          make(chan chan *headerFilterTask),
+		bodyFilter:            make(chan chan *bodyFilterTask),
+		witnessFilter:         make(chan chan *witnessFilterTask),
+		done:                  make(chan common.Hash),
+		quit:                  make(chan struct{}),
+		announces:             make(map[string]int),
+		announced:             make(map[common.Hash][]*blockAnnounce),
+		fetching:              make(map[common.Hash]*blockAnnounce),
+		fetched:               make(map[common.Hash][]*blockAnnounce),
+		completing:            make(map[common.Hash]*blockAnnounce),
+		witnessing:            make(map[common.Hash]*blockAnnounce),
+		queue:                 prque.New[int64, *blockOrHeaderInject](nil),
+		queues:                make(map[string]int),
+		queued:                make(map[common.Hash]*blockOrHeaderInject),
+		pendingWitness:        make(map[common.Hash]*blockOrHeaderInject),
+		receivedWitnesses:     make(map[common.Hash]*injectedWitnessMsg),
+		getHeader:             getHeader,
+		getBlock:              getBlock,
+		verifyHeader:          verifyHeader,
+		broadcastBlock:        broadcastBlock,
+		chainHeight:           chainHeight,
+		insertHeaders:         insertHeaders,
+		insertChain:           insertChain,
+		dropPeer:              dropPeer,
+		enableBlockTracking:   enableBlockTracking,
+		requireWitness:        requireWitness,
+		failedWitnessAttempts: make(map[string]int),
+		witnessTimeoutChan:    make(chan witnessTimeoutInfo, 100),
 	}
 }
 
@@ -555,6 +568,13 @@ func (f *BlockFetcher) loop() {
 			if notification.number == 0 {
 				break
 			}
+			// If the peer has already failed too many times, ignore the announcement
+			if f.failedWitnessAttempts[notification.origin] >= witnessTimeoutDropThreshold {
+				log.Debug("Peer ignored announcement, too many prior witness failures", "peer", notification.origin, "failures", f.failedWitnessAttempts[notification.origin], "limit", witnessTimeoutDropThreshold)
+				blockAnnounceDropMeter.Mark(1)
+				break
+			}
+
 			// If we have a valid block number, check that it's potentially useful
 			if dist := int64(notification.number) - int64(f.chainHeight()); dist < -maxUncleDist || dist > maxQueueDist {
 				log.Debug("Peer discarded announcement", "peer", notification.origin, "number", notification.number, "hash", notification.hash, "distance", dist)
@@ -596,6 +616,12 @@ func (f *BlockFetcher) loop() {
 			// If witnesses are strictly required, discard directly injected blocks without one.
 			if f.requireWitness && op.block != nil && op.witness == nil {
 				log.Warn("Discarding injected block, witness required but not provided", "hash", op.hash(), "number", op.number(), "origin", op.origin)
+				continue
+			}
+
+			// If the peer has already failed too many times, ignore the announcement
+			if f.failedWitnessAttempts[op.origin] >= witnessTimeoutDropThreshold {
+				log.Warn("Discarding injected block, peer has too many prior witness failures", "peer", op.origin, "hash", op.hash(), "failures", f.failedWitnessAttempts[op.origin], "limit", witnessTimeoutDropThreshold)
 				continue
 			}
 
@@ -931,6 +957,18 @@ func (f *BlockFetcher) loop() {
 			}
 			// Send out all block witness requests
 			for peer, hashAnnounceMap := range request {
+				// Check peer failure count BEFORE launching goroutines for this peer
+				if f.failedWitnessAttempts[peer] >= witnessTimeoutDropThreshold {
+					log.Warn("Skipping witness fetch batch, peer failed threshold", "peer", peer, "hashes", len(hashAnnounceMap), "failures", f.failedWitnessAttempts[peer], "limit", witnessTimeoutDropThreshold)
+					// Clean up the state for these hashes as they won't be fetched.
+					// They were already removed from f.witnessing when added to 'request'.
+					// Just remove from pendingWitness.
+					for hash := range hashAnnounceMap {
+						delete(f.pendingWitness, hash)
+					}
+					continue // Skip this peer entirely for this batch
+				}
+
 				// Collect hashes for logging and potential batching if protocol supported it
 				hashesToFetch := make([]common.Hash, 0, len(hashAnnounceMap))
 				for hash := range hashAnnounceMap {
@@ -976,7 +1014,12 @@ func (f *BlockFetcher) loop() {
 								packet := res.Res.(*wit.WitnessPacketRLPPacket)
 
 								if len(packet.WitnessPacketResponse) == 0 {
-									log.Warn("Received empty witness response from peer", "peer", peer, "hash", hash)
+									log.Warn("Received empty witness response from peer, signalling failure", "peer", peer, "hash", hash)
+									// Signal back to main loop to treat as failure and clean up state.
+									select {
+									case f.witnessTimeoutChan <- witnessTimeoutInfo{hash: hash, peer: peer}:
+									case <-f.quit:
+									}
 									return
 								}
 
@@ -1013,8 +1056,7 @@ func (f *BlockFetcher) loop() {
 											log.Trace("Fetcher quit while sending enqueue request")
 										}
 
-										// Clean up states
-										delete(f.pendingWitness, hash)
+										// State cleanup (pendingWitness) is handled by the main loop via enqueue channel.
 									} else {
 										// Witness received, but origin doesn't match or announce missing.
 										log.Trace("Witness received, but announce origin mismatch or missing", "peer", peer, "hash", hash)
@@ -1032,7 +1074,12 @@ func (f *BlockFetcher) loop() {
 								// was already rescheduled at this point, we were
 								// waiting for a catchup. With an unresponsive
 								// peer however, it's a protocol violation.
-								f.dropPeer(peer)
+								// Send timeout info back to main loop instead of dropping here.
+								log.Warn("Witness fetch timed out for peer", "peer", peer, "hash", hash)
+								select {
+								case f.witnessTimeoutChan <- witnessTimeoutInfo{hash: hash, peer: peer}:
+								case <-f.quit:
+								}
 							}
 						}(hash, announce, announcedAt)
 					}
@@ -1040,6 +1087,30 @@ func (f *BlockFetcher) loop() {
 			}
 			// Schedule the next fetch if blocks are still pending
 			f.rescheduleWitness(witnessTimer)
+
+		case info := <-f.witnessTimeoutChan:
+			// A witness fetch timed out for a peer. Clean up the state for this block
+			// in the fetcher, allowing the downloader to potentially retry later.
+			// Track repeated failures to penalize the peer.
+			log.Warn("Witness fetch timed out, cleaning up fetcher state", "hash", info.hash, "peer", info.peer)
+
+			delete(f.witnessing, info.hash)        // Remove from active witness fetching state
+			delete(f.pendingWitness, info.hash)    // Remove from blocks waiting for witness
+			delete(f.receivedWitnesses, info.hash) // Clean up any potentially cached witness for this hash
+			// Explicitly forget the hash entirely to clean up all associated state
+			// and allow downloader to retry from scratch.
+			f.forgetHash(info.hash)
+			f.forgetBlock(info.hash)
+
+			// Track failures and drop peer if threshold exceeded
+			f.failedWitnessAttempts[info.peer]++
+
+			if f.failedWitnessAttempts[info.peer] >= witnessTimeoutDropThreshold {
+				log.Warn("Dropping peer due to repeated witness fetch timeouts", "peer", info.peer, "failures", f.failedWitnessAttempts[info.peer])
+				f.dropPeer(info.peer)
+			}
+			// No need to reschedule witness timer here, as the cleanup effectively removes the block
+			// from this fetcher path. If the block is still needed, the downloader should handle it.
 
 		case filter := <-f.headerFilter:
 			// Headers arrived from a remote peer. Extract those that were explicitly
@@ -1633,7 +1704,6 @@ func (f *BlockFetcher) forgetHash(hash common.Hash) {
 		delete(f.completing, hash)
 	}
 
-	// Remove from received witness cache as it's no longer needed
 	delete(f.receivedWitnesses, hash)
 }
 
