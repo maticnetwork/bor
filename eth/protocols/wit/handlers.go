@@ -52,3 +52,13 @@ func handleNewWitness(backend Backend, msg Decoder, peer *Peer) error {
 
 	return backend.Handle(peer, req)
 }
+
+func handleNewWitnessHashes(backend Backend, msg Decoder, peer *Peer) error {
+	// Decode the NewWitnessHashesPacket request
+	req := new(NewWitnessHashesPacket)
+	if err := msg.Decode(&req); err != nil {
+		return fmt.Errorf("failed to decode NewWitnessHashesPacket: %w", err)
+	}
+
+	return backend.Handle(peer, req)
+}

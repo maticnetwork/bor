@@ -660,7 +660,7 @@ func (s *Ethereum) startMilestoneWhitelistService() {
 		s.subscribeAndHandleMilestone(context.Background(), ethHandler, bor)
 	} else {
 		const (
-			tickerDuration = 50 * time.Millisecond
+			tickerDuration = 1000 * time.Millisecond
 			fnName         = "whitelist milestone"
 		)
 

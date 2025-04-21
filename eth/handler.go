@@ -606,15 +606,16 @@ func (h *handler) BroadcastBlock(block *types.Block, witness *stateless.Witness,
 	peers := h.peers.peersWithoutBlock(hash)
 	peersWithoutWitness := h.peers.peersWithoutWitness(hash)
 
-	if witness != nil {
-		transfer := peersWithoutWitness[:int(math.Sqrt(float64(len(peersWithoutWitness))))]
-		for _, peer := range transfer {
-			peer.AsyncSendNewWitness(witness)
-		}
-	}
-
 	// If propagation is requested, send to a subset of the peer
 	if propagate {
+		if witness != nil {
+			transfer := peersWithoutWitness[:int(math.Sqrt(float64(len(peersWithoutWitness))))]
+			for _, peer := range transfer {
+				log.Debug("Sending witness to peer", "hash", witness.Header().Hash(), "peer", peer.ID())
+				peer.AsyncSendNewWitness(witness)
+			}
+		}
+
 		// Calculate the TD of the block (it's not imported yet, so block.Td is not valid)
 		var td *big.Int
 		if parent := h.chain.GetBlock(block.ParentHash(), block.NumberU64()-1); parent != nil {
@@ -654,6 +655,10 @@ func (h *handler) BroadcastBlock(block *types.Block, witness *stateless.Witness,
 	if h.chain.HasBlock(hash, block.NumberU64()) {
 		for _, peer := range peers {
 			peer.AsyncSendNewBlockHash(block)
+		}
+
+		for _, peer := range peersWithoutWitness {
+			peer.AsyncSendNewWitnessHash(block.Header().Hash())
 		}
 
 		log.Debug("Announced block", "hash", hash, "recipients", len(peers), "duration", common.PrettyDuration(time.Since(block.ReceivedAt)))

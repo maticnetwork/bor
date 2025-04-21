@@ -1895,6 +1895,8 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 			log.Error("error in witness encoding", "caughterr", err)
 		}
 
+		log.Debug("Writing witness", "block", block.NumberU64(), "hash", block.Hash(), "header", statedb.Witness().Header())
+
 		rawdb.WriteWitness(blockBatch, block.Hash(), witBuf.Bytes())
 	} else {
 		log.Debug("No witness to write", "block", block.NumberU64())
@@ -2137,7 +2139,6 @@ func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 }
 
 func (bc *BlockChain) InsertChainStateless(chain types.Blocks, witnesses []*stateless.Witness) (int, error) {
-	log.Info("InsertChainStateless", "blocks", len(chain), "witnesses", len(witnesses))
 	// Sanity check that we have something meaningful to import
 	if len(chain) == 0 {
 		return 0, nil

@@ -1,10 +1,10 @@
 package eth
 
 import (
-	"bytes"
 	"fmt"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/eth/protocols/wit"
@@ -14,12 +14,6 @@ import (
 )
 
 const (
-	// softResponseLimit is the target maximum size of replies to data retrievals.
-	softResponseLimit = 2 * 1024 * 1024
-
-	// estWitnessPacketSize is the estimated size of a witness response packet per witness.
-	estWitnessPacketSize = 1024 // Rough estimate, adjust as needed
-
 	// witnessRequestTimeout defines how long to wait for an in-flight witness computation.
 	witnessRequestTimeout = 5 * time.Second
 )
@@ -54,6 +48,8 @@ func (h *witHandler) Handle(peer *wit.Peer, packet wit.Packet) error {
 	switch packet := packet.(type) {
 	case *wit.NewWitnessPacket:
 		return h.handleWitnessBroadcast(peer, packet.Witness)
+	case *wit.NewWitnessHashesPacket:
+		return h.handleWitnessHashesBroadcast(peer, packet.Hashes)
 	case *wit.GetWitnessPacket:
 		// Call handleGetWitness which returns the raw RLP data
 		witnessesRLPBytes, err := h.handleGetWitness(peer, packet)
@@ -75,14 +71,11 @@ func (h *witHandler) Handle(peer *wit.Peer, packet wit.Packet) error {
 
 // handleWitnessBroadcast handles a witness broadcast from a peer.
 func (h *witHandler) handleWitnessBroadcast(peer *wit.Peer, witness *stateless.Witness) error {
-	var witBuf bytes.Buffer
-	if err := witness.EncodeRLP(&witBuf); err != nil {
-		log.Error("error in witness encoding", "caughterr", err)
-	}
+	peer.AddKnownWitness(witness.Header().Hash())
 
 	// Inject the witness into the block fetcher's cache
 	if h.blockFetcher != nil {
-		log.Info("Injecting witness into block fetcher", "hash", witness.Header().Hash())
+		log.Debug("Injecting witness into block fetcher", "hash", witness.Header().Hash(), "peer", peer.ID())
 		if err := h.blockFetcher.InjectWitness(peer.ID(), witness); err != nil {
 			peer.Log().Warn("Failed to inject broadcast witness into fetcher", "hash", witness.Header().Hash(), "err", err)
 			// Don't return error, just log, as block might still be importable via other means
@@ -92,6 +85,14 @@ func (h *witHandler) handleWitnessBroadcast(peer *wit.Peer, witness *stateless.W
 		peer.Log().Warn("Block fetcher nil in witHandler, cannot inject witness")
 	}
 
+	return nil
+}
+
+// handleWitnessHashesBroadcast handles a witness hashes broadcast from a peer.
+func (h *witHandler) handleWitnessHashesBroadcast(peer *wit.Peer, hashes []common.Hash) error {
+	for _, hash := range hashes {
+		peer.AddKnownWitness(hash)
+	}
 	return nil
 }
 

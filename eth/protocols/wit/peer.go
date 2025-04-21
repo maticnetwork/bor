@@ -35,9 +35,9 @@ type Peer struct {
 
 	logger log.Logger // Contextual logger with the peer id injected
 
-	knownWitnesses *knownCache             // Set of witness hashes (`witness.Headers[0].Hash()`) known to be known by this peer
-	queuedWitness  chan *stateless.Witness // Queue of witness to broadcast to this peer
-	// queuedWitnessAnns    chan *stateless.Witness // Queue of witness announcements to this peer
+	knownWitnesses    *knownCache             // Set of witness hashes (`witness.Headers[0].Hash()`) known to be known by this peer
+	queuedWitness     chan *stateless.Witness // Queue of witness to broadcast to this peer
+	queuedWitnessAnns chan common.Hash        // Queue of witness announcements to this peer
 
 	reqDispatch chan *request  // Dispatch channel to send witness requests and track them until fulfillment
 	reqCancel   chan *cancel   // Dispatch channel to cancel pending witness requests
@@ -53,17 +53,17 @@ type Peer struct {
 func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter, logger log.Logger) *Peer {
 	id := p.ID().String()
 	peer := &Peer{
-		id:             id,
-		Peer:           p,
-		rw:             rw,
-		version:        version,
-		logger:         logger.With("peer", id),
-		knownWitnesses: newKnownCache(maxKnownWitnesses),
-		queuedWitness:  make(chan *stateless.Witness, maxQueuedWitnesses),
-		// queuedWitnessAnns:    make(chan *stateless.Witness, maxQueuedWitnessAnns),
-		reqDispatch: make(chan *request),
-		reqCancel:   make(chan *cancel),
-		resDispatch: make(chan *response),
+		id:                id,
+		Peer:              p,
+		rw:                rw,
+		version:           version,
+		logger:            logger.With("peer", id),
+		knownWitnesses:    newKnownCache(maxKnownWitnesses),
+		queuedWitness:     make(chan *stateless.Witness, maxQueuedWitnesses),
+		queuedWitnessAnns: make(chan common.Hash, maxQueuedWitnessAnns),
+		reqDispatch:       make(chan *request),
+		reqCancel:         make(chan *cancel),
+		resDispatch:       make(chan *response),
 
 		term: make(chan struct{}),
 	}
@@ -80,10 +80,17 @@ func (p *Peer) sendNewWitness(witness *stateless.Witness) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
-	p.knownWitnesses.Add(witness)
+	p.knownWitnesses.Add(witness.Header().Hash())
 
 	return p2p.Send(p.rw, NewWitnessMsg, &NewWitnessPacket{
 		Witness: witness,
+	})
+}
+
+// sendNewWitnessHashes sends witness hashes to the peer
+func (p *Peer) sendNewWitnessHashes(hashes []common.Hash) error {
+	return p2p.Send(p.rw, NewWitnessHashesMsg, &NewWitnessHashesPacket{
+		Hashes: hashes,
 	})
 }
 
@@ -94,12 +101,28 @@ func (p *Peer) AsyncSendNewWitness(witness *stateless.Witness) {
 	p.lock.RLock()
 	defer p.lock.RUnlock()
 
+	log.Debug("AsyncSendNewWitness", "witness", witness, "hash", witness.Header().Hash(), "peer", p.id)
+
 	// Queue the witness for broadcast
 	select {
 	case p.queuedWitness <- witness:
-		p.knownWitnesses.Add(witness)
+		p.knownWitnesses.Add(witness.Header().Hash())
 	default:
 		p.logger.Debug("Dropped witness propagation.", "witness", witness, "peer", p.id)
+	}
+}
+
+// AsyncSendNewWitnessHash queues witness hash for broadcast to the peer.
+func (p *Peer) AsyncSendNewWitnessHash(hash common.Hash) {
+	p.lock.RLock()
+	defer p.lock.RUnlock()
+
+	// Queue the witness hashes for broadcast
+	select {
+	case p.queuedWitnessAnns <- hash:
+		p.knownWitnesses.Add(hash)
+	default:
+		p.logger.Debug("Dropped witness hashes propagation.", "hashes", hash, "peer", p.id)
 	}
 }
 
@@ -159,10 +182,10 @@ func (p *Peer) KnownWitnesses() *knownCache {
 }
 
 // AddKnownWitnesses adds a witness hash to the set of known witness hashes.
-func (p *Peer) AddKnownWitness(witness *stateless.Witness) {
+func (p *Peer) AddKnownWitness(hash common.Hash) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
-	p.knownWitnesses.Add(witness)
+	p.knownWitnesses.Add(hash)
 }
 
 // KnownWitnessesCount returns the number of known witness.
@@ -176,7 +199,7 @@ func (p *Peer) KnownWitnessesCount() int {
 func (p *Peer) KnownWitnessesContains(witness *stateless.Witness) bool {
 	p.lock.RLock()
 	defer p.lock.RUnlock()
-	return p.knownWitnesses.Contains(witness)
+	return p.knownWitnesses.Contains(witness.Header().Hash())
 }
 
 func (p *Peer) KnownWitnessContainsHash(hash common.Hash) bool {
@@ -213,16 +236,16 @@ func newKnownCache(max int) *knownCache {
 }
 
 // Add adds a witness to the set.
-func (k *knownCache) Add(witness *stateless.Witness) {
+func (k *knownCache) Add(hash common.Hash) {
 	for k.hashes.Cardinality() > max(0, k.max-1) {
 		k.hashes.Pop()
 	}
-	k.hashes.Add(witness.Headers[0].Hash())
+	k.hashes.Add(hash)
 }
 
 // Contains returns whether the given item is in the set.
-func (k *knownCache) Contains(withess *stateless.Witness) bool {
-	return k.hashes.Contains(withess.Headers[0].Hash())
+func (k *knownCache) Contains(hash common.Hash) bool {
+	return k.hashes.Contains(hash)
 }
 
 // Cardinality returns the number of elements in the set.
