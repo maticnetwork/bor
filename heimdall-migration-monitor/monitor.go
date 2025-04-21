@@ -15,21 +15,24 @@ import (
 
 var IsHeimdallV2, IsHFApproaching, firstSuccessfulCheckPassed bool
 
-func StartHeimdallMigrationMonitor(heimdallUrl string) {
-	parsedURL, err := url.Parse(heimdallUrl)
+func StartHeimdallMigrationMonitor(heimdallAPIUrl string) {
+	parsedURL, err := url.Parse(heimdallAPIUrl)
 	if err != nil {
 		panic(fmt.Errorf("error parsing heimdallUrl: %w", err))
 	}
 
 	// TODO: Do we need special configuration for this port?
-	host, port, splitErr := net.SplitHostPort(parsedURL.Host)
-	if splitErr == nil && port != "" {
-		parsedURL.Host = net.JoinHostPort(host, "26657")
+	host, _, splitErr := net.SplitHostPort(parsedURL.Host)
+	if splitErr != nil {
+		panic(fmt.Errorf("error splitting host and port: %w", splitErr))
 	}
-	heimdallUrl = parsedURL.String()
 
-	go heimdallMigrationMonitor(heimdallUrl)
-	go heimdallHaltHeightMonitor(heimdallUrl)
+	parsedURL.Host = net.JoinHostPort(host, "26657")
+
+	heimdallRPCUrl := parsedURL.String()
+
+	go heimdallMigrationMonitor(heimdallRPCUrl)
+	go heimdallHaltHeightMonitor(heimdallAPIUrl)
 }
 
 func WaitFirstSuccessfulCheck() {
