@@ -1333,6 +1333,7 @@ func (c *Bor) FetchAndCommitSpan(
 		)
 	}
 
+	log.Error("Will commit span", "validators", validators, "producers", producers, "minSpan", minSpan)
 	return c.spanner.CommitSpan(ctx, minSpan, validators, producers, state, header, chain)
 }
 
