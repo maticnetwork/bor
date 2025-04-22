@@ -1140,18 +1140,19 @@ func (c *Bor) checkAndCommitSpan(
 func (c *Bor) getLatestHeimdallSpan() (*span.HeimdallSpan, error) {
 	storedSpanBytes, err := c.db.Get(rawdb.LastHeimdallSpanKey)
 	if err != nil {
-		log.Error("Error while fetching last heimdallv1 span from db", "error", err)
-		return nil, err
+		log.Error("Error while fetching heimdallv1 span from db", "error", err)
+		return nil, nil
 	}
 
 	if len(storedSpanBytes) == 0 {
-		return nil, errors.New("no heimdall span found in db")
+		log.Info("No heimdallv1 span found in db")
+		return nil, nil
 	}
 
 	var storedSpan span.HeimdallSpan
 	if err := json.Unmarshal(storedSpanBytes, &storedSpan); err != nil {
 		log.Error("Error while unmarshalling heimdallv1 span", "error", err)
-		return nil, err
+		return nil, nil
 	}
 
 	return &storedSpan, nil
@@ -1177,8 +1178,14 @@ func (c *Bor) saveLatestHeimdallSpan() {
 		return
 	}
 
-	if respSpan.ID <= storedSpan.ID {
-		log.Info("Latest heimdallv1 span is not updated", "storedSpanID", storedSpan.ID, "respSpanID", respSpan.ID)
+	storedSpanID := uint64(0)
+
+	if storedSpan != nil {
+		storedSpanID = storedSpan.ID
+	}
+
+	if respSpan.ID <= storedSpanID {
+		log.Info("Latest heimdallv1 span is not updated", "storedSpanID", storedSpanID, "respSpanID", respSpan.ID)
 		return
 	}
 
@@ -1193,7 +1200,7 @@ func (c *Bor) saveLatestHeimdallSpan() {
 		return
 	}
 
-	log.Info("Latest heimdallv1 span is updated", "storedSpanID", storedSpan.ID, "respSpanID", respSpan.ID)
+	log.Info("Latest heimdallv1 span is updated", "storedSpanID", storedSpanID, "respSpanID", respSpan.ID)
 }
 
 func (c *Bor) needToCommitSpan(currentSpan *span.Span, headerNumber uint64) bool {
