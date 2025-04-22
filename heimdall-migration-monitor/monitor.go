@@ -74,7 +74,7 @@ func heimdallHaltHeightMonitor(heimdallUrl string) {
 		if haltHeightResponse.Result > int(currentHeight) && haltHeightResponse.Result-int(currentHeight) < 100 {
 			IsHFApproaching = true
 		} else {
-			IsHFApproaching = false
+			IsHFApproaching = true
 		}
 	}
 }
