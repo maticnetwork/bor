@@ -1143,10 +1143,7 @@ func (c *Bor) checkAndCommitSpan(
 	}
 
 	if c.needToCommitSpan(span, headerNumber) {
-		err = c.FetchAndCommitSpan(ctx, span.ID+1, state, header, chain)
-		if err != nil {
-		}
-		return err
+		return c.FetchAndCommitSpan(ctx, span.ID+1, state, header, chain)
 	}
 
 	return nil
