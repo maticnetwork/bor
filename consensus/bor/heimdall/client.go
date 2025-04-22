@@ -95,8 +95,9 @@ const (
 	fetchMilestone        = "/milestone/latest"
 	fetchMilestoneCountV2 = "/milestone/count"
 
-	fetchSpanFormat = "bor/span/%d"
-	fetchLatestSpan = "bor/span/latest-span"
+	fetchSpanFormat   = "bor/span/%d"
+	fetchLatestSpanV1 = "bor/latest-span"
+	fetchLatestSpanV2 = "bor/span/latest"
 )
 
 // StateSyncEventsV1 fetches the state sync events from heimdall
@@ -225,7 +226,7 @@ func (h *HeimdallClient) GetSpanV2(ctx context.Context, spanID uint64) (*types.S
 }
 
 func (h *HeimdallClient) GetLatestSpanV1(ctx context.Context) (*span.HeimdallSpan, error) {
-	url, err := latestSpanUrl(h.urlString)
+	url, err := latestSpanUrlV1(h.urlString)
 	if err != nil {
 		return nil, err
 	}
@@ -240,7 +241,7 @@ func (h *HeimdallClient) GetLatestSpanV1(ctx context.Context) (*span.HeimdallSpa
 }
 
 func (h *HeimdallClient) GetLatestSpanV2(ctx context.Context) (*types.Span, error) {
-	url, err := latestSpanUrl(h.urlString)
+	url, err := latestSpanUrlV2(h.urlString)
 	if err != nil {
 		return nil, err
 	}
@@ -528,8 +529,12 @@ func spanURL(urlString string, spanID uint64) (*url.URL, error) {
 	return makeURL(urlString, fmt.Sprintf(fetchSpanFormat, spanID), "")
 }
 
-func latestSpanUrl(urlString string) (*url.URL, error) {
-	return makeURL(urlString, fetchLatestSpan, "")
+func latestSpanUrlV1(urlString string) (*url.URL, error) {
+	return makeURL(urlString, fetchLatestSpanV1, "")
+}
+
+func latestSpanUrlV2(urlString string) (*url.URL, error) {
+	return makeURL(urlString, fetchLatestSpanV2, "")
 }
 
 func stateSyncURLV1(urlString string, fromID uint64, to int64) (*url.URL, error) {
