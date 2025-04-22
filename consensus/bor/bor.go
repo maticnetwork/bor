@@ -1137,13 +1137,16 @@ func (c *Bor) checkAndCommitSpan(
 	var ctx = context.Background()
 	headerNumber := header.Number.Uint64()
 
-	span, err := c.spanner.GetCurrentSpan(ctx, header.ParentHash)
+	span, err := c.spanner.GetCurrentSpan(ctx, header.ParentHash, state)
 	if err != nil {
 		return err
 	}
 
 	if c.needToCommitSpan(span, headerNumber) {
-		return c.FetchAndCommitSpan(ctx, span.ID+1, state, header, chain)
+		err = c.FetchAndCommitSpan(ctx, span.ID+1, state, header, chain)
+		if err != nil {
+		}
+		return err
 	}
 
 	return nil
@@ -1265,7 +1268,7 @@ func (c *Bor) CommitStates(
 
 	if c.config.IsIndore(header.Number) {
 		// Fetch the LastStateId from contract via current state instance
-		lastStateIDBig, err = c.GenesisContractsClient.LastStateId(state.Copy(), number-1, header.ParentHash)
+		lastStateIDBig, err = c.GenesisContractsClient.LastStateId(state, number-1, header.ParentHash)
 		if err != nil {
 			return nil, err
 		}
@@ -1376,7 +1379,7 @@ func (c *Bor) getNextHeimdallSpanForTest(
 ) (*span.HeimdallSpan, error) {
 	headerNumber := header.Number.Uint64()
 
-	spanBor, err := c.spanner.GetCurrentSpan(ctx, header.ParentHash)
+	spanBor, err := c.spanner.GetCurrentSpan(ctx, header.ParentHash, nil)
 	if err != nil {
 		return nil, err
 	}

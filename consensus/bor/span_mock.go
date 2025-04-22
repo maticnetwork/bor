@@ -57,18 +57,18 @@ func (mr *MockSpannerMockRecorder) CommitSpan(arg0, arg1, arg2, arg3, arg4, arg5
 }
 
 // GetCurrentSpan mocks base method.
-func (m *MockSpanner) GetCurrentSpan(arg0 context.Context, arg1 common.Hash) (*span.Span, error) {
+func (m *MockSpanner) GetCurrentSpan(arg0 context.Context, arg1 common.Hash, arg2 *state.StateDB) (*span.Span, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetCurrentSpan", arg0, arg1)
+	ret := m.ctrl.Call(m, "GetCurrentSpan", arg0, arg1, arg2)
 	ret0, _ := ret[0].(*span.Span)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetCurrentSpan indicates an expected call of GetCurrentSpan.
-func (mr *MockSpannerMockRecorder) GetCurrentSpan(arg0, arg1 interface{}) *gomock.Call {
+func (mr *MockSpannerMockRecorder) GetCurrentSpan(arg0, arg1, arg2 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentSpan", reflect.TypeOf((*MockSpanner)(nil).GetCurrentSpan), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentSpan", reflect.TypeOf((*MockSpanner)(nil).GetCurrentSpan), arg0, arg1, arg2)
 }
 
 // GetCurrentValidatorsByBlockNrOrHash mocks base method.

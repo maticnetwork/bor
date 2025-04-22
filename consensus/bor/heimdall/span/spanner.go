@@ -47,7 +47,7 @@ func NewChainSpanner(ethAPI api.Caller, validatorSet abi.ABI, chainConfig *param
 }
 
 // GetCurrentSpan get current span from contract
-func (c *ChainSpanner) GetCurrentSpan(ctx context.Context, headerHash common.Hash) (*Span, error) {
+func (c *ChainSpanner) GetCurrentSpan(ctx context.Context, headerHash common.Hash, state *state.StateDB) (*Span, error) {
 	// block
 	blockNr := rpc.BlockNumberOrHashWithHash(headerHash, false)
 
@@ -66,11 +66,11 @@ func (c *ChainSpanner) GetCurrentSpan(ctx context.Context, headerHash common.Has
 	gas := (hexutil.Uint64)(uint64(math.MaxUint64 / 2))
 
 	// todo: would we like to have a timeout here?
-	result, err := c.ethAPI.Call(ctx, ethapi.TransactionArgs{
+	result, err := c.ethAPI.CallWithState(ctx, ethapi.TransactionArgs{
 		Gas:  &gas,
 		To:   &toAddress,
 		Data: &msgData,
-	}, &blockNr, nil, nil)
+	}, &blockNr, state, nil, nil)
 	if err != nil {
 		return nil, err
 	}
