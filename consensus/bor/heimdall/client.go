@@ -201,12 +201,19 @@ func (h *HeimdallClient) GetSpanV1(ctx context.Context, spanID uint64) (*span.He
 	}
 
 	ctx = WithRequestType(ctx, SpanRequest)
+	if hmm.IsHFApproaching {
+		request := &Request{client: h.client, url: url, start: time.Now()}
+		response, err := Fetch[SpanResponseV1](ctx, request)
+		if err != nil {
+			return nil, err
+		}
+		return &response.Result, nil
+	}
 
 	response, err := FetchWithRetry[SpanResponseV1](ctx, h.client, url, h.closeCh)
 	if err != nil {
 		return nil, err
 	}
-
 	return &response.Result, nil
 }
 
