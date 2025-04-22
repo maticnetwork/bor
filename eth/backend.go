@@ -780,9 +780,11 @@ func (s *Ethereum) fetchAndHandleMilestone(ctx context.Context, ethHandler *ethH
 }
 
 func (s *Ethereum) handleNoAckMilestone(ctx context.Context, ethHandler *ethHandler, bor *bor.Bor) error {
+	log.Error("handleNoAckMilestone", "hmm.IsHeimdallV2", hmm.IsHeimdallV2)
 	if hmm.IsHeimdallV2 {
 		return nil
 	}
+	log.Error("executing handleNoAckMilestone")
 
 	milestoneID, err := ethHandler.fetchNoAckMilestone(ctx, bor)
 
@@ -800,9 +802,11 @@ func (s *Ethereum) handleNoAckMilestone(ctx context.Context, ethHandler *ethHand
 }
 
 func (s *Ethereum) handleNoAckMilestoneByID(ctx context.Context, ethHandler *ethHandler, bor *bor.Bor) error {
+	log.Error("handleNoAckMilestoneByID", "hmm.IsHeimdallV2", hmm.IsHeimdallV2)
 	if hmm.IsHeimdallV2 {
 		return nil
 	}
+	log.Error("executing handleNoAckMilestoneByID")
 
 	milestoneIDs := ethHandler.downloader.GetMilestoneIDsList()
 

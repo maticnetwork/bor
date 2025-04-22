@@ -124,6 +124,7 @@ func heimdallMigrationMonitor(heimdallUrl string) {
 
 		// TODO: We are not interested just in the version but if also the network is building blocks
 		// Set flag to true if version is 0.38.x or above
+		log.Error("heimdallMigrationMonitor", "version", version, "minor", minor)
 		if minor >= 38 {
 			IsHeimdallV2 = true
 		} else {
