@@ -1300,7 +1300,7 @@ func (c *Bor) FetchAndCommitSpan(
 					response.ID = newSpanID
 					// TODO: Is this correct?
 					spanLength := response.EndBlock - response.StartBlock
-					response.StartBlock = header.Number.Uint64() + c.config.CalculateSprint(header.Number.Uint64()) + 1
+					response.StartBlock = header.Number.Uint64() + c.config.CalculateSprint(header.Number.Uint64())
 					response.EndBlock = response.StartBlock + spanLength
 				} else {
 					return err
