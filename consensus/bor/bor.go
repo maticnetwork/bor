@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"math/big"
 	"sort"
 	"strconv"
@@ -1137,7 +1138,7 @@ func (c *Bor) checkAndCommitSpan(
 	var ctx = context.Background()
 	headerNumber := header.Number.Uint64()
 
-	span, err := c.spanner.GetCurrentSpan(ctx, header.ParentHash)
+	span, err := c.spanner.GetCurrentSpan(ctx, header.ParentHash, state)
 	if err != nil {
 		return err
 	}
@@ -1265,7 +1266,15 @@ func (c *Bor) CommitStates(
 
 	if c.config.IsIndore(header.Number) {
 		// Fetch the LastStateId from contract via current state instance
-		lastStateIDBig, err = c.GenesisContractsClient.LastStateId(state.Copy(), number-1, header.ParentHash)
+		tempState := state.Copy()
+		lastStateIDBig, err = c.GenesisContractsClient.LastStateId(tempState, number-1, header.ParentHash)
+
+		if tempState.Witness() != nil {
+			// Clone the witness Codes and State sets from the temporary snapshot back into the original state
+			state.Witness().Codes = maps.Clone(tempState.Witness().Codes)
+			state.Witness().State = maps.Clone(tempState.Witness().State)
+		}
+
 		if err != nil {
 			return nil, err
 		}
@@ -1376,7 +1385,7 @@ func (c *Bor) getNextHeimdallSpanForTest(
 ) (*span.HeimdallSpan, error) {
 	headerNumber := header.Number.Uint64()
 
-	spanBor, err := c.spanner.GetCurrentSpan(ctx, header.ParentHash)
+	spanBor, err := c.spanner.GetCurrentSpan(ctx, header.ParentHash, nil)
 	if err != nil {
 		return nil, err
 	}
