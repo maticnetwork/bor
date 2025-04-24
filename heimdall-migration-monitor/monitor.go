@@ -55,7 +55,7 @@ func heimdallHaltHeightMonitor(heimdallUrl string) {
 
 		var haltHeightResponse struct {
 			Height string `json:"height"`
-			Result int64  `json:"result"`
+			Result int    `json:"result"`
 		}
 
 		err = json.NewDecoder(resp.Body).Decode(&haltHeightResponse)
@@ -65,16 +65,18 @@ func heimdallHaltHeightMonitor(heimdallUrl string) {
 			continue
 		}
 
+		log.Error("halt height", "height", haltHeightResponse.Height, "result", haltHeightResponse.Result)
+
 		currentHeight, err := strconv.ParseInt(haltHeightResponse.Height, 10, 32)
 		if err != nil {
 			log.Error("Error parsing halt height", "err", err)
 			continue
 		}
 
-		if haltHeightResponse.Result > currentHeight && haltHeightResponse.Result-currentHeight < 100 {
+		if haltHeightResponse.Result > int(currentHeight) && haltHeightResponse.Result-int(currentHeight) < 100 {
 			IsHFApproaching = true
 		} else {
-			IsHFApproaching = true
+			IsHFApproaching = false
 		}
 	}
 }
