@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           fetch-depth: 0
       # Variables
@@ -394,10 +394,10 @@ jobs:
         run: ls -ltr packaging/deb/ | grep bor
 
       - name: Release bor Packages
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@da05d552573ad5aba039eaac05058a918a7bf631
         with:
           tag_name: ${{ env.GIT_TAG }}
-          prerelease: true
+          make_latest: false
           files: |
             packaging/deb/bor-mainnet-**.deb
             packaging/deb/bor-pbss-mainnet-**.deb
