@@ -47,6 +47,8 @@ func WaitFirstSuccessfulCheck() {
 
 func heimdallHaltHeightMonitor(heimdallUrl string) {
 	for {
+		time.Sleep(5 * time.Second)
+
 		resp, err := http.Get(fmt.Sprintf("%s/chainmanager/halt-height", heimdallUrl))
 		if err != nil {
 			// TODO: Better to not log error because after heimdallv2 runs the endpoint exist
