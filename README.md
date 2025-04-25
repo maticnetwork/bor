@@ -5,7 +5,7 @@ Bor is the Official Golang implementation of the Polygon PoS blockchain. It is a
 https://pkg.go.dev/badge/github.com/maticnetwork/bor
 )](https://pkg.go.dev/github.com/maticnetwork/bor)
 [![Go Report Card](https://goreportcard.com/badge/github.com/maticnetwork/bor)](https://goreportcard.com/report/github.com/maticnetwork/bor)
-![MIT License](https://img.shields.io/github/license/maticnetwork/bor)
+[![MIT License](https://img.shields.io/github/license/maticnetwork/bor)](https://www.gnu.org/licenses/gpl-3.0.en.html)
 [![Discord](https://img.shields.io/badge/discord-join%20chat-blue.svg)](https://discord.com/invite/0xpolygonrnd)
 [![Twitter Follow](https://img.shields.io/twitter/follow/0xPolygon.svg?style=social)](https://twitter.com/0xPolygon)
 
