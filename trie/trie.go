@@ -684,6 +684,7 @@ func (t *Trie) resolveAndTrack(n hashNode, prefix []byte) (node, error) {
 
 	t.tracerMutex.Lock()
 	t.tracer.onRead(prefix, blob)
+	t.tracerMutex.Unlock()
 
 	// The returned node blob won't be changed afterward. No need to
 	// deep-copy the slice.
