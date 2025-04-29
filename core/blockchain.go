@@ -177,6 +177,7 @@ func (c *CacheConfig) triedbConfig(isVerkle bool) *triedb.Config {
 		}
 	}
 	if c.StateScheme == rawdb.PathScheme {
+		log.Info("Setting trie db config", "state history", c.StateHistory, "clean limit", c.TrieCleanLimit, "dirty limit", c.TrieDirtyLimit)
 		config.PathDB = &pathdb.Config{
 			StateHistory:    c.StateHistory,
 			CleanCacheSize:  c.TrieCleanLimit * 1024 * 1024,
