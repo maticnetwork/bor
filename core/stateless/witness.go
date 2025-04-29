@@ -24,6 +24,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/log"
 )
 
 // HeaderReader is an interface to pull in headers in place of block hashes for
@@ -81,6 +82,7 @@ func (w *Witness) AddBlockHash(number uint64) {
 
 // AddCode adds a bytecode blob to the witness.
 func (w *Witness) AddCode(code []byte) {
+	log.Info("***** Add code for witness, shouldn't happen")
 	if len(code) == 0 {
 		return
 	}

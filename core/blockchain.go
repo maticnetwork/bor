@@ -2081,6 +2081,9 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool, makeWitness 
 		return nil, 0, nil
 	}
 
+	// Explicitly disable witness generation
+	makeWitness = false
+
 	// Start a parallel signature recovery (signer will fluke on fork transition, minimal perf loss)
 	SenderCacher.RecoverFromBlocks(types.MakeSigner(bc.chainConfig, chain[0].Number(), chain[0].Time()), chain)
 
@@ -2340,6 +2343,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool, makeWitness 
 			// only block being inserted. A bit crude, but witnesses are huge,
 			// so we refuse to make an entire chain of them.
 			if bc.vmConfig.StatelessSelfValidation || (makeWitness && len(chain) == 1) {
+				log.Info("**** into generate witness, shouldn't happen ***")
 				witness, err = stateless.NewWitness(block.Header(), bc)
 				if err != nil {
 					return nil, it.index, err
