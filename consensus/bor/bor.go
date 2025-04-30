@@ -479,7 +479,10 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 		if err != nil {
 			return err
 		}
-		newValidators := span.ValidatorSet.Validators
+		newValidators := make([]*valset.Validator, len(span.SelectedProducers))
+		for i, val := range span.SelectedProducers {
+			newValidators[i] = &val
+		}
 
 		sort.Sort(valset.ValidatorsByAddress(newValidators))
 
@@ -580,9 +583,13 @@ func (c *Bor) snapshot(chain consensus.ChainHeaderReader, number uint64, hash co
 				if err != nil {
 					return nil, err
 				}
+				producers := make([]*valset.Validator, len(span.SelectedProducers))
+				for i, val := range span.SelectedProducers {
+					producers[i] = &val
+				}
 
 				// new snap shot
-				snap = newSnapshot(c.chainConfig, c.signatures, number, hash, span.ValidatorSet.Validators)
+				snap = newSnapshot(c.chainConfig, c.signatures, number, hash, producers)
 				if err := snap.store(c.db); err != nil {
 					return nil, err
 				}
