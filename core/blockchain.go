@@ -181,7 +181,7 @@ func (c *CacheConfig) triedbConfig(isVerkle bool) *triedb.Config {
 		config.PathDB = &pathdb.Config{
 			StateHistory:    c.StateHistory,
 			CleanCacheSize:  c.TrieCleanLimit * 1024 * 1024,
-			WriteBufferSize: 256 * 1024 * 1024,
+			WriteBufferSize: 32 * 1024 * 1024,
 		}
 	}
 	return config
