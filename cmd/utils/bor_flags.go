@@ -43,13 +43,6 @@ var (
 		Value: "",
 	}
 
-	// HeimdallgRPCAddressFlag flag for heimdall gRPC address
-	HeimdallWSAddressFlag = &cli.StringFlag{
-		Name:  "bor.heimdallWS",
-		Usage: "Address of Heimdall WS Subscription service",
-		Value: "",
-	}
-
 	// RunHeimdallFlag flag for running heimdall internally from bor
 	RunHeimdallFlag = &cli.BoolFlag{
 		Name:  "bor.runheimdall",
@@ -74,7 +67,6 @@ var (
 		HeimdallTimeoutFlag,
 		WithoutHeimdallFlag,
 		HeimdallgRPCAddressFlag,
-		HeimdallWSAddressFlag,
 		RunHeimdallFlag,
 		RunHeimdallArgsFlag,
 		UseHeimdallAppFlag,
@@ -87,7 +79,6 @@ func SetBorConfig(ctx *cli.Context, cfg *eth.Config) {
 	cfg.HeimdallTimeout = ctx.Duration(HeimdallTimeoutFlag.Name)
 	cfg.WithoutHeimdall = ctx.Bool(WithoutHeimdallFlag.Name)
 	cfg.HeimdallgRPCAddress = ctx.String(HeimdallgRPCAddressFlag.Name)
-	cfg.HeimdallWSAddress = ctx.String(HeimdallWSAddressFlag.Name)
 	cfg.RunHeimdall = ctx.Bool(RunHeimdallFlag.Name)
 	cfg.RunHeimdallArgs = ctx.String(RunHeimdallArgsFlag.Name)
 	cfg.UseHeimdallApp = ctx.Bool(UseHeimdallAppFlag.Name)

@@ -3,7 +3,6 @@
 package ethconfig
 
 import (
-	"encoding/json"
 	"math/big"
 	"time"
 
@@ -16,8 +15,8 @@ import (
 	"github.com/ethereum/go-ethereum/miner"
 )
 
-// MarshalJSON marshals as JSON.
-func (c Config) MarshalJSON() ([]byte, error) {
+// MarshalTOML marshals as TOML.
+func (c Config) MarshalTOML() (interface{}, error) {
 	type Config struct {
 		Genesis                              *core.Genesis `toml:",omitempty"`
 		NetworkId                            uint64
@@ -51,7 +50,6 @@ func (c Config) MarshalJSON() ([]byte, error) {
 		BlobPool                             blobpool.Config
 		GPO                                  gasprice.Config
 		EnablePreimageRecording              bool
-		EnableWitnessCollection              bool `toml:"-"`
 		VMTrace                              string
 		VMTraceJsonConfig                    string
 		DocRoot                              string `toml:"-"`
@@ -64,7 +62,6 @@ func (c Config) MarshalJSON() ([]byte, error) {
 		HeimdallTimeout                      time.Duration
 		WithoutHeimdall                      bool
 		HeimdallgRPCAddress                  string
-		HeimdallWSAddress                    string
 		RunHeimdall                          bool
 		RunHeimdallArgs                      string
 		UseHeimdallApp                       bool
@@ -120,7 +117,6 @@ func (c Config) MarshalJSON() ([]byte, error) {
 	enc.HeimdallTimeout = c.HeimdallTimeout
 	enc.WithoutHeimdall = c.WithoutHeimdall
 	enc.HeimdallgRPCAddress = c.HeimdallgRPCAddress
-	enc.HeimdallWSAddress = c.HeimdallWSAddress
 	enc.RunHeimdall = c.RunHeimdall
 	enc.RunHeimdallArgs = c.RunHeimdallArgs
 	enc.UseHeimdallApp = c.UseHeimdallApp
@@ -130,11 +126,11 @@ func (c Config) MarshalJSON() ([]byte, error) {
 	enc.DevFakeAuthor = c.DevFakeAuthor
 	enc.OverrideVerkle = c.OverrideVerkle
 	enc.EnableBlockTracking = c.EnableBlockTracking
-	return json.Marshal(&enc)
+	return &enc, nil
 }
 
-// UnmarshalJSON unmarshals from JSON.
-func (c *Config) UnmarshalJSON(input []byte) error {
+// UnmarshalTOML unmarshals from TOML.
+func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 	type Config struct {
 		Genesis                              *core.Genesis `toml:",omitempty"`
 		NetworkId                            *uint64
@@ -168,7 +164,6 @@ func (c *Config) UnmarshalJSON(input []byte) error {
 		BlobPool                             *blobpool.Config
 		GPO                                  *gasprice.Config
 		EnablePreimageRecording              *bool
-		EnableWitnessCollection              *bool `toml:"-"`
 		VMTrace                              *string
 		VMTraceJsonConfig                    *string
 		DocRoot                              *string `toml:"-"`
@@ -181,7 +176,6 @@ func (c *Config) UnmarshalJSON(input []byte) error {
 		HeimdallTimeout                      *time.Duration
 		WithoutHeimdall                      *bool
 		HeimdallgRPCAddress                  *string
-		HeimdallWSAddress                    *string
 		RunHeimdall                          *bool
 		RunHeimdallArgs                      *string
 		UseHeimdallApp                       *bool
@@ -193,7 +187,7 @@ func (c *Config) UnmarshalJSON(input []byte) error {
 		EnableBlockTracking                  *bool
 	}
 	var dec Config
-	if err := json.Unmarshal(input, &dec); err != nil {
+	if err := unmarshal(&dec); err != nil {
 		return err
 	}
 	if dec.Genesis != nil {
@@ -327,9 +321,6 @@ func (c *Config) UnmarshalJSON(input []byte) error {
 	}
 	if dec.HeimdallgRPCAddress != nil {
 		c.HeimdallgRPCAddress = *dec.HeimdallgRPCAddress
-	}
-	if dec.HeimdallWSAddress != nil {
-		c.HeimdallWSAddress = *dec.HeimdallWSAddress
 	}
 	if dec.RunHeimdall != nil {
 		c.RunHeimdall = *dec.RunHeimdall

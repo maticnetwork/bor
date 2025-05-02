@@ -29,7 +29,6 @@ const (
 	PriorityWindowSizeFactor = 2
 )
 
-// TODO HV2: Consider aligning with the one defined in x/stake/types/validator_set.go
 // ValidatorSet represent a set of *Validator at a given height.
 // The validators can be fetched by address or index.
 // The index is in order of .Address, so the indices are fixed

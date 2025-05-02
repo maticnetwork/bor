@@ -8,10 +8,10 @@ import (
 	context "context"
 	reflect "reflect"
 
-	types "github.com/0xPolygon/heimdall-v2/x/bor/types"
 	clerk "github.com/ethereum/go-ethereum/consensus/bor/clerk"
 	checkpoint "github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
 	milestone "github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
+	span "github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
 	gomock "github.com/golang/mock/gomock"
 )
 
@@ -80,6 +80,21 @@ func (mr *MockIHeimdallClientMockRecorder) FetchCheckpointCount(ctx interface{})
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchCheckpointCount", reflect.TypeOf((*MockIHeimdallClient)(nil).FetchCheckpointCount), ctx)
 }
 
+// FetchLastNoAckMilestone mocks base method.
+func (m *MockIHeimdallClient) FetchLastNoAckMilestone(ctx context.Context) (string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FetchLastNoAckMilestone", ctx)
+	ret0, _ := ret[0].(string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FetchLastNoAckMilestone indicates an expected call of FetchLastNoAckMilestone.
+func (mr *MockIHeimdallClientMockRecorder) FetchLastNoAckMilestone(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchLastNoAckMilestone", reflect.TypeOf((*MockIHeimdallClient)(nil).FetchLastNoAckMilestone), ctx)
+}
+
 // FetchMilestone mocks base method.
 func (m *MockIHeimdallClient) FetchMilestone(ctx context.Context) (*milestone.Milestone, error) {
 	m.ctrl.T.Helper()
@@ -110,19 +125,47 @@ func (mr *MockIHeimdallClientMockRecorder) FetchMilestoneCount(ctx interface{}) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchMilestoneCount", reflect.TypeOf((*MockIHeimdallClient)(nil).FetchMilestoneCount), ctx)
 }
 
-// GetSpan mocks base method.
-func (m *MockIHeimdallClient) GetSpan(arg0 context.Context, arg1 uint64) (*types.Span, error) {
+// FetchMilestoneID mocks base method.
+func (m *MockIHeimdallClient) FetchMilestoneID(ctx context.Context, milestoneID string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSpan", arg0, arg1)
-	ret0, _ := ret[0].(*types.Span)
+	ret := m.ctrl.Call(m, "FetchMilestoneID", ctx, milestoneID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// FetchMilestoneID indicates an expected call of FetchMilestoneID.
+func (mr *MockIHeimdallClientMockRecorder) FetchMilestoneID(ctx, milestoneID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchMilestoneID", reflect.TypeOf((*MockIHeimdallClient)(nil).FetchMilestoneID), ctx, milestoneID)
+}
+
+// FetchNoAckMilestone mocks base method.
+func (m *MockIHeimdallClient) FetchNoAckMilestone(ctx context.Context, milestoneID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FetchNoAckMilestone", ctx, milestoneID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// FetchNoAckMilestone indicates an expected call of FetchNoAckMilestone.
+func (mr *MockIHeimdallClientMockRecorder) FetchNoAckMilestone(ctx, milestoneID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchNoAckMilestone", reflect.TypeOf((*MockIHeimdallClient)(nil).FetchNoAckMilestone), ctx, milestoneID)
+}
+
+// Span mocks base method.
+func (m *MockIHeimdallClient) Span(ctx context.Context, spanID uint64) (*span.HeimdallSpan, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Span", ctx, spanID)
+	ret0, _ := ret[0].(*span.HeimdallSpan)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetSpan indicates an expected call of GetSpan.
-func (mr *MockIHeimdallClientMockRecorder) GetSpan(arg0, arg1 interface{}) *gomock.Call {
+// Span indicates an expected call of Span.
+func (mr *MockIHeimdallClientMockRecorder) Span(ctx, spanID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSpan", reflect.TypeOf((*MockIHeimdallClient)(nil).GetSpan), arg0, arg1)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Span", reflect.TypeOf((*MockIHeimdallClient)(nil).Span), ctx, spanID)
 }
 
 // StateSyncEvents mocks base method.

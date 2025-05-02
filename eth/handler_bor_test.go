@@ -2,10 +2,10 @@ package eth
 
 import (
 	"context"
+	"math/big"
 	"testing"
 	"time"
 
-	"github.com/0xPolygon/heimdall-v2/x/bor/types"
 	"github.com/stretchr/testify/require"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -13,23 +13,25 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
+	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
 )
 
 type mockHeimdall struct {
-	fetchCheckpoint      func(ctx context.Context, number int64) (*checkpoint.Checkpoint, error)
-	fetchCheckpointCount func(ctx context.Context) (int64, error)
-	fetchMilestone       func(ctx context.Context) (*milestone.Milestone, error)
-	fetchMilestoneCount  func(ctx context.Context) (int64, error)
+	fetchCheckpoint         func(ctx context.Context, number int64) (*checkpoint.Checkpoint, error)
+	fetchCheckpointCount    func(ctx context.Context) (int64, error)
+	fetchMilestone          func(ctx context.Context) (*milestone.Milestone, error)
+	fetchMilestoneCount     func(ctx context.Context) (int64, error)
+	fetchNoAckMilestone     func(ctx context.Context, milestoneID string) error
+	fetchLastNoAckMilestone func(ctx context.Context) (string, error)
 }
 
 func (m *mockHeimdall) StateSyncEvents(ctx context.Context, fromID uint64, to int64) ([]*clerk.EventRecordWithTime, error) {
 	return nil, nil
 }
-
-func (m *mockHeimdall) GetSpan(ctx context.Context, spanID uint64) (*types.Span, error) {
+func (m *mockHeimdall) Span(ctx context.Context, spanID uint64) (*span.HeimdallSpan, error) {
+	//nolint:nilnil
 	return nil, nil
 }
-
 func (m *mockHeimdall) FetchCheckpoint(ctx context.Context, number int64) (*checkpoint.Checkpoint, error) {
 	return m.fetchCheckpoint(ctx, number)
 }
@@ -41,6 +43,16 @@ func (m *mockHeimdall) FetchMilestone(ctx context.Context) (*milestone.Milestone
 }
 func (m *mockHeimdall) FetchMilestoneCount(ctx context.Context) (int64, error) {
 	return m.fetchMilestoneCount(ctx)
+}
+func (m *mockHeimdall) FetchNoAckMilestone(ctx context.Context, milestoneID string) error {
+	return m.fetchNoAckMilestone(ctx, milestoneID)
+}
+func (m *mockHeimdall) FetchLastNoAckMilestone(ctx context.Context) (string, error) {
+	return m.fetchLastNoAckMilestone(ctx)
+}
+
+func (m *mockHeimdall) FetchMilestoneID(ctx context.Context, milestoneID string) error {
+	return m.fetchNoAckMilestone(ctx, milestoneID)
 }
 
 func (m *mockHeimdall) Close() {}
@@ -90,20 +102,17 @@ func fetchCheckpointTest(t *testing.T, heimdall *mockHeimdall, bor *bor.Bor, han
 	// create a background context
 	ctx := context.Background()
 
-	_, err := handler.fetchWhitelistCheckpoint(ctx, bor)
+	_, _, err := handler.fetchWhitelistCheckpoint(ctx, bor, nil, verifier)
 	require.ErrorIs(t, err, errCheckpoint)
 
 	// create 4 mock checkpoints
 	checkpoints = createMockCheckpoints(4)
 
-	checkpoint, err := handler.fetchWhitelistCheckpoint(ctx, bor)
-	blockHash, err2 := handler.handleWhitelistCheckpoint(ctx, checkpoint, nil, verifier, false)
-	blockNum := checkpoint.EndBlock
+	blockNum, blockHash, err := handler.fetchWhitelistCheckpoint(ctx, bor, nil, verifier)
 
 	// Check if we have expected result
 	require.Equal(t, err, nil)
-	require.Equal(t, err2, nil)
-	require.Equal(t, checkpoints[len(checkpoints)-1].EndBlock, blockNum)
+	require.Equal(t, checkpoints[len(checkpoints)-1].EndBlock.Uint64(), blockNum)
 	require.Equal(t, checkpoints[len(checkpoints)-1].RootHash, blockHash)
 }
 
@@ -123,33 +132,31 @@ func fetchMilestoneTest(t *testing.T, heimdall *mockHeimdall, bor *bor.Bor, hand
 	// create a background context
 	ctx := context.Background()
 
-	_, err := handler.fetchWhitelistMilestone(ctx, bor)
+	_, _, err := handler.fetchWhitelistMilestone(ctx, bor, nil, verifier)
 	require.ErrorIs(t, err, errMilestone)
 
 	// create 4 mock checkpoints
 	milestones = createMockMilestones(4)
 
-	milestone, err := handler.fetchWhitelistMilestone(ctx, bor)
-	num := milestone.EndBlock
-	hash := milestone.Hash
+	num, hash, err := handler.fetchWhitelistMilestone(ctx, bor, nil, verifier)
 
 	// Check if we have expected result
 	require.Equal(t, err, nil)
-	require.Equal(t, milestones[len(milestones)-1].EndBlock, num)
+	require.Equal(t, milestones[len(milestones)-1].EndBlock.Uint64(), num)
 	require.Equal(t, milestones[len(milestones)-1].Hash, hash)
 }
 
 func createMockCheckpoints(count int) []*checkpoint.Checkpoint {
 	var (
 		checkpoints []*checkpoint.Checkpoint = make([]*checkpoint.Checkpoint, count)
-		startBlock  uint64                   = 257 // any number can be used
+		startBlock  int64                    = 257 // any number can be used
 	)
 
 	for i := 0; i < count; i++ {
 		checkpoints[i] = &checkpoint.Checkpoint{
 			Proposer:   common.Address{},
-			StartBlock: startBlock,
-			EndBlock:   startBlock + 255,
+			StartBlock: big.NewInt(startBlock),
+			EndBlock:   big.NewInt(startBlock + 255),
 			RootHash:   common.Hash{},
 			BorChainID: "137",
 			Timestamp:  uint64(time.Now().Unix()),
@@ -163,14 +170,14 @@ func createMockCheckpoints(count int) []*checkpoint.Checkpoint {
 func createMockMilestones(count int) []*milestone.Milestone {
 	var (
 		milestones []*milestone.Milestone = make([]*milestone.Milestone, count)
-		startBlock uint64                 = 257 // any number can be used
+		startBlock int64                  = 257 // any number can be used
 	)
 
 	for i := 0; i < count; i++ {
 		milestones[i] = &milestone.Milestone{
 			Proposer:   common.Address{},
-			StartBlock: startBlock,
-			EndBlock:   startBlock + 255,
+			StartBlock: big.NewInt(startBlock),
+			EndBlock:   big.NewInt(startBlock + 255),
 			Hash:       common.Hash{},
 			BorChainID: "137",
 			Timestamp:  uint64(time.Now().Unix()),

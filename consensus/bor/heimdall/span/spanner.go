@@ -6,7 +6,6 @@ import (
 	"math"
 	"math/big"
 
-	stakeTypes "github.com/0xPolygon/heimdall-v2/x/stake/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/consensus/bor/abi"
@@ -288,31 +287,41 @@ func (c *ChainSpanner) GetCurrentValidatorsByHash(ctx context.Context, headerHas
 
 const method = "commitSpan"
 
-func (c *ChainSpanner) CommitSpan(ctx context.Context, minimalSpan Span, validators, producers []stakeTypes.MinimalVal, state *state.StateDB, header *types.Header, chainContext core.ChainContext) error {
+func (c *ChainSpanner) CommitSpan(ctx context.Context, heimdallSpan HeimdallSpan, state *state.StateDB, header *types.Header, chainContext core.ChainContext) error {
 	// get validators bytes
+	validators := make([]valset.MinimalVal, 0, len(heimdallSpan.ValidatorSet.Validators))
+	for _, val := range heimdallSpan.ValidatorSet.Validators {
+		validators = append(validators, val.MinimalVal())
+	}
+
 	validatorBytes, err := rlp.EncodeToBytes(validators)
 	if err != nil {
 		return err
 	}
 
 	// get producers bytes
+	producers := make([]valset.MinimalVal, 0, len(heimdallSpan.SelectedProducers))
+	for _, val := range heimdallSpan.SelectedProducers {
+		producers = append(producers, val.MinimalVal())
+	}
+
 	producerBytes, err := rlp.EncodeToBytes(producers)
 	if err != nil {
 		return err
 	}
 
 	log.Info("✅ Committing new span",
-		"id", minimalSpan.ID,
-		"startBlock", minimalSpan.StartBlock,
-		"endBlock", minimalSpan.EndBlock,
+		"id", heimdallSpan.ID,
+		"startBlock", heimdallSpan.StartBlock,
+		"endBlock", heimdallSpan.EndBlock,
 		"validatorBytes", hex.EncodeToString(validatorBytes),
 		"producerBytes", hex.EncodeToString(producerBytes),
 	)
 
 	data, err := c.validatorSet.Pack(method,
-		big.NewInt(0).SetUint64(minimalSpan.ID),
-		big.NewInt(0).SetUint64(minimalSpan.StartBlock),
-		big.NewInt(0).SetUint64(minimalSpan.EndBlock),
+		big.NewInt(0).SetUint64(heimdallSpan.ID),
+		big.NewInt(0).SetUint64(heimdallSpan.StartBlock),
+		big.NewInt(0).SetUint64(heimdallSpan.EndBlock),
 		validatorBytes,
 		producerBytes,
 	)

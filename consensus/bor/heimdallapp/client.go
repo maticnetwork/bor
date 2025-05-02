@@ -5,7 +5,10 @@ import (
 
 	"github.com/ethereum/go-ethereum/log"
 
-	"github.com/0xPolygon/heimdall-v2/app"
+	"github.com/maticnetwork/heimdall/app"
+	"github.com/maticnetwork/heimdall/cmd/heimdalld/service"
+
+	abci "github.com/tendermint/tendermint/abci/types"
 )
 
 const (
@@ -18,8 +21,7 @@ type HeimdallAppClient struct {
 
 func NewHeimdallAppClient() *HeimdallAppClient {
 	return &HeimdallAppClient{
-		// TODO HV2: Implement according to the new setup
-		// hApp: service.GetHeimdallApp(),
+		hApp: service.GetHeimdallApp(),
 	}
 }
 
@@ -29,5 +31,5 @@ func (h *HeimdallAppClient) Close() {
 }
 
 func (h *HeimdallAppClient) NewContext() types.Context {
-	return h.hApp.NewContext(true)
+	return h.hApp.NewContext(true, abci.Header{Height: h.hApp.LastBlockHeight()})
 }

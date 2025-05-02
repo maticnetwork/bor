@@ -18,16 +18,18 @@ type (
 )
 
 const (
-	StateSyncRequest       requestType = "state-sync"
-	SpanRequest            requestType = "span"
-	CheckpointRequest      requestType = "checkpoint"
-	CheckpointCountRequest requestType = "checkpoint-count"
-	MilestoneRequest       requestType = "milestone"
-	MilestoneCountRequest  requestType = "milestone-count"
-	MilestoneIDRequest     requestType = "milestone-id"
+	stateSyncRequest          requestType = "state-sync"
+	spanRequest               requestType = "span"
+	checkpointRequest         requestType = "checkpoint"
+	checkpointCountRequest    requestType = "checkpoint-count"
+	milestoneRequest          requestType = "milestone"
+	milestoneCountRequest     requestType = "milestone-count"
+	milestoneNoAckRequest     requestType = "milestone-no-ack"
+	milestoneLastNoAckRequest requestType = "milestone-last-no-ack"
+	milestoneIDRequest        requestType = "milestone-id"
 )
 
-func WithRequestType(ctx context.Context, reqType requestType) context.Context {
+func withRequestType(ctx context.Context, reqType requestType) context.Context {
 	return context.WithValue(ctx, requestTypeKey{}, reqType)
 }
 
@@ -38,49 +40,63 @@ func getRequestType(ctx context.Context) (requestType, bool) {
 
 var (
 	requestMeters = map[requestType]meter{
-		StateSyncRequest: {
+		stateSyncRequest: {
 			request: map[bool]metrics.Meter{
 				true:  metrics.NewRegisteredMeter("client/requests/statesync/valid", nil),
 				false: metrics.NewRegisteredMeter("client/requests/statesync/invalid", nil),
 			},
 			timer: metrics.NewRegisteredTimer("client/requests/statesync/duration", nil),
 		},
-		SpanRequest: {
+		spanRequest: {
 			request: map[bool]metrics.Meter{
 				true:  metrics.NewRegisteredMeter("client/requests/span/valid", nil),
 				false: metrics.NewRegisteredMeter("client/requests/span/invalid", nil),
 			},
 			timer: metrics.NewRegisteredTimer("client/requests/span/duration", nil),
 		},
-		CheckpointRequest: {
+		checkpointRequest: {
 			request: map[bool]metrics.Meter{
 				true:  metrics.NewRegisteredMeter("client/requests/checkpoint/valid", nil),
 				false: metrics.NewRegisteredMeter("client/requests/checkpoint/invalid", nil),
 			},
 			timer: metrics.NewRegisteredTimer("client/requests/checkpoint/duration", nil),
 		},
-		CheckpointCountRequest: {
+		checkpointCountRequest: {
 			request: map[bool]metrics.Meter{
 				true:  metrics.NewRegisteredMeter("client/requests/checkpointcount/valid", nil),
 				false: metrics.NewRegisteredMeter("client/requests/checkpointcount/invalid", nil),
 			},
 			timer: metrics.NewRegisteredTimer("client/requests/checkpointcount/duration", nil),
 		},
-		MilestoneRequest: {
+		milestoneRequest: {
 			request: map[bool]metrics.Meter{
 				true:  metrics.NewRegisteredMeter("client/requests/milestone/valid", nil),
 				false: metrics.NewRegisteredMeter("client/requests/milestone/invalid", nil),
 			},
 			timer: metrics.NewRegisteredTimer("client/requests/milestone/duration", nil),
 		},
-		MilestoneCountRequest: {
+		milestoneCountRequest: {
 			request: map[bool]metrics.Meter{
 				true:  metrics.NewRegisteredMeter("client/requests/milestonecount/valid", nil),
 				false: metrics.NewRegisteredMeter("client/requests/milestonecount/invalid", nil),
 			},
 			timer: metrics.NewRegisteredTimer("client/requests/milestonecount/duration", nil),
 		},
-		MilestoneIDRequest: {
+		milestoneNoAckRequest: {
+			request: map[bool]metrics.Meter{
+				true:  metrics.NewRegisteredMeter("client/requests/milestonenoack/valid", nil),
+				false: metrics.NewRegisteredMeter("client/requests/milestonenoack/invalid", nil),
+			},
+			timer: metrics.NewRegisteredTimer("client/requests/milestonenoack/duration", nil),
+		},
+		milestoneLastNoAckRequest: {
+			request: map[bool]metrics.Meter{
+				true:  metrics.NewRegisteredMeter("client/requests/milestonelastnoack/valid", nil),
+				false: metrics.NewRegisteredMeter("client/requests/milestonelastnoack/invalid", nil),
+			},
+			timer: metrics.NewRegisteredTimer("client/requests/milestonelastnoack/duration", nil),
+		},
+		milestoneIDRequest: {
 			request: map[bool]metrics.Meter{
 				true:  metrics.NewRegisteredMeter("client/requests/milestoneid/valid", nil),
 				false: metrics.NewRegisteredMeter("client/requests/milestoneid/invalid", nil),
@@ -90,7 +106,7 @@ var (
 	}
 )
 
-func SendMetrics(ctx context.Context, start time.Time, isSuccessful bool) {
+func sendMetrics(ctx context.Context, start time.Time, isSuccessful bool) {
 	reqType, ok := getRequestType(ctx)
 	if !ok {
 		return

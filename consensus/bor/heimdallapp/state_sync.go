@@ -4,9 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/0xPolygon/heimdall-v2/x/clerk/types"
+	"github.com/maticnetwork/heimdall/clerk/types"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
 )
 
@@ -49,12 +48,12 @@ func toEvents(hdEvents []types.EventRecord) []*clerk.EventRecordWithTime {
 func toEvent(hdEvent types.EventRecord) *clerk.EventRecordWithTime {
 	return &clerk.EventRecordWithTime{
 		EventRecord: clerk.EventRecord{
-			ID:       hdEvent.Id,
-			Contract: common.HexToAddress(hdEvent.Contract),
-			Data:     hdEvent.Data,
-			TxHash:   common.HexToHash(hdEvent.TxHash),
+			ID:       hdEvent.ID,
+			Contract: hdEvent.Contract.EthAddress(),
+			Data:     hdEvent.Data.Bytes(),
+			TxHash:   hdEvent.TxHash.EthHash(),
 			LogIndex: hdEvent.LogIndex,
-			ChainID:  hdEvent.BorChainId,
+			ChainID:  hdEvent.ChainID,
 		},
 		Time: hdEvent.RecordTime,
 	}

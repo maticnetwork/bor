@@ -33,6 +33,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/beacon"
 	"github.com/ethereum/go-ethereum/consensus/bor"
+	"github.com/ethereum/go-ethereum/consensus/bor/heimdall"
 	"github.com/ethereum/go-ethereum/consensus/clique"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/bloombits"
@@ -56,7 +57,6 @@ import (
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/internal/shutdowncheck"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/miner"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/p2p"
@@ -66,10 +66,6 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/ethereum/go-ethereum/triedb"
-)
-
-var (
-	MilestoneWhitelistedDelayTimer = metrics.NewRegisteredTimer("chain/milestone/whitelisteddelay", nil)
 )
 
 // Config contains the configuration options of the ETH protocol.
@@ -626,6 +622,8 @@ func (s *Ethereum) Start() error {
 
 	go s.startCheckpointWhitelistService()
 	go s.startMilestoneWhitelistService()
+	go s.startNoAckMilestoneService()
+	go s.startNoAckMilestoneByIDService()
 
 	return nil
 }
@@ -636,7 +634,8 @@ var (
 )
 
 const (
-	whitelistTimeout = 30 * time.Second
+	whitelistTimeout      = 30 * time.Second
+	noAckMilestoneTimeout = 4 * time.Second
 )
 
 // StartCheckpointWhitelistService starts the goroutine to fetch checkpoints and update the
@@ -647,25 +646,36 @@ func (s *Ethereum) startCheckpointWhitelistService() {
 		fnName         = "whitelist checkpoint"
 	)
 
-	s.retryHeimdallHandler(s.fetchAndHandleWhitelistCheckpoint, tickerDuration, whitelistTimeout, fnName)
+	s.retryHeimdallHandler(s.handleWhitelistCheckpoint, tickerDuration, whitelistTimeout, fnName)
 }
 
 // startMilestoneWhitelistService starts the goroutine to fetch milestiones and update the
 // milestone whitelist map.
 func (s *Ethereum) startMilestoneWhitelistService() {
-	ethHandler, bor, _ := s.getHandler()
+	const (
+		tickerDuration = 12 * time.Second
+		fnName         = "whitelist milestone"
+	)
 
-	// If heimdall ws is available use WS subscription to new milestone events instead of polling
-	if bor != nil && bor.HeimdallWSClient != nil {
-		s.subscribeAndHandleMilestone(context.Background(), ethHandler, bor)
-	} else {
-		const (
-			tickerDuration = 1000 * time.Millisecond
-			fnName         = "whitelist milestone"
-		)
+	s.retryHeimdallHandler(s.handleMilestone, tickerDuration, whitelistTimeout, fnName)
+}
 
-		s.retryHeimdallHandler(s.fetchAndHandleMilestone, tickerDuration, whitelistTimeout, fnName)
-	}
+func (s *Ethereum) startNoAckMilestoneService() {
+	const (
+		tickerDuration = 6 * time.Second
+		fnName         = "no-ack-milestone service"
+	)
+
+	s.retryHeimdallHandler(s.handleNoAckMilestone, tickerDuration, noAckMilestoneTimeout, fnName)
+}
+
+func (s *Ethereum) startNoAckMilestoneByIDService() {
+	const (
+		tickerDuration = 1 * time.Minute
+		fnName         = "no-ack-milestone-by-id service"
+	)
+
+	s.retryHeimdallHandler(s.handleNoAckMilestoneByID, tickerDuration, noAckMilestoneTimeout, fnName)
 }
 
 func (s *Ethereum) retryHeimdallHandler(fn heimdallHandler, tickerDuration time.Duration, timeout time.Duration, fnName string) {
@@ -710,12 +720,12 @@ func retryHeimdallHandler(fn heimdallHandler, tickerDuration time.Duration, time
 	}
 }
 
-// fetchAndHandleWhitelistCheckpoint handles the checkpoint whitelist mechanism.
-func (s *Ethereum) fetchAndHandleWhitelistCheckpoint(ctx context.Context, ethHandler *ethHandler, bor *bor.Bor) error {
+// handleWhitelistCheckpoint handles the checkpoint whitelist mechanism.
+func (s *Ethereum) handleWhitelistCheckpoint(ctx context.Context, ethHandler *ethHandler, bor *bor.Bor) error {
 	// Create a new bor verifier, which will be used to verify checkpoints and milestones
 	verifier := newBorVerifier()
 
-	checkpoint, err := ethHandler.fetchWhitelistCheckpoint(ctx, bor)
+	blockNum, blockHash, err := ethHandler.fetchWhitelistCheckpoint(ctx, bor, s, verifier)
 	// If the array is empty, we're bound to receive an error. Non-nill error and non-empty array
 	// means that array has partial elements and it failed for some block. We'll add those partial
 	// elements anyway.
@@ -723,45 +733,67 @@ func (s *Ethereum) fetchAndHandleWhitelistCheckpoint(ctx context.Context, ethHan
 		return err
 	}
 
-	_, err = ethHandler.handleWhitelistCheckpoint(ctx, checkpoint, s, verifier, true)
-	return err
+	ethHandler.downloader.ProcessCheckpoint(blockNum, blockHash)
+
+	return nil
 }
 
 type heimdallHandler func(ctx context.Context, ethHandler *ethHandler, bor *bor.Bor) error
 
-var lastSeenMilestoneBlockNumber uint64
-
-// fetchAndHandleMilestone handles the milestone mechanism.
-func (s *Ethereum) fetchAndHandleMilestone(ctx context.Context, ethHandler *ethHandler, bor *bor.Bor) error {
+// handleMilestone handles the milestone mechanism.
+func (s *Ethereum) handleMilestone(ctx context.Context, ethHandler *ethHandler, bor *bor.Bor) error {
 	// Create a new bor verifier, which will be used to verify checkpoints and milestones
 	verifier := newBorVerifier()
-	milestone, err := ethHandler.fetchWhitelistMilestone(ctx, bor)
+	num, hash, err := ethHandler.fetchWhitelistMilestone(ctx, bor, s, verifier)
+
+	// If the current chain head is behind the received milestone, add it to the future milestone
+	// list. Also, the hash mismatch (end block hash) error will lead to rewind so also
+	// add that milestone to the future milestone list.
+	if errors.Is(err, errChainOutOfSync) || errors.Is(err, errHashMismatch) {
+		ethHandler.downloader.ProcessFutureMilestone(num, hash)
+	}
+
+	if errors.Is(err, heimdall.ErrServiceUnavailable) {
+		return nil
+	}
+
 	if err != nil {
 		return err
 	}
 
-	return ethHandler.handleMilestone(ctx, s, milestone, verifier)
+	ethHandler.downloader.ProcessMilestone(num, hash)
+
+	return nil
 }
 
-func (s *Ethereum) subscribeAndHandleMilestone(ctx context.Context, ethHandler *ethHandler, bor *bor.Bor) error {
-	milestoneEvents := bor.HeimdallWSClient.SubscribeMilestoneEvents(ctx)
+func (s *Ethereum) handleNoAckMilestone(ctx context.Context, ethHandler *ethHandler, bor *bor.Bor) error {
+	milestoneID, err := ethHandler.fetchNoAckMilestone(ctx, bor)
 
-	for {
-		select {
-		case m, ok := <-milestoneEvents:
-			if !ok {
-				return nil
-			}
+	if errors.Is(err, heimdall.ErrServiceUnavailable) {
+		return nil
+	}
 
-			err := ethHandler.handleMilestone(ctx, s, m, newBorVerifier())
-			if err != nil {
-				log.Error("error handling milestone ws event", "err", err)
-			}
+	if err != nil {
+		return err
+	}
 
-		case <-ctx.Done():
-			return nil
+	ethHandler.downloader.RemoveMilestoneID(milestoneID)
+
+	return nil
+}
+
+func (s *Ethereum) handleNoAckMilestoneByID(ctx context.Context, ethHandler *ethHandler, bor *bor.Bor) error {
+	milestoneIDs := ethHandler.downloader.GetMilestoneIDsList()
+
+	for _, milestoneID := range milestoneIDs {
+		// todo: check if we can ignore the error
+		err := ethHandler.fetchNoAckMilestoneByID(ctx, bor, milestoneID)
+		if err == nil {
+			ethHandler.downloader.RemoveMilestoneID(milestoneID)
 		}
 	}
+
+	return nil
 }
 
 func (s *Ethereum) setupDiscovery() error {

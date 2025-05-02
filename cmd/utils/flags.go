@@ -2285,7 +2285,6 @@ func MakeChain(ctx *cli.Context, stack *node.Node, readonly bool) (*core.BlockCh
 		HeimdallTimeout:     ctx.Duration(HeimdallTimeoutFlag.Name),
 		WithoutHeimdall:     ctx.Bool(WithoutHeimdallFlag.Name),
 		HeimdallgRPCAddress: ctx.String(HeimdallgRPCAddressFlag.Name),
-		HeimdallWSAddress:   ctx.String(HeimdallWSAddressFlag.Name),
 		RunHeimdall:         ctx.Bool(RunHeimdallArgsFlag.Name),
 		RunHeimdallArgs:     ctx.String(RunHeimdallArgsFlag.Name),
 		UseHeimdallApp:      ctx.Bool(UseHeimdallAppFlag.Name),

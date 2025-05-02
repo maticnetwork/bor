@@ -6,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -131,32 +129,9 @@ func borVerify(ctx context.Context, eth *Ethereum, handler *ethHandler, start ui
 			log.Info("Rewinding chain due to milestone endblock hash mismatch", "number", rewindTo)
 		}
 
-		var canonicalChain []*types.Block
-
-		length := end - rewindTo
-
-		canonicalChain = eth.BlockChain().GetBlocksFromHash(common.HexToHash(hash), int(length))
-
-		// Reverse the canonical chain
-		for i, j := 0, len(canonicalChain)-1; i < j; i, j = i+1, j-1 {
-			canonicalChain[i], canonicalChain[j] = canonicalChain[j], canonicalChain[i]
-		}
-
 		rewindBack(eth, head, rewindTo)
 
-		if canonicalChain != nil && len(canonicalChain) == int(length) {
-			log.Info("Inserting canonical chain", "from", canonicalChain[0].NumberU64(), "hash", canonicalChain[0].Hash(), "to", canonicalChain[len(canonicalChain)-1].NumberU64(), "hash", canonicalChain[len(canonicalChain)-1].Hash())
-			_, err := eth.BlockChain().InsertChain(canonicalChain)
-			if err != nil {
-				log.Warn("Failed to insert canonical chain", "err", err)
-				return hash, err
-			} else {
-				log.Info("Successfully inserted canonical chain")
-			}
-		} else {
-			log.Warn("Failed to insert canonical chain", "length", len(canonicalChain), "expected", length)
-			return hash, errHashMismatch
-		}
+		return hash, errHashMismatch
 	}
 
 	// fetch the end block hash

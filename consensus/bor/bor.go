@@ -20,7 +20,6 @@ import (
 	"github.com/holiman/uint256"
 	"golang.org/x/crypto/sha3"
 
-	stakeTypes "github.com/0xPolygon/heimdall-v2/x/stake/types"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
 	balance_tracing "github.com/ethereum/go-ethereum/core/tracing"
@@ -225,7 +224,6 @@ type Bor struct {
 	spanner                Spanner
 	GenesisContractsClient GenesisContract
 	HeimdallClient         IHeimdallClient
-	HeimdallWSClient       IHeimdallWSClient
 
 	// The fields below are for testing only
 	fakeDiff      bool // Skip difficulty verifications
@@ -246,7 +244,6 @@ func New(
 	ethAPI api.Caller,
 	spanner Spanner,
 	heimdallClient IHeimdallClient,
-	heimdallWSClient IHeimdallWSClient,
 	genesisContracts GenesisContract,
 	devFakeAuthor bool,
 ) *Bor {
@@ -271,7 +268,6 @@ func New(
 		spanner:                spanner,
 		GenesisContractsClient: genesisContracts,
 		HeimdallClient:         heimdallClient,
-		HeimdallWSClient:       heimdallWSClient,
 		devFakeAuthor:          devFakeAuthor,
 	}
 
@@ -346,7 +342,7 @@ func (c *Bor) verifyHeader(chain consensus.ChainHeaderReader, header *types.Head
 	number := header.Number.Uint64()
 
 	// Don't waste time checking blocks from the future
-	if header.Time-c.config.CalculatePeriod(number) > uint64(time.Now().Unix()) {
+	if header.Time > uint64(time.Now().Unix()) {
 		return consensus.ErrFutureBlock
 	}
 
@@ -825,14 +821,6 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 	header.Time = parent.Time + CalcProducerDelay(number, succession, c.config)
 	if header.Time < uint64(time.Now().Unix()) {
 		header.Time = uint64(time.Now().Unix())
-	} else {
-		if succession == 0 {
-			startTime := time.Unix(int64(header.Time-c.config.CalculatePeriod(number)), 0)
-
-			if time.Now().Before(startTime) {
-				time.Sleep(time.Until(startTime))
-			}
-		}
 	}
 
 	return nil
@@ -1028,12 +1016,7 @@ func (c *Bor) Seal(chain consensus.ChainHeaderReader, block *types.Block, result
 	}
 
 	// Sweet, the protocol permits us to sign the block, wait for our time
-	delay := time.Until(time.Unix(int64(header.Time-c.config.CalculatePeriod(number)), 0))
-
-	if successionNumber > 0 {
-		delay = time.Until(time.Unix(int64(header.Time), 0))
-	}
-
+	delay := time.Unix(int64(header.Time), 0).Sub(time.Now()) // nolint: gosimple
 	// wiggle was already accounted for in header.Time, this is just for logging
 	wiggle := time.Duration(successionNumber) * time.Duration(c.config.CalculateBackupMultiplier(number)) * time.Second
 
@@ -1176,12 +1159,7 @@ func (c *Bor) FetchAndCommitSpan(
 	header *types.Header,
 	chain core.ChainContext,
 ) error {
-	var (
-		minSpan    span.Span
-		chainId    string
-		validators []stakeTypes.MinimalVal
-		producers  []stakeTypes.MinimalVal
-	)
+	var heimdallSpan span.HeimdallSpan
 
 	if c.HeimdallClient == nil {
 		// fixme: move to a new mock or fake and remove c.HeimdallClient completely
@@ -1190,62 +1168,26 @@ func (c *Bor) FetchAndCommitSpan(
 			return err
 		}
 
-		minSpan = span.Span{
-			ID:         s.ID,
-			StartBlock: s.StartBlock,
-			EndBlock:   s.EndBlock,
-		}
-		chainId = s.ChainID
-
-		for _, val := range s.ValidatorSet.Validators {
-			m := stakeTypes.MinimalVal{
-				ID:          val.ID,
-				VotingPower: uint64(val.VotingPower),
-				Signer:      val.Address,
-			}
-			validators = append(validators, m)
-		}
-
-		for _, val := range s.SelectedProducers {
-			m := stakeTypes.MinimalVal{
-				ID:          val.ID,
-				VotingPower: uint64(val.VotingPower),
-				Signer:      val.Address,
-			}
-			producers = append(producers, m)
-		}
+		heimdallSpan = *s
 	} else {
-		response, err := c.HeimdallClient.GetSpan(ctx, newSpanID)
+		response, err := c.HeimdallClient.Span(ctx, newSpanID)
 		if err != nil {
 			return err
 		}
 
-		minSpan = span.Span{
-			ID:         response.Id,
-			StartBlock: response.StartBlock,
-			EndBlock:   response.EndBlock,
-		}
-		chainId = response.BorChainId
-
-		for _, val := range response.ValidatorSet.Validators {
-			validators = append(validators, val.MinimalVal())
-		}
-
-		for _, val := range response.SelectedProducers {
-			producers = append(producers, val.MinimalVal())
-		}
+		heimdallSpan = *response
 	}
 
 	// check if chain id matches with Heimdall span
-	if chainId != c.chainConfig.ChainID.String() {
+	if heimdallSpan.ChainID != c.chainConfig.ChainID.String() {
 		return fmt.Errorf(
 			"chain id proposed span, %s, and bor chain id, %s, doesn't match",
-			chainId,
+			heimdallSpan.ChainID,
 			c.chainConfig.ChainID,
 		)
 	}
 
-	return c.spanner.CommitSpan(ctx, minSpan, validators, producers, state, header, chain)
+	return c.spanner.CommitSpan(ctx, heimdallSpan, state, header, chain)
 }
 
 // CommitStates commit states

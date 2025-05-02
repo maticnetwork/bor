@@ -9,17 +9,9 @@ import (
 	"net/http"
 	"net/url"
 	"path"
-	"reflect"
 	"sort"
 	"time"
 
-	"github.com/0xPolygon/heimdall-v2/x/bor/types"
-	clerkTypes "github.com/0xPolygon/heimdall-v2/x/clerk/types"
-	"github.com/cosmos/cosmos-sdk/codec"
-	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
-	cryptocodec "github.com/cosmos/cosmos-sdk/crypto/codec"
-	"github.com/cosmos/gogoproto/proto"
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
@@ -77,15 +69,18 @@ func NewHeimdallClient(urlString string, timeout time.Duration) *HeimdallClient 
 }
 
 const (
-	fetchStateSyncEventsFormat = "from-id=%d&to-time=%d"
-	fetchStateSyncEventsPath   = "clerk/time"
-	fetchStateSyncList         = "clerk/event-record/list"
+	fetchStateSyncEventsFormat = "from-id=%d&to-time=%d&limit=%d"
+	fetchStateSyncEventsPath   = "clerk/event-record/list"
 
 	fetchCheckpoint      = "/checkpoints/%s"
 	fetchCheckpointCount = "/checkpoints/count"
 
 	fetchMilestone      = "/milestone/latest"
 	fetchMilestoneCount = "/milestone/count"
+
+	fetchLastNoAckMilestone = "/milestone/lastNoAck"
+	fetchNoAckMilestone     = "/milestone/noAck/%s"
+	fetchMilestoneID        = "/milestone/ID/%s"
 
 	fetchSpanFormat = "bor/span/%d"
 )
@@ -94,40 +89,28 @@ func (h *HeimdallClient) StateSyncEvents(ctx context.Context, fromID uint64, to 
 	eventRecords := make([]*clerk.EventRecordWithTime, 0)
 
 	for {
-		url, err := stateSyncListURL(h.urlString)
+		url, err := stateSyncURL(h.urlString, fromID, to)
 		if err != nil {
 			return nil, err
 		}
 
 		log.Info("Fetching state sync events", "queryParams", url.RawQuery)
 
-		ctx = WithRequestType(ctx, StateSyncRequest)
+		ctx = withRequestType(ctx, stateSyncRequest)
 
-		response, err := FetchWithRetry[clerkTypes.RecordListResponse](ctx, h.client, url, h.closeCh)
+		response, err := FetchWithRetry[StateSyncEventsResponse](ctx, h.client, url, h.closeCh)
 		if err != nil {
 			return nil, err
 		}
 
-		var record *clerk.EventRecordWithTime
-
-		for _, e := range response.EventRecords {
-			if e.Id >= fromID && e.RecordTime.Before(time.Unix(to, 0)) {
-				record = &clerk.EventRecordWithTime{
-					EventRecord: clerk.EventRecord{
-						ID:       e.Id,
-						ChainID:  e.BorChainId,
-						Contract: common.HexToAddress(e.Contract),
-						Data:     e.Data,
-						LogIndex: e.LogIndex,
-						TxHash:   common.HexToHash(e.TxHash),
-					},
-					Time: e.RecordTime,
-				}
-				eventRecords = append(eventRecords, record)
-			}
+		if response == nil || response.Result == nil {
+			// status 204
+			break
 		}
 
-		if len(response.EventRecords) < stateFetchLimit {
+		eventRecords = append(eventRecords, response.Result...)
+
+		if len(response.Result) < stateFetchLimit {
 			break
 		}
 
@@ -141,19 +124,20 @@ func (h *HeimdallClient) StateSyncEvents(ctx context.Context, fromID uint64, to 
 	return eventRecords, nil
 }
 
-func (h *HeimdallClient) GetSpan(ctx context.Context, spanID uint64) (*types.Span, error) {
+func (h *HeimdallClient) Span(ctx context.Context, spanID uint64) (*span.HeimdallSpan, error) {
 	url, err := spanURL(h.urlString, spanID)
 	if err != nil {
 		return nil, err
 	}
 
-	ctx = WithRequestType(ctx, SpanRequest)
+	ctx = withRequestType(ctx, spanRequest)
 
-	response, err := FetchWithRetry[types.QuerySpanByIdResponse](ctx, h.client, url, h.closeCh)
+	response, err := FetchWithRetry[SpanResponse](ctx, h.client, url, h.closeCh)
 	if err != nil {
 		return nil, err
 	}
-	return response.Span, nil
+
+	return &response.Result, nil
 }
 
 // FetchCheckpoint fetches the checkpoint from heimdall
@@ -163,7 +147,7 @@ func (h *HeimdallClient) FetchCheckpoint(ctx context.Context, number int64) (*ch
 		return nil, err
 	}
 
-	ctx = WithRequestType(ctx, CheckpointRequest)
+	ctx = withRequestType(ctx, checkpointRequest)
 
 	response, err := FetchWithRetry[checkpoint.CheckpointResponse](ctx, h.client, url, h.closeCh)
 	if err != nil {
@@ -173,14 +157,14 @@ func (h *HeimdallClient) FetchCheckpoint(ctx context.Context, number int64) (*ch
 	return &response.Result, nil
 }
 
-// FetchMilestone fetches the milestone from heimdall
+// FetchMilestone fetches the checkpoint from heimdall
 func (h *HeimdallClient) FetchMilestone(ctx context.Context) (*milestone.Milestone, error) {
 	url, err := milestoneURL(h.urlString)
 	if err != nil {
 		return nil, err
 	}
 
-	ctx = WithRequestType(ctx, MilestoneRequest)
+	ctx = withRequestType(ctx, milestoneRequest)
 
 	response, err := FetchWithRetry[milestone.MilestoneResponse](ctx, h.client, url, h.closeCh)
 	if err != nil {
@@ -197,14 +181,14 @@ func (h *HeimdallClient) FetchCheckpointCount(ctx context.Context) (int64, error
 		return 0, err
 	}
 
-	ctx = WithRequestType(ctx, CheckpointCountRequest)
+	ctx = withRequestType(ctx, checkpointCountRequest)
 
 	response, err := FetchWithRetry[checkpoint.CheckpointCountResponse](ctx, h.client, url, h.closeCh)
 	if err != nil {
 		return 0, err
 	}
 
-	return response.Result, nil
+	return response.Result.Result, nil
 }
 
 // FetchMilestoneCount fetches the milestone count from heimdall
@@ -214,14 +198,75 @@ func (h *HeimdallClient) FetchMilestoneCount(ctx context.Context) (int64, error)
 		return 0, err
 	}
 
-	ctx = WithRequestType(ctx, MilestoneCountRequest)
+	ctx = withRequestType(ctx, milestoneCountRequest)
 
 	response, err := FetchWithRetry[milestone.MilestoneCountResponse](ctx, h.client, url, h.closeCh)
 	if err != nil {
 		return 0, err
 	}
 
-	return response.Count, nil
+	return response.Result.Count, nil
+}
+
+// FetchLastNoAckMilestone fetches the last no-ack-milestone from heimdall
+func (h *HeimdallClient) FetchLastNoAckMilestone(ctx context.Context) (string, error) {
+	url, err := lastNoAckMilestoneURL(h.urlString)
+	if err != nil {
+		return "", err
+	}
+
+	ctx = withRequestType(ctx, milestoneLastNoAckRequest)
+
+	response, err := FetchWithRetry[milestone.MilestoneLastNoAckResponse](ctx, h.client, url, h.closeCh)
+	if err != nil {
+		return "", err
+	}
+
+	return response.Result.Result, nil
+}
+
+// FetchNoAckMilestone fetches the last no-ack-milestone from heimdall
+func (h *HeimdallClient) FetchNoAckMilestone(ctx context.Context, milestoneID string) error {
+	url, err := noAckMilestoneURL(h.urlString, milestoneID)
+	if err != nil {
+		return err
+	}
+
+	ctx = withRequestType(ctx, milestoneNoAckRequest)
+
+	response, err := FetchWithRetry[milestone.MilestoneNoAckResponse](ctx, h.client, url, h.closeCh)
+	if err != nil {
+		return err
+	}
+
+	if !response.Result.Result {
+		return fmt.Errorf("%w: milestoneID %q", ErrNotInRejectedList, milestoneID)
+	}
+
+	return nil
+}
+
+// FetchMilestoneID fetches the bool result from Heimdal whether the ID corresponding
+// to the given milestone is in process in Heimdall
+func (h *HeimdallClient) FetchMilestoneID(ctx context.Context, milestoneID string) error {
+	url, err := milestoneIDURL(h.urlString, milestoneID)
+	if err != nil {
+		return err
+	}
+
+	ctx = withRequestType(ctx, milestoneIDRequest)
+
+	response, err := FetchWithRetry[milestone.MilestoneIDResponse](ctx, h.client, url, h.closeCh)
+
+	if err != nil {
+		return err
+	}
+
+	if !response.Result.Result {
+		return fmt.Errorf("%w: milestoneID %q", ErrNotInMilestoneList, milestoneID)
+	}
+
+	return nil
 }
 
 // FetchWithRetry returns data from heimdall with retry
@@ -302,7 +347,7 @@ func Fetch[T any](ctx context.Context, request *Request) (*T, error) {
 
 	defer func() {
 		if metrics.Enabled {
-			SendMetrics(ctx, request.start, isSuccessful)
+			sendMetrics(ctx, request.start, isSuccessful)
 		}
 	}()
 
@@ -315,23 +360,6 @@ func Fetch[T any](ctx context.Context, request *Request) (*T, error) {
 
 	if body == nil {
 		return nil, ErrNoResponse
-	}
-
-	p, ok := interface{}(result).(proto.Message)
-	if ok {
-		interfaceRegistry := codectypes.NewInterfaceRegistry()
-		cryptocodec.RegisterInterfaces(interfaceRegistry)
-		cdc := codec.NewProtoCodec(interfaceRegistry)
-
-		err = cdc.UnmarshalJSON(body, p)
-		if err != nil {
-			return nil, err
-		}
-
-		tValue := reflect.ValueOf(result).Elem()
-		tValue.Set(reflect.ValueOf(p).Elem())
-
-		return result, nil
 	}
 
 	err = json.Unmarshal(body, result)
@@ -349,13 +377,9 @@ func spanURL(urlString string, spanID uint64) (*url.URL, error) {
 }
 
 func stateSyncURL(urlString string, fromID uint64, to int64) (*url.URL, error) {
-	queryParams := fmt.Sprintf(fetchStateSyncEventsFormat, fromID, to)
+	queryParams := fmt.Sprintf(fetchStateSyncEventsFormat, fromID, to, stateFetchLimit)
 
 	return makeURL(urlString, fetchStateSyncEventsPath, queryParams)
-}
-
-func stateSyncListURL(urlString string) (*url.URL, error) {
-	return makeURL(urlString, fetchStateSyncList, "")
 }
 
 func checkpointURL(urlString string, number int64) (*url.URL, error) {
@@ -381,6 +405,20 @@ func checkpointCountURL(urlString string) (*url.URL, error) {
 
 func milestoneCountURL(urlString string) (*url.URL, error) {
 	return makeURL(urlString, fetchMilestoneCount, "")
+}
+
+func lastNoAckMilestoneURL(urlString string) (*url.URL, error) {
+	return makeURL(urlString, fetchLastNoAckMilestone, "")
+}
+
+func noAckMilestoneURL(urlString string, id string) (*url.URL, error) {
+	url := fmt.Sprintf(fetchNoAckMilestone, id)
+	return makeURL(urlString, url, "")
+}
+
+func milestoneIDURL(urlString string, id string) (*url.URL, error) {
+	url := fmt.Sprintf(fetchMilestoneID, id)
+	return makeURL(urlString, url, "")
 }
 
 func makeURL(urlString, rawPath, rawQuery string) (*url.URL, error) {
