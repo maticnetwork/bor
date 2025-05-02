@@ -1121,9 +1121,17 @@ func (c *Bor) checkAndCommitSpan(
 	var ctx = context.Background()
 	headerNumber := header.Number.Uint64()
 
-	span, err := c.spanner.GetCurrentSpan(ctx, header.ParentHash, state)
+	tempState := state.Copy()
+
+	span, err := c.spanner.GetCurrentSpan(ctx, header.ParentHash, tempState)
 	if err != nil {
 		return err
+	}
+
+	if tempState.Witness() != nil {
+		// Clone the witness Codes and State sets from the temporary snapshot back into the original state
+		state.Witness().Codes = maps.Clone(tempState.Witness().Codes)
+		state.Witness().State = maps.Clone(tempState.Witness().State)
 	}
 
 	if c.needToCommitSpan(span, headerNumber) {
