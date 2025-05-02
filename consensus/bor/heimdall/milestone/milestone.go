@@ -1,10 +1,7 @@
 package milestone
 
 import (
-	"encoding/base64"
 	"encoding/json"
-	"fmt"
-	"strconv"
 
 	"github.com/ethereum/go-ethereum/common"
 )
@@ -21,45 +18,29 @@ type Milestone struct {
 }
 
 func (m *Milestone) UnmarshalJSON(data []byte) error {
-	type Alias Milestone
-	temp := &struct {
-		StartBlock string `json:"start_block"`
-		EndBlock   string `json:"end_block"`
-		Hash       string `json:"hash"`
-		Timestamp  string `json:"timestamp"`
-		*Alias
-	}{
-		Alias: (*Alias)(m),
+	// Define a temp struct that matches the JSON structure.
+	var temp struct {
+		Proposer    string `json:"proposer"`
+		StartBlock  uint64 `json:"start_block"`
+		EndBlock    uint64 `json:"end_block"`
+		Hash        string `json:"hash"`
+		BorChainID  string `json:"bor_chain_id"`
+		MilestoneID string `json:"milestone_id"`
+		Timestamp   uint64 `json:"timestamp"`
 	}
 
-	if err := json.Unmarshal(data, temp); err != nil {
-
+	// Unmarshal the JSON into the temp struct.
+	if err := json.Unmarshal(data, &temp); err != nil {
 		return err
 	}
 
-	startBlock, err := strconv.ParseUint(temp.StartBlock, 10, 64)
-	if err != nil {
-		return fmt.Errorf("invalid start_block: %w", err)
-	}
-	m.StartBlock = startBlock
-
-	endBlock, err := strconv.ParseUint(temp.EndBlock, 10, 64)
-	if err != nil {
-		return fmt.Errorf("invalid end_block: %w", err)
-	}
-	m.EndBlock = endBlock
-
-	decodedHash, err := base64.StdEncoding.DecodeString(temp.Hash)
-	if err != nil {
-		return fmt.Errorf("failed to decode hash: %w", err)
-	}
-	m.Hash = common.BytesToHash(decodedHash)
-
-	timestamp, err := strconv.ParseUint(temp.Timestamp, 10, 64)
-	if err != nil {
-		return fmt.Errorf("invalid timestamp: %w", err)
-	}
-	m.Timestamp = timestamp
+	m.Proposer = common.HexToAddress(temp.Proposer)
+	m.StartBlock = temp.StartBlock
+	m.EndBlock = temp.EndBlock
+	m.Hash = common.HexToHash(temp.Hash)
+	m.BorChainID = temp.BorChainID
+	m.MilestoneID = temp.MilestoneID
+	m.Timestamp = temp.Timestamp
 
 	return nil
 }
