@@ -44,6 +44,7 @@ import (
 )
 
 const (
+	zerothSpanEnd      = 255  // End block of 0th span
 	checkpointInterval = 1024 // Number of blocks after which to save the vote snapshot to the database
 	inmemorySnapshots  = 128  // Number of recent vote snapshots to keep in memory
 	inmemorySignatures = 4096 // Number of recent block signatures to keep in memory
@@ -473,14 +474,22 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 		return err
 	}
 
-	// Verify the validator list match the local contract
-	if IsSprintStart(number+1, c.config.CalculateSprint(number)) {
+	// Verify if the producer set in header's extra data matches with the list in span.
+	// We skip the check for 0th span as the producer set in contract v/s producer set
+	// in heimdall span is different which will lead a mismatch. Moreover, to make the
+	// validation stateless, we use the span from heimdall (via span store) instead of
+	// span from validator set genesis contract as both are supposed to be equivalent.
+	if number > zerothSpanEnd && IsSprintStart(number+1, c.config.CalculateSprint(number)) {
 		span, err := c.spanStore.spanByBlockNumber(context.Background(), number+1)
 		if err != nil {
 			return err
 		}
-		newValidators := span.ValidatorSet.Validators
 
+		// Use producer set from span as it's equivalent to the data we get from genesis contract
+		newValidators := make([]*valset.Validator, len(span.SelectedProducers))
+		for i, val := range span.SelectedProducers {
+			newValidators[i] = &val
+		}
 		sort.Sort(valset.ValidatorsByAddress(newValidators))
 
 		headerVals, err := valset.ParseValidators(header.GetValidatorBytes(c.chainConfig))
