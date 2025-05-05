@@ -173,7 +173,7 @@ func borVerify(ctx context.Context, eth *Ethereum, handler *ethHandler, start ui
 
 // Stop the miner if the mining process is running and rewind back the chain
 func rewindBack(eth *Ethereum, head uint64, rewindTo uint64) {
-	if eth.Miner().Mining() {
+	if eth.Miner() != nil && eth.Miner().Mining() {
 		ch := make(chan struct{})
 		eth.Miner().Stop(ch)
 
