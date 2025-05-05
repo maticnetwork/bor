@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor"
@@ -113,8 +112,9 @@ func (h *ethHandler) handleMilestone(ctx context.Context, eth *Ethereum, milesto
 
 	for lastSeenMilestoneBlockNumber < num {
 		lastSeenMilestoneBlockNumber += 1
-		blockTime := eth.blockchain.GetBlockByNumber(lastSeenMilestoneBlockNumber).Time()
-		MilestoneWhitelistedDelayTimer.UpdateSince(time.Unix(int64(blockTime), 0))
+		// TODO: fix MilestoneWhitelistedDelayTimer in stateless_client (GetBlockByNumber retrieving nil when it shouldnt)
+		// blockTime := eth.blockchain.GetBlockByNumber(lastSeenMilestoneBlockNumber).Time()
+		// MilestoneWhitelistedDelayTimer.UpdateSince(time.Unix(int64(blockTime), 0))
 	}
 
 	h.downloader.ProcessMilestone(num, hash)

@@ -571,7 +571,9 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td, ttd *
 	height := latest.Number.Uint64()
 
 	var origin uint64
-	if !beaconMode {
+	if mode == StatelessSync {
+		origin = height
+	} else if !beaconMode {
 		// In legacy mode, reach out to the network and find the ancestor
 		origin, err = d.findAncestor(p, latest)
 		if err != nil {
