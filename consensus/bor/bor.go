@@ -1296,6 +1296,9 @@ func (c *Bor) FetchAndCommitSpan(
 				if response, err = c.getLatestHeimdallSpan(); err != nil {
 					return err
 				}
+				if response == nil {
+					return fmt.Errorf("heimdallv1 span not found")
+				}
 				response.ID = newSpanID
 				spanLength := response.EndBlock - response.StartBlock
 				response.StartBlock = header.Number.Uint64() + c.config.CalculateSprint(header.Number.Uint64())
