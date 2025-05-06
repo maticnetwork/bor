@@ -79,11 +79,21 @@ func (s *SpanStore) spanById(ctx context.Context, spanId uint64) (*span.Heimdall
 // asked for a future span. This is safe to assume as we don't have a way to find out span id for a future block
 // unless we hardcode the span length (which we don't want to).
 func (s *SpanStore) spanByBlockNumber(ctx context.Context, blockNumber uint64) (*span.HeimdallSpan, error) {
+	// As we don't persist latest known span to db, we loose the value on restarts. This leads to multiple heimdall calls
+	// which can be avoided. Hence we estimate the span id from block number which updates the latest known span id. Note
+	// that we still check if the block number lies in the range of span before returning it.
+	estimatedSpanId := estimateSpanId(blockNumber)
+	// Ignore the return value of this span as we validate it later in the loop
+	_, err := s.spanById(ctx, estimatedSpanId)
+	if err != nil {
+		return nil, err
+	}
 	// Iterate over all spans and check for number. This is to replicate the behaviour implemented in
 	// https://github.com/maticnetwork/genesis-contracts/blob/master/contracts/BorValidatorSet.template#L118-L134
 	// This logic is independent of the span length (bit extra effort but maintains equivalence) and will work
 	// for all span lengths (even if we change it in future).
-	for id := int(s.latestKnownSpanId); id >= 0; id-- {
+	latestKnownSpanId := s.latestKnownSpanId
+	for id := int(latestKnownSpanId); id >= 0; id-- {
 		span, err := s.spanById(ctx, uint64(id))
 		if err != nil {
 			return nil, err
@@ -92,7 +102,7 @@ func (s *SpanStore) spanByBlockNumber(ctx context.Context, blockNumber uint64) (
 			return span, nil
 		}
 		// Check if block number given is out of bounds
-		if id == int(s.latestKnownSpanId) && blockNumber > span.EndBlock {
+		if id == int(latestKnownSpanId) && blockNumber > span.EndBlock {
 			return getFutureSpan(ctx, uint64(id)+1, blockNumber, s)
 		}
 	}
@@ -116,6 +126,14 @@ func getFutureSpan(ctx context.Context, id uint64, blockNumber uint64, s *SpanSt
 		}
 		id++
 	}
+}
+
+// estimateSpanId returns the corresponding span id for the given block number in a deterministic way.
+func estimateSpanId(blockNumber uint64) uint64 {
+	if blockNumber > zerothSpanEnd {
+		return 1 + (blockNumber-zerothSpanEnd-1)/defaultSpanLength
+	}
+	return 0
 }
 
 // setHeimdallClient sets the underlying heimdall client to be used. It is useful in
