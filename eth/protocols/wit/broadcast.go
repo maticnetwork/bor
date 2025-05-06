@@ -1,6 +1,6 @@
 package wit
 
-import "github.com/ethereum/go-ethereum/common"
+import "github.com/ethereum/go-ethereum/log"
 
 // broadcastWitness is a write loop that multiplexes witness and witness announcements
 // to the remote peer. The goal is to have an async writer that does not lock up
@@ -14,13 +14,14 @@ func (p *Peer) broadcastWitness() {
 			if err := p.sendNewWitness(witness); err != nil {
 				return
 			}
-			p.logger.Trace("propagated witness", "witness", witness)
+			p.logger.Debug("propagated witness", "witness", witness)
 
-		case hash := <-p.queuedWitnessAnns:
-			if err := p.sendNewWitnessHashes([]common.Hash{hash}); err != nil {
+		case packet := <-p.queuedWitnessAnns:
+			if err := p.sendNewWitnessHashes(packet); err != nil {
+				log.Debug("failed to send new witness hashes", "error", err)
 				return
 			}
-			p.logger.Trace("propagated witness hashes", "hashes", hash)
+			p.logger.Debug("propagated witness hashes", "hashes", packet.Hashes, "numbers", packet.Numbers)
 
 		case <-p.term:
 			return

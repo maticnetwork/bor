@@ -1014,6 +1014,13 @@ func (c *Command) Flags(config *Config) *flagset.Flagset {
 		Default: c.cliConfig.WitnessProtocol,
 	})
 
+	f.BoolFlag(&flagset.BoolFlag{
+		Name:    "syncwithwitnesses",
+		Usage:   "Sync blocks with witnesses",
+		Value:   &c.cliConfig.SyncWithWitnesses,
+		Default: c.cliConfig.SyncWithWitnesses,
+	})
+
 	f.Uint64Flag(&flagset.Uint64Flag{
 		Name:    "dev.gaslimit",
 		Usage:   "Initial block gas limit",

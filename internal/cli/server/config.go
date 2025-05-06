@@ -99,6 +99,9 @@ type Config struct {
 	// WitnessProtocol enables the wit/0 protocol
 	WitnessProtocol bool `hcl:"witnessprotocol,optional" toml:"witnessprotocol,optional"`
 
+	// SyncWithWitnesses enables syncing blocks with witnesses
+	SyncWithWitnesses bool `hcl:"syncwithwitnesses,optional" toml:"syncwithwitnesses,optional"`
+
 	// Logging has the logging related settings
 	Logging *LoggingConfig `hcl:"log,block" toml:"log,block"`
 
@@ -622,7 +625,8 @@ func DefaultConfig() *Config {
 		Ancient:                 "",
 		DBEngine:                "pebble",
 		KeyStoreDir:             "",
-		WitnessProtocol:         true,
+		WitnessProtocol:         false,
+		SyncWithWitnesses:       false,
 		Logging: &LoggingConfig{
 			Vmodule:             "",
 			Json:                false,
@@ -1222,6 +1226,14 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 	n.ParallelEVM.Enforce = c.ParallelEVM.Enforce
 
 	n.WitnessProtocol = c.WitnessProtocol
+	if c.SyncMode == "stateless" {
+		if !c.WitnessProtocol {
+			log.Warn("Witness protocol is disabled, overriding to true for stateless sync")
+		}
+		n.WitnessProtocol = true
+	}
+
+	n.SyncWithWitnesses = c.SyncWithWitnesses
 
 	n.RPCReturnDataLimit = c.RPCReturnDataLimit
 

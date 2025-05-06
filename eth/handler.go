@@ -139,6 +139,7 @@ type handler struct {
 
 	enableBlockTracking bool
 	txAnnouncementOnly  bool
+	syncWithWitnesses   bool
 
 	// channels for fetcher, syncer, txsyncLoop
 	quitSync chan struct{}
@@ -175,7 +176,10 @@ func newHandler(config *handlerConfig) (*handler, error) {
 		quitSync:            make(chan struct{}),
 		handlerDoneCh:       make(chan struct{}),
 		handlerStartCh:      make(chan struct{}),
+		syncWithWitnesses:   config.syncWithWitnesses,
 	}
+
+	log.Info("Sync with witnesses", "enabled", config.syncWithWitnesses)
 
 	if config.Sync == downloader.StatelessSync {
 		// For stateless sync, we don't need to check state availability since
@@ -261,15 +265,7 @@ func newHandler(config *handlerConfig) (*handler, error) {
 			return 0, nil
 		}
 
-		// When in stateless mode, use InsertChainStateless instead of InsertChain
-		if h.statelessSync.Load() {
-			// For now, we pass nil for witnesses as we don't have a way to get witnesses here
-			// A future enhancement would be to propagate witnesses along with blocks
-			return h.chain.InsertChainStateless(blocks, witnesses)
-		}
-
-		// Default behavior is to use regular InsertChain
-		return h.chain.InsertChain(blocks)
+		return h.chain.InsertChainWithWitnesses(blocks, witnesses)
 	}
 
 	// If snap sync is requested but snapshots are disabled, fail loudly
@@ -277,7 +273,7 @@ func newHandler(config *handlerConfig) (*handler, error) {
 		return nil, errors.New("snap sync not supported with snapshots disabled")
 	}
 
-	h.blockFetcher = fetcher.NewBlockFetcher(false, nil, h.chain.GetBlockByHash, validator, h.BroadcastBlock, heighter, nil, inserter, h.removePeer, h.enableBlockTracking, h.statelessSync.Load())
+	h.blockFetcher = fetcher.NewBlockFetcher(false, nil, h.chain.GetBlockByHash, validator, h.BroadcastBlock, heighter, nil, inserter, h.removePeer, h.enableBlockTracking, h.statelessSync.Load() || h.syncWithWitnesses)
 
 	fetchTx := func(peer string, hashes []common.Hash) error {
 		p := h.peers.peer(peer)
@@ -670,7 +666,8 @@ func (h *handler) BroadcastBlock(block *types.Block, witness *stateless.Witness,
 		}
 
 		for _, peer := range peersWithoutWitness {
-			peer.AsyncSendNewWitnessHash(block.Header().Hash())
+			log.Info("Announcing block hash to peer", "peer", peer.ID(), "hash", block.Header().Hash(), "number", block.NumberU64())
+			peer.AsyncSendNewWitnessHash(block.Header().Hash(), block.NumberU64())
 		}
 
 		log.Debug("Announced block", "hash", hash, "recipients", len(peers), "duration", common.PrettyDuration(time.Since(block.ReceivedAt)))

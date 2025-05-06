@@ -68,6 +68,7 @@ func (c Config) MarshalTOML() (interface{}, error) {
 		BorLogs                              bool
 		ParallelEVM                          core.ParallelEVMConfig `toml:",omitempty"`
 		WitnessProtocol                      bool
+		SyncWithWitnesses                    bool
 		DevFakeAuthor                        bool     `hcl:"devfakeauthor,optional" toml:"devfakeauthor,optional"`
 		OverrideVerkle                       *big.Int `toml:",omitempty"`
 		EnableBlockTracking                  bool
@@ -126,6 +127,7 @@ func (c Config) MarshalTOML() (interface{}, error) {
 	enc.BorLogs = c.BorLogs
 	enc.ParallelEVM = c.ParallelEVM
 	enc.WitnessProtocol = c.WitnessProtocol
+	enc.SyncWithWitnesses = c.SyncWithWitnesses
 	enc.DevFakeAuthor = c.DevFakeAuthor
 	enc.OverrideVerkle = c.OverrideVerkle
 	enc.EnableBlockTracking = c.EnableBlockTracking
@@ -188,6 +190,7 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 		BorLogs                              *bool
 		ParallelEVM                          *core.ParallelEVMConfig `toml:",omitempty"`
 		WitnessProtocol                      *bool
+		SyncWithWitnesses                    *bool
 		DevFakeAuthor                        *bool    `hcl:"devfakeauthor,optional" toml:"devfakeauthor,optional"`
 		OverrideVerkle                       *big.Int `toml:",omitempty"`
 		EnableBlockTracking                  *bool
@@ -348,6 +351,9 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 	}
 	if dec.WitnessProtocol != nil {
 		c.WitnessProtocol = *dec.WitnessProtocol
+	}
+	if dec.SyncWithWitnesses != nil {
+		c.SyncWithWitnesses = *dec.SyncWithWitnesses
 	}
 	if dec.DevFakeAuthor != nil {
 		c.DevFakeAuthor = *dec.DevFakeAuthor

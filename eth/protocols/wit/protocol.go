@@ -78,7 +78,8 @@ type NewWitnessPacket struct {
 }
 
 type NewWitnessHashesPacket struct {
-	Hashes []common.Hash
+	Hashes  []common.Hash
+	Numbers []uint64
 }
 
 func (w *GetWitnessRequest) Name() string { return "GetWitness" }

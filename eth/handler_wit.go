@@ -49,7 +49,7 @@ func (h *witHandler) Handle(peer *wit.Peer, packet wit.Packet) error {
 	case *wit.NewWitnessPacket:
 		return h.handleWitnessBroadcast(peer, packet.Witness)
 	case *wit.NewWitnessHashesPacket:
-		return h.handleWitnessHashesBroadcast(peer, packet.Hashes)
+		return h.handleWitnessHashesAnnounce(peer, packet.Hashes, packet.Numbers)
 	case *wit.GetWitnessPacket:
 		// Call handleGetWitness which returns the raw RLP data
 		witnessesRLPBytes, err := h.handleGetWitness(peer, packet)
@@ -88,8 +88,8 @@ func (h *witHandler) handleWitnessBroadcast(peer *wit.Peer, witness *stateless.W
 	return nil
 }
 
-// handleWitnessHashesBroadcast handles a witness hashes broadcast from a peer.
-func (h *witHandler) handleWitnessHashesBroadcast(peer *wit.Peer, hashes []common.Hash) error {
+// handleWitnessHashesAnnounce handles a witness hashes broadcast from a peer.
+func (h *witHandler) handleWitnessHashesAnnounce(peer *wit.Peer, hashes []common.Hash, numbers []uint64) error {
 	for _, hash := range hashes {
 		peer.AddKnownWitness(hash)
 	}

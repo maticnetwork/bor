@@ -307,6 +307,7 @@ type BlockChain struct {
 	stateSyncFeed              event.Feed                              // State sync feed
 	chain2HeadFeed             event.Feed                              // Reorg/NewHead/Fork data feed
 	pendingWitnessComputations sync.Map                                // Tracks in-flight witness computations: hash -> chan witnessResult
+	computeWitness             bool                                    // Whether to compute witnesses
 }
 
 // NewBlockChain returns a fully initialised block chain using information
@@ -590,7 +591,7 @@ func NewParallelBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis 
 	return bc, nil
 }
 
-func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ types.Receipts, _ []*types.Log, _ uint64, _ *state.StateDB, vtime time.Duration, blockEndErr error) {
+func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header, computeWitness bool) (_ types.Receipts, _ []*types.Log, _ uint64, _ *state.StateDB, vtime time.Duration, blockEndErr error) {
 	// Process the block using processor and parallelProcessor at the same time, take the one which finishes first, cancel the other, and return the result
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -671,12 +672,14 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 		processorCount++
 
 		go func() {
-			witness, err := stateless.NewWitness(block.Header(), bc)
-			if err != nil {
-				log.Error("error in witness generation", "caughterr", err)
+			if computeWitness {
+				witness, err := stateless.NewWitness(block.Header(), bc)
+				if err != nil {
+					log.Error("error in witness generation", "caughterr", err)
+				}
+				statedb.StartPrefetcher("chain", witness)
 			}
 
-			statedb.StartPrefetcher("chain", witness)
 			pstart := time.Now()
 			res, err := bc.processor.Process(block, statedb, bc.vmConfig, nil, ctx)
 			blockExecutionSerialTimer.UpdateSince(pstart)
@@ -731,6 +734,10 @@ func (bc *BlockChain) empty() bool {
 	}
 
 	return true
+}
+
+func (bc *BlockChain) SetComputeWitness(computeWitness bool) {
+	bc.computeWitness = computeWitness
 }
 
 // loadLastState loads the last known chain state from the database. This method
@@ -2086,29 +2093,35 @@ func (bc *BlockChain) addFutureBlock(block *types.Block) error {
 // the index number of the failing block as well an error describing what went
 // wrong. After insertion is done, all accumulated events will be fired.
 func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
+	return bc.InsertChainWithWitnesses(chain, nil)
+}
+
+func (bc *BlockChain) InsertChainWithWitnesses(chain types.Blocks, witnesses []*stateless.Witness) (int, error) {
 	// Sanity check that we have something meaningful to import
 	if len(chain) == 0 {
 		return 0, nil
 	}
 
-	// Pre-register all block hashes as potentially needing witness computation.
-	// This ensures that even if insertion fails early for some blocks, a potential
-	// waiter via GetWitnessOrWait won't miss a computation started elsewhere.
-	for _, block := range chain {
-		// Use LoadOrStore to avoid overwriting if an entry already exists (e.g., concurrent access).
-		// A buffered channel prevents blocking if the result is never read.
-		bc.pendingWitnessComputations.LoadOrStore(block.Hash(), make(chan witnessResult, 1))
-	}
-
-	defer func() {
+	if bc.computeWitness {
+		// Pre-register all block hashes as potentially needing witness computation.
+		// This ensures that even if insertion fails early for some blocks, a potential
+		// waiter via GetWitnessOrWait won't miss a computation started elsewhere.
 		for _, block := range chain {
-			val, ok := bc.pendingWitnessComputations.Load(block.Hash())
-			if ok {
-				close(val.(chan witnessResult))
-			}
-			bc.pendingWitnessComputations.Delete(block.Hash())
+			// Use LoadOrStore to avoid overwriting if an entry already exists (e.g., concurrent access).
+			// A buffered channel prevents blocking if the result is never read.
+			bc.pendingWitnessComputations.LoadOrStore(block.Hash(), make(chan witnessResult, 1))
 		}
-	}()
+
+		defer func() {
+			for _, block := range chain {
+				val, ok := bc.pendingWitnessComputations.Load(block.Hash())
+				if ok {
+					close(val.(chan witnessResult))
+				}
+				bc.pendingWitnessComputations.Delete(block.Hash())
+			}
+		}()
+	}
 
 	bc.blockProcFeed.Send(true)
 
@@ -2136,7 +2149,7 @@ func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 	}
 	defer bc.chainmu.Unlock()
 
-	_, n, err := bc.insertChain(chain, true, false) // No witness collection for mass inserts (would get super large)
+	_, n, err := bc.insertChainWithWitnesses(chain, true, false, witnesses)
 	return n, err
 }
 
@@ -2288,6 +2301,10 @@ func (bc *BlockChain) InsertChainStateless(chain types.Blocks, witnesses []*stat
 // is imported, but then new canon-head is added before the actual sidechain
 // completes, then the historic state could be pruned again
 func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool, makeWitness bool) (*stateless.Witness, int, error) {
+	return bc.insertChainWithWitnesses(chain, setHead, makeWitness, nil)
+}
+
+func (bc *BlockChain) insertChainWithWitnesses(chain types.Blocks, setHead bool, makeWitness bool, witnesses []*stateless.Witness) (*stateless.Witness, int, error) {
 	// If the chain is terminating, don't even bother starting up.
 	if bc.insertStopped() {
 		return nil, 0, nil
@@ -2561,7 +2578,19 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool, makeWitness 
 
 		// Process block using the parent state as reference point
 		pstart := time.Now()
-		receipts, logs, usedGas, statedb, vtime, err := bc.ProcessBlock(block, parent)
+
+		computeWitness := bc.computeWitness
+
+		if witnesses != nil && len(witnesses) > it.processed()-1 && witnesses[it.processed()-1] != nil {
+			memdb := witnesses[it.processed()-1].MakeHashDB()
+			bc.statedb.TrieDB().SetReadBackend(hashdb.New(memdb, triedb.HashDefaults.HashDB))
+			computeWitness = false
+			bc.statedb.DisableSnapInReader()
+		}
+
+		receipts, logs, usedGas, statedb, vtime, err := bc.ProcessBlock(block, parent, computeWitness)
+		bc.statedb.TrieDB().SetReadBackend(nil)
+		bc.statedb.EnableSnapInReader()
 		activeState = statedb
 
 		if err != nil {

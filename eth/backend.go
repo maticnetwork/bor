@@ -263,6 +263,8 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		eth.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, config.Genesis, &overrides, eth.engine, vmConfig, eth.shouldPreserve, &config.TransactionHistory, checker)
 	}
 
+	eth.blockchain.SetComputeWitness(config.WitnessProtocol)
+
 	// 1.14.8: NewOracle function definition was changed to accept (startPrice *big.Int) param.
 	eth.APIBackend.gpo = gasprice.NewOracle(eth.APIBackend, gpoParams, config.Miner.GasPrice)
 	if err != nil {
@@ -312,6 +314,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		checker:               checker,
 		enableBlockTracking:   eth.config.EnableBlockTracking,
 		txAnnouncementOnly:    eth.p2pServer.TxAnnouncementOnly,
+		syncWithWitnesses:     eth.config.SyncWithWitnesses,
 		computeWitness:        eth.config.WitnessProtocol,
 		fastForwardThreshold:  config.FastForwardThreshold,
 		witnessPruneThreshold: config.WitnessPruneThreshold,
@@ -656,12 +659,16 @@ func (s *Ethereum) startCheckpointWhitelistService() {
 // startMilestoneWhitelistService starts the goroutine to fetch milestiones and update the
 // milestone whitelist map.
 func (s *Ethereum) startMilestoneWhitelistService() {
-	const (
-		tickerDuration = 12 * time.Second
-		fnName         = "whitelist milestone"
-	)
+	_, bor, _ := s.getHandler()
 
-	s.retryHeimdallHandler(s.handleMilestone, tickerDuration, whitelistTimeout, fnName)
+	// If heimdall ws is available use WS subscription to new milestone events instead of polling
+	if bor != nil {
+		const (
+			tickerDuration = 30000 * time.Millisecond
+			fnName         = "whitelist milestone"
+		)
+		s.retryHeimdallHandler(s.handleMilestone, tickerDuration, whitelistTimeout, fnName)
+	}
 }
 
 func (s *Ethereum) startNoAckMilestoneService() {
