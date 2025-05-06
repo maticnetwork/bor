@@ -1118,7 +1118,7 @@ func (c *Bor) checkAndCommitSpan(
 	header *types.Header,
 	chain core.ChainContext,
 ) error {
-	if !hmm.IsHeimdallV2 && hmm.IsHFApproaching {
+	if !hmm.IsHeimdallV2 {
 		c.saveLatestHeimdallSpan()
 	}
 
@@ -1293,18 +1293,13 @@ func (c *Bor) FetchAndCommitSpan(
 			response, err := c.HeimdallClient.GetSpanV1(ctx, newSpanID)
 			if err != nil {
 				log.Error("Error while fetching heimdallv1 span", "error", err)
-				if hmm.IsHFApproaching {
-					if response, err = c.getLatestHeimdallSpan(); err != nil {
-						return err
-					}
-					response.ID = newSpanID
-					// TODO: Is this correct?
-					spanLength := response.EndBlock - response.StartBlock
-					response.StartBlock = header.Number.Uint64() + c.config.CalculateSprint(header.Number.Uint64())
-					response.EndBlock = response.StartBlock + spanLength
-				} else {
+				if response, err = c.getLatestHeimdallSpan(); err != nil {
 					return err
 				}
+				response.ID = newSpanID
+				spanLength := response.EndBlock - response.StartBlock
+				response.StartBlock = header.Number.Uint64() + c.config.CalculateSprint(header.Number.Uint64())
+				response.EndBlock = response.StartBlock + spanLength
 			}
 
 			minSpan = span.Span{

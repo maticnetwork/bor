@@ -13,7 +13,7 @@ import (
 	log "github.com/ethereum/go-ethereum/log"
 )
 
-var IsHeimdallV2, IsHFApproaching, firstSuccessfulCheckPassed bool
+var IsHeimdallV2, firstSuccessfulCheckPassed bool
 
 func StartHeimdallMigrationMonitor(heimdallAPIUrl string) {
 	parsedURL, err := url.Parse(heimdallAPIUrl)
@@ -32,7 +32,6 @@ func StartHeimdallMigrationMonitor(heimdallAPIUrl string) {
 	heimdallRPCUrl := parsedURL.String()
 
 	go heimdallMigrationMonitor(heimdallRPCUrl)
-	go heimdallHaltHeightMonitor(heimdallAPIUrl)
 }
 
 func WaitFirstSuccessfulCheck() {
@@ -42,44 +41,6 @@ func WaitFirstSuccessfulCheck() {
 			return
 		}
 		time.Sleep(10 * time.Second)
-	}
-}
-
-func heimdallHaltHeightMonitor(heimdallUrl string) {
-	for {
-		time.Sleep(5 * time.Second)
-
-		resp, err := http.Get(fmt.Sprintf("%s/chainmanager/halt-height", heimdallUrl))
-		if err != nil {
-			// TODO: Better to not log error because after heimdallv2 runs the endpoint exist
-			continue
-		}
-
-		var haltHeightResponse struct {
-			Height string `json:"height"`
-			Result int    `json:"result"`
-		}
-
-		err = json.NewDecoder(resp.Body).Decode(&haltHeightResponse)
-		resp.Body.Close()
-		if err != nil {
-			log.Error("Error decoding response", "err", err)
-			continue
-		}
-
-		log.Error("halt height", "height", haltHeightResponse.Height, "result", haltHeightResponse.Result)
-
-		currentHeight, err := strconv.ParseInt(haltHeightResponse.Height, 10, 32)
-		if err != nil {
-			log.Error("Error parsing halt height", "err", err)
-			continue
-		}
-
-		if haltHeightResponse.Result >= int(currentHeight) && haltHeightResponse.Result-int(currentHeight) < 100 {
-			IsHFApproaching = true
-		} else {
-			IsHFApproaching = false
-		}
 	}
 }
 
