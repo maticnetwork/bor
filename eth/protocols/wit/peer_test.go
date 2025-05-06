@@ -52,15 +52,15 @@ var testWitness3 = &stateless.Witness{
 func TestAddKnownWitness(t *testing.T) {
 	peer := setupPeer()
 
-	peer.AddKnownWitness(testWitness1)
+	peer.AddKnownWitness(testWitness1.Header().Hash())
 	assert.True(t, peer.KnownWitnessesContains(testWitness1), "Witness should be known by the peer")
 	assert.Equal(t, 1, peer.knownWitnesses.Cardinality(), "Known witnesses count should be 1")
 
-	peer.AddKnownWitness(testWitness2)
+	peer.AddKnownWitness(testWitness2.Header().Hash())
 	assert.True(t, peer.KnownWitnessesContains(testWitness2), "Witness should be known by the peer")
 	assert.Equal(t, 2, peer.knownWitnesses.Cardinality(), "Known witnesses count should be 2")
 
-	peer.AddKnownWitness(testWitness3)
+	peer.AddKnownWitness(testWitness3.Header().Hash())
 	assert.True(t, peer.KnownWitnessesContains(testWitness3), "Witness should be known by the peer")
 
 	// TODO(@pratikspatil024) - this will fail bacause the way we calculate the hash of the witness is by getting the

@@ -267,6 +267,8 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		eth.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, config.Genesis, &overrides, eth.engine, vmConfig, eth.shouldPreserve, &config.TransactionHistory, checker)
 	}
 
+	eth.blockchain.SetComputeWitness(config.WitnessProtocol)
+
 	// 1.14.8: NewOracle function definition was changed to accept (startPrice *big.Int) param.
 	eth.APIBackend.gpo = gasprice.NewOracle(eth.APIBackend, gpoParams, config.Miner.GasPrice)
 	if err != nil {
@@ -316,6 +318,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		checker:             checker,
 		enableBlockTracking: eth.config.EnableBlockTracking,
 		txAnnouncementOnly:  eth.p2pServer.TxAnnouncementOnly,
+		syncWithWitnesses:   eth.config.SyncWithWitnesses,
 	}); err != nil {
 		return nil, err
 	}
@@ -660,7 +663,7 @@ func (s *Ethereum) startMilestoneWhitelistService() {
 		s.subscribeAndHandleMilestone(context.Background(), ethHandler, bor)
 	} else {
 		const (
-			tickerDuration = 1000 * time.Millisecond
+			tickerDuration = 30000 * time.Millisecond
 			fnName         = "whitelist milestone"
 		)
 

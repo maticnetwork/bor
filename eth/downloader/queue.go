@@ -1172,7 +1172,6 @@ func (q *queue) deliver(id string, taskPool map[common.Hash]*types.Header,
 		header := request.Headers[i]
 		// Short circuit assembly if no more fetch results are reported by the peer
 		if i >= results {
-			log.Warn("deliver: Peer provided fewer results than headers requested", "peer", id, "headerIndex", i, "resultsCount", results)
 			break
 		}
 		// Validate the fields

@@ -108,26 +108,19 @@ func (h *ethHandler) handleBlockAnnounces(peer *eth.Peer, hashes []common.Hash, 
 		}
 	}
 
-	// Get the ethPeer wrapper for witness support
-	ethPeer := h.peers.peer(peer.ID())
-	if ethPeer == nil {
-		return errors.New("peer not found")
-	}
+	var witnessRequester func(hash common.Hash, sink chan *wit.Response) (*wit.Request, error)
+	if h.statelessSync.Load() || h.syncWithWitnesses {
+		// Create a witness requester that uses the wit.Peer's RequestWitness method
+		witnessRequester = func(hash common.Hash, sink chan *wit.Response) (*wit.Request, error) {
+			// Get the ethPeer from the peerSet
+			ethPeer := h.peers.getOnePeerWithWitness(hash)
+			if ethPeer == nil {
+				return nil, fmt.Errorf("no peer with witness for hash %s is available", hash)
+			}
 
-	// Create a witness requester that uses the wit.Peer's RequestWitness method
-	witnessRequester := func(hashes []common.Hash, sink chan *wit.Response) (*wit.Request, error) {
-		// Get the wit.Peer from the ethPeer
-		if ethPeer.witPeer == nil {
-			return nil, errors.New("peer does not support witness protocol")
+			// Request witnesses using the wit peer
+			return ethPeer.witPeer.RequestWitness([]common.Hash{hash}, sink)
 		}
-
-		// Request witnesses using the wit peer
-		return ethPeer.witPeer.RequestWitness(hashes, sink)
-	}
-
-	if !h.statelessSync.Load() {
-		log.Debug("Stateless sync is disabled, skipping witness requests")
-		witnessRequester = nil
 	}
 
 	for i := 0; i < len(unknownHashes); i++ {
@@ -142,37 +135,25 @@ func (h *ethHandler) handleBlockAnnounces(peer *eth.Peer, hashes []common.Hash, 
 func (h *ethHandler) handleBlockBroadcast(peer *eth.Peer, block *types.Block, td *big.Int) error {
 	// If stateless sync is enabled, use the dedicated injectNeedWitness channel.
 	// Otherwise, use the original Enqueue optimization.
-	if h.statelessSync.Load() {
+	if h.statelessSync.Load() || h.syncWithWitnesses {
 		log.Debug("Received block broadcast during stateless sync", "blockNumber", block.NumberU64(), "blockHash", block.Hash())
-		ethPeer := h.peers.peer(peer.ID())
-		if ethPeer == nil {
-			log.Error("Peer not found in peerset during block broadcast handling", "peer", peer.ID())
-			return fmt.Errorf("peer %s not found in peerset", peer.ID())
-		}
 
 		// Create a witness requester closure *only if* the peer supports the protocol.
-		var witnessRequester func(hashes []common.Hash, sink chan *wit.Response) (*wit.Request, error)
-		if ethPeer.witPeer != nil {
-			witnessRequester = func(hashes []common.Hash, sink chan *wit.Response) (*wit.Request, error) {
-				// Re-check witPeer inside closure in case it disconnects?
-				if ethPeer.witPeer == nil {
-					return nil, errors.New("peer disconnected from witness protocol")
-				}
-				// Request witnesses using the wit peer
-				return ethPeer.witPeer.RequestWitness(hashes, sink)
+		witnessRequester := func(hash common.Hash, sink chan *wit.Response) (*wit.Request, error) {
+			// Get the ethPeer from the peerSet
+			ethPeer := h.peers.getOnePeerWithWitness(hash)
+			if ethPeer == nil {
+				return nil, fmt.Errorf("no peer with witness for hash %s is available", hash)
 			}
-		} else {
-			// If stateless sync is required, but the peer doesn't support witness,
-			// we cannot proceed. Log and drop the block.
-			log.Warn("Stateless sync enabled, but peer does not support witness protocol; dropping block broadcast", "peer", peer.ID(), "hash", block.Hash())
-			// Return nil because dropping is not a protocol error from the peer's side.
-			return nil
+
+			// Request witnesses using the wit peer
+			return ethPeer.witPeer.RequestWitness([]common.Hash{hash}, sink)
 		}
 
 		// Call the new fetcher method to inject the block
 		if err := h.blockFetcher.InjectBlockWithWitnessRequirement(peer.ID(), block, witnessRequester); err != nil {
 			// Log the error if injection failed (e.g., channel full)
-			log.Warn("Failed to inject block requiring witness", "hash", block.Hash(), "peer", peer.ID(), "err", err)
+			log.Debug("Failed to inject block requiring witness", "hash", block.Hash(), "peer", peer.ID(), "err", err)
 			// Return nil? Or the error? Let's return nil as dropping isn't a peer protocol error.
 			return nil
 		}
