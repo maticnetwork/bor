@@ -1290,19 +1290,28 @@ func (c *Bor) FetchAndCommitSpan(
 			}
 		} else {
 			log.Error("Will fetch heimdallv1 span", "newSpanID", newSpanID)
-			response, err := c.HeimdallClient.GetSpanV1(ctx, newSpanID)
-			if err != nil {
+			var response *span.HeimdallSpan
+			var err error
+			for {
+				response, err = c.HeimdallClient.GetSpanV1(ctx, newSpanID)
+				if err == nil {
+					break
+				}
 				log.Error("Error while fetching heimdallv1 span", "error", err)
 				if response, err = c.getLatestHeimdallSpan(); err != nil {
+					log.Error("Error while fetching last heimdallv1 span from db", "error", err)
 					return err
 				}
-				if response == nil {
-					return fmt.Errorf("heimdallv1 span not found")
+				if response != nil {
+					response.ID = newSpanID
+					spanLength := response.EndBlock - response.StartBlock
+					response.StartBlock = header.Number.Uint64() + c.config.CalculateSprint(header.Number.Uint64())
+					response.EndBlock = response.StartBlock + spanLength
+					break
 				}
-				response.ID = newSpanID
-				spanLength := response.EndBlock - response.StartBlock
-				response.StartBlock = header.Number.Uint64() + c.config.CalculateSprint(header.Number.Uint64())
-				response.EndBlock = response.StartBlock + spanLength
+
+				// TODO: Better to use exponential backoff?
+				time.Sleep(1 * time.Second)
 			}
 
 			minSpan = span.Span{
