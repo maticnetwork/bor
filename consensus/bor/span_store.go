@@ -103,7 +103,7 @@ func (s *SpanStore) spanByBlockNumber(ctx context.Context, blockNumber uint64) (
 		}
 		// Check if block number given is out of bounds
 		if id == int(latestKnownSpanId) && blockNumber > span.EndBlock {
-			return getFutureSpan(ctx, uint64(id)+1, blockNumber, s)
+			return getFutureSpan(ctx, uint64(id)+1, blockNumber, latestKnownSpanId, s)
 		}
 	}
 
@@ -111,10 +111,9 @@ func (s *SpanStore) spanByBlockNumber(ctx context.Context, blockNumber uint64) (
 }
 
 // getFutureSpan fetches span for future block number. It is mostly needed during snap sync.
-func getFutureSpan(ctx context.Context, id uint64, blockNumber uint64, s *SpanStore) (*span.HeimdallSpan, error) {
-	latestKnownSpan := s.latestKnownSpanId
+func getFutureSpan(ctx context.Context, id uint64, blockNumber uint64, latestKnownSpanId uint64, s *SpanStore) (*span.HeimdallSpan, error) {
 	for {
-		if id > latestKnownSpan+maxSpanFetchLimit {
+		if id > latestKnownSpanId+maxSpanFetchLimit {
 			return nil, fmt.Errorf("span not found for block %d", blockNumber)
 		}
 		span, err := s.spanById(ctx, id)
