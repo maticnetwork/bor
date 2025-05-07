@@ -73,7 +73,7 @@ func (h *ethHandler) fetchWhitelistMilestone(ctx context.Context, bor *bor.Bor) 
 		return nil, err
 	}
 
-	log.Debug("Got new milestone from heimdall", "start", milestone.StartBlock, "end", milestone.EndBlock, "hash", milestone.Hash.String())
+	log.Debug("Got new milestone from heimdall", "start", milestone.StartBlock, "end", milestone.EndBlock, "hash", milestone.Hash.String(), "totalDifficulty", milestone.TotalDifficulty)
 
 	return milestone, err
 }

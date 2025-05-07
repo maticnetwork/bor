@@ -1133,6 +1133,21 @@ func (api *BlockChainAPI) GetBlockReceipts(ctx context.Context, blockNrOrHash rp
 	return result, nil
 }
 
+// GetTdByHash returns a map containing the total difficulty (hex-encoded) for the given block hash.
+// The fullTx parameter is unused here but kept for compatibility with other RPC methods.
+func (api *BlockChainAPI) GetTdByHash(ctx context.Context, hash common.Hash) (map[string]interface{}, error) {
+
+	td := api.b.GetTd(ctx, hash)
+	if td == nil {
+		return nil, fmt.Errorf("block not found for hash %s", hash.Hex())
+	}
+
+	resp := make(map[string]interface{}, 2)
+	resp["blockHash"] = hash.Hex()
+	resp["totalDifficulty"] = hexutil.EncodeBig(td)
+	return resp, nil
+}
+
 // OverrideAccount indicates the overriding fields of account during the execution
 // of a message call.
 // Note, state and stateDiff can't be specified at the same time. If state is
