@@ -38,7 +38,7 @@ func (h *HeimdallGRPCClient) FetchCheckpointCount(ctx context.Context) (int64, e
 	return count, nil
 }
 
-func (h *HeimdallGRPCClient) FetchCheckpoint(ctx context.Context, number int64) (*checkpoint.Checkpoint, error) {
+func (h *HeimdallGRPCClient) FetchCheckpoint(ctx context.Context, number int64) (*checkpoint.CheckpointV2, error) {
 	var fetchedCheckpoint checkpointTypes.Checkpoint
 	var err error
 
@@ -78,7 +78,7 @@ func (h *HeimdallGRPCClient) FetchCheckpoint(ctx context.Context, number int64) 
 		log.Info("Fetched checkpoint", "number", number)
 	}
 
-	checkpoint := &checkpoint.Checkpoint{
+	checkpoint := &checkpoint.CheckpointV2{
 		Proposer:   common.HexToAddress(fetchedCheckpoint.Proposer),
 		StartBlock: fetchedCheckpoint.StartBlock,
 		EndBlock:   fetchedCheckpoint.EndBlock,

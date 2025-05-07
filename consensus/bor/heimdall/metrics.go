@@ -18,13 +18,16 @@ type (
 )
 
 const (
-	StateSyncRequest       requestType = "state-sync"
-	SpanRequest            requestType = "span"
-	CheckpointRequest      requestType = "checkpoint"
-	CheckpointCountRequest requestType = "checkpoint-count"
-	MilestoneRequest       requestType = "milestone"
-	MilestoneCountRequest  requestType = "milestone-count"
-	MilestoneIDRequest     requestType = "milestone-id"
+	StateSyncRequest          requestType = "state-sync"
+	SpanRequest               requestType = "span"
+	LatestSpanRequest         requestType = "latest-span"
+	CheckpointRequest         requestType = "checkpoint"
+	CheckpointCountRequest    requestType = "checkpoint-count"
+	MilestoneRequest          requestType = "milestone"
+	MilestoneCountRequest     requestType = "milestone-count"
+	MilestoneNoAckRequest     requestType = "milestone-no-ack"
+	MilestoneLastNoAckRequest requestType = "milestone-last-no-ack"
+	MilestoneIDRequest        requestType = "milestone-id"
 )
 
 func WithRequestType(ctx context.Context, reqType requestType) context.Context {
@@ -51,6 +54,13 @@ var (
 				false: metrics.NewRegisteredMeter("client/requests/span/invalid", nil),
 			},
 			timer: metrics.NewRegisteredTimer("client/requests/span/duration", nil),
+		},
+		LatestSpanRequest: {
+			request: map[bool]metrics.Meter{
+				true:  metrics.NewRegisteredMeter("client/requests/latestspan/valid", nil),
+				false: metrics.NewRegisteredMeter("client/requests/latestspan/invalid", nil),
+			},
+			timer: metrics.NewRegisteredTimer("client/requests/latestspan/duration", nil),
 		},
 		CheckpointRequest: {
 			request: map[bool]metrics.Meter{
