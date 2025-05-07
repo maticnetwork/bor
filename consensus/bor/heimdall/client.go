@@ -218,7 +218,8 @@ func (h *HeimdallClient) GetSpanV2(ctx context.Context, spanID uint64) (*types.S
 
 	ctx = WithRequestType(ctx, SpanRequest)
 
-	response, err := FetchWithRetry[types.QuerySpanByIdResponse](ctx, h.client, url, h.closeCh)
+	request := &Request{client: h.client, url: url, start: time.Now()}
+	response, err := Fetch[types.QuerySpanByIdResponse](ctx, request)
 	if err != nil {
 		return nil, err
 	}
