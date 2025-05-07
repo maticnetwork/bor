@@ -1382,7 +1382,7 @@ func (c *Bor) FetchAndCommitSpan(
 				}
 				if response != nil {
 					response.Id = newSpanID
-					spanLength := getSpanLength(response.EndBlock, response.StartBlock)
+					spanLength := getSpanLength(response.StartBlock, response.EndBlock)
 					response.StartBlock = getSpanStartBlock()
 					response.EndBlock = getSpanEndBlock(response.StartBlock, spanLength)
 					return true, nil
@@ -1425,7 +1425,7 @@ func (c *Bor) FetchAndCommitSpan(
 				}
 				if response != nil {
 					response.ID = newSpanID
-					spanLength := getSpanLength(response.EndBlock, response.StartBlock)
+					spanLength := getSpanLength(response.StartBlock, response.EndBlock)
 					response.StartBlock = getSpanStartBlock()
 					response.EndBlock = getSpanEndBlock(response.StartBlock, spanLength)
 					return true, nil
