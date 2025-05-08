@@ -656,7 +656,7 @@ func (h *handler) BroadcastBlock(block *types.Block, witness *stateless.Witness,
 		}
 
 		for _, peer := range peersWithoutWitness {
-			log.Info("Announcing block hash to peer", "peer", peer.ID(), "hash", block.Header().Hash(), "number", block.NumberU64())
+			log.Debug("Announcing block hash to peer", "peer", peer.ID(), "hash", block.Header().Hash(), "number", block.NumberU64())
 			peer.AsyncSendNewWitnessHash(block.Header().Hash(), block.NumberU64())
 		}
 
