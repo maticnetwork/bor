@@ -6,6 +6,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/eth/protocols/wit"
 	"github.com/ethereum/go-ethereum/log"
@@ -49,7 +50,7 @@ func (h *witHandler) Handle(peer *wit.Peer, packet wit.Packet) error {
 	case *wit.NewWitnessPacket:
 		return h.handleWitnessBroadcast(peer, packet.Witness)
 	case *wit.NewWitnessHashesPacket:
-		return h.handleWitnessHashesBroadcast(peer, packet.Hashes)
+		return h.handleWitnessHashesAnnounce(peer, packet.Hashes, packet.Numbers)
 	case *wit.GetWitnessPacket:
 		// Call handleGetWitness which returns the raw RLP data
 		witnessesRLPBytes, err := h.handleGetWitness(peer, packet)
@@ -72,12 +73,17 @@ func (h *witHandler) Handle(peer *wit.Peer, packet wit.Packet) error {
 // handleWitnessBroadcast handles a witness broadcast from a peer.
 func (h *witHandler) handleWitnessBroadcast(peer *wit.Peer, witness *stateless.Witness) error {
 	peer.AddKnownWitness(witness.Header().Hash())
+	hash := witness.Header().Hash()
 
 	// Inject the witness into the block fetcher's cache
 	if h.blockFetcher != nil {
-		log.Debug("Injecting witness into block fetcher", "hash", witness.Header().Hash(), "peer", peer.ID())
+		log.Debug("Injecting witness into block fetcher", "hash", hash, "peer", peer.ID())
+		// Verify witness header matches a known block hash
+		blockHash := witness.Header().Hash()
+		log.Debug("Witness details", "blockHash", blockHash, "header", witness.Header().Number)
+
 		if err := h.blockFetcher.InjectWitness(peer.ID(), witness); err != nil {
-			peer.Log().Warn("Failed to inject broadcast witness into fetcher", "hash", witness.Header().Hash(), "err", err)
+			peer.Log().Warn("Failed to inject broadcast witness into fetcher", "hash", hash, "err", err)
 			// Don't return error, just log, as block might still be importable via other means
 		}
 	} else {
@@ -88,8 +94,8 @@ func (h *witHandler) handleWitnessBroadcast(peer *wit.Peer, witness *stateless.W
 	return nil
 }
 
-// handleWitnessHashesBroadcast handles a witness hashes broadcast from a peer.
-func (h *witHandler) handleWitnessHashesBroadcast(peer *wit.Peer, hashes []common.Hash) error {
+// handleWitnessHashesAnnounce handles a witness hashes broadcast from a peer.
+func (h *witHandler) handleWitnessHashesAnnounce(peer *wit.Peer, hashes []common.Hash, numbers []uint64) error {
 	for _, hash := range hashes {
 		peer.AddKnownWitness(hash)
 	}
@@ -107,9 +113,10 @@ func (h *witHandler) handleGetWitness(peer *wit.Peer, req *wit.GetWitnessPacket)
 	// Fetch witnesses from the backend
 	for _, hash := range req.Hashes {
 		// Call the blockchain method which now returns raw RLP bytes
-		witnessBytes, err := h.Chain().GetWitnessOrWait(hash, witnessRequestTimeout)
-		if err != nil || witnessBytes == nil {
-			log.Debug("handleGetWitness: error getting witness", "hash", hash, "err", err)
+		witnessBytes := rawdb.ReadWitness(h.Chain().DB(), hash)
+		if len(witnessBytes) > 0 {
+			log.Trace("Witness found in DB immediately", "hash", hash)
+			witnessesRLPBytes = append(witnessesRLPBytes, witnessBytes)
 		}
 
 		witnessesRLPBytes = append(witnessesRLPBytes, witnessBytes)
