@@ -835,6 +835,7 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 // Finalize implements consensus.Engine, ensuring no uncles are set, nor block
 // rewards given.
 func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, wrappedState vm.StateDB, body *types.Body) {
+	start := time.Now()
 	headerNumber := header.Number.Uint64()
 	if body.Withdrawals != nil || header.WithdrawalsHash != nil {
 		return
@@ -878,15 +879,16 @@ func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, 
 		return
 	}
 
-	// No block rewards in PoA, so the state remains as is and uncles are dropped
-	start := time.Now()
-	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
-	log.Info("[block tracker] done calculating state root in finalize", "number", header.Number.Uint64(), "time", time.Since(start))
-	header.UncleHash = types.CalcUncleHash(nil)
-
 	// Set state sync data to blockchain
 	bc := chain.(*core.BlockChain)
 	bc.SetStateSync(stateSyncData)
+	log.Info("[block tracker] misc consensus time in finalize", "number", headerNumber, "time", time.Since(start))
+
+	// No block rewards in PoA, so the state remains as is and uncles are dropped
+	start = time.Now()
+	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
+	log.Info("[block tracker] done calculating state root in finalize", "number", header.Number.Uint64(), "time", time.Since(start))
+	header.UncleHash = types.CalcUncleHash(nil)
 }
 
 func decodeGenesisAlloc(i interface{}) (types.GenesisAlloc, error) {

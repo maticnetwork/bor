@@ -128,6 +128,7 @@ func (v *BlockValidator) ValidateBody(block *types.Block) error {
 // ValidateState validates the various changes that happen after a state transition,
 // such as amount of used gas, the receipt roots and the state root itself.
 func (v *BlockValidator) ValidateState(block *types.Block, statedb *state.StateDB, res *ProcessResult, stateless bool) error {
+	start := time.Now()
 	if res == nil {
 		return errors.New("nil ProcessResult value")
 	}
@@ -160,9 +161,11 @@ func (v *BlockValidator) ValidateState(block *types.Block, statedb *state.StateD
 	} else if res.Requests != nil {
 		return errors.New("block has requests before prague fork")
 	}
+	log.Info("[block tracker] misc time in validate state", "number", header.Number.Uint64(), "time", time.Since(start))
+
 	// Validate the state root against the received state root and throw
 	// an error if they don't match.
-	start := time.Now()
+	start = time.Now()
 	if root := statedb.IntermediateRoot(v.config.IsEIP158(header.Number)); header.Root != root {
 		return fmt.Errorf("invalid merkle root (remote: %x local: %x) dberr: %w", header.Root, root, statedb.Error())
 	}
