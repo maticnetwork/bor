@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	cmath "github.com/ethereum/go-ethereum/common/math"
@@ -29,6 +30,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -94,6 +96,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	}
 
 	// Iterate over and process the individual transactions
+	start := time.Now()
 	for i, tx := range block.Transactions() {
 		if interruptCtx != nil {
 			select {
@@ -117,6 +120,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 		receipts = append(receipts, receipt)
 		allLogs = append(allLogs, receipt.Logs...)
 	}
+	log.Info("[block tracker] done evm processing", "number", block.NumberU64(), "time", time.Since(start), "txs", len(block.Transactions()), "gas", *usedGas)
 	// Read requests if Prague is enabled and bor consensus is not active.
 	var requests [][]byte
 	if p.config.IsPrague(block.Number()) && p.config.Bor == nil {
@@ -137,7 +141,9 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
 	// Note that we specifically need `Blockchain` for `ChainHeaderReader` interface as it's
 	// typecasted in bor consensus for setting state-sync events.
+	start = time.Now()
 	p.chain.engine.Finalize(p.blockchain, header, tracingStateDB, block.Body())
+	log.Info("[block tracker] done finalizing in consensus", "number", block.NumberU64(), "time", time.Since(start))
 
 	return &ProcessResult{
 		Receipts: receipts,

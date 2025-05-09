@@ -879,7 +879,9 @@ func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, 
 	}
 
 	// No block rewards in PoA, so the state remains as is and uncles are dropped
+	start := time.Now()
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
+	log.Info("[block tracker] done calculating state root in finalize", "number", header.Number.Uint64(), "time", time.Since(start))
 	header.UncleHash = types.CalcUncleHash(nil)
 
 	// Set state sync data to blockchain
@@ -966,7 +968,9 @@ func (c *Bor) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *typ
 	}
 
 	// No block rewards in PoA, so the state remains as it is
+	start := time.Now()
 	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
+	log.Info("[block tracker] done calculating state root in finalize and assemble", "number", header.Number.Uint64(), "time", time.Since(start))
 
 	// Uncles are dropped
 	header.UncleHash = types.CalcUncleHash(nil)

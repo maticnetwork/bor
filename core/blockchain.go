@@ -654,10 +654,12 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header, wit
 			statedb.StartPrefetcher("chain", witness)
 			pstart := time.Now()
 			res, err := bc.processor.Process(block, statedb, bc.vmConfig, ctx)
+			log.Info("[block tracker] done processing block", "number", block.NumberU64(), "time", time.Since(pstart))
 			blockExecutionSerialTimer.UpdateSince(pstart)
 			if err == nil {
 				vstart := time.Now()
 				err = bc.validator.ValidateState(block, statedb, res, false)
+				log.Info("[block tracker] done validating block", "number", block.NumberU64(), "time", time.Since(vstart))
 				vtime = time.Since(vstart)
 			}
 			if res == nil {
