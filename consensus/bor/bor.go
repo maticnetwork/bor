@@ -1182,13 +1182,15 @@ func (c *Bor) getLatestHeimdallSpanV2() (*borTypes.Span, error) {
 	return &storedSpan, nil
 }
 
+const getSpanTimeout = 2 * time.Second
+
 func (c *Bor) saveLatestHeimdallSpanV1() {
 	if c.HeimdallClient == nil {
 		log.Info("saveLatestHeimdallSpan - heimdall client is nil")
 		return
 	}
 
-	ctxWithTimeout, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctxWithTimeout, cancel := context.WithTimeout(context.Background(), getSpanTimeout)
 	defer cancel()
 	respSpan, err := c.HeimdallClient.GetLatestSpanV1(ctxWithTimeout)
 	if err != nil {
@@ -1233,7 +1235,7 @@ func (c *Bor) saveLatestHeimdallSpanV2() {
 		return
 	}
 
-	ctxWithTimeout, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctxWithTimeout, cancel := context.WithTimeout(context.Background(), getSpanTimeout)
 	defer cancel()
 	respSpan, err := c.HeimdallClient.GetLatestSpanV2(ctxWithTimeout)
 	if err != nil {
@@ -1378,7 +1380,7 @@ func (c *Bor) FetchAndCommitSpan(
 				log.Error("Error while fetching heimdallv2 span", "error", err)
 				if response, err = c.getLatestHeimdallSpanV2(); err != nil {
 					log.Error("Error while fetching last heimdallv2 span from db", "error", err)
-					return true, err
+					return false, err
 				}
 				if response != nil {
 					response.Id = newSpanID
@@ -1421,7 +1423,7 @@ func (c *Bor) FetchAndCommitSpan(
 				log.Error("Error while fetching heimdallv1 span", "error", err)
 				if response, err = c.getLatestHeimdallSpanV1(); err != nil {
 					log.Error("Error while fetching last heimdallv1 span from db", "error", err)
-					return true, err
+					return false, err
 				}
 				if response != nil {
 					response.ID = newSpanID
@@ -1470,7 +1472,6 @@ func (c *Bor) FetchAndCommitSpan(
 		)
 	}
 
-	log.Error("Will commit span", "validators", validators, "producers", producers, "minSpan", minSpan)
 	return c.spanner.CommitSpan(ctx, minSpan, validators, producers, state, header, chain)
 }
 
