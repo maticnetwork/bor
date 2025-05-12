@@ -941,29 +941,29 @@ func (f *BlockFetcher) importBlocks(peer string, block *types.Block) {
 			return
 		}
 
-		if f.enableBlockTracking {
-			// Log the insertion event
-			var (
-				msg         string
-				delayInMs   uint64
-				prettyDelay common.PrettyDuration
-			)
+		// if f.enableBlockTracking {
+		// Log the insertion event
+		var (
+			msg         string
+			delayInMs   uint64
+			prettyDelay common.PrettyDuration
+		)
 
-			if block.AnnouncedAt != nil {
-				msg = "[block tracker] Inserted new block with announcement"
-				delayInMs = uint64(time.Since(*block.AnnouncedAt).Milliseconds())
-				prettyDelay = common.PrettyDuration(time.Since(*block.AnnouncedAt))
-			} else {
-				msg = "[block tracker] Inserted new block without announcement"
-				delayInMs = uint64(time.Since(block.ReceivedAt).Milliseconds())
-				prettyDelay = common.PrettyDuration(time.Since(block.ReceivedAt))
-			}
-
-			totalDelayInMs := uint64(time.Now().UnixMilli()) - block.Time()*1000
-			totalDelay := common.PrettyDuration(time.Millisecond * time.Duration(totalDelayInMs))
-
-			log.Info(msg, "number", block.Number().Uint64(), "hash", hash, "delay", prettyDelay, "delayInMs", delayInMs, "totalDelay", totalDelay, "totalDelayInMs", totalDelayInMs)
+		if block.AnnouncedAt != nil {
+			msg = "[block tracker] Inserted new block with announcement"
+			delayInMs = uint64(time.Since(*block.AnnouncedAt).Milliseconds())
+			prettyDelay = common.PrettyDuration(time.Since(*block.AnnouncedAt))
+		} else {
+			msg = "[block tracker] Inserted new block without announcement"
+			delayInMs = uint64(time.Since(block.ReceivedAt).Milliseconds())
+			prettyDelay = common.PrettyDuration(time.Since(block.ReceivedAt))
 		}
+
+		totalDelayInMs := uint64(time.Now().UnixMilli()) - block.Time()*1000
+		totalDelay := common.PrettyDuration(time.Millisecond * time.Duration(totalDelayInMs))
+
+		log.Info(msg, "number", block.Number().Uint64(), "hash", hash, "delay", prettyDelay, "delayInMs", delayInMs, "totalDelay", totalDelay, "totalDelayInMs", totalDelayInMs)
+		// }
 
 		// If import succeeded, broadcast the block
 		blockAnnounceOutTimer.UpdateSince(block.ReceivedAt)
