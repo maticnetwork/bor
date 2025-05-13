@@ -670,13 +670,14 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header, com
 		processorCount++
 
 		go func() {
+			var witness *stateless.Witness
 			if computeWitness {
-				witness, err := stateless.NewWitness(block.Header(), bc)
+				witness, err = stateless.NewWitness(block.Header(), bc)
 				if err != nil {
 					log.Error("error in witness generation", "caughterr", err)
 				}
-				statedb.StartPrefetcher("chain", witness)
 			}
+			statedb.StartPrefetcher("chain", witness)
 
 			pstart := time.Now()
 			res, err := bc.processor.Process(block, statedb, bc.vmConfig, nil, ctx)
