@@ -13,6 +13,8 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
+	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
+	hmm "github.com/ethereum/go-ethereum/heimdall-migration-monitor"
 )
 
 type mockHeimdall struct {
@@ -22,31 +24,68 @@ type mockHeimdall struct {
 	fetchMilestoneCount  func(ctx context.Context) (int64, error)
 }
 
-func (m *mockHeimdall) StateSyncEvents(ctx context.Context, fromID uint64, to int64) ([]*clerk.EventRecordWithTime, error) {
+func (m *mockHeimdall) StateSyncEventsV1(ctx context.Context, fromID uint64, to int64) ([]*clerk.EventRecordWithTime, error) {
 	return nil, nil
 }
 
-func (m *mockHeimdall) GetSpan(ctx context.Context, spanID uint64) (*types.Span, error) {
+func (m *mockHeimdall) StateSyncEventsV2(ctx context.Context, fromID uint64, to int64) ([]*clerk.EventRecordWithTime, error) {
 	return nil, nil
 }
 
-func (m *mockHeimdall) FetchCheckpoint(ctx context.Context, number int64) (*checkpoint.CheckpointV2, error) {
+func (m *mockHeimdall) GetSpanV1(ctx context.Context, spanID uint64) (*span.HeimdallSpan, error) {
+	return nil, nil
+}
+
+func (m *mockHeimdall) GetSpanV2(ctx context.Context, spanID uint64) (*types.Span, error) {
+	return nil, nil
+}
+
+func (m *mockHeimdall) GetLatestSpanV1(ctx context.Context) (*span.HeimdallSpan, error) {
+	return nil, nil
+}
+
+func (m *mockHeimdall) GetLatestSpanV2(ctx context.Context) (*types.Span, error) {
+	return nil, nil
+}
+
+func (m *mockHeimdall) FetchCheckpointV1(ctx context.Context, number int64) (*checkpoint.CheckpointV1, error) {
+	return nil, nil
+}
+
+func (m *mockHeimdall) FetchCheckpointV2(ctx context.Context, number int64) (*checkpoint.CheckpointV2, error) {
 	return m.fetchCheckpoint(ctx, number)
 }
+
 func (m *mockHeimdall) FetchCheckpointCount(ctx context.Context) (int64, error) {
 	return m.fetchCheckpointCount(ctx)
 }
-func (m *mockHeimdall) FetchMilestone(ctx context.Context) (*milestone.MilestoneV2, error) {
+
+func (m *mockHeimdall) FetchMilestoneV1(ctx context.Context) (*milestone.MilestoneV1, error) {
+	return nil, nil
+}
+
+func (m *mockHeimdall) FetchMilestoneV2(ctx context.Context) (*milestone.MilestoneV2, error) {
 	return m.fetchMilestone(ctx)
 }
+
 func (m *mockHeimdall) FetchMilestoneCount(ctx context.Context) (int64, error) {
 	return m.fetchMilestoneCount(ctx)
+}
+
+func (m *mockHeimdall) FetchNoAckMilestone(ctx context.Context, milestoneID string) error {
+	return nil
+}
+
+func (m *mockHeimdall) FetchLastNoAckMilestone(ctx context.Context) (string, error) {
+	return "", nil
 }
 
 func (m *mockHeimdall) Close() {}
 
 func TestFetchWhitelistCheckpointAndMilestone(t *testing.T) {
 	t.Parallel()
+
+	hmm.IsHeimdallV2 = true
 
 	// create an empty ethHandler
 	handler := &ethHandler{}

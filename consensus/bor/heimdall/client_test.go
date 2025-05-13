@@ -142,7 +142,7 @@ func TestFetchCheckpointFromMockHeimdall(t *testing.T) {
 
 	// Create a new heimdall client and use same port for connection
 	client := NewHeimdallClient(fmt.Sprintf("http://localhost:%d", port))
-	_, err = client.FetchCheckpoint(context.Background(), -1)
+	_, err = client.FetchCheckpointV1(context.Background(), -1)
 	require.NoError(t, err, "expect no error in fetching checkpoint")
 
 	// Shutdown the server
@@ -251,7 +251,7 @@ func TestFetchShutdown(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 
 	// Expect this to fail due to timeout
-	_, err = client.FetchCheckpoint(ctx, -1)
+	_, err = client.FetchCheckpointV1(ctx, -1)
 	require.Equal(t, "context deadline exceeded", err.Error(), "expect the function error to be a context deadline exceeded error")
 	require.Equal(t, "context deadline exceeded", ctx.Err().Error(), "expect the ctx error to be a context deadline exceeded error")
 
@@ -274,7 +274,7 @@ func TestFetchShutdown(t *testing.T) {
 	}(cancel)
 
 	// Expect this to fail due to cancellation
-	_, err = client.FetchCheckpoint(ctx, -1)
+	_, err = client.FetchCheckpointV1(ctx, -1)
 	require.Equal(t, "context canceled", err.Error(), "expect the function error to be a context cancelled error")
 	require.Equal(t, "context canceled", ctx.Err().Error(), "expect the ctx error to be a context cancelled error")
 
@@ -292,7 +292,7 @@ func TestFetchShutdown(t *testing.T) {
 	}()
 
 	// Expect this to fail due to shutdown
-	_, err = client.FetchCheckpoint(context.Background(), -1)
+	_, err = client.FetchCheckpointV1(context.Background(), -1)
 	require.Equal(t, ErrShutdownDetected.Error(), err.Error(), "expect the function error to be a shutdown detected error")
 
 	// Shutdown the server
@@ -402,12 +402,12 @@ func TestSpanURL(t *testing.T) {
 func TestStateSyncURL(t *testing.T) {
 	t.Parallel()
 
-	url, err := stateSyncURLV2("http://bor0", 10, 100)
+	url, err := stateSyncURLV1("http://bor0", 10, 100)
 	if err != nil {
 		t.Fatal("got an error", err)
 	}
 
-	const expected = "http://bor0/clerk/time?from-id=10&to-time=100"
+	const expected = "http://bor0/clerk/event-record/list?from-id=10&to-time=100&limit=50"
 
 	if url.String() != expected {
 		t.Fatalf("expected URL %q, got %q", expected, url.String())
