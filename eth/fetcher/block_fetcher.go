@@ -944,25 +944,36 @@ func (f *BlockFetcher) importBlocks(peer string, block *types.Block) {
 		// if f.enableBlockTracking {
 		// Log the insertion event
 		var (
-			msg         string
-			delayInMs   uint64
-			prettyDelay common.PrettyDuration
+			msg          string
+			delayInMs    uint64
+			prettyDelay  common.PrettyDuration
+			p2pDelayInMs uint64
+			p2pdelay     common.PrettyDuration
 		)
 
+		// block.AnnouncedAt -> block announcement time
+		// block.Time() -> actual block time
+		// delay = time since block announcement till import was done
+		// totalDelay = time since block was mined till import was done
+		// rough propagation delay = time since block was mined till block was announced
 		if block.AnnouncedAt != nil {
 			msg = "[block tracker] Inserted new block with announcement"
 			delayInMs = uint64(time.Since(*block.AnnouncedAt).Milliseconds())
 			prettyDelay = common.PrettyDuration(time.Since(*block.AnnouncedAt))
+			p2pDelayInMs = uint64(block.AnnouncedAt.UnixMilli()) - block.Time()*1000
+			p2pdelay = common.PrettyDuration(time.Millisecond * time.Duration(p2pDelayInMs))
 		} else {
 			msg = "[block tracker] Inserted new block without announcement"
 			delayInMs = uint64(time.Since(block.ReceivedAt).Milliseconds())
 			prettyDelay = common.PrettyDuration(time.Since(block.ReceivedAt))
+			p2pDelayInMs = uint64(block.ReceivedAt.UnixMilli()) - block.Time()*1000
+			p2pdelay = common.PrettyDuration(time.Millisecond * time.Duration(p2pDelayInMs))
 		}
 
 		totalDelayInMs := uint64(time.Now().UnixMilli()) - block.Time()*1000
 		totalDelay := common.PrettyDuration(time.Millisecond * time.Duration(totalDelayInMs))
 
-		log.Info(msg, "number", block.Number().Uint64(), "hash", hash, "delay", prettyDelay, "delayInMs", delayInMs, "totalDelay", totalDelay, "totalDelayInMs", totalDelayInMs)
+		log.Info(msg, "number", block.Number().Uint64(), "hash", hash, "delay", prettyDelay, "delayInMs", delayInMs, "totalDelay", totalDelay, "totalDelayInMs", totalDelayInMs, "p2pDelay", p2pdelay, "p2pDelayInMs", p2pDelayInMs)
 		// }
 
 		// If import succeeded, broadcast the block
