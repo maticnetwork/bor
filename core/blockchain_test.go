@@ -175,7 +175,7 @@ func testBlockChainImport(chain types.Blocks, blockchain *BlockChain) error {
 		if err != nil {
 			return err
 		}
-		receipts, logs, usedGas, statedb, _, err := blockchain.ProcessBlock(block, blockchain.GetBlockByHash(block.ParentHash()).Header())
+		receipts, logs, usedGas, statedb, _, err := blockchain.ProcessBlock(block, blockchain.GetBlockByHash(block.ParentHash()).Header(), false)
 		res := &ProcessResult{
 			Receipts: receipts,
 			Logs:     logs,
@@ -234,7 +234,7 @@ func testParallelBlockChainImport(t *testing.T, scheme string, enforceParallelPr
 type AlwaysFailParallelStateProcessor struct {
 }
 
-func (p *AlwaysFailParallelStateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config, interruptCtx context.Context) (*ProcessResult, error) {
+func (p *AlwaysFailParallelStateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config, address *common.Address, interruptCtx context.Context) (*ProcessResult, error) {
 	return nil, errors.New("always fail")
 }
 
@@ -246,9 +246,9 @@ func NewSlowSerialStateProcessor(s Processor) *SlowSerialStateProcessor {
 	return &SlowSerialStateProcessor{s: s}
 }
 
-func (p *SlowSerialStateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config, interruptCtx context.Context) (*ProcessResult, error) {
+func (p *SlowSerialStateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config, address *common.Address, interruptCtx context.Context) (*ProcessResult, error) {
 	time.Sleep(100 * time.Millisecond)
-	return p.s.Process(block, statedb, cfg, interruptCtx)
+	return p.s.Process(block, statedb, cfg, nil, interruptCtx)
 }
 
 func TestSuccessfulBlockImportParallelFailed(t *testing.T) {

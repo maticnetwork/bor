@@ -17,6 +17,8 @@
 package eth
 
 import (
+	"errors"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/eth/protocols/snap"
@@ -103,6 +105,9 @@ func (r *ethWitRequest) Close() error {
 // RequestWitnesses implements downloader.Peer.
 // It requests witnesses using the wit protocol for the given block hashes.
 func (p *ethPeer) RequestWitnesses(hashes []common.Hash, dlResCh chan *eth.Response) (*eth.Request, error) {
+	if p.witPeer == nil {
+		return nil, errors.New("witness peer not found")
+	}
 	p.witPeer.Log().Trace("RequestWitnesses called", "peer", p.ID(), "hashes", len(hashes))
 	// Create a channel for the underlying witness protocol responses.
 	witResCh := make(chan *wit.Response)

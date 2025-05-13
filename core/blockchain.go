@@ -302,11 +302,10 @@ type BlockChain struct {
 	logger                       *tracing.Hooks
 
 	// Bor related changes
-	borReceiptsCache           *lru.Cache[common.Hash, *types.Receipt] // Cache for the most recent bor receipt receipts per block
-	stateSyncData              []*types.StateSyncData                  // State sync data
-	stateSyncFeed              event.Feed                              // State sync feed
-	chain2HeadFeed             event.Feed                              // Reorg/NewHead/Fork data feed
-	pendingWitnessComputations sync.Map                                // Tracks in-flight witness computations: hash -> chan witnessResult
+	borReceiptsCache *lru.Cache[common.Hash, *types.Receipt] // Cache for the most recent bor receipt receipts per block
+	stateSyncData    []*types.StateSyncData                  // State sync data
+	stateSyncFeed    event.Feed                              // State sync feed
+	chain2HeadFeed   event.Feed                              // Reorg/NewHead/Fork data feed
 }
 
 // NewBlockChain returns a fully initialised block chain using information
@@ -357,9 +356,8 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 		engine:        engine,
 		vmConfig:      vmConfig,
 
-		borReceiptsCache:           lru.NewCache[common.Hash, *types.Receipt](receiptsCacheLimit),
-		logger:                     vmConfig.Tracer,
-		pendingWitnessComputations: sync.Map{}, // Initialize the new map
+		borReceiptsCache: lru.NewCache[common.Hash, *types.Receipt](receiptsCacheLimit),
+		logger:           vmConfig.Tracer,
 	}
 
 	var err error
@@ -590,7 +588,7 @@ func NewParallelBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis 
 	return bc, nil
 }
 
-func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ types.Receipts, _ []*types.Log, _ uint64, _ *state.StateDB, vtime time.Duration, blockEndErr error) {
+func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header, computeWitness bool) (_ types.Receipts, _ []*types.Log, _ uint64, _ *state.StateDB, vtime time.Duration, blockEndErr error) {
 	// Process the block using processor and parallelProcessor at the same time, take the one which finishes first, cancel the other, and return the result
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -671,12 +669,15 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header) (_ 
 		processorCount++
 
 		go func() {
-			witness, err := stateless.NewWitness(block.Header(), bc)
-			if err != nil {
-				log.Error("error in witness generation", "caughterr", err)
+			var witness *stateless.Witness
+			if computeWitness {
+				witness, err = stateless.NewWitness(block.Header(), bc)
+				if err != nil {
+					log.Error("error in witness generation", "caughterr", err)
+				}
 			}
-
 			statedb.StartPrefetcher("chain", witness)
+
 			pstart := time.Now()
 			res, err := bc.processor.Process(block, statedb, bc.vmConfig, nil, ctx)
 			blockExecutionSerialTimer.UpdateSince(pstart)
@@ -2084,29 +2085,14 @@ func (bc *BlockChain) addFutureBlock(block *types.Block) error {
 // the index number of the failing block as well an error describing what went
 // wrong. After insertion is done, all accumulated events will be fired.
 func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
+	return bc.InsertChainWithWitnesses(chain, false, nil)
+}
+
+func (bc *BlockChain) InsertChainWithWitnesses(chain types.Blocks, makeWitness bool, witnesses []*stateless.Witness) (int, error) {
 	// Sanity check that we have something meaningful to import
 	if len(chain) == 0 {
 		return 0, nil
 	}
-
-	// Pre-register all block hashes as potentially needing witness computation.
-	// This ensures that even if insertion fails early for some blocks, a potential
-	// waiter via GetWitnessOrWait won't miss a computation started elsewhere.
-	for _, block := range chain {
-		// Use LoadOrStore to avoid overwriting if an entry already exists (e.g., concurrent access).
-		// A buffered channel prevents blocking if the result is never read.
-		bc.pendingWitnessComputations.LoadOrStore(block.Hash(), make(chan witnessResult, 1))
-	}
-
-	defer func() {
-		for _, block := range chain {
-			val, ok := bc.pendingWitnessComputations.Load(block.Hash())
-			if ok {
-				close(val.(chan witnessResult))
-			}
-			bc.pendingWitnessComputations.Delete(block.Hash())
-		}
-	}()
 
 	bc.blockProcFeed.Send(true)
 
@@ -2134,7 +2120,7 @@ func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
 	}
 	defer bc.chainmu.Unlock()
 
-	_, n, err := bc.insertChain(chain, true, false) // No witness collection for mass inserts (would get super large)
+	_, n, err := bc.insertChainWithWitnesses(chain, true, makeWitness, witnesses)
 	return n, err
 }
 
@@ -2146,22 +2132,6 @@ func (bc *BlockChain) InsertChainStateless(chain types.Blocks, witnesses []*stat
 
 	bc.blockProcFeed.Send(true)
 	defer bc.blockProcFeed.Send(false)
-
-	for _, block := range chain {
-		// Use LoadOrStore to avoid overwriting if an entry already exists (e.g., concurrent access).
-		// A buffered channel prevents blocking if the result is never read.
-		bc.pendingWitnessComputations.LoadOrStore(block.Hash(), make(chan witnessResult, 1))
-	}
-
-	defer func() {
-		for _, block := range chain {
-			val, ok := bc.pendingWitnessComputations.Load(block.Hash())
-			if ok {
-				close(val.(chan witnessResult))
-			}
-			bc.pendingWitnessComputations.Delete(block.Hash())
-		}
-	}()
 
 	stats := insertStats{startTime: mclock.Now()}
 
@@ -2259,14 +2229,6 @@ func (bc *BlockChain) InsertChainStateless(chain types.Blocks, witnesses []*stat
 			return processed, err
 		}
 
-		val, ok := bc.pendingWitnessComputations.Load(block.Hash())
-		if ok {
-			select {
-			case val.(chan witnessResult) <- witnessResult{witness: witness, err: nil}:
-			default:
-			}
-		}
-
 		statedb := state.StateDB{}
 		statedb.SetWitness(witness)
 
@@ -2294,6 +2256,10 @@ func (bc *BlockChain) InsertChainStateless(chain types.Blocks, witnesses []*stat
 // is imported, but then new canon-head is added before the actual sidechain
 // completes, then the historic state could be pruned again
 func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool, makeWitness bool) (*stateless.Witness, int, error) {
+	return bc.insertChainWithWitnesses(chain, setHead, makeWitness, nil)
+}
+
+func (bc *BlockChain) insertChainWithWitnesses(chain types.Blocks, setHead bool, makeWitness bool, witnesses []*stateless.Witness) (*stateless.Witness, int, error) {
 	// If the chain is terminating, don't even bother starting up.
 	if bc.insertStopped() {
 		return nil, 0, nil
@@ -2567,7 +2533,19 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool, makeWitness 
 
 		// Process block using the parent state as reference point
 		pstart := time.Now()
-		receipts, logs, usedGas, statedb, vtime, err := bc.ProcessBlock(block, parent)
+
+		computeWitness := makeWitness
+
+		if witnesses != nil && len(witnesses) > it.processed()-1 && witnesses[it.processed()-1] != nil {
+			memdb := witnesses[it.processed()-1].MakeHashDB()
+			bc.statedb.TrieDB().SetReadBackend(hashdb.New(memdb, triedb.HashDefaults.HashDB))
+			computeWitness = false
+			bc.statedb.DisableSnapInReader()
+		}
+
+		receipts, logs, usedGas, statedb, vtime, err := bc.ProcessBlock(block, parent, computeWitness)
+		bc.statedb.TrieDB().SetReadBackend(nil)
+		bc.statedb.EnableSnapInReader()
 		activeState = statedb
 
 		if err != nil {
@@ -2621,14 +2599,6 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool, makeWitness 
 
 		if !isValid {
 			return nil, it.index, whitelist.ErrMismatch
-		}
-
-		val, ok := bc.pendingWitnessComputations.Load(block.Hash())
-		if ok {
-			select {
-			case val.(chan witnessResult) <- witnessResult{witness: statedb.Witness(), err: nil}:
-			default:
-			}
 		}
 
 		if !setHead {
@@ -3605,106 +3575,4 @@ func (bc *BlockChain) ProcessBlockWithWitnesses(block *types.Block, parent *type
 		log.Info("Successfully self validated the block", "block", block.Number(), "hash", block.Hash())
 	}
 	return nil
-}
-
-// GetWitnessOrWait attempts to retrieve the RLP-encoded witness for a given block hash.
-// If the witness is not immediately available in the database, it waits up to the
-// specified timeout for a pending computation to complete or for the witness to
-// appear in the database.
-func (bc *BlockChain) GetWitnessOrWait(hash common.Hash, timeout time.Duration) (rlp.RawValue, error) {
-	// 1. Initial database check
-	witnessBytes := rawdb.ReadWitness(bc.db, hash)
-	if len(witnessBytes) > 0 {
-		log.Trace("Witness found in DB immediately", "hash", hash)
-		return rlp.RawValue(witnessBytes), nil
-	}
-
-	// 2. Setup timeout and polling ticker
-	deadline := time.Now().Add(timeout)
-	// Use a fixed, reasonable poll interval instead of depending on the timeout value.
-	pollInterval := 100 * time.Millisecond
-	ticker := time.NewTicker(pollInterval)
-	defer ticker.Stop()
-
-	log.Trace("Witness not in DB, starting wait/poll loop", "hash", hash, "timeout", timeout)
-
-	// 3. Wait loop: Poll DB, check map/channel, handle timeout/quit
-	for {
-		// Check map for pending computation *before* the select
-		val, mapOk := bc.pendingWitnessComputations.Load(hash)
-		var resultChan chan witnessResult // Stays nil if map entry doesn't exist or type is wrong
-		var chanOk bool
-		if mapOk {
-			resultChan, chanOk = val.(chan witnessResult)
-			if !chanOk {
-				log.Error("Invalid type in pending witness map", "hash", hash)
-				return nil, fmt.Errorf("internal error: invalid type in pending witness map for hash %s", hash.Hex())
-			}
-			log.Trace("Found pending computation channel", "hash", hash)
-		} // If !mapOk, resultChan remains nil and the <-resultChan case in select won't trigger
-
-		// Consolidated select statement
-		select {
-		case result, ok := <-resultChan: // This case is only selected if resultChan is non-nil
-			if !ok { // Channel closed
-				// Re-check DB one last time as computation finished/was cleaned up
-				witnessBytes = rawdb.ReadWitness(bc.db, hash)
-				if len(witnessBytes) > 0 {
-					log.Trace("Witness found in DB after channel close", "hash", hash)
-					return rlp.RawValue(witnessBytes), nil
-				}
-				log.Debug("Witness computation channel closed prematurely", "hash", hash)
-				return nil, errWitnessComputationFailed
-			}
-
-			// Process result from channel
-			if result.err != nil {
-				log.Debug("Witness computation returned error", "hash", hash, "err", result.err)
-				return nil, errWitnessComputationFailed
-			}
-			if result.witness == nil {
-				log.Debug("Witness computation succeeded but no witness generated", "hash", hash)
-				// Re-check DB as it might have been written concurrently or computation was for an old block
-				witnessBytes = rawdb.ReadWitness(bc.db, hash)
-				if len(witnessBytes) > 0 {
-					log.Trace("Witness found in DB after nil result from channel", "hash", hash)
-					return rlp.RawValue(witnessBytes), nil
-				}
-				return nil, nil // Treat as not found
-			}
-
-			// Encode and return the witness
-			var witBuf bytes.Buffer
-			if err := result.witness.EncodeRLP(&witBuf); err != nil {
-				log.Error("Failed to encode computed witness", "hash", hash, "err", err)
-				return nil, fmt.Errorf("failed to encode witness: %w", err)
-			}
-			log.Trace("Witness successfully retrieved from channel", "hash", hash)
-			return rlp.RawValue(witBuf.Bytes()), nil
-
-		case <-ticker.C:
-			// Check DB periodically
-			witnessBytes = rawdb.ReadWitness(bc.db, hash)
-			if len(witnessBytes) > 0 {
-				log.Trace("Witness found in DB during polling check", "hash", hash)
-				return rlp.RawValue(witnessBytes), nil
-			}
-			// Check timeout
-			if time.Now().After(deadline) {
-				log.Debug("Timeout reached waiting for witness", "hash", hash, "timeout", timeout)
-				return nil, errWitnessTimeout
-			}
-			// Otherwise, loop continues, map will be checked at the start of the next iteration
-			log.Trace("Ticker check, DB empty, continuing wait", "hash", hash)
-
-		case <-bc.quit:
-			log.Trace("Blockchain stopped while waiting for witness", "hash", hash)
-			// Optional final DB check before returning stop error
-			// witnessBytes = rawdb.ReadWitness(bc.db, hash)
-			// if len(witnessBytes) > 0 {
-			// 	return rlp.RawValue(witnessBytes), nil
-			// }
-			return nil, errChainStopped
-		}
-	}
 }

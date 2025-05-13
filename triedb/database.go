@@ -92,10 +92,11 @@ type backend interface {
 // types of node backend as an entrypoint. It's responsible for all interactions
 // relevant with trie nodes and node preimages.
 type Database struct {
-	disk      ethdb.Database
-	config    *Config        // Configuration for trie database
-	preimages *preimageStore // The store for caching preimages
-	backend   backend        // The backend for managing trie nodes
+	disk        ethdb.Database
+	config      *Config        // Configuration for trie database
+	preimages   *preimageStore // The store for caching preimages
+	backend     backend        // The backend for managing trie nodes
+	readBackend backend
 }
 
 // NewDatabase initializes the trie database with default settings, note
@@ -125,9 +126,16 @@ func NewDatabase(diskdb ethdb.Database, config *Config) *Database {
 	return db
 }
 
+func (db *Database) SetReadBackend(backend backend) {
+	db.readBackend = backend
+}
+
 // Reader returns a reader for accessing all trie nodes with provided state root.
 // An error will be returned if the requested state is not available.
 func (db *Database) Reader(blockRoot common.Hash) (database.Reader, error) {
+	if db.readBackend != nil {
+		return db.readBackend.Reader(blockRoot)
+	}
 	return db.backend.Reader(blockRoot)
 }
 
