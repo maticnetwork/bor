@@ -260,7 +260,7 @@ func newHandler(config *handlerConfig) (*handler, error) {
 			return 0, nil
 		}
 
-		return h.chain.InsertChainWithWitnesses(blocks, witnesses)
+		return h.chain.InsertChainWithWitnesses(blocks, config.computeWitness, witnesses)
 	}
 
 	// If snap sync is requested but snapshots are disabled, fail loudly
