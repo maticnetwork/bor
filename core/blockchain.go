@@ -306,7 +306,6 @@ type BlockChain struct {
 	stateSyncData    []*types.StateSyncData                  // State sync data
 	stateSyncFeed    event.Feed                              // State sync feed
 	chain2HeadFeed   event.Feed                              // Reorg/NewHead/Fork data feed
-	computeWitness   bool                                    // Whether to compute witnesses
 }
 
 // NewBlockChain returns a fully initialised block chain using information
@@ -733,10 +732,6 @@ func (bc *BlockChain) empty() bool {
 	}
 
 	return true
-}
-
-func (bc *BlockChain) SetComputeWitness(computeWitness bool) {
-	bc.computeWitness = computeWitness
 }
 
 // loadLastState loads the last known chain state from the database. This method
@@ -2092,10 +2087,10 @@ func (bc *BlockChain) addFutureBlock(block *types.Block) error {
 // the index number of the failing block as well an error describing what went
 // wrong. After insertion is done, all accumulated events will be fired.
 func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
-	return bc.InsertChainWithWitnesses(chain, nil)
+	return bc.InsertChainWithWitnesses(chain, false, nil)
 }
 
-func (bc *BlockChain) InsertChainWithWitnesses(chain types.Blocks, witnesses []*stateless.Witness) (int, error) {
+func (bc *BlockChain) InsertChainWithWitnesses(chain types.Blocks, makeWitness bool, witnesses []*stateless.Witness) (int, error) {
 	// Sanity check that we have something meaningful to import
 	if len(chain) == 0 {
 		return 0, nil
@@ -2127,7 +2122,7 @@ func (bc *BlockChain) InsertChainWithWitnesses(chain types.Blocks, witnesses []*
 	}
 	defer bc.chainmu.Unlock()
 
-	_, n, err := bc.insertChainWithWitnesses(chain, true, false, witnesses)
+	_, n, err := bc.insertChainWithWitnesses(chain, true, makeWitness, witnesses)
 	return n, err
 }
 
@@ -2533,7 +2528,7 @@ func (bc *BlockChain) insertChainWithWitnesses(chain types.Blocks, setHead bool,
 		// Process block using the parent state as reference point
 		pstart := time.Now()
 
-		computeWitness := bc.computeWitness
+		computeWitness := makeWitness
 
 		if witnesses != nil && len(witnesses) > it.processed()-1 && witnesses[it.processed()-1] != nil {
 			memdb := witnesses[it.processed()-1].MakeHashDB()
