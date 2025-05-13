@@ -17,6 +17,7 @@
 package miner
 
 import (
+	"fmt"
 	"math/big"
 	"os"
 	"sync/atomic"
@@ -708,26 +709,31 @@ func testGetSealingWork(t *testing.T, chainConfig *params.ChainConfig, engine co
 // TestCommitInterruptExperimentBor_NormalFlow tests the commit interrupt experiment for bor consensus by inducing
 // an artificial delay at transaction level. It runs the normal mining flow triggered via new head.
 func TestCommitInterruptExperimentBor_NormalFlow(t *testing.T) {
-	// with 1 sec block time and 200 millisec tx delay we should get 5 txs per block
-	testCommitInterruptExperimentBor(t, 200, 5, 0)
+	// with 1 sec block time and 200 millisec tx delay we should get 3 txs per block as we only have
+	// 500ms to process. although it seems that 3rd transaction will be interrupted, it's already procedded
+	testCommitInterruptExperimentBor(t, 200, 3, 0)
 
 	time.Sleep(2 * time.Second)
 
-	// with 1 sec block time and 100 millisec tx delay we should get 10 txs per block
-	testCommitInterruptExperimentBor(t, 100, 10, 0)
+	// with 1 sec block time and 100 millisec tx delay we should get 5 txs per block as we only have
+	// 500ms to process.
+	testCommitInterruptExperimentBor(t, 100, 5, 0)
 }
 
 // nolint : paralleltest
 // TestCommitInterruptExperimentBorContract tests the commit interrupt experiment for bor consensus by inducing an artificial delay at OPCODE level.
 func TestCommitInterruptExperimentBorContract(t *testing.T) {
-	// pre-calculated number of OPCODES = 123. 7*123=861 < 1000, 1 tx is possible but 2 tx per block will not be possible.
-	testCommitInterruptExperimentBorContract(t, 0, 1, 7)
+	// pre-calculated number of OPCODES = 123. 5*123=615 > 500 so no txs included
+	// testCommitInterruptExperimentBorContract(t, 0, 0, 5)
+	// time.Sleep(2 * time.Second)
+	// pre-calculated number of OPCODES = 123. 3*123=369 < 500, 2 tx is possible but 1 tx per block will not be possible. But 1 happen due to other overheads.
+	testCommitInterruptExperimentBorContract(t, 0, 1, 3)
 	time.Sleep(2 * time.Second)
-	// pre-calculated number of OPCODES = 123. 2*123=246 < 1000, 4 tx is possible but 5 tx per block will not be possible. But 3 happen due to other overheads.
-	testCommitInterruptExperimentBorContract(t, 0, 3, 2)
+	// pre-calculated number of OPCODES = 123. 2*123=246 < 500, 2 tx is possible but 3 tx per block will not be possible. But 1 happen due to other overheads.
+	testCommitInterruptExperimentBorContract(t, 0, 1, 2)
 	time.Sleep(2 * time.Second)
-	// pre-calculated number of OPCODES = 123. 3*123=369 < 1000, 2 tx is possible but 3 tx per block will not be possible.
-	testCommitInterruptExperimentBorContract(t, 0, 2, 3)
+	// pre-calculated number of OPCODES = 123. 1*123=123 < 500, 3 tx is possible but 4 tx per block will not be possible.
+	testCommitInterruptExperimentBorContract(t, 0, 3, 1)
 }
 
 // nolint : thelper
@@ -777,8 +783,12 @@ func testCommitInterruptExperimentBorContract(t *testing.T, delay uint, txCount 
 
 	currentBlockNumber := w.current.header.Number.Uint64()
 	prevBlockTxCount := w.chain.GetBlockByNumber(currentBlockNumber - 1).Transactions().Len()
-	assert.Check(t, prevBlockTxCount > 0)
-	assert.Check(t, prevBlockTxCount <= txCount)
+	if txCount == 0 {
+		assert.Check(t, prevBlockTxCount == 0)
+	} else {
+		assert.Check(t, prevBlockTxCount > 0)
+		assert.Check(t, prevBlockTxCount <= txCount)
+	}
 }
 
 // // nolint : thelper
@@ -828,8 +838,8 @@ func testCommitInterruptExperimentBor(t *testing.T, delay uint, txCount int, opc
 	w.stop()
 
 	currentBlockNumber := w.current.header.Number.Uint64()
-	assert.Check(t, txCount >= w.chain.GetBlockByNumber(currentBlockNumber-1).Transactions().Len())
-	assert.Check(t, 0 < w.chain.GetBlockByNumber(currentBlockNumber-1).Transactions().Len())
+	assert.Check(t, txCount >= w.chain.GetBlockByNumber(currentBlockNumber-1).Transactions().Len(), fmt.Sprintf("got: %d, expected: %d", w.chain.GetBlockByNumber(currentBlockNumber-1).Transactions().Len(), txCount))
+	assert.Check(t, 0 < w.chain.GetBlockByNumber(currentBlockNumber-1).Transactions().Len(), fmt.Sprintf("tx count in block: %d", w.chain.GetBlockByNumber(currentBlockNumber-1).Transactions().Len()))
 }
 
 // TestCommitInterruptExperimentBor_NewTxFlow tests the commit interrupt experiment for bor consensus by inducing
