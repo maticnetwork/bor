@@ -1557,8 +1557,10 @@ func resetAndCopyInterruptCtx(interruptCtx context.Context) context.Context {
 }
 
 func getInterruptTimer(interruptCtx context.Context, number, timestamp uint64) (context.Context, func()) {
-	delay := time.Until(time.Unix(int64(timestamp), 0))
-	interruptCtx, cancel := context.WithTimeout(interruptCtx, delay)
+	// Instead of interrupting block building at exact header time, we leave 500ms as buffer
+	// for consensus operations (in Finalize) and state root calculation.
+	adjustedDelay := time.Unix(int64(timestamp), 0).Add(-500 * time.Millisecond)
+	interruptCtx, cancel := context.WithTimeout(interruptCtx, time.Until(adjustedDelay))
 
 	go func() {
 		<-interruptCtx.Done()
