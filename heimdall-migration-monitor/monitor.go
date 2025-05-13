@@ -40,6 +40,7 @@ func WaitFirstSuccessfulCheck() {
 		if firstSuccessfulCheckPassed {
 			return
 		}
+		fmt.Println("Trying to check Heimdall version...")
 		time.Sleep(10 * time.Second)
 	}
 }

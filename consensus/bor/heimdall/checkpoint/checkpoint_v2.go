@@ -33,7 +33,6 @@ func (m *CheckpointV2) UnmarshalJSON(data []byte) error {
 	}
 
 	if err := json.Unmarshal(data, temp); err != nil {
-
 		return err
 	}
 

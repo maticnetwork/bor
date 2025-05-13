@@ -1119,10 +1119,12 @@ func (c *Bor) checkAndCommitSpan(
 	header *types.Header,
 	chain core.ChainContext,
 ) error {
-	if hmm.IsHeimdallV2 {
-		c.saveLatestHeimdallSpanV2()
-	} else {
-		c.saveLatestHeimdallSpanV1()
+	if header.Number.Uint64()%c.config.CalculateSprint(header.Number.Uint64()) == 0 {
+		if hmm.IsHeimdallV2 {
+			c.saveLatestHeimdallSpanV2()
+		} else {
+			c.saveLatestHeimdallSpanV1()
+		}
 	}
 
 	var ctx = context.Background()

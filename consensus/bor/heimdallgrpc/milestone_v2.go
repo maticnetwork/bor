@@ -7,10 +7,11 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
+	hmm "github.com/ethereum/go-ethereum/heimdall-migration-monitor"
 	"github.com/ethereum/go-ethereum/log"
 )
 
-func (h *HeimdallGRPCClient) FetchMilestoneCount(ctx context.Context) (int64, error) {
+func (h *HeimdallGRPCClient) FetchMilestoneCountV2(ctx context.Context) (int64, error) {
 	log.Info("Fetching milestone count")
 
 	var err error
@@ -36,7 +37,7 @@ func (h *HeimdallGRPCClient) FetchMilestoneCount(ctx context.Context) (int64, er
 	return count, nil
 }
 
-func (h *HeimdallGRPCClient) FetchMilestone(ctx context.Context) (*milestone.MilestoneV2, error) {
+func (h *HeimdallGRPCClient) FetchMilestoneV2(ctx context.Context) (*milestone.MilestoneV2, error) {
 	log.Debug("Fetching milestone")
 
 	var err error
@@ -72,36 +73,10 @@ func (h *HeimdallGRPCClient) FetchMilestone(ctx context.Context) (*milestone.Mil
 	return milestone, nil
 }
 
-// func (h *HeimdallGRPCClient) FetchLastNoAckMilestone(ctx context.Context) (string, error) {
-// 	log.Debug("Fetching latest no ack milestone Id")
+func (h *HeimdallGRPCClient) FetchMilestoneCount(ctx context.Context) (int64, error) {
+	if hmm.IsHeimdallV2 {
+		return h.FetchMilestoneCountV2(ctx)
+	}
 
-// 	res, err := h.milestoneQueryClient.GetLatestNoAckMilestone(ctx, nil)
-// 	if err != nil {
-// 		return "", err
-// 	}
-
-// 	log.Debug("Fetched last no-ack milestone", "res", res.Result)
-
-// 	return res.Result, nil
-// }
-
-// func (h *HeimdallGRPCClient) FetchNoAckMilestone(ctx context.Context, milestoneID string) error {
-// 	req := &proto.FetchMilestoneNoAckRequest{
-// 		MilestoneID: milestoneID,
-// 	}
-
-// 	log.Debug("Fetching no ack milestone", "milestoneID", milestoneID)
-
-// 	res, err := h.milestoneQueryClient.GetNoAckMilestoneById(ctx, req)
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	if !res.Result.Result {
-// 		return fmt.Errorf("%w: milestoneID %q", heimdall.ErrNotInRejectedList, milestoneID)
-// 	}
-
-// 	log.Debug("Fetched no ack milestone", "milestoneID", milestoneID)
-
-// 	return nil
-// }
+	return h.FetchMilestoneCountV1(ctx)
+}

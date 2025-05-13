@@ -8,9 +8,9 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 
-	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
-
 	"github.com/ethereum/go-ethereum/log"
+	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
+	protoV1 "github.com/maticnetwork/polyproto/heimdall"
 
 	borTypes "github.com/0xPolygon/heimdall-v2/x/bor/types"
 	checkpointTypes "github.com/0xPolygon/heimdall-v2/x/checkpoint/types"
@@ -24,6 +24,7 @@ const (
 
 type HeimdallGRPCClient struct {
 	conn                  *grpc.ClientConn
+	client                protoV1.HeimdallClient
 	borQueryClient        borTypes.QueryClient
 	checkpointQueryClient checkpointTypes.QueryClient
 	clerkQueryClient      clerkTypes.QueryClient
@@ -52,6 +53,7 @@ func NewHeimdallGRPCClient(address string) *HeimdallGRPCClient {
 
 	return &HeimdallGRPCClient{
 		conn:                  conn,
+		client:                protoV1.NewHeimdallClient(conn),
 		borQueryClient:        borTypes.NewQueryClient(conn),
 		checkpointQueryClient: checkpointTypes.NewQueryClient(conn),
 		clerkQueryClient:      clerkTypes.NewQueryClient(conn),

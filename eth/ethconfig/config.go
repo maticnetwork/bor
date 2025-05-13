@@ -29,6 +29,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/bor/contract"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall" //nolint:typecheck
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
+	"github.com/ethereum/go-ethereum/consensus/bor/heimdallgrpc"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdallws"
 	"github.com/ethereum/go-ethereum/consensus/clique"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
@@ -243,7 +244,7 @@ func CreateConsensusEngine(chainConfig *params.ChainConfig, ethConfig *Config, d
 				// TODO HV2: Uncomment once FetchMilestoneID is implemented
 				// heimdallClient = heimdallapp.NewHeimdallAppClient()
 			} else if ethConfig.HeimdallgRPCAddress != "" {
-				// heimdallClient = heimdallgrpc.NewHeimdallGRPCClient(ethConfig.HeimdallgRPCAddress)
+				heimdallClient = heimdallgrpc.NewHeimdallGRPCClient(ethConfig.HeimdallgRPCAddress)
 			} else {
 				heimdallClient = heimdall.NewHeimdallClient(ethConfig.HeimdallURL)
 			}

@@ -7,12 +7,13 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
+	hmm "github.com/ethereum/go-ethereum/heimdall-migration-monitor"
 	"github.com/ethereum/go-ethereum/log"
 
 	checkpointTypes "github.com/0xPolygon/heimdall-v2/x/checkpoint/types"
 )
 
-func (h *HeimdallGRPCClient) FetchCheckpointCount(ctx context.Context) (int64, error) {
+func (h *HeimdallGRPCClient) FetchCheckpointCountV2(ctx context.Context) (int64, error) {
 	log.Info("Fetching checkpoint count")
 
 	var err error
@@ -38,7 +39,7 @@ func (h *HeimdallGRPCClient) FetchCheckpointCount(ctx context.Context) (int64, e
 	return count, nil
 }
 
-func (h *HeimdallGRPCClient) FetchCheckpoint(ctx context.Context, number int64) (*checkpoint.CheckpointV2, error) {
+func (h *HeimdallGRPCClient) FetchCheckpointV2(ctx context.Context, number int64) (*checkpoint.CheckpointV2, error) {
 	var fetchedCheckpoint checkpointTypes.Checkpoint
 	var err error
 
@@ -88,4 +89,12 @@ func (h *HeimdallGRPCClient) FetchCheckpoint(ctx context.Context, number int64) 
 	}
 
 	return checkpoint, nil
+}
+
+func (h *HeimdallGRPCClient) FetchCheckpointCount(ctx context.Context) (int64, error) {
+	if hmm.IsHeimdallV2 {
+		return h.FetchCheckpointCountV2(ctx)
+	}
+
+	return h.FetchCheckpointCountV1(ctx)
 }
