@@ -1839,12 +1839,11 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	ptd := bc.GetTd(block.ParentHash(), block.NumberU64()-1)
 	var externTd *big.Int
 	if ptd == nil {
-		// return []*types.Log{}, consensus.ErrUnknownAncestor
-		externTd = new(big.Int).Add(block.Number(), big.NewInt(1))
-	} else {
-		// Make sure no inconsistent state is leaked during insertion
-		externTd = new(big.Int).Add(block.Difficulty(), ptd)
+		return []*types.Log{}, consensus.ErrUnknownAncestor
 	}
+
+	// Make sure no inconsistent state is leaked during insertion
+	externTd = new(big.Int).Add(block.Difficulty(), ptd)
 
 	// Irrelevant of the canonical status, write the block itself to the database.
 	//

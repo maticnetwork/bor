@@ -27,6 +27,8 @@ import (
 
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
+	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state/snapshot"
 	"github.com/ethereum/go-ethereum/core/stateless"
@@ -162,6 +164,14 @@ type Downloader struct {
 	syncStartBlock uint64    // Head snap block when Geth was started
 	syncStartTime  time.Time // Time instance when chain sync started
 	syncLogTime    time.Time // Time instance when status was last reported
+
+	// FastForward
+	FastForwardThreshold  uint64
+	latestCheckpointBlock uint64
+	fastForwardBlock      uint64
+	futureCandidateBlocks []uint64
+	fastForwardMu         sync.Mutex
+	fastForwardBlockCh    chan uint64
 }
 
 // LightChain encapsulates functions required to synchronise a light chain.
@@ -228,7 +238,7 @@ type BlockChain interface {
 
 // New creates a new downloader to fetch hashes and blocks from remote peers.
 // nolint: staticcheck
-func New(stateDb ethdb.Database, mux *event.TypeMux, chain BlockChain, lightchain LightChain, dropPeer peerDropFn, success func(), whitelistService ethereum.ChainValidator) *Downloader {
+func New(stateDb ethdb.Database, mux *event.TypeMux, chain BlockChain, lightchain LightChain, dropPeer peerDropFn, success func(), whitelistService ethereum.ChainValidator, fastForwardThreshold uint64) *Downloader {
 	if lightchain == nil {
 		lightchain = chain
 	}
@@ -248,6 +258,9 @@ func New(stateDb ethdb.Database, mux *event.TypeMux, chain BlockChain, lightchai
 		syncStartBlock:         chain.CurrentSnapBlock().Number.Uint64(),
 		ChainValidator:         whitelistService,
 		maxValidationThreshold: maxValidationThreshold,
+		futureCandidateBlocks:  make([]uint64, 0),
+		fastForwardBlockCh:     make(chan uint64),
+		FastForwardThreshold:   fastForwardThreshold,
 	}
 	// Create the post-merge skeleton syncer and start the process
 	dl.skeleton = newSkeleton(stateDb, dl.peers, dropPeer, newBeaconBackfiller(dl, success))
@@ -572,7 +585,7 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td, ttd *
 
 	var origin uint64
 	if mode == StatelessSync {
-		origin = height
+		origin = d.GetOrWaitFastForwardBlock()
 	} else if !beaconMode {
 		// In legacy mode, reach out to the network and find the ancestor
 		origin, err = d.findAncestor(p, latest)
@@ -2119,4 +2132,90 @@ func (d *Downloader) fetchWitnesses(from uint64, beaconMode bool) error {
 	err := d.concurrentFetch((*witnessQueue)(d), beaconMode)
 	log.Debug("Block witness fetcher terminated", "from", from, "err", err)
 	return err
+}
+
+func (d *Downloader) UpdateFastForwardBlockFromMilestone(db ethdb.KeyValueWriter, milestone *milestone.Milestone) {
+	d.fastForwardMu.Lock()
+	defer d.fastForwardMu.Unlock()
+
+	// Fast Forward just for stateless clients
+	if d.getMode() != StatelessSync {
+		return
+	}
+
+	// Store TD from received milestones
+	rawdb.WriteTd(db, milestone.Hash, milestone.EndBlock, big.NewInt(int64(milestone.TotalDifficulty)))
+
+	if milestone.EndBlock > d.latestCheckpointBlock && d.latestCheckpointBlock > 0 {
+		d.futureCandidateBlocks = append(d.futureCandidateBlocks, milestone.EndBlock)
+	} else if milestone.EndBlock > d.fastForwardBlock {
+		d.setFastForwardBlock(milestone.EndBlock)
+	}
+
+}
+
+func (d *Downloader) UpdateFastForwardBlockFromCheckpoint(checkpoint *checkpoint.Checkpoint) {
+	d.fastForwardMu.Lock()
+	defer d.fastForwardMu.Unlock()
+
+	// Fast Forward just for stateless clients
+	if d.getMode() != StatelessSync {
+		return
+	}
+
+	if checkpoint.EndBlock > d.latestCheckpointBlock {
+		d.latestCheckpointBlock = checkpoint.EndBlock
+
+		// choose next fastforward block
+		nextFastForward := uint64(0)
+
+		found := false
+		for _, candidate := range d.futureCandidateBlocks {
+			if candidate <= d.latestCheckpointBlock && candidate > nextFastForward {
+				nextFastForward = candidate
+				found = true
+			}
+		}
+		if found {
+			d.setFastForwardBlock(nextFastForward)
+		}
+
+		// clean futureCandidateBlocks
+		filteredCandidates := make([]uint64, 0)
+		for _, candidate := range d.futureCandidateBlocks {
+			if candidate > nextFastForward {
+				filteredCandidates = append(filteredCandidates, candidate)
+			}
+		}
+		d.futureCandidateBlocks = filteredCandidates
+	}
+
+}
+
+func (d *Downloader) GetOrWaitFastForwardBlock() uint64 {
+	localHeight := d.blockchain.CurrentBlock().Number.Uint64()
+
+	var fastForwardBlock uint64
+	if d.fastForwardBlock != 0 {
+		fastForwardBlock = d.fastForwardBlock
+	} else {
+		// wait until receive a fast forward block
+		fastForwardBlock = <-d.fastForwardBlockCh
+	}
+
+	distance := (int64(fastForwardBlock) - int64(localHeight))
+	if distance > int64(d.FastForwardThreshold) || localHeight == 0 {
+		log.Debug("StatelessSync: FastForwarding", "fastForwardBlock", fastForwardBlock)
+		return fastForwardBlock
+	} else {
+		return localHeight
+	}
+}
+
+func (d *Downloader) setFastForwardBlock(nextFastForward uint64) {
+	d.fastForwardBlock = nextFastForward
+	select {
+	case d.fastForwardBlockCh <- d.fastForwardBlock:
+	default:
+	}
 }

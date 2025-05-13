@@ -297,6 +297,9 @@ func (w *chainValidatorFake) ProcessCheckpoint(endBlockNum uint64, endBlockHash 
 func (w *chainValidatorFake) ProcessMilestone(endBlockNum uint64, endBlockHash common.Hash)  {}
 func (w *chainValidatorFake) ProcessFutureMilestone(num uint64, hash common.Hash) {
 }
+func (w *chainValidatorFake) UpdateFastForwardMilestone(num uint64, hash common.Hash) {
+}
+
 func (w *chainValidatorFake) GetWhitelistedCheckpoint() (bool, uint64, common.Hash) {
 	return false, 0, common.Hash{}
 }

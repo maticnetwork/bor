@@ -3,7 +3,6 @@
 package ethconfig
 
 import (
-	"encoding/json"
 	"math/big"
 	"time"
 
@@ -16,8 +15,8 @@ import (
 	"github.com/ethereum/go-ethereum/miner"
 )
 
-// MarshalJSON marshals as JSON.
-func (c Config) MarshalJSON() ([]byte, error) {
+// MarshalTOML marshals as TOML.
+func (c Config) MarshalTOML() (interface{}, error) {
 	type Config struct {
 		Genesis                              *core.Genesis `toml:",omitempty"`
 		NetworkId                            uint64
@@ -51,7 +50,6 @@ func (c Config) MarshalJSON() ([]byte, error) {
 		BlobPool                             blobpool.Config
 		GPO                                  gasprice.Config
 		EnablePreimageRecording              bool
-		EnableWitnessCollection              bool `toml:"-"`
 		VMTrace                              string
 		VMTraceJsonConfig                    string
 		DocRoot                              string `toml:"-"`
@@ -74,6 +72,7 @@ func (c Config) MarshalJSON() ([]byte, error) {
 		DevFakeAuthor                        bool     `hcl:"devfakeauthor,optional" toml:"devfakeauthor,optional"`
 		OverrideVerkle                       *big.Int `toml:",omitempty"`
 		EnableBlockTracking                  bool
+		FastForwardThreshold                 uint64
 	}
 	var enc Config
 	enc.Genesis = c.Genesis
@@ -130,11 +129,12 @@ func (c Config) MarshalJSON() ([]byte, error) {
 	enc.DevFakeAuthor = c.DevFakeAuthor
 	enc.OverrideVerkle = c.OverrideVerkle
 	enc.EnableBlockTracking = c.EnableBlockTracking
-	return json.Marshal(&enc)
+	enc.FastForwardThreshold = c.FastForwardThreshold
+	return &enc, nil
 }
 
-// UnmarshalJSON unmarshals from JSON.
-func (c *Config) UnmarshalJSON(input []byte) error {
+// UnmarshalTOML unmarshals from TOML.
+func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 	type Config struct {
 		Genesis                              *core.Genesis `toml:",omitempty"`
 		NetworkId                            *uint64
@@ -168,7 +168,6 @@ func (c *Config) UnmarshalJSON(input []byte) error {
 		BlobPool                             *blobpool.Config
 		GPO                                  *gasprice.Config
 		EnablePreimageRecording              *bool
-		EnableWitnessCollection              *bool `toml:"-"`
 		VMTrace                              *string
 		VMTraceJsonConfig                    *string
 		DocRoot                              *string `toml:"-"`
@@ -191,9 +190,10 @@ func (c *Config) UnmarshalJSON(input []byte) error {
 		DevFakeAuthor                        *bool    `hcl:"devfakeauthor,optional" toml:"devfakeauthor,optional"`
 		OverrideVerkle                       *big.Int `toml:",omitempty"`
 		EnableBlockTracking                  *bool
+		FastForwardThreshold                 *uint64
 	}
 	var dec Config
-	if err := json.Unmarshal(input, &dec); err != nil {
+	if err := unmarshal(&dec); err != nil {
 		return err
 	}
 	if dec.Genesis != nil {
@@ -357,6 +357,9 @@ func (c *Config) UnmarshalJSON(input []byte) error {
 	}
 	if dec.EnableBlockTracking != nil {
 		c.EnableBlockTracking = *dec.EnableBlockTracking
+	}
+	if dec.FastForwardThreshold != nil {
+		c.FastForwardThreshold = *dec.FastForwardThreshold
 	}
 	return nil
 }
