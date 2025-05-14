@@ -46,7 +46,7 @@ func (h *HeimdallGRPCClient) GetLatestSpanV1(ctx context.Context) (*span.Heimdal
 func parseSpan(protoSpan *proto.Span) *span.HeimdallSpan {
 	resp := &span.HeimdallSpan{
 		Span: span.Span{
-			ID:         protoSpan.ID,
+			Id:         protoSpan.ID,
 			StartBlock: protoSpan.StartBlock,
 			EndBlock:   protoSpan.EndBlock,
 		},

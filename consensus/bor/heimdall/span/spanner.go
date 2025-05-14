@@ -88,7 +88,7 @@ func (c *ChainSpanner) GetCurrentSpan(ctx context.Context, headerHash common.Has
 
 	// create new span
 	span := Span{
-		ID:         ret.Number.Uint64(),
+		Id:         ret.Number.Uint64(),
 		StartBlock: ret.StartBlock.Uint64(),
 		EndBlock:   ret.EndBlock.Uint64(),
 	}
@@ -302,7 +302,7 @@ func (c *ChainSpanner) CommitSpan(ctx context.Context, minimalSpan Span, validat
 	}
 
 	log.Info("✅ Committing new span",
-		"id", minimalSpan.ID,
+		"id", minimalSpan.Id,
 		"startBlock", minimalSpan.StartBlock,
 		"endBlock", minimalSpan.EndBlock,
 		"validatorBytes", hex.EncodeToString(validatorBytes),
@@ -310,7 +310,7 @@ func (c *ChainSpanner) CommitSpan(ctx context.Context, minimalSpan Span, validat
 	)
 
 	data, err := c.validatorSet.Pack(method,
-		big.NewInt(0).SetUint64(minimalSpan.ID),
+		big.NewInt(0).SetUint64(minimalSpan.Id),
 		big.NewInt(0).SetUint64(minimalSpan.StartBlock),
 		big.NewInt(0).SetUint64(minimalSpan.EndBlock),
 		validatorBytes,

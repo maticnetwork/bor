@@ -1121,9 +1121,9 @@ func (c *Bor) checkAndCommitSpan(
 ) error {
 	if header.Number.Uint64()%c.config.CalculateSprint(header.Number.Uint64()) == 0 {
 		if hmm.IsHeimdallV2 {
-			c.saveLatestHeimdallSpanV2()
+			c.updateLatestHeimdallSpanV2()
 		} else {
-			c.saveLatestHeimdallSpanV1()
+			c.updateLatestHeimdallSpanV1()
 		}
 	}
 
@@ -1136,57 +1136,57 @@ func (c *Bor) checkAndCommitSpan(
 	}
 
 	if c.needToCommitSpan(span, headerNumber) {
-		return c.FetchAndCommitSpan(ctx, span.ID+1, state, header, chain)
+		return c.FetchAndCommitSpan(ctx, span.Id+1, state, header, chain)
 	}
 
 	return nil
 }
 
-func (c *Bor) getLatestHeimdallSpanV1() (*span.HeimdallSpan, error) {
+func (c *Bor) getLatestHeimdallSpanV1() *span.HeimdallSpan {
 	storedSpanBytes, err := c.db.Get(rawdb.LastHeimdallV1SpanKey)
 	if err != nil {
 		log.Error("Error while fetching heimdallv1 span from db", "error", err)
-		return nil, nil
+		return nil
 	}
 
 	if len(storedSpanBytes) == 0 {
 		log.Info("No heimdallv1 span found in db")
-		return nil, nil
+		return nil
 	}
 
 	var storedSpan span.HeimdallSpan
 	if err := json.Unmarshal(storedSpanBytes, &storedSpan); err != nil {
 		log.Error("Error while unmarshalling heimdallv1 span", "error", err)
-		return nil, nil
+		return nil
 	}
 
-	return &storedSpan, nil
+	return &storedSpan
 }
 
-func (c *Bor) getLatestHeimdallSpanV2() (*borTypes.Span, error) {
+func (c *Bor) getLatestHeimdallSpanV2() *borTypes.Span {
 	storedSpanBytes, err := c.db.Get(rawdb.LastHeimdallV2SpanKey)
 	if err != nil {
 		log.Error("Error while fetching heimdallv2 span from db", "error", err)
-		return nil, nil
+		return nil
 	}
 
 	if len(storedSpanBytes) == 0 {
 		log.Info("No heimdallv2 span found in db")
-		return nil, nil
+		return nil
 	}
 
 	var storedSpan borTypes.Span
 	if err := json.Unmarshal(storedSpanBytes, &storedSpan); err != nil {
 		log.Error("Error while unmarshalling heimdallv2 span", "error", err)
-		return nil, nil
+		return nil
 	}
 
-	return &storedSpan, nil
+	return &storedSpan
 }
 
 const getSpanTimeout = 2 * time.Second
 
-func (c *Bor) saveLatestHeimdallSpanV1() {
+func (c *Bor) updateLatestHeimdallSpanV1() {
 	if c.HeimdallClient == nil {
 		log.Info("saveLatestHeimdallSpan - heimdall client is nil")
 		return
@@ -1200,20 +1200,16 @@ func (c *Bor) saveLatestHeimdallSpanV1() {
 		return
 	}
 
-	storedSpan, err := c.getLatestHeimdallSpanV1()
-	if err != nil {
-		log.Error("Error while fetching last heimdallv1 span from db", "error", err)
-		return
-	}
+	storedSpan := c.getLatestHeimdallSpanV1()
 
 	storedSpanID := uint64(0)
 
 	if storedSpan != nil {
-		storedSpanID = storedSpan.ID
+		storedSpanID = storedSpan.Id
 	}
 
-	if respSpan.ID <= storedSpanID {
-		log.Info("Latest heimdallv1 span is not updated", "storedSpanID", storedSpanID, "respSpanID", respSpan.ID)
+	if respSpan.Id <= storedSpanID {
+		log.Info("Latest heimdallv1 span is not updated", "storedSpanID", storedSpanID, "respSpanID", respSpan.Id)
 		return
 	}
 
@@ -1228,10 +1224,10 @@ func (c *Bor) saveLatestHeimdallSpanV1() {
 		return
 	}
 
-	log.Info("Latest heimdallv1 span is updated", "storedSpanID", storedSpanID, "respSpanID", respSpan.ID)
+	log.Info("Latest heimdallv1 span is updated", "storedSpanID", storedSpanID, "respSpanID", respSpan.Id)
 }
 
-func (c *Bor) saveLatestHeimdallSpanV2() {
+func (c *Bor) updateLatestHeimdallSpanV2() {
 	if c.HeimdallClient == nil {
 		log.Info("saveLatestHeimdallSpan - heimdall client is nil")
 		return
@@ -1245,11 +1241,7 @@ func (c *Bor) saveLatestHeimdallSpanV2() {
 		return
 	}
 
-	storedSpan, err := c.getLatestHeimdallSpanV2()
-	if err != nil {
-		log.Error("Error while fetching last heimdallv2 span from db", "error", err)
-		return
-	}
+	storedSpan := c.getLatestHeimdallSpanV2()
 
 	storedSpanID := uint64(0)
 
@@ -1317,7 +1309,7 @@ func (c *Bor) FetchAndCommitSpan(
 		}
 
 		minSpan = span.Span{
-			ID:         s.ID,
+			Id:         s.Id,
 			StartBlock: s.StartBlock,
 			EndBlock:   s.EndBlock,
 		}
@@ -1350,16 +1342,11 @@ func (c *Bor) FetchAndCommitSpan(
 		getSpanEndBlock := func(startBlock uint64, spanLength uint64) uint64 {
 			return startBlock + spanLength
 		}
-		retryWithBackoff := func(exec func() (bool, error)) error {
+		retryWithBackoff := func(exec func() bool) {
 			i := 1
 			for {
-				done, err := exec()
-				if err != nil {
-					return err
-				}
-
-				if done {
-					return nil
+				if done := exec(); done {
+					return
 				}
 
 				time.Sleep(time.Duration(i) * time.Second)
@@ -1372,35 +1359,27 @@ func (c *Bor) FetchAndCommitSpan(
 
 		if hmm.IsHeimdallV2 {
 			var response *borTypes.Span
-			var err error
 
-			err = retryWithBackoff(func() (bool, error) {
+			retryWithBackoff(func() bool {
+				var err error
 				response, err = c.HeimdallClient.GetSpanV2(ctx, newSpanID)
 				if err == nil {
-					return true, nil
+					return true
 				}
 				log.Error("Error while fetching heimdallv2 span", "error", err)
-				if response, err = c.getLatestHeimdallSpanV2(); err != nil {
-					log.Error("Error while fetching last heimdallv2 span from db", "error", err)
-					return false, err
-				}
+				response = c.getLatestHeimdallSpanV2()
 				if response != nil {
 					response.Id = newSpanID
 					spanLength := getSpanLength(response.StartBlock, response.EndBlock)
 					response.StartBlock = getSpanStartBlock()
 					response.EndBlock = getSpanEndBlock(response.StartBlock, spanLength)
-					return true, nil
+					return true
 				}
-				return false, nil
+				return false
 			})
 
-			if err != nil {
-				log.Error("Error while fetching heimdallv2 span", "error", err)
-				return err
-			}
-
 			minSpan = span.Span{
-				ID:         response.Id,
+				Id:         response.Id,
 				StartBlock: response.StartBlock,
 				EndBlock:   response.EndBlock,
 			}
@@ -1415,31 +1394,31 @@ func (c *Bor) FetchAndCommitSpan(
 			}
 		} else {
 			var response *span.HeimdallSpan
-			var err error
 
-			err = retryWithBackoff(func() (bool, error) {
+			retryWithBackoff(func() bool {
+				var err error
 				response, err = c.HeimdallClient.GetSpanV1(ctx, newSpanID)
 				if err == nil {
-					return true, nil
+					return true
 				}
 				log.Error("Error while fetching heimdallv1 span", "error", err)
-				if response, err = c.getLatestHeimdallSpanV1(); err != nil {
+				if response = c.getLatestHeimdallSpanV1(); err != nil {
 					log.Error("Error while fetching last heimdallv1 span from db", "error", err)
-					return false, err
+					return false
 				}
 				if response != nil {
-					response.ID = newSpanID
+					response.Id = newSpanID
 					spanLength := getSpanLength(response.StartBlock, response.EndBlock)
 					response.StartBlock = getSpanStartBlock()
 					response.EndBlock = getSpanEndBlock(response.StartBlock, spanLength)
-					return true, nil
+					return true
 				}
 
-				return false, nil
+				return false
 			})
 
 			minSpan = span.Span{
-				ID:         response.ID,
+				Id:         response.Id,
 				StartBlock: response.StartBlock,
 				EndBlock:   response.EndBlock,
 			}
@@ -1627,7 +1606,7 @@ func (c *Bor) getNextHeimdallSpanForTest(
 	}
 
 	// new span
-	spanBor.ID = newSpanID
+	spanBor.Id = newSpanID
 	if spanBor.EndBlock == 0 {
 		spanBor.StartBlock = 256
 	} else {
