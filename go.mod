@@ -62,7 +62,7 @@ require (
 	github.com/kilic/bls12-381 v0.1.0
 	github.com/kylelemons/godebug v1.1.0
 	github.com/maticnetwork/crand v1.0.2
-	github.com/maticnetwork/polyproto v0.0.4
+	github.com/maticnetwork/polyproto v0.0.5
 	github.com/mattn/go-colorable v0.1.13
 	github.com/mattn/go-isatty v0.0.20
 	github.com/mitchellh/cli v1.1.5

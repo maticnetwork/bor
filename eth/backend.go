@@ -33,6 +33,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/beacon"
 	"github.com/ethereum/go-ethereum/consensus/bor"
+	"github.com/ethereum/go-ethereum/consensus/bor/heimdall"
 	"github.com/ethereum/go-ethereum/consensus/clique"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/bloombits"
@@ -52,6 +53,7 @@ import (
 	"github.com/ethereum/go-ethereum/eth/tracers"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
+	hmm "github.com/ethereum/go-ethereum/heimdall-migration-monitor"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/internal/shutdowncheck"
 	"github.com/ethereum/go-ethereum/log"
@@ -639,6 +641,8 @@ func (s *Ethereum) Start() error {
 
 	go s.startCheckpointWhitelistService()
 	go s.startMilestoneWhitelistService()
+	go s.startNoAckMilestoneService()
+	go s.startNoAckMilestoneByIDService()
 
 	return nil
 }
@@ -649,7 +653,8 @@ var (
 )
 
 const (
-	whitelistTimeout = 30 * time.Second
+	whitelistTimeout      = 30 * time.Second
+	noAckMilestoneTimeout = 4 * time.Second
 )
 
 // StartCheckpointWhitelistService starts the goroutine to fetch checkpoints and update the
@@ -669,16 +674,34 @@ func (s *Ethereum) startMilestoneWhitelistService() {
 	ethHandler, bor, _ := s.getHandler()
 
 	// If heimdall ws is available use WS subscription to new milestone events instead of polling
-	if bor != nil && bor.HeimdallWSClient != nil {
+	if hmm.IsHeimdallV2 && bor != nil && bor.HeimdallWSClient != nil {
 		s.subscribeAndHandleMilestone(context.Background(), ethHandler, bor)
 	} else {
 		const (
-			tickerDuration = 50 * time.Millisecond
+			tickerDuration = 2 * time.Second
 			fnName         = "whitelist milestone"
 		)
 
 		s.retryHeimdallHandler(s.fetchAndHandleMilestone, tickerDuration, whitelistTimeout, fnName)
 	}
+}
+
+func (s *Ethereum) startNoAckMilestoneService() {
+	const (
+		tickerDuration = 6 * time.Second
+		fnName         = "no-ack-milestone service"
+	)
+
+	s.retryHeimdallHandler(s.handleNoAckMilestone, tickerDuration, noAckMilestoneTimeout, fnName)
+}
+
+func (s *Ethereum) startNoAckMilestoneByIDService() {
+	const (
+		tickerDuration = 1 * time.Minute
+		fnName         = "no-ack-milestone-by-id service"
+	)
+
+	s.retryHeimdallHandler(s.handleNoAckMilestoneByID, tickerDuration, noAckMilestoneTimeout, fnName)
 }
 
 func (s *Ethereum) retryHeimdallHandler(fn heimdallHandler, tickerDuration time.Duration, timeout time.Duration, fnName string) {
@@ -754,6 +777,44 @@ func (s *Ethereum) fetchAndHandleMilestone(ctx context.Context, ethHandler *ethH
 	}
 
 	return ethHandler.handleMilestone(ctx, s, milestone, verifier)
+}
+
+func (s *Ethereum) handleNoAckMilestone(ctx context.Context, ethHandler *ethHandler, bor *bor.Bor) error {
+	if hmm.IsHeimdallV2 {
+		return nil
+	}
+
+	milestoneID, err := ethHandler.fetchNoAckMilestone(ctx, bor)
+
+	if errors.Is(err, heimdall.ErrServiceUnavailable) {
+		return nil
+	}
+
+	if err != nil {
+		return err
+	}
+
+	ethHandler.downloader.RemoveMilestoneID(milestoneID)
+
+	return nil
+}
+
+func (s *Ethereum) handleNoAckMilestoneByID(ctx context.Context, ethHandler *ethHandler, bor *bor.Bor) error {
+	if hmm.IsHeimdallV2 {
+		return nil
+	}
+
+	milestoneIDs := ethHandler.downloader.GetMilestoneIDsList()
+
+	for _, milestoneID := range milestoneIDs {
+		// todo: check if we can ignore the error
+		err := ethHandler.fetchNoAckMilestoneByID(ctx, bor, milestoneID)
+		if err == nil {
+			ethHandler.downloader.RemoveMilestoneID(milestoneID)
+		}
+	}
+
+	return nil
 }
 
 func (s *Ethereum) subscribeAndHandleMilestone(ctx context.Context, ethHandler *ethHandler, bor *bor.Bor) error {

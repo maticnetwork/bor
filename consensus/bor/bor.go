@@ -23,6 +23,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
 	balance_tracing "github.com/ethereum/go-ethereum/core/tracing"
+	hmm "github.com/ethereum/go-ethereum/heimdall-migration-monitor"
 
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/bor/api"
@@ -1125,7 +1126,7 @@ func (c *Bor) checkAndCommitSpan(
 	}
 
 	if c.needToCommitSpan(span, headerNumber) {
-		return c.FetchAndCommitSpan(ctx, span.ID+1, state, header, chain)
+		return c.FetchAndCommitSpan(ctx, span.Id+1, state, header, chain)
 	}
 
 	return nil
@@ -1172,7 +1173,7 @@ func (c *Bor) FetchAndCommitSpan(
 		}
 
 		minSpan = span.Span{
-			ID:         s.ID,
+			Id:         s.Id,
 			StartBlock: s.StartBlock,
 			EndBlock:   s.EndBlock,
 		}
@@ -1196,24 +1197,58 @@ func (c *Bor) FetchAndCommitSpan(
 			producers = append(producers, m)
 		}
 	} else {
-		response, err := c.HeimdallClient.GetSpan(ctx, newSpanID)
-		if err != nil {
-			return err
-		}
+		if hmm.IsHeimdallV2 {
+			response, err := c.HeimdallClient.GetSpanV2(ctx, newSpanID)
+			if err != nil {
+				log.Error("Error while fetching heimdallv2 span", "error", err)
+				return err
+			}
 
-		minSpan = span.Span{
-			ID:         response.Id,
-			StartBlock: response.StartBlock,
-			EndBlock:   response.EndBlock,
-		}
-		chainId = response.BorChainId
+			minSpan = span.Span{
+				Id:         response.Id,
+				StartBlock: response.StartBlock,
+				EndBlock:   response.EndBlock,
+			}
+			chainId = response.BorChainId
 
-		for _, val := range response.ValidatorSet.Validators {
-			validators = append(validators, val.MinimalVal())
-		}
+			for _, val := range response.ValidatorSet.Validators {
+				validators = append(validators, val.MinimalVal())
+			}
 
-		for _, val := range response.SelectedProducers {
-			producers = append(producers, val.MinimalVal())
+			for _, val := range response.SelectedProducers {
+				producers = append(producers, val.MinimalVal())
+			}
+		} else {
+			response, err := c.HeimdallClient.GetSpanV1(ctx, newSpanID)
+			if err != nil {
+				log.Error("Error while fetching heimdallv1 span", "error", err)
+				return err
+			}
+
+			minSpan = span.Span{
+				Id:         response.Id,
+				StartBlock: response.StartBlock,
+				EndBlock:   response.EndBlock,
+			}
+			chainId = response.ChainID
+
+			for _, val := range response.ValidatorSet.Validators {
+				m := stakeTypes.MinimalVal{
+					ID:          val.ID,
+					VotingPower: uint64(val.VotingPower),
+					Signer:      val.Address,
+				}
+				validators = append(validators, m)
+			}
+
+			for _, val := range response.SelectedProducers {
+				m := stakeTypes.MinimalVal{
+					ID:          val.ID,
+					VotingPower: uint64(val.VotingPower),
+					Signer:      val.Address,
+				}
+				producers = append(producers, m)
+			}
 		}
 	}
 
@@ -1271,7 +1306,12 @@ func (c *Bor) CommitStates(
 		"fromID", from,
 		"to", to.Format(time.RFC3339))
 
-	eventRecords, err := c.HeimdallClient.StateSyncEvents(context.Background(), from, to.Unix())
+	var eventRecords []*clerk.EventRecordWithTime
+	if hmm.IsHeimdallV2 {
+		eventRecords, err = c.HeimdallClient.StateSyncEventsV2(context.Background(), from, to.Unix())
+	} else {
+		eventRecords, err = c.HeimdallClient.StateSyncEventsV1(context.Background(), from, to.Unix())
+	}
 	if err != nil {
 		log.Error("Error occurred when fetching state sync events", "fromID", from, "to", to.Unix(), "err", err)
 	}
@@ -1372,7 +1412,7 @@ func (c *Bor) getNextHeimdallSpanForTest(
 	}
 
 	// new span
-	spanBor.ID = newSpanID
+	spanBor.Id = newSpanID
 	if spanBor.EndBlock == 0 {
 		spanBor.StartBlock = 256
 	} else {
