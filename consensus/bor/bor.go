@@ -1402,10 +1402,7 @@ func (c *Bor) FetchAndCommitSpan(
 					return true
 				}
 				log.Error("Error while fetching heimdallv1 span", "error", err)
-				if response = c.getLatestHeimdallSpanV1(); err != nil {
-					log.Error("Error while fetching last heimdallv1 span from db", "error", err)
-					return false
-				}
+				response = c.getLatestHeimdallSpanV1()
 				if response != nil {
 					response.Id = newSpanID
 					spanLength := getSpanLength(response.StartBlock, response.EndBlock)
