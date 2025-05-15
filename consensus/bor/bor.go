@@ -349,8 +349,9 @@ func (c *Bor) verifyHeader(chain consensus.ChainHeaderReader, header *types.Head
 
 	number := header.Number.Uint64()
 
-	// Don't waste time checking blocks from the future
-	if header.Time > uint64(time.Now().Unix()) {
+	// Don't waste time checking blocks from the future but allow a buffer of block time for
+	// early block announcements.
+	if header.Time-c.config.CalculatePeriod(number) > uint64(time.Now().Unix()) {
 		return consensus.ErrFutureBlock
 	}
 
@@ -827,6 +828,15 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 	header.Time = parent.Time + CalcProducerDelay(number, succession, c.config)
 	if header.Time < uint64(time.Now().Unix()) {
 		header.Time = uint64(time.Now().Unix())
+	} else {
+		// For primary validators, wait until previous block time is completed before starting
+		// to produce next block
+		if succession == 0 {
+			startTime := time.Unix(int64(header.Time-c.config.CalculatePeriod(number)), 0)
+			if time.Now().Before(startTime) {
+				time.Sleep(time.Until(startTime))
+			}
+		}
 	}
 
 	return nil
@@ -1022,7 +1032,12 @@ func (c *Bor) Seal(chain consensus.ChainHeaderReader, block *types.Block, result
 	}
 
 	// Sweet, the protocol permits us to sign the block, wait for our time
-	delay := time.Unix(int64(header.Time), 0).Sub(time.Now()) // nolint: gosimple
+	delay := time.Until(time.Unix(int64(header.Time), 0)) // Set the delay until header time for non-primary validators
+	if successionNumber == 0 {
+		// For primary producers, set the delay to `header.Time - block time` instead of `header.Time`
+		// for early block announcement instead of waiting for full block time.
+		delay = time.Until(time.Unix(int64(header.Time-c.config.CalculatePeriod(number)), 0))
+	}
 	// wiggle was already accounted for in header.Time, this is just for logging
 	wiggle := time.Duration(successionNumber) * time.Duration(c.config.CalculateBackupMultiplier(number)) * time.Second
 
