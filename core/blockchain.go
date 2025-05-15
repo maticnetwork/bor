@@ -2007,9 +2007,11 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 
 	if reorg {
 		// Reorganise the chain if the parent is not the head block
-		if !stateless && (block.ParentHash() != currentBlock.Hash()) {
+		if block.ParentHash() != currentBlock.Hash() {
 			if err = bc.reorg(currentBlock, block); err != nil {
-				return NonStatTy, err
+				if !(stateless && err == errInvalidNewChain) { // fast forward may raise an invalid new chain error, skipping for stateless
+					return NonStatTy, err
+				}
 			}
 		}
 
@@ -2184,12 +2186,62 @@ func (bc *BlockChain) InsertChainStateless(chain types.Blocks, witnesses []*stat
 		}
 	}
 
+	// Pre-checks passed, start the full block imports
+	if !bc.chainmu.TryLock() {
+		return 0, errChainStopped
+	}
+	defer bc.chainmu.Unlock()
+
+	// Start the parallel header verifier
+	headers := make([]*types.Header, len(chain))
+	for i, block := range chain {
+		headers[i] = block.Header()
+	}
+	abort, results := bc.engine.VerifyHeaders(bc, headers)
+	defer close(abort)
+
+	// Check the validity of incoming chain
+	isValid, err := bc.forker.ValidateReorg(bc.CurrentBlock(), headers)
+	if err != nil {
+		return 0, err
+	}
+
+	if !isValid {
+		// The chain to be imported is invalid as the blocks doesn't match with
+		// the whitelisted block number.
+		return 0, whitelist.ErrMismatch
+	}
+
 	// In stateless mode, we process blocks one by one without committing the state
 	var processed int
 	for i, block := range chain {
+		// Check if block is already known before attempting to process
+
+		if bc.HasBlock(block.Hash(), block.NumberU64()) {
+			log.Trace("Skipping known block in InsertChainStateless", "number", block.NumberU64(), "hash", block.Hash())
+			processed++ // Count as processed since we're skipping it
+			// We need to ensure the header verification result for this block is consumed
+			// even though we are skipping the processing.
+			if err := <-results; err != nil {
+				// If header verification failed for this known block (shouldn't happen often),
+				// it might indicate a deeper issue, but we can't proceed with the chain.
+				log.Warn("Header verification failed for known block", "number", block.NumberU64(), "hash", block.Hash(), "err", err)
+				return processed - 1, fmt.Errorf("header verification failed for known block %d (%s): %w", block.NumberU64(), block.Hash(), err)
+			}
+			continue // Skip to the next block
+		}
 		// If the chain is terminating, don't even bother starting up.
 		if bc.insertStopped() {
 			return processed, errInsertionInterrupted
+		}
+
+		// Wait for the block's verification to complete
+		if err := <-results; err != nil {
+			// ignoring Unknown Ancestor error for fast forward scenario
+			if i == 0 && err == consensus.ErrUnknownAncestor {
+				continue
+			}
+			return processed, err
 		}
 
 		// Get the witness for this block if available
