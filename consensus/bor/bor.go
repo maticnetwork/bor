@@ -350,7 +350,9 @@ func (c *Bor) verifyHeader(chain consensus.ChainHeaderReader, header *types.Head
 	number := header.Number.Uint64()
 
 	// Don't waste time checking blocks from the future but allow a buffer of block time for
-	// early block announcements.
+	// early block announcements. Note that this is a loose check and would allow early blocks
+	// from non-primary producer. Such blocks will be rejected later when we know the succession
+	// number of the signer in the current sprint.
 	if header.Time-c.config.CalculatePeriod(number) > uint64(time.Now().Unix()) {
 		return consensus.ErrFutureBlock
 	}
@@ -708,6 +710,13 @@ func (c *Bor) verifySeal(chain consensus.ChainHeaderReader, header *types.Header
 		parent = parents[len(parents)-1]
 	} else if number > 0 {
 		parent = chain.GetHeader(header.ParentHash, number-1)
+	}
+
+	// Reject blocks form non-primary producers if they're earlier than the expected time
+	if succession != 0 {
+		if header.Time > uint64(time.Now().Unix()) {
+			return consensus.ErrFutureBlock
+		}
 	}
 
 	if IsBlockEarly(parent, header, number, succession, c.config) {
