@@ -296,6 +296,18 @@ func (ps *peerSet) peer(id string) *ethPeer {
 	return ps.peers[id]
 }
 
+func (ps *peerSet) getOnePeerWithWitness(hash common.Hash) *ethPeer {
+	ps.lock.RLock()
+	defer ps.lock.RUnlock()
+
+	for _, p := range ps.peers {
+		if p.witPeer != nil && p.witPeer.KnownWitnessContainsHash(hash) {
+			return p
+		}
+	}
+	return nil
+}
+
 // peersWithoutWitness retrives a list of peers that do nor have a given witness
 // in their set of known hashes so it might be propagated to them.
 // This is used to avoid sending the same witness to the same peer multiple times.

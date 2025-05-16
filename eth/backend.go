@@ -316,6 +316,8 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		checker:              checker,
 		enableBlockTracking:  eth.config.EnableBlockTracking,
 		txAnnouncementOnly:   eth.p2pServer.TxAnnouncementOnly,
+		syncWithWitnesses:    eth.config.SyncWithWitnesses,
+		computeWitness:       eth.config.WitnessProtocol,
 		FastForwardThreshold: config.FastForwardThreshold,
 	}); err != nil {
 		return nil, err
@@ -661,7 +663,7 @@ func (s *Ethereum) startMilestoneWhitelistService() {
 		s.subscribeAndHandleMilestone(context.Background(), ethHandler, bor)
 	} else {
 		const (
-			tickerDuration = 1000 * time.Millisecond
+			tickerDuration = 30000 * time.Millisecond
 			fnName         = "whitelist milestone"
 		)
 

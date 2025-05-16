@@ -207,6 +207,9 @@ type Config struct {
 	// WitnessProtocol enabless the wit protocol
 	WitnessProtocol bool
 
+	// SyncWithWitnesses enables syncing blocks with witnesses
+	SyncWithWitnesses bool
+
 	// Develop Fake Author mode to produce blocks without authorisation
 	DevFakeAuthor bool `hcl:"devfakeauthor,optional" toml:"devfakeauthor,optional"`
 

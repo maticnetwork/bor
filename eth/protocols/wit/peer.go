@@ -35,9 +35,9 @@ type Peer struct {
 
 	logger log.Logger // Contextual logger with the peer id injected
 
-	knownWitnesses    *knownCache             // Set of witness hashes (`witness.Headers[0].Hash()`) known to be known by this peer
-	queuedWitness     chan *stateless.Witness // Queue of witness to broadcast to this peer
-	queuedWitnessAnns chan common.Hash        // Queue of witness announcements to this peer
+	knownWitnesses    *knownCache                  // Set of witness hashes (`witness.Headers[0].Hash()`) known to be known by this peer
+	queuedWitness     chan *stateless.Witness      // Queue of witness to broadcast to this peer
+	queuedWitnessAnns chan *NewWitnessHashesPacket // Queue of witness announcements to this peer
 
 	reqDispatch chan *request  // Dispatch channel to send witness requests and track them until fulfillment
 	reqCancel   chan *cancel   // Dispatch channel to cancel pending witness requests
@@ -60,7 +60,7 @@ func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter, logger log.Logger)
 		logger:            logger.With("peer", id),
 		knownWitnesses:    newKnownCache(maxKnownWitnesses),
 		queuedWitness:     make(chan *stateless.Witness, maxQueuedWitnesses),
-		queuedWitnessAnns: make(chan common.Hash, maxQueuedWitnessAnns),
+		queuedWitnessAnns: make(chan *NewWitnessHashesPacket, maxQueuedWitnessAnns),
 		reqDispatch:       make(chan *request),
 		reqCancel:         make(chan *cancel),
 		resDispatch:       make(chan *response),
@@ -88,10 +88,8 @@ func (p *Peer) sendNewWitness(witness *stateless.Witness) error {
 }
 
 // sendNewWitnessHashes sends witness hashes to the peer
-func (p *Peer) sendNewWitnessHashes(hashes []common.Hash) error {
-	return p2p.Send(p.rw, NewWitnessHashesMsg, &NewWitnessHashesPacket{
-		Hashes: hashes,
-	})
+func (p *Peer) sendNewWitnessHashes(packet *NewWitnessHashesPacket) error {
+	return p2p.Send(p.rw, NewWitnessHashesMsg, packet)
 }
 
 // AsyncSendNewWitness queues an entire witness for broadcast to the peer. The
@@ -113,13 +111,16 @@ func (p *Peer) AsyncSendNewWitness(witness *stateless.Witness) {
 }
 
 // AsyncSendNewWitnessHash queues witness hash for broadcast to the peer.
-func (p *Peer) AsyncSendNewWitnessHash(hash common.Hash) {
+func (p *Peer) AsyncSendNewWitnessHash(hash common.Hash, number uint64) {
 	p.lock.RLock()
 	defer p.lock.RUnlock()
 
 	// Queue the witness hashes for broadcast
 	select {
-	case p.queuedWitnessAnns <- hash:
+	case p.queuedWitnessAnns <- &NewWitnessHashesPacket{
+		Hashes:  []common.Hash{hash},
+		Numbers: []uint64{number},
+	}:
 		p.knownWitnesses.Add(hash)
 	default:
 		p.logger.Debug("Dropped witness hashes propagation.", "hashes", hash, "peer", p.id)
