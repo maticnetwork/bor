@@ -3,6 +3,7 @@ package bor
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -1268,6 +1269,36 @@ func (c *Bor) updateLatestHeimdallSpanV2() {
 	log.Info("Latest heimdallv2 span is updated", "storedSpanID", storedSpanID, "respSpanID", respSpan.Id)
 }
 
+func (c *Bor) setStartBlockHeimdallSpanID(startBlock, spanID uint64) error {
+	spanIDBytes := make([]byte, 8)
+	binary.BigEndian.PutUint64(spanIDBytes, spanID)
+
+	startBlockBytes := make([]byte, 8)
+	binary.BigEndian.PutUint64(startBlockBytes, startBlock)
+
+	if err := c.db.Put(append(rawdb.SpanStartBlockToHeimdallSpanIDKey, startBlockBytes...), spanIDBytes); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *Bor) getStartBlockHeimdallSpanID(startBlock uint64) (uint64, error) {
+	startBlockBytes := make([]byte, 8)
+	binary.BigEndian.PutUint64(startBlockBytes, startBlock)
+
+	spanIDBytes, err := c.db.Get(append(rawdb.SpanStartBlockToHeimdallSpanIDKey, startBlockBytes...))
+	if err != nil {
+		return 0, err
+	}
+
+	if len(spanIDBytes) == 0 {
+		return 0, fmt.Errorf("no heimdall span id found for start block %d", startBlock)
+	}
+	spanID := binary.BigEndian.Uint64(spanIDBytes)
+	return spanID, nil
+}
+
 func (c *Bor) needToCommitSpan(currentSpan *span.Span, headerNumber uint64) bool {
 	// if span is nil
 	if currentSpan == nil {
@@ -1369,6 +1400,11 @@ func (c *Bor) FetchAndCommitSpan(
 				log.Error("Error while fetching heimdallv2 span", "error", err)
 				response = c.getLatestHeimdallSpanV2()
 				if response != nil {
+					if err := c.setStartBlockHeimdallSpanID(response.StartBlock, response.Id); err != nil {
+						log.Error("Error while saving heimdallv2 span id to db", "error", err)
+						return false
+					}
+
 					response.Id = newSpanID
 					spanLength := getSpanLength(response.StartBlock, response.EndBlock)
 					response.StartBlock = getSpanStartBlock()
@@ -1404,6 +1440,11 @@ func (c *Bor) FetchAndCommitSpan(
 				log.Error("Error while fetching heimdallv1 span", "error", err)
 				response = c.getLatestHeimdallSpanV1()
 				if response != nil {
+					if err := c.setStartBlockHeimdallSpanID(response.StartBlock, response.Id); err != nil {
+						log.Error("Error while saving heimdallv1 span id to db", "error", err)
+						return false
+					}
+
 					response.Id = newSpanID
 					spanLength := getSpanLength(response.StartBlock, response.EndBlock)
 					response.StartBlock = getSpanStartBlock()
