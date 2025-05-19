@@ -65,6 +65,7 @@ func (c *HeimdallWSClient) tryUntilSubscribeMilestoneEvents(ctx context.Context)
 		conn, _, err := websocket.DefaultDialer.Dial(c.url, nil)
 		if err != nil {
 			log.Error("failed to dial websocket on heimdall ws subscription", "err", err)
+			continue
 		}
 		c.mu.Lock()
 		c.conn = conn
