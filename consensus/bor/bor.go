@@ -1400,15 +1400,16 @@ func (c *Bor) FetchAndCommitSpan(
 				log.Error("Error while fetching heimdallv2 span", "error", err)
 				response = c.getLatestHeimdallSpanV2()
 				if response != nil {
-					if err := c.setStartBlockHeimdallSpanID(response.StartBlock, response.Id); err != nil {
-						log.Error("Error while saving heimdallv2 span id to db", "error", err)
-						return false
-					}
-
+					originalSpanID := response.Id
 					response.Id = newSpanID
 					spanLength := getSpanLength(response.StartBlock, response.EndBlock)
 					response.StartBlock = getSpanStartBlock()
 					response.EndBlock = getSpanEndBlock(response.StartBlock, spanLength)
+
+					if err := c.setStartBlockHeimdallSpanID(response.StartBlock, originalSpanID); err != nil {
+						log.Error("Error while saving heimdallv2 span id to db", "error", err)
+						return false
+					}
 					return true
 				}
 				return false
@@ -1440,15 +1441,16 @@ func (c *Bor) FetchAndCommitSpan(
 				log.Error("Error while fetching heimdallv1 span", "error", err)
 				response = c.getLatestHeimdallSpanV1()
 				if response != nil {
-					if err := c.setStartBlockHeimdallSpanID(response.StartBlock, response.Id); err != nil {
-						log.Error("Error while saving heimdallv1 span id to db", "error", err)
-						return false
-					}
-
+					originalSpanID := response.Id
 					response.Id = newSpanID
 					spanLength := getSpanLength(response.StartBlock, response.EndBlock)
 					response.StartBlock = getSpanStartBlock()
 					response.EndBlock = getSpanEndBlock(response.StartBlock, spanLength)
+
+					if err := c.setStartBlockHeimdallSpanID(response.StartBlock, originalSpanID); err != nil {
+						log.Error("Error while saving heimdallv1 span id to db", "error", err)
+						return false
+					}
 					return true
 				}
 
