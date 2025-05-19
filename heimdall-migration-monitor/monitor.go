@@ -10,12 +10,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/ethdb"
 	log "github.com/ethereum/go-ethereum/log"
 )
 
 var IsHeimdallV2, firstSuccessfulCheckPassed bool
 
-func StartHeimdallMigrationMonitor(heimdallAPIUrl string) {
+func StartHeimdallMigrationMonitor(heimdallAPIUrl string, db ethdb.Database) {
 	parsedURL, err := url.Parse(heimdallAPIUrl)
 	if err != nil {
 		panic(fmt.Errorf("error parsing heimdallUrl: %w", err))
@@ -31,7 +33,9 @@ func StartHeimdallMigrationMonitor(heimdallAPIUrl string) {
 
 	heimdallRPCUrl := parsedURL.String()
 
-	go heimdallMigrationMonitor(heimdallRPCUrl)
+	IsHeimdallV2 = getIsHeimdallV2Flag(db)
+
+	go heimdallMigrationMonitor(heimdallRPCUrl, db)
 }
 
 func WaitFirstSuccessfulCheck() {
@@ -45,7 +49,7 @@ func WaitFirstSuccessfulCheck() {
 	}
 }
 
-func heimdallMigrationMonitor(heimdallUrl string) {
+func heimdallMigrationMonitor(heimdallUrl string, db ethdb.Database) {
 
 	isFirstCheck := true
 	for {
@@ -91,11 +95,43 @@ func heimdallMigrationMonitor(heimdallUrl string) {
 		// TODO: We are not interested just in the version but if also the network is building blocks
 		// Set flag to true if version is 0.38.x or above
 		if minor >= 38 {
+			if !IsHeimdallV2 {
+				storeIsHeimdallV2Flag(db)
+			}
 			IsHeimdallV2 = true
 		} else {
+			if IsHeimdallV2 {
+				storeIsHeimdallV2Flag(db)
+			}
 			IsHeimdallV2 = false
 		}
 
 		firstSuccessfulCheckPassed = true
 	}
+}
+
+func storeIsHeimdallV2Flag(db ethdb.Database) {
+	if err := db.Put(rawdb.IsHeimdallV2Key, []byte(strconv.FormatBool(IsHeimdallV2))); err != nil {
+		log.Error("Error storing IsHeimdallV2 flag", "err", err)
+	}
+}
+
+func getIsHeimdallV2Flag(db ethdb.Database) bool {
+	value, err := db.Get(rawdb.IsHeimdallV2Key)
+	if err != nil {
+		log.Error("Error getting IsHeimdallV2 flag", "err", err)
+		return false
+	}
+
+	if value == nil {
+		return false
+	}
+
+	isHeimdallV2, err := strconv.ParseBool(string(value))
+	if err != nil {
+		log.Error("Error parsing IsHeimdallV2 flag", "err", err)
+		return false
+	}
+
+	return isHeimdallV2
 }

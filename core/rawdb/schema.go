@@ -156,6 +156,8 @@ var (
 
 	SpanStartBlockToHeimdallSpanIDKey = []byte("spanStartBlockToHeimdallSpanID-") // span start block to heimdall span id key
 
+	IsHeimdallV2Key = []byte("isHeimdallV2") // flag that says if we are working with heimdall v2
+
 	preimageCounter    = metrics.NewRegisteredCounter("db/preimage/total", nil)
 	preimageHitCounter = metrics.NewRegisteredCounter("db/preimage/hits", nil)
 )

@@ -276,7 +276,7 @@ func NewServer(config *Config, opts ...serverOption) (*Server, error) {
 	}
 
 	if !config.Developer.Enabled {
-		hmm.StartHeimdallMigrationMonitor(config.Heimdall.URL)
+		hmm.StartHeimdallMigrationMonitor(config.Heimdall.URL, srv.backend.ChainDb())
 		hmm.WaitFirstSuccessfulCheck()
 	}
 
