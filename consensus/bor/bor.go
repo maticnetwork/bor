@@ -356,13 +356,18 @@ func (c *Bor) verifyHeader(chain consensus.ChainHeaderReader, header *types.Head
 		// from non-primary producer. Such blocks will be rejected later when we know the succession
 		// number of the signer in the current sprint.
 		if header.Time-c.config.CalculatePeriod(number) > uint64(time.Now().Unix()) {
+			log.Info("[manav] verify: bhilai activated, failed", "number", number, "header.Time", header.Time, "period", c.config.CalculatePeriod(number), "now", uint64(time.Now().Unix()))
 			return consensus.ErrFutureBlock
+		} else {
+			log.Info("[manav] verify: bhilai activated, success", "number", number)
 		}
 	} else {
 		// Don't waste time checking blocks from the future
 		if header.Time > uint64(time.Now().Unix()) {
+			log.Info("[manav] verify: bhilai not activated, failed", "number", number, "header.Time", header.Time, "now", uint64(time.Now().Unix()))
 			return consensus.ErrFutureBlock
 		}
+		log.Info("[manav] verify: bhilai not activated, success", "number", number)
 	}
 
 	if err := validateHeaderExtraField(header.Extra); err != nil {
@@ -723,8 +728,13 @@ func (c *Bor) verifySeal(chain consensus.ChainHeaderReader, header *types.Header
 	// Post Bhilai HF, reject blocks form non-primary producers if they're earlier than the expected time
 	if c.config.IsBhilai(header.Number) && succession != 0 {
 		if header.Time > uint64(time.Now().Unix()) {
+			log.Info("[manav] verify2: bhilai activated, failed", "number", number, "header.Time", header.Time, "now", uint64(time.Now().Unix()), "succession", succession)
 			return consensus.ErrFutureBlock
+		} else {
+			log.Info("[manav] verify2: bhilai activated, success", "number", number)
 		}
+	} else {
+		log.Info("[manav] verify2: bhilai not activated, success", "number", number)
 	}
 
 	if IsBlockEarly(parent, header, number, succession, c.config) {
@@ -1051,7 +1061,9 @@ func (c *Bor) Seal(chain consensus.ChainHeaderReader, block *types.Block, result
 			// for early block announcement instead of waiting for full block time.
 			delay = time.Until(time.Unix(int64(header.Time-c.config.CalculatePeriod(number)), 0))
 		}
+		log.Info("[manav] seal: bhilai activated, setting delay before sending block", "delay", delay, "succession", successionNumber, "until header time", time.Until(time.Unix(int64(header.Time), 0)))
 	} else {
+		log.Info("[manav] seal: bhilai not activated")
 		delay = time.Until(time.Unix(int64(header.Time), 0)) // Wait until we reach header time
 	}
 
