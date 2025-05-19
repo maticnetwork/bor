@@ -28,7 +28,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"runtime/debug"
 	"sort"
 	"strings"
 	"sync"
@@ -2208,10 +2207,9 @@ func (bc *BlockChain) InsertChainStateless(chain types.Blocks, witnesses []*stat
 		// Wait for the block's verification to complete
 		if err := <-results; err != nil {
 			// ignoring Unknown Ancestor error for fast forward scenario
-			if i == 0 && err == consensus.ErrUnknownAncestor {
-				continue
+			if !(i == 0 && err == consensus.ErrUnknownAncestor) {
+				return processed, err
 			}
-			return processed, err
 		}
 
 		// Get the witness for this block if available
@@ -3163,7 +3161,6 @@ func (bc *BlockChain) reorg(oldHead *types.Header, newHead *types.Block) error {
 	} else if len(newChain) > 0 {
 		// Special case happens in the post merge stage that current head is
 		// the ancestor of new head while these two blocks are not consecutive
-		debug.PrintStack()
 		log.Info("Extend chain", "add", len(newChain), "number", newChain[0].Number(), "hash", newChain[0].Hash())
 		blockReorgAddMeter.Mark(int64(len(newChain)))
 	} else {
