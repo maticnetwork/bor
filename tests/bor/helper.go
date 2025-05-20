@@ -112,16 +112,18 @@ func setupMiner(t *testing.T, n int, genesis *core.Genesis) ([]*node.Node, []*et
 	return stacks, nodes, enodes
 }
 
-func buildEthereumInstance(t *testing.T, db ethdb.Database) *initializeData {
+func buildEthereumInstance(t *testing.T, db ethdb.Database, updateGenesis ...func(gen *core.Genesis)) *initializeData {
 	genesisData, err := ioutil.ReadFile("./testdata/genesis.json")
 	if err != nil {
 		t.Fatalf("%s", err)
 	}
 
 	gen := &core.Genesis{}
-
 	if err := json.Unmarshal(genesisData, gen); err != nil {
 		t.Fatalf("%s", err)
+	}
+	for _, update := range updateGenesis {
+		update(gen)
 	}
 
 	ethConf := &eth.Config{
@@ -129,7 +131,6 @@ func buildEthereumInstance(t *testing.T, db ethdb.Database) *initializeData {
 		BorLogs:     true,
 		StateScheme: "hash",
 	}
-
 	ethConf.Genesis.MustCommit(db, triedb.NewDatabase(db, triedb.HashDefaults))
 
 	ethereum := utils.CreateBorEthereum(ethConf)
@@ -159,7 +160,7 @@ func insertNewBlock(t *testing.T, chain *core.BlockChain, block *types.Block) {
 
 type Option func(header *types.Header)
 
-func buildNextBlock(t *testing.T, _bor consensus.Engine, chain *core.BlockChain, parentBlock *types.Block, signer []byte, borConfig *params.BorConfig, txs []*types.Transaction, currentValidators []*valset.Validator, opts ...Option) *types.Block {
+func buildHeader(t *testing.T, chain *core.BlockChain, parentBlock *types.Block, signer []byte, borConfig *params.BorConfig, currentValidators []*valset.Validator, opts ...Option) *types.Header {
 	t.Helper()
 
 	header := &types.Header{
@@ -174,7 +175,12 @@ func buildNextBlock(t *testing.T, _bor consensus.Engine, chain *core.BlockChain,
 		signer = getSignerKey(header.Number.Uint64())
 	}
 
+	// Similar to the logic in bor consensus
 	header.Time = parentBlock.Time() + bor.CalcProducerDelay(header.Number.Uint64(), 0, borConfig)
+	if header.Time < uint64(time.Now().Unix()) {
+		header.Time = uint64(time.Now().Unix())
+	}
+
 	header.Extra = make([]byte, 32+65) // vanity + extraSeal
 
 	isSpanStart := IsSpanStart(number)
@@ -210,6 +216,15 @@ func buildNextBlock(t *testing.T, _bor consensus.Engine, chain *core.BlockChain,
 		opt(header)
 	}
 
+	return header
+}
+
+func buildNextBlock(t *testing.T, _bor consensus.Engine, chain *core.BlockChain, parentBlock *types.Block, signer []byte, borConfig *params.BorConfig, txs []*types.Transaction, currentValidators []*valset.Validator, skipSealing bool, opts ...Option) *types.Block {
+	t.Helper()
+
+	// Build a new header based on parent block
+	header := buildHeader(t, chain, parentBlock, signer, borConfig, currentValidators, opts...)
+
 	state, err := chain.State()
 	if err != nil {
 		t.Fatalf("%s", err)
@@ -240,6 +255,11 @@ func buildNextBlock(t *testing.T, _bor consensus.Engine, chain *core.BlockChain,
 	}
 
 	res := make(chan *types.Block, 1)
+
+	if skipSealing {
+		sign(t, header, signer, borConfig)
+		return types.NewBlockWithHeader(header)
+	}
 
 	err = _bor.Seal(chain, block, res, nil)
 	if err != nil {
