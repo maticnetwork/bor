@@ -1515,6 +1515,8 @@ func (w *whitelistFake) PurgeWhitelistedCheckpoint() {}
 
 func (w *whitelistFake) ProcessMilestone(_ uint64, _ common.Hash)       {}
 func (w *whitelistFake) ProcessFutureMilestone(_ uint64, _ common.Hash) {}
+func (w *whitelistFake) UpdateFastForwardMilestone(num uint64, hash common.Hash) {
+}
 func (w *whitelistFake) GetWhitelistedMilestone() (bool, uint64, common.Hash) {
 	return false, 0, common.Hash{}
 }

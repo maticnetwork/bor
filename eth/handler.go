@@ -89,21 +89,22 @@ type txPool interface {
 // handlerConfig is the collection of initialization parameters to create a full
 // node network handler.
 type handlerConfig struct {
-	NodeID              enode.ID            // P2P node ID used for tx propagation topology
-	Database            ethdb.Database      // Database for direct sync insertions
-	Chain               *core.BlockChain    // Blockchain to serve data from
-	TxPool              txPool              // Transaction pool to propagate from
-	Network             uint64              // Network identifier to advertise
-	Sync                downloader.SyncMode // Whether to snap or full sync
-	BloomCache          uint64              // Megabytes to alloc for snap sync bloom
-	EventMux            *event.TypeMux      // Legacy event mux, deprecate for `feed`
-	checker             ethereum.ChainValidator
-	RequiredBlocks      map[uint64]common.Hash // Hard coded map of required block hashes for sync challenges
-	EthAPI              *ethapi.BlockChainAPI  // EthAPI to interact
-	enableBlockTracking bool                   // Whether to log information collected while tracking block lifecycle
-	txAnnouncementOnly  bool                   // Whether to only announce txs to peers
-	syncWithWitnesses   bool                   // Whether to sync blocks with witnesses
-	computeWitness      bool                   // Whether to compute witnesses
+	NodeID               enode.ID            // P2P node ID used for tx propagation topology
+	Database             ethdb.Database      // Database for direct sync insertions
+	Chain                *core.BlockChain    // Blockchain to serve data from
+	TxPool               txPool              // Transaction pool to propagate from
+	Network              uint64              // Network identifier to advertise
+	Sync                 downloader.SyncMode // Whether to snap or full sync
+	BloomCache           uint64              // Megabytes to alloc for snap sync bloom
+	EventMux             *event.TypeMux      // Legacy event mux, deprecate for `feed`
+	checker              ethereum.ChainValidator
+	RequiredBlocks       map[uint64]common.Hash // Hard coded map of required block hashes for sync challenges
+	EthAPI               *ethapi.BlockChainAPI  // EthAPI to interact
+	enableBlockTracking  bool                   // Whether to log information collected while tracking block lifecycle
+	txAnnouncementOnly   bool                   // Whether to only announce txs to peers
+	syncWithWitnesses    bool                   // Whether to sync blocks with witnesses
+	computeWitness       bool                   // Whether to compute witnesses
+	FastForwardThreshold uint64                 // Minimum necessary distance between local header and peer to fast forward
 }
 
 type handler struct {
@@ -222,7 +223,7 @@ func newHandler(config *handlerConfig) (*handler, error) {
 	}
 
 	// Construct the downloader (long sync)
-	h.downloader = downloader.New(config.Database, h.eventMux, h.chain, nil, h.removePeer, h.enableSyncedFeatures, config.checker)
+	h.downloader = downloader.New(config.Database, h.eventMux, h.chain, nil, h.removePeer, h.enableSyncedFeatures, config.checker, config.FastForwardThreshold)
 	if ttd := h.chain.Config().TerminalTotalDifficulty; ttd != nil {
 		if h.chain.Config().TerminalTotalDifficultyPassed {
 			log.Info("Chain post-merge, sync via beacon client")
@@ -260,7 +261,11 @@ func newHandler(config *handlerConfig) (*handler, error) {
 			return 0, nil
 		}
 
-		return h.chain.InsertChainWithWitnesses(blocks, config.computeWitness, witnesses)
+		if h.statelessSync.Load() {
+			return h.chain.InsertChainStateless(blocks, witnesses)
+		} else {
+			return h.chain.InsertChainWithWitnesses(blocks, config.computeWitness, witnesses)
+		}
 	}
 
 	// If snap sync is requested but snapshots are disabled, fail loudly

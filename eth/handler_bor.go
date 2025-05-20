@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor"
@@ -41,6 +40,8 @@ func (h *ethHandler) fetchWhitelistCheckpoint(ctx context.Context, bor *bor.Bor)
 }
 
 func (h *ethHandler) handleWhitelistCheckpoint(ctx context.Context, checkpoint *checkpoint.Checkpoint, eth *Ethereum, verifier *borVerifier, process bool) (common.Hash, error) {
+	h.downloader.UpdateFastForwardBlockFromCheckpoint(checkpoint)
+
 	// Verify if the checkpoint fetched can be added to the local whitelist entry or not
 	// If verified, it returns the hash of the end block of the checkpoint. If not,
 	// it will return appropriate error.
@@ -74,13 +75,15 @@ func (h *ethHandler) fetchWhitelistMilestone(ctx context.Context, bor *bor.Bor) 
 		return nil, err
 	}
 
-	log.Debug("Got new milestone from heimdall", "start", milestone.StartBlock, "end", milestone.EndBlock, "hash", milestone.Hash.String())
+	log.Debug("Got new milestone from heimdall", "start", milestone.StartBlock, "end", milestone.EndBlock, "hash", milestone.Hash.String(), "totalDifficulty", milestone.TotalDifficulty)
 
 	return milestone, err
 }
 
 // handleMilestone verify and process the fetched milestone
 func (h *ethHandler) handleMilestone(ctx context.Context, eth *Ethereum, milestone *milestone.Milestone, verifier *borVerifier) error {
+	h.downloader.UpdateFastForwardBlockFromMilestone(h.chain.DB(), milestone)
+
 	// Verify if the milestone fetched can be added to the local whitelist entry or not. If verified,
 	// the hash of the end block of the milestone is returned else appropriate error is returned.
 	_, err := verifier.verify(ctx, eth, h, milestone.StartBlock, milestone.EndBlock, milestone.Hash.String()[2:], false)
@@ -113,8 +116,9 @@ func (h *ethHandler) handleMilestone(ctx context.Context, eth *Ethereum, milesto
 
 	for lastSeenMilestoneBlockNumber < num {
 		lastSeenMilestoneBlockNumber += 1
-		blockTime := eth.blockchain.GetBlockByNumber(lastSeenMilestoneBlockNumber).Time()
-		MilestoneWhitelistedDelayTimer.UpdateSince(time.Unix(int64(blockTime), 0))
+		// TODO: fix MilestoneWhitelistedDelayTimer in stateless_client (GetBlockByNumber retrieving nil when it shouldnt)
+		// blockTime := eth.blockchain.GetBlockByNumber(lastSeenMilestoneBlockNumber).Time()
+		// MilestoneWhitelistedDelayTimer.UpdateSince(time.Unix(int64(blockTime), 0))
 	}
 
 	h.downloader.ProcessMilestone(num, hash)
