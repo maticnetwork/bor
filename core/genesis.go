@@ -323,6 +323,7 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *triedb.Database, g
 	// is initialized with an external ancient store. Commit genesis state
 	// in this case.
 	header := rawdb.ReadHeader(db, stored, 0)
+	var storedcfg *params.ChainConfig
 	if header.Root != types.EmptyRootHash && !triedb.Initialized(header.Root) {
 		if genesis == nil {
 			genesis = DefaultGenesisBlock()
@@ -331,6 +332,8 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *triedb.Database, g
 		// Ensure the stored genesis matches with the given one.
 		hash := genesis.ToBlock().Hash()
 		if hash != stored {
+			storedcfg = rawdb.ReadChainConfig(db, stored)
+			log.Error(fmt.Sprintf("Stored: %+v, New: %+v", *storedcfg, *genesis.Config))
 			return genesis.Config, hash, &GenesisMismatchError{stored, hash}
 		}
 
@@ -345,6 +348,7 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *triedb.Database, g
 		applyOverrides(genesis.Config)
 		hash := genesis.ToBlock().Hash()
 		if hash != stored {
+			log.Error(fmt.Sprintf("Stored: %+v, New: %+v", *storedcfg, *genesis.Config))
 			return genesis.Config, hash, &GenesisMismatchError{stored, hash}
 		}
 	}
@@ -356,7 +360,7 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *triedb.Database, g
 		return newcfg, common.Hash{}, err
 	}
 
-	storedcfg := rawdb.ReadChainConfig(db, stored)
+	storedcfg = rawdb.ReadChainConfig(db, stored)
 	if storedcfg == nil {
 		log.Warn("Found genesis block without chain config")
 		rawdb.WriteChainConfig(db, stored, newcfg)
