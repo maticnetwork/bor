@@ -45,6 +45,7 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/tests/bor/mocks"
+	"github.com/ethereum/go-ethereum/trie"
 	"github.com/ethereum/go-ethereum/triedb"
 )
 
@@ -58,12 +59,17 @@ var (
 	key2, _ = crypto.HexToECDSA(privKey2)
 	addr2   = crypto.PubkeyToAddress(key2.PublicKey) // 0x9fB29AAc15b9A4B7F17c3385939b007540f4d791
 
+	// This account is secondary validator for 1st span (0-indexed)
+	key3, _ = crypto.HexToECDSA(privKey3)
+	addr3   = crypto.PubkeyToAddress(key3.PublicKey) // 0x96C42C56fdb78294F96B0cFa33c92bed7D75F96a
+
 	keys = []*ecdsa.PrivateKey{key, key2}
 )
 
 const (
 	privKey  = "b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291"
 	privKey2 = "9b28f36fbd67381120752d6172ecdcf10e06ab2d9a1367aac00cdcd6ac7855d3"
+	privKey3 = "c8deb0bea5c41afe8e37b4d1bd84e31adff11b09c8c96ff4b605003cce067cd9"
 
 	// The genesis for tests was generated with following parameters
 	extraSeal = 65 // Fixed number of extra-data suffix bytes reserved for signer seal
@@ -239,7 +245,6 @@ func buildNextBlock(t *testing.T, _bor consensus.Engine, chain *core.BlockChain,
 	block, err := _bor.FinalizeAndAssemble(chain, b.header, state, &types.Body{
 		Transactions: b.txs,
 	}, b.receipts)
-
 	if err != nil {
 		panic(fmt.Sprintf("error finalizing block: %v", err))
 	}
@@ -257,8 +262,9 @@ func buildNextBlock(t *testing.T, _bor consensus.Engine, chain *core.BlockChain,
 	res := make(chan *types.Block, 1)
 
 	if skipSealing {
+		header := block.Header()
 		sign(t, header, signer, borConfig)
-		return types.NewBlockWithHeader(header)
+		return types.NewBlock(header, block.Body(), b.receipts, trie.NewStackTrie(nil))
 	}
 
 	err = _bor.Seal(chain, block, res, nil)

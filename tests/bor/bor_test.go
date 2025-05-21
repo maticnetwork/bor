@@ -1492,7 +1492,10 @@ func testEncodeSigHeader(w io.Writer, header *types.Header, c *params.BorConfig)
 	}
 }
 
-func TestEarlyBlockAnnouncementPostBhilai(t *testing.T) {
+// TestEarlyBlockAnnouncementPostBhilai_Primary tests for different cases of early block announcement
+// acting as a primary block producer. It ensures that consensus handles the header time and
+// block announcement time correctly.
+func TestEarlyBlockAnnouncementPostBhilai_Primary(t *testing.T) {
 	t.Parallel()
 	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelInfo, true)))
 	fdlimit.Raise(2048)
@@ -1535,9 +1538,6 @@ func TestEarlyBlockAnnouncementPostBhilai(t *testing.T) {
 
 	spanner := getMockedSpanner(t, currentValidators)
 	_bor.SetSpanner(spanner)
-
-	chainHeadCh := make(chan core.ChainHeadEvent, 10)
-	chain.SubscribeChainHeadEvent(chainHeadCh)
 
 	// Build block 1 normally
 	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators, false)
@@ -1618,4 +1618,190 @@ func TestEarlyBlockAnnouncementPostBhilai(t *testing.T) {
 	i, err = chain.InsertChain([]*types.Block{block})
 	require.Equal(t, bor.ErrInvalidTimestamp, err, "incorrect error while inserting block #5")
 	require.Equal(t, 0, i, "incorrect number of blocks inserted while inserting block #5")
+}
+
+// TestEarlyBlockAnnouncementPostBhilai_NonPrimary tests for different cases of early block announcement
+// acting as a non-primary block producer. It ensures that consensus handles the header time and
+// block announcement time correctly.
+func TestEarlyBlockAnnouncementPostBhilai_NonPrimary(t *testing.T) {
+	t.Parallel()
+	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelInfo, true)))
+	fdlimit.Raise(2048)
+
+	// Setup forks from genesis block with 2s block time for simplicity
+	updateGenesis := func(gen *core.Genesis) {
+		gen.Timestamp = uint64(time.Now().Unix())
+		gen.Config.Bor.Period = map[string]uint64{"0": 2}
+		gen.Config.Bor.Sprint = map[string]uint64{"0": 16}
+		gen.Config.Bor.ProducerDelay = map[string]uint64{"0": 4}
+		gen.Config.Bor.BackupMultiplier = map[string]uint64{"0": 2}
+		gen.Config.Bor.StateSyncConfirmationDelay = map[string]uint64{"0": 128}
+		gen.Config.LondonBlock = common.Big0
+		gen.Config.ShanghaiBlock = common.Big0
+		gen.Config.CancunBlock = common.Big0
+		gen.Config.PragueBlock = common.Big0
+		gen.Config.Bor.JaipurBlock = common.Big0
+		gen.Config.Bor.DelhiBlock = common.Big0
+		gen.Config.Bor.IndoreBlock = common.Big0
+		gen.Config.Bor.BhilaiBlock = common.Big0
+	}
+	init := buildEthereumInstance(t, rawdb.NewMemoryDatabase(), updateGenesis)
+
+	chain := init.ethereum.BlockChain()
+	engine := init.ethereum.Engine()
+	_bor := engine.(*bor.Bor)
+	defer _bor.Close()
+
+	// Use 3 validators from the start to allow out-of-turn block production
+	_, span0 := loadSpanFromFile(t)
+	span0.StartBlock = 0
+	span0.EndBlock = 255
+	_, span1 := loadSpanFromFile(t)
+
+	// key2 and addr2 belong to the primary validator, authorize consensus to sign messages
+	engine.(*bor.Bor).Authorize(addr2, func(account accounts.Account, s string, data []byte) ([]byte, error) {
+		return crypto.Sign(crypto.Keccak256(data), key2)
+	})
+
+	// Create mock heimdall client
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	h := createMockHeimdall(ctrl, span0, span1)
+	h.EXPECT().StateSyncEvents(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return([]*clerk.EventRecordWithTime{getSampleEventRecord(t)}, nil).AnyTimes()
+	_bor.SetHeimdallClient(h)
+
+	block := init.genesis.ToBlock()
+	currentValidators := span0.ValidatorSet.Validators
+
+	spanner := getMockedSpanner(t, currentValidators)
+	_bor.SetSpanner(spanner)
+
+	// Build block 1 normally with the primary validator
+	updateDiff := func(header *types.Header) {
+		// We need to explicitly set it otherwise it derives value from
+		// parent block (which is genesis) which we don't want.
+		header.Difficulty = new(big.Int).SetUint64(3)
+	}
+	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators, false, updateDiff)
+	i, err := chain.InsertChain([]*types.Block{block})
+	require.NoError(t, err, "error inserting block #1")
+	require.Equal(t, 1, i, "incorrect number of blocks inserted while inserting block #1")
+
+	// Going ahead, all blocks will be built by the tertiary (backup) validator. Authorize consensus
+	// to sign messages on behalf of it's private keys
+	engine.(*bor.Bor).Authorize(addr3, func(account accounts.Account, s string, data []byte) ([]byte, error) {
+		sig, err := crypto.Sign(crypto.Keccak256(data), key3)
+		return sig, err
+	})
+
+	// Cases for tertiary (sealing side)
+	// 1. Block building + sealing should happen at header time and not before that (match timings)
+
+	// Cases for tertiary (verification side)
+	// 1. Block received on time (after header.Time) should be accepted
+	// 2. Block received before header.Time in last 2s should be rejected with ErrFutureBlock (by second check)
+	// 3. Block received before header.Time not in last 2s should be also be rejected ErrFutureBlock (by first check)
+	// 4. Block received before previous block time should be rejected (by first check)
+
+	// Case 1: Build a block from tertiary validator with header.Time set before block 1's time
+	// As the time in header is invalid, the block should be rejected due to invalid timestamp.
+	// Use signer to sign block instead of using `bor.Seal` call. This is done to immediately
+	// build the next block instead of waiting for the delay.
+	// Block 2
+	signer, _ := hex.DecodeString(privKey3)
+	updateHeader := func(header *types.Header) {
+		header.Difficulty = new(big.Int).SetUint64(1)
+		header.Time = block.Time() - 1
+	}
+	tempBlock := buildNextBlock(t, _bor, chain, block, signer, init.genesis.Config.Bor, nil, currentValidators, true, updateHeader)
+	i, err = chain.InsertChain([]*types.Block{tempBlock})
+	require.Equal(t, bor.ErrInvalidTimestamp, err, "incorrect error while inserting block #2")
+	require.Equal(t, 0, i, "incorrect number of blocks inserted while inserting block #2")
+
+	// Case 2: Build a block from tertiary validator with header.Time set correctly (previous + 6s).
+	// Announce the block early before the previous block's announcement window is over. This should
+	// lead to future block error from consensus.
+	// Block 2 again, build with correct time but announce early
+	updateHeader = func(header *types.Header) {
+		header.Difficulty = new(big.Int).SetUint64(1)
+		// Succession is 2 because of tertiary validator
+		header.Time = block.Time() + bor.CalcProducerDelay(block.NumberU64(), 2, init.genesis.Config.Bor)
+	}
+	tempBlock = buildNextBlock(t, _bor, chain, block, signer, init.genesis.Config.Bor, nil, currentValidators, true, updateHeader)
+	// Block is invalid according to consensus rules and should return appropriate error
+	// Insert chain would accept the block as future block so we don't attempt calling it.
+	err = engine.VerifyHeader(chain, tempBlock.Header())
+	require.Equal(t, consensus.ErrFutureBlock, err, "incorrect error while verifying block #2")
+
+	// Case 3: Happy case. Build a correct block and ensure the sealing function waits until expected
+	// header time before announcing the block. Non-primary validators can't announce blocks early.
+	var expectedBlockBuildingTime time.Duration
+	updateHeader = func(header *types.Header) {
+		header.Difficulty = new(big.Int).SetUint64(1)
+		header.Time = block.Time() + bor.CalcProducerDelay(block.NumberU64(), 2, init.genesis.Config.Bor)
+		// Capture the expected header time based on the logic used in bor consensus
+		expectedBlockBuildingTime = time.Until(time.Unix(int64(header.Time), 0))
+	}
+	// Capture the time taken in block building (mainly sealing due to delay)
+	start := time.Now()
+	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators, false, updateHeader)
+	blockAnnouncementTime := time.Since(start)
+	// The building + sealing time should be greater than ideal time (6s for tertiary validator)
+	// as early block announcement is not allowed for non-primary validators.
+	require.GreaterOrEqual(t, blockAnnouncementTime, expectedBlockBuildingTime, fmt.Sprintf("block #2 announcement happened before header time for non-primary validator"))
+	i, err = chain.InsertChain([]*types.Block{block})
+	require.NoError(t, err, "error inserting block #2")
+	require.Equal(t, 1, i, "incorrect number of blocks inserted while inserting block #2")
+
+	// Case 4: Build a block from tertiary validator with correct header time but try to announce it
+	// before it's expected time (i.e. 6s here). Early announcements for non-primary validators
+	// should be rejected with a future block error from consensus.
+	// Block 3 (tertiary)
+	updateHeader = func(header *types.Header) {
+		header.Difficulty = new(big.Int).SetUint64(1)
+		header.Time = block.Time() + bor.CalcProducerDelay(block.NumberU64(), 2, init.genesis.Config.Bor)
+	}
+	block = buildNextBlock(t, _bor, chain, block, signer, init.genesis.Config.Bor, nil, currentValidators, true, updateHeader)
+
+	// reject if announced early (here: parent block time + 2s)
+	time.Sleep(2 * time.Second)
+	err = engine.VerifyHeader(chain, block.Header())
+	require.Equal(t, consensus.ErrFutureBlock, err, "incorrect error while verifying block #3")
+
+	// reject if announced early (here: parent block time + 4s)
+	time.Sleep(2 * time.Second)
+	err = engine.VerifyHeader(chain, block.Header())
+	require.Equal(t, consensus.ErrFutureBlock, err, "incorrect error while verifying block #3")
+
+	// accept if announced after expected header.Time (here: parent block time + 6s)
+	time.Sleep(2 * time.Second)
+	err = engine.VerifyHeader(chain, block.Header())
+	require.NoError(t, err, "error verifying block #3")
+
+	i, err = chain.InsertChain([]*types.Block{block})
+	require.NoError(t, err, "error inserting block #3")
+	require.Equal(t, 1, i, "incorrect number of blocks inserted while inserting block #3")
+
+	// Case 5: Build a block from tertiary validator with an incorrect header time (1s before parent block) and
+	// announce it on time. This case is different than case 1 because header time is tweaked by only 1s compared
+	// to 7s in that case. Consensus should reject this block with a too soon error (instead of invalid timestamp
+	// in case 1).
+	updateHeader = func(header *types.Header) {
+		header.Difficulty = new(big.Int).SetUint64(1)
+		header.Time = block.Time() + bor.CalcProducerDelay(block.NumberU64(), 2, init.genesis.Config.Bor) - 1
+	}
+	// Capture time to wait until the expected header time before announcing the block
+	timeToWait := time.Until(time.Unix(int64(block.Time()+bor.CalcProducerDelay(block.NumberU64(), 2, init.genesis.Config.Bor)), 0))
+	block = buildNextBlock(t, _bor, chain, block, signer, init.genesis.Config.Bor, nil, currentValidators, true, updateHeader)
+
+	// Wait for expected time + some buffer
+	time.Sleep(timeToWait)
+	time.Sleep(100 * time.Millisecond)
+
+	err = engine.VerifyHeader(chain, block.Header())
+	require.Equal(t,
+		bor.BlockTooSoonError{Number: 4, Succession: 2},
+		*err.(*bor.BlockTooSoonError))
 }
