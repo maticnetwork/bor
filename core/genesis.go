@@ -403,8 +403,9 @@ func LoadChainConfig(db ethdb.Database, genesis *Genesis) (*params.ChainConfig, 
 	// in case the database is empty. Notably, we only care about the
 	// chain config corresponds to the canonical chain.
 	stored := rawdb.ReadCanonicalHash(db, 0)
+	var storedcfg *params.ChainConfig
 	if stored != (common.Hash{}) {
-		storedcfg := rawdb.ReadChainConfig(db, stored)
+		storedcfg = rawdb.ReadChainConfig(db, stored)
 		if storedcfg != nil {
 			return storedcfg, nil
 		}
@@ -420,6 +421,7 @@ func LoadChainConfig(db ethdb.Database, genesis *Genesis) (*params.ChainConfig, 
 		// external ancient chain segment), ensure the provided genesis
 		// is matched.
 		if stored != (common.Hash{}) && genesis.ToBlock().Hash() != stored {
+			log.Error(fmt.Sprintf("Stored: %+v, New: %+v", *storedcfg, *genesis.Config))
 			return nil, &GenesisMismatchError{stored, genesis.ToBlock().Hash()}
 		}
 		return genesis.Config, nil
