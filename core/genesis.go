@@ -517,6 +517,9 @@ func (g *Genesis) ToBlock() *types.Block {
 			head.BlobGasUsed = nil
 		}
 	}
+
+	head.RequestsHash = &types.EmptyRequestsHash
+
 	return types.NewBlock(head, &types.Body{Withdrawals: withdrawals}, nil, trie.NewStackTrie(nil))
 }
 
