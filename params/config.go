@@ -665,6 +665,8 @@ type ChainConfig struct {
 	PragueBlock   *big.Int `json:"pragueBlock,omitempty"`   // Prague switch Block (nil = no fork, 0 = already on prague)
 	VerkleBlock   *big.Int `json:"verkleBlock,omitempty"`   // Verkle switch Block (nil = no fork, 0 = already on verkle)
 
+	DepositContractAddress common.Address `json:"depositContractAddress,omitempty"`
+
 	// TerminalTotalDifficulty is the amount of total difficulty reached by
 	// the network that triggers the consensus upgrade.
 	TerminalTotalDifficulty *big.Int `json:"terminalTotalDifficulty,omitempty"`
