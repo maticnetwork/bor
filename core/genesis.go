@@ -349,7 +349,9 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *triedb.Database, g
 		hash := genesis.ToBlock().Hash()
 		if hash != stored {
 			storedcfg = rawdb.ReadChainConfig(db, stored)
+			log.Error(fmt.Sprintf("Genesis block: %+v", genesis.ToBlock()))
 			log.Error(fmt.Sprintf("Stored: %+v, New: %+v", *storedcfg, *genesis.Config))
+			log.Error(fmt.Sprintf("Stored BorConfig: %+v, New BorConfig: %+v", *storedcfg.Bor, *genesis.Config.Bor))
 			return genesis.Config, hash, &GenesisMismatchError{stored, hash}
 		}
 	}
