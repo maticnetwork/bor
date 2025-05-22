@@ -364,6 +364,7 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 		if genesis == nil {
 			genesis = DefaultGenesisBlock()
 		}
+		log.Error(fmt.Sprintf("GenesisBlock: %+v", *genesis))
 		// Ensure the stored genesis matches with the given one.
 		hash := genesis.ToBlock().Hash()
 		if hash != stored {
@@ -382,6 +383,7 @@ func SetupGenesisBlockWithOverride(db ethdb.Database, triedb *trie.Database, gen
 	// Check whether the genesis block is already written.
 	if genesis != nil {
 		hash := genesis.ToBlock().Hash()
+		log.Error(fmt.Sprintf("GenesisBlock: %+v", *genesis))
 		if hash != stored {
 			return genesis.Config, hash, &GenesisMismatchError{stored, hash}
 		}
@@ -449,6 +451,7 @@ func LoadChainConfig(db ethdb.Database, genesis *Genesis) (*params.ChainConfig, 
 	}
 	// Load the config from the provided genesis specification
 	if genesis != nil {
+		log.Error(fmt.Sprintf("GenesisBlock: %+v", *genesis))
 		// Reject invalid genesis spec without valid chain config
 		if genesis.Config == nil {
 			return nil, errGenesisNoConfig
