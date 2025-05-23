@@ -1841,7 +1841,7 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 		return []*types.Log{}, consensus.ErrUnknownAncestor
 	}
 	// Make sure no inconsistent state is leaked during insertion
-	externTd := new(big.Int).Add(block.Difficulty(), ptd)
+	externTd := new(big.Int).Add(big.NewInt(1), ptd)
 
 	// Irrelevant of the canonical status, write the block itself to the database.
 	//
@@ -1986,12 +1986,12 @@ func (bc *BlockChain) WriteBlockAndSetHead(block *types.Block, receipts []*types
 	}
 	defer bc.chainmu.Unlock()
 
-	return bc.writeBlockAndSetHead(block, receipts, logs, state, emitHeadEvent)
+	return bc.writeBlockAndSetHead(block, receipts, logs, state, emitHeadEvent, false)
 }
 
 // writeBlockAndSetHead is the internal implementation of WriteBlockAndSetHead.
 // This function expects the chain mutex to be held.
-func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool) (status WriteStatus, err error) {
+func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool, stateless bool) (status WriteStatus, err error) {
 	stateSyncLogs, err := bc.writeBlockWithState(block, receipts, logs, state)
 	if err != nil {
 		return NonStatTy, err
@@ -2007,7 +2007,9 @@ func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types
 		// Reorganise the chain if the parent is not the head block
 		if block.ParentHash() != currentBlock.Hash() {
 			if err = bc.reorg(currentBlock, block); err != nil {
-				return NonStatTy, err
+				if !(stateless && (err == errInvalidNewChain || err == errInvalidOldChain)) { // fast forward may raise an invalid new chain error, skipping for stateless
+					return NonStatTy, err
+				}
 			}
 		}
 
@@ -2233,18 +2235,10 @@ func (bc *BlockChain) InsertChainStateless(chain types.Blocks, witnesses []*stat
 
 		// Wait for the block's verification to complete
 		if err := <-results; err != nil {
-			return processed, err
-		}
-
-		// Get the parent header
-		var parent *types.Header
-		if i == 0 {
-			parent = bc.GetHeader(block.ParentHash(), block.NumberU64()-1)
-			if parent == nil {
-				return processed, consensus.ErrUnknownAncestor
+			// ignoring Unknown Ancestor error for fast forward scenario
+			if !(i == 0 && err == consensus.ErrUnknownAncestor) {
+				return processed, err
 			}
-		} else {
-			parent = chain[i-1].Header()
 		}
 
 		// Get the witness for this block if available
@@ -2254,7 +2248,7 @@ func (bc *BlockChain) InsertChainStateless(chain types.Blocks, witnesses []*stat
 		}
 
 		// Process the block using stateless execution
-		err := bc.ProcessBlockWithWitnesses(block, parent, witness)
+		err := bc.ProcessBlockWithWitnesses(block, witness)
 		if err != nil {
 			return processed, err
 		}
@@ -2271,7 +2265,7 @@ func (bc *BlockChain) InsertChainStateless(chain types.Blocks, witnesses []*stat
 		statedb.SetWitness(witness)
 
 		// Write the block to the chain without committing state
-		if _, err := bc.writeBlockAndSetHead(block, nil, nil, &statedb, false); err != nil {
+		if _, err := bc.writeBlockAndSetHead(block, nil, nil, &statedb, false, true); err != nil {
 			return processed, err
 		}
 
@@ -2635,7 +2629,7 @@ func (bc *BlockChain) insertChain(chain types.Blocks, setHead bool, makeWitness 
 			// Don't set the head, only insert the block
 			_, err = bc.writeBlockWithState(block, receipts, logs, statedb)
 		} else {
-			status, err = bc.writeBlockAndSetHead(block, receipts, logs, statedb, false)
+			status, err = bc.writeBlockAndSetHead(block, receipts, logs, statedb, false, false)
 		}
 
 		followupInterrupt.Store(true)
@@ -2835,7 +2829,7 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 		// Don't set the head, only insert the block
 		_, err = bc.writeBlockWithState(block, res.Receipts, res.Logs, statedb)
 	} else {
-		status, err = bc.writeBlockAndSetHead(block, res.Receipts, res.Logs, statedb, false)
+		status, err = bc.writeBlockAndSetHead(block, res.Receipts, res.Logs, statedb, false, false)
 	}
 	if err != nil {
 		return nil, err
@@ -3571,7 +3565,7 @@ func (bc *BlockChain) SubscribeChain2HeadEvent(ch chan<- Chain2HeadEvent) event.
 }
 
 // ProcessBlockWithWitnesses processes a block in stateless mode using the provided witnesses.
-func (bc *BlockChain) ProcessBlockWithWitnesses(block *types.Block, parent *types.Header, witness *stateless.Witness) error {
+func (bc *BlockChain) ProcessBlockWithWitnesses(block *types.Block, witness *stateless.Witness) error {
 	if witness == nil {
 		return errors.New("nil witness")
 	}
