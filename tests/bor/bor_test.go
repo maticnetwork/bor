@@ -50,7 +50,6 @@ var (
 )
 
 func TestValidatorWentOffline(t *testing.T) {
-
 	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelInfo, true)))
 	fdlimit.Raise(2048)
 
@@ -372,7 +371,11 @@ func TestInsertingSpanSizeBlocks(t *testing.T) {
 	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelInfo, true)))
 	fdlimit.Raise(2048)
 
-	init := buildEthereumInstance(t, rawdb.NewMemoryDatabase())
+	updateGenesis := func(gen *core.Genesis) {
+		gen.Config.Bor.StateSyncConfirmationDelay = map[string]uint64{"0": 128}
+		gen.Config.Bor.Sprint = map[string]uint64{"0": sprintSize}
+	}
+	init := buildEthereumInstance(t, rawdb.NewMemoryDatabase(), updateGenesis)
 	chain := init.ethereum.BlockChain()
 	engine := init.ethereum.Engine()
 	_bor := engine.(*bor.Bor)
@@ -423,7 +426,12 @@ func TestFetchStateSyncEvents(t *testing.T) {
 	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelInfo, true)))
 	fdlimit.Raise(2048)
 
-	init := buildEthereumInstance(t, rawdb.NewMemoryDatabase())
+	stateSyncConfirmationDelay := int64(128)
+	updateGenesis := func(gen *core.Genesis) {
+		gen.Config.Bor.StateSyncConfirmationDelay = map[string]uint64{"0": uint64(stateSyncConfirmationDelay)}
+		gen.Config.Bor.Sprint = map[string]uint64{"0": sprintSize}
+	}
+	init := buildEthereumInstance(t, rawdb.NewMemoryDatabase(), updateGenesis)
 	chain := init.ethereum.BlockChain()
 	engine := init.ethereum.Engine()
 	_bor := engine.(*bor.Bor)
@@ -451,8 +459,12 @@ func TestFetchStateSyncEvents(t *testing.T) {
 
 	// Mock state sync events
 	fromID := uint64(1)
-	// at # sprintSize, events are fetched for [fromID, (block-sprint).Time)
-	to := int64(chain.GetHeaderByNumber(0).Time)
+	// at # sprintSize, events are fetched for [fromID, (block-sprint).Time])
+	// as indore hf is enabled, we need to consider the stateSyncConfirmationDelay and
+	// we need to predict the time of 4th block (i.e. the sprint end block) to calculate
+	// the correct value of to. As per the config, non sprint end primary blocks take
+	// 1s and sprint end ones take 6s. This leads to 3*1 + 6 = 9s of added time from genesis.
+	to := int64(chain.GetHeaderByNumber(0).Time) + 9 - stateSyncConfirmationDelay
 	eventCount := 50
 
 	sample := getSampleEventRecord(t)
@@ -493,7 +505,12 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelInfo, true)))
 	fdlimit.Raise(2048)
 
-	init := buildEthereumInstance(t, rawdb.NewMemoryDatabase())
+	stateSyncConfirmationDelay := int64(128)
+	updateGenesis := func(gen *core.Genesis) {
+		gen.Config.Bor.StateSyncConfirmationDelay = map[string]uint64{"0": uint64(stateSyncConfirmationDelay)}
+		gen.Config.Bor.Sprint = map[string]uint64{"0": sprintSize}
+	}
+	init := buildEthereumInstance(t, rawdb.NewMemoryDatabase(), updateGenesis)
 	chain := init.ethereum.BlockChain()
 	engine := init.ethereum.Engine()
 	_bor := engine.(*bor.Bor)
@@ -517,9 +534,13 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 	h := createMockHeimdall(ctrl, &span0, &res.Result)
 
 	// Mock State Sync events
-	// at # sprintSize, events are fetched for [fromID, (block-sprint).Time)
+	// at # sprintSize, events are fetched for [fromID, (block-sprint).Time])
+	// as indore hf is enabled, we need to consider the stateSyncConfirmationDelay and
+	// we need to predict the time of 4th block (i.e. the sprint end block) to calculate
+	// the correct value of to. As per the config, non sprint end primary blocks take
+	// 1s and sprint end ones take 6s. This leads to 3*1 + 6 = 9s of added time from genesis.
 	fromID := uint64(1)
-	to := int64(chain.GetHeaderByNumber(0).Time)
+	to := int64(chain.GetHeaderByNumber(0).Time) + 9 - stateSyncConfirmationDelay
 	sample := getSampleEventRecord(t)
 
 	// First query will be from [id=1, (block-sprint).Time]
@@ -551,9 +572,9 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 	// state 6 was not written
 	require.Equal(t, uint64(4), lastStateID.Uint64())
 
-	//
+	// Same calculation for from and to as above
 	fromID = uint64(5)
-	to = int64(chain.GetHeaderByNumber(sprintSize).Time)
+	to = int64(chain.GetHeaderByNumber(sprintSize).Time) + 9 - stateSyncConfirmationDelay
 
 	eventRecords = []*clerk.EventRecordWithTime{
 		buildStateEvent(sample, 5, 7),
@@ -593,6 +614,7 @@ func TestOutOfTurnSigning(t *testing.T) {
 
 	updateGenesis := func(gen *core.Genesis) {
 		gen.Config.Bor.StateSyncConfirmationDelay = map[string]uint64{"0": 128}
+		gen.Config.Bor.Sprint = map[string]uint64{"0": sprintSize}
 	}
 	init := buildEthereumInstance(t, rawdb.NewMemoryDatabase(), updateGenesis)
 	chain := init.ethereum.BlockChain()
@@ -629,7 +651,8 @@ func TestOutOfTurnSigning(t *testing.T) {
 	for i := uint64(1); i < spanSize; i++ {
 		// Update the validator set before sprint end (so that it is returned when called for next block)
 		// E.g. In this case, update on block 3 as snapshot of block 3 will be called for block 4's verification
-		if i == sprintSize-1 {
+		// Sprint length is 4 for this test
+		if i == chain.Config().Bor.CalculateSprint(i)-1 {
 			currentValidators = heimdallSpan.ValidatorSet.Validators
 
 			// Update the span0's validator set to new validator set. This will be used in verify header when we query
@@ -1542,8 +1565,16 @@ func TestEarlyBlockAnnouncementPostBhilai_Primary(t *testing.T) {
 	spanner := getMockedSpanner(t, currentValidators)
 	_bor.SetSpanner(spanner)
 
+	updateTime := func(header *types.Header) {
+		// This logic matches with consensus.Prepare function. It's done explicitly here
+		// because other tests aren't designed to use current time and hence might break.
+		if header.Time < uint64(time.Now().Unix()) {
+			header.Time = uint64(time.Now().Unix())
+		}
+	}
+
 	// Build block 1 normally
-	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators, false)
+	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators, false, updateTime)
 	i, err := chain.InsertChain([]*types.Block{block})
 	// Block verified and imported successfully
 	require.NoError(t, err, "error inserting block #1")
@@ -1558,7 +1589,7 @@ func TestEarlyBlockAnnouncementPostBhilai_Primary(t *testing.T) {
 	maxDelay := time.Until(time.Unix(int64(headerTime), 0))
 	// Track time taken to build, and seal (basically announce) the block
 	start := time.Now()
-	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators, false)
+	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators, false, updateTime)
 	blockAnnouncementTime := time.Since(start)
 	// The building + sealing time should be less than the expected pre-bhilai block building time (~2s)
 	require.LessOrEqual(t, blockAnnouncementTime, maxDelay, fmt.Sprintf("block announcement happened after header time"))
@@ -1572,7 +1603,7 @@ func TestEarlyBlockAnnouncementPostBhilai_Primary(t *testing.T) {
 	// Wait until header.Time + 1s before building the block
 	headerTime = block.Time() + bor.CalcProducerDelay(block.NumberU64(), 0, init.genesis.Config.Bor)
 	time.Sleep(time.Until(time.Unix(int64(headerTime)+1, 0)))
-	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators, false)
+	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators, false, updateTime)
 	require.Greater(t, block.Time(), headerTime, "block time should be greated than expected header time")
 	// Block verified and imported successfully
 	i, err = chain.InsertChain([]*types.Block{block})
@@ -1580,7 +1611,7 @@ func TestEarlyBlockAnnouncementPostBhilai_Primary(t *testing.T) {
 	require.Equal(t, 1, i, "incorrect number of blocks inserted while inserting block #3")
 
 	// Build block 4 normally
-	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators, false)
+	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators, false, updateTime)
 	i, err = chain.InsertChain([]*types.Block{block})
 	// Block verified and imported successfully
 	require.NoError(t, err, "error inserting block #4")
@@ -1592,7 +1623,7 @@ func TestEarlyBlockAnnouncementPostBhilai_Primary(t *testing.T) {
 	// build the next block instead of waiting for the delay (using bor.Seal will not lead
 	// to block being rejected).
 	signer, err := hex.DecodeString(privKey)
-	tempBlock := buildNextBlock(t, _bor, chain, block, signer, init.genesis.Config.Bor, nil, currentValidators, true)
+	tempBlock := buildNextBlock(t, _bor, chain, block, signer, init.genesis.Config.Bor, nil, currentValidators, true, updateTime)
 	i, err = chain.InsertChain([]*types.Block{tempBlock})
 	// No error is expected here because block will be added to future chain and is
 	// technically valid (according to insert chain function)
@@ -1603,7 +1634,7 @@ func TestEarlyBlockAnnouncementPostBhilai_Primary(t *testing.T) {
 	require.Equal(t, consensus.ErrFutureBlock, err, "incorrect error while verifying block #5")
 
 	// Build block 5 again normally
-	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators, false)
+	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators, false, updateTime)
 	i, err = chain.InsertChain([]*types.Block{block})
 	// Block verified and imported successfully
 	require.NoError(t, err, "error inserting block #5")
@@ -1681,13 +1712,21 @@ func TestEarlyBlockAnnouncementPostBhilai_NonPrimary(t *testing.T) {
 	spanner := getMockedSpanner(t, currentValidators)
 	_bor.SetSpanner(spanner)
 
+	updateTime := func(header *types.Header) {
+		// This logic matches with consensus.Prepare function. It's done explicitly here
+		// because other tests aren't designed to use current time and hence might break.
+		if header.Time < uint64(time.Now().Unix()) {
+			header.Time = uint64(time.Now().Unix())
+		}
+	}
+
 	// Build block 1 normally with the primary validator
 	updateDiff := func(header *types.Header) {
 		// We need to explicitly set it otherwise it derives value from
 		// parent block (which is genesis) which we don't want.
 		header.Difficulty = new(big.Int).SetUint64(3)
 	}
-	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators, false, updateDiff)
+	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators, false, updateTime, updateDiff)
 	i, err := chain.InsertChain([]*types.Block{block})
 	require.NoError(t, err, "error inserting block #1")
 	require.Equal(t, 1, i, "incorrect number of blocks inserted while inserting block #1")
@@ -1699,15 +1738,6 @@ func TestEarlyBlockAnnouncementPostBhilai_NonPrimary(t *testing.T) {
 		return sig, err
 	})
 
-	// Cases for tertiary (sealing side)
-	// 1. Block building + sealing should happen at header time and not before that (match timings)
-
-	// Cases for tertiary (verification side)
-	// 1. Block received on time (after header.Time) should be accepted
-	// 2. Block received before header.Time in last 2s should be rejected with ErrFutureBlock (by second check)
-	// 3. Block received before header.Time not in last 2s should be also be rejected ErrFutureBlock (by first check)
-	// 4. Block received before previous block time should be rejected (by first check)
-
 	// Case 1: Build a block from tertiary validator with header.Time set before block 1's time
 	// As the time in header is invalid, the block should be rejected due to invalid timestamp.
 	// Use signer to sign block instead of using `bor.Seal` call. This is done to immediately
@@ -1718,7 +1748,7 @@ func TestEarlyBlockAnnouncementPostBhilai_NonPrimary(t *testing.T) {
 		header.Difficulty = new(big.Int).SetUint64(1)
 		header.Time = block.Time() - 1
 	}
-	tempBlock := buildNextBlock(t, _bor, chain, block, signer, init.genesis.Config.Bor, nil, currentValidators, true, updateHeader)
+	tempBlock := buildNextBlock(t, _bor, chain, block, signer, init.genesis.Config.Bor, nil, currentValidators, true, updateTime, updateHeader)
 	i, err = chain.InsertChain([]*types.Block{tempBlock})
 	require.Equal(t, bor.ErrInvalidTimestamp, err, "incorrect error while inserting block #2")
 	require.Equal(t, 0, i, "incorrect number of blocks inserted while inserting block #2")
@@ -1732,7 +1762,7 @@ func TestEarlyBlockAnnouncementPostBhilai_NonPrimary(t *testing.T) {
 		// Succession is 2 because of tertiary validator
 		header.Time = block.Time() + bor.CalcProducerDelay(block.NumberU64(), 2, init.genesis.Config.Bor)
 	}
-	tempBlock = buildNextBlock(t, _bor, chain, block, signer, init.genesis.Config.Bor, nil, currentValidators, true, updateHeader)
+	tempBlock = buildNextBlock(t, _bor, chain, block, signer, init.genesis.Config.Bor, nil, currentValidators, true, updateTime, updateHeader)
 	// Block is invalid according to consensus rules and should return appropriate error
 	// Insert chain would accept the block as future block so we don't attempt calling it.
 	err = engine.VerifyHeader(chain, tempBlock.Header())
@@ -1749,7 +1779,7 @@ func TestEarlyBlockAnnouncementPostBhilai_NonPrimary(t *testing.T) {
 	}
 	// Capture the time taken in block building (mainly sealing due to delay)
 	start := time.Now()
-	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators, false, updateHeader)
+	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators, false, updateTime, updateHeader)
 	blockAnnouncementTime := time.Since(start)
 	// The building + sealing time should be greater than ideal time (6s for tertiary validator)
 	// as early block announcement is not allowed for non-primary validators.
@@ -1766,7 +1796,7 @@ func TestEarlyBlockAnnouncementPostBhilai_NonPrimary(t *testing.T) {
 		header.Difficulty = new(big.Int).SetUint64(1)
 		header.Time = block.Time() + bor.CalcProducerDelay(block.NumberU64(), 2, init.genesis.Config.Bor)
 	}
-	block = buildNextBlock(t, _bor, chain, block, signer, init.genesis.Config.Bor, nil, currentValidators, true, updateHeader)
+	block = buildNextBlock(t, _bor, chain, block, signer, init.genesis.Config.Bor, nil, currentValidators, true, updateTime, updateHeader)
 
 	// reject if announced early (here: parent block time + 2s)
 	time.Sleep(2 * time.Second)
@@ -1797,7 +1827,7 @@ func TestEarlyBlockAnnouncementPostBhilai_NonPrimary(t *testing.T) {
 	}
 	// Capture time to wait until the expected header time before announcing the block
 	timeToWait := time.Until(time.Unix(int64(block.Time()+bor.CalcProducerDelay(block.NumberU64(), 2, init.genesis.Config.Bor)), 0))
-	block = buildNextBlock(t, _bor, chain, block, signer, init.genesis.Config.Bor, nil, currentValidators, true, updateHeader)
+	block = buildNextBlock(t, _bor, chain, block, signer, init.genesis.Config.Bor, nil, currentValidators, true, updateTime, updateHeader)
 
 	// Wait for expected time + some buffer
 	time.Sleep(timeToWait)

@@ -40,7 +40,6 @@ import (
 	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/ethereum/go-ethereum/ethdb"
-	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/miner"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/p2p"
@@ -171,7 +170,6 @@ type Option func(header *types.Header)
 
 func buildHeader(t *testing.T, chain *core.BlockChain, parentBlock *types.Block, signer []byte, borConfig *params.BorConfig, currentValidators []*valset.Validator, opts ...Option) *types.Header {
 	t.Helper()
-	log.Info("Building header...", "len(newVals)", len(currentValidators), "number", parentBlock.Number().Uint64())
 
 	header := &types.Header{
 		Number:     big.NewInt(int64(parentBlock.Number().Uint64() + 1)),
@@ -187,6 +185,7 @@ func buildHeader(t *testing.T, chain *core.BlockChain, parentBlock *types.Block,
 
 	// Similar to the logic in bor consensus
 	header.Time = parentBlock.Time() + bor.CalcProducerDelay(header.Number.Uint64(), 0, borConfig)
+	// Keeping this causes some e2e tests to fail because they work under certain time assumptions
 	// if header.Time < uint64(time.Now().Unix()) {
 	// 	header.Time = uint64(time.Now().Unix())
 	// }
@@ -198,8 +197,11 @@ func buildHeader(t *testing.T, chain *core.BlockChain, parentBlock *types.Block,
 	}
 	header.Extra = header.Extra[:types.ExtraVanityLength]
 
+	var isSprintEnd bool
+	if (number+1)%chain.Config().Bor.CalculateSprint(number) == 0 {
+		isSprintEnd = true
+	}
 	isSpanStart := IsSpanStart(number)
-	isSprintEnd := IsSprintEnd(number)
 
 	if isSpanStart {
 		header.Difficulty = new(big.Int).SetInt64(int64(len(currentValidators)))
