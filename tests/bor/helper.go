@@ -3,6 +3,7 @@
 package bor
 
 import (
+	"bytes"
 	"crypto/ecdsa"
 	"encoding/hex"
 	"encoding/json"
@@ -39,11 +40,13 @@ import (
 	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/miner"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/tests/bor/mocks"
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/ethereum/go-ethereum/triedb"
@@ -168,6 +171,7 @@ type Option func(header *types.Header)
 
 func buildHeader(t *testing.T, chain *core.BlockChain, parentBlock *types.Block, signer []byte, borConfig *params.BorConfig, currentValidators []*valset.Validator, opts ...Option) *types.Header {
 	t.Helper()
+	log.Info("Building header...", "len(newVals)", len(currentValidators), "number", parentBlock.Number().Uint64())
 
 	header := &types.Header{
 		Number:     big.NewInt(int64(parentBlock.Number().Uint64() + 1)),
@@ -183,11 +187,16 @@ func buildHeader(t *testing.T, chain *core.BlockChain, parentBlock *types.Block,
 
 	// Similar to the logic in bor consensus
 	header.Time = parentBlock.Time() + bor.CalcProducerDelay(header.Number.Uint64(), 0, borConfig)
-	if header.Time < uint64(time.Now().Unix()) {
-		header.Time = uint64(time.Now().Unix())
-	}
+	// if header.Time < uint64(time.Now().Unix()) {
+	// 	header.Time = uint64(time.Now().Unix())
+	// }
 
+	// Similar to logic in bor consensus (prepare)
 	header.Extra = make([]byte, 32+65) // vanity + extraSeal
+	if len(header.Extra) < types.ExtraVanityLength {
+		header.Extra = append(header.Extra, bytes.Repeat([]byte{0x00}, types.ExtraVanityLength-len(header.Extra))...)
+	}
+	header.Extra = header.Extra[:types.ExtraVanityLength]
 
 	isSpanStart := IsSpanStart(number)
 	isSprintEnd := IsSprintEnd(number)
@@ -199,15 +208,47 @@ func buildHeader(t *testing.T, chain *core.BlockChain, parentBlock *types.Block,
 	if isSprintEnd {
 		sort.Sort(valset.ValidatorsByAddress(currentValidators))
 
-		validatorBytes := make([]byte, len(currentValidators)*validatorHeaderBytesLength)
-		header.Extra = make([]byte, 32+len(validatorBytes)+65) // vanity + validatorBytes + extraSeal
+		// Extra data is encoded differently after cancun
+		if chain.Config().IsCancun(header.Number) {
+			var tempValidatorBytes []byte
+			for _, validator := range currentValidators {
+				tempValidatorBytes = append(tempValidatorBytes, validator.HeaderBytes()...)
+			}
 
-		for i, val := range currentValidators {
-			copy(validatorBytes[i*validatorHeaderBytesLength:], val.HeaderBytes())
+			blockExtraData := &types.BlockExtraData{
+				ValidatorBytes: tempValidatorBytes,
+				TxDependency:   nil,
+			}
+			blockExtraDataBytes, err := rlp.EncodeToBytes(blockExtraData)
+			if err != nil {
+				t.Fatalf("error while encoding block extra data: %v", err)
+			}
+			header.Extra = append(header.Extra, blockExtraDataBytes...)
+		} else {
+			validatorBytes := make([]byte, len(currentValidators)*validatorHeaderBytesLength)
+			header.Extra = make([]byte, 32+len(validatorBytes)+65) // vanity + validatorBytes + extraSeal
+
+			for i, val := range currentValidators {
+				copy(validatorBytes[i*validatorHeaderBytesLength:], val.HeaderBytes())
+			}
+
+			copy(header.Extra[32:], validatorBytes)
+		}
+	} else if chain.Config().IsCancun(header.Number) {
+		blockExtraData := &types.BlockExtraData{
+			ValidatorBytes: nil,
+			TxDependency:   nil,
 		}
 
-		copy(header.Extra[32:], validatorBytes)
+		blockExtraDataBytes, err := rlp.EncodeToBytes(blockExtraData)
+		if err != nil {
+			t.Fatalf("error while encoding block extra data: %v", err)
+		}
+
+		header.Extra = append(header.Extra, blockExtraDataBytes...)
 	}
+
+	header.Extra = append(header.Extra, make([]byte, types.ExtraSealLength)...)
 
 	if chain.Config().IsLondon(header.Number) {
 		header.BaseFee = eip1559.CalcBaseFee(chain.Config(), parentBlock.Header())

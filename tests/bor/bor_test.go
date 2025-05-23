@@ -591,7 +591,10 @@ func TestOutOfTurnSigning(t *testing.T) {
 	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelInfo, true)))
 	fdlimit.Raise(2048)
 
-	init := buildEthereumInstance(t, rawdb.NewMemoryDatabase())
+	updateGenesis := func(gen *core.Genesis) {
+		gen.Config.Bor.StateSyncConfirmationDelay = map[string]uint64{"0": 128}
+	}
+	init := buildEthereumInstance(t, rawdb.NewMemoryDatabase(), updateGenesis)
 	chain := init.ethereum.BlockChain()
 	engine := init.ethereum.Engine()
 	_bor := engine.(*bor.Bor)
