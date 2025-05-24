@@ -840,12 +840,10 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 	if header.Time < uint64(time.Now().Unix()) {
 		header.Time = uint64(time.Now().Unix())
 	} else {
-		if succession == 0 {
-			startTime := time.Unix(int64(header.Time-c.config.CalculatePeriod(number)), 0)
+		startTime := time.Unix(int64(header.Time-c.config.CalculatePeriod(number)), 0)
 
-			if time.Now().Before(startTime) {
-				time.Sleep(time.Until(startTime))
-			}
+		if time.Now().Before(startTime) {
+			time.Sleep(time.Until(startTime))
 		}
 	}
 
