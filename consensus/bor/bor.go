@@ -355,7 +355,7 @@ func (c *Bor) verifyHeader(chain consensus.ChainHeaderReader, header *types.Head
 	number := header.Number.Uint64()
 
 	// Don't waste time checking blocks from the future
-	if header.Time-c.config.CalculatePeriod(number) > uint64(time.Now().Unix()) {
+	if header.Time > uint64(time.Now().Unix()) {
 		return consensus.ErrFutureBlock
 	}
 
@@ -839,12 +839,6 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 	header.Time = parent.Time + CalcProducerDelay(number, succession, c.config)
 	if header.Time < uint64(time.Now().Unix()) {
 		header.Time = uint64(time.Now().Unix())
-	} else {
-		startTime := time.Unix(int64(header.Time-c.config.CalculatePeriod(number)), 0)
-
-		if time.Now().Before(startTime) {
-			time.Sleep(time.Until(startTime))
-		}
 	}
 
 	return nil
@@ -1040,12 +1034,7 @@ func (c *Bor) Seal(chain consensus.ChainHeaderReader, block *types.Block, result
 	}
 
 	// Sweet, the protocol permits us to sign the block, wait for our time
-	delay := time.Until(time.Unix(int64(header.Time-c.config.CalculatePeriod(number)), 0))
-
-	if successionNumber > 0 {
-		delay = time.Until(time.Unix(int64(header.Time), 0))
-	}
-
+	delay := time.Unix(int64(header.Time), 0).Sub(time.Now()) // nolint: gosimple
 	// wiggle was already accounted for in header.Time, this is just for logging
 	wiggle := time.Duration(successionNumber) * time.Duration(c.config.CalculateBackupMultiplier(number)) * time.Second
 

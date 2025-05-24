@@ -57,7 +57,6 @@ import (
 	"github.com/ethereum/go-ethereum/internal/shutdowncheck"
 	"github.com/ethereum/go-ethereum/internal/version"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/miner"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/p2p"
@@ -67,10 +66,6 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/ethereum/go-ethereum/triedb"
-)
-
-var (
-	MilestoneWhitelistedDelayTimer = metrics.NewRegisteredTimer("chain/milestone/whitelisteddelay", nil)
 )
 
 // Config contains the configuration options of the ETH protocol.
