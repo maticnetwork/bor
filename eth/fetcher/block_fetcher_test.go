@@ -137,7 +137,7 @@ func (f *fetcherTester) verifyHeader(header *types.Header) error {
 }
 
 // broadcastBlock is a nop placeholder for the block broadcasting.
-func (f *fetcherTester) broadcastBlock(block *types.Block, propagate bool) {
+func (f *fetcherTester) broadcastBlock(block *types.Block, witness *stateless.Witness, propagate bool) {
 }
 
 // chainHeight retrieves the current height (block number) of the chain.
@@ -997,12 +997,12 @@ func TestBlockMemoryExhaustionAttack(t *testing.T) {
 
 // makeWitnessFetcher creates a witness fetcher for a given peer.
 func (f *fetcherTester) makeWitnessFetcher(peer string, blocks map[common.Hash]*types.Block, drift time.Duration) witnessRequesterFn {
-	return func(hashes []common.Hash, sink chan *wit.Response) (*wit.Request, error) {
+	return func(hash common.Hash, sink chan *wit.Response) (*wit.Request, error) {
 		// Create a new peer to handle the request
 		p := wit.NewPeer(1, &p2p.Peer{}, nil, log.New())
 
 		// Request witnesses from the peer
-		req, err := p.RequestWitness(hashes, sink)
+		req, err := p.RequestWitness([]common.Hash{hash}, sink)
 		if err != nil {
 			return nil, err
 		}
@@ -1014,25 +1014,21 @@ func (f *fetcherTester) makeWitnessFetcher(peer string, blocks map[common.Hash]*
 				return
 			}
 
-			// Gather all the witnesses
-			witnesses := make([]*stateless.Witness, 0, len(hashes))
-			for _, hash := range hashes {
-				if block, ok := blocks[hash]; ok {
-					// Create a witness for the block
-					witness, err := stateless.NewWitness(block.Header(), nil)
-					if err != nil {
-						continue
-					}
-					witnesses = append(witnesses, witness)
+			// Get the witness for the single hash
+			if block, ok := blocks[hash]; ok {
+				// Create a witness for the block
+				witness, err := stateless.NewWitness(block.Header(), nil)
+				if err != nil {
+					return
 				}
-			}
 
-			// Deliver the witnesses
-			sink <- &wit.Response{
-				Req:  req,
-				Res:  &wit.NewWitnessPacket{Witness: witnesses[0]}, // For testing, just use the first witness
-				Time: time.Since(req.Sent),
-				Done: make(chan error),
+				// Deliver the witness
+				sink <- &wit.Response{
+					Req:  req,
+					Res:  &wit.NewWitnessPacket{Witness: witness},
+					Time: time.Since(req.Sent),
+					Done: make(chan error),
+				}
 			}
 		}()
 

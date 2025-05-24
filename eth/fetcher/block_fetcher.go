@@ -732,7 +732,7 @@ func (f *BlockFetcher) loop() {
 							return
 						} // Invalid response type
 						// Ignoring withdrawals here, since the block fetcher is not used post-merge.
-						txs, uncles, _, _ := bodyResponse.Unpack()
+						txs, uncles, _ := bodyResponse.Unpack()
 						f.FilterBodies(p, txs, uncles, time.Now(), announcedAt)
 
 					case <-timeout.C:
