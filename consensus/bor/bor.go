@@ -473,13 +473,13 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 	// TODO:
 	// Verify validator statelessly
 
-	// snap, err := c.snapshot(chain, number-1, header.ParentHash, parents)
-	// if err != nil {
-	// 	return err
-	// }
+	snap, err := c.snapshot(chain, number-1, header.ParentHash, parents)
+	if err != nil {
+		return err
+	}
 
 	// Verify the validator list match the local contract
-	if false && IsSprintStart(number+1, c.config.CalculateSprint(number)) {
+	if IsSprintStart(number+1, c.config.CalculateSprint(number)) {
 		newValidators, err := c.spanner.GetCurrentValidatorsByBlockNrOrHash(context.Background(), rpc.BlockNumberOrHashWithNumber(rpc.LatestBlockNumber), number+1)
 
 		if err != nil {
@@ -507,7 +507,7 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 	}
 
 	// verify the validator list in the last sprint block
-	if false && IsSprintStart(number, c.config.CalculateSprint(number)) {
+	if IsSprintStart(number, c.config.CalculateSprint(number)) {
 		parentValidatorBytes := parent.GetValidatorBytes(c.chainConfig)
 		validatorsBytes := make([]byte, len(snap.ValidatorSet.Validators)*validatorHeaderBytesLength)
 
@@ -526,8 +526,7 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 
 	// All basic checks passed, verify the seal and return
 	// TODO: Verify seal statelessly
-	// return c.verifySeal(chain, header, parents)
-	return nil
+	return c.verifySeal(chain, header, parents)
 }
 
 // snapshot retrieves the authorization snapshot at a given point in time.
