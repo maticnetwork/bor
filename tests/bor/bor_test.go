@@ -1565,11 +1565,22 @@ func TestEarlyBlockAnnouncementPostBhilai_Primary(t *testing.T) {
 	spanner := getMockedSpanner(t, currentValidators)
 	_bor.SetSpanner(spanner)
 
+	// Pre-define succession as 0 as all the tests are for primary
+	succession := 0
+	getSuccession := func() int {
+		return succession
+	}
 	updateTime := func(header *types.Header) {
 		// This logic matches with consensus.Prepare function. It's done explicitly here
 		// because other tests aren't designed to use current time and hence might break.
 		if header.Time < uint64(time.Now().Unix()) {
 			header.Time = uint64(time.Now().Unix())
+		} else {
+			if chain.Config().Bor.IsBhilai(header.Number) && getSuccession() == 0 {
+				period := chain.Config().Bor.CalculatePeriod(header.Number.Uint64())
+				startTime := time.Unix(int64(header.Time-period), 0)
+				time.Sleep(time.Until(startTime))
+			}
 		}
 	}
 
@@ -1582,17 +1593,21 @@ func TestEarlyBlockAnnouncementPostBhilai_Primary(t *testing.T) {
 
 	// Case 1: Block announced before header time should be accepted
 	// Block 2
-	// Wait until the block building time (header.Time - 2s) for this block starts
-	time.Sleep(time.Until(time.Unix(int64(block.Time()), 0)))
+	// The previous was built early but `updateTime` function will ensure block building
+	// doesn't start before the block's 2s time window.
+	waitingTime := time.Until(time.Unix(int64(block.Time()), 0))
 	// Capture the expected header time based on the logic used in bor consensus
-	headerTime := block.Time() + bor.CalcProducerDelay(block.NumberU64(), 0, init.genesis.Config.Bor)
-	maxDelay := time.Until(time.Unix(int64(headerTime), 0))
+	headerTime := block.Time() + bor.CalcProducerDelay(block.NumberU64(), getSuccession(), init.genesis.Config.Bor)
+	// Define a max possible delay which is time until header time + waiting time defined above
+	maxDelay := time.Until(time.Unix(int64(headerTime), 0)) + waitingTime
 	// Track time taken to build, and seal (basically announce) the block
 	start := time.Now()
 	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators, false, updateTime)
 	blockAnnouncementTime := time.Since(start)
 	// The building + sealing time should be less than the expected pre-bhilai block building time (~2s)
 	require.LessOrEqual(t, blockAnnouncementTime, maxDelay, fmt.Sprintf("block announcement happened after header time"))
+	// The building + sealing time should be slightly greater than the waiting time
+	require.Greater(t, blockAnnouncementTime, waitingTime, fmt.Sprintf("block announcement time is less than waiting time"))
 	// Block verified and imported successfully
 	i, err = chain.InsertChain([]*types.Block{block})
 	require.NoError(t, err, "error inserting block #2")
@@ -1601,7 +1616,7 @@ func TestEarlyBlockAnnouncementPostBhilai_Primary(t *testing.T) {
 	// Case 2: Delayed block (after header time) should be accepted
 	// Block 3
 	// Wait until header.Time + 1s before building the block
-	headerTime = block.Time() + bor.CalcProducerDelay(block.NumberU64(), 0, init.genesis.Config.Bor)
+	headerTime = block.Time() + bor.CalcProducerDelay(block.NumberU64(), getSuccession(), init.genesis.Config.Bor)
 	time.Sleep(time.Until(time.Unix(int64(headerTime)+1, 0)))
 	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators, false, updateTime)
 	require.Greater(t, block.Time(), headerTime, "block time should be greated than expected header time")
@@ -1622,8 +1637,15 @@ func TestEarlyBlockAnnouncementPostBhilai_Primary(t *testing.T) {
 	// Use signer to sign block instead of using `bor.Seal` call. This is done to immediately
 	// build the next block instead of waiting for the delay (using bor.Seal will not lead
 	// to block being rejected).
+	updateTimeWithoutSleep := func(header *types.Header) {
+		// This logic matches with consensus.Prepare function. It's done explicitly here
+		// because other tests aren't designed to use current time and hence might break.
+		if header.Time < uint64(time.Now().Unix()) {
+			header.Time = uint64(time.Now().Unix())
+		}
+	}
 	signer, err := hex.DecodeString(privKey)
-	tempBlock := buildNextBlock(t, _bor, chain, block, signer, init.genesis.Config.Bor, nil, currentValidators, true, updateTime)
+	tempBlock := buildNextBlock(t, _bor, chain, block, signer, init.genesis.Config.Bor, nil, currentValidators, true, updateTimeWithoutSleep)
 	i, err = chain.InsertChain([]*types.Block{tempBlock})
 	// No error is expected here because block will be added to future chain and is
 	// technically valid (according to insert chain function)
@@ -1644,7 +1666,7 @@ func TestEarlyBlockAnnouncementPostBhilai_Primary(t *testing.T) {
 	// Block 6
 	// Set the header time to be 1s earlier than the expected header time
 	setTime := func(header *types.Header) {
-		header.Time = block.Time() + bor.CalcProducerDelay(block.NumberU64(), 0, init.genesis.Config.Bor) - 1
+		header.Time = block.Time() + bor.CalcProducerDelay(block.NumberU64(), getSuccession(), init.genesis.Config.Bor) - 1
 	}
 	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators, false, setTime)
 	// Consensus verification will fail and this error will float up unlike future block error
@@ -1712,11 +1734,21 @@ func TestEarlyBlockAnnouncementPostBhilai_NonPrimary(t *testing.T) {
 	spanner := getMockedSpanner(t, currentValidators)
 	_bor.SetSpanner(spanner)
 
+	succession := 0
+	getSuccession := func() int {
+		return succession
+	}
 	updateTime := func(header *types.Header) {
 		// This logic matches with consensus.Prepare function. It's done explicitly here
 		// because other tests aren't designed to use current time and hence might break.
 		if header.Time < uint64(time.Now().Unix()) {
 			header.Time = uint64(time.Now().Unix())
+		} else {
+			if chain.Config().Bor.IsBhilai(header.Number) && getSuccession() == 0 {
+				period := chain.Config().Bor.CalculatePeriod(header.Number.Uint64())
+				startTime := time.Unix(int64(header.Time-period), 0)
+				time.Sleep(time.Until(startTime))
+			}
 		}
 	}
 
@@ -1737,6 +1769,9 @@ func TestEarlyBlockAnnouncementPostBhilai_NonPrimary(t *testing.T) {
 		sig, err := crypto.Sign(crypto.Keccak256(data), key3)
 		return sig, err
 	})
+
+	// All blocks from this point will be built by the tertiary validator. Set the succession to 2
+	succession = 2
 
 	// Case 1: Build a block from tertiary validator with header.Time set before block 1's time
 	// As the time in header is invalid, the block should be rejected due to invalid timestamp.
@@ -1760,7 +1795,7 @@ func TestEarlyBlockAnnouncementPostBhilai_NonPrimary(t *testing.T) {
 	updateHeader = func(header *types.Header) {
 		header.Difficulty = new(big.Int).SetUint64(1)
 		// Succession is 2 because of tertiary validator
-		header.Time = block.Time() + bor.CalcProducerDelay(block.NumberU64(), 2, init.genesis.Config.Bor)
+		header.Time = block.Time() + bor.CalcProducerDelay(block.NumberU64(), getSuccession(), init.genesis.Config.Bor)
 	}
 	tempBlock = buildNextBlock(t, _bor, chain, block, signer, init.genesis.Config.Bor, nil, currentValidators, true, updateTime, updateHeader)
 	// Block is invalid according to consensus rules and should return appropriate error
@@ -1773,7 +1808,7 @@ func TestEarlyBlockAnnouncementPostBhilai_NonPrimary(t *testing.T) {
 	var expectedBlockBuildingTime time.Duration
 	updateHeader = func(header *types.Header) {
 		header.Difficulty = new(big.Int).SetUint64(1)
-		header.Time = block.Time() + bor.CalcProducerDelay(block.NumberU64(), 2, init.genesis.Config.Bor)
+		header.Time = block.Time() + bor.CalcProducerDelay(block.NumberU64(), getSuccession(), init.genesis.Config.Bor)
 		// Capture the expected header time based on the logic used in bor consensus
 		expectedBlockBuildingTime = time.Until(time.Unix(int64(header.Time), 0))
 	}
@@ -1794,7 +1829,7 @@ func TestEarlyBlockAnnouncementPostBhilai_NonPrimary(t *testing.T) {
 	// Block 3 (tertiary)
 	updateHeader = func(header *types.Header) {
 		header.Difficulty = new(big.Int).SetUint64(1)
-		header.Time = block.Time() + bor.CalcProducerDelay(block.NumberU64(), 2, init.genesis.Config.Bor)
+		header.Time = block.Time() + bor.CalcProducerDelay(block.NumberU64(), getSuccession(), init.genesis.Config.Bor)
 	}
 	block = buildNextBlock(t, _bor, chain, block, signer, init.genesis.Config.Bor, nil, currentValidators, true, updateTime, updateHeader)
 
@@ -1823,10 +1858,10 @@ func TestEarlyBlockAnnouncementPostBhilai_NonPrimary(t *testing.T) {
 	// in case 1).
 	updateHeader = func(header *types.Header) {
 		header.Difficulty = new(big.Int).SetUint64(1)
-		header.Time = block.Time() + bor.CalcProducerDelay(block.NumberU64(), 2, init.genesis.Config.Bor) - 1
+		header.Time = block.Time() + bor.CalcProducerDelay(block.NumberU64(), getSuccession(), init.genesis.Config.Bor) - 1
 	}
 	// Capture time to wait until the expected header time before announcing the block
-	timeToWait := time.Until(time.Unix(int64(block.Time()+bor.CalcProducerDelay(block.NumberU64(), 2, init.genesis.Config.Bor)), 0))
+	timeToWait := time.Until(time.Unix(int64(block.Time()+bor.CalcProducerDelay(block.NumberU64(), getSuccession(), init.genesis.Config.Bor)), 0))
 	block = buildNextBlock(t, _bor, chain, block, signer, init.genesis.Config.Bor, nil, currentValidators, true, updateTime, updateHeader)
 
 	// Wait for expected time + some buffer
