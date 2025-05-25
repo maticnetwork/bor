@@ -1992,6 +1992,7 @@ func testSetHeadWithScheme(t *testing.T, tt *rewindTest, snapshots bool, scheme 
 			TrieTimeLimit:  5 * time.Minute,
 			SnapshotLimit:  0, // Disable snapshot
 			StateScheme:    scheme,
+			TriesInMemory:  128,
 		}
 	)
 	if snapshots {

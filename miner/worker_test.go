@@ -44,8 +44,8 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/tests/bor/mocks"
 	"github.com/ethereum/go-ethereum/triedb"
-	"github.com/golang/mock/gomock"
 	"github.com/holiman/uint256"
+	gomock "go.uber.org/mock/gomock"
 	"gotest.tools/assert"
 )
 
@@ -386,8 +386,16 @@ func getFakeBorFromConfig(t *testing.T, chainConfig *params.ChainConfig) (consen
 	// Mock span 0 for heimdall
 	span0 := createMockSpanForTest(TestBankAddress, chainConfig.ChainID.String())
 
+	validators := make([]*valset.Validator, len(span0.ValidatorSet.Validators))
+	for i, v := range span0.ValidatorSet.Validators {
+		validators[i] = &valset.Validator{
+			Address:     common.HexToAddress(v.Signer),
+			VotingPower: v.VotingPower,
+		}
+	}
+
 	spanner := bor.NewMockSpanner(ctrl)
-	spanner.EXPECT().GetCurrentValidatorsByHash(gomock.Any(), gomock.Any(), gomock.Any()).Return(span0.ValidatorSet.Validators, nil).AnyTimes()
+	spanner.EXPECT().GetCurrentValidatorsByHash(gomock.Any(), gomock.Any(), gomock.Any()).Return(validators, nil).AnyTimes()
 
 	heimdallClientMock := mocks.NewMockIHeimdallClient(ctrl)
 	heimdallWSClient := mocks.NewMockIHeimdallWSClient(ctrl)
@@ -936,6 +944,8 @@ func BenchmarkBorMining(b *testing.B) {
 	ethAPIMock := api.NewMockCaller(ctrl)
 	ethAPIMock.EXPECT().Call(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
+	span0 := createMockSpanForTest(TestBankAddress, "1")
+
 	spanner := bor.NewMockSpanner(ctrl)
 	spanner.EXPECT().GetCurrentValidatorsByHash(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*valset.Validator{
 		{
@@ -948,6 +958,7 @@ func BenchmarkBorMining(b *testing.B) {
 
 	heimdallClientMock := mocks.NewMockIHeimdallClient(ctrl)
 	heimdallWSClient := mocks.NewMockIHeimdallWSClient(ctrl)
+	heimdallClientMock.EXPECT().GetSpan(gomock.Any(), uint64(0)).Return(&span0, nil).AnyTimes()
 
 	heimdallClientMock.EXPECT().Close().Times(1)
 
@@ -1035,6 +1046,8 @@ func BenchmarkBorMiningBlockSTMMetadata(b *testing.B) {
 	ethAPIMock := api.NewMockCaller(ctrl)
 	ethAPIMock.EXPECT().Call(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
+	span0 := createMockSpanForTest(TestBankAddress, "1")
+
 	spanner := bor.NewMockSpanner(ctrl)
 	spanner.EXPECT().GetCurrentValidatorsByHash(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*valset.Validator{
 		{
@@ -1047,7 +1060,7 @@ func BenchmarkBorMiningBlockSTMMetadata(b *testing.B) {
 
 	heimdallClientMock := mocks.NewMockIHeimdallClient(ctrl)
 	heimdallWSClient := mocks.NewMockIHeimdallWSClient(ctrl)
-
+	heimdallClientMock.EXPECT().GetSpan(gomock.Any(), uint64(0)).Return(&span0, nil).AnyTimes()
 	heimdallClientMock.EXPECT().Close().Times(1)
 
 	contractMock := bor.NewMockGenesisContract(ctrl)

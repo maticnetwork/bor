@@ -142,9 +142,6 @@ func TestSupplyRewards(t *testing.T) {
 	)
 
 	expected := supplyInfo{
-		Issuance: &supplyInfoIssuance{
-			Reward: (*hexutil.Big)(new(big.Int).Mul(common.Big2, big.NewInt(params.Ether))),
-		},
 		Number:     1,
 		Hash:       common.HexToHash("0xcbb08370505be503dafedc4e96d139ea27aba3cbc580148568b8a307b3f51052"),
 		ParentHash: common.HexToHash("0xadeda0a83e337b6c073e3f0e9a17531a04009b397a9588c093b628f21b8bc5a3"),
@@ -203,12 +200,8 @@ func TestSupplyEip1559Burn(t *testing.T) {
 	}
 	var (
 		head     = chain.CurrentBlock()
-		reward   = new(big.Int).Mul(common.Big2, big.NewInt(params.Ether))
 		burn     = new(big.Int).Mul(big.NewInt(21000), head.BaseFee)
 		expected = supplyInfo{
-			Issuance: &supplyInfoIssuance{
-				Reward: (*hexutil.Big)(reward),
-			},
 			Burn: &supplyInfoBurn{
 				EIP1559: (*hexutil.Big)(burn),
 			},

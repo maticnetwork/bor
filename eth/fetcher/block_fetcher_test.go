@@ -1086,10 +1086,16 @@ func testWitnessFetching(t *testing.T, light bool) {
 	// Wait for witness fetching
 	time.Sleep(100 * time.Millisecond)
 
-	// Verify that all blocks were imported
+	// Verify that all blocks/headers were imported
 	for i := 0; i < len(hashes); i++ {
-		if block := tester.getBlock(hashes[i]); block == nil {
-			t.Fatalf("block %d not imported", i)
+		if light { // In light mode, we expect headers
+			if header := tester.getHeader(hashes[i]); header == nil {
+				t.Fatalf("header %d (hash %s) not imported in light mode", i, hashes[i].TerminalString())
+			}
+		} else { // In full mode, we expect blocks
+			if block := tester.getBlock(hashes[i]); block == nil {
+				t.Fatalf("block %d (hash %s) not imported in full mode", i, hashes[i].TerminalString())
+			}
 		}
 	}
 }
@@ -1127,10 +1133,16 @@ func testSequentialAnnouncementsWithDrift(t *testing.T, light bool) {
 	// Wait for witness fetching
 	time.Sleep(100 * time.Millisecond)
 
-	// Verify that all blocks were imported
+	// Verify that all blocks/headers were imported
 	for i := 0; i < len(hashes); i++ {
-		if block := tester.getBlock(hashes[i]); block == nil {
-			t.Fatalf("block %d not imported", i)
+		if light { // In light mode, we expect headers
+			if header := tester.getHeader(hashes[i]); header == nil {
+				t.Fatalf("header %d (hash %s) not imported in light mode", i, hashes[i].TerminalString())
+			}
+		} else { // In full mode, we expect blocks
+			if block := tester.getBlock(hashes[i]); block == nil {
+				t.Fatalf("block %d (hash %s) not imported in full mode", i, hashes[i].TerminalString())
+			}
 		}
 	}
 }
@@ -1168,10 +1180,16 @@ func testSequentialAnnouncementsWithTimeout(t *testing.T, light bool) {
 	// Wait for witness fetching
 	time.Sleep(100 * time.Millisecond)
 
-	// Verify that all blocks were imported
+	// Verify that all blocks/headers were imported
 	for i := 0; i < len(hashes); i++ {
-		if block := tester.getBlock(hashes[i]); block == nil {
-			t.Fatalf("block %d not imported", i)
+		if light { // In light mode, we expect headers
+			if header := tester.getHeader(hashes[i]); header == nil {
+				t.Fatalf("header %d (hash %s) not imported in light mode", i, hashes[i].TerminalString())
+			}
+		} else { // In full mode, we expect blocks
+			if block := tester.getBlock(hashes[i]); block == nil {
+				t.Fatalf("block %d (hash %s) not imported in full mode", i, hashes[i].TerminalString())
+			}
 		}
 	}
 }

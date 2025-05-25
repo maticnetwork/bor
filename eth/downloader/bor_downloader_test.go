@@ -1059,6 +1059,9 @@ func testSyncProgress(t *testing.T, protocol uint, mode SyncMode) {
 
 	pending.Wait()
 
+	// Simulate a successful sync above the fork
+	tester.downloader.syncStatsChainOrigin = tester.downloader.syncStatsChainHeight
+
 	// Synchronise all the blocks and check continuation progress
 	tester.newPeer("peer-full", protocol, chain.blocks[1:])
 	pending.Add(1)

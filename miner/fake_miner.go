@@ -5,13 +5,12 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/golang/mock/gomock"
-
+	heimdallTypes "github.com/0xPolygon/heimdall-v2/x/bor/types"
+	heimdallStakeTypes "github.com/0xPolygon/heimdall-v2/x/stake/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/bor"
 	"github.com/ethereum/go-ethereum/consensus/bor/api"
-	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
 	"github.com/ethereum/go-ethereum/consensus/bor/valset"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -26,6 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/tests/bor/mocks"
 	"github.com/ethereum/go-ethereum/triedb"
+	gomock "go.uber.org/mock/gomock"
 )
 
 type DefaultBorMiner struct {
@@ -50,8 +50,16 @@ func NewBorDefaultMiner(t *testing.T) *DefaultBorMiner {
 	// Mock span 0 for heimdall
 	span0 := createMockSpanForTest(common.Address{0x1}, "1337")
 
+	validators := make([]*valset.Validator, len(span0.ValidatorSet.Validators))
+	for i, v := range span0.ValidatorSet.Validators {
+		validators[i] = &valset.Validator{
+			Address:     common.HexToAddress(v.Signer),
+			VotingPower: v.VotingPower,
+		}
+	}
+
 	spanner := bor.NewMockSpanner(ctrl)
-	spanner.EXPECT().GetCurrentValidatorsByHash(gomock.Any(), gomock.Any(), gomock.Any()).Return(span0.ValidatorSet.Validators, nil).AnyTimes()
+	spanner.EXPECT().GetCurrentValidatorsByHash(gomock.Any(), gomock.Any(), gomock.Any()).Return(validators, nil).AnyTimes()
 
 	heimdallClient := mocks.NewMockIHeimdallClient(ctrl)
 	heimdallWSClient := mocks.NewMockIHeimdallWSClient(ctrl)
@@ -156,27 +164,28 @@ func NewFakeBor(t TensingObject, chainDB ethdb.Database, chainConfig *params.Cha
 	return bor.New(chainConfig, chainDB, ethAPIMock, spanner, heimdallClientMock, heimdallClientWSMock, contractMock, false)
 }
 
-func createMockSpanForTest(address common.Address, chainId string) span.HeimdallSpan {
+func createMockSpanForTest(address common.Address, chainId string) heimdallTypes.Span {
 	// Mock span 0 for heimdall calls
-	validator := valset.Validator{
-		ID:               0,
-		Address:          address,
+	validator := heimdallStakeTypes.Validator{
+		ValId:            0,
+		StartEpoch:       0,
+		EndEpoch:         0,
+		Nonce:            0,
 		VotingPower:      100,
 		ProposerPriority: 0,
+		Signer:           address.Hex(),
 	}
-	validatorSet := valset.ValidatorSet{
-		Validators: []*valset.Validator{&validator},
+	validatorSet := heimdallStakeTypes.ValidatorSet{
+		Validators: []*heimdallStakeTypes.Validator{&validator},
 		Proposer:   &validator,
 	}
-	span0 := span.HeimdallSpan{
-		Span: span.Span{
-			ID:         0,
-			StartBlock: 0,
-			EndBlock:   255,
-		},
+	span0 := heimdallTypes.Span{
+		Id:                0,
+		StartBlock:        0,
+		EndBlock:          255,
 		ValidatorSet:      validatorSet,
-		SelectedProducers: []valset.Validator{validator},
-		ChainID:           chainId,
+		SelectedProducers: []heimdallStakeTypes.Validator{validator},
+		BorChainId:        chainId,
 	}
 
 	return span0
