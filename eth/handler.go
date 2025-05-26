@@ -769,8 +769,8 @@ func (h *handler) minedBroadcastLoop() {
 				delay := common.PrettyDuration(time.Millisecond * time.Duration(delayInMs))
 				log.Info("[block tracker] Broadcasting mined block", "number", ev.Block.NumberU64(), "hash", ev.Block.Hash(), "blockTime", ev.Block.Time(), "now", time.Now().Unix(), "delay", delay, "delayInMs", delayInMs)
 			}
-			h.BroadcastBlock(ev.Block, nil, true)  // First propagate block to peers
-			h.BroadcastBlock(ev.Block, nil, false) // Only then announce to the rest
+			h.BroadcastBlock(ev.Block, ev.Witness, true)  // First propagate block to peers
+			h.BroadcastBlock(ev.Block, ev.Witness, false) // Only then announce to the rest
 		}
 	}
 }

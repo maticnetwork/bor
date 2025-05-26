@@ -23,6 +23,7 @@ import (
 	stakeTypes "github.com/0xPolygon/heimdall-v2/x/stake/types"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/stateless"
 	balance_tracing "github.com/ethereum/go-ethereum/core/tracing"
 
 	"github.com/ethereum/go-ethereum/consensus"
@@ -995,7 +996,7 @@ func (c *Bor) Authorize(currentSigner common.Address, signFn SignerFn) {
 
 // Seal implements consensus.Engine, attempting to create a sealed block using
 // the local signing credentials.
-func (c *Bor) Seal(chain consensus.ChainHeaderReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
+func (c *Bor) Seal(chain consensus.ChainHeaderReader, block *types.Block, witness *stateless.Witness, results chan<- *consensus.NewSealedBlockEvent, stop <-chan struct{}) error {
 	header := block.Header()
 	// Sealing the genesis block is not supported
 	number := header.Number.Uint64()
@@ -1071,7 +1072,7 @@ func (c *Bor) Seal(chain consensus.ChainHeaderReader, block *types.Block, result
 			)
 		}
 		select {
-		case results <- block.WithSeal(header):
+		case results <- &consensus.NewSealedBlockEvent{Block: block.WithSeal(header), Witness: witness}:
 		default:
 			log.Warn("Sealing result was not read by miner", "number", number, "sealhash", SealHash(header, c.config))
 		}

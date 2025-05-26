@@ -217,7 +217,7 @@ type worker struct {
 	newWorkCh          chan *newWorkReq
 	getWorkCh          chan *getWorkReq
 	taskCh             chan *task
-	resultCh           chan *types.Block
+	resultCh           chan *consensus.NewSealedBlockEvent
 	startCh            chan struct{}
 	exitCh             chan struct{}
 	resubmitIntervalCh chan time.Duration
@@ -297,7 +297,7 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 		newWorkCh:           make(chan *newWorkReq),
 		getWorkCh:           make(chan *getWorkReq),
 		taskCh:              make(chan *task),
-		resultCh:            make(chan *types.Block, resultQueueSize),
+		resultCh:            make(chan *consensus.NewSealedBlockEvent, resultQueueSize),
 		startCh:             make(chan struct{}, 1),
 		exitCh:              make(chan struct{}),
 		resubmitIntervalCh:  make(chan time.Duration),
@@ -721,7 +721,7 @@ func (w *worker) taskLoop() {
 			w.pendingTasks[sealHash] = task
 			w.pendingMu.Unlock()
 
-			if err := w.engine.Seal(w.chain, task.block, w.resultCh, stopCh); err != nil {
+			if err := w.engine.Seal(w.chain, task.block, task.state.Witness(), w.resultCh, stopCh); err != nil {
 				log.Warn("Block sealing failed", "err", err)
 				w.pendingMu.Lock()
 				delete(w.pendingTasks, sealHash)
@@ -741,11 +741,18 @@ func (w *worker) resultLoop() {
 
 	for {
 		select {
-		case block := <-w.resultCh:
+		case newSealedBlockEvent := <-w.resultCh:
+
 			// Short circuit when receiving empty result.
+			if newSealedBlockEvent == nil {
+				continue
+			}
+			block := newSealedBlockEvent.Block
+			witness := newSealedBlockEvent.Witness
 			if block == nil {
 				continue
 			}
+
 			// Short circuit when receiving duplicate result caused by resubmitting.
 			if w.chain.HasBlock(block.Hash(), block.NumberU64()) {
 				continue
@@ -817,7 +824,7 @@ func (w *worker) resultLoop() {
 				"elapsed", common.PrettyDuration(time.Since(task.createdAt)))
 
 			// Broadcast the block and announce chain insertion event
-			w.mux.Post(core.NewMinedBlockEvent{Block: block})
+			w.mux.Post(core.NewMinedBlockEvent{Block: block, Witness: witness})
 
 			sealedBlocksCounter.Inc(1)
 
