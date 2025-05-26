@@ -353,8 +353,8 @@ func (d *Downloader) UnregisterPeer(id string) error {
 
 // LegacySync tries to sync up our local block chain with a remote peer, both
 // adding various sanity checks as well as wrapping it with various log entries.
-func (d *Downloader) LegacySync(id string, head common.Hash, td, ttd *big.Int, mode SyncMode) error {
-	err := d.synchronise(id, head, td, ttd, mode, false, nil)
+func (d *Downloader) LegacySync(id string, head common.Hash, td, ttd *big.Int, mode SyncMode, db ethdb.Database) error {
+	err := d.synchronise(id, head, td, ttd, mode, false, nil, db)
 
 	switch err {
 	case nil, errBusy, errCanceled:
@@ -395,7 +395,7 @@ func (d *Downloader) LegacySync(id string, head common.Hash, td, ttd *big.Int, m
 // synchronise will select the peer and use it for synchronising. If an empty string is given
 // it will use the best peer possible and synchronize if its TD is higher than our own. If any of the
 // checks fail an error will be returned. This method is synchronous
-func (d *Downloader) synchronise(id string, hash common.Hash, td, ttd *big.Int, mode SyncMode, beaconMode bool, beaconPing chan struct{}) error {
+func (d *Downloader) synchronise(id string, hash common.Hash, td, ttd *big.Int, mode SyncMode, beaconMode bool, beaconPing chan struct{}, db ethdb.Database) error {
 	// The beacon header syncer is async. It will start this synchronization and
 	// will continue doing other tasks. However, if synchronization needs to be
 	// cancelled, the syncer needs to know if we reached the startup point (and
@@ -485,7 +485,7 @@ func (d *Downloader) synchronise(id string, hash common.Hash, td, ttd *big.Int, 
 		close(beaconPing)
 	}
 
-	return d.syncWithPeer(p, hash, td, ttd, beaconMode)
+	return d.syncWithPeer(p, hash, td, ttd, beaconMode, db)
 }
 
 func (d *Downloader) getMode() SyncMode {
@@ -494,7 +494,7 @@ func (d *Downloader) getMode() SyncMode {
 
 // syncWithPeer starts a block synchronization based on the hash chain from the
 // specified peer and head hash.
-func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td, ttd *big.Int, beaconMode bool) (err error) {
+func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td, ttd *big.Int, beaconMode bool, db ethdb.Database) (err error) {
 	d.mux.Post(StartEvent{})
 
 	defer func() {
@@ -571,7 +571,19 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td, ttd *
 	height := latest.Number.Uint64()
 
 	var origin uint64
-	if !beaconMode {
+	if mode == StatelessSync {
+		localHeight := d.blockchain.CurrentBlock().Number.Uint64()
+
+		// FastForward on Heimdall-v1 (only for test purposes)
+		// It just fastforward once and when it's done it writes an ephemeral TD in origin block to ensure parent to be queried
+		if localHeight == 0 {
+			origin = height
+			if db != nil {
+				rawdb.WriteTd(db, latest.Hash(), height, big.NewInt(int64(height)))
+			}
+			log.Info("StatelessSync; FastForwarding to latest block of peer", "blockNumber", height, "localHeight", localHeight)
+		}
+	} else if !beaconMode {
 		// In legacy mode, reach out to the network and find the ancestor
 		origin, err = d.findAncestor(p, latest)
 		if err != nil {
@@ -595,6 +607,7 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td, ttd *
 
 	// Ensure our origin point is below any snap sync pivot point
 	if mode == SnapSync {
+		// TODO insert stateless logic here
 		if height <= uint64(fsMinFullBlocks) {
 			origin = 0
 		} else {

@@ -619,7 +619,7 @@ func (h *handler) BroadcastBlock(block *types.Block, witness *stateless.Witness,
 		// Calculate the TD of the block (it's not imported yet, so block.Td is not valid)
 		var td *big.Int
 		if parent := h.chain.GetBlock(block.ParentHash(), block.NumberU64()-1); parent != nil {
-			td = new(big.Int).Add(block.Difficulty(), h.chain.GetTd(block.ParentHash(), block.NumberU64()-1))
+			td = new(big.Int).Add(big.NewInt(1), h.chain.GetTd(block.ParentHash(), block.NumberU64()-1))
 		} else {
 			log.Error("Propagating dangling block", "number", block.Number(), "hash", hash)
 			return
