@@ -844,10 +844,10 @@ func (w *worker) makeEnv(parent *types.Header, header *types.Header, coinbase co
 			return nil, err
 		}
 		state.StartPrefetcher("miner", bundle)
+	} else {
+		// todo: @anshalshukla - check if witness is required
+		state.StartPrefetcher("miner", nil)
 	}
-
-	// todo: @anshalshukla - check if witness is required
-	state.StartPrefetcher("miner", nil)
 
 	// Note the passed coinbase may be different with header.Coinbase.
 	env := &environment{
@@ -1456,7 +1456,7 @@ func (w *worker) commitWork(interrupt *atomic.Int32, noempty bool, timestamp int
 	work, err = w.prepareWork(&generateParams{
 		timestamp: uint64(timestamp),
 		coinbase:  coinbase,
-	}, false)
+	}, true)
 
 	if err != nil {
 		return
