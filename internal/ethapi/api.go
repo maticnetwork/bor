@@ -771,7 +771,6 @@ func (api *BlockChainAPI) GetBlockReceipts(ctx context.Context, blockNrOrHash rp
 
 // GetTdByHash returns a map containing the total difficulty (hex-encoded) for the given block hash.
 func (api *BlockChainAPI) GetTdByHash(ctx context.Context, hash common.Hash) map[string]interface{} {
-
 	td := api.b.GetTd(ctx, hash)
 	if td == nil {
 		return nil
