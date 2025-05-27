@@ -398,7 +398,6 @@ func XTestDelivery(t *testing.T) {
 				}
 
 				time.Sleep(100 * time.Millisecond)
-
 				_, err := q.DeliverBodies(peer.id, txset, txsHashes, uncleset, uncleHashes, nil, nil)
 				if err != nil {
 					fmt.Printf("delivered %d bodies %v\n", len(txset), err)

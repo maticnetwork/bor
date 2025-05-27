@@ -10,6 +10,8 @@ The ```bor server``` command runs the Bor client.
 
 - ```bor.heimdallgRPC```: Address of Heimdall gRPC service
 
+- ```bor.heimdalltimeout```: Timeout period for bor's outgoing requests to heimdall (default: 5s)
+
 - ```bor.logs```: Enables bor log retrieval (default: false)
 
 - ```bor.runheimdall```: Run Heimdall service as a child process (default: false)
@@ -88,7 +90,7 @@ The ```bor server``` command runs the Bor client.
 
 - ```state.scheme```: Scheme to use for storing ethereum state ('hash' or 'path') (default: path)
 
-- ```syncmode```: Blockchain sync mode (only "full" sync supported) (default: full)
+- ```syncmode```: Blockchain sync mode ("full" or "snap") (default: full)
 
 - ```verbosity```: Logging verbosity for the server (5=trace|4=debug|3=info|2=warn|1=error|0=crit) (default: 3)
 
@@ -238,11 +240,13 @@ The ```bor server``` command runs the Bor client.
 
 - ```port```: Network listening port (default: 30303)
 
+- ```txannouncementonly```: Whether to only announce transactions to peers (default: false)
+
 - ```txarrivalwait```: Maximum duration to wait for a transaction before explicitly requesting it (default: 500ms)
 
 - ```v4disc```: Enables the V4 discovery mechanism (default: true)
 
-- ```v5disc```: Enables the experimental RLPx V5 (Topic Discovery) mechanism (default: false)
+- ```v5disc```: Enables the V5 discovery mechanism (default: true)
 
 ### Sealer Options
 

@@ -111,6 +111,10 @@ func (db *Database) Delete(key []byte) error {
 	panic("not supported")
 }
 
+func (db *Database) DeleteRange(start, end []byte) error {
+	panic("not supported")
+}
+
 func (db *Database) ModifyAncients(f func(ethdb.AncientWriteOp) error) (int64, error) {
 	panic("not supported")
 }
@@ -125,10 +129,6 @@ func (db *Database) TruncateTail(n uint64) (uint64, error) {
 
 func (db *Database) Sync() error {
 	return nil
-}
-
-func (db *Database) MigrateTable(s string, f func([]byte) ([]byte, error)) error {
-	panic("not supported")
 }
 
 func (db *Database) NewBatch() ethdb.Batch {

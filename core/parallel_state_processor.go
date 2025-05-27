@@ -265,7 +265,7 @@ var parallelizabilityTimer = metrics.NewRegisteredTimer("block/parallelizability
 // returns the amount of gas that was used in the process. If any of the
 // transactions failed to execute due to insufficient gas it will return an error.
 // nolint:gocognit
-func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config, interruptCtx context.Context) (types.Receipts, []*types.Log, uint64, error) {
+func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg vm.Config, interruptCtx context.Context) (*ProcessResult, error) {
 	var (
 		receipts    types.Receipts
 		header      = block.Header()
@@ -301,13 +301,25 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 	}
 
 	blockContext := NewEVMBlockContext(header, p.bc, nil)
+	context := NewEVMBlockContext(header, p.bc.hc, nil)
 
+	vmenv := vm.NewEVM(context, vm.TxContext{}, statedb, p.config, cfg)
+	var tracingStateDB = vm.StateDB(statedb)
+	if hooks := cfg.Tracer; hooks != nil {
+		tracingStateDB = state.NewHookedState(statedb, hooks)
+	}
+	if beaconRoot := block.BeaconRoot(); beaconRoot != nil {
+		ProcessBeaconBlockRoot(*beaconRoot, vmenv, tracingStateDB)
+	}
+	if p.config.IsPrague(block.Number()) {
+		ProcessParentBlockHash(block.ParentHash(), vmenv, statedb)
+	}
 	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
 		msg, err := TransactionToMessage(tx, types.MakeSigner(p.config, header.Number, header.Time), header.BaseFee)
 		if err != nil {
 			log.Error("error creating message", "err", err)
-			return nil, nil, 0, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
+			return nil, fmt.Errorf("could not apply tx %d [%v]: %w", i, tx.Hash().Hex(), err)
 		}
 
 		cleansdb := statedb.Copy()
@@ -386,13 +398,35 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 	}
 
 	if err != nil {
-		return nil, nil, 0, err
+		return nil, err
+	}
+
+	// Read requests if Prague is enabled and bor consensus is not active.
+	var requests [][]byte
+	if p.config.IsPrague(block.Number()) && p.config.Bor == nil {
+		// EIP-6110 deposits
+		depositRequests, err := ParseDepositLogs(allLogs, p.config)
+		if err != nil {
+			return nil, err
+		}
+		requests = append(requests, depositRequests)
+		// EIP-7002 withdrawals
+		withdrawalRequests := ProcessWithdrawalQueue(vmenv, tracingStateDB)
+		requests = append(requests, withdrawalRequests)
+		// EIP-7251 consolidations
+		consolidationRequests := ProcessConsolidationQueue(vmenv, tracingStateDB)
+		requests = append(requests, consolidationRequests)
 	}
 
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
 	p.engine.Finalize(p.bc, header, statedb, block.Body())
 
-	return receipts, allLogs, *usedGas, nil
+	return &ProcessResult{
+		Receipts: receipts,
+		Requests: requests,
+		Logs:     allLogs,
+		GasUsed:  *usedGas,
+	}, nil
 }
 
 func GetDeps(txDependency [][]uint64) map[int][]int {

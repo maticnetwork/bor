@@ -54,16 +54,15 @@ var (
 // freezerTableSize defines the maximum size of freezer data files.
 const freezerTableSize = 2 * 1000 * 1000 * 1000
 
-// Freezer is a memory mapped append-only database to store immutable ordered
-// data into flat files:
+// Freezer is an append-only database to store immutable ordered data into
+// flat files:
 //
-//   - The append-only nature ensures that disk writes are minimized.
-//   - The memory mapping ensures we can max out system memory for caching without
-//     reserving it for go-ethereum. This would also reduce the memory requirements
-//     of Geth, and thus also GC overhead.
+// - The append-only nature ensures that disk writes are minimized.
+// - The in-order data ensures that disk reads are always optimized.
 type Freezer struct {
-	frozen atomic.Uint64 // Number of items already frozen
-	tail   atomic.Uint64 // Number of the first stored item in the freezer
+	datadir string
+	frozen  atomic.Uint64 // Number of items already frozen
+	tail    atomic.Uint64 // Number of the first stored item in the freezer
 
 	// This lock synchronizes writers and the truncate operation, as well as
 	// the "atomic" (batched) read operations.
@@ -116,6 +115,7 @@ func NewFreezer(datadir string, namespace string, readonly bool, offset uint64, 
 	}
 	// Open all the supported data tables
 	freezer := &Freezer{
+		datadir:      datadir,
 		readonly:     readonly,
 		tables:       make(map[string]*freezerTable),
 		instanceLock: lock,
@@ -162,7 +162,7 @@ func NewFreezer(datadir string, namespace string, readonly bool, offset uint64, 
 	return freezer, nil
 }
 
-// Close terminates the chain freezer, unmapping all the data files.
+// Close terminates the chain freezer, closing all the data files.
 func (f *Freezer) Close() error {
 	f.writeLock.Lock()
 	defer f.writeLock.Unlock()
@@ -182,6 +182,11 @@ func (f *Freezer) Close() error {
 		return fmt.Errorf("%v", errs)
 	}
 	return nil
+}
+
+// AncientDatadir returns the path of the ancient store.
+func (f *Freezer) AncientDatadir() (string, error) {
+	return f.datadir, nil
 }
 
 // HasAncient returns an indicator whether the specified ancient data exists

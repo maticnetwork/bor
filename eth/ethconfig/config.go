@@ -18,7 +18,6 @@
 package ethconfig
 
 import (
-	"errors"
 	"math/big"
 	"time"
 
@@ -62,7 +61,6 @@ var Defaults = Config{
 	TxLookupLimit:      2350000,
 	TransactionHistory: 2350000,
 	StateHistory:       params.FullImmutabilityThreshold,
-	LightPeers:         100,
 	DatabaseCache:      512,
 	TrieCleanCache:     154,
 	TrieDirtyCache:     256,
@@ -96,11 +94,13 @@ type Config struct {
 	EthDiscoveryURLs  []string
 	SnapDiscoveryURLs []string
 
+	// State options.
 	NoPruning  bool // Whether to disable pruning and flush everything to disk
 	NoPrefetch bool // Whether to disable prefetching and only load state on demand
 
-	// Deprecated, use 'TransactionHistory' instead.
-	TxLookupLimit      uint64 `toml:",omitempty"` // The maximum number of blocks from head whose tx indices are reserved.
+	// Deprecated: use 'TransactionHistory' instead.
+	TxLookupLimit uint64 `toml:",omitempty"` // The maximum number of blocks from head whose tx indices are reserved.
+
 	TransactionHistory uint64 `toml:",omitempty"` // The maximum number of blocks from head whose tx indices are reserved.
 	StateHistory       uint64 `toml:",omitempty"` // The maximum number of blocks from head whose state histories are reserved.
 
@@ -113,14 +113,6 @@ type Config struct {
 	// canonical chain of all remote peers. Setting the option makes geth verify the
 	// presence of these blocks for every new peer connection.
 	RequiredBlocks map[uint64]common.Hash `toml:"-"`
-
-	// Light client options
-	LightServ        int  `toml:",omitempty"` // Maximum percentage of time allowed for serving LES requests
-	LightIngress     int  `toml:",omitempty"` // Incoming bandwidth limit for light servers
-	LightEgress      int  `toml:",omitempty"` // Outgoing bandwidth limit for light servers
-	LightPeers       int  `toml:",omitempty"` // Maximum number of LES client peers
-	LightNoPrune     bool `toml:",omitempty"` // Whether to disable light chain pruning
-	LightNoSyncServe bool `toml:",omitempty"` // Whether to serve light clients before syncing
 
 	// Database options
 	SkipBcVersionCheck bool `toml:"-"`
@@ -157,15 +149,9 @@ type Config struct {
 	// Enables tracking of SHA3 preimages in the VM
 	EnablePreimageRecording bool
 
-	// Enables prefetching trie nodes for read operations too
-	EnableWitnessCollection bool `toml:"-"`
-
 	// Enables VM tracing
 	VMTrace           string
 	VMTraceJsonConfig string
-
-	// Miscellaneous options
-	DocRoot string `toml:"-"`
 
 	// RPCGasCap is the global gas cap for eth-call variants.
 	RPCGasCap uint64
@@ -185,6 +171,9 @@ type Config struct {
 
 	// URL to connect to Heimdall node
 	HeimdallURL string
+
+	// timeout in heimdall requests
+	HeimdallTimeout time.Duration
 
 	// No heimdall service
 	WithoutHeimdall bool
@@ -246,7 +235,7 @@ func CreateConsensusEngine(chainConfig *params.ChainConfig, ethConfig *Config, d
 			} else if ethConfig.HeimdallgRPCAddress != "" {
 				heimdallClient = heimdallgrpc.NewHeimdallGRPCClient(ethConfig.HeimdallgRPCAddress)
 			} else {
-				heimdallClient = heimdall.NewHeimdallClient(ethConfig.HeimdallURL)
+				heimdallClient = heimdall.NewHeimdallClient(ethConfig.HeimdallURL, ethConfig.HeimdallTimeout)
 			}
 
 			var heimdallWSClient bor.IHeimdallWSClient
@@ -260,12 +249,6 @@ func CreateConsensusEngine(chainConfig *params.ChainConfig, ethConfig *Config, d
 
 			return bor.New(chainConfig, db, blockchainAPI, spanner, heimdallClient, heimdallWSClient, genesisContractsClient, false), nil
 		}
-	}
-	// If defaulting to proof-of-work, enforce an already merged network since
-	// we cannot run PoW algorithms anymore, so we cannot even follow a chain
-	// not coordinated by a beacon node.
-	if !chainConfig.TerminalTotalDifficultyPassed {
-		return nil, errors.New("ethash is only supported as a historical component of already merged networks")
 	}
 	return beacon.New(ethash.NewFaker()), nil
 }

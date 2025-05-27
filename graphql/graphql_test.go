@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"math/big"
 	"net/http"
 	"strings"
@@ -336,8 +337,8 @@ func TestGraphQLConcurrentResolvers(t *testing.T) {
 		},
 		// Multiple fields of block race to resolve header and body.
 		{
-			body: "{ block { number hash gasLimit ommerCount transactionCount totalDifficulty } }",
-			want: fmt.Sprintf(`{"block":{"number":"0x1","hash":"%s","gasLimit":"0xaf79e0","ommerCount":"0x0","transactionCount":"0x3","totalDifficulty":"0x200000"}}`, chain[len(chain)-1].Hash()),
+			body: "{ block { number hash gasLimit ommerCount transactionCount } }",
+			want: fmt.Sprintf(`{"block":{"number":"0x1","hash":"%s","gasLimit":"0xaf79e0","ommerCount":"0x0","transactionCount":"0x3"}}`, chain[len(chain)-1].Hash()),
 		},
 		// Multiple fields of a block race to resolve the header and body.
 		{
@@ -463,18 +464,22 @@ func newGQLService(t *testing.T, stack *node.Node, shanghai bool, gspec *core.Ge
 		TrieDirtyCache: 5,
 		TrieTimeout:    60 * time.Minute,
 		SnapshotCache:  5,
+		RPCGasCap:      1000000,
 		StateScheme:    rawdb.HashScheme,
 	}
 	var engine consensus.Engine = ethash.NewFaker()
 	if shanghai {
 		engine = beacon.NewFaker()
-		chainCfg := gspec.Config
-		chainCfg.TerminalTotalDifficultyPassed = true
-		chainCfg.TerminalTotalDifficulty = common.Big0
+		gspec.Config.TerminalTotalDifficulty = common.Big0
 		// GenerateChain will increment timestamps by 10.
 		// Shanghai upgrade at block 1.
-		ShanghaiBlock := big.NewInt(5)
-		chainCfg.ShanghaiBlock = ShanghaiBlock
+		// shanghaiTime := uint64(5)
+		// gspec.Config.ShanghaiTime = &shanghaiTime
+		// Using block 1 instead as bor doesn't allow timestamp based hardforks
+		gspec.Config.ShanghaiBlock = big.NewInt(1)
+	} else {
+		// set an arbitrary large ttd as chains are required to be known to be merged
+		gspec.Config.TerminalTotalDifficulty = big.NewInt(math.MaxInt64)
 	}
 	ethBackend, err := eth.New(stack, ethConf)
 	if err != nil {

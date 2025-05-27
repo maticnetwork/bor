@@ -11,6 +11,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/bor"
 	"github.com/ethereum/go-ethereum/consensus/bor/api"
+	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
 	"github.com/ethereum/go-ethereum/consensus/bor/valset"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -46,18 +47,15 @@ func NewBorDefaultMiner(t *testing.T) *DefaultBorMiner {
 	ethAPI := api.NewMockCaller(ctrl)
 	ethAPI.EXPECT().Call(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
+	// Mock span 0 for heimdall
+	span0 := createMockSpanForTest(common.Address{0x1}, "1337")
+
 	spanner := bor.NewMockSpanner(ctrl)
-	spanner.EXPECT().GetCurrentValidatorsByHash(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*valset.Validator{
-		{
-			ID:               0,
-			Address:          common.Address{0x1},
-			VotingPower:      100,
-			ProposerPriority: 0,
-		},
-	}, nil).AnyTimes()
+	spanner.EXPECT().GetCurrentValidatorsByHash(gomock.Any(), gomock.Any(), gomock.Any()).Return(span0.ValidatorSet.Validators, nil).AnyTimes()
 
 	heimdallClient := mocks.NewMockIHeimdallClient(ctrl)
 	heimdallWSClient := mocks.NewMockIHeimdallWSClient(ctrl)
+	heimdallClient.EXPECT().GetSpanV1(gomock.Any(), uint64(0)).Return(&span0, nil).AnyTimes()
 	heimdallClient.EXPECT().Close().Times(1)
 
 	genesisContracts := bor.NewMockGenesisContract(ctrl)
@@ -90,7 +88,7 @@ func createBorMiner(t *testing.T, ethAPIMock api.Caller, spanner bor.Spanner, he
 		t.Fatalf("can't create new chain %v", err)
 	}
 
-	statedb, _ := state.New(common.Hash{}, state.NewDatabase(chainDB), nil)
+	statedb, _ := state.New(common.Hash{}, state.NewDatabase(triedb.NewDatabase(rawdb.NewMemoryDatabase(), nil), nil))
 	blockchain := &testBlockChainBor{chainConfig, statedb, 10000000, new(event.Feed)}
 
 	pool := legacypool.New(testTxPoolConfigBor, blockchain)
@@ -156,6 +154,32 @@ func NewFakeBor(t TensingObject, chainDB ethdb.Database, chainConfig *params.Cha
 	}
 
 	return bor.New(chainConfig, chainDB, ethAPIMock, spanner, heimdallClientMock, heimdallClientWSMock, contractMock, false)
+}
+
+func createMockSpanForTest(address common.Address, chainId string) span.HeimdallSpan {
+	// Mock span 0 for heimdall calls
+	validator := valset.Validator{
+		ID:               0,
+		Address:          address,
+		VotingPower:      100,
+		ProposerPriority: 0,
+	}
+	validatorSet := valset.ValidatorSet{
+		Validators: []*valset.Validator{&validator},
+		Proposer:   &validator,
+	}
+	span0 := span.HeimdallSpan{
+		Span: span.Span{
+			Id:         0,
+			StartBlock: 0,
+			EndBlock:   255,
+		},
+		ValidatorSet:      validatorSet,
+		SelectedProducers: []valset.Validator{validator},
+		ChainID:           chainId,
+	}
+
+	return span0
 }
 
 var (

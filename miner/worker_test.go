@@ -383,19 +383,16 @@ func getFakeBorFromConfig(t *testing.T, chainConfig *params.ChainConfig) (consen
 	ethAPIMock := api.NewMockCaller(ctrl)
 	ethAPIMock.EXPECT().Call(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
 
+	// Mock span 0 for heimdall
+	span0 := createMockSpanForTest(TestBankAddress, chainConfig.ChainID.String())
+
 	spanner := bor.NewMockSpanner(ctrl)
-	spanner.EXPECT().GetCurrentValidatorsByHash(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*valset.Validator{
-		{
-			ID:               0,
-			Address:          TestBankAddress,
-			VotingPower:      100,
-			ProposerPriority: 0,
-		},
-	}, nil).AnyTimes()
+	spanner.EXPECT().GetCurrentValidatorsByHash(gomock.Any(), gomock.Any(), gomock.Any()).Return(span0.ValidatorSet.Validators, nil).AnyTimes()
 
 	heimdallClientMock := mocks.NewMockIHeimdallClient(ctrl)
 	heimdallWSClient := mocks.NewMockIHeimdallWSClient(ctrl)
 
+	heimdallClientMock.EXPECT().GetSpanV1(gomock.Any(), uint64(0)).Return(&span0, nil).AnyTimes()
 	heimdallClientMock.EXPECT().Close().AnyTimes()
 
 	contractMock := bor.NewMockGenesisContract(ctrl)
@@ -877,7 +874,7 @@ func TestCommitInterruptExperimentBor_NewTxFlow(t *testing.T) {
 		for {
 			head := <-chainHeadCh
 			// We skip the initial 2 blocks as the mining timings are a bit skewed up
-			if head.Block.NumberU64() == 2 {
+			if head.Header.Number.Uint64() == 2 {
 				// Wait until `w.current` is updated for next block (3)
 				time.Sleep(100 * time.Millisecond)
 

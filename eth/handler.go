@@ -29,7 +29,6 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/beacon"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/forkid"
-	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/txpool"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -44,7 +43,6 @@ import (
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/enode"
-	"github.com/ethereum/go-ethereum/triedb/pathdb"
 )
 
 const (
@@ -99,6 +97,7 @@ type handlerConfig struct {
 	RequiredBlocks      map[uint64]common.Hash // Hard coded map of required block hashes for sync challenges
 	EthAPI              *ethapi.BlockChainAPI  // EthAPI to interact
 	enableBlockTracking bool                   // Whether to log information collected while tracking block lifecycle
+	txAnnouncementOnly  bool                   // Whether to only announce txs to peers
 }
 
 type handler struct {
@@ -129,6 +128,7 @@ type handler struct {
 	requiredBlocks map[uint64]common.Hash
 
 	enableBlockTracking bool
+	txAnnouncementOnly  bool
 
 	// channels for fetcher, syncer, txsyncLoop
 	quitSync chan struct{}
@@ -159,6 +159,7 @@ func newHandler(config *handlerConfig) (*handler, error) {
 		ethAPI:              config.EthAPI,
 		requiredBlocks:      config.RequiredBlocks,
 		enableBlockTracking: config.enableBlockTracking,
+		txAnnouncementOnly:  config.txAnnouncementOnly,
 		quitSync:            make(chan struct{}),
 		handlerDoneCh:       make(chan struct{}),
 		handlerStartCh:      make(chan struct{}),
@@ -172,19 +173,14 @@ func newHandler(config *handlerConfig) (*handler, error) {
 		// * the last snap sync is not finished while user specifies a full sync this
 		//   time. But we don't have any recent state for full sync.
 		// In these cases however it's safe to reenable snap sync.
-
-		// TODO - uncomment when we (Polygon-PoS, bor) have snap sync/pbss
-		// fullBlock, snapBlock := h.chain.CurrentBlock(), h.chain.CurrentSnapBlock()
-
-		// TODO - uncomment when we (Polygon-PoS, bor) have snap sync/pbss
-		// For more info - https://github.com/ethereum/go-ethereum/pull/28171
-		// if fullBlock.Number.Uint64() == 0 && snapBlock.Number.Uint64() > 0 {
-		// 	h.snapSync.Store(true)
-		// 	log.Warn("Switch sync mode from full sync to snap sync", "reason", "snap sync incomplete")
-		// } else if !h.chain.HasState(fullBlock.Root) {
-		// 	h.snapSync.Store(true)
-		// 	log.Warn("Switch sync mode from full sync to snap sync", "reason", "head state missing")
-		// }
+		fullBlock, snapBlock := h.chain.CurrentBlock(), h.chain.CurrentSnapBlock()
+		if fullBlock.Number.Uint64() == 0 && snapBlock.Number.Uint64() > 0 {
+			h.snapSync.Store(true)
+			log.Warn("Switch sync mode from full sync to snap sync", "reason", "snap sync incomplete")
+		} else if !h.chain.HasState(fullBlock.Root) {
+			h.snapSync.Store(true)
+			log.Warn("Switch sync mode from full sync to snap sync", "reason", "head state missing")
+		}
 	} else {
 		head := h.chain.CurrentBlock()
 		if head.Number.Uint64() > 0 && h.chain.HasState(head.Root) {
@@ -202,20 +198,7 @@ func newHandler(config *handlerConfig) (*handler, error) {
 	}
 	// Construct the downloader (long sync)
 	h.downloader = downloader.New(config.Database, h.eventMux, h.chain, nil, h.removePeer, h.enableSyncedFeatures, config.checker)
-	if ttd := h.chain.Config().TerminalTotalDifficulty; ttd != nil {
-		if h.chain.Config().TerminalTotalDifficultyPassed {
-			log.Info("Chain post-merge, sync via beacon client")
-		} else {
-			head := h.chain.CurrentBlock()
-			if td := h.chain.GetTd(head.Hash(), head.Number.Uint64()); td.Cmp(ttd) >= 0 {
-				log.Info("Chain post-TTD, sync via beacon client")
-			} else {
-				log.Warn("Chain pre-merge, sync via PoW (ensure beacon client is ready)")
-			}
-		}
-	} else if h.chain.Config().TerminalTotalDifficultyPassed {
-		log.Error("Chain configured post-merge, but without TTD. Are you debugging sync?")
-	}
+
 	// Construct the fetcher (short sync)
 	validator := func(header *types.Header) error {
 		// Reject all the PoS style headers in the first place. No matter
@@ -633,7 +616,7 @@ func (h *handler) BroadcastTransactions(txs types.Transactions) {
 		case tx.Size() > txMaxBroadcastSize:
 			largeTxs++
 		default:
-			maybeDirect = true
+			maybeDirect = !h.txAnnouncementOnly
 		}
 		// Send the transaction (if it's small enough) directly to a subset of
 		// the peers that have not received it yet, ensuring that the flow of
@@ -720,9 +703,6 @@ func (h *handler) enableSyncedFeatures() {
 	if h.snapSync.Load() {
 		log.Info("Snap sync complete, auto disabling")
 		h.snapSync.Store(false)
-	}
-	if h.chain.TrieDB().Scheme() == rawdb.PathScheme {
-		h.chain.TrieDB().SetBufferSize(pathdb.DefaultBufferSize)
 	}
 }
 

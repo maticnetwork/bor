@@ -88,7 +88,7 @@ func (c *Command) Flags(config *Config) *flagset.Flagset {
 	})
 	f.StringFlag(&flagset.StringFlag{
 		Name:    "syncmode",
-		Usage:   `Blockchain sync mode (only "full" sync supported)`,
+		Usage:   `Blockchain sync mode ("full" or "snap")`,
 		Value:   &c.cliConfig.SyncMode,
 		Default: c.cliConfig.SyncMode,
 	})
@@ -166,6 +166,12 @@ func (c *Command) Flags(config *Config) *flagset.Flagset {
 		Usage:   "URL of Heimdall service",
 		Value:   &c.cliConfig.Heimdall.URL,
 		Default: c.cliConfig.Heimdall.URL,
+	})
+	f.DurationFlag(&flagset.DurationFlag{
+		Name:    "bor.heimdalltimeout",
+		Usage:   "Timeout period for bor's outgoing requests to heimdall",
+		Value:   &c.cliConfig.Heimdall.Timeout,
+		Default: c.cliConfig.Heimdall.Timeout,
 	})
 	f.BoolFlag(&flagset.BoolFlag{
 		Name:    "bor.withoutheimdall",
@@ -800,9 +806,9 @@ func (c *Command) Flags(config *Config) *flagset.Flagset {
 	})
 	f.BoolFlag(&flagset.BoolFlag{
 		Name:    "v5disc",
-		Usage:   "Enables the experimental RLPx V5 (Topic Discovery) mechanism",
-		Value:   &c.cliConfig.P2P.Discovery.V5Enabled,
-		Default: c.cliConfig.P2P.Discovery.V5Enabled,
+		Usage:   "Enables the V5 discovery mechanism",
+		Value:   &c.cliConfig.P2P.Discovery.DiscoveryV5,
+		Default: c.cliConfig.P2P.Discovery.DiscoveryV5,
 		Group:   "P2P",
 	})
 	f.DurationFlag(&flagset.DurationFlag{
@@ -810,6 +816,13 @@ func (c *Command) Flags(config *Config) *flagset.Flagset {
 		Usage:   "Maximum duration to wait for a transaction before explicitly requesting it",
 		Value:   &c.cliConfig.P2P.TxArrivalWait,
 		Default: c.cliConfig.P2P.TxArrivalWait,
+		Group:   "P2P",
+	})
+	f.BoolFlag(&flagset.BoolFlag{
+		Name:    "txannouncementonly",
+		Usage:   "Whether to only announce transactions to peers",
+		Value:   &c.cliConfig.P2P.TxAnnouncementOnly,
+		Default: c.cliConfig.P2P.TxAnnouncementOnly,
 		Group:   "P2P",
 	})
 	f.SliceStringFlag(&flagset.SliceStringFlag{

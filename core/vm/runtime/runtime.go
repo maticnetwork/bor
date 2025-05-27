@@ -21,7 +21,6 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
@@ -58,27 +57,26 @@ type Config struct {
 func setDefaults(cfg *Config) {
 	if cfg.ChainConfig == nil {
 		cfg.ChainConfig = &params.ChainConfig{
-			ChainID:                       big.NewInt(1),
-			HomesteadBlock:                new(big.Int),
-			DAOForkBlock:                  new(big.Int),
-			DAOForkSupport:                false,
-			EIP150Block:                   new(big.Int),
-			EIP155Block:                   new(big.Int),
-			EIP158Block:                   new(big.Int),
-			ByzantiumBlock:                new(big.Int),
-			ConstantinopleBlock:           new(big.Int),
-			PetersburgBlock:               new(big.Int),
-			IstanbulBlock:                 new(big.Int),
-			MuirGlacierBlock:              new(big.Int),
-			BerlinBlock:                   new(big.Int),
-			LondonBlock:                   new(big.Int),
-			ArrowGlacierBlock:             nil,
-			GrayGlacierBlock:              nil,
-			TerminalTotalDifficulty:       big.NewInt(0),
-			TerminalTotalDifficultyPassed: true,
-			MergeNetsplitBlock:            nil,
-			ShanghaiBlock:                 new(big.Int),
-			CancunBlock:                   new(big.Int)}
+			ChainID:                 big.NewInt(1),
+			HomesteadBlock:          new(big.Int),
+			DAOForkBlock:            new(big.Int),
+			DAOForkSupport:          false,
+			EIP150Block:             new(big.Int),
+			EIP155Block:             new(big.Int),
+			EIP158Block:             new(big.Int),
+			ByzantiumBlock:          new(big.Int),
+			ConstantinopleBlock:     new(big.Int),
+			PetersburgBlock:         new(big.Int),
+			IstanbulBlock:           new(big.Int),
+			MuirGlacierBlock:        new(big.Int),
+			BerlinBlock:             new(big.Int),
+			LondonBlock:             new(big.Int),
+			ArrowGlacierBlock:       nil,
+			GrayGlacierBlock:        nil,
+			TerminalTotalDifficulty: big.NewInt(0),
+			MergeNetsplitBlock:      nil,
+			ShanghaiBlock:           new(big.Int),
+			CancunBlock:             new(big.Int)}
 	}
 	if cfg.Difficulty == nil {
 		cfg.Difficulty = new(big.Int)
@@ -112,10 +110,7 @@ func setDefaults(cfg *Config) {
 	if cfg.BlobBaseFee == nil {
 		cfg.BlobBaseFee = big.NewInt(params.BlobTxMinBlobGasprice)
 	}
-	// Merge indicators
-	if t := cfg.ChainConfig.ShanghaiBlock; cfg.ChainConfig.TerminalTotalDifficultyPassed || (t != nil && t.Cmp(big.NewInt(0)) == 0) {
-		cfg.Random = &(common.Hash{})
-	}
+	cfg.Random = &(common.Hash{})
 }
 
 // Execute executes the code using the input as call data during the execution.
@@ -131,7 +126,7 @@ func Execute(code, input []byte, cfg *Config) ([]byte, *state.StateDB, error) {
 	setDefaults(cfg)
 
 	if cfg.State == nil {
-		cfg.State, _ = state.New(types.EmptyRootHash, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
+		cfg.State, _ = state.New(types.EmptyRootHash, state.NewDatabaseForTesting())
 	}
 
 	var (
@@ -151,7 +146,7 @@ func Execute(code, input []byte, cfg *Config) ([]byte, *state.StateDB, error) {
 	// set the receiver's (the executing contract) code for execution.
 	cfg.State.SetCode(address, code)
 	// Call the code with the given configuration.
-	ret, _, err := vmenv.Call(
+	ret, leftOverGas, err := vmenv.Call(
 		sender,
 		common.BytesToAddress([]byte("contract")),
 		input,
@@ -159,7 +154,9 @@ func Execute(code, input []byte, cfg *Config) ([]byte, *state.StateDB, error) {
 		uint256.MustFromBig(cfg.Value),
 		nil,
 	)
-
+	if cfg.EVMConfig.Tracer != nil && cfg.EVMConfig.Tracer.OnTxEnd != nil {
+		cfg.EVMConfig.Tracer.OnTxEnd(&types.Receipt{GasUsed: cfg.GasLimit - leftOverGas}, err)
+	}
 	return ret, cfg.State, err
 }
 
@@ -172,7 +169,7 @@ func Create(input []byte, cfg *Config) ([]byte, common.Address, uint64, error) {
 	setDefaults(cfg)
 
 	if cfg.State == nil {
-		cfg.State, _ = state.New(types.EmptyRootHash, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
+		cfg.State, _ = state.New(types.EmptyRootHash, state.NewDatabaseForTesting())
 	}
 
 	var (
@@ -194,7 +191,9 @@ func Create(input []byte, cfg *Config) ([]byte, common.Address, uint64, error) {
 		cfg.GasLimit,
 		uint256.MustFromBig(cfg.Value),
 	)
-
+	if cfg.EVMConfig.Tracer != nil && cfg.EVMConfig.Tracer.OnTxEnd != nil {
+		cfg.EVMConfig.Tracer.OnTxEnd(&types.Receipt{GasUsed: cfg.GasLimit - leftOverGas}, err)
+	}
 	return code, address, leftOverGas, err
 }
 
@@ -229,6 +228,8 @@ func Call(address common.Address, input []byte, cfg *Config) ([]byte, uint64, er
 		uint256.MustFromBig(cfg.Value),
 		nil,
 	)
-
+	if cfg.EVMConfig.Tracer != nil && cfg.EVMConfig.Tracer.OnTxEnd != nil {
+		cfg.EVMConfig.Tracer.OnTxEnd(&types.Receipt{GasUsed: cfg.GasLimit - leftOverGas}, err)
+	}
 	return ret, leftOverGas, err
 }

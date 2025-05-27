@@ -11,7 +11,7 @@ import (
 	"github.com/0xPolygon/heimdall-v2/x/bor/types"
 )
 
-//go:generate mockgen -destination=../../tests/bor/mocks/IHeimdallClient.go -package=mocks . IHeimdallClient
+//go:generate mockgen -source=heimdall.go -destination=../../tests/bor/mocks/IHeimdallClient.go -package=mocks
 type IHeimdallClient interface {
 	StateSyncEventsV1(ctx context.Context, fromID uint64, to int64) ([]*clerk.EventRecordWithTime, error)
 	StateSyncEventsV2(ctx context.Context, fromID uint64, to int64) ([]*clerk.EventRecordWithTime, error)

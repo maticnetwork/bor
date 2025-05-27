@@ -17,9 +17,11 @@
 package runtime
 
 import (
+	"encoding/binary"
 	"fmt"
 	"math/big"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -28,7 +30,6 @@ import (
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/asm"
-	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
@@ -107,7 +108,7 @@ func TestExecute(t *testing.T) {
 }
 
 func TestCall(t *testing.T) {
-	state, _ := state.New(types.EmptyRootHash, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
+	state, _ := state.New(types.EmptyRootHash, state.NewDatabaseForTesting())
 	address := common.HexToAddress("0xaa")
 	state.SetCode(address, []byte{
 		byte(vm.PUSH1), 10,
@@ -166,7 +167,7 @@ func BenchmarkCall(b *testing.B) {
 }
 func benchmarkEVM_Create(bench *testing.B, code string) {
 	var (
-		statedb, _ = state.New(types.EmptyRootHash, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
+		statedb, _ = state.New(types.EmptyRootHash, state.NewDatabaseForTesting())
 		sender     = common.BytesToAddress([]byte("sender"))
 		receiver   = common.BytesToAddress([]byte("receiver"))
 	)
@@ -233,7 +234,7 @@ func BenchmarkEVM_SWAP1(b *testing.B) {
 		return contract
 	}
 
-	state, _ := state.New(types.EmptyRootHash, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
+	state, _ := state.New(types.EmptyRootHash, state.NewDatabaseForTesting())
 	contractAddr := common.BytesToAddress([]byte("contract"))
 
 	b.Run("10k", func(b *testing.B) {
@@ -247,6 +248,41 @@ func BenchmarkEVM_SWAP1(b *testing.B) {
 			}
 		}
 	})
+}
+
+func BenchmarkEVM_RETURN(b *testing.B) {
+	// returns a contract that returns a zero-byte slice of len size
+	returnContract := func(size uint64) []byte {
+		contract := []byte{
+			byte(vm.PUSH8), 0, 0, 0, 0, 0, 0, 0, 0, // PUSH8 0xXXXXXXXXXXXXXXXX
+			byte(vm.PUSH0),  // PUSH0
+			byte(vm.RETURN), // RETURN
+		}
+		binary.BigEndian.PutUint64(contract[1:], size)
+		return contract
+	}
+
+	state, _ := state.New(types.EmptyRootHash, state.NewDatabaseForTesting())
+	contractAddr := common.BytesToAddress([]byte("contract"))
+
+	for _, n := range []uint64{1_000, 10_000, 100_000, 1_000_000} {
+		b.Run(strconv.FormatUint(n, 10), func(b *testing.B) {
+			b.ReportAllocs()
+
+			contractCode := returnContract(n)
+			state.SetCode(contractAddr, contractCode)
+
+			for i := 0; i < b.N; i++ {
+				ret, _, err := Call(contractAddr, []byte{}, &Config{State: state})
+				if err != nil {
+					b.Fatal(err)
+				}
+				if uint64(len(ret)) != n {
+					b.Fatalf("expected return size %d, got %d", n, len(ret))
+				}
+			}
+		})
+	}
 }
 
 func fakeHeader(n uint64, parentHash common.Hash) *types.Header {
@@ -371,11 +407,11 @@ func TestBlockhash(t *testing.T) {
 func benchmarkNonModifyingCode(gas uint64, code []byte, name string, tracerCode string, b *testing.B) {
 	cfg := new(Config)
 	setDefaults(cfg)
-	cfg.State, _ = state.New(types.EmptyRootHash, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
+	cfg.State, _ = state.New(types.EmptyRootHash, state.NewDatabaseForTesting())
 	cfg.GasLimit = gas
 
 	if len(tracerCode) > 0 {
-		tracer, err := tracers.DefaultDirectory.New(tracerCode, new(tracers.Context), nil)
+		tracer, err := tracers.DefaultDirectory.New(tracerCode, new(tracers.Context), nil, cfg.ChainConfig)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -498,6 +534,17 @@ func BenchmarkSimpleLoop(b *testing.B) {
 		byte(vm.JUMP),
 	}
 
+	loopingCode2 := []byte{
+		byte(vm.JUMPDEST), //  [ count ]
+		// push args for the call
+		byte(vm.PUSH4), 1, 2, 3, 4,
+		byte(vm.PUSH5), 1, 2, 3, 4, 5,
+
+		byte(vm.POP), byte(vm.POP),
+		byte(vm.PUSH6), 0, 0, 0, 0, 0, 0, // jumpdestination
+		byte(vm.JUMP),
+	}
+
 	callRevertingContractWithInput := []byte{
 		byte(vm.JUMPDEST), //
 		// push args for the call
@@ -524,6 +571,7 @@ func BenchmarkSimpleLoop(b *testing.B) {
 	benchmarkNonModifyingCode(100000000, staticCallIdentity, "staticcall-identity-100M", "", b)
 	benchmarkNonModifyingCode(100000000, callIdentity, "call-identity-100M", "", b)
 	benchmarkNonModifyingCode(100000000, loopingCode, "loop-100M", "", b)
+	benchmarkNonModifyingCode(100000000, loopingCode2, "loop2-100M", "", b)
 	benchmarkNonModifyingCode(100000000, callInexistant, "call-nonexist-100M", "", b)
 	benchmarkNonModifyingCode(100000000, callEOA, "call-EOA-100M", "", b)
 	benchmarkNonModifyingCode(100000000, callRevertingContractWithInput, "call-reverting-100M", "", b)
@@ -870,7 +918,7 @@ func TestRuntimeJSTracer(t *testing.T) {
 
 	for i, jsTracer := range jsTracers {
 		for j, tc := range tests {
-			statedb, _ := state.New(types.EmptyRootHash, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
+			statedb, _ := state.New(types.EmptyRootHash, state.NewDatabaseForTesting())
 			statedb.SetCode(main, tc.code)
 			statedb.SetCode(common.HexToAddress("0xbb"), calleeCode)
 			statedb.SetCode(common.HexToAddress("0xcc"), calleeCode)
@@ -878,7 +926,7 @@ func TestRuntimeJSTracer(t *testing.T) {
 			statedb.SetCode(common.HexToAddress("0xee"), calleeCode)
 			statedb.SetCode(common.HexToAddress("0xff"), suicideCode)
 
-			tracer, err := tracers.DefaultDirectory.New(jsTracer, new(tracers.Context), nil)
+			tracer, err := tracers.DefaultDirectory.New(jsTracer, new(tracers.Context), nil, params.MergedTestChainConfig)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -915,8 +963,8 @@ func TestJSTracerCreateTx(t *testing.T) {
 	exit: function(res) { this.exits++ }}`
 	code := []byte{byte(vm.PUSH1), 0, byte(vm.PUSH1), 0, byte(vm.RETURN)}
 
-	statedb, _ := state.New(types.EmptyRootHash, state.NewDatabase(rawdb.NewMemoryDatabase()), nil)
-	tracer, err := tracers.DefaultDirectory.New(jsTracer, new(tracers.Context), nil)
+	statedb, _ := state.New(types.EmptyRootHash, state.NewDatabaseForTesting())
+	tracer, err := tracers.DefaultDirectory.New(jsTracer, new(tracers.Context), nil, params.MergedTestChainConfig)
 	if err != nil {
 		t.Fatal(err)
 	}

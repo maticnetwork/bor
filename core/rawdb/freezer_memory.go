@@ -19,11 +19,11 @@ package rawdb
 import (
 	"errors"
 	"fmt"
+	"math"
 	"sync"
 	"sync/atomic"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/math"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -413,13 +413,6 @@ func (f *MemoryFreezer) Sync() error {
 	return nil
 }
 
-// MigrateTable processes and migrates entries of a given table to a new format.
-// The second argument is a function that takes a raw entry and returns it
-// in the newest format.
-func (f *MemoryFreezer) MigrateTable(string, func([]byte) ([]byte, error)) error {
-	return errors.New("not implemented")
-}
-
 // Close releases all the sources held by the memory freezer. It will panic if
 // any following invocation is made to a closed freezer.
 func (f *MemoryFreezer) Close() error {
@@ -444,4 +437,10 @@ func (f *MemoryFreezer) Reset() error {
 	f.tables = tables
 	f.items, f.tail = 0, 0
 	return nil
+}
+
+// AncientDatadir returns the path of the ancient store.
+// Since the memory freezer is ephemeral, an empty string is returned.
+func (f *MemoryFreezer) AncientDatadir() (string, error) {
+	return "", nil
 }

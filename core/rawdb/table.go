@@ -123,12 +123,6 @@ func (t *table) Sync() error {
 	return t.db.Sync()
 }
 
-// MigrateTable processes the entries in a given table in sequence
-// converting them to a new format if they're of an old format.
-func (t *table) MigrateTable(kind string, convert convertLegacyFn) error {
-	return t.db.MigrateTable(kind, convert)
-}
-
 // AncientDatadir returns the ancient datadir of the underlying database.
 func (t *table) AncientDatadir() (string, error) {
 	return t.db.AncientDatadir()
@@ -143,6 +137,12 @@ func (t *table) Put(key []byte, value []byte) error {
 // Delete removes the given prefixed key from the database.
 func (t *table) Delete(key []byte) error {
 	return t.db.Delete(append([]byte(t.prefix), key...))
+}
+
+// DeleteRange deletes all of the keys (and values) in the range [start,end)
+// (inclusive on start, exclusive on end).
+func (t *table) DeleteRange(start, end []byte) error {
+	return t.db.DeleteRange(append([]byte(t.prefix), start...), append([]byte(t.prefix), end...))
 }
 
 // NewIterator creates a binary-alphabetical iterator over a subset

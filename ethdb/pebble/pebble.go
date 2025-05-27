@@ -149,7 +149,7 @@ func (l panicLogger) Fatalf(format string, args ...interface{}) {
 
 // New returns a wrapped pebble DB object. The namespace is the prefix that the
 // metrics reporting should use for surfacing internal stats.
-func New(file string, cache int, handles int, namespace string, readonly bool, ephemeral bool) (*Database, error) {
+func New(file string, cache int, handles int, namespace string, readonly bool) (*Database, error) {
 	// Ensure we have some minimal caching and file guarantees
 	if cache < minCache {
 		cache = minCache
@@ -193,7 +193,7 @@ func New(file string, cache int, handles int, namespace string, readonly bool, e
 		fn:           file,
 		log:          logger,
 		quitChan:     make(chan chan error),
-		writeOptions: &pebble.WriteOptions{Sync: !ephemeral},
+		writeOptions: &pebble.WriteOptions{Sync: false},
 	}
 	opt := &pebble.Options{
 		// Pebble has a single combined cache area and the write
@@ -221,12 +221,12 @@ func New(file string, cache int, handles int, namespace string, readonly bool, e
 		// options for the last level are used for all subsequent levels.
 		Levels: []pebble.LevelOptions{
 			{TargetFileSize: 2 * 1024 * 1024, FilterPolicy: bloom.FilterPolicy(10)},
-			{TargetFileSize: 2 * 1024 * 1024, FilterPolicy: bloom.FilterPolicy(10)},
-			{TargetFileSize: 2 * 1024 * 1024, FilterPolicy: bloom.FilterPolicy(10)},
-			{TargetFileSize: 2 * 1024 * 1024, FilterPolicy: bloom.FilterPolicy(10)},
-			{TargetFileSize: 2 * 1024 * 1024, FilterPolicy: bloom.FilterPolicy(10)},
-			{TargetFileSize: 2 * 1024 * 1024, FilterPolicy: bloom.FilterPolicy(10)},
-			{TargetFileSize: 2 * 1024 * 1024, FilterPolicy: bloom.FilterPolicy(10)},
+			{TargetFileSize: 4 * 1024 * 1024, FilterPolicy: bloom.FilterPolicy(10)},
+			{TargetFileSize: 8 * 1024 * 1024, FilterPolicy: bloom.FilterPolicy(10)},
+			{TargetFileSize: 16 * 1024 * 1024, FilterPolicy: bloom.FilterPolicy(10)},
+			{TargetFileSize: 32 * 1024 * 1024, FilterPolicy: bloom.FilterPolicy(10)},
+			{TargetFileSize: 64 * 1024 * 1024, FilterPolicy: bloom.FilterPolicy(10)},
+			{TargetFileSize: 128 * 1024 * 1024, FilterPolicy: bloom.FilterPolicy(10)},
 		},
 		ReadOnly: readonly,
 		EventListener: &pebble.EventListener{
@@ -305,9 +305,9 @@ func (d *Database) Has(key []byte) (bool, error) {
 	} else if err != nil {
 		return false, err
 	}
-
-	closer.Close()
-
+	if err = closer.Close(); err != nil {
+		return false, err
+	}
 	return true, nil
 }
 
@@ -325,8 +325,9 @@ func (d *Database) Get(key []byte) ([]byte, error) {
 
 	ret := make([]byte, len(dat))
 	copy(ret, dat)
-	closer.Close()
-
+	if err = closer.Close(); err != nil {
+		return nil, err
+	}
 	return ret, nil
 }
 
@@ -347,7 +348,18 @@ func (d *Database) Delete(key []byte) error {
 	if d.closed {
 		return pebble.ErrClosed
 	}
-	return d.db.Delete(key, nil)
+	return d.db.Delete(key, d.writeOptions)
+}
+
+// DeleteRange deletes all of the keys (and values) in the range [start,end)
+// (inclusive on start, exclusive on end).
+func (d *Database) DeleteRange(start, end []byte) error {
+	d.quitLock.RLock()
+	defer d.quitLock.RUnlock()
+	if d.closed {
+		return pebble.ErrClosed
+	}
+	return d.db.DeleteRange(start, end, d.writeOptions)
 }
 
 // NewBatch creates a write-only key-value store that buffers changes to its host
@@ -548,7 +560,9 @@ type batch struct {
 
 // Put inserts the given value into the batch for later committing.
 func (b *batch) Put(key, value []byte) error {
-	_ = b.b.Set(key, value, nil)
+	if err := b.b.Set(key, value, nil); err != nil {
+		return err
+	}
 	b.size += len(key) + len(value)
 
 	return nil
@@ -556,7 +570,9 @@ func (b *batch) Put(key, value []byte) error {
 
 // Delete inserts the key removal into the batch for later committing.
 func (b *batch) Delete(key []byte) error {
-	_ = b.b.Delete(key, nil)
+	if err := b.b.Delete(key, nil); err != nil {
+		return err
+	}
 	b.size += len(key)
 
 	return nil
@@ -589,24 +605,23 @@ func (b *batch) Replay(w ethdb.KeyValueWriter) error {
 
 	for {
 		kind, k, v, ok, err := reader.Next()
-		if err != nil {
+		if !ok || err != nil {
 			return err
-		}
-		if !ok {
-			break
 		}
 		// The (k,v) slices might be overwritten if the batch is reset/reused,
 		// and the receiver should copy them if they are to be retained long-term.
 		if kind == pebble.InternalKeyKindSet {
-			_ = w.Put(k, v)
+			if err = w.Put(k, v); err != nil {
+				return err
+			}
 		} else if kind == pebble.InternalKeyKindDelete {
-			_ = w.Delete(k)
+			if err = w.Delete(k); err != nil {
+				return err
+			}
 		} else {
 			return fmt.Errorf("unhandled operation, keytype: %v", kind)
 		}
 	}
-
-	return nil
 }
 
 // pebbleIterator is a wrapper of underlying iterator in storage engine.
