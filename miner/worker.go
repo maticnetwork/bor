@@ -276,10 +276,12 @@ type worker struct {
 	// in this case this feature will add all empty blocks into canonical chain
 	// non-stop and no real transaction will be included.
 	noempty atomic.Bool
+
+	makeWitness bool
 }
 
 //nolint:staticcheck
-func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus.Engine, eth Backend, mux *event.TypeMux, isLocalBlock func(header *types.Header) bool, init bool) *worker {
+func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus.Engine, eth Backend, mux *event.TypeMux, isLocalBlock func(header *types.Header) bool, init bool, makeWitness bool) *worker {
 	worker := &worker{
 		config:              config,
 		chainConfig:         chainConfig,
@@ -303,6 +305,7 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 		resubmitIntervalCh:  make(chan time.Duration),
 		resubmitAdjustCh:    make(chan *intervalAdjust, resubmitAdjustChanSize),
 		interruptCommitFlag: config.CommitInterruptFlag,
+		makeWitness:         makeWitness,
 	}
 	worker.noempty.Store(true)
 	// Subscribe for transaction insertion events (whether from network or resurrects)
@@ -1463,7 +1466,7 @@ func (w *worker) commitWork(interrupt *atomic.Int32, noempty bool, timestamp int
 	work, err = w.prepareWork(&generateParams{
 		timestamp: uint64(timestamp),
 		coinbase:  coinbase,
-	}, true)
+	}, w.makeWitness)
 
 	if err != nil {
 		return
