@@ -392,7 +392,7 @@ func TestSpanURL(t *testing.T) {
 		t.Fatal("got an error", err)
 	}
 
-	const expected = "http://bor0/bor/span/1"
+	const expected = "http://bor0/bor/spans/1"
 
 	if url.String() != expected {
 		t.Fatalf("expected URL %q, got %q", expected, url.String())

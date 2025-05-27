@@ -86,17 +86,19 @@ const (
 
 	fetchStateSyncEventsFormatV2 = "from_id=%d&to_time=%s&limit=%d"
 	fetchStateSyncEventsPathV2   = "clerk/time"
-	fetchStateSyncListV2         = "clerk/event-record/list"
+	fetchStateSyncListV2         = "clerk/event-records/list"
 
 	fetchCheckpointV2      = "/checkpoints/%s"
 	fetchCheckpointCountV2 = "/checkpoints/count"
 
-	fetchMilestone        = "/milestone/latest"
-	fetchMilestoneCountV2 = "/milestone/count"
+	fetchV1Milestone      = "/milestone/latest"
+	fetchV2Milestone      = "/milestones/latest"
+	fetchMilestoneCountV2 = "/milestones/count"
 
-	fetchSpanFormat   = "bor/span/%d"
+	fetchSpanFormatV1 = "bor/span/%d"
+	fetchSpanFormatV2 = "bor/spans/%d"
 	fetchLatestSpanV1 = "bor/latest-span"
-	fetchLatestSpanV2 = "bor/span/latest"
+	fetchLatestSpanV2 = "bor/spans/latest"
 )
 
 // StateSyncEventsV1 fetches the state sync events from heimdall
@@ -194,7 +196,7 @@ func (h *HeimdallClient) StateSyncEventsV2(ctx context.Context, fromID uint64, t
 }
 
 func (h *HeimdallClient) GetSpanV1(ctx context.Context, spanID uint64) (*span.HeimdallSpan, error) {
-	url, err := spanURL(h.urlString, spanID)
+	url, err := spanV1URL(h.urlString, spanID)
 	if err != nil {
 		return nil, err
 	}
@@ -210,7 +212,7 @@ func (h *HeimdallClient) GetSpanV1(ctx context.Context, spanID uint64) (*span.He
 }
 
 func (h *HeimdallClient) GetSpanV2(ctx context.Context, spanID uint64) (*types.Span, error) {
-	url, err := spanURL(h.urlString, spanID)
+	url, err := spanV2URL(h.urlString, spanID)
 	if err != nil {
 		return nil, err
 	}
@@ -291,7 +293,7 @@ func (h *HeimdallClient) FetchCheckpointV2(ctx context.Context, number int64) (*
 
 // FetchMilestoneV1 fetches the checkpoint from heimdall
 func (h *HeimdallClient) FetchMilestoneV1(ctx context.Context) (*milestone.MilestoneV1, error) {
-	url, err := milestoneURL(h.urlString)
+	url, err := milestoneV1URL(h.urlString)
 	if err != nil {
 		return nil, err
 	}
@@ -308,7 +310,7 @@ func (h *HeimdallClient) FetchMilestoneV1(ctx context.Context) (*milestone.Miles
 
 // FetchMilestoneV2 fetches the milestone from heimdall
 func (h *HeimdallClient) FetchMilestoneV2(ctx context.Context) (*milestone.MilestoneV2, error) {
-	url, err := milestoneURL(h.urlString)
+	url, err := milestoneV2URL(h.urlString)
 	if err != nil {
 		return nil, err
 	}
@@ -531,8 +533,12 @@ func Fetch[T any](ctx context.Context, request *Request) (*T, error) {
 	return result, nil
 }
 
-func spanURL(urlString string, spanID uint64) (*url.URL, error) {
-	return makeURL(urlString, fmt.Sprintf(fetchSpanFormat, spanID), "")
+func spanV1URL(urlString string, spanID uint64) (*url.URL, error) {
+	return makeURL(urlString, fmt.Sprintf(fetchSpanFormatV1, spanID), "")
+}
+
+func spanV2URL(urlString string, spanID uint64) (*url.URL, error) {
+	return makeURL(urlString, fmt.Sprintf(fetchSpanFormatV2, spanID), "")
 }
 
 func latestSpanUrlV1(urlString string) (*url.URL, error) {
@@ -569,8 +575,14 @@ func checkpointURL(urlString string, number int64) (*url.URL, error) {
 	return makeURL(urlString, url, "")
 }
 
-func milestoneURL(urlString string) (*url.URL, error) {
-	url := fetchMilestone
+func milestoneV1URL(urlString string) (*url.URL, error) {
+	url := fetchV1Milestone
+
+	return makeURL(urlString, url, "")
+}
+
+func milestoneV2URL(urlString string) (*url.URL, error) {
+	url := fetchV2Milestone
 
 	return makeURL(urlString, url, "")
 }
