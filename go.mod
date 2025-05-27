@@ -351,7 +351,6 @@ require (
 
 replace (
 	cosmossdk.io/client/v2 => github.com/0xPolygon/cosmos-sdk/client/v2 v2.0.0-beta.1
-	github.com/0xPolygon/heimdall-v2 => ../heimdall-v2
 	github.com/Masterminds/goutils => github.com/Masterminds/goutils v1.1.1
 	github.com/cometbft/cometbft => github.com/0xPolygon/cometbft v0.1.3-beta-polygon
 	github.com/cosmos/cosmos-sdk => github.com/0xPolygon/cosmos-sdk v0.1.15-beta-polygon
