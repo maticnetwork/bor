@@ -55,8 +55,8 @@ import (
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/internal/shutdowncheck"
+	"github.com/ethereum/go-ethereum/internal/version"
 	"github.com/ethereum/go-ethereum/log"
-	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/miner"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/p2p"
@@ -66,10 +66,6 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/ethereum/go-ethereum/triedb"
-)
-
-var (
-	MilestoneWhitelistedDelayTimer = metrics.NewRegisteredTimer("chain/milestone/whitelisteddelay", nil)
 )
 
 // Config contains the configuration options of the ETH protocol.
@@ -215,7 +211,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 	if !config.SkipBcVersionCheck {
 		if bcVersion != nil && *bcVersion > core.BlockChainVersion {
-			return nil, fmt.Errorf("database version is v%d, Geth %s only supports v%d", *bcVersion, params.VersionWithMeta, core.BlockChainVersion)
+			return nil, fmt.Errorf("database version is v%d, Geth %s only supports v%d", *bcVersion, version.WithMeta, core.BlockChainVersion)
 		} else if bcVersion == nil || *bcVersion < core.BlockChainVersion {
 			if bcVersion != nil { // only print warning on upgrade, not on init
 				log.Warn("Upgrade blockchain database version", "from", dbVer, "to", core.BlockChainVersion)
@@ -246,7 +242,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	}
 
 	if config.VMTrace != "" {
-		var traceConfig json.RawMessage
+		traceConfig := json.RawMessage("{}")
 		if config.VMTraceJsonConfig != "" {
 			traceConfig = json.RawMessage(config.VMTraceJsonConfig)
 		}
@@ -876,10 +872,14 @@ func (s *Ethereum) SyncMode() downloader.SyncMode {
 	// We are in a full sync, but the associated head state is missing. To complete
 	// the head state, forcefully rerun the snap sync. Note it doesn't mean the
 	// persistent state is corrupted, just mismatch with the head block.
-	if !s.blockchain.HasState(head.Root) {
+	if !s.blockchain.HasState(head.Root) && !s.handler.statelessSync.Load() {
 		log.Info("Reenabled snap sync as chain is stateless")
 		return downloader.SnapSync
 	}
 	// Nope, we're really full syncing
-	return downloader.FullSync
+	if s.handler.statelessSync.Load() {
+		return downloader.StatelessSync
+	} else {
+		return downloader.FullSync
+	}
 }

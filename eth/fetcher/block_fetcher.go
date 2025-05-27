@@ -603,16 +603,30 @@ func (f *BlockFetcher) loop() {
 				}
 
 				if time.Since(announces[0].time) > timeout {
-					// Pick a random peer to retrieve from, reset all others
-					announce := announces[rand.Intn(len(announces))]
+					// Determine if we should proceed to fetch the header for this hash.
+					shouldScheduleFetch := !f.wm.isPending(hash) && // Not handled by witness manager
+						f.queued[hash] == nil && // Not already in the import queue
+						f.fetched[hash] == nil && // Header not already fetched
+						f.completing[hash] == nil && // Body not already being completed
+						((f.light && f.getHeader(hash) == nil) || (!f.light && f.getBlock(hash) == nil)) // Not in DB
 
-					f.forgetHash(hash) // Removes from f.announced
+					if shouldScheduleFetch {
+						announceToUse := announces[rand.Intn(len(announces))]
+						f.forgetHash(hash) // This also removes from f.announced
 
-					// If the block still didn't arrive, queue for fetching
-					// Also check if witness manager is already handling it
-					if !f.wm.isPending(hash) && ((f.light && f.getHeader(hash) == nil) || (!f.light && f.getBlock(hash) == nil)) {
-						request[announce.origin] = append(request[announce.origin], hash)
-						f.fetching[hash] = announce
+						request[announceToUse.origin] = append(request[announceToUse.origin], hash)
+						f.fetching[hash] = announceToUse
+					} else {
+						for _, annItem := range announces { // 'announces' is f.announced[hash]
+							f.announces[annItem.origin]--
+							if f.announces[annItem.origin] <= 0 {
+								delete(f.announces, annItem.origin)
+							}
+						}
+						delete(f.announced, hash)
+						if f.announceChangeHook != nil {
+							f.announceChangeHook(hash, false)
+						}
 					}
 				}
 			}
@@ -732,7 +746,7 @@ func (f *BlockFetcher) loop() {
 							return
 						} // Invalid response type
 						// Ignoring withdrawals here, since the block fetcher is not used post-merge.
-						txs, uncles, _, _ := bodyResponse.Unpack()
+						txs, uncles, _ := bodyResponse.Unpack()
 						f.FilterBodies(p, txs, uncles, time.Now(), announcedAt)
 
 					case <-timeout.C:
@@ -798,7 +812,7 @@ func (f *BlockFetcher) loop() {
 							block.AnnouncedAt = &task.announcedTime
 
 							// Check if a witness is required for this empty block
-							if announce.fetchWitness != nil {
+							if f.requireWitness && announce.fetchWitness != nil {
 								// === Witness Manager Interaction ===
 								// Check peer failure status BEFORE delegating
 								if f.wm.HasFailedTooManyTimes(announce.origin) {
@@ -934,7 +948,7 @@ func (f *BlockFetcher) loop() {
 							block.AnnouncedAt = &task.announcedTime
 
 							// If witness is needed, delegate to witness manager, otherwise add to enqueue list
-							if matchAnnounce.fetchWitness != nil {
+							if f.requireWitness && matchAnnounce.fetchWitness != nil {
 								// === Witness Manager Interaction ===
 								// Check peer failure status BEFORE delegating
 								if f.wm.HasFailedTooManyTimes(announce.origin) {

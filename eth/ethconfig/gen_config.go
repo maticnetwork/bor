@@ -110,7 +110,6 @@ func (c Config) MarshalTOML() (interface{}, error) {
 	enc.EnablePreimageRecording = c.EnablePreimageRecording
 	enc.VMTrace = c.VMTrace
 	enc.VMTraceJsonConfig = c.VMTraceJsonConfig
-	enc.DocRoot = c.DocRoot
 	enc.RPCGasCap = c.RPCGasCap
 	enc.RPCReturnDataLimit = c.RPCReturnDataLimit
 	enc.RPCEVMTimeout = c.RPCEVMTimeout
@@ -300,9 +299,6 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 	}
 	if dec.VMTraceJsonConfig != nil {
 		c.VMTraceJsonConfig = *dec.VMTraceJsonConfig
-	}
-	if dec.DocRoot != nil {
-		c.DocRoot = *dec.DocRoot
 	}
 	if dec.RPCGasCap != nil {
 		c.RPCGasCap = *dec.RPCGasCap

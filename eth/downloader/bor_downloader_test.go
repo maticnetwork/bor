@@ -94,7 +94,7 @@ func newTesterWithNotification(t *testing.T, success func()) *downloadTester {
 	}
 
 	//nolint: staticcheck
-	tester.downloader = New(db, new(event.TypeMux), tester.chain, nil, tester.dropPeer, success, whitelist.NewService(db))
+	tester.downloader = New(db, new(event.TypeMux), tester.chain, nil, tester.dropPeer, success, whitelist.NewService(db), 0)
 
 	return tester
 }
@@ -1059,6 +1059,9 @@ func testSyncProgress(t *testing.T, protocol uint, mode SyncMode) {
 
 	pending.Wait()
 
+	// Simulate a successful sync above the fork
+	tester.downloader.syncStatsChainOrigin = tester.downloader.syncStatsChainHeight
+
 	// Synchronise all the blocks and check continuation progress
 	tester.newPeer("peer-full", protocol, chain.blocks[1:])
 	pending.Add(1)
@@ -1383,9 +1386,6 @@ func TestRemoteHeaderRequestSpan(t *testing.T) {
 	}
 
 	for i, tt := range testCases {
-		i := i
-		tt := tt
-
 		t.Run("", func(t *testing.T) {
 			from, count, span, max := calculateRequestSpan(tt.remoteHeight, tt.localHeight)
 			data := reqs(int(from), count, span)

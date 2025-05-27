@@ -1175,10 +1175,7 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 	case "full":
 		n.SyncMode = downloader.FullSync
 	case "snap":
-		// n.SyncMode = downloader.SnapSync // TODO(snap): Uncomment when we have snap sync working
-		n.SyncMode = downloader.FullSync
-
-		log.Warn("Bor doesn't support Snap Sync yet, switching to Full Sync mode")
+		n.SyncMode = downloader.SnapSync
 	case "stateless":
 		n.SyncMode = downloader.StatelessSync
 		log.Info("Using Stateless Sync mode - syncing from latest checkpoint without history")

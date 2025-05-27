@@ -1,6 +1,7 @@
 package wit
 
 import (
+	"crypto/rand"
 	"math/big"
 	"testing"
 
@@ -8,12 +9,16 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
+	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/stretchr/testify/assert"
 )
 
 func setupPeer() *Peer {
 	logger := log.New()
-	return NewPeer(1, &p2p.Peer{}, nil, logger)
+	var id enode.ID
+	rand.Read(id[:])
+	p2pPeer := p2p.NewPeer(id, "test-peer", nil)
+	return NewPeer(1, p2pPeer, nil, logger)
 }
 
 var testHeader1 = &types.Header{
@@ -28,26 +33,29 @@ var testHeader3 = &types.Header{
 	Number: big.NewInt(16),
 }
 
-var testWitness1 = &stateless.Witness{
-	Headers: []*types.Header{
-		testHeader1,
-	},
+// Create context headers for each witness (these will be used for witness.Header().Hash())
+var testContextHeader1 = &types.Header{
+	Number: big.NewInt(11), // Context should be the block the witness is for
 }
 
-var testWitness2 = &stateless.Witness{
-	Headers: []*types.Header{
-		testHeader2,
-		testHeader3,
-	},
+var testContextHeader2 = &types.Header{
+	Number: big.NewInt(17), // Different from testContextHeader1
 }
 
-var testWitness3 = &stateless.Witness{
-	Headers: []*types.Header{
-		testHeader1,
-		testHeader2,
-		testHeader3,
-	},
+var testContextHeader3 = &types.Header{
+	Number: big.NewInt(18), // Different from both above
 }
+
+func createWitness(context *types.Header, headers []*types.Header) *stateless.Witness {
+	// Create a new witness with the context and set the headers
+	w, _ := stateless.NewWitness(context, nil)
+	w.Headers = headers
+	return w
+}
+
+var testWitness1 = createWitness(testContextHeader1, []*types.Header{testHeader1})
+var testWitness2 = createWitness(testContextHeader2, []*types.Header{testHeader2, testHeader3})
+var testWitness3 = createWitness(testContextHeader3, []*types.Header{testHeader1, testHeader2, testHeader3})
 
 func TestAddKnownWitness(t *testing.T) {
 	peer := setupPeer()
@@ -63,13 +71,9 @@ func TestAddKnownWitness(t *testing.T) {
 	peer.AddKnownWitness(testWitness3.Header().Hash())
 	assert.True(t, peer.KnownWitnessesContains(testWitness3), "Witness should be known by the peer")
 
-	// TODO(@pratikspatil024) - this will fail bacause the way we calculate the hash of the witness is by getting the
-	// hash of the first header, and beacuse the witness1 and witness3 have the same first header,
-	// they will be considered the same witness.
-	// So we need to change the way we calculate the hash of the witness
-	//
-	// assert.Equal(t, 3, peer.knownWitnesses.Cardinality(), "Known witnesses count should be 3")
-
+	// The witnesses now have different context headers, so they have different hashes
+	// even though testWitness1 and testWitness3 share some of the same headers in their Headers slice
+	assert.Equal(t, 3, peer.knownWitnesses.Cardinality(), "Known witnesses count should be 3")
 }
 
 /*
