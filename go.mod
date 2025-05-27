@@ -3,7 +3,7 @@ module github.com/ethereum/go-ethereum
 go 1.24.3
 
 require (
-	github.com/0xPolygon/heimdall-v2 v0.1.24
+	github.com/0xPolygon/heimdall-v2 v0.1.25
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.3.2
 	github.com/BurntSushi/toml v1.4.0
 	github.com/JekaMas/go-grpc-net-conn v0.0.0-20220708155319-6aff21f2d13d
@@ -360,5 +360,4 @@ replace (
 	github.com/tendermint/tendermint => github.com/maticnetwork/tendermint v0.33.0
 	github.com/tendermint/tm-db => github.com/tendermint/tm-db v0.2.0
 	go.mongodb.org/mongo-driver => go.mongodb.org/mongo-driver v1.14.0
-	github.com/0xPolygon/heimdall-v2 => ../heimdall-v2
 )
