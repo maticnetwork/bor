@@ -320,7 +320,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 	}
 
 	if config.SyncMode != downloader.StatelessSync {
-		eth.miner = miner.New(eth, &config.Miner, eth.blockchain.Config(), eth.EventMux(), eth.engine, eth.isLocalBlock)
+		eth.miner = miner.New(eth, &config.Miner, eth.blockchain.Config(), eth.EventMux(), eth.engine, eth.isLocalBlock, eth.config.WitnessProtocol)
 		eth.miner.SetExtra(makeExtraData(config.Miner.ExtraData))
 	}
 

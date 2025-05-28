@@ -22,6 +22,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/params"
@@ -103,7 +104,7 @@ type Engine interface {
 	//
 	// Note, the method returns immediately and will send the result async. More
 	// than one result may also be returned depending on the consensus algorithm.
-	Seal(chain ChainHeaderReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error
+	Seal(chain ChainHeaderReader, block *types.Block, witness *stateless.Witness, results chan<- *NewSealedBlockEvent, stop <-chan struct{}) error
 
 	// SealHash returns the hash of a block prior to it being sealed.
 	SealHash(header *types.Header) common.Hash
@@ -125,4 +126,9 @@ type PoW interface {
 
 	// Hashrate returns the current mining hashrate of a PoW consensus engine.
 	Hashrate() float64
+}
+
+type NewSealedBlockEvent struct {
+	Block   *types.Block
+	Witness *stateless.Witness
 }

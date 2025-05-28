@@ -35,6 +35,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/consensus/misc/eip1559"
 	"github.com/ethereum/go-ethereum/core/state"
+	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -652,7 +653,7 @@ func (c *Clique) Authorize(signer common.Address, signFn SignerFn) {
 
 // Seal implements consensus.Engine, attempting to create a sealed block using
 // the local signing credentials.
-func (c *Clique) Seal(chain consensus.ChainHeaderReader, block *types.Block, results chan<- *types.Block, stop <-chan struct{}) error {
+func (c *Clique) Seal(chain consensus.ChainHeaderReader, block *types.Block, witness *stateless.Witness, results chan<- *consensus.NewSealedBlockEvent, stop <-chan struct{}) error {
 	header := block.Header()
 
 	// Sealing the genesis block is not supported
@@ -715,7 +716,7 @@ func (c *Clique) Seal(chain consensus.ChainHeaderReader, block *types.Block, res
 		}
 
 		select {
-		case results <- block.WithSeal(header):
+		case results <- &consensus.NewSealedBlockEvent{Block: block.WithSeal(header)}:
 		default:
 			log.Warn("Sealing result is not read by miner", "sealhash", SealHash(header))
 		}

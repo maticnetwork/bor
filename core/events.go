@@ -17,6 +17,7 @@
 package core
 
 import (
+	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/core/types"
 )
 
@@ -24,7 +25,10 @@ import (
 type NewTxsEvent struct{ Txs []*types.Transaction }
 
 // NewMinedBlockEvent is posted when a block has been imported.
-type NewMinedBlockEvent struct{ Block *types.Block }
+type NewMinedBlockEvent struct {
+	Block   *types.Block
+	Witness *stateless.Witness
+}
 
 // RemovedLogsEvent is posted when a reorg happens
 type RemovedLogsEvent struct{ Logs []*types.Log }

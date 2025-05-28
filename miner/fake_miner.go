@@ -112,7 +112,7 @@ func createBorMiner(t *testing.T, ethAPIMock api.Caller, spanner bor.Spanner, he
 	}
 
 	// Create Miner
-	miner := New(backend, &config, chainConfig, mux, engine, nil)
+	miner := New(backend, &config, chainConfig, mux, engine, nil, false)
 
 	cleanup := func(skipMiner bool) {
 		bc.Stop()
