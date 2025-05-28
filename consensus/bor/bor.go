@@ -1136,6 +1136,7 @@ func (c *Bor) checkAndCommitSpan(
 		return err
 	}
 
+	log.Info("CURRENT SPAN", "spanID", span.Id, "headerNumber", "span", span)
 	if c.needToCommitSpan(span, headerNumber) {
 		return c.FetchAndCommitSpan(ctx, span.Id+1, state, header, chain)
 	}
