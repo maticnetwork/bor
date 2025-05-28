@@ -1136,7 +1136,7 @@ func (c *Bor) checkAndCommitSpan(
 		return err
 	}
 
-	log.Info("CURRENT SPAN", "spanID", span.Id, "headerNumber", "span", span)
+	log.Info("CURRENT SPAN", "spanID", span.Id, "span", span)
 	if c.needToCommitSpan(span, headerNumber) {
 		return c.FetchAndCommitSpan(ctx, span.Id+1, state, header, chain)
 	}
@@ -1144,25 +1144,25 @@ func (c *Bor) checkAndCommitSpan(
 	return nil
 }
 
-func (c *Bor) getLatestHeimdallSpanV1() *span.HeimdallSpan {
+func (c *Bor) getLatestHeimdallSpanV1() (*span.HeimdallSpan, error) {
 	storedSpanBytes, err := c.db.Get(rawdb.LastHeimdallV1SpanKey)
 	if err != nil {
 		log.Error("Error while fetching heimdallv1 span from db", "error", err)
-		return nil
+		return nil, err
 	}
 
 	if len(storedSpanBytes) == 0 {
 		log.Info("No heimdallv1 span found in db")
-		return nil
+		return nil, errors.New("no heimdallv1 span found in db")
 	}
 
 	var storedSpan span.HeimdallSpan
 	if err := json.Unmarshal(storedSpanBytes, &storedSpan); err != nil {
 		log.Error("Error while unmarshalling heimdallv1 span", "error", err)
-		return nil
+		return nil, err
 	}
 
-	return &storedSpan
+	return &storedSpan, nil
 }
 
 func (c *Bor) getLatestHeimdallSpanV2() *borTypes.Span {
@@ -1202,7 +1202,7 @@ func (c *Bor) updateLatestHeimdallSpanV1() {
 		return
 	}
 
-	storedSpan := c.getLatestHeimdallSpanV1()
+	storedSpan, _ := c.getLatestHeimdallSpanV1()
 
 	storedSpanID := uint64(0)
 
@@ -1439,8 +1439,11 @@ func (c *Bor) FetchAndCommitSpan(
 				if err == nil {
 					return true
 				}
-				log.Error("Error while fetching heimdallv1 span", "error", err)
-				response = c.getLatestHeimdallSpanV1()
+				log.Error("Error while fetching heimdallv1 span", "newSpanID", newSpanID, "error", err)
+				response, err = c.getLatestHeimdallSpanV1()
+				if err != nil {
+					log.Error("ERROR IN getLatestHeimdallSpanV1", "newSpanID", newSpanID, "error", err)
+				}
 				if response != nil {
 					originalSpanID := response.Id
 					response.Id = newSpanID
@@ -1455,15 +1458,19 @@ func (c *Bor) FetchAndCommitSpan(
 					return true
 				}
 
+				log.Info("RESPONSE!!", "response", response)
 				return false
 			})
 
+			log.Info("RESPONSE OUTSIDE!!", "response", response)
 			minSpan = span.Span{
 				Id:         response.Id,
 				StartBlock: response.StartBlock,
 				EndBlock:   response.EndBlock,
 			}
 			chainId = response.ChainID
+
+			log.Info("MIN SPAN", "minSpan", minSpan)
 
 			for _, val := range response.ValidatorSet.Validators {
 				m := stakeTypes.MinimalVal{
