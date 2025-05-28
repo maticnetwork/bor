@@ -14,7 +14,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/network"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
-	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
 
 	"github.com/stretchr/testify/require"
 )
@@ -61,18 +60,12 @@ func CreateMockHeimdallServer(wg *sync.WaitGroup, port int, listener net.Listene
 		Handler: mux,
 	}
 
-	// Close the listener using the port and immediately consume it below
-	err := listener.Close()
-	if err != nil {
-		return nil, err
-	}
-
 	go func() {
 		defer wg.Done()
 
-		// always returns error. ErrServerClosed on graceful close
-		if err := srv.ListenAndServe(); err != http.ErrServerClosed {
-			fmt.Printf("error in server.ListenAndServe(): %v", err)
+		// Use the provided listener instead of closing it and creating a new one
+		if err := srv.Serve(listener); err != http.ErrServerClosed {
+			fmt.Printf("error in server.Serve(): %v", err)
 		}
 	}()
 
@@ -92,16 +85,20 @@ func TestFetchCheckpointFromMockHeimdall(t *testing.T) {
 	// Initialize the fake handler and add a fake checkpoint handler function
 	handler := &HttpHandlerFake{}
 	handler.handleFetchCheckpoint = func(w http.ResponseWriter, _ *http.Request) {
-		err := json.NewEncoder(w).Encode(checkpoint.CheckpointResponse{
-			Result: checkpoint.Checkpoint{
-				Proposer:   common.Address{},
-				StartBlock: 0,
-				EndBlock:   512,
-				RootHash:   common.Hash{},
-				BorChainID: "15001",
-				Timestamp:  0,
+		// Create a properly formatted checkpoint response with string fields
+		// and base64-encoded root hash as expected by the UnmarshalJSON method
+		response := map[string]interface{}{
+			"checkpoint": map[string]interface{}{
+				"proposer":     "0x0000000000000000000000000000000000000000",
+				"start_block":  "0",
+				"end_block":    "512",
+				"root_hash":    "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", // Base64 encoded zero hash
+				"bor_chain_id": "15001",
+				"timestamp":    "0",
 			},
-		})
+		}
+
+		err := json.NewEncoder(w).Encode(response)
 
 		if err != nil {
 			w.WriteHeader(500) // Return 500 Internal Server Error.
@@ -115,6 +112,9 @@ func TestFetchCheckpointFromMockHeimdall(t *testing.T) {
 	// Create mock heimdall server and pass handler instance for setting up the routes
 	srv, err := CreateMockHeimdallServer(wg, port, listener, handler)
 	require.NoError(t, err, "expect no error in starting mock heimdall server")
+
+	// Add a small delay to ensure server is ready
+	time.Sleep(100 * time.Millisecond)
 
 	// Create a new heimdall client and use same port for connection
 	client := NewHeimdallClient(fmt.Sprintf("http://localhost:%d", port), 5*time.Second)
@@ -142,16 +142,22 @@ func TestFetchMilestoneFromMockHeimdall(t *testing.T) {
 	// Initialize the fake handler and add a fake milestone handler function
 	handler := &HttpHandlerFake{}
 	handler.handleFetchMilestone = func(w http.ResponseWriter, _ *http.Request) {
-		err := json.NewEncoder(w).Encode(milestone.MilestoneResponse{
-			Result: milestone.Milestone{
-				Proposer:   common.Address{},
-				StartBlock: 0,
-				EndBlock:   512,
-				Hash:       common.Hash{},
-				BorChainID: "15001",
-				Timestamp:  0,
+		// Create a properly formatted milestone response with string fields
+		// and base64-encoded hash as expected by the UnmarshalJSON method
+		response := map[string]interface{}{
+			"milestone": map[string]interface{}{
+				"proposer":         "0x0000000000000000000000000000000000000000",
+				"start_block":      "0",
+				"end_block":        "512",
+				"hash":             "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=", // Base64 encoded zero hash
+				"bor_chain_id":     "15001",
+				"milestone_id":     "1",
+				"timestamp":        "0",
+				"total_difficulty": "0",
 			},
-		})
+		}
+
+		err := json.NewEncoder(w).Encode(response)
 
 		if err != nil {
 			w.WriteHeader(500) // Return 500 Internal Server Error.
@@ -165,6 +171,9 @@ func TestFetchMilestoneFromMockHeimdall(t *testing.T) {
 	// Create mock heimdall server and pass handler instance for setting up the routes
 	srv, err := CreateMockHeimdallServer(wg, port, listener, handler)
 	require.NoError(t, err, "expect no error in starting mock heimdall server")
+
+	// Add a small delay to ensure server is ready
+	time.Sleep(100 * time.Millisecond)
 
 	// Create a new heimdall client and use same port for connection
 	client := NewHeimdallClient(fmt.Sprintf("http://localhost:%d", port), 5*time.Second)

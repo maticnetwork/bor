@@ -12,7 +12,7 @@ import (
 	state "github.com/ethereum/go-ethereum/core/state"
 	ethapi "github.com/ethereum/go-ethereum/internal/ethapi"
 	rpc "github.com/ethereum/go-ethereum/rpc"
-	gomock "github.com/golang/mock/gomock"
+	gomock "go.uber.org/mock/gomock"
 )
 
 // MockCaller is a mock of Caller interface.

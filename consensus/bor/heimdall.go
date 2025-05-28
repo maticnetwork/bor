@@ -21,7 +21,6 @@ type IHeimdallClient interface {
 	Close()
 }
 
-//go:generate mockgen -destination=../../tests/bor/mocks/IHeimdallWSClient.go -package=mocks . IHeimdallWSClient
 type IHeimdallWSClient interface {
 	SubscribeMilestoneEvents(ctx context.Context) <-chan *milestone.Milestone
 	Unsubscribe(ctx context.Context) error

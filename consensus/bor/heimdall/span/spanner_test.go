@@ -12,8 +12,8 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/bor/valset"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rpc"
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
+	gomock "go.uber.org/mock/gomock"
 )
 
 func TestGetCurrentValidatorsByBlockNrOrHash(t *testing.T) {

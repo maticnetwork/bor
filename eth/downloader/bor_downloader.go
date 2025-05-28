@@ -301,6 +301,7 @@ func (d *Downloader) Progress() ethereum.SyncProgress {
 	progress, pending := d.SnapSyncer.Progress()
 
 	return ethereum.SyncProgress{
+		StartingBlock:       d.syncStatsChainOrigin,
 		CurrentBlock:        current,
 		HighestBlock:        d.syncStatsChainHeight,
 		SyncedAccounts:      progress.AccountSynced,
@@ -734,8 +735,6 @@ func (d *Downloader) spawnSync(fetchers []func() error) error {
 	d.cancelWg.Add(len(fetchers))
 
 	for _, fn := range fetchers {
-		fn := fn
-
 		go func() { defer d.cancelWg.Done(); errc <- fn() }()
 	}
 	// Wait for the first error, then terminate the others.

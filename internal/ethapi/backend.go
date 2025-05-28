@@ -75,7 +75,6 @@ type Backend interface {
 	GetTdByNumber(ctx context.Context, blockNr rpc.BlockNumber) *big.Int
 	SubscribeChainEvent(ch chan<- core.ChainEvent) event.Subscription
 	SubscribeChainHeadEvent(ch chan<- core.ChainHeadEvent) event.Subscription
-	SubscribeChainSideEvent(ch chan<- core.ChainSideEvent) event.Subscription
 
 	// Transaction pool API
 	SendTx(ctx context.Context, signedTx *types.Transaction) error
@@ -146,9 +145,6 @@ func GetAPIs(apiBackend Backend) []rpc.API {
 		}, {
 			Namespace: "eth",
 			Service:   NewEthereumAccountAPI(apiBackend.AccountManager()),
-		}, {
-			Namespace: "personal",
-			Service:   NewPersonalAccountAPI(apiBackend, nonceLock),
 		}, {
 			Namespace: "bor",
 			Service:   NewBorAPI(apiBackend),

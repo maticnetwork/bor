@@ -17,7 +17,6 @@
 package core
 
 import (
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/core/types"
 )
@@ -35,13 +34,13 @@ type NewMinedBlockEvent struct {
 type RemovedLogsEvent struct{ Logs []*types.Log }
 
 type ChainEvent struct {
-	Block *types.Block
-	Hash  common.Hash
-	Logs  []*types.Log
+	Header *types.Header
 }
 
 type ChainSideEvent struct {
-	Block *types.Block
+	Header *types.Header
 }
 
-type ChainHeadEvent struct{ Block *types.Block }
+type ChainHeadEvent struct {
+	Header *types.Header
+}
