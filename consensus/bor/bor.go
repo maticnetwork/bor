@@ -357,12 +357,14 @@ func (c *Bor) verifyHeader(chain consensus.ChainHeaderReader, header *types.Head
 		// from non-primary producer. Such blocks will be rejected later when we know the succession
 		// number of the signer in the current sprint.
 		if header.Time-c.config.CalculatePeriod(number) > now {
-			return fmt.Errorf("%w: block %d announced too early post bhilai, header unix time: %d, now: %d", consensus.ErrFutureBlock, number, header.Time, now)
+			log.Error("Block announced too early post bhilai", "number", number, "headerTime", header.Time, "now", now)
+			return consensus.ErrFutureBlock
 		}
 	} else {
 		// Don't waste time checking blocks from the future
 		if header.Time > now {
-			return fmt.Errorf("%w: block %d announced too early, header unix time: %d, now: %d", consensus.ErrFutureBlock, number, header.Time, now)
+			log.Error("Block announced too early", "number", number, "headerTime", header.Time, "now", now)
+			return consensus.ErrFutureBlock
 		}
 	}
 
@@ -725,7 +727,8 @@ func (c *Bor) verifySeal(chain consensus.ChainHeaderReader, header *types.Header
 	if c.config.IsBhilai(header.Number) && succession != 0 {
 		now := uint64(time.Now().Unix())
 		if header.Time > now {
-			return fmt.Errorf("%w: block %d announced too early by non-primary producer post bhilai, header unix time: %d, now: %d", consensus.ErrFutureBlock, number, header.Time, now)
+			log.Error("Block announced too early by non-primary producer post bhilai", "number", number, "headerTime", header.Time, "now", now)
+			return consensus.ErrFutureBlock
 		}
 	}
 
