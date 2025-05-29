@@ -16,9 +16,12 @@ func (h *HeimdallGRPCClient) GetSpanV2(ctx context.Context, spanID uint64) (*typ
 
 	var err error
 
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, defaultTimeout)
+	defer cancel()
+
 	// Start the timer and set the request type on the context.
 	start := time.Now()
-	ctx = heimdall.WithRequestType(ctx, heimdall.SpanRequest)
+	ctx = heimdall.WithRequestType(ctxWithTimeout, heimdall.SpanRequest)
 
 	// Defer the metrics call.
 	defer func() {
@@ -46,9 +49,12 @@ func (h *HeimdallGRPCClient) GetLatestSpanV2(ctx context.Context) (*types.Span, 
 
 	var err error
 
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, defaultTimeout)
+	defer cancel()
+
 	// Start the timer and set the request type on the context.
 	start := time.Now()
-	ctx = heimdall.WithRequestType(ctx, heimdall.LatestSpanRequest)
+	ctx = heimdall.WithRequestType(ctxWithTimeout, heimdall.LatestSpanRequest)
 
 	// Defer the metrics call.
 	defer func() {

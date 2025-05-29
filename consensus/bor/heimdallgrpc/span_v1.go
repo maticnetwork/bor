@@ -18,7 +18,10 @@ func (h *HeimdallGRPCClient) GetSpanV1(ctx context.Context, spanID uint64) (*spa
 
 	log.Info("Fetching span", "spanID", spanID)
 
-	res, err := h.client.Span(ctx, req)
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, defaultTimeout)
+	defer cancel()
+
+	res, err := h.client.Span(ctxWithTimeout, req)
 	if err != nil {
 		return nil, err
 	}
@@ -33,7 +36,10 @@ func (h *HeimdallGRPCClient) GetLatestSpanV1(ctx context.Context) (*span.Heimdal
 
 	log.Info("Fetching latest span")
 
-	res, err := h.client.LatestSpan(ctx, req)
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, defaultTimeout)
+	defer cancel()
+
+	res, err := h.client.LatestSpan(ctxWithTimeout, req)
 	if err != nil {
 		return nil, err
 	}

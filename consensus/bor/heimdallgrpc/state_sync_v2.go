@@ -18,9 +18,13 @@ func (h *HeimdallGRPCClient) StateSyncEventsV2(ctx context.Context, fromID uint6
 	log.Info("Fetching state sync events", "fromID", fromID, "to", to)
 
 	var err error
+
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, defaultTimeout)
+	defer cancel()
+
 	// Start the timer and set the request type on the context.
 	start := time.Now()
-	ctx = heimdall.WithRequestType(ctx, heimdall.StateSyncRequest)
+	ctx = heimdall.WithRequestType(ctxWithTimeout, heimdall.StateSyncRequest)
 
 	// Defer the metrics call.
 	defer func() {

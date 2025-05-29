@@ -1148,12 +1148,10 @@ func (c *Bor) checkAndCommitSpan(
 	var ctx = context.Background()
 	headerNumber := header.Number.Uint64()
 
-	if header.Number.Uint64()%c.config.CalculateSprint(header.Number.Uint64()) == 0 {
-		if hmm.IsHeimdallV2 {
-			c.updateLatestHeimdallSpanV2()
-		} else {
-			c.updateLatestHeimdallSpanV1()
-		}
+	if hmm.IsHeimdallV2 {
+		c.updateLatestHeimdallSpanV2()
+	} else {
+		c.updateLatestHeimdallSpanV1()
 	}
 
 	span, err := c.spanner.GetCurrentSpan(ctx, header.ParentHash)
@@ -1336,7 +1334,8 @@ func (c *Bor) needToCommitSpan(currentSpan *span.Span, headerNumber uint64) bool
 	}
 
 	// if current block is first block of last sprint in current span
-	if currentSpan.EndBlock > c.config.CalculateSprint(headerNumber) && currentSpan.EndBlock-c.config.CalculateSprint(headerNumber)+1 == headerNumber {
+	sprintLength := c.config.CalculateSprint(headerNumber)
+	if currentSpan.EndBlock > sprintLength && currentSpan.EndBlock-sprintLength+1 == headerNumber {
 		return true
 	}
 

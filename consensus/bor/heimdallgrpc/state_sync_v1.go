@@ -26,7 +26,10 @@ func (h *HeimdallGRPCClient) StateSyncEventsV1(ctx context.Context, fromID uint6
 		err    error
 	)
 
-	res, err = h.client.StateSyncEvents(ctx, req)
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, defaultTimeout)
+	defer cancel()
+
+	res, err = h.client.StateSyncEvents(ctxWithTimeout, req)
 	if err != nil {
 		return nil, err
 	}

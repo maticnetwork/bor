@@ -657,6 +657,10 @@ func internalFetch(ctx context.Context, client http.Client, u *url.URL) ([]byte,
 }
 
 func internalFetchWithTimeout(ctx context.Context, client http.Client, url *url.URL) ([]byte, error) {
+	if client.Timeout == 0 {
+		// If no timeout is set, use a default timeout
+		client.Timeout = 1 * time.Second
+	}
 	ctx, cancel := context.WithTimeout(ctx, client.Timeout)
 	defer cancel()
 
