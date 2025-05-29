@@ -1653,7 +1653,7 @@ func TestEarlyBlockAnnouncementPostBhilai_Primary(t *testing.T) {
 	require.Equal(t, 1, i, "incorrect number of blocks inserted while inserting block #5")
 	// Block is invalid according to consensus rules and should return appropriate error
 	err = engine.VerifyHeader(chain, tempBlock.Header())
-	require.Equal(t, consensus.ErrFutureBlock, err, "incorrect error while verifying block #5")
+	require.ErrorIs(t, err, consensus.ErrFutureBlock, "incorrect error while verifying block #5")
 
 	// Build block 5 again normally
 	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators, false, updateTime)
@@ -1801,7 +1801,7 @@ func TestEarlyBlockAnnouncementPostBhilai_NonPrimary(t *testing.T) {
 	// Block is invalid according to consensus rules and should return appropriate error
 	// Insert chain would accept the block as future block so we don't attempt calling it.
 	err = engine.VerifyHeader(chain, tempBlock.Header())
-	require.Equal(t, consensus.ErrFutureBlock, err, "incorrect error while verifying block #2")
+	require.ErrorIs(t, err, consensus.ErrFutureBlock, "incorrect error while verifying block #2")
 
 	// Case 3: Happy case. Build a correct block and ensure the sealing function waits until expected
 	// header time before announcing the block. Non-primary validators can't announce blocks early.
@@ -1836,12 +1836,12 @@ func TestEarlyBlockAnnouncementPostBhilai_NonPrimary(t *testing.T) {
 	// reject if announced early (here: parent block time + 2s)
 	time.Sleep(2 * time.Second)
 	err = engine.VerifyHeader(chain, block.Header())
-	require.Equal(t, consensus.ErrFutureBlock, err, "incorrect error while verifying block #3")
+	require.ErrorIs(t, err, consensus.ErrFutureBlock, "incorrect error while verifying block #3")
 
 	// reject if announced early (here: parent block time + 4s)
 	time.Sleep(2 * time.Second)
 	err = engine.VerifyHeader(chain, block.Header())
-	require.Equal(t, consensus.ErrFutureBlock, err, "incorrect error while verifying block #3")
+	require.ErrorIs(t, err, consensus.ErrFutureBlock, "incorrect error while verifying block #3")
 
 	// accept if announced after expected header.Time (here: parent block time + 6s)
 	time.Sleep(2 * time.Second)
