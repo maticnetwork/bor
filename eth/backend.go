@@ -288,14 +288,15 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 	// BOR changes
 	// Blob pool is removed from Subpool for Bor
-	eth.txPool, err = txpool.New(config.TxPool.PriceLimit, eth.blockchain, []txpool.SubPool{legacyPool})
-	if err != nil {
-		return nil, err
+	if eth.config.SyncMode != downloader.StatelessSync {
+		eth.txPool, err = txpool.New(config.TxPool.PriceLimit, eth.blockchain, []txpool.SubPool{legacyPool})
+		if err != nil {
+			return nil, err
+		}
+		// The `config.TxPool.PriceLimit` used above doesn't reflect the sanitized/enforced changes
+		// made in the txpool. Update the `gasTip` explicitly to reflect the enforced value.
+		eth.txPool.SetGasTip(new(big.Int).SetUint64(params.BorDefaultTxPoolPriceLimit))
 	}
-
-	// The `config.TxPool.PriceLimit` used above doesn't reflect the sanitized/enforced changes
-	// made in the txpool. Update the `gasTip` explicitly to reflect the enforced value.
-	eth.txPool.SetGasTip(new(big.Int).SetUint64(params.BorDefaultTxPoolPriceLimit))
 
 	// Permit the downloader to use the trie cache allowance during fast sync
 	cacheLimit := cacheConfig.TrieCleanLimit + cacheConfig.TrieDirtyLimit + cacheConfig.SnapshotLimit
