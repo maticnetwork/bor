@@ -288,6 +288,9 @@ func (p *TxPool) SetGasTip(tip *big.Int) {
 // Has returns an indicator whether the pool has a transaction cached with the
 // given hash.
 func (p *TxPool) Has(hash common.Hash) bool {
+	if p == nil {
+		return false
+	}
 	for _, subpool := range p.subpools {
 		if subpool.Has(hash) {
 			return true
@@ -298,6 +301,9 @@ func (p *TxPool) Has(hash common.Hash) bool {
 
 // Get returns a transaction if it is contained in the pool, or nil otherwise.
 func (p *TxPool) Get(hash common.Hash) *types.Transaction {
+	if p == nil {
+		return nil
+	}
 	for _, subpool := range p.subpools {
 		if tx := subpool.Get(hash); tx != nil {
 			return tx
@@ -326,6 +332,9 @@ func (p *TxPool) GetBlobs(vhashes []common.Hash) ([]*kzg4844.Blob, []*kzg4844.Pr
 // to the large transaction churn, add may postpone fully integrating the tx
 // to a later point to batch multiple ones together.
 func (p *TxPool) Add(txs []*types.Transaction, local bool, sync bool) []error {
+	if p == nil {
+		return []error{fmt.Errorf("stateless client: txpool disabled")}
+	}
 	// Split the input transactions between the subpools. It shouldn't really
 	// happen that we receive merged batches, but better graceful than strange
 	// errors.
@@ -374,6 +383,9 @@ func (p *TxPool) Add(txs []*types.Transaction, local bool, sync bool) []error {
 // The transactions can also be pre-filtered by the dynamic fee components to
 // reduce allocations and load on downstream subsystems.
 func (p *TxPool) Pending(filter PendingFilter) map[common.Address][]*LazyTransaction {
+	if p == nil {
+		return make(map[common.Address][]*LazyTransaction)
+	}
 	txs := make(map[common.Address][]*LazyTransaction)
 	for _, subpool := range p.subpools {
 		for addr, set := range subpool.Pending(filter) {
@@ -386,6 +398,12 @@ func (p *TxPool) Pending(filter PendingFilter) map[common.Address][]*LazyTransac
 // SubscribeTransactions registers a subscription for new transaction events,
 // supporting feeding only newly seen or also resurrected transactions.
 func (p *TxPool) SubscribeTransactions(ch chan<- core.NewTxsEvent, reorgs bool) event.Subscription {
+	if p == nil {
+		return event.NewSubscription(func(quit <-chan struct{}) error {
+			<-quit
+			return nil
+		})
+	}
 	subs := make([]event.Subscription, len(p.subpools))
 	for i, subpool := range p.subpools {
 		subs[i] = subpool.SubscribeTransactions(ch, reorgs)
@@ -411,6 +429,9 @@ func (p *TxPool) Nonce(addr common.Address) uint64 {
 // Stats retrieves the current pool stats, namely the number of pending and the
 // number of queued (non-executable) transactions.
 func (p *TxPool) Stats() (int, int) {
+	if p == nil {
+		return 0, 0
+	}
 	var runnable, blocked int
 	for _, subpool := range p.subpools {
 		run, block := subpool.Stats()
