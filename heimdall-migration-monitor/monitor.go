@@ -3,11 +3,8 @@ package hmm
 import (
 	"encoding/json"
 	"fmt"
-	"net"
 	"net/http"
-	"net/url"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -18,24 +15,9 @@ import (
 var IsHeimdallV2, firstSuccessfulCheckPassed bool
 
 func StartHeimdallMigrationMonitor(heimdallAPIUrl string, db ethdb.Database) {
-	parsedURL, err := url.Parse(heimdallAPIUrl)
-	if err != nil {
-		panic(fmt.Errorf("error parsing heimdallUrl: %w", err))
-	}
-
-	// TODO: Do we need special configuration for this port?
-	host, _, splitErr := net.SplitHostPort(parsedURL.Host)
-	if splitErr != nil {
-		panic(fmt.Errorf("error splitting host and port: %w", splitErr))
-	}
-
-	parsedURL.Host = net.JoinHostPort(host, "26657")
-
-	heimdallRPCUrl := parsedURL.String()
-
 	IsHeimdallV2 = getIsHeimdallV2Flag(db)
 
-	go heimdallMigrationMonitor(heimdallRPCUrl, db)
+	go heimdallMigrationMonitor(heimdallAPIUrl, db)
 }
 
 func WaitFirstSuccessfulCheck() {
@@ -58,43 +40,46 @@ func heimdallMigrationMonitor(heimdallUrl string, db ethdb.Database) {
 		}
 		isFirstCheck = false
 
-		resp, err := http.Get(fmt.Sprintf("%s/status", heimdallUrl))
+		resp, err := http.Get(fmt.Sprintf("%s/chainmanager/params", heimdallUrl))
 		if err != nil {
 			log.Error("Error fetching status", "err", err)
 			continue
 		}
 
-		var statusResponse struct {
+		var paramsResponse struct {
+			// v1
 			Result struct {
-				NodeInfo struct {
-					Version string `json:"version"`
-				} `json:"node_info"`
+				ChainParams struct {
+					MaticTokenAddress string `json:"matic_token_address"`
+				} `json:"chain_params"`
 			} `json:"result"`
+
+			// v2
+			Params struct {
+				ChainParams struct {
+					PolTokenAddress string `json:"pol_token_address"`
+				} `json:"chain_params"`
+			} `json:"params"`
 		}
 
-		err = json.NewDecoder(resp.Body).Decode(&statusResponse)
+		err = json.NewDecoder(resp.Body).Decode(&paramsResponse)
 		resp.Body.Close()
 		if err != nil {
 			log.Error("Error decoding response", "err", err)
 			continue
 		}
 
-		version := statusResponse.Result.NodeInfo.Version
-		parts := strings.Split(version, ".")
-		if len(parts) < 2 {
-			log.Error("Unexpected version format", "version", version)
+		if paramsResponse.Result.ChainParams.MaticTokenAddress == "" && paramsResponse.Params.ChainParams.PolTokenAddress == "" {
+			log.Error("Heimdall API did not return chain parameters")
 			continue
 		}
 
-		minor, err := strconv.Atoi(parts[1])
-		if err != nil {
-			log.Error("Error parsing minor version", "err", err)
+		if paramsResponse.Result.ChainParams.MaticTokenAddress != "" && paramsResponse.Params.ChainParams.PolTokenAddress != "" {
+			log.Error("Heimdall API returned both v1 and v2 chain parameters, please check the API endpoint")
 			continue
 		}
 
-		// TODO: We are not interested just in the version but if also the network is building blocks
-		// Set flag to true if version is 0.38.x or above
-		if minor >= 38 {
+		if paramsResponse.Params.ChainParams.PolTokenAddress != "" {
 			if !IsHeimdallV2 {
 				storeIsHeimdallV2Flag(db)
 			}
