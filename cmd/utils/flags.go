@@ -1404,6 +1404,27 @@ func SetP2PConfig(ctx *cli.Context, cfg *p2p.Config) {
 	}
 }
 
+// MakePasswordList reads password lines from the file specified by the global --password flag.
+func MakePasswordList(ctx *cli.Context) []string {
+	path := ctx.Path(PasswordFileFlag.Name)
+	if path == "" {
+		return nil
+	}
+
+	text, err := os.ReadFile(path)
+	if err != nil {
+		Fatalf("Failed to read password file: %v", err)
+	}
+
+	lines := strings.Split(string(text), "\n")
+	// Sanitise DOS line endings.
+	for i := range lines {
+		lines[i] = strings.TrimRight(lines[i], "\r")
+	}
+
+	return lines
+}
+
 // SetNodeConfig applies node-related command line flags to the config.
 func SetNodeConfig(ctx *cli.Context, cfg *node.Config) {
 	SetP2PConfig(ctx, &cfg.P2P)
