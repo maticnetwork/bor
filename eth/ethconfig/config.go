@@ -56,25 +56,27 @@ var FullNodeGPO = gasprice.Config{
 
 // Defaults contains default settings for use on the Ethereum main net.
 var Defaults = Config{
-	SyncMode:             downloader.FullSync,
-	NetworkId:            0, // enable auto configuration of networkID == chainID
-	TxLookupLimit:        2350000,
-	TransactionHistory:   2350000,
-	StateHistory:         params.FullImmutabilityThreshold,
-	DatabaseCache:        512,
-	TrieCleanCache:       154,
-	TrieDirtyCache:       256,
-	TrieTimeout:          60 * time.Minute,
-	SnapshotCache:        102,
-	FilterLogCacheSize:   32,
-	Miner:                miner.DefaultConfig,
-	TxPool:               legacypool.DefaultConfig,
-	BlobPool:             blobpool.DefaultConfig,
-	RPCGasCap:            50000000,
-	RPCEVMTimeout:        5 * time.Second,
-	GPO:                  FullNodeGPO,
-	RPCTxFeeCap:          1, // 1 ether
-	FastForwardThreshold: 100,
+	SyncMode:              downloader.FullSync,
+	NetworkId:             0, // enable auto configuration of networkID == chainID
+	TxLookupLimit:         2350000,
+	TransactionHistory:    2350000,
+	StateHistory:          params.FullImmutabilityThreshold,
+	DatabaseCache:         512,
+	TrieCleanCache:        154,
+	TrieDirtyCache:        256,
+	TrieTimeout:           60 * time.Minute,
+	SnapshotCache:         102,
+	FilterLogCacheSize:    32,
+	Miner:                 miner.DefaultConfig,
+	TxPool:                legacypool.DefaultConfig,
+	BlobPool:              blobpool.DefaultConfig,
+	RPCGasCap:             50000000,
+	RPCEVMTimeout:         5 * time.Second,
+	GPO:                   FullNodeGPO,
+	RPCTxFeeCap:           1, // 1 ether
+	FastForwardThreshold:  100,
+	WitnessPruneThreshold: 6400,
+	WitnessPruneInterval:  120,
 }
 
 //go:generate go run github.com/fjl/gencodec -type Config -formats toml -out gen_config.go
@@ -217,6 +219,12 @@ type Config struct {
 
 	// Minimum necessary distance between local header and peer to fast forward
 	FastForwardThreshold uint64
+
+	// Minimum necessary distance between local header and latest non pruned witness
+	WitnessPruneThreshold uint64
+
+	// The time interval between each witness prune routine
+	WitnessPruneInterval uint64
 }
 
 // CreateConsensusEngine creates a consensus engine for the given chain configuration.

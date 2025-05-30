@@ -29,6 +29,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/beacon"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/forkid"
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/core/txpool"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -87,22 +88,24 @@ type txPool interface {
 // handlerConfig is the collection of initialization parameters to create a full
 // node network handler.
 type handlerConfig struct {
-	NodeID               enode.ID            // P2P node ID used for tx propagation topology
-	Database             ethdb.Database      // Database for direct sync insertions
-	Chain                *core.BlockChain    // Blockchain to serve data from
-	TxPool               txPool              // Transaction pool to propagate from
-	Network              uint64              // Network identifier to advertise
-	Sync                 downloader.SyncMode // Whether to snap or full sync
-	BloomCache           uint64              // Megabytes to alloc for snap sync bloom
-	EventMux             *event.TypeMux      // Legacy event mux, deprecate for `feed`
-	checker              ethereum.ChainValidator
-	RequiredBlocks       map[uint64]common.Hash // Hard coded map of required block hashes for sync challenges
-	EthAPI               *ethapi.BlockChainAPI  // EthAPI to interact
-	enableBlockTracking  bool                   // Whether to log information collected while tracking block lifecycle
-	txAnnouncementOnly   bool                   // Whether to only announce txs to peers
-	syncWithWitnesses    bool                   // Whether to sync blocks with witnesses
-	computeWitness       bool                   // Whether to compute witnesses
-	FastForwardThreshold uint64                 // Minimum necessary distance between local header and peer to fast forward
+	NodeID                enode.ID            // P2P node ID used for tx propagation topology
+	Database              ethdb.Database      // Database for direct sync insertions
+	Chain                 *core.BlockChain    // Blockchain to serve data from
+	TxPool                txPool              // Transaction pool to propagate from
+	Network               uint64              // Network identifier to advertise
+	Sync                  downloader.SyncMode // Whether to snap or full sync
+	BloomCache            uint64              // Megabytes to alloc for snap sync bloom
+	EventMux              *event.TypeMux      // Legacy event mux, deprecate for `feed`
+	checker               ethereum.ChainValidator
+	RequiredBlocks        map[uint64]common.Hash // Hard coded map of required block hashes for sync challenges
+	EthAPI                *ethapi.BlockChainAPI  // EthAPI to interact
+	enableBlockTracking   bool                   // Whether to log information collected while tracking block lifecycle
+	txAnnouncementOnly    bool                   // Whether to only announce txs to peers
+	syncWithWitnesses     bool                   // Whether to sync blocks with witnesses
+	computeWitness        bool                   // Whether to compute witnesses
+	fastForwardThreshold  uint64                 // Minimum necessary distance between local header and peer to fast forward
+	witnessPruneThreshold uint64                 // Minimum necessary distance between local header and latest non pruned witness
+	witnessPruneInterval  uint64                 // The time interval between each witness prune routine
 }
 
 type handler struct {
@@ -138,13 +141,17 @@ type handler struct {
 	syncWithWitnesses   bool
 
 	// channels for fetcher, syncer, txsyncLoop
-	quitSync chan struct{}
+	quitSync  chan struct{}
+	quitPrune chan struct{}
 
 	chainSync *chainSyncer
 	wg        sync.WaitGroup
 
 	handlerStartCh chan struct{}
 	handlerDoneCh  chan struct{}
+
+	witnessPruneThreshold uint64        // Minimum necessary distance between local header and latest non pruned witness
+	witnessPruneInterval  time.Duration // The time interval between each witness prune routine
 }
 
 // newHandler returns a handler for all Ethereum chain management protocol.
@@ -155,22 +162,25 @@ func newHandler(config *handlerConfig) (*handler, error) {
 	}
 
 	h := &handler{
-		nodeID:              config.NodeID,
-		networkID:           config.Network,
-		forkFilter:          forkid.NewFilter(config.Chain),
-		eventMux:            config.EventMux,
-		database:            config.Database,
-		txpool:              config.TxPool,
-		chain:               config.Chain,
-		peers:               newPeerSet(),
-		ethAPI:              config.EthAPI,
-		requiredBlocks:      config.RequiredBlocks,
-		enableBlockTracking: config.enableBlockTracking,
-		txAnnouncementOnly:  config.txAnnouncementOnly,
-		quitSync:            make(chan struct{}),
-		handlerDoneCh:       make(chan struct{}),
-		handlerStartCh:      make(chan struct{}),
-		syncWithWitnesses:   config.syncWithWitnesses,
+		nodeID:                config.NodeID,
+		networkID:             config.Network,
+		forkFilter:            forkid.NewFilter(config.Chain),
+		eventMux:              config.EventMux,
+		database:              config.Database,
+		txpool:                config.TxPool,
+		chain:                 config.Chain,
+		peers:                 newPeerSet(),
+		ethAPI:                config.EthAPI,
+		requiredBlocks:        config.RequiredBlocks,
+		enableBlockTracking:   config.enableBlockTracking,
+		txAnnouncementOnly:    config.txAnnouncementOnly,
+		quitSync:              make(chan struct{}),
+		quitPrune:             make(chan struct{}),
+		handlerDoneCh:         make(chan struct{}),
+		handlerStartCh:        make(chan struct{}),
+		syncWithWitnesses:     config.syncWithWitnesses,
+		witnessPruneThreshold: config.witnessPruneThreshold,
+		witnessPruneInterval:  time.Duration(int64(config.witnessPruneInterval)) * time.Second,
 	}
 
 	log.Info("Sync with witnesses", "enabled", config.syncWithWitnesses)
@@ -216,7 +226,7 @@ func newHandler(config *handlerConfig) (*handler, error) {
 	}
 
 	// Construct the downloader (long sync)
-	h.downloader = downloader.New(config.Database, h.eventMux, h.chain, nil, h.removePeer, h.enableSyncedFeatures, config.checker, config.FastForwardThreshold)
+	h.downloader = downloader.New(config.Database, h.eventMux, h.chain, nil, h.removePeer, h.enableSyncedFeatures, config.checker, config.fastForwardThreshold)
 	if ttd := h.chain.Config().TerminalTotalDifficulty; ttd != nil {
 		head := h.chain.CurrentBlock()
 		if td := h.chain.GetTd(head.Hash(), head.Number.Uint64()); td.Cmp(ttd) >= 0 {
@@ -275,6 +285,10 @@ func newHandler(config *handlerConfig) (*handler, error) {
 	}
 	h.txFetcher = fetcher.NewTxFetcher(h.txpool.Has, addTxs, fetchTx, h.removePeer)
 	h.chainSync = newChainSyncer(h)
+
+	if config.computeWitness {
+		h.pruneWitnessLoop()
+	}
 
 	return h, nil
 }
@@ -825,4 +839,52 @@ func (h *handler) GetPeerStats() []*PeerStats {
 	}
 
 	return info
+}
+
+// pruneWitnessLoop starts a background goroutine that prunes old witnesses every h.witnessPruneInterval.
+// Close h.quitPrune to stop it.
+func (h *handler) pruneWitnessLoop() {
+	go func() {
+		timer := time.NewTimer(0)
+		defer timer.Stop()
+		for {
+			select {
+			case <-timer.C:
+				h.pruneWitness()
+				timer.Reset(h.witnessPruneInterval)
+			case <-h.quitPrune:
+				log.Info("quit prune witness")
+				return
+			}
+		}
+	}()
+}
+
+func (h *handler) pruneWitness() {
+	cursor := rawdb.ReadWitnessPruneCursor(h.database)
+	latest := uint64(h.ethAPI.BlockNumber())
+	var cutoff uint64
+	if latest > h.witnessPruneThreshold {
+		cutoff = latest - h.witnessPruneThreshold
+	}
+
+	if cursor == nil {
+		cursor = &cutoff
+	}
+
+	batch := h.database.NewBatch()
+	if *cursor < cutoff {
+		allHashes := rawdb.ReadAllHashesInRange(h.database, *cursor, cutoff-1)
+
+		for _, hash := range allHashes {
+			rawdb.DeleteWitness(batch, hash.Hash)
+		}
+		*cursor = cutoff
+	}
+
+	rawdb.WriteWitnessPruneCursor(batch, *cursor)
+
+	if err := batch.Write(); err != nil {
+		log.Error("error while pruning old witnesses", "writeErr", err)
+	}
 }

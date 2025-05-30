@@ -74,6 +74,8 @@ func (c Config) MarshalTOML() (interface{}, error) {
 		OverrideVerkle                       *big.Int `toml:",omitempty"`
 		EnableBlockTracking                  bool
 		FastForwardThreshold                 uint64
+		WitnessPruneThreshold                uint64
+		WitnessPruneInterval                 uint64
 	}
 	var enc Config
 	enc.Genesis = c.Genesis
@@ -131,6 +133,8 @@ func (c Config) MarshalTOML() (interface{}, error) {
 	enc.OverrideVerkle = c.OverrideVerkle
 	enc.EnableBlockTracking = c.EnableBlockTracking
 	enc.FastForwardThreshold = c.FastForwardThreshold
+	enc.WitnessPruneThreshold = c.WitnessPruneThreshold
+	enc.WitnessPruneInterval = c.WitnessPruneInterval
 	return &enc, nil
 }
 
@@ -193,6 +197,8 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 		OverrideVerkle                       *big.Int `toml:",omitempty"`
 		EnableBlockTracking                  *bool
 		FastForwardThreshold                 *uint64
+		WitnessPruneThreshold                *uint64
+		WitnessPruneInterval                 *uint64
 	}
 	var dec Config
 	if err := unmarshal(&dec); err != nil {
@@ -362,6 +368,12 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 	}
 	if dec.FastForwardThreshold != nil {
 		c.FastForwardThreshold = *dec.FastForwardThreshold
+	}
+	if dec.WitnessPruneThreshold != nil {
+		c.WitnessPruneThreshold = *dec.WitnessPruneThreshold
+	}
+	if dec.WitnessPruneInterval != nil {
+		c.WitnessPruneInterval = *dec.WitnessPruneInterval
 	}
 	return nil
 }

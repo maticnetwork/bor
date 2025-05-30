@@ -134,7 +134,8 @@ var (
 	configPrefix   = []byte("ethereum-config-")  // config prefix for the db
 	genesisPrefix  = []byte("ethereum-genesis-") // genesis state prefix for the db
 
-	WitnessPrefix = []byte("witness-")
+	WitnessPrefix         = []byte("witness-")
+	WitnessPruneCursorKey = []byte("witnessPruneCursorKey")
 
 	// BloomBitsIndexPrefix is the data table of a chain indexer to track its progress
 	BloomBitsIndexPrefix = []byte("iB")
@@ -255,6 +256,10 @@ func preimageKey(hash common.Hash) []byte {
 // witnessKey = WitnessPrefix + hash
 func witnessKey(hash common.Hash) []byte {
 	return append(WitnessPrefix, hash.Bytes()...)
+}
+
+func witnessPruneCursorKey() []byte {
+	return WitnessPruneCursorKey
 }
 
 // codeKey = CodePrefix + hash
