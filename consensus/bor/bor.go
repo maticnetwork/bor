@@ -1140,18 +1140,24 @@ func (c *Bor) checkAndCommitSpan(
 }
 
 func (c *Bor) needToCommitSpan(currentSpan *span.Span, headerNumber uint64) bool {
-	// if span is nil
+	// If span is nil, return false.
 	if currentSpan == nil {
 		return false
 	}
 
-	// check span is not set initially
+	// Check if span is not set initially, we commit the span with spanId 1, which will also commit the 0th span.
+	// Check: https://github.com/maticnetwork/genesis-contracts/blob/5dcbcc72f10ab847276586e629f96b8a6d369e1d/contracts/BorValidatorSet.template#L229
 	if currentSpan.EndBlock == 0 {
 		return true
 	}
 
-	// if current block is first block of last sprint in current span
+	// If the current block is the first block of the last sprint in the current span.
+	// But here we should skip the check for the 0th span, as it will cause the span to be committed to be committed twice.
 	if currentSpan.EndBlock > c.config.CalculateSprint(headerNumber) && currentSpan.EndBlock-c.config.CalculateSprint(headerNumber)+1 == headerNumber {
+		if currentSpan.ID == 0 {
+			// If the current span is the 0th span, we will skip commiting the span.
+			return false
+		}
 		return true
 	}
 
