@@ -1155,7 +1155,7 @@ func (c *Bor) needToCommitSpan(currentSpan *span.Span, headerNumber uint64) bool
 	// But here we should skip the check for the 0th span, as it will cause the span to be committed to be committed twice.
 	if currentSpan.EndBlock > c.config.CalculateSprint(headerNumber) && currentSpan.EndBlock-c.config.CalculateSprint(headerNumber)+1 == headerNumber {
 		if currentSpan.ID == 0 {
-			// If the current span is the 0th span, we will skip commiting the span.
+			// If the current span is the 0th span, we will skip committing the span.
 			log.Info("Skipping the last sprint commit for 0th span", "spanID", currentSpan.ID, "headerNumber", headerNumber)
 			return false
 		}
