@@ -78,7 +78,7 @@ func testOfflineBlockPruneWithAmountReserved(t *testing.T, amountReserved uint64
 	err = testBlockPruner.BlockPruneBackup(chaindbPath, 512, dbHandles, "", false, false)
 	require.NoError(t, err, "failed to backup block")
 
-	dbBack, err := node.OpenDatabaseWithFreezer(chaindbPath, 0, 0, newAncientPath, "", false, true, false)
+	dbBack, err := node.OpenDatabaseWithFreezer(chaindbPath, 0, 0, newAncientPath, "", false, true, false, false)
 	require.NoError(t, err, "failed to create db with ancient backend")
 
 	defer dbBack.Close()
@@ -132,7 +132,7 @@ func BlockchainCreator(t *testing.T, node *node.Node, chaindbPath, AncientPath s
 	t.Helper()
 
 	// Create a database with ancient freezer.
-	db, err := node.OpenDatabaseWithFreezer(chaindbPath, 0, 0, AncientPath, "", false, false, false)
+	db, err := node.OpenDatabaseWithFreezer(chaindbPath, 0, 0, AncientPath, "", false, false, false, false)
 	require.NoError(t, err, "failed to create db with ancient backend")
 
 	defer db.Close()

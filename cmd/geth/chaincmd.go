@@ -227,7 +227,7 @@ func initGenesis(ctx *cli.Context) error {
 		overrides.OverrideVerkle = new(big.Int).SetInt64(v)
 	}
 
-	chaindb, err := stack.OpenDatabaseWithFreezer("chaindata", 0, 0, ctx.String(utils.AncientFlag.Name), "", false, false, false)
+	chaindb, err := stack.OpenDatabaseWithFreezer("chaindata", 0, 0, ctx.String(utils.AncientFlag.Name), "", false, false, false, false)
 	if err != nil {
 		utils.Fatalf("Failed to open database: %v", err)
 	}
