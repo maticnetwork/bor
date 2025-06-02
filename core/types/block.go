@@ -496,7 +496,7 @@ func (h *Header) GetValidatorBytes(chainConfig *params.ChainConfig) []byte {
 
 	var blockExtraData BlockExtraData
 	if err := rlp.DecodeBytes(h.Extra[ExtraVanityLength:len(h.Extra)-ExtraSealLength], &blockExtraData); err != nil {
-		log.Debug("error while decoding block extra data", "err", err)
+		log.Warn("error while decoding block extra data", "err", err)
 		return nil
 	}
 
