@@ -96,6 +96,7 @@ func heimdallMigrationMonitor(heimdallUrl string, db ethdb.Database) {
 }
 
 func storeIsHeimdallV2Flag(db ethdb.Database) {
+	log.Error("Storing IsHeimdallV2 flag", "value", IsHeimdallV2)
 	if err := db.Put(rawdb.IsHeimdallV2Key, []byte(strconv.FormatBool(IsHeimdallV2))); err != nil {
 		log.Error("Error storing IsHeimdallV2 flag", "err", err)
 	}
@@ -109,6 +110,7 @@ func getIsHeimdallV2Flag(db ethdb.Database) bool {
 	}
 
 	if value == nil {
+		log.Info("IsHeimdallV2 flag not set, defaulting to false")
 		return false
 	}
 
@@ -117,6 +119,8 @@ func getIsHeimdallV2Flag(db ethdb.Database) bool {
 		log.Error("Error parsing IsHeimdallV2 flag", "err", err)
 		return false
 	}
+
+	log.Info("Retrieved IsHeimdallV2 flag", "value", isHeimdallV2)
 
 	return isHeimdallV2
 }
