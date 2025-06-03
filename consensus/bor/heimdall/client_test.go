@@ -387,7 +387,7 @@ func TestContext(t *testing.T) {
 func TestSpanURL(t *testing.T) {
 	t.Parallel()
 
-	url, err := spanV1URL("http://bor0", 1)
+	url, err := spanV2URL("http://bor0", 1)
 	if err != nil {
 		t.Fatal("got an error", err)
 	}
