@@ -81,14 +81,14 @@ func heimdallMigrationMonitor(heimdallUrl string, db ethdb.Database) {
 
 		if paramsResponse.Params.ChainParams.PolTokenAddress != "" {
 			if !IsHeimdallV2 {
+				IsHeimdallV2 = true
 				storeIsHeimdallV2Flag(db)
 			}
-			IsHeimdallV2 = true
 		} else {
 			if IsHeimdallV2 {
+				IsHeimdallV2 = false
 				storeIsHeimdallV2Flag(db)
 			}
-			IsHeimdallV2 = false
 		}
 
 		firstSuccessfulCheckPassed = true
