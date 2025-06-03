@@ -22,6 +22,8 @@ const IdealBatchSize = 100 * 1024
 
 // Batch is a write-only database that commits changes to its host database
 // when Write is called. A batch cannot be used concurrently.
+//
+//go:generate mockgen -destination=../eth/filters/IBatch.go -package=filters . Batch
 type Batch interface {
 	KeyValueWriter
 
