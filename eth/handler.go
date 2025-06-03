@@ -29,7 +29,6 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/beacon"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/forkid"
-	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/core/txpool"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -141,8 +140,7 @@ type handler struct {
 	syncWithWitnesses   bool
 
 	// channels for fetcher, syncer, txsyncLoop
-	quitSync  chan struct{}
-	quitPrune chan struct{}
+	quitSync chan struct{}
 
 	chainSync *chainSyncer
 	wg        sync.WaitGroup
@@ -150,8 +148,7 @@ type handler struct {
 	handlerStartCh chan struct{}
 	handlerDoneCh  chan struct{}
 
-	witnessPruneThreshold uint64        // Minimum necessary distance between local header and latest non pruned witness
-	witnessPruneInterval  time.Duration // The time interval between each witness prune routine
+	witPruner *witPruner
 }
 
 // newHandler returns a handler for all Ethereum chain management protocol.
@@ -162,25 +159,22 @@ func newHandler(config *handlerConfig) (*handler, error) {
 	}
 
 	h := &handler{
-		nodeID:                config.NodeID,
-		networkID:             config.Network,
-		forkFilter:            forkid.NewFilter(config.Chain),
-		eventMux:              config.EventMux,
-		database:              config.Database,
-		txpool:                config.TxPool,
-		chain:                 config.Chain,
-		peers:                 newPeerSet(),
-		ethAPI:                config.EthAPI,
-		requiredBlocks:        config.RequiredBlocks,
-		enableBlockTracking:   config.enableBlockTracking,
-		txAnnouncementOnly:    config.txAnnouncementOnly,
-		quitSync:              make(chan struct{}),
-		quitPrune:             make(chan struct{}),
-		handlerDoneCh:         make(chan struct{}),
-		handlerStartCh:        make(chan struct{}),
-		syncWithWitnesses:     config.syncWithWitnesses,
-		witnessPruneThreshold: config.witnessPruneThreshold,
-		witnessPruneInterval:  time.Duration(int64(config.witnessPruneInterval)) * time.Second,
+		nodeID:              config.NodeID,
+		networkID:           config.Network,
+		forkFilter:          forkid.NewFilter(config.Chain),
+		eventMux:            config.EventMux,
+		database:            config.Database,
+		txpool:              config.TxPool,
+		chain:               config.Chain,
+		peers:               newPeerSet(),
+		ethAPI:              config.EthAPI,
+		requiredBlocks:      config.RequiredBlocks,
+		enableBlockTracking: config.enableBlockTracking,
+		txAnnouncementOnly:  config.txAnnouncementOnly,
+		quitSync:            make(chan struct{}),
+		handlerDoneCh:       make(chan struct{}),
+		handlerStartCh:      make(chan struct{}),
+		syncWithWitnesses:   config.syncWithWitnesses,
 	}
 
 	log.Info("Sync with witnesses", "enabled", config.syncWithWitnesses)
@@ -287,7 +281,8 @@ func newHandler(config *handlerConfig) (*handler, error) {
 	h.chainSync = newChainSyncer(h)
 
 	if config.computeWitness {
-		h.pruneWitnessLoop()
+		h.witPruner = NewWitPruner(h.ethAPI, h.database, config.witnessPruneThreshold, time.Duration(config.witnessPruneInterval)*time.Second)
+		h.witPruner.Start()
 	}
 
 	return h, nil
@@ -839,52 +834,4 @@ func (h *handler) GetPeerStats() []*PeerStats {
 	}
 
 	return info
-}
-
-// pruneWitnessLoop starts a background goroutine that prunes old witnesses every h.witnessPruneInterval.
-// Close h.quitPrune to stop it.
-func (h *handler) pruneWitnessLoop() {
-	go func() {
-		timer := time.NewTimer(0)
-		defer timer.Stop()
-		for {
-			select {
-			case <-timer.C:
-				h.pruneWitness()
-				timer.Reset(h.witnessPruneInterval)
-			case <-h.quitPrune:
-				log.Info("quit prune witness")
-				return
-			}
-		}
-	}()
-}
-
-func (h *handler) pruneWitness() {
-	cursor := rawdb.ReadWitnessPruneCursor(h.database)
-	latest := uint64(h.ethAPI.BlockNumber())
-	var cutoff uint64
-	if latest > h.witnessPruneThreshold {
-		cutoff = latest - h.witnessPruneThreshold
-	}
-
-	if cursor == nil {
-		cursor = &cutoff
-	}
-
-	batch := h.database.NewBatch()
-	if *cursor < cutoff {
-		allHashes := rawdb.ReadAllHashesInRange(h.database, *cursor, cutoff-1)
-
-		for _, hash := range allHashes {
-			rawdb.DeleteWitness(batch, hash.Hash)
-		}
-		*cursor = cutoff
-	}
-
-	rawdb.WriteWitnessPruneCursor(batch, *cursor)
-
-	if err := batch.Write(); err != nil {
-		log.Error("error while pruning old witnesses", "writeErr", err)
-	}
 }
