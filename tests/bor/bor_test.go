@@ -448,7 +448,7 @@ func TestFetchStateSyncEvents(t *testing.T) {
 	// A. Insert blocks for the 0th sprint.
 	block := init.genesis.ToBlock()
 
-	// B. Mock /bor/span/1
+	// B. Mock /bor/spans/1
 	res := loadSpanFromFile(t)
 
 	valsetVals := valset.HeimdallToValSetValidators(res.ValidatorSet.Validators)
@@ -519,7 +519,7 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 
 	defer _bor.Close()
 
-	// Mock /bor/span/1
+	// Mock /bor/spans/1
 	res := loadSpanFromFile(t)
 
 	valsetVals := valset.HeimdallToValSetValidators(res.ValidatorSet.Validators)

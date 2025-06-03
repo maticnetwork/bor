@@ -387,12 +387,12 @@ func TestContext(t *testing.T) {
 func TestSpanURL(t *testing.T) {
 	t.Parallel()
 
-	url, err := spanURL("http://bor0", 1)
+	url, err := spanV2URL("http://bor0", 1)
 	if err != nil {
 		t.Fatal("got an error", err)
 	}
 
-	const expected = "http://bor0/bor/span/1"
+	const expected = "http://bor0/bor/spans/1"
 
 	if url.String() != expected {
 		t.Fatalf("expected URL %q, got %q", expected, url.String())
@@ -407,7 +407,7 @@ func TestStateSyncURL(t *testing.T) {
 		t.Fatal("got an error", err)
 	}
 
-	const expected = "http://bor0/clerk/event-record/list?from-id=10&to-time=100&limit=50"
+	const expected = "http://bor0/clerk/event-records/list?from-id=10&to-time=100&limit=50"
 
 	if url.String() != expected {
 		t.Fatalf("expected URL %q, got %q", expected, url.String())
