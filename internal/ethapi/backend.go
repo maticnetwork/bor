@@ -40,6 +40,8 @@ import (
 
 // Backend interface provides the common API services (that are provided by
 // both full and light clients) with access to necessary functions.
+//
+//go:generate mockgen -destination=../../eth/filters/IBackend.go -package=filters . Backend
 type Backend interface {
 	// General Ethereum API
 	SyncProgress() ethereum.SyncProgress
