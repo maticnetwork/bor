@@ -185,7 +185,7 @@ func (c *PruneStateCommand) Run(args []string) int {
 		return 1
 	}
 
-	chaindb, err := node.OpenDatabaseWithFreezer(chaindataPath, int(c.cache), dbHandles, c.datadirAncient, "", false, false, false)
+	chaindb, err := node.OpenDatabaseWithFreezer(chaindataPath, int(c.cache), dbHandles, c.datadirAncient, "", false, false, false, false)
 
 	if err != nil {
 		c.UI.Error(err.Error())
@@ -344,7 +344,7 @@ func (c *PruneBlockCommand) Run(args []string) int {
 
 // validateAgainstSnapshot checks if the MPT data and snapshot data matches with each other or not
 func (c *PruneBlockCommand) validateAgainstSnapshot(stack *node.Node, dbHandles int) error {
-	chaindb, err := stack.OpenDatabaseWithFreezer(chaindataPath, c.cache, dbHandles, c.datadirAncient, "", false, true, false)
+	chaindb, err := stack.OpenDatabaseWithFreezer(chaindataPath, c.cache, dbHandles, c.datadirAncient, "", false, true, false, false)
 	if err != nil {
 		return fmt.Errorf("failed to accessdb %v", err)
 	}
@@ -649,7 +649,7 @@ func (c *InspectAncientDbCommand) Run(args []string) int {
 }
 
 func (c *InspectAncientDbCommand) inspectAncientDb(stack *node.Node, dbHandles int) error {
-	chaindb, err := stack.OpenDatabaseWithFreezer(chaindataPath, 1024, dbHandles, c.datadirAncient, "", false, true, false)
+	chaindb, err := stack.OpenDatabaseWithFreezer(chaindataPath, 1024, dbHandles, c.datadirAncient, "", false, true, false, false)
 	if err != nil {
 		return err
 	}

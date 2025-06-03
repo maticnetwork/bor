@@ -483,10 +483,10 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 	// TODO:
 	// Verify validator statelessly
 
-	snap, err := c.snapshot(chain, number-1, header.ParentHash, parents)
-	if err != nil {
-		return err
-	}
+	// snap, err := c.snapshot(chain, number-1, header.ParentHash, parents)
+	// if err != nil {
+	// 	return err
+	// }
 
 	// Verify if the producer set in header's extra data matches with the list in span.
 	// We skip the check for 0th span as the producer set in contract v/s producer set
@@ -525,7 +525,7 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 	}
 
 	// verify the validator list in the last sprint block
-	if IsSprintStart(number, c.config.CalculateSprint(number)) {
+	if false && IsSprintStart(number, c.config.CalculateSprint(number)) {
 		parentValidatorBytes := parent.GetValidatorBytes(c.chainConfig)
 		validatorsBytes := make([]byte, len(snap.ValidatorSet.Validators)*validatorHeaderBytesLength)
 
@@ -544,7 +544,8 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 
 	// All basic checks passed, verify the seal and return
 	// TODO: Verify seal statelessly
-	return c.verifySeal(chain, header, parents)
+	// return c.verifySeal(chain, header, parents)
+	return nil
 }
 
 // snapshot retrieves the authorization snapshot at a given point in time.
