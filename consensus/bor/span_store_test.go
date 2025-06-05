@@ -244,6 +244,8 @@ func (h *MockHeimdallClient) Close() {
 
 // MockOverlappingHeimdallClient simulates overlapping spans for testing
 type MockOverlappingHeimdallClient struct {
+	failGetLatestSpan bool
+	latestSpanID      *uint64
 }
 
 func (h *MockOverlappingHeimdallClient) GetSpan(ctx context.Context, spanID uint64) (*types.Span, error) {
@@ -335,13 +337,28 @@ func (h *MockOverlappingHeimdallClient) GetSpan(ctx context.Context, spanID uint
 			ValidatorSet:      validatorSet,
 			SelectedProducers: selectedProducers,
 		}, nil
+	case 8:
+		return &types.Span{
+			Id:                8,
+			StartBlock:        600,
+			EndBlock:          699,
+			ValidatorSet:      validatorSet,
+			SelectedProducers: selectedProducers,
+		}, nil
 	default:
 		return nil, fmt.Errorf("span %d not found", spanID)
 	}
 }
 
 func (h *MockOverlappingHeimdallClient) GetLatestSpan(ctx context.Context) (*types.Span, error) {
-	return h.GetSpan(ctx, 6)
+	if h.failGetLatestSpan {
+		return nil, fmt.Errorf("latest span fetch error")
+	}
+	var spanID uint64 = 6 // default
+	if h.latestSpanID != nil {
+		spanID = *h.latestSpanID
+	}
+	return h.GetSpan(ctx, spanID)
 }
 
 // Implement interface methods for MockOverlappingHeimdallClient
@@ -504,6 +521,169 @@ func TestSpanStore_SpanByBlockNumber_OverlappingSpansMultipleMatches(t *testing.
 	require.Equal(t, uint64(5), span.ID, "should return span 5 (highest ID) for block 190")
 }
 
+func TestSpanStore_GetFutureSpan(t *testing.T) {
+	ctx := context.Background()
+
+	type testCase struct {
+		name              string
+		startID           uint64
+		blockNumber       uint64
+		latestKnownSpanID uint64 // informational
+		mockClientSetup   func() IHeimdallClient
+		expectedSpanID    uint64
+		expectError       bool
+		expectedErrorMsg  string
+	}
+
+	uintPtr := func(i uint64) *uint64 { return &i }
+
+	testCases := []testCase{
+		{
+			name:              "simple future span found",
+			startID:           3,
+			blockNumber:       275, // in span 4 (250-349)
+			latestKnownSpanID: 2,
+			mockClientSetup: func() IHeimdallClient {
+				return &MockOverlappingHeimdallClient{} // latest is 6
+			},
+			expectedSpanID: 4,
+		},
+		{
+			name:              "overlapping future span, highest ID chosen",
+			startID:           1,
+			blockNumber:       180, // in spans 1(100-199), 3(150-249), 5(175-225)
+			latestKnownSpanID: 0,
+			mockClientSetup: func() IHeimdallClient {
+				return &MockOverlappingHeimdallClient{}
+			},
+			expectedSpanID: 5, // should be 5 because it has the highest ID
+		},
+		{
+			name:              "span not found",
+			startID:           1,
+			blockNumber:       375, // between spans 4 and 6
+			latestKnownSpanID: 0,
+			mockClientSetup: func() IHeimdallClient {
+				return &MockOverlappingHeimdallClient{}
+			},
+			expectError:      true,
+			expectedErrorMsg: "span not found for block 375",
+		},
+		{
+			name:              "stop search after two skipped spans",
+			startID:           2,
+			blockNumber:       120, // not in any span starting from 2, so should fail
+			latestKnownSpanID: 1,
+			mockClientSetup: func() IHeimdallClient {
+				return &MockOverlappingHeimdallClient{}
+			},
+			expectError:      true, // no candidate found
+			expectedErrorMsg: "span not found for block 120",
+		},
+		{
+			name:              "stop search after two skipped spans with candidate",
+			startID:           1,
+			blockNumber:       160, // in span 1 and 3. search should stop after checking span 5 and return span 3
+			latestKnownSpanID: 0,
+			mockClientSetup: func() IHeimdallClient {
+				return &MockOverlappingHeimdallClient{}
+			},
+			expectedSpanID: 3,
+		},
+		{
+			name:              "span found before an erroring span",
+			startID:           6,
+			blockNumber:       450, // in span 6
+			latestKnownSpanID: 5,
+			mockClientSetup: func() IHeimdallClient {
+				return &MockOverlappingHeimdallClient{} // GetSpan(7) will fail by default, but we should return candidate
+			},
+			expectedSpanID: 6,
+		},
+		{
+			name:              "error from spanById with no candidate",
+			startID:           7, // this will fail in the mock
+			blockNumber:       500,
+			latestKnownSpanID: 6,
+			mockClientSetup: func() IHeimdallClient {
+				return &MockOverlappingHeimdallClient{latestSpanID: uintPtr(8)}
+			},
+			expectError:      true,
+			expectedErrorMsg: "span 7 not found",
+		},
+		{
+			name:              "latest span fetch fails",
+			startID:           1,
+			blockNumber:       200,
+			latestKnownSpanID: 0,
+			mockClientSetup: func() IHeimdallClient {
+				return &MockOverlappingHeimdallClient{failGetLatestSpan: true}
+			},
+			expectError:      true,
+			expectedErrorMsg: "latest span fetch error",
+		},
+		{
+			name:              "id greater than latestSpan.ID at start",
+			startID:           7,
+			blockNumber:       200,
+			latestKnownSpanID: 6,
+			mockClientSetup: func() IHeimdallClient {
+				return &MockOverlappingHeimdallClient{} // latest span is 6
+			},
+			expectError:      true,
+			expectedErrorMsg: "span not found for block 200",
+		},
+		{
+			name:              "block number found in first future span",
+			startID:           5,
+			blockNumber:       180, // in span 5
+			latestKnownSpanID: 4,
+			mockClientSetup: func() IHeimdallClient {
+				return &MockOverlappingHeimdallClient{}
+			},
+			expectedSpanID: 5,
+		},
+		{
+			name:              "latest span is 0",
+			startID:           1,
+			blockNumber:       50,
+			latestKnownSpanID: 0,
+			mockClientSetup: func() IHeimdallClient {
+				return &MockOverlappingHeimdallClient{latestSpanID: uintPtr(0)}
+			},
+			expectError:      true,
+			expectedErrorMsg: "span not found for block 50",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			mockClient := tc.mockClientSetup()
+			spanStore := NewSpanStore(mockClient, nil, "1337")
+			defer spanStore.Close()
+
+			// Pre-load some spans to make the store behave more realistically
+			for i := uint64(0); i <= tc.latestKnownSpanID; i++ {
+				_, err := spanStore.spanById(context.Background(), i)
+				require.NoError(t, err)
+			}
+
+			span, err := spanStore.getFutureSpan(ctx, tc.startID, tc.blockNumber, tc.latestKnownSpanID)
+
+			if tc.expectError {
+				require.Error(t, err)
+				if tc.expectedErrorMsg != "" {
+					require.Contains(t, err.Error(), tc.expectedErrorMsg)
+				}
+			} else {
+				require.NoError(t, err)
+				require.NotNil(t, span)
+				require.Equal(t, tc.expectedSpanID, span.ID)
+			}
+		})
+	}
+}
+
 func TestSpanStore_EstimateSpanId(t *testing.T) {
 	spanStore := NewSpanStore(nil, nil, "1337") // Heimdall client and spanner not needed for this test
 	defer spanStore.Close()
@@ -567,7 +747,7 @@ func TestSpanStore_EstimateSpanId(t *testing.T) {
 			setupLastUsedSpan: func() {
 				mockLastUsedSpan(1, zerothSpanEnd+1, zerothSpanEnd+defaultSpanLength)
 			},
-			expectedSpanId: 4,
+			expectedSpanId: 3,
 		},
 		{
 			name:        "block_before_last_used_span",

@@ -235,12 +235,13 @@ type Bor struct {
 	HeimdallWSClient       IHeimdallWSClient
 
 	spanStore            *SpanStore // Store to save previous span data from heimdall
-	latestMilestoneBlock uint64
+	latestMilestoneBlock atomic.Uint64
 
 	// The fields below are for testing only
 	fakeDiff      bool // Skip difficulty verifications
 	devFakeAuthor bool
 
+	quit      chan struct{}
 	closeOnce sync.Once
 }
 
@@ -299,6 +300,7 @@ func New(
 		HeimdallWSClient:       heimdallWSClient,
 		spanStore:              spanStore,
 		devFakeAuthor:          devFakeAuthor,
+		quit:                   make(chan struct{}),
 	}
 
 	c.authorizedSigner.Store(&signer{
@@ -315,6 +317,8 @@ func New(
 			panic(fmt.Sprintf("BUG: Block alloc '%s' in genesis is not correct: %v", key, err))
 		}
 	}
+
+	go c.runMilestoneFetcher()
 
 	return c
 }
@@ -606,7 +610,7 @@ func (c *Bor) snapshot(chain consensus.ChainHeaderReader, targetHeader *types.He
 	}
 
 	if checkNewSpan && c.config.IsVeBlop(targetHeader.Number) {
-		err := c.performSpanCheck(chain, targetHeader, false)
+		err := c.performSpanCheck(chain, targetHeader)
 		if err != nil {
 			return nil, err
 		}
@@ -642,8 +646,12 @@ func (c *Bor) snapshot(chain consensus.ChainHeaderReader, targetHeader *types.He
 }
 
 // Check if the node needs to wait for a new span
-func (c *Bor) performSpanCheck(chain consensus.ChainHeaderReader, targetHeader *types.Header, checkMilestone bool) error {
+func (c *Bor) performSpanCheck(chain consensus.ChainHeaderReader, targetHeader *types.Header) error {
 	if targetHeader.Number.Uint64()-1 == 0 {
+		return nil
+	}
+
+	if c.latestMilestoneBlock.Load() >= targetHeader.Number.Uint64() {
 		return nil
 	}
 
@@ -655,30 +663,10 @@ func (c *Bor) performSpanCheck(chain consensus.ChainHeaderReader, targetHeader *
 	parentHeader := chain.GetHeader(targetHeader.ParentHash, targetHeader.Number.Uint64()-1)
 
 	// If parent header isn't known or a milestone check is requested, we need to wait for a new span
-	if parentHeader == nil || checkMilestone {
-		log.Debug("Parent header is nil or checkMilestone is true", "checkMilestone", checkMilestone, "targetHeader", targetHeader.Number.Uint64(), "parentHeaderHash", targetHeader.ParentHash)
-
-		if c.latestMilestoneBlock < targetHeader.Number.Uint64() && c.HeimdallClient != nil {
-			milestone, err := c.HeimdallClient.FetchMilestone(context.Background())
-			if err != nil {
-				log.Warn("Error while fetching milestone", "error", err)
-			}
-
-			c.latestMilestoneBlock = milestone.EndBlock
-
-			// If the milestone is greater than the target header, no need to wait for a new span
-			if c.latestMilestoneBlock >= targetHeader.Number.Uint64() {
-				return nil
-			}
-		} else {
-			return nil
-		}
-
-		ctx, cancel := context.WithTimeout(context.Background(), veblopBlockTimeout*2)
-		defer cancel()
-
-		log.Info("Waiting for new span", "target block", targetHeader.Number.Uint64(), "targetHeaderAuthor", targetHeaderAuthor, "checkMilestone", checkMilestone)
-		_, err := c.spanStore.waitForNewSpan(ctx, targetHeader.Number.Uint64(), targetHeaderAuthor)
+	if parentHeader == nil {
+		log.Info("Parent header is nil", "targetHeader", targetHeader.Number.Uint64(), "parentHeaderHash", targetHeader.ParentHash)
+		log.Info("Waiting for new span", "target block", targetHeader.Number.Uint64(), "targetHeaderAuthor", targetHeaderAuthor)
+		_, err := c.spanStore.waitForNewSpan(targetHeader.Number.Uint64(), targetHeaderAuthor, veblopBlockTimeout*2)
 		if err != nil {
 			log.Warn("Error while waiting for new span", "error", err)
 			return err
@@ -696,10 +684,7 @@ func (c *Bor) performSpanCheck(chain consensus.ChainHeaderReader, targetHeader *
 		log.Info("Starting span check due to longer than expected block time", "target block", targetHeader.Number.Uint64(), "parentHeader", targetHeader.ParentHash, "parentHeaderAuthor", parentHeaderAuthor, "targetHeaderAuthor", targetHeaderAuthor)
 
 		// Keep getting the latest span until we get a new span or a new milestone
-		ctx, cancel := context.WithTimeout(context.Background(), veblopBlockTimeout*2)
-		defer cancel()
-
-		foundNewSpan, err := c.spanStore.waitForNewSpan(ctx, targetHeader.Number.Uint64(), targetHeaderAuthor)
+		foundNewSpan, err := c.spanStore.waitForNewSpan(targetHeader.Number.Uint64(), targetHeaderAuthor, veblopBlockTimeout*2)
 		if err != nil {
 			log.Warn("Error while waiting for new span", "error", err)
 			return err
@@ -708,7 +693,7 @@ func (c *Bor) performSpanCheck(chain consensus.ChainHeaderReader, targetHeader *
 		log.Info("Span check complete", "foundNewSpan", foundNewSpan)
 
 		if !foundNewSpan {
-			return c.performSpanCheck(chain, targetHeader, true)
+			return c.performSpanCheck(chain, targetHeader)
 		}
 
 		return nil
@@ -716,9 +701,7 @@ func (c *Bor) performSpanCheck(chain consensus.ChainHeaderReader, targetHeader *
 		log.Info("Updating latest span due to different author", "target block", targetHeader.Number.Uint64(), "parentHeader", targetHeader.ParentHash, "parentHeaderAuthor", parentHeaderAuthor, "targetHeaderAuthor", targetHeaderAuthor)
 
 		// We don't want to wait for a new span forever if the target header author is different from the parent header author, because it would lead to a deadlock if the header is signed by a malicious producer who is not in the validator set.
-		ctx, cancel := context.WithTimeout(context.Background(), veblopBlockTimeout)
-		defer cancel()
-		foundNewSpan, err := c.spanStore.waitForNewSpan(ctx, targetHeader.Number.Uint64(), parentHeaderAuthor)
+		foundNewSpan, err := c.spanStore.waitForNewSpan(targetHeader.Number.Uint64(), parentHeaderAuthor, veblopBlockTimeout)
 		if err != nil {
 			log.Warn("Error while waiting for new span", "error", err)
 			return err
@@ -1195,9 +1178,10 @@ func (c *Bor) APIs(chain consensus.ChainHeaderReader) []rpc.API {
 	}}
 }
 
-// Close implements consensus.Engine. It's a noop for bor as there are no background threads.
+// Close implements consensus.Engine.
 func (c *Bor) Close() error {
 	c.closeOnce.Do(func() {
+		close(c.quit)
 		if c.HeimdallClient != nil {
 			c.HeimdallClient.Close()
 		}
@@ -1208,6 +1192,30 @@ func (c *Bor) Close() error {
 	})
 
 	return nil
+}
+
+func (c *Bor) runMilestoneFetcher() {
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if c.HeimdallClient != nil {
+				milestone, err := c.HeimdallClient.FetchMilestone(context.Background())
+				if err != nil {
+					log.Warn("Error while fetching milestone", "error", err)
+					continue
+				}
+
+				if milestone != nil {
+					c.latestMilestoneBlock.Store(milestone.EndBlock)
+				}
+			}
+		case <-c.quit:
+			return
+		}
+	}
 }
 
 func (c *Bor) checkAndCommitSpan(

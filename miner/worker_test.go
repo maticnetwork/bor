@@ -405,6 +405,7 @@ func getFakeBorFromConfig(t *testing.T, chainConfig *params.ChainConfig) (consen
 	heimdallClientMock.EXPECT().GetSpan(gomock.Any(), uint64(0)).Return(&span0, nil).AnyTimes()
 	heimdallClientMock.EXPECT().GetSpan(gomock.Any(), uint64(1)).Return(nil, errors.New("span not found")).AnyTimes()
 	heimdallClientMock.EXPECT().GetLatestSpan(gomock.Any()).Return(&span0, nil).AnyTimes()
+	heimdallClientMock.EXPECT().FetchMilestone(gomock.Any()).Return(nil, nil).AnyTimes()
 	heimdallClientMock.EXPECT().Close().AnyTimes()
 
 	contractMock := bor.NewMockGenesisContract(ctrl)

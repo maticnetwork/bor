@@ -286,10 +286,10 @@ func (s *SpanStore) estimateSpanId(blockNumber uint64) uint64 {
 			startBlock := lastUsedSpan.Span.StartBlock
 			endBlock := lastUsedSpan.Span.EndBlock
 			if blockNumber > endBlock {
-				return lastUsedSpan.Span.ID + 1 + (blockNumber-endBlock)/defaultSpanLength
+				return lastUsedSpan.Span.ID + 1 + (blockNumber-endBlock-1)/defaultSpanLength
 			} else if blockNumber < startBlock {
 				// Calculate how many spans to go back. (startBlock - blockNumber + defaultSpanLength - 1) / defaultSpanLength is ceil((startBlock - blockNumber)/defaultSpanLength)
-				spansToDecrement := (startBlock - blockNumber + defaultSpanLength - 1) / defaultSpanLength
+				spansToDecrement := 1 + (startBlock-blockNumber-1)/defaultSpanLength
 				if lastUsedSpan.Span.ID >= spansToDecrement { // Prevent underflow for uint64
 					return lastUsedSpan.Span.ID - spansToDecrement
 				} else {
@@ -355,8 +355,10 @@ func (s *SpanStore) Close() {
 }
 
 // Wait for a new span whose selected producers are different from the current header author
-func (s *SpanStore) waitForNewSpan(ctx context.Context, targetBlockNumber uint64, currentHeaderAuthor common.Address) (bool, error) {
+func (s *SpanStore) waitForNewSpan(targetBlockNumber uint64, currentHeaderAuthor common.Address, timeout time.Duration) (bool, error) {
 	delay := 200 * time.Millisecond
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
 
 	currentSpan, err := s.spanByBlockNumber(ctx, targetBlockNumber)
 	if err != nil {
