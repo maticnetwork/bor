@@ -3,8 +3,10 @@ package bor
 import (
 	"context"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
@@ -878,4 +880,221 @@ func TestSpanStore_Close(t *testing.T) {
 	spanStore.Close()
 	spanStore.cancel = nil
 	spanStore.Close() // Should not panic
+}
+
+// dynamicHeimdallClient is a mock IHeimdallClient for testing waitForNewSpan.
+// It allows dynamically changing the spans returned during a test.
+type dynamicHeimdallClient struct {
+	mu         sync.Mutex
+	spans      map[uint64]*types.Span
+	latestSpan *types.Span
+	fetchErr   error
+}
+
+func newDynamicHeimdallClient() *dynamicHeimdallClient {
+	return &dynamicHeimdallClient{spans: make(map[uint64]*types.Span)}
+}
+
+func (d *dynamicHeimdallClient) GetSpan(ctx context.Context, spanID uint64) (*types.Span, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	if d.fetchErr != nil {
+		return nil, d.fetchErr
+	}
+	if s, ok := d.spans[spanID]; ok {
+		// Return a copy to avoid data races if the test modifies it while it's being used.
+		spanCopy := *s
+		producersCopy := make([]stakeTypes.Validator, len(s.SelectedProducers))
+		copy(producersCopy, s.SelectedProducers)
+		spanCopy.SelectedProducers = producersCopy
+		return &spanCopy, nil
+	}
+	return nil, fmt.Errorf("span %d not found", spanID)
+}
+
+func (d *dynamicHeimdallClient) GetLatestSpan(ctx context.Context) (*types.Span, error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	if d.fetchErr != nil {
+		return nil, d.fetchErr
+	}
+	if d.latestSpan == nil {
+		// To avoid panic if latest span is not set, which can happen in some test setups.
+		if len(d.spans) > 0 {
+			var maxID uint64
+			for id := range d.spans {
+				if id > maxID {
+					maxID = id
+				}
+			}
+			return d.spans[maxID], nil
+		}
+		return nil, fmt.Errorf("latest span not set in mock")
+	}
+	return d.latestSpan, nil
+}
+
+func (d *dynamicHeimdallClient) setSpans(spans map[uint64]*types.Span, latestSpan *types.Span) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.spans = spans
+	d.latestSpan = latestSpan
+}
+
+func (d *dynamicHeimdallClient) setError(err error) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.fetchErr = err
+}
+
+func (d *dynamicHeimdallClient) StateSyncEvents(ctx context.Context, fromID uint64, to int64) ([]*clerk.EventRecordWithTime, error) {
+	panic("not implemented")
+}
+func (d *dynamicHeimdallClient) FetchCheckpoint(ctx context.Context, number int64) (*checkpoint.Checkpoint, error) {
+	panic("not implemented")
+}
+func (d *dynamicHeimdallClient) FetchCheckpointCount(ctx context.Context) (int64, error) {
+	panic("not implemented")
+}
+func (d *dynamicHeimdallClient) FetchMilestone(ctx context.Context) (*milestone.Milestone, error) {
+	panic("not implemented")
+}
+func (d *dynamicHeimdallClient) FetchMilestoneCount(ctx context.Context) (int64, error) {
+	panic("not implemented")
+}
+func (d *dynamicHeimdallClient) FetchNoAckMilestone(ctx context.Context, milestoneID string) error {
+	panic("not implemented")
+}
+func (d *dynamicHeimdallClient) FetchLastNoAckMilestone(ctx context.Context) (string, error) {
+	panic("not implemented")
+}
+func (d *dynamicHeimdallClient) FetchMilestoneID(ctx context.Context, milestoneID string) error {
+	panic("not implemented")
+}
+func (d *dynamicHeimdallClient) Close() {}
+
+func makeTestSpan(id, start, end uint64, producerAddr common.Address) *types.Span {
+	producer := stakeTypes.Validator{
+		ValId:            id,
+		Signer:           producerAddr.Hex(),
+		VotingPower:      100,
+		ProposerPriority: 0,
+	}
+	return &types.Span{
+		Id:         id,
+		StartBlock: start,
+		EndBlock:   end,
+		ValidatorSet: stakeTypes.ValidatorSet{
+			Validators: []*stakeTypes.Validator{&producer},
+			Proposer:   &producer,
+		},
+		SelectedProducers: []stakeTypes.Validator{producer},
+	}
+}
+
+func TestSpanStore_WaitForNewSpan(t *testing.T) {
+	author1 := common.HexToAddress("0xaaaa")
+	author2 := common.HexToAddress("0xbbbb")
+	span0 := makeTestSpan(0, 0, 99, author1)
+
+	t.Run("success on first try", func(t *testing.T) {
+		client := newDynamicHeimdallClient()
+		span1 := makeTestSpan(1, 100, 200, author2)
+		client.setSpans(map[uint64]*types.Span{0: span0, 1: span1}, span1)
+
+		store := NewSpanStore(client, nil, "1337")
+		defer store.Close()
+
+		found, err := store.waitForNewSpan(150, author1, 1*time.Second)
+		require.NoError(t, err)
+		require.True(t, found)
+	})
+
+	t.Run("success after update", func(t *testing.T) {
+		client := newDynamicHeimdallClient()
+		span1 := makeTestSpan(1, 100, 200, author1)
+		client.setSpans(map[uint64]*types.Span{0: span0, 1: span1}, span1)
+
+		store := NewSpanStore(client, nil, "1337")
+		defer store.Close()
+
+		go func() {
+			time.Sleep(100 * time.Millisecond) // Give waitForNewSpan time to start polling
+			span2 := makeTestSpan(2, 150, 250, author2)
+			client.setSpans(map[uint64]*types.Span{0: span0, 1: span1, 2: span2}, span2)
+		}()
+
+		found, err := store.waitForNewSpan(150, author1, 1*time.Second)
+		require.NoError(t, err)
+		require.True(t, found)
+	})
+
+	t.Run("timeout when producer does not change", func(t *testing.T) {
+		client := newDynamicHeimdallClient()
+		span1 := makeTestSpan(1, 100, 200, author1)
+		client.setSpans(map[uint64]*types.Span{0: span0, 1: span1}, span1)
+
+		store := NewSpanStore(client, nil, "1337")
+		defer store.Close()
+
+		// Use a short timeout to ensure the test doesn't run for too long
+		found, err := store.waitForNewSpan(150, author1, 250*time.Millisecond)
+		require.NoError(t, err)
+		require.False(t, found)
+	})
+
+	t.Run("error from heimdall", func(t *testing.T) {
+		client := newDynamicHeimdallClient()
+		expectedErr := fmt.Errorf("heimdall connection error")
+		client.setError(expectedErr)
+
+		store := NewSpanStore(client, nil, "1337")
+		defer store.Close()
+
+		found, err := store.waitForNewSpan(150, author1, 1*time.Second)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), expectedErr.Error())
+		require.False(t, found)
+	})
+
+	t.Run("empty producers list initially", func(t *testing.T) {
+		client := newDynamicHeimdallClient()
+		span1 := makeTestSpan(1, 100, 200, author1)
+		span1.SelectedProducers = []stakeTypes.Validator{} // Empty producer list
+		client.setSpans(map[uint64]*types.Span{0: span0, 1: span1}, span1)
+
+		store := NewSpanStore(client, nil, "1337")
+		defer store.Close()
+
+		go func() {
+			time.Sleep(100 * time.Millisecond)
+			span2 := makeTestSpan(2, 150, 250, author2)
+			client.setSpans(map[uint64]*types.Span{0: span0, 1: span1, 2: span2}, span2)
+		}()
+
+		found, err := store.waitForNewSpan(150, author1, 1*time.Second)
+		require.NoError(t, err)
+		require.True(t, found)
+	})
+
+	t.Run("target block not initially in span", func(t *testing.T) {
+		client := newDynamicHeimdallClient()
+		span1 := makeTestSpan(1, 100, 200, author1) // block 150 is now in this span
+		client.setSpans(map[uint64]*types.Span{0: span0, 1: span1}, span1)
+
+		store := NewSpanStore(client, nil, "1337")
+		defer store.Close()
+
+		go func() {
+			time.Sleep(100 * time.Millisecond)
+			span2 := makeTestSpan(2, 150, 250, author2) // New span that contains the block
+			client.setSpans(map[uint64]*types.Span{0: span0, 1: span1, 2: span2}, span2)
+		}()
+
+		found, err := store.waitForNewSpan(150, author1, 1*time.Second)
+		require.NoError(t, err)
+		require.True(t, found)
+	})
 }
