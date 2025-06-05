@@ -713,6 +713,7 @@ type BorConfig struct {
 	IndoreBlock                *big.Int               `json:"indoreBlock"`                // Indore switch block (nil = no fork, 0 = already on indore)
 	StateSyncConfirmationDelay map[string]uint64      `json:"stateSyncConfirmationDelay"` // StateSync Confirmation Delay, in seconds, to calculate `to`
 	AhmedabadBlock             *big.Int               `json:"ahmedabadBlock"`             // Ahmedabad switch block (nil = no fork, 0 = already on ahmedabad)
+	VeBlopBlock                *big.Int               `json:"veblopBlock"`                // VeBlop switch block (nil = no fork, 0 = already on veblop)
 }
 
 // String implements the stringer interface, returning the consensus engine details.
@@ -754,6 +755,10 @@ func (c *BorConfig) CalculateStateSyncDelay(number uint64) uint64 {
 
 func (c *BorConfig) IsAhmedabad(number *big.Int) bool {
 	return isBlockForked(c.AhmedabadBlock, number)
+}
+
+func (c *BorConfig) IsVeBlop(number *big.Int) bool {
+	return isBlockForked(c.VeBlopBlock, number)
 }
 
 // // TODO: modify this function once the block number is finalized

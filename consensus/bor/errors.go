@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
+	"github.com/ethereum/go-ethereum/consensus/bor/valset"
 )
 
 type MaxCheckpointLengthExceededError struct {
@@ -67,15 +68,17 @@ func (e *UnauthorizedProposerError) Error() string {
 
 // UnauthorizedSignerError is returned if a header is [being] signed by an unauthorized entity.
 type UnauthorizedSignerError struct {
-	Number uint64
-	Signer []byte
+	Number         uint64
+	Signer         []byte
+	AllowedSigners []*valset.Validator
 }
 
 func (e *UnauthorizedSignerError) Error() string {
 	return fmt.Sprintf(
-		"Signer 0x%x is not a part of the producer set at block %d",
+		"Signer 0x%x is not a part of the producer set at block %d. Allowed signers: %v",
 		e.Signer,
 		e.Number,
+		e.AllowedSigners,
 	)
 }
 

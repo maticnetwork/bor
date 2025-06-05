@@ -28,6 +28,7 @@ type mockHeimdall struct {
 	fetchCheckpointCount func(ctx context.Context) (int64, error)
 	fetchMilestone       func(ctx context.Context) (*milestone.Milestone, error)
 	fetchMilestoneCount  func(ctx context.Context) (int64, error)
+	getLatestSpan        func(ctx context.Context) (*heimdalltypes.Span, error)
 }
 
 func (m *mockHeimdall) StateSyncEvents(ctx context.Context, fromID uint64, to int64) ([]*clerk.EventRecordWithTime, error) {
@@ -50,7 +51,9 @@ func (m *mockHeimdall) FetchMilestone(ctx context.Context) (*milestone.Milestone
 func (m *mockHeimdall) FetchMilestoneCount(ctx context.Context) (int64, error) {
 	return m.fetchMilestoneCount(ctx)
 }
-
+func (m *mockHeimdall) GetLatestSpan(ctx context.Context) (*heimdalltypes.Span, error) {
+	return m.getLatestSpan(ctx)
+}
 func (m *mockHeimdall) Close() {}
 
 func TestFetchWhitelistCheckpointAndMilestone(t *testing.T) {

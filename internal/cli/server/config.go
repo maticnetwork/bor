@@ -692,7 +692,7 @@ func DefaultConfig() *Config {
 			GasCeil:             30_000_000,                                 // geth's default
 			GasPrice:            big.NewInt(params.BorDefaultMinerGasPrice), // bor's default
 			ExtraData:           "",
-			Recommit:            125 * time.Second,
+			Recommit:            1 * time.Second,
 			CommitInterruptFlag: true,
 		},
 		Gpo: &GpoConfig{
