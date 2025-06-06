@@ -237,7 +237,7 @@ type Bor struct {
 
 	// The fields below are for testing only
 	fakeDiff      bool // Skip difficulty verifications
-	devFakeAuthor bool
+	DevFakeAuthor bool
 
 	closeOnce sync.Once
 }
@@ -284,7 +284,7 @@ func New(
 		HeimdallClient:         heimdallClient,
 		HeimdallWSClient:       heimdallWSClient,
 		spanStore:              spanStore,
-		devFakeAuthor:          devFakeAuthor,
+		DevFakeAuthor:          devFakeAuthor,
 	}
 
 	c.authorizedSigner.Store(&signer{
@@ -356,10 +356,24 @@ func (c *Bor) verifyHeader(chain consensus.ChainHeaderReader, header *types.Head
 	}
 
 	number := header.Number.Uint64()
+	now := uint64(time.Now().Unix())
 
-	// Don't waste time checking blocks from the future
-	if header.Time-c.config.CalculatePeriod(number) > uint64(time.Now().Unix()) {
-		return consensus.ErrFutureBlock
+	// Allow early blocks if Bhilai HF is enabled
+	if c.config.IsBhilai(header.Number) {
+		// Don't waste time checking blocks from the future but allow a buffer of block time for
+		// early block announcements. Note that this is a loose check and would allow early blocks
+		// from non-primary producer. Such blocks will be rejected later when we know the succession
+		// number of the signer in the current sprint.
+		if header.Time-c.config.CalculatePeriod(number) > now {
+			log.Error("Block announced too early post bhilai", "number", number, "headerTime", header.Time, "now", now)
+			return consensus.ErrFutureBlock
+		}
+	} else {
+		// Don't waste time checking blocks from the future
+		if header.Time > now {
+			log.Error("Block announced too early", "number", number, "headerTime", header.Time, "now", now)
+			return consensus.ErrFutureBlock
+		}
 	}
 
 	if err := validateHeaderExtraField(header.Extra); err != nil {
@@ -547,7 +561,7 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 func (c *Bor) snapshot(chain consensus.ChainHeaderReader, number uint64, hash common.Hash, parents []*types.Header) (*Snapshot, error) {
 	// Search for a snapshot in memory or on disk for checkpoints
 	signer := common.BytesToAddress(c.authorizedSigner.Load().signer.Bytes())
-	if c.devFakeAuthor && signer.String() != "0x0000000000000000000000000000000000000000" {
+	if c.DevFakeAuthor && signer.String() != "0x0000000000000000000000000000000000000000" {
 		log.Info("👨‍💻Using DevFakeAuthor", "signer", signer)
 
 		val := valset.NewValidator(signer, 1000)
@@ -717,7 +731,16 @@ func (c *Bor) verifySeal(chain consensus.ChainHeaderReader, header *types.Header
 		parent = chain.GetHeader(header.ParentHash, number-1)
 	}
 
-	if IsBlockOnTime(parent, header, number, succession, c.config) {
+	// Post Bhilai HF, reject blocks form non-primary producers if they're earlier than the expected time
+	if c.config.IsBhilai(header.Number) && succession != 0 {
+		now := uint64(time.Now().Unix())
+		if header.Time > now {
+			log.Error("Block announced too early by non-primary producer post bhilai", "number", number, "headerTime", header.Time, "now", now)
+			return consensus.ErrFutureBlock
+		}
+	}
+
+	if IsBlockEarly(parent, header, number, succession, c.config) {
 		return &BlockTooSoonError{number, succession}
 	}
 
@@ -732,7 +755,9 @@ func (c *Bor) verifySeal(chain consensus.ChainHeaderReader, header *types.Header
 	return nil
 }
 
-func IsBlockOnTime(parent *types.Header, header *types.Header, number uint64, succession int, cfg *params.BorConfig) bool {
+// IsBlockEarly returns true if the header time is earlier than expected (according to consensus rules). This
+// can happen if the producer maliciously updates the header time.
+func IsBlockEarly(parent *types.Header, header *types.Header, number uint64, succession int, cfg *params.BorConfig) bool {
 	return parent != nil && header.Time < parent.Time+CalcProducerDelay(number, succession, cfg)
 }
 
@@ -836,12 +861,14 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 	if header.Time < uint64(time.Now().Unix()) {
 		header.Time = uint64(time.Now().Unix())
 	} else {
-		if succession == 0 {
+		// For primary validators, wait until the current block production window
+		// starts. This prevents bor from starting to build next block before time
+		// as we'd like to wait for new transactions. Although this change doesn't
+		// need a check for hard fork as it doesn't change any consensus rules, we
+		// still keep it for safety and testing.
+		if c.config.IsBhilai(big.NewInt(int64(number))) && succession == 0 {
 			startTime := time.Unix(int64(header.Time-c.config.CalculatePeriod(number)), 0)
-
-			if time.Now().Before(startTime) {
-				time.Sleep(time.Until(startTime))
-			}
+			time.Sleep(time.Until(startTime))
 		}
 	}
 
@@ -1037,11 +1064,18 @@ func (c *Bor) Seal(chain consensus.ChainHeaderReader, block *types.Block, result
 		return err
 	}
 
-	// Sweet, the protocol permits us to sign the block, wait for our time
-	delay := time.Until(time.Unix(int64(header.Time-c.config.CalculatePeriod(number)), 0))
+	var delay time.Duration
 
-	if successionNumber > 0 {
-		delay = time.Until(time.Unix(int64(header.Time), 0))
+	// Sweet, the protocol permits us to sign the block, wait for our time
+	if c.config.IsBhilai(header.Number) {
+		delay = time.Until(time.Unix(int64(header.Time), 0)) // Wait until we reach header time for non-primary validators
+		if successionNumber == 0 {
+			// For primary producers, set the delay to `header.Time - block time` instead of `header.Time`
+			// for early block announcement instead of waiting for full block time.
+			delay = time.Until(time.Unix(int64(header.Time-c.config.CalculatePeriod(number)), 0))
+		}
+	} else {
+		delay = time.Until(time.Unix(int64(header.Time), 0)) // Wait until we reach header time
 	}
 
 	// wiggle was already accounted for in header.Time, this is just for logging
@@ -1323,19 +1357,26 @@ func (c *Bor) getStartBlockHeimdallSpanID(startBlock uint64) (uint64, error) {
 }
 
 func (c *Bor) needToCommitSpan(currentSpan *span.Span, headerNumber uint64) bool {
-	// if span is nil
+	// If span is nil, return false.
 	if currentSpan == nil {
 		return false
 	}
 
-	// check span is not set initially
+	// Check if span is not set initially, we commit the span with spanId 1, which will also commit the 0th span.
+	// Check: https://github.com/maticnetwork/genesis-contracts/blob/5dcbcc72f10ab847276586e629f96b8a6d369e1d/contracts/BorValidatorSet.template#L229
 	if currentSpan.EndBlock == 0 {
 		return true
 	}
 
-	// if current block is first block of last sprint in current span
+	// If the current block is the first block of the last sprint in the current span.
+	// But here we should skip the check for the 0th span, as it will cause the span to be committed to be committed twice.
 	sprintLength := c.config.CalculateSprint(headerNumber)
 	if currentSpan.EndBlock > sprintLength && currentSpan.EndBlock-sprintLength+1 == headerNumber {
+		if currentSpan.Id == 0 {
+			// If the current span is the 0th span, we will skip committing the span.
+			log.Info("Skipping the last sprint commit for 0th span", "spanID", currentSpan.Id, "headerNumber", headerNumber)
+			return false
+		}
 		return true
 	}
 
