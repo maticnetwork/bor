@@ -1570,12 +1570,8 @@ func getInterruptTimer(interruptCtx context.Context, number, timestamp uint64) (
 	common.Interrupted.Store(false)
 
 	go func() {
-		time.Sleep(delay)
-		common.Interrupted.Store(true)
-	}()
-
-	go func() {
 		<-interruptCtx.Done()
+		common.Interrupted.Store(true)
 		if interruptCtx.Err() != context.Canceled {
 			log.Info("Commit Interrupt. Pre-committing the current block", "block", number)
 			cancel()
