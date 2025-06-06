@@ -327,8 +327,7 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool, i
 	for {
 		if interruptCtx != nil {
 			// case of interrupting by timeout
-			select {
-			case <-interruptCtx.Done():
+			if common.Interrupted.Load() {
 				txHash, _ := GetCurrentTxFromContext(interruptCtx)
 				interruptedTxCache, _ := GetCache(interruptCtx)
 
@@ -347,7 +346,6 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool, i
 
 					return nil, ErrInterrupt
 				}
-			default:
 			}
 		}
 
@@ -521,8 +519,7 @@ func (in *EVMInterpreter) RunWithDelay(contract *Contract, input []byte, readOnl
 	for {
 		if interruptCtx != nil {
 			// case of interrupting by timeout
-			select {
-			case <-interruptCtx.Done():
+			if common.Interrupted.Load() {
 				txHash, _ := GetCurrentTxFromContext(interruptCtx)
 				interruptedTxCache, _ := GetCache(interruptCtx)
 
@@ -543,7 +540,6 @@ func (in *EVMInterpreter) RunWithDelay(contract *Contract, input []byte, readOnl
 
 					return nil, ErrInterrupt
 				}
-			default:
 			}
 		}
 
