@@ -116,6 +116,7 @@ func (c *ChainSpanner) GetCurrentValidatorsByBlockNrOrHash(ctx context.Context, 
 func (c *ChainSpanner) tryGetBorValidatorsWithId(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash, blockNumber uint64, toAddress common.Address, gas hexutil.Uint64) ([]*valset.Validator, error) {
 	firstEndBlock, err := c.getFirstEndBlock(ctx, blockNrOrHash, toAddress, gas)
 	if err != nil {
+		log.Error("--- error calling get first end block", "err", err)
 		return nil, err
 	}
 	var spanNumber *big.Int
@@ -124,12 +125,14 @@ func (c *ChainSpanner) tryGetBorValidatorsWithId(ctx context.Context, blockNrOrH
 	} else {
 		spanNumber, err = c.getSpanByBlock(ctx, blockNrOrHash, blockNumber, toAddress, gas)
 		if err != nil {
+			log.Error("--- error calling get span by block", "err", err)
 			return nil, err
 		}
 	}
 
 	borValidatorsWithoutId, err := c.getBorValidatorsWithoutId(ctx, blockNrOrHash, blockNumber, toAddress, gas)
 	if err != nil {
+		log.Error("--- error calling bor vals without id", "err", err)
 		return nil, err
 	}
 
@@ -141,6 +144,7 @@ func (c *ChainSpanner) tryGetBorValidatorsWithId(ctx context.Context, blockNrOrH
 		p, err := c.getProducersBySpanAndIndexMethod(ctx, blockNrOrHash, toAddress, gas, spanNumber, i)
 		// if fails, return validators without id
 		if err != nil {
+			log.Error("--- error fetching producers", "err", err, "spanNumber", spanNumber, "index", i)
 			return borValidatorsWithoutId, nil
 		}
 
