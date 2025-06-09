@@ -1569,9 +1569,11 @@ func resetAndCopyInterruptCtx(interruptCtx context.Context) context.Context {
 func getInterruptTimer(interruptCtx context.Context, number, timestamp uint64) (context.Context, func()) {
 	delay := time.Until(time.Unix(int64(timestamp), 0))
 	interruptCtx, cancel := context.WithTimeout(interruptCtx, delay)
+	common.Interrupted.Store(false)
 
 	go func() {
 		<-interruptCtx.Done()
+		common.Interrupted.Store(true)
 		if interruptCtx.Err() != context.Canceled {
 			log.Info("Commit Interrupt. Pre-committing the current block", "block", number)
 			cancel()
