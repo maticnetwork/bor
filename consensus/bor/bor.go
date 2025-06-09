@@ -779,12 +779,29 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 
 	header.Extra = header.Extra[:types.ExtraVanityLength]
 
+	log.Info("--- in consensus.Prepare, fetching validator set from spanner", "number", number)
+	v, err := c.spanner.GetCurrentValidatorsByHash(context.Background(), header.ParentHash, number)
+	if err != nil {
+		log.Error("--- error fetching validator set from spanner", "err", err)
+	}
+	if len(v) == 0 {
+		log.Error("--- empty validator set from spanner")
+	}
+	if len(v) > 0 {
+		log.Info("--- fetched validator set from spanner", "len", len(v))
+		if len(v) == 1 {
+			log.Info("--- single validator", "address", v[0].Address, "power", v[0].VotingPower)
+		}
+	}
+
 	// get validator set if number
 	if IsSprintStart(number+1, c.config.CalculateSprint(number)) {
 		newValidators, err := c.spanner.GetCurrentValidatorsByHash(context.Background(), header.ParentHash, number+1)
 		if err != nil {
 			return errUnknownValidators
 		}
+
+		log.Info("--- prepare: sprint end: fetched validator set", "len", len(newValidators))
 
 		// sort validator by address
 		sort.Sort(valset.ValidatorsByAddress(newValidators))
