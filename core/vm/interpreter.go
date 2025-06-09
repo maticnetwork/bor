@@ -326,9 +326,32 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool, i
 	// parent context.
 	for {
 		if interruptCtx != nil {
+			if common.Interrupted.Load() {
+				log.Info("--- run: found commit interrupt due to global flag", "err", interruptCtx.Err())
+				txHash, _ := GetCurrentTxFromContext(interruptCtx)
+				interruptedTxCache, _ := GetCache(interruptCtx)
+
+				if interruptedTxCache == nil {
+					break
+				}
+
+				// if the tx is already in the cache, it means that it has been interrupted before and we will not interrupt it again
+				found, _ := interruptedTxCache.Cache.ContainsOrAdd(txHash, true)
+				if found {
+					interruptedTxCache.Cache.Remove(txHash)
+				} else {
+					// if the tx is not in the cache, it means that it has not been interrupted before and we will interrupt it
+					opcodeCommitInterruptCounter.Inc(1)
+					log.Warn("OPCODE Level interrupt")
+
+					return nil, ErrInterrupt
+				}
+			}
+
 			// case of interrupting by timeout
 			select {
 			case <-interruptCtx.Done():
+				log.Info("--- run: found commit interrupt due to context.Done")
 				txHash, _ := GetCurrentTxFromContext(interruptCtx)
 				interruptedTxCache, _ := GetCache(interruptCtx)
 
@@ -520,9 +543,34 @@ func (in *EVMInterpreter) RunWithDelay(contract *Contract, input []byte, readOnl
 	// parent context.
 	for {
 		if interruptCtx != nil {
+			if common.Interrupted.Load() {
+				log.Info("--- runWithDelay: found commit interrupt due to global flag", "err", interruptCtx.Err())
+				txHash, _ := GetCurrentTxFromContext(interruptCtx)
+				interruptedTxCache, _ := GetCache(interruptCtx)
+
+				if interruptedTxCache == nil {
+					break
+				}
+
+				// if the tx is already in the cache, it means that it has been interrupted before and we will not interrupt it again
+				found, _ := interruptedTxCache.Cache.ContainsOrAdd(txHash, true)
+				log.Info("FOUND", "found", found, "txHash", txHash)
+
+				if found {
+					interruptedTxCache.Cache.Remove(txHash)
+				} else {
+					// if the tx is not in the cache, it means that it has not been interrupted before and we will interrupt it
+					opcodeCommitInterruptCounter.Inc(1)
+					log.Warn("OPCODE Level interrupt")
+
+					return nil, ErrInterrupt
+				}
+			}
+
 			// case of interrupting by timeout
 			select {
 			case <-interruptCtx.Done():
+				log.Info("--- runWithDelay: found commit interrupt due to context.Done")
 				txHash, _ := GetCurrentTxFromContext(interruptCtx)
 				interruptedTxCache, _ := GetCache(interruptCtx)
 

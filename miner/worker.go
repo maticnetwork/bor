@@ -967,9 +967,16 @@ mainloop:
 				env.state.AddEmptyMVHashMap()
 			}
 
+			if common.Interrupted.Load() {
+				log.Info("--- worker/commitTransactions: found commit interrupt due to global flag")
+				log.Warn("Tx Level Interrupt", "hash", lastTxHash, "err", w.interruptCtx.Err())
+				break mainloop
+			}
+
 			// case of interrupting by timeout
 			select {
 			case <-w.interruptCtx.Done():
+				log.Info("--- worker/commitTransactions: found commit interrupt due to context.Done")
 				txCommitInterruptCounter.Inc(1)
 				log.Warn("Tx Level Interrupt", "hash", lastTxHash, "err", w.interruptCtx.Err())
 				break mainloop
