@@ -3,6 +3,7 @@ package bor
 import (
 	"context"
 	"encoding/json"
+	"math/big"
 
 	"github.com/ethereum/go-ethereum/consensus/bor/valset"
 
@@ -134,45 +135,69 @@ func (s *Snapshot) apply(headers []*types.Header, c *Bor) (*Snapshot, error) {
 			return nil, err
 		}
 
-		// check if signer is in validator set
+		// add recents
+		snap.Recents[number] = signer
+
+		// change validator set and change proposer
+		span, err := c.spanStore.spanByBlockNumber(context.Background(), number)
+		if err != nil {
+			return nil, err
+		}
+		producers := make([]*valset.Validator, len(span.SelectedProducers))
+		for i, validator := range span.SelectedProducers {
+			producers[i] = &valset.Validator{
+				Address:     validator.Address,
+				VotingPower: validator.VotingPower,
+			}
+		}
+		v := getUpdatedValidatorSet(snap.ValidatorSet.Copy(), producers)
+
+		if (number > 0 && (number+1)%s.chainConfig.Bor.CalculateSprint(number) == 0) || c.config.IsVeBlop(header.Number) {
+			v.IncrementProposerPriority(1)
+		}
+
+		snap.ValidatorSet = v
+
 		if !snap.ValidatorSet.HasAddress(signer) {
-			return nil, &UnauthorizedSignerError{number, signer.Bytes()}
+			return nil, &UnauthorizedSignerError{number, signer.Bytes(), snap.ValidatorSet.Validators}
 		}
 
 		if _, err = snap.GetSignerSuccessionNumber(signer); err != nil {
 			return nil, err
 		}
-
-		// add recents
-		snap.Recents[number] = signer
-
-		// change validator set and change proposer
-		if number > 0 && (number+1)%s.chainConfig.Bor.CalculateSprint(number) == 0 {
-			if err := validateHeaderExtraField(header.Extra); err != nil {
-				return nil, err
-			}
-
-			validatorBytes := header.GetValidatorBytes(s.chainConfig)
-
-			// get validators from headers and use that for new validator set
-			newVals, _ := valset.ParseValidators(validatorBytes)
-			v := getUpdatedValidatorSet(snap.ValidatorSet.Copy(), newVals)
-			v.IncrementProposerPriority(1)
-
-			if v.CheckEmptyId() {
-				// Fetch the validator set from span
-				span, err := c.spanStore.spanByBlockNumber(context.Background(), number+1)
-				if err != nil {
-					return nil, err
-				}
-				v.IncludeIds(span.ValidatorSet.Validators)
-			}
-			snap.ValidatorSet = v
-		}
 	}
 
 	snap.Number += uint64(len(headers))
 	snap.Hash = headers[len(headers)-1].Hash()
+
+	return snap, nil
+}
+
+func (s *Snapshot) applyNumber(number uint64, c *Bor) (*Snapshot, error) {
+	if s.Number != number-1 {
+		return nil, errOutOfRangeChain
+	}
+
+	snap := s.copy()
+
+	span, err := c.spanStore.spanByBlockNumber(context.Background(), number)
+	if err != nil {
+		return nil, err
+	}
+	producers := make([]*valset.Validator, len(span.SelectedProducers))
+	for i, validator := range span.SelectedProducers {
+		producers[i] = &valset.Validator{
+			Address:     validator.Address,
+			VotingPower: validator.VotingPower,
+		}
+	}
+	v := getUpdatedValidatorSet(snap.ValidatorSet.Copy(), producers)
+
+	if c.config.IsVeBlop(big.NewInt(int64(number))) {
+		v.IncrementProposerPriority(1)
+	}
+
+	snap.ValidatorSet = v
 
 	return snap, nil
 }
@@ -190,7 +215,7 @@ func (s *Snapshot) GetSignerSuccessionNumber(signer common.Address) (int, error)
 	signerIndex, _ := s.ValidatorSet.GetByAddress(signer)
 
 	if signerIndex == -1 {
-		return -1, &UnauthorizedSignerError{s.Number, signer.Bytes()}
+		return -1, &UnauthorizedSignerError{s.Number, signer.Bytes(), s.ValidatorSet.Validators}
 	}
 
 	tempIndex := signerIndex

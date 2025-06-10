@@ -45,14 +45,16 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/ethereum/go-ethereum/trie"
+	ttlcache "github.com/jellydator/ttlcache/v3"
 )
 
 const (
-	defaultSpanLength  = 6400 // Default span length i.e. number of bor blocks in a span
-	zerothSpanEnd      = 255  // End block of 0th span
-	checkpointInterval = 1024 // Number of blocks after which to save the vote snapshot to the database
-	inmemorySnapshots  = 128  // Number of recent vote snapshots to keep in memory
-	inmemorySignatures = 4096 // Number of recent block signatures to keep in memory
+	defaultSpanLength  = 6400            // Default span length i.e. number of bor blocks in a span
+	zerothSpanEnd      = 255             // End block of 0th span
+	checkpointInterval = 1024            // Number of blocks after which to save the vote snapshot to the database
+	inmemorySnapshots  = 128             // Number of recent vote snapshots to keep in memory
+	inmemorySignatures = 4096            // Number of recent block signatures to keep in memory
+	veblopBlockTimeout = time.Second * 4 // Timeout for new span check. DO NOT CHANGE THIS VALUE.
 )
 
 // Bor protocol constants.
@@ -220,8 +222,9 @@ type Bor struct {
 	config      *params.BorConfig   // Consensus engine configuration parameters for bor consensus
 	db          ethdb.Database      // Database to store and retrieve snapshot checkpoints
 
-	recents    *lru.ARCCache // Snapshots for recent block to speed up reorgs
-	signatures *lru.ARCCache // Signatures of recent blocks to speed up mining
+	recents               *ttlcache.Cache[common.Hash, *Snapshot]     // Snapshots for recent block to speed up reorgs
+	recentVerifiedHeaders *ttlcache.Cache[common.Hash, *types.Header] // Headers for recent blocks to speed up reorgs
+	signatures            *lru.ARCCache                               // Signatures of recent blocks to speed up mining
 
 	authorizedSigner atomic.Pointer[signer] // Ethereum address and sign function of the signing key
 
@@ -231,12 +234,14 @@ type Bor struct {
 	HeimdallClient         IHeimdallClient
 	HeimdallWSClient       IHeimdallWSClient
 
-	spanStore SpanStore // Store to save previous span data from heimdall
+	spanStore            *SpanStore // Store to save previous span data from heimdall
+	latestMilestoneBlock atomic.Uint64
 
 	// The fields below are for testing only
 	fakeDiff      bool // Skip difficulty verifications
 	devFakeAuthor bool
 
+	quit      chan struct{}
 	closeOnce sync.Once
 }
 
@@ -264,8 +269,19 @@ func New(
 		borConfig.Sprint = defaultSprintLength
 	}
 	// Allocate the snapshot caches and create the engine
-	recents, _ := lru.NewARC(inmemorySnapshots)
+	recents := ttlcache.New[common.Hash, *Snapshot](
+		ttlcache.WithTTL[common.Hash, *Snapshot](veblopBlockTimeout),
+		ttlcache.WithCapacity[common.Hash, *Snapshot](inmemorySnapshots),
+		ttlcache.WithDisableTouchOnHit[common.Hash, *Snapshot](),
+	)
+
 	signatures, _ := lru.NewARC(inmemorySignatures)
+
+	recentVerifiedHeaders := ttlcache.New[common.Hash, *types.Header](
+		ttlcache.WithTTL[common.Hash, *types.Header](veblopBlockTimeout),
+		ttlcache.WithCapacity[common.Hash, *types.Header](inmemorySignatures),
+		ttlcache.WithDisableTouchOnHit[common.Hash, *types.Header](),
+	)
 
 	// Create a new span store
 	spanStore := NewSpanStore(heimdallClient, spanner, chainConfig.ChainID.String())
@@ -276,6 +292,7 @@ func New(
 		db:                     db,
 		ethAPI:                 ethAPI,
 		recents:                recents,
+		recentVerifiedHeaders:  recentVerifiedHeaders,
 		signatures:             signatures,
 		spanner:                spanner,
 		GenesisContractsClient: genesisContracts,
@@ -283,13 +300,14 @@ func New(
 		HeimdallWSClient:       heimdallWSClient,
 		spanStore:              spanStore,
 		devFakeAuthor:          devFakeAuthor,
+		quit:                   make(chan struct{}),
 	}
 
 	c.authorizedSigner.Store(&signer{
 		common.Address{},
 		func(_ accounts.Account, _ string, i []byte) ([]byte, error) {
 			// return an error to prevent panics
-			return nil, &UnauthorizedSignerError{0, common.Address{}.Bytes()}
+			return nil, &UnauthorizedSignerError{0, common.Address{}.Bytes(), []*valset.Validator{}}
 		},
 	})
 
@@ -299,6 +317,8 @@ func New(
 			panic(fmt.Sprintf("BUG: Block alloc '%s' in genesis is not correct: %v", key, err))
 		}
 	}
+
+	go c.runMilestoneFetcher()
 
 	return c
 }
@@ -411,7 +431,13 @@ func (c *Bor) verifyHeader(chain consensus.ChainHeaderReader, header *types.Head
 	}
 
 	// All basic checks passed, verify cascading fields
-	return c.verifyCascadingFields(chain, header, parents)
+	err := c.verifyCascadingFields(chain, header, parents)
+	if err != nil {
+		return err
+	}
+
+	c.recentVerifiedHeaders.Set(header.Hash(), header, ttlcache.DefaultTTL)
+	return nil
 }
 
 // validateHeaderExtraField validates that the extra-data contains both the vanity and signature.
@@ -476,81 +502,13 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 		return ErrInvalidTimestamp
 	}
 
-	// Retrieve the snapshot needed to verify this header and cache it
-
-	var snap *Snapshot
-
-	// TODO:
-	// Verify validator statelessly
-
-	// snap, err := c.snapshot(chain, number-1, header.ParentHash, parents)
-	// if err != nil {
-	// 	return err
-	// }
-
-	// Verify if the producer set in header's extra data matches with the list in span.
-	// We skip the check for 0th span as the producer set in contract v/s producer set
-	// in heimdall span is different which will lead a mismatch. Moreover, to make the
-	// validation stateless, we use the span from heimdall (via span store) instead of
-	// span from validator set genesis contract as both are supposed to be equivalent.
-	if number > zerothSpanEnd && IsSprintStart(number+1, c.config.CalculateSprint(number)) {
-		span, err := c.spanStore.spanByBlockNumber(context.Background(), number+1)
-		if err != nil {
-			return err
-		}
-
-		// Use producer set from span as it's equivalent to the data we get from genesis contract
-		newValidators := make([]*valset.Validator, len(span.SelectedProducers))
-		for i, val := range span.SelectedProducers {
-			newValidators[i] = &val
-		}
-		sort.Sort(valset.ValidatorsByAddress(newValidators))
-
-		headerVals, err := valset.ParseValidators(header.GetValidatorBytes(c.chainConfig))
-		if err != nil {
-			return err
-		}
-
-		if len(newValidators) != len(headerVals) {
-			log.Warn("Invalid validator set", "block number", number, "newValidators", newValidators, "headerVals", headerVals)
-			return errInvalidSpanValidators
-		}
-
-		for i, val := range newValidators {
-			if !bytes.Equal(val.HeaderBytes(), headerVals[i].HeaderBytes()) {
-				log.Warn("Invalid validator set", "block number", number, "index", i, "local validator", val, "header validator", headerVals[i])
-				return errInvalidSpanValidators
-			}
-		}
-	}
-
-	// verify the validator list in the last sprint block
-	if false && IsSprintStart(number, c.config.CalculateSprint(number)) {
-		parentValidatorBytes := parent.GetValidatorBytes(c.chainConfig)
-		validatorsBytes := make([]byte, len(snap.ValidatorSet.Validators)*validatorHeaderBytesLength)
-
-		currentValidators := snap.ValidatorSet.Copy().Validators
-		// sort validator by address
-		sort.Sort(valset.ValidatorsByAddress(currentValidators))
-
-		for i, validator := range currentValidators {
-			copy(validatorsBytes[i*validatorHeaderBytesLength:], validator.HeaderBytes())
-		}
-		// len(header.Extra) >= extraVanity+extraSeal has already been validated in validateHeaderExtraField, so this won't result in a panic
-		if !bytes.Equal(parentValidatorBytes, validatorsBytes) {
-			return &MismatchingValidatorsError{number - 1, validatorsBytes, parentValidatorBytes}
-		}
-	}
-
 	// All basic checks passed, verify the seal and return
-	// TODO: Verify seal statelessly
-	// return c.verifySeal(chain, header, parents)
-	return nil
+	return c.verifySeal(chain, header, parents)
 }
 
 // snapshot retrieves the authorization snapshot at a given point in time.
 // nolint: gocognit
-func (c *Bor) snapshot(chain consensus.ChainHeaderReader, number uint64, hash common.Hash, parents []*types.Header) (*Snapshot, error) {
+func (c *Bor) snapshot(chain consensus.ChainHeaderReader, targetHeader *types.Header, parents []*types.Header, checkNewSpan bool) (*Snapshot, error) {
 	// Search for a snapshot in memory or on disk for checkpoints
 	signer := common.BytesToAddress(c.authorizedSigner.Load().signer.Bytes())
 	if c.devFakeAuthor && signer.String() != "0x0000000000000000000000000000000000000000" {
@@ -559,7 +517,7 @@ func (c *Bor) snapshot(chain consensus.ChainHeaderReader, number uint64, hash co
 		val := valset.NewValidator(signer, 1000)
 		validatorset := valset.NewValidatorSet([]*valset.Validator{val})
 
-		snapshot := newSnapshot(c.chainConfig, c.signatures, number, hash, validatorset.Validators)
+		snapshot := newSnapshot(c.chainConfig, c.signatures, targetHeader.Number.Uint64(), targetHeader.Hash(), validatorset.Validators)
 
 		return snapshot, nil
 	}
@@ -568,12 +526,14 @@ func (c *Bor) snapshot(chain consensus.ChainHeaderReader, number uint64, hash co
 
 	headers := make([]*types.Header, 0, 16)
 
+	hash := targetHeader.ParentHash
+	number := targetHeader.Number.Uint64() - 1
+
 	//nolint:govet
 	for snap == nil {
 		// If an in-memory snapshot was found, use that
-		if s, ok := c.recents.Get(hash); ok {
-			snap = s.(*Snapshot)
-
+		if v := c.recents.Get(hash); v != nil {
+			snap = v.Value()
 			break
 		}
 
@@ -649,12 +609,19 @@ func (c *Bor) snapshot(chain consensus.ChainHeaderReader, number uint64, hash co
 		headers[i], headers[len(headers)-1-i] = headers[len(headers)-1-i], headers[i]
 	}
 
+	if checkNewSpan && c.config.IsVeBlop(targetHeader.Number) {
+		err := c.performSpanCheck(chain, targetHeader)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	snap, err := snap.apply(headers, c)
 	if err != nil {
 		return nil, err
 	}
 
-	c.recents.Add(snap.Hash, snap)
+	c.recents.Set(snap.Hash, snap, ttlcache.DefaultTTL)
 
 	// If we've generated a new checkpoint snapshot, save to disk
 	if snap.Number%checkpointInterval == 0 && len(headers) > 0 {
@@ -665,7 +632,87 @@ func (c *Bor) snapshot(chain consensus.ChainHeaderReader, number uint64, hash co
 		log.Trace("Stored snapshot to disk", "number", snap.Number, "hash", snap.Hash)
 	}
 
+	if c.config.IsVeBlop(targetHeader.Number) {
+		snap, err = snap.applyNumber(targetHeader.Number.Uint64(), c)
+		if err != nil {
+			return nil, err
+		}
+
+		snap.Number = targetHeader.Number.Uint64()
+		snap.Hash = targetHeader.Hash()
+	}
+
 	return snap, err
+}
+
+// Check if the node needs to wait for a new span
+func (c *Bor) performSpanCheck(chain consensus.ChainHeaderReader, targetHeader *types.Header) error {
+	if targetHeader.Number.Uint64()-1 == 0 {
+		return nil
+	}
+
+	if c.latestMilestoneBlock.Load() >= targetHeader.Number.Uint64() {
+		return nil
+	}
+
+	targetHeaderAuthor, missingTargetSignature := c.Author(targetHeader)
+	if missingTargetSignature != nil {
+		return nil
+	}
+
+	parentHeader := chain.GetHeader(targetHeader.ParentHash, targetHeader.Number.Uint64()-1)
+
+	// If parent header isn't known or a milestone check is requested, we need to wait for a new span
+	if parentHeader == nil {
+		log.Info("Parent header is nil", "targetHeader", targetHeader.Number.Uint64(), "parentHeaderHash", targetHeader.ParentHash)
+		log.Info("Waiting for new span", "target block", targetHeader.Number.Uint64(), "targetHeaderAuthor", targetHeaderAuthor)
+		_, err := c.spanStore.waitForNewSpan(targetHeader.Number.Uint64(), targetHeaderAuthor, veblopBlockTimeout*2)
+		if err != nil {
+			log.Warn("Error while waiting for new span", "error", err)
+			return err
+		}
+
+		return nil
+	}
+
+	parentHeaderAuthor, missingParentSignature := c.Author(parentHeader)
+	if missingParentSignature != nil {
+		return missingParentSignature
+	}
+
+	if !c.recentVerifiedHeaders.Has(targetHeader.ParentHash) && targetHeaderAuthor == parentHeaderAuthor {
+		log.Info("Starting span check due to longer than expected block time", "target block", targetHeader.Number.Uint64(), "parentHeader", targetHeader.ParentHash, "parentHeaderAuthor", parentHeaderAuthor, "targetHeaderAuthor", targetHeaderAuthor)
+
+		// Keep getting the latest span until we get a new span or a new milestone
+		foundNewSpan, err := c.spanStore.waitForNewSpan(targetHeader.Number.Uint64(), targetHeaderAuthor, veblopBlockTimeout*2)
+		if err != nil {
+			log.Warn("Error while waiting for new span", "error", err)
+			return err
+		}
+
+		log.Info("Span check complete", "foundNewSpan", foundNewSpan)
+
+		if !foundNewSpan {
+			return c.performSpanCheck(chain, targetHeader)
+		}
+
+		return nil
+	} else if missingTargetSignature == nil && targetHeaderAuthor != parentHeaderAuthor {
+		log.Info("Updating latest span due to different author", "target block", targetHeader.Number.Uint64(), "parentHeader", targetHeader.ParentHash, "parentHeaderAuthor", parentHeaderAuthor, "targetHeaderAuthor", targetHeaderAuthor)
+
+		// We don't want to wait for a new span forever if the target header author is different from the parent header author, because it would lead to a deadlock if the header is signed by a malicious producer who is not in the validator set.
+		foundNewSpan, err := c.spanStore.waitForNewSpan(targetHeader.Number.Uint64(), parentHeaderAuthor, veblopBlockTimeout)
+		if err != nil {
+			log.Warn("Error while waiting for new span", "error", err)
+			return err
+		}
+
+		log.Info("Span check complete", "foundNewSpan", foundNewSpan)
+
+		return nil
+	}
+
+	return nil
 }
 
 // VerifyUncles implements consensus.Engine, always returning an error for any
@@ -695,7 +742,7 @@ func (c *Bor) verifySeal(chain consensus.ChainHeaderReader, header *types.Header
 		return errUnknownBlock
 	}
 	// Retrieve the snapshot needed to verify this header and cache it
-	snap, err := c.snapshot(chain, number-1, header.ParentHash, parents)
+	snap, err := c.snapshot(chain, header, parents, true)
 	if err != nil {
 		return err
 	}
@@ -708,7 +755,7 @@ func (c *Bor) verifySeal(chain consensus.ChainHeaderReader, header *types.Header
 
 	if !snap.ValidatorSet.HasAddress(signer) {
 		// Check the UnauthorizedSignerError.Error() msg to see why we pass number-1
-		return &UnauthorizedSignerError{number - 1, signer.Bytes()}
+		return &UnauthorizedSignerError{number, signer.Bytes(), snap.ValidatorSet.Validators}
 	}
 
 	succession, err := snap.GetSignerSuccessionNumber(signer)
@@ -751,7 +798,7 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 
 	number := header.Number.Uint64()
 	// Assemble the validator snapshot to check which votes make sense
-	snap, err := c.snapshot(chain, number-1, header.ParentHash, nil)
+	snap, err := c.snapshot(chain, header, nil, true)
 	if err != nil {
 		return err
 	}
@@ -769,10 +816,15 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 	header.Extra = header.Extra[:types.ExtraVanityLength]
 
 	// get validator set if number
-	if IsSprintStart(number+1, c.config.CalculateSprint(number)) {
-		newValidators, err := c.spanner.GetCurrentValidatorsByHash(context.Background(), header.ParentHash, number+1)
+	if IsSprintStart(number+1, c.config.CalculateSprint(number)) && !c.config.IsVeBlop(header.Number) {
+		span, err := c.spanStore.spanByBlockNumber(context.Background(), number+1)
 		if err != nil {
-			return errUnknownValidators
+			return err
+		}
+
+		newValidators := make([]*valset.Validator, len(span.SelectedProducers))
+		for i, val := range span.SelectedProducers {
+			newValidators[i] = &val
 		}
 
 		// sort validator by address
@@ -870,9 +922,11 @@ func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, 
 		start := time.Now()
 		cx := statefull.ChainContext{Chain: chain, Bor: c}
 		// check and commit span
-		if err := c.checkAndCommitSpan(state, header, cx); err != nil {
-			log.Error("Error while committing span", "error", err)
-			return
+		if !c.config.IsVeBlop(header.Number) {
+			if err := c.checkAndCommitSpan(state, header, cx); err != nil {
+				log.Error("Error while committing span", "error", err)
+				return
+			}
 		}
 
 		if c.HeimdallClient != nil {
@@ -955,9 +1009,11 @@ func (c *Bor) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *typ
 		cx := statefull.ChainContext{Chain: chain, Bor: c}
 
 		// check and commit span
-		if err = c.checkAndCommitSpan(state, header, cx); err != nil {
-			log.Error("Error while committing span", "error", err)
-			return nil, err
+		if !c.config.IsVeBlop(header.Number) {
+			if err = c.checkAndCommitSpan(state, header, cx); err != nil {
+				log.Error("Error while committing span", "error", err)
+				return nil, err
+			}
 		}
 
 		if c.HeimdallClient != nil {
@@ -1019,7 +1075,7 @@ func (c *Bor) Seal(chain consensus.ChainHeaderReader, block *types.Block, witnes
 	// Don't hold the signer fields for the entire sealing procedure
 	currentSigner := *c.authorizedSigner.Load()
 
-	snap, err := c.snapshot(chain, number-1, header.ParentHash, nil)
+	snap, err := c.snapshot(chain, header, nil, true)
 	if err != nil {
 		return err
 	}
@@ -1027,7 +1083,7 @@ func (c *Bor) Seal(chain consensus.ChainHeaderReader, block *types.Block, witnes
 	// Bail out if we're unauthorized to sign a block
 	if !snap.ValidatorSet.HasAddress(currentSigner.signer) {
 		// Check the UnauthorizedSignerError.Error() msg to see why we pass number-1
-		return &UnauthorizedSignerError{number - 1, currentSigner.signer.Bytes()}
+		return &UnauthorizedSignerError{number, currentSigner.signer.Bytes(), snap.ValidatorSet.Validators}
 	}
 
 	successionNumber, err := snap.GetSignerSuccessionNumber(currentSigner.signer)
@@ -1098,7 +1154,7 @@ func Sign(signFn SignerFn, signer common.Address, header *types.Header, c *param
 // that a new block should have based on the previous blocks in the chain and the
 // current signer.
 func (c *Bor) CalcDifficulty(chain consensus.ChainHeaderReader, _ uint64, parent *types.Header) *big.Int {
-	snap, err := c.snapshot(chain, parent.Number.Uint64(), parent.Hash(), nil)
+	snap, err := c.snapshot(chain, parent, nil, true)
 	if err != nil {
 		return nil
 	}
@@ -1122,15 +1178,44 @@ func (c *Bor) APIs(chain consensus.ChainHeaderReader) []rpc.API {
 	}}
 }
 
-// Close implements consensus.Engine. It's a noop for bor as there are no background threads.
+// Close implements consensus.Engine.
 func (c *Bor) Close() error {
 	c.closeOnce.Do(func() {
+		close(c.quit)
 		if c.HeimdallClient != nil {
 			c.HeimdallClient.Close()
+		}
+
+		if c.spanStore != nil {
+			c.spanStore.Close()
 		}
 	})
 
 	return nil
+}
+
+func (c *Bor) runMilestoneFetcher() {
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			if c.HeimdallClient != nil {
+				milestone, err := c.HeimdallClient.FetchMilestone(context.Background())
+				if err != nil {
+					log.Warn("Error while fetching milestone", "error", err)
+					continue
+				}
+
+				if milestone != nil {
+					c.latestMilestoneBlock.Store(milestone.EndBlock)
+				}
+			}
+		case <-c.quit:
+			return
+		}
+	}
 }
 
 func (c *Bor) checkAndCommitSpan(
@@ -1406,7 +1491,7 @@ func (c *Bor) getNextHeimdallSpanForTest(
 	// get local chain context object
 	localContext := chain.(statefull.ChainContext)
 	// Retrieve the snapshot needed to verify this header and cache it
-	snap, err := c.snapshot(localContext.Chain, headerNumber-1, header.ParentHash, nil)
+	snap, err := c.snapshot(localContext.Chain, header, nil, false)
 	if err != nil {
 		return nil, err
 	}

@@ -116,6 +116,21 @@ func (mr *MockIHeimdallClientMockRecorder) FetchMilestoneCount(ctx any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FetchMilestoneCount", reflect.TypeOf((*MockIHeimdallClient)(nil).FetchMilestoneCount), ctx)
 }
 
+// GetLatestSpan mocks base method.
+func (m *MockIHeimdallClient) GetLatestSpan(ctx context.Context) (*types.Span, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetLatestSpan", ctx)
+	ret0, _ := ret[0].(*types.Span)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetLatestSpan indicates an expected call of GetLatestSpan.
+func (mr *MockIHeimdallClientMockRecorder) GetLatestSpan(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLatestSpan", reflect.TypeOf((*MockIHeimdallClient)(nil).GetLatestSpan), ctx)
+}
+
 // GetSpan mocks base method.
 func (m *MockIHeimdallClient) GetSpan(ctx context.Context, spanID uint64) (*types.Span, error) {
 	m.ctrl.T.Helper()

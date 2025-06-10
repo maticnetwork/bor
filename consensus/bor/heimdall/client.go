@@ -79,15 +79,15 @@ func NewHeimdallClient(urlString string, timeout time.Duration) *HeimdallClient 
 const (
 	fetchStateSyncEventsFormat = "from-id=%d&to-time=%d"
 	fetchStateSyncEventsPath   = "clerk/time"
-	fetchStateSyncList         = "clerk/event-record/list"
+	fetchStateSyncList         = "clerk/event-records/list"
 
 	fetchCheckpoint      = "/checkpoints/%s"
 	fetchCheckpointCount = "/checkpoints/count"
 
-	fetchMilestone      = "/milestone/latest"
-	fetchMilestoneCount = "/milestone/count"
+	fetchMilestone      = "/milestones/latest"
+	fetchMilestoneCount = "/milestones/count"
 
-	fetchSpanFormat = "bor/span/%d"
+	fetchSpanFormat = "bor/spans/%d"
 )
 
 func (h *HeimdallClient) StateSyncEvents(ctx context.Context, fromID uint64, to int64) ([]*clerk.EventRecordWithTime, error) {
@@ -148,6 +148,21 @@ func (h *HeimdallClient) GetSpan(ctx context.Context, spanID uint64) (*types.Spa
 	}
 
 	ctx = WithRequestType(ctx, SpanRequest)
+
+	response, err := FetchWithRetry[types.QuerySpanByIdResponse](ctx, h.client, url, h.closeCh)
+	if err != nil {
+		return nil, err
+	}
+	return response.Span, nil
+}
+
+func (h *HeimdallClient) GetLatestSpan(ctx context.Context) (*types.Span, error) {
+	url, err := latestSpanURL(h.urlString)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx = WithRequestType(ctx, LatestSpanRequest)
 
 	response, err := FetchWithRetry[types.QuerySpanByIdResponse](ctx, h.client, url, h.closeCh)
 	if err != nil {
@@ -346,6 +361,10 @@ func Fetch[T any](ctx context.Context, request *Request) (*T, error) {
 
 func spanURL(urlString string, spanID uint64) (*url.URL, error) {
 	return makeURL(urlString, fmt.Sprintf(fetchSpanFormat, spanID), "")
+}
+
+func latestSpanURL(urlString string) (*url.URL, error) {
+	return makeURL(urlString, "bor/spans/latest", "")
 }
 
 func stateSyncURL(urlString string, fromID uint64, to int64) (*url.URL, error) {

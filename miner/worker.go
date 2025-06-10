@@ -538,11 +538,14 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 			// If sealing is running resubmit a new work cycle periodically to pull in
 			// higher priced transactions. Disable this overhead for pending blocks.
 			if w.IsRunning() && (w.chainConfig.Clique == nil || w.chainConfig.Clique.Period > 0) {
+				// TODO: In veblop, short circuit prevents the non-producers from producing blocks when
+				// the primary producer is down. Figure out a way to keep short circuiting but allow the non-producers to produce blocks.
+
 				// Short circuit if no new transaction arrives.
-				if w.newTxs.Load() == 0 {
-					timer.Reset(recommit)
-					continue
-				}
+				// if w.newTxs.Load() == 0 {
+				// 	timer.Reset(recommit)
+				// 	continue
+				// }
 				commit(true, commitInterruptResubmit)
 			}
 

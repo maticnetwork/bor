@@ -40,3 +40,29 @@ func (h *HeimdallGRPCClient) GetSpan(ctx context.Context, spanID uint64) (*types
 
 	return resSpan, nil
 }
+
+func (h *HeimdallGRPCClient) GetLatestSpan(ctx context.Context) (*types.Span, error) {
+	log.Info("Fetching latest span")
+
+	var err error
+
+	// Start the timer and set the request type on the context.
+	start := time.Now()
+	ctx = heimdall.WithRequestType(ctx, heimdall.LatestSpanRequest)
+
+	// Defer the metrics call.
+	defer func() {
+		heimdall.SendMetrics(ctx, start, err == nil)
+	}()
+
+	res, err := h.borQueryClient.GetLatestSpan(ctx, &types.QueryLatestSpanRequest{})
+	if err != nil {
+		return nil, err
+	}
+
+	resSpan := res.GetSpan()
+
+	log.Info("Fetched latest span")
+
+	return &resSpan, nil
+}

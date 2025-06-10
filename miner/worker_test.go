@@ -17,6 +17,7 @@
 package miner
 
 import (
+	"errors"
 	"math/big"
 	"os"
 	"sync/atomic"
@@ -72,6 +73,7 @@ func testGenerateBlockAndImport(t *testing.T, isClique bool, isBor bool) {
 		chainConfig = *params.BorUnittestChainConfig
 
 		engine, ctrl = getFakeBorFromConfig(t, &chainConfig)
+		defer engine.Close()
 		defer ctrl.Finish()
 	} else {
 		if isClique {
@@ -401,6 +403,9 @@ func getFakeBorFromConfig(t *testing.T, chainConfig *params.ChainConfig) (consen
 	heimdallWSClient := mocks.NewMockIHeimdallWSClient(ctrl)
 
 	heimdallClientMock.EXPECT().GetSpan(gomock.Any(), uint64(0)).Return(&span0, nil).AnyTimes()
+	heimdallClientMock.EXPECT().GetSpan(gomock.Any(), uint64(1)).Return(nil, errors.New("span not found")).AnyTimes()
+	heimdallClientMock.EXPECT().GetLatestSpan(gomock.Any()).Return(&span0, nil).AnyTimes()
+	heimdallClientMock.EXPECT().FetchMilestone(gomock.Any()).Return(nil, nil).AnyTimes()
 	heimdallClientMock.EXPECT().Close().AnyTimes()
 
 	contractMock := bor.NewMockGenesisContract(ctrl)
@@ -755,6 +760,7 @@ func testCommitInterruptExperimentBorContract(t *testing.T, delay uint, txCount 
 	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelInfo, true)))
 
 	engine, _ = getFakeBorFromConfig(t, chainConfig)
+	defer engine.Close()
 
 	w, b, _ := newTestWorker(t, chainConfig, engine, rawdb.NewMemoryDatabase(), true, delay, opcodeDelay)
 	defer w.close()
@@ -808,6 +814,7 @@ func testCommitInterruptExperimentBor(t *testing.T, delay uint, txCount int, opc
 	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelInfo, true)))
 
 	engine, ctrl = getFakeBorFromConfig(t, chainConfig)
+	defer engine.Close()
 
 	w, b, _ := newTestWorker(t, chainConfig, engine, rawdb.NewMemoryDatabase(), true, delay, opcodeDelay)
 	defer func() {
@@ -858,6 +865,7 @@ func TestCommitInterruptExperimentBor_NewTxFlow(t *testing.T) {
 	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelInfo, true)))
 
 	engine, ctrl = getFakeBorFromConfig(t, chainConfig)
+	defer engine.Close()
 
 	w, b, _ := newTestWorker(t, chainConfig, engine, rawdb.NewMemoryDatabase(), true, uint(0), uint(0))
 	defer func() {
@@ -959,6 +967,7 @@ func BenchmarkBorMining(b *testing.B) {
 	heimdallClientMock := mocks.NewMockIHeimdallClient(ctrl)
 	heimdallWSClient := mocks.NewMockIHeimdallWSClient(ctrl)
 	heimdallClientMock.EXPECT().GetSpan(gomock.Any(), uint64(0)).Return(&span0, nil).AnyTimes()
+	heimdallClientMock.EXPECT().GetLatestSpan(gomock.Any()).Return(&span0, nil).AnyTimes()
 
 	heimdallClientMock.EXPECT().Close().Times(1)
 
@@ -1061,6 +1070,7 @@ func BenchmarkBorMiningBlockSTMMetadata(b *testing.B) {
 	heimdallClientMock := mocks.NewMockIHeimdallClient(ctrl)
 	heimdallWSClient := mocks.NewMockIHeimdallWSClient(ctrl)
 	heimdallClientMock.EXPECT().GetSpan(gomock.Any(), uint64(0)).Return(&span0, nil).AnyTimes()
+	heimdallClientMock.EXPECT().GetLatestSpan(gomock.Any()).Return(&span0, nil).AnyTimes()
 	heimdallClientMock.EXPECT().Close().Times(1)
 
 	contractMock := bor.NewMockGenesisContract(ctrl)

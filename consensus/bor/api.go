@@ -47,7 +47,7 @@ func (api *API) GetSnapshot(number *rpc.BlockNumber) (*Snapshot, error) {
 		return nil, errUnknownBlock
 	}
 
-	return api.bor.snapshot(api.chain, header.Number.Uint64(), header.Hash(), nil)
+	return api.bor.snapshot(api.chain, header, nil, false)
 }
 
 type BlockSigners struct {
@@ -209,7 +209,7 @@ func (api *API) GetSnapshotAtHash(hash common.Hash) (*Snapshot, error) {
 		return nil, errUnknownBlock
 	}
 
-	return api.bor.snapshot(api.chain, header.Number.Uint64(), header.Hash(), nil)
+	return api.bor.snapshot(api.chain, header, nil, false)
 }
 
 // GetSigners retrieves the list of authorized signers at the specified block.
@@ -226,7 +226,7 @@ func (api *API) GetSigners(number *rpc.BlockNumber) ([]common.Address, error) {
 		return nil, errUnknownBlock
 	}
 
-	snap, err := api.bor.snapshot(api.chain, header.Number.Uint64(), header.Hash(), nil)
+	snap, err := api.bor.snapshot(api.chain, header, nil, false)
 
 	if err != nil {
 		return nil, err
@@ -242,7 +242,7 @@ func (api *API) GetSignersAtHash(hash common.Hash) ([]common.Address, error) {
 		return nil, errUnknownBlock
 	}
 
-	snap, err := api.bor.snapshot(api.chain, header.Number.Uint64(), header.Hash(), nil)
+	snap, err := api.bor.snapshot(api.chain, header, nil, false)
 
 	if err != nil {
 		return nil, err

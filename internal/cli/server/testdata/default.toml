@@ -75,7 +75,7 @@ devfakeauthor = false
   extradata = ""
   gaslimit = 30000000
   gasprice = "25000000000"
-  recommit = "2m5s"
+  recommit = "1s"
   commitinterrupt = true
 
 [jsonrpc]

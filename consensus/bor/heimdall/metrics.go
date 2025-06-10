@@ -20,6 +20,7 @@ type (
 const (
 	StateSyncRequest       requestType = "state-sync"
 	SpanRequest            requestType = "span"
+	LatestSpanRequest      requestType = "latest-span"
 	CheckpointRequest      requestType = "checkpoint"
 	CheckpointCountRequest requestType = "checkpoint-count"
 	MilestoneRequest       requestType = "milestone"

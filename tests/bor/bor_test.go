@@ -379,7 +379,7 @@ func TestInsertingSpanSizeBlocks(t *testing.T) {
 	defer _bor.Close()
 
 	span0 := createMockSpan(addr, chain.Config().ChainID.String())
-	_, currentSpan := loadSpanFromFile(t)
+	currentSpan := loadSpanFromFile(t)
 
 	// Create mock heimdall client
 	ctrl := gomock.NewController(t)
@@ -440,7 +440,7 @@ func TestFetchStateSyncEvents(t *testing.T) {
 	currentValidators := span0.ValidatorSet.Validators
 
 	// Load mock span 0
-	res, _ := loadSpanFromFile(t)
+	res := loadSpanFromFile(t)
 
 	// reate mock bor spanner
 	spanner := getMockedSpanner(t, currentValidators)
@@ -506,7 +506,7 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 	span0 := createMockSpan(addr, chain.Config().ChainID.String())
 
 	// Load mock span 1
-	res, _ := loadSpanFromFile(t)
+	res := loadSpanFromFile(t)
 
 	spanner := getMockedSpanner(t, span0.ValidatorSet.Validators)
 	_bor.SetSpanner(spanner)
@@ -601,7 +601,7 @@ func TestOutOfTurnSigning(t *testing.T) {
 
 	span0 := createMockSpan(addr, chain.Config().ChainID.String())
 
-	_, heimdallSpan := loadSpanFromFile(t)
+	heimdallSpan := loadSpanFromFile(t)
 	proposer := valset.NewValidator(addr, 10)
 	heimdallSpan.ValidatorSet.Validators = append(heimdallSpan.ValidatorSet.Validators, proposer)
 
@@ -703,7 +703,7 @@ func TestSignerNotFound(t *testing.T) {
 
 	span0 := createMockSpan(addr, chain.Config().ChainID.String())
 
-	_, heimdallSpan := loadSpanFromFile(t)
+	heimdallSpan := loadSpanFromFile(t)
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
