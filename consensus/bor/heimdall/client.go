@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"runtime/debug"
 	"sort"
 	"time"
 
@@ -307,6 +308,7 @@ func FetchWithRetry[T any](ctx context.Context, client http.Client, url *url.URL
 retryLoop:
 	for {
 		log.Info("Retrying again in 5 seconds to fetch data from Heimdall", "path", url.Path, "attempt", attempt)
+		log.Info("Stack trace on heimdall spans", "trace", string(debug.Stack()))
 
 		attempt++
 
