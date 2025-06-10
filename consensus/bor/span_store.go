@@ -103,6 +103,7 @@ func (s *SpanStore) spanById(ctx context.Context, spanId uint64) (*span.Heimdall
 				var err error
 				response, err = s.heimdallClient.GetSpanV2(ctx, spanId)
 				if err == nil {
+					currentSpan = span.ConvertV2SpanToV1Span(response)
 					return true
 				}
 				log.Error("Error while fetching heimdallv2 span", "error", err)
@@ -136,6 +137,7 @@ func (s *SpanStore) spanById(ctx context.Context, spanId uint64) (*span.Heimdall
 			var err error
 			response, err = s.heimdallClient.GetSpanV1(ctx, spanId)
 			if err == nil {
+				currentSpan = response
 				return true
 			}
 			log.Error("Error while fetching heimdallv1 span", "error", err)
@@ -151,12 +153,20 @@ func (s *SpanStore) spanById(ctx context.Context, spanId uint64) (*span.Heimdall
 					log.Error("Error while saving heimdallv1 span id to db", "error", err)
 					return false
 				}
+
+				currentSpan = response
+
 				return true
 			}
 
 			return false
 		})
 	}
+
+	if currentSpan == nil {
+		return nil, fmt.Errorf("span not found for id %d", spanId)
+	}
+
 	s.store.Add(spanId, currentSpan)
 	if currentSpan.Span.Id > s.latestKnownSpanId {
 		s.latestKnownSpanId = currentSpan.Id
