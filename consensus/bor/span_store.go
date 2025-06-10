@@ -96,10 +96,10 @@ func (s *SpanStore) spanById(ctx context.Context, spanId uint64) (*span.Heimdall
 			}
 		}
 
-		if hmm.IsHeimdallV2 {
-			var response *borTypes.Span
+		retryWithBackoff(func() bool {
+			if hmm.IsHeimdallV2 {
+				var response *borTypes.Span
 
-			retryWithBackoff(func() bool {
 				var err error
 				response, err = s.heimdallClient.GetSpanV2(ctx, spanId)
 				if err == nil {
@@ -122,40 +122,40 @@ func (s *SpanStore) spanById(ctx context.Context, spanId uint64) (*span.Heimdall
 						log.Error("Error while saving heimdallv2 span id to db", "error", err)
 						return false
 					}
+
+					currentSpan = span.ConvertV2SpanToV1Span(response)
+
 					return true
 				}
-				return false
-			})
 
-			currentSpan = span.ConvertV2SpanToV1Span(response)
-		} else {
+				return false
+			}
+
 			var response *span.HeimdallSpan
 
-			retryWithBackoff(func() bool {
-				var err error
-				response, err = s.heimdallClient.GetSpanV1(ctx, spanId)
-				if err == nil {
-					return true
-				}
-				log.Error("Error while fetching heimdallv1 span", "error", err)
-				response = s.getLatestHeimdallSpanV1()
-				if response != nil {
-					originalSpanID := response.Id
-					response.Id = spanId
-					spanLength := getSpanLength(response.StartBlock, response.EndBlock)
-					response.StartBlock = getSpanStartBlock(originalSpanID, response.StartBlock, spanLength)
-					response.EndBlock = getSpanEndBlock(response.StartBlock, spanLength)
+			var err error
+			response, err = s.heimdallClient.GetSpanV1(ctx, spanId)
+			if err == nil {
+				return true
+			}
+			log.Error("Error while fetching heimdallv1 span", "error", err)
+			response = s.getLatestHeimdallSpanV1()
+			if response != nil {
+				originalSpanID := response.Id
+				response.Id = spanId
+				spanLength := getSpanLength(response.StartBlock, response.EndBlock)
+				response.StartBlock = getSpanStartBlock(originalSpanID, response.StartBlock, spanLength)
+				response.EndBlock = getSpanEndBlock(response.StartBlock, spanLength)
 
-					if err := s.setStartBlockHeimdallSpanID(response.StartBlock, originalSpanID); err != nil {
-						log.Error("Error while saving heimdallv1 span id to db", "error", err)
-						return false
-					}
-					return true
+				if err := s.setStartBlockHeimdallSpanID(response.StartBlock, originalSpanID); err != nil {
+					log.Error("Error while saving heimdallv1 span id to db", "error", err)
+					return false
 				}
+				return true
+			}
 
-				return false
-			})
-		}
+			return false
+		})
 	}
 	s.store.Add(spanId, currentSpan)
 	if currentSpan.Span.Id > s.latestKnownSpanId {
