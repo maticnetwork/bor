@@ -2,10 +2,16 @@ package bor
 
 import (
 	"context"
+	"encoding/binary"
+	"encoding/json"
 	"fmt"
+	"time"
 
+	borTypes "github.com/0xPolygon/heimdall-v2/x/bor/types"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
 	"github.com/ethereum/go-ethereum/consensus/bor/valset"
+	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/ethdb"
 	hmm "github.com/ethereum/go-ethereum/heimdall-migration-monitor"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -27,9 +33,11 @@ type SpanStore struct {
 
 	latestKnownSpanId uint64
 	chainId           string
+
+	db ethdb.Database
 }
 
-func NewSpanStore(heimdallClient IHeimdallClient, spanner Spanner, chainId string) SpanStore {
+func NewSpanStore(heimdallClient IHeimdallClient, spanner Spanner, chainId string, db ethdb.Database) SpanStore {
 	cache, _ := lru.NewARC(10)
 	return SpanStore{
 		store:             cache,
@@ -37,6 +45,7 @@ func NewSpanStore(heimdallClient IHeimdallClient, spanner Spanner, chainId strin
 		spanner:           spanner,
 		latestKnownSpanId: 0,
 		chainId:           chainId,
+		db:                db,
 	}
 }
 
@@ -47,41 +56,169 @@ func (s *SpanStore) spanById(ctx context.Context, spanId uint64) (*span.Heimdall
 		currentSpan, _ = value.(*span.HeimdallSpan)
 	}
 
-	if currentSpan == nil {
-		var err error
-		if s.heimdallClient == nil {
-			if spanId == 0 {
-				currentSpan, err = getMockSpan0(ctx, s.spanner, s.chainId)
-				if err != nil {
-					log.Warn("Unable to fetch span from heimdall", "id", spanId, "err", err)
-					return nil, err
-				}
-			} else {
-				return nil, fmt.Errorf("unable to create test span without heimdall client for id %d", spanId)
-			}
-		} else {
-			if hmm.IsHeimdallV2 {
-				spanV2, err := s.heimdallClient.GetSpanV2(ctx, spanId)
-				if err != nil {
-					log.Warn("Unable to fetch span v2 from heimdall", "id", spanId, "err", err)
-					return nil, err
-				}
-				currentSpan = span.ConvertV2SpanToV1Span(spanV2)
-			} else {
-				currentSpan, err = s.heimdallClient.GetSpanV1(ctx, spanId)
-				if err != nil {
-					log.Warn("Unable to fetch span v1 from heimdall", "id", spanId, "err", err)
-					return nil, err
-				}
-			}
-		}
-		s.store.Add(spanId, currentSpan)
-		if currentSpan.Span.Id > s.latestKnownSpanId {
-			s.latestKnownSpanId = currentSpan.Id
-		}
+	if currentSpan != nil {
+		return currentSpan, nil
 	}
 
-	return currentSpan, nil
+	var err error
+	if s.heimdallClient == nil {
+		if spanId == 0 {
+			currentSpan, err = getMockSpan0(ctx, s.spanner, s.chainId)
+			if err != nil {
+				log.Warn("Unable to fetch span from heimdall", "id", spanId, "err", err)
+				return nil, err
+			}
+		} else {
+			return nil, fmt.Errorf("unable to create test span without heimdall client for id %d", spanId)
+		}
+	} else {
+		getSpanLength := func(startBlock, endBlock uint64) uint64 {
+			return endBlock - startBlock
+		}
+		getSpanStartBlock := func(latestSpanId, latestSpanStartBlock, spanLength uint64) uint64 {
+			return latestSpanStartBlock + ((latestSpanId - spanId) * spanLength)
+		}
+		getSpanEndBlock := func(startBlock uint64, spanLength uint64) uint64 {
+			return startBlock + spanLength
+		}
+		retryWithBackoff := func(exec func() bool) {
+			i := 1
+			for {
+				if done := exec(); done {
+					return
+				}
+
+				time.Sleep(time.Duration(i) * time.Second)
+
+				if i < 5 {
+					i++
+				}
+			}
+		}
+
+		if hmm.IsHeimdallV2 {
+			var response *borTypes.Span
+
+			retryWithBackoff(func() bool {
+				var err error
+				response, err = s.heimdallClient.GetSpanV2(ctx, spanId)
+				if err == nil {
+					return true
+				}
+				log.Error("Error while fetching heimdallv2 span", "error", err)
+				response = s.getLatestHeimdallSpanV2()
+				if response != nil {
+					if spanId < response.Id {
+						log.Error("Span id is less than latest heimdallv2 span id, using latest span", "spanId", spanId, "latestSpanId", response.Id)
+						return true
+					}
+					originalSpanID := response.Id
+					response.Id = spanId
+					spanLength := getSpanLength(response.StartBlock, response.EndBlock)
+					response.StartBlock = getSpanStartBlock(originalSpanID, response.StartBlock, spanLength)
+					response.EndBlock = getSpanEndBlock(response.StartBlock, spanLength)
+
+					if err := s.setStartBlockHeimdallSpanID(response.StartBlock, originalSpanID); err != nil {
+						log.Error("Error while saving heimdallv2 span id to db", "error", err)
+						return false
+					}
+					return true
+				}
+				return false
+			})
+
+			currentSpan = span.ConvertV2SpanToV1Span(response)
+		} else {
+			var response *span.HeimdallSpan
+
+			retryWithBackoff(func() bool {
+				var err error
+				response, err = s.heimdallClient.GetSpanV1(ctx, spanId)
+				if err == nil {
+					return true
+				}
+				log.Error("Error while fetching heimdallv1 span", "error", err)
+				response = s.getLatestHeimdallSpanV1()
+				if response != nil {
+					originalSpanID := response.Id
+					response.Id = spanId
+					spanLength := getSpanLength(response.StartBlock, response.EndBlock)
+					response.StartBlock = getSpanStartBlock(originalSpanID, response.StartBlock, spanLength)
+					response.EndBlock = getSpanEndBlock(response.StartBlock, spanLength)
+
+					if err := s.setStartBlockHeimdallSpanID(response.StartBlock, originalSpanID); err != nil {
+						log.Error("Error while saving heimdallv1 span id to db", "error", err)
+						return false
+					}
+					return true
+				}
+
+				return false
+			})
+		}
+	}
+	s.store.Add(spanId, currentSpan)
+	if currentSpan.Span.Id > s.latestKnownSpanId {
+		s.latestKnownSpanId = currentSpan.Id
+	}
+
+	return nil, nil
+}
+
+func (s *SpanStore) setStartBlockHeimdallSpanID(startBlock, spanID uint64) error {
+	spanIDBytes := make([]byte, 8)
+	binary.BigEndian.PutUint64(spanIDBytes, spanID)
+
+	startBlockBytes := make([]byte, 8)
+	binary.BigEndian.PutUint64(startBlockBytes, startBlock)
+
+	if err := s.db.Put(append(rawdb.SpanStartBlockToHeimdallSpanIDKey, startBlockBytes...), spanIDBytes); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *SpanStore) getLatestHeimdallSpanV1() *span.HeimdallSpan {
+	storedSpanBytes, err := s.db.Get(rawdb.LastHeimdallV1SpanKey)
+	if err != nil {
+		log.Error("Error while fetching heimdallv1 span from db", "error", err)
+		return nil
+	}
+
+	if len(storedSpanBytes) == 0 {
+		log.Info("No heimdallv1 span found in db")
+		return nil
+	}
+
+	var storedSpan span.HeimdallSpan
+	if err := json.Unmarshal(storedSpanBytes, &storedSpan); err != nil {
+		log.Error("Error while unmarshalling heimdallv1 span", "error", err)
+		return nil
+	}
+
+	return &storedSpan
+}
+
+func (s *SpanStore) getLatestHeimdallSpanV2() *borTypes.Span {
+	storedSpanBytes, err := s.db.Get(rawdb.LastHeimdallV2SpanKey)
+	if err != nil {
+		log.Error("Error while fetching heimdallv2 span from db", "error", err)
+		return nil
+	}
+
+	if len(storedSpanBytes) == 0 {
+		log.Info("No heimdallv2 span found in db")
+		return nil
+	}
+
+	var storedSpan borTypes.Span
+	if err := json.Unmarshal(storedSpanBytes, &storedSpan); err != nil {
+		log.Error("Error while unmarshalling heimdallv2 span", "error", err)
+		return nil
+	}
+
+	return &storedSpan
 }
 
 // spanByBlockNumber returns a span given a block number. It fetches span from heimdall if not found in cache. It
