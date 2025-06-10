@@ -970,7 +970,7 @@ mainloop:
 			// Check for the global flag and context to interrupt block building on timeout.
 			// We use the global flag because it's cheap to check for an atomic boolean than
 			// checking if we received any value in context.Done channel.
-			if common.Interrupted.Load() {
+			if common.InterruptBlockBuilding.Load() {
 				select {
 				case <-w.interruptCtx.Done():
 					txCommitInterruptCounter.Inc(1)
@@ -1575,14 +1575,14 @@ func getInterruptTimer(interruptCtx context.Context, number, timestamp uint64) (
 	interruptCtx, cancel := context.WithTimeout(interruptCtx, delay)
 
 	// Reset the global flag when timer starts for building a new block.
-	common.Interrupted.Store(false)
+	common.InterruptBlockBuilding.Store(false)
 
 	go func() {
 		<-interruptCtx.Done()
 
 		// Toggle the global flag to indicate commit transactions loop and EVM interpreter loop
 		// to stop block building.
-		common.Interrupted.Store(true)
+		common.InterruptBlockBuilding.Store(true)
 
 		if interruptCtx.Err() != context.Canceled {
 			log.Info("Commit Interrupt. Pre-committing the current block", "block", number)

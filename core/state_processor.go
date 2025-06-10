@@ -97,7 +97,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
 		// Check for the global flag and context to interrupt block building on timeout.
-		if interruptCtx != nil && common.Interrupted.Load() {
+		if interruptCtx != nil && common.InterruptBlockBuilding.Load() {
 			select {
 			case <-interruptCtx.Done():
 				return nil, interruptCtx.Err()
