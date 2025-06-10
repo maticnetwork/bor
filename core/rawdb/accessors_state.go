@@ -282,3 +282,28 @@ func WriteWitness(db ethdb.KeyValueWriter, blockHash common.Hash, witness []byte
 		log.Crit("Failed to store witness", "err", err)
 	}
 }
+
+func DeleteWitness(db ethdb.KeyValueWriter, blockHash common.Hash) {
+	log.Debug("DeleteWitness", "blockHash", blockHash)
+	if err := db.Delete(witnessKey(blockHash)); err != nil {
+		log.Crit("Failed to remove witness", "err", err)
+	}
+}
+
+func ReadWitnessPruneCursor(db ethdb.KeyValueReader) *uint64 {
+	log.Debug("ReadWitnessCursor")
+	data, err := db.Get(witnessPruneCursorKey())
+	if err != nil || len(data) == 0 {
+		return nil
+	}
+
+	number := binary.BigEndian.Uint64(data)
+	return &number
+}
+
+func WriteWitnessPruneCursor(db ethdb.KeyValueWriter, cursor uint64) {
+	log.Debug("WriteWitnessPruneCursor", "cursor", cursor)
+	if err := db.Put(witnessPruneCursorKey(), encodeBlockNumber(cursor)); err != nil {
+		log.Crit("Failed to store witness", "err", err)
+	}
+}
