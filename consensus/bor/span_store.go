@@ -172,7 +172,7 @@ func (s *SpanStore) spanById(ctx context.Context, spanId uint64) (*span.Heimdall
 		s.latestKnownSpanId = currentSpan.Id
 	}
 
-	return nil, nil
+	return currentSpan, nil
 }
 
 func (s *SpanStore) setStartBlockHeimdallSpanID(startBlock, spanID uint64) error {
