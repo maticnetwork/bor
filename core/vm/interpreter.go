@@ -328,7 +328,7 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool, i
 		// Check for the global flag to interrupt block building on timeout. We use
 		// the global flag because it's cheap to check for an atomic boolean than
 		// checking if we received any value in context.Done channel.
-		if interruptCtx != nil && common.Interrupted.Load() {
+		if interruptCtx != nil && common.InterruptBlockBuilding.Load() {
 			// Also check if the context is done. This is needed because when we
 			// do read calls (via eth_call) from consensus, the global flag is
 			// set to true which leads to an interrupt which we don't want. As
@@ -529,7 +529,7 @@ func (in *EVMInterpreter) RunWithDelay(contract *Contract, input []byte, readOnl
 		// Check for the global flag to interrupt block building on timeout. We use
 		// the global flag because it's cheap to check for an atomic boolean than
 		// checking if we received any value in context.Done channel.
-		if interruptCtx != nil && common.Interrupted.Load() {
+		if interruptCtx != nil && common.InterruptBlockBuilding.Load() {
 			// Also check if the context is done. This is needed because when we
 			// do read calls (via eth_call) from consensus, the global flag is
 			// set to true which leads to an interrupt which we don't want. As
