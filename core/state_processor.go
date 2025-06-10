@@ -97,11 +97,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 
 	// Iterate over and process the individual transactions
 	for i, tx := range block.Transactions() {
-		if common.Interrupted.Load() {
-			log.Info("--- process: found commit interrupt due to global flag", "err", interruptCtx.Err())
-			return nil, interruptCtx.Err()
-		}
-		if interruptCtx != nil {
+		if interruptCtx != nil && common.Interrupted.Load() {
 			select {
 			case <-interruptCtx.Done():
 				log.Info("--- process: found commit interrupt due to context.Done")
