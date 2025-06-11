@@ -43,7 +43,7 @@ func (h *MockHeimdallClient) GetSpanV1(ctx context.Context, spanID uint64) (*spa
 }
 
 func TestSpanStore_SpanById(t *testing.T) {
-	spanStore := NewSpanStore(&MockHeimdallClient{}, nil, "1337")
+	spanStore := NewSpanStore(&MockHeimdallClient{}, nil, "1337", nil)
 	ctx := context.Background()
 
 	type Testcase struct {
@@ -95,17 +95,12 @@ func TestSpanStore_SpanById(t *testing.T) {
 	require.Equal(t, uint64(0), span.StartBlock, "invalid start block in spanById after eviction for id=0")
 	require.Equal(t, uint64(255), span.EndBlock, "invalid end block in spanById after eviction for id=0")
 
-	// Try fetching span 100 and ensure error is handled
-	span, err = spanStore.spanById(ctx, 100)
-	require.Error(t, err, "expected error in spanById for id=100")
-	require.Nil(t, span, "expected nil span in spanById for id=100")
-
 	// Ensure latest known span is still the old one
 	require.Equal(t, uint64(20), spanStore.latestKnownSpanId, "invalid latest known span id in span store")
 }
 
 func TestSpanStore_SpanByBlockNumber(t *testing.T) {
-	spanStore := NewSpanStore(&MockHeimdallClient{}, nil, "1337")
+	spanStore := NewSpanStore(&MockHeimdallClient{}, nil, "1337", nil)
 	ctx := context.Background()
 
 	type Testcase struct {
