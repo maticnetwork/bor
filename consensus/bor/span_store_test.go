@@ -43,7 +43,7 @@ func (h *MockHeimdallClient) GetSpanV1(ctx context.Context, spanID uint64) (*spa
 }
 
 func TestSpanStore_SpanById(t *testing.T) {
-	spanStore := NewSpanStore(&MockHeimdallClient{}, nil, "1337")
+	spanStore := NewSpanStore(&MockHeimdallClient{}, nil, "1337", nil)
 	ctx := context.Background()
 
 	type Testcase struct {
@@ -105,7 +105,7 @@ func TestSpanStore_SpanById(t *testing.T) {
 }
 
 func TestSpanStore_SpanByBlockNumber(t *testing.T) {
-	spanStore := NewSpanStore(&MockHeimdallClient{}, nil, "1337")
+	spanStore := NewSpanStore(&MockHeimdallClient{}, nil, "1337", nil)
 	ctx := context.Background()
 
 	type Testcase struct {
@@ -246,4 +246,34 @@ func (h *MockHeimdallClient) FetchLastNoAckMilestone(ctx context.Context) (strin
 
 func (h *MockHeimdallClient) Close() {
 	panic("implement me")
+}
+
+func TestEstimateSpanId(t *testing.T) {
+	type Testcase struct {
+		blockNumber uint64
+		expectedId  uint64
+	}
+
+	testcases := []Testcase{
+		{blockNumber: 0, expectedId: 0},
+		{blockNumber: 255, expectedId: 0},
+		{blockNumber: 256, expectedId: 1},
+		{blockNumber: 6655, expectedId: 1},
+		{blockNumber: 6656, expectedId: 2},
+		{blockNumber: 13055, expectedId: 2},
+	}
+
+	estimateSpanId := func(blockNumber uint64) uint64 {
+		if blockNumber > zerothSpanEnd {
+			return 1 + (blockNumber-zerothSpanEnd-1)/defaultSpanLength
+		}
+		return 0
+	}
+
+	for _, tc := range testcases {
+		t.Run(fmt.Sprintf("Block %d", tc.blockNumber), func(t *testing.T) {
+			id := estimateSpanId(tc.blockNumber)
+			require.Equal(t, tc.expectedId, id, "expected span id for block %d to be %d but got %d", tc.blockNumber, tc.expectedId, id)
+		})
+	}
 }

@@ -240,26 +240,32 @@ func (s *SpanStore) spanByBlockNumber(ctx context.Context, blockNumber uint64) (
 	// which can be avoided. Hence we estimate the span id from block number which updates the latest known span id. Note
 	// that we still check if the block number lies in the range of span before returning it.
 	estimatedSpanId := estimateSpanId(blockNumber)
+	log.Error("spanByBlockNumber called with block number", "blockNumber", blockNumber, "estimatedSpanId", estimatedSpanId)
 	// Ignore the return value of this span as we validate it later in the loop
 	_, err := s.spanById(ctx, estimatedSpanId)
 	if err != nil {
+		log.Error("Error while fetching span by id", "spanId", estimatedSpanId, "error", err)
 		return nil, err
 	}
+	log.Error("spanByBlockNumber updated latest known span id", "latestKnownSpanId", s.latestKnownSpanId)
 	// Iterate over all spans and check for number. This is to replicate the behaviour implemented in
 	// https://github.com/maticnetwork/genesis-contracts/blob/master/contracts/BorValidatorSet.template#L118-L134
 	// This logic is independent of the span length (bit extra effort but maintains equivalence) and will work
 	// for all span lengths (even if we change it in future).
 	latestKnownSpanId := s.latestKnownSpanId
 	for id := int(latestKnownSpanId); id >= 0; id-- {
+		log.Error("spanByBlockNumber checking span", "id", id, "blockNumber", blockNumber)
 		span, err := s.spanById(ctx, uint64(id))
 		if err != nil {
 			return nil, err
 		}
+		log.Error("spanByBlockNumber found span", "id", id, "span", span)
 		if blockNumber >= span.StartBlock && blockNumber <= span.EndBlock {
 			return span, nil
 		}
 		// Check if block number given is out of bounds
 		if id == int(latestKnownSpanId) && blockNumber > span.EndBlock {
+			log.Error("spanByBlockNumber block number is out of bounds", "id", id, "blockNumber", blockNumber, "spanEndBlock", span.EndBlock)
 			return getFutureSpan(ctx, uint64(id)+1, blockNumber, latestKnownSpanId, s)
 		}
 	}
