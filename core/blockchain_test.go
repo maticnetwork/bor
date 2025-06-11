@@ -4721,3 +4721,393 @@ func TestPragueRequests(t *testing.T) {
 		t.Fatalf("block %d: failed to insert into chain: %v", n, err)
 	}
 }
+
+// mockChainValidator is a mock implementation of ethereum.ChainValidator for testing
+type mockChainValidator struct {
+	hasMilestone     bool
+	milestoneNumber  uint64
+	milestoneHash    common.Hash
+	shouldFailHeader map[uint64]bool // block numbers that should fail verification
+}
+
+func (m *mockChainValidator) IsValidPeer(fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error) {
+	return true, nil
+}
+
+func (m *mockChainValidator) IsValidChain(currentHeader *types.Header, chain []*types.Header) (bool, error) {
+	return true, nil
+}
+
+func (m *mockChainValidator) GetWhitelistedCheckpoint() (bool, uint64, common.Hash) {
+	return false, 0, common.Hash{}
+}
+
+func (m *mockChainValidator) GetWhitelistedMilestone() (bool, uint64, common.Hash) {
+	return m.hasMilestone, m.milestoneNumber, m.milestoneHash
+}
+
+func (m *mockChainValidator) ProcessCheckpoint(endBlockNum uint64, endBlockHash common.Hash) {}
+
+func (m *mockChainValidator) ProcessMilestone(endBlockNum uint64, endBlockHash common.Hash) {}
+
+func (m *mockChainValidator) ProcessFutureMilestone(num uint64, hash common.Hash) {}
+
+func (m *mockChainValidator) PurgeWhitelistedCheckpoint() {}
+
+func (m *mockChainValidator) PurgeWhitelistedMilestone() {}
+
+func (m *mockChainValidator) LockMutex(endBlockNum uint64) bool { return true }
+
+func (m *mockChainValidator) UnlockMutex(doLock bool, milestoneId string, endBlockNum uint64, endBlockHash common.Hash) {
+}
+
+func (m *mockChainValidator) UnlockSprint(endBlockNum uint64) {}
+
+func (m *mockChainValidator) RemoveMilestoneID(milestoneId string) {}
+
+func (m *mockChainValidator) GetMilestoneIDsList() []string { return nil }
+
+// mockEngine that can fail header verification for specific block numbers
+type mockFailingEngine struct {
+	*ethash.Ethash
+	shouldFailHeader      map[uint64]bool
+	allowInitialInsertion bool // Allow initial insertion to succeed
+	insertionComplete     bool // Track when insertion is complete
+}
+
+func (m *mockFailingEngine) VerifyHeaders(chain consensus.ChainHeaderReader, headers []*types.Header) (chan<- struct{}, <-chan error) {
+	abort := make(chan struct{})
+	results := make(chan error, len(headers))
+
+	go func() {
+		defer close(results)
+		for _, header := range headers {
+			select {
+			case <-abort:
+				return
+			default:
+				// If we're allowing initial insertion and it's not complete yet, succeed
+				if m.allowInitialInsertion && !m.insertionComplete {
+					results <- nil
+				} else if m.shouldFailHeader != nil && m.shouldFailHeader[header.Number.Uint64()] {
+					results <- errors.New("mock header verification failure")
+				} else {
+					results <- nil
+				}
+			}
+		}
+	}()
+
+	return abort, results
+}
+
+func (m *mockFailingEngine) markInsertionComplete() {
+	m.insertionComplete = true
+}
+
+// TestHeaderVerificationLoop tests the background header verification functionality
+func TestHeaderVerificationLoop(t *testing.T) {
+	testHeaderVerificationLoop(t, rawdb.HashScheme)
+	testHeaderVerificationLoop(t, rawdb.PathScheme)
+}
+
+func testHeaderVerificationLoop(t *testing.T, scheme string) {
+	// Test case 1: Valid chain - no rewinds should happen
+	t.Run("ValidChain", func(t *testing.T) {
+		engine := ethash.NewFaker()
+		genesis := &Genesis{
+			Config:  params.TestChainConfig,
+			BaseFee: big.NewInt(params.InitialBaseFee),
+		}
+
+		// Create a mock validator that has a finalized block at height 3
+		mockValidator := &mockChainValidator{
+			hasMilestone:    true,
+			milestoneNumber: 3,
+			milestoneHash:   common.HexToHash("0x123"),
+		}
+
+		// Generate blocks
+		_, blocks, _ := GenerateChainWithGenesis(genesis, engine, 8, nil)
+
+		// Create blockchain with mock validator
+		chain, err := NewBlockChain(rawdb.NewMemoryDatabase(), DefaultCacheConfigWithScheme(scheme), genesis, nil, engine, vm.Config{}, nil, nil, mockValidator)
+		if err != nil {
+			t.Fatalf("failed to create blockchain: %v", err)
+		}
+		defer chain.Stop()
+
+		// Insert blocks
+		if _, err := chain.InsertChain(blocks); err != nil {
+			t.Fatalf("failed to insert chain: %v", err)
+		}
+
+		currentHead := chain.CurrentBlock()
+		initialHead := currentHead.Number.Uint64()
+
+		// Wait a bit for the verification loop to run
+		time.Sleep(3 * time.Second)
+
+		// Head should not have changed since all headers are valid
+		newHead := chain.CurrentBlock()
+		if newHead.Number.Uint64() != initialHead {
+			t.Errorf("Head should not have changed, got %d, want %d", newHead.Number.Uint64(), initialHead)
+		}
+	})
+
+	// Test case 2: Invalid header at block 6 - should rewind to block 5
+	t.Run("InvalidHeaderRewind", func(t *testing.T) {
+		failingHeaders := map[uint64]bool{6: true} // Block 6 will fail verification
+		engine := &mockFailingEngine{
+			Ethash:                ethash.NewFaker(),
+			shouldFailHeader:      failingHeaders,
+			allowInitialInsertion: true, // Allow initial insertion to succeed
+		}
+
+		// Create a config with VeBlop enabled
+		config := *params.TestChainConfig
+		config.Bor = &params.BorConfig{
+			VeBlopBlock: big.NewInt(0), // Enable VeBlop from genesis
+		}
+
+		genesis := &Genesis{
+			Config:  &config,
+			BaseFee: big.NewInt(params.InitialBaseFee),
+		}
+
+		// Create a mock validator that has a finalized block at height 3
+		mockValidator := &mockChainValidator{
+			hasMilestone:    true,
+			milestoneNumber: 3,
+			milestoneHash:   common.HexToHash("0x123"),
+		}
+
+		// Generate blocks
+		_, blocks, _ := GenerateChainWithGenesis(genesis, engine.Ethash, 8, nil)
+
+		// Create blockchain with mock validator and failing engine
+		chain, err := NewBlockChain(rawdb.NewMemoryDatabase(), DefaultCacheConfigWithScheme(scheme), genesis, nil, engine, vm.Config{}, nil, nil, mockValidator)
+		if err != nil {
+			t.Fatalf("failed to create blockchain: %v", err)
+		}
+		defer chain.Stop()
+
+		// Insert blocks (this should succeed initially)
+		if _, err := chain.InsertChain(blocks); err != nil {
+			t.Fatalf("failed to insert chain: %v", err)
+		}
+
+		// Verify all blocks were imported correctly
+		currentHead := chain.CurrentBlock()
+		if currentHead.Number.Uint64() != 8 {
+			t.Fatalf("blocks not imported correctly, got head %d, want %d", currentHead.Number.Uint64(), 5)
+		}
+
+		// Mark insertion as complete so verification will start failing
+		engine.markInsertionComplete()
+
+		// Wait for the verification loop to detect the invalid header and rewind
+		time.Sleep(3 * time.Second)
+
+		// Head should have been rewound to block 5 (last valid block before the failing block 6)
+		newHead := chain.CurrentBlock()
+		if newHead.Number.Uint64() != 5 {
+			t.Errorf("Head should have been rewound to %d, got %d", 5, newHead.Number.Uint64())
+		}
+	})
+
+	// Test case 3: No finalized block - verification should not run
+	t.Run("NoFinalizedBlock", func(t *testing.T) {
+		engine := ethash.NewFaker()
+		genesis := &Genesis{
+			Config:  params.TestChainConfig,
+			BaseFee: big.NewInt(params.InitialBaseFee),
+		}
+
+		// Create a mock validator with no finalized block
+		mockValidator := &mockChainValidator{
+			hasMilestone: false,
+		}
+
+		// Generate blocks
+		_, blocks, _ := GenerateChainWithGenesis(genesis, engine, 5, nil)
+
+		// Create blockchain with mock validator
+		chain, err := NewBlockChain(rawdb.NewMemoryDatabase(), DefaultCacheConfigWithScheme(scheme), genesis, nil, engine, vm.Config{}, nil, nil, mockValidator)
+		if err != nil {
+			t.Fatalf("failed to create blockchain: %v", err)
+		}
+		defer chain.Stop()
+
+		// Insert blocks
+		if _, err := chain.InsertChain(blocks); err != nil {
+			t.Fatalf("failed to insert chain: %v", err)
+		}
+
+		initialHead := chain.CurrentBlock().Number.Uint64()
+
+		// Wait a bit
+		time.Sleep(3 * time.Second)
+
+		// Head should not have changed since there's no finalized block to verify against
+		newHead := chain.CurrentBlock()
+		if newHead.Number.Uint64() != initialHead {
+			t.Errorf("Head should not have changed, got %d, want %d", newHead.Number.Uint64(), initialHead)
+		}
+	})
+
+	// Test case 4: Current head at finalized block - no verification needed
+	t.Run("HeadAtFinalizedBlock", func(t *testing.T) {
+		engine := ethash.NewFaker()
+		genesis := &Genesis{
+			Config:  params.TestChainConfig,
+			BaseFee: big.NewInt(params.InitialBaseFee),
+		}
+
+		// Generate blocks
+		_, blocks, _ := GenerateChainWithGenesis(genesis, engine, 5, nil)
+
+		// Create a mock validator where finalized block equals current head
+		mockValidator := &mockChainValidator{
+			hasMilestone:    true,
+			milestoneNumber: 5, // Same as head
+			milestoneHash:   blocks[4].Hash(),
+		}
+
+		// Create blockchain with mock validator
+		chain, err := NewBlockChain(rawdb.NewMemoryDatabase(), DefaultCacheConfigWithScheme(scheme), genesis, nil, engine, vm.Config{}, nil, nil, mockValidator)
+		if err != nil {
+			t.Fatalf("failed to create blockchain: %v", err)
+		}
+		defer chain.Stop()
+
+		// Insert blocks
+		if _, err := chain.InsertChain(blocks); err != nil {
+			t.Fatalf("failed to insert chain: %v", err)
+		}
+
+		initialHead := chain.CurrentBlock().Number.Uint64()
+
+		// Wait a bit
+		time.Sleep(3 * time.Second)
+
+		// Head should not have changed since current head equals finalized block
+		newHead := chain.CurrentBlock()
+		if newHead.Number.Uint64() != initialHead {
+			t.Errorf("Head should not have changed, got %d, want %d", newHead.Number.Uint64(), initialHead)
+		}
+	})
+
+	// Test case 5: Verify proper shutdown when blockchain stops
+	t.Run("ProperShutdown", func(t *testing.T) {
+		engine := ethash.NewFaker()
+		genesis := &Genesis{
+			Config:  params.TestChainConfig,
+			BaseFee: big.NewInt(params.InitialBaseFee),
+		}
+
+		mockValidator := &mockChainValidator{
+			hasMilestone:    true,
+			milestoneNumber: 2,
+			milestoneHash:   common.HexToHash("0x123"),
+		}
+
+		// Generate blocks
+		_, blocks, _ := GenerateChainWithGenesis(genesis, engine, 5, nil)
+
+		// Create blockchain
+		chain, err := NewBlockChain(rawdb.NewMemoryDatabase(), DefaultCacheConfigWithScheme(scheme), genesis, nil, engine, vm.Config{}, nil, nil, mockValidator)
+		if err != nil {
+			t.Fatalf("failed to create blockchain: %v", err)
+		}
+
+		// Insert blocks
+		if _, err := chain.InsertChain(blocks); err != nil {
+			t.Fatalf("failed to insert chain: %v", err)
+		}
+
+		time.Sleep(1 * time.Second)
+
+		chain.Stop()
+	})
+}
+
+// TestVerifyPendingHeaders tests the verifyPendingHeaders method directly
+func TestVerifyPendingHeaders(t *testing.T) {
+	testVerifyPendingHeaders(t, rawdb.HashScheme)
+	testVerifyPendingHeaders(t, rawdb.PathScheme)
+}
+
+func testVerifyPendingHeaders(t *testing.T, scheme string) {
+	engine := ethash.NewFaker()
+	genesis := &Genesis{
+		Config:  params.TestChainConfig,
+		BaseFee: big.NewInt(params.InitialBaseFee),
+	}
+
+	// Generate blocks
+	_, blocks, _ := GenerateChainWithGenesis(genesis, engine, 8, nil)
+
+	// Test with mock validator
+	mockValidator := &mockChainValidator{
+		hasMilestone:    true,
+		milestoneNumber: 3,
+		milestoneHash:   common.HexToHash("0x123"),
+	}
+
+	// Create blockchain
+	chain, err := NewBlockChain(rawdb.NewMemoryDatabase(), DefaultCacheConfigWithScheme(scheme), genesis, nil, engine, vm.Config{}, nil, nil, mockValidator)
+	if err != nil {
+		t.Fatalf("failed to create blockchain: %v", err)
+	}
+	defer chain.Stop()
+
+	// Insert blocks
+	if _, err := chain.InsertChain(blocks); err != nil {
+		t.Fatalf("failed to insert chain: %v", err)
+	}
+
+	initialHead := chain.CurrentBlock().Number.Uint64()
+
+	// Call verifyPendingHeaders directly - should not rewind since all headers are valid
+	chain.verifyPendingHeaders()
+
+	// Head should not have changed
+	newHead := chain.CurrentBlock().Number.Uint64()
+	if newHead != initialHead {
+		t.Errorf("Head should not have changed, got %d, want %d", newHead, initialHead)
+	}
+}
+
+// TestHeaderVerificationWithNilChecker tests that verification is skipped when checker is nil
+func TestHeaderVerificationWithNilChecker(t *testing.T) {
+	engine := ethash.NewFaker()
+	genesis := &Genesis{
+		Config:  params.TestChainConfig,
+		BaseFee: big.NewInt(params.InitialBaseFee),
+	}
+
+	// Create blockchain with nil checker
+	chain, err := NewBlockChain(rawdb.NewMemoryDatabase(), DefaultCacheConfigWithScheme(rawdb.HashScheme), genesis, nil, engine, vm.Config{}, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("failed to create blockchain: %v", err)
+	}
+	defer chain.Stop()
+
+	// Generate and insert blocks
+	_, blocks, _ := GenerateChainWithGenesis(genesis, engine, 5, nil)
+	if _, err := chain.InsertChain(blocks); err != nil {
+		t.Fatalf("failed to insert chain: %v", err)
+	}
+
+	initialHead := chain.CurrentBlock().Number.Uint64()
+
+	// Wait a bit - the verification loop should not run since checker is nil
+	time.Sleep(2 * time.Second)
+
+	// Head should not have changed
+	newHead := chain.CurrentBlock().Number.Uint64()
+	if newHead != initialHead {
+		t.Errorf("Head should not have changed when checker is nil, got %d, want %d", newHead, initialHead)
+	}
+}
