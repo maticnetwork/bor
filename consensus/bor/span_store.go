@@ -73,13 +73,13 @@ func (s *SpanStore) spanById(ctx context.Context, spanId uint64) (*span.Heimdall
 		}
 	} else {
 		getSpanLength := func(startBlock, endBlock uint64) uint64 {
-			return endBlock - startBlock
+			return (endBlock - startBlock) + 1
 		}
 		getSpanStartBlock := func(latestSpanId, latestSpanStartBlock, spanLength uint64) uint64 {
-			return latestSpanStartBlock + ((latestSpanId - spanId) * spanLength)
+			return latestSpanStartBlock + ((spanId - latestSpanId) * spanLength)
 		}
 		getSpanEndBlock := func(startBlock uint64, spanLength uint64) uint64 {
-			return startBlock + spanLength
+			return startBlock + spanLength - 1
 		}
 		retryWithBackoff := func(exec func() bool) {
 			i := 1
