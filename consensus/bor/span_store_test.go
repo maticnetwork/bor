@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/0xPolygon/heimdall-v2/x/bor/types"
+	borTypes "github.com/0xPolygon/heimdall-v2/x/bor/types"
 	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
@@ -276,4 +277,30 @@ func TestEstimateSpanId(t *testing.T) {
 			require.Equal(t, tc.expectedId, id, "expected span id for block %d to be %d but got %d", tc.blockNumber, tc.expectedId, id)
 		})
 	}
+}
+
+func TestCalcSpan(t *testing.T) {
+	spanId := uint64(2) // Example span ID
+	getSpanLength := func(startBlock, endBlock uint64) uint64 {
+		return (endBlock - startBlock) + 1
+	}
+	getSpanStartBlock := func(latestSpanId, latestSpanStartBlock, spanLength uint64) uint64 {
+		return latestSpanStartBlock + ((spanId - latestSpanId) * spanLength)
+	}
+	getSpanEndBlock := func(startBlock uint64, spanLength uint64) uint64 {
+		return startBlock + spanLength - 1
+	}
+	response := &borTypes.Span{
+		Id:         1,
+		StartBlock: 256,
+		EndBlock:   6655,
+	}
+
+	originalSpanID := response.Id
+	response.Id = spanId
+	spanLength := getSpanLength(response.StartBlock, response.EndBlock)
+	response.StartBlock = getSpanStartBlock(originalSpanID, response.StartBlock, spanLength)
+	response.EndBlock = getSpanEndBlock(response.StartBlock, spanLength)
+
+	require.Equal(t, uint64(15360), response.StartBlock, "expected start block to be 15360 but got %d", response.StartBlock)
 }
