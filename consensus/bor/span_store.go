@@ -108,6 +108,7 @@ func (s *SpanStore) spanById(ctx context.Context, spanId uint64) (*span.Heimdall
 				}
 				log.Error("Error while fetching heimdallv2 span", "error", err)
 				response = s.getLatestHeimdallSpanV2()
+				log.Error("Response from latest heimdallv2 span", "response", response)
 				if response != nil {
 					if spanId < response.Id {
 						log.Error("Span id is less than latest heimdallv2 span id, using latest span", "spanId", spanId, "latestSpanId", response.Id)
