@@ -86,7 +86,6 @@ const (
 
 	fetchStateSyncEventsFormatV2 = "from_id=%d&to_time=%s&limit=%d"
 	fetchStateSyncEventsPathV2   = "clerk/time"
-	fetchStateSyncListV2         = "clerk/event-records/list"
 
 	fetchCheckpointV2      = "/checkpoints/%s"
 	fetchCheckpointCountV2 = "/checkpoints/count"
