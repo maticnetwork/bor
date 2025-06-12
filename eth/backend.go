@@ -704,10 +704,18 @@ func (s *Ethereum) startMilestoneWhitelistService() {
 
 	// If heimdall ws is available use WS subscription to new milestone events instead of polling
 	if hmm.IsHeimdallV2 && bor != nil && bor.HeimdallWSClient != nil {
-		if err := s.subscribeAndHandleMilestone(context.Background(), ethHandler, bor); err != nil {
-			log.Error("Error subscribing to milestone events", "err", err)
-			// If we fail to subscribe, we fall back to polling
-			log.Warn("Falling back to polling for milestones")
+		for {
+			if err := s.subscribeAndHandleMilestone(context.Background(), ethHandler, bor); err != nil {
+				log.Error("Error subscribing to milestone events", "err", err)
+			}
+
+			// If we fail to subscribe, retry after a delay
+			select {
+			case <-s.closeCh:
+				return
+			case <-time.After(tickerDuration):
+				// Continue to retry subscribing to milestone event
+			}
 		}
 	}
 
