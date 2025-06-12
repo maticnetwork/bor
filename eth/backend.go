@@ -697,17 +697,21 @@ func (s *Ethereum) startCheckpointWhitelistService() {
 func (s *Ethereum) startMilestoneWhitelistService() {
 	ethHandler, bor, _ := s.getHandler()
 
+	const (
+		tickerDuration = 2 * time.Second
+		fnName         = "whitelist milestone"
+	)
+
 	// If heimdall ws is available use WS subscription to new milestone events instead of polling
 	if hmm.IsHeimdallV2 && bor != nil && bor.HeimdallWSClient != nil {
-		s.subscribeAndHandleMilestone(context.Background(), ethHandler, bor)
-	} else {
-		const (
-			tickerDuration = 2 * time.Second
-			fnName         = "whitelist milestone"
-		)
-
-		s.retryHeimdallHandler(s.fetchAndHandleMilestone, tickerDuration, whitelistTimeout, fnName)
+		if err := s.subscribeAndHandleMilestone(context.Background(), ethHandler, bor); err != nil {
+			log.Error("Error subscribing to milestone events", "err", err)
+			// If we fail to subscribe, we fall back to polling
+			log.Warn("Falling back to polling for milestones")
+		}
 	}
+
+	s.retryHeimdallHandler(s.fetchAndHandleMilestone, tickerDuration, whitelistTimeout, fnName)
 }
 
 func (s *Ethereum) startNoAckMilestoneService() {
