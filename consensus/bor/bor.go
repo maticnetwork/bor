@@ -1312,7 +1312,7 @@ func (c *Bor) needToCommitSpan(currentSpan *span.Span, headerNumber uint64) bool
 	}
 
 	// If the current block is the first block of the last sprint in the current span.
-	// But here we should skip the check for the 0th span, as it will cause the span to be committed to be committed twice.
+	// But here we should skip the check for the 0th span, as it will cause the span to be committed twice.
 	sprintLength := c.config.CalculateSprint(headerNumber)
 	if currentSpan.EndBlock > sprintLength && currentSpan.EndBlock-sprintLength+1 == headerNumber {
 		if currentSpan.Id == 0 {

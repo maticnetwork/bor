@@ -43,7 +43,7 @@ var (
 		Value: "",
 	}
 
-	// HeimdallgRPCAddressFlag flag for heimdall gRPC address
+	// HeimdallWSAddressFlag flag for heimdall websocket subscription service
 	HeimdallWSAddressFlag = &cli.StringFlag{
 		Name:  "bor.heimdallWS",
 		Usage: "Address of Heimdall WS Subscription service",
