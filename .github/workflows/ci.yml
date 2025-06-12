@@ -64,7 +64,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: 1.23.x
+          go-version: 1.24.3
 
       - name: Install dependencies on Linux
         if: runner.os == 'Linux'
