@@ -689,7 +689,7 @@ func (s *Ethereum) startCheckpointWhitelistService() {
 		fnName         = "whitelist checkpoint"
 	)
 
-	s.retryHeimdallHandler(s.fetchAndHandleWhitelistCheckpoint, tickerDuration, whitelistTimeout, fnName)
+	s.retryHeimdallHandler(s.fetchAndHandleWhitelistCheckpoint, tickerDuration, whitelistTimeout)
 }
 
 // startMilestoneWhitelistService starts the goroutine to fetch milestiones and update the
@@ -699,7 +699,6 @@ func (s *Ethereum) startMilestoneWhitelistService() {
 
 	const (
 		tickerDuration = 2 * time.Second
-		fnName         = "whitelist milestone"
 	)
 
 	// If heimdall ws is available use WS subscription to new milestone events instead of polling
@@ -719,32 +718,30 @@ func (s *Ethereum) startMilestoneWhitelistService() {
 		}
 	}
 
-	s.retryHeimdallHandler(s.fetchAndHandleMilestone, tickerDuration, whitelistTimeout, fnName)
+	s.retryHeimdallHandler(s.fetchAndHandleMilestone, tickerDuration, whitelistTimeout)
 }
 
 func (s *Ethereum) startNoAckMilestoneService() {
 	const (
 		tickerDuration = 6 * time.Second
-		fnName         = "no-ack-milestone service"
 	)
 
-	s.retryHeimdallHandler(s.handleNoAckMilestone, tickerDuration, noAckMilestoneTimeout, fnName)
+	s.retryHeimdallHandler(s.handleNoAckMilestone, tickerDuration, noAckMilestoneTimeout)
 }
 
 func (s *Ethereum) startNoAckMilestoneByIDService() {
 	const (
 		tickerDuration = 1 * time.Minute
-		fnName         = "no-ack-milestone-by-id service"
 	)
 
-	s.retryHeimdallHandler(s.handleNoAckMilestoneByID, tickerDuration, noAckMilestoneTimeout, fnName)
+	s.retryHeimdallHandler(s.handleNoAckMilestoneByID, tickerDuration, noAckMilestoneTimeout)
 }
 
-func (s *Ethereum) retryHeimdallHandler(fn heimdallHandler, tickerDuration time.Duration, timeout time.Duration, fnName string) {
-	retryHeimdallHandler(fn, tickerDuration, timeout, fnName, s.closeCh, s.getHandler)
+func (s *Ethereum) retryHeimdallHandler(fn heimdallHandler, tickerDuration time.Duration, timeout time.Duration) {
+	retryHeimdallHandler(fn, tickerDuration, timeout, s.closeCh, s.getHandler)
 }
 
-func retryHeimdallHandler(fn heimdallHandler, tickerDuration time.Duration, timeout time.Duration, fnName string, closeCh chan struct{}, getHandler func() (*ethHandler, *bor.Bor, error)) {
+func retryHeimdallHandler(fn heimdallHandler, tickerDuration time.Duration, timeout time.Duration, closeCh chan struct{}, getHandler func() (*ethHandler, *bor.Bor, error)) {
 	// a shortcut helps with tests and early exit
 	select {
 	case <-closeCh:
