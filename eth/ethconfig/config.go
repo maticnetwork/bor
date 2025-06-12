@@ -239,8 +239,9 @@ func CreateConsensusEngine(chainConfig *params.ChainConfig, ethConfig *Config, d
 
 			var heimdallClient bor.IHeimdallClient
 			if ethConfig.RunHeimdall && ethConfig.UseHeimdallApp {
-				// TODO HV2: Uncomment once FetchMilestoneID is implemented
+				// TODO: Running heimdall from bor is not tested yet.
 				// heimdallClient = heimdallapp.NewHeimdallAppClient()
+				panic("Running heimdall from bor is not implemented yet. Please use heimdall gRPC or HTTP client instead.")
 			} else if ethConfig.HeimdallgRPCAddress != "" {
 				heimdallClient = heimdallgrpc.NewHeimdallGRPCClient(ethConfig.HeimdallgRPCAddress)
 			} else {
