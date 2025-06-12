@@ -368,7 +368,7 @@ func geth(ctx *cli.Context) error {
 		_, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
 
-		// TODO HV2: needs to be tested!
+		// TODO: Running heimdall from bor is not tested yet.
 		go func() {
 			rootCmd := heimdalld.NewRootCmd()
 			if err := svrcmd.Execute(rootCmd, "HD", heimdallApp.DefaultNodeHome); err != nil {
