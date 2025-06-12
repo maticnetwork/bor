@@ -16,7 +16,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	borTypes "github.com/0xPolygon/heimdall-v2/x/bor/types"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	lru "github.com/hashicorp/golang-lru"
 	"github.com/holiman/uint256"
@@ -270,7 +269,7 @@ func New(
 	signatures, _ := lru.NewARC(inmemorySignatures)
 
 	// Create a new span store
-	spanStore := NewSpanStore(heimdallClient, spanner, chainConfig.ChainID.String())
+	spanStore := NewSpanStore(heimdallClient, spanner, chainConfig.ChainID.String(), db)
 
 	c := &Bor{
 		chainConfig:            chainConfig,
@@ -1200,48 +1199,6 @@ func (c *Bor) checkAndCommitSpan(
 	return nil
 }
 
-func (c *Bor) getLatestHeimdallSpanV1() *span.HeimdallSpan {
-	storedSpanBytes, err := c.db.Get(rawdb.LastHeimdallV1SpanKey)
-	if err != nil {
-		log.Error("Error while fetching heimdallv1 span from db", "error", err)
-		return nil
-	}
-
-	if len(storedSpanBytes) == 0 {
-		log.Info("No heimdallv1 span found in db")
-		return nil
-	}
-
-	var storedSpan span.HeimdallSpan
-	if err := json.Unmarshal(storedSpanBytes, &storedSpan); err != nil {
-		log.Error("Error while unmarshalling heimdallv1 span", "error", err)
-		return nil
-	}
-
-	return &storedSpan
-}
-
-func (c *Bor) getLatestHeimdallSpanV2() *borTypes.Span {
-	storedSpanBytes, err := c.db.Get(rawdb.LastHeimdallV2SpanKey)
-	if err != nil {
-		log.Error("Error while fetching heimdallv2 span from db", "error", err)
-		return nil
-	}
-
-	if len(storedSpanBytes) == 0 {
-		log.Info("No heimdallv2 span found in db")
-		return nil
-	}
-
-	var storedSpan borTypes.Span
-	if err := json.Unmarshal(storedSpanBytes, &storedSpan); err != nil {
-		log.Error("Error while unmarshalling heimdallv2 span", "error", err)
-		return nil
-	}
-
-	return &storedSpan
-}
-
 const getSpanTimeout = 2 * time.Second
 
 func (c *Bor) updateLatestHeimdallSpanV1() {
@@ -1258,7 +1215,7 @@ func (c *Bor) updateLatestHeimdallSpanV1() {
 		return
 	}
 
-	storedSpan := c.getLatestHeimdallSpanV1()
+	storedSpan := c.spanStore.getLatestHeimdallSpanV1()
 
 	storedSpanID := uint64(0)
 
@@ -1299,7 +1256,7 @@ func (c *Bor) updateLatestHeimdallSpanV2() {
 		return
 	}
 
-	storedSpan := c.getLatestHeimdallSpanV2()
+	storedSpan := c.spanStore.getLatestHeimdallSpanV2()
 
 	storedSpanID := uint64(0)
 
@@ -1324,20 +1281,6 @@ func (c *Bor) updateLatestHeimdallSpanV2() {
 	}
 
 	log.Info("Latest heimdallv2 span is updated", "storedSpanID", storedSpanID, "respSpanID", respSpan.Id)
-}
-
-func (c *Bor) setStartBlockHeimdallSpanID(startBlock, spanID uint64) error {
-	spanIDBytes := make([]byte, 8)
-	binary.BigEndian.PutUint64(spanIDBytes, spanID)
-
-	startBlockBytes := make([]byte, 8)
-	binary.BigEndian.PutUint64(startBlockBytes, startBlock)
-
-	if err := c.db.Put(append(rawdb.SpanStartBlockToHeimdallSpanIDKey, startBlockBytes...), spanIDBytes); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func (c *Bor) getStartBlockHeimdallSpanID(startBlock uint64) (uint64, error) {
@@ -1429,123 +1372,37 @@ func (c *Bor) FetchAndCommitSpan(
 			producers = append(producers, m)
 		}
 	} else {
-		getSpanLength := func(startBlock, endBlock uint64) uint64 {
-			return endBlock - startBlock
+		response, err := c.spanStore.spanById(ctx, newSpanID)
+		if err != nil {
+			return fmt.Errorf("failed to get span by id %d: %w", newSpanID, err)
 		}
-		getSpanStartBlock := func() uint64 {
-			return header.Number.Uint64() + c.config.CalculateSprint(header.Number.Uint64())
-		}
-		getSpanEndBlock := func(startBlock uint64, spanLength uint64) uint64 {
-			return startBlock + spanLength
-		}
-		retryWithBackoff := func(exec func() bool) {
-			i := 1
-			for {
-				if done := exec(); done {
-					return
-				}
-
-				time.Sleep(time.Duration(i) * time.Second)
-
-				if i < 5 {
-					i++
-				}
-			}
+		if response == nil {
+			return fmt.Errorf("span with id %d not found", newSpanID)
 		}
 
-		if hmm.IsHeimdallV2 {
-			var response *borTypes.Span
+		minSpan = span.Span{
+			Id:         response.Id,
+			StartBlock: response.StartBlock,
+			EndBlock:   response.EndBlock,
+		}
+		chainId = response.ChainID
 
-			retryWithBackoff(func() bool {
-				var err error
-				response, err = c.HeimdallClient.GetSpanV2(ctx, newSpanID)
-				if err == nil {
-					return true
-				}
-				log.Error("Error while fetching heimdallv2 span", "error", err)
-				response = c.getLatestHeimdallSpanV2()
-				if response != nil {
-					originalSpanID := response.Id
-					response.Id = newSpanID
-					spanLength := getSpanLength(response.StartBlock, response.EndBlock)
-					response.StartBlock = getSpanStartBlock()
-					response.EndBlock = getSpanEndBlock(response.StartBlock, spanLength)
-
-					if err := c.setStartBlockHeimdallSpanID(response.StartBlock, originalSpanID); err != nil {
-						log.Error("Error while saving heimdallv2 span id to db", "error", err)
-						return false
-					}
-					return true
-				}
-				return false
-			})
-
-			minSpan = span.Span{
-				Id:         response.Id,
-				StartBlock: response.StartBlock,
-				EndBlock:   response.EndBlock,
+		for _, val := range response.ValidatorSet.Validators {
+			m := stakeTypes.MinimalVal{
+				ID:          val.ID,
+				VotingPower: uint64(val.VotingPower),
+				Signer:      val.Address,
 			}
-			chainId = response.BorChainId
+			validators = append(validators, m)
+		}
 
-			for _, val := range response.ValidatorSet.Validators {
-				validators = append(validators, val.MinimalVal())
+		for _, val := range response.SelectedProducers {
+			m := stakeTypes.MinimalVal{
+				ID:          val.ID,
+				VotingPower: uint64(val.VotingPower),
+				Signer:      val.Address,
 			}
-
-			for _, val := range response.SelectedProducers {
-				producers = append(producers, val.MinimalVal())
-			}
-		} else {
-			var response *span.HeimdallSpan
-
-			retryWithBackoff(func() bool {
-				var err error
-				response, err = c.HeimdallClient.GetSpanV1(ctx, newSpanID)
-				if err == nil {
-					return true
-				}
-				log.Error("Error while fetching heimdallv1 span", "error", err)
-				response = c.getLatestHeimdallSpanV1()
-				if response != nil {
-					originalSpanID := response.Id
-					response.Id = newSpanID
-					spanLength := getSpanLength(response.StartBlock, response.EndBlock)
-					response.StartBlock = getSpanStartBlock()
-					response.EndBlock = getSpanEndBlock(response.StartBlock, spanLength)
-
-					if err := c.setStartBlockHeimdallSpanID(response.StartBlock, originalSpanID); err != nil {
-						log.Error("Error while saving heimdallv1 span id to db", "error", err)
-						return false
-					}
-					return true
-				}
-
-				return false
-			})
-
-			minSpan = span.Span{
-				Id:         response.Id,
-				StartBlock: response.StartBlock,
-				EndBlock:   response.EndBlock,
-			}
-			chainId = response.ChainID
-
-			for _, val := range response.ValidatorSet.Validators {
-				m := stakeTypes.MinimalVal{
-					ID:          val.ID,
-					VotingPower: uint64(val.VotingPower),
-					Signer:      val.Address,
-				}
-				validators = append(validators, m)
-			}
-
-			for _, val := range response.SelectedProducers {
-				m := stakeTypes.MinimalVal{
-					ID:          val.ID,
-					VotingPower: uint64(val.VotingPower),
-					Signer:      val.Address,
-				}
-				producers = append(producers, m)
-			}
+			producers = append(producers, m)
 		}
 	}
 
