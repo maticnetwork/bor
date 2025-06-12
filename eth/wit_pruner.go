@@ -63,16 +63,19 @@ func (wp *witPruner) pruneWitness() {
 		cursor = &cutoff
 	}
 
+	log.Info("PruneWitness: Starting Prune Routine", "cursor", *cursor, "cutoff", cutoff)
 	batch := wp.database.NewBatch()
 	if *cursor < cutoff {
 		allHashes := rawdb.ReadAllHashesInRange(wp.database, *cursor, cutoff-1)
 
+		log.Info("PruneWitness: Deleting old hashes", "count", len(allHashes))
 		for _, hash := range allHashes {
 			rawdb.DeleteWitness(batch, hash.Hash)
 		}
 		*cursor = cutoff
 	}
 
+	log.Info("PruneWitness: Updating cursor", "cursor", *cursor)
 	rawdb.WriteWitnessPruneCursor(batch, *cursor)
 
 	if err := batch.Write(); err != nil {
