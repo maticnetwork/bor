@@ -12,11 +12,6 @@ WORKDIR ${BOR_DIR}
 # Copy go.mod and go.sum first to leverage Docker's cache
 COPY go.mod go.sum ./
 
-# Configure git for SSH and install dependencies
-RUN --mount=type=ssh git config --global url."git@github.com:".insteadOf "https://github.com/" \
-  && mkdir -p ~/.ssh \
-  && ssh-keyscan github.com >> ~/.ssh/known_hosts
-
 # Download dependencies separately (this layer can be cached)
 RUN --mount=type=ssh go mod download
 
