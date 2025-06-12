@@ -303,6 +303,7 @@ type BlockChain struct {
 	stateSyncFeed    event.Feed                              // State sync feed
 	chain2HeadFeed   event.Feed                              // Reorg/NewHead/Fork data feed
 	chainSideFeed    event.Feed                              // Side chain data feed (removed from geth but needed in bor)
+	checker          ethereum.ChainValidator
 }
 
 // NewBlockChain returns a fully initialised block chain using information
@@ -355,6 +356,7 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 
 		borReceiptsCache: lru.NewCache[common.Hash, *types.Receipt](receiptsCacheLimit),
 		logger:           vmConfig.Tracer,
+		checker:          checker,
 	}
 
 	var err error
@@ -557,6 +559,9 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 	if txLookupLimit != nil {
 		bc.txIndexer = newTxIndexer(*txLookupLimit, bc)
 	}
+
+	// Start header verification loop
+	bc.startHeaderVerificationLoop()
 
 	return bc, nil
 }
@@ -3500,4 +3505,100 @@ func (bc *BlockChain) ProcessBlockWithWitnesses(block *types.Block, witness *sta
 		log.Info("Successfully self validated the block", "block", block.Number(), "hash", block.Hash())
 	}
 	return nil
+}
+
+// startHeaderVerificationLoop starts a background goroutine that periodically
+// verifies headers after the latest finalized block and rewinds the chain if
+// invalid headers are detected.
+func (bc *BlockChain) startHeaderVerificationLoop() {
+	if bc.checker == nil {
+		return // No checker available
+	}
+
+	bc.wg.Add(1)
+	go func() {
+		defer bc.wg.Done()
+		ticker := time.NewTicker(2 * time.Second)
+		defer ticker.Stop()
+
+		log.Info("Started header verification loop")
+
+		for {
+			select {
+			case <-bc.quit:
+				log.Info("Stopping header verification loop")
+				return
+			case <-ticker.C:
+				bc.verifyPendingHeaders()
+			}
+		}
+	}()
+}
+
+// verifyPendingHeaders checks headers after the latest finalized block
+// and rewinds the chain if invalid headers are found.
+func (bc *BlockChain) verifyPendingHeaders() {
+	// Get the latest finalized block
+	hasMilestone, milestoneNumber, _ := bc.checker.GetWhitelistedMilestone()
+	if !hasMilestone {
+		return // No finalized block yet
+	}
+
+	currentHead := bc.CurrentBlock()
+	if currentHead.Number.Uint64() <= milestoneNumber {
+		return // Nothing to verify
+	}
+
+	chainConfig := bc.Config()
+
+	// We don't need to verify headers before VeBlop
+	if !chainConfig.Bor.IsVeBlop(currentHead.Number) {
+		return // VeBlop is not enabled yet
+	}
+
+	// Collect headers from finalized block + 1 to current head
+	var headers []*types.Header
+	for i := milestoneNumber + 1; i <= currentHead.Number.Uint64(); i++ {
+		header := bc.GetHeaderByNumber(i)
+		if header == nil {
+			log.Debug("Missing header during verification", "number", i)
+			return // Missing header, skip verification
+		}
+		headers = append(headers, header)
+	}
+
+	if len(headers) == 0 {
+		return
+	}
+
+	log.Debug("Verifying pending headers", "from", headers[0].Number.Uint64(),
+		"to", headers[len(headers)-1].Number.Uint64(), "count", len(headers))
+
+	// Verify headers
+	abort, results := bc.engine.VerifyHeaders(bc, headers)
+	defer close(abort)
+
+	// Check results and find the last valid header
+	lastValidNumber := milestoneNumber
+	for _, header := range headers {
+		select {
+		case <-bc.quit:
+			return
+		case err := <-results:
+			if err != nil {
+				log.Warn("Invalid header detected during background verification",
+					"number", header.Number.Uint64(), "hash", header.Hash(), "err", err)
+				// Rewind to the last valid block
+				if lastValidNumber < currentHead.Number.Uint64() {
+					log.Warn("Rewinding chain due to invalid header",
+						"from", currentHead.Number.Uint64(), "to", lastValidNumber)
+					if err := bc.SetHead(lastValidNumber); err != nil {
+						log.Error("Failed to rewind chain", "err", err)
+					}
+				}
+				return
+			}
+			lastValidNumber = header.Number.Uint64()
+		}
+	}
 }
