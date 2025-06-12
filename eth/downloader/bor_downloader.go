@@ -575,13 +575,16 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td, ttd *
 		localHeight := d.blockchain.CurrentBlock().Number.Uint64()
 
 		// FastForward on Heimdall-v1 (only for test purposes)
-		// It just fastforward once and when it's done it writes an ephemeral TD in origin block to ensure parent to be queried
-		if localHeight == 0 {
+		// It just fastforward on start or with high difference between nodes and when it's done it writes an ephemeral TD in origin block to ensure parent to be queried
+		if localHeight == 0 || (int64(height)-int64(localHeight) > 100) {
 			origin = height
 			if db != nil {
 				rawdb.WriteTd(db, latest.Hash(), height, big.NewInt(int64(height)))
 			}
-			log.Info("StatelessSync; FastForwarding to latest block of peer", "blockNumber", height, "localHeight", localHeight)
+			log.Info("StatelessSync; FastForwarding to latest block of peer", "blockNumber", height, "localHeight", localHeight, "peer", p.id)
+		} else {
+			origin = localHeight
+			log.Info("StatelessSync; Keeping local height as origin to sync", "blockNumber", height, "localHeight", localHeight, "peer", p.id)
 		}
 	} else if !beaconMode {
 		// In legacy mode, reach out to the network and find the ancestor

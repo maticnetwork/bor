@@ -357,7 +357,7 @@ func NewBlockPruner(n *node.Node, oldAncientPath, newAncientPath string, BlockAm
 func (p *BlockPruner) backupOldDb(name string, cache, handles int, namespace string, readonly, interrupt bool) error {
 	log.Info("Backup old ancientDB", "oldAncientPath", p.oldAncientPath, "newAncientPath", p.newAncientPath)
 	// Open old db wrapper.
-	chainDb, err := p.node.OpenDatabaseWithFreezer(name, cache, handles, p.oldAncientPath, namespace, readonly, true, interrupt)
+	chainDb, err := p.node.OpenDatabaseWithFreezer(name, cache, handles, p.oldAncientPath, namespace, readonly, true, interrupt, false)
 	if err != nil {
 		return fmt.Errorf("failed to open ancient database: %v", err)
 	}
