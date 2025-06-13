@@ -24,9 +24,8 @@ func (m *CheckpointV2) UnmarshalJSON(data []byte) error {
 	temp := &struct {
 		StartBlock string `json:"start_block"`
 		EndBlock   string `json:"end_block"`
-
-		RootHash  string `json:"root_hash"`
-		Timestamp string `json:"timestamp"`
+		RootHash   string `json:"root_hash"`
+		Timestamp  string `json:"timestamp"`
 		*Alias
 	}{
 		Alias: (*Alias)(m),

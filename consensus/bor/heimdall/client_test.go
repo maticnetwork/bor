@@ -14,7 +14,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/network"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
-	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
 
 	"github.com/stretchr/testify/require"
 )
@@ -63,7 +62,7 @@ func CreateMockHeimdallServer(wg *sync.WaitGroup, port int, listener net.Listene
 	})
 
 	// Create a route for fetching milestone
-	mux.HandleFunc("/milestone/latest", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/milestones/latest", func(w http.ResponseWriter, r *http.Request) {
 		handler.GetMilestoneHandler()(w, r)
 	})
 
@@ -114,16 +113,29 @@ func TestFetchCheckpointFromMockHeimdall(t *testing.T) {
 	wg.Add(1)
 
 	// Initialize the fake handler and add a fake checkpoint handler function
+	type gRPCGatewayCheckpointV2 struct {
+		Proposer   common.Address `json:"proposer"`
+		StartBlock string         `json:"start_block"`
+		EndBlock   string         `json:"end_block"`
+		RootHash   string         `json:"root_hash"`
+		BorChainID string         `json:"bor_chain_id"`
+		Timestamp  string         `json:"timestamp"`
+	}
+
+	type gRPCGatewayCheckpointResponseV2 struct {
+		Result gRPCGatewayCheckpointV2 `json:"checkpoint"`
+	}
+
 	handler := &HttpHandlerFake{}
 	handler.handleFetchCheckpoint = func(w http.ResponseWriter, _ *http.Request) {
-		err := json.NewEncoder(w).Encode(checkpoint.CheckpointResponseV2{
-			Result: checkpoint.CheckpointV2{
+		err := json.NewEncoder(w).Encode(gRPCGatewayCheckpointResponseV2{
+			Result: gRPCGatewayCheckpointV2{
 				Proposer:   common.Address{},
-				StartBlock: 0,
-				EndBlock:   512,
-				RootHash:   common.Hash{},
+				StartBlock: "0",
+				EndBlock:   "512",
+				RootHash:   "dGVzdA==",
 				BorChainID: "15001",
-				Timestamp:  0,
+				Timestamp:  "0",
 			},
 		})
 
@@ -164,16 +176,32 @@ func TestFetchMilestoneFromMockHeimdall(t *testing.T) {
 	wg.Add(1)
 
 	// Initialize the fake handler and add a fake milestone handler function
+	type gRPCGatewayMilestoneV2 struct {
+		Proposer        common.Address `json:"proposer"`
+		StartBlock      string         `json:"start_block"`
+		EndBlock        string         `json:"end_block"`
+		Hash            string         `json:"hash"`
+		BorChainID      string         `json:"bor_chain_id"`
+		MilestoneID     string         `json:"milestone_id"`
+		Timestamp       string         `json:"timestamp"`
+		TotalDifficulty string         `json:"total_difficulty"`
+	}
+
+	type gRPCGatewayMilestoneResponseV2 struct {
+		Result gRPCGatewayMilestoneV2 `json:"milestone"`
+	}
+
 	handler := &HttpHandlerFake{}
 	handler.handleFetchMilestone = func(w http.ResponseWriter, _ *http.Request) {
-		err := json.NewEncoder(w).Encode(milestone.MilestoneResponseV2{
-			Result: milestone.MilestoneV2{
-				Proposer:   common.Address{},
-				StartBlock: 0,
-				EndBlock:   512,
-				Hash:       common.Hash{},
-				BorChainID: "15001",
-				Timestamp:  0,
+		err := json.NewEncoder(w).Encode(gRPCGatewayMilestoneResponseV2{
+			Result: gRPCGatewayMilestoneV2{
+				Proposer:        common.Address{},
+				StartBlock:      "0",
+				EndBlock:        "512",
+				Hash:            "dGVzdA==",
+				BorChainID:      "15001",
+				Timestamp:       "0",
+				TotalDifficulty: "0",
 			},
 		})
 
