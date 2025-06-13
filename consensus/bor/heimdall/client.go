@@ -92,6 +92,7 @@ const (
 
 	fetchV1Milestone      = "/milestone/latest"
 	fetchV2Milestone      = "/milestones/latest"
+	fetchMilestoneCountV1 = "/milestone/count"
 	fetchMilestoneCountV2 = "/milestones/count"
 
 	fetchSpanFormatV1 = "bor/span/%d"
@@ -350,19 +351,24 @@ func (h *HeimdallClient) FetchCheckpointCount(ctx context.Context) (int64, error
 
 // FetchMilestoneCount fetches the milestone count from heimdall
 func (h *HeimdallClient) FetchMilestoneCount(ctx context.Context) (int64, error) {
-	url, err := milestoneCountURL(h.urlString)
-	if err != nil {
-		return 0, err
-	}
-
 	ctx = WithRequestType(ctx, MilestoneCountRequest)
 
 	if hmm.IsHeimdallV2 {
+		url, err := milestoneCountV2URL(h.urlString)
+		if err != nil {
+			return 0, err
+		}
+
 		response, err := FetchWithRetry[milestone.MilestoneCountResponseV2](ctx, h.client, url, h.closeCh)
 		if err != nil {
 			return 0, err
 		}
 		return response.Count, nil
+	}
+
+	url, err := milestoneCountV1URL(h.urlString)
+	if err != nil {
+		return 0, err
 	}
 
 	response, err := FetchWithRetry[milestone.MilestoneCountResponseV1](ctx, h.client, url, h.closeCh)
@@ -590,7 +596,11 @@ func checkpointCountURL(urlString string) (*url.URL, error) {
 	return makeURL(urlString, fetchCheckpointCountV2, "")
 }
 
-func milestoneCountURL(urlString string) (*url.URL, error) {
+func milestoneCountV1URL(urlString string) (*url.URL, error) {
+	return makeURL(urlString, fetchMilestoneCountV1, "")
+}
+
+func milestoneCountV2URL(urlString string) (*url.URL, error) {
 	return makeURL(urlString, fetchMilestoneCountV2, "")
 }
 

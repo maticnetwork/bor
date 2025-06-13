@@ -75,6 +75,24 @@ type MilestoneResponseV2 struct {
 	Result MilestoneV2 `json:"milestone"`
 }
 
+func (m *MilestoneCountResponseV2) UnmarshalJSON(data []byte) error {
+	temp := &struct {
+		Count string `json:"count"`
+	}{}
+
+	if err := json.Unmarshal(data, temp); err != nil {
+		return err
+	}
+
+	count, err := strconv.ParseInt(temp.Count, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid count: %w", err)
+	}
+	m.Count = count
+
+	return nil
+}
+
 type MilestoneCountResponseV2 struct {
 	Count int64 `json:"count"`
 }

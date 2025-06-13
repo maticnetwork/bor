@@ -66,6 +66,24 @@ type CheckpointResponseV2 struct {
 	Result CheckpointV2 `json:"checkpoint"`
 }
 
+func (m *CheckpointCountResponseV2) UnmarshalJSON(data []byte) error {
+	temp := &struct {
+		Count string `json:"ack_count"`
+	}{}
+
+	if err := json.Unmarshal(data, temp); err != nil {
+		return err
+	}
+
+	count, err := strconv.ParseInt(temp.Count, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid count: %w", err)
+	}
+	m.Result = count
+
+	return nil
+}
+
 type CheckpointCountResponseV2 struct {
 	Result int64 `json:"ack_count"`
 }
