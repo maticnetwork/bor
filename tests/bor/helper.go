@@ -374,7 +374,7 @@ func sign(t *testing.T, header *types.Header, signer []byte, c *params.BorConfig
 }
 
 //nolint:unused,deadcode
-func stateSyncEventsPayload(t *testing.T) *heimdall.StateSyncEventsResponse {
+func stateSyncEventsPayload(t *testing.T) *heimdall.StateSyncEventsResponseV1 {
 	t.Helper()
 
 	stateData, err := os.ReadFile("./testdata/states.json")
@@ -382,7 +382,7 @@ func stateSyncEventsPayload(t *testing.T) *heimdall.StateSyncEventsResponse {
 		t.Fatalf("%s", err)
 	}
 
-	res := &heimdall.StateSyncEventsResponse{}
+	res := &heimdall.StateSyncEventsResponseV1{}
 	if err := json.Unmarshal(stateData, res); err != nil {
 		t.Fatalf("%s", err)
 	}
@@ -427,8 +427,8 @@ func getMockedHeimdallClient(t *testing.T, heimdallSpan *borTypes.Span) (*mocks.
 	ctrl := gomock.NewController(t)
 	h := mocks.NewMockIHeimdallClient(ctrl)
 
-	h.EXPECT().GetSpan(gomock.Any(), uint64(1)).Return(heimdallSpan, nil).AnyTimes()
-	h.EXPECT().StateSyncEvents(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*clerk.EventRecordWithTime{getSampleEventRecord(t)}, nil).AnyTimes()
+	h.EXPECT().GetSpanV1(gomock.Any(), uint64(1)).Return(heimdallSpan, nil).AnyTimes()
+	h.EXPECT().StateSyncEventsV1(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*clerk.EventRecordWithTime{getSampleEventRecord(t)}, nil).AnyTimes()
 
 	return h, ctrl
 }
@@ -463,10 +463,10 @@ func createMockHeimdall(ctrl *gomock.Controller, span0, span1 *span.HeimdallSpan
 	h := mocks.NewMockIHeimdallClient(ctrl)
 
 	h.EXPECT().Close().AnyTimes()
-	h.EXPECT().Span(gomock.Any(), uint64(0)).Return(span0, nil).AnyTimes()
-	h.EXPECT().Span(gomock.Any(), uint64(1)).Return(span1, nil).AnyTimes()
-	h.EXPECT().FetchCheckpoint(gomock.Any(), int64(-1)).Return(&checkpoint.Checkpoint{}, nil).AnyTimes()
-	h.EXPECT().FetchMilestone(gomock.Any()).Return(&milestone.Milestone{}, nil).AnyTimes()
+	h.EXPECT().GetSpanV1(gomock.Any(), uint64(0)).Return(span0, nil).AnyTimes()
+	h.EXPECT().GetSpanV1(gomock.Any(), uint64(1)).Return(span1, nil).AnyTimes()
+	h.EXPECT().FetchCheckpointV1(gomock.Any(), int64(-1)).Return(&checkpoint.Checkpoint{}, nil).AnyTimes()
+	h.EXPECT().FetchMilestoneV1(gomock.Any()).Return(&milestone.Milestone{}, nil).AnyTimes()
 	h.EXPECT().FetchLastNoAckMilestone(gomock.Any()).Return("", nil).AnyTimes()
 	h.EXPECT().FetchNoAckMilestone(gomock.Any(), string("test")).Return(nil).AnyTimes()
 
