@@ -643,6 +643,8 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header, com
 		processorCount++
 
 		go func() {
+			log.Info("######## Parallel processor running", "block", block.NumberU64())
+
 			parallelStatedb.StartPrefetcher("chain", nil)
 			pstart := time.Now()
 			res, err := bc.parallelProcessor.Process(block, parallelStatedb, bc.vmConfig, nil, ctx)
@@ -669,6 +671,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header, com
 		processorCount++
 
 		go func() {
+			log.Info("######## Normal processor running", "block", block.NumberU64(), "computeWitness", computeWitness)
 			var witness *stateless.Witness
 			if computeWitness {
 				witness, err = stateless.NewWitness(block.Header(), bc)
@@ -1901,6 +1904,7 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 		rawdb.WriteWitness(blockBatch, block.Hash(), witBuf.Bytes())
 	} else {
 		log.Debug("No witness to write", "block", block.NumberU64())
+		log.Info("######## No witness to write", "block", block.NumberU64())
 	}
 
 	if err := blockBatch.Write(); err != nil {
