@@ -25,7 +25,6 @@ import (
 	"slices"
 	"sort"
 	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -33,7 +32,6 @@ import (
 	heimdalld "github.com/0xPolygon/heimdall-v2/cmd/heimdalld/cmd"
 	svrcmd "github.com/cosmos/cosmos-sdk/server/cmd"
 	"github.com/ethereum/go-ethereum/accounts"
-	"github.com/ethereum/go-ethereum/accounts/keystore"
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/console/prompt"
@@ -469,40 +467,5 @@ func startNode(ctx *cli.Context, stack *node.Node, isConsole bool) {
 				}
 			}
 		}()
-	}
-}
-
-// unlockAccounts unlocks any account specifically requested.
-func unlockAccounts(ctx *cli.Context, stack *node.Node) {
-	var unlocks []string
-
-	inputs := strings.Split(ctx.String(utils.UnlockedAccountFlag.Name), ",")
-	for _, input := range inputs {
-		if trimmed := strings.TrimSpace(input); trimmed != "" {
-			unlocks = append(unlocks, trimmed)
-		}
-	}
-	// Short circuit if there is no account to unlock.
-	if len(unlocks) == 0 {
-		return
-	}
-	// If insecure account unlocking is not allowed if node's APIs are exposed to external.
-	// Print warning log to user and skip unlocking.
-	if !stack.Config().InsecureUnlockAllowed && stack.Config().ExtRPCEnabled() {
-		utils.Fatalf("Account unlock with HTTP access is forbidden!")
-	}
-
-	backends := stack.AccountManager().Backends(keystore.KeyStoreType)
-
-	if len(backends) == 0 {
-		log.Warn("Failed to unlock accounts, keystore is not available")
-		return
-	}
-
-	ks := backends[0].(*keystore.KeyStore)
-	passwords := utils.MakePasswordList(ctx)
-
-	for i, account := range unlocks {
-		unlockAccount(ks, account, i, passwords)
 	}
 }
