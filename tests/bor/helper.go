@@ -391,7 +391,7 @@ func stateSyncEventsPayload(t *testing.T) *heimdall.StateSyncEventsResponseV1 {
 }
 
 //nolint:unused,deadcode
-func loadSpanFromFile(t *testing.T) *borTypes.Span {
+func loadSpanFromFile(t *testing.T) *heimdall.SpanResponse {
 	t.Helper()
 
 	spanData, err := os.ReadFile("./testdata/span.json")
@@ -399,7 +399,7 @@ func loadSpanFromFile(t *testing.T) *borTypes.Span {
 		t.Fatalf("%s", err)
 	}
 
-	res := &borTypes.Span{}
+	res := &heimdall.SpanResponse{}
 
 	if err := json.Unmarshal(spanData, res); err != nil {
 		t.Fatalf("%s", err)
