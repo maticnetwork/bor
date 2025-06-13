@@ -20,6 +20,8 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
+
+	stakeTypes "github.com/0xPolygon/heimdall-v2/x/stake/types"
 )
 
 type ChainSpanner struct {
@@ -87,7 +89,7 @@ func (c *ChainSpanner) GetCurrentSpan(ctx context.Context, headerHash common.Has
 
 	// create new span
 	span := Span{
-		ID:         ret.Number.Uint64(),
+		Id:         ret.Number.Uint64(),
 		StartBlock: ret.StartBlock.Uint64(),
 		EndBlock:   ret.EndBlock.Uint64(),
 	}
@@ -287,41 +289,31 @@ func (c *ChainSpanner) GetCurrentValidatorsByHash(ctx context.Context, headerHas
 
 const method = "commitSpan"
 
-func (c *ChainSpanner) CommitSpan(ctx context.Context, heimdallSpan HeimdallSpan, state *state.StateDB, header *types.Header, chainContext core.ChainContext) error {
+func (c *ChainSpanner) CommitSpan(ctx context.Context, minimalSpan Span, validators, producers []stakeTypes.MinimalVal, state *state.StateDB, header *types.Header, chainContext core.ChainContext) error {
 	// get validators bytes
-	validators := make([]valset.MinimalVal, 0, len(heimdallSpan.ValidatorSet.Validators))
-	for _, val := range heimdallSpan.ValidatorSet.Validators {
-		validators = append(validators, val.MinimalVal())
-	}
-
 	validatorBytes, err := rlp.EncodeToBytes(validators)
 	if err != nil {
 		return err
 	}
 
 	// get producers bytes
-	producers := make([]valset.MinimalVal, 0, len(heimdallSpan.SelectedProducers))
-	for _, val := range heimdallSpan.SelectedProducers {
-		producers = append(producers, val.MinimalVal())
-	}
-
 	producerBytes, err := rlp.EncodeToBytes(producers)
 	if err != nil {
 		return err
 	}
 
 	log.Info("✅ Committing new span",
-		"id", heimdallSpan.ID,
-		"startBlock", heimdallSpan.StartBlock,
-		"endBlock", heimdallSpan.EndBlock,
+		"id", minimalSpan.Id,
+		"startBlock", minimalSpan.StartBlock,
+		"endBlock", minimalSpan.EndBlock,
 		"validatorBytes", hex.EncodeToString(validatorBytes),
 		"producerBytes", hex.EncodeToString(producerBytes),
 	)
 
 	data, err := c.validatorSet.Pack(method,
-		big.NewInt(0).SetUint64(heimdallSpan.ID),
-		big.NewInt(0).SetUint64(heimdallSpan.StartBlock),
-		big.NewInt(0).SetUint64(heimdallSpan.EndBlock),
+		big.NewInt(0).SetUint64(minimalSpan.Id),
+		big.NewInt(0).SetUint64(minimalSpan.StartBlock),
+		big.NewInt(0).SetUint64(minimalSpan.EndBlock),
 		validatorBytes,
 		producerBytes,
 	)

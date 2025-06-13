@@ -113,6 +113,7 @@ type Backend interface {
 	PurgeWhitelistedCheckpoint()
 	GetWhitelistedMilestone() (bool, uint64, common.Hash)
 	PurgeWhitelistedMilestone()
+	GetStartBlockHeimdallSpanID(ctx context.Context, startBlock uint64) (uint64, error)
 
 	// Networking related APIs
 	PeerStats() interface{}

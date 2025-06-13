@@ -11,14 +11,17 @@ import (
 	protoutils "github.com/maticnetwork/polyproto/utils"
 )
 
-func (h *HeimdallGRPCClient) Span(ctx context.Context, spanID uint64) (*span.HeimdallSpan, error) {
+func (h *HeimdallGRPCClient) GetSpanV1(ctx context.Context, spanID uint64) (*span.HeimdallSpan, error) {
 	req := &proto.SpanRequest{
 		ID: spanID,
 	}
 
 	log.Info("Fetching span", "spanID", spanID)
 
-	res, err := h.client.Span(ctx, req)
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, defaultTimeout)
+	defer cancel()
+
+	res, err := h.client.Span(ctxWithTimeout, req)
 	if err != nil {
 		return nil, err
 	}
@@ -28,10 +31,28 @@ func (h *HeimdallGRPCClient) Span(ctx context.Context, spanID uint64) (*span.Hei
 	return parseSpan(res.Result), nil
 }
 
+func (h *HeimdallGRPCClient) GetLatestSpanV1(ctx context.Context) (*span.HeimdallSpan, error) {
+	req := &proto.LatestSpanRequest{}
+
+	log.Info("Fetching latest span")
+
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, defaultTimeout)
+	defer cancel()
+
+	res, err := h.client.LatestSpan(ctxWithTimeout, req)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Info("Fetched latest span")
+
+	return parseSpan(res.Result), nil
+}
+
 func parseSpan(protoSpan *proto.Span) *span.HeimdallSpan {
 	resp := &span.HeimdallSpan{
 		Span: span.Span{
-			ID:         protoSpan.ID,
+			Id:         protoSpan.ID,
 			StartBlock: protoSpan.StartBlock,
 			EndBlock:   protoSpan.EndBlock,
 		},

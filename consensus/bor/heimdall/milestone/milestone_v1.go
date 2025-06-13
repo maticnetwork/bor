@@ -6,8 +6,8 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
-// milestone defines a response object type of bor milestone
-type Milestone struct {
+// MilestoneV1 defines a response object type of bor milestone
+type MilestoneV1 struct {
 	Proposer   common.Address `json:"proposer"`
 	StartBlock *big.Int       `json:"start_block"`
 	EndBlock   *big.Int       `json:"end_block"`
@@ -16,18 +16,18 @@ type Milestone struct {
 	Timestamp  uint64         `json:"timestamp"`
 }
 
-type MilestoneResponse struct {
-	Height string    `json:"height"`
-	Result Milestone `json:"result"`
+type MilestoneResponseV1 struct {
+	Height string      `json:"height"`
+	Result MilestoneV1 `json:"result"`
 }
 
-type MilestoneCount struct {
+type MilestoneCountV1 struct {
 	Count int64 `json:"count"`
 }
 
-type MilestoneCountResponse struct {
-	Height string         `json:"height"`
-	Result MilestoneCount `json:"result"`
+type MilestoneCountResponseV1 struct {
+	Height string           `json:"height"`
+	Result MilestoneCountV1 `json:"result"`
 }
 
 type MilestoneLastNoAck struct {

@@ -11,7 +11,7 @@ import (
 	protoutils "github.com/maticnetwork/polyproto/utils"
 )
 
-func (h *HeimdallGRPCClient) FetchCheckpointCount(ctx context.Context) (int64, error) {
+func (h *HeimdallGRPCClient) FetchCheckpointCountV1(ctx context.Context) (int64, error) {
 	log.Info("Fetching checkpoint count")
 
 	res, err := h.client.FetchCheckpointCount(ctx, nil)
@@ -24,7 +24,7 @@ func (h *HeimdallGRPCClient) FetchCheckpointCount(ctx context.Context) (int64, e
 	return res.Result.Result, nil
 }
 
-func (h *HeimdallGRPCClient) FetchCheckpoint(ctx context.Context, number int64) (*checkpoint.Checkpoint, error) {
+func (h *HeimdallGRPCClient) FetchCheckpointV1(ctx context.Context, number int64) (*checkpoint.CheckpointV1, error) {
 	req := &proto.FetchCheckpointRequest{
 		ID: number,
 	}
@@ -38,7 +38,7 @@ func (h *HeimdallGRPCClient) FetchCheckpoint(ctx context.Context, number int64) 
 
 	log.Info("Fetched checkpoint", "number", number)
 
-	checkpoint := &checkpoint.Checkpoint{
+	checkpoint := &checkpoint.CheckpointV1{
 		StartBlock: new(big.Int).SetUint64(res.Result.StartBlock),
 		EndBlock:   new(big.Int).SetUint64(res.Result.EndBlock),
 		RootHash:   protoutils.ConvertH256ToHash(res.Result.RootHash),

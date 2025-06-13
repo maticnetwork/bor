@@ -12,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/event"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
@@ -74,8 +75,10 @@ func (b *EthAPIBackend) GetVoteOnHash(ctx context.Context, starBlockNr uint64, e
 	isLocked := downloader.LockMutex(endBlockNr)
 
 	if !isLocked {
-		downloader.UnlockMutex(false, "", endBlockNr, common.Hash{})
-		return false, errors.New("whitelisted number or locked sprint number is more than the received end block number")
+		// We are not locking blocks for voting, anymore. We keep all forks until milestone is finalized.
+		// downloader.UnlockMutex(false, "", endBlockNr, common.Hash{})
+		log.Warn("whitelisted number or locked sprint number is more than the received end block number", "endBlockNr", endBlockNr)
+		// return false, errors.New("whitelisted number or locked sprint number is more than the received end block number")
 	}
 
 	if localEndBlockHash != hash {
@@ -127,4 +130,20 @@ func (b *EthAPIBackend) SubscribeStateSyncEvent(ch chan<- core.StateSyncEvent) e
 // SubscribeChain2HeadEvent subscribes to reorg/head/fork event
 func (b *EthAPIBackend) SubscribeChain2HeadEvent(ch chan<- core.Chain2HeadEvent) event.Subscription {
 	return b.eth.BlockChain().SubscribeChain2HeadEvent(ch)
+}
+
+func (b *EthAPIBackend) GetStartBlockHeimdallSpanID(ctx context.Context, startBlock uint64) (uint64, error) {
+	var api *bor.API
+
+	for _, _api := range b.eth.Engine().APIs(b.eth.BlockChain()) {
+		if _api.Namespace == "bor" {
+			api = _api.Service.(*bor.API)
+		}
+	}
+
+	if api == nil {
+		return 0, errBorEngineNotAvailable
+	}
+
+	return api.GetStartBlockHeimdallSpanID(startBlock)
 }

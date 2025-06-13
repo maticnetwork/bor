@@ -140,6 +140,16 @@ var (
 	FixedCommitteeRootKey = []byte("fixedRoot-") // bigEndian64(syncPeriod) -> committee root hash
 	SyncCommitteeKey      = []byte("committee-") // bigEndian64(syncPeriod) -> serialized committee
 
+	LastHeimdallV1SpanKey = []byte("heimdallV1Span") // heimdall v1 span key
+	LastHeimdallV2SpanKey = []byte("heimdallV2Span") // heimdall v2 span key
+
+	SpanStartBlockToHeimdallSpanIDKey = []byte("spanStartBlockToHeimdallSpanID-") // span start block to heimdall span id key
+
+	IsHeimdallV2Key = []byte("isHeimdallV2") // flag that says if we are working with heimdall v2
+
+	preimageCounter    = metrics.NewRegisteredCounter("db/preimage/total", nil)
+	preimageHitCounter = metrics.NewRegisteredCounter("db/preimage/hits", nil)
+
 	// new log index
 	filterMapsPrefix         = "fm-"
 	filterMapsRangeKey       = []byte(filterMapsPrefix + "R")
@@ -150,7 +160,6 @@ var (
 	// old log index
 	bloomBitsMetaPrefix = []byte("iB")
 
-	preimageCounter     = metrics.NewRegisteredCounter("db/preimage/total", nil)
 	preimageHitsCounter = metrics.NewRegisteredCounter("db/preimage/hits", nil)
 	preimageMissCounter = metrics.NewRegisteredCounter("db/preimage/miss", nil)
 )

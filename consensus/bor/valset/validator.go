@@ -9,8 +9,11 @@ import (
 	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
+
+	stakeTypes "github.com/0xPolygon/heimdall-v2/x/stake/types"
 )
 
+// TODO HV2: Consider aligning the struct with the one defined in x/stake/types/validator.go
 // Validator represents Volatile state for each Validator
 type Validator struct {
 	ID               uint64         `json:"ID"`
@@ -112,15 +115,15 @@ func (v *Validator) PowerBytes() []byte {
 func (v *Validator) MinimalVal() MinimalVal {
 	return MinimalVal{
 		ID:          v.ID,
-		VotingPower: uint64(v.VotingPower),
 		Signer:      v.Address,
+		VotingPower: uint64(v.VotingPower),
 	}
 }
 
 // ParseValidators returns validator set bytes
 func ParseValidators(validatorsBytes []byte) ([]*Validator, error) {
 	if len(validatorsBytes)%40 != 0 {
-		return nil, errors.New("Invalid validators bytes")
+		return nil, errors.New("invalid validators bytes")
 	}
 
 	result := make([]*Validator, len(validatorsBytes)/40)
@@ -144,8 +147,8 @@ func ParseValidators(validatorsBytes []byte) ([]*Validator, error) {
 // Used to send validator information to bor validator contract
 type MinimalVal struct {
 	ID          uint64         `json:"ID"`
-	VotingPower uint64         `json:"power"` // TODO add 10^-18 here so that we dont overflow easily
 	Signer      common.Address `json:"signer"`
+	VotingPower uint64         `json:"power"` // TODO add 10^-18 here so that we dont overflow easily
 }
 
 // SortMinimalValByAddress sorts validators
@@ -164,4 +167,25 @@ func ValidatorsToMinimalValidators(vals []Validator) (minVals []MinimalVal) {
 	}
 
 	return
+}
+
+// HeimdallToValSetValidators converts heimdall validators to valset validators
+func HeimdallToValSetValidators(heimdallValidators []*stakeTypes.Validator) []*Validator {
+	result := make([]*Validator, len(heimdallValidators))
+
+	for i, heimdallValidator := range heimdallValidators {
+		result[i] = HeimdallToValSetValidator(heimdallValidator)
+	}
+
+	return result
+}
+
+// HeimdallToValSetValidator converts heimdall validator to valset validator
+func HeimdallToValSetValidator(heimdallValidator *stakeTypes.Validator) *Validator {
+	return &Validator{
+		ID:               heimdallValidator.ValId,
+		Address:          common.HexToAddress(heimdallValidator.Signer),
+		VotingPower:      heimdallValidator.VotingPower,
+		ProposerPriority: heimdallValidator.ProposerPriority,
+	}
 }

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/big"
 	"net"
 	"net/http"
 	"sync"
@@ -15,7 +14,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/network"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
-	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
 
 	"github.com/stretchr/testify/require"
 )
@@ -36,12 +34,6 @@ func (h *HttpHandlerFake) GetCheckpointHandler() http.HandlerFunc {
 	}
 }
 
-func (h *HttpHandlerFake) GetMilestoneHandler() http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		h.handleFetchMilestone.ServeHTTP(w, r)
-	}
-}
-
 func (h *HttpHandlerFake) GetNoAckMilestoneHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		h.handleFetchNoAckMilestone.ServeHTTP(w, r)
@@ -51,6 +43,12 @@ func (h *HttpHandlerFake) GetNoAckMilestoneHandler() http.HandlerFunc {
 func (h *HttpHandlerFake) GetLastNoAckMilestoneHandler() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		h.handleFetchLastNoAckMilestone.ServeHTTP(w, r)
+	}
+}
+
+func (h *HttpHandlerFake) GetMilestoneHandler() http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		h.handleFetchMilestone.ServeHTTP(w, r)
 	}
 }
 
@@ -64,7 +62,7 @@ func CreateMockHeimdallServer(wg *sync.WaitGroup, port int, listener net.Listene
 	})
 
 	// Create a route for fetching milestone
-	mux.HandleFunc("/milestone/latest", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/milestones/latest", func(w http.ResponseWriter, r *http.Request) {
 		handler.GetMilestoneHandler()(w, r)
 	})
 
@@ -115,17 +113,29 @@ func TestFetchCheckpointFromMockHeimdall(t *testing.T) {
 	wg.Add(1)
 
 	// Initialize the fake handler and add a fake checkpoint handler function
+	type gRPCGatewayCheckpointV2 struct {
+		Proposer   common.Address `json:"proposer"`
+		StartBlock string         `json:"start_block"`
+		EndBlock   string         `json:"end_block"`
+		RootHash   string         `json:"root_hash"`
+		BorChainID string         `json:"bor_chain_id"`
+		Timestamp  string         `json:"timestamp"`
+	}
+
+	type gRPCGatewayCheckpointResponseV2 struct {
+		Result gRPCGatewayCheckpointV2 `json:"checkpoint"`
+	}
+
 	handler := &HttpHandlerFake{}
 	handler.handleFetchCheckpoint = func(w http.ResponseWriter, _ *http.Request) {
-		err := json.NewEncoder(w).Encode(checkpoint.CheckpointResponse{
-			Height: "0",
-			Result: checkpoint.Checkpoint{
+		err := json.NewEncoder(w).Encode(gRPCGatewayCheckpointResponseV2{
+			Result: gRPCGatewayCheckpointV2{
 				Proposer:   common.Address{},
-				StartBlock: big.NewInt(0),
-				EndBlock:   big.NewInt(512),
-				RootHash:   common.Hash{},
+				StartBlock: "0",
+				EndBlock:   "512",
+				RootHash:   "dGVzdA==",
 				BorChainID: "15001",
-				Timestamp:  0,
+				Timestamp:  "0",
 			},
 		})
 
@@ -144,7 +154,7 @@ func TestFetchCheckpointFromMockHeimdall(t *testing.T) {
 
 	// Create a new heimdall client and use same port for connection
 	client := NewHeimdallClient(fmt.Sprintf("http://localhost:%d", port), 5*time.Second)
-	_, err = client.FetchCheckpoint(context.Background(), -1)
+	_, err = client.FetchCheckpointV2(context.Background(), -1)
 	require.NoError(t, err, "expect no error in fetching checkpoint")
 
 	// Shutdown the server
@@ -166,17 +176,32 @@ func TestFetchMilestoneFromMockHeimdall(t *testing.T) {
 	wg.Add(1)
 
 	// Initialize the fake handler and add a fake milestone handler function
+	type gRPCGatewayMilestoneV2 struct {
+		Proposer        common.Address `json:"proposer"`
+		StartBlock      string         `json:"start_block"`
+		EndBlock        string         `json:"end_block"`
+		Hash            string         `json:"hash"`
+		BorChainID      string         `json:"bor_chain_id"`
+		MilestoneID     string         `json:"milestone_id"`
+		Timestamp       string         `json:"timestamp"`
+		TotalDifficulty string         `json:"total_difficulty"`
+	}
+
+	type gRPCGatewayMilestoneResponseV2 struct {
+		Result gRPCGatewayMilestoneV2 `json:"milestone"`
+	}
+
 	handler := &HttpHandlerFake{}
 	handler.handleFetchMilestone = func(w http.ResponseWriter, _ *http.Request) {
-		err := json.NewEncoder(w).Encode(milestone.MilestoneResponse{
-			Height: "0",
-			Result: milestone.Milestone{
-				Proposer:   common.Address{},
-				StartBlock: big.NewInt(0),
-				EndBlock:   big.NewInt(512),
-				Hash:       common.Hash{},
-				BorChainID: "15001",
-				Timestamp:  0,
+		err := json.NewEncoder(w).Encode(gRPCGatewayMilestoneResponseV2{
+			Result: gRPCGatewayMilestoneV2{
+				Proposer:        common.Address{},
+				StartBlock:      "0",
+				EndBlock:        "512",
+				Hash:            "dGVzdA==",
+				BorChainID:      "15001",
+				Timestamp:       "0",
+				TotalDifficulty: "0",
 			},
 		})
 
@@ -195,7 +220,7 @@ func TestFetchMilestoneFromMockHeimdall(t *testing.T) {
 
 	// Create a new heimdall client and use same port for connection
 	client := NewHeimdallClient(fmt.Sprintf("http://localhost:%d", port), 5*time.Second)
-	_, err = client.FetchMilestone(context.Background())
+	_, err = client.FetchMilestoneV2(context.Background())
 	require.NoError(t, err, "expect no error in fetching milestone")
 
 	// Shutdown the server
@@ -224,12 +249,11 @@ func TestFetchShutdown(t *testing.T) {
 	handler.handleFetchCheckpoint = func(w http.ResponseWriter, _ *http.Request) {
 		time.Sleep(100 * time.Millisecond)
 
-		err := json.NewEncoder(w).Encode(checkpoint.CheckpointResponse{
-			Height: "0",
-			Result: checkpoint.Checkpoint{
+		err := json.NewEncoder(w).Encode(checkpoint.CheckpointResponseV2{
+			Result: checkpoint.CheckpointV2{
 				Proposer:   common.Address{},
-				StartBlock: big.NewInt(0),
-				EndBlock:   big.NewInt(512),
+				StartBlock: 0,
+				EndBlock:   512,
 				RootHash:   common.Hash{},
 				BorChainID: "15001",
 				Timestamp:  0,
@@ -255,7 +279,7 @@ func TestFetchShutdown(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 
 	// Expect this to fail due to timeout
-	_, err = client.FetchCheckpoint(ctx, -1)
+	_, err = client.FetchCheckpointV1(ctx, -1)
 	require.Equal(t, "context deadline exceeded", err.Error(), "expect the function error to be a context deadline exceeded error")
 	require.Equal(t, "context deadline exceeded", ctx.Err().Error(), "expect the ctx error to be a context deadline exceeded error")
 
@@ -278,7 +302,7 @@ func TestFetchShutdown(t *testing.T) {
 	}(cancel)
 
 	// Expect this to fail due to cancellation
-	_, err = client.FetchCheckpoint(ctx, -1)
+	_, err = client.FetchCheckpointV1(ctx, -1)
 	require.Equal(t, "context canceled", err.Error(), "expect the function error to be a context cancelled error")
 	require.Equal(t, "context canceled", ctx.Err().Error(), "expect the ctx error to be a context cancelled error")
 
@@ -296,7 +320,7 @@ func TestFetchShutdown(t *testing.T) {
 	}()
 
 	// Expect this to fail due to shutdown
-	_, err = client.FetchCheckpoint(context.Background(), -1)
+	_, err = client.FetchCheckpointV1(context.Background(), -1)
 	require.Equal(t, ErrShutdownDetected.Error(), err.Error(), "expect the function error to be a shutdown detected error")
 
 	// Shutdown the server
@@ -391,12 +415,12 @@ func TestContext(t *testing.T) {
 func TestSpanURL(t *testing.T) {
 	t.Parallel()
 
-	url, err := spanURL("http://bor0", 1)
+	url, err := spanV2URL("http://bor0", 1)
 	if err != nil {
 		t.Fatal("got an error", err)
 	}
 
-	const expected = "http://bor0/bor/span/1"
+	const expected = "http://bor0/bor/spans/1"
 
 	if url.String() != expected {
 		t.Fatalf("expected URL %q, got %q", expected, url.String())
@@ -406,7 +430,7 @@ func TestSpanURL(t *testing.T) {
 func TestStateSyncURL(t *testing.T) {
 	t.Parallel()
 
-	url, err := stateSyncURL("http://bor0", 10, 100)
+	url, err := stateSyncURLV1("http://bor0", 10, 100)
 	if err != nil {
 		t.Fatal("got an error", err)
 	}
