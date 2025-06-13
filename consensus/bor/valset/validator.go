@@ -180,7 +180,7 @@ func HeimdallToValSetValidators(heimdallValidators []*stakeTypes.Validator) []*V
 	return result
 }
 
-// HeimdalToValSetValidator converts heimdall validator to valset validator
+// HeimdallToValSetValidator converts heimdall validator to valset validator
 func HeimdallToValSetValidator(heimdallValidator *stakeTypes.Validator) *Validator {
 	return &Validator{
 		ID:               heimdallValidator.ValId,
