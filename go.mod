@@ -3,7 +3,7 @@ module github.com/ethereum/go-ethereum
 go 1.24.3
 
 require (
-	github.com/0xPolygon/heimdall-v2 v0.1.26
+	github.com/0xPolygon/heimdall-v2 v0.1.32
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.3.2
 	github.com/BurntSushi/toml v1.4.0
 	github.com/JekaMas/go-grpc-net-conn v0.0.0-20220708155319-6aff21f2d13d

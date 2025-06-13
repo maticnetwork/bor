@@ -74,8 +74,8 @@ github.com/0xPolygon/cosmos-sdk v0.1.15-beta-polygon h1:NRHZaNYexu/gtugvHTOooVQ+
 github.com/0xPolygon/cosmos-sdk v0.1.15-beta-polygon/go.mod h1:+rwBgGykS8X1oZrJUfmFODOCqGXYc7jIcjUONPkDme4=
 github.com/0xPolygon/cosmos-sdk/client/v2 v2.0.0-beta.1 h1:XV7f44uAJ1p1w9j15uzm2S8VOSusHFJ1UWvkUj0EK7g=
 github.com/0xPolygon/cosmos-sdk/client/v2 v2.0.0-beta.1/go.mod h1:JEUSu9moNZQ4kU3ir1DKD5eU4bllmAexrGWjmb9k8qU=
-github.com/0xPolygon/heimdall-v2 v0.1.26 h1:CCrVN4XSLdK/LgvfZ8yjkOOMa9K/9B53OkcaMvmdRdE=
-github.com/0xPolygon/heimdall-v2 v0.1.26/go.mod h1:S0erRhMWnGR9TZ0na/ONYnC1DBkX2B7RL5IIK6x7SHk=
+github.com/0xPolygon/heimdall-v2 v0.1.32 h1:IkVrgSub6UDA1zyVV6vpNkkVlvFb7dbKNtviZBusdeA=
+github.com/0xPolygon/heimdall-v2 v0.1.32/go.mod h1:cPgfJvRIIGmlBulp4oj+oXNTxHwfVVBuZ/qHIFfd8uE=
 github.com/99designs/go-keychain v0.0.0-20191008050251-8e49817e8af4 h1:/vQbFIOMbk2FiG/kXiLl8BRyzTWDw7gX/Hz7Dd5eDMs=
 github.com/99designs/go-keychain v0.0.0-20191008050251-8e49817e8af4/go.mod h1:hN7oaIRCjzsZ2dE+yG5k+rsdt3qcwykqK6HVGcKwsw4=
 github.com/99designs/keyring v1.2.1 h1:tYLp1ULvO7i3fI5vE21ReQuj99QFSs7lGm0xWyJo87o=

@@ -11,22 +11,24 @@ import (
 
 // MilestoneV2 defines a response object type of bor milestone
 type MilestoneV2 struct {
-	Proposer    common.Address `json:"proposer"`
-	StartBlock  uint64         `json:"start_block"`
-	EndBlock    uint64         `json:"end_block"`
-	Hash        common.Hash    `json:"hash"`
-	BorChainID  string         `json:"bor_chain_id"`
-	MilestoneID string         `json:"milestone_id"`
-	Timestamp   uint64         `json:"timestamp"`
+	Proposer        common.Address `json:"proposer"`
+	StartBlock      uint64         `json:"start_block"`
+	EndBlock        uint64         `json:"end_block"`
+	Hash            common.Hash    `json:"hash"`
+	BorChainID      string         `json:"bor_chain_id"`
+	MilestoneID     string         `json:"milestone_id"`
+	Timestamp       uint64         `json:"timestamp"`
+	TotalDifficulty uint64         `json:"total_difficulty"`
 }
 
 func (m *MilestoneV2) UnmarshalJSON(data []byte) error {
 	type Alias MilestoneV2
 	temp := &struct {
-		StartBlock string `json:"start_block"`
-		EndBlock   string `json:"end_block"`
-		Hash       string `json:"hash"`
-		Timestamp  string `json:"timestamp"`
+		StartBlock      string `json:"start_block"`
+		EndBlock        string `json:"end_block"`
+		Hash            string `json:"hash"`
+		Timestamp       string `json:"timestamp"`
+		TotalDifficulty string `json:"total_difficulty"`
 		*Alias
 	}{
 		Alias: (*Alias)(m),
@@ -60,6 +62,12 @@ func (m *MilestoneV2) UnmarshalJSON(data []byte) error {
 		return fmt.Errorf("invalid timestamp: %w", err)
 	}
 	m.Timestamp = timestamp
+
+	totalDifficulty, err := strconv.ParseUint(temp.TotalDifficulty, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid total_difficulty: %w", err)
+	}
+	m.TotalDifficulty = totalDifficulty
 
 	return nil
 }
