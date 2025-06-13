@@ -357,7 +357,6 @@ func (q *queue) Schedule(headers []*types.Header, hashes []common.Hash, from uin
 
 	// Insert all the headers prioritised by the contained block number
 	inserts := make([]*types.Header, 0, len(headers))
-
 	for i, header := range headers {
 		// Make sure chain order is honoured and preserved throughout
 		hash := hashes[i]
@@ -397,7 +396,6 @@ func (q *queue) Schedule(headers []*types.Header, hashes []common.Hash, from uin
 				log.Warn("Header already scheduled for witness fetch", "number", header.Number, "hash", hash)
 			}
 		}
-
 		inserts = append(inserts, header)
 		q.headerHead = hash
 		from++
@@ -693,7 +691,6 @@ func (q *queue) Revoke(peerID string) {
 		q.headerTaskQueue.Push(request.From, -int64(request.From))
 		delete(q.headerPendPool, peerID)
 	}
-
 	if request, ok := q.blockPendPool[peerID]; ok {
 		for _, header := range request.Headers {
 			q.blockTaskQueue.Push(header, -int64(header.Number.Uint64()))
@@ -1120,7 +1117,7 @@ func (q *queue) DeliverWitnesses(id string, witnessData interface{}, meta interf
 // to access the queue, so they already need a lock anyway.
 func (q *queue) deliver(id string, taskPool map[common.Hash]*types.Header,
 	taskQueue *prque.Prque[int64, *types.Header], pendPool map[string]*fetchRequest,
-	reqTimer metrics.Timer, resInMeter metrics.Meter, resDropMeter metrics.Meter,
+	reqTimer *metrics.Timer, resInMeter, resDropMeter *metrics.Meter,
 	results int, validate func(index int, header *types.Header) error,
 	reconstruct func(index int, result *fetchResult)) (int, error) {
 	log.Trace("deliver: Entered", "peer", id, "resultsCount", results)

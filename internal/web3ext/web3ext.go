@@ -307,6 +307,11 @@ web3._extend({
 			params: 1,
 		}),
 		new web3._extend.Method({
+			name: 'setMemoryLimit',
+			call: 'debug_setMemoryLimit',
+			params: 1,
+		}),
+		new web3._extend.Method({
 			name: 'memStats',
 			call: 'debug_memStats',
 			params: 0,
@@ -575,8 +580,8 @@ web3._extend({
 		new web3._extend.Method({
 			name: 'estimateGas',
 			call: 'eth_estimateGas',
-			params: 3,
-			inputFormatter: [web3._extend.formatters.inputCallFormatter, web3._extend.formatters.inputBlockNumberFormatter, null],
+			params: 4,
+			inputFormatter: [web3._extend.formatters.inputCallFormatter, web3._extend.formatters.inputBlockNumberFormatter, null, null],
 			outputFormatter: web3._extend.utils.toDecimal
 		}),
 		new web3._extend.Method({

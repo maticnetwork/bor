@@ -182,6 +182,8 @@ func (p *Peer) dispatchResponse(res *Response, metadata func() interface{}) erro
 				return <-res.Done // Response delivered, return any errors
 			case <-res.Req.Cancel:
 				return nil // Request cancelled, silently discard response
+			case <-p.term:
+				return errDisconnected
 			}
 		}
 

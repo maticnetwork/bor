@@ -675,7 +675,6 @@ func (c *Clique) Seal(chain consensus.ChainHeaderReader, block *types.Block, wit
 	if err != nil {
 		return err
 	}
-
 	if _, authorized := snap.Signers[signer]; !authorized {
 		return errUnauthorizedSigner
 	}
@@ -690,7 +689,6 @@ func (c *Clique) Seal(chain consensus.ChainHeaderReader, block *types.Block, wit
 	}
 	// Sweet, the protocol permits us to sign the block, wait for our time
 	delay := time.Unix(int64(header.Time), 0).Sub(time.Now()) // nolint: gosimple
-
 	if header.Difficulty.Cmp(diffNoTurn) == 0 {
 		// It's not our turn explicitly to sign, delay it a bit
 		wiggle := time.Duration(len(snap.Signers)/2+1) * wiggleTime
@@ -703,11 +701,9 @@ func (c *Clique) Seal(chain consensus.ChainHeaderReader, block *types.Block, wit
 	if err != nil {
 		return err
 	}
-
 	copy(header.Extra[len(header.Extra)-extraSeal:], sighash)
 	// Wait until sealing is terminated or delay timeout.
 	log.Trace("Waiting for slot to sign and propagate", "delay", common.PrettyDuration(delay))
-
 	go func() {
 		select {
 		case <-stop:
