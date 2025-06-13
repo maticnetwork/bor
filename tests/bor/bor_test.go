@@ -388,8 +388,8 @@ func TestInsertingSpanSizeBlocks(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	h := createMockHeimdall(ctrl, &span0, res.Result)
-	h.EXPECT().StateSyncEvents(gomock.Any(), gomock.Any(), gomock.Any()).
+	h := createMockHeimdall(ctrl, &span0, &res.Result)
+	h.EXPECT().StateSyncEventsV1(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return([]*clerk.EventRecordWithTime{getSampleEventRecord(t)}, nil).AnyTimes()
 	_bor.SetHeimdallClient(h)
 
@@ -406,7 +406,7 @@ func TestInsertingSpanSizeBlocks(t *testing.T) {
 		insertNewBlock(t, chain, block)
 	}
 
-	valsetVals := valset.HeimdallToValSetValidators(currentSpan.ValidatorSet.Validators)
+	valsetVals := res.Result.ValidatorSet.Validators
 
 	spanner = getMockedSpanner(t, valsetVals)
 	_bor.SetSpanner(spanner)
@@ -557,7 +557,7 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 		buildStateEvent(sample, 6, 4), // id = 6, time = 4
 	}
 
-	h.EXPECT().StateSyncEvents(gomock.Any(), fromID, to).Return(eventRecords, nil).AnyTimes()
+	h.EXPECT().StateSyncEventsV1(gomock.Any(), fromID, to).Return(eventRecords, nil).AnyTimes()
 	_bor.SetHeimdallClient(h)
 
 	// Insert the blocks for the 0th sprint.
@@ -583,7 +583,7 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 		buildStateEvent(sample, 5, 7),
 		buildStateEvent(sample, 6, 4),
 	}
-	h.EXPECT().StateSyncEvents(gomock.Any(), fromID, to).Return(eventRecords, nil).AnyTimes()
+	h.EXPECT().StateSyncEventsV1(gomock.Any(), fromID, to).Return(eventRecords, nil).AnyTimes()
 
 	for i := sprintSize + 1; i <= spanSize; i++ {
 		// Update the validator set at the end of span and update the respective mocks
@@ -628,14 +628,15 @@ func TestOutOfTurnSigning(t *testing.T) {
 	span0 := createMockSpan(addr, chain.Config().ChainID.String())
 
 	res := loadSpanFromFile(t)
+	valsetVals := res.Result.ValidatorSet.Validators
 	proposer := valset.NewValidator(addr, 10)
-	res.Result.ValidatorSet.Validators = append(res.Result.ValidatorSet.Validators, proposer)
+	valsetVals = append(res.Result.ValidatorSet.Validators, proposer)
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	h := createMockHeimdall(ctrl, &span0, res.Result)
-	h.EXPECT().StateSyncEvents(gomock.Any(), gomock.Any(), gomock.Any()).
+	h := createMockHeimdall(ctrl, &span0, &res.Result)
+	h.EXPECT().StateSyncEventsV1(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return([]*clerk.EventRecordWithTime{getSampleEventRecord(t)}, nil).AnyTimes()
 	_bor.SetHeimdallClient(h)
 
@@ -656,7 +657,7 @@ func TestOutOfTurnSigning(t *testing.T) {
 		// E.g. In this case, update on block 3 as snapshot of block 3 will be called for block 4's verification
 		// Sprint length is 4 for this test
 		if i == chain.Config().Bor.CalculateSprint(i)-1 {
-			currentValidators = heimdallSpan.ValidatorSet.Validators
+			currentValidators = res.Result.ValidatorSet.Validators
 
 			// Update the span0's validator set to new validator set. This will be used in verify header when we query
 			// span to compare validator's set with header's extradata. Even though our span store has old validator set
@@ -687,7 +688,7 @@ func TestOutOfTurnSigning(t *testing.T) {
 		header.Difficulty = big.NewInt(int64(len(valsetVals)) - turn)
 	}
 
-	block = buildNextBlock(t, _bor, chain, block, signerKey, init.genesis.Config.Bor, nil, heimdallSpan.ValidatorSet.Validators, false, setParentTime, setDifficulty)
+	block = buildNextBlock(t, _bor, chain, block, signerKey, init.genesis.Config.Bor, nil, res.Result.ValidatorSet.Validators, false, setParentTime, setDifficulty)
 	_, err := chain.InsertChain([]*types.Block{block})
 	require.Equal(t,
 		bor.BlockTooSoonError{Number: spanSize, Succession: expectedSuccessionNumber},
@@ -735,8 +736,8 @@ func TestSignerNotFound(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	h := createMockHeimdall(ctrl, &span0, res.Result)
-	h.EXPECT().StateSyncEvents(gomock.Any(), gomock.Any(), gomock.Any()).
+	h := createMockHeimdall(ctrl, &span0, &res.Result)
+	h.EXPECT().StateSyncEventsV1(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return([]*clerk.EventRecordWithTime{getSampleEventRecord(t)}, nil).AnyTimes()
 	_bor.SetHeimdallClient(h)
 
@@ -1557,8 +1558,8 @@ func TestEarlyBlockAnnouncementPostBhilai_Primary(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	h := createMockHeimdall(ctrl, &span0, res.Result)
-	h.EXPECT().StateSyncEvents(gomock.Any(), gomock.Any(), gomock.Any()).
+	h := createMockHeimdall(ctrl, &span0, &res.Result)
+	h.EXPECT().StateSyncEventsV1(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return([]*clerk.EventRecordWithTime{getSampleEventRecord(t)}, nil).AnyTimes()
 	_bor.SetHeimdallClient(h)
 
@@ -1726,8 +1727,8 @@ func TestEarlyBlockAnnouncementPostBhilai_NonPrimary(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	h := createMockHeimdall(ctrl, res1.Result, res2.Result)
-	h.EXPECT().StateSyncEvents(gomock.Any(), gomock.Any(), gomock.Any()).
+	h := createMockHeimdall(ctrl, &res1.Result, &res2.Result)
+	h.EXPECT().StateSyncEventsV1(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return([]*clerk.EventRecordWithTime{getSampleEventRecord(t)}, nil).AnyTimes()
 	_bor.SetHeimdallClient(h)
 
