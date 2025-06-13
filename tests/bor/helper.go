@@ -447,7 +447,7 @@ func createMockSpan(address common.Address, chainId string) span.HeimdallSpan {
 	}
 	span0 := span.HeimdallSpan{
 		Span: span.Span{
-			ID:         0,
+			Id:         0,
 			StartBlock: 0,
 			EndBlock:   255,
 		},
@@ -465,8 +465,8 @@ func createMockHeimdall(ctrl *gomock.Controller, span0, span1 *span.HeimdallSpan
 	h.EXPECT().Close().AnyTimes()
 	h.EXPECT().GetSpanV1(gomock.Any(), uint64(0)).Return(span0, nil).AnyTimes()
 	h.EXPECT().GetSpanV1(gomock.Any(), uint64(1)).Return(span1, nil).AnyTimes()
-	h.EXPECT().FetchCheckpointV1(gomock.Any(), int64(-1)).Return(&checkpoint.Checkpoint{}, nil).AnyTimes()
-	h.EXPECT().FetchMilestoneV1(gomock.Any()).Return(&milestone.Milestone{}, nil).AnyTimes()
+	h.EXPECT().FetchCheckpointV1(gomock.Any(), int64(-1)).Return(&checkpoint.CheckpointV1{}, nil).AnyTimes()
+	h.EXPECT().FetchMilestoneV1(gomock.Any()).Return(&milestone.MilestoneV1{}, nil).AnyTimes()
 	h.EXPECT().FetchLastNoAckMilestone(gomock.Any()).Return("", nil).AnyTimes()
 	h.EXPECT().FetchNoAckMilestone(gomock.Any(), string("test")).Return(nil).AnyTimes()
 
@@ -477,7 +477,7 @@ func getMockedSpanner(t *testing.T, validators []*valset.Validator) *bor.MockSpa
 	t.Helper()
 
 	mockSpan := &span.Span{
-		ID:         0,
+		Id:         0,
 		StartBlock: 0,
 		EndBlock:   0,
 	}

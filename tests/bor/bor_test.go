@@ -382,7 +382,7 @@ func TestInsertingSpanSizeBlocks(t *testing.T) {
 	defer _bor.Close()
 
 	span0 := createMockSpan(addr, chain.Config().ChainID.String())
-	_, currentSpan := loadSpanFromFile(t)
+	currentSpan := loadSpanFromFile(t)
 
 	// Create mock heimdall client
 	ctrl := gomock.NewController(t)
@@ -448,7 +448,7 @@ func TestFetchStateSyncEvents(t *testing.T) {
 	currentValidators := span0.ValidatorSet.Validators
 
 	// Load mock span 0
-	res, _ := loadSpanFromFile(t)
+	res := loadSpanFromFile(t)
 
 	// reate mock bor spanner
 	spanner := getMockedSpanner(t, currentValidators)
@@ -474,7 +474,7 @@ func TestFetchStateSyncEvents(t *testing.T) {
 	sample.Time = time.Unix(to-int64(eventCount+1), 0) // Last event.Time will be just < to
 	eventRecords := generateFakeStateSyncEvents(sample, eventCount)
 
-	h.EXPECT().StateSyncEvents(gomock.Any(), fromID, to).Return(eventRecords, nil).AnyTimes()
+	h.EXPECT().StateSyncEventsV1(gomock.Any(), fromID, to).Return(eventRecords, nil).AnyTimes()
 	_bor.SetHeimdallClient(h)
 
 	// Insert sprintSize # of blocks so that span is fetched at the start of a new sprint
@@ -523,7 +523,7 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 	span0 := createMockSpan(addr, chain.Config().ChainID.String())
 
 	// Load mock span 1
-	res, _ := loadSpanFromFile(t)
+	res := loadSpanFromFile(t)
 
 	spanner := getMockedSpanner(t, span0.ValidatorSet.Validators)
 	_bor.SetSpanner(spanner)
@@ -627,7 +627,7 @@ func TestOutOfTurnSigning(t *testing.T) {
 
 	span0 := createMockSpan(addr, chain.Config().ChainID.String())
 
-	_, heimdallSpan := loadSpanFromFile(t)
+	heimdallSpan := loadSpanFromFile(t)
 	proposer := valset.NewValidator(addr, 10)
 	heimdallSpan.ValidatorSet.Validators = append(heimdallSpan.ValidatorSet.Validators, proposer)
 
@@ -730,7 +730,7 @@ func TestSignerNotFound(t *testing.T) {
 
 	span0 := createMockSpan(addr, chain.Config().ChainID.String())
 
-	_, heimdallSpan := loadSpanFromFile(t)
+	heimdallSpan := loadSpanFromFile(t)
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -1449,7 +1449,7 @@ func TestJaipurFork(t *testing.T) {
 	block := init.genesis.ToBlock()
 
 	span0 := createMockSpan(addr, chain.Config().ChainID.String())
-	res, _ := loadSpanFromFile(t)
+	res := loadSpanFromFile(t)
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -1551,7 +1551,7 @@ func TestEarlyBlockAnnouncementPostBhilai_Primary(t *testing.T) {
 	defer _bor.Close()
 
 	span0 := createMockSpan(addr, chain.Config().ChainID.String())
-	_, currentSpan := loadSpanFromFile(t)
+	currentSpan := loadSpanFromFile(t)
 
 	// Create mock heimdall client
 	ctrl := gomock.NewController(t)
@@ -1712,10 +1712,10 @@ func TestEarlyBlockAnnouncementPostBhilai_NonPrimary(t *testing.T) {
 	defer _bor.Close()
 
 	// Use 3 validators from the start to allow out-of-turn block production
-	_, span0 := loadSpanFromFile(t)
+	span0 := loadSpanFromFile(t)
 	span0.StartBlock = 0
 	span0.EndBlock = 255
-	_, span1 := loadSpanFromFile(t)
+	span1 := loadSpanFromFile(t)
 
 	// key2 and addr2 belong to the primary validator, authorize consensus to sign messages
 	engine.(*bor.Bor).Authorize(addr2, func(account accounts.Account, s string, data []byte) ([]byte, error) {
