@@ -137,7 +137,7 @@ func (p *StateProcessor) Process(block *types.Block, statedb *state.StateDB, cfg
 	// Finalize the block, applying any consensus engine specific extras (e.g. block rewards)
 	// Note that we specifically need `Blockchain` for `ChainHeaderReader` interface as it's
 	// typecasted in bor consensus for setting state-sync events.
-	p.chain.engine.Finalize(p.blockchain, header, tracingStateDB, block.Body())
+	p.chain.engine.Finalize(p.blockchain, header, statedb, block.Body())
 
 	return &ProcessResult{
 		Receipts: receipts,
