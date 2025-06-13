@@ -70,7 +70,7 @@ type backend interface {
 	HeaderByNumber(ctx context.Context, number rpc.BlockNumber) (*types.Header, error)
 	GetTd(ctx context.Context, hash common.Hash) *big.Int
 	Stats() (pending int, queued int)
-	SyncProgress() ethereum.SyncProgress
+	SyncProgress(ctx context.Context) ethereum.SyncProgress
 
 	// Bor
 	SubscribeChain2HeadEvent(ch chan<- core.Chain2HeadEvent) event.Subscription
@@ -737,7 +737,6 @@ func (s *Service) assembleBlockStats(header *types.Header) *blockStats {
 		if header == nil {
 			header = s.backend.CurrentHeader()
 		}
-
 		td = s.backend.GetTd(context.Background(), header.Hash())
 		txs = []txStats{}
 	}
@@ -906,7 +905,7 @@ func (s *Service) reportStats(conn *connWrapper) error {
 	)
 	// check if backend is a full node
 	if fullBackend, ok := s.backend.(fullNodeBackend); ok {
-		sync := fullBackend.SyncProgress()
+		sync := fullBackend.SyncProgress(context.Background())
 		syncing = fullBackend.CurrentHeader().Number.Uint64() >= sync.HighestBlock
 
 		price, _ := fullBackend.SuggestGasTipCap(context.Background())
@@ -916,7 +915,7 @@ func (s *Service) reportStats(conn *connWrapper) error {
 			gasprice += int(basefee.Uint64())
 		}
 	} else {
-		sync := s.backend.SyncProgress()
+		sync := s.backend.SyncProgress(context.Background())
 		syncing = s.backend.CurrentHeader().Number.Uint64() >= sync.HighestBlock
 	}
 	// Assemble the node stats and send it to the server

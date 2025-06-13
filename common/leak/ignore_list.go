@@ -11,6 +11,9 @@ func IgnoreList() []goleak.Option {
 		goleak.IgnoreTopFunction("github.com/rjeczalik/notify.(*nonrecursiveTree).dispatch"),
 		goleak.IgnoreTopFunction("github.com/rjeczalik/notify.(*nonrecursiveTree).internal"),
 		goleak.IgnoreTopFunction("github.com/rjeczalik/notify._Cfunc_CFRunLoopRun"),
+		goleak.IgnoreTopFunction("internal/poll.runtime_pollWait"),
+		goleak.IgnoreTopFunction("github.com/desertbit/timer.timerRoutine"),
+		goleak.IgnoreTopFunction("github.com/godbus/dbus.(*Conn).Auth"),
 
 		// todo: this leaks should be fixed
 		goleak.IgnoreTopFunction("github.com/ethereum/go-ethereum/accounts/abi/bind/backends.nullSubscription.func1"),

@@ -1,3 +1,5 @@
+//go:generate mockgen -destination=mock_ethapi_backend.go -package=eth -mock_names=Backend=MockAPIBackend github.com/ethereum/go-ethereum/internal/ethapi Backend
+
 // witpruner_test.go
 package eth
 
@@ -15,7 +17,7 @@ import (
 	"github.com/ethereum/go-ethereum/eth/filters"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/rpc"
-	"github.com/golang/mock/gomock"
+	"go.uber.org/mock/gomock"
 )
 
 var headerPrefix = []byte("h") // headerPrefix + num (uint64 big endian) + hash -> header

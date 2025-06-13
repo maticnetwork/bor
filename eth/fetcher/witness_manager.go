@@ -225,7 +225,7 @@ func (m *witnessManager) handleNeed(msg *injectBlockNeedWitnessMsg) {
 	}
 
 	// Check distance (using parent's function)
-	if dist := int64(number) - int64(m.parentChainHeight()); dist < -maxUncleDist || dist > maxQueueDist {
+	if dist := int64(number) - int64(m.parentChainHeight()); dist < -maxUncleDist {
 		m.mu.Unlock()
 		log.Debug("[wm] Discarded injected block, too far away", "peer", msg.origin, "number", number, "hash", hash, "distance", dist)
 		return // Doesn't count towards DOS limits as it's injected, just drop.

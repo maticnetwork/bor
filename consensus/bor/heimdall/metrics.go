@@ -12,8 +12,8 @@ type (
 	requestType    string
 
 	meter struct {
-		request map[bool]metrics.Meter // map[isSuccessful]metrics.Meter
-		timer   metrics.Timer
+		request map[bool]*metrics.Meter // map[isSuccessful]metrics.Meter
+		timer   *metrics.Timer
 	}
 )
 
@@ -40,49 +40,49 @@ func getRequestType(ctx context.Context) (requestType, bool) {
 var (
 	requestMeters = map[requestType]meter{
 		StateSyncRequest: {
-			request: map[bool]metrics.Meter{
+			request: map[bool]*metrics.Meter{
 				true:  metrics.NewRegisteredMeter("client/requests/statesync/valid", nil),
 				false: metrics.NewRegisteredMeter("client/requests/statesync/invalid", nil),
 			},
 			timer: metrics.NewRegisteredTimer("client/requests/statesync/duration", nil),
 		},
 		SpanRequest: {
-			request: map[bool]metrics.Meter{
+			request: map[bool]*metrics.Meter{
 				true:  metrics.NewRegisteredMeter("client/requests/span/valid", nil),
 				false: metrics.NewRegisteredMeter("client/requests/span/invalid", nil),
 			},
 			timer: metrics.NewRegisteredTimer("client/requests/span/duration", nil),
 		},
 		CheckpointRequest: {
-			request: map[bool]metrics.Meter{
+			request: map[bool]*metrics.Meter{
 				true:  metrics.NewRegisteredMeter("client/requests/checkpoint/valid", nil),
 				false: metrics.NewRegisteredMeter("client/requests/checkpoint/invalid", nil),
 			},
 			timer: metrics.NewRegisteredTimer("client/requests/checkpoint/duration", nil),
 		},
 		CheckpointCountRequest: {
-			request: map[bool]metrics.Meter{
+			request: map[bool]*metrics.Meter{
 				true:  metrics.NewRegisteredMeter("client/requests/checkpointcount/valid", nil),
 				false: metrics.NewRegisteredMeter("client/requests/checkpointcount/invalid", nil),
 			},
 			timer: metrics.NewRegisteredTimer("client/requests/checkpointcount/duration", nil),
 		},
 		MilestoneRequest: {
-			request: map[bool]metrics.Meter{
+			request: map[bool]*metrics.Meter{
 				true:  metrics.NewRegisteredMeter("client/requests/milestone/valid", nil),
 				false: metrics.NewRegisteredMeter("client/requests/milestone/invalid", nil),
 			},
 			timer: metrics.NewRegisteredTimer("client/requests/milestone/duration", nil),
 		},
 		MilestoneCountRequest: {
-			request: map[bool]metrics.Meter{
+			request: map[bool]*metrics.Meter{
 				true:  metrics.NewRegisteredMeter("client/requests/milestonecount/valid", nil),
 				false: metrics.NewRegisteredMeter("client/requests/milestonecount/invalid", nil),
 			},
 			timer: metrics.NewRegisteredTimer("client/requests/milestonecount/duration", nil),
 		},
 		MilestoneIDRequest: {
-			request: map[bool]metrics.Meter{
+			request: map[bool]*metrics.Meter{
 				true:  metrics.NewRegisteredMeter("client/requests/milestoneid/valid", nil),
 				false: metrics.NewRegisteredMeter("client/requests/milestoneid/invalid", nil),
 			},
