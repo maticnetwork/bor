@@ -2087,7 +2087,7 @@ func (bc *BlockChain) addFutureBlock(block *types.Block) error {
 // the index number of the failing block as well an error describing what went
 // wrong. After insertion is done, all accumulated events will be fired.
 func (bc *BlockChain) InsertChain(chain types.Blocks) (int, error) {
-	return bc.InsertChainWithWitnesses(chain, false, nil)
+	return bc.InsertChainWithWitnesses(chain, true, nil)
 }
 
 func (bc *BlockChain) InsertChainWithWitnesses(chain types.Blocks, makeWitness bool, witnesses []*stateless.Witness) (int, error) {
