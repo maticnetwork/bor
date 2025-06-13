@@ -4,10 +4,10 @@ import (
 	"context"
 	"time"
 
-	"github.com/0xPolygon/heimdall-v2/x/clerk/types"
-
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
+
+	"github.com/0xPolygon/heimdall-v2/x/clerk/types"
 )
 
 func (h *HeimdallAppClient) StateSyncEvents(ctx context.Context, fromID uint64, to int64) ([]*clerk.EventRecordWithTime, error) {

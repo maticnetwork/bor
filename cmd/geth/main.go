@@ -28,9 +28,6 @@ import (
 	"syscall"
 	"time"
 
-	heimdallApp "github.com/0xPolygon/heimdall-v2/app"
-	heimdalld "github.com/0xPolygon/heimdall-v2/cmd/heimdalld/cmd"
-	svrcmd "github.com/cosmos/cosmos-sdk/server/cmd"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/common"
@@ -49,6 +46,10 @@ import (
 	_ "github.com/ethereum/go-ethereum/eth/tracers/native"
 
 	"github.com/urfave/cli/v2"
+
+	heimdallApp "github.com/0xPolygon/heimdall-v2/app"
+	heimdalld "github.com/0xPolygon/heimdall-v2/cmd/heimdalld/cmd"
+	svrcmd "github.com/cosmos/cosmos-sdk/server/cmd"
 )
 
 const (

@@ -8,13 +8,14 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/0xPolygon/heimdall-v2/app"
-	heimdalld "github.com/0xPolygon/heimdall-v2/cmd/heimdalld/cmd"
-	svrcmd "github.com/cosmos/cosmos-sdk/server/cmd"
 	"github.com/mitchellh/cli"
 	"github.com/pelletier/go-toml"
 
 	"github.com/ethereum/go-ethereum/log"
+
+	"github.com/0xPolygon/heimdall-v2/app"
+	heimdalld "github.com/0xPolygon/heimdall-v2/cmd/heimdalld/cmd"
+	svrcmd "github.com/cosmos/cosmos-sdk/server/cmd"
 )
 
 // Command is the command to start the sever

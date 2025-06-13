@@ -21,7 +21,6 @@ import (
 	"github.com/holiman/uint256"
 	"golang.org/x/crypto/sha3"
 
-	stakeTypes "github.com/0xPolygon/heimdall-v2/x/stake/types"
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
 	balance_tracing "github.com/ethereum/go-ethereum/core/tracing"
@@ -46,6 +45,8 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/ethereum/go-ethereum/trie"
+
+	stakeTypes "github.com/0xPolygon/heimdall-v2/x/stake/types"
 )
 
 const (

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"time"
 
-	borTypes "github.com/0xPolygon/heimdall-v2/x/bor/types"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
 	"github.com/ethereum/go-ethereum/consensus/bor/valset"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -16,6 +15,8 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rpc"
 	lru "github.com/hashicorp/golang-lru"
+
+	borTypes "github.com/0xPolygon/heimdall-v2/x/bor/types"
 )
 
 // maxSpanFetchLimit denotes maximum number of future spans to fetch. During snap sync,

@@ -20,6 +20,7 @@ import (
 
 const (
 	stateFetchLimit = 50
+	defaultTimeout  = 1 * time.Second
 )
 
 type HeimdallGRPCClient struct {
@@ -73,5 +74,3 @@ func removePrefix(address string) string {
 	}
 	return address
 }
-
-var defaultTimeout = 1 * time.Second

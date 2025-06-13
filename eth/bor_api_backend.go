@@ -75,6 +75,7 @@ func (b *EthAPIBackend) GetVoteOnHash(ctx context.Context, starBlockNr uint64, e
 	isLocked := downloader.LockMutex(endBlockNr)
 
 	if !isLocked {
+		// We are not locking blocks for voting, anymore. We keep all forks until milestone is finalized.
 		// downloader.UnlockMutex(false, "", endBlockNr, common.Hash{})
 		log.Warn("whitelisted number or locked sprint number is more than the received end block number", "endBlockNr", endBlockNr)
 		// return false, errors.New("whitelisted number or locked sprint number is more than the received end block number")
