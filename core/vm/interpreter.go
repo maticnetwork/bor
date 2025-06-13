@@ -325,8 +325,15 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool, i
 	// the execution of one of the operations or until the done flag is set by the
 	// parent context.
 	for {
-		if interruptCtx != nil {
-			// case of interrupting by timeout
+		// Check for the global flag to interrupt block building on timeout. We use
+		// the global flag because it's cheap to check for an atomic boolean than
+		// checking if we received any value in context.Done channel.
+		if interruptCtx != nil && common.InterruptBlockBuilding.Load() {
+			// Also check if the context is done. This is needed because when we
+			// do read calls (via eth_call) from consensus, the global flag is
+			// set to true which leads to an interrupt which we don't want. As
+			// context will be without timeout for such calls, we'll just fallback
+			// to the default case here.
 			select {
 			case <-interruptCtx.Done():
 				txHash, _ := GetCurrentTxFromContext(interruptCtx)
@@ -519,8 +526,15 @@ func (in *EVMInterpreter) RunWithDelay(contract *Contract, input []byte, readOnl
 	// the execution of one of the operations or until the done flag is set by the
 	// parent context.
 	for {
-		if interruptCtx != nil {
-			// case of interrupting by timeout
+		// Check for the global flag to interrupt block building on timeout. We use
+		// the global flag because it's cheap to check for an atomic boolean than
+		// checking if we received any value in context.Done channel.
+		if interruptCtx != nil && common.InterruptBlockBuilding.Load() {
+			// Also check if the context is done. This is needed because when we
+			// do read calls (via eth_call) from consensus, the global flag is
+			// set to true which leads to an interrupt which we don't want. As
+			// context will be without timeout for such calls, we'll just fallback
+			// to the default case here.
 			select {
 			case <-interruptCtx.Done():
 				txHash, _ := GetCurrentTxFromContext(interruptCtx)

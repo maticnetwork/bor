@@ -967,13 +967,17 @@ mainloop:
 				env.state.AddEmptyMVHashMap()
 			}
 
-			// case of interrupting by timeout
-			select {
-			case <-w.interruptCtx.Done():
-				txCommitInterruptCounter.Inc(1)
-				log.Warn("Tx Level Interrupt", "hash", lastTxHash, "err", w.interruptCtx.Err())
-				break mainloop
-			default:
+			// Check for the global flag and context to interrupt block building on timeout.
+			// We use the global flag because it's cheap to check for an atomic boolean than
+			// checking if we received any value in context.Done channel.
+			if common.InterruptBlockBuilding.Load() {
+				select {
+				case <-w.interruptCtx.Done():
+					txCommitInterruptCounter.Inc(1)
+					log.Warn("Tx Level Interrupt", "hash", lastTxHash, "err", w.interruptCtx.Err())
+					break mainloop
+				default:
+				}
 			}
 		}
 
@@ -1570,8 +1574,16 @@ func getInterruptTimer(interruptCtx context.Context, number, timestamp uint64) (
 	delay := time.Until(time.Unix(int64(timestamp), 0))
 	interruptCtx, cancel := context.WithTimeout(interruptCtx, delay)
 
+	// Reset the global flag when timer starts for building a new block.
+	common.InterruptBlockBuilding.Store(false)
+
 	go func() {
 		<-interruptCtx.Done()
+
+		// Toggle the global flag to indicate commit transactions loop and EVM interpreter loop
+		// to stop block building.
+		common.InterruptBlockBuilding.Store(true)
+
 		if interruptCtx.Err() != context.Canceled {
 			log.Info("Commit Interrupt. Pre-committing the current block", "block", number)
 			cancel()
