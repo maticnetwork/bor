@@ -265,7 +265,11 @@ func newHandler(config *handlerConfig) (*handler, error) {
 			return 0, nil
 		}
 
-		return h.chain.InsertChainWithWitnesses(blocks, config.computeWitness, witnesses)
+		if h.statelessSync.Load() {
+			return h.chain.InsertChainStateless(blocks, witnesses)
+		} else {
+			return h.chain.InsertChainWithWitnesses(blocks, config.computeWitness, witnesses)
+		}
 	}
 
 	// If snap sync is requested but snapshots are disabled, fail loudly
