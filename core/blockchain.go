@@ -670,6 +670,9 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header, com
 
 		processorCount++
 
+		if !computeWitness {
+			log.Info("#### Debug stack", "stack", string(debug.Stack()))
+		}
 		go func() {
 			log.Info("######## Normal processor running", "block", block.NumberU64(), "computeWitness", computeWitness)
 			var witness *stateless.Witness
