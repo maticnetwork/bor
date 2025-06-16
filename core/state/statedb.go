@@ -510,6 +510,7 @@ func (s *StateDB) StartPrefetcher(namespace string, witness *stateless.Witness) 
 	// the prefetcher is constructed. For more details, see:
 	// https://github.com/ethereum/go-ethereum/issues/29880
 	s.prefetcher = newTriePrefetcher(s.db, s.originalRoot, namespace, witness == nil)
+	log.Info("--- starting prefetcher")
 	if err := s.prefetcher.prefetch(common.Hash{}, s.originalRoot, common.Address{}, nil, nil, false); err != nil {
 		log.Error("Failed to prefetch account trie", "root", s.originalRoot, "err", err)
 	}
@@ -519,6 +520,7 @@ func (s *StateDB) StartPrefetcher(namespace string, witness *stateless.Witness) 
 // from the gathered metrics.
 func (s *StateDB) StopPrefetcher() {
 	if s.prefetcher != nil {
+		log.Info("--- terminating prefetcher")
 		s.prefetcher.terminate(false)
 		s.prefetcher.report()
 		s.prefetcher = nil

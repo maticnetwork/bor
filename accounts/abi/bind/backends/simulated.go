@@ -714,7 +714,7 @@ func (b *SimulatedBackend) callContract(ctx context.Context, call ethereum.CallM
 	vmEnv := vm.NewEVM(evmContext, stateDB, b.config, vm.Config{NoBaseFee: true})
 	gasPool := new(core.GasPool).AddGas(gomath.MaxUint64)
 
-	return core.ApplyMessage(vmEnv, msg, gasPool, context.Background())
+	return core.ApplyMessage(vmEnv, msg, gasPool, nil)
 }
 
 // SendTransaction updates the pending block to include the given transaction.
