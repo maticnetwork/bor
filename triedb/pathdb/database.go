@@ -54,7 +54,7 @@ const (
 
 var (
 	// maxDiffLayers is the maximum diff layers allowed in the layer tree.
-	maxDiffLayers = 16
+	maxDiffLayers = 1
 )
 
 // layer is the interface implemented by all state layers which includes some
