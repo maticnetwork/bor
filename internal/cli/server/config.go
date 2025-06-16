@@ -551,6 +551,9 @@ type CacheConfig struct {
 	// TxLookupLimit sets the maximum number of blocks from head whose tx indices are reserved.
 	TxLookupLimit uint64 `hcl:"txlookuplimit,optional" toml:"txlookuplimit,optional"`
 
+	// LogHistory sets the maximum number of blocks from head where a log search index is maintained.
+	LogHistory uint64 `hcl:"loghistory,optional" toml:"loghistory,optional"`
+
 	// Number of block states to keep in memory (default = 128)
 	TriesInMemory uint64 `hcl:"triesinmemory,optional" toml:"triesinmemory,optional"`
 
@@ -765,6 +768,7 @@ func DefaultConfig() *Config {
 			NoPrefetch:         false,
 			Preimages:          false,
 			TxLookupLimit:      2350000,
+			LogHistory:         2350000,
 			TriesInMemory:      128,
 			FilterLogCacheSize: ethconfig.Defaults.FilterLogCacheSize,
 			TrieTimeout:        60 * time.Minute,
@@ -1132,6 +1136,7 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 		n.NoPrefetch = c.Cache.NoPrefetch
 		n.Preimages = c.Cache.Preimages
 		n.TransactionHistory = c.Cache.TxLookupLimit
+		n.LogHistory = c.Cache.LogHistory
 		n.TrieTimeout = c.Cache.TrieTimeout
 		n.TriesInMemory = c.Cache.TriesInMemory
 		n.FilterLogCacheSize = c.Cache.FilterLogCacheSize
@@ -1230,7 +1235,6 @@ var (
 // tries unlocking the specified account a few times.
 func unlockAccount(ks *keystore.KeyStore, address string, i int, passwords []string) (accounts.Account, string) {
 	account, err := utils.MakeAddress(ks, address)
-
 	if err != nil {
 		utils.Fatalf("Could not list accounts: %v", err)
 	}

@@ -457,6 +457,13 @@ func (c *Command) Flags(config *Config) *flagset.Flagset {
 		Default: c.cliConfig.Cache.TxLookupLimit,
 		Group:   "Cache",
 	})
+	f.Uint64Flag(&flagset.Uint64Flag{
+		Name:    "loghistory",
+		Usage:   "Number of recent blocks to maintain log index for",
+		Value:   &c.cliConfig.Cache.LogHistory,
+		Default: c.cliConfig.Cache.LogHistory,
+		Group:   "Cache",
+	})
 	f.IntFlag(&flagset.IntFlag{
 		Name:    "fdlimit",
 		Usage:   "Raise the open file descriptor resource limit (default = system fd limit)",
