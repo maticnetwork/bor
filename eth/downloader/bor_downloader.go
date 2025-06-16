@@ -1446,8 +1446,18 @@ func (d *Downloader) processHeaders(origin uint64, td, ttd *big.Int, beaconMode 
 				// mode and we can skip to terminating sync.
 				if !beaconMode {
 					head := d.blockchain.CurrentBlock()
-					if !gotHeaders && td.Cmp(d.blockchain.GetTd(head.Hash(), head.Number.Uint64())) > 0 {
-						return errStallingPeer
+					if !gotHeaders {
+						tdRemote := d.blockchain.GetTd(head.Hash(), head.Number.Uint64())
+						log.Debug("[debugwit] TD comparison for header",
+							"localTD", td,
+							"remoteTD", tdRemote,
+							"headHash", head.Hash().Hex(),
+							"headNumber", head.Number.String(),
+						)
+
+						if td.Cmp(tdRemote) > 0 {
+							return errStallingPeer
+						}
 					}
 					// If snap or light syncing, ensure promised headers are indeed delivered. This is
 					// needed to detect scenarios where an attacker feeds a bad pivot and then bails out
@@ -1458,7 +1468,15 @@ func (d *Downloader) processHeaders(origin uint64, td, ttd *big.Int, beaconMode 
 					// peer gave us something useful, we're already happy/progressed (above check).
 					if mode == SnapSync {
 						head := d.lightchain.CurrentHeader()
-						if td.Cmp(d.lightchain.GetTd(head.Hash(), head.Number.Uint64())) > 0 {
+						tdRemote := d.lightchain.GetTd(head.Hash(), head.Number.Uint64())
+						log.Debug("[debugwit] TD comparison (lightchain) for header",
+							"localTD", td,
+							"remoteTD", tdRemote,
+							"headHash", head.Hash().Hex(),
+							"headNumber", head.Number.String(),
+						)
+
+						if td.Cmp(tdRemote) > 0 {
 							return errStallingPeer
 						}
 					}
