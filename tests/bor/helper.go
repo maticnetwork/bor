@@ -42,6 +42,7 @@ import (
 	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/ethereum/go-ethereum/ethdb"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/miner"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/p2p"
@@ -273,21 +274,23 @@ func buildHeader(t *testing.T, chain *core.BlockChain, parentBlock *types.Block,
 }
 
 func buildNextBlock(t *testing.T, _bor consensus.Engine, chain *core.BlockChain, parentBlock *types.Block, signer []byte, borConfig *params.BorConfig, txs []*types.Transaction, currentValidators []*valset.Validator, skipSealing bool, opts ...Option) *types.Block {
+	log.Error("buildNextBlock called, this is not a test function, use buildNextBlockForTest instead")
 	t.Helper()
 
+	log.Error("buildNextBlock 1")
 	// Build a new header based on parent block
 	header := buildHeader(t, chain, parentBlock, signer, borConfig, currentValidators, opts...)
-
+	log.Error("buildNextBlock 2")
 	state, err := chain.State()
 	if err != nil {
 		t.Fatalf("%s", err)
 	}
-
+	log.Error("buildNextBlock 3")
 	b := &blockGen{header: header}
 	for _, tx := range txs {
 		b.addTxWithChain(chain, state, tx, addr)
 	}
-
+	log.Error("buildNextBlock 4")
 	// Finalize and seal the block
 	block, err := _bor.FinalizeAndAssemble(chain, b.header, state, &types.Body{
 		Transactions: b.txs,
@@ -295,32 +298,33 @@ func buildNextBlock(t *testing.T, _bor consensus.Engine, chain *core.BlockChain,
 	if err != nil {
 		panic(fmt.Sprintf("error finalizing block: %v", err))
 	}
-
+	log.Error("buildNextBlock 5")
 	// Write state changes to db
 	root, err := state.Commit(block.NumberU64(), chain.Config().IsEIP158(b.header.Number), false)
 	if err != nil {
 		panic(fmt.Sprintf("state write error: %v", err))
 	}
-
+	log.Error("buildNextBlock 6")
 	if err := state.Database().TrieDB().Commit(root, false); err != nil {
 		panic(fmt.Sprintf("trie write error: %v", err))
 	}
-
+	log.Error("buildNextBlock 7")
 	res := make(chan *types.Block, 1)
-
+	log.Error("buildNextBlock 8")
 	if skipSealing {
 		header := block.Header()
 		sign(t, header, signer, borConfig)
 		return types.NewBlock(header, block.Body(), b.receipts, trie.NewStackTrie(nil))
 	}
-
+	log.Error("buildNextBlock 9")
 	err = _bor.Seal(chain, block, res, nil)
 	if err != nil {
 		// an error case - sign manually
+		log.Error(fmt.Sprintf("signing with signer %s", hex.EncodeToString(signer)))
 		sign(t, header, signer, borConfig)
 		return types.NewBlockWithHeader(header)
 	}
-
+	log.Error("buildNextBlock 10")
 	return <-res
 }
 

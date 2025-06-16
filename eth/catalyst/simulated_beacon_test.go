@@ -17,7 +17,6 @@
 package catalyst
 
 import (
-	"context"
 	"fmt"
 	"math/big"
 	"testing"
@@ -114,7 +113,7 @@ func TestSimulatedBeaconSendWithdrawals(t *testing.T) {
 		}
 		txs[tx.Hash()] = tx
 
-		if err := ethService.APIBackend.SendTx(context.Background(), tx); err != nil {
+		if err := ethService.APIBackend.SendTx(t.Context(), tx); err != nil {
 			t.Fatal("SendTx failed", err)
 		}
 	}

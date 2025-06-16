@@ -154,11 +154,11 @@ func TestFetchCheckpointFromMockHeimdall(t *testing.T) {
 
 	// Create a new heimdall client and use same port for connection
 	client := NewHeimdallClient(fmt.Sprintf("http://localhost:%d", port), 5*time.Second)
-	_, err = client.FetchCheckpointV2(context.Background(), -1)
+	_, err = client.FetchCheckpointV2(t.Context(), -1)
 	require.NoError(t, err, "expect no error in fetching checkpoint")
 
 	// Shutdown the server
-	err = srv.Shutdown(context.TODO())
+	err = srv.Shutdown(t.Context())
 	require.NoError(t, err, "expect no error in shutting down mock heimdall server")
 
 	// Wait for `wg.Done()` to be called in the mock server's routine.
@@ -220,11 +220,11 @@ func TestFetchMilestoneFromMockHeimdall(t *testing.T) {
 
 	// Create a new heimdall client and use same port for connection
 	client := NewHeimdallClient(fmt.Sprintf("http://localhost:%d", port), 5*time.Second)
-	_, err = client.FetchMilestoneV2(context.Background())
+	_, err = client.FetchMilestoneV2(t.Context())
 	require.NoError(t, err, "expect no error in fetching milestone")
 
 	// Shutdown the server
-	err = srv.Shutdown(context.TODO())
+	err = srv.Shutdown(t.Context())
 	require.NoError(t, err, "expect no error in shutting down mock heimdall server")
 
 	// Wait for `wg.Done()` to be called in the mock server's routine.
@@ -276,7 +276,7 @@ func TestFetchShutdown(t *testing.T) {
 	// Create a new heimdall client and use same port for connection
 	client := NewHeimdallClient(fmt.Sprintf("http://localhost:%d", port), 5*time.Second)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 
 	// Expect this to fail due to timeout
 	_, err = client.FetchCheckpointV1(ctx, -1)
@@ -293,7 +293,7 @@ func TestFetchShutdown(t *testing.T) {
 		w.WriteHeader(500) // Return 500 Internal Server Error.
 	}
 
-	ctx, cancel = context.WithTimeout(context.Background(), 50*time.Millisecond) // Use some high value for timeout
+	ctx, cancel = context.WithTimeout(t.Context(), 50*time.Millisecond) // Use some high value for timeout
 
 	// Cancel the context after a delay until we make request
 	go func(cancel context.CancelFunc) {
@@ -320,11 +320,11 @@ func TestFetchShutdown(t *testing.T) {
 	}()
 
 	// Expect this to fail due to shutdown
-	_, err = client.FetchCheckpointV1(context.Background(), -1)
+	_, err = client.FetchCheckpointV1(t.Context(), -1)
 	require.Equal(t, ErrShutdownDetected.Error(), err.Error(), "expect the function error to be a shutdown detected error")
 
 	// Shutdown the server
-	err = srv.Shutdown(context.TODO())
+	err = srv.Shutdown(t.Context())
 	require.NoError(t, err, "expect no error in shutting down mock heimdall server")
 
 	// Wait for `wg.Done()` to be called in the mock server's routine.
@@ -336,7 +336,7 @@ func TestFetchShutdown(t *testing.T) {
 func TestContext(t *testing.T) {
 	t.Parallel()
 
-	ctx, cancel1 := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel1 := context.WithTimeout(t.Context(), 1*time.Second)
 
 	// Case1: Done is not yet closed, so Err returns nil.
 	require.NoError(t, ctx.Err(), "expect nil error")
@@ -359,7 +359,7 @@ func TestContext(t *testing.T) {
 	}(ctx, wg)
 
 	// Case3: Check normal case
-	ctx, cancel2 := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel2 := context.WithTimeout(t.Context(), 3*time.Second)
 
 	wg.Add(1)
 
@@ -383,7 +383,7 @@ func TestContext(t *testing.T) {
 	}
 
 	// Case4: Check if cancellation is being handled
-	ctx, cancel3 := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel3 := context.WithTimeout(t.Context(), 1*time.Second)
 
 	wg.Add(1)
 

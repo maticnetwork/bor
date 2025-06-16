@@ -1,7 +1,6 @@
 package span
 
 import (
-	"context"
 	"fmt"
 	"math/big"
 	"testing"
@@ -147,7 +146,7 @@ func TestGetCurrentValidatorsByBlockNrOrHash(t *testing.T) {
 			blockNrOrHash := rpc.BlockNumberOrHashWithNumber(blockNumber)
 
 			// Execute method
-			validators, err := chainSpanner.GetCurrentValidatorsByBlockNrOrHash(context.Background(), blockNrOrHash, tc.blockNumber)
+			validators, err := chainSpanner.GetCurrentValidatorsByBlockNrOrHash(t.Context(), blockNrOrHash, tc.blockNumber)
 
 			// Assertions
 			if tc.expectError {

@@ -44,7 +44,7 @@ func (h *MockHeimdallClient) GetSpanV1(ctx context.Context, spanID uint64) (*spa
 
 func TestSpanStore_SpanById(t *testing.T) {
 	spanStore := NewSpanStore(&MockHeimdallClient{}, nil, "1337", nil)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	type Testcase struct {
 		id         uint64
@@ -101,7 +101,7 @@ func TestSpanStore_SpanById(t *testing.T) {
 
 func TestSpanStore_SpanByBlockNumber(t *testing.T) {
 	spanStore := NewSpanStore(&MockHeimdallClient{}, nil, "1337", nil)
-	ctx := context.Background()
+	ctx := t.Context()
 
 	type Testcase struct {
 		blockNumber uint64
