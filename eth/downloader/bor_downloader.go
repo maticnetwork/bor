@@ -1191,6 +1191,7 @@ func (d *Downloader) fetchHeaders(p *peerConnection, from uint64, head uint64) e
 				}
 			}
 			if d.getMode() == StatelessSync {
+				log.Info("[debugwit] %w: header request failed: %v", errBadPeer, err)
 				select {
 				case d.queue.witnessWakeCh <- false:
 				case <-d.cancelCh:
@@ -1436,6 +1437,8 @@ func (d *Downloader) processHeaders(origin uint64, td, ttd *big.Int, beaconMode 
 					}
 				}
 				if mode == StatelessSync {
+					log.Info("[debugwit] notify header are fully processed")
+
 					select {
 					case d.queue.witnessWakeCh <- false:
 					case <-d.cancelCh:
