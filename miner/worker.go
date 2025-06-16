@@ -927,10 +927,11 @@ func (w *worker) commitTransactions(env *environment, plainTxs, blobTxs *transac
 	var depsWg sync.WaitGroup
 	var once sync.Once
 
-	EnableMVHashMap := w.chainConfig.IsCancun(env.header.Number)
+	// EnableMVHashMap := w.chainConfig.IsCancun(env.header.Number)
+	EnableMVHashMap := false
 
 	// create and add empty mvHashMap in statedb
-	if EnableMVHashMap && w.IsRunning() && false {
+	if EnableMVHashMap && w.IsRunning() {
 		deps = map[int]map[int]bool{}
 
 		chDeps = make(chan blockstm.TxDep)
