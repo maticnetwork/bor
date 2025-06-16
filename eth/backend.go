@@ -680,8 +680,10 @@ func (s *Ethereum) Start() error {
 	go s.startMilestoneWhitelistService()
 
 	// start log indexer
-	s.filterMaps.Start()
-	go s.updateFilterMapsHeads()
+	if !s.config.LogNoHistory {
+		s.filterMaps.Start()
+		go s.updateFilterMapsHeads()
+	}
 
 	return nil
 }
