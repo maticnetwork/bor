@@ -40,7 +40,7 @@ type SpanStore struct {
 
 func NewSpanStore(heimdallClient IHeimdallClient, spanner Spanner, chainId string, db ethdb.Database) SpanStore {
 	cache, _ := lru.NewARC(10)
-	return SpanStore{
+	ss := SpanStore{
 		store:             cache,
 		heimdallClient:    heimdallClient,
 		spanner:           spanner,
@@ -48,6 +48,8 @@ func NewSpanStore(heimdallClient IHeimdallClient, spanner Spanner, chainId strin
 		chainId:           chainId,
 		db:                db,
 	}
+	ss.getLatestHeimdallSpanV1()
+	return ss
 }
 
 // spanById returns a span given its id. It fetches span from heimdall if not found in cache.
