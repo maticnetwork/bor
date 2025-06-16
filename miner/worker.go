@@ -145,7 +145,6 @@ func (env *environment) discard() {
 		return
 	}
 
-	log.Info("--- stopping prefetcher...")
 	env.state.StopPrefetcher()
 }
 
@@ -618,9 +617,7 @@ func (w *worker) mainLoop() {
 			// already included in the current sealing block. These transactions will
 			// be automatically eliminated.
 			// nolint : nestif
-			log.Info("--- new tx event", "w.IsRunning", w.IsRunning(), "current", w.current == nil)
 			if !w.IsRunning() && w.current != nil {
-				log.Info("--- here")
 				// If block is already full, abort
 				if gp := w.current.gasPool; gp != nil && gp.Gas() < params.TxGas {
 					continue
@@ -653,7 +650,6 @@ func (w *worker) mainLoop() {
 				if w.interruptCommitFlag {
 					stopFn = createInterruptTimer(w.current.header.Number.Uint64(), w.current.header.Time, &w.interruptBlockBuilding)
 				}
-				log.Info("--- about to commit tx")
 				w.commitTransactions(w.current, plainTxs, blobTxs, nil, new(uint256.Int))
 				stopFn()
 
@@ -1533,7 +1529,6 @@ func (w *worker) commitWork(interrupt *atomic.Int32, noempty bool, timestamp int
 	}
 
 	w.current = work
-	log.Info("--- updating w.current...")
 }
 
 // createInterruptTimer creates and starts a timer based on the header's timestamp for block building
@@ -1541,7 +1536,6 @@ func (w *worker) commitWork(interrupt *atomic.Int32, noempty bool, timestamp int
 func createInterruptTimer(number, timestamp uint64, interruptBlockBuilding *atomic.Bool) func() {
 	delay := time.Until(time.Unix(int64(timestamp), 0))
 	interruptCtx, cancel := context.WithTimeout(context.Background(), delay)
-	log.Info("--- delay", "delay", delay)
 
 	// Reset the flag when timer starts for building a new block.
 	interruptBlockBuilding.Store(false)
