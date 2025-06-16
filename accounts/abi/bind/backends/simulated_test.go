@@ -18,7 +18,6 @@ package backends
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"math/big"
 	"math/rand"
@@ -45,6 +44,7 @@ func TestSimulatedBackend(t *testing.T) {
 	defer goleak.VerifyNone(t, append(leak.IgnoreList(),
 		goleak.IgnoreTopFunction("go.opencensus.io/stats/view.(*worker).start"),
 		goleak.IgnoreTopFunction("github.com/desertbit/timer.timerRoutine"),
+		goleak.IgnoreTopFunction("internal/poll.runtime_pollWait"),
 	)...)
 	var gasLimit uint64 = 8000029
 
@@ -322,7 +322,7 @@ func TestNonceAt(t *testing.T) {
 	}
 
 	// create a signed transaction to send
-	head, _ := sim.HeaderByNumber(context.Background(), nil) // Should be child's, good enough
+	head, _ := sim.HeaderByNumber(t.Context(), nil) // Should be child's, good enough
 	gasPrice := new(big.Int).Add(head.BaseFee, big.NewInt(1))
 
 	tx := types.NewTransaction(nonce, testAddr, big.NewInt(1000), params.TxGas, gasPrice, nil)
@@ -770,7 +770,7 @@ func TestTransactionCount(t *testing.T) {
 		t.Errorf("expected transaction count of %v does not match actual count of %v", 0, count)
 	}
 	// create a signed transaction to send
-	head, _ := sim.HeaderByNumber(context.Background(), nil) // Should be child's, good enough
+	head, _ := sim.HeaderByNumber(t.Context(), nil) // Should be child's, good enough
 	gasPrice := new(big.Int).Add(head.BaseFee, big.NewInt(1))
 
 	tx := types.NewTransaction(uint64(0), testAddr, big.NewInt(1000), params.TxGas, gasPrice, nil)
@@ -829,7 +829,7 @@ func TestTransactionInBlock(t *testing.T) {
 		t.Errorf("expected pending nonce of 0 got %v", pendingNonce)
 	}
 	// create a signed transaction to send
-	head, _ := sim.HeaderByNumber(context.Background(), nil) // Should be child's, good enough
+	head, _ := sim.HeaderByNumber(t.Context(), nil) // Should be child's, good enough
 	gasPrice := new(big.Int).Add(head.BaseFee, big.NewInt(1))
 
 	tx := types.NewTransaction(uint64(0), testAddr, big.NewInt(1000), params.TxGas, gasPrice, nil)
@@ -889,7 +889,7 @@ func TestPendingNonceAt(t *testing.T) {
 	}
 
 	// create a signed transaction to send
-	head, _ := sim.HeaderByNumber(context.Background(), nil) // Should be child's, good enough
+	head, _ := sim.HeaderByNumber(t.Context(), nil) // Should be child's, good enough
 	gasPrice := new(big.Int).Add(head.BaseFee, big.NewInt(1))
 
 	tx := types.NewTransaction(uint64(0), testAddr, big.NewInt(1000), params.TxGas, gasPrice, nil)
@@ -983,9 +983,7 @@ func TestSuggestGasPrice(t *testing.T) {
 	)
 	defer sim.Close()
 
-	bgCtx := context.Background()
-
-	gasPrice, err := sim.SuggestGasPrice(bgCtx)
+	gasPrice, err := sim.SuggestGasPrice(t.Context())
 	if err != nil {
 		t.Errorf("could not get gas price: %v", err)
 	}
@@ -1429,7 +1427,7 @@ func TestForkLogsReborn(t *testing.T) {
 		t.Error("Event should be included")
 	}
 	// 6.
-	if err := sim.Fork(context.Background(), parent.Hash()); err != nil {
+	if err := sim.Fork(t.Context(), parent.Hash()); err != nil {
 		t.Errorf("forking: %v", err)
 	}
 	// 7.
@@ -1445,7 +1443,7 @@ func TestForkLogsReborn(t *testing.T) {
 		t.Error("Event should be removed")
 	}
 	// 9.
-	if err := sim.SendTransaction(context.Background(), tx); err != nil {
+	if err := sim.SendTransaction(t.Context(), tx); err != nil {
 		t.Errorf("sending transaction: %v", err)
 	}
 
@@ -1479,15 +1477,15 @@ func TestForkResendTx(t *testing.T) {
 	// 1.
 	parent := sim.blockchain.CurrentBlock()
 	// 2.
-	head, _ := sim.HeaderByNumber(context.Background(), nil) // Should be child's, good enough
+	head, _ := sim.HeaderByNumber(t.Context(), nil) // Should be child's, good enough
 	gasPrice := new(big.Int).Add(head.BaseFee, big.NewInt(1))
 
 	_tx := types.NewTransaction(0, testAddr, big.NewInt(1000), params.TxGas, gasPrice, nil)
 	tx, _ := types.SignTx(_tx, types.HomesteadSigner{}, testKey)
-	sim.SendTransaction(context.Background(), tx)
+	sim.SendTransaction(t.Context(), tx)
 	sim.Commit()
 	// 3.
-	receipt, _ := sim.TransactionReceipt(context.Background(), tx.Hash())
+	receipt, _ := sim.TransactionReceipt(t.Context(), tx.Hash())
 	if h := receipt.BlockNumber.Uint64(); h != 1 {
 		t.Errorf("TX included in wrong block: %d", h)
 	}
@@ -1564,7 +1562,7 @@ func TestAdjustTimeAfterFork(t *testing.T) {
 	sim.Commit() // h1
 	h1 := sim.blockchain.CurrentHeader().Hash()
 	sim.Commit() // h2
-	_ = sim.Fork(context.Background(), h1)
+	_ = sim.Fork(t.Context(), h1)
 	_ = sim.AdjustTime(1 * time.Second)
 	sim.Commit()
 
