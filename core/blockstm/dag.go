@@ -34,14 +34,16 @@ type TxDep struct {
 func HasReadDep(txFrom TxnOutput, txTo TxnInput) bool {
 	hasReadDepCallCounter.Inc(1)
 
+	nFrom, nTo := len(txFrom), len(txTo)
 	// Cutoff determined by benchmarking: below this size, nested loops outperform map lookup
 	// due to avoiding allocation overhead. With median=15, this captures >50% of calls.
-	const smallCutoff = 512
-	if len(txTo) <= smallCutoff {
+	const smallCutoff = 128
+	if nTo <= smallCutoff {
 		// For small inputs, use direct comparison (O(n*m) but with better constants)
-		for _, rd := range txFrom {
-			for _, v := range txTo {
-				if rd.Path == v.Path {
+		for i := 0; i < nFrom; i++ {
+			path := txFrom[i].Path
+			for j := 0; j < nTo; j++ {
+				if path == txTo[j].Path {
 					return true
 				}
 			}
@@ -52,7 +54,7 @@ func HasReadDep(txFrom TxnOutput, txTo TxnInput) bool {
 	// For larger inputs, use map for O(n+m) complexity
 	// Using struct{} instead of bool saves memory (0 bytes vs 1 byte per entry)
 	// since we only need set membership, not associated values
-	reads := make(map[Key]struct{})
+	reads := make(map[Key]struct{}, nTo)
 	for _, v := range txTo {
 		reads[v.Path] = struct{}{}
 	}
