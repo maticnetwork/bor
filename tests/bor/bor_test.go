@@ -668,10 +668,9 @@ func TestOutOfTurnSigning(t *testing.T) {
 			// stored in cache, we're updating the underlying pointer here and hence we don't need to update the cache.
 			span0.ValidatorSet.Validators = currentValidators
 		}
-		log.Error("Inserting block", "number", i, "validators", currentValidators)
+
 		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators, false, setDifficulty)
 		insertNewBlock(t, chain, block)
-		log.Error("Inserted block", "number", i, "hash", block.Hash().Hex())
 	}
 
 	// Insert the spanSize-th block.
