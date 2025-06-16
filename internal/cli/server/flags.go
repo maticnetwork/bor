@@ -122,6 +122,12 @@ func (c *Command) Flags(config *Config) *flagset.Flagset {
 		Value:   &c.cliConfig.BorLogs,
 		Default: c.cliConfig.BorLogs,
 	})
+	f.BoolFlag(&flagset.BoolFlag{
+		Name:    "history.logs.disable",
+		Usage:   `Disables the history logs (filtermaps) indexing`,
+		Value:   &c.cliConfig.LogNoHistory,
+		Default: c.cliConfig.LogNoHistory,
+	})
 
 	// logging related flags (log-level and verbosity is present above, it will be removed soon)
 	f.StringFlag(&flagset.StringFlag{

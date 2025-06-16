@@ -94,6 +94,9 @@ type Config struct {
 	// BorLogs enables bor log retrieval
 	BorLogs bool `hcl:"bor.logs,optional" toml:"bor.logs,optional"`
 
+	// LogNoHistory disables the history logs (filtermaps) indexing
+	LogNoHistory bool `hcl:"history.logs.disable,optional" toml:"history.logs.disable,optional"`
+
 	// Ethstats is the address of the ethstats server to send telemetry
 	Ethstats string `hcl:"ethstats,optional" toml:"ethstats,optional"`
 
@@ -658,9 +661,10 @@ func DefaultConfig() *Config {
 		},
 		SyncMode:    "full",
 		GcMode:      "full",
-		StateScheme: "path",
-		Snapshot:    true,
-		BorLogs:     false,
+		StateScheme:  "path",
+		Snapshot:     true,
+		BorLogs:      false,
+		LogNoHistory: false,
 		TxPool: &TxPoolConfig{
 			Locals:       []string{},
 			NoLocals:     false,
@@ -1205,6 +1209,7 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 	}
 
 	n.BorLogs = c.BorLogs
+	n.LogNoHistory = c.LogNoHistory
 	n.DatabaseHandles = dbHandles
 
 	n.ParallelEVM.Enable = c.ParallelEVM.Enable
