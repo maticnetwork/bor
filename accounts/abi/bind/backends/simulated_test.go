@@ -42,7 +42,10 @@ import (
 func TestSimulatedBackend(t *testing.T) {
 	// The goroutine leak we're ignoring is actually not a real leak
 	// it's a known behavior of the OpenCensus package that we're using for metrics and monitoring
-	defer goleak.VerifyNone(t, append(leak.IgnoreList(), goleak.IgnoreTopFunction("go.opencensus.io/stats/view.(*worker).start"))...)
+	defer goleak.VerifyNone(t, append(leak.IgnoreList(),
+		goleak.IgnoreTopFunction("go.opencensus.io/stats/view.(*worker).start"),
+		goleak.IgnoreTopFunction("github.com/desertbit/timer.timerRoutine"),
+	)...)
 	var gasLimit uint64 = 8000029
 
 	key, _ := crypto.GenerateKey() // nolint: gosec
