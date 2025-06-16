@@ -276,6 +276,11 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 		metadata    bool
 	)
 
+	// Set an empty context if nil
+	if interruptCtx == nil {
+		interruptCtx = context.Background()
+	}
+
 	// Mutate the block and state according to any hard-fork specs
 	if p.config.DAOForkSupport && p.config.DAOForkBlock != nil && p.config.DAOForkBlock.Cmp(block.Number()) == 0 {
 		misc.ApplyDAOHardFork(statedb)

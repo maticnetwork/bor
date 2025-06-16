@@ -23,6 +23,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/accounts/abi"
@@ -86,7 +87,7 @@ func TestEVM(t *testing.T) {
 		byte(vm.ORIGIN),
 		byte(vm.BLOCKHASH),
 		byte(vm.COINBASE),
-	}, nil, nil)
+	}, nil, nil, nil)
 }
 
 func TestExecute(t *testing.T) {
@@ -97,7 +98,7 @@ func TestExecute(t *testing.T) {
 		byte(vm.PUSH1), 32,
 		byte(vm.PUSH1), 0,
 		byte(vm.RETURN),
-	}, nil, nil)
+	}, nil, nil, nil)
 	if err != nil {
 		t.Fatal("didn't expect error", err)
 	}
@@ -105,6 +106,37 @@ func TestExecute(t *testing.T) {
 	num := new(big.Int).SetBytes(ret)
 	if num.Cmp(big.NewInt(10)) != 0 {
 		t.Error("Expected 10, got", num)
+	}
+}
+
+func TestExecuteWithInterrupt(t *testing.T) {
+	var interrupt atomic.Bool
+
+	// Execute by keeping interrupt to false
+	_, _, err := Execute([]byte{
+		byte(vm.PUSH1), 10,
+		byte(vm.PUSH1), 0,
+		byte(vm.MSTORE),
+		byte(vm.PUSH1), 32,
+		byte(vm.PUSH1), 0,
+		byte(vm.RETURN),
+	}, nil, nil, &interrupt)
+	if err != nil {
+		t.Fatal("didn't expect error", err)
+	}
+
+	// Set interrupt to true
+	interrupt.Store(true)
+	_, _, err = Execute([]byte{
+		byte(vm.PUSH1), 10,
+		byte(vm.PUSH1), 0,
+		byte(vm.MSTORE),
+		byte(vm.PUSH1), 32,
+		byte(vm.PUSH1), 0,
+		byte(vm.RETURN),
+	}, nil, nil, &interrupt)
+	if err != vm.ErrInterrupt {
+		t.Fatalf("invalid error, expected: %v, got: %v", vm.ErrInterrupt, err)
 	}
 }
 
@@ -160,9 +192,9 @@ func BenchmarkCall(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		for j := 0; j < 400; j++ {
-			Execute(code, cpurchase, nil)
-			Execute(code, creceived, nil)
-			Execute(code, refund, nil)
+			Execute(code, cpurchase, nil, nil)
+			Execute(code, creceived, nil, nil)
+			Execute(code, refund, nil, nil)
 		}
 	}
 }
@@ -377,7 +409,7 @@ func TestBlockhash(t *testing.T) {
 	ret, _, err := Execute(data, input, &Config{
 		GetHashFn:   core.GetHashFn(header, chain),
 		BlockNumber: new(big.Int).Set(header.Number),
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
@@ -536,7 +568,7 @@ func TestEip2929Cases(t *testing.T) {
 				Tracer:    logger.NewMarkdownLogger(nil, os.Stdout).Hooks(),
 				ExtraEips: []int{2929},
 			},
-		})
+		}, nil)
 	}
 
 	{ // First eip testcase
@@ -698,7 +730,7 @@ func TestColdAccountAccessCost(t *testing.T) {
 					},
 				},
 			},
-		})
+		}, nil)
 		if want := tc.want; have != want {
 			t.Fatalf("testcase %d, gas report wrong, step %d, have %d want %d", i, tc.step, have, want)
 		}
@@ -958,7 +990,7 @@ func TestDelegatedAccountAccessCost(t *testing.T) {
 					},
 				},
 			},
-		})
+		}, nil)
 		if want := tc.want; have != want {
 			t.Fatalf("testcase %d, gas report wrong, step %d, have %d want %d", i, tc.step, have, want)
 		}
