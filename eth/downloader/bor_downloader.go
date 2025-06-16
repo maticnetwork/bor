@@ -579,7 +579,7 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td, ttd *
 		if localHeight == 0 || (int64(height)-int64(localHeight) > 100) {
 			origin = height
 			if db != nil {
-				rawdb.WriteTd(db, latest.Hash(), height, big.NewInt(int64(height)))
+				rawdb.WriteTd(db, latest.Hash(), height, td)
 			}
 			log.Info("StatelessSync; FastForwarding to latest block of peer", "blockNumber", height, "localHeight", localHeight, "peer", p.id)
 		} else {
