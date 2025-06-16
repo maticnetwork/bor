@@ -1455,7 +1455,7 @@ func (d *Downloader) processHeaders(origin uint64, td, ttd *big.Int, beaconMode 
 							"headNumber", head.Number.String(),
 						)
 
-						if td.Cmp(tdRemote) > 0 {
+						if td.Cmp(tdRemote) > 0 && mode != StatelessSync {
 							return errStallingPeer
 						}
 					}
