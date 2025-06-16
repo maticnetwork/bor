@@ -250,6 +250,7 @@ func (in *EVMInterpreter) Run(contract *Contract, input []byte, readOnly bool, i
 	for {
 		// Check for the flag to interrupt block building on timeout.
 		if interrupt.Load() {
+			opcodeCommitInterruptCounter.Inc(1)
 			return nil, ErrInterrupt
 		}
 
