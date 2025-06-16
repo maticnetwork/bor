@@ -208,6 +208,8 @@ func (s *SpanStore) getLatestHeimdallSpanV1() *span.HeimdallSpan {
 		return nil
 	}
 
+	log.Error("Fetched heimdallv1 span from db", "spanId", storedSpan.Id, "startBlock", storedSpan.StartBlock, "endBlock", storedSpan.EndBlock)
+
 	return &storedSpan
 }
 
