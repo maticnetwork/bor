@@ -631,9 +631,8 @@ func TestOutOfTurnSigning(t *testing.T) {
 	span0 := createMockSpan(addr, chain.Config().ChainID.String())
 
 	res := loadSpanFromFile(t)
-	valsetVals := res.Result.ValidatorSet.Validators
 	proposer := valset.NewValidator(addr, 10)
-	valsetVals = append(res.Result.ValidatorSet.Validators, proposer)
+	res.Result.ValidatorSet.Validators = append(res.Result.ValidatorSet.Validators, proposer)
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -651,7 +650,7 @@ func TestOutOfTurnSigning(t *testing.T) {
 
 	setDifficulty := func(header *types.Header) {
 		if IsSprintStart(header.Number.Uint64()) {
-			header.Difficulty = big.NewInt(int64(len(valsetVals)))
+			header.Difficulty = big.NewInt(int64(len(res.Result.ValidatorSet.Validators)))
 		}
 	}
 
@@ -690,7 +689,7 @@ func TestOutOfTurnSigning(t *testing.T) {
 	const turn = 1
 
 	setDifficulty = func(header *types.Header) {
-		header.Difficulty = big.NewInt(int64(len(valsetVals)) - turn)
+		header.Difficulty = big.NewInt(int64(len(res.Result.ValidatorSet.Validators)) - turn)
 	}
 
 	block = buildNextBlock(t, _bor, chain, block, signerKey, init.genesis.Config.Bor, nil, res.Result.ValidatorSet.Validators, false, setParentTime, setDifficulty)
@@ -699,7 +698,7 @@ func TestOutOfTurnSigning(t *testing.T) {
 		bor.BlockTooSoonError{Number: spanSize, Succession: expectedSuccessionNumber},
 		*err.(*bor.BlockTooSoonError))
 
-	expectedDifficulty := uint64(len(valsetVals) - expectedSuccessionNumber - turn) // len(validators) - succession
+	expectedDifficulty := uint64(len(res.Result.ValidatorSet.Validators) - expectedSuccessionNumber - turn) // len(validators) - succession
 	header := block.Header()
 
 	diff := bor.CalcProducerDelay(header.Number.Uint64(), expectedSuccessionNumber, init.genesis.Config.Bor)
