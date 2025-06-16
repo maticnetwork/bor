@@ -391,6 +391,7 @@ func TestInsertingSpanSizeBlocks(t *testing.T) {
 	h := createMockHeimdall(ctrl, &span0, &res.Result)
 	h.EXPECT().StateSyncEventsV1(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return([]*clerk.EventRecordWithTime{getSampleEventRecord(t)}, nil).AnyTimes()
+	h.EXPECT().GetLatestSpanV1(gomock.Any()).Return(nil, fmt.Errorf("span not found")).AnyTimes()
 	_bor.SetHeimdallClient(h)
 
 	block := init.genesis.ToBlock()
