@@ -222,41 +222,6 @@ func accountList(ctx *cli.Context) error {
 	return nil
 }
 
-func ambiguousAddrRecovery(ks *keystore.KeyStore, err *keystore.AmbiguousAddrError, auth string) accounts.Account {
-	fmt.Printf("Multiple key files exist for address %x:\n", err.Addr)
-
-	for _, a := range err.Matches {
-		fmt.Println("  ", a.URL)
-	}
-
-	fmt.Println("Testing your password against all of them...")
-
-	var match *accounts.Account
-
-	for i, a := range err.Matches {
-		if e := ks.Unlock(a, auth); e == nil {
-			match = &err.Matches[i]
-			break
-		}
-	}
-
-	if match == nil {
-		utils.Fatalf("None of the listed files could be unlocked.")
-		return accounts.Account{}
-	}
-
-	fmt.Printf("Your password unlocked %s\n", match.URL)
-	fmt.Println("In order to avoid this warning, you need to remove the following duplicate key files:")
-
-	for _, a := range err.Matches {
-		if a != *match {
-			fmt.Println("  ", a.URL)
-		}
-	}
-
-	return *match
-}
-
 // readPasswordFromFile reads the first line of the given file, trims line endings,
 // and returns the password and whether the reading was successful.
 func readPasswordFromFile(path string) (string, bool) {

@@ -32,8 +32,8 @@ func WaitFirstSuccessfulCheck() {
 }
 
 func heimdallMigrationMonitor(heimdallUrl string, db ethdb.Database) {
-
 	isFirstCheck := true
+
 	for {
 		if !isFirstCheck {
 			time.Sleep(10 * time.Second)

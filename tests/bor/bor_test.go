@@ -476,6 +476,7 @@ func TestFetchStateSyncEvents(t *testing.T) {
 	eventRecords := generateFakeStateSyncEvents(sample, eventCount)
 
 	h.EXPECT().StateSyncEventsV1(gomock.Any(), fromID, to).Return(eventRecords, nil).AnyTimes()
+	h.EXPECT().GetLatestSpanV1(gomock.Any()).Return(nil, fmt.Errorf("span not found")).AnyTimes()
 	_bor.SetHeimdallClient(h)
 
 	// Insert sprintSize # of blocks so that span is fetched at the start of a new sprint
@@ -559,6 +560,7 @@ func TestFetchStateSyncEvents_2(t *testing.T) {
 	}
 
 	h.EXPECT().StateSyncEventsV1(gomock.Any(), fromID, to).Return(eventRecords, nil).AnyTimes()
+	h.EXPECT().GetLatestSpanV1(gomock.Any()).Return(nil, fmt.Errorf("span not found")).AnyTimes()
 	_bor.SetHeimdallClient(h)
 
 	// Insert the blocks for the 0th sprint.
@@ -639,6 +641,7 @@ func TestOutOfTurnSigning(t *testing.T) {
 	h := createMockHeimdall(ctrl, &span0, &res.Result)
 	h.EXPECT().StateSyncEventsV1(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return([]*clerk.EventRecordWithTime{getSampleEventRecord(t)}, nil).AnyTimes()
+	h.EXPECT().GetLatestSpanV1(gomock.Any()).Return(nil, fmt.Errorf("span not found")).AnyTimes()
 	_bor.SetHeimdallClient(h)
 
 	spanner := getMockedSpanner(t, res.Result.ValidatorSet.Validators)
