@@ -766,7 +766,7 @@ func testCommitInterruptExperimentBor(t *testing.T, delay uint, txCount int) {
 // TestCommitInterruptExperimentBor_NewTxFlow tests the commit interrupt experiment for bor consensus by inducing
 // an artificial delay at transaction level. It runs the mining flow triggered via new transactions channel. The tests
 // are a bit unconventional compared to normal flow as the situations are only possible in non-validator mode.
-func TestCommitInterruptExperimentBor_NewTxFlow2(t *testing.T) {
+func TestCommitInterruptExperimentBor_NewTxFlow(t *testing.T) {
 	var (
 		engine      consensus.Engine
 		chainConfig *params.ChainConfig
@@ -780,6 +780,7 @@ func TestCommitInterruptExperimentBor_NewTxFlow2(t *testing.T) {
 
 	engine, ctrl = getFakeBorFromConfig(t, chainConfig)
 
+	// Set the mock tx delay to 500ms
 	w, b, _ := newTestWorker(t, chainConfig, engine, rawdb.NewMemoryDatabase(), true, 500)
 	defer func() {
 		w.close()
