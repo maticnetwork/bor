@@ -19,6 +19,7 @@ package runtime
 import (
 	"math"
 	"math/big"
+	"sync/atomic"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/state"
@@ -118,7 +119,7 @@ func setDefaults(cfg *Config) {
 //
 // Execute sets up an in-memory, temporary, environment for the execution of
 // the given code. It makes sure that it's restored to its original state afterwards.
-func Execute(code, input []byte, cfg *Config) ([]byte, *state.StateDB, error) {
+func Execute(code, input []byte, cfg *Config, interrupt *atomic.Bool) ([]byte, *state.StateDB, error) {
 	if cfg == nil {
 		cfg = new(Config)
 	}
@@ -151,7 +152,7 @@ func Execute(code, input []byte, cfg *Config) ([]byte, *state.StateDB, error) {
 		input,
 		cfg.GasLimit,
 		uint256.MustFromBig(cfg.Value),
-		nil,
+		interrupt,
 	)
 	if cfg.EVMConfig.Tracer != nil && cfg.EVMConfig.Tracer.OnTxEnd != nil {
 		cfg.EVMConfig.Tracer.OnTxEnd(&types.Receipt{GasUsed: cfg.GasLimit - leftOverGas}, err)

@@ -25,7 +25,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	lru "github.com/hashicorp/golang-lru"
 	"github.com/holiman/uint256"
 	"go.opentelemetry.io/otel"
 
@@ -146,6 +145,7 @@ func (env *environment) discard() {
 		return
 	}
 
+	log.Info("--- stopping prefetcher...")
 	env.state.StopPrefetcher()
 }
 
@@ -272,9 +272,9 @@ type worker struct {
 	resubmitHook func(time.Duration, time.Duration) // Method to call upon updating resubmitting interval.
 
 	// Interrupt commit to stop block building on time
-	interruptCommitFlag bool // Denotes whether interrupt commit is enabled or not
-	interruptCtx        context.Context
-	interruptedTxCache  *vm.TxCache
+	interruptCommitFlag    bool        // Denotes whether interrupt commit is enabled or not
+	interruptBlockBuilding atomic.Bool // A toggle to denote whether to stop block building or not
+	mockTxDelay            uint        // A mock delay for transaction execution, only used in tests
 
 	// noempty is the flag used to control whether the feature of pre-seal empty
 	// block is enabled. The default value is false(pre-seal is enabled by default).
@@ -316,16 +316,6 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 	// Subscribe events for blockchain
 	worker.chainHeadSub = eth.BlockChain().SubscribeChainHeadEvent(worker.chainHeadCh)
 
-	interruptedTxCache, err := lru.New(vm.InterruptedTxCacheSize)
-	if err != nil {
-		log.Warn("Failed to create interrupted tx cache", "err", err)
-	}
-
-	worker.interruptCtx = context.Background()
-	worker.interruptedTxCache = &vm.TxCache{
-		Cache: interruptedTxCache,
-	}
-
 	if !worker.interruptCommitFlag {
 		worker.noempty.Store(false)
 	}
@@ -365,6 +355,12 @@ func newWorker(config *Config, chainConfig *params.ChainConfig, engine consensus
 	}
 
 	return worker
+}
+
+// setMockTxDelay sets the delay field used for inducing delay in between
+// transaction execution in tests.
+func (w *worker) setMockTxDelay(mockTxDelay uint) {
+	w.mockTxDelay = mockTxDelay
 }
 
 // setEtherbase sets the etherbase used to initialize the block coinbase field.
@@ -622,7 +618,9 @@ func (w *worker) mainLoop() {
 			// already included in the current sealing block. These transactions will
 			// be automatically eliminated.
 			// nolint : nestif
+			log.Info("--- new tx event", "w.IsRunning", w.IsRunning(), "current", w.current == nil)
 			if !w.IsRunning() && w.current != nil {
+				log.Info("--- here")
 				// If block is already full, abort
 				if gp := w.current.gasPool; gp != nil && gp.Gas() < params.TxGas {
 					continue
@@ -651,12 +649,11 @@ func (w *worker) mainLoop() {
 
 				tcount := w.current.tcount
 
-				w.interruptCtx = resetAndCopyInterruptCtx(w.interruptCtx)
 				stopFn := func() {}
 				if w.interruptCommitFlag {
-					w.interruptCtx, stopFn = getInterruptTimer(w.interruptCtx, w.current.header.Number.Uint64(), w.current.header.Time)
-					w.interruptCtx = vm.PutCache(w.interruptCtx, w.interruptedTxCache)
+					stopFn = createInterruptTimer(w.current.header.Number.Uint64(), w.current.header.Time, &w.interruptBlockBuilding)
 				}
+				log.Info("--- about to commit tx")
 				w.commitTransactions(w.current, plainTxs, blobTxs, nil, new(uint256.Int))
 				stopFn()
 
@@ -898,8 +895,7 @@ func (w *worker) commitTransaction(env *environment, tx *types.Transaction) ([]*
 		gp   = env.gasPool.Gas()
 	)
 
-	w.interruptCtx = vm.SetCurrentTxOnContext(w.interruptCtx, tx.Hash())
-	receipt, err := core.ApplyTransaction(env.evm, env.gasPool, env.state, env.header, tx, &env.header.GasUsed, w.interruptCtx)
+	receipt, err := core.ApplyTransaction(env.evm, env.gasPool, env.state, env.header, tx, &env.header.GasUsed, &w.interruptBlockBuilding)
 	if err != nil {
 		env.state.RevertToSnapshot(snap)
 		env.gasPool.SetGas(gp)
@@ -962,23 +958,15 @@ mainloop:
 			}
 		}
 
-		if w.interruptCtx != nil {
-			if EnableMVHashMap && w.IsRunning() {
-				env.state.AddEmptyMVHashMap()
-			}
+		if EnableMVHashMap && w.IsRunning() {
+			env.state.AddEmptyMVHashMap()
+		}
 
-			// Check for the global flag and context to interrupt block building on timeout.
-			// We use the global flag because it's cheap to check for an atomic boolean than
-			// checking if we received any value in context.Done channel.
-			if common.InterruptBlockBuilding.Load() {
-				select {
-				case <-w.interruptCtx.Done():
-					txCommitInterruptCounter.Inc(1)
-					log.Warn("Tx Level Interrupt", "hash", lastTxHash, "err", w.interruptCtx.Err())
-					break mainloop
-				default:
-				}
-			}
+		// Check for the flag to interrupt block building on timeout.
+		if w.interruptBlockBuilding.Load() {
+			txCommitInterruptCounter.Inc(1)
+			log.Debug("Block building interrupted due to timeout, aborting new transaction commits", "hash", lastTxHash)
+			break mainloop
 		}
 
 		// If we don't have enough gas for any further transactions then we're done.
@@ -1079,13 +1067,8 @@ mainloop:
 
 		logs, err := w.commitTransaction(env, tx)
 
-		// Check if we have a `delay` set in interrupt context. It's only set during tests.
-		if w.interruptCtx != nil {
-			if delay := w.interruptCtx.Value(vm.InterruptCtxDelayKey); delay != nil {
-				// nolint : durationcheck
-				time.Sleep(time.Duration(delay.(uint)) * time.Millisecond)
-			}
-		}
+		// Set mock delay (if any) between transactions for tests
+		time.Sleep(time.Duration(w.mockTxDelay) * time.Millisecond)
 
 		switch {
 		case errors.Is(err, core.ErrNonceTooLow):
@@ -1405,7 +1388,6 @@ func (w *worker) generateWork(params *generateParams, witness bool) *newPayloadR
 	}
 	defer work.discard()
 
-	w.interruptCtx = resetAndCopyInterruptCtx(w.interruptCtx)
 	if !params.noTxs {
 		interrupt := new(atomic.Int32)
 
@@ -1495,15 +1477,14 @@ func (w *worker) commitWork(interrupt *atomic.Int32, noempty bool, timestamp int
 		return
 	}
 
-	w.interruptCtx = resetAndCopyInterruptCtx(w.interruptCtx)
 	stopFn := func() {}
 	defer func() {
 		stopFn()
 	}()
 
 	if !noempty && w.interruptCommitFlag {
-		w.interruptCtx, stopFn = getInterruptTimer(w.interruptCtx, work.header.Number.Uint64(), work.header.Time)
-		w.interruptCtx = vm.PutCache(w.interruptCtx, w.interruptedTxCache)
+		// Start the timer for block building
+		stopFn = createInterruptTimer(work.header.Number.Uint64(), work.header.Time, &w.interruptBlockBuilding)
 	}
 
 	// Create an empty block based on temporary copied state for
@@ -1552,45 +1533,34 @@ func (w *worker) commitWork(interrupt *atomic.Int32, noempty bool, timestamp int
 	}
 
 	w.current = work
+	log.Info("--- updating w.current...")
 }
 
-// resetAndCopyInterruptCtx resets the interrupt context and copies the values set
-// from the old one to newly created one. It is necessary to reset context in this way
-// to get rid of the older parent timeout context.
-func resetAndCopyInterruptCtx(interruptCtx context.Context) context.Context {
-	// Create a fresh new context and copy values from old one
-	newCtx := context.Background()
-	if delay := interruptCtx.Value(vm.InterruptCtxDelayKey); delay != nil {
-		newCtx = context.WithValue(newCtx, vm.InterruptCtxDelayKey, delay)
-	}
-	if opcodeDelay := interruptCtx.Value(vm.InterruptCtxOpcodeDelayKey); opcodeDelay != nil {
-		newCtx = context.WithValue(newCtx, vm.InterruptCtxOpcodeDelayKey, opcodeDelay)
-	}
-
-	return newCtx
-}
-
-func getInterruptTimer(interruptCtx context.Context, number, timestamp uint64) (context.Context, func()) {
+// createInterruptTimer creates and starts a timer based on the header's timestamp for block building
+// and toggles the flag when the timer expires.
+func createInterruptTimer(number, timestamp uint64, interruptBlockBuilding *atomic.Bool) func() {
 	delay := time.Until(time.Unix(int64(timestamp), 0))
-	interruptCtx, cancel := context.WithTimeout(interruptCtx, delay)
+	interruptCtx, cancel := context.WithTimeout(context.Background(), delay)
+	log.Info("--- delay", "delay", delay)
 
-	// Reset the global flag when timer starts for building a new block.
-	common.InterruptBlockBuilding.Store(false)
+	// Reset the flag when timer starts for building a new block.
+	interruptBlockBuilding.Store(false)
 
 	go func() {
+		// Wait for timeout
 		<-interruptCtx.Done()
 
-		// Toggle the global flag to indicate commit transactions loop and EVM interpreter loop
+		// Toggle the flag to indicate commit transactions loop and EVM interpreter loop
 		// to stop block building.
-		common.InterruptBlockBuilding.Store(true)
+		interruptBlockBuilding.Store(true)
 
 		if interruptCtx.Err() != context.Canceled {
-			log.Info("Commit Interrupt. Pre-committing the current block", "block", number)
+			log.Info("Block building interrupted due to timeout", "block", number)
 			cancel()
 		}
 	}()
 
-	return interruptCtx, cancel
+	return cancel
 }
 
 // commit runs any post-transaction state modifications, assembles the final block
@@ -1660,12 +1630,6 @@ func (w *worker) adjustResubmitInterval(message *intervalAdjust) {
 	default:
 		log.Warn("the resubmitAdjustCh is full, discard the message")
 	}
-}
-
-// setInterruptCtx sets `value` for given `key` for interrupt commit logic. To be only
-// used for e2e unit tests.
-func (w *worker) setInterruptCtx(key any, value any) {
-	w.interruptCtx = context.WithValue(w.interruptCtx, key, value)
 }
 
 // copyReceipts makes a deep copy of the given receipts.
