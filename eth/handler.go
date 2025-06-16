@@ -259,6 +259,7 @@ func newHandler(config *handlerConfig) (*handler, error) {
 		return h.chain.CurrentBlock().Number.Uint64()
 	}
 	inserter := func(blocks types.Blocks, witnesses []*stateless.Witness) (int, error) {
+		log.Info("[debugwit] Called Inserter", "blocksLen", len(blocks), "witLen", len(witnesses))
 		// If sync is running, deny importing weird blocks.
 		if !h.synced.Load() {
 			log.Warn("Syncing, discarded propagated block", "number", blocks[0].Number(), "hash", blocks[0].Hash())
@@ -266,8 +267,10 @@ func newHandler(config *handlerConfig) (*handler, error) {
 		}
 
 		if h.statelessSync.Load() {
+			log.Info("[debugwit] Called InsertChainStateless", "blocksLen", len(blocks), "witLen", len(witnesses))
 			return h.chain.InsertChainStateless(blocks, witnesses)
 		} else {
+			log.Info("[debugwit] Called InsertChainWithWitnesses", "blocksLen", len(blocks), "witLen", len(witnesses))
 			return h.chain.InsertChainWithWitnesses(blocks, config.computeWitness, witnesses)
 		}
 	}
