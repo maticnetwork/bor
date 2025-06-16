@@ -414,7 +414,10 @@ func (d *Downloader) concurrentFetch(queue typedQueue, beaconMode bool) error {
 		case cont := <-queue.waker():
 			// The header fetcher sent a continuation flag, check if it's done
 			if !cont {
+				log.Info("[debugwit] continuation flag false, finished true", cont, "cont")
 				finished = true
+			} else {
+				log.Info("[debugwit] continuation flag true, finished false", cont, "cont")
 			}
 		}
 	}
