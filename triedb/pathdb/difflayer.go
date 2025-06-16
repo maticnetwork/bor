@@ -85,15 +85,26 @@ func (dl *diffLayer) node(owner common.Hash, path []byte, depth int) ([]byte, co
 	dl.lock.RLock()
 	defer dl.lock.RUnlock()
 
+	return dl.nodeUnlocked(owner, path, depth)
+}
+
+// nodeUnlocked is the internal unlocked version of node method to avoid recursive lock overhead.
+func (dl *diffLayer) nodeUnlocked(owner common.Hash, path []byte, depth int) ([]byte, common.Hash, *nodeLoc, error) {
 	// If the trie node is known locally, return it
 	n, ok := dl.nodes.node(owner, path)
 	if ok {
-		dirtyNodeHitMeter.Mark(1)
-		dirtyNodeHitDepthHist.Update(int64(depth))
-		dirtyNodeReadMeter.Mark(int64(len(n.Blob)))
+		// dirtyNodeHitMeter.Mark(1)
+		// dirtyNodeHitDepthHist.Update(int64(depth))
+		// dirtyNodeReadMeter.Mark(int64(len(n.Blob)))
 		return n.Blob, n.Hash, &nodeLoc{loc: locDiffLayer, depth: depth}, nil
 	}
 	// Trie node unknown to this layer, resolve from parent
+	// Try to optimize for consecutive diff layers
+	if parent, ok := dl.parent.(*diffLayer); ok {
+		parent.lock.RLock()
+		defer parent.lock.RUnlock()
+		return parent.nodeUnlocked(owner, path, depth+1)
+	}
 	return dl.parent.node(owner, path, depth+1)
 }
 
@@ -107,19 +118,30 @@ func (dl *diffLayer) account(hash common.Hash, depth int) ([]byte, error) {
 	dl.lock.RLock()
 	defer dl.lock.RUnlock()
 
+	return dl.accountUnlocked(hash, depth)
+}
+
+// accountUnlocked is the internal unlocked version of account method to avoid recursive lock overhead.
+func (dl *diffLayer) accountUnlocked(hash common.Hash, depth int) ([]byte, error) {
 	if blob, found := dl.states.account(hash); found {
-		dirtyStateHitMeter.Mark(1)
-		dirtyStateHitDepthHist.Update(int64(depth))
-		dirtyStateReadMeter.Mark(int64(len(blob)))
+		// dirtyStateHitMeter.Mark(1)
+		// dirtyStateHitDepthHist.Update(int64(depth))
+		// dirtyStateReadMeter.Mark(int64(len(blob)))
 
 		if len(blob) == 0 {
-			stateAccountInexMeter.Mark(1)
+			// stateAccountInexMeter.Mark(1)
 		} else {
-			stateAccountExistMeter.Mark(1)
+			// stateAccountExistMeter.Mark(1)
 		}
 		return blob, nil
 	}
 	// Account is unknown to this layer, resolve from parent
+	// Try to optimize for consecutive diff layers
+	if parent, ok := dl.parent.(*diffLayer); ok {
+		parent.lock.RLock()
+		defer parent.lock.RUnlock()
+		return parent.accountUnlocked(hash, depth+1)
+	}
 	return dl.parent.account(hash, depth+1)
 }
 
@@ -133,19 +155,30 @@ func (dl *diffLayer) storage(accountHash, storageHash common.Hash, depth int) ([
 	dl.lock.RLock()
 	defer dl.lock.RUnlock()
 
+	return dl.storageUnlocked(accountHash, storageHash, depth)
+}
+
+// storageUnlocked is the internal unlocked version of storage method to avoid recursive lock overhead.
+func (dl *diffLayer) storageUnlocked(accountHash, storageHash common.Hash, depth int) ([]byte, error) {
 	if blob, found := dl.states.storage(accountHash, storageHash); found {
-		dirtyStateHitMeter.Mark(1)
-		dirtyStateHitDepthHist.Update(int64(depth))
-		dirtyStateReadMeter.Mark(int64(len(blob)))
+		// dirtyStateHitMeter.Mark(1)
+		// dirtyStateHitDepthHist.Update(int64(depth))
+		// dirtyStateReadMeter.Mark(int64(len(blob)))
 
 		if len(blob) == 0 {
-			stateStorageInexMeter.Mark(1)
+			// stateStorageInexMeter.Mark(1)
 		} else {
-			stateStorageExistMeter.Mark(1)
+			// stateStorageExistMeter.Mark(1)
 		}
 		return blob, nil
 	}
 	// storage slot is unknown to this layer, resolve from parent
+	// Try to optimize for consecutive diff layers
+	if parent, ok := dl.parent.(*diffLayer); ok {
+		parent.lock.RLock()
+		defer parent.lock.RUnlock()
+		return parent.storageUnlocked(accountHash, storageHash, depth+1)
+	}
 	return dl.parent.storage(accountHash, storageHash, depth+1)
 }
 

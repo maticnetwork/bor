@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"unsafe"
 
 	"github.com/VictoriaMetrics/fastcache"
 	"github.com/ethereum/go-ethereum/common"
@@ -87,11 +88,17 @@ func (s *nodeSet) updateSize(delta int64) {
 	s.size = 0
 }
 
+// bytesToStringUnsafe converts []byte to string without allocation.
+// This is safe for read-only operations like map lookups.
+func bytesToStringUnsafe(b []byte) string {
+	return unsafe.String(unsafe.SliceData(b), len(b))
+}
+
 // node retrieves the trie node with node path and its trie identifier.
 func (s *nodeSet) node(owner common.Hash, path []byte) (*trienode.Node, bool) {
 	// Account trie node
 	if owner == (common.Hash{}) {
-		n, ok := s.accountNodes[string(path)]
+		n, ok := s.accountNodes[bytesToStringUnsafe(path)]
 		return n, ok
 	}
 	// Storage trie node
@@ -99,7 +106,7 @@ func (s *nodeSet) node(owner common.Hash, path []byte) (*trienode.Node, bool) {
 	if !ok {
 		return nil, false
 	}
-	n, ok := subset[string(path)]
+	n, ok := subset[bytesToStringUnsafe(path)]
 	return n, ok
 }
 
