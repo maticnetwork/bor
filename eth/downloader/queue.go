@@ -1103,7 +1103,7 @@ func (q *queue) DeliverWitnesses(id string, witnessData interface{}, meta interf
 		log.Trace("DeliverWitnesses: reconstructWitness entered", "peer", id, "index", index, "header", result.Header.Hash())
 		// Decode the RLP witness data
 		wit := new(stateless.Witness)
-		log.Trace("DeliverWitnesses: Decoding witness RLP", "peer", id, "index", index)
+		log.Trace("DeliverWitnesses: Decoding witness RLP", "peer", id, "index", index, "lenRLPInBytes", len(witnessRLP[index]))
 		if err := rlp.DecodeBytes(witnessRLP[index], wit); err != nil {
 			log.Warn("DeliverWitnesses: Failed to decode witness RLP", "err", err, "peer", id, "header", result.Header.Hash())
 			// How to handle decode failure? Mark as incomplete? For now, just log.
