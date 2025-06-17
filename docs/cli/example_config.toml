@@ -161,11 +161,17 @@ devfakeauthor = false           # Run miner without validator set authorization 
   trie = 15                # Percentage of cache memory allowance to use for trie caching (default = 15% full mode, 30% archive mode)
   noprefetch = false       # Disable heuristic state prefetch during block import (less CPU and disk IO, more time waiting for data)
   preimages = false        # Enable recording the SHA3/keccak preimages of trie keys
-  txlookuplimit = 2350000  # Number of recent blocks to maintain transactions index for (default = about 56 days, 0 = entire chain)
+  txlookuplimit = 2350000  # Number of recent blocks to maintain transactions index for (soon to be deprecated, use history.transactions instead)
   triesinmemory = 128      # Number of block states (tries) to keep in memory
   blocklogs = 32           # Size (in number of blocks) of the log cache for filtering
   timeout = "1h0m0s"       # Time after which the Merkle Patricia Trie is stored to disc from memory
   fdlimit = 0              # Raise the open file descriptor resource limit (default = system fd limit)
+
+[history]                  # For historical data retention related flags
+  transactions = 2350000   # Number of recent blocks to maintain transactions index for (default = about 2 months, 0 = entire chain)
+  logs = 2350000           # Number of recent blocks to maintain log search index for (default = about 2 months, 0 = entire chain)
+  "logs.disable" = false   # Do not maintain log search index
+  state = 90000            # Number of recent blocks to retain state history for, only relevant in state.scheme=path (default = 90,000 blocks, 0 = entire chain)
 
 [accounts]
   unlock = []                    # Comma separated list of accounts to unlock
