@@ -1437,7 +1437,7 @@ func (d *Downloader) processHeaders(origin uint64, td, ttd *big.Int, beaconMode 
 					}
 				}
 				if mode == StatelessSync {
-					log.Info("[debugwit] notify header are fully processed")
+					log.Info("[debugwit] notify header are fully processed", "task", task)
 
 					select {
 					case d.queue.witnessWakeCh <- false:
