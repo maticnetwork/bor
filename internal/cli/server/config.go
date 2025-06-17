@@ -1166,7 +1166,7 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 	// History
 	{
 		// TODO: uncomment this when txlookuplimit is completely removed
-		// n.TransactionHistory = c.Cache.TxLookupLimit
+		n.TransactionHistory = c.History.TransactionHistory
 		n.LogHistory = c.History.LogHistory
 		n.LogNoHistory = c.History.LogNoHistory
 		n.StateHistory = c.History.StateHistory
