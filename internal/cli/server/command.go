@@ -122,15 +122,17 @@ func (c *Command) extractFlags(args []string) error {
 		}
 	}
 
+	var tomlConfig *toml.Tree
+
 	// nolint: nestif
 	// check for log-level and verbosity here
 	if configFilePath != "" {
-		data, _ := toml.LoadFile(configFilePath)
-		if data.Has("verbosity") && data.Has("log-level") {
-			log.Warn("Config contains both, verbosity and log-level, log-level will be deprecated soon. Use verbosity only.", "using", data.Get("verbosity"))
-		} else if !data.Has("verbosity") && data.Has("log-level") {
-			log.Warn("Config contains log-level only, note that log-level will be deprecated soon. Use verbosity instead.", "using", data.Get("log-level"))
-			c.cliConfig.Verbosity = VerbosityStringToInt(strings.ToLower(data.Get("log-level").(string)))
+		tomlConfig, _ = toml.LoadFile(configFilePath)
+		if tomlConfig.Has("verbosity") && tomlConfig.Has("log-level") {
+			log.Warn("Config contains both, verbosity and log-level, log-level will be deprecated soon. Use verbosity only.", "using", tomlConfig.Get("verbosity"))
+		} else if !tomlConfig.Has("verbosity") && tomlConfig.Has("log-level") {
+			log.Warn("Config contains log-level only, note that log-level will be deprecated soon. Use verbosity instead.", "using", tomlConfig.Get("log-level"))
+			c.cliConfig.Verbosity = VerbosityStringToInt(strings.ToLower(tomlConfig.Get("log-level").(string)))
 		}
 	} else {
 		tempFlag := 0
@@ -150,9 +152,70 @@ func (c *Command) extractFlags(args []string) error {
 		}
 	}
 
+	// Handle multiple flags for tx lookup limit
+	c.cliConfig.Cache.TxLookupLimit = handleTxLookupLimitFlag(tomlConfig, args, c.cliConfig)
+
 	c.config = c.cliConfig
 
 	return nil
+}
+
+func handleTxLookupLimitFlag(config *toml.Tree, args []string, cliConfig *Config) uint64 {
+	var (
+		oldSet bool
+		newSet bool
+		value  int64
+	)
+
+	for _, val := range args {
+		if strings.HasPrefix(val, "-txlookuplimit") || strings.HasPrefix(val, "--txlookuplimit") {
+			oldSet = true
+		}
+		if strings.HasPrefix(val, "-history.transactions") || strings.HasPrefix(val, "--history.transactions") {
+			newSet = true
+		}
+	}
+
+	if oldSet && newSet {
+		log.Warn("Both, txlookuplimit and history.transactions flags are provided. txlookuplimit will be deprecated soon, using history.transactions", "value", cliConfig.History.TransactionHistory)
+		return cliConfig.History.TransactionHistory
+	}
+
+	if oldSet && !newSet {
+		log.Warn("The flag txlookuplimit will be deprecated soon, please use history.transactions instead")
+		return cliConfig.Cache.TxLookupLimit
+	}
+
+	if newSet && !oldSet {
+		return cliConfig.History.TransactionHistory
+	}
+
+	if config == nil {
+		return cliConfig.History.TransactionHistory
+	}
+
+	oldSet = config.Has("cache.txlookuplimit")
+	newSet = config.Has("history.transactions")
+
+	if oldSet && newSet {
+		value = config.Get("history.transactions").(int64)
+		log.Warn("Config contains both, txlookuplimit and history.transactions. txlookuplimit will be deprecated soon, using history.transactions", "value", value)
+		return uint64(value)
+	}
+
+	if oldSet && !newSet {
+		value = config.Get("cache.txlookuplimit").(int64)
+		log.Warn("The flag txlookuplimit will be deprecated soon, please use history.transactions instead")
+		return uint64(value)
+	}
+
+	if newSet && !oldSet {
+		value = config.Get("history.transactions").(int64)
+		return uint64(value)
+	}
+
+	// User hasn't set any of these flags explcitly, use default value of new flag
+	return cliConfig.History.TransactionHistory
 }
 
 // Run implements the cli.Command interface

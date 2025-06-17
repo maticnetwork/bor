@@ -1155,18 +1155,18 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 		n.TrieDirtyCache = calcPerc(c.Cache.PercGc)
 		n.NoPrefetch = c.Cache.NoPrefetch
 		n.Preimages = c.Cache.Preimages
+		// Note that even the values set by `history.transactions` will be written in the old flag until it's removed.
+		n.TransactionHistory = c.Cache.TxLookupLimit
 		n.TrieTimeout = c.Cache.TrieTimeout
 		n.TriesInMemory = c.Cache.TriesInMemory
 		n.FilterLogCacheSize = c.Cache.FilterLogCacheSize
 
-		log.Warn("The flag txlookuplimit will be deprecated soon, please use history.transactions instead")
-		n.TransactionHistory = c.Cache.TxLookupLimit
 	}
 
 	// History
 	{
 		// TODO: uncomment this when txlookuplimit is completely removed
-		n.TransactionHistory = c.History.TransactionHistory
+		// n.TransactionHistory = c.History.TransactionHistory
 		n.LogHistory = c.History.LogHistory
 		n.LogNoHistory = c.History.LogNoHistory
 		n.StateHistory = c.History.StateHistory
