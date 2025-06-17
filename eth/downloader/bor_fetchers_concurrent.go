@@ -379,11 +379,11 @@ func (d *Downloader) concurrentFetch(queue typedQueue, beaconMode bool) error {
 			// Signal the dispatcher that the round trip is done. We'll drop the
 			// peer if the data turns out to be junk.
 			if reflect.TypeOf(queue) == reflect.TypeOf(&witnessQueue{}) {
-				log.Debug("Signal dispatcher", "queue type", reflect.TypeOf(queue), "res", res)
+				log.Debug("Signal dispatcher", "queue type", reflect.TypeOf(queue))
 			}
 			res.Done <- nil
 			if reflect.TypeOf(queue) == reflect.TypeOf(&witnessQueue{}) {
-				log.Debug("Close request", "queue type", reflect.TypeOf(queue), "res", res)
+				log.Debug("Close request", "queue type", reflect.TypeOf(queue))
 			}
 			res.Req.Close()
 
