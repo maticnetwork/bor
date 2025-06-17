@@ -576,7 +576,7 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td, ttd *
 
 		// FastForward on Heimdall-v1 (only for test purposes)
 		// It just fastforward on start or with high difference between nodes and when it's done it writes an ephemeral TD in origin block to ensure parent to be queried
-		if localHeight == 0 || (int64(height)-int64(localHeight) > 100) {
+		if localHeight == 0 || (int64(height)-int64(localHeight) > 300) {
 			origin = height
 			if db != nil {
 				rawdb.WriteTd(db, latest.Hash(), height, td)
@@ -1271,7 +1271,7 @@ func (d *Downloader) fetchHeaders(p *peerConnection, from uint64, head uint64) e
 			p.log.Debug("No more headers available")
 
 			log.Info("[debugwit] No more headers available, waiting to fecth again")
-			time.Sleep(time.Second * 30)
+			time.Sleep(time.Second * 10)
 			continue
 
 			// select {
