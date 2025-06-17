@@ -850,7 +850,7 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 	}
 
 	header.Time = parent.Time + CalcProducerDelay(number, succession, c.config)
-	if header.Time < uint64(time.Now().Unix()) {
+	if header.Time < uint64(time.Now().Unix())+1 {
 		header.Time = uint64(time.Now().Unix()) + CalcProducerDelay(number, succession, c.config)
 	} else {
 		// For primary validators, wait until the current block production window
