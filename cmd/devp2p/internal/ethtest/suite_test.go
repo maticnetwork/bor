@@ -154,7 +154,7 @@ func setupGeth(stack *node.Node, dir string) error {
 	if err := catalyst.Register(stack, backend); err != nil {
 		return fmt.Errorf("failed to register catalyst service: %v", err)
 	}
-	_, err = backend.BlockChain().InsertChain(chain.blocks[1:])
+	_, err = backend.BlockChain().InsertChain(chain.blocks[1:], false)
 
 	return err
 }

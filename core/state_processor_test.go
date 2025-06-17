@@ -258,7 +258,7 @@ func TestStateProcessorErrors(t *testing.T) {
 			// The EstimateGas API tests test this case.
 		} {
 			block := GenerateBadBlock(gspec.ToBlock(), beacon.New(ethash.NewFaker()), tt.txs, gspec.Config, false)
-			_, err := blockchain.InsertChain(types.Blocks{block})
+			_, err := blockchain.InsertChain(types.Blocks{block}, false)
 			if err == nil {
 				t.Fatal("block imported without errors")
 			}
@@ -307,7 +307,7 @@ func TestStateProcessorErrors(t *testing.T) {
 			},
 		} {
 			block := GenerateBadBlock(gspec.ToBlock(), ethash.NewFaker(), tt.txs, gspec.Config, true)
-			_, err := blockchain.InsertChain(types.Blocks{block})
+			_, err := blockchain.InsertChain(types.Blocks{block}, false)
 			if err == nil {
 				t.Fatal("block imported without errors")
 			}
@@ -346,7 +346,7 @@ func TestStateProcessorErrors(t *testing.T) {
 			},
 		} {
 			block := GenerateBadBlock(gspec.ToBlock(), beacon.New(ethash.NewFaker()), tt.txs, gspec.Config, false)
-			_, err := blockchain.InsertChain(types.Blocks{block})
+			_, err := blockchain.InsertChain(types.Blocks{block}, false)
 			if err == nil {
 				t.Fatal("block imported without errors")
 			}

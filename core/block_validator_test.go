@@ -85,7 +85,7 @@ func testHeaderVerification(t *testing.T, scheme string) {
 			}
 		}
 
-		chain.InsertChain(blocks[i : i+1])
+		chain.InsertChain(blocks[i:i+1], false)
 	}
 }
 
@@ -199,7 +199,7 @@ func testHeaderVerificationForMerging(t *testing.T, isClique bool) {
 			t.Fatalf("pre-block %d: unexpected result returned: %v", i, result)
 		case <-time.After(25 * time.Millisecond):
 		}
-		chain.InsertChain(preBlocks[i : i+1])
+		chain.InsertChain(preBlocks[i:i+1], false)
 	}
 	// Verify the blocks after the merging
 	for i := 0; i < len(postBlocks); i++ {

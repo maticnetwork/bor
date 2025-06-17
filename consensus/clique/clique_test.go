@@ -93,7 +93,7 @@ func TestReimportMirroredState(t *testing.T) {
 	chain, _ = core.NewBlockChain(db, nil, genspec, nil, engine, vm.Config{}, nil, nil, nil)
 	defer chain.Stop()
 
-	if _, err := chain.InsertChain(blocks[:2]); err != nil {
+	if _, err := chain.InsertChain(blocks[:2], false); err != nil {
 		t.Fatalf("failed to insert initial blocks: %v", err)
 	}
 
@@ -107,7 +107,7 @@ func TestReimportMirroredState(t *testing.T) {
 	chain, _ = core.NewBlockChain(db, nil, genspec, nil, engine, vm.Config{}, nil, nil, nil)
 	defer chain.Stop()
 
-	if _, err := chain.InsertChain(blocks[2:]); err != nil {
+	if _, err := chain.InsertChain(blocks[2:], false); err != nil {
 		t.Fatalf("failed to insert final block: %v", err)
 	}
 

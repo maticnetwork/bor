@@ -2011,7 +2011,7 @@ func testSetHeadWithScheme(t *testing.T, tt *rewindTest, snapshots bool, scheme 
 		sideblocks, _ = GenerateChain(gspec.Config, gspec.ToBlock(), engine, rawdb.NewMemoryDatabase(), tt.sidechainBlocks, func(i int, b *BlockGen) {
 			b.SetCoinbase(common.Address{0x01})
 		})
-		if _, err := chain.InsertChain(sideblocks); err != nil {
+		if _, err := chain.InsertChain(sideblocks, false); err != nil {
 			t.Fatalf("Failed to import side chain: %v", err)
 		}
 	}
@@ -2019,7 +2019,7 @@ func testSetHeadWithScheme(t *testing.T, tt *rewindTest, snapshots bool, scheme 
 		b.SetCoinbase(common.Address{0x02})
 		b.SetDifficulty(big.NewInt(1000000))
 	})
-	if _, err := chain.InsertChain(canonblocks[:tt.commitBlock]); err != nil {
+	if _, err := chain.InsertChain(canonblocks[:tt.commitBlock], false); err != nil {
 		t.Fatalf("Failed to import canonical chain start: %v", err)
 	}
 	if tt.commitBlock > 0 {
@@ -2030,7 +2030,7 @@ func testSetHeadWithScheme(t *testing.T, tt *rewindTest, snapshots bool, scheme 
 			}
 		}
 	}
-	if _, err := chain.InsertChain(canonblocks[tt.commitBlock:]); err != nil {
+	if _, err := chain.InsertChain(canonblocks[tt.commitBlock:], false); err != nil {
 		t.Fatalf("Failed to import canonical chain tail: %v", err)
 	}
 	// Reopen the trie database without persisting in-memory dirty nodes.
