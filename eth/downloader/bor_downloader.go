@@ -1191,7 +1191,6 @@ func (d *Downloader) fetchHeaders(p *peerConnection, from uint64, head uint64) e
 				}
 			}
 			if d.getMode() == StatelessSync {
-				log.Info("[debugwit] %w: header request failed: %v", errBadPeer, err)
 				select {
 				case d.queue.witnessWakeCh <- false:
 				case <-d.cancelCh:
@@ -1270,12 +1269,17 @@ func (d *Downloader) fetchHeaders(p *peerConnection, from uint64, head uint64) e
 			}
 			// Pivot done (or not in snap sync) and no more headers, terminate the process
 			p.log.Debug("No more headers available")
-			select {
-			case d.headerProcCh <- nil:
-				return nil
-			case <-d.cancelCh:
-				return errCanceled
-			}
+
+			log.Info("[debugwit] No more headers available, waiting to fecth again")
+			time.Sleep(time.Second * 30)
+			continue
+
+			// select {
+			// case d.headerProcCh <- nil:
+			// 	return nil
+			// case <-d.cancelCh:
+			// 	return errCanceled
+			// }
 		}
 		// If we received a skeleton batch, resolve internals concurrently
 		var progressed bool
@@ -1437,8 +1441,6 @@ func (d *Downloader) processHeaders(origin uint64, td, ttd *big.Int, beaconMode 
 					}
 				}
 				if mode == StatelessSync {
-					log.Info("[debugwit] notify header are fully processed", "task", task)
-
 					select {
 					case d.queue.witnessWakeCh <- false:
 					case <-d.cancelCh:
@@ -1451,13 +1453,6 @@ func (d *Downloader) processHeaders(origin uint64, td, ttd *big.Int, beaconMode 
 					head := d.blockchain.CurrentBlock()
 					if !gotHeaders {
 						tdRemote := d.blockchain.GetTd(head.Hash(), head.Number.Uint64())
-						log.Debug("[debugwit] TD comparison for header",
-							"localTD", td,
-							"remoteTD", tdRemote,
-							"headHash", head.Hash().Hex(),
-							"headNumber", head.Number.String(),
-						)
-
 						if td.Cmp(tdRemote) > 0 && mode != StatelessSync {
 							return errStallingPeer
 						}
@@ -1472,13 +1467,6 @@ func (d *Downloader) processHeaders(origin uint64, td, ttd *big.Int, beaconMode 
 					if mode == SnapSync {
 						head := d.lightchain.CurrentHeader()
 						tdRemote := d.lightchain.GetTd(head.Hash(), head.Number.Uint64())
-						log.Debug("[debugwit] TD comparison (lightchain) for header",
-							"localTD", td,
-							"remoteTD", tdRemote,
-							"headHash", head.Hash().Hex(),
-							"headNumber", head.Number.String(),
-						)
-
 						if td.Cmp(tdRemote) > 0 {
 							return errStallingPeer
 						}
