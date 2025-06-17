@@ -103,6 +103,9 @@ type Config struct {
 	// SyncWithWitnesses enables syncing blocks with witnesses
 	SyncWithWitnesses bool `hcl:"syncwithwitnesses,optional" toml:"syncwithwitnesses,optional"`
 
+	// SyncAndProduceWitnesses enables producing witnesses while syncing
+	SyncAndProduceWitnesses bool `hcl:"syncandproducewitnesses,optional" toml:"syncandproducewitnesses,optional"`
+
 	// Logging has the logging related settings
 	Logging *LoggingConfig `hcl:"log,block" toml:"log,block"`
 
@@ -631,6 +634,7 @@ func DefaultConfig() *Config {
 		KeyStoreDir:             "",
 		WitnessProtocol:         false,
 		SyncWithWitnesses:       false,
+		SyncAndProduceWitnesses: false,
 		Logging: &LoggingConfig{
 			Vmodule:             "",
 			Json:                false,
@@ -1235,8 +1239,8 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 		}
 		n.WitnessProtocol = true
 	}
-
 	n.SyncWithWitnesses = c.SyncWithWitnesses
+	n.SyncAndProduceWitnesses = c.SyncAndProduceWitnesses
 
 	n.RPCReturnDataLimit = c.RPCReturnDataLimit
 

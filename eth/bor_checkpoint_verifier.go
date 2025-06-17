@@ -146,7 +146,7 @@ func borVerify(ctx context.Context, eth *Ethereum, handler *ethHandler, start ui
 
 		if canonicalChain != nil && len(canonicalChain) == int(length) {
 			log.Info("Inserting canonical chain", "from", canonicalChain[0].NumberU64(), "hash", canonicalChain[0].Hash(), "to", canonicalChain[len(canonicalChain)-1].NumberU64(), "hash", canonicalChain[len(canonicalChain)-1].Hash())
-			_, err := eth.BlockChain().InsertChain(canonicalChain)
+			_, err := eth.BlockChain().InsertChain(canonicalChain, eth.config.SyncAndProduceWitnesses)
 			if err != nil {
 				log.Warn("Failed to insert canonical chain", "err", err)
 				return hash, err

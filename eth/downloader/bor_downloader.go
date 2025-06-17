@@ -172,6 +172,9 @@ type Downloader struct {
 	futureCandidateBlocks []uint64
 	fastForwardMu         sync.Mutex
 	fastForwardBlockCh    chan uint64
+
+	// syncAndProduceWitnesses
+	syncAndProduceWitnesses bool // Whether to produce witnesses while syncing
 }
 
 // LightChain encapsulates functions required to synchronise a light chain.
@@ -218,7 +221,7 @@ type BlockChain interface {
 	SnapSyncCommitHead(common.Hash) error
 
 	// InsertChain inserts a batch of blocks into the local chain.
-	InsertChain(types.Blocks) (int, error)
+	InsertChain(types.Blocks, bool) (int, error)
 
 	// InsertChainStateless inserts a batch of blocks into the local chain in stateless mode.
 	InsertChainStateless(types.Blocks, []*stateless.Witness) (int, error)
@@ -238,29 +241,30 @@ type BlockChain interface {
 
 // New creates a new downloader to fetch hashes and blocks from remote peers.
 // nolint: staticcheck
-func New(stateDb ethdb.Database, mux *event.TypeMux, chain BlockChain, lightchain LightChain, dropPeer peerDropFn, success func(), whitelistService ethereum.ChainValidator, fastForwardThreshold uint64) *Downloader {
+func New(stateDb ethdb.Database, mux *event.TypeMux, chain BlockChain, lightchain LightChain, dropPeer peerDropFn, success func(), whitelistService ethereum.ChainValidator, fastForwardThreshold uint64, syncAndProduceWitnesses bool) *Downloader {
 	if lightchain == nil {
 		lightchain = chain
 	}
 
 	dl := &Downloader{
-		stateDB:                stateDb,
-		mux:                    mux,
-		queue:                  newQueue(blockCacheMaxItems, blockCacheInitialItems),
-		peers:                  newPeerSet(),
-		blockchain:             chain,
-		lightchain:             lightchain,
-		dropPeer:               dropPeer,
-		headerProcCh:           make(chan *headerTask, 1),
-		quitCh:                 make(chan struct{}),
-		SnapSyncer:             snap.NewSyncer(stateDb, chain.TrieDB().Scheme()),
-		stateSyncStart:         make(chan *stateSync),
-		syncStartBlock:         chain.CurrentSnapBlock().Number.Uint64(),
-		ChainValidator:         whitelistService,
-		maxValidationThreshold: maxValidationThreshold,
-		futureCandidateBlocks:  make([]uint64, 0),
-		fastForwardBlockCh:     make(chan uint64),
-		FastForwardThreshold:   fastForwardThreshold,
+		stateDB:                 stateDb,
+		mux:                     mux,
+		queue:                   newQueue(blockCacheMaxItems, blockCacheInitialItems),
+		peers:                   newPeerSet(),
+		blockchain:              chain,
+		lightchain:              lightchain,
+		dropPeer:                dropPeer,
+		headerProcCh:            make(chan *headerTask, 1),
+		quitCh:                  make(chan struct{}),
+		SnapSyncer:              snap.NewSyncer(stateDb, chain.TrieDB().Scheme()),
+		stateSyncStart:          make(chan *stateSync),
+		syncStartBlock:          chain.CurrentSnapBlock().Number.Uint64(),
+		ChainValidator:          whitelistService,
+		maxValidationThreshold:  maxValidationThreshold,
+		futureCandidateBlocks:   make([]uint64, 0),
+		fastForwardBlockCh:      make(chan uint64),
+		FastForwardThreshold:    fastForwardThreshold,
+		syncAndProduceWitnesses: syncAndProduceWitnesses,
 	}
 	// Create the post-merge skeleton syncer and start the process
 	dl.skeleton = newSkeleton(stateDb, dl.peers, dropPeer, newBeaconBackfiller(dl, success))
@@ -1662,7 +1666,7 @@ func (d *Downloader) importBlockResults(results []*fetchResult) error {
 	// Downloaded blocks are always regarded as trusted after the
 	// transition. Because the downloaded chain is guided by the
 	// consensus-layer.
-	if index, err := d.blockchain.InsertChain(blocks); err != nil {
+	if index, err := d.blockchain.InsertChain(blocks, d.syncAndProduceWitnesses); err != nil {
 		if index < len(results) {
 			log.Debug("Downloaded item processing failed", "number", results[index].Header.Number, "hash", results[index].Header.Hash(), "err", err)
 
