@@ -3,7 +3,7 @@ package server
 import (
 	"crypto/ecdsa"
 	"fmt"
-	"math"
+	// "math"
 	"math/big"
 	"os"
 	"path/filepath"
@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	godebug "runtime/debug"
+	// godebug "runtime/debug"
 
 	"github.com/hashicorp/hcl/v2/hclsimple"
 	"github.com/imdario/mergo"
@@ -1141,10 +1141,10 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 			}
 		}
 		// Tune the garbage collector
-		gogc := math.Max(20, math.Min(100, 100/(float64(cache)/1024)))
+		// gogc := math.Max(20, math.Min(100, 100/(float64(cache)/1024)))
 
-		log.Debug("Sanitizing Go's GC trigger", "percent", int(gogc))
-		godebug.SetGCPercent(int(gogc))
+		// log.Debug("Sanitizing Go's GC trigger", "percent", int(gogc))
+		// godebug.SetGCPercent(int(gogc))
 
 		n.DatabaseCache = calcPerc(c.Cache.PercDatabase)
 		n.SnapshotCache = calcPerc(c.Cache.PercSnapshot)
