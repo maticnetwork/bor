@@ -1499,9 +1499,9 @@ func (w *worker) commitWork(interrupt *atomic.Int32, noempty bool, timestamp int
 
 	// Create an empty block based on temporary copied state for
 	// sealing in advance without waiting block execution finished.
-	if !noempty && !w.noempty.Load() {
-		_ = w.commit(work.copy(), nil, false, start)
-	}
+	// if !noempty && !w.noempty.Load() {
+	// 	_ = w.commit(work.copy(), nil, false, start)
+	// }
 	// Fill pending transactions from the txpool into the block.
 	err = w.fillTransactions(interrupt, work)
 
