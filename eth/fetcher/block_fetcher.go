@@ -20,6 +20,7 @@ package fetcher
 import (
 	"errors"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -207,6 +208,9 @@ type BlockFetcher struct {
 
 	done chan common.Hash
 	quit chan struct{}
+
+	// Protect concurrent map access from goroutines
+	mu sync.RWMutex
 
 	// Announce states
 	announces  map[string]int                   // Per peer blockAnnounce counts to prevent memory exhaustion
@@ -458,16 +462,32 @@ func (f *BlockFetcher) loop() {
 
 	for {
 		// Clean up any expired block fetches
+		f.mu.RLock()
+		expiredHashes := make([]common.Hash, 0)
 		for hash, announce := range f.fetching {
 			if time.Since(announce.time) > fetchTimeout {
-				f.forgetHash(hash)
+				expiredHashes = append(expiredHashes, hash)
 			}
+		}
+		f.mu.RUnlock()
+
+		for _, hash := range expiredHashes {
+			f.forgetHash(hash)
 		}
 		// Import any queued blocks that could potentially fit
 		height := f.chainHeight()
 
-		for !f.queue.Empty() {
-			op := f.queue.PopItem()
+		for {
+			f.mu.Lock()
+			var op *blockOrHeaderInject
+			if !f.queue.Empty() {
+				op = f.queue.PopItem()
+			}
+			f.mu.Unlock()
+
+			if op == nil {
+				break
+			}
 
 			hash := op.hash()
 			if f.queueChangeHook != nil {
@@ -476,7 +496,9 @@ func (f *BlockFetcher) loop() {
 			// If too high up the chain or phase, continue later
 			number := op.number()
 			if number > height+1 {
+				f.mu.Lock()
 				f.queue.Push(op, -int64(number))
+				f.mu.Unlock()
 
 				if f.queueChangeHook != nil {
 					f.queueChangeHook(hash, true)
@@ -1058,11 +1080,14 @@ func (f *BlockFetcher) enqueue(peer string, header *types.Header, block *types.B
 		return
 	}
 
+	f.mu.Lock()
+
 	// Ensure the peer isn't DOSing us
 	count := f.queues[peer] + 1
 	if count > blockLimit {
 		log.Debug("Discarded delivered header or block, exceeded allowance", "peer", peer, "number", number, "hash", hash, "limit", blockLimit)
 		blockBroadcastDOSMeter.Mark(1)
+		f.mu.Unlock()
 		f.forgetHash(hash) // Calls wm.forget
 		return
 	}
@@ -1070,15 +1095,18 @@ func (f *BlockFetcher) enqueue(peer string, header *types.Header, block *types.B
 	if dist := int64(number) - int64(f.chainHeight()); dist < -maxUncleDist || dist > maxQueueDist {
 		log.Debug("Discarded delivered header or block, too far away", "peer", peer, "number", number, "hash", hash, "distance", dist)
 		blockBroadcastDropMeter.Mark(1)
+		f.mu.Unlock()
 		f.forgetHash(hash) // Calls wm.forget
 		return
 	}
 	// Discard if already queued or pending witness
 	if _, ok := f.queued[hash]; ok {
+		f.mu.Unlock()
 		return
 	}
 	if f.wm.isPending(hash) {
 		log.Debug("Block already pending witness, not queuing", "hash", hash)
+		f.mu.Unlock()
 		return
 	}
 
@@ -1092,6 +1120,7 @@ func (f *BlockFetcher) enqueue(peer string, header *types.Header, block *types.B
 		op.witness = witness
 	} else {
 		log.Error("Invalid state in enqueue: header and block are nil", "peer", peer, "hash", hash)
+		f.mu.Unlock()
 		return // Should not happen due to check above
 	}
 
@@ -1104,6 +1133,7 @@ func (f *BlockFetcher) enqueue(peer string, header *types.Header, block *types.B
 	}
 
 	log.Debug("Queued delivered header or block", "peer", peer, "number", number, "hash", hash, "queued", f.queue.Size())
+	f.mu.Unlock()
 
 	// Notify witness manager to forget any pending state for this hash,
 	// as the block has now been successfully queued for import.
@@ -1226,6 +1256,9 @@ func (f *BlockFetcher) importBlocks(peer string, block *types.Block, witness *st
 // forgetHash removes all traces of a block announcement from the fetcher's
 // internal state.
 func (f *BlockFetcher) forgetHash(hash common.Hash) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
 	// Remove all pending announces and decrement DOS counters
 	if announceMap, ok := f.announced[hash]; ok {
 		for _, announce := range announceMap {
@@ -1273,12 +1306,18 @@ func (f *BlockFetcher) forgetHash(hash common.Hash) {
 // forgetBlock removes all traces of a queued block from the fetcher's internal
 // state.
 func (f *BlockFetcher) forgetBlock(hash common.Hash) {
-	if insert := f.queued[hash]; insert != nil {
+	f.mu.Lock()
+	insert := f.queued[hash]
+	if insert != nil {
 		f.queues[insert.origin]--
 		if f.queues[insert.origin] == 0 {
 			delete(f.queues, insert.origin)
 		}
 		delete(f.queued, hash)
+	}
+	f.mu.Unlock()
+
+	if insert != nil {
 		// Notify witness manager only if we actually removed it from the queue
 		// Note: enqueue and done cases already call wm.forget, so this might be redundant
 		// Let's keep it for cases where forgetBlock is called directly after checking getBlock/getHeader
