@@ -18,10 +18,10 @@ package core
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"math"
 	"math/big"
+	"sync/atomic"
 
 	"github.com/ethereum/go-ethereum/common"
 	cmath "github.com/ethereum/go-ethereum/common/math"
@@ -220,16 +220,16 @@ func TransactionToMessage(tx *types.Transaction, s types.Signer, baseFee *big.In
 // the gas used (which includes gas refunds) and an error if it failed. An error always
 // indicates a core error meaning that the message would always fail for that particular
 // state and would never be accepted within a block.
-func ApplyMessage(evm *vm.EVM, msg *Message, gp *GasPool, interruptCtx context.Context) (*ExecutionResult, error) {
+func ApplyMessage(evm *vm.EVM, msg *Message, gp *GasPool, interrupt *atomic.Bool) (*ExecutionResult, error) {
 	evm.SetTxContext(NewEVMTxContext(msg))
-	return newStateTransition(evm, msg, gp).execute(interruptCtx)
+	return newStateTransition(evm, msg, gp).execute(interrupt)
 }
 
-func ApplyMessageNoFeeBurnOrTip(evm *vm.EVM, msg Message, gp *GasPool, interruptCtx context.Context) (*ExecutionResult, error) {
+func ApplyMessageNoFeeBurnOrTip(evm *vm.EVM, msg Message, gp *GasPool, interrupt *atomic.Bool) (*ExecutionResult, error) {
 	st := newStateTransition(evm, &msg, gp)
 	st.noFeeBurnAndTip = true
 
-	return st.execute(interruptCtx)
+	return st.execute(interrupt)
 }
 
 // stateTransition represents a state transition.
@@ -438,7 +438,7 @@ func (st *stateTransition) preCheck() error {
 //
 // However if any consensus issue encountered, return the error directly with
 // nil evm execution result.
-func (st *stateTransition) execute(interruptCtx context.Context) (*ExecutionResult, error) {
+func (st *stateTransition) execute(interrupt *atomic.Bool) (*ExecutionResult, error) {
 	input1 := st.state.GetBalance(st.msg.From)
 
 	var input2 *uint256.Int
@@ -548,7 +548,7 @@ func (st *stateTransition) execute(interruptCtx context.Context) (*ExecutionResu
 		}
 
 		// Execute the transaction's call.
-		ret, st.gasRemaining, vmerr = st.evm.Call(msg.From, st.to(), msg.Data, st.gasRemaining, value, interruptCtx)
+		ret, st.gasRemaining, vmerr = st.evm.Call(msg.From, st.to(), msg.Data, st.gasRemaining, value, interrupt)
 	}
 
 	// Record the gas used excluding gas refunds. This value represents the actual

@@ -24,6 +24,6 @@ func FuzzVmRuntime(f *testing.F) {
 	f.Fuzz(func(t *testing.T, code, input []byte) {
 		Execute(code, input, &Config{
 			GasLimit: 12000000,
-		})
+		}, nil)
 	})
 }
