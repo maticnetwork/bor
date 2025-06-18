@@ -245,7 +245,7 @@ func ImportChain(chain *core.BlockChain, fn string) error {
 			log.Info("Skipping batch as all blocks present", "batch", batch, "first", blocks[0].Hash(), "last", blocks[i-1].Hash())
 			continue
 		}
-		if failindex, err := chain.InsertChain(missing); err != nil {
+		if failindex, err := chain.InsertChain(missing, false); err != nil {
 			var failnumber uint64
 			if failindex > 0 && failindex < len(missing) {
 				failnumber = missing[failindex].NumberU64()

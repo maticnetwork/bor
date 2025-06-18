@@ -561,7 +561,7 @@ func testSupplyTracer(t *testing.T, genesis *core.Genesis, gen func(*core.BlockG
 		gen(b)
 	})
 
-	if n, err := chain.InsertChain(blocks); err != nil {
+	if n, err := chain.InsertChain(blocks, false); err != nil {
 		return nil, chain, fmt.Errorf("block %d: failed to insert into chain: %v", n, err)
 	}
 

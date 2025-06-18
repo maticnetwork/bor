@@ -94,7 +94,7 @@ func newTesterWithNotification(t *testing.T, success func()) *downloadTester {
 	}
 
 	//nolint: staticcheck
-	tester.downloader = New(db, new(event.TypeMux), tester.chain, nil, tester.dropPeer, success, whitelist.NewService(db), 0)
+	tester.downloader = New(db, new(event.TypeMux), tester.chain, nil, tester.dropPeer, success, whitelist.NewService(db), 0, false)
 
 	return tester
 }
@@ -1459,7 +1459,7 @@ func testBeaconSync(t *testing.T, protocol uint, mode SyncMode) {
 			// nolint:govet
 			if c.local > 0 {
 				// nolint:govet
-				_, _ = tester.chain.InsertChain(chain.blocks[1 : c.local+1])
+				_, _ = tester.chain.InsertChain(chain.blocks[1:c.local+1], false)
 			}
 
 			if err := tester.downloader.BeaconSync(mode, chain.blocks[len(chain.blocks)-1].Header(), nil); err != nil {

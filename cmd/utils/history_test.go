@@ -82,7 +82,7 @@ func TestHistoryImportAndExport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unable to initialize chain: %v", err)
 	}
-	if _, err := chain.InsertChain(blocks); err != nil {
+	if _, err := chain.InsertChain(blocks, false); err != nil {
 		t.Fatalf("error inserting chain: %v", err)
 	}
 

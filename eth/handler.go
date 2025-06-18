@@ -95,24 +95,25 @@ type txPool interface {
 // handlerConfig is the collection of initialization parameters to create a full
 // node network handler.
 type handlerConfig struct {
-	NodeID                enode.ID            // P2P node ID used for tx propagation topology
-	Database              ethdb.Database      // Database for direct sync insertions
-	Chain                 *core.BlockChain    // Blockchain to serve data from
-	TxPool                txPool              // Transaction pool to propagate from
-	Network               uint64              // Network identifier to advertise
-	Sync                  downloader.SyncMode // Whether to snap or full sync
-	BloomCache            uint64              // Megabytes to alloc for snap sync bloom
-	EventMux              *event.TypeMux      // Legacy event mux, deprecate for `feed`
-	checker               ethereum.ChainValidator
-	RequiredBlocks        map[uint64]common.Hash // Hard coded map of required block hashes for sync challenges
-	EthAPI                *ethapi.BlockChainAPI  // EthAPI to interact
-	enableBlockTracking   bool                   // Whether to log information collected while tracking block lifecycle
-	txAnnouncementOnly    bool                   // Whether to only announce txs to peers
-	syncWithWitnesses     bool                   // Whether to sync blocks with witnesses
-	computeWitness        bool                   // Whether to compute witnesses
-	fastForwardThreshold  uint64                 // Minimum necessary distance between local header and peer to fast forward
-	witnessPruneThreshold uint64                 // Minimum necessary distance between local header and latest non pruned witness
-	witnessPruneInterval  uint64                 // The time interval between each witness prune routine
+	NodeID                  enode.ID            // P2P node ID used for tx propagation topology
+	Database                ethdb.Database      // Database for direct sync insertions
+	Chain                   *core.BlockChain    // Blockchain to serve data from
+	TxPool                  txPool              // Transaction pool to propagate from
+	Network                 uint64              // Network identifier to advertise
+	Sync                    downloader.SyncMode // Whether to snap or full sync
+	BloomCache              uint64              // Megabytes to alloc for snap sync bloom
+	EventMux                *event.TypeMux      // Legacy event mux, deprecate for `feed`
+	checker                 ethereum.ChainValidator
+	RequiredBlocks          map[uint64]common.Hash // Hard coded map of required block hashes for sync challenges
+	EthAPI                  *ethapi.BlockChainAPI  // EthAPI to interact
+	enableBlockTracking     bool                   // Whether to log information collected while tracking block lifecycle
+	txAnnouncementOnly      bool                   // Whether to only announce txs to peers
+	witnessProtocol         bool                   // Whether to enable witness protocol
+	syncWithWitnesses       bool                   // Whether to sync blocks with witnesses
+	syncAndProduceWitnesses bool                   // Whether to sync blocks and produce witnesses simultaneously
+	fastForwardThreshold    uint64                 // Minimum necessary distance between local header and peer to fast forward
+	witnessPruneThreshold   uint64                 // Minimum necessary distance between local header and latest non pruned witness
+	witnessPruneInterval    uint64                 // The time interval between each witness prune routine
 }
 
 type handler struct {
@@ -145,7 +146,10 @@ type handler struct {
 
 	enableBlockTracking bool
 	txAnnouncementOnly  bool
-	syncWithWitnesses   bool
+
+	// Witness protocol related fields
+	syncWithWitnesses       bool
+	syncAndProduceWitnesses bool // Whether to sync blocks and produce witnesses simultaneously
 
 	// channels for fetcher, syncer, txsyncLoop
 	quitSync chan struct{}
@@ -167,22 +171,23 @@ func newHandler(config *handlerConfig) (*handler, error) {
 	}
 
 	h := &handler{
-		nodeID:              config.NodeID,
-		networkID:           config.Network,
-		forkFilter:          forkid.NewFilter(config.Chain),
-		eventMux:            config.EventMux,
-		database:            config.Database,
-		txpool:              config.TxPool,
-		chain:               config.Chain,
-		peers:               newPeerSet(),
-		ethAPI:              config.EthAPI,
-		requiredBlocks:      config.RequiredBlocks,
-		enableBlockTracking: config.enableBlockTracking,
-		txAnnouncementOnly:  config.txAnnouncementOnly,
-		quitSync:            make(chan struct{}),
-		handlerDoneCh:       make(chan struct{}),
-		handlerStartCh:      make(chan struct{}),
-		syncWithWitnesses:   config.syncWithWitnesses,
+		nodeID:                  config.NodeID,
+		networkID:               config.Network,
+		forkFilter:              forkid.NewFilter(config.Chain),
+		eventMux:                config.EventMux,
+		database:                config.Database,
+		txpool:                  config.TxPool,
+		chain:                   config.Chain,
+		peers:                   newPeerSet(),
+		ethAPI:                  config.EthAPI,
+		requiredBlocks:          config.RequiredBlocks,
+		enableBlockTracking:     config.enableBlockTracking,
+		txAnnouncementOnly:      config.txAnnouncementOnly,
+		quitSync:                make(chan struct{}),
+		handlerDoneCh:           make(chan struct{}),
+		handlerStartCh:          make(chan struct{}),
+		syncWithWitnesses:       config.syncWithWitnesses,
+		syncAndProduceWitnesses: config.syncAndProduceWitnesses,
 	}
 
 	log.Info("Sync with witnesses", "enabled", config.syncWithWitnesses)
@@ -228,7 +233,7 @@ func newHandler(config *handlerConfig) (*handler, error) {
 	}
 
 	// Construct the downloader (long sync)
-	h.downloader = downloader.New(config.Database, h.eventMux, h.chain, nil, h.removePeer, h.enableSyncedFeatures, config.checker, config.fastForwardThreshold)
+	h.downloader = downloader.New(config.Database, h.eventMux, h.chain, nil, h.removePeer, h.enableSyncedFeatures, config.checker, config.fastForwardThreshold, config.syncAndProduceWitnesses)
 	if ttd := h.chain.Config().TerminalTotalDifficulty; ttd != nil {
 		head := h.chain.CurrentBlock()
 		if td := h.chain.GetTd(head.Hash(), head.Number.Uint64()); td.Cmp(ttd) >= 0 {
@@ -263,7 +268,7 @@ func newHandler(config *handlerConfig) (*handler, error) {
 		if h.statelessSync.Load() {
 			return h.chain.InsertChainStateless(blocks, witnesses)
 		} else {
-			return h.chain.InsertChainWithWitnesses(blocks, config.computeWitness, witnesses)
+			return h.chain.InsertChainWithWitnesses(blocks, config.witnessProtocol, witnesses)
 		}
 	}
 
@@ -288,7 +293,7 @@ func newHandler(config *handlerConfig) (*handler, error) {
 	h.txFetcher = fetcher.NewTxFetcher(h.txpool.Has, addTxs, fetchTx, h.removePeer)
 	h.chainSync = newChainSyncer(h)
 
-	if config.computeWitness {
+	if config.witnessProtocol {
 		h.witPruner = NewWitPruner(h.ethAPI, h.database, config.witnessPruneThreshold, time.Duration(config.witnessPruneInterval)*time.Second)
 		h.witPruner.Start()
 	}

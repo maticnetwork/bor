@@ -459,7 +459,7 @@ func newTestBackend(t *testing.T, n int, gspec *core.Genesis, engine consensus.E
 	if err != nil {
 		t.Fatalf("failed to create tester chain: %v", err)
 	}
-	if n, err := chain.InsertChain(blocks); err != nil {
+	if n, err := chain.InsertChain(blocks, false); err != nil {
 		t.Fatalf("block %d: failed to insert into chain: %v", n, err)
 	}
 

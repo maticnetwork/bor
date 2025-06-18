@@ -246,7 +246,7 @@ func (t *BlockTest) insertBlocks(blockchain *core.BlockChain) ([]btBlock, error)
 		// RLP decoding worked, try to insert into chain:
 		blocks := types.Blocks{cb}
 
-		i, err := blockchain.InsertChain(blocks)
+		i, err := blockchain.InsertChain(blocks, false)
 		if err != nil {
 			if b.BlockHeader == nil {
 				continue // OK - block is supposed to be invalid, continue with next block

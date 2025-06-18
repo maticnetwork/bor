@@ -204,7 +204,7 @@ func TestProcessVerkle(t *testing.T) {
 
 	t.Log("verified verkle proof, inserting blocks into the chain")
 
-	endnum, err := blockchain.InsertChain(chain)
+	endnum, err := blockchain.InsertChain(chain, false)
 	if err != nil {
 		t.Fatalf("block %d imported with error: %v", endnum, err)
 	}

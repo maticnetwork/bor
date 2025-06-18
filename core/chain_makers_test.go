@@ -123,7 +123,7 @@ func TestGeneratePOSChain(t *testing.T) {
 	blockchain, _ := NewBlockChain(db, nil, gspec, nil, beacon.NewFaker(), vm.Config{}, nil, nil, nil)
 	defer blockchain.Stop()
 
-	if i, err := blockchain.InsertChain(genchain); err != nil {
+	if i, err := blockchain.InsertChain(genchain, false); err != nil {
 		t.Fatalf("insert error (block %d): %v\n", genchain[i].NumberU64(), err)
 	}
 
@@ -240,7 +240,7 @@ func ExampleGenerateChain() {
 	blockchain, _ := NewBlockChain(db, DefaultCacheConfigWithScheme(rawdb.HashScheme), gspec, nil, ethash.NewFaker(), vm.Config{}, nil, nil, nil)
 	defer blockchain.Stop()
 
-	if i, err := blockchain.InsertChain(chain); err != nil {
+	if i, err := blockchain.InsertChain(chain, false); err != nil {
 		fmt.Printf("insert error (block %d): %v\n", chain[i].NumberU64(), err)
 		return
 	}

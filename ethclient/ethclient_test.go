@@ -114,7 +114,7 @@ func newTestBackend(config *node.Config) (*node.Node, []*types.Block, error) {
 	if err := n.Start(); err != nil {
 		return nil, nil, fmt.Errorf("can't start test node: %v", err)
 	}
-	if _, err := ethservice.BlockChain().InsertChain(blocks[1:]); err != nil {
+	if _, err := ethservice.BlockChain().InsertChain(blocks[1:], false); err != nil {
 		return nil, nil, fmt.Errorf("can't import test blocks: %v", err)
 	}
 	// Ensure the tx indexing is fully generated

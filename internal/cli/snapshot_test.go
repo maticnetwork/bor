@@ -153,7 +153,7 @@ func BlockchainCreator(t *testing.T, node *node.Node, chaindbPath, AncientPath s
 		block.SetDifficulty(big.NewInt(1000000))
 	})
 
-	_, err = blockchain.InsertChain(blocks)
+	_, err = blockchain.InsertChain(blocks, false)
 	require.NoError(t, err, "failed to insert chain")
 
 	// Force run a freeze cycle

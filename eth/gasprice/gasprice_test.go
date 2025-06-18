@@ -227,7 +227,7 @@ func newTestBackend(t *testing.T, londonBlock *big.Int, cancunBlock *big.Int, pe
 		t.Fatalf("Failed to create local chain, %v", err)
 	}
 
-	chain.InsertChain(blocks)
+	chain.InsertChain(blocks, false)
 	chain.SetFinalized(chain.GetBlockByNumber(25).Header())
 	chain.SetSafe(chain.GetBlockByNumber(25).Header())
 

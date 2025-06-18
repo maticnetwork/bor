@@ -234,7 +234,7 @@ func newTestBlockchain(blocks []*types.Block) *core.BlockChain {
 			panic(err)
 		}
 
-		if n, err := chain.InsertChain(blocks); err != nil {
+		if n, err := chain.InsertChain(blocks, false); err != nil {
 			panic(fmt.Sprintf("block %d: %v", n, err))
 		}
 

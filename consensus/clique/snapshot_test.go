@@ -474,12 +474,12 @@ func (tt *cliqueTest) run(t *testing.T) {
 	defer chain.Stop()
 
 	for j := 0; j < len(batches)-1; j++ {
-		if k, err := chain.InsertChain(batches[j]); err != nil {
+		if k, err := chain.InsertChain(batches[j], false); err != nil {
 			t.Fatalf("failed to import batch %d, block %d: %v", j, k, err)
 		}
 	}
 
-	if _, err = chain.InsertChain(batches[len(batches)-1]); err != tt.failure {
+	if _, err = chain.InsertChain(batches[len(batches)-1], false); err != tt.failure {
 		t.Errorf("failure mismatch: have %v, want %v", err, tt.failure)
 	}
 

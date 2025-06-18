@@ -72,7 +72,7 @@ func newTestEnv(t *testing.T, n int, gasTip uint64, journal string) *testEnv {
 	if err != nil {
 		t.Fatalf("Failed to create tx pool: %v", err)
 	}
-	if n, err := chain.InsertChain(blocks); err != nil {
+	if n, err := chain.InsertChain(blocks, false); err != nil {
 		t.Fatalf("Failed to process block %d: %v", n, err)
 	}
 	if err := pool.Sync(); err != nil {
@@ -133,7 +133,7 @@ func (env *testEnv) commit() {
 		}
 		gen.AddTx(tx)
 	})
-	env.chain.InsertChain(blocks)
+	env.chain.InsertChain(blocks, false)
 	if err := env.pool.Sync(); err != nil {
 		panic(err)
 	}

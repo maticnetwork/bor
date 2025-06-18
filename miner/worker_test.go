@@ -121,7 +121,7 @@ func testGenerateBlockAndImport(t *testing.T, isClique bool, isBor bool) {
 		select {
 		case ev := <-sub.Chan():
 			block := ev.Data.(core.NewMinedBlockEvent).Block
-			if _, err := chain.InsertChain([]*types.Block{block}); err != nil {
+			if _, err := chain.InsertChain([]*types.Block{block}, false); err != nil {
 				t.Fatalf("failed to insert new mined block %d: %v", block.NumberU64(), err)
 			}
 		case <-time.After(3 * time.Second): // Worker needs 1s to include new changes.
@@ -138,7 +138,7 @@ func testGenerateBlockAndImport(t *testing.T, isClique bool, isBor bool) {
 		select {
 		case ev := <-sub.Chan():
 			block := ev.Data.(core.NewMinedBlockEvent).Block
-			if _, err := chain.InsertChain([]*types.Block{block}); err != nil {
+			if _, err := chain.InsertChain([]*types.Block{block}, false); err != nil {
 				t.Fatalf("failed to insert new mined block %d: %v", block.NumberU64(), err)
 			}
 		case <-time.After(3 * time.Second): // Worker needs 1s to include new changes.
@@ -368,7 +368,7 @@ func TestGenerateAndImportBlock(t *testing.T) {
 		select {
 		case ev := <-sub.Chan():
 			block := ev.Data.(core.NewMinedBlockEvent).Block
-			if _, err := chain.InsertChain([]*types.Block{block}); err != nil {
+			if _, err := chain.InsertChain([]*types.Block{block}, false); err != nil {
 				t.Fatalf("failed to insert new mined block %d: %v", block.NumberU64(), err)
 			}
 		case <-time.After(3 * time.Second): // Worker needs 1s to include new changes.
@@ -1030,7 +1030,7 @@ func BenchmarkBorMining(b *testing.B) {
 		case ev := <-sub.Chan():
 			block := ev.Data.(core.NewMinedBlockEvent).Block
 
-			if _, err := chain.InsertChain([]*types.Block{block}); err != nil {
+			if _, err := chain.InsertChain([]*types.Block{block}, false); err != nil {
 				b.Fatalf("failed to insert new mined block %d: %v", block.NumberU64(), err)
 			}
 
@@ -1141,7 +1141,7 @@ func BenchmarkBorMiningBlockSTMMetadata(b *testing.B) {
 		case ev := <-sub.Chan():
 			block := ev.Data.(core.NewMinedBlockEvent).Block
 
-			if _, err := chain.InsertChain([]*types.Block{block}); err != nil {
+			if _, err := chain.InsertChain([]*types.Block{block}, false); err != nil {
 				b.Fatalf("failed to insert new mined block %d: %v", block.NumberU64(), err)
 			}
 

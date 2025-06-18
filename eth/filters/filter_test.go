@@ -284,7 +284,7 @@ func testFilters(t *testing.T, history uint64, noHistory bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = bc.InsertChain(chain)
+	_, err = bc.InsertChain(chain, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -441,7 +441,7 @@ func TestRangeLogs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = bc.InsertChain(chain[:600])
+	_, err = bc.InsertChain(chain[:600], false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -490,7 +490,7 @@ func TestRangeLogs(t *testing.T) {
 	expEvent(rangeLogsTestSynced, 401, 601)
 	expEvent(rangeLogsTestResults, 401, 501)
 	expEvent(rangeLogsTestUnindexed, 300, 401)
-	if _, err := bc.InsertChain(chain[600:700]); err != nil {
+	if _, err := bc.InsertChain(chain[600:700], false); err != nil {
 		t.Fatal(err)
 	}
 	updateHead()
@@ -500,7 +500,7 @@ func TestRangeLogs(t *testing.T) {
 	// test case #2
 	newFilter(400, int64(rpc.LatestBlockNumber))
 	expEvent(rangeLogsTestIndexed, 501, 701)
-	if _, err := bc.InsertChain(chain[700:800]); err != nil {
+	if _, err := bc.InsertChain(chain[700:800], false); err != nil {
 		t.Fatal(err)
 	}
 	updateHead()
@@ -534,7 +534,7 @@ func TestRangeLogs(t *testing.T) {
 	expEvent(rangeLogsTestSynced, 551, 739)
 	expEvent(rangeLogsTestResults, 0, 0)
 	expEvent(rangeLogsTestIndexed, 740, 741)
-	if _, err := bc.InsertChain(chain[740:750]); err != nil {
+	if _, err := bc.InsertChain(chain[740:750], false); err != nil {
 		t.Fatal(err)
 	}
 	updateHead()
@@ -554,7 +554,7 @@ func TestRangeLogs(t *testing.T) {
 	updateHead()
 	newFilter(400, int64(rpc.LatestBlockNumber))
 	expEvent(rangeLogsTestIndexed, 400, 501)
-	if _, err := bc.InsertChain(chain[500:650]); err != nil {
+	if _, err := bc.InsertChain(chain[500:650], false); err != nil {
 		t.Fatal(err)
 	}
 	updateHead()
@@ -566,7 +566,7 @@ func TestRangeLogs(t *testing.T) {
 	// indexed head extension seems possible
 	expEvent(rangeLogsTestIndexed, 499, 651)
 	// further head extension causes tail unindexing in searched range
-	if _, err := bc.InsertChain(chain[650:750]); err != nil {
+	if _, err := bc.InsertChain(chain[650:750], false); err != nil {
 		t.Fatal(err)
 	}
 	updateHead()
@@ -589,7 +589,7 @@ func TestRangeLogs(t *testing.T) {
 	expEvent(rangeLogsTestSynced, 551, 751)
 	expEvent(rangeLogsTestResults, 551, 751)
 	expEvent(rangeLogsTestUnindexed, 400, 551)
-	if _, err := bc.InsertChain(chain[750:1000]); err != nil {
+	if _, err := bc.InsertChain(chain[750:1000], false); err != nil {
 		t.Fatal(err)
 	}
 	updateHead()

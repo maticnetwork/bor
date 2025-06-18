@@ -214,7 +214,7 @@ func benchInsertChain(b *testing.B, disk bool, gen func(int, *BlockGen)) {
 	b.ReportAllocs()
 	b.ResetTimer()
 
-	if i, err := chainman.InsertChain(chain); err != nil {
+	if i, err := chainman.InsertChain(chain, false); err != nil {
 		b.Fatalf("insert error (block %d): %v\n", i, err)
 	}
 }

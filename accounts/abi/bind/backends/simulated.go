@@ -130,7 +130,7 @@ func (b *SimulatedBackend) Commit() common.Hash {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	if _, err := b.blockchain.InsertChain([]*types.Block{b.pendingBlock}); err != nil {
+	if _, err := b.blockchain.InsertChain([]*types.Block{b.pendingBlock}, false); err != nil {
 		panic(err) // This cannot happen unless the simulator is wrong, fail in that case
 	}
 	blockHash := b.pendingBlock.Hash()

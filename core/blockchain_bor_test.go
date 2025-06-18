@@ -35,7 +35,7 @@ func TestChain2HeadEvent(t *testing.T) {
 	blockchain.SubscribeChain2HeadEvent(chain2HeadCh)
 
 	chain, _ := GenerateChain(gspec.Config, genesis, ethash.NewFaker(), db, 3, func(i int, gen *BlockGen) {})
-	if _, err := blockchain.InsertChain(chain); err != nil {
+	if _, err := blockchain.InsertChain(chain, false); err != nil {
 		t.Fatalf("failed to insert chain: %v", err)
 	}
 
@@ -53,7 +53,7 @@ func TestChain2HeadEvent(t *testing.T) {
 		gen.AddTx(tx)
 	})
 
-	if _, err := blockchain.InsertChain(replacementBlocks); err != nil {
+	if _, err := blockchain.InsertChain(replacementBlocks, false); err != nil {
 		t.Fatalf("failed to insert chain: %v", err)
 	}
 

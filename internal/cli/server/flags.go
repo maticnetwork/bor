@@ -1012,19 +1012,24 @@ func (c *Command) Flags(config *Config) *flagset.Flagset {
 		Default: c.cliConfig.ParallelEVM.Enforce,
 	})
 
-	// WitnessProtocol
+	// Witness Protocol Flags
 	f.BoolFlag(&flagset.BoolFlag{
 		Name:    "witnessprotocol",
 		Usage:   "Enable witness protocol",
 		Value:   &c.cliConfig.WitnessProtocol,
 		Default: c.cliConfig.WitnessProtocol,
 	})
-
 	f.BoolFlag(&flagset.BoolFlag{
 		Name:    "syncwithwitnesses",
 		Usage:   "Sync blocks with witnesses",
 		Value:   &c.cliConfig.SyncWithWitnesses,
 		Default: c.cliConfig.SyncWithWitnesses,
+	})
+	f.BoolFlag(&flagset.BoolFlag{
+		Name:    "syncandproducewitnesses",
+		Usage:   "Produce witnesses while syncing",
+		Value:   &c.cliConfig.SyncAndProduceWitnesses,
+		Default: c.cliConfig.SyncAndProduceWitnesses,
 	})
 
 	f.Uint64Flag(&flagset.Uint64Flag{
