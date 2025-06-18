@@ -2133,24 +2133,32 @@ func (d *Downloader) fetchWitnesses(from uint64, beaconMode bool) error {
 	return err
 }
 
-func (d *Downloader) UpdateFastForwardBlockFromMilestone(db ethdb.KeyValueWriter, milestone *milestone.Milestone) {
+func (d *Downloader) UpdateFastForwardBlockFromMilestone(db ethdb.Database, milestone *milestone.Milestone) {
 	d.fastForwardMu.Lock()
 	defer d.fastForwardMu.Unlock()
 
-	// Fast Forward just for stateless clients
+	// Fast Forward is just for stateless clients.
 	if d.getMode() != StatelessSync {
 		return
 	}
 
-	// Store TD from received milestones
-	rawdb.WriteTd(db, milestone.Hash, milestone.EndBlock, big.NewInt(int64(milestone.TotalDifficulty)))
+	milestoneTd := big.NewInt(int64(milestone.TotalDifficulty))
+	// Check if the milestone totalDifficulty already exists and matches.
+	existingTd := rawdb.ReadTd(db, milestone.Hash, milestone.EndBlock)
+	if existingTd != nil && existingTd.Cmp(milestoneTd) == 0 {
+		// No need to update, the totalDifficulty matches.
+	} else if existingTd != nil && existingTd.Cmp(milestoneTd) != 0 {
+		log.Warn("Milestone totalDifficulty mismatch, overwriting", "hash", milestone.Hash, "endBlock", milestone.EndBlock, "existingTd", existingTd, "newTd", milestoneTd)
+		rawdb.WriteTd(db, milestone.Hash, milestone.EndBlock, milestoneTd)
+	} else if existingTd == nil {
+		rawdb.WriteTd(db, milestone.Hash, milestone.EndBlock, milestoneTd)
+	}
 
 	if milestone.EndBlock > d.latestCheckpointBlock && d.latestCheckpointBlock > 0 {
 		d.futureCandidateBlocks = append(d.futureCandidateBlocks, milestone.EndBlock)
 	} else if milestone.EndBlock > d.fastForwardBlock {
 		d.setFastForwardBlock(milestone.EndBlock)
 	}
-
 }
 
 func (d *Downloader) UpdateFastForwardBlockFromCheckpoint(checkpoint *checkpoint.Checkpoint) {
