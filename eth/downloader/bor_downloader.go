@@ -2153,7 +2153,7 @@ func (d *Downloader) UpdateFastForwardBlockFromMilestone(db ethdb.Database, mile
 			log.Warn("Milestone totalDifficulty mismatch, overwriting", "hash", milestone.Hash, "endBlock", milestone.EndBlock, "existingTd", existingTd, "newTd", milestoneTd)
 			rawdb.WriteTd(db, milestone.Hash, milestone.EndBlock, milestoneTd)
 		}
-		// else: match exists, do nothing (no overwrite)
+		// else: match exists, do nothing (no overwrite).
 	} else {
 		rawdb.WriteTd(db, milestone.Hash, milestone.EndBlock, milestoneTd)
 	}
