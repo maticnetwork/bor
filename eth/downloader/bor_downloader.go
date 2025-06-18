@@ -2143,14 +2143,18 @@ func (d *Downloader) UpdateFastForwardBlockFromMilestone(db ethdb.Database, mile
 	}
 
 	milestoneTd := big.NewInt(int64(milestone.TotalDifficulty))
-	// Check if the milestone totalDifficulty already exists and matches.
 	existingTd := rawdb.ReadTd(db, milestone.Hash, milestone.EndBlock)
-	if existingTd != nil && existingTd.Cmp(milestoneTd) == 0 {
-		// No need to update, the totalDifficulty matches.
-	} else if existingTd != nil && existingTd.Cmp(milestoneTd) != 0 {
-		log.Warn("Milestone totalDifficulty mismatch, overwriting", "hash", milestone.Hash, "endBlock", milestone.EndBlock, "existingTd", existingTd, "newTd", milestoneTd)
-		rawdb.WriteTd(db, milestone.Hash, milestone.EndBlock, milestoneTd)
-	} else if existingTd == nil {
+	if existingTd != nil {
+		if existingTd.Cmp(milestoneTd) != 0 {
+			// If it doesn't match, we overwrite it with the new totalDifficulty.
+			// This can happen if the milestone was updated with a new totalDifficulty.
+			// This is expected in case of a reorg or a new milestone.
+			// We assume that the new totalDifficulty is correct and we overwrite the old one.
+			log.Warn("Milestone totalDifficulty mismatch, overwriting", "hash", milestone.Hash, "endBlock", milestone.EndBlock, "existingTd", existingTd, "newTd", milestoneTd)
+			rawdb.WriteTd(db, milestone.Hash, milestone.EndBlock, milestoneTd)
+		}
+		// else: match exists, do nothing (no overwrite)
+	} else {
 		rawdb.WriteTd(db, milestone.Hash, milestone.EndBlock, milestoneTd)
 	}
 
