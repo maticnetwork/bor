@@ -18,7 +18,6 @@ package core_test
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -190,7 +189,7 @@ func TestSignData(t *testing.T) {
 	createAccount(control, api, t)
 	control.approveCh <- "1"
 
-	list, err := api.List(context.Background())
+	list, err := api.List(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -200,7 +199,7 @@ func TestSignData(t *testing.T) {
 	control.approveCh <- "Y"
 	control.inputCh <- "wrongpassword"
 
-	signature, err := api.SignData(context.Background(), apitypes.TextPlain.Mime, a, hexutil.Encode([]byte("EHLO world")))
+	signature, err := api.SignData(t.Context(), apitypes.TextPlain.Mime, a, hexutil.Encode([]byte("EHLO world")))
 	if signature != nil {
 		t.Errorf("Expected nil-data, got %x", signature)
 	}
@@ -210,7 +209,7 @@ func TestSignData(t *testing.T) {
 	}
 	control.approveCh <- "No way"
 
-	signature, err = api.SignData(context.Background(), apitypes.TextPlain.Mime, a, hexutil.Encode([]byte("EHLO world")))
+	signature, err = api.SignData(t.Context(), apitypes.TextPlain.Mime, a, hexutil.Encode([]byte("EHLO world")))
 	if signature != nil {
 		t.Errorf("Expected nil-data, got %x", signature)
 	}
@@ -222,7 +221,7 @@ func TestSignData(t *testing.T) {
 	control.approveCh <- "Y"
 	control.inputCh <- "a_long_password"
 
-	signature, err = api.SignData(context.Background(), apitypes.TextPlain.Mime, a, hexutil.Encode([]byte("EHLO world")))
+	signature, err = api.SignData(t.Context(), apitypes.TextPlain.Mime, a, hexutil.Encode([]byte("EHLO world")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -236,7 +235,7 @@ func TestSignData(t *testing.T) {
 
 	var want []byte
 
-	if signature, err = api.SignTypedData(context.Background(), a, typedData); err != nil {
+	if signature, err = api.SignTypedData(t.Context(), a, typedData); err != nil {
 		t.Fatal(err)
 	} else if signature == nil || len(signature) != 65 {
 		t.Errorf("Expected 65 byte signature (got %d bytes)", len(signature))
@@ -250,7 +249,7 @@ func TestSignData(t *testing.T) {
 
 	if typedDataJson, err := json.Marshal(typedData); err != nil {
 		t.Fatal(err)
-	} else if signature, err = api.SignData(context.Background(), apitypes.DataTyped.Mime, a, hexutil.Encode(typedDataJson)); err != nil {
+	} else if signature, err = api.SignData(t.Context(), apitypes.DataTyped.Mime, a, hexutil.Encode(typedDataJson)); err != nil {
 		t.Fatal(err)
 	} else if signature == nil || len(signature) != 65 {
 		t.Errorf("Expected 65 byte signature (got %d bytes)", len(signature))

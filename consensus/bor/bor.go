@@ -3,6 +3,7 @@ package bor
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -15,6 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	lru "github.com/hashicorp/golang-lru"
 	"github.com/holiman/uint256"
 	"golang.org/x/crypto/sha3"
@@ -22,6 +24,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
 	balance_tracing "github.com/ethereum/go-ethereum/core/tracing"
+	hmm "github.com/ethereum/go-ethereum/heimdall-migration-monitor"
 
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/bor/api"
@@ -42,6 +45,8 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/ethereum/go-ethereum/trie"
+
+	stakeTypes "github.com/0xPolygon/heimdall-v2/x/stake/types"
 )
 
 const (
@@ -226,6 +231,7 @@ type Bor struct {
 	spanner                Spanner
 	GenesisContractsClient GenesisContract
 	HeimdallClient         IHeimdallClient
+	HeimdallWSClient       IHeimdallWSClient
 
 	spanStore SpanStore // Store to save previous span data from heimdall
 
@@ -248,6 +254,7 @@ func New(
 	ethAPI api.Caller,
 	spanner Spanner,
 	heimdallClient IHeimdallClient,
+	heimdallWSClient IHeimdallWSClient,
 	genesisContracts GenesisContract,
 	devFakeAuthor bool,
 ) *Bor {
@@ -263,7 +270,7 @@ func New(
 	signatures, _ := lru.NewARC(inmemorySignatures)
 
 	// Create a new span store
-	spanStore := NewSpanStore(heimdallClient, spanner, chainConfig.ChainID.String())
+	spanStore := NewSpanStore(heimdallClient, spanner, chainConfig.ChainID.String(), db)
 
 	c := &Bor{
 		chainConfig:            chainConfig,
@@ -275,6 +282,7 @@ func New(
 		spanner:                spanner,
 		GenesisContractsClient: genesisContracts,
 		HeimdallClient:         heimdallClient,
+		HeimdallWSClient:       heimdallWSClient,
 		spanStore:              spanStore,
 		DevFakeAuthor:          devFakeAuthor,
 	}
@@ -1174,16 +1182,122 @@ func (c *Bor) checkAndCommitSpan(
 	var ctx = context.Background()
 	headerNumber := header.Number.Uint64()
 
+	if hmm.IsHeimdallV2 {
+		c.updateLatestHeimdallSpanV2()
+	} else {
+		c.updateLatestHeimdallSpanV1()
+	}
+
 	span, err := c.spanner.GetCurrentSpan(ctx, header.ParentHash)
 	if err != nil {
 		return err
 	}
 
 	if c.needToCommitSpan(span, headerNumber) {
-		return c.FetchAndCommitSpan(ctx, span.ID+1, state, header, chain)
+		return c.FetchAndCommitSpan(ctx, span.Id+1, state, header, chain)
 	}
 
 	return nil
+}
+
+const getSpanTimeout = 2 * time.Second
+
+func (c *Bor) updateLatestHeimdallSpanV1() {
+	if c.HeimdallClient == nil {
+		log.Info("saveLatestHeimdallSpan - heimdall client is nil")
+		return
+	}
+
+	ctxWithTimeout, cancel := context.WithTimeout(context.Background(), getSpanTimeout)
+	defer cancel()
+	respSpan, err := c.HeimdallClient.GetLatestSpanV1(ctxWithTimeout)
+	if err != nil {
+		log.Error("Error while fetching latest heimdallv1 span", "error", err)
+		return
+	}
+
+	storedSpan := c.spanStore.getLatestHeimdallSpanV1()
+
+	storedSpanID := uint64(0)
+
+	if storedSpan != nil {
+		storedSpanID = storedSpan.Id
+	}
+
+	if respSpan.Id <= storedSpanID {
+		log.Info("Latest heimdallv1 span is not updated", "storedSpanID", storedSpanID, "respSpanID", respSpan.Id)
+		return
+	}
+
+	respSpanBytes, err := json.Marshal(respSpan)
+	if err != nil {
+		log.Error("Error while marshalling heimdallv1 span", "error", err)
+		return
+	}
+
+	if err := c.db.Put(rawdb.LastHeimdallV1SpanKey, respSpanBytes); err != nil {
+		log.Error("Error while saving heimdallv1 span to db", "error", err)
+		return
+	}
+
+	log.Info("Latest heimdallv1 span is updated", "storedSpanID", storedSpanID, "respSpanID", respSpan.Id)
+}
+
+func (c *Bor) updateLatestHeimdallSpanV2() {
+	if c.HeimdallClient == nil {
+		log.Info("saveLatestHeimdallSpan - heimdall client is nil")
+		return
+	}
+
+	ctxWithTimeout, cancel := context.WithTimeout(context.Background(), getSpanTimeout)
+	defer cancel()
+	respSpan, err := c.HeimdallClient.GetLatestSpanV2(ctxWithTimeout)
+	if err != nil {
+		log.Error("Error while fetching latest heimdallv2 span", "error", err)
+		return
+	}
+
+	storedSpan := c.spanStore.getLatestHeimdallSpanV2()
+
+	storedSpanID := uint64(0)
+
+	if storedSpan != nil {
+		storedSpanID = storedSpan.Id
+	}
+
+	if respSpan.Id <= storedSpanID {
+		log.Info("Latest heimdallv2 span is not updated", "storedSpanID", storedSpanID, "respSpanID", respSpan.Id)
+		return
+	}
+
+	respSpanBytes, err := json.Marshal(respSpan)
+	if err != nil {
+		log.Error("Error while marshalling heimdallv2 span", "error", err)
+		return
+	}
+
+	if err := c.db.Put(rawdb.LastHeimdallV2SpanKey, respSpanBytes); err != nil {
+		log.Error("Error while saving heimdallv2 span to db", "error", err)
+		return
+	}
+
+	log.Info("Latest heimdallv2 span is updated", "storedSpanID", storedSpanID, "respSpanID", respSpan.Id)
+}
+
+func (c *Bor) getStartBlockHeimdallSpanID(startBlock uint64) (uint64, error) {
+	startBlockBytes := make([]byte, 8)
+	binary.BigEndian.PutUint64(startBlockBytes, startBlock)
+
+	spanIDBytes, err := c.db.Get(append(rawdb.SpanStartBlockToHeimdallSpanIDKey, startBlockBytes...))
+	if err != nil {
+		return 0, err
+	}
+
+	if len(spanIDBytes) == 0 {
+		return 0, fmt.Errorf("no heimdall span id found for start block %d", startBlock)
+	}
+	spanID := binary.BigEndian.Uint64(spanIDBytes)
+	return spanID, nil
 }
 
 func (c *Bor) needToCommitSpan(currentSpan *span.Span, headerNumber uint64) bool {
@@ -1199,11 +1313,12 @@ func (c *Bor) needToCommitSpan(currentSpan *span.Span, headerNumber uint64) bool
 	}
 
 	// If the current block is the first block of the last sprint in the current span.
-	// But here we should skip the check for the 0th span, as it will cause the span to be committed to be committed twice.
-	if currentSpan.EndBlock > c.config.CalculateSprint(headerNumber) && currentSpan.EndBlock-c.config.CalculateSprint(headerNumber)+1 == headerNumber {
-		if currentSpan.ID == 0 {
+	// But here we should skip the check for the 0th span, as it will cause the span to be committed twice.
+	sprintLength := c.config.CalculateSprint(headerNumber)
+	if currentSpan.EndBlock > sprintLength && currentSpan.EndBlock-sprintLength+1 == headerNumber {
+		if currentSpan.Id == 0 {
 			// If the current span is the 0th span, we will skip committing the span.
-			log.Info("Skipping the last sprint commit for 0th span", "spanID", currentSpan.ID, "headerNumber", headerNumber)
+			log.Info("Skipping the last sprint commit for 0th span", "spanID", currentSpan.Id, "headerNumber", headerNumber)
 			return false
 		}
 		return true
@@ -1219,7 +1334,12 @@ func (c *Bor) FetchAndCommitSpan(
 	header *types.Header,
 	chain core.ChainContext,
 ) error {
-	var heimdallSpan span.HeimdallSpan
+	var (
+		minSpan    span.Span
+		chainId    string
+		validators []stakeTypes.MinimalVal
+		producers  []stakeTypes.MinimalVal
+	)
 
 	if c.HeimdallClient == nil {
 		// fixme: move to a new mock or fake and remove c.HeimdallClient completely
@@ -1228,26 +1348,75 @@ func (c *Bor) FetchAndCommitSpan(
 			return err
 		}
 
-		heimdallSpan = *s
+		minSpan = span.Span{
+			Id:         s.Id,
+			StartBlock: s.StartBlock,
+			EndBlock:   s.EndBlock,
+		}
+		chainId = s.ChainID
+
+		for _, val := range s.ValidatorSet.Validators {
+			m := stakeTypes.MinimalVal{
+				ID:          val.ID,
+				VotingPower: uint64(val.VotingPower),
+				Signer:      val.Address,
+			}
+			validators = append(validators, m)
+		}
+
+		for _, val := range s.SelectedProducers {
+			m := stakeTypes.MinimalVal{
+				ID:          val.ID,
+				VotingPower: uint64(val.VotingPower),
+				Signer:      val.Address,
+			}
+			producers = append(producers, m)
+		}
 	} else {
 		response, err := c.spanStore.spanById(ctx, newSpanID)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to get span by id %d: %w", newSpanID, err)
+		}
+		if response == nil {
+			return fmt.Errorf("span with id %d not found", newSpanID)
 		}
 
-		heimdallSpan = *response
+		minSpan = span.Span{
+			Id:         response.Id,
+			StartBlock: response.StartBlock,
+			EndBlock:   response.EndBlock,
+		}
+		chainId = response.ChainID
+
+		for _, val := range response.ValidatorSet.Validators {
+			m := stakeTypes.MinimalVal{
+				ID:          val.ID,
+				VotingPower: uint64(val.VotingPower),
+				Signer:      val.Address,
+			}
+			validators = append(validators, m)
+		}
+
+		for _, val := range response.SelectedProducers {
+			m := stakeTypes.MinimalVal{
+				ID:          val.ID,
+				VotingPower: uint64(val.VotingPower),
+				Signer:      val.Address,
+			}
+			producers = append(producers, m)
+		}
 	}
 
 	// check if chain id matches with Heimdall span
-	if heimdallSpan.ChainID != c.chainConfig.ChainID.String() {
+	if chainId != c.chainConfig.ChainID.String() {
 		return fmt.Errorf(
 			"chain id proposed span, %s, and bor chain id, %s, doesn't match",
-			heimdallSpan.ChainID,
+			chainId,
 			c.chainConfig.ChainID,
 		)
 	}
 
-	return c.spanner.CommitSpan(ctx, heimdallSpan, state, header, chain)
+	return c.spanner.CommitSpan(ctx, minSpan, validators, producers, state, header, chain)
 }
 
 // CommitStates commit states
@@ -1292,9 +1461,16 @@ func (c *Bor) CommitStates(
 		"fromID", from,
 		"to", to.Format(time.RFC3339))
 
-	eventRecords, err := c.HeimdallClient.StateSyncEvents(context.Background(), from, to.Unix())
+	var eventRecords []*clerk.EventRecordWithTime
+	if hmm.IsHeimdallV2 {
+		eventRecords, err = c.HeimdallClient.StateSyncEventsV2(context.Background(), from, to.Unix())
+	} else {
+		eventRecords, err = c.HeimdallClient.StateSyncEventsV1(context.Background(), from, to.Unix())
+	}
 	if err != nil {
 		log.Error("Error occurred when fetching state sync events", "fromID", from, "to", to.Unix(), "err", err)
+		stateSyncs := make([]*types.StateSyncData, 0)
+		return stateSyncs, nil
 	}
 
 	if c.config.OverrideStateSyncRecords != nil {
@@ -1395,7 +1571,7 @@ func (c *Bor) getNextHeimdallSpanForTest(
 	}
 
 	// new span
-	spanBor.ID = newSpanID
+	spanBor.Id = newSpanID
 	if spanBor.EndBlock == 0 {
 		spanBor.StartBlock = 256
 	} else {

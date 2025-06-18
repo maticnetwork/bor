@@ -10,11 +10,13 @@ import (
 	"fmt"
 	"io/ioutil"
 	"math/big"
+	"os"
 	"sort"
 	"testing"
 	"time"
 
 	"github.com/golang/mock/gomock"
+	"github.com/google/uuid"
 
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/accounts/keystore"
@@ -49,6 +51,8 @@ import (
 	"github.com/ethereum/go-ethereum/tests/bor/mocks"
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/ethereum/go-ethereum/triedb"
+
+	borTypes "github.com/0xPolygon/heimdall-v2/x/bor/types"
 )
 
 var (
@@ -273,7 +277,6 @@ func buildNextBlock(t *testing.T, _bor consensus.Engine, chain *core.BlockChain,
 
 	// Build a new header based on parent block
 	header := buildHeader(t, chain, parentBlock, signer, borConfig, currentValidators, opts...)
-
 	state, err := chain.State()
 	if err != nil {
 		t.Fatalf("%s", err)
@@ -303,7 +306,6 @@ func buildNextBlock(t *testing.T, _bor consensus.Engine, chain *core.BlockChain,
 	}
 
 	res := make(chan *types.Block, 1)
-
 	if skipSealing {
 		header := block.Header()
 		sign(t, header, signer, borConfig)
@@ -370,15 +372,15 @@ func sign(t *testing.T, header *types.Header, signer []byte, c *params.BorConfig
 }
 
 //nolint:unused,deadcode
-func stateSyncEventsPayload(t *testing.T) *heimdall.StateSyncEventsResponse {
+func stateSyncEventsPayload(t *testing.T) *heimdall.StateSyncEventsResponseV1 {
 	t.Helper()
 
-	stateData, err := ioutil.ReadFile("./testdata/states.json")
+	stateData, err := os.ReadFile("./testdata/states.json")
 	if err != nil {
 		t.Fatalf("%s", err)
 	}
 
-	res := &heimdall.StateSyncEventsResponse{}
+	res := &heimdall.StateSyncEventsResponseV1{}
 	if err := json.Unmarshal(stateData, res); err != nil {
 		t.Fatalf("%s", err)
 	}
@@ -387,21 +389,21 @@ func stateSyncEventsPayload(t *testing.T) *heimdall.StateSyncEventsResponse {
 }
 
 //nolint:unused,deadcode
-func loadSpanFromFile(t *testing.T) (*heimdall.SpanResponse, *span.HeimdallSpan) {
+func loadSpanFromFile(t *testing.T) *heimdall.SpanResponseV1 {
 	t.Helper()
 
-	spanData, err := ioutil.ReadFile("./testdata/span.json")
+	spanData, err := os.ReadFile("./testdata/span.json")
 	if err != nil {
 		t.Fatalf("%s", err)
 	}
 
-	res := &heimdall.SpanResponse{}
+	res := &heimdall.SpanResponseV1{}
 
 	if err := json.Unmarshal(spanData, res); err != nil {
 		t.Fatalf("%s", err)
 	}
 
-	return res, &res.Result
+	return res
 }
 
 func getSignerKey(number uint64) []byte {
@@ -417,16 +419,14 @@ func getSignerKey(number uint64) []byte {
 	return newKey
 }
 
-func getMockedHeimdallClient(t *testing.T, heimdallSpan *span.HeimdallSpan) (*mocks.MockIHeimdallClient, *gomock.Controller) {
+func getMockedHeimdallClient(t *testing.T, heimdallSpan *borTypes.Span) (*mocks.MockIHeimdallClient, *gomock.Controller) {
 	t.Helper()
 
 	ctrl := gomock.NewController(t)
 	h := mocks.NewMockIHeimdallClient(ctrl)
 
-	h.EXPECT().Span(gomock.Any(), uint64(1)).Return(heimdallSpan, nil).AnyTimes()
-
-	h.EXPECT().StateSyncEvents(gomock.Any(), gomock.Any(), gomock.Any()).
-		Return([]*clerk.EventRecordWithTime{getSampleEventRecord(t)}, nil).AnyTimes()
+	h.EXPECT().GetSpanV1(gomock.Any(), uint64(1)).Return(heimdallSpan, nil).AnyTimes()
+	h.EXPECT().StateSyncEventsV1(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*clerk.EventRecordWithTime{getSampleEventRecord(t)}, nil).AnyTimes()
 
 	return h, ctrl
 }
@@ -445,7 +445,7 @@ func createMockSpan(address common.Address, chainId string) span.HeimdallSpan {
 	}
 	span0 := span.HeimdallSpan{
 		Span: span.Span{
-			ID:         0,
+			Id:         0,
 			StartBlock: 0,
 			EndBlock:   255,
 		},
@@ -461,10 +461,10 @@ func createMockHeimdall(ctrl *gomock.Controller, span0, span1 *span.HeimdallSpan
 	h := mocks.NewMockIHeimdallClient(ctrl)
 
 	h.EXPECT().Close().AnyTimes()
-	h.EXPECT().Span(gomock.Any(), uint64(0)).Return(span0, nil).AnyTimes()
-	h.EXPECT().Span(gomock.Any(), uint64(1)).Return(span1, nil).AnyTimes()
-	h.EXPECT().FetchCheckpoint(gomock.Any(), int64(-1)).Return(&checkpoint.Checkpoint{}, nil).AnyTimes()
-	h.EXPECT().FetchMilestone(gomock.Any()).Return(&milestone.Milestone{}, nil).AnyTimes()
+	h.EXPECT().GetSpanV1(gomock.Any(), uint64(0)).Return(span0, nil).AnyTimes()
+	h.EXPECT().GetSpanV1(gomock.Any(), uint64(1)).Return(span1, nil).AnyTimes()
+	h.EXPECT().FetchCheckpointV1(gomock.Any(), int64(-1)).Return(&checkpoint.CheckpointV1{}, nil).AnyTimes()
+	h.EXPECT().FetchMilestoneV1(gomock.Any()).Return(&milestone.MilestoneV1{}, nil).AnyTimes()
 	h.EXPECT().FetchLastNoAckMilestone(gomock.Any()).Return("", nil).AnyTimes()
 	h.EXPECT().FetchNoAckMilestone(gomock.Any(), string("test")).Return(nil).AnyTimes()
 
@@ -474,11 +474,17 @@ func createMockHeimdall(ctrl *gomock.Controller, span0, span1 *span.HeimdallSpan
 func getMockedSpanner(t *testing.T, validators []*valset.Validator) *bor.MockSpanner {
 	t.Helper()
 
+	mockSpan := &span.Span{
+		Id:         0,
+		StartBlock: 0,
+		EndBlock:   0,
+	}
+
 	spanner := bor.NewMockSpanner(gomock.NewController(t))
 	spanner.EXPECT().GetCurrentValidatorsByHash(gomock.Any(), gomock.Any(), gomock.Any()).Return(validators, nil).AnyTimes()
 	spanner.EXPECT().GetCurrentValidatorsByBlockNrOrHash(gomock.Any(), gomock.Any(), gomock.Any()).Return(validators, nil).AnyTimes()
-	spanner.EXPECT().GetCurrentSpan(gomock.Any(), gomock.Any()).Return(&span.Span{0, 0, 0}, nil).AnyTimes()
-	spanner.EXPECT().CommitSpan(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	spanner.EXPECT().GetCurrentSpan(gomock.Any(), gomock.Any()).Return(mockSpan, nil).AnyTimes()
+	spanner.EXPECT().CommitSpan(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	return spanner
 }
 
@@ -540,7 +546,7 @@ func InitGenesis(t *testing.T, faucets []*ecdsa.PrivateKey, fileLocation string,
 	t.Helper()
 
 	// sprint size = 8 in genesis
-	genesisData, err := ioutil.ReadFile(fileLocation)
+	genesisData, err := os.ReadFile(fileLocation)
 	if err != nil {
 		t.Fatalf("%s", err)
 	}
@@ -561,7 +567,10 @@ func InitGenesis(t *testing.T, faucets []*ecdsa.PrivateKey, fileLocation string,
 
 func InitMiner(genesis *core.Genesis, privKey *ecdsa.PrivateKey, withoutHeimdall bool) (*node.Node, *eth.Ethereum, error) {
 	// Define the basic configurations for the Ethereum node
-	datadir, _ := ioutil.TempDir("", "")
+	datadir, err := os.MkdirTemp("", "InitMiner-"+uuid.New().String())
+	if err != nil {
+		return nil, nil, err
+	}
 
 	config := &node.Config{
 		Name:    "geth",

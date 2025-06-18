@@ -17,7 +17,6 @@
 package node
 
 import (
-	"context"
 	crand "crypto/rand"
 	"fmt"
 	"net/http"
@@ -47,8 +46,7 @@ type authTest struct {
 }
 
 func (at *authTest) Run(t *testing.T) {
-	ctx := context.Background()
-	cl, err := rpc.DialOptions(ctx, at.endpoint, rpc.WithHTTPAuth(at.prov))
+	cl, err := rpc.DialOptions(t.Context(), at.endpoint, rpc.WithHTTPAuth(at.prov))
 	if at.expectDialFail {
 		if err == nil {
 			t.Fatal("expected initial dial to fail")
@@ -61,7 +59,7 @@ func (at *authTest) Run(t *testing.T) {
 	}
 
 	var x string
-	err = cl.CallContext(ctx, &x, "engine_helloWorld")
+	err = cl.CallContext(t.Context(), &x, "engine_helloWorld")
 	if at.expectCall1Fail {
 		if err == nil {
 			t.Fatal("expected call 1 to fail")
@@ -76,7 +74,7 @@ func (at *authTest) Run(t *testing.T) {
 		t.Fatalf("method was silent but did not return expected value: %q", x)
 	}
 
-	err = cl.CallContext(ctx, &x, "eth_helloWorld")
+	err = cl.CallContext(t.Context(), &x, "eth_helloWorld")
 	if at.expectCall2Fail {
 		if err == nil {
 			t.Fatal("expected call 2 to fail")

@@ -191,6 +191,12 @@ func (c *Command) Flags(config *Config) *flagset.Flagset {
 		Value:   &c.cliConfig.Heimdall.GRPCAddress,
 		Default: c.cliConfig.Heimdall.GRPCAddress,
 	})
+	f.StringFlag(&flagset.StringFlag{
+		Name:    "bor.heimdallWS",
+		Usage:   "Address of Heimdall ws subscription service",
+		Value:   &c.cliConfig.Heimdall.WSAddress,
+		Default: c.cliConfig.Heimdall.WSAddress,
+	})
 	f.BoolFlag(&flagset.BoolFlag{
 		Name:    "bor.runheimdall",
 		Usage:   "Run Heimdall service as a child process",
