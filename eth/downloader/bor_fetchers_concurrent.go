@@ -350,7 +350,7 @@ func (d *Downloader) concurrentFetch(queue typedQueue, beaconMode bool) error {
 
 		case res := <-responses:
 			if reflect.TypeOf(queue) == reflect.TypeOf(&witnessQueue{}) {
-				log.Debug("Received response", "queue type", reflect.TypeOf(queue), "res", res)
+				log.Debug("Received response", "queue type", reflect.TypeOf(queue))
 			}
 			// Response arrived, it may be for an existing or an already timed
 			// out request. If the former, update the timeout heap and perhaps
