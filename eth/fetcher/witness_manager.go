@@ -601,10 +601,11 @@ func (m *witnessManager) handleWitnessFetchFailureExt(hash common.Hash, peer str
 	}
 	// Track peer failures (for metrics)
 	m.failedWitnessAttempts[peer]++
+	failures := m.failedWitnessAttempts[peer]
 	// Penalise peer with time-based window
 	m.mu.Unlock()
 
-	log.Debug("[wm] Penalising peer for witness fetch failure", "peer", peer, "failures", m.failedWitnessAttempts[peer], "penalty", witnessFailurePenalty, "until", time.Now().Add(witnessFailurePenalty))
+	log.Debug("[wm] Penalising peer for witness fetch failure", "peer", peer, "failures", failures, "penalty", witnessFailurePenalty, "until", time.Now().Add(witnessFailurePenalty))
 	m.penalisePeer(peer)
 
 	m.rescheduleWitness()

@@ -1983,3 +1983,57 @@ func TestSafeEnqueueSuccess(t *testing.T) {
 		t.Error("Expected peer penalty to be removed after successful enqueue")
 	}
 }
+
+// TestConcurrentWitnessFetchFailure tests that handleWitnessFetchFailureExt
+// can be called concurrently without causing race conditions
+func TestConcurrentWitnessFetchFailure(t *testing.T) {
+	quit := make(chan struct{})
+	defer close(quit)
+
+	dropPeer := peerDropFn(func(id string) {})
+	enqueueCh := make(chan *enqueueRequest, 10)
+	getBlock := blockRetrievalFn(func(hash common.Hash) *types.Block { return nil })
+	getHeader := HeaderRetrievalFn(func(hash common.Hash) *types.Header { return nil })
+	chainHeight := chainHeightFn(func() uint64 { return 100 })
+
+	manager := newWitnessManager(
+		quit,
+		dropPeer,
+		enqueueCh,
+		getBlock,
+		getHeader,
+		chainHeight,
+	)
+
+	// Start the manager
+	go manager.loop()
+	defer manager.stop()
+
+	hash := common.HexToHash("0x123")
+	peer := "test-peer"
+	err := errors.New("fetch failed")
+
+	// Run multiple concurrent calls to handleWitnessFetchFailureExt
+	// This should not cause a race condition panic
+	var wg sync.WaitGroup
+	numGoroutines := 100
+
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			manager.handleWitnessFetchFailureExt(hash, peer, err, false)
+		}()
+	}
+
+	wg.Wait()
+
+	// Verify that the failure count is correct
+	manager.mu.Lock()
+	failureCount := manager.failedWitnessAttempts[peer]
+	manager.mu.Unlock()
+
+	if failureCount != numGoroutines {
+		t.Errorf("Expected failure count %d, got %d", numGoroutines, failureCount)
+	}
+}

@@ -2,6 +2,7 @@ package fetcher
 
 import (
 	"context"
+	"fmt"
 	"math/big"
 	"math/rand"
 	"sync"
@@ -652,7 +653,7 @@ func TestBlockFetcherMemoryLeaks(t *testing.T) {
 
 	// Check that maps aren't growing unbounded
 	fetcher.mu.RLock()
-	totalMapSize := len(fetcher.announced) + len(fetcher.fetching) + 
+	totalMapSize := len(fetcher.announced) + len(fetcher.fetching) +
 		len(fetcher.fetched) + len(fetcher.completing) + len(fetcher.queued)
 	fetcher.mu.RUnlock()
 
@@ -705,11 +706,109 @@ func TestWitnessManagerMemoryLeaks(t *testing.T) {
 
 	// Check map sizes
 	manager.mu.Lock()
-	totalMapSize := len(manager.pending) + len(manager.failedWitnessAttempts) + 
+	totalMapSize := len(manager.pending) + len(manager.failedWitnessAttempts) +
 		len(manager.peerPenalty) + len(manager.witnessUnavailable)
 	manager.mu.Unlock()
 
 	if totalMapSize > 1000 {
 		t.Errorf("WitnessManager maps may be leaking memory, total size: %d", totalMapSize)
+	}
+}
+
+// TestWitnessManagerMapAccessRace specifically tests the race condition
+// that was fixed in handleWitnessFetchFailureExt where map access occurred
+// after the mutex was unlocked
+func TestWitnessManagerMapAccessRace(t *testing.T) {
+	quit := make(chan struct{})
+	defer close(quit)
+
+	dropPeer := peerDropFn(func(id string) {})
+	enqueueCh := make(chan *enqueueRequest, 100)
+	getBlock := blockRetrievalFn(func(hash common.Hash) *types.Block { return nil })
+	getHeader := HeaderRetrievalFn(func(hash common.Hash) *types.Header { return nil })
+	chainHeight := chainHeightFn(func() uint64 { return 100 })
+
+	manager := newWitnessManager(
+		quit,
+		dropPeer,
+		enqueueCh,
+		getBlock,
+		getHeader,
+		chainHeight,
+	)
+
+	// Start the manager
+	go manager.loop()
+	defer manager.stop()
+
+	// Create test data
+	hash := common.HexToHash("0x123")
+	peer1 := "test-peer-1"
+	peer2 := "test-peer-2"
+	err := fmt.Errorf("fetch failed")
+
+	// Run intensive concurrent operations that previously caused
+	// the race condition panic
+	var wg sync.WaitGroup
+	numGoroutines := 50
+	operationsPerGoroutine := 20
+
+	// Goroutine 1: Concurrent failure handling (the problematic function)
+	for i := 0; i < numGoroutines; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			peer := peer1
+			if idx%2 == 0 {
+				peer = peer2
+			}
+
+			for j := 0; j < operationsPerGoroutine; j++ {
+				// This call previously had a race condition
+				manager.handleWitnessFetchFailureExt(hash, peer, err, false)
+
+				// Add some variability to increase chance of race
+				if j%3 == 0 {
+					time.Sleep(time.Microsecond)
+				}
+			}
+		}(i)
+	}
+
+	// Goroutine 2: Concurrent penalty checks (accessing the same maps)
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			peer := peer1
+			if idx%2 == 0 {
+				peer = peer2
+			}
+
+			for j := 0; j < operationsPerGoroutine*2; j++ {
+				// This accesses the same maps that the failure handler modifies
+				_ = manager.HasFailedTooManyTimes(peer)
+
+				if j%5 == 0 {
+					time.Sleep(time.Microsecond)
+				}
+			}
+		}(i)
+	}
+
+	wg.Wait()
+
+	// Verify that the maps are in a consistent state
+	manager.mu.Lock()
+	failures1 := manager.failedWitnessAttempts[peer1]
+	failures2 := manager.failedWitnessAttempts[peer2]
+	manager.mu.Unlock()
+
+	expectedTotal := numGoroutines/2*operationsPerGoroutine + (numGoroutines-numGoroutines/2)*operationsPerGoroutine
+	actualTotal := failures1 + failures2
+
+	if actualTotal != expectedTotal {
+		t.Errorf("Expected total failures %d, got %d (peer1: %d, peer2: %d)",
+			expectedTotal, actualTotal, failures1, failures2)
 	}
 }
