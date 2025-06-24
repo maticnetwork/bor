@@ -9,12 +9,6 @@ import (
 	"github.com/ethereum/go-ethereum/metrics"
 )
 
-// ChainReader interface for blockchain access
-type ChainReader interface {
-	CurrentBlock() *types.Header
-	GetBlockByNumber(number uint64) *types.Block
-}
-
 type milestone struct {
 	finality[*rawdb.Milestone]
 
@@ -26,9 +20,6 @@ type milestone struct {
 	FutureMilestoneList  map[uint64]common.Hash // Future Milestone list
 	FutureMilestoneOrder []uint64               // Future Milestone Order
 	MaxCapacity          int                    //Capacity of future Milestone list
-
-	// Blockchain access for fork detection
-	blockchain ChainReader
 }
 
 type milestoneService interface {
@@ -107,20 +98,6 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 func (m *milestone) IsValidPeer(fetchHeadersByNumber func(number uint64, amount int, skip int, reverse bool) ([]*types.Header, []common.Hash, error)) (bool, error) {
 	if !flags.Milestone {
 		return true, nil
-	}
-
-	// Fork detection: Check if we have a local fork - if so, allow sync to recover
-	if m.blockchain != nil && m.doExist {
-		localHead := m.blockchain.CurrentBlock()
-		if localHead != nil && localHead.Number.Uint64() >= m.Number {
-			localBlock := m.blockchain.GetBlockByNumber(m.Number)
-			if localBlock != nil && localBlock.Hash() != m.Hash {
-				log.Info("Fork detected, allowing peer sync for recovery",
-					"local", localBlock.Hash(), "milestone", m.Hash, "block", m.Number)
-				MilestonePeerMeter.Mark(int64(1))
-				return true, nil
-			}
-		}
 	}
 
 	res, err := m.finality.IsValidPeer(fetchHeadersByNumber)

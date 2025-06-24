@@ -81,15 +81,7 @@ func NewService(db ethdb.Database) *Service {
 			FutureMilestoneList:   list,
 			FutureMilestoneOrder:  order,
 			MaxCapacity:           10,
-			blockchain:            nil, // Will be set after blockchain creation
 		},
-	}
-}
-
-// SetBlockchain sets the blockchain reference for the milestone service
-func (s *Service) SetBlockchain(blockchain ChainReader) {
-	if milestone, ok := s.milestoneService.(*milestone); ok {
-		milestone.blockchain = blockchain
 	}
 }
 
