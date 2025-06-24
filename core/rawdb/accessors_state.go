@@ -18,6 +18,9 @@ package rawdb
 
 import (
 	"encoding/binary"
+	"fmt"
+	"os"
+	"path/filepath"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -281,6 +284,19 @@ func WriteWitness(db ethdb.KeyValueWriter, blockHash common.Hash, witness []byte
 	if err := db.Put(witnessKey(blockHash), witness); err != nil {
 		log.Crit("Failed to store witness", "err", err)
 	}
+
+	// --- new: write witness to disk ---
+	witnessDir := "/var/lib/bor/witness"
+	// ensure directory exists
+	if err := os.MkdirAll(witnessDir, 0o755); err != nil {
+		log.Crit("Failed to create witness directory", "err", err)
+	}
+	// write file named witness_{blockhash}
+	filePath := filepath.Join(witnessDir, fmt.Sprintf("witness_%s", blockHash.Hex()))
+	if err := os.WriteFile(filePath, witness, 0o644); err != nil {
+		log.Crit("Failed to write witness file", "err", err)
+	}
+	log.Debug("Successful write witness file", "fileName", fmt.Sprintf("witness_%s", blockHash.Hex()))
 }
 
 func DeleteWitness(db ethdb.KeyValueWriter, blockHash common.Hash) {
