@@ -150,9 +150,17 @@ func borVerify(ctx context.Context, eth *Ethereum, handler *ethHandler, start ui
 			if err != nil {
 				log.Warn("Failed to insert canonical chain", "err", err)
 				return hash, err
-			} else {
-				log.Info("Successfully inserted canonical chain")
 			}
+
+			// Then explicitly set the final block as canonical to ensure proper canonical mapping
+			finalBlock := canonicalChain[len(canonicalChain)-1]
+			_, err = eth.BlockChain().SetCanonical(finalBlock)
+			if err != nil {
+				log.Warn("Failed to set canonical head after insertion", "err", err, "block", finalBlock.NumberU64(), "hash", finalBlock.Hash())
+				return hash, err
+			}
+
+			log.Info("Successfully inserted canonical chain")
 		} else {
 			log.Warn("Failed to insert canonical chain", "length", len(canonicalChain), "expected", length)
 			return hash, errHashMismatch
