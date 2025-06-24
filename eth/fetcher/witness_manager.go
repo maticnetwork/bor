@@ -131,11 +131,17 @@ func (m *witnessManager) loop() {
 
 	for {
 		var timerChan <-chan time.Time
-		if len(m.pending) > 0 {
+
+		// Check pending count under mutex protection
+		m.mu.Lock()
+		pendingCount := len(m.pending)
+		m.mu.Unlock()
+
+		if pendingCount > 0 {
 			// Only listen to timer if there are pending items
 			timerChan = m.witnessTimer.C
 			// If too long since last tick, reset the timer to ensure we don't get stuck
-			if time.Since(lastTick) > 10*time.Second && len(m.pending) > 0 {
+			if time.Since(lastTick) > 10*time.Second {
 				log.Debug("[wm] Long time since last tick, forcing timer reset", "sinceLastTick", time.Since(lastTick))
 				m.rescheduleWitness()
 			}
@@ -405,10 +411,12 @@ func (m *witnessManager) tick() {
 		// Check if peer is currently penalised
 		if m.HasFailedTooManyTimes(peer) {
 			log.Debug("[wm] Skipping witness fetch batch, peer currently penalised", "peer", peer, "hashes", len(hashAnnounceMap))
-			// Clean up the state for these hashes
+			// Clean up the state for these hashes - must protect with mutex
+			m.mu.Lock()
 			for hash := range hashAnnounceMap {
 				delete(m.pending, hash)
 			}
+			m.mu.Unlock()
 			continue // Skip this peer entirely
 		}
 
@@ -601,11 +609,14 @@ func (m *witnessManager) handleWitnessFetchFailureExt(hash common.Hash, peer str
 	}
 	// Track peer failures (for metrics)
 	m.failedWitnessAttempts[peer]++
-	// Penalise peer with time-based window
+	failures := m.failedWitnessAttempts[peer]
+
+	// Penalise peer with time-based window - do this under the same lock
+	until := time.Now().Add(witnessFailurePenalty)
+	m.peerPenalty[peer] = until
 	m.mu.Unlock()
 
-	log.Debug("[wm] Penalising peer for witness fetch failure", "peer", peer, "failures", m.failedWitnessAttempts[peer], "penalty", witnessFailurePenalty, "until", time.Now().Add(witnessFailurePenalty))
-	m.penalisePeer(peer)
+	log.Debug("[wm] Penalising peer for witness fetch failure", "peer", peer, "failures", failures, "penalty", witnessFailurePenalty, "until", until)
 
 	m.rescheduleWitness()
 }

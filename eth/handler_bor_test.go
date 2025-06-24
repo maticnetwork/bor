@@ -70,7 +70,7 @@ func TestFetchWhitelistCheckpointAndMilestone(t *testing.T) {
 
 	// create a downloader with the blockchain
 	mux := new(event.TypeMux)
-	mockDownloader := downloader.New(db, mux, chain, nil, func(string) {}, func() {}, whitelist.NewService(db), 0)
+	mockDownloader := downloader.New(db, mux, chain, nil, func(string) {}, func() {}, whitelist.NewService(db), 0, false)
 
 	// create an ethHandler with the mock downloader
 	handler := &ethHandler{
