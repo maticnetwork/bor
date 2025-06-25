@@ -20,8 +20,11 @@
 package downloader
 
 import (
+	"bytes"
+	"compress/gzip"
 	"errors"
 	"fmt"
+	"io"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -1103,8 +1106,12 @@ func (q *queue) DeliverWitnesses(id string, witnessData interface{}, meta interf
 		log.Trace("DeliverWitnesses: reconstructWitness entered", "peer", id, "index", index, "header", result.Header.Hash())
 		// Decode the RLP witness data
 		wit := new(stateless.Witness)
-		log.Trace("DeliverWitnesses: Decoding witness RLP", "peer", id, "index", index, "lenRLPInBytes", len(witnessRLP[index]))
-		if err := rlp.DecodeBytes(witnessRLP[index], wit); err != nil {
+		decompressedRLP, err := DecompressGzip(witnessRLP[index])
+		if err != nil {
+			log.Warn("DeliverWitnesses: Failed to decompress witness RLP", "err", err, "peer", id, "header", result.Header.Hash())
+		}
+		log.Trace("DeliverWitnesses: Decoding witness RLP", "peer", id, "index", index, "lenRLPCompressedInBytes", len(witnessRLP[index]), "lenRLPDecompressedInBytes")
+		if err := rlp.DecodeBytes(decompressedRLP, wit); err != nil {
 			log.Warn("DeliverWitnesses: Failed to decode witness RLP", "err", err, "peer", id, "header", result.Header.Hash())
 			// How to handle decode failure? Mark as incomplete? For now, just log.
 			return
@@ -1242,4 +1249,23 @@ func (q *queue) Prepare(offset uint64, mode SyncMode) {
 	// Prepare the queue for sync results
 	q.resultCache.Prepare(offset)
 	q.mode = mode
+}
+
+// DecompressGzip reverses CompressWithGzip.
+func DecompressGzip(compressed []byte) ([]byte, error) {
+	// Wrap compressed bytes in a reader
+	buf := bytes.NewReader(compressed)
+	// Create a gzip reader
+	gz, err := gzip.NewReader(buf)
+	if err != nil {
+		return nil, err
+	}
+	defer gz.Close()
+
+	// Copy the decompressed data into out
+	var out bytes.Buffer
+	if _, err := io.Copy(&out, gz); err != nil {
+		return nil, err
+	}
+	return out.Bytes(), nil
 }

@@ -1,6 +1,8 @@
 package eth
 
 import (
+	"bytes"
+	"compress/gzip"
 	"fmt"
 	"time"
 
@@ -115,8 +117,12 @@ func (h *witHandler) handleGetWitness(peer *wit.Peer, req *wit.GetWitnessPacket)
 		// Call the blockchain method which now returns raw RLP bytes
 		witnessBytes := rawdb.ReadWitness(h.Chain().DB(), hash)
 		if len(witnessBytes) > 0 {
+			compressedWitnessBytes, err := CompressWithGzip(witnessBytes)
+			if err != nil {
+				return nil, err
+			}
 			log.Trace("Witness found in DB immediately", "hash", hash)
-			witnessesRLPBytes = append(witnessesRLPBytes, witnessBytes)
+			witnessesRLPBytes = append(witnessesRLPBytes, compressedWitnessBytes)
 		}
 
 		witnessesRLPBytes = append(witnessesRLPBytes, witnessBytes)
@@ -124,4 +130,20 @@ func (h *witHandler) handleGetWitness(peer *wit.Peer, req *wit.GetWitnessPacket)
 	// Return the collected RLP data
 	log.Debug("handleGetWitness returning witnesses", "peer", peer.ID(), "reqID", req.RequestId, "count", len(witnessesRLPBytes))
 	return witnessesRLPBytes, nil
+}
+
+// CompressWithGzip takes a byte slice and returns its GZIP-compressed form.
+func CompressWithGzip(data []byte) ([]byte, error) {
+	var buf bytes.Buffer
+	// Create a new gzip writer writing into our buffer
+	gz := gzip.NewWriter(&buf)
+	// Write the data to it
+	if _, err := gz.Write(data); err != nil {
+		return nil, err
+	}
+	// Close to flush and write the footer
+	if err := gz.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
