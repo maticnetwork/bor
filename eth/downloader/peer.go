@@ -149,7 +149,7 @@ func (p *peerConnection) ReceiptCapacity(targetRTT time.Duration) int {
 func (p *peerConnection) WitnessCapacity(targetRTT time.Duration) int {
 	cap := p.rates.Capacity(wit.MsgWitness, targetRTT)
 	// Placeholder limit, replace MaxWitnessFetch with actual constant if defined
-	const MaxWitnessFetch = 128 // Placeholder value
+	const MaxWitnessFetch = 1 // Placeholder value
 	if cap > MaxWitnessFetch {
 		cap = MaxWitnessFetch
 	}
