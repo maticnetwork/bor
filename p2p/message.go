@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"runtime/debug"
 	"sync/atomic"
 	"time"
 
@@ -101,6 +102,8 @@ type MsgReadWriter interface {
 func Send(w MsgWriter, msgcode uint64, data interface{}) error {
 	size, r, err := rlp.EncodeToReader(data)
 	if err != nil {
+		log.Debug("Error sending p2p packet", "foundErr", err)
+		debug.PrintStack()
 		return err
 	}
 
