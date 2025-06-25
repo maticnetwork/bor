@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/event"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/rlp"
 )
@@ -103,6 +104,7 @@ func Send(w MsgWriter, msgcode uint64, data interface{}) error {
 		return err
 	}
 
+	log.Debug("Sending p2p packet", "size", size, "uint32Size", uint32(size))
 	return w.WriteMsg(Msg{Code: msgcode, Size: uint32(size), Payload: r})
 }
 
