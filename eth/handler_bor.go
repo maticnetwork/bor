@@ -82,18 +82,25 @@ func (h *ethHandler) fetchWhitelistMilestone(ctx context.Context, bor *bor.Bor) 
 
 // handleMilestone verify and process the fetched milestone
 func (h *ethHandler) handleMilestone(ctx context.Context, eth *Ethereum, milestone *milestone.Milestone, verifier *borVerifier) error {
+	log.Info("[Stateless][handleMilestone] Starting milestone handling", "start", milestone.StartBlock, "end", milestone.EndBlock, "hash", milestone.Hash.String())
+
 	h.downloader.UpdateFastForwardBlockFromMilestone(h.chain.DB(), milestone)
+	log.Info("[Stateless][handleMilestone] Updated fast forward block from milestone", "end", milestone.EndBlock)
 
 	// Verify if the milestone fetched can be added to the local whitelist entry or not. If verified,
 	// the hash of the end block of the milestone is returned else appropriate error is returned.
+	log.Info("[Stateless][handleMilestone] Starting milestone verification", "start", milestone.StartBlock, "end", milestone.EndBlock)
 	_, err := verifier.verify(ctx, eth, h, milestone.StartBlock, milestone.EndBlock, milestone.Hash.String()[2:], false)
 	if err != nil {
 		if errors.Is(err, errChainOutOfSync) {
-			log.Info("Whitelisting milestone deferred", "err", err)
+			log.Info("[Stateless][handleMilestone] Whitelisting milestone deferred", "err", err)
 		} else {
-			log.Warn("Failed to whitelist milestone", "err", err)
+			log.Info("[Stateless][handleMilestone] Failed to whitelist milestone", "err", err)
 		}
+		log.Info("[Stateless][handleMilestone] Unlocking sprint due to verification failure", "end", milestone.EndBlock)
 		h.downloader.UnlockSprint(milestone.EndBlock)
+	} else {
+		log.Info("[Stateless][handleMilestone] Milestone verification successful", "start", milestone.StartBlock, "end", milestone.EndBlock)
 	}
 
 	num := milestone.EndBlock
@@ -103,14 +110,17 @@ func (h *ethHandler) handleMilestone(ctx context.Context, eth *Ethereum, milesto
 	// list. Also, the hash mismatch (end block hash) error will lead to rewind so also
 	// add that milestone to the future milestone list.
 	if errors.Is(err, errChainOutOfSync) || errors.Is(err, errHashMismatch) {
+		log.Info("[Stateless][handleMilestone] Processing future milestone due to chain sync or hash mismatch", "num", num, "hash", hash)
 		h.downloader.ProcessFutureMilestone(num, hash)
 	}
 
 	if errors.Is(err, heimdall.ErrServiceUnavailable) {
+		log.Info("[Stateless][handleMilestone] Heimdall service unavailable, returning early")
 		return nil
 	}
 
 	if err != nil {
+		log.Info("[Stateless][handleMilestone] Milestone handling failed", "err", err)
 		return err
 	}
 
@@ -121,8 +131,10 @@ func (h *ethHandler) handleMilestone(ctx context.Context, eth *Ethereum, milesto
 		// MilestoneWhitelistedDelayTimer.UpdateSince(time.Unix(int64(blockTime), 0))
 	}
 
+	log.Info("[Stateless][handleMilestone] Processing milestone", "num", num, "hash", hash)
 	h.downloader.ProcessMilestone(num, hash)
 
+	log.Info("[Stateless][handleMilestone] Milestone handling completed successfully", "start", milestone.StartBlock, "end", milestone.EndBlock)
 	return nil
 }
 

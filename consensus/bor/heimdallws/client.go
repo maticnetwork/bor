@@ -64,7 +64,7 @@ func (c *HeimdallWSClient) tryUntilSubscribeMilestoneEvents(ctx context.Context)
 
 		conn, _, err := websocket.DefaultDialer.Dial(c.url, nil)
 		if err != nil {
-			log.Error("failed to dial websocket on heimdall ws subscription", "err", err)
+			log.Error("Failed to dial websocket on heimdall ws subscription", "err", err)
 		}
 		c.mu.Lock()
 		c.conn = conn
@@ -79,7 +79,7 @@ func (c *HeimdallWSClient) tryUntilSubscribeMilestoneEvents(ctx context.Context)
 		req.Params.Query = "tm.event='NewBlock' AND milestone.number>0"
 
 		if err := c.conn.WriteJSON(req); err != nil {
-			log.Error("failed to send subscription request on heimdall ws subscription", "err", err)
+			log.Error("Failed to send subscription request on heimdall ws subscription", "err", err)
 			continue
 		}
 		log.Info("Successfully connected on heimdall ws subscription")

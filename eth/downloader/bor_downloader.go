@@ -2150,7 +2150,7 @@ func (d *Downloader) UpdateFastForwardBlockFromMilestone(db ethdb.Database, mile
 			// This can happen if the milestone was updated with a new totalDifficulty.
 			// This is expected in case of a reorg or a new milestone.
 			// We assume that the new totalDifficulty is correct and we overwrite the old one.
-			log.Warn("Milestone totalDifficulty mismatch, overwriting", "hash", milestone.Hash, "endBlock", milestone.EndBlock, "existingTd", existingTd, "newTd", milestoneTd)
+			log.Warn("[Stateless][UpdateFastForwardBlockFromMilestone] Milestone totalDifficulty mismatch, overwriting", "hash", milestone.Hash, "endBlock", milestone.EndBlock, "existingTd", existingTd, "newTd", milestoneTd)
 			rawdb.WriteTd(db, milestone.Hash, milestone.EndBlock, milestoneTd)
 		}
 		// else: match exists, do nothing (no overwrite).

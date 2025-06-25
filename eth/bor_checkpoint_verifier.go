@@ -56,17 +56,20 @@ func borVerify(ctx context.Context, eth *Ethereum, handler *ethHandler, start ui
 		str = "checkpoint"
 	}
 
+	log.Info("[Stateless][borVerify] Starting verification", "type", str, "start", start, "end", end, "hash", hash)
+
 	// check if we have the given blocks
 	currentBlock := eth.BlockChain().CurrentBlock()
 	if currentBlock == nil {
-		log.Debug(fmt.Sprintf("Failed to fetch current block from blockchain while verifying incoming %s", str))
+		log.Info("[Stateless][borVerify] Failed to fetch current block from blockchain", "type", str)
 		return hash, errMissingCurrentBlock
 	}
 
 	head := currentBlock.Number.Uint64()
+	log.Info("[Stateless][borVerify] Current chain head", "head", head, "end", end, "type", str)
 
 	if head < end {
-		log.Debug(fmt.Sprintf("Current head block behind incoming %s block", str), "head", head, "end block", end)
+		log.Info("[Stateless][borVerify] Current head block behind incoming block", "type", str, "head", head, "end", end)
 		return hash, errChainOutOfSync
 	}
 
@@ -74,33 +77,33 @@ func borVerify(ctx context.Context, eth *Ethereum, handler *ethHandler, start ui
 
 	// verify the hash
 	if isCheckpoint {
+		log.Info("[Stateless][borVerify] Calculating root hash for checkpoint verification", "start", start, "end", end)
 		var err error
 
 		// in case of checkpoint get the rootHash
 		localHash, err = handler.ethAPI.GetRootHash(ctx, start, end)
 
 		if err != nil {
-			log.Debug("Failed to calculate root hash of given block range while whitelisting checkpoint", "start", start, "end", end, "err", err)
+			log.Info("[Stateless][borVerify] Failed to calculate root hash", "start", start, "end", end, "err", err)
 			return hash, fmt.Errorf("%w: %v", errRootHash, err)
 		}
+		log.Info("[Stateless][borVerify] Root hash calculated successfully", "localHash", localHash)
 	} else {
+		log.Info("[Stateless][borVerify] Getting end block hash for milestone verification", "end", end)
 		// in case of milestone(isCheckpoint==false) get the hash of endBlock
 		block, err := handler.ethAPI.GetBlockByNumber(ctx, rpc.BlockNumber(end), false)
 		if err != nil || block == nil || block["hash"] == nil {
-			log.Debug("Failed to get end block hash while whitelisting milestone", "number", end, "err", err)
+			log.Info("[Stateless][borVerify] Failed to get end block hash", "number", end, "err", err)
 			return hash, fmt.Errorf("%w: %v", errEndBlock, err)
 		}
 
 		localHash = fmt.Sprintf("%v", block["hash"])[2:]
+		log.Info("[Stateless][borVerify] End block hash retrieved successfully", "localHash", localHash)
 	}
 
 	//nolint
 	if localHash != hash {
-		if isCheckpoint {
-			log.Warn("Root hash mismatch while whitelisting checkpoint", "expected", localHash, "got", hash)
-		} else {
-			log.Warn("End block hash mismatch while whitelisting milestone", "expected", localHash, "got", hash)
-		}
+		log.Info("[Stateless][borVerify] Hash mismatch detected", "type", str, "expected", localHash, "got", hash)
 
 		ethHandler := (*ethHandler)(eth.handler)
 
@@ -110,31 +113,30 @@ func borVerify(ctx context.Context, eth *Ethereum, handler *ethHandler, start ui
 		)
 
 		if doExist, rewindTo, _ = ethHandler.downloader.GetWhitelistedMilestone(); doExist {
-
+			log.Info("[Stateless][borVerify] Found whitelisted milestone for rewind", "rewindTo", rewindTo)
 		} else if doExist, rewindTo, _ = ethHandler.downloader.GetWhitelistedCheckpoint(); doExist {
-
+			log.Info("[Stateless][borVerify] Found whitelisted checkpoint for rewind", "rewindTo", rewindTo)
 		} else {
 			if start <= 0 {
 				rewindTo = 0
 			} else {
 				rewindTo = start - 1
 			}
+			log.Info("[Stateless][borVerify] No whitelisted blocks found, using calculated rewind", "rewindTo", rewindTo)
 		}
 
 		if head-rewindTo > maxRewindLen {
 			rewindTo = head - maxRewindLen
+			log.Info("[Stateless][borVerify] Adjusted rewind to maximum allowed length", "rewindTo", rewindTo, "maxRewindLen", maxRewindLen)
 		}
 
-		if isCheckpoint {
-			log.Info("Rewinding chain due to checkpoint root hash mismatch", "number", rewindTo)
-		} else {
-			log.Info("Rewinding chain due to milestone endblock hash mismatch", "number", rewindTo)
-		}
+		log.Info("[Stateless][borVerify] Rewinding chain due to hash mismatch", "type", str, "rewindTo", rewindTo)
 
 		var canonicalChain []*types.Block
 
 		length := end - rewindTo
 
+		log.Info("[Stateless][borVerify] Fetching canonical chain blocks", "hash", hash, "length", length)
 		canonicalChain = eth.BlockChain().GetBlocksFromHash(common.HexToHash(hash), int(length))
 
 		// Reverse the canonical chain
@@ -142,31 +144,36 @@ func borVerify(ctx context.Context, eth *Ethereum, handler *ethHandler, start ui
 			canonicalChain[i], canonicalChain[j] = canonicalChain[j], canonicalChain[i]
 		}
 
+		log.Info("[Stateless][borVerify] Initiating chain rewind", "from", head, "to", rewindTo)
 		rewindBack(eth, head, rewindTo)
 
 		if canonicalChain != nil && len(canonicalChain) == int(length) {
-			log.Info("Inserting canonical chain", "from", canonicalChain[0].NumberU64(), "hash", canonicalChain[0].Hash(), "to", canonicalChain[len(canonicalChain)-1].NumberU64(), "hash", canonicalChain[len(canonicalChain)-1].Hash())
+			log.Info("[Stateless][borVerify] Inserting canonical chain", "from", canonicalChain[0].NumberU64(), "hash", canonicalChain[0].Hash(), "to", canonicalChain[len(canonicalChain)-1].NumberU64(), "hash", canonicalChain[len(canonicalChain)-1].Hash())
 			_, err := eth.BlockChain().InsertChain(canonicalChain, eth.config.SyncAndProduceWitnesses)
 			if err != nil {
-				log.Warn("Failed to insert canonical chain", "err", err)
+				log.Info("[Stateless][borVerify] Failed to insert canonical chain", "err", err)
 				return hash, err
 			} else {
-				log.Info("Successfully inserted canonical chain")
+				log.Info("[Stateless][borVerify] Successfully inserted canonical chain")
 			}
 		} else {
-			log.Warn("Failed to insert canonical chain", "length", len(canonicalChain), "expected", length)
+			log.Info("[Stateless][borVerify] Failed to insert canonical chain due to length mismatch", "chainLength", len(canonicalChain), "expected", length)
 			return hash, errHashMismatch
 		}
+	} else {
+		log.Info("[Stateless][borVerify] Hash verification successful", "type", str, "hash", localHash)
 	}
 
 	// fetch the end block hash
+	log.Info("[Stateless][borVerify] Fetching final end block hash", "end", end)
 	block, err := handler.ethAPI.GetBlockByNumber(ctx, rpc.BlockNumber(end), false)
 	if err != nil {
-		log.Debug("Failed to get end block hash while whitelisting", "err", err)
+		log.Info("[Stateless][borVerify] Failed to get end block hash", "end", end, "err", err)
 		return hash, fmt.Errorf("%w: %v", errEndBlock, err)
 	}
 
 	hash = fmt.Sprintf("%v", block["hash"])
+	log.Info("[Stateless][borVerify] Verification completed successfully", "type", str, "finalHash", hash)
 
 	return hash, nil
 }

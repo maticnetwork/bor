@@ -712,14 +712,16 @@ func (s *Ethereum) startMilestoneWhitelistService() {
 	ethHandler, bor, _ := s.getHandler()
 
 	// If heimdall ws is available use WS subscription to new milestone events instead of polling
+	log.Info("[Stateless][startMilestoneWhitelistService]", "HeimdallWSClient", bor.HeimdallWSClient)
 	if bor != nil && bor.HeimdallWSClient != nil {
+		log.Info("[Stateless][startMilestoneWhitelistService] Using HeimdallWSClient", "HeimdallWSClient", bor.HeimdallWSClient)
 		s.subscribeAndHandleMilestone(context.Background(), ethHandler, bor)
 	} else {
+		log.Info("[Stateless][startMilestoneWhitelistService] Using polling mechanism for milestones")
 		const (
 			tickerDuration = 500 * time.Millisecond
 			fnName         = "whitelist milestone"
 		)
-
 		s.retryHeimdallHandler(s.fetchAndHandleMilestone, tickerDuration, whitelistTimeout, fnName)
 	}
 }
@@ -808,6 +810,10 @@ func (s *Ethereum) subscribeAndHandleMilestone(ctx context.Context, ethHandler *
 			if !ok {
 				return nil
 			}
+
+			// Log the milestone event received from Heimdall WS connection
+			log.Info("[Stateless][subscribeAndHandleMilestone] Received milestone events", "m", m)
+			log.Info("[Stateless][subscribeAndHandleMilestone] Received milestone events", "start", m.StartBlock, "end", m.EndBlock, "hash", m.Hash, "milestoneID", m.MilestoneID, "proposer", m.Proposer, "timestamp", m.Timestamp)
 
 			err := ethHandler.handleMilestone(ctx, s, m, newBorVerifier())
 			if err != nil {

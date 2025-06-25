@@ -271,6 +271,7 @@ func CreateConsensusEngine(chainConfig *params.ChainConfig, ethConfig *Config, d
 			var heimdallWSClient bor.IHeimdallWSClient
 			var err error
 			if ethConfig.HeimdallWSAddress != "" {
+				log.Info("[Stateless][CreateConsensusEngine] Using HeimdallWSClient", "HeimdallWSAddress", ethConfig.HeimdallWSAddress)
 				heimdallWSClient, err = heimdallws.NewHeimdallWSClient(ethConfig.HeimdallWSAddress)
 				if err != nil {
 					return nil, err
