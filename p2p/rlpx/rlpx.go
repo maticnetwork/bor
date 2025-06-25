@@ -31,10 +31,12 @@ import (
 	"io"
 	mrand "math/rand"
 	"net"
+	"runtime/debug"
 	"time"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/crypto/ecies"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/golang/snappy"
 	"golang.org/x/crypto/sha3"
@@ -223,6 +225,7 @@ func (c *Conn) Write(code uint64, data []byte) (uint32, error) {
 	}
 
 	if len(data) > maxUint24 {
+		log.Debug("message too large error stack trace", "traceGot", string(debug.Stack()))
 		return 0, errPlainMessageTooLarge
 	}
 
