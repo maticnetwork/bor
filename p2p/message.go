@@ -21,12 +21,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"runtime/debug"
 	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum/event"
-	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/rlp"
 )
@@ -102,12 +100,9 @@ type MsgReadWriter interface {
 func Send(w MsgWriter, msgcode uint64, data interface{}) error {
 	size, r, err := rlp.EncodeToReader(data)
 	if err != nil {
-		log.Debug("Error sending p2p packet", "foundErr", err)
-		debug.PrintStack()
 		return err
 	}
 
-	log.Debug("Sending p2p packet", "size", size, "uint32Size", uint32(size))
 	return w.WriteMsg(Msg{Code: msgcode, Size: uint32(size), Payload: r})
 }
 
