@@ -1109,6 +1109,7 @@ func (q *queue) DeliverWitnesses(id string, witnessData interface{}, meta interf
 		decompressedRLP, err := DecompressGzip(witnessRLP[index])
 		if err != nil {
 			log.Warn("DeliverWitnesses: Failed to decompress witness RLP", "err", err, "peer", id, "header", result.Header.Hash())
+			return
 		}
 		log.Trace("DeliverWitnesses: Decoding witness RLP", "peer", id, "index", index, "lenRLPCompressedInBytes", len(witnessRLP[index]), "lenRLPDecompressedInBytes")
 		if err := rlp.DecodeBytes(decompressedRLP, wit); err != nil {
@@ -1267,5 +1268,7 @@ func DecompressGzip(compressed []byte) ([]byte, error) {
 	if _, err := io.Copy(&out, gz); err != nil {
 		return nil, err
 	}
-	return out.Bytes(), nil
+	decompressed := out.Bytes()
+	log.Info("[gzip] decompression", "compressedSize", len(compressed), "decompressedSize", len(decompressed))
+	return decompressed, nil
 }

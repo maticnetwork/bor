@@ -145,5 +145,7 @@ func CompressWithGzip(data []byte) ([]byte, error) {
 	if err := gz.Close(); err != nil {
 		return nil, err
 	}
-	return buf.Bytes(), nil
+	compressed := buf.Bytes()
+	log.Info("[gzip] compression", "compressedSize", len(compressed), "decompressedSize", len(data))
+	return compressed, nil
 }
