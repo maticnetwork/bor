@@ -23,7 +23,7 @@ func (h *HeimdallAppClient) FetchCheckpointCount(_ context.Context) (int64, erro
 	return int64(res), nil
 }
 
-func (h *HeimdallAppClient) FetchCheckpoint(_ context.Context, number int64) (*checkpoint.CheckpointV2, error) {
+func (h *HeimdallAppClient) FetchCheckpoint(_ context.Context, number int64) (*checkpoint.Checkpoint, error) {
 	log.Info("Fetching checkpoint", "number", number)
 
 	res, err := h.hApp.CheckpointKeeper.GetCheckpointByNumber(h.NewContext(), uint64(number))
@@ -36,8 +36,8 @@ func (h *HeimdallAppClient) FetchCheckpoint(_ context.Context, number int64) (*c
 	return toBorCheckpoint(res), nil
 }
 
-func toBorCheckpoint(hdCheckpoint hmTypes.Checkpoint) *checkpoint.CheckpointV2 {
-	return &checkpoint.CheckpointV2{
+func toBorCheckpoint(hdCheckpoint hmTypes.Checkpoint) *checkpoint.Checkpoint {
+	return &checkpoint.Checkpoint{
 		Proposer:   common.HexToAddress(hdCheckpoint.Proposer),
 		StartBlock: hdCheckpoint.StartBlock,
 		EndBlock:   hdCheckpoint.EndBlock,

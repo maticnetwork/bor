@@ -131,19 +131,3 @@ func (b *EthAPIBackend) SubscribeStateSyncEvent(ch chan<- core.StateSyncEvent) e
 func (b *EthAPIBackend) SubscribeChain2HeadEvent(ch chan<- core.Chain2HeadEvent) event.Subscription {
 	return b.eth.BlockChain().SubscribeChain2HeadEvent(ch)
 }
-
-func (b *EthAPIBackend) GetStartBlockHeimdallSpanID(ctx context.Context, startBlock uint64) (uint64, error) {
-	var api *bor.API
-
-	for _, _api := range b.eth.Engine().APIs(b.eth.BlockChain()) {
-		if _api.Namespace == "bor" {
-			api = _api.Service.(*bor.API)
-		}
-	}
-
-	if api == nil {
-		return 0, errBorEngineNotAvailable
-	}
-
-	return api.GetStartBlockHeimdallSpanID(startBlock)
-}

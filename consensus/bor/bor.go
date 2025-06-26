@@ -3,7 +3,6 @@ package bor
 import (
 	"bytes"
 	"context"
-	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -16,7 +15,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ethereum/go-ethereum/core/rawdb"
 	lru "github.com/hashicorp/golang-lru"
 	"github.com/holiman/uint256"
 	"golang.org/x/crypto/sha3"
@@ -24,7 +22,6 @@ import (
 	"github.com/ethereum/go-ethereum/accounts"
 	"github.com/ethereum/go-ethereum/common"
 	balance_tracing "github.com/ethereum/go-ethereum/core/tracing"
-	hmm "github.com/ethereum/go-ethereum/heimdall-migration-monitor"
 
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/bor/api"
@@ -1182,12 +1179,6 @@ func (c *Bor) checkAndCommitSpan(
 	var ctx = context.Background()
 	headerNumber := header.Number.Uint64()
 
-	if hmm.IsHeimdallV2 {
-		c.updateLatestHeimdallSpanV2()
-	} else {
-		c.updateLatestHeimdallSpanV1()
-	}
-
 	span, err := c.spanner.GetCurrentSpan(ctx, header.ParentHash)
 	if err != nil {
 		return err
@@ -1198,106 +1189,6 @@ func (c *Bor) checkAndCommitSpan(
 	}
 
 	return nil
-}
-
-const getSpanTimeout = 2 * time.Second
-
-func (c *Bor) updateLatestHeimdallSpanV1() {
-	if c.HeimdallClient == nil {
-		log.Info("saveLatestHeimdallSpan - heimdall client is nil")
-		return
-	}
-
-	ctxWithTimeout, cancel := context.WithTimeout(context.Background(), getSpanTimeout)
-	defer cancel()
-	respSpan, err := c.HeimdallClient.GetLatestSpanV1(ctxWithTimeout)
-	if err != nil {
-		log.Error("Error while fetching latest heimdallv1 span", "error", err)
-		return
-	}
-
-	storedSpan := c.spanStore.getLatestHeimdallSpanV1()
-
-	storedSpanID := uint64(0)
-
-	if storedSpan != nil {
-		storedSpanID = storedSpan.Id
-	}
-
-	if respSpan.Id <= storedSpanID {
-		log.Info("Latest heimdallv1 span is not updated", "storedSpanID", storedSpanID, "respSpanID", respSpan.Id)
-		return
-	}
-
-	respSpanBytes, err := json.Marshal(respSpan)
-	if err != nil {
-		log.Error("Error while marshalling heimdallv1 span", "error", err)
-		return
-	}
-
-	if err := c.db.Put(rawdb.LastHeimdallV1SpanKey, respSpanBytes); err != nil {
-		log.Error("Error while saving heimdallv1 span to db", "error", err)
-		return
-	}
-
-	log.Info("Latest heimdallv1 span is updated", "storedSpanID", storedSpanID, "respSpanID", respSpan.Id)
-}
-
-func (c *Bor) updateLatestHeimdallSpanV2() {
-	if c.HeimdallClient == nil {
-		log.Info("saveLatestHeimdallSpan - heimdall client is nil")
-		return
-	}
-
-	ctxWithTimeout, cancel := context.WithTimeout(context.Background(), getSpanTimeout)
-	defer cancel()
-	respSpan, err := c.HeimdallClient.GetLatestSpanV2(ctxWithTimeout)
-	if err != nil {
-		log.Error("Error while fetching latest heimdallv2 span", "error", err)
-		return
-	}
-
-	storedSpan := c.spanStore.getLatestHeimdallSpanV2()
-
-	storedSpanID := uint64(0)
-
-	if storedSpan != nil {
-		storedSpanID = storedSpan.Id
-	}
-
-	if respSpan.Id <= storedSpanID {
-		log.Info("Latest heimdallv2 span is not updated", "storedSpanID", storedSpanID, "respSpanID", respSpan.Id)
-		return
-	}
-
-	respSpanBytes, err := json.Marshal(respSpan)
-	if err != nil {
-		log.Error("Error while marshalling heimdallv2 span", "error", err)
-		return
-	}
-
-	if err := c.db.Put(rawdb.LastHeimdallV2SpanKey, respSpanBytes); err != nil {
-		log.Error("Error while saving heimdallv2 span to db", "error", err)
-		return
-	}
-
-	log.Info("Latest heimdallv2 span is updated", "storedSpanID", storedSpanID, "respSpanID", respSpan.Id)
-}
-
-func (c *Bor) getStartBlockHeimdallSpanID(startBlock uint64) (uint64, error) {
-	startBlockBytes := make([]byte, 8)
-	binary.BigEndian.PutUint64(startBlockBytes, startBlock)
-
-	spanIDBytes, err := c.db.Get(append(rawdb.SpanStartBlockToHeimdallSpanIDKey, startBlockBytes...))
-	if err != nil {
-		return 0, err
-	}
-
-	if len(spanIDBytes) == 0 {
-		return 0, fmt.Errorf("no heimdall span id found for start block %d", startBlock)
-	}
-	spanID := binary.BigEndian.Uint64(spanIDBytes)
-	return spanID, nil
 }
 
 func (c *Bor) needToCommitSpan(currentSpan *span.Span, headerNumber uint64) bool {
@@ -1462,15 +1353,9 @@ func (c *Bor) CommitStates(
 		"to", to.Format(time.RFC3339))
 
 	var eventRecords []*clerk.EventRecordWithTime
-	if hmm.IsHeimdallV2 {
-		eventRecords, err = c.HeimdallClient.StateSyncEventsV2(context.Background(), from, to.Unix())
-	} else {
-		eventRecords, err = c.HeimdallClient.StateSyncEventsV1(context.Background(), from, to.Unix())
-	}
+	eventRecords, err = c.HeimdallClient.StateSyncEvents(context.Background(), from, to.Unix())
 	if err != nil {
 		log.Error("Error occurred when fetching state sync events", "fromID", from, "to", to.Unix(), "err", err)
-		stateSyncs := make([]*types.StateSyncData, 0)
-		return stateSyncs, nil
 	}
 
 	if c.config.OverrideStateSyncRecords != nil {

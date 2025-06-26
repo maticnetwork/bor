@@ -55,7 +55,7 @@ func NewBorDefaultMiner(t *testing.T) *DefaultBorMiner {
 
 	heimdallClient := mocks.NewMockIHeimdallClient(ctrl)
 	heimdallWSClient := mocks.NewMockIHeimdallWSClient(ctrl)
-	heimdallClient.EXPECT().GetSpanV1(gomock.Any(), uint64(0)).Return(&span0, nil).AnyTimes()
+	heimdallClient.EXPECT().GetSpan(gomock.Any(), uint64(0)).Return(&span0, nil).AnyTimes()
 	heimdallClient.EXPECT().Close().Times(1)
 
 	genesisContracts := bor.NewMockGenesisContract(ctrl)

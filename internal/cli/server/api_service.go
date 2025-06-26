@@ -107,18 +107,6 @@ func (s *Server) BorBlockReceipt(ctx context.Context, req *protobor.ReceiptReque
 	return &protobor.ReceiptResponse{Receipt: ConvertReceiptToProtoReceipt(receipt)}, nil
 }
 
-func (s *Server) GetStartBlockHeimdallSpanID(ctx context.Context, req *protobor.GetStartBlockHeimdallSpanIDRequest) (*protobor.GetStartBlockHeimdallSpanIDResponse, error) {
-	spanID, err := s.backend.APIBackend.GetStartBlockHeimdallSpanID(ctx, req.StartBlock)
-	if err != nil {
-		return nil, err
-	}
-
-	return &protobor.GetStartBlockHeimdallSpanIDResponse{
-		StartBlock:     req.StartBlock,
-		HeimdallSpanID: spanID,
-	}, nil
-}
-
 func getRpcBlockNumberFromString(blockNumber string) (rpc.BlockNumber, error) {
 	switch blockNumber {
 	case "latest":

@@ -187,31 +187,19 @@ func TestSpanStore_SpanByBlockNumber(t *testing.T) {
 }
 
 // Irrelevant to the tests above but necessary for interface compatibility
-func (h *MockHeimdallClient) StateSyncEventsV1(ctx context.Context, fromID uint64, to int64) ([]*clerk.EventRecordWithTime, error) {
+func (h *MockHeimdallClient) StateSyncEvents(ctx context.Context, fromID uint64, to int64) ([]*clerk.EventRecordWithTime, error) {
 	panic("implement me")
 }
 
-func (h *MockHeimdallClient) StateSyncEventsV2(ctx context.Context, fromID uint64, to int64) ([]*clerk.EventRecordWithTime, error) {
+func (h *MockHeimdallClient) GetSpan(ctx context.Context, spanID uint64) (*types.Span, error) {
 	panic("implement me")
 }
 
-func (h *MockHeimdallClient) GetSpanV2(ctx context.Context, spanID uint64) (*types.Span, error) {
+func (h *MockHeimdallClient) GetLatestSpan(ctx context.Context) (*types.Span, error) {
 	panic("implement me")
 }
 
-func (h *MockHeimdallClient) GetLatestSpanV1(ctx context.Context) (*span.HeimdallSpan, error) {
-	panic("implement me")
-}
-
-func (h *MockHeimdallClient) GetLatestSpanV2(ctx context.Context) (*types.Span, error) {
-	panic("implement me")
-}
-
-func (h *MockHeimdallClient) FetchCheckpointV1(ctx context.Context, number int64) (*checkpoint.CheckpointV1, error) {
-	panic("implement me")
-}
-
-func (h *MockHeimdallClient) FetchCheckpointV2(ctx context.Context, number int64) (*checkpoint.CheckpointV2, error) {
+func (h *MockHeimdallClient) FetchCheckpoint(ctx context.Context, number int64) (*checkpoint.Checkpoint, error) {
 	panic("implement me")
 }
 
@@ -219,23 +207,11 @@ func (h *MockHeimdallClient) FetchCheckpointCount(ctx context.Context) (int64, e
 	panic("implement me")
 }
 
-func (h *MockHeimdallClient) FetchMilestoneV1(ctx context.Context) (*milestone.MilestoneV1, error) {
-	panic("implement me")
-}
-
-func (h *MockHeimdallClient) FetchMilestoneV2(ctx context.Context) (*milestone.MilestoneV2, error) {
+func (h *MockHeimdallClient) FetchMilestone(ctx context.Context) (*milestone.Milestone, error) {
 	panic("implement me")
 }
 
 func (h *MockHeimdallClient) FetchMilestoneCount(ctx context.Context) (int64, error) {
-	panic("implement me")
-}
-
-func (h *MockHeimdallClient) FetchNoAckMilestone(ctx context.Context, milestoneID string) error {
-	panic("implement me")
-}
-
-func (h *MockHeimdallClient) FetchLastNoAckMilestone(ctx context.Context) (string, error) {
 	panic("implement me")
 }
 

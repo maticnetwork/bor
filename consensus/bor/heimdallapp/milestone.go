@@ -25,7 +25,7 @@ func (h *HeimdallAppClient) FetchMilestoneCount(_ context.Context) (int64, error
 	return int64(res), nil
 }
 
-func (h *HeimdallAppClient) FetchMilestone(_ context.Context) (*milestone.MilestoneV2, error) {
+func (h *HeimdallAppClient) FetchMilestone(_ context.Context) (*milestone.Milestone, error) {
 	log.Debug("Fetching Latest Milestone")
 
 	res, err := h.hApp.MilestoneKeeper.GetLastMilestone(h.NewContext())
@@ -47,8 +47,8 @@ func (h *HeimdallAppClient) FetchLastNoAckMilestone(_ context.Context) (string, 
 	return "", errors.New("not implemented in heimdallv2")
 }
 
-func toBorMilestone(hdMilestone *milestoneTypes.Milestone) *milestone.MilestoneV2 {
-	return &milestone.MilestoneV2{
+func toBorMilestone(hdMilestone *milestoneTypes.Milestone) *milestone.Milestone {
+	return &milestone.Milestone{
 		Proposer:   common.HexToAddress(hdMilestone.Proposer),
 		StartBlock: hdMilestone.StartBlock,
 		EndBlock:   hdMilestone.EndBlock,

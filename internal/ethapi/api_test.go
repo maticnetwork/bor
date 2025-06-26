@@ -724,10 +724,6 @@ func (b testBackend) HistoryPruningCutoff() uint64 {
 	return bn
 }
 
-func (b testBackend) GetStartBlockHeimdallSpanID(ctx context.Context, startBlock uint64) (uint64, error) {
-	panic("implement me")
-}
-
 func TestEstimateGas(t *testing.T) {
 	t.Parallel()
 	// Initialize test accounts

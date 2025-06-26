@@ -50,10 +50,10 @@ func (mr *MockIHeimdallWSClientMockRecorder) Close() *gomock.Call {
 }
 
 // SubscribeMilestoneEvents mocks base method.
-func (m *MockIHeimdallWSClient) SubscribeMilestoneEvents(arg0 context.Context) <-chan *milestone.MilestoneV2 {
+func (m *MockIHeimdallWSClient) SubscribeMilestoneEvents(arg0 context.Context) <-chan *milestone.Milestone {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SubscribeMilestoneEvents", arg0)
-	ret0, _ := ret[0].(<-chan *milestone.MilestoneV2)
+	ret0, _ := ret[0].(<-chan *milestone.Milestone)
 	return ret0
 }
 
