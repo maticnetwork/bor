@@ -872,7 +872,7 @@ func (c *BorConfig) IsBhilai(number *big.Int) bool {
 }
 
 func (c *BorConfig) IsVeBlop(number *big.Int) bool {
-	return isBlockForked(c.VeBlopBlock, number)
+	return true
 }
 
 // // TODO: modify this function once the block number is finalized
