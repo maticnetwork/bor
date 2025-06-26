@@ -124,8 +124,6 @@ func (h *witHandler) handleGetWitness(peer *wit.Peer, req *wit.GetWitnessPacket)
 			log.Trace("Witness found in DB immediately", "hash", hash)
 			witnessesRLPBytes = append(witnessesRLPBytes, compressedWitnessBytes)
 		}
-
-		witnessesRLPBytes = append(witnessesRLPBytes, witnessBytes)
 	}
 	// Return the collected RLP data
 	log.Debug("handleGetWitness returning witnesses", "peer", peer.ID(), "reqID", req.RequestId, "count", len(witnessesRLPBytes))
