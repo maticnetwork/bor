@@ -395,7 +395,6 @@ var (
 			DelhiBlock:     big.NewInt(38189056),
 			IndoreBlock:    big.NewInt(44934656),
 			AhmedabadBlock: big.NewInt(62278656),
-			VeBlopBlock:    big.NewInt(0),
 			StateSyncConfirmationDelay: map[string]uint64{
 				"44934656": 128,
 			},
