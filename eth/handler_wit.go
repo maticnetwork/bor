@@ -117,12 +117,12 @@ func (h *witHandler) handleGetWitness(peer *wit.Peer, req *wit.GetWitnessPacket)
 		// Call the blockchain method which now returns raw RLP bytes
 		witnessBytes := rawdb.ReadWitness(h.Chain().DB(), hash)
 		if len(witnessBytes) > 0 {
-			compressedWitnessBytes, err := CompressWithGzip(witnessBytes)
-			if err != nil {
-				return nil, err
-			}
+			// compressedWitnessBytes, err := CompressWithGzip(witnessBytes)
+			// if err != nil {
+			// 	return nil, err
+			// }
 			log.Trace("Witness found in DB immediately", "hash", hash)
-			witnessesRLPBytes = append(witnessesRLPBytes, compressedWitnessBytes)
+			witnessesRLPBytes = append(witnessesRLPBytes, witnessBytes)
 		}
 	}
 	// Return the collected RLP data
