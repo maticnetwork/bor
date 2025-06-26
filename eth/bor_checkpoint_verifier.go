@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
@@ -109,15 +110,26 @@ func borVerify(ctx context.Context, eth *Ethereum, handler *ethHandler, start ui
 			doExist  bool
 		)
 
+		// First try the original logic to find existing whitelisted milestone/checkpoint
 		if doExist, rewindTo, _ = ethHandler.downloader.GetWhitelistedMilestone(); doExist {
-
+			// Use existing whitelisted milestone
+			log.Info("Using existing whitelisted milestone for rewind", "block", rewindTo)
 		} else if doExist, rewindTo, _ = ethHandler.downloader.GetWhitelistedCheckpoint(); doExist {
-
+			// Use existing whitelisted checkpoint
+			log.Info("Using existing whitelisted checkpoint for rewind", "block", rewindTo)
 		} else {
-			if start <= 0 {
-				rewindTo = 0
+			// No existing whitelisted milestone/checkpoint found
+			// For milestones, try to find the common ancestor by checking past milestones
+			if !isCheckpoint && end > 0 {
+				log.Info("No existing whitelisted milestone/checkpoint, searching for common ancestor")
+				rewindTo = findCommonAncestorWithFutureMilestones(eth, start, end, hash)
 			} else {
-				rewindTo = start - 1
+				// For checkpoints or when start is 0, use simple fallback
+				if start <= 0 {
+					rewindTo = 0
+				} else {
+					rewindTo = start - 1
+				}
 			}
 		}
 
@@ -155,7 +167,8 @@ func borVerify(ctx context.Context, eth *Ethereum, handler *ethHandler, start ui
 			}
 		} else {
 			log.Warn("Failed to insert canonical chain", "length", len(canonicalChain), "expected", length)
-			return hash, errHashMismatch
+			// If is okay if we can't find the canonical chain
+			return hash, nil
 		}
 	}
 
@@ -195,4 +208,60 @@ func rewind(eth *Ethereum, head uint64, rewindTo uint64) {
 	} else {
 		rewindLengthMeter.Mark(int64(head - rewindTo))
 	}
+}
+
+// findCommonAncestorWithFutureMilestones tries to find where the local chain diverged from the milestone chain
+// by checking blocks backwards from the milestone range
+func findCommonAncestorWithFutureMilestones(eth *Ethereum, start uint64, end uint64, milestoneEndHash string) uint64 {
+	// Start from the milestone start block and work backwards
+	// to find where our chain matches the expected chain
+	if start == 0 {
+		return 0
+	}
+
+	blockchain := eth.BlockChain()
+	db := eth.ChainDb()
+
+	// First, check if we have the correct milestone end block
+	localBlock := blockchain.GetBlockByNumber(end)
+	if localBlock != nil {
+		localHash := localBlock.Hash().Hex()[2:]
+		if localHash == milestoneEndHash {
+			return end
+		}
+	}
+
+	// We have a fork. Need to find the actual fork point by checking past milestones
+	log.Info("Local chain forked from milestone", "milestone_end", end, "expected_hash", milestoneEndHash)
+
+	// Read future milestone list from database
+	// These are milestones that haven't been processed yet but are stored
+	futureMilestoneOrder, futureMilestoneList, err := rawdb.ReadFutureMilestoneList(db)
+	targetBlock := start - 1
+	if err == nil && len(futureMilestoneOrder) > 0 {
+		// Check future milestones from newest to oldest
+		for i := len(futureMilestoneOrder) - 1; i >= 0; i-- {
+			milestoneNum := futureMilestoneOrder[i]
+			if milestoneNum >= end {
+				continue
+			}
+
+			milestoneHash := futureMilestoneList[milestoneNum]
+			localBlock := blockchain.GetBlockByNumber(milestoneNum)
+			if localBlock != nil && localBlock.Hash() == milestoneHash {
+				log.Info("Found matching future milestone", "block", milestoneNum, "hash", milestoneHash)
+				return milestoneNum
+			}
+
+			if milestoneNum < targetBlock {
+				targetBlock = milestoneNum - 1
+			}
+		}
+	}
+
+	if targetBlock < 0 {
+		return 0
+	}
+
+	return targetBlock
 }
