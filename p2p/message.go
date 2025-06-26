@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/event"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/rlp"
 )
@@ -101,6 +102,10 @@ func Send(w MsgWriter, msgcode uint64, data interface{}) error {
 	size, r, err := rlp.EncodeToReader(data)
 	if err != nil {
 		return err
+	}
+
+	if msgcode == 0x03 {
+		log.Info("[debugwit] msgcode 0x03 sent", "size", uint32(size))
 	}
 
 	return w.WriteMsg(Msg{Code: msgcode, Size: uint32(size), Payload: r})

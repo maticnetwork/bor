@@ -216,6 +216,12 @@ func (p *Peer) ReplyWitnessRLP(requestID uint64, witnesses []rlp.RawValue) error
 	log.Debug("After lock")
 
 	// Send the response
+	witnessesSize := 0
+	for _, wit := range witnesses {
+		witnessesSize += len(wit)
+	}
+	log.Info("[debugwit] ReplyWitnessRLP called", "lenWitnesses", witnessesSize)
+
 	return p2p.Send(p.rw, MsgWitness, &WitnessPacketRLPPacket{
 		RequestId:             requestID,
 		WitnessPacketResponse: witnesses,
