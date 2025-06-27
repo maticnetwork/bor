@@ -1473,10 +1473,19 @@ func (c *Bor) CommitStates(
 		return stateSyncs, nil
 	}
 
+	// This if statement checks if there are any state sync record overrides configured for the current block number.
+	// If there are, it truncates the eventRecords array to the specified number of records.
 	if c.config.OverrideStateSyncRecords != nil {
 		if val, ok := c.config.OverrideStateSyncRecords[strconv.FormatUint(number, 10)]; ok {
 			eventRecords = eventRecords[0:val]
 		}
+	}
+
+	// This if statement checks if there are any state sync record overrides configured for the current block number.
+	// If there are, it truncates the eventRecords array to the specified number of records.
+	overrideStateSyncRecord, ok := c.config.GetOverrideStateSyncRecord(number)
+	if ok {
+		eventRecords = eventRecords[0:overrideStateSyncRecord]
 	}
 
 	fetchTime := time.Since(fetchStart)
