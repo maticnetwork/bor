@@ -804,13 +804,16 @@ func (s *StateDB) SubBalance(addr common.Address, amount *uint256.Int, reason tr
 	}
 }
 
-func (s *StateDB) SetBalance(addr common.Address, amount *uint256.Int, reason tracing.BalanceChangeReason) {
+func (s *StateDB) SetBalance(addr common.Address, amount *uint256.Int, reason tracing.BalanceChangeReason) uint256.Int {
 	stateObject := s.getOrNewStateObject(addr)
+	var prevBalance uint256.Int
 	if stateObject != nil {
 		stateObject = s.mvRecordWritten(stateObject)
+		prevBalance = *stateObject.Balance()
 		stateObject.SetBalance(amount, reason)
 		MVWrite(s, blockstm.NewSubpathKey(addr, BalancePath))
 	}
+	return prevBalance
 }
 
 func (s *StateDB) SetNonce(addr common.Address, nonce uint64) {
@@ -1911,4 +1914,21 @@ func (s *StateDB) Witness() *stateless.Witness {
 
 func (s *StateDB) AccessEvents() *AccessEvents {
 	return s.accessEvents
+}
+
+func (s *StateDB) IsVerkle() bool {
+	return s.GetTrie().IsVerkle()
+}
+
+func (s *StateDB) Clone() any {
+	return s.Copy()
+}
+
+func (s *StateDB) Unhooked() any {
+	// Already unhooked, just return self
+	return s
+}
+
+func (s *StateDB) SetBorConsensusTime(borConsensusTime time.Duration) {
+	s.BorConsensusTime = borConsensusTime
 }

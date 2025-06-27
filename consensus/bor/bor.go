@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/core/state"
 	"io"
 	"math/big"
 	"sort"
@@ -32,8 +33,8 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/consensus/misc/eip1559"
 	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
@@ -819,7 +820,7 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header) e
 
 // Finalize implements consensus.Engine, ensuring no uncles are set, nor block
 // rewards given.
-func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, body *types.Body) {
+func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state vm.StateDB, body *types.Body) {
 	headerNumber := header.Number.Uint64()
 	if body.Withdrawals != nil || header.WithdrawalsHash != nil {
 		return
@@ -851,7 +852,7 @@ func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, 
 			}
 		}
 
-		state.BorConsensusTime = time.Since(start)
+		state.SetBorConsensusTime(time.Since(start))
 	}
 
 	if err = c.changeContractCodeIfNeeded(headerNumber, state); err != nil {
@@ -883,7 +884,7 @@ func decodeGenesisAlloc(i interface{}) (types.GenesisAlloc, error) {
 	return alloc, nil
 }
 
-func (c *Bor) changeContractCodeIfNeeded(headerNumber uint64, state *state.StateDB) error {
+func (c *Bor) changeContractCodeIfNeeded(headerNumber uint64, state vm.StateDB) error {
 	for blockNumber, genesisAlloc := range c.config.BlockAlloc {
 		if blockNumber == strconv.FormatUint(headerNumber, 10) {
 			allocs, err := decodeGenesisAlloc(genesisAlloc)
@@ -1105,7 +1106,7 @@ func (c *Bor) Close() error {
 }
 
 func (c *Bor) checkAndCommitSpan(
-	state *state.StateDB,
+	state vm.StateDB,
 	header *types.Header,
 	chain core.ChainContext,
 ) error {
@@ -1146,7 +1147,7 @@ func (c *Bor) needToCommitSpan(currentSpan *span.Span, headerNumber uint64) bool
 func (c *Bor) FetchAndCommitSpan(
 	ctx context.Context,
 	newSpanID uint64,
-	state *state.StateDB,
+	state vm.StateDB,
 	header *types.Header,
 	chain core.ChainContext,
 ) error {
@@ -1183,7 +1184,7 @@ func (c *Bor) FetchAndCommitSpan(
 
 // CommitStates commit states
 func (c *Bor) CommitStates(
-	state *state.StateDB,
+	state vm.StateDB,
 	header *types.Header,
 	chain statefull.ChainContext,
 ) ([]*types.StateSyncData, error) {
@@ -1199,7 +1200,7 @@ func (c *Bor) CommitStates(
 
 	if c.config.IsIndore(header.Number) {
 		// Fetch the LastStateId from contract via current state instance
-		lastStateIDBig, err = c.GenesisContractsClient.LastStateId(state.Copy(), number-1, header.ParentHash)
+		lastStateIDBig, err = c.GenesisContractsClient.LastStateId(state.Clone().(vm.StateDB), number-1, header.ParentHash)
 		if err != nil {
 			return nil, err
 		}

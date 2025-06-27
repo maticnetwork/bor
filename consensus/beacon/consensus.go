@@ -19,6 +19,7 @@ package beacon
 import (
 	"errors"
 	"fmt"
+	"github.com/ethereum/go-ethereum/core/vm"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -349,7 +350,7 @@ func (beacon *Beacon) Prepare(chain consensus.ChainHeaderReader, header *types.H
 }
 
 // Finalize implements consensus.Engine and processes withdrawals on top.
-func (beacon *Beacon) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, body *types.Body) {
+func (beacon *Beacon) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state vm.StateDB, body *types.Body) {
 	if !beacon.IsPoSHeader(header) {
 		beacon.ethone.Finalize(chain, header, state, body)
 		return
