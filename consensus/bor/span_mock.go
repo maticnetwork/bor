@@ -12,10 +12,10 @@ import (
 	span "github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
 	valset "github.com/ethereum/go-ethereum/consensus/bor/valset"
 	core "github.com/ethereum/go-ethereum/core"
-	state "github.com/ethereum/go-ethereum/core/state"
 	types "github.com/ethereum/go-ethereum/core/types"
 	rpc "github.com/ethereum/go-ethereum/rpc"
 	gomock "github.com/golang/mock/gomock"
+	vm "github.com/ethereum/go-ethereum/core/vm"
 )
 
 // MockSpanner is a mock of Spanner interface.
@@ -42,7 +42,7 @@ func (m *MockSpanner) EXPECT() *MockSpannerMockRecorder {
 }
 
 // CommitSpan mocks base method.
-func (m *MockSpanner) CommitSpan(arg0 context.Context, arg1 span.HeimdallSpan, arg2 *state.StateDB, arg3 *types.Header, arg4 core.ChainContext) error {
+func (m *MockSpanner) CommitSpan(arg0 context.Context, arg1 span.HeimdallSpan, arg2 vm.StateDB, arg3 *types.Header, arg4 core.ChainContext) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CommitSpan", arg0, arg1, arg2, arg3, arg4)
 	ret0, _ := ret[0].(error)
