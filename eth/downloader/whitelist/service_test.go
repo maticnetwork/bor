@@ -46,7 +46,7 @@ func NewMockService(db ethdb.Database) *Service {
 	}
 }
 
-// TestWhitelistCheckpoint checks the checkpoint whitelist setter and getter functions.
+// TestWhitelistedCheckpoint checks the checkpoint whitelist setter and getter functions.
 func TestWhitelistedCheckpoint(t *testing.T) {
 	t.Parallel()
 

@@ -148,7 +148,7 @@ func (f *fetcherTester) chainHeight() uint64 {
 	return f.blocks[f.hashes[len(f.hashes)-1]].NumberU64()
 }
 
-// insertChain injects a new headers into the simulated chain.
+// insertHeaders injects a new headers into the simulated chain.
 func (f *fetcherTester) insertHeaders(headers []*types.Header) (int, error) {
 	f.lock.Lock()
 	defer f.lock.Unlock()
