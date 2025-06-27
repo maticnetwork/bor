@@ -20,8 +20,9 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/blockstm"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/core/tracing"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -35,16 +36,18 @@ type StateDB interface {
 	CreateAccount(common.Address)
 	CreateContract(common.Address)
 
-	SubBalance(common.Address, *uint256.Int, tracing.BalanceChangeReason)
-	AddBalance(common.Address, *uint256.Int, tracing.BalanceChangeReason)
+	SubBalance(common.Address, *uint256.Int, tracing.BalanceChangeReason) uint256.Int
+	AddBalance(common.Address, *uint256.Int, tracing.BalanceChangeReason) uint256.Int
 	GetBalance(common.Address) *uint256.Int
 
 	GetNonce(common.Address) uint64
-	SetNonce(common.Address, uint64)
+	SetNonce(common.Address, uint64, tracing.NonceChangeReason)
 
 	GetCodeHash(common.Address) common.Hash
 	GetCode(common.Address) []byte
-	SetCode(common.Address, []byte)
+
+	// SetCode sets the new code for the address, and returns the previous code, if any.
+	SetCode(common.Address, []byte) []byte
 	GetCodeSize(common.Address) int
 
 	AddRefund(uint64)
@@ -53,16 +56,21 @@ type StateDB interface {
 
 	GetCommittedState(common.Address, common.Hash) common.Hash
 	GetState(common.Address, common.Hash) common.Hash
-	SetState(common.Address, common.Hash, common.Hash)
+	SetState(common.Address, common.Hash, common.Hash) common.Hash
 	GetStorageRoot(addr common.Address) common.Hash
 
 	GetTransientState(addr common.Address, key common.Hash) common.Hash
 	SetTransientState(addr common.Address, key, value common.Hash)
 
-	SelfDestruct(common.Address)
+	SelfDestruct(common.Address) uint256.Int
 	HasSelfDestructed(common.Address) bool
 
-	Selfdestruct6780(common.Address)
+	// SelfDestruct6780 is post-EIP6780 selfdestruct, which means that it's a
+	// send-all-to-beneficiary, unless the contract was created in this same
+	// transaction, in which case it will be destructed.
+	// This method returns the prior balance, along with a boolean which is
+	// true iff the object was indeed destructed.
+	SelfDestruct6780(common.Address) (uint256.Int, bool)
 
 	// Exist reports whether the given account exists in state.
 	// Notably this should also return true for self-destructed accounts.
@@ -91,10 +99,14 @@ type StateDB interface {
 	AddLog(*types.Log)
 	AddPreimage(common.Hash, []byte)
 
-	Finalise(bool)
 	Witness() *stateless.Witness
 
-	// Polygon Specific StateDB methods
+	AccessEvents() *state.AccessEvents
+
+	// Finalise must be invoked at the end of a transaction
+	Finalise(bool)
+  
+  // Polygon Specific StateDB methods
 	GetMVHashmap() *blockstm.MVHashMap
 	SetMVHashmap(mvHashmap *blockstm.MVHashMap)
 	IntermediateRoot(deleteEmptyObjects bool) common.Hash
@@ -103,20 +115,19 @@ type StateDB interface {
 	TxIndex() int
 	SetTxContext(txHash common.Hash, txIndex int)
 	SetBalance(common.Address, *uint256.Int, tracing.BalanceChangeReason) uint256.Int
+  // Clone is used to create a copy of the StateDB, same as `Copy` on *state.StateDB but rename so interface has its own nameAdd commentMore actions
+	//
+	//   state.Clone().(vm.StateDB)
+	//
+	// The `any` return type is required to avoid import cycles.
 	Clone() any
+  // Unhooked is used to return the underlying state without any hooks applied, in Polygon, some potentialAdd commentMore actions
+	// state modifying operations can be called on a vm.StateDB interface, which might be hooked but we want those
+	// operation to always be non-recorded, this method ensures this.
+	//
+	//   state.Unhooked().(vm.StateDB)
+	//
+	// The `any` return type is required to avoid import cycles.
 	Unhooked() any
 	SetBorConsensusTime(borConsensusTime time.Duration)
-}
-
-// CallContext provides a basic interface for the EVM calling conventions. The EVM
-// depends on this context being implemented for doing subcalls and initialising new EVM contracts.
-type CallContext interface {
-	// Call calls another contract.
-	Call(env *EVM, me ContractRef, addr common.Address, data []byte, gas, value *big.Int) ([]byte, error)
-	// CallCode takes another contracts code and execute within our own context
-	CallCode(env *EVM, me ContractRef, addr common.Address, data []byte, gas, value *big.Int) ([]byte, error)
-	// DelegateCall is same as CallCode except sender and value is propagated from parent to child scope
-	DelegateCall(env *EVM, me ContractRef, addr common.Address, data []byte, gas *big.Int) ([]byte, error)
-	// Create creates a new contract
-	Create(env *EVM, me ContractRef, data []byte, gas, value *big.Int) ([]byte, common.Address, error)
 }
