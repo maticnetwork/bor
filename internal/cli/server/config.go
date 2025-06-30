@@ -91,6 +91,12 @@ type Config struct {
 	// Snapshot enables the snapshot database mode
 	Snapshot bool `hcl:"snapshot,optional" toml:"snapshot,optional"`
 
+	// Log indexer history
+	LogHistory uint64 `hcl:"loghistory,optional" toml:"loghistory,optional"`
+
+	// Disable log indexer
+	LogNoHistory bool `hcl:"lognohistory,optional" toml:"lognohistory,optional"`
+
 	// BorLogs enables bor log retrieval
 	BorLogs bool `hcl:"bor.logs,optional" toml:"bor.logs,optional"`
 
@@ -660,11 +666,13 @@ func DefaultConfig() *Config {
 			GRPCAddress: "",
 			WSAddress:   "",
 		},
-		SyncMode:    "full",
-		GcMode:      "full",
-		StateScheme: "path",
-		Snapshot:    true,
-		BorLogs:     false,
+		SyncMode:     "full",
+		GcMode:       "full",
+		StateScheme:  "path",
+		Snapshot:     true,
+		LogHistory:   2350000,
+		LogNoHistory: false,
+		BorLogs:      false,
 		TxPool: &TxPoolConfig{
 			Locals:       []string{},
 			NoLocals:     false,
@@ -951,6 +959,10 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 	n.RunHeimdallArgs = c.Heimdall.RunHeimdallArgs
 	n.UseHeimdallApp = c.Heimdall.UseHeimdallApp
 
+	// Log index
+	n.LogHistory = c.LogHistory
+	n.LogNoHistory = c.LogNoHistory
+
 	// Developer Fake Author for producing blocks without authorisation on bor consensus
 	n.DevFakeAuthor = c.DevFakeAuthor
 
@@ -1235,7 +1247,6 @@ var (
 // tries unlocking the specified account a few times.
 func unlockAccount(ks *keystore.KeyStore, address string, i int, passwords []string) (accounts.Account, string) {
 	account, err := utils.MakeAddress(ks, address)
-
 	if err != nil {
 		utils.Fatalf("Could not list accounts: %v", err)
 	}
