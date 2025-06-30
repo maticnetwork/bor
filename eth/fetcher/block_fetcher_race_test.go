@@ -720,7 +720,6 @@ func TestWitnessManagerMemoryLeaks(t *testing.T) {
 // after the mutex was unlocked
 func TestWitnessManagerMapAccessRace(t *testing.T) {
 	quit := make(chan struct{})
-	defer close(quit)
 
 	dropPeer := peerDropFn(func(id string) {})
 	enqueueCh := make(chan *enqueueRequest, 100)
@@ -738,8 +737,12 @@ func TestWitnessManagerMapAccessRace(t *testing.T) {
 	)
 
 	// Start the manager
-	go manager.loop()
-	defer manager.stop()
+	manager.start()
+	defer func() {
+		close(quit)
+		time.Sleep(10 * time.Millisecond) // Give the loop time to exit
+		manager.stop()
+	}()
 
 	// Create test data
 	hash := common.HexToHash("0x123")
