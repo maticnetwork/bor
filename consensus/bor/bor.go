@@ -522,7 +522,7 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 
 // snapshot retrieves the authorization snapshot at a given point in time.
 // nolint: gocognit
-func (c *Bor) snapshot(chain consensus.ChainHeaderReader, targetHeader *types.Header, parents []*types.Header, checkNewSpan bool) (*Snapshot, error) {
+func (c *Bor) snapshot(chain consensus.ChainHeaderReader, targetHeader *types.Header, parents []*types.Header, checkNewSpan bool) (snap *Snapshot, err error) {
 	// Search for a snapshot in memory or on disk for checkpoints
 	signer := common.BytesToAddress(c.authorizedSigner.Load().signer.Bytes())
 	if c.DevFakeAuthor && signer.String() != "0x0000000000000000000000000000000000000000" {
@@ -536,7 +536,9 @@ func (c *Bor) snapshot(chain consensus.ChainHeaderReader, targetHeader *types.He
 		return snapshot, nil
 	}
 
-	var snap *Snapshot
+	if c.config.IsVeBlop(targetHeader.Number) {
+		return c.getVeBlopSnapshot(chain, targetHeader, parents, checkNewSpan)
+	}
 
 	headers := make([]*types.Header, 0, 16)
 
@@ -623,14 +625,7 @@ func (c *Bor) snapshot(chain consensus.ChainHeaderReader, targetHeader *types.He
 		headers[i], headers[len(headers)-1-i] = headers[len(headers)-1-i], headers[i]
 	}
 
-	if checkNewSpan && c.config.IsVeBlop(targetHeader.Number) {
-		err := c.performSpanCheck(chain, targetHeader)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	snap, err := snap.apply(headers, c)
+	snap, err = snap.apply(headers, c)
 	if err != nil {
 		return nil, err
 	}
@@ -646,21 +641,43 @@ func (c *Bor) snapshot(chain consensus.ChainHeaderReader, targetHeader *types.He
 		log.Trace("Stored snapshot to disk", "number", snap.Number, "hash", snap.Hash)
 	}
 
-	if c.config.IsVeBlop(targetHeader.Number) {
-		snap, err = snap.applyNumber(targetHeader.Number.Uint64(), c)
-		if err != nil {
-			return nil, err
-		}
-
-		snap.Number = targetHeader.Number.Uint64()
-		snap.Hash = targetHeader.Hash()
-	}
-
 	return snap, err
 }
 
+func (c *Bor) getVeBlopSnapshot(chain consensus.ChainHeaderReader, targetHeader *types.Header, parents []*types.Header, checkNewSpan bool) (*Snapshot, error) {
+	number := targetHeader.Number.Uint64()
+
+	if checkNewSpan {
+		err := c.performSpanCheck(chain, targetHeader, parents)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	span, err := c.spanStore.spanByBlockNumber(context.Background(), number)
+	if err != nil {
+		return nil, err
+	}
+
+	producers := make([]*valset.Validator, len(span.SelectedProducers))
+	for i, validator := range span.SelectedProducers {
+		producers[i] = &valset.Validator{
+			Address:     validator.Address,
+			VotingPower: validator.VotingPower,
+		}
+	}
+
+	sortedProducers := valset.ValidatorsByAddress(producers)
+	sort.Sort(sortedProducers)
+
+	snap := newSnapshot(c.chainConfig, c.signatures, number, targetHeader.Hash(), sortedProducers)
+
+	c.recents.Set(snap.Hash, snap, ttlcache.DefaultTTL)
+	return snap, nil
+}
+
 // Check if the node needs to wait for a new span
-func (c *Bor) performSpanCheck(chain consensus.ChainHeaderReader, targetHeader *types.Header) error {
+func (c *Bor) performSpanCheck(chain consensus.ChainHeaderReader, targetHeader *types.Header, parents []*types.Header) error {
 	if targetHeader.Number.Uint64()-1 == 0 {
 		return nil
 	}
@@ -674,7 +691,12 @@ func (c *Bor) performSpanCheck(chain consensus.ChainHeaderReader, targetHeader *
 		return nil
 	}
 
-	parentHeader := chain.GetHeader(targetHeader.ParentHash, targetHeader.Number.Uint64()-1)
+	var parentHeader *types.Header
+	if len(parents) > 0 {
+		parentHeader = parents[len(parents)-1]
+	} else {
+		parentHeader = chain.GetHeader(targetHeader.ParentHash, targetHeader.Number.Uint64()-1)
+	}
 
 	// If parent header isn't known or a milestone check is requested, we need to wait for a new span
 	if parentHeader == nil {
@@ -707,7 +729,7 @@ func (c *Bor) performSpanCheck(chain consensus.ChainHeaderReader, targetHeader *
 		log.Info("Span check complete", "foundNewSpan", foundNewSpan)
 
 		if !foundNewSpan {
-			return c.performSpanCheck(chain, targetHeader)
+			return c.performSpanCheck(chain, targetHeader, parents)
 		}
 
 		return nil

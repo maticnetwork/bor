@@ -2215,7 +2215,7 @@ func (d *Downloader) GetOrWaitFastForwardBlock() uint64 {
 	}
 
 	distance := (int64(fastForwardBlock) - int64(localHeight))
-	if distance > int64(d.FastForwardThreshold) || localHeight == 0 {
+	if distance > int64(d.FastForwardThreshold) {
 		log.Info("StatelessSync: FastForwarding", "fastForwardBlock", fastForwardBlock)
 		return fastForwardBlock
 	} else {

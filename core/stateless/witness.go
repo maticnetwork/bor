@@ -124,3 +124,9 @@ func (w *Witness) Root() common.Hash {
 func (w *Witness) Header() *types.Header {
 	return w.context
 }
+
+func (w *Witness) SetHeader(header *types.Header) {
+	if w != nil {
+		w.context = header
+	}
+}

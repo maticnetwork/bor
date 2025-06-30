@@ -153,6 +153,9 @@ func (c *HeimdallWSClient) readMessages(ctx context.Context) {
 		if timestamp, err := strconv.ParseUint(attrs["timestamp"], 10, 64); err == nil {
 			m.Timestamp = timestamp
 		}
+		if totalDifficulty, err := strconv.ParseUint(attrs["total_difficulty"], 10, 64); err == nil {
+			m.TotalDifficulty = totalDifficulty
+		}
 
 		// Deliver the milestone event, respecting context cancellation.
 		select {

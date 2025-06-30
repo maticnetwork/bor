@@ -50,6 +50,21 @@ type ValidatorSet struct {
 	validatorsMap    map[common.Address]int // address -> index
 }
 
+func (vals *ValidatorSet) ValidatorMapString() string {
+	// Sort the map by index
+	validatorMap := make(map[int]common.Address)
+	for address, index := range vals.validatorsMap {
+		validatorMap[index] = address
+	}
+
+	validatorMapString := ""
+	for i := 0; i < len(vals.Validators); i++ {
+		validatorMapString += fmt.Sprintf("%s: %d, ", validatorMap[i].String(), i)
+	}
+
+	return validatorMapString
+}
+
 // NewValidatorSet initializes a ValidatorSet by copying over the
 // values from `valz`, a list of Validators. If valz is nil or empty,
 // the new ValidatorSet will have an empty list of Validators.

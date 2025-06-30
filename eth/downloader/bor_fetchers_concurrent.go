@@ -349,9 +349,6 @@ func (d *Downloader) concurrentFetch(queue typedQueue, beaconMode bool) error {
 			}
 
 		case res := <-responses:
-			if reflect.TypeOf(queue) == reflect.TypeOf(&witnessQueue{}) {
-				log.Debug("Received response", "queue type", reflect.TypeOf(queue), "res", res)
-			}
 			// Response arrived, it may be for an existing or an already timed
 			// out request. If the former, update the timeout heap and perhaps
 			// reschedule the timeout timer.
@@ -378,13 +375,7 @@ func (d *Downloader) concurrentFetch(queue typedQueue, beaconMode bool) error {
 
 			// Signal the dispatcher that the round trip is done. We'll drop the
 			// peer if the data turns out to be junk.
-			if reflect.TypeOf(queue) == reflect.TypeOf(&witnessQueue{}) {
-				log.Debug("Signal dispatcher", "queue type", reflect.TypeOf(queue), "res", res)
-			}
 			res.Done <- nil
-			if reflect.TypeOf(queue) == reflect.TypeOf(&witnessQueue{}) {
-				log.Debug("Close request", "queue type", reflect.TypeOf(queue), "res", res)
-			}
 			res.Req.Close()
 
 			if reflect.TypeOf(queue) == reflect.TypeOf(&witnessQueue{}) {
