@@ -171,6 +171,9 @@ type StateDB struct {
 
 	// Bor metrics
 	BorConsensusTime time.Duration
+
+	// GetState operation histogram
+	getStateTimeHistogram metrics.Histogram
 }
 
 // New creates a new state from a given trie.
@@ -198,6 +201,7 @@ func New(root common.Hash, db Database) (*StateDB, error) {
 		journal:              newJournal(),
 		accessList:           newAccessList(),
 		transientStorage:     newTransientStorage(),
+		getStateTimeHistogram: metrics.GetOrRegisterHistogram("statedb/getstate/time", nil, metrics.NewExpDecaySample(1028, 0.015)),
 	}
 	if db.TrieDB().IsVerkle() {
 		sdb.accessEvents = NewAccessEvents(db.PointCache())
@@ -709,6 +713,11 @@ func (s *StateDB) GetCodeHash(addr common.Address) common.Hash {
 
 // GetState retrieves the value associated with the specific key.
 func (s *StateDB) GetState(addr common.Address, hash common.Hash) common.Hash {
+	start := time.Now()
+	defer func() {
+		s.getStateTimeHistogram.Update(time.Since(start).Nanoseconds())
+	}()
+
 	return MVRead(s, blockstm.NewStateKey(addr, hash), common.Hash{}, func(s *StateDB) common.Hash {
 		stateObject := s.getStateObject(addr)
 		if stateObject != nil {
@@ -1119,6 +1128,7 @@ func (s *StateDB) Copy() *StateDB {
 		accessList:       s.accessList.Copy(),
 		transientStorage: s.transientStorage.Copy(),
 		journal:          s.journal.copy(),
+		getStateTimeHistogram: s.getStateTimeHistogram,
 	}
 	if s.witness != nil {
 		state.witness = s.witness.Copy()

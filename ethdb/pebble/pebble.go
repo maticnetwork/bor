@@ -86,6 +86,10 @@ type Database struct {
 	pebbleNativeTableCacheHitsMeter   *metrics.Meter // Meter for tracking block cache hits
 	pebbleNativeTableCacheMissesMeter *metrics.Meter // Meter for tracking block cache misses
 
+	// Operation timing histograms with pebblenative namespace
+	pebbleNativeGetTimeHistogram metrics.Histogram // Histogram for tracking Get operation time
+	pebbleNativePutTimeHistogram metrics.Histogram // Histogram for tracking Put operation time
+
 	quitLock sync.RWMutex    // Mutex protecting the quit channel and the closed flag
 	quitChan chan chan error // Quit channel to stop the metrics collection before closing the database
 	closed   bool            // keep track of whether we're Closed
@@ -284,6 +288,10 @@ func New(file string, cache int, handles int, namespace string, readonly bool, e
 	db.pebbleNativeTableCacheCountGauge = metrics.GetOrRegisterGauge(namespace+"pebblenative/tablecache/count", nil)
 	db.pebbleNativeTableCacheHitsMeter = metrics.GetOrRegisterMeter(namespace+"pebblenative/tablecache/hits", nil)
 	db.pebbleNativeTableCacheMissesMeter = metrics.GetOrRegisterMeter(namespace+"pebblenative/tablecache/misses", nil)
+
+	// Operation timing histograms with pebblenative namespace
+	db.pebbleNativeGetTimeHistogram = metrics.GetOrRegisterHistogram(namespace+"pebblenative/operation/get/time", nil, metrics.NewExpDecaySample(1028, 0.015))
+	db.pebbleNativePutTimeHistogram = metrics.GetOrRegisterHistogram(namespace+"pebblenative/operation/put/time", nil, metrics.NewExpDecaySample(1028, 0.015))
 	//
 
 	// Start up the metrics gathering and return
@@ -336,6 +344,11 @@ func (d *Database) Has(key []byte) (bool, error) {
 
 // Get retrieves the given key if it's present in the key-value store.
 func (d *Database) Get(key []byte) ([]byte, error) {
+	start := time.Now()
+	defer func() {
+		d.pebbleNativeGetTimeHistogram.Update(time.Since(start).Nanoseconds())
+	}()
+
 	d.quitLock.RLock()
 	defer d.quitLock.RUnlock()
 	if d.closed {
@@ -356,6 +369,11 @@ func (d *Database) Get(key []byte) ([]byte, error) {
 
 // Put inserts the given value into the key-value store.
 func (d *Database) Put(key []byte, value []byte) error {
+	start := time.Now()
+	defer func() {
+		d.pebbleNativePutTimeHistogram.Update(time.Since(start).Nanoseconds())
+	}()
+
 	d.quitLock.RLock()
 	defer d.quitLock.RUnlock()
 	if d.closed {
