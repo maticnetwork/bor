@@ -260,15 +260,7 @@ jobs:
 
       - name: Run smoke tests
         run: |
-          echo "Deposit 100 matic for each account to bor network"
-          cd matic-cli/devnet/devnet
-          SCRIPT_ADDRESS=$(jq -r '.[0].address' signer-dump.json)
-          SCRIPT_PRIVATE_KEY=$(jq -r '.[0].priv_key' signer-dump.json)
-          cd ../code/pos-contracts
-          CONTRACT_ADDRESS=$(jq -r .root.tokens.MaticToken contractAddresses.json)
-          forge script scripts/matic-cli-scripts/Deposit.s.sol:MaticDeposit --rpc-url http://localhost:9545 --private-key $SCRIPT_PRIVATE_KEY --broadcast --sig "run(address,address,uint256)" $SCRIPT_ADDRESS $CONTRACT_ADDRESS 100000000000000000000
-          cd ../../../..
-          timeout 60m bash bor/integration-tests/smoke_test.sh
+          timeout 20m bash bor/integration-tests/smoke_test.sh
 
       - name: Run RPC Tests
         run: |

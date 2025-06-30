@@ -21,7 +21,7 @@ blockNumber:
   - '0'
 
 sprintSize:
-  - '64'
+  - '16'
 sprintSizeBlockNumber:
   - '0'
 
