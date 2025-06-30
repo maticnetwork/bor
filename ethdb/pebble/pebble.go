@@ -75,6 +75,17 @@ type Database struct {
 
 	levelsGauge []*metrics.Gauge // Gauge for tracking the number of tables in levels
 
+	// PebbleDB native metrics with pebblenative namespace
+	pebbleNativeBlockCacheSizeGauge   *metrics.Gauge // Gauge for tracking block cache size in bytes
+	pebbleNativeBlockCacheCountGauge  *metrics.Gauge // Gauge for tracking number of cached blocks
+	pebbleNativeBlockCacheHitsMeter   *metrics.Meter // Meter for tracking block cache hits
+	pebbleNativeBlockCacheMissesMeter *metrics.Meter // Meter for tracking block cache misses
+
+	pebbleNativeTableCacheSizeGauge   *metrics.Gauge // Gauge for tracking block cache size in bytes
+	pebbleNativeTableCacheCountGauge  *metrics.Gauge // Gauge for tracking number of cached blocks
+	pebbleNativeTableCacheHitsMeter   *metrics.Meter // Meter for tracking block cache hits
+	pebbleNativeTableCacheMissesMeter *metrics.Meter // Meter for tracking block cache misses
+
 	quitLock sync.RWMutex    // Mutex protecting the quit channel and the closed flag
 	quitChan chan chan error // Quit channel to stop the metrics collection before closing the database
 	closed   bool            // keep track of whether we're Closed
@@ -262,6 +273,18 @@ func New(file string, cache int, handles int, namespace string, readonly bool, e
 	db.nonlevel0CompGauge = metrics.GetOrRegisterGauge(namespace+"compact/nonlevel0", nil)
 	db.seekCompGauge = metrics.GetOrRegisterGauge(namespace+"compact/seek", nil)
 	db.manualMemAllocGauge = metrics.GetOrRegisterGauge(namespace+"memory/manualalloc", nil)
+
+	// PebbleDB native metrics with pebblenative namespace
+	db.pebbleNativeBlockCacheSizeGauge = metrics.GetOrRegisterGauge(namespace+"pebblenative/blockcache/size", nil)
+	db.pebbleNativeBlockCacheCountGauge = metrics.GetOrRegisterGauge(namespace+"pebblenative/blockcache/count", nil)
+	db.pebbleNativeBlockCacheHitsMeter = metrics.GetOrRegisterMeter(namespace+"pebblenative/blockcache/hits", nil)
+	db.pebbleNativeBlockCacheMissesMeter = metrics.GetOrRegisterMeter(namespace+"pebblenative/blockcache/misses", nil)
+
+	db.pebbleNativeTableCacheSizeGauge = metrics.GetOrRegisterGauge(namespace+"pebblenative/tablecache/size", nil)
+	db.pebbleNativeTableCacheCountGauge = metrics.GetOrRegisterGauge(namespace+"pebblenative/tablecache/count", nil)
+	db.pebbleNativeTableCacheHitsMeter = metrics.GetOrRegisterMeter(namespace+"pebblenative/tablecache/hits", nil)
+	db.pebbleNativeTableCacheMissesMeter = metrics.GetOrRegisterMeter(namespace+"pebblenative/tablecache/misses", nil)
+	//
 
 	// Start up the metrics gathering and return
 	go db.meter(metricsGatheringInterval, namespace)
@@ -516,6 +539,17 @@ func (d *Database) meter(refresh time.Duration, namespace string) {
 			}
 			d.levelsGauge[i].Update(level.NumFiles)
 		}
+
+		// Update PebbleDB native block cache metrics
+		d.pebbleNativeBlockCacheSizeGauge.Update(stats.BlockCache.Size)
+		d.pebbleNativeBlockCacheCountGauge.Update(stats.BlockCache.Count)
+		d.pebbleNativeBlockCacheHitsMeter.Mark(stats.BlockCache.Hits)
+		d.pebbleNativeBlockCacheMissesMeter.Mark(stats.BlockCache.Misses)
+
+		d.pebbleNativeTableCacheSizeGauge.Update(stats.TableCache.Size)
+		d.pebbleNativeTableCacheCountGauge.Update(stats.TableCache.Count)
+		d.pebbleNativeTableCacheHitsMeter.Mark(stats.TableCache.Hits)
+		d.pebbleNativeTableCacheMissesMeter.Mark(stats.TableCache.Misses)
 
 		// Sleep a bit, then repeat the stats collection
 		select {
