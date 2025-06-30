@@ -34,6 +34,11 @@ import (
 	"github.com/ethereum/go-ethereum/metrics"
 )
 
+// numLevels is the number of levels in PebbleDB's LSM tree.
+// This matches the internal constant manifest.NumLevels = 7 from
+// github.com/cockroachdb/pebble/internal/manifest/version.go
+const numLevels = 7
+
 const (
 	// minCache is the minimum amount of memory in megabytes to allocate to pebble
 	// read and write caching, split half and half.
@@ -106,48 +111,72 @@ type Database struct {
 	pebbleNativeIngestCountMeter *metrics.Meter // Meter for tracking total number of ingestions
 
 	// PebbleDB native flush metrics with pebblenative namespace
-	pebbleNativeFlushCountMeter                  *metrics.Meter // Meter for tracking total number of flushes
-	pebbleNativeFlushNumInProgressGauge          *metrics.Gauge // Gauge for tracking number of in-progress flushes
-	pebbleNativeFlushAsIngestCountMeter          *metrics.Meter // Meter for tracking flush operations handling ingested tables
-	pebbleNativeFlushAsIngestTableCountMeter     *metrics.Meter // Meter for tracking tables ingested as flushables
-	pebbleNativeFlushAsIngestBytesMeter          *metrics.Meter // Meter for tracking bytes flushed for flushables from ingestion
-	pebbleNativeFlushWriteThroughputBytesMeter   *metrics.Meter // Meter for tracking flush write throughput bytes
+	pebbleNativeFlushCountMeter                   *metrics.Meter // Meter for tracking total number of flushes
+	pebbleNativeFlushNumInProgressGauge           *metrics.Gauge // Gauge for tracking number of in-progress flushes
+	pebbleNativeFlushAsIngestCountMeter           *metrics.Meter // Meter for tracking flush operations handling ingested tables
+	pebbleNativeFlushAsIngestTableCountMeter      *metrics.Meter // Meter for tracking tables ingested as flushables
+	pebbleNativeFlushAsIngestBytesMeter           *metrics.Meter // Meter for tracking bytes flushed for flushables from ingestion
+	pebbleNativeFlushWriteThroughputBytesMeter    *metrics.Meter // Meter for tracking flush write throughput bytes
 	pebbleNativeFlushWriteThroughputDurationMeter *metrics.Meter // Meter for tracking flush write throughput work duration
-	pebbleNativeFlushWriteThroughputIdleMeter    *metrics.Meter // Meter for tracking flush write throughput idle duration
+	pebbleNativeFlushWriteThroughputIdleMeter     *metrics.Meter // Meter for tracking flush write throughput idle duration
 
 	// PebbleDB native filter metrics with pebblenative namespace
 	pebbleNativeFilterHitsMeter   *metrics.Meter // Meter for tracking filter hits
 	pebbleNativeFilterMissesMeter *metrics.Meter // Meter for tracking filter misses
 
 	// PebbleDB native memtable metrics with pebblenative namespace
-	pebbleNativeMemTableSizeGauge       *metrics.Gauge // Gauge for tracking memtable size in bytes
-	pebbleNativeMemTableCountGauge      *metrics.Gauge // Gauge for tracking number of memtables
-	pebbleNativeMemTableZombieSizeGauge *metrics.Gauge // Gauge for tracking zombie memtable size in bytes
+	pebbleNativeMemTableSizeGauge        *metrics.Gauge // Gauge for tracking memtable size in bytes
+	pebbleNativeMemTableCountGauge       *metrics.Gauge // Gauge for tracking number of memtables
+	pebbleNativeMemTableZombieSizeGauge  *metrics.Gauge // Gauge for tracking zombie memtable size in bytes
 	pebbleNativeMemTableZombieCountGauge *metrics.Gauge // Gauge for tracking number of zombie memtables
 
 	// PebbleDB native keys metrics with pebblenative namespace
-	pebbleNativeKeysRangeKeySetsCountGauge     *metrics.Gauge // Gauge for tracking range key sets count
-	pebbleNativeKeysTombstoneCountGauge        *metrics.Gauge // Gauge for tracking tombstone count
+	pebbleNativeKeysRangeKeySetsCountGauge       *metrics.Gauge // Gauge for tracking range key sets count
+	pebbleNativeKeysTombstoneCountGauge          *metrics.Gauge // Gauge for tracking tombstone count
 	pebbleNativeKeysMissizedTombstonesCountMeter *metrics.Meter // Meter for tracking cumulative missized tombstones count
 
 	// PebbleDB native snapshots metrics with pebblenative namespace
-	pebbleNativeSnapshotsCountGauge        *metrics.Gauge // Gauge for tracking number of open snapshots
+	pebbleNativeSnapshotsCountGauge          *metrics.Gauge // Gauge for tracking number of open snapshots
 	pebbleNativeSnapshotsEarliestSeqNumGauge *metrics.Gauge // Gauge for tracking earliest snapshot sequence number
-	pebbleNativeSnapshotsPinnedKeysMeter   *metrics.Meter // Meter for tracking cumulative pinned keys count
-	pebbleNativeSnapshotsPinnedSizeMeter   *metrics.Meter // Meter for tracking cumulative pinned size
+	pebbleNativeSnapshotsPinnedKeysMeter     *metrics.Meter // Meter for tracking cumulative pinned keys count
+	pebbleNativeSnapshotsPinnedSizeMeter     *metrics.Meter // Meter for tracking cumulative pinned size
 
 	// PebbleDB native table and uptime metrics with pebblenative namespace
 	pebbleNativeTableItersGauge *metrics.Gauge // Gauge for tracking number of open sstable iterators
 	pebbleNativeUptimeGauge     *metrics.Gauge // Gauge for tracking database uptime
 
 	// PebbleDB native WAL metrics with pebblenative namespace
-	pebbleNativeWALFilesGauge               *metrics.Gauge // Gauge for tracking number of live WAL files
-	pebbleNativeWALObsoleteFilesGauge       *metrics.Gauge // Gauge for tracking number of obsolete WAL files
+	pebbleNativeWALFilesGauge                *metrics.Gauge // Gauge for tracking number of live WAL files
+	pebbleNativeWALObsoleteFilesGauge        *metrics.Gauge // Gauge for tracking number of obsolete WAL files
 	pebbleNativeWALObsoletePhysicalSizeGauge *metrics.Gauge // Gauge for tracking physical size of obsolete WAL files
-	pebbleNativeWALSizeGauge                *metrics.Gauge // Gauge for tracking size of live data in WAL files
-	pebbleNativeWALPhysicalSizeGauge        *metrics.Gauge // Gauge for tracking physical size of WAL files on-disk
-	pebbleNativeWALBytesInMeter             *metrics.Meter // Meter for tracking logical bytes written to WAL
-	pebbleNativeWALBytesWrittenMeter        *metrics.Meter // Meter for tracking bytes written to WAL
+	pebbleNativeWALSizeGauge                 *metrics.Gauge // Gauge for tracking size of live data in WAL files
+	pebbleNativeWALPhysicalSizeGauge         *metrics.Gauge // Gauge for tracking physical size of WAL files on-disk
+	pebbleNativeWALBytesInMeter              *metrics.Meter // Meter for tracking logical bytes written to WAL
+	pebbleNativeWALBytesWrittenMeter         *metrics.Meter // Meter for tracking bytes written to WAL
+
+	// PebbleDB native level metrics with pebblenative namespace (numLevels levels: L0-L6)
+	pebbleNativeLevelSublevelsGauge               [numLevels]*metrics.Gauge // Gauge for tracking sublevels for each level
+	pebbleNativeLevelNumFilesGauge                [numLevels]*metrics.Gauge // Gauge for tracking number of files for each level
+	pebbleNativeLevelNumVirtualFilesGauge         [numLevels]*metrics.Gauge // Gauge for tracking number of virtual files for each level
+	pebbleNativeLevelSizeGauge                    [numLevels]*metrics.Gauge // Gauge for tracking size in bytes for each level
+	pebbleNativeLevelVirtualSizeGauge             [numLevels]*metrics.Gauge // Gauge for tracking virtual size for each level
+	pebbleNativeLevelScoreGauge                   [numLevels]*metrics.Gauge // Gauge for tracking compaction score for each level
+	pebbleNativeLevelBytesInMeter                 [numLevels]*metrics.Meter // Meter for tracking bytes in for each level
+	pebbleNativeLevelBytesIngestedMeter           [numLevels]*metrics.Meter // Meter for tracking bytes ingested for each level
+	pebbleNativeLevelBytesMovedMeter              [numLevels]*metrics.Meter // Meter for tracking bytes moved for each level
+	pebbleNativeLevelBytesReadMeter               [numLevels]*metrics.Meter // Meter for tracking bytes read for each level
+	pebbleNativeLevelBytesCompactedMeter          [numLevels]*metrics.Meter // Meter for tracking bytes compacted for each level
+	pebbleNativeLevelBytesFlushedMeter            [numLevels]*metrics.Meter // Meter for tracking bytes flushed for each level
+	pebbleNativeLevelTablesCompactedMeter         [numLevels]*metrics.Meter // Meter for tracking tables compacted for each level
+	pebbleNativeLevelTablesFlushedMeter           [numLevels]*metrics.Meter // Meter for tracking tables flushed for each level
+	pebbleNativeLevelTablesIngestedMeter          [numLevels]*metrics.Meter // Meter for tracking tables ingested for each level
+	pebbleNativeLevelTablesMovedMeter             [numLevels]*metrics.Meter // Meter for tracking tables moved for each level
+	pebbleNativeLevelMultiLevelBytesInTopMeter    [numLevels]*metrics.Meter // Meter for tracking multi-level bytes in top for each level
+	pebbleNativeLevelMultiLevelBytesInMeter       [numLevels]*metrics.Meter // Meter for tracking multi-level bytes in for each level
+	pebbleNativeLevelMultiLevelBytesReadMeter     [numLevels]*metrics.Meter // Meter for tracking multi-level bytes read for each level
+	pebbleNativeLevelValueBlocksSizeGauge         [numLevels]*metrics.Gauge // Gauge for tracking value blocks size for each level
+	pebbleNativeLevelBytesWrittenDataBlocksMeter  [numLevels]*metrics.Meter // Meter for tracking bytes written to data blocks for each level
+	pebbleNativeLevelBytesWrittenValueBlocksMeter [numLevels]*metrics.Meter // Meter for tracking bytes written to value blocks for each level
 
 	// Operation timing histograms with pebblenative namespace
 	pebbleNativeGetTimeHistogram metrics.Histogram // Histogram for tracking Get operation time
@@ -414,6 +443,34 @@ func New(file string, cache int, handles int, namespace string, readonly bool, e
 	db.pebbleNativeWALPhysicalSizeGauge = metrics.GetOrRegisterGauge(namespace+"pebblenative/wal/physicalsize", nil)
 	db.pebbleNativeWALBytesInMeter = metrics.GetOrRegisterMeter(namespace+"pebblenative/wal/bytesin", nil)
 	db.pebbleNativeWALBytesWrittenMeter = metrics.GetOrRegisterMeter(namespace+"pebblenative/wal/byteswritten", nil)
+
+	// PebbleDB native level metrics with pebblenative namespace (register for all levels)
+	for level := 0; level < numLevels; level++ {
+		levelStr := fmt.Sprintf("%d", level)
+
+		db.pebbleNativeLevelSublevelsGauge[level] = metrics.GetOrRegisterGauge(namespace+"pebblenative/level/"+levelStr+"/sublevels", nil)
+		db.pebbleNativeLevelNumFilesGauge[level] = metrics.GetOrRegisterGauge(namespace+"pebblenative/level/"+levelStr+"/numfiles", nil)
+		db.pebbleNativeLevelNumVirtualFilesGauge[level] = metrics.GetOrRegisterGauge(namespace+"pebblenative/level/"+levelStr+"/numvirtualfiles", nil)
+		db.pebbleNativeLevelSizeGauge[level] = metrics.GetOrRegisterGauge(namespace+"pebblenative/level/"+levelStr+"/size", nil)
+		db.pebbleNativeLevelVirtualSizeGauge[level] = metrics.GetOrRegisterGauge(namespace+"pebblenative/level/"+levelStr+"/virtualsize", nil)
+		db.pebbleNativeLevelScoreGauge[level] = metrics.GetOrRegisterGauge(namespace+"pebblenative/level/"+levelStr+"/score", nil)
+		db.pebbleNativeLevelBytesInMeter[level] = metrics.GetOrRegisterMeter(namespace+"pebblenative/level/"+levelStr+"/bytesin", nil)
+		db.pebbleNativeLevelBytesIngestedMeter[level] = metrics.GetOrRegisterMeter(namespace+"pebblenative/level/"+levelStr+"/bytesingested", nil)
+		db.pebbleNativeLevelBytesMovedMeter[level] = metrics.GetOrRegisterMeter(namespace+"pebblenative/level/"+levelStr+"/bytesmoved", nil)
+		db.pebbleNativeLevelBytesReadMeter[level] = metrics.GetOrRegisterMeter(namespace+"pebblenative/level/"+levelStr+"/bytesread", nil)
+		db.pebbleNativeLevelBytesCompactedMeter[level] = metrics.GetOrRegisterMeter(namespace+"pebblenative/level/"+levelStr+"/bytescompacted", nil)
+		db.pebbleNativeLevelBytesFlushedMeter[level] = metrics.GetOrRegisterMeter(namespace+"pebblenative/level/"+levelStr+"/bytesflushed", nil)
+		db.pebbleNativeLevelTablesCompactedMeter[level] = metrics.GetOrRegisterMeter(namespace+"pebblenative/level/"+levelStr+"/tablescompacted", nil)
+		db.pebbleNativeLevelTablesFlushedMeter[level] = metrics.GetOrRegisterMeter(namespace+"pebblenative/level/"+levelStr+"/tablesflushed", nil)
+		db.pebbleNativeLevelTablesIngestedMeter[level] = metrics.GetOrRegisterMeter(namespace+"pebblenative/level/"+levelStr+"/tablesingested", nil)
+		db.pebbleNativeLevelTablesMovedMeter[level] = metrics.GetOrRegisterMeter(namespace+"pebblenative/level/"+levelStr+"/tablesmoved", nil)
+		db.pebbleNativeLevelMultiLevelBytesInTopMeter[level] = metrics.GetOrRegisterMeter(namespace+"pebblenative/level/"+levelStr+"/multilevel/bytesintop", nil)
+		db.pebbleNativeLevelMultiLevelBytesInMeter[level] = metrics.GetOrRegisterMeter(namespace+"pebblenative/level/"+levelStr+"/multilevel/bytesin", nil)
+		db.pebbleNativeLevelMultiLevelBytesReadMeter[level] = metrics.GetOrRegisterMeter(namespace+"pebblenative/level/"+levelStr+"/multilevel/bytesread", nil)
+		db.pebbleNativeLevelValueBlocksSizeGauge[level] = metrics.GetOrRegisterGauge(namespace+"pebblenative/level/"+levelStr+"/valueblockssize", nil)
+		db.pebbleNativeLevelBytesWrittenDataBlocksMeter[level] = metrics.GetOrRegisterMeter(namespace+"pebblenative/level/"+levelStr+"/byteswrittendatablocks", nil)
+		db.pebbleNativeLevelBytesWrittenValueBlocksMeter[level] = metrics.GetOrRegisterMeter(namespace+"pebblenative/level/"+levelStr+"/byteswrittenvalueblocks", nil)
+	}
 
 	// Operation timing histograms with pebblenative namespace
 	db.pebbleNativeGetTimeHistogram = metrics.GetOrRegisterHistogram(namespace+"pebblenative/operation/get/time", nil, metrics.NewExpDecaySample(1028, 0.015))
@@ -757,6 +814,40 @@ func (d *Database) meter(refresh time.Duration, namespace string) {
 		d.pebbleNativeWALPhysicalSizeGauge.Update(int64(stats.WAL.PhysicalSize))
 		d.pebbleNativeWALBytesInMeter.Mark(int64(stats.WAL.BytesIn))
 		d.pebbleNativeWALBytesWrittenMeter.Mark(int64(stats.WAL.BytesWritten))
+
+		// Update PebbleDB native level metrics for all levels
+		// Assert that PebbleDB stats has the expected number of levels
+		if len(stats.Levels) != numLevels {
+			d.log.Error("PebbleDB level count mismatch", "expected", numLevels, "actual", len(stats.Levels))
+			panic(fmt.Sprintf("PebbleDB level count mismatch: expected %d levels, got %d", numLevels, len(stats.Levels)))
+		}
+
+		for level := 0; level < numLevels; level++ {
+			levelMetrics := &stats.Levels[level]
+
+			d.pebbleNativeLevelSublevelsGauge[level].Update(int64(levelMetrics.Sublevels))
+			d.pebbleNativeLevelNumFilesGauge[level].Update(levelMetrics.NumFiles)
+			d.pebbleNativeLevelNumVirtualFilesGauge[level].Update(int64(levelMetrics.NumVirtualFiles))
+			d.pebbleNativeLevelSizeGauge[level].Update(levelMetrics.Size)
+			d.pebbleNativeLevelVirtualSizeGauge[level].Update(int64(levelMetrics.VirtualSize))
+			d.pebbleNativeLevelScoreGauge[level].Update(int64(levelMetrics.Score * 1000)) // Scale float64 to int64 by 1000 for precision
+			d.pebbleNativeLevelBytesInMeter[level].Mark(int64(levelMetrics.BytesIn))
+			d.pebbleNativeLevelBytesIngestedMeter[level].Mark(int64(levelMetrics.BytesIngested))
+			d.pebbleNativeLevelBytesMovedMeter[level].Mark(int64(levelMetrics.BytesMoved))
+			d.pebbleNativeLevelBytesReadMeter[level].Mark(int64(levelMetrics.BytesRead))
+			d.pebbleNativeLevelBytesCompactedMeter[level].Mark(int64(levelMetrics.BytesCompacted))
+			d.pebbleNativeLevelBytesFlushedMeter[level].Mark(int64(levelMetrics.BytesFlushed))
+			d.pebbleNativeLevelTablesCompactedMeter[level].Mark(int64(levelMetrics.TablesCompacted))
+			d.pebbleNativeLevelTablesFlushedMeter[level].Mark(int64(levelMetrics.TablesFlushed))
+			d.pebbleNativeLevelTablesIngestedMeter[level].Mark(int64(levelMetrics.TablesIngested))
+			d.pebbleNativeLevelTablesMovedMeter[level].Mark(int64(levelMetrics.TablesMoved))
+			d.pebbleNativeLevelMultiLevelBytesInTopMeter[level].Mark(int64(levelMetrics.MultiLevel.BytesInTop))
+			d.pebbleNativeLevelMultiLevelBytesInMeter[level].Mark(int64(levelMetrics.MultiLevel.BytesIn))
+			d.pebbleNativeLevelMultiLevelBytesReadMeter[level].Mark(int64(levelMetrics.MultiLevel.BytesRead))
+			d.pebbleNativeLevelValueBlocksSizeGauge[level].Update(int64(levelMetrics.Additional.ValueBlocksSize))
+			d.pebbleNativeLevelBytesWrittenDataBlocksMeter[level].Mark(int64(levelMetrics.Additional.BytesWrittenDataBlocks))
+			d.pebbleNativeLevelBytesWrittenValueBlocksMeter[level].Mark(int64(levelMetrics.Additional.BytesWrittenValueBlocks))
+		}
 
 		// Sleep a bit, then repeat the stats collection
 		select {
