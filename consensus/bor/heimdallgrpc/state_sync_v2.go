@@ -55,7 +55,7 @@ func (h *HeimdallGRPCClient) StateSyncEventsV2(ctx context.Context, fromID uint6
 			EventRecord: clerk.EventRecord{
 				ID:       event.Id,
 				Contract: common.HexToAddress(event.Contract),
-				Data:     event.Data[2:],
+				Data:     event.Data,
 				TxHash:   common.HexToHash(event.TxHash),
 				LogIndex: event.LogIndex,
 				ChainID:  event.BorChainId,
