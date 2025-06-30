@@ -86,6 +86,69 @@ type Database struct {
 	pebbleNativeTableCacheHitsMeter   *metrics.Meter // Meter for tracking block cache hits
 	pebbleNativeTableCacheMissesMeter *metrics.Meter // Meter for tracking block cache misses
 
+	// PebbleDB native compact metrics with pebblenative namespace
+	pebbleNativeCompactCountMeter             *metrics.Meter // Meter for tracking total number of compactions
+	pebbleNativeCompactDefaultCountMeter      *metrics.Meter // Meter for tracking default compaction count
+	pebbleNativeCompactDeleteOnlyCountMeter   *metrics.Meter // Meter for tracking delete-only compaction count
+	pebbleNativeCompactElisionOnlyCountMeter  *metrics.Meter // Meter for tracking elision-only compaction count
+	pebbleNativeCompactMoveCountMeter         *metrics.Meter // Meter for tracking move compaction count
+	pebbleNativeCompactReadCountMeter         *metrics.Meter // Meter for tracking read compaction count
+	pebbleNativeCompactRewriteCountMeter      *metrics.Meter // Meter for tracking rewrite compaction count
+	pebbleNativeCompactMultiLevelCountMeter   *metrics.Meter // Meter for tracking multi-level compaction count
+	pebbleNativeCompactCounterLevelCountMeter *metrics.Meter // Meter for tracking counter-level compaction count
+	pebbleNativeCompactEstimatedDebtGauge     *metrics.Gauge // Gauge for tracking estimated compaction debt in bytes
+	pebbleNativeCompactInProgressBytesGauge   *metrics.Gauge // Gauge for tracking bytes in in-progress compactions
+	pebbleNativeCompactNumInProgressGauge     *metrics.Gauge // Gauge for tracking number of in-progress compactions
+	pebbleNativeCompactMarkedFilesGauge       *metrics.Gauge // Gauge for tracking number of files marked for compaction
+	pebbleNativeCompactDurationMeter          *metrics.Meter // Meter for tracking cumulative compaction duration
+
+	// PebbleDB native ingest metrics with pebblenative namespace
+	pebbleNativeIngestCountMeter *metrics.Meter // Meter for tracking total number of ingestions
+
+	// PebbleDB native flush metrics with pebblenative namespace
+	pebbleNativeFlushCountMeter                  *metrics.Meter // Meter for tracking total number of flushes
+	pebbleNativeFlushNumInProgressGauge          *metrics.Gauge // Gauge for tracking number of in-progress flushes
+	pebbleNativeFlushAsIngestCountMeter          *metrics.Meter // Meter for tracking flush operations handling ingested tables
+	pebbleNativeFlushAsIngestTableCountMeter     *metrics.Meter // Meter for tracking tables ingested as flushables
+	pebbleNativeFlushAsIngestBytesMeter          *metrics.Meter // Meter for tracking bytes flushed for flushables from ingestion
+	pebbleNativeFlushWriteThroughputBytesMeter   *metrics.Meter // Meter for tracking flush write throughput bytes
+	pebbleNativeFlushWriteThroughputDurationMeter *metrics.Meter // Meter for tracking flush write throughput work duration
+	pebbleNativeFlushWriteThroughputIdleMeter    *metrics.Meter // Meter for tracking flush write throughput idle duration
+
+	// PebbleDB native filter metrics with pebblenative namespace
+	pebbleNativeFilterHitsMeter   *metrics.Meter // Meter for tracking filter hits
+	pebbleNativeFilterMissesMeter *metrics.Meter // Meter for tracking filter misses
+
+	// PebbleDB native memtable metrics with pebblenative namespace
+	pebbleNativeMemTableSizeGauge       *metrics.Gauge // Gauge for tracking memtable size in bytes
+	pebbleNativeMemTableCountGauge      *metrics.Gauge // Gauge for tracking number of memtables
+	pebbleNativeMemTableZombieSizeGauge *metrics.Gauge // Gauge for tracking zombie memtable size in bytes
+	pebbleNativeMemTableZombieCountGauge *metrics.Gauge // Gauge for tracking number of zombie memtables
+
+	// PebbleDB native keys metrics with pebblenative namespace
+	pebbleNativeKeysRangeKeySetsCountGauge     *metrics.Gauge // Gauge for tracking range key sets count
+	pebbleNativeKeysTombstoneCountGauge        *metrics.Gauge // Gauge for tracking tombstone count
+	pebbleNativeKeysMissizedTombstonesCountMeter *metrics.Meter // Meter for tracking cumulative missized tombstones count
+
+	// PebbleDB native snapshots metrics with pebblenative namespace
+	pebbleNativeSnapshotsCountGauge        *metrics.Gauge // Gauge for tracking number of open snapshots
+	pebbleNativeSnapshotsEarliestSeqNumGauge *metrics.Gauge // Gauge for tracking earliest snapshot sequence number
+	pebbleNativeSnapshotsPinnedKeysMeter   *metrics.Meter // Meter for tracking cumulative pinned keys count
+	pebbleNativeSnapshotsPinnedSizeMeter   *metrics.Meter // Meter for tracking cumulative pinned size
+
+	// PebbleDB native table and uptime metrics with pebblenative namespace
+	pebbleNativeTableItersGauge *metrics.Gauge // Gauge for tracking number of open sstable iterators
+	pebbleNativeUptimeGauge     *metrics.Gauge // Gauge for tracking database uptime
+
+	// PebbleDB native WAL metrics with pebblenative namespace
+	pebbleNativeWALFilesGauge               *metrics.Gauge // Gauge for tracking number of live WAL files
+	pebbleNativeWALObsoleteFilesGauge       *metrics.Gauge // Gauge for tracking number of obsolete WAL files
+	pebbleNativeWALObsoletePhysicalSizeGauge *metrics.Gauge // Gauge for tracking physical size of obsolete WAL files
+	pebbleNativeWALSizeGauge                *metrics.Gauge // Gauge for tracking size of live data in WAL files
+	pebbleNativeWALPhysicalSizeGauge        *metrics.Gauge // Gauge for tracking physical size of WAL files on-disk
+	pebbleNativeWALBytesInMeter             *metrics.Meter // Meter for tracking logical bytes written to WAL
+	pebbleNativeWALBytesWrittenMeter        *metrics.Meter // Meter for tracking bytes written to WAL
+
 	// Operation timing histograms with pebblenative namespace
 	pebbleNativeGetTimeHistogram metrics.Histogram // Histogram for tracking Get operation time
 	pebbleNativePutTimeHistogram metrics.Histogram // Histogram for tracking Put operation time
@@ -288,6 +351,69 @@ func New(file string, cache int, handles int, namespace string, readonly bool, e
 	db.pebbleNativeTableCacheCountGauge = metrics.GetOrRegisterGauge(namespace+"pebblenative/tablecache/count", nil)
 	db.pebbleNativeTableCacheHitsMeter = metrics.GetOrRegisterMeter(namespace+"pebblenative/tablecache/hits", nil)
 	db.pebbleNativeTableCacheMissesMeter = metrics.GetOrRegisterMeter(namespace+"pebblenative/tablecache/misses", nil)
+
+	// PebbleDB native compact metrics with pebblenative namespace
+	db.pebbleNativeCompactCountMeter = metrics.GetOrRegisterMeter(namespace+"pebblenative/compact/count", nil)
+	db.pebbleNativeCompactDefaultCountMeter = metrics.GetOrRegisterMeter(namespace+"pebblenative/compact/defaultcount", nil)
+	db.pebbleNativeCompactDeleteOnlyCountMeter = metrics.GetOrRegisterMeter(namespace+"pebblenative/compact/deleteonlycount", nil)
+	db.pebbleNativeCompactElisionOnlyCountMeter = metrics.GetOrRegisterMeter(namespace+"pebblenative/compact/elisiononlycount", nil)
+	db.pebbleNativeCompactMoveCountMeter = metrics.GetOrRegisterMeter(namespace+"pebblenative/compact/movecount", nil)
+	db.pebbleNativeCompactReadCountMeter = metrics.GetOrRegisterMeter(namespace+"pebblenative/compact/readcount", nil)
+	db.pebbleNativeCompactRewriteCountMeter = metrics.GetOrRegisterMeter(namespace+"pebblenative/compact/rewritecount", nil)
+	db.pebbleNativeCompactMultiLevelCountMeter = metrics.GetOrRegisterMeter(namespace+"pebblenative/compact/multilevelcount", nil)
+	db.pebbleNativeCompactCounterLevelCountMeter = metrics.GetOrRegisterMeter(namespace+"pebblenative/compact/counterlevelcount", nil)
+	db.pebbleNativeCompactEstimatedDebtGauge = metrics.GetOrRegisterGauge(namespace+"pebblenative/compact/estimateddebt", nil)
+	db.pebbleNativeCompactInProgressBytesGauge = metrics.GetOrRegisterGauge(namespace+"pebblenative/compact/inprogressbytes", nil)
+	db.pebbleNativeCompactNumInProgressGauge = metrics.GetOrRegisterGauge(namespace+"pebblenative/compact/numinprogress", nil)
+	db.pebbleNativeCompactMarkedFilesGauge = metrics.GetOrRegisterGauge(namespace+"pebblenative/compact/markedfiles", nil)
+	db.pebbleNativeCompactDurationMeter = metrics.GetOrRegisterMeter(namespace+"pebblenative/compact/duration", nil)
+
+	// PebbleDB native ingest metrics with pebblenative namespace
+	db.pebbleNativeIngestCountMeter = metrics.GetOrRegisterMeter(namespace+"pebblenative/ingest/count", nil)
+
+	// PebbleDB native flush metrics with pebblenative namespace
+	db.pebbleNativeFlushCountMeter = metrics.GetOrRegisterMeter(namespace+"pebblenative/flush/count", nil)
+	db.pebbleNativeFlushNumInProgressGauge = metrics.GetOrRegisterGauge(namespace+"pebblenative/flush/numinprogress", nil)
+	db.pebbleNativeFlushAsIngestCountMeter = metrics.GetOrRegisterMeter(namespace+"pebblenative/flush/asingestcount", nil)
+	db.pebbleNativeFlushAsIngestTableCountMeter = metrics.GetOrRegisterMeter(namespace+"pebblenative/flush/asingesttablecount", nil)
+	db.pebbleNativeFlushAsIngestBytesMeter = metrics.GetOrRegisterMeter(namespace+"pebblenative/flush/asingestbytes", nil)
+	db.pebbleNativeFlushWriteThroughputBytesMeter = metrics.GetOrRegisterMeter(namespace+"pebblenative/flush/writethroughput/bytes", nil)
+	db.pebbleNativeFlushWriteThroughputDurationMeter = metrics.GetOrRegisterMeter(namespace+"pebblenative/flush/writethroughput/duration", nil)
+	db.pebbleNativeFlushWriteThroughputIdleMeter = metrics.GetOrRegisterMeter(namespace+"pebblenative/flush/writethroughput/idle", nil)
+
+	// PebbleDB native filter metrics with pebblenative namespace
+	db.pebbleNativeFilterHitsMeter = metrics.GetOrRegisterMeter(namespace+"pebblenative/filter/hits", nil)
+	db.pebbleNativeFilterMissesMeter = metrics.GetOrRegisterMeter(namespace+"pebblenative/filter/misses", nil)
+
+	// PebbleDB native memtable metrics with pebblenative namespace
+	db.pebbleNativeMemTableSizeGauge = metrics.GetOrRegisterGauge(namespace+"pebblenative/memtable/size", nil)
+	db.pebbleNativeMemTableCountGauge = metrics.GetOrRegisterGauge(namespace+"pebblenative/memtable/count", nil)
+	db.pebbleNativeMemTableZombieSizeGauge = metrics.GetOrRegisterGauge(namespace+"pebblenative/memtable/zombiesize", nil)
+	db.pebbleNativeMemTableZombieCountGauge = metrics.GetOrRegisterGauge(namespace+"pebblenative/memtable/zombiecount", nil)
+
+	// PebbleDB native keys metrics with pebblenative namespace
+	db.pebbleNativeKeysRangeKeySetsCountGauge = metrics.GetOrRegisterGauge(namespace+"pebblenative/keys/rangekeysetscount", nil)
+	db.pebbleNativeKeysTombstoneCountGauge = metrics.GetOrRegisterGauge(namespace+"pebblenative/keys/tombstonecount", nil)
+	db.pebbleNativeKeysMissizedTombstonesCountMeter = metrics.GetOrRegisterMeter(namespace+"pebblenative/keys/missizedtombstonescount", nil)
+
+	// PebbleDB native snapshots metrics with pebblenative namespace
+	db.pebbleNativeSnapshotsCountGauge = metrics.GetOrRegisterGauge(namespace+"pebblenative/snapshots/count", nil)
+	db.pebbleNativeSnapshotsEarliestSeqNumGauge = metrics.GetOrRegisterGauge(namespace+"pebblenative/snapshots/earliestseqnum", nil)
+	db.pebbleNativeSnapshotsPinnedKeysMeter = metrics.GetOrRegisterMeter(namespace+"pebblenative/snapshots/pinnedkeys", nil)
+	db.pebbleNativeSnapshotsPinnedSizeMeter = metrics.GetOrRegisterMeter(namespace+"pebblenative/snapshots/pinnedsize", nil)
+
+	// PebbleDB native table and uptime metrics with pebblenative namespace
+	db.pebbleNativeTableItersGauge = metrics.GetOrRegisterGauge(namespace+"pebblenative/tableiters", nil)
+	db.pebbleNativeUptimeGauge = metrics.GetOrRegisterGauge(namespace+"pebblenative/uptime", nil)
+
+	// PebbleDB native WAL metrics with pebblenative namespace
+	db.pebbleNativeWALFilesGauge = metrics.GetOrRegisterGauge(namespace+"pebblenative/wal/files", nil)
+	db.pebbleNativeWALObsoleteFilesGauge = metrics.GetOrRegisterGauge(namespace+"pebblenative/wal/obsoletefiles", nil)
+	db.pebbleNativeWALObsoletePhysicalSizeGauge = metrics.GetOrRegisterGauge(namespace+"pebblenative/wal/obsoletephysicalsize", nil)
+	db.pebbleNativeWALSizeGauge = metrics.GetOrRegisterGauge(namespace+"pebblenative/wal/size", nil)
+	db.pebbleNativeWALPhysicalSizeGauge = metrics.GetOrRegisterGauge(namespace+"pebblenative/wal/physicalsize", nil)
+	db.pebbleNativeWALBytesInMeter = metrics.GetOrRegisterMeter(namespace+"pebblenative/wal/bytesin", nil)
+	db.pebbleNativeWALBytesWrittenMeter = metrics.GetOrRegisterMeter(namespace+"pebblenative/wal/byteswritten", nil)
 
 	// Operation timing histograms with pebblenative namespace
 	db.pebbleNativeGetTimeHistogram = metrics.GetOrRegisterHistogram(namespace+"pebblenative/operation/get/time", nil, metrics.NewExpDecaySample(1028, 0.015))
@@ -568,6 +694,69 @@ func (d *Database) meter(refresh time.Duration, namespace string) {
 		d.pebbleNativeTableCacheCountGauge.Update(stats.TableCache.Count)
 		d.pebbleNativeTableCacheHitsMeter.Mark(stats.TableCache.Hits)
 		d.pebbleNativeTableCacheMissesMeter.Mark(stats.TableCache.Misses)
+
+		// Update PebbleDB native compact metrics
+		d.pebbleNativeCompactCountMeter.Mark(stats.Compact.Count)
+		d.pebbleNativeCompactDefaultCountMeter.Mark(stats.Compact.DefaultCount)
+		d.pebbleNativeCompactDeleteOnlyCountMeter.Mark(stats.Compact.DeleteOnlyCount)
+		d.pebbleNativeCompactElisionOnlyCountMeter.Mark(stats.Compact.ElisionOnlyCount)
+		d.pebbleNativeCompactMoveCountMeter.Mark(stats.Compact.MoveCount)
+		d.pebbleNativeCompactReadCountMeter.Mark(stats.Compact.ReadCount)
+		d.pebbleNativeCompactRewriteCountMeter.Mark(stats.Compact.RewriteCount)
+		d.pebbleNativeCompactMultiLevelCountMeter.Mark(stats.Compact.MultiLevelCount)
+		d.pebbleNativeCompactCounterLevelCountMeter.Mark(stats.Compact.CounterLevelCount)
+		d.pebbleNativeCompactEstimatedDebtGauge.Update(int64(stats.Compact.EstimatedDebt))
+		d.pebbleNativeCompactInProgressBytesGauge.Update(stats.Compact.InProgressBytes)
+		d.pebbleNativeCompactNumInProgressGauge.Update(stats.Compact.NumInProgress)
+		d.pebbleNativeCompactMarkedFilesGauge.Update(int64(stats.Compact.MarkedFiles))
+		d.pebbleNativeCompactDurationMeter.Mark(int64(stats.Compact.Duration))
+
+		// Update PebbleDB native ingest metrics
+		d.pebbleNativeIngestCountMeter.Mark(int64(stats.Ingest.Count))
+
+		// Update PebbleDB native flush metrics
+		d.pebbleNativeFlushCountMeter.Mark(stats.Flush.Count)
+		d.pebbleNativeFlushNumInProgressGauge.Update(stats.Flush.NumInProgress)
+		d.pebbleNativeFlushAsIngestCountMeter.Mark(int64(stats.Flush.AsIngestCount))
+		d.pebbleNativeFlushAsIngestTableCountMeter.Mark(int64(stats.Flush.AsIngestTableCount))
+		d.pebbleNativeFlushAsIngestBytesMeter.Mark(int64(stats.Flush.AsIngestBytes))
+		d.pebbleNativeFlushWriteThroughputBytesMeter.Mark(int64(stats.Flush.WriteThroughput.Bytes))
+		d.pebbleNativeFlushWriteThroughputDurationMeter.Mark(int64(stats.Flush.WriteThroughput.WorkDuration))
+		d.pebbleNativeFlushWriteThroughputIdleMeter.Mark(int64(stats.Flush.WriteThroughput.IdleDuration))
+
+		// Update PebbleDB native filter metrics
+		d.pebbleNativeFilterHitsMeter.Mark(stats.Filter.Hits)
+		d.pebbleNativeFilterMissesMeter.Mark(stats.Filter.Misses)
+
+		// Update PebbleDB native memtable metrics
+		d.pebbleNativeMemTableSizeGauge.Update(int64(stats.MemTable.Size))
+		d.pebbleNativeMemTableCountGauge.Update(stats.MemTable.Count)
+		d.pebbleNativeMemTableZombieSizeGauge.Update(int64(stats.MemTable.ZombieSize))
+		d.pebbleNativeMemTableZombieCountGauge.Update(stats.MemTable.ZombieCount)
+
+		// Update PebbleDB native keys metrics
+		d.pebbleNativeKeysRangeKeySetsCountGauge.Update(int64(stats.Keys.RangeKeySetsCount))
+		d.pebbleNativeKeysTombstoneCountGauge.Update(int64(stats.Keys.TombstoneCount))
+		d.pebbleNativeKeysMissizedTombstonesCountMeter.Mark(int64(stats.Keys.MissizedTombstonesCount))
+
+		// Update PebbleDB native snapshots metrics
+		d.pebbleNativeSnapshotsCountGauge.Update(int64(stats.Snapshots.Count))
+		d.pebbleNativeSnapshotsEarliestSeqNumGauge.Update(int64(stats.Snapshots.EarliestSeqNum))
+		d.pebbleNativeSnapshotsPinnedKeysMeter.Mark(int64(stats.Snapshots.PinnedKeys))
+		d.pebbleNativeSnapshotsPinnedSizeMeter.Mark(int64(stats.Snapshots.PinnedSize))
+
+		// Update PebbleDB native table and uptime metrics
+		d.pebbleNativeTableItersGauge.Update(stats.TableIters)
+		d.pebbleNativeUptimeGauge.Update(int64(stats.Uptime))
+
+		// Update PebbleDB native WAL metrics
+		d.pebbleNativeWALFilesGauge.Update(stats.WAL.Files)
+		d.pebbleNativeWALObsoleteFilesGauge.Update(stats.WAL.ObsoleteFiles)
+		d.pebbleNativeWALObsoletePhysicalSizeGauge.Update(int64(stats.WAL.ObsoletePhysicalSize))
+		d.pebbleNativeWALSizeGauge.Update(int64(stats.WAL.Size))
+		d.pebbleNativeWALPhysicalSizeGauge.Update(int64(stats.WAL.PhysicalSize))
+		d.pebbleNativeWALBytesInMeter.Mark(int64(stats.WAL.BytesIn))
+		d.pebbleNativeWALBytesWrittenMeter.Mark(int64(stats.WAL.BytesWritten))
 
 		// Sleep a bit, then repeat the stats collection
 		select {
