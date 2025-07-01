@@ -545,10 +545,10 @@ func (w *worker) newWorkLoop(recommit time.Duration) {
 				// the primary producer is down. Figure out a way to keep short circuiting but allow the non-producers to produce blocks.
 
 				// Short circuit if no new transaction arrives.
-				// if w.newTxs.Load() == 0 {
-				// 	timer.Reset(recommit)
-				// 	continue
-				// }
+				if w.newTxs.Load() == 0 {
+					timer.Reset(recommit)
+					continue
+				}
 				commit(true, commitInterruptResubmit)
 			}
 
