@@ -1,0 +1,121 @@
+name: Stateless Sync Tests
+
+on:
+  push:
+    branches:
+      - "stateless_sync"
+  pull_request:
+    branches:
+      - "stateless_sync"
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: stateless-sync-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  ENCLAVE_NAME: stateless-sync-e2e
+
+jobs:
+  e2e-tests:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      # Try to free up disk space (around 6 GB) before running the kurtosis job.
+      # This is needed because the job fails with "System.IO.IOException: No space left on device".
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # 2023/10/19
+        with:
+          tool-cache: true
+
+      - name: Checkout Bor
+        uses: actions/checkout@v4
+        with:
+          path: bor
+          fetch-depth: 0
+
+      - name: Install dependencies on Linux
+        if: runner.os == 'Linux'
+        run: sudo apt update && sudo apt install build-essential
+
+      - name: Pre kurtosis run
+        uses: ./bor/.github/actions/kurtosis-pre-run
+        with:
+          docker_username: ${{ secrets.DOCKER_USERNAME }}
+          docker_token: ${{ secrets.DOCKER_TOKEN }}
+
+      # Build Bor image from current branch for stateless sync feature.
+      - name: Build Bor Docker Image (stateless_sync)
+        run: |
+          cd bor
+          git branch --show-current
+          docker build -t bor:stateless_sync --file Dockerfile .
+
+      # Build Bor image from develop branch for compatibility testing.
+      # - name: Build Bor Docker Image (develop)
+      #   run: |
+      #     cd bor
+      #     ORIGINAL_REF=$(git rev-parse --abbrev-ref HEAD)
+      #     if [ "$ORIGINAL_REF" = "HEAD" ]; then
+      #       # We're in detached HEAD; fallback to commit hash
+      #       ORIGINAL_REF=$(git rev-parse HEAD)
+      #     fi
+
+      #     echo "Original ref: $ORIGINAL_REF"
+
+      #     git checkout develop
+      #     git pull origin develop
+      #     docker build -t bor:develop --file Dockerfile .
+
+      #     git checkout "$ORIGINAL_REF"
+      #     echo "Switched back to: $(git rev-parse --abbrev-ref HEAD || git rev-parse HEAD)"
+
+      - name: Checkout Heimdall-v2
+        uses: actions/checkout@v4
+        with:
+          repository: 0xPolygon/heimdall-v2
+          ref: stateless_sync
+          path: heimdall-v2
+          fetch-depth: 0
+
+      # # Build Heimdall-v2 image from stateless_sync branch.
+      - name: Build Heimdall-v2 Docker Image (stateless_sync)
+        run: |
+          cd heimdall-v2
+          docker build -t heimdall-v2:stateless_sync --file Dockerfile .
+
+      # # Build Heimdall-v2 image from develop branch.
+      # - name: Build Heimdall-v2 Docker Image (develop)
+      #   run: |
+      #     cd heimdall-v2
+      #     git checkout develop
+      #     git pull origin develop
+      #     docker build -t heimdall-v2:develop --file Dockerfile .
+
+      - name: Checkout Kurtosis
+        uses: actions/checkout@v4
+        with:
+          repository: 0xPolygon/kurtosis-polygon-pos
+          ref: stateless
+          path: kurtosis-polygon-pos
+
+      - name: Copy kurtosis config
+        run: cp ./bor/.github/configs/stateless-e2e.yml ./kurtosis-polygon-pos/stateless-e2e.yml
+
+      - name: Kurtosis run
+        run: |
+          cd kurtosis-polygon-pos
+          kurtosis run --args-file stateless-e2e.yml --enclave ${{ env.ENCLAVE_NAME }} .
+
+      - name: Inspect enclave
+        run: |
+          cd kurtosis-polygon-pos
+          kurtosis enclave inspect ${{ env.ENCLAVE_NAME }}
+
+      - name: Post kurtosis run
+        if: always()
+        uses: ./bor/.github/actions/kurtosis-post-run
+        with:
+          enclave_name: ${{ env.ENCLAVE_NAME }}

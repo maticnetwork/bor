@@ -1,0 +1,47 @@
+name: kurtosis-pre-run
+description: Prepare the environment for deploying Kurtosis packages.
+
+inputs:
+  docker_username:
+    description: The username for docker registry
+    required: false
+  docker_token:
+    description: The token for docker registry
+    required: false
+
+runs:
+  using: composite
+  steps:
+    - name: Login to docker registry
+      if: ${{ inputs.docker_username && inputs.docker_token }}
+      uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+      with:
+        username: ${{ inputs.docker_username }}
+        password: ${{ inputs.docker_token }}
+
+    - name: Login to github container registry
+      uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
+      with:
+        registry: ghcr.io
+        username: ${{ github.actor }}
+        password: ${{ github.token }}
+
+    - name: Install kurtosis
+      shell: bash
+      run: |
+        echo "deb [trusted=yes] https://apt.fury.io/kurtosis-tech/ /" | sudo tee /etc/apt/sources.list.d/kurtosis.list
+        sudo apt update
+        sudo apt install -y kurtosis-cli=1.7.2
+        kurtosis analytics disable
+        kurtosis version
+
+    - name: Install yq
+      shell: bash
+      run: |
+        pip3 install yq
+        yq --version
+
+    - name: Install foundry
+      uses: foundry-rs/foundry-toolchain@v1
+      with:
+        version: v1.0.0
