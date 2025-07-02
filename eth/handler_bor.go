@@ -161,8 +161,10 @@ func (h *ethHandler) handleMilestone(ctx context.Context, eth *Ethereum, milesto
 
 	for lastSeenMilestoneBlockNumber < num {
 		lastSeenMilestoneBlockNumber += 1
-		blockTime := eth.blockchain.GetBlockByNumber(lastSeenMilestoneBlockNumber).Time()
-		MilestoneWhitelistedDelayTimer.UpdateSince(time.Unix(int64(blockTime), 0))
+		block := eth.blockchain.GetBlockByNumber(lastSeenMilestoneBlockNumber)
+		if block != nil && block.Header() != nil {
+			MilestoneWhitelistedDelayTimer.UpdateSince(time.Unix(int64(block.Time()), 0))
+		}
 	}
 
 	h.downloader.ProcessMilestone(num, hash)
