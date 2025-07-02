@@ -1,4 +1,5 @@
 name: CI
+
 on:
   push:
     branches:
@@ -48,7 +49,7 @@ jobs:
           restore-keys: ${{ runner.os }}-go-
 
       - name: Build
-        run: make all
+        run: make bor
 
   lint:
     if: (github.event.action != 'closed' || github.event.pull_request.merged == true)
