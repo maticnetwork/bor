@@ -803,8 +803,6 @@ func (s *Ethereum) fetchAndHandleWhitelistCheckpoint(ctx context.Context, ethHan
 
 type heimdallHandler func(ctx context.Context, ethHandler *ethHandler, bor *bor.Bor) error
 
-var lastSeenMilestoneBlockNumber uint64
-
 // fetchAndHandleMilestone handles the milestone mechanism.
 func (s *Ethereum) fetchAndHandleMilestone(ctx context.Context, ethHandler *ethHandler, bor *bor.Bor) error {
 	// Create a new bor verifier, which will be used to verify checkpoints and milestones
