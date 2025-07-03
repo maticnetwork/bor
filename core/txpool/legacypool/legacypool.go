@@ -35,6 +35,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/txpool"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto/kzg4844"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
@@ -706,6 +707,9 @@ func (pool *LegacyPool) add(tx *types.Transaction) (replaced bool, err error) {
 	}
 	// already validated by this point
 	from, _ := types.Sender(pool.signer, tx)
+
+	// naive... no buffering or queueing for now
+	go pool.PreExecuteTx(tx)
 
 	// If the address is not yet known, request exclusivity to track the account
 	// only by this subpool until all transactions are evicted
@@ -1973,4 +1977,85 @@ func (pool *LegacyPool) Clear() {
 // authorizations from the specific address cached in the pool.
 func (pool *LegacyPool) HasPendingAuth(addr common.Address) bool {
 	return pool.all.hasAuth(addr)
+}
+
+// PreExecuteTx executes a transaction against the current state without committing changes.
+// This is used for cache warming and validation. Similar to eth_call but optimized for pool usage.
+func (pool *LegacyPool) PreExecuteTx(tx *types.Transaction) {
+	pool.mu.RLock()
+	defer pool.mu.RUnlock()
+
+	// Create execution state copy to avoid modifying the actual state
+	tempState := pool.currentState.Copy()
+
+	// Get current head for block context
+	header := pool.currentHead.Load()
+	if header == nil {
+		return
+	}
+
+	// Convert transaction to message
+	msg, err := core.TransactionToMessage(tx, pool.signer, header.BaseFee)
+	if err != nil {
+		return
+	}
+
+	// Create block context for EVM
+	blockContext := pool.newEVMBlockContext(header)
+
+	// Create EVM with optimized config for pre-execution
+	evm := vm.NewEVM(blockContext, tempState, pool.chainconfig, vm.Config{NoBaseFee: true})
+
+	// Create gas pool with current head's gas limit
+	gasPool := new(core.GasPool).AddGas(header.GasLimit)
+
+	// Execute the message
+	usedGas := new(atomic.Bool)
+	_, err = core.ApplyMessage(evm, msg, gasPool, usedGas)
+	return
+}
+
+// newEVMBlockContext creates a block context for EVM execution using the current pool state
+func (pool *LegacyPool) newEVMBlockContext(header *types.Header) vm.BlockContext {
+	return vm.BlockContext{
+		CanTransfer: core.CanTransfer,
+		Transfer:    core.Transfer,
+		GetHash:     pool.newGetHashFunc(header),
+		Coinbase:    header.Coinbase,
+		BlockNumber: new(big.Int).Set(header.Number),
+		Time:        header.Time,
+		Difficulty:  new(big.Int).Set(header.Difficulty),
+		BaseFee:     new(big.Int).Set(header.BaseFee),
+		GasLimit:    header.GasLimit,
+		Random:      &header.MixDigest,
+	}
+}
+
+// newGetHashFunc creates a GetHash function for block context using the chain interface
+func (pool *LegacyPool) newGetHashFunc(header *types.Header) func(uint64) common.Hash {
+	return func(n uint64) common.Hash {
+		// For pre-execution, we only need recent block hashes
+		// If the requested block is too old or in the future, return zero hash
+		current := header.Number.Uint64()
+		if n >= current || current-n > 256 {
+			return common.Hash{}
+		}
+
+		// Get the block from the chain
+		block := pool.chain.GetBlock(header.ParentHash, current-1)
+		if block == nil {
+			return common.Hash{}
+		}
+
+		// Walk backwards to find the requested block
+		for i := current - 1; i > n && block != nil; i-- {
+			block = pool.chain.GetBlock(block.ParentHash(), i-1)
+		}
+
+		if block != nil && block.NumberU64() == n {
+			return block.Hash()
+		}
+
+		return common.Hash{}
+	}
 }
