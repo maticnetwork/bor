@@ -1987,7 +1987,7 @@ func (pool *LegacyPool) PreExecuteTx(tx *types.Transaction) {
 
 	// Create execution state copy and disable blockstm concurrency
 	tempState := pool.currentState.Copy()
-	tempState.mvHashmap = nil // Disable blockstm logic completely
+	tempState.SetMVHashmap(nil) // Disable blockstm logic completely
 
 	// Get current head for block context
 	header := pool.currentHead.Load()
