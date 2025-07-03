@@ -13,7 +13,7 @@ import (
 	protoutils "github.com/maticnetwork/polyproto/utils"
 )
 
-func (h *HeimdallGRPCClient) FetchMilestoneCount(ctx context.Context) (int64, error) {
+func (h *HeimdallGRPCClient) FetchMilestoneCountV1(ctx context.Context) (int64, error) {
 	log.Info("Fetching milestone count")
 
 	res, err := h.client.FetchMilestoneCount(ctx, nil)
@@ -26,7 +26,7 @@ func (h *HeimdallGRPCClient) FetchMilestoneCount(ctx context.Context) (int64, er
 	return res.Result.Count, nil
 }
 
-func (h *HeimdallGRPCClient) FetchMilestone(ctx context.Context) (*milestone.Milestone, error) {
+func (h *HeimdallGRPCClient) FetchMilestoneV1(ctx context.Context) (*milestone.MilestoneV1, error) {
 	log.Info("Fetching milestone")
 
 	res, err := h.client.FetchMilestone(ctx, nil)
@@ -36,7 +36,7 @@ func (h *HeimdallGRPCClient) FetchMilestone(ctx context.Context) (*milestone.Mil
 
 	log.Info("Fetched milestone")
 
-	milestone := &milestone.Milestone{
+	milestone := &milestone.MilestoneV1{
 		StartBlock: new(big.Int).SetUint64(res.Result.StartBlock),
 		EndBlock:   new(big.Int).SetUint64(res.Result.EndBlock),
 		Hash:       protoutils.ConvertH256ToHash(res.Result.RootHash),

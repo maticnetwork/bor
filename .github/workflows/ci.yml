@@ -32,7 +32,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: 1.23.x
+          go-version: 1.24.3
 
       - name: Install dependencies on Linux
         if: runner.os == 'Linux'
@@ -64,7 +64,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: 1.23.x
+          go-version: 1.24.3
 
       - name: Install dependencies on Linux
         if: runner.os == 'Linux'
@@ -92,7 +92,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: 1.23.x
+          go-version: 1.24.3
 
       - name: Install dependencies on Linux
         if: runner.os == 'Linux'
@@ -143,7 +143,7 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: 1.23.x
+          go-version: 1.24.3
 
       - name: Install dependencies on Linux
         if: runner.os == 'Linux'
@@ -199,13 +199,13 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version: 1.23.x
+          go-version: 1.24.3
 
       - name: Checkout matic-cli
         uses: actions/checkout@v4
         with:
           repository: maticnetwork/matic-cli
-          ref: master
+          ref: heimdall-v2
           path: matic-cli
 
       - name: Install dependencies on Linux
@@ -255,7 +255,7 @@ jobs:
         run: |
           cd matic-cli/devnet
           bash ../util-scripts/docker/devnet_setup.sh
-            cd -
+          cd -
           timeout 2m bash bor/integration-tests/bor_health.sh
 
       - name: Run smoke tests

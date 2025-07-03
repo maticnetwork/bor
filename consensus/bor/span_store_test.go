@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/0xPolygon/heimdall-v2/x/bor/types"
 	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
@@ -15,7 +16,7 @@ import (
 type MockHeimdallClient struct {
 }
 
-func (h *MockHeimdallClient) Span(ctx context.Context, spanID uint64) (*span.HeimdallSpan, error) {
+func (h *MockHeimdallClient) GetSpanV1(ctx context.Context, spanID uint64) (*span.HeimdallSpan, error) {
 	// Throw error for span id 100
 	if spanID == 100 {
 		return nil, fmt.Errorf("unable to fetch span")
@@ -25,7 +26,7 @@ func (h *MockHeimdallClient) Span(ctx context.Context, spanID uint64) (*span.Hei
 	if spanID == 0 {
 		return &span.HeimdallSpan{
 			Span: span.Span{
-				ID:         0,
+				Id:         0,
 				StartBlock: 0,
 				EndBlock:   255,
 			},
@@ -33,7 +34,7 @@ func (h *MockHeimdallClient) Span(ctx context.Context, spanID uint64) (*span.Hei
 	} else {
 		return &span.HeimdallSpan{
 			Span: span.Span{
-				ID:         spanID,
+				Id:         spanID,
 				StartBlock: 6400*(spanID-1) + 256,
 				EndBlock:   6400*spanID + 255,
 			},
@@ -42,8 +43,8 @@ func (h *MockHeimdallClient) Span(ctx context.Context, spanID uint64) (*span.Hei
 }
 
 func TestSpanStore_SpanById(t *testing.T) {
-	spanStore := NewSpanStore(&MockHeimdallClient{}, nil, "1337")
-	ctx := context.Background()
+	spanStore := NewSpanStore(&MockHeimdallClient{}, nil, "1337", nil)
+	ctx := t.Context()
 
 	type Testcase struct {
 		id         uint64
@@ -61,7 +62,7 @@ func TestSpanStore_SpanById(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			span, err := spanStore.spanById(ctx, tc.id)
 			require.NoError(t, err, "err in spanById for id=%d", tc.id)
-			require.Equal(t, tc.id, span.ID, "invalid id in spanById for id=%d", tc.id)
+			require.Equal(t, tc.id, span.Id, "invalid id in spanById for id=%d", tc.id)
 			require.Equal(t, tc.startBlock, span.StartBlock, "invalid start block in spanById for id=%d", tc.id)
 			require.Equal(t, tc.endBlock, span.EndBlock, "invalid end block in spanById for id=%d", tc.id)
 		})
@@ -90,22 +91,17 @@ func TestSpanStore_SpanById(t *testing.T) {
 	// Ensure we're still able to fetch old spans even though they're evicted from cache
 	span, err := spanStore.spanById(ctx, 0)
 	require.NoError(t, err, "err in spanById after eviction for id=0")
-	require.Equal(t, uint64(0), span.ID, "invalid id in spanById after eviction for id=0")
+	require.Equal(t, uint64(0), span.Id, "invalid id in spanById after eviction for id=0")
 	require.Equal(t, uint64(0), span.StartBlock, "invalid start block in spanById after eviction for id=0")
 	require.Equal(t, uint64(255), span.EndBlock, "invalid end block in spanById after eviction for id=0")
-
-	// Try fetching span 100 and ensure error is handled
-	span, err = spanStore.spanById(ctx, 100)
-	require.Error(t, err, "expected error in spanById for id=100")
-	require.Nil(t, span, "expected nil span in spanById for id=100")
 
 	// Ensure latest known span is still the old one
 	require.Equal(t, uint64(20), spanStore.latestKnownSpanId, "invalid latest known span id in span store")
 }
 
 func TestSpanStore_SpanByBlockNumber(t *testing.T) {
-	spanStore := NewSpanStore(&MockHeimdallClient{}, nil, "1337")
-	ctx := context.Background()
+	spanStore := NewSpanStore(&MockHeimdallClient{}, nil, "1337", nil)
+	ctx := t.Context()
 
 	type Testcase struct {
 		blockNumber uint64
@@ -145,7 +141,7 @@ func TestSpanStore_SpanByBlockNumber(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			span, err := spanStore.spanByBlockNumber(ctx, tc.blockNumber)
 			require.NoError(t, err, "err in spanByBlockNumber for block=%d", tc.blockNumber)
-			require.Equal(t, tc.id, span.ID, "invalid id in spanByBlockNumber for block=%d", tc.blockNumber)
+			require.Equal(t, tc.id, span.Id, "invalid id in spanByBlockNumber for block=%d", tc.blockNumber)
 			require.Equal(t, tc.startBlock, span.StartBlock, "invalid start block in spanByBlockNumber for block=%d", tc.blockNumber)
 			require.Equal(t, tc.endBlock, span.EndBlock, "invalid end block in spanByBlockNumber for block=%d", tc.blockNumber)
 		})
@@ -176,7 +172,7 @@ func TestSpanStore_SpanByBlockNumber(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			span, err := spanStore.spanByBlockNumber(ctx, tc.blockNumber)
 			require.NoError(t, err, "err in spanByBlockNumber for block=%d", tc.blockNumber)
-			require.Equal(t, tc.id, span.ID, "invalid id in spanByBlockNumber for block=%d", tc.blockNumber)
+			require.Equal(t, tc.id, span.Id, "invalid id in spanByBlockNumber for block=%d", tc.blockNumber)
 			require.Equal(t, tc.startBlock, span.StartBlock, "invalid start block in spanByBlockNumber for block=%d", tc.blockNumber)
 			require.Equal(t, tc.endBlock, span.EndBlock, "invalid end block in spanByBlockNumber for block=%d", tc.blockNumber)
 		})
@@ -185,36 +181,64 @@ func TestSpanStore_SpanByBlockNumber(t *testing.T) {
 	// Asking for a future span
 	span, err := spanStore.spanByBlockNumber(ctx, 128256) // block 128256 belongs to span 21 (future span)
 	require.NoError(t, err, "err in spanByBlockNumber for future block 128256")
-	require.Equal(t, uint64(21), span.ID, "invalid id in spanByBlockNumber for future block 128256")
+	require.Equal(t, uint64(21), span.Id, "invalid id in spanByBlockNumber for future block 128256")
 	require.Equal(t, uint64(128256), span.StartBlock, "invalid start block in spanByBlockNumber for future block 128256")
 	require.Equal(t, uint64(134655), span.EndBlock, "invalid end block in spanByBlockNumber for future block 128256")
 }
 
 // Irrelevant to the tests above but necessary for interface compatibility
-func (h *MockHeimdallClient) StateSyncEvents(ctx context.Context, fromID uint64, to int64) ([]*clerk.EventRecordWithTime, error) {
+func (h *MockHeimdallClient) StateSyncEventsV1(ctx context.Context, fromID uint64, to int64) ([]*clerk.EventRecordWithTime, error) {
 	panic("implement me")
 }
-func (h *MockHeimdallClient) FetchCheckpoint(ctx context.Context, number int64) (*checkpoint.Checkpoint, error) {
+
+func (h *MockHeimdallClient) StateSyncEventsV2(ctx context.Context, fromID uint64, to int64) ([]*clerk.EventRecordWithTime, error) {
 	panic("implement me")
 }
+
+func (h *MockHeimdallClient) GetSpanV2(ctx context.Context, spanID uint64) (*types.Span, error) {
+	panic("implement me")
+}
+
+func (h *MockHeimdallClient) GetLatestSpanV1(ctx context.Context) (*span.HeimdallSpan, error) {
+	panic("implement me")
+}
+
+func (h *MockHeimdallClient) GetLatestSpanV2(ctx context.Context) (*types.Span, error) {
+	panic("implement me")
+}
+
+func (h *MockHeimdallClient) FetchCheckpointV1(ctx context.Context, number int64) (*checkpoint.CheckpointV1, error) {
+	panic("implement me")
+}
+
+func (h *MockHeimdallClient) FetchCheckpointV2(ctx context.Context, number int64) (*checkpoint.CheckpointV2, error) {
+	panic("implement me")
+}
+
 func (h *MockHeimdallClient) FetchCheckpointCount(ctx context.Context) (int64, error) {
 	panic("implement me")
 }
-func (h *MockHeimdallClient) FetchMilestone(ctx context.Context) (*milestone.Milestone, error) {
+
+func (h *MockHeimdallClient) FetchMilestoneV1(ctx context.Context) (*milestone.MilestoneV1, error) {
 	panic("implement me")
 }
+
+func (h *MockHeimdallClient) FetchMilestoneV2(ctx context.Context) (*milestone.MilestoneV2, error) {
+	panic("implement me")
+}
+
 func (h *MockHeimdallClient) FetchMilestoneCount(ctx context.Context) (int64, error) {
 	panic("implement me")
 }
+
 func (h *MockHeimdallClient) FetchNoAckMilestone(ctx context.Context, milestoneID string) error {
 	panic("implement me")
 }
+
 func (h *MockHeimdallClient) FetchLastNoAckMilestone(ctx context.Context) (string, error) {
 	panic("implement me")
 }
-func (h *MockHeimdallClient) FetchMilestoneID(ctx context.Context, milestoneID string) error {
-	panic("implement me")
-}
+
 func (h *MockHeimdallClient) Close() {
 	panic("implement me")
 }

@@ -267,6 +267,9 @@ type HeimdallConfig struct {
 	// GRPCAddress is the address of the heimdall grpc server
 	GRPCAddress string `hcl:"grpc-address,optional" toml:"grpc-address,optional"`
 
+	// WSAddress is the address of the heimdall ws subscription server
+	WSAddress string `hcl:"ws-address,optional" toml:"ws-address,optional"`
+
 	// RunHeimdall is used to run heimdall as a child process
 	RunHeimdall bool `hcl:"bor.runheimdall,optional" toml:"bor.runheimdall,optional"`
 
@@ -655,6 +658,7 @@ func DefaultConfig() *Config {
 			Timeout:     5 * time.Second,
 			Without:     false,
 			GRPCAddress: "",
+			WSAddress:   "",
 		},
 		SyncMode:    "full",
 		GcMode:      "full",
@@ -942,6 +946,7 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 	n.HeimdallTimeout = c.Heimdall.Timeout
 	n.WithoutHeimdall = c.Heimdall.Without
 	n.HeimdallgRPCAddress = c.Heimdall.GRPCAddress
+	n.HeimdallWSAddress = c.Heimdall.WSAddress
 	n.RunHeimdall = c.Heimdall.RunHeimdall
 	n.RunHeimdallArgs = c.Heimdall.RunHeimdallArgs
 	n.UseHeimdallApp = c.Heimdall.UseHeimdallApp
