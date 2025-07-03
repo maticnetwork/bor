@@ -1982,18 +1982,15 @@ func (pool *LegacyPool) HasPendingAuth(addr common.Address) bool {
 // PreExecuteTx executes a transaction against the current state without committing changes.
 // This is used for cache warming and validation. Similar to eth_call but optimized for pool usage.
 func (pool *LegacyPool) PreExecuteTx(tx *types.Transaction) {
-	pool.mu.RLock()
-	defer pool.mu.RUnlock()
-
-	// Create execution state copy and disable blockstm concurrency
-	tempState := pool.currentState.Copy()
-	tempState.SetMVHashmap(nil) // Disable blockstm logic completely
-	tempState.ClearReadMap()    // Clear read map to avoid stale references
-	tempState.ClearWriteMap()   // Clear write map to avoid stale references
-
 	// Get current head for block context
 	header := pool.currentHead.Load()
 	if header == nil {
+		return
+	}
+
+	// Create fresh isolated state like eth_call does (no heavy copying)
+	isolatedState, err := pool.chain.StateAt(header.Root)
+	if err != nil {
 		return
 	}
 
@@ -2007,7 +2004,7 @@ func (pool *LegacyPool) PreExecuteTx(tx *types.Transaction) {
 	blockContext := pool.newEVMBlockContext(header)
 
 	// Create EVM with optimized config for pre-execution
-	evm := vm.NewEVM(blockContext, tempState, pool.chainconfig, vm.Config{NoBaseFee: true})
+	evm := vm.NewEVM(blockContext, isolatedState, pool.chainconfig, vm.Config{NoBaseFee: true})
 
 	// Create gas pool with current head's gas limit
 	gasPool := new(core.GasPool).AddGas(header.GasLimit)
