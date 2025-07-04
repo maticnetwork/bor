@@ -1701,18 +1701,19 @@ func (pool *LegacyPool) demoteUnexecutables() {
 			}
 			pendingGauge.Dec(int64(len(gapped)))
 		}
-		// Delete the entire pending entry if it became empty.
 		if list.Empty() {
+			// Delete the entire pending entry if it became empty.
 			delete(pool.pending, addr)
 			if _, ok := pool.queue[addr]; !ok {
 				pool.reserver.Release(addr)
 			}
+		} else {
+			// Update the latest known pending nonce
+			highestPending := list.LastElement()
+			nonces[addr] = highestPending.Nonce() + 1
+			pool.pendingNonces.setAll(nonces)
 		}
 
-		// Update the latest known pending nonce
-		highestPending := list.LastElement()
-		nonces[addr] = highestPending.Nonce() + 1
-		pool.pendingNonces.setAll(nonces)
 	}
 }
 
