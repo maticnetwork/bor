@@ -137,10 +137,7 @@ func (p *Params) columnIndex(lvIndex uint64, logValue *common.Hash) uint32 {
 // corresponding rows up until the first one where the row mapped to the given
 // layer is not full.
 func (p *Params) maxRowLength(layerIndex uint32) uint32 {
-	logLayerDiff := uint(layerIndex) * p.logLayerDiff
-	if logLayerDiff > p.logMapsPerEpoch {
-		logLayerDiff = p.logMapsPerEpoch
-	}
+	logLayerDiff := min(uint(layerIndex)*p.logLayerDiff, p.logMapsPerEpoch)
 	return p.baseRowLength << logLayerDiff
 }
 
@@ -149,10 +146,7 @@ func (p *Params) maxRowLength(layerIndex uint32) uint32 {
 // frequency of re-mapping increases with every new layer until it reaches
 // the frequency where it is different for every mapIndex.
 func (p *Params) maskedMapIndex(mapIndex, layerIndex uint32) uint32 {
-	logLayerDiff := uint(layerIndex) * p.logLayerDiff
-	if logLayerDiff > p.logMapsPerEpoch {
-		logLayerDiff = p.logMapsPerEpoch
-	}
+	logLayerDiff := min(uint(layerIndex)*p.logLayerDiff, p.logMapsPerEpoch)
 	return mapIndex & (uint32(math.MaxUint32) << (p.logMapsPerEpoch - logLayerDiff))
 }
 

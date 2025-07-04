@@ -60,10 +60,7 @@ func getData(data []byte, start uint64, size uint64) []byte {
 		start = length
 	}
 
-	end := start + size
-	if end > length {
-		end = length
-	}
+	end := min(start+size, length)
 
 	return common.RightPadBytes(data[start:end], int(size))
 }
@@ -73,10 +70,7 @@ func getDataAndAdjustedBounds(data []byte, start uint64, size uint64) (codeCopyP
 	if start > length {
 		start = length
 	}
-	end := start + size
-	if end > length {
-		end = length
-	}
+	end := min(start+size, length)
 	return common.RightPadBytes(data[start:end], int(size)), start, end - start
 }
 
