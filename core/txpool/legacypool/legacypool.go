@@ -1177,12 +1177,8 @@ func (pool *LegacyPool) Add(txs []*types.Transaction, sync bool) []error {
 }
 
 // addTxsLocked attempts to queue a batch of transactions if they are valid.
-// The transaction pool lock must be held.
+// The transaction pool lock must not be held.
 func (pool *LegacyPool) addTxs(txs []*types.Transaction, async bool) ([]error, *accountSet) {
-	if !async {
-		pool.mu.Lock()
-		defer pool.mu.Unlock()
-	}
 	dirty := newAccountSet(pool.signer)
 	errs := make([]error, len(txs))
 	for i, tx := range txs {
