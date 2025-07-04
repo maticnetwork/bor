@@ -1407,10 +1407,6 @@ func (c *Config) buildNode() (*node.Config, error) {
 		cfg.P2P.ListenAddr = ""
 		cfg.P2P.NoDial = true
 		cfg.P2P.DiscoveryV5 = false
-
-		// enable JsonRPC HTTP API
-		c.JsonRPC.Http.Enabled = true
-		cfg.HTTPModules = []string{"admin", "debug", "eth", "miner", "net", "personal", "txpool", "web3", "bor"}
 	}
 
 	// enable jsonrpc endpoints
