@@ -1307,6 +1307,26 @@ func (pool *LegacyPool) runReorg(done chan struct{}, reset *txpoolResetRequest, 
 	// because of another transaction (e.g. higher gas price).
 	if reset != nil {
 		pool.demoteUnexecutables()
+	}
+
+	// Bor: TxPool in order to maintain strict consistency acquires a lock for
+	// the entire call. To reduce the time lock is acquired, we do some truncation
+	// operations first, release the lock, and then do reheap because of change
+	// in base fee. This gives `Pending()` waiting for the lock a priority than
+	// internal rearrangement.
+
+	// Ensure pool.queue and pool.pending sizes stay within the configured limits.
+	pool.truncatePending()
+	pool.truncateQueue()
+
+	// Update metrics
+	dropBetweenReorgHistogram.Update(int64(pool.changesSinceReorg))
+	pool.changesSinceReorg = 0 // Reset change counter
+
+	pool.mu.Unlock()
+
+	// Reheap if needed
+	if reset != nil {
 		if reset.newHead != nil {
 			if pool.chainconfig.IsLondon(new(big.Int).Add(reset.newHead.Number, big.NewInt(1))) {
 				pendingBaseFee := eip1559.CalcBaseFee(pool.chainconfig, reset.newHead)
@@ -1315,21 +1335,7 @@ func (pool *LegacyPool) runReorg(done chan struct{}, reset *txpoolResetRequest, 
 				pool.priced.Reheap()
 			}
 		}
-		// Update all accounts to the latest known pending nonce
-		nonces := make(map[common.Address]uint64, len(pool.pending))
-		for addr, list := range pool.pending {
-			highestPending := list.LastElement()
-			nonces[addr] = highestPending.Nonce() + 1
-		}
-		pool.pendingNonces.setAll(nonces)
 	}
-	// Ensure pool.queue and pool.pending sizes stay within the configured limits.
-	pool.truncatePending()
-	pool.truncateQueue()
-
-	dropBetweenReorgHistogram.Update(int64(pool.changesSinceReorg))
-	pool.changesSinceReorg = 0 // Reset change counter
-	pool.mu.Unlock()
 
 	// Notify subsystems for newly added transactions
 	for _, tx := range promoted {
@@ -1643,6 +1649,8 @@ func (pool *LegacyPool) truncateQueue() {
 // is always explicitly triggered by SetBaseFee and it would be unnecessary and wasteful
 // to trigger a re-heap is this function
 func (pool *LegacyPool) demoteUnexecutables() {
+	nonces := make(map[common.Address]uint64, len(pool.pending))
+
 	// Iterate over all accounts and demote any non-executable transactions
 	currentHeader := pool.currentHead.Load()
 	for addr, list := range pool.pending {
@@ -1700,6 +1708,11 @@ func (pool *LegacyPool) demoteUnexecutables() {
 				pool.reserver.Release(addr)
 			}
 		}
+
+		// Update the latest known pending nonce
+		highestPending := list.LastElement()
+		nonces[addr] = highestPending.Nonce() + 1
+		pool.pendingNonces.setAll(nonces)
 	}
 }
 
