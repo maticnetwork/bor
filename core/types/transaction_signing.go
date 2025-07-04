@@ -600,32 +600,32 @@ func deriveChainId(v *big.Int) *big.Int {
 }
 
 // FakeSigner implements the Signer interface and accepts unprotected transactions
-type FakeSigner struct{ londonSigner }
+type FakeSigner struct{ pragueSigner }
 
 var _ Signer = FakeSigner{}
 
 func NewFakeSigner(chainId *big.Int) Signer {
-	signer := NewLondonSigner(chainId)
-	ls, _ := signer.(londonSigner)
-	return FakeSigner{londonSigner: ls}
+	signer := NewPragueSigner(chainId)
+	ps, _ := signer.(pragueSigner)
+	return FakeSigner{pragueSigner: ps}
 }
 
 func (f FakeSigner) Sender(tx *Transaction) (common.Address, error) {
-	return f.londonSigner.Sender(tx)
+	return f.pragueSigner.Sender(tx)
 }
 
 func (f FakeSigner) SignatureValues(tx *Transaction, sig []byte) (r, s, v *big.Int, err error) {
-	return f.londonSigner.SignatureValues(tx, sig)
+	return f.pragueSigner.SignatureValues(tx, sig)
 }
 
 func (f FakeSigner) ChainID() *big.Int {
-	return f.londonSigner.ChainID()
+	return f.pragueSigner.ChainID()
 }
 
 // Hash returns 'signature hash', i.e. the transaction hash that is signed by the
 // private key. This hash does not uniquely identify the transaction.
 func (f FakeSigner) Hash(tx *Transaction) common.Hash {
-	return f.londonSigner.Hash(tx)
+	return f.pragueSigner.Hash(tx)
 }
 
 // Equal returns true if the given signer is the same as the receiver.
