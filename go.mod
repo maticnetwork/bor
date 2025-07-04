@@ -1,9 +1,9 @@
 module github.com/ethereum/go-ethereum
 
-go 1.24.3
+go 1.24.4
 
 require (
-	github.com/0xPolygon/heimdall-v2 v0.1.32
+	github.com/0xPolygon/heimdall-v2 v0.1.34
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.3.2
 	github.com/BurntSushi/toml v1.4.0
 	github.com/JekaMas/go-grpc-net-conn v0.0.0-20220708155319-6aff21f2d13d
@@ -89,7 +89,6 @@ require (
 	go.opentelemetry.io/otel/sdk v1.32.0
 	go.uber.org/automaxprocs v1.6.0
 	go.uber.org/goleak v1.3.0
-	go.uber.org/mock v0.5.0
 	golang.org/x/crypto v0.36.0
 	golang.org/x/exp v0.0.0-20250106191152-7588d65b2ba8
 	golang.org/x/sync v0.12.0
@@ -358,9 +357,9 @@ require (
 replace (
 	cosmossdk.io/client/v2 => github.com/0xPolygon/cosmos-sdk/client/v2 v2.0.0-beta.1
 	github.com/Masterminds/goutils => github.com/Masterminds/goutils v1.1.1
-	github.com/cometbft/cometbft => github.com/0xPolygon/cometbft v0.1.3-beta-polygon
-	github.com/cosmos/cosmos-sdk => github.com/0xPolygon/cosmos-sdk v0.1.15-beta-polygon
-	github.com/ethereum/go-ethereum => github.com/maticnetwork/bor v1.5.5
+	github.com/cometbft/cometbft => github.com/0xPolygon/cometbft v0.2.0-polygon
+	github.com/cosmos/cosmos-sdk => github.com/0xPolygon/cosmos-sdk v0.2.0-polygon
+	github.com/ethereum/go-ethereum => github.com/maticnetwork/bor v1.14.14-0.20250618164709-3dc7d31cdac3
 	github.com/ethereum/go-ethereum/common/math => github.com/maticnetwork/bor/common/math v1.5.5
 	github.com/tendermint/tendermint => github.com/maticnetwork/tendermint v0.33.0
 	github.com/tendermint/tm-db => github.com/tendermint/tm-db v0.2.0

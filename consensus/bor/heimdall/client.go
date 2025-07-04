@@ -84,7 +84,7 @@ const (
 	fetchLastNoAckMilestoneV1 = "/milestone/lastNoAck"
 	fetchNoAckMilestoneV1     = "/milestone/noAck/%s"
 
-	fetchStateSyncEventsFormatV2 = "from_id=%d&to_time=%s&limit=%d"
+	fetchStateSyncEventsFormatV2 = "from_id=%d&to_time=%s&pagination.limit=%d"
 	fetchStateSyncEventsPathV2   = "clerk/time"
 
 	fetchCheckpointV2      = "/checkpoints/%s"

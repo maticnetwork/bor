@@ -278,6 +278,11 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 		eth.blockchain, err = core.NewBlockChain(chainDb, cacheConfig, config.Genesis, &overrides, eth.engine, vmConfig, eth.shouldPreserve, &config.TransactionHistory, checker)
 	}
 
+	// Set blockchain reference for fork detection in whitelist service
+	if err == nil {
+		checker.SetBlockchain(eth.blockchain)
+	}
+
 	// 1.14.8: NewOracle function definition was changed to accept (startPrice *big.Int) param.
 	eth.APIBackend.gpo = gasprice.NewOracle(eth.APIBackend, gpoParams, config.Miner.GasPrice)
 	if err != nil {
@@ -797,8 +802,6 @@ func (s *Ethereum) fetchAndHandleWhitelistCheckpoint(ctx context.Context, ethHan
 }
 
 type heimdallHandler func(ctx context.Context, ethHandler *ethHandler, bor *bor.Bor) error
-
-var lastSeenMilestoneBlockNumber uint64
 
 // fetchAndHandleMilestone handles the milestone mechanism.
 func (s *Ethereum) fetchAndHandleMilestone(ctx context.Context, ethHandler *ethHandler, bor *bor.Bor) error {

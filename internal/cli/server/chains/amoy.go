@@ -52,6 +52,9 @@ var amoyTestnet = &Chain{
 				},
 				ValidatorContract:     "0x0000000000000000000000000000000000001000",
 				StateReceiverContract: "0x0000000000000000000000000000000000001001",
+				OverrideStateSyncRecordsInRange: []params.BlockRangeOverride{
+					{StartBlock: 23184305, EndBlock: 23220127, Value: 0},
+				},
 				BurntContract: map[string]string{
 					"0":     "0x000000000000000000000000000000000000dead",
 					"73100": "0xeCDD77cE6f146cCf5dab707941d318Bd50eeD2C9",
