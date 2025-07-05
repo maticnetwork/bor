@@ -2274,16 +2274,15 @@ func (bc *BlockChain) InsertChainStateless(chain types.Blocks, witnesses []*stat
 		}
 
 		// Process the block using stateless execution
-		err := bc.ProcessBlockWithWitnesses(block, witness)
+		statedb, err := bc.ProcessBlockWithWitnesses(block, witness)
 		if err != nil {
 			return processed, err
 		}
 
-		statedb := state.StateDB{}
 		statedb.SetWitness(witness)
 
 		// Write the block to the chain without committing state
-		if _, err := bc.writeBlockAndSetHead(block, nil, nil, &statedb, false, true); err != nil {
+		if _, err := bc.writeBlockAndSetHead(block, nil, nil, statedb, false, true); err != nil {
 			return processed, err
 		}
 
@@ -2624,7 +2623,7 @@ func (bc *BlockChain) insertChainWithWitnesses(chain types.Blocks, setHead bool,
 		computeWitness := makeWitness
 
 		if witnesses != nil && len(witnesses) > it.processed()-1 && witnesses[it.processed()-1] != nil {
-			memdb := witnesses[it.processed()-1].MakeHashDB()
+			memdb := witnesses[it.processed()-1].MakeHashDB(bc.statedb.TrieDB().Disk())
 			bc.statedb.TrieDB().SetReadBackend(hashdb.New(memdb, triedb.HashDefaults.HashDB))
 			computeWitness = false
 			bc.statedb.DisableSnapInReader()
@@ -2813,7 +2812,7 @@ type blockProcessingResult struct {
 // processBlock executes and validates the given block. If there was no error
 // it writes the block and associated state to database.
 // nolint : unused
-func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, start time.Time, setHead bool) (_ *blockProcessingResult, blockEndErr error) {
+func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, start time.Time, setHead bool, diskdb ethdb.Database) (_ *blockProcessingResult, blockEndErr error) {
 	if bc.logger != nil && bc.logger.OnBlockStart != nil {
 		td := bc.GetTd(block.ParentHash(), block.NumberU64()-1)
 		bc.logger.OnBlockStart(tracing.BlockEvent{
@@ -2863,7 +2862,7 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 		author := NewEVMBlockContext(block.Header(), bc.hc, nil).Coinbase
 
 		// Run the stateless self-cross-validation
-		crossStateRoot, crossReceiptRoot, err := ExecuteStateless(bc.chainConfig, bc.vmConfig, task, witness, &author, bc.engine)
+		crossStateRoot, crossReceiptRoot, _, err := ExecuteStateless(bc.chainConfig, bc.vmConfig, task, witness, &author, bc.engine, diskdb)
 		if err != nil {
 			return nil, fmt.Errorf("stateless self-validation failed: %v", err)
 		}
@@ -3575,9 +3574,9 @@ func (bc *BlockChain) SubscribeChain2HeadEvent(ch chan<- Chain2HeadEvent) event.
 }
 
 // ProcessBlockWithWitnesses processes a block in stateless mode using the provided witnesses.
-func (bc *BlockChain) ProcessBlockWithWitnesses(block *types.Block, witness *stateless.Witness) error {
+func (bc *BlockChain) ProcessBlockWithWitnesses(block *types.Block, witness *stateless.Witness) (*state.StateDB, error) {
 	if witness == nil {
-		return errors.New("nil witness")
+		return nil, errors.New("nil witness")
 	}
 	// Remove critical computed fields from the block to force true recalculation
 	context := block.Header()
@@ -3589,26 +3588,26 @@ func (bc *BlockChain) ProcessBlockWithWitnesses(block *types.Block, witness *sta
 	// Bor: Calculate EvmBlockContext with Root and ReceiptHash to properly get the author
 	author := NewEVMBlockContext(block.Header(), bc.hc, nil).Coinbase
 
-	crossStateRoot, crossReceiptRoot, err := ExecuteStateless(bc.chainConfig, bc.vmConfig, task, witness, &author, bc.engine)
+	crossStateRoot, crossReceiptRoot, statedb, err := ExecuteStateless(bc.chainConfig, bc.vmConfig, task, witness, &author, bc.engine, bc.statedb.TrieDB().Disk())
 
 	// Currently, we don't return the error, because we don't have a way to handle Span update statelessly
 	// TODO: Return the error once we have a way to handle Span update
 	if err != nil {
 		log.Error("Stateless self-validation failed", "block", block.Number(), "hash", block.Hash(), "error", err)
-		return nil
+		return nil, err
 	}
 	if crossStateRoot != block.Root() {
 		log.Error("Stateless self-validation root mismatch", "block", block.Number(), "hash", block.Hash(), "cross", crossStateRoot, "local", block.Root())
-		return nil
+		return nil, err
 	}
 	if crossReceiptRoot != block.ReceiptHash() {
 		log.Error("Stateless self-validation receipt root mismatch", "block", block.Number(), "hash", block.Hash(), "cross", crossReceiptRoot, "local", block.ReceiptHash())
-		return nil
+		return nil, err
 	}
 	if !(err != nil || crossStateRoot != block.Root() || crossReceiptRoot != block.ReceiptHash()) {
 		log.Info("Successfully self validated the block", "block", block.Number(), "hash", block.Hash())
 	}
-	return nil
+	return statedb, nil
 }
 
 // startHeaderVerificationLoop starts a background goroutine that periodically

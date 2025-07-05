@@ -26,6 +26,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/trie"
@@ -41,7 +42,7 @@ import (
 //   - It cannot be placed outside of core, because it needs to construct a dud headerchain
 //
 // TODO(karalabe): Would be nice to resolve both issues above somehow and move it.
-func ExecuteStateless(config *params.ChainConfig, vmconfig vm.Config, block *types.Block, witness *stateless.Witness, author *common.Address, consensus consensus.Engine) (common.Hash, common.Hash, error) {
+func ExecuteStateless(config *params.ChainConfig, vmconfig vm.Config, block *types.Block, witness *stateless.Witness, author *common.Address, consensus consensus.Engine, diskdb ethdb.Database) (common.Hash, common.Hash, *state.StateDB, error) {
 	// Sanity check if the supplied block accidentally contains a set root or
 	// receipt hash. If so, be very loud, but still continue.
 	if block.Root() != (common.Hash{}) {
@@ -51,10 +52,10 @@ func ExecuteStateless(config *params.ChainConfig, vmconfig vm.Config, block *typ
 		log.Error("stateless runner received receipt root it's expected to calculate (faulty consensus client)", "block", block.Number())
 	}
 	// Create and populate the state database to serve as the stateless backend
-	memdb := witness.MakeHashDB()
+	memdb := witness.MakeHashDB(diskdb)
 	db, err := state.New(witness.Root(), state.NewDatabase(triedb.NewDatabase(memdb, triedb.HashDefaults), nil))
 	if err != nil {
-		return common.Hash{}, common.Hash{}, err
+		return common.Hash{}, common.Hash{}, nil, err
 	}
 	// Create a blockchain that is idle, but can be used to access headers through
 	headerChain := &HeaderChain{
@@ -68,14 +69,14 @@ func ExecuteStateless(config *params.ChainConfig, vmconfig vm.Config, block *typ
 
 	res, err := processor.Process(block, db, vmconfig, author, context.Background())
 	if err != nil {
-		return common.Hash{}, common.Hash{}, err
+		return common.Hash{}, common.Hash{}, nil, err
 	}
 
 	if err = validator.ValidateState(block, db, res, true); err != nil {
-		return common.Hash{}, common.Hash{}, err
+		return common.Hash{}, common.Hash{}, nil, err
 	}
 	// Almost everything validated, but receipt and state root needs to be returned
 	receiptRoot := types.DeriveSha(res.Receipts, trie.NewStackTrie(nil))
 	stateRoot := db.IntermediateRoot(config.IsEIP158(block.Number()))
-	return stateRoot, receiptRoot, nil
+	return stateRoot, receiptRoot, db, nil
 }

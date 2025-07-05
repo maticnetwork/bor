@@ -489,6 +489,7 @@ type Syncer struct {
 	trienodeHealThrottle  float64       // Divisor for throttling the amount of trienode heal data requested
 	trienodeHealThrottled time.Time     // Timestamp the last time the throttle was updated
 
+	bytecodeOnlyMode   bool               // If true, only sync bytecodes, skip accounts and storage
 	trienodeHealSynced uint64             // Number of state trie nodes downloaded
 	trienodeHealBytes  common.StorageSize // Number of state trie bytes persisted to disk
 	trienodeHealDups   uint64             // Number of state trie nodes already processed
@@ -542,6 +543,13 @@ func NewSyncer(db ethdb.KeyValueStore, scheme string) *Syncer {
 
 		extProgress: new(SyncProgress),
 	}
+}
+
+// SetBytecodeOnlyMode configures the syncer to only download bytecodes, skipping accounts and storage
+func (s *Syncer) SetBytecodeOnlyMode(enabled bool) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	s.bytecodeOnlyMode = enabled
 }
 
 // Register injects a new data source into the syncer's peerset.
@@ -629,7 +637,16 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 	// Retrieve the previous sync status from LevelDB and abort if already synced
 	s.loadSyncStatus()
 
-	if len(s.tasks) == 0 && s.healer.scheduler.Pending() == 0 {
+	// In bytecode-only mode, we always need to do a fresh scan for new contracts
+	if s.bytecodeOnlyMode {
+		// Clear any existing tasks and force a fresh scan
+		s.lock.Lock()
+		s.tasks = nil
+		s.snapped = false
+		s.lock.Unlock()
+		// Create fresh tasks for scanning
+		s.loadSyncStatus()
+	} else if len(s.tasks) == 0 && s.healer.scheduler.Pending() == 0 {
 		log.Debug("Snapshot sync already completed")
 		return nil
 	}
@@ -699,8 +716,21 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 		s.cleanStorageTasks()
 		s.cleanAccountTasks()
 
-		if len(s.tasks) == 0 && s.healer.scheduler.Pending() == 0 {
-			return nil
+		// Check for sync completion
+		if len(s.tasks) == 0 && s.snapped {
+			// In bytecode-only mode, only check if bytecode tasks are complete
+			if s.bytecodeOnlyMode {
+				if len(s.healer.codeTasks) == 0 {
+					log.Info("Bytecode-only sync completed", "codeTasks", len(s.healer.codeTasks))
+					return nil
+				}
+				log.Debug("Bytecode-only sync continuing", "codeTasks", len(s.healer.codeTasks))
+			} else {
+				// Normal mode: check all healing tasks
+				if s.healer.scheduler.Pending() == 0 {
+					return nil
+				}
+			}
 		}
 		// Assign all the data retrieval tasks to any free peers
 		s.assignAccountTasks(accountResps, accountReqFails, cancel)
@@ -770,7 +800,8 @@ func (s *Syncer) Sync(root common.Hash, cancel chan struct{}) error {
 func (s *Syncer) loadSyncStatus() {
 	var progress SyncProgress
 
-	if status := rawdb.ReadSnapshotSyncStatus(s.db); status != nil {
+	// In bytecode-only mode, always start fresh to scan for new contracts
+	if status := rawdb.ReadSnapshotSyncStatus(s.db); status != nil && !s.bytecodeOnlyMode {
 		if err := json.Unmarshal(status, &progress); err != nil {
 			log.Error("Failed to decode snap sync status", "err", err)
 		} else {
@@ -886,7 +917,11 @@ func (s *Syncer) loadSyncStatus() {
 			genTrie:        tr,
 		})
 
-		log.Debug("Created account sync task", "from", next, "last", last)
+		if s.bytecodeOnlyMode {
+			log.Info("Created account sync task for bytecode-only mode", "from", next, "last", last)
+		} else {
+			log.Debug("Created account sync task", "from", next, "last", last)
+		}
 		next = common.BigToHash(new(big.Int).Add(last.Big(), common.Big1))
 	}
 }
@@ -1256,6 +1291,11 @@ func (s *Syncer) assignStorageTasks(success chan *storageResponse, fail chan *st
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
+	// Skip storage task assignment entirely in bytecode-only mode
+	if s.bytecodeOnlyMode {
+		return
+	}
+
 	// Sort the peers by download capacity to use faster ones if many available
 	idlers := &capacitySort{
 		ids:  make([]string, 0, len(s.storageIdlers)),
@@ -1430,6 +1470,11 @@ func (s *Syncer) assignStorageTasks(success chan *storageResponse, fail chan *st
 func (s *Syncer) assignTrienodeHealTasks(success chan *trienodeHealResponse, fail chan *trienodeHealRequest, cancel chan struct{}) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
+
+	// Skip trie node healing entirely in bytecode-only mode
+	if s.bytecodeOnlyMode {
+		return
+	}
 
 	// Sort the peers by download capacity to use faster ones if many available
 	idlers := &capacitySort{
@@ -2027,7 +2072,8 @@ func (s *Syncer) processAccountResponse(res *accountResponse) {
 			}
 		}
 		// Check if the account is a contract with an unknown storage trie
-		if account.Root != types.EmptyRootHash {
+		if account.Root != types.EmptyRootHash && !s.bytecodeOnlyMode {
+			// Skip storage syncing entirely if in bytecode-only mode
 			// If the storage was already retrieved in the last cycle, there's no need
 			// to resync it again, regardless of whether the storage root is consistent
 			// or not.
@@ -2556,40 +2602,43 @@ func (s *Syncer) forwardAccountTask(task *accountTask) {
 	// snapshot generation.
 	oldAccountBytes := s.accountBytes
 
-	batch := ethdb.HookedBatch{
-		Batch: s.db.NewBatch(),
-		OnPut: func(key []byte, value []byte) {
-			s.accountBytes += common.StorageSize(len(key) + len(value))
-		},
-	}
-
-	for i, hash := range res.hashes {
-		if task.needCode[i] || task.needState[i] {
-			break
+	// Skip account persistence entirely in bytecode-only mode
+	if !s.bytecodeOnlyMode {
+		batch := ethdb.HookedBatch{
+			Batch: s.db.NewBatch(),
+			OnPut: func(key []byte, value []byte) {
+				s.accountBytes += common.StorageSize(len(key) + len(value))
+			},
 		}
-		slim := types.SlimAccountRLP(*res.accounts[i])
-		rawdb.WriteAccountSnapshot(batch, hash, slim)
 
-		if !task.needHeal[i] {
-			// If the storage task is complete, drop it into the stack trie
-			// to generate account trie nodes for it
-			full, err := types.FullAccountRLP(slim) // TODO(karalabe): Slim parsing can be omitted
-			if err != nil {
-				panic(err) // Really shouldn't ever happen
+		for i, hash := range res.hashes {
+			if task.needCode[i] || task.needState[i] {
+				break
 			}
-			task.genTrie.update(hash[:], full)
-		} else {
-			// If the storage task is incomplete, explicitly delete the corresponding
-			// account item from the account trie to ensure that all nodes along the
-			// path to the incomplete storage trie are cleaned up.
-			if err := task.genTrie.delete(hash[:]); err != nil {
-				panic(err) // Really shouldn't ever happen
+			slim := types.SlimAccountRLP(*res.accounts[i])
+			rawdb.WriteAccountSnapshot(batch, hash, slim)
+
+			if !task.needHeal[i] {
+				// If the storage task is complete, drop it into the stack trie
+				// to generate account trie nodes for it
+				full, err := types.FullAccountRLP(slim) // TODO(karalabe): Slim parsing can be omitted
+				if err != nil {
+					panic(err) // Really shouldn't ever happen
+				}
+				task.genTrie.update(hash[:], full)
+			} else {
+				// If the storage task is incomplete, explicitly delete the corresponding
+				// account item from the account trie to ensure that all nodes along the
+				// path to the incomplete storage trie are cleaned up.
+				if err := task.genTrie.delete(hash[:]); err != nil {
+					panic(err) // Really shouldn't ever happen
+				}
 			}
 		}
-	}
-	// Flush anything written just now and update the stats
-	if err := batch.Write(); err != nil {
-		log.Crit("Failed to persist accounts", "err", err)
+		// Flush anything written just now and update the stats
+		if err := batch.Write(); err != nil {
+			log.Crit("Failed to persist accounts", "err", err)
+		}
 	}
 
 	s.accountSynced += uint64(len(res.accounts))
@@ -2597,8 +2646,15 @@ func (s *Syncer) forwardAccountTask(task *accountTask) {
 	// Task filling persisted, push it the chunk marker forward to the first
 	// account still missing data.
 	for i, hash := range res.hashes {
-		if task.needCode[i] || task.needState[i] {
-			return
+		// In bytecode-only mode, only wait for bytecode, ignore storage
+		if s.bytecodeOnlyMode {
+			if task.needCode[i] {
+				return
+			}
+		} else {
+			if task.needCode[i] || task.needState[i] {
+				return
+			}
 		}
 
 		task.Next = incHash(hash)
