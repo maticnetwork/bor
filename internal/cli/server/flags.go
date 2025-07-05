@@ -116,6 +116,18 @@ func (c *Command) Flags(config *Config) *flagset.Flagset {
 		Value:   &c.cliConfig.Snapshot,
 		Default: c.cliConfig.Snapshot,
 	})
+	f.Uint64Flag(&flagset.Uint64Flag{
+		Name:    "history.log",
+		Usage:   `Number of recent blocks to maintain log search index for (default = about one year, 0 = entire chain)`,
+		Value:   &c.cliConfig.LogHistory,
+		Default: c.cliConfig.LogHistory,
+	})
+	f.BoolFlag(&flagset.BoolFlag{
+		Name:    "history.logs.disable",
+		Usage:   `Do not maintain log search index`,
+		Value:   &c.cliConfig.LogNoHistory,
+		Default: c.cliConfig.LogNoHistory,
+	})
 	f.BoolFlag(&flagset.BoolFlag{
 		Name:    "bor.logs",
 		Usage:   `Enables bor log retrieval`,
