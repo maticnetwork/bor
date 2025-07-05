@@ -143,6 +143,24 @@ type Config struct {
 
 	// Pprof has the pprof related settings
 	Pprof *PprofConfig `hcl:"pprof,block" toml:"pprof,block"`
+
+	// HistoryConfig has historical data retention related settings
+	History *HistoryConfig `hcl:"history,block" toml:"history,block"`
+}
+
+type HistoryConfig struct {
+	// TransactionHistory denotes the maximum number of blocks from head whose tx indices are reserved.
+	TransactionHistory uint64 `hcl:"transactions,block" toml:"transactions,block"`
+
+	// LogHistory denotes the maximum number of blocks from head where a log search index is maintained.
+	LogHistory uint64 `hcl:"logs,block" toml:"logs,block"`
+
+	// LogNoHistory denotes whether log search index is maintained or not.
+	LogNoHistory bool `hcl:"logs.disable,block" toml:"logs.disable,block"`
+
+	// StateHistory denotes number of recent blocks to retain state history for (only relevant
+	// in state.scheme=path)
+	StateHistory uint64 `hcl:"state,block" toml:"state,block"`
 }
 
 type LoggingConfig struct {
@@ -811,6 +829,12 @@ func DefaultConfig() *Config {
 			SpeculativeProcesses: 8,
 			Enforce:              false,
 		},
+		History: &HistoryConfig{
+			TransactionHistory: ethconfig.Defaults.TransactionHistory,
+			LogHistory:         ethconfig.Defaults.LogHistory,
+			LogNoHistory:       ethconfig.Defaults.LogNoHistory,
+			StateHistory:       params.FullImmutabilityThreshold,
+		},
 	}
 }
 
@@ -1136,10 +1160,20 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 		n.TrieDirtyCache = calcPerc(c.Cache.PercGc)
 		n.NoPrefetch = c.Cache.NoPrefetch
 		n.Preimages = c.Cache.Preimages
+		// Note that even the values set by `history.transactions` will be written in the old flag until it's removed.
 		n.TransactionHistory = c.Cache.TxLookupLimit
 		n.TrieTimeout = c.Cache.TrieTimeout
 		n.TriesInMemory = c.Cache.TriesInMemory
 		n.FilterLogCacheSize = c.Cache.FilterLogCacheSize
+	}
+
+	// History
+	{
+		// TODO: uncomment this when txlookuplimit is completely removed
+		// n.TransactionHistory = c.History.TransactionHistory
+		n.LogHistory = c.History.LogHistory
+		n.LogNoHistory = c.History.LogNoHistory
+		n.StateHistory = c.History.StateHistory
 	}
 
 	// LevelDB

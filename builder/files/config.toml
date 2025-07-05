@@ -163,7 +163,13 @@ syncmode = "full"
   # timeout = "1h0m0s"
   # fdlimit = 0
 
-[accounts]
+# [history]
+#   transactions = 2350000
+#   logs = 2350000
+#   "logs.disable" = false
+#   state = 90000
+
+# [accounts]
   # allow-insecure-unlock = true
   # password = "/var/lib/bor/password.txt"
   # unlock = ["VALIDATOR ADDRESS"]
