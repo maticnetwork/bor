@@ -220,7 +220,6 @@ func ReadBytecodeSyncLastBlock(db ethdb.KeyValueReader) uint64 {
 
 // WriteBytecodeSyncLastBlock stores the last block number up to which bytecodes were synced.
 func WriteBytecodeSyncLastBlock(db ethdb.KeyValueWriter, block uint64) {
-	log.Info("Writing bytecode sync last block", "block", block)
 	if err := db.Put(bytecodeSyncLastBlockKey, encodeBlockNumber(block)); err != nil {
 		log.Crit("Failed to store bytecode sync last block", "err", err)
 	}

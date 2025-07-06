@@ -508,11 +508,19 @@ func (f *BlockFetcher) loop() {
 			}
 			// Otherwise if fresh and still unknown, try and import
 			// Also check if witness manager is handling it
-			if (number+maxUncleDist < height) || (f.light && f.getHeader(hash) != nil) || (!f.light && f.getBlock(hash) != nil) || f.wm.isPending(hash) {
-				// If known or pending witness, just forget about it in the main queue
+			if (number+maxUncleDist < height) || (f.light && f.getHeader(hash) != nil) || (!f.light && f.getBlock(hash) != nil) {
+				// If known, forget about it
 				f.forgetBlock(hash)
-				// We don't call wm.forget here because the block might still be needed by wm
 				continue
+			}
+			if f.wm.isPending(hash) {
+				// If witness manager is handling it, re-queue for later
+				// The witness manager will enqueue it when ready
+				f.queue.Push(op, -int64(number))
+				if f.queueChangeHook != nil {
+					f.queueChangeHook(hash, true)
+				}
+				break // Exit the import loop to let witness manager work
 			}
 
 			if f.light {

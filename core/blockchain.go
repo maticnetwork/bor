@@ -997,7 +997,11 @@ func (bc *BlockChain) rewindHashHead(head *types.Header, root common.Hash) (*typ
 			logged = time.Now()
 			logger = log.Info
 		}
-		logger("Block state missing, rewinding further", "number", head.Number, "hash", head.Hash(), "elapsed", common.PrettyDuration(time.Since(start)))
+		if bc.cacheConfig.TriesInMemory == 0 {
+			logger("Stateless mode: skipping state check", "number", head.Number, "hash", head.Hash(), "elapsed", common.PrettyDuration(time.Since(start)))
+		} else {
+			logger("Block state missing, rewinding further", "number", head.Number, "hash", head.Hash(), "elapsed", common.PrettyDuration(time.Since(start)))
+		}
 
 		// If a root threshold was requested but not yet crossed, check
 		if !beyondRoot && head.Root == root {
@@ -1011,6 +1015,11 @@ func (bc *BlockChain) rewindHashHead(head *types.Header, root common.Hash) (*typ
 		}
 		// If the associated state is not reachable, continue searching
 		// backwards until an available state is found.
+		// Skip state checking for stateless nodes (TriesInMemory == 0)
+		if bc.cacheConfig.TriesInMemory == 0 {
+			// For stateless nodes, we can use any block as head without state checking
+			break
+		}
 		if !bc.HasState(head.Root) {
 			// If the chain is gapped in the middle, return the genesis
 			// block as the new chain head.
@@ -1037,6 +1046,13 @@ func (bc *BlockChain) rewindHashHead(head *types.Header, root common.Hash) (*typ
 		log.Debug("Skipping block with threshold state", "number", head.Number, "hash", head.Hash(), "root", head.Root)
 		head = bc.GetHeader(head.ParentHash, head.Number.Uint64()-1) // Keep rewinding
 	}
+	// If we exited the loop (e.g., for stateless nodes), return the current head
+	if bc.cacheConfig.TriesInMemory == 0 {
+		log.Info("Rewound to block (stateless mode)", "number", head.Number, "hash", head.Hash())
+	} else {
+		log.Info("Rewound to target block", "number", head.Number, "hash", head.Hash())
+	}
+	return head, rootNumber
 }
 
 // rewindPathHead implements the logic of rewindHead in the context of path scheme.
@@ -1051,7 +1067,8 @@ func (bc *BlockChain) rewindPathHead(head *types.Header, root common.Hash) (*typ
 
 		// noState represents if the target state requested for search
 		// is unavailable and impossible to be recovered.
-		noState = !bc.HasState(root) && !bc.stateRecoverable(root)
+		// For stateless nodes, we don't check state availability
+		noState = bc.cacheConfig.TriesInMemory > 0 && !bc.HasState(root) && !bc.stateRecoverable(root)
 
 		start  = time.Now() // Timestamp the rewinding is restarted
 		logged = time.Now() // Timestamp last progress log was printed
@@ -1063,7 +1080,11 @@ func (bc *BlockChain) rewindPathHead(head *types.Header, root common.Hash) (*typ
 			logged = time.Now()
 			logger = log.Info
 		}
-		logger("Block state missing, rewinding further", "number", head.Number, "hash", head.Hash(), "elapsed", common.PrettyDuration(time.Since(start)))
+		if bc.cacheConfig.TriesInMemory == 0 {
+			logger("Stateless mode: skipping state check", "number", head.Number, "hash", head.Hash(), "elapsed", common.PrettyDuration(time.Since(start)))
+		} else {
+			logger("Block state missing, rewinding further", "number", head.Number, "hash", head.Hash(), "elapsed", common.PrettyDuration(time.Since(start)))
+		}
 
 		// If a root threshold was requested but not yet crossed, check
 		if !beyondRoot && head.Root == root {
@@ -1072,13 +1093,20 @@ func (bc *BlockChain) rewindPathHead(head *types.Header, root common.Hash) (*typ
 		// If the root threshold hasn't been crossed but the available
 		// state is reached, quickly determine if the target state is
 		// possible to be reached or not.
-		if !beyondRoot && noState && bc.HasState(head.Root) {
+		// Skip this check for stateless nodes
+		if bc.cacheConfig.TriesInMemory > 0 && !beyondRoot && noState && bc.HasState(head.Root) {
 			beyondRoot = true
 			log.Info("Disable the search for unattainable state", "root", root)
 		}
 		// Check if the associated state is available or recoverable if
 		// the requested root has already been crossed.
-		if beyondRoot && (bc.HasState(head.Root) || bc.stateRecoverable(head.Root)) {
+		// Skip state checking for stateless nodes (TriesInMemory == 0)
+		if bc.cacheConfig.TriesInMemory == 0 {
+			// For stateless nodes, we can use any block as head without state checking
+			if beyondRoot {
+				break
+			}
+		} else if beyondRoot && (bc.HasState(head.Root) || bc.stateRecoverable(head.Root)) {
 			break
 		}
 		// If pivot block is reached, return the genesis block as the
@@ -1105,12 +1133,17 @@ func (bc *BlockChain) rewindPathHead(head *types.Header, root common.Hash) (*typ
 		}
 	}
 	// Recover if the target state if it's not available yet.
-	if !bc.HasState(head.Root) {
+	// Skip state recovery for stateless nodes (TriesInMemory == 0)
+	if bc.cacheConfig.TriesInMemory > 0 && !bc.HasState(head.Root) {
 		if err := bc.triedb.Recover(head.Root); err != nil {
 			log.Crit("Failed to rollback state", "err", err)
 		}
 	}
-	log.Info("Rewound to block with state", "number", head.Number, "hash", head.Hash())
+	if bc.cacheConfig.TriesInMemory == 0 {
+		log.Info("Rewound to block (stateless mode)", "number", head.Number, "hash", head.Hash())
+	} else {
+		log.Info("Rewound to block with state", "number", head.Number, "hash", head.Hash())
+	}
 	return head, rootNumber
 }
 
@@ -1178,7 +1211,8 @@ func (bc *BlockChain) setHeadBeyondRoot(head uint64, time uint64, root common.Ha
 			// the pivot point. In this scenario, there is no possible recovery
 			// approach except for rerunning a snap sync. Do nothing here until the
 			// state syncer picks it up.
-			if !bc.HasState(newHeadBlock.Root) {
+			// Skip state checking for stateless nodes (TriesInMemory == 0)
+			if bc.cacheConfig.TriesInMemory > 0 && !bc.HasState(newHeadBlock.Root) {
 				if newHeadBlock.Number.Uint64() != 0 {
 					log.Crit("Chain is stateless at a non-genesis block")
 				}
@@ -2261,8 +2295,54 @@ func (bc *BlockChain) InsertChainStateless(chain types.Blocks, witnesses []*stat
 
 		// Wait for the block's verification to complete
 		if err := <-results; err != nil {
-			// ignoring Unknown Ancestor error for fast forward scenario
-			if !(i == 0 && err == consensus.ErrUnknownAncestor) {
+			if err == consensus.ErrUnknownAncestor {
+				// For stateless nodes, check if this is a reorg situation
+				parentNum := block.NumberU64() - 1
+				existingBlock := bc.GetBlockByNumber(parentNum)
+
+				if existingBlock != nil && existingBlock.Hash() != block.ParentHash() {
+					// We have a different block at the parent's height - this could be a reorg
+					log.Info("Conflicting block detected in stateless sync",
+						"blockNum", block.NumberU64(),
+						"parentNum", parentNum,
+						"existingParent", existingBlock.Hash(),
+						"expectedParent", block.ParentHash())
+
+					// Verify the existing parent block to see if it's valid
+					// This helps avoid unnecessary rewinds if the existing block is correct
+					existingHeader := existingBlock.Header()
+					verifyErr := bc.engine.VerifyHeader(bc, existingHeader)
+
+					// Check if the existing parent is valid
+					if verifyErr == nil {
+						// Existing parent is valid, so the new block is on a wrong fork
+						log.Info("Existing parent block is valid, rejecting new fork",
+							"existingParent", existingBlock.Hash(),
+							"rejectedParent", block.ParentHash())
+						return processed, fmt.Errorf("rejecting block %d: existing parent %s is valid",
+							block.NumberU64(), existingBlock.Hash())
+					}
+
+					// Existing parent is invalid, we need to rewind and accept the new chain
+					log.Info("Existing parent block is invalid, accepting reorg",
+						"existingParent", existingBlock.Hash(),
+						"newParent", block.ParentHash(),
+						"verifyErr", verifyErr)
+
+					// For stateless nodes, we need to rewind and let the sync continue
+					// This will cause the correct parent block to be fetched and imported
+					if err := bc.SetHead(parentNum - 1); err != nil {
+						return processed, fmt.Errorf("failed to rewind for reorg: %w", err)
+					}
+
+					// Return to let the downloader retry with the correct chain
+					return processed, fmt.Errorf("reorg detected, rewound to block %d", parentNum-1)
+				} else if i != 0 {
+					// Not the first block and no reorg detected
+					return processed, err
+				}
+				// First block in batch or successful reorg handling - continue
+			} else {
 				return processed, err
 			}
 		}

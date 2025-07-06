@@ -2006,7 +2006,7 @@ func TestConcurrentWitnessFetchFailure(t *testing.T) {
 	)
 
 	// Start the manager
-	go manager.loop()
+	manager.start()
 	defer manager.stop()
 
 	hash := common.HexToHash("0x123")
