@@ -1892,7 +1892,6 @@ func (pool *LegacyPool) demoteUnexecutables() {
 			nonces[addr] = highestPending.Nonce() + 1
 			pool.pendingNonces.setAll(nonces)
 		}
-
 	}
 }
 
