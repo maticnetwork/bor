@@ -2,13 +2,10 @@ package bor
 
 import (
 	"context"
-	"encoding/binary"
-	"encoding/json"
 	"fmt"
 
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
 	"github.com/ethereum/go-ethereum/consensus/bor/valset"
-	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -88,62 +85,6 @@ func (s *SpanStore) spanById(ctx context.Context, spanId uint64) (*borTypes.Span
 	}
 
 	return currentSpan, nil
-}
-
-func (s *SpanStore) setStartBlockHeimdallSpanID(startBlock, spanID uint64) error {
-	spanIDBytes := make([]byte, 8)
-	binary.BigEndian.PutUint64(spanIDBytes, spanID)
-
-	startBlockBytes := make([]byte, 8)
-	binary.BigEndian.PutUint64(startBlockBytes, startBlock)
-
-	if err := s.db.Put(append(rawdb.SpanStartBlockToHeimdallSpanIDKey, startBlockBytes...), spanIDBytes); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (s *SpanStore) getLatestHeimdallSpanV1() *borTypes.Span {
-	storedSpanBytes, err := s.db.Get(rawdb.LastHeimdallV1SpanKey)
-	if err != nil {
-		log.Error("Error while fetching heimdallv1 span from db", "error", err)
-		return nil
-	}
-
-	if len(storedSpanBytes) == 0 {
-		log.Info("No heimdallv1 span found in db")
-		return nil
-	}
-
-	var storedSpan borTypes.Span
-	if err := json.Unmarshal(storedSpanBytes, &storedSpan); err != nil {
-		log.Error("Error while unmarshalling heimdallv1 span", "error", err)
-		return nil
-	}
-
-	return &storedSpan
-}
-
-func (s *SpanStore) getLatestHeimdallSpanV2() *borTypes.Span {
-	storedSpanBytes, err := s.db.Get(rawdb.LastHeimdallV2SpanKey)
-	if err != nil {
-		log.Error("Error while fetching heimdallv2 span from db", "error", err)
-		return nil
-	}
-
-	if len(storedSpanBytes) == 0 {
-		log.Info("No heimdallv2 span found in db")
-		return nil
-	}
-
-	var storedSpan borTypes.Span
-	if err := json.Unmarshal(storedSpanBytes, &storedSpan); err != nil {
-		log.Error("Error while unmarshalling heimdallv2 span", "error", err)
-		return nil
-	}
-
-	return &storedSpan
 }
 
 // spanByBlockNumber returns a span given a block number. It fetches span from heimdall if not found in cache. It
