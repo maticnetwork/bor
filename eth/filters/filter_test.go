@@ -118,7 +118,7 @@ func benchmarkFilters(b *testing.B, history uint64, noHistory bool) {
 
 	for i := 0; i < b.N; i++ {
 		filter.begin = 0
-		logs, _ := filter.Logs(context.Background())
+		logs, _ := filter.Logs(b.Context())
 		if len(logs) != 4 {
 			b.Fatal("expected 4 logs, got", len(logs))
 		}
@@ -389,7 +389,7 @@ func testFilters(t *testing.T, history uint64, noHistory bool) {
 			err: errPendingLogsUnsupported.Error(),
 		},
 	} {
-		logs, err := tc.f.Logs(context.Background())
+		logs, err := tc.f.Logs(t.Context())
 		if err == nil && tc.err != "" {
 			t.Fatalf("test %d, expected error %q, got nil", i, tc.err)
 		} else if err != nil && err.Error() != tc.err {
@@ -409,7 +409,7 @@ func testFilters(t *testing.T, history uint64, noHistory bool) {
 
 	t.Run("timeout", func(t *testing.T) {
 		f := sys.NewRangeFilter(0, rpc.LatestBlockNumber.Int64(), nil, nil)
-		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Hour))
+		ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Hour))
 		defer cancel()
 		_, err := f.Logs(ctx)
 		if err == nil {
@@ -470,7 +470,7 @@ func TestRangeLogs(t *testing.T) {
 		filter = sys.NewRangeFilter(begin, end, addresses, nil)
 		filter.rangeLogsTestHook = make(chan rangeLogsTestEvent)
 		go func(filter *Filter) {
-			filter.Logs(context.Background())
+			filter.Logs(t.Context())
 			// ensure that filter will not be blocked if we exit early
 			for range filter.rangeLogsTestHook {
 			}

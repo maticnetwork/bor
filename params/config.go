@@ -390,11 +390,13 @@ var (
 		LondonBlock:         big.NewInt(23850000),
 		ShanghaiBlock:       big.NewInt(50523000),
 		CancunBlock:         big.NewInt(54876000),
+		PragueBlock:         big.NewInt(73440256),
 		Bor: &BorConfig{
 			JaipurBlock:    big.NewInt(23850000),
 			DelhiBlock:     big.NewInt(38189056),
 			IndoreBlock:    big.NewInt(44934656),
 			AhmedabadBlock: big.NewInt(62278656),
+			BhilaiBlock:    big.NewInt(73440256),
 			StateSyncConfirmationDelay: map[string]uint64{
 				"44934656": 128,
 			},
@@ -806,23 +808,30 @@ func (c CliqueConfig) String() string {
 	return fmt.Sprintf("clique(period: %d, epoch: %d)", c.Period, c.Epoch)
 }
 
+type BlockRangeOverride struct {
+	StartBlock uint64 `json:"startBlock"`
+	EndBlock   uint64 `json:"endBlock"`
+	Value      int    `json:"value"`
+}
+
 // BorConfig is the consensus engine configs for Matic bor based sealing.
 type BorConfig struct {
-	Period                     map[string]uint64      `json:"period"`                   // Number of seconds between blocks to enforce
-	ProducerDelay              map[string]uint64      `json:"producerDelay"`            // Number of seconds delay between two producer interval
-	Sprint                     map[string]uint64      `json:"sprint"`                   // Epoch length to proposer
-	BackupMultiplier           map[string]uint64      `json:"backupMultiplier"`         // Backup multiplier to determine the wiggle time
-	ValidatorContract          string                 `json:"validatorContract"`        // Validator set contract
-	StateReceiverContract      string                 `json:"stateReceiverContract"`    // State receiver contract
-	OverrideStateSyncRecords   map[string]int         `json:"overrideStateSyncRecords"` // override state records count
-	BlockAlloc                 map[string]interface{} `json:"blockAlloc"`
-	BurntContract              map[string]string      `json:"burntContract"`              // governance contract where the token will be sent to and burnt in london fork
-	JaipurBlock                *big.Int               `json:"jaipurBlock"`                // Jaipur switch block (nil = no fork, 0 = already on jaipur)
-	DelhiBlock                 *big.Int               `json:"delhiBlock"`                 // Delhi switch block (nil = no fork, 0 = already on delhi)
-	IndoreBlock                *big.Int               `json:"indoreBlock"`                // Indore switch block (nil = no fork, 0 = already on indore)
-	StateSyncConfirmationDelay map[string]uint64      `json:"stateSyncConfirmationDelay"` // StateSync Confirmation Delay, in seconds, to calculate `to`
-	AhmedabadBlock             *big.Int               `json:"ahmedabadBlock"`             // Ahmedabad switch block (nil = no fork, 0 = already on ahmedabad)
-	BhilaiBlock                *big.Int               `json:"bhilaiBlock"`                // Bhilai switch block (nil = no fork, 0 = already on bhilai)
+	Period                          map[string]uint64      `json:"period"`                          // Number of seconds between blocks to enforce
+	ProducerDelay                   map[string]uint64      `json:"producerDelay"`                   // Number of seconds delay between two producer interval
+	Sprint                          map[string]uint64      `json:"sprint"`                          // Epoch length to proposer
+	BackupMultiplier                map[string]uint64      `json:"backupMultiplier"`                // Backup multiplier to determine the wiggle time
+	ValidatorContract               string                 `json:"validatorContract"`               // Validator set contract
+	StateReceiverContract           string                 `json:"stateReceiverContract"`           // State receiver contract
+	OverrideStateSyncRecords        map[string]int         `json:"overrideStateSyncRecords"`        // override state records count
+	OverrideStateSyncRecordsInRange []BlockRangeOverride   `json:"overrideStateSyncRecordsInRange"` // override state records count in a given block range
+	BlockAlloc                      map[string]interface{} `json:"blockAlloc"`
+	BurntContract                   map[string]string      `json:"burntContract"`              // governance contract where the token will be sent to and burnt in london fork
+	JaipurBlock                     *big.Int               `json:"jaipurBlock"`                // Jaipur switch block (nil = no fork, 0 = already on jaipur)
+	DelhiBlock                      *big.Int               `json:"delhiBlock"`                 // Delhi switch block (nil = no fork, 0 = already on delhi)
+	IndoreBlock                     *big.Int               `json:"indoreBlock"`                // Indore switch block (nil = no fork, 0 = already on indore)
+	StateSyncConfirmationDelay      map[string]uint64      `json:"stateSyncConfirmationDelay"` // StateSync Confirmation Delay, in seconds, to calculate `to`
+	AhmedabadBlock                  *big.Int               `json:"ahmedabadBlock"`             // Ahmedabad switch block (nil = no fork, 0 = already on ahmedabad)
+	BhilaiBlock                     *big.Int               `json:"bhilaiBlock"`                // Bhilai switch block (nil = no fork, 0 = already on bhilai)
 }
 
 // String implements the stringer interface, returning the consensus engine details.
@@ -913,6 +922,15 @@ func borKeyValueConfigHelper[T uint64 | string](field map[string]T, number uint6
 
 func (c *BorConfig) CalculateBurntContract(number uint64) string {
 	return borKeyValueConfigHelper(c.BurntContract, number)
+}
+
+func (c *BorConfig) GetOverrideStateSyncRecord(block uint64) (int, bool) {
+	for _, r := range c.OverrideStateSyncRecordsInRange {
+		if block >= r.StartBlock && block <= r.EndBlock {
+			return r.Value, true
+		}
+	}
+	return 0, false
 }
 
 // Description returns a human-readable description of ChainConfig.

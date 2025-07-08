@@ -25,7 +25,6 @@ import (
 	"slices"
 	"sort"
 	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -46,8 +45,11 @@ import (
 	_ "github.com/ethereum/go-ethereum/eth/tracers/live"
 	_ "github.com/ethereum/go-ethereum/eth/tracers/native"
 
-	"github.com/maticnetwork/heimdall/cmd/heimdalld/service"
 	"github.com/urfave/cli/v2"
+
+	heimdallApp "github.com/0xPolygon/heimdall-v2/app"
+	heimdalld "github.com/0xPolygon/heimdall-v2/cmd/heimdalld/cmd"
+	svrcmd "github.com/cosmos/cosmos-sdk/server/cmd"
 )
 
 const (
@@ -362,11 +364,16 @@ func geth(ctx *cli.Context) error {
 	}
 
 	if ctx.Bool(utils.RunHeimdallFlag.Name) {
-		shutdownCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+		_, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
 
+		// TODO: Running heimdall from bor is not tested yet.
 		go func() {
-			service.NewHeimdallService(shutdownCtx, getHeimdallArgs(ctx))
+			rootCmd := heimdalld.NewRootCmd()
+			if err := svrcmd.Execute(rootCmd, "HD", heimdallApp.DefaultNodeHome); err != nil {
+				_, _ = fmt.Fprintln(rootCmd.OutOrStderr(), err)
+				os.Exit(1)
+			}
 		}()
 	}
 
@@ -462,9 +469,4 @@ func startNode(ctx *cli.Context, stack *node.Node, isConsole bool) {
 			}
 		}()
 	}
-}
-
-func getHeimdallArgs(ctx *cli.Context) []string {
-	heimdallArgs := strings.Split(ctx.String(utils.RunHeimdallArgsFlag.Name), ",")
-	return append([]string{"start"}, heimdallArgs...)
 }

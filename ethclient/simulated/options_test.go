@@ -17,7 +17,6 @@
 package simulated
 
 import (
-	"context"
 	"math/big"
 	"strings"
 	"testing"
@@ -37,7 +36,7 @@ func TestWithBlockGasLimitOption(t *testing.T) {
 	defer sim.Close()
 
 	client := sim.Client()
-	genesis, err := client.BlockByNumber(context.Background(), big.NewInt(0))
+	genesis, err := client.BlockByNumber(t.Context(), big.NewInt(0))
 	if err != nil {
 		t.Fatalf("failed to retrieve genesis block: %v", err)
 	}
@@ -46,7 +45,7 @@ func TestWithBlockGasLimitOption(t *testing.T) {
 	}
 	// Produce a number of blocks and verify the locked in gas target
 	sim.Commit()
-	head, err := client.BlockByNumber(context.Background(), big.NewInt(1))
+	head, err := client.BlockByNumber(t.Context(), big.NewInt(1))
 	if err != nil {
 		t.Fatalf("failed to retrieve head block: %v", err)
 	}
@@ -64,7 +63,7 @@ func TestWithCallGasLimitOption(t *testing.T) {
 	defer sim.Close()
 
 	client := sim.Client()
-	_, err := client.CallContract(context.Background(), ethereum.CallMsg{
+	_, err := client.CallContract(t.Context(), ethereum.CallMsg{
 		From: testAddr,
 		To:   &testAddr,
 		Gas:  21000,

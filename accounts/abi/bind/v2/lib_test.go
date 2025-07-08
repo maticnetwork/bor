@@ -92,7 +92,7 @@ func TestDeploymentLibraries(t *testing.T) {
 		t.Fatalf("deployment should have generated 5 addresses.  got %d", len(res.Addresses))
 	}
 	for _, tx := range res.Txs {
-		_, err = bind.WaitDeployed(context.Background(), bindBackend, tx.Hash())
+		_, err = bind.WaitDeployed(t.Context(), bindBackend, tx.Hash())
 		if err != nil {
 			t.Fatalf("error deploying library: %+v", err)
 		}
@@ -100,7 +100,7 @@ func TestDeploymentLibraries(t *testing.T) {
 
 	doInput := c.PackDo(big.NewInt(1))
 	contractAddr := res.Addresses[nested_libraries.C1MetaData.ID]
-	callOpts := &bind.CallOpts{From: common.Address{}, Context: context.Background()}
+	callOpts := &bind.CallOpts{From: common.Address{}, Context: t.Context()}
 	instance := c.Instance(bindBackend, contractAddr)
 	internalCallCount, err := bind.Call(instance, callOpts, doInput, c.UnpackDo)
 	if err != nil {
@@ -136,7 +136,7 @@ func TestDeploymentWithOverrides(t *testing.T) {
 		t.Fatalf("deployment should have generated 4 addresses.  got %d", len(res.Addresses))
 	}
 	for _, tx := range res.Txs {
-		_, err = bind.WaitDeployed(context.Background(), bindBackend, tx.Hash())
+		_, err = bind.WaitDeployed(t.Context(), bindBackend, tx.Hash())
 		if err != nil {
 			t.Fatalf("error deploying library: %+v", err)
 		}
@@ -162,7 +162,7 @@ func TestDeploymentWithOverrides(t *testing.T) {
 		t.Fatalf("deployment should have generated 1 address.  got %d", len(res.Addresses))
 	}
 	for _, tx := range res.Txs {
-		_, err = bind.WaitDeployed(context.Background(), bindBackend, tx.Hash())
+		_, err = bind.WaitDeployed(t.Context(), bindBackend, tx.Hash())
 		if err != nil {
 			t.Fatalf("error deploying library: %+v", err)
 		}
@@ -220,7 +220,7 @@ func TestEvents(t *testing.T) {
 	}
 
 	backend.Commit()
-	if _, err := bind.WaitDeployed(context.Background(), backend, res.Txs[events.CMetaData.ID].Hash()); err != nil {
+	if _, err := bind.WaitDeployed(t.Context(), backend, res.Txs[events.CMetaData.ID].Hash()); err != nil {
 		t.Fatalf("WaitDeployed failed %v", err)
 	}
 
@@ -247,7 +247,7 @@ func TestEvents(t *testing.T) {
 		t.Fatalf("failed to send transaction: %v", err)
 	}
 	backend.Commit()
-	if _, err := bind.WaitMined(context.Background(), backend, tx.Hash()); err != nil {
+	if _, err := bind.WaitMined(t.Context(), backend, tx.Hash()); err != nil {
 		t.Fatalf("error waiting for tx to be mined: %v", err)
 	}
 
@@ -279,7 +279,7 @@ done:
 
 	filterOpts := &bind.FilterOpts{
 		Start:   0,
-		Context: context.Background(),
+		Context: t.Context(),
 	}
 	it, err := bind.FilterEvents(instance, filterOpts, c.UnpackBasic1Event)
 	if err != nil {
@@ -329,7 +329,7 @@ func TestErrors(t *testing.T) {
 	}
 
 	backend.Commit()
-	if _, err := bind.WaitDeployed(context.Background(), backend, res.Txs[solc_errors.CMetaData.ID].Hash()); err != nil {
+	if _, err := bind.WaitDeployed(t.Context(), backend, res.Txs[solc_errors.CMetaData.ID].Hash()); err != nil {
 		t.Fatalf("WaitDeployed failed %v", err)
 	}
 

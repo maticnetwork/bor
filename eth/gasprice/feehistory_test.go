@@ -17,7 +17,6 @@
 package gasprice
 
 import (
-	"context"
 	"errors"
 	"math/big"
 	"testing"
@@ -62,7 +61,7 @@ func TestFeeHistory(t *testing.T) {
 		backend := newTestBackend(t, big.NewInt(16), big.NewInt(28), c.pending)
 		oracle := NewOracle(backend, config, nil)
 
-		first, reward, baseFee, ratio, blobBaseFee, blobRatio, err := oracle.FeeHistory(context.Background(), c.count, c.last, c.percent)
+		first, reward, baseFee, ratio, blobBaseFee, blobRatio, err := oracle.FeeHistory(t.Context(), c.count, c.last, c.percent)
 		backend.teardown()
 
 		expReward := c.expCount

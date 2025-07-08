@@ -11,7 +11,7 @@ import (
 	proto "github.com/maticnetwork/polyproto/heimdall"
 )
 
-func (h *HeimdallGRPCClient) StateSyncEvents(ctx context.Context, fromID uint64, to int64) ([]*clerk.EventRecordWithTime, error) {
+func (h *HeimdallGRPCClient) StateSyncEventsV1(ctx context.Context, fromID uint64, to int64) ([]*clerk.EventRecordWithTime, error) {
 	eventRecords := make([]*clerk.EventRecordWithTime, 0)
 
 	req := &proto.StateSyncEventsRequest{
@@ -26,7 +26,10 @@ func (h *HeimdallGRPCClient) StateSyncEvents(ctx context.Context, fromID uint64,
 		err    error
 	)
 
-	res, err = h.client.StateSyncEvents(ctx, req)
+	ctxWithTimeout, cancel := context.WithTimeout(ctx, defaultTimeout)
+	defer cancel()
+
+	res, err = h.client.StateSyncEvents(ctxWithTimeout, req)
 	if err != nil {
 		return nil, err
 	}
