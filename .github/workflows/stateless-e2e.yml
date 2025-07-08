@@ -3,10 +3,10 @@ name: Stateless Sync Tests
 on:
   push:
     branches:
-      - "stateless_sync"
+      - 'stateless_sync'
   pull_request:
     branches:
-      - "stateless_sync"
+      - 'stateless_sync'
     types: [opened, synchronize, reopened]
 
 concurrency:
@@ -54,23 +54,23 @@ jobs:
           docker build -t bor:stateless_sync --file Dockerfile .
 
       # Build Bor image from develop branch for compatibility testing.
-      # - name: Build Bor Docker Image (develop)
-      #   run: |
-      #     cd bor
-      #     ORIGINAL_REF=$(git rev-parse --abbrev-ref HEAD)
-      #     if [ "$ORIGINAL_REF" = "HEAD" ]; then
-      #       # We're in detached HEAD; fallback to commit hash
-      #       ORIGINAL_REF=$(git rev-parse HEAD)
-      #     fi
+      - name: Build Bor Docker Image (develop)
+        run: |
+          cd bor
+          ORIGINAL_REF=$(git rev-parse --abbrev-ref HEAD)
+          if [ "$ORIGINAL_REF" = "HEAD" ]; then
+            # We're in detached HEAD; fallback to commit hash
+            ORIGINAL_REF=$(git rev-parse HEAD)
+          fi
 
-      #     echo "Original ref: $ORIGINAL_REF"
+          echo "Original ref: $ORIGINAL_REF"
 
-      #     git checkout develop
-      #     git pull origin develop
-      #     docker build -t bor:develop --file Dockerfile .
+          git checkout develop
+          git pull origin develop
+          docker build -t bor:develop --file Dockerfile .
 
-      #     git checkout "$ORIGINAL_REF"
-      #     echo "Switched back to: $(git rev-parse --abbrev-ref HEAD || git rev-parse HEAD)"
+          git checkout "$ORIGINAL_REF"
+          echo "Switched back to: $(git rev-parse --abbrev-ref HEAD || git rev-parse HEAD)"
 
       - name: Checkout Heimdall-v2
         uses: actions/checkout@v4
@@ -85,14 +85,6 @@ jobs:
         run: |
           cd heimdall-v2
           docker build -t heimdall-v2:stateless_sync --file Dockerfile .
-
-      # # Build Heimdall-v2 image from develop branch.
-      # - name: Build Heimdall-v2 Docker Image (develop)
-      #   run: |
-      #     cd heimdall-v2
-      #     git checkout develop
-      #     git pull origin develop
-      #     docker build -t heimdall-v2:develop --file Dockerfile .
 
       - name: Checkout Kurtosis
         uses: actions/checkout@v4
@@ -113,6 +105,9 @@ jobs:
         run: |
           cd kurtosis-polygon-pos
           kurtosis enclave inspect ${{ env.ENCLAVE_NAME }}
+
+      - name: Test state syncs
+        run: kurtosis service exec ${{ env.ENCLAVE_NAME }} test-runner "bats --filter-tags pos,bridge,matic,pol --recursive tests/"
 
       - name: Post kurtosis run
         if: always()

@@ -1,26 +1,26 @@
 polygon_pos_package:
   participants:
-    # 3 validators on develop branch
-    # - kind: validator
-    #   cl_type: heimdall-v2
-    #   cl_image: heimdall-v2:develop
-    #   el_type: bor
-    #   el_image: bor:develop
-    #   count: 3
-    #   el_bor_produce_witness: false
-    #   el_bor_sync_with_witness: false
+    # 1 validator on Bor's develop branch
+    - kind: validator
+      cl_type: heimdall-v2
+      cl_image: heimdall-v2:stateless_sync
+      el_type: bor
+      el_image: bor:develop
+      count: 1
+      el_bor_produce_witness: false
+      el_bor_sync_with_witness: false
 
-    # 3 validators on stateless_sync branch
+    # 5 validators on Bor's stateless_sync branch
     - kind: validator
       cl_type: heimdall-v2
       cl_image: heimdall-v2:stateless_sync
       el_type: bor
       el_image: bor:stateless_sync
-      count: 3
+      count: 5
       el_bor_produce_witness: true
       el_bor_sync_with_witness: false
 
-    # 3 total RPC nodes
+    # 3 Total RPC nodes on Bor's stateless_sync branch
     - kind: rpc
       cl_type: heimdall-v2
       cl_image: heimdall-v2:stateless_sync
@@ -39,7 +39,7 @@ polygon_pos_package:
       el_bor_produce_witness: true
       el_bor_sync_with_witness: false
 
-    # Stateless RPC node
+    # 1 Stateless RPC node
     - kind: rpc
       cl_type: heimdall-v2
       cl_image: heimdall-v2:stateless_sync
