@@ -357,9 +357,9 @@ require (
 replace (
 	cosmossdk.io/client/v2 => github.com/0xPolygon/cosmos-sdk/client/v2 v2.0.0-beta.1
 	github.com/Masterminds/goutils => github.com/Masterminds/goutils v1.1.1
-	github.com/cometbft/cometbft => github.com/0xPolygon/cometbft v0.1.3-beta-polygon
-	github.com/cosmos/cosmos-sdk => github.com/0xPolygon/cosmos-sdk v0.1.15-beta-polygon
-	github.com/ethereum/go-ethereum => github.com/maticnetwork/bor v1.5.5
+	github.com/cometbft/cometbft => github.com/0xPolygon/cometbft v0.2.0-polygon
+	github.com/cosmos/cosmos-sdk => github.com/0xPolygon/cosmos-sdk v0.2.0-polygon
+	github.com/ethereum/go-ethereum => github.com/maticnetwork/bor v1.14.14-0.20250618164709-3dc7d31cdac3
 	github.com/ethereum/go-ethereum/common/math => github.com/maticnetwork/bor/common/math v1.5.5
 	github.com/tendermint/tendermint => github.com/maticnetwork/tendermint v0.33.0
 	github.com/tendermint/tm-db => github.com/tendermint/tm-db v0.2.0

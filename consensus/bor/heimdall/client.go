@@ -66,7 +66,7 @@ func NewHeimdallClient(urlString string, timeout time.Duration) *HeimdallClient 
 }
 
 const (
-	fetchStateSyncEventsFormat = "from_id=%d&to_time=%s&limit=%d"
+	fetchStateSyncEventsFormat = "from_id=%d&to_time=%s&pagination.limit=%d"
 	fetchStateSyncEventsPath   = "clerk/time"
 
 	fetchCheckpoint      = "/checkpoints/%s"
