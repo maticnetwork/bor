@@ -685,162 +685,20 @@ func (pool *LegacyPool) validateAuth(tx *types.Transaction) error {
 // add validates a transaction and inserts it into the non-executable queue for later
 // pending promotion and execution. If the transaction is a replacement for an already
 // pending or queued one, it overwrites the previous transaction if its price is higher.
-func (pool *LegacyPool) add(tx *types.Transaction) (replaced bool, err error) {
-	// If the transaction is already known, discard it
-	hash := tx.Hash()
-	if pool.all.Get(hash) != nil {
-		log.Trace("Discarding already known transaction", "hash", hash)
-		knownTxMeter.Mark(1)
-		return false, txpool.ErrAlreadyKnown
-	}
-
-	if pool.config.AllowUnprotectedTxs {
-		pool.signer = types.NewFakeSigner(tx.ChainId())
-	}
-
-	// If the transaction fails basic validation, discard it
-	if err := pool.validateTx(tx); err != nil {
-		log.Trace("Discarding invalid transaction", "hash", hash, "err", err)
-		invalidTxMeter.Mark(1)
-		return false, err
-	}
-	// already validated by this point
-	from, _ := types.Sender(pool.signer, tx)
-
-	// If the address is not yet known, request exclusivity to track the account
-	// only by this subpool until all transactions are evicted
-	var (
-		_, hasPending = pool.pending[from]
-		_, hasQueued  = pool.queue[from]
-	)
-	if !hasPending && !hasQueued {
-		if err := pool.reserver.Hold(from); err != nil {
-			return false, err
-		}
-		defer func() {
-			// If the transaction is rejected by some post-validation check, remove
-			// the lock on the reservation set.
-			//
-			// Note, `err` here is the named error return, which will be initialized
-			// by a return statement before running deferred methods. Take care with
-			// removing or subscoping err as it will break this clause.
-			if err != nil {
-				pool.reserver.Release(from)
-			}
-		}()
-	}
-	// If the transaction pool is full, discard underpriced transactions
-	if uint64(pool.all.Slots()+numSlots(tx)) > pool.config.GlobalSlots+pool.config.GlobalQueue {
-		// If the new transaction is underpriced, don't accept it
-		if pool.priced.Underpriced(tx) {
-			log.Trace("Discarding underpriced transaction", "hash", hash, "gasTipCap", tx.GasTipCap(), "gasFeeCap", tx.GasFeeCap())
-			underpricedTxMeter.Mark(1)
-			return false, txpool.ErrUnderpriced
-		}
-
-		// We're about to replace a transaction. The reorg does a more thorough
-		// analysis of what to remove and how, but it runs async. We don't want to
-		// do too many replacements between reorg-runs, so we cap the number of
-		// replacements to 25% of the slots
-		if pool.changesSinceReorg > int(pool.config.GlobalSlots/4) {
-			throttleTxMeter.Mark(1)
-			return false, ErrTxPoolOverflow
-		}
-
-		// New transaction is better than our worse ones, make room for it.
-		// If we can't make enough room for new one, abort the operation.
-		drop, success := pool.priced.Discard(pool.all.Slots() - int(pool.config.GlobalSlots+pool.config.GlobalQueue) + numSlots(tx))
-
-		// Special case, we still can't make the room for the new remote one.
-		if !success {
-			log.Trace("Discarding overflown transaction", "hash", hash)
-			overflowedTxMeter.Mark(1)
-			return false, ErrTxPoolOverflow
-		}
-
-		// If the new transaction is a future transaction it should never churn pending transactions
-		if pool.isGapped(from, tx) {
-			var replacesPending bool
-			for _, dropTx := range drop {
-				dropSender, _ := types.Sender(pool.signer, dropTx)
-				if list := pool.pending[dropSender]; list != nil && list.Contains(dropTx.Nonce()) {
-					replacesPending = true
-					break
-				}
-			}
-			// Add all transactions back to the priced queue
-			if replacesPending {
-				for _, dropTx := range drop {
-					pool.priced.Put(dropTx)
-				}
-				log.Trace("Discarding future transaction replacing pending tx", "hash", hash)
-				return false, ErrFutureReplacePending
-			}
-		}
-
-		// Kick out the underpriced remote transactions.
-		for _, tx := range drop {
-			log.Trace("Discarding freshly underpriced transaction", "hash", tx.Hash(), "gasTipCap", tx.GasTipCap(), "gasFeeCap", tx.GasFeeCap())
-			underpricedTxMeter.Mark(1)
-
-			sender, _ := types.Sender(pool.signer, tx)
-			dropped := pool.removeTx(tx.Hash(), false, sender != from) // Don't unreserve the sender of the tx being added if last from the acc
-
-			pool.changesSinceReorg += dropped
-		}
-	}
-
-	// Try to replace an existing transaction in the pending pool
-	if list := pool.pending[from]; list != nil && list.Contains(tx.Nonce()) {
-		// Nonce already pending, check if required price bump is met
-		inserted, old := list.Add(tx, pool.config.PriceBump)
-		if !inserted {
-			pendingDiscardMeter.Mark(1)
-			return false, txpool.ErrReplaceUnderpriced
-		}
-		// New transaction is better, replace old one
-		if old != nil {
-			pool.all.Remove(old.Hash())
-			pool.priced.Removed(1)
-			pendingReplaceMeter.Mark(1)
-		}
-		pool.all.Add(tx)
-		pool.priced.Put(tx)
-		pool.queueTxEvent(tx)
-		log.Trace("Pooled new executable transaction", "hash", hash, "from", from, "to", tx.To())
-
-		// Successful promotion, bump the heartbeat
-		pool.beats[from] = time.Now()
-		return old != nil, nil
-	}
-	// New transaction isn't replacing a pending one, push into queue
-	replaced, err = pool.enqueueTx(hash, tx, true)
-	if err != nil {
-		return false, err
-	}
-
-	log.Trace("Pooled new future transaction", "hash", hash, "from", from, "to", tx.To())
-	return replaced, nil
-}
-
-// addAsync is a semi-async version of `add`. It frees up the global pool lock
-// to allow other functions to use the pending pool. It also performs some
-// operations on `pricedList` async to avoid waiting for reheap.
-//
-// It also validates a transaction and inserts it into the non-executable queue
-// for later pending promotion and execution. If the transaction is a replacement
-// for an already pending or queued one, it overwrites the previous transaction
-// if its price is higher.
-func (pool *LegacyPool) addAsync(tx *types.Transaction) (replaced bool, err error) {
-	// Acquire the lock initially as we need to operate on `pending` and `queued` pools
-	// for validation.
-	pool.mu.Lock()
+// If async insertion is requested, it frees up the global pool lock to allow other
+// functions to use the pending pool. It also performs some operations on the `pricedHeap`
+// async to avoid waiting for reheap. The pool lock won't be held when called in async mode.
+func (pool *LegacyPool) add(tx *types.Transaction, async bool) (replaced bool, err error) {
+	// If `async` is set, acquire the global lock.
 	var locked bool = true
-	defer func() {
-		if locked {
-			pool.mu.Unlock()
-		}
-	}()
+	if async {
+		pool.mu.Lock()
+		defer func() {
+			if locked {
+				pool.mu.Unlock()
+			}
+		}()
+	}
 
 	// If the transaction is already known, discard it
 	hash := tx.Hash()
@@ -887,11 +745,12 @@ func (pool *LegacyPool) addAsync(tx *types.Transaction) (replaced bool, err erro
 	}
 	// If the transaction pool is full, discard underpriced transactions
 	if uint64(pool.all.Slots()+numSlots(tx)) > pool.config.GlobalSlots+pool.config.GlobalQueue {
-		// The call below can take time due to internal lock if reheap is going on. Free up
-		// the lock to allow other functions to operate.
-		pool.mu.Unlock()
-		locked = false
-
+		if async {
+			// The call below can take time due to internal lock if reheap is going on. Free up
+			// the lock to allow other functions to operate.
+			pool.mu.Unlock()
+			locked = false
+		}
 		// If the new transaction is underpriced, don't accept it
 		if pool.priced.Underpriced(tx) {
 			log.Trace("Discarding underpriced transaction", "hash", hash, "gasTipCap", tx.GasTipCap(), "gasFeeCap", tx.GasFeeCap())
@@ -919,10 +778,12 @@ func (pool *LegacyPool) addAsync(tx *types.Transaction) (replaced bool, err erro
 			return false, ErrTxPoolOverflow
 		}
 
-		// We're done operating on the `pricedList`. Acquire the lock again
-		// for rest of the operations.
-		pool.mu.Lock()
-		locked = true
+		if async {
+			// We're done operating on the `pricedList`. Acquire the lock again
+			// for rest of the operations.
+			pool.mu.Lock()
+			locked = true
+		}
 
 		// If the new transaction is a future transaction it should never churn pending transactions
 		if pool.isGapped(from, tx) {
@@ -936,9 +797,15 @@ func (pool *LegacyPool) addAsync(tx *types.Transaction) (replaced bool, err erro
 			}
 			// Add all transactions back to the priced queue
 			if replacesPending {
-				// We don't want to get blocked on this due to internal lock, so
-				// call the function to insert transactions into the heap async.
-				go pool.priced.PutMany(drop)
+				if async {
+					// We don't want to get blocked on this due to internal lock, so
+					// call the function to insert transactions into the heap async.
+					go pool.priced.PutMany(drop)
+				} else {
+					for _, dropTx := range drop {
+						pool.priced.Put(dropTx)
+					}
+				}
 				log.Trace("Discarding future transaction replacing pending tx", "hash", hash)
 				return false, ErrFutureReplacePending
 			}
@@ -971,9 +838,13 @@ func (pool *LegacyPool) addAsync(tx *types.Transaction) (replaced bool, err erro
 			pendingReplaceMeter.Mark(1)
 		}
 		pool.all.Add(tx)
-		// We don't want to get blocked on this due to internal lock, so
-		// call the function to insert transactions into the heap async.
-		go pool.priced.Put(tx)
+		if async {
+			// We don't want to get blocked on this due to internal lock, so
+			// call the function to insert transactions into the heap async.
+			go pool.priced.Put(tx)
+		} else {
+			pool.priced.Put(tx)
+		}
 		pool.queueTxEvent(tx)
 		log.Trace("Pooled new executable transaction", "hash", hash, "from", from, "to", tx.To())
 
@@ -1182,15 +1053,7 @@ func (pool *LegacyPool) addTxs(txs []*types.Transaction, async bool) ([]error, *
 	dirty := newAccountSet(pool.signer)
 	errs := make([]error, len(txs))
 	for i, tx := range txs {
-		var (
-			replaced bool
-			err      error
-		)
-		if async {
-			replaced, err = pool.addAsync(tx)
-		} else {
-			replaced, err = pool.add(tx)
-		}
+		replaced, err := pool.add(tx, async)
 		errs[i] = err
 		if err == nil && !replaced {
 			dirty.addTx(tx)
