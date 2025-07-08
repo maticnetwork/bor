@@ -61,8 +61,8 @@ var Defaults = Config{
 	HistoryMode:        history.KeepAll,
 	NetworkId:          0, // enable auto configuration of networkID == chainID
 	TxLookupLimit:      2350000,
-	TransactionHistory: 2350000,
-	LogHistory:         2350000,
+	TransactionHistory: 2350000, // Note: used in bor cli
+	LogHistory:         2350000, // Note: used in bor cli
 	StateHistory:       params.FullImmutabilityThreshold,
 	DatabaseCache:      512,
 	TrieCleanCache:     154,

@@ -158,6 +158,12 @@ syncmode = "full"
     # timeout = "1h0m0s"
     # fdlimit = 0
 
+# [history]
+#   transactions = 2350000
+#   logs = 2350000
+#   "logs.disable" = false
+#   state = 90000
+
 [accounts]
     allow-insecure-unlock = true
     # password = "$BOR_DIR/password.txt"
