@@ -4,12 +4,14 @@ defaultFee: 2000
 defaultStake: 10000
 
 borChainId: 15001
-heimdallChainId: heimdall-15001
-
 borDockerBuildContext: '../../bor'
-heimdallDockerBuildContext: 'https://github.com/maticnetwork/heimdall.git#develop'
 
+heimdallChainId: heimdall-15001
+heimdallDockerBuildContext: 'https://github.com/0xPolygon/heimdall-v2.git#develop'
+
+genesisContractsRepo: https://github.com/maticnetwork/genesis-contracts.git
 genesisContractsBranch: master
+
 contractsRepo: https://github.com/0xPolygon/pos-contracts.git
 contractsBranch: anvil-pos
 
@@ -19,7 +21,7 @@ blockNumber:
   - '0'
 
 sprintSize:
-  - '64'
+  - '16'
 sprintSizeBlockNumber:
   - '0'
 
@@ -33,6 +35,7 @@ numOfErigonValidators: 0
 numOfErigonSentries: 0
 numOfErigonArchiveNodes: 0
 
-ethURL: http://anvil:9545
 ethHostUser: ubuntu
+ethURL: http://anvil:9545
+
 mnemonic: 'clock radar mass judge dismiss just intact mind resemble fringe diary casino'

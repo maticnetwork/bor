@@ -18,7 +18,6 @@ package node
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -184,7 +183,7 @@ func TestWebsocketOrigins(t *testing.T) {
 
 // TestIsWebsocket tests if an incoming websocket upgrade request is handled properly.
 func TestIsWebsocket(t *testing.T) {
-	r, _ := http.NewRequestWithContext(context.Background(), http.MethodGet, "/", nil)
+	r, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 
 	assert.False(t, isWebsocket(r))
 	r.Header.Set("upgrade", "websocket")
@@ -560,7 +559,7 @@ func TestGzipHandler(t *testing.T) {
 				Timeout: 10 * time.Second,
 			}
 
-			req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL, nil)
 			if err != nil {
 				log.Crit("Can't build request", "url", srv.URL, "err", err)
 			}

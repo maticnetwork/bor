@@ -293,7 +293,7 @@ func TestStateHooks(t *testing.T) {
 	DefaultDirectory.Register("stateTracer", newStateTracer, false)
 	api := NewAPI(backend)
 	tracer := "stateTracer"
-	res, err := api.TraceCall(context.Background(), ethapi.TransactionArgs{From: &from, To: &to, Value: (*hexutil.Big)(big.NewInt(1000))}, rpc.BlockNumberOrHashWithNumber(rpc.LatestBlockNumber), &TraceCallConfig{TraceConfig: TraceConfig{Tracer: &tracer}})
+	res, err := api.TraceCall(t.Context(), ethapi.TransactionArgs{From: &from, To: &to, Value: (*hexutil.Big)(big.NewInt(1000))}, rpc.BlockNumberOrHashWithNumber(rpc.LatestBlockNumber), &TraceCallConfig{TraceConfig: TraceConfig{Tracer: &tracer}})
 	if err != nil {
 		t.Fatalf("failed to trace call: %v", err)
 	}
@@ -494,7 +494,7 @@ func TestTraceCall(t *testing.T) {
 	}
 
 	for i, testspec := range testSuite {
-		result, err := api.TraceCall(context.Background(), testspec.call, rpc.BlockNumberOrHash{BlockNumber: &testspec.blockNumber}, testspec.config)
+		result, err := api.TraceCall(t.Context(), testspec.call, rpc.BlockNumberOrHash{BlockNumber: &testspec.blockNumber}, testspec.config)
 		if testspec.expectErr != nil {
 			if err == nil {
 				t.Errorf("test %d: expect error %v, got nothing", i, testspec.expectErr)
@@ -559,7 +559,7 @@ func TestTraceTransaction(t *testing.T) {
 	defer backend.chain.Stop()
 	api := NewAPI(backend)
 
-	result, err := api.TraceTransaction(context.Background(), target, nil)
+	result, err := api.TraceTransaction(t.Context(), target, nil)
 	if err != nil {
 		t.Errorf("Failed to trace transaction %v", err)
 	}
@@ -580,7 +580,7 @@ func TestTraceTransaction(t *testing.T) {
 	}
 
 	// Test non-existent transaction
-	_, err = api.TraceTransaction(context.Background(), common.Hash{42}, nil)
+	_, err = api.TraceTransaction(t.Context(), common.Hash{42}, nil)
 	if !errors.Is(err, errTxNotFound) {
 		t.Fatalf("want %v, have %v", errTxNotFound, err)
 	}
@@ -656,7 +656,7 @@ func TestTraceBlock(t *testing.T) {
 	}
 
 	for i, tc := range testSuite {
-		result, err := api.TraceBlockByNumber(context.Background(), tc.blockNumber, tc.config)
+		result, err := api.TraceBlockByNumber(t.Context(), tc.blockNumber, tc.config)
 		if tc.expectErr != nil {
 			if err == nil {
 				t.Errorf("test %d, want error %v", i, tc.expectErr)
@@ -737,7 +737,7 @@ func TestIOdump(t *testing.T) {
 	}
 
 	for i, tc := range testSuite {
-		result, err := api.TraceBlockByNumber(context.Background(), tc.blockNumber, tc.config)
+		result, err := api.TraceBlockByNumber(t.Context(), tc.blockNumber, tc.config)
 		if tc.expectErr != nil {
 			if err == nil {
 				t.Errorf("test %d, want error %v", i, tc.expectErr)
@@ -1130,7 +1130,7 @@ func TestTracingWithOverrides(t *testing.T) {
 	}
 
 	for i, tc := range testSuite {
-		result, err := api.TraceCall(context.Background(), tc.call, rpc.BlockNumberOrHash{BlockNumber: &tc.blockNumber}, tc.config)
+		result, err := api.TraceCall(t.Context(), tc.call, rpc.BlockNumberOrHash{BlockNumber: &tc.blockNumber}, tc.config)
 		if tc.expectErr != nil {
 			if err == nil {
 				t.Errorf("test %d: want error %v, have nothing", i, tc.expectErr)
@@ -1254,8 +1254,8 @@ func TestTraceChain(t *testing.T) {
 		ref.Store(0)
 		rel.Store(0)
 
-		from, _ := api.blockByNumber(context.Background(), rpc.BlockNumber(c.start))
-		to, _ := api.blockByNumber(context.Background(), rpc.BlockNumber(c.end))
+		from, _ := api.blockByNumber(t.Context(), rpc.BlockNumber(c.start))
+		to, _ := api.blockByNumber(t.Context(), rpc.BlockNumber(c.end))
 		resCh := api.traceChain(from, to, c.config, nil)
 
 		next := c.start + 1
@@ -1362,7 +1362,7 @@ func TestTraceBlockWithBasefee(t *testing.T) {
 		},
 	}
 	for i, tc := range testSuite {
-		result, err := api.TraceBlockByNumber(context.Background(), tc.blockNumber, tc.config)
+		result, err := api.TraceBlockByNumber(t.Context(), tc.blockNumber, tc.config)
 		if err != nil {
 			t.Errorf("test %d, want no error, have %v", i, err)
 			continue

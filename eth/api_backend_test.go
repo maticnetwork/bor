@@ -17,7 +17,6 @@
 package eth
 
 import (
-	"context"
 	"crypto/ecdsa"
 	"errors"
 	"math/big"
@@ -140,10 +139,10 @@ func testSendTx(t *testing.T, withLocal bool) {
 			key:   key,
 		},
 	})
-	b.SendTx(context.Background(), txA)
+	b.SendTx(t.Context(), txA)
 
 	txB := makeTx(1, nil, nil, key)
-	err := b.SendTx(context.Background(), txB)
+	err := b.SendTx(t.Context(), txB)
 
 	if withLocal {
 		if err != nil {

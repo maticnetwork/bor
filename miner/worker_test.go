@@ -122,7 +122,7 @@ func testGenerateBlockAndImport(t *testing.T, isClique bool, isBor bool) {
 			if _, err := chain.InsertChain([]*types.Block{block}); err != nil {
 				t.Fatalf("failed to insert new mined block %d: %v", block.NumberU64(), err)
 			}
-		case <-time.After(3 * time.Second): // Worker needs 1s to include new changes.
+		case <-time.After(5 * time.Second): // Worker needs 1s to include new changes.
 			t.Fatalf("timeout")
 		}
 	}
@@ -387,14 +387,16 @@ func getFakeBorFromConfig(t *testing.T, chainConfig *params.ChainConfig) (consen
 	spanner.EXPECT().GetCurrentValidatorsByHash(gomock.Any(), gomock.Any(), gomock.Any()).Return(span0.ValidatorSet.Validators, nil).AnyTimes()
 
 	heimdallClientMock := mocks.NewMockIHeimdallClient(ctrl)
-	heimdallClientMock.EXPECT().Span(gomock.Any(), uint64(0)).Return(&span0, nil).AnyTimes()
+	heimdallWSClient := mocks.NewMockIHeimdallWSClient(ctrl)
+
+	heimdallClientMock.EXPECT().GetSpanV1(gomock.Any(), uint64(0)).Return(&span0, nil).AnyTimes()
 	heimdallClientMock.EXPECT().Close().AnyTimes()
 
 	contractMock := bor.NewMockGenesisContract(ctrl)
 
 	db, _, _ := NewDBForFakes(t)
 
-	engine := NewFakeBor(t, db, chainConfig, ethAPIMock, spanner, heimdallClientMock, contractMock)
+	engine := NewFakeBor(t, db, chainConfig, ethAPIMock, spanner, heimdallClientMock, heimdallWSClient, contractMock)
 
 	return engine, ctrl
 }
@@ -856,13 +858,15 @@ func BenchmarkBorMining(b *testing.B) {
 	}, nil).AnyTimes()
 
 	heimdallClientMock := mocks.NewMockIHeimdallClient(ctrl)
+	heimdallWSClient := mocks.NewMockIHeimdallWSClient(ctrl)
+
 	heimdallClientMock.EXPECT().Close().Times(1)
 
 	contractMock := bor.NewMockGenesisContract(ctrl)
 
 	db, _, _ := NewDBForFakes(b)
 
-	engine := NewFakeBor(b, db, chainConfig, ethAPIMock, spanner, heimdallClientMock, contractMock)
+	engine := NewFakeBor(b, db, chainConfig, ethAPIMock, spanner, heimdallClientMock, heimdallWSClient, contractMock)
 	defer engine.Close()
 
 	chainConfig.LondonBlock = big.NewInt(0)
@@ -953,13 +957,15 @@ func BenchmarkBorMiningBlockSTMMetadata(b *testing.B) {
 	}, nil).AnyTimes()
 
 	heimdallClientMock := mocks.NewMockIHeimdallClient(ctrl)
+	heimdallWSClient := mocks.NewMockIHeimdallWSClient(ctrl)
+
 	heimdallClientMock.EXPECT().Close().Times(1)
 
 	contractMock := bor.NewMockGenesisContract(ctrl)
 
 	db, _, _ := NewDBForFakes(b)
 
-	engine := NewFakeBor(b, db, chainConfig, ethAPIMock, spanner, heimdallClientMock, contractMock)
+	engine := NewFakeBor(b, db, chainConfig, ethAPIMock, spanner, heimdallClientMock, heimdallWSClient, contractMock)
 	defer engine.Close()
 
 	chainConfig.LondonBlock = big.NewInt(0)

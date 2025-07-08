@@ -943,7 +943,7 @@ func TestBreakFromCircularDependency(t *testing.T) {
 		}
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
 	// This should not hang
@@ -976,7 +976,7 @@ func TestBreakFromPartialCircularDependency(t *testing.T) {
 		}
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
 
 	// This should not hang

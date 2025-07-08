@@ -121,7 +121,7 @@ func TestNewBackend(t *testing.T) {
 	defer sim.Close()
 
 	client := sim.Client()
-	num, err := client.BlockNumber(context.Background())
+	num, err := client.BlockNumber(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -130,7 +130,7 @@ func TestNewBackend(t *testing.T) {
 	}
 	// Create a block
 	sim.Commit()
-	num, err = client.BlockNumber(context.Background())
+	num, err = client.BlockNumber(t.Context())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -145,13 +145,13 @@ func TestAdjustTime(t *testing.T) {
 	defer sim.Close()
 
 	client := sim.Client()
-	block1, _ := client.BlockByNumber(context.Background(), nil)
+	block1, _ := client.BlockByNumber(t.Context(), nil)
 
 	// Create a block
 	if err := sim.AdjustTime(time.Minute); err != nil {
 		t.Fatal(err)
 	}
-	block2, _ := client.BlockByNumber(context.Background(), nil)
+	block2, _ := client.BlockByNumber(t.Context(), nil)
 	prevTime := block1.Time()
 	newTime := block2.Time()
 	if newTime-prevTime != 60 {
@@ -165,7 +165,7 @@ func TestSendTransaction(t *testing.T) {
 	defer sim.Close()
 
 	client := sim.Client()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	signedTx, err := newTx(sim, testKey)
 	if err != nil {
@@ -205,7 +205,7 @@ func TestFork(t *testing.T) {
 	defer sim.Close()
 
 	client := sim.Client()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// 1.
 	parent, _ := client.HeaderByNumber(ctx, nil)
@@ -254,7 +254,7 @@ func TestForkResendTx(t *testing.T) {
 	defer sim.Close()
 
 	client := sim.Client()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// 1.
 	parent, _ := client.HeaderByNumber(ctx, nil)
@@ -296,7 +296,7 @@ func TestCommitReturnValue(t *testing.T) {
 	defer sim.Close()
 
 	client := sim.Client()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test if Commit returns the correct block hash
 	h1 := sim.Commit()
@@ -340,7 +340,7 @@ func TestAdjustTimeAfterFork(t *testing.T) {
 	defer sim.Close()
 
 	client := sim.Client()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	sim.Commit() // h1
 	h1, _ := client.HeaderByNumber(ctx, nil)

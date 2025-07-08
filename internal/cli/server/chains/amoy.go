@@ -28,11 +28,13 @@ var amoyTestnet = &Chain{
 			LondonBlock:         big.NewInt(73100),
 			ShanghaiBlock:       big.NewInt(73100),
 			CancunBlock:         big.NewInt(5423600),
+			PragueBlock:         big.NewInt(22765056),
 			Bor: &params.BorConfig{
 				JaipurBlock:    big.NewInt(73100),
 				DelhiBlock:     big.NewInt(73100),
 				IndoreBlock:    big.NewInt(73100),
 				AhmedabadBlock: big.NewInt(11865856),
+				BhilaiBlock:    big.NewInt(22765056),
 				StateSyncConfirmationDelay: map[string]uint64{
 					"0": 128,
 				},
@@ -50,6 +52,9 @@ var amoyTestnet = &Chain{
 				},
 				ValidatorContract:     "0x0000000000000000000000000000000000001000",
 				StateReceiverContract: "0x0000000000000000000000000000000000001001",
+				OverrideStateSyncRecordsInRange: []params.BlockRangeOverride{
+					{StartBlock: 23184305, EndBlock: 23220127, Value: 0},
+				},
 				BurntContract: map[string]string{
 					"0":     "0x000000000000000000000000000000000000dead",
 					"73100": "0xeCDD77cE6f146cCf5dab707941d318Bd50eeD2C9",

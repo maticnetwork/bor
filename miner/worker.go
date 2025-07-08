@@ -881,6 +881,7 @@ func (w *worker) updateSnapshot(env *environment) {
 		env.receipts,
 		trie.NewStackTrie(nil),
 	)
+
 	w.snapshotReceipts = copyReceipts(env.receipts)
 	w.snapshotState = env.state.Copy()
 }

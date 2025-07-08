@@ -65,7 +65,6 @@ func TestTransactionRollbackBehavior(t *testing.T) {
 func testSendSignedTx(t *testing.T, key *ecdsa.PrivateKey, sim *Backend, isBlobTx bool) *types.Transaction {
 	t.Helper()
 	client := sim.Client()
-	ctx := context.Background()
 
 	var (
 		err      error
@@ -80,7 +79,7 @@ func testSendSignedTx(t *testing.T, key *ecdsa.PrivateKey, sim *Backend, isBlobT
 		t.Fatalf("failed to create transaction: %v", err)
 	}
 
-	if err = client.SendTransaction(ctx, signedTx); err != nil {
+	if err = client.SendTransaction(t.Context(), signedTx); err != nil {
 		t.Fatalf("failed to send transaction: %v", err)
 	}
 
