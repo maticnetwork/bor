@@ -81,7 +81,7 @@ func NewMockServiceWithBlockchain(db ethdb.Database, blockchain ChainReader) *Se
 	return service
 }
 
-// TestWhitelistCheckpoint checks the checkpoint whitelist setter and getter functions.
+// TestWhitelistedCheckpoint tests the whitelisting functionalities using checkpoints.
 func TestWhitelistedCheckpoint(t *testing.T) {
 	t.Parallel()
 
