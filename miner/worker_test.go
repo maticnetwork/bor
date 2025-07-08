@@ -93,11 +93,6 @@ func testGenerateBlockAndImport(t *testing.T, isClique bool, isBor bool) {
 	chain, _ := core.NewBlockChain(rawdb.NewMemoryDatabase(), nil, b.genesis, nil, engine, vm.Config{}, nil, nil, nil)
 	defer chain.Stop()
 
-	// Ignore empty commit here for less noise.
-	w.skipSealHook = func(task *task) bool {
-		return len(task.receipts) == 0
-	}
-
 	// Wait for mined blocks.
 	sub := w.mux.Subscribe(core.NewMinedBlockEvent{})
 	defer sub.Unsubscribe()
@@ -286,7 +281,7 @@ func (b *testWorkerBackend) newRandomTxWithNonce(creation bool, nonce uint64) *t
 	gasPrice := big.NewInt(100 * params.InitialBaseFee)
 
 	if creation {
-		tx, _ = types.SignTx(types.NewContractCreation(b.txPool.Nonce(TestBankAddress), big.NewInt(0), testGas, gasPrice, common.FromHex(testCode)), types.HomesteadSigner{}, testBankKey)
+		tx, _ = types.SignTx(types.NewContractCreation(b.txPool.PoolNonce(TestBankAddress), big.NewInt(0), testGas, gasPrice, common.FromHex(testCode)), types.HomesteadSigner{}, testBankKey)
 	} else {
 		tx, _ = types.SignTx(types.NewTransaction(nonce, testUserAddress, big.NewInt(1000), params.TxGas, gasPrice, nil), types.HomesteadSigner{}, testBankKey)
 	}
@@ -343,11 +338,6 @@ func TestGenerateAndImportBlock(t *testing.T) {
 	// This test chain imports the mined blocks.
 	chain, _ := core.NewBlockChain(rawdb.NewMemoryDatabase(), nil, b.genesis, nil, engine, vm.Config{}, nil, nil, nil)
 	defer chain.Stop()
-
-	// Ignore empty commit here for less noise.
-	w.skipSealHook = func(task *task) bool {
-		return len(task.receipts) == 0
-	}
 
 	// Wait for mined blocks.
 	sub := w.mux.Subscribe(core.NewMinedBlockEvent{})
