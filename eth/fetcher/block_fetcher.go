@@ -29,7 +29,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
-	"github.com/ethereum/go-ethereum/eth/protocols/wit"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/trie"
@@ -90,7 +89,7 @@ type headerRequesterFn func(common.Hash, chan *eth.Response) (*eth.Request, erro
 type bodyRequesterFn func([]common.Hash, chan *eth.Response) (*eth.Request, error)
 
 // witnessRequesterFn is a callback type for sending a witness retrieval request.
-type witnessRequesterFn func(common.Hash, chan *wit.Response) (*wit.Request, error)
+type witnessRequesterFn func(common.Hash, chan *eth.Response) (*eth.Request, error)
 
 // headerVerifierFn is a callback type to verify a block's header for fast propagation.
 type headerVerifierFn func(header *types.Header) error

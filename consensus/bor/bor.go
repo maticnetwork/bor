@@ -1172,7 +1172,7 @@ func (c *Bor) Seal(chain consensus.ChainHeaderReader, block *types.Block, witnes
 	}
 
 	// Wait until sealing is terminated or delay timeout.
-	log.Info("Waiting for slot to sign and propagate", "number", number, "hash", header.Hash, "delay-in-sec", uint(delay), "delay", common.PrettyDuration(delay))
+	log.Info("Waiting for slot to sign and propagate", "number", number, "hash", header.Hash(), "delay-in-sec", uint(delay), "delay", common.PrettyDuration(delay))
 
 	go func() {
 		select {

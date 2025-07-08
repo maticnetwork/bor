@@ -59,7 +59,6 @@ import (
 	"github.com/ethereum/go-ethereum/triedb"
 	"github.com/ethereum/go-ethereum/triedb/hashdb"
 	"github.com/ethereum/go-ethereum/triedb/pathdb"
-	"golang.org/x/exp/rand"
 )
 
 var (
@@ -1955,22 +1954,10 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	rawdb.WritePreimages(blockBatch, statedb.Preimages())
 
 	if statedb.Witness() != nil {
-		// START - DELETE THIS SNIPPET
-		if block.NumberU64()%20 == 0 {
-			FillWitnessWithDeterministicRandomCode(statedb.Witness())
-		}
-		// END   - DELETE THIS SNIPPET
-
 		var witBuf bytes.Buffer
 		if err := statedb.Witness().EncodeRLP(&witBuf); err != nil {
 			log.Error("error in witness encoding", "caughterr", err)
 		}
-
-		// START - DELETE THIS SNIPPET
-		// including a few fake codes on the witness to increase witness size
-		log.Info("[witpagination] Write big witness", "witSize", len(witBuf.Bytes()))
-
-		// END   - DELETE THIS SNIPPET
 
 		log.Debug("Writing witness", "block", block.NumberU64(), "hash", block.Hash(), "header", statedb.Witness().Header())
 
@@ -2053,38 +2040,6 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	}
 
 	return stateSyncLogs, nil
-}
-
-// FillWitnessWithDeterministicRandomCode repeatedly generates and adds random code blocks
-// to the witness until the total added code reaches 40MB. The size of each block is up to 24KB.
-// Random generation is seeded deterministically on each call, so the sequence is repeatable.
-func FillWitnessWithDeterministicRandomCode(w *stateless.Witness) {
-	const (
-		targetSize   = 17 * 1024 * 1024 // 17MB
-		maxChunkSize = 24 * 1024        // 24KB
-		seed         = 42               // fixed seed for determinism
-	)
-
-	r := rand.New(rand.NewSource(seed))
-	total := 0
-
-	for total < targetSize {
-		// determine next chunk size (1 to maxChunkSize)
-		chunkSize := r.Intn(maxChunkSize) + 1
-		if total+chunkSize > targetSize {
-			chunkSize = targetSize - total
-		}
-
-		// generate random bytes
-		buf := make([]byte, chunkSize)
-		for i := range buf {
-			buf[i] = byte(r.Intn(256))
-		}
-
-		// add to witness
-		w.AddCode(buf)
-		total += chunkSize
-	}
 }
 
 // WriteBlockAndSetHead writes the given block and all associated state to the database,

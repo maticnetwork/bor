@@ -26,7 +26,6 @@ import (
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
-	"github.com/ethereum/go-ethereum/eth/protocols/wit"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 )
@@ -121,10 +120,10 @@ func (h *ethHandler) handleBlockAnnounces(peer *eth.Peer, hashes []common.Hash, 
 		}
 	}
 
-	var witnessRequester func(hash common.Hash, sink chan *wit.Response) (*wit.Request, error)
+	var witnessRequester func(hash common.Hash, sink chan *eth.Response) (*eth.Request, error)
 	if h.statelessSync.Load() || h.syncWithWitnesses {
 		// Create a witness requester that uses the wit.Peer's RequestWitness method
-		witnessRequester = func(hash common.Hash, sink chan *wit.Response) (*wit.Request, error) {
+		witnessRequester = func(hash common.Hash, sink chan *eth.Response) (*eth.Request, error) {
 			// Get the ethPeer from the peerSet
 			ethPeer := h.peers.getOnePeerWithWitness(hash)
 			if ethPeer == nil {
@@ -132,7 +131,7 @@ func (h *ethHandler) handleBlockAnnounces(peer *eth.Peer, hashes []common.Hash, 
 			}
 
 			// Request witnesses using the wit peer
-			return ethPeer.witPeer.RequestWitness([]common.Hash{hash}, sink)
+			return ethPeer.RequestWitnesses([]common.Hash{hash}, sink)
 		}
 	}
 
@@ -152,7 +151,7 @@ func (h *ethHandler) handleBlockBroadcast(peer *eth.Peer, block *types.Block, td
 		log.Debug("Received block broadcast during stateless sync", "blockNumber", block.NumberU64(), "blockHash", block.Hash())
 
 		// Create a witness requester closure *only if* the peer supports the protocol.
-		witnessRequester := func(hash common.Hash, sink chan *wit.Response) (*wit.Request, error) {
+		witnessRequester := func(hash common.Hash, sink chan *eth.Response) (*eth.Request, error) {
 			// Get the ethPeer from the peerSet
 			ethPeer := h.peers.getOnePeerWithWitness(hash)
 			if ethPeer == nil {
@@ -160,7 +159,7 @@ func (h *ethHandler) handleBlockBroadcast(peer *eth.Peer, block *types.Block, td
 			}
 
 			// Request witnesses using the wit peer
-			return ethPeer.witPeer.RequestWitness([]common.Hash{hash}, sink)
+			return ethPeer.RequestWitnesses([]common.Hash{hash}, sink)
 		}
 
 		// Call the new fetcher method to inject the block

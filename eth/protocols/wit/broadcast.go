@@ -14,7 +14,7 @@ func (p *Peer) broadcastWitness() {
 			if err := p.sendNewWitness(witness); err != nil {
 				return
 			}
-			p.logger.Debug("propagated witness", "witness", witness)
+			p.logger.Debug("propagated witness", "hash", witness.Header().Hash())
 
 		case packet := <-p.queuedWitnessAnns:
 			if err := p.sendNewWitnessHashes(packet); err != nil {

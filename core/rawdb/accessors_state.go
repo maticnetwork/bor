@@ -280,10 +280,24 @@ func ReadWitness(db ethdb.KeyValueReader, blockHash common.Hash) []byte {
 	return data
 }
 
+func ReadWitnessSize(db ethdb.KeyValueReader, blockHash common.Hash) *uint64 {
+	log.Debug("ReadWitnessSize", "blockHash", blockHash)
+	data, err := db.Get(witnessSizeKey(blockHash))
+	if err != nil || len(data) == 0 {
+		return nil
+	}
+
+	number := binary.BigEndian.Uint64(data)
+	return &number
+}
+
 func WriteWitness(db ethdb.KeyValueWriter, blockHash common.Hash, witness []byte) {
 	log.Debug("WriteWitness", "blockHash", blockHash)
 	if err := db.Put(witnessKey(blockHash), witness); err != nil {
 		log.Crit("Failed to store witness", "err", err)
+	}
+	if err := db.Put(witnessSizeKey(blockHash), encodeBlockNumber(uint64(len(witness)))); err != nil {
+		log.Crit("Failed to store witness size", "err", err)
 	}
 }
 
@@ -292,6 +306,10 @@ func DeleteWitness(db ethdb.KeyValueWriter, blockHash common.Hash) {
 	if err := db.Delete(witnessKey(blockHash)); err != nil {
 		log.Crit("Failed to remove witness", "err", err)
 	}
+	if err := db.Delete(witnessSizeKey(blockHash)); err != nil {
+		log.Crit("Failed to remove witness size", "err", err)
+	}
+
 }
 
 func ReadWitnessPruneCursor(db ethdb.KeyValueReader) *uint64 {

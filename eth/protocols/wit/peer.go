@@ -9,7 +9,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
-	"github.com/ethereum/go-ethereum/rlp"
 )
 
 const (
@@ -99,14 +98,14 @@ func (p *Peer) AsyncSendNewWitness(witness *stateless.Witness) {
 	p.lock.RLock()
 	defer p.lock.RUnlock()
 
-	log.Debug("AsyncSendNewWitness", "witness", witness, "hash", witness.Header().Hash(), "peer", p.id)
+	log.Debug("AsyncSendNewWitness", "hash", witness.Header().Hash(), "peer", p.id)
 
 	// Queue the witness for broadcast
 	select {
 	case p.queuedWitness <- witness:
 		p.knownWitnesses.Add(witness.Header().Hash())
 	default:
-		p.logger.Debug("Dropped witness propagation.", "witness", witness, "peer", p.id)
+		p.logger.Debug("Dropped witness propagation.", "hash", witness.Header().Hash(), "peer", p.id)
 	}
 }
 
@@ -127,12 +126,12 @@ func (p *Peer) AsyncSendNewWitnessHash(hash common.Hash, number uint64) {
 	}
 }
 
-// RequestWitness sends a request to the peer for witnesses by block hashes.
-func (p *Peer) RequestWitness(hashes []common.Hash, sink chan *Response) (*Request, error) {
+// RequestWitness sends a request to the peer for witnesses by witness pages.
+func (p *Peer) RequestWitness(witnessPages []WitnessPageRequest, sink chan *Response) (*Request, error) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
-	log.Debug("Requesting witnesses", "peer", p.id, "count", len(hashes))
+	log.Debug("Requesting witnesses", "peer", p.id, "count", len(witnessPages))
 	id := rand.Uint64()
 
 	req := &Request{
@@ -143,7 +142,7 @@ func (p *Peer) RequestWitness(hashes []common.Hash, sink chan *Response) (*Reque
 		data: &GetWitnessPacket{
 			RequestId: id,
 			GetWitnessRequest: &GetWitnessRequest{
-				Hashes: hashes,
+				WitnessPages: witnessPages,
 			},
 		},
 	}
@@ -209,8 +208,8 @@ func (p *Peer) KnownWitnessContainsHash(hash common.Hash) bool {
 	return p.knownWitnesses.hashes.Contains(hash)
 }
 
-// ReplyWitnessRLP is the response to GetWitness
-func (p *Peer) ReplyWitnessRLP(requestID uint64, witnesses []rlp.RawValue) error {
+// ReplyWitness is the response to GetWitness
+func (p *Peer) ReplyWitness(requestID uint64, response *WitnessPacketResponse) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 	log.Debug("After lock")
@@ -218,7 +217,7 @@ func (p *Peer) ReplyWitnessRLP(requestID uint64, witnesses []rlp.RawValue) error
 	// Send the response
 	return p2p.Send(p.rw, MsgWitness, &WitnessPacketRLPPacket{
 		RequestId:             requestID,
-		WitnessPacketResponse: witnesses,
+		WitnessPacketResponse: *response,
 	})
 }
 
