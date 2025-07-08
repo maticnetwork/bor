@@ -7,11 +7,12 @@ import (
 
 	"github.com/golang/mock/gomock"
 
+	borTypes "github.com/0xPolygon/heimdall-v2/x/bor/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/bor"
 	"github.com/ethereum/go-ethereum/consensus/bor/api"
-	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
+	borSpan "github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
 	"github.com/ethereum/go-ethereum/consensus/bor/valset"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -156,7 +157,7 @@ func NewFakeBor(t TensingObject, chainDB ethdb.Database, chainConfig *params.Cha
 	return bor.New(chainConfig, chainDB, ethAPIMock, spanner, heimdallClientMock, heimdallClientWSMock, contractMock, false)
 }
 
-func createMockSpanForTest(address common.Address, chainId string) span.HeimdallSpan {
+func createMockSpanForTest(address common.Address, chainId string) borTypes.Span {
 	// Mock span 0 for heimdall calls
 	validator := valset.Validator{
 		ID:               0,
@@ -168,15 +169,13 @@ func createMockSpanForTest(address common.Address, chainId string) span.Heimdall
 		Validators: []*valset.Validator{&validator},
 		Proposer:   &validator,
 	}
-	span0 := span.HeimdallSpan{
-		Span: span.Span{
-			Id:         0,
-			StartBlock: 0,
-			EndBlock:   255,
-		},
-		ValidatorSet:      validatorSet,
-		SelectedProducers: []valset.Validator{validator},
-		ChainID:           chainId,
+	span0 := borTypes.Span{
+		Id:                0,
+		StartBlock:        0,
+		EndBlock:          255,
+		ValidatorSet:      borSpan.ConvertBorValSetToHeimdallValSet(&validatorSet),
+		SelectedProducers: borSpan.ConvertBorValidatorsToHeimdallValidators([]*valset.Validator{&validator}),
+		BorChainId:        chainId,
 	}
 
 	return span0

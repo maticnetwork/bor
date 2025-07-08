@@ -2,44 +2,16 @@ package bor
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/0xPolygon/heimdall-v2/x/bor/types"
 	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
-	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
 	"github.com/stretchr/testify/require"
 )
 
 type MockHeimdallClient struct {
-}
-
-func (h *MockHeimdallClient) GetSpanV1(ctx context.Context, spanID uint64) (*span.HeimdallSpan, error) {
-	// Throw error for span id 100
-	if spanID == 100 {
-		return nil, fmt.Errorf("unable to fetch span")
-	}
-
-	// For everything else, return hardcoded span assuming length 6400 (except for span 0)
-	if spanID == 0 {
-		return &span.HeimdallSpan{
-			Span: span.Span{
-				Id:         0,
-				StartBlock: 0,
-				EndBlock:   255,
-			},
-		}, nil
-	} else {
-		return &span.HeimdallSpan{
-			Span: span.Span{
-				Id:         spanID,
-				StartBlock: 6400*(spanID-1) + 256,
-				EndBlock:   6400*spanID + 255,
-			},
-		}, nil
-	}
 }
 
 func TestSpanStore_SpanById(t *testing.T) {

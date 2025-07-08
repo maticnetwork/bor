@@ -74,8 +74,8 @@ github.com/0xPolygon/cosmos-sdk v0.1.15-beta-polygon h1:NRHZaNYexu/gtugvHTOooVQ+
 github.com/0xPolygon/cosmos-sdk v0.1.15-beta-polygon/go.mod h1:+rwBgGykS8X1oZrJUfmFODOCqGXYc7jIcjUONPkDme4=
 github.com/0xPolygon/cosmos-sdk/client/v2 v2.0.0-beta.1 h1:XV7f44uAJ1p1w9j15uzm2S8VOSusHFJ1UWvkUj0EK7g=
 github.com/0xPolygon/cosmos-sdk/client/v2 v2.0.0-beta.1/go.mod h1:JEUSu9moNZQ4kU3ir1DKD5eU4bllmAexrGWjmb9k8qU=
-github.com/0xPolygon/heimdall-v2 v0.1.32 h1:IkVrgSub6UDA1zyVV6vpNkkVlvFb7dbKNtviZBusdeA=
-github.com/0xPolygon/heimdall-v2 v0.1.32/go.mod h1:cPgfJvRIIGmlBulp4oj+oXNTxHwfVVBuZ/qHIFfd8uE=
+github.com/0xPolygon/heimdall-v2 v0.2.8-0.20250708101522-d403fe733391 h1:ZRD7i2q9wp2J/IbWKdLmBCA+PgviBRGDm5MLWZ5tX0Y=
+github.com/0xPolygon/heimdall-v2 v0.2.8-0.20250708101522-d403fe733391/go.mod h1:OrfslZ/6UByzKaxGqJyf7l/OUFa/vky5lTNAl0JIZ+s=
 github.com/99designs/go-keychain v0.0.0-20191008050251-8e49817e8af4 h1:/vQbFIOMbk2FiG/kXiLl8BRyzTWDw7gX/Hz7Dd5eDMs=
 github.com/99designs/go-keychain v0.0.0-20191008050251-8e49817e8af4/go.mod h1:hN7oaIRCjzsZ2dE+yG5k+rsdt3qcwykqK6HVGcKwsw4=
 github.com/99designs/keyring v1.2.1 h1:tYLp1ULvO7i3fI5vE21ReQuj99QFSs7lGm0xWyJo87o=
@@ -1252,8 +1252,6 @@ go.uber.org/goleak v1.1.10/go.mod h1:8a7PlsEVH3e/a/GLqe5IIrQx6GzcnRmZEufDUTk4A7A
 go.uber.org/goleak v1.2.1/go.mod h1:qlT2yGI9QafXHhZZLxlSuNsMw3FFLxBr+tBRlmO1xH4=
 go.uber.org/goleak v1.3.0 h1:2K3zAYmnTNqV73imy9J1T3WC+gmCePx2hEGkimedGto=
 go.uber.org/goleak v1.3.0/go.mod h1:CoHD4mav9JJNrW/WLlf7HGZPjdw8EucARQHekz1X6bE=
-go.uber.org/mock v0.5.0 h1:KAMbZvZPyBPWgD14IrIQ38QCyjwpvVVV6K/bHl1IwQU=
-go.uber.org/mock v0.5.0/go.mod h1:ge71pBPLYDk7QIi1LupWxdAykm7KIEFchiOqd6z7qMM=
 go.uber.org/multierr v1.1.0/go.mod h1:wR5kodmAFQ0UK8QlbwjlSNy0Z68gJhDJUG5sjR94q/0=
 go.uber.org/multierr v1.3.0/go.mod h1:VgVr7evmIr6uPjLBxg28wmKNXyqE9akIJ5XnfpiKl+4=
 go.uber.org/multierr v1.6.0/go.mod h1:cdWPpRnG4AhwMwsgIHip0KRBQjJy5kYEpYjJxpXp9iU=

@@ -49,10 +49,10 @@ func NewSpanStore(heimdallClient IHeimdallClient, spanner Spanner, chainId strin
 }
 
 // spanById returns a span given its id. It fetches span from heimdall if not found in cache.
-func (s *SpanStore) spanById(ctx context.Context, spanId uint64) (*span.HeimdallSpan, error) {
-	var currentSpan *span.HeimdallSpan
+func (s *SpanStore) spanById(ctx context.Context, spanId uint64) (*borTypes.Span, error) {
+	var currentSpan *borTypes.Span
 	if value, ok := s.store.Get(spanId); ok {
-		currentSpan, _ = value.(*span.HeimdallSpan)
+		currentSpan, _ = value.(*borTypes.Span)
 	}
 
 	if currentSpan != nil {
@@ -83,7 +83,7 @@ func (s *SpanStore) spanById(ctx context.Context, spanId uint64) (*span.Heimdall
 	}
 
 	s.store.Add(spanId, currentSpan)
-	if currentSpan.Span.Id > s.latestKnownSpanId {
+	if currentSpan.Id > s.latestKnownSpanId {
 		s.latestKnownSpanId = currentSpan.Id
 	}
 
@@ -104,7 +104,7 @@ func (s *SpanStore) setStartBlockHeimdallSpanID(startBlock, spanID uint64) error
 	return nil
 }
 
-func (s *SpanStore) getLatestHeimdallSpanV1() *span.HeimdallSpan {
+func (s *SpanStore) getLatestHeimdallSpanV1() *borTypes.Span {
 	storedSpanBytes, err := s.db.Get(rawdb.LastHeimdallV1SpanKey)
 	if err != nil {
 		log.Error("Error while fetching heimdallv1 span from db", "error", err)
@@ -116,7 +116,7 @@ func (s *SpanStore) getLatestHeimdallSpanV1() *span.HeimdallSpan {
 		return nil
 	}
 
-	var storedSpan span.HeimdallSpan
+	var storedSpan borTypes.Span
 	if err := json.Unmarshal(storedSpanBytes, &storedSpan); err != nil {
 		log.Error("Error while unmarshalling heimdallv1 span", "error", err)
 		return nil
@@ -150,7 +150,7 @@ func (s *SpanStore) getLatestHeimdallSpanV2() *borTypes.Span {
 // assumes that a span has been committed before (i.e. is current or past span) and returns an error if
 // asked for a future span. This is safe to assume as we don't have a way to find out span id for a future block
 // unless we hardcode the span length (which we don't want to).
-func (s *SpanStore) spanByBlockNumber(ctx context.Context, blockNumber uint64) (*span.HeimdallSpan, error) {
+func (s *SpanStore) spanByBlockNumber(ctx context.Context, blockNumber uint64) (*borTypes.Span, error) {
 	// As we don't persist latest known span to db, we loose the value on restarts. This leads to multiple heimdall calls
 	// which can be avoided. Hence we estimate the span id from block number which updates the latest known span id. Note
 	// that we still check if the block number lies in the range of span before returning it.
@@ -183,7 +183,7 @@ func (s *SpanStore) spanByBlockNumber(ctx context.Context, blockNumber uint64) (
 }
 
 // getFutureSpan fetches span for future block number. It is mostly needed during snap sync.
-func getFutureSpan(ctx context.Context, id uint64, blockNumber uint64, latestKnownSpanId uint64, s *SpanStore) (*span.HeimdallSpan, error) {
+func getFutureSpan(ctx context.Context, id uint64, blockNumber uint64, latestKnownSpanId uint64, s *SpanStore) (*borTypes.Span, error) {
 	for {
 		if id > latestKnownSpanId+maxSpanFetchLimit {
 			return nil, fmt.Errorf("span not found for block %d", blockNumber)
@@ -215,7 +215,7 @@ func (s *SpanStore) setHeimdallClient(client IHeimdallClient) {
 
 // getMockSpan0 constructs a mock span 0 by fetching validator set from genesis state. This should
 // only be used in tests where heimdall client is not available.
-func getMockSpan0(ctx context.Context, spanner Spanner, chainId string) (*span.HeimdallSpan, error) {
+func getMockSpan0(ctx context.Context, spanner Spanner, chainId string) (*borTypes.Span, error) {
 	if spanner == nil {
 		return nil, fmt.Errorf("spanner not available to fetch validator set")
 	}
@@ -229,18 +229,13 @@ func getMockSpan0(ctx context.Context, spanner Spanner, chainId string) (*span.H
 		Validators: vals,
 		Proposer:   vals[0],
 	}
-	selectedProducers := make([]valset.Validator, len(vals))
-	for _, v := range vals {
-		selectedProducers = append(selectedProducers, *v)
-	}
-	return &span.HeimdallSpan{
-		Span: span.Span{
-			Id:         0,
-			StartBlock: 0,
-			EndBlock:   255,
-		},
-		ValidatorSet:      validatorSet,
-		SelectedProducers: selectedProducers,
-		ChainID:           chainId,
+
+	return &borTypes.Span{
+		Id:                0,
+		StartBlock:        0,
+		EndBlock:          255,
+		ValidatorSet:      span.ConvertBorValSetToHeimdallValSet(&validatorSet),
+		SelectedProducers: span.ConvertBorValidatorsToHeimdallValidators(vals),
+		BorChainId:        chainId,
 	}, nil
 }

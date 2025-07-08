@@ -26,7 +26,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/bor/api"
 	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
-	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
+	borSpan "github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
 	"github.com/ethereum/go-ethereum/consensus/bor/statefull"
 	"github.com/ethereum/go-ethereum/consensus/bor/valset"
 	"github.com/ethereum/go-ethereum/consensus/misc"
@@ -43,6 +43,7 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 	"github.com/ethereum/go-ethereum/trie"
 
+	borTypes "github.com/0xPolygon/heimdall-v2/x/bor/types"
 	stakeTypes "github.com/0xPolygon/heimdall-v2/x/stake/types"
 )
 
@@ -507,8 +508,9 @@ func (c *Bor) verifyCascadingFields(chain consensus.ChainHeaderReader, header *t
 		}
 
 		// Use producer set from span as it's equivalent to the data we get from genesis contract
-		newValidators := make([]*valset.Validator, len(span.SelectedProducers))
-		for i, val := range span.SelectedProducers {
+		selectedProducers := borSpan.ConvertHeimdallValidatorsToBorValidators(span.SelectedProducers)
+		newValidators := make([]*valset.Validator, len(selectedProducers))
+		for i, val := range selectedProducers {
 			newValidators[i] = &val
 		}
 		sort.Sort(valset.ValidatorsByAddress(newValidators))
@@ -611,7 +613,8 @@ func (c *Bor) snapshot(chain consensus.ChainHeaderReader, number uint64, hash co
 				}
 
 				// new snap shot
-				snap = newSnapshot(c.chainConfig, c.signatures, number, hash, span.ValidatorSet.Validators)
+				borValSet := borSpan.ConvertHeimdallValSetToBorValSet(span.ValidatorSet)
+				snap = newSnapshot(c.chainConfig, c.signatures, number, hash, borValSet.Validators)
 				if err := snap.store(c.db); err != nil {
 					return nil, err
 				}
@@ -1191,7 +1194,7 @@ func (c *Bor) checkAndCommitSpan(
 	return nil
 }
 
-func (c *Bor) needToCommitSpan(currentSpan *span.Span, headerNumber uint64) bool {
+func (c *Bor) needToCommitSpan(currentSpan *borTypes.Span, headerNumber uint64) bool {
 	// If span is nil, return false.
 	if currentSpan == nil {
 		return false
@@ -1226,7 +1229,7 @@ func (c *Bor) FetchAndCommitSpan(
 	chain core.ChainContext,
 ) error {
 	var (
-		minSpan    span.Span
+		minSpan    borTypes.Span
 		chainId    string
 		validators []stakeTypes.MinimalVal
 		producers  []stakeTypes.MinimalVal
@@ -1239,29 +1242,19 @@ func (c *Bor) FetchAndCommitSpan(
 			return err
 		}
 
-		minSpan = span.Span{
+		minSpan = borTypes.Span{
 			Id:         s.Id,
 			StartBlock: s.StartBlock,
 			EndBlock:   s.EndBlock,
 		}
-		chainId = s.ChainID
+		chainId = s.BorChainId
 
 		for _, val := range s.ValidatorSet.Validators {
-			m := stakeTypes.MinimalVal{
-				ID:          val.ID,
-				VotingPower: uint64(val.VotingPower),
-				Signer:      val.Address,
-			}
-			validators = append(validators, m)
+			validators = append(validators, val.MinimalVal())
 		}
 
 		for _, val := range s.SelectedProducers {
-			m := stakeTypes.MinimalVal{
-				ID:          val.ID,
-				VotingPower: uint64(val.VotingPower),
-				Signer:      val.Address,
-			}
-			producers = append(producers, m)
+			producers = append(producers, val.MinimalVal())
 		}
 	} else {
 		response, err := c.spanStore.spanById(ctx, newSpanID)
@@ -1272,29 +1265,19 @@ func (c *Bor) FetchAndCommitSpan(
 			return fmt.Errorf("span with id %d not found", newSpanID)
 		}
 
-		minSpan = span.Span{
+		minSpan = borTypes.Span{
 			Id:         response.Id,
 			StartBlock: response.StartBlock,
 			EndBlock:   response.EndBlock,
 		}
-		chainId = response.ChainID
+		chainId = response.BorChainId
 
 		for _, val := range response.ValidatorSet.Validators {
-			m := stakeTypes.MinimalVal{
-				ID:          val.ID,
-				VotingPower: uint64(val.VotingPower),
-				Signer:      val.Address,
-			}
-			validators = append(validators, m)
+			validators = append(validators, val.MinimalVal())
 		}
 
 		for _, val := range response.SelectedProducers {
-			m := stakeTypes.MinimalVal{
-				ID:          val.ID,
-				VotingPower: uint64(val.VotingPower),
-				Signer:      val.Address,
-			}
-			producers = append(producers, m)
+			producers = append(producers, val.MinimalVal())
 		}
 	}
 
@@ -1439,7 +1422,7 @@ func (c *Bor) getNextHeimdallSpanForTest(
 	newSpanID uint64,
 	header *types.Header,
 	chain core.ChainContext,
-) (*span.HeimdallSpan, error) {
+) (*borTypes.Span, error) {
 	headerNumber := header.Number.Uint64()
 
 	spanBor, err := c.spanner.GetCurrentSpan(ctx, header.ParentHash)
@@ -1464,20 +1447,11 @@ func (c *Bor) getNextHeimdallSpanForTest(
 	}
 
 	spanBor.EndBlock = spanBor.StartBlock + (100 * c.config.CalculateSprint(headerNumber)) - 1
+	spanBor.BorChainId = c.chainConfig.ChainID.String()
+	spanBor.ValidatorSet = borSpan.ConvertBorValSetToHeimdallValSet(snap.ValidatorSet)
+	spanBor.SelectedProducers = borSpan.ConvertBorValidatorsToHeimdallValidators(snap.ValidatorSet.Validators)
 
-	selectedProducers := make([]valset.Validator, len(snap.ValidatorSet.Validators))
-	for i, v := range snap.ValidatorSet.Validators {
-		selectedProducers[i] = *v
-	}
-
-	heimdallSpan := &span.HeimdallSpan{
-		Span:              *spanBor,
-		ValidatorSet:      *snap.ValidatorSet,
-		SelectedProducers: selectedProducers,
-		ChainID:           c.chainConfig.ChainID.String(),
-	}
-
-	return heimdallSpan, nil
+	return spanBor, nil
 }
 
 func validatorContains(a []*valset.Validator, x *valset.Validator) (*valset.Validator, bool) {

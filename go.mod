@@ -1,9 +1,9 @@
 module github.com/ethereum/go-ethereum
 
-go 1.24.3
+go 1.24.4
 
 require (
-	github.com/0xPolygon/heimdall-v2 v0.1.32
+	github.com/0xPolygon/heimdall-v2 v0.2.8-0.20250708101522-d403fe733391
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.3.2
 	github.com/BurntSushi/toml v1.4.0
 	github.com/JekaMas/go-grpc-net-conn v0.0.0-20220708155319-6aff21f2d13d
@@ -89,7 +89,6 @@ require (
 	go.opentelemetry.io/otel/sdk v1.32.0
 	go.uber.org/automaxprocs v1.6.0
 	go.uber.org/goleak v1.3.0
-	go.uber.org/mock v0.5.0
 	golang.org/x/crypto v0.36.0
 	golang.org/x/exp v0.0.0-20250106191152-7588d65b2ba8
 	golang.org/x/sync v0.12.0

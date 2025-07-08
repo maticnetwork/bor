@@ -11,7 +11,7 @@ import (
 	"github.com/0xPolygon/heimdall-v2/x/bor/types"
 )
 
-func (h *HeimdallGRPCClient) GetSpanV2(ctx context.Context, spanID uint64) (*types.Span, error) {
+func (h *HeimdallGRPCClient) GetSpan(ctx context.Context, spanID uint64) (*types.Span, error) {
 	log.Info("Fetching span", "spanID", spanID)
 
 	var err error
@@ -44,7 +44,7 @@ func (h *HeimdallGRPCClient) GetSpanV2(ctx context.Context, spanID uint64) (*typ
 	return resSpan, nil
 }
 
-func (h *HeimdallGRPCClient) GetLatestSpanV2(ctx context.Context) (*types.Span, error) {
+func (h *HeimdallGRPCClient) GetLatestSpan(ctx context.Context) (*types.Span, error) {
 	log.Info("Fetching latest span")
 
 	var err error
