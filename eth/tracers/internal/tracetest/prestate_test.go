@@ -110,7 +110,7 @@ func testPrestateTracer(tracerName string, dirPath string, t *testing.T) {
 			}
 			evm := vm.NewEVM(blockContext, state.StateDB, test.Genesis.Config, vm.Config{Tracer: tracer.Hooks})
 			tracer.OnTxStart(evm.GetVMContext(), tx, msg.From)
-			vmRet, err := core.ApplyMessage(evm, msg, new(core.GasPool).AddGas(tx.Gas()), t.Context())
+			vmRet, err := core.ApplyMessage(evm, msg, new(core.GasPool).AddGas(tx.Gas()), nil)
 			if err != nil {
 				t.Fatalf("failed to execute transaction: %v", err)
 			}

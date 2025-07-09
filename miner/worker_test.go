@@ -86,17 +86,12 @@ func testGenerateBlockAndImport(t *testing.T, isClique bool, isBor bool) {
 
 	defer engine.Close()
 
-	w, b, _ := newTestWorker(t, &chainConfig, engine, db, false, 0, 0)
+	w, b, _ := newTestWorker(t, &chainConfig, engine, db, false, 0)
 	defer w.close()
 
 	// This test chain imports the mined blocks.
 	chain, _ := core.NewBlockChain(rawdb.NewMemoryDatabase(), nil, b.genesis, nil, engine, vm.Config{}, nil, nil, nil)
 	defer chain.Stop()
-
-	// Ignore empty commit here for less noise.
-	w.skipSealHook = func(task *task) bool {
-		return len(task.receipts) == 0
-	}
 
 	// Wait for mined blocks.
 	sub := w.mux.Subscribe(core.NewMinedBlockEvent{})
@@ -286,7 +281,7 @@ func (b *testWorkerBackend) newRandomTxWithNonce(creation bool, nonce uint64) *t
 	gasPrice := big.NewInt(100 * params.InitialBaseFee)
 
 	if creation {
-		tx, _ = types.SignTx(types.NewContractCreation(b.txPool.Nonce(TestBankAddress), big.NewInt(0), testGas, gasPrice, common.FromHex(testCode)), types.HomesteadSigner{}, testBankKey)
+		tx, _ = types.SignTx(types.NewContractCreation(b.txPool.PoolNonce(TestBankAddress), big.NewInt(0), testGas, gasPrice, common.FromHex(testCode)), types.HomesteadSigner{}, testBankKey)
 	} else {
 		tx, _ = types.SignTx(types.NewTransaction(nonce, testUserAddress, big.NewInt(1000), params.TxGas, gasPrice, nil), types.HomesteadSigner{}, testBankKey)
 	}
@@ -317,14 +312,11 @@ func (b *testWorkerBackend) newStorageContractCallTx(to common.Address, nonce ui
 	return tx
 }
 
-func newTestWorker(t TensingObject, chainConfig *params.ChainConfig, engine consensus.Engine, db ethdb.Database, noempty bool, delay uint, opcodeDelay uint) (*worker, *testWorkerBackend, func()) {
+func newTestWorker(t TensingObject, chainConfig *params.ChainConfig, engine consensus.Engine, db ethdb.Database, noempty bool, delay uint) (*worker, *testWorkerBackend, func()) {
 	backend := newTestWorkerBackend(t, chainConfig, engine, db)
 	backend.txPool.Add(pendingTxs, false)
 	w := newWorker(testConfig, chainConfig, engine, backend, new(event.TypeMux), nil, false)
-	if delay != 0 || opcodeDelay != 0 {
-		w.setInterruptCtx(vm.InterruptCtxDelayKey, delay)
-		w.setInterruptCtx(vm.InterruptCtxOpcodeDelayKey, opcodeDelay)
-	}
+	w.setMockTxDelay(delay)
 	w.setEtherbase(testBankAddress)
 	// enable empty blocks
 	w.noempty.Store(noempty)
@@ -340,17 +332,12 @@ func TestGenerateAndImportBlock(t *testing.T) {
 	config.Clique = &params.CliqueConfig{Period: 1, Epoch: 30000}
 	engine := clique.New(config.Clique, db)
 
-	w, b, _ := newTestWorker(t, &config, engine, db, false, 0, 0)
+	w, b, _ := newTestWorker(t, &config, engine, db, false, 0)
 	defer w.close()
 
 	// This test chain imports the mined blocks.
 	chain, _ := core.NewBlockChain(rawdb.NewMemoryDatabase(), nil, b.genesis, nil, engine, vm.Config{}, nil, nil, nil)
 	defer chain.Stop()
-
-	// Ignore empty commit here for less noise.
-	w.skipSealHook = func(task *task) bool {
-		return len(task.receipts) == 0
-	}
 
 	// Wait for mined blocks.
 	sub := w.mux.Subscribe(core.NewMinedBlockEvent{})
@@ -417,7 +404,7 @@ func testEmptyWork(t *testing.T, chainConfig *params.ChainConfig, engine consens
 	t.Helper()
 	defer engine.Close()
 
-	w, _, _ := newTestWorker(t, chainConfig, engine, rawdb.NewMemoryDatabase(), false, 0, 0)
+	w, _, _ := newTestWorker(t, chainConfig, engine, rawdb.NewMemoryDatabase(), false, 0)
 	defer w.close()
 
 	taskCh := make(chan struct{}, 2)
@@ -464,7 +451,7 @@ func TestAdjustIntervalClique(t *testing.T) {
 func testAdjustInterval(t *testing.T, chainConfig *params.ChainConfig, engine consensus.Engine) {
 	defer engine.Close()
 
-	w, _, _ := newTestWorker(t, chainConfig, engine, rawdb.NewMemoryDatabase(), false, 0, 0)
+	w, _, _ := newTestWorker(t, chainConfig, engine, rawdb.NewMemoryDatabase(), false, 0)
 	defer w.close()
 
 	w.skipSealHook = func(task *task) bool {
@@ -569,7 +556,7 @@ func TestGetSealingWorkPostMerge(t *testing.T) {
 func testGetSealingWork(t *testing.T, chainConfig *params.ChainConfig, engine consensus.Engine) {
 	defer engine.Close()
 
-	w, b, _ := newTestWorker(t, chainConfig, engine, rawdb.NewMemoryDatabase(), false, 0, 0)
+	w, b, _ := newTestWorker(t, chainConfig, engine, rawdb.NewMemoryDatabase(), false, 0)
 	defer w.close()
 
 	w.setExtra([]byte{0x01, 0x02})
@@ -711,81 +698,17 @@ func testGetSealingWork(t *testing.T, chainConfig *params.ChainConfig, engine co
 // an artificial delay at transaction level. It runs the normal mining flow triggered via new head.
 func TestCommitInterruptExperimentBor_NormalFlow(t *testing.T) {
 	// with 1 sec block time and 200 millisec tx delay we should get 5 txs per block
-	testCommitInterruptExperimentBor(t, 200, 5, 0)
+	testCommitInterruptExperimentBor(t, 200, 5)
 
 	time.Sleep(2 * time.Second)
 
 	// with 1 sec block time and 100 millisec tx delay we should get 10 txs per block
-	testCommitInterruptExperimentBor(t, 100, 10, 0)
+	testCommitInterruptExperimentBor(t, 100, 10)
 }
 
-// nolint : paralleltest
-// TestCommitInterruptExperimentBorContract tests the commit interrupt experiment for bor consensus by inducing an artificial delay at OPCODE level.
-func TestCommitInterruptExperimentBorContract(t *testing.T) {
-	// pre-calculated number of OPCODES = 123. 7*123=861 < 1000, 1 tx is possible but 2 tx per block will not be possible.
-	testCommitInterruptExperimentBorContract(t, 0, 1, 7)
-	time.Sleep(2 * time.Second)
-	// pre-calculated number of OPCODES = 123. 2*123=246 < 1000, 4 tx is possible but 5 tx per block will not be possible. But 3 happen due to other overheads.
-	testCommitInterruptExperimentBorContract(t, 0, 3, 2)
-	time.Sleep(2 * time.Second)
-	// pre-calculated number of OPCODES = 123. 3*123=369 < 1000, 2 tx is possible but 3 tx per block will not be possible.
-	testCommitInterruptExperimentBorContract(t, 0, 2, 3)
-}
-
-// nolint : thelper
-// testCommitInterruptExperimentBorContract is a helper function for testing the commit interrupt experiment for bor consensus.
-func testCommitInterruptExperimentBorContract(t *testing.T, delay uint, txCount int, opcodeDelay uint) {
-	var (
-		engine      consensus.Engine
-		chainConfig *params.ChainConfig
-		txInTxpool  = 100
-		txs         = make([]*types.Transaction, 0, txInTxpool)
-	)
-
-	chainConfig = params.BorUnittestChainConfig
-
-	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelInfo, true)))
-
-	engine, _ = getFakeBorFromConfig(t, chainConfig)
-
-	w, b, _ := newTestWorker(t, chainConfig, engine, rawdb.NewMemoryDatabase(), true, delay, opcodeDelay)
-	defer w.close()
-
-	// nonce 0 tx
-	tx, addr := b.newStorageCreateContractTx()
-	if err := b.txPool.Add([]*types.Transaction{tx}, false)[0]; err != nil {
-		t.Fatal(err)
-	}
-
-	time.Sleep(4 * time.Second)
-
-	// nonce starts from 1 because we already have one tx
-	initNonce := uint64(1)
-
-	for i := 0; i < txInTxpool; i++ {
-		tx := b.newStorageContractCallTx(addr, initNonce+uint64(i))
-		txs = append(txs, tx)
-	}
-
-	wrapped := make([]*types.Transaction, len(txs))
-	copy(wrapped, txs)
-
-	b.TxPool().Add(wrapped, false)
-
-	// Start mining!
-	w.start()
-	time.Sleep(5 * time.Second)
-	w.stop()
-
-	currentBlockNumber := w.current.header.Number.Uint64()
-	prevBlockTxCount := w.chain.GetBlockByNumber(currentBlockNumber - 1).Transactions().Len()
-	assert.Check(t, prevBlockTxCount > 0)
-	assert.Check(t, prevBlockTxCount <= txCount)
-}
-
-// // nolint : thelper
+// nolint: thelper
 // testCommitInterruptExperimentBor is a helper function for testing the commit interrupt experiment for bor consensus.
-func testCommitInterruptExperimentBor(t *testing.T, delay uint, txCount int, opcodeDelay uint) {
+func testCommitInterruptExperimentBor(t *testing.T, delay uint, txCount int) {
 	var (
 		engine      consensus.Engine
 		chainConfig *params.ChainConfig
@@ -801,7 +724,7 @@ func testCommitInterruptExperimentBor(t *testing.T, delay uint, txCount int, opc
 
 	engine, ctrl = getFakeBorFromConfig(t, chainConfig)
 
-	w, b, _ := newTestWorker(t, chainConfig, engine, rawdb.NewMemoryDatabase(), true, delay, opcodeDelay)
+	w, b, _ := newTestWorker(t, chainConfig, engine, rawdb.NewMemoryDatabase(), true, delay)
 	defer func() {
 		w.close()
 		engine.Close()
@@ -818,9 +741,7 @@ func testCommitInterruptExperimentBor(t *testing.T, delay uint, txCount int, opc
 	}
 
 	wrapped := make([]*types.Transaction, len(txs))
-	for i, tx := range txs {
-		wrapped[i] = tx
-	}
+	copy(wrapped, txs)
 
 	b.TxPool().Add(wrapped, false)
 
@@ -851,7 +772,8 @@ func TestCommitInterruptExperimentBor_NewTxFlow(t *testing.T) {
 
 	engine, ctrl = getFakeBorFromConfig(t, chainConfig)
 
-	w, b, _ := newTestWorker(t, chainConfig, engine, rawdb.NewMemoryDatabase(), true, uint(0), uint(0))
+	// Set the mock tx delay to 500ms
+	w, b, _ := newTestWorker(t, chainConfig, engine, rawdb.NewMemoryDatabase(), true, 500)
 	defer func() {
 		w.close()
 		engine.Close()
@@ -881,39 +803,17 @@ func TestCommitInterruptExperimentBor_NewTxFlow(t *testing.T) {
 				// Stop the miner so that worker assumes it's a sentry and not a validator
 				w.stop()
 
-				// Add the first transaction to be mined normally via `txsCh`
-				b.TxPool().Add([]*types.Transaction{tx1}, false)
+				// Add all 3 transactions to the pool so that they're executed via the `txsCh`
+				b.TxPool().Add([]*types.Transaction{tx1, tx2, tx3}, false)
 
 				// Set it to syncing mode so that it doesn't mine via the `commitWork` flow
 				w.syncing.Store(true)
 
 				// Wait until the mining window (2s) is almost about to reach leaving
-				// a very small time (~10ms) to try to commit transaction before timing out.
+				// a very small time (~100ms) to try to commit transaction before timing out.
 				delay := time.Until(time.Unix(int64(w.current.header.Time), 0))
-				delay -= 10 * time.Millisecond
-
-				// Case 1: This transaction should not be included due to commit interrupt
-				// at opcode level. It will start the EVM execution but will end in between.
+				delay -= 100 * time.Millisecond
 				<-time.After(delay)
-
-				// Set an artificial delay at opcode level
-				w.setInterruptCtx(vm.InterruptCtxOpcodeDelayKey, uint(500))
-
-				// Send the second transaction
-				b.TxPool().Add([]*types.Transaction{tx2}, false)
-
-				// Reset the delay again. By this time, we're sure that it has timed out.
-				delay = time.Until(time.Unix(int64(w.current.header.Time), 0))
-
-				// Case 2: This transaction should not be included because the miner loop
-				// won't accept any transactions post the deadline (i.e. header.Timestamp).
-				<-time.After(delay)
-
-				// Reset the artificial opcode delay just to be sure of the exclusion of tx
-				w.setInterruptCtx(vm.InterruptCtxOpcodeDelayKey, uint(0))
-
-				// Send the third transaction
-				b.TxPool().Add([]*types.Transaction{tx3}, false)
 			}
 		}
 	}()
@@ -921,10 +821,11 @@ func TestCommitInterruptExperimentBor_NewTxFlow(t *testing.T) {
 	// Wait for enough time to mine 3 blocks
 	time.Sleep(6 * time.Second)
 
-	// Ensure that the last block was 3 and only 1 transactions out of 3 were included
+	// Ensure that the last block was 3 and only 2/3 transactions are mined because
+	// of the 500ms timeout and 1s block time.
 	assert.Equal(t, w.current.header.Number.Uint64(), uint64(3))
-	assert.Equal(t, w.current.tcount, 1)
-	assert.Equal(t, len(w.current.txs), 1)
+	assert.Equal(t, w.current.tcount, 2)
+	assert.Equal(t, len(w.current.txs), 2)
 }
 
 func BenchmarkBorMining(b *testing.B) {
@@ -960,7 +861,7 @@ func BenchmarkBorMining(b *testing.B) {
 
 	chainConfig.LondonBlock = big.NewInt(0)
 
-	w, back, _ := newTestWorker(b, chainConfig, engine, rawdb.NewMemoryDatabase(), false, 0, 0)
+	w, back, _ := newTestWorker(b, chainConfig, engine, rawdb.NewMemoryDatabase(), false, 0)
 	defer w.close()
 
 	chain, _ := core.NewBlockChain(rawdb.NewMemoryDatabase(), nil, back.genesis, nil, engine, vm.Config{}, nil, nil, nil)
@@ -1059,7 +960,7 @@ func BenchmarkBorMiningBlockSTMMetadata(b *testing.B) {
 
 	chainConfig.LondonBlock = big.NewInt(0)
 
-	w, back, _ := newTestWorker(b, chainConfig, engine, rawdb.NewMemoryDatabase(), false, 0, 0)
+	w, back, _ := newTestWorker(b, chainConfig, engine, rawdb.NewMemoryDatabase(), false, 0)
 	defer w.close()
 
 	// This test chain imports the mined blocks.
