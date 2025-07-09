@@ -685,7 +685,21 @@ func (pool *LegacyPool) validateAuth(tx *types.Transaction) error {
 // add validates a transaction and inserts it into the non-executable queue for later
 // pending promotion and execution. If the transaction is a replacement for an already
 // pending or queued one, it overwrites the previous transaction if its price is higher.
-func (pool *LegacyPool) add(tx *types.Transaction) (replaced bool, err error) {
+// If async insertion is requested, it frees up the global pool lock to allow other
+// functions to use the pending pool. It also performs some operations on the `pricedHeap`
+// async to avoid waiting for reheap. The pool lock won't be held when called in async mode.
+func (pool *LegacyPool) add(tx *types.Transaction, async bool) (replaced bool, err error) {
+	// If `async` is set, acquire the global lock.
+	var locked bool = true
+	if async {
+		pool.mu.Lock()
+		defer func() {
+			if locked {
+				pool.mu.Unlock()
+			}
+		}()
+	}
+
 	// If the transaction is already known, discard it
 	hash := tx.Hash()
 	if pool.all.Get(hash) != nil {
@@ -731,6 +745,12 @@ func (pool *LegacyPool) add(tx *types.Transaction) (replaced bool, err error) {
 	}
 	// If the transaction pool is full, discard underpriced transactions
 	if uint64(pool.all.Slots()+numSlots(tx)) > pool.config.GlobalSlots+pool.config.GlobalQueue {
+		if async {
+			// The call below can take time due to internal lock if reheap is going on. Free up
+			// the lock to allow other functions to operate.
+			pool.mu.Unlock()
+			locked = false
+		}
 		// If the new transaction is underpriced, don't accept it
 		if pool.priced.Underpriced(tx) {
 			log.Trace("Discarding underpriced transaction", "hash", hash, "gasTipCap", tx.GasTipCap(), "gasFeeCap", tx.GasFeeCap())
@@ -758,6 +778,13 @@ func (pool *LegacyPool) add(tx *types.Transaction) (replaced bool, err error) {
 			return false, ErrTxPoolOverflow
 		}
 
+		if async {
+			// We're done operating on the `pricedList`. Acquire the lock again
+			// for rest of the operations.
+			pool.mu.Lock()
+			locked = true
+		}
+
 		// If the new transaction is a future transaction it should never churn pending transactions
 		if pool.isGapped(from, tx) {
 			var replacesPending bool
@@ -770,8 +797,14 @@ func (pool *LegacyPool) add(tx *types.Transaction) (replaced bool, err error) {
 			}
 			// Add all transactions back to the priced queue
 			if replacesPending {
-				for _, dropTx := range drop {
-					pool.priced.Put(dropTx)
+				if async {
+					// We don't want to get blocked on this due to internal lock, so
+					// call the function to insert transactions into the heap async.
+					go pool.priced.PutMany(drop)
+				} else {
+					for _, dropTx := range drop {
+						pool.priced.Put(dropTx)
+					}
 				}
 				log.Trace("Discarding future transaction replacing pending tx", "hash", hash)
 				return false, ErrFutureReplacePending
@@ -805,7 +838,13 @@ func (pool *LegacyPool) add(tx *types.Transaction) (replaced bool, err error) {
 			pendingReplaceMeter.Mark(1)
 		}
 		pool.all.Add(tx)
-		pool.priced.Put(tx)
+		if async {
+			// We don't want to get blocked on this due to internal lock, so
+			// call the function to insert transactions into the heap async.
+			go pool.priced.Put(tx)
+		} else {
+			pool.priced.Put(tx)
+		}
 		pool.queueTxEvent(tx)
 		log.Trace("Pooled new executable transaction", "hash", hash, "from", from, "to", tx.To())
 
@@ -878,7 +917,9 @@ func (pool *LegacyPool) enqueueTx(hash common.Hash, tx *types.Transaction, addAl
 	}
 	if addAll {
 		pool.all.Add(tx)
-		pool.priced.Put(tx)
+		// We don't want to get blocked on this due to internal lock, so
+		// call the function to insert transactions into the heap async.
+		go pool.priced.Put(tx)
 	}
 	// If we never record the heartbeat, do it right now.
 	if _, exist := pool.beats[from]; !exist {
@@ -986,10 +1027,9 @@ func (pool *LegacyPool) Add(txs []*types.Transaction, sync bool) []error {
 		return errs
 	}
 
-	// Process all the new transaction and merge any errors into the original slice
-	pool.mu.Lock()
-	newErrs, dirtyAddrs := pool.addTxsLocked(news)
-	pool.mu.Unlock()
+	// Process all the new transaction and merge any errors into the original slice. Avoid
+	// locking here as we'll use the global lock optimally.
+	newErrs, dirtyAddrs := pool.addTxs(news, true)
 
 	var nilSlot = 0
 	for _, err := range newErrs {
@@ -1008,12 +1048,12 @@ func (pool *LegacyPool) Add(txs []*types.Transaction, sync bool) []error {
 }
 
 // addTxsLocked attempts to queue a batch of transactions if they are valid.
-// The transaction pool lock must be held.
-func (pool *LegacyPool) addTxsLocked(txs []*types.Transaction) ([]error, *accountSet) {
+// The transaction pool lock must not be held.
+func (pool *LegacyPool) addTxs(txs []*types.Transaction, async bool) ([]error, *accountSet) {
 	dirty := newAccountSet(pool.signer)
 	errs := make([]error, len(txs))
 	for i, tx := range txs {
-		replaced, err := pool.add(tx)
+		replaced, err := pool.add(tx, async)
 		errs[i] = err
 		if err == nil && !replaced {
 			dirty.addTx(tx)
@@ -1307,6 +1347,26 @@ func (pool *LegacyPool) runReorg(done chan struct{}, reset *txpoolResetRequest, 
 	// because of another transaction (e.g. higher gas price).
 	if reset != nil {
 		pool.demoteUnexecutables()
+	}
+
+	// Bor: TxPool in order to maintain strict consistency acquires a lock for
+	// the entire call. To reduce the time lock is acquired, we do some truncation
+	// operations first, release the lock, and then do reheap because of change
+	// in base fee. This gives `Pending()` waiting for the lock a priority than
+	// internal rearrangement.
+
+	// Ensure pool.queue and pool.pending sizes stay within the configured limits.
+	pool.truncatePending()
+	pool.truncateQueue()
+
+	// Update metrics
+	dropBetweenReorgHistogram.Update(int64(pool.changesSinceReorg))
+	pool.changesSinceReorg = 0 // Reset change counter
+
+	pool.mu.Unlock()
+
+	// Reheap if needed
+	if reset != nil {
 		if reset.newHead != nil {
 			if pool.chainconfig.IsLondon(new(big.Int).Add(reset.newHead.Number, big.NewInt(1))) {
 				pendingBaseFee := eip1559.CalcBaseFee(pool.chainconfig, reset.newHead)
@@ -1315,21 +1375,7 @@ func (pool *LegacyPool) runReorg(done chan struct{}, reset *txpoolResetRequest, 
 				pool.priced.Reheap()
 			}
 		}
-		// Update all accounts to the latest known pending nonce
-		nonces := make(map[common.Address]uint64, len(pool.pending))
-		for addr, list := range pool.pending {
-			highestPending := list.LastElement()
-			nonces[addr] = highestPending.Nonce() + 1
-		}
-		pool.pendingNonces.setAll(nonces)
 	}
-	// Ensure pool.queue and pool.pending sizes stay within the configured limits.
-	pool.truncatePending()
-	pool.truncateQueue()
-
-	dropBetweenReorgHistogram.Update(int64(pool.changesSinceReorg))
-	pool.changesSinceReorg = 0 // Reset change counter
-	pool.mu.Unlock()
 
 	// Notify subsystems for newly added transactions
 	for _, tx := range promoted {
@@ -1444,7 +1490,9 @@ func (pool *LegacyPool) reset(oldHead, newHead *types.Header) {
 	// Inject any transactions discarded due to reorgs
 	log.Debug("Reinjecting stale transactions", "count", len(reinject))
 	core.SenderCacher().Recover(pool.signer, reinject)
-	pool.addTxsLocked(reinject)
+
+	// Add transactions synchronously as we're already holding the lock
+	pool.addTxs(reinject, false)
 }
 
 // promoteExecutables moves transactions that have become processable from the
@@ -1643,6 +1691,8 @@ func (pool *LegacyPool) truncateQueue() {
 // is always explicitly triggered by SetBaseFee and it would be unnecessary and wasteful
 // to trigger a re-heap is this function
 func (pool *LegacyPool) demoteUnexecutables() {
+	nonces := make(map[common.Address]uint64, len(pool.pending))
+
 	// Iterate over all accounts and demote any non-executable transactions
 	currentHeader := pool.currentHead.Load()
 	for addr, list := range pool.pending {
@@ -1693,12 +1743,17 @@ func (pool *LegacyPool) demoteUnexecutables() {
 			}
 			pendingGauge.Dec(int64(len(gapped)))
 		}
-		// Delete the entire pending entry if it became empty.
 		if list.Empty() {
+			// Delete the entire pending entry if it became empty.
 			delete(pool.pending, addr)
 			if _, ok := pool.queue[addr]; !ok {
 				pool.reserver.Release(addr)
 			}
+		} else {
+			// Update the latest known pending nonce
+			highestPending := list.LastElement()
+			nonces[addr] = highestPending.Nonce() + 1
+			pool.pendingNonces.setAll(nonces)
 		}
 	}
 }

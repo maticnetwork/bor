@@ -638,8 +638,22 @@ func newPricedList(all *lookup) *pricedList {
 
 // Put inserts a new transaction into the heap.
 func (l *pricedList) Put(tx *types.Transaction) {
+	l.reheapMu.Lock()
+	defer l.reheapMu.Unlock()
+
 	// Insert every new transaction to the urgent heap first; Discard will balance the heaps
 	heap.Push(&l.urgent, tx)
+}
+
+// PutMany inserts an array of new transactions into the heap.
+func (l *pricedList) PutMany(txs types.Transactions) {
+	l.reheapMu.Lock()
+	defer l.reheapMu.Unlock()
+
+	for _, tx := range txs {
+		// Insert every new transaction to the urgent heap first; Discard will balance the heaps
+		heap.Push(&l.urgent, tx)
+	}
 }
 
 // Removed notifies the prices transaction list that an old transaction dropped
@@ -658,6 +672,9 @@ func (l *pricedList) Removed(count int) {
 // Underpriced checks whether a transaction is cheaper than (or as cheap as) the
 // lowest priced (remote) transaction currently being tracked.
 func (l *pricedList) Underpriced(tx *types.Transaction) bool {
+	l.reheapMu.Lock()
+	defer l.reheapMu.Unlock()
+
 	// Note: with two queues, being underpriced is defined as being worse than the worst item
 	// in all non-empty queues if there is any. If both queues are empty then nothing is underpriced.
 	return (l.underpricedFor(&l.urgent, tx) || len(l.urgent.list) == 0) &&
@@ -693,6 +710,9 @@ func (l *pricedList) underpricedFor(h *priceHeap, tx *types.Transaction) bool {
 // priced list and returns them for further removal from the entire pool.
 // If noPending is set to true, we will only consider the floating list
 func (l *pricedList) Discard(slots int) (types.Transactions, bool) {
+	l.reheapMu.Lock()
+	defer l.reheapMu.Unlock()
+
 	drop := make(types.Transactions, 0, slots) // Remote underpriced transactions to drop
 
 	for slots > 0 {
