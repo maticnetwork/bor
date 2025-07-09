@@ -325,7 +325,7 @@ for i in {1..10}; do
 
 		if [[ "$block_timestamp" =~ ^[0-9]+$ ]]; then
 			latency=$((current_timestamp - block_timestamp))
-			echo "Block $finalized_block: timestamp=$block_timestamp, current=$current_timestamp, latency=${latency}s"
+			echo "Block $finalized_block: block_timestamp=$block_timestamp, current_timestamp=$current_timestamp, latency=${latency}s"
 
 			if [ $latency -gt 5 ]; then
 				echo "❌ Settlement latency check failed: ${latency}s > 5s for block $finalized_block"
