@@ -75,6 +75,11 @@ jobs:
           cd kurtosis-polygon-pos
           kurtosis enclave inspect ${{ env.ENCLAVE_NAME }}
 
+      - name: Run stateless sync tests
+        run: |
+          cd bor
+          bash integration-tests/stateless_sync_test.sh
+
       - name: Test state syncs
         run: kurtosis service exec ${{ env.ENCLAVE_NAME }} test-runner "bats --filter-tags pos,bridge,matic,pol --recursive tests/"
 
