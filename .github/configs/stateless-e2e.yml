@@ -1,23 +1,26 @@
 polygon_pos_package:
-  participants:
-    # 1 validator on Bor's develop branch
-    - kind: validator
-      cl_type: heimdall-v2
-      cl_image: heimdall-v2:stateless_sync
-      el_type: bor
-      el_image: bor:develop
-      count: 1
-      el_bor_produce_witness: false
-      el_bor_sync_with_witness: false
+  network_params:
+    el_block_interval_seconds: 1
 
-    # 5 validators on Bor's stateless_sync branch
+  participants:
+    # 8 validators on Bor's stateless_sync branch
     - kind: validator
       cl_type: heimdall-v2
       cl_image: heimdall-v2:stateless_sync
       el_type: bor
       el_image: bor:stateless_sync
-      count: 5
+      count: 8
       el_bor_produce_witness: true
+      el_bor_sync_with_witness: false
+
+    # 1 validator with Bor 2.2.5 version
+    - kind: validator
+      cl_type: heimdall-v2
+      cl_image: heimdall-v2:stateless_sync
+      el_type: bor
+      el_image: 0xpolygon/bor:2.2.5
+      count: 1
+      el_bor_produce_witness: false
       el_bor_sync_with_witness: false
 
     # 3 Total RPC nodes on Bor's stateless_sync branch
