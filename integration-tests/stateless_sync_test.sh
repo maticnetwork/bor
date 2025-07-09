@@ -14,11 +14,6 @@ if ! command -v kurtosis &>/dev/null; then
 	exit 1
 fi
 
-if ! command -v bc &>/dev/null; then
-	echo "Error: 'bc' command not found. Please install bc for hex calculations."
-	exit 1
-fi
-
 # Define the enclave name
 ENCLAVE_NAME=${ENCLAVE_NAME:-"stateless-sync-e2e"}
 
@@ -33,10 +28,7 @@ get_block_number() {
 	local service_name=$1
 	local rpc_url=$(get_rpc_url $service_name)
 	if [ -n "$rpc_url" ]; then
-		cast block --rpc-url "$rpc_url" 2>/dev/null | grep "number" | awk '{print $2}' | sed 's/,//' | sed 's/^0x//' | (
-			read hex
-			echo "ibase=16; $hex" | bc 2>/dev/null || echo "0"
-		)
+		cast block --rpc-url "$rpc_url" 2>/dev/null | grep "number" | awk '{print $2}' | sed 's/,//' || echo "0"
 	else
 		echo "0"
 	fi
@@ -48,9 +40,7 @@ get_block_timestamp() {
 	local block_number=$2
 	local rpc_url=$(get_rpc_url $service_name)
 	if [ -n "$rpc_url" ]; then
-		# Convert decimal block number to hex format that cast expects
-		local hex_block_number=$(printf "0x%x" $block_number)
-		cast block $hex_block_number --rpc-url "$rpc_url" 2>/dev/null | grep "timestamp" | awk '{print $2}' | sed 's/,//' || echo "0"
+		cast block $block_number --rpc-url "$rpc_url" 2>/dev/null | grep "timestamp" | awk '{print $2}' | sed 's/,//' || echo "0"
 	else
 		echo "0"
 	fi
@@ -61,10 +51,7 @@ get_finalized_block() {
 	local service_name=$1
 	local rpc_url=$(get_rpc_url $service_name)
 	if [ -n "$rpc_url" ]; then
-		cast block finalized --rpc-url "$rpc_url" 2>/dev/null | grep "number" | awk '{print $2}' | sed 's/,//' | sed 's/^0x//' | (
-			read hex
-			echo "ibase=16; $hex" | bc 2>/dev/null || echo "0"
-		)
+		cast block finalized --rpc-url "$rpc_url" 2>/dev/null | grep "number" | awk '{print $2}' | sed 's/,//' || echo "0"
 	else
 		echo "0"
 	fi
@@ -76,9 +63,7 @@ get_block_hash() {
 	local block_number=$2
 	local rpc_url=$(get_rpc_url $service_name)
 	if [ -n "$rpc_url" ]; then
-		# Convert decimal block number to hex format that cast expects
-		local hex_block_number=$(printf "0x%x" $block_number)
-		cast block $hex_block_number --rpc-url "$rpc_url" 2>/dev/null | grep "^hash" | awk '{print $2}' | sed 's/,//' || echo ""
+		cast block $block_number --rpc-url "$rpc_url" 2>/dev/null | grep "^hash" | awk '{print $2}' | sed 's/,//' || echo ""
 	else
 		echo ""
 	fi
@@ -223,6 +208,7 @@ echo ""
 echo "=== Test 2: Checking post-veblop HF behavior (after block 400) ==="
 
 # Wait for block 450 to ensure we're past the HF
+TARGET_BLOCK_VEBLOP_HF=400
 TARGET_BLOCK_POST_HF=450
 echo "Waiting for block $TARGET_BLOCK_POST_HF to ensure we're past veblop HF..."
 
@@ -260,11 +246,11 @@ while true; do
 	if [ $max_stateless_block -ge $TARGET_BLOCK_POST_HF ]; then
 		echo "✅ Stateless sync nodes continued syncing past veblop HF"
 
-		# Check if legacy nodes stopped progressing significantly
+		# Check if legacy nodes stopped progressing
 		if [ $max_legacy_block -lt $TARGET_BLOCK_POST_HF ]; then
 			echo "✅ Legacy nodes appropriately stopped syncing after veblop HF (at block $max_legacy_block)"
 		else
-			echo "⚠️  Legacy nodes are still syncing (at block $max_legacy_block) - forked off from stateless sync validators"
+			echo "⚠️  Legacy nodes are still running (at block $max_legacy_block) - forked off from stateless sync validators"
 		fi
 
 		# Check block hash consensus for stateless sync services at block 450
