@@ -47,6 +47,8 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/holiman/uint256"
 	"gotest.tools/assert"
+
+	borSpan "github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
 )
 
 // nolint : paralleltest
@@ -387,7 +389,7 @@ func getFakeBorFromConfig(t *testing.T, chainConfig *params.ChainConfig) (consen
 	span0 := createMockSpanForTest(TestBankAddress, chainConfig.ChainID.String())
 
 	spanner := bor.NewMockSpanner(ctrl)
-	spanner.EXPECT().GetCurrentValidatorsByHash(gomock.Any(), gomock.Any(), gomock.Any()).Return(span0.ValidatorSet.Validators, nil).AnyTimes()
+	spanner.EXPECT().GetCurrentValidatorsByHash(gomock.Any(), gomock.Any(), gomock.Any()).Return(borSpan.ConvertHeimdallValidatorsToBorValidatorsByRef(span0.ValidatorSet.Validators), nil).AnyTimes()
 
 	heimdallClientMock := mocks.NewMockIHeimdallClient(ctrl)
 	heimdallWSClient := mocks.NewMockIHeimdallWSClient(ctrl)
