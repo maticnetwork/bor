@@ -435,7 +435,7 @@ func TestStateSyncURL(t *testing.T) {
 		t.Fatal("got an error", err)
 	}
 
-	const expected = "http://bor0/clerk/event-record/list?from-id=10&to-time=100&limit=50"
+	const expected = "http://bor0/clerk/time?from_id=10&to_time=1970-01-01T00:01:40Z&pagination.limit=50"
 
 	if url.String() != expected {
 		t.Fatalf("expected URL %q, got %q", expected, url.String())

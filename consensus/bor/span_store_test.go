@@ -2,6 +2,7 @@ package bor
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/0xPolygon/heimdall-v2/x/bor/types"
@@ -164,7 +165,25 @@ func (h *MockHeimdallClient) StateSyncEvents(ctx context.Context, fromID uint64,
 }
 
 func (h *MockHeimdallClient) GetSpan(ctx context.Context, spanID uint64) (*types.Span, error) {
-	panic("implement me")
+	// Throw error for span id 100
+	if spanID == 100 {
+		return nil, fmt.Errorf("unable to fetch span")
+	}
+
+	// For everything else, return hardcoded span assuming length 6400 (except for span 0)
+	if spanID == 0 {
+		return &types.Span{
+			Id:         0,
+			StartBlock: 0,
+			EndBlock:   255,
+		}, nil
+	} else {
+		return &types.Span{
+			Id:         spanID,
+			StartBlock: 6400*(spanID-1) + 256,
+			EndBlock:   6400*spanID + 255,
+		}, nil
+	}
 }
 
 func (h *MockHeimdallClient) GetLatestSpan(ctx context.Context) (*types.Span, error) {
