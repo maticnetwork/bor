@@ -23,13 +23,6 @@ jobs:
     timeout-minutes: 60
 
     steps:
-      # Try to free up disk space (around 6 GB) before running the kurtosis job.
-      # This is needed because the job fails with "System.IO.IOException: No space left on device".
-      - name: Free disk space
-        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # 2023/10/19
-        with:
-          tool-cache: true
-
       - name: Checkout Bor
         uses: actions/checkout@v4
         with:
