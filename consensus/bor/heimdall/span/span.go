@@ -86,3 +86,16 @@ func ConvertHeimdallValidatorsToBorValidators(heimdallValidators []stakeTypes.Va
 	}
 	return validators
 }
+
+func ConvertHeimdallValidatorsToBorValidatorsByRef(heimdallValidators []*stakeTypes.Validator) []*valset.Validator {
+	validators := make([]*valset.Validator, len(heimdallValidators))
+	for i, v := range heimdallValidators {
+		validators[i] = &valset.Validator{
+			ID:               v.ValId,
+			Address:          common.HexToAddress(v.Signer),
+			VotingPower:      v.VotingPower,
+			ProposerPriority: v.ProposerPriority,
+		}
+	}
+	return validators
+}

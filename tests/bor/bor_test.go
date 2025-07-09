@@ -28,7 +28,6 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/bor"
 	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
 	borSpan "github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
-	"github.com/ethereum/go-ethereum/consensus/bor/valset"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -639,8 +638,10 @@ func TestOutOfTurnSigning(t *testing.T) {
 	span0 := createMockSpan(addr, chain.Config().ChainID.String())
 
 	res := loadSpanFromFile(t)
-	proposer := valset.NewValidator(addr, 10)
-	res.ValidatorSet.Validators = append(res.ValidatorSet.Validators, proposer)
+	res.ValidatorSet.Validators = append(res.ValidatorSet.Validators, &stakeTypes.Validator{
+		Signer:      addr.String(),
+		VotingPower: 10,
+	})
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -651,14 +652,14 @@ func TestOutOfTurnSigning(t *testing.T) {
 	h.EXPECT().GetLatestSpan(gomock.Any()).Return(&span0, nil).AnyTimes()
 	_bor.SetHeimdallClient(h)
 
-	spanner := getMockedSpanner(t, res.Result.ValidatorSet.Validators)
+	spanner := getMockedSpanner(t, borSpan.ConvertHeimdallValSetToBorValSet(res.ValidatorSet).Validators)
 	_bor.SetSpanner(spanner)
 
 	block := init.genesis.ToBlock()
 
 	setDifficulty := func(header *types.Header) {
 		if IsSprintStart(header.Number.Uint64()) {
-			header.Difficulty = big.NewInt(int64(len(res.Result.ValidatorSet.Validators)))
+			header.Difficulty = big.NewInt(int64(len(res.ValidatorSet.Validators)))
 		}
 	}
 
@@ -668,7 +669,7 @@ func TestOutOfTurnSigning(t *testing.T) {
 		// E.g. In this case, update on block 3 as snapshot of block 3 will be called for block 4's verification
 		// Sprint length is 4 for this test
 		if i == chain.Config().Bor.CalculateSprint(i)-1 {
-			currentValidators = res.Result.ValidatorSet.Validators
+			currentValidators = res.ValidatorSet.Validators
 
 			// Update the span0's validator set to new validator set. This will be used in verify header when we query
 			// span to compare validator's set with header's extradata. Even though our span store has old validator set
@@ -676,7 +677,7 @@ func TestOutOfTurnSigning(t *testing.T) {
 			span0.ValidatorSet.Validators = currentValidators
 		}
 
-		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators, false, setDifficulty)
+		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, borSpan.ConvertHeimdallValidatorsToBorValidatorsByRef(currentValidators), false, setDifficulty)
 		insertNewBlock(t, chain, block)
 	}
 
@@ -697,16 +698,16 @@ func TestOutOfTurnSigning(t *testing.T) {
 	const turn = 1
 
 	setDifficulty = func(header *types.Header) {
-		header.Difficulty = big.NewInt(int64(len(res.Result.ValidatorSet.Validators)) - turn)
+		header.Difficulty = big.NewInt(int64(len(res.ValidatorSet.Validators)) - turn)
 	}
 
-	block = buildNextBlock(t, _bor, chain, block, signerKey, init.genesis.Config.Bor, nil, res.Result.ValidatorSet.Validators, false, setParentTime, setDifficulty)
+	block = buildNextBlock(t, _bor, chain, block, signerKey, init.genesis.Config.Bor, nil, borSpan.ConvertHeimdallValidatorsToBorValidatorsByRef(res.ValidatorSet.Validators), false, setParentTime, setDifficulty)
 	_, err := chain.InsertChain([]*types.Block{block})
 	require.Equal(t,
 		bor.BlockTooSoonError{Number: spanSize, Succession: expectedSuccessionNumber},
 		*err.(*bor.BlockTooSoonError))
 
-	expectedDifficulty := uint64(len(res.Result.ValidatorSet.Validators) - expectedSuccessionNumber - turn) // len(validators) - succession
+	expectedDifficulty := uint64(len(res.ValidatorSet.Validators) - expectedSuccessionNumber - turn) // len(validators) - succession
 	header := block.Header()
 
 	diff := bor.CalcProducerDelay(header.Number.Uint64(), expectedSuccessionNumber, init.genesis.Config.Bor)
@@ -748,7 +749,7 @@ func TestSignerNotFound(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	h := createMockHeimdall(ctrl, &span0, &res.Result)
+	h := createMockHeimdall(ctrl, &span0, res)
 	h.EXPECT().StateSyncEvents(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return([]*clerk.EventRecordWithTime{getSampleEventRecord(t)}, nil).AnyTimes()
 	_bor.SetHeimdallClient(h)
@@ -765,7 +766,7 @@ func TestSignerNotFound(t *testing.T) {
 		return crypto.Sign(crypto.Keccak256(data), newKey)
 	})
 
-	block = buildNextBlock(t, _bor, chain, block, signerKey, init.genesis.Config.Bor, nil, res.Result.ValidatorSet.Validators, false)
+	block = buildNextBlock(t, _bor, chain, block, signerKey, init.genesis.Config.Bor, nil, borSpan.ConvertHeimdallValidatorsToBorValidatorsByRef(res.ValidatorSet.Validators), false)
 
 	_, err := chain.InsertChain([]*types.Block{block})
 	require.Equal(t,
@@ -1467,10 +1468,10 @@ func TestJaipurFork(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	h := createMockHeimdall(ctrl, &span0, &res.Result)
+	h := createMockHeimdall(ctrl, &span0, res)
 	_bor.SetHeimdallClient(h)
 
-	spanner := getMockedSpanner(t, res.Result.ValidatorSet.Validators)
+	spanner := getMockedSpanner(t, borSpan.ConvertHeimdallValidatorsToBorValidatorsByRef(res.ValidatorSet.Validators))
 	_bor.SetSpanner(spanner)
 
 	currentValidators := span0.ValidatorSet.Validators
@@ -1478,14 +1479,14 @@ func TestJaipurFork(t *testing.T) {
 		// Update the validator set before sprint end (so that it is returned when called for next block)
 		// E.g. In this case, update on block 3 as snapshot of block 3 will be called for block 4's verification
 		if i == sprintSize-1 {
-			currentValidators = res.Result.ValidatorSet.Validators
+			currentValidators = res.ValidatorSet.Validators
 
 			// Update the span0's validator set to new validator set. This will be used in verify header when we query
 			// span to compare validator's set with header's extradata. Even though our span store has old validator set
 			// stored in cache, we're updating the underlying pointer here and hence we don't need to update the cache.
 			span0.ValidatorSet.Validators = currentValidators
 		}
-		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators, false)
+		block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, borSpan.ConvertHeimdallValidatorsToBorValidatorsByRef(currentValidators), false)
 		insertNewBlock(t, chain, block)
 
 		if block.Number().Uint64() == init.genesis.Config.Bor.JaipurBlock.Uint64()-1 {
@@ -1570,7 +1571,7 @@ func TestEarlyBlockAnnouncementPostBhilai_Primary(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	h := createMockHeimdall(ctrl, &span0, &res.Result)
+	h := createMockHeimdall(ctrl, &span0, res)
 	h.EXPECT().StateSyncEvents(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return([]*clerk.EventRecordWithTime{getSampleEventRecord(t)}, nil).AnyTimes()
 	_bor.SetHeimdallClient(h)
@@ -1578,7 +1579,7 @@ func TestEarlyBlockAnnouncementPostBhilai_Primary(t *testing.T) {
 	block := init.genesis.ToBlock()
 	currentValidators := span0.ValidatorSet.Validators
 
-	spanner := getMockedSpanner(t, currentValidators)
+	spanner := getMockedSpanner(t, borSpan.ConvertHeimdallValidatorsToBorValidatorsByRef(currentValidators))
 	_bor.SetSpanner(spanner)
 
 	// Pre-define succession as 0 as all the tests are for primary
@@ -1601,7 +1602,7 @@ func TestEarlyBlockAnnouncementPostBhilai_Primary(t *testing.T) {
 	}
 
 	// Build block 1 normally
-	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators, false, updateTime)
+	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, borSpan.ConvertHeimdallValidatorsToBorValidatorsByRef(currentValidators), false, updateTime)
 	i, err := chain.InsertChain([]*types.Block{block})
 	// Block verified and imported successfully
 	require.NoError(t, err, "error inserting block #1")
@@ -1618,7 +1619,7 @@ func TestEarlyBlockAnnouncementPostBhilai_Primary(t *testing.T) {
 	maxDelay := time.Until(time.Unix(int64(headerTime), 0)) + waitingTime
 	// Track time taken to build, and seal (basically announce) the block
 	start := time.Now()
-	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators, false, updateTime)
+	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, borSpan.ConvertHeimdallValidatorsToBorValidatorsByRef(currentValidators), false, updateTime)
 	blockAnnouncementTime := time.Since(start)
 	// The building + sealing time should be less than the expected pre-bhilai block building time (~2s)
 	require.LessOrEqual(t, blockAnnouncementTime, maxDelay, fmt.Sprintf("block announcement happened after header time"))
@@ -1634,7 +1635,7 @@ func TestEarlyBlockAnnouncementPostBhilai_Primary(t *testing.T) {
 	// Wait until header.Time + 1s before building the block
 	headerTime = block.Time() + bor.CalcProducerDelay(block.NumberU64(), getSuccession(), init.genesis.Config.Bor)
 	time.Sleep(time.Until(time.Unix(int64(headerTime)+1, 0)))
-	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators, false, updateTime)
+	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, borSpan.ConvertHeimdallValidatorsToBorValidatorsByRef(currentValidators), false, updateTime)
 	require.Greater(t, block.Time(), headerTime, "block time should be greated than expected header time")
 	// Block verified and imported successfully
 	i, err = chain.InsertChain([]*types.Block{block})
@@ -1642,7 +1643,7 @@ func TestEarlyBlockAnnouncementPostBhilai_Primary(t *testing.T) {
 	require.Equal(t, 1, i, "incorrect number of blocks inserted while inserting block #3")
 
 	// Build block 4 normally
-	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators, false, updateTime)
+	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, borSpan.ConvertHeimdallValidatorsToBorValidatorsByRef(currentValidators), false, updateTime)
 	i, err = chain.InsertChain([]*types.Block{block})
 	// Block verified and imported successfully
 	require.NoError(t, err, "error inserting block #4")
@@ -1661,7 +1662,7 @@ func TestEarlyBlockAnnouncementPostBhilai_Primary(t *testing.T) {
 		}
 	}
 	signer, err := hex.DecodeString(privKey)
-	tempBlock := buildNextBlock(t, _bor, chain, block, signer, init.genesis.Config.Bor, nil, currentValidators, true, updateTimeWithoutSleep)
+	tempBlock := buildNextBlock(t, _bor, chain, block, signer, init.genesis.Config.Bor, nil, borSpan.ConvertHeimdallValidatorsToBorValidatorsByRef(currentValidators), true, updateTimeWithoutSleep)
 	i, err = chain.InsertChain([]*types.Block{tempBlock})
 	// No error is expected here because block will be added to future chain and is
 	// technically valid (according to insert chain function)
@@ -1672,7 +1673,7 @@ func TestEarlyBlockAnnouncementPostBhilai_Primary(t *testing.T) {
 	require.ErrorIs(t, err, consensus.ErrFutureBlock, "incorrect error while verifying block #5")
 
 	// Build block 5 again normally
-	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators, false, updateTime)
+	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, borSpan.ConvertHeimdallValidatorsToBorValidatorsByRef(currentValidators), false, updateTime)
 	i, err = chain.InsertChain([]*types.Block{block})
 	// Block verified and imported successfully
 	require.NoError(t, err, "error inserting block #5")
@@ -1684,7 +1685,7 @@ func TestEarlyBlockAnnouncementPostBhilai_Primary(t *testing.T) {
 	setTime := func(header *types.Header) {
 		header.Time = block.Time() + bor.CalcProducerDelay(block.NumberU64(), getSuccession(), init.genesis.Config.Bor) - 1
 	}
-	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators, false, setTime)
+	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, borSpan.ConvertHeimdallValidatorsToBorValidatorsByRef(currentValidators), false, setTime)
 	// Consensus verification will fail and this error will float up unlike future block error
 	// as we've tweaked the header time which is not allowed.
 	i, err = chain.InsertChain([]*types.Block{block})
@@ -1726,8 +1727,8 @@ func TestEarlyBlockAnnouncementPostBhilai_NonPrimary(t *testing.T) {
 
 	// Use 3 validators from the start to allow out-of-turn block production
 	res1 := loadSpanFromFile(t)
-	res1.Result.StartBlock = 0
-	res1.Result.EndBlock = 255
+	res1.StartBlock = 0
+	res1.EndBlock = 255
 	res2 := loadSpanFromFile(t)
 
 	// key2 and addr2 belong to the primary validator, authorize consensus to sign messages
@@ -1739,15 +1740,15 @@ func TestEarlyBlockAnnouncementPostBhilai_NonPrimary(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	h := createMockHeimdall(ctrl, &res1.Result, &res2.Result)
+	h := createMockHeimdall(ctrl, res1, res2)
 	h.EXPECT().StateSyncEvents(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return([]*clerk.EventRecordWithTime{getSampleEventRecord(t)}, nil).AnyTimes()
 	_bor.SetHeimdallClient(h)
 
 	block := init.genesis.ToBlock()
-	currentValidators := res1.Result.ValidatorSet.Validators
+	currentValidators := res1.ValidatorSet.Validators
 
-	spanner := getMockedSpanner(t, currentValidators)
+	spanner := getMockedSpanner(t, borSpan.ConvertHeimdallValidatorsToBorValidatorsByRef(currentValidators))
 	_bor.SetSpanner(spanner)
 
 	succession := 0
@@ -1774,7 +1775,7 @@ func TestEarlyBlockAnnouncementPostBhilai_NonPrimary(t *testing.T) {
 		// parent block (which is genesis) which we don't want.
 		header.Difficulty = new(big.Int).SetUint64(3)
 	}
-	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators, false, updateTime, updateDiff)
+	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, borSpan.ConvertHeimdallValidatorsToBorValidatorsByRef(currentValidators), false, updateTime, updateDiff)
 	i, err := chain.InsertChain([]*types.Block{block})
 	require.NoError(t, err, "error inserting block #1")
 	require.Equal(t, 1, i, "incorrect number of blocks inserted while inserting block #1")
@@ -1799,7 +1800,7 @@ func TestEarlyBlockAnnouncementPostBhilai_NonPrimary(t *testing.T) {
 		header.Difficulty = new(big.Int).SetUint64(1)
 		header.Time = block.Time() - 1
 	}
-	tempBlock := buildNextBlock(t, _bor, chain, block, signer, init.genesis.Config.Bor, nil, currentValidators, true, updateTime, updateHeader)
+	tempBlock := buildNextBlock(t, _bor, chain, block, signer, init.genesis.Config.Bor, nil, borSpan.ConvertHeimdallValidatorsToBorValidatorsByRef(currentValidators), true, updateTime, updateHeader)
 	i, err = chain.InsertChain([]*types.Block{tempBlock})
 	require.Equal(t, bor.ErrInvalidTimestamp, err, "incorrect error while inserting block #2")
 	require.Equal(t, 0, i, "incorrect number of blocks inserted while inserting block #2")
@@ -1813,7 +1814,7 @@ func TestEarlyBlockAnnouncementPostBhilai_NonPrimary(t *testing.T) {
 		// Succession is 2 because of tertiary validator
 		header.Time = block.Time() + bor.CalcProducerDelay(block.NumberU64(), getSuccession(), init.genesis.Config.Bor)
 	}
-	tempBlock = buildNextBlock(t, _bor, chain, block, signer, init.genesis.Config.Bor, nil, currentValidators, true, updateTime, updateHeader)
+	tempBlock = buildNextBlock(t, _bor, chain, block, signer, init.genesis.Config.Bor, nil, borSpan.ConvertHeimdallValidatorsToBorValidatorsByRef(currentValidators), true, updateTime, updateHeader)
 	// Block is invalid according to consensus rules and should return appropriate error
 	// Insert chain would accept the block as future block so we don't attempt calling it.
 	err = engine.VerifyHeader(chain, tempBlock.Header())
@@ -1830,7 +1831,7 @@ func TestEarlyBlockAnnouncementPostBhilai_NonPrimary(t *testing.T) {
 	}
 	// Capture the time taken in block building (mainly sealing due to delay)
 	start := time.Now()
-	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, currentValidators, false, updateTime, updateHeader)
+	block = buildNextBlock(t, _bor, chain, block, nil, init.genesis.Config.Bor, nil, borSpan.ConvertHeimdallValidatorsToBorValidatorsByRef(currentValidators), false, updateTime, updateHeader)
 	blockAnnouncementTime := time.Since(start)
 	// The building + sealing time should be greater than ideal time (6s for tertiary validator)
 	// as early block announcement is not allowed for non-primary validators.
@@ -1847,7 +1848,7 @@ func TestEarlyBlockAnnouncementPostBhilai_NonPrimary(t *testing.T) {
 		header.Difficulty = new(big.Int).SetUint64(1)
 		header.Time = block.Time() + bor.CalcProducerDelay(block.NumberU64(), getSuccession(), init.genesis.Config.Bor)
 	}
-	block = buildNextBlock(t, _bor, chain, block, signer, init.genesis.Config.Bor, nil, currentValidators, true, updateTime, updateHeader)
+	block = buildNextBlock(t, _bor, chain, block, signer, init.genesis.Config.Bor, nil, borSpan.ConvertHeimdallValidatorsToBorValidatorsByRef(currentValidators), true, updateTime, updateHeader)
 
 	// reject if announced early (here: parent block time + 2s)
 	time.Sleep(2 * time.Second)
@@ -1878,7 +1879,7 @@ func TestEarlyBlockAnnouncementPostBhilai_NonPrimary(t *testing.T) {
 	}
 	// Capture time to wait until the expected header time before announcing the block
 	timeToWait := time.Until(time.Unix(int64(block.Time()+bor.CalcProducerDelay(block.NumberU64(), getSuccession(), init.genesis.Config.Bor)), 0))
-	block = buildNextBlock(t, _bor, chain, block, signer, init.genesis.Config.Bor, nil, currentValidators, true, updateTime, updateHeader)
+	block = buildNextBlock(t, _bor, chain, block, signer, init.genesis.Config.Bor, nil, borSpan.ConvertHeimdallValidatorsToBorValidatorsByRef(currentValidators), true, updateTime, updateHeader)
 
 	// Wait for expected time + some buffer
 	time.Sleep(timeToWait)
