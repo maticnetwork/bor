@@ -183,10 +183,7 @@ func benchmarkPrecompiled(addr string, test precompiledTest, bench *testing.B) {
 		}
 		bench.StopTimer()
 
-		elapsed := uint64(time.Since(start))
-		if elapsed < 1 {
-			elapsed = 1
-		}
+		elapsed := max(uint64(time.Since(start)), 1)
 
 		gasUsed := reqGas * uint64(bench.N)
 		bench.ReportMetric(float64(reqGas), "gas/op")
