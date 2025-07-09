@@ -18,22 +18,23 @@ func ConvertHeimdallValSetToBorValSet(heimdallValSet stakeTypes.ValidatorSet) va
 		}
 	}
 
-	proposer := &valset.Validator{
-		ID:               heimdallValSet.Proposer.ValId,
-		Address:          common.HexToAddress(heimdallValSet.Proposer.Signer),
-		VotingPower:      heimdallValSet.Proposer.VotingPower,
-		ProposerPriority: heimdallValSet.Proposer.ProposerPriority,
-	}
-
-	valset := valset.ValidatorSet{
+	resValSet := valset.ValidatorSet{
 		Validators: validators,
-		Proposer:   proposer,
 	}
 
-	valset.UpdateTotalVotingPower()
-	valset.UpdateValidatorMap()
+	if heimdallValSet.Proposer != nil {
+		resValSet.Proposer = &valset.Validator{
+			ID:               heimdallValSet.Proposer.ValId,
+			Address:          common.HexToAddress(heimdallValSet.Proposer.Signer),
+			VotingPower:      heimdallValSet.Proposer.VotingPower,
+			ProposerPriority: heimdallValSet.Proposer.ProposerPriority,
+		}
+	}
 
-	return valset
+	resValSet.UpdateTotalVotingPower()
+	resValSet.UpdateValidatorMap()
+
+	return resValSet
 }
 
 func ConvertBorValSetToHeimdallValSet(borValSet *valset.ValidatorSet) stakeTypes.ValidatorSet {
