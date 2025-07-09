@@ -16,6 +16,7 @@ import (
 const (
 	// witnessRequestTimeout defines how long to wait for an in-flight witness computation.
 	witnessRequestTimeout = 5 * time.Second
+	PageSize              = 15 * 1024 * 1024 // 15 MB
 )
 
 // witHandler implements the eth.Backend interface to handle the various network
@@ -100,10 +101,6 @@ func (h *witHandler) handleWitnessHashesAnnounce(peer *wit.Peer, hashes []common
 // It now returns the data and error, rather than sending the reply directly.
 // The returned data is [][]byte, as rlp.RawValue is essentially []byte.
 func (h *witHandler) handleGetWitness(peer *wit.Peer, req *wit.GetWitnessPacket) (wit.WitnessPacketResponse, error) {
-	const (
-		PageSize = 15 * 1024 * 1024 // 15 MB
-	)
-
 	log.Debug("handleGetWitness processing request", "peer", peer.ID(), "reqID", req.RequestId, "witnessPages", len(req.WitnessPages))
 	// list different witnesses to query
 	seen := make(map[common.Hash]struct{}, len(req.WitnessPages))
