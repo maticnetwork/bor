@@ -886,9 +886,9 @@ func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, 
 		return
 	}
 
-	// Extract the underlying state to access methods like `IntermediateRoot` and `Copy`
-	// required for bor consensus operations
-	state := wrappedState.(*state.StateDB)
+	// Get the underlying state db instance as we'll only interact with genesis contracts
+	// going ahead for consensus verification.
+	state := wrappedState.Inner()
 
 	var (
 		stateSyncData []*types.StateSyncData
@@ -916,7 +916,10 @@ func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, 
 		state.BorConsensusTime = time.Since(start)
 	}
 
-	if err = c.changeContractCodeIfNeeded(headerNumber, state); err != nil {
+	// Check if any hardfork needs change in genesis contract code. Note that we use
+	// the wrapped state here as it may have a hooked state db instance which can help
+	// in tracing if it's enabled.
+	if err = c.changeContractCodeIfNeeded(headerNumber, wrappedState); err != nil {
 		log.Error("Error changing contract code", "error", err)
 		return
 	}
@@ -941,7 +944,7 @@ func decodeGenesisAlloc(i interface{}) (types.GenesisAlloc, error) {
 	return alloc, nil
 }
 
-func (c *Bor) changeContractCodeIfNeeded(headerNumber uint64, state *state.StateDB) error {
+func (c *Bor) changeContractCodeIfNeeded(headerNumber uint64, state vm.StateDB) error {
 	for blockNumber, genesisAlloc := range c.config.BlockAlloc {
 		if blockNumber == strconv.FormatUint(headerNumber, 10) {
 			allocs, err := decodeGenesisAlloc(genesisAlloc)
