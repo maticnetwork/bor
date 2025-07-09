@@ -380,7 +380,7 @@ func stateSyncEventsPayload(t *testing.T) []*clerk.EventRecordWithTime {
 	}
 
 	res := make([]*clerk.EventRecordWithTime, 0)
-	if err := json.Unmarshal(stateData, res); err != nil {
+	if err := json.Unmarshal(stateData, &res); err != nil {
 		t.Fatalf("%s", err)
 	}
 
