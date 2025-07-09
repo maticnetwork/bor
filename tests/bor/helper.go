@@ -24,11 +24,10 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/bor"
-	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
-	"github.com/ethereum/go-ethereum/consensus/bor/heimdall" //nolint:typecheck
+	"github.com/ethereum/go-ethereum/consensus/bor/clerk" //nolint:typecheck
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
-	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
+	borSpan "github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
 	"github.com/ethereum/go-ethereum/consensus/bor/valset"
 	"github.com/ethereum/go-ethereum/consensus/misc/eip1559"
 	"github.com/ethereum/go-ethereum/core"
@@ -372,7 +371,7 @@ func sign(t *testing.T, header *types.Header, signer []byte, c *params.BorConfig
 }
 
 //nolint:unused,deadcode
-func stateSyncEventsPayload(t *testing.T) *heimdall.StateSyncEventsResponseV1 {
+func stateSyncEventsPayload(t *testing.T) []*clerk.EventRecordWithTime {
 	t.Helper()
 
 	stateData, err := os.ReadFile("./testdata/states.json")
@@ -380,7 +379,7 @@ func stateSyncEventsPayload(t *testing.T) *heimdall.StateSyncEventsResponseV1 {
 		t.Fatalf("%s", err)
 	}
 
-	res := &heimdall.StateSyncEventsResponseV1{}
+	res := make([]*clerk.EventRecordWithTime, 0)
 	if err := json.Unmarshal(stateData, res); err != nil {
 		t.Fatalf("%s", err)
 	}
@@ -389,7 +388,7 @@ func stateSyncEventsPayload(t *testing.T) *heimdall.StateSyncEventsResponseV1 {
 }
 
 //nolint:unused,deadcode
-func loadSpanFromFile(t *testing.T) *heimdall.SpanResponseV1 {
+func loadSpanFromFile(t *testing.T) *borTypes.Span {
 	t.Helper()
 
 	spanData, err := os.ReadFile("./testdata/span.json")
@@ -397,8 +396,7 @@ func loadSpanFromFile(t *testing.T) *heimdall.SpanResponseV1 {
 		t.Fatalf("%s", err)
 	}
 
-	res := &heimdall.SpanResponseV1{}
-
+	res := &borTypes.Span{}
 	if err := json.Unmarshal(spanData, res); err != nil {
 		t.Fatalf("%s", err)
 	}
@@ -447,7 +445,7 @@ func createMockSpan(address common.Address, chainId string) borTypes.Span {
 		Id:                0,
 		StartBlock:        0,
 		EndBlock:          255,
-		ValidatorSet:      borSpan.ConvertBorValSetToHeimdallValSet(validatorSet),
+		ValidatorSet:      borSpan.ConvertBorValSetToHeimdallValSet(&validatorSet),
 		SelectedProducers: borSpan.ConvertBorValidatorsToHeimdallValidators([]*valset.Validator{&validator}),
 		BorChainId:        chainId,
 	}
@@ -513,9 +511,9 @@ func getSampleEventRecord(t *testing.T) *clerk.EventRecordWithTime {
 	t.Helper()
 
 	eventRecords := stateSyncEventsPayload(t)
-	eventRecords.Result[0].Time = time.Unix(1, 0)
+	eventRecords[0].Time = time.Unix(1, 0)
 
-	return eventRecords.Result[0]
+	return eventRecords[0]
 }
 
 func newGwei(n int64) *big.Int {
