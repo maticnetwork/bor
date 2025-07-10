@@ -259,3 +259,68 @@ func (mr *MockIHeimdallClientMockRecorder) StateSyncEventsV2(ctx, fromID, to int
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StateSyncEventsV2", reflect.TypeOf((*MockIHeimdallClient)(nil).StateSyncEventsV2), ctx, fromID, to)
 }
+
+// MockIHeimdallWSClient is a mock of IHeimdallWSClient interface.
+type MockIHeimdallWSClient struct {
+	ctrl     *gomock.Controller
+	recorder *MockIHeimdallWSClientMockRecorder
+}
+
+// MockIHeimdallWSClientMockRecorder is the mock recorder for MockIHeimdallWSClient.
+type MockIHeimdallWSClientMockRecorder struct {
+	mock *MockIHeimdallWSClient
+}
+
+// NewMockIHeimdallWSClient creates a new mock instance.
+func NewMockIHeimdallWSClient(ctrl *gomock.Controller) *MockIHeimdallWSClient {
+	mock := &MockIHeimdallWSClient{ctrl: ctrl}
+	mock.recorder = &MockIHeimdallWSClientMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockIHeimdallWSClient) EXPECT() *MockIHeimdallWSClientMockRecorder {
+	return m.recorder
+}
+
+// Close mocks base method.
+func (m *MockIHeimdallWSClient) Close() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Close")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Close indicates an expected call of Close.
+func (mr *MockIHeimdallWSClientMockRecorder) Close() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockIHeimdallWSClient)(nil).Close))
+}
+
+// SubscribeMilestoneEvents mocks base method.
+func (m *MockIHeimdallWSClient) SubscribeMilestoneEvents(ctx context.Context) <-chan *milestone.MilestoneV2 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SubscribeMilestoneEvents", ctx)
+	ret0, _ := ret[0].(<-chan *milestone.MilestoneV2)
+	return ret0
+}
+
+// SubscribeMilestoneEvents indicates an expected call of SubscribeMilestoneEvents.
+func (mr *MockIHeimdallWSClientMockRecorder) SubscribeMilestoneEvents(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SubscribeMilestoneEvents", reflect.TypeOf((*MockIHeimdallWSClient)(nil).SubscribeMilestoneEvents), ctx)
+}
+
+// Unsubscribe mocks base method.
+func (m *MockIHeimdallWSClient) Unsubscribe(ctx context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Unsubscribe", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Unsubscribe indicates an expected call of Unsubscribe.
+func (mr *MockIHeimdallWSClientMockRecorder) Unsubscribe(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unsubscribe", reflect.TypeOf((*MockIHeimdallWSClient)(nil).Unsubscribe), ctx)
+}
