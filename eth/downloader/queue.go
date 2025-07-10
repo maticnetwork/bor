@@ -31,11 +31,9 @@ import (
 	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto/kzg4844"
-	"github.com/ethereum/go-ethereum/eth/protocols/wit"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/params"
-	"github.com/ethereum/go-ethereum/rlp"
 )
 
 const (
@@ -1038,7 +1036,7 @@ func (q *queue) DeliverReceipts(id string, receiptList [][]*types.Receipt, recei
 }
 
 // DeliverWitnesses injects a witness retrieval response into the results cache.
-func (q *queue) DeliverWitnesses(id string, witnessData interface{}, meta interface{}) (int, error) {
+func (q *queue) DeliverWitnesses(id string, witnesses []*stateless.Witness, meta interface{}) (int, error) {
 	log.Debug("DeliverWitnesses: Entered", "peer", id)
 	defer log.Debug("DeliverWitnesses: Exiting", "peer", id)
 
@@ -1056,28 +1054,19 @@ func (q *queue) DeliverWitnesses(id string, witnessData interface{}, meta interf
 		witnessDropMeter.Mark(1) // Assuming 1 witness per response drop
 		return 0, errNoFetchesPending
 	}
-	// Ensure we received the correct type of data ([]rlp.RawValue)
-	witnessRLP, ok := witnessData.(wit.WitnessPacketResponse)
-	if !ok {
-		log.Warn("DeliverWitnesses: Received unexpected data type", "type", fmt.Sprintf("%T", witnessData), "peer", id)
-		witnessDropMeter.Mark(1)
-		// We should probably return the request to the queue here
-		// q.expire(id, q.witnessPendPool, q.witnessTaskQueue)
-		return 0, fmt.Errorf("invalid witness data type: %T", witnessData)
-	}
 
-	log.Debug("DeliverWitnesses: Received witness RLP data", "peer", id, "count", len(witnessRLP))
+	log.Debug("DeliverWitnesses: Received witnesses", "peer", id, "count", len(witnesses))
 
 	// Mark incoming data and time
-	witnessInMeter.Mark(int64(len(witnessRLP)))
+	witnessInMeter.Mark(int64(len(witnesses)))
 	witnessReqTimer.UpdateSince(request.Time)
 
 	// Define validation logic (placeholder)
 	validateWitness := func(index int, header *types.Header) error {
 		// TODO: Add validation if witness can be checked against header
 		// e.g., if header contains a witness hash.
-		if index >= len(witnessRLP) {
-			return fmt.Errorf("witness index %d out of bounds (%d)", index, len(witnessRLP))
+		if index >= len(witnesses) {
+			return fmt.Errorf("witness index %d out of bounds (%d)", index, len(witnesses))
 		}
 		return nil
 	}
@@ -1085,17 +1074,7 @@ func (q *queue) DeliverWitnesses(id string, witnessData interface{}, meta interf
 	// Define reconstruction logic (decode RLP and assign)
 	reconstructWitness := func(index int, result *fetchResult) {
 		log.Trace("DeliverWitnesses: reconstructWitness entered", "peer", id, "index", index, "header", result.Header.Hash())
-		// Decode the RLP witness data
-		wit := new(stateless.Witness)
-		log.Trace("DeliverWitnesses: Decoding witness RLP", "peer", id, "index", index)
-		if err := rlp.DecodeBytes(witnessRLP[index], wit); err != nil {
-			log.Warn("DeliverWitnesses: Failed to decode witness RLP", "err", err, "peer", id, "header", result.Header.Hash())
-			// How to handle decode failure? Mark as incomplete? For now, just log.
-			return
-		}
-		log.Trace("DeliverWitnesses: Successfully decoded witness RLP", "peer", id, "index", index)
-		// Assign decoded witness and mark as done
-		result.Witness = wit
+		result.Witness = witnesses[index]
 		result.SetWitnessDone()
 		log.Trace("DeliverWitnesses: reconstructWitness finished", "peer", id, "index", index, "header", result.Header.Hash(), "allDone", result.AllDone())
 	}
@@ -1104,7 +1083,7 @@ func (q *queue) DeliverWitnesses(id string, witnessData interface{}, meta interf
 	log.Debug("DeliverWitnesses: Calling generic deliver", "peer", id, "reqHeaders", len(request.Headers))
 	acceptedCount, err := q.deliver(id, q.witnessTaskPool, q.witnessTaskQueue, q.witnessPendPool,
 		witnessReqTimer, witnessInMeter, witnessDropMeter,
-		len(witnessRLP), // Pass the count of received RLP items
+		len(witnesses), // Pass the count of received RLP items
 		validateWitness, reconstructWitness)
 	log.Debug("DeliverWitnesses: Generic deliver returned", "peer", id, "accepted", acceptedCount, "err", err)
 	return acceptedCount, err

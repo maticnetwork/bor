@@ -23,8 +23,8 @@ import (
 
 	// Assuming witnesses are related to types
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
-	"github.com/ethereum/go-ethereum/eth/protocols/wit"
 	"github.com/ethereum/go-ethereum/log"
 )
 
@@ -110,27 +110,20 @@ func (q *witnessQueue) request(peer *peerConnection, req *fetchRequest, resCh ch
 func (q *witnessQueue) deliver(peer *peerConnection, packet *eth.Response) (int, error) {
 	log.Trace("Delivering witness response", "peer", peer.id)
 	// Check the actual response type. Should be a pointer to WitnessPacketRLPPacket.
-	witPacketPtr, ok := packet.Res.(*wit.WitnessPacketRLPPacket) // Expect pointer type
+	witPacketData, ok := packet.Res.([]*stateless.Witness) // Expect pointer type
 	if !ok {
 		peer.log.Warn("Witness deliver unexpected response type", "type", fmt.Sprintf("%T", packet.Res))
 		return 0, fmt.Errorf("unexpected response type: %T", packet.Res)
 	}
 
-	// The witPacket.WitnessPacketResponse is []rlp.RawValue
-	// Need to decode this into actual witness structures or pass the raw data.
-	witnessData := witPacketPtr.WitnessPacketResponse // Dereference pointer implicitly? Check definition
-	// If WitnessPacketResponse is a pointer type in the struct, no change needed here.
-	// If it's a value type, we access it via witPacketPtr.WitnessPacketResponse.
-	// Assuming value type based on common patterns.
-
-	numWitnesses := len(witnessData) // Number of raw witness blobs received
+	numWitnesses := len(witPacketData) // Number of raw witness blobs received
 
 	// Placeholder: Needs DeliverWitnesses method definition in queue struct
 	// Adjust DeliverWitnesses to accept the raw RLP data or decoded witnesses.
 	// Pass witnessData ( []rlp.RawValue ) or decoded data.
 	// The `requests` parameter used previously seems incorrect based on witPacket structure.
 	// Assuming the signature in queue.go will be updated to accept []rlp.RawValue and interface{}
-	accepted, err := q.queue.DeliverWitnesses(peer.id, witnessData, packet.Meta) // Pass raw witness data and potential metadata
+	accepted, err := q.queue.DeliverWitnesses(peer.id, witPacketData, packet.Meta) // Pass raw witness data and potential metadata
 
 	switch {
 	case err == nil && numWitnesses == 0:

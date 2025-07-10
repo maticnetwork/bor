@@ -5,7 +5,6 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/stateless"
-	"github.com/ethereum/go-ethereum/rlp"
 )
 
 // Constants to match up protocol versions and messages
@@ -26,7 +25,7 @@ var ProtocolVersions = []uint{WIT1}
 var protocolLengths = map[uint]uint64{WIT1: 4}
 
 // maxMessageSize is the maximum cap on the size of a protocol message.
-const maxMessageSize = 10 * 1024 * 1024
+const maxMessageSize = 16 * 1024 * 1024
 
 const (
 	NewWitnessMsg       = 0x00
@@ -52,9 +51,14 @@ type Packet interface {
 	Kind() byte   // Kind returns the message type.
 }
 
-// GetWitnessRequest represents a list of witnesses query by block hashes.
+// GetWitnessRequest represents a list of witnesses query by witness pages.
 type GetWitnessRequest struct {
-	Hashes []common.Hash // Request by list of block hashes
+	WitnessPages []WitnessPageRequest // Request by list of witness pages
+}
+
+type WitnessPageRequest struct {
+	Hash common.Hash // BlockHash
+	Page uint64      // Starts on 0
 }
 
 // GetWitnessPacket represents a witness query with request ID wrapping.
@@ -71,7 +75,14 @@ type WitnessPacketRLPPacket struct {
 
 // WitnessPacketResponse represents a witness response, to use when we already
 // have the witness rlp encoded.
-type WitnessPacketResponse []rlp.RawValue
+type WitnessPacketResponse []WitnessPageResponse
+
+type WitnessPageResponse struct {
+	Data       []byte
+	Hash       common.Hash
+	Page       uint64 // Starts on 0; If Page >= TotalPages means the request was invalid and the response is an empty data array
+	TotalPages uint64 // Length of pages
+}
 
 type NewWitnessPacket struct {
 	Witness *stateless.Witness

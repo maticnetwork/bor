@@ -12,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 
 	//	"github.com/ethereum/go-ethereum/eth/protocols/eth" // Not directly needed here
+	"github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/eth/protocols/wit"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -516,7 +517,7 @@ func (m *witnessManager) tick() {
 
 // fetchWitness performs a single witness fetch in a goroutine.
 func (m *witnessManager) fetchWitness(peer string, hash common.Hash, announce *blockAnnounce) {
-	resCh := make(chan *wit.Response)
+	resCh := make(chan *eth.Response)
 
 	announcedAt := announce.time // Capture the original 'ready-to-fetch' time for logging/timestamping
 	witnessFetchMeter.Mark(1)
@@ -564,7 +565,7 @@ func (m *witnessManager) fetchWitness(peer string, hash common.Hash, announce *b
 		}
 
 		witness := &stateless.Witness{}
-		err = rlp.DecodeBytes(packet.WitnessPacketResponse[0], witness)
+		err = rlp.DecodeBytes(packet.WitnessPacketResponse[0].Data, witness)
 		if err != nil {
 			log.Debug("[wm] Failed to decode witness RLP", "peer", peer, "hash", hash, "err", err)
 			m.handleWitnessFetchFailureExt(hash, peer, fmt.Errorf("RLP decoding failed: %w", err), false)

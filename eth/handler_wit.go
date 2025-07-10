@@ -11,12 +11,12 @@ import (
 	"github.com/ethereum/go-ethereum/eth/protocols/wit"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p/enode"
-	"github.com/ethereum/go-ethereum/rlp"
 )
 
 const (
 	// witnessRequestTimeout defines how long to wait for an in-flight witness computation.
 	witnessRequestTimeout = 5 * time.Second
+	PageSize              = 15 * 1024 * 1024 // 15 MB
 )
 
 // witHandler implements the eth.Backend interface to handle the various network
@@ -53,17 +53,12 @@ func (h *witHandler) Handle(peer *wit.Peer, packet wit.Packet) error {
 		return h.handleWitnessHashesAnnounce(peer, packet.Hashes, packet.Numbers)
 	case *wit.GetWitnessPacket:
 		// Call handleGetWitness which returns the raw RLP data
-		witnessesRLPBytes, err := h.handleGetWitness(peer, packet)
+		response, err := h.handleGetWitness(peer, packet)
 		if err != nil {
 			return fmt.Errorf("failed to handle GetWitnessPacket: %w", err)
 		}
-		// Convert [][]byte to []rlp.RawValue before replying
-		witnessesRLP := make([]rlp.RawValue, len(witnessesRLPBytes))
-		for i, b := range witnessesRLPBytes {
-			witnessesRLP[i] = rlp.RawValue(b)
-		}
 		// Reply using the retrieved RLP data
-		return peer.ReplyWitnessRLP(packet.RequestId, witnessesRLP)
+		return peer.ReplyWitness(packet.RequestId, &response)
 
 	default:
 		return fmt.Errorf("unknown wit packet type %T", packet)
@@ -105,21 +100,57 @@ func (h *witHandler) handleWitnessHashesAnnounce(peer *wit.Peer, hashes []common
 // handleGetWitness retrieves witnesses for the requested block hashes and returns them as raw RLP data.
 // It now returns the data and error, rather than sending the reply directly.
 // The returned data is [][]byte, as rlp.RawValue is essentially []byte.
-func (h *witHandler) handleGetWitness(peer *wit.Peer, req *wit.GetWitnessPacket) ([][]byte, error) {
-	witnessesRLPBytes := make([][]byte, 0, len(req.Hashes))
+func (h *witHandler) handleGetWitness(peer *wit.Peer, req *wit.GetWitnessPacket) (wit.WitnessPacketResponse, error) {
+	log.Debug("handleGetWitness processing request", "peer", peer.ID(), "reqID", req.RequestId, "witnessPages", len(req.WitnessPages))
+	// list different witnesses to query
+	seen := make(map[common.Hash]struct{}, len(req.WitnessPages))
+	for _, witnessPage := range req.WitnessPages {
+		seen[witnessPage.Hash] = struct{}{}
+	}
 
-	log.Debug("handleGetWitness processing request", "peer", peer.ID(), "reqID", req.RequestId, "hashes", len(req.Hashes))
-
-	// Fetch witnesses from the backend
-	for _, hash := range req.Hashes {
-		// Call the blockchain method which now returns raw RLP bytes
-		witnessBytes := rawdb.ReadWitness(h.Chain().DB(), hash)
-		if len(witnessBytes) > 0 {
-			log.Trace("Witness found in DB immediately", "hash", hash)
-			witnessesRLPBytes = append(witnessesRLPBytes, witnessBytes)
+	// witness sizes query
+	witnessSize := make(map[common.Hash]uint64, len(seen))
+	for witnessBlockHash := range seen {
+		size := rawdb.ReadWitnessSize(h.Chain().DB(), witnessBlockHash)
+		if size == nil {
+			witnessSize[witnessBlockHash] = 0
+		} else {
+			witnessSize[witnessBlockHash] = *size
 		}
 	}
+
+	// query witnesses by demand
+	var response wit.WitnessPacketResponse
+	witnessCache := make(map[common.Hash][]byte, len(seen))
+	for _, witnessPage := range req.WitnessPages {
+		totalPages := (witnessSize[witnessPage.Hash] + PageSize - 1) / PageSize // integer trick for: ceil(witnessSize/PageSize)
+		var witnessPageResponse wit.WitnessPageResponse
+		witnessPageResponse.Page = witnessPage.Page
+		witnessPageResponse.Hash = witnessPage.Hash
+		witnessPageResponse.TotalPages = totalPages
+
+		needToQuery := witnessPage.Page < totalPages
+		if needToQuery {
+			var witnessBytes []byte
+			if cachedRLPBytes, exists := witnessCache[witnessPage.Hash]; exists {
+				witnessBytes = cachedRLPBytes
+			} else {
+				queriedBytes := rawdb.ReadWitness(h.Chain().DB(), witnessPage.Hash)
+				witnessCache[witnessPage.Hash] = queriedBytes
+				witnessBytes = queriedBytes
+			}
+
+			start := PageSize * witnessPage.Page
+			end := start + PageSize
+			if end > uint64(len(witnessBytes)) {
+				end = uint64(len(witnessBytes))
+			}
+			witnessPageResponse.Data = witnessBytes[start:end]
+		}
+		response = append(response, witnessPageResponse)
+	}
+
 	// Return the collected RLP data
-	log.Debug("handleGetWitness returning witnesses", "peer", peer.ID(), "reqID", req.RequestId, "count", len(witnessesRLPBytes))
-	return witnessesRLPBytes, nil
+	log.Debug("handleGetWitness returning witnesses pages", "peer", peer.ID(), "reqID", req.RequestId, "count", len(response))
+	return response, nil
 }
