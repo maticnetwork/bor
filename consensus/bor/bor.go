@@ -1339,6 +1339,9 @@ func (c *Bor) CommitStates(
 	eventRecords, err = c.HeimdallClient.StateSyncEvents(context.Background(), from, to.Unix())
 	if err != nil {
 		log.Error("Error occurred when fetching state sync events", "fromID", from, "to", to.Unix(), "err", err)
+
+		stateSyncs := make([]*types.StateSyncData, 0)
+		return stateSyncs, nil
 	}
 
 	// This if statement checks if there are any state sync record overrides configured for the current block number.

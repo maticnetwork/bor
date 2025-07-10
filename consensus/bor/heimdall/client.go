@@ -93,7 +93,8 @@ func (h *HeimdallClient) StateSyncEvents(ctx context.Context, fromID uint64, to 
 
 		ctx = WithRequestType(ctx, StateSyncRequest)
 
-		response, err := FetchWithRetry[clerkTypes.RecordListResponse](ctx, h.client, url, h.closeCh)
+		request := &Request{client: h.client, url: url, start: time.Now()}
+		response, err := Fetch[clerkTypes.RecordListResponse](ctx, request)
 		if err != nil {
 			return nil, err
 		}
