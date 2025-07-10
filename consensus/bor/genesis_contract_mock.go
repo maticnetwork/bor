@@ -13,6 +13,7 @@ import (
 	statefull "github.com/ethereum/go-ethereum/consensus/bor/statefull"
 	state "github.com/ethereum/go-ethereum/core/state"
 	types "github.com/ethereum/go-ethereum/core/types"
+	vm "github.com/ethereum/go-ethereum/core/vm"
 	gomock "github.com/golang/mock/gomock"
 )
 
@@ -40,7 +41,7 @@ func (m *MockGenesisContract) EXPECT() *MockGenesisContractMockRecorder {
 }
 
 // CommitState mocks base method.
-func (m *MockGenesisContract) CommitState(arg0 *clerk.EventRecordWithTime, arg1 *state.StateDB, arg2 *types.Header, arg3 statefull.ChainContext) (uint64, error) {
+func (m *MockGenesisContract) CommitState(arg0 *clerk.EventRecordWithTime, arg1 vm.StateDB, arg2 *types.Header, arg3 statefull.ChainContext) (uint64, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CommitState", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(uint64)

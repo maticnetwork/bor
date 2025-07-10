@@ -13,8 +13,8 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/bor/statefull"
 	"github.com/ethereum/go-ethereum/consensus/bor/valset"
 	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
@@ -289,7 +289,7 @@ func (c *ChainSpanner) GetCurrentValidatorsByHash(ctx context.Context, headerHas
 
 const method = "commitSpan"
 
-func (c *ChainSpanner) CommitSpan(ctx context.Context, minimalSpan Span, validators, producers []stakeTypes.MinimalVal, state *state.StateDB, header *types.Header, chainContext core.ChainContext) error {
+func (c *ChainSpanner) CommitSpan(ctx context.Context, minimalSpan Span, validators, producers []stakeTypes.MinimalVal, state vm.StateDB, header *types.Header, chainContext core.ChainContext) error {
 	// get validators bytes
 	validatorBytes, err := rlp.EncodeToBytes(validators)
 	if err != nil {

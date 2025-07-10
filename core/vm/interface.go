@@ -34,6 +34,7 @@ type StateDB interface {
 
 	SubBalance(common.Address, *uint256.Int, tracing.BalanceChangeReason) uint256.Int
 	AddBalance(common.Address, *uint256.Int, tracing.BalanceChangeReason) uint256.Int
+	SetBalance(common.Address, *uint256.Int, tracing.BalanceChangeReason) uint256.Int // Needed for bor consensus
 	GetBalance(common.Address) *uint256.Int
 
 	GetNonce(common.Address) uint64
@@ -101,4 +102,7 @@ type StateDB interface {
 
 	// Finalise must be invoked at the end of a transaction
 	Finalise(bool)
+
+	// Inner returns the underlying state instance. Needed for bor consensus.
+	Inner() *state.StateDB
 }

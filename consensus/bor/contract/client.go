@@ -14,6 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/bor/statefull"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
@@ -66,7 +67,7 @@ func NewGenesisContractsClient(
 
 func (gc *GenesisContractsClient) CommitState(
 	event *clerk.EventRecordWithTime,
-	state *state.StateDB,
+	state vm.StateDB,
 	header *types.Header,
 	chCtx statefull.ChainContext,
 ) (uint64, error) {

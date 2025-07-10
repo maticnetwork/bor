@@ -195,17 +195,20 @@ func ApplyTransactionWithEVM(msg *Message, gp *GasPool, statedb *state.StateDB, 
 	statedb.SetMVHashmap(nil)
 
 	if evm.ChainConfig().IsLondon(blockNumber) {
-		statedb.AddBalance(result.BurntContractAddress, cmath.BigIntToUint256Int(result.FeeBurnt), tracing.BalanceChangeTransfer)
+		// Use `evm.StateDB` for using hooked state db if tracing is enabled
+		evm.StateDB.AddBalance(result.BurntContractAddress, cmath.BigIntToUint256Int(result.FeeBurnt), tracing.BalanceChangeTransfer)
 	}
 
-	statedb.AddBalance(evm.Context.Coinbase, cmath.BigIntToUint256Int(result.FeeTipped), tracing.BalanceChangeTransfer)
+	evm.StateDB.AddBalance(evm.Context.Coinbase, cmath.BigIntToUint256Int(result.FeeTipped), tracing.BalanceChangeTransfer)
 	output1 := new(big.Int).SetBytes(result.SenderInitBalance.Bytes())
 	output2 := new(big.Int).SetBytes(coinbaseBalance.Bytes())
 
 	// Deprecating transfer log and will be removed in future fork. PLEASE DO NOT USE this transfer log going forward. Parameters won't get updated as expected going forward with EIP1559
 	// add transfer log
+	// We use `evm.StateDB` instance instead of normal `statedb` as if tracing is enabled, we may have a hooked state db instance
+	// for the fee transfer log.
 	AddFeeTransferLog(
-		statedb,
+		evm.StateDB,
 
 		msg.From,
 		evm.Context.Coinbase,
