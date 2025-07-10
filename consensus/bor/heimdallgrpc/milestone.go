@@ -7,11 +7,10 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
-	hmm "github.com/ethereum/go-ethereum/heimdall-migration-monitor"
 	"github.com/ethereum/go-ethereum/log"
 )
 
-func (h *HeimdallGRPCClient) FetchMilestoneCountV2(ctx context.Context) (int64, error) {
+func (h *HeimdallGRPCClient) FetchMilestoneCount(ctx context.Context) (int64, error) {
 	log.Info("Fetching milestone count")
 
 	var err error
@@ -37,7 +36,7 @@ func (h *HeimdallGRPCClient) FetchMilestoneCountV2(ctx context.Context) (int64, 
 	return count, nil
 }
 
-func (h *HeimdallGRPCClient) FetchMilestoneV2(ctx context.Context) (*milestone.MilestoneV2, error) {
+func (h *HeimdallGRPCClient) FetchMilestone(ctx context.Context) (*milestone.Milestone, error) {
 	log.Debug("Fetching milestone")
 
 	var err error
@@ -58,7 +57,7 @@ func (h *HeimdallGRPCClient) FetchMilestoneV2(ctx context.Context) (*milestone.M
 
 	fetchedMilestone := res.GetMilestone()
 
-	milestone := &milestone.MilestoneV2{
+	milestone := &milestone.Milestone{
 		Proposer:    common.HexToAddress(fetchedMilestone.Proposer),
 		StartBlock:  fetchedMilestone.StartBlock,
 		EndBlock:    fetchedMilestone.EndBlock,
@@ -71,12 +70,4 @@ func (h *HeimdallGRPCClient) FetchMilestoneV2(ctx context.Context) (*milestone.M
 	log.Debug("Fetched milestone")
 
 	return milestone, nil
-}
-
-func (h *HeimdallGRPCClient) FetchMilestoneCount(ctx context.Context) (int64, error) {
-	if hmm.IsHeimdallV2 {
-		return h.FetchMilestoneCountV2(ctx)
-	}
-
-	return h.FetchMilestoneCountV1(ctx)
 }

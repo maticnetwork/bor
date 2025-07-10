@@ -8,9 +8,9 @@ import (
 	context "context"
 	reflect "reflect"
 
+	borTypes "github.com/0xPolygon/heimdall-v2/x/bor/types"
 	types "github.com/0xPolygon/heimdall-v2/x/stake/types"
 	common "github.com/ethereum/go-ethereum/common"
-	span "github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
 	valset "github.com/ethereum/go-ethereum/consensus/bor/valset"
 	core "github.com/ethereum/go-ethereum/core"
 	state "github.com/ethereum/go-ethereum/core/state"
@@ -43,7 +43,7 @@ func (m *MockSpanner) EXPECT() *MockSpannerMockRecorder {
 }
 
 // CommitSpan mocks base method.
-func (m *MockSpanner) CommitSpan(arg0 context.Context, arg1 span.Span, arg2, arg3 []types.MinimalVal, arg4 *state.StateDB, arg5 *types0.Header, arg6 core.ChainContext) error {
+func (m *MockSpanner) CommitSpan(arg0 context.Context, arg1 borTypes.Span, arg2, arg3 []types.MinimalVal, arg4 *state.StateDB, arg5 *types0.Header, arg6 core.ChainContext) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CommitSpan", arg0, arg1, arg2, arg3, arg4, arg5, arg6)
 	ret0, _ := ret[0].(error)
@@ -57,10 +57,10 @@ func (mr *MockSpannerMockRecorder) CommitSpan(arg0, arg1, arg2, arg3, arg4, arg5
 }
 
 // GetCurrentSpan mocks base method.
-func (m *MockSpanner) GetCurrentSpan(arg0 context.Context, arg1 common.Hash) (*span.Span, error) {
+func (m *MockSpanner) GetCurrentSpan(arg0 context.Context, arg1 common.Hash) (*borTypes.Span, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetCurrentSpan", arg0, arg1)
-	ret0, _ := ret[0].(*span.Span)
+	ret0, _ := ret[0].(*borTypes.Span)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

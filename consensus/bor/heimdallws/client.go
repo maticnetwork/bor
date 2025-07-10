@@ -17,7 +17,7 @@ import (
 type HeimdallWSClient struct {
 	conn   *websocket.Conn
 	url    string // store the URL for reconnection
-	events chan *milestone.MilestoneV2
+	events chan *milestone.Milestone
 	done   chan struct{}
 	mu     sync.Mutex
 }
@@ -27,13 +27,13 @@ func NewHeimdallWSClient(url string) (*HeimdallWSClient, error) {
 	return &HeimdallWSClient{
 		conn:   nil,
 		url:    url,
-		events: make(chan *milestone.MilestoneV2),
+		events: make(chan *milestone.Milestone),
 		done:   make(chan struct{}),
 	}, nil
 }
 
 // SubscribeMilestoneEvents sends the subscription request and starts processing incoming messages.
-func (c *HeimdallWSClient) SubscribeMilestoneEvents(ctx context.Context) <-chan *milestone.MilestoneV2 {
+func (c *HeimdallWSClient) SubscribeMilestoneEvents(ctx context.Context) <-chan *milestone.Milestone {
 	c.tryUntilSubscribeMilestoneEvents(ctx)
 
 	// Start the goroutine to read messages.
@@ -145,7 +145,7 @@ func (c *HeimdallWSClient) readMessages(ctx context.Context) {
 		}
 
 		// Build the Milestone object from attributes.
-		m := &milestone.MilestoneV2{
+		m := &milestone.Milestone{
 			Proposer:    common.HexToAddress(attrs["proposer"]),
 			Hash:        common.HexToHash(attrs["hash"]),
 			BorChainID:  attrs["bor_chain_id"],

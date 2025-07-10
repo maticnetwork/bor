@@ -9,37 +9,10 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
-	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
 	"github.com/stretchr/testify/require"
 )
 
 type MockHeimdallClient struct {
-}
-
-func (h *MockHeimdallClient) GetSpanV1(ctx context.Context, spanID uint64) (*span.HeimdallSpan, error) {
-	// Throw error for span id 100
-	if spanID == 100 {
-		return nil, fmt.Errorf("unable to fetch span")
-	}
-
-	// For everything else, return hardcoded span assuming length 6400 (except for span 0)
-	if spanID == 0 {
-		return &span.HeimdallSpan{
-			Span: span.Span{
-				Id:         0,
-				StartBlock: 0,
-				EndBlock:   255,
-			},
-		}, nil
-	} else {
-		return &span.HeimdallSpan{
-			Span: span.Span{
-				Id:         spanID,
-				StartBlock: 6400*(spanID-1) + 256,
-				EndBlock:   6400*spanID + 255,
-			},
-		}, nil
-	}
 }
 
 func TestSpanStore_SpanById(t *testing.T) {
@@ -187,31 +160,37 @@ func TestSpanStore_SpanByBlockNumber(t *testing.T) {
 }
 
 // Irrelevant to the tests above but necessary for interface compatibility
-func (h *MockHeimdallClient) StateSyncEventsV1(ctx context.Context, fromID uint64, to int64) ([]*clerk.EventRecordWithTime, error) {
+func (h *MockHeimdallClient) StateSyncEvents(ctx context.Context, fromID uint64, to int64) ([]*clerk.EventRecordWithTime, error) {
 	panic("implement me")
 }
 
-func (h *MockHeimdallClient) StateSyncEventsV2(ctx context.Context, fromID uint64, to int64) ([]*clerk.EventRecordWithTime, error) {
+func (h *MockHeimdallClient) GetSpan(ctx context.Context, spanID uint64) (*types.Span, error) {
+	// Throw error for span id 100
+	if spanID == 100 {
+		return nil, fmt.Errorf("unable to fetch span")
+	}
+
+	// For everything else, return hardcoded span assuming length 6400 (except for span 0)
+	if spanID == 0 {
+		return &types.Span{
+			Id:         0,
+			StartBlock: 0,
+			EndBlock:   255,
+		}, nil
+	} else {
+		return &types.Span{
+			Id:         spanID,
+			StartBlock: 6400*(spanID-1) + 256,
+			EndBlock:   6400*spanID + 255,
+		}, nil
+	}
+}
+
+func (h *MockHeimdallClient) GetLatestSpan(ctx context.Context) (*types.Span, error) {
 	panic("implement me")
 }
 
-func (h *MockHeimdallClient) GetSpanV2(ctx context.Context, spanID uint64) (*types.Span, error) {
-	panic("implement me")
-}
-
-func (h *MockHeimdallClient) GetLatestSpanV1(ctx context.Context) (*span.HeimdallSpan, error) {
-	panic("implement me")
-}
-
-func (h *MockHeimdallClient) GetLatestSpanV2(ctx context.Context) (*types.Span, error) {
-	panic("implement me")
-}
-
-func (h *MockHeimdallClient) FetchCheckpointV1(ctx context.Context, number int64) (*checkpoint.CheckpointV1, error) {
-	panic("implement me")
-}
-
-func (h *MockHeimdallClient) FetchCheckpointV2(ctx context.Context, number int64) (*checkpoint.CheckpointV2, error) {
+func (h *MockHeimdallClient) FetchCheckpoint(ctx context.Context, number int64) (*checkpoint.Checkpoint, error) {
 	panic("implement me")
 }
 
@@ -219,23 +198,11 @@ func (h *MockHeimdallClient) FetchCheckpointCount(ctx context.Context) (int64, e
 	panic("implement me")
 }
 
-func (h *MockHeimdallClient) FetchMilestoneV1(ctx context.Context) (*milestone.MilestoneV1, error) {
-	panic("implement me")
-}
-
-func (h *MockHeimdallClient) FetchMilestoneV2(ctx context.Context) (*milestone.MilestoneV2, error) {
+func (h *MockHeimdallClient) FetchMilestone(ctx context.Context) (*milestone.Milestone, error) {
 	panic("implement me")
 }
 
 func (h *MockHeimdallClient) FetchMilestoneCount(ctx context.Context) (int64, error) {
-	panic("implement me")
-}
-
-func (h *MockHeimdallClient) FetchNoAckMilestone(ctx context.Context, milestoneID string) error {
-	panic("implement me")
-}
-
-func (h *MockHeimdallClient) FetchLastNoAckMilestone(ctx context.Context) (string, error) {
 	panic("implement me")
 }
 

@@ -12,7 +12,6 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
-	hmm "github.com/ethereum/go-ethereum/heimdall-migration-monitor"
 	"github.com/ethereum/go-ethereum/log"
 )
 
@@ -28,7 +27,7 @@ var (
 
 // fetchWhitelistCheckpoint fetches the latest checkpoint from it's local heimdall
 // and verifies the data against bor data.
-func (h *ethHandler) fetchWhitelistCheckpoint(ctx context.Context, bor *bor.Bor) (result *checkpoint.CheckpointV2, err error) {
+func (h *ethHandler) fetchWhitelistCheckpoint(ctx context.Context, bor *bor.Bor) (result *checkpoint.Checkpoint, err error) {
 	defer func() {
 		if err == nil && result != nil {
 			log.Debug("Got new checkpoint from heimdall", "start", result.StartBlock, "end", result.EndBlock, "rootHash", result.RootHash.String())
@@ -36,34 +35,14 @@ func (h *ethHandler) fetchWhitelistCheckpoint(ctx context.Context, bor *bor.Bor)
 	}()
 
 	// fetch the latest checkpoint from Heimdall
-	if hmm.IsHeimdallV2 {
-		result, err = bor.HeimdallClient.FetchCheckpointV2(ctx, -1)
-		if err = reportCommonErrors("latest checkpointV2", err, errCheckpoint); err != nil {
-			return nil, err
-		}
-		return result, nil
-	}
-
-	resultV1, err := bor.HeimdallClient.FetchCheckpointV1(ctx, -1)
-	if err = reportCommonErrors("latest checkpointV1", err, errCheckpoint); err != nil {
+	result, err = bor.HeimdallClient.FetchCheckpoint(ctx, -1)
+	if err = reportCommonErrors("latest checkpointV2", err, errCheckpoint); err != nil {
 		return nil, err
 	}
-
-	if resultV1 == nil || resultV1.StartBlock == nil || resultV1.EndBlock == nil {
-		return nil, fmt.Errorf("invalid checkpoint data: %v", resultV1)
-	}
-
-	return &checkpoint.CheckpointV2{
-		Proposer:   resultV1.Proposer,
-		StartBlock: resultV1.StartBlock.Uint64(),
-		EndBlock:   resultV1.EndBlock.Uint64(),
-		RootHash:   resultV1.RootHash,
-		BorChainID: resultV1.BorChainID,
-		Timestamp:  resultV1.Timestamp,
-	}, nil
+	return result, nil
 }
 
-func (h *ethHandler) handleWhitelistCheckpoint(ctx context.Context, checkpoint *checkpoint.CheckpointV2, eth *Ethereum, verifier *borVerifier, process bool) (common.Hash, error) {
+func (h *ethHandler) handleWhitelistCheckpoint(ctx context.Context, checkpoint *checkpoint.Checkpoint, eth *Ethereum, verifier *borVerifier, process bool) (common.Hash, error) {
 	// Verify if the checkpoint fetched can be added to the local whitelist entry or not
 	// If verified, it returns the hash of the end block of the checkpoint. If not,
 	// it will return appropriate error.
@@ -89,7 +68,7 @@ func (h *ethHandler) handleWhitelistCheckpoint(ctx context.Context, checkpoint *
 
 // fetchWhitelistMilestone fetches the latest milestone from it's local heimdall
 // and verifies the data against bor data.
-func (h *ethHandler) fetchWhitelistMilestone(ctx context.Context, bor *bor.Bor) (result *milestone.MilestoneV2, err error) {
+func (h *ethHandler) fetchWhitelistMilestone(ctx context.Context, bor *bor.Bor) (result *milestone.Milestone, err error) {
 	defer func() {
 		if err == nil && result != nil {
 			log.Debug("Got new milestone from heimdall", "start", result.StartBlock, "end", result.EndBlock, "hash", result.Hash.String())
@@ -97,38 +76,15 @@ func (h *ethHandler) fetchWhitelistMilestone(ctx context.Context, bor *bor.Bor) 
 	}()
 
 	// fetch latest milestone
-	if hmm.IsHeimdallV2 {
-		result, err = bor.HeimdallClient.FetchMilestoneV2(ctx)
-		if err = reportCommonErrors("latest milestone", err, errMilestone); err != nil {
-			return nil, err
-		}
-		return result, nil
-	}
-
-	milestoneV1, err := bor.HeimdallClient.FetchMilestoneV1(ctx)
+	result, err = bor.HeimdallClient.FetchMilestone(ctx)
 	if err = reportCommonErrors("latest milestone", err, errMilestone); err != nil {
 		return nil, err
 	}
-
-	if milestoneV1 == nil || milestoneV1.StartBlock == nil || milestoneV1.EndBlock == nil {
-		return nil, fmt.Errorf("invalid milstone data: %v", milestoneV1)
-	}
-
-	result = &milestone.MilestoneV2{
-		Proposer:    milestoneV1.Proposer,
-		Hash:        milestoneV1.Hash,
-		StartBlock:  milestoneV1.StartBlock.Uint64(),
-		EndBlock:    milestoneV1.EndBlock.Uint64(),
-		BorChainID:  milestoneV1.BorChainID,
-		MilestoneID: "",
-		Timestamp:   milestoneV1.Timestamp,
-	}
-
-	return result, err
+	return result, nil
 }
 
 // handleMilestone verify and process the fetched milestone
-func (h *ethHandler) handleMilestone(ctx context.Context, eth *Ethereum, milestone *milestone.MilestoneV2, verifier *borVerifier) error {
+func (h *ethHandler) handleMilestone(ctx context.Context, eth *Ethereum, milestone *milestone.Milestone, verifier *borVerifier) error {
 	// Verify if the milestone fetched can be added to the local whitelist entry or not. If verified,
 	// the hash of the end block of the milestone is returned else appropriate error is returned.
 	_, err := verifier.verify(ctx, eth, h, milestone.StartBlock, milestone.EndBlock, milestone.Hash.String()[2:], false)
@@ -172,22 +128,6 @@ func (h *ethHandler) handleMilestone(ctx context.Context, eth *Ethereum, milesto
 	h.downloader.ProcessMilestone(num, hash)
 
 	return nil
-}
-
-func (h *ethHandler) fetchNoAckMilestone(ctx context.Context, bor *bor.Bor) (string, error) {
-	milestoneID, err := bor.HeimdallClient.FetchLastNoAckMilestone(ctx)
-	err = reportCommonErrors("latest no-ack milestone", err, nil)
-
-	return milestoneID, err
-}
-
-func (h *ethHandler) fetchNoAckMilestoneByID(ctx context.Context, bor *bor.Bor, milestoneID string) error {
-	err := bor.HeimdallClient.FetchNoAckMilestone(ctx, milestoneID)
-	if errors.Is(err, heimdall.ErrNotInRejectedList) {
-		log.Debug("MilestoneID not in rejected list", "milestoneID", milestoneID)
-	}
-	err = reportCommonErrors("no-ack milestone by ID", err, nil, "milestoneID", milestoneID)
-	return err
 }
 
 // reportCommonErrors reports common errors which can occur while fetching data from heimdall. It also

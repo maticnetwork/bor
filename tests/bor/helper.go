@@ -24,11 +24,10 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/bor"
-	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
-	"github.com/ethereum/go-ethereum/consensus/bor/heimdall" //nolint:typecheck
+	"github.com/ethereum/go-ethereum/consensus/bor/clerk" //nolint:typecheck
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
-	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
+	borSpan "github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
 	"github.com/ethereum/go-ethereum/consensus/bor/valset"
 	"github.com/ethereum/go-ethereum/consensus/misc/eip1559"
 	"github.com/ethereum/go-ethereum/core"
@@ -372,7 +371,7 @@ func sign(t *testing.T, header *types.Header, signer []byte, c *params.BorConfig
 }
 
 //nolint:unused,deadcode
-func stateSyncEventsPayload(t *testing.T) *heimdall.StateSyncEventsResponseV1 {
+func stateSyncEventsPayload(t *testing.T) []*clerk.EventRecordWithTime {
 	t.Helper()
 
 	stateData, err := os.ReadFile("./testdata/states.json")
@@ -380,8 +379,8 @@ func stateSyncEventsPayload(t *testing.T) *heimdall.StateSyncEventsResponseV1 {
 		t.Fatalf("%s", err)
 	}
 
-	res := &heimdall.StateSyncEventsResponseV1{}
-	if err := json.Unmarshal(stateData, res); err != nil {
+	res := make([]*clerk.EventRecordWithTime, 0)
+	if err := json.Unmarshal(stateData, &res); err != nil {
 		t.Fatalf("%s", err)
 	}
 
@@ -389,7 +388,7 @@ func stateSyncEventsPayload(t *testing.T) *heimdall.StateSyncEventsResponseV1 {
 }
 
 //nolint:unused,deadcode
-func loadSpanFromFile(t *testing.T) *heimdall.SpanResponseV1 {
+func loadSpanFromFile(t *testing.T) *borTypes.Span {
 	t.Helper()
 
 	spanData, err := os.ReadFile("./testdata/span.json")
@@ -397,8 +396,7 @@ func loadSpanFromFile(t *testing.T) *heimdall.SpanResponseV1 {
 		t.Fatalf("%s", err)
 	}
 
-	res := &heimdall.SpanResponseV1{}
-
+	res := &borTypes.Span{}
 	if err := json.Unmarshal(spanData, res); err != nil {
 		t.Fatalf("%s", err)
 	}
@@ -425,13 +423,13 @@ func getMockedHeimdallClient(t *testing.T, heimdallSpan *borTypes.Span) (*mocks.
 	ctrl := gomock.NewController(t)
 	h := mocks.NewMockIHeimdallClient(ctrl)
 
-	h.EXPECT().GetSpanV1(gomock.Any(), uint64(1)).Return(heimdallSpan, nil).AnyTimes()
-	h.EXPECT().StateSyncEventsV1(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*clerk.EventRecordWithTime{getSampleEventRecord(t)}, nil).AnyTimes()
+	h.EXPECT().GetSpan(gomock.Any(), uint64(1)).Return(heimdallSpan, nil).AnyTimes()
+	h.EXPECT().StateSyncEvents(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*clerk.EventRecordWithTime{getSampleEventRecord(t)}, nil).AnyTimes()
 
 	return h, ctrl
 }
 
-func createMockSpan(address common.Address, chainId string) span.HeimdallSpan {
+func createMockSpan(address common.Address, chainId string) borTypes.Span {
 	// Mock span 0 for heimdall calls
 	validator := valset.Validator{
 		ID:               0,
@@ -443,30 +441,26 @@ func createMockSpan(address common.Address, chainId string) span.HeimdallSpan {
 		Validators: []*valset.Validator{&validator},
 		Proposer:   &validator,
 	}
-	span0 := span.HeimdallSpan{
-		Span: span.Span{
-			Id:         0,
-			StartBlock: 0,
-			EndBlock:   255,
-		},
-		ValidatorSet:      validatorSet,
-		SelectedProducers: []valset.Validator{validator},
-		ChainID:           chainId,
+	span0 := borTypes.Span{
+		Id:                0,
+		StartBlock:        0,
+		EndBlock:          255,
+		ValidatorSet:      borSpan.ConvertBorValSetToHeimdallValSet(&validatorSet),
+		SelectedProducers: borSpan.ConvertBorValidatorsToHeimdallValidators([]*valset.Validator{&validator}),
+		BorChainId:        chainId,
 	}
 
 	return span0
 }
 
-func createMockHeimdall(ctrl *gomock.Controller, span0, span1 *span.HeimdallSpan) *mocks.MockIHeimdallClient {
+func createMockHeimdall(ctrl *gomock.Controller, span0, span1 *borTypes.Span) *mocks.MockIHeimdallClient {
 	h := mocks.NewMockIHeimdallClient(ctrl)
 
 	h.EXPECT().Close().AnyTimes()
-	h.EXPECT().GetSpanV1(gomock.Any(), uint64(0)).Return(span0, nil).AnyTimes()
-	h.EXPECT().GetSpanV1(gomock.Any(), uint64(1)).Return(span1, nil).AnyTimes()
-	h.EXPECT().FetchCheckpointV1(gomock.Any(), int64(-1)).Return(&checkpoint.CheckpointV1{}, nil).AnyTimes()
-	h.EXPECT().FetchMilestoneV1(gomock.Any()).Return(&milestone.MilestoneV1{}, nil).AnyTimes()
-	h.EXPECT().FetchLastNoAckMilestone(gomock.Any()).Return("", nil).AnyTimes()
-	h.EXPECT().FetchNoAckMilestone(gomock.Any(), string("test")).Return(nil).AnyTimes()
+	h.EXPECT().GetSpan(gomock.Any(), uint64(0)).Return(span0, nil).AnyTimes()
+	h.EXPECT().GetSpan(gomock.Any(), uint64(1)).Return(span1, nil).AnyTimes()
+	h.EXPECT().FetchCheckpoint(gomock.Any(), int64(-1)).Return(&checkpoint.Checkpoint{}, nil).AnyTimes()
+	h.EXPECT().FetchMilestone(gomock.Any()).Return(&milestone.Milestone{}, nil).AnyTimes()
 
 	return h
 }
@@ -474,7 +468,7 @@ func createMockHeimdall(ctrl *gomock.Controller, span0, span1 *span.HeimdallSpan
 func getMockedSpanner(t *testing.T, validators []*valset.Validator) *bor.MockSpanner {
 	t.Helper()
 
-	mockSpan := &span.Span{
+	mockSpan := &borTypes.Span{
 		Id:         0,
 		StartBlock: 0,
 		EndBlock:   0,
@@ -517,9 +511,9 @@ func getSampleEventRecord(t *testing.T) *clerk.EventRecordWithTime {
 	t.Helper()
 
 	eventRecords := stateSyncEventsPayload(t)
-	eventRecords.Result[0].Time = time.Unix(1, 0)
+	eventRecords[0].Time = time.Unix(1, 0)
 
-	return eventRecords.Result[0]
+	return eventRecords[0]
 }
 
 func newGwei(n int64) *big.Int {

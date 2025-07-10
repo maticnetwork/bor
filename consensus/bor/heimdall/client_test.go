@@ -154,7 +154,7 @@ func TestFetchCheckpointFromMockHeimdall(t *testing.T) {
 
 	// Create a new heimdall client and use same port for connection
 	client := NewHeimdallClient(fmt.Sprintf("http://localhost:%d", port), 5*time.Second)
-	_, err = client.FetchCheckpointV2(t.Context(), -1)
+	_, err = client.FetchCheckpoint(t.Context(), -1)
 	require.NoError(t, err, "expect no error in fetching checkpoint")
 
 	// Shutdown the server
@@ -220,7 +220,7 @@ func TestFetchMilestoneFromMockHeimdall(t *testing.T) {
 
 	// Create a new heimdall client and use same port for connection
 	client := NewHeimdallClient(fmt.Sprintf("http://localhost:%d", port), 5*time.Second)
-	_, err = client.FetchMilestoneV2(t.Context())
+	_, err = client.FetchMilestone(t.Context())
 	require.NoError(t, err, "expect no error in fetching milestone")
 
 	// Shutdown the server
@@ -249,8 +249,8 @@ func TestFetchShutdown(t *testing.T) {
 	handler.handleFetchCheckpoint = func(w http.ResponseWriter, _ *http.Request) {
 		time.Sleep(100 * time.Millisecond)
 
-		err := json.NewEncoder(w).Encode(checkpoint.CheckpointResponseV2{
-			Result: checkpoint.CheckpointV2{
+		err := json.NewEncoder(w).Encode(checkpoint.CheckpointResponse{
+			Result: checkpoint.Checkpoint{
 				Proposer:   common.Address{},
 				StartBlock: 0,
 				EndBlock:   512,
@@ -279,7 +279,7 @@ func TestFetchShutdown(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 
 	// Expect this to fail due to timeout
-	_, err = client.FetchCheckpointV1(ctx, -1)
+	_, err = client.FetchCheckpoint(ctx, -1)
 	require.Equal(t, "context deadline exceeded", err.Error(), "expect the function error to be a context deadline exceeded error")
 	require.Equal(t, "context deadline exceeded", ctx.Err().Error(), "expect the ctx error to be a context deadline exceeded error")
 
@@ -302,7 +302,7 @@ func TestFetchShutdown(t *testing.T) {
 	}(cancel)
 
 	// Expect this to fail due to cancellation
-	_, err = client.FetchCheckpointV1(ctx, -1)
+	_, err = client.FetchCheckpoint(ctx, -1)
 	require.Equal(t, "context canceled", err.Error(), "expect the function error to be a context cancelled error")
 	require.Equal(t, "context canceled", ctx.Err().Error(), "expect the ctx error to be a context cancelled error")
 
@@ -320,7 +320,7 @@ func TestFetchShutdown(t *testing.T) {
 	}()
 
 	// Expect this to fail due to shutdown
-	_, err = client.FetchCheckpointV1(t.Context(), -1)
+	_, err = client.FetchCheckpoint(t.Context(), -1)
 	require.Equal(t, ErrShutdownDetected.Error(), err.Error(), "expect the function error to be a shutdown detected error")
 
 	// Shutdown the server
@@ -415,7 +415,7 @@ func TestContext(t *testing.T) {
 func TestSpanURL(t *testing.T) {
 	t.Parallel()
 
-	url, err := spanV2URL("http://bor0", 1)
+	url, err := spanURL("http://bor0", 1)
 	if err != nil {
 		t.Fatal("got an error", err)
 	}
@@ -430,12 +430,12 @@ func TestSpanURL(t *testing.T) {
 func TestStateSyncURL(t *testing.T) {
 	t.Parallel()
 
-	url, err := stateSyncURLV1("http://bor0", 10, 100)
+	url, err := stateSyncURL("http://bor0", 10, 100)
 	if err != nil {
 		t.Fatal("got an error", err)
 	}
 
-	const expected = "http://bor0/clerk/event-record/list?from-id=10&to-time=100&limit=50"
+	const expected = "http://bor0/clerk/time?from_id=10&to_time=1970-01-01T00:01:40Z&pagination.limit=50"
 
 	if url.String() != expected {
 		t.Fatalf("expected URL %q, got %q", expected, url.String())

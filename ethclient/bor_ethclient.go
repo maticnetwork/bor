@@ -43,12 +43,3 @@ func (ec *Client) GetBorBlockReceipt(ctx context.Context, hash common.Hash) (*ty
 
 	return r, err
 }
-
-// GetStartBlockHeimdallSpanID returns the start block and heimdall span id
-func (ec *Client) GetStartBlockHeimdallSpanID(ctx context.Context, startBlock uint64) (uint64, error) {
-	var spanID uint64
-	if err := ec.c.CallContext(ctx, &spanID, "bor_getStartBlockHeimdallSpanID", startBlock); err != nil {
-		return 0, err
-	}
-	return spanID, nil
-}

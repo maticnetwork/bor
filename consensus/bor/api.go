@@ -357,8 +357,3 @@ func (api *API) initializeRootHashCache() error {
 func getRootHashKey(start uint64, end uint64) string {
 	return strconv.FormatUint(start, 10) + "-" + strconv.FormatUint(end, 10)
 }
-
-// GetStartBlockHeimdallSpanID returns the heimdall span that was used by bor to self commit spans
-func (api *API) GetStartBlockHeimdallSpanID(start uint64) (uint64, error) {
-	return api.bor.getStartBlockHeimdallSpanID(start)
-}

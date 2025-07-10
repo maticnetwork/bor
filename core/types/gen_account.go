@@ -50,18 +50,15 @@ func (a *Account) UnmarshalJSON(input []byte) error {
 	if err := json.Unmarshal(input, &dec); err != nil {
 		return err
 	}
-
 	if dec.Code != nil {
 		a.Code = *dec.Code
 	}
-
 	if dec.Storage != nil {
 		a.Storage = make(map[common.Hash]common.Hash, len(dec.Storage))
 		for k, v := range dec.Storage {
 			a.Storage[common.Hash(k)] = common.Hash(v)
 		}
 	}
-
 	if dec.Balance == nil {
 		return errors.New("missing required field 'balance' for Account")
 	}
@@ -69,10 +66,8 @@ func (a *Account) UnmarshalJSON(input []byte) error {
 	if dec.Nonce != nil {
 		a.Nonce = uint64(*dec.Nonce)
 	}
-
 	if dec.PrivateKey != nil {
 		a.PrivateKey = *dec.PrivateKey
 	}
-
 	return nil
 }

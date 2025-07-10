@@ -9,6 +9,7 @@ import (
 	lru "github.com/hashicorp/golang-lru"
 
 	"github.com/ethereum/go-ethereum/common"
+	borSpan "github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/params"
@@ -165,7 +166,7 @@ func (s *Snapshot) apply(headers []*types.Header, c *Bor) (*Snapshot, error) {
 				if err != nil {
 					return nil, err
 				}
-				v.IncludeIds(span.ValidatorSet.Validators)
+				v.IncludeIds(borSpan.ConvertHeimdallValSetToBorValSet(span.ValidatorSet).Validators)
 			}
 			snap.ValidatorSet = v
 		}

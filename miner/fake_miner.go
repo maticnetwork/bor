@@ -7,11 +7,12 @@ import (
 
 	"github.com/golang/mock/gomock"
 
+	borTypes "github.com/0xPolygon/heimdall-v2/x/bor/types"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/bor"
 	"github.com/ethereum/go-ethereum/consensus/bor/api"
-	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
+	borSpan "github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
 	"github.com/ethereum/go-ethereum/consensus/bor/valset"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -51,11 +52,11 @@ func NewBorDefaultMiner(t *testing.T) *DefaultBorMiner {
 	span0 := createMockSpanForTest(common.Address{0x1}, "1337")
 
 	spanner := bor.NewMockSpanner(ctrl)
-	spanner.EXPECT().GetCurrentValidatorsByHash(gomock.Any(), gomock.Any(), gomock.Any()).Return(span0.ValidatorSet.Validators, nil).AnyTimes()
+	spanner.EXPECT().GetCurrentValidatorsByHash(gomock.Any(), gomock.Any(), gomock.Any()).Return(borSpan.ConvertHeimdallValSetToBorValSet(span0.ValidatorSet).Validators, nil).AnyTimes()
 
 	heimdallClient := mocks.NewMockIHeimdallClient(ctrl)
 	heimdallWSClient := mocks.NewMockIHeimdallWSClient(ctrl)
-	heimdallClient.EXPECT().GetSpanV1(gomock.Any(), uint64(0)).Return(&span0, nil).AnyTimes()
+	heimdallClient.EXPECT().GetSpan(gomock.Any(), uint64(0)).Return(&span0, nil).AnyTimes()
 	heimdallClient.EXPECT().Close().Times(1)
 
 	genesisContracts := bor.NewMockGenesisContract(ctrl)
@@ -156,7 +157,7 @@ func NewFakeBor(t TensingObject, chainDB ethdb.Database, chainConfig *params.Cha
 	return bor.New(chainConfig, chainDB, ethAPIMock, spanner, heimdallClientMock, heimdallClientWSMock, contractMock, false)
 }
 
-func createMockSpanForTest(address common.Address, chainId string) span.HeimdallSpan {
+func createMockSpanForTest(address common.Address, chainId string) borTypes.Span {
 	// Mock span 0 for heimdall calls
 	validator := valset.Validator{
 		ID:               0,
@@ -168,15 +169,13 @@ func createMockSpanForTest(address common.Address, chainId string) span.Heimdall
 		Validators: []*valset.Validator{&validator},
 		Proposer:   &validator,
 	}
-	span0 := span.HeimdallSpan{
-		Span: span.Span{
-			Id:         0,
-			StartBlock: 0,
-			EndBlock:   255,
-		},
-		ValidatorSet:      validatorSet,
-		SelectedProducers: []valset.Validator{validator},
-		ChainID:           chainId,
+	span0 := borTypes.Span{
+		Id:                0,
+		StartBlock:        0,
+		EndBlock:          255,
+		ValidatorSet:      borSpan.ConvertBorValSetToHeimdallValSet(&validatorSet),
+		SelectedProducers: borSpan.ConvertBorValidatorsToHeimdallValidators([]*valset.Validator{&validator}),
+		BorChainId:        chainId,
 	}
 
 	return span0

@@ -109,12 +109,3 @@ func (api *BorAPI) SendRawTransactionConditional(ctx context.Context, input hexu
 func (api *BorAPI) GetVoteOnHash(ctx context.Context, starBlockNr uint64, endBlockNr uint64, hash string, milestoneId string) (bool, error) {
 	return api.b.GetVoteOnHash(ctx, starBlockNr, endBlockNr, hash, milestoneId)
 }
-
-func (api *BorAPI) GetStartBlockHeimdallSpanID(ctx context.Context, startBlock uint64) (uint64, error) {
-	spanID, err := api.b.GetStartBlockHeimdallSpanID(ctx, startBlock)
-	if err != nil {
-		return 0, err
-	}
-
-	return spanID, nil
-}

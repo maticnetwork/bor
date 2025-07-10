@@ -14,7 +14,7 @@ import (
 	"github.com/0xPolygon/heimdall-v2/x/clerk/types"
 )
 
-func (h *HeimdallGRPCClient) StateSyncEventsV2(ctx context.Context, fromID uint64, to int64) ([]*clerk.EventRecordWithTime, error) {
+func (h *HeimdallGRPCClient) StateSyncEvents(ctx context.Context, fromID uint64, to int64) ([]*clerk.EventRecordWithTime, error) {
 	log.Info("Fetching state sync events", "fromID", fromID, "to", to)
 
 	var err error
