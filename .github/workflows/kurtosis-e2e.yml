@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  ENCLAVE_NAME: stateless-sync-e2e
+  ENCLAVE_NAME: kurtosis-e2e
 
 jobs:
   e2e-tests:
@@ -35,12 +35,10 @@ jobs:
       - name: Pre kurtosis run
         uses: ./bor/.github/actions/kurtosis-pre-run
 
-      # Build Bor image from current branch for stateless sync feature.
-      - name: Build Bor Docker Image (stateless_sync)
+      - name: Build Bor Docker Image
         run: |
           cd bor
-          git branch --show-current
-          docker build -t bor:stateless_sync --file Dockerfile .
+          docker build -t bor:local --file Dockerfile .
 
       - name: Checkout Heimdall-v2
         uses: actions/checkout@v4
@@ -49,11 +47,10 @@ jobs:
           ref: stateless_sync
           path: heimdall-v2
 
-      # # Build Heimdall-v2 image from stateless_sync branch.
-      - name: Build Heimdall-v2 Docker Image (stateless_sync)
+      - name: Build Heimdall-v2 Docker Image
         run: |
           cd heimdall-v2
-          docker build -t heimdall-v2:stateless_sync --file Dockerfile .
+          docker build -t heimdall-v2:local --file Dockerfile .
 
       - name: Checkout Kurtosis
         uses: actions/checkout@v4
@@ -63,12 +60,12 @@ jobs:
           path: kurtosis-polygon-pos
 
       - name: Copy kurtosis config
-        run: cp ./bor/.github/configs/stateless-e2e.yml ./kurtosis-polygon-pos/stateless-e2e.yml
+        run: cp ./bor/.github/configs/kurtosis-e2e.yml ./kurtosis-polygon-pos/kurtosis-e2e.yml
 
       - name: Kurtosis run
         run: |
           cd kurtosis-polygon-pos
-          kurtosis run --args-file stateless-e2e.yml --enclave ${{ env.ENCLAVE_NAME }} .
+          kurtosis run --args-file kurtosis-e2e.yml --enclave ${{ env.ENCLAVE_NAME }} .
 
       - name: Inspect enclave
         run: |
@@ -80,7 +77,7 @@ jobs:
           cd bor
           bash integration-tests/stateless_sync_test.sh
 
-      - name: Test state syncs
+      - name: Test state syncs (post VeBlop HF)
         run: kurtosis service exec ${{ env.ENCLAVE_NAME }} test-runner "bats --filter-tags pos,bridge,matic,pol --recursive tests/"
 
       - name: Post kurtosis run

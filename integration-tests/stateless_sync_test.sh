@@ -15,7 +15,7 @@ if ! command -v kurtosis &>/dev/null; then
 fi
 
 # Define the enclave name
-ENCLAVE_NAME=${ENCLAVE_NAME:-"stateless-sync-e2e"}
+ENCLAVE_NAME=${ENCLAVE_NAME:-"kurtosis-e2e"}
 
 # Function to get RPC URL for a service
 get_rpc_url() {
@@ -208,7 +208,7 @@ echo ""
 echo "=== Test 2: Checking post-veblop HF behavior (after block 400) ==="
 
 # Wait for block 450 to ensure we're past the HF
-TARGET_BLOCK_VEBLOP_HF=400
+TARGET_BLOCK_HF=400
 TARGET_BLOCK_POST_HF=450
 echo "Waiting for block $TARGET_BLOCK_POST_HF to ensure we're past veblop HF..."
 
@@ -247,7 +247,7 @@ while true; do
 		echo "✅ Stateless sync nodes continued syncing past veblop HF"
 
 		# Check if legacy nodes stopped progressing
-		if [ $max_legacy_block -lt $TARGET_BLOCK_POST_HF ]; then
+		if [ $max_legacy_block -lt $TARGET_BLOCK_HF ]; then
 			echo "✅ Legacy nodes appropriately stopped syncing after veblop HF (at block $max_legacy_block)"
 		else
 			echo "⚠️  Legacy nodes are still running (at block $max_legacy_block) - forked off from stateless sync validators"

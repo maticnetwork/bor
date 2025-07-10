@@ -6,9 +6,9 @@ polygon_pos_package:
     # 8 validators on Bor's stateless_sync branch
     - kind: validator
       cl_type: heimdall-v2
-      cl_image: heimdall-v2:stateless_sync
+      cl_image: heimdall-v2:local
       el_type: bor
-      el_image: bor:stateless_sync
+      el_image: bor:local
       count: 8
       el_bor_produce_witness: true
       el_bor_sync_with_witness: false
@@ -16,7 +16,7 @@ polygon_pos_package:
     # 1 validator with Bor 2.2.5 version
     - kind: validator
       cl_type: heimdall-v2
-      cl_image: heimdall-v2:stateless_sync
+      cl_image: heimdall-v2:local
       el_type: bor
       el_image: 0xpolygon/bor:2.2.5
       count: 1
@@ -26,18 +26,18 @@ polygon_pos_package:
     # 3 Total RPC nodes on Bor's stateless_sync branch
     - kind: rpc
       cl_type: heimdall-v2
-      cl_image: heimdall-v2:stateless_sync
+      cl_image: heimdall-v2:local
       el_type: bor
-      el_image: bor:stateless_sync
+      el_image: bor:local
       count: 1
       el_bor_produce_witness: false
       el_bor_sync_with_witness: false
 
     - kind: rpc
       cl_type: heimdall-v2
-      cl_image: heimdall-v2:stateless_sync
+      cl_image: heimdall-v2:local
       el_type: bor
-      el_image: bor:stateless_sync
+      el_image: bor:local
       count: 1
       el_bor_produce_witness: true
       el_bor_sync_with_witness: false
@@ -45,9 +45,9 @@ polygon_pos_package:
     # 1 Stateless RPC node
     - kind: rpc
       cl_type: heimdall-v2
-      cl_image: heimdall-v2:stateless_sync
+      cl_image: heimdall-v2:local
       el_type: bor
-      el_image: bor:stateless_sync
+      el_image: bor:local
       count: 1
       el_bor_produce_witness: true
       el_bor_sync_with_witness: true
