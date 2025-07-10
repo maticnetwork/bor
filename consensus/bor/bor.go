@@ -886,10 +886,6 @@ func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, 
 		return
 	}
 
-	// Get the underlying state db instance as we'll only interact with genesis contracts
-	// going ahead for consensus verification.
-	state := wrappedState.Inner()
-
 	var (
 		stateSyncData []*types.StateSyncData
 		err           error
@@ -913,6 +909,8 @@ func (c *Bor) Finalize(chain consensus.ChainHeaderReader, header *types.Header, 
 			}
 		}
 
+		// Get the underlying state for updating consensus time
+		state := wrappedState.Inner()
 		state.BorConsensusTime = time.Since(start)
 	}
 
