@@ -19,6 +19,7 @@ package miner
 import (
 	"container/heap"
 	"math/big"
+	"sync/atomic"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/txpool"
@@ -98,15 +99,26 @@ type transactionsByPriceAndNonce struct {
 //
 // Note, the input map is reowned so the caller should not interact any more with
 // if after providing it to the constructor.
-func newTransactionsByPriceAndNonce(signer types.Signer, txs map[common.Address][]*txpool.LazyTransaction, baseFee *big.Int) *transactionsByPriceAndNonce {
+//
+// The construction is halted if interrupt is set (during block building timeout).
+func newTransactionsByPriceAndNonce(signer types.Signer, txs map[common.Address][]*txpool.LazyTransaction, baseFee *big.Int, interrupt *atomic.Bool) *transactionsByPriceAndNonce {
 	// Convert the basefee from header format to uint256 format
 	var baseFeeUint *uint256.Int
 	if baseFee != nil {
 		baseFeeUint = uint256.MustFromBig(baseFee)
 	}
+	if interrupt == nil {
+		interrupt = new(atomic.Bool)
+	}
 	// Initialize a price and received time based heap with the head transactions
 	heads := make(txByPriceAndTime, 0, len(txs))
 	for from, accTxs := range txs {
+		// Check for the flag to interrupt block building on timeout.
+		if interrupt.Load() {
+			// We could send partial set of sorted transactions but they'll anyways
+			// be rejected during commit transactions. Instead send an empty list.
+			return emptyTransactionsByPriceAndNonce(signer, baseFeeUint)
+		}
 		wrapped, err := newTxWithMinerFee(accTxs[0], from, baseFeeUint)
 		if err != nil {
 			delete(txs, from)
@@ -123,6 +135,15 @@ func newTransactionsByPriceAndNonce(signer types.Signer, txs map[common.Address]
 		heads:   heads,
 		signer:  signer,
 		baseFee: baseFeeUint,
+	}
+}
+
+func emptyTransactionsByPriceAndNonce(signer types.Signer, baseFee *uint256.Int) *transactionsByPriceAndNonce {
+	return &transactionsByPriceAndNonce{
+		signer:  signer,
+		txs:     map[common.Address][]*txpool.LazyTransaction{},
+		heads:   make(txByPriceAndTime, 0),
+		baseFee: baseFee,
 	}
 }
 

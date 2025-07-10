@@ -516,8 +516,9 @@ func (pool *LegacyPool) ContentFrom(addr common.Address) ([]*types.Transaction, 
 // account and sorted by nonce.
 //
 // The transactions can also be pre-filtered by the dynamic fee components to
-// reduce allocations and load on downstream subsystems.
-func (pool *LegacyPool) Pending(filter txpool.PendingFilter) map[common.Address][]*txpool.LazyTransaction {
+// reduce allocations and load on downstream subsystems. The retrieval is halted
+// if interrupt is set (during block building timeout).
+func (pool *LegacyPool) Pending(filter txpool.PendingFilter, interrupt *atomic.Bool) map[common.Address][]*txpool.LazyTransaction {
 	// If only blob transactions are requested, this pool is unsuitable as it
 	// contains none, don't even bother.
 	if filter.OnlyBlobTxs {
@@ -525,6 +526,10 @@ func (pool *LegacyPool) Pending(filter txpool.PendingFilter) map[common.Address]
 	}
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
+
+	if interrupt == nil {
+		interrupt = new(atomic.Bool)
+	}
 
 	// Convert the new uint256.Int types to the old big.Int ones used by the legacy pool
 	var (
@@ -539,6 +544,13 @@ func (pool *LegacyPool) Pending(filter txpool.PendingFilter) map[common.Address]
 	}
 	pending := make(map[common.Address][]*txpool.LazyTransaction, len(pool.pending))
 	for addr, list := range pool.pending {
+		// Check for the flag to interrupt block building on timeout.
+		if interrupt.Load() {
+			// We could send partial set of pending transactions but they'll anyways
+			// be rejected during commit transactions. Instead avoid sending anything.
+			return nil
+		}
+
 		txs := list.Flatten()
 
 		// If the miner requests tip enforcement, cap the lists now

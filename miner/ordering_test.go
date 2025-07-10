@@ -102,7 +102,7 @@ func testTransactionPriceNonceSort(t *testing.T, baseFee *big.Int) {
 		expectedCount += count
 	}
 	// Sort the transactions and cross check the nonce ordering
-	txset := newTransactionsByPriceAndNonce(signer, groups, baseFee)
+	txset := newTransactionsByPriceAndNonce(signer, groups, baseFee, nil)
 
 	txs := types.Transactions{}
 	for tx, _ := txset.Peek(); tx != nil; tx, _ = txset.Peek() {
@@ -168,7 +168,7 @@ func TestTransactionTimeSort(t *testing.T) {
 		})
 	}
 	// Sort the transactions and cross check the nonce ordering
-	txset := newTransactionsByPriceAndNonce(signer, groups, nil)
+	txset := newTransactionsByPriceAndNonce(signer, groups, nil, nil)
 
 	txs := types.Transactions{}
 	for tx, _ := txset.Peek(); tx != nil; tx, _ = txset.Peek() {

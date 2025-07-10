@@ -27,6 +27,7 @@ import (
 	"path/filepath"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -1596,7 +1597,7 @@ func (p *BlobPool) drop() {
 //
 // The transactions can also be pre-filtered by the dynamic fee components to
 // reduce allocations and load on downstream subsystems.
-func (p *BlobPool) Pending(filter txpool.PendingFilter) map[common.Address][]*txpool.LazyTransaction {
+func (p *BlobPool) Pending(filter txpool.PendingFilter, interrupt *atomic.Bool) map[common.Address][]*txpool.LazyTransaction {
 	// If only plain transactions are requested, this pool is unsuitable as it
 	// contains none, don't even bother.
 	if filter.OnlyPlainTxs {

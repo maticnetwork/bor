@@ -3021,7 +3021,7 @@ func BenchmarkPoolAccountMultiBatchInsertRace(b *testing.B) {
 		for {
 			select {
 			case <-t.C:
-				pending = pool.Pending(txpool.PendingFilter{})
+				pending = pool.Pending(txpool.PendingFilter{}, nil)
 			case <-done:
 				break loop
 			}
@@ -3076,7 +3076,7 @@ func BenchmarkPoolAccountMultiBatchInsertNoLockRace(b *testing.B) {
 		var pending map[common.Address][]*txpool.LazyTransaction
 
 		for range t.C {
-			pending = pool.Pending(txpool.PendingFilter{})
+			pending = pool.Pending(txpool.PendingFilter{}, nil)
 
 			if len(pending) >= b.N/2 {
 				close(done)
@@ -3152,7 +3152,7 @@ func BenchmarkPoolAccountsBatchInsertRace(b *testing.B) {
 		for {
 			select {
 			case <-t.C:
-				pending = pool.Pending(txpool.PendingFilter{})
+				pending = pool.Pending(txpool.PendingFilter{}, nil)
 			case <-done:
 				break loop
 			}
@@ -3201,7 +3201,7 @@ func BenchmarkPoolAccountsBatchInsertNoLockRace(b *testing.B) {
 		var pending map[common.Address][]*txpool.LazyTransaction
 
 		for range t.C {
-			pending = pool.Pending(txpool.PendingFilter{})
+			pending = pool.Pending(txpool.PendingFilter{}, nil)
 
 			if len(pending) >= b.N/2 {
 				close(done)
@@ -3250,7 +3250,7 @@ func TestPoolMultiAccountBatchInsertRace(t *testing.T) {
 		)
 
 		for range t.C {
-			pending = pool.Pending(txpool.PendingFilter{})
+			pending = pool.Pending(txpool.PendingFilter{}, nil)
 			total = len(pending)
 
 			if total >= n {

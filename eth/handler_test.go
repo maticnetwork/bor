@@ -20,6 +20,7 @@ import (
 	"math/big"
 	"sort"
 	"sync"
+	"sync/atomic"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
@@ -123,7 +124,7 @@ func (p *testTxPool) Add(txs []*types.Transaction, sync bool) []error {
 }
 
 // Pending returns all the transactions known to the pool
-func (p *testTxPool) Pending(filter txpool.PendingFilter) map[common.Address][]*txpool.LazyTransaction {
+func (p *testTxPool) Pending(filter txpool.PendingFilter, interrupt *atomic.Bool) map[common.Address][]*txpool.LazyTransaction {
 	p.lock.RLock()
 	defer p.lock.RUnlock()
 
