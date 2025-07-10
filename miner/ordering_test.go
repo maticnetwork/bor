@@ -194,10 +194,3 @@ func TestTransactionTimeSort(t *testing.T) {
 		}
 	}
 }
-
-func TestManav(t *testing.T) {
-	a := newTransactionsByPriceAndNonce(types.NewPragueSigner(big.NewInt(17)), map[common.Address][]*txpool.LazyTransaction{}, common.Big0, nil)
-	tx, b := a.Peek()
-	t.Log(tx)
-	t.Log(b)
-}
