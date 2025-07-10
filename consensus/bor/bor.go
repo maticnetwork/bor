@@ -1428,6 +1428,16 @@ func (c *Bor) CommitStates(
 	fetchStart := time.Now()
 	number := header.Number.Uint64()
 
+	// Check for override state sync records before fetching event records
+	if c.config.OverrideStateSyncRecordsInRange != nil {
+		overrideStateSyncRecord, ok := c.config.GetOverrideStateSyncRecord(number)
+		if ok && overrideStateSyncRecord == 0 {
+			// If override value is 0, skip fetching event records entirely
+			log.Info("Skipping state sync events fetch due to override value 0", "number", number)
+			return make([]*types.StateSyncData, 0), nil
+		}
+	}
+
 	var (
 		lastStateIDBig *big.Int
 		from           uint64
