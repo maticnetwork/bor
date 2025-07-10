@@ -438,7 +438,7 @@ func (w *worker) stop() {
 	w.running.Store(false)
 }
 
-// isRunning returns an indicator whether worker is running or not.
+// IsRunning returns an indicator whether worker is running or not.
 func (w *worker) IsRunning() bool {
 	return w.running.Load()
 }
