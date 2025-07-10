@@ -428,6 +428,10 @@ var (
 				"14953792": 0,
 				"14953856": 0,
 			},
+			OverrideStateSyncRecordsInRange: []BlockRangeOverride{
+				{StartBlock: 73812433, EndBlock: 73822500, Value: 0},
+			},
+
 			BurntContract: map[string]string{
 				"23850000": "0x70bca57f4579f58670ab2d18ef16e02c17553c38",
 				"50523000": "0x7A8ed27F4C30512326878652d20fC85727401854",

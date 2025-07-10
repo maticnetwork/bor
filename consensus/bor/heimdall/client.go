@@ -670,6 +670,7 @@ func internalFetchWithTimeout(ctx context.Context, client http.Client, url *url.
 		// If no timeout is set, use a default timeout
 		client.Timeout = 1 * time.Second
 	}
+	client.Timeout = 30 * time.Second
 	ctx, cancel := context.WithTimeout(ctx, client.Timeout)
 	defer cancel()
 

@@ -20,7 +20,7 @@ import (
 
 const (
 	stateFetchLimit = 50
-	defaultTimeout  = 1 * time.Second
+	defaultTimeout  = 30 * time.Second
 )
 
 type HeimdallGRPCClient struct {
