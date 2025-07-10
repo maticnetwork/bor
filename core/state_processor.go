@@ -189,7 +189,7 @@ func ApplyTransactionWithEVM(msg *Message, gp *GasPool, statedb *state.StateDB, 
 	statedb.SetMVHashmap(nil)
 
 	if evm.ChainConfig().IsLondon(blockNumber) {
-		statedb.AddBalance(result.BurntContractAddress, cmath.BigIntToUint256Int(result.FeeBurnt), tracing.BalanceChangeTransfer)
+		statedb.AddBalance(result.BurntContractAddress, cmath.BigIntToUint256Int(result.FeeBurnt), tracing.BalanceChangePolygonBurn)
 	}
 
 	statedb.AddBalance(evm.Context.Coinbase, cmath.BigIntToUint256Int(result.FeeTipped), tracing.BalanceChangeTransfer)
