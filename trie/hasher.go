@@ -138,7 +138,7 @@ func (h *hasher) hashFullNodeChildren(n *fullNode) *fullNode {
 	return &fullNode{flags: nodeFlag{}, Children: children}
 }
 
-// shortNodeToHash computes the hash of the given shortNode. The shortNode must
+// shortnodeToHash computes the hash of the given shortNode. The shortNode must
 // first be collapsed, with its key converted to compact form. If the RLP-encoded
 // node data is smaller than 32 bytes, the node itself is returned.
 func (h *hasher) shortnodeToHash(n *shortNode, force bool) node {

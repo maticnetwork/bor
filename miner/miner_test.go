@@ -286,8 +286,8 @@ func TestCloseMiner(t *testing.T) {
 	waitForMiningState(t, miner, false)
 }
 
-// // TestMinerSetEtherbase checks that etherbase becomes set even if mining isn't
-// // possible at the moment
+// TestMinerSetEtherbase checks that etherbase becomes set even if mining isn't
+// possible at the moment
 func TestMinerSetEtherbase(t *testing.T) {
 	t.Parallel()
 
