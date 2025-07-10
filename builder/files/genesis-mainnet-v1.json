@@ -53,7 +53,7 @@
         "14953856": 0
       },
       "overrideStateSyncRecordsInRange": [
-        { "startBlock": 73812433, "endBlock": 73822500, "value": 0 }
+        { "startBlock": 73812433, "endBlock": 73826700, "value": 0 }
       ],
       "blockAlloc": {
         "22156660": {
