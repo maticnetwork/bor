@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"math/big"
 	"sync"
+	"sync/atomic"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
@@ -377,11 +378,12 @@ func (p *TxPool) Add(txs []*types.Transaction, sync bool) []error {
 // account and sorted by nonce.
 //
 // The transactions can also be pre-filtered by the dynamic fee components to
-// reduce allocations and load on downstream subsystems.
-func (p *TxPool) Pending(filter PendingFilter) map[common.Address][]*LazyTransaction {
+// reduce allocations and load on downstream subsystems. The retrieval is halted
+// if interrupt is set (during block building timeout).
+func (p *TxPool) Pending(filter PendingFilter, interrupt *atomic.Bool) map[common.Address][]*LazyTransaction {
 	txs := make(map[common.Address][]*LazyTransaction)
 	for _, subpool := range p.subpools {
-		for addr, set := range subpool.Pending(filter) {
+		for addr, set := range subpool.Pending(filter, interrupt) {
 			txs[addr] = set
 		}
 	}

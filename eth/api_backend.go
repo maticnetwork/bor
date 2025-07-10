@@ -379,7 +379,7 @@ func (b *EthAPIBackend) SendTx(ctx context.Context, signedTx *types.Transaction)
 }
 
 func (b *EthAPIBackend) GetPoolTransactions() (types.Transactions, error) {
-	pending := b.eth.txPool.Pending(txpool.PendingFilter{})
+	pending := b.eth.txPool.Pending(txpool.PendingFilter{}, nil)
 
 	var txs types.Transactions
 

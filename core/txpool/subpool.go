@@ -18,6 +18,7 @@ package txpool
 
 import (
 	"math/big"
+	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -153,8 +154,9 @@ type SubPool interface {
 	// account and sorted by nonce.
 	//
 	// The transactions can also be pre-filtered by the dynamic fee components to
-	// reduce allocations and load on downstream subsystems.
-	Pending(filter PendingFilter) map[common.Address][]*LazyTransaction
+	// reduce allocations and load on downstream subsystems. The retrieval is halted
+	// if interrupt is set (during block building timeout).
+	Pending(filter PendingFilter, interrupt *atomic.Bool) map[common.Address][]*LazyTransaction
 
 	// SubscribeTransactions subscribes to new transaction events. The subscriber
 	// can decide whether to receive notifications only for newly seen transactions
