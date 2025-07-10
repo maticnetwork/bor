@@ -1,0 +1,57 @@
+polygon_pos_package:
+  network_params:
+    el_block_interval_seconds: 1
+
+  participants:
+    # 8 validators on Bor's stateless_sync branch
+    - kind: validator
+      cl_type: heimdall-v2
+      cl_image: heimdall-v2:local
+      el_type: bor
+      el_image: bor:local
+      count: 8
+      el_bor_produce_witness: true
+      el_bor_sync_with_witness: false
+
+    # 1 validator with Bor 2.2.5 version
+    - kind: validator
+      cl_type: heimdall-v2
+      cl_image: heimdall-v2:local
+      el_type: bor
+      el_image: 0xpolygon/bor:2.2.5
+      count: 1
+      el_bor_produce_witness: false
+      el_bor_sync_with_witness: false
+
+    # 3 Total RPC nodes on Bor's stateless_sync branch
+    - kind: rpc
+      cl_type: heimdall-v2
+      cl_image: heimdall-v2:local
+      el_type: bor
+      el_image: bor:local
+      count: 1
+      el_bor_produce_witness: false
+      el_bor_sync_with_witness: false
+
+    - kind: rpc
+      cl_type: heimdall-v2
+      cl_image: heimdall-v2:local
+      el_type: bor
+      el_image: bor:local
+      count: 1
+      el_bor_produce_witness: true
+      el_bor_sync_with_witness: false
+
+    # 1 Stateless RPC node
+    - kind: rpc
+      cl_type: heimdall-v2
+      cl_image: heimdall-v2:local
+      el_type: bor
+      el_image: bor:local
+      count: 1
+      el_bor_produce_witness: true
+      el_bor_sync_with_witness: true
+
+  additional_services:
+    - prometheus_grafana
+    - test_runner

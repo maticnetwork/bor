@@ -1,0 +1,36 @@
+name: kurtosis-post-run
+description: Dump enclave and upload it as an artifact after deploying Kurtosis packages.
+
+inputs:
+  enclave_name:
+    description: The name of the kurtosis enclave
+    required: true
+  args_filename:
+    description: The name of the args file
+    required: false
+
+runs:
+  using: composite
+  steps:
+    - name: Dump enclave
+      shell: bash
+      run: kurtosis enclave dump ${{ inputs.enclave_name }} ./dump
+
+    - name: Generate archive name
+      id: archive-name
+      shell: bash
+      run: |
+        archive_name="kurtosis_pos_dump_${{ github.run_id }}"
+        if [[ -z "${{ inputs.args_filename }}" ]]; then
+          archive_name+="_without_args"
+        else
+          archive_name+="_with_args_${{ inputs.args_filename }}"
+        fi
+        echo "ARCHIVE_NAME=${archive_name}" >> "${GITHUB_OUTPUT}"
+        echo "ARCHIVE_NAME=${archive_name}"
+
+    - name: Upload enclave dump
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ steps.archive-name.outputs.ARCHIVE_NAME }}
+        path: ./dump
