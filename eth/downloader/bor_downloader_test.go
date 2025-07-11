@@ -1653,3 +1653,176 @@ func TestFakedSyncProgress67BypassWhitelistValidation(t *testing.T) {
 	err := tester.sync("light", nil, mode)
 	assert.NoError(t, err, "failed synchronisation")
 }
+
+// TestNeedsBytecodeSyncLogic tests the needsBytecodeSync function logic
+func TestNeedsBytecodeSyncLogic(t *testing.T) {
+	tests := []struct {
+		name             string
+		currentBlock     uint64
+		fastForwardBlock uint64
+		lastSyncedBlock  uint64
+		expectedNeedSync bool
+		expectReason     string
+	}{
+		{
+			name:             "Gap less than threshold",
+			currentBlock:     5000,
+			fastForwardBlock: 5500,
+			lastSyncedBlock:  0,
+			expectedNeedSync: false,
+			expectReason:     "gap less than threshold",
+		},
+		{
+			name:             "No previous sync with large gap",
+			currentBlock:     1000,
+			fastForwardBlock: 3000,
+			lastSyncedBlock:  0,
+			expectedNeedSync: true,
+			expectReason:     "no previous sync found",
+		},
+		{
+			name:             "Fast forward block moved beyond last sync",
+			currentBlock:     1000,
+			fastForwardBlock: 5000,
+			lastSyncedBlock:  3000,
+			expectedNeedSync: true,
+			expectReason:     "fast forward block moved",
+		},
+		{
+			name:             "Already synced beyond fast forward",
+			currentBlock:     1000,
+			fastForwardBlock: 3000,
+			lastSyncedBlock:  4000,
+			expectedNeedSync: false,
+			expectReason:     "already synced",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a fresh test downloader for each test case
+			tester := newTester(t)
+			defer tester.terminate()
+
+			// Set up test parameters
+			tester.downloader.FastForwardThreshold = 1000
+
+			// Mock the current block by inserting a chain
+			if tt.currentBlock > 0 {
+				// Generate chain from the current head
+				parentHeader := tester.downloader.blockchain.CurrentBlock()
+				parent := tester.downloader.blockchain.GetBlockByHash(parentHeader.Hash())
+				chain, _ := core.GenerateChain(params.TestChainConfig, parent,
+					ethash.NewFaker(), tester.downloader.stateDB, int(tt.currentBlock), nil)
+				_, err := tester.downloader.blockchain.InsertChain(chain, false)
+				if err != nil {
+					t.Fatalf("Failed to insert chain: %v", err)
+				}
+			}
+
+			// Set last synced block
+			if tt.lastSyncedBlock > 0 {
+				rawdb.WriteBytecodeSyncLastBlock(tester.downloader.stateDB, tt.lastSyncedBlock)
+			} else {
+				rawdb.DeleteBytecodeSyncMetadata(tester.downloader.stateDB)
+			}
+
+			// Test needsBytecodeSync
+			result := tester.downloader.needsBytecodeSync(tt.fastForwardBlock)
+
+			// Debug: check actual current block
+			actualCurrentBlock := tester.downloader.blockchain.CurrentBlock().Number.Uint64()
+			if actualCurrentBlock != tt.currentBlock {
+				t.Logf("Note: actual current block = %d, expected = %d", actualCurrentBlock, tt.currentBlock)
+			}
+
+			if result != tt.expectedNeedSync {
+				t.Errorf("needsBytecodeSync() = %v, want %v (reason: %s)", result, tt.expectedNeedSync, tt.expectReason)
+			}
+
+			// Verify last synced block read correctly
+			if tt.lastSyncedBlock > 0 {
+				storedBlock := rawdb.ReadBytecodeSyncLastBlock(tester.downloader.stateDB)
+				if storedBlock != tt.lastSyncedBlock {
+					t.Errorf("stored block = %d, want %d", storedBlock, tt.lastSyncedBlock)
+				}
+			}
+		})
+	}
+}
+
+// TestBytecodeSyncMetadataPersistence tests reading and writing bytecode sync metadata
+func TestBytecodeSyncMetadataPersistence(t *testing.T) {
+	db := rawdb.NewMemoryDatabase()
+
+	// Test writing and reading last block
+	testBlock := uint64(12345)
+	testRoot := common.HexToHash("0xdeadbeef")
+
+	// Initially should return 0
+	if block := rawdb.ReadBytecodeSyncLastBlock(db); block != 0 {
+		t.Errorf("Expected 0 for uninitialized block, got %d", block)
+	}
+
+	// Write metadata
+	rawdb.WriteBytecodeSyncLastBlock(db, testBlock)
+	rawdb.WriteBytecodeSyncStateRoot(db, testRoot)
+
+	// Read and verify
+	if block := rawdb.ReadBytecodeSyncLastBlock(db); block != testBlock {
+		t.Errorf("Expected %d, got %d", testBlock, block)
+	}
+	if root := rawdb.ReadBytecodeSyncStateRoot(db); root != testRoot {
+		t.Errorf("Expected %s, got %s", testRoot.Hex(), root.Hex())
+	}
+
+	// Test deletion
+	rawdb.DeleteBytecodeSyncMetadata(db)
+	if block := rawdb.ReadBytecodeSyncLastBlock(db); block != 0 {
+		t.Errorf("Expected 0 after deletion, got %d", block)
+	}
+	if root := rawdb.ReadBytecodeSyncStateRoot(db); root != (common.Hash{}) {
+		t.Errorf("Expected empty hash after deletion, got %s", root.Hex())
+	}
+}
+
+// TestStatelessSyncWithBytecodePreFetch tests the stateless sync with bytecode pre-fetching
+func TestStatelessSyncWithBytecodePreFetch(t *testing.T) {
+	// This test simulates a stateless sync where bytecodes are fetched first
+	tester := newTester(t)
+	defer tester.terminate()
+
+	// Create a chain with some blocks
+	chain := testChainBase.shorten(100)
+
+	// Create a peer
+	tester.newPeer("peer", eth.ETH68, chain.blocks[1:])
+
+	// Set up for stateless sync
+	tester.downloader.mode.Store(uint32(StatelessSync))
+	tester.downloader.FastForwardThreshold = 10
+
+	// Mock fast forward block
+	fastForwardBlock := uint64(80)
+	tester.downloader.setFastForwardBlock(fastForwardBlock)
+
+	// Ensure no previous bytecode sync
+	rawdb.DeleteBytecodeSyncMetadata(tester.downloader.stateDB)
+
+	// The sync should trigger bytecode sync first
+	// Note: This is a simplified test as full implementation would require
+	// mocking the snap syncer
+	needsSync := tester.downloader.needsBytecodeSync(fastForwardBlock)
+	if !needsSync {
+		t.Error("Expected to need bytecode sync for stateless node")
+	}
+
+	// Simulate successful bytecode sync by writing metadata
+	rawdb.WriteBytecodeSyncLastBlock(tester.downloader.stateDB, fastForwardBlock)
+
+	// Now it shouldn't need sync
+	needsSync = tester.downloader.needsBytecodeSync(fastForwardBlock)
+	if needsSync {
+		t.Error("Should not need bytecode sync after completion")
+	}
+}

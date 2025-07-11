@@ -529,12 +529,32 @@ func (m *witnessManager) fetchWitness(peer string, hash common.Hash, announce *b
 			log.Debug("[wm] Marking witness as unavailable based on fetch initiation error", "hash", hash)
 			m.markWitnessUnavailable(hash)
 			// Don't penalize the announcing peer in this case
-		} else {
-			// Penalize the peer for other initiation failures
-			m.handleWitnessFetchFailureExt(hash, peer, fmt.Errorf("request initiation failed: %w", err), false)
+			return
 		}
+
+		// For other errors, check if still pending before handling failure
+		m.mu.Lock()
+		if _, exists := m.pending[hash]; !exists {
+			m.mu.Unlock()
+			log.Debug("[wm] Skipping witness fetch failure handling, block no longer pending", "peer", peer, "hash", hash)
+			return
+		}
+		m.mu.Unlock()
+
+		// Penalize the peer for other initiation failures
+		m.handleWitnessFetchFailureExt(hash, peer, fmt.Errorf("request initiation failed: %w", err), false)
 		return
 	}
+
+	// Check if still pending after successful request creation
+	m.mu.Lock()
+	if _, exists := m.pending[hash]; !exists {
+		m.mu.Unlock()
+		log.Debug("[wm] Skipping witness fetch, block no longer pending", "peer", peer, "hash", hash)
+		req.Close()
+		return
+	}
+	m.mu.Unlock()
 	defer req.Close()
 
 	timeout := time.NewTimer(2 * fetchTimeout) // 2x leeway before dropping the peer
@@ -588,23 +608,22 @@ func (m *witnessManager) fetchWitness(peer string, hash common.Hash, announce *b
 func (m *witnessManager) handleWitnessFetchSuccess(fetchPeer string, hash common.Hash, witness *stateless.Witness, announcedAt time.Time) {
 	m.mu.Lock()
 	state, exists := m.pending[hash]
-	m.mu.Unlock()
 	if !exists {
+		m.mu.Unlock()
 		// Block is no longer pending (e.g., already imported, timed out elsewhere, forgotten)
 		log.Debug("[wm] Witness received, but block no longer pending", "peer", fetchPeer, "hash", hash)
 		return
 	}
-
 	// Check if witness already arrived via broadcast
 	if state.op.witness != nil {
+		m.mu.Unlock()
 		log.Debug("[wm] Witness received via fetch, but already present (likely from broadcast)", "peer", fetchPeer, "hash", hash)
 		return // Already handled
 	}
 
 	log.Debug("[wm] Witness received via fetch, queuing block for import", "peer", fetchPeer, "origin", state.op.origin, "number", state.op.number(), "hash", hash)
 
-	// Attach witness and enqueue
-	m.mu.Lock()
+	// Attach witness (under lock)
 	state.op.witness = witness
 	m.mu.Unlock()
 

@@ -201,3 +201,52 @@ func WriteTransitionStatus(db ethdb.KeyValueWriter, data []byte) {
 		log.Crit("Failed to store the eth2 transition status", "err", err)
 	}
 }
+
+// ReadBytecodeSyncLastBlock retrieves the last block number up to which bytecodes were synced.
+func ReadBytecodeSyncLastBlock(db ethdb.KeyValueReader) uint64 {
+	data, err := db.Get(bytecodeSyncLastBlockKey)
+	if err != nil {
+		log.Debug("Failed to read bytecode sync last block", "err", err)
+		return 0
+	}
+	if len(data) != 8 {
+		log.Debug("Invalid bytecode sync last block data", "len", len(data))
+		return 0
+	}
+	block := decodeNumber(data)
+	log.Debug("Read bytecode sync last block", "block", block)
+	return block
+}
+
+// WriteBytecodeSyncLastBlock stores the last block number up to which bytecodes were synced.
+func WriteBytecodeSyncLastBlock(db ethdb.KeyValueWriter, block uint64) {
+	if err := db.Put(bytecodeSyncLastBlockKey, encodeBlockNumber(block)); err != nil {
+		log.Crit("Failed to store bytecode sync last block", "err", err)
+	}
+}
+
+// ReadBytecodeSyncStateRoot retrieves the state root at the last synced block for validation.
+func ReadBytecodeSyncStateRoot(db ethdb.KeyValueReader) common.Hash {
+	data, _ := db.Get(bytecodeSyncStateRootKey)
+	if len(data) != common.HashLength {
+		return common.Hash{}
+	}
+	return common.BytesToHash(data)
+}
+
+// WriteBytecodeSyncStateRoot stores the state root at the last synced block for validation.
+func WriteBytecodeSyncStateRoot(db ethdb.KeyValueWriter, root common.Hash) {
+	if err := db.Put(bytecodeSyncStateRootKey, root.Bytes()); err != nil {
+		log.Crit("Failed to store bytecode sync state root", "err", err)
+	}
+}
+
+// DeleteBytecodeSyncMetadata removes the bytecode sync metadata from the database.
+func DeleteBytecodeSyncMetadata(db ethdb.KeyValueWriter) {
+	if err := db.Delete(bytecodeSyncLastBlockKey); err != nil {
+		log.Crit("Failed to delete bytecode sync last block", "err", err)
+	}
+	if err := db.Delete(bytecodeSyncStateRootKey); err != nil {
+		log.Crit("Failed to delete bytecode sync state root", "err", err)
+	}
+}

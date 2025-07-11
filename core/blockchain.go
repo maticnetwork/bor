@@ -182,6 +182,7 @@ type CacheConfig struct {
 	// This defines the cutoff block for history expiry.
 	// Blocks before this number may be unavailable in the chain database.
 	HistoryPruningCutoff uint64
+	Stateless            bool // Whether the node is in stateless mode
 }
 
 // triedbConfig derives the configures for trie database.
@@ -423,8 +424,8 @@ func NewBlockChain(db ethdb.Database, cacheConfig *CacheConfig, genesis *Genesis
 	head := bc.CurrentBlock()
 	// nolint:nestif
 
-	// If TriesInMemory is set to 0, we know the node is in stateless mode and will not load the state from disk
-	if !bc.HasState(head.Root) && bc.cacheConfig.TriesInMemory > 0 {
+	// If the node is in stateless mode, it should not load the state from disk
+	if !bc.HasState(head.Root) && !bc.cacheConfig.Stateless {
 		if head.Number.Uint64() == 0 {
 			// The genesis state is missing, which is only possible in the path-based
 			// scheme. This situation occurs when the initial state sync is not finished
@@ -1163,7 +1164,12 @@ func (bc *BlockChain) setHeadBeyondRoot(head uint64, time uint64, root common.Ha
 		// nolint:nestif
 		if currentBlock := bc.CurrentBlock(); currentBlock != nil && header.Number.Uint64() <= currentBlock.Number.Uint64() {
 			var newHeadBlock *types.Header
-			newHeadBlock, rootNumber = bc.rewindHead(header, root)
+			if !bc.cacheConfig.Stateless {
+				newHeadBlock, rootNumber = bc.rewindHead(header, root)
+			} else {
+				newHeadBlock = header
+				rootNumber = header.Number.Uint64()
+			}
 			rawdb.WriteHeadBlockHash(db, newHeadBlock.Hash())
 
 			// Degrade the chain markers if they are explicitly reverted.
@@ -1178,7 +1184,8 @@ func (bc *BlockChain) setHeadBeyondRoot(head uint64, time uint64, root common.Ha
 			// the pivot point. In this scenario, there is no possible recovery
 			// approach except for rerunning a snap sync. Do nothing here until the
 			// state syncer picks it up.
-			if !bc.HasState(newHeadBlock.Root) {
+			// Skip state checking for stateless nodes
+			if !bc.cacheConfig.Stateless && !bc.HasState(newHeadBlock.Root) {
 				if newHeadBlock.Number.Uint64() != 0 {
 					log.Crit("Chain is stateless at a non-genesis block")
 				}
@@ -1481,7 +1488,7 @@ func (bc *BlockChain) Stop() {
 	}
 	if bc.triedb.Scheme() == rawdb.PathScheme {
 		// Ensure that the in-memory trie nodes are journaled to disk properly.
-		if bc.cacheConfig.TriesInMemory > 0 {
+		if !bc.cacheConfig.Stateless {
 			if err := bc.triedb.Journal(bc.CurrentBlock().Root); err != nil {
 				log.Info("Failed to journal in-memory trie nodes", "err", err)
 			}
@@ -2261,8 +2268,54 @@ func (bc *BlockChain) InsertChainStateless(chain types.Blocks, witnesses []*stat
 
 		// Wait for the block's verification to complete
 		if err := <-results; err != nil {
-			// ignoring Unknown Ancestor error for fast forward scenario
-			if !(i == 0 && err == consensus.ErrUnknownAncestor) {
+			if err == consensus.ErrUnknownAncestor {
+				// For stateless nodes, check if this is a reorg situation
+				parentNum := block.NumberU64() - 1
+				existingBlock := bc.GetBlockByNumber(parentNum)
+
+				if existingBlock != nil && existingBlock.Hash() != block.ParentHash() {
+					// We have a different block at the parent's height - this could be a reorg
+					log.Info("Conflicting block detected in stateless sync",
+						"blockNum", block.NumberU64(),
+						"parentNum", parentNum,
+						"existingParent", existingBlock.Hash(),
+						"expectedParent", block.ParentHash())
+
+					// Verify the existing parent block to see if it's valid
+					// This helps avoid unnecessary rewinds if the existing block is correct
+					existingHeader := existingBlock.Header()
+					verifyErr := bc.engine.VerifyHeader(bc, existingHeader)
+
+					// Check if the existing parent is valid
+					if verifyErr == nil {
+						// Existing parent is valid, so the new block is on a wrong fork
+						log.Info("Existing parent block is valid, rejecting new fork",
+							"existingParent", existingBlock.Hash(),
+							"rejectedParent", block.ParentHash())
+						return processed, fmt.Errorf("rejecting block %d: existing parent %s is valid",
+							block.NumberU64(), existingBlock.Hash())
+					}
+
+					// Existing parent is invalid, we need to rewind and accept the new chain
+					log.Info("Existing parent block is invalid, accepting reorg",
+						"existingParent", existingBlock.Hash(),
+						"newParent", block.ParentHash(),
+						"verifyErr", verifyErr)
+
+					// For stateless nodes, we need to rewind and let the sync continue
+					// This will cause the correct parent block to be fetched and imported
+					if err := bc.SetHead(parentNum - 1); err != nil {
+						return processed, fmt.Errorf("failed to rewind for reorg: %w", err)
+					}
+
+					// Return to let the downloader retry with the correct chain
+					return processed, fmt.Errorf("reorg detected, rewound to block %d", parentNum-1)
+				} else if i != 0 {
+					// Not the first block and no reorg detected
+					return processed, err
+				}
+				// First block in batch or successful reorg handling - continue
+			} else {
 				return processed, err
 			}
 		}
@@ -2274,16 +2327,15 @@ func (bc *BlockChain) InsertChainStateless(chain types.Blocks, witnesses []*stat
 		}
 
 		// Process the block using stateless execution
-		err := bc.ProcessBlockWithWitnesses(block, witness)
+		statedb, err := bc.ProcessBlockWithWitnesses(block, witness)
 		if err != nil {
 			return processed, err
 		}
 
-		statedb := state.StateDB{}
 		statedb.SetWitness(witness)
 
 		// Write the block to the chain without committing state
-		if _, err := bc.writeBlockAndSetHead(block, nil, nil, &statedb, false, true); err != nil {
+		if _, err := bc.writeBlockAndSetHead(block, nil, nil, statedb, false, true); err != nil {
 			return processed, err
 		}
 
@@ -2624,7 +2676,7 @@ func (bc *BlockChain) insertChainWithWitnesses(chain types.Blocks, setHead bool,
 		computeWitness := makeWitness
 
 		if witnesses != nil && len(witnesses) > it.processed()-1 && witnesses[it.processed()-1] != nil {
-			memdb := witnesses[it.processed()-1].MakeHashDB()
+			memdb := witnesses[it.processed()-1].MakeHashDB(bc.statedb.TrieDB().Disk())
 			bc.statedb.TrieDB().SetReadBackend(hashdb.New(memdb, triedb.HashDefaults.HashDB))
 			computeWitness = false
 			bc.statedb.DisableSnapInReader()
@@ -2813,7 +2865,7 @@ type blockProcessingResult struct {
 // processBlock executes and validates the given block. If there was no error
 // it writes the block and associated state to database.
 // nolint : unused
-func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, start time.Time, setHead bool) (_ *blockProcessingResult, blockEndErr error) {
+func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, start time.Time, setHead bool, diskdb ethdb.Database) (_ *blockProcessingResult, blockEndErr error) {
 	if bc.logger != nil && bc.logger.OnBlockStart != nil {
 		td := bc.GetTd(block.ParentHash(), block.NumberU64()-1)
 		bc.logger.OnBlockStart(tracing.BlockEvent{
@@ -2863,7 +2915,7 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 		author := NewEVMBlockContext(block.Header(), bc.hc, nil).Coinbase
 
 		// Run the stateless self-cross-validation
-		crossStateRoot, crossReceiptRoot, err := ExecuteStateless(bc.chainConfig, bc.vmConfig, task, witness, &author, bc.engine)
+		crossStateRoot, crossReceiptRoot, _, err := ExecuteStateless(bc.chainConfig, bc.vmConfig, task, witness, &author, bc.engine, diskdb)
 		if err != nil {
 			return nil, fmt.Errorf("stateless self-validation failed: %v", err)
 		}
@@ -3575,9 +3627,9 @@ func (bc *BlockChain) SubscribeChain2HeadEvent(ch chan<- Chain2HeadEvent) event.
 }
 
 // ProcessBlockWithWitnesses processes a block in stateless mode using the provided witnesses.
-func (bc *BlockChain) ProcessBlockWithWitnesses(block *types.Block, witness *stateless.Witness) error {
+func (bc *BlockChain) ProcessBlockWithWitnesses(block *types.Block, witness *stateless.Witness) (*state.StateDB, error) {
 	if witness == nil {
-		return errors.New("nil witness")
+		return nil, errors.New("nil witness")
 	}
 	// Remove critical computed fields from the block to force true recalculation
 	context := block.Header()
@@ -3589,26 +3641,26 @@ func (bc *BlockChain) ProcessBlockWithWitnesses(block *types.Block, witness *sta
 	// Bor: Calculate EvmBlockContext with Root and ReceiptHash to properly get the author
 	author := NewEVMBlockContext(block.Header(), bc.hc, nil).Coinbase
 
-	crossStateRoot, crossReceiptRoot, err := ExecuteStateless(bc.chainConfig, bc.vmConfig, task, witness, &author, bc.engine)
+	crossStateRoot, crossReceiptRoot, statedb, err := ExecuteStateless(bc.chainConfig, bc.vmConfig, task, witness, &author, bc.engine, bc.statedb.TrieDB().Disk())
 
 	// Currently, we don't return the error, because we don't have a way to handle Span update statelessly
 	// TODO: Return the error once we have a way to handle Span update
 	if err != nil {
 		log.Error("Stateless self-validation failed", "block", block.Number(), "hash", block.Hash(), "error", err)
-		return nil
+		return nil, err
 	}
 	if crossStateRoot != block.Root() {
 		log.Error("Stateless self-validation root mismatch", "block", block.Number(), "hash", block.Hash(), "cross", crossStateRoot, "local", block.Root())
-		return nil
+		return nil, err
 	}
 	if crossReceiptRoot != block.ReceiptHash() {
 		log.Error("Stateless self-validation receipt root mismatch", "block", block.Number(), "hash", block.Hash(), "cross", crossReceiptRoot, "local", block.ReceiptHash())
-		return nil
+		return nil, err
 	}
 	if !(err != nil || crossStateRoot != block.Root() || crossReceiptRoot != block.ReceiptHash()) {
 		log.Info("Successfully self validated the block", "block", block.Number(), "hash", block.Hash())
 	}
-	return nil
+	return statedb, nil
 }
 
 // startHeaderVerificationLoop starts a background goroutine that periodically

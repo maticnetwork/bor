@@ -588,7 +588,34 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, td, ttd *
 
 	var origin uint64
 	if mode == StatelessSync {
-		origin = d.GetOrWaitFastForwardBlock()
+		// Get the fast forward block first
+		fastForwardBlock := d.GetOrWaitFastForwardBlock()
+
+		// Check if we need to download bytecodes before starting stateless sync
+		if d.needsBytecodeSync(fastForwardBlock) {
+			log.Info("Starting bytecode-only snap sync before stateless sync", "fastForwardBlock", fastForwardBlock)
+
+			// We need the header at fastForwardBlock as the pivot for bytecode sync
+			// Request it from the peer since we might not have it locally
+			headers, _, err := d.fetchHeadersByNumber(p, fastForwardBlock, 1, 0, false)
+			if err != nil || len(headers) == 0 {
+				log.Warn("Failed to fetch fastForwardBlock header, using latest as fallback",
+					"fastForwardBlock", fastForwardBlock, "err", err)
+				// Fallback to latest if we can't get the specific block
+				headers = []*types.Header{latest}
+			}
+			pivotHeader := headers[0]
+
+			// Run bytecode-only snap sync
+			if err := d.runBytecodeOnlySnapSync(p, pivotHeader); err != nil {
+				log.Error("Bytecode-only snap sync failed", "err", err)
+				return fmt.Errorf("bytecode-only snap sync failed: %w", err)
+			}
+
+			log.Info("Bytecode-only snap sync completed, continuing with stateless sync")
+		}
+
+		origin = fastForwardBlock
 	} else if !beaconMode {
 		// In legacy mode, reach out to the network and find the ancestor
 		origin, err = d.findAncestor(p, latest)
@@ -2122,6 +2149,18 @@ func (d *Downloader) importBlockResultsStateless(results []*fetchResult) error {
 		log.Warn("Invalid block body", "index", index, "hash", blocks[index].Hash(), "err", err)
 		return errInvalidBody // Or a more specific error if possible
 	}
+
+	// Update bytecode sync last block to prevent re-triggering bytecode sync
+	// during active stateless sync when the fast forward block advances
+	if len(blocks) > 0 {
+		lastBlock := blocks[len(blocks)-1].NumberU64()
+		currentBytecodeSyncBlock := rawdb.ReadBytecodeSyncLastBlock(d.stateDB)
+		if lastBlock > currentBytecodeSyncBlock {
+			rawdb.WriteBytecodeSyncLastBlock(d.stateDB, lastBlock)
+			log.Debug("Updated bytecode sync last block during stateless sync", "block", lastBlock)
+		}
+	}
+
 	return nil
 }
 
@@ -2158,7 +2197,21 @@ func (d *Downloader) UpdateFastForwardBlockFromMilestone(db ethdb.Database, mile
 		rawdb.WriteTd(db, milestone.Hash, milestone.EndBlock, milestoneTd)
 	}
 
-	if milestone.EndBlock > d.latestCheckpointBlock && d.latestCheckpointBlock > 0 {
+	// For stateless nodes that are significantly behind, we should fast forward
+	// immediately rather than waiting for checkpoints
+	currentBlock := d.blockchain.CurrentBlock().Number.Uint64()
+	gap := int64(milestone.EndBlock) - int64(currentBlock)
+
+	// If we're more than FastForwardThreshold behind, fast forward immediately
+	// This prevents stateless nodes from getting stuck when they're far behind
+	if gap > int64(d.FastForwardThreshold) && milestone.EndBlock > d.fastForwardBlock {
+		log.Info("Fast forwarding stateless node due to large gap",
+			"currentBlock", currentBlock,
+			"milestoneEnd", milestone.EndBlock,
+			"gap", gap,
+			"threshold", d.FastForwardThreshold)
+		d.setFastForwardBlock(milestone.EndBlock)
+	} else if milestone.EndBlock > d.latestCheckpointBlock && d.latestCheckpointBlock > 0 {
 		d.futureCandidateBlocks = append(d.futureCandidateBlocks, milestone.EndBlock)
 	} else if milestone.EndBlock > d.fastForwardBlock {
 		d.setFastForwardBlock(milestone.EndBlock)
@@ -2229,4 +2282,105 @@ func (d *Downloader) setFastForwardBlock(nextFastForward uint64) {
 	case d.fastForwardBlockCh <- d.fastForwardBlock:
 	default:
 	}
+}
+
+// needsBytecodeSync checks if bytecode-only snap sync is needed before stateless sync
+func (d *Downloader) needsBytecodeSync(fastForwardBlock uint64) bool {
+	if fastForwardBlock == 0 {
+		fastForwardBlock = d.GetOrWaitFastForwardBlock()
+	}
+
+	// Get the current fast forward block to compare against completed block
+	currentBlock := d.blockchain.CurrentBlock().Number.Uint64()
+
+	// Check if the gap between current block and fast forward block is less than threshold
+	// If so, we don't need bytecode sync regardless of previous sync state
+	gap := int64(fastForwardBlock) - int64(currentBlock)
+	if gap <= int64(d.FastForwardThreshold) {
+		log.Info("Bytecode sync skipped: gap less than FastForwardThreshold",
+			"currentBlock", currentBlock, "fastForwardBlock", fastForwardBlock,
+			"gap", gap, "threshold", d.FastForwardThreshold)
+		return false
+	}
+
+	// Read the last synced block from the database
+	lastSyncedBlock := rawdb.ReadBytecodeSyncLastBlock(d.stateDB)
+
+	// If we haven't synced any bytecodes yet and gap is significant, we need to sync
+	if lastSyncedBlock == 0 {
+		log.Info("Bytecode sync needed: no previous sync found",
+			"fastForwardBlock", fastForwardBlock, "currentBlock", currentBlock,
+			"gap", gap, "threshold", d.FastForwardThreshold)
+		return true
+	}
+
+	// If the fast forward block has moved beyond our last sync, we need to sync
+	if lastSyncedBlock < fastForwardBlock {
+		log.Info("Bytecode sync needed: fast forward block moved",
+			"lastSyncedBlock", lastSyncedBlock, "fastForwardBlock", fastForwardBlock,
+			"currentBlock", currentBlock, "gap", gap)
+		return true
+	}
+
+	// Bytecode sync is already complete up to or beyond the fast forward block
+	log.Debug("Bytecode sync not needed", "lastSyncedBlock", lastSyncedBlock, "fastForwardBlock", fastForwardBlock)
+	return false
+}
+
+// runBytecodeOnlySnapSync performs a bytecode-only snap sync before stateless sync
+func (d *Downloader) runBytecodeOnlySnapSync(p *peerConnection, pivot *types.Header) error {
+	// Save current mode to restore later
+	oldMode := d.getMode()
+
+	// Switch to bytecode-only snap sync mode
+	d.mode.Store(uint32(BytecodeOnlySnapSync))
+	defer d.mode.Store(uint32(oldMode)) // Restore mode on exit
+
+	// Set up the pivot for snap sync
+	d.pivotLock.Lock()
+	d.pivotHeader = pivot
+	d.pivotLock.Unlock()
+
+	// Don't write pivot number for bytecode-only sync in stateless mode
+	// This prevents the node from entering snap sync mode on restart
+	if oldMode != StatelessSync {
+		// Write the pivot number to database
+		rawdb.WriteLastPivotNumber(d.stateDB, pivot.Number.Uint64())
+	}
+
+	log.Info("Starting bytecode-only snap sync", "pivot", pivot.Number, "hash", pivot.Hash())
+
+	// Configure the snap syncer for bytecode-only mode
+	d.SnapSyncer.SetBytecodeOnlyMode(true)
+	defer d.SnapSyncer.SetBytecodeOnlyMode(false)
+
+	// For stateless sync, don't mark snap sync as running to avoid triggering
+	// full trie rebuild. We only need bytecodes, not full state sync.
+	if oldMode != StatelessSync {
+		// Mark snap sync as running (this tells the snap syncer we're in snap sync mode)
+		rawdb.WriteSnapSyncStatusFlag(d.stateDB, rawdb.StateSyncRunning)
+	}
+
+	// Start the state sync at the pivot root
+	sync := d.syncState(pivot.Root)
+
+	// Wait for sync to complete
+	if err := sync.Wait(); err != nil {
+		return fmt.Errorf("bytecode-only snap sync failed: %w", err)
+	}
+
+	// Mark bytecode-only sync as completed up to this pivot block
+	rawdb.WriteBytecodeSyncLastBlock(d.stateDB, pivot.Number.Uint64())
+	rawdb.WriteBytecodeSyncStateRoot(d.stateDB, pivot.Root)
+
+	// Clear the snap sync status flag if it was set
+	// This is critical for stateless nodes to continue with stateless sync
+	if oldMode != StatelessSync {
+		rawdb.WriteSnapSyncStatusFlag(d.stateDB, rawdb.StateSyncFinished)
+	}
+
+	// Verify the write was successful
+	verifyBlock := rawdb.ReadBytecodeSyncLastBlock(d.stateDB)
+	log.Info("Bytecode-only snap sync completed successfully", "completedBlock", pivot.Number.Uint64(), "verifiedBlock", verifyBlock)
+	return nil
 }

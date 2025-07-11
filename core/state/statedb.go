@@ -992,10 +992,6 @@ func (s *StateDB) getStateObject(addr common.Address) *stateObject {
 			return nil
 		}
 		s.AccountReads += time.Since(start)
-		// Short circuit if the account is not found
-		if acct == nil {
-			return nil
-		}
 		// Independent of where we loaded the data from, add it to the prefetcher.
 		// Whilst this would be a bit weird if snapshots are disabled, but we still
 		// want the trie nodes to end up in the prefetcher too, so just push through.
@@ -1003,6 +999,10 @@ func (s *StateDB) getStateObject(addr common.Address) *stateObject {
 			if err = s.prefetcher.prefetch(common.Hash{}, s.originalRoot, common.Address{}, []common.Address{addr}, nil, true); err != nil {
 				log.Error("Failed to prefetch account", "addr", addr, "err", err)
 			}
+		}
+		// Short circuit if the account is not found
+		if acct == nil {
+			return nil
 		}
 		// Insert into the live set
 		obj := newObject(s, addr, acct)

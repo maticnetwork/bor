@@ -39,6 +39,11 @@ type Request struct {
 	Sent time.Time // Timestamp when the request was sent
 }
 
+// ID returns the request ID for logging purposes
+func (r *Request) ID() uint64 {
+	return r.id
+}
+
 // Close aborts an in-flight request. Although there's no way to notify the
 // remote peer about the cancellation, this method notifies the dispatcher to
 // discard any late responses.
