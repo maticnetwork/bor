@@ -245,6 +245,7 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 	if config.SyncMode == downloader.StatelessSync {
 		cacheConfig.TriesInMemory = 0
+		cacheConfig.Stateless = true
 	}
 
 	if config.VMTrace != "" {
