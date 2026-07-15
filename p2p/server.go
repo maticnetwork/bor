@@ -85,6 +85,7 @@ type Server struct {
 	running bool
 
 	listener     net.Listener
+	bulk         *BulkSidecar
 	ourHandshake *protoHandshake
 	loopWG       sync.WaitGroup // loop, listenLoop
 	peerFeed     event.Feed
@@ -430,6 +431,11 @@ func (srv *Server) DiscoveryV5() *discover.UDPv5 {
 	return srv.discv5
 }
 
+// BulkSidecar returns the auxiliary QUIC sidecar, if enabled.
+func (srv *Server) BulkSidecar() *BulkSidecar {
+	return srv.bulk
+}
+
 // StopDialing stops the dial scheduler without stopping the server.
 func (srv *Server) StopDialing() {
 	srv.lock.Lock()
@@ -453,6 +459,9 @@ func (srv *Server) Stop() {
 	if srv.listener != nil {
 		// this unblocks listener Accept
 		srv.listener.Close()
+	}
+	if srv.bulk != nil {
+		srv.bulk.Close()
 	}
 
 	close(srv.quit)
@@ -550,6 +559,9 @@ func (srv *Server) Start() (err error) {
 		if err := srv.setupListening(); err != nil {
 			return err
 		}
+	}
+	if err := srv.setupBulkSidecar(); err != nil {
+		return err
 	}
 
 	if err := srv.setupDiscovery(); err != nil {
@@ -754,6 +766,39 @@ func (srv *Server) setupListening() error {
 	return nil
 }
 
+func (srv *Server) setupBulkSidecar() error {
+	if !srv.EnableBulkSidecar {
+		return nil
+	}
+	listenAddr := srv.BulkListenAddr
+	if listenAddr == "" {
+		listenAddr = srv.ListenAddr
+		if listenAddr == "" {
+			listenAddr = ":0"
+		}
+	}
+	bulk, err := newBulkSidecar(srv, listenAddr)
+	if err != nil {
+		return err
+	}
+	srv.bulk = bulk
+
+	if udp, ok := bulk.Addr().(*net.UDPAddr); ok {
+		if udp.IP.To4() == nil && udp.IP.To16() != nil {
+			srv.localnode.Set(enr.QUIC6(udp.Port))
+		} else {
+			srv.localnode.Set(enr.QUIC(udp.Port))
+		}
+	}
+
+	srv.loopWG.Add(1)
+	go func() {
+		defer srv.loopWG.Done()
+		bulk.run()
+	}()
+	return nil
+}
+
 func (srv *Server) setupUDPListening() (*net.UDPConn, error) {
 	listenAddr := srv.ListenAddr
 
@@ -791,6 +836,15 @@ func (srv *Server) doPeerOp(fn peerOpFunc) {
 		<-srv.peerOpDone
 	case <-srv.quit:
 	}
+}
+
+// Peer retrieves a connected peer by ID.
+func (srv *Server) Peer(id enode.ID) *Peer {
+	var peer *Peer
+	srv.doPeerOp(func(peers map[enode.ID]*Peer) {
+		peer = peers[id]
+	})
+	return peer
 }
 
 // run is the main loop of the server.
@@ -1189,6 +1243,9 @@ func (srv *Server) runPeer(p *Peer) {
 
 	// Run the per-peer main loop.
 	remoteRequested, err := p.run()
+	if srv.bulk != nil {
+		srv.bulk.DropPeer(p.ID())
+	}
 
 	// Announce disconnect on the main loop to update the peer set.
 	// The main loop waits for existing peers to be sent on srv.delpeer

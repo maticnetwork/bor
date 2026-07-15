@@ -37,11 +37,12 @@ type Peer struct {
 // version.
 func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter) *Peer {
 	id := p.ID().String()
+	routed := p2p.NewRoutedMsgReadWriter(rw, nil, isBulkSnapMsg)
 
 	return &Peer{
 		id:      id,
 		Peer:    p,
-		rw:      rw,
+		rw:      routed,
 		version: version,
 		logger:  log.New("peer", id[:8]),
 	}
@@ -51,7 +52,7 @@ func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter) *Peer {
 func NewFakePeer(version uint, id string, rw p2p.MsgReadWriter) *Peer {
 	return &Peer{
 		id:      id,
-		rw:      rw,
+		rw:      p2p.NewRoutedMsgReadWriter(rw, nil, isBulkSnapMsg),
 		version: version,
 		logger:  log.New("peer", id[:8]),
 	}
@@ -70,6 +71,28 @@ func (p *Peer) Version() uint {
 // Log overrides the P2P logger with the higher level one containing only the id.
 func (p *Peer) Log() log.Logger {
 	return p.logger
+}
+
+// AttachBulkRW installs an auxiliary bulk lane for the large snap request and
+// response packets. Control traffic remains on the primary devp2p lane.
+func (p *Peer) AttachBulkRW(rw p2p.MsgReadWriter) {
+	if routed, ok := p.rw.(interface{ AttachBulk(p2p.MsgReadWriter) }); ok {
+		routed.AttachBulk(rw)
+		return
+	}
+	p.rw = p2p.NewRoutedMsgReadWriter(p.rw, rw, isBulkSnapMsg)
+}
+
+func isBulkSnapMsg(code uint64) bool {
+	switch code {
+	case GetAccountRangeMsg, AccountRangeMsg,
+		GetStorageRangesMsg, StorageRangesMsg,
+		GetByteCodesMsg, ByteCodesMsg,
+		GetTrieNodesMsg, TrieNodesMsg:
+		return true
+	default:
+		return false
+	}
 }
 
 // RequestAccountRange fetches a batch of accounts rooted in a specific account

@@ -34,6 +34,8 @@ func (c Config) MarshalTOML() (interface{}, error) {
 		Protocols          []Protocol       `toml:"-" json:"-"`
 		ListenAddr         string
 		DiscAddr           string
+		EnableBulkSidecar  bool   `toml:",omitempty"`
+		BulkListenAddr     string `toml:",omitempty"`
 		NAT                nat.Interface `toml:",omitempty"`
 		Dialer             NodeDialer    `toml:"-"`
 		NoDial             bool          `toml:",omitempty"`
@@ -60,6 +62,8 @@ func (c Config) MarshalTOML() (interface{}, error) {
 	enc.Protocols = c.Protocols
 	enc.ListenAddr = c.ListenAddr
 	enc.DiscAddr = c.DiscAddr
+	enc.EnableBulkSidecar = c.EnableBulkSidecar
+	enc.BulkListenAddr = c.BulkListenAddr
 	enc.NAT = c.NAT
 	enc.Dialer = c.Dialer
 	enc.NoDial = c.NoDial
@@ -90,6 +94,8 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 		Protocols          []Protocol       `toml:"-" json:"-"`
 		ListenAddr         *string
 		DiscAddr           *string
+		EnableBulkSidecar  *bool   `toml:",omitempty"`
+		BulkListenAddr     *string `toml:",omitempty"`
 		NAT                *configNAT `toml:",omitempty"`
 		Dialer             NodeDialer `toml:"-"`
 		NoDial             *bool      `toml:",omitempty"`
@@ -152,6 +158,12 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 	}
 	if dec.DiscAddr != nil {
 		c.DiscAddr = *dec.DiscAddr
+	}
+	if dec.EnableBulkSidecar != nil {
+		c.EnableBulkSidecar = *dec.EnableBulkSidecar
+	}
+	if dec.BulkListenAddr != nil {
+		c.BulkListenAddr = *dec.BulkListenAddr
 	}
 	if dec.NAT != nil {
 		c.NAT = dec.NAT

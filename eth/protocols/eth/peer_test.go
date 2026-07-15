@@ -170,3 +170,112 @@ func TestPeerForgetTransactions(t *testing.T) {
 		t.Error("hash[1] should still be known")
 	}
 }
+
+func TestPeerAttachBulkRWRoutesBodyAndReceiptTraffic(t *testing.T) {
+	primaryApp, primaryNet := p2p.MsgPipe()
+	defer primaryApp.Close()
+	defer primaryNet.Close()
+
+	bulkApp, bulkNet := p2p.MsgPipe()
+	defer bulkApp.Close()
+	defer bulkNet.Close()
+
+	var id enode.ID
+	rand.Read(id[:])
+
+	peer := NewPeer(ETH69, p2p.NewPeer(id, "test", nil), primaryNet, nil)
+	defer peer.Close()
+	peer.AttachBulkRW(bulkNet)
+
+	resCh := make(chan *Response, 1)
+	hashes := []common.Hash{{0x01}, {0x02}}
+
+	reqc := make(chan *Request, 1)
+	errc := make(chan error, 4)
+	go func() {
+		req, err := peer.RequestBodies(hashes, resCh)
+		if err == nil {
+			reqc <- req
+		}
+		errc <- err
+	}()
+
+	msg, err := bulkApp.ReadMsg()
+	if err != nil {
+		t.Fatalf("failed to read block bodies request: %v", err)
+	}
+	var bodiesReq GetBlockBodiesPacket
+	if err := msg.Decode(&bodiesReq); err != nil {
+		t.Fatalf("failed to decode block bodies request: %v", err)
+	}
+	if len(bodiesReq.GetBlockBodiesRequest) != len(hashes) {
+		t.Fatalf("unexpected block bodies request size: got %d want %d", len(bodiesReq.GetBlockBodiesRequest), len(hashes))
+	}
+	for i := range hashes {
+		if bodiesReq.GetBlockBodiesRequest[i] != hashes[i] {
+			t.Fatalf("block bodies hash mismatch at %d", i)
+		}
+	}
+	req := <-reqc
+	defer req.Close()
+	if err := <-errc; err != nil {
+		t.Fatalf("failed to request bodies: %v", err)
+	}
+	if req.id != bodiesReq.RequestId {
+		t.Fatalf("block bodies request id mismatch: got %d want %d", req.id, bodiesReq.RequestId)
+	}
+
+	go func() {
+		req, err := peer.RequestReceipts(hashes, resCh)
+		if err == nil {
+			reqc <- req
+		}
+		errc <- err
+	}()
+	msg, err = bulkApp.ReadMsg()
+	if err != nil {
+		t.Fatalf("failed to read receipts request: %v", err)
+	}
+	var receiptsReq GetReceiptsPacket
+	if err := msg.Decode(&receiptsReq); err != nil {
+		t.Fatalf("failed to decode receipts request: %v", err)
+	}
+	if len(receiptsReq.GetReceiptsRequest) != len(hashes) {
+		t.Fatalf("unexpected receipt request size: got %d want %d", len(receiptsReq.GetReceiptsRequest), len(hashes))
+	}
+	for i := range hashes {
+		if receiptsReq.GetReceiptsRequest[i] != hashes[i] {
+			t.Fatalf("receipt hash mismatch at %d", i)
+		}
+	}
+	req = <-reqc
+	defer req.Close()
+	if err := <-errc; err != nil {
+		t.Fatalf("failed to request receipts: %v", err)
+	}
+	if req.id != receiptsReq.RequestId {
+		t.Fatalf("receipt request id mismatch: got %d want %d", req.id, receiptsReq.RequestId)
+	}
+
+	go func() { errc <- peer.ReplyBlockBodiesRLP(7, nil) }()
+	if err := p2p.ExpectMsg(bulkApp, BlockBodiesMsg, &BlockBodiesRLPPacket{
+		RequestId:              7,
+		BlockBodiesRLPResponse: nil,
+	}); err != nil {
+		t.Fatalf("block body reply did not use bulk lane: %v", err)
+	}
+	if err := <-errc; err != nil {
+		t.Fatalf("failed to reply with bodies: %v", err)
+	}
+
+	go func() { errc <- peer.ReplyReceiptsRLP(8, nil) }()
+	if err := p2p.ExpectMsg(bulkApp, ReceiptsMsg, &ReceiptsRLPPacket{
+		RequestId:           8,
+		ReceiptsRLPResponse: nil,
+	}); err != nil {
+		t.Fatalf("receipt reply did not use bulk lane: %v", err)
+	}
+	if err := <-errc; err != nil {
+		t.Fatalf("failed to reply with receipts: %v", err)
+	}
+}

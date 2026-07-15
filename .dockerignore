@@ -3,3 +3,7 @@
 build/_workspace
 build/_bin
 tests/testdata
+.git
+.gocache
+.gomodcache
+prod.pprof

@@ -101,10 +101,11 @@ type Peer struct {
 // NewPeer create a wrapper for a network connection and negotiated  protocol
 // version.
 func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter, txpool TxPool) *Peer {
+	routed := p2p.NewRoutedMsgReadWriter(rw, nil, isBulkEthMsg)
 	peer := &Peer{
 		id:              p.ID().String(),
 		Peer:            p,
-		rw:              rw,
+		rw:              routed,
 		version:         version,
 		td:              new(big.Int),
 		knownTxs:        newKnownCache(maxKnownTxs),
@@ -138,6 +139,26 @@ func (p *Peer) Close() {
 // ID retrieves the peer's unique identifier.
 func (p *Peer) ID() string {
 	return p.id
+}
+
+// AttachBulkRW installs an auxiliary bulk lane for large downloader traffic.
+// Header, txpool, and control messages remain on the primary devp2p lane.
+func (p *Peer) AttachBulkRW(rw p2p.MsgReadWriter) {
+	if routed, ok := p.rw.(interface{ AttachBulk(p2p.MsgReadWriter) }); ok {
+		routed.AttachBulk(rw)
+		return
+	}
+	p.rw = p2p.NewRoutedMsgReadWriter(p.rw, rw, isBulkEthMsg)
+}
+
+func isBulkEthMsg(code uint64) bool {
+	switch code {
+	case GetBlockBodiesMsg, BlockBodiesMsg,
+		GetReceiptsMsg, ReceiptsMsg:
+		return true
+	default:
+		return false
+	}
 }
 
 // Version retrieves the peer's negotiated `eth` protocol version.

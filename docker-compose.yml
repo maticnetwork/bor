@@ -1,0 +1,23 @@
+services:
+  bor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: bor:quic-bulk-poc
+    command:
+      - server
+      - --config
+      - /etc/bor/config.toml
+    ports:
+      - "8545:8545"
+      - "8546:8546"
+      - "30303:30303/tcp"
+      - "30303:30303/udp"
+      - "30304:30304/udp"
+    volumes:
+      - ./packaging/docker/bor-bulk.toml:/etc/bor/config.toml:ro
+      - bor-data:/var/lib/bor/data
+    restart: unless-stopped
+
+volumes:
+  bor-data:

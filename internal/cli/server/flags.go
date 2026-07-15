@@ -1016,6 +1016,20 @@ func (c *Command) Flags(config *Config) *flagset.Flagset {
 		Default: c.cliConfig.P2P.Port,
 		Group:   "P2P",
 	})
+	f.BoolFlag(&flagset.BoolFlag{
+		Name:    "bulk-sidecar",
+		Usage:   "Enable the QUIC bulk-transfer sidecar for snap and large sync traffic",
+		Value:   &c.cliConfig.P2P.EnableBulkSidecar,
+		Default: c.cliConfig.P2P.EnableBulkSidecar,
+		Group:   "P2P",
+	})
+	f.Uint64Flag(&flagset.Uint64Flag{
+		Name:    "bulk-port",
+		Usage:   "UDP port for the QUIC bulk-transfer sidecar",
+		Value:   &c.cliConfig.P2P.BulkPort,
+		Default: c.cliConfig.P2P.BulkPort,
+		Group:   "P2P",
+	})
 	f.SliceStringFlag(&flagset.SliceStringFlag{
 		Name:    "bootnodes",
 		Usage:   "Comma separated enode URLs for P2P discovery bootstrap",

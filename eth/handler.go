@@ -504,6 +504,7 @@ func (h *handler) runEthPeer(peer *eth.Peer, handler eth.Handler) error {
 			return err
 		}
 	}
+	h.attachBulkSidecar(peer, snap)
 	h.chainSync.handlePeerEvent()
 
 	// Bor: skip propagating transactions if flag is set
@@ -606,6 +607,27 @@ func (h *handler) runWitExtension(peer *wit.Peer, handler wit.Handler) error {
 	}
 
 	return handler(peer)
+}
+
+func (h *handler) attachBulkSidecar(peer *eth.Peer, snapPeer *snap.Peer) {
+	if h.p2pServer == nil || h.p2pServer.BulkSidecar() == nil {
+		return
+	}
+	sidecar := h.p2pServer.BulkSidecar()
+	go func() {
+		if rw, err := sidecar.OpenChannel(peer.Peer, "eth-bulk"); err != nil {
+			peer.Log().Debug("Bulk eth sidecar unavailable", "err", err)
+		} else {
+			peer.AttachBulkRW(rw)
+		}
+		if snapPeer != nil {
+			if rw, err := sidecar.OpenChannel(snapPeer.Peer, "snap-bulk"); err != nil {
+				snapPeer.Log().Debug("Bulk snap sidecar unavailable", "err", err)
+			} else {
+				snapPeer.AttachBulkRW(rw)
+			}
+		}
+	}()
 }
 
 // jailPeer jails a peer to prevent reconnection for a period of time

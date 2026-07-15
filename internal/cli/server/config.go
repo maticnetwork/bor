@@ -260,6 +260,13 @@ type P2PConfig struct {
 	// Port is the port number
 	Port uint64 `hcl:"port,optional" toml:"port,optional"`
 
+	// EnableBulkSidecar enables the QUIC bulk-transfer sidecar while keeping
+	// control traffic on the main devp2p listener.
+	EnableBulkSidecar bool `hcl:"bulk-sidecar,optional" toml:"bulk-sidecar,optional"`
+
+	// BulkPort is the UDP port used by the QUIC bulk-transfer sidecar.
+	BulkPort uint64 `hcl:"bulk-port,optional" toml:"bulk-port,optional"`
+
 	// NoDiscover is used to disable discovery
 	NoDiscover bool `hcl:"nodiscover,optional" toml:"nodiscover,optional"`
 
@@ -880,6 +887,8 @@ func DefaultConfig() *Config {
 			MaxPendPeers:         50,
 			Bind:                 "0.0.0.0",
 			Port:                 30303,
+			EnableBulkSidecar:    false,
+			BulkPort:             30304,
 			NoDiscover:           false,
 			NAT:                  "any",
 			NetRestrict:          "",
@@ -1973,6 +1982,7 @@ func (c *Config) buildNode() (*node.Config, error) {
 			MaxPeers:             int(c.P2P.MaxPeers),
 			MaxPendingPeers:      int(c.P2P.MaxPendPeers),
 			ListenAddr:           c.P2P.Bind + ":" + strconv.Itoa(int(c.P2P.Port)),
+			EnableBulkSidecar:    c.P2P.EnableBulkSidecar,
 			DiscoveryV4:          c.P2P.Discovery.DiscoveryV4,
 			DiscoveryV5:          c.P2P.Discovery.DiscoveryV5,
 			TxArrivalWait:        c.P2P.TxArrivalWait,
@@ -2004,6 +2014,9 @@ func (c *Config) buildNode() (*node.Config, error) {
 		WSJsonRPCExecutionPoolRequestTimeout:   c.JsonRPC.Ws.ExecutionPoolRequestTimeout,
 		HTTPJsonRPCExecutionPoolSize:           c.JsonRPC.Http.ExecutionPoolSize,
 		HTTPJsonRPCExecutionPoolRequestTimeout: c.JsonRPC.Http.ExecutionPoolRequestTimeout,
+	}
+	if c.P2P.EnableBulkSidecar {
+		cfg.P2P.BulkListenAddr = c.P2P.Bind + ":" + strconv.Itoa(int(c.P2P.BulkPort))
 	}
 
 	if c.P2P.NetRestrict != "" {
