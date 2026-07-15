@@ -784,11 +784,7 @@ func (srv *Server) setupBulkSidecar() error {
 	srv.bulk = bulk
 
 	if udp, ok := bulk.Addr().(*net.UDPAddr); ok {
-		if udp.IP.To4() == nil && udp.IP.To16() != nil {
-			srv.localnode.Set(enr.QUIC6(udp.Port))
-		} else {
-			srv.localnode.Set(enr.QUIC(udp.Port))
-		}
+		srv.setBulkQUICRecord(udp)
 	}
 
 	srv.loopWG.Add(1)
@@ -797,6 +793,24 @@ func (srv *Server) setupBulkSidecar() error {
 		bulk.run()
 	}()
 	return nil
+}
+
+func (srv *Server) setBulkQUICRecord(udp *net.UDPAddr) {
+	if udp == nil {
+		return
+	}
+	switch {
+	case udp.IP == nil || udp.IP.IsUnspecified():
+		// Unspecified listeners may later announce either an IPv4 or IPv6 node IP.
+		// Publish both QUIC records so the sidecar remains reachable whichever family
+		// the local node record ultimately prefers.
+		srv.localnode.Set(enr.QUIC(udp.Port))
+		srv.localnode.Set(enr.QUIC6(udp.Port))
+	case udp.IP.To4() == nil && udp.IP.To16() != nil:
+		srv.localnode.Set(enr.QUIC6(udp.Port))
+	default:
+		srv.localnode.Set(enr.QUIC(udp.Port))
+	}
 }
 
 func (srv *Server) setupUDPListening() (*net.UDPConn, error) {

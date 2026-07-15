@@ -35,7 +35,7 @@ FROM alpine:3.23
 ARG BOR_DIR=/var/lib/bor/
 ENV BOR_DIR=$BOR_DIR
 
-RUN apk add --no-cache bash ca-certificates && \
+RUN apk add --no-cache bash ca-certificates wget && \
     mkdir -p ${BOR_DIR}
 
 WORKDIR ${BOR_DIR}

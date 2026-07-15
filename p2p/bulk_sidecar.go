@@ -310,6 +310,7 @@ func (b *BulkSidecar) acceptAuth(stream *quic.Stream) (*enode.Node, error) {
 func (b *BulkSidecar) dialConn(ctx context.Context, remote *enode.Node) (*quic.Conn, error) {
 	endpoint, ok := remote.QUICEndpoint()
 	if !ok {
+		b.log.Debug("Bulk sidecar peer missing QUIC endpoint", "peer", remote.ID(), "node", remote.String(), "ip", remote.IPAddr(), "tcp", remote.TCP(), "udp", remote.UDP())
 		return nil, errBulkSidecarNoQUIC
 	}
 	dialCtx, cancel := context.WithTimeout(ctx, bulkDialTimeout)
@@ -385,6 +386,7 @@ func (b *BulkSidecar) adoptConn(remote *enode.Node, conn *quic.Conn) bool {
 	session.conn = conn
 	session.connClosed = conn.Context().Done()
 	session.channels = make(map[string]MsgReadWriter)
+	b.log.Debug("Bulk sidecar session established", "peer", remote.ID(), "remote", conn.RemoteAddr())
 	return true
 }
 
@@ -523,6 +525,7 @@ func (s *bulkSession) ensureConn(ctx context.Context) (*quic.Conn, error) {
 		s.conn = conn
 		s.connClosed = conn.Context().Done()
 		s.channels = make(map[string]MsgReadWriter)
+		s.sidecar.log.Debug("Bulk sidecar session established", "peer", s.remoteID, "remote", conn.RemoteAddr())
 		go s.sidecar.runConn(s.remoteID, conn)
 		return conn, nil
 	}
@@ -609,6 +612,8 @@ func (s *bulkSession) storeChannel(channel string, rw MsgReadWriter) {
 	waiters := s.waiters[channel]
 	delete(s.waiters, channel)
 	s.lock.Unlock()
+
+	s.sidecar.log.Debug("Bulk sidecar channel opened", "peer", s.remoteID, "channel", channel)
 
 	for _, waiter := range waiters {
 		waiter <- bulkChannelResult{rw: rw}
