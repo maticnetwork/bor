@@ -73,8 +73,8 @@ func (p *Peer) Log() log.Logger {
 	return p.logger
 }
 
-// AttachBulkRW installs an auxiliary bulk lane for the large snap request and
-// response packets. Control traffic remains on the primary devp2p lane.
+// AttachBulkRW installs an auxiliary sidecar lane for the negotiated snap
+// protocol. When unavailable, traffic falls back to the primary devp2p lane.
 func (p *Peer) AttachBulkRW(rw p2p.MsgReadWriter) {
 	if routed, ok := p.rw.(interface{ AttachBulk(p2p.MsgReadWriter) }); ok {
 		routed.AttachBulk(rw)
@@ -85,10 +85,14 @@ func (p *Peer) AttachBulkRW(rw p2p.MsgReadWriter) {
 
 func isBulkSnapMsg(code uint64) bool {
 	switch code {
-	case GetAccountRangeMsg, AccountRangeMsg,
-		GetStorageRangesMsg, StorageRangesMsg,
-		GetByteCodesMsg, ByteCodesMsg,
-		GetTrieNodesMsg, TrieNodesMsg:
+	case GetAccountRangeMsg,
+		AccountRangeMsg,
+		GetStorageRangesMsg,
+		StorageRangesMsg,
+		GetByteCodesMsg,
+		ByteCodesMsg,
+		GetTrieNodesMsg,
+		TrieNodesMsg:
 		return true
 	default:
 		return false

@@ -141,8 +141,9 @@ func (p *Peer) ID() string {
 	return p.id
 }
 
-// AttachBulkRW installs an auxiliary bulk lane for large downloader traffic.
-// Header, txpool, and control messages remain on the primary devp2p lane.
+// AttachBulkRW installs an auxiliary sidecar lane for the negotiated eth
+// protocol. Status stays on the primary devp2p lane because the sidecar is
+// attached after the initial protocol handshake completes.
 func (p *Peer) AttachBulkRW(rw p2p.MsgReadWriter) {
 	if routed, ok := p.rw.(interface{ AttachBulk(p2p.MsgReadWriter) }); ok {
 		routed.AttachBulk(rw)
@@ -153,8 +154,19 @@ func (p *Peer) AttachBulkRW(rw p2p.MsgReadWriter) {
 
 func isBulkEthMsg(code uint64) bool {
 	switch code {
-	case GetBlockBodiesMsg, BlockBodiesMsg,
-		GetReceiptsMsg, ReceiptsMsg:
+	case NewBlockHashesMsg,
+		TransactionsMsg,
+		GetBlockHeadersMsg,
+		BlockHeadersMsg,
+		GetBlockBodiesMsg,
+		BlockBodiesMsg,
+		NewBlockMsg,
+		NewPooledTransactionHashesMsg,
+		GetPooledTransactionsMsg,
+		PooledTransactionsMsg,
+		GetReceiptsMsg,
+		ReceiptsMsg,
+		BlockRangeUpdateMsg:
 		return true
 	default:
 		return false

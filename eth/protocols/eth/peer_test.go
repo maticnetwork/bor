@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 )
@@ -171,7 +172,7 @@ func TestPeerForgetTransactions(t *testing.T) {
 	}
 }
 
-func TestPeerAttachBulkRWRoutesBodyAndReceiptTraffic(t *testing.T) {
+func TestPeerAttachBulkRWRoutesEthTraffic(t *testing.T) {
 	primaryApp, primaryNet := p2p.MsgPipe()
 	defer primaryApp.Close()
 	defer primaryNet.Close()
@@ -277,5 +278,60 @@ func TestPeerAttachBulkRWRoutesBodyAndReceiptTraffic(t *testing.T) {
 	}
 	if err := <-errc; err != nil {
 		t.Fatalf("failed to reply with receipts: %v", err)
+	}
+
+	go func() { errc <- peer.SendTransactions(types.Transactions{}) }()
+	if err := p2p.ExpectMsg(bulkApp, TransactionsMsg, types.Transactions{}); err != nil {
+		t.Fatalf("transactions gossip did not use sidecar lane: %v", err)
+	}
+	if err := <-errc; err != nil {
+		t.Fatalf("failed to send transactions: %v", err)
+	}
+
+	go func() { errc <- peer.SendNewBlockHashes(hashes, []uint64{1, 2}) }()
+	if err := p2p.ExpectMsg(bulkApp, NewBlockHashesMsg, NewBlockHashesPacket{
+		{Hash: hashes[0], Number: 1},
+		{Hash: hashes[1], Number: 2},
+	}); err != nil {
+		t.Fatalf("block announcement did not use sidecar lane: %v", err)
+	}
+	if err := <-errc; err != nil {
+		t.Fatalf("failed to send block hashes: %v", err)
+	}
+
+	go func() { errc <- p2p.Send(peer.rw, StatusMsg, &StatusPacket68{}) }()
+	if err := p2p.ExpectMsg(primaryApp, StatusMsg, &StatusPacket68{}); err != nil {
+		t.Fatalf("status message should remain on primary lane: %v", err)
+	}
+	if err := <-errc; err != nil {
+		t.Fatalf("failed to send status: %v", err)
+	}
+}
+
+func TestIsBulkEthMsgRoutesAllPostStatusMessages(t *testing.T) {
+	tests := []struct {
+		code uint64
+		want bool
+	}{
+		{StatusMsg, false},
+		{NewBlockHashesMsg, true},
+		{TransactionsMsg, true},
+		{GetBlockHeadersMsg, true},
+		{BlockHeadersMsg, true},
+		{GetBlockBodiesMsg, true},
+		{BlockBodiesMsg, true},
+		{NewBlockMsg, true},
+		{NewPooledTransactionHashesMsg, true},
+		{GetPooledTransactionsMsg, true},
+		{PooledTransactionsMsg, true},
+		{GetReceiptsMsg, true},
+		{ReceiptsMsg, true},
+		{BlockRangeUpdateMsg, true},
+		{0xff, false},
+	}
+	for _, test := range tests {
+		if got := isBulkEthMsg(test.code); got != test.want {
+			t.Fatalf("isBulkEthMsg(%d) = %v, want %v", test.code, got, test.want)
+		}
 	}
 }

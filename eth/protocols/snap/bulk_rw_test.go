@@ -9,7 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 )
 
-func TestPeerAttachBulkRWRoutesRequests(t *testing.T) {
+func TestPeerAttachBulkRWRoutesSnapTraffic(t *testing.T) {
 	primaryApp, primaryNet := p2p.MsgPipe()
 	defer primaryApp.Close()
 	defer primaryNet.Close()
@@ -34,6 +34,17 @@ func TestPeerAttachBulkRWRoutesRequests(t *testing.T) {
 	}
 	if err := <-errc; err != nil {
 		t.Fatalf("failed to send bytecode request: %v", err)
+	}
+
+	errc = make(chan error, 1)
+	go func() {
+		errc <- p2p.Send(peer.rw, AccountRangeMsg, &AccountRangePacket{ID: 8})
+	}()
+	if err := p2p.ExpectMsg(bulkApp, AccountRangeMsg, &AccountRangePacket{ID: 8}); err != nil {
+		t.Fatalf("snap response did not use sidecar lane: %v", err)
+	}
+	if err := <-errc; err != nil {
+		t.Fatalf("failed to send account range response: %v", err)
 	}
 }
 
@@ -101,4 +112,26 @@ func (b *snapBackendStub) PeerInfo(id enode.ID) interface{} { return nil }
 func (b *snapBackendStub) Handle(peer *Peer, packet Packet) error {
 	b.handled <- packet
 	return nil
+}
+
+func TestIsBulkSnapMsgRoutesAllMessages(t *testing.T) {
+	tests := []struct {
+		code uint64
+		want bool
+	}{
+		{GetAccountRangeMsg, true},
+		{AccountRangeMsg, true},
+		{GetStorageRangesMsg, true},
+		{StorageRangesMsg, true},
+		{GetByteCodesMsg, true},
+		{ByteCodesMsg, true},
+		{GetTrieNodesMsg, true},
+		{TrieNodesMsg, true},
+		{0xff, false},
+	}
+	for _, test := range tests {
+		if got := isBulkSnapMsg(test.code); got != test.want {
+			t.Fatalf("isBulkSnapMsg(%d) = %v, want %v", test.code, got, test.want)
+		}
+	}
 }

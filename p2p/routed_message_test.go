@@ -135,3 +135,27 @@ func TestRoutedMsgReadWriterAttachesBulkLate(t *testing.T) {
 		t.Fatalf("bulk send failed: %v", err)
 	}
 }
+
+func TestRoutedMsgReadWriterFallsBackToPrimaryWhenBulkWriteFails(t *testing.T) {
+	primaryApp, primaryNet := MsgPipe()
+	defer primaryApp.Close()
+	defer primaryNet.Close()
+
+	bulkApp, bulkNet := MsgPipe()
+	defer bulkNet.Close()
+
+	rw := NewRoutedMsgReadWriter(primaryNet, bulkNet, func(code uint64) bool { return code == 2 })
+
+	if err := bulkApp.Close(); err != nil {
+		t.Fatalf("failed to close bulk lane: %v", err)
+	}
+
+	errc := make(chan error, 1)
+	go func() { errc <- SendItems(rw, 2, uint64(22)) }()
+	if err := ExpectMsg(primaryApp, 2, []uint64{22}); err != nil {
+		t.Fatalf("primary fallback mismatch: %v", err)
+	}
+	if err := <-errc; err != nil {
+		t.Fatalf("send failed after fallback: %v", err)
+	}
+}
