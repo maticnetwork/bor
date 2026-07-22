@@ -43,19 +43,19 @@ import (
 )
 
 const (
-	bulkSidecarNextProto        = "bor-bulk/1"
-	bulkSidecarVersion          = uint64(1)
-	bulkAuthControlMaxSize      = 1024
-	bulkChannelControlMaxSize   = 256
-	bulkFrameHeaderSize         = 12
-	bulkMaxMessageSize          = 10 * 1024 * 1024
-	bulkDialTimeout             = 5 * time.Second
-	bulkAuthTimeout             = 5 * time.Second
-	bulkChannelOpenTimeout      = 5 * time.Second
-	bulkMessageReadTimeout      = 30 * time.Second
-	bulkMessageWriteTimeout     = 20 * time.Second
-	bulkSidecarCloseErrorCode   = quic.ApplicationErrorCode(0x424f52)
-	bulkSidecarProtocolError    = quic.ApplicationErrorCode(0x424f53)
+	bulkSidecarNextProto      = "bor-bulk/1"
+	bulkSidecarVersion        = uint64(1)
+	bulkAuthControlMaxSize    = 1024
+	bulkChannelControlMaxSize = 256
+	bulkFrameHeaderSize       = 12
+	bulkMaxMessageSize        = 10 * 1024 * 1024
+	bulkDialTimeout           = 5 * time.Second
+	bulkAuthTimeout           = 5 * time.Second
+	bulkChannelOpenTimeout    = 5 * time.Second
+	bulkMessageReadTimeout    = 30 * time.Second
+	bulkMessageWriteTimeout   = 20 * time.Second
+	bulkSidecarCloseErrorCode = quic.ApplicationErrorCode(0x424f52)
+	bulkSidecarProtocolError  = quic.ApplicationErrorCode(0x424f53)
 )
 
 var (
@@ -82,8 +82,8 @@ type BulkSidecar struct {
 }
 
 type bulkSession struct {
-	sidecar *BulkSidecar
-	remote  *enode.Node
+	sidecar  *BulkSidecar
+	remote   *enode.Node
 	remoteID enode.ID
 
 	lock       sync.Mutex
@@ -123,6 +123,7 @@ type bulkChannelHello struct {
 
 type bulkStreamMsgRW struct {
 	stream *quic.Stream
+	log    log.Logger
 	write  sync.Mutex
 }
 
@@ -137,10 +138,10 @@ func newBulkSidecar(srv *Server, listenAddr string) (*BulkSidecar, error) {
 		MinVersion:   tls.VersionTLS13,
 	}
 	quicConf := &quic.Config{
-		HandshakeIdleTimeout:      bulkAuthTimeout,
-		MaxIdleTimeout:            60 * time.Second,
-		KeepAlivePeriod:           15 * time.Second,
-		MaxIncomingStreams:        16,
+		HandshakeIdleTimeout:           bulkAuthTimeout,
+		MaxIdleTimeout:                 60 * time.Second,
+		KeepAlivePeriod:                15 * time.Second,
+		MaxIncomingStreams:             16,
 		InitialStreamReceiveWindow:     2 * bulkMaxMessageSize,
 		MaxStreamReceiveWindow:         2 * bulkMaxMessageSize,
 		InitialConnectionReceiveWindow: 4 * bulkMaxMessageSize,
@@ -151,15 +152,15 @@ func newBulkSidecar(srv *Server, listenAddr string) (*BulkSidecar, error) {
 		return nil, err
 	}
 	return &BulkSidecar{
-		srv:       srv,
-		listener:  listener,
-		tls:       tlsConf,
-		config:    quicConf,
-		log:       srv.log,
-		localID:   srv.localnode.ID(),
-		priv:      srv.PrivateKey,
-		closeCh:   make(chan struct{}),
-		sessions:  make(map[enode.ID]*bulkSession),
+		srv:      srv,
+		listener: listener,
+		tls:      tlsConf,
+		config:   quicConf,
+		log:      srv.log,
+		localID:  srv.localnode.ID(),
+		priv:     srv.PrivateKey,
+		closeCh:  make(chan struct{}),
+		sessions: make(map[enode.ID]*bulkSession),
 	}, nil
 }
 
@@ -230,8 +231,8 @@ func (b *BulkSidecar) session(remote *enode.Node) *bulkSession {
 		return session
 	}
 	session := &bulkSession{
-		sidecar: b,
-		remote:  remote,
+		sidecar:  b,
+		remote:   remote,
 		remoteID: remoteID,
 		channels: make(map[string]MsgReadWriter),
 		waiters:  make(map[string][]chan bulkChannelResult),
@@ -552,7 +553,10 @@ func (s *bulkSession) openChannel(ctx context.Context, channel string) (MsgReadW
 		if err := writeBulkControl(stream, bulkChannelHello{Version: bulkSidecarVersion, Channel: channel}); err != nil {
 			return nil, err
 		}
-		rw := &bulkStreamMsgRW{stream: stream}
+		rw := &bulkStreamMsgRW{
+			stream: stream,
+			log:    log.New("peer", s.remoteID, "channel", channel),
+		}
 		s.storeChannel(channel, rw)
 		return rw, nil
 	}
@@ -570,7 +574,10 @@ func (s *bulkSession) acceptChannel(stream *quic.Stream) error {
 	if hello.Channel == "" || len(hello.Channel) > 64 {
 		return errors.New("invalid bulk channel name")
 	}
-	s.storeChannel(hello.Channel, &bulkStreamMsgRW{stream: stream})
+	s.storeChannel(hello.Channel, &bulkStreamMsgRW{
+		stream: stream,
+		log:    log.New("peer", s.remoteID, "channel", hello.Channel),
+	})
 	return nil
 }
 
@@ -633,11 +640,13 @@ func (rw *bulkStreamMsgRW) ReadMsg() (Msg, error) {
 	if size > bulkMaxMessageSize {
 		return Msg{}, fmt.Errorf("bulk message too large: %d", size)
 	}
-	return Msg{
+	msg := Msg{
 		Code:    binary.BigEndian.Uint64(header[:8]),
 		Size:    size,
 		Payload: io.LimitReader(deadlineReader{stream: rw.stream}, int64(size)),
-	}, nil
+	}
+	rw.log.Trace("Bulk sidecar read message", "code", msg.Code, "size", msg.Size)
+	return msg, nil
 }
 
 func (rw *bulkStreamMsgRW) WriteMsg(msg Msg) error {
@@ -663,6 +672,7 @@ func (rw *bulkStreamMsgRW) WriteMsg(msg Msg) error {
 	if n != int64(msg.Size) {
 		return io.ErrUnexpectedEOF
 	}
+	rw.log.Trace("Bulk sidecar wrote message", "code", msg.Code, "size", msg.Size)
 	return nil
 }
 

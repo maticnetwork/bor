@@ -39,8 +39,9 @@ wait_for_rpc() {
 wait_for_log() {
 	service="$1"
 	pattern="$2"
+	attempt_limit="${3:-90}"
 	attempt=0
-	while [ "${attempt}" -lt 90 ]; do
+	while [ "${attempt}" -lt "${attempt_limit}" ]; do
 		if docker compose -f "${compose_file}" logs "${service}" 2>/dev/null | grep -q "${pattern}"; then
 			return 0
 		fi
@@ -48,6 +49,21 @@ wait_for_log() {
 		sleep 1
 	done
 	echo "log pattern not observed for ${service}: ${pattern}" >&2
+	return 1
+}
+
+wait_for_log_either() {
+	pattern="$1"
+	attempt_limit="${2:-90}"
+	attempt=0
+	while [ "${attempt}" -lt "${attempt_limit}" ]; do
+		if docker compose -f "${compose_file}" logs bor-a bor-b 2>/dev/null | grep -E -q "${pattern}"; then
+			return 0
+		fi
+		attempt=$((attempt + 1))
+		sleep 1
+	done
+	echo "log pattern not observed for bor-a or bor-b: ${pattern}" >&2
 	return 1
 }
 
@@ -104,6 +120,8 @@ check)
 	wait_for_log bor-b "Bulk sidecar channel opened.*eth-bulk"
 	wait_for_log bor-a "Bulk sidecar channel opened.*snap-bulk"
 	wait_for_log bor-b "Bulk sidecar channel opened.*snap-bulk"
+	wait_for_log_either 'Bulk sidecar wrote message.*channel=eth-bulk.*code=(2|8)' 300
+	wait_for_log_either 'Bulk sidecar wrote message.*channel=eth-bulk.*code=(1|7)' 300
 	echo "amoy sidecar pair check passed"
 	;;
 status)
