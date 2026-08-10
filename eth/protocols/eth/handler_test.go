@@ -484,6 +484,32 @@ func testGetBlockBodies(t *testing.T, protocol uint) {
 	}
 }
 
+func TestServiceGetBlockBodiesQueryReturnsEmptyGenesisBody(t *testing.T) {
+	t.Parallel()
+
+	backend := newTestBackendWithGenerator(0, true, false, nil)
+	defer backend.close()
+
+	hash := backend.chain.Genesis().Hash()
+	bodies := ServiceGetBlockBodiesQuery(backend.chain, GetBlockBodiesRequest{hash})
+	if len(bodies) != 1 {
+		t.Fatalf("unexpected body count: got %d want 1", len(bodies))
+	}
+	var body BlockBody
+	if err := rlp.DecodeBytes(bodies[0], &body); err != nil {
+		t.Fatalf("failed to decode genesis body: %v", err)
+	}
+	if len(body.Transactions) != 0 {
+		t.Fatalf("unexpected transaction count: got %d want 0", len(body.Transactions))
+	}
+	if len(body.Uncles) != 0 {
+		t.Fatalf("unexpected uncle count: got %d want 0", len(body.Uncles))
+	}
+	if len(body.Withdrawals) != 0 {
+		t.Fatalf("unexpected withdrawal count: got %d want 0", len(body.Withdrawals))
+	}
+}
+
 // Tests that the transaction receipts can be retrieved based on hashes.
 func TestGetBlockReceipts69(t *testing.T) { testGetBlockReceipts(t, ETH69) }
 func TestGetBlockReceipts68(t *testing.T) { testGetBlockReceipts(t, ETH68) }

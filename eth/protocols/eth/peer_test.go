@@ -299,6 +299,30 @@ func TestPeerAttachBulkRWRoutesEthTraffic(t *testing.T) {
 		t.Fatalf("failed to send block hashes: %v", err)
 	}
 
+	go func() { errc <- peer.RequestTxs(hashes) }()
+	msg, err = bulkApp.ReadMsg()
+	if err != nil {
+		t.Fatalf("failed to read pooled transaction request: %v", err)
+	}
+	if msg.Code != GetPooledTransactionsMsg {
+		t.Fatalf("unexpected pooled transaction request code: got %d want %d", msg.Code, GetPooledTransactionsMsg)
+	}
+	var txReq GetPooledTransactionsPacket
+	if err := msg.Decode(&txReq); err != nil {
+		t.Fatalf("failed to decode pooled transaction request: %v", err)
+	}
+	if len(txReq.GetPooledTransactionsRequest) != len(hashes) {
+		t.Fatalf("unexpected pooled transaction request size: got %d want %d", len(txReq.GetPooledTransactionsRequest), len(hashes))
+	}
+	for i := range hashes {
+		if txReq.GetPooledTransactionsRequest[i] != hashes[i] {
+			t.Fatalf("pooled transaction hash mismatch at %d", i)
+		}
+	}
+	if err := <-errc; err != nil {
+		t.Fatalf("failed to request transactions: %v", err)
+	}
+
 	go func() { errc <- p2p.Send(peer.rw, StatusMsg, &StatusPacket68{}) }()
 	if err := p2p.ExpectMsg(primaryApp, StatusMsg, &StatusPacket68{}); err != nil {
 		t.Fatalf("status message should remain on primary lane: %v", err)

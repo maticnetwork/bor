@@ -2,26 +2,23 @@ chain = "amoy"
 datadir = "/var/lib/bor/data"
 syncmode = "full"
 snapshot = true
-verbosity = 4
+verbosity = 5
 
 [p2p]
   bind = "0.0.0.0"
   port = 30303
   bulk-sidecar = true
   bulk-port = 30304
-  nodiscover = false
-  maxpeers = 50
-  maxpendpeers = 50
+  nodiscover = true
+  maxpeers = 5
+  maxpendpeers = 5
   nat = "extip:172.30.0.3"
   nodekeyhex = "6c3699283bda56ad74f6b855546325b68d482e983852a7a17dca9a3f7f0b6d65"
   [p2p.discovery]
-    v4disc = true
-    v5disc = true
-    bootnodes = [
-      "enode://bce861be777e91b0a5a49d58a51e14f32f201b4c6c2d1fbea6c7a1f14756cbb3f931f3188d6b65de8b07b53ff28d03b6e366d09e56360d2124a9fc5a15a0913d@54.217.171.196:30303",
-      "enode://4a3dc0081a346d26a73d79dd88216a9402d2292318e2db9947dbc97ea9c4afb2498dc519c0af04420dc13a238c279062da0320181e7c1461216ce4513bfd40bf@13.251.184.185:30303"
-    ]
-    dns = [ "enrtree://AKUEZKN7PSKVNR65FZDHECMKOJQSGPARGTPPBI7WS2VUL4EGR6XPC@amoy.polygon-peers.io" ]
+    v4disc = false
+    v5disc = false
+    bootnodes = []
+    dns = []
 
 [jsonrpc]
   [jsonrpc.http]

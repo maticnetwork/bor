@@ -18,7 +18,9 @@ package eth
 
 import (
 	"errors"
+	"net"
 	"testing"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -135,8 +137,8 @@ func TestTriggerBlockBodyFetchToPeers(t *testing.T) {
 	t.Parallel()
 
 	hashes := []common.Hash{common.HexToHash("0x3"), common.HexToHash("0x4")}
-	peerA := &fakeBlockBodyFetchPeer{id: "a"}
-	peerB := &fakeBlockBodyFetchPeer{id: "b"}
+	peerA := &fakeBlockBodyFetchPeer{id: "a", respond: true}
+	peerB := &fakeBlockBodyFetchPeer{id: "b", respond: true}
 
 	if err := triggerBlockBodyFetchToPeers([]blockBodyFetchPeer{peerA, peerB}, hashes); err != nil {
 		t.Fatalf("failed to trigger block body fetch: %v", err)
@@ -146,6 +148,69 @@ func TestTriggerBlockBodyFetchToPeers(t *testing.T) {
 	}
 	if len(peerB.hashes) != 1 || len(peerB.hashes[0]) != 1 || peerB.hashes[0][0] != hashes[1] {
 		t.Fatalf("unexpected block body request for peerB: %+v", peerB.hashes)
+	}
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for (peerA.responsesAcked != 1 || peerB.responsesAcked != 1 || peerA.requestsClosed != 1 || peerB.requestsClosed != 1) && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if peerA.responsesAcked != 1 || peerB.responsesAcked != 1 {
+		t.Fatalf("expected response acknowledgements, got peerA=%d peerB=%d", peerA.responsesAcked, peerB.responsesAcked)
+	}
+	if peerA.requestsClosed != 1 || peerB.requestsClosed != 1 {
+		t.Fatalf("expected requests to close, got peerA=%d peerB=%d", peerA.requestsClosed, peerB.requestsClosed)
+	}
+}
+
+func TestSelectTriggerPeersPrefersPrivateBulkPeers(t *testing.T) {
+	t.Parallel()
+
+	peers := []fakeTriggerTargetPeer{
+		{id: "public-bulk", bulk: true, addr: &net.TCPAddr{IP: net.ParseIP("54.1.2.3"), Port: 30303}},
+		{id: "private-bulk", bulk: true, addr: &net.TCPAddr{IP: net.ParseIP("172.30.0.3"), Port: 30303}},
+		{id: "public-plain", addr: &net.TCPAddr{IP: net.ParseIP("18.1.2.3"), Port: 30303}},
+	}
+
+	selected, selection := selectTriggerPeers(peers)
+	if selection != "private-bulk" {
+		t.Fatalf("unexpected selection mode %q", selection)
+	}
+	if len(selected) != 1 || selected[0].id != "private-bulk" {
+		t.Fatalf("unexpected selected peers: %+v", selected)
+	}
+}
+
+func TestSelectTriggerPeersFallsBackToBulkPeers(t *testing.T) {
+	t.Parallel()
+
+	peers := []fakeTriggerTargetPeer{
+		{id: "plain-a", addr: &net.TCPAddr{IP: net.ParseIP("18.1.2.3"), Port: 30303}},
+		{id: "bulk-a", bulk: true, addr: &net.TCPAddr{IP: net.ParseIP("54.1.2.3"), Port: 30303}},
+		{id: "bulk-b", bulk: true, addr: &net.TCPAddr{IP: net.ParseIP("35.4.5.6"), Port: 30303}},
+	}
+
+	selected, selection := selectTriggerPeers(peers)
+	if selection != "bulk" {
+		t.Fatalf("unexpected selection mode %q", selection)
+	}
+	if len(selected) != 2 || selected[0].id != "bulk-a" || selected[1].id != "bulk-b" {
+		t.Fatalf("unexpected selected peers: %+v", selected)
+	}
+}
+
+func TestSelectTriggerPeersFallsBackToAllPeers(t *testing.T) {
+	t.Parallel()
+
+	peers := []fakeTriggerTargetPeer{
+		{id: "b", inbound: true, addr: &net.TCPAddr{IP: net.ParseIP("18.1.2.3"), Port: 30303}},
+		{id: "a", inbound: false, addr: &net.TCPAddr{IP: net.ParseIP("18.1.2.4"), Port: 30303}},
+	}
+
+	selected, selection := selectTriggerPeers(peers)
+	if selection != "all" {
+		t.Fatalf("unexpected selection mode %q", selection)
+	}
+	if len(selected) != 2 || selected[0].id != "a" || selected[1].id != "b" {
+		t.Fatalf("unexpected selected peers: %+v", selected)
 	}
 }
 
@@ -200,9 +265,12 @@ func (p *fakeTxFetchPeer) RequestTxs(hashes []common.Hash) error {
 }
 
 type fakeBlockBodyFetchPeer struct {
-	id     string
-	hashes [][]common.Hash
-	err    error
+	id             string
+	hashes         [][]common.Hash
+	err            error
+	respond        bool
+	requestsClosed int
+	responsesAcked int
 }
 
 func (p *fakeBlockBodyFetchPeer) ID() string { return p.id }
@@ -212,5 +280,31 @@ func (p *fakeBlockBodyFetchPeer) RequestBodies(hashes []common.Hash, sink chan *
 		return nil, p.err
 	}
 	p.hashes = append(p.hashes, append([]common.Hash(nil), hashes...))
-	return &ethproto.Request{}, nil
+	req := &ethproto.Request{Cancel: make(chan struct{})}
+	if p.respond {
+		go func() {
+			done := make(chan error, 1)
+			sink <- &ethproto.Response{Done: done}
+			if err := <-done; err == nil {
+				p.responsesAcked++
+			}
+		}()
+	}
+	go func() {
+		<-req.Cancel
+		p.requestsClosed++
+	}()
+	return req, nil
 }
+
+type fakeTriggerTargetPeer struct {
+	id      string
+	bulk    bool
+	inbound bool
+	addr    net.Addr
+}
+
+func (p fakeTriggerTargetPeer) ID() string           { return p.id }
+func (p fakeTriggerTargetPeer) HasBulkRW() bool      { return p.bulk }
+func (p fakeTriggerTargetPeer) RemoteAddr() net.Addr { return p.addr }
+func (p fakeTriggerTargetPeer) Inbound() bool        { return p.inbound }

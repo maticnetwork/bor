@@ -152,6 +152,13 @@ func (p *Peer) AttachBulkRW(rw p2p.MsgReadWriter) {
 	p.rw = p2p.NewRoutedMsgReadWriter(p.rw, rw, isBulkEthMsg)
 }
 
+func (p *Peer) HasBulkRW() bool {
+	if routed, ok := p.rw.(interface{ HasBulk() bool }); ok {
+		return routed.HasBulk()
+	}
+	return false
+}
+
 func isBulkEthMsg(code uint64) bool {
 	switch code {
 	case NewBlockHashesMsg,

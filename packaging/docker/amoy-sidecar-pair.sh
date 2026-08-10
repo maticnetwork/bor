@@ -90,6 +90,10 @@ now_ms() {
 	python3 -c 'import time; print(int(time.time() * 1000))'
 }
 
+log_since_time() {
+	python3 -c 'import datetime; print((datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(seconds=2)).strftime("%Y-%m-%dT%H:%M:%SZ"))'
+}
+
 wait_for_mutual_peer() {
 	service="$1"
 	target_id="$2"
@@ -118,21 +122,25 @@ pair_nodes() {
 }
 
 run_gossip_checks() {
-	trigger_since=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+	trigger_since=$(log_since_time)
 	rpc bor-a "admin_triggerTxGossip" >/dev/null
 	wait_for_log_since bor-a 'Bulk sidecar wrote message.*channel=eth-bulk.*code=(2|8)' "${trigger_since}" 30
 
-	trigger_since=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+	trigger_since=$(log_since_time)
 	rpc bor-a "admin_triggerBlockAnnouncement" >/dev/null
 	wait_for_log_since bor-a 'Bulk sidecar wrote message.*channel=eth-bulk.*code=(1|7)' "${trigger_since}" 30
 }
 
 run_fetcher_checks() {
-	trigger_since=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+	trigger_since=$(log_since_time)
 	rpc bor-a "admin_triggerTxFetch" >/dev/null
 	wait_for_log_since bor-a 'Bulk sidecar wrote message.*channel=eth-bulk.*code=9' "${trigger_since}" 30
+	wait_for_log_since bor-b 'Bulk sidecar read message.*channel=eth-bulk.*code=9' "${trigger_since}" 30
+	wait_for_log_since bor-b 'Serving pooled transaction request' "${trigger_since}" 30
+	wait_for_log_since bor-b 'Bulk sidecar wrote message.*channel=eth-bulk.*code=10' "${trigger_since}" 30
+	wait_for_log_since bor-a 'Received pooled transaction response' "${trigger_since}" 30
 
-	trigger_since=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+	trigger_since=$(log_since_time)
 	rpc bor-a "admin_triggerBlockBodyFetch" >/dev/null
 	wait_for_log_since bor-a 'Bulk sidecar wrote message.*channel=eth-bulk.*code=5' "${trigger_since}" 30
 	wait_for_log_since bor-b 'Bulk sidecar wrote message.*channel=eth-bulk.*code=6' "${trigger_since}" 30
@@ -163,7 +171,7 @@ measure_trigger() {
 	method="$2"
 	log_service="$3"
 	pattern="$4"
-	trigger_since=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+	trigger_since=$(log_since_time)
 	start_ms=$(now_ms)
 	rpc "${service}" "${method}" >/dev/null
 	wait_for_log_since "${log_service}" "${pattern}" "${trigger_since}" 30
@@ -221,7 +229,7 @@ measure)
 	echo "block_announcement_ms=$(measure_trigger bor-a admin_triggerBlockAnnouncement bor-a 'Bulk sidecar wrote message.*channel=eth-bulk.*code=(1|7)')"
 	echo "tx_fetch_request_ms=$(measure_trigger bor-a admin_triggerTxFetch bor-a 'Bulk sidecar wrote message.*channel=eth-bulk.*code=9')"
 	echo "block_body_request_ms=$(measure_trigger bor-a admin_triggerBlockBodyFetch bor-a 'Bulk sidecar wrote message.*channel=eth-bulk.*code=5')"
-	trigger_since=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+	trigger_since=$(log_since_time)
 	start_ms=$(now_ms)
 	rpc bor-a "admin_triggerBlockBodyFetch" >/dev/null
 	wait_for_log_since bor-b 'Bulk sidecar wrote message.*channel=eth-bulk.*code=6' "${trigger_since}" 30

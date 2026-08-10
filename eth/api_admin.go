@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"io"
 	"math/big"
+	"net"
 	"os"
 	"slices"
 	"strings"
@@ -33,6 +34,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	ethproto "github.com/ethereum/go-ethereum/eth/protocols/eth"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 )
@@ -154,6 +156,7 @@ func (api *AdminAPI) ImportChain(file string) (bool, error) {
 // network trigger emitted through the admin namespace.
 type TrafficTriggerResult struct {
 	PeerCount   int         `json:"peerCount"`
+	PeerIDs     []string    `json:"peerIds,omitempty"`
 	TxHash      common.Hash `json:"txHash,omitempty"`
 	BlockHash   common.Hash `json:"blockHash,omitempty"`
 	BlockNumber uint64      `json:"blockNumber,omitempty"`
@@ -179,6 +182,8 @@ type blockBodyFetchPeer interface {
 	RequestBodies([]common.Hash, chan *ethproto.Response) (*ethproto.Request, error)
 }
 
+const triggerBodyFetchResponseTimeout = 2 * time.Second
+
 // TriggerTxGossip injects a synthetic transaction directly onto connected eth
 // peers. This is intended for operator testing of peer propagation paths.
 func (api *AdminAPI) TriggerTxGossip(peerID *string) (*TrafficTriggerResult, error) {
@@ -195,6 +200,7 @@ func (api *AdminAPI) TriggerTxGossip(peerID *string) (*TrafficTriggerResult, err
 	}
 	return &TrafficTriggerResult{
 		PeerCount: len(peers),
+		PeerIDs:   peerIDs(peers),
 		TxHash:    tx.Hash(),
 	}, nil
 }
@@ -218,6 +224,7 @@ func (api *AdminAPI) TriggerBlockAnnouncement(peerID *string) (*TrafficTriggerRe
 	}
 	return &TrafficTriggerResult{
 		PeerCount:   len(peers),
+		PeerIDs:     peerIDs(peers),
 		BlockHash:   hash,
 		BlockNumber: number,
 	}, nil
@@ -236,6 +243,7 @@ func (api *AdminAPI) TriggerTxFetch(peerID *string) (*TrafficTriggerResult, erro
 	}
 	return &TrafficTriggerResult{
 		PeerCount: len(peers),
+		PeerIDs:   peerIDs(peers),
 		TxHash:    hashes[0],
 	}, nil
 }
@@ -261,6 +269,7 @@ func (api *AdminAPI) TriggerBlockBodyFetch(peerID *string) (*TrafficTriggerResul
 	}
 	return &TrafficTriggerResult{
 		PeerCount: len(peers),
+		PeerIDs:   peerIDs(peers),
 		BlockHash: hashes[0],
 	}, nil
 }
@@ -274,16 +283,117 @@ func (api *AdminAPI) targetEthPeers(peerID *string) ([]*ethPeer, error) {
 		if peer == nil {
 			return nil, fmt.Errorf("peer %s not found", *peerID)
 		}
+		api.logTriggerTargets("explicit", []*ethPeer{peer})
 		return []*ethPeer{peer}, nil
 	}
 	peers := api.eth.handler.peers.all()
 	if len(peers) == 0 {
 		return nil, errors.New("no connected eth peers")
 	}
-	slices.SortFunc(peers, func(a, b *ethPeer) int {
-		return strings.Compare(a.ID(), b.ID())
-	})
+	peers, selection := selectTriggerPeers(peers)
+	api.logTriggerTargets(selection, peers)
 	return peers, nil
+}
+
+type triggerTargetPeer interface {
+	ID() string
+	HasBulkRW() bool
+	RemoteAddr() net.Addr
+	Inbound() bool
+}
+
+func selectTriggerPeers[T triggerTargetPeer](peers []T) ([]T, string) {
+	sorted := append([]T(nil), peers...)
+	slices.SortFunc(sorted, compareTriggerPeers[T])
+
+	privateBulk := collectTriggerPeers(sorted, func(peer T) bool {
+		return peer.HasBulkRW() && isPrivateTriggerAddr(peer.RemoteAddr())
+	})
+	if len(privateBulk) > 0 {
+		return privateBulk, "private-bulk"
+	}
+	bulk := collectTriggerPeers(sorted, func(peer T) bool {
+		return peer.HasBulkRW()
+	})
+	if len(bulk) > 0 {
+		return bulk, "bulk"
+	}
+	return sorted, "all"
+}
+
+func compareTriggerPeers[T triggerTargetPeer](a, b T) int {
+	if diff := compareBool(isPrivateTriggerAddr(a.RemoteAddr()), isPrivateTriggerAddr(b.RemoteAddr())); diff != 0 {
+		return diff
+	}
+	if diff := compareBool(a.HasBulkRW(), b.HasBulkRW()); diff != 0 {
+		return diff
+	}
+	if diff := compareBool(!a.Inbound(), !b.Inbound()); diff != 0 {
+		return diff
+	}
+	return strings.Compare(a.ID(), b.ID())
+}
+
+func collectTriggerPeers[T any](peers []T, keep func(T) bool) []T {
+	out := make([]T, 0, len(peers))
+	for _, peer := range peers {
+		if keep(peer) {
+			out = append(out, peer)
+		}
+	}
+	return out
+}
+
+func compareBool(a, b bool) int {
+	switch {
+	case a == b:
+		return 0
+	case a:
+		return -1
+	default:
+		return 1
+	}
+}
+
+func isPrivateTriggerAddr(addr net.Addr) bool {
+	if addr == nil {
+		return false
+	}
+	host, _, err := net.SplitHostPort(addr.String())
+	if err != nil {
+		host = addr.String()
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	return ip.IsLoopback() || ip.IsPrivate()
+}
+
+func peerIDs(peers []*ethPeer) []string {
+	ids := make([]string, 0, len(peers))
+	for _, peer := range peers {
+		ids = append(ids, peer.ID())
+	}
+	return ids
+}
+
+func (api *AdminAPI) logTriggerTargets(selection string, peers []*ethPeer) {
+	peerIDs := make([]string, 0, len(peers))
+	remoteAddrs := make([]string, 0, len(peers))
+	bulkPeers := make([]string, 0, len(peers))
+	for _, peer := range peers {
+		peerIDs = append(peerIDs, peer.ID())
+		if addr := peer.RemoteAddr(); addr != nil {
+			remoteAddrs = append(remoteAddrs, addr.String())
+		} else {
+			remoteAddrs = append(remoteAddrs, "")
+		}
+		if peer.HasBulkRW() {
+			bulkPeers = append(bulkPeers, peer.ID())
+		}
+	}
+	log.Info("Admin trigger selected peers", "selection", selection, "count", len(peers), "peerIDs", peerIDs, "bulkPeers", bulkPeers, "remoteAddrs", remoteAddrs)
 }
 
 func (api *AdminAPI) syntheticTransaction() (*types.Transaction, error) {
@@ -394,15 +504,30 @@ func triggerTxFetchToPeers(peers []txFetchPeer, hashes []common.Hash) error {
 
 func triggerBlockBodyFetchToPeers(peers []blockBodyFetchPeer, hashes []common.Hash) error {
 	for i, peer := range peers {
-		req, err := peer.RequestBodies([]common.Hash{hashes[i]}, make(chan *ethproto.Response, 1))
+		sink := make(chan *ethproto.Response, 1)
+		req, err := peer.RequestBodies([]common.Hash{hashes[i]}, sink)
 		if err != nil {
 			return fmt.Errorf("request bodies from peer %s: %w", peer.ID(), err)
 		}
 		if req != nil {
-			_ = req.Close()
+			waitForBodyFetchResponse(req, sink)
 		}
 	}
 	return nil
+}
+
+func waitForBodyFetchResponse(req *ethproto.Request, sink <-chan *ethproto.Response) {
+	defer func() {
+		_ = req.Close()
+	}()
+
+	select {
+	case res := <-sink:
+		if res != nil && res.Done != nil {
+			res.Done <- nil
+		}
+	case <-time.After(triggerBodyFetchResponseTimeout):
+	}
 }
 
 func (api *AdminAPI) bodyFetchHashForPeer(peer *ethPeer) (common.Hash, bool) {

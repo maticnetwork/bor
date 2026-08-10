@@ -17,8 +17,13 @@
 package p2p
 
 import (
+	"bytes"
+	"fmt"
+	"io"
 	"sync"
 	"sync/atomic"
+
+	"github.com/ethereum/go-ethereum/log"
 )
 
 // NewRoutedMsgReadWriter multiplexes reads from the primary and bulk lanes while
@@ -80,7 +85,9 @@ func (rw *routedMsgReadWriter) AttachBulk(bulk MsgReadWriter) {
 		return
 	}
 	rw.bulkReader.Store(bulk)
+	log.Debug("Attached bulk routed message lane", "reader_type", fmt.Sprintf("%T", bulk))
 	rw.bulkStart.Do(func() {
+		log.Debug("Starting bulk routed message read loop", "reader_type", fmt.Sprintf("%T", bulk))
 		go rw.readLoop(bulk, false)
 	})
 }
@@ -93,14 +100,34 @@ func (rw *routedMsgReadWriter) bulk() (MsgReadWriter, bool) {
 	return reader.(MsgReadWriter), true
 }
 
+func (rw *routedMsgReadWriter) HasBulk() bool {
+	_, ok := rw.bulk()
+	return ok
+}
+
 func (rw *routedMsgReadWriter) readLoop(reader MsgReader, forwardErr bool) {
+	readerType := fmt.Sprintf("%T", reader)
 	for {
 		msg, err := reader.ReadMsg()
+		if err == nil {
+			payload, readErr := io.ReadAll(msg.Payload)
+			if readErr != nil {
+				err = readErr
+			} else {
+				msg.Size = uint32(len(payload))
+				msg.Payload = bytes.NewReader(payload)
+			}
+		}
+		if err == nil {
+			log.Debug("Routed message read loop received message", "reader_type", readerType, "forward_err", forwardErr, "code", msg.Code, "size", msg.Size)
+		}
 		if err != nil && !forwardErr {
+			log.Debug("Routed bulk read loop exiting", "reader_type", readerType, "err", err)
 			return
 		}
 		rw.reads <- routedReadResult{msg: msg, err: err}
 		if err != nil {
+			log.Debug("Routed message read loop exiting", "reader_type", readerType, "forward_err", forwardErr, "err", err)
 			return
 		}
 	}
