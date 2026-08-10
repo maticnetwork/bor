@@ -35,6 +35,7 @@ import (
 	"github.com/ethereum/go-ethereum/eth/protocols/wit"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
+	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/ethereum/go-ethereum/triedb"
@@ -103,13 +104,17 @@ type fetcherTester struct {
 
 // newTester creates a new fetcher test mocker.
 func newTester(light bool) *fetcherTester {
+	return newTesterWithWitnessRequirement(light, false)
+}
+
+func newTesterWithWitnessRequirement(light bool, requireWitness bool) *fetcherTester {
 	tester := &fetcherTester{
 		hashes:  []common.Hash{genesis.Hash()},
 		headers: map[common.Hash]*types.Header{genesis.Hash(): genesis.Header()},
 		blocks:  map[common.Hash]*types.Block{genesis.Hash(): genesis},
 		drops:   make(map[string]bool),
 	}
-	tester.fetcher = NewBlockFetcher(light, tester.getHeader, tester.getBlock, tester.verifyHeader, tester.broadcastBlock, tester.chainHeight, nil, tester.insertHeaders, tester.insertChain, tester.dropPeer, nil, false, false, 0, nil, nil)
+	tester.fetcher = NewBlockFetcher(light, tester.getHeader, tester.getBlock, tester.verifyHeader, tester.broadcastBlock, tester.chainHeight, nil, tester.insertHeaders, tester.insertChain, tester.dropPeer, nil, false, requireWitness, 0, nil, nil)
 	tester.fetcher.Start()
 
 	return tester
@@ -279,6 +284,197 @@ func (f *fetcherTester) makeBodyFetcher(peer string, blocks map[common.Hash]*typ
 		}()
 
 		return req, nil
+	}
+}
+
+func TestBlockFetcherRequestsHeadersAndBodiesOverBulkLane(t *testing.T) {
+	t.Parallel()
+
+	tester := newTesterWithWitnessRequirement(false, false)
+	defer tester.fetcher.Stop()
+
+	hashes, blocks := makeChain(1, 0xaa, genesis)
+	block := blocks[hashes[0]]
+
+	peer, _, bulkApp := newBulkETHTestPeer(t)
+	imported := make(chan *types.Block, 1)
+	tester.fetcher.importedHook = func(header *types.Header, importedBlock *types.Block) {
+		if importedBlock != nil {
+			imported <- importedBlock
+		}
+	}
+
+	if err := tester.fetcher.Notify(
+		"peerA",
+		block.Hash(),
+		block.NumberU64(),
+		time.Now().Add(-arriveTimeout),
+		func(hash common.Hash, sink chan *eth.Response) (*eth.Request, error) {
+			return peer.RequestOneHeader(hash, sink)
+		},
+		func(hashes []common.Hash, sink chan *eth.Response) (*eth.Request, error) {
+			return peer.RequestBodies(hashes, sink)
+		},
+		nil,
+	); err != nil {
+		t.Fatalf("failed to notify block fetcher: %v", err)
+	}
+
+	headerMsg := readETHMsgWithTimeout(t, bulkApp)
+	if headerMsg.Code != eth.GetBlockHeadersMsg {
+		t.Fatalf("unexpected header request code: got %d want %d", headerMsg.Code, eth.GetBlockHeadersMsg)
+	}
+	var headerReq eth.GetBlockHeadersPacket
+	if err := headerMsg.Decode(&headerReq); err != nil {
+		t.Fatalf("failed to decode header request: %v", err)
+	}
+	if headerReq.GetBlockHeadersRequest == nil || headerReq.GetBlockHeadersRequest.Origin.Hash != block.Hash() {
+		t.Fatalf("unexpected header request origin: got %+v want %s", headerReq.GetBlockHeadersRequest, block.Hash())
+	}
+	if unknown := tester.fetcher.FilterHeaders("peerA", []*types.Header{block.Header()}, time.Now(), time.Now()); len(unknown) != 0 {
+		t.Fatalf("unexpected unknown headers returned from filter: %d", len(unknown))
+	}
+
+	bodyMsg := readETHMsgWithTimeout(t, bulkApp)
+	if bodyMsg.Code != eth.GetBlockBodiesMsg {
+		t.Fatalf("unexpected body request code: got %d want %d", bodyMsg.Code, eth.GetBlockBodiesMsg)
+	}
+	var bodyReq eth.GetBlockBodiesPacket
+	if err := bodyMsg.Decode(&bodyReq); err != nil {
+		t.Fatalf("failed to decode body request: %v", err)
+	}
+	if len(bodyReq.GetBlockBodiesRequest) != 1 || bodyReq.GetBlockBodiesRequest[0] != block.Hash() {
+		t.Fatalf("unexpected body request hashes: got %+v want [%s]", bodyReq.GetBlockBodiesRequest, block.Hash())
+	}
+	txs, uncles := tester.fetcher.FilterBodies("peerA", [][]*types.Transaction{block.Transactions()}, [][]*types.Header{block.Uncles()}, time.Now(), time.Now())
+	if len(txs) != 0 || len(uncles) != 0 {
+		t.Fatalf("unexpected unmatched bodies returned from filter: txs=%d uncles=%d", len(txs), len(uncles))
+	}
+
+	select {
+	case importedBlock := <-imported:
+		if importedBlock.Hash() != block.Hash() {
+			t.Fatalf("unexpected imported block: got %s want %s", importedBlock.Hash(), block.Hash())
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for imported block")
+	}
+}
+
+func TestBlockFetcherRequiresWitnessAfterBulkBodyFetch(t *testing.T) {
+	t.Parallel()
+
+	tester := newTesterWithWitnessRequirement(false, true)
+	defer tester.fetcher.Stop()
+
+	hashes, blocks := makeChain(1, 0xbb, genesis)
+	block := blocks[hashes[0]]
+	witness := createTestWitnessForBlock(block)
+
+	peer, _, bulkApp := newBulkETHTestPeer(t)
+	imported := make(chan *types.Block, 1)
+	tester.fetcher.importedHook = func(header *types.Header, importedBlock *types.Block) {
+		if importedBlock != nil {
+			imported <- importedBlock
+		}
+	}
+
+	if err := tester.fetcher.Notify(
+		"peerA",
+		block.Hash(),
+		block.NumberU64(),
+		time.Now().Add(-arriveTimeout),
+		func(hash common.Hash, sink chan *eth.Response) (*eth.Request, error) {
+			return peer.RequestOneHeader(hash, sink)
+		},
+		func(hashes []common.Hash, sink chan *eth.Response) (*eth.Request, error) {
+			return peer.RequestBodies(hashes, sink)
+		},
+		func(hash common.Hash, sink chan *eth.Response) (*eth.Request, error) { return nil, nil },
+	); err != nil {
+		t.Fatalf("failed to notify witness-requiring block fetcher: %v", err)
+	}
+
+	headerMsg := readETHMsgWithTimeout(t, bulkApp)
+	var headerReq eth.GetBlockHeadersPacket
+	if err := headerMsg.Decode(&headerReq); err != nil {
+		t.Fatalf("failed to decode header request: %v", err)
+	}
+	if unknown := tester.fetcher.FilterHeaders("peerA", []*types.Header{block.Header()}, time.Now(), time.Now()); len(unknown) != 0 {
+		t.Fatalf("unexpected unknown headers returned from filter: %d", len(unknown))
+	}
+
+	bodyMsg := readETHMsgWithTimeout(t, bulkApp)
+	var bodyReq eth.GetBlockBodiesPacket
+	if err := bodyMsg.Decode(&bodyReq); err != nil {
+		t.Fatalf("failed to decode body request: %v", err)
+	}
+	txs, uncles := tester.fetcher.FilterBodies("peerA", [][]*types.Transaction{block.Transactions()}, [][]*types.Header{block.Uncles()}, time.Now(), time.Now())
+	if len(txs) != 0 || len(uncles) != 0 {
+		t.Fatalf("unexpected unmatched bodies returned from filter: txs=%d uncles=%d", len(txs), len(uncles))
+	}
+
+	select {
+	case importedBlock := <-imported:
+		t.Fatalf("block imported before witness injection: %s", importedBlock.Hash())
+	case <-time.After(150 * time.Millisecond):
+	}
+
+	if err := tester.fetcher.InjectWitness("peerA", witness); err != nil {
+		t.Fatalf("failed to inject witness: %v", err)
+	}
+
+	select {
+	case importedBlock := <-imported:
+		if importedBlock.Hash() != block.Hash() {
+			t.Fatalf("unexpected imported block after witness injection: got %s want %s", importedBlock.Hash(), block.Hash())
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for witness-backed import")
+	}
+}
+
+func newBulkETHTestPeer(t *testing.T) (*eth.Peer, *p2p.MsgPipeRW, *p2p.MsgPipeRW) {
+	t.Helper()
+
+	primaryApp, primaryNet := p2p.MsgPipe()
+	bulkApp, bulkNet := p2p.MsgPipe()
+	t.Cleanup(func() {
+		primaryApp.Close()
+		primaryNet.Close()
+		bulkApp.Close()
+		bulkNet.Close()
+	})
+
+	peer := eth.NewPeer(eth.ETH69, p2p.NewPeerPipe(enode.ID{1}, "block-fetcher-bulk", nil, primaryNet), primaryNet, nil)
+	peer.AttachBulkRW(bulkNet)
+	t.Cleanup(peer.Close)
+
+	return peer, primaryApp, bulkApp
+}
+
+func readETHMsgWithTimeout(t *testing.T, rw *p2p.MsgPipeRW) p2p.Msg {
+	t.Helper()
+
+	type msgResult struct {
+		msg p2p.Msg
+		err error
+	}
+	resultCh := make(chan msgResult, 1)
+	go func() {
+		msg, err := rw.ReadMsg()
+		resultCh <- msgResult{msg: msg, err: err}
+	}()
+
+	select {
+	case result := <-resultCh:
+		if result.err != nil {
+			t.Fatalf("failed to read message: %v", result.err)
+		}
+		return result.msg
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for eth message")
+		return p2p.Msg{}
 	}
 }
 

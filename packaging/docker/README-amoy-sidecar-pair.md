@@ -30,8 +30,8 @@ What this does:
 - assigns stable nodekeys and stable container IPs
 - pairs the nodes with `admin_addPeer` using full ENRs so QUIC metadata is preserved
 - verifies `eth-bulk` and `snap-bulk` channels from logs
-- verifies live `eth-bulk` traffic for tx gossip (`Transactions` or `NewPooledTransactionHashes`)
-  and block announcements (`NewBlockHashes` or `NewBlock`) from sidecar message logs
+- actively triggers tx gossip and block announcements through the local `admin`
+  RPC and verifies the resulting `eth-bulk` sidecar message logs
 
 Notes:
 
@@ -40,5 +40,5 @@ Notes:
   open QUIC sidecar channels directly to each other
 - public Amoy peers are not expected to reach these bridge IPs; this stack is for
   controlled live-network testing of our own pair
-- `check` can wait up to 300 seconds for naturally occurring Amoy tx gossip and
-  block announcements to traverse the sidecar
+- `check` is deterministic now: once the pair is connected, it injects the
+  verification traffic immediately instead of waiting on ambient Amoy activity

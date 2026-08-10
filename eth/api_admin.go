@@ -18,14 +18,21 @@ package eth
 
 import (
 	"compress/gzip"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"os"
+	"slices"
 	"strings"
+	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
@@ -140,4 +147,161 @@ func (api *AdminAPI) ImportChain(file string) (bool, error) {
 		blocks = blocks[:0]
 	}
 	return true, nil
+}
+
+// TrafficTriggerResult reports the peer fanout and object hash for an injected
+// network trigger emitted through the admin namespace.
+type TrafficTriggerResult struct {
+	PeerCount   int         `json:"peerCount"`
+	TxHash      common.Hash `json:"txHash,omitempty"`
+	BlockHash   common.Hash `json:"blockHash,omitempty"`
+	BlockNumber uint64      `json:"blockNumber,omitempty"`
+}
+
+type txGossipPeer interface {
+	ID() string
+	SendTransactions(types.Transactions) error
+}
+
+type blockAnnouncementPeer interface {
+	ID() string
+	SendNewBlockHashes([]common.Hash, []uint64) error
+}
+
+// TriggerTxGossip injects a synthetic transaction directly onto connected eth
+// peers. This is intended for operator testing of peer propagation paths.
+func (api *AdminAPI) TriggerTxGossip(peerID *string) (*TrafficTriggerResult, error) {
+	peers, err := api.targetEthPeers(peerID)
+	if err != nil {
+		return nil, err
+	}
+	tx, err := api.syntheticTransaction()
+	if err != nil {
+		return nil, err
+	}
+	if err := triggerTxGossipToPeers(asTxGossipPeers(peers), tx); err != nil {
+		return nil, err
+	}
+	return &TrafficTriggerResult{
+		PeerCount: len(peers),
+		TxHash:    tx.Hash(),
+	}, nil
+}
+
+// TriggerBlockAnnouncement injects a new-block-hashes announcement for the
+// current local head onto connected eth peers. This is intended for operator
+// testing of peer announcement paths.
+func (api *AdminAPI) TriggerBlockAnnouncement(peerID *string) (*TrafficTriggerResult, error) {
+	peers, err := api.targetEthPeers(peerID)
+	if err != nil {
+		return nil, err
+	}
+	head := api.eth.BlockChain().CurrentBlock()
+	if head == nil {
+		return nil, errors.New("current head unavailable")
+	}
+	hash := head.Hash()
+	number := head.Number.Uint64()
+	if err := triggerBlockAnnouncementToPeers(asBlockAnnouncementPeers(peers), hash, number); err != nil {
+		return nil, err
+	}
+	return &TrafficTriggerResult{
+		PeerCount:   len(peers),
+		BlockHash:   hash,
+		BlockNumber: number,
+	}, nil
+}
+
+func (api *AdminAPI) targetEthPeers(peerID *string) ([]*ethPeer, error) {
+	if api.eth == nil || api.eth.handler == nil || api.eth.handler.peers == nil {
+		return nil, errors.New("eth protocol handler unavailable")
+	}
+	if peerID != nil {
+		peer := api.eth.handler.peers.peer(*peerID)
+		if peer == nil {
+			return nil, fmt.Errorf("peer %s not found", *peerID)
+		}
+		return []*ethPeer{peer}, nil
+	}
+	peers := api.eth.handler.peers.all()
+	if len(peers) == 0 {
+		return nil, errors.New("no connected eth peers")
+	}
+	slices.SortFunc(peers, func(a, b *ethPeer) int {
+		return strings.Compare(a.ID(), b.ID())
+	})
+	return peers, nil
+}
+
+func (api *AdminAPI) syntheticTransaction() (*types.Transaction, error) {
+	head := api.eth.BlockChain().CurrentBlock()
+	if head == nil {
+		return nil, errors.New("current head unavailable")
+	}
+	key, err := crypto.GenerateKey()
+	if err != nil {
+		return nil, err
+	}
+	config := api.eth.BlockChain().Config()
+	to := common.Address{}
+	nonce := uint64(time.Now().UnixNano())
+	if head.BaseFee != nil {
+		return types.SignNewTx(key, types.LatestSigner(config), &types.DynamicFeeTx{
+			ChainID:   config.ChainID,
+			Nonce:     nonce,
+			To:        &to,
+			Gas:       params.TxGas,
+			GasTipCap: big.NewInt(1),
+			GasFeeCap: new(big.Int).Add(head.BaseFee, big.NewInt(1)),
+			Value:     big.NewInt(0),
+			Data:      randomTriggerData(),
+		})
+	}
+	return types.SignTx(
+		types.NewTransaction(nonce, to, big.NewInt(0), params.TxGas, big.NewInt(1), randomTriggerData()),
+		types.LatestSigner(config),
+		key,
+	)
+}
+
+func randomTriggerData() []byte {
+	payload := make([]byte, 8)
+	if _, err := rand.Read(payload); err != nil {
+		big.NewInt(time.Now().UnixNano()).FillBytes(payload)
+	}
+	return payload
+}
+
+func asTxGossipPeers(peers []*ethPeer) []txGossipPeer {
+	out := make([]txGossipPeer, 0, len(peers))
+	for _, peer := range peers {
+		out = append(out, peer.Peer)
+	}
+	return out
+}
+
+func asBlockAnnouncementPeers(peers []*ethPeer) []blockAnnouncementPeer {
+	out := make([]blockAnnouncementPeer, 0, len(peers))
+	for _, peer := range peers {
+		out = append(out, peer.Peer)
+	}
+	return out
+}
+
+func triggerTxGossipToPeers(peers []txGossipPeer, tx *types.Transaction) error {
+	for _, peer := range peers {
+		if err := peer.SendTransactions(types.Transactions{tx}); err != nil {
+			return fmt.Errorf("send transactions to peer %s: %w", peer.ID(), err)
+		}
+	}
+	return nil
+}
+
+func triggerBlockAnnouncementToPeers(peers []blockAnnouncementPeer, hash common.Hash, number uint64) error {
+	for _, peer := range peers {
+		if err := peer.SendNewBlockHashes([]common.Hash{hash}, []uint64{number}); err != nil {
+			return fmt.Errorf("send block announcement to peer %s: %w", peer.ID(), err)
+		}
+	}
+	return nil
 }
