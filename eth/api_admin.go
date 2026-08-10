@@ -32,6 +32,7 @@ import (
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	ethproto "github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 )
@@ -168,6 +169,16 @@ type blockAnnouncementPeer interface {
 	SendNewBlockHashes([]common.Hash, []uint64) error
 }
 
+type txFetchPeer interface {
+	ID() string
+	RequestTxs([]common.Hash) error
+}
+
+type blockBodyFetchPeer interface {
+	ID() string
+	RequestBodies([]common.Hash, chan *ethproto.Response) (*ethproto.Request, error)
+}
+
 // TriggerTxGossip injects a synthetic transaction directly onto connected eth
 // peers. This is intended for operator testing of peer propagation paths.
 func (api *AdminAPI) TriggerTxGossip(peerID *string) (*TrafficTriggerResult, error) {
@@ -209,6 +220,48 @@ func (api *AdminAPI) TriggerBlockAnnouncement(peerID *string) (*TrafficTriggerRe
 		PeerCount:   len(peers),
 		BlockHash:   hash,
 		BlockNumber: number,
+	}, nil
+}
+
+// TriggerTxFetch injects a pooled-transaction retrieval request onto connected
+// peers. This is intended for operator testing of fetcher-style bulk traffic.
+func (api *AdminAPI) TriggerTxFetch(peerID *string) (*TrafficTriggerResult, error) {
+	peers, err := api.targetEthPeers(peerID)
+	if err != nil {
+		return nil, err
+	}
+	hashes := []common.Hash{randomTriggerHash(), randomTriggerHash()}
+	if err := triggerTxFetchToPeers(asTxFetchPeers(peers), hashes); err != nil {
+		return nil, err
+	}
+	return &TrafficTriggerResult{
+		PeerCount: len(peers),
+		TxHash:    hashes[0],
+	}, nil
+}
+
+// TriggerBlockBodyFetch injects a block body retrieval request for the latest
+// block hash advertised by connected peers. This is intended for operator
+// testing of bulk retrieval request/response paths.
+func (api *AdminAPI) TriggerBlockBodyFetch(peerID *string) (*TrafficTriggerResult, error) {
+	peers, err := api.targetEthPeers(peerID)
+	if err != nil {
+		return nil, err
+	}
+	hashes := make([]common.Hash, 0, len(peers))
+	for _, peer := range peers {
+		hash, ok := api.bodyFetchHashForPeer(peer)
+		if !ok {
+			return nil, fmt.Errorf("peer %s has no advertised block hash", peer.ID())
+		}
+		hashes = append(hashes, hash)
+	}
+	if err := triggerBlockBodyFetchToPeers(asBlockBodyFetchPeers(peers), hashes); err != nil {
+		return nil, err
+	}
+	return &TrafficTriggerResult{
+		PeerCount: len(peers),
+		BlockHash: hashes[0],
 	}, nil
 }
 
@@ -272,6 +325,14 @@ func randomTriggerData() []byte {
 	return payload
 }
 
+func randomTriggerHash() common.Hash {
+	var hash common.Hash
+	if _, err := rand.Read(hash[:]); err != nil {
+		big.NewInt(time.Now().UnixNano()).FillBytes(hash[:])
+	}
+	return hash
+}
+
 func asTxGossipPeers(peers []*ethPeer) []txGossipPeer {
 	out := make([]txGossipPeer, 0, len(peers))
 	for _, peer := range peers {
@@ -282,6 +343,22 @@ func asTxGossipPeers(peers []*ethPeer) []txGossipPeer {
 
 func asBlockAnnouncementPeers(peers []*ethPeer) []blockAnnouncementPeer {
 	out := make([]blockAnnouncementPeer, 0, len(peers))
+	for _, peer := range peers {
+		out = append(out, peer.Peer)
+	}
+	return out
+}
+
+func asTxFetchPeers(peers []*ethPeer) []txFetchPeer {
+	out := make([]txFetchPeer, 0, len(peers))
+	for _, peer := range peers {
+		out = append(out, peer.Peer)
+	}
+	return out
+}
+
+func asBlockBodyFetchPeers(peers []*ethPeer) []blockBodyFetchPeer {
+	out := make([]blockBodyFetchPeer, 0, len(peers))
 	for _, peer := range peers {
 		out = append(out, peer.Peer)
 	}
@@ -304,4 +381,44 @@ func triggerBlockAnnouncementToPeers(peers []blockAnnouncementPeer, hash common.
 		}
 	}
 	return nil
+}
+
+func triggerTxFetchToPeers(peers []txFetchPeer, hashes []common.Hash) error {
+	for _, peer := range peers {
+		if err := peer.RequestTxs(hashes); err != nil {
+			return fmt.Errorf("request transactions from peer %s: %w", peer.ID(), err)
+		}
+	}
+	return nil
+}
+
+func triggerBlockBodyFetchToPeers(peers []blockBodyFetchPeer, hashes []common.Hash) error {
+	for i, peer := range peers {
+		req, err := peer.RequestBodies([]common.Hash{hashes[i]}, make(chan *ethproto.Response, 1))
+		if err != nil {
+			return fmt.Errorf("request bodies from peer %s: %w", peer.ID(), err)
+		}
+		if req != nil {
+			_ = req.Close()
+		}
+	}
+	return nil
+}
+
+func (api *AdminAPI) bodyFetchHashForPeer(peer *ethPeer) (common.Hash, bool) {
+	if peer == nil {
+		return common.Hash{}, false
+	}
+	if blockRange := peer.BlockRange(); blockRange != nil && blockRange.LatestBlockHash != (common.Hash{}) {
+		return blockRange.LatestBlockHash, true
+	}
+	head, _ := peer.Head()
+	if head != (common.Hash{}) {
+		return head, true
+	}
+	currentHead := api.eth.BlockChain().CurrentBlock()
+	if currentHead == nil {
+		return common.Hash{}, false
+	}
+	return currentHead.Hash(), true
 }

@@ -3,6 +3,8 @@
 set -eu
 
 compose_file="${COMPOSE_FILE:-docker-compose.amoy-sidecar-pair.yml}"
+gocache_dir="${GOCACHE_DIR:-/Users/djones/Github/bor/.gocache}"
+gomodcache_dir="${GOMODCACHE_DIR:-/Users/djones/Github/bor/.gomodcache}"
 
 rpc() {
 	service="$1"
@@ -84,6 +86,10 @@ wait_for_log_either() {
 	return 1
 }
 
+now_ms() {
+	python3 -c 'import time; print(int(time.time() * 1000))'
+}
+
 wait_for_mutual_peer() {
 	service="$1"
 	target_id="$2"
@@ -111,6 +117,60 @@ pair_nodes() {
 	rpc bor-a "admin_addPeer" "[\"${bor_b_enr}\"]" >/dev/null
 }
 
+run_gossip_checks() {
+	trigger_since=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+	rpc bor-a "admin_triggerTxGossip" >/dev/null
+	wait_for_log_since bor-a 'Bulk sidecar wrote message.*channel=eth-bulk.*code=(2|8)' "${trigger_since}" 30
+
+	trigger_since=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+	rpc bor-a "admin_triggerBlockAnnouncement" >/dev/null
+	wait_for_log_since bor-a 'Bulk sidecar wrote message.*channel=eth-bulk.*code=(1|7)' "${trigger_since}" 30
+}
+
+run_fetcher_checks() {
+	trigger_since=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+	rpc bor-a "admin_triggerTxFetch" >/dev/null
+	wait_for_log_since bor-a 'Bulk sidecar wrote message.*channel=eth-bulk.*code=9' "${trigger_since}" 30
+
+	trigger_since=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+	rpc bor-a "admin_triggerBlockBodyFetch" >/dev/null
+	wait_for_log_since bor-a 'Bulk sidecar wrote message.*channel=eth-bulk.*code=5' "${trigger_since}" 30
+	wait_for_log_since bor-b 'Bulk sidecar wrote message.*channel=eth-bulk.*code=6' "${trigger_since}" 30
+}
+
+verify_pair_ready() {
+	bor_a_id=$(rpc bor-a "admin_nodeInfo" | string_field "id")
+	bor_b_id=$(rpc bor-b "admin_nodeInfo" | string_field "id")
+	wait_for_mutual_peer bor-a "${bor_b_id}"
+	wait_for_mutual_peer bor-b "${bor_a_id}"
+	wait_for_log bor-a "Bulk sidecar session established"
+	wait_for_log bor-b "Bulk sidecar session established"
+	wait_for_log bor-a "Bulk sidecar channel opened.*eth-bulk"
+	wait_for_log bor-b "Bulk sidecar channel opened.*eth-bulk"
+	wait_for_log bor-a "Bulk sidecar channel opened.*snap-bulk"
+	wait_for_log bor-b "Bulk sidecar channel opened.*snap-bulk"
+}
+
+run_fallback_tests() {
+	env GOCACHE="${gocache_dir}" GOMODCACHE="${gomodcache_dir}" \
+		go test ./p2p -run '^TestRoutedMsgReadWriterFallsBackToPrimaryWhenBulkWriteFails$' -count=1
+	env GOCACHE="${gocache_dir}" GOMODCACHE="${gomodcache_dir}" \
+		go test ./p2p -run '^TestRoutedMsgReadWriterIgnoresBulkReadErrors$' -count=1
+}
+
+measure_trigger() {
+	service="$1"
+	method="$2"
+	log_service="$3"
+	pattern="$4"
+	trigger_since=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+	start_ms=$(now_ms)
+	rpc "${service}" "${method}" >/dev/null
+	wait_for_log_since "${log_service}" "${pattern}" "${trigger_since}" 30
+	end_ms=$(now_ms)
+	echo "$((end_ms - start_ms))"
+}
+
 cmd="${1:-up}"
 
 case "${cmd}" in
@@ -127,23 +187,46 @@ pair)
 	pair_nodes
 	;;
 check)
-	bor_a_id=$(rpc bor-a "admin_nodeInfo" | string_field "id")
-	bor_b_id=$(rpc bor-b "admin_nodeInfo" | string_field "id")
-	wait_for_mutual_peer bor-a "${bor_b_id}"
-	wait_for_mutual_peer bor-b "${bor_a_id}"
-	wait_for_log bor-a "Bulk sidecar session established"
-	wait_for_log bor-b "Bulk sidecar session established"
-	wait_for_log bor-a "Bulk sidecar channel opened.*eth-bulk"
-	wait_for_log bor-b "Bulk sidecar channel opened.*eth-bulk"
-	wait_for_log bor-a "Bulk sidecar channel opened.*snap-bulk"
-	wait_for_log bor-b "Bulk sidecar channel opened.*snap-bulk"
-	trigger_since=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-	rpc bor-a "admin_triggerTxGossip" >/dev/null
-	wait_for_log_since bor-a 'Bulk sidecar wrote message.*channel=eth-bulk.*code=(2|8)' "${trigger_since}" 30
-	trigger_since=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-	rpc bor-a "admin_triggerBlockAnnouncement" >/dev/null
-	wait_for_log_since bor-a 'Bulk sidecar wrote message.*channel=eth-bulk.*code=(1|7)' "${trigger_since}" 30
+	verify_pair_ready
+	run_gossip_checks
+	run_fetcher_checks
 	echo "amoy sidecar pair check passed"
+	;;
+check-fetchers)
+	verify_pair_ready
+	run_fetcher_checks
+	echo "amoy sidecar fetcher check passed"
+	;;
+soak)
+	verify_pair_ready
+	iterations="${2:-10}"
+	i=1
+	while [ "${i}" -le "${iterations}" ]; do
+		run_gossip_checks
+		run_fetcher_checks
+		wait_for_mutual_peer bor-a "$(rpc bor-b "admin_nodeInfo" | string_field "id")"
+		wait_for_mutual_peer bor-b "$(rpc bor-a "admin_nodeInfo" | string_field "id")"
+		echo "soak iteration ${i}/${iterations} passed"
+		i=$((i + 1))
+	done
+	echo "amoy sidecar soak passed"
+	;;
+fallback)
+	run_fallback_tests
+	echo "fallback verification passed"
+	;;
+measure)
+	verify_pair_ready
+	echo "tx_gossip_ms=$(measure_trigger bor-a admin_triggerTxGossip bor-a 'Bulk sidecar wrote message.*channel=eth-bulk.*code=(2|8)')"
+	echo "block_announcement_ms=$(measure_trigger bor-a admin_triggerBlockAnnouncement bor-a 'Bulk sidecar wrote message.*channel=eth-bulk.*code=(1|7)')"
+	echo "tx_fetch_request_ms=$(measure_trigger bor-a admin_triggerTxFetch bor-a 'Bulk sidecar wrote message.*channel=eth-bulk.*code=9')"
+	echo "block_body_request_ms=$(measure_trigger bor-a admin_triggerBlockBodyFetch bor-a 'Bulk sidecar wrote message.*channel=eth-bulk.*code=5')"
+	trigger_since=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+	start_ms=$(now_ms)
+	rpc bor-a "admin_triggerBlockBodyFetch" >/dev/null
+	wait_for_log_since bor-b 'Bulk sidecar wrote message.*channel=eth-bulk.*code=6' "${trigger_since}" 30
+	end_ms=$(now_ms)
+	echo "block_body_response_ms=$((end_ms - start_ms))"
 	;;
 status)
 	echo "bor-a peer count: $(hex_result "$(rpc bor-a "net_peerCount")")"
@@ -156,7 +239,7 @@ down)
 	docker compose -f "${compose_file}" down -v
 	;;
 *)
-	echo "usage: $0 {up|pair|check|status|logs|down}" >&2
+	echo "usage: $0 {up|pair|check|check-fetchers|soak [iterations]|fallback|measure|status|logs|down}" >&2
 	exit 1
 	;;
 esac

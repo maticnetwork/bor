@@ -14,6 +14,10 @@ Usage:
 ```bash
 packaging/docker/amoy-sidecar-pair.sh up
 packaging/docker/amoy-sidecar-pair.sh check
+packaging/docker/amoy-sidecar-pair.sh check-fetchers
+packaging/docker/amoy-sidecar-pair.sh soak 10
+packaging/docker/amoy-sidecar-pair.sh fallback
+packaging/docker/amoy-sidecar-pair.sh measure
 packaging/docker/amoy-sidecar-pair.sh status
 packaging/docker/amoy-sidecar-pair.sh logs
 packaging/docker/amoy-sidecar-pair.sh down
@@ -32,6 +36,10 @@ What this does:
 - verifies `eth-bulk` and `snap-bulk` channels from logs
 - actively triggers tx gossip and block announcements through the local `admin`
   RPC and verifies the resulting `eth-bulk` sidecar message logs
+- actively triggers tx fetch and block body fetch requests so fetcher-style bulk
+  traffic is also verified on the sidecar
+- exposes `soak`, `fallback`, and `measure` commands for repeated checks,
+  fallback-path verification, and simple timing capture
 
 Notes:
 
@@ -42,3 +50,7 @@ Notes:
   controlled live-network testing of our own pair
 - `check` is deterministic now: once the pair is connected, it injects the
   verification traffic immediately instead of waiting on ambient Amoy activity
+- `fallback` runs the local routed-message fallback tests that prove bulk-lane
+  write/read failures fall back safely to the primary devp2p lane
+- `measure` prints rough end-to-end timing in milliseconds for the forced
+  sidecar checks so you can compare behavior across builds or environments
