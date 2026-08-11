@@ -208,12 +208,6 @@ func handleMessage(backend Backend, peer *Peer) error {
 	if err != nil {
 		return err
 	}
-	if msg.Code == GetBlockBodiesMsg || msg.Code == BlockBodiesMsg {
-		peer.Log().Debug("Received block body protocol message", "code", msg.Code, "size", msg.Size)
-	}
-	if msg.Code == GetPooledTransactionsMsg || msg.Code == PooledTransactionsMsg {
-		peer.Log().Debug("Received pooled transaction protocol message", "code", msg.Code, "size", msg.Size)
-	}
 	if msg.Size > maxMessageSize {
 		return fmt.Errorf("%w: %v > %v", errMsgTooLarge, msg.Size, maxMessageSize)
 	}

@@ -18,12 +18,8 @@ package p2p
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"sync"
-	"sync/atomic"
-
-	"github.com/ethereum/go-ethereum/log"
 )
 
 // NewRoutedMsgReadWriter multiplexes reads from the primary and bulk lanes while
@@ -55,14 +51,20 @@ type routedMsgReadWriter struct {
 	shouldRoute func(code uint64) bool
 
 	start      sync.Once
-	bulkStart  sync.Once
 	reads      chan routedReadResult
-	bulkReader atomic.Value
+	bulkMu     sync.RWMutex
+	bulkReader *routedBulkLane
+	bulkSeq    uint64
+}
+
+type routedBulkLane struct {
+	id uint64
+	rw MsgReadWriter
 }
 
 func (rw *routedMsgReadWriter) ReadMsg() (Msg, error) {
 	rw.start.Do(func() {
-		go rw.readLoop(rw.primary, true)
+		go rw.readLoop(rw.primary, true, 0)
 	})
 
 	result := <-rw.reads
@@ -84,20 +86,17 @@ func (rw *routedMsgReadWriter) AttachBulk(bulk MsgReadWriter) {
 	if bulk == nil {
 		return
 	}
-	rw.bulkReader.Store(bulk)
-	log.Debug("Attached bulk routed message lane", "reader_type", fmt.Sprintf("%T", bulk))
-	rw.bulkStart.Do(func() {
-		log.Debug("Starting bulk routed message read loop", "reader_type", fmt.Sprintf("%T", bulk))
-		go rw.readLoop(bulk, false)
-	})
+	lane := rw.setBulk(bulk)
+	go rw.readLoop(lane.rw, false, lane.id)
 }
 
 func (rw *routedMsgReadWriter) bulk() (MsgReadWriter, bool) {
-	reader := rw.bulkReader.Load()
-	if reader == nil {
+	rw.bulkMu.RLock()
+	defer rw.bulkMu.RUnlock()
+	if rw.bulkReader == nil {
 		return nil, false
 	}
-	return reader.(MsgReadWriter), true
+	return rw.bulkReader.rw, true
 }
 
 func (rw *routedMsgReadWriter) HasBulk() bool {
@@ -105,10 +104,40 @@ func (rw *routedMsgReadWriter) HasBulk() bool {
 	return ok
 }
 
-func (rw *routedMsgReadWriter) readLoop(reader MsgReader, forwardErr bool) {
-	readerType := fmt.Sprintf("%T", reader)
+func (rw *routedMsgReadWriter) setBulk(bulk MsgReadWriter) *routedBulkLane {
+	rw.bulkMu.Lock()
+	defer rw.bulkMu.Unlock()
+
+	rw.bulkSeq++
+	rw.bulkReader = &routedBulkLane{
+		id: rw.bulkSeq,
+		rw: bulk,
+	}
+	return rw.bulkReader
+}
+
+func (rw *routedMsgReadWriter) isCurrentBulk(id uint64) bool {
+	rw.bulkMu.RLock()
+	defer rw.bulkMu.RUnlock()
+
+	return rw.bulkReader != nil && rw.bulkReader.id == id
+}
+
+func (rw *routedMsgReadWriter) clearBulk(id uint64) {
+	rw.bulkMu.Lock()
+	defer rw.bulkMu.Unlock()
+
+	if rw.bulkReader != nil && rw.bulkReader.id == id {
+		rw.bulkReader = nil
+	}
+}
+
+func (rw *routedMsgReadWriter) readLoop(reader MsgReader, forwardErr bool, bulkID uint64) {
 	for {
 		msg, err := reader.ReadMsg()
+		if !forwardErr && !rw.isCurrentBulk(bulkID) {
+			return
+		}
 		if err == nil {
 			payload, readErr := io.ReadAll(msg.Payload)
 			if readErr != nil {
@@ -118,16 +147,12 @@ func (rw *routedMsgReadWriter) readLoop(reader MsgReader, forwardErr bool) {
 				msg.Payload = bytes.NewReader(payload)
 			}
 		}
-		if err == nil {
-			log.Debug("Routed message read loop received message", "reader_type", readerType, "forward_err", forwardErr, "code", msg.Code, "size", msg.Size)
-		}
 		if err != nil && !forwardErr {
-			log.Debug("Routed bulk read loop exiting", "reader_type", readerType, "err", err)
+			rw.clearBulk(bulkID)
 			return
 		}
 		rw.reads <- routedReadResult{msg: msg, err: err}
 		if err != nil {
-			log.Debug("Routed message read loop exiting", "reader_type", readerType, "forward_err", forwardErr, "err", err)
 			return
 		}
 	}

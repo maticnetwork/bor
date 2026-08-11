@@ -1,6 +1,9 @@
 package p2p
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestRoutedMsgReadWriterRoutesWrites(t *testing.T) {
 	primaryApp, primaryNet := MsgPipe()
@@ -157,5 +160,53 @@ func TestRoutedMsgReadWriterFallsBackToPrimaryWhenBulkWriteFails(t *testing.T) {
 	}
 	if err := <-errc; err != nil {
 		t.Fatalf("send failed after fallback: %v", err)
+	}
+}
+
+func TestRoutedMsgReadWriterRestartsBulkReadsAfterReattach(t *testing.T) {
+	primaryApp, primaryNet := MsgPipe()
+	defer primaryApp.Close()
+	defer primaryNet.Close()
+
+	bulkApp1, bulkNet1 := MsgPipe()
+	routed, ok := NewRoutedMsgReadWriter(primaryNet, bulkNet1, func(code uint64) bool { return code == 2 }).(interface {
+		AttachBulk(MsgReadWriter)
+		ReadMsg() (Msg, error)
+	})
+	if !ok {
+		t.Fatal("expected attachable routed msg read writer")
+	}
+
+	if err := bulkApp1.Close(); err != nil {
+		t.Fatalf("failed to close initial bulk lane: %v", err)
+	}
+	// Allow the first bulk read loop to observe the closed lane and exit.
+	time.Sleep(10 * time.Millisecond)
+	if hasBulk, ok := routed.(interface{ HasBulk() bool }); !ok || hasBulk.HasBulk() {
+		t.Fatal("expected closed bulk lane to be cleared")
+	}
+
+	bulkApp2, bulkNet2 := MsgPipe()
+	defer bulkApp2.Close()
+	defer bulkNet2.Close()
+
+	routed.AttachBulk(bulkNet2)
+
+	errc := make(chan error, 1)
+	go func() { errc <- SendItems(bulkApp2, 2, uint64(22)) }()
+
+	msg, err := routed.ReadMsg()
+	if err != nil {
+		t.Fatalf("failed to read reattached bulk message: %v", err)
+	}
+	var payload []uint64
+	if err := msg.Decode(&payload); err != nil {
+		t.Fatalf("failed to decode reattached bulk payload: %v", err)
+	}
+	if msg.Code != 2 || len(payload) != 1 || payload[0] != 22 {
+		t.Fatalf("unexpected reattached bulk payload: code=%d payload=%v", msg.Code, payload)
+	}
+	if err := <-errc; err != nil {
+		t.Fatalf("send failed on reattached bulk lane: %v", err)
 	}
 }

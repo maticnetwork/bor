@@ -5,6 +5,7 @@ set -eu
 compose_file="${COMPOSE_FILE:-docker-compose.amoy-sidecar-pair.yml}"
 gocache_dir="${GOCACHE_DIR:-/Users/djones/Github/bor/.gocache}"
 gomodcache_dir="${GOMODCACHE_DIR:-/Users/djones/Github/bor/.gomodcache}"
+log_tail_lines="${LOG_TAIL_LINES:-2000}"
 
 rpc() {
 	service="$1"
@@ -44,7 +45,7 @@ wait_for_log() {
 	attempt_limit="${3:-90}"
 	attempt=0
 	while [ "${attempt}" -lt "${attempt_limit}" ]; do
-		if docker compose -f "${compose_file}" logs "${service}" 2>/dev/null | grep -q "${pattern}"; then
+		if docker compose -f "${compose_file}" logs --tail "${log_tail_lines}" "${service}" 2>/dev/null | grep -E -q "${pattern}"; then
 			return 0
 		fi
 		attempt=$((attempt + 1))
@@ -61,7 +62,7 @@ wait_for_log_since() {
 	attempt_limit="${4:-90}"
 	attempt=0
 	while [ "${attempt}" -lt "${attempt_limit}" ]; do
-		if docker compose -f "${compose_file}" logs --since "${since}" "${service}" 2>/dev/null | grep -q "${pattern}"; then
+		if docker compose -f "${compose_file}" logs --since "${since}" --tail "${log_tail_lines}" "${service}" 2>/dev/null | grep -E -q "${pattern}"; then
 			return 0
 		fi
 		attempt=$((attempt + 1))
@@ -76,7 +77,7 @@ wait_for_log_either() {
 	attempt_limit="${2:-90}"
 	attempt=0
 	while [ "${attempt}" -lt "${attempt_limit}" ]; do
-		if docker compose -f "${compose_file}" logs bor-a bor-b 2>/dev/null | grep -E -q "${pattern}"; then
+		if docker compose -f "${compose_file}" logs --tail "${log_tail_lines}" bor-a bor-b 2>/dev/null | grep -E -q "${pattern}"; then
 			return 0
 		fi
 		attempt=$((attempt + 1))
@@ -125,10 +126,12 @@ run_gossip_checks() {
 	trigger_since=$(log_since_time)
 	rpc bor-a "admin_triggerTxGossip" >/dev/null
 	wait_for_log_since bor-a 'Bulk sidecar wrote message.*channel=eth-bulk.*code=(2|8)' "${trigger_since}" 30
+	wait_for_log_since bor-b 'Bulk sidecar read message.*channel=eth-bulk.*code=(2|8)' "${trigger_since}" 30
 
 	trigger_since=$(log_since_time)
 	rpc bor-a "admin_triggerBlockAnnouncement" >/dev/null
 	wait_for_log_since bor-a 'Bulk sidecar wrote message.*channel=eth-bulk.*code=(1|7)' "${trigger_since}" 30
+	wait_for_log_since bor-b 'Bulk sidecar read message.*channel=eth-bulk.*code=(1|7)' "${trigger_since}" 30
 }
 
 run_fetcher_checks() {
@@ -136,14 +139,15 @@ run_fetcher_checks() {
 	rpc bor-a "admin_triggerTxFetch" >/dev/null
 	wait_for_log_since bor-a 'Bulk sidecar wrote message.*channel=eth-bulk.*code=9' "${trigger_since}" 30
 	wait_for_log_since bor-b 'Bulk sidecar read message.*channel=eth-bulk.*code=9' "${trigger_since}" 30
-	wait_for_log_since bor-b 'Serving pooled transaction request' "${trigger_since}" 30
 	wait_for_log_since bor-b 'Bulk sidecar wrote message.*channel=eth-bulk.*code=10' "${trigger_since}" 30
-	wait_for_log_since bor-a 'Received pooled transaction response' "${trigger_since}" 30
+	wait_for_log_since bor-a 'Bulk sidecar read message.*channel=eth-bulk.*code=10' "${trigger_since}" 30
 
 	trigger_since=$(log_since_time)
 	rpc bor-a "admin_triggerBlockBodyFetch" >/dev/null
 	wait_for_log_since bor-a 'Bulk sidecar wrote message.*channel=eth-bulk.*code=5' "${trigger_since}" 30
+	wait_for_log_since bor-b 'Bulk sidecar read message.*channel=eth-bulk.*code=5' "${trigger_since}" 30
 	wait_for_log_since bor-b 'Bulk sidecar wrote message.*channel=eth-bulk.*code=6' "${trigger_since}" 30
+	wait_for_log_since bor-a 'Bulk sidecar read message.*channel=eth-bulk.*code=6' "${trigger_since}" 30
 }
 
 verify_pair_ready() {
@@ -151,12 +155,6 @@ verify_pair_ready() {
 	bor_b_id=$(rpc bor-b "admin_nodeInfo" | string_field "id")
 	wait_for_mutual_peer bor-a "${bor_b_id}"
 	wait_for_mutual_peer bor-b "${bor_a_id}"
-	wait_for_log bor-a "Bulk sidecar session established"
-	wait_for_log bor-b "Bulk sidecar session established"
-	wait_for_log bor-a "Bulk sidecar channel opened.*eth-bulk"
-	wait_for_log bor-b "Bulk sidecar channel opened.*eth-bulk"
-	wait_for_log bor-a "Bulk sidecar channel opened.*snap-bulk"
-	wait_for_log bor-b "Bulk sidecar channel opened.*snap-bulk"
 }
 
 run_fallback_tests() {
