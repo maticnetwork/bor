@@ -17,6 +17,9 @@
 package snap
 
 import (
+	"math/rand"
+	"sync"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
@@ -31,6 +34,9 @@ type Peer struct {
 	version   uint              // Protocol version negotiated
 
 	logger log.Logger // Contextual logger with the peer id injected
+
+	pendingLock sync.Mutex
+	pending     map[uint64]*Request
 }
 
 // NewPeer creates a wrapper for a network connection and negotiated  protocol
@@ -45,6 +51,7 @@ func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter) *Peer {
 		rw:      routed,
 		version: version,
 		logger:  log.New("peer", id[:8]),
+		pending: make(map[uint64]*Request),
 	}
 }
 
@@ -55,6 +62,7 @@ func NewFakePeer(version uint, id string, rw p2p.MsgReadWriter) *Peer {
 		rw:      p2p.NewRoutedMsgReadWriter(rw, nil, isBulkSnapMsg),
 		version: version,
 		logger:  log.New("peer", id[:8]),
+		pending: make(map[uint64]*Request),
 	}
 }
 
@@ -81,6 +89,13 @@ func (p *Peer) AttachBulkRW(rw p2p.MsgReadWriter) {
 		return
 	}
 	p.rw = p2p.NewRoutedMsgReadWriter(p.rw, rw, isBulkSnapMsg)
+}
+
+func (p *Peer) HasBulkRW() bool {
+	if routed, ok := p.rw.(interface{ HasBulk() bool }); ok {
+		return routed.HasBulk()
+	}
+	return false
 }
 
 func isBulkSnapMsg(code uint64) bool {
@@ -163,4 +178,26 @@ func (p *Peer) RequestTrieNodes(id uint64, root common.Hash, paths []TrieNodePat
 		Paths: paths,
 		Bytes: bytes,
 	})
+}
+
+// RequestTrieNodesWithSink fetches trie nodes and delivers the response back to
+// the supplied sink so callers can synchronously validate snap payload traffic.
+func (p *Peer) RequestTrieNodesWithSink(root common.Hash, paths []TrieNodePathSet, bytes uint64, sink chan *Response) (*Request, error) {
+	id := rand.Uint64()
+	req := &Request{
+		id:   id,
+		sink: sink,
+		code: GetTrieNodesMsg,
+		want: TrieNodesMsg,
+		data: &GetTrieNodesPacket{
+			ID:    id,
+			Root:  root,
+			Paths: paths,
+			Bytes: bytes,
+		},
+	}
+	if err := p.dispatchRequest(req); err != nil {
+		return nil, err
+	}
+	return req, nil
 }

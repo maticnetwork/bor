@@ -72,6 +72,19 @@ wait_for_log_since() {
 	return 1
 }
 
+wait_for_channel_open_since() {
+	service="$1"
+	channel="$2"
+	since="$3"
+	wait_for_log_since "${service}" "Bulk sidecar channel opened.*channel=${channel}" "${since}" 90
+}
+
+wait_for_session_since() {
+	service="$1"
+	since="$2"
+	wait_for_log_since "${service}" 'Bulk sidecar session established' "${since}" 90
+}
+
 wait_for_log_either() {
 	pattern="$1"
 	attempt_limit="${2:-90}"
@@ -162,6 +175,15 @@ run_witness_checks() {
 	wait_for_log_since bor-a 'Bulk sidecar read message.*channel=wit-bulk.*code=3' "${trigger_since}" 30
 }
 
+run_snap_checks() {
+	trigger_since=$(log_since_time)
+	rpc bor-a "admin_triggerSnapTrieNodeFetch" >/dev/null
+	wait_for_log_since bor-a 'Bulk sidecar wrote message.*channel=snap-bulk.*code=6' "${trigger_since}" 30
+	wait_for_log_since bor-b 'Bulk sidecar read message.*channel=snap-bulk.*code=6' "${trigger_since}" 30
+	wait_for_log_since bor-b 'Bulk sidecar wrote message.*channel=snap-bulk.*code=7' "${trigger_since}" 30
+	wait_for_log_since bor-a 'Bulk sidecar read message.*channel=snap-bulk.*code=7' "${trigger_since}" 30
+}
+
 run_fetcher_checks() {
 	trigger_since=$(log_since_time)
 	rpc bor-a "admin_triggerTxFetch" >/dev/null
@@ -178,11 +200,41 @@ run_fetcher_checks() {
 	wait_for_log_since bor-a 'Bulk sidecar read message.*channel=eth-bulk.*code=6' "${trigger_since}" 30
 }
 
+run_mixed_checks() {
+	run_gossip_checks
+	run_snap_checks
+	run_witness_checks
+	run_fetcher_checks
+}
+
 verify_pair_ready() {
 	bor_a_id=$(rpc bor-a "admin_nodeInfo" | string_field "id")
 	bor_b_id=$(rpc bor-b "admin_nodeInfo" | string_field "id")
 	wait_for_mutual_peer bor-a "${bor_b_id}"
 	wait_for_mutual_peer bor-b "${bor_a_id}"
+}
+
+wait_for_bulk_channels_since() {
+	since="$1"
+	wait_for_channel_open_since bor-a eth-bulk "${since}"
+	wait_for_channel_open_since bor-b eth-bulk "${since}"
+	wait_for_channel_open_since bor-a snap-bulk "${since}"
+	wait_for_channel_open_since bor-b snap-bulk "${since}"
+	wait_for_channel_open_since bor-a wit-bulk "${since}"
+	wait_for_channel_open_since bor-b wit-bulk "${since}"
+}
+
+recover_peer() {
+	service="${1:-bor-b}"
+	recovery_since=$(log_since_time)
+	docker compose -f "${compose_file}" restart "${service}"
+	wait_for_rpc "${service}"
+	pair_nodes
+	verify_pair_ready
+	wait_for_session_since bor-a "${recovery_since}"
+	wait_for_session_since "${service}" "${recovery_since}"
+	wait_for_bulk_channels_since "${recovery_since}"
+	run_mixed_checks
 }
 
 run_fallback_tests() {
@@ -222,9 +274,7 @@ pair)
 	;;
 check)
 	verify_pair_ready
-	run_gossip_checks
-	run_witness_checks
-	run_fetcher_checks
+	run_mixed_checks
 	echo "amoy sidecar pair check passed"
 	;;
 check-witness)
@@ -242,15 +292,36 @@ soak)
 	iterations="${2:-10}"
 	i=1
 	while [ "${i}" -le "${iterations}" ]; do
-		run_gossip_checks
-		run_witness_checks
-		run_fetcher_checks
+		run_mixed_checks
 		wait_for_mutual_peer bor-a "$(rpc bor-b "admin_nodeInfo" | string_field "id")"
 		wait_for_mutual_peer bor-b "$(rpc bor-a "admin_nodeInfo" | string_field "id")"
 		echo "soak iteration ${i}/${iterations} passed"
 		i=$((i + 1))
 	done
 	echo "amoy sidecar soak passed"
+	;;
+recover)
+	verify_pair_ready
+	recover_peer "${2:-bor-b}"
+	echo "amoy sidecar recovery check passed"
+	;;
+soak-long)
+	verify_pair_ready
+	iterations="${2:-50}"
+	recover_every="${3:-10}"
+	i=1
+	while [ "${i}" -le "${iterations}" ]; do
+		run_mixed_checks
+		wait_for_mutual_peer bor-a "$(rpc bor-b "admin_nodeInfo" | string_field "id")"
+		wait_for_mutual_peer bor-b "$(rpc bor-a "admin_nodeInfo" | string_field "id")"
+		if [ "${recover_every}" -gt 0 ] && [ $((i % recover_every)) -eq 0 ]; then
+			recover_peer bor-b
+			echo "soak-long recovery ${i}/${iterations} passed"
+		fi
+		echo "soak-long iteration ${i}/${iterations} passed"
+		i=$((i + 1))
+	done
+	echo "amoy sidecar long soak passed"
 	;;
 fallback)
 	run_fallback_tests
@@ -261,12 +332,19 @@ measure)
 	echo "tx_gossip_ms=$(measure_trigger bor-a admin_triggerTxGossip bor-a 'Bulk sidecar wrote message.*channel=eth-bulk.*code=(2|8)')"
 	echo "block_announcement_ms=$(measure_trigger bor-a admin_triggerBlockAnnouncement bor-a 'Bulk sidecar wrote message.*channel=eth-bulk.*code=(1|7)')"
 	echo "witness_announcement_ms=$(measure_trigger bor-a admin_triggerWitnessAnnouncement bor-a 'Bulk sidecar wrote message.*channel=wit-bulk.*code=1')"
+	echo "snap_trie_request_ms=$(measure_trigger bor-a admin_triggerSnapTrieNodeFetch bor-a 'Bulk sidecar wrote message.*channel=snap-bulk.*code=6')"
 	seed_result=$(rpc bor-b "admin_seedWitnessForHead")
 	witness_hash=$(printf '%s' "${seed_result}" | string_field "blockHash")
 	if [ -z "${witness_hash}" ]; then
 		echo "failed to seed witness for witness timing capture" >&2
 		exit 1
 	fi
+	trigger_since=$(log_since_time)
+	start_ms=$(now_ms)
+	rpc bor-a "admin_triggerSnapTrieNodeFetch" >/dev/null
+	wait_for_log_since bor-b 'Bulk sidecar wrote message.*channel=snap-bulk.*code=7' "${trigger_since}" 30
+	end_ms=$(now_ms)
+	echo "snap_trie_response_ms=$((end_ms - start_ms))"
 	trigger_since=$(log_since_time)
 	start_ms=$(now_ms)
 	rpc bor-a "admin_triggerWitnessMetadataFetchByHash" "[\"${witness_hash}\"]" >/dev/null
@@ -311,7 +389,7 @@ down)
 	docker compose -f "${compose_file}" down -v
 	;;
 *)
-	echo "usage: $0 {up|pair|check|check-witness|check-fetchers|soak [iterations]|fallback|measure|status|logs|down}" >&2
+	echo "usage: $0 {up|pair|check|check-witness|check-fetchers|soak [iterations]|recover [service]|soak-long [iterations] [recover-every]|fallback|measure|status|logs|down}" >&2
 	exit 1
 	;;
 esac

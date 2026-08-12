@@ -25,6 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	ethproto "github.com/ethereum/go-ethereum/eth/protocols/eth"
+	snapproto "github.com/ethereum/go-ethereum/eth/protocols/snap"
 	witproto "github.com/ethereum/go-ethereum/eth/protocols/wit"
 )
 
@@ -159,6 +160,40 @@ func TestTriggerBlockBodyFetchToPeers(t *testing.T) {
 	}
 	if peerA.requestsClosed != 1 || peerB.requestsClosed != 1 {
 		t.Fatalf("expected requests to close, got peerA=%d peerB=%d", peerA.requestsClosed, peerB.requestsClosed)
+	}
+}
+
+func TestTriggerSnapTrieNodeFetchToPeers(t *testing.T) {
+	t.Parallel()
+
+	root := common.HexToHash("0x99")
+	paths := []snapproto.TrieNodePathSet{{{}}}
+	peerA := &fakeSnapTrieNodeFetchPeer{id: "a", respond: true}
+	peerB := &fakeSnapTrieNodeFetchPeer{id: "b", respond: true}
+
+	if err := triggerSnapTrieNodeFetchToPeers([]snapTrieNodeFetchPeer{peerA, peerB}, root, paths, 4096); err != nil {
+		t.Fatalf("failed to trigger snap trie node fetch: %v", err)
+	}
+	for _, peer := range []*fakeSnapTrieNodeFetchPeer{peerA, peerB} {
+		if len(peer.requests) != 1 {
+			t.Fatalf("peer %s received %d snap requests, want 1", peer.id, len(peer.requests))
+		}
+		if peer.requests[0].root != root {
+			t.Fatalf("peer %s received root %s, want %s", peer.id, peer.requests[0].root, root)
+		}
+		if peer.requests[0].bytes != 4096 {
+			t.Fatalf("peer %s received byte cap %d, want 4096", peer.id, peer.requests[0].bytes)
+		}
+		if len(peer.requests[0].paths) != 1 || len(peer.requests[0].paths[0]) != 1 || len(peer.requests[0].paths[0][0]) != 0 {
+			t.Fatalf("peer %s received unexpected trie paths: %#v", peer.id, peer.requests[0].paths)
+		}
+	}
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for (peerA.responsesAcked != 1 || peerB.responsesAcked != 1) && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if peerA.responsesAcked != 1 || peerB.responsesAcked != 1 {
+		t.Fatalf("expected snap trie node acknowledgements, got peerA=%d peerB=%d", peerA.responsesAcked, peerB.responsesAcked)
 	}
 }
 
@@ -386,6 +421,52 @@ func (p *fakeBlockBodyFetchPeer) RequestBodies(hashes []common.Hash, sink chan *
 		<-req.Cancel
 		p.requestsClosed++
 	}()
+	return req, nil
+}
+
+type fakeSnapTrieNodeFetchPeer struct {
+	id             string
+	err            error
+	respond        bool
+	responsesAcked int
+	requests       []snapTrieNodeRequest
+}
+
+type snapTrieNodeRequest struct {
+	root  common.Hash
+	paths []snapproto.TrieNodePathSet
+	bytes uint64
+}
+
+func (p *fakeSnapTrieNodeFetchPeer) ID() string { return p.id }
+
+func (p *fakeSnapTrieNodeFetchPeer) RequestTrieNodesWithSink(root common.Hash, paths []snapproto.TrieNodePathSet, bytes uint64, sink chan *snapproto.Response) (*snapproto.Request, error) {
+	if p.err != nil {
+		return nil, p.err
+	}
+	copied := make([]snapproto.TrieNodePathSet, len(paths))
+	for i, pathset := range paths {
+		copied[i] = make(snapproto.TrieNodePathSet, len(pathset))
+		for j, path := range pathset {
+			copied[i][j] = append([]byte(nil), path...)
+		}
+	}
+	p.requests = append(p.requests, snapTrieNodeRequest{root: root, paths: copied, bytes: bytes})
+	req := &snapproto.Request{}
+	if p.respond {
+		go func() {
+			done := make(chan error, 1)
+			sink <- &snapproto.Response{
+				Res: &snapproto.TrieNodesPacket{
+					Nodes: [][]byte{{0x01, 0x02}},
+				},
+				Done: done,
+			}
+			if err := <-done; err == nil {
+				p.responsesAcked++
+			}
+		}()
+	}
 	return req, nil
 }
 

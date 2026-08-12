@@ -17,6 +17,8 @@ packaging/docker/amoy-sidecar-pair.sh check
 packaging/docker/amoy-sidecar-pair.sh check-witness
 packaging/docker/amoy-sidecar-pair.sh check-fetchers
 packaging/docker/amoy-sidecar-pair.sh soak 10
+packaging/docker/amoy-sidecar-pair.sh recover
+packaging/docker/amoy-sidecar-pair.sh soak-long 50 10
 packaging/docker/amoy-sidecar-pair.sh fallback
 packaging/docker/amoy-sidecar-pair.sh measure
 packaging/docker/amoy-sidecar-pair.sh status
@@ -37,14 +39,20 @@ What this does:
 - verifies `eth-bulk`, `snap-bulk`, and `wit-bulk` channel bring-up from logs
 - actively triggers tx gossip and block announcements through the local `admin`
   RPC and verifies the resulting `eth-bulk` sidecar message logs
+- actively triggers a deterministic snap trie-node request through the local
+  `admin` RPC and verifies the resulting `snap-bulk` request/response logs
 - actively triggers witness announcements and witness metadata requests through
   the local `admin` RPC and verifies the resulting `wit-bulk` sidecar message logs
 - seeds a deterministic witness on one node and verifies both witness metadata
   fetch and full witness page fetch over `wit-bulk`
 - actively triggers tx fetch and block body fetch requests so fetcher-style bulk
   traffic is also verified on the sidecar
+- restarts one node on demand, waits for devp2p and QUIC sidecar recovery, and
+  reruns the mixed traffic checks so recovery is validated instead of assumed
 - exposes `soak`, `fallback`, and `measure` commands for repeated checks,
   fallback-path verification, and simple timing capture
+- exposes `soak-long` for a heavier soak that injects periodic node restarts
+  during the run
 
 Notes:
 
@@ -59,3 +67,7 @@ Notes:
   write/read failures fall back safely to the primary devp2p lane
 - `measure` prints rough end-to-end timing in milliseconds for the forced
   sidecar checks so you can compare behavior across builds or environments
+- `recover` defaults to restarting `bor-b`; pass `bor-a` or `bor-b` explicitly
+  if you want to choose which side is bounced
+- `soak-long 50 10` runs 50 mixed-check iterations and restarts `bor-b` every
+  10 iterations to confirm the sidecar keeps recovering under repeated churn

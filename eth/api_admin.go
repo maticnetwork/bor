@@ -36,6 +36,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	ethproto "github.com/ethereum/go-ethereum/eth/protocols/eth"
+	snapproto "github.com/ethereum/go-ethereum/eth/protocols/snap"
 	witproto "github.com/ethereum/go-ethereum/eth/protocols/wit"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
@@ -195,7 +196,13 @@ type witnessMetadataFetchPeer interface {
 	RequestWitnessMetadata(hashes []common.Hash, sink chan *witproto.Response) (*witproto.Request, error)
 }
 
+type snapTrieNodeFetchPeer interface {
+	ID() string
+	RequestTrieNodesWithSink(root common.Hash, paths []snapproto.TrieNodePathSet, bytes uint64, sink chan *snapproto.Response) (*snapproto.Request, error)
+}
+
 const triggerBodyFetchResponseTimeout = 2 * time.Second
+const triggerSnapTrieNodeTimeout = 5 * time.Second
 const triggerWitnessMetadataTimeout = 5 * time.Second
 const triggerWitnessFetchTimeout = 5 * time.Second
 
@@ -286,6 +293,30 @@ func (api *AdminAPI) TriggerBlockBodyFetch(peerID *string) (*TrafficTriggerResul
 		PeerCount: len(peers),
 		PeerIDs:   peerIDs(peers),
 		BlockHash: hashes[0],
+	}, nil
+}
+
+// TriggerSnapTrieNodeFetch injects a deterministic trie-node request for the
+// current head state root onto connected snap peers.
+func (api *AdminAPI) TriggerSnapTrieNodeFetch(peerID *string) (*TrafficTriggerResult, error) {
+	peers, err := api.targetSnapPeers(peerID)
+	if err != nil {
+		return nil, err
+	}
+	head := api.eth.BlockChain().CurrentBlock()
+	if head == nil {
+		return nil, errors.New("current head unavailable")
+	}
+	root := head.Root
+	paths := []snapproto.TrieNodePathSet{{{}}}
+	if err := triggerSnapTrieNodeFetchToPeers(asSnapTrieNodeFetchPeers(peers), root, paths, 4096); err != nil {
+		return nil, err
+	}
+	return &TrafficTriggerResult{
+		PeerCount:   len(peers),
+		PeerIDs:     peerIDs(peers),
+		BlockHash:   head.Hash(),
+		BlockNumber: head.Number.Uint64(),
 	}, nil
 }
 
@@ -433,6 +464,27 @@ func (api *AdminAPI) targetWitnessPeers(peerID *string, requireMetadata bool) ([
 			return nil, errors.New("no connected wit peers support metadata requests")
 		}
 		return nil, errors.New("no connected wit peers")
+	}
+	if peerID == nil {
+		filtered, selection := selectTriggerPeers(filtered)
+		api.logTriggerTargets(selection, filtered)
+	}
+	return filtered, nil
+}
+
+func (api *AdminAPI) targetSnapPeers(peerID *string) ([]*ethPeer, error) {
+	peers, err := api.targetEthPeers(peerID)
+	if err != nil {
+		return nil, err
+	}
+	filtered := make([]*ethPeer, 0, len(peers))
+	for _, peer := range peers {
+		if peer.snapExt != nil {
+			filtered = append(filtered, peer)
+		}
+	}
+	if len(filtered) == 0 {
+		return nil, errors.New("no connected snap peers")
 	}
 	if peerID == nil {
 		filtered, selection := selectTriggerPeers(filtered)
@@ -621,6 +673,14 @@ func asBlockBodyFetchPeers(peers []*ethPeer) []blockBodyFetchPeer {
 	return out
 }
 
+func asSnapTrieNodeFetchPeers(peers []*ethPeer) []snapTrieNodeFetchPeer {
+	out := make([]snapTrieNodeFetchPeer, 0, len(peers))
+	for _, peer := range peers {
+		out = append(out, peer.snapExt.Peer)
+	}
+	return out
+}
+
 func asWitnessAnnouncementPeers(peers []*ethPeer) []witnessAnnouncementPeer {
 	out := make([]witnessAnnouncementPeer, 0, len(peers))
 	for _, peer := range peers {
@@ -691,6 +751,22 @@ func triggerBlockBodyFetchToPeers(peers []blockBodyFetchPeer, hashes []common.Ha
 	return nil
 }
 
+func triggerSnapTrieNodeFetchToPeers(peers []snapTrieNodeFetchPeer, root common.Hash, paths []snapproto.TrieNodePathSet, bytes uint64) error {
+	for _, peer := range peers {
+		sink := make(chan *snapproto.Response, 1)
+		req, err := peer.RequestTrieNodesWithSink(root, paths, bytes, sink)
+		if err != nil {
+			return fmt.Errorf("request snap trie nodes from peer %s: %w", peer.ID(), err)
+		}
+		if req != nil {
+			if err := waitForSnapTrieNodeResponse(req, sink); err != nil {
+				return fmt.Errorf("await snap trie node response from peer %s: %w", peer.ID(), err)
+			}
+		}
+	}
+	return nil
+}
+
 func triggerWitnessAnnouncementToPeers(peers []witnessAnnouncementPeer, hash common.Hash, number uint64) {
 	for _, peer := range peers {
 		peer.AsyncSendNewWitnessHash(hash, number)
@@ -740,6 +816,35 @@ func waitForBodyFetchResponse(req *ethproto.Request, sink <-chan *ethproto.Respo
 			res.Done <- nil
 		}
 	case <-time.After(triggerBodyFetchResponseTimeout):
+	}
+}
+
+func waitForSnapTrieNodeResponse(req *snapproto.Request, sink <-chan *snapproto.Response) error {
+	defer func() {
+		_ = req.Close()
+	}()
+
+	select {
+	case res := <-sink:
+		if res == nil {
+			return errors.New("nil snap trie node response")
+		}
+		packet, ok := res.Res.(*snapproto.TrieNodesPacket)
+		if !ok {
+			return fmt.Errorf("unexpected snap trie node response type %T", res.Res)
+		}
+		if len(packet.Nodes) == 0 {
+			if res.Done != nil {
+				res.Done <- nil
+			}
+			return errors.New("snap trie node response contained no nodes")
+		}
+		if res.Done != nil {
+			res.Done <- nil
+		}
+		return nil
+	case <-time.After(triggerSnapTrieNodeTimeout):
+		return errors.New("snap trie node response timeout")
 	}
 }
 
