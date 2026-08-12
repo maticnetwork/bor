@@ -18,7 +18,9 @@ package p2p
 
 import (
 	"bytes"
+	"errors"
 	"io"
+	"net"
 	"sync"
 )
 
@@ -76,6 +78,8 @@ func (rw *routedMsgReadWriter) WriteMsg(msg Msg) error {
 		if bulk, ok := rw.bulk(); ok {
 			if err := bulk.WriteMsg(msg); err == nil {
 				return nil
+			} else {
+				bulkSidecarWriteFallbackMeter.Mark(1)
 			}
 		}
 	}
@@ -148,6 +152,11 @@ func (rw *routedMsgReadWriter) readLoop(reader MsgReader, forwardErr bool, bulkI
 			}
 		}
 		if err != nil && !forwardErr {
+			if isTimeoutError(err) {
+				bulkSidecarReadTimeoutMeter.Mark(1)
+				continue
+			}
+			bulkSidecarReadErrorMeter.Mark(1)
 			rw.clearBulk(bulkID)
 			return
 		}
@@ -156,4 +165,9 @@ func (rw *routedMsgReadWriter) readLoop(reader MsgReader, forwardErr bool, bulkI
 			return
 		}
 	}
+}
+
+func isTimeoutError(err error) bool {
+	var timeoutErr net.Error
+	return errors.As(err, &timeoutErr) && timeoutErr.Timeout()
 }

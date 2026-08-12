@@ -134,6 +134,34 @@ run_gossip_checks() {
 	wait_for_log_since bor-b 'Bulk sidecar read message.*channel=eth-bulk.*code=(1|7)' "${trigger_since}" 30
 }
 
+run_witness_checks() {
+	trigger_since=$(log_since_time)
+	rpc bor-a "admin_triggerWitnessAnnouncement" >/dev/null
+	wait_for_log_since bor-a 'Bulk sidecar wrote message.*channel=wit-bulk.*code=1' "${trigger_since}" 30
+	wait_for_log_since bor-b 'Bulk sidecar read message.*channel=wit-bulk.*code=1' "${trigger_since}" 30
+
+	seed_result=$(rpc bor-b "admin_seedWitnessForHead")
+	witness_hash=$(printf '%s' "${seed_result}" | string_field "blockHash")
+	if [ -z "${witness_hash}" ]; then
+		echo "failed to seed witness for deterministic fetch" >&2
+		return 1
+	fi
+
+	trigger_since=$(log_since_time)
+	rpc bor-a "admin_triggerWitnessMetadataFetchByHash" "[\"${witness_hash}\"]" >/dev/null
+	wait_for_log_since bor-a 'Bulk sidecar wrote message.*channel=wit-bulk.*code=4' "${trigger_since}" 30
+	wait_for_log_since bor-b 'Bulk sidecar read message.*channel=wit-bulk.*code=4' "${trigger_since}" 30
+	wait_for_log_since bor-b 'Bulk sidecar wrote message.*channel=wit-bulk.*code=5' "${trigger_since}" 30
+	wait_for_log_since bor-a 'Bulk sidecar read message.*channel=wit-bulk.*code=5' "${trigger_since}" 30
+
+	trigger_since=$(log_since_time)
+	rpc bor-a "admin_triggerWitnessFetchByHash" "[\"${witness_hash}\"]" >/dev/null
+	wait_for_log_since bor-a 'Bulk sidecar wrote message.*channel=wit-bulk.*code=2' "${trigger_since}" 30
+	wait_for_log_since bor-b 'Bulk sidecar read message.*channel=wit-bulk.*code=2' "${trigger_since}" 30
+	wait_for_log_since bor-b 'Bulk sidecar wrote message.*channel=wit-bulk.*code=3' "${trigger_since}" 30
+	wait_for_log_since bor-a 'Bulk sidecar read message.*channel=wit-bulk.*code=3' "${trigger_since}" 30
+}
+
 run_fetcher_checks() {
 	trigger_since=$(log_since_time)
 	rpc bor-a "admin_triggerTxFetch" >/dev/null
@@ -195,8 +223,14 @@ pair)
 check)
 	verify_pair_ready
 	run_gossip_checks
+	run_witness_checks
 	run_fetcher_checks
 	echo "amoy sidecar pair check passed"
+	;;
+check-witness)
+	verify_pair_ready
+	run_witness_checks
+	echo "amoy sidecar witness check passed"
 	;;
 check-fetchers)
 	verify_pair_ready
@@ -209,6 +243,7 @@ soak)
 	i=1
 	while [ "${i}" -le "${iterations}" ]; do
 		run_gossip_checks
+		run_witness_checks
 		run_fetcher_checks
 		wait_for_mutual_peer bor-a "$(rpc bor-b "admin_nodeInfo" | string_field "id")"
 		wait_for_mutual_peer bor-b "$(rpc bor-a "admin_nodeInfo" | string_field "id")"
@@ -225,6 +260,19 @@ measure)
 	verify_pair_ready
 	echo "tx_gossip_ms=$(measure_trigger bor-a admin_triggerTxGossip bor-a 'Bulk sidecar wrote message.*channel=eth-bulk.*code=(2|8)')"
 	echo "block_announcement_ms=$(measure_trigger bor-a admin_triggerBlockAnnouncement bor-a 'Bulk sidecar wrote message.*channel=eth-bulk.*code=(1|7)')"
+	echo "witness_announcement_ms=$(measure_trigger bor-a admin_triggerWitnessAnnouncement bor-a 'Bulk sidecar wrote message.*channel=wit-bulk.*code=1')"
+	seed_result=$(rpc bor-b "admin_seedWitnessForHead")
+	witness_hash=$(printf '%s' "${seed_result}" | string_field "blockHash")
+	if [ -z "${witness_hash}" ]; then
+		echo "failed to seed witness for witness timing capture" >&2
+		exit 1
+	fi
+	trigger_since=$(log_since_time)
+	start_ms=$(now_ms)
+	rpc bor-a "admin_triggerWitnessMetadataFetchByHash" "[\"${witness_hash}\"]" >/dev/null
+	wait_for_log_since bor-a 'Bulk sidecar wrote message.*channel=wit-bulk.*code=4' "${trigger_since}" 30
+	end_ms=$(now_ms)
+	echo "witness_metadata_request_ms=$((end_ms - start_ms))"
 	echo "tx_fetch_request_ms=$(measure_trigger bor-a admin_triggerTxFetch bor-a 'Bulk sidecar wrote message.*channel=eth-bulk.*code=9')"
 	echo "block_body_request_ms=$(measure_trigger bor-a admin_triggerBlockBodyFetch bor-a 'Bulk sidecar wrote message.*channel=eth-bulk.*code=5')"
 	trigger_since=$(log_since_time)
@@ -233,6 +281,24 @@ measure)
 	wait_for_log_since bor-b 'Bulk sidecar wrote message.*channel=eth-bulk.*code=6' "${trigger_since}" 30
 	end_ms=$(now_ms)
 	echo "block_body_response_ms=$((end_ms - start_ms))"
+	trigger_since=$(log_since_time)
+	start_ms=$(now_ms)
+	rpc bor-a "admin_triggerWitnessMetadataFetchByHash" "[\"${witness_hash}\"]" >/dev/null
+	wait_for_log_since bor-b 'Bulk sidecar wrote message.*channel=wit-bulk.*code=5' "${trigger_since}" 30
+	end_ms=$(now_ms)
+	echo "witness_metadata_response_ms=$((end_ms - start_ms))"
+	trigger_since=$(log_since_time)
+	start_ms=$(now_ms)
+	rpc bor-a "admin_triggerWitnessFetchByHash" "[\"${witness_hash}\"]" >/dev/null
+	wait_for_log_since bor-a 'Bulk sidecar wrote message.*channel=wit-bulk.*code=2' "${trigger_since}" 30
+	end_ms=$(now_ms)
+	echo "witness_fetch_request_ms=$((end_ms - start_ms))"
+	trigger_since=$(log_since_time)
+	start_ms=$(now_ms)
+	rpc bor-a "admin_triggerWitnessFetchByHash" "[\"${witness_hash}\"]" >/dev/null
+	wait_for_log_since bor-b 'Bulk sidecar wrote message.*channel=wit-bulk.*code=3' "${trigger_since}" 30
+	end_ms=$(now_ms)
+	echo "witness_fetch_response_ms=$((end_ms - start_ms))"
 	;;
 status)
 	echo "bor-a peer count: $(hex_result "$(rpc bor-a "net_peerCount")")"
@@ -245,7 +311,7 @@ down)
 	docker compose -f "${compose_file}" down -v
 	;;
 *)
-	echo "usage: $0 {up|pair|check|check-fetchers|soak [iterations]|fallback|measure|status|logs|down}" >&2
+	echo "usage: $0 {up|pair|check|check-witness|check-fetchers|soak [iterations]|fallback|measure|status|logs|down}" >&2
 	exit 1
 	;;
 esac

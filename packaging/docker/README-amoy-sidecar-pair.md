@@ -14,6 +14,7 @@ Usage:
 ```bash
 packaging/docker/amoy-sidecar-pair.sh up
 packaging/docker/amoy-sidecar-pair.sh check
+packaging/docker/amoy-sidecar-pair.sh check-witness
 packaging/docker/amoy-sidecar-pair.sh check-fetchers
 packaging/docker/amoy-sidecar-pair.sh soak 10
 packaging/docker/amoy-sidecar-pair.sh fallback
@@ -33,9 +34,13 @@ What this does:
 - starts two sidecar-enabled Bor nodes on Amoy
 - assigns stable nodekeys and stable container IPs
 - pairs the nodes with `admin_addPeer` using full ENRs so QUIC metadata is preserved
-- verifies `eth-bulk` and `snap-bulk` channels from logs
+- verifies `eth-bulk`, `snap-bulk`, and `wit-bulk` channel bring-up from logs
 - actively triggers tx gossip and block announcements through the local `admin`
   RPC and verifies the resulting `eth-bulk` sidecar message logs
+- actively triggers witness announcements and witness metadata requests through
+  the local `admin` RPC and verifies the resulting `wit-bulk` sidecar message logs
+- seeds a deterministic witness on one node and verifies both witness metadata
+  fetch and full witness page fetch over `wit-bulk`
 - actively triggers tx fetch and block body fetch requests so fetcher-style bulk
   traffic is also verified on the sidecar
 - exposes `soak`, `fallback`, and `measure` commands for repeated checks,

@@ -25,6 +25,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	ethproto "github.com/ethereum/go-ethereum/eth/protocols/eth"
+	witproto "github.com/ethereum/go-ethereum/eth/protocols/wit"
 )
 
 func TestTriggerTxGossipToPeers(t *testing.T) {
@@ -161,6 +162,97 @@ func TestTriggerBlockBodyFetchToPeers(t *testing.T) {
 	}
 }
 
+func TestTriggerWitnessAnnouncementToPeers(t *testing.T) {
+	t.Parallel()
+
+	hash := common.HexToHash("0x55")
+	number := uint64(44)
+	peerA := &fakeWitnessAnnouncementPeer{id: "a"}
+	peerB := &fakeWitnessAnnouncementPeer{id: "b"}
+
+	triggerWitnessAnnouncementToPeers([]witnessAnnouncementPeer{peerA, peerB}, hash, number)
+
+	for _, peer := range []*fakeWitnessAnnouncementPeer{peerA, peerB} {
+		if len(peer.hashes) != 1 || peer.hashes[0] != hash {
+			t.Fatalf("peer %s received unexpected witness hashes: %+v", peer.id, peer.hashes)
+		}
+		if len(peer.numbers) != 1 || peer.numbers[0] != number {
+			t.Fatalf("peer %s received unexpected witness numbers: %+v", peer.id, peer.numbers)
+		}
+	}
+}
+
+func TestTriggerWitnessMetadataFetchToPeers(t *testing.T) {
+	t.Parallel()
+
+	hash := common.HexToHash("0x77")
+	peerA := &fakeWitnessMetadataFetchPeer{id: "a", respond: true, available: true}
+	peerB := &fakeWitnessMetadataFetchPeer{id: "b", respond: true, available: true}
+
+	if err := triggerWitnessMetadataFetchToPeers([]witnessMetadataFetchPeer{peerA, peerB}, hash, true); err != nil {
+		t.Fatalf("failed to trigger witness metadata fetch: %v", err)
+	}
+	if len(peerA.hashes) != 1 || len(peerA.hashes[0]) != 1 || peerA.hashes[0][0] != hash {
+		t.Fatalf("unexpected witness metadata request for peerA: %+v", peerA.hashes)
+	}
+	if len(peerB.hashes) != 1 || len(peerB.hashes[0]) != 1 || peerB.hashes[0][0] != hash {
+		t.Fatalf("unexpected witness metadata request for peerB: %+v", peerB.hashes)
+	}
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for (peerA.responsesAcked != 1 || peerB.responsesAcked != 1) && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if peerA.responsesAcked != 1 || peerB.responsesAcked != 1 {
+		t.Fatalf("expected witness metadata acknowledgements, got peerA=%d peerB=%d", peerA.responsesAcked, peerB.responsesAcked)
+	}
+}
+
+func TestSeedWitnessForHead(t *testing.T) {
+	t.Parallel()
+
+	handler := newTestHandlerWithBlocks(1)
+	defer handler.close()
+
+	api := NewAdminAPI(&Ethereum{blockchain: handler.chain, handler: handler.handler})
+	res, err := api.SeedWitnessForHead()
+	if err != nil {
+		t.Fatalf("failed to seed witness: %v", err)
+	}
+	if res.BlockHash == (common.Hash{}) {
+		t.Fatal("expected seeded witness hash")
+	}
+	if !handler.chain.HasWitness(res.BlockHash) {
+		t.Fatalf("expected witness store to contain %s", res.BlockHash)
+	}
+}
+
+func TestTriggerWitnessFetchToPeers(t *testing.T) {
+	t.Parallel()
+
+	hash := common.HexToHash("0x88")
+	peerA := &fakeWitnessFetchPeer{id: "a", respond: true}
+	peerB := &fakeWitnessFetchPeer{id: "b", respond: true}
+
+	if err := triggerWitnessFetchToPeers([]witnessFetchPeer{peerA, peerB}, hash); err != nil {
+		t.Fatalf("failed to trigger witness fetch: %v", err)
+	}
+	for _, peer := range []*fakeWitnessFetchPeer{peerA, peerB} {
+		if len(peer.requests) != 1 || len(peer.requests[0]) != 1 {
+			t.Fatalf("peer %s received unexpected witness requests: %+v", peer.id, peer.requests)
+		}
+		if peer.requests[0][0].Hash != hash || peer.requests[0][0].Page != 0 {
+			t.Fatalf("peer %s received unexpected witness page request: %+v", peer.id, peer.requests[0][0])
+		}
+	}
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for (peerA.responsesAcked != 1 || peerB.responsesAcked != 1) && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if peerA.responsesAcked != 1 || peerB.responsesAcked != 1 {
+		t.Fatalf("expected witness fetch acknowledgements, got peerA=%d peerB=%d", peerA.responsesAcked, peerB.responsesAcked)
+	}
+}
+
 func TestSelectTriggerPeersPrefersPrivateBulkPeers(t *testing.T) {
 	t.Parallel()
 
@@ -294,6 +386,94 @@ func (p *fakeBlockBodyFetchPeer) RequestBodies(hashes []common.Hash, sink chan *
 		<-req.Cancel
 		p.requestsClosed++
 	}()
+	return req, nil
+}
+
+type fakeWitnessAnnouncementPeer struct {
+	id      string
+	hashes  []common.Hash
+	numbers []uint64
+}
+
+func (p *fakeWitnessAnnouncementPeer) ID() string { return p.id }
+
+func (p *fakeWitnessAnnouncementPeer) AsyncSendNewWitnessHash(hash common.Hash, number uint64) {
+	p.hashes = append(p.hashes, hash)
+	p.numbers = append(p.numbers, number)
+}
+
+type fakeWitnessMetadataFetchPeer struct {
+	id             string
+	hashes         [][]common.Hash
+	err            error
+	respond        bool
+	responsesAcked int
+	available      bool
+}
+
+func (p *fakeWitnessMetadataFetchPeer) ID() string { return p.id }
+
+func (p *fakeWitnessMetadataFetchPeer) RequestWitnessMetadata(hashes []common.Hash, sink chan *witproto.Response) (*witproto.Request, error) {
+	if p.err != nil {
+		return nil, p.err
+	}
+	p.hashes = append(p.hashes, append([]common.Hash(nil), hashes...))
+	req := &witproto.Request{}
+	if p.respond {
+		go func() {
+			done := make(chan error, 1)
+			sink <- &witproto.Response{
+				Res: &witproto.WitnessMetadataPacket{
+					Metadata: []witproto.WitnessMetadataResponse{{
+						Hash:      hashes[0],
+						Available: p.available,
+					}},
+				},
+				Done: done,
+			}
+			if err := <-done; err == nil {
+				p.responsesAcked++
+			}
+		}()
+	}
+	return req, nil
+}
+
+type fakeWitnessFetchPeer struct {
+	id             string
+	requests       [][]witproto.WitnessPageRequest
+	err            error
+	respond        bool
+	responsesAcked int
+}
+
+func (p *fakeWitnessFetchPeer) ID() string { return p.id }
+
+func (p *fakeWitnessFetchPeer) RequestWitness(witnessPages []witproto.WitnessPageRequest, sink chan *witproto.Response) (*witproto.Request, error) {
+	if p.err != nil {
+		return nil, p.err
+	}
+	p.requests = append(p.requests, append([]witproto.WitnessPageRequest(nil), witnessPages...))
+	req := &witproto.Request{}
+	if p.respond {
+		go func() {
+			done := make(chan error, 1)
+			sink <- &witproto.Response{
+				Res: &witproto.WitnessPacketRLPPacket{
+					WitnessPacketResponse: []witproto.WitnessPageResponse{{
+						Hash:       witnessPages[0].Hash,
+						Page:       witnessPages[0].Page,
+						TotalPages: 1,
+						Data:       []byte{0x01, 0x02, 0x03},
+					}},
+				},
+				Done: done,
+			}
+			if err := <-done; err == nil {
+				p.responsesAcked++
+			}
+		}()
+	}
 	return req, nil
 }
 

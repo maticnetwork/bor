@@ -526,6 +526,7 @@ func (s *bulkSession) ensureConn(ctx context.Context) (*quic.Conn, error) {
 		s.conn = conn
 		s.connClosed = conn.Context().Done()
 		s.channels = make(map[string]MsgReadWriter)
+		bulkSidecarSessionMeter.Mark(1)
 		s.sidecar.log.Debug("Bulk sidecar session established", "peer", s.remoteID, "remote", conn.RemoteAddr())
 		go s.sidecar.runConn(s.remoteID, conn)
 		return conn, nil
@@ -611,15 +612,17 @@ func (s *bulkSession) waitChannel(ctx context.Context, channel string) (MsgReadW
 
 func (s *bulkSession) storeChannel(channel string, rw MsgReadWriter) {
 	s.lock.Lock()
-	if _, exists := s.channels[channel]; exists {
-		s.lock.Unlock()
-		return
-	}
+	_, exists := s.channels[channel]
 	s.channels[channel] = rw
 	waiters := s.waiters[channel]
 	delete(s.waiters, channel)
 	s.lock.Unlock()
 
+	if exists {
+		bulkSidecarChannelReplaceMeter.Mark(1)
+	} else {
+		bulkSidecarChannelOpenMeter.Mark(1)
+	}
 	s.sidecar.log.Debug("Bulk sidecar channel opened", "peer", s.remoteID, "channel", channel)
 
 	for _, waiter := range waiters {

@@ -98,5 +98,7 @@ wait_for_log bor-a "Bulk sidecar channel opened.*eth-bulk"
 wait_for_log bor-b "Bulk sidecar channel opened.*eth-bulk"
 wait_for_log bor-a "Bulk sidecar channel opened.*snap-bulk"
 wait_for_log bor-b "Bulk sidecar channel opened.*snap-bulk"
+wait_for_log bor-a "Bulk sidecar channel opened.*wit-bulk"
+wait_for_log bor-b "Bulk sidecar channel opened.*wit-bulk"
 
 echo "bulk sidecar docker test passed"

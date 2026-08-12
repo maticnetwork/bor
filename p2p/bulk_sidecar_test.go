@@ -12,6 +12,32 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enr"
 )
 
+func TestBulkSessionStoreChannelReplacesExistingLane(t *testing.T) {
+	session := &bulkSession{
+		sidecar: &BulkSidecar{log: log.New()},
+		remoteID: enode.ID{0x01},
+		channels: make(map[string]MsgReadWriter),
+		waiters:  make(map[string][]chan bulkChannelResult),
+	}
+	firstApp, firstNet := MsgPipe()
+	defer firstApp.Close()
+	defer firstNet.Close()
+	secondApp, secondNet := MsgPipe()
+	defer secondApp.Close()
+	defer secondNet.Close()
+
+	session.storeChannel("eth-bulk", firstNet)
+	session.storeChannel("eth-bulk", secondNet)
+
+	got, ok := session.getChannel("eth-bulk")
+	if !ok {
+		t.Fatal("expected stored bulk channel")
+	}
+	if got != secondNet {
+		t.Fatal("expected latest bulk channel to replace the previous lane")
+	}
+}
+
 type TestGetPooledTransactionsRequest []common.Hash
 
 type testGetPooledTransactionsPacket struct {

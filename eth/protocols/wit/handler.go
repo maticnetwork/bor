@@ -52,7 +52,6 @@ func MakeProtocols(backend Backend, network uint64) []p2p.Protocol {
 			Version: version,
 			Length:  protocolLengths[version],
 			Run: func(p *p2p.Peer, rw p2p.MsgReadWriter) error {
-				log.Debug("witness Run", "peer", p)
 				peer := NewPeer(version, p, rw, log.New())
 				defer peer.Close()
 				return backend.RunPeer(peer, func(peer *Peer) error {
@@ -149,7 +148,6 @@ var wit2 = map[uint64]msgHandler{
 func handleMessage(backend Backend, peer *Peer) error {
 	// Read the next message from the remote peer, and ensure it's fully consumed
 	msg, err := peer.rw.ReadMsg()
-	log.Debug("witness handleMessage", "msg", msg, "err", err)
 	if err != nil {
 		return err
 	}

@@ -54,10 +54,11 @@ type Peer struct {
 // NewPeer creates a new WIT peer and starts its background processes.
 func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter, logger log.Logger) *Peer {
 	id := p.ID().String()
+	routed := p2p.NewRoutedMsgReadWriter(rw, nil, isBulkWitMsg)
 	peer := &Peer{
 		id:                id,
 		Peer:              p,
-		rw:                rw,
+		rw:                routed,
 		version:           version,
 		logger:            logger.With("peer", id),
 		knownWitnesses:    newKnownCache(maxKnownWitnesses),
@@ -77,6 +78,37 @@ func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter, logger log.Logger)
 	go peer.dispatcher()
 
 	return peer
+}
+
+// AttachBulkRW installs an auxiliary sidecar lane for the negotiated wit
+// protocol. When unavailable, traffic falls back to the primary devp2p lane.
+func (p *Peer) AttachBulkRW(rw p2p.MsgReadWriter) {
+	if routed, ok := p.rw.(interface{ AttachBulk(p2p.MsgReadWriter) }); ok {
+		routed.AttachBulk(rw)
+		return
+	}
+	p.rw = p2p.NewRoutedMsgReadWriter(p.rw, rw, isBulkWitMsg)
+}
+
+func (p *Peer) HasBulkRW() bool {
+	if routed, ok := p.rw.(interface{ HasBulk() bool }); ok {
+		return routed.HasBulk()
+	}
+	return false
+}
+
+func isBulkWitMsg(code uint64) bool {
+	switch code {
+	case NewWitnessMsg,
+		NewWitnessHashesMsg,
+		GetMsgWitness,
+		MsgWitness,
+		GetWitnessMetadataMsg,
+		WitnessMetadataMsg:
+		return true
+	default:
+		return false
+	}
 }
 
 // sendWitness sends witness to the peer

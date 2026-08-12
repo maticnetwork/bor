@@ -1,9 +1,35 @@
 package p2p
 
 import (
+	"bytes"
+	"io"
 	"testing"
 	"time"
 )
+
+type timeoutErr struct{}
+
+func (timeoutErr) Error() string   { return "timeout" }
+func (timeoutErr) Timeout() bool   { return true }
+func (timeoutErr) Temporary() bool { return true }
+
+type scriptedMsgRW struct {
+	results chan scriptedResult
+}
+
+type scriptedResult struct {
+	msg Msg
+	err error
+}
+
+func (rw *scriptedMsgRW) ReadMsg() (Msg, error) {
+	result := <-rw.results
+	return result.msg, result.err
+}
+
+func (rw *scriptedMsgRW) WriteMsg(msg Msg) error {
+	return nil
+}
 
 func TestRoutedMsgReadWriterRoutesWrites(t *testing.T) {
 	primaryApp, primaryNet := MsgPipe()
@@ -208,5 +234,45 @@ func TestRoutedMsgReadWriterRestartsBulkReadsAfterReattach(t *testing.T) {
 	}
 	if err := <-errc; err != nil {
 		t.Fatalf("send failed on reattached bulk lane: %v", err)
+	}
+}
+
+func TestRoutedMsgReadWriterIgnoresBulkReadTimeouts(t *testing.T) {
+	primaryApp, primaryNet := MsgPipe()
+	defer primaryApp.Close()
+	defer primaryNet.Close()
+
+	bulk := &scriptedMsgRW{
+		results: make(chan scriptedResult, 2),
+	}
+	routed, ok := NewRoutedMsgReadWriter(primaryNet, bulk, func(code uint64) bool { return code == 2 }).(interface {
+		HasBulk() bool
+		ReadMsg() (Msg, error)
+	})
+	if !ok {
+		t.Fatal("expected attachable routed msg read writer")
+	}
+
+	bulk.results <- scriptedResult{err: timeoutErr{}}
+	bulk.results <- scriptedResult{
+		msg: Msg{
+			Code:    2,
+			Size:    1,
+			Payload: io.NopCloser(bytes.NewReader([]byte{0xc0})),
+		},
+	}
+
+	msg, err := routed.ReadMsg()
+	if err != nil {
+		t.Fatalf("unexpected read failure after timeout: %v", err)
+	}
+	if msg.Code != 2 {
+		t.Fatalf("unexpected message code after timeout recovery: got %d want 2", msg.Code)
+	}
+	if err := msg.Discard(); err != nil {
+		t.Fatalf("failed to discard recovered bulk message: %v", err)
+	}
+	if !routed.HasBulk() {
+		t.Fatal("expected bulk lane to remain attached after timeout")
 	}
 }

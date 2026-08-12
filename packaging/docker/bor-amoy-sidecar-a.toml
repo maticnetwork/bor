@@ -35,5 +35,8 @@ verbosity = 5
     api = ["eth", "net", "web3"]
     origins = ["*"]
 
+[witness]
+  enable = true
+
 [telemetry]
   metrics = true

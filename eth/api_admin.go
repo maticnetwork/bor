@@ -17,6 +17,7 @@
 package eth
 
 import (
+	"bytes"
 	"compress/gzip"
 	"crypto/rand"
 	"errors"
@@ -31,9 +32,11 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	ethproto "github.com/ethereum/go-ethereum/eth/protocols/eth"
+	witproto "github.com/ethereum/go-ethereum/eth/protocols/wit"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -182,7 +185,19 @@ type blockBodyFetchPeer interface {
 	RequestBodies([]common.Hash, chan *ethproto.Response) (*ethproto.Request, error)
 }
 
+type witnessAnnouncementPeer interface {
+	ID() string
+	AsyncSendNewWitnessHash(hash common.Hash, number uint64)
+}
+
+type witnessMetadataFetchPeer interface {
+	ID() string
+	RequestWitnessMetadata(hashes []common.Hash, sink chan *witproto.Response) (*witproto.Request, error)
+}
+
 const triggerBodyFetchResponseTimeout = 2 * time.Second
+const triggerWitnessMetadataTimeout = 5 * time.Second
+const triggerWitnessFetchTimeout = 5 * time.Second
 
 // TriggerTxGossip injects a synthetic transaction directly onto connected eth
 // peers. This is intended for operator testing of peer propagation paths.
@@ -274,6 +289,109 @@ func (api *AdminAPI) TriggerBlockBodyFetch(peerID *string) (*TrafficTriggerResul
 	}, nil
 }
 
+// TriggerWitnessAnnouncement injects a witness-hash announcement for the
+// current local head onto connected wit peers.
+func (api *AdminAPI) TriggerWitnessAnnouncement(peerID *string) (*TrafficTriggerResult, error) {
+	peers, err := api.targetWitnessPeers(peerID, false)
+	if err != nil {
+		return nil, err
+	}
+	head := api.eth.BlockChain().CurrentBlock()
+	if head == nil {
+		return nil, errors.New("current head unavailable")
+	}
+	hash := head.Hash()
+	number := head.Number.Uint64()
+	triggerWitnessAnnouncementToPeers(asWitnessAnnouncementPeers(peers), hash, number)
+	return &TrafficTriggerResult{
+		PeerCount:   len(peers),
+		PeerIDs:     peerIDs(peers),
+		BlockHash:   hash,
+		BlockNumber: number,
+	}, nil
+}
+
+// TriggerWitnessMetadataFetch injects a witness metadata request for the
+// current local head hash onto connected wit peers.
+func (api *AdminAPI) TriggerWitnessMetadataFetch(peerID *string) (*TrafficTriggerResult, error) {
+	peers, err := api.targetWitnessPeers(peerID, true)
+	if err != nil {
+		return nil, err
+	}
+	head := api.eth.BlockChain().CurrentBlock()
+	if head == nil {
+		return nil, errors.New("current head unavailable")
+	}
+	hash := head.Hash()
+	if err := triggerWitnessMetadataFetchToPeers(asWitnessMetadataFetchPeers(peers), hash, false); err != nil {
+		return nil, err
+	}
+	return &TrafficTriggerResult{
+		PeerCount: len(peers),
+		PeerIDs:   peerIDs(peers),
+		BlockHash: hash,
+	}, nil
+}
+
+// SeedWitnessForHead stores a deterministic witness for the current local head
+// so peers can serve a known witness payload during operator verification.
+func (api *AdminAPI) SeedWitnessForHead() (*TrafficTriggerResult, error) {
+	if api.eth == nil || api.eth.blockchain == nil {
+		return nil, errors.New("blockchain unavailable")
+	}
+	head := api.eth.BlockChain().CurrentBlock()
+	if head == nil {
+		return nil, errors.New("current head unavailable")
+	}
+	witness, err := stateless.NewWitness(head, nil)
+	if err != nil {
+		return nil, err
+	}
+	var witBuf bytes.Buffer
+	if err := witness.EncodeRLP(&witBuf); err != nil {
+		return nil, err
+	}
+	api.eth.blockchain.WriteWitness(head.Hash(), witBuf.Bytes())
+	return &TrafficTriggerResult{
+		BlockHash:   head.Hash(),
+		BlockNumber: head.Number.Uint64(),
+	}, nil
+}
+
+// TriggerWitnessMetadataFetchByHash injects a witness metadata request for the
+// provided hash onto connected wit peers.
+func (api *AdminAPI) TriggerWitnessMetadataFetchByHash(hash common.Hash, peerID *string) (*TrafficTriggerResult, error) {
+	peers, err := api.targetWitnessPeers(peerID, true)
+	if err != nil {
+		return nil, err
+	}
+	if err := triggerWitnessMetadataFetchToPeers(asWitnessMetadataFetchPeers(peers), hash, true); err != nil {
+		return nil, err
+	}
+	return &TrafficTriggerResult{
+		PeerCount: len(peers),
+		PeerIDs:   peerIDs(peers),
+		BlockHash: hash,
+	}, nil
+}
+
+// TriggerWitnessFetchByHash injects a witness page request for the provided
+// hash onto connected wit peers.
+func (api *AdminAPI) TriggerWitnessFetchByHash(hash common.Hash, peerID *string) (*TrafficTriggerResult, error) {
+	peers, err := api.targetWitnessPeers(peerID, false)
+	if err != nil {
+		return nil, err
+	}
+	if err := triggerWitnessFetchToPeers(asWitnessFetchPeers(peers), hash); err != nil {
+		return nil, err
+	}
+	return &TrafficTriggerResult{
+		PeerCount: len(peers),
+		PeerIDs:   peerIDs(peers),
+		BlockHash: hash,
+	}, nil
+}
+
 func (api *AdminAPI) targetEthPeers(peerID *string) ([]*ethPeer, error) {
 	if api.eth == nil || api.eth.handler == nil || api.eth.handler.peers == nil {
 		return nil, errors.New("eth protocol handler unavailable")
@@ -293,6 +411,34 @@ func (api *AdminAPI) targetEthPeers(peerID *string) ([]*ethPeer, error) {
 	peers, selection := selectTriggerPeers(peers)
 	api.logTriggerTargets(selection, peers)
 	return peers, nil
+}
+
+func (api *AdminAPI) targetWitnessPeers(peerID *string, requireMetadata bool) ([]*ethPeer, error) {
+	peers, err := api.targetEthPeers(peerID)
+	if err != nil {
+		return nil, err
+	}
+	filtered := make([]*ethPeer, 0, len(peers))
+	for _, peer := range peers {
+		if peer.witPeer == nil {
+			continue
+		}
+		if requireMetadata && peer.witPeer.Peer.Version() < witproto.WIT1 {
+			continue
+		}
+		filtered = append(filtered, peer)
+	}
+	if len(filtered) == 0 {
+		if requireMetadata {
+			return nil, errors.New("no connected wit peers support metadata requests")
+		}
+		return nil, errors.New("no connected wit peers")
+	}
+	if peerID == nil {
+		filtered, selection := selectTriggerPeers(filtered)
+		api.logTriggerTargets(selection, filtered)
+	}
+	return filtered, nil
 }
 
 type triggerTargetPeer interface {
@@ -475,6 +621,35 @@ func asBlockBodyFetchPeers(peers []*ethPeer) []blockBodyFetchPeer {
 	return out
 }
 
+func asWitnessAnnouncementPeers(peers []*ethPeer) []witnessAnnouncementPeer {
+	out := make([]witnessAnnouncementPeer, 0, len(peers))
+	for _, peer := range peers {
+		out = append(out, peer.witPeer.Peer)
+	}
+	return out
+}
+
+func asWitnessMetadataFetchPeers(peers []*ethPeer) []witnessMetadataFetchPeer {
+	out := make([]witnessMetadataFetchPeer, 0, len(peers))
+	for _, peer := range peers {
+		out = append(out, peer.witPeer.Peer)
+	}
+	return out
+}
+
+type witnessFetchPeer interface {
+	ID() string
+	RequestWitness(witnessPages []witproto.WitnessPageRequest, sink chan *witproto.Response) (*witproto.Request, error)
+}
+
+func asWitnessFetchPeers(peers []*ethPeer) []witnessFetchPeer {
+	out := make([]witnessFetchPeer, 0, len(peers))
+	for _, peer := range peers {
+		out = append(out, peer.witPeer.Peer)
+	}
+	return out
+}
+
 func triggerTxGossipToPeers(peers []txGossipPeer, tx *types.Transaction) error {
 	for _, peer := range peers {
 		if err := peer.SendTransactions(types.Transactions{tx}); err != nil {
@@ -516,6 +691,44 @@ func triggerBlockBodyFetchToPeers(peers []blockBodyFetchPeer, hashes []common.Ha
 	return nil
 }
 
+func triggerWitnessAnnouncementToPeers(peers []witnessAnnouncementPeer, hash common.Hash, number uint64) {
+	for _, peer := range peers {
+		peer.AsyncSendNewWitnessHash(hash, number)
+	}
+}
+
+func triggerWitnessMetadataFetchToPeers(peers []witnessMetadataFetchPeer, hash common.Hash, requireAvailable bool) error {
+	for _, peer := range peers {
+		sink := make(chan *witproto.Response, 1)
+		req, err := peer.RequestWitnessMetadata([]common.Hash{hash}, sink)
+		if err != nil {
+			return fmt.Errorf("request witness metadata from peer %s: %w", peer.ID(), err)
+		}
+		if req != nil {
+			if err := waitForWitnessMetadataResponse(req, sink, requireAvailable); err != nil {
+				return fmt.Errorf("await witness metadata response from peer %s: %w", peer.ID(), err)
+			}
+		}
+	}
+	return nil
+}
+
+func triggerWitnessFetchToPeers(peers []witnessFetchPeer, hash common.Hash) error {
+	for _, peer := range peers {
+		sink := make(chan *witproto.Response, 1)
+		req, err := peer.RequestWitness([]witproto.WitnessPageRequest{{Hash: hash, Page: 0}}, sink)
+		if err != nil {
+			return fmt.Errorf("request witness page from peer %s: %w", peer.ID(), err)
+		}
+		if req != nil {
+			if err := waitForWitnessFetchResponse(req, sink); err != nil {
+				return fmt.Errorf("await witness page response from peer %s: %w", peer.ID(), err)
+			}
+		}
+	}
+	return nil
+}
+
 func waitForBodyFetchResponse(req *ethproto.Request, sink <-chan *ethproto.Response) {
 	defer func() {
 		_ = req.Close()
@@ -527,6 +740,66 @@ func waitForBodyFetchResponse(req *ethproto.Request, sink <-chan *ethproto.Respo
 			res.Done <- nil
 		}
 	case <-time.After(triggerBodyFetchResponseTimeout):
+	}
+}
+
+func waitForWitnessMetadataResponse(req *witproto.Request, sink <-chan *witproto.Response, requireAvailable bool) error {
+	defer func() {
+		_ = req.Close()
+	}()
+
+	select {
+	case res := <-sink:
+		if res == nil {
+			return errors.New("nil witness metadata response")
+		}
+		if requireAvailable {
+			packet, ok := res.Res.(*witproto.WitnessMetadataPacket)
+			if !ok {
+				return fmt.Errorf("unexpected witness metadata response type %T", res.Res)
+			}
+			if len(packet.Metadata) == 0 {
+				return errors.New("empty witness metadata response")
+			}
+			if !packet.Metadata[0].Available {
+				return errors.New("witness metadata reports unavailable witness")
+			}
+		}
+		if res.Done != nil {
+			res.Done <- nil
+		}
+		return nil
+	case <-time.After(triggerWitnessMetadataTimeout):
+		return errors.New("witness metadata response timeout")
+	}
+}
+
+func waitForWitnessFetchResponse(req *witproto.Request, sink <-chan *witproto.Response) error {
+	defer func() {
+		_ = req.Close()
+	}()
+
+	select {
+	case res := <-sink:
+		if res == nil {
+			return errors.New("nil witness fetch response")
+		}
+		packet, ok := res.Res.(*witproto.WitnessPacketRLPPacket)
+		if !ok {
+			return fmt.Errorf("unexpected witness fetch response type %T", res.Res)
+		}
+		if len(packet.WitnessPacketResponse) == 0 {
+			return errors.New("empty witness fetch response")
+		}
+		if len(packet.WitnessPacketResponse[0].Data) == 0 {
+			return errors.New("empty witness page payload")
+		}
+		if res.Done != nil {
+			res.Done <- nil
+		}
+		return nil
+	case <-time.After(triggerWitnessFetchTimeout):
+		return errors.New("witness fetch response timeout")
 	}
 }
 

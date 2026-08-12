@@ -35,5 +35,8 @@ verbosity = 4
 [miner]
   mine = false
 
+[witness]
+  enable = true
+
 [telemetry]
   metrics = true
