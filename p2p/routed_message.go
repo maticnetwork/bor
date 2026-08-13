@@ -29,11 +29,22 @@ import (
 //
 // If bulk is nil or shouldRoute is nil, the primary lane is returned unchanged.
 func NewRoutedMsgReadWriter(primary MsgReadWriter, bulk MsgReadWriter, shouldRoute func(code uint64) bool) MsgReadWriter {
+	return newRoutedMsgReadWriter(primary, bulk, "", shouldRoute)
+}
+
+// NewChannelRoutedMsgReadWriter attaches a metrics label to routed bulk-lane
+// traffic so fallbacks and read failures can be surfaced per channel.
+func NewChannelRoutedMsgReadWriter(primary MsgReadWriter, bulk MsgReadWriter, channel string, shouldRoute func(code uint64) bool) MsgReadWriter {
+	return newRoutedMsgReadWriter(primary, bulk, channel, shouldRoute)
+}
+
+func newRoutedMsgReadWriter(primary MsgReadWriter, bulk MsgReadWriter, channel string, shouldRoute func(code uint64) bool) MsgReadWriter {
 	if shouldRoute == nil {
 		return primary
 	}
 	rw := &routedMsgReadWriter{
 		primary:     primary,
+		channel:     channel,
 		shouldRoute: shouldRoute,
 		reads:       make(chan routedReadResult, 2),
 	}
@@ -50,6 +61,7 @@ type routedReadResult struct {
 
 type routedMsgReadWriter struct {
 	primary     MsgReadWriter
+	channel     string
 	shouldRoute func(code uint64) bool
 
 	start      sync.Once
@@ -80,6 +92,7 @@ func (rw *routedMsgReadWriter) WriteMsg(msg Msg) error {
 				return nil
 			} else {
 				bulkSidecarWriteFallbackMeter.Mark(1)
+				bulkSidecarStats.markChannelWriteFallback(rw.channel)
 			}
 		}
 	}
@@ -154,9 +167,11 @@ func (rw *routedMsgReadWriter) readLoop(reader MsgReader, forwardErr bool, bulkI
 		if err != nil && !forwardErr {
 			if isTimeoutError(err) {
 				bulkSidecarReadTimeoutMeter.Mark(1)
+				bulkSidecarStats.markChannelReadTimeout(rw.channel)
 				continue
 			}
 			bulkSidecarReadErrorMeter.Mark(1)
+			bulkSidecarStats.markChannelReadError(rw.channel)
 			rw.clearBulk(bulkID)
 			return
 		}

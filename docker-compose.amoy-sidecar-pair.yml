@@ -8,6 +8,8 @@ services:
       - server
       - --config
       - /etc/bor/config.toml
+      - --state.scheme
+      - hash
     ports:
       - "127.0.0.1:18545:8545"
       - "127.0.0.1:18546:8546"
@@ -16,7 +18,7 @@ services:
       - "30314:30304/udp"
     volumes:
       - ./packaging/docker/bor-amoy-sidecar-a.toml:/etc/bor/config.toml:ro
-      - bor-amoy-a-data:/var/lib/bor/data
+      - bor-amoy-hash-a-data:/var/lib/bor/data
     restart: unless-stopped
     networks:
       amoy-sidecar-net:
@@ -28,6 +30,8 @@ services:
       - server
       - --config
       - /etc/bor/config.toml
+      - --state.scheme
+      - hash
     ports:
       - "127.0.0.1:28545:8545"
       - "127.0.0.1:28546:8546"
@@ -36,7 +40,7 @@ services:
       - "30414:30304/udp"
     volumes:
       - ./packaging/docker/bor-amoy-sidecar-b.toml:/etc/bor/config.toml:ro
-      - bor-amoy-b-data:/var/lib/bor/data
+      - bor-amoy-hash-b-data:/var/lib/bor/data
     restart: unless-stopped
     networks:
       amoy-sidecar-net:
@@ -49,5 +53,5 @@ networks:
         - subnet: 172.30.0.0/24
 
 volumes:
-  bor-amoy-a-data:
-  bor-amoy-b-data:
+  bor-amoy-hash-a-data:
+  bor-amoy-hash-b-data:

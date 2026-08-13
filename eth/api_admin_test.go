@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	ethproto "github.com/ethereum/go-ethereum/eth/protocols/eth"
 	snapproto "github.com/ethereum/go-ethereum/eth/protocols/snap"
@@ -163,6 +164,72 @@ func TestTriggerBlockBodyFetchToPeers(t *testing.T) {
 	}
 }
 
+func TestTriggerSnapAccountRangeFetchToPeers(t *testing.T) {
+	t.Parallel()
+
+	root := common.HexToHash("0x90")
+	peerA := &fakeSnapAccountRangeFetchPeer{id: "a", respond: true}
+	peerB := &fakeSnapAccountRangeFetchPeer{id: "b", respond: true}
+
+	if err := triggerSnapAccountRangeFetchToPeers([]snapAccountRangeFetchPeer{peerA, peerB}, root); err != nil {
+		t.Fatalf("failed to trigger snap account range fetch: %v", err)
+	}
+	for _, peer := range []*fakeSnapAccountRangeFetchPeer{peerA, peerB} {
+		if len(peer.requests) != 1 {
+			t.Fatalf("peer %s received %d snap account requests, want 1", peer.id, len(peer.requests))
+		}
+		if peer.requests[0].root != root || peer.requests[0].bytes != 4096 {
+			t.Fatalf("peer %s received unexpected account request: %+v", peer.id, peer.requests[0])
+		}
+	}
+	assertSnapAcks(t, func() int { return peerA.responsesAcked }, func() int { return peerB.responsesAcked }, "snap account range")
+}
+
+func TestTriggerSnapStorageRangeFetchToPeers(t *testing.T) {
+	t.Parallel()
+
+	root := common.HexToHash("0x91")
+	account := common.HexToHash("0x92")
+	peerA := &fakeSnapStorageRangeFetchPeer{id: "a", respond: true}
+	peerB := &fakeSnapStorageRangeFetchPeer{id: "b", respond: true}
+
+	if err := triggerSnapStorageRangeFetchToPeers([]snapStorageRangeFetchPeer{peerA, peerB}, root, account); err != nil {
+		t.Fatalf("failed to trigger snap storage range fetch: %v", err)
+	}
+	for _, peer := range []*fakeSnapStorageRangeFetchPeer{peerA, peerB} {
+		if len(peer.requests) != 1 {
+			t.Fatalf("peer %s received %d snap storage requests, want 1", peer.id, len(peer.requests))
+		}
+		req := peer.requests[0]
+		if req.root != root || req.bytes != 4096 || len(req.accounts) != 1 || req.accounts[0] != account {
+			t.Fatalf("peer %s received unexpected storage request: %+v", peer.id, req)
+		}
+	}
+	assertSnapAcks(t, func() int { return peerA.responsesAcked }, func() int { return peerB.responsesAcked }, "snap storage range")
+}
+
+func TestTriggerSnapByteCodeFetchToPeers(t *testing.T) {
+	t.Parallel()
+
+	codeHash := common.HexToHash("0x93")
+	peerA := &fakeSnapByteCodeFetchPeer{id: "a", respond: true}
+	peerB := &fakeSnapByteCodeFetchPeer{id: "b", respond: true}
+
+	if err := triggerSnapByteCodeFetchToPeers([]snapByteCodeFetchPeer{peerA, peerB}, codeHash); err != nil {
+		t.Fatalf("failed to trigger snap bytecode fetch: %v", err)
+	}
+	for _, peer := range []*fakeSnapByteCodeFetchPeer{peerA, peerB} {
+		if len(peer.requests) != 1 {
+			t.Fatalf("peer %s received %d snap bytecode requests, want 1", peer.id, len(peer.requests))
+		}
+		req := peer.requests[0]
+		if req.bytes != 4096 || len(req.hashes) != 1 || req.hashes[0] != codeHash {
+			t.Fatalf("peer %s received unexpected bytecode request: %+v", peer.id, req)
+		}
+	}
+	assertSnapAcks(t, func() int { return peerA.responsesAcked }, func() int { return peerB.responsesAcked }, "snap bytecode")
+}
+
 func TestTriggerSnapTrieNodeFetchToPeers(t *testing.T) {
 	t.Parallel()
 
@@ -188,12 +255,62 @@ func TestTriggerSnapTrieNodeFetchToPeers(t *testing.T) {
 			t.Fatalf("peer %s received unexpected trie paths: %#v", peer.id, peer.requests[0].paths)
 		}
 	}
-	deadline := time.Now().Add(500 * time.Millisecond)
-	for (peerA.responsesAcked != 1 || peerB.responsesAcked != 1) && time.Now().Before(deadline) {
-		time.Sleep(10 * time.Millisecond)
+	assertSnapAcks(t, func() int { return peerA.responsesAcked }, func() int { return peerB.responsesAcked }, "snap trie node")
+}
+
+func TestSnapTriggerStorageAccountFallbackUsesSnapshotStorage(t *testing.T) {
+	t.Parallel()
+
+	handler := newTestHandler()
+	defer handler.close()
+
+	api := NewAdminAPI(&Ethereum{blockchain: handler.chain, handler: handler.handler})
+	head := handler.chain.CurrentBlock()
+	if head == nil {
+		t.Fatal("expected current head")
 	}
-	if peerA.responsesAcked != 1 || peerB.responsesAcked != 1 {
-		t.Fatalf("expected snap trie node acknowledgements, got peerA=%d peerB=%d", peerA.responsesAcked, peerB.responsesAcked)
+	account := common.HexToHash("0x1234")
+	slot := common.HexToHash("0x5678")
+	rawdb.WriteStorageSnapshot(handler.db, account, slot, []byte{0x01})
+
+	storageAccount, err := api.snapTriggerStorageAccountFallback(head.Root)
+	if err != nil {
+		t.Fatalf("failed to resolve snap trigger storage account fallback: %v", err)
+	}
+	if storageAccount != account {
+		t.Fatalf("unexpected storage account %s, want %s", storageAccount, account)
+	}
+}
+
+func TestSeedSnapTriggerFixtures(t *testing.T) {
+	t.Parallel()
+
+	handler := newTestHandler()
+	defer handler.close()
+
+	api := NewAdminAPI(&Ethereum{blockchain: handler.chain, handler: handler.handler})
+	res, err := api.SeedSnapTriggerFixtures()
+	if err != nil {
+		t.Fatalf("failed to seed snap trigger fixtures: %v", err)
+	}
+	if res.StorageAccount != snapTriggerStorageFixtureAccount || res.StorageSlot != snapTriggerStorageFixtureSlot {
+		t.Fatalf("unexpected storage fixture result: %+v", res)
+	}
+	if res.CodeAccount != snapTriggerCodeFixtureAccount || res.CodeHash != snapTriggerCodeFixtureHash {
+		t.Fatalf("unexpected code fixture result: %+v", res)
+	}
+	samples, err := api.snapTriggerSamples()
+	if err != nil {
+		t.Fatalf("failed to collect snap trigger samples: %v", err)
+	}
+	if samples.storageAccount != snapTriggerStorageFixtureAccount {
+		t.Fatalf("unexpected seeded storage account %s, want %s", samples.storageAccount, snapTriggerStorageFixtureAccount)
+	}
+	if samples.codeHash != snapTriggerCodeFixtureHash {
+		t.Fatalf("unexpected seeded code hash %s, want %s", samples.codeHash, snapTriggerCodeFixtureHash)
+	}
+	if code := rawdb.ReadCodeWithPrefix(handler.db, snapTriggerCodeFixtureHash); len(code) == 0 {
+		t.Fatal("expected seeded code fixture to be stored")
 	}
 }
 
@@ -424,6 +541,131 @@ func (p *fakeBlockBodyFetchPeer) RequestBodies(hashes []common.Hash, sink chan *
 	return req, nil
 }
 
+type fakeSnapAccountRangeFetchPeer struct {
+	id             string
+	err            error
+	respond        bool
+	responsesAcked int
+	requests       []snapAccountRangeRequest
+}
+
+type snapAccountRangeRequest struct {
+	root   common.Hash
+	origin common.Hash
+	limit  common.Hash
+	bytes  uint64
+}
+
+func (p *fakeSnapAccountRangeFetchPeer) ID() string { return p.id }
+
+func (p *fakeSnapAccountRangeFetchPeer) RequestAccountRangeWithSink(root common.Hash, origin, limit common.Hash, bytes uint64, sink chan *snapproto.Response) (*snapproto.Request, error) {
+	if p.err != nil {
+		return nil, p.err
+	}
+	p.requests = append(p.requests, snapAccountRangeRequest{root: root, origin: origin, limit: limit, bytes: bytes})
+	req := &snapproto.Request{}
+	if p.respond {
+		go func() {
+			done := make(chan error, 1)
+			sink <- &snapproto.Response{
+				Res: &snapproto.AccountRangePacket{
+					Accounts: []*snapproto.AccountData{{Hash: common.HexToHash("0x01"), Body: []byte{0xc0}}},
+				},
+				Done: done,
+			}
+			if err := <-done; err == nil {
+				p.responsesAcked++
+			}
+		}()
+	}
+	return req, nil
+}
+
+type fakeSnapStorageRangeFetchPeer struct {
+	id             string
+	err            error
+	respond        bool
+	responsesAcked int
+	requests       []snapStorageRangeRequest
+}
+
+type snapStorageRangeRequest struct {
+	root     common.Hash
+	accounts []common.Hash
+	origin   []byte
+	limit    []byte
+	bytes    uint64
+}
+
+func (p *fakeSnapStorageRangeFetchPeer) ID() string { return p.id }
+
+func (p *fakeSnapStorageRangeFetchPeer) RequestStorageRangesWithSink(root common.Hash, accounts []common.Hash, origin, limit []byte, bytes uint64, sink chan *snapproto.Response) (*snapproto.Request, error) {
+	if p.err != nil {
+		return nil, p.err
+	}
+	p.requests = append(p.requests, snapStorageRangeRequest{
+		root:     root,
+		accounts: append([]common.Hash(nil), accounts...),
+		origin:   append([]byte(nil), origin...),
+		limit:    append([]byte(nil), limit...),
+		bytes:    bytes,
+	})
+	req := &snapproto.Request{}
+	if p.respond {
+		go func() {
+			done := make(chan error, 1)
+			sink <- &snapproto.Response{
+				Res: &snapproto.StorageRangesPacket{
+					Slots: [][]*snapproto.StorageData{{{Hash: common.HexToHash("0x02"), Body: []byte{0x01}}}},
+				},
+				Done: done,
+			}
+			if err := <-done; err == nil {
+				p.responsesAcked++
+			}
+		}()
+	}
+	return req, nil
+}
+
+type fakeSnapByteCodeFetchPeer struct {
+	id             string
+	err            error
+	respond        bool
+	responsesAcked int
+	requests       []snapByteCodeRequest
+}
+
+type snapByteCodeRequest struct {
+	hashes []common.Hash
+	bytes  uint64
+}
+
+func (p *fakeSnapByteCodeFetchPeer) ID() string { return p.id }
+
+func (p *fakeSnapByteCodeFetchPeer) RequestByteCodesWithSink(hashes []common.Hash, bytes uint64, sink chan *snapproto.Response) (*snapproto.Request, error) {
+	if p.err != nil {
+		return nil, p.err
+	}
+	p.requests = append(p.requests, snapByteCodeRequest{hashes: append([]common.Hash(nil), hashes...), bytes: bytes})
+	req := &snapproto.Request{}
+	if p.respond {
+		go func() {
+			done := make(chan error, 1)
+			sink <- &snapproto.Response{
+				Res: &snapproto.ByteCodesPacket{
+					Codes: [][]byte{{0x60, 0x00}},
+				},
+				Done: done,
+			}
+			if err := <-done; err == nil {
+				p.responsesAcked++
+			}
+		}()
+	}
+	return req, nil
+}
+
 type fakeSnapTrieNodeFetchPeer struct {
 	id             string
 	err            error
@@ -468,6 +710,18 @@ func (p *fakeSnapTrieNodeFetchPeer) RequestTrieNodesWithSink(root common.Hash, p
 		}()
 	}
 	return req, nil
+}
+
+func assertSnapAcks(t *testing.T, gotA, gotB func() int, label string) {
+	t.Helper()
+
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for (gotA() != 1 || gotB() != 1) && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if gotA() != 1 || gotB() != 1 {
+		t.Fatalf("expected %s acknowledgements, got peerA=%d peerB=%d", label, gotA(), gotB())
+	}
 }
 
 type fakeWitnessAnnouncementPeer struct {

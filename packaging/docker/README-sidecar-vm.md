@@ -19,6 +19,7 @@ Enable the feature at runtime in your config:
 ```toml
 syncmode = "full"
 snapshot = true
+state.scheme = "hash"
 
 [p2p]
   bind = "0.0.0.0"
@@ -41,6 +42,10 @@ snapshot = true
 What matters:
 
 - `p2p.bulk-sidecar = true` turns on the QUIC sidecar listener and dialer.
+- `state.scheme = "hash"` is required for the current deterministic snap
+  storage/code fixture helpers used by the live verification flow.
+- if you want to remove config-parser ambiguity entirely, start Bor with
+  `--state.scheme hash` in addition to the TOML setting.
 - `p2p.bulk-port` must be reachable between the two Bor nodes over UDP.
 - `p2p.nat = "extip:..."` should advertise the real address the other node can
   dial for both devp2p and the sidecar metadata.
@@ -79,6 +84,18 @@ curl -s http://127.0.0.1:8545 \
 
 curl -s http://127.0.0.1:8545 \
   -H 'Content-Type: application/json' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"admin_triggerSnapAccountRangeFetch","params":[]}'
+
+curl -s http://127.0.0.1:8545 \
+  -H 'Content-Type: application/json' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"admin_triggerSnapStorageRangeFetch","params":[]}'
+
+curl -s http://127.0.0.1:8545 \
+  -H 'Content-Type: application/json' \
+  --data '{"jsonrpc":"2.0","id":1,"method":"admin_triggerSnapByteCodeFetch","params":[]}'
+
+curl -s http://127.0.0.1:8545 \
+  -H 'Content-Type: application/json' \
   --data '{"jsonrpc":"2.0","id":1,"method":"admin_triggerSnapTrieNodeFetch","params":[]}'
 
 curl -s http://127.0.0.1:8545 \
@@ -108,7 +125,8 @@ Expected live signals:
 - `eth-bulk` carries tx gossip, block announcements, tx fetches, and block body
   fetches.
 - `snap-bulk` carries the deterministic trie-node request/response triggered by
-  `admin_triggerSnapTrieNodeFetch`.
+  `admin_triggerSnapTrieNodeFetch`, plus deterministic account-range,
+  storage-range, and bytecode request/response traffic.
 - `wit-bulk` carries witness announcements, metadata probes, and witness page
   fetches.
 
@@ -119,4 +137,5 @@ packaging/docker/amoy-sidecar-pair.sh up
 packaging/docker/amoy-sidecar-pair.sh check
 packaging/docker/amoy-sidecar-pair.sh recover
 packaging/docker/amoy-sidecar-pair.sh soak-long 50 10
+packaging/docker/amoy-sidecar-pair.sh soak-high-confidence
 ```

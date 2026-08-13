@@ -101,7 +101,7 @@ type Peer struct {
 // NewPeer create a wrapper for a network connection and negotiated  protocol
 // version.
 func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter, txpool TxPool) *Peer {
-	routed := p2p.NewRoutedMsgReadWriter(rw, nil, isBulkEthMsg)
+	routed := p2p.NewChannelRoutedMsgReadWriter(rw, nil, "eth-bulk", isBulkEthMsg)
 	peer := &Peer{
 		id:              p.ID().String(),
 		Peer:            p,

@@ -123,6 +123,7 @@ type bulkChannelHello struct {
 
 type bulkStreamMsgRW struct {
 	stream *quic.Stream
+	channel string
 	log    log.Logger
 	write  sync.Mutex
 }
@@ -387,6 +388,7 @@ func (b *BulkSidecar) adoptConn(remote *enode.Node, conn *quic.Conn) bool {
 	session.conn = conn
 	session.connClosed = conn.Context().Done()
 	session.channels = make(map[string]MsgReadWriter)
+	bulkSidecarStats.markSessionEstablished()
 	b.log.Debug("Bulk sidecar session established", "peer", remote.ID(), "remote", conn.RemoteAddr())
 	return true
 }
@@ -527,6 +529,7 @@ func (s *bulkSession) ensureConn(ctx context.Context) (*quic.Conn, error) {
 		s.connClosed = conn.Context().Done()
 		s.channels = make(map[string]MsgReadWriter)
 		bulkSidecarSessionMeter.Mark(1)
+		bulkSidecarStats.markSessionEstablished()
 		s.sidecar.log.Debug("Bulk sidecar session established", "peer", s.remoteID, "remote", conn.RemoteAddr())
 		go s.sidecar.runConn(s.remoteID, conn)
 		return conn, nil
@@ -556,6 +559,7 @@ func (s *bulkSession) openChannel(ctx context.Context, channel string) (MsgReadW
 		}
 		rw := &bulkStreamMsgRW{
 			stream: stream,
+			channel: channel,
 			log:    log.New("peer", s.remoteID, "channel", channel),
 		}
 		s.storeChannel(channel, rw)
@@ -577,6 +581,7 @@ func (s *bulkSession) acceptChannel(stream *quic.Stream) error {
 	}
 	s.storeChannel(hello.Channel, &bulkStreamMsgRW{
 		stream: stream,
+		channel: hello.Channel,
 		log:    log.New("peer", s.remoteID, "channel", hello.Channel),
 	})
 	return nil
@@ -620,8 +625,10 @@ func (s *bulkSession) storeChannel(channel string, rw MsgReadWriter) {
 
 	if exists {
 		bulkSidecarChannelReplaceMeter.Mark(1)
+		bulkSidecarStats.markChannelReplaced(channel)
 	} else {
 		bulkSidecarChannelOpenMeter.Mark(1)
+		bulkSidecarStats.markChannelOpened(channel)
 	}
 	s.sidecar.log.Debug("Bulk sidecar channel opened", "peer", s.remoteID, "channel", channel)
 
@@ -648,6 +655,7 @@ func (rw *bulkStreamMsgRW) ReadMsg() (Msg, error) {
 		Size:    size,
 		Payload: io.LimitReader(deadlineReader{stream: rw.stream}, int64(size)),
 	}
+	bulkSidecarStats.markChannelRead(rw.channel)
 	rw.log.Trace("Bulk sidecar read message", "code", msg.Code, "size", msg.Size)
 	return msg, nil
 }
@@ -675,6 +683,7 @@ func (rw *bulkStreamMsgRW) WriteMsg(msg Msg) error {
 	if n != int64(msg.Size) {
 		return io.ErrUnexpectedEOF
 	}
+	bulkSidecarStats.markChannelWrite(rw.channel)
 	rw.log.Trace("Bulk sidecar wrote message", "code", msg.Code, "size", msg.Size)
 	return nil
 }

@@ -19,6 +19,7 @@ packaging/docker/amoy-sidecar-pair.sh check-fetchers
 packaging/docker/amoy-sidecar-pair.sh soak 10
 packaging/docker/amoy-sidecar-pair.sh recover
 packaging/docker/amoy-sidecar-pair.sh soak-long 50 10
+packaging/docker/amoy-sidecar-pair.sh soak-high-confidence
 packaging/docker/amoy-sidecar-pair.sh fallback
 packaging/docker/amoy-sidecar-pair.sh measure
 packaging/docker/amoy-sidecar-pair.sh status
@@ -34,6 +35,10 @@ Host RPC endpoints:
 What this does:
 
 - starts two sidecar-enabled Bor nodes on Amoy
+- pins the pair to `state.scheme = "hash"` so deterministic snap fixture seeding
+  and snapshot-backed QUIC bulk checks can run end-to-end
+- also passes `--state.scheme hash` on the container command line so the live
+  test path is not dependent on TOML decoding quirks
 - assigns stable nodekeys and stable container IPs
 - pairs the nodes with `admin_addPeer` using full ENRs so QUIC metadata is preserved
 - verifies `eth-bulk`, `snap-bulk`, and `wit-bulk` channel bring-up from logs
@@ -41,6 +46,7 @@ What this does:
   RPC and verifies the resulting `eth-bulk` sidecar message logs
 - actively triggers a deterministic snap trie-node request through the local
   `admin` RPC and verifies the resulting `snap-bulk` request/response logs
+  plus deterministic account-range, storage-range, and bytecode request/response logs
 - actively triggers witness announcements and witness metadata requests through
   the local `admin` RPC and verifies the resulting `wit-bulk` sidecar message logs
 - seeds a deterministic witness on one node and verifies both witness metadata
@@ -49,10 +55,16 @@ What this does:
   traffic is also verified on the sidecar
 - restarts one node on demand, waits for devp2p and QUIC sidecar recovery, and
   reruns the mixed traffic checks so recovery is validated instead of assumed
+- captures `admin_bulkSidecarStatus` snapshots before and after each recovery
+  bounce so churn runs leave channel/session evidence, not just pass/fail output
 - exposes `soak`, `fallback`, and `measure` commands for repeated checks,
   fallback-path verification, and simple timing capture
 - exposes `soak-long` for a heavier soak that injects periodic node restarts
   during the run
+- exposes `soak-high-confidence` as the default longer churn preset
+  (`soak-long 50 10`)
+- exposes `status` output with the live `admin_bulkSidecarStatus` snapshot from
+  each node so session/channel health and counters are visible without log spelunking
 
 Notes:
 
@@ -63,6 +75,9 @@ Notes:
   controlled live-network testing of our own pair
 - `check` is deterministic now: once the pair is connected, it injects the
   verification traffic immediately instead of waiting on ambient Amoy activity
+- `up` resets the pair volumes by default so old path-scheme state cannot leak
+  into the hash-scheme verification flow; set `PRESERVE_VOLUMES=1` if you want
+  to keep the existing data volume intentionally
 - `fallback` runs the local routed-message fallback tests that prove bulk-lane
   write/read failures fall back safely to the primary devp2p lane
 - `measure` prints rough end-to-end timing in milliseconds for the forced
@@ -71,3 +86,5 @@ Notes:
   if you want to choose which side is bounced
 - `soak-long 50 10` runs 50 mixed-check iterations and restarts `bor-b` every
   10 iterations to confirm the sidecar keeps recovering under repeated churn
+- `soak-high-confidence` is a convenience wrapper for the same `50 / 10` churn
+  profile when you want the longer confidence run without remembering arguments

@@ -32,6 +32,8 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/core/state/snapshot"
 	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -39,8 +41,10 @@ import (
 	snapproto "github.com/ethereum/go-ethereum/eth/protocols/snap"
 	witproto "github.com/ethereum/go-ethereum/eth/protocols/wit"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
+	"github.com/holiman/uint256"
 )
 
 // AdminAPI is the collection of Ethereum full node related APIs for node
@@ -166,6 +170,14 @@ type TrafficTriggerResult struct {
 	BlockNumber uint64      `json:"blockNumber,omitempty"`
 }
 
+type SnapTriggerFixtureResult struct {
+	Root           common.Hash `json:"root"`
+	StorageAccount common.Hash `json:"storageAccount"`
+	StorageSlot    common.Hash `json:"storageSlot"`
+	CodeAccount    common.Hash `json:"codeAccount"`
+	CodeHash       common.Hash `json:"codeHash"`
+}
+
 type txGossipPeer interface {
 	ID() string
 	SendTransactions(types.Transactions) error
@@ -186,6 +198,21 @@ type blockBodyFetchPeer interface {
 	RequestBodies([]common.Hash, chan *ethproto.Response) (*ethproto.Request, error)
 }
 
+type snapAccountRangeFetchPeer interface {
+	ID() string
+	RequestAccountRangeWithSink(root common.Hash, origin, limit common.Hash, bytes uint64, sink chan *snapproto.Response) (*snapproto.Request, error)
+}
+
+type snapStorageRangeFetchPeer interface {
+	ID() string
+	RequestStorageRangesWithSink(root common.Hash, accounts []common.Hash, origin, limit []byte, bytes uint64, sink chan *snapproto.Response) (*snapproto.Request, error)
+}
+
+type snapByteCodeFetchPeer interface {
+	ID() string
+	RequestByteCodesWithSink(hashes []common.Hash, bytes uint64, sink chan *snapproto.Response) (*snapproto.Request, error)
+}
+
 type witnessAnnouncementPeer interface {
 	ID() string
 	AsyncSendNewWitnessHash(hash common.Hash, number uint64)
@@ -202,9 +229,21 @@ type snapTrieNodeFetchPeer interface {
 }
 
 const triggerBodyFetchResponseTimeout = 2 * time.Second
+const triggerSnapAccountRangeTimeout = 5 * time.Second
+const triggerSnapStorageRangeTimeout = 5 * time.Second
+const triggerSnapByteCodeTimeout = 5 * time.Second
 const triggerSnapTrieNodeTimeout = 5 * time.Second
 const triggerWitnessMetadataTimeout = 5 * time.Second
 const triggerWitnessFetchTimeout = 5 * time.Second
+const maxSnapTriggerAccountScan = 8192
+
+var (
+	snapTriggerStorageFixtureAccount = common.HexToHash("0x1")
+	snapTriggerStorageFixtureSlot    = common.HexToHash("0x101")
+	snapTriggerCodeFixtureAccount    = common.HexToHash("0x2")
+	snapTriggerCodeFixture           = []byte{0x60, 0x00, 0x60, 0x00, 0xf3}
+	snapTriggerCodeFixtureHash       = crypto.Keccak256Hash(snapTriggerCodeFixture)
+)
 
 // TriggerTxGossip injects a synthetic transaction directly onto connected eth
 // peers. This is intended for operator testing of peer propagation paths.
@@ -293,6 +332,84 @@ func (api *AdminAPI) TriggerBlockBodyFetch(peerID *string) (*TrafficTriggerResul
 		PeerCount: len(peers),
 		PeerIDs:   peerIDs(peers),
 		BlockHash: hashes[0],
+	}, nil
+}
+
+// TriggerSnapAccountRangeFetch injects a deterministic account-range request
+// for the current head state root onto connected snap peers.
+func (api *AdminAPI) TriggerSnapAccountRangeFetch(peerID *string) (*TrafficTriggerResult, error) {
+	peers, err := api.targetSnapPeers(peerID)
+	if err != nil {
+		return nil, err
+	}
+	samples, err := api.snapTriggerSamples()
+	if err != nil {
+		return nil, err
+	}
+	if err := triggerSnapAccountRangeFetchToPeers(asSnapAccountRangeFetchPeers(peers), samples.root); err != nil {
+		return nil, err
+	}
+	return &TrafficTriggerResult{
+		PeerCount:   len(peers),
+		PeerIDs:     peerIDs(peers),
+		BlockHash:   samples.blockHash,
+		BlockNumber: samples.blockNumber,
+	}, nil
+}
+
+// TriggerSnapStorageRangeFetch injects a deterministic storage-range request
+// for an account known to have storage at the current head.
+func (api *AdminAPI) TriggerSnapStorageRangeFetch(peerID *string) (*TrafficTriggerResult, error) {
+	peers, err := api.targetSnapPeers(peerID)
+	if err != nil {
+		return nil, err
+	}
+	samples, err := api.snapTriggerSamples()
+	if err != nil {
+		return nil, err
+	}
+	if samples.storageAccount == (common.Hash{}) {
+		samples.storageAccount, err = api.snapTriggerStorageAccountFallback(samples.root)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if samples.storageAccount == (common.Hash{}) {
+		return nil, errors.New("no storage-bearing account found for snap trigger")
+	}
+	if err := triggerSnapStorageRangeFetchToPeers(asSnapStorageRangeFetchPeers(peers), samples.root, samples.storageAccount); err != nil {
+		return nil, err
+	}
+	return &TrafficTriggerResult{
+		PeerCount:   len(peers),
+		PeerIDs:     peerIDs(peers),
+		BlockHash:   samples.blockHash,
+		BlockNumber: samples.blockNumber,
+	}, nil
+}
+
+// TriggerSnapByteCodeFetch injects a deterministic bytecode request for a code
+// hash known to exist at the current head.
+func (api *AdminAPI) TriggerSnapByteCodeFetch(peerID *string) (*TrafficTriggerResult, error) {
+	peers, err := api.targetSnapPeers(peerID)
+	if err != nil {
+		return nil, err
+	}
+	samples, err := api.snapTriggerSamples()
+	if err != nil {
+		return nil, err
+	}
+	if samples.codeHash == (common.Hash{}) {
+		return nil, errors.New("no code-bearing account found for snap trigger")
+	}
+	if err := triggerSnapByteCodeFetchToPeers(asSnapByteCodeFetchPeers(peers), samples.codeHash); err != nil {
+		return nil, err
+	}
+	return &TrafficTriggerResult{
+		PeerCount:   len(peers),
+		PeerIDs:     peerIDs(peers),
+		BlockHash:   samples.blockHash,
+		BlockNumber: samples.blockNumber,
 	}, nil
 }
 
@@ -387,6 +504,62 @@ func (api *AdminAPI) SeedWitnessForHead() (*TrafficTriggerResult, error) {
 		BlockHash:   head.Hash(),
 		BlockNumber: head.Number.Uint64(),
 	}, nil
+}
+
+// SeedSnapTriggerFixtures stores deterministic snapshot fixtures so snap
+// trigger RPCs have stable storage/code sources on sparse test states.
+func (api *AdminAPI) SeedSnapTriggerFixtures() (*SnapTriggerFixtureResult, error) {
+	if api.eth == nil || api.eth.blockchain == nil {
+		return nil, errors.New("blockchain unavailable")
+	}
+	chain := api.eth.BlockChain()
+	head := chain.CurrentBlock()
+	if head == nil {
+		return nil, errors.New("current head unavailable")
+	}
+	if chain.TrieDB().Scheme() != rawdb.HashScheme {
+		return nil, errors.New("snap trigger fixtures require hash-scheme snapshots")
+	}
+	if chain.Snapshots() == nil {
+		return nil, errors.New("snapshots unavailable for snap trigger fixtures")
+	}
+	batch := chain.StateCache().TrieDB().Disk().NewBatch()
+	rawdb.WriteAccountSnapshot(batch, snapTriggerStorageFixtureAccount, types.SlimAccountRLP(types.StateAccount{
+		Balance:  uint256.NewInt(0),
+		Root:     common.HexToHash("0x1"),
+		CodeHash: types.EmptyCodeHash.Bytes(),
+	}))
+	rawdb.WriteStorageSnapshot(batch, snapTriggerStorageFixtureAccount, snapTriggerStorageFixtureSlot, []byte{0x01})
+	rawdb.WriteAccountSnapshot(batch, snapTriggerCodeFixtureAccount, types.SlimAccountRLP(types.StateAccount{
+		Balance:  uint256.NewInt(0),
+		Root:     types.EmptyRootHash,
+		CodeHash: snapTriggerCodeFixtureHash.Bytes(),
+	}))
+	rawdb.WriteCode(batch, snapTriggerCodeFixtureHash, snapTriggerCodeFixture)
+	if err := batch.Write(); err != nil {
+		return nil, fmt.Errorf("write snap trigger fixtures: %w", err)
+	}
+	return &SnapTriggerFixtureResult{
+		Root:           head.Root,
+		StorageAccount: snapTriggerStorageFixtureAccount,
+		StorageSlot:    snapTriggerStorageFixtureSlot,
+		CodeAccount:    snapTriggerCodeFixtureAccount,
+		CodeHash:       snapTriggerCodeFixtureHash,
+	}, nil
+}
+
+// BulkSidecarStatus returns a live snapshot of bulk-sidecar sessions, channels,
+// and per-channel counters for operator verification.
+func (api *AdminAPI) BulkSidecarStatus() (*p2p.BulkSidecarStatus, error) {
+	if api.eth == nil || api.eth.p2pServer == nil {
+		return &p2p.BulkSidecarStatus{}, nil
+	}
+	sidecar := api.eth.p2pServer.BulkSidecar()
+	if sidecar == nil {
+		return &p2p.BulkSidecarStatus{}, nil
+	}
+	status := sidecar.Status()
+	return &status, nil
 }
 
 // TriggerWitnessMetadataFetchByHash injects a witness metadata request for the
@@ -491,6 +664,22 @@ func (api *AdminAPI) targetSnapPeers(peerID *string) ([]*ethPeer, error) {
 		api.logTriggerTargets(selection, filtered)
 	}
 	return filtered, nil
+}
+
+type snapTriggerAccountIterator interface {
+	Next() bool
+	Error() error
+	Hash() common.Hash
+	Account() []byte
+	Release()
+}
+
+type snapTriggerSamples struct {
+	root           common.Hash
+	blockHash      common.Hash
+	blockNumber    uint64
+	storageAccount common.Hash
+	codeHash       common.Hash
 }
 
 type triggerTargetPeer interface {
@@ -673,6 +862,30 @@ func asBlockBodyFetchPeers(peers []*ethPeer) []blockBodyFetchPeer {
 	return out
 }
 
+func asSnapAccountRangeFetchPeers(peers []*ethPeer) []snapAccountRangeFetchPeer {
+	out := make([]snapAccountRangeFetchPeer, 0, len(peers))
+	for _, peer := range peers {
+		out = append(out, peer.snapExt.Peer)
+	}
+	return out
+}
+
+func asSnapStorageRangeFetchPeers(peers []*ethPeer) []snapStorageRangeFetchPeer {
+	out := make([]snapStorageRangeFetchPeer, 0, len(peers))
+	for _, peer := range peers {
+		out = append(out, peer.snapExt.Peer)
+	}
+	return out
+}
+
+func asSnapByteCodeFetchPeers(peers []*ethPeer) []snapByteCodeFetchPeer {
+	out := make([]snapByteCodeFetchPeer, 0, len(peers))
+	for _, peer := range peers {
+		out = append(out, peer.snapExt.Peer)
+	}
+	return out
+}
+
 func asSnapTrieNodeFetchPeers(peers []*ethPeer) []snapTrieNodeFetchPeer {
 	out := make([]snapTrieNodeFetchPeer, 0, len(peers))
 	for _, peer := range peers {
@@ -751,6 +964,54 @@ func triggerBlockBodyFetchToPeers(peers []blockBodyFetchPeer, hashes []common.Ha
 	return nil
 }
 
+func triggerSnapAccountRangeFetchToPeers(peers []snapAccountRangeFetchPeer, root common.Hash) error {
+	for _, peer := range peers {
+		sink := make(chan *snapproto.Response, 1)
+		req, err := peer.RequestAccountRangeWithSink(root, common.Hash{}, common.MaxHash, 4096, sink)
+		if err != nil {
+			return fmt.Errorf("request snap account range from peer %s: %w", peer.ID(), err)
+		}
+		if req != nil {
+			if err := waitForSnapAccountRangeResponse(req, sink); err != nil {
+				return fmt.Errorf("await snap account range response from peer %s: %w", peer.ID(), err)
+			}
+		}
+	}
+	return nil
+}
+
+func triggerSnapStorageRangeFetchToPeers(peers []snapStorageRangeFetchPeer, root, account common.Hash) error {
+	for _, peer := range peers {
+		sink := make(chan *snapproto.Response, 1)
+		req, err := peer.RequestStorageRangesWithSink(root, []common.Hash{account}, nil, nil, 4096, sink)
+		if err != nil {
+			return fmt.Errorf("request snap storage ranges from peer %s: %w", peer.ID(), err)
+		}
+		if req != nil {
+			if err := waitForSnapStorageRangeResponse(req, sink); err != nil {
+				return fmt.Errorf("await snap storage range response from peer %s: %w", peer.ID(), err)
+			}
+		}
+	}
+	return nil
+}
+
+func triggerSnapByteCodeFetchToPeers(peers []snapByteCodeFetchPeer, codeHash common.Hash) error {
+	for _, peer := range peers {
+		sink := make(chan *snapproto.Response, 1)
+		req, err := peer.RequestByteCodesWithSink([]common.Hash{codeHash}, 4096, sink)
+		if err != nil {
+			return fmt.Errorf("request snap bytecodes from peer %s: %w", peer.ID(), err)
+		}
+		if req != nil {
+			if err := waitForSnapByteCodeResponse(req, sink); err != nil {
+				return fmt.Errorf("await snap bytecode response from peer %s: %w", peer.ID(), err)
+			}
+		}
+	}
+	return nil
+}
+
 func triggerSnapTrieNodeFetchToPeers(peers []snapTrieNodeFetchPeer, root common.Hash, paths []snapproto.TrieNodePathSet, bytes uint64) error {
 	for _, peer := range peers {
 		sink := make(chan *snapproto.Response, 1)
@@ -816,6 +1077,93 @@ func waitForBodyFetchResponse(req *ethproto.Request, sink <-chan *ethproto.Respo
 			res.Done <- nil
 		}
 	case <-time.After(triggerBodyFetchResponseTimeout):
+	}
+}
+
+func waitForSnapAccountRangeResponse(req *snapproto.Request, sink <-chan *snapproto.Response) error {
+	defer func() {
+		_ = req.Close()
+	}()
+
+	select {
+	case res := <-sink:
+		if res == nil {
+			return errors.New("nil snap account range response")
+		}
+		packet, ok := res.Res.(*snapproto.AccountRangePacket)
+		if !ok {
+			return fmt.Errorf("unexpected snap account range response type %T", res.Res)
+		}
+		if len(packet.Accounts) == 0 {
+			if res.Done != nil {
+				res.Done <- nil
+			}
+			return errors.New("snap account range response contained no accounts")
+		}
+		if res.Done != nil {
+			res.Done <- nil
+		}
+		return nil
+	case <-time.After(triggerSnapAccountRangeTimeout):
+		return errors.New("snap account range response timeout")
+	}
+}
+
+func waitForSnapStorageRangeResponse(req *snapproto.Request, sink <-chan *snapproto.Response) error {
+	defer func() {
+		_ = req.Close()
+	}()
+
+	select {
+	case res := <-sink:
+		if res == nil {
+			return errors.New("nil snap storage range response")
+		}
+		packet, ok := res.Res.(*snapproto.StorageRangesPacket)
+		if !ok {
+			return fmt.Errorf("unexpected snap storage range response type %T", res.Res)
+		}
+		if len(packet.Slots) == 0 || len(packet.Slots[0]) == 0 {
+			if res.Done != nil {
+				res.Done <- nil
+			}
+			return errors.New("snap storage range response contained no slots")
+		}
+		if res.Done != nil {
+			res.Done <- nil
+		}
+		return nil
+	case <-time.After(triggerSnapStorageRangeTimeout):
+		return errors.New("snap storage range response timeout")
+	}
+}
+
+func waitForSnapByteCodeResponse(req *snapproto.Request, sink <-chan *snapproto.Response) error {
+	defer func() {
+		_ = req.Close()
+	}()
+
+	select {
+	case res := <-sink:
+		if res == nil {
+			return errors.New("nil snap bytecode response")
+		}
+		packet, ok := res.Res.(*snapproto.ByteCodesPacket)
+		if !ok {
+			return fmt.Errorf("unexpected snap bytecode response type %T", res.Res)
+		}
+		if len(packet.Codes) == 0 || len(packet.Codes[0]) == 0 {
+			if res.Done != nil {
+				res.Done <- nil
+			}
+			return errors.New("snap bytecode response contained no code")
+		}
+		if res.Done != nil {
+			res.Done <- nil
+		}
+		return nil
+	case <-time.After(triggerSnapByteCodeTimeout):
+		return errors.New("snap bytecode response timeout")
 	}
 }
 
@@ -924,4 +1272,119 @@ func (api *AdminAPI) bodyFetchHashForPeer(peer *ethPeer) (common.Hash, bool) {
 		return common.Hash{}, false
 	}
 	return currentHead.Hash(), true
+}
+
+func (api *AdminAPI) snapTriggerSamples() (*snapTriggerSamples, error) {
+	head := api.eth.BlockChain().CurrentBlock()
+	if head == nil {
+		return nil, errors.New("current head unavailable")
+	}
+	samples := &snapTriggerSamples{
+		root:        head.Root,
+		blockHash:   head.Hash(),
+		blockNumber: head.Number.Uint64(),
+	}
+	it, err := api.snapTriggerAccountIterator(samples.root)
+	if err != nil {
+		return nil, err
+	}
+	defer it.Release()
+
+	for scanned := 0; scanned < maxSnapTriggerAccountScan && it.Next(); scanned++ {
+		account, err := types.FullAccount(it.Account())
+		if err != nil {
+			return nil, fmt.Errorf("decode snap trigger account: %w", err)
+		}
+		if samples.storageAccount == (common.Hash{}) && account.Root != types.EmptyRootHash {
+			samples.storageAccount = it.Hash()
+		}
+		if samples.codeHash == (common.Hash{}) &&
+			len(account.CodeHash) > 0 &&
+			!bytes.Equal(account.CodeHash, types.EmptyCodeHash[:]) {
+			codeHash := common.BytesToHash(account.CodeHash)
+			if len(api.eth.BlockChain().ContractCodeWithPrefix(codeHash)) > 0 {
+				samples.codeHash = codeHash
+			}
+		}
+		if samples.storageAccount != (common.Hash{}) && samples.codeHash != (common.Hash{}) {
+			break
+		}
+	}
+	if err := it.Error(); err != nil {
+		return nil, fmt.Errorf("iterate snap trigger accounts: %w", err)
+	}
+	return samples, nil
+}
+
+func (api *AdminAPI) snapTriggerAccountIterator(root common.Hash) (snapTriggerAccountIterator, error) {
+	chain := api.eth.BlockChain()
+	if chain.TrieDB().Scheme() == rawdb.HashScheme {
+		if chain.Snapshots() == nil {
+			return nil, errors.New("snapshots unavailable for snap trigger")
+		}
+		return chain.Snapshots().AccountIterator(root, common.Hash{})
+	}
+	return chain.TrieDB().AccountIterator(root, common.Hash{})
+}
+
+func (api *AdminAPI) snapTriggerStorageAccountFallback(root common.Hash) (common.Hash, error) {
+	chain := api.eth.BlockChain()
+	if chain.TrieDB().Scheme() != rawdb.HashScheme {
+		return common.Hash{}, errors.New("no storage-bearing account found for snap trigger")
+	}
+	if chain.Snapshots() == nil {
+		return common.Hash{}, errors.New("snapshots unavailable for snap trigger")
+	}
+	it := rawdb.NewKeyLengthIterator(chain.StateCache().TrieDB().Disk().NewIterator(rawdb.SnapshotStoragePrefix, nil), len(rawdb.SnapshotStoragePrefix)+2*common.HashLength)
+	defer it.Release()
+
+	var lastAccount common.Hash
+	for it.Next() {
+		key := it.Key()
+		account := common.BytesToHash(key[len(rawdb.SnapshotStoragePrefix) : len(rawdb.SnapshotStoragePrefix)+common.HashLength])
+		if account == lastAccount {
+			continue
+		}
+		lastAccount = account
+
+		ok, err := api.snapTriggerStorageAvailable(root, account)
+		if err != nil {
+			return common.Hash{}, err
+		}
+		if ok {
+			return account, nil
+		}
+	}
+	if err := it.Error(); err != nil {
+		return common.Hash{}, fmt.Errorf("iterate snap trigger storage snapshot: %w", err)
+	}
+	return common.Hash{}, errors.New("no storage-bearing account found for snap trigger")
+}
+
+func (api *AdminAPI) snapTriggerStorageAvailable(root common.Hash, account common.Hash) (bool, error) {
+	chain := api.eth.BlockChain()
+	var (
+		it  snapshot.StorageIterator
+		err error
+	)
+	if chain.TrieDB().Scheme() == rawdb.HashScheme {
+		if chain.Snapshots() == nil {
+			return false, errors.New("snapshots unavailable for snap trigger")
+		}
+		it, err = chain.Snapshots().StorageIterator(root, account, common.Hash{})
+	} else {
+		it, err = chain.TrieDB().StorageIterator(root, account, common.Hash{})
+	}
+	if err != nil {
+		return false, nil
+	}
+	defer it.Release()
+
+	if !it.Next() {
+		if err := it.Error(); err != nil {
+			return false, fmt.Errorf("iterate snap trigger storage for %s: %w", account, err)
+		}
+		return false, nil
+	}
+	return true, nil
 }

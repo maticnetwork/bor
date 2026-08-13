@@ -54,7 +54,7 @@ type Peer struct {
 // NewPeer creates a new WIT peer and starts its background processes.
 func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter, logger log.Logger) *Peer {
 	id := p.ID().String()
-	routed := p2p.NewRoutedMsgReadWriter(rw, nil, isBulkWitMsg)
+	routed := p2p.NewChannelRoutedMsgReadWriter(rw, nil, "wit-bulk", isBulkWitMsg)
 	peer := &Peer{
 		id:                id,
 		Peer:              p,
@@ -87,7 +87,7 @@ func (p *Peer) AttachBulkRW(rw p2p.MsgReadWriter) {
 		routed.AttachBulk(rw)
 		return
 	}
-	p.rw = p2p.NewRoutedMsgReadWriter(p.rw, rw, isBulkWitMsg)
+	p.rw = p2p.NewChannelRoutedMsgReadWriter(p.rw, rw, "wit-bulk", isBulkWitMsg)
 }
 
 func (p *Peer) HasBulkRW() bool {

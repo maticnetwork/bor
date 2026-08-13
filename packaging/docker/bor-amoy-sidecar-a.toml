@@ -1,5 +1,7 @@
 chain = "amoy"
 datadir = "/var/lib/bor/data"
+state.scheme = "hash"
+"db.scheme" = "hash"
 syncmode = "full"
 snapshot = true
 verbosity = 5

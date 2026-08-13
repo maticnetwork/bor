@@ -43,7 +43,7 @@ type Peer struct {
 // version.
 func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter) *Peer {
 	id := p.ID().String()
-	routed := p2p.NewRoutedMsgReadWriter(rw, nil, isBulkSnapMsg)
+	routed := p2p.NewChannelRoutedMsgReadWriter(rw, nil, "snap-bulk", isBulkSnapMsg)
 
 	return &Peer{
 		id:      id,
@@ -59,7 +59,7 @@ func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter) *Peer {
 func NewFakePeer(version uint, id string, rw p2p.MsgReadWriter) *Peer {
 	return &Peer{
 		id:      id,
-		rw:      p2p.NewRoutedMsgReadWriter(rw, nil, isBulkSnapMsg),
+		rw:      p2p.NewChannelRoutedMsgReadWriter(rw, nil, "snap-bulk", isBulkSnapMsg),
 		version: version,
 		logger:  log.New("peer", id[:8]),
 		pending: make(map[uint64]*Request),
@@ -88,7 +88,7 @@ func (p *Peer) AttachBulkRW(rw p2p.MsgReadWriter) {
 		routed.AttachBulk(rw)
 		return
 	}
-	p.rw = p2p.NewRoutedMsgReadWriter(p.rw, rw, isBulkSnapMsg)
+	p.rw = p2p.NewChannelRoutedMsgReadWriter(p.rw, rw, "snap-bulk", isBulkSnapMsg)
 }
 
 func (p *Peer) HasBulkRW() bool {
@@ -130,6 +130,29 @@ func (p *Peer) RequestAccountRange(id uint64, root common.Hash, origin, limit co
 	})
 }
 
+// RequestAccountRangeWithSink fetches a batch of accounts and delivers the
+// response back to the supplied sink.
+func (p *Peer) RequestAccountRangeWithSink(root common.Hash, origin, limit common.Hash, bytes uint64, sink chan *Response) (*Request, error) {
+	id := rand.Uint64()
+	req := &Request{
+		id:   id,
+		sink: sink,
+		code: GetAccountRangeMsg,
+		want: AccountRangeMsg,
+		data: &GetAccountRangePacket{
+			ID:     id,
+			Root:   root,
+			Origin: origin,
+			Limit:  limit,
+			Bytes:  bytes,
+		},
+	}
+	if err := p.dispatchRequest(req); err != nil {
+		return nil, err
+	}
+	return req, nil
+}
+
 // RequestStorageRanges fetches a batch of storage slots belonging to one or more
 // accounts. If slots from only one account is requested, an origin marker may also
 // be used to retrieve from there.
@@ -152,6 +175,30 @@ func (p *Peer) RequestStorageRanges(id uint64, root common.Hash, accounts []comm
 	})
 }
 
+// RequestStorageRangesWithSink fetches storage ranges and delivers the response
+// back to the supplied sink.
+func (p *Peer) RequestStorageRangesWithSink(root common.Hash, accounts []common.Hash, origin, limit []byte, bytes uint64, sink chan *Response) (*Request, error) {
+	id := rand.Uint64()
+	req := &Request{
+		id:   id,
+		sink: sink,
+		code: GetStorageRangesMsg,
+		want: StorageRangesMsg,
+		data: &GetStorageRangesPacket{
+			ID:       id,
+			Root:     root,
+			Accounts: accounts,
+			Origin:   origin,
+			Limit:    limit,
+			Bytes:    bytes,
+		},
+	}
+	if err := p.dispatchRequest(req); err != nil {
+		return nil, err
+	}
+	return req, nil
+}
+
 // RequestByteCodes fetches a batch of bytecodes by hash.
 func (p *Peer) RequestByteCodes(id uint64, hashes []common.Hash, bytes uint64) error {
 	p.logger.Trace("Fetching set of byte codes", "reqid", id, "hashes", len(hashes), "bytes", common.StorageSize(bytes))
@@ -163,6 +210,27 @@ func (p *Peer) RequestByteCodes(id uint64, hashes []common.Hash, bytes uint64) e
 		Hashes: hashes,
 		Bytes:  bytes,
 	})
+}
+
+// RequestByteCodesWithSink fetches bytecodes and delivers the response back to
+// the supplied sink.
+func (p *Peer) RequestByteCodesWithSink(hashes []common.Hash, bytes uint64, sink chan *Response) (*Request, error) {
+	id := rand.Uint64()
+	req := &Request{
+		id:   id,
+		sink: sink,
+		code: GetByteCodesMsg,
+		want: ByteCodesMsg,
+		data: &GetByteCodesPacket{
+			ID:     id,
+			Hashes: hashes,
+			Bytes:  bytes,
+		},
+	}
+	if err := p.dispatchRequest(req); err != nil {
+		return nil, err
+	}
+	return req, nil
 }
 
 // RequestTrieNodes fetches a batch of account or storage trie nodes rooted in
