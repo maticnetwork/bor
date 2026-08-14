@@ -124,6 +124,9 @@ func (c *Client) newClientConn(conn ServerCodec) *clientConn {
 }
 
 func (cc *clientConn) close(err error, inflightReq *requestOp) {
+	// The client-side pool is per-connection (created in newClientConn), so it
+	// is owned here and must be stopped to release its metric goroutine.
+	cc.handler.executionPool.Stop()
 	cc.handler.close(err, inflightReq)
 	cc.codec.close()
 }
