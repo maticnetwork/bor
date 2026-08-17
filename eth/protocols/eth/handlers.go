@@ -255,6 +255,9 @@ func handleGetBlockBodies(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(&query); err != nil {
 		return err
 	}
+	heavyResponseServeSlots <- struct{}{}
+	defer func() { <-heavyResponseServeSlots }()
+
 	response := ServiceGetBlockBodiesQuery(backend.Chain(), query.GetBlockBodiesRequest)
 	return peer.ReplyBlockBodiesRLP(query.RequestId, response)
 }
@@ -306,6 +309,9 @@ func handleGetReceipts68(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(&query); err != nil {
 		return err
 	}
+	heavyResponseServeSlots <- struct{}{}
+	defer func() { <-heavyResponseServeSlots }()
+
 	response := ServiceGetReceiptsQuery68(backend.Chain(), query.GetReceiptsRequest)
 	return peer.ReplyReceiptsRLP(query.RequestId, response)
 }
@@ -316,6 +322,9 @@ func handleGetReceipts69(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(&query); err != nil {
 		return err
 	}
+	heavyResponseServeSlots <- struct{}{}
+	defer func() { <-heavyResponseServeSlots }()
+
 	response := ServiceGetReceiptsQuery69(backend.Chain(), query.GetReceiptsRequest)
 	return peer.ReplyReceiptsRLP(query.RequestId, response)
 }
@@ -494,6 +503,7 @@ func handleNewBlockhashes(backend Backend, msg Decoder, peer *Peer) error {
 	if err := msg.Decode(ann); err != nil {
 		return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 	}
+	peer.Log().Trace("Observed block announcements", "count", len(*ann))
 	// Mark the hashes as present at the remote node
 	for _, block := range *ann {
 		peer.markBlock(block.Hash)
@@ -695,6 +705,7 @@ func handleNewPooledTransactionHashes(backend Backend, msg Decoder, peer *Peer) 
 	if len(ann.Hashes) != len(ann.Types) || len(ann.Hashes) != len(ann.Sizes) {
 		return fmt.Errorf("NewPooledTransactionHashes: invalid len of fields in %v %v %v", len(ann.Hashes), len(ann.Types), len(ann.Sizes))
 	}
+	peer.Log().Trace("Observed transaction announcements", "count", len(ann.Hashes))
 	// Schedule all the unknown hashes for retrieval
 	for _, hash := range ann.Hashes {
 		peer.markTransaction(hash)

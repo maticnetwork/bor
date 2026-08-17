@@ -263,6 +263,7 @@ run_health_checks() {
 	require_json_pattern "${status_json}" '"eth-bulk"' "eth-bulk status"
 	require_json_pattern "${status_json}" '"eth-control"' "eth-control status"
 	require_json_pattern "${status_json}" '"eth-tx"' "eth-tx status"
+	require_json_pattern "${status_json}" '"eth-tx-fetch"' "eth-tx-fetch status"
 	require_json_pattern "${status_json}" '"snap-accounts"' "snap-accounts status"
 	require_json_pattern "${status_json}" '"snap-storage"' "snap-storage status"
 	require_json_pattern "${status_json}" '"snap-code"' "snap-code status"
@@ -273,10 +274,10 @@ run_health_checks() {
 run_fetcher_checks() {
 	trigger_since=$(log_since_time)
 	rpc_ok bor-a "admin_triggerTxFetch" >/dev/null
-	wait_for_log_since bor-a 'Bulk sidecar wrote message.*channel=eth-bulk.*code=9' "${trigger_since}" 30
-	wait_for_log_since bor-b 'Bulk sidecar read message.*channel=eth-bulk.*code=9' "${trigger_since}" 30
-	wait_for_log_since bor-b 'Bulk sidecar wrote message.*channel=eth-bulk.*code=10' "${trigger_since}" 30
-	wait_for_log_since bor-a 'Bulk sidecar read message.*channel=eth-bulk.*code=10' "${trigger_since}" 30
+	wait_for_log_since bor-a 'Bulk sidecar wrote message.*channel=eth-tx-fetch.*code=9' "${trigger_since}" 30
+	wait_for_log_since bor-b 'Bulk sidecar read message.*channel=eth-tx-fetch.*code=9' "${trigger_since}" 30
+	wait_for_log_since bor-b 'Bulk sidecar wrote message.*channel=eth-tx-fetch.*code=10' "${trigger_since}" 30
+	wait_for_log_since bor-a 'Bulk sidecar read message.*channel=eth-tx-fetch.*code=10' "${trigger_since}" 30
 
 	trigger_since=$(log_since_time)
 	rpc_ok bor-a "admin_triggerBlockBodyFetch" >/dev/null
@@ -311,6 +312,8 @@ wait_for_bulk_channels_since() {
 	wait_for_channel_open_since bor-b eth-control "${since}"
 	wait_for_channel_open_since bor-a eth-tx "${since}"
 	wait_for_channel_open_since bor-b eth-tx "${since}"
+	wait_for_channel_open_since bor-a eth-tx-fetch "${since}"
+	wait_for_channel_open_since bor-b eth-tx-fetch "${since}"
 	wait_for_channel_open_since bor-a snap-accounts "${since}"
 	wait_for_channel_open_since bor-b snap-accounts "${since}"
 	wait_for_channel_open_since bor-a snap-storage "${since}"
@@ -404,7 +407,7 @@ measure_all() {
 	wait_for_log_since bor-a 'Bulk sidecar wrote message.*channel=wit-bulk.*code=4' "${trigger_since}" 30
 	end_ms=$(now_ms)
 	echo "witness_metadata_request_ms=$((end_ms - start_ms))"
-	echo "tx_fetch_request_ms=$(measure_trigger bor-a admin_triggerTxFetch bor-a 'Bulk sidecar wrote message.*channel=eth-bulk.*code=9')"
+	echo "tx_fetch_request_ms=$(measure_trigger bor-a admin_triggerTxFetch bor-a 'Bulk sidecar wrote message.*channel=eth-tx-fetch.*code=9')"
 	echo "block_body_request_ms=$(measure_trigger bor-a admin_triggerBlockBodyFetch bor-a 'Bulk sidecar wrote message.*channel=eth-bulk.*code=5')"
 	trigger_since=$(log_since_time)
 	start_ms=$(now_ms)

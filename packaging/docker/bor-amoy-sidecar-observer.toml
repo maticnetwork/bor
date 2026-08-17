@@ -1,0 +1,44 @@
+chain = "amoy"
+datadir = "/var/lib/bor/data"
+state.scheme = "hash"
+"db.scheme" = "hash"
+syncmode = "full"
+snapshot = true
+verbosity = 5
+
+[p2p]
+  bind = "0.0.0.0"
+  port = 30303
+  bulk-sidecar = true
+  bulk-port = 30304
+  nodiscover = true
+  maxpeers = 5
+  maxpendpeers = 5
+  nat = "extip:172.30.0.4"
+  nodekeyhex = "6370fd0336434f0d5434f66c92f9c31a7df7db4b7c0f6234f8dfbb1f6f9e7331"
+  [p2p.discovery]
+    v4disc = false
+    v5disc = false
+    bootnodes = []
+    dns = []
+
+[jsonrpc]
+  [jsonrpc.http]
+    enabled = true
+    host = "0.0.0.0"
+    port = 8545
+    api = ["eth", "net", "web3", "txpool", "bor", "admin"]
+    vhosts = ["*"]
+    corsdomain = ["*"]
+  [jsonrpc.ws]
+    enabled = true
+    host = "0.0.0.0"
+    port = 8546
+    api = ["eth", "net", "web3"]
+    origins = ["*"]
+
+[witness]
+  enable = true
+
+[telemetry]
+  metrics = true

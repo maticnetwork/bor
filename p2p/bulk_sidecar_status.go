@@ -3,6 +3,9 @@ package p2p
 import (
 	"slices"
 	"sync"
+
+	"github.com/quic-go/quic-go/qlog"
+	"github.com/quic-go/quic-go/qlogwriter"
 )
 
 type BulkSidecarChannelCounters struct {
@@ -20,6 +23,22 @@ type BulkSidecarCounters struct {
 	Channels            map[string]BulkSidecarChannelCounters `json:"channels,omitempty"`
 }
 
+type BulkSidecarSocketBuffers struct {
+	ConfiguredReadBuffer  int `json:"configuredReadBuffer,omitempty"`
+	ActualReadBuffer      int `json:"actualReadBuffer,omitempty"`
+	ConfiguredWriteBuffer int `json:"configuredWriteBuffer,omitempty"`
+	ActualWriteBuffer     int `json:"actualWriteBuffer,omitempty"`
+}
+
+type BulkSidecarWireCounters struct {
+	PacketsSent     uint64 `json:"packetsSent"`
+	PacketsReceived uint64 `json:"packetsReceived"`
+	PacketsDropped  uint64 `json:"packetsDropped"`
+	BytesSent       uint64 `json:"bytesSent"`
+	BytesReceived   uint64 `json:"bytesReceived"`
+	BytesDropped    uint64 `json:"bytesDropped"`
+}
+
 type BulkSidecarPeerStatus struct {
 	PeerID    string   `json:"peerId"`
 	Connected bool     `json:"connected"`
@@ -28,18 +47,22 @@ type BulkSidecarPeerStatus struct {
 }
 
 type BulkSidecarStatus struct {
-	Enabled        bool                   `json:"enabled"`
-	ListenAddr     string                 `json:"listenAddr,omitempty"`
-	ActiveSessions int                    `json:"activeSessions"`
-	ActiveChannels int                    `json:"activeChannels"`
-	Peers          []BulkSidecarPeerStatus `json:"peers,omitempty"`
-	Counters       BulkSidecarCounters    `json:"counters"`
+	Enabled        bool                     `json:"enabled"`
+	ListenAddr     string                   `json:"listenAddr,omitempty"`
+	ActiveSessions int                      `json:"activeSessions"`
+	ActiveChannels int                      `json:"activeChannels"`
+	Peers          []BulkSidecarPeerStatus  `json:"peers,omitempty"`
+	SocketBuffers  BulkSidecarSocketBuffers `json:"socketBuffers,omitempty"`
+	Counters       BulkSidecarCounters      `json:"counters"`
+	Wire           BulkSidecarWireCounters  `json:"wire"`
 }
 
 type bulkSidecarStatsBook struct {
 	lock                sync.Mutex
 	sessionsEstablished uint64
 	channels            map[string]*BulkSidecarChannelCounters
+	socketBuffers       BulkSidecarSocketBuffers
+	wire                BulkSidecarWireCounters
 }
 
 var bulkSidecarStats = &bulkSidecarStatsBook{
@@ -53,8 +76,8 @@ func (b *BulkSidecar) Status() BulkSidecarStatus {
 	status := BulkSidecarStatus{
 		Enabled:    true,
 		ListenAddr: b.Addr().String(),
-		Counters:   bulkSidecarStats.snapshot(),
 	}
+	status.Counters, status.SocketBuffers, status.Wire = bulkSidecarStats.snapshot()
 	b.lock.Lock()
 	defer b.lock.Unlock()
 
@@ -146,7 +169,34 @@ func (s *bulkSidecarStatsBook) markChannelWriteFallback(channel string) {
 	s.channel(channel).WriteFallback++
 }
 
-func (s *bulkSidecarStatsBook) snapshot() BulkSidecarCounters {
+func (s *bulkSidecarStatsBook) setSocketBuffers(status BulkSidecarSocketBuffers) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	s.socketBuffers = status
+}
+
+func (s *bulkSidecarStatsBook) markPacketSent(length int) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	s.wire.PacketsSent++
+	s.wire.BytesSent += uint64(length)
+}
+
+func (s *bulkSidecarStatsBook) markPacketReceived(length int) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	s.wire.PacketsReceived++
+	s.wire.BytesReceived += uint64(length)
+}
+
+func (s *bulkSidecarStatsBook) markPacketDropped(length int) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	s.wire.PacketsDropped++
+	s.wire.BytesDropped += uint64(length)
+}
+
+func (s *bulkSidecarStatsBook) snapshot() (BulkSidecarCounters, BulkSidecarSocketBuffers, BulkSidecarWireCounters) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -157,7 +207,7 @@ func (s *bulkSidecarStatsBook) snapshot() BulkSidecarCounters {
 	for name, counters := range s.channels {
 		out.Channels[name] = *counters
 	}
-	return out
+	return out, s.socketBuffers, s.wire
 }
 
 func (s *bulkSidecarStatsBook) channel(name string) *BulkSidecarChannelCounters {
@@ -168,3 +218,38 @@ func (s *bulkSidecarStatsBook) channel(name string) *BulkSidecarChannelCounters 
 	}
 	return counters
 }
+
+func (s *bulkSidecarStatsBook) newTransportRecorder() qlogwriter.Recorder {
+	return &bulkSidecarQlogRecorder{stats: s}
+}
+
+func (s *bulkSidecarStatsBook) newConnectionTrace() qlogwriter.Trace {
+	return &bulkSidecarQlogTrace{stats: s}
+}
+
+type bulkSidecarQlogTrace struct {
+	stats *bulkSidecarStatsBook
+}
+
+func (t *bulkSidecarQlogTrace) SupportsSchemas(string) bool { return true }
+
+func (t *bulkSidecarQlogTrace) AddProducer() qlogwriter.Recorder {
+	return &bulkSidecarQlogRecorder{stats: t.stats}
+}
+
+type bulkSidecarQlogRecorder struct {
+	stats *bulkSidecarStatsBook
+}
+
+func (r *bulkSidecarQlogRecorder) RecordEvent(ev qlogwriter.Event) {
+	switch event := ev.(type) {
+	case qlog.PacketSent:
+		r.stats.markPacketSent(event.Raw.Length)
+	case qlog.PacketReceived:
+		r.stats.markPacketReceived(event.Raw.Length)
+	case qlog.PacketDropped:
+		r.stats.markPacketDropped(event.Raw.Length)
+	}
+}
+
+func (r *bulkSidecarQlogRecorder) Close() error { return nil }

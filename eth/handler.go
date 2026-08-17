@@ -615,7 +615,7 @@ func (h *handler) attachBulkSidecar(peer *eth.Peer, snapPeer *snap.Peer, witPeer
 	}
 	sidecar := h.p2pServer.BulkSidecar()
 	go func() {
-		for _, channel := range []string{"eth-control", "eth-blocks", "eth-tx", "eth-bulk"} {
+		for _, channel := range []string{"eth-control", "eth-blocks", "eth-tx", "eth-tx-fetch", "eth-bulk"} {
 			if rw, err := sidecar.OpenChannel(peer.Peer, channel); err != nil {
 				peer.Log().Debug("Bulk eth sidecar unavailable", "channel", channel, "err", err)
 			} else {

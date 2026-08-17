@@ -32,9 +32,11 @@ import (
 	"net"
 	"slices"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/quic-go/quic-go"
+	"github.com/quic-go/quic-go/qlogwriter"
 
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/log"
@@ -55,6 +57,8 @@ const (
 	bulkMessageReadTimeout    = 30 * time.Second
 	bulkMessageWriteTimeout   = 20 * time.Second
 	bulkConnReceiveWindow     = 16 * bulkMaxMessageSize
+	bulkSocketReadBufferSize  = 8 * 1024 * 1024
+	bulkSocketWriteBufferSize = 8 * 1024 * 1024
 	bulkSidecarCloseErrorCode = quic.ApplicationErrorCode(0x424f52)
 	bulkSidecarProtocolError  = quic.ApplicationErrorCode(0x424f53)
 )
@@ -66,11 +70,12 @@ var (
 )
 
 type BulkSidecar struct {
-	srv      *Server
-	listener *quic.Listener
-	tls      *tls.Config
-	config   *quic.Config
-	log      log.Logger
+	srv       *Server
+	listener  *quic.Listener
+	transport *quic.Transport
+	tls       *tls.Config
+	config    *quic.Config
+	log       log.Logger
 
 	localID enode.ID
 	priv    *ecdsa.PrivateKey
@@ -148,21 +153,41 @@ func newBulkSidecar(srv *Server, listenAddr string) (*BulkSidecar, error) {
 		MaxStreamReceiveWindow:         2 * bulkMaxMessageSize,
 		InitialConnectionReceiveWindow: bulkConnReceiveWindow,
 		MaxConnectionReceiveWindow:     bulkConnReceiveWindow,
+		Tracer: func(context.Context, bool, quic.ConnectionID) qlogwriter.Trace {
+			return bulkSidecarStats.newConnectionTrace()
+		},
 	}
-	listener, err := quic.ListenAddr(listenAddr, tlsConf, quicConf)
+	udpAddr, err := net.ResolveUDPAddr("udp", listenAddr)
 	if err != nil {
 		return nil, err
 	}
+	udpConn, err := net.ListenUDP("udp", udpAddr)
+	if err != nil {
+		return nil, err
+	}
+	socketBuffers := configureBulkSidecarSocketBuffers(udpConn)
+	bulkSidecarStats.setSocketBuffers(socketBuffers)
+
+	transport := &quic.Transport{
+		Conn:   udpConn,
+		Tracer: bulkSidecarStats.newTransportRecorder(),
+	}
+	listener, err := transport.Listen(tlsConf, quicConf)
+	if err != nil {
+		_ = udpConn.Close()
+		return nil, err
+	}
 	return &BulkSidecar{
-		srv:      srv,
-		listener: listener,
-		tls:      tlsConf,
-		config:   quicConf,
-		log:      srv.log,
-		localID:  srv.localnode.ID(),
-		priv:     srv.PrivateKey,
-		closeCh:  make(chan struct{}),
-		sessions: make(map[enode.ID]*bulkSession),
+		srv:       srv,
+		listener:  listener,
+		transport: transport,
+		tls:       tlsConf,
+		config:    quicConf,
+		log:       srv.log,
+		localID:   srv.localnode.ID(),
+		priv:      srv.PrivateKey,
+		closeCh:   make(chan struct{}),
+		sessions:  make(map[enode.ID]*bulkSession),
 	}, nil
 }
 
@@ -173,7 +198,9 @@ func (b *BulkSidecar) Addr() net.Addr {
 func (b *BulkSidecar) Close() {
 	b.closeOnce.Do(func() {
 		close(b.closeCh)
-		if b.listener != nil {
+		if b.transport != nil {
+			_ = b.transport.Close()
+		} else if b.listener != nil {
 			_ = b.listener.Close()
 		}
 		b.lock.Lock()
@@ -640,9 +667,6 @@ func (s *bulkSession) storeChannel(channel string, rw MsgReadWriter) {
 }
 
 func (rw *bulkStreamMsgRW) ReadMsg() (Msg, error) {
-	if err := rw.stream.SetReadDeadline(time.Now().Add(bulkMessageReadTimeout)); err != nil {
-		return Msg{}, err
-	}
 	var header [bulkFrameHeaderSize]byte
 	if _, err := io.ReadFull(rw.stream, header[:]); err != nil {
 		return Msg{}, err
@@ -650,6 +674,9 @@ func (rw *bulkStreamMsgRW) ReadMsg() (Msg, error) {
 	size := binary.BigEndian.Uint32(header[8:])
 	if size > bulkMaxMessageSize {
 		return Msg{}, fmt.Errorf("bulk message too large: %d", size)
+	}
+	if err := rw.stream.SetReadDeadline(time.Now().Add(bulkMessageReadTimeout)); err != nil {
+		return Msg{}, err
 	}
 	msg := Msg{
 		Code:    binary.BigEndian.Uint64(header[:8]),
@@ -707,6 +734,39 @@ func writeBulkControl(stream *quic.Stream, msg interface{}) error {
 	}
 	_, err = stream.Write(payload)
 	return err
+}
+
+func configureBulkSidecarSocketBuffers(conn *net.UDPConn) BulkSidecarSocketBuffers {
+	status := BulkSidecarSocketBuffers{
+		ConfiguredReadBuffer:  bulkSocketReadBufferSize,
+		ConfiguredWriteBuffer: bulkSocketWriteBufferSize,
+	}
+	if err := conn.SetReadBuffer(status.ConfiguredReadBuffer); err != nil {
+		status.ConfiguredReadBuffer = 0
+	}
+	if err := conn.SetWriteBuffer(status.ConfiguredWriteBuffer); err != nil {
+		status.ConfiguredWriteBuffer = 0
+	}
+	status.ActualReadBuffer = socketBufferSize(conn, syscall.SO_RCVBUF)
+	status.ActualWriteBuffer = socketBufferSize(conn, syscall.SO_SNDBUF)
+	return status
+}
+
+func socketBufferSize(conn *net.UDPConn, opt int) int {
+	rawConn, err := conn.SyscallConn()
+	if err != nil {
+		return 0
+	}
+	value := 0
+	controlErr := rawConn.Control(func(fd uintptr) {
+		if size, sockErr := syscall.GetsockoptInt(int(fd), syscall.SOL_SOCKET, opt); sockErr == nil {
+			value = size
+		}
+	})
+	if controlErr != nil {
+		return 0
+	}
+	return value
 }
 
 func readBulkControl(stream *quic.Stream, maxSize uint32, out interface{}) error {

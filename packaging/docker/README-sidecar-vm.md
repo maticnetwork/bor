@@ -50,8 +50,8 @@ What matters:
 - `p2p.nat = "extip:..."` should advertise the real address the other node can
   dial for both devp2p and the sidecar metadata.
 - `[witness].enable = true` is required if you want to validate `wit-bulk`.
-- No extra compile-time switch is required for `eth-bulk`, `snap-bulk`, or
-  `wit-bulk`.
+- No extra compile-time switch is required for any of the QUIC sidecar lanes,
+  including `eth-tx`, `eth-tx-fetch`, `eth-bulk`, `snap-*`, or `wit-bulk`.
 
 Minimal two-node process:
 
@@ -61,8 +61,9 @@ Minimal two-node process:
 4. Call `admin_addPeer(["<other-enr>"])` on both sides.
 5. Wait for `admin_peers` to show the opposite node ID on each side.
 6. Confirm logs show `Bulk sidecar session established`.
-7. Confirm logs show `Bulk sidecar channel opened` for `eth-bulk`,
-   `snap-bulk`, and `wit-bulk`.
+7. Confirm logs show `Bulk sidecar channel opened` for `eth-control`,
+   `eth-blocks`, `eth-tx`, `eth-tx-fetch`, `eth-bulk`, `snap-accounts`,
+   `snap-storage`, `snap-code`, `snap-trie`, and `wit-bulk`.
 8. Trigger traffic over RPC:
 
 ```bash
@@ -122,11 +123,13 @@ rg "Bulk sidecar session established|Bulk sidecar channel opened|Bulk sidecar (w
 
 Expected live signals:
 
-- `eth-bulk` carries tx gossip, block announcements, tx fetches, and block body
-  fetches.
-- `snap-bulk` carries the deterministic trie-node request/response triggered by
-  `admin_triggerSnapTrieNodeFetch`, plus deterministic account-range,
-  storage-range, and bytecode request/response traffic.
+- `eth-tx` carries direct transaction gossip and transaction announcements.
+- `eth-blocks` carries block announcements and full block propagation.
+- `eth-control` carries header / range-control traffic.
+- `eth-tx-fetch` carries pooled-tx request / response traffic.
+- `eth-bulk` carries block bodies and receipts.
+- `snap-accounts`, `snap-storage`, `snap-code`, and `snap-trie` carry the
+  deterministic snap request / response traffic for their corresponding paths.
 - `wit-bulk` carries witness announcements, metadata probes, and witness page
   fetches.
 

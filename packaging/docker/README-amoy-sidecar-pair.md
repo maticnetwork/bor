@@ -42,6 +42,7 @@ What this does:
 - assigns stable nodekeys and stable container IPs
 - pairs the nodes with `admin_addPeer` using full ENRs so QUIC metadata is preserved
 - verifies `eth-blocks`, `eth-bulk`, `eth-control`, `eth-tx`,
+  `eth-tx-fetch`,
   `snap-accounts`, `snap-storage`, `snap-code`, `snap-trie`, and `wit-bulk`
   channel bring-up from logs
 - actively triggers tx gossip and block announcements through the local `admin`
@@ -54,8 +55,8 @@ What this does:
   the local `admin` RPC and verifies the resulting `wit-bulk` sidecar message logs
 - seeds a deterministic witness on one node and verifies both witness metadata
   fetch and full witness page fetch over `wit-bulk`
-- actively triggers tx fetch and block body fetch requests so fetcher-style bulk
-  traffic is also verified on the sidecar
+- actively triggers tx fetch and block body fetch requests so fetcher-style
+  sidecar traffic is verified on both `eth-tx-fetch` and `eth-bulk`
 - restarts one node on demand, waits for devp2p and QUIC sidecar recovery, and
   reruns the mixed traffic checks so recovery is validated instead of assumed
 - captures `admin_bulkSidecarStatus` snapshots before and after each recovery
@@ -67,7 +68,8 @@ What this does:
 - exposes `soak-high-confidence` as the default longer churn preset
   (`soak-long 50 10`)
 - exposes `status` output with the live `admin_bulkSidecarStatus` snapshot from
-  each node so session/channel health and counters are visible without log spelunking
+  each node so session/channel health, UDP socket buffers, and QUIC packet
+  counters are visible without log spelunking
 
 Notes:
 
