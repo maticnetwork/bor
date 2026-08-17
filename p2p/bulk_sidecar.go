@@ -54,6 +54,7 @@ const (
 	bulkChannelOpenTimeout    = 5 * time.Second
 	bulkMessageReadTimeout    = 30 * time.Second
 	bulkMessageWriteTimeout   = 20 * time.Second
+	bulkConnReceiveWindow     = 16 * bulkMaxMessageSize
 	bulkSidecarCloseErrorCode = quic.ApplicationErrorCode(0x424f52)
 	bulkSidecarProtocolError  = quic.ApplicationErrorCode(0x424f53)
 )
@@ -122,10 +123,10 @@ type bulkChannelHello struct {
 }
 
 type bulkStreamMsgRW struct {
-	stream *quic.Stream
+	stream  *quic.Stream
 	channel string
-	log    log.Logger
-	write  sync.Mutex
+	log     log.Logger
+	write   sync.Mutex
 }
 
 func newBulkSidecar(srv *Server, listenAddr string) (*BulkSidecar, error) {
@@ -142,11 +143,11 @@ func newBulkSidecar(srv *Server, listenAddr string) (*BulkSidecar, error) {
 		HandshakeIdleTimeout:           bulkAuthTimeout,
 		MaxIdleTimeout:                 60 * time.Second,
 		KeepAlivePeriod:                15 * time.Second,
-		MaxIncomingStreams:             16,
+		MaxIncomingStreams:             32,
 		InitialStreamReceiveWindow:     2 * bulkMaxMessageSize,
 		MaxStreamReceiveWindow:         2 * bulkMaxMessageSize,
-		InitialConnectionReceiveWindow: 4 * bulkMaxMessageSize,
-		MaxConnectionReceiveWindow:     4 * bulkMaxMessageSize,
+		InitialConnectionReceiveWindow: bulkConnReceiveWindow,
+		MaxConnectionReceiveWindow:     bulkConnReceiveWindow,
 	}
 	listener, err := quic.ListenAddr(listenAddr, tlsConf, quicConf)
 	if err != nil {
@@ -558,9 +559,9 @@ func (s *bulkSession) openChannel(ctx context.Context, channel string) (MsgReadW
 			return nil, err
 		}
 		rw := &bulkStreamMsgRW{
-			stream: stream,
+			stream:  stream,
 			channel: channel,
-			log:    log.New("peer", s.remoteID, "channel", channel),
+			log:     log.New("peer", s.remoteID, "channel", channel),
 		}
 		s.storeChannel(channel, rw)
 		return rw, nil
@@ -580,9 +581,9 @@ func (s *bulkSession) acceptChannel(stream *quic.Stream) error {
 		return errors.New("invalid bulk channel name")
 	}
 	s.storeChannel(hello.Channel, &bulkStreamMsgRW{
-		stream: stream,
+		stream:  stream,
 		channel: hello.Channel,
-		log:    log.New("peer", s.remoteID, "channel", hello.Channel),
+		log:     log.New("peer", s.remoteID, "channel", hello.Channel),
 	})
 	return nil
 }
@@ -653,7 +654,7 @@ func (rw *bulkStreamMsgRW) ReadMsg() (Msg, error) {
 	msg := Msg{
 		Code:    binary.BigEndian.Uint64(header[:8]),
 		Size:    size,
-		Payload: io.LimitReader(deadlineReader{stream: rw.stream}, int64(size)),
+		Payload: io.LimitReader(rw.stream, int64(size)),
 	}
 	bulkSidecarStats.markChannelRead(rw.channel)
 	rw.log.Trace("Bulk sidecar read message", "code", msg.Code, "size", msg.Size)
@@ -686,17 +687,6 @@ func (rw *bulkStreamMsgRW) WriteMsg(msg Msg) error {
 	bulkSidecarStats.markChannelWrite(rw.channel)
 	rw.log.Trace("Bulk sidecar wrote message", "code", msg.Code, "size", msg.Size)
 	return nil
-}
-
-type deadlineReader struct {
-	stream *quic.Stream
-}
-
-func (r deadlineReader) Read(p []byte) (int, error) {
-	if err := r.stream.SetReadDeadline(time.Now().Add(bulkMessageReadTimeout)); err != nil {
-		return 0, err
-	}
-	return r.stream.Read(p)
 }
 
 func writeBulkControl(stream *quic.Stream, msg interface{}) error {

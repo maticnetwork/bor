@@ -14,23 +14,38 @@ func TestPeerAttachBulkRWRoutesSnapTraffic(t *testing.T) {
 	defer primaryApp.Close()
 	defer primaryNet.Close()
 
-	bulkApp, bulkNet := p2p.MsgPipe()
-	defer bulkApp.Close()
-	defer bulkNet.Close()
+	accountApp, accountNet := p2p.MsgPipe()
+	defer accountApp.Close()
+	defer accountNet.Close()
+
+	storageApp, storageNet := p2p.MsgPipe()
+	defer storageApp.Close()
+	defer storageNet.Close()
+
+	codeApp, codeNet := p2p.MsgPipe()
+	defer codeApp.Close()
+	defer codeNet.Close()
+
+	trieApp, trieNet := p2p.MsgPipe()
+	defer trieApp.Close()
+	defer trieNet.Close()
 
 	peer := NewFakePeer(SNAP1, "snap-test", primaryNet)
-	peer.AttachBulkRW(bulkNet)
+	peer.AttachBulkChannelRW(snapAccountsChannel, accountNet)
+	peer.AttachBulkChannelRW(snapStorageChannel, storageNet)
+	peer.AttachBulkChannelRW(snapCodeChannel, codeNet)
+	peer.AttachBulkChannelRW(snapTrieChannel, trieNet)
 
 	errc := make(chan error, 1)
 	go func() {
 		errc <- peer.RequestByteCodes(7, []common.Hash{{0x01}}, 1024)
 	}()
-	if err := p2p.ExpectMsg(bulkApp, GetByteCodesMsg, &GetByteCodesPacket{
+	if err := p2p.ExpectMsg(codeApp, GetByteCodesMsg, &GetByteCodesPacket{
 		ID:     7,
 		Hashes: []common.Hash{{0x01}},
 		Bytes:  1024,
 	}); err != nil {
-		t.Fatalf("bulk lane mismatch: %v", err)
+		t.Fatalf("bytecode lane mismatch: %v", err)
 	}
 	if err := <-errc; err != nil {
 		t.Fatalf("failed to send bytecode request: %v", err)
@@ -40,11 +55,56 @@ func TestPeerAttachBulkRWRoutesSnapTraffic(t *testing.T) {
 	go func() {
 		errc <- p2p.Send(peer.rw, AccountRangeMsg, &AccountRangePacket{ID: 8})
 	}()
-	if err := p2p.ExpectMsg(bulkApp, AccountRangeMsg, &AccountRangePacket{ID: 8}); err != nil {
-		t.Fatalf("snap response did not use sidecar lane: %v", err)
+	if err := p2p.ExpectMsg(accountApp, AccountRangeMsg, &AccountRangePacket{ID: 8}); err != nil {
+		t.Fatalf("account lane mismatch: %v", err)
 	}
 	if err := <-errc; err != nil {
 		t.Fatalf("failed to send account range response: %v", err)
+	}
+
+	errc = make(chan error, 1)
+	go func() {
+		errc <- peer.RequestStorageRanges(9, common.Hash{0x02}, []common.Hash{{0x03}}, nil, nil, 2048)
+	}()
+	if err := p2p.ExpectMsg(storageApp, GetStorageRangesMsg, &GetStorageRangesPacket{
+		ID:       9,
+		Root:     common.Hash{0x02},
+		Accounts: []common.Hash{{0x03}},
+		Origin:   nil,
+		Limit:    nil,
+		Bytes:    2048,
+	}); err != nil {
+		t.Fatalf("storage lane mismatch: %v", err)
+	}
+	if err := <-errc; err != nil {
+		t.Fatalf("failed to send storage request: %v", err)
+	}
+
+	errc = make(chan error, 1)
+	go func() {
+		errc <- peer.RequestTrieNodes(10, common.Hash{0x04}, []TrieNodePathSet{{[]byte{0xaa}}}, 4096)
+	}()
+	if err := p2p.ExpectMsg(trieApp, GetTrieNodesMsg, &GetTrieNodesPacket{
+		ID:    10,
+		Root:  common.Hash{0x04},
+		Paths: []TrieNodePathSet{{[]byte{0xaa}}},
+		Bytes: 4096,
+	}); err != nil {
+		t.Fatalf("trie lane mismatch: %v", err)
+	}
+	if err := <-errc; err != nil {
+		t.Fatalf("failed to send trie request: %v", err)
+	}
+
+	errc = make(chan error, 1)
+	go func() {
+		errc <- p2p.Send(peer.rw, TrieNodesMsg, &TrieNodesPacket{ID: 11})
+	}()
+	if err := p2p.ExpectMsg(trieApp, TrieNodesMsg, &TrieNodesPacket{ID: 11}); err != nil {
+		t.Fatalf("trie response did not use trie lane: %v", err)
+	}
+	if err := <-errc; err != nil {
+		t.Fatalf("failed to send trie response: %v", err)
 	}
 }
 
@@ -53,12 +113,12 @@ func TestHandleConsumesBulkLanePackets(t *testing.T) {
 	defer primaryApp.Close()
 	defer primaryNet.Close()
 
-	bulkApp, bulkNet := p2p.MsgPipe()
-	defer bulkApp.Close()
-	defer bulkNet.Close()
+	codeApp, codeNet := p2p.MsgPipe()
+	defer codeApp.Close()
+	defer codeNet.Close()
 
 	peer := NewFakePeer(SNAP1, "snap-test", primaryNet)
-	peer.AttachBulkRW(bulkNet)
+	peer.AttachBulkChannelRW(snapCodeChannel, codeNet)
 
 	backend := &snapBackendStub{
 		handled: make(chan Packet, 1),
@@ -69,7 +129,7 @@ func TestHandleConsumesBulkLanePackets(t *testing.T) {
 	}()
 
 	packet := &ByteCodesPacket{ID: 9, Codes: [][]byte{{0xaa, 0xbb}}}
-	if err := p2p.Send(bulkApp, ByteCodesMsg, packet); err != nil {
+	if err := p2p.Send(codeApp, ByteCodesMsg, packet); err != nil {
 		t.Fatalf("failed to send bulk response: %v", err)
 	}
 
@@ -86,7 +146,7 @@ func TestHandleConsumesBulkLanePackets(t *testing.T) {
 		t.Fatalf("handler exited early: %v", err)
 	}
 
-	if err := bulkApp.Close(); err != nil {
+	if err := codeApp.Close(); err != nil {
 		t.Fatalf("failed to close bulk lane: %v", err)
 	}
 	if err := primaryApp.Close(); err != nil {
@@ -114,24 +174,24 @@ func (b *snapBackendStub) Handle(peer *Peer, packet Packet) error {
 	return nil
 }
 
-func TestIsBulkSnapMsgRoutesAllMessages(t *testing.T) {
+func TestSnapSidecarChannelForMsg(t *testing.T) {
 	tests := []struct {
 		code uint64
-		want bool
+		want string
 	}{
-		{GetAccountRangeMsg, true},
-		{AccountRangeMsg, true},
-		{GetStorageRangesMsg, true},
-		{StorageRangesMsg, true},
-		{GetByteCodesMsg, true},
-		{ByteCodesMsg, true},
-		{GetTrieNodesMsg, true},
-		{TrieNodesMsg, true},
-		{0xff, false},
+		{GetAccountRangeMsg, snapAccountsChannel},
+		{AccountRangeMsg, snapAccountsChannel},
+		{GetStorageRangesMsg, snapStorageChannel},
+		{StorageRangesMsg, snapStorageChannel},
+		{GetByteCodesMsg, snapCodeChannel},
+		{ByteCodesMsg, snapCodeChannel},
+		{GetTrieNodesMsg, snapTrieChannel},
+		{TrieNodesMsg, snapTrieChannel},
+		{0xff, ""},
 	}
 	for _, test := range tests {
-		if got := isBulkSnapMsg(test.code); got != test.want {
-			t.Fatalf("isBulkSnapMsg(%d) = %v, want %v", test.code, got, test.want)
+		if got := snapSidecarChannelForMsg(test.code); got != test.want {
+			t.Fatalf("snapSidecarChannelForMsg(%d) = %q, want %q", test.code, got, test.want)
 		}
 	}
 }

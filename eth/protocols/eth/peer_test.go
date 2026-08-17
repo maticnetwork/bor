@@ -177,6 +177,18 @@ func TestPeerAttachBulkRWRoutesEthTraffic(t *testing.T) {
 	defer primaryApp.Close()
 	defer primaryNet.Close()
 
+	controlApp, controlNet := p2p.MsgPipe()
+	defer controlApp.Close()
+	defer controlNet.Close()
+
+	blocksApp, blocksNet := p2p.MsgPipe()
+	defer blocksApp.Close()
+	defer blocksNet.Close()
+
+	txApp, txNet := p2p.MsgPipe()
+	defer txApp.Close()
+	defer txNet.Close()
+
 	bulkApp, bulkNet := p2p.MsgPipe()
 	defer bulkApp.Close()
 	defer bulkNet.Close()
@@ -186,7 +198,10 @@ func TestPeerAttachBulkRWRoutesEthTraffic(t *testing.T) {
 
 	peer := NewPeer(ETH69, p2p.NewPeer(id, "test", nil), primaryNet, nil)
 	defer peer.Close()
-	peer.AttachBulkRW(bulkNet)
+	peer.AttachBulkChannelRW(ethControlChannel, controlNet)
+	peer.AttachBulkChannelRW(ethBlocksChannel, blocksNet)
+	peer.AttachBulkChannelRW(ethTxChannel, txNet)
+	peer.AttachBulkChannelRW(ethBulkChannel, bulkNet)
 
 	resCh := make(chan *Response, 1)
 	hashes := []common.Hash{{0x01}, {0x02}}
@@ -281,19 +296,19 @@ func TestPeerAttachBulkRWRoutesEthTraffic(t *testing.T) {
 	}
 
 	go func() { errc <- peer.SendTransactions(types.Transactions{}) }()
-	if err := p2p.ExpectMsg(bulkApp, TransactionsMsg, types.Transactions{}); err != nil {
-		t.Fatalf("transactions gossip did not use sidecar lane: %v", err)
+	if err := p2p.ExpectMsg(txApp, TransactionsMsg, types.Transactions{}); err != nil {
+		t.Fatalf("transactions gossip did not use tx lane: %v", err)
 	}
 	if err := <-errc; err != nil {
 		t.Fatalf("failed to send transactions: %v", err)
 	}
 
 	go func() { errc <- peer.SendNewBlockHashes(hashes, []uint64{1, 2}) }()
-	if err := p2p.ExpectMsg(bulkApp, NewBlockHashesMsg, NewBlockHashesPacket{
+	if err := p2p.ExpectMsg(blocksApp, NewBlockHashesMsg, NewBlockHashesPacket{
 		{Hash: hashes[0], Number: 1},
 		{Hash: hashes[1], Number: 2},
 	}); err != nil {
-		t.Fatalf("block announcement did not use sidecar lane: %v", err)
+		t.Fatalf("block announcement did not use block lane: %v", err)
 	}
 	if err := <-errc; err != nil {
 		t.Fatalf("failed to send block hashes: %v", err)
@@ -323,6 +338,33 @@ func TestPeerAttachBulkRWRoutesEthTraffic(t *testing.T) {
 		t.Fatalf("failed to request transactions: %v", err)
 	}
 
+	go func() {
+		req, err := peer.RequestHeadersByHash(hashes[0], 2, 0, false, resCh)
+		if err == nil {
+			reqc <- req
+		}
+		errc <- err
+	}()
+	msg, err = controlApp.ReadMsg()
+	if err != nil {
+		t.Fatalf("failed to read header request: %v", err)
+	}
+	if msg.Code != GetBlockHeadersMsg {
+		t.Fatalf("unexpected header request code: got %d want %d", msg.Code, GetBlockHeadersMsg)
+	}
+	var headersReq GetBlockHeadersPacket
+	if err := msg.Decode(&headersReq); err != nil {
+		t.Fatalf("failed to decode header request: %v", err)
+	}
+	req = <-reqc
+	defer req.Close()
+	if err := <-errc; err != nil {
+		t.Fatalf("failed to request headers: %v", err)
+	}
+	if req.id != headersReq.RequestId {
+		t.Fatalf("header request id mismatch: got %d want %d", req.id, headersReq.RequestId)
+	}
+
 	go func() { errc <- p2p.Send(peer.rw, StatusMsg, &StatusPacket68{}) }()
 	if err := p2p.ExpectMsg(primaryApp, StatusMsg, &StatusPacket68{}); err != nil {
 		t.Fatalf("status message should remain on primary lane: %v", err)
@@ -332,30 +374,30 @@ func TestPeerAttachBulkRWRoutesEthTraffic(t *testing.T) {
 	}
 }
 
-func TestIsBulkEthMsgRoutesAllPostStatusMessages(t *testing.T) {
+func TestEthSidecarChannelForMsg(t *testing.T) {
 	tests := []struct {
 		code uint64
-		want bool
+		want string
 	}{
-		{StatusMsg, false},
-		{NewBlockHashesMsg, true},
-		{TransactionsMsg, true},
-		{GetBlockHeadersMsg, true},
-		{BlockHeadersMsg, true},
-		{GetBlockBodiesMsg, true},
-		{BlockBodiesMsg, true},
-		{NewBlockMsg, true},
-		{NewPooledTransactionHashesMsg, true},
-		{GetPooledTransactionsMsg, true},
-		{PooledTransactionsMsg, true},
-		{GetReceiptsMsg, true},
-		{ReceiptsMsg, true},
-		{BlockRangeUpdateMsg, true},
-		{0xff, false},
+		{StatusMsg, ""},
+		{NewBlockHashesMsg, ethBlocksChannel},
+		{TransactionsMsg, ethTxChannel},
+		{GetBlockHeadersMsg, ethControlChannel},
+		{BlockHeadersMsg, ethControlChannel},
+		{GetBlockBodiesMsg, ethBulkChannel},
+		{BlockBodiesMsg, ethBulkChannel},
+		{NewBlockMsg, ethBlocksChannel},
+		{NewPooledTransactionHashesMsg, ethTxChannel},
+		{GetPooledTransactionsMsg, ethBulkChannel},
+		{PooledTransactionsMsg, ethBulkChannel},
+		{GetReceiptsMsg, ethBulkChannel},
+		{ReceiptsMsg, ethBulkChannel},
+		{BlockRangeUpdateMsg, ethControlChannel},
+		{0xff, ""},
 	}
 	for _, test := range tests {
-		if got := isBulkEthMsg(test.code); got != test.want {
-			t.Fatalf("isBulkEthMsg(%d) = %v, want %v", test.code, got, test.want)
+		if got := ethSidecarChannelForMsg(test.code); got != test.want {
+			t.Fatalf("ethSidecarChannelForMsg(%d) = %q, want %q", test.code, got, test.want)
 		}
 	}
 }

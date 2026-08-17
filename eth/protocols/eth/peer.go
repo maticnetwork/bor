@@ -59,6 +59,11 @@ const (
 	// dropping broadcasts. Similarly to block propagations, there's no point to queue
 	// above some healthy uncle limit, so use that.
 	maxQueuedBlockAnns = 4
+
+	ethControlChannel = "eth-control"
+	ethBlocksChannel  = "eth-blocks"
+	ethTxChannel      = "eth-tx"
+	ethBulkChannel    = "eth-bulk"
 )
 
 // max is a helper function which returns the larger of the two given integers.
@@ -101,7 +106,7 @@ type Peer struct {
 // NewPeer create a wrapper for a network connection and negotiated  protocol
 // version.
 func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter, txpool TxPool) *Peer {
-	routed := p2p.NewChannelRoutedMsgReadWriter(rw, nil, "eth-bulk", isBulkEthMsg)
+	routed := p2p.NewMultiChannelRoutedMsgReadWriter(rw, ethSidecarChannelForMsg)
 	peer := &Peer{
 		id:              p.ID().String(),
 		Peer:            p,
@@ -145,11 +150,28 @@ func (p *Peer) ID() string {
 // protocol. Status stays on the primary devp2p lane because the sidecar is
 // attached after the initial protocol handshake completes.
 func (p *Peer) AttachBulkRW(rw p2p.MsgReadWriter) {
+	for _, channel := range []string{ethControlChannel, ethBlocksChannel, ethTxChannel, ethBulkChannel} {
+		p.AttachBulkChannelRW(channel, rw)
+	}
+}
+
+// AttachBulkChannelRW installs an auxiliary sidecar lane for a specific eth
+// traffic class. Status stays on the primary devp2p lane because the sidecar
+// is attached after the initial protocol handshake completes.
+func (p *Peer) AttachBulkChannelRW(channel string, rw p2p.MsgReadWriter) {
 	if routed, ok := p.rw.(interface{ AttachBulk(p2p.MsgReadWriter) }); ok {
+		if multi, ok := p.rw.(interface {
+			AttachBulkChannel(string, p2p.MsgReadWriter)
+		}); ok {
+			multi.AttachBulkChannel(channel, rw)
+			return
+		}
 		routed.AttachBulk(rw)
 		return
 	}
-	p.rw = p2p.NewRoutedMsgReadWriter(p.rw, rw, isBulkEthMsg)
+	p.rw = p2p.NewChannelRoutedMsgReadWriter(p.rw, rw, channel, func(code uint64) bool {
+		return ethSidecarChannelForMsg(code) == channel
+	})
 }
 
 func (p *Peer) HasBulkRW() bool {
@@ -159,25 +181,32 @@ func (p *Peer) HasBulkRW() bool {
 	return false
 }
 
-func isBulkEthMsg(code uint64) bool {
+func ethSidecarChannelForMsg(code uint64) string {
 	switch code {
 	case NewBlockHashesMsg,
-		TransactionsMsg,
-		GetBlockHeadersMsg,
+		NewBlockMsg:
+		return ethBlocksChannel
+	case TransactionsMsg,
+		NewPooledTransactionHashesMsg:
+		return ethTxChannel
+	case GetBlockHeadersMsg,
 		BlockHeadersMsg,
-		GetBlockBodiesMsg,
+		BlockRangeUpdateMsg:
+		return ethControlChannel
+	case GetBlockBodiesMsg,
 		BlockBodiesMsg,
-		NewBlockMsg,
-		NewPooledTransactionHashesMsg,
 		GetPooledTransactionsMsg,
 		PooledTransactionsMsg,
 		GetReceiptsMsg,
-		ReceiptsMsg,
-		BlockRangeUpdateMsg:
-		return true
+		ReceiptsMsg:
+		return ethBulkChannel
 	default:
-		return false
+		return ""
 	}
+}
+
+func isBulkEthMsg(code uint64) bool {
+	return ethSidecarChannelForMsg(code) != ""
 }
 
 // Version retrieves the peer's negotiated `eth` protocol version.

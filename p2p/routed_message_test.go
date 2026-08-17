@@ -58,6 +58,58 @@ func TestRoutedMsgReadWriterRoutesWrites(t *testing.T) {
 	}
 }
 
+func TestMultiChannelRoutedMsgReadWriterRoutesWritesByChannel(t *testing.T) {
+	primaryApp, primaryNet := MsgPipe()
+	defer primaryApp.Close()
+	defer primaryNet.Close()
+
+	controlApp, controlNet := MsgPipe()
+	defer controlApp.Close()
+	defer controlNet.Close()
+
+	bulkApp, bulkNet := MsgPipe()
+	defer bulkApp.Close()
+	defer bulkNet.Close()
+
+	routed, ok := NewMultiChannelRoutedMsgReadWriter(primaryNet, func(code uint64) string {
+		switch code {
+		case 3:
+			return "eth-control"
+		case 5:
+			return "eth-bulk"
+		default:
+			return ""
+		}
+	}).(interface {
+		AttachBulkChannel(string, MsgReadWriter)
+		WriteMsg(Msg) error
+	})
+	if !ok {
+		t.Fatal("expected multi-channel routed msg read writer")
+	}
+	routed.AttachBulkChannel("eth-control", controlNet)
+	routed.AttachBulkChannel("eth-bulk", bulkNet)
+
+	errc := make(chan error, 3)
+	go func() { errc <- SendItems(routed, 1, uint64(11)) }()
+	if err := ExpectMsg(primaryApp, 1, []uint64{11}); err != nil {
+		t.Fatalf("primary lane mismatch: %v", err)
+	}
+	go func() { errc <- SendItems(routed, 3, uint64(33)) }()
+	if err := ExpectMsg(controlApp, 3, []uint64{33}); err != nil {
+		t.Fatalf("control lane mismatch: %v", err)
+	}
+	go func() { errc <- SendItems(routed, 5, uint64(55)) }()
+	if err := ExpectMsg(bulkApp, 5, []uint64{55}); err != nil {
+		t.Fatalf("bulk lane mismatch: %v", err)
+	}
+	for range 3 {
+		if err := <-errc; err != nil {
+			t.Fatalf("send failed: %v", err)
+		}
+	}
+}
+
 func TestRoutedMsgReadWriterReadsBothLanes(t *testing.T) {
 	primaryApp, primaryNet := MsgPipe()
 	defer primaryApp.Close()
@@ -182,6 +234,42 @@ func TestRoutedMsgReadWriterFallsBackToPrimaryWhenBulkWriteFails(t *testing.T) {
 	errc := make(chan error, 1)
 	go func() { errc <- SendItems(rw, 2, uint64(22)) }()
 	if err := ExpectMsg(primaryApp, 2, []uint64{22}); err != nil {
+		t.Fatalf("primary fallback mismatch: %v", err)
+	}
+	if err := <-errc; err != nil {
+		t.Fatalf("send failed after fallback: %v", err)
+	}
+}
+
+func TestMultiChannelRoutedMsgReadWriterFallsBackPerChannel(t *testing.T) {
+	primaryApp, primaryNet := MsgPipe()
+	defer primaryApp.Close()
+	defer primaryNet.Close()
+
+	controlApp, controlNet := MsgPipe()
+	defer controlNet.Close()
+
+	routed, ok := NewMultiChannelRoutedMsgReadWriter(primaryNet, func(code uint64) string {
+		if code == 3 {
+			return "eth-control"
+		}
+		return ""
+	}).(interface {
+		AttachBulkChannel(string, MsgReadWriter)
+		WriteMsg(Msg) error
+	})
+	if !ok {
+		t.Fatal("expected multi-channel routed msg read writer")
+	}
+	routed.AttachBulkChannel("eth-control", controlNet)
+
+	if err := controlApp.Close(); err != nil {
+		t.Fatalf("failed to close control lane: %v", err)
+	}
+
+	errc := make(chan error, 1)
+	go func() { errc <- SendItems(routed, 3, uint64(33)) }()
+	if err := ExpectMsg(primaryApp, 3, []uint64{33}); err != nil {
 		t.Fatalf("primary fallback mismatch: %v", err)
 	}
 	if err := <-errc; err != nil {

@@ -24,6 +24,23 @@ import (
 	"sync"
 )
 
+const routedDefaultBulkChannel = "__bulk__"
+
+// NewMultiChannelRoutedMsgReadWriter multiplexes reads from the primary lane
+// plus any number of named sidecar lanes while routing writes by message code
+// to the named lane selected by route.
+func NewMultiChannelRoutedMsgReadWriter(primary MsgReadWriter, route func(code uint64) string) MsgReadWriter {
+	if route == nil {
+		return primary
+	}
+	return &routedMsgReadWriter{
+		primary: primary,
+		route:   route,
+		reads:   make(chan routedReadResult, 2),
+		bulks:   make(map[string]*routedBulkLane),
+	}
+}
+
 // NewRoutedMsgReadWriter multiplexes reads from the primary and bulk lanes while
 // routing writes for selected message codes over the bulk lane.
 //
@@ -42,14 +59,18 @@ func newRoutedMsgReadWriter(primary MsgReadWriter, bulk MsgReadWriter, channel s
 	if shouldRoute == nil {
 		return primary
 	}
-	rw := &routedMsgReadWriter{
-		primary:     primary,
-		channel:     channel,
-		shouldRoute: shouldRoute,
-		reads:       make(chan routedReadResult, 2),
+	if channel == "" {
+		channel = routedDefaultBulkChannel
 	}
+	rw := NewMultiChannelRoutedMsgReadWriter(primary, func(code uint64) string {
+		if shouldRoute(code) {
+			return channel
+		}
+		return ""
+	}).(*routedMsgReadWriter)
+	rw.defaultChannel = channel
 	if bulk != nil {
-		rw.AttachBulk(bulk)
+		rw.AttachBulkChannel(channel, bulk)
 	}
 	return rw
 }
@@ -60,25 +81,26 @@ type routedReadResult struct {
 }
 
 type routedMsgReadWriter struct {
-	primary     MsgReadWriter
-	channel     string
-	shouldRoute func(code uint64) bool
+	primary        MsgReadWriter
+	defaultChannel string
+	route          func(code uint64) string
 
-	start      sync.Once
-	reads      chan routedReadResult
-	bulkMu     sync.RWMutex
-	bulkReader *routedBulkLane
-	bulkSeq    uint64
+	start   sync.Once
+	reads   chan routedReadResult
+	bulkMu  sync.RWMutex
+	bulks   map[string]*routedBulkLane
+	bulkSeq uint64
 }
 
 type routedBulkLane struct {
-	id uint64
-	rw MsgReadWriter
+	id      uint64
+	channel string
+	rw      MsgReadWriter
 }
 
 func (rw *routedMsgReadWriter) ReadMsg() (Msg, error) {
 	rw.start.Do(func() {
-		go rw.readLoop(rw.primary, true, 0)
+		go rw.readLoop(rw.primary, true, "", 0)
 	})
 
 	result := <-rw.reads
@@ -86,13 +108,13 @@ func (rw *routedMsgReadWriter) ReadMsg() (Msg, error) {
 }
 
 func (rw *routedMsgReadWriter) WriteMsg(msg Msg) error {
-	if rw.shouldRoute(msg.Code) {
-		if bulk, ok := rw.bulk(); ok {
+	if channel := rw.route(msg.Code); channel != "" {
+		if bulk, ok := rw.bulk(channel); ok {
 			if err := bulk.WriteMsg(msg); err == nil {
 				return nil
 			} else {
 				bulkSidecarWriteFallbackMeter.Mark(1)
-				bulkSidecarStats.markChannelWriteFallback(rw.channel)
+				bulkSidecarStats.markChannelWriteFallback(channel)
 			}
 		}
 	}
@@ -100,59 +122,77 @@ func (rw *routedMsgReadWriter) WriteMsg(msg Msg) error {
 }
 
 func (rw *routedMsgReadWriter) AttachBulk(bulk MsgReadWriter) {
-	if bulk == nil {
+	rw.AttachBulkChannel(rw.defaultChannel, bulk)
+}
+
+func (rw *routedMsgReadWriter) AttachBulkChannel(channel string, bulk MsgReadWriter) {
+	if channel == "" || bulk == nil {
 		return
 	}
-	lane := rw.setBulk(bulk)
-	go rw.readLoop(lane.rw, false, lane.id)
+	lane := rw.setBulk(channel, bulk)
+	go rw.readLoop(lane.rw, false, lane.channel, lane.id)
 }
 
-func (rw *routedMsgReadWriter) bulk() (MsgReadWriter, bool) {
-	rw.bulkMu.RLock()
-	defer rw.bulkMu.RUnlock()
-	if rw.bulkReader == nil {
+func (rw *routedMsgReadWriter) bulk(channel string) (MsgReadWriter, bool) {
+	if channel == "" {
 		return nil, false
 	}
-	return rw.bulkReader.rw, true
+	rw.bulkMu.RLock()
+	defer rw.bulkMu.RUnlock()
+	lane := rw.bulks[channel]
+	if lane == nil {
+		return nil, false
+	}
+	return lane.rw, true
 }
 
-func (rw *routedMsgReadWriter) HasBulk() bool {
-	_, ok := rw.bulk()
+func (rw *routedMsgReadWriter) HasBulkChannel(channel string) bool {
+	_, ok := rw.bulk(channel)
 	return ok
 }
 
-func (rw *routedMsgReadWriter) setBulk(bulk MsgReadWriter) *routedBulkLane {
+func (rw *routedMsgReadWriter) HasBulk() bool {
+	rw.bulkMu.RLock()
+	defer rw.bulkMu.RUnlock()
+	return len(rw.bulks) > 0
+}
+
+func (rw *routedMsgReadWriter) setBulk(channel string, bulk MsgReadWriter) *routedBulkLane {
 	rw.bulkMu.Lock()
 	defer rw.bulkMu.Unlock()
 
 	rw.bulkSeq++
-	rw.bulkReader = &routedBulkLane{
-		id: rw.bulkSeq,
-		rw: bulk,
+	lane := &routedBulkLane{
+		id:      rw.bulkSeq,
+		channel: channel,
+		rw:      bulk,
 	}
-	return rw.bulkReader
+	rw.bulks[channel] = lane
+	return lane
 }
 
-func (rw *routedMsgReadWriter) isCurrentBulk(id uint64) bool {
+func (rw *routedMsgReadWriter) isCurrentBulk(channel string, id uint64) bool {
 	rw.bulkMu.RLock()
 	defer rw.bulkMu.RUnlock()
 
-	return rw.bulkReader != nil && rw.bulkReader.id == id
+	lane := rw.bulks[channel]
+	return lane != nil && lane.id == id
 }
 
-func (rw *routedMsgReadWriter) clearBulk(id uint64) {
+func (rw *routedMsgReadWriter) clearBulk(channel string, id uint64) {
 	rw.bulkMu.Lock()
 	defer rw.bulkMu.Unlock()
 
-	if rw.bulkReader != nil && rw.bulkReader.id == id {
-		rw.bulkReader = nil
+	lane := rw.bulks[channel]
+	if lane != nil && lane.id == id {
+		delete(rw.bulks, channel)
 	}
 }
 
-func (rw *routedMsgReadWriter) readLoop(reader MsgReader, forwardErr bool, bulkID uint64) {
+func (rw *routedMsgReadWriter) readLoop(reader MsgReader, forwardErr bool, channel string, bulkID uint64) {
 	for {
 		msg, err := reader.ReadMsg()
-		if !forwardErr && !rw.isCurrentBulk(bulkID) {
+		if !forwardErr && !rw.isCurrentBulk(channel, bulkID) {
 			return
 		}
 		if err == nil {
@@ -167,12 +207,12 @@ func (rw *routedMsgReadWriter) readLoop(reader MsgReader, forwardErr bool, bulkI
 		if err != nil && !forwardErr {
 			if isTimeoutError(err) {
 				bulkSidecarReadTimeoutMeter.Mark(1)
-				bulkSidecarStats.markChannelReadTimeout(rw.channel)
+				bulkSidecarStats.markChannelReadTimeout(channel)
 				continue
 			}
 			bulkSidecarReadErrorMeter.Mark(1)
-			bulkSidecarStats.markChannelReadError(rw.channel)
-			rw.clearBulk(bulkID)
+			bulkSidecarStats.markChannelReadError(channel)
+			rw.clearBulk(channel, bulkID)
 			return
 		}
 		rw.reads <- routedReadResult{msg: msg, err: err}

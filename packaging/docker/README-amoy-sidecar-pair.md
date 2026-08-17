@@ -41,12 +41,15 @@ What this does:
   test path is not dependent on TOML decoding quirks
 - assigns stable nodekeys and stable container IPs
 - pairs the nodes with `admin_addPeer` using full ENRs so QUIC metadata is preserved
-- verifies `eth-bulk`, `snap-bulk`, and `wit-bulk` channel bring-up from logs
+- verifies `eth-blocks`, `eth-bulk`, `eth-control`, `eth-tx`,
+  `snap-accounts`, `snap-storage`, `snap-code`, `snap-trie`, and `wit-bulk`
+  channel bring-up from logs
 - actively triggers tx gossip and block announcements through the local `admin`
   RPC and verifies the resulting `eth-bulk` sidecar message logs
-- actively triggers a deterministic snap trie-node request through the local
-  `admin` RPC and verifies the resulting `snap-bulk` request/response logs
-  plus deterministic account-range, storage-range, and bytecode request/response logs
+- actively triggers deterministic snap account-range, storage-range, bytecode,
+  and trie-node requests through the local `admin` RPC and verifies the
+  resulting named-lane request/response logs on `snap-accounts`,
+  `snap-storage`, `snap-code`, and `snap-trie`
 - actively triggers witness announcements and witness metadata requests through
   the local `admin` RPC and verifies the resulting `wit-bulk` sidecar message logs
 - seeds a deterministic witness on one node and verifies both witness metadata
