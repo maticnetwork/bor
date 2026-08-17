@@ -157,6 +157,24 @@ func TestHandleConsumesBulkLanePackets(t *testing.T) {
 	}
 }
 
+func TestPeerAttachBulkChannelRWKeepsRoutedRW(t *testing.T) {
+	primaryApp, primaryNet := p2p.MsgPipe()
+	defer primaryApp.Close()
+	defer primaryNet.Close()
+
+	codeApp, codeNet := p2p.MsgPipe()
+	defer codeApp.Close()
+	defer codeNet.Close()
+
+	peer := NewFakePeer(SNAP1, "snap-test", primaryNet)
+	original := peer.rw
+	peer.AttachBulkChannelRW(snapCodeChannel, codeNet)
+
+	if peer.rw != original {
+		t.Fatal("expected late bulk attach to preserve the routed read-writer")
+	}
+}
+
 type snapBackendStub struct {
 	handled chan Packet
 }

@@ -169,6 +169,8 @@ func (p *Peer) AttachBulkChannelRW(channel string, rw p2p.MsgReadWriter) {
 		routed.AttachBulk(rw)
 		return
 	}
+	// NewPeer pre-wraps rw with the routed wrapper, so live sidecar attachment
+	// normally updates lane state in place instead of swapping out p.rw.
 	p.rw = p2p.NewChannelRoutedMsgReadWriter(p.rw, rw, channel, func(code uint64) bool {
 		return ethSidecarChannelForMsg(code) == channel
 	})

@@ -2,7 +2,9 @@ package p2p
 
 import (
 	"bytes"
+	"errors"
 	"io"
+	"sync"
 	"testing"
 	"time"
 )
@@ -20,6 +22,56 @@ type scriptedMsgRW struct {
 type scriptedResult struct {
 	msg Msg
 	err error
+}
+
+type stressMsgRW struct {
+	closeOnce sync.Once
+	closed    chan struct{}
+	results   chan scriptedResult
+}
+
+func newStressMsgRW() *stressMsgRW {
+	return &stressMsgRW{
+		closed:  make(chan struct{}),
+		results: make(chan scriptedResult, 128),
+	}
+}
+
+func (rw *stressMsgRW) ReadMsg() (Msg, error) {
+	select {
+	case result := <-rw.results:
+		return result.msg, result.err
+	case <-rw.closed:
+		return Msg{}, ErrPipeClosed
+	}
+}
+
+func (rw *stressMsgRW) WriteMsg(msg Msg) error {
+	select {
+	case <-rw.closed:
+		return ErrPipeClosed
+	default:
+	}
+	_, err := io.Copy(io.Discard, msg.Payload)
+	return err
+}
+
+func (rw *stressMsgRW) PushMsg(code uint64) {
+	msg := Msg{
+		Code:    code,
+		Size:    1,
+		Payload: bytes.NewReader([]byte{0xc0}),
+	}
+	select {
+	case rw.results <- scriptedResult{msg: msg}:
+	case <-rw.closed:
+	}
+}
+
+func (rw *stressMsgRW) Close() {
+	rw.closeOnce.Do(func() {
+		close(rw.closed)
+	})
 }
 
 func (rw *scriptedMsgRW) ReadMsg() (Msg, error) {
@@ -362,5 +414,109 @@ func TestRoutedMsgReadWriterIgnoresBulkReadTimeouts(t *testing.T) {
 	}
 	if !routed.HasBulk() {
 		t.Fatal("expected bulk lane to remain attached after timeout")
+	}
+}
+
+func TestMultiChannelRoutedMsgReadWriterConcurrentAttachAndTraffic(t *testing.T) {
+	primary := newStressMsgRW()
+	routed, ok := NewMultiChannelRoutedMsgReadWriter(primary, func(code uint64) string {
+		switch code % 3 {
+		case 1:
+			return "control"
+		case 2:
+			return "bulk"
+		default:
+			return ""
+		}
+	}).(interface {
+		AttachBulkChannel(string, MsgReadWriter)
+		ReadMsg() (Msg, error)
+		WriteMsg(Msg) error
+	})
+	if !ok {
+		t.Fatal("expected multi-channel routed msg read writer")
+	}
+
+	control := newStressMsgRW()
+	bulk := newStressMsgRW()
+	routed.AttachBulkChannel("control", control)
+	routed.AttachBulkChannel("bulk", bulk)
+
+	readErrc := make(chan error, 1)
+	var readWG sync.WaitGroup
+	readWG.Add(1)
+	go func() {
+		defer readWG.Done()
+		for {
+			msg, err := routed.ReadMsg()
+			if err != nil {
+				if !errors.Is(err, ErrPipeClosed) {
+					readErrc <- err
+				}
+				return
+			}
+			if err := msg.Discard(); err != nil {
+				readErrc <- err
+				return
+			}
+		}
+	}()
+
+	errc := make(chan error, 8)
+	var writeWG sync.WaitGroup
+	for worker := 0; worker < 4; worker++ {
+		writeWG.Add(1)
+		go func(offset uint64) {
+			defer writeWG.Done()
+			for i := uint64(0); i < 250; i++ {
+				if err := SendItems(routed, (i+offset)%3, i); err != nil {
+					errc <- err
+					return
+				}
+			}
+		}(uint64(worker))
+	}
+
+	var attachWG sync.WaitGroup
+	attachWG.Add(1)
+	go func() {
+		defer attachWG.Done()
+
+		currentControl := control
+		currentBulk := bulk
+		for i := 0; i < 200; i++ {
+			nextControl := newStressMsgRW()
+			nextBulk := newStressMsgRW()
+
+			routed.AttachBulkChannel("control", nextControl)
+			routed.AttachBulkChannel("bulk", nextBulk)
+
+			primary.PushMsg(90)
+			nextControl.PushMsg(91)
+			nextBulk.PushMsg(92)
+
+			currentControl.Close()
+			currentBulk.Close()
+			currentControl = nextControl
+			currentBulk = nextBulk
+		}
+		currentControl.Close()
+		currentBulk.Close()
+	}()
+
+	writeWG.Wait()
+	attachWG.Wait()
+	primary.Close()
+	readWG.Wait()
+
+	select {
+	case err := <-readErrc:
+		t.Fatalf("read failed during concurrent attach stress: %v", err)
+	default:
+	}
+	select {
+	case err := <-errc:
+		t.Fatalf("write failed during concurrent attach stress: %v", err)
+	default:
 	}
 }

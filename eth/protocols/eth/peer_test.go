@@ -374,6 +374,29 @@ func TestPeerAttachBulkRWRoutesEthTraffic(t *testing.T) {
 	}
 }
 
+func TestPeerAttachBulkChannelRWKeepsRoutedRW(t *testing.T) {
+	primaryApp, primaryNet := p2p.MsgPipe()
+	defer primaryApp.Close()
+	defer primaryNet.Close()
+
+	bulkApp, bulkNet := p2p.MsgPipe()
+	defer bulkApp.Close()
+	defer bulkNet.Close()
+
+	var id enode.ID
+	rand.Read(id[:])
+
+	peer := NewPeer(ETH69, p2p.NewPeer(id, "test", nil), primaryNet, nil)
+	defer peer.Close()
+
+	original := peer.rw
+	peer.AttachBulkChannelRW(ethBulkChannel, bulkNet)
+
+	if peer.rw != original {
+		t.Fatal("expected late bulk attach to preserve the routed read-writer")
+	}
+}
+
 func TestEthSidecarChannelForMsg(t *testing.T) {
 	tests := []struct {
 		code uint64
