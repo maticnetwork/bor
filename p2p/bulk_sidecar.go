@@ -127,8 +127,15 @@ type bulkChannelHello struct {
 	Channel string
 }
 
+type bulkFrameStream interface {
+	io.Reader
+	io.Writer
+	SetReadDeadline(time.Time) error
+	SetWriteDeadline(time.Time) error
+}
+
 type bulkStreamMsgRW struct {
-	stream  *quic.Stream
+	stream  bulkFrameStream
 	channel string
 	log     log.Logger
 	write   sync.Mutex
@@ -667,6 +674,11 @@ func (s *bulkSession) storeChannel(channel string, rw MsgReadWriter) {
 }
 
 func (rw *bulkStreamMsgRW) ReadMsg() (Msg, error) {
+	// Clear the authentication or previous payload deadline while the lane is
+	// idle. A payload deadline is installed again after the next frame header.
+	if err := rw.stream.SetReadDeadline(time.Time{}); err != nil {
+		return Msg{}, err
+	}
 	var header [bulkFrameHeaderSize]byte
 	if _, err := io.ReadFull(rw.stream, header[:]); err != nil {
 		return Msg{}, err

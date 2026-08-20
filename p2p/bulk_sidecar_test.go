@@ -14,7 +14,7 @@ import (
 
 func TestBulkSessionStoreChannelReplacesExistingLane(t *testing.T) {
 	session := &bulkSession{
-		sidecar: &BulkSidecar{log: log.New()},
+		sidecar:  &BulkSidecar{log: log.New()},
 		remoteID: enode.ID{0x01},
 		channels: make(map[string]MsgReadWriter),
 		waiters:  make(map[string][]chan bulkChannelResult),
@@ -95,10 +95,38 @@ func TestBulkSidecarOpenChannelRoundTrip(t *testing.T) {
 			rightRW = result.rw
 		}
 	}
-
 	sendErr := make(chan error, 1)
 	go func() { sendErr <- SendItems(leftRW, 2, uint64(22)) }()
 	if err := ExpectMsg(rightRW, 2, []uint64{22}); err != nil {
+		t.Fatalf("bulk lane delivery failed: %v", err)
+	}
+	if err := <-sendErr; err != nil {
+		t.Fatalf("bulk lane send failed: %v", err)
+	}
+}
+
+func TestBulkStreamReadClearsExpiredDeadline(t *testing.T) {
+	senderConn, receiverConn := net.Pipe()
+	defer senderConn.Close()
+	defer receiverConn.Close()
+
+	sender := &bulkStreamMsgRW{stream: senderConn, channel: "snap-trie", log: log.New()}
+	receiver := &bulkStreamMsgRW{stream: receiverConn, channel: "snap-trie", log: log.New()}
+	if err := receiverConn.SetReadDeadline(time.Now().Add(-time.Second)); err != nil {
+		t.Fatalf("failed to install expired authentication deadline: %v", err)
+	}
+
+	readErr := make(chan error, 1)
+	go func() { readErr <- ExpectMsg(receiver, 2, []uint64{22}) }()
+	select {
+	case err := <-readErr:
+		t.Fatalf("read returned before a message was sent: %v", err)
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	sendErr := make(chan error, 1)
+	go func() { sendErr <- SendItems(sender, 2, uint64(22)) }()
+	if err := <-readErr; err != nil {
 		t.Fatalf("bulk lane delivery failed: %v", err)
 	}
 	if err := <-sendErr; err != nil {
