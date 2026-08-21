@@ -17,7 +17,6 @@
 package p2p
 
 import (
-	"bytes"
 	"errors"
 	"io"
 	"net"
@@ -78,6 +77,42 @@ func newRoutedMsgReadWriter(primary MsgReadWriter, bulk MsgReadWriter, channel s
 type routedReadResult struct {
 	msg Msg
 	err error
+}
+
+type routedPayload struct {
+	reader    io.Reader
+	remaining uint32
+	done      chan<- error
+	once      sync.Once
+}
+
+func (p *routedPayload) Read(buf []byte) (int, error) {
+	if p.remaining == 0 {
+		p.finish(nil)
+		return 0, io.EOF
+	}
+	if uint32(len(buf)) > p.remaining {
+		buf = buf[:p.remaining]
+	}
+	n, err := p.reader.Read(buf)
+	p.remaining -= uint32(n)
+
+	if p.remaining == 0 {
+		if errors.Is(err, io.EOF) {
+			err = nil
+		}
+		p.finish(err)
+	} else if err != nil {
+		if errors.Is(err, io.EOF) {
+			err = io.ErrUnexpectedEOF
+		}
+		p.finish(err)
+	}
+	return n, err
+}
+
+func (p *routedPayload) finish(err error) {
+	p.once.Do(func() { p.done <- err })
 }
 
 type routedMsgReadWriter struct {
@@ -195,28 +230,40 @@ func (rw *routedMsgReadWriter) readLoop(reader MsgReader, forwardErr bool, chann
 		if !forwardErr && !rw.isCurrentBulk(channel, bulkID) {
 			return
 		}
-		if err == nil {
-			payload, readErr := io.ReadAll(msg.Payload)
-			if readErr != nil {
-				err = readErr
-			} else {
-				msg.Size = uint32(len(payload))
-				msg.Payload = bytes.NewReader(payload)
+		if err != nil {
+			if !forwardErr {
+				if isTimeoutError(err) {
+					bulkSidecarReadTimeoutMeter.Mark(1)
+					bulkSidecarStats.markChannelReadTimeout(channel)
+				} else {
+					bulkSidecarReadErrorMeter.Mark(1)
+					bulkSidecarStats.markChannelReadError(channel)
+				}
+				rw.clearBulk(channel, bulkID)
+				return
 			}
-		}
-		if err != nil && !forwardErr {
-			if isTimeoutError(err) {
-				bulkSidecarReadTimeoutMeter.Mark(1)
-				bulkSidecarStats.markChannelReadTimeout(channel)
-				continue
-			}
-			bulkSidecarReadErrorMeter.Mark(1)
-			bulkSidecarStats.markChannelReadError(channel)
-			rw.clearBulk(channel, bulkID)
+			rw.reads <- routedReadResult{msg: msg, err: err}
 			return
 		}
-		rw.reads <- routedReadResult{msg: msg, err: err}
-		if err != nil {
+		if msg.Size == 0 {
+			rw.reads <- routedReadResult{msg: msg}
+			continue
+		}
+		done := make(chan error, 1)
+		msg.Payload = &routedPayload{reader: msg.Payload, remaining: msg.Size, done: done}
+		rw.reads <- routedReadResult{msg: msg}
+
+		if err := <-done; err != nil {
+			if !forwardErr {
+				if isTimeoutError(err) {
+					bulkSidecarReadTimeoutMeter.Mark(1)
+					bulkSidecarStats.markChannelReadTimeout(channel)
+				} else {
+					bulkSidecarReadErrorMeter.Mark(1)
+					bulkSidecarStats.markChannelReadError(channel)
+				}
+				rw.clearBulk(channel, bulkID)
+			}
 			return
 		}
 	}

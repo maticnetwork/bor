@@ -15,6 +15,19 @@ func (timeoutErr) Error() string   { return "timeout" }
 func (timeoutErr) Timeout() bool   { return true }
 func (timeoutErr) Temporary() bool { return true }
 
+type partialTimeoutReader struct {
+	emitted bool
+}
+
+func (r *partialTimeoutReader) Read(buf []byte) (int, error) {
+	if !r.emitted {
+		r.emitted = true
+		buf[0] = 0xc0
+		return 1, nil
+	}
+	return 0, timeoutErr{}
+}
+
 type scriptedMsgRW struct {
 	results chan scriptedResult
 }
@@ -377,7 +390,7 @@ func TestRoutedMsgReadWriterRestartsBulkReadsAfterReattach(t *testing.T) {
 	}
 }
 
-func TestRoutedMsgReadWriterIgnoresBulkReadTimeouts(t *testing.T) {
+func TestRoutedMsgReadWriterDropsBulkLaneAfterReadTimeout(t *testing.T) {
 	primaryApp, primaryNet := MsgPipe()
 	defer primaryApp.Close()
 	defer primaryNet.Close()
@@ -393,27 +406,151 @@ func TestRoutedMsgReadWriterIgnoresBulkReadTimeouts(t *testing.T) {
 		t.Fatal("expected attachable routed msg read writer")
 	}
 
+	readc := make(chan scriptedResult, 1)
+	go func() {
+		msg, err := routed.ReadMsg()
+		readc <- scriptedResult{msg: msg, err: err}
+	}()
 	bulk.results <- scriptedResult{err: timeoutErr{}}
-	bulk.results <- scriptedResult{
-		msg: Msg{
-			Code:    2,
-			Size:    1,
-			Payload: io.NopCloser(bytes.NewReader([]byte{0xc0})),
-		},
+
+	deadline := time.Now().Add(time.Second)
+	for routed.HasBulk() && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
 	}
+	if routed.HasBulk() {
+		t.Fatal("expected timed-out bulk lane to be removed")
+	}
+
+	sendErr := make(chan error, 1)
+	go func() { sendErr <- SendItems(primaryApp, 2, uint64(22)) }()
+	result := <-readc
+	msg, err := result.msg, result.err
+	if err != nil {
+		t.Fatalf("unexpected primary fallback failure after timeout: %v", err)
+	}
+	if msg.Code != 2 {
+		t.Fatalf("unexpected fallback message code: got %d want 2", msg.Code)
+	}
+	if err := msg.Discard(); err != nil {
+		t.Fatalf("failed to discard primary fallback message: %v", err)
+	}
+	if err := <-sendErr; err != nil {
+		t.Fatalf("primary fallback send failed: %v", err)
+	}
+}
+
+func TestRoutedMsgReadWriterStreamsBulkPayload(t *testing.T) {
+	primaryApp, primaryNet := MsgPipe()
+	defer primaryApp.Close()
+	defer primaryNet.Close()
+
+	bulk := &scriptedMsgRW{results: make(chan scriptedResult, 1)}
+	routed := NewRoutedMsgReadWriter(primaryNet, bulk, func(code uint64) bool { return code == 2 })
+	payloadReader, payloadWriter := io.Pipe()
+	defer payloadReader.Close()
+	defer payloadWriter.Close()
+
+	bulk.results <- scriptedResult{msg: Msg{Code: 2, Size: 2, Payload: payloadReader}}
+	readc := make(chan scriptedResult, 1)
+	go func() {
+		msg, err := routed.ReadMsg()
+		readc <- scriptedResult{msg: msg, err: err}
+	}()
+
+	var result scriptedResult
+	select {
+	case result = <-readc:
+	case <-time.After(time.Second):
+		t.Fatal("message header was not delivered before its payload")
+	}
+	if result.err != nil {
+		t.Fatalf("failed to read streamed message: %v", result.err)
+	}
+	writeErr := make(chan error, 1)
+	go func() {
+		_, err := payloadWriter.Write([]byte{0xc1, 0x80})
+		writeErr <- err
+	}()
+	payload, err := io.ReadAll(result.msg.Payload)
+	if err != nil {
+		t.Fatalf("failed to consume streamed payload: %v", err)
+	}
+	if !bytes.Equal(payload, []byte{0xc1, 0x80}) {
+		t.Fatalf("streamed payload mismatch: got %x", payload)
+	}
+	if err := <-writeErr; err != nil {
+		t.Fatalf("failed to write streamed payload: %v", err)
+	}
+}
+
+func TestRoutedMsgReadWriterWaitsForPayloadBeforeNextFrame(t *testing.T) {
+	primaryApp, primaryNet := MsgPipe()
+	defer primaryApp.Close()
+	defer primaryNet.Close()
+
+	bulk := &scriptedMsgRW{results: make(chan scriptedResult, 2)}
+	routed := NewRoutedMsgReadWriter(primaryNet, bulk, func(code uint64) bool { return code == 2 })
+	bulk.results <- scriptedResult{msg: Msg{Code: 2, Size: 1, Payload: bytes.NewReader([]byte{0xc0})}}
+	bulk.results <- scriptedResult{msg: Msg{Code: 2, Size: 1, Payload: bytes.NewReader([]byte{0xc1})}}
+
+	first, err := routed.ReadMsg()
+	if err != nil {
+		t.Fatalf("failed to read first frame: %v", err)
+	}
+	secondc := make(chan scriptedResult, 1)
+	go func() {
+		msg, err := routed.ReadMsg()
+		secondc <- scriptedResult{msg: msg, err: err}
+	}()
+	select {
+	case <-secondc:
+		t.Fatal("next frame was read before the first payload was consumed")
+	case <-time.After(50 * time.Millisecond):
+	}
+	if err := first.Discard(); err != nil {
+		t.Fatalf("failed to discard first payload: %v", err)
+	}
+	select {
+	case second := <-secondc:
+		if second.err != nil {
+			t.Fatalf("failed to read second frame: %v", second.err)
+		}
+		if err := second.msg.Discard(); err != nil {
+			t.Fatalf("failed to discard second payload: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("second frame remained blocked after first payload consumption")
+	}
+}
+
+func TestRoutedMsgReadWriterDropsBulkLaneAfterPartialPayloadTimeout(t *testing.T) {
+	primaryApp, primaryNet := MsgPipe()
+	defer primaryApp.Close()
+	defer primaryNet.Close()
+
+	bulk := &scriptedMsgRW{results: make(chan scriptedResult, 1)}
+	routed, ok := NewRoutedMsgReadWriter(primaryNet, bulk, func(code uint64) bool { return code == 2 }).(interface {
+		HasBulk() bool
+		ReadMsg() (Msg, error)
+	})
+	if !ok {
+		t.Fatal("expected attachable routed msg read writer")
+	}
+	bulk.results <- scriptedResult{msg: Msg{Code: 2, Size: 2, Payload: &partialTimeoutReader{}}}
 
 	msg, err := routed.ReadMsg()
 	if err != nil {
-		t.Fatalf("unexpected read failure after timeout: %v", err)
+		t.Fatalf("failed to read partial frame header: %v", err)
 	}
-	if msg.Code != 2 {
-		t.Fatalf("unexpected message code after timeout recovery: got %d want 2", msg.Code)
+	if _, err := io.ReadAll(msg.Payload); !isTimeoutError(err) {
+		t.Fatalf("expected payload timeout, got %v", err)
 	}
-	if err := msg.Discard(); err != nil {
-		t.Fatalf("failed to discard recovered bulk message: %v", err)
+	deadline := time.Now().Add(time.Second)
+	for routed.HasBulk() && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
 	}
-	if !routed.HasBulk() {
-		t.Fatal("expected bulk lane to remain attached after timeout")
+	if routed.HasBulk() {
+		t.Fatal("expected partially-read bulk lane to be removed")
 	}
 }
 
