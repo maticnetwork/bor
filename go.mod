@@ -1,7 +1,7 @@
 module github.com/ethereum/go-ethereum
 
 // Note: Change the go image version in Dockerfile if you change this.
-go 1.26.5
+go 1.26.6
 
 require (
 	github.com/0xPolygon/crand v1.0.3
@@ -78,6 +78,7 @@ require (
 	github.com/protolambda/bls12-381-util v0.1.0
 	github.com/protolambda/zrnt v0.34.1
 	github.com/protolambda/ztyp v0.2.2
+	github.com/quic-go/quic-go v0.56.0
 	github.com/rs/cors v1.11.1
 	github.com/ryanuber/columnize v2.1.2+incompatible
 	github.com/shirou/gopsutil v3.21.11+incompatible
@@ -293,7 +294,6 @@ require (
 	github.com/pion/dtls/v3 v3.1.4 // indirect
 	github.com/pion/transport/v4 v4.0.2 // indirect
 	github.com/posener/complete v1.2.3 // indirect
-	github.com/quic-go/quic-go v0.56.0 // indirect
 	github.com/rabbitmq/amqp091-go v1.13.0 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20250401214520-65e299d6c5c9 // indirect
 	github.com/redis/go-redis/v9 v9.7.3 // indirect

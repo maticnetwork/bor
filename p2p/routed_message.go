@@ -91,9 +91,7 @@ func (p *routedPayload) Read(buf []byte) (int, error) {
 		p.finish(nil)
 		return 0, io.EOF
 	}
-	if uint32(len(buf)) > p.remaining {
-		buf = buf[:p.remaining]
-	}
+	buf = buf[:min(uint32(len(buf)), p.remaining)]
 	n, err := p.reader.Read(buf)
 	p.remaining -= uint32(n)
 
@@ -224,6 +222,25 @@ func (rw *routedMsgReadWriter) clearBulk(channel string, id uint64) {
 	}
 }
 
+func (rw *routedMsgReadWriter) failBulkRead(channel string, bulkID uint64, err error) {
+	if isTimeoutError(err) {
+		bulkSidecarReadTimeoutMeter.Mark(1)
+		bulkSidecarStats.markChannelReadTimeout(channel)
+	} else {
+		bulkSidecarReadErrorMeter.Mark(1)
+		bulkSidecarStats.markChannelReadError(channel)
+	}
+	rw.clearBulk(channel, bulkID)
+}
+
+func (rw *routedMsgReadWriter) handleReadError(msg Msg, err error, forwardErr bool, channel string, bulkID uint64) {
+	if forwardErr {
+		rw.reads <- routedReadResult{msg: msg, err: err}
+		return
+	}
+	rw.failBulkRead(channel, bulkID, err)
+}
+
 func (rw *routedMsgReadWriter) readLoop(reader MsgReader, forwardErr bool, channel string, bulkID uint64) {
 	for {
 		msg, err := reader.ReadMsg()
@@ -231,18 +248,7 @@ func (rw *routedMsgReadWriter) readLoop(reader MsgReader, forwardErr bool, chann
 			return
 		}
 		if err != nil {
-			if !forwardErr {
-				if isTimeoutError(err) {
-					bulkSidecarReadTimeoutMeter.Mark(1)
-					bulkSidecarStats.markChannelReadTimeout(channel)
-				} else {
-					bulkSidecarReadErrorMeter.Mark(1)
-					bulkSidecarStats.markChannelReadError(channel)
-				}
-				rw.clearBulk(channel, bulkID)
-				return
-			}
-			rw.reads <- routedReadResult{msg: msg, err: err}
+			rw.handleReadError(msg, err, forwardErr, channel, bulkID)
 			return
 		}
 		if msg.Size == 0 {
@@ -255,14 +261,7 @@ func (rw *routedMsgReadWriter) readLoop(reader MsgReader, forwardErr bool, chann
 
 		if err := <-done; err != nil {
 			if !forwardErr {
-				if isTimeoutError(err) {
-					bulkSidecarReadTimeoutMeter.Mark(1)
-					bulkSidecarStats.markChannelReadTimeout(channel)
-				} else {
-					bulkSidecarReadErrorMeter.Mark(1)
-					bulkSidecarStats.markChannelReadError(channel)
-				}
-				rw.clearBulk(channel, bulkID)
+				rw.failBulkRead(channel, bulkID, err)
 			}
 			return
 		}

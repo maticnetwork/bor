@@ -142,10 +142,6 @@ func snapSidecarChannelForMsg(code uint64) string {
 	}
 }
 
-func isBulkSnapMsg(code uint64) bool {
-	return snapSidecarChannelForMsg(code) != ""
-}
-
 // RequestAccountRange fetches a batch of accounts rooted in a specific account
 // trie, starting with the origin.
 func (p *Peer) RequestAccountRange(id uint64, root common.Hash, origin, limit common.Hash, bytes uint64) error {

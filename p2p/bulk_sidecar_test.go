@@ -1,6 +1,8 @@
 package p2p
 
 import (
+	"errors"
+	"io"
 	"net"
 	"testing"
 	"time"
@@ -11,6 +13,17 @@ import (
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/p2p/enr"
 )
+
+type readDeadlineErrorStream struct {
+	err error
+}
+
+func (s *readDeadlineErrorStream) Read([]byte) (int, error)    { return 0, io.EOF }
+func (s *readDeadlineErrorStream) Write(p []byte) (int, error) { return len(p), nil }
+func (s *readDeadlineErrorStream) SetReadDeadline(time.Time) error {
+	return s.err
+}
+func (s *readDeadlineErrorStream) SetWriteDeadline(time.Time) error { return nil }
 
 func TestBulkSessionStoreChannelReplacesExistingLane(t *testing.T) {
 	session := &bulkSession{
@@ -131,6 +144,18 @@ func TestBulkStreamReadClearsExpiredDeadline(t *testing.T) {
 	}
 	if err := <-sendErr; err != nil {
 		t.Fatalf("bulk lane send failed: %v", err)
+	}
+}
+
+func TestBulkStreamReadReturnsDeadlineResetError(t *testing.T) {
+	want := errors.New("deadline reset failed")
+	rw := &bulkStreamMsgRW{
+		stream:  &readDeadlineErrorStream{err: want},
+		channel: "snap-trie",
+		log:     log.New(),
+	}
+	if _, err := rw.ReadMsg(); !errors.Is(err, want) {
+		t.Fatalf("expected deadline reset error, got %v", err)
 	}
 }
 

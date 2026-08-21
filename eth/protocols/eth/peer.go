@@ -209,10 +209,6 @@ func ethSidecarChannelForMsg(code uint64) string {
 	}
 }
 
-func isBulkEthMsg(code uint64) bool {
-	return ethSidecarChannelForMsg(code) != ""
-}
-
 // Version retrieves the peer's negotiated `eth` protocol version.
 func (p *Peer) Version() uint {
 	return p.version

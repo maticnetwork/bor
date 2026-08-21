@@ -1,5 +1,5 @@
 # ─── BUILDER STAGE ───────────────────────────────────────────────────────────────
-FROM golang:1.26.5-alpine AS builder
+FROM golang:1.26.6-alpine AS builder
 
 ARG BOR_DIR=/var/lib/bor/
 ARG GIT_COMMIT=""

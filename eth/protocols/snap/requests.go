@@ -9,8 +9,6 @@ import (
 )
 
 var (
-	errSnapDisconnected        = errors.New("disconnected")
-	errSnapDanglingResponse    = errors.New("response to non-existent request")
 	errSnapMismatchingResponse = errors.New("mismatching response type")
 )
 

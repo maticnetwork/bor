@@ -2616,21 +2616,27 @@ func TestRapidBlockProduction_WithoutWait(t *testing.T) {
 
 	w.start()
 
+	// SenderCacher owns a process-wide worker pool that is initialized on first use.
+	// Start it before the baseline so its permanent goroutines are not mistaken for
+	// prefetch leaks created by this test.
+	core.SenderCacher()
+
 	goroutinesBefore := runtime.NumGoroutine()
 	t.Logf("Goroutines before test: %d", goroutinesBefore)
 
 	// Rapidly trigger block production - spawn overlapping prefetch goroutines
 	var wg sync.WaitGroup
+	workTimestamp := time.Now().Unix()
 	for i := 0; i < 20; i++ {
 		wg.Add(1)
-		go func(idx int) {
+		go func() {
 			defer wg.Done()
 			w.newWorkCh <- &newWorkReq{
 				interrupt: new(atomic.Int32),
 				noempty:   false,
-				timestamp: time.Now().Unix() + int64(idx),
+				timestamp: workTimestamp,
 			}
-		}(i)
+		}()
 		time.Sleep(25 * time.Millisecond) // Faster than prefetch completes - creates overlap
 
 		// Force GC during overlap period to stress test
@@ -2651,9 +2657,7 @@ func TestRapidBlockProduction_WithoutWait(t *testing.T) {
 	}
 
 	// Check for goroutine leaks
-	// Extra wait after GC to ensure all goroutines have fully exited
 	runtime.GC()
-	time.Sleep(2 * time.Second)
 	goroutinesAfter := runtime.NumGoroutine()
 	goroutineDelta := goroutinesAfter - goroutinesBefore
 

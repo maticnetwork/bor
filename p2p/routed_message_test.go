@@ -28,6 +28,21 @@ func (r *partialTimeoutReader) Read(buf []byte) (int, error) {
 	return 0, timeoutErr{}
 }
 
+var errPartialPayload = errors.New("partial payload failure")
+
+type partialErrorReader struct {
+	emitted bool
+}
+
+func (r *partialErrorReader) Read(buf []byte) (int, error) {
+	if !r.emitted {
+		r.emitted = true
+		buf[0] = 0xc0
+		return 1, nil
+	}
+	return 0, errPartialPayload
+}
+
 type scriptedMsgRW struct {
 	results chan scriptedResult
 }
@@ -94,6 +109,39 @@ func (rw *scriptedMsgRW) ReadMsg() (Msg, error) {
 
 func (rw *scriptedMsgRW) WriteMsg(msg Msg) error {
 	return nil
+}
+
+func TestRoutedPayloadConvertsEarlyEOF(t *testing.T) {
+	done := make(chan error, 1)
+	payload := &routedPayload{
+		reader:    bytes.NewReader([]byte{0xc0}),
+		remaining: 2,
+		done:      done,
+	}
+	if _, err := io.ReadAll(payload); !errors.Is(err, io.ErrUnexpectedEOF) {
+		t.Fatalf("expected unexpected EOF, got %v", err)
+	}
+	if err := <-done; !errors.Is(err, io.ErrUnexpectedEOF) {
+		t.Fatalf("unexpected completion error: %v", err)
+	}
+}
+
+func TestRoutedMsgReadWriterForwardsZeroSizeMessage(t *testing.T) {
+	primary := newStressMsgRW()
+	routed := NewRoutedMsgReadWriter(primary, nil, func(uint64) bool { return false })
+	primary.results <- scriptedResult{msg: Msg{Code: 1}}
+
+	msg, err := routed.ReadMsg()
+	if err != nil {
+		t.Fatalf("failed to read zero-size message: %v", err)
+	}
+	if msg.Code != 1 || msg.Size != 0 {
+		t.Fatalf("unexpected zero-size message: code=%d size=%d", msg.Code, msg.Size)
+	}
+	primary.Close()
+	if _, err := routed.ReadMsg(); !errors.Is(err, ErrPipeClosed) {
+		t.Fatalf("expected closed primary lane, got %v", err)
+	}
 }
 
 func TestRoutedMsgReadWriterRoutesWrites(t *testing.T) {
@@ -528,6 +576,8 @@ func TestRoutedMsgReadWriterDropsBulkLaneAfterPartialPayloadTimeout(t *testing.T
 	defer primaryApp.Close()
 	defer primaryNet.Close()
 
+	before, _, _ := bulkSidecarStats.snapshot()
+	beforeCounters := before.Channels[routedDefaultBulkChannel]
 	bulk := &scriptedMsgRW{results: make(chan scriptedResult, 1)}
 	routed, ok := NewRoutedMsgReadWriter(primaryNet, bulk, func(code uint64) bool { return code == 2 }).(interface {
 		HasBulk() bool
@@ -551,6 +601,55 @@ func TestRoutedMsgReadWriterDropsBulkLaneAfterPartialPayloadTimeout(t *testing.T
 	}
 	if routed.HasBulk() {
 		t.Fatal("expected partially-read bulk lane to be removed")
+	}
+	after, _, _ := bulkSidecarStats.snapshot()
+	afterCounters := after.Channels[routedDefaultBulkChannel]
+	if afterCounters.ReadTimeouts != beforeCounters.ReadTimeouts+1 {
+		t.Fatalf("expected one recorded timeout: before=%d after=%d", beforeCounters.ReadTimeouts, afterCounters.ReadTimeouts)
+	}
+	if afterCounters.ReadErrors != beforeCounters.ReadErrors {
+		t.Fatalf("payload timeout was recorded as a read error: before=%d after=%d", beforeCounters.ReadErrors, afterCounters.ReadErrors)
+	}
+}
+
+func TestRoutedMsgReadWriterDropsBulkLaneAfterPartialPayloadError(t *testing.T) {
+	primaryApp, primaryNet := MsgPipe()
+	defer primaryApp.Close()
+	defer primaryNet.Close()
+
+	before, _, _ := bulkSidecarStats.snapshot()
+	beforeCounters := before.Channels[routedDefaultBulkChannel]
+	bulk := &scriptedMsgRW{results: make(chan scriptedResult, 1)}
+	routed, ok := NewRoutedMsgReadWriter(primaryNet, bulk, func(code uint64) bool { return code == 2 }).(interface {
+		HasBulk() bool
+		ReadMsg() (Msg, error)
+	})
+	if !ok {
+		t.Fatal("expected attachable routed msg read writer")
+	}
+	bulk.results <- scriptedResult{msg: Msg{Code: 2, Size: 2, Payload: &partialErrorReader{}}}
+
+	msg, err := routed.ReadMsg()
+	if err != nil {
+		t.Fatalf("failed to read partial frame header: %v", err)
+	}
+	if _, err := io.ReadAll(msg.Payload); !errors.Is(err, errPartialPayload) {
+		t.Fatalf("expected payload failure, got %v", err)
+	}
+	deadline := time.Now().Add(time.Second)
+	for routed.HasBulk() && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if routed.HasBulk() {
+		t.Fatal("expected failed bulk lane to be removed")
+	}
+	after, _, _ := bulkSidecarStats.snapshot()
+	afterCounters := after.Channels[routedDefaultBulkChannel]
+	if afterCounters.ReadErrors != beforeCounters.ReadErrors+1 {
+		t.Fatalf("expected one recorded read error: before=%d after=%d", beforeCounters.ReadErrors, afterCounters.ReadErrors)
+	}
+	if afterCounters.ReadTimeouts != beforeCounters.ReadTimeouts {
+		t.Fatalf("payload error was recorded as a timeout: before=%d after=%d", beforeCounters.ReadTimeouts, afterCounters.ReadTimeouts)
 	}
 }
 
