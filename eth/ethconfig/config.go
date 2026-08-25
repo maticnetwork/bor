@@ -402,7 +402,11 @@ func CreateConsensusEngine(chainConfig *params.ChainConfig, ethConfig *Config, d
 								"index", i, "grpc", grpcAddrs[i], "err", err)
 
 							if i < len(httpURLs) {
-								heimdallClients = append(heimdallClients, heimdall.NewHeimdallClient(httpURLs[i], ethConfig.HeimdallTimeout))
+								httpClient, httpErr := heimdall.NewHeimdallClient(httpURLs[i], ethConfig.HeimdallTimeout)
+								if httpErr != nil {
+									return nil, fmt.Errorf("failed to initialize Heimdall HTTP client for %q: %w", httpURLs[i], httpErr)
+								}
+								heimdallClients = append(heimdallClients, httpClient)
 							}
 
 							continue
@@ -410,12 +414,20 @@ func CreateConsensusEngine(chainConfig *params.ChainConfig, ethConfig *Config, d
 
 						heimdallClients = append(heimdallClients, grpcClient)
 					} else if i < len(httpURLs) {
-						heimdallClients = append(heimdallClients, heimdall.NewHeimdallClient(httpURLs[i], ethConfig.HeimdallTimeout))
+						httpClient, err := heimdall.NewHeimdallClient(httpURLs[i], ethConfig.HeimdallTimeout)
+						if err != nil {
+							return nil, fmt.Errorf("failed to initialize Heimdall HTTP client for %q: %w", httpURLs[i], err)
+						}
+						heimdallClients = append(heimdallClients, httpClient)
 					}
 				}
 
 				if len(heimdallClients) == 0 {
-					heimdallClient = heimdall.NewHeimdallClient(ethConfig.HeimdallURL, ethConfig.HeimdallTimeout)
+					httpClient, err := heimdall.NewHeimdallClient(ethConfig.HeimdallURL, ethConfig.HeimdallTimeout)
+					if err != nil {
+						return nil, fmt.Errorf("failed to initialize Heimdall HTTP client for %q: %w", ethConfig.HeimdallURL, err)
+					}
+					heimdallClient = httpClient
 				} else if len(heimdallClients) == 1 {
 					heimdallClient = heimdallClients[0]
 				} else {

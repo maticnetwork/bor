@@ -193,7 +193,7 @@ func (c *Command) Flags(config *Config) *flagset.Flagset {
 	// heimdall
 	f.StringFlag(&flagset.StringFlag{
 		Name:    "bor.heimdall",
-		Usage:   "URL of Heimdall service (comma-separated for failover: \"url1,url2\")",
+		Usage:   "URL of Heimdall service (comma-separated for failover: \"url1,url2\"). Use h3://host:port to force the QUIC sidecar",
 		Value:   &c.cliConfig.Heimdall.URL,
 		Default: c.cliConfig.Heimdall.URL,
 	})

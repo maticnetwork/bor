@@ -427,8 +427,10 @@ func TestFailover_Integration_ServiceUnavailable(t *testing.T) {
 	}))
 	t.Cleanup(secondary.Close)
 
-	primaryClient := NewHeimdallClient(primary.URL, 5*time.Second)
-	secondaryClient := NewHeimdallClient(secondary.URL, 5*time.Second)
+	primaryClient, err := NewHeimdallClient(primary.URL, 5*time.Second)
+	require.NoError(t, err)
+	secondaryClient, err := NewHeimdallClient(secondary.URL, 5*time.Second)
+	require.NoError(t, err)
 
 	fc, err := NewMultiHeimdallClient(primaryClient, secondaryClient)
 	require.NoError(t, err)
