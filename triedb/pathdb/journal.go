@@ -319,8 +319,10 @@ func (db *Database) Journal(root common.Hash) error {
 		log.Info("Persisting dirty state", "root", root, "layers", disk.buffer.layers)
 	}
 	// Block until the background flushing is finished and terminate
-	// the potential active state generator.
-	if err := disk.terminate(); err != nil {
+	// the potential active state generator. persist=false: Journal() is not
+	// a final shutdown, so the address-biased cache must not be saved here
+	// (see terminate's doc comment) — only Database.Close() persists it.
+	if err := disk.terminate(false); err != nil {
 		return err
 	}
 	start := time.Now()

@@ -3,6 +3,7 @@ package pathdb
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -561,7 +562,7 @@ func TestPreloadBFS_CycleFree(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cache.Close()
+	defer cache.Close(true)
 	// Wait for async preload to complete (no rate limit, so completes in microseconds)
 	cache.wg.Wait()
 
@@ -594,7 +595,7 @@ func TestPreloadBFS_EmptyExtensionReadOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cache.Close()
+	defer cache.Close(true)
 
 	cache.wg.Wait()
 
@@ -628,7 +629,7 @@ func TestPreloadBFS_ExtensionTraversal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer cache.Close()
+	defer cache.Close(true)
 
 	cache.wg.Wait()
 
@@ -669,7 +670,7 @@ func TestAddressBiasedCache_RateLimitInterruption_ValidTrie(t *testing.T) {
 	time.Sleep(50 * time.Millisecond)
 
 	start := time.Now()
-	cache.Close()
+	cache.Close(true)
 	if elapsed := time.Since(start); elapsed > time.Second {
 		t.Fatalf("Close took too long during valid-trie rate-limited preload: %v", elapsed)
 	}
@@ -868,7 +869,7 @@ func TestAddressBiasedCache_RateLimitCreation(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create cache: %v", err)
 		}
-		defer cache.Close()
+		defer cache.Close(true)
 
 		// rateLimitBPS should be 0
 		if cache.rateLimitBPS != 0 {
@@ -889,7 +890,7 @@ func TestAddressBiasedCache_RateLimitCreation(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Failed to create cache: %v", err)
 		}
-		defer cache.Close()
+		defer cache.Close(true)
 
 		if cache.rateLimitBPS != rateLimit {
 			t.Errorf("Expected rateLimitBPS to be %d, got %d", rateLimit, cache.rateLimitBPS)
@@ -940,7 +941,7 @@ func TestAddressBiasedCache_RateLimitThrottling(t *testing.T) {
 		// Wait for preload to complete
 		cache.wg.Wait()
 		unlimitedDuration := time.Since(start)
-		cache.Close()
+		cache.Close(true)
 
 		// Unlimited should be very fast (< 100ms for small dataset)
 		if unlimitedDuration > 500*time.Millisecond {
@@ -977,7 +978,7 @@ func TestAddressBiasedCache_RateLimitThrottling(t *testing.T) {
 		select {
 		case <-done:
 			rateLimitedDuration := time.Since(start)
-			cache.Close()
+			cache.Close(true)
 
 			// With 10KB/s rate limit and ~5KB data, should take at least 400ms
 			// (accounting for burst allowance of 64KB)
@@ -985,7 +986,7 @@ func TestAddressBiasedCache_RateLimitThrottling(t *testing.T) {
 			t.Logf("Rate limited preload took: %v", rateLimitedDuration)
 
 		case <-time.After(10 * time.Second):
-			cache.Close()
+			cache.Close(true)
 			t.Fatal("Rate limited preload timed out")
 		}
 	})
@@ -1030,7 +1031,7 @@ func TestAddressBiasedCache_RateLimitInterruption(t *testing.T) {
 
 	// Cancel by closing
 	start := time.Now()
-	cache.Close()
+	cache.Close(true)
 	closeDuration := time.Since(start)
 
 	// Close should return quickly (not wait for full preload)
@@ -1076,7 +1077,7 @@ func TestAddressBiasedCache_ShutdownDuringRateLimitWait(t *testing.T) {
 
 	// Now Close() should interrupt the WaitN call
 	start := time.Now()
-	cache.Close()
+	cache.Close(true)
 	closeDuration := time.Since(start)
 
 	// Close should return quickly since WaitN respects context cancellation
@@ -1127,7 +1128,7 @@ func TestAddressBiasedCache_BurstExceeded(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create cache: %v", err)
 	}
-	defer cache.Close()
+	defer cache.Close(true)
 
 	// Wait for preload to process all nodes
 	time.Sleep(500 * time.Millisecond)
@@ -1194,7 +1195,7 @@ func TestAddressBiasedCache_PreloadWithRateLimit(t *testing.T) {
 		t.Errorf("Root node data mismatch: expected %s, got %s", rootData, retrieved)
 	}
 
-	cache.Close()
+	cache.Close(true)
 }
 
 // TestAddressBiasedCache_GracefulShutdown tests that Close() properly stops
@@ -1222,7 +1223,7 @@ func TestAddressBiasedCache_GracefulShutdown(t *testing.T) {
 	}
 
 	// Immediately close the cache to test interruption
-	cache.Close()
+	cache.Close(true)
 
 	// Verify the cache is still functional after Close()
 	key := append(accountHash.Bytes(), []byte{1, 2}...)
@@ -1248,9 +1249,9 @@ func TestAddressBiasedCache_MultipleClose(t *testing.T) {
 	}
 
 	// Close multiple times should not panic
-	cache.Close()
-	cache.Close()
-	cache.Close()
+	cache.Close(true)
+	cache.Close(true)
+	cache.Close(true)
 }
 
 func TestAddressBiasedCache_CloseSavesAndReloadWarmsUp(t *testing.T) {
@@ -1274,7 +1275,7 @@ func TestAddressBiasedCache_CloseSavesAndReloadWarmsUp(t *testing.T) {
 	if !cache.Has(rootKey) {
 		t.Fatal("expected root node to be preloaded before close")
 	}
-	cache.Close() // must write the snapshot file to journalDir
+	cache.Close(true) // must write the snapshot file to journalDir
 
 	// Reopen against the same journalDir but an empty database, so the only
 	// way the reloaded cache can have the root entry is via the persisted file.
@@ -1321,32 +1322,48 @@ func TestAddressBiasedCache_ReloadSizeMismatchFallsBackToPreload(t *testing.T) {
 	accountHash := crypto.Keccak256Hash(addr.Bytes())
 	journalDir := t.TempDir()
 
-	db := rawdb.NewMemoryDatabase()
+	base := rawdb.NewMemoryDatabase()
 	rootData := encodeBranchNode(t, []byte{0}, bytes.Repeat([]byte{0xEF}, 32))
-	rawdb.WriteStorageTrieNode(db, accountHash, nil, rootData)
+	rawdb.WriteStorageTrieNode(base, accountHash, nil, rootData)
 
-	addressCacheSizes := map[common.Address]int{addr: 64 * 1024}
+	// 64MiB vs 128MiB: fastcache buckets maxBytes into per-bucket chunk
+	// counts (bucketsCount=512, chunkSize=64KiB); these two sizes land on
+	// different chunk counts and are confirmed (via a standalone probe
+	// against the vendored fastcache v1.13.0) to make LoadFromFileOrNew
+	// reject the mismatched file and fall back to a fresh empty cache. Byte
+	// sizes close together (e.g. 64KB vs 128KB) round to the SAME chunk
+	// count and are silently accepted — do not shrink these values.
+	const firstSize = 64 * 1024 * 1024
+	const secondSize = 128 * 1024 * 1024
 
-	// First run: creates and persists a snapshot sized for 64KB.
-	first, err := NewAddressBiasedCache(db, addressCacheSizes, 32*1024, 0, journalDir)
+	// First run: creates and persists a snapshot sized for firstSize.
+	first, err := NewAddressBiasedCache(base, map[common.Address]int{addr: firstSize}, 4*1024*1024, 0, journalDir)
 	if err != nil {
 		t.Fatalf("failed to create first cache: %v", err)
 	}
 	first.wg.Wait()
-	first.Close()
+	first.Close(true)
 
-	// Second run: same journalDir, but a different configured cache size for
-	// the same address (simulates an addresscachesizes config change).
-	mismatchedSizes := map[common.Address]int{addr: 128 * 1024}
-	second, err := NewAddressBiasedCache(db, mismatchedSizes, 32*1024, 0, journalDir)
+	// Second run: same journalDir, but a genuinely different configured
+	// cache size for the same address (simulates an addresscachesizes
+	// config change). Use a countingDatabase spy so the test proves a real
+	// disk read happened (preload actually ran) rather than merely
+	// asserting Has(), which a size-accepted-but-"mismatched" reload could
+	// also satisfy.
+	spy := &countingDatabase{Database: base}
+	second, err := NewAddressBiasedCache(spy, map[common.Address]int{addr: secondSize}, 4*1024*1024, 0, journalDir)
 	if err != nil {
 		t.Fatalf("failed to create second cache: %v", err)
 	}
 	second.wg.Wait()
 
+	if spy.gets() == 0 {
+		t.Fatal("expected preloadAddressAsync to have run (and read from disk) after a size-mismatched snapshot was rejected, but no disk reads occurred")
+	}
+
 	rootKey := accountHash.Bytes()
 	if !second.Has(rootKey) {
-		t.Fatal("expected preloadAddressAsync to have run and filled the cache after a size-mismatched snapshot was rejected")
+		t.Fatal("expected preloadAddressAsync to have filled the cache after a size-mismatched snapshot was rejected")
 	}
 }
 
@@ -1376,7 +1393,7 @@ func TestAddressBiasedCache_ReloadedEntryIsStaleButDetectable(t *testing.T) {
 		t.Fatalf("failed to create cache: %v", err)
 	}
 	before.wg.Wait()
-	before.Close()
+	before.Close(true)
 
 	// Simulate the address being mutated while the node was down: the root
 	// node at the same path now has different content.
@@ -1408,5 +1425,94 @@ func TestAddressBiasedCache_ReloadedEntryIsStaleButDetectable(t *testing.T) {
 	fresh := rawdb.ReadStorageTrieNode(db, accountHash, nil)
 	if !bytes.Equal(fresh, newRootData) {
 		t.Fatalf("expected disk to hold the mutated data: got %x want %x", fresh, newRootData)
+	}
+}
+
+// TestAddressBiasedCache_ClosePersistFlag proves the fix for the bug where
+// diskLayer.terminate() (called from Journal() and Disable(), not just a
+// genuine Database.Close()) would otherwise trigger a redundant/misplaced
+// snapshot save. Close(false) must leave no snapshot file behind; Close(true)
+// must.
+func TestAddressBiasedCache_ClosePersistFlag(t *testing.T) {
+	addr := common.HexToAddress("0x1234567890123456789012345678901234567890")
+	accountHash := crypto.Keccak256Hash(addr.Bytes())
+
+	newPopulatedCache := func(t *testing.T, journalDir string) *AddressBiasedCache {
+		t.Helper()
+		db := rawdb.NewMemoryDatabase()
+		rootData := encodeBranchNode(t, []byte{0, 1}, bytes.Repeat([]byte{0x9A}, 32))
+		rawdb.WriteStorageTrieNode(db, accountHash, nil, rootData)
+
+		cache, err := NewAddressBiasedCache(db, map[common.Address]int{addr: 64 * 1024}, 32*1024, 0, journalDir)
+		if err != nil {
+			t.Fatalf("failed to create cache: %v", err)
+		}
+		cache.wg.Wait()
+		return cache
+	}
+
+	t.Run("Close(false) does not persist", func(t *testing.T) {
+		journalDir := t.TempDir()
+		cache := newPopulatedCache(t, journalDir)
+		cache.Close(false)
+
+		path := snapshotPath(journalDir, accountHash)
+		if _, err := os.Stat(path); err == nil {
+			t.Fatalf("expected no snapshot file at %s after Close(false), but one exists", path)
+		} else if !os.IsNotExist(err) {
+			t.Fatalf("unexpected error checking for snapshot file: %v", err)
+		}
+	})
+
+	t.Run("Close(true) persists", func(t *testing.T) {
+		journalDir := t.TempDir()
+		cache := newPopulatedCache(t, journalDir)
+		cache.Close(true)
+
+		path := snapshotPath(journalDir, accountHash)
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("expected a snapshot file/dir at %s after Close(true), got err: %v", path, err)
+		}
+	})
+}
+
+// TestAddressBiasedCache_ReloadPartialFillFallsBackToPreload proves the fix
+// for a bug where a snapshot persisted mid-preload (e.g. from two restarts in
+// quick succession) would be incorrectly treated as fully warm, permanently
+// skipping the top-up preload.
+func TestAddressBiasedCache_ReloadPartialFillFallsBackToPreload(t *testing.T) {
+	addr := common.HexToAddress("0x1234567890123456789012345678901234567890")
+	accountHash := crypto.Keccak256Hash(addr.Bytes())
+	journalDir := t.TempDir()
+
+	base := rawdb.NewMemoryDatabase()
+	rootData := encodeBranchNode(t, []byte{0}, bytes.Repeat([]byte{0x77}, 32))
+	rawdb.WriteStorageTrieNode(base, accountHash, nil, rootData)
+
+	// Large cacheSize relative to the tiny amount of data actually written,
+	// so a full preload (2/3 fill target) can never be reached from this
+	// single small node — simulating a snapshot saved mid-preload with only
+	// a sliver of the eventual content.
+	const cacheSize = 16 * 1024 * 1024 // 16MiB target; single node is far below 2/3 of this.
+
+	first, err := NewAddressBiasedCache(base, map[common.Address]int{addr: cacheSize}, 4*1024*1024, 0, journalDir)
+	if err != nil {
+		t.Fatalf("failed to create first cache: %v", err)
+	}
+	first.wg.Wait()
+	first.Close(true)
+
+	// Reopen with a countingDatabase so we can prove preload actually ran
+	// (a disk read happened) rather than the cache merely coming back
+	// "warm" from the (partial) persisted snapshot.
+	spy := &countingDatabase{Database: base}
+	second, err := NewAddressBiasedCache(spy, map[common.Address]int{addr: cacheSize}, 4*1024*1024, 0, journalDir)
+	if err != nil {
+		t.Fatalf("failed to reopen cache: %v", err)
+	}
+	second.wg.Wait()
+
+	if spy.gets() == 0 {
+		t.Fatal("expected preloadAddressAsync to have run (and read from disk) for a partially-filled reloaded snapshot, but no disk reads occurred")
 	}
 }

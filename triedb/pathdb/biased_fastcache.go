@@ -112,7 +112,18 @@ func (c *AddressBiasedCache) initAddressCache(addr common.Address, cacheSize int
 
 	var stats fastcache.Stats
 	addrCache.UpdateStats(&stats)
-	warm = stats.EntriesCount > 0
+	// A reload is only "warm" if it reached the same 2/3-of-cacheSize fill
+	// target preloadAddressAsync itself targets (see the totalBytesLoaded
+	// check in preloadAddressAsync). Without this check, a snapshot
+	// persisted mid-preload (e.g. two restarts in quick succession) would
+	// be marked warm and permanently skip the top-up preload — leaving the
+	// cache stuck near-empty for addresses that are rarely touched by
+	// organic block-processing traffic, which is exactly the profile of
+	// the addresses this feature targets.
+	warm = stats.BytesSize >= uint64(cacheSize*2/3)
+	if warm {
+		log.Info("Reloaded address cache snapshot", "address", addr, "entries", stats.EntriesCount, "bytes", stats.BytesSize, "path", snapshotPath(c.journalDir, accountHash))
+	}
 
 	// Mark this address as preloaded
 	c.preloadedAddrs.Store(accountHash, struct{}{})
@@ -461,21 +472,29 @@ func (c *AddressBiasedCache) Reset() {
 	})
 }
 
-// Close cancels all background preload operations, waits for them to finish,
-// and — if a journal directory is configured — persists each address's cache
-// to disk so a future restart can reload it instead of preloading from
-// scratch. commonCache is never persisted (see design spec).
+// Close cancels all background preload operations and waits for them to
+// finish. If persist is true and a journal directory is configured, it also
+// persists each address's cache to disk so a future restart can reload it
+// instead of preloading from scratch. commonCache is never persisted (see
+// design spec).
+//
+// persist must be true only for a genuine final database shutdown
+// (Database.Close()). diskLayer.terminate() also calls this method (with
+// persist=false) from Journal() and Disable(), which stop the background
+// preloader for unrelated reasons and are not the node restarting — passing
+// true there would mean a redundant, potentially multi-GB write on those
+// paths for no benefit.
 //
 // A save failure (disk full, permission error, etc.) is logged and does not
 // fail Close(): losing a snapshot only degrades the next startup to a cold
 // preload, identical to today's behavior, and must not block shutdown.
-func (c *AddressBiasedCache) Close() {
+func (c *AddressBiasedCache) Close(persist bool) {
 	if c.cancel != nil {
 		c.cancel()  // Signal all goroutines to stop
 		c.wg.Wait() // Wait for them to finish
 	}
 
-	if c.journalDir == "" {
+	if !persist || c.journalDir == "" {
 		return
 	}
 
