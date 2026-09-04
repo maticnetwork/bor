@@ -3,6 +3,7 @@ package pathdb
 import (
 	stdcontext "context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sync"
 	"time"
@@ -460,11 +461,43 @@ func (c *AddressBiasedCache) Reset() {
 	})
 }
 
-// Close cancels all background preload operations and waits for them to finish.
-// This ensures graceful shutdown and prevents goroutines from blocking application termination.
+// Close cancels all background preload operations, waits for them to finish,
+// and — if a journal directory is configured — persists each address's cache
+// to disk so a future restart can reload it instead of preloading from
+// scratch. commonCache is never persisted (see design spec).
+//
+// A save failure (disk full, permission error, etc.) is logged and does not
+// fail Close(): losing a snapshot only degrades the next startup to a cold
+// preload, identical to today's behavior, and must not block shutdown.
 func (c *AddressBiasedCache) Close() {
 	if c.cancel != nil {
 		c.cancel()  // Signal all goroutines to stop
 		c.wg.Wait() // Wait for them to finish
 	}
+
+	if c.journalDir == "" {
+		return
+	}
+
+	dir := filepath.Join(c.journalDir, "addresscache")
+	if err := ensureDir(dir); err != nil {
+		log.Warn("Failed to create address cache snapshot directory", "dir", dir, "err", err)
+		return
+	}
+
+	c.addressCaches.Range(func(key, value any) bool {
+		accountHash := key.(common.Hash)
+		addrCache := value.(*fastcache.Cache)
+
+		path := snapshotPath(c.journalDir, accountHash)
+		if err := addrCache.SaveToFileConcurrent(path, 4); err != nil {
+			log.Warn("Failed to persist address cache", "account hash", accountHash.Hex(), "path", path, "err", err)
+		}
+		return true
+	})
+}
+
+// ensureDir creates dir (and any missing parents) if it doesn't already exist.
+func ensureDir(dir string) error {
+	return os.MkdirAll(dir, 0o755)
 }

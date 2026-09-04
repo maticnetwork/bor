@@ -1252,3 +1252,44 @@ func TestAddressBiasedCache_MultipleClose(t *testing.T) {
 	cache.Close()
 	cache.Close()
 }
+
+func TestAddressBiasedCache_CloseSavesAndReloadWarmsUp(t *testing.T) {
+	addr := common.HexToAddress("0x1234567890123456789012345678901234567890")
+	accountHash := crypto.Keccak256Hash(addr.Bytes())
+	journalDir := t.TempDir()
+
+	db := rawdb.NewMemoryDatabase()
+	rootData := encodeBranchNode(t, []byte{0, 1}, bytes.Repeat([]byte{0xAB}, 32))
+	rawdb.WriteStorageTrieNode(db, accountHash, nil, rootData)
+
+	addressCacheSizes := map[common.Address]int{addr: 64 * 1024}
+
+	cache, err := NewAddressBiasedCache(db, addressCacheSizes, 32*1024, 0, journalDir)
+	if err != nil {
+		t.Fatalf("failed to create cache: %v", err)
+	}
+	cache.wg.Wait() // let preload finish filling the (cold) cache
+
+	rootKey := accountHash.Bytes()
+	if !cache.Has(rootKey) {
+		t.Fatal("expected root node to be preloaded before close")
+	}
+	cache.Close() // must write the snapshot file to journalDir
+
+	// Reopen against the same journalDir but an empty database, so the only
+	// way the reloaded cache can have the root entry is via the persisted file.
+	emptyDB := rawdb.NewMemoryDatabase()
+	reloaded, err := NewAddressBiasedCache(emptyDB, addressCacheSizes, 32*1024, 0, journalDir)
+	if err != nil {
+		t.Fatalf("failed to reopen cache: %v", err)
+	}
+	reloaded.wg.Wait()
+
+	if !reloaded.Has(rootKey) {
+		t.Fatal("expected root node to survive a Close() + reload round trip")
+	}
+	got := reloaded.Get(rootKey)
+	if !bytes.Equal(got, rootData) {
+		t.Fatalf("reloaded root node mismatch: got %x want %x", got, rootData)
+	}
+}
