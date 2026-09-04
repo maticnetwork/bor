@@ -3,6 +3,7 @@ package pathdb
 import (
 	stdcontext "context"
 	"fmt"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -45,6 +46,17 @@ type AddressBiasedCache struct {
 
 	// Rate limiting for preload operations (bytes per second, 0 = unlimited)
 	rateLimitBPS int64
+
+	// Directory used to persist/reload per-address caches across restarts.
+	// Empty string disables persistence (in-memory-only, matches legacy behavior).
+	journalDir string
+}
+
+// snapshotPath returns the on-disk path used to persist/reload the given
+// address's cache. journalDir is expected to already be an absolute,
+// resolved directory (see triedb/pathdb.Config.JournalDirectory).
+func snapshotPath(journalDir string, accountHash common.Hash) string {
+	return filepath.Join(journalDir, "addresscache", accountHash.Hex()+".cache")
 }
 
 // NewAddressBiasedCache creates a new address-biased cache with preloading.
@@ -54,18 +66,22 @@ type AddressBiasedCache struct {
 // of the cache for non-preloaded data. The rateLimitBPS limits preload I/O
 // in bytes per second (0 = unlimited).
 // Preloading happens asynchronously in the background.
-func NewAddressBiasedCache(db ethdb.Database, addressCacheSizes map[common.Address]int, commonCacheSize int, rateLimitBPS int64) (*AddressBiasedCache, error) {
+func NewAddressBiasedCache(db ethdb.Database, addressCacheSizes map[common.Address]int, commonCacheSize int, rateLimitBPS int64, journalDir string) (*AddressBiasedCache, error) {
 	ctx, cancel := stdcontext.WithCancel(stdcontext.Background())
 	cache := &AddressBiasedCache{
 		commonCache:  fastcache.New(commonCacheSize),
 		ctx:          ctx,
 		cancel:       cancel,
 		rateLimitBPS: rateLimitBPS,
+		journalDir:   journalDir,
 	}
 
 	// Initialize caches synchronously, but preload asynchronously
 	for addr, cacheSize := range addressCacheSizes {
-		cache.initAddressCache(addr, cacheSize)
+		warm := cache.initAddressCache(addr, cacheSize)
+		if warm {
+			continue
+		}
 
 		// Start async preloading
 		cache.wg.Add(1)
@@ -75,14 +91,33 @@ func NewAddressBiasedCache(db ethdb.Database, addressCacheSizes map[common.Addre
 	return cache, nil
 }
 
-// initAddressCache initializes the cache structures for an address synchronously
-func (c *AddressBiasedCache) initAddressCache(addr common.Address, cacheSize int) {
+// initAddressCache initializes the cache structure for an address synchronously.
+// If a persisted snapshot exists at the address's snapshot path and matches
+// the configured cache size, it is reloaded and the cache is considered warm
+// (the caller should skip preloadAddressAsync for this address). Otherwise a
+// fresh empty cache is created and the cache is considered cold. Staleness of
+// a reloaded cache is not a correctness concern: reader.Node already hash-
+// verifies every cache hit and evicts+refetches on mismatch, regardless of
+// why the cached blob is stale.
+func (c *AddressBiasedCache) initAddressCache(addr common.Address, cacheSize int) (warm bool) {
 	accountHash := crypto.Keccak256Hash(addr.Bytes())
-	addrCache := fastcache.New(cacheSize)
+
+	var addrCache *fastcache.Cache
+	if c.journalDir != "" {
+		addrCache = fastcache.LoadFromFileOrNew(snapshotPath(c.journalDir, accountHash), cacheSize)
+	} else {
+		addrCache = fastcache.New(cacheSize)
+	}
+
+	var stats fastcache.Stats
+	addrCache.UpdateStats(&stats)
+	warm = stats.EntriesCount > 0
 
 	// Mark this address as preloaded
 	c.preloadedAddrs.Store(accountHash, struct{}{})
 	c.addressCaches.Store(accountHash, addrCache)
+
+	return warm
 }
 
 // preloadAddressAsync loads storage trie nodes for the given account hash using

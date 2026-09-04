@@ -60,7 +60,7 @@ func newDiskLayer(root common.Hash, id uint64, db *Database, nodes *AddressBiase
 	// or reuse the provided caches if they are not nil (inherited from
 	// the original disk layer).
 	if nodes == nil && db.config.TrieCleanSize != 0 {
-		cachedNodes, err := NewAddressBiasedCache(db.diskdb, db.config.AddressCacheSizes, db.config.TrieCleanSize, db.config.PreloadRateLimit)
+		cachedNodes, err := NewAddressBiasedCache(db.diskdb, db.config.AddressCacheSizes, db.config.TrieCleanSize, db.config.PreloadRateLimit, db.config.JournalDirectory)
 		if err != nil {
 			panic(err)
 		}

@@ -100,7 +100,7 @@ func TestAddressBiasedCache_RouteCache(t *testing.T) {
 	}
 
 	db := rawdb.NewMemoryDatabase()
-	cache, err := NewAddressBiasedCache(db, addressCacheSizes, 512*1024, 0)
+	cache, err := NewAddressBiasedCache(db, addressCacheSizes, 512*1024, 0, "")
 	if err != nil {
 		t.Fatalf("Failed to create cache: %v", err)
 	}
@@ -148,7 +148,7 @@ func TestAddressBiasedCache_GetSet(t *testing.T) {
 	}
 
 	db := rawdb.NewMemoryDatabase()
-	cache, err := NewAddressBiasedCache(db, addressCacheSizes, 512*1024, 0)
+	cache, err := NewAddressBiasedCache(db, addressCacheSizes, 512*1024, 0, "")
 	if err != nil {
 		t.Fatalf("Failed to create cache: %v", err)
 	}
@@ -188,7 +188,7 @@ func TestAddressBiasedCache_Has(t *testing.T) {
 	}
 
 	db := rawdb.NewMemoryDatabase()
-	cache, err := NewAddressBiasedCache(db, addressCacheSizes, 512*1024, 0)
+	cache, err := NewAddressBiasedCache(db, addressCacheSizes, 512*1024, 0, "")
 	if err != nil {
 		t.Fatalf("Failed to create cache: %v", err)
 	}
@@ -216,7 +216,7 @@ func TestAddressBiasedCache_Del(t *testing.T) {
 	}
 
 	db := rawdb.NewMemoryDatabase()
-	cache, err := NewAddressBiasedCache(db, addressCacheSizes, 512*1024, 0)
+	cache, err := NewAddressBiasedCache(db, addressCacheSizes, 512*1024, 0, "")
 	if err != nil {
 		t.Fatalf("Failed to create cache: %v", err)
 	}
@@ -251,7 +251,7 @@ func TestAddressBiasedCache_Reset(t *testing.T) {
 	}
 
 	db := rawdb.NewMemoryDatabase()
-	cache, err := NewAddressBiasedCache(db, addressCacheSizes, 512*1024, 0)
+	cache, err := NewAddressBiasedCache(db, addressCacheSizes, 512*1024, 0, "")
 	if err != nil {
 		t.Fatalf("Failed to create cache: %v", err)
 	}
@@ -289,7 +289,7 @@ func TestAddressBiasedCache_MultipleAddresses(t *testing.T) {
 	}
 
 	db := rawdb.NewMemoryDatabase()
-	cache, err := NewAddressBiasedCache(db, addressCacheSizes, 256*1024, 0)
+	cache, err := NewAddressBiasedCache(db, addressCacheSizes, 256*1024, 0, "")
 	if err != nil {
 		t.Fatalf("Failed to create cache: %v", err)
 	}
@@ -356,7 +356,7 @@ func TestAddressBiasedCache_PreloadWithData(t *testing.T) {
 		addr: 10 * 1024, // Small cache to test limit
 	}
 
-	cache, err := NewAddressBiasedCache(db, addressCacheSizes, 512*1024, 0)
+	cache, err := NewAddressBiasedCache(db, addressCacheSizes, 512*1024, 0, "")
 	if err != nil {
 		t.Fatalf("Failed to create cache: %v", err)
 	}
@@ -557,7 +557,7 @@ func TestPreloadBFS_CycleFree(t *testing.T) {
 		encodeShortNode(t, nibblesToCompact([]byte{0xc}, true), []byte("v13")))
 
 	cacheSize := 10 * 1024 * 1024 // 10 MiB — large enough to hold all 5 nodes
-	cache, err := NewAddressBiasedCache(db, map[common.Address]int{addr: cacheSize}, 512*1024, 0)
+	cache, err := NewAddressBiasedCache(db, map[common.Address]int{addr: cacheSize}, 512*1024, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -590,7 +590,7 @@ func TestPreloadBFS_EmptyExtensionReadOnce(t *testing.T) {
 	rawdb.WriteStorageTrieNode(base, accountHash, nil,
 		encodeShortNode(t, []byte{0x00}, bytes.Repeat([]byte{0xee}, 32)))
 
-	cache, err := NewAddressBiasedCache(db, map[common.Address]int{addr: 1024 * 1024}, 512*1024, 0)
+	cache, err := NewAddressBiasedCache(db, map[common.Address]int{addr: 1024 * 1024}, 512*1024, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -624,7 +624,7 @@ func TestPreloadBFS_ExtensionTraversal(t *testing.T) {
 	rawdb.WriteStorageTrieNode(db, accountHash, []byte{1, 2, 3},
 		encodeShortNode(t, nibblesToCompact([]byte{0xd}, true), []byte("v123")))
 
-	cache, err := NewAddressBiasedCache(db, map[common.Address]int{addr: 1024 * 1024}, 512*1024, 0)
+	cache, err := NewAddressBiasedCache(db, map[common.Address]int{addr: 1024 * 1024}, 512*1024, 0, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -661,7 +661,7 @@ func TestAddressBiasedCache_RateLimitInterruption_ValidTrie(t *testing.T) {
 		}
 	}
 
-	cache, err := NewAddressBiasedCache(db, map[common.Address]int{addr: 8 * 1024 * 1024}, 512*1024, 1024)
+	cache, err := NewAddressBiasedCache(db, map[common.Address]int{addr: 8 * 1024 * 1024}, 512*1024, 1024, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -683,7 +683,7 @@ func TestAddressBiasedCache_EmptyDatabase(t *testing.T) {
 	}
 
 	db := rawdb.NewMemoryDatabase()
-	_, err := NewAddressBiasedCache(db, addressCacheSizes, 512*1024, 0)
+	_, err := NewAddressBiasedCache(db, addressCacheSizes, 512*1024, 0, "")
 	if err != nil {
 		t.Fatalf("Failed to create cache: %v", err)
 	}
@@ -717,7 +717,7 @@ func TestAddressBiasedCache_AsyncPreloadWithConcurrentWrites(t *testing.T) {
 		addr: 100 * 1024,
 	}
 
-	cache, err := NewAddressBiasedCache(db, addressCacheSizes, 512*1024, 0)
+	cache, err := NewAddressBiasedCache(db, addressCacheSizes, 512*1024, 0, "")
 	if err != nil {
 		t.Fatalf("Failed to create cache: %v", err)
 	}
@@ -746,7 +746,7 @@ func TestAddressBiasedCache_ConcurrentAccess(t *testing.T) {
 	}
 
 	db := rawdb.NewMemoryDatabase()
-	cache, err := NewAddressBiasedCache(db, addressCacheSizes, 512*1024, 0)
+	cache, err := NewAddressBiasedCache(db, addressCacheSizes, 512*1024, 0, "")
 	if err != nil {
 		t.Fatalf("Failed to create cache: %v", err)
 	}
@@ -793,7 +793,7 @@ func BenchmarkAddressBiasedCache_Get_AddressCache(b *testing.B) {
 	}
 
 	db := rawdb.NewMemoryDatabase()
-	cache, err := NewAddressBiasedCache(db, addressCacheSizes, 5*1024*1024, 0)
+	cache, err := NewAddressBiasedCache(db, addressCacheSizes, 5*1024*1024, 0, "")
 	if err != nil {
 		b.Fatalf("Failed to create cache: %v", err)
 	}
@@ -816,7 +816,7 @@ func BenchmarkAddressBiasedCache_Get_CommonCache(b *testing.B) {
 	}
 
 	db := rawdb.NewMemoryDatabase()
-	cache, err := NewAddressBiasedCache(db, addressCacheSizes, 5*1024*1024, 0)
+	cache, err := NewAddressBiasedCache(db, addressCacheSizes, 5*1024*1024, 0, "")
 	if err != nil {
 		b.Fatalf("Failed to create cache: %v", err)
 	}
@@ -838,7 +838,7 @@ func BenchmarkAddressBiasedCache_Set(b *testing.B) {
 	}
 
 	db := rawdb.NewMemoryDatabase()
-	cache, err := NewAddressBiasedCache(db, addressCacheSizes, 5*1024*1024, 0)
+	cache, err := NewAddressBiasedCache(db, addressCacheSizes, 5*1024*1024, 0, "")
 	if err != nil {
 		b.Fatalf("Failed to create cache: %v", err)
 	}
@@ -864,7 +864,7 @@ func TestAddressBiasedCache_RateLimitCreation(t *testing.T) {
 			addr: 1024 * 1024,
 		}
 
-		cache, err := NewAddressBiasedCache(db, addressCacheSizes, 512*1024, 0)
+		cache, err := NewAddressBiasedCache(db, addressCacheSizes, 512*1024, 0, "")
 		if err != nil {
 			t.Fatalf("Failed to create cache: %v", err)
 		}
@@ -885,7 +885,7 @@ func TestAddressBiasedCache_RateLimitCreation(t *testing.T) {
 		}
 
 		rateLimit := int64(500 * 1024) // 500 KB/s
-		cache, err := NewAddressBiasedCache(db, addressCacheSizes, 512*1024, rateLimit)
+		cache, err := NewAddressBiasedCache(db, addressCacheSizes, 512*1024, rateLimit, "")
 		if err != nil {
 			t.Fatalf("Failed to create cache: %v", err)
 		}
@@ -932,7 +932,7 @@ func TestAddressBiasedCache_RateLimitThrottling(t *testing.T) {
 		rawdb.WriteStorageTrieNode(dbCopy, accountHash, nil, nodeData)
 
 		start := time.Now()
-		cache, err := NewAddressBiasedCache(dbCopy, addressCacheSizes, 512*1024, 0)
+		cache, err := NewAddressBiasedCache(dbCopy, addressCacheSizes, 512*1024, 0, "")
 		if err != nil {
 			t.Fatalf("Failed to create cache: %v", err)
 		}
@@ -962,7 +962,7 @@ func TestAddressBiasedCache_RateLimitThrottling(t *testing.T) {
 		rateLimit := int64(10 * 1024) // 10 KB/s
 
 		start := time.Now()
-		cache, err := NewAddressBiasedCache(dbCopy, addressCacheSizes, 512*1024, rateLimit)
+		cache, err := NewAddressBiasedCache(dbCopy, addressCacheSizes, 512*1024, rateLimit, "")
 		if err != nil {
 			t.Fatalf("Failed to create cache: %v", err)
 		}
@@ -1020,7 +1020,7 @@ func TestAddressBiasedCache_RateLimitInterruption(t *testing.T) {
 	// Very slow rate limit to ensure preload is still running when we cancel
 	rateLimit := int64(1024) // 1 KB/s - would take ~1000 seconds normally
 
-	cache, err := NewAddressBiasedCache(db, addressCacheSizes, 512*1024, rateLimit)
+	cache, err := NewAddressBiasedCache(db, addressCacheSizes, 512*1024, rateLimit, "")
 	if err != nil {
 		t.Fatalf("Failed to create cache: %v", err)
 	}
@@ -1066,7 +1066,7 @@ func TestAddressBiasedCache_ShutdownDuringRateLimitWait(t *testing.T) {
 	// After ~6 children (~60KB) the burst is exhausted and WaitN blocks for ~10s per node.
 	rateLimit := int64(1024) // 1 KB/s
 
-	cache, err := NewAddressBiasedCache(db, addressCacheSizes, 512*1024, rateLimit)
+	cache, err := NewAddressBiasedCache(db, addressCacheSizes, 512*1024, rateLimit, "")
 	if err != nil {
 		t.Fatalf("Failed to create cache: %v", err)
 	}
@@ -1123,7 +1123,7 @@ func TestAddressBiasedCache_BurstExceeded(t *testing.T) {
 	// Use a rate limit so the limiter is created (burst = 64KB)
 	rateLimit := int64(1024 * 1024) // 1MB/s - fast enough that small nodes pass
 
-	cache, err := NewAddressBiasedCache(db, addressCacheSizes, 512*1024, rateLimit)
+	cache, err := NewAddressBiasedCache(db, addressCacheSizes, 512*1024, rateLimit, "")
 	if err != nil {
 		t.Fatalf("Failed to create cache: %v", err)
 	}
@@ -1175,7 +1175,7 @@ func TestAddressBiasedCache_PreloadWithRateLimit(t *testing.T) {
 	// Use a reasonable rate limit
 	rateLimit := int64(100 * 1024) // 100 KB/s
 
-	cache, err := NewAddressBiasedCache(db, addressCacheSizes, 512*1024, rateLimit)
+	cache, err := NewAddressBiasedCache(db, addressCacheSizes, 512*1024, rateLimit, "")
 	if err != nil {
 		t.Fatalf("Failed to create cache: %v", err)
 	}
@@ -1216,7 +1216,7 @@ func TestAddressBiasedCache_GracefulShutdown(t *testing.T) {
 	addressCacheSizes := map[common.Address]int{
 		addr: 10 * 1024 * 1024, // 10 MB
 	}
-	cache, err := NewAddressBiasedCache(db, addressCacheSizes, 1024*1024, 0)
+	cache, err := NewAddressBiasedCache(db, addressCacheSizes, 1024*1024, 0, "")
 	if err != nil {
 		t.Fatalf("Failed to create cache: %v", err)
 	}
@@ -1242,7 +1242,7 @@ func TestAddressBiasedCache_MultipleClose(t *testing.T) {
 	addressCacheSizes := map[common.Address]int{
 		addr: 1024 * 1024, // 1 MB
 	}
-	cache, err := NewAddressBiasedCache(db, addressCacheSizes, 1024*1024, 0)
+	cache, err := NewAddressBiasedCache(db, addressCacheSizes, 1024*1024, 0, "")
 	if err != nil {
 		t.Fatalf("Failed to create cache: %v", err)
 	}
