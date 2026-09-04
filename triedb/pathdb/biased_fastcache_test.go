@@ -1349,3 +1349,64 @@ func TestAddressBiasedCache_ReloadSizeMismatchFallsBackToPreload(t *testing.T) {
 		t.Fatal("expected preloadAddressAsync to have run and filled the cache after a size-mismatched snapshot was rejected")
 	}
 }
+
+// TestAddressBiasedCache_ReloadedEntryIsStaleButDetectable simulates the
+// scenario the whole persistence feature depends on for correctness: a
+// snapshot taken before a restart contains an entry that no longer matches
+// the current on-disk trie node (the address was mutated while the node was
+// down). This test proves two things: (1) after reload, AddressBiasedCache.Get
+// returns the OLD (persisted) blob rather than silently updating itself, and
+// (2) the current on-disk data is in fact different — i.e. the discrepancy
+// the AddressBiasedCache layer hands upward (for reader.Node's existing hash
+// check to catch) is real, not a test artifact.
+func TestAddressBiasedCache_ReloadedEntryIsStaleButDetectable(t *testing.T) {
+	addr := common.HexToAddress("0x1234567890123456789012345678901234567890")
+	accountHash := crypto.Keccak256Hash(addr.Bytes())
+	journalDir := t.TempDir()
+
+	db := rawdb.NewMemoryDatabase()
+	oldRootData := encodeBranchNode(t, []byte{0, 1}, bytes.Repeat([]byte{0x11}, 32))
+	rawdb.WriteStorageTrieNode(db, accountHash, nil, oldRootData)
+
+	addressCacheSizes := map[common.Address]int{addr: 64 * 1024}
+
+	// "Before restart": preload from disk, then gracefully close (persists snapshot).
+	before, err := NewAddressBiasedCache(db, addressCacheSizes, 32*1024, 0, journalDir)
+	if err != nil {
+		t.Fatalf("failed to create cache: %v", err)
+	}
+	before.wg.Wait()
+	before.Close()
+
+	// Simulate the address being mutated while the node was down: the root
+	// node at the same path now has different content.
+	newRootData := encodeBranchNode(t, []byte{2, 3}, bytes.Repeat([]byte{0x22}, 32))
+	rawdb.WriteStorageTrieNode(db, accountHash, nil, newRootData)
+
+	// "After restart": reload from the snapshot. The underlying database
+	// already has the mutated value, but the cache should come back warm
+	// from the persisted (now-stale) blob rather than re-reading disk,
+	// since a warm reload skips preloadAddressAsync entirely (Task 1).
+	after, err := NewAddressBiasedCache(db, addressCacheSizes, 32*1024, 0, journalDir)
+	if err != nil {
+		t.Fatalf("failed to reopen cache: %v", err)
+	}
+	after.wg.Wait()
+
+	rootKey := accountHash.Bytes()
+	got := after.Get(rootKey)
+	if !bytes.Equal(got, oldRootData) {
+		t.Fatalf("expected reloaded cache to hold the persisted (stale) blob, got %x want (stale) %x", got, oldRootData)
+	}
+	if bytes.Equal(got, newRootData) {
+		t.Fatal("reloaded cache unexpectedly matches the new on-disk data — the test setup did not actually create a staleness scenario")
+	}
+
+	// Confirm the discrepancy is real and disk-readable, which is exactly
+	// what lets reader.Node's existing hash-verify-and-evict path (outside
+	// this package's cache layer, not re-tested here) self-heal on next access.
+	fresh := rawdb.ReadStorageTrieNode(db, accountHash, nil)
+	if !bytes.Equal(fresh, newRootData) {
+		t.Fatalf("expected disk to hold the mutated data: got %x want %x", fresh, newRootData)
+	}
+}
