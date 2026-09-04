@@ -1293,3 +1293,59 @@ func TestAddressBiasedCache_CloseSavesAndReloadWarmsUp(t *testing.T) {
 		t.Fatalf("reloaded root node mismatch: got %x want %x", got, rootData)
 	}
 }
+
+func TestAddressBiasedCache_ReloadMissingFileFallsBackToPreload(t *testing.T) {
+	addr := common.HexToAddress("0x1234567890123456789012345678901234567890")
+	accountHash := crypto.Keccak256Hash(addr.Bytes())
+	journalDir := t.TempDir() // empty: no snapshot file exists yet
+
+	db := rawdb.NewMemoryDatabase()
+	rootData := encodeBranchNode(t, []byte{0}, bytes.Repeat([]byte{0xCD}, 32))
+	rawdb.WriteStorageTrieNode(db, accountHash, nil, rootData)
+
+	addressCacheSizes := map[common.Address]int{addr: 64 * 1024}
+	cache, err := NewAddressBiasedCache(db, addressCacheSizes, 32*1024, 0, journalDir)
+	if err != nil {
+		t.Fatalf("failed to create cache: %v", err)
+	}
+	cache.wg.Wait()
+
+	rootKey := accountHash.Bytes()
+	if !cache.Has(rootKey) {
+		t.Fatal("expected preloadAddressAsync to have filled the cache from disk when no snapshot file exists")
+	}
+}
+
+func TestAddressBiasedCache_ReloadSizeMismatchFallsBackToPreload(t *testing.T) {
+	addr := common.HexToAddress("0x1234567890123456789012345678901234567890")
+	accountHash := crypto.Keccak256Hash(addr.Bytes())
+	journalDir := t.TempDir()
+
+	db := rawdb.NewMemoryDatabase()
+	rootData := encodeBranchNode(t, []byte{0}, bytes.Repeat([]byte{0xEF}, 32))
+	rawdb.WriteStorageTrieNode(db, accountHash, nil, rootData)
+
+	addressCacheSizes := map[common.Address]int{addr: 64 * 1024}
+
+	// First run: creates and persists a snapshot sized for 64KB.
+	first, err := NewAddressBiasedCache(db, addressCacheSizes, 32*1024, 0, journalDir)
+	if err != nil {
+		t.Fatalf("failed to create first cache: %v", err)
+	}
+	first.wg.Wait()
+	first.Close()
+
+	// Second run: same journalDir, but a different configured cache size for
+	// the same address (simulates an addresscachesizes config change).
+	mismatchedSizes := map[common.Address]int{addr: 128 * 1024}
+	second, err := NewAddressBiasedCache(db, mismatchedSizes, 32*1024, 0, journalDir)
+	if err != nil {
+		t.Fatalf("failed to create second cache: %v", err)
+	}
+	second.wg.Wait()
+
+	rootKey := accountHash.Bytes()
+	if !second.Has(rootKey) {
+		t.Fatal("expected preloadAddressAsync to have run and filled the cache after a size-mismatched snapshot was rejected")
+	}
+}
