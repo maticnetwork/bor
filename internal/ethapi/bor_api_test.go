@@ -4461,3 +4461,38 @@ func TestSystemTxGasCapBypass(t *testing.T) {
 		})
 	}
 }
+
+func TestGetPreconfAuditStatus(t *testing.T) {
+	backend := newTestBackend(t, 0, &core.Genesis{Config: params.TestChainConfig, Alloc: types.GenesisAlloc{}}, ethash.NewFaker(), nil)
+	api := NewBorAPI(backend)
+
+	// A node that never audited reports neither mark, so an empty
+	// invalidation range cannot be read as a clean window.
+	status := api.GetPreconfAuditStatus()
+	if status.AuditedThrough != nil || status.UnauditedThrough != nil {
+		t.Fatalf("status = %+v, want both marks absent", status)
+	}
+
+	if err := rawdb.WritePreconfAuditedThrough(backend.ChainDb(), 77); err != nil {
+		t.Fatalf("write watermark: %v", err)
+	}
+	if err := rawdb.WritePreconfUnauditedThrough(backend.ChainDb(), 30); err != nil {
+		t.Fatalf("write unaudited: %v", err)
+	}
+
+	status = api.GetPreconfAuditStatus()
+	if status.AuditedThrough == nil || uint64(*status.AuditedThrough) != 77 {
+		t.Fatalf("auditedThrough = %v, want 77", status.AuditedThrough)
+	}
+	if status.UnauditedThrough == nil || uint64(*status.UnauditedThrough) != 30 {
+		t.Fatalf("unauditedThrough = %v, want 30", status.UnauditedThrough)
+	}
+
+	encoded, err := json.Marshal(status)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if want := `{"auditedThrough":"0x4d","unauditedThrough":"0x1e"}`; string(encoded) != want {
+		t.Fatalf("json = %s, want %s", encoded, want)
+	}
+}

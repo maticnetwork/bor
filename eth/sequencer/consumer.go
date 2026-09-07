@@ -66,6 +66,14 @@ type Consumer struct {
 	handoff      atomic.Pointer[types.Header]
 	sealVerify   atomic.Bool
 
+	// watching reports whether a stream session has reached the store tip.
+	// Only then does a canonical head mean this node saw whatever the store
+	// held at that height, which is what lets the audit watermark advance.
+	watching     atomic.Bool
+	auditTrigger chan struct{}
+	auditWindow  uint64
+	auditMu      sync.Mutex
+
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 }
@@ -83,12 +91,13 @@ func NewConsumerWithTransactionLookup(endpoint string, chain *core.BlockChain, t
 	}
 
 	consumer := &Consumer{
-		chain:     chain,
-		endpoint:  endpoint,
-		txLookup:  txLookup,
-		index:     NewIndex(),
-		store:     NewPendingStore(chain.DB()),
-		recentTxs: make(map[common.Hash]*types.Transaction),
+		chain:        chain,
+		endpoint:     endpoint,
+		txLookup:     txLookup,
+		index:        NewIndex(),
+		store:        NewPendingStore(chain.DB()),
+		recentTxs:    make(map[common.Hash]*types.Transaction),
+		auditTrigger: make(chan struct{}, 1),
 	}
 	consumer.reconciled.Store(chain.CurrentBlock())
 	return consumer, nil
@@ -195,7 +204,7 @@ func (c *Consumer) Start() {
 	ctx, cancel := context.WithCancel(context.Background())
 	c.cancel = cancel
 
-	c.wg.Add(2)
+	c.wg.Add(3)
 	go func() {
 		defer c.wg.Done()
 		c.run(ctx)
@@ -203,6 +212,10 @@ func (c *Consumer) Start() {
 	go func() {
 		defer c.wg.Done()
 		c.evictLoop(ctx)
+	}()
+	go func() {
+		defer c.wg.Done()
+		c.auditLoop(ctx)
 	}()
 }
 
@@ -248,12 +261,19 @@ func (c *Consumer) run(ctx context.Context) {
 	var sess *session
 
 	for {
+		// Before every session, including the first: whatever the stream was
+		// not covering — a restart, or a session that just dropped — is a
+		// window this node did not watch, and the audit closes it.
+		c.requestAudit()
+
 		var err error
 		if derr := c.deterministic(); derr != nil {
 			err = fmt.Errorf("preconf re-execution not deterministic yet: %w", derr)
 		} else {
 			sess, err = c.follow(ctx, sess)
 		}
+
+		c.watching.Store(false)
 
 		if ctx.Err() != nil {
 			return
@@ -268,92 +288,6 @@ func (c *Consumer) run(ctx context.Context) {
 		case <-time.After(consumerRetryDelay):
 		}
 	}
-}
-
-// evictLoop drops preconf receipts for heights the canonical chain has
-// imported — the normal receipt path serves them from there on.
-func (c *Consumer) evictLoop(ctx context.Context) {
-	heads := make(chan core.ChainHeadEvent, 16)
-	sub := c.chain.SubscribeChainHeadEvent(heads)
-
-	defer sub.Unsubscribe()
-	c.handleCanonicalHead()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case _, ok := <-heads:
-			if !ok {
-				return
-			}
-			c.handleCanonicalHead()
-		case <-sub.Err():
-			return
-		}
-	}
-}
-
-func (c *Consumer) handleCanonicalHead() {
-	c.publishMu.Lock()
-	invalidations := c.reconcileCanonicalHeadLocked()
-	c.publishMu.Unlock()
-	c.pendingStore().writeInvalidations(invalidations)
-}
-
-func (c *Consumer) reconcileCanonicalHeadLocked() []pendingInvalidation {
-	head := c.chain.CurrentBlock()
-	number := head.Number.Uint64()
-	c.index.EvictThrough(number)
-	logs, invalidations := c.pendingStore().reconcileThroughMemory(number, c.chain.GetBlockByNumber, c.chain.GetReceiptsByHash)
-	var clearFrom *uint64
-	for _, invalidation := range invalidations {
-		if invalidation.number <= number || (clearFrom != nil && invalidation.number >= *clearFrom) {
-			continue
-		}
-		height := invalidation.number
-		clearFrom = &height
-	}
-	if clearFrom != nil {
-		c.index.ClearFrom(*clearFrom)
-	}
-	c.reconciled.Store(head)
-	c.clearCanonicalHandoffThrough(head)
-	c.enqueuePendingLogs(logs)
-	return invalidations
-}
-
-func (c *Consumer) ensureCanonicalHeadReconciled() bool {
-	c.publishMu.Lock()
-	head := c.chain.CurrentBlock()
-	if head == nil || head.Number == nil {
-		c.publishMu.Unlock()
-		return false
-	}
-	handoff := c.handoff.Load()
-	if handoff != nil && handoff.Number != nil && handoff.Number.Cmp(head.Number) == 0 && handoff.Hash() != head.Hash() {
-		c.publishMu.Unlock()
-		return false
-	}
-	marker := c.reconciled.Load()
-	if marker != nil {
-		if marker.Hash() == head.Hash() {
-			c.clearCanonicalHandoffThrough(head)
-			c.publishMu.Unlock()
-			return true
-		}
-		if marker.Number != nil && marker.Number.Cmp(head.Number) > 0 {
-			c.publishMu.Unlock()
-			return false
-		}
-	}
-	invalidations := c.reconcileCanonicalHeadLocked()
-	marker = c.reconciled.Load()
-	head = c.chain.CurrentBlock()
-	ready := marker != nil && head != nil && marker.Hash() == head.Hash()
-	c.publishMu.Unlock()
-	c.pendingStore().writeInvalidations(invalidations)
-	return ready
 }
 
 // resumeRequest picks the stream position, never asking the same anchor
@@ -395,6 +329,10 @@ func (c *Consumer) follow(ctx context.Context, sess *session) (*session, error) 
 	client := pb.NewConsumerServiceClient(conn)
 
 	for attempt := 0; ; attempt++ {
+		// Each attempt is a fresh position: nothing is being followed until
+		// the new session reaches the tip again.
+		c.watching.Store(false)
+
 		streamCtx, cancelStream := context.WithCancel(ctx)
 		stream, serr := client.Stream(streamCtx, c.resumeRequest(sess, attempt))
 		if serr != nil {
@@ -452,7 +390,13 @@ func handlePreparedStreamFrame(sess *session, frame preparedStreamFrame) (*sessi
 		return sess, fmt.Errorf("stream recv: %w", frame.recvErr)
 	}
 	if frame.entry == nil {
-		log.Info("Sequence stream live", "head", fmt.Sprintf("%x", sess.head[:8]))
+		if frame.live {
+			sess.consumer.watching.Store(true)
+			// Catch-up is over; audit whatever it replayed past instead of
+			// executing.
+			sess.consumer.requestAudit()
+			log.Info("Sequence stream live", "head", fmt.Sprintf("%x", sess.head[:8]))
+		}
 		return sess, nil
 	}
 	err := sess.handlePrepared(frame)

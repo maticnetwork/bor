@@ -119,3 +119,26 @@ func TestSequencerFlagsWithoutConfigBlock(t *testing.T) {
 	require.False(t, c.cliConfig.Sequencer.Enabled)
 	require.Equal(t, 200*time.Millisecond, c.cliConfig.Sequencer.Poll)
 }
+
+// The audit depth only reaches the node when the integration is on; zero
+// leaves the sequencer package default in place.
+func TestSequencerAuditWindow(t *testing.T) {
+	cases := []struct {
+		name   string
+		config *Config
+		want   uint64
+	}{
+		{name: "no sequencer block", config: &Config{}, want: 0},
+		{name: "disabled", config: &Config{Sequencer: &SequencerConfig{AuditWindow: 900}}, want: 0},
+		{name: "enabled", config: &Config{Sequencer: &SequencerConfig{Enabled: true, AuditWindow: 900}}, want: 900},
+		{name: "enabled and unset", config: &Config{Sequencer: &SequencerConfig{Enabled: true}}, want: 0},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.config.sequencerAuditWindow(); got != tc.want {
+				t.Fatalf("sequencerAuditWindow() = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}

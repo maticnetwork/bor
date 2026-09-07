@@ -121,6 +121,7 @@ devfakeauthor = false
   enabletrace = false
   "txsync.defaulttimeout" = "20s"
   "txsync.maxtimeout" = "1m0s"
+  "txsync.maxconcurrent" = 4096
   accept-preconf-tx = false
   accept-private-tx = false
   [jsonrpc.http]
@@ -278,3 +279,4 @@ devfakeauthor = false
   publisher-endpoint = ""
   consumer-endpoint = ""
   poll = "200ms"
+  audit-window = 0

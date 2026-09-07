@@ -100,3 +100,48 @@ func ReadInvalidPreconfsInRange(db ethdb.Iteratee, from, to uint64) []InvalidPre
 	}
 	return records
 }
+
+// ReadPreconfAuditedThrough returns the highest block the sequence-store audit
+// has compared against the canonical chain, and whether a watermark is stored
+// at all. A node that has never audited has no watermark, which is not the same
+// as having audited through block zero.
+func ReadPreconfAuditedThrough(db ethdb.KeyValueReader) (uint64, bool) {
+	return readPreconfHeight(db, preconfAuditedThroughKey)
+}
+
+// WritePreconfAuditedThrough stores the audit watermark.
+func WritePreconfAuditedThrough(db ethdb.KeyValueWriter, number uint64) error {
+	return writePreconfHeight(db, preconfAuditedThroughKey, number)
+}
+
+// ReadPreconfUnauditedThrough returns the highest block the audit is known to
+// have skipped. Heights at or below it may hold preconfirmations this node
+// never compared against the chain, so an empty invalidation range there means
+// unknown rather than clean.
+func ReadPreconfUnauditedThrough(db ethdb.KeyValueReader) (uint64, bool) {
+	return readPreconfHeight(db, preconfUnauditedThroughKey)
+}
+
+// WritePreconfUnauditedThrough raises the skipped-window mark. It never lowers
+// it: a later pass auditing a narrower window does not make an older gap go
+// away.
+func WritePreconfUnauditedThrough(db ethdb.KeyValueStore, number uint64) error {
+	if current, ok := ReadPreconfUnauditedThrough(db); ok && current >= number {
+		return nil
+	}
+	return writePreconfHeight(db, preconfUnauditedThroughKey, number)
+}
+
+func readPreconfHeight(db ethdb.KeyValueReader, key []byte) (uint64, bool) {
+	value, err := db.Get(key)
+	if err != nil || len(value) != 8 {
+		return 0, false
+	}
+	return binary.BigEndian.Uint64(value), true
+}
+
+func writePreconfHeight(db ethdb.KeyValueWriter, key []byte, number uint64) error {
+	value := make([]byte, 8)
+	binary.BigEndian.PutUint64(value, number)
+	return db.Put(key, value)
+}

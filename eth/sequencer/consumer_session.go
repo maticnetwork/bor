@@ -193,6 +193,11 @@ func (s *session) applyOpen(open *pb.BlockOpen) {
 		return
 	}
 
+	if s.consumer.behindCanonicalHead(number) {
+		s.dropBacklogOpen(number)
+		return
+	}
+
 	if s.env != nil {
 		// A new open while a block is still open is a producer rebuild of
 		// the in-progress height; its state is unusable.

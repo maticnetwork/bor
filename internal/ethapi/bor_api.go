@@ -158,6 +158,31 @@ func (api *BorAPI) GetInvalidPreconfBlocks(ctx context.Context, from, to rpc.Blo
 	return rawdb.ReadInvalidPreconfsInRange(api.b.ChainDb(), fromNum, toNum), nil
 }
 
+// PreconfAuditStatus reports how much of the chain this node has compared
+// against the sequence store. A nil AuditedThrough means the node has never
+// audited, and a non-nil UnauditedThrough marks a window it is known to have
+// skipped: an empty invalidation range at or below that height means unknown,
+// not clean.
+type PreconfAuditStatus struct {
+	AuditedThrough   *hexutil.Uint64 `json:"auditedThrough"`
+	UnauditedThrough *hexutil.Uint64 `json:"unauditedThrough"`
+}
+
+// GetPreconfAuditStatus returns the sequence-store audit watermarks, so a
+// caller can tell "no invalidations here" apart from "this window was never
+// compared".
+func (api *BorAPI) GetPreconfAuditStatus() *PreconfAuditStatus {
+	status := new(PreconfAuditStatus)
+	if audited, ok := rawdb.ReadPreconfAuditedThrough(api.b.ChainDb()); ok {
+		status.AuditedThrough = (*hexutil.Uint64)(&audited)
+	}
+	if unaudited, ok := rawdb.ReadPreconfUnauditedThrough(api.b.ChainDb()); ok {
+		status.UnauditedThrough = (*hexutil.Uint64)(&unaudited)
+	}
+
+	return status
+}
+
 // resolveInvalidPreconfBound converts an rpc.BlockNumber range bound into a
 // concrete height. Explicit heights pass through unchanged — invalidation
 // records may reference numbers that never became canonical — while the

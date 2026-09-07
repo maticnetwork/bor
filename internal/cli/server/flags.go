@@ -1517,4 +1517,10 @@ func (c *Command) registerSequencerFlags(f *flagset.Flagset) {
 		Value:   &c.cliConfig.Sequencer.Poll,
 		Default: c.cliConfig.Sequencer.Poll,
 	})
+	f.Uint64Flag(&flagset.Uint64Flag{
+		Name:    "sequencer.audit-window",
+		Usage:   "Blocks one startup audit of the sequence store walks before the rest of the gap is reported unaudited",
+		Value:   &c.cliConfig.Sequencer.AuditWindow,
+		Default: c.cliConfig.Sequencer.AuditWindow,
+	})
 }

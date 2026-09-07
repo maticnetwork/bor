@@ -114,3 +114,57 @@ func TestInvalidPreconfsInRange(t *testing.T) {
 		t.Fatalf("capped range = %d records, newest %d", len(records), records[0].Number)
 	}
 }
+
+func TestPreconfAuditWatermarks(t *testing.T) {
+	db := NewMemoryDatabase()
+
+	// A node that never audited has no watermark, which is not the same as
+	// having audited through block zero.
+	if _, ok := ReadPreconfAuditedThrough(db); ok {
+		t.Fatal("watermark present on a fresh database")
+	}
+	if _, ok := ReadPreconfUnauditedThrough(db); ok {
+		t.Fatal("unaudited mark present on a fresh database")
+	}
+
+	if err := WritePreconfAuditedThrough(db, 0); err != nil {
+		t.Fatalf("write zero: %v", err)
+	}
+	if number, ok := ReadPreconfAuditedThrough(db); !ok || number != 0 {
+		t.Fatalf("watermark = (%d, %v), want (0, true)", number, ok)
+	}
+
+	if err := WritePreconfAuditedThrough(db, 4_200_000_000_000); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if number, ok := ReadPreconfAuditedThrough(db); !ok || number != 4_200_000_000_000 {
+		t.Fatalf("watermark = (%d, %v)", number, ok)
+	}
+}
+
+// The unaudited mark only rises: a later pass over a narrower window does not
+// make an older gap disappear.
+func TestPreconfUnauditedThroughOnlyRises(t *testing.T) {
+	db := NewMemoryDatabase()
+
+	for _, number := range []uint64{90, 40, 91, 12} {
+		if err := WritePreconfUnauditedThrough(db, number); err != nil {
+			t.Fatalf("write %d: %v", number, err)
+		}
+	}
+
+	if number, ok := ReadPreconfUnauditedThrough(db); !ok || number != 91 {
+		t.Fatalf("unaudited mark = (%d, %v), want (91, true)", number, ok)
+	}
+}
+
+func TestPreconfHeightRejectsShortValue(t *testing.T) {
+	db := NewMemoryDatabase()
+	if err := db.Put(preconfAuditedThroughKey, []byte{0x01}); err != nil {
+		t.Fatalf("put: %v", err)
+	}
+
+	if _, ok := ReadPreconfAuditedThrough(db); ok {
+		t.Fatal("a truncated value read back as a height")
+	}
+}
