@@ -293,7 +293,7 @@ require (
 	github.com/pion/dtls/v3 v3.1.4 // indirect
 	github.com/pion/transport/v4 v4.0.2 // indirect
 	github.com/posener/complete v1.2.3 // indirect
-	github.com/rabbitmq/amqp091-go v1.10.0 // indirect
+	github.com/rabbitmq/amqp091-go v1.13.0 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20250401214520-65e299d6c5c9 // indirect
 	github.com/redis/go-redis/v9 v9.7.3 // indirect
 	github.com/robfig/cron/v3 v3.0.1 // indirect
