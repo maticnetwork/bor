@@ -194,8 +194,14 @@ func TestAuditAdvancesPastHeightsThatPromisedNothing(t *testing.T) {
 		return fetchFrom(t, sealed)(ctx, height)
 	}}
 
-	if _, err := audit.run(context.Background()); err != nil {
+	summary, err := audit.run(context.Background())
+	if err != nil {
 		t.Fatalf("run: %v", err)
+	}
+
+	// 6 is unretained and 7 was never sealed: both walked, only 7 compared.
+	if summary.walked != 3 || summary.compared != 2 {
+		t.Fatalf("walked/compared = %d/%d, want 3/2", summary.walked, summary.compared)
 	}
 
 	if records := rawdb.ReadInvalidPreconfsInRange(db, 0, 8); len(records) != 0 {
@@ -461,9 +467,13 @@ func TestAuditSummaryCounts(t *testing.T) {
 		t.Fatalf("run: %v", err)
 	}
 
-	// Heights 6..10: five walked, one mismatch at 7, one uncomparable at 9.
+	// Heights 6..10: five walked, but 8 is not in the store, so four were
+	// actually compared. One mismatch at 7, one uncomparable at 9.
 	if summary.walked != 5 {
 		t.Fatalf("walked = %d, want 5", summary.walked)
+	}
+	if summary.compared != 4 {
+		t.Fatalf("compared = %d, want 4: a height the store does not hold is walked, not compared", summary.compared)
 	}
 	if summary.mismatch != 1 {
 		t.Fatalf("mismatch = %d, want 1", summary.mismatch)

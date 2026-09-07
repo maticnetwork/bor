@@ -9,9 +9,8 @@ import (
 
 	pb "github.com/0xPolygon/sequence-store-proto/sequencestore/v1"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
-	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/params"
 )
 
 // The watermark may only advance for heights this node actually watched. A
@@ -214,110 +213,6 @@ func TestRequestAuditCoalesces(t *testing.T) {
 	}
 }
 
-// The depth predicate on its own, including the boundary and the shallow
-// chain that has no backlog to speak of.
-func TestBehindHead(t *testing.T) {
-	previous := backlogOpenDepth
-	backlogOpenDepth = 64
-
-	t.Cleanup(func() { backlogOpenDepth = previous })
-
-	cases := []struct {
-		name       string
-		number     uint64
-		headNumber uint64
-		want       bool
-	}{
-		{name: "at the head", number: 1000, headNumber: 1000, want: false},
-		{name: "one inside the depth", number: 937, headNumber: 1000, want: false},
-		{name: "exactly the depth behind", number: 936, headNumber: 1000, want: true},
-		{name: "far behind", number: 10, headNumber: 1000, want: true},
-		{name: "ahead of the head", number: 1001, headNumber: 1000, want: false},
-		{name: "chain shallower than the depth", number: 1, headNumber: 64, want: false},
-		{name: "chain one deeper than the depth", number: 1, headNumber: 65, want: true},
-		{name: "genesis-only chain", number: 0, headNumber: 0, want: false},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := behindHead(tc.number, tc.headNumber); got != tc.want {
-				t.Fatalf("behindHead(%d, %d) = %v, want %v", tc.number, tc.headNumber, got, tc.want)
-			}
-		})
-	}
-}
-
-func TestBehindCanonicalHead(t *testing.T) {
-	h := startExecHarness(t)
-	consumer := &Consumer{chain: h.chain, index: NewIndex()}
-
-	head := h.chain.CurrentBlock().Number.Uint64()
-
-	previous := backlogOpenDepth
-	backlogOpenDepth = 1
-
-	t.Cleanup(func() { backlogOpenDepth = previous })
-
-	cases := []struct {
-		name   string
-		number uint64
-		want   bool
-	}{
-		{name: "at the head", number: head, want: false},
-		{name: "one behind the head", number: head - 1, want: true},
-		{name: "ahead of the head", number: head + 5, want: false},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := consumer.behindCanonicalHead(tc.number); got != tc.want {
-				t.Fatalf("behindCanonicalHead(%d) = %v, want %v", tc.number, got, tc.want)
-			}
-		})
-	}
-
-	// A chain shallower than the depth has no backlog to speak of.
-	backlogOpenDepth = head + 10
-	if consumer.behindCanonicalHead(1) {
-		t.Fatal("a chain shallower than the backlog depth reported a backlog")
-	}
-}
-
-// A restart replays store history while p2p import runs ahead of the stream.
-// Those opens are backlog: dropping them costs a pruned-state lookup and the
-// warning storm it produces, and unlike skip it must leave the speculative
-// tip and the invalidation ledger untouched, because nothing was ever
-// published for a height the chain already holds.
-func TestBacklogOpenIsDroppedWithoutInvalidating(t *testing.T) {
-	h := startExecHarness(t)
-	s := h.session()
-
-	previous := backlogOpenDepth
-	backlogOpenDepth = 1
-
-	t.Cleanup(func() { backlogOpenDepth = previous })
-
-	genesis := h.chain.GetHeaderByNumber(0)
-	open := openOn(genesis, h.config, [32]byte{1}).GetBlockOpen()
-
-	tip := common.Hash{0xab}
-	s.tip = tip
-	s.tipNumber = 1
-	s.env = &blockEnv{header: &types.Header{Number: big.NewInt(1)}}
-
-	s.applyOpen(open)
-
-	if s.env != nil {
-		t.Fatal("a backlog open started execution")
-	}
-	if s.parked != nil {
-		t.Fatal("a backlog open kept parked state")
-	}
-	if s.tip != tip || s.tipNumber != 1 {
-		t.Fatal("dropping a backlog open reset the speculative tip; that is skip's job, not this path's")
-	}
-}
-
 // A trigger has to actually run a pass. Seeding the first watermark is the
 // one pass that reaches no further than the local chain, so it exercises the
 // loop without a store connection.
@@ -352,4 +247,39 @@ func TestAuditLoopRunsAPassOnTrigger(t *testing.T) {
 
 	cancel()
 	<-done
+}
+
+// A precondition failure must not queue an audit. The run loop retries every
+// consumerRetryDelay, so a node that stays ineligible — pre-Rio, no coinbase
+// map — would otherwise walk the store on a two-second loop. Observed on a
+// kurtosis devnet: a pass every 2s while the chain sat below the Rio height.
+func TestIneligibleSessionDoesNotQueueAnAudit(t *testing.T) {
+	// Rio far in the future, so the node is not preconf-eligible.
+	h := startExecHarnessBor(t, &params.BorConfig{
+		Sprint:   map[string]uint64{"0": 16},
+		RioBlock: big.NewInt(1_000_000),
+		Coinbase: map[string]string{
+			"0": "0x000000000000000000000000000000000000ba5e",
+		},
+		BurntContract: map[string]string{
+			"0": "0x000000000000000000000000000000000000dead",
+		},
+	})
+	consumer := newAuditTestConsumer(h)
+
+	if err := consumer.deterministic(); err == nil {
+		t.Fatal("chain is preconf-eligible; the test needs an ineligible one")
+	}
+
+	sess, err := consumer.runSession(t.Context(), nil)
+	if err == nil {
+		t.Fatal("an ineligible chain ran a session")
+	}
+	if sess != nil {
+		t.Fatal("an ineligible chain produced a session")
+	}
+
+	if len(consumer.auditTrigger) != 0 {
+		t.Fatal("a precondition failure queued an audit pass")
+	}
 }

@@ -261,18 +261,13 @@ func (c *Consumer) deterministic() error {
 func (c *Consumer) run(ctx context.Context) {
 	var sess *session
 
-	for {
-		// Before every session, including the first: whatever the stream was
-		// not covering — a restart, or a session that just dropped — is a
-		// window this node did not watch, and the audit closes it.
-		c.requestAudit()
+	// Startup: whatever window the previous process left open is this one's
+	// to close.
+	c.requestAudit()
 
+	for {
 		var err error
-		if derr := c.deterministic(); derr != nil {
-			err = fmt.Errorf("preconf re-execution not deterministic yet: %w", derr)
-		} else {
-			sess, err = c.follow(ctx, sess)
-		}
+		sess, err = c.runSession(ctx, sess)
 
 		c.watching.Store(false)
 
@@ -289,6 +284,22 @@ func (c *Consumer) run(ctx context.Context) {
 		case <-time.After(consumerRetryDelay):
 		}
 	}
+}
+
+// runSession runs one stream session, and asks for an audit only when one
+// actually ran. A precondition failure must not: nothing was being followed,
+// so no new window opened, and this loop retries every consumerRetryDelay —
+// a node sitting pre-Rio would otherwise audit the store on a two-second
+// loop for as long as it stayed ineligible.
+func (c *Consumer) runSession(ctx context.Context, sess *session) (*session, error) {
+	if derr := c.deterministic(); derr != nil {
+		return sess, fmt.Errorf("preconf re-execution not deterministic yet: %w", derr)
+	}
+
+	next, err := c.follow(ctx, sess)
+	c.requestAudit()
+
+	return next, err
 }
 
 // evictLoop drops preconf receipts for heights the canonical chain has

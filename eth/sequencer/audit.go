@@ -66,9 +66,14 @@ const (
 )
 
 type auditSummary struct {
-	from      uint64
-	through   uint64
+	from    uint64
+	through uint64
+	// walked counts every height the pass visited; compared counts the ones
+	// the store actually held a generation for. Reporting only walked cannot
+	// tell "audited the window, all matched" from "the store held nothing for
+	// any of it", which are very different answers for an operator.
 	walked    uint64
+	compared  uint64
 	mismatch  uint64
 	unknown   uint64
 	skippedTo uint64 // highest height left unaudited by the window bound
@@ -154,7 +159,8 @@ func (a *auditor) run(ctx context.Context) (auditSummary, error) {
 
 	a.persist(through)
 	log.Info("Sequence store audit complete", "from", from, "through", through,
-		"walked", summary.walked, "mismatched", summary.mismatch, "uncomparable", summary.unknown)
+		"walked", summary.walked, "compared", summary.compared,
+		"mismatched", summary.mismatch, "uncomparable", summary.unknown)
 
 	return summary, nil
 }
@@ -191,6 +197,7 @@ func (a *auditor) auditHeightInto(ctx context.Context, height uint64, summary *a
 	}
 
 	summary.walked++
+	summary.compared++
 	a.recordVerdict(height, auditHeight(entries, height, a.chain.GetCanonicalHash(height)), summary)
 
 	return nil
