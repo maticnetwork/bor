@@ -85,10 +85,19 @@ func (a *auditor) windowToAudit() (from, through, skippedTo uint64, ok bool) {
 	}
 	through = head.Number.Uint64()
 
-	watermark, stored := rawdb.ReadPreconfAuditedThrough(a.db)
+	watermark, stored, err := rawdb.ReadPreconfAuditedThrough(a.db)
+	if err != nil {
+		// Absence seeds the watermark at the head; an unreadable watermark
+		// must not, or a failed read would mark the whole window audited and
+		// the monotonic writes would never let it back.
+		log.Warn("Sequence store audit watermark unreadable", "err", err)
+
+		return 0, 0, 0, false
+	}
 	if !stored {
 		a.persist(through)
 		log.Info("Sequence store audit watermark seeded", "height", through)
+
 		return 0, 0, 0, false
 	}
 	if watermark >= through {
@@ -209,9 +218,16 @@ func (a *auditor) persist(number uint64) {
 		a.advance(number)
 		return
 	}
-	if current, ok := rawdb.ReadPreconfAuditedThrough(a.db); ok && current >= number {
+	current, stored, err := rawdb.ReadPreconfAuditedThrough(a.db)
+	if err != nil {
+		log.Warn("Sequence store audit watermark unreadable; holding", "height", number, "err", err)
+
 		return
 	}
+	if stored && current >= number {
+		return
+	}
+
 	if err := rawdb.WritePreconfAuditedThrough(a.db, number); err != nil {
 		log.Warn("Failed to persist sequence store audit watermark", "height", number, "err", err)
 	}
@@ -287,8 +303,12 @@ func (c *Consumer) auditLoop(ctx context.Context) {
 func (c *Consumer) runAuditPass(ctx context.Context) {
 	audit := &auditor{db: c.chain.DB(), chain: c.chain, window: c.auditWindow, advance: c.advanceAudited}
 
-	// Resolve the window before dialing: the common case is nothing to audit,
-	// and a trigger fired on every session retry must not cost a connection.
+	// Resolve the window before building a client: the common case is nothing
+	// to audit and a trigger fires on every session retry. grpc.NewClient is
+	// lazy, so this saves a client and its teardown rather than a connection,
+	// and it keeps a bad endpoint from logging once per retry while there is
+	// no work to do. run recomputes the window, so removing this changes
+	// nothing observable in-process — there is deliberately no test for it.
 	from, through, _, ok := audit.windowToAudit()
 	if !ok {
 		return
@@ -333,7 +353,13 @@ func (c *Consumer) advanceAudited(number uint64) {
 	defer c.auditMu.Unlock()
 
 	db := c.chain.DB()
-	if current, ok := rawdb.ReadPreconfAuditedThrough(db); ok && current >= number {
+	current, stored, err := rawdb.ReadPreconfAuditedThrough(db)
+	if err != nil {
+		log.Warn("Sequence store audit watermark unreadable; holding", "height", number, "err", err)
+
+		return
+	}
+	if stored && current >= number {
 		return
 	}
 

@@ -3,6 +3,7 @@ package sequencer
 import (
 	"context"
 	"net"
+	"sync/atomic"
 	"testing"
 
 	"google.golang.org/grpc"
@@ -41,14 +42,32 @@ func (s *auditStoreStub) GetBlock(_ context.Context, req *pb.GetBlockRequest) (*
 	return &pb.GetBlockResponse{Entries: sealedGeneration(s.t, header)}, nil
 }
 
-func startAuditStore(t *testing.T, sealed map[uint64]*types.Header) (string, *auditStoreStub) {
+// countingListener reports connections, so a test can assert on the dial
+// itself rather than on a side effect that happens either way.
+type countingListener struct {
+	net.Listener
+
+	accepted atomic.Int64
+}
+
+func (l *countingListener) Accept() (net.Conn, error) {
+	conn, err := l.Listener.Accept()
+	if err == nil {
+		l.accepted.Add(1)
+	}
+
+	return conn, err
+}
+
+func startAuditStore(t *testing.T, sealed map[uint64]*types.Header) (string, *auditStoreStub, *countingListener) {
 	t.Helper()
 
-	lis, err := net.Listen("tcp", "127.0.0.1:0")
+	base, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
 
+	lis := &countingListener{Listener: base}
 	stub := &auditStoreStub{t: t, sealed: sealed, asked: make(chan uint64, 64)}
 	srv := grpc.NewServer()
 	pb.RegisterConsumerServiceServer(srv, stub)
@@ -56,7 +75,7 @@ func startAuditStore(t *testing.T, sealed map[uint64]*types.Header) (string, *au
 	go func() { _ = srv.Serve(lis) }()
 	t.Cleanup(srv.Stop)
 
-	return lis.Addr().String(), stub
+	return base.Addr().String(), stub, lis
 }
 
 // The pass as the consumer actually runs it: dial the store, read each height
@@ -78,7 +97,7 @@ func TestAuditPassOverGRPCRecordsMismatches(t *testing.T) {
 	// adopted.
 	sealed[head] = testHeader(head, common.Hash{0xee})
 
-	endpoint, stub := startAuditStore(t, sealed)
+	endpoint, stub, lis := startAuditStore(t, sealed)
 
 	consumer := newAuditTestConsumer(h)
 	consumer.endpoint = endpoint
@@ -89,7 +108,7 @@ func TestAuditPassOverGRPCRecordsMismatches(t *testing.T) {
 
 	consumer.runAuditPass(t.Context())
 
-	if got, ok := rawdb.ReadPreconfAuditedThrough(h.chain.DB()); !ok || got != head {
+	if got, ok, _ := rawdb.ReadPreconfAuditedThrough(h.chain.DB()); !ok || got != head {
 		t.Fatalf("watermark = (%d, %v), want (%d, true)", got, ok, head)
 	}
 
@@ -101,27 +120,40 @@ func TestAuditPassOverGRPCRecordsMismatches(t *testing.T) {
 	if len(stub.asked) == 0 {
 		t.Fatal("the pass never read the store")
 	}
+
+	// The counter has to be able to see a dial, or its use below proves nothing.
+	if lis.accepted.Load() == 0 {
+		t.Fatal("the listener counted no connection for a pass that read the store")
+	}
 }
 
-// Nothing to audit means no connection is opened at all: a trigger fires on
-// every session retry, and those must not each cost a dial.
-func TestAuditPassSkipsTheDialWithNothingToAudit(t *testing.T) {
+// With nothing to audit the pass reads nothing and leaves the watermark
+// alone. It deliberately does not assert that no client was built: the
+// pre-dial short-circuit in runAuditPass has no observable effect, because
+// grpc.NewClient is lazy and run recomputes the window anyway.
+func TestAuditPassWithNothingToAuditReadsNothing(t *testing.T) {
 	h := startExecHarness(t)
-	consumer := newAuditTestConsumer(h)
-
-	// An address nobody is listening on: dialing lazily succeeds, but the
-	// first read would fail, so a pass that reads anything would not be able
-	// to advance the watermark past the head.
-	consumer.endpoint = "127.0.0.1:1"
-
 	head := h.chain.CurrentBlock().Number.Uint64()
+
+	endpoint, stub, lis := startAuditStore(t, map[uint64]*types.Header{})
+
+	consumer := newAuditTestConsumer(h)
+	consumer.endpoint = endpoint
+
 	if err := rawdb.WritePreconfAuditedThrough(h.chain.DB(), head); err != nil {
 		t.Fatalf("seed watermark: %v", err)
 	}
 
 	consumer.runAuditPass(t.Context())
 
-	if got, _ := rawdb.ReadPreconfAuditedThrough(h.chain.DB()); got != head {
+	if len(stub.asked) != 0 {
+		t.Fatalf("the pass read %d heights with nothing to audit", len(stub.asked))
+	}
+	if got := lis.accepted.Load(); got != 0 {
+		t.Fatalf("the pass connected %d times with nothing to audit", got)
+	}
+
+	if got, _, _ := rawdb.ReadPreconfAuditedThrough(h.chain.DB()); got != head {
 		t.Fatalf("watermark = %d, want it untouched at %d", got, head)
 	}
 }
@@ -139,7 +171,7 @@ func TestAuditPassHoldsTheWatermarkWhenTheStoreIsUnreachable(t *testing.T) {
 
 	consumer.runAuditPass(t.Context())
 
-	if got, _ := rawdb.ReadPreconfAuditedThrough(h.chain.DB()); got != 1 {
+	if got, _, _ := rawdb.ReadPreconfAuditedThrough(h.chain.DB()); got != 1 {
 		t.Fatalf("watermark = %d, want it held at 1", got)
 	}
 }
@@ -169,7 +201,7 @@ func TestAuditPassHandlesAnUndialableEndpoint(t *testing.T) {
 
 	consumer.runAuditPass(t.Context())
 
-	if got, _ := rawdb.ReadPreconfAuditedThrough(h.chain.DB()); got != 1 {
+	if got, _, _ := rawdb.ReadPreconfAuditedThrough(h.chain.DB()); got != 1 {
 		t.Fatalf("watermark = %d, want it held at 1", got)
 	}
 }

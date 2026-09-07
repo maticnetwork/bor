@@ -171,16 +171,25 @@ type PreconfAuditStatus struct {
 // GetPreconfAuditStatus returns the sequence-store audit watermarks, so a
 // caller can tell "no invalidations here" apart from "this window was never
 // compared".
-func (api *BorAPI) GetPreconfAuditStatus() *PreconfAuditStatus {
+func (api *BorAPI) GetPreconfAuditStatus() (*PreconfAuditStatus, error) {
+	audited, auditedStored, err := rawdb.ReadPreconfAuditedThrough(api.b.ChainDb())
+	if err != nil {
+		return nil, err
+	}
+	unaudited, unauditedStored, err := rawdb.ReadPreconfUnauditedThrough(api.b.ChainDb())
+	if err != nil {
+		return nil, err
+	}
+
 	status := new(PreconfAuditStatus)
-	if audited, ok := rawdb.ReadPreconfAuditedThrough(api.b.ChainDb()); ok {
+	if auditedStored {
 		status.AuditedThrough = (*hexutil.Uint64)(&audited)
 	}
-	if unaudited, ok := rawdb.ReadPreconfUnauditedThrough(api.b.ChainDb()); ok {
+	if unauditedStored {
 		status.UnauditedThrough = (*hexutil.Uint64)(&unaudited)
 	}
 
-	return status
+	return status, nil
 }
 
 // resolveInvalidPreconfBound converts an rpc.BlockNumber range bound into a

@@ -79,7 +79,7 @@ func fetchFrom(t *testing.T, sealed map[uint64]*types.Header) fetchGeneration {
 func auditedThrough(t *testing.T, db ethdb.Database) uint64 {
 	t.Helper()
 
-	number, ok := rawdb.ReadPreconfAuditedThrough(db)
+	number, ok, _ := rawdb.ReadPreconfAuditedThrough(db)
 	if !ok {
 		t.Fatal("no audit watermark stored")
 	}
@@ -229,7 +229,7 @@ func TestAuditWindowTruncatesAndMarksTheRemainderUnaudited(t *testing.T) {
 		t.Fatalf("skippedTo = %d, want 90", summary.skippedTo)
 	}
 
-	unaudited, ok := rawdb.ReadPreconfUnauditedThrough(db)
+	unaudited, ok, _ := rawdb.ReadPreconfUnauditedThrough(db)
 	if !ok || unaudited != 90 {
 		t.Fatalf("unaudited mark = (%d, %v), want (90, true): a truncated window must not read as clean", unaudited, ok)
 	}
@@ -570,7 +570,7 @@ func TestAuditCheckpointsMidPass(t *testing.T) {
 	audit := &auditor{db: db, chain: chain, window: through, fetch: func(ctx context.Context, height uint64) ([]*pb.Entry, error) {
 		if height == checkpoint+1 && !seen {
 			seen = true
-			atCheckpoint, _ = rawdb.ReadPreconfAuditedThrough(db)
+			atCheckpoint, _, _ = rawdb.ReadPreconfAuditedThrough(db)
 		}
 
 		return fetchFrom(t, sealed)(ctx, height)
@@ -601,7 +601,7 @@ func TestAuditPersistUsesTheInjectedWriter(t *testing.T) {
 	if len(advanced) != 1 || advanced[0] != 11 {
 		t.Fatalf("advance calls = %v, want [11]", advanced)
 	}
-	if _, ok := rawdb.ReadPreconfAuditedThrough(db); ok {
+	if _, ok, _ := rawdb.ReadPreconfAuditedThrough(db); ok {
 		t.Fatal("persist wrote directly while a writer was injected")
 	}
 }
@@ -615,7 +615,7 @@ func TestAuditPersistNeverLowersTheWatermark(t *testing.T) {
 	audit.persist(20)
 	audit.persist(19)
 
-	if got, _ := rawdb.ReadPreconfAuditedThrough(db); got != 20 {
+	if got, _, _ := rawdb.ReadPreconfAuditedThrough(db); got != 20 {
 		t.Fatalf("watermark = %d, want 20", got)
 	}
 }
@@ -625,12 +625,12 @@ func TestRecordSkippedWindowOnlyWritesAGap(t *testing.T) {
 	audit := &auditor{db: db}
 
 	audit.recordSkippedWindow(0, 1, 10)
-	if _, ok := rawdb.ReadPreconfUnauditedThrough(db); ok {
+	if _, ok, _ := rawdb.ReadPreconfUnauditedThrough(db); ok {
 		t.Fatal("an untruncated window recorded a gap")
 	}
 
 	audit.recordSkippedWindow(7, 8, 10)
-	if got, ok := rawdb.ReadPreconfUnauditedThrough(db); !ok || got != 7 {
+	if got, ok, _ := rawdb.ReadPreconfUnauditedThrough(db); !ok || got != 7 {
 		t.Fatalf("unaudited mark = (%d, %v), want (7, true)", got, ok)
 	}
 }
@@ -680,7 +680,59 @@ func TestAuditSurvivesWriteFailures(t *testing.T) {
 	if summary.mismatch != 1 {
 		t.Fatalf("mismatch = %d, want 1", summary.mismatch)
 	}
-	if got, _ := rawdb.ReadPreconfAuditedThrough(backing); got != 1 {
+	if got, _, _ := rawdb.ReadPreconfAuditedThrough(backing); got != 1 {
 		t.Fatalf("watermark = %d, want it unchanged at 1 when writes fail", got)
+	}
+}
+
+// failingReadDB reports a stored watermark it then cannot hand over, which is
+// the read-only failure that used to read as "never audited".
+type failingReadDB struct {
+	ethdb.Database
+}
+
+func (failingReadDB) Has([]byte) (bool, error)   { return true, nil }
+func (failingReadDB) Get([]byte) ([]byte, error) { return nil, errReadRefused }
+
+var errReadRefused = errors.New("read refused")
+
+// An unreadable watermark must not be treated as absence. Absence seeds the
+// mark at the current head, which would declare the whole unaudited window
+// clean — and the monotonic writes would never let it back.
+func TestAuditDoesNotSeedTheWatermarkOnAReadFailure(t *testing.T) {
+	chain, sealed := auditFixture(t, 50)
+
+	// The assertion has to be that nothing was written: "no window resolved"
+	// holds whether the read failed or reported absence, so it proves nothing.
+	backing := rawdb.NewMemoryDatabase()
+	audit := &auditor{db: failingReadDB{backing}, chain: chain, fetch: fetchFrom(t, sealed)}
+
+	summary, err := audit.run(context.Background())
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if summary.walked != 0 {
+		t.Fatalf("walked = %d, want 0", summary.walked)
+	}
+
+	if number, stored, err := rawdb.ReadPreconfAuditedThrough(backing); stored || err != nil {
+		t.Fatalf("watermark = (%d, %v, %v), want nothing written: an unreadable "+
+			"mark was seeded at the head, declaring the window clean", number, stored, err)
+	}
+}
+
+// persist holds when it cannot read the current mark, rather than writing over
+// a value it could not compare against.
+func TestAuditPersistHoldsOnAReadFailure(t *testing.T) {
+	backing := rawdb.NewMemoryDatabase()
+	if err := rawdb.WritePreconfAuditedThrough(backing, 9); err != nil {
+		t.Fatalf("seed watermark: %v", err)
+	}
+
+	audit := &auditor{db: failingReadDB{backing}}
+	audit.persist(100)
+
+	if got, _, _ := rawdb.ReadPreconfAuditedThrough(backing); got != 9 {
+		t.Fatalf("watermark = %d, want it held at 9", got)
 	}
 }

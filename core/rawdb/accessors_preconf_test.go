@@ -1,6 +1,9 @@
 package rawdb
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 func TestInvalidPreconfRecords(t *testing.T) {
 	db := NewMemoryDatabase()
@@ -120,24 +123,24 @@ func TestPreconfAuditWatermarks(t *testing.T) {
 
 	// A node that never audited has no watermark, which is not the same as
 	// having audited through block zero.
-	if _, ok := ReadPreconfAuditedThrough(db); ok {
+	if _, ok, _ := ReadPreconfAuditedThrough(db); ok {
 		t.Fatal("watermark present on a fresh database")
 	}
-	if _, ok := ReadPreconfUnauditedThrough(db); ok {
+	if _, ok, _ := ReadPreconfUnauditedThrough(db); ok {
 		t.Fatal("unaudited mark present on a fresh database")
 	}
 
 	if err := WritePreconfAuditedThrough(db, 0); err != nil {
 		t.Fatalf("write zero: %v", err)
 	}
-	if number, ok := ReadPreconfAuditedThrough(db); !ok || number != 0 {
+	if number, ok, _ := ReadPreconfAuditedThrough(db); !ok || number != 0 {
 		t.Fatalf("watermark = (%d, %v), want (0, true)", number, ok)
 	}
 
 	if err := WritePreconfAuditedThrough(db, 4_200_000_000_000); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	if number, ok := ReadPreconfAuditedThrough(db); !ok || number != 4_200_000_000_000 {
+	if number, ok, _ := ReadPreconfAuditedThrough(db); !ok || number != 4_200_000_000_000 {
 		t.Fatalf("watermark = (%d, %v)", number, ok)
 	}
 }
@@ -153,18 +156,71 @@ func TestPreconfUnauditedThroughOnlyRises(t *testing.T) {
 		}
 	}
 
-	if number, ok := ReadPreconfUnauditedThrough(db); !ok || number != 91 {
+	if number, ok, _ := ReadPreconfUnauditedThrough(db); !ok || number != 91 {
 		t.Fatalf("unaudited mark = (%d, %v), want (91, true)", number, ok)
 	}
 }
 
-func TestPreconfHeightRejectsShortValue(t *testing.T) {
-	db := NewMemoryDatabase()
-	if err := db.Put(preconfAuditedThroughKey, []byte{0x01}); err != nil {
-		t.Fatalf("put: %v", err)
-	}
+// A stored height has three answers, and the caller acts differently on each:
+// present, absent, and unavailable. A malformed value or a failing read must
+// not read as absence, because absence seeds the audit watermark at the head.
+func TestPreconfHeightSeparatesAbsenceFromFailure(t *testing.T) {
+	t.Run("truncated value is an error, not absence", func(t *testing.T) {
+		db := NewMemoryDatabase()
+		if err := db.Put(preconfAuditedThroughKey, []byte{0x01}); err != nil {
+			t.Fatalf("put: %v", err)
+		}
 
-	if _, ok := ReadPreconfAuditedThrough(db); ok {
-		t.Fatal("a truncated value read back as a height")
-	}
+		number, ok, err := ReadPreconfAuditedThrough(db)
+		if err == nil {
+			t.Fatal("a truncated value read back without an error")
+		}
+		if ok || number != 0 {
+			t.Fatalf("read = (%d, %v), want (0, false)", number, ok)
+		}
+	})
+
+	t.Run("missing key is absence, not an error", func(t *testing.T) {
+		number, ok, err := ReadPreconfAuditedThrough(NewMemoryDatabase())
+		if err != nil {
+			t.Fatalf("missing key returned an error: %v", err)
+		}
+		if ok || number != 0 {
+			t.Fatalf("read = (%d, %v), want (0, false)", number, ok)
+		}
+	})
+
+	t.Run("failing presence check is an error", func(t *testing.T) {
+		number, ok, err := ReadPreconfAuditedThrough(failingReader{})
+		if err == nil {
+			t.Fatal("a failing read reported absence")
+		}
+		if ok || number != 0 {
+			t.Fatalf("read = (%d, %v), want (0, false)", number, ok)
+		}
+	})
+
+	t.Run("failing value read is an error", func(t *testing.T) {
+		number, ok, err := ReadPreconfUnauditedThrough(presentButUnreadable{})
+		if err == nil {
+			t.Fatal("a failing value read reported absence")
+		}
+		if ok || number != 0 {
+			t.Fatalf("read = (%d, %v), want (0, false)", number, ok)
+		}
+	})
 }
+
+var errReadRefused = errors.New("read refused")
+
+type failingReader struct{}
+
+func (failingReader) Has([]byte) (bool, error)   { return false, errReadRefused }
+func (failingReader) Get([]byte) ([]byte, error) { return nil, errReadRefused }
+
+// presentButUnreadable reports the key exists and then fails to hand it over,
+// which is the shape of a corrupt or racing backend.
+type presentButUnreadable struct{}
+
+func (presentButUnreadable) Has([]byte) (bool, error)   { return true, nil }
+func (presentButUnreadable) Get([]byte) ([]byte, error) { return nil, errReadRefused }

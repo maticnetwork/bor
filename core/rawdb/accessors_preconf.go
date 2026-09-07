@@ -2,6 +2,7 @@ package rawdb
 
 import (
 	"encoding/binary"
+	"fmt"
 
 	"github.com/ethereum/go-ethereum/ethdb"
 )
@@ -104,8 +105,10 @@ func ReadInvalidPreconfsInRange(db ethdb.Iteratee, from, to uint64) []InvalidPre
 // ReadPreconfAuditedThrough returns the highest block the sequence-store audit
 // has compared against the canonical chain, and whether a watermark is stored
 // at all. A node that has never audited has no watermark, which is not the same
-// as having audited through block zero.
-func ReadPreconfAuditedThrough(db ethdb.KeyValueReader) (uint64, bool) {
+// as having audited through block zero — and neither is the same as a database
+// that could not answer, which is why a read failure is an error rather than a
+// third spelling of absence.
+func ReadPreconfAuditedThrough(db ethdb.KeyValueReader) (uint64, bool, error) {
 	return readPreconfHeight(db, preconfAuditedThroughKey)
 }
 
@@ -118,26 +121,45 @@ func WritePreconfAuditedThrough(db ethdb.KeyValueWriter, number uint64) error {
 // have skipped. Heights at or below it may hold preconfirmations this node
 // never compared against the chain, so an empty invalidation range there means
 // unknown rather than clean.
-func ReadPreconfUnauditedThrough(db ethdb.KeyValueReader) (uint64, bool) {
+func ReadPreconfUnauditedThrough(db ethdb.KeyValueReader) (uint64, bool, error) {
 	return readPreconfHeight(db, preconfUnauditedThroughKey)
 }
 
 // WritePreconfUnauditedThrough raises the skipped-window mark. It never lowers
 // it: a later pass auditing a narrower window does not make an older gap go
-// away.
+// away. An unreadable current mark is treated as absent and the write goes
+// ahead — recording a gap this node knows about beats leaving the window
+// unrecorded because the comparison could not be made.
 func WritePreconfUnauditedThrough(db ethdb.KeyValueStore, number uint64) error {
-	if current, ok := ReadPreconfUnauditedThrough(db); ok && current >= number {
+	current, stored, err := ReadPreconfUnauditedThrough(db)
+	if err == nil && stored && current >= number {
 		return nil
 	}
 	return writePreconfHeight(db, preconfUnauditedThroughKey, number)
 }
 
-func readPreconfHeight(db ethdb.KeyValueReader, key []byte) (uint64, bool) {
-	value, err := db.Get(key)
-	if err != nil || len(value) != 8 {
-		return 0, false
+// readPreconfHeight separates the three answers a stored height can have:
+// present, absent, and unavailable. Collapsing the last into the second would
+// let a read failure read as "never audited", which seeds the audit watermark
+// at the current head and marks an uncompared window clean.
+func readPreconfHeight(db ethdb.KeyValueReader, key []byte) (uint64, bool, error) {
+	present, err := db.Has(key)
+	if err != nil {
+		return 0, false, fmt.Errorf("read preconf height %s: %w", key, err)
 	}
-	return binary.BigEndian.Uint64(value), true
+	if !present {
+		return 0, false, nil
+	}
+
+	value, err := db.Get(key)
+	if err != nil {
+		return 0, false, fmt.Errorf("read preconf height %s: %w", key, err)
+	}
+	if len(value) != 8 {
+		return 0, false, fmt.Errorf("preconf height %s is %d bytes, want 8", key, len(value))
+	}
+
+	return binary.BigEndian.Uint64(value), true, nil
 }
 
 func writePreconfHeight(db ethdb.KeyValueWriter, key []byte, number uint64) error {

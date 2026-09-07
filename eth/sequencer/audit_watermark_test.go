@@ -27,14 +27,14 @@ func TestWatermarkAdvancesOnlyWhileWatchingTheTip(t *testing.T) {
 	}
 
 	consumer.markCanonicalHeadAudited()
-	if got, _ := rawdb.ReadPreconfAuditedThrough(h.chain.DB()); got != head-1 {
+	if got, _, _ := rawdb.ReadPreconfAuditedThrough(h.chain.DB()); got != head-1 {
 		t.Fatal("watermark advanced while the consumer was not following the store tip")
 	}
 
 	consumer.watching.Store(true)
 	consumer.markCanonicalHeadAudited()
 
-	got, ok := rawdb.ReadPreconfAuditedThrough(h.chain.DB())
+	got, ok, _ := rawdb.ReadPreconfAuditedThrough(h.chain.DB())
 	if !ok || got != head {
 		t.Fatalf("watermark = (%d, %v), want (%d, true)", got, ok, head)
 	}
@@ -55,7 +55,7 @@ func TestWatermarkGapAsksForAnAuditInsteadOfJumping(t *testing.T) {
 
 	consumer.markCanonicalHeadAudited()
 
-	if got, _ := rawdb.ReadPreconfAuditedThrough(h.chain.DB()); got != head-2 {
+	if got, _, _ := rawdb.ReadPreconfAuditedThrough(h.chain.DB()); got != head-2 {
 		t.Fatalf("watermark = %d, want it held at %d across a gap", got, head-2)
 	}
 
@@ -73,7 +73,7 @@ func TestWatermarkAbsentAsksForAnAudit(t *testing.T) {
 
 	consumer.markCanonicalHeadAudited()
 
-	if _, ok := rawdb.ReadPreconfAuditedThrough(h.chain.DB()); ok {
+	if _, ok, _ := rawdb.ReadPreconfAuditedThrough(h.chain.DB()); ok {
 		t.Fatal("the live path seeded a watermark it never audited")
 	}
 
@@ -94,7 +94,7 @@ func TestWatermarkHoldsWhenTheHeadMovesBack(t *testing.T) {
 
 	consumer.markCanonicalHeadAudited()
 
-	if got, _ := rawdb.ReadPreconfAuditedThrough(h.chain.DB()); got != 5_000 {
+	if got, _, _ := rawdb.ReadPreconfAuditedThrough(h.chain.DB()); got != 5_000 {
 		t.Fatalf("watermark = %d, want 5000", got)
 	}
 }
@@ -115,7 +115,7 @@ func TestAdvanceAuditedNeverRewinds(t *testing.T) {
 	consumer.advanceAudited(50)
 	consumer.advanceAudited(20)
 
-	if got, _ := rawdb.ReadPreconfAuditedThrough(h.chain.DB()); got != 50 {
+	if got, _, _ := rawdb.ReadPreconfAuditedThrough(h.chain.DB()); got != 50 {
 		t.Fatalf("watermark = %d, want 50", got)
 	}
 }
@@ -164,7 +164,7 @@ func TestHandleCanonicalHeadAdvancesTheWatermark(t *testing.T) {
 
 	consumer.handleCanonicalHead()
 
-	if got, ok := rawdb.ReadPreconfAuditedThrough(h.chain.DB()); !ok || got != head {
+	if got, ok, _ := rawdb.ReadPreconfAuditedThrough(h.chain.DB()); !ok || got != head {
 		t.Fatalf("watermark = (%d, %v), want (%d, true)", got, ok, head)
 	}
 }
@@ -339,7 +339,7 @@ func TestAuditLoopRunsAPassOnTrigger(t *testing.T) {
 	head := h.chain.CurrentBlock().Number.Uint64()
 	deadline := time.After(2 * time.Second)
 	for {
-		if got, ok := rawdb.ReadPreconfAuditedThrough(h.chain.DB()); ok && got == head {
+		if got, ok, _ := rawdb.ReadPreconfAuditedThrough(h.chain.DB()); ok && got == head {
 			break
 		}
 

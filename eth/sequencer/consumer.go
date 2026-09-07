@@ -346,7 +346,12 @@ func (c *Consumer) markCanonicalHeadAudited() {
 		return
 	}
 
-	watermark, stored := rawdb.ReadPreconfAuditedThrough(c.chain.DB())
+	watermark, stored, err := rawdb.ReadPreconfAuditedThrough(c.chain.DB())
+	if err != nil {
+		log.Warn("Sequence store audit watermark unreadable", "err", err)
+
+		return
+	}
 	if !stored {
 		// The audit seeds the first watermark; until it does there is no
 		// position to step from.

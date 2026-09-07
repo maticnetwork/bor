@@ -4468,7 +4468,10 @@ func TestGetPreconfAuditStatus(t *testing.T) {
 
 	// A node that never audited reports neither mark, so an empty
 	// invalidation range cannot be read as a clean window.
-	status := api.GetPreconfAuditStatus()
+	status, err := api.GetPreconfAuditStatus()
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
 	if status.AuditedThrough != nil || status.UnauditedThrough != nil {
 		t.Fatalf("status = %+v, want both marks absent", status)
 	}
@@ -4480,7 +4483,10 @@ func TestGetPreconfAuditStatus(t *testing.T) {
 		t.Fatalf("write unaudited: %v", err)
 	}
 
-	status = api.GetPreconfAuditStatus()
+	status, err = api.GetPreconfAuditStatus()
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
 	if status.AuditedThrough == nil || uint64(*status.AuditedThrough) != 77 {
 		t.Fatalf("auditedThrough = %v, want 77", status.AuditedThrough)
 	}

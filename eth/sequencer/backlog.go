@@ -23,9 +23,11 @@ func (c *Consumer) behindCanonicalHead(number uint64) bool {
 }
 
 // behindHead is the depth predicate on its own, so the boundary is testable
-// without a chain deep enough to reach it.
+// without a chain deep enough to reach it. The height comes off the wire, so
+// the comparison subtracts rather than adds: number+depth would wrap for a
+// height near the top of the range and read as backlog.
 func behindHead(number, headNumber uint64) bool {
-	return headNumber > backlogOpenDepth && number+backlogOpenDepth <= headNumber
+	return headNumber > backlogOpenDepth && number <= headNumber-backlogOpenDepth
 }
 
 // dropBacklogOpen voids any speculative work and ignores an open for a height
