@@ -896,8 +896,8 @@ func TestTriggerRelayFetch_DroppedByCapCanBeRetriedOnceCapacityFrees(t *testing.
 	hash := common.HexToHash("0xd00d")
 	healthy := &fakeWitnessPeer{pages: map[uint64][]byte{0: goodData}, totalPages: 1}
 	healthyPeer := newFakeEthPeerWithWitness(211, healthy)
-	registerFakePeer(h.peers, healthyPeer)
 	healthyPeer.witPeer.Peer.AddKnownWitness(hash)
+	registerFakePeer(h.peers, healthyPeer)
 
 	dropsBefore := wit2RelayFetchConcurrencyDropMeter.Snapshot().Count()
 	h.triggerRelayFetch(hash, wantHash, "")
