@@ -317,7 +317,7 @@ func fetchAndCacheCode(addr common.Address, blockHex string, alchemyURL string) 
 	codeDir := filepath.Join(witnessDir, "codes")
 	os.MkdirAll(codeDir, 0755) //nolint:errcheck
 
-	cachePath := filepath.Join(codeDir, addr.Hex()+".bin")
+	cachePath := filepath.Join(codeDir, addr.Hex()+"-"+blockHex+".bin")
 	if data, err := os.ReadFile(cachePath); err == nil {
 		return data, nil
 	}
@@ -376,6 +376,9 @@ func prewarmCodes(diskdb ethdb.Database, witness *stateless.Witness, block *type
 		if err != nil {
 			return fmt.Errorf("fetching code for %s: %w", addr.Hex(), err)
 		}
+		if got := crypto.Keccak256Hash(code); got != codeHash {
+			return fmt.Errorf("code for %s at %s hashes to %x, account expects %x", addr.Hex(), parentBlockHex, got, codeHash)
+		}
 
 		if len(code) > 0 {
 			rawdb.WriteCode(diskdb, codeHash, code)
@@ -387,6 +390,15 @@ func prewarmCodes(diskdb ethdb.Database, witness *stateless.Witness, block *type
 	for _, tx := range block.Transactions() {
 		if tx.To() != nil {
 			if err := checkAndFetch(*tx.To()); err != nil {
+				return err
+			}
+		}
+		for _, auth := range tx.SetCodeAuthorizations() {
+			authority, err := auth.Authority()
+			if err != nil {
+				continue
+			}
+			if err := checkAndFetch(authority); err != nil {
 				return err
 			}
 		}
@@ -405,6 +417,18 @@ func newCodeCachingDB(codeDir string) *codeCachingDB {
 		Database: rawdb.NewMemoryDatabase(),
 		codeDir:  codeDir,
 	}
+}
+
+// supplementalCodes are EIP-7702 delegation designators that the dataset builder
+// missed: prewarmCodes originally fetched code only for tx.To() addresses, never
+// for authorities, and cached by address without a block dimension, so an
+// authority re-delegated between dataset blocks kept a stale designator. These
+// are the pre-block designators of authorities re-delegated in blocks 83014074,
+// 83014100 and 83020871, keyed by content hash like every other code blob.
+var supplementalCodes = []string{
+	"ef0100bee2f0de34362ff34a9189c2b2e67ed61a3300e9",
+	"ef010089248eec91b1436da005c405eb5fbcb0d0088e1e",
+	"ef0100879a23a785796bfca1d22f48c91818e1157a01b4",
 }
 
 func (db *codeCachingDB) loadCodesFromDisk() error {
@@ -441,6 +465,10 @@ func (db *codeCachingDB) loadCodesFromDisk() error {
 			codeHash := crypto.Keccak256Hash(code)
 			rawdb.WriteCode(db.Database, codeHash, code)
 		}
+	}
+	for _, hexCode := range supplementalCodes {
+		code := common.FromHex(hexCode)
+		rawdb.WriteCode(db.Database, crypto.Keccak256Hash(code), code)
 	}
 	return nil
 }
@@ -598,6 +626,9 @@ func executeStatelessSerial(config *params.ChainConfig, block *types.Block, witn
 	res, err := processor.Process(block, db, vm.Config{}, author, context.Background())
 	if err != nil {
 		return common.Hash{}, common.Hash{}, nil, err
+	}
+	if err := db.Error(); err != nil {
+		return common.Hash{}, common.Hash{}, nil, fmt.Errorf("serial base read: %w", err)
 	}
 
 	receiptRoot := types.DeriveSha(res.Receipts, trie.NewStackTrie(nil))
@@ -1093,7 +1124,8 @@ func runConsistencyCheck(t *testing.T, blocks []testBlockData, diskdb ethdb.Data
 
 		serialState, serialReceipt, _, err := executeStatelessSerial(config, bd.block, bd.witness, &author, engine, diskdb)
 		if err != nil {
-			t.Logf("block %d (#%d) serial error (skipping): %v", blockNum, i, err)
+			t.Errorf("block %d (#%d): serial error: %v", blockNum, i, err)
+			failures++
 			continue
 		}
 
@@ -1710,7 +1742,8 @@ func runV2BlockSTMConsistency(t *testing.T, blocks []testBlockData, diskdb ethdb
 		serialState, serialReceiptRoot, serialResult, err := executeStatelessSerial(config, bd.block, bd.witness, &author, engine, diskdb)
 		serialDur := time.Since(tSerial)
 		if err != nil {
-			t.Logf("block %d (#%d) serial error (skipping): %v", blockNum, i, err)
+			t.Errorf("block %d (#%d): serial error: %v", blockNum, i, err)
+			failures++
 			continue
 		}
 
@@ -1760,6 +1793,15 @@ func runV2BlockSTMConsistency(t *testing.T, blocks []testBlockData, diskdb ethdb
 		store := blockstm.NewMVStore()
 		bals := blockstm.NewMVBalanceStore()
 		result := ExecuteV2BlockSTM(context.Background(), tasks, readBase, store, bals, blockContext, bd.block.Hash(), vm.Config{}, config, bd.block.GasLimit(), numWorkers, finalDB, nil)
+		// A base read failure makes V2 drop the tx at settlement, so the root
+		// comparison below would report a misleading mismatch. Surface it as
+		// what it is: incomplete state (usually a code blob missing from the
+		// testdata archive).
+		if result.ReadErr != nil {
+			t.Errorf("block %d (#%d): v2 base read error: %v", blockNum, i, result.ReadErr)
+			failures++
+			continue
+		}
 
 		engine.Finalize(nil, bd.block.Header(), finalDB, bd.block.Body(), nil)
 		v2State := finalDB.IntermediateRoot(config.IsEIP158(bd.block.Number()))

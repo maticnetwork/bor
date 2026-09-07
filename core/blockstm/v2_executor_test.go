@@ -46,6 +46,7 @@ type mockV2Env struct {
 }
 
 func (e *mockV2Env) BaseNonce(common.Address) uint64 { return 0 }
+func (e *mockV2Env) BaseCodeSize(common.Address) int { return 0 }
 func (e *mockV2Env) Execute(task V2Task, workerID int, incarnation int,
 	senderNonces map[common.Address]uint64, coinbase common.Address,
 	waitForTx func(int), waitForFinal func(int), deferWrites bool) V2TxState {
@@ -134,6 +135,7 @@ type timedMockV2Env struct {
 }
 
 func (e *timedMockV2Env) BaseNonce(common.Address) uint64 { return 0 }
+func (e *timedMockV2Env) BaseCodeSize(common.Address) int { return 0 }
 func (e *timedMockV2Env) Execute(task V2Task, workerID int, incarnation int,
 	senderNonces map[common.Address]uint64, coinbase common.Address,
 	waitForTx func(int), waitForFinal func(int), deferWrites bool) V2TxState {
@@ -234,6 +236,7 @@ func (s *panickingV2State) SetDeferMVWrites(bool)                   {}
 type panickingV2Env struct{ s *panickingV2State }
 
 func (e *panickingV2Env) BaseNonce(common.Address) uint64 { return 0 }
+func (e *panickingV2Env) BaseCodeSize(common.Address) int { return 0 }
 func (e *panickingV2Env) Execute(task V2Task, workerID int, incarnation int,
 	senderNonces map[common.Address]uint64, coinbase common.Address,
 	waitForTx func(int), waitForFinal func(int), deferWrites bool) V2TxState {
@@ -273,11 +276,18 @@ func (t *nonceMockTask) Sender() common.Address        { return t.sender }
 func (t *nonceMockTask) To() *common.Address           { return nil }
 func (t *nonceMockTask) Authorities() []common.Address { return t.auths }
 
-// nonceMockEnv reads BaseNonce from a per-address map.
-type nonceMockEnv struct{ nonces map[common.Address]uint64 }
+// nonceMockEnv reads BaseNonce and BaseCodeSize from per-address maps.
+type nonceMockEnv struct {
+	nonces    map[common.Address]uint64
+	codeSizes map[common.Address]int
+}
 
 func (e *nonceMockEnv) BaseNonce(addr common.Address) uint64 {
 	return e.nonces[addr]
+}
+
+func (e *nonceMockEnv) BaseCodeSize(addr common.Address) int {
+	return e.codeSizes[addr]
 }
 func (e *nonceMockEnv) Execute(V2Task, int, int, map[common.Address]uint64, common.Address, func(int), func(int), bool) V2TxState {
 	return nil
@@ -372,6 +382,27 @@ func TestComputeSenderNonces_ExcludesAuthorities(t *testing.T) {
 		}
 		if got := out[2][addrA]; got != 8 {
 			t.Errorf("tx2 SenderNonces[A] = %d, want 8", got)
+		}
+	})
+
+	// A sender delegated in an EARLIER block carries a designator at base
+	// state but appears in no auth list of this block, so authoritySet
+	// misses it. A CALL into it runs the delegate code in its own frame;
+	// a CREATE there bumps the sender's nonce mid-block, invalidating any
+	// pre-computed chain position after it. Excluding senders with
+	// base-state code routes them through the MVStore path instead.
+	t.Run("sender has base-state code: no publish", func(t *testing.T) {
+		tasks := []V2Task{
+			&nonceMockTask{idx: 0, sender: addrA},
+			&nonceMockTask{idx: 1, sender: addrA},
+		}
+		env := &nonceMockEnv{
+			nonces:    map[common.Address]uint64{addrA: 0},
+			codeSizes: map[common.Address]int{addrA: 23}, // ef0100 || 20-byte target
+		}
+		out := computeSenderNonces(tasks, env)
+		if out[0] != nil || out[1] != nil {
+			t.Errorf("sender has base code; want nil for both, got %v / %v", out[0], out[1])
 		}
 	})
 }

@@ -8,6 +8,8 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
+	"github.com/ethereum/go-ethereum/eth/protocols/wit"
+	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 )
@@ -62,6 +64,76 @@ func TestPeerSetForgetTransactionsEmpty(t *testing.T) {
 
 	// ForgetTransactions should not panic with no peers
 	ps.ForgetTransactions([]common.Hash{{1}, {2}, {3}})
+}
+
+// TestGetOnePeerWithWitnessPrefersBodyOverAnnounce locks in the WIT2 fast-path
+// invariant: when at least one peer has the body (knownWitnesses) and another
+// has only seen the signed announce (knownAnnounces), body-known wins. If a
+// future change inverts this, fetchers will silently prefer slower sources.
+func TestGetOnePeerWithWitnessPrefersBodyOverAnnounce(t *testing.T) {
+	t.Parallel()
+
+	ps := newPeerSet()
+	defer ps.close()
+
+	hash := common.HexToHash("0xabc")
+
+	bodyPeer := newRegisteredPeerForTest(t, ps)
+	announcePeer := newRegisteredPeerForTest(t, ps)
+
+	bodyPeer.witPeer.Peer.AddKnownWitness(hash)
+	announcePeer.witPeer.Peer.(*wit.Peer).AddKnownAnnounce(hash)
+
+	got := ps.getOnePeerWithWitness(hash)
+	if got == nil {
+		t.Fatal("expected a candidate; got nil")
+	}
+	if got.ID() != bodyPeer.ID() {
+		t.Fatalf("body-known peer must win over announce-only: got %s want %s",
+			got.ID(), bodyPeer.ID())
+	}
+}
+
+// TestGetOnePeerWithWitnessFallsBackToAnnounce locks in the fix for the
+// fast-path regression: when no peer has the body yet, the announce-known
+// fallback IS selectable. Without this, a hop-2 stateless validator with a
+// verified signed announce would have nothing to fetch from until the body
+// broadcast finally arrived — eliminating the WIT2 latency win.
+func TestGetOnePeerWithWitnessFallsBackToAnnounce(t *testing.T) {
+	t.Parallel()
+
+	ps := newPeerSet()
+	defer ps.close()
+
+	hash := common.HexToHash("0xdef")
+
+	announcePeer := newRegisteredPeerForTest(t, ps)
+	announcePeer.witPeer.Peer.(*wit.Peer).AddKnownAnnounce(hash)
+
+	got := ps.getOnePeerWithWitness(hash)
+	if got == nil {
+		t.Fatal("announce-only peer must be a fetch candidate after the WIT2 fast-path fix")
+	}
+	if got.ID() != announcePeer.ID() {
+		t.Fatalf("expected announce-only peer; got %s", got.ID())
+	}
+}
+
+func newRegisteredPeerForTest(t *testing.T, ps *peerSet) *ethPeer {
+	t.Helper()
+	var id enode.ID
+	rand.Read(id[:])
+	_, net := p2p.MsgPipe()
+	t.Cleanup(func() { net.Close() })
+
+	p2pPeer := p2p.NewPeer(id, "fast-path-peer", nil)
+	ethP := eth.NewPeer(eth.ETH68, p2pPeer, net, nil)
+	witP := wit.NewPeer(wit.WIT2, p2pPeer, net, log.New())
+
+	if err := ps.registerPeer(ethP, nil, witP); err != nil {
+		t.Fatalf("register peer: %v", err)
+	}
+	return ps.peer(ethP.ID())
 }
 
 func TestPeerWithHighestTDSkipsBackedOffPeers(t *testing.T) {

@@ -72,7 +72,7 @@ func newTestWitnessManager() *testWitnessManager {
 	getHeader := HeaderRetrievalFn(func(hash common.Hash) *types.Header { return nil })
 	chainHeight := chainHeightFn(func() uint64 { return 100 })
 
-	tw.manager = newWitnessManager(quit, dropPeer, nil, enqueueCh, getBlock, getHeader, chainHeight, nil, 0)
+	tw.manager = newWitnessManager(quit, dropPeer, nil, enqueueCh, getBlock, getHeader, chainHeight, nil, nil, nil, 0)
 	return tw
 }
 
@@ -190,6 +190,8 @@ func TestHandleNeedDuplicates(t *testing.T) {
 		getHeader,
 		chainHeight,
 		nil,
+		nil,
+		nil,
 		0,
 	)
 
@@ -247,6 +249,8 @@ func TestHandleNeedKnownBlock(t *testing.T) {
 		getHeader,
 		chainHeight,
 		nil,
+		nil,
+		nil,
 		0,
 	)
 
@@ -295,6 +299,8 @@ func TestHandleBroadcast(t *testing.T) {
 		getBlock,
 		getHeader,
 		chainHeight,
+		nil,
+		nil,
 		nil,
 		0,
 	)
@@ -369,6 +375,8 @@ func TestWitnessUnavailable(t *testing.T) {
 		getHeader,
 		chainHeight,
 		nil,
+		nil,
+		nil,
 		0,
 	)
 
@@ -431,6 +439,8 @@ func TestForget(t *testing.T) {
 		getHeader,
 		chainHeight,
 		nil,
+		nil,
+		nil,
 		0,
 	)
 
@@ -482,6 +492,8 @@ func TestHandleFilterResult(t *testing.T) {
 		getHeader,
 		chainHeight,
 		nil,
+		nil,
+		nil,
 		0,
 	)
 
@@ -520,6 +532,8 @@ func TestCheckCompleting(t *testing.T) {
 		getBlock,
 		getHeader,
 		chainHeight,
+		nil,
+		nil,
 		nil,
 		0,
 	)
@@ -563,6 +577,8 @@ func TestWitnessFetchFailure(t *testing.T) {
 		getBlock,
 		getHeader,
 		chainHeight,
+		nil,
+		nil,
 		nil,
 		0,
 	)
@@ -677,6 +693,8 @@ func TestCleanupUnavailableCache(t *testing.T) {
 		getHeader,
 		chainHeight,
 		nil,
+		nil,
+		nil,
 		0,
 	)
 
@@ -732,6 +750,8 @@ func TestWitnessFetchWithBlockNoLongerPending(t *testing.T) {
 		getBlock,
 		getHeader,
 		chainHeight,
+		nil,
+		nil,
 		nil,
 		0,
 	)
@@ -846,6 +866,8 @@ func TestTick(t *testing.T) {
 		getHeader,
 		chainHeight,
 		nil,
+		nil,
+		nil,
 		0,
 	)
 
@@ -932,6 +954,8 @@ func TestTickMaxRetries(t *testing.T) {
 		getHeader,
 		chainHeight,
 		nil,
+		nil,
+		nil,
 		0,
 	)
 
@@ -990,6 +1014,8 @@ func TestTickWithWitnessAlreadyPresent(t *testing.T) {
 		getBlock,
 		getHeader,
 		chainHeight,
+		nil,
+		nil,
 		nil,
 		0,
 	)
@@ -1074,6 +1100,8 @@ func TestHandleWitnessFetchSuccess(t *testing.T) {
 		getHeader,
 		chainHeight,
 		nil,
+		nil,
+		nil,
 		0,
 	)
 
@@ -1142,6 +1170,8 @@ func TestHandleWitnessFetchSuccessNoPending(t *testing.T) {
 		getHeader,
 		chainHeight,
 		nil,
+		nil,
+		nil,
 		0,
 	)
 
@@ -1174,6 +1204,8 @@ func TestHandleWitnessFetchSuccessWitnessAlreadyPresent(t *testing.T) {
 		getBlock,
 		getHeader,
 		chainHeight,
+		nil,
+		nil,
 		nil,
 		0,
 	)
@@ -1224,6 +1256,8 @@ func TestRescheduleWitness(t *testing.T) {
 		getBlock,
 		getHeader,
 		chainHeight,
+		nil,
+		nil,
 		nil,
 		0,
 	)
@@ -1281,6 +1315,8 @@ func TestSafeEnqueueWithNilWitness(t *testing.T) {
 		getHeader,
 		chainHeight,
 		nil,
+		nil,
+		nil,
 		0,
 	)
 
@@ -1325,6 +1361,8 @@ func TestSafeEnqueueChannelClosed(t *testing.T) {
 		getHeader,
 		chainHeight,
 		nil,
+		nil,
+		nil,
 		0,
 	)
 
@@ -1361,6 +1399,8 @@ func TestHandleNeedDistanceCheck(t *testing.T) {
 		getBlock,
 		getHeader,
 		chainHeight,
+		nil,
+		nil,
 		nil,
 		0,
 	)
@@ -1406,6 +1446,8 @@ func TestHandleNeedMissingFetchWitness(t *testing.T) {
 		getHeader,
 		chainHeight,
 		nil,
+		nil,
+		nil,
 		0,
 	)
 
@@ -1445,6 +1487,8 @@ func TestLoop(t *testing.T) {
 		getBlock,
 		getHeader,
 		chainHeight,
+		nil,
+		nil,
 		nil,
 		0,
 	)
@@ -1520,6 +1564,8 @@ func TestHandleFilterResultWithoutWitness(t *testing.T) {
 		getHeader,
 		chainHeight,
 		nil,
+		nil,
+		nil,
 		0,
 	)
 
@@ -1561,6 +1607,8 @@ func TestCheckCompletingWithoutWitness(t *testing.T) {
 		getHeader,
 		chainHeight,
 		nil,
+		nil,
+		nil,
 		0,
 	)
 
@@ -1601,6 +1649,8 @@ func TestFetchWitnessError(t *testing.T) {
 		getBlock,
 		getHeader,
 		chainHeight,
+		nil,
+		nil,
 		nil,
 		0,
 	)
@@ -1645,6 +1695,8 @@ func TestHandleFilterResultWitnessUnavailable(t *testing.T) {
 		getHeader,
 		chainHeight,
 		nil,
+		nil,
+		nil,
 		0,
 	)
 
@@ -1687,6 +1739,8 @@ func TestHandleFilterResultDuplicate(t *testing.T) {
 		getBlock,
 		getHeader,
 		chainHeight,
+		nil,
+		nil,
 		nil,
 		0,
 	)
@@ -1734,6 +1788,8 @@ func TestCheckCompletingWitnessUnavailable(t *testing.T) {
 		getHeader,
 		chainHeight,
 		nil,
+		nil,
+		nil,
 		0,
 	)
 
@@ -1776,6 +1832,8 @@ func TestCheckCompletingDuplicate(t *testing.T) {
 		getBlock,
 		getHeader,
 		chainHeight,
+		nil,
+		nil,
 		nil,
 		0,
 	)
@@ -1830,6 +1888,8 @@ func TestCheckCompletingKnownBlock(t *testing.T) {
 		getHeader,
 		chainHeight,
 		nil,
+		nil,
+		nil,
 		0,
 	)
 
@@ -1867,6 +1927,8 @@ func TestTickInvalidPendingState(t *testing.T) {
 		getBlock,
 		getHeader,
 		chainHeight,
+		nil,
+		nil,
 		nil,
 		0,
 	)
@@ -1910,6 +1972,8 @@ func TestTickNotReadyYet(t *testing.T) {
 		getBlock,
 		getHeader,
 		chainHeight,
+		nil,
+		nil,
 		nil,
 		0,
 	)
@@ -1974,6 +2038,8 @@ func TestSafeEnqueueSuccess(t *testing.T) {
 		getHeader,
 		chainHeight,
 		nil,
+		nil,
+		nil,
 		0,
 	)
 
@@ -2037,6 +2103,8 @@ func TestConcurrentWitnessFetchFailure(t *testing.T) {
 		getHeader,
 		chainHeight,
 		nil,
+		nil,
+		nil,
 		0,
 	)
 
@@ -2095,6 +2163,8 @@ func TestCheckWitnessPageCountWithPeerJailing(t *testing.T) {
 		getBlock,
 		getHeader,
 		chainHeight,
+		nil,
+		nil,
 		nil,
 		gasCeil,
 	)
@@ -2159,6 +2229,8 @@ func TestCheckWitnessPageCountWithConsensusFailure(t *testing.T) {
 		getBlock,
 		getHeader,
 		chainHeight,
+		nil,
+		nil,
 		nil,
 		gasCeil,
 	)
@@ -2253,6 +2325,8 @@ func TestCheckWitnessPageCountWithPeerFailures(t *testing.T) {
 		getHeader,
 		chainHeight,
 		nil,
+		nil,
+		nil,
 		gasCeil,
 	)
 
@@ -2326,6 +2400,8 @@ func TestCheckWitnessPageCountWithInsufficientPeers(t *testing.T) {
 		getBlock,
 		getHeader,
 		chainHeight,
+		nil,
+		nil,
 		nil,
 		gasCeil,
 	)
@@ -2403,6 +2479,8 @@ func TestCheckWitnessPageCountBelowThreshold(t *testing.T) {
 			getHeader,
 			chainHeight,
 			currentHeader,
+			nil,
+			nil,
 			gasCeil,
 		)
 
@@ -2467,6 +2545,8 @@ func TestCheckWitnessPageCountBelowThreshold(t *testing.T) {
 			getHeader,
 			chainHeight,
 			currentHeader,
+			nil,
+			nil,
 			gasCeil,
 		)
 
@@ -2527,6 +2607,8 @@ func TestCheckWitnessPageCountBelowThreshold(t *testing.T) {
 			getHeader,
 			chainHeight,
 			nil, // currentHeader is nil
+			nil, // signedWitnessHash is nil
+			nil, // cacheWitnessForServing is nil
 			gasCeil,
 		)
 
@@ -2593,6 +2675,8 @@ func TestConcurrentWitnessVerification(t *testing.T) {
 		getBlock,
 		getHeader,
 		chainHeight,
+		nil,
+		nil,
 		nil,
 		gasCeil,
 	)
@@ -2661,7 +2745,7 @@ func TestFetchWitnessNoPeerError(t *testing.T) {
 
 	manager := newWitnessManager(
 		quit, dropPeer, nil, enqueueCh,
-		getBlock, getHeader, chainHeight, nil, 0,
+		getBlock, getHeader, chainHeight, nil, nil, nil, 0,
 	)
 
 	hash := common.HexToHash("0xabc")
@@ -2726,7 +2810,7 @@ func TestWitnessTickPreservesValidPendingEntry(t *testing.T) {
 
 	manager := newWitnessManager(
 		quit, dropPeer, nil, enqueueCh,
-		getBlock, getHeader, chainHeight, nil, 0,
+		getBlock, getHeader, chainHeight, nil, nil, nil, 0,
 	)
 
 	block := createTestBlock(101)
@@ -2777,7 +2861,7 @@ func TestFetchWitnessOtherErrorKeepsPending(t *testing.T) {
 
 	manager := newWitnessManager(
 		quit, dropPeer, nil, enqueueCh,
-		getBlock, getHeader, chainHeight, nil, 0,
+		getBlock, getHeader, chainHeight, nil, nil, nil, 0,
 	)
 
 	hash := common.HexToHash("0xfade")
@@ -2843,7 +2927,7 @@ func TestCheckWitnessPageCountAtThreshold(t *testing.T) {
 
 	manager := newWitnessManager(
 		quit, dropPeer, jailPeer, enqueueCh,
-		getBlock, getHeader, chainHeight, currentHeader, 30_000_000,
+		getBlock, getHeader, chainHeight, currentHeader, nil, nil, 30_000_000,
 	)
 
 	threshold := manager.calculatePageThreshold()
@@ -2888,6 +2972,8 @@ func newWitnessManagerForTest(t *testing.T) (*witnessManager, <-chan *enqueueReq
 		blockRetrievalFn(func(common.Hash) *types.Block { return nil }),
 		HeaderRetrievalFn(func(common.Hash) *types.Header { return nil }),
 		chainHeightFn(func() uint64 { return 100 }),
+		nil,
+		nil,
 		nil,
 		0,
 	)
@@ -3164,6 +3250,8 @@ func TestWitnessCalculatePageThresholdMinimumClamp(t *testing.T) {
 			currentHeaderFn(func() *types.Header {
 				return &types.Header{Number: big.NewInt(100), GasLimit: 1} // < 1MB → 0 pages pre-clamp
 			}),
+			nil,
+			nil,
 			0,
 		)
 		if got := m.calculatePageThreshold(); got < 1 {
@@ -3183,6 +3271,8 @@ func TestWitnessCalculatePageThresholdMinimumClamp(t *testing.T) {
 			HeaderRetrievalFn(func(common.Hash) *types.Header { return nil }),
 			chainHeightFn(func() uint64 { return 100 }),
 			nil, // no current header → fallback to config path
+			nil, // no signed-witness lookup
+			nil, // no cache-witness-for-serving
 			1,   // 1 gas ceil → 0 pages pre-clamp
 		)
 		if got := m.calculatePageThreshold(); got < 1 {
@@ -3340,6 +3430,8 @@ func TestVerifyWitnessPageCountDishonestPeer(t *testing.T) {
 		HeaderRetrievalFn(func(common.Hash) *types.Header { return nil }),
 		chainHeightFn(func() uint64 { return 100 }),
 		nil,
+		nil,
+		nil,
 		0,
 	)
 
@@ -3413,7 +3505,7 @@ func TestWitnessLoopDrivesFetchesForPending(t *testing.T) {
 
 	manager := newWitnessManager(
 		quit, dropPeer, nil, enqueueCh,
-		getBlock, getHeader, chainHeight, nil, 0,
+		getBlock, getHeader, chainHeight, nil, nil, nil, 0,
 	)
 
 	fetchCalled := make(chan struct{}, 1)

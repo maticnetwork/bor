@@ -592,6 +592,10 @@ func (e *v2Env) BaseNonce(addr common.Address) uint64 {
 	return e.base.GetNonce(addr)
 }
 
+func (e *v2Env) BaseCodeSize(addr common.Address) int {
+	return e.base.GetCodeSize(addr)
+}
+
 // Shared closures — allocated once, reused across all workers.
 var sharedTransferLogFn = state.TransferLogFn(func(db *state.StateDB, sender, recipient common.Address, amount, input1, input2, output1, output2 *big.Int) {
 	AddTransferLog(db, sender, recipient, amount, input1, input2, output1, output2)

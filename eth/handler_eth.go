@@ -136,7 +136,7 @@ func (h *ethHandler) handleBlockAnnounces(peer *eth.Peer, hashes []common.Hash, 
 func (h *ethHandler) createWitnessRequester() func(hash common.Hash, sink chan *eth.Response) (*eth.Request, error) {
 	return func(hash common.Hash, sink chan *eth.Response) (*eth.Request, error) {
 		// Get the ethPeer from the peerSet
-		ethPeer := h.peers.getOnePeerWithWitness(hash)
+		ethPeer := h.resolveWitnessFetchPeer(hash)
 		if ethPeer == nil {
 			return nil, fmt.Errorf("no peer with witness for hash %s is available", hash)
 		}
@@ -144,6 +144,32 @@ func (h *ethHandler) createWitnessRequester() func(hash common.Hash, sink chan *
 		// Request witnesses using the wit peer with verification
 		return ethPeer.RequestWitnessesWithVerification([]common.Hash{hash}, sink, h.verifyPageCount, (*handler)(h).jailPeer)
 	}
+}
+
+// resolveWitnessFetchPeer picks a body-fetch target for hash. Marked peers
+// win: getOnePeerWithWitness prefers a proven body-holder and falls back to
+// an announce-known relayer. If neither exists, fall back to the peer that
+// relayed a still-deferred signed announcement for the hash. At the
+// stateless tip the deferred state is structural, not transient: the
+// announce cannot be producer-verified before the block imports, the block
+// cannot import without the witness, and the unverified announce marks no
+// peer — so without this fallback a consumer whose witness exceeds the
+// full-push size cap has no pull target at all. The deferred relayer is on
+// the witness propagation path and is exactly who a pull should target.
+// Its bytes are NOT trusted on the deferred commitment — an unverified
+// announcement must not be able to veto or bless data — import (stateless
+// execution + state-root check) remains the verifier, as on every WIT1
+// fetch.
+func (h *ethHandler) resolveWitnessFetchPeer(hash common.Hash) *ethPeer {
+	if p := h.peers.getOnePeerWithWitness(hash); p != nil {
+		return p
+	}
+	if peerID, ok := (*handler)(h).deferredAnnounces.peekPeer(hash, func(id string) bool {
+		return h.peers.peer(id) != nil
+	}); ok {
+		return h.peers.peer(peerID)
+	}
+	return nil
 }
 
 // verifyPageCount verifies the witness page count for a given block hash by

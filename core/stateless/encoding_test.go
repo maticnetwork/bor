@@ -180,3 +180,62 @@ func TestRoundtrip_BorWitnessFormat(t *testing.T) {
 		t.Errorf("Codes should be empty after BorWitness roundtrip, got %d", len(decoded.Codes))
 	}
 }
+
+// TestEncodeRLP_DeterministicAcrossInsertionOrder is the regression test for
+// the WIT2 byte-blame model. State entries arrive via a Go map, whose
+// iteration order is randomised, so without sorting in EncodeRLP two
+// witnesses with identical logical content would encode to different bytes
+// and hash differently. Receivers verifying response bytes against the BP-
+// signed witness hash would falsely drop honest peers.
+func TestEncodeRLP_DeterministicAcrossInsertionOrder(t *testing.T) {
+	const N = 64
+	nodes := make([][]byte, N)
+	for i := 0; i < N; i++ {
+		nodes[i] = []byte{byte(i), byte(i ^ 0x5a), byte(i ^ 0xa5)}
+	}
+
+	makeWitness := func(insertionOrder []int) *Witness {
+		w := &Witness{
+			Headers: []*types.Header{{Number: big.NewInt(1)}},
+			Codes:   make(map[string]struct{}),
+			State:   make(map[string]struct{}, len(insertionOrder)),
+		}
+		w.context = &types.Header{Number: big.NewInt(2)}
+		for _, i := range insertionOrder {
+			w.State[string(nodes[i])] = struct{}{}
+		}
+		return w
+	}
+
+	encode := func(w *Witness) []byte {
+		raw, err := rlp.EncodeToBytes(w)
+		if err != nil {
+			t.Fatalf("encode: %v", err)
+		}
+		return raw
+	}
+
+	forward := make([]int, N)
+	for i := range forward {
+		forward[i] = i
+	}
+	reverse := make([]int, N)
+	for i := range reverse {
+		reverse[i] = N - 1 - i
+	}
+
+	wForward := makeWitness(forward)
+	wReverse := makeWitness(reverse)
+	if got, want := encode(wForward), encode(wReverse); string(got) != string(want) {
+		t.Fatalf("EncodeRLP must be deterministic across map insertion orders; got divergent bytes (%d vs %d)", len(got), len(want))
+	}
+
+	// Re-encoding the same witness multiple times must also yield identical
+	// bytes, even though Go map iteration is fresh each call.
+	first := encode(wForward)
+	for i := 0; i < 5; i++ {
+		if string(encode(wForward)) != string(first) {
+			t.Fatalf("repeat encode call %d differs from first", i)
+		}
+	}
+}

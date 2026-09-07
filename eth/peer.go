@@ -128,6 +128,7 @@ type WitnessPeer interface {
 	// the method ethPeer.RequestWitnesses invokes
 	AsyncSendNewWitness(witness *stateless.Witness)
 	AsyncSendNewWitnessHash(hash common.Hash, number uint64)
+	AsyncSendSignedWitnessAnnouncement(ann wit.SignedWitnessAnnouncement)
 	RequestWitness(witnessPages []wit.WitnessPageRequest, sink chan *wit.Response) (*wit.Request, error)
 	RequestWitnessMetadata(hashes []common.Hash, sink chan *wit.Response) (*wit.Request, error)
 	Close()
@@ -136,9 +137,11 @@ type WitnessPeer interface {
 	Log() log.Logger
 	KnownWitnesses() *wit.KnownCache
 	AddKnownWitness(hash common.Hash)
+	AddKnownAnnounce(hash common.Hash)
 	KnownWitnessesCount() int
 	KnownWitnessesContains(witness *stateless.Witness) bool
 	KnownWitnessContainsHash(hash common.Hash) bool
+	KnownAnnounceContainsHash(hash common.Hash) bool
 	ReplyWitness(requestID uint64, response *wit.WitnessPacketResponse) error
 }
 

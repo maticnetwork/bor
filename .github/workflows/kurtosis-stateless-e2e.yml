@@ -6,7 +6,7 @@ on:
       - 'master'
       - 'develop'
   pull_request:
-    types: [opened, synchronize]
+    types: [opened, synchronize, reopened]
 
 concurrency:
   group: kurtosis-stateless-e2e-${{ github.event.pull_request.number || github.ref }}
@@ -18,11 +18,15 @@ env:
 
 jobs:
   build-bor:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - name: Checkout bor
         uses: actions/checkout@v7
+        with:
+          persist-credentials: false
 
       - name: Build bor docker image
         run: docker build -t bor:local --file Dockerfile .
@@ -38,6 +42,8 @@ jobs:
           retention-days: 1
 
   build-heimdall-v2:
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -46,6 +52,7 @@ jobs:
         with:
           repository: 0xPolygon/heimdall-v2
           ref: develop
+          persist-credentials: false
 
       - name: Build heimdall-v2 docker image
         run: docker build -t heimdall-v2:local --file Dockerfile .
@@ -66,10 +73,10 @@ jobs:
       - build-heimdall-v2
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    # These permissions are required to log in to GCR
+    # GitHub withholds OIDC and repository secrets from fork pull_request runs.
+    # Trusted runs use OIDC only while preparing public dependency images.
     permissions:
       contents: read
-      actions: write
       id-token: write
     steps:
       # Set up kurtosis
@@ -78,14 +85,49 @@ jobs:
         with:
           repository: 0xPolygon/kurtosis-pos
           ref: v1.4.2
+          persist-credentials: false
 
       # This step will free disk space and thus remove any docker images previously built
-      - name: Pre kurtosis run
+      - name: Pre kurtosis run (trusted)
+        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
         uses: ./.github/actions/kurtosis/setup
         with:
           main_branch: develop
           docker_username: ${{ secrets.DOCKERHUB }}
           docker_token: ${{ secrets.DOCKERHUB_KEY }}
+
+      # Fork PRs deliberately avoid the authenticated registry setup above.
+      # Kurtosis pulls the package's public image references directly instead.
+      - name: Free disk space (fork)
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
+        with:
+          tool-cache: false
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: true
+          swap-storage: true
+
+      - name: Install Kurtosis and yq (fork)
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+        run: |
+          KURTOSIS_DEB=/tmp/kurtosis-cli_1.18.2_linux_amd64.deb
+          curl --proto '=https' --tlsv1.2 -fsSL \
+            https://github.com/kurtosis-tech/kurtosis-cli-release-artifacts/releases/download/1.18.2/kurtosis-cli_1.18.2_linux_amd64.deb \
+            -o "$KURTOSIS_DEB"
+          echo "6522717e33ede4e08b5fd3f2a47689c016c045075777c938f43d4b94e17c760d  $KURTOSIS_DEB" | sha256sum --check -
+          sudo apt-get install -y "$KURTOSIS_DEB"
+          kurtosis analytics disable
+          python3 -m pip install --disable-pip-version-check yq==4.1.2
+
+      - name: Install Foundry (fork)
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+        uses: foundry-rs/foundry-toolchain@908c540300062bd5a7e473851cdb4282204cee09 # v1.9.1
+        with:
+          version: v1.5.1
+          cache: false
 
       - name: Checkout pos-workflows
         uses: actions/checkout@v7
@@ -93,6 +135,7 @@ jobs:
           repository: 0xPolygon/pos-workflows
           ref: main
           path: pos-workflows
+          persist-credentials: false
 
       - name: Copy kurtosis config
         run: cp ./pos-workflows/configs/kurtosis-stateless-e2e.yml ./kurtosis-stateless-e2e.yml
