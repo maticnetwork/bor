@@ -14,7 +14,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
-	"github.com/ethereum/go-ethereum/trie/utils"
 )
 
 // ---------------------------------------------------------------------------
@@ -82,7 +81,7 @@ type ParallelStateDB struct {
 	TxIndex     int
 	Incarnation int                      // bumped on re-execution for validation
 	base        *SafeBase                // thread-safe pre-block state reads
-	rawBase     *StateDB                 // raw base for PointCache/Witness only
+	rawBase     *StateDB                 // raw base for Witness only
 	store       *blockstm.MVStore        // shared versioned values
 	bals        *blockstm.MVBalanceStore // shared balance deltas
 
@@ -1261,8 +1260,6 @@ func (s *ParallelStateDB) Finalise(deleteEmptyObjects bool) {}
 
 // Inner returns the underlying StateDB. Required by Bor consensus.
 func (s *ParallelStateDB) Inner() *StateDB { return s.rawBase }
-
-func (s *ParallelStateDB) PointCache() *utils.PointCache { return s.rawBase.PointCache() }
 
 // Witness returns the shared *Witness so BLOCKHASH writes from V2 workers
 // land where finalDB sees them. The share is established by the caller

@@ -114,7 +114,7 @@ func confirmHTTPRequestYieldsStatusCode(t *testing.T, method, contentType, body 
 		t.Fatalf("request failed: %v", err)
 	}
 
-	resp.Body.Close()
+	cleanlyCloseBody(resp.Body)
 	confirmStatusCode(t, resp.StatusCode, expectedStatusCode)
 }
 

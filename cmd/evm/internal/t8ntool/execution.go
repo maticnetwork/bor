@@ -18,10 +18,10 @@ package t8ntool
 
 import (
 	"fmt"
+	stdmath "math"
 	"math/big"
 
 	"github.com/holiman/uint256"
-	"golang.org/x/crypto/sha3"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -35,6 +35,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/tracing"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/crypto/keccak"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
@@ -44,8 +45,9 @@ import (
 )
 
 type Prestate struct {
-	Env stEnv              `json:"env"`
-	Pre types.GenesisAlloc `json:"pre"`
+	Env        stEnv                         `json:"env"`
+	Pre        types.GenesisAlloc            `json:"pre"`
+	TreeLeaves map[common.Hash]hexutil.Bytes `json:"vkt,omitempty"`
 }
 
 //go:generate go run github.com/fjl/gencodec -type ExecutionResult -field-override executionResultMarshaling -out gen_execresult.go
@@ -147,7 +149,8 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig, 
 	}
 
 	var (
-		statedb     = MakePreState(rawdb.NewMemoryDatabase(), pre.Pre)
+		isEIP4762   = chainConfig.IsVerkle(big.NewInt(int64(pre.Env.Number)))
+		statedb     = MakePreState(rawdb.NewMemoryDatabase(), pre.Pre, isEIP4762)
 		signer      = types.MakeSigner(chainConfig, new(big.Int).SetUint64(pre.Env.Number), pre.Env.Timestamp)
 		gaspool     = new(core.GasPool)
 		blockHash   = common.Hash{0x13, 0x37}
@@ -311,6 +314,10 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig, 
 		// Amount is in gwei, turn into wei
 		amount := new(big.Int).Mul(new(big.Int).SetUint64(w.Amount), big.NewInt(params.GWei))
 		statedb.AddBalance(w.Address, uint256.MustFromBig(amount), tracing.BalanceIncreaseWithdrawal)
+
+		if isEIP4762 {
+			statedb.AccessEvents().AddAccount(w.Address, true, stdmath.MaxUint64)
+		}
 	}
 
 	// Polygon/bor: EIP-6110, EIP-7002, and EIP-7251 are not supported
@@ -374,8 +381,7 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig, 
 		execRs.Requests = requests
 	}
 
-	// Re-create statedb instance with new root upon the updated database
-	// for accessing latest states.
+	// Re-create statedb instance with new root for MPT mode
 	statedb, err = state.New(root, statedb.Database())
 	if err != nil {
 		return nil, nil, nil, NewError(ErrorEVM, fmt.Errorf("could not reopen state: %v", err))
@@ -384,12 +390,17 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig, 
 	return statedb, execRs, body, nil
 }
 
-func MakePreState(db ethdb.Database, accounts types.GenesisAlloc) *state.StateDB {
-	tdb := triedb.NewDatabase(db, &triedb.Config{Preimages: true})
+func MakePreState(db ethdb.Database, accounts types.GenesisAlloc, isBintrie bool) *state.StateDB {
+	tdb := triedb.NewDatabase(db, &triedb.Config{Preimages: true, IsVerkle: isBintrie})
 	sdb := state.NewDatabase(tdb, nil)
-	statedb, err := state.New(types.EmptyRootHash, sdb)
+
+	root := types.EmptyRootHash
+	if isBintrie {
+		root = types.EmptyBinaryHash
+	}
+	statedb, err := state.New(root, sdb)
 	if err != nil {
-		panic(fmt.Errorf("failed to create initial state: %v", err))
+		panic(fmt.Errorf("failed to create initial statedb: %v", err))
 	}
 	for addr, a := range accounts {
 		statedb.SetCode(addr, a.Code, tracing.CodeChangeUnspecified)
@@ -400,10 +411,15 @@ func MakePreState(db ethdb.Database, accounts types.GenesisAlloc) *state.StateDB
 		}
 	}
 	// Commit and re-open to start with a clean state.
-	root, err := statedb.Commit(0, false, false)
+	root, err = statedb.Commit(0, false, false)
 	if err != nil {
 		panic(fmt.Errorf("failed to commit initial state: %v", err))
 	}
+	// If bintrie mode started, check if conversion happened
+	if isBintrie {
+		return statedb
+	}
+	// For MPT mode, reopen the state with the committed root
 	statedb, err = state.New(root, sdb)
 	if err != nil {
 		panic(fmt.Errorf("failed to reopen state after commit: %v", err))
@@ -411,8 +427,8 @@ func MakePreState(db ethdb.Database, accounts types.GenesisAlloc) *state.StateDB
 	return statedb
 }
 
-func rlpHash(x interface{}) (h common.Hash) {
-	hw := sha3.NewLegacyKeccak256()
+func rlpHash(x any) (h common.Hash) {
+	hw := keccak.NewLegacyKeccak256()
 	rlp.Encode(hw, x)
 	hw.Sum(h[:0])
 

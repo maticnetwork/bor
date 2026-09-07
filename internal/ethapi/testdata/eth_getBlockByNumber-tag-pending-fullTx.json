@@ -20,6 +20,7 @@
     {
       "blockHash": "0xdbfad986768c46622dbffa32455fee9ae67929dc27da1f97b364516fd004456f",
       "blockNumber": "0xb",
+      "blockTimestamp": "0x6e",
       "from": "0x703c4b2bd70c169f5717101caee543299fc946c7",
       "gas": "0x5208",
       "gasPrice": "0xde56ab3",

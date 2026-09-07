@@ -76,7 +76,7 @@ func benchSnailtracer(b *testing.B, switchDispatch bool) {
 		evm := NewEVM(bctx, db, benchChainConfig, Config{EnableEVMSwitchDispatch: switchDispatch})
 		evm.SetTxContext(TxContext{
 			Origin:   caller,
-			GasPrice: big.NewInt(1),
+			GasPrice: uint256.NewInt(1),
 		})
 		evm.Call(caller, addr, calldata, 1_000_000_000, new(uint256.Int))
 	}

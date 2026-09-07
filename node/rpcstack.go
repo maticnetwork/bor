@@ -149,6 +149,9 @@ func (h *httpServer) start() error {
 
 	// Initialize the server.
 	h.server = &http.Server{Handler: h}
+	h.server.Protocols = new(http.Protocols)
+	h.server.Protocols.SetHTTP1(true)
+	h.server.Protocols.SetUnencryptedHTTP2(true)
 	if h.timeouts != (rpc.HTTPTimeouts{}) {
 		CheckTimeouts(&h.timeouts)
 		h.server.ReadTimeout = h.timeouts.ReadTimeout

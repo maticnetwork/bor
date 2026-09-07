@@ -23,11 +23,11 @@ import (
 	"time"
 
 	"github.com/holiman/uint256"
-	"golang.org/x/crypto/sha3"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto/keccak"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -39,7 +39,7 @@ import (
 )
 
 func hashData(input []byte) common.Hash {
-	var hasher = sha3.NewLegacyKeccak256()
+	var hasher = keccak.NewLegacyKeccak256()
 
 	var hash common.Hash
 

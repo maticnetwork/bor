@@ -130,10 +130,11 @@ var pdbExemptMethods = map[string]pdbExemptCategory{
 	"ValidateKnownAccounts": catLowLevel,
 
 	// Debug / introspection — purely for tooling.
-	"Dump":            catDebug,
-	"DumpToCollector": catDebug,
-	"RawDump":         catDebug,
-	"IterativeDump":   catDebug,
+	"Dump":              catDebug,
+	"DumpToCollector":   catDebug,
+	"RawDump":           catDebug,
+	"IterativeDump":     catDebug,
+	"DumpBinTrieLeaves": catDebug,
 }
 
 // TestPDBMethodParity fails when *StateDB grows an exported method that

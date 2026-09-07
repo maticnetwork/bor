@@ -24,6 +24,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/tracing"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -260,33 +261,26 @@ func opKeccak256(pc *uint64, evm *EVM, scope *ScopeContext) ([]byte, error) {
 	offset, size := scope.Stack.pop(), scope.Stack.peek()
 	data := scope.Memory.GetPtr(offset.Uint64(), size.Uint64())
 
-	// Fast path: cache 64-byte keccak256 (Solidity mapping slot lookups).
-	// These are the most common SHA3 calls — keccak256(key ++ slot_number).
+	// Fast path: cache 64-byte keccak256 results (Solidity mapping slot lookups),
+	// the most common SHA3 calls — keccak256(key ++ slot_number).
+	var hash common.Hash
 	if len(data) == 64 && evm.Config.Keccak256Cache != nil {
 		var key [64]byte
 		copy(key[:], data)
 		if cached, ok := evm.Config.Keccak256Cache.Load(key); ok {
-			h := cached.(common.Hash)
-			if evm.Config.EnablePreimageRecording {
-				evm.StateDB.AddPreimage(h, data)
-			}
-			size.SetBytes32(h[:])
-			return nil, nil
+			hash = cached.(common.Hash)
+		} else {
+			hash = crypto.Keccak256Hash(data)
+			evm.Config.Keccak256Cache.Store(key, hash)
 		}
-		evm.hasher.Reset()
-		evm.hasher.Write(data)
-		evm.hasher.Read(evm.hasherBuf[:])
-		evm.Config.Keccak256Cache.Store(key, evm.hasherBuf)
 	} else {
-		evm.hasher.Reset()
-		evm.hasher.Write(data)
-		evm.hasher.Read(evm.hasherBuf[:])
+		hash = crypto.Keccak256Hash(data)
 	}
 
 	if evm.Config.EnablePreimageRecording {
-		evm.StateDB.AddPreimage(evm.hasherBuf, data)
+		evm.StateDB.AddPreimage(hash, data)
 	}
-	size.SetBytes(evm.hasherBuf[:])
+	size.SetBytes(hash[:])
 	return nil, nil
 }
 
@@ -473,9 +467,7 @@ func opExtCodeHash(pc *uint64, evm *EVM, scope *ScopeContext) ([]byte, error) {
 }
 
 func opGasprice(pc *uint64, evm *EVM, scope *ScopeContext) ([]byte, error) {
-	v, _ := uint256.FromBig(evm.GasPrice)
-	scope.Stack.push(v)
-
+	scope.Stack.push(evm.GasPrice.Clone())
 	return nil, nil
 }
 
@@ -1007,6 +999,115 @@ func opSelfdestruct6780(pc *uint64, evm *EVM, scope *ScopeContext) ([]byte, erro
 	}
 
 	return nil, errStopToken
+}
+
+func decodeSingle(x byte) int {
+	if x <= 90 {
+		return int(x) + 17
+	}
+	return int(x) - 20
+}
+
+func decodePair(x byte) (int, int) {
+	var k int
+	if x <= 79 {
+		k = int(x)
+	} else {
+		k = int(x) - 48
+	}
+	q, r := k/16, k%16
+	if q < r {
+		return q + 1, r + 1
+	}
+	return r + 1, 29 - q
+}
+
+func opDupN(pc *uint64, evm *EVM, scope *ScopeContext) ([]byte, error) {
+	code := scope.Contract.Code
+	i := *pc + 1
+
+	// If the immediate byte is missing, treat as 0x00 (same convention as PUSHn).
+	var x byte
+	if i < uint64(len(code)) {
+		x = code[i]
+	}
+
+	// This range is excluded to preserve compatibility with existing opcodes.
+	if x > 90 && x < 128 {
+		return nil, &ErrInvalidOpCode{opcode: OpCode(x)}
+	}
+	n := decodeSingle(x)
+
+	// DUPN duplicates the n'th stack item, so the stack must contain at least n elements.
+	if scope.Stack.len() < n {
+		return nil, &ErrStackUnderflow{stackLen: scope.Stack.len(), required: n}
+	}
+
+	//The n‘th stack item is duplicated at the top of the stack.
+	scope.Stack.push(scope.Stack.Back(n - 1))
+	*pc += 1
+	return nil, nil
+}
+
+func opSwapN(pc *uint64, evm *EVM, scope *ScopeContext) ([]byte, error) {
+	code := scope.Contract.Code
+	i := *pc + 1
+
+	// If the immediate byte is missing, treat as 0x00 (same convention as PUSHn).
+	var x byte
+	if i < uint64(len(code)) {
+		x = code[i]
+	}
+
+	// This range is excluded to preserve compatibility with existing opcodes.
+	if x > 90 && x < 128 {
+		return nil, &ErrInvalidOpCode{opcode: OpCode(x)}
+	}
+	n := decodeSingle(x)
+
+	// SWAPN operates on the top and n+1 stack items, so the stack must contain at least n+1 elements.
+	if scope.Stack.len() < n+1 {
+		return nil, &ErrStackUnderflow{stackLen: scope.Stack.len(), required: n + 1}
+	}
+
+	// The (n+1)‘th stack item is swapped with the top of the stack.
+	indexTop := scope.Stack.len() - 1
+	indexN := scope.Stack.len() - 1 - n
+	scope.Stack.data[indexTop], scope.Stack.data[indexN] = scope.Stack.data[indexN], scope.Stack.data[indexTop]
+	*pc += 1
+	return nil, nil
+}
+
+func opExchange(pc *uint64, evm *EVM, scope *ScopeContext) ([]byte, error) {
+	code := scope.Contract.Code
+	i := *pc + 1
+
+	// If the immediate byte is missing, treat as 0x00 (same convention as PUSHn).
+	var x byte
+	if i < uint64(len(code)) {
+		x = code[i]
+	}
+
+	// This range is excluded both to preserve compatibility with existing opcodes
+	// and to keep decode_pair’s 16-aligned arithmetic mapping valid (0–79, 128–255).
+	if x > 79 && x < 128 {
+		return nil, &ErrInvalidOpCode{opcode: OpCode(x)}
+	}
+	n, m := decodePair(x)
+	need := max(n, m) + 1
+
+	// EXCHANGE operates on the (n+1)'th and (m+1)'th stack items,
+	// so the stack must contain at least max(n, m)+1 elements.
+	if scope.Stack.len() < need {
+		return nil, &ErrStackUnderflow{stackLen: scope.Stack.len(), required: need}
+	}
+
+	// The (n+1)‘th stack item is swapped with the (m+1)‘th stack item.
+	indexN := scope.Stack.len() - 1 - n
+	indexM := scope.Stack.len() - 1 - m
+	scope.Stack.data[indexN], scope.Stack.data[indexM] = scope.Stack.data[indexM], scope.Stack.data[indexN]
+	*pc += 1
+	return nil, nil
 }
 
 // following functions are used by the instruction jump  table

@@ -23,18 +23,18 @@ Status legend: `pending` / `in-progress` / `merged` / `skipped`.
 | #  | Milestone | Batch | Boundary    | Commits | Theme                                                                                          | Status  |
 | -- | --------- | ----- | ----------- | ------- | ---------------------------------------------------------------------------------------------- | ------- |
 | 1  | v1.16.9   | 1/1   | `95665d570` | 3       | crypto security backports (ECIES invalid-curve, secp256k1 coordinate check) + release          | merged (`a06dbd7d2`) |
-| 2  | v1.17.0   | 1/12  | `f23d506b7` | 20      | bugfix sweep: rawdb/state/pathdb fixes, RPC framing, blobpool, filters                          | pending |
-| 3  | v1.17.0   | 2/12  | `cf93077fa` | 20      | verkle/UBT groundwork, rawdb+rlp hardening, fusaka beacon update                                | pending |
-| 4  | v1.17.0   | 3/12  | `a122dbe45` | 20      | **EIP-8024 introduced** (`core/vm`), miner `--miner.maxblobs`, gnark-crypto bump                | pending |
-| 5  | v1.17.0   | 4/12  | `228933a66` | 20      | catalyst getPayload fork checks, pebble config, slow-block stats, downloader syncmode           | pending |
-| 6  | v1.17.0   | 5/12  | `5dfcffcf3` | 20      | state/code-read metrics, tx fetcher validation, blobpool legacy sidecar removal                 | pending |
-| 7  | v1.17.0   | 6/12  | `710008450` | 20      | snap-sync locking, getBlobsV3, pathdb history indexing, go-verkle removal                       | pending |
-| 8  | v1.17.0   | 7/12  | `94710f79a` | 20      | state update hook, trienode history compression, blobpool gaps; KZG peer-drop fix               | pending |
-| 9  | v1.17.0   | 8/12  | `8fad02ac6` | 20      | OpenTelemetry RPC tracing, **read-only gas handlers (`core/vm`)**, trienode history enable      | pending |
-| 10 | v1.17.0   | 9/12  | `845009f68` | 20      | eth_getProofs for history, **EIP-8024 immediate-byte update**, alloc reductions                 | pending |
-| 11 | v1.17.0   | 10/12 | `c12959dc8` | 20      | perf/alloc sweep, keccak vendoring, Ledger Gen5, rlp RawList                                    | pending |
-| 12 | v1.17.0   | 11/12 | `c50e5edfa` | 20      | EraE format, rlp iterators, HTTP/2 JSON-RPC, telemetry CLI wiring                               | pending |
-| 13 | v1.17.0   | 12/12 | `0cf3d3ba4` | 7       | delayed p2p decoding, header-verification hardening, **v1.17.0 release**                        | pending |
+| 2  | v1.17.0   | 1/12  | `f23d506b7` | 20      | bugfix sweep: rawdb/state/pathdb fixes, RPC framing, blobpool, filters                          | merged (`2a85bf611`) |
+| 3  | v1.17.0   | 2/12  | `cf93077fa` | 20      | verkle/UBT groundwork, rawdb+rlp hardening, fusaka beacon update                                | merged (`ad0f54e9c`) |
+| 4  | v1.17.0   | 3/12  | `a122dbe45` | 20      | **EIP-8024 introduced** (`core/vm`), miner `--miner.maxblobs`, gnark-crypto bump                | merged (`7278fa559`) |
+| 5  | v1.17.0   | 4/12  | `228933a66` | 20      | catalyst getPayload fork checks, pebble config, slow-block stats, downloader syncmode           | merged (`8b4a6095d`) |
+| 6  | v1.17.0   | 5/12  | `5dfcffcf3` | 20      | state/code-read metrics, tx fetcher validation, blobpool legacy sidecar removal                 | merged (`4e17d3dc0`) |
+| 7  | v1.17.0   | 6/12  | `710008450` | 20      | snap-sync locking, getBlobsV3, pathdb history indexing, go-verkle removal                       | merged (`85a1750c5`) |
+| 8  | v1.17.0   | 7/12  | `94710f79a` | 20      | state update hook, trienode history compression, blobpool gaps; KZG peer-drop fix               | merged (`09cddf9b7`) |
+| 9  | v1.17.0   | 8/12  | `8fad02ac6` | 20      | OpenTelemetry RPC tracing, **read-only gas handlers (`core/vm`)**, trienode history enable      | merged (`c1537496c`) |
+| 10 | v1.17.0   | 9/12  | `845009f68` | 20      | eth_getProofs for history, **EIP-8024 immediate-byte update**, alloc reductions                 | merged (`0f76e0c30`) |
+| 11 | v1.17.0   | 10/12 | `c12959dc8` | 20      | perf/alloc sweep, keccak vendoring, Ledger Gen5, rlp RawList                                    | merged (`f4f2c07fd`) |
+| 12 | v1.17.0   | 11/12 | `c50e5edfa` | 20      | EraE format, rlp iterators, HTTP/2 JSON-RPC, telemetry CLI wiring                               | merged (`2c0608fc6`) |
+| 13 | v1.17.0   | 12/12 | `0cf3d3ba4` | 7       | delayed p2p decoding, header-verification hardening, **v1.17.0 release**                        | merged (`70994671a`) |
 | 14 | v1.17.1   | 1/2   | `9ecb6c4ae` | 20      | **syscall value-transfer disable (`core/vm`)**, BAL type changes, **Amsterdam precompile touch** | pending |
 | 15 | v1.17.1   | 2/2   | `16783c167` | 20      | **eth/68 protocol drop**, **EIP-7843 SLOTNUM**, **8024 enabled in Amsterdam**, Go 1.26; release  | pending |
 | 16 | v1.17.2   | 1/4   | `00540f946` | 20      | **EIP-7778 block gas accounting**, miner prefetcher, **amsterdam jump table**, default cache 4096 | pending |
@@ -82,7 +82,7 @@ Status legend: `pending` / `in-progress` / `merged` / `skipped`.
 
 ## Resume anchors
 
-- `PROGRESS_TIP`: none yet (no batch merged).
+- `PROGRESS_TIP`: `70994671a` (v1.17.0 batch 12/12 `0cf3d3ba4` merged). **All 12 v1.17.0 batches merged.** Next = v1.17.0 **milestone chores** (durable-docs commit + `gen_config.go` regen + `pdbExemptMethods` fix + full integration/kurtosis/diffguard/govulncheck + PR triage), then the v1.17.0 stacked draft PR, then milestone v1.17.1 (batches 14–15, boundary `9ecb6c4ae`).
 - Working branch for milestone 1 (`v1.16.9`): `ppatil-upstream-v1.16.9` — cut
   from `upstream-merge-v1.17.4` on the milestone's first batch.
 - Full first-parent logs per milestone captured in the planning run directory:

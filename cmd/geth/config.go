@@ -40,7 +40,6 @@ import (
 	"github.com/ethereum/go-ethereum/beacon/blsync"
 	"github.com/ethereum/go-ethereum/cmd/utils"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/eth/catalyst"
 	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
@@ -268,11 +267,11 @@ func makeFullNode(ctx *cli.Context) (*node.Node, ethapi.Backend) {
 	// Configure synchronization override service
 	var synctarget common.Hash
 	if ctx.IsSet(utils.SyncTargetFlag.Name) {
-		hex := hexutil.MustDecode(ctx.String(utils.SyncTargetFlag.Name))
-		if len(hex) != common.HashLength {
-			utils.Fatalf("invalid sync target length: have %d, want %d", len(hex), common.HashLength)
+		target := ctx.String(utils.SyncTargetFlag.Name)
+		if !common.IsHexHash(target) {
+			utils.Fatalf("sync target hash is not a valid hex hash: %s", target)
 		}
-		synctarget = common.BytesToHash(hex)
+		synctarget = common.HexToHash(target)
 	}
 	utils.RegisterSyncOverrideService(stack, eth, synctarget, ctx.Bool(utils.ExitWhenSyncedFlag.Name))
 
@@ -393,9 +392,9 @@ func applyMetricConfig(ctx *cli.Context, cfg *gethConfig) {
 			ctx.IsSet(utils.MetricsInfluxDBBucketFlag.Name)
 
 		if enableExport && v2FlagIsSet {
-			utils.Fatalf("Flags --influxdb.metrics.organization, --influxdb.metrics.token, --influxdb.metrics.bucket are only available for influxdb-v2")
+			utils.Fatalf("Flags --%s, --%s, --%s are only available for influxdb-v2", utils.MetricsInfluxDBOrganizationFlag.Name, utils.MetricsInfluxDBTokenFlag.Name, utils.MetricsInfluxDBBucketFlag.Name)
 		} else if enableExportV2 && v1FlagIsSet {
-			utils.Fatalf("Flags --influxdb.metrics.username, --influxdb.metrics.password are only available for influxdb-v1")
+			utils.Fatalf("Flags --%s, --%s are only available for influxdb-v1", utils.MetricsInfluxDBUsernameFlag.Name, utils.MetricsInfluxDBPasswordFlag.Name)
 		}
 	}
 }

@@ -559,6 +559,17 @@ func (p *TxPool) Clear() {
 	}
 }
 
+// FilterType returns whether a transaction with the given type is supported
+// (can be added) by the pool.
+func (p *TxPool) FilterType(kind byte) bool {
+	for _, subpool := range p.subpools {
+		if subpool.FilterType(kind) {
+			return true
+		}
+	}
+	return false
+}
+
 // SpeculativeSetter is implemented by subpools that support speculative
 // state updates for pipelined SRC. This avoids import cycles between txpool
 // and legacypool packages.

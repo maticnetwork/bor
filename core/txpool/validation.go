@@ -164,6 +164,15 @@ func validateBlobTx(tx *types.Transaction, head *types.Header, opts *ValidationO
 	if sidecar == nil {
 		return errors.New("missing sidecar in blob transaction")
 	}
+	// Ensure the sidecar is constructed with the correct version, consistent
+	// with the current fork.
+	version := types.BlobSidecarVersion0
+	if opts.Config.IsOsaka(head.Number) {
+		version = types.BlobSidecarVersion1
+	}
+	if sidecar.Version != version {
+		return fmt.Errorf("unexpected sidecar version, want: %d, got: %d", version, sidecar.Version)
+	}
 	// Ensure the blob fee cap satisfies the minimum blob gas price
 	if tx.BlobGasFeeCapIntCmp(blobTxMinBlobGasPrice) < 0 {
 		return fmt.Errorf("%w: blob fee cap %v, minimum needed %v", ErrTxGasPriceTooLow, tx.BlobGasFeeCap(), blobTxMinBlobGasPrice)

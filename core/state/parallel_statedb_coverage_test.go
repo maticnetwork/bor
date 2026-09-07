@@ -615,7 +615,7 @@ func TestPDB_TransientStorage(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Inner / PointCache / Witness / AccessEvents trivial accessors
+// Inner / Witness / AccessEvents trivial accessors
 // ---------------------------------------------------------------------------
 
 // TestPDB_InnerAccessors exercises wrappers used by Bor consensus hooks.
@@ -624,7 +624,6 @@ func TestPDB_InnerAccessors(t *testing.T) {
 	if pdb.Inner() == nil {
 		t.Fatal("Inner returned nil")
 	}
-	_ = pdb.PointCache() // may be nil; just must not panic
 	if pdb.Witness() != nil {
 		t.Fatal("Witness: V2 always returns nil")
 	}

@@ -201,7 +201,7 @@ func execPathResultWithConfig(
 	evm := NewEVM(bctx, db, chainCfg, cfg)
 	evm.SetTxContext(TxContext{
 		Origin:     origin,
-		GasPrice:   big.NewInt(66),
+		GasPrice:   uint256.NewInt(66),
 		BlobHashes: blobHashes,
 	})
 	ret, gasLeft, err := evm.Call(caller, addr, input, gas, uint256.NewInt(77))
@@ -1553,7 +1553,7 @@ func makeEVM(code []byte, gas uint64, switchDispatch bool) (*EVM, common.Address
 	db.Prepare(rules, caller, common.Address{}, &addr, ActivePrecompiles(rules), nil)
 
 	evm := NewEVM(bctx, db, diffChainConfig, Config{EnableEVMSwitchDispatch: switchDispatch})
-	evm.SetTxContext(TxContext{Origin: origin, GasPrice: big.NewInt(66)})
+	evm.SetTxContext(TxContext{Origin: origin, GasPrice: uint256.NewInt(66)})
 	return evm, addr
 }
 

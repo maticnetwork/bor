@@ -73,6 +73,8 @@ var DefaultConfig = Config{
 		ListenAddr:    ":30303",
 		MaxPeers:      50,
 		NAT:           nat.Any(),
+		DiscoveryV4:   true,
+		DiscoveryV5:   true,
 		TxArrivalWait: 500 * time.Millisecond,
 	},
 	DBEngine: "", // Use whatever exists, will default to Pebble if non-existent and supported

@@ -126,10 +126,6 @@ func Transaction(ctx *cli.Context) error {
 	var results []result
 
 	for it.Next() {
-		if err := it.Err(); err != nil {
-			return NewError(ErrorIO, err)
-		}
-
 		var tx types.Transaction
 
 		err := rlp.DecodeBytes(it.Value(), &tx)
@@ -212,6 +208,9 @@ func Transaction(ctx *cli.Context) error {
 		}
 
 		results = append(results, r)
+	}
+	if err := it.Err(); err != nil {
+		return NewError(ErrorIO, err)
 	}
 
 	out, err := json.MarshalIndent(results, "", "  ")

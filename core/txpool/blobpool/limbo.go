@@ -22,7 +22,6 @@ import (
 	"github.com/holiman/billy"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/consensus/misc/eip4844"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
@@ -58,7 +57,7 @@ func newLimbo(config *params.ChainConfig, datadir string) (*limbo, error) {
 	}
 
 	// Create new slotter for pre-Osaka blob configuration.
-	slotter := newSlotter(eip4844.LatestMaxBlobsPerBlock(config))
+	slotter := newSlotter(params.BlobTxMaxBlobs)
 
 	// See if we need to migrate the limbo after fusaka.
 	slotter, err := tryMigrate(config, slotter, datadir)

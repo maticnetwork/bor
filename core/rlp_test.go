@@ -21,12 +21,11 @@ import (
 	"math/big"
 	"testing"
 
-	"golang.org/x/crypto/sha3"
-
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/crypto/keccak"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
 )
@@ -162,7 +161,7 @@ func BenchmarkHashing(b *testing.B) {
 
 	var got common.Hash
 
-	var hasher = sha3.NewLegacyKeccak256()
+	var hasher = keccak.NewLegacyKeccak256()
 
 	b.Run("iteratorhashing", func(b *testing.B) {
 		for b.Loop() {

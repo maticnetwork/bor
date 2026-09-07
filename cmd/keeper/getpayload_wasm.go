@@ -1,4 +1,4 @@
-// Copyright 2025 The go-ethereum Authors
+// Copyright 2026 The go-ethereum Authors
 // This file is part of the go-ethereum library.
 //
 // The go-ethereum library is free software: you can redistribute it and/or modify
@@ -14,20 +14,23 @@
 // You should have received a copy of the GNU Lesser General Public License
 // along with the go-ethereum library. If not, see <http://www.gnu.org/licenses/>.
 
-//go:build !tinygo
-// +build !tinygo
+//go:build wasm
+// +build wasm
 
-package rawdb
+package main
 
 import (
-	"io"
-
-	"github.com/olekukonko/tablewriter"
+	"unsafe"
 )
 
-// Re-export the real tablewriter types and functions
-type Table = tablewriter.Table
+//go:wasmimport geth_io len
+func hintLen() uint32
 
-func newTableWriter(w io.Writer) *Table {
-	return tablewriter.NewWriter(w)
+//go:wasmimport geth_io read
+func hintRead(data unsafe.Pointer)
+
+func getInput() []byte {
+	data := make([]byte, hintLen())
+	hintRead(unsafe.Pointer(&data[0]))
+	return data
 }

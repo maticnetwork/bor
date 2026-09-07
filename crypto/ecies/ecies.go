@@ -131,7 +131,6 @@ func (prv *PrivateKey) GenerateShared(pub *PublicKey, skLen, macLen int) (sk []b
 	if pub.X == nil || pub.Y == nil || !pub.Curve.IsOnCurve(pub.X, pub.Y) {
 		return nil, ErrInvalidPublicKey
 	}
-
 	if skLen+macLen > MaxSharedKeyLength(pub) {
 		return nil, ErrSharedKeyTooBig
 	}

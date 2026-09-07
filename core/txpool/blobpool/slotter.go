@@ -19,7 +19,6 @@ package blobpool
 import (
 	"github.com/holiman/billy"
 
-	"github.com/ethereum/go-ethereum/consensus/misc/eip4844"
 	"github.com/ethereum/go-ethereum/params"
 )
 
@@ -56,7 +55,7 @@ func tryMigrate(config *params.ChainConfig, slotter billy.SlotSizeFn, datadir st
 			store.Close()
 		}
 		// Set the slotter to the format now that the Osaka is active.
-		slotter = newSlotterEIP7594(eip4844.LatestMaxBlobsPerBlock(config))
+		slotter = newSlotterEIP7594(params.BlobTxMaxBlobs)
 	}
 	return slotter, nil
 }

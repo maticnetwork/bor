@@ -24,6 +24,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/hmac"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -34,11 +35,10 @@ import (
 	"time"
 
 	"github.com/golang/snappy"
-	"golang.org/x/crypto/sha3"
 
-	"github.com/ethereum/go-ethereum/common/bitutil"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/crypto/ecies"
+	"github.com/ethereum/go-ethereum/crypto/keccak"
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
@@ -523,11 +523,11 @@ func (h *handshakeState) secrets(auth, authResp []byte) (Secrets, error) {
 	}
 
 	// setup sha3 instances for the MACs
-	mac1 := sha3.NewLegacyKeccak256()
+	mac1 := keccak.NewLegacyKeccak256()
 	mac1.Write(xor(s.MAC, h.respNonce))
 	mac1.Write(auth)
 
-	mac2 := sha3.NewLegacyKeccak256()
+	mac2 := keccak.NewLegacyKeccak256()
 	mac2.Write(xor(s.MAC, h.initNonce))
 	mac2.Write(authResp)
 
@@ -731,6 +731,6 @@ func exportPubkey(pub *ecies.PublicKey) []byte {
 
 func xor(one, other []byte) (xor []byte) {
 	xor = make([]byte, len(one))
-	bitutil.XORBytes(xor, one, other)
+	subtle.XORBytes(xor, one, other)
 	return xor
 }

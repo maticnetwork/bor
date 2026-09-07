@@ -126,25 +126,31 @@ func (t *BlockTest) RunV2(snapshotter bool, scheme string, witness bool, tracer 
 	return t.run(snapshotter, scheme, witness, tracer, postCheck, true)
 }
 
+// Network returns the network/fork name for this test.
+func (t *BlockTest) Network() string {
+	return t.json.Network
+}
+
 func (t *BlockTest) run(snapshotter bool, scheme string, witness bool, tracer *tracing.Hooks, postCheck func(error, *core.BlockChain), useV2 bool) (result error) {
 	config, ok := Forks[t.json.Network]
 	if !ok {
 		return UnsupportedForkError{t.json.Network}
 	}
 	// import pre accounts & construct test genesis block & state root
+	// Commit genesis state
 	var (
+		gspec = t.genesis(config)
 		db    = rawdb.NewMemoryDatabase()
 		tconf = &triedb.Config{
 			Preimages: true,
+			IsVerkle:  gspec.Config.IsVerkleGenesis(),
 		}
 	)
-	if scheme == rawdb.PathScheme {
+	if scheme == rawdb.PathScheme || tconf.IsVerkle {
 		tconf.PathDB = pathdb.Defaults
 	} else {
 		tconf.HashDB = hashdb.Defaults
 	}
-	// Commit genesis state
-	gspec := t.genesis(config)
 
 	// if ttd is not specified, set an arbitrary huge value
 	if gspec.Config.TerminalTotalDifficulty == nil {
@@ -289,7 +295,7 @@ func (t *BlockTest) insertBlocks(blockchain *core.BlockChain) ([]btBlock, error)
 
 		if b.BlockHeader == nil {
 			if data, err := json.MarshalIndent(cb.Header(), "", "  "); err == nil {
-				fmt.Fprintf(os.Stderr, "block (index %d) insertion should have failed due to: %v:\n%v\n",
+				fmt.Fprintf(os.Stdout, "block (index %d) insertion should have failed due to: %v:\n%v\n",
 					bi, b.ExpectException, string(data))
 			}
 

@@ -305,7 +305,7 @@ func (sim *simulator) processBlock(ctx context.Context, block *simBlock, header,
 	if block.BlockOverrides.BlobBaseFee != nil {
 		blockContext.BlobBaseFee = block.BlockOverrides.BlobBaseFee.ToInt()
 	}
-	precompiles := sim.activePrecompiles(sim.base)
+	precompiles := sim.activePrecompiles(header)
 	// State overrides are applied prior to execution of a block
 	if err := block.StateOverrides.Apply(sim.state, precompiles); err != nil {
 		return nil, nil, nil, err
@@ -391,7 +391,7 @@ func (sim *simulator) processBlock(ctx context.Context, block *simBlock, header,
 			if errors.Is(result.Err, vm.ErrExecutionReverted) {
 				// If the result contains a revert reason, try to unpack it.
 				revertErr := newRevertError(result.Revert())
-				callRes.Error = &callError{Message: revertErr.Error(), Code: errCodeReverted, Data: revertErr.ErrorData().(string)}
+				callRes.Error = &callError{Message: revertErr.Error(), Code: revertErr.ErrorCode(), Data: revertErr.ErrorData().(string)}
 			} else {
 				msg := result.Err.Error()
 				if gasCapped {

@@ -42,7 +42,6 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/ethereum/go-ethereum/trie/trienode"
-	"github.com/ethereum/go-ethereum/trie/utils"
 )
 
 // TriesInMemory represents the number of layers that are kept in RAM.
@@ -266,7 +265,7 @@ func NewWithReader(root common.Hash, db Database, reader Reader) (*StateDB, erro
 		transientStorage:      newTransientStorage(),
 	}
 	if db.TrieDB().IsVerkle() {
-		sdb.accessEvents = NewAccessEvents(db.PointCache())
+		sdb.accessEvents = NewAccessEvents()
 	}
 
 	return sdb, nil
@@ -974,7 +973,6 @@ func (s *StateDB) Logs() []*types.Log {
 	for _, lgs := range s.logs {
 		logs = append(logs, lgs...)
 	}
-
 	return logs
 }
 
@@ -1779,15 +1777,15 @@ func (s *StateDB) addWitnessNodes(nodes map[string][]byte, addrHash common.Hash)
 // capture them.
 func (s *StateDB) addObjectWitness(obj *stateObject) {
 	if trie := obj.getPrefetchedTrie(); trie != nil {
-		s.addWitnessNodes(trie.Witness(), obj.addrHash)
+		s.addWitnessNodes(trie.Witness(), obj.addrHash())
 	} else if obj.trie != nil {
-		s.addWitnessNodes(obj.trie.Witness(), obj.addrHash)
+		s.addWitnessNodes(obj.trie.Witness(), obj.addrHash())
 	} else if s.prefetcher == nil {
 		if tr, err := obj.getTrie(); err == nil {
 			for key := range obj.originStorage {
 				tr.GetStorage(obj.address, key[:])
 			}
-			s.addWitnessNodes(tr.Witness(), obj.addrHash)
+			s.addWitnessNodes(tr.Witness(), obj.addrHash())
 		}
 	}
 }
@@ -2292,7 +2290,7 @@ func (s *StateDB) commit(deleteEmptyObjects bool, noStorageWiping bool, blockNum
 				return err
 			}
 			lock.Lock()
-			updates[obj.addrHash] = update
+			updates[obj.addrHash()] = update
 			s.StorageCommits = time.Since(start) // overwrite with the longest storage commit runtime
 			lock.Unlock()
 			return nil
@@ -3205,7 +3203,7 @@ func (s *StateDB) FinaliseFastWithPrefetch(deleteEmptyObjects bool) {
 			if obj == nil {
 				continue
 			}
-			_ = s.prefetcher.prefetch(obj.addrHash, as.root, as.addr, nil, as.slots, false)
+			_ = s.prefetcher.prefetch(obj.addrHash(), as.root, as.addr, nil, as.slots, false)
 		}
 	}
 	s.FinaliseFast(deleteEmptyObjects)
@@ -3301,11 +3299,6 @@ func (s *StateDB) finalisePromote(addr common.Address, obj *stateObject) {
 // Used by V2 parallel execution where per-operation timing is not needed.
 func (s *StateDB) SkipTimers() {
 	s.skipTimers = true
-}
-
-// PointCache returns the point cache used by verkle tree.
-func (s *StateDB) PointCache() *utils.PointCache {
-	return s.db.PointCache()
 }
 
 // Witness retrieves the current state witness being collected.

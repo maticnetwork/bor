@@ -13,13 +13,13 @@ import (
 
 type readerTestLayer struct {
 	layer
-	nodeFn    func(common.Hash, []byte, int) ([]byte, common.Hash, *nodeLoc, error)
+	nodeFn    func(common.Hash, []byte, int) ([]byte, common.Hash, nodeLoc, error)
 	accountFn func(common.Hash, int) ([]byte, error)
 	storageFn func(common.Hash, common.Hash, int) ([]byte, error)
 	parent    layer
 }
 
-func (l *readerTestLayer) node(owner common.Hash, path []byte, depth int) ([]byte, common.Hash, *nodeLoc, error) {
+func (l *readerTestLayer) node(owner common.Hash, path []byte, depth int) ([]byte, common.Hash, nodeLoc, error) {
 	return l.nodeFn(owner, path, depth)
 }
 
@@ -51,36 +51,36 @@ func TestReaderNodeWalkPaths(t *testing.T) {
 	tests := []struct {
 		name        string
 		noHashCheck bool
-		node        func(common.Hash, []byte, int) ([]byte, common.Hash, *nodeLoc, error)
+		node        func(common.Hash, []byte, int) ([]byte, common.Hash, nodeLoc, error)
 		want        []byte
 		wantError   string
 	}{
 		{
 			name: "matching hash",
-			node: func(common.Hash, []byte, int) ([]byte, common.Hash, *nodeLoc, error) {
-				return blob, hash, &nodeLoc{loc: locDiffLayer}, nil
+			node: func(common.Hash, []byte, int) ([]byte, common.Hash, nodeLoc, error) {
+				return blob, hash, nodeLoc{loc: locDiffLayer}, nil
 			},
 			want: blob,
 		},
 		{
 			name:        "hash check disabled",
 			noHashCheck: true,
-			node: func(common.Hash, []byte, int) ([]byte, common.Hash, *nodeLoc, error) {
-				return blob, common.Hash{}, &nodeLoc{loc: locDiskLayer}, nil
+			node: func(common.Hash, []byte, int) ([]byte, common.Hash, nodeLoc, error) {
+				return blob, common.Hash{}, nodeLoc{loc: locDiskLayer}, nil
 			},
 			want: blob,
 		},
 		{
 			name: "layer error",
-			node: func(common.Hash, []byte, int) ([]byte, common.Hash, *nodeLoc, error) {
-				return nil, common.Hash{}, nil, boom
+			node: func(common.Hash, []byte, int) ([]byte, common.Hash, nodeLoc, error) {
+				return nil, common.Hash{}, nodeLoc{}, boom
 			},
 			wantError: boom.Error(),
 		},
 		{
 			name: "dirty hash mismatch",
-			node: func(common.Hash, []byte, int) ([]byte, common.Hash, *nodeLoc, error) {
-				return blob, common.HexToHash("0x9999"), &nodeLoc{loc: locDirtyCache, depth: 2}, nil
+			node: func(common.Hash, []byte, int) ([]byte, common.Hash, nodeLoc, error) {
+				return blob, common.HexToHash("0x9999"), nodeLoc{loc: locDirtyCache, depth: 2}, nil
 			},
 			wantError: "unexpected node:",
 		},
@@ -112,8 +112,8 @@ func TestReaderStaleFallbackHelpers(t *testing.T) {
 
 	db := New(rawdb.NewMemoryDatabase(), nil, false)
 	stale := &readerTestLayer{
-		nodeFn: func(common.Hash, []byte, int) ([]byte, common.Hash, *nodeLoc, error) {
-			return nil, common.Hash{}, nil, errSnapshotStale
+		nodeFn: func(common.Hash, []byte, int) ([]byte, common.Hash, nodeLoc, error) {
+			return nil, common.Hash{}, nodeLoc{}, errSnapshotStale
 		},
 		accountFn: func(common.Hash, int) ([]byte, error) {
 			return nil, errSnapshotStale
@@ -147,7 +147,7 @@ func TestReaderStaleFallbackHelpers(t *testing.T) {
 	require.Equal(t, locDiskLayer, loc.loc)
 
 	evictCachedNode(stale, common.Hash{}, []byte{1})
-	require.Equal(t, "loc: diff, depth: 4", (&nodeLoc{loc: locDiffLayer, depth: 4}).string())
+	require.Equal(t, "loc: diff, depth: 4", (nodeLoc{loc: locDiffLayer, depth: 4}).string())
 }
 
 func TestPipelineReaderIrregularBranches(t *testing.T) {
@@ -177,8 +177,8 @@ func TestPipelineReaderIrregularBranches(t *testing.T) {
 		disk := db.tree.bottom()
 		disk.markStale()
 		stale := &readerTestLayer{
-			nodeFn: func(common.Hash, []byte, int) ([]byte, common.Hash, *nodeLoc, error) {
-				return nil, common.Hash{}, nil, errSnapshotStale
+			nodeFn: func(common.Hash, []byte, int) ([]byte, common.Hash, nodeLoc, error) {
+				return nil, common.Hash{}, nodeLoc{}, errSnapshotStale
 			},
 			accountFn: func(common.Hash, int) ([]byte, error) {
 				return nil, errSnapshotStale
@@ -201,12 +201,12 @@ func TestPipelineReaderIrregularBranches(t *testing.T) {
 		calls := 0
 		db := New(rawdb.NewMemoryDatabase(), nil, false)
 		layer := &readerTestLayer{parent: db.tree.bottom()}
-		layer.nodeFn = func(common.Hash, []byte, int) ([]byte, common.Hash, *nodeLoc, error) {
+		layer.nodeFn = func(common.Hash, []byte, int) ([]byte, common.Hash, nodeLoc, error) {
 			calls++
 			if calls == 1 {
-				return []byte{0xc0}, common.HexToHash("0x1"), &nodeLoc{loc: locCleanCache}, nil
+				return []byte{0xc0}, common.HexToHash("0x1"), nodeLoc{loc: locCleanCache}, nil
 			}
-			return nil, common.Hash{}, nil, boom
+			return nil, common.Hash{}, nodeLoc{}, boom
 		}
 		r := &reader{db: db, layer: layer}
 		_, err := r.nodeWalk(common.Hash{}, nil, common.HexToHash("0x2"))
@@ -227,8 +227,8 @@ func TestReaderPublicFallbackBranches(t *testing.T) {
 		r := &reader{
 			noHashCheck: true,
 			layer: &readerTestLayer{
-				nodeFn: func(common.Hash, []byte, int) ([]byte, common.Hash, *nodeLoc, error) {
-					return blob, common.Hash{}, &nodeLoc{loc: locDiskLayer}, nil
+				nodeFn: func(common.Hash, []byte, int) ([]byte, common.Hash, nodeLoc, error) {
+					return blob, common.Hash{}, nodeLoc{loc: locDiskLayer}, nil
 				},
 			},
 		}

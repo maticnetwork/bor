@@ -170,7 +170,7 @@ func TestPrefetchedObjectWitnessAndReadOnlyDestructSkip(t *testing.T) {
 		term:     make(chan struct{}),
 		fetchers: make(map[string]*subfetcher),
 	}
-	prefetcher.fetchers[prefetcher.trieID(obj.addrHash, root)] = &subfetcher{
+	prefetcher.fetchers[prefetcher.trieID(obj.addrHash(), root)] = &subfetcher{
 		trie: tr,
 		term: term,
 	}

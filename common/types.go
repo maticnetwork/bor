@@ -29,9 +29,8 @@ import (
 	"strconv"
 	"strings"
 
-	"golang.org/x/crypto/sha3"
-
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/crypto/keccak"
 )
 
 // Lengths of hashes and addresses in bytes.
@@ -78,6 +77,15 @@ func HexToRefHash(s string) *Hash {
 	v := BytesToHash(FromHex(s))
 
 	return &v
+}
+
+// IsHexHash verifies whether a string can represent a valid hex-encoded
+// Ethereum hash or not.
+func IsHexHash(s string) bool {
+	if has0xPrefix(s) {
+		s = s[2:]
+	}
+	return len(s) == 2*HashLength && isHex(s)
 }
 
 // Cmp compares two hashes.
@@ -284,7 +292,7 @@ func (a *Address) checksumHex() []byte {
 	buf := a.hex()
 
 	// compute checksum
-	sha := sha3.NewLegacyKeccak256()
+	sha := keccak.NewLegacyKeccak256()
 	sha.Write(buf[2:])
 
 	hash := sha.Sum(nil)

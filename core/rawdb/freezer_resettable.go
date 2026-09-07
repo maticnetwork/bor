@@ -239,16 +239,12 @@ func cleanup(path string) error {
 	if err != nil {
 		return err
 	}
+	defer dir.Close()
 
 	names, err := dir.Readdirnames(0)
 	if err != nil {
 		return err
 	}
-
-	if cerr := dir.Close(); cerr != nil {
-		return cerr
-	}
-
 	for _, name := range names {
 		if name == filepath.Base(path)+tmpSuffix {
 			log.Info("Removed leftover freezer directory", "name", name)

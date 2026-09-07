@@ -28,8 +28,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ethereum/go-verkle"
-
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/log"
@@ -69,13 +67,6 @@ func (n BlockNonce) MarshalText() ([]byte, error) {
 // UnmarshalText implements encoding.TextUnmarshaler.
 func (n *BlockNonce) UnmarshalText(input []byte) error {
 	return hexutil.UnmarshalFixedText("BlockNonce", input, n[:])
-}
-
-// ExecutionWitness represents the witness + proof used in a verkle context,
-// to provide the ability to execute a block statelessly.
-type ExecutionWitness struct {
-	StateDiff   verkle.StateDiff    `json:"stateDiff"`
-	VerkleProof *verkle.VerkleProof `json:"verkleProof"`
 }
 
 //go:generate go run github.com/fjl/gencodec -type Header -field-override headerMarshaling -out gen_header_json.go
@@ -334,11 +325,6 @@ type Block struct {
 	uncles       []*Header
 	transactions Transactions
 	withdrawals  Withdrawals
-
-	// witness is not an encoded part of the block body.
-	// It is held in Block in order for easy relaying to the places
-	// that process it.
-	witness *ExecutionWitness
 
 	// caches
 	hash atomic.Pointer[common.Hash]
@@ -702,9 +688,6 @@ func (b *Block) BlobGasUsed() *uint64 {
 	return nil
 }
 
-// ExecutionWitness returns the verkle execution witneess + proof for a block
-func (b *Block) ExecutionWitness() *ExecutionWitness { return b.witness }
-
 // Size returns the true RLP encoded storage size of the block, either by encoding
 // and returning it, or returning a previously cached value.
 func (b *Block) Size() uint64 {
@@ -770,7 +753,6 @@ func (b *Block) WithSeal(header *Header) *Block {
 		transactions: b.transactions,
 		uncles:       b.uncles,
 		withdrawals:  b.withdrawals,
-		witness:      b.witness,
 	}
 }
 
@@ -782,22 +764,11 @@ func (b *Block) WithBody(body Body) *Block {
 		transactions: slices.Clone(body.Transactions),
 		uncles:       make([]*Header, len(body.Uncles)),
 		withdrawals:  slices.Clone(body.Withdrawals),
-		witness:      b.witness,
 	}
 	for i := range body.Uncles {
 		block.uncles[i] = CopyHeader(body.Uncles[i])
 	}
 	return block
-}
-
-func (b *Block) WithWitness(witness *ExecutionWitness) *Block {
-	return &Block{
-		header:       b.header,
-		transactions: b.transactions,
-		uncles:       b.uncles,
-		withdrawals:  b.withdrawals,
-		witness:      witness,
-	}
 }
 
 // Hash returns the keccak256 hash of b's header.

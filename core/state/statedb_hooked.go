@@ -27,7 +27,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/params"
-	"github.com/ethereum/go-ethereum/trie/utils"
 )
 
 // hookedStateDB represents a statedb which emits calls to tracing-hooks
@@ -134,10 +133,6 @@ func (s *hookedStateDB) AddSlotToAccessList(addr common.Address, slot common.Has
 	s.inner.AddSlotToAccessList(addr, slot)
 }
 
-func (s *hookedStateDB) PointCache() *utils.PointCache {
-	return s.inner.PointCache()
-}
-
 func (s *hookedStateDB) Prepare(rules params.Rules, sender, coinbase common.Address, dest *common.Address, precompiles []common.Address, txAccesses types.AccessList) {
 	s.inner.Prepare(rules, sender, coinbase, dest, precompiles, txAccesses)
 }
@@ -233,7 +228,7 @@ func (s *hookedStateDB) SelfDestruct(address common.Address) uint256.Int {
 	var prevCode []byte
 	var prevCodeHash common.Hash
 
-	if s.hooks.OnCodeChange != nil {
+	if s.hooks.OnCodeChange != nil || s.hooks.OnCodeChangeV2 != nil {
 		prevCode = s.inner.GetCode(address)
 		prevCodeHash = s.inner.GetCodeHash(address)
 	}
@@ -259,7 +254,7 @@ func (s *hookedStateDB) SelfDestruct6780(address common.Address) (uint256.Int, b
 	var prevCode []byte
 	var prevCodeHash common.Hash
 
-	if s.hooks.OnCodeChange != nil {
+	if s.hooks.OnCodeChange != nil || s.hooks.OnCodeChangeV2 != nil {
 		prevCodeHash = s.inner.GetCodeHash(address)
 		prevCode = s.inner.GetCode(address)
 	}

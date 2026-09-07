@@ -34,6 +34,8 @@ func (c Config) MarshalTOML() (interface{}, error) {
 		LogNoHistory                         bool   `toml:",omitempty"`
 		LogExportCheckpoints                 string
 		StateHistory                         uint64                 `toml:",omitempty"`
+		TrienodeHistory                      int64                  `toml:",omitempty"`
+		NodeFullValueCheckpoint              uint32                 `toml:",omitempty"`
 		StateScheme                          string                 `toml:",omitempty"`
 		RequiredBlocks                       map[uint64]common.Hash `toml:"-"`
 		SkipBcVersionCheck                   bool                   `toml:"-"`
@@ -84,6 +86,7 @@ func (c Config) MarshalTOML() (interface{}, error) {
 		BorLogs                              bool
 		ParallelEVM                          core.ParallelEVMConfig `toml:",omitempty"`
 		WitnessProtocol                      bool
+		NoSnapServing                        bool
 		SyncWithWitnesses                    bool
 		SyncAndProduceWitnesses              bool
 		DevFakeAuthor                        bool     `hcl:"devfakeauthor,optional" toml:"devfakeauthor,optional"`
@@ -122,6 +125,8 @@ func (c Config) MarshalTOML() (interface{}, error) {
 	enc.LogNoHistory = c.LogNoHistory
 	enc.LogExportCheckpoints = c.LogExportCheckpoints
 	enc.StateHistory = c.StateHistory
+	enc.TrienodeHistory = c.TrienodeHistory
+	enc.NodeFullValueCheckpoint = c.NodeFullValueCheckpoint
 	enc.StateScheme = c.StateScheme
 	enc.RequiredBlocks = c.RequiredBlocks
 	enc.SkipBcVersionCheck = c.SkipBcVersionCheck
@@ -172,6 +177,7 @@ func (c Config) MarshalTOML() (interface{}, error) {
 	enc.BorLogs = c.BorLogs
 	enc.ParallelEVM = c.ParallelEVM
 	enc.WitnessProtocol = c.WitnessProtocol
+	enc.NoSnapServing = c.NoSnapServing
 	enc.SyncWithWitnesses = c.SyncWithWitnesses
 	enc.SyncAndProduceWitnesses = c.SyncAndProduceWitnesses
 	enc.DevFakeAuthor = c.DevFakeAuthor
@@ -214,6 +220,8 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 		LogNoHistory                         *bool   `toml:",omitempty"`
 		LogExportCheckpoints                 *string
 		StateHistory                         *uint64                `toml:",omitempty"`
+		TrienodeHistory                      *int64                 `toml:",omitempty"`
+		NodeFullValueCheckpoint              *uint32                `toml:",omitempty"`
 		StateScheme                          *string                `toml:",omitempty"`
 		RequiredBlocks                       map[uint64]common.Hash `toml:"-"`
 		SkipBcVersionCheck                   *bool                  `toml:"-"`
@@ -264,6 +272,7 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 		BorLogs                              *bool
 		ParallelEVM                          *core.ParallelEVMConfig `toml:",omitempty"`
 		WitnessProtocol                      *bool
+		NoSnapServing                        *bool
 		SyncWithWitnesses                    *bool
 		SyncAndProduceWitnesses              *bool
 		DevFakeAuthor                        *bool    `hcl:"devfakeauthor,optional" toml:"devfakeauthor,optional"`
@@ -332,6 +341,12 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 	}
 	if dec.StateHistory != nil {
 		c.StateHistory = *dec.StateHistory
+	}
+	if dec.TrienodeHistory != nil {
+		c.TrienodeHistory = *dec.TrienodeHistory
+	}
+	if dec.NodeFullValueCheckpoint != nil {
+		c.NodeFullValueCheckpoint = *dec.NodeFullValueCheckpoint
 	}
 	if dec.StateScheme != nil {
 		c.StateScheme = *dec.StateScheme
@@ -482,6 +497,9 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 	}
 	if dec.WitnessProtocol != nil {
 		c.WitnessProtocol = *dec.WitnessProtocol
+	}
+	if dec.NoSnapServing != nil {
+		c.NoSnapServing = *dec.NoSnapServing
 	}
 	if dec.SyncWithWitnesses != nil {
 		c.SyncWithWitnesses = *dec.SyncWithWitnesses

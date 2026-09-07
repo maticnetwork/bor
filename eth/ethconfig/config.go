@@ -47,6 +47,7 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/miner"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/triedb/pathdb"
 )
 
 // parseURLs splits a comma-separated URL string into a trimmed, non-empty slice.
@@ -80,33 +81,35 @@ var FullNodeGPO = gasprice.Config{
 
 // Defaults contains default settings for use on the Ethereum main net.
 var Defaults = Config{
-	SyncMode:              downloader.SnapSync,
-	HistoryMode:           history.KeepAll,
-	NetworkId:             0, // enable auto configuration of networkID == chainID
-	TxLookupLimit:         2350000,
-	TransactionHistory:    2350000, // Note: used in bor cli
-	LogHistory:            2350000, // Note: used in bor cli
-	StateHistory:          params.FullImmutabilityThreshold,
-	DatabaseCache:         512,
-	TrieCleanCache:        154,
-	TrieDirtyCache:        256,
-	TrieTimeout:           60 * time.Minute,
-	SnapshotCache:         102,
-	FilterLogCacheSize:    32,
-	LogQueryLimit:         1000,
-	Miner:                 miner.DefaultConfig,
-	TxPool:                legacypool.DefaultConfig,
-	BlobPool:              blobpool.DefaultConfig,
-	RPCGasCap:             50000000,
-	RPCEVMTimeout:         5 * time.Second,
-	GPO:                   FullNodeGPO,
-	RPCTxFeeCap:           1, // 1 ether
-	FastForwardThreshold:  6400,
-	WitnessPruneThreshold: 64000,
-	WitnessPruneInterval:  120 * time.Second,
-	WitnessAPIEnabled:     false,
-	TxSyncDefaultTimeout:  20 * time.Second,
-	TxSyncMaxTimeout:      1 * time.Minute,
+	SyncMode:                downloader.SnapSync,
+	HistoryMode:             history.KeepAll,
+	NetworkId:               0, // enable auto configuration of networkID == chainID
+	TxLookupLimit:           2350000,
+	TransactionHistory:      2350000, // Note: used in bor cli
+	LogHistory:              2350000, // Note: used in bor cli
+	StateHistory:            params.FullImmutabilityThreshold,
+	TrienodeHistory:         -1,
+	NodeFullValueCheckpoint: pathdb.Defaults.FullValueCheckpoint,
+	DatabaseCache:           512,
+	TrieCleanCache:          154,
+	TrieDirtyCache:          256,
+	TrieTimeout:             60 * time.Minute,
+	SnapshotCache:           102,
+	FilterLogCacheSize:      32,
+	LogQueryLimit:           1000,
+	Miner:                   miner.DefaultConfig,
+	TxPool:                  legacypool.DefaultConfig,
+	BlobPool:                blobpool.DefaultConfig,
+	RPCGasCap:               50000000,
+	RPCEVMTimeout:           5 * time.Second,
+	GPO:                     FullNodeGPO,
+	RPCTxFeeCap:             1, // 1 ether
+	FastForwardThreshold:    6400,
+	WitnessPruneThreshold:   64000,
+	WitnessPruneInterval:    120 * time.Second,
+	WitnessAPIEnabled:       false,
+	TxSyncDefaultTimeout:    20 * time.Second,
+	TxSyncMaxTimeout:        1 * time.Minute,
 }
 
 //go:generate go run github.com/fjl/gencodec -type Config -formats toml -out gen_config.go
@@ -153,6 +156,13 @@ type Config struct {
 	LogNoHistory         bool   `toml:",omitempty"` // No log search index is maintained.
 	LogExportCheckpoints string // export log index checkpoints to file
 	StateHistory         uint64 `toml:",omitempty"` // The maximum number of blocks from head whose state histories are reserved.
+	TrienodeHistory      int64  `toml:",omitempty"` // Number of blocks from the chain head for which trienode histories are retained
+
+	// The frequency of full-value encoding. For example, a value of 16 means
+	// that, on average, for a given trie node across its 16 consecutive historical
+	// versions, only one version is stored in full format, while the others
+	// are stored in diff mode for storage compression.
+	NodeFullValueCheckpoint uint32 `toml:",omitempty"`
 
 	// State scheme represents the scheme used to store ethereum states and trie
 	// nodes on top. It can be 'hash', 'path', or none which means use the scheme
