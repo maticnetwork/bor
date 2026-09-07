@@ -501,6 +501,15 @@ Fork/EIP surfaces (invariant 6 — all merged DORMANT):
   `TestReinforceMultiClientPreCompilesTest`'s expected Rules-field list. This corrects the v1.17.0 drop of
   upstream's `AmsterdamTime`/`IsAmsterdam` — enabling Amsterdam later is now "set `AmsterdamBlock`", like the
   other dormant forks.
+  - **Correction (review of #2325, 2026-09-07):** the block-based conversion carried the field, `IsAmsterdam`
+    and `Rules` but dropped three surfaces upstream wires for `AmsterdamTime` — `CheckConfigForkOrder`'s
+    ordered list (upstream `params/config.go:954`), `checkCompatible`'s `isForkTimestampIncompatible` call
+    (upstream `:1125`) and the startup banner (upstream `:690`). Left as-is, a genesis could schedule
+    `amsterdamBlock` before `osakaBlock` and pass validation, and moving it under an already-synced head
+    would produce no `ConfigCompatError` and no rewind. Latent while nil on every preset, live the moment any
+    config sets it. Added all three plus `TestAmsterdamForkGuards`, which fails on each surface without the
+    fix. `ChainConfig.Block(forks.Amsterdam)` was examined and deliberately left alone — the method has no
+    callers in the tree.
 - **EIP-7843 SLOTNUM (#33589, `f811bfe4f`)** — opcode `SLOTNUM (0x4b)` + `opSlotNum` + `enable7843` wired into
   `newAmsterdamInstructionSet`, instantiated (`amsterdamInstructionSet` var in `jump_table.go`) and dispatched
   (`case evm.chainRules.IsAmsterdam` in `core/vm/evm.go`, above `IsOsaka`). Header field `SlotNumber *uint64

@@ -1344,6 +1344,9 @@ func (c *ChainConfig) Description() string {
 	if c.OsakaBlock != nil {
 		banner += fmt.Sprintf(" - Osaka:                      #%-8v\n", *c.OsakaBlock)
 	}
+	if c.AmsterdamBlock != nil {
+		banner += fmt.Sprintf(" - Amsterdam:                  #%-8v\n", *c.AmsterdamBlock)
+	}
 	banner += fmt.Sprintf("\nAll fork specifications can be found at https://ethereum.github.io/execution-specs/src/ethereum/forks/\n")
 	return banner
 }
@@ -1571,6 +1574,7 @@ func (c *ChainConfig) CheckConfigForkOrder() error {
 		{name: "cancunBlock", block: c.CancunBlock, optional: true},
 		{name: "pragueBlock", block: c.PragueBlock, optional: true},
 		{name: "osakaBlock", block: c.OsakaBlock, optional: true},
+		{name: "amsterdamBlock", block: c.AmsterdamBlock, optional: true},
 		{name: "verkleBlock", block: c.VerkleBlock, optional: true},
 	} {
 		if lastFork.name != "" {
@@ -1740,6 +1744,9 @@ func (c *ChainConfig) checkCompatible(newcfg *ChainConfig, headNumber *big.Int, 
 
 	if isForkBlockIncompatible(c.OsakaBlock, newcfg.OsakaBlock, headNumber) {
 		return newBlockCompatError("Osaka fork block", c.OsakaBlock, newcfg.OsakaBlock)
+	}
+	if isForkBlockIncompatible(c.AmsterdamBlock, newcfg.AmsterdamBlock, headNumber) {
+		return newBlockCompatError("Amsterdam fork block", c.AmsterdamBlock, newcfg.AmsterdamBlock)
 	}
 	return nil
 }
