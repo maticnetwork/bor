@@ -18,8 +18,13 @@ func (c *Consumer) behindCanonicalHead(number uint64) bool {
 	if head == nil || head.Number == nil {
 		return false
 	}
-	headNumber := head.Number.Uint64()
 
+	return behindHead(number, head.Number.Uint64())
+}
+
+// behindHead is the depth predicate on its own, so the boundary is testable
+// without a chain deep enough to reach it.
+func behindHead(number, headNumber uint64) bool {
 	return headNumber > backlogOpenDepth && number+backlogOpenDepth <= headNumber
 }
 

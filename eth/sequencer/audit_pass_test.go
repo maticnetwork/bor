@@ -440,3 +440,247 @@ type headlessAuditChain struct{}
 
 func (headlessAuditChain) CurrentBlock() *types.Header         { return nil }
 func (headlessAuditChain) GetCanonicalHash(uint64) common.Hash { return common.Hash{} }
+
+// The counters are the pass's report to its caller; without asserting them a
+// mutation to any of the tallies goes unnoticed.
+func TestAuditSummaryCounts(t *testing.T) {
+	db := rawdb.NewMemoryDatabase()
+	chain, sealed := auditFixture(t, 10)
+
+	sealed[7] = testHeader(7, common.Hash{0xee}) // mismatch
+	delete(sealed, 8)                            // NotFound
+	chain.hashes[9] = common.Hash{}              // uncomparable: no canonical hash
+
+	if err := rawdb.WritePreconfAuditedThrough(db, 5); err != nil {
+		t.Fatalf("seed watermark: %v", err)
+	}
+
+	audit := &auditor{db: db, chain: chain, fetch: fetchFrom(t, sealed)}
+	summary, err := audit.run(context.Background())
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	// Heights 6..10: five walked, one mismatch at 7, one uncomparable at 9.
+	if summary.walked != 5 {
+		t.Fatalf("walked = %d, want 5", summary.walked)
+	}
+	if summary.mismatch != 1 {
+		t.Fatalf("mismatch = %d, want 1", summary.mismatch)
+	}
+	if summary.unknown != 1 {
+		t.Fatalf("unknown = %d, want 1", summary.unknown)
+	}
+	if summary.skippedTo != 0 {
+		t.Fatalf("skippedTo = %d, want 0 for a window inside the depth", summary.skippedTo)
+	}
+}
+
+func TestRecordVerdict(t *testing.T) {
+	cases := []struct {
+		name     string
+		verdict  auditVerdict
+		mismatch uint64
+		unknown  uint64
+		recorded bool
+	}{
+		{name: "mismatch", verdict: auditMismatch, mismatch: 1, recorded: true},
+		{name: "unknown", verdict: auditUnknown, unknown: 1},
+		{name: "match", verdict: auditMatch},
+		{name: "no seal", verdict: auditNoSeal},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			db := rawdb.NewMemoryDatabase()
+			audit := &auditor{db: db}
+			summary := auditSummary{}
+
+			audit.recordVerdict(42, tc.verdict, &summary)
+
+			if summary.mismatch != tc.mismatch {
+				t.Fatalf("mismatch = %d, want %d", summary.mismatch, tc.mismatch)
+			}
+			if summary.unknown != tc.unknown {
+				t.Fatalf("unknown = %d, want %d", summary.unknown, tc.unknown)
+			}
+
+			records := rawdb.ReadInvalidPreconfsInRange(db, 42, 42)
+			if tc.recorded && len(records) != 1 {
+				t.Fatalf("records = %+v, want one", records)
+			}
+			if !tc.recorded && len(records) != 0 {
+				t.Fatalf("records = %+v, want none", records)
+			}
+		})
+	}
+}
+
+// The window boundary: exactly the depth is walked whole, one more truncates.
+func TestAuditWindowDepthBoundary(t *testing.T) {
+	cases := []struct {
+		name          string
+		watermark     uint64
+		wantFrom      uint64
+		wantSkippedTo uint64
+	}{
+		{name: "exactly the depth", watermark: 90, wantFrom: 91, wantSkippedTo: 0},
+		{name: "one past the depth", watermark: 89, wantFrom: 91, wantSkippedTo: 90},
+		{name: "well past the depth", watermark: 1, wantFrom: 91, wantSkippedTo: 90},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			db := rawdb.NewMemoryDatabase()
+			chain, _ := auditFixture(t, 100)
+
+			if err := rawdb.WritePreconfAuditedThrough(db, tc.watermark); err != nil {
+				t.Fatalf("seed watermark: %v", err)
+			}
+
+			audit := &auditor{db: db, chain: chain, window: 10}
+			from, through, skippedTo, ok := audit.windowToAudit()
+			if !ok {
+				t.Fatal("no window to audit")
+			}
+
+			if from != tc.wantFrom || through != 100 || skippedTo != tc.wantSkippedTo {
+				t.Fatalf("window = [%d,%d] skippedTo %d, want [%d,100] skippedTo %d",
+					from, through, skippedTo, tc.wantFrom, tc.wantSkippedTo)
+			}
+		})
+	}
+}
+
+// The watermark is written at the checkpoint interval, so a pass that is
+// interrupted repeatedly still converges instead of re-walking its prefix.
+func TestAuditCheckpointsMidPass(t *testing.T) {
+	db := rawdb.NewMemoryDatabase()
+	through := uint64(auditCheckpointInterval) + 10
+	chain, sealed := auditFixture(t, through)
+
+	if err := rawdb.WritePreconfAuditedThrough(db, 0); err != nil {
+		t.Fatalf("seed watermark: %v", err)
+	}
+
+	checkpoint := uint64(auditCheckpointInterval)
+	var atCheckpoint uint64
+	seen := false
+
+	audit := &auditor{db: db, chain: chain, window: through, fetch: func(ctx context.Context, height uint64) ([]*pb.Entry, error) {
+		if height == checkpoint+1 && !seen {
+			seen = true
+			atCheckpoint, _ = rawdb.ReadPreconfAuditedThrough(db)
+		}
+
+		return fetchFrom(t, sealed)(ctx, height)
+	}}
+
+	if _, err := audit.run(context.Background()); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	if !seen {
+		t.Fatalf("the pass never reached height %d", checkpoint+1)
+	}
+	if atCheckpoint != checkpoint {
+		t.Fatalf("watermark at the checkpoint = %d, want %d", atCheckpoint, checkpoint)
+	}
+}
+
+// persist routes through the consumer's guarded writer when one is set, and
+// writes directly otherwise.
+func TestAuditPersistUsesTheInjectedWriter(t *testing.T) {
+	db := rawdb.NewMemoryDatabase()
+
+	var advanced []uint64
+	audit := &auditor{db: db, advance: func(number uint64) { advanced = append(advanced, number) }}
+
+	audit.persist(11)
+
+	if len(advanced) != 1 || advanced[0] != 11 {
+		t.Fatalf("advance calls = %v, want [11]", advanced)
+	}
+	if _, ok := rawdb.ReadPreconfAuditedThrough(db); ok {
+		t.Fatal("persist wrote directly while a writer was injected")
+	}
+}
+
+// persist holds at the stored height rather than lowering it.
+func TestAuditPersistNeverLowersTheWatermark(t *testing.T) {
+	db := rawdb.NewMemoryDatabase()
+	audit := &auditor{db: db}
+
+	audit.persist(20)
+	audit.persist(20)
+	audit.persist(19)
+
+	if got, _ := rawdb.ReadPreconfAuditedThrough(db); got != 20 {
+		t.Fatalf("watermark = %d, want 20", got)
+	}
+}
+
+func TestRecordSkippedWindowOnlyWritesAGap(t *testing.T) {
+	db := rawdb.NewMemoryDatabase()
+	audit := &auditor{db: db}
+
+	audit.recordSkippedWindow(0, 1, 10)
+	if _, ok := rawdb.ReadPreconfUnauditedThrough(db); ok {
+		t.Fatal("an untruncated window recorded a gap")
+	}
+
+	audit.recordSkippedWindow(7, 8, 10)
+	if got, ok := rawdb.ReadPreconfUnauditedThrough(db); !ok || got != 7 {
+		t.Fatalf("unaudited mark = (%d, %v), want (7, true)", got, ok)
+	}
+}
+
+// failingWriteDB fails every write, direct or batched, so the pass's
+// write-error paths run.
+type failingWriteDB struct {
+	ethdb.Database
+}
+
+func (failingWriteDB) Put([]byte, []byte) error { return errWriteRefused }
+
+func (d failingWriteDB) NewBatch() ethdb.Batch {
+	return failingBatch{Batch: d.Database.NewBatch()}
+}
+
+type failingBatch struct {
+	ethdb.Batch
+}
+
+func (failingBatch) Write() error { return errWriteRefused }
+
+var errWriteRefused = errors.New("write refused")
+
+// A database that refuses writes must not stop the walk: the pass logs and
+// keeps auditing, because the alternative is losing the whole window.
+func TestAuditSurvivesWriteFailures(t *testing.T) {
+	chain, sealed := auditFixture(t, 100)
+	sealed[95] = testHeader(95, common.Hash{0xee})
+
+	backing := rawdb.NewMemoryDatabase()
+	if err := rawdb.WritePreconfAuditedThrough(backing, 1); err != nil {
+		t.Fatalf("seed watermark: %v", err)
+	}
+
+	audit := &auditor{db: failingWriteDB{backing}, chain: chain, fetch: fetchFrom(t, sealed), window: 10}
+	summary, err := audit.run(context.Background())
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	// The walk still covered the window and still counted the mismatch, even
+	// though none of the three writes it attempted could land.
+	if summary.walked != 10 {
+		t.Fatalf("walked = %d, want 10", summary.walked)
+	}
+	if summary.mismatch != 1 {
+		t.Fatalf("mismatch = %d, want 1", summary.mismatch)
+	}
+	if got, _ := rawdb.ReadPreconfAuditedThrough(backing); got != 1 {
+		t.Fatalf("watermark = %d, want it unchanged at 1 when writes fail", got)
+	}
+}

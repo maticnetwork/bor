@@ -142,6 +142,31 @@ func TestLiveFrameStartsWatching(t *testing.T) {
 	if !consumer.watching.Load() {
 		t.Fatal("the live marker did not start watching")
 	}
+
+	// Catch-up is over at the live marker, so whatever it replayed past has
+	// to be audited.
+	if len(consumer.auditTrigger) != 1 {
+		t.Fatal("reaching the tip did not request an audit pass")
+	}
+}
+
+// The canonical-head handler is what the chain actually calls; the watermark
+// has to advance through it, not just through the helper.
+func TestHandleCanonicalHeadAdvancesTheWatermark(t *testing.T) {
+	h := startExecHarness(t)
+	consumer := newAuditTestConsumer(h)
+	consumer.watching.Store(true)
+
+	head := h.chain.CurrentBlock().Number.Uint64()
+	if err := rawdb.WritePreconfAuditedThrough(h.chain.DB(), head-1); err != nil {
+		t.Fatalf("seed watermark: %v", err)
+	}
+
+	consumer.handleCanonicalHead()
+
+	if got, ok := rawdb.ReadPreconfAuditedThrough(h.chain.DB()); !ok || got != head {
+		t.Fatalf("watermark = (%d, %v), want (%d, true)", got, ok, head)
+	}
 }
 
 func TestPrepareStreamFlagsTheLiveFrame(t *testing.T) {
@@ -186,6 +211,39 @@ func TestRequestAuditCoalesces(t *testing.T) {
 
 	if len(consumer.auditTrigger) != 1 {
 		t.Fatalf("queued %d passes, want 1: the window is recomputed when a pass starts", len(consumer.auditTrigger))
+	}
+}
+
+// The depth predicate on its own, including the boundary and the shallow
+// chain that has no backlog to speak of.
+func TestBehindHead(t *testing.T) {
+	previous := backlogOpenDepth
+	backlogOpenDepth = 64
+
+	t.Cleanup(func() { backlogOpenDepth = previous })
+
+	cases := []struct {
+		name       string
+		number     uint64
+		headNumber uint64
+		want       bool
+	}{
+		{name: "at the head", number: 1000, headNumber: 1000, want: false},
+		{name: "one inside the depth", number: 937, headNumber: 1000, want: false},
+		{name: "exactly the depth behind", number: 936, headNumber: 1000, want: true},
+		{name: "far behind", number: 10, headNumber: 1000, want: true},
+		{name: "ahead of the head", number: 1001, headNumber: 1000, want: false},
+		{name: "chain shallower than the depth", number: 1, headNumber: 64, want: false},
+		{name: "chain one deeper than the depth", number: 1, headNumber: 65, want: true},
+		{name: "genesis-only chain", number: 0, headNumber: 0, want: false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := behindHead(tc.number, tc.headNumber); got != tc.want {
+				t.Fatalf("behindHead(%d, %d) = %v, want %v", tc.number, tc.headNumber, got, tc.want)
+			}
+		})
 	}
 }
 
