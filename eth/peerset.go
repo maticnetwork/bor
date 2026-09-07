@@ -60,6 +60,7 @@ type peerSet struct {
 	peers     map[string]*ethPeer // Peers connected on the `eth` protocol
 	snapPeers int                 // Number of `snap` compatible peers for connection prioritization
 	witPeers  int                 // Number of `wit` compatible peers for connection prioritization
+	revision  uint64              // Peer-set revision
 
 	snapWait map[string]chan *snap.Peer // Peers connected on `eth` waiting for their snap extension
 	snapPend map[string]*snap.Peer      // Peers connected on the `snap` protocol, but not yet on `eth`
@@ -267,6 +268,7 @@ func (ps *peerSet) registerPeer(peer *eth.Peer, extSnap *snap.Peer, extWit *wit.
 	}
 
 	ps.peers[id] = eth
+	ps.revision++
 
 	return nil
 }
@@ -283,6 +285,7 @@ func (ps *peerSet) unregisterPeer(id string) error {
 	}
 
 	delete(ps.peers, id)
+	ps.revision++
 
 	if peer.snapExt != nil {
 		ps.snapPeers--
@@ -446,6 +449,13 @@ func (ps *peerSet) len() int {
 	defer ps.lock.RUnlock()
 
 	return len(ps.peers)
+}
+
+func (ps *peerSet) currentRevision() uint64 {
+	ps.lock.RLock()
+	defer ps.lock.RUnlock()
+
+	return ps.revision
 }
 
 // snapLen returns if the current number of `snap` peers in the set.

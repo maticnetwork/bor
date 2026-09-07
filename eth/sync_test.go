@@ -210,9 +210,15 @@ func TestChainSyncerCooldownSurvivesBlockAnnounce(t *testing.T) {
 	if err := handler.downloader.RegisterPeer(peer2.ID(), eth.ETH68, &ethPeer{Peer: peer2}); err != nil {
 		t.Fatal(err)
 	}
+	if err := handler.peers.unregisterPeer(peer.ID()); err != nil {
+		t.Fatal(err)
+	}
+	if handler.peers.len() != 1 {
+		t.Fatalf("peer replacement should preserve peer count, have %d", handler.peers.len())
+	}
 	syncer.onPeerEvent()
 	if !syncer.peersUnavailableUntil.IsZero() {
-		t.Fatal("a genuine peer-set change must clear the cooldown")
+		t.Fatal("a peer replacement must clear the cooldown")
 	}
 }
 
