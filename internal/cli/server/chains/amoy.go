@@ -44,6 +44,7 @@ var amoyTestnet = &Chain{
 				GiuglianoBlock:    big.NewInt(35573500),
 				ChicagoBlock:      big.NewInt(38358000),
 				ValenciaBlock:     big.NewInt(40776000),
+				AustinBlock:       big.NewInt(44120000),
 				HampiBlock:        nil, // unscheduled
 
 				StateSyncConfirmationDelay: map[string]uint64{

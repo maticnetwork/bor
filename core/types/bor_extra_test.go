@@ -28,6 +28,15 @@ import (
 	"github.com/ethereum/go-ethereum/rlp"
 )
 
+// wrapExtra wraps an RLP-encoded BlockExtraData/BlockExtraDataPostAustin body in
+// the vanity+seal envelope real header.Extra bytes use.
+func wrapExtra(body []byte) []byte {
+	extra := make([]byte, ExtraVanityLength, ExtraVanityLength+len(body)+ExtraSealLength)
+	extra = append(extra, body...)
+	extra = append(extra, make([]byte, ExtraSealLength)...)
+	return extra
+}
+
 // borExtraWithDeps builds a Bor-style Extra (vanity + RLP(BlockExtraData) + seal)
 // whose TxDependency holds `deps` empty inner lists.
 func borExtraWithDeps(t *testing.T, validatorBytes []byte, deps int, gasTarget, bfcd *uint64) []byte {
@@ -43,10 +52,7 @@ func borExtraWithDeps(t *testing.T, validatorBytes []byte, deps int, gasTarget, 
 		t.Fatalf("encode BlockExtraData: %v", err)
 	}
 
-	extra := make([]byte, ExtraVanityLength, ExtraVanityLength+len(body)+ExtraSealLength)
-	extra = append(extra, body...)
-	extra = append(extra, make([]byte, ExtraSealLength)...)
-	return extra
+	return wrapExtra(body)
 }
 
 // allocBytes reports how many bytes f allocates, with GC paused so the delta is
@@ -157,6 +163,93 @@ func TestBorHeaderExtraAccessorsAgree(t *testing.T) {
 	}
 	if want := h.Extra[ExtraVanityLength : len(h.Extra)-ExtraSealLength]; !bytes.Equal(rawVals, want) {
 		t.Fatal("pre-Cancun validator bytes must be the raw envelope")
+	}
+}
+
+// TestBorHeaderExtraAustinBoundary checks the accessors at the
+// activation boundary (N-1/N/N+1): pre-Austin blocks decode real TxDependency
+// via BlockExtraData; post-Austin blocks decode via BlockExtraDataPostAustin and
+// every accessor returns nil TxDependency.
+func TestBorHeaderExtraAustinBoundary(t *testing.T) {
+	t.Parallel()
+
+	const austin = 100
+	cfg := &params.ChainConfig{
+		ChainID:     big.NewInt(137),
+		CancunBlock: big.NewInt(0),
+		Bor: &params.BorConfig{
+			ValenciaBlock: big.NewInt(0),
+			AustinBlock:   big.NewInt(austin),
+		},
+	}
+	gasTarget, bfcd := uint64(30_000_000), uint64(8)
+
+	// N-1: pre-Austin, TxDependency is still on the wire and must decode.
+	preHeader := &Header{
+		Number: big.NewInt(austin - 1),
+		Extra:  borExtraWithDeps(t, []byte("val set"), 3, &gasTarget, &bfcd),
+	}
+
+	vals, gt, den := preHeader.GetValidatorBytesAndBaseFeeParams(cfg)
+	if !bytes.Equal(vals, []byte("val set")) {
+		t.Fatalf("pre-Austin validator bytes: got %q", vals)
+	}
+	if gt == nil || *gt != gasTarget || den == nil || *den != bfcd {
+		t.Fatalf("pre-Austin base-fee params: got (%v,%v)", gt, den)
+	}
+	if full := preHeader.DecodeBlockExtraData(cfg); full == nil || len(full.TxDependency) != 3 {
+		t.Fatalf("pre-Austin DecodeBlockExtraData must still expose real TxDependency: %+v", full)
+	}
+
+	// N and N+1: post-Austin, no TxDependency slot on the wire at all.
+	for _, n := range []int64{austin, austin + 1} {
+		body, err := rlp.EncodeToBytes(&BlockExtraDataPostAustin{
+			ValidatorBytes:           []byte("val set"),
+			GasTarget:                &gasTarget,
+			BaseFeeChangeDenominator: &bfcd,
+		})
+		if err != nil {
+			t.Fatalf("encode BlockExtraDataPostAustin: %v", err)
+		}
+		postHeader := &Header{Number: big.NewInt(n), Extra: wrapExtra(body)}
+
+		vals, gt, den := postHeader.GetValidatorBytesAndBaseFeeParams(cfg)
+		if !bytes.Equal(vals, []byte("val set")) {
+			t.Fatalf("block %d validator bytes: got %q", n, vals)
+		}
+		if gt == nil || *gt != gasTarget || den == nil || *den != bfcd {
+			t.Fatalf("block %d base-fee params: got (%v,%v)", n, gt, den)
+		}
+		if vals2 := postHeader.GetValidatorBytes(cfg); !bytes.Equal(vals2, vals) {
+			t.Fatalf("block %d: GetValidatorBytes disagrees with combined accessor", n)
+		}
+		if gt2, den2 := postHeader.GetBaseFeeParams(cfg); !reflect.DeepEqual(gt, gt2) || !reflect.DeepEqual(den, den2) {
+			t.Fatalf("block %d: GetBaseFeeParams disagrees with combined accessor", n)
+		}
+
+		full := postHeader.DecodeBlockExtraData(cfg)
+		if full == nil {
+			t.Fatalf("block %d: DecodeBlockExtraData returned nil", n)
+		}
+		if full.TxDependency != nil {
+			t.Fatalf("block %d: TxDependency must be nil post-Austin, got %v", n, full.TxDependency)
+		}
+		if !bytes.Equal(full.ValidatorBytes, []byte("val set")) || full.GasTarget == nil || *full.GasTarget != gasTarget {
+			t.Fatalf("block %d: DecodeBlockExtraData mismatch: %+v", n, full)
+		}
+
+		// Round-trip: BlockExtraDataPostAustin must encode/decode stably.
+		var decoded BlockExtraDataPostAustin
+		if err := rlp.DecodeBytes(body, &decoded); err != nil {
+			t.Fatalf("block %d: BlockExtraDataPostAustin decode: %v", n, err)
+		}
+		reencoded, err := rlp.EncodeToBytes(&decoded)
+		if err != nil {
+			t.Fatalf("block %d: BlockExtraDataPostAustin re-encode: %v", n, err)
+		}
+		if !bytes.Equal(reencoded, body) {
+			t.Fatalf("block %d: BlockExtraDataPostAustin round-trip mismatch", n)
+		}
 	}
 }
 

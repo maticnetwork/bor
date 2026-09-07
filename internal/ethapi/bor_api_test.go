@@ -4182,6 +4182,17 @@ func postCancunCfg() *params.ChainConfig {
 	}
 }
 
+func postAustinCfg() *params.ChainConfig {
+	return &params.ChainConfig{
+		ChainID:     big.NewInt(1),
+		CancunBlock: big.NewInt(0),
+		Bor: &params.BorConfig{
+			GiuglianoBlock: big.NewInt(0),
+			AustinBlock:    big.NewInt(0),
+		},
+	}
+}
+
 // newBlockExtraTestAPI creates a BlockChainAPI backed by a testBackendWithBlockExtra.
 func newBlockExtraTestAPI(t *testing.T, block *types.Block, cfg *params.ChainConfig) *BlockChainAPI {
 	t.Helper()
@@ -4191,13 +4202,43 @@ func newBlockExtraTestAPI(t *testing.T, block *types.Block, cfg *params.ChainCon
 	return NewBlockChainAPI(backend)
 }
 
-// makeBlockWithBorExtra creates a block with RLP-encoded BlockExtraData in the header Extra field.
-func makeBlockWithBorExtra(number int64, bed *types.BlockExtraData) *types.Block {
+// makeBlockWithBorExtra creates a block with an RLP-encoded BlockExtraData or
+// BlockExtraDataPostAustin in the header Extra field.
+func makeBlockWithBorExtra(number int64, bed any) *types.Block {
 	bedBytes, _ := rlp.EncodeToBytes(bed)
 	extra := make([]byte, types.ExtraVanityLength)
 	extra = append(extra, bedBytes...)
 	extra = append(extra, make([]byte, types.ExtraSealLength)...)
 	return makeBlockWithExtra(number, extra)
+}
+
+// TestGetBlockByNumber_BorExtraFlag_PostAustin verifies
+// decodedExtra.txDependency is always null once Austin activates, while
+// gasTarget/baseFeeChangeDenominator still round-trip.
+func TestGetBlockByNumber_BorExtraFlag_PostAustin(t *testing.T) {
+	t.Parallel()
+	gasTarget := uint64(15_000_000)
+	bfcd := uint64(64)
+
+	block := makeBlockWithBorExtra(10, &types.BlockExtraDataPostAustin{
+		GasTarget:                &gasTarget,
+		BaseFeeChangeDenominator: &bfcd,
+	})
+	api := newBlockExtraTestAPI(t, block, postAustinCfg())
+
+	result, err := api.GetBlockByNumber(context.Background(), 10, false, boolPtr(true))
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	extraData, ok := result["decodedExtra"]
+	require.True(t, ok, "response should contain decodedExtra")
+
+	rpcExtra := extraData.(*RPCBlockExtraData)
+	require.NotNil(t, rpcExtra.GasTarget)
+	require.Equal(t, hexutil.Uint64(gasTarget), *rpcExtra.GasTarget)
+	require.NotNil(t, rpcExtra.BaseFeeChangeDenominator)
+	require.Equal(t, hexutil.Uint64(bfcd), *rpcExtra.BaseFeeChangeDenominator)
+	require.Nil(t, rpcExtra.TxDependency, "txDependency must be null post-Austin")
 }
 
 func TestGetBlockByNumber_BorExtraFlag_PostCancun(t *testing.T) {

@@ -1134,6 +1134,42 @@ func TestLateBlockTimestampFix(t *testing.T) {
 		require.True(t, header.ActualTime.After(expectedMin) || header.ActualTime.Equal(expectedMin),
 			"header.ActualTime should be at least blockTime from now")
 	})
+
+	t.Run("abort recovery keeps the original target", func(t *testing.T) {
+		sp := &fakeSpanner{vals: []*valset.Validator{{Address: addr1, VotingPower: 1}}}
+		rioCfg := &params.BorConfig{
+			Sprint:   map[string]uint64{"0": 64},
+			Period:   map[string]uint64{"0": 2},
+			RioBlock: big.NewInt(0),
+		}
+		blockTime := 2 * time.Second
+
+		parentActualTime := time.Now().Add(-blockTime + 700*time.Millisecond)
+		genesisTime := uint64(parentActualTime.Unix())
+
+		chain, b := newChainAndBorForTest(t, sp, rioCfg, true, addr1, genesisTime)
+		b.blockTime = blockTime
+
+		genesis := chain.HeaderChain().GetHeaderByNumber(0)
+		parentHash := genesis.Hash()
+		b.parentActualTimeCache.Add(parentHash, parentActualTime)
+
+		expectedTargetWithoutExtension := parentActualTime.Add(blockTime)
+		remaining := time.Until(expectedTargetWithoutExtension)
+		require.Greater(t, remaining, 500*time.Millisecond, "test setup: remaining should be > 500ms")
+		require.Less(t, remaining, minBlockBuildTime, "test setup: remaining should be < minBlockBuildTime")
+
+		header := &types.Header{
+			Number:        big.NewInt(1),
+			ParentHash:    parentHash,
+			AbortRecovery: true,
+		}
+
+		require.NoError(t, b.Prepare(chain.HeaderChain(), header, false))
+		require.False(t, header.ActualTime.IsZero())
+		require.WithinDuration(t, expectedTargetWithoutExtension, header.ActualTime, 5*time.Millisecond)
+		require.Equal(t, uint64(expectedTargetWithoutExtension.Unix()), header.Time)
+	})
 }
 
 // setupFinalizeTest creates a test environment for FinalizeAndAssemble tests
@@ -4050,6 +4086,50 @@ func TestPrepare_CancunEncoding(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, len(h2.Extra) > types.ExtraVanityLength+types.ExtraSealLength)
 }
+
+// TestPrepare_AustinEncoding verifies Prepare encodes headers as
+// BlockExtraDataPostAustin from the Austin block onward, and as the legacy
+// BlockExtraData shape just before it.
+func TestPrepare_AustinEncoding(t *testing.T) {
+	t.Parallel()
+	addr1 := common.HexToAddress("0x1")
+	sp := &fakeSpanner{vals: []*valset.Validator{{Address: addr1, VotingPower: 1}}}
+
+	const austin = 15 // coincide with the sprint-end block used below
+	borCfg := borConfigWithDelays(16)
+	borCfg.GiuglianoBlock = big.NewInt(0)
+	borCfg.AustinBlock = big.NewInt(austin)
+
+	cfg := newAllForksChainConfig(borCfg)
+	cfg.ShanghaiBlock = big.NewInt(0)
+	cfg.CancunBlock = big.NewInt(0)
+
+	chain, b := newChainAndBorForTestWithConfig(t, sp, cfg, true, addr1, uint64(time.Now().Unix())-200)
+	genesis := chain.HeaderChain().GetHeaderByNumber(0)
+
+	// Block 15 is sprint-end (IsSprintStart(16, 16)=true) and == austin: post-Austin wire shape.
+	h := &types.Header{
+		ParentHash: genesis.Hash(),
+		Number:     big.NewInt(austin),
+		GasLimit:   genesis.GasLimit,
+		UncleHash:  uncleHash,
+	}
+	require.NoError(t, b.Prepare(chain.HeaderChain(), h, false))
+
+	payload := h.Extra[types.ExtraVanityLength : len(h.Extra)-types.ExtraSealLength]
+	var noDep types.BlockExtraDataPostAustin
+	require.NoError(t, rlp.DecodeBytes(payload, &noDep), "post-Austin Extra must decode as BlockExtraDataPostAustin")
+	require.NotEmpty(t, noDep.ValidatorBytes)
+	require.NotNil(t, noDep.GasTarget)
+
+	vals, gt, den := h.GetValidatorBytesAndBaseFeeParams(cfg)
+	require.Equal(t, noDep.ValidatorBytes, vals)
+	require.Equal(t, noDep.GasTarget, gt)
+	require.Equal(t, noDep.BaseFeeChangeDenominator, den)
+	full := h.DecodeBlockExtraData(cfg)
+	require.NotNil(t, full)
+	require.Nil(t, full.TxDependency, "TxDependency must normalize to nil post-Austin")
+}
 func TestFinalize_SprintWithHeimdallCommitStates(t *testing.T) {
 	t.Parallel()
 	addr1 := common.HexToAddress("0x1")
@@ -5032,219 +5112,177 @@ func TestFinalize_CheckAndCommitSpanError(t *testing.T) {
 	require.Nil(t, result)
 }
 
-// P1 Test: TestBorPrepare_WaitOnPrepareFlag validates the new waitOnPrepare
-// parameter in the Prepare method
-func TestBorPrepare_WaitOnPrepareFlag(t *testing.T) {
+// TestPrepare_PrimaryProducerWaitOnPrepareControlsEarlyAnnouncementDelay
+// verifies the Giugliano timing split used for early block announcements.
+// Normal production waits until the parent slot boundary before building, but
+// speculative/prefetch callers can opt out and do their own wait later.
+func TestPrepare_PrimaryProducerWaitOnPrepareControlsEarlyAnnouncementDelay(t *testing.T) {
 	t.Parallel()
 
-	// Setup: Create a blockchain and Bor engine
+	addr := common.HexToAddress("0x1")
+	sp := &fakeSpanner{vals: []*valset.Validator{{Address: addr, VotingPower: 1}}}
+	blockTime := 2 * time.Second
+	borCfg := &params.BorConfig{
+		Sprint:         map[string]uint64{"0": 64},
+		Period:         map[string]uint64{"0": 2},
+		GiuglianoBlock: big.NewInt(0),
+		RioBlock:       big.NewInt(0),
+	}
+	genesisTime := uint64(time.Now().Unix())
+	chain, b := newChainAndBorForTest(t, sp, borCfg, true, addr, genesisTime)
+	defer chain.Stop()
+	b.blockTime = blockTime
+
+	genesis := chain.HeaderChain().GetHeaderByNumber(0)
+	require.NotNil(t, genesis)
+
+	// Both subtests assert against the parent boundary itself rather than
+	// fixed elapsed-time bounds, so scheduling hiccups on loaded CI runners
+	// can't flake them: opt-out must return before the boundary (with a full
+	// second of headroom), normal production must not return until it.
+	t.Run("opt out stays fast", func(t *testing.T) {
+		parentActual := time.Now().Add(1 * time.Second)
+		b.parentActualTimeCache.Add(genesis.Hash(), parentActual)
+		header := createTestHeader(genesis, 1, borCfg.Period["0"])
+
+		err := b.Prepare(chain, header, false)
+
+		require.NoError(t, err)
+		require.True(t, time.Now().Before(parentActual),
+			"Prepare(waitOnPrepare=false) must return before the parent slot boundary")
+		require.NotZero(t, header.Time, "Prepare should still populate header time")
+	})
+
+	t.Run("normal production waits for parent boundary", func(t *testing.T) {
+		parentActual := time.Now().Add(300 * time.Millisecond)
+		b.parentActualTimeCache.Add(genesis.Hash(), parentActual)
+		header := createTestHeader(genesis, 1, borCfg.Period["0"])
+
+		err := b.Prepare(chain, header, true)
+
+		require.NoError(t, err)
+		require.False(t, time.Now().Before(parentActual),
+			"Prepare(waitOnPrepare=true) must wait until the parent slot boundary")
+		require.NotZero(t, header.Time, "Prepare should still populate header time")
+	})
+}
+
+func TestEarliestAnnounceTime(t *testing.T) {
+	t.Parallel()
+
 	addr := common.HexToAddress("0x1")
 	sp := &fakeSpanner{vals: []*valset.Validator{{Address: addr, VotingPower: 1}}}
 	borCfg := &params.BorConfig{
-		Sprint: map[string]uint64{"0": 64},
-		Period: map[string]uint64{"0": 2},
+		Sprint:         map[string]uint64{"0": 64},
+		Period:         map[string]uint64{"0": 2},
+		GiuglianoBlock: big.NewInt(0),
+	}
+	chain, b := newChainAndBorForTest(t, sp, borCfg, true, addr, uint64(time.Now().Unix()))
+	defer chain.Stop()
+
+	require.WithinDuration(t, time.Now(), b.EarliestAnnounceTime(chain.HeaderChain(), nil), time.Second)
+	require.WithinDuration(t, time.Now(), b.EarliestAnnounceTime(chain.HeaderChain(), &types.Header{Number: new(big.Int)}), time.Second)
+
+	genesis := chain.HeaderChain().GetHeaderByNumber(0)
+	require.NotNil(t, genesis)
+	childTime := time.Now().Add(time.Hour)
+	child := &types.Header{
+		ParentHash: genesis.Hash(),
+		Number:     big.NewInt(1),
+		ActualTime: childTime,
+	}
+	require.Equal(t, genesis.GetActualTime(), b.EarliestAnnounceTime(chain.HeaderChain(), child))
+
+	cachedParentTime := genesis.GetActualTime().Add(750 * time.Millisecond)
+	b.parentActualTimeCache.Add(genesis.Hash(), cachedParentTime)
+	require.Equal(t, cachedParentTime, b.EarliestAnnounceTime(chain.HeaderChain(), child))
+
+	child.ParentHash = common.HexToHash("0xdead")
+	require.Equal(t, childTime, b.EarliestAnnounceTime(chain.HeaderChain(), child))
+
+	preGiugliano := *borCfg
+	preGiugliano.GiuglianoBlock = big.NewInt(10)
+	b.config = &preGiugliano
+	require.Equal(t, childTime, b.EarliestAnnounceTime(chain.HeaderChain(), child))
+}
+
+func TestPipelineFinalizeAndAssembleInputPaths(t *testing.T) {
+	t.Parallel()
+
+	addr := common.HexToAddress("0x1")
+	sp := &fakeSpanner{vals: []*valset.Validator{{Address: addr, VotingPower: 1}}}
+	borCfg := &params.BorConfig{
+		Sprint:         map[string]uint64{"0": 64},
+		Period:         map[string]uint64{"0": 2},
+		MadhugiriBlock: big.NewInt(0),
 	}
 	chain, b := newChainAndBorForTest(t, sp, borCfg, true, addr, uint64(time.Now().Unix()))
 	defer chain.Stop()
 
 	genesis := chain.HeaderChain().GetHeaderByNumber(0)
 	require.NotNil(t, genesis)
+	header := &types.Header{
+		Number:     big.NewInt(1),
+		ParentHash: genesis.Hash(),
+		GasLimit:   10_000_000,
+		Time:       genesis.Time + 2,
+	}
+	statedb := newStateDBForTest(t, genesis.Root)
 
-	// Test 1: Prepare with waitOnPrepare=false should return quickly
-	t.Run("no_wait", func(t *testing.T) {
-		testHeader := createTestHeader(genesis, 1, borCfg.Period["0"])
+	withdrawals := &types.Body{Withdrawals: []*types.Withdrawal{}}
+	data, err := b.FinalizeForPipeline(chain.HeaderChain(), header, statedb, withdrawals, nil)
+	require.ErrorIs(t, err, consensus.ErrUnexpectedWithdrawals)
+	require.Nil(t, data)
 
-		start := time.Now()
-		err := b.Prepare(chain, testHeader, false)
-		elapsed := time.Since(start)
+	requestsHash := common.HexToHash("0x1234")
+	requestHeader := types.CopyHeader(header)
+	requestHeader.RequestsHash = &requestsHash
+	data, err = b.FinalizeForPipeline(chain.HeaderChain(), requestHeader, statedb, &types.Body{}, nil)
+	require.ErrorIs(t, err, consensus.ErrUnexpectedRequests)
+	require.Nil(t, data)
 
-		if err != nil {
-			t.Fatalf("Prepare with waitOnPrepare=false failed: %v", err)
-		}
+	data, err = b.FinalizeForPipeline(chain.HeaderChain(), header, statedb, &types.Body{}, nil)
+	require.NoError(t, err)
+	require.Nil(t, data)
 
-		// Should complete very quickly (< 100ms) since no waiting
-		if elapsed > 100*time.Millisecond {
-			t.Logf("Warning: Prepare took %v, expected < 100ms when waitOnPrepare=false", elapsed)
-		}
+	root := common.HexToHash("0xbeef")
+	body := &types.Body{}
+	block, receipts, err := b.AssembleBlock(chain, types.CopyHeader(header), statedb, body, nil, root, nil)
+	require.NoError(t, err)
+	require.Equal(t, root, block.Root())
+	require.Equal(t, types.EmptyUncleHash, block.UncleHash())
+	require.Empty(t, receipts)
 
-		// Verify header is valid
-		if testHeader.Time == 0 {
-			t.Error("Header time should be set")
-		}
-
-		t.Logf("Prepare with waitOnPrepare=false completed in %v", elapsed)
-	})
-
-	// Test 2: Prepare with waitOnPrepare=true should wait for the proper block time
-	t.Run("with_wait", func(t *testing.T) {
-		// Create a config with Giugliano enabled to activate wait-in-Prepare logic
-		borCfgWithBhilai := &params.BorConfig{
-			Sprint:         map[string]uint64{"0": 64},
-			Period:         map[string]uint64{"0": 2},
-			GiuglianoBlock: big.NewInt(0), // Enable Giugliano from block 0
-		}
-
-		// Set genesis time 3 seconds in the future to ensure enough wait time
-		// even after test setup overhead
-		genesisTime := uint64(time.Now().Add(3 * time.Second).Unix())
-
-		// Use DevFakeAuthor=true so the signer is authorized and is the primary producer
-		chainWithWait, bWithWait := newChainAndBorForTest(t, sp, borCfgWithBhilai, true, addr, genesisTime)
-		defer chainWithWait.Stop()
-
-		genesisWithWait := chainWithWait.HeaderChain().GetHeaderByNumber(0)
-		require.NotNil(t, genesisWithWait)
-
-		testHeader := createTestHeader(genesisWithWait, 1, borCfgWithBhilai.Period["0"])
-
-		// Calculate expected wait time dynamically based on actual genesis time
-		// This accounts for test setup overhead between setting genesis time and calling Prepare
-		start := time.Now()
-		genesisTimestamp := time.Unix(int64(genesisWithWait.Time), 0)
-		expectedDelay := time.Until(genesisTimestamp)
-
-		// If genesis time has already passed due to slow test setup, test won't wait
-		if expectedDelay < 0 {
-			t.Skipf("Test setup took too long (%v), genesis time already passed", time.Since(time.Unix(int64(genesisTime), 0)))
-		}
-
-		err := bWithWait.Prepare(chainWithWait, testHeader, true)
-		elapsed := time.Since(start)
-
-		if err != nil {
-			t.Fatalf("Prepare with waitOnPrepare=true failed: %v", err)
-		}
-
-		// With Giugliano enabled, DevFakeAuthor=true (making this node the primary producer),
-		// and waitOnPrepare=true, should wait until parent (genesis) time has passed
-		// Allow 100ms tolerance for timing precision and scheduling overhead
-		minWait := expectedDelay - 100*time.Millisecond
-		maxWait := expectedDelay + 200*time.Millisecond // Allow extra time for scheduling
-
-		if minWait < 0 {
-			minWait = 0
-		}
-
-		if elapsed < minWait {
-			t.Errorf("Prepare waited %v, expected at least %v (calculated from expectedDelay=%v)", elapsed, minWait, expectedDelay)
-		}
-		if elapsed > maxWait {
-			t.Logf("Warning: Prepare took %v, expected around %v (calculated from expectedDelay=%v)", elapsed, expectedDelay, expectedDelay)
-		}
-
-		// Verify header is valid
-		if testHeader.Time == 0 {
-			t.Error("Header time should be set")
-		}
-
-		t.Logf("Prepare with waitOnPrepare=true completed in %v (expected delay was %v)", elapsed, expectedDelay)
-	})
-
-	// Test 3: Verify both produce compatible headers
-	t.Run("compatibility", func(t *testing.T) {
-		header1 := createTestHeader(genesis, 3, borCfg.Period["0"])
-		header2 := createTestHeader(genesis, 3, borCfg.Period["0"])
-
-		err1 := b.Prepare(chain, header1, false)
-		err2 := b.Prepare(chain, header2, true)
-
-		if err1 != nil || err2 != nil {
-			t.Fatalf("Prepare failed: err1=%v, err2=%v", err1, err2)
-		}
-
-		// Both should produce valid headers with same block number
-		if header1.Number.Cmp(header2.Number) != 0 {
-			t.Error("Headers should have same block number")
-		}
-
-		t.Logf("Both waitOnPrepare modes produce compatible headers for block %d", header1.Number.Uint64())
-	})
+	stateSyncData := []*types.StateSyncData{{
+		ID:       1,
+		Contract: common.HexToAddress("0xabc"),
+		Data:     []byte{0x1},
+	}}
+	body = &types.Body{}
+	block, receipts, err = b.AssembleBlock(chain, types.CopyHeader(header), statedb, body, nil, root, stateSyncData)
+	require.NoError(t, err)
+	require.Len(t, block.Transactions(), 1)
+	require.Equal(t, uint8(types.StateSyncTxType), block.Transactions()[0].Type())
+	require.Len(t, receipts, 1)
+	require.Equal(t, uint8(types.StateSyncTxType), receipts[0].Type)
 }
 
-// TestPrepare_WaitGate_GiuglianoOnly verifies that the wait-in-Prepare
-// mechanism activates only when IsGiugliano is true.
-func TestPrepare_WaitGate_GiuglianoOnly(t *testing.T) {
-	t.Parallel()
-
-	addr := common.HexToAddress("0x1")
-	sp := &fakeSpanner{vals: []*valset.Validator{{Address: addr, VotingPower: 1}}}
-
-	t.Run("before Giugliano – waitOnPrepare=true returns quickly", func(t *testing.T) {
-		borCfg := &params.BorConfig{
-			Sprint: map[string]uint64{"0": 64},
-			Period: map[string]uint64{"0": 2},
-			// GiuglianoBlock not set → IsGiugliano always false
-		}
-		// Set genesis time slightly in the future so there would be a non-trivial delay
-		// if the wait were active.
-		genesisTime := uint64(time.Now().Add(2 * time.Second).Unix())
-		chain, b := newChainAndBorForTest(t, sp, borCfg, true, addr, genesisTime)
-		defer chain.Stop()
-
-		genesis := chain.HeaderChain().GetHeaderByNumber(0)
-		require.NotNil(t, genesis)
-
-		header := &types.Header{Number: big.NewInt(1), ParentHash: genesis.Hash()}
-
-		start := time.Now()
-		err := b.Prepare(chain, header, true)
-		elapsed := time.Since(start)
-
-		require.NoError(t, err)
-		// Without Giugliano the wait block is skipped; should return in < 200 ms
-		require.Less(t, elapsed, 200*time.Millisecond,
-			"Prepare should not wait when Giugliano is not active")
-	})
-
-	t.Run("at Giugliano – waitOnPrepare=true waits for primary producer", func(t *testing.T) {
-		borCfg := &params.BorConfig{
-			Sprint:         map[string]uint64{"0": 64},
-			Period:         map[string]uint64{"0": 2},
-			GiuglianoBlock: big.NewInt(0),
-		}
-		// Genesis 3 s in the future → there will be a measurable wait.
-		genesisTime := uint64(time.Now().Add(3 * time.Second).Unix())
-		chain, b := newChainAndBorForTest(t, sp, borCfg, true, addr, genesisTime)
-		defer chain.Stop()
-
-		genesis := chain.HeaderChain().GetHeaderByNumber(0)
-		require.NotNil(t, genesis)
-
-		// Measure expected delay right before calling Prepare, same pattern as TestBorPrepare_WaitOnPrepareFlag.
-		expectedDelay := time.Until(time.Unix(int64(genesis.Time), 0))
-		if expectedDelay < 100*time.Millisecond {
-			t.Skip("genesis time already passed due to slow setup")
-		}
-
-		header := &types.Header{Number: big.NewInt(1), ParentHash: genesis.Hash()}
-
-		start := time.Now()
-		err := b.Prepare(chain, header, true)
-		elapsed := time.Since(start)
-
-		require.NoError(t, err)
-		minWait := expectedDelay - 200*time.Millisecond
-		if minWait < 0 {
-			minWait = 0
-		}
-		require.Greater(t, elapsed, minWait,
-			"Prepare should wait for primary producer when Giugliano is active")
-	})
-}
-
-// TestSeal_PrimaryProducerDelay_GiuglianoBoundary verifies that delay=0 in Seal
-// for the primary producer (succession==0) is gated on IsGiugliano.
+// TestSeal_PrimaryProducerDelay_GiuglianoBoundary verifies that primary
+// producers wait in Seal before Giugliano, but return immediately after
+// Giugliano because the parent-boundary wait has moved to Prepare. This is the
+// mechanism that preserves early block announcement.
 func TestSeal_PrimaryProducerDelay_GiuglianoBoundary(t *testing.T) {
 	t.Parallel()
 
 	addr := common.HexToAddress("0x1")
 	sp := &fakeSpanner{vals: []*valset.Validator{{Address: addr, VotingPower: 1}}}
-	now := uint64(time.Now().Unix())
+	now := uint64(time.Now().Unix()) - 100
 
-	makeHeader := func(borCfg *params.BorConfig) (*types.Header, *Bor, *core.BlockChain) {
+	makeBlock := func(borCfg *params.BorConfig) (*types.Block, *Bor, *core.BlockChain, time.Time) {
 		chain, b := newChainAndBorForTest(t, sp, borCfg, true, addr, now)
 		genesis := chain.HeaderChain().GetHeaderByNumber(0)
 		require.NotNil(t, genesis)
+		target := time.Now().Add(350 * time.Millisecond)
 		h := &types.Header{
 			Number:     big.NewInt(1),
 			ParentHash: genesis.Hash(),
@@ -5252,55 +5290,52 @@ func TestSeal_PrimaryProducerDelay_GiuglianoBoundary(t *testing.T) {
 			UncleHash:  uncleHash,
 			Difficulty: big.NewInt(1),
 			GasLimit:   8_000_000,
+			Time:       uint64(target.Unix()),
+			ActualTime: target,
 		}
-		// Set header.Time so GetActualTime() returns something in the past
-		h.Time = now - 1
-		return h, b, chain
+		body := &types.Body{Transactions: types.Transactions{types.NewTx(&types.LegacyTx{})}}
+		return types.NewBlock(h, body, nil, trie.NewStackTrie(nil)), b, chain, target
 	}
 
-	t.Run("before Giugliano – primary producer has non-zero delay", func(t *testing.T) {
-		borCfg := &params.BorConfig{
-			Sprint: map[string]uint64{"0": 64},
-			Period: map[string]uint64{"0": 2},
-			// GiuglianoBlock not set
-		}
-		h, b, chain := makeHeader(borCfg)
+	assertSealTiming := func(t *testing.T, borCfg *params.BorConfig, expectWait bool) {
+		block, b, chain, target := makeBlock(borCfg)
 		defer chain.Stop()
 
-		snap, err := b.snapshot(chain.HeaderChain(), h, nil, false)
+		b.Authorize(addr, func(accounts.Account, string, []byte) ([]byte, error) {
+			return make([]byte, types.ExtraSealLength), nil
+		})
+
+		results := make(chan *consensus.NewSealedBlockEvent, 1)
+		stop := make(chan struct{})
+
+		err := b.Seal(chain.HeaderChain(), block, nil, results, stop)
 		require.NoError(t, err)
 
-		successionNumber, err := snap.GetSignerSuccessionNumber(addr)
-		require.NoError(t, err)
-		require.Equal(t, 0, successionNumber, "DevFakeAuthor should be primary producer")
+		select {
+		case result := <-results:
+			require.NotNil(t, result)
+			require.NotNil(t, result.Block)
+			if expectWait {
+				require.False(t, time.Now().Before(target.Add(-50*time.Millisecond)),
+					"seal result arrived before target time %v", target)
+			} else {
+				require.True(t, time.Now().Before(target.Add(-100*time.Millisecond)),
+					"seal result did not preserve early announcement before target time %v", target)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("timed out waiting for sealed block")
+		}
+	}
 
-		// Before Giugliano the delay=0 branch should NOT be taken.
-		// The else branch sets delay = time.Until(header.GetActualTime()).
-		// Since header.Time is in the past, delay ≤ 0 — but the point is the branch
-		// selected is the else, not the delay=0 one.
-		isNewHF := b.config.IsGiugliano(h.Number)
-		require.False(t, isNewHF, "IsGiugliano should be false before GiuglianoBlock")
+	t.Run("before Giugliano", func(t *testing.T) {
+		borCfg := borConfigWithDelays(64)
+		assertSealTiming(t, borCfg, true)
 	})
 
-	t.Run("at Giugliano – primary producer gets delay=0", func(t *testing.T) {
-		borCfg := &params.BorConfig{
-			Sprint:         map[string]uint64{"0": 64},
-			Period:         map[string]uint64{"0": 2},
-			GiuglianoBlock: big.NewInt(0),
-		}
-		h, b, chain := makeHeader(borCfg)
-		defer chain.Stop()
-
-		snap, err := b.snapshot(chain.HeaderChain(), h, nil, false)
-		require.NoError(t, err)
-
-		successionNumber, err := snap.GetSignerSuccessionNumber(addr)
-		require.NoError(t, err)
-		require.Equal(t, 0, successionNumber, "DevFakeAuthor should be primary producer")
-
-		isNewHF := b.config.IsGiugliano(h.Number)
-		require.True(t, isNewHF, "IsGiugliano should be true at GiuglianoBlock=0")
-		// The Seal function would take the delay=0 branch for this signer/header combination.
+	t.Run("at Giugliano", func(t *testing.T) {
+		borCfg := borConfigWithDelays(64)
+		borCfg.GiuglianoBlock = big.NewInt(0)
+		assertSealTiming(t, borCfg, false)
 	})
 }
 
@@ -5748,54 +5783,49 @@ func (s *giuglianoVerifySetup) makeSignedChild(t *testing.T, extra []byte, baseF
 	return h
 }
 
-func TestSetGiuglianoExtraFields_PreGiugliano(t *testing.T) {
+func TestGiuglianoExtraFields_PreGiugliano(t *testing.T) {
 	t.Parallel()
 	_, b, _ := newGiuglianoBorForTest(t, false)
 
 	header := &types.Header{Number: big.NewInt(1)}
 	parent := &types.Header{Number: big.NewInt(0), GasLimit: 30_000_000}
-	bed := &types.BlockExtraData{}
 
-	b.setGiuglianoExtraFields(header, parent, bed)
+	gasTarget, bfcd := b.giuglianoExtraFields(header, parent)
 
-	require.Nil(t, bed.GasTarget, "GasTarget should be nil for pre-Giugliano blocks")
-	require.Nil(t, bed.BaseFeeChangeDenominator, "BaseFeeChangeDenominator should be nil for pre-Giugliano blocks")
+	require.Nil(t, gasTarget, "GasTarget should be nil for pre-Giugliano blocks")
+	require.Nil(t, bfcd, "BaseFeeChangeDenominator should be nil for pre-Giugliano blocks")
 }
 
-func TestSetGiuglianoExtraFields_PostGiugliano(t *testing.T) {
+func TestGiuglianoExtraFields_PostGiugliano(t *testing.T) {
 	t.Parallel()
 	_, b, cfg := newGiuglianoBorForTest(t, true)
 
 	parent := &types.Header{Number: big.NewInt(0), GasLimit: 30_000_000, BaseFee: big.NewInt(1000000000)}
 	header := &types.Header{Number: big.NewInt(1)}
-	bed := &types.BlockExtraData{}
 
-	b.setGiuglianoExtraFields(header, parent, bed)
+	gasTarget, bfcd := b.giuglianoExtraFields(header, parent)
 
 	expectedGasTarget := eip1559.CalcGasTarget(cfg, parent)
 	expectedBFCD := params.BaseFeeChangeDenominator(cfg.Bor, parent.Number)
 
-	require.NotNil(t, bed.GasTarget)
-	require.Equal(t, expectedGasTarget, *bed.GasTarget)
-	require.NotNil(t, bed.BaseFeeChangeDenominator)
-	require.Equal(t, expectedBFCD, *bed.BaseFeeChangeDenominator)
+	require.NotNil(t, gasTarget)
+	require.Equal(t, expectedGasTarget, *gasTarget)
+	require.NotNil(t, bfcd)
+	require.Equal(t, expectedBFCD, *bfcd)
 }
 
-func TestSetGiuglianoExtraFields_UsesParentNotCurrent(t *testing.T) {
+func TestGiuglianoExtraFields_UsesParentNotCurrent(t *testing.T) {
 	t.Parallel()
 	_, b, _ := newGiuglianoBorForTest(t, true)
 
 	parent := &types.Header{Number: big.NewInt(5), GasLimit: 30_000_000, BaseFee: big.NewInt(1000000000)}
 	header := &types.Header{Number: big.NewInt(6), GasLimit: 30_000_100, BaseFee: big.NewInt(875000000)}
 
-	bedFromParent := &types.BlockExtraData{}
-	b.setGiuglianoExtraFields(header, parent, bedFromParent)
-
-	bedFromCurrent := &types.BlockExtraData{}
-	b.setGiuglianoExtraFields(header, header, bedFromCurrent)
+	gasTargetFromParent, _ := b.giuglianoExtraFields(header, parent)
+	gasTargetFromCurrent, _ := b.giuglianoExtraFields(header, header)
 
 	// parent.GasLimit=30_000_000 vs header.GasLimit=30_000_100 → different gas targets
-	require.NotEqual(t, *bedFromParent.GasTarget, *bedFromCurrent.GasTarget,
+	require.NotEqual(t, *gasTargetFromParent, *gasTargetFromCurrent,
 		"GasTarget should differ when using parent vs current header")
 }
 

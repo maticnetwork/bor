@@ -27,6 +27,7 @@ import (
 	"os"
 	"path"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -185,7 +186,7 @@ func testBlockChainImport(chain types.Blocks, blockchain *BlockChain) error {
 		if err != nil {
 			return err
 		}
-		receipts, logs, usedGas, statedb, _, err := blockchain.ProcessBlock(block, blockchain.GetBlockByHash(block.ParentHash()).Header(), nil, nil)
+		receipts, logs, usedGas, statedb, _, err := blockchain.ProcessBlock(block, blockchain.GetBlockByHash(block.ParentHash()).Header(), nil, nil, nil)
 		res := &ProcessResult{
 			Receipts: receipts,
 			Logs:     logs,
@@ -4236,6 +4237,135 @@ func TestCreateThenDeletePreByzantium(t *testing.T) {
 		},
 	})
 }
+
+func TestHasRecentPipelinedHeadState(t *testing.T) {
+	block := types.NewBlockWithHeader(&types.Header{
+		Number: big.NewInt(1),
+		Root:   common.HexToHash("0x01"),
+	})
+	chain := &BlockChain{}
+
+	require.False(t, chain.HasRecentPipelinedHeadState(block.Hash(), block.Root()))
+
+	chain.pendingImportHeadHash = block.Hash()
+	chain.pendingImportHeadRoot = block.Root()
+	chain.pendingImportHeadStart = time.Now()
+
+	require.True(t, chain.HasRecentPipelinedHeadState(block.Hash(), block.Root()))
+	require.False(t, chain.HasRecentPipelinedHeadState(common.HexToHash("0x02"), block.Root()))
+	require.False(t, chain.HasRecentPipelinedHeadState(block.Hash(), common.HexToHash("0x03")))
+
+	chain.pendingImportHeadStart = time.Now().Add(-pipelinedImportStateAvailabilityGrace - time.Second)
+	require.False(t, chain.HasRecentPipelinedHeadState(block.Hash(), block.Root()))
+}
+
+func TestHasRecentPipelinedHeadStatePendingSRC(t *testing.T) {
+	block := types.NewBlockWithHeader(&types.Header{
+		Number: big.NewInt(1),
+		Root:   common.HexToHash("0x04"),
+	})
+	chain := &BlockChain{
+		pendingImportSRC: &pendingImportSRCState{
+			block:       block,
+			blockStart:  time.Now(),
+			collectedCh: make(chan struct{}),
+		},
+	}
+
+	require.True(t, chain.HasRecentPipelinedHeadState(block.Hash(), block.Root()))
+
+	close(chain.pendingImportSRC.collectedCh)
+	require.False(t, chain.HasRecentPipelinedHeadState(block.Hash(), block.Root()))
+
+	chain.pendingImportSRC = &pendingImportSRCState{
+		block:       block,
+		blockStart:  time.Now().Add(-pipelinedImportStateAvailabilityGrace - time.Second),
+		collectedCh: make(chan struct{}),
+	}
+	require.False(t, chain.HasRecentPipelinedHeadState(block.Hash(), block.Root()))
+}
+
+func TestHasStateTreatsRecentPipelinedRootAsAvailable(t *testing.T) {
+	_, _, chain, err := newCanonical(ethash.NewFaker(), 0, true, rawdb.HashScheme)
+	require.NoError(t, err)
+	t.Cleanup(chain.Stop)
+
+	block := types.NewBlockWithHeader(&types.Header{
+		Number: big.NewInt(1),
+		Root:   common.HexToHash("0x05"),
+	})
+	require.False(t, chain.HasCommittedState(block.Root()))
+
+	chain.pendingImportHeadHash = common.HexToHash("0x06")
+	chain.pendingImportHeadRoot = block.Root()
+	chain.pendingImportHeadStart = time.Now()
+
+	require.True(t, chain.HasState(block.Root()))
+	require.False(t, chain.HasRecentPipelinedHeadState(block.Hash(), block.Root()))
+}
+
+func TestPipelinedWitnessWaitPaths(t *testing.T) {
+	_, _, chain, err := newCanonical(ethash.NewFaker(), 0, true, rawdb.HashScheme)
+	require.NoError(t, err)
+	t.Cleanup(chain.Stop)
+	chain.cfg.EnablePipelinedImportSRC = true
+
+	block := types.NewBlockWithHeader(&types.Header{Number: big.NewInt(1)})
+	hash := block.Hash()
+
+	chain.pendingImportSRC = &pendingImportSRCState{
+		block:       block,
+		makeWitness: false,
+		collectedCh: make(chan struct{}),
+	}
+	witness, matched := chain.waitForPendingSRCWitness(hash)
+	require.True(t, matched)
+	require.Nil(t, witness)
+	require.Nil(t, chain.waitForPipelinedWitness(hash))
+
+	chain.pendingImportSRC = &pendingImportSRCState{
+		block:       block,
+		makeWitness: true,
+		collectedCh: make(chan struct{}),
+	}
+	chain.CacheWitness(hash, []byte("witness"))
+	close(chain.pendingImportSRC.collectedCh)
+	witness, matched = chain.waitForPendingSRCWitness(hash)
+	require.True(t, matched)
+	require.Equal(t, []byte("witness"), witness)
+
+	chain.pendingImportSRC = nil
+	chain.pipelinedMakeWitness.Store(false)
+	require.Nil(t, chain.waitForPipelinedWitness(common.HexToHash("0x1234")))
+
+	polledHash := common.HexToHash("0x5678")
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+		chain.CacheWitness(polledHash, []byte("polled"))
+	}()
+	require.Equal(t, []byte("polled"), chain.pollWitnessCache(polledHash, time.Second, time.Millisecond))
+}
+
+func TestWithinPipelinedImportStateGrace(t *testing.T) {
+	now := time.Now()
+	tests := []struct {
+		name  string
+		start time.Time
+		want  bool
+	}{
+		{name: "zero", start: time.Time{}, want: false},
+		{name: "future", start: now.Add(time.Nanosecond), want: false},
+		{name: "current", start: now, want: true},
+		{name: "boundary", start: now.Add(-pipelinedImportStateAvailabilityGrace), want: true},
+		{name: "expired", start: now.Add(-pipelinedImportStateAvailabilityGrace - time.Nanosecond), want: false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			require.Equal(t, test.want, withinPipelinedImportStateGrace(test.start, now))
+		})
+	}
+}
+
 func TestCreateThenDeletePostByzantium(t *testing.T) {
 	t.Parallel()
 	testCreateThenDelete(t, params.TestChainConfig)
@@ -6548,4 +6678,1704 @@ func TestWriteBlockMetrics(t *testing.T) {
 	if commitSnap.Mean() < 0 {
 		t.Error("stateCommitTimer mean duration should be non-negative")
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Pipelined Import SRC Tests
+// ---------------------------------------------------------------------------
+
+// pipelinedConfig returns a BlockChainConfig with pipelined import SRC enabled.
+func pipelinedConfig(scheme string) *BlockChainConfig {
+	cfg := DefaultConfig().WithStateScheme(scheme)
+	cfg.EnablePipelinedImportSRC = true
+	cfg.PipelinedImportSRCLogs = true
+	return cfg
+}
+
+// pipelinedConfigWithWarmSnapshot returns the standard pipelined config with
+// the warm-snapshot handoff enabled. Used by snapshot-on-vs-off parity tests.
+func pipelinedConfigWithWarmSnapshot(scheme string) *BlockChainConfig {
+	cfg := pipelinedConfig(scheme)
+	cfg.PipelinedSRCWarmSnapshot = true
+	return cfg
+}
+
+// TestPipelinedImportSRC_MultipleBlocks generates 10 blocks with transactions and
+// inserts them into two chains — one with pipelined SRC enabled and one without.
+// The state roots of every canonical block must match between both chains.
+func TestPipelinedImportSRC_MultipleBlocks(t *testing.T) {
+	testPipelinedImportSRC_MultipleBlocks(t, rawdb.HashScheme, pipelinedConfig(rawdb.HashScheme))
+	testPipelinedImportSRC_MultipleBlocks(t, rawdb.PathScheme, pipelinedConfig(rawdb.PathScheme))
+}
+
+func testPipelinedImportSRC_MultipleBlocks(t *testing.T, scheme string, pipeCfg *BlockChainConfig) {
+	var (
+		key, _    = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+		addr      = crypto.PubkeyToAddress(key.PublicKey)
+		recipient = common.HexToAddress("0x00000000000000000000000000000000deadbeef")
+		funds     = new(big.Int).Mul(big.NewInt(1000), big.NewInt(params.Ether))
+		gspec     = &Genesis{
+			Config:  params.AllEthashProtocolChanges,
+			Alloc:   types.GenesisAlloc{addr: {Balance: funds}},
+			BaseFee: big.NewInt(params.InitialBaseFee),
+		}
+		signer = types.LatestSigner(gspec.Config)
+		engine = ethash.NewFaker()
+	)
+
+	// Generate 10 blocks with a simple transfer in each.
+	_, blocks, _ := GenerateChainWithGenesis(gspec, engine, 10, func(i int, gen *BlockGen) {
+		tx, _ := types.SignTx(
+			types.NewTransaction(gen.TxNonce(addr), recipient, big.NewInt(1000), params.TxGas, gen.header.BaseFee, nil),
+			signer, key,
+		)
+		gen.AddTx(tx)
+	})
+
+	// Chain with pipeline enabled.
+	pipeChain, err := NewBlockChain(rawdb.NewMemoryDatabase(), gspec, engine, pipeCfg)
+	if err != nil {
+		t.Fatalf("failed to create pipeline chain: %v", err)
+	}
+	defer pipeChain.Stop()
+
+	// Reference chain without pipeline.
+	refChain, err := NewBlockChain(rawdb.NewMemoryDatabase(), gspec, engine, DefaultConfig().WithStateScheme(scheme))
+	if err != nil {
+		t.Fatalf("failed to create reference chain: %v", err)
+	}
+	defer refChain.Stop()
+
+	if _, err := pipeChain.InsertChain(blocks, false); err != nil {
+		t.Fatalf("pipeline chain: failed to insert blocks: %v", err)
+	}
+	if _, err := refChain.InsertChain(blocks, false); err != nil {
+		t.Fatalf("reference chain: failed to insert blocks: %v", err)
+	}
+
+	// Both chains must agree on head.
+	if pipeChain.CurrentBlock().Number.Uint64() != 10 {
+		t.Fatalf("pipeline chain head = %d, want 10", pipeChain.CurrentBlock().Number.Uint64())
+	}
+	if refChain.CurrentBlock().Number.Uint64() != 10 {
+		t.Fatalf("reference chain head = %d, want 10", refChain.CurrentBlock().Number.Uint64())
+	}
+
+	// All canonical blocks must have matching state roots.
+	for i := uint64(1); i <= 10; i++ {
+		pipeBlock := pipeChain.GetBlockByNumber(i)
+		refBlock := refChain.GetBlockByNumber(i)
+		if pipeBlock == nil || refBlock == nil {
+			t.Fatalf("block %d: missing on pipeline(%v) or reference(%v)", i, pipeBlock == nil, refBlock == nil)
+		}
+		if pipeBlock.Root() != refBlock.Root() {
+			t.Errorf("block %d: state root mismatch pipeline=%s reference=%s", i, pipeBlock.Root(), refBlock.Root())
+		}
+		if pipeBlock.Hash() != refBlock.Hash() {
+			t.Errorf("block %d: block hash mismatch pipeline=%s reference=%s", i, pipeBlock.Hash(), refBlock.Hash())
+		}
+	}
+}
+
+// TestPipelinedImportSRC_SingleBlock inserts a single block with pipeline enabled
+// and verifies correctness of the state.
+func TestPipelinedImportSRC_SingleBlock(t *testing.T) {
+	testPipelinedImportSRC_SingleBlock(t, rawdb.HashScheme)
+	testPipelinedImportSRC_SingleBlock(t, rawdb.PathScheme)
+}
+
+func testPipelinedImportSRC_SingleBlock(t *testing.T, scheme string) {
+	var (
+		key, _    = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+		addr      = crypto.PubkeyToAddress(key.PublicKey)
+		recipient = common.HexToAddress("0x00000000000000000000000000000000deadbeef")
+		funds     = new(big.Int).Mul(big.NewInt(1000), big.NewInt(params.Ether))
+		gspec     = &Genesis{
+			Config:  params.AllEthashProtocolChanges,
+			Alloc:   types.GenesisAlloc{addr: {Balance: funds}},
+			BaseFee: big.NewInt(params.InitialBaseFee),
+		}
+		signer = types.LatestSigner(gspec.Config)
+		engine = ethash.NewFaker()
+	)
+
+	_, blocks, _ := GenerateChainWithGenesis(gspec, engine, 1, func(i int, gen *BlockGen) {
+		tx, _ := types.SignTx(
+			types.NewTransaction(gen.TxNonce(addr), recipient, big.NewInt(1000), params.TxGas, gen.header.BaseFee, nil),
+			signer, key,
+		)
+		gen.AddTx(tx)
+	})
+
+	chain, err := NewBlockChain(rawdb.NewMemoryDatabase(), gspec, engine, pipelinedConfig(scheme))
+	if err != nil {
+		t.Fatalf("failed to create chain: %v", err)
+	}
+	defer chain.Stop()
+
+	if _, err := chain.InsertChain(blocks, false); err != nil {
+		t.Fatalf("failed to insert block: %v", err)
+	}
+
+	if chain.CurrentBlock().Number.Uint64() != 1 {
+		t.Fatalf("head = %d, want 1", chain.CurrentBlock().Number.Uint64())
+	}
+
+	statedb, err := chain.StateAt(blocks[0].Root())
+	if err != nil {
+		t.Fatalf("StateAt failed: %v", err)
+	}
+
+	// Recipient should have received 1000 wei.
+	bal := statedb.GetBalance(recipient)
+	if bal.IsZero() {
+		t.Error("recipient balance should be non-zero after transfer")
+	}
+}
+
+// TestPipelinedImportSRC_CrossCallPersistence inserts blocks across two separate
+// InsertChain calls with pipelined SRC and verifies that state persists correctly
+// between calls (the pending SRC from the first batch is flushed before the
+// second batch begins).
+func TestPipelinedImportSRC_CrossCallPersistence(t *testing.T) {
+	testPipelinedImportSRC_CrossCallPersistence(t, rawdb.HashScheme)
+	testPipelinedImportSRC_CrossCallPersistence(t, rawdb.PathScheme)
+}
+
+func testPipelinedImportSRC_CrossCallPersistence(t *testing.T, scheme string) {
+	var (
+		key, _    = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+		addr      = crypto.PubkeyToAddress(key.PublicKey)
+		recipient = common.HexToAddress("0x00000000000000000000000000000000deadbeef")
+		funds     = new(big.Int).Mul(big.NewInt(1000), big.NewInt(params.Ether))
+		gspec     = &Genesis{
+			Config:  params.AllEthashProtocolChanges,
+			Alloc:   types.GenesisAlloc{addr: {Balance: funds}},
+			BaseFee: big.NewInt(params.InitialBaseFee),
+		}
+		signer = types.LatestSigner(gspec.Config)
+		engine = ethash.NewFaker()
+	)
+
+	_, blocks, _ := GenerateChainWithGenesis(gspec, engine, 6, func(i int, gen *BlockGen) {
+		tx, _ := types.SignTx(
+			types.NewTransaction(gen.TxNonce(addr), recipient, big.NewInt(1000), params.TxGas, gen.header.BaseFee, nil),
+			signer, key,
+		)
+		gen.AddTx(tx)
+	})
+
+	// Pipeline chain: split insertion across two calls.
+	pipeChain, err := NewBlockChain(rawdb.NewMemoryDatabase(), gspec, engine, pipelinedConfig(scheme))
+	if err != nil {
+		t.Fatalf("failed to create pipeline chain: %v", err)
+	}
+	defer pipeChain.Stop()
+
+	if _, err := pipeChain.InsertChain(blocks[:3], false); err != nil {
+		t.Fatalf("pipeline: first batch insert failed: %v", err)
+	}
+	if _, err := pipeChain.InsertChain(blocks[3:], false); err != nil {
+		t.Fatalf("pipeline: second batch insert failed: %v", err)
+	}
+
+	// Reference chain: single call.
+	refChain, err := NewBlockChain(rawdb.NewMemoryDatabase(), gspec, engine, DefaultConfig().WithStateScheme(scheme))
+	if err != nil {
+		t.Fatalf("failed to create reference chain: %v", err)
+	}
+	defer refChain.Stop()
+
+	if _, err := refChain.InsertChain(blocks, false); err != nil {
+		t.Fatalf("reference: insert failed: %v", err)
+	}
+
+	if pipeChain.CurrentBlock().Number.Uint64() != 6 {
+		t.Fatalf("pipeline head = %d, want 6", pipeChain.CurrentBlock().Number.Uint64())
+	}
+
+	for i := uint64(1); i <= 6; i++ {
+		pipeBlock := pipeChain.GetBlockByNumber(i)
+		refBlock := refChain.GetBlockByNumber(i)
+		if pipeBlock == nil || refBlock == nil {
+			t.Fatalf("block %d missing", i)
+		}
+		if pipeBlock.Root() != refBlock.Root() {
+			t.Errorf("block %d: state root mismatch pipeline=%s reference=%s", i, pipeBlock.Root(), refBlock.Root())
+		}
+	}
+}
+
+// TestPipelinedImportSRC_Reorg inserts a main chain and then a longer fork to
+// trigger a reorg. Verifies that the fork becomes canonical and all state roots
+// are valid after the reorg.
+func TestPipelinedImportSRC_Reorg(t *testing.T) {
+	testPipelinedImportSRC_Reorg(t, rawdb.HashScheme)
+	testPipelinedImportSRC_Reorg(t, rawdb.PathScheme)
+}
+
+func testPipelinedImportSRC_Reorg(t *testing.T, scheme string) {
+	var (
+		key1, _ = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+		key2, _ = crypto.HexToECDSA("8a1f9a8f95be41cd7ccb6168179afb4504aefe388d1e14474d32c45c72ce7b7a")
+		addr1   = crypto.PubkeyToAddress(key1.PublicKey)
+		addr2   = crypto.PubkeyToAddress(key2.PublicKey)
+		funds   = new(big.Int).Mul(big.NewInt(1000), big.NewInt(params.Ether))
+		gspec   = &Genesis{
+			Config: params.AllEthashProtocolChanges,
+			Alloc: types.GenesisAlloc{
+				addr1: {Balance: funds},
+				addr2: {Balance: funds},
+			},
+			BaseFee: big.NewInt(params.InitialBaseFee),
+		}
+		signer = types.LatestSigner(gspec.Config)
+		engine = ethash.NewFaker()
+	)
+
+	// Main chain: 5 blocks, transfers from addr1.
+	_, mainBlocks, _ := GenerateChainWithGenesis(gspec, engine, 5, func(i int, gen *BlockGen) {
+		tx, _ := types.SignTx(
+			types.NewTransaction(gen.TxNonce(addr1), common.HexToAddress("0x1111"), big.NewInt(1000), params.TxGas, gen.header.BaseFee, nil),
+			signer, key1,
+		)
+		gen.AddTx(tx)
+	})
+
+	// Fork chain: 7 blocks branching from genesis, using addr2 so it creates
+	// different state. Longer chain so it becomes canonical.
+	_, forkBlocks, _ := GenerateChainWithGenesis(gspec, engine, 7, func(i int, gen *BlockGen) {
+		tx, _ := types.SignTx(
+			types.NewTransaction(gen.TxNonce(addr2), common.HexToAddress("0x2222"), big.NewInt(2000), params.TxGas, gen.header.BaseFee, nil),
+			signer, key2,
+		)
+		gen.AddTx(tx)
+	})
+
+	chain, err := NewBlockChain(rawdb.NewMemoryDatabase(), gspec, engine, pipelinedConfig(scheme))
+	if err != nil {
+		t.Fatalf("failed to create chain: %v", err)
+	}
+	defer chain.Stop()
+
+	// Insert main chain.
+	if _, err := chain.InsertChain(mainBlocks, false); err != nil {
+		t.Fatalf("main chain insert failed: %v", err)
+	}
+	if chain.CurrentBlock().Number.Uint64() != 5 {
+		t.Fatalf("after main: head = %d, want 5", chain.CurrentBlock().Number.Uint64())
+	}
+
+	// Insert fork chain — should trigger reorg since it's longer.
+	if _, err := chain.InsertChain(forkBlocks, false); err != nil {
+		t.Fatalf("fork chain insert failed: %v", err)
+	}
+	if chain.CurrentBlock().Number.Uint64() != 7 {
+		t.Fatalf("after fork: head = %d, want 7", chain.CurrentBlock().Number.Uint64())
+	}
+
+	// Verify the fork is now canonical by checking block hashes.
+	for i := uint64(1); i <= 7; i++ {
+		canonical := chain.GetBlockByNumber(i)
+		if canonical == nil {
+			t.Fatalf("missing canonical block %d after reorg", i)
+		}
+		if canonical.Hash() != forkBlocks[i-1].Hash() {
+			t.Errorf("block %d: canonical hash %s != fork hash %s", i, canonical.Hash(), forkBlocks[i-1].Hash())
+		}
+	}
+
+	// Verify state is accessible for the canonical head.
+	statedb, err := chain.StateAt(chain.CurrentBlock().Root)
+	if err != nil {
+		t.Fatalf("StateAt head failed: %v", err)
+	}
+	// addr2 sent 2000 wei per block for 7 blocks => should have less than initial funds.
+	bal := statedb.GetBalance(addr2)
+	if bal.IsZero() {
+		t.Error("addr2 balance should be non-zero")
+	}
+}
+
+// TestPipelinedImportSRC_StateAtDuringPipeline generates blocks that modify
+// account balances and verifies that StateAt returns correct balances for each
+// block's root after pipelined insertion.
+func TestPipelinedImportSRC_StateAtDuringPipeline(t *testing.T) {
+	testPipelinedImportSRC_StateAtDuringPipeline(t, rawdb.HashScheme)
+	testPipelinedImportSRC_StateAtDuringPipeline(t, rawdb.PathScheme)
+}
+
+func testPipelinedImportSRC_StateAtDuringPipeline(t *testing.T, scheme string) {
+	var (
+		key, _    = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+		addr      = crypto.PubkeyToAddress(key.PublicKey)
+		recipient = common.HexToAddress("0x00000000000000000000000000000000deadbeef")
+		funds     = new(big.Int).Mul(big.NewInt(1000), big.NewInt(params.Ether))
+		txValue   = big.NewInt(10000) // 10000 wei per block
+		gspec     = &Genesis{
+			Config:  params.AllEthashProtocolChanges,
+			Alloc:   types.GenesisAlloc{addr: {Balance: funds}},
+			BaseFee: big.NewInt(params.InitialBaseFee),
+		}
+		signer = types.LatestSigner(gspec.Config)
+		engine = ethash.NewFaker()
+	)
+
+	numBlocks := 5
+	_, blocks, _ := GenerateChainWithGenesis(gspec, engine, numBlocks, func(i int, gen *BlockGen) {
+		tx, _ := types.SignTx(
+			types.NewTransaction(gen.TxNonce(addr), recipient, txValue, params.TxGas, gen.header.BaseFee, nil),
+			signer, key,
+		)
+		gen.AddTx(tx)
+	})
+
+	chain, err := NewBlockChain(rawdb.NewMemoryDatabase(), gspec, engine, pipelinedConfig(scheme))
+	if err != nil {
+		t.Fatalf("failed to create chain: %v", err)
+	}
+	defer chain.Stop()
+
+	if _, err := chain.InsertChain(blocks, false); err != nil {
+		t.Fatalf("failed to insert chain: %v", err)
+	}
+
+	// Verify state at each block root shows monotonically increasing recipient balance.
+	var prevBal *uint256.Int
+	for i := 0; i < numBlocks; i++ {
+		statedb, err := chain.StateAt(blocks[i].Root())
+		if err != nil {
+			t.Fatalf("block %d: StateAt failed: %v", i+1, err)
+		}
+		bal := statedb.GetBalance(recipient)
+		if bal.IsZero() {
+			t.Errorf("block %d: recipient balance is zero, expected non-zero", i+1)
+		}
+		if prevBal != nil && bal.Cmp(prevBal) <= 0 {
+			t.Errorf("block %d: recipient balance %s should be greater than previous %s", i+1, bal, prevBal)
+		}
+		prevBal = bal.Clone()
+	}
+
+	// Final balance should equal txValue * numBlocks.
+	expectedBal := new(big.Int).Mul(txValue, big.NewInt(int64(numBlocks)))
+	finalState, _ := chain.StateAt(blocks[numBlocks-1].Root())
+	got := finalState.GetBalance(recipient).ToBig()
+	if got.Cmp(expectedBal) != 0 {
+		t.Errorf("final recipient balance: got %s, want %s", got, expectedBal)
+	}
+}
+
+// TestPipelinedImportSRC_ValidateStateCheap verifies that blocks inserted with
+// pipelined SRC pass all cheap validation checks (gas used, bloom filter,
+// receipt root). This is implicitly tested by successful insertion, but this
+// test explicitly verifies no errors by comparing against a reference chain.
+func TestPipelinedImportSRC_ValidateStateCheap(t *testing.T) {
+	testPipelinedImportSRC_ValidateStateCheap(t, rawdb.HashScheme)
+	testPipelinedImportSRC_ValidateStateCheap(t, rawdb.PathScheme)
+}
+
+func testPipelinedImportSRC_ValidateStateCheap(t *testing.T, scheme string) {
+	var (
+		key, _    = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+		addr      = crypto.PubkeyToAddress(key.PublicKey)
+		recipient = common.HexToAddress("0x00000000000000000000000000000000deadbeef")
+		funds     = new(big.Int).Mul(big.NewInt(1000), big.NewInt(params.Ether))
+		gspec     = &Genesis{
+			Config:  params.AllEthashProtocolChanges,
+			Alloc:   types.GenesisAlloc{addr: {Balance: funds}},
+			BaseFee: big.NewInt(params.InitialBaseFee),
+		}
+		signer = types.LatestSigner(gspec.Config)
+		engine = ethash.NewFaker()
+	)
+
+	_, blocks, _ := GenerateChainWithGenesis(gspec, engine, 8, func(i int, gen *BlockGen) {
+		tx, _ := types.SignTx(
+			types.NewTransaction(gen.TxNonce(addr), recipient, big.NewInt(1000), params.TxGas, gen.header.BaseFee, nil),
+			signer, key,
+		)
+		gen.AddTx(tx)
+	})
+
+	// Insert with pipeline — any ValidateStateCheap failure would surface as
+	// an InsertChain error.
+	pipeChain, err := NewBlockChain(rawdb.NewMemoryDatabase(), gspec, engine, pipelinedConfig(scheme))
+	if err != nil {
+		t.Fatalf("failed to create pipeline chain: %v", err)
+	}
+	defer pipeChain.Stop()
+
+	n, err := pipeChain.InsertChain(blocks, false)
+	if err != nil {
+		t.Fatalf("pipeline InsertChain failed at block %d: %v", n, err)
+	}
+
+	// Reference chain for comparison.
+	refChain, err := NewBlockChain(rawdb.NewMemoryDatabase(), gspec, engine, DefaultConfig().WithStateScheme(scheme))
+	if err != nil {
+		t.Fatalf("failed to create reference chain: %v", err)
+	}
+	defer refChain.Stop()
+
+	if _, err := refChain.InsertChain(blocks, false); err != nil {
+		t.Fatalf("reference InsertChain failed: %v", err)
+	}
+
+	// Verify: every block has matching gas, bloom, receipt root, and state root.
+	for i := uint64(1); i <= 8; i++ {
+		pBlock := pipeChain.GetBlockByNumber(i)
+		rBlock := refChain.GetBlockByNumber(i)
+		if pBlock == nil || rBlock == nil {
+			t.Fatalf("block %d missing", i)
+		}
+		if pBlock.GasUsed() != rBlock.GasUsed() {
+			t.Errorf("block %d: gas used mismatch %d vs %d", i, pBlock.GasUsed(), rBlock.GasUsed())
+		}
+		if pBlock.Bloom() != rBlock.Bloom() {
+			t.Errorf("block %d: bloom filter mismatch", i)
+		}
+		if pBlock.ReceiptHash() != rBlock.ReceiptHash() {
+			t.Errorf("block %d: receipt hash mismatch %s vs %s", i, pBlock.ReceiptHash(), rBlock.ReceiptHash())
+		}
+		if pBlock.Root() != rBlock.Root() {
+			t.Errorf("block %d: state root mismatch %s vs %s", i, pBlock.Root(), rBlock.Root())
+		}
+	}
+}
+
+// TestPipelinedImportMetrics verifies that the pipelined-import metrics and
+// their parity timers actually increment when blocks flow through the
+// pipelined path, and that the mode gauge reflects the enabled config.
+func TestPipelinedImportMetrics(t *testing.T) {
+	metrics.Enable()
+
+	const numBlocks = 5
+
+	var (
+		key, _    = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+		addr      = crypto.PubkeyToAddress(key.PublicKey)
+		recipient = common.HexToAddress("0x00000000000000000000000000000000deadbeef")
+		funds     = new(big.Int).Mul(big.NewInt(1000), big.NewInt(params.Ether))
+		gspec     = &Genesis{
+			Config:  params.AllEthashProtocolChanges,
+			Alloc:   types.GenesisAlloc{addr: {Balance: funds}},
+			BaseFee: big.NewInt(params.InitialBaseFee),
+		}
+		signer = types.LatestSigner(gspec.Config)
+		engine = ethash.NewFaker()
+	)
+
+	_, blocks, _ := GenerateChainWithGenesis(gspec, engine, numBlocks, func(i int, gen *BlockGen) {
+		tx, _ := types.SignTx(
+			types.NewTransaction(gen.TxNonce(addr), recipient, big.NewInt(1000), params.TxGas, gen.header.BaseFee, nil),
+			signer, key,
+		)
+		gen.AddTx(tx)
+	})
+
+	// Snapshot counters before — metrics registrations are process-global, so
+	// other tests in the same binary may have already moved them.
+	blocksBefore := pipelineImportBlocksCounter.Snapshot().Count()
+	hitBefore := pipelineImportHitCounter.Snapshot().Count()
+	mismatchBefore := pipelineImportRootMismatchCounter.Snapshot().Count()
+	insertBefore := blockInsertTimer.Snapshot().Count()
+	stateCommitBefore := stateCommitTimer.Snapshot().Count()
+	pipelineExecBefore := pipelineImportExecutionTimer.Snapshot().Count()
+	overlapBefore := pipelineImportOverlapExecutionTimer.Snapshot().Count()
+	overlapBlocksBefore := pipelineImportOverlapBlocksCounter.Snapshot().Count()
+	noOverlapBlocksBefore := pipelineImportNoOverlapBlocksCounter.Snapshot().Count()
+	overlapPercentBefore := pipelineImportOverlapExecutionPercent.Snapshot().Count()
+	srcOpenBefore := pipelineImportSRCOpenStateDBTimer.Snapshot().Count()
+	srcApplyBefore := pipelineImportSRCApplyFlatDiffTimer.Snapshot().Count()
+	srcCommitBefore := pipelineImportSRCCommitTimer.Snapshot().Count()
+	execWithOverlapBefore := pipelineImportExecWithOverlapTimer.Snapshot().Count()
+	execNoOverlapBefore := pipelineImportExecNoOverlapTimer.Snapshot().Count()
+	execBucketBefore := pipelineImportExecOverlap0Timer.Snapshot().Count() +
+		pipelineImportExecOverlap1To25Timer.Snapshot().Count() +
+		pipelineImportExecOverlap25To50Timer.Snapshot().Count() +
+		pipelineImportExecOverlap50To75Timer.Snapshot().Count() +
+		pipelineImportExecOverlap75To100Timer.Snapshot().Count()
+	srcWithNextBefore := pipelineImportSRCWithNextExecTimer.Snapshot().Count()
+	srcNoNextBefore := pipelineImportSRCNoNextExecTimer.Snapshot().Count()
+	srcWithNextSumBefore := pipelineImportSRCWithNextExecTimer.Snapshot().Sum()
+	srcNoNextSumBefore := pipelineImportSRCNoNextExecTimer.Snapshot().Sum()
+
+	pipeChain, err := NewBlockChain(rawdb.NewMemoryDatabase(), gspec, engine, pipelinedConfig(rawdb.HashScheme))
+	if err != nil {
+		t.Fatalf("failed to create pipeline chain: %v", err)
+	}
+	defer pipeChain.Stop()
+
+	if got := pipelineImportEnabledGauge.Snapshot().Value(); got != 1 {
+		t.Errorf("pipelineImportEnabledGauge = %d, want 1 when EnablePipelinedImportSRC=true", got)
+	}
+
+	if _, err := pipeChain.InsertChain(blocks, false); err != nil {
+		t.Fatalf("pipeline InsertChain failed: %v", err)
+	}
+
+	// Drain the trailing pending SRC so per-block counters reflect every block.
+	if err := pipeChain.flushPendingImportSRC(true); err != nil {
+		t.Fatalf("flushPendingImportSRC failed: %v", err)
+	}
+
+	blocksDelta := pipelineImportBlocksCounter.Snapshot().Count() - blocksBefore
+	hitDelta := pipelineImportHitCounter.Snapshot().Count() - hitBefore
+	mismatchDelta := pipelineImportRootMismatchCounter.Snapshot().Count() - mismatchBefore
+	insertDelta := blockInsertTimer.Snapshot().Count() - insertBefore
+	stateCommitDelta := stateCommitTimer.Snapshot().Count() - stateCommitBefore
+	pipelineExecDelta := pipelineImportExecutionTimer.Snapshot().Count() - pipelineExecBefore
+	overlapDelta := pipelineImportOverlapExecutionTimer.Snapshot().Count() - overlapBefore
+	overlapBlocksDelta := pipelineImportOverlapBlocksCounter.Snapshot().Count() - overlapBlocksBefore
+	noOverlapBlocksDelta := pipelineImportNoOverlapBlocksCounter.Snapshot().Count() - noOverlapBlocksBefore
+	overlapPercentDelta := pipelineImportOverlapExecutionPercent.Snapshot().Count() - overlapPercentBefore
+	srcOpenDelta := pipelineImportSRCOpenStateDBTimer.Snapshot().Count() - srcOpenBefore
+	srcApplyDelta := pipelineImportSRCApplyFlatDiffTimer.Snapshot().Count() - srcApplyBefore
+	srcCommitDelta := pipelineImportSRCCommitTimer.Snapshot().Count() - srcCommitBefore
+	execWithOverlapDelta := pipelineImportExecWithOverlapTimer.Snapshot().Count() - execWithOverlapBefore
+	execNoOverlapDelta := pipelineImportExecNoOverlapTimer.Snapshot().Count() - execNoOverlapBefore
+	execBucketDelta := pipelineImportExecOverlap0Timer.Snapshot().Count() +
+		pipelineImportExecOverlap1To25Timer.Snapshot().Count() +
+		pipelineImportExecOverlap25To50Timer.Snapshot().Count() +
+		pipelineImportExecOverlap50To75Timer.Snapshot().Count() +
+		pipelineImportExecOverlap75To100Timer.Snapshot().Count() - execBucketBefore
+	srcWithNextDelta := pipelineImportSRCWithNextExecTimer.Snapshot().Count() - srcWithNextBefore
+	srcNoNextDelta := pipelineImportSRCNoNextExecTimer.Snapshot().Count() - srcNoNextBefore
+	srcSplitDurationDelta := pipelineImportSRCWithNextExecTimer.Snapshot().Sum() + pipelineImportSRCNoNextExecTimer.Snapshot().Sum() -
+		srcWithNextSumBefore - srcNoNextSumBefore
+
+	if blocksDelta != numBlocks {
+		t.Errorf("pipelineImportBlocksCounter delta = %d, want %d", blocksDelta, numBlocks)
+	}
+	// First block has no pending predecessor; subsequent blocks should all hit.
+	if hitDelta != numBlocks-1 {
+		t.Errorf("pipelineImportHitCounter delta = %d, want %d", hitDelta, numBlocks-1)
+	}
+	if mismatchDelta != 0 {
+		t.Errorf("pipelineImportRootMismatchCounter delta = %d, want 0 (safety alarm)", mismatchDelta)
+	}
+	if insertDelta != numBlocks {
+		t.Errorf("blockInsertTimer (parity) delta = %d, want %d", insertDelta, numBlocks)
+	}
+	if stateCommitDelta != numBlocks {
+		t.Errorf("stateCommitTimer (parity, from SRC goroutine) delta = %d, want %d", stateCommitDelta, numBlocks)
+	}
+	if pipelineExecDelta != numBlocks {
+		t.Errorf("pipelineImportExecutionTimer delta = %d, want %d", pipelineExecDelta, numBlocks)
+	}
+	if overlapDelta != numBlocks-1 {
+		t.Errorf("pipelineImportOverlapExecutionTimer delta = %d, want %d", overlapDelta, numBlocks-1)
+	}
+	if overlapBlocksDelta+noOverlapBlocksDelta != numBlocks-1 {
+		t.Errorf("overlap/no-overlap block deltas = %d + %d, want %d", overlapBlocksDelta, noOverlapBlocksDelta, numBlocks-1)
+	}
+	if overlapPercentDelta != numBlocks-1 {
+		t.Errorf("pipelineImportOverlapExecutionPercent delta = %d, want %d", overlapPercentDelta, numBlocks-1)
+	}
+	if srcOpenDelta != numBlocks {
+		t.Errorf("pipelineImportSRCOpenStateDBTimer delta = %d, want %d", srcOpenDelta, numBlocks)
+	}
+	if srcApplyDelta != numBlocks {
+		t.Errorf("pipelineImportSRCApplyFlatDiffTimer delta = %d, want %d", srcApplyDelta, numBlocks)
+	}
+	if srcCommitDelta != numBlocks {
+		t.Errorf("pipelineImportSRCCommitTimer delta = %d, want %d", srcCommitDelta, numBlocks)
+	}
+	// Categorical execution split: every classified block lands in exactly one
+	// of with/no overlap, and the binary split must track the overlap counters.
+	if execWithOverlapDelta+execNoOverlapDelta != numBlocks-1 {
+		t.Errorf("execution with/no-overlap deltas = %d + %d, want %d", execWithOverlapDelta, execNoOverlapDelta, numBlocks-1)
+	}
+	if execWithOverlapDelta != overlapBlocksDelta {
+		t.Errorf("execution/with_overlap delta = %d, want %d (overlap blocks)", execWithOverlapDelta, overlapBlocksDelta)
+	}
+	if execNoOverlapDelta != noOverlapBlocksDelta {
+		t.Errorf("execution/no_overlap delta = %d, want %d (no-overlap blocks)", execNoOverlapDelta, noOverlapBlocksDelta)
+	}
+	if execBucketDelta != numBlocks-1 {
+		t.Errorf("execution overlap bucket deltas sum = %d, want %d", execBucketDelta, numBlocks-1)
+	}
+	// SRC split mirrors the execution split from the next-block perspective.
+	if srcWithNextDelta+srcNoNextDelta != numBlocks-1 {
+		t.Errorf("src with/no-next-exec-overlap deltas = %d + %d, want %d", srcWithNextDelta, srcNoNextDelta, numBlocks-1)
+	}
+	if srcWithNextDelta != overlapBlocksDelta {
+		t.Errorf("src/with_next_exec_overlap delta = %d, want %d (overlap blocks)", srcWithNextDelta, overlapBlocksDelta)
+	}
+	if srcWithNextDelta+srcNoNextDelta > 0 && srcSplitDurationDelta <= int64(10*time.Microsecond) {
+		t.Errorf("src overlap split recorded only %s total duration; want real SRC wall-clock, not defer-registration time", time.Duration(srcSplitDurationDelta))
+	}
+}
+
+// TestPipelineImportDisabledGauge verifies the mode gauge reads 0 when the
+// pipeline is not enabled in the chain config.
+func TestPipelineImportDisabledGauge(t *testing.T) {
+	metrics.Enable()
+
+	gspec := &Genesis{
+		Config:  params.AllEthashProtocolChanges,
+		BaseFee: big.NewInt(params.InitialBaseFee),
+	}
+	engine := ethash.NewFaker()
+
+	chain, err := NewBlockChain(rawdb.NewMemoryDatabase(), gspec, engine, DefaultConfig().WithStateScheme(rawdb.HashScheme))
+	if err != nil {
+		t.Fatalf("failed to create chain: %v", err)
+	}
+	defer chain.Stop()
+
+	if got := pipelineImportEnabledGauge.Snapshot().Value(); got != 0 {
+		t.Errorf("pipelineImportEnabledGauge = %d, want 0 when EnablePipelinedImportSRC=false", got)
+	}
+}
+
+// TestPipelineFlatDiffHitMeters verifies that the FlatDiff overlay meters
+// increment when consecutive blocks under pipelined import touch accounts/slots
+// mutated by the previous block.
+func TestPipelineFlatDiffHitMeters(t *testing.T) {
+	metrics.Enable()
+
+	var (
+		key, _    = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+		addr      = crypto.PubkeyToAddress(key.PublicKey)
+		recipient = common.HexToAddress("0x00000000000000000000000000000000deadbeef")
+		funds     = new(big.Int).Mul(big.NewInt(1000), big.NewInt(params.Ether))
+		gspec     = &Genesis{
+			Config:  params.AllEthashProtocolChanges,
+			Alloc:   types.GenesisAlloc{addr: {Balance: funds}},
+			BaseFee: big.NewInt(params.InitialBaseFee),
+		}
+		signer = types.LatestSigner(gspec.Config)
+		engine = ethash.NewFaker()
+	)
+
+	// Every block transfers from the same `addr` to `recipient` — both addresses
+	// are in the previous block's FlatDiff, so reads in the next block's
+	// execution should hit the overlay.
+	_, blocks, _ := GenerateChainWithGenesis(gspec, engine, 3, func(i int, gen *BlockGen) {
+		tx, _ := types.SignTx(
+			types.NewTransaction(gen.TxNonce(addr), recipient, big.NewInt(1000), params.TxGas, gen.header.BaseFee, nil),
+			signer, key,
+		)
+		gen.AddTx(tx)
+	})
+
+	// The FlatDiff meters live in the state package (unexported); look them up
+	// by name in the global registry rather than exposing accessors.
+	flatAcctMeter, ok := metrics.DefaultRegistry.Get("state/flatdiff/account_hits").(*metrics.Meter)
+	if !ok {
+		t.Fatal("state/flatdiff/account_hits meter not registered")
+	}
+	accountHitsBefore := flatAcctMeter.Snapshot().Count()
+
+	pipeChain, err := NewBlockChain(rawdb.NewMemoryDatabase(), gspec, engine, pipelinedConfig(rawdb.HashScheme))
+	if err != nil {
+		t.Fatalf("failed to create pipeline chain: %v", err)
+	}
+	defer pipeChain.Stop()
+
+	if _, err := pipeChain.InsertChain(blocks, false); err != nil {
+		t.Fatalf("pipeline InsertChain failed: %v", err)
+	}
+	_ = pipeChain.flushPendingImportSRC(true)
+
+	if flatAcctMeter.Snapshot().Count()-accountHitsBefore == 0 {
+		t.Error("state/flatdiff/account_hits should have non-zero delta after consecutive-block transfers")
+	}
+	// Storage hits depend on the specific SSTORE pattern; pure balance-transfer
+	// blocks may not hit storage slots. We only assert account-side hits here.
+}
+
+// TestPipelinedImportSRC_MakeWitnessFalse verifies that when the pipelined
+// import path is invoked with makeWitness=false (the producewitnesses=false
+// configuration), the SRC goroutine still computes and validates the state
+// root — but skips witness construction, FlatDiff read-surface preload, and
+// witness encoding/caching entirely.
+func TestPipelinedImportSRC_MakeWitnessFalse(t *testing.T) {
+	metrics.Enable()
+
+	const numBlocks = 5
+
+	var (
+		key, _    = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+		addr      = crypto.PubkeyToAddress(key.PublicKey)
+		recipient = common.HexToAddress("0x00000000000000000000000000000000deadbeef")
+		funds     = new(big.Int).Mul(big.NewInt(1000), big.NewInt(params.Ether))
+		gspec     = &Genesis{
+			Config:  params.AllEthashProtocolChanges,
+			Alloc:   types.GenesisAlloc{addr: {Balance: funds}},
+			BaseFee: big.NewInt(params.InitialBaseFee),
+		}
+		signer = types.LatestSigner(gspec.Config)
+		engine = ethash.NewFaker()
+	)
+
+	_, blocks, _ := GenerateChainWithGenesis(gspec, engine, numBlocks, func(i int, gen *BlockGen) {
+		tx, _ := types.SignTx(
+			types.NewTransaction(gen.TxNonce(addr), recipient, big.NewInt(1000), params.TxGas, gen.header.BaseFee, nil),
+			signer, key,
+		)
+		gen.AddTx(tx)
+	})
+
+	pipeChain, err := NewBlockChain(rawdb.NewMemoryDatabase(), gspec, engine, pipelinedConfig(rawdb.HashScheme))
+	if err != nil {
+		t.Fatalf("failed to create pipeline chain: %v", err)
+	}
+	defer pipeChain.Stop()
+
+	// Snapshot the metrics that should NOT advance when makeWitness=false.
+	preloadTimerBefore := pipelineSRCPreloadTimer.Snapshot().Count()
+	preloadSlotsBefore := pipelineSRCPreloadSlotsHistogram.Snapshot().Count()
+	preloadAccountsBefore := pipelineSRCPreloadReadAccountsHistogram.Snapshot().Count()
+	// And the one that SHOULD advance — metrics are package-global, so we must
+	// compare deltas rather than absolute counts.
+	stateCommitBefore := stateCommitTimer.Snapshot().Count()
+
+	// makeWitness=false is the default for InsertChain.
+	if _, err := pipeChain.InsertChain(blocks, false); err != nil {
+		t.Fatalf("pipeline InsertChain failed: %v", err)
+	}
+	if err := pipeChain.flushPendingImportSRC(true); err != nil {
+		t.Fatalf("flushPendingImportSRC failed: %v", err)
+	}
+
+	// State roots must match the canonical roots from GenerateChainWithGenesis
+	// — root validation runs even with witness off.
+	for i := uint64(1); i <= numBlocks; i++ {
+		pipeBlock := pipeChain.GetBlockByNumber(i)
+		if pipeBlock == nil {
+			t.Fatalf("block %d: missing on pipeline chain", i)
+		}
+		if pipeBlock.Root() != blocks[i-1].Root() {
+			t.Errorf("block %d: state root mismatch pipeline=%s expected=%s", i, pipeBlock.Root(), blocks[i-1].Root())
+		}
+	}
+
+	// No witness should be produced or persisted — neither cache nor store.
+	// HasWitness covers both surfaces; check both explicitly so a future
+	// refactor that splits the write paths still trips the assertion.
+	for i := uint64(1); i <= numBlocks; i++ {
+		hash := pipeChain.GetBlockByNumber(i).Hash()
+		if pipeChain.witnessCache.Contains(hash) {
+			t.Errorf("block %d: witnessCache unexpectedly contains witness when makeWitness=false", i)
+		}
+		if pipeChain.witnessStore.HasWitness(hash) {
+			t.Errorf("block %d: witnessStore unexpectedly contains witness when makeWitness=false", i)
+		}
+		if pipeChain.HasWitness(hash) {
+			t.Errorf("block %d: HasWitness=true when makeWitness=false", i)
+		}
+	}
+
+	// Preload timer + histograms must not have fired — they exist solely to
+	// populate the witness with proof-path nodes.
+	if delta := pipelineSRCPreloadTimer.Snapshot().Count() - preloadTimerBefore; delta != 0 {
+		t.Errorf("pipelineSRCPreloadTimer delta = %d, want 0 when makeWitness=false", delta)
+	}
+	if delta := pipelineSRCPreloadSlotsHistogram.Snapshot().Count() - preloadSlotsBefore; delta != 0 {
+		t.Errorf("pipelineSRCPreloadSlotsHistogram delta = %d, want 0 when makeWitness=false", delta)
+	}
+	if delta := pipelineSRCPreloadReadAccountsHistogram.Snapshot().Count() - preloadAccountsBefore; delta != 0 {
+		t.Errorf("pipelineSRCPreloadReadAccountsHistogram delta = %d, want 0 when makeWitness=false", delta)
+	}
+
+	// stateCommitTimer should still fire once per block — CommitWithUpdate
+	// runs unconditionally, witness or not.
+	if delta := stateCommitTimer.Snapshot().Count() - stateCommitBefore; delta != numBlocks {
+		t.Errorf("stateCommitTimer delta = %d, want %d when makeWitness=false (CommitWithUpdate must still run)", delta, numBlocks)
+	}
+
+	// GetWitness for a recent existing block must miss fast on a witness-off
+	// node: no witness will ever appear, so the peer-serving path must not
+	// fall through to the 2s cache poll (a peer could otherwise stall the
+	// WIT handler for the full timeout per recent hash).
+	start := time.Now()
+	if w := pipeChain.GetWitness(pipeChain.GetBlockByNumber(numBlocks - 1).Hash()); w != nil {
+		t.Errorf("GetWitness returned a witness on a makeWitness=false chain")
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Errorf("GetWitness took %v on a witness-off node, want a fast miss (poll must be skipped)", elapsed)
+	}
+}
+
+// TestPipelinedImportSRC_MakeWitnessTrue verifies that when InsertChain is
+// called with makeWitness=true and the pipeline is enabled, the SRC goroutine
+// produces a witness, caches it, and preload metrics fire as expected.
+func TestPipelinedImportSRC_MakeWitnessTrue(t *testing.T) {
+	metrics.Enable()
+
+	const numBlocks = 3
+
+	var (
+		key, _    = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+		addr      = crypto.PubkeyToAddress(key.PublicKey)
+		recipient = common.HexToAddress("0x00000000000000000000000000000000deadbeef")
+		funds     = new(big.Int).Mul(big.NewInt(1000), big.NewInt(params.Ether))
+		gspec     = &Genesis{
+			Config:  params.AllEthashProtocolChanges,
+			Alloc:   types.GenesisAlloc{addr: {Balance: funds}},
+			BaseFee: big.NewInt(params.InitialBaseFee),
+		}
+		signer = types.LatestSigner(gspec.Config)
+		engine = ethash.NewFaker()
+	)
+
+	_, blocks, _ := GenerateChainWithGenesis(gspec, engine, numBlocks, func(i int, gen *BlockGen) {
+		tx, _ := types.SignTx(
+			types.NewTransaction(gen.TxNonce(addr), recipient, big.NewInt(1000), params.TxGas, gen.header.BaseFee, nil),
+			signer, key,
+		)
+		gen.AddTx(tx)
+	})
+
+	pipeChain, err := NewBlockChain(rawdb.NewMemoryDatabase(), gspec, engine, pipelinedConfig(rawdb.HashScheme))
+	if err != nil {
+		t.Fatalf("failed to create pipeline chain: %v", err)
+	}
+	defer pipeChain.Stop()
+
+	preloadTimerBefore := pipelineSRCPreloadTimer.Snapshot().Count()
+	preloadSlotsBefore := pipelineSRCPreloadSlotsHistogram.Snapshot().Count()
+	preloadAccountsBefore := pipelineSRCPreloadReadAccountsHistogram.Snapshot().Count()
+
+	if _, err := pipeChain.InsertChain(blocks, true); err != nil {
+		t.Fatalf("pipeline InsertChain (makeWitness=true) failed: %v", err)
+	}
+	if err := pipeChain.flushPendingImportSRC(true); err != nil {
+		t.Fatalf("flushPendingImportSRC failed: %v", err)
+	}
+
+	// Witness should be cached for every imported block.
+	for i := uint64(1); i <= numBlocks; i++ {
+		hash := pipeChain.GetBlockByNumber(i).Hash()
+		if !pipeChain.witnessCache.Contains(hash) {
+			t.Errorf("block %d: witnessCache missing witness when makeWitness=true", i)
+		}
+	}
+
+	// Preload timer + histograms should fire once per block.
+	if delta := pipelineSRCPreloadTimer.Snapshot().Count() - preloadTimerBefore; delta != numBlocks {
+		t.Errorf("pipelineSRCPreloadTimer delta = %d, want %d when makeWitness=true", delta, numBlocks)
+	}
+	if delta := pipelineSRCPreloadSlotsHistogram.Snapshot().Count() - preloadSlotsBefore; delta != numBlocks {
+		t.Errorf("pipelineSRCPreloadSlotsHistogram delta = %d, want %d when makeWitness=true", delta, numBlocks)
+	}
+	if delta := pipelineSRCPreloadReadAccountsHistogram.Snapshot().Count() - preloadAccountsBefore; delta != numBlocks {
+		t.Errorf("pipelineSRCPreloadReadAccountsHistogram delta = %d, want %d when makeWitness=true", delta, numBlocks)
+	}
+}
+
+// TestPipelinedImportSRC_RootParityWitnessOnVsOff is the consensus-critical
+// parity check for mitigation (2.5): the pipelined SRC goroutine uses
+// state.NewTrieOnly when makeWitness=true and state.New (multi-reader) when
+// makeWitness=false. Both reader paths must produce byte-identical state
+// roots when importing the same blocks — otherwise consensus would split
+// between witness-producing and witness-off nodes on the same network.
+//
+// Two import shapes are exercised:
+//   - shape A: a single InsertChain(blocks) call — batch behaviour
+//   - shape B: two consecutive InsertChain calls — exercises cross-call
+//     pending-SRC reuse (the FlatDiff overlay path between batches)
+//
+// Path scheme is used because state.New only differs from state.NewTrieOnly
+// when a flat reader is actually wired (pathdb StateReader); under hash
+// scheme without a snapshot the multi-reader degenerates to trie-only and
+// the test would not detect a real parity bug.
+func TestPipelinedImportSRC_RootParityWitnessOnVsOff(t *testing.T) {
+	const numBlocks = 8
+	const splitAt = 3 // shape B: insert blocks[:splitAt] then blocks[splitAt:]
+
+	var (
+		key, _    = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+		addr      = crypto.PubkeyToAddress(key.PublicKey)
+		recipient = common.HexToAddress("0x00000000000000000000000000000000deadbeef")
+		funds     = new(big.Int).Mul(big.NewInt(1000), big.NewInt(params.Ether))
+		gspec     = &Genesis{
+			Config:  params.AllEthashProtocolChanges,
+			Alloc:   types.GenesisAlloc{addr: {Balance: funds}},
+			BaseFee: big.NewInt(params.InitialBaseFee),
+		}
+		signer = types.LatestSigner(gspec.Config)
+		engine = ethash.NewFaker()
+	)
+
+	_, blocks, _ := GenerateChainWithGenesis(gspec, engine, numBlocks, func(i int, gen *BlockGen) {
+		tx, _ := types.SignTx(
+			types.NewTransaction(gen.TxNonce(addr), recipient, big.NewInt(1000), params.TxGas, gen.header.BaseFee, nil),
+			signer, key,
+		)
+		gen.AddTx(tx)
+	})
+
+	// Witness=true path: NewTrieOnly reader, single InsertChain batch.
+	witnessOnChain, err := NewBlockChain(rawdb.NewMemoryDatabase(), gspec, engine, pipelinedConfig(rawdb.PathScheme))
+	if err != nil {
+		t.Fatalf("witness-on chain: %v", err)
+	}
+	defer witnessOnChain.Stop()
+	if _, err := witnessOnChain.InsertChain(blocks, true); err != nil {
+		t.Fatalf("witness-on InsertChain: %v", err)
+	}
+	if err := witnessOnChain.flushPendingImportSRC(true); err != nil {
+		t.Fatalf("witness-on flush: %v", err)
+	}
+
+	// Witness=false path, shape A: single InsertChain batch with state.New reader.
+	witnessOffBatch, err := NewBlockChain(rawdb.NewMemoryDatabase(), gspec, engine, pipelinedConfig(rawdb.PathScheme))
+	if err != nil {
+		t.Fatalf("witness-off batch chain: %v", err)
+	}
+	defer witnessOffBatch.Stop()
+	if _, err := witnessOffBatch.InsertChain(blocks, false); err != nil {
+		t.Fatalf("witness-off batch InsertChain: %v", err)
+	}
+	if err := witnessOffBatch.flushPendingImportSRC(true); err != nil {
+		t.Fatalf("witness-off batch flush: %v", err)
+	}
+
+	// Witness=false path, shape B: split insertion exercises cross-call
+	// pending-SRC reuse — the second InsertChain opens with a pending FlatDiff
+	// from the first batch and must produce the same roots as the batched
+	// path.
+	witnessOffSplit, err := NewBlockChain(rawdb.NewMemoryDatabase(), gspec, engine, pipelinedConfig(rawdb.PathScheme))
+	if err != nil {
+		t.Fatalf("witness-off split chain: %v", err)
+	}
+	defer witnessOffSplit.Stop()
+	if _, err := witnessOffSplit.InsertChain(blocks[:splitAt], false); err != nil {
+		t.Fatalf("witness-off split first batch: %v", err)
+	}
+	if _, err := witnessOffSplit.InsertChain(blocks[splitAt:], false); err != nil {
+		t.Fatalf("witness-off split second batch: %v", err)
+	}
+	if err := witnessOffSplit.flushPendingImportSRC(true); err != nil {
+		t.Fatalf("witness-off split flush: %v", err)
+	}
+
+	// Per-block parity: every chain must agree with the canonical root from
+	// the generator AND with each other.
+	for i := uint64(1); i <= numBlocks; i++ {
+		canonical := blocks[i-1].Root()
+
+		on := witnessOnChain.GetBlockByNumber(i)
+		offBatch := witnessOffBatch.GetBlockByNumber(i)
+		offSplit := witnessOffSplit.GetBlockByNumber(i)
+		if on == nil || offBatch == nil || offSplit == nil {
+			t.Fatalf("block %d: missing on one of the chains (on=%v offBatch=%v offSplit=%v)",
+				i, on == nil, offBatch == nil, offSplit == nil)
+		}
+
+		if on.Root() != canonical {
+			t.Errorf("block %d: witness-on root %s != canonical %s", i, on.Root(), canonical)
+		}
+		if offBatch.Root() != canonical {
+			t.Errorf("block %d: witness-off batch root %s != canonical %s", i, offBatch.Root(), canonical)
+		}
+		if offSplit.Root() != canonical {
+			t.Errorf("block %d: witness-off split root %s != canonical %s", i, offSplit.Root(), canonical)
+		}
+		if on.Root() != offBatch.Root() {
+			t.Errorf("block %d: witness-on vs witness-off-batch root mismatch %s != %s", i, on.Root(), offBatch.Root())
+		}
+		if offBatch.Root() != offSplit.Root() {
+			t.Errorf("block %d: witness-off batch vs split root mismatch %s != %s", i, offBatch.Root(), offSplit.Root())
+		}
+	}
+}
+
+// TestPipelinedImportSRC_WitnessHardFailsWithoutExecWitness verifies that
+// runSRCCompute rejects the configuration where a witness is requested but
+// none is supplied by the caller. The import path always hands the
+// EVM-populated witness through to SRC; only miner/legacy callers may set
+// allowOwnWitness=true to opt into SRC creating its own witness. Spawning
+// the SRC goroutine with makeWitness=true, execWitness=nil, and
+// allowOwnWitness=false must set pending.err.
+func TestPipelinedImportSRC_WitnessHardFailsWithoutExecWitness(t *testing.T) {
+	var (
+		key, _    = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+		addr      = crypto.PubkeyToAddress(key.PublicKey)
+		recipient = common.HexToAddress("0x00000000000000000000000000000000deadbeef")
+		funds     = new(big.Int).Mul(big.NewInt(1000), big.NewInt(params.Ether))
+		gspec     = &Genesis{
+			Config:  params.AllEthashProtocolChanges,
+			Alloc:   types.GenesisAlloc{addr: {Balance: funds}},
+			BaseFee: big.NewInt(params.InitialBaseFee),
+		}
+		signer = types.LatestSigner(gspec.Config)
+		engine = ethash.NewFaker()
+	)
+
+	_, blocks, _ := GenerateChainWithGenesis(gspec, engine, 1, func(i int, gen *BlockGen) {
+		tx, _ := types.SignTx(
+			types.NewTransaction(gen.TxNonce(addr), recipient, big.NewInt(1000), params.TxGas, gen.header.BaseFee, nil),
+			signer, key,
+		)
+		gen.AddTx(tx)
+	})
+
+	chain, err := NewBlockChain(rawdb.NewMemoryDatabase(), gspec, engine, pipelinedConfig(rawdb.HashScheme))
+	if err != nil {
+		t.Fatalf("failed to create chain: %v", err)
+	}
+	defer chain.Stop()
+
+	// First import a block normally so we have a committed parent root and a
+	// FlatDiff to feed the SRC. The import path's makeWitness=false is used so
+	// no witness work runs in the legitimate insertion.
+	if _, err := chain.InsertChain(blocks, false); err != nil {
+		t.Fatalf("InsertChain failed: %v", err)
+	}
+	if err := chain.flushPendingImportSRC(true); err != nil {
+		t.Fatalf("flushPendingImportSRC failed: %v", err)
+	}
+
+	// Now manually spawn an SRC goroutine with makeWitness=true,
+	// execWitness=nil, allowOwnWitness=false. Use a dummy FlatDiff to keep
+	// ApplyFlatDiffForCommit from being reached; runSRCCompute should error
+	// out before touching it.
+	parent := chain.GetBlockByNumber(0)
+	target := blocks[0]
+	chain.SpawnSRCGoroutine(target, parent.Root(), &state.FlatDiff{}, true, nil, false, nil, false)
+
+	// Drain via the public wait API: the goroutine sets pending.err and exits.
+	chain.pendingSRCMu.Lock()
+	pending := chain.pendingSRC
+	chain.pendingSRCMu.Unlock()
+	if pending == nil {
+		t.Fatal("expected pendingSRC after SpawnSRCGoroutine")
+	}
+	pending.wg.Wait()
+
+	if pending.err == nil {
+		t.Fatal("expected pending.err to be set when execWitness=nil and allowOwnWitness=false; " +
+			"got nil — the hard-fail check is not enforcing the witness contract")
+	}
+	if !strings.Contains(pending.err.Error(), "without execution witness") {
+		t.Errorf("pending.err = %v, want error mentioning 'without execution witness'", pending.err)
+	}
+}
+
+// TestPipelinedImportSRC_WitnessIncludesBlockHashAncestors verifies that
+// BLOCKHASH opcode access during EVM execution is reflected in the witness
+// published by the pipelined SRC path.
+//
+// The pipelined import path runs EVM execution and SRC commit on different
+// goroutines but must publish a single completed witness. AddBlockHash fires
+// during execution (vm/instructions.go::opBlockhash) on the witness attached
+// to the executing StateDB; the published witness must therefore include
+// those Headers entries. BLOCKHASH ancestor coverage is checked through
+// Headers because BorWitness serialises Headers but not Codes; verifiers
+// source bytecode from local storage.
+//
+// Test setup:
+//   - Block 1: regular value transfer, no BLOCKHASH.
+//   - Block 2: calls a contract whose bytecode runs BLOCKHASH(0). At block 2
+//     this triggers Witness.AddBlockHash(0), which extends Headers to include
+//     genesis (parent=block-1 is already in Headers from NewWitness; reaching
+//     back to genesis adds the second entry).
+//
+// Generation requires a real chain context for AddTxWithChain to satisfy the
+// EVM's blockhash lookup — chain_makers.go's plain AddTx uses a fake
+// BlockChain with no headers and crashes on GetHashFn. The test builds a
+// separate ctxChain for generation, then imports all blocks into a fresh
+// pipeChain configured with pipelined SRC.
+func TestPipelinedImportSRC_WitnessIncludesBlockHashAncestors(t *testing.T) {
+	// Bytecode: PUSH1 0x00 ; BLOCKHASH ; POP ; STOP
+	// Reads the hash of block 0 (genesis), discards it. Triggers
+	// witness.AddBlockHash(0) inside vm/instructions.go::opBlockhash on
+	// whichever StateDB owns the witness at execution time.
+	contractCode := []byte{0x60, 0x00, 0x40, 0x50, 0x00}
+	contractAddr := common.HexToAddress("0xb1a5cab1ec0de")
+
+	var (
+		key, _ = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+		addr   = crypto.PubkeyToAddress(key.PublicKey)
+		funds  = new(big.Int).Mul(big.NewInt(1000), big.NewInt(params.Ether))
+		gspec  = &Genesis{
+			Config: params.AllEthashProtocolChanges,
+			Alloc: types.GenesisAlloc{
+				addr:         {Balance: funds},
+				contractAddr: {Code: contractCode, Balance: big.NewInt(0)},
+			},
+			BaseFee: big.NewInt(params.InitialBaseFee),
+		}
+		signer = types.LatestSigner(gspec.Config)
+		engine = ethash.NewFaker()
+	)
+
+	// Phase 1: Generate block 1 (no BLOCKHASH yet) using a fresh shared db
+	// that we'll reuse for ctxChain so headers are written exactly once.
+	db := rawdb.NewMemoryDatabase()
+	tdb := triedb.NewDatabase(db, triedb.HashDefaults)
+	genesisBlock := gspec.MustCommit(db, tdb)
+	prefix, _ := GenerateChain(gspec.Config, genesisBlock, engine, db, 1, func(i int, gen *BlockGen) {})
+
+	// Phase 2: Build ctxChain on the same db so BlockGen.AddTxWithChain has
+	// a real HeaderChain to satisfy the BLOCKHASH lookup in block 2.
+	ctxChain, err := NewBlockChain(db, gspec, engine, DefaultConfig().WithStateScheme(rawdb.HashScheme))
+	if err != nil {
+		t.Fatalf("ctxChain: %v", err)
+	}
+	if _, err := ctxChain.InsertChain(prefix, false); err != nil {
+		t.Fatalf("ctxChain: insert prefix: %v", err)
+	}
+
+	// Phase 3: Generate block 2 with a tx that calls the contract → BLOCKHASH(0)
+	// fires during EVM execution, extending the execution witness's Headers.
+	block2Slice, _ := GenerateChain(gspec.Config, prefix[0], engine, db, 1, func(i int, gen *BlockGen) {
+		tx, _ := types.SignTx(
+			types.NewTransaction(gen.TxNonce(addr), contractAddr, big.NewInt(0), 100_000, gen.header.BaseFee, nil),
+			signer, key,
+		)
+		gen.AddTxWithChain(ctxChain, tx)
+	})
+	ctxChain.Stop()
+
+	allBlocks := append(append([]*types.Block{}, prefix...), block2Slice...)
+
+	// Phase 4: Fresh pipeChain, import everything with witness=true
+	pipeChain, err := NewBlockChain(rawdb.NewMemoryDatabase(), gspec, engine, pipelinedConfig(rawdb.HashScheme))
+	if err != nil {
+		t.Fatalf("pipeChain: %v", err)
+	}
+	defer pipeChain.Stop()
+
+	if _, err := pipeChain.InsertChain(allBlocks, true); err != nil {
+		t.Fatalf("InsertChain (makeWitness=true): %v", err)
+	}
+	if err := pipeChain.flushPendingImportSRC(true); err != nil {
+		t.Fatalf("flushPendingImportSRC: %v", err)
+	}
+
+	// Phase 5: Decode the published witness for block 2 and verify Headers
+	// extends past parent, which is what AddBlockHash(0) records during
+	// execution.
+	target := block2Slice[0]
+	encoded := pipeChain.GetWitness(target.Hash())
+	if encoded == nil {
+		t.Fatalf("block 2: witness missing from cache")
+	}
+	var w stateless.Witness
+	if err := rlp.DecodeBytes(encoded, &w); err != nil {
+		t.Fatalf("decode witness: %v", err)
+	}
+
+	// AddBlockHash(0) walks back from parent (block 1) to genesis, so the
+	// published witness's Headers slice should have length 2: [block 1, genesis].
+	if len(w.Headers) < 2 {
+		t.Fatalf("Headers length = %d, want >= 2 (parent + genesis from BLOCKHASH(0)); "+
+			"the published witness must include execution-time AddBlockHash entries",
+			len(w.Headers))
+	}
+
+	parentHeader := prefix[0].Header()
+	if w.Headers[0].Hash() != parentHeader.Hash() {
+		t.Errorf("Headers[0] = %s, want parent (block 1) %s", w.Headers[0].Hash(), parentHeader.Hash())
+	}
+	foundGenesis := false
+	for _, h := range w.Headers {
+		if h.Number.Uint64() == 0 && h.Hash() == genesisBlock.Hash() {
+			foundGenesis = true
+			break
+		}
+	}
+	if !foundGenesis {
+		t.Errorf("Headers does not contain genesis (BLOCKHASH(0) referenced it); Headers=%d entries", len(w.Headers))
+	}
+
+	if err := stateless.ValidateWitnessPreState(&w, pipeChain, target.Header()); err != nil {
+		t.Errorf("ValidateWitnessPreState failed on the published witness: %v", err)
+	}
+}
+
+// TestPipelinedImportSRC_WitnessEncodeDecodeRoundtrip verifies that pipelined
+// witnesses encode-decode cleanly and pass canonical pre-state validation,
+// covering the basic shared-witness contract: the same Witness object that
+// EVM execution populated must round-trip through RLP and validate.
+func TestPipelinedImportSRC_WitnessEncodeDecodeRoundtrip(t *testing.T) {
+	const numBlocks = 3
+	var (
+		key, _    = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+		addr      = crypto.PubkeyToAddress(key.PublicKey)
+		recipient = common.HexToAddress("0x00000000000000000000000000000000deadbeef")
+		funds     = new(big.Int).Mul(big.NewInt(1000), big.NewInt(params.Ether))
+		gspec     = &Genesis{
+			Config:  params.AllEthashProtocolChanges,
+			Alloc:   types.GenesisAlloc{addr: {Balance: funds}},
+			BaseFee: big.NewInt(params.InitialBaseFee),
+		}
+		signer = types.LatestSigner(gspec.Config)
+		engine = ethash.NewFaker()
+	)
+
+	_, blocks, _ := GenerateChainWithGenesis(gspec, engine, numBlocks, func(i int, gen *BlockGen) {
+		tx, _ := types.SignTx(
+			types.NewTransaction(gen.TxNonce(addr), recipient, big.NewInt(1000), params.TxGas, gen.header.BaseFee, nil),
+			signer, key,
+		)
+		gen.AddTx(tx)
+	})
+
+	pipeChain, err := NewBlockChain(rawdb.NewMemoryDatabase(), gspec, engine, pipelinedConfig(rawdb.HashScheme))
+	if err != nil {
+		t.Fatalf("failed to create pipeline chain: %v", err)
+	}
+	defer pipeChain.Stop()
+
+	if _, err := pipeChain.InsertChain(blocks, true); err != nil {
+		t.Fatalf("InsertChain (makeWitness=true) failed: %v", err)
+	}
+	if err := pipeChain.flushPendingImportSRC(true); err != nil {
+		t.Fatalf("flushPendingImportSRC failed: %v", err)
+	}
+
+	for i := uint64(1); i <= numBlocks; i++ {
+		block := pipeChain.GetBlockByNumber(i)
+		encoded := pipeChain.GetWitness(block.Hash())
+		if encoded == nil {
+			t.Fatalf("block %d: witness missing from cache", i)
+		}
+		var w stateless.Witness
+		if err := rlp.DecodeBytes(encoded, &w); err != nil {
+			t.Fatalf("block %d: decode witness: %v", i, err)
+		}
+		if len(w.Headers) == 0 {
+			t.Errorf("block %d: decoded witness has no Headers", i)
+		}
+		if err := stateless.ValidateWitnessPreState(&w, pipeChain, block.Header()); err != nil {
+			t.Errorf("block %d: ValidateWitnessPreState failed: %v", i, err)
+		}
+	}
+}
+
+// TestPipelinedImportSRC_WarmSnapshotWitnessParity is the consensus-critical
+// parity test for the warm-snapshot handoff. The same chain is imported
+// twice — once with PipelinedSRCWarmSnapshot=false (baseline pathdb-only
+// reader) and once with PipelinedSRCWarmSnapshot=true (snapshot-aware
+// reader). Per-block state roots, decoded witnesses, and the State proof
+// node sets must be identical, AND each published witness must replay
+// statelessly via ProcessBlockWithWitnesses to the same root the chain
+// produced. Any divergence proves the snapshot path silently dropped or
+// substituted proof nodes.
+//
+// Root parity alone is necessary but not sufficient: it proves the commit
+// walk produced the same hash, not that the published witness covers the
+// same proof surface. Stateless replay is the strongest assertion — it
+// reconstructs state from the witness alone (plus the receiver's local
+// codes/headers) and recomputes the post-state root.
+//
+// Runs under both HashScheme and PathScheme; PathScheme is the production
+// target and exercises the pathdb fallthrough path in the snapshot reader.
+func TestPipelinedImportSRC_WarmSnapshotWitnessParity(t *testing.T) {
+	testPipelinedImportSRC_WarmSnapshotWitnessParity(t, rawdb.HashScheme)
+	testPipelinedImportSRC_WarmSnapshotWitnessParity(t, rawdb.PathScheme)
+}
+
+func testPipelinedImportSRC_WarmSnapshotWitnessParity(t *testing.T, scheme string) {
+	t.Run(scheme, func(t *testing.T) {
+		const numBlocks = 8
+		var (
+			key, _    = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+			addr      = crypto.PubkeyToAddress(key.PublicKey)
+			recipient = common.HexToAddress("0x00000000000000000000000000000000deadbeef")
+			funds     = new(big.Int).Mul(big.NewInt(1000), big.NewInt(params.Ether))
+			gspec     = &Genesis{
+				Config:  params.AllEthashProtocolChanges,
+				Alloc:   types.GenesisAlloc{addr: {Balance: funds}},
+				BaseFee: big.NewInt(params.InitialBaseFee),
+			}
+			signer = types.LatestSigner(gspec.Config)
+			engine = ethash.NewFaker()
+		)
+
+		_, blocks, _ := GenerateChainWithGenesis(gspec, engine, numBlocks, func(i int, gen *BlockGen) {
+			tx, _ := types.SignTx(
+				types.NewTransaction(gen.TxNonce(addr), recipient, big.NewInt(1000), params.TxGas, gen.header.BaseFee, nil),
+				signer, key,
+			)
+			gen.AddTx(tx)
+		})
+
+		importInto := func(t *testing.T, label string, cfg *BlockChainConfig) *BlockChain {
+			t.Helper()
+			chain, err := NewBlockChain(rawdb.NewMemoryDatabase(), gspec, engine, cfg)
+			if err != nil {
+				t.Fatalf("%s: NewBlockChain: %v", label, err)
+			}
+			t.Cleanup(chain.Stop)
+			if _, err := chain.InsertChain(blocks, true); err != nil {
+				t.Fatalf("%s: InsertChain: %v", label, err)
+			}
+			if err := chain.flushPendingImportSRC(true); err != nil {
+				t.Fatalf("%s: flushPendingImportSRC: %v", label, err)
+			}
+			return chain
+		}
+
+		chainOff := importInto(t, "snapshot-off", pipelinedConfig(scheme))
+		chainOn := importInto(t, "snapshot-on", pipelinedConfigWithWarmSnapshot(scheme))
+
+		for i := uint64(1); i <= numBlocks; i++ {
+			blkOff := chainOff.GetBlockByNumber(i)
+			blkOn := chainOn.GetBlockByNumber(i)
+			if blkOff == nil || blkOn == nil {
+				t.Fatalf("block %d: missing on one of the chains (off=%v on=%v)", i, blkOff == nil, blkOn == nil)
+			}
+			if blkOff.Root() != blkOn.Root() {
+				t.Errorf("block %d: state root mismatch off=%s on=%s", i, blkOff.Root(), blkOn.Root())
+			}
+
+			encOff := chainOff.GetWitness(blkOff.Hash())
+			encOn := chainOn.GetWitness(blkOn.Hash())
+			if encOff == nil || encOn == nil {
+				t.Fatalf("block %d: witness missing (off=%v on=%v)", i, encOff == nil, encOn == nil)
+			}
+
+			var wOff, wOn stateless.Witness
+			if err := rlp.DecodeBytes(encOff, &wOff); err != nil {
+				t.Fatalf("block %d: decode off witness: %v", i, err)
+			}
+			if err := rlp.DecodeBytes(encOn, &wOn); err != nil {
+				t.Fatalf("block %d: decode on witness: %v", i, err)
+			}
+
+			if err := stateless.ValidateWitnessPreState(&wOff, chainOff, blkOff.Header()); err != nil {
+				t.Errorf("block %d: off witness pre-state validation: %v", i, err)
+			}
+			if err := stateless.ValidateWitnessPreState(&wOn, chainOn, blkOn.Header()); err != nil {
+				t.Errorf("block %d: on witness pre-state validation: %v", i, err)
+			}
+
+			// State proof-node parity: the snapshot path must produce the
+			// same set of trie proof nodes as the no-snapshot path. The
+			// State map's keys are RLP node blobs; equal sets = equal proof
+			// coverage.
+			if len(wOff.State) != len(wOn.State) {
+				t.Errorf("block %d: State size off=%d on=%d", i, len(wOff.State), len(wOn.State))
+			}
+			for k := range wOff.State {
+				if _, ok := wOn.State[k]; !ok {
+					t.Errorf("block %d: snapshot-on witness missing proof node present in baseline (len=%d)", i, len(k))
+					break
+				}
+			}
+			for k := range wOn.State {
+				if _, ok := wOff.State[k]; !ok {
+					t.Errorf("block %d: snapshot-on witness has proof node not in baseline (len=%d)", i, len(k))
+					break
+				}
+			}
+
+			// Headers parity: BLOCKHASH ancestor inclusion must be identical
+			// across snapshot-on/off. (For this transfer-only chain there are
+			// no BLOCKHASH ops; Headers is just [parent].)
+			if len(wOff.Headers) != len(wOn.Headers) {
+				t.Errorf("block %d: Headers length off=%d on=%d", i, len(wOff.Headers), len(wOn.Headers))
+			}
+
+			// Stateless replay parity: each chain's published witness must
+			// reconstruct state and recompute the post-state root via
+			// ProcessBlockWithWitnesses. ExecuteStateless returns an error
+			// if the recomputed root diverges from block.Root() — that's
+			// exactly the assertion we want. SetHeader installs the
+			// context header (the block being replayed) on the decoded
+			// witness, which RLP decode does not preserve. The witness's
+			// HeaderReader (used to resolve BLOCKHASH ancestor lookups) is
+			// also dropped by RLP decode, but ProcessBlockWithWitnesses
+			// falls back to the BlockChain itself when the witness has no
+			// HeaderReader set — so for in-memory test chains nothing
+			// further needs wiring here.
+			wOff.SetHeader(blkOff.Header())
+			wOn.SetHeader(blkOn.Header())
+			if _, _, err := chainOff.ProcessBlockWithWitnesses(blkOff, &wOff); err != nil {
+				t.Errorf("block %d: stateless replay (off chain witness) failed: %v", i, err)
+			}
+			if _, _, err := chainOn.ProcessBlockWithWitnesses(blkOn, &wOn); err != nil {
+				t.Errorf("block %d: stateless replay (on chain witness) failed: %v", i, err)
+			}
+		}
+	})
+}
+
+// TestPipelinedImportSRC_WarmSnapshotPreservesBlockHashAncestors mirrors
+// TestPipelinedImportSRC_WitnessIncludesBlockHashAncestors but with the
+// warm-snapshot handoff enabled. BLOCKHASH ancestor coverage is collected on
+// the execution witness during EVM execution, before SRC starts; the
+// snapshot path only changes how SRC's trie reads are served, not the
+// witness ownership chain. Therefore Headers must still extend to include
+// the BLOCKHASH-referenced ancestor, and the published witness must
+// statelessly replay.
+//
+// Runs under both HashScheme and PathScheme.
+func TestPipelinedImportSRC_WarmSnapshotPreservesBlockHashAncestors(t *testing.T) {
+	testPipelinedImportSRC_WarmSnapshotPreservesBlockHashAncestors(t, rawdb.HashScheme)
+	testPipelinedImportSRC_WarmSnapshotPreservesBlockHashAncestors(t, rawdb.PathScheme)
+}
+
+func testPipelinedImportSRC_WarmSnapshotPreservesBlockHashAncestors(t *testing.T, scheme string) {
+	t.Run(scheme, func(t *testing.T) {
+		runWarmSnapshotBlockHashTest(t, scheme)
+	})
+}
+
+func runWarmSnapshotBlockHashTest(t *testing.T, scheme string) {
+	contractCode := []byte{0x60, 0x00, 0x40, 0x50, 0x00}
+	contractAddr := common.HexToAddress("0xb1a5cab1ec0de")
+
+	var (
+		key, _ = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+		addr   = crypto.PubkeyToAddress(key.PublicKey)
+		funds  = new(big.Int).Mul(big.NewInt(1000), big.NewInt(params.Ether))
+		gspec  = &Genesis{
+			Config: params.AllEthashProtocolChanges,
+			Alloc: types.GenesisAlloc{
+				addr:         {Balance: funds},
+				contractAddr: {Code: contractCode, Balance: big.NewInt(0)},
+			},
+			BaseFee: big.NewInt(params.InitialBaseFee),
+		}
+		signer = types.LatestSigner(gspec.Config)
+		engine = ethash.NewFaker()
+	)
+
+	db := rawdb.NewMemoryDatabase()
+	tdb := triedb.NewDatabase(db, triedb.HashDefaults)
+	genesisBlock := gspec.MustCommit(db, tdb)
+	prefix, _ := GenerateChain(gspec.Config, genesisBlock, engine, db, 1, func(i int, gen *BlockGen) {})
+
+	ctxChain, err := NewBlockChain(db, gspec, engine, DefaultConfig().WithStateScheme(rawdb.HashScheme))
+	if err != nil {
+		t.Fatalf("ctxChain: %v", err)
+	}
+	if _, err := ctxChain.InsertChain(prefix, false); err != nil {
+		t.Fatalf("ctxChain insert prefix: %v", err)
+	}
+	block2Slice, _ := GenerateChain(gspec.Config, prefix[0], engine, db, 1, func(i int, gen *BlockGen) {
+		tx, _ := types.SignTx(
+			types.NewTransaction(gen.TxNonce(addr), contractAddr, big.NewInt(0), 100_000, gen.header.BaseFee, nil),
+			signer, key,
+		)
+		gen.AddTxWithChain(ctxChain, tx)
+	})
+	ctxChain.Stop()
+
+	allBlocks := append(append([]*types.Block{}, prefix...), block2Slice...)
+
+	pipeChain, err := NewBlockChain(rawdb.NewMemoryDatabase(), gspec, engine, pipelinedConfigWithWarmSnapshot(scheme))
+	if err != nil {
+		t.Fatalf("pipeChain: %v", err)
+	}
+	defer pipeChain.Stop()
+
+	if _, err := pipeChain.InsertChain(allBlocks, true); err != nil {
+		t.Fatalf("InsertChain (snapshot=true, witness=true): %v", err)
+	}
+	if err := pipeChain.flushPendingImportSRC(true); err != nil {
+		t.Fatalf("flushPendingImportSRC: %v", err)
+	}
+
+	target := block2Slice[0]
+	encoded := pipeChain.GetWitness(target.Hash())
+	if encoded == nil {
+		t.Fatalf("block 2: witness missing from cache")
+	}
+	var w stateless.Witness
+	if err := rlp.DecodeBytes(encoded, &w); err != nil {
+		t.Fatalf("decode witness: %v", err)
+	}
+	if len(w.Headers) < 2 {
+		t.Fatalf("Headers length = %d, want >= 2 (parent + genesis from BLOCKHASH(0)) — "+
+			"warm-snapshot path must preserve BLOCKHASH ancestor coverage", len(w.Headers))
+	}
+	parentHeader := prefix[0].Header()
+	if w.Headers[0].Hash() != parentHeader.Hash() {
+		t.Errorf("Headers[0] = %s, want parent %s", w.Headers[0].Hash(), parentHeader.Hash())
+	}
+	foundGenesis := false
+	for _, h := range w.Headers {
+		if h.Number.Uint64() == 0 && h.Hash() == genesisBlock.Hash() {
+			foundGenesis = true
+			break
+		}
+	}
+	if !foundGenesis {
+		t.Errorf("Headers does not contain genesis (BLOCKHASH(0) referenced it); Headers=%d entries", len(w.Headers))
+	}
+	if err := stateless.ValidateWitnessPreState(&w, pipeChain, target.Header()); err != nil {
+		t.Errorf("ValidateWitnessPreState failed on snapshot-on witness: %v", err)
+	}
+
+	// Stateless replay: the published witness must reconstruct state
+	// (including the BLOCKHASH ancestor lookup) and recompute the same
+	// post-state root via ExecuteStateless. This is the consumer-side
+	// check that the snapshot path's witness is actually replayable, not
+	// just structurally well-formed.
+	w.SetHeader(target.Header())
+	if _, _, err := pipeChain.ProcessBlockWithWitnesses(target, &w); err != nil {
+		t.Errorf("stateless replay of snapshot-on BLOCKHASH witness failed: %v", err)
+	}
+}
+
+// TestPipelinedImportSRC_WarmSnapshotStorageTrieParity is the storage-trie
+// counterpart to the witness parity test. The snapshot reader is wrapped at
+// the database.NodeReader layer used by both account and storage tries; this
+// test specifically exercises storage-trie reads (SLOAD) and writes (SSTORE)
+// so the storage-owner branch of newSnapshotNodeDatabase / trieReader.Storage
+// is covered. A single contract is deployed with pre-populated storage; each
+// block's transaction loads a previously-set slot and writes a new one,
+// progressively growing the storage trie. The witness must include the
+// storage proof nodes touched by both the SLOAD and the SSTORE update path.
+//
+// Snapshot-off and snapshot-on import the same chain into independent
+// blockchains; per-block roots, decoded witness State sets, and stateless
+// replay must all agree. Runs under both HashScheme and PathScheme.
+func TestPipelinedImportSRC_WarmSnapshotStorageTrieParity(t *testing.T) {
+	testPipelinedImportSRC_WarmSnapshotStorageTrieParity(t, rawdb.HashScheme)
+	testPipelinedImportSRC_WarmSnapshotStorageTrieParity(t, rawdb.PathScheme)
+}
+
+func testPipelinedImportSRC_WarmSnapshotStorageTrieParity(t *testing.T, scheme string) {
+	t.Run(scheme, func(t *testing.T) {
+		// Contract program:
+		//   SLOAD(NUMBER - 1) ; POP   — read a previously-set slot, forcing
+		//                               a storage-trie pre-state read whose
+		//                               proof nodes must be in the witness
+		//   SSTORE(NUMBER, NUMBER)    — write a new slot, growing the trie
+		//                               (the update walks the proof path)
+		contractCode := []byte{
+			byte(vm.PUSH1), 0x01,
+			byte(vm.NUMBER),
+			byte(vm.SUB),
+			byte(vm.SLOAD),
+			byte(vm.POP),
+			byte(vm.NUMBER),
+			byte(vm.NUMBER),
+			byte(vm.SSTORE),
+			byte(vm.STOP),
+		}
+		contractAddr := common.HexToAddress("0x5707a6e500000000000000000000000000000001")
+
+		// Pre-populate slots 0..7 in the contract's storage trie so block 1's
+		// SLOAD(0) hits a real entry rather than an empty slot, ensuring the
+		// pre-state read actually walks storage-trie nodes.
+		preStorage := make(map[common.Hash]common.Hash, 8)
+		for i := 0; i < 8; i++ {
+			preStorage[common.BigToHash(big.NewInt(int64(i)))] = common.BigToHash(big.NewInt(int64(i + 1000)))
+		}
+
+		const numBlocks = 6
+		var (
+			key, _ = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+			addr   = crypto.PubkeyToAddress(key.PublicKey)
+			funds  = new(big.Int).Mul(big.NewInt(1000), big.NewInt(params.Ether))
+			gspec  = &Genesis{
+				Config: params.AllEthashProtocolChanges,
+				Alloc: types.GenesisAlloc{
+					addr: {Balance: funds},
+					contractAddr: {
+						Code:    contractCode,
+						Balance: big.NewInt(0),
+						Storage: preStorage,
+					},
+				},
+				BaseFee: big.NewInt(params.InitialBaseFee),
+			}
+			signer = types.LatestSigner(gspec.Config)
+			engine = ethash.NewFaker()
+		)
+
+		_, blocks, _ := GenerateChainWithGenesis(gspec, engine, numBlocks, func(i int, gen *BlockGen) {
+			tx, _ := types.SignTx(
+				types.NewTransaction(gen.TxNonce(addr), contractAddr, big.NewInt(0), 100_000, gen.header.BaseFee, nil),
+				signer, key,
+			)
+			gen.AddTx(tx)
+		})
+
+		importInto := func(t *testing.T, label string, cfg *BlockChainConfig) *BlockChain {
+			t.Helper()
+			chain, err := NewBlockChain(rawdb.NewMemoryDatabase(), gspec, engine, cfg)
+			if err != nil {
+				t.Fatalf("%s: NewBlockChain: %v", label, err)
+			}
+			t.Cleanup(chain.Stop)
+			if _, err := chain.InsertChain(blocks, true); err != nil {
+				t.Fatalf("%s: InsertChain: %v", label, err)
+			}
+			if err := chain.flushPendingImportSRC(true); err != nil {
+				t.Fatalf("%s: flushPendingImportSRC: %v", label, err)
+			}
+			return chain
+		}
+
+		chainOff := importInto(t, "snapshot-off", pipelinedConfig(scheme))
+		chainOn := importInto(t, "snapshot-on", pipelinedConfigWithWarmSnapshot(scheme))
+
+		for i := uint64(1); i <= numBlocks; i++ {
+			blkOff := chainOff.GetBlockByNumber(i)
+			blkOn := chainOn.GetBlockByNumber(i)
+			if blkOff == nil || blkOn == nil {
+				t.Fatalf("block %d: missing on one of the chains (off=%v on=%v)", i, blkOff == nil, blkOn == nil)
+			}
+			if blkOff.Root() != blkOn.Root() {
+				t.Errorf("block %d: state root mismatch off=%s on=%s", i, blkOff.Root(), blkOn.Root())
+			}
+
+			encOff := chainOff.GetWitness(blkOff.Hash())
+			encOn := chainOn.GetWitness(blkOn.Hash())
+			if encOff == nil || encOn == nil {
+				t.Fatalf("block %d: witness missing (off=%v on=%v)", i, encOff == nil, encOn == nil)
+			}
+
+			var wOff, wOn stateless.Witness
+			if err := rlp.DecodeBytes(encOff, &wOff); err != nil {
+				t.Fatalf("block %d: decode off witness: %v", i, err)
+			}
+			if err := rlp.DecodeBytes(encOn, &wOn); err != nil {
+				t.Fatalf("block %d: decode on witness: %v", i, err)
+			}
+
+			if err := stateless.ValidateWitnessPreState(&wOff, chainOff, blkOff.Header()); err != nil {
+				t.Errorf("block %d: off witness pre-state validation: %v", i, err)
+			}
+			if err := stateless.ValidateWitnessPreState(&wOn, chainOn, blkOn.Header()); err != nil {
+				t.Errorf("block %d: on witness pre-state validation: %v", i, err)
+			}
+
+			// State proof-node parity. The snapshot path must produce the same
+			// set of trie proof nodes as the pathdb-only path. For this test
+			// the State map covers both account-trie and storage-trie nodes.
+			if len(wOff.State) != len(wOn.State) {
+				t.Errorf("block %d: State size off=%d on=%d", i, len(wOff.State), len(wOn.State))
+			}
+			for k := range wOff.State {
+				if _, ok := wOn.State[k]; !ok {
+					t.Errorf("block %d: snapshot-on witness missing proof node present in baseline (len=%d)", i, len(k))
+					break
+				}
+			}
+			for k := range wOn.State {
+				if _, ok := wOff.State[k]; !ok {
+					t.Errorf("block %d: snapshot-on witness has proof node not in baseline (len=%d)", i, len(k))
+					break
+				}
+			}
+
+			// Stateless replay parity. ExecuteStateless reconstructs the
+			// pre-state from the witness's State proof nodes (including
+			// storage subtries) and recomputes the post-state root. Failure
+			// here indicates the snapshot path served a storage-trie node
+			// whose blob disagrees with what pathdb would have served.
+			wOff.SetHeader(blkOff.Header())
+			wOn.SetHeader(blkOn.Header())
+			if _, _, err := chainOff.ProcessBlockWithWitnesses(blkOff, &wOff); err != nil {
+				t.Errorf("block %d: stateless replay (off chain witness) failed: %v", i, err)
+			}
+			if _, _, err := chainOn.ProcessBlockWithWitnesses(blkOn, &wOn); err != nil {
+				t.Errorf("block %d: stateless replay (on chain witness) failed: %v", i, err)
+			}
+		}
+	})
 }

@@ -1593,7 +1593,9 @@ func runWithAbort(code []byte, gas uint64, switchDispatch bool) error {
 // mid-execution stops both paths and both return the same error.
 func TestInterruptDuringExecution(t *testing.T) {
 	t.Parallel()
-	const gas = uint64(10_000_000)
+	// High enough that the loop can't exhaust gas before the 5ms interrupt
+	// fires, even under CPU contention.
+	const gas = uint64(10_000_000_000)
 
 	// Infinite loop — only the interrupt can stop it.
 	loop := []byte{
@@ -1617,7 +1619,8 @@ func TestInterruptDuringExecution(t *testing.T) {
 // JUMP/JUMPI to stop, and both paths produce the same result.
 func TestAbortDuringJump(t *testing.T) {
 	t.Parallel()
-	const gas = uint64(10_000_000)
+	// See TestInterruptDuringExecution.
+	const gas = uint64(10_000_000_000)
 
 	jumpLoop := []byte{
 		byte(JUMPDEST), // pc=0

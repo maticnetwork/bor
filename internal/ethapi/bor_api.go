@@ -334,6 +334,8 @@ func (api *BorAPI) GetHeaderByNumber(ctx context.Context, blockNumber rpc.BlockN
 
 // RPCBlockExtraData contains the parsed fields from the block header's Extra field.
 // Only populated for post-Cancun blocks that use RLP-encoded BlockExtraData.
+// TxDependency is deprecated: always null post-Austin, kept for
+// backward compatibility.
 type RPCBlockExtraData struct {
 	GasTarget                *hexutil.Uint64 `json:"gasTarget"`
 	BaseFeeChangeDenominator *hexutil.Uint64 `json:"baseFeeChangeDenominator"`

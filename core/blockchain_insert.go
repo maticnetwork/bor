@@ -53,6 +53,12 @@ func (st *insertStats) report(chain []*types.Block, index int, snapDiffItems, sn
 		for _, block := range chain[(index+1)-st.processed : index+1] {
 			txs += len(block.Transactions())
 		}
+		importSegmentBlocksHistogram.Update(int64(st.processed))
+		importSegmentElapsedTimer.Update(elapsed)
+		importSegmentGasUsedHistogram.Update(int64(st.usedGas))
+		if elapsed > 0 {
+			importSegmentMgaspsHistogram.Update(int64(mgasps))
+		}
 
 		end := chain[index]
 

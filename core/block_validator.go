@@ -134,6 +134,37 @@ func (v *BlockValidator) ValidateBody(block *types.Block) error {
 	return nil
 }
 
+// ValidateStateCheap validates the cheap (non-trie) post-state checks: gas used,
+// bloom filter, receipt root, and requests hash. It does NOT compute the state
+// root (IntermediateRoot), which is the expensive operation. Used by the pipelined
+// import path where IntermediateRoot is deferred to a background SRC goroutine.
+func (v *BlockValidator) ValidateStateCheap(block *types.Block, statedb *state.StateDB, res *ProcessResult) error {
+	if res == nil {
+		return errors.New("nil ProcessResult value")
+	}
+	header := block.Header()
+	if block.GasUsed() != res.GasUsed {
+		return fmt.Errorf("%w (remote: %d local: %d)", ErrGasUsedMismatch, block.GasUsed(), res.GasUsed)
+	}
+	rbloom := types.MergeBloom(res.Receipts)
+	if rbloom != header.Bloom {
+		return fmt.Errorf("%w (remote: %x  local: %x)", ErrBloomMismatch, header.Bloom, rbloom)
+	}
+	receiptSha := types.DeriveSha(res.Receipts, trie.NewStackTrie(nil))
+	if receiptSha != header.ReceiptHash {
+		return fmt.Errorf("%w (remote: %x local: %x)", ErrReceiptRootMismatch, header.ReceiptHash, receiptSha)
+	}
+	if header.RequestsHash != nil {
+		reqhash := types.CalcRequestsHash(res.Requests)
+		if reqhash != *header.RequestsHash {
+			return fmt.Errorf("%w (remote: %x local: %x)", ErrRequestsHashMismatch, *header.RequestsHash, reqhash)
+		}
+	} else if res.Requests != nil {
+		return errors.New("block has requests before prague fork")
+	}
+	return nil
+}
+
 // ValidateState validates the various changes that happen after a state transition,
 // such as amount of used gas, the receipt roots and the state root itself.
 func (v *BlockValidator) ValidateState(block *types.Block, statedb *state.StateDB, res *ProcessResult, stateless bool) error {

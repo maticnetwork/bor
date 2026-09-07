@@ -40,7 +40,6 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/clique"
 	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core"
-	"github.com/ethereum/go-ethereum/core/blockstm"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/tracing"
@@ -55,7 +54,6 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/tests/bor/mocks"
 	"github.com/ethereum/go-ethereum/trie"
-	"github.com/ethereum/go-ethereum/triedb"
 
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
 	borSpan "github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
@@ -1131,6 +1129,37 @@ func TestCommitInterruptPending(t *testing.T) {
 	w.stop()
 }
 
+func TestCreateInterruptTimer_IsolatedPerBuild(t *testing.T) {
+	t.Parallel()
+
+	first := newBuildInterruptState()
+	second := newBuildInterruptState()
+
+	stopFirst := createInterruptTimer(1, time.Now().Add(25*time.Millisecond), first.timeoutFlag(), first.flagSetAtPtr(), true)
+	defer stopFirst()
+	stopSecond := createInterruptTimer(2, time.Now().Add(500*time.Millisecond), second.timeoutFlag(), second.flagSetAtPtr(), true)
+	defer stopSecond()
+
+	require.Eventually(t, func() bool {
+		return first.timedOut.Load()
+	}, time.Second, 10*time.Millisecond)
+	require.NotZero(t, first.flagSetAt.Load())
+	require.False(t, second.timedOut.Load(), "one build's timeout must not trip another build")
+	require.Zero(t, second.flagSetAt.Load())
+}
+
+func TestCreateInterruptTimer_CancelDoesNotTripInterrupt(t *testing.T) {
+	t.Parallel()
+
+	state := newBuildInterruptState()
+	stop := createInterruptTimer(1, time.Now().Add(500*time.Millisecond), state.timeoutFlag(), state.flagSetAtPtr(), true)
+	stop()
+
+	time.Sleep(50 * time.Millisecond)
+	require.False(t, state.timedOut.Load(), "canceling a build timer must not look like a timeout")
+	require.Zero(t, state.flagSetAt.Load())
+}
+
 // TestBenchmarkPending is a simple benchmark test to measure the performance of transaction pool. It inserts
 // large number of transactions into the pool and captures the time taken for `pending` to return the list
 // of pending transactions. The purpose is just to compare the performance on different branches.
@@ -1293,132 +1322,6 @@ func BenchmarkBorMining(b *testing.B) {
 
 			if _, err := chain.InsertChain([]*types.Block{block}, false); err != nil {
 				b.Fatalf("failed to insert new mined block %d: %v", block.NumberU64(), err)
-			}
-
-			b.Log("block", block.NumberU64(), "time", block.Time()-prev, "txs", block.Transactions().Len(), "gasUsed", block.GasUsed(), "gasLimit", block.GasLimit())
-
-			prev = block.Time()
-		case <-time.After(time.Duration(blockPeriod) * time.Second):
-			b.Fatalf("timeout")
-		}
-	}
-}
-
-// uses core.NewParallelBlockChain to use the dependencies present in the block header
-// params.BorUnittestChainConfig contains the NapoliBlock as big.NewInt(5), so the first 4 blocks will not have metadata.
-// nolint:gocognit
-func BenchmarkBorMiningBlockSTMMetadata(b *testing.B) {
-	chainConfig := params.BorUnittestChainConfig
-
-	ctrl := gomock.NewController(b)
-	defer ctrl.Finish()
-
-	ethAPIMock := api.NewMockCaller(ctrl)
-	ethAPIMock.EXPECT().Call(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).AnyTimes()
-
-	spanner := bor.NewMockSpanner(ctrl)
-	spanner.EXPECT().GetCurrentValidatorsByHash(gomock.Any(), gomock.Any(), gomock.Any()).Return([]*valset.Validator{
-		{
-			ID:               0,
-			Address:          TestBankAddress,
-			VotingPower:      100,
-			ProposerPriority: 0,
-		},
-	}, nil).AnyTimes()
-
-	heimdallClientMock := mocks.NewMockIHeimdallClient(ctrl)
-	heimdallClientMock.EXPECT().FetchStatus(gomock.Any()).Return(&ctypes.SyncInfo{CatchingUp: false}, nil).AnyTimes()
-	heimdallWSClient := mocks.NewMockIHeimdallWSClient(ctrl)
-	heimdallClientMock.EXPECT().Close().Times(1)
-
-	contractMock := bor.NewMockGenesisContract(ctrl)
-
-	db, _, _ := NewDBForFakes(b)
-
-	engine := NewFakeBor(b, db, chainConfig, ethAPIMock, spanner, heimdallClientMock, heimdallWSClient, contractMock)
-	defer engine.Close()
-
-	chainConfig.LondonBlock = big.NewInt(0)
-
-	w, back, _ := newTestWorker(b, DefaultTestConfig(), chainConfig, engine, rawdb.NewMemoryDatabase(), false, 0)
-	defer w.close()
-
-	// This test chain imports the mined blocks.
-	db2 := rawdb.NewMemoryDatabase()
-	back.genesis.MustCommit(db2, triedb.NewDatabase(db2, triedb.HashDefaults))
-
-	chain, _ := core.NewParallelBlockChain(db2, back.genesis, engine, core.DefaultConfig(), 8, false)
-	defer chain.Stop()
-
-	// Ignore empty commit here for less noise.
-	w.skipSealHook = func(task *task) bool {
-		return len(task.receipts) == 0
-	}
-
-	// fulfill tx pool
-	const (
-		totalGas    = testGas + params.TxGas
-		totalBlocks = 10
-	)
-
-	var err error
-
-	txInBlock := int(back.genesis.GasLimit/totalGas) + 1
-
-	// a bit risky
-	for i := 0; i < 2*totalBlocks*txInBlock; i++ {
-		err = back.txPool.Add([]*types.Transaction{back.newRandomTx(true)}, false)[0]
-		if err != nil {
-			b.Fatal("while adding a local transaction", err)
-		}
-
-		err = back.txPool.Add([]*types.Transaction{back.newRandomTx(false)}, false)[0]
-		if err != nil {
-			b.Fatal("while adding a remote transaction", err)
-		}
-	}
-
-	// Wait for mined blocks.
-	sub := w.mux.Subscribe(core.NewMinedBlockEvent{})
-	defer sub.Unsubscribe()
-
-	b.ResetTimer()
-
-	prev := uint64(time.Now().Unix())
-
-	// Start mining!
-	w.start()
-
-	blockPeriod, ok := back.genesis.Config.Bor.Period["0"]
-	if !ok {
-		blockPeriod = 1
-	}
-
-	for i := 0; i < totalBlocks; i++ {
-		select {
-		case ev := <-sub.Chan():
-			block := ev.Data.(core.NewMinedBlockEvent).Block
-
-			if _, err := chain.InsertChain([]*types.Block{block}, false); err != nil {
-				b.Fatalf("failed to insert new mined block %d: %v", block.NumberU64(), err)
-			}
-
-			// check for dependencies for block number > 4
-			if block.NumberU64() <= 4 {
-				if block.GetTxDependency() != nil {
-					b.Fatalf("dependency not nil")
-				}
-			} else {
-				deps := block.GetTxDependency()
-				if len(deps[0]) != 0 {
-					b.Fatalf("wrong dependency")
-				}
-
-				for i := 1; i < block.Transactions().Len(); i++ {
-					if deps[i][0] != uint64(i-1) || len(deps[i]) != 1 {
-						b.Fatalf("wrong dependency")
-					}
-				}
 			}
 
 			b.Log("block", block.NumberU64(), "time", block.Time()-prev, "txs", block.Transactions().Len(), "gasUsed", block.GasUsed(), "gasLimit", block.GasLimit())
@@ -1657,7 +1560,7 @@ func TestCommitWorkLeaksPendingWorkBlockWhenSyncing(t *testing.T) {
 	w.pendingWorkBlock.Store(42)
 
 	// Call commitWork directly to drive the in-sync early-return path.
-	w.commitWork(nil, false, time.Now().Unix())
+	w.commitWork(nil, false, time.Now().Unix(), false)
 
 	got := w.pendingWorkBlock.Load()
 	if got != 0 {
@@ -3213,51 +3116,28 @@ func TestWriteBlockAndSetHeadTimer(t *testing.T) {
 	}
 }
 
-// TestDelayFlagOffByOne verifies that the delayFlag check inspects each transaction's
-// own read set rather than its predecessor's.
-func TestDelayFlagOffByOne(t *testing.T) {
-	t.Parallel()
+// TestPipelineBuildGaugeAlwaysDisabled verifies that production-side pipelined
+// SRC is not exposed as a miner config option and stays disabled.
+func TestPipelineBuildGaugeAlwaysDisabled(t *testing.T) {
+	metrics.Enable()
 
-	coinbase := common.HexToAddress("0x000000000000000000000000000000000000bA5e")
-	burntContract := common.HexToAddress("0x000000000000000000000000000000000000dead")
+	var (
+		engine      consensus.Engine
+		chainConfig = params.BorUnittestChainConfig
+		db          = rawdb.NewMemoryDatabase()
+		ctrl        *gomock.Controller
+	)
+	engine, ctrl = getFakeBorFromConfig(t, chainConfig)
+	defer engine.Close()
+	defer ctrl.Finish()
 
-	// Initialize the mvReadMapList with 3 transactions.
-	n := 3
-	mvReadMapList := make([]map[blockstm.Key]blockstm.ReadDescriptor, n)
-	for i := range mvReadMapList {
-		mvReadMapList[i] = make(map[blockstm.Key]blockstm.ReadDescriptor)
+	cfg := DefaultTestConfig()
+	w, _, _ := newTestWorker(t, cfg, chainConfig, engine, db, false, 0)
+	defer w.close()
+
+	if got := pipelineBuildEnabledGauge.Snapshot().Value(); got != 0 {
+		t.Errorf("pipelineBuildEnabledGauge = %d, want 0 when production pipelining is disabled", got)
 	}
-
-	// Only the last tx reads the coinbase and burnt-contract balances.
-	mvReadMapList[n-1][blockstm.NewSubpathKey(coinbase, state.BalancePath)] = blockstm.ReadDescriptor{}
-	mvReadMapList[n-1][blockstm.NewSubpathKey(burntContract, state.BalancePath)] = blockstm.ReadDescriptor{}
-
-	buggyDelayFlag := func() bool {
-		for i := 1; i <= len(mvReadMapList)-1; i++ {
-			reads := mvReadMapList[i-1] // bug: checks predecessor read set instead of current tx
-			_, ok1 := reads[blockstm.NewSubpathKey(coinbase, state.BalancePath)]
-			_, ok2 := reads[blockstm.NewSubpathKey(burntContract, state.BalancePath)]
-			if ok1 || ok2 {
-				return false
-			}
-		}
-		return true
-	}
-
-	fixedDelayFlag := func() bool {
-		for i := 1; i <= len(mvReadMapList)-1; i++ {
-			reads := mvReadMapList[i]
-			_, ok1 := reads[blockstm.NewSubpathKey(coinbase, state.BalancePath)]
-			_, ok2 := reads[blockstm.NewSubpathKey(burntContract, state.BalancePath)]
-			if ok1 || ok2 {
-				return false
-			}
-		}
-		return true
-	}
-
-	require.True(t, buggyDelayFlag(), "bug: last tx skipped, DAG hint incorrectly embedded")
-	require.False(t, fixedDelayFlag(), "fix: last tx detected, DAG hint suppressed")
 }
 
 // TestPrefetchFromPool_BuilderModeSwitch verifies that when builderStarted is signaled

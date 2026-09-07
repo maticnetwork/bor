@@ -29,4 +29,18 @@ var (
 	storageTriesUpdatedMeter = metrics.NewRegisteredMeter("state/update/storagenodes", nil)
 	accountTrieDeletedMeter  = metrics.NewRegisteredMeter("state/delete/accountnodes", nil)
 	storageTriesDeletedMeter = metrics.NewRegisteredMeter("state/delete/storagenodes", nil)
+
+	// FlatDiff overlay hit meters — fire when a state read is satisfied by the
+	// previous block's FlatDiff instead of falling through to the committed trie.
+	// Non-zero rate confirms the pipelined SRC overlay is active on this statedb
+	// (applies to both block import and speculative build paths).
+	//
+	// These also serve as the build-side cache-visibility substitute under
+	// pipelining: the speculative build path uses NewWithFlatBase, which creates
+	// a plain StateDB without the instrumented prefetch/process readers that
+	// populate chain/*/reads/cache/*. Those meters therefore receive no
+	// build-side contribution when pipelining is enabled. Use the flatdiff
+	// meters here for overlay efficiency signals in pipelined build mode.
+	flatDiffAccountHitsMeter = metrics.NewRegisteredMeter("state/flatdiff/account_hits", nil)
+	flatDiffStorageHitsMeter = metrics.NewRegisteredMeter("state/flatdiff/storage_hits", nil)
 )

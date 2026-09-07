@@ -163,6 +163,16 @@ func (b *testBackend) Handle(*Peer, Packet) error {
 	//panic("data processing tests should be done in the handler package")
 }
 
+type packetCapturingBackend struct {
+	*testBackend
+	packet Packet
+}
+
+func (b *packetCapturingBackend) Handle(_ *Peer, packet Packet) error {
+	b.packet = packet
+	return nil
+}
+
 // Tests that block headers can be retrieved from a remote chain based on user queries.
 func TestGetBlockHeaders69(t *testing.T) { testGetBlockHeaders(t, ETH69) }
 func TestGetBlockHeaders68(t *testing.T) { testGetBlockHeaders(t, ETH68) }
@@ -655,6 +665,38 @@ func TestGetPooledTransaction(t *testing.T) {
 	t.Run("legacyTx", func(t *testing.T) {
 		testGetPooledTransaction(t, false)
 	})
+}
+
+func TestHandlePooledTransactionsForwardsRequestID(t *testing.T) {
+	base := newTestBackend(0)
+	defer base.close()
+
+	backend := &packetCapturingBackend{testBackend: base}
+	peer, _ := newTestPeer("peer", ETH68, backend)
+	defer peer.close()
+
+	tx := types.NewTransaction(0, testAddr, big.NewInt(10_000), params.TxGas, big.NewInt(25_000_000_000), nil)
+	packet := PooledTransactionsPacket{
+		RequestId:                  777,
+		PooledTransactionsResponse: []*types.Transaction{tx},
+	}
+	encoded, err := rlp.EncodeToBytes(&packet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := handlePooledTransactions(backend, decoder{msg: encoded}, peer.Peer); err != nil {
+		t.Fatal(err)
+	}
+	delivered, ok := backend.packet.(*PooledTransactionsPacket)
+	if !ok {
+		t.Fatalf("unexpected packet type: %T", backend.packet)
+	}
+	if delivered.RequestId != packet.RequestId {
+		t.Fatalf("wrong request ID: have %d, want %d", delivered.RequestId, packet.RequestId)
+	}
+	if len(delivered.PooledTransactionsResponse) != 1 || delivered.PooledTransactionsResponse[0].Hash() != tx.Hash() {
+		t.Fatalf("wrong pooled transaction response: %v", delivered.PooledTransactionsResponse)
+	}
 }
 
 func testGetPooledTransaction(t *testing.T, blobTx bool) {

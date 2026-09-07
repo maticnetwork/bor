@@ -175,6 +175,9 @@ type Config struct {
 
 	// Relay has transaction relay related settings
 	Relay *RelayConfig `hcl:"relay,block" toml:"relay,block"`
+
+	// Pipeline has pipelined SRC settings for block import
+	Pipeline *PipelineConfig `hcl:"pipeline,block" toml:"pipeline,block"`
 }
 
 type HistoryConfig struct {
@@ -822,6 +825,22 @@ type RelayConfig struct {
 	BlockProducerRpcEndpoints []string `hcl:"bp-rpc-endpoints,optional" toml:"bp-rpc-endpoints,optional"`
 }
 
+// PipelineConfig has settings for pipelined state root computation during block import.
+type PipelineConfig struct {
+	// EnableImportSRC enables pipelined state root computation during block import:
+	// overlap SRC(N) with tx execution of block N+1
+	EnableImportSRC bool `hcl:"enable-import-src,optional" toml:"enable-import-src,optional"`
+
+	// ImportSRCLogs enables verbose logging for pipelined import SRC
+	ImportSRCLogs bool `hcl:"import-src-logs,optional" toml:"import-src-logs,optional"`
+
+	// WarmSnapshot enables warm-cache handoff from the execution-side trie
+	// prefetcher to the pipelined SRC goroutine when witnesses are produced.
+	// Targets cold-cache restart/catch-up CPU; no effect on correctness or
+	// witness completeness. Witness-off import ignores it.
+	WarmSnapshot bool `hcl:"warm-snapshot,optional" toml:"warm-snapshot,optional"`
+}
+
 func DefaultConfig() *Config {
 	return &Config{
 		Chain:                       "mainnet",
@@ -1086,6 +1105,11 @@ func DefaultConfig() *Config {
 			EnablePrivateTx:           false,
 			BlockProducerRpcEndpoints: []string{},
 		},
+		Pipeline: &PipelineConfig{
+			EnableImportSRC: false,
+			ImportSRCLogs:   false,
+			WarmSnapshot:    true,
+		},
 	}
 }
 
@@ -1174,6 +1198,10 @@ func readConfigFile(path string) (*Config, error) {
 		TxPool: &TxPoolConfig{},
 		Cache:  &CacheConfig{},
 		Sealer: &SealerConfig{},
+		// WarmSnapshot defaults on: witness-producing nodes measure faster
+		// with it, and it is inert otherwise. The zero value would silently
+		// put HCL-configured witness nodes on the slower path.
+		Pipeline: &PipelineConfig{WarmSnapshot: true},
 	}
 
 	if err := hclsimple.DecodeFile(path, nil, config); err != nil {
@@ -1568,6 +1596,9 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 		n.TrieDirtyCache = calcPerc(c.Cache.PercGc)
 		n.NoPrefetch = c.Cache.NoPrefetch
 		n.Preimages = c.Cache.Preimages
+		n.EnablePipelinedImportSRC = c.Pipeline.EnableImportSRC
+		n.PipelinedImportSRCLogs = c.Pipeline.ImportSRCLogs
+		n.PipelinedSRCWarmSnapshot = c.Pipeline.WarmSnapshot
 		// Note that even the values set by `history.transactions` will be written in the old flag until it's removed.
 		n.TransactionHistory = c.Cache.TxLookupLimit
 		n.TrieTimeout = c.Cache.TrieTimeout

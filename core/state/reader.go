@@ -249,7 +249,13 @@ func (r *flatReader) Storage(addr common.Address, key common.Hash) (common.Hash,
 // trieReader is safe for concurrent read.
 type trieReader struct {
 	root common.Hash      // State root which uniquely represent a state
-	db   *triedb.Database // Database for loading trie
+	db   *triedb.Database // Database for loading trie (kept for IsVerkle / Disk access)
+
+	// nodeDB is the database used to construct sub-tries (storage tries) on
+	// demand. It defaults to db, but the snapshot-aware constructor wraps db
+	// so storage trie reads consult a WarmSnapshot before falling through to
+	// pathdb. Keeping it as an interface lets the wrapper remain transparent.
+	nodeDB database.NodeDatabase
 
 	// Main trie, resolved in constructor. Note either the Merkle-Patricia-tree
 	// or Verkle-tree is not safe for concurrent read.
@@ -312,6 +318,35 @@ func newTrieReader(root common.Hash, db *triedb.Database) (*trieReader, error) {
 	return &trieReader{
 		root:     root,
 		db:       db,
+		nodeDB:   db,
+		mainTrie: tr,
+	}, nil
+}
+
+// newTrieReaderWithSnapshot mirrors newTrieReader but receives a snapshot-aware
+// NodeDatabase so trie reads can consult a WarmSnapshot before falling through
+// to pathdb/pebble. The snapshot is hash-verified by the supplied NodeDatabase;
+// misses or hash mismatches transparently fall through. The trie itself is
+// unchanged (NewStateTrie sees a wrapped NodeDatabase only) — its
+// resolveAndTrack path and prevalueTracer recording fire identically whether
+// the served node came from the snapshot or pathdb, so witness completeness
+// under NewTrieOnly semantics is preserved.
+//
+// Verkle is not supported by this path: pipelined SRC is MPT-only and the
+// snapshot is constructed from MPT trie nodes. Callers that need verkle
+// readers must use newTrieReader.
+func newTrieReaderWithSnapshot(root common.Hash, db *triedb.Database, nodeDB database.NodeDatabase) (*trieReader, error) {
+	if db.IsVerkle() {
+		return nil, errors.New("warm snapshot reader: verkle scheme is not supported")
+	}
+	tr, err := trie.NewStateTrie(trie.StateTrieID(root), nodeDB)
+	if err != nil {
+		return nil, err
+	}
+	return &trieReader{
+		root:     root,
+		db:       db,
+		nodeDB:   nodeDB,
 		mainTrie: tr,
 	}, nil
 }
@@ -443,7 +478,7 @@ func (r *trieReader) subTrieConcurrent(addr common.Address) (Trie, error) {
 	if err != nil {
 		return nil, err
 	}
-	newTr, err := trie.NewStateTrie(trie.StorageTrieID(r.root, crypto.Keccak256Hash(addr.Bytes()), root), r.db)
+	newTr, err := trie.NewStateTrie(trie.StorageTrieID(r.root, crypto.Keccak256Hash(addr.Bytes()), root), r.nodeDB)
 	if err != nil {
 		return nil, err
 	}
@@ -468,7 +503,7 @@ func (r *trieReader) subTrieLocked(addr common.Address) (Trie, error) {
 	if err != nil {
 		return nil, err
 	}
-	tr, err := trie.NewStateTrie(trie.StorageTrieID(r.root, crypto.Keccak256Hash(addr.Bytes()), root), r.db)
+	tr, err := trie.NewStateTrie(trie.StorageTrieID(r.root, crypto.Keccak256Hash(addr.Bytes()), root), r.nodeDB)
 	if err != nil {
 		return nil, err
 	}
@@ -664,6 +699,25 @@ func (r *readerWithCache) account(addr common.Address, caller readerRole) (*type
 func (r *readerWithCache) Account(addr common.Address) (*types.StateAccount, error) {
 	account, _, _, _, err := r.account(addr, roleUnknown)
 	return account, err
+}
+
+// CollectReadSet enumerates every account and storage key resolved through
+// this cache during the block, regardless of which statedb issued the read
+// or which backing layer served it. The cache is shared across the reader
+// triple, finalDB, and every BlockSTM pool copy, so this is a complete
+// record of reader-reaching reads — the counterpart, for the FlatDiff
+// read-set, of what resolveCachedKeysIntoTrie is for witness trie nodes.
+func (r *readerWithCache) CollectReadSet(onAccount func(common.Address, bool), onStorage func(common.Address, common.Hash)) {
+	r.accounts.Range(func(k, v any) bool {
+		ent := v.(*accountCacheEntry)
+		onAccount(k.(common.Address), ent.acct != nil)
+		return true
+	})
+	r.storageCache.Range(func(k, _ any) bool {
+		key := k.(storageKey)
+		onStorage(key.addr, key.slot)
+		return true
+	})
 }
 
 // storage retrieves the storage slot specified by the address and slot key, along

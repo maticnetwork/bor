@@ -174,6 +174,11 @@ type BlockChain interface {
 
 	// StateAt returns a state database for a given root hash (generally the head).
 	StateAt(root common.Hash) (*state.StateDB, error)
+
+	// PostExecState returns a StateDB representing the post-execution
+	// state of the given block header. Under pipelined SRC, uses a non-blocking
+	// FlatDiff overlay when available; otherwise falls back to StateAt.
+	PostExecState(header *types.Header) (*state.StateDB, error)
 }
 
 // Config are the configuration parameters of the transaction pool.
@@ -410,7 +415,7 @@ func (pool *LegacyPool) Init(gasTip uint64, head *types.Header, reserver txpool.
 	// Initialize the state with head block, or fallback to empty one in
 	// case the head state is not available (might occur when node is not
 	// fully synced).
-	statedb, err := pool.chain.StateAt(head.Root)
+	statedb, err := pool.chain.PostExecState(head)
 	if err != nil {
 		statedb, err = pool.chain.StateAt(types.EmptyRootHash)
 	}
@@ -1791,7 +1796,7 @@ func (pool *LegacyPool) reset(oldHead, newHead *types.Header) {
 	if newHead == nil {
 		newHead = pool.chain.CurrentBlock() // Special case during testing
 	}
-	statedb, err := pool.chain.StateAt(newHead.Root)
+	statedb, err := pool.chain.PostExecState(newHead)
 	if err != nil {
 		log.Error("Failed to reset txpool state", "err", err)
 		return
@@ -1806,6 +1811,40 @@ func (pool *LegacyPool) reset(oldHead, newHead *types.Header) {
 
 	// Add transactions synchronously as we're already holding the lock
 	pool.addTxs(reinject, false)
+}
+
+// SetSpeculativeState updates the pool's internal state to reflect a new
+// block that hasn't been written to the chain yet. This is used by pipelined
+// SRC: after block N's transactions are executed but before block N is sealed,
+// the miner calls this to update the txpool so that speculative execution of
+// block N+1 gets correct pending transactions (with block N's nonces/balances).
+//
+// Unlike the full reset() path, this does NOT walk the chain for included/
+// discarded transactions (the block isn't in the chain DB). It only:
+//  1. Updates currentState and pendingNonces from the provided statedb
+//  2. Sets currentHead to the new header
+//  3. Demotes transactions with stale nonces
+//  4. Promotes newly executable transactions
+func (pool *LegacyPool) SetSpeculativeState(newHead *types.Header, statedb *state.StateDB) {
+	pool.mu.Lock()
+
+	pool.currentHead.Store(newHead)
+	pool.currentState = statedb
+	pool.pendingNonces = newNoncer(statedb)
+
+	// Demote transactions that are no longer valid with the new nonces
+	pool.demoteUnexecutables()
+
+	// Promote transactions that are now executable
+	promoted := pool.promoteExecutables(nil)
+	pool.mu.Unlock()
+
+	// Fire events for promoted transactions after releasing the pool lock,
+	// matching the regular promotion flow — a subscriber calling back into
+	// the pool must not deadlock, and Send on a hot lock is contention.
+	if len(promoted) > 0 {
+		pool.txFeed.Send(core.NewTxsEvent{Txs: promoted})
+	}
 }
 
 // promoteExecutables moves transactions that have become processable from the

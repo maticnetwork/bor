@@ -3196,6 +3196,670 @@ func getMockedSpannerWithSpanRotation(t *testing.T, validator1, validator2 commo
 	return spanner
 }
 
+// TestBlockProduction_Basic verifies that a single miner can produce multiple
+// consecutive blocks correctly.
+func TestBlockProduction_Basic(t *testing.T) {
+	t.Parallel()
+	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelInfo, true)))
+	fdlimit.Raise(2048)
+
+	faucets := make([]*ecdsa.PrivateKey, 128)
+	for i := 0; i < len(faucets); i++ {
+		faucets[i], _ = crypto.GenerateKey()
+	}
+
+	genesis := InitGenesis(t, faucets, "./testdata/genesis_2val.json", 16)
+	genesis.Config.Bor.Period = map[string]uint64{"0": 2}
+	genesis.Config.Bor.Sprint = map[string]uint64{"0": 16}
+	genesis.Config.Bor.RioBlock = big.NewInt(0) // Enable Rio so snapshot uses spanByBlockNumber (no ecrecover needed)
+
+	// Start a single miner.
+	stack, ethBackend, err := InitMiner(genesis, keys[0], true)
+	require.NoError(t, err)
+	defer stack.Close()
+
+	for stack.Server().NodeInfo().Ports.Listener == 0 {
+		time.Sleep(250 * time.Millisecond)
+	}
+
+	// Start mining
+	err = ethBackend.StartMining()
+	require.NoError(t, err)
+
+	// Wait for the miner to produce at least 10 blocks
+	targetBlock := uint64(10)
+	deadline := time.After(60 * time.Second)
+	for {
+		select {
+		case <-deadline:
+			currentNum := ethBackend.BlockChain().CurrentBlock().Number.Uint64()
+			t.Fatalf("Timed out waiting for block %d, current block: %d", targetBlock, currentNum)
+		default:
+			time.Sleep(500 * time.Millisecond)
+			if ethBackend.BlockChain().CurrentBlock().Number.Uint64() >= targetBlock {
+				goto done
+			}
+		}
+	}
+done:
+
+	chain := ethBackend.BlockChain()
+	currentNum := chain.CurrentBlock().Number.Uint64()
+	t.Logf("Miner produced %d blocks", currentNum)
+
+	// Verify chain integrity: each block's parent hash matches the previous block's hash
+	for i := uint64(1); i <= currentNum; i++ {
+		block := chain.GetBlockByNumber(i)
+		require.NotNil(t, block, "block %d not found", i)
+
+		if i > 0 {
+			parent := chain.GetBlockByNumber(i - 1)
+			require.NotNil(t, parent, "parent block %d not found", i-1)
+			require.Equal(t, parent.Hash(), block.ParentHash(),
+				"block %d ParentHash mismatch: expected %x, got %x", i, parent.Hash(), block.ParentHash())
+		}
+
+		// Verify state root is valid (can open state at this root)
+		_, err := chain.StateAt(block.Root())
+		require.NoError(t, err, "cannot open state at block %d root %x", i, block.Root())
+	}
+}
+
+// TestBlockProduction_WithTransactions verifies that the miner correctly
+// includes transactions in blocks.
+func TestBlockProduction_WithTransactions(t *testing.T) {
+	t.Parallel()
+	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelInfo, true)))
+	fdlimit.Raise(2048)
+
+	faucets := make([]*ecdsa.PrivateKey, 128)
+	for i := 0; i < len(faucets); i++ {
+		faucets[i], _ = crypto.GenerateKey()
+	}
+
+	genesis := InitGenesis(t, faucets, "./testdata/genesis_2val.json", 16)
+	genesis.Config.Bor.Period = map[string]uint64{"0": 2}
+	genesis.Config.Bor.Sprint = map[string]uint64{"0": 16}
+	genesis.Config.Bor.RioBlock = big.NewInt(0)
+
+	stack, ethBackend, err := InitMiner(genesis, keys[0], true)
+	require.NoError(t, err)
+	defer stack.Close()
+
+	for stack.Server().NodeInfo().Ports.Listener == 0 {
+		time.Sleep(250 * time.Millisecond)
+	}
+
+	err = ethBackend.StartMining()
+	require.NoError(t, err)
+
+	// Wait for a few blocks first
+	for ethBackend.BlockChain().CurrentBlock().Number.Uint64() < 2 {
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	// Submit transactions
+	txpool := ethBackend.TxPool()
+	senderKey := pkey1
+	recipientAddr := crypto.PubkeyToAddress(pkey2.PublicKey)
+	signer := types.LatestSignerForChainID(genesis.Config.ChainID)
+
+	nonce := txpool.Nonce(crypto.PubkeyToAddress(senderKey.PublicKey))
+	txCount := 10
+
+	for i := 0; i < txCount; i++ {
+		tx := types.NewTransaction(
+			nonce+uint64(i),
+			recipientAddr,
+			big.NewInt(1000),
+			21000,
+			big.NewInt(30000000000),
+			nil,
+		)
+		signedTx, err := types.SignTx(tx, signer, senderKey)
+		require.NoError(t, err)
+		errs := txpool.Add([]*types.Transaction{signedTx}, true)
+		require.Nil(t, errs[0], "failed to add tx %d", i)
+	}
+
+	// Wait for transactions to be included in blocks
+	deadline := time.After(60 * time.Second)
+	for {
+		select {
+		case <-deadline:
+			t.Fatal("Timed out waiting for transactions to be included")
+		default:
+			time.Sleep(500 * time.Millisecond)
+			// Check if all transactions have been mined
+			currentNonce := txpool.Nonce(crypto.PubkeyToAddress(senderKey.PublicKey))
+			if currentNonce >= nonce+uint64(txCount) {
+				goto txsDone
+			}
+		}
+	}
+txsDone:
+
+	chain := ethBackend.BlockChain()
+	currentNum := chain.CurrentBlock().Number.Uint64()
+	t.Logf("All %d transactions included by block %d", txCount, currentNum)
+
+	// Give block insertion time to settle before scanning the chain.
+	time.Sleep(2 * time.Second)
+	currentNum = chain.CurrentBlock().Number.Uint64()
+
+	// Verify we can find the transactions in the blocks
+	totalTxs := 0
+	for i := uint64(1); i <= currentNum; i++ {
+		block := chain.GetBlockByNumber(i)
+		if block != nil {
+			totalTxs += len(block.Transactions())
+		}
+	}
+	require.GreaterOrEqual(t, totalTxs, txCount,
+		"expected at least %d transactions across all blocks, got %d", txCount, totalTxs)
+}
+
+// TestPipelinedImportSRC_BasicImport verifies that a non-mining node with
+// pipelined import SRC enabled correctly syncs blocks from a block-producing
+// peer. The importer computes state roots in the background (overlapping
+// SRC(N) with tx execution of N+1) and should arrive at the same chain state
+// as the BP.
+func TestPipelinedImportSRC_BasicImport(t *testing.T) {
+	t.Parallel()
+	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelInfo, true)))
+	fdlimit.Raise(2048)
+
+	faucets := make([]*ecdsa.PrivateKey, 128)
+	for i := 0; i < len(faucets); i++ {
+		faucets[i], _ = crypto.GenerateKey()
+	}
+
+	genesis := InitGenesis(t, faucets, "./testdata/genesis_2val.json", 16)
+	genesis.Config.Bor.Period = map[string]uint64{"0": 2}
+	genesis.Config.Bor.Sprint = map[string]uint64{"0": 16}
+	genesis.Config.Bor.RioBlock = big.NewInt(0)
+
+	// Start a normal BP (no pipeline on mining side)
+	bpStack, bpBackend, err := InitMiner(genesis, keys[0], true)
+	require.NoError(t, err)
+	defer bpStack.Close()
+
+	for bpStack.Server().NodeInfo().Ports.Listener == 0 {
+		time.Sleep(250 * time.Millisecond)
+	}
+
+	// Start a non-mining importer with pipelined import SRC
+	importerStack, importerBackend, err := InitImporterWithPipelinedSRC(genesis, keys[1], true)
+	require.NoError(t, err)
+	defer importerStack.Close()
+
+	for importerStack.Server().NodeInfo().Ports.Listener == 0 {
+		time.Sleep(250 * time.Millisecond)
+	}
+
+	// Connect the two peers
+	connectAndWaitForPeers(t, importerStack, bpStack)
+
+	// Start mining on the BP
+	err = bpBackend.StartMining()
+	require.NoError(t, err)
+
+	// Wait for the BP to produce at least 20 blocks
+	targetBlock := uint64(20)
+	deadline := time.After(120 * time.Second)
+	for {
+		select {
+		case <-deadline:
+			bpNum := bpBackend.BlockChain().CurrentBlock().Number.Uint64()
+			t.Fatalf("Timed out waiting for BP to reach block %d, current: %d", targetBlock, bpNum)
+		default:
+			time.Sleep(500 * time.Millisecond)
+			if bpBackend.BlockChain().CurrentBlock().Number.Uint64() >= targetBlock {
+				goto bpDone
+			}
+		}
+	}
+bpDone:
+
+	bpNum := bpBackend.BlockChain().CurrentBlock().Number.Uint64()
+	t.Logf("BP produced %d blocks, waiting for importer to sync", bpNum)
+
+	// Wait for the importer to sync up to the target
+	deadline = time.After(120 * time.Second)
+	for {
+		select {
+		case <-deadline:
+			importerNum := importerBackend.BlockChain().CurrentBlock().Number.Uint64()
+			t.Fatalf("Timed out waiting for importer to reach block %d, current: %d", targetBlock, importerNum)
+		default:
+			time.Sleep(500 * time.Millisecond)
+			if importerBackend.BlockChain().CurrentBlock().Number.Uint64() >= targetBlock {
+				goto importerDone
+			}
+		}
+	}
+importerDone:
+
+	importerNum := importerBackend.BlockChain().CurrentBlock().Number.Uint64()
+	t.Logf("Importer synced to block %d", importerNum)
+
+	// Allow async DB writes to flush
+	time.Sleep(2 * time.Second)
+
+	// Use the minimum of both chains for comparison
+	bpNum = bpBackend.BlockChain().CurrentBlock().Number.Uint64()
+	importerNum = importerBackend.BlockChain().CurrentBlock().Number.Uint64()
+	compareUpTo := bpNum
+	if importerNum < compareUpTo {
+		compareUpTo = importerNum
+	}
+
+	bpChain := bpBackend.BlockChain()
+	importerChain := importerBackend.BlockChain()
+
+	for i := uint64(1); i <= compareUpTo; i++ {
+		bpBlock := bpChain.GetBlockByNumber(i)
+		require.NotNil(t, bpBlock, "BP missing block %d", i)
+
+		importerBlock := importerChain.GetBlockByNumber(i)
+		require.NotNil(t, importerBlock, "importer missing block %d", i)
+
+		// Block hashes must match
+		require.Equal(t, bpBlock.Hash(), importerBlock.Hash(),
+			"block %d hash mismatch: BP=%x importer=%x", i, bpBlock.Hash(), importerBlock.Hash())
+
+		// State roots must match
+		require.Equal(t, bpBlock.Root(), importerBlock.Root(),
+			"block %d state root mismatch: BP=%x importer=%x", i, bpBlock.Root(), importerBlock.Root())
+
+		// Verify the importer can open state at each block's root
+		_, err := importerChain.StateAt(importerBlock.Root())
+		require.NoError(t, err, "importer cannot open state at block %d root %x", i, importerBlock.Root())
+	}
+
+	t.Logf("Verified %d blocks: hashes, state roots, and state accessibility all match", compareUpTo)
+}
+
+// TestPipelinedImportSRC_WithTransactions verifies that a non-mining node with
+// pipelined import SRC correctly imports blocks containing transactions. It
+// checks that transaction receipts exist and that account balances match
+// between the BP and the importer.
+func TestPipelinedImportSRC_WithTransactions(t *testing.T) {
+	t.Parallel()
+	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelInfo, true)))
+	fdlimit.Raise(2048)
+
+	faucets := make([]*ecdsa.PrivateKey, 128)
+	for i := 0; i < len(faucets); i++ {
+		faucets[i], _ = crypto.GenerateKey()
+	}
+
+	genesis := InitGenesis(t, faucets, "./testdata/genesis_2val.json", 16)
+	genesis.Config.Bor.Period = map[string]uint64{"0": 2}
+	genesis.Config.Bor.Sprint = map[string]uint64{"0": 16}
+	genesis.Config.Bor.RioBlock = big.NewInt(0)
+
+	// Start BP without pipeline
+	bpStack, bpBackend, err := InitMiner(genesis, keys[0], true)
+	require.NoError(t, err)
+	defer bpStack.Close()
+
+	for bpStack.Server().NodeInfo().Ports.Listener == 0 {
+		time.Sleep(250 * time.Millisecond)
+	}
+
+	// Start importer with pipelined import SRC
+	importerStack, importerBackend, err := InitImporterWithPipelinedSRC(genesis, keys[1], true)
+	require.NoError(t, err)
+	defer importerStack.Close()
+
+	for importerStack.Server().NodeInfo().Ports.Listener == 0 {
+		time.Sleep(250 * time.Millisecond)
+	}
+
+	// Connect peers
+	connectAndWaitForPeers(t, importerStack, bpStack)
+
+	// Start mining
+	err = bpBackend.StartMining()
+	require.NoError(t, err)
+
+	// Wait for a few blocks before submitting transactions
+	for bpBackend.BlockChain().CurrentBlock().Number.Uint64() < 2 {
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	// Submit ETH transfer transactions to the BP
+	txpool := bpBackend.TxPool()
+	senderKey := pkey1
+	senderAddr := crypto.PubkeyToAddress(senderKey.PublicKey)
+	recipientAddr := crypto.PubkeyToAddress(pkey2.PublicKey)
+	signer := types.LatestSignerForChainID(genesis.Config.ChainID)
+
+	nonce := txpool.Nonce(senderAddr)
+	txCount := 10
+	transferAmount := big.NewInt(1000)
+
+	for i := 0; i < txCount; i++ {
+		tx := types.NewTransaction(
+			nonce+uint64(i),
+			recipientAddr,
+			transferAmount,
+			21000,
+			big.NewInt(30000000000),
+			nil,
+		)
+		signedTx, err := types.SignTx(tx, signer, senderKey)
+		require.NoError(t, err)
+		errs := txpool.Add([]*types.Transaction{signedTx}, true)
+		require.Nil(t, errs[0], "failed to add tx %d", i)
+	}
+
+	// Wait for all transactions to be mined on the BP
+	deadline := time.After(120 * time.Second)
+	for {
+		select {
+		case <-deadline:
+			t.Fatal("Timed out waiting for transactions to be mined on BP")
+		default:
+			time.Sleep(500 * time.Millisecond)
+			if txpool.Nonce(senderAddr) >= nonce+uint64(txCount) {
+				goto txsMined
+			}
+		}
+	}
+txsMined:
+
+	bpNum := bpBackend.BlockChain().CurrentBlock().Number.Uint64()
+	t.Logf("All %d transactions mined on BP by block %d", txCount, bpNum)
+
+	// Wait for the importer to sync past the block containing the last tx
+	targetBlock := bpNum
+	deadline = time.After(120 * time.Second)
+	for {
+		select {
+		case <-deadline:
+			importerNum := importerBackend.BlockChain().CurrentBlock().Number.Uint64()
+			t.Fatalf("Timed out waiting for importer to reach block %d, current: %d", targetBlock, importerNum)
+		default:
+			time.Sleep(500 * time.Millisecond)
+			if importerBackend.BlockChain().CurrentBlock().Number.Uint64() >= targetBlock {
+				goto importerSynced
+			}
+		}
+	}
+importerSynced:
+
+	// Allow async DB writes to flush
+	time.Sleep(2 * time.Second)
+
+	importerNum := importerBackend.BlockChain().CurrentBlock().Number.Uint64()
+	t.Logf("Importer synced to block %d", importerNum)
+
+	bpChain := bpBackend.BlockChain()
+	importerChain := importerBackend.BlockChain()
+
+	// Re-read current block numbers after the flush delay
+	bpNum = bpChain.CurrentBlock().Number.Uint64()
+	importerNum = importerChain.CurrentBlock().Number.Uint64()
+	compareUpTo := bpNum
+	if importerNum < compareUpTo {
+		compareUpTo = importerNum
+	}
+
+	// Verify blocks, state roots, and transaction counts match
+	totalBpTxs := 0
+	totalImporterTxs := 0
+	for i := uint64(1); i <= compareUpTo; i++ {
+		bpBlock := bpChain.GetBlockByNumber(i)
+		require.NotNil(t, bpBlock, "BP missing block %d", i)
+
+		importerBlock := importerChain.GetBlockByNumber(i)
+		require.NotNil(t, importerBlock, "importer missing block %d", i)
+
+		require.Equal(t, bpBlock.Hash(), importerBlock.Hash(),
+			"block %d hash mismatch", i)
+		require.Equal(t, bpBlock.Root(), importerBlock.Root(),
+			"block %d state root mismatch", i)
+
+		// Transaction counts must match per block
+		require.Equal(t, len(bpBlock.Transactions()), len(importerBlock.Transactions()),
+			"block %d tx count mismatch: BP=%d importer=%d", i,
+			len(bpBlock.Transactions()), len(importerBlock.Transactions()))
+
+		totalBpTxs += len(bpBlock.Transactions())
+		totalImporterTxs += len(importerBlock.Transactions())
+
+		// Verify receipts exist on the importer for each transaction
+		for j, tx := range importerBlock.Transactions() {
+			receipt, _, _, _ := rawdb.ReadReceipt(importerBackend.ChainDb(), tx.Hash(), importerChain.Config())
+			require.NotNil(t, receipt, "importer missing receipt for tx %d in block %d (hash=%x)", j, i, tx.Hash())
+		}
+	}
+
+	require.GreaterOrEqual(t, totalBpTxs, txCount,
+		"expected at least %d transactions across BP blocks, got %d", txCount, totalBpTxs)
+	require.Equal(t, totalBpTxs, totalImporterTxs,
+		"total tx count mismatch: BP=%d importer=%d", totalBpTxs, totalImporterTxs)
+
+	// Verify account balances match between BP and importer at the latest
+	// common block — this confirms the pipelined SRC produced correct state.
+	bpState, err := bpChain.StateAt(bpChain.GetBlockByNumber(compareUpTo).Root())
+	require.NoError(t, err, "cannot open BP state at block %d", compareUpTo)
+
+	importerState, err := importerChain.StateAt(importerChain.GetBlockByNumber(compareUpTo).Root())
+	require.NoError(t, err, "cannot open importer state at block %d", compareUpTo)
+
+	bpRecipientBal := bpState.GetBalance(recipientAddr)
+	importerRecipientBal := importerState.GetBalance(recipientAddr)
+	require.Equal(t, bpRecipientBal.String(), importerRecipientBal.String(),
+		"recipient balance mismatch at block %d: BP=%s importer=%s",
+		compareUpTo, bpRecipientBal, importerRecipientBal)
+
+	bpSenderBal := bpState.GetBalance(senderAddr)
+	importerSenderBal := importerState.GetBalance(senderAddr)
+	require.Equal(t, bpSenderBal.String(), importerSenderBal.String(),
+		"sender balance mismatch at block %d: BP=%s importer=%s",
+		compareUpTo, bpSenderBal, importerSenderBal)
+
+	t.Logf("Verified %d blocks with %d total transactions, balances match", compareUpTo, totalImporterTxs)
+}
+
+// TestPipelinedImportSRC_SelfDestruct verifies that a contract which
+// self-destructs in its constructor is correctly handled by the FlatDiff
+// overlay during pipelined import. Without the Destructs check in
+// getStateObject, the importer would fall through to the trie reader and
+// see stale pre-destruct state from the committed parent root.
+//
+// Post-Cancun (EIP-6780), SELFDESTRUCT only fully destroys an account when
+// called in the same transaction that created the contract, so the test uses
+// a constructor that immediately self-destructs.
+func TestPipelinedImportSRC_SelfDestruct(t *testing.T) {
+	t.Parallel()
+	log.SetDefault(log.NewLogger(log.NewTerminalHandlerWithLevel(os.Stderr, log.LevelInfo, true)))
+	fdlimit.Raise(2048)
+
+	faucets := make([]*ecdsa.PrivateKey, 128)
+	for i := 0; i < len(faucets); i++ {
+		faucets[i], _ = crypto.GenerateKey()
+	}
+
+	genesis := InitGenesis(t, faucets, "./testdata/genesis_2val.json", 16)
+	genesis.Config.Bor.Period = map[string]uint64{"0": 2}
+	genesis.Config.Bor.Sprint = map[string]uint64{"0": 16}
+	genesis.Config.Bor.RioBlock = big.NewInt(0)
+
+	// Start a normal BP (no pipeline on mining side)
+	bpStack, bpBackend, err := InitMiner(genesis, keys[0], true)
+	require.NoError(t, err)
+	defer bpStack.Close()
+
+	for bpStack.Server().NodeInfo().Ports.Listener == 0 {
+		time.Sleep(250 * time.Millisecond)
+	}
+
+	// Start importer with pipelined import SRC
+	importerStack, importerBackend, err := InitImporterWithPipelinedSRC(genesis, keys[1], true)
+	require.NoError(t, err)
+	defer importerStack.Close()
+
+	for importerStack.Server().NodeInfo().Ports.Listener == 0 {
+		time.Sleep(250 * time.Millisecond)
+	}
+
+	// Connect peers
+	connectAndWaitForPeers(t, importerStack, bpStack)
+
+	// Start mining
+	err = bpBackend.StartMining()
+	require.NoError(t, err)
+
+	// Wait for a few blocks so we're past cancunBlock=3
+	for bpBackend.BlockChain().CurrentBlock().Number.Uint64() < 5 {
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	// Deploy a contract whose constructor immediately self-destructs,
+	// sending its value back to CALLER.
+	// Init code: CALLER (0x33) SELFDESTRUCT (0xFF) = 0x33FF
+	selfDestructInitCode := []byte{byte(vm.CALLER), byte(vm.SELFDESTRUCT)}
+	deployValue := big.NewInt(1_000_000_000_000_000_000) // 1 ETH
+
+	txpool := bpBackend.TxPool()
+	senderKey := pkey1
+	senderAddr := crypto.PubkeyToAddress(senderKey.PublicKey)
+	signer := types.LatestSignerForChainID(genesis.Config.ChainID)
+
+	nonce := txpool.Nonce(senderAddr)
+
+	// Predict the contract address
+	contractAddr := crypto.CreateAddress(senderAddr, nonce)
+	t.Logf("Deploying self-destruct contract at predicted address %s with nonce %d", contractAddr.Hex(), nonce)
+
+	// Record sender balance before deployment
+	bpChain := bpBackend.BlockChain()
+	preState, err := bpChain.StateAt(bpChain.CurrentBlock().Root)
+	require.NoError(t, err)
+	senderBalBefore := preState.GetBalance(senderAddr)
+	t.Logf("Sender balance before deploy: %s", senderBalBefore.String())
+
+	// Create the deployment tx with value
+	deployTx, err := types.SignTx(
+		types.NewContractCreation(nonce, deployValue, 100_000, big.NewInt(30_000_000_000), selfDestructInitCode),
+		signer, senderKey,
+	)
+	require.NoError(t, err)
+
+	errs := txpool.Add([]*types.Transaction{deployTx}, true)
+	require.Nil(t, errs[0], "failed to add deploy tx")
+
+	// Also send a normal transfer in the NEXT block to force pipeline overlap.
+	// This ensures block N+1 uses the FlatDiff from block N (which has the destruct).
+	nonce++
+	recipientAddr := crypto.PubkeyToAddress(pkey2.PublicKey)
+	transferTx, err := types.SignTx(
+		types.NewTransaction(nonce, recipientAddr, big.NewInt(1000), 21000, big.NewInt(30_000_000_000), nil),
+		signer, senderKey,
+	)
+	require.NoError(t, err)
+	errs = txpool.Add([]*types.Transaction{transferTx}, true)
+	require.Nil(t, errs[0], "failed to add transfer tx")
+
+	// Wait for both txs to be mined
+	deadline := time.After(120 * time.Second)
+	for {
+		select {
+		case <-deadline:
+			t.Fatal("Timed out waiting for transactions to be mined on BP")
+		default:
+			time.Sleep(500 * time.Millisecond)
+			if txpool.Nonce(senderAddr) >= nonce+1 {
+				goto txsMined
+			}
+		}
+	}
+txsMined:
+
+	bpNum := bpBackend.BlockChain().CurrentBlock().Number.Uint64()
+	t.Logf("Transactions mined on BP by block %d", bpNum)
+
+	// Wait for importer to sync
+	targetBlock := bpNum
+	deadline = time.After(120 * time.Second)
+	for {
+		select {
+		case <-deadline:
+			importerNum := importerBackend.BlockChain().CurrentBlock().Number.Uint64()
+			t.Fatalf("Timed out waiting for importer to reach block %d, current: %d", targetBlock, importerNum)
+		default:
+			time.Sleep(500 * time.Millisecond)
+			if importerBackend.BlockChain().CurrentBlock().Number.Uint64() >= targetBlock {
+				goto importerSynced
+			}
+		}
+	}
+importerSynced:
+
+	// Allow async DB writes to flush
+	time.Sleep(2 * time.Second)
+
+	importerChain := importerBackend.BlockChain()
+	importerNum := importerChain.CurrentBlock().Number.Uint64()
+	t.Logf("Importer synced to block %d", importerNum)
+
+	// Re-read BP chain head
+	bpNum = bpChain.CurrentBlock().Number.Uint64()
+	compareUpTo := bpNum
+	if importerNum < compareUpTo {
+		compareUpTo = importerNum
+	}
+
+	// Verify block hashes and state roots match
+	for i := uint64(1); i <= compareUpTo; i++ {
+		bpBlock := bpChain.GetBlockByNumber(i)
+		require.NotNil(t, bpBlock, "BP missing block %d", i)
+
+		importerBlock := importerChain.GetBlockByNumber(i)
+		require.NotNil(t, importerBlock, "importer missing block %d", i)
+
+		require.Equal(t, bpBlock.Hash(), importerBlock.Hash(),
+			"block %d hash mismatch", i)
+		require.Equal(t, bpBlock.Root(), importerBlock.Root(),
+			"block %d state root mismatch", i)
+	}
+
+	// Verify the self-destructed contract is gone on BOTH chains
+	bpState, err := bpChain.StateAt(bpChain.GetBlockByNumber(compareUpTo).Root())
+	require.NoError(t, err)
+	importerState, err := importerChain.StateAt(importerChain.GetBlockByNumber(compareUpTo).Root())
+	require.NoError(t, err)
+
+	// Contract should have zero balance (ETH sent back to sender via SELFDESTRUCT)
+	bpContractBal := bpState.GetBalance(contractAddr)
+	importerContractBal := importerState.GetBalance(contractAddr)
+	require.True(t, bpContractBal.IsZero(), "BP: contract should have zero balance, got %s", bpContractBal)
+	require.True(t, importerContractBal.IsZero(), "importer: contract should have zero balance, got %s", importerContractBal)
+
+	// Contract should have no code
+	bpCode := bpState.GetCode(contractAddr)
+	importerCode := importerState.GetCode(contractAddr)
+	require.Empty(t, bpCode, "BP: contract should have no code")
+	require.Empty(t, importerCode, "importer: contract should have no code")
+
+	// Contract nonce should be zero (fully destroyed)
+	require.Equal(t, uint64(0), bpState.GetNonce(contractAddr), "BP: contract nonce should be 0")
+	require.Equal(t, uint64(0), importerState.GetNonce(contractAddr), "importer: contract nonce should be 0")
+
+	// Sender balances must match between BP and importer
+	bpSenderBal := bpState.GetBalance(senderAddr)
+	importerSenderBal := importerState.GetBalance(senderAddr)
+	require.Equal(t, bpSenderBal.String(), importerSenderBal.String(),
+		"sender balance mismatch: BP=%s importer=%s", bpSenderBal, importerSenderBal)
+
+	t.Logf("Verified: contract %s fully destroyed, sender balances match (BP=%s, importer=%s)",
+		contractAddr.Hex(), bpSenderBal, importerSenderBal)
+}
+
 // TestProducerRecoversAfterMiningRestart is an integration-level regression
 // test for the family of "elected but silent" producer stalls
 // (post-mortem INC-37 for the 2026-05-07 Amoy chain halt).

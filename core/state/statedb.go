@@ -99,6 +99,15 @@ type StateDB struct {
 	// boundaries.
 	stateObjectsDestruct map[common.Address]*stateObject
 
+	// currentBlockDestructs holds the subset of stateObjectsDestruct that this
+	// block's own execution destructed. The FlatDiff replay paths also seed
+	// stateObjectsDestruct — with the *parent* block's destructs, whose
+	// post-parent storage the overlay legitimately serves — so the combined map
+	// can't distinguish "storage was wiped by the block being executed" from
+	// "the parent wiped it and the overlay holds what replaced it". Only the
+	// former may suppress an overlay read.
+	currentBlockDestructs map[common.Address]struct{}
+
 	// This map tracks the account mutations that occurred during the
 	// transition. Uncommitted mutations belonging to the same account
 	// can be merged into a single one which is equivalent from database's
@@ -155,6 +164,18 @@ type StateDB struct {
 	// collecting. Idempotent. Deliberately not carried across Copy.
 	witnessPrewalkStop func()
 
+	// nonExistentReads tracks addresses that were looked up but don't exist
+	// in the state trie. Under pipelined SRC, these are included in the
+	// FlatDiff so the SRC goroutine can walk their trie paths and capture
+	// proof-of-absence nodes for the witness. Without this, stateless
+	// execution fails when it tries to prove these accounts don't exist.
+	nonExistentReads map[common.Address]struct{}
+
+	// flatDiffRef is a read-only reference to the parent block's FlatDiff,
+	// consulted lazily by getStateObject and GetCommittedState before falling
+	// through to the trie reader. Set by NewWithFlatBase; nil otherwise.
+	flatDiffRef *FlatDiff
+
 	// Measurements gathered during execution for debugging purposes
 
 	AccountLoaded        int          // Number of accounts retrieved from the database during the state transition
@@ -190,22 +211,58 @@ func New(root common.Hash, db Database) (*StateDB, error) {
 	return NewWithReader(root, db, reader)
 }
 
+// NewTrieOnly creates a new state that uses only the trie reader (no flat/snapshot
+// readers). This forces all account and storage reads to walk the MPT, which is
+// required for witness building — the witness captures trie nodes during the walk.
+// Used by the pipelined SRC goroutine to ensure the witness is complete.
+func NewTrieOnly(root common.Hash, db *CachingDB) (*StateDB, error) {
+	reader, err := db.TrieOnlyReader(root)
+	if err != nil {
+		return nil, err
+	}
+	return NewWithReader(root, db, reader)
+}
+
+// NewTrieOnlyWithSnapshot is the warm-cache variant of NewTrieOnly. Trie reads
+// consult a WarmSnapshot (typically captured from the execution-side trie
+// prefetcher) before falling through to the regular pathdb-backed NodeReader.
+// Hits with matching hash skip diff-layer/disk-layer/pebble work entirely;
+// misses or hash mismatches are served by the underlying reader unchanged.
+// NewTrieOnly semantics are preserved — the trie still walks, prevalueTracer
+// still records, witness is still complete. The snapshot wrapper is installed
+// on the StateDB database itself, not just the initial Reader, so commit-time
+// OpenTrie/OpenStorageTrie calls also use the same warm handoff.
+//
+// A nil snapshot is equivalent to NewTrieOnly.
+func NewTrieOnlyWithSnapshot(root common.Hash, db *CachingDB, snapshot *WarmSnapshot) (*StateDB, error) {
+	if snapshot == nil || snapshot.Len() == 0 {
+		return NewTrieOnly(root, db)
+	}
+	snapshotDB := newSnapshotStateDatabase(db, snapshot)
+	reader, err := snapshotDB.Reader(root)
+	if err != nil {
+		return nil, err
+	}
+	return NewWithReader(root, snapshotDB, reader)
+}
+
 // NewWithReader creates a new state for the specified state root. Unlike New,
 // this function accepts an additional Reader which is bound to the given root.
 func NewWithReader(root common.Hash, db Database, reader Reader) (*StateDB, error) {
 	sdb := &StateDB{
-		db:                   db,
-		originalRoot:         root,
-		reader:               reader,
-		stateObjects:         make(map[common.Address]*stateObject),
-		revertedKeys:         make(map[blockstm.Key]struct{}),
-		stateObjectsDestruct: make(map[common.Address]*stateObject),
-		mutations:            make(map[common.Address]*mutation),
-		logs:                 make(map[common.Hash][]*types.Log),
-		preimages:            make(map[common.Hash][]byte),
-		journal:              newJournal(),
-		accessList:           newAccessList(),
-		transientStorage:     newTransientStorage(),
+		db:                    db,
+		originalRoot:          root,
+		reader:                reader,
+		stateObjects:          make(map[common.Address]*stateObject),
+		revertedKeys:          make(map[blockstm.Key]struct{}),
+		stateObjectsDestruct:  make(map[common.Address]*stateObject),
+		currentBlockDestructs: make(map[common.Address]struct{}),
+		mutations:             make(map[common.Address]*mutation),
+		logs:                  make(map[common.Hash][]*types.Log),
+		preimages:             make(map[common.Hash][]byte),
+		journal:               newJournal(),
+		accessList:            newAccessList(),
+		transientStorage:      newTransientStorage(),
 	}
 	if db.TrieDB().IsVerkle() {
 		sdb.accessEvents = NewAccessEvents()
@@ -462,18 +519,15 @@ func (s *StateDB) EnableConcurrentReads() {
 
 // StorageCache returns the shared trieReader storage cache (sync.Map) if available.
 // This cache is populated by all readers (prefetcher, serial, V2).
-// SafeBase can use it for instant storage lookups.
 func (s *StateDB) StorageCache() *sync.Map {
 	return findStorageCache(s.reader)
 }
 
 // OverlayPendingStorageInto walks every live stateObject and writes its
 // in-memory pending+dirty storage values into target, keyed by stateKey{addr,
-// slot}. Use it to repair a SharedStorageCache that was populated from raw
-// trie reads BEFORE pre-block writes (EIP-4788/EIP-2935 system contracts,
-// DAO fork, etc.) landed in dirty/pending storage. Without this overlay,
-// SafeBase serves the stale trie value (zero, for previously-unwritten
-// system-contract slots) and downstream V2 workers see no system-call effect.
+// slot}. This is useful for external storage caches that were populated from
+// raw trie reads before pre-block writes (EIP-4788/EIP-2935 system contracts,
+// DAO fork, etc.) landed in dirty/pending storage.
 func (s *StateDB) OverlayPendingStorageInto(target *sync.Map) {
 	if target == nil {
 		return
@@ -764,6 +818,111 @@ func (s *StateDB) StopPrefetcher() {
 	}
 }
 
+// DetachedPrefetcher is a trie prefetcher that has been removed from its
+// StateDB and handed to another owner. It is used by pipelined SRC import so
+// the import thread can move on with a fresh StateDB while SRC waits for the
+// previous block's prefetcher to finish.
+//
+// A detached prefetcher must be consumed exactly once via Stop or
+// StopAndCollectWarmSnapshot. Both methods synchronously wait for all
+// subfetcher goroutines to exit before reporting stats.
+type DetachedPrefetcher struct {
+	prefetcher *triePrefetcher
+}
+
+// DetachPrefetcher removes the current prefetcher from the StateDB without
+// stopping it. The caller becomes responsible for eventually calling Stop or
+// StopAndCollectWarmSnapshot on the returned handle.
+func (s *StateDB) DetachPrefetcher() *DetachedPrefetcher {
+	if s.prefetcher == nil {
+		return nil
+	}
+	prefetcher := s.prefetcher
+	s.prefetcher = nil
+	return &DetachedPrefetcher{prefetcher: prefetcher}
+}
+
+// PrefetcherSnapshotStats describes the synchronous phases and warm-node mix
+// observed while stopping and snapshotting a trie prefetcher.
+type PrefetcherSnapshotStats struct {
+	Drain   time.Duration
+	Collect time.Duration
+	Report  time.Duration
+
+	Fetchers        int
+	LoadedFetchers  int
+	AccountFetchers int
+	StorageFetchers int
+
+	AccountNodes int
+	StorageNodes int
+	AccountBytes int
+	StorageBytes int
+}
+
+// Stop synchronously drains a detached prefetcher, reports its stats, and
+// discards any warm nodes it loaded. This is the wait-only pipelined SRC mode:
+// it lets the execution-side prefetcher finish warming shared lower-level
+// caches without installing a WarmSnapshot reader.
+func (p *DetachedPrefetcher) Stop() PrefetcherSnapshotStats {
+	var stats PrefetcherSnapshotStats
+	if p == nil || p.prefetcher == nil {
+		return stats
+	}
+	prefetcher := p.prefetcher
+	p.prefetcher = nil
+
+	phaseStart := time.Now()
+	prefetcher.terminate(false)
+	stats.Drain = time.Since(phaseStart)
+	stats.Fetchers = prefetcher.fetcherCount()
+
+	phaseStart = time.Now()
+	prefetcher.report()
+	stats.Report = time.Since(phaseStart)
+	return stats
+}
+
+// StopAndCollectWarmSnapshot synchronously drains a detached prefetcher,
+// captures the trie nodes its subfetchers loaded, reports stats, and returns a
+// quiesced WarmSnapshotInput owned by the caller.
+//
+// This method uses full-drain termination. Execution can continue on the
+// import thread while SRC waits here, so queued prefetch work is allowed to
+// finish and increase the warm surface.
+func (p *DetachedPrefetcher) StopAndCollectWarmSnapshot() (*WarmSnapshotInput, PrefetcherSnapshotStats) {
+	var stats PrefetcherSnapshotStats
+	if p == nil || p.prefetcher == nil {
+		return nil, stats
+	}
+	prefetcher := p.prefetcher
+	p.prefetcher = nil
+
+	phaseStart := time.Now()
+	prefetcher.terminate(false)
+	stats.Drain = time.Since(phaseStart)
+
+	phaseStart = time.Now()
+	tries, snapshotStats := prefetcher.snapshotWarmNodes()
+	stats.Collect = time.Since(phaseStart)
+	stats.Fetchers = snapshotStats.Fetchers
+	stats.LoadedFetchers = snapshotStats.LoadedFetchers
+	stats.AccountFetchers = snapshotStats.AccountFetchers
+	stats.StorageFetchers = snapshotStats.StorageFetchers
+	stats.AccountNodes = snapshotStats.AccountNodes
+	stats.StorageNodes = snapshotStats.StorageNodes
+	stats.AccountBytes = snapshotStats.AccountBytes
+	stats.StorageBytes = snapshotStats.StorageBytes
+
+	phaseStart = time.Now()
+	prefetcher.report()
+	stats.Report = time.Since(phaseStart)
+	if len(tries) == 0 {
+		return nil, stats
+	}
+	return NewWarmSnapshotInput(tries), stats
+}
+
 // ResetPrefetcher cleans the prefetcher from a State, commonly used in tempStates to track witness while no impacting block building
 // Do also remove mutations previously tracked to just look to the new ones
 func (s *StateDB) ResetPrefetcher() {
@@ -771,6 +930,7 @@ func (s *StateDB) ResetPrefetcher() {
 	s.mutations = make(map[common.Address]*mutation)
 	s.stateObjects = make(map[common.Address]*stateObject)
 	s.stateObjectsDestruct = make(map[common.Address]*stateObject)
+	s.currentBlockDestructs = make(map[common.Address]struct{})
 }
 
 // setError remembers the first non-nil error it is called with.
@@ -1143,6 +1303,7 @@ func (s *StateDB) SetStorage(addr common.Address, storage map[common.Hash]common
 			s.stateObjectsDestruct[addr] = obj
 		}
 	}
+	s.currentBlockDestructs[addr] = struct{}{}
 	newObj := s.createObject(addr)
 	for k, v := range storage {
 		newObj.SetState(k, v)
@@ -1249,6 +1410,20 @@ func (s *StateDB) deleteStateObject(addr common.Address) {
 
 func (s *StateDB) getStateObject(addr common.Address) *stateObject {
 	return MVRead(s, blockstm.NewAddressKey(addr), nil, func(s *StateDB) *stateObject {
+		// FlatDiff is part of this StateDB's logical base. Let it mask stale
+		// cached objects loaded from committedParentRoot, unless the current
+		// execution has already dirtied the account.
+		if s.flatDiffRef != nil && !s.hasAccountMutation(addr) {
+			if acct, exists, covered := s.flatDiffRef.accountOverlay(addr); covered {
+				if !exists {
+					return nil
+				}
+				if obj := s.stateObjects[addr]; obj != nil && obj.fromFlatDiff {
+					return obj
+				}
+				return s.flatDiffStateObject(addr, acct)
+			}
+		}
 		// Prefer live objects if any is available
 		if obj := s.stateObjects[addr]; obj != nil {
 			return obj
@@ -1281,6 +1456,14 @@ func (s *StateDB) getStateObject(addr common.Address) *stateObject {
 		}
 		// Short circuit if the account is not found
 		if acct == nil {
+			// Track the address so the pipelined SRC goroutine can walk
+			// the trie path and capture proof-of-absence nodes for the
+			// witness. Without this, stateless execution can't verify
+			// non-existent accounts.
+			if s.nonExistentReads == nil {
+				s.nonExistentReads = make(map[common.Address]struct{})
+			}
+			s.nonExistentReads[addr] = struct{}{}
 			return nil
 		}
 		// Insert into the live set
@@ -1293,6 +1476,55 @@ func (s *StateDB) getStateObject(addr common.Address) *stateObject {
 
 func (s *StateDB) setStateObject(object *stateObject) {
 	s.stateObjects[object.Address()] = object
+}
+
+// hasAccountMutation reports whether current execution already owns the
+// account value. FlatDiff still defines the parent base, but it must not
+// replace a live object that this block has dirtied.
+func (s *StateDB) hasAccountMutation(addr common.Address) bool {
+	if _, ok := s.journal.dirties[addr]; ok {
+		return true
+	}
+	if _, ok := s.mutations[addr]; ok {
+		return true
+	}
+	return false
+}
+
+func (s *StateDB) flatDiffStateObject(addr common.Address, acct types.StateAccount) *stateObject {
+	flatDiffAccountHitsMeter.Mark(1)
+	acctCopy := acct
+	obj := newObject(s, addr, &acctCopy)
+	obj.fromFlatDiff = true
+	if code, ok := s.flatDiffRef.Code[common.BytesToHash(acctCopy.CodeHash)]; ok {
+		obj.code = code
+	}
+	// Resolve the committed storage root for prefetcher consistency.
+	//
+	// The FlatDiff account's Root is block N's post-state storage root,
+	// but the prefetcher's NodeReader is opened at committedParentRoot
+	// (the grandparent). These are inconsistent — the reader can only
+	// resolve trie nodes for the grandparent's storage root. Without
+	// this, the prefetcher hits "Unexpected trie node" hash mismatches
+	// on every storage trie root resolution for FlatDiff accounts.
+	//
+	// We read the account from the committed state (flat reader, in-
+	// memory snapshot) to get the grandparent's storage root. This is
+	// the root that the prefetcher's reader can actually resolve.
+	if acctCopy.Root != types.EmptyRootHash {
+		if committedAcct, err := s.reader.Account(addr); err == nil && committedAcct != nil {
+			obj.prefetchRoot = committedAcct.Root
+		} else {
+			obj.prefetchRoot = types.EmptyRootHash
+		}
+		// If the account doesn't exist in the committed state (new in
+		// block N), prefetchRoot is set to the empty storage root so the
+		// storage prefetcher skips it; the trie didn't exist at
+		// committedParentRoot and block N's post-state root would be
+		// inconsistent with this reader.
+	}
+	s.setStateObject(obj)
+	return obj
 }
 
 // Exporting so that it can be used by simulated backend for test cases
@@ -1372,20 +1604,21 @@ func (s *StateDB) CreateContract(addr common.Address) {
 func (s *StateDB) Copy() *StateDB {
 	// Copy all the basic fields, initialize the memory ones
 	state := &StateDB{
-		db:                   s.db,
-		reader:               s.reader,
-		originalRoot:         s.originalRoot,
-		stateObjects:         make(map[common.Address]*stateObject, len(s.stateObjects)),
-		stateObjectsDestruct: make(map[common.Address]*stateObject, len(s.stateObjectsDestruct)),
-		revertedKeys:         make(map[blockstm.Key]struct{}),
-		mutations:            make(map[common.Address]*mutation, len(s.mutations)),
-		dbErr:                s.dbErr,
-		refund:               s.refund,
-		thash:                s.thash,
-		txIndex:              s.txIndex,
-		logs:                 make(map[common.Hash][]*types.Log, len(s.logs)),
-		logSize:              s.logSize,
-		preimages:            maps.Clone(s.preimages),
+		db:                    s.db,
+		reader:                s.reader,
+		originalRoot:          s.originalRoot,
+		stateObjects:          make(map[common.Address]*stateObject, len(s.stateObjects)),
+		stateObjectsDestruct:  make(map[common.Address]*stateObject, len(s.stateObjectsDestruct)),
+		currentBlockDestructs: make(map[common.Address]struct{}, len(s.currentBlockDestructs)),
+		revertedKeys:          make(map[blockstm.Key]struct{}),
+		mutations:             make(map[common.Address]*mutation, len(s.mutations)),
+		dbErr:                 s.dbErr,
+		refund:                s.refund,
+		thash:                 s.thash,
+		txIndex:               s.txIndex,
+		logs:                  make(map[common.Hash][]*types.Log, len(s.logs)),
+		logSize:               s.logSize,
+		preimages:             maps.Clone(s.preimages),
 
 		// Timing fields — must be carried over so metrics in resultLoop see
 		// the values accumulated during fillTransactions, not zero.
@@ -1405,6 +1638,7 @@ func (s *StateDB) Copy() *StateDB {
 		transientStorage: s.transientStorage.Copy(),
 		journal:          s.journal.copy(),
 	}
+	state.flatDiffRef = s.flatDiffRef // read-only, safe to share
 	if s.trie != nil {
 		state.trie = mustCopyTrie(s.trie)
 	}
@@ -1419,6 +1653,9 @@ func (s *StateDB) Copy() *StateDB {
 		state.stateObjects[addr] = obj.deepCopy(state)
 	}
 	// Deep copy destructed state objects.
+	for addr := range s.currentBlockDestructs {
+		state.currentBlockDestructs[addr] = struct{}{}
+	}
 	for addr, obj := range s.stateObjectsDestruct {
 		state.stateObjectsDestruct[addr] = obj.deepCopy(state)
 	}
@@ -1451,6 +1688,10 @@ func (s *StateDB) Copy() *StateDB {
 
 	if s.mvHashmap != nil {
 		state.mvHashmap = s.mvHashmap
+	}
+
+	if len(s.nonExistentReads) > 0 {
+		state.nonExistentReads = maps.Clone(s.nonExistentReads)
 	}
 
 	return state
@@ -1497,6 +1738,7 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 			if _, ok := s.stateObjectsDestruct[obj.address]; !ok {
 				s.stateObjectsDestruct[obj.address] = obj
 			}
+			s.currentBlockDestructs[obj.address] = struct{}{}
 		} else {
 			obj.finalise()
 			s.markUpdate(addr)
@@ -1516,6 +1758,36 @@ func (s *StateDB) Finalise(deleteEmptyObjects bool) {
 	}
 	// Invalidate journal because reverting across transactions is not allowed.
 	s.clearJournalAndRefund()
+}
+
+// addWitnessNodes adds storage-trie nodes to the block witness and, when
+// per-account stats are being tracked, attributes them to the account.
+func (s *StateDB) addWitnessNodes(nodes map[string][]byte, addrHash common.Hash) {
+	s.witness.AddState(nodes)
+	if s.witnessStats != nil {
+		s.witnessStats.Add(nodes, addrHash)
+	}
+}
+
+// addObjectWitness pulls the object's storage-trie witness into the block
+// witness, preferring the prefetched trie, then the object's own trie. With
+// neither available and no prefetcher running, storage reads went through the
+// reader (separate trie / prevalueTracer), so the intermediate proof-path
+// nodes are missing — open the storage trie and re-read the accessed slots to
+// capture them.
+func (s *StateDB) addObjectWitness(obj *stateObject) {
+	if trie := obj.getPrefetchedTrie(); trie != nil {
+		s.addWitnessNodes(trie.Witness(), obj.addrHash())
+	} else if obj.trie != nil {
+		s.addWitnessNodes(obj.trie.Witness(), obj.addrHash())
+	} else if s.prefetcher == nil {
+		if tr, err := obj.getTrie(); err == nil {
+			for key := range obj.originStorage {
+				tr.GetStorage(obj.address, key[:])
+			}
+			s.addWitnessNodes(tr.Witness(), obj.addrHash())
+		}
+	}
 }
 
 // IntermediateRoot computes the current root hash of the state trie.
@@ -1597,19 +1869,7 @@ func (s *StateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
 			if len(obj.originStorage) == 0 {
 				continue
 			}
-			if trie := obj.getPrefetchedTrie(); trie != nil {
-				witness := trie.Witness()
-				s.witness.AddState(witness)
-				if s.witnessStats != nil {
-					s.witnessStats.Add(witness, obj.addrHash())
-				}
-			} else if obj.trie != nil {
-				witness := obj.trie.Witness()
-				s.witness.AddState(witness)
-				if s.witnessStats != nil {
-					s.witnessStats.Add(witness, obj.addrHash())
-				}
-			}
+			s.addObjectWitness(obj)
 		}
 		// Pull in only-read and non-destructed trie witnesses
 		for _, obj := range s.stateObjects {
@@ -1621,19 +1881,7 @@ func (s *StateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
 			if len(obj.originStorage) == 0 {
 				continue
 			}
-			if trie := obj.getPrefetchedTrie(); trie != nil {
-				witness := trie.Witness()
-				s.witness.AddState(witness)
-				if s.witnessStats != nil {
-					s.witnessStats.Add(witness, obj.addrHash())
-				}
-			} else if obj.trie != nil {
-				witness := obj.trie.Witness()
-				s.witness.AddState(witness)
-				if s.witnessStats != nil {
-					s.witnessStats.Add(witness, obj.addrHash())
-				}
-			}
+			s.addObjectWitness(obj)
 		}
 		s.WitnessCollection += time.Since(witStart)
 	}
@@ -1697,6 +1945,26 @@ func (s *StateDB) IntermediateRoot(deleteEmptyObjects bool) common.Hash {
 
 	if s.prefetcher != nil {
 		s.prefetcher.used(common.Hash{}, s.originalRoot, usedAddrs, nil)
+	}
+	// When there is no prefetcher and witness building is enabled, account
+	// reads went through the reader (a separate trie with its own
+	// prevalueTracer), so s.trie lacks intermediate nodes for read-only
+	// accounts. Walk them through s.trie now to capture proof-path nodes
+	// that will be included in the witness.
+	if s.witness != nil && s.prefetcher == nil && !s.db.TrieDB().IsVerkle() {
+		for _, obj := range s.stateObjects {
+			if _, ok := s.mutations[obj.address]; ok {
+				continue
+			}
+			s.trie.GetAccount(obj.address)
+		}
+		// Walk proof-of-absence paths for non-existent accounts. Even
+		// though these accounts don't exist, the trie traversal captures
+		// intermediate nodes that stateless execution needs to verify
+		// the accounts' non-existence.
+		for addr := range s.nonExistentReads {
+			s.trie.GetAccount(addr)
+		}
 	}
 	// Track the amount of time wasted on hashing the account trie
 	if !s.skipTimers {
@@ -2052,6 +2320,7 @@ func (s *StateDB) commit(deleteEmptyObjects bool, noStorageWiping bool, blockNum
 	// Clear all internal flags and update state root at the end.
 	s.mutations = make(map[common.Address]*mutation)
 	s.stateObjectsDestruct = make(map[common.Address]*stateObject)
+	s.currentBlockDestructs = make(map[common.Address]struct{})
 
 	origin := s.originalRoot
 	s.originalRoot = root
@@ -2135,6 +2404,580 @@ func (s *StateDB) CommitWithUpdate(block uint64, deleteEmptyObjects bool, noStor
 		return common.Hash{}, nil, err
 	}
 	return ret.root, ret, nil
+}
+
+// FlatDiff is a flat snapshot of all account and storage mutations from one
+// block's execution. It is extracted cheaply (~1ms) via CommitSnapshot without
+// requiring MPT hashing. A goroutine then applies the FlatDiff to a fresh
+// StateDB to compute the actual state root concurrently with the next block.
+type FlatDiff struct {
+	Accounts  map[common.Address]types.StateAccount          // post-state of each modified account
+	Storage   map[common.Address]map[common.Hash]common.Hash // post-state storage slots
+	Destructs map[common.Address]struct{}                    // self-destructed accounts
+	Code      map[common.Hash][]byte                         // newly deployed code
+
+	// ReadSet and ReadStorage list accounts and storage slots that were read
+	// (but not mutated) during block execution. The pipelined SRC goroutine loads
+	// these from the root_{N-1} trie so their MPT proof nodes are captured in
+	// the witness for stateless execution.
+	ReadSet     []common.Address
+	ReadStorage map[common.Address][]common.Hash
+
+	// NonExistentReads lists addresses that were looked up during execution
+	// but don't exist in the state trie. The SRC goroutine walks these paths
+	// to capture proof-of-absence trie nodes for the witness, enabling
+	// stateless execution to verify these accounts don't exist.
+	NonExistentReads []common.Address
+
+	// trackOverlayReads enables recording of overlay-served reads while this
+	// FlatDiff acts as the next block's read overlay. Overlay hits never
+	// reach the shared reader, and under BlockSTM v2 they may materialize
+	// only on discarded pool copies — this tracker is the only place they
+	// are reliably observed. Set by CommitSnapshot when a witness is being
+	// produced; left off otherwise so witness-off imports pay nothing.
+	trackOverlayReads bool
+
+	// overlayAccountReads / overlayStorageReads accumulate the keys the NEXT
+	// block read from this overlay (concurrent: workers and finalDB record
+	// into the shared FlatDiff). Keys: common.Address / stateKey.
+	overlayAccountReads sync.Map
+	overlayStorageReads sync.Map
+}
+
+// recordOverlayAccountRead notes an overlay-served account read. Load-first
+// keeps the hit path to one lock-free map probe after the first record.
+func (diff *FlatDiff) recordOverlayAccountRead(addr common.Address) {
+	if !diff.trackOverlayReads {
+		return
+	}
+	if _, ok := diff.overlayAccountReads.Load(addr); !ok {
+		diff.overlayAccountReads.Store(addr, struct{}{})
+	}
+}
+
+// recordOverlayStorageRead notes an overlay-served storage read.
+func (diff *FlatDiff) recordOverlayStorageRead(addr common.Address, slot common.Hash) {
+	if !diff.trackOverlayReads {
+		return
+	}
+	key := stateKey{addr: addr, slot: slot}
+	if _, ok := diff.overlayStorageReads.Load(key); !ok {
+		diff.overlayStorageReads.Store(key, struct{}{})
+	}
+}
+
+// collectOverlayReads hands every recorded overlay-served read to the
+// callbacks. Account existence is resolved against this FlatDiff itself:
+// an overlay-covered account either exists in Accounts (written or
+// resurrected by the overlay's block) or was destructed by it.
+func (diff *FlatDiff) collectOverlayReads(onAccount func(common.Address, bool), onStorage func(common.Address, common.Hash)) {
+	diff.overlayAccountReads.Range(func(k, _ any) bool {
+		addr := k.(common.Address)
+		_, exists := diff.Accounts[addr]
+		onAccount(addr, exists)
+		return true
+	})
+	diff.overlayStorageReads.Range(func(k, _ any) bool {
+		key := k.(stateKey)
+		onStorage(key.addr, key.slot)
+		return true
+	})
+}
+
+// storageOverlay returns a FlatDiff-covered storage value. A destructed
+// account covers every slot: rewritten slots come from Storage, all other
+// pre-destruction slots read as zero. The third return value is true when
+// the value came from an explicit Storage entry rather than the destruct mask.
+func (diff *FlatDiff) storageOverlay(addr common.Address, key common.Hash) (common.Hash, bool, bool) {
+	if diff == nil {
+		return common.Hash{}, false, false
+	}
+	if slots, ok := diff.Storage[addr]; ok {
+		if value, ok := slots[key]; ok {
+			diff.recordOverlayStorageRead(addr, key)
+			return value, true, true
+		}
+	}
+	if _, destructed := diff.Destructs[addr]; destructed {
+		diff.recordOverlayStorageRead(addr, key)
+		return common.Hash{}, true, false
+	}
+	return common.Hash{}, false, false
+}
+
+// accountOverlay returns FlatDiff-covered account data. Accounts wins over
+// Destructs to represent destruct-and-resurrect in the same parent block.
+func (diff *FlatDiff) accountOverlay(addr common.Address) (types.StateAccount, bool, bool) {
+	if diff == nil {
+		return types.StateAccount{}, false, false
+	}
+	if acct, ok := diff.Accounts[addr]; ok {
+		diff.recordOverlayAccountRead(addr)
+		return acct, true, true
+	}
+	if _, destructed := diff.Destructs[addr]; destructed {
+		diff.recordOverlayAccountRead(addr)
+		return types.StateAccount{}, false, true
+	}
+	return types.StateAccount{}, false, false
+}
+
+// TouchAllAddresses performs read-only accesses on dst for every address and
+// storage slot recorded in the FlatDiff. This ensures dst tracks these
+// addresses in its stateObjects so they later appear in dst's own FlatDiff
+// (via CommitSnapshot). Unlike ApplyFlatDiff, it does NOT overwrite any
+// account data — it only forces dst to load the accounts from its own trie.
+func (diff *FlatDiff) TouchAllAddresses(dst *StateDB) {
+	for addr := range diff.Accounts {
+		touchAddressAndStorage(dst, addr, diff.mutatedStorageKeys(addr))
+	}
+	for _, addr := range diff.ReadSet {
+		touchAddressAndStorage(dst, addr, diff.ReadStorage[addr])
+	}
+	for addr := range diff.Destructs {
+		dst.GetBalance(addr)
+	}
+	// Touch non-existent addresses so dst tracks them (via its own
+	// nonExistentReads) and the SRC goroutine can capture their
+	// proof-of-absence trie nodes for the witness.
+	for _, addr := range diff.NonExistentReads {
+		dst.GetBalance(addr)
+	}
+}
+
+// touchAddressAndStorage calls GetBalance on addr and GetCommittedState on
+// each provided slot so the destination statedb tracks the reads (and the
+// background SRC walks those trie nodes for the witness).
+func touchAddressAndStorage(dst *StateDB, addr common.Address, slots []common.Hash) {
+	dst.GetBalance(addr)
+	for _, slot := range slots {
+		dst.GetCommittedState(addr, slot)
+	}
+}
+
+// mutatedStorageKeys returns the keys of diff.Storage[addr] as a slice so
+// TouchAllAddresses can route both mutated and read-only accounts through
+// touchAddressAndStorage without branching on map vs slice.
+func (diff *FlatDiff) mutatedStorageKeys(addr common.Address) []common.Hash {
+	slots, ok := diff.Storage[addr]
+	if !ok {
+		return nil
+	}
+	keys := make([]common.Hash, 0, len(slots))
+	for k := range slots {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+// CommitSnapshot finalises the StateDB and returns a FlatDiff capturing all
+// mutations without performing any MPT hashing (~1ms). After this call the
+// StateDB should no longer be used by the caller.
+func (s *StateDB) CommitSnapshot(deleteEmptyObjects bool) *FlatDiff {
+	s.Finalise(deleteEmptyObjects)
+
+	diff := &FlatDiff{
+		Accounts:    make(map[common.Address]types.StateAccount),
+		Storage:     make(map[common.Address]map[common.Hash]common.Hash),
+		Destructs:   make(map[common.Address]struct{}),
+		Code:        make(map[common.Hash][]byte),
+		ReadStorage: make(map[common.Address][]common.Hash),
+	}
+	for addr := range s.stateObjectsDestruct {
+		diff.Destructs[addr] = struct{}{}
+	}
+	for addr, op := range s.mutations {
+		s.captureMutation(diff, addr, op)
+	}
+	// Read-only accounts: accessed during execution but not mutated. The
+	// pipelined SRC goroutine loads their root_{N-1} trie nodes into the
+	// witness so stateless nodes can execute against root_{N-1}.
+	for addr, obj := range s.stateObjects {
+		s.captureReadOnlyAccount(diff, addr, obj)
+	}
+	// Non-existent account reads: looked-up addresses that don't exist in
+	// the state trie. The SRC goroutine needs these to walk proof-of-absence
+	// paths and capture trie nodes for the witness.
+	for addr := range s.nonExistentReads {
+		s.captureNonExistentRead(diff, addr)
+	}
+	// The stateObjects walk above only sees reads that materialized on THIS
+	// statedb. Under BlockSTM v2 worker reads live on discarded pool copies,
+	// and reads served by the parent FlatDiff overlay never reach the shared
+	// reader at all — both leave the read-set short, the SRC preload re-reads
+	// too little at the parent root, and the completed witness lacks
+	// current-generation proof nodes for the missing keys. Drain the two
+	// shared, attribution-free read records instead. Only witness production
+	// consumes the read surface, so witness-off imports skip the cost.
+	if s.witness != nil {
+		s.drainExternalReadsIntoDiff(diff)
+		diff.trackOverlayReads = true
+	}
+	return diff
+}
+
+// drainExternalReadsIntoDiff merges read keys observed outside this StateDB's
+// stateObjects into the diff's read surface: the shared reader cache (every
+// read that reached the reader, from any worker or statedb) and the parent
+// FlatDiff's overlay-read tracker (reads the overlay served without touching
+// the reader). Keys already covered by the diff's mutations or existing read
+// lists are skipped. This may include speculative prefetcher reads — a
+// superset only ever costs witness size, never correctness.
+func (s *StateDB) drainExternalReadsIntoDiff(diff *FlatDiff) {
+	seenAccounts := make(map[common.Address]struct{}, len(diff.ReadSet)+len(diff.NonExistentReads))
+	for _, addr := range diff.ReadSet {
+		seenAccounts[addr] = struct{}{}
+	}
+	for _, addr := range diff.NonExistentReads {
+		seenAccounts[addr] = struct{}{}
+	}
+	seenSlots := make(map[stateKey]struct{})
+	for addr, slots := range diff.ReadStorage {
+		for _, slot := range slots {
+			seenSlots[stateKey{addr: addr, slot: slot}] = struct{}{}
+		}
+	}
+	onAccount := func(addr common.Address, exists bool) {
+		if _, ok := seenAccounts[addr]; ok {
+			return
+		}
+		// Mutated and destructed accounts get their trie paths walked by
+		// ApplyFlatDiffForCommit/CommitWithUpdate and the destruct preload.
+		if _, ok := diff.Accounts[addr]; ok {
+			return
+		}
+		if _, ok := diff.Destructs[addr]; ok {
+			return
+		}
+		seenAccounts[addr] = struct{}{}
+		if exists {
+			diff.ReadSet = append(diff.ReadSet, addr)
+		} else {
+			diff.NonExistentReads = append(diff.NonExistentReads, addr)
+		}
+	}
+	onStorage := func(addr common.Address, slot common.Hash) {
+		key := stateKey{addr: addr, slot: slot}
+		if _, ok := seenSlots[key]; ok {
+			return
+		}
+		if slots, ok := diff.Storage[addr]; ok {
+			if _, written := slots[slot]; written {
+				return
+			}
+		}
+		seenSlots[key] = struct{}{}
+		diff.ReadStorage[addr] = append(diff.ReadStorage[addr], slot)
+	}
+	if rwc := findReaderWithCache(s.reader); rwc != nil {
+		rwc.CollectReadSet(onAccount, onStorage)
+	}
+	if s.flatDiffRef != nil {
+		s.flatDiffRef.collectOverlayReads(onAccount, onStorage)
+	}
+}
+
+// captureMutation records a single mutated/destructed account into the
+// FlatDiff. Destructs take both the explicit delete path and the pending
+// Destructs set; live mutations copy account data, dirty code, and both
+// pending and read-only storage so the SRC goroutine can later walk every
+// trie node the block touched.
+func (s *StateDB) captureMutation(diff *FlatDiff, addr common.Address, op *mutation) {
+	if op.isDelete() {
+		diff.Destructs[addr] = struct{}{}
+		return
+	}
+	obj, ok := s.stateObjects[addr]
+	if !ok {
+		return
+	}
+	diff.Accounts[addr] = obj.data
+	if obj.dirtyCode {
+		diff.Code[common.BytesToHash(obj.CodeHash())] = obj.code
+	}
+	captureObjectStorage(diff, addr, obj)
+}
+
+// captureObjectStorage copies pending (post-Finalise) storage mutations and
+// any read-only slots that weren't overwritten. Read-only slots matter
+// because the SRC goroutine needs to load their trie nodes into the witness
+// (e.g., span commits read validator-contract slots they don't write).
+func captureObjectStorage(diff *FlatDiff, addr common.Address, obj *stateObject) {
+	if len(obj.pendingStorage) > 0 {
+		slots := make(map[common.Hash]common.Hash, len(obj.pendingStorage))
+		for k, v := range obj.pendingStorage {
+			slots[k] = v
+		}
+		diff.Storage[addr] = slots
+	}
+	if len(obj.originStorage) == 0 {
+		return
+	}
+	var readSlots []common.Hash
+	for slot := range obj.originStorage {
+		if _, dirty := obj.pendingStorage[slot]; !dirty {
+			readSlots = append(readSlots, slot)
+		}
+	}
+	if len(readSlots) > 0 {
+		diff.ReadStorage[addr] = readSlots
+	}
+}
+
+// captureReadOnlyAccount adds an account to ReadSet (and its originStorage
+// to ReadStorage) if it was accessed but neither mutated nor destructed in
+// this block. Mutated/destructed accounts are already handled by
+// captureMutation.
+func (s *StateDB) captureReadOnlyAccount(diff *FlatDiff, addr common.Address, obj *stateObject) {
+	if _, isMutation := s.mutations[addr]; isMutation {
+		return
+	}
+	if _, isDestruct := s.stateObjectsDestruct[addr]; isDestruct {
+		return
+	}
+	diff.ReadSet = append(diff.ReadSet, addr)
+	if len(obj.originStorage) == 0 {
+		return
+	}
+	slots := make([]common.Hash, 0, len(obj.originStorage))
+	for slot := range obj.originStorage {
+		slots = append(slots, slot)
+	}
+	diff.ReadStorage[addr] = slots
+}
+
+// captureNonExistentRead records proof-of-absence address reads. Skips
+// addresses that ended up existing (e.g., created later in the block) since
+// captureMutation/captureReadOnlyAccount already handled them.
+func (s *StateDB) captureNonExistentRead(diff *FlatDiff, addr common.Address) {
+	if _, isMutation := s.mutations[addr]; isMutation {
+		return
+	}
+	if _, ok := s.stateObjects[addr]; ok {
+		return
+	}
+	diff.NonExistentReads = append(diff.NonExistentReads, addr)
+}
+
+// ApplyFlatDiff installs the previous block's mutations as pre-loaded (but not
+// dirty) state objects, giving the current block immediate read access to the
+// previous block's post-state without waiting for the background goroutine to
+// commit the trie.
+//
+// Accounts are inserted directly into s.stateObjects — bypassing the journal —
+// so Finalise/CommitSnapshot only captures accounts the CURRENT block actually
+// modifies. Without this, every account touched in block N would be re-captured
+// in block N+1's FlatDiff and cascade indefinitely.
+//
+// Newly deployed contract code (dirtyCode in the previous block) is carried
+// in-memory because the background goroutine may not have written it to the
+// key-value store yet.
+func (s *StateDB) ApplyFlatDiff(diff *FlatDiff) {
+	// Register self-destructed accounts so getStateObject returns nil for them,
+	// preventing a stale trie read while the background goroutine's deletion
+	// has not yet been committed.
+	for addr := range diff.Destructs {
+		if _, already := s.stateObjectsDestruct[addr]; !already {
+			s.stateObjectsDestruct[addr] = newObject(s, addr, nil)
+		}
+	}
+	for addr, acct := range diff.Accounts {
+		s.applyFlatAccountOverlay(diff, addr, acct)
+	}
+}
+
+// applyFlatAccountOverlay installs a FlatDiff account into stateObjects as a
+// read-only overlay: no journal entries, no dirty bits. Newly-deployed code
+// is carried in memory because the background goroutine may not have
+// persisted it yet; pre-existing contracts resolve via stateObject.Code().
+// Pending storage from the previous block is loaded as originStorage so
+// CommitSnapshot only re-captures slots that THIS block writes.
+func (s *StateDB) applyFlatAccountOverlay(diff *FlatDiff, addr common.Address, acct types.StateAccount) {
+	acctCopy := acct
+	obj := newObject(s, addr, &acctCopy)
+	if code, ok := diff.Code[common.BytesToHash(acctCopy.CodeHash)]; ok {
+		obj.code = code
+		// dirtyCode intentionally left false: code was deployed in the
+		// previous block, not this one.
+	}
+	if slots, ok := diff.Storage[addr]; ok {
+		for k, v := range slots {
+			obj.originStorage[k] = v
+		}
+	}
+	s.stateObjects[addr] = obj
+}
+
+// ApplyFlatDiffForCommit marks all mutations in diff as dirty via the normal
+// Set* mutation path, so that a subsequent CommitWithUpdate produces the
+// correct state root for the block. Unlike ApplyFlatDiff, which installs
+// accounts as a read-only overlay, this method ensures every change is
+// journalled so Finalise and commit pick them up.
+//
+// Use this only in the background goroutine that computes a block's actual
+// state root; it is not suitable for execution state objects (it would cause
+// mutations to cascade into subsequent FlatDiffs).
+func (s *StateDB) ApplyFlatDiffForCommit(diff *FlatDiff) {
+	// Handle self-destructs. Pure destructs (not resurrected) go through
+	// SelfDestruct, which loads the original from the trie and marks it for
+	// deletion. Resurrected accounts (present in both Destructs and Accounts)
+	// are set up inside applyFlatMutation so the subsequent Set* calls create
+	// a fresh object via getOrNewStateObject.
+	for addr := range diff.Destructs {
+		if _, resurrected := diff.Accounts[addr]; resurrected {
+			continue
+		}
+		s.SelfDestruct(addr)
+	}
+	for addr, acct := range diff.Accounts {
+		s.applyFlatMutation(diff, addr, acct)
+	}
+}
+
+// ApplyFlatDiffForCommitFast marks all mutations in diff as dirty without
+// constructing journal revert entries. It is intended for the witness-off SRC
+// goroutine only: the FlatDiff replay is irrevocable, so Snapshot/RevertToSnapshot
+// support would only add allocation and setter overhead before CommitWithUpdate.
+//
+// Witness-producing SRC still uses ApplyFlatDiffForCommit because the normal
+// setters/read path is the conservative path for collecting every proof node.
+func (s *StateDB) ApplyFlatDiffForCommitFast(diff *FlatDiff) {
+	for addr := range diff.Destructs {
+		if _, resurrected := diff.Accounts[addr]; resurrected {
+			continue
+		}
+		s.applyFlatPureDestructFast(addr)
+	}
+	for addr, acct := range diff.Accounts {
+		s.applyFlatMutationFast(diff, addr, acct)
+	}
+}
+
+// applyFlatMutation commits one FlatDiff account mutation onto the statedb
+// via the journalled Set* path so Finalise / commit pick it up. Handles
+// resurrection by seeding stateObjectsDestruct with the pre-block original
+// (needed by handleDestruction to delete the original storage trie).
+func (s *StateDB) applyFlatMutation(diff *FlatDiff, addr common.Address, acct types.StateAccount) {
+	if _, destructed := diff.Destructs[addr]; destructed {
+		if _, already := s.stateObjectsDestruct[addr]; !already {
+			if prev := s.getStateObject(addr); prev != nil {
+				s.stateObjectsDestruct[addr] = prev
+			}
+		}
+		delete(s.stateObjects, addr)
+	}
+	if code, ok := diff.Code[common.BytesToHash(acct.CodeHash)]; ok {
+		s.SetCode(addr, code, tracing.CodeChangeUnspecified)
+	}
+	// SetState reads the pre-block origin from the storage trie, populating
+	// uncommittedStorage so updateTrie correctly writes or deletes each slot
+	// (including zero-value deletions).
+	if slots, ok := diff.Storage[addr]; ok {
+		for k, v := range slots {
+			s.SetState(addr, k, v)
+		}
+	}
+	// Set* ensures the account appears in journal.dirties so Finalise emits
+	// a markUpdate, even when only storage or code changed.
+	s.SetNonce(addr, acct.Nonce, tracing.NonceChangeUnspecified)
+	s.SetBalance(addr, acct.Balance, tracing.BalanceChangeUnspecified)
+}
+
+func (s *StateDB) applyFlatPureDestructFast(addr common.Address) {
+	obj := s.getStateObject(addr)
+	if obj == nil {
+		return
+	}
+	if !obj.Balance().IsZero() {
+		obj.setBalance(new(uint256.Int))
+	}
+	obj.markSelfdestructed()
+	s.journal.dirty(addr)
+}
+
+// resolveFlatMutationObject returns the state object a flat mutation for addr
+// applies to, recreating the object from scratch when the diff destructed the
+// account (preserving the pre-destruct object for witness collection).
+func (s *StateDB) resolveFlatMutationObject(diff *FlatDiff, addr common.Address) *stateObject {
+	if _, destructed := diff.Destructs[addr]; destructed {
+		if _, already := s.stateObjectsDestruct[addr]; !already {
+			if prev := s.getStateObject(addr); prev != nil {
+				s.stateObjectsDestruct[addr] = prev
+			}
+		}
+		delete(s.stateObjects, addr)
+		delete(s.nonExistentReads, addr)
+		obj := newObject(s, addr, nil)
+		s.setStateObject(obj)
+		return obj
+	}
+	obj := s.getStateObject(addr)
+	if obj == nil {
+		delete(s.nonExistentReads, addr)
+		obj = newObject(s, addr, nil)
+		s.setStateObject(obj)
+	}
+	return obj
+}
+
+func (s *StateDB) applyFlatMutationFast(diff *FlatDiff, addr common.Address, acct types.StateAccount) {
+	obj := s.resolveFlatMutationObject(diff, addr)
+	if obj == nil {
+		return
+	}
+	obj.data.Nonce = acct.Nonce
+	if acct.Balance != nil {
+		obj.data.Balance = new(uint256.Int).Set(acct.Balance)
+	} else {
+		obj.data.Balance = new(uint256.Int)
+	}
+	codeHash := common.BytesToHash(acct.CodeHash)
+	if code, ok := diff.Code[codeHash]; ok {
+		obj.setCode(codeHash, code)
+	}
+	if slots, ok := diff.Storage[addr]; ok {
+		for key, value := range slots {
+			obj.dirtyStorage[key] = value
+		}
+	}
+	s.journal.dirty(addr)
+}
+
+// NewWithFlatBase creates a StateDB at parentCommittedRoot (the last root
+// committed to the trie database) with a FlatDiff overlay so that reads see
+// the post-state of the block that produced flatDiff, without waiting for
+// that block's state root to be computed.
+//
+// This is used during pipelined SRC: while a background goroutine computes
+// root_N from (root_{N-1}, FlatDiff_N), the next block N+1 can already be
+// executed using NewWithFlatBase(root_{N-1}, db, FlatDiff_N).
+func NewWithFlatBase(parentCommittedRoot common.Hash, db Database, flatDiff *FlatDiff) (*StateDB, error) {
+	sdb, err := New(parentCommittedRoot, db)
+	if err != nil {
+		return nil, err
+	}
+	if flatDiff != nil {
+		sdb.flatDiffRef = flatDiff
+	}
+	return sdb, nil
+}
+
+// SetFlatDiffRef sets the read-only FlatDiff reference for lazy lookups.
+func (s *StateDB) SetFlatDiffRef(diff *FlatDiff) {
+	s.flatDiffRef = diff
+}
+
+// WasStorageSlotRead returns true if the given address+slot was accessed
+// (read) during this block's execution. Used by pipelined SRC to detect
+// whether any transaction read the EIP-2935 history storage slot that
+// contains stale data during speculative execution.
+func (s *StateDB) WasStorageSlotRead(addr common.Address, slot common.Hash) bool {
+	obj, exists := s.stateObjects[addr]
+	if !exists {
+		return false
+	}
+	_, accessed := obj.originStorage[slot]
+	return accessed
 }
 
 // Prepare handles the preparatory steps for executing a state transition with.
@@ -2360,7 +3203,7 @@ func (s *StateDB) FinaliseFastWithPrefetch(deleteEmptyObjects bool) {
 			if obj == nil {
 				continue
 			}
-			_ = s.prefetcher.prefetch(obj.addrHash(), obj.data.Root, as.addr, nil, as.slots, false)
+			_ = s.prefetcher.prefetch(obj.addrHash(), as.root, as.addr, nil, as.slots, false)
 		}
 	}
 	s.FinaliseFast(deleteEmptyObjects)
@@ -2368,6 +3211,7 @@ func (s *StateDB) FinaliseFastWithPrefetch(deleteEmptyObjects bool) {
 
 type addrDirtySlots struct {
 	addr  common.Address
+	root  common.Hash
 	slots []common.Hash
 }
 
@@ -2378,14 +3222,18 @@ func (s *StateDB) snapshotDirtyStorageSlots() []addrDirtySlots {
 	var out []addrDirtySlots
 	for addr := range s.journal.dirties {
 		obj, exist := s.stateObjects[addr]
-		if !exist || obj.data.Root == types.EmptyRootHash || len(obj.dirtyStorage) == 0 {
+		if !exist || len(obj.dirtyStorage) == 0 {
+			continue
+		}
+		root := obj.getPrefetchRoot()
+		if root == types.EmptyRootHash && !s.db.TrieDB().IsVerkle() {
 			continue
 		}
 		slots := make([]common.Hash, 0, len(obj.dirtyStorage))
 		for key := range obj.dirtyStorage {
 			slots = append(slots, key)
 		}
-		out = append(out, addrDirtySlots{addr: addr, slots: slots})
+		out = append(out, addrDirtySlots{addr: addr, root: root, slots: slots})
 	}
 	return out
 }
@@ -2424,6 +3272,7 @@ func (s *StateDB) finaliseDelete(addr common.Address, obj *stateObject) {
 	if _, ok := s.stateObjectsDestruct[obj.address]; !ok {
 		s.stateObjectsDestruct[obj.address] = obj
 	}
+	s.currentBlockDestructs[obj.address] = struct{}{}
 }
 
 // finalisePromote moves dirty storage to pending, capturing origin values
@@ -2464,4 +3313,21 @@ func (s *StateDB) AccessEvents() *AccessEvents {
 // Inner receives the underlying state db
 func (s *StateDB) Inner() *StateDB {
 	return s
+}
+
+// PropagateReadsTo touches all addresses and storage slots accessed in s on
+// the destination StateDB. This ensures the destination tracks them in its
+// stateObjects (and later in its FlatDiff ReadSet) so the pipelined SRC
+// goroutine captures their trie proof nodes in the witness.
+//
+// Use this when a temporary copy of the state is used for EVM calls (e.g.,
+// CommitStates → LastStateId) and the accessed addresses must be visible
+// in the original state for witness generation.
+func (s *StateDB) PropagateReadsTo(dst *StateDB) {
+	for addr, obj := range s.stateObjects {
+		dst.GetBalance(addr)
+		for slot := range obj.originStorage {
+			dst.GetState(addr, slot)
+		}
+	}
 }

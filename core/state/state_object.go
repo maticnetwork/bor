@@ -56,6 +56,30 @@ type stateObject struct {
 	origin      *types.StateAccount // Account original data without any change applied, nil means it was not existent
 	data        types.StateAccount  // Account data with all mutations applied in the scope of block
 
+	// prefetchRoot holds the storage root from the committed parent state, used
+	// exclusively for prefetcher interactions during pipelined SRC.
+	//
+	// When an account is loaded from FlatDiff (the previous block's uncommitted
+	// mutations), its origin.Root and data.Root reflect block N's post-state —
+	// but the prefetcher's NodeReader is opened at committedParentRoot (the
+	// grandparent). This creates a (stateRoot, storageRoot) mismatch: the reader
+	// can only resolve trie nodes for the grandparent's storage root, not block
+	// N's. The result is "Unexpected trie node" hash-mismatch errors on every
+	// storage trie root resolution, killing the prefetcher for those accounts.
+	//
+	// prefetchRoot stores the grandparent's storage root — the one consistent
+	// with the prefetcher's reader. It is set only for FlatDiff-sourced accounts;
+	// for accounts loaded from the committed state it stays zero, and
+	// getPrefetchRoot() falls back to data.Root (which is already consistent).
+	//
+	// The committed root is obtained from the flat state reader (in-memory
+	// snapshot), so the cost is effectively zero.
+	prefetchRoot common.Hash
+
+	// fromFlatDiff marks objects materialized from StateDB.flatDiffRef rather
+	// than from the committed trie reader.
+	fromFlatDiff bool
+
 	// Write caches.
 	trie Trie   // storage trie, which becomes non-nil on first access
 	code []byte // contract bytecode, which gets set when code is loaded
@@ -131,6 +155,28 @@ func (s *stateObject) touch() {
 	s.db.journal.touchChange(s.address)
 }
 
+// getPrefetchRoot returns the storage root to use for all prefetcher
+// interactions (prefetch, trie lookup, used). This must be consistent across
+// all calls for a given account so the subfetcher trieID matches.
+//
+// For accounts loaded from FlatDiff (pipelined SRC), the storage root in
+// origin/data reflects block N's post-state, but the prefetcher's NodeReader
+// is at committedParentRoot (the grandparent). Using block N's root would
+// cause a hash mismatch when resolving the storage trie root node. Instead,
+// we return the grandparent's storage root (stored in prefetchRoot), which
+// is consistent with the reader. If the account did not exist at the
+// committed parent root, prefetchRoot is the empty storage root and storage
+// prefetches are skipped.
+//
+// For accounts loaded from the committed state (normal path), prefetchRoot
+// is zero and we fall back to data.Root, which is already consistent.
+func (s *stateObject) getPrefetchRoot() common.Hash {
+	if s.prefetchRoot != (common.Hash{}) {
+		return s.prefetchRoot
+	}
+	return s.data.Root
+}
+
 // getTrie returns the associated storage trie. The trie will be opened if it's
 // not loaded previously. An error will be returned if trie can't be loaded.
 //
@@ -159,11 +205,14 @@ func (s *stateObject) getTrie() (Trie, error) {
 func (s *stateObject) getPrefetchedTrie() Trie {
 	// If there's nothing to meaningfully return, let the user figure it out by
 	// pulling the trie from disk.
-	if (s.data.Root == types.EmptyRootHash && !s.db.db.TrieDB().IsVerkle()) || s.db.prefetcher == nil {
+	root := s.getPrefetchRoot()
+	if (root == types.EmptyRootHash && !s.db.db.TrieDB().IsVerkle()) || s.db.prefetcher == nil {
 		return nil
 	}
-	// Attempt to retrieve the trie from the prefetcher
-	return s.db.prefetcher.trie(s.addrHash(), s.data.Root)
+	// Use getPrefetchRoot() so the trieID matches the one used when scheduling
+	// the prefetch. For FlatDiff accounts this is the committed parent's storage
+	// root; for normal accounts it equals data.Root (unchanged behavior).
+	return s.db.prefetcher.trie(s.addrHash(), root)
 }
 
 // GetState retrieves a value associated with the given storage key.
@@ -190,6 +239,29 @@ func (s *stateObject) GetCommittedState(key common.Hash) common.Hash {
 	defer s.storageMutex.Unlock()
 	// If we have a pending write or clean cached, return that
 	if value, pending := s.pendingStorage[key]; pending {
+		return value
+	}
+
+	// If this block's own execution destructed the account, its storage is
+	// wiped and no previous database may be consulted — including the FlatDiff
+	// overlay, which holds the parent block's post-state. Anything set after a
+	// resurrection is in pendingStorage above. This check has to precede the
+	// overlay probe; the equivalent stateObjectsDestruct check further down
+	// cannot, because the FlatDiff replay paths seed that map with the parent
+	// block's destructs, whose overlay entries are legitimate.
+	if _, destructed := s.db.currentBlockDestructs[s.address]; destructed {
+		s.originStorage[key] = common.Hash{}
+		return common.Hash{}
+	}
+
+	// Check the FlatDiff reference for storage slots from the parent block.
+	// It must beat originStorage because this object may have been cached from
+	// committedParentRoot before the FlatDiff reference was attached.
+	if value, ok, explicit := s.db.flatDiffRef.storageOverlay(s.address, key); ok {
+		if explicit {
+			flatDiffStorageHitsMeter.Mark(1)
+		}
+		s.originStorage[key] = value
 		return value
 	}
 
@@ -231,9 +303,14 @@ func (s *stateObject) GetCommittedState(key common.Hash) common.Hash {
 	s.db.StorageReads += time.Since(start)
 
 	// Schedule the resolved storage slots for prefetching if it's enabled.
-	if s.db.prefetcher != nil && s.data.Root != types.EmptyRootHash {
-		if err = s.db.prefetcher.prefetch(s.addrHash(), s.origin.Root, s.address, nil, []common.Hash{key}, true); err != nil {
-			log.Error("Failed to prefetch storage slot", "addr", s.address, "key", key, "err", err)
+	// Use getPrefetchRoot() for the storage root so the subfetcher's trieID
+	// is consistent with the prefetcher's NodeReader state root. For FlatDiff
+	// accounts, this is the committed parent's storage root (not block N's).
+	if s.db.prefetcher != nil {
+		if root := s.getPrefetchRoot(); root != types.EmptyRootHash || s.db.db.TrieDB().IsVerkle() {
+			if err = s.db.prefetcher.prefetch(s.addrHash(), root, s.address, nil, []common.Hash{key}, true); err != nil {
+				log.Error("Failed to prefetch storage slot", "addr", s.address, "key", key, "err", err)
+			}
 		}
 	}
 	s.originStorage[key] = value
@@ -293,9 +370,12 @@ func (s *stateObject) finalise() {
 		// byzantium fork) and entry is necessary to modify the value back.
 		s.pendingStorage[key] = value
 	}
-	if s.db.prefetcher != nil && len(slotsToPrefetch) > 0 && s.data.Root != types.EmptyRootHash {
-		if err := s.db.prefetcher.prefetch(s.addrHash(), s.data.Root, s.address, nil, slotsToPrefetch, false); err != nil {
-			log.Error("Failed to prefetch slots", "addr", s.address, "slots", len(slotsToPrefetch), "err", err)
+	// Use getPrefetchRoot() for consistency with other prefetcher calls.
+	if s.db.prefetcher != nil && len(slotsToPrefetch) > 0 {
+		if root := s.getPrefetchRoot(); root != types.EmptyRootHash || s.db.db.TrieDB().IsVerkle() {
+			if err := s.db.prefetcher.prefetch(s.addrHash(), root, s.address, nil, slotsToPrefetch, false); err != nil {
+				log.Error("Failed to prefetch slots", "addr", s.address, "slots", len(slotsToPrefetch), "err", err)
+			}
 		}
 	}
 
@@ -389,8 +469,29 @@ func (s *stateObject) updateTrie() (Trie, error) {
 		s.db.StorageDeleted.Add(1)
 	}
 
+	// Use getPrefetchRoot() so the trieID matches the one used during scheduling.
 	if s.db.prefetcher != nil {
-		s.db.prefetcher.used(s.addrHash(), s.data.Root, nil, used)
+		if root := s.getPrefetchRoot(); root != types.EmptyRootHash || s.db.db.TrieDB().IsVerkle() {
+			s.db.prefetcher.used(s.addrHash(), root, nil, used)
+		}
+	}
+	// When witness building is enabled without a prefetcher, storage reads
+	// went through the reader (a separate trie with its own PrevalueTracer)
+	// and their intermediate nodes are NOT in obj.trie. Re-read read-only
+	// slots (in originStorage but not in uncommittedStorage) through the
+	// storage trie so that resolveAndTrack captures the intermediate nodes
+	// and obj.trie.Witness() includes them. A failed re-read means the
+	// witness would be incomplete — surface it like the other trie ops so
+	// the commit aborts instead of shipping a broken witness.
+	if s.db.witness != nil && s.db.prefetcher == nil {
+		for key := range s.originStorage {
+			if _, dirty := s.uncommittedStorage[key]; !dirty {
+				if _, err := tr.GetStorage(s.address, key[:]); err != nil {
+					s.db.setError(err)
+					return nil, err
+				}
+			}
+		}
 	}
 	s.uncommittedStorage = make(Storage) // empties the commit markers
 	return tr, nil
@@ -519,6 +620,8 @@ func (s *stateObject) deepCopy(db *StateDB) *stateObject {
 		addressHash:        nil,
 		origin:             s.origin,
 		data:               s.data,
+		prefetchRoot:       s.prefetchRoot,
+		fromFlatDiff:       s.fromFlatDiff,
 		code:               s.code,
 		originStorage:      s.originStorage.Copy(),
 		pendingStorage:     s.pendingStorage.Copy(),

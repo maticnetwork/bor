@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"math/big"
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -79,13 +80,20 @@ func fuzz(input []byte) int {
 	// Create a fetcher and hook into it's simulated fields
 	clock := new(mclock.Simulated)
 	rand := rand.New(rand.NewSource(0x3a29)) // Same used in package tests!!!
+	requests := make(map[string]uint64)
+	var lock sync.Mutex
 
 	f := fetcher.NewTxFetcherForTests(
 		func(common.Hash) bool { return false },
 		func(txs []*types.Transaction) []error {
 			return make([]error, len(txs))
 		},
-		func(string, []common.Hash) error { return nil },
+		func(peer string, requestID uint64, hashes []common.Hash) error {
+			lock.Lock()
+			requests[peer] = requestID
+			lock.Unlock()
+			return nil
+		},
 		nil,
 		clock,
 		func() time.Time {
@@ -194,8 +202,14 @@ func fuzz(input []byte) int {
 			if verbose {
 				fmt.Println("Enqueue", peer, deliverIdxs, direct)
 			}
+			var requestID uint64
+			if direct {
+				lock.Lock()
+				requestID = requests[peer]
+				lock.Unlock()
+			}
 
-			if err := f.Enqueue(peer, deliveries, direct); err != nil {
+			if err := f.Enqueue(peer, deliveries, direct, requestID); err != nil {
 				panic(err)
 			}
 

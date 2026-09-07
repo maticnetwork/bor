@@ -239,6 +239,9 @@ const (
 	// Build fails if the budget ever drops below the per-record cap (uint underflow).
 	_ = uint(MaxStateSyncBytesPerBlock - MaxStateSyncRecordBytes - 1)
 
+	// MaxStateSyncGasPerBlock is the cumulative gas threshold for state-sync execution.
+	MaxStateSyncGasPerBlock uint64 = 30_000_000
+
 	// BorDefaultMinerGasPrice defines the minimum gas price to mine a transaction.
 	BorDefaultMinerGasPrice = 25 * GWei
 

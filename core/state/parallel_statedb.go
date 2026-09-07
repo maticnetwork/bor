@@ -81,7 +81,7 @@ type ParallelStateDB struct {
 	TxIndex     int
 	Incarnation int                      // bumped on re-execution for validation
 	base        *SafeBase                // thread-safe pre-block state reads
-	rawBase     *StateDB                 // raw base for PointCache/Witness only
+	rawBase     *StateDB                 // raw base for Witness only
 	store       *blockstm.MVStore        // shared versioned values
 	bals        *blockstm.MVBalanceStore // shared balance deltas
 
@@ -184,6 +184,22 @@ type ParallelStateDB struct {
 	// blob fork-gating violation). Such a tx must NOT be settled; the caller
 	// must abort the block and surface the error like the serial path does.
 	ExecErr error
+	// BaseReadErr records the first base-state read failure THIS incarnation
+	// observed (missing trie node, absent code). Reset clears it, so on the
+	// final ParallelStateDB of a tx it reflects only the incarnation that
+	// settled: a speculative incarnation chasing stale values may legitimately
+	// read outside the canonical state (fatal on witness-backed replay, where
+	// such nodes simply don't exist) and is then invalidated and re-executed —
+	// only an error observed by the SETTLED incarnation means a zero-ish read
+	// reached consensus state, and only that must abort the block.
+	BaseReadErr error
+}
+
+// noteBaseReadErr records the first base read failure of this incarnation.
+func (s *ParallelStateDB) noteBaseReadErr(err error) {
+	if err != nil && s.BaseReadErr == nil {
+		s.BaseReadErr = err
+	}
 }
 
 type parallelRevision struct {
@@ -274,6 +290,7 @@ func (s *ParallelStateDB) Reset(txIndex int, base *SafeBase, store *blockstm.MVS
 	s.ExecFailed = false
 	s.Panicked = false
 	s.ExecErr = nil
+	s.BaseReadErr = nil
 	s.TransferLogFn = nil
 	s.FeeLogFn = nil
 }
@@ -640,7 +657,9 @@ func (s *ParallelStateDB) Exist(addr common.Address) bool {
 	// No prior creation or destruction. Fall through to base + balance +
 	// nonce check (handles base-state accounts and addresses made to exist
 	// by a prior tx's value transfer or nonce bump).
-	if s.base.Exist(addr) {
+	exists, berr := s.base.Exist(addr)
+	s.noteBaseReadErr(berr)
+	if exists {
 		return true
 	}
 	if !s.GetBalance(addr).IsZero() {
@@ -675,7 +694,9 @@ func (s *ParallelStateDB) GetBalance(addr common.Address) *uint256.Int {
 	add, sub := s.priorBalanceDeltas(addr)
 	s.recordBalanceRead(addr, add, sub)
 
-	result := new(uint256.Int).Set(s.base.GetBalance(addr))
+	baseBal, berr := s.base.GetBalance(addr)
+	s.noteBaseReadErr(berr)
+	result := new(uint256.Int).Set(baseBal)
 	result.Add(result, &add)
 	result.Sub(result, &sub)
 	if a := s.localBalAdd[addr]; a != nil {
@@ -763,7 +784,8 @@ func (s *ParallelStateDB) GetNonce(addr common.Address) uint64 {
 		s.recordStoreRead(nonceKey, -1, 0, uint64(0))
 		return 0
 	}
-	baseNonce := s.base.GetNonce(addr)
+	baseNonce, berr := s.base.GetNonce(addr)
+	s.noteBaseReadErr(berr)
 	s.recordStoreRead(nonceKey, -1, 0, baseNonce)
 	return baseNonce
 }
@@ -803,7 +825,8 @@ func (s *ParallelStateDB) GetCode(addr common.Address) []byte {
 		s.recordStoreRead(codeKey, -1, 0, []byte(nil))
 		return nil
 	}
-	baseCode := s.base.GetCode(addr)
+	baseCode, berr := s.base.GetCode(addr)
+	s.noteBaseReadErr(berr)
 	s.recordStoreRead(codeKey, -1, 0, baseCode)
 	return baseCode
 }
@@ -857,7 +880,8 @@ func (s *ParallelStateDB) GetCodeHash(addr common.Address) common.Hash {
 		return common.Hash{}
 	}
 	// For base (pre-block) accounts, use the stored code hash.
-	baseHash := s.base.GetCodeHash(addr)
+	baseHash, berr := s.base.GetCodeHash(addr)
+	s.noteBaseReadErr(berr)
 	if baseHash != (common.Hash{}) {
 		return baseHash
 	}
@@ -925,7 +949,8 @@ func (s *ParallelStateDB) GetState(addr common.Address, key common.Hash) common.
 		s.recordStoreRead(stateKey, -1, 0, common.Hash{})
 		return common.Hash{}
 	}
-	baseVal := s.base.GetState(addr, key)
+	baseVal, berr := s.base.GetState(addr, key)
+	s.noteBaseReadErr(berr)
 	s.recordStoreRead(stateKey, -1, 0, baseVal)
 	return baseVal
 }
@@ -950,7 +975,9 @@ func (s *ParallelStateDB) GetCommittedState(addr common.Address, key common.Hash
 		// else: destroyed after this write → result stays zero
 	} else {
 		if suicideIdx < 0 {
-			result = s.base.GetCommittedState(addr, key)
+			var berr error
+			result, berr = s.base.GetCommittedState(addr, key)
+			s.noteBaseReadErr(berr)
 		}
 		s.recordStoreRead(mvKey, -1, 0, result)
 	}
@@ -1016,7 +1043,9 @@ func (s *ParallelStateDB) GetStorageRoot(addr common.Address) common.Hash {
 		// CreatePath in sync — Exist() handles that).
 		return common.Hash{}
 	}
-	return s.base.GetStorageRoot(addr)
+	root, berr := s.base.GetStorageRoot(addr)
+	s.noteBaseReadErr(berr)
+	return root
 }
 
 // ---------- Refund ----------

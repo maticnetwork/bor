@@ -22,19 +22,14 @@ import (
 // failed every Cancun spec test that exercised EIP-4788's user-facing read
 // path of the BeaconRoots system contract.
 //
-// Bug: SafeBase.SharedStorageCache (the trie reader's storageCache) is shared
-// across the prefetcher and V2 workers. The prefetcher loads BeaconRoots
-// storage slots from the trie BEFORE applyV2PreExecSystemCalls runs the
-// EIP-4788 system call, so the cache holds the pre-write zeros. The system
-// call then writes 12 (timestamp) and the parent beacon root into stateObject
-// dirty/pending storage — never touching the trie reader, so the cache stays
-// stale. SafeBase.GetState returned the cached zero, BeaconRoots' user-call
-// path checked storage[t%8191] != t and reverted, the spec-test caller saw
-// success=0 and the block's gas/state diverged from the spec.
+// Bug: V2 used to let SafeBase serve storage directly from the trie reader's
+// cache. If that cache was warmed before applyV2PreExecSystemCalls wrote the
+// EIP-4788 timestamp/root pair, workers could read the pre-write zero instead
+// of StateDB's pending storage. BeaconRoots' user-call path then reverted and
+// the block's gas/state diverged from the spec.
 //
-// Fix: in newV2Env, after wiring SharedStorageCache, overlay every live
-// stateObject's pending+dirty storage onto the cache so it reflects
-// post-system-call state — see StateDB.OverlayPendingStorageInto.
+// Fix: SafeBase storage misses go through StateDB.GetState, which owns pending
+// writes, FlatDiff overlays, and trie/cache fallback semantics.
 func TestV2_PreExecSystemCallVisibleToTx(t *testing.T) {
 	t.Run("Serial", func(t *testing.T) { runEIP4788Roundtrip(t, false) })
 	t.Run("V2", func(t *testing.T) { runEIP4788Roundtrip(t, true) })
@@ -106,11 +101,10 @@ func runEIP4788Roundtrip(t *testing.T, useV2 bool) {
 			t.Fatalf("ApplyMessage: %v", err)
 		}
 	} else {
-		// Re-create the production V2 setup: trigger StorageCache population
-		// (mimicking the prefetcher reading BeaconRoots[12] from trie BEFORE
-		// the system call writes to it), then run applyV2PreExecSystemCalls,
-		// then ExecuteV2BlockSTM. Without the OverlayPendingStorageInto fix
-		// in newV2Env, the worker would see the stale cached zero.
+		// Re-create the production V2 setup: read BeaconRoots[12] before the
+		// system call writes to it, then run applyV2PreExecSystemCalls, then
+		// ExecuteV2BlockSTM. Workers must observe StateDB's post-system-call
+		// pending storage, not the earlier committed-state read.
 		_ = statedb.GetState(params.BeaconRootsAddress, common.BigToHash(new(big.Int).SetUint64(timestamp%8191)))
 		body := &types.Body{Transactions: types.Transactions{tx}}
 		header := &types.Header{

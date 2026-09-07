@@ -644,6 +644,9 @@ func (b testBackend) StateAndHeaderByNumberOrHash(ctx context.Context, blockNrOr
 	}
 	panic("only implemented for number")
 }
+func (b testBackend) WaitForStateCommit(ctx context.Context, root common.Hash) error {
+	return nil
+}
 func (b testBackend) Pending() (*types.Block, types.Receipts, *state.StateDB) {
 	block := b.pending
 	if block == nil {

@@ -45,6 +45,7 @@ var mainnetBor = &Chain{
 				GiuglianoBlock:    big.NewInt(85268500),
 				ChicagoBlock:      big.NewInt(87218600),
 				ValenciaBlock:     big.NewInt(89531000),
+				AustinBlock:       big.NewInt(91949700),
 				HampiBlock:        nil, // unscheduled
 
 				StateSyncConfirmationDelay: map[string]uint64{

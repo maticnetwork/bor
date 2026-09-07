@@ -40,14 +40,71 @@ pattern = "docs/cli/**"
 processingMode = "skip"
 reason = "generated CLI reference (make docs)"
 
+[[classification.pathRules]]
+pattern = "build/checksums.txt"
+processingMode = "skip"
+reason = "generated release checksum manifest"
+
+# Inherited geth components that Bor does not use in production. Keep a
+# lightweight compatibility review because shared interfaces still compile
+# into Bor and are used by tests and developer tooling.
+
+[[classification.pathRules]]
+pattern = "beacon/**"
+reviewPriority = "low"
+reason = "geth beacon-client functionality is not used by Bor production"
+
+[[classification.pathRules]]
+pattern = "consensus/beacon/**"
+reviewPriority = "low"
+reason = "geth beacon consensus engine is not used by Bor production"
+
+[[classification.pathRules]]
+pattern = "consensus/clique/**"
+reviewPriority = "low"
+reason = "Clique consensus is not used by Bor production"
+
+[[classification.pathRules]]
+pattern = "consensus/ethash/**"
+reviewPriority = "low"
+reason = "Ethash consensus is not used by Bor production"
+
+[[classification.pathRules]]
+pattern = "eth/catalyst/**"
+reviewPriority = "low"
+reason = "Beacon Engine API is not used by Bor production consensus"
+
+# Standalone upstream developer tools outside normal Bor operation.
+
+[[classification.pathRules]]
+pattern = "cmd/evm/**"
+reviewPriority = "low"
+reason = "standalone geth EVM developer tool"
+
+[[classification.pathRules]]
+pattern = "cmd/devp2p/**"
+reviewPriority = "low"
+reason = "standalone geth networking developer tool"
+
+[[classification.pathRules]]
+pattern = "cmd/blsync/**"
+reviewPriority = "low"
+reason = "standalone beacon light-sync tool"
+
 # Consensus-critical zones, mirroring the scopes in .claude/rules. Bugs here
 # can halt the chain, split consensus, or lose funds.
 
 [[classification.pathRules]]
-pattern = "consensus/**"
+pattern = "consensus/bor/**"
 reviewPriority = "critical"
 labels = ["consensus"]
 reason = "validator auth, sprint/span block production, Heimdall trust, fork choice"
+
+[[classification.pathRules]]
+pattern = "consensus/misc/**"
+reviewPriority = "critical"
+labels = ["consensus"]
+reason = "shared base-fee, blob-gas, and gas-limit validation used by Bor production"
 
 [[classification.pathRules]]
 pattern = "miner/**"

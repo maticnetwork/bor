@@ -45,9 +45,10 @@ const (
 
 // witnessRequestState tracks the state of a pending witness request.
 type witnessRequestState struct {
-	op       *blockOrHeaderInject // The original block/header injection operation.
-	announce *blockAnnounce       // Announcement details, non-nil if a fetch is in flight.
-	retries  int                  // Number of fetch attempts already made
+	op           *blockOrHeaderInject // The original block/header injection operation.
+	announce     *blockAnnounce       // Announcement details, non-nil if a fetch is in flight.
+	retries      int                  // Number of fetch attempts already made
+	emptyRetries int                  // Consecutive "body not ready yet" (empty) responses, for backoff
 }
 
 // cachedWitness represents a witness that arrived before its corresponding block
@@ -57,23 +58,73 @@ type cachedWitness struct {
 	timestamp time.Time
 }
 
+// signedWitnessHashFn returns the BP-signed witness content hash for a block,
+// if a WIT2 signed announcement has been received and verified locally. It is
+// used by the witness manager on fetch success to verify byte-correctness:
+// if the encoded witness bytes don't hash to the signed witnessHash, the
+// serving peer lied and is dropped. If no signed announcement is on file
+// (e.g., WIT1-only fetch), the check is skipped.
+type signedWitnessHashFn func(blockHash common.Hash) (witnessHash common.Hash, ok bool)
+
+// cacheWitnessForServingFn hands successfully-fetched witness bytes to the
+// network handler so peers can serve them pre-import. Called only after the
+// byte-correctness check (vs. BP-signed witnessHash, when present) has passed,
+// so the cached bytes are safe to serve. The witnessHash is the canonical
+// keccak256 of the canonical encoding, identical to what the BP signed.
+type cacheWitnessForServingFn func(blockHash common.Hash, witnessBytes []byte, witnessHash common.Hash)
+
+// peerStrikeFn records a WIT2 misbehavior strike against a peer (by id) that
+// served a non-empty witness whose bytes mismatch the on-file BP-signed hash.
+// Unlike peerDropFn it does not immediately disconnect: a single mismatch is
+// tolerated (a faulty/malicious BP that signed a bogus hash makes honest servers
+// mismatch too), but sustained byte-serving misbehavior accrues toward the same
+// disconnect threshold as bad announces. Optional; nil disables the penalty.
+type peerStrikeFn func(id string)
+
 // witnessManager handles the logic specific to fetching and managing witnesses
 // for blocks, isolating it from the main BlockFetcher loop.
 type witnessManager struct {
 	// Parent fetcher fields/methods required
-	parentQuit          <-chan struct{}        // Parent fetcher's quit channel
-	parentDropPeer      peerDropFn             // Function to drop a misbehaving peer
-	parentJailPeer      peerJailFn             // Function to jail a peer to prevent reconnection (optional)
-	parentEnqueueCh     chan<- *enqueueRequest // Channel to send completed blocks+witnesses back
-	parentGetBlock      blockRetrievalFn       // Function to check if block is known locally
-	parentGetHeader     HeaderRetrievalFn      // Function to check if header is known locally (needed for checks)
-	parentChainHeight   chainHeightFn          // Retrieve chain height for distance checks
-	parentCurrentHeader currentHeaderFn        // Retrieve current block header for gas limit
+	parentQuit                   <-chan struct{}          // Parent fetcher's quit channel
+	parentDropPeer               peerDropFn               // Function to drop a misbehaving peer
+	parentJailPeer               peerJailFn               // Function to jail a peer to prevent reconnection (optional)
+	parentEnqueueCh              chan<- *enqueueRequest   // Channel to send completed blocks+witnesses back
+	parentGetBlock               blockRetrievalFn         // Function to check if block is known locally
+	parentGetHeader              HeaderRetrievalFn        // Function to check if header is known locally (needed for checks)
+	parentChainHeight            chainHeightFn            // Retrieve chain height for distance checks
+	parentCurrentHeader          currentHeaderFn          // Retrieve current block header for gas limit
+	parentSignedWitnessHash      signedWitnessHashFn      // WIT2: lookup a BP-signed witness hash for byte-correctness verification
+	parentCacheWitnessForServing cacheWitnessForServingFn // WIT2: hand bytes to the handler for pre-import serving by peers
+	parentStrikeWitnessServer    peerStrikeFn             // WIT2: strike a peer that served non-empty bytes mismatching the signed hash (optional)
 
 	// Witness-specific state
 	pending            map[common.Hash]*witnessRequestState         // Blocks waiting for witness or actively fetching.
 	witnessUnavailable map[common.Hash]time.Time                    // Tracks hashes whose witnesses are known to be unavailable, with expiry times.
 	witnessCache       *ttlcache.Cache[common.Hash, *cachedWitness] // TTL cache of witnesses that arrived before their blocks
+
+	// WIT2 signed-hash mismatch tracking. A bad or stale BP-signed witness hash
+	// makes every honest server's canonical bytes mismatch, which would stall
+	// the block until the signed announcement's TTL expires. We track the
+	// distinct servers that mismatch a given block's signed hash and, past
+	// signedHashMismatchQuarantineThreshold, quarantine that hash so subsequent
+	// fetches skip the signed-hash gate and fall back to WIT1 (import-time
+	// execution arbitrates the bytes) immediately instead of waiting out the TTL.
+	// Guarded by its own mutex (inner to m.mu in the rare paths that hold both).
+	//
+	// Unlike witnessUnavailable, entries here are cleared only by the 4
+	// pending-removal exits (forget/safeEnqueue/markWitnessUnavailable/
+	// handleWitnessFetchFailureExt) or a matching success — none of which fire
+	// again once a hash has already left m.pending. A response that mismatches
+	// AFTER that point (e.g. the block imported via broadcast, or forget()
+	// already ran) still runs verifyAgainstSignedHash and creates a fresh
+	// entry nothing will ever remove. wit2StateExpiry gives every entry a TTL,
+	// refreshed on each touch, swept by the same cleanupTicker that expires
+	// witnessUnavailable, so a late/adversarial mismatch can no longer leak
+	// state for the process lifetime.
+	wit2QuarantineMu  sync.Mutex
+	wit2MismatchPeers map[common.Hash]map[string]struct{}
+	wit2Quarantined   map[common.Hash]struct{}
+	wit2StateExpiry   map[common.Hash]time.Time
 
 	// Witness verification state
 	gasCeil uint64 // Gas ceiling for calculating dynamic page threshold
@@ -108,6 +159,8 @@ func newWitnessManager(
 	parentGetHeader HeaderRetrievalFn,
 	parentChainHeight chainHeightFn,
 	parentCurrentHeader currentHeaderFn,
+	parentSignedWitnessHash signedWitnessHashFn,
+	parentCacheWitnessForServing cacheWitnessForServingFn,
 	gasCeil uint64,
 ) *witnessManager {
 	// Create TTL cache with 1 minute expiration for witnesses
@@ -117,22 +170,27 @@ func newWitnessManager(
 	)
 
 	m := &witnessManager{
-		parentQuit:          parentQuit,
-		parentDropPeer:      parentDropPeer,
-		parentJailPeer:      parentJailPeer,
-		parentEnqueueCh:     parentEnqueueCh,
-		parentGetBlock:      parentGetBlock,
-		parentGetHeader:     parentGetHeader,
-		parentChainHeight:   parentChainHeight,
-		parentCurrentHeader: parentCurrentHeader,
-		pending:             make(map[common.Hash]*witnessRequestState),
-		witnessUnavailable:  make(map[common.Hash]time.Time),
-		witnessCache:        witnessCache,
-		gasCeil:             gasCeil,
-		injectNeedWitnessCh: make(chan *injectBlockNeedWitnessMsg, 10),
-		injectWitnessCh:     make(chan *injectedWitnessMsg, 10),
-		witnessTimer:        time.NewTimer(0),
-		pokeCh:              make(chan struct{}, 1),
+		parentQuit:                   parentQuit,
+		parentDropPeer:               parentDropPeer,
+		parentJailPeer:               parentJailPeer,
+		parentEnqueueCh:              parentEnqueueCh,
+		parentGetBlock:               parentGetBlock,
+		parentGetHeader:              parentGetHeader,
+		parentChainHeight:            parentChainHeight,
+		parentCurrentHeader:          parentCurrentHeader,
+		parentSignedWitnessHash:      parentSignedWitnessHash,
+		parentCacheWitnessForServing: parentCacheWitnessForServing,
+		pending:                      make(map[common.Hash]*witnessRequestState),
+		witnessUnavailable:           make(map[common.Hash]time.Time),
+		witnessCache:                 witnessCache,
+		wit2MismatchPeers:            make(map[common.Hash]map[string]struct{}),
+		wit2Quarantined:              make(map[common.Hash]struct{}),
+		wit2StateExpiry:              make(map[common.Hash]time.Time),
+		gasCeil:                      gasCeil,
+		injectNeedWitnessCh:          make(chan *injectBlockNeedWitnessMsg, 10),
+		injectWitnessCh:              make(chan *injectedWitnessMsg, 10),
+		witnessTimer:                 time.NewTimer(0),
+		pokeCh:                       make(chan struct{}, 1),
 	}
 	m.stopAndDrainTimer()
 	return m
@@ -205,6 +263,7 @@ func (m *witnessManager) loop() {
 		case <-cleanupTicker.C:
 			log.Debug("[wm] Cleanup ticker triggered")
 			m.cleanupUnavailableCache()
+			m.cleanupWit2QuarantineState()
 
 		// A poke indicates the timer was rescheduled by another goroutine. We
 		// simply loop around so that the timer channel is re-evaluated with the
@@ -631,10 +690,32 @@ func (m *witnessManager) processWitnessResponse(peer string, hash common.Hash, r
 		return
 	}
 	if len(witness) == 0 {
+		// Empty/unavailable response: the peer doesn't have the body yet
+		// (e.g. WIT2 announce-only relayer that has not finished importing).
+		// This is the expected steady state on the WIT2 fast path, not a
+		// failure — back off the request (keeping the responder; dropping on
+		// "no body" is what makes announce-only fallback peers unsafe to ask,
+		// which would erase the WIT2 multi-hop latency win at hop>=2).
 		log.Debug("[wm] Received empty witness response from peer", "peer", peer, "hash", hash)
-		m.handleWitnessFetchFailureExt(hash, peer, errors.New("empty witness response"), false)
+		m.handleWitnessBodyNotReady(hash)
 		return
 	}
+
+	// WIT2: byte-correctness check. If we have a BP-signed announcement on
+	// file for this block, the encoded witness bytes must hash to the
+	// signed witnessHash. State-root failures (content-correctness) are
+	// handled later in the import path and do NOT drop the server.
+	body, witnessHash, ok := m.verifyAgainstSignedHash(peer, hash, witness[0])
+	if !ok {
+		return
+	}
+
+	// WIT2: hand the verified bytes to the handler for pre-import serving.
+	// Done before import-side enqueue so a peer asking us for the body
+	// during the chain-write window gets bytes from the in-flight cache
+	// rather than empty results. body is nil on the WIT1 path (no signed
+	// hash on file) — cacheVerifiedWitnessForServing no-ops in that case.
+	m.cacheVerifiedWitnessForServing(hash, body, witnessHash)
 
 	metrics.RecordPerItemDuration(blockWitnessItemDownloadTimer, res.Time, 1)
 	m.handleWitnessFetchSuccess(peer, hash, witness[0], announcedAt)
@@ -727,6 +808,7 @@ func (m *witnessManager) handleWitnessFetchFailureExt(hash common.Hash, peer str
 	m.mu.Lock()
 	if removePending {
 		delete(m.pending, hash)
+		m.clearSignedHashMismatch(hash)
 	} else {
 		if state := m.pending[hash]; state != nil {
 			// back-off before next retry
@@ -760,6 +842,7 @@ func (m *witnessManager) safeEnqueue(op *blockOrHeaderInject) {
 	// Remove the pending state while holding the lock, ensuring any concurrent
 	// isPending checks will see the updated state.
 	delete(m.pending, hash)
+	m.clearSignedHashMismatch(hash)
 	m.mu.Unlock()
 
 	// Now with lock released, attempt to send the request to parent fetcher
@@ -784,6 +867,7 @@ func (m *witnessManager) forget(hash common.Hash) {
 		log.Debug("[wm] Forgetting pending witness state", "hash", hash)
 		delete(m.pending, hash)
 	}
+	m.clearSignedHashMismatch(hash)
 	m.mu.Unlock()
 	// Ensure timer reflects potential state change
 	m.rescheduleWitness()
@@ -821,6 +905,12 @@ func (m *witnessManager) markWitnessUnavailable(hash common.Hash) {
 	m.witnessUnavailable[hash] = expiry
 	// Remove from pending state if it exists, as we won't fetch it now
 	delete(m.pending, hash)
+	// Clear any signed-hash mismatch/quarantine state for this block too. This is
+	// the fourth pending-removal exit (alongside the soft-fail removePending,
+	// safeEnqueue, and forget paths); without it a quarantined hash that then
+	// exhausts its fetch retries leaks its quarantine entry for the process
+	// lifetime (the quarantine maps have no TTL or periodic GC).
+	m.clearSignedHashMismatch(hash)
 	m.mu.Unlock()
 
 	m.rescheduleWitness() // Recalculate timer based on remaining pending items
