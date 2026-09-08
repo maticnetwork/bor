@@ -224,3 +224,28 @@ type presentButUnreadable struct{}
 
 func (presentButUnreadable) Has([]byte) (bool, error)   { return true, nil }
 func (presentButUnreadable) Get([]byte) ([]byte, error) { return nil, errReadRefused }
+
+func TestWriteInvalidPreconfIfAbsent(t *testing.T) {
+	db := NewMemoryDatabase()
+
+	wrote, err := WriteInvalidPreconfIfAbsent(db, 9, "unobserved_mismatch")
+	if err != nil {
+		t.Fatalf("first write: %v", err)
+	}
+	if !wrote {
+		t.Fatal("first write reported no write")
+	}
+
+	wrote, err = WriteInvalidPreconfIfAbsent(db, 9, "reorged")
+	if err != nil {
+		t.Fatalf("second write: %v", err)
+	}
+	if wrote {
+		t.Fatal("second write replaced an existing record")
+	}
+
+	records := ReadInvalidPreconfsInRange(db, 9, 9)
+	if len(records) != 1 || records[0].Reason != "unobserved_mismatch" {
+		t.Fatalf("records = %+v, want the first reason kept", records)
+	}
+}

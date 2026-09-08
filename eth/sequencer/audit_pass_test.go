@@ -746,3 +746,129 @@ func TestAuditPersistHoldsOnAReadFailure(t *testing.T) {
 		t.Fatalf("watermark = %d, want it held at 9", got)
 	}
 }
+
+func unauditedThrough(t *testing.T, db ethdb.Database) (uint64, bool) {
+	t.Helper()
+
+	number, ok, err := rawdb.ReadPreconfUnauditedThrough(db)
+	if err != nil {
+		t.Fatalf("read unaudited mark: %v", err)
+	}
+
+	return number, ok
+}
+
+func TestAuditLeavesALiveRecordInPlace(t *testing.T) {
+	db := rawdb.NewMemoryDatabase()
+	chain, sealed := auditFixture(t, 12)
+
+	// Height 7 sealed something that never became canonical, and the live
+	// path already served a preconfirmation from it and invalidated it.
+	sealed[7] = testHeader(7, common.Hash{0xee})
+	if err := rawdb.WriteInvalidPreconf(db, 7, "canonical_mismatch"); err != nil {
+		t.Fatalf("seed live record: %v", err)
+	}
+	if err := rawdb.WritePreconfAuditedThrough(db, 4); err != nil {
+		t.Fatalf("seed watermark: %v", err)
+	}
+
+	audit := &auditor{db: db, chain: chain, fetch: fetchFrom(t, sealed)}
+	summary, err := audit.run(context.Background())
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	records := rawdb.ReadInvalidPreconfsInRange(db, 5, 12)
+	if len(records) != 1 || records[0].Number != 7 {
+		t.Fatalf("records = %+v, want one at 7", records)
+	}
+	// unobserved_mismatch claims nothing was served from the height, which
+	// would be a weaker and wrong account of a preconfirmation that was.
+	if records[0].Reason != "canonical_mismatch" {
+		t.Fatalf("reason = %q, want canonical_mismatch preserved", records[0].Reason)
+	}
+	if summary.alreadyJudged != 1 {
+		t.Fatalf("alreadyJudged = %d, want 1", summary.alreadyJudged)
+	}
+}
+
+func TestAuditReportsAWindowTheStoreHeldNothingFor(t *testing.T) {
+	db := rawdb.NewMemoryDatabase()
+	chain, _ := auditFixture(t, 12)
+
+	// Down longer than the store's retention: every height in the window
+	// answers NOT_FOUND.
+	if err := rawdb.WritePreconfAuditedThrough(db, 4); err != nil {
+		t.Fatalf("seed watermark: %v", err)
+	}
+
+	audit := &auditor{db: db, chain: chain, fetch: fetchFrom(t, map[uint64]*types.Header{})}
+	summary, err := audit.run(context.Background())
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	if summary.compared != 0 || summary.walked != 8 {
+		t.Fatalf("walked/compared = %d/%d, want 8/0", summary.walked, summary.compared)
+	}
+	// The watermark still advances, or the window is re-walked forever, so
+	// the unaudited mark is what keeps the range from reading as clean.
+	if got := auditedThrough(t, db); got != 12 {
+		t.Fatalf("watermark = %d, want 12", got)
+	}
+	unaudited, ok := unauditedThrough(t, db)
+	if !ok || unaudited != 12 {
+		t.Fatalf("unaudited = %d (stored %v), want 12", unaudited, ok)
+	}
+}
+
+func TestAuditReportsOnlyTheUnheldOldestEnd(t *testing.T) {
+	db := rawdb.NewMemoryDatabase()
+	chain, sealed := auditFixture(t, 12)
+
+	// Retention floor at 8: the window's oldest heights are gone, the rest
+	// compare normally.
+	for height := uint64(5); height < 8; height++ {
+		delete(sealed, height)
+	}
+	if err := rawdb.WritePreconfAuditedThrough(db, 4); err != nil {
+		t.Fatalf("seed watermark: %v", err)
+	}
+
+	audit := &auditor{db: db, chain: chain, fetch: fetchFrom(t, sealed)}
+	summary, err := audit.run(context.Background())
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	if summary.compared != 5 {
+		t.Fatalf("compared = %d, want 5", summary.compared)
+	}
+	unaudited, ok := unauditedThrough(t, db)
+	if !ok || unaudited != 7 {
+		t.Fatalf("unaudited = %d (stored %v), want 7", unaudited, ok)
+	}
+}
+
+func TestAuditDoesNotReportAGapAfterTheStoreHasHeldSomething(t *testing.T) {
+	db := rawdb.NewMemoryDatabase()
+	chain, sealed := auditFixture(t, 12)
+
+	// A hole in the middle is the store having been down for those heights,
+	// not a retention floor: nothing was promised there and the run is not
+	// reported. Documented so the narrower guarantee is deliberate.
+	delete(sealed, 9)
+	delete(sealed, 10)
+	if err := rawdb.WritePreconfAuditedThrough(db, 4); err != nil {
+		t.Fatalf("seed watermark: %v", err)
+	}
+
+	audit := &auditor{db: db, chain: chain, fetch: fetchFrom(t, sealed)}
+	if _, err := audit.run(context.Background()); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	if unaudited, ok := unauditedThrough(t, db); ok {
+		t.Fatalf("unaudited = %d, want nothing recorded", unaudited)
+	}
+}

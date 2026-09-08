@@ -72,11 +72,19 @@ type auditSummary struct {
 	// the store actually held a generation for. Reporting only walked cannot
 	// tell "audited the window, all matched" from "the store held nothing for
 	// any of it", which are very different answers for an operator.
-	walked    uint64
-	compared  uint64
-	mismatch  uint64
-	unknown   uint64
-	skippedTo uint64 // highest height left unaudited by the window bound
+	walked   uint64
+	compared uint64
+	mismatch uint64
+	unknown  uint64
+	// alreadyJudged counts mismatches the live path had already recorded, so
+	// this pass left the stronger record in place.
+	alreadyJudged uint64
+	skippedTo     uint64 // highest height left unaudited by the window bound
+	// leadingUnheld is the last height of the run of heights at the oldest
+	// end of the window that the store held nothing for. Retention aging a
+	// height out and a producer never publishing there are both NOT_FOUND, so
+	// the run is reported unknown rather than advanced over as clean.
+	leadingUnheld uint64
 }
 
 // windowToAudit reports the height range this pass should walk. ok is false when
@@ -143,12 +151,12 @@ func (a *auditor) run(ctx context.Context) (auditSummary, error) {
 
 	for height := from; height <= through; height++ {
 		if err := ctx.Err(); err != nil {
-			a.persist(height - 1)
+			a.stopAt(&summary, height-1)
 			return summary, err
 		}
 
 		if err := a.auditHeightInto(ctx, height, &summary); err != nil {
-			a.persist(height - 1)
+			a.stopAt(&summary, height-1)
 			return summary, err
 		}
 
@@ -157,12 +165,30 @@ func (a *auditor) run(ctx context.Context) (auditSummary, error) {
 		}
 	}
 
-	a.persist(through)
+	a.stopAt(&summary, through)
 	log.Info("Sequence store audit complete", "from", from, "through", through,
 		"walked", summary.walked, "compared", summary.compared,
-		"mismatched", summary.mismatch, "uncomparable", summary.unknown)
+		"mismatched", summary.mismatch, "uncomparable", summary.unknown,
+		"alreadyJudged", summary.alreadyJudged, "unheld", summary.leadingUnheld)
 
 	return summary, nil
+}
+
+// stopAt closes a pass at height: it reports any run of heights the store held
+// nothing for at the oldest end of the window before raising the watermark, so
+// the two writes cannot be separated by a crash in a way that reports an
+// uncompared range as clean.
+func (a *auditor) stopAt(summary *auditSummary, height uint64) {
+	if summary.leadingUnheld != 0 {
+		if err := rawdb.WritePreconfUnauditedThrough(a.db, summary.leadingUnheld); err != nil {
+			log.Warn("Failed to record unheld sequence store window", "through", summary.leadingUnheld, "err", err)
+		} else {
+			log.Warn("Sequence store held nothing for the oldest end of the audit window",
+				"unaudited", summary.leadingUnheld, "from", summary.from)
+		}
+	}
+
+	a.persist(height)
 }
 
 // recordSkippedWindow marks the heights the depth bound left out, so an empty
@@ -187,9 +213,16 @@ func (a *auditor) auditHeightInto(ctx context.Context, height uint64, summary *a
 	switch {
 	case err == nil:
 	case isNotFound(err):
-		// The store holds nothing here: either it was down, or the producer
-		// never published. Nothing was promised, so nothing to invalidate.
+		// The store holds nothing here: it was down, the producer never
+		// published, or retention aged the height out. Nothing was promised,
+		// so there is nothing to invalidate — but while no height in this
+		// window has held anything yet, the run is indistinguishable from a
+		// retention floor, and advancing over it would report a window
+		// nothing compared as clean.
 		summary.walked++
+		if summary.compared == 0 {
+			summary.leadingUnheld = height
+		}
 
 		return nil
 	default:
@@ -208,10 +241,22 @@ func (a *auditor) recordVerdict(height uint64, verdict auditVerdict, summary *au
 	case auditMismatch:
 		summary.mismatch++
 
-		if err := rawdb.WriteInvalidPreconf(a.db, height, unobservedMismatchReason); err != nil {
+		// A record already at this height came from the live path, which
+		// served a preconfirmation and then invalidated it. That is a
+		// stronger claim than this pass can make, so it stands.
+		wrote, err := rawdb.WriteInvalidPreconfIfAbsent(a.db, height, unobservedMismatchReason)
+		switch {
+		case err != nil:
 			log.Warn("Failed to record unobserved preconfirmation mismatch", "number", height, "err", err)
+		case !wrote:
+			summary.alreadyJudged++
 		}
 	case auditUnknown:
+		// Held but undecidable — no canonical hash, or a seal that does not
+		// decode or sits at the wrong height. Counted and logged, not marked:
+		// the unaudited mark is a prefix, so raising it for one scattered
+		// height would declare the whole history below it uncompared. All
+		// three causes are a store or data fault rather than a normal state.
 		summary.unknown++
 	case auditMatch, auditNoSeal:
 	}
@@ -355,6 +400,13 @@ func (c *Consumer) runAuditPass(ctx context.Context) {
 // advanceAudited raises the persisted audit watermark. It never lowers it: the
 // audit pass and the canonical-head path both advance it, and a pass that
 // finishes after the live path has moved on must not rewind the mark.
+//
+// A verdict is therefore only ever as good as the canonical chain at the time
+// it was reached. A reorg below the mark replaces heights this pass already
+// judged, and nothing revisits them — re-auditing would mean rewinding the
+// mark on every reorg and re-walking the window, which is the cost this
+// monotonicity exists to avoid. Bor reorgs are shallow and milestones make
+// deep ones rare, so the trade is deliberate rather than free.
 func (c *Consumer) advanceAudited(number uint64) {
 	c.auditMu.Lock()
 	defer c.auditMu.Unlock()

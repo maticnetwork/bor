@@ -35,6 +35,35 @@ func WriteInvalidPreconf(db ethdb.Database, number uint64, reason string) error 
 	return batch.Write()
 }
 
+// WriteInvalidPreconfIfAbsent writes an invalidation only where the height
+// carries none, and reports whether it wrote. The audit backfills heights the
+// live path may already have judged; a live record means a preconfirmation
+// reached callers, which is a stronger claim than any after-the-fact verdict,
+// so it must not be overwritten by one.
+//
+// The check and the write are not atomic. A live record landing between them
+// is still overwritten, which needs the live path to judge the exact height a
+// pass is judging, in that window — the two only overlap at a height a dropped
+// session left behind the watermark. Narrowing it further would need a
+// compare-and-set the key-value layer does not offer.
+func WriteInvalidPreconfIfAbsent(db ethdb.Database, number uint64, reason string) (bool, error) {
+	key := invalidPreconfKey(number)
+
+	present, err := db.Has(key)
+	if err != nil {
+		return false, fmt.Errorf("read invalid preconf %d: %w", number, err)
+	}
+	if present {
+		return false, nil
+	}
+
+	if err := WriteInvalidPreconf(db, number, reason); err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
 func ReadInvalidPreconfs(db ethdb.Iteratee, limit uint64) []InvalidPreconfRecord {
 	if limit == 0 {
 		return []InvalidPreconfRecord{}
@@ -117,10 +146,12 @@ func WritePreconfAuditedThrough(db ethdb.KeyValueWriter, number uint64) error {
 	return writePreconfHeight(db, preconfAuditedThroughKey, number)
 }
 
-// ReadPreconfUnauditedThrough returns the highest block the audit is known to
-// have skipped. Heights at or below it may hold preconfirmations this node
-// never compared against the chain, so an empty invalidation range there means
-// unknown rather than clean.
+// ReadPreconfUnauditedThrough returns the highest block the audit did not
+// compare. Two causes raise it: the depth bound skipped the height, or the
+// store answered NOT_FOUND for the oldest end of a window it walked, which
+// retention aging the height out is indistinguishable from. Heights at or
+// below it may hold preconfirmations this node never compared against the
+// chain, so an empty invalidation range there means unknown, not clean.
 func ReadPreconfUnauditedThrough(db ethdb.KeyValueReader) (uint64, bool, error) {
 	return readPreconfHeight(db, preconfUnauditedThroughKey)
 }
