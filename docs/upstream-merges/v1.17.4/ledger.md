@@ -614,3 +614,30 @@ so `newWorkLoop` segfaults on a chain config with no Bor section. Identical on `
 on the base branch and here (3 occurrences each). Unreachable in Bor production, where
 `Bor` is always set; it only shows up in the excluded `cmd/` tests, which spin standard
 Ethereum configs. Left alone — out of scope for a sync PR.
+
+### Known-red list, corrected (2026-09-08)
+
+Every batch entry above carries a "pre-existing failures" line. Re-checked at
+`6b4820b5e` against the actual test contract; none of the three recurring
+entries is currently a known-red.
+
+- **`core/state TestPDBMethodParity` — RESOLVED, remove.** Passes. The standing
+  TODO ("milestone fix = add `DumpBinTrieLeaves` to `pdbExemptMethods`") is
+  stale; the `#32445` drift no longer reproduces. It was already observed
+  passing during the Hampi/#2319 cascade and has stayed green since.
+- **`core/vm TestAbortDuringJump` / `TestInterruptDuringExecution` — not
+  currently failing.** They are *not* skipped by `-short` (0 skips), and ran
+  20/20 green over 10 iterations. The flakiness recorded above predates the
+  cascade that brought in `2ea9635db` ("core, miner: fix pipeline race test
+  failures", #2371), which is a plausible cause but has not been confirmed.
+  Worth leaving on a watch list rather than a known-red list.
+- **`cmd/evm TestT8n` / `TestEvmRun` / `TestEVMTracing` / `TestEvmRunRegEx` —
+  category error, remove.** `cmd/` is excluded from `TESTALL`, so these were
+  never part of the suite. They were recorded as accepted breakage from runs
+  made outside the contract. The t8n golden drift is real if you run those
+  packages directly; it simply is not something this sync gates on, and listing
+  it as known-red trains reviewers to expect red where the suite is in fact
+  green.
+
+The milestone-tier run is **144 packages, 0 failures**. Treat any red as new
+until shown otherwise.
