@@ -453,6 +453,22 @@ Fork/EIP surfaces (invariant 6 — all merged DORMANT, no activation moved on an
   value is discarded and `originStorage`/return stay empty → state root unchanged
   (behavior-preserving; committed-state reads are pre-block-immutable, no BlockSTM impact).
   `core/state` tests pass.
+  - **Correction (review of #2325, 2026-09-08, raised by @lucca30):** "behavior-preserving" held for
+    state but not for the **witness**, and the read arrived ungated while every other Amsterdam
+    surface in this milestone is gated. `NewTrieOnly` forces reads through the MPT so the witness
+    captures the nodes walked, so this read adds the destructed account's storage proof path to the
+    witness. A node on this version reading against a witness from a producer without it gets a
+    reader error → `setError` → `dbErr` → commit aborts (`statedb.go:2177`) → import fails. Reachable
+    by create-and-selfdestruct in one tx then reading that address's storage later in the same block.
+    That is the producer/consumer witness skew Hampi exists for, and an ungated fork surface also
+    fails invariant 9 as `fork-register.md` defines `verified-dormant`. Gated on a new
+    `StateDB.amsterdam`, set from `rules.IsAmsterdam` in `Prepare` and carried through `Copy`;
+    `TestDestructedSlotReadIsAmsterdamGated` fails without the gate. Deliberate divergence from
+    upstream, which does not gate it. **Caveat:** `Prepare` is per-transaction, so a path reaching
+    `GetCommittedState` without preparing a transaction (system calls, state-sync in `Finalize`, the
+    pooled `StateDB`s behind `SafeBase`) leaves the flag false and skips the read — correct while
+    Amsterdam is dormant, but it must be revisited when the fork is scheduled, or BAL will
+    under-record on those paths.
 
 Notable resolutions:
 

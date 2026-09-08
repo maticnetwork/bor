@@ -283,11 +283,19 @@ func (s *stateObject) GetCommittedState(key common.Hash) common.Hash {
 		// The read operation is still essential for correctly building
 		// the block-level access list.
 		//
+		// Gated on Amsterdam, which upstream does not do. The read walks the
+		// trie, so under a witness-building reader it pulls the destructed
+		// account's storage proof path into the witness. Ungated, a node on
+		// this version would require nodes that a producer on an older
+		// version never recorded, and fail the import. Only the block-level
+		// access list needs the read, and that does not exist before the fork.
+		//
 		// TODO(rjl493456442) the reader interface can be extended with
 		// Touch, recording the read access without the actual disk load.
-		_, err := s.db.reader.Storage(s.address, key)
-		if err != nil {
-			s.db.setError(err)
+		if s.db.amsterdam {
+			if _, err := s.db.reader.Storage(s.address, key); err != nil {
+				s.db.setError(err)
+			}
 		}
 		s.originStorage[key] = common.Hash{} // track the empty slot as origin value
 		return common.Hash{}
