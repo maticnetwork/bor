@@ -2,8 +2,10 @@ package sequencer
 
 import (
 	"context"
+	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/consensus/misc/eip1559"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 )
@@ -23,6 +25,51 @@ func (c *Consumer) PendingSnapshot(ctx context.Context) (*types.Block, types.Rec
 		return nil, nil, nil, nil
 	}
 	return block, receipts, statedb, nil
+}
+
+// HeadPendingView is an empty pending block on the head, the last-resort view
+// for a non-mining RPC node in the import->next-open gap when no preconf entry
+// is active. Without it such a node answers -32000 for ~150ms every block,
+// breaking bind's default eth_getCode(addr,"pending"). The backend tries it
+// only after the live view and the miner, so it never shadows either.
+func (c *Consumer) HeadPendingView() (*types.Block, types.Receipts, *state.StateDB, error) {
+	anchor, ok := c.pendingReadAnchor()
+	if !ok {
+		return nil, nil, nil, nil
+	}
+	block, receipts, statedb, err := c.headPendingView(anchor)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if !c.pendingReadAnchorValid(anchor) {
+		return nil, nil, nil, nil
+	}
+	return block, receipts, statedb, nil
+}
+
+// headPendingView builds the empty head+1 block on the head state, or nil when
+// the head or its state is unavailable.
+func (c *Consumer) headPendingView(head *types.Header) (*types.Block, types.Receipts, *state.StateDB, error) {
+	if head == nil || c.chain == nil {
+		return nil, nil, nil, nil
+	}
+	statedb, err := c.chain.StateAt(head.Root)
+	if err != nil || statedb == nil {
+		return nil, nil, nil, nil
+	}
+	number := new(big.Int).Add(head.Number, big.NewInt(1))
+	header := &types.Header{
+		ParentHash: head.Hash(),
+		Number:     number,
+		GasLimit:   head.GasLimit,
+		Time:       head.Time + 1,
+		Difficulty: big.NewInt(1),
+		Root:       head.Root,
+	}
+	if config := c.chain.Config(); config.IsLondon(number) {
+		header.BaseFee = eip1559.CalcBaseFee(config, head)
+	}
+	return types.NewBlockWithHeader(header), types.Receipts{}, statedb, nil
 }
 
 func (c *Consumer) PendingBlock() *types.Block {

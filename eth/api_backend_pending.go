@@ -26,20 +26,39 @@ func (b *EthAPIBackend) PendingBlock() *types.Block {
 	if block := b.sequencerPendingBlock(); block != nil {
 		return block
 	}
-	if b.eth.miner == nil {
-		return nil
+	if b.eth.miner != nil {
+		if block := b.eth.miner.PendingBlock(); block != nil {
+			return block
+		}
 	}
-	return b.eth.miner.PendingBlock()
+	// Keep the "pending" block accessors consistent with the pending state
+	// below during the import->next-open gap.
+	block, _ := b.headPendingBlock()
+	return block
 }
 
 func (b *EthAPIBackend) PendingBlockAndReceipts() (*types.Block, types.Receipts) {
 	if block, receipts := b.sequencerPendingBlockAndReceipts(); block != nil {
 		return block, receipts
 	}
-	if b.eth.miner == nil {
+	if b.eth.miner != nil {
+		if block, receipts, _ := b.eth.miner.Pending(); block != nil {
+			return block, receipts
+		}
+	}
+	return b.headPendingBlock()
+}
+
+// headPendingBlock is the block half of the head fallback, shared by the
+// pending block accessors.
+func (b *EthAPIBackend) headPendingBlock() (*types.Block, types.Receipts) {
+	if b.eth.seqConsumer == nil {
 		return nil, nil
 	}
-	block, receipts, _ := b.eth.miner.Pending()
+	block, receipts, statedb, err := b.eth.seqConsumer.HeadPendingView()
+	if err != nil || block == nil || statedb == nil {
+		return nil, nil
+	}
 	return block, receipts
 }
 
@@ -76,6 +95,15 @@ func (b *EthAPIBackend) PendingSnapshot(ctx context.Context) (*types.Block, type
 	if b.eth.miner != nil {
 		block, receipts, statedb := b.eth.miner.Pending()
 		if block != nil && statedb != nil {
+			return block, receipts, statedb, nil
+		}
+	}
+	// Last resort for a non-mining sequencer RPC node in the import->next-open
+	// gap: an empty head block keeps pending state available instead of
+	// erroring for ~150ms every block.
+	if b.eth.seqConsumer != nil {
+		block, receipts, statedb, err := b.eth.seqConsumer.HeadPendingView()
+		if err == nil && block != nil && statedb != nil {
 			return block, receipts, statedb, nil
 		}
 	}

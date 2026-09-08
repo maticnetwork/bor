@@ -31,6 +31,13 @@ type apiSequenceConsumer struct {
 	rangeBlocks   []*types.Block
 	rangeReceipts []types.Receipts
 	snapshotErr   error
+	headBlock     *types.Block
+	headState     *state.StateDB
+	headErr       error
+}
+
+func (c *apiSequenceConsumer) HeadPendingView() (*types.Block, types.Receipts, *state.StateDB, error) {
+	return c.headBlock, nil, c.headState, c.headErr
 }
 
 func (c *apiSequenceConsumer) PendingSnapshot(context.Context) (*types.Block, types.Receipts, *state.StateDB, error) {
@@ -270,5 +277,46 @@ func TestSequencerPendingSnapshotFailures(t *testing.T) {
 	b.eth.seqConsumer = &apiSequenceConsumer{index: sequencer.NewIndex()}
 	if _, _, _, err := b.PendingSnapshot(t.Context()); err == nil {
 		t.Fatal("empty snapshot did not fail")
+	}
+}
+
+// A non-mining RPC node with the sequencer enabled has no miner pending, and
+// between importing a block and receiving the next open the consumer has no
+// active entry. The backend must then serve the consumer's head fallback so
+// pending state stays available instead of returning -32000; without it,
+// go-ethereum bind's default eth_getCode(addr,"pending") gas preflight fails
+// for ~150ms every block.
+func TestSequencerPendingSnapshotHeadFallback(t *testing.T) {
+	b := initBackend(false)
+	defer b.eth.blockchain.Stop()
+	defer b.eth.txPool.Close()
+
+	head := b.eth.blockchain.CurrentBlock()
+	statedb, err := b.eth.blockchain.StateAt(head.Root)
+	if err != nil {
+		t.Fatalf("state: %v", err)
+	}
+	empty := types.NewBlockWithHeader(&types.Header{
+		ParentHash: head.Hash(),
+		Number:     new(big.Int).Add(head.Number, big.NewInt(1)),
+	})
+
+	// No live entry (PendingSnapshot nil), no miner, but a head view is offered.
+	b.eth.seqConsumer = &apiSequenceConsumer{index: sequencer.NewIndex(), headBlock: empty, headState: statedb}
+
+	block, _, gotState, err := b.PendingSnapshot(t.Context())
+	if err != nil {
+		t.Fatalf("head fallback should serve pending, got error: %v", err)
+	}
+	if block != empty || gotState != statedb {
+		t.Fatal("backend did not fall back to the consumer head view")
+	}
+	// The block accessors must serve the same head view, so
+	// eth_getBlockByNumber("pending") does not return null in the gap.
+	if pb := b.PendingBlock(); pb != empty {
+		t.Fatalf("PendingBlock did not use the head fallback: %v", pb)
+	}
+	if pb, _ := b.PendingBlockAndReceipts(); pb != empty {
+		t.Fatalf("PendingBlockAndReceipts did not use the head fallback: %v", pb)
 	}
 }
