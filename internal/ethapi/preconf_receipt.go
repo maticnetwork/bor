@@ -1,8 +1,6 @@
 package ethapi
 
 import (
-	"context"
-
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -15,10 +13,6 @@ type preconfBackend interface {
 
 type preconfReceiptSubscriber interface {
 	SubscribePreconfReceipts(chan<- core.PreconfReceiptsEvent) event.Subscription
-}
-
-type preconfSyncSubmitter interface {
-	SubmitTxForPreconfSync(context.Context, *types.Transaction) error
 }
 
 func getPreconfTransaction(backend Backend, hash common.Hash) (*types.Transaction, *types.Receipt, bool) {

@@ -5354,9 +5354,49 @@ func TestSendRawTransactionSync_Preconfirmation(t *testing.T) {
 	if receipt == nil || receipt["transactionHash"] != tx.Hash() || receipt["blockHash"] != nil || receipt["preconfirmation"] != true {
 		t.Fatalf("preconfirmation receipt = %#v", receipt)
 	}
-	if b.sentTx != nil {
-		t.Fatalf("transaction was also submitted to the local txpool")
+	if b.sentTx == nil || b.sentTx.Hash() != tx.Hash() {
+		t.Fatalf("transaction was not submitted to the local txpool")
 	}
+}
+
+func TestSendRawTransactionSync_RelayIsOptional(t *testing.T) {
+	t.Parallel()
+	genesis := &core.Genesis{Config: params.TestChainConfig, Alloc: types.GenesisAlloc{}}
+	b := newTestBackend(t, 0, genesis, ethash.NewFaker(), nil)
+	b.preconfEnabled = true
+	b.submitTxForPreconfFn = func(tx *types.Transaction) error {
+		go func() {
+			time.Sleep(20 * time.Millisecond)
+			receipt := &types.Receipt{
+				Type:              tx.Type(),
+				Status:            types.ReceiptStatusSuccessful,
+				CumulativeGasUsed: tx.Gas(),
+				GasUsed:           tx.Gas(),
+				EffectiveGasPrice: tx.GasPrice(),
+				TxHash:            tx.Hash(),
+				BlockNumber:       new(big.Int).Add(b.CurrentBlock().Number, common.Big1),
+			}
+			b.preconf.mu.Lock()
+			b.preconf.tx = tx
+			b.preconf.receipt = receipt
+			b.preconf.mu.Unlock()
+			b.preconfFeed.Send(core.PreconfReceiptsEvent{
+				BlockTime:    b.CurrentBlock().Time + 1,
+				Receipts:     types.Receipts{receipt},
+				Transactions: types.Transactions{tx},
+			})
+		}()
+		return errors.New("rpc client unavailable to submit transactions")
+	}
+	api := NewTransactionAPI(b, new(AddrLocker))
+	raw, tx := makeSelfSignedRaw(t, api, b.acc.Address)
+	timeout := hexutil.Uint64(500)
+
+	receipt, err := api.SendRawTransactionSync(t.Context(), raw, &timeout)
+	require.NoError(t, err)
+	require.Equal(t, tx.Hash(), receipt["transactionHash"])
+	require.Nil(t, receipt["blockHash"])
+	require.Equal(t, true, receipt["preconfirmation"])
 }
 
 func TestSendRawTransactionSync_PrefersQueuedPreconfirmation(t *testing.T) {

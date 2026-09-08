@@ -2278,17 +2278,11 @@ func (api *TransactionAPI) SendRawTransactionSync(ctx context.Context, input hex
 }
 
 func (api *TransactionAPI) submitSyncTransaction(ctx context.Context, tx *types.Transaction) (common.Hash, bool, error) {
-	if submitter, ok := api.b.(preconfSyncSubmitter); ok && api.b.PreconfEnabled() {
-		if err := submitter.SubmitTxForPreconfSync(ctx, tx); err != nil {
-			return common.Hash{}, false, err
-		}
-		return tx.Hash(), true, nil
-	}
 	hash, err := SubmitTransaction(ctx, api.b, tx)
 	if err == nil {
 		api.submitForPreconf(tx)
 	}
-	return hash, false, err
+	return hash, api.b.PreconfEnabled(), err
 }
 
 // txSyncTimeout resolves the caller's requested wait window against the node's
