@@ -1,6 +1,7 @@
 package state
 
 import (
+	"math/big"
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -57,39 +58,47 @@ func TestDestructedSlotReadIsAmsterdamGated(t *testing.T) {
 		return statedb, counting
 	}
 
-	t.Run("pre-amsterdam does not read", func(t *testing.T) {
-		t.Parallel()
+	// Drive the gate through ChainConfig.Rules at a real activation boundary
+	// rather than a hand-built Rules value, so the test also covers IsAmsterdam
+	// itself rather than only the plumbing downstream of it.
+	const forkBlock = 100
 
-		statedb, counting := newDestructedState(t)
-		statedb.Prepare(params.Rules{}, addr, common.Address{}, nil, nil, nil)
+	cfg := *params.TestChainConfig
+	cfg.AmsterdamBlock = big.NewInt(forkBlock)
 
-		if got := statedb.GetCommittedState(addr, slot); got != (common.Hash{}) {
-			t.Errorf("expected empty slot, got %x", got)
-		}
-		if counting.storageReads != 0 {
-			t.Errorf("expected no reader access before Amsterdam, got %d", counting.storageReads)
-		}
-	})
+	for _, tc := range []struct {
+		name      string
+		number    int64
+		wantReads int
+	}{
+		{name: "N-1", number: forkBlock - 1, wantReads: 0},
+		{name: "N", number: forkBlock, wantReads: 1},
+		{name: "N+1", number: forkBlock + 1, wantReads: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	t.Run("post-amsterdam reads", func(t *testing.T) {
-		t.Parallel()
+			statedb, counting := newDestructedState(t)
+			rules := cfg.Rules(big.NewInt(tc.number), false, 0)
+			if want := tc.wantReads == 1; rules.IsAmsterdam != want {
+				t.Fatalf("IsAmsterdam at block %d = %v, want %v", tc.number, rules.IsAmsterdam, want)
+			}
+			statedb.Prepare(rules, addr, common.Address{}, nil, nil, nil)
 
-		statedb, counting := newDestructedState(t)
-		statedb.Prepare(params.Rules{IsAmsterdam: true}, addr, common.Address{}, nil, nil, nil)
-
-		if got := statedb.GetCommittedState(addr, slot); got != (common.Hash{}) {
-			t.Errorf("expected empty slot, got %x", got)
-		}
-		if counting.storageReads != 1 {
-			t.Errorf("expected one reader access after Amsterdam, got %d", counting.storageReads)
-		}
-	})
+			if got := statedb.GetCommittedState(addr, slot); got != (common.Hash{}) {
+				t.Errorf("expected empty slot, got %x", got)
+			}
+			if counting.storageReads != tc.wantReads {
+				t.Errorf("reader accesses = %d, want %d", counting.storageReads, tc.wantReads)
+			}
+		})
+	}
 
 	t.Run("copy carries the gate", func(t *testing.T) {
 		t.Parallel()
 
 		statedb, _ := newDestructedState(t)
-		statedb.Prepare(params.Rules{IsAmsterdam: true}, addr, common.Address{}, nil, nil, nil)
+		statedb.Prepare(cfg.Rules(big.NewInt(forkBlock), false, 0), addr, common.Address{}, nil, nil, nil)
 
 		if !statedb.Copy().amsterdam {
 			t.Error("Copy dropped the Amsterdam gate")

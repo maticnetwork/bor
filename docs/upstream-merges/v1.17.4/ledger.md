@@ -567,3 +567,37 @@ Verification (per-batch tier): `go build ./...` rc=0; `go vet` clean on touched 
 copylocks); `go mod tidy` clean (go.mod diff = c-kzg bump + olekukonko removal). `go test` pass: `core/types`,
 `core/vm` (guards), `core/` (182s), `miner` (196s), `eth/protocols/eth`, `trie`, `core/txpool/blobpool`,
 `consensus/beacon`. No leftover conflict markers.
+
+## v1.17.1 MILESTONE-TIER VERIFICATION (2026-09-08)
+
+Run against `ppatil-upstream-v1.17.1` at `4570596178` plus the uncommitted N-1/N/N+1
+boundary test. First milestone-tier run recorded in this ledger; every prior entry is
+per-batch tier only.
+
+**Use the repo's own contract, not `go test ./...`.** `make test` is:
+
+```
+GODEBUG=cgocheck=0 go test -p 1 --timeout 30m -cover -short $(go list ./... | grep -v go-ethereum/cmd/)
+```
+
+Three differences from a naive `go test ./...`, each of which manufactures a false failure:
+
+- **`cmd/` is excluded** from `TESTALL`. Running it surfaces `cmd/evm`, `cmd/geth` and
+  `cmd/devp2p/internal/ethtest` failures that are not part of the suite. The `cmd/evm`
+  t8n entries on this ledger's known-red list came from a run that was outside the
+  contract in the same way.
+- **`--timeout 30m`**, not the 10m default. `core` takes 604s under parallel package
+  execution and is killed at 600s; the failure presents as a `subfetcher` goroutine dump
+  that reads like a prefetcher deadlock and is not one.
+- **`-p 1`** (serial packages). With it, `core` finishes in 175s — the 604s figure was
+  CPU contention, not a slow test.
+
+Result: **144 packages pass, 0 failures, no panics, exit 0.** Slowest: `miner` 220s,
+`core` 175s, `rlp/rlpgen` 141s, `eth/fetcher` 137s.
+
+Adjacent finding (pre-existing, not introduced by this stack): `miner/worker.go:913`
+calls `w.chainConfig.Bor.CalculatePeriod(...)` with no nil check on `w.chainConfig.Bor`,
+so `newWorkLoop` segfaults on a chain config with no Bor section. Identical on `develop`,
+on the base branch and here (3 occurrences each). Unreachable in Bor production, where
+`Bor` is always set; it only shows up in the excluded `cmd/` tests, which spin standard
+Ethereum configs. Left alone — out of scope for a sync PR.
