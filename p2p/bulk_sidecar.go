@@ -354,7 +354,7 @@ func (b *BulkSidecar) dialConn(ctx context.Context, remote *enode.Node) (*quic.C
 	defer cancel()
 
 	tlsConf := &tls.Config{
-		InsecureSkipVerify: true,
+		InsecureSkipVerify: false,
 		NextProtos:         []string{bulkSidecarNextProto},
 		MinVersion:         tls.VersionTLS13,
 	}
