@@ -469,6 +469,19 @@ Fork/EIP surfaces (invariant 6 — all merged DORMANT, no activation moved on an
     pooled `StateDB`s behind `SafeBase`) leaves the flag false and skips the read — correct while
     Amsterdam is dormant, but it must be revisited when the fork is scheduled, or BAL will
     under-record on those paths.
+  - **Measured, not argued (2026-09-08):** `TestDestructedReadWitnessSkew` (`core/state`)
+    drives one destructed-account read against a committed storage trie and harvests the
+    witness both ways: **1 node with the gate on, 5 with it off — 4 extra nodes the reading
+    path demands, a clean superset.** It fails if the gate is removed, so it pins the
+    direction rather than restating it.
+  - **Subtlety worth keeping, because it nearly caused a wrong retraction:** #2180's comment
+    in `stateObject.updateTrie` says reader reads go through "a separate trie with its own
+    PrevalueTracer" and their nodes "are NOT in obj.trie". That is true, and it reads exactly
+    like "reader reads never reach the witness" — which is false. They reach it by a
+    different route: `trieReader.CollectStateWitness` harvests the reader's `mainTrie` and
+    per-address sub-tries, and `StateDB.CollectStateWitness()` is called from
+    `core/parallel_state_processor.go:1192` on the V2 BlockSTM path. "Not in `obj.trie`" and
+    "not in the witness" are different claims; only the first holds.
 
 Notable resolutions:
 
