@@ -1,0 +1,43 @@
+services:
+  bor-a:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: bor:quic-bulk-poc
+    command:
+      - server
+      - --config
+      - /etc/bor/config.toml
+    ports:
+      - "127.0.0.1:18545:8545"
+    volumes:
+      - ./packaging/docker/bor-bulk-a.toml:/etc/bor/config.toml:ro
+      - bor-a-data:/var/lib/bor/data
+    networks:
+      bulk-test-net:
+        ipv4_address: 172.29.0.2
+
+  bor-b:
+    image: bor:quic-bulk-poc
+    command:
+      - server
+      - --config
+      - /etc/bor/config.toml
+    ports:
+      - "127.0.0.1:28545:8545"
+    volumes:
+      - ./packaging/docker/bor-bulk-b.toml:/etc/bor/config.toml:ro
+      - bor-b-data:/var/lib/bor/data
+    networks:
+      bulk-test-net:
+        ipv4_address: 172.29.0.3
+
+networks:
+  bulk-test-net:
+    ipam:
+      config:
+        - subnet: 172.29.0.0/24
+
+volumes:
+  bor-a-data:
+  bor-b-data:

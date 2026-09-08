@@ -106,6 +106,14 @@ type Config struct {
 	// for TCP and DiscAddr for the UDP discovery protocol.
 	DiscAddr string
 
+	// EnableBulkSidecar enables an auxiliary QUIC listener used for bulk sync
+	// traffic. Normal devp2p/RLPx control traffic remains on ListenAddr.
+	EnableBulkSidecar bool `toml:",omitempty"`
+
+	// BulkListenAddr is the address for the QUIC bulk sidecar. If empty, it is
+	// derived from ListenAddr / DiscAddr with an ephemeral port.
+	BulkListenAddr string `toml:",omitempty"`
+
 	// If set to a non-nil value, the given NAT port mapper
 	// is used to make the listening port available to the
 	// Internet.

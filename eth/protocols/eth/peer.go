@@ -59,6 +59,12 @@ const (
 	// dropping broadcasts. Similarly to block propagations, there's no point to queue
 	// above some healthy uncle limit, so use that.
 	maxQueuedBlockAnns = 4
+
+	ethControlChannel = "eth-control"
+	ethBlocksChannel  = "eth-blocks"
+	ethTxChannel      = "eth-tx"
+	ethTxFetchChannel = "eth-tx-fetch"
+	ethBulkChannel    = "eth-bulk"
 )
 
 // max is a helper function which returns the larger of the two given integers.
@@ -101,10 +107,11 @@ type Peer struct {
 // NewPeer create a wrapper for a network connection and negotiated  protocol
 // version.
 func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter, txpool TxPool) *Peer {
+	routed := p2p.NewMultiChannelRoutedMsgReadWriter(rw, ethSidecarChannelForMsg)
 	peer := &Peer{
 		id:              p.ID().String(),
 		Peer:            p,
-		rw:              rw,
+		rw:              routed,
 		version:         version,
 		td:              new(big.Int),
 		knownTxs:        newKnownCache(maxKnownTxs),
@@ -138,6 +145,68 @@ func (p *Peer) Close() {
 // ID retrieves the peer's unique identifier.
 func (p *Peer) ID() string {
 	return p.id
+}
+
+// AttachBulkRW installs an auxiliary sidecar lane for the negotiated eth
+// protocol. Status stays on the primary devp2p lane because the sidecar is
+// attached after the initial protocol handshake completes.
+func (p *Peer) AttachBulkRW(rw p2p.MsgReadWriter) {
+	for _, channel := range []string{ethControlChannel, ethBlocksChannel, ethTxChannel, ethTxFetchChannel, ethBulkChannel} {
+		p.AttachBulkChannelRW(channel, rw)
+	}
+}
+
+// AttachBulkChannelRW installs an auxiliary sidecar lane for a specific eth
+// traffic class. Status stays on the primary devp2p lane because the sidecar
+// is attached after the initial protocol handshake completes.
+func (p *Peer) AttachBulkChannelRW(channel string, rw p2p.MsgReadWriter) {
+	if routed, ok := p.rw.(interface{ AttachBulk(p2p.MsgReadWriter) }); ok {
+		if multi, ok := p.rw.(interface {
+			AttachBulkChannel(string, p2p.MsgReadWriter)
+		}); ok {
+			multi.AttachBulkChannel(channel, rw)
+			return
+		}
+		routed.AttachBulk(rw)
+		return
+	}
+	// NewPeer pre-wraps rw with the routed wrapper, so live sidecar attachment
+	// normally updates lane state in place instead of swapping out p.rw.
+	p.rw = p2p.NewChannelRoutedMsgReadWriter(p.rw, rw, channel, func(code uint64) bool {
+		return ethSidecarChannelForMsg(code) == channel
+	})
+}
+
+func (p *Peer) HasBulkRW() bool {
+	if routed, ok := p.rw.(interface{ HasBulk() bool }); ok {
+		return routed.HasBulk()
+	}
+	return false
+}
+
+func ethSidecarChannelForMsg(code uint64) string {
+	switch code {
+	case NewBlockHashesMsg,
+		NewBlockMsg:
+		return ethBlocksChannel
+	case TransactionsMsg,
+		NewPooledTransactionHashesMsg:
+		return ethTxChannel
+	case GetPooledTransactionsMsg,
+		PooledTransactionsMsg:
+		return ethTxFetchChannel
+	case GetBlockHeadersMsg,
+		BlockHeadersMsg,
+		BlockRangeUpdateMsg:
+		return ethControlChannel
+	case GetBlockBodiesMsg,
+		BlockBodiesMsg,
+		GetReceiptsMsg,
+		ReceiptsMsg:
+		return ethBulkChannel
+	default:
+		return ""
+	}
 }
 
 // Version retrieves the peer's negotiated `eth` protocol version.

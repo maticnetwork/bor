@@ -2,10 +2,12 @@ package heimdall
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"path"
@@ -20,6 +22,7 @@ import (
 	codectypes "github.com/cosmos/cosmos-sdk/codec/types"
 	cryptocodec "github.com/cosmos/cosmos-sdk/crypto/codec"
 	"github.com/cosmos/gogoproto/proto"
+	"github.com/quic-go/quic-go/http3"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
@@ -60,9 +63,10 @@ const (
 )
 
 type HeimdallClient struct {
-	urlString string
-	client    http.Client
-	closeCh   chan struct{}
+	urlString       string
+	client          http.Client
+	transportCloser io.Closer
+	closeCh         chan struct{}
 }
 
 type Request struct {
@@ -71,14 +75,45 @@ type Request struct {
 	start  time.Time
 }
 
-func NewHeimdallClient(urlString string, timeout time.Duration) *HeimdallClient {
-	return &HeimdallClient{
-		urlString: urlString,
-		client: http.Client{
-			Timeout: timeout,
-		},
-		closeCh: make(chan struct{}),
+func NewHeimdallClient(urlString string, timeout time.Duration) (*HeimdallClient, error) {
+	normalizedURL, client, transportCloser, err := newHeimdallHTTPClient(urlString, timeout)
+	if err != nil {
+		return nil, err
 	}
+	return &HeimdallClient{
+		urlString:       normalizedURL,
+		client:          client,
+		transportCloser: transportCloser,
+		closeCh:         make(chan struct{}),
+	}, nil
+}
+
+func newHeimdallHTTPClient(urlString string, timeout time.Duration) (string, http.Client, io.Closer, error) {
+	client := http.Client{Timeout: timeout}
+
+	u, err := url.Parse(urlString)
+	if err != nil || u.Scheme != "h3" {
+		return urlString, client, nil, err
+	}
+	if u.Host == "" {
+		return "", http.Client{}, nil, fmt.Errorf("invalid Heimdall QUIC endpoint %q: empty host", urlString)
+	}
+
+	tlsConf := &tls.Config{
+		MinVersion: tls.VersionTLS13,
+		ServerName: u.Hostname(),
+	}
+	if isLocalhost(u.Hostname()) {
+		tlsConf.InsecureSkipVerify = true
+	}
+
+	transport := &http3.Transport{
+		TLSClientConfig: tlsConf,
+	}
+	client.Transport = transport
+	u.Scheme = "https"
+
+	return u.String(), client, transport, nil
 }
 
 const (
@@ -506,4 +541,15 @@ func internalFetchWithTimeout(ctx context.Context, client http.Client, url *url.
 func (h *HeimdallClient) Close() {
 	close(h.closeCh)
 	h.client.CloseIdleConnections()
+	if h.transportCloser != nil {
+		_ = h.transportCloser.Close()
+	}
+}
+
+func isLocalhost(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }

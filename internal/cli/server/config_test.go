@@ -134,6 +134,18 @@ func TestConfigBootnodesDefault(t *testing.T) {
 	})
 }
 
+func TestConfigBuildNodeBulkSidecar(t *testing.T) {
+	config := DefaultConfig()
+	config.P2P.EnableBulkSidecar = true
+	config.P2P.BulkPort = 30304
+	config.P2P.Bind = "0.0.0.0"
+
+	cfg, err := config.buildNode()
+	assert.NoError(t, err)
+	assert.True(t, cfg.P2P.EnableBulkSidecar)
+	assert.Equal(t, "0.0.0.0:30304", cfg.P2P.BulkListenAddr)
+}
+
 func TestMakePasswordListFromFile(t *testing.T) {
 	t.Parallel()
 

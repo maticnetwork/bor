@@ -70,10 +70,11 @@ var DefaultConfig = Config{
 	BatchResponseMaxSize: 25 * 1000 * 1000,
 	GraphQLVirtualHosts:  []string{"localhost"},
 	P2P: p2p.Config{
-		ListenAddr:    ":30303",
-		MaxPeers:      50,
-		NAT:           nat.Any(),
-		TxArrivalWait: 500 * time.Millisecond,
+		ListenAddr:        ":30303",
+		MaxPeers:          50,
+		NAT:               nat.Any(),
+		TxArrivalWait:     500 * time.Millisecond,
+		EnableBulkSidecar: false,
 	},
 	DBEngine: "", // Use whatever exists, will default to Pebble if non-existent and supported
 }

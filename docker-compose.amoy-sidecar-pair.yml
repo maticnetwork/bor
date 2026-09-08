@@ -1,0 +1,80 @@
+services:
+  bor-a:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: bor:quic-bulk-poc
+    command:
+      - server
+      - --config
+      - /etc/bor/config.toml
+      - --state.scheme
+      - hash
+    ports:
+      - "127.0.0.1:18545:8545"
+      - "127.0.0.1:18546:8546"
+      - "30313:30303/tcp"
+      - "30313:30303/udp"
+      - "30314:30304/udp"
+    volumes:
+      - ${BOR_A_CONFIG:-./packaging/docker/bor-amoy-sidecar-a.toml}:/etc/bor/config.toml:ro
+      - bor-amoy-hash-a-data:/var/lib/bor/data
+    restart: unless-stopped
+    networks:
+      amoy-sidecar-net:
+        ipv4_address: 172.30.0.2
+
+  bor-b:
+    image: bor:quic-bulk-poc
+    command:
+      - server
+      - --config
+      - /etc/bor/config.toml
+      - --state.scheme
+      - hash
+    ports:
+      - "127.0.0.1:28545:8545"
+      - "127.0.0.1:28546:8546"
+      - "30413:30303/tcp"
+      - "30413:30303/udp"
+      - "30414:30304/udp"
+    volumes:
+      - ${BOR_B_CONFIG:-./packaging/docker/bor-amoy-sidecar-b.toml}:/etc/bor/config.toml:ro
+      - bor-amoy-hash-b-data:/var/lib/bor/data
+    restart: unless-stopped
+    networks:
+      amoy-sidecar-net:
+        ipv4_address: 172.30.0.3
+
+  bor-observer:
+    image: bor:quic-bulk-poc
+    command:
+      - server
+      - --config
+      - /etc/bor/config.toml
+      - --state.scheme
+      - hash
+    ports:
+      - "127.0.0.1:38545:8545"
+      - "127.0.0.1:38546:8546"
+      - "30513:30303/tcp"
+      - "30513:30303/udp"
+      - "30514:30304/udp"
+    volumes:
+      - ${BOR_OBSERVER_CONFIG:-./packaging/docker/bor-amoy-sidecar-observer.toml}:/etc/bor/config.toml:ro
+      - bor-amoy-hash-observer-data:/var/lib/bor/data
+    restart: unless-stopped
+    networks:
+      amoy-sidecar-net:
+        ipv4_address: 172.30.0.4
+
+networks:
+  amoy-sidecar-net:
+    ipam:
+      config:
+        - subnet: 172.30.0.0/24
+
+volumes:
+  bor-amoy-hash-a-data:
+  bor-amoy-hash-b-data:
+  bor-amoy-hash-observer-data:

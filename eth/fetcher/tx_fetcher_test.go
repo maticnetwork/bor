@@ -31,6 +31,9 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/crypto/kzg4844"
+	ethproto "github.com/ethereum/go-ethereum/eth/protocols/eth"
+	"github.com/ethereum/go-ethereum/p2p"
+	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/holiman/uint256"
 )
@@ -1320,6 +1323,77 @@ func TestTransactionFetcherFullCapDropsBatch(t *testing.T) {
 	})
 }
 
+func TestTransactionFetcherRequestsTransactionsOverBulkLane(t *testing.T) {
+	t.Parallel()
+
+	primaryApp, primaryNet := p2p.MsgPipe()
+	defer primaryApp.Close()
+	defer primaryNet.Close()
+
+	bulkApp, bulkNet := p2p.MsgPipe()
+	defer bulkApp.Close()
+	defer bulkNet.Close()
+
+	peer := ethproto.NewPeer(ethproto.ETH69, p2p.NewPeerPipe(enode.ID{1}, "tx-fetcher-bulk", nil, primaryNet), primaryNet, nil)
+	defer peer.Close()
+	peer.AttachBulkRW(bulkNet)
+
+	clock := new(mclock.Simulated)
+	step := make(chan struct{}, 8)
+	requestedIDCh := make(chan uint64, 1)
+	fetcher := NewTxFetcherForTests(
+		func(common.Hash) bool { return false },
+		func([]*types.Transaction) []error { return nil },
+		func(origin string, requestID uint64, hashes []common.Hash) error {
+			if origin != "peerA" {
+				t.Fatalf("unexpected fetch origin: got %s want peerA", origin)
+			}
+			requestedIDCh <- requestID
+			return peer.RequestTxs(requestID, hashes)
+		},
+		nil,
+		clock,
+		time.Now,
+		rand.New(rand.NewSource(0x3a29)),
+	)
+	fetcher.step = step
+	fetcher.Start()
+	defer fetcher.Stop()
+
+	hashes := []common.Hash{{0x01}, {0x02}}
+	if err := fetcher.Notify("peerA", []byte{types.LegacyTxType, types.LegacyTxType}, []uint32{111, 222}, hashes); err != nil {
+		t.Fatalf("failed to notify tx fetcher: %v", err)
+	}
+	<-step
+
+	clock.Run(txArriveTimeout)
+	<-step
+
+	msg := readMsgWithTimeout(t, bulkApp)
+	if msg.Code != ethproto.GetPooledTransactionsMsg {
+		t.Fatalf("unexpected tx fetch request code: got %d want %d", msg.Code, ethproto.GetPooledTransactionsMsg)
+	}
+	var req ethproto.GetPooledTransactionsPacket
+	if err := msg.Decode(&req); err != nil {
+		t.Fatalf("failed to decode tx fetch request: %v", err)
+	}
+	if requestID := <-requestedIDCh; req.RequestId != requestID {
+		t.Fatalf("tx fetch request ID mismatch: got %d want %d", req.RequestId, requestID)
+	}
+	if len(req.GetPooledTransactionsRequest) != len(hashes) {
+		t.Fatalf("unexpected tx fetch request size: got %d want %d", len(req.GetPooledTransactionsRequest), len(hashes))
+	}
+	requested := append([]common.Hash(nil), req.GetPooledTransactionsRequest...)
+	slices.SortFunc(requested, common.Hash.Cmp)
+	expected := append([]common.Hash(nil), hashes...)
+	slices.SortFunc(expected, common.Hash.Cmp)
+	for i := range expected {
+		if requested[i] != expected[i] {
+			t.Fatalf("tx fetch hash mismatch at %d: got %s want %s", i, requested[i], expected[i])
+		}
+	}
+}
+
 // Tests that when a new batch would exceed the cap, it is trimmed to fit rather
 // than being entirely dropped (the partial truncation path).
 func TestTransactionFetcherPartialBatchTrimming(t *testing.T) {
@@ -2575,6 +2649,31 @@ func testTransactionFetcher(t *testing.T, tt txFetcherTest) {
 				t.Errorf("step %d: hash %s present in both stage 1 and 2", i, hash)
 			}
 		}
+	}
+}
+
+func readMsgWithTimeout(t *testing.T, rw *p2p.MsgPipeRW) p2p.Msg {
+	t.Helper()
+
+	type msgResult struct {
+		msg p2p.Msg
+		err error
+	}
+	resultCh := make(chan msgResult, 1)
+	go func() {
+		msg, err := rw.ReadMsg()
+		resultCh <- msgResult{msg: msg, err: err}
+	}()
+
+	select {
+	case result := <-resultCh:
+		if result.err != nil {
+			t.Fatalf("failed to read message: %v", result.err)
+		}
+		return result.msg
+	case <-time.After(2 * time.Second):
+		t.Fatal("timed out waiting for message")
+		return p2p.Msg{}
 	}
 }
 

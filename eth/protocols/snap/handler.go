@@ -181,8 +181,10 @@ func HandleMessage(backend Backend, peer *Peer) error {
 				return fmt.Errorf("accounts not monotonically increasing: #%d [%x] vs #%d [%x]", i-1, res.Accounts[i-1].Hash[:], i, res.Accounts[i].Hash[:])
 			}
 		}
+		if handled, err := peer.dispatchResponse(AccountRangeMsg, res); handled || err != nil {
+			return err
+		}
 		requestTracker.Fulfil(peer.id, peer.version, AccountRangeMsg, res.ID)
-
 		return backend.Handle(peer, res)
 
 	case msg.Code == GetStorageRangesMsg:
@@ -216,8 +218,10 @@ func HandleMessage(backend Backend, peer *Peer) error {
 			}
 		}
 
+		if handled, err := peer.dispatchResponse(StorageRangesMsg, res); handled || err != nil {
+			return err
+		}
 		requestTracker.Fulfil(peer.id, peer.version, StorageRangesMsg, res.ID)
-
 		return backend.Handle(peer, res)
 
 	case msg.Code == GetByteCodesMsg:
@@ -242,8 +246,10 @@ func HandleMessage(backend Backend, peer *Peer) error {
 			return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 		}
 
+		if handled, err := peer.dispatchResponse(ByteCodesMsg, res); handled || err != nil {
+			return err
+		}
 		requestTracker.Fulfil(peer.id, peer.version, ByteCodesMsg, res.ID)
-
 		return backend.Handle(peer, res)
 
 	case msg.Code == GetTrieNodesMsg:
@@ -270,8 +276,10 @@ func HandleMessage(backend Backend, peer *Peer) error {
 			return fmt.Errorf("%w: message %v: %v", errDecode, msg, err)
 		}
 
+		if handled, err := peer.dispatchResponse(TrieNodesMsg, res); handled || err != nil {
+			return err
+		}
 		requestTracker.Fulfil(peer.id, peer.version, TrieNodesMsg, res.ID)
-
 		return backend.Handle(peer, res)
 
 	default:

@@ -17,9 +17,19 @@
 package snap
 
 import (
+	"math/rand"
+	"sync"
+
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
+)
+
+const (
+	snapAccountsChannel = "snap-accounts"
+	snapStorageChannel  = "snap-storage"
+	snapCodeChannel     = "snap-code"
+	snapTrieChannel     = "snap-trie"
 )
 
 // Peer is a collection of relevant information we have about a `snap` peer.
@@ -31,19 +41,24 @@ type Peer struct {
 	version   uint              // Protocol version negotiated
 
 	logger log.Logger // Contextual logger with the peer id injected
+
+	pendingLock sync.Mutex
+	pending     map[uint64]*Request
 }
 
 // NewPeer creates a wrapper for a network connection and negotiated  protocol
 // version.
 func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter) *Peer {
 	id := p.ID().String()
+	routed := p2p.NewMultiChannelRoutedMsgReadWriter(rw, snapSidecarChannelForMsg)
 
 	return &Peer{
 		id:      id,
 		Peer:    p,
-		rw:      rw,
+		rw:      routed,
 		version: version,
 		logger:  log.New("peer", id[:8]),
+		pending: make(map[uint64]*Request),
 	}
 }
 
@@ -51,9 +66,10 @@ func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter) *Peer {
 func NewFakePeer(version uint, id string, rw p2p.MsgReadWriter) *Peer {
 	return &Peer{
 		id:      id,
-		rw:      rw,
+		rw:      p2p.NewMultiChannelRoutedMsgReadWriter(rw, snapSidecarChannelForMsg),
 		version: version,
 		logger:  log.New("peer", id[:8]),
+		pending: make(map[uint64]*Request),
 	}
 }
 
@@ -72,6 +88,60 @@ func (p *Peer) Log() log.Logger {
 	return p.logger
 }
 
+// AttachBulkRW installs an auxiliary sidecar lane for the negotiated snap
+// protocol. When unavailable, traffic falls back to the primary devp2p lane.
+func (p *Peer) AttachBulkRW(rw p2p.MsgReadWriter) {
+	for _, channel := range []string{snapAccountsChannel, snapStorageChannel, snapCodeChannel, snapTrieChannel} {
+		p.AttachBulkChannelRW(channel, rw)
+	}
+}
+
+// AttachBulkChannelRW installs an auxiliary sidecar lane for a specific snap
+// traffic class. When unavailable, traffic falls back to the primary devp2p lane.
+func (p *Peer) AttachBulkChannelRW(channel string, rw p2p.MsgReadWriter) {
+	if routed, ok := p.rw.(interface{ AttachBulk(p2p.MsgReadWriter) }); ok {
+		if multi, ok := p.rw.(interface {
+			AttachBulkChannel(string, p2p.MsgReadWriter)
+		}); ok {
+			multi.AttachBulkChannel(channel, rw)
+			return
+		}
+		routed.AttachBulk(rw)
+		return
+	}
+	// NewPeer and NewFakePeer pre-wrap rw with the routed wrapper, so live
+	// sidecar attachment normally updates lane state in place.
+	p.rw = p2p.NewChannelRoutedMsgReadWriter(p.rw, rw, channel, func(code uint64) bool {
+		return snapSidecarChannelForMsg(code) == channel
+	})
+}
+
+func (p *Peer) HasBulkRW() bool {
+	if routed, ok := p.rw.(interface{ HasBulk() bool }); ok {
+		return routed.HasBulk()
+	}
+	return false
+}
+
+func snapSidecarChannelForMsg(code uint64) string {
+	switch code {
+	case GetAccountRangeMsg,
+		AccountRangeMsg:
+		return snapAccountsChannel
+	case GetStorageRangesMsg,
+		StorageRangesMsg:
+		return snapStorageChannel
+	case GetByteCodesMsg,
+		ByteCodesMsg:
+		return snapCodeChannel
+	case GetTrieNodesMsg,
+		TrieNodesMsg:
+		return snapTrieChannel
+	default:
+		return ""
+	}
+}
+
 // RequestAccountRange fetches a batch of accounts rooted in a specific account
 // trie, starting with the origin.
 func (p *Peer) RequestAccountRange(id uint64, root common.Hash, origin, limit common.Hash, bytes uint64) error {
@@ -86,6 +156,29 @@ func (p *Peer) RequestAccountRange(id uint64, root common.Hash, origin, limit co
 		Limit:  limit,
 		Bytes:  bytes,
 	})
+}
+
+// RequestAccountRangeWithSink fetches a batch of accounts and delivers the
+// response back to the supplied sink.
+func (p *Peer) RequestAccountRangeWithSink(root common.Hash, origin, limit common.Hash, bytes uint64, sink chan *Response) (*Request, error) {
+	id := rand.Uint64()
+	req := &Request{
+		id:   id,
+		sink: sink,
+		code: GetAccountRangeMsg,
+		want: AccountRangeMsg,
+		data: &GetAccountRangePacket{
+			ID:     id,
+			Root:   root,
+			Origin: origin,
+			Limit:  limit,
+			Bytes:  bytes,
+		},
+	}
+	if err := p.dispatchRequest(req); err != nil {
+		return nil, err
+	}
+	return req, nil
 }
 
 // RequestStorageRanges fetches a batch of storage slots belonging to one or more
@@ -110,6 +203,30 @@ func (p *Peer) RequestStorageRanges(id uint64, root common.Hash, accounts []comm
 	})
 }
 
+// RequestStorageRangesWithSink fetches storage ranges and delivers the response
+// back to the supplied sink.
+func (p *Peer) RequestStorageRangesWithSink(root common.Hash, accounts []common.Hash, origin, limit []byte, bytes uint64, sink chan *Response) (*Request, error) {
+	id := rand.Uint64()
+	req := &Request{
+		id:   id,
+		sink: sink,
+		code: GetStorageRangesMsg,
+		want: StorageRangesMsg,
+		data: &GetStorageRangesPacket{
+			ID:       id,
+			Root:     root,
+			Accounts: accounts,
+			Origin:   origin,
+			Limit:    limit,
+			Bytes:    bytes,
+		},
+	}
+	if err := p.dispatchRequest(req); err != nil {
+		return nil, err
+	}
+	return req, nil
+}
+
 // RequestByteCodes fetches a batch of bytecodes by hash.
 func (p *Peer) RequestByteCodes(id uint64, hashes []common.Hash, bytes uint64) error {
 	p.logger.Trace("Fetching set of byte codes", "reqid", id, "hashes", len(hashes), "bytes", common.StorageSize(bytes))
@@ -121,6 +238,27 @@ func (p *Peer) RequestByteCodes(id uint64, hashes []common.Hash, bytes uint64) e
 		Hashes: hashes,
 		Bytes:  bytes,
 	})
+}
+
+// RequestByteCodesWithSink fetches bytecodes and delivers the response back to
+// the supplied sink.
+func (p *Peer) RequestByteCodesWithSink(hashes []common.Hash, bytes uint64, sink chan *Response) (*Request, error) {
+	id := rand.Uint64()
+	req := &Request{
+		id:   id,
+		sink: sink,
+		code: GetByteCodesMsg,
+		want: ByteCodesMsg,
+		data: &GetByteCodesPacket{
+			ID:     id,
+			Hashes: hashes,
+			Bytes:  bytes,
+		},
+	}
+	if err := p.dispatchRequest(req); err != nil {
+		return nil, err
+	}
+	return req, nil
 }
 
 // RequestTrieNodes fetches a batch of account or storage trie nodes rooted in
@@ -136,4 +274,26 @@ func (p *Peer) RequestTrieNodes(id uint64, root common.Hash, paths []TrieNodePat
 		Paths: paths,
 		Bytes: bytes,
 	})
+}
+
+// RequestTrieNodesWithSink fetches trie nodes and delivers the response back to
+// the supplied sink so callers can synchronously validate snap payload traffic.
+func (p *Peer) RequestTrieNodesWithSink(root common.Hash, paths []TrieNodePathSet, bytes uint64, sink chan *Response) (*Request, error) {
+	id := rand.Uint64()
+	req := &Request{
+		id:   id,
+		sink: sink,
+		code: GetTrieNodesMsg,
+		want: TrieNodesMsg,
+		data: &GetTrieNodesPacket{
+			ID:    id,
+			Root:  root,
+			Paths: paths,
+			Bytes: bytes,
+		},
+	}
+	if err := p.dispatchRequest(req); err != nil {
+		return nil, err
+	}
+	return req, nil
 }

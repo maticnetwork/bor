@@ -80,6 +80,13 @@ var (
 
 	// capture the rest of errors that are not handled by the above meters
 	serveOtherError = metrics.NewRegisteredMeter("p2p/serves/error/other", nil)
+
+	bulkSidecarSessionMeter        = metrics.NewRegisteredMeter("p2p/bulk/session", nil)
+	bulkSidecarChannelOpenMeter    = metrics.NewRegisteredMeter("p2p/bulk/channel/open", nil)
+	bulkSidecarChannelReplaceMeter = metrics.NewRegisteredMeter("p2p/bulk/channel/replace", nil)
+	bulkSidecarReadTimeoutMeter    = metrics.NewRegisteredMeter("p2p/bulk/read/timeout", nil)
+	bulkSidecarReadErrorMeter      = metrics.NewRegisteredMeter("p2p/bulk/read/error", nil)
+	bulkSidecarWriteFallbackMeter  = metrics.NewRegisteredMeter("p2p/bulk/write/fallback", nil)
 )
 
 // markDialError matches errors that occur while setting up a dial connection to the

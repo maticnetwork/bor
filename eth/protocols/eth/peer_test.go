@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 )
@@ -168,5 +169,278 @@ func TestPeerForgetTransactions(t *testing.T) {
 	}
 	if !peer.knownTxs.Contains(hashes[1]) {
 		t.Error("hash[1] should still be known")
+	}
+}
+
+func TestPeerAttachBulkRWRoutesEthTraffic(t *testing.T) {
+	primaryApp, primaryNet := p2p.MsgPipe()
+	defer primaryApp.Close()
+	defer primaryNet.Close()
+
+	controlApp, controlNet := p2p.MsgPipe()
+	defer controlApp.Close()
+	defer controlNet.Close()
+
+	blocksApp, blocksNet := p2p.MsgPipe()
+	defer blocksApp.Close()
+	defer blocksNet.Close()
+
+	txApp, txNet := p2p.MsgPipe()
+	defer txApp.Close()
+	defer txNet.Close()
+
+	txFetchApp, txFetchNet := p2p.MsgPipe()
+	defer txFetchApp.Close()
+	defer txFetchNet.Close()
+
+	bulkApp, bulkNet := p2p.MsgPipe()
+	defer bulkApp.Close()
+	defer bulkNet.Close()
+
+	var id enode.ID
+	rand.Read(id[:])
+
+	peer := NewPeer(ETH69, p2p.NewPeer(id, "test", nil), primaryNet, nil)
+	defer peer.Close()
+	peer.AttachBulkChannelRW(ethControlChannel, controlNet)
+	peer.AttachBulkChannelRW(ethBlocksChannel, blocksNet)
+	peer.AttachBulkChannelRW(ethTxChannel, txNet)
+	peer.AttachBulkChannelRW(ethTxFetchChannel, txFetchNet)
+	peer.AttachBulkChannelRW(ethBulkChannel, bulkNet)
+
+	resCh := make(chan *Response, 1)
+	hashes := []common.Hash{{0x01}, {0x02}}
+
+	reqc := make(chan *Request, 1)
+	errc := make(chan error, 4)
+	go func() {
+		req, err := peer.RequestBodies(hashes, resCh)
+		if err == nil {
+			reqc <- req
+		}
+		errc <- err
+	}()
+
+	msg, err := bulkApp.ReadMsg()
+	if err != nil {
+		t.Fatalf("failed to read block bodies request: %v", err)
+	}
+	var bodiesReq GetBlockBodiesPacket
+	if err := msg.Decode(&bodiesReq); err != nil {
+		t.Fatalf("failed to decode block bodies request: %v", err)
+	}
+	if len(bodiesReq.GetBlockBodiesRequest) != len(hashes) {
+		t.Fatalf("unexpected block bodies request size: got %d want %d", len(bodiesReq.GetBlockBodiesRequest), len(hashes))
+	}
+	for i := range hashes {
+		if bodiesReq.GetBlockBodiesRequest[i] != hashes[i] {
+			t.Fatalf("block bodies hash mismatch at %d", i)
+		}
+	}
+	req := <-reqc
+	defer req.Close()
+	if err := <-errc; err != nil {
+		t.Fatalf("failed to request bodies: %v", err)
+	}
+	if req.id != bodiesReq.RequestId {
+		t.Fatalf("block bodies request id mismatch: got %d want %d", req.id, bodiesReq.RequestId)
+	}
+
+	go func() {
+		req, err := peer.RequestReceipts(hashes, resCh)
+		if err == nil {
+			reqc <- req
+		}
+		errc <- err
+	}()
+	msg, err = bulkApp.ReadMsg()
+	if err != nil {
+		t.Fatalf("failed to read receipts request: %v", err)
+	}
+	var receiptsReq GetReceiptsPacket
+	if err := msg.Decode(&receiptsReq); err != nil {
+		t.Fatalf("failed to decode receipts request: %v", err)
+	}
+	if len(receiptsReq.GetReceiptsRequest) != len(hashes) {
+		t.Fatalf("unexpected receipt request size: got %d want %d", len(receiptsReq.GetReceiptsRequest), len(hashes))
+	}
+	for i := range hashes {
+		if receiptsReq.GetReceiptsRequest[i] != hashes[i] {
+			t.Fatalf("receipt hash mismatch at %d", i)
+		}
+	}
+	req = <-reqc
+	defer req.Close()
+	if err := <-errc; err != nil {
+		t.Fatalf("failed to request receipts: %v", err)
+	}
+	if req.id != receiptsReq.RequestId {
+		t.Fatalf("receipt request id mismatch: got %d want %d", req.id, receiptsReq.RequestId)
+	}
+
+	go func() { errc <- peer.ReplyBlockBodiesRLP(7, nil) }()
+	if err := p2p.ExpectMsg(bulkApp, BlockBodiesMsg, &BlockBodiesRLPPacket{
+		RequestId:              7,
+		BlockBodiesRLPResponse: nil,
+	}); err != nil {
+		t.Fatalf("block body reply did not use bulk lane: %v", err)
+	}
+	if err := <-errc; err != nil {
+		t.Fatalf("failed to reply with bodies: %v", err)
+	}
+
+	go func() { errc <- peer.ReplyReceiptsRLP(8, nil) }()
+	if err := p2p.ExpectMsg(bulkApp, ReceiptsMsg, &ReceiptsRLPPacket{
+		RequestId:           8,
+		ReceiptsRLPResponse: nil,
+	}); err != nil {
+		t.Fatalf("receipt reply did not use bulk lane: %v", err)
+	}
+	if err := <-errc; err != nil {
+		t.Fatalf("failed to reply with receipts: %v", err)
+	}
+
+	go func() { errc <- peer.SendTransactions(types.Transactions{}) }()
+	if err := p2p.ExpectMsg(txApp, TransactionsMsg, types.Transactions{}); err != nil {
+		t.Fatalf("transactions gossip did not use tx lane: %v", err)
+	}
+	if err := <-errc; err != nil {
+		t.Fatalf("failed to send transactions: %v", err)
+	}
+
+	go func() { errc <- peer.SendNewBlockHashes(hashes, []uint64{1, 2}) }()
+	if err := p2p.ExpectMsg(blocksApp, NewBlockHashesMsg, NewBlockHashesPacket{
+		{Hash: hashes[0], Number: 1},
+		{Hash: hashes[1], Number: 2},
+	}); err != nil {
+		t.Fatalf("block announcement did not use block lane: %v", err)
+	}
+	if err := <-errc; err != nil {
+		t.Fatalf("failed to send block hashes: %v", err)
+	}
+
+	const txRequestID = uint64(9)
+	go func() { errc <- peer.RequestTxs(txRequestID, hashes) }()
+	msg, err = txFetchApp.ReadMsg()
+	if err != nil {
+		t.Fatalf("failed to read pooled transaction request: %v", err)
+	}
+	if msg.Code != GetPooledTransactionsMsg {
+		t.Fatalf("unexpected pooled transaction request code: got %d want %d", msg.Code, GetPooledTransactionsMsg)
+	}
+	var txReq GetPooledTransactionsPacket
+	if err := msg.Decode(&txReq); err != nil {
+		t.Fatalf("failed to decode pooled transaction request: %v", err)
+	}
+	if txReq.RequestId != txRequestID {
+		t.Fatalf("unexpected pooled transaction request ID: got %d want %d", txReq.RequestId, txRequestID)
+	}
+	if len(txReq.GetPooledTransactionsRequest) != len(hashes) {
+		t.Fatalf("unexpected pooled transaction request size: got %d want %d", len(txReq.GetPooledTransactionsRequest), len(hashes))
+	}
+	for i := range hashes {
+		if txReq.GetPooledTransactionsRequest[i] != hashes[i] {
+			t.Fatalf("pooled transaction hash mismatch at %d", i)
+		}
+	}
+	if err := <-errc; err != nil {
+		t.Fatalf("failed to request transactions: %v", err)
+	}
+
+	go func() { errc <- peer.ReplyPooledTransactionsRLP(9, hashes[:1], nil) }()
+	if err := p2p.ExpectMsg(txFetchApp, PooledTransactionsMsg, &PooledTransactionsRLPPacket{
+		RequestId:                     9,
+		PooledTransactionsRLPResponse: nil,
+	}); err != nil {
+		t.Fatalf("pooled transaction reply did not use tx-fetch lane: %v", err)
+	}
+	if err := <-errc; err != nil {
+		t.Fatalf("failed to reply with pooled transactions: %v", err)
+	}
+
+	go func() {
+		req, err := peer.RequestHeadersByHash(hashes[0], 2, 0, false, resCh)
+		if err == nil {
+			reqc <- req
+		}
+		errc <- err
+	}()
+	msg, err = controlApp.ReadMsg()
+	if err != nil {
+		t.Fatalf("failed to read header request: %v", err)
+	}
+	if msg.Code != GetBlockHeadersMsg {
+		t.Fatalf("unexpected header request code: got %d want %d", msg.Code, GetBlockHeadersMsg)
+	}
+	var headersReq GetBlockHeadersPacket
+	if err := msg.Decode(&headersReq); err != nil {
+		t.Fatalf("failed to decode header request: %v", err)
+	}
+	req = <-reqc
+	defer req.Close()
+	if err := <-errc; err != nil {
+		t.Fatalf("failed to request headers: %v", err)
+	}
+	if req.id != headersReq.RequestId {
+		t.Fatalf("header request id mismatch: got %d want %d", req.id, headersReq.RequestId)
+	}
+
+	go func() { errc <- p2p.Send(peer.rw, StatusMsg, &StatusPacket68{}) }()
+	if err := p2p.ExpectMsg(primaryApp, StatusMsg, &StatusPacket68{}); err != nil {
+		t.Fatalf("status message should remain on primary lane: %v", err)
+	}
+	if err := <-errc; err != nil {
+		t.Fatalf("failed to send status: %v", err)
+	}
+}
+
+func TestPeerAttachBulkChannelRWKeepsRoutedRW(t *testing.T) {
+	primaryApp, primaryNet := p2p.MsgPipe()
+	defer primaryApp.Close()
+	defer primaryNet.Close()
+
+	bulkApp, bulkNet := p2p.MsgPipe()
+	defer bulkApp.Close()
+	defer bulkNet.Close()
+
+	var id enode.ID
+	rand.Read(id[:])
+
+	peer := NewPeer(ETH69, p2p.NewPeer(id, "test", nil), primaryNet, nil)
+	defer peer.Close()
+
+	original := peer.rw
+	peer.AttachBulkChannelRW(ethBulkChannel, bulkNet)
+
+	if peer.rw != original {
+		t.Fatal("expected late bulk attach to preserve the routed read-writer")
+	}
+}
+
+func TestEthSidecarChannelForMsg(t *testing.T) {
+	tests := []struct {
+		code uint64
+		want string
+	}{
+		{StatusMsg, ""},
+		{NewBlockHashesMsg, ethBlocksChannel},
+		{TransactionsMsg, ethTxChannel},
+		{GetBlockHeadersMsg, ethControlChannel},
+		{BlockHeadersMsg, ethControlChannel},
+		{GetBlockBodiesMsg, ethBulkChannel},
+		{BlockBodiesMsg, ethBulkChannel},
+		{NewBlockMsg, ethBlocksChannel},
+		{NewPooledTransactionHashesMsg, ethTxChannel},
+		{GetPooledTransactionsMsg, ethTxFetchChannel},
+		{PooledTransactionsMsg, ethTxFetchChannel},
+		{GetReceiptsMsg, ethBulkChannel},
+		{ReceiptsMsg, ethBulkChannel},
+		{BlockRangeUpdateMsg, ethControlChannel},
+		{0xff, ""},
+	}
+	for _, test := range tests {
+		if got := ethSidecarChannelForMsg(test.code); got != test.want {
+			t.Fatalf("ethSidecarChannelForMsg(%d) = %q, want %q", test.code, got, test.want)
+		}
 	}
 }

@@ -504,6 +504,7 @@ func (h *handler) runEthPeer(peer *eth.Peer, handler eth.Handler) error {
 			return err
 		}
 	}
+	h.attachBulkSidecar(peer, snap, wit)
 	h.chainSync.handlePeerEvent()
 
 	// Bor: skip propagating transactions if flag is set
@@ -606,6 +607,38 @@ func (h *handler) runWitExtension(peer *wit.Peer, handler wit.Handler) error {
 	}
 
 	return handler(peer)
+}
+
+func (h *handler) attachBulkSidecar(peer *eth.Peer, snapPeer *snap.Peer, witPeer *wit.Peer) {
+	if h.p2pServer == nil || h.p2pServer.BulkSidecar() == nil {
+		return
+	}
+	sidecar := h.p2pServer.BulkSidecar()
+	go func() {
+		for _, channel := range []string{"eth-control", "eth-blocks", "eth-tx", "eth-tx-fetch", "eth-bulk"} {
+			if rw, err := sidecar.OpenChannel(peer.Peer, channel); err != nil {
+				peer.Log().Debug("Bulk eth sidecar unavailable", "channel", channel, "err", err)
+			} else {
+				peer.AttachBulkChannelRW(channel, rw)
+			}
+		}
+		if snapPeer != nil {
+			for _, channel := range []string{"snap-accounts", "snap-storage", "snap-code", "snap-trie"} {
+				if rw, err := sidecar.OpenChannel(snapPeer.Peer, channel); err != nil {
+					snapPeer.Log().Debug("Bulk snap sidecar unavailable", "channel", channel, "err", err)
+				} else {
+					snapPeer.AttachBulkChannelRW(channel, rw)
+				}
+			}
+		}
+		if witPeer != nil {
+			if rw, err := sidecar.OpenChannel(witPeer.Peer, "wit-bulk"); err != nil {
+				witPeer.Log().Debug("Bulk wit sidecar unavailable", "err", err)
+			} else {
+				witPeer.AttachBulkRW(rw)
+			}
+		}
+	}()
 }
 
 // jailPeer jails a peer to prevent reconnection for a period of time

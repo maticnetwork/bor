@@ -149,7 +149,8 @@ func TestFetchCheckpointFromMockHeimdall(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Create a new heimdall client and use same port for connection
-	client := NewHeimdallClient(fmt.Sprintf("http://localhost:%d", port), 5*time.Second)
+	client, err := NewHeimdallClient(fmt.Sprintf("http://localhost:%d", port), 5*time.Second)
+	require.NoError(t, err)
 	_, err = client.FetchCheckpoint(t.Context(), -1)
 	require.NoError(t, err, "expect no error in fetching checkpoint")
 
@@ -218,7 +219,8 @@ func TestFetchMilestoneFromMockHeimdall(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// Create a new heimdall client and use same port for connection
-	client := NewHeimdallClient(fmt.Sprintf("http://localhost:%d", port), 5*time.Second)
+	client, err := NewHeimdallClient(fmt.Sprintf("http://localhost:%d", port), 5*time.Second)
+	require.NoError(t, err)
 	_, err = client.FetchMilestone(t.Context())
 	require.NoError(t, err, "expect no error in fetching milestone")
 
@@ -273,7 +275,8 @@ func TestFetchShutdown(t *testing.T) {
 	require.NoError(t, err, "expect no error in starting mock heimdall server")
 
 	// Create a new heimdall client and use same port for connection
-	client := NewHeimdallClient(fmt.Sprintf("http://localhost:%d", port), 5*time.Second)
+	client, err := NewHeimdallClient(fmt.Sprintf("http://localhost:%d", port), 5*time.Second)
+	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(t.Context(), 50*time.Millisecond)
 

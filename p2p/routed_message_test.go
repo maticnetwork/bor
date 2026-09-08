@@ -1,0 +1,758 @@
+package p2p
+
+import (
+	"bytes"
+	"errors"
+	"io"
+	"sync"
+	"testing"
+	"time"
+)
+
+type timeoutErr struct{}
+
+func (timeoutErr) Error() string   { return "timeout" }
+func (timeoutErr) Timeout() bool   { return true }
+func (timeoutErr) Temporary() bool { return true }
+
+type partialTimeoutReader struct {
+	emitted bool
+}
+
+func (r *partialTimeoutReader) Read(buf []byte) (int, error) {
+	if !r.emitted {
+		r.emitted = true
+		buf[0] = 0xc0
+		return 1, nil
+	}
+	return 0, timeoutErr{}
+}
+
+var errPartialPayload = errors.New("partial payload failure")
+
+type partialErrorReader struct {
+	emitted bool
+}
+
+func (r *partialErrorReader) Read(buf []byte) (int, error) {
+	if !r.emitted {
+		r.emitted = true
+		buf[0] = 0xc0
+		return 1, nil
+	}
+	return 0, errPartialPayload
+}
+
+type scriptedMsgRW struct {
+	results chan scriptedResult
+}
+
+type scriptedResult struct {
+	msg Msg
+	err error
+}
+
+type stressMsgRW struct {
+	closeOnce sync.Once
+	closed    chan struct{}
+	results   chan scriptedResult
+}
+
+func newStressMsgRW() *stressMsgRW {
+	return &stressMsgRW{
+		closed:  make(chan struct{}),
+		results: make(chan scriptedResult, 128),
+	}
+}
+
+func (rw *stressMsgRW) ReadMsg() (Msg, error) {
+	select {
+	case result := <-rw.results:
+		return result.msg, result.err
+	case <-rw.closed:
+		return Msg{}, ErrPipeClosed
+	}
+}
+
+func (rw *stressMsgRW) WriteMsg(msg Msg) error {
+	select {
+	case <-rw.closed:
+		return ErrPipeClosed
+	default:
+	}
+	_, err := io.Copy(io.Discard, msg.Payload)
+	return err
+}
+
+func (rw *stressMsgRW) PushMsg(code uint64) {
+	msg := Msg{
+		Code:    code,
+		Size:    1,
+		Payload: bytes.NewReader([]byte{0xc0}),
+	}
+	select {
+	case rw.results <- scriptedResult{msg: msg}:
+	case <-rw.closed:
+	}
+}
+
+func (rw *stressMsgRW) Close() {
+	rw.closeOnce.Do(func() {
+		close(rw.closed)
+	})
+}
+
+func (rw *scriptedMsgRW) ReadMsg() (Msg, error) {
+	result := <-rw.results
+	return result.msg, result.err
+}
+
+func (rw *scriptedMsgRW) WriteMsg(msg Msg) error {
+	return nil
+}
+
+func TestRoutedPayloadConvertsEarlyEOF(t *testing.T) {
+	done := make(chan error, 1)
+	payload := &routedPayload{
+		reader:    bytes.NewReader([]byte{0xc0}),
+		remaining: 2,
+		done:      done,
+	}
+	if _, err := io.ReadAll(payload); !errors.Is(err, io.ErrUnexpectedEOF) {
+		t.Fatalf("expected unexpected EOF, got %v", err)
+	}
+	if err := <-done; !errors.Is(err, io.ErrUnexpectedEOF) {
+		t.Fatalf("unexpected completion error: %v", err)
+	}
+}
+
+func TestRoutedMsgReadWriterForwardsZeroSizeMessage(t *testing.T) {
+	primary := newStressMsgRW()
+	routed := NewRoutedMsgReadWriter(primary, nil, func(uint64) bool { return false })
+	primary.results <- scriptedResult{msg: Msg{Code: 1}}
+
+	msg, err := routed.ReadMsg()
+	if err != nil {
+		t.Fatalf("failed to read zero-size message: %v", err)
+	}
+	if msg.Code != 1 || msg.Size != 0 {
+		t.Fatalf("unexpected zero-size message: code=%d size=%d", msg.Code, msg.Size)
+	}
+	primary.Close()
+	if _, err := routed.ReadMsg(); !errors.Is(err, ErrPipeClosed) {
+		t.Fatalf("expected closed primary lane, got %v", err)
+	}
+}
+
+func TestRoutedMsgReadWriterRoutesWrites(t *testing.T) {
+	primaryApp, primaryNet := MsgPipe()
+	defer primaryApp.Close()
+	defer primaryNet.Close()
+
+	bulkApp, bulkNet := MsgPipe()
+	defer bulkApp.Close()
+	defer bulkNet.Close()
+
+	rw := NewRoutedMsgReadWriter(primaryNet, bulkNet, func(code uint64) bool { return code == 2 })
+
+	errc := make(chan error, 2)
+	go func() { errc <- SendItems(rw, 1, uint64(11)) }()
+	if err := ExpectMsg(primaryApp, 1, []uint64{11}); err != nil {
+		t.Fatalf("primary lane mismatch: %v", err)
+	}
+	go func() { errc <- SendItems(rw, 2, uint64(22)) }()
+	if err := ExpectMsg(bulkApp, 2, []uint64{22}); err != nil {
+		t.Fatalf("bulk lane mismatch: %v", err)
+	}
+	for range 2 {
+		if err := <-errc; err != nil {
+			t.Fatalf("send failed: %v", err)
+		}
+	}
+}
+
+func TestMultiChannelRoutedMsgReadWriterRoutesWritesByChannel(t *testing.T) {
+	primaryApp, primaryNet := MsgPipe()
+	defer primaryApp.Close()
+	defer primaryNet.Close()
+
+	controlApp, controlNet := MsgPipe()
+	defer controlApp.Close()
+	defer controlNet.Close()
+
+	bulkApp, bulkNet := MsgPipe()
+	defer bulkApp.Close()
+	defer bulkNet.Close()
+
+	routed, ok := NewMultiChannelRoutedMsgReadWriter(primaryNet, func(code uint64) string {
+		switch code {
+		case 3:
+			return "eth-control"
+		case 5:
+			return "eth-bulk"
+		default:
+			return ""
+		}
+	}).(interface {
+		AttachBulkChannel(string, MsgReadWriter)
+		WriteMsg(Msg) error
+	})
+	if !ok {
+		t.Fatal("expected multi-channel routed msg read writer")
+	}
+	routed.AttachBulkChannel("eth-control", controlNet)
+	routed.AttachBulkChannel("eth-bulk", bulkNet)
+
+	errc := make(chan error, 3)
+	go func() { errc <- SendItems(routed, 1, uint64(11)) }()
+	if err := ExpectMsg(primaryApp, 1, []uint64{11}); err != nil {
+		t.Fatalf("primary lane mismatch: %v", err)
+	}
+	go func() { errc <- SendItems(routed, 3, uint64(33)) }()
+	if err := ExpectMsg(controlApp, 3, []uint64{33}); err != nil {
+		t.Fatalf("control lane mismatch: %v", err)
+	}
+	go func() { errc <- SendItems(routed, 5, uint64(55)) }()
+	if err := ExpectMsg(bulkApp, 5, []uint64{55}); err != nil {
+		t.Fatalf("bulk lane mismatch: %v", err)
+	}
+	for range 3 {
+		if err := <-errc; err != nil {
+			t.Fatalf("send failed: %v", err)
+		}
+	}
+}
+
+func TestRoutedMsgReadWriterReadsBothLanes(t *testing.T) {
+	primaryApp, primaryNet := MsgPipe()
+	defer primaryApp.Close()
+	defer primaryNet.Close()
+
+	bulkApp, bulkNet := MsgPipe()
+	defer bulkApp.Close()
+	defer bulkNet.Close()
+
+	rw := NewRoutedMsgReadWriter(primaryNet, bulkNet, func(code uint64) bool { return code == 2 })
+
+	errc := make(chan error, 2)
+	go func() { errc <- SendItems(bulkApp, 2, uint64(22)) }()
+	go func() { errc <- SendItems(primaryApp, 1, uint64(11)) }()
+
+	got := map[uint64]uint64{}
+	for range 2 {
+		msg, err := rw.ReadMsg()
+		if err != nil {
+			t.Fatalf("failed to read routed message: %v", err)
+		}
+		var payload []uint64
+		if err := msg.Decode(&payload); err != nil {
+			t.Fatalf("failed to decode payload: %v", err)
+		}
+		if len(payload) != 1 {
+			t.Fatalf("unexpected payload length %d", len(payload))
+		}
+		got[msg.Code] = payload[0]
+	}
+
+	if got[1] != 11 {
+		t.Fatalf("primary payload mismatch: got %d want 11", got[1])
+	}
+	if got[2] != 22 {
+		t.Fatalf("bulk payload mismatch: got %d want 22", got[2])
+	}
+	for range 2 {
+		if err := <-errc; err != nil {
+			t.Fatalf("send failed: %v", err)
+		}
+	}
+}
+
+func TestRoutedMsgReadWriterIgnoresBulkReadErrors(t *testing.T) {
+	primaryApp, primaryNet := MsgPipe()
+	defer primaryApp.Close()
+	defer primaryNet.Close()
+
+	bulkApp, bulkNet := MsgPipe()
+	defer bulkApp.Close()
+	defer bulkNet.Close()
+
+	rw := NewRoutedMsgReadWriter(primaryNet, bulkNet, func(code uint64) bool { return true })
+
+	if err := bulkApp.Close(); err != nil {
+		t.Fatalf("failed to close bulk lane: %v", err)
+	}
+
+	errc := make(chan error, 1)
+	go func() { errc <- SendItems(primaryApp, 1, uint64(11)) }()
+
+	msg, err := rw.ReadMsg()
+	if err != nil {
+		t.Fatalf("unexpected read failure after bulk close: %v", err)
+	}
+	var payload []uint64
+	if err := msg.Decode(&payload); err != nil {
+		t.Fatalf("failed to decode payload: %v", err)
+	}
+	if msg.Code != 1 || len(payload) != 1 || payload[0] != 11 {
+		t.Fatalf("unexpected primary payload after bulk close: code=%d payload=%v", msg.Code, payload)
+	}
+	if err := <-errc; err != nil {
+		t.Fatalf("send failed: %v", err)
+	}
+}
+
+func TestRoutedMsgReadWriterAttachesBulkLate(t *testing.T) {
+	primaryApp, primaryNet := MsgPipe()
+	defer primaryApp.Close()
+	defer primaryNet.Close()
+
+	routed, ok := NewRoutedMsgReadWriter(primaryNet, nil, func(code uint64) bool { return code == 2 }).(interface {
+		AttachBulk(MsgReadWriter)
+		ReadMsg() (Msg, error)
+		WriteMsg(Msg) error
+	})
+	if !ok {
+		t.Fatal("expected attachable routed msg read writer")
+	}
+
+	bulkApp, bulkNet := MsgPipe()
+	defer bulkApp.Close()
+	defer bulkNet.Close()
+
+	routed.AttachBulk(bulkNet)
+	errc := make(chan error, 1)
+	go func() { errc <- SendItems(routed, 2, uint64(22)) }()
+	if err := ExpectMsg(bulkApp, 2, []uint64{22}); err != nil {
+		t.Fatalf("bulk lane mismatch after late attach: %v", err)
+	}
+	if err := <-errc; err != nil {
+		t.Fatalf("bulk send failed: %v", err)
+	}
+}
+
+func TestRoutedMsgReadWriterFallsBackToPrimaryWhenBulkWriteFails(t *testing.T) {
+	primaryApp, primaryNet := MsgPipe()
+	defer primaryApp.Close()
+	defer primaryNet.Close()
+
+	bulkApp, bulkNet := MsgPipe()
+	defer bulkNet.Close()
+
+	rw := NewRoutedMsgReadWriter(primaryNet, bulkNet, func(code uint64) bool { return code == 2 })
+
+	if err := bulkApp.Close(); err != nil {
+		t.Fatalf("failed to close bulk lane: %v", err)
+	}
+
+	errc := make(chan error, 1)
+	go func() { errc <- SendItems(rw, 2, uint64(22)) }()
+	if err := ExpectMsg(primaryApp, 2, []uint64{22}); err != nil {
+		t.Fatalf("primary fallback mismatch: %v", err)
+	}
+	if err := <-errc; err != nil {
+		t.Fatalf("send failed after fallback: %v", err)
+	}
+}
+
+func TestMultiChannelRoutedMsgReadWriterFallsBackPerChannel(t *testing.T) {
+	primaryApp, primaryNet := MsgPipe()
+	defer primaryApp.Close()
+	defer primaryNet.Close()
+
+	controlApp, controlNet := MsgPipe()
+	defer controlNet.Close()
+
+	routed, ok := NewMultiChannelRoutedMsgReadWriter(primaryNet, func(code uint64) string {
+		if code == 3 {
+			return "eth-control"
+		}
+		return ""
+	}).(interface {
+		AttachBulkChannel(string, MsgReadWriter)
+		WriteMsg(Msg) error
+	})
+	if !ok {
+		t.Fatal("expected multi-channel routed msg read writer")
+	}
+	routed.AttachBulkChannel("eth-control", controlNet)
+
+	if err := controlApp.Close(); err != nil {
+		t.Fatalf("failed to close control lane: %v", err)
+	}
+
+	errc := make(chan error, 1)
+	go func() { errc <- SendItems(routed, 3, uint64(33)) }()
+	if err := ExpectMsg(primaryApp, 3, []uint64{33}); err != nil {
+		t.Fatalf("primary fallback mismatch: %v", err)
+	}
+	if err := <-errc; err != nil {
+		t.Fatalf("send failed after fallback: %v", err)
+	}
+}
+
+func TestRoutedMsgReadWriterRestartsBulkReadsAfterReattach(t *testing.T) {
+	primaryApp, primaryNet := MsgPipe()
+	defer primaryApp.Close()
+	defer primaryNet.Close()
+
+	bulkApp1, bulkNet1 := MsgPipe()
+	routed, ok := NewRoutedMsgReadWriter(primaryNet, bulkNet1, func(code uint64) bool { return code == 2 }).(interface {
+		AttachBulk(MsgReadWriter)
+		ReadMsg() (Msg, error)
+	})
+	if !ok {
+		t.Fatal("expected attachable routed msg read writer")
+	}
+
+	if err := bulkApp1.Close(); err != nil {
+		t.Fatalf("failed to close initial bulk lane: %v", err)
+	}
+	// Allow the first bulk read loop to observe the closed lane and exit.
+	time.Sleep(10 * time.Millisecond)
+	if hasBulk, ok := routed.(interface{ HasBulk() bool }); !ok || hasBulk.HasBulk() {
+		t.Fatal("expected closed bulk lane to be cleared")
+	}
+
+	bulkApp2, bulkNet2 := MsgPipe()
+	defer bulkApp2.Close()
+	defer bulkNet2.Close()
+
+	routed.AttachBulk(bulkNet2)
+
+	errc := make(chan error, 1)
+	go func() { errc <- SendItems(bulkApp2, 2, uint64(22)) }()
+
+	msg, err := routed.ReadMsg()
+	if err != nil {
+		t.Fatalf("failed to read reattached bulk message: %v", err)
+	}
+	var payload []uint64
+	if err := msg.Decode(&payload); err != nil {
+		t.Fatalf("failed to decode reattached bulk payload: %v", err)
+	}
+	if msg.Code != 2 || len(payload) != 1 || payload[0] != 22 {
+		t.Fatalf("unexpected reattached bulk payload: code=%d payload=%v", msg.Code, payload)
+	}
+	if err := <-errc; err != nil {
+		t.Fatalf("send failed on reattached bulk lane: %v", err)
+	}
+}
+
+func TestRoutedMsgReadWriterDropsBulkLaneAfterReadTimeout(t *testing.T) {
+	primaryApp, primaryNet := MsgPipe()
+	defer primaryApp.Close()
+	defer primaryNet.Close()
+
+	bulk := &scriptedMsgRW{
+		results: make(chan scriptedResult, 2),
+	}
+	routed, ok := NewRoutedMsgReadWriter(primaryNet, bulk, func(code uint64) bool { return code == 2 }).(interface {
+		HasBulk() bool
+		ReadMsg() (Msg, error)
+	})
+	if !ok {
+		t.Fatal("expected attachable routed msg read writer")
+	}
+
+	readc := make(chan scriptedResult, 1)
+	go func() {
+		msg, err := routed.ReadMsg()
+		readc <- scriptedResult{msg: msg, err: err}
+	}()
+	bulk.results <- scriptedResult{err: timeoutErr{}}
+
+	deadline := time.Now().Add(time.Second)
+	for routed.HasBulk() && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if routed.HasBulk() {
+		t.Fatal("expected timed-out bulk lane to be removed")
+	}
+
+	sendErr := make(chan error, 1)
+	go func() { sendErr <- SendItems(primaryApp, 2, uint64(22)) }()
+	result := <-readc
+	msg, err := result.msg, result.err
+	if err != nil {
+		t.Fatalf("unexpected primary fallback failure after timeout: %v", err)
+	}
+	if msg.Code != 2 {
+		t.Fatalf("unexpected fallback message code: got %d want 2", msg.Code)
+	}
+	if err := msg.Discard(); err != nil {
+		t.Fatalf("failed to discard primary fallback message: %v", err)
+	}
+	if err := <-sendErr; err != nil {
+		t.Fatalf("primary fallback send failed: %v", err)
+	}
+}
+
+func TestRoutedMsgReadWriterStreamsBulkPayload(t *testing.T) {
+	primaryApp, primaryNet := MsgPipe()
+	defer primaryApp.Close()
+	defer primaryNet.Close()
+
+	bulk := &scriptedMsgRW{results: make(chan scriptedResult, 1)}
+	routed := NewRoutedMsgReadWriter(primaryNet, bulk, func(code uint64) bool { return code == 2 })
+	payloadReader, payloadWriter := io.Pipe()
+	defer payloadReader.Close()
+	defer payloadWriter.Close()
+
+	bulk.results <- scriptedResult{msg: Msg{Code: 2, Size: 2, Payload: payloadReader}}
+	readc := make(chan scriptedResult, 1)
+	go func() {
+		msg, err := routed.ReadMsg()
+		readc <- scriptedResult{msg: msg, err: err}
+	}()
+
+	var result scriptedResult
+	select {
+	case result = <-readc:
+	case <-time.After(time.Second):
+		t.Fatal("message header was not delivered before its payload")
+	}
+	if result.err != nil {
+		t.Fatalf("failed to read streamed message: %v", result.err)
+	}
+	writeErr := make(chan error, 1)
+	go func() {
+		_, err := payloadWriter.Write([]byte{0xc1, 0x80})
+		writeErr <- err
+	}()
+	payload, err := io.ReadAll(result.msg.Payload)
+	if err != nil {
+		t.Fatalf("failed to consume streamed payload: %v", err)
+	}
+	if !bytes.Equal(payload, []byte{0xc1, 0x80}) {
+		t.Fatalf("streamed payload mismatch: got %x", payload)
+	}
+	if err := <-writeErr; err != nil {
+		t.Fatalf("failed to write streamed payload: %v", err)
+	}
+}
+
+func TestRoutedMsgReadWriterWaitsForPayloadBeforeNextFrame(t *testing.T) {
+	primaryApp, primaryNet := MsgPipe()
+	defer primaryApp.Close()
+	defer primaryNet.Close()
+
+	bulk := &scriptedMsgRW{results: make(chan scriptedResult, 2)}
+	routed := NewRoutedMsgReadWriter(primaryNet, bulk, func(code uint64) bool { return code == 2 })
+	bulk.results <- scriptedResult{msg: Msg{Code: 2, Size: 1, Payload: bytes.NewReader([]byte{0xc0})}}
+	bulk.results <- scriptedResult{msg: Msg{Code: 2, Size: 1, Payload: bytes.NewReader([]byte{0xc1})}}
+
+	first, err := routed.ReadMsg()
+	if err != nil {
+		t.Fatalf("failed to read first frame: %v", err)
+	}
+	secondc := make(chan scriptedResult, 1)
+	go func() {
+		msg, err := routed.ReadMsg()
+		secondc <- scriptedResult{msg: msg, err: err}
+	}()
+	select {
+	case <-secondc:
+		t.Fatal("next frame was read before the first payload was consumed")
+	case <-time.After(50 * time.Millisecond):
+	}
+	if err := first.Discard(); err != nil {
+		t.Fatalf("failed to discard first payload: %v", err)
+	}
+	select {
+	case second := <-secondc:
+		if second.err != nil {
+			t.Fatalf("failed to read second frame: %v", second.err)
+		}
+		if err := second.msg.Discard(); err != nil {
+			t.Fatalf("failed to discard second payload: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("second frame remained blocked after first payload consumption")
+	}
+}
+
+func TestRoutedMsgReadWriterDropsBulkLaneAfterPartialPayloadTimeout(t *testing.T) {
+	primaryApp, primaryNet := MsgPipe()
+	defer primaryApp.Close()
+	defer primaryNet.Close()
+
+	before, _, _ := bulkSidecarStats.snapshot()
+	beforeCounters := before.Channels[routedDefaultBulkChannel]
+	bulk := &scriptedMsgRW{results: make(chan scriptedResult, 1)}
+	routed, ok := NewRoutedMsgReadWriter(primaryNet, bulk, func(code uint64) bool { return code == 2 }).(interface {
+		HasBulk() bool
+		ReadMsg() (Msg, error)
+	})
+	if !ok {
+		t.Fatal("expected attachable routed msg read writer")
+	}
+	bulk.results <- scriptedResult{msg: Msg{Code: 2, Size: 2, Payload: &partialTimeoutReader{}}}
+
+	msg, err := routed.ReadMsg()
+	if err != nil {
+		t.Fatalf("failed to read partial frame header: %v", err)
+	}
+	if _, err := io.ReadAll(msg.Payload); !isTimeoutError(err) {
+		t.Fatalf("expected payload timeout, got %v", err)
+	}
+	deadline := time.Now().Add(time.Second)
+	for routed.HasBulk() && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if routed.HasBulk() {
+		t.Fatal("expected partially-read bulk lane to be removed")
+	}
+	after, _, _ := bulkSidecarStats.snapshot()
+	afterCounters := after.Channels[routedDefaultBulkChannel]
+	if afterCounters.ReadTimeouts != beforeCounters.ReadTimeouts+1 {
+		t.Fatalf("expected one recorded timeout: before=%d after=%d", beforeCounters.ReadTimeouts, afterCounters.ReadTimeouts)
+	}
+	if afterCounters.ReadErrors != beforeCounters.ReadErrors {
+		t.Fatalf("payload timeout was recorded as a read error: before=%d after=%d", beforeCounters.ReadErrors, afterCounters.ReadErrors)
+	}
+}
+
+func TestRoutedMsgReadWriterDropsBulkLaneAfterPartialPayloadError(t *testing.T) {
+	primaryApp, primaryNet := MsgPipe()
+	defer primaryApp.Close()
+	defer primaryNet.Close()
+
+	before, _, _ := bulkSidecarStats.snapshot()
+	beforeCounters := before.Channels[routedDefaultBulkChannel]
+	bulk := &scriptedMsgRW{results: make(chan scriptedResult, 1)}
+	routed, ok := NewRoutedMsgReadWriter(primaryNet, bulk, func(code uint64) bool { return code == 2 }).(interface {
+		HasBulk() bool
+		ReadMsg() (Msg, error)
+	})
+	if !ok {
+		t.Fatal("expected attachable routed msg read writer")
+	}
+	bulk.results <- scriptedResult{msg: Msg{Code: 2, Size: 2, Payload: &partialErrorReader{}}}
+
+	msg, err := routed.ReadMsg()
+	if err != nil {
+		t.Fatalf("failed to read partial frame header: %v", err)
+	}
+	if _, err := io.ReadAll(msg.Payload); !errors.Is(err, errPartialPayload) {
+		t.Fatalf("expected payload failure, got %v", err)
+	}
+	deadline := time.Now().Add(time.Second)
+	for routed.HasBulk() && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if routed.HasBulk() {
+		t.Fatal("expected failed bulk lane to be removed")
+	}
+	after, _, _ := bulkSidecarStats.snapshot()
+	afterCounters := after.Channels[routedDefaultBulkChannel]
+	if afterCounters.ReadErrors != beforeCounters.ReadErrors+1 {
+		t.Fatalf("expected one recorded read error: before=%d after=%d", beforeCounters.ReadErrors, afterCounters.ReadErrors)
+	}
+	if afterCounters.ReadTimeouts != beforeCounters.ReadTimeouts {
+		t.Fatalf("payload error was recorded as a timeout: before=%d after=%d", beforeCounters.ReadTimeouts, afterCounters.ReadTimeouts)
+	}
+}
+
+func TestMultiChannelRoutedMsgReadWriterConcurrentAttachAndTraffic(t *testing.T) {
+	primary := newStressMsgRW()
+	routed, ok := NewMultiChannelRoutedMsgReadWriter(primary, func(code uint64) string {
+		switch code % 3 {
+		case 1:
+			return "control"
+		case 2:
+			return "bulk"
+		default:
+			return ""
+		}
+	}).(interface {
+		AttachBulkChannel(string, MsgReadWriter)
+		ReadMsg() (Msg, error)
+		WriteMsg(Msg) error
+	})
+	if !ok {
+		t.Fatal("expected multi-channel routed msg read writer")
+	}
+
+	control := newStressMsgRW()
+	bulk := newStressMsgRW()
+	routed.AttachBulkChannel("control", control)
+	routed.AttachBulkChannel("bulk", bulk)
+
+	readErrc := make(chan error, 1)
+	var readWG sync.WaitGroup
+	readWG.Add(1)
+	go func() {
+		defer readWG.Done()
+		for {
+			msg, err := routed.ReadMsg()
+			if err != nil {
+				if !errors.Is(err, ErrPipeClosed) {
+					readErrc <- err
+				}
+				return
+			}
+			if err := msg.Discard(); err != nil {
+				readErrc <- err
+				return
+			}
+		}
+	}()
+
+	errc := make(chan error, 8)
+	var writeWG sync.WaitGroup
+	for worker := 0; worker < 4; worker++ {
+		writeWG.Add(1)
+		go func(offset uint64) {
+			defer writeWG.Done()
+			for i := uint64(0); i < 250; i++ {
+				if err := SendItems(routed, (i+offset)%3, i); err != nil {
+					errc <- err
+					return
+				}
+			}
+		}(uint64(worker))
+	}
+
+	var attachWG sync.WaitGroup
+	attachWG.Add(1)
+	go func() {
+		defer attachWG.Done()
+
+		currentControl := control
+		currentBulk := bulk
+		for i := 0; i < 200; i++ {
+			nextControl := newStressMsgRW()
+			nextBulk := newStressMsgRW()
+
+			routed.AttachBulkChannel("control", nextControl)
+			routed.AttachBulkChannel("bulk", nextBulk)
+
+			primary.PushMsg(90)
+			nextControl.PushMsg(91)
+			nextBulk.PushMsg(92)
+
+			currentControl.Close()
+			currentBulk.Close()
+			currentControl = nextControl
+			currentBulk = nextBulk
+		}
+		currentControl.Close()
+		currentBulk.Close()
+	}()
+
+	writeWG.Wait()
+	attachWG.Wait()
+	primary.Close()
+	readWG.Wait()
+
+	select {
+	case err := <-readErrc:
+		t.Fatalf("read failed during concurrent attach stress: %v", err)
+	default:
+	}
+	select {
+	case err := <-errc:
+		t.Fatalf("write failed during concurrent attach stress: %v", err)
+	default:
+	}
+}

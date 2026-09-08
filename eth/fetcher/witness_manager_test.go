@@ -2904,6 +2904,53 @@ func TestFetchWitnessOtherErrorKeepsPending(t *testing.T) {
 	}
 }
 
+func TestFetchWitnessNilRequestKeepsPending(t *testing.T) {
+	quit := make(chan struct{})
+	defer close(quit)
+
+	dropPeer := peerDropFn(func(id string) {})
+	enqueueCh := make(chan *enqueueRequest, 10)
+	getBlock := blockRetrievalFn(func(hash common.Hash) *types.Block { return nil })
+	getHeader := HeaderRetrievalFn(func(hash common.Hash) *types.Header { return nil })
+	chainHeight := chainHeightFn(func() uint64 { return 100 })
+
+	manager := newWitnessManager(
+		quit, dropPeer, nil, enqueueCh,
+		getBlock, getHeader, chainHeight, nil, nil, nil, 0,
+	)
+
+	hash := common.HexToHash("0xcafe")
+	peer := "test-peer"
+
+	manager.mu.Lock()
+	manager.pending[hash] = &witnessRequestState{
+		op: &blockOrHeaderInject{origin: peer},
+		announce: &blockAnnounce{
+			origin: peer,
+			hash:   hash,
+			number: 101,
+			time:   time.Now(),
+		},
+	}
+	manager.mu.Unlock()
+
+	announce := &blockAnnounce{
+		origin: peer,
+		hash:   hash,
+		number: 101,
+		time:   time.Now(),
+		fetchWitness: func(common.Hash, chan *eth.Response) (*eth.Request, error) {
+			return nil, nil
+		},
+	}
+
+	manager.fetchWitness(peer, hash, announce)
+
+	if !manager.isPending(hash) {
+		t.Error("pending entry was removed on nil request; expected it to be retained for retry")
+	}
+}
+
 // TestCheckWitnessPageCountAtThreshold covers the exact-boundary case where
 // pageCount equals the computed threshold. The guard is `pageCount <=
 // threshold` — flipping to `<` would incorrectly trigger peer verification at

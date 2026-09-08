@@ -6,7 +6,7 @@ The ```bor server``` command runs the Bor client.
 
 - ```bor.devfakeauthor```: Run miner without validator set authorization [dev mode] : Use with '--bor.withoutheimdall' (default: false)
 
-- ```bor.heimdall```: URL of Heimdall service (comma-separated for failover: "url1,url2") (default: http://localhost:1317)
+- ```bor.heimdall```: URL of Heimdall service (comma-separated for failover: "url1,url2"). Use `h3://host:port` to force Heimdall's QUIC sidecar (default: http://localhost:1317)
 
 - ```bor.heimdallWS```: Address of Heimdall WS subscription service (comma-separated for failover: "addr1,addr2")
 

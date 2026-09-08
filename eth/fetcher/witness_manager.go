@@ -644,11 +644,21 @@ func (m *witnessManager) initiateWitnessFetch(hash common.Hash, announce *blockA
 		m.handleWitnessFetchFailureExt(hash, peer, wrappedErr, false)
 		return nil, "", false
 	}
+	if req == nil {
+		err := errors.New("request initiation failed: nil witness request")
+		log.Debug("[wm] Witness fetch returned nil request without error", "peer", announce.origin, "hash", hash)
+		if !m.isPending(hash) {
+			log.Debug("[wm] Skipping nil witness request failure handling, block no longer pending", "peer", announce.origin, "hash", hash)
+			return nil, "", false
+		}
+		m.handleWitnessFetchFailureExt(hash, "", err, false)
+		return nil, "", false
+	}
 
 	// Successful request creation — verify the block is still pending.
 	if !m.isPending(hash) {
 		log.Debug("[wm] Skipping witness fetch, block no longer pending", "peer", peer, "hash", hash)
-		m.handleWitnessFetchFailureExt(hash, "", fmt.Errorf("request initiation failed: %w", err), false)
+		m.handleWitnessFetchFailureExt(hash, "", errors.New("request initiation failed: block no longer pending"), false)
 		req.Close()
 		return nil, "", false
 	}

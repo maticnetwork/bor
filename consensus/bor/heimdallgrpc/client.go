@@ -142,9 +142,14 @@ func NewHeimdallGRPCClient(grpcAddress string, heimdallURL string, timeout time.
 
 	log.Info("Connected to Heimdall gRPC server", "grpcAddress", grpcAddress, "dialAddr", addr)
 
+	restClient, err := heimdall.NewHeimdallClient(heimdallURL, timeout)
+	if err != nil {
+		return nil, err
+	}
+
 	return &HeimdallGRPCClient{
 		conn:                  conn,
-		client:                heimdall.NewHeimdallClient(heimdallURL, timeout),
+		client:                restClient,
 		borQueryClient:        borTypes.NewQueryClient(conn),
 		checkpointQueryClient: checkpointTypes.NewQueryClient(conn),
 		clerkQueryClient:      clerkTypes.NewQueryClient(conn),

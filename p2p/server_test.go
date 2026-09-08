@@ -23,6 +23,7 @@ import (
 	"io"
 	"math/rand"
 	"net"
+	"net/netip"
 	"reflect"
 	"strconv"
 	"strings"
@@ -220,6 +221,92 @@ func TestServerDial(t *testing.T) {
 
 	case <-time.After(1 * time.Second):
 		t.Error("server did not connect within one second")
+	}
+}
+
+func TestServerDialPreservesQUICEndpointFromENR(t *testing.T) {
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("could not setup listener: %v", err)
+	}
+	defer listener.Close()
+
+	accepted := make(chan net.Conn, 1)
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil {
+			return
+		}
+		accepted <- conn
+	}()
+
+	remoteKey := newkey()
+	connected := make(chan *Peer, 1)
+	srv := startTestServer(t, &remoteKey.PublicKey, func(p *Peer) { connected <- p })
+	defer srv.Stop()
+
+	tcpAddr := listener.Addr().(*net.TCPAddr)
+	var record enr.Record
+	record.Set(enr.IPv4Addr(netip.MustParseAddr(tcpAddr.IP.String())))
+	record.Set(enr.TCP(tcpAddr.Port))
+	record.Set(enr.UDP(tcpAddr.Port))
+	record.Set(enr.QUIC(30304))
+	if err := enode.SignV4(&record, remoteKey); err != nil {
+		t.Fatalf("failed to sign node record: %v", err)
+	}
+	node, err := enode.New(enode.ValidSchemes, &record)
+	if err != nil {
+		t.Fatalf("failed to build node from enr: %v", err)
+	}
+
+	srv.AddPeer(node)
+
+	select {
+	case conn := <-accepted:
+		defer conn.Close()
+	case <-time.After(1 * time.Second):
+		t.Fatal("server did not dial within one second")
+	}
+
+	select {
+	case peer := <-connected:
+		endpoint, ok := peer.Node().QUICEndpoint()
+		if !ok {
+			t.Fatal("connected peer lost QUIC endpoint")
+		}
+		if got := int(endpoint.Port()); got != 30304 {
+			t.Fatalf("wrong QUIC port %d, want %d", got, 30304)
+		}
+	case <-time.After(1 * time.Second):
+		t.Fatal("server did not launch peer within one second")
+	}
+}
+
+func TestSetBulkQUICRecordPublishesBothFamiliesForUnspecifiedListener(t *testing.T) {
+	srv := &Server{
+		Config: Config{
+			PrivateKey: newkey(),
+			Name:       "test",
+			Logger:     testlog.Logger(t, log.LvlTrace),
+		},
+	}
+	if err := srv.setupLocalNode(); err != nil {
+		t.Fatalf("failed to set up local node: %v", err)
+	}
+
+	srv.setBulkQUICRecord(&net.UDPAddr{IP: net.IPv6zero, Port: 30304})
+
+	node := srv.localnode.Node()
+	if endpoint, ok := node.QUICEndpoint(); !ok || int(endpoint.Port()) != 30304 {
+		t.Fatalf("missing ipv4 quic endpoint, got ok=%v endpoint=%v", ok, endpoint)
+	}
+
+	var quic6 enr.QUIC6
+	if err := node.Load(&quic6); err != nil {
+		t.Fatalf("missing quic6 record: %v", err)
+	}
+	if int(quic6) != 30304 {
+		t.Fatalf("wrong quic6 port %d, want %d", quic6, 30304)
 	}
 }
 

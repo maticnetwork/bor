@@ -19,6 +19,7 @@ package eth
 import (
 	"fmt"
 	"math/big"
+	"runtime"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -50,7 +51,24 @@ const (
 	// containing 200+ transactions nowadays, the practical limit will always
 	// be softResponseLimit.
 	maxReceiptsServe = 1024
+
+	// maxHeavyResponseWorkers bounds concurrent large body/receipt serving so a
+	// burst of expensive requests can't monopolize handler resources.
+	maxHeavyResponseWorkers = 4
 )
+
+var heavyResponseServeSlots = make(chan struct{}, heavyResponseWorkerLimit())
+
+func heavyResponseWorkerLimit() int {
+	limit := runtime.GOMAXPROCS(0)
+	if limit < 1 {
+		limit = 1
+	}
+	if limit > maxHeavyResponseWorkers {
+		limit = maxHeavyResponseWorkers
+	}
+	return limit
+}
 
 // Handler is a callback to invoke from an outside runner after the boilerplate
 // exchanges have passed.

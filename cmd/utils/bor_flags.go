@@ -19,7 +19,7 @@ var (
 	// HeimdallURLFlag flag for heimdall url (comma-separated for failover)
 	HeimdallURLFlag = &cli.StringFlag{
 		Name:  "bor.heimdall",
-		Usage: "URL of Heimdall service (comma-separated for failover: \"url1,url2\")",
+		Usage: "URL of Heimdall service (comma-separated for failover: \"url1,url2\"). Use h3://host:port to force the QUIC sidecar",
 		Value: "http://localhost:1317",
 	}
 
