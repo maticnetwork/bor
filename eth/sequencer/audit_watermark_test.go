@@ -283,3 +283,55 @@ func TestIneligibleSessionDoesNotQueueAnAudit(t *testing.T) {
 		t.Fatal("a precondition failure queued an audit pass")
 	}
 }
+
+// A session that has returned is following nothing. If watching survived it,
+// the next canonical head would advance the mark across a window nobody
+// compared — the S3 invariant, from the devnet, in a unit test.
+func TestSessionEndStopsWatching(t *testing.T) {
+	h := startExecHarnessBor(t, &params.BorConfig{
+		Sprint:   map[string]uint64{"0": 16},
+		RioBlock: big.NewInt(1_000_000),
+		Coinbase: map[string]string{
+			"0": "0x000000000000000000000000000000000000ba5e",
+		},
+		BurntContract: map[string]string{
+			"0": "0x000000000000000000000000000000000000dead",
+		},
+	})
+	consumer := newAuditTestConsumer(h)
+	consumer.watching.Store(true)
+
+	if _, err := consumer.runSession(t.Context(), nil); err == nil {
+		t.Fatal("an ineligible chain ran a session")
+	}
+
+	if consumer.watching.Load() {
+		t.Fatal("a returned session left the consumer marked as watching the tip")
+	}
+}
+
+// Start has to wire the audit loop, or a restart never closes its window. The
+// seeding pass is the one that reaches no further than the local chain, so it
+// runs without a reachable store.
+func TestStartWiresTheAuditLoop(t *testing.T) {
+	h := startExecHarness(t)
+	consumer := newAuditTestConsumer(h)
+	consumer.endpoint = "127.0.0.1:1"
+
+	consumer.Start()
+	t.Cleanup(consumer.Close)
+
+	head := h.chain.CurrentBlock().Number.Uint64()
+	deadline := time.After(2 * time.Second)
+	for {
+		if got, ok, _ := rawdb.ReadPreconfAuditedThrough(h.chain.DB()); ok && got == head {
+			return
+		}
+
+		select {
+		case <-deadline:
+			t.Fatal("Start did not run an audit pass; the loop is not wired")
+		case <-time.After(5 * time.Millisecond):
+		}
+	}
+}

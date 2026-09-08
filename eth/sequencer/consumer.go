@@ -269,8 +269,6 @@ func (c *Consumer) run(ctx context.Context) {
 		var err error
 		sess, err = c.runSession(ctx, sess)
 
-		c.watching.Store(false)
-
 		if ctx.Err() != nil {
 			return
 		}
@@ -292,6 +290,11 @@ func (c *Consumer) run(ctx context.Context) {
 // a node sitting pre-Rio would otherwise audit the store on a two-second
 // loop for as long as it stayed ineligible.
 func (c *Consumer) runSession(ctx context.Context, sess *session) (*session, error) {
+	// A session that has returned is following nothing, so the canonical head
+	// stops standing for "this node saw what the store held". Leaving this set
+	// would let the watermark advance across a window nobody compared.
+	defer c.watching.Store(false)
+
 	if derr := c.deterministic(); derr != nil {
 		return sess, fmt.Errorf("preconf re-execution not deterministic yet: %w", derr)
 	}
