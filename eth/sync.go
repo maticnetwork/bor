@@ -61,8 +61,8 @@ type chainSyncer struct {
 	peerEventCh chan struct{}
 	doneCh      chan error // non-nil when sync is running
 
-	peersUnavailableUntil      time.Time
-	peersUnavailableAtRevision uint64
+	peersUnavailableUntil time.Time
+	observedPeerRevision  uint64
 }
 
 // chainSyncOp is a scheduled sync operation.
@@ -143,7 +143,6 @@ func (cs *chainSyncer) onSyncDone(err error) {
 
 	if errors.Is(err, downloader.ErrPeersUnavailable) || errors.Is(err, downloader.ErrPeerBackedOff) || errors.Is(err, whitelist.ErrNoRemote) {
 		cs.peersUnavailableUntil = time.Now().Add(forceSyncCycle)
-		cs.peersUnavailableAtRevision = cs.handler.peers.currentRevision()
 	} else {
 		cs.peersUnavailableUntil = time.Time{}
 	}
@@ -159,9 +158,11 @@ func (cs *chainSyncer) onSyncDone(err error) {
 }
 
 func (cs *chainSyncer) onPeerEvent() {
-	if !cs.peersUnavailableUntil.IsZero() && cs.handler.peers.currentRevision() != cs.peersUnavailableAtRevision {
+	revision := cs.handler.peers.currentRevision()
+	if !cs.peersUnavailableUntil.IsZero() && revision != cs.observedPeerRevision {
 		cs.peersUnavailableUntil = time.Time{}
 	}
+	cs.observedPeerRevision = revision
 }
 
 func (cs *chainSyncer) shutdown() {
