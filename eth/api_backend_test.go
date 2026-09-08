@@ -319,8 +319,6 @@ func TestRelayMethodWiring(t *testing.T) {
 
 	t.Run("submit and check methods reach relay", func(t *testing.T) {
 		t.Parallel()
-		// Init with enablePreconf=true, enablePrivateTx=true but no URLs
-		// → txRelay created with nil multiclient → methods return errors, proving wiring works
 		rs := relay.Init(true, true, false, false, nil)
 		defer rs.Close()
 		b := &EthAPIBackend{relay: rs}
@@ -328,7 +326,7 @@ func TestRelayMethodWiring(t *testing.T) {
 		tx := types.NewTransaction(0, common.Address{}, nil, 0, nil, nil)
 
 		err := b.SubmitTxForPreconf(tx)
-		require.Error(t, err, "SubmitTxForPreconf should return error with nil multiclient")
+		require.NoError(t, err, "SubmitTxForPreconf should be optional without producer endpoints")
 
 		_, err = b.CheckPreconfStatus(common.Hash{})
 		require.Error(t, err, "CheckPreconfStatus should return error with nil multiclient")

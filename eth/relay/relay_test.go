@@ -89,9 +89,16 @@ func TestConfigAccessors(t *testing.T) {
 	defer rs.Close()
 
 	require.True(t, rs.PreconfEnabled(), "expected PreconfEnabled to be true")
+	require.False(t, rs.PreconfRelayAvailable(), "expected preconf relay to be unavailable")
 	require.False(t, rs.PrivateTxEnabled(), "expected PrivateTxEnabled to be false")
 	require.True(t, rs.AcceptPreconfTxs(), "expected AcceptPreconfTxs to be true")
 	require.False(t, rs.AcceptPrivateTxs(), "expected AcceptPrivateTxs to be false")
+
+	server := newMockRpcServer()
+	defer server.close()
+	withProducer := Init(true, false, false, false, []string{server.server.URL})
+	defer withProducer.Close()
+	require.True(t, withProducer.PreconfRelayAvailable(), "expected preconf relay to be available")
 }
 
 func TestRelaySubmitPreconfTransaction(t *testing.T) {

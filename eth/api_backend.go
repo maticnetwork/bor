@@ -836,6 +836,18 @@ func (b *EthAPIBackend) PreconfEnabled() bool {
 	return b.relay.PreconfEnabled()
 }
 func (b *EthAPIBackend) SubmitTxForPreconf(tx *types.Transaction) error {
+	if b.eth != nil {
+		if consumer, ok := b.eth.seqConsumer.(interface {
+			CachePreconfTransaction(*types.Transaction) error
+		}); ok {
+			if err := consumer.CachePreconfTransaction(tx); err != nil {
+				return err
+			}
+		}
+	}
+	if !b.relay.PreconfRelayAvailable() {
+		return nil
+	}
 	return b.relay.SubmitPreconfTransaction(tx)
 }
 

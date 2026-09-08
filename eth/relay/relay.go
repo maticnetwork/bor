@@ -100,6 +100,10 @@ func (s *RelayService) PreconfEnabled() bool {
 	return s.config.enablePreconf
 }
 
+func (s *RelayService) PreconfRelayAvailable() bool {
+	return s.txRelay != nil && s.txRelay.multiclient != nil
+}
+
 func (s *RelayService) PrivateTxEnabled() bool {
 	return s.config.enablePrivateTx
 }
