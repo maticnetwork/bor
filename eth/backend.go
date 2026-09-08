@@ -78,6 +78,7 @@ import (
 
 type sequenceConsumer interface {
 	PendingSnapshot(context.Context) (*types.Block, types.Receipts, *state.StateDB, error)
+	HeadPendingView() (*types.Block, types.Receipts, *state.StateDB, error)
 	PendingBlock() *types.Block
 	PendingBlockAndReceipts() (*types.Block, types.Receipts)
 	PendingLogRange() (*types.Header, []*types.Block, []types.Receipts)
