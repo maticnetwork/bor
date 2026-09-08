@@ -224,6 +224,40 @@ func TestChainSyncerCooldownSurvivesBlockAnnounce(t *testing.T) {
 	}
 }
 
+func TestChainSyncerLoopInitializesPeerRevision(t *testing.T) {
+	handler, cleanup := newChainSyncerTestHandler(t)
+	defer cleanup()
+	handler.maxPeers = defaultMinSyncPeers
+
+	peer := registerPeerWithTD(t, handler.peers, 1_000_000)
+	if err := handler.downloader.RegisterPeer(peer.ID(), eth.ETH68, &ethPeer{Peer: peer}); err != nil {
+		t.Fatal(err)
+	}
+
+	syncer := handler.chainSync
+	syncer.peersUnavailableUntil = time.Now().Add(time.Hour)
+	handler.wg.Add(1)
+	done := make(chan struct{})
+	go func() {
+		syncer.loop()
+		close(done)
+	}()
+
+	if !syncer.handlePeerEvent() {
+		t.Fatal("chain syncer stopped before processing the peer event")
+	}
+	close(handler.quitSync)
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("chain syncer did not stop")
+	}
+	if syncer.peersUnavailableUntil.IsZero() {
+		t.Fatal("an initial peer event with no peer-set change must not clear the cooldown")
+	}
+}
+
 func TestChainSyncerLoopRetriesBackedOffPeer(t *testing.T) {
 	handler, cleanup := newChainSyncerTestHandler(t)
 	defer cleanup()

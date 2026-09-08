@@ -112,6 +112,7 @@ func (cs *chainSyncer) loop() {
 	retry := newResettableTimer()
 	defer retry.stop()
 
+	cs.observedPeerRevision = cs.handler.peers.currentRevision()
 	for {
 		if op, wait := cs.nextSyncOp(); op != nil {
 			retry.stop()
