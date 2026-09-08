@@ -127,6 +127,9 @@ func TestTriggerTxFetchToPeers(t *testing.T) {
 		t.Fatalf("failed to trigger tx fetch: %v", err)
 	}
 	for _, peer := range []*fakeTxFetchPeer{peerA, peerB} {
+		if len(peer.requestIDs) != 1 {
+			t.Fatalf("peer %s received %d tx fetch request IDs, want 1", peer.id, len(peer.requestIDs))
+		}
 		if len(peer.hashes) != 1 {
 			t.Fatalf("peer %s received %d tx fetch batches, want 1", peer.id, len(peer.hashes))
 		}
@@ -493,17 +496,19 @@ func (p *fakeBlockAnnouncementPeer) SendNewBlockHashes(hashes []common.Hash, num
 }
 
 type fakeTxFetchPeer struct {
-	id     string
-	hashes [][]common.Hash
-	err    error
+	id         string
+	requestIDs []uint64
+	hashes     [][]common.Hash
+	err        error
 }
 
 func (p *fakeTxFetchPeer) ID() string { return p.id }
 
-func (p *fakeTxFetchPeer) RequestTxs(hashes []common.Hash) error {
+func (p *fakeTxFetchPeer) RequestTxs(requestID uint64, hashes []common.Hash) error {
 	if p.err != nil {
 		return p.err
 	}
+	p.requestIDs = append(p.requestIDs, requestID)
 	p.hashes = append(p.hashes, append([]common.Hash(nil), hashes...))
 	return nil
 }

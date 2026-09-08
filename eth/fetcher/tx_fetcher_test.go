@@ -1340,14 +1340,16 @@ func TestTransactionFetcherRequestsTransactionsOverBulkLane(t *testing.T) {
 
 	clock := new(mclock.Simulated)
 	step := make(chan struct{}, 8)
+	requestedIDCh := make(chan uint64, 1)
 	fetcher := NewTxFetcherForTests(
 		func(common.Hash) bool { return false },
 		func([]*types.Transaction) []error { return nil },
-		func(origin string, hashes []common.Hash) error {
+		func(origin string, requestID uint64, hashes []common.Hash) error {
 			if origin != "peerA" {
 				t.Fatalf("unexpected fetch origin: got %s want peerA", origin)
 			}
-			return peer.RequestTxs(hashes)
+			requestedIDCh <- requestID
+			return peer.RequestTxs(requestID, hashes)
 		},
 		nil,
 		clock,
@@ -1374,6 +1376,9 @@ func TestTransactionFetcherRequestsTransactionsOverBulkLane(t *testing.T) {
 	var req ethproto.GetPooledTransactionsPacket
 	if err := msg.Decode(&req); err != nil {
 		t.Fatalf("failed to decode tx fetch request: %v", err)
+	}
+	if requestID := <-requestedIDCh; req.RequestId != requestID {
+		t.Fatalf("tx fetch request ID mismatch: got %d want %d", req.RequestId, requestID)
 	}
 	if len(req.GetPooledTransactionsRequest) != len(hashes) {
 		t.Fatalf("unexpected tx fetch request size: got %d want %d", len(req.GetPooledTransactionsRequest), len(hashes))

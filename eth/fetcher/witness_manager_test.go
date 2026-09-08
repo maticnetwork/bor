@@ -2916,7 +2916,7 @@ func TestFetchWitnessNilRequestKeepsPending(t *testing.T) {
 
 	manager := newWitnessManager(
 		quit, dropPeer, nil, enqueueCh,
-		getBlock, getHeader, chainHeight, nil, 0,
+		getBlock, getHeader, chainHeight, nil, nil, nil, 0,
 	)
 
 	hash := common.HexToHash("0xcafe")
