@@ -854,17 +854,20 @@ func (c *Config) sequencerSettings() (string, string, string, time.Duration, err
 		return "", "", "", 0, nil
 	}
 
-	if c.Sequencer.PublisherEndpoint == "" {
-		return "", "", "", 0, fmt.Errorf("sequencer.enabled requires sequencer.publisher-endpoint")
+	role := "consumer"
+	if c.Sealer.Enabled {
+		role = "producer"
 	}
 
+	// Both roles read the tail through the consumer service; only a producer
+	// publishes, so the publisher endpoint is required for producers only —
+	// a consumer (RPC node) never uses it.
 	if c.Sequencer.ConsumerEndpoint == "" {
 		return "", "", "", 0, fmt.Errorf("sequencer.enabled requires sequencer.consumer-endpoint")
 	}
 
-	role := "consumer"
-	if c.Sealer.Enabled {
-		role = "producer"
+	if role == "producer" && c.Sequencer.PublisherEndpoint == "" {
+		return "", "", "", 0, fmt.Errorf("a producing sequencer node requires sequencer.publisher-endpoint")
 	}
 
 	return role, c.Sequencer.PublisherEndpoint, c.Sequencer.ConsumerEndpoint, c.Sequencer.Poll, nil

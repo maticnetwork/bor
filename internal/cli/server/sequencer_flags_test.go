@@ -59,10 +59,12 @@ func TestSequencerSettingsDerivation(t *testing.T) {
 	}{
 		{"disabled", base(false, true, "h:1", "h:2"), "", false},
 		{"nil block", &Config{Sealer: DefaultConfig().Sealer}, "", false},
-		{"enabled without publisher endpoint", base(true, true, "", "h:2"), "", true},
-		{"enabled without consumer endpoint", base(true, true, "h:1", ""), "", true},
+		{"producer without publisher endpoint", base(true, true, "", "h:2"), "", true},
+		{"producer without consumer endpoint", base(true, true, "h:1", ""), "", true},
+		{"consumer without consumer endpoint", base(true, false, "h:1", ""), "", true},
 		{"enabled mining node", base(true, true, "h:1", "h:2"), "producer", false},
 		{"enabled non-mining node", base(true, false, "h:1", "h:2"), "consumer", false},
+		{"consumer needs no publisher endpoint", base(true, false, "", "h:2"), "consumer", false},
 	}
 
 	for _, tc := range cases {
@@ -80,7 +82,7 @@ func TestSequencerSettingsDerivation(t *testing.T) {
 			require.Equal(t, tc.wantRole, role)
 
 			if role != "" {
-				require.Equal(t, "h:1", pubEndpoint)
+				require.Equal(t, tc.config.Sequencer.PublisherEndpoint, pubEndpoint)
 				require.Equal(t, "h:2", consEndpoint)
 				require.Equal(t, 200*time.Millisecond, poll)
 			}

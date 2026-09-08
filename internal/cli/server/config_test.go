@@ -642,11 +642,19 @@ func TestSequencerConfigValidation(t *testing.T) {
 		// job (sequencer_flags_test.go); this case pins that a settings
 		// error fails the whole build.
 		{
-			name: "enabled without publisher endpoint fails the build",
+			name: "producer without publisher endpoint fails the build",
 			mutate: func(c *Config) {
+				c.Sealer.Enabled = true
 				c.Sequencer = &SequencerConfig{Enabled: true, ConsumerEndpoint: "localhost:9550"}
 			},
 			wantErr: true,
+		},
+		{
+			name: "consumer needs only the consumer endpoint",
+			mutate: func(c *Config) {
+				c.Sequencer = &SequencerConfig{Enabled: true, ConsumerEndpoint: "localhost:9550"}
+			},
+			role: "consumer",
 		},
 		{
 			name: "enabled on a sealing node publishes",
