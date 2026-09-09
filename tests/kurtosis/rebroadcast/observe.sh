@@ -40,7 +40,7 @@ if [[ "$seed_tx" == "true" ]]; then
     echo "Could not read the pending nonce for $sender" >&2
     exit 1
   fi
-  tx_hash=$(docker run --rm --entrypoint cast "$cast_image" send --async \
+  tx_hash=$(docker run --rm --add-host host.docker.internal:host-gateway --entrypoint cast "$cast_image" send --async \
     --rpc-url "$docker_rpc_url" --private-key "$private_key" --legacy \
     --nonce "$((nonce_hex))" --gas-price 30000000000 \
     0x000000000000000000000000000000000000dEaD \

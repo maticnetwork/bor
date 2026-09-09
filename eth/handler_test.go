@@ -425,7 +425,7 @@ func TestStuckTxBroadcastLoop(t *testing.T) {
 	handler := newTestHandler()
 	defer handler.close()
 
-	handler.handler.rebroadcastOK.Store(true)
+	handler.handler.enableSyncedFeatures()
 
 	tx := types.NewTransaction(0, testAddr, big.NewInt(100), 21000, big.NewInt(1000000000), nil)
 	signedTx, err := types.SignTx(tx, types.HomesteadSigner{}, testKey)

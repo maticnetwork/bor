@@ -141,6 +141,10 @@ func (cs *chainSyncer) onSyncDone(err error) {
 	cs.doneCh = nil
 	cs.force.Reset(forceSyncCycle)
 	cs.forced = false
+	if err != nil {
+		// A failed attempt may leave no peer ahead to trigger another successful sync.
+		cs.updateRebroadcastStatus()
+	}
 
 	if errors.Is(err, downloader.ErrPeersUnavailable) || errors.Is(err, downloader.ErrPeerBackedOff) || errors.Is(err, whitelist.ErrNoRemote) {
 		cs.peersUnavailableUntil = time.Now().Add(forceSyncCycle)
@@ -225,6 +229,7 @@ func (cs *chainSyncer) nextSyncOp() (*chainSyncOp, time.Duration) {
 	if cs.doneCh != nil {
 		return nil, 0 // Sync already running
 	}
+	cs.updateRebroadcastStatus()
 	if remaining := time.Until(cs.peersUnavailableUntil); remaining > 0 {
 		return nil, remaining
 	}
@@ -269,6 +274,25 @@ func (cs *chainSyncer) nextSyncOp() (*chainSyncOp, time.Duration) {
 
 	cs.handler.rebroadcastOK.Store(false)
 	return op, 0
+}
+
+func (cs *chainSyncer) updateRebroadcastStatus() {
+	if !cs.handler.synced.Load() {
+		cs.handler.rebroadcastOK.Store(false)
+		return
+	}
+	// Backoff limits sync attempts, but a benched peer can still show we're behind.
+	peer, _ := cs.handler.peers.peerWithHighestTD(nil)
+	if peer == nil {
+		cs.handler.rebroadcastOK.Store(true)
+		return
+	}
+	_, ourTD := cs.modeAndLocalHead()
+	if ourTD == nil {
+		ourTD = big.NewInt(0)
+	}
+	_, peerTD := peer.Head()
+	cs.handler.rebroadcastOK.Store(peerTD.Cmp(ourTD) <= 0)
 }
 
 func peerToSyncOp(mode downloader.SyncMode, p *eth.Peer) *chainSyncOp {
