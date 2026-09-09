@@ -63,6 +63,17 @@ type sent struct {
 
 const maxTransactionsPerPublishedRecord = 64
 
+// maxMessageBytes mirrors the store's Redpanda max.message.bytes: a larger
+// record draws a permanent MESSAGE_TOO_LARGE on produce and fails the publisher.
+const maxMessageBytes = 1 << 20
+
+// recordSizeReserve leaves headroom for per-transaction protobuf framing and the
+// prefix commitment, so a capped record's proto.Size stays under what the ingress
+// accepts (max.message.bytes less its own recordFraming).
+const recordSizeReserve = 4 * 1024
+
+const maxRecordBytes = maxMessageBytes - recordSizeReserve
+
 const publishedRecordBatchDelay = 5 * time.Millisecond
 
 // stallTracker watches ack progress from outside the send loop: a hung
@@ -344,7 +355,9 @@ func coalescePublishedRecord(items []journalItem, acked uint64) (*pb.Entry, []jo
 		for _, raw := range candidate.GetTransactions() {
 			candidateBytes += uint64(len(raw))
 		}
-		if candidateBytes > pendingInputLimit-inputBytes {
+		// A lone transaction over the cap still ships via the single-record
+		// return below; the store judges it rather than losing it here.
+		if inputBytes+candidateBytes > uint64(maxRecordBytes) {
 			break
 		}
 		batch = append(batch, item)
@@ -406,7 +419,9 @@ func (p *Publisher) handleAck(ack ackResult, inflight *[]sent) (streamResult, bo
 		// resending in order is exact.
 		return streamResult{reason: endTransport}, true
 	default:
-		p.fail("store rejected entry", "status", ack.status)
+		// Terminal but safe: no fence, no resend. A MALFORMED here means the
+		// store's max.message.bytes is below our record cap.
+		p.fail("store rejected entry", "status", ack.status, "seq", first.item.seq)
 
 		return streamResult{reason: endTerminal}, true
 	}
