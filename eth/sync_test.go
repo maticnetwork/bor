@@ -57,7 +57,7 @@ func TestChainSyncerNextSyncOpStates(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	handler.rebroadcastOK.Store(true)
+	handler.enableSyncedFeatures()
 	op, wait := syncer.nextSyncOp()
 	if op == nil {
 		t.Fatal("expected sync operation")
