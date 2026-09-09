@@ -313,3 +313,8 @@ func (s *hookedStateDB) Logs() []*types.Log {
 func (s *hookedStateDB) Inner() *StateDB {
 	return s.inner
 }
+
+// Hooks returns the tracing hooks this state emits to.
+func (s *hookedStateDB) Hooks() *tracing.Hooks {
+	return s.hooks
+}

@@ -9,6 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/core/types"
+	ethproto "github.com/ethereum/go-ethereum/eth/protocols/eth"
 	"github.com/ethereum/go-ethereum/eth/protocols/wit"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/p2p"
@@ -48,6 +49,37 @@ func newTestWitPeerWithReader() (*wit.Peer, func()) {
 	}()
 
 	peer := wit.NewPeer(wit.WIT1, p2pPeer, net, log.New())
+	cleanup := func() {
+		app.Close()
+		peer.Close()
+		<-done
+	}
+	return peer, cleanup
+}
+
+// newTestWit2PeerWithReader creates a wit.Peer negotiated at WIT2, with the
+// same draining behavior as newTestWitPeerWithReader. WIT2-specific paths
+// (signed announce, AsyncSendSignedWitnessAnnouncement) early-return on a
+// WIT1 peer, so tests that exercise them must use this helper.
+func newTestWit2PeerWithReader() (*wit.Peer, func()) {
+	var id enode.ID
+	rand.Read(id[:])
+	p2pPeer := p2p.NewPeer(id, "test-peer-wit2", nil)
+	app, net := p2p.MsgPipe()
+
+	done := make(chan struct{})
+	go func() {
+		for {
+			msg, err := app.ReadMsg()
+			if err != nil {
+				close(done)
+				return
+			}
+			msg.Discard()
+		}
+	}()
+
+	peer := wit.NewPeer(wit.WIT2, p2pPeer, net, log.New())
 	cleanup := func() {
 		app.Close()
 		peer.Close()
@@ -247,8 +279,13 @@ func TestHandleGetWitnessMetadata_HashCountBound(t *testing.T) {
 	}
 }
 
-// TestHandleGetWitness_PageCountBound exercises the per-request page cap that
-// mirrors handleGetWitnessMetadata's hash cap.
+// TestHandleGetWitness_PageCountBound exercises the per-request page-entry cap
+// on the witness *data* handler (F-1). The in-loop byte guards only count data
+// bytes on the needToQuery branch, so a request packed with unknown hashes or
+// out-of-range pages accumulates zero bytes and never trips them — yet each
+// distinct hash still costs a DB size lookup and each page a response entry.
+// MaxWitnessServe bounds that amplification up front. This mirrors
+// TestHandleGetWitnessMetadata_HashCountBound for the metadata handler.
 func TestHandleGetWitness_PageCountBound(t *testing.T) {
 	handler := newTestHandler()
 	defer handler.close()
@@ -269,6 +306,8 @@ func TestHandleGetWitness_PageCountBound(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			// All distinct, unknown hashes: this is the cheap-to-build,
+			// zero-byte request that the byte guards alone fail to bound.
 			pages := make([]wit.WitnessPageRequest, tc.count)
 			for i := range pages {
 				pages[i] = wit.WitnessPageRequest{
@@ -364,6 +403,42 @@ func TestHandleGetWitness_ResponseEncodedSizeBound(t *testing.T) {
 	require.Contains(t, err.Error(), "response exceeds maximum p2p payload size")
 }
 
+// TestLoadWitnessPageData_TruncatedWitness covers loadWitnessPageData's defensive
+// clamp paths: when the size index advertises a page whose byte offset lies past
+// the witness bytes actually stored (a size/stored-bytes disagreement, e.g. under
+// a concurrent delete), start is clamped to the witness length and the request
+// fails with "witness page unavailable" rather than serving a misleading empty
+// page. The pre-populated cache mirrors WIT2 in-flight serving and keeps the test
+// allocation-free.
+func TestLoadWitnessPageData_TruncatedWitness(t *testing.T) {
+	handler := newTestHandler()
+	defer handler.close()
+	witHandler := (*witHandler)(handler.handler)
+
+	hash := common.Hash{0xab}
+	const size = PageSize + 1                                     // size index claims 2 pages...
+	totalPages := uint64((size + PageSize - 1) / PageSize)        // == 2
+	witnessCache := map[common.Hash][]byte{hash: []byte("short")} // ...but only 5 bytes stored
+	totalLoaded := 0
+
+	// Page 1 is in range per the size index (page < totalPages), but its start
+	// offset (PageSize) is past the 5 stored bytes, so start clamps to the witness
+	// length and start == end trips the unavailable path.
+	data, err := witHandler.loadWitnessPageData(
+		wit.WitnessPageRequest{Hash: hash, Page: 1},
+		totalPages, size, witnessCache, &totalLoaded,
+	)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "witness page unavailable")
+	require.Nil(t, data)
+}
+
+// TestHandleGetWitness_UsesPipelinedCacheDuringSizeResolution covers
+// resolveWitnessBytes' fallback for a witness that is not yet persisted but
+// whose header is local: it must wait on the pipelined SRC goroutine
+// (GetWitnessUncachedWait) rather than falling through to the WIT2 waiter
+// path, which only tracks network-received (signed/deferred) hashes and would
+// never fire for a locally-produced block.
 func TestHandleGetWitness_UsesPipelinedCacheDuringSizeResolution(t *testing.T) {
 	handler := newTestHandler()
 	defer handler.close()
@@ -378,14 +453,14 @@ func TestHandleGetWitness_UsesPipelinedCacheDuringSizeResolution(t *testing.T) {
 	witness := []byte{1, 2, 3, 4}
 	handler.chain.CacheWitness(hash, witness)
 
-	sizes, prefetched := witHandler.resolveWitnessSizes(map[common.Hash]struct{}{hash: {}})
+	prefetched, sizes := witHandler.resolveWitnessBytes([]wit.WitnessPageRequest{{Hash: hash, Page: 0}})
 	require.Equal(t, uint64(len(witness)), sizes[hash])
 	require.Equal(t, witness, prefetched[hash])
 
 	missingHeader := &types.Header{Number: big.NewInt(3_000_001)}
 	missingHash := missingHeader.Hash()
 	rawdb.WriteHeader(handler.chain.DB(), missingHeader)
-	sizes, prefetched = witHandler.resolveWitnessSizes(map[common.Hash]struct{}{missingHash: {}})
+	prefetched, sizes = witHandler.resolveWitnessBytes([]wit.WitnessPageRequest{{Hash: missingHash, Page: 0}})
 	require.Zero(t, sizes[missingHash])
 	require.NotContains(t, prefetched, missingHash)
 
@@ -659,4 +734,54 @@ func TestWitHandlerHandle(t *testing.T) {
 		err := witHandler.Handle(peer, packet)
 		require.NoError(t, err, "Handle should handle missing witness metadata gracefully")
 	})
+}
+
+// TestResolveWitnessFetchPeerFallsBackToDeferredAnnouncer covers the pull
+// path for the structural deferred state at a stateless tip: the signed
+// announce for a pending block cannot be producer-verified before import
+// (header not local), so its relayer is never marked announce-known and
+// getOnePeerWithWitness has no candidate. Witnesses above the full-push size
+// cap are never pushed either, so without a deferred-aware fallback the
+// consumer has NO body source at all and the block sits until the announce
+// TTL expires. The fetch-peer resolution must fall back to the peer recorded
+// on the deferred entry — the relayer that announced the witness.
+func TestResolveWitnessFetchPeerFallsBackToDeferredAnnouncer(t *testing.T) {
+	h := newTestHandler()
+	defer h.close()
+
+	ethH := (*ethHandler)(h.handler)
+
+	witPeer, cleanup := newTestWit2PeerWithReader()
+	defer cleanup()
+
+	var id enode.ID
+	rand.Read(id[:])
+	ethPeer := ethproto.NewPeer(ethproto.ETH68, p2p.NewPeer(id, "test-eth-peer", nil), nil, nil)
+	defer ethPeer.Close()
+	require.NoError(t, h.handler.peers.registerPeer(ethPeer, nil, witPeer))
+
+	header := &types.Header{Number: big.NewInt(31337)}
+	hash := header.Hash()
+
+	// No marked peer, no deferred entry → no fetch target.
+	if p := ethH.resolveWitnessFetchPeer(hash); p != nil {
+		t.Fatal("no peer should resolve without marks or deferred entries")
+	}
+
+	// A deferred (header-unknown, producer-unverified) announce recorded from
+	// that peer must make it the fallback fetch target.
+	h.handler.deferredAnnounces.put(wit.SignedWitnessAnnouncement{
+		BlockHash:   hash,
+		BlockNumber: header.Number.Uint64(),
+		WitnessHash: common.HexToHash("0xc0ffee"),
+		Signature:   make([]byte, wit.SignatureLength),
+	}, ethPeer.ID())
+
+	p := ethH.resolveWitnessFetchPeer(hash)
+	if p == nil {
+		t.Fatal("deferred-announce relayer was not resolved as the fetch fallback; stateless tip consumer has no body source for oversized witnesses")
+	}
+	if p.ID() != ethPeer.ID() {
+		t.Fatalf("resolved wrong peer: got %s want %s", p.ID(), ethPeer.ID())
+	}
 }

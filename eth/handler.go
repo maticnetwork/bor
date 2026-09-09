@@ -186,6 +186,67 @@ type handler struct {
 	syncWithWitnesses       bool
 	syncAndProduceWitnesses bool // Whether to sync blocks and produce witnesses simultaneously
 
+	// WIT2: cache of BP-signed witness announcements, keyed by block hash.
+	// Populated by both produced (signed locally) and received-and-verified
+	// announcements. Consulted by the relay path to dedup, by the body
+	// broadcast path to re-emit signed announces, and by the fetch path to
+	// supply the byte-correctness comparison hash.
+	signedWitnesses *signedWitnessCache
+
+	// WIT2: in-flight witness bodies received via NewWitness broadcast but
+	// not yet written to chain storage. Lets serving peers answer GetWitness
+	// requests during the import gap, which is what unlocks fast multi-hop
+	// propagation — without it, only the producer/post-import nodes can
+	// serve and stateless nodes more than 1 hop away wait per-hop on full
+	// validation before they can pull from anyone.
+	pendingWitnessBodies *pendingWitnessBodyCache
+	wit2PeerTracker      *peerWit2Tracker
+
+	// WIT2: separate, much tighter per-peer budget gating how often a peer's
+	// GetWitness request for a body we don't have can trigger a NEW
+	// triggerRelayFetch goroutine (see recordWitnessWaiter). Deliberately
+	// distinct from wit2PeerTracker, which only rate-limits cheap inbound
+	// announce ingestion — a fetch trigger costs a real round trip against
+	// another peer, so it needs its own, smaller budget.
+	wit2FetchTriggerTracker *peerWit2Tracker
+
+	// WIT2: signed announcements whose producer-binding could not be checked
+	// at receive time because the matching block header wasn't local yet.
+	// Drained from the chain-head subscription on each new block so the race
+	// between block and announce gossip streams self-heals once the chain
+	// catches up.
+	deferredAnnounces *deferredAnnounceCache
+
+	// WIT2: peers that asked us for a witness body we did not yet hold (we
+	// answered GetWitness empty for a hash with a BP-signed announcement on
+	// file). When we obtain the body we push it straight to them, restoring
+	// the WIT1-style hand-off the fast announce removed.
+	witnessWaiters *witnessWaiterRegistry
+
+	// WIT2: dedup guard for relayFetchOnDemand — a pure relay node (no
+	// produce_witness, no sync_with_witness) has no reason of its own to
+	// ever fetch witness bytes, so without this it can register waiters via
+	// recordWitnessWaiter forever without any path to satisfy them. Ensures
+	// at most one outstanding upstream fetch per hash.
+	relayFetchInFlight sync.Map
+
+	// WIT2: global concurrency cap on triggerRelayFetch, independent of the
+	// per-peer wit2FetchTriggerTracker budget above. That tracker only
+	// bounds a single requesting peer's trigger rate — it does nothing to
+	// stop several distinct peers from each independently bursting their
+	// own budget at once. On a relay node with multiple downstream peers
+	// (the exact multi-hop topology this fetch mechanism serves), enough
+	// simultaneous triggers can transiently exhaust file descriptors —
+	// confirmed on a real devnet run, where a burst of concurrent fetches
+	// produced "too many open files" and permanently dropped peer
+	// connections and the heimdall HTTP client. Sized well above any single
+	// relay hop's realistic concurrent demand while bounding the total
+	// number of simultaneous outbound fetch attempts network-wide.
+	relayFetchSem chan struct{}
+
+	wit2HeadCh  chan core.ChainHeadEvent
+	wit2HeadSub event.Subscription
+
 	// channels for fetcher, syncer, txsyncLoop
 	quitSync chan struct{}
 
@@ -225,6 +286,13 @@ func newHandler(config *handlerConfig) (*handler, error) {
 		syncWithWitnesses:       config.syncWithWitnesses,
 		syncAndProduceWitnesses: config.syncAndProduceWitnesses,
 		privateTxGetter:         config.privateTxGetter,
+		signedWitnesses:         newSignedWitnessCache(),
+		pendingWitnessBodies:    newPendingWitnessBodyCache(witnessBodyCacheCapacity),
+		wit2PeerTracker:         newPeerWit2Tracker(),
+		wit2FetchTriggerTracker: newPeerWit2TrackerWithBudget(wit2FetchTriggerBurstCap, wit2FetchTriggerRefillPerSecond),
+		relayFetchSem:           make(chan struct{}, wit2RelayFetchGlobalConcurrencyCap),
+		deferredAnnounces:       newDeferredAnnounceCache(deferredAnnounceCapacity),
+		witnessWaiters:          newWitnessWaiterRegistry(),
 	}
 
 	log.Info("Sync with witnesses", "enabled", config.syncWithWitnesses)
@@ -308,7 +376,10 @@ func newHandler(config *handlerConfig) (*handler, error) {
 		}
 	}
 
-	h.blockFetcher = fetcher.NewBlockFetcher(false, nil, h.chain.GetBlockByHash, validator, h.BroadcastBlock, heighter, h.chain.CurrentHeader, nil, inserter, h.removePeer, h.jailPeer, h.enableBlockTracking, h.statelessSync.Load() || h.syncWithWitnesses, config.gasCeil)
+	h.blockFetcher = fetcher.NewBlockFetcher(false, nil, h.chain.GetBlockByHash, validator, h.BroadcastBlock, heighter, h.chain.CurrentHeader, nil, inserter, h.removePeer, h.jailPeer, h.enableBlockTracking, h.statelessSync.Load() || h.syncWithWitnesses, config.gasCeil, h.lookupSignedWitnessHash, h.cacheVerifiedWitnessForServing)
+	// WIT2: penalize a peer that serves a non-empty witness whose bytes mismatch
+	// the BP-signed commitment (strike, not drop — see strikeWit2PeerByID).
+	h.blockFetcher.SetWitnessServerStriker(h.strikeWit2PeerByID)
 
 	fetchTx := func(peer string, requestID uint64, hashes []common.Hash) error {
 		p := h.peers.peer(peer)
@@ -558,6 +629,12 @@ func (h *handler) removePeer(id string) {
 		log.Debug("Handler: removing peer", "peer", peer.ID(), "inbound", peer.Peer.Inbound(), "duration", common.PrettyDuration(peer.Peer.Lifetime()))
 		peer.Peer.Disconnect(p2p.DiscUselessPeer)
 	}
+	if h.wit2PeerTracker != nil {
+		h.wit2PeerTracker.forget(id)
+	}
+	if h.wit2FetchTriggerTracker != nil {
+		h.wit2FetchTriggerTracker.forget(id)
+	}
 }
 
 // unregisterPeer removes a peer from the downloader, fetchers and main peer set.
@@ -569,6 +646,24 @@ func (h *handler) unregisterPeer(id string) {
 		logger = log.New("peer", id)
 	} else {
 		logger = log.New("peer", id[:8])
+	}
+	// Forget any WIT2 per-peer tracker state on the guaranteed teardown path.
+	// This runs for every disconnect (clean/remote-initiated or our own drop),
+	// unlike removePeer which only fires on proactive drops — so the per-peer
+	// announce-budget/strike map cannot leak one entry per disconnecting peer.
+	// Done before the registration check below: tracker state is independent of
+	// peer-set membership and must be cleared even for a half-registered peer.
+	if h.wit2PeerTracker != nil {
+		h.wit2PeerTracker.forget(id)
+	}
+	if h.wit2FetchTriggerTracker != nil {
+		h.wit2FetchTriggerTracker.forget(id)
+	}
+	// Likewise drop any witness-waiter entries this peer holds, on the same
+	// guaranteed teardown path. Otherwise a peer that asked for a not-yet-held
+	// witness and then disconnected leaves its *wit.Peer recorded until the TTL.
+	if h.witnessWaiters != nil {
+		h.witnessWaiters.forget(id)
 	}
 	// Abort if the peer does not exist
 	peer := h.peers.peer(id)
@@ -639,6 +734,15 @@ func (h *handler) Start(maxPeers int) {
 	// start peer handler tracker
 	h.wg.Add(1)
 	go h.protoTracker()
+
+	// WIT2: drain deferred signed announces on each new chain head. This
+	// closes the cosend race: when a signed announcement arrives ahead of
+	// its block, we hold it in deferredAnnounces and re-evaluate as soon as
+	// the matching header lands.
+	h.wit2HeadCh = make(chan core.ChainHeadEvent, chainHeadChanSize)
+	h.wit2HeadSub = h.chain.SubscribeChainHeadEvent(h.wit2HeadCh)
+	h.wg.Add(1)
+	go h.deferredAnnouncesLoop()
 }
 
 func (h *handler) Stop() {
@@ -726,6 +830,11 @@ func (h *handler) BroadcastBlock(block *types.Block, witness *stateless.Witness,
 			peer.AsyncSendNewBlock(block, td)
 		}
 
+		// WIT2: co-send the witness announcement to every direct block
+		// recipient that doesn't yet have the witness. Closes the gap where
+		// blocks fan out at sqrt(N) but witnesses didn't.
+		h.cosendWitnessAnnouncement(hash, block.NumberU64(), transfer, staticAndTrustedPeers)
+
 		log.Debug("Propagated block", "hash", hash, "recipients", len(transfer), "static and trusted recipients", len(staticAndTrustedPeers), "duration", common.PrettyDuration(time.Since(block.ReceivedAt)))
 
 		return
@@ -739,8 +848,17 @@ func (h *handler) BroadcastBlock(block *types.Block, witness *stateless.Witness,
 	}
 
 	if h.chain.HasWitness(hash) {
+		// Try to attach a BP signature so WIT2 peers can fast-validate and
+		// transitively relay. Falls through to unsigned WIT1 announces for
+		// peers below WIT2 (and for any peer if signing is unavailable, e.g.,
+		// non-producer nodes that didn't receive a signed announce upstream).
+		signedAnn, hasSigned := h.signLocalWitnessAnnouncement(hash, block.NumberU64())
 		for _, peer := range peersWithoutWitness {
-			peer.Peer.AsyncSendNewWitnessHash(block.Header().Hash(), block.NumberU64())
+			if hasSigned && peer.Peer.Version() >= wit.WIT2 {
+				peer.Peer.AsyncSendSignedWitnessAnnouncement(signedAnn)
+			} else {
+				peer.Peer.AsyncSendNewWitnessHash(block.Header().Hash(), block.NumberU64())
+			}
 		}
 		log.Debug("Announced witness", "hash", hash, "recipients", len(peers), "duration", common.PrettyDuration(time.Since(block.ReceivedAt)))
 	}

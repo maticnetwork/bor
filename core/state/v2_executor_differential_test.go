@@ -92,6 +92,11 @@ func (e *exEnv) BaseNonce(addr common.Address) uint64 {
 	return nonce
 }
 
+func (e *exEnv) BaseCodeSize(addr common.Address) int {
+	size, _ := e.safeBase.GetCodeSize(addr)
+	return size
+}
+
 func (e *exEnv) acquire(idx int) *ParallelStateDB {
 	e.poolMu.Lock()
 	defer e.poolMu.Unlock()
