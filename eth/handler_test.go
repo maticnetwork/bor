@@ -421,49 +421,67 @@ func TestJailPeer(t *testing.T) {
 	})
 }
 
-func TestStuckTxBroadcastLoop(t *testing.T) {
-	t.Parallel()
-
+func TestRebroadcastStuckTransactions(t *testing.T) {
 	handler := newTestHandler()
 	defer handler.close()
 
-	// Mark handler as synced so it processes stuck transactions
-	handler.handler.synced.Store(true)
+	handler.handler.rebroadcastOK.Store(true)
 
-	// Create a test transaction
 	tx := types.NewTransaction(0, testAddr, big.NewInt(100), 21000, big.NewInt(1000000000), nil)
 	signedTx, err := types.SignTx(tx, types.HomesteadSigner{}, testKey)
 	if err != nil {
 		t.Fatalf("failed to sign tx: %v", err)
 	}
+	handler.txpool.Add(types.Transactions{signedTx}, true)
 
-	// Send stuck transaction event
-	handler.txpool.SendStuckTxs([]*types.Transaction{signedTx})
+	app, net := p2p.MsgPipe()
+	defer app.Close()
+	defer net.Close()
+	peer := eth.NewPeer(eth.ETH69, p2p.NewPeer(enode.ID{1}, "test", nil), net, handler.txpool)
+	defer peer.Close()
+	if err := handler.handler.peers.registerPeer(peer, nil, nil); err != nil {
+		t.Fatal(err)
+	}
 
-	// Give the loop time to process
-	time.Sleep(100 * time.Millisecond)
+	if !handler.handler.rebroadcastStuckTransactions(types.Transactions{signedTx}) {
+		t.Fatal("synced handler did not rebroadcast stuck transaction")
+	}
+	type readResult struct {
+		msg p2p.Msg
+		err error
+	}
+	result := make(chan readResult, 1)
+	go func() {
+		msg, err := app.ReadMsg()
+		result <- readResult{msg: msg, err: err}
+	}()
+	select {
+	case result := <-result:
+		if result.err != nil {
+			t.Fatal(result.err)
+		}
+		defer result.msg.Discard()
+		if result.msg.Code != eth.TransactionsMsg {
+			t.Fatalf("message code mismatch: have %d, want %d", result.msg.Code, eth.TransactionsMsg)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for rebroadcast transaction")
+	}
 }
 
-func TestStuckTxBroadcastLoopNotSynced(t *testing.T) {
-	t.Parallel()
-
+func TestRebroadcastStuckTransactionsNotSynced(t *testing.T) {
 	handler := newTestHandler()
 	defer handler.close()
 
-	// Handler is not synced by default (synced.Load() == false)
-
-	// Create a test transaction
 	tx := types.NewTransaction(0, testAddr, big.NewInt(100), 21000, big.NewInt(1000000000), nil)
 	signedTx, err := types.SignTx(tx, types.HomesteadSigner{}, testKey)
 	if err != nil {
 		t.Fatalf("failed to sign tx: %v", err)
 	}
 
-	// Send stuck transaction event - should be ignored since not synced
-	handler.txpool.SendStuckTxs([]*types.Transaction{signedTx})
-
-	// Give the loop time to process (or ignore)
-	time.Sleep(100 * time.Millisecond)
+	if handler.handler.rebroadcastStuckTransactions(types.Transactions{signedTx}) {
+		t.Fatal("unsynced handler rebroadcast stuck transaction")
+	}
 }
 
 func TestBroadcastChoice(t *testing.T) {

@@ -147,6 +147,7 @@ type handler struct {
 	snapSync      atomic.Bool // Flag whether snap sync is enabled (gets disabled if we already have blocks)
 	statelessSync atomic.Bool // Flag whether stateless sync is enabled
 	synced        atomic.Bool // Flag whether we're considered synchronised (enables transaction processing)
+	rebroadcastOK atomic.Bool // Flag whether the latest scheduled sync completed successfully
 
 	database ethdb.Database
 	txpool   txPool
@@ -1054,29 +1055,26 @@ func (h *handler) stuckTxBroadcastLoop() {
 	for {
 		select {
 		case event := <-h.stuckTxsCh:
-			// Only rebroadcast when synced
-			if !h.synced.Load() {
-				continue
+			if h.rebroadcastStuckTransactions(event.Txs) {
+				log.Debug("Rebroadcast stuck transactions", "count", len(event.Txs))
 			}
-
-			// Collect hashes to clear from knownTxs
-			hashes := make([]common.Hash, len(event.Txs))
-			for i, tx := range event.Txs {
-				hashes[i] = tx.Hash()
-			}
-
-			// Clear from all peers' knownTxs
-			h.peers.ForgetTransactions(hashes)
-
-			// Rebroadcast
-			h.BroadcastTransactions(event.Txs)
-
-			log.Debug("Rebroadcast stuck transactions", "count", len(event.Txs))
-
 		case <-h.stuckTxsSub.Err():
 			return
 		}
 	}
+}
+
+func (h *handler) rebroadcastStuckTransactions(txs types.Transactions) bool {
+	if !h.rebroadcastOK.Load() {
+		return false
+	}
+	hashes := make([]common.Hash, len(txs))
+	for i, tx := range txs {
+		hashes[i] = tx.Hash()
+	}
+	h.peers.ForgetTransactions(hashes)
+	h.BroadcastTransactions(txs)
+	return true
 }
 
 // enableSyncedFeatures enables the post-sync functionalities when the initial
@@ -1084,6 +1082,7 @@ func (h *handler) stuckTxBroadcastLoop() {
 func (h *handler) enableSyncedFeatures() {
 	// Mark the local node as synced.
 	h.synced.Store(true)
+	h.rebroadcastOK.Store(true)
 
 	// If we were running snap sync and it finished, disable doing another
 	// round on next sync cycle

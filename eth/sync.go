@@ -267,6 +267,7 @@ func (cs *chainSyncer) nextSyncOp() (*chainSyncOp, time.Duration) {
 		return nil, retry // In sync with the available peer; the retry hint still wakes us when benched higher-TD peers expire
 	}
 
+	cs.handler.rebroadcastOK.Store(false)
 	return op, 0
 }
 
