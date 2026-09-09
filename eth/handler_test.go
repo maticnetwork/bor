@@ -421,7 +421,7 @@ func TestJailPeer(t *testing.T) {
 	})
 }
 
-func TestRebroadcastStuckTransactions(t *testing.T) {
+func TestStuckTxBroadcastLoop(t *testing.T) {
 	handler := newTestHandler()
 	defer handler.close()
 
@@ -443,9 +443,7 @@ func TestRebroadcastStuckTransactions(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !handler.handler.rebroadcastStuckTransactions(types.Transactions{signedTx}) {
-		t.Fatal("synced handler did not rebroadcast stuck transaction")
-	}
+	handler.txpool.SendStuckTxs(types.Transactions{signedTx})
 	type readResult struct {
 		msg p2p.Msg
 		err error
@@ -460,9 +458,15 @@ func TestRebroadcastStuckTransactions(t *testing.T) {
 		if result.err != nil {
 			t.Fatal(result.err)
 		}
-		defer result.msg.Discard()
 		if result.msg.Code != eth.TransactionsMsg {
 			t.Fatalf("message code mismatch: have %d, want %d", result.msg.Code, eth.TransactionsMsg)
+		}
+		var txs eth.TransactionsPacket
+		if err := result.msg.Decode(&txs); err != nil {
+			t.Fatal(err)
+		}
+		if len(txs) != 1 || txs[0].Hash() != signedTx.Hash() {
+			t.Fatalf("rebroadcast transactions mismatch: have %v, want %s", txs, signedTx.Hash())
 		}
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for rebroadcast transaction")
