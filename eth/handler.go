@@ -147,7 +147,7 @@ type handler struct {
 	snapSync      atomic.Bool // Flag whether snap sync is enabled (gets disabled if we already have blocks)
 	statelessSync atomic.Bool // Flag whether stateless sync is enabled
 	synced        atomic.Bool // Flag whether we're considered synchronised (enables transaction processing)
-	rebroadcastOK atomic.Bool // Flag whether the latest scheduled sync completed successfully
+	rebroadcastOK atomic.Bool // Enables stuck-tx rebroadcast after successful sync; cleared when catch-up sync is required
 
 	database ethdb.Database
 	txpool   txPool

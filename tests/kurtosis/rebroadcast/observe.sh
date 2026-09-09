@@ -9,7 +9,8 @@ tc_image=${TC_IMAGE:-gaiadocker/iproute2:3.3}
 cast_image=${CAST_IMAGE:-ghcr.io/foundry-rs/foundry@sha256:0c00cb0bda1ab1b91c9a6bf60f4c76c09c1a8870824b6d4718afbabacf6f9a17}
 seed_tx=${SEED_TX:-true}
 
-container=$(docker ps --format '{{.Names}}' | grep "$service" | head -1)
+containers=$(docker ps --format '{{.Names}}')
+container=$(printf '%s\n' "$containers" | grep -F -- "$service" | head -n 1 || true)
 if [[ -z "$container" ]]; then
   echo "No running container found for service $service" >&2
   exit 1
