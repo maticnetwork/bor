@@ -1610,6 +1610,9 @@ func (d *Downloader) fillHeaderSkeleton(from uint64, skeleton []*types.Header) (
 	d.queue.ScheduleSkeleton(from, skeleton)
 
 	err := d.concurrentFetch((*headerQueue)(d), false)
+	if errors.Is(err, ErrPeersUnavailable) {
+		err = fmt.Errorf("skeleton fill failed: %v", err)
+	}
 	if err != nil {
 		log.Debug("Skeleton fill failed", "err", err)
 	}
