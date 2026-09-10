@@ -39,6 +39,16 @@ var (
 	// self-validation.
 	ErrStatelessStateRootMismatch = errors.New("stateless self-validation state root mismatch")
 
+	// ErrStatelessIncompleteState indicates that stateless execution could not
+	// load a piece of state or contract code it required: the witness omitted a
+	// trie node the block accesses, or a called contract's bytecode was absent
+	// from local disk (WIT2 witnesses do not carry code). StateDB records such a
+	// miss as a sticky error and nil-serves the read, so execution continues
+	// against phantom-zero state; the divergence would otherwise surface only as
+	// a misleading ErrGasUsedMismatch (or a state root mismatch). It is detected
+	// explicitly so the block is rejected with its true cause instead.
+	ErrStatelessIncompleteState = errors.New("stateless execution hit incomplete state or code")
+
 	// ErrGasUsedMismatch indicates a mismatch between locally computed
 	// gas used and the block's gas used during validation.
 	ErrGasUsedMismatch = errors.New("invalid gas used")

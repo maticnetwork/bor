@@ -18,6 +18,7 @@ package core
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/lru"
@@ -28,10 +29,18 @@ import (
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/log"
+	"github.com/ethereum/go-ethereum/metrics"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/ethereum/go-ethereum/triedb"
 )
+
+// statelessIncompleteStateMeter counts blocks rejected because stateless
+// execution could not load required state or contract code (see
+// ErrStatelessIncompleteState). A non-zero rate on a stateless node signals a
+// witness-completeness or bytecode-heal gap rather than genuine consensus
+// divergence.
+var statelessIncompleteStateMeter = metrics.NewRegisteredMeter("chain/stateless/incomplete_state", nil)
 
 // ExecuteStateless runs a stateless execution based on a witness, verifies
 // everything it can locally and returns the state root and receipt root, that
@@ -68,6 +77,28 @@ func ExecuteStateless(config *params.ChainConfig, vmconfig vm.Config, block *typ
 	validator := NewBlockValidator(config, nil) // No chain, we only validate the state, not the block
 
 	res, err := processor.Process(block, db, vmconfig, author, context.Background())
+
+	// A missing witness trie node, or a called contract's bytecode absent from
+	// local disk (WIT2 witnesses do not carry code), is caught by StateDB
+	// (state/statedb.go's setError/dbErr) but only recorded as a sticky flag —
+	// it never halts execution, so the read silently nil-serves and execution
+	// continues against phantom-zero state. That can either flow into a wrong
+	// gas result (surfacing only as a misleading ErrGasUsedMismatch, or a state
+	// root mismatch on the full path) or push the divergent execution into a
+	// secondary failure — e.g. "gas limit reached" — that Process returns as its
+	// own error, masking the true cause. In both cases db.Error() names the real
+	// problem, so check it FIRST and prefer it over any Process error: the
+	// computed result is untrustworthy the moment a required read could not be
+	// served. The test-only serial replay (executeStatelessSerial) already gates
+	// on db.Error() this way; this makes the production path do the same. db/res
+	// are preserved so callers doing forensic capture still see the computed
+	// (wrong) result, not just the error string.
+	if dbErr := db.Error(); dbErr != nil {
+		statelessIncompleteStateMeter.Mark(1)
+		log.Error("stateless execution hit incomplete state or code; rejecting block",
+			"block", block.Number(), "hash", block.Hash(), "err", dbErr, "procErr", err)
+		return common.Hash{}, common.Hash{}, db, res, fmt.Errorf("%w: %v", ErrStatelessIncompleteState, dbErr)
+	}
 	if err != nil {
 		return common.Hash{}, common.Hash{}, nil, nil, err
 	}
