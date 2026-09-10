@@ -893,6 +893,20 @@ type SequencerConfig struct {
 	// (continuous building); zero keeps the one-shot fill at slot start.
 	Poll    time.Duration `hcl:"-,optional" toml:"-"`
 	PollRaw string        `hcl:"poll,optional" toml:"poll,optional"`
+
+	// AuditWindow bounds how many blocks one startup audit of the store
+	// walks before declaring the rest of the gap unaudited.
+	AuditWindow uint64 `hcl:"audit-window,optional" toml:"audit-window,optional"`
+}
+
+// sequencerAuditWindow returns the configured audit depth, or zero when the
+// integration is off (which leaves the package default in place).
+func (c *Config) sequencerAuditWindow() uint64 {
+	if c.Sequencer == nil || !c.Sequencer.Enabled {
+		return 0
+	}
+
+	return c.Sequencer.AuditWindow
 }
 
 func DefaultConfig() *Config {
@@ -1828,6 +1842,7 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 	n.SequencerPublisherEndpoint = seqPubEndpoint
 	n.SequencerConsumerEndpoint = seqConsEndpoint
 	n.SequencerPoll = seqPoll
+	n.SequencerAuditWindow = c.sequencerAuditWindow()
 
 	n.EnablePreconfs = c.Relay.EnablePreconfs
 	n.EnablePrivateTx = c.Relay.EnablePrivateTx

@@ -1,6 +1,9 @@
 package rawdb
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 func TestInvalidPreconfRecords(t *testing.T) {
 	db := NewMemoryDatabase()
@@ -112,5 +115,137 @@ func TestInvalidPreconfsInRange(t *testing.T) {
 	records = ReadInvalidPreconfsInRange(db, 0, InvalidPreconfQueryLimit+100)
 	if len(records) != InvalidPreconfQueryLimit || records[0].Number != InvalidPreconfQueryLimit+19 {
 		t.Fatalf("capped range = %d records, newest %d", len(records), records[0].Number)
+	}
+}
+
+func TestPreconfAuditWatermarks(t *testing.T) {
+	db := NewMemoryDatabase()
+
+	// A node that never audited has no watermark, which is not the same as
+	// having audited through block zero.
+	if _, ok, _ := ReadPreconfAuditedThrough(db); ok {
+		t.Fatal("watermark present on a fresh database")
+	}
+	if _, ok, _ := ReadPreconfUnauditedThrough(db); ok {
+		t.Fatal("unaudited mark present on a fresh database")
+	}
+
+	if err := WritePreconfAuditedThrough(db, 0); err != nil {
+		t.Fatalf("write zero: %v", err)
+	}
+	if number, ok, _ := ReadPreconfAuditedThrough(db); !ok || number != 0 {
+		t.Fatalf("watermark = (%d, %v), want (0, true)", number, ok)
+	}
+
+	if err := WritePreconfAuditedThrough(db, 4_200_000_000_000); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if number, ok, _ := ReadPreconfAuditedThrough(db); !ok || number != 4_200_000_000_000 {
+		t.Fatalf("watermark = (%d, %v)", number, ok)
+	}
+}
+
+// The unaudited mark only rises: a later pass over a narrower window does not
+// make an older gap disappear.
+func TestPreconfUnauditedThroughOnlyRises(t *testing.T) {
+	db := NewMemoryDatabase()
+
+	for _, number := range []uint64{90, 40, 91, 12} {
+		if err := WritePreconfUnauditedThrough(db, number); err != nil {
+			t.Fatalf("write %d: %v", number, err)
+		}
+	}
+
+	if number, ok, _ := ReadPreconfUnauditedThrough(db); !ok || number != 91 {
+		t.Fatalf("unaudited mark = (%d, %v), want (91, true)", number, ok)
+	}
+}
+
+// A stored height has three answers, and the caller acts differently on each:
+// present, absent, and unavailable. A malformed value or a failing read must
+// not read as absence, because absence seeds the audit watermark at the head.
+func TestPreconfHeightSeparatesAbsenceFromFailure(t *testing.T) {
+	t.Run("truncated value is an error, not absence", func(t *testing.T) {
+		db := NewMemoryDatabase()
+		if err := db.Put(preconfAuditedThroughKey, []byte{0x01}); err != nil {
+			t.Fatalf("put: %v", err)
+		}
+
+		number, ok, err := ReadPreconfAuditedThrough(db)
+		if err == nil {
+			t.Fatal("a truncated value read back without an error")
+		}
+		if ok || number != 0 {
+			t.Fatalf("read = (%d, %v), want (0, false)", number, ok)
+		}
+	})
+
+	t.Run("missing key is absence, not an error", func(t *testing.T) {
+		number, ok, err := ReadPreconfAuditedThrough(NewMemoryDatabase())
+		if err != nil {
+			t.Fatalf("missing key returned an error: %v", err)
+		}
+		if ok || number != 0 {
+			t.Fatalf("read = (%d, %v), want (0, false)", number, ok)
+		}
+	})
+
+	t.Run("failing presence check is an error", func(t *testing.T) {
+		number, ok, err := ReadPreconfAuditedThrough(failingReader{})
+		if err == nil {
+			t.Fatal("a failing read reported absence")
+		}
+		if ok || number != 0 {
+			t.Fatalf("read = (%d, %v), want (0, false)", number, ok)
+		}
+	})
+
+	t.Run("failing value read is an error", func(t *testing.T) {
+		number, ok, err := ReadPreconfUnauditedThrough(presentButUnreadable{})
+		if err == nil {
+			t.Fatal("a failing value read reported absence")
+		}
+		if ok || number != 0 {
+			t.Fatalf("read = (%d, %v), want (0, false)", number, ok)
+		}
+	})
+}
+
+var errReadRefused = errors.New("read refused")
+
+type failingReader struct{}
+
+func (failingReader) Has([]byte) (bool, error)   { return false, errReadRefused }
+func (failingReader) Get([]byte) ([]byte, error) { return nil, errReadRefused }
+
+// presentButUnreadable reports the key exists and then fails to hand it over,
+// which is the shape of a corrupt or racing backend.
+type presentButUnreadable struct{}
+
+func (presentButUnreadable) Has([]byte) (bool, error)   { return true, nil }
+func (presentButUnreadable) Get([]byte) ([]byte, error) { return nil, errReadRefused }
+
+func TestWriteInvalidPreconfIfAbsent(t *testing.T) {
+	db := NewMemoryDatabase()
+
+	wrote, err := WriteInvalidPreconfIfAbsent(db, 9, "unobserved_mismatch")
+	if err != nil {
+		t.Fatalf("first write: %v", err)
+	}
+	if !wrote {
+		t.Fatal("first write reported no write")
+	}
+
+	wrote, err = WriteInvalidPreconfIfAbsent(db, 9, "reorged")
+	if err != nil {
+		t.Fatalf("second write: %v", err)
+	}
+	if wrote {
+		t.Fatal("second write replaced an existing record")
+	}
+
+	records := ReadInvalidPreconfsInRange(db, 9, 9)
+	if len(records) != 1 || records[0].Reason != "unobserved_mismatch" {
+		t.Fatalf("records = %+v, want the first reason kept", records)
 	}
 }

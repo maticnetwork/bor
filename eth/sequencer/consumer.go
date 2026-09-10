@@ -17,6 +17,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/event"
 	"github.com/ethereum/go-ethereum/log"
@@ -66,6 +67,14 @@ type Consumer struct {
 	handoff      atomic.Pointer[types.Header]
 	sealVerify   atomic.Bool
 
+	// watching reports whether a stream session has reached the store tip.
+	// Only then does a canonical head mean this node saw whatever the store
+	// held at that height, which is what lets the audit watermark advance.
+	watching     atomic.Bool
+	auditTrigger chan struct{}
+	auditWindow  uint64
+	auditMu      sync.Mutex
+
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 }
@@ -83,12 +92,13 @@ func NewConsumerWithTransactionLookup(endpoint string, chain *core.BlockChain, t
 	}
 
 	consumer := &Consumer{
-		chain:     chain,
-		endpoint:  endpoint,
-		txLookup:  txLookup,
-		index:     NewIndex(),
-		store:     NewPendingStore(chain.DB()),
-		recentTxs: make(map[common.Hash]*types.Transaction),
+		chain:        chain,
+		endpoint:     endpoint,
+		txLookup:     txLookup,
+		index:        NewIndex(),
+		store:        NewPendingStore(chain.DB()),
+		recentTxs:    make(map[common.Hash]*types.Transaction),
+		auditTrigger: make(chan struct{}, 1),
 	}
 	consumer.reconciled.Store(chain.CurrentBlock())
 	return consumer, nil
@@ -195,7 +205,7 @@ func (c *Consumer) Start() {
 	ctx, cancel := context.WithCancel(context.Background())
 	c.cancel = cancel
 
-	c.wg.Add(2)
+	c.wg.Add(3)
 	go func() {
 		defer c.wg.Done()
 		c.run(ctx)
@@ -203,6 +213,10 @@ func (c *Consumer) Start() {
 	go func() {
 		defer c.wg.Done()
 		c.evictLoop(ctx)
+	}()
+	go func() {
+		defer c.wg.Done()
+		c.auditLoop(ctx)
 	}()
 }
 
@@ -247,13 +261,13 @@ func (c *Consumer) deterministic() error {
 func (c *Consumer) run(ctx context.Context) {
 	var sess *session
 
+	// Startup: whatever window the previous process left open is this one's
+	// to close.
+	c.requestAudit()
+
 	for {
 		var err error
-		if derr := c.deterministic(); derr != nil {
-			err = fmt.Errorf("preconf re-execution not deterministic yet: %w", derr)
-		} else {
-			sess, err = c.follow(ctx, sess)
-		}
+		sess, err = c.runSession(ctx, sess)
 
 		if ctx.Err() != nil {
 			return
@@ -268,6 +282,27 @@ func (c *Consumer) run(ctx context.Context) {
 		case <-time.After(consumerRetryDelay):
 		}
 	}
+}
+
+// runSession runs one stream session, and asks for an audit only when one
+// actually ran. A precondition failure must not: nothing was being followed,
+// so no new window opened, and this loop retries every consumerRetryDelay —
+// a node sitting pre-Rio would otherwise audit the store on a two-second
+// loop for as long as it stayed ineligible.
+func (c *Consumer) runSession(ctx context.Context, sess *session) (*session, error) {
+	// A session that has returned is following nothing, so the canonical head
+	// stops standing for "this node saw what the store held". Leaving this set
+	// would let the watermark advance across a window nobody compared.
+	defer c.watching.Store(false)
+
+	if derr := c.deterministic(); derr != nil {
+		return sess, fmt.Errorf("preconf re-execution not deterministic yet: %w", derr)
+	}
+
+	next, err := c.follow(ctx, sess)
+	c.requestAudit()
+
+	return next, err
 }
 
 // evictLoop drops preconf receipts for heights the canonical chain has
@@ -299,6 +334,57 @@ func (c *Consumer) handleCanonicalHead() {
 	invalidations := c.reconcileCanonicalHeadLocked()
 	c.publishMu.Unlock()
 	c.pendingStore().writeInvalidations(invalidations)
+	c.markCanonicalHeadAudited()
+}
+
+// markCanonicalHeadAudited advances the audit watermark for a height this node
+// reconciled while following the store tip.
+//
+// Two conditions gate it. watching: a session that dropped, or one still
+// replaying history, leaves heights nobody compared. Contiguity: the mark may
+// only step to the next height, because a jump would carry it over a window
+// the session never compared — the catch-up backlog it dropped before
+// reaching the tip. A gap instead asks for an audit pass, which walks the
+// window properly and lets contiguous stepping resume.
+//
+// Heights the store never held do advance. Nothing was promised at those
+// heights, so there is no preconfirmation to invalidate — the same reasoning
+// the store's own outage contract uses, and it holds for the entries a
+// producer backfills long after the block went canonical.
+func (c *Consumer) markCanonicalHeadAudited() {
+	if !c.watching.Load() {
+		return
+	}
+	head := c.chain.CurrentBlock()
+	if head == nil || head.Number == nil {
+		return
+	}
+
+	watermark, stored, err := rawdb.ReadPreconfAuditedThrough(c.chain.DB())
+	if err != nil {
+		log.Warn("Sequence store audit watermark unreadable", "err", err)
+
+		return
+	}
+	if !stored {
+		// The audit seeds the first watermark; until it does there is no
+		// position to step from.
+		c.requestAudit()
+
+		return
+	}
+
+	number := head.Number.Uint64()
+	if number <= watermark {
+		return
+	}
+	if number > watermark+1 {
+		c.requestAudit()
+
+		return
+	}
+
+	c.advanceAudited(number)
 }
 
 func (c *Consumer) reconcileCanonicalHeadLocked() []pendingInvalidation {
@@ -395,6 +481,10 @@ func (c *Consumer) follow(ctx context.Context, sess *session) (*session, error) 
 	client := pb.NewConsumerServiceClient(conn)
 
 	for attempt := 0; ; attempt++ {
+		// Each attempt is a fresh position: nothing is being followed until
+		// the new session reaches the tip again.
+		c.watching.Store(false)
+
 		streamCtx, cancelStream := context.WithCancel(ctx)
 		stream, serr := client.Stream(streamCtx, c.resumeRequest(sess, attempt))
 		if serr != nil {
@@ -452,7 +542,13 @@ func handlePreparedStreamFrame(sess *session, frame preparedStreamFrame) (*sessi
 		return sess, fmt.Errorf("stream recv: %w", frame.recvErr)
 	}
 	if frame.entry == nil {
-		log.Info("Sequence stream live", "head", fmt.Sprintf("%x", sess.head[:8]))
+		if frame.live {
+			sess.consumer.watching.Store(true)
+			// Catch-up is over; audit whatever it replayed past instead of
+			// executing.
+			sess.consumer.requestAudit()
+			log.Info("Sequence stream live", "head", fmt.Sprintf("%x", sess.head[:8]))
+		}
 		return sess, nil
 	}
 	err := sess.handlePrepared(frame)

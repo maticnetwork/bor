@@ -38,6 +38,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/internal/ethapi/override"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/ethereum/go-ethereum/rlp"
@@ -4457,6 +4458,88 @@ func TestSystemTxGasCapBypass(t *testing.T) {
 			} else {
 				require.True(t, gasAvailable.Uint64() > rpcGasCap,
 					"gas should bypass RPCGasCap (%d), got %s", rpcGasCap, gasAvailable)
+			}
+		})
+	}
+}
+
+func TestGetPreconfAuditStatus(t *testing.T) {
+	backend := newTestBackend(t, 0, &core.Genesis{Config: params.TestChainConfig, Alloc: types.GenesisAlloc{}}, ethash.NewFaker(), nil)
+	api := NewBorAPI(backend)
+
+	// A node that never audited reports neither mark, so an empty
+	// invalidation range cannot be read as a clean window.
+	status, err := api.GetPreconfAuditStatus()
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if status.AuditedThrough != nil || status.UnauditedThrough != nil {
+		t.Fatalf("status = %+v, want both marks absent", status)
+	}
+
+	if err := rawdb.WritePreconfAuditedThrough(backend.ChainDb(), 77); err != nil {
+		t.Fatalf("write watermark: %v", err)
+	}
+	if err := rawdb.WritePreconfUnauditedThrough(backend.ChainDb(), 30); err != nil {
+		t.Fatalf("write unaudited: %v", err)
+	}
+
+	status, err = api.GetPreconfAuditStatus()
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if status.AuditedThrough == nil || uint64(*status.AuditedThrough) != 77 {
+		t.Fatalf("auditedThrough = %v, want 77", status.AuditedThrough)
+	}
+	if status.UnauditedThrough == nil || uint64(*status.UnauditedThrough) != 30 {
+		t.Fatalf("unauditedThrough = %v, want 30", status.UnauditedThrough)
+	}
+
+	encoded, err := json.Marshal(status)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if want := `{"auditedThrough":"0x4d","unauditedThrough":"0x1e"}`; string(encoded) != want {
+		t.Fatalf("json = %s, want %s", encoded, want)
+	}
+}
+
+func TestGetPreconfAuditStatusSurfacesAnUnreadableMark(t *testing.T) {
+	// Each mark gets its own case: corrupting both would let the first read
+	// fail and short-circuit, leaving the second branch unexercised.
+	//
+	// Literal keys, mirroring core/rawdb's unexported ones. Each case asserts
+	// the corruption actually took, so a renamed key fails here rather than
+	// leaving this passing against a mark that reads fine.
+	cases := []struct {
+		name string
+		key  string
+		read func(ethdb.KeyValueReader) (uint64, bool, error)
+	}{
+		{"audited", "PreconfAuditedThrough", rawdb.ReadPreconfAuditedThrough},
+		{"unaudited", "PreconfUnauditedThrough", rawdb.ReadPreconfUnauditedThrough},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			backend := newTestBackend(t, 0, &core.Genesis{Config: params.TestChainConfig, Alloc: types.GenesisAlloc{}}, ethash.NewFaker(), nil)
+			api := NewBorAPI(backend)
+
+			if err := backend.ChainDb().Put([]byte(tc.key), []byte{0xff, 0xff}); err != nil {
+				t.Fatalf("corrupt %s: %v", tc.key, err)
+			}
+			if _, _, err := tc.read(backend.ChainDb()); err == nil {
+				t.Fatalf("%s still reads cleanly; the key no longer matches rawdb", tc.key)
+			}
+
+			// Reporting no marks here would read as "never audited", which is
+			// the clean-looking answer this method exists to avoid giving.
+			status, err := api.GetPreconfAuditStatus()
+			if err == nil {
+				t.Fatalf("status = %+v, want an error for an unreadable mark", status)
+			}
+			if status != nil {
+				t.Fatalf("status = %+v, want nil alongside the error", status)
 			}
 		})
 	}

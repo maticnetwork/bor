@@ -22,6 +22,10 @@ type preparedStreamFrame struct {
 	fold         preparedFold
 	recvErr      error
 	openApplied  chan struct{}
+	// live marks the store's caught-up-to-tip frame. Entries after it are
+	// live appends, which is what makes a canonical head at or below the tip
+	// something this node actually observed.
+	live bool
 }
 
 type preparedFold struct {
@@ -57,7 +61,7 @@ func (c *Consumer) prepareStream(ctx context.Context, stream streamReceiver, sta
 
 		entry := frame.GetEntry()
 		if entry == nil {
-			if !c.handoffPreparedFrame(ctx, out, preparedStreamFrame{}) {
+			if !c.handoffPreparedFrame(ctx, out, preparedStreamFrame{live: frame.GetLive() != nil}) {
 				return
 			}
 			continue

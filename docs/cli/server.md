@@ -104,6 +104,8 @@ The ```bor server``` command runs the Bor client.
 
 - ```rpc.returndatalimit```: Maximum size (in bytes) a result of an rpc request could have (use 0 for no limits) (default: 100000)
 
+- ```sequencer.audit-window```: Blocks one startup audit of the sequence store walks before the rest of the gap is reported unaudited (0 uses the built-in window) (default: 0)
+
 - ```sequencer.consumer-endpoint```: Sequence store consumer service gRPC endpoint (tail reads during reconciliation)
 
 - ```sequencer.enabled```: Enable the sequence store integration (a mining node publishes the block lifecycle) (default: false)
@@ -265,6 +267,8 @@ The ```bor server``` command runs the Bor client.
 - ```rpc.txfeecap```: Sets a cap on transaction fee (in ether) that can be sent via the RPC APIs (0 = no cap) (default: 1)
 
 - ```rpc.txsync.defaulttimeout```: Default timeout for eth_sendRawTransactionSync (e.g. 2s, 500ms) (default: 20s)
+
+- ```rpc.txsync.maxconcurrent```: Maximum eth_sendRawTransactionSync calls waiting for a receipt at once (0 = no limit) (default: 4096)
 
 - ```rpc.txsync.maxtimeout```: Maximum allowed timeout for eth_sendRawTransactionSync (e.g. 5m) (default: 1m0s)
 

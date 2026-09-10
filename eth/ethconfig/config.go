@@ -359,6 +359,10 @@ type Config struct {
 	SequencerConsumerEndpoint  string
 	SequencerPoll              time.Duration
 
+	// SequencerAuditWindow bounds how many blocks one startup audit of the
+	// store walks; zero takes the package default.
+	SequencerAuditWindow uint64
+
 	// Preconf / Private transaction relay related settings
 
 	EnablePreconfs            bool
