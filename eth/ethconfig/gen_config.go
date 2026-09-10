@@ -100,6 +100,7 @@ func (c Config) MarshalTOML() (interface{}, error) {
 		DisableBlindForkValidation           bool
 		MaxBlindForkValidationLimit          uint64
 		TxSyncDefaultTimeout                 time.Duration `toml:",omitempty"`
+		TxSyncMaxConcurrent                  int           `toml:",omitempty"`
 		TxSyncMaxTimeout                     time.Duration `toml:",omitempty"`
 		EnablePreconfs                       bool
 		EnablePrivateTx                      bool
@@ -188,6 +189,7 @@ func (c Config) MarshalTOML() (interface{}, error) {
 	enc.DisableBlindForkValidation = c.DisableBlindForkValidation
 	enc.MaxBlindForkValidationLimit = c.MaxBlindForkValidationLimit
 	enc.TxSyncDefaultTimeout = c.TxSyncDefaultTimeout
+	enc.TxSyncMaxConcurrent = c.TxSyncMaxConcurrent
 	enc.TxSyncMaxTimeout = c.TxSyncMaxTimeout
 	enc.EnablePreconfs = c.EnablePreconfs
 	enc.EnablePrivateTx = c.EnablePrivateTx
@@ -280,6 +282,7 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 		DisableBlindForkValidation           *bool
 		MaxBlindForkValidationLimit          *uint64
 		TxSyncDefaultTimeout                 *time.Duration `toml:",omitempty"`
+		TxSyncMaxConcurrent                  *int           `toml:",omitempty"`
 		TxSyncMaxTimeout                     *time.Duration `toml:",omitempty"`
 		EnablePreconfs                       *bool
 		EnablePrivateTx                      *bool
@@ -530,6 +533,9 @@ func (c *Config) UnmarshalTOML(unmarshal func(interface{}) error) error {
 	}
 	if dec.TxSyncDefaultTimeout != nil {
 		c.TxSyncDefaultTimeout = *dec.TxSyncDefaultTimeout
+	}
+	if dec.TxSyncMaxConcurrent != nil {
+		c.TxSyncMaxConcurrent = *dec.TxSyncMaxConcurrent
 	}
 	if dec.TxSyncMaxTimeout != nil {
 		c.TxSyncMaxTimeout = *dec.TxSyncMaxTimeout

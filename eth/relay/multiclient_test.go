@@ -1,9 +1,11 @@
 package relay
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -22,6 +24,7 @@ import (
 type mockRpcServer struct {
 	server *httptest.Server
 	mu     sync.RWMutex
+	opened atomic.Uint64
 
 	handleBlockNumber   func(w http.ResponseWriter, id int)
 	handleSendPreconfTx func(w http.ResponseWriter, id int, params json.RawMessage)
@@ -65,19 +68,48 @@ func newMockRpcServer() *mockRpcServer {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", m.handleRequests)
-	m.server = httptest.NewServer(mux)
+	m.server = httptest.NewUnstartedServer(mux)
+	m.server.Config.ConnState = func(_ net.Conn, state http.ConnState) {
+		if state == http.StateNew {
+			m.opened.Add(1)
+		}
+	}
+	m.server.Start()
 
 	return m
 }
 
 func (m *mockRpcServer) handleRequests(w http.ResponseWriter, r *http.Request) {
+	var raw json.RawMessage
+	if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if len(raw) > 0 && raw[0] == '[' {
+		var requests []json.RawMessage
+		if err := json.Unmarshal(raw, &requests); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		responses := make([]json.RawMessage, len(requests))
+		for i, request := range requests {
+			recorder := httptest.NewRecorder()
+			m.handleRequest(recorder, request)
+			responses[i] = bytes.TrimSpace(recorder.Body.Bytes())
+		}
+		json.NewEncoder(w).Encode(responses)
+		return
+	}
+	m.handleRequest(w, raw)
+}
+
+func (m *mockRpcServer) handleRequest(w http.ResponseWriter, raw json.RawMessage) {
 	var req struct {
 		ID     int             `json:"id"`
 		Method string          `json:"method"`
 		Params json.RawMessage `json:"params"`
 	}
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.Unmarshal(raw, &req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
@@ -121,10 +153,23 @@ func defaultHandleBlockNumber(w http.ResponseWriter, id int) {
 
 func defaultHandleSendPreconfTx(w http.ResponseWriter, id int, params json.RawMessage) {
 	// Extract the raw transaction from params
-	var rawTxParams []string
-	json.Unmarshal(params, &rawTxParams)
+	var rawTxParams []json.RawMessage
+	if err := json.Unmarshal(params, &rawTxParams); err != nil || len(rawTxParams) == 0 {
+		defaultSendError(w, id, -32602, "invalid transaction parameters")
+		return
+	}
+	var rawTx string
+	if err := json.Unmarshal(rawTxParams[0], &rawTx); err != nil {
+		defaultSendError(w, id, -32602, err.Error())
+		return
+	}
+	raw, err := hexutil.Decode(rawTx)
+	if err != nil {
+		defaultSendError(w, id, -32602, err.Error())
+		return
+	}
 	tx := new(types.Transaction)
-	if err := tx.UnmarshalBinary(hexutil.MustDecode(rawTxParams[0])); err != nil {
+	if err := tx.UnmarshalBinary(raw); err != nil {
 		defaultSendError(w, id, -32602, err.Error())
 		return
 	}
@@ -332,6 +377,42 @@ func TestSubmitPreconfTx(t *testing.T) {
 		require.True(t, res, "expected preconf to be offered by all BPs")
 	})
 
+	t.Run("submitPreconfTx without pending wait", func(t *testing.T) {
+		type pendingWaitParam struct {
+			value bool
+			err   error
+		}
+		observed := make(chan pendingWaitParam, 1)
+		rpcServers[0].setHandleSendPreconfTx(func(w http.ResponseWriter, id int, params json.RawMessage) {
+			var values []json.RawMessage
+			if err := json.Unmarshal(params, &values); err != nil {
+				observed <- pendingWaitParam{err: err}
+				defaultHandleSendPreconfTx(w, id, params)
+				return
+			}
+			if len(values) < 2 {
+				observed <- pendingWaitParam{err: fmt.Errorf("missing pending wait parameter")}
+				defaultHandleSendPreconfTx(w, id, params)
+				return
+			}
+			var waitForPending bool
+			err := json.Unmarshal(values[1], &waitForPending)
+			observed <- pendingWaitParam{value: waitForPending, err: err}
+			defaultHandleSendPreconfTx(w, id, params)
+		})
+		defer rpcServers[0].setHandleSendPreconfTx(defaultHandleSendPreconfTx)
+
+		mc := newMultiClient(urls)
+		defer mc.close()
+
+		res, err := mc.submitPreconfTxWithoutPendingWait(rawTx)
+		require.NoError(t, err)
+		require.True(t, res)
+		param := <-observed
+		require.NoError(t, param.err)
+		require.False(t, param.value)
+	})
+
 	t.Run("submitPreconfTx with invalid tx", func(t *testing.T) {
 		mc := newMultiClient(urls)
 		defer mc.close()
@@ -517,6 +598,51 @@ func TestSubmitPreconfTx(t *testing.T) {
 		require.Error(t, err, "expected error in submitting preconf tx")
 		require.False(t, res, "expected preconf to be not offered by all BPs")
 	})
+}
+
+func TestSubmitPreconfTxReusesHTTPConnections(t *testing.T) {
+	const parallel = 32
+
+	server := newMockRpcServer()
+	defer server.close()
+	mc := newMultiClientWithLimit([]string{server.server.URL}, parallel)
+	require.NotNil(t, mc)
+	defer mc.close()
+
+	tx := types.NewTransaction(1, common.Address{}, nil, 0, nil, nil)
+	rawTx, err := tx.MarshalBinary()
+	require.NoError(t, err)
+
+	runWave := func() {
+		arrived := make(chan struct{}, parallel)
+		release := make(chan struct{})
+		server.setHandleSendPreconfTx(func(w http.ResponseWriter, id int, params json.RawMessage) {
+			arrived <- struct{}{}
+			<-release
+			defaultHandleSendPreconfTx(w, id, params)
+		})
+
+		var wg sync.WaitGroup
+		wg.Add(parallel)
+		for range parallel {
+			go func() {
+				defer wg.Done()
+				result, err := mc.submitPreconfTx(rawTx)
+				require.NoError(t, err)
+				require.True(t, result)
+			}()
+		}
+		for range parallel {
+			<-arrived
+		}
+		close(release)
+		wg.Wait()
+	}
+
+	runWave()
+	opened := server.opened.Load()
+	runWave()
+	require.Equal(t, opened, server.opened.Load())
 }
 
 func TestSubmitPrivateTx(t *testing.T) {

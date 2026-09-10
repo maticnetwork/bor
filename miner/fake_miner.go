@@ -200,10 +200,8 @@ func createMockSpanForTest(address common.Address, chainId string) borTypes.Span
 	return span0
 }
 
-var (
-	// Test chain configurations
-	testTxPoolConfigBor legacypool.Config
-)
+// Test chain configurations
+var testTxPoolConfigBor legacypool.Config
 
 // TODO - Arpit, Duplicate Functions
 type mockBackendBor struct {
@@ -220,6 +218,12 @@ func NewMockBackendBor(bc *core.BlockChain, txPool *txpool.TxPool) *mockBackendB
 
 func (m *mockBackendBor) BlockChain() *core.BlockChain {
 	return m.bc
+}
+
+// WhitelistedMilestone implements Backend. The mock reports no milestone,
+// which leaves the finality gate to its startup grace.
+func (*mockBackendBor) WhitelistedMilestone() (bool, uint64, common.Hash) {
+	return false, 0, common.Hash{}
 }
 
 // PeerCount implements Backend. Returns a constant; tests using

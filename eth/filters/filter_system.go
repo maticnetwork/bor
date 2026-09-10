@@ -332,18 +332,8 @@ func (es *EventSystem) subscribe(sub *subscription) *Subscription {
 // given criteria to the given logs channel. Default value for the from and to
 // block is "latest". If the fromBlock > toBlock an error is returned.
 func (es *EventSystem) SubscribeLogs(crit ethereum.FilterQuery, logs chan []*types.Log) (*Subscription, error) {
-	if len(crit.Topics) > maxTopics {
-		return nil, errExceedMaxTopics
-	}
-	if es.sys.cfg.LogQueryLimit != 0 {
-		if len(crit.Addresses) > es.sys.cfg.LogQueryLimit {
-			return nil, errExceedLogQueryLimit
-		}
-		for _, topics := range crit.Topics {
-			if len(topics) > es.sys.cfg.LogQueryLimit {
-				return nil, errExceedLogQueryLimit
-			}
-		}
+	if err := es.validateLogCriteria(crit); err != nil {
+		return nil, err
 	}
 	var from, to rpc.BlockNumber
 	if crit.FromBlock == nil {

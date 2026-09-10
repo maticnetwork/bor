@@ -1164,7 +1164,9 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header, w
 		if err != nil {
 			// If the signer is not in the active validator set, use succession 0
 			// so that the pending block header is still valid for RPC queries.
-			// Seal() will independently reject the block if unauthorized.
+			// Seal() will independently reject the block if unauthorized, and
+			// the miner keeps such a build out of the sequence store (see
+			// IsAuthorizedSigner).
 			succession = 0
 		}
 	}
@@ -1552,6 +1554,31 @@ func (c *Bor) commitSprintWork(chain consensus.ChainHeaderReader, header *types.
 
 // Authorize injects a private key into the consensus engine to mint new blocks
 // with.
+// IsAuthorizedSigner reports whether the node's signer may seal the given
+// prepared header (post-Rio: whether it is among the span's selected
+// producers), mirroring Seal's refusal checks. The miner consults it before
+// publishing a build's sequence: a block Seal would refuse must produce no
+// store records. Nodes without a signer are not authorized.
+func (c *Bor) IsAuthorizedSigner(chain consensus.ChainHeaderReader, header *types.Header) bool {
+	signer := c.authorizedSigner.Load().signer
+	if signer == (common.Address{}) {
+		return false
+	}
+
+	snap, err := c.snapshot(chain, header, nil, false)
+	if err != nil {
+		return false
+	}
+
+	if !snap.ValidatorSet.HasAddress(signer) && !snap.isAllowedByValidatorSetOverride(signer, header.Number.Uint64()) {
+		return false
+	}
+
+	_, err = snap.GetSignerSuccessionNumber(signer)
+
+	return err == nil
+}
+
 func (c *Bor) Authorize(currentSigner common.Address, signFn SignerFn) {
 	c.authorizedSigner.Store(&signer{
 		signer: currentSigner,
@@ -1689,6 +1716,42 @@ func Sign(signFn SignerFn, signer common.Address, header *types.Header, c *param
 	return nil
 }
 
+// SignBytes signs the supplied preimage bytes under a context-specific
+// mimetype using the engine's currently authorized signer. The mimetype is the
+// domain tag the underlying signer (clef, keystore) sees, so callers MUST pass
+// a context-specific value (e.g. accounts.MimetypeBorWitnessAnnounce) and
+// never reuse accounts.MimetypeBor outside of header sealing — that would let
+// a signature produced here be replayed as a block-seal signature on any
+// header BorRLP that hashes to the same digest.
+//
+// Callers pass the unhashed preimage; the wallet's SignData implementation
+// applies keccak256 once before signing. Verifiers must independently hash
+// the same preimage and ecrecover against the resulting digest.
+func (c *Bor) SignBytes(mimetype string, digest []byte) (signer common.Address, sig []byte, err error) {
+	if mimetype == "" || mimetype == accounts.MimetypeBor {
+		return common.Address{}, nil, errors.New("bor: SignBytes requires a non-empty, non-header mimetype")
+	}
+	current := c.authorizedSigner.Load()
+	if current == nil || current.signer == (common.Address{}) {
+		return common.Address{}, nil, errors.New("bor: no authorized signer configured")
+	}
+	sig, err = current.signFn(accounts.Account{Address: current.signer}, mimetype, digest)
+	if err != nil {
+		return common.Address{}, nil, err
+	}
+	return current.signer, sig, nil
+}
+
+// CurrentSigner returns the address of the currently authorized signer, or
+// the zero address if none has been configured.
+func (c *Bor) CurrentSigner() common.Address {
+	current := c.authorizedSigner.Load()
+	if current == nil {
+		return common.Address{}
+	}
+	return current.signer
+}
+
 // CalcDifficulty is the difficulty adjustment algorithm. It returns the difficulty
 // that a new block should have based on the previous blocks in the chain and the
 // current signer.
@@ -1776,6 +1839,34 @@ func (c *Bor) runMilestoneFetcher() {
 			return
 		}
 	}
+}
+
+// stateTracingHooks is implemented by state wrappers (state.NewHookedState)
+// that emit tracing hooks for the state they wrap.
+type stateTracingHooks interface {
+	Hooks() *tracing.Hooks
+}
+
+// systemTxVMConfig returns the vm.Config to use when applying bor system
+// transactions (span commits and state-sync events) over the given state.
+//
+// The tracer is derived from the state itself rather than taken from
+// c.vmConfig: canonical block import passes a hooked state when a live tracer
+// is configured, so system transactions keep being traced there. Every other
+// caller — the miner and eth_simulateV1 via FinalizeAndAssemble, or historical
+// state regeneration via Finalize — passes a plain state and must not fire the
+// node-wide live tracer: those run outside the import goroutine, and invoking
+// the singleton live tracer concurrently corrupts its state and can crash the
+// node.
+func (c *Bor) systemTxVMConfig(state vm.StateDB) vm.Config {
+	cfg := c.vmConfig
+	if hooked, ok := state.(stateTracingHooks); ok {
+		cfg.Tracer = hooked.Hooks()
+	} else {
+		cfg.Tracer = nil
+	}
+
+	return cfg
 }
 
 func (c *Bor) checkAndCommitSpan(
@@ -1907,7 +1998,7 @@ func (c *Bor) FetchAndCommitSpan(
 		)
 	}
 
-	return c.spanner.CommitSpan(ctx, minSpan, validators, producers, state, header, chain, c.vmConfig)
+	return c.spanner.CommitSpan(ctx, minSpan, validators, producers, state, header, chain, c.systemTxVMConfig(state))
 }
 
 // CommitStates commit states
@@ -2018,6 +2109,8 @@ func (c *Bor) CommitStates(
 
 	var gasUsed uint64
 
+	vmConfig := c.systemTxVMConfig(state)
+
 	for _, eventRecord := range eventRecords {
 		if eventRecord.ID <= lastStateID {
 			continue
@@ -2063,7 +2156,7 @@ func (c *Bor) CommitStates(
 
 		// Receipt construction expects the receiver call to emit at least one log.
 		// A receiver without code can complete without producing one.
-		gasUsed, err = c.GenesisContractsClient.CommitState(eventRecord, state, header, chain, c.vmConfig)
+		gasUsed, err = c.GenesisContractsClient.CommitState(eventRecord, state, header, chain, vmConfig)
 		if err != nil {
 			return nil, err
 		}

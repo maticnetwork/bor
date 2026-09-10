@@ -34,9 +34,13 @@ import (
 	"strconv"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core"
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/rlp"
 )
+
+type genesis struct {
+	Alloc types.GenesisAlloc `json:"alloc"`
+}
 
 type allocItem struct {
 	Addr    *big.Int
@@ -55,7 +59,7 @@ type allocItemStorageItem struct {
 	Val common.Hash
 }
 
-func makelist(g *core.Genesis) []allocItem {
+func makelist(g *genesis) []allocItem {
 	items := make([]allocItem, 0, len(g.Alloc))
 	for addr, account := range g.Alloc {
 		var misc *allocItemMisc
@@ -81,7 +85,7 @@ func makelist(g *core.Genesis) []allocItem {
 	return items
 }
 
-func makealloc(g *core.Genesis) string {
+func makealloc(g *genesis) string {
 	a := makelist(g)
 	data, err := rlp.EncodeToBytes(a)
 	if err != nil {
@@ -96,7 +100,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	g := new(core.Genesis)
+	g := new(genesis)
 	file, err := os.Open(os.Args[1])
 	if err != nil {
 		panic(err)

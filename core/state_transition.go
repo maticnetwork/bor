@@ -189,6 +189,13 @@ type Message struct {
 
 // TransactionToMessage converts a transaction into a Message.
 func TransactionToMessage(tx *types.Transaction, s types.Signer, baseFee *big.Int) (*Message, error) {
+	msg := TransactionToMessageWithVerifiedSender(tx, common.Address{}, baseFee)
+	sender, err := types.Sender(s, tx)
+	msg.From = sender
+	return msg, err
+}
+
+func TransactionToMessageWithVerifiedSender(tx *types.Transaction, sender common.Address, baseFee *big.Int) *Message {
 	msg := &Message{
 		Nonce:                 tx.Nonce(),
 		GasLimit:              tx.Gas(),
@@ -204,6 +211,7 @@ func TransactionToMessage(tx *types.Transaction, s types.Signer, baseFee *big.In
 		SkipTransactionChecks: false,
 		BlobHashes:            tx.BlobHashes(),
 		BlobGasFeeCap:         tx.BlobGasFeeCap(),
+		From:                  sender,
 	}
 	// If baseFee provided, set gasPrice to effectiveGasPrice.
 	if baseFee != nil {
@@ -213,10 +221,7 @@ func TransactionToMessage(tx *types.Transaction, s types.Signer, baseFee *big.In
 		}
 	}
 
-	var err error
-	msg.From, err = types.Sender(s, tx)
-
-	return msg, err
+	return msg
 }
 
 // ApplyMessage computes the new state by applying the given message

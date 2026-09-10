@@ -664,6 +664,7 @@ func InspectDatabase(db ethdb.Database, keyPrefix, keyStart []byte) error {
 		filterMapRows      stat
 		filterMapLastBlock stat
 		filterMapBlockLV   stat
+		invalidPreconfs    stat
 
 		// Path-mode archive data
 		stateIndex stat
@@ -753,6 +754,8 @@ func InspectDatabase(db ethdb.Database, keyPrefix, keyStart []byte) error {
 				filterMapLastBlock.add(size)
 			case bytes.HasPrefix(key, filterMapBlockLVPrefix) && len(key) == len(filterMapBlockLVPrefix)+8:
 				filterMapBlockLV.add(size)
+			case bytes.HasPrefix(key, invalidPreconfPrefix) && len(key) == len(invalidPreconfPrefix)+8:
+				invalidPreconfs.add(size)
 
 			// old log index (deprecated)
 			case bytes.HasPrefix(key, bloomBitsPrefix) && len(key) == (len(bloomBitsPrefix)+10+common.HashLength):
@@ -853,6 +856,7 @@ func InspectDatabase(db ethdb.Database, keyPrefix, keyStart []byte) error {
 		{"Key-Value store", "Log index filter-map rows", filterMapRows.sizeString(), filterMapRows.countString()},
 		{"Key-Value store", "Log index last-block-of-map", filterMapLastBlock.sizeString(), filterMapLastBlock.countString()},
 		{"Key-Value store", "Log index block-lv", filterMapBlockLV.sizeString(), filterMapBlockLV.countString()},
+		{"Key-Value store", "Invalid preconfirmations", invalidPreconfs.sizeString(), invalidPreconfs.countString()},
 		{"Key-Value store", "Log bloombits (deprecated)", bloomBits.sizeString(), bloomBits.countString()},
 		{"Key-Value store", "Contract codes", codes.sizeString(), codes.countString()},
 		{"Key-Value store", "Hash trie nodes", legacyTries.sizeString(), legacyTries.countString()},

@@ -22,8 +22,10 @@ const (
 	maxQueuedWitnesses = 10
 
 	// maxQueuedWitnessAnns is the maximum number of witness announcements to queue up before
-	// dropping broadcasts
-	maxQueuedWitnessAnns = 10
+	// dropping broadcasts. Bumped from 10 to 64 in WIT2 to absorb transitive-relay bursts;
+	// each announcement is small (33 bytes per entry, 130 bytes signed) so the memory
+	// footprint stays well under 10KB per peer.
+	maxQueuedWitnessAnns = 64
 )
 
 // Peer is a collection of relevant information we have about a `wit` peer.
@@ -36,9 +38,11 @@ type Peer struct {
 
 	logger log.Logger // Contextual logger with the peer id injected
 
-	knownWitnesses    *KnownCache                  // Set of witness hashes (`witness.Headers[0].Hash()`) known to be known by this peer
-	queuedWitness     chan *stateless.Witness      // Queue of witness to broadcast to this peer
-	queuedWitnessAnns chan *NewWitnessHashesPacket // Queue of witness announcements to this peer
+	knownWitnesses    *KnownCache                        // Witness hashes this peer is known to HAVE (body served, body broadcast received). Feeds body-fetch peer selection.
+	knownAnnounces    *KnownCache                        // Witness hashes this peer has SEEN an announcement for, but not necessarily the body. Used only to suppress redundant announce relay.
+	queuedWitness     chan *stateless.Witness            // Queue of witness to broadcast to this peer
+	queuedWitnessAnns chan *NewWitnessHashesPacket       // Queue of unsigned witness announcements to this peer (WIT1)
+	queuedSignedAnns  chan *SignedNewWitnessHashesPacket // Queue of signed witness announcements to this peer (WIT2)
 
 	reqDispatch chan *request  // Dispatch channel to send witness requests and track them until fulfillment
 	reqCancel   chan *cancel   // Dispatch channel to cancel pending witness requests
@@ -57,8 +61,10 @@ func NewPeer(version uint, p *p2p.Peer, rw p2p.MsgReadWriter, logger log.Logger)
 		version:           version,
 		logger:            logger.With("peer", id),
 		knownWitnesses:    newKnownCache(maxKnownWitnesses),
+		knownAnnounces:    newKnownCache(maxKnownWitnesses),
 		queuedWitness:     make(chan *stateless.Witness, maxQueuedWitnesses),
 		queuedWitnessAnns: make(chan *NewWitnessHashesPacket, maxQueuedWitnessAnns),
+		queuedSignedAnns:  make(chan *SignedNewWitnessHashesPacket, maxQueuedWitnessAnns),
 		reqDispatch:       make(chan *request),
 		reqCancel:         make(chan *cancel),
 		resDispatch:       make(chan *response),
@@ -85,6 +91,12 @@ func (p *Peer) sendNewWitness(witness *stateless.Witness) error {
 // sendNewWitnessHashes sends witness hashes to the peer
 func (p *Peer) sendNewWitnessHashes(packet *NewWitnessHashesPacket) error {
 	return p2p.Send(p.rw, NewWitnessHashesMsg, packet)
+}
+
+// sendSignedNewWitnessHashes sends signed witness announcements to the peer.
+// Only valid for WIT2+ peers; the caller must check Version() before invoking.
+func (p *Peer) sendSignedNewWitnessHashes(packet *SignedNewWitnessHashesPacket) error {
+	return p2p.Send(p.rw, SignedNewWitnessHashesMsg, packet)
 }
 
 // AsyncSendNewWitness queues an entire witness for broadcast to the peer. The
@@ -114,6 +126,26 @@ func (p *Peer) AsyncSendNewWitnessHash(hash common.Hash, number uint64) {
 		p.knownWitnesses.Add(hash)
 	default:
 		p.logger.Debug("Dropped witness hashes propagation.", "hashes", hash, "peer", p.id)
+	}
+}
+
+// AsyncSendSignedWitnessAnnouncement queues a BP-signed witness announcement
+// for broadcast to the peer. The peer must speak WIT2 or higher; callers are
+// responsible for checking Version(). The block hash is added to the peer's
+// announce-known set (NOT the body-known set) so subsequent announce gossip
+// on the same hash is suppressed, while body-fetch peer selection is not
+// misled into asking this peer for bytes it does not yet have.
+func (p *Peer) AsyncSendSignedWitnessAnnouncement(ann SignedWitnessAnnouncement) {
+	if p.version < WIT2 {
+		return
+	}
+	select {
+	case p.queuedSignedAnns <- &SignedNewWitnessHashesPacket{
+		Announcements: []SignedWitnessAnnouncement{ann},
+	}:
+		p.knownAnnounces.Add(ann.BlockHash)
+	default:
+		p.logger.Debug("Dropped signed witness announcement.", "blockHash", ann.BlockHash, "peer", p.id)
 	}
 }
 
@@ -199,6 +231,20 @@ func (p *Peer) KnownWitnesses() *KnownCache {
 // AddKnownWitnesses adds a witness hash to the set of known witness hashes.
 func (p *Peer) AddKnownWitness(hash common.Hash) {
 	p.knownWitnesses.Add(hash)
+}
+
+// AddKnownAnnounce records that this peer has seen the signed announcement for
+// `hash`, without claiming the peer holds the body. Used to suppress redundant
+// announce-relay only; body-fetch peer selection ignores this set.
+func (p *Peer) AddKnownAnnounce(hash common.Hash) {
+	p.knownAnnounces.Add(hash)
+}
+
+// KnownAnnounceContainsHash reports whether this peer is known to have seen an
+// announcement for `hash` (either inbound or outbound). False does not imply
+// the peer is unaware — only that this side has no record.
+func (p *Peer) KnownAnnounceContainsHash(hash common.Hash) bool {
+	return p.knownAnnounces.hashes.Contains(hash)
 }
 
 // KnownWitnessesCount returns the number of known witness.

@@ -42,6 +42,90 @@ type Backend interface {
 	BlockChain() *core.BlockChain
 	TxPool() *txpool.TxPool
 	PeerCount() int
+
+	// WhitelistedMilestone is finality's view of the chain: the newest
+	// Heimdall milestone the node has whitelisted, or false when none has
+	// arrived yet. The worker's finality gate compares it against the local
+	// chain before a producer builds.
+	WhitelistedMilestone() (bool, uint64, common.Hash)
+}
+
+// AdoptedWindow is a previous producer's unsealed block handed back by the
+// sequence store: the open context the block must inherit and the ordered
+// transactions to commit before consulting the txpool.
+type AdoptedWindow struct {
+	Number     uint64
+	Timestamp  uint64
+	ParentHash common.Hash
+	GasLimit   uint64
+	BaseFee    *big.Int
+	Txs        []*types.Transaction
+}
+
+// SealVerdict is the store's answer to "may this sealed block be broadcast".
+// The zero value is SealUnknown so an implementation that never answers
+// defaults to broadcasting — production must not gate on the store.
+type SealVerdict int
+
+const (
+	// SealUnknown: no verdict in budget (store slow, unreachable, or catching
+	// up). Broadcast anyway — the liveness override.
+	SealUnknown SealVerdict = iota
+
+	// SealConfirmed: the store took our seal (or the chain already holds our
+	// exact block). Broadcast.
+	SealConfirmed
+
+	// SealRefused: another producer's block owns this height — its seal beat
+	// ours in the store and its block is on our chain. Discard ours;
+	// broadcasting it would fork the chain against an already-decided height.
+	SealRefused
+)
+
+// BlockSequencer receives block-production progress for the sequence store:
+// the block context when a build starts, each transaction as it commits, and
+// the sealed header the moment sealing completes. Implementations must never
+// block — they are called on the worker's hot paths.
+type BlockSequencer interface {
+	OpenBlock(number uint64, timestamp uint64, parent common.Hash, gasLimit uint64, baseFee *big.Int)
+	PublishTx(tx *types.Transaction)
+
+	// SealBlock delivers the complete sealed block: the seal flush needs
+	// the body to complete or re-anchor the store window (design §3.5).
+	SealBlock(block *types.Block)
+
+	// AdoptWindow reads the store tail for the block about to be built
+	// (bounded; design §3.4). A returned window is an unsealed incumbent
+	// window on this tip that the build must follow: the header inherits
+	// its context and its transactions are committed first. nil means
+	// build normally.
+	AdoptWindow(number uint64, parent common.Hash) *AdoptedWindow
+
+	// AwaitSequenced blocks until the window being built is confirmed by
+	// the store, so the block about to be sealed is provably the store's
+	// sequence at this height. false means another producer holds the
+	// height and this block must not be sealed. An unreachable store
+	// returns true — production never waits on the store.
+	AwaitSequenced(timeout time.Duration, number uint64, txs []*types.Transaction) bool
+
+	// ResyncNeeded reports that another producer holds the height this
+	// node is building and reached the store first. The build stops rather
+	// than seal beside their sequence; the next work cycle adopts it.
+	// Reading consumes the signal.
+	ResyncNeeded() bool
+
+	// ConfirmSeal reports whether the block just handed to SealBlock may be
+	// broadcast, waiting up to timeout for the store's verdict. The store's
+	// head CAS elects exactly one seal per height; the loser learns it lost
+	// and withholds its block, so one height gets one broadcast.
+	ConfirmSeal(timeout time.Duration) SealVerdict
+
+	// RefreshInterval is the mempool re-snapshot cadence while a block is
+	// open: when non-zero the worker keeps the block open until just before
+	// its announce time, refilling from the pool on this cadence so
+	// transactions are executed (and preconfirmed) as they arrive. Zero
+	// keeps the default one-shot fill.
+	RefreshInterval() time.Duration
 }
 
 // Config is the configuration parameters of mining.
@@ -133,6 +217,12 @@ func (miner *Miner) GetWorker() *worker {
 	return miner.worker
 }
 
+// SetSequencer attaches a sequence-store publisher to the worker. Call before
+// the miner starts; the worker reads the field without synchronization.
+func (miner *Miner) SetSequencer(s BlockSequencer) {
+	miner.worker.sequencer = s
+}
+
 // update keeps track of the downloader events. Please be aware that this is a one shot type of update loop.
 // It's entered once and as soon as `Done` or `Failed` has been broadcasted the events are unregistered and
 // the loop is exited. This to prevent a major security vuln where external parties can DOS you with blocks
@@ -181,6 +271,8 @@ func (miner *Miner) update() {
 				if shouldStart {
 					miner.worker.start()
 				}
+
+				miner.worker.rearmFinalityGrace()
 				miner.worker.syncing.Store(false)
 
 			case downloader.DoneEvent:
@@ -189,6 +281,8 @@ func (miner *Miner) update() {
 				if shouldStart {
 					miner.worker.start()
 				}
+
+				miner.worker.rearmFinalityGrace()
 				miner.worker.syncing.Store(false)
 
 				// Stop reacting to downloader events

@@ -63,6 +63,7 @@ type Backend interface {
 	UnprotectedAllowed() bool      // allows only for EIP155 transactions.
 	RPCTxSyncDefaultTimeout() time.Duration
 	RPCTxSyncMaxTimeout() time.Duration
+	RPCTxSyncMaxConcurrent() int
 
 	// Preconf / Private tx related API for relay
 	PreconfEnabled() bool
@@ -169,6 +170,42 @@ type Backend interface {
 	GetWork() ([4]string, error)
 	SubmitWork(nonce types.BlockNonce, hash, digest common.Hash) (bool, error)
 	SubmitHashrate(rate hexutil.Uint64, id common.Hash) (bool, error)
+}
+
+type pendingMetadataBackend interface {
+	PendingBlock() *types.Block
+	PendingBlockAndReceipts() (*types.Block, types.Receipts)
+}
+
+type pendingSnapshotBackend interface {
+	PendingSnapshot(context.Context) (*types.Block, types.Receipts, *state.StateDB, error)
+}
+
+func pendingBlock(backend Backend) *types.Block {
+	if metadata, ok := backend.(pendingMetadataBackend); ok {
+		return metadata.PendingBlock()
+	}
+	block, _, _ := backend.Pending()
+	return block
+}
+
+func pendingBlockAndReceipts(backend Backend) (*types.Block, types.Receipts) {
+	if metadata, ok := backend.(pendingMetadataBackend); ok {
+		return metadata.PendingBlockAndReceipts()
+	}
+	block, receipts, _ := backend.Pending()
+	return block, receipts
+}
+
+func pendingSnapshot(ctx context.Context, backend Backend) (*types.Block, types.Receipts, *state.StateDB, error) {
+	if snapshot, ok := backend.(pendingSnapshotBackend); ok {
+		return snapshot.PendingSnapshot(ctx)
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, nil, nil, err
+	}
+	block, receipts, statedb := backend.Pending()
+	return block, receipts, statedb, nil
 }
 
 func GetAPIs(apiBackend Backend) []rpc.API {

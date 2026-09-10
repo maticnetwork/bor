@@ -115,6 +115,7 @@ const (
 	errCodeReverted                = -32000
 	errCodeVMError                 = -32015
 	errCodeTxSyncTimeout           = 4
+	errCodeTxSyncBusy              = -32005
 )
 
 func txValidationError(err error) *invalidTxError {
@@ -175,6 +176,19 @@ type blockGasLimitReachedError struct{ message string }
 
 func (e *blockGasLimitReachedError) Error() string  { return e.message }
 func (e *blockGasLimitReachedError) ErrorCode() int { return errCodeBlockGasLimitReached }
+
+// errTxSyncBusy is returned instead of admitting a waiter the node has no room
+// for. It carries no hash because the transaction was never submitted: the
+// caller can retry, or fall back to eth_sendRawTransaction and poll.
+var errTxSyncBusy = &txSyncBusyError{}
+
+type txSyncBusyError struct{}
+
+func (e *txSyncBusyError) Error() string {
+	return "too many transactions waiting for a synchronous receipt"
+}
+
+func (e *txSyncBusyError) ErrorCode() int { return errCodeTxSyncBusy }
 
 func (e *txSyncTimeoutError) Error() string          { return e.msg }
 func (e *txSyncTimeoutError) ErrorCode() int         { return errCodeTxSyncTimeout }

@@ -58,6 +58,14 @@ func TestUnmarshalJSONNewFilterArgs(t *testing.T) {
 		t.Fatalf("expected 0 topics, got %d topics", len(test0.Topics))
 	}
 
+	var pending FilterCriteria
+	if err := json.Unmarshal([]byte(`{"pending":true}`), &pending); err != nil {
+		t.Fatal(err)
+	}
+	if !pending.Pending {
+		t.Fatal("expected pending opt-in")
+	}
+
 	// from, to block number
 	var test1 FilterCriteria
 	vector := fmt.Sprintf(`{"fromBlock":"%v","toBlock":"%v"}`, fromBlock, toBlock)

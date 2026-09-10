@@ -84,10 +84,12 @@ type Account struct {
 	blockNrOrHash rpc.BlockNumberOrHash
 }
 
-// getState fetches the StateDB object for an account.
-func (a *Account) getState(ctx context.Context) (*state.StateDB, error) {
-	state, _, err := a.r.backend.StateAndHeaderByNumberOrHash(ctx, a.blockNrOrHash)
-	return state, err
+// getState fetches the StateDB object for an account. Callers must invoke the
+// returned release function so a pending-state snapshot does not remain leased.
+func (a *Account) getState(ctx context.Context) (*state.StateDB, context.CancelFunc, error) {
+	callCtx, cancel := context.WithCancel(ctx)
+	state, _, err := a.r.backend.StateAndHeaderByNumberOrHash(callCtx, a.blockNrOrHash)
+	return state, cancel, err
 }
 
 func (a *Account) Address(ctx context.Context) (common.Address, error) {
@@ -95,7 +97,8 @@ func (a *Account) Address(ctx context.Context) (common.Address, error) {
 }
 
 func (a *Account) Balance(ctx context.Context) (hexutil.Big, error) {
-	state, err := a.getState(ctx)
+	state, release, err := a.getState(ctx)
+	defer release()
 	if err != nil {
 		return hexutil.Big{}, err
 	}
@@ -115,7 +118,8 @@ func (a *Account) TransactionCount(ctx context.Context) (hexutil.Uint64, error) 
 		}
 		return hexutil.Uint64(nonce), nil
 	}
-	state, err := a.getState(ctx)
+	state, release, err := a.getState(ctx)
+	defer release()
 	if err != nil {
 		return 0, err
 	}
@@ -123,7 +127,8 @@ func (a *Account) TransactionCount(ctx context.Context) (hexutil.Uint64, error) 
 }
 
 func (a *Account) Code(ctx context.Context) (hexutil.Bytes, error) {
-	state, err := a.getState(ctx)
+	state, release, err := a.getState(ctx)
+	defer release()
 	if err != nil {
 		return hexutil.Bytes{}, err
 	}
@@ -131,7 +136,8 @@ func (a *Account) Code(ctx context.Context) (hexutil.Bytes, error) {
 }
 
 func (a *Account) Storage(ctx context.Context, args struct{ Slot common.Hash }) (common.Hash, error) {
-	state, err := a.getState(ctx)
+	state, release, err := a.getState(ctx)
+	defer release()
 	if err != nil {
 		return common.Hash{}, err
 	}
@@ -1251,8 +1257,10 @@ func (p *Pending) Account(ctx context.Context, args struct {
 func (p *Pending) Call(ctx context.Context, args struct {
 	Data ethapi.TransactionArgs
 }) (*CallResult, error) {
+	callCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	pendingBlockNr := rpc.BlockNumberOrHashWithNumber(rpc.PendingBlockNumber)
-	result, err := ethapi.DoCall(ctx, p.r.backend, args.Data, pendingBlockNr, nil, nil, nil, p.r.backend.RPCEVMTimeout(), p.r.backend.RPCGasCap())
+	result, err := ethapi.DoCall(callCtx, p.r.backend, args.Data, pendingBlockNr, nil, nil, nil, p.r.backend.RPCEVMTimeout(), p.r.backend.RPCGasCap())
 	if err != nil {
 		return nil, err
 	}

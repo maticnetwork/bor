@@ -2,6 +2,8 @@ package relay
 
 import (
 	"context"
+	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -17,6 +19,7 @@ import (
 
 const (
 	rpcTimeout             = 2 * time.Second
+	preconfBatchRPCTimeout = 10 * time.Second
 	privateTxRetryInterval = 2 * time.Second
 	privateTxMaxRetries    = 5
 )
@@ -51,6 +54,7 @@ func isAlreadyKnownError(err error) bool {
 // to perform certain queries across all of them and make a unified decision.
 type multiClient struct {
 	clients       []*rpc.Client // rpc client instances dialed to each block producer
+	transports    []*http.Transport
 	closed        atomic.Bool
 	retryInterval time.Duration // 0 means use privateTxRetryInterval; configurable for testing
 
@@ -60,18 +64,23 @@ type multiClient struct {
 }
 
 func newMultiClient(urls []string) *multiClient {
+	return newMultiClientWithLimit(urls, DefaultServiceConfig.maxConcurrentTasks)
+}
+
+func newMultiClientWithLimit(urls []string, maxConcurrent int) *multiClient {
 	if len(urls) == 0 {
 		log.Warn("[tx-relay] No block producer URLs provided")
 		return nil
 	}
 
 	clients := make([]*rpc.Client, 0, len(urls))
+	transports := make([]*http.Transport, 0, len(urls))
 	failed := 0
 	for i, url := range urls {
 		// We use the rpc dialer for primarily 2 reasons:
 		// 1. It supports automatic reconnection when connection is lost
 		// 2. It allows us to do rpc queries which aren't directly available in ethclient (like txpool_contentFrom)
-		client, err := rpc.Dial(url)
+		client, transport, err := dialRelayEndpoint(url, maxConcurrent)
 		if err != nil {
 			failed++
 			log.Warn("[tx-relay] Failed to dial rpc endpoint, skipping", "url", url, "index", i, "err", err)
@@ -85,6 +94,9 @@ func newMultiClient(urls []string) *multiClient {
 		cancel()
 		if err != nil {
 			client.Close()
+			if transport != nil {
+				transport.CloseIdleConnections()
+			}
 			failed++
 			log.Warn("[tx-relay] Failed to fetch latest block number, skipping", "url", url, "index", i, "err", err)
 			continue
@@ -93,6 +105,9 @@ func newMultiClient(urls []string) *multiClient {
 		number, err := hexutil.DecodeUint64(blockNumber)
 		if err != nil {
 			client.Close()
+			if transport != nil {
+				transport.CloseIdleConnections()
+			}
 			failed++
 			log.Warn("[tx-relay] Failed to decode latest block number, skipping", "url", url, "index", i, "err", err)
 			continue
@@ -100,6 +115,7 @@ func newMultiClient(urls []string) *multiClient {
 
 		log.Info("[tx-relay] Dial successful", "blockNumber", number, "index", i)
 		clients = append(clients, client)
+		transports = append(transports, transport)
 	}
 
 	if failed == len(urls) {
@@ -110,10 +126,34 @@ func newMultiClient(urls []string) *multiClient {
 	log.Info("[tx-relay] Initialised rpc client for each block producer", "success", len(clients), "failed", failed)
 	mc := &multiClient{
 		clients:      clients,
+		transports:   transports,
 		reporterDone: make(chan struct{}),
 	}
 	go mc.reportRejections()
 	return mc
+}
+
+func dialRelayEndpoint(rawURL string, maxConcurrent int) (*rpc.Client, *http.Transport, error) {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return nil, nil, err
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		client, err := rpc.Dial(rawURL)
+		return client, nil, err
+	}
+
+	maxConnections := max(1, maxConcurrent)
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.MaxIdleConns = maxConnections
+	transport.MaxIdleConnsPerHost = maxConnections
+	transport.MaxConnsPerHost = maxConnections
+	client, err := rpc.DialOptions(context.Background(), rawURL, rpc.WithHTTPClient(&http.Client{Transport: transport}))
+	if err != nil {
+		transport.CloseIdleConnections()
+		return nil, nil, err
+	}
+	return client, transport, nil
 }
 
 type SendTxForPreconfResponse struct {
@@ -121,7 +161,94 @@ type SendTxForPreconfResponse struct {
 	Preconfirmed bool        `json:"preconfirmed"`
 }
 
+type preconfSubmissionResult struct {
+	preconfirmed bool
+	err          error
+}
+
 func (mc *multiClient) submitPreconfTx(rawTx []byte) (bool, error) {
+	return mc.submitPreconfTxWithPendingWait(rawTx, true)
+}
+
+func (mc *multiClient) submitPreconfTxWithoutPendingWait(rawTx []byte) (bool, error) {
+	return mc.submitPreconfTxWithPendingWait(rawTx, false)
+}
+
+func (mc *multiClient) submitPreconfTxBatchWithoutPendingWait(rawTxs [][]byte) []preconfSubmissionResult {
+	results := make([]preconfSubmissionResult, len(rawTxs))
+	if len(rawTxs) == 0 {
+		return results
+	}
+	type clientResults struct {
+		responses []SendTxForPreconfResponse
+		errors    []error
+	}
+	allResults := make(chan clientResults, len(mc.clients))
+	for _, client := range mc.clients {
+		go func(client *rpc.Client) {
+			responses, errors, err := callPreconfBatch(client, rawTxs)
+			if err != nil {
+				responses, errors, _ = callPreconfBatch(client, rawTxs)
+			}
+			allResults <- clientResults{responses: responses, errors: errors}
+		}(client)
+	}
+	accepted := make([]int, len(rawTxs))
+	for range mc.clients {
+		clientResult := <-allResults
+		for i, err := range clientResult.errors {
+			if err != nil {
+				preconfRpcFailureMeter.Mark(1)
+				mc.rejectionTracker.record(err)
+				if isAlreadyKnownError(err) {
+					preconfRpcAlreadyKnownMeter.Mark(1)
+					accepted[i]++
+					continue
+				}
+				if results[i].err == nil {
+					results[i].err = err
+				}
+				continue
+			}
+			preconfRpcSuccessMeter.Mark(1)
+			if clientResult.responses[i].Preconfirmed {
+				accepted[i]++
+			}
+		}
+	}
+	for i := range results {
+		results[i].preconfirmed = accepted[i] == len(mc.clients)
+		if !results[i].preconfirmed && results[i].err == nil {
+			belowThresholdPreconfMeter.Mark(1)
+		}
+	}
+	return results
+}
+
+func callPreconfBatch(client *rpc.Client, rawTxs [][]byte) ([]SendTxForPreconfResponse, []error, error) {
+	responses := make([]SendTxForPreconfResponse, len(rawTxs))
+	batch := make([]rpc.BatchElem, len(rawTxs))
+	for i, rawTx := range rawTxs {
+		batch[i] = rpc.BatchElem{
+			Method: "eth_sendRawTransactionForPreconf",
+			Args:   []any{hexutil.Encode(rawTx), false},
+			Result: &responses[i],
+		}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), preconfBatchRPCTimeout)
+	err := client.BatchCallContext(ctx, batch)
+	cancel()
+	errors := make([]error, len(rawTxs))
+	for i := range batch {
+		errors[i] = batch[i].Error
+		if errors[i] == nil && err != nil {
+			errors[i] = err
+		}
+	}
+	return responses, errors, err
+}
+
+func (mc *multiClient) submitPreconfTxWithPendingWait(rawTx []byte, waitForPending bool) (bool, error) {
 	// Submit tx to all block producers in parallel
 	var (
 		firstErr            error
@@ -137,7 +264,12 @@ func (mc *multiClient) submitPreconfTx(rawTx []byte) (bool, error) {
 			callStart := time.Now()
 			var preconfResponse SendTxForPreconfResponse
 			ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
-			err := client.CallContext(ctx, &preconfResponse, "eth_sendRawTransactionForPreconf", hexutil.Encode(rawTx))
+			var err error
+			if waitForPending {
+				err = client.CallContext(ctx, &preconfResponse, "eth_sendRawTransactionForPreconf", hexutil.Encode(rawTx))
+			} else {
+				err = client.CallContext(ctx, &preconfResponse, "eth_sendRawTransactionForPreconf", hexutil.Encode(rawTx), false)
+			}
 			cancel()
 			elapsed := time.Since(callStart)
 
@@ -388,6 +520,11 @@ func (mc *multiClient) close() {
 		}
 		for _, client := range mc.clients {
 			client.Close()
+		}
+		for _, transport := range mc.transports {
+			if transport != nil {
+				transport.CloseIdleConnections()
+			}
 		}
 	})
 }

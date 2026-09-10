@@ -967,6 +967,20 @@ func (mr *MockBackendMockRecorder) RPCTxSyncDefaultTimeout() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RPCTxSyncDefaultTimeout", reflect.TypeOf((*MockBackend)(nil).RPCTxSyncDefaultTimeout))
 }
 
+// RPCTxSyncMaxConcurrent mocks base method.
+func (m *MockBackend) RPCTxSyncMaxConcurrent() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RPCTxSyncMaxConcurrent")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// RPCTxSyncMaxConcurrent indicates an expected call of RPCTxSyncMaxConcurrent.
+func (mr *MockBackendMockRecorder) RPCTxSyncMaxConcurrent() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RPCTxSyncMaxConcurrent", reflect.TypeOf((*MockBackend)(nil).RPCTxSyncMaxConcurrent))
+}
+
 // RPCTxSyncMaxTimeout mocks base method.
 func (m *MockBackend) RPCTxSyncMaxTimeout() time.Duration {
 	m.ctrl.T.Helper()

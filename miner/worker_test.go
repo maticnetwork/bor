@@ -60,8 +60,9 @@ import (
 )
 
 // TestPendingStateNotStaleForNonValidator verifies that a Bor node whose signer
-// is NOT in the active validator set still keeps its pending snapshot fresh.
-// Regression test: previously, Prepare() returned UnauthorizedSignerError for
+// is NOT in the active validator set still keeps its pending snapshot fresh —
+// while, with a sequencer attached, publishing nothing to the store. Regression
+// test: previously, Prepare() returned UnauthorizedSignerError for
 // non-validators, which caused prepareWork to fail and the snapshot to never
 // update, leading to stale trie errors on "pending" RPC queries.
 func TestPendingStateNotStaleForNonValidator(t *testing.T) {
@@ -82,17 +83,19 @@ func TestPendingStateNotStaleForNonValidator(t *testing.T) {
 	w := newWorker(DefaultTestConfig(), &chainConfig, engine, backend, new(event.TypeMux), nil, false, false)
 	defer w.close()
 
+	// Attach a sequencer: an unauthorized signer's build must stay local.
+	rec := &recordingSequencer{}
+	w.sequencer = rec
+
 	// Override the signer to one NOT in the validator set.
 	engine.(*bor.Bor).Authorize(nonValidatorAddr, func(account accounts.Account, s string, data []byte) ([]byte, error) {
 		return crypto.Sign(crypto.Keccak256(data), nonValidatorKey)
 	})
 	w.setEtherbase(nonValidatorAddr)
 
-	// Start the worker. It will call commitWork which calls Prepare.
-	// Before the fix: Prepare fails with UnauthorizedSignerError, snapshot
-	// is never set, pending() returns nil.
-	// After the fix: Prepare succeeds (defaults succession to 0), snapshot
-	// is updated, pending() returns valid state.
+	// Start the worker. Prepare succeeds for the unauthorized signer
+	// (succession defaults to 0), the snapshot refreshes, and Seal
+	// independently rejects the block.
 	w.start()
 
 	// Give the worker time to process the start event and run commitWork.
@@ -108,6 +111,27 @@ func TestPendingStateNotStaleForNonValidator(t *testing.T) {
 		"pending state balance for funded account should not be zero (would indicate stale trie)")
 	require.NoError(t, pendingState.Error(),
 		"pending state should have no database errors")
+
+	// Nothing of the unauthorized build may reach the sequence store.
+	rec.mu.Lock()
+	opens, txs, seals := len(rec.opens), rec.txs, len(rec.seals)
+	rec.mu.Unlock()
+
+	require.Zero(t, opens, "unauthorized signer must not publish opens")
+	require.Zero(t, txs, "unauthorized signer must not publish transactions")
+	require.Zero(t, seals, "unauthorized signer must not publish seals")
+
+	// The engine reports the signer unauthorized — the signal the miner uses
+	// to keep this build out of the sequence store — and flips once the
+	// validator's own key is restored.
+	require.False(t, engine.(*bor.Bor).IsAuthorizedSigner(w.chain, pendingBlock.Header()),
+		"non-validator signer must not be authorized")
+
+	engine.(*bor.Bor).Authorize(testBankAddress, func(account accounts.Account, s string, data []byte) ([]byte, error) {
+		return crypto.Sign(crypto.Keccak256(data), testBankKey)
+	})
+	require.True(t, engine.(*bor.Bor).IsAuthorizedSigner(w.chain, pendingBlock.Header()),
+		"the validator signer must be authorized")
 }
 
 // nolint : paralleltest
@@ -162,9 +186,7 @@ func testGenerateBlockAndImport(t *testing.T, isClique bool, isBor bool) {
 	// Start mining!
 	w.start()
 
-	var (
-		err error
-	)
+	var err error
 	// []*types.Transaction{tx}
 	var i uint64
 	for i = 0; i < 5; i++ {
@@ -277,6 +299,11 @@ func DefaultTestConfig() *Config {
 
 // testWorkerBackend implements worker.Backend interfaces and wraps all information needed during the testing.
 type testWorkerBackend struct {
+	msMu     sync.Mutex
+	msExists bool
+	msNumber uint64
+	msHash   common.Hash
+
 	db      ethdb.Database
 	txPool  *txpool.TxPool
 	chain   *core.BlockChain
@@ -284,7 +311,7 @@ type testWorkerBackend struct {
 }
 
 func newTestWorkerBackend(t TensingObject, chainConfig *params.ChainConfig, engine consensus.Engine, db ethdb.Database) *testWorkerBackend {
-	var gspec = &core.Genesis{
+	gspec := &core.Genesis{
 		Config: chainConfig,
 		Alloc:  types.GenesisAlloc{testBankAddress: {Balance: testBankFunds}},
 	}
@@ -320,6 +347,22 @@ func newTestWorkerBackend(t TensingObject, chainConfig *params.ChainConfig, engi
 		genesis: gspec,
 	}
 	return b
+}
+
+// setMilestone drives the finality gate in tests: the whitelisted milestone
+// the backend reports to the worker.
+func (b *testWorkerBackend) setMilestone(number uint64, hash common.Hash) {
+	b.msMu.Lock()
+	defer b.msMu.Unlock()
+
+	b.msExists, b.msNumber, b.msHash = true, number, hash
+}
+
+func (b *testWorkerBackend) WhitelistedMilestone() (bool, uint64, common.Hash) {
+	b.msMu.Lock()
+	defer b.msMu.Unlock()
+
+	return b.msExists, b.msNumber, b.msHash
 }
 
 func (b *testWorkerBackend) BlockChain() *core.BlockChain { return b.chain }
@@ -544,6 +587,7 @@ func TestEmptyWorkEthash(t *testing.T) {
 	t.Skip()
 	testEmptyWork(t, ethashChainConfig, ethash.NewFaker())
 }
+
 func TestEmptyWorkClique(t *testing.T) {
 	t.Skip()
 	testEmptyWork(t, cliqueChainConfig, clique.New(cliqueChainConfig.Clique, rawdb.NewMemoryDatabase()))
@@ -748,7 +792,7 @@ func testGetSealingWork(t *testing.T, chainConfig *params.ChainConfig, engine co
 			t.Errorf("Mismatched block number, want %d got %d", number, block.NumberU64())
 		}
 	}
-	var cases = []struct {
+	cases := []struct {
 		parent       common.Hash
 		coinbase     common.Address
 		random       common.Hash

@@ -57,6 +57,50 @@ func TestClientRequest(t *testing.T) {
 	}
 }
 
+type batchContextService struct {
+	mu    sync.Mutex
+	first context.Context
+}
+
+func (s *batchContextService) Check(ctx context.Context, index int) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if index == 0 {
+		s.first = ctx
+		return true
+	}
+	return s.first != nil && s.first.Err() == context.Canceled
+}
+
+func TestServerCancelsEachBatchCallContext(t *testing.T) {
+	t.Parallel()
+
+	server := NewServer("", 0, 0)
+	defer server.Stop()
+	if err := server.RegisterName("batchctx", new(batchContextService)); err != nil {
+		t.Fatal(err)
+	}
+	client := DialInProc(server)
+	defer client.Close()
+
+	var first, second bool
+	batch := []BatchElem{
+		{Method: "batchctx_check", Args: []any{0}, Result: &first},
+		{Method: "batchctx_check", Args: []any{1}, Result: &second},
+	}
+	if err := client.BatchCallContext(t.Context(), batch); err != nil {
+		t.Fatal(err)
+	}
+	for i, elem := range batch {
+		if elem.Error != nil {
+			t.Fatalf("batch element %d failed: %v", i, elem.Error)
+		}
+	}
+	if !first || !second {
+		t.Fatalf("call contexts not canceled independently: first=%t second=%t", first, second)
+	}
+}
+
 func TestClientResponseType(t *testing.T) {
 	t.Parallel()
 

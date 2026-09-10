@@ -681,6 +681,12 @@ var (
 		Value:    ethconfig.Defaults.TxSyncMaxTimeout,
 		Category: flags.APICategory,
 	}
+	RPCTxSyncMaxConcurrentFlag = &cli.IntFlag{
+		Name:     "rpc.txsync.maxconcurrent",
+		Usage:    "Maximum eth_sendRawTransactionSync calls waiting for a receipt at once (0 = no limit)",
+		Value:    ethconfig.Defaults.TxSyncMaxConcurrent,
+		Category: flags.APICategory,
+	}
 	// Authenticated RPC HTTP settings
 	AuthListenFlag = &cli.StringFlag{
 		Name:     "authrpc.addr",
@@ -1891,6 +1897,10 @@ func SetEthConfig(ctx *cli.Context, stack *node.Node, cfg *ethconfig.Config) {
 	if ctx.IsSet(RPCTxSyncDefaultTimeoutFlag.Name) {
 		cfg.TxSyncDefaultTimeout = ctx.Duration(RPCTxSyncDefaultTimeoutFlag.Name)
 	}
+	if ctx.IsSet(RPCTxSyncMaxConcurrentFlag.Name) {
+		cfg.TxSyncMaxConcurrent = ctx.Int(RPCTxSyncMaxConcurrentFlag.Name)
+	}
+
 	if ctx.IsSet(RPCTxSyncMaxTimeoutFlag.Name) {
 		cfg.TxSyncMaxTimeout = ctx.Duration(RPCTxSyncMaxTimeoutFlag.Name)
 	}

@@ -777,7 +777,7 @@ func handlePooledTransactions(backend Backend, msg Decoder, peer *Peer) error {
 
 	requestTracker.Fulfil(peer.id, peer.version, PooledTransactionsMsg, txs.RequestId)
 
-	return backend.Handle(peer, &txs.PooledTransactionsResponse)
+	return backend.Handle(peer, &txs)
 }
 
 func handleBlockRangeUpdate(backend Backend, msg Decoder, peer *Peer) error {

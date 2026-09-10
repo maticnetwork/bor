@@ -66,6 +66,32 @@ func handleNewWitnessHashes(backend Backend, msg Decoder, peer *Peer) error {
 	return backend.Handle(peer, req)
 }
 
+// MaxSignedAnnouncesPerPacket caps how many signed witness announcements a
+// single SignedNewWitnessHashesPacket may carry. Each announcement triggers
+// ecrecover and a header lookup downstream, so an unbounded packet is a cheap
+// DoS vector. 64 matches maxQueuedWitnessAnns: the relay queue and the wire
+// limit move together so a packet that fits the queue also fits the wire.
+const MaxSignedAnnouncesPerPacket = 64
+
+// handleSignedNewWitnessHashes processes a SignedNewWitnessHashesPacket from a
+// peer (WIT2+). The packet is forwarded to the backend, which is responsible
+// for signature verification, validator-set check, relay, and triggering the
+// body fetch. We cap the announcement count at decode time so the backend
+// never sees an unbounded packet.
+func handleSignedNewWitnessHashes(backend Backend, msg Decoder, peer *Peer) error {
+	req := new(SignedNewWitnessHashesPacket)
+	if err := msg.Decode(&req); err != nil {
+		return fmt.Errorf("failed to decode SignedNewWitnessHashesPacket: %w", err)
+	}
+	if len(req.Announcements) == 0 {
+		return fmt.Errorf("invalid SignedNewWitnessHashesPacket: Announcements cannot be empty")
+	}
+	if len(req.Announcements) > MaxSignedAnnouncesPerPacket {
+		return fmt.Errorf("SignedNewWitnessHashesPacket exceeds cap: %d > %d", len(req.Announcements), MaxSignedAnnouncesPerPacket)
+	}
+	return backend.Handle(peer, req)
+}
+
 // handleGetWitnessMetadata processes a GetWitnessMetadataPacket request from a peer.
 func handleGetWitnessMetadata(backend Backend, msg Decoder, peer *Peer) error {
 	// Decode the GetWitnessMetadataPacket request

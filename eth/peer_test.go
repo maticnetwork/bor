@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert" // import path where ethPeer lives
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -647,6 +648,50 @@ func TestReconstructWitness(t *testing.T) {
 
 		assert.Error(t, err)
 		assert.Nil(t, reconstructed)
+	})
+
+	// DuplicatePageMisreconstructs documents a gap in the multi-page witness
+	// path: reconstructWitness sorts by page index and concatenates without
+	// deduping, and its caller appends received pages to receivedWitPages
+	// (peer.go:542) with no (hash,page) dedup while triggering reassembly purely
+	// on len(pages)==TotalPages (peer.go:543). So if one page index arrives twice
+	// (e.g. an original request and a retry both land, or a peer replays a page),
+	// the count hits TotalPages with a real page still missing, reassembly fires
+	// over the duplicated/short byte stream, and the witness is reconstructed
+	// incorrectly — never as the original. A late duplicate instead trips the
+	// ">TotalPages" guard (peer.go:591) and jails the peer. This test pins the
+	// mis-reconstruction so a future dedup fix can be verified; it is not fixed
+	// here (out of scope for this PR).
+	t.Run("DuplicatePageMisreconstructs", func(t *testing.T) {
+		witness, _ := stateless.NewWitness(&types.Header{Number: big.NewInt(100)}, nil)
+		FillWitnessWithDeterministicRandomState(witness, 4*1024)
+		var buf bytes.Buffer
+		require.NoError(t, witness.EncodeRLP(&buf))
+		witnessBytes := buf.Bytes()
+
+		// Split into exactly two pages so [p0,p1] reconstructs the original.
+		half := (len(witnessBytes) + 1) / 2
+		p0 := wit.WitnessPageResponse{Page: 0, TotalPages: 2, Hash: common.Hash{0x01}, Data: witnessBytes[:half]}
+		p1 := wit.WitnessPageResponse{Page: 1, TotalPages: 2, Hash: common.Hash{0x01}, Data: witnessBytes[half:]}
+
+		p := &ethPeer{Peer: eth.NewPeer(1, p2p.NewPeer(enode.ID{0x01}, "test", []p2p.Cap{}), nil, nil)}
+
+		// Sanity: the correct page set reconstructs the original witness.
+		correct, err := p.reconstructWitness([]wit.WitnessPageResponse{p0, p1})
+		require.NoError(t, err)
+		require.NotNil(t, correct)
+
+		// Duplicate of page 0 (page 1 never arrives): len hits TotalPages=2, so
+		// the caller would trigger reassembly here. reconstructWitness must NOT
+		// silently yield the correct witness — it either errors or produces a
+		// different (wrong) reconstruction.
+		dup, dupErr := p.reconstructWitness([]wit.WitnessPageResponse{p0, p0})
+		if dupErr == nil {
+			var dupBuf bytes.Buffer
+			require.NoError(t, dup.EncodeRLP(&dupBuf))
+			assert.NotEqual(t, witnessBytes, dupBuf.Bytes(),
+				"duplicate page 0 must not reconstruct the original witness (no dedup)")
+		}
 	})
 }
 

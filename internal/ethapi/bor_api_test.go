@@ -44,6 +44,41 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 )
 
+func TestGetInvalidPreconfBlocks(t *testing.T) {
+	backend := newTestBackend(t, 0, &core.Genesis{Config: params.TestChainConfig, Alloc: types.GenesisAlloc{}}, ethash.NewFaker(), nil)
+	for number, reason := range map[uint64]string{4: "skipped", 6: "canonical_mismatch", 9: "reorged"} {
+		if err := rawdb.WriteInvalidPreconf(backend.ChainDb(), number, reason); err != nil {
+			t.Fatalf("write %d: %v", number, err)
+		}
+	}
+	api := NewBorAPI(backend)
+	ctx := context.Background()
+
+	// Range [5,9] returns 9 then 6, newest first; 4 is below the range.
+	records, err := api.GetInvalidPreconfBlocks(ctx, rpc.BlockNumber(5), rpc.BlockNumber(9))
+	if err != nil {
+		t.Fatalf("range query: %v", err)
+	}
+	if len(records) != 2 || records[0].Number != 9 || records[1].Number != 6 || records[1].Reason != "canonical_mismatch" {
+		t.Fatalf("records = %+v", records)
+	}
+
+	// A single-block range hits exactly one record.
+	if records, err = api.GetInvalidPreconfBlocks(ctx, rpc.BlockNumber(4), rpc.BlockNumber(4)); err != nil || len(records) != 1 || records[0].Number != 4 {
+		t.Fatalf("single-block range = %+v, err = %v", records, err)
+	}
+
+	// A range with no invalidations returns a non-nil empty slice.
+	if records, err = api.GetInvalidPreconfBlocks(ctx, rpc.BlockNumber(10), rpc.BlockNumber(20)); err != nil || records == nil || len(records) != 0 {
+		t.Fatalf("empty range = %+v (nil=%t), err = %v", records, records == nil, err)
+	}
+
+	// from > to is rejected.
+	if _, err = api.GetInvalidPreconfBlocks(ctx, rpc.BlockNumber(9), rpc.BlockNumber(5)); err == nil {
+		t.Fatal("expected error for from > to")
+	}
+}
+
 func TestBorWitnessAPI_Integration(t *testing.T) {
 	t.Parallel()
 	genesis := &core.Genesis{
@@ -136,8 +171,13 @@ func (b *testBackend) RPCTxSyncMaxTimeout() time.Duration {
 	return 5 * time.Minute
 }
 
+func (b *testBackend) RPCTxSyncMaxConcurrent() int {
+	return b.syncMaxConcurrent
+}
+
 func (b *backendMock) RPCTxSyncDefaultTimeout() time.Duration { return 2 * time.Second }
 func (b *backendMock) RPCTxSyncMaxTimeout() time.Duration     { return 5 * time.Minute }
+func (b *backendMock) RPCTxSyncMaxConcurrent() int            { return 0 }
 
 func (b *testBackend) Etherbase() (common.Address, error) {
 	return common.Address{}, nil
@@ -3769,6 +3809,15 @@ func TestFilterCriteriaUnmarshalJSON(t *testing.T) {
 				}
 				if fc.ToBlock == nil || fc.ToBlock.Int64() != 10 {
 					t.Errorf("ToBlock = %v, want 10", fc.ToBlock)
+				}
+			},
+		},
+		{
+			name:  "pending flag",
+			input: `{"pending":true}`,
+			check: func(t *testing.T, fc FilterCriteria) {
+				if !fc.Pending {
+					t.Fatal("expected Pending to be set")
 				}
 			},
 		},

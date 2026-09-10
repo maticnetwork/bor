@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"context"
 	"errors"
 	"sync"
 	"time"
@@ -10,6 +11,8 @@ import (
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/metrics"
 )
+
+const preconfSubmitBatchSize = 64
 
 var (
 	errRpcClientUnavailable      = errors.New("rpc client unavailable to submit transactions")
@@ -58,6 +61,8 @@ type TxTask struct {
 	rawtx      []byte
 	hash       common.Hash
 	insertedAt time.Time
+	result     chan error
+	skipWait   bool
 
 	preconfirmed bool // whether block producer preconfirmed the tx or not
 	err          error
@@ -83,7 +88,7 @@ func NewService(urls []string, config *ServiceConfig) *Service {
 	}
 	s := &Service{
 		config:      config,
-		multiclient: newMultiClient(urls),
+		multiclient: newMultiClientWithLimit(urls, config.maxConcurrentTasks),
 		store:       make(map[common.Hash]TxTask),
 		taskCh:      make(chan TxTask, config.maxQueuedTasks),
 		semaphore:   make(chan struct{}, config.maxConcurrentTasks),
@@ -104,6 +109,23 @@ func (s *Service) SetTxGetter(getter TxGetter) {
 // and returns true if the task is successfully queued. It fails if either the rpc clients
 // are unavailable or if the task queue is full.
 func (s *Service) SubmitTransactionForPreconf(tx *types.Transaction) error {
+	return s.submitTransactionForPreconf(tx, nil, false)
+}
+
+func (s *Service) SubmitTransactionForPreconfSync(ctx context.Context, tx *types.Transaction) error {
+	result := make(chan error, 1)
+	if err := s.submitTransactionForPreconf(tx, result, true); err != nil {
+		return err
+	}
+	select {
+	case err := <-result:
+		return err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (s *Service) submitTransactionForPreconf(tx *types.Transaction, result chan error, skipWait bool) error {
 	if s.multiclient == nil {
 		log.Warn("[tx-relay] No rpc client available to submit transactions")
 		return errRpcClientUnavailable
@@ -125,7 +147,7 @@ func (s *Service) SubmitTransactionForPreconf(tx *types.Transaction) error {
 
 	// Queue for processing (non-blocking until queue is full)
 	select {
-	case s.taskCh <- TxTask{rawtx: rawTx, hash: tx.Hash()}:
+	case s.taskCh <- TxTask{rawtx: rawTx, hash: tx.Hash(), result: result, skipWait: skipWait}:
 		return nil
 	default:
 		log.Info("[tx-relay] Task queue full, dropping transaction", "hash", tx.Hash())
@@ -139,22 +161,94 @@ func (s *Service) processPreconfTasks() {
 	for {
 		select {
 		case task := <-s.taskCh:
-			// Acquire semaphore to limit concurrent submissions
-			select {
-			case s.semaphore <- struct{}{}:
-			case <-s.closeCh:
-				log.Info("[tx-relay] Stopping preconf task processing, service closing")
-				return
+			if task.skipWait {
+				tasks := []TxTask{task}
+				for len(tasks) < preconfSubmitBatchSize {
+					select {
+					case next := <-s.taskCh:
+						if !next.skipWait {
+							s.startPreconfTasks(tasks)
+							s.startPreconfTask(next)
+							tasks = nil
+							break
+						}
+						tasks = append(tasks, next)
+					default:
+						s.startPreconfTasks(tasks)
+						tasks = nil
+					}
+					if tasks == nil {
+						break
+					}
+				}
+				if tasks != nil {
+					s.startPreconfTasks(tasks)
+				}
+				continue
 			}
-			s.wg.Add(1)
-			go func(task TxTask) {
-				defer s.wg.Done()
-				defer func() { <-s.semaphore }()
-				s.processPreconfTask(task)
-			}(task)
+			s.startPreconfTask(task)
 		case <-s.closeCh:
 			return
 		}
+	}
+}
+
+func (s *Service) startPreconfTask(task TxTask) {
+	if !s.acquirePreconfSlots(1) {
+		return
+	}
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		defer s.releasePreconfSlots(1)
+		s.processPreconfTask(task)
+	}()
+}
+
+func (s *Service) startPreconfTasks(tasks []TxTask) {
+	if !s.acquirePreconfSlots(len(tasks)) {
+		return
+	}
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		defer s.releasePreconfSlots(len(tasks))
+		s.processPreconfTaskBatch(tasks)
+	}()
+}
+
+func (s *Service) acquirePreconfSlots(count int) bool {
+	acquired := 0
+	for acquired < count {
+		select {
+		case s.semaphore <- struct{}{}:
+			acquired++
+		case <-s.closeCh:
+			s.releasePreconfSlots(acquired)
+			return false
+		}
+	}
+	return true
+}
+
+func (s *Service) releasePreconfSlots(count int) {
+	for range count {
+		<-s.semaphore
+	}
+}
+
+func (s *Service) processPreconfTaskBatch(tasks []TxTask) {
+	rawTxs := make([][]byte, len(tasks))
+	for i := range tasks {
+		uniquePreconfsTaskMeter.Mark(1)
+		rawTxs[i] = tasks[i].rawtx
+	}
+	start := time.Now()
+	results := s.multiclient.submitPreconfTxBatchWithoutPendingWait(rawTxs)
+	elapsed := time.Since(start)
+	for i := range tasks {
+		preconfSubmitTimer.Update(elapsed)
+		s.finishPreconfTask(tasks[i], results[i].preconfirmed, results[i].err, start)
 	}
 }
 
@@ -164,15 +258,27 @@ func (s *Service) processPreconfTask(task TxTask) {
 	// Capture some metrics
 	uniquePreconfsTaskMeter.Mark(1)
 	start := time.Now()
-	res, err := s.multiclient.submitPreconfTx(task.rawtx)
+	var res bool
+	var err error
+	if task.skipWait {
+		res, err = s.multiclient.submitPreconfTxWithoutPendingWait(task.rawtx)
+	} else {
+		res, err = s.multiclient.submitPreconfTx(task.rawtx)
+	}
+	submissionErr := err
 	preconfSubmitTimer.UpdateSince(start)
+	s.finishPreconfTask(task, res, submissionErr, start)
+}
+
+func (s *Service) finishPreconfTask(task TxTask, res bool, submissionErr error, start time.Time) {
+	err := submissionErr
 	// It's possible that the calls succeeded but preconf was not offered in which
 	// case err would be nil. Update with a generic error as preconf wasn't offered.
 	if !res && err == nil {
 		err = errPreconfValidationFailed
 	}
-	if err != nil {
-		log.Warn("[tx-relay] Error submitting preconf tx", "elapsed", time.Since(start), "err", err)
+	if submissionErr != nil {
+		log.Warn("[tx-relay] Error submitting preconf tx", "elapsed", time.Since(start), "err", submissionErr)
 	}
 	task.preconfirmed = res
 	task.err = err
@@ -180,6 +286,9 @@ func (s *Service) processPreconfTask(task TxTask) {
 	// incase we have some changes in the retry logic.
 
 	s.updateTaskInCache(task)
+	if task.result != nil {
+		task.result <- submissionErr
+	}
 }
 
 // updateTaskInCache safely updates or inserts a task in cache by acting as a

@@ -192,6 +192,7 @@ type FilterQuery struct {
 	FromBlock *big.Int         // beginning of the queried range, nil means genesis block
 	ToBlock   *big.Int         // end of the range, nil means latest block
 	Addresses []common.Address // restricts matches to events created by specific contracts
+	Pending   bool             // restricts matches to the current pending block
 
 	// The Topic list restricts matches to particular event topics. Each event has a list
 	// of topics. Topics matches a prefix of that list. An empty element slice matches any

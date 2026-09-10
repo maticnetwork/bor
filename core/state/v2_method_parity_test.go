@@ -96,13 +96,14 @@ var pdbExemptMethods = map[string]pdbExemptCategory{
 
 	// Block lifecycle — the final commit / copy / prefetcher always run on
 	// the underlying StateDB; PDB is per-tx and recycled, not committed.
-	"Commit":           catLifecycle,
-	"CommitWithUpdate": catLifecycle,
-	"IntermediateRoot": catLifecycle,
-	"StartPrefetcher":  catLifecycle,
-	"StopPrefetcher":   catLifecycle,
-	"ResetPrefetcher":  catLifecycle,
-	"Copy":             catLifecycle,
+	"Commit":                catLifecycle,
+	"CommitWithUpdate":      catLifecycle,
+	"IntermediateRoot":      catLifecycle,
+	"StartPrefetcher":       catLifecycle,
+	"StopPrefetcher":        catLifecycle,
+	"ResetPrefetcher":       catLifecycle,
+	"Copy":                  catLifecycle,
+	"CopyWithoutLogHistory": catLifecycle,
 
 	// Pipelined SRC import — FlatDiff capture/replay, read propagation,
 	// and detached prefetcher handoff are block-level StateDB operations.

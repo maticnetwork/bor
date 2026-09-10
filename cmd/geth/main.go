@@ -203,6 +203,7 @@ var (
 		utils.BatchResponseMaxSize,
 		utils.RPCTxSyncDefaultTimeoutFlag,
 		utils.RPCTxSyncMaxTimeoutFlag,
+		utils.RPCTxSyncMaxConcurrentFlag,
 	}
 
 	metricsFlags = []cli.Flag{

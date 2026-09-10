@@ -19,4 +19,5 @@ comment:
 ignore:
   - "consensus/bor/genesis_contract_mock.go"
   - "consensus/bor/span_mock.go"
+  - "eth/peer_mock.go"
 

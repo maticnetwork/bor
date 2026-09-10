@@ -272,3 +272,9 @@ devfakeauthor = false
   enable-import-src = false
   import-src-logs = false
   warm-snapshot = true
+
+[sequencer]
+  enabled = false
+  publisher-endpoint = ""
+  consumer-endpoint = ""
+  poll = "200ms"

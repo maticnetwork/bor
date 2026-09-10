@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"sync"
@@ -116,6 +117,51 @@ func TestSubmitTransactionForPreconf(t *testing.T) {
 		service.storeMu.RUnlock()
 		require.True(t, exists, "expected task to be stored after processing")
 		require.True(t, task.preconfirmed, "expected task to be preconfirmed")
+	})
+
+	t.Run("wait for producer submission", func(t *testing.T) {
+		for _, server := range rpcServers {
+			server.setHandleSendPreconfTx(func(w http.ResponseWriter, id int, params json.RawMessage) {
+				time.Sleep(20 * time.Millisecond)
+				defaultHandleSendPreconfTx(w, id, params)
+			})
+		}
+		defer func() {
+			for _, server := range rpcServers {
+				server.setHandleSendPreconfTx(defaultHandleSendPreconfTx)
+			}
+		}()
+
+		service := NewService(urls, nil)
+		defer service.close()
+
+		tx := types.NewTransaction(1, common.Address{}, nil, 0, nil, nil)
+		started := time.Now()
+		err := service.SubmitTransactionForPreconfSync(context.Background(), tx)
+		require.NoError(t, err)
+		require.GreaterOrEqual(t, time.Since(started), 20*time.Millisecond)
+	})
+
+	t.Run("stop waiting when context closes", func(t *testing.T) {
+		for _, server := range rpcServers {
+			server.setHandleSendPreconfTx(func(w http.ResponseWriter, id int, params json.RawMessage) {
+				time.Sleep(100 * time.Millisecond)
+				defaultHandleSendPreconfTx(w, id, params)
+			})
+		}
+		defer func() {
+			for _, server := range rpcServers {
+				server.setHandleSendPreconfTx(defaultHandleSendPreconfTx)
+			}
+		}()
+
+		service := NewService(urls, nil)
+		defer service.close()
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+		defer cancel()
+		tx := types.NewTransaction(1, common.Address{}, nil, 0, nil, nil)
+		require.ErrorIs(t, service.SubmitTransactionForPreconfSync(ctx, tx), context.DeadlineExceeded)
 	})
 
 	t.Run("queue invalid tx for preconf", func(t *testing.T) {

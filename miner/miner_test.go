@@ -136,6 +136,50 @@ func TestMiner(t *testing.T) {
 	waitForMiningState(t, miner, true)
 }
 
+// Sync completion re-arms the finality grace: the anchor must move to the
+// moment the node becomes eligible to build, not stay at construction —
+// a resync outliving the grace would otherwise consume it silently.
+func TestMinerSyncCompletionRearmsFinalityGrace(t *testing.T) {
+	t.Parallel()
+
+	minerBor := NewBorDefaultMiner(t)
+	defer func() {
+		minerBor.Cleanup(false)
+		minerBor.Ctrl.Finish()
+	}()
+
+	miner := minerBor.Miner
+	mux := minerBor.Mux
+
+	miner.Start()
+	waitForMiningState(t, miner, true)
+
+	// Age the anchor as a long resync would, then fail a sync.
+	aged := time.Now().Add(-time.Hour).UnixNano()
+	miner.worker.eligibleSince.Store(aged)
+
+	mux.Post(downloader.StartEvent{})
+	waitForMiningState(t, miner, false)
+	mux.Post(downloader.FailedEvent{})
+	waitForMiningState(t, miner, true)
+
+	if miner.worker.eligibleSince.Load() == aged {
+		t.Fatal("a failed sync's completion must re-arm the finality grace")
+	}
+
+	// Age again; a successful sync must also re-arm.
+	miner.worker.eligibleSince.Store(aged)
+
+	mux.Post(downloader.StartEvent{})
+	waitForMiningState(t, miner, false)
+	mux.Post(downloader.DoneEvent{})
+	waitForMiningState(t, miner, true)
+
+	if miner.worker.eligibleSince.Load() == aged {
+		t.Fatal("a completed sync must re-arm the finality grace")
+	}
+}
+
 // TestMinerDownloaderFirstFails tests that mining is only
 // permitted to run indefinitely once the downloader sees a DoneEvent (success).
 // An initial FailedEvent should allow mining to stop on a subsequent

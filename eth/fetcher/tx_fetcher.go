@@ -74,12 +74,28 @@ const (
 
 	// addTxsBatchSize it the max number of transactions to add in a single batch from a peer.
 	addTxsBatchSize = 128
+
+	// reqIDTestSeed seeds the independent, deterministic request-ID source used
+	// in tests/fuzzing (see requestIDs). Fixed and unrelated to any caller-supplied
+	// rand seed, so generating a request ID never perturbs the peer/hash shuffle
+	// sequence that rand drives.
+	reqIDTestSeed = 0x7e9713a
 )
 
 var (
 	// txFetchTimeout is the maximum allotted time to return an explicitly
 	// requested transaction.
 	txFetchTimeout = 5 * time.Second
+
+	// txFetchDanglingRetry is the minimum time since a request was originally
+	// sent (not since it went dangling at txFetchTimeout) before a peer whose
+	// request timed out without a reply becomes eligible for a fresh
+	// retrieval again. Kept above p2p's frameReadTimeout (30s): a peer whose
+	// underlying connection is actually dead gets dropped by then regardless,
+	// so a retry only ever races a reply from a peer that's merely slow, not
+	// disconnected. Request-ID correlation in the txDelivery direct-delivery
+	// path still handles a late reply from the superseded request either way.
+	txFetchDanglingRetry = 7 * txFetchTimeout
 )
 
 // txAnnounce is the notification of the availability of a batch
@@ -100,9 +116,10 @@ type txMetadata struct {
 // txRequest represents an in-flight transaction retrieval request destined to
 // a specific peers.
 type txRequest struct {
-	hashes []common.Hash            // Transactions having been requested
-	stolen map[common.Hash]struct{} // Deliveries by someone else (don't re-request)
-	time   mclock.AbsTime           // Timestamp of the request
+	hashes    []common.Hash            // Transactions having been requested
+	stolen    map[common.Hash]struct{} // Deliveries by someone else (don't re-request)
+	time      mclock.AbsTime           // Timestamp of the request
+	requestID uint64                   // Request identifier sent on the wire
 }
 
 // txDelivery is the notification that a batch of transactions have been added
@@ -112,6 +129,7 @@ type txDelivery struct {
 	hashes    []common.Hash // Batch of transaction hashes having been delivered
 	metas     []txMetadata  // Batch of metadata associated with the delivered hashes
 	direct    bool          // Whether this is a direct reply or a broadcast
+	requestID uint64        // Request identifier echoed by direct replies
 	violation error         // Whether we encountered a protocol violation
 }
 
@@ -133,10 +151,13 @@ type txDrop struct {
 // The invariants of the fetcher are:
 //   - Each tracked transaction (hash) must only be present in one of the
 //     three stages. This ensures that the fetcher operates akin to a finite
-//     state automata and there's do data leak.
+//     state automata and there's no data leak.
 //   - Each peer that announced transactions may be scheduled retrievals, but
 //     only ever one concurrently. This ensures we can immediately know what is
-//     missing from a reply and reschedule it.
+//     missing from a reply and reschedule it. Exception: a peer whose request
+//     went dangling (see txFetchDanglingRetry) may be retried before its
+//     abandoned request is dead on the wire; the request ID echoed in
+//     PooledTransactionsMsg identifies stale replies from abandoned requests.
 type TxFetcher struct {
 	notify  chan *txAnnounce
 	cleanup chan *txDelivery
@@ -164,28 +185,33 @@ type TxFetcher struct {
 	alternates map[common.Hash]map[string]struct{} // In-flight transaction alternate origins if retrieval fails
 
 	// Callbacks
-	hasTx    func(common.Hash) bool             // Retrieves a tx from the local txpool
-	addTxs   func([]*types.Transaction) []error // Insert a batch of transactions into local txpool
-	fetchTxs func(string, []common.Hash) error  // Retrieves a set of txs from a remote peer
-	dropPeer func(string)                       // Drops a peer in case of announcement violation
+	hasTx    func(common.Hash) bool                    // Retrieves a tx from the local txpool
+	addTxs   func([]*types.Transaction) []error        // Insert a batch of transactions into local txpool
+	fetchTxs func(string, uint64, []common.Hash) error // Retrieves a set of txs from a remote peer
+	dropPeer func(string)                              // Drops a peer in case of announcement violation
 
-	step     chan struct{}    // Notification channel when the fetcher loop iterates
-	clock    mclock.Clock     // Monotonic clock or simulated clock for tests
-	realTime func() time.Time // Real system time or simulated time for tests
-	rand     *mrand.Rand      // Randomizer to use in tests instead of map range loops (soft-random)
+	step       chan struct{}    // Notification channel when the fetcher loop iterates
+	clock      mclock.Clock     // Monotonic clock or simulated clock for tests
+	realTime   func() time.Time // Real system time or simulated time for tests
+	rand       *mrand.Rand      // Randomizer to use in tests instead of map range loops (soft-random)
+	requestIDs *mrand.Rand      // Independent, deterministic-in-tests source for request IDs; kept separate from rand so generating one doesn't perturb the peer/hash shuffle sequence rand drives
 }
 
 // NewTxFetcher creates a transaction fetcher to retrieve transaction
 // based on hash announcements.
-func NewTxFetcher(hasTx func(common.Hash) bool, addTxs func([]*types.Transaction) []error, fetchTxs func(string, []common.Hash) error, dropPeer func(string)) *TxFetcher {
+func NewTxFetcher(hasTx func(common.Hash) bool, addTxs func([]*types.Transaction) []error, fetchTxs func(string, uint64, []common.Hash) error, dropPeer func(string)) *TxFetcher {
 	return NewTxFetcherForTests(hasTx, addTxs, fetchTxs, dropPeer, mclock.System{}, time.Now, nil)
 }
 
 // NewTxFetcherForTests is a testing method to mock out the realtime clock with
 // a simulated version and the internal randomness with a deterministic one.
 func NewTxFetcherForTests(
-	hasTx func(common.Hash) bool, addTxs func([]*types.Transaction) []error, fetchTxs func(string, []common.Hash) error, dropPeer func(string),
+	hasTx func(common.Hash) bool, addTxs func([]*types.Transaction) []error, fetchTxs func(string, uint64, []common.Hash) error, dropPeer func(string),
 	clock mclock.Clock, realTime func() time.Time, rand *mrand.Rand) *TxFetcher {
+	var requestIDs *mrand.Rand
+	if rand != nil {
+		requestIDs = mrand.New(mrand.NewSource(reqIDTestSeed))
+	}
 	return &TxFetcher{
 		notify:      make(chan *txAnnounce),
 		cleanup:     make(chan *txDelivery),
@@ -207,6 +233,7 @@ func NewTxFetcherForTests(
 		clock:       clock,
 		realTime:    realTime,
 		rand:        rand,
+		requestIDs:  requestIDs,
 	}
 }
 
@@ -274,7 +301,7 @@ func (f *TxFetcher) isKnownUnderpriced(hash common.Hash) bool {
 // and the fetcher. This method may be called by both transaction broadcasts and
 // direct request replies. The differentiation is important so the fetcher can
 // re-schedule missing transactions as soon as possible.
-func (f *TxFetcher) Enqueue(peer string, txs []*types.Transaction, direct bool) error {
+func (f *TxFetcher) Enqueue(peer string, txs []*types.Transaction, direct bool, requestID uint64) error {
 	var (
 		inMeter          = txReplyInMeter
 		knownMeter       = txReplyKnownMeter
@@ -367,7 +394,7 @@ func (f *TxFetcher) Enqueue(peer string, txs []*types.Transaction, direct bool) 
 		}
 	}
 	select {
-	case f.cleanup <- &txDelivery{origin: peer, hashes: added, metas: metas, direct: direct, violation: violation}:
+	case f.cleanup <- &txDelivery{origin: peer, hashes: added, metas: metas, direct: direct, requestID: requestID, violation: violation}:
 		return nil
 	case <-f.quit:
 		return errTerminated
@@ -552,6 +579,12 @@ func (f *TxFetcher) loop() {
 			// could also penalize (Drop), but there's nothing to gain, and if could
 			// possibly further increase the load on it.
 			for peer, req := range f.requests {
+				// Already dangling from a prior tick; skip so a single episode
+				// contributes exactly one txFetcherSlowPeers.Inc, matching the
+				// one-Dec-per-episode convention the dangling-retry path relies on.
+				if req.hashes == nil {
+					continue
+				}
 				if time.Duration(f.clock.Now()-req.time)+txGatherSlack > txFetchTimeout {
 					txRequestTimeoutMeter.Mark(int64(len(req.hashes)))
 
@@ -599,6 +632,21 @@ func (f *TxFetcher) loop() {
 			f.rescheduleTimeout(timeoutTimer, timeoutTrigger)
 
 		case delivery := <-f.cleanup:
+			// A direct delivery whose request ID doesn't match the peer's
+			// currently tracked request is a stale reply to an abandoned
+			// request (see txFetchDanglingRetry). The transactions it
+			// carries were still actually received, so metadata validation
+			// and tracker cleanup below must still run against them; only
+			// resolving/rescheduling the (different) currently tracked
+			// request must be skipped.
+			staleRequest := false
+			if delivery.direct {
+				if req := f.requests[delivery.origin]; req != nil && delivery.requestID != req.requestID {
+					log.Debug("Discarding stale transaction delivery for a different request", "peer", delivery.origin, "request", delivery.requestID, "want", req.requestID, "hashes", len(delivery.hashes))
+					staleRequest = true
+				}
+			}
+
 			// Independent if the delivery was direct or broadcast, remove all
 			// traces of the hash from internal trackers. That said, compare any
 			// advertised metadata with the real ones and drop bad peers.
@@ -662,8 +710,12 @@ func (f *TxFetcher) loop() {
 
 					// If a transaction currently being fetched from a different
 					// origin was delivered (delivery stolen), mark it so the
-					// actual delivery won't double schedule it.
-					if origin, ok := f.fetching[hash]; ok && (origin != delivery.origin || !delivery.direct) {
+					// actual delivery won't double schedule it. A stale-ID
+					// delivery never legitimately resolves whatever request is
+					// currently fetching this hash, even if that request also
+					// happens to belong to the same peer (its own abandoned
+					// request and its current one are different requests).
+					if origin, ok := f.fetching[hash]; ok && (origin != delivery.origin || !delivery.direct || staleRequest) {
 						stolen := f.requests[origin].stolen
 						if stolen == nil {
 							f.requests[origin].stolen = make(map[common.Hash]struct{})
@@ -676,16 +728,26 @@ func (f *TxFetcher) loop() {
 					delete(f.fetching, hash)
 				}
 			}
-			// In case of a direct delivery, also reschedule anything missing
-			// from the original query
-			if delivery.direct {
-				// Mark the requesting successful (independent of individual status)
+			// In case of a direct delivery that still resolves the currently
+			// tracked request, also reschedule anything missing from the
+			// original query. A stale request-ID delivery must not be
+			// treated as resolving a different, still-outstanding request.
+			if delivery.direct && !staleRequest {
+				// Mark the request successful (independent of individual status)
 				txRequestDoneMeter.Mark(int64(len(delivery.hashes)))
 
 				// Make sure something was pending, nuke it
 				req := f.requests[delivery.origin]
 				if req == nil {
 					log.Warn("Unexpected transaction delivery", "peer", delivery.origin)
+
+					// No tracked request for this peer to correlate against.
+					// Possibly because no request was ever scheduled for this peer (e.g. all
+					// announced hashes were already being fetched from others), because the peer
+					// was dropped before this delivery arrived, or because the delivery is unsolicited.
+					// Either way, a violation in it is still real and the shared check
+					// below is unreachable from this break, so enforce it here too.
+					f.dropPeerOnViolation(delivery)
 					break
 				}
 				if req.hashes == nil {
@@ -743,10 +805,7 @@ func (f *TxFetcher) loop() {
 				f.scheduleFetches(timeoutTimer, timeoutTrigger, nil) // Partial delivery may enable others to deliver too
 			}
 			// If we encountered a protocol violation, disconnect the peer
-			if delivery.violation != nil {
-				log.Warn("Disconnect peer for protocol violation", "peer", delivery.origin, "direct", delivery.direct, "hashes", len(delivery.hashes), "error", delivery.violation)
-				f.dropPeer(delivery.origin)
-			}
+			f.dropPeerOnViolation(delivery)
 
 		case drop := <-f.drop:
 			// A peer was dropped, remove all traces of it
@@ -904,6 +963,36 @@ func (f *TxFetcher) rescheduleTimeout(timer *mclock.Timer, trigger chan struct{}
 	})
 }
 
+// dropPeerOnViolation disconnects the delivery's origin if it committed a
+// protocol violation, and is a no-op otherwise.
+func (f *TxFetcher) dropPeerOnViolation(delivery *txDelivery) {
+	if delivery.violation == nil {
+		return
+	}
+
+	log.Warn("Disconnect peer for protocol violation", "peer", delivery.origin, "direct", delivery.direct, "hashes", len(delivery.hashes), "error", delivery.violation)
+	f.dropPeer(delivery.origin)
+}
+
+// evictStaleRequest reports whether peer is eligible for a fresh retrieval
+// right now, and whether the peer's immediately preceding placeholder was
+// itself dangling, used only to decide whether to clear its slow-peer
+// metrics accounting in scheduleFetches.
+func (f *TxFetcher) evictStaleRequest(peer string, now mclock.AbsTime) (eligible, wasDangling bool) {
+	req := f.requests[peer]
+	if req == nil {
+		return true, false
+	}
+	if req.hashes != nil {
+		return false, false // genuinely in-flight, don't double-request
+	}
+	if time.Duration(now-req.time) < txFetchDanglingRetry {
+		return false, false // dangling, too recent (measured from the original send, not from timeout) to retry yet
+	}
+
+	return true, true
+}
+
 // scheduleFetches starts a batch of retrievals for all available idle peers.
 func (f *TxFetcher) scheduleFetches(timer *mclock.Timer, timeout chan struct{}, whitelist map[string]struct{}) {
 	// Gather the set of peers we want to retrieve from (default to all)
@@ -920,10 +1009,12 @@ func (f *TxFetcher) scheduleFetches(timer *mclock.Timer, timeout chan struct{}, 
 	}
 	// For each active peer, try to schedule some transaction fetches
 	idle := len(f.requests) == 0
+	now := f.clock.Now()
 
 	f.forEachPeer(actives, func(peer string) {
-		if f.requests[peer] != nil {
-			return // continue in the for-each
+		eligible, wasDangling := f.evictStaleRequest(peer, now)
+		if !eligible {
+			return // continue in the for-each - genuinely in-flight, or dangling too recently
 		}
 
 		if len(f.announces[peer]) == 0 {
@@ -962,23 +1053,38 @@ func (f *TxFetcher) scheduleFetches(timer *mclock.Timer, timeout chan struct{}, 
 		})
 		// If any hashes were allocated, request them from the peer
 		if len(hashes) > 0 {
-			f.requests[peer] = &txRequest{hashes: hashes, time: f.clock.Now()}
+			if wasDangling {
+				// Dangling placeholder actually superseded.
+				// Keep request-ID correlation by replacing it with
+				// the new request before the peer sees the new wire request.
+				txFetcherSlowPeers.Dec(1)
+				txFetcherSlowWait.Update(time.Duration(now - f.requests[peer].time).Nanoseconds())
+			}
+			requestID := f.nextRequestID()
+			f.requests[peer] = &txRequest{hashes: hashes, time: f.clock.Now(), requestID: requestID}
 			txRequestOutMeter.Mark(int64(len(hashes)))
 
-			go func(peer string, hashes []common.Hash) {
+			go func(peer string, requestID uint64, hashes []common.Hash) {
 				// Try to fetch the transactions, but in case of a request
 				// failure (e.g. peer disconnected), reschedule the hashes.
-				if err := f.fetchTxs(peer, hashes); err != nil {
+				if err := f.fetchTxs(peer, requestID, hashes); err != nil {
 					txRequestFailMeter.Mark(int64(len(hashes)))
 					f.Drop(peer)
 				}
-			}(peer, hashes)
+			}(peer, requestID, hashes)
 		}
 	})
 	// If a new request was fired, schedule a timeout timer
 	if idle && len(f.requests) > 0 {
 		f.rescheduleTimeout(timer, timeout)
 	}
+}
+
+func (f *TxFetcher) nextRequestID() uint64 {
+	if f.requestIDs != nil {
+		return f.requestIDs.Uint64()
+	}
+	return mrand.Uint64()
 }
 
 // forEachPeer does a range loop over a map of peers in production, but during

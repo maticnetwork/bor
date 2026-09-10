@@ -17,7 +17,9 @@
 package stateless
 
 import (
+	"bytes"
 	"io"
+	"sort"
 
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -85,19 +87,29 @@ func (w *Witness) fromExtWitness(ext *ExtWitness) error {
 // EncodeRLP serializes a witness as RLP using the canonical BorWitness 3-field
 // format. Only state trie nodes are encoded; contract bytecodes are not
 // included in the wire format.
+//
+// State entries are sorted lexicographically before encoding so the output is
+// byte-identical for any two witnesses with the same logical contents. Without
+// this, Go's randomized map iteration would produce different bytes per call,
+// breaking any code that hashes the encoded witness for content addressing —
+// notably the WIT2 BP-signed witness hash, which is computed by both producer
+// and verifiers and must match exactly.
 func (w *Witness) EncodeRLP(wr io.Writer) error {
 	w.lock.RLock()
 	defer w.lock.RUnlock()
 
-	bw := &BorWitness{
+	state := make([][]byte, 0, len(w.State))
+	for node := range w.State {
+		state = append(state, []byte(node))
+	}
+	sort.Slice(state, func(i, j int) bool {
+		return bytes.Compare(state[i], state[j]) < 0
+	})
+	return rlp.Encode(wr, &BorWitness{
 		Context: w.context,
 		Headers: w.Headers,
-		State:   make([][]byte, 0, len(w.State)),
-	}
-	for node := range w.State {
-		bw.State = append(bw.State, []byte(node))
-	}
-	return rlp.Encode(wr, bw)
+		State:   state,
+	})
 }
 
 // DecodeRLP decodes a witness from RLP. It first attempts the canonical

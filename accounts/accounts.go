@@ -37,11 +37,12 @@ type Account struct {
 }
 
 const (
-	MimetypeDataWithValidator = "data/validator"
-	MimetypeTypedData         = "data/typed"
-	MimetypeClique            = "application/x-clique-header"
-	MimetypeBor               = "application/x-bor-header"
-	MimetypeTextPlain         = "text/plain"
+	MimetypeDataWithValidator  = "data/validator"
+	MimetypeTypedData          = "data/typed"
+	MimetypeClique             = "application/x-clique-header"
+	MimetypeBor                = "application/x-bor-header"
+	MimetypeBorWitnessAnnounce = "application/x-bor-wit2-announce"
+	MimetypeTextPlain          = "text/plain"
 )
 
 // Wallet represents a software or hardware wallet that might contain one or more

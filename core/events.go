@@ -46,6 +46,12 @@ type ChainEvent struct {
 	Transactions []*types.Transaction
 }
 
+type PreconfReceiptsEvent struct {
+	BlockTime    uint64
+	Receipts     []*types.Receipt
+	Transactions []*types.Transaction
+}
+
 type ChainSideEvent struct {
 	Header *types.Header
 }

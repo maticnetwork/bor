@@ -237,6 +237,46 @@ func TestCopy(t *testing.T) {
 	}
 }
 
+func TestCopyWithoutLogHistoryPreservesLogIndex(t *testing.T) {
+	statedb, err := New(types.EmptyRootHash, NewDatabaseForTesting())
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	statedb.SetTxContext(common.Hash{1}, 0)
+	statedb.AddLog(&types.Log{})
+	statedb.Finalise(true)
+
+	copy := statedb.CopyWithoutLogHistory()
+	if logs := copy.Logs(); len(logs) != 0 {
+		t.Fatalf("copied logs = %d, want 0", len(logs))
+	}
+	copy.SetTxContext(common.Hash{2}, 1)
+	copy.AddLog(&types.Log{})
+	logs := copy.Logs()
+	if len(logs) != 1 || logs[0].Index != 1 {
+		t.Fatalf("new logs = %#v, want one log at index 1", logs)
+	}
+}
+
+func TestCopyWithoutLogHistoryKeepsLogsForDirtyJournal(t *testing.T) {
+	statedb, err := New(types.EmptyRootHash, NewDatabaseForTesting())
+	if err != nil {
+		t.Fatalf("create state: %v", err)
+	}
+	snapshot := statedb.Snapshot()
+	statedb.SetTxContext(common.Hash{1}, 0)
+	statedb.AddLog(&types.Log{})
+
+	copy := statedb.CopyWithoutLogHistory()
+	if logs := copy.Logs(); len(logs) != 1 {
+		t.Fatalf("copied logs = %d, want 1", len(logs))
+	}
+	copy.RevertToSnapshot(snapshot)
+	if logs := copy.Logs(); len(logs) != 0 {
+		t.Fatalf("logs after revert = %d, want 0", len(logs))
+	}
+}
+
 // TestCopyWithDirtyJournal tests if Copy can correct create a equal copied
 // stateDB with dirty journal present.
 func TestCopyWithDirtyJournal(t *testing.T) {

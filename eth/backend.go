@@ -39,6 +39,7 @@ import (
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/filtermaps"
 	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/state/pruner"
 	"github.com/ethereum/go-ethereum/core/txpool"
 	"github.com/ethereum/go-ethereum/core/txpool/blobpool"
@@ -55,6 +56,7 @@ import (
 	"github.com/ethereum/go-ethereum/eth/protocols/snap"
 	"github.com/ethereum/go-ethereum/eth/protocols/wit"
 	"github.com/ethereum/go-ethereum/eth/relay"
+	"github.com/ethereum/go-ethereum/eth/sequencer"
 	"github.com/ethereum/go-ethereum/eth/tracers"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/event"
@@ -73,6 +75,20 @@ import (
 	"github.com/ethereum/go-ethereum/rpc"
 	gethversion "github.com/ethereum/go-ethereum/version"
 )
+
+type sequenceConsumer interface {
+	PendingSnapshot(context.Context) (*types.Block, types.Receipts, *state.StateDB, error)
+	HeadPendingView() (*types.Block, types.Receipts, *state.StateDB, error)
+	PendingBlock() *types.Block
+	PendingBlockAndReceipts() (*types.Block, types.Receipts)
+	PendingLogRange() (*types.Header, []*types.Block, []types.Receipts)
+	PendingParentState(context.Context, *types.Block) (*state.StateDB, error)
+	PendingNonce(common.Address) (uint64, bool, error)
+	LookupPreconf(common.Hash) (*types.Transaction, *types.Receipt, bool)
+	SubscribePendingLogs(chan<- []*types.Log) event.Subscription
+	SubscribePreconfReceipts(chan<- core.PreconfReceiptsEvent) event.Subscription
+	Close()
+}
 
 var (
 	MilestoneWhitelistedDelayTimer = metrics.NewRegisteredTimer("chain/milestone/whitelisteddelay", nil)
@@ -141,6 +157,11 @@ type Ethereum struct {
 	gasPrice  *big.Int
 	etherbase common.Address
 
+	// Sequence store integration (design docs/sequencer-bor.md): at most
+	// one is set, by role.
+	seqPublisher *sequencer.Publisher // mining node: publishes the block lifecycle
+	seqConsumer  sequenceConsumer     // RPC node: re-executes the stream for preconf receipts
+
 	networkID     uint64
 	netRPCService *ethapi.NetAPI
 
@@ -151,6 +172,64 @@ type Ethereum struct {
 	closeCh chan struct{} // Channel to signal the background processes to exit
 
 	shutdownTracker *shutdowncheck.ShutdownTracker // Tracks if and when the node has shutdown ungracefully
+}
+
+// attachSequencer wires the sequence store integration by role (design
+// docs/sequencer-bor.md): a mining node publishes the block lifecycle, a
+// non-mining node follows the stream for preconf receipts.
+func (s *Ethereum) attachSequencer(config *ethconfig.Config) error {
+	switch config.SequencerRole {
+	case "producer":
+		if s.miner == nil {
+			return nil
+		}
+
+		publisher, err := sequencer.NewPublisher(config.SequencerPublisherEndpoint,
+			config.SequencerConsumerEndpoint, s.blockchain.Config().ChainID.Uint64(),
+			config.SequencerPoll, s.blockchain, s.WhitelistedMilestone)
+		if err != nil {
+			return fmt.Errorf("sequencer publisher: %w", err)
+		}
+
+		// The broadcast gate consensus-verifies a foreign store seal before
+		// treating it as ownership of a height: a seal from a rotated-out
+		// producer can never become canonical and must not refuse this
+		// node's block.
+		if v, ok := s.engine.(interface {
+			VerifySeal(consensus.ChainHeaderReader, *types.Header) error
+		}); ok {
+			publisher.SetSealVerifier(func(header *types.Header) error {
+				return v.VerifySeal(s.blockchain, header)
+			})
+		}
+
+		s.seqPublisher = publisher
+		s.miner.SetSequencer(publisher)
+	case "consumer":
+		// A consumer that cannot start (not a bor chain) must not block the
+		// node: preconfs stay off, everything else runs.
+		consumer, err := sequencer.NewConsumerWithTransactionLookup(config.SequencerConsumerEndpoint, s.blockchain, s.txPool)
+		if err != nil {
+			log.Error("Sequencer consumer disabled", "err", err)
+
+			return nil
+		}
+
+		s.seqConsumer = consumer
+		s.blockchain.SetPreconfProvider(consumer)
+		consumer.Start()
+	case "":
+	default:
+		return fmt.Errorf("unknown sequencer role %q", config.SequencerRole)
+	}
+
+	return nil
+}
+
+func configureMinerForSequencer(config *ethconfig.Config, chainConfig *params.ChainConfig) {
+	if config.SequencerRole == "consumer" && chainConfig != nil && chainConfig.Bor != nil {
+		config.Miner.DisablePendingBlock = true
+	}
 }
 
 // New creates a new Ethereum object (including the initialisation of the common Ethereum object),
@@ -482,10 +561,15 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 	eth.dropper = newDropper(eth.p2pServer.MaxDialedConns(), eth.p2pServer.MaxInboundConns())
 
+	configureMinerForSequencer(config, eth.blockchain.Config())
 	if config.SyncMode != downloader.StatelessSync {
 		eth.miner = miner.New(eth, &config.Miner, eth.blockchain.Config(), eth.eventMux, eth.engine, eth.isLocalBlock, eth.config.WitnessProtocol)
 		eth.miner.SetExtra(makeExtraData(config.Miner.ExtraData))
 		eth.miner.SetPrioAddresses(config.TxPool.Locals)
+	}
+
+	if err := eth.attachSequencer(config); err != nil {
+		return nil, err
 	}
 
 	// 1.14.8: NewOracle function definition was changed to accept (startPrice *big.Int) param.
@@ -710,13 +794,21 @@ func (s *Ethereum) StopMining() {
 func (s *Ethereum) IsMining() bool      { return s.miner.Mining() }
 func (s *Ethereum) Miner() *miner.Miner { return s.miner }
 
-func (s *Ethereum) AccountManager() *accounts.Manager  { return s.accountManager }
-func (s *Ethereum) BlockChain() *core.BlockChain       { return s.blockchain }
-func (s *Ethereum) TxPool() *txpool.TxPool             { return s.txPool }
-func (s *Ethereum) BlobTxPool() *blobpool.BlobPool     { return s.blobTxPool }
-func (s *Ethereum) Engine() consensus.Engine           { return s.engine }
-func (s *Ethereum) ChainDb() ethdb.Database            { return s.chainDb }
-func (s *Ethereum) IsListening() bool                  { return true } // Always listening
+func (s *Ethereum) AccountManager() *accounts.Manager { return s.accountManager }
+func (s *Ethereum) BlockChain() *core.BlockChain      { return s.blockchain }
+func (s *Ethereum) TxPool() *txpool.TxPool            { return s.txPool }
+func (s *Ethereum) BlobTxPool() *blobpool.BlobPool    { return s.blobTxPool }
+func (s *Ethereum) Engine() consensus.Engine          { return s.engine }
+func (s *Ethereum) ChainDb() ethdb.Database           { return s.chainDb }
+func (s *Ethereum) IsListening() bool                 { return true } // Always listening
+// WhitelistedMilestone implements miner.Backend: the newest Heimdall
+// milestone the downloader has whitelisted, or false when none has arrived.
+// The miner's finality gate compares it against the local chain before a
+// producer builds.
+func (s *Ethereum) WhitelistedMilestone() (bool, uint64, common.Hash) {
+	return s.Downloader().ChainValidator.GetWhitelistedMilestone()
+}
+
 func (s *Ethereum) Downloader() *downloader.Downloader { return s.handler.downloader }
 func (s *Ethereum) Synced() bool                       { return s.handler.synced.Load() }
 func (s *Ethereum) SetSynced()                         { s.handler.enableSyncedFeatures() }
@@ -1096,7 +1188,14 @@ func (s *Ethereum) Stop() error {
 	s.closeFilterMaps <- ch
 	<-ch
 	s.filterMaps.Stop()
+	if s.seqConsumer != nil {
+		s.seqConsumer.Close()
+	}
 	s.txPool.Close()
+	if s.seqPublisher != nil {
+		s.seqPublisher.Close()
+	}
+
 	if s.miner != nil {
 		s.miner.Close()
 	}

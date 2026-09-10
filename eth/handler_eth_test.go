@@ -76,8 +76,8 @@ func (h *testEthHandler) Handle(peer *eth.Peer, packet eth.Packet) error {
 		h.txBroadcasts.Send(([]*types.Transaction)(*packet))
 		return nil
 
-	case *eth.PooledTransactionsResponse:
-		h.txBroadcasts.Send(([]*types.Transaction)(*packet))
+	case *eth.PooledTransactionsPacket:
+		h.txBroadcasts.Send(([]*types.Transaction)(packet.PooledTransactionsResponse))
 		return nil
 
 	default:

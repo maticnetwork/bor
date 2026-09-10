@@ -636,7 +636,8 @@ type BlockChain struct {
 	prefetcher                     Prefetcher
 	processor                      Processor // Block transaction processor interface
 	parallelProcessor              Processor // Parallel block transaction processor interface
-	parallelSpeculativeProcesses   int       // Number of parallel speculative processes
+	preconfProvider                PreconfProvider
+	parallelSpeculativeProcesses   int // Number of parallel speculative processes
 	enforceParallelProcessor       bool
 	parallelStatelessImportEnabled atomic.Bool // Whether parallel stateless import is enabled via config
 	parallelStatelessImportWorkers int         // Number of workers to use for parallel stateless import
@@ -1496,6 +1497,93 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header, wit
 	return result.receipts, result.logs, result.usedGas, result.statedb, result.vtime, result.err
 }
 
+func (bc *BlockChain) claimPreconf(block *types.Block, requireWitness bool, compatible, allowPrefix bool) (*PreconfExecution, time.Duration, bool) {
+	if bc.preconfProvider == nil || bc.logger != nil || !compatible || !bc.canClaimPreconf(requireWitness) {
+		return nil, 0, false
+	}
+	cached, ok := bc.preconfProvider.ClaimPreconf(block)
+	if !ok && allowPrefix {
+		if provider, supported := bc.preconfProvider.(PreconfPrefixProvider); supported {
+			cached, ok = provider.ClaimPreconfPrefix(block)
+		}
+	}
+	if !ok || cached == nil || cached.StateDB == nil || cached.Result == nil {
+		if ok {
+			bc.preconfProvider.RejectClaimedPreconf(block)
+		}
+		return nil, 0, ok
+	}
+	start := time.Now()
+	err := bc.validator.ValidateState(block, cached.StateDB, cached.Result, false)
+	elapsed := time.Since(start)
+	if err != nil {
+		bc.preconfProvider.RejectClaimedPreconf(block)
+		return nil, elapsed, true
+	}
+	return cached, elapsed, true
+}
+
+func (bc *BlockChain) canClaimPreconf(requireWitness bool) bool {
+	config := bc.cfg.VmConfig
+	return !requireWitness && !bc.cfg.Stateless && !bc.enforceParallelProcessor &&
+		config.Tracer == nil && !config.NoBaseFee && !config.EnablePreimageRecording &&
+		len(config.ExtraEips) == 0 && !config.StatelessSelfValidation && !config.EnableWitnessStats
+}
+
+func (bc *BlockChain) beginPreconfImport(block *types.Block, setHead bool) bool {
+	if !setHead || block == nil || bc.preconfProvider == nil {
+		return false
+	}
+	head := bc.CurrentBlock()
+	if head == nil || head.Number == nil || block.NumberU64() != head.Number.Uint64()+1 || block.ParentHash() != head.Hash() {
+		return false
+	}
+	observer, ok := bc.preconfProvider.(PreconfImportObserver)
+	if !ok {
+		return false
+	}
+	observer.BeginPreconfImport(block)
+	return true
+}
+
+func (bc *BlockChain) trackPreconfImport(outstanding map[common.Hash]*types.Block, block *types.Block, setHead bool) {
+	if bc.beginPreconfImport(block, setHead) {
+		outstanding[block.Hash()] = block
+	}
+}
+
+func (bc *BlockChain) resolvePipelinedPreconf(outstanding map[common.Hash]*types.Block, block *types.Block) {
+	if head := bc.CurrentBlock(); head != nil && head.Hash() == block.Hash() {
+		delete(outstanding, block.Hash())
+	}
+}
+
+func (bc *BlockChain) resolveWrittenPreconf(outstanding map[common.Hash]*types.Block, block *types.Block, status WriteStatus) {
+	if status == CanonStatTy {
+		delete(outstanding, block.Hash())
+	}
+}
+
+func (bc *BlockChain) processBlockForImport(block *types.Block, parent *types.Header, witness *stateless.Witness, interrupt *atomic.Bool, pipeOpts *PipelineImportOpts, requireWitness, preconfCompatible bool, outstanding map[common.Hash]*types.Block) (types.Receipts, []*types.Log, uint64, *state.StateDB, time.Duration, error) {
+	cached, validationTime, claimed := bc.claimPreconf(block, requireWitness, pipeOpts == nil && preconfCompatible, witness == nil)
+	if claimed {
+		outstanding[block.Hash()] = block
+	}
+	if cached != nil {
+		return cached.Result.Receipts, cached.Result.Logs, cached.Result.GasUsed, cached.StateDB, validationTime, nil
+	}
+	return bc.ProcessBlock(block, parent, witness, interrupt, pipeOpts)
+}
+
+func (bc *BlockChain) releasePreconfs(outstanding map[common.Hash]*types.Block) {
+	if bc.preconfProvider == nil {
+		return
+	}
+	for _, block := range outstanding {
+		bc.preconfProvider.CompletePreconf(block, nil, false)
+	}
+}
+
 func (bc *BlockChain) setupSnapshot() {
 	// Short circuit if the chain is established with path scheme, as the
 	// state snapshot has been integrated into path database natively.
@@ -2222,6 +2310,10 @@ func (bc *BlockChain) ExportN(w io.Writer, first uint64, last uint64) error {
 //
 // Note, this function assumes that the `mu` mutex is held!
 func (bc *BlockChain) writeHeadBlock(block *types.Block) {
+	bc.writeHeadBlockWithPreconf(block, "")
+}
+
+func (bc *BlockChain) writeHeadBlockWithPreconf(block *types.Block, invalidation string) {
 	// Add the block to the canonical chain number scheme and mark as the head
 	batch := bc.db.NewBatch()
 	rawdb.WriteHeadHeaderHash(batch, block.Hash())
@@ -2229,6 +2321,11 @@ func (bc *BlockChain) writeHeadBlock(block *types.Block) {
 	rawdb.WriteCanonicalHash(batch, block.Hash(), block.NumberU64())
 	rawdb.WriteTxLookupEntriesByBlock(batch, block)
 	rawdb.WriteHeadBlockHash(batch, block.Hash())
+	if invalidation != "" {
+		if err := rawdb.PrepareInvalidPreconf(batch, block.NumberU64(), invalidation); err != nil {
+			log.Warn("Failed to prepare preconfirmation invalidation", "number", block.NumberU64(), "err", err)
+		}
+	}
 
 	// Flush the whole batch into the disk, exit the node if failed
 	if err := batch.Write(); err != nil {
@@ -3596,6 +3693,7 @@ func (bc *BlockChain) insertChainWithWitnesses(chain types.Blocks, setHead bool,
 
 	// No validation errors for the first block (or chain prefix skipped)
 	var activeState *state.StateDB
+	outstandingPreconfs := make(map[common.Hash]*types.Block)
 	defer func() {
 		// The chain importer is starting and stopping trie prefetchers. If a bad
 		// block or other error is hit however, an early return may not properly
@@ -3604,6 +3702,7 @@ func (bc *BlockChain) insertChainWithWitnesses(chain types.Blocks, setHead bool,
 		if activeState != nil {
 			activeState.StopPrefetcher()
 		}
+		bc.releasePreconfs(outstandingPreconfs)
 	}()
 
 	// Track the singleton witness from this chain insertion (if any)
@@ -3701,6 +3800,7 @@ func (bc *BlockChain) insertChainWithWitnesses(chain types.Blocks, setHead bool,
 		if parent == nil {
 			parent = bc.GetHeader(block.ParentHash(), block.NumberU64()-1)
 		}
+		bc.trackPreconfImport(outstandingPreconfs, block, setHead)
 
 		// --- Pipelined import: check for pending SRC from previous block ---
 		//
@@ -3779,7 +3879,7 @@ func (bc *BlockChain) insertChainWithWitnesses(chain types.Blocks, setHead bool,
 		}
 
 		cheapExecStart := time.Now()
-		receipts, logs, usedGas, statedb, vtime, err := bc.ProcessBlock(block, parent, witness, &followupInterrupt, pipeOpts)
+		receipts, logs, usedGas, statedb, vtime, err := bc.processBlockForImport(block, parent, witness, &followupInterrupt, pipeOpts, computeWitness, !witnessFed, outstandingPreconfs)
 		cheapExecElapsed := time.Since(cheapExecStart)
 		if pipelineActive {
 			pipelineImportCheapExecTimer.Update(cheapExecElapsed)
@@ -3842,6 +3942,7 @@ func (bc *BlockChain) insertChainWithWitnesses(chain types.Blocks, setHead bool,
 				}
 				return nil, idx, err
 			}
+			bc.resolvePipelinedPreconf(outstandingPreconfs, block)
 			followupInterrupt.Store(true)
 			stats.processed++
 			stats.usedGas += usedGas
@@ -3904,7 +4005,6 @@ func (bc *BlockChain) insertChainWithWitnesses(chain types.Blocks, setHead bool,
 		if err != nil {
 			return nil, it.index, err
 		}
-
 		if !isValid {
 			return nil, it.index, whitelist.ErrMismatch
 		}
@@ -3923,6 +4023,7 @@ func (bc *BlockChain) insertChainWithWitnesses(chain types.Blocks, setHead bool,
 		if err != nil {
 			return nil, it.index, err
 		}
+		bc.resolveWrittenPreconf(outstandingPreconfs, block, status)
 
 		// Update the metrics touched during block commit
 		accountCommitTimer.Update(statedb.AccountCommits)   // Account commits are complete, we can mark them
@@ -5016,7 +5117,11 @@ func (bc *BlockChain) emitPostWriteEvents(block *types.Block, receipts []*types.
 		})
 		return
 	}
-	bc.writeHeadBlock(block)
+	var invalidation string
+	if bc.preconfProvider != nil {
+		invalidation = bc.preconfProvider.CompletePreconf(block, receipts, true)
+	}
+	bc.writeHeadBlockWithPreconf(block, invalidation)
 	bc.chainFeed.Send(ChainEvent{
 		Header:       block.Header(),
 		Receipts:     receipts,

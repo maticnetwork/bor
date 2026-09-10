@@ -42,6 +42,7 @@ var (
 	errUnknownBlock           = errors.New("unknown block")
 	errBlockHashWithRange     = errors.New("can't specify fromBlock/toBlock with blockHash")
 	errPendingLogsUnsupported = errors.New("pending logs are not supported")
+	errPendingLogsIncomplete  = errors.New("pending logs are not fully available yet")
 	errExceedMaxTopics        = errors.New("exceed max topics")
 	errExceedLogQueryLimit    = errors.New("exceed max addresses or topics per search position")
 	errExceedMaxTxHashes      = errors.New("exceed max number of transaction hashes allowed per transactionReceipts subscription")
@@ -322,7 +323,7 @@ func (api *FilterAPI) Logs(ctx context.Context, crit FilterCriteria) (*rpc.Subsc
 		matchedLogs = make(chan []*types.Log)
 	)
 
-	logsSub, err := api.events.SubscribeLogs(ethereum.FilterQuery(crit), matchedLogs)
+	logsSub, err := api.subscribeLogs(crit, matchedLogs)
 	if err != nil {
 		return nil, err
 	}
@@ -421,10 +422,6 @@ func (api *FilterAPI) TransactionReceipts(ctx context.Context, filter *Transacti
 	return rpcSub, nil
 }
 
-// FilterCriteria represents a request to create a new filter.
-// Same as ethereum.FilterQuery but with UnmarshalJSON() method.
-type FilterCriteria ethereum.FilterQuery
-
 // NewFilter creates a new filter and returns the filter id. It can be
 // used to retrieve logs when the state changes. This method cannot be
 // used to fetch logs that are already stored in the state.
@@ -439,7 +436,7 @@ type FilterCriteria ethereum.FilterQuery
 func (api *FilterAPI) NewFilter(crit FilterCriteria) (rpc.ID, error) {
 	logs := make(chan []*types.Log)
 
-	logsSub, err := api.events.SubscribeLogs(ethereum.FilterQuery(crit), logs)
+	logsSub, err := api.subscribeLogs(crit, logs)
 	if err != nil {
 		return "", err
 	}
@@ -493,6 +490,13 @@ func (api *FilterAPI) GetLogs(ctx context.Context, crit FilterCriteria) ([]*type
 	var filter *Filter
 
 	var borLogsFilter *BorBlockLogsFilter
+
+	if isCanonicalToPendingRange(crit) {
+		return api.getLogsThroughPending(ctx, crit)
+	}
+	if crit.Pending || isPendingRange(crit) {
+		return api.getPendingLogs(ctx, crit)
+	}
 
 	if crit.BlockHash != nil {
 		if crit.FromBlock != nil || crit.ToBlock != nil {
@@ -581,6 +585,9 @@ func (api *FilterAPI) GetFilterLogs(ctx context.Context, id rpc.ID) ([]*types.Lo
 
 	if !found || f.typ != LogsSubscription {
 		return nil, errFilterNotFound
+	}
+	if f.crit.Pending || isPendingRange(f.crit) {
+		return api.getPendingLogs(ctx, f.crit)
 	}
 
 	borConfig := api.sys.backend.ChainConfig().Bor
@@ -724,12 +731,14 @@ func (args *FilterCriteria) UnmarshalJSON(data []byte) error {
 		ToBlock   *rpc.BlockNumber `json:"toBlock"`
 		Addresses interface{}      `json:"address"`
 		Topics    []interface{}    `json:"topics"`
+		Pending   bool             `json:"pending"`
 	}
 
 	var raw input
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
 	}
+	args.Pending = raw.Pending
 
 	if raw.BlockHash != nil {
 		if raw.FromBlock != nil || raw.ToBlock != nil {

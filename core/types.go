@@ -65,3 +65,28 @@ type ProcessResult struct {
 	Logs     []*types.Log
 	GasUsed  uint64
 }
+
+type PreconfExecution struct {
+	StateDB *state.StateDB
+	Result  *ProcessResult
+}
+
+// PreconfProvider coordinates speculative executions with canonical import.
+type PreconfProvider interface {
+	// ClaimPreconf reserves a fully executed result matching block.
+	ClaimPreconf(block *types.Block) (*PreconfExecution, bool)
+	// RejectClaimedPreconf discards a claimed result that failed validation.
+	RejectClaimedPreconf(block *types.Block)
+	// CompletePreconf resolves a claim and reports a committed-view mismatch.
+	CompletePreconf(block *types.Block, receipts types.Receipts, committed bool) string
+}
+
+// PreconfPrefixProvider completes a partially executed preconfirmation against
+// the canonical block without waiting for the stream to finish the block.
+type PreconfPrefixProvider interface {
+	ClaimPreconfPrefix(block *types.Block) (*PreconfExecution, bool)
+}
+
+type PreconfImportObserver interface {
+	BeginPreconfImport(block *types.Block)
+}

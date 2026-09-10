@@ -242,7 +242,7 @@ func (h *handler) handleBatch(msgs []*jsonrpcMessage) {
 				break
 			}
 
-			resp := h.handleCallMsg(cp, msg)
+			resp := h.handleBatchCall(cp, msg)
 			callBuffer.pushResponse(resp)
 			if resp != nil && h.batchResponseMaxSize != 0 {
 				responseBytes += len(resp.Result)
@@ -264,6 +264,17 @@ func (h *handler) handleBatch(msgs []*jsonrpcMessage) {
 			n.activate()
 		}
 	})
+}
+
+func (h *handler) handleBatchCall(cp *callProc, msg *jsonrpcMessage) *jsonrpcMessage {
+	if msg.isSubscribe() {
+		return h.handleCallMsg(cp, msg)
+	}
+	// Give each batch item its own lifetime so resources retained by a handler,
+	// such as a pending-state snapshot, are released before the next item runs.
+	ctx, cancel := context.WithCancel(cp.ctx)
+	defer cancel()
+	return h.handleCallMsg(&callProc{ctx: ctx}, msg)
 }
 
 func (h *handler) respondWithBatchTooLarge(cp *callProc, batch []*jsonrpcMessage) {
@@ -405,11 +416,11 @@ func (h *handler) startCallProc(fn func(*callProc)) {
 
 	ctx, cancel := context.WithCancel(h.rootCtx)
 
-	h.executionPool.Submit(context.Background(), func() error {
+	h.executionPool.SubmitWithSlot(context.Background(), func(slot *Slot) error {
 		defer h.callWG.Done()
 		defer cancel()
 
-		fn(&callProc{ctx: ctx})
+		fn(&callProc{ctx: withExecutionSlot(ctx, slot)})
 
 		h.executionPool.processed.Add(1)
 

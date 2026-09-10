@@ -961,6 +961,12 @@ func (bc *BlockChain) DB() ethdb.Database {
 	return bc.db
 }
 
+// SetPreconfProvider installs the preconfirmation provider during service
+// initialization, before block import starts.
+func (bc *BlockChain) SetPreconfProvider(provider PreconfProvider) {
+	bc.preconfProvider = provider
+}
+
 //
 // Bor related changes
 //

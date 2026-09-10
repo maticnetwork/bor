@@ -3,7 +3,6 @@ package server
 import (
 	"crypto/ecdsa"
 	"fmt"
-
 	"math"
 	"math/big"
 	"os"
@@ -178,6 +177,8 @@ type Config struct {
 
 	// Pipeline has pipelined SRC settings for block import
 	Pipeline *PipelineConfig `hcl:"pipeline,block" toml:"pipeline,block"`
+
+	Sequencer *SequencerConfig `hcl:"sequencer,block" toml:"sequencer,block"`
 }
 
 type HistoryConfig struct {
@@ -517,6 +518,9 @@ type JsonRPCConfig struct {
 	TxSyncMaxTimeout    time.Duration `hcl:"-,optional" toml:"-"`
 	TxSyncMaxTimeoutRaw string        `hcl:"txsync.maxtimeout,optional" toml:"txsync.maxtimeout,optional"`
 
+	// Maximum eth_sendRawTransactionSync calls waiting for a receipt at once (0 = no limit)
+	TxSyncMaxConcurrent int `hcl:"txsync.maxconcurrent,optional" toml:"txsync.maxconcurrent,optional"`
+
 	// AcceptPreconfTx allows the RPC server to accept preconf transactions
 	AcceptPreconfTx bool `hcl:"accept-preconf-tx,optional" toml:"accept-preconf-tx,optional"`
 
@@ -841,6 +845,56 @@ type PipelineConfig struct {
 	WarmSnapshot bool `hcl:"warm-snapshot,optional" toml:"warm-snapshot,optional"`
 }
 
+// sequencerSettings derives the ethconfig sequencer fields: a mining node
+// publishes, a non-mining node consumes the stream for preconf receipts.
+// Enabling requires both service endpoints (the publisher also reads the
+// tail through the consumer service when it reconciles).
+func (c *Config) sequencerSettings() (string, string, string, time.Duration, error) {
+	if c.Sequencer == nil || !c.Sequencer.Enabled {
+		return "", "", "", 0, nil
+	}
+
+	role := "consumer"
+	if c.Sealer.Enabled {
+		role = "producer"
+	}
+
+	// Both roles read the tail through the consumer service; only a producer
+	// publishes, so the publisher endpoint is required for producers only —
+	// a consumer (RPC node) never uses it.
+	if c.Sequencer.ConsumerEndpoint == "" {
+		return "", "", "", 0, fmt.Errorf("sequencer.enabled requires sequencer.consumer-endpoint")
+	}
+
+	if role == "producer" && c.Sequencer.PublisherEndpoint == "" {
+		return "", "", "", 0, fmt.Errorf("a producing sequencer node requires sequencer.publisher-endpoint")
+	}
+
+	return role, c.Sequencer.PublisherEndpoint, c.Sequencer.ConsumerEndpoint, c.Sequencer.Poll, nil
+}
+
+// SequencerConfig configures the sequence store integration. Role is
+// derived, not configured: a mining node publishes the block lifecycle;
+// a non-mining node consumes the stream for preconf receipts.
+type SequencerConfig struct {
+	// Enabled turns the sequence store integration on.
+	Enabled bool `hcl:"enabled,optional" toml:"enabled,optional"`
+
+	// PublisherEndpoint is the gRPC address of the store's publisher
+	// service (the publish stream).
+	PublisherEndpoint string `hcl:"publisher-endpoint,optional" toml:"publisher-endpoint,optional"`
+
+	// ConsumerEndpoint is the gRPC address of the store's consumer
+	// service (tail reads during reconciliation; consumers in a future
+	// phase).
+	ConsumerEndpoint string `hcl:"consumer-endpoint,optional" toml:"consumer-endpoint,optional"`
+
+	// Poll is the producer's txpool poll cadence while a block is open
+	// (continuous building); zero keeps the one-shot fill at slot start.
+	Poll    time.Duration `hcl:"-,optional" toml:"-"`
+	PollRaw string        `hcl:"poll,optional" toml:"poll,optional"`
+}
+
 func DefaultConfig() *Config {
 	return &Config{
 		Chain:                       "mainnet",
@@ -966,6 +1020,7 @@ func DefaultConfig() *Config {
 			EnableTrace:          false,
 			TxSyncDefaultTimeout: ethconfig.Defaults.TxSyncDefaultTimeout,
 			TxSyncMaxTimeout:     ethconfig.Defaults.TxSyncMaxTimeout,
+			TxSyncMaxConcurrent:  ethconfig.Defaults.TxSyncMaxConcurrent,
 			AcceptPreconfTx:      false,
 			AcceptPrivateTx:      false,
 			Http: &APIConfig{
@@ -1110,6 +1165,12 @@ func DefaultConfig() *Config {
 			ImportSRCLogs:   false,
 			WarmSnapshot:    true,
 		},
+		Sequencer: &SequencerConfig{
+			Enabled:           false,
+			PublisherEndpoint: "",
+			ConsumerEndpoint:  "",
+			Poll:              200 * time.Millisecond,
+		},
 	}
 }
 
@@ -1171,6 +1232,14 @@ func (c *Config) fillTimeDurations() error {
 		{"p2p.txarrivalwait", &c.P2P.TxArrivalWait, &c.P2P.TxArrivalWaitRaw},
 		{"rpc.txsync.defaulttimeout", &c.JsonRPC.TxSyncDefaultTimeout, &c.JsonRPC.TxSyncDefaultTimeoutRaw},
 		{"rpc.txsync.maxtimeout", &c.JsonRPC.TxSyncMaxTimeout, &c.JsonRPC.TxSyncMaxTimeoutRaw},
+	}
+
+	if c.Sequencer != nil {
+		tds = append(tds, struct {
+			path string
+			td   *time.Duration
+			str  *string
+		}{"sequencer.poll", &c.Sequencer.Poll, &c.Sequencer.PollRaw})
 	}
 
 	for _, x := range tds {
@@ -1662,6 +1731,7 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 	n.RPCTxFeeCap = c.JsonRPC.TxFeeCap
 	n.TxSyncDefaultTimeout = c.JsonRPC.TxSyncDefaultTimeout
 	n.TxSyncMaxTimeout = c.JsonRPC.TxSyncMaxTimeout
+	n.TxSyncMaxConcurrent = c.JsonRPC.TxSyncMaxConcurrent
 
 	n.LogQueryLimit = c.JsonRPC.LogQueryLimit
 	n.RPCBlockRangeLimit = c.JsonRPC.RangeLimit
@@ -1747,7 +1817,18 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 	n.DisableBlindForkValidation = c.DisableBlindForkValidation
 	n.MaxBlindForkValidationLimit = c.MaxBlindForkValidationLimit
 
-	// Set preconf / private transaction flags for relay
+	// Sequence store: role is derived — a mining node publishes, a
+	// non-mining node consumes the stream for preconf receipts.
+	seqRole, seqPubEndpoint, seqConsEndpoint, seqPoll, err := c.sequencerSettings()
+	if err != nil {
+		return nil, err
+	}
+
+	n.SequencerRole = seqRole
+	n.SequencerPublisherEndpoint = seqPubEndpoint
+	n.SequencerConsumerEndpoint = seqConsEndpoint
+	n.SequencerPoll = seqPoll
+
 	n.EnablePreconfs = c.Relay.EnablePreconfs
 	n.EnablePrivateTx = c.Relay.EnablePrivateTx
 	n.BlockProducerRpcEndpoints = c.Relay.BlockProducerRpcEndpoints
@@ -1853,7 +1934,6 @@ var (
 // tries unlocking the specified account a few times.
 func unlockAccount(ks *keystore.KeyStore, address string, i int, passwords []string) (accounts.Account, string) {
 	account, err := utils.MakeAddress(ks, address)
-
 	if err != nil {
 		utils.Fatalf("Could not list accounts: %v", err)
 	}

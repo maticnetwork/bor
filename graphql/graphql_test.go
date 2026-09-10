@@ -17,6 +17,7 @@
 package graphql
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -33,14 +34,17 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/ethash"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/eth"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/ethereum/go-ethereum/eth/filters"
+	"github.com/ethereum/go-ethereum/internal/ethapi"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/rpc"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -58,6 +62,51 @@ func TestBuildSchema(t *testing.T) {
 	// Make sure the schema can be parsed and matched up to the object model.
 	if _, err := newHandler(stack, nil, nil, []string{}, []string{}); err != nil {
 		t.Errorf("Could not construct GraphQL handler: %v", err)
+	}
+}
+
+type leasedPendingBackend struct {
+	ethapi.Backend
+	state *state.StateDB
+	lease chan struct{}
+}
+
+func (b *leasedPendingBackend) StateAndHeaderByNumberOrHash(ctx context.Context, _ rpc.BlockNumberOrHash) (*state.StateDB, *types.Header, error) {
+	select {
+	case b.lease <- struct{}{}:
+	case <-ctx.Done():
+		return nil, nil, ctx.Err()
+	}
+	context.AfterFunc(ctx, func() { <-b.lease })
+	return b.state.Copy(), nil, nil
+}
+
+func TestPendingAccountResolversReleaseStateLease(t *testing.T) {
+	statedb, err := state.New(types.EmptyRootHash, state.NewDatabaseForTesting())
+	if err != nil {
+		t.Fatal(err)
+	}
+	backend := &leasedPendingBackend{state: statedb, lease: make(chan struct{}, 1)}
+	account := &Account{
+		r:             &Resolver{backend: backend},
+		blockNrOrHash: rpc.BlockNumberOrHashWithNumber(rpc.PendingBlockNumber),
+	}
+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+	defer cancel()
+
+	done := make(chan error, 2)
+	go func() {
+		_, err := account.Balance(ctx)
+		done <- err
+	}()
+	go func() {
+		_, err := account.Code(ctx)
+		done <- err
+	}()
+	for range 2 {
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
 	}
 }
 

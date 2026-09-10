@@ -1604,42 +1604,18 @@ func (s *StateDB) CreateContract(addr common.Address) {
 // Copy creates a deep, independent copy of the state.
 // Snapshots of the copied state cannot be applied to the copy.
 func (s *StateDB) Copy() *StateDB {
-	// Copy all the basic fields, initialize the memory ones
-	state := &StateDB{
-		db:                    s.db,
-		reader:                s.reader,
-		originalRoot:          s.originalRoot,
-		stateObjects:          make(map[common.Address]*stateObject, len(s.stateObjects)),
-		stateObjectsDestruct:  make(map[common.Address]*stateObject, len(s.stateObjectsDestruct)),
-		currentBlockDestructs: make(map[common.Address]struct{}, len(s.currentBlockDestructs)),
-		revertedKeys:          make(map[blockstm.Key]struct{}),
-		mutations:             make(map[common.Address]*mutation, len(s.mutations)),
-		dbErr:                 s.dbErr,
-		refund:                s.refund,
-		thash:                 s.thash,
-		txIndex:               s.txIndex,
-		logs:                  make(map[common.Hash][]*types.Log, len(s.logs)),
-		logSize:               s.logSize,
-		preimages:             maps.Clone(s.preimages),
+	return s.copy(true)
+}
 
-		// Timing fields — must be carried over so metrics in resultLoop see
-		// the values accumulated during fillTransactions, not zero.
-		AccountReads:         s.AccountReads,
-		StorageReads:         s.StorageReads,
-		SnapshotAccountReads: s.SnapshotAccountReads,
-		SnapshotStorageReads: s.SnapshotStorageReads,
-		BorConsensusTime:     s.BorConsensusTime,
-
-		// Do we need to copy the access list and transient storage?
-		// In practice: No. At the start of a transaction, these two lists are empty.
-		// In practice, we only ever copy state _between_ transactions/blocks, never
-		// in the middle of a transaction. However, it doesn't cost us much to copy
-		// empty lists, so we do it anyway to not blow up if we ever decide copy them
-		// in the middle of a transaction.
-		accessList:       s.accessList.Copy(),
-		transientStorage: s.transientStorage.Copy(),
-		journal:          s.journal.copy(),
+func (s *StateDB) CopyWithoutLogHistory() *StateDB {
+	if s.journal.length() != 0 {
+		return s.Copy()
 	}
+	return s.copy(false)
+}
+
+func (s *StateDB) copy(copyLogHistory bool) *StateDB {
+	state := s.newCopyState()
 	state.flatDiffRef = s.flatDiffRef // read-only, safe to share
 	if s.trie != nil {
 		state.trie = mustCopyTrie(s.trie)
@@ -1665,15 +1641,8 @@ func (s *StateDB) Copy() *StateDB {
 	for addr, op := range s.mutations {
 		state.mutations[addr] = op.copy()
 	}
-	// Deep copy the logs occurred in the scope of block
-	for hash, logs := range s.logs {
-		cpy := make([]*types.Log, len(logs))
-		for i, l := range logs {
-			cpy[i] = new(types.Log)
-			*cpy[i] = *l
-		}
-
-		state.logs[hash] = cpy
+	if copyLogHistory {
+		state.logs = cloneLogs(s.logs)
 	}
 	// Do we need to copy the access list and transient storage?
 	// In practice: No. At the start of a transaction, these two lists are empty.
@@ -1684,19 +1653,66 @@ func (s *StateDB) Copy() *StateDB {
 	state.accessList = s.accessList.Copy()
 	state.transientStorage = s.transientStorage.Copy()
 
-	if s.prefetcher != nil {
-		state.prefetcher = s.prefetcher
+	if prefetcher := s.prefetcher; prefetcher != nil {
+		state.prefetcher = prefetcher
 	}
-
 	if s.mvHashmap != nil {
 		state.mvHashmap = s.mvHashmap
 	}
-
 	if len(s.nonExistentReads) > 0 {
 		state.nonExistentReads = maps.Clone(s.nonExistentReads)
 	}
-
 	return state
+}
+
+func (s *StateDB) newCopyState() *StateDB {
+	return &StateDB{
+		db:                    s.db,
+		reader:                s.reader,
+		originalRoot:          s.originalRoot,
+		stateObjects:          make(map[common.Address]*stateObject, len(s.stateObjects)),
+		stateObjectsDestruct:  make(map[common.Address]*stateObject, len(s.stateObjectsDestruct)),
+		currentBlockDestructs: make(map[common.Address]struct{}, len(s.currentBlockDestructs)),
+		revertedKeys:          make(map[blockstm.Key]struct{}),
+		mutations:             make(map[common.Address]*mutation, len(s.mutations)),
+		dbErr:                 s.dbErr,
+		refund:                s.refund,
+		thash:                 s.thash,
+		txIndex:               s.txIndex,
+		logs:                  make(map[common.Hash][]*types.Log),
+		logSize:               s.logSize,
+		preimages:             maps.Clone(s.preimages),
+
+		// Timing fields — must be carried over so metrics in resultLoop see
+		// the values accumulated during fillTransactions, not zero.
+		AccountReads:         s.AccountReads,
+		StorageReads:         s.StorageReads,
+		SnapshotAccountReads: s.SnapshotAccountReads,
+		SnapshotStorageReads: s.SnapshotStorageReads,
+		BorConsensusTime:     s.BorConsensusTime,
+
+		// Do we need to copy the access list and transient storage?
+		// In practice: No. At the start of a transaction, these two lists are empty.
+		// In practice, we only ever copy state _between_ transactions/blocks, never
+		// in the middle of a transaction. However, it doesn't cost us much to copy
+		// empty lists, so we do it anyway to not blow up if we ever decide copy them
+		// in the middle of a transaction.
+		accessList:       s.accessList.Copy(),
+		transientStorage: s.transientStorage.Copy(),
+		journal:          s.journal.copy(),
+	}
+}
+
+func cloneLogs(logs map[common.Hash][]*types.Log) map[common.Hash][]*types.Log {
+	cloned := make(map[common.Hash][]*types.Log, len(logs))
+	for hash, entries := range logs {
+		cloned[hash] = make([]*types.Log, len(entries))
+		for i, entry := range entries {
+			cloned[hash][i] = new(types.Log)
+			*cloned[hash][i] = *entry
+		}
+	}
+	return cloned
 }
 
 // Snapshot returns an identifier for the current revision of the state.

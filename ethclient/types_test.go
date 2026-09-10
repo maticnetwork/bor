@@ -88,6 +88,20 @@ func TestToFilterArg(t *testing.T) {
 			nil,
 		},
 		{
+			"with pending view",
+			ethereum.FilterQuery{
+				Addresses: addresses,
+				Topics:    [][]common.Hash{},
+				Pending:   true,
+			},
+			map[string]interface{}{
+				"address": addresses,
+				"pending": true,
+				"topics":  [][]common.Hash{},
+			},
+			nil,
+		},
+		{
 			"with blockhash",
 			ethereum.FilterQuery{
 				Addresses: addresses,

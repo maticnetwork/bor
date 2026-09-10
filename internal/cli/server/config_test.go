@@ -626,3 +626,80 @@ func TestDeveloperModeGasParameters(t *testing.T) {
 		assert.Contains(t, err.Error(), "miner.targetGasPercentage must be between 1-100")
 	})
 }
+
+func TestSequencerConfigValidation(t *testing.T) {
+	cases := []struct {
+		name    string
+		mutate  func(*Config)
+		wantErr bool
+		role    string
+	}{
+		{
+			name:   "disabled sequencer builds",
+			mutate: func(c *Config) {},
+		},
+		// Per-field endpoint validation is the sequencerSettings table's
+		// job (sequencer_flags_test.go); this case pins that a settings
+		// error fails the whole build.
+		{
+			name: "producer without publisher endpoint fails the build",
+			mutate: func(c *Config) {
+				c.Sealer.Enabled = true
+				c.Sequencer = &SequencerConfig{Enabled: true, ConsumerEndpoint: "localhost:9550"}
+			},
+			wantErr: true,
+		},
+		{
+			name: "consumer needs only the consumer endpoint",
+			mutate: func(c *Config) {
+				c.Sequencer = &SequencerConfig{Enabled: true, ConsumerEndpoint: "localhost:9550"}
+			},
+			role: "consumer",
+		},
+		{
+			name: "enabled on a sealing node publishes",
+			mutate: func(c *Config) {
+				c.Sealer.Enabled = true
+				c.Sequencer = &SequencerConfig{
+					Enabled:           true,
+					PublisherEndpoint: "localhost:9550",
+					ConsumerEndpoint:  "localhost:9551",
+					Poll:              time.Second,
+				}
+			},
+			role: "producer",
+		},
+		{
+			name: "enabled on a non-sealing node consumes",
+			mutate: func(c *Config) {
+				c.Sequencer = &SequencerConfig{
+					Enabled:           true,
+					PublisherEndpoint: "localhost:9550",
+					ConsumerEndpoint:  "localhost:9551",
+					Poll:              time.Second,
+				}
+			},
+			role: "consumer",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			config := DefaultConfig()
+			tc.mutate(config)
+
+			assert.NoError(t, config.loadChain())
+
+			ethConfig, err := config.buildEth(nil, nil)
+			if tc.wantErr {
+				assert.Error(t, err)
+				assert.Nil(t, ethConfig)
+
+				return
+			}
+
+			assert.NoError(t, err)
+			assert.Equal(t, tc.role, ethConfig.SequencerRole)
+		})
+	}
+}

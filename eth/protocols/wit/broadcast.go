@@ -23,6 +23,13 @@ func (p *Peer) broadcastWitness() {
 			}
 			p.logger.Debug("propagated witness hashes", "hashes", packet.Hashes, "numbers", packet.Numbers)
 
+		case packet := <-p.queuedSignedAnns:
+			if err := p.sendSignedNewWitnessHashes(packet); err != nil {
+				log.Debug("failed to send signed witness announcements", "error", err)
+				return
+			}
+			p.logger.Debug("propagated signed witness announcements", "count", len(packet.Announcements))
+
 		case <-p.term:
 			return
 		}

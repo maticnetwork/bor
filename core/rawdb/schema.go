@@ -99,7 +99,8 @@ var (
 	offsetOfLastAncientFreezer = []byte("offsetOfLastAncientFreezer")
 
 	// badBlockKey tracks the list of bad blocks seen by local
-	badBlockKey = []byte("InvalidBlock")
+	badBlockKey          = []byte("InvalidBlock")
+	invalidPreconfPrefix = []byte("InvalidPreconf-")
 
 	// uncleanShutdownKey tracks the list of local crashes
 	uncleanShutdownKey = []byte("unclean-shutdown") // config prefix for the db
