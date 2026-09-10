@@ -36,6 +36,18 @@ var (
 	// peer delivered bytes whose keccak256 did not match the BP-signed hash.
 	witnessByteMismatchMeter = metrics.NewRegisteredMeter("eth/fetcher/witness/byte_mismatch", nil)
 
+	// witnessImportFailureMeter tracks witnesses that survived every pre-import
+	// check and then failed stateless execution — the only signal that proves a
+	// witness does not reconstruct the block it claims to.
+	witnessImportFailureMeter = metrics.NewRegisteredMeter("eth/fetcher/witness/import/failure", nil)
+
+	// witnessSourceRetryMeter tracks blocks re-fetched from a different peer
+	// after such a failure, and witnessImportGaveUpMeter those that exhausted
+	// their alternative sources. A rising ratio between the two means the
+	// witnesses themselves are bad, not the peers serving them.
+	witnessSourceRetryMeter  = metrics.NewRegisteredMeter("eth/fetcher/witness/import/retry", nil)
+	witnessImportGaveUpMeter = metrics.NewRegisteredMeter("eth/fetcher/witness/import/gaveup", nil)
+
 	// Witness page count metrics
 	witnessPageCountBelowThresholdMeter = metrics.NewRegisteredMeter("eth/fetcher/witness/pagecount/below_threshold", nil)
 	witnessPageCountAboveThresholdMeter = metrics.NewRegisteredMeter("eth/fetcher/witness/pagecount/above_threshold", nil)

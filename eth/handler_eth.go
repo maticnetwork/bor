@@ -160,11 +160,34 @@ func (h *ethHandler) createWitnessRequester() func(hash common.Hash, sink chan *
 // announcement must not be able to veto or bless data — import (stateless
 // execution + state-root check) remains the verifier, as on every WIT1
 // fetch.
+//
+// Peers whose witness for this exact block already failed stateless validation
+// here are skipped. That exclusion is per-block and short-lived, and it is
+// allowed to leave us with no candidate at all: re-asking the peer we just
+// proved wrong would only buy another failed execution, so reporting "no peer"
+// and letting the request back off is strictly better than looping on bytes we
+// know are bad.
 func (h *ethHandler) resolveWitnessFetchPeer(hash common.Hash) *ethPeer {
-	if p := h.peers.getOnePeerWithWitness(hash); p != nil {
-		return p
+	excluded := h.blockFetcher.ExcludedWitnessSources(hash)
+	if len(excluded) == 0 {
+		// Fast path: nothing to route around.
+		if p := h.peers.getOnePeerWithWitness(hash); p != nil {
+			return p
+		}
+	} else {
+		// peersWithWitnessCandidates preserves getOnePeerWithWitness's ordering
+		// (body-known first, announce-only after) while letting us walk past
+		// the excluded ones instead of giving up on the first hit.
+		for _, p := range h.peers.peersWithWitnessCandidates(hash) {
+			if _, skip := excluded[p.ID()]; !skip {
+				return p
+			}
+		}
 	}
 	if peerID, ok := (*handler)(h).deferredAnnounces.peekPeer(hash, func(id string) bool {
+		if _, skip := excluded[id]; skip {
+			return false
+		}
 		return h.peers.peer(id) != nil
 	}); ok {
 		return h.peers.peer(peerID)

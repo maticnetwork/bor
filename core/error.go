@@ -18,6 +18,7 @@ package core
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/ethereum/go-ethereum/core/types"
 )
@@ -38,6 +39,22 @@ var (
 	// state root and the cross-validated (remote) state root during stateless
 	// self-validation.
 	ErrStatelessStateRootMismatch = errors.New("stateless self-validation state root mismatch")
+
+	// ErrWitnessInvalid marks an import failure that is attributable to the
+	// witness supplied for a block rather than to this node's local state or
+	// storage. Every failure raised while executing against a witness-backed
+	// trie belongs to this class: the witness memdb serves only what the
+	// witness carried, so a missing node, a wrong post-state root or a failed
+	// state validation all say "these bytes are unusable", never "our disk is
+	// unhappy".
+	//
+	// Callers use it to decide whether a second opinion is worth asking for —
+	// re-fetching the witness from a different peer, or (on a node that holds
+	// the state) re-running the block through full execution — and to decide
+	// whether the peer that served the witness deserves blame. Errors are
+	// wrapped, not replaced, so existing errors.Is checks against the
+	// underlying cause keep working.
+	ErrWitnessInvalid = errors.New("witness-attributable validation failure")
 
 	// ErrGasUsedMismatch indicates a mismatch between locally computed
 	// gas used and the block's gas used during validation.
@@ -189,3 +206,19 @@ var (
 	// with different state-sync data than what this node computed.
 	ErrStateSyncMismatch = errors.New("state-sync mismatch")
 )
+
+// WitnessError wraps err as a witness-attributable failure. It returns nil for
+// a nil err so it can be applied inline to a call's result.
+func WitnessError(err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("%w: %w", ErrWitnessInvalid, err)
+}
+
+// IsWitnessError reports whether err (or any error it wraps) was raised while
+// executing against a supplied witness, and is therefore attributable to that
+// witness rather than to local state. See ErrWitnessInvalid.
+func IsWitnessError(err error) bool {
+	return errors.Is(err, ErrWitnessInvalid)
+}

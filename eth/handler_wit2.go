@@ -32,6 +32,11 @@ var (
 	wit2ConflictingWitnessHashMeter     = metrics.NewRegisteredMeter("eth/wit2/announce/conflicting_witness_hash", nil)
 	wit2RateLimitDropMeter              = metrics.NewRegisteredMeter("eth/wit2/announce/rate_limit_drop", nil)
 	wit2StrikeDisconnectMeter           = metrics.NewRegisteredMeter("eth/wit2/announce/strike_disconnect", nil)
+	// witnessFullExecFallbackMeter counts blocks a state-holding node had to
+	// re-import with full execution because the witness it was handed failed
+	// stateless validation. Non-zero means witnesses are reaching this node
+	// wrong; it is not itself an error, the block still imported.
+	witnessFullExecFallbackMeter        = metrics.NewRegisteredMeter("eth/witness/import/full_exec_fallback", nil)
 	wit2WaiterPushMeter                 = metrics.NewRegisteredMeter("eth/wit2/serve/waiter_push", nil)
 	wit2WaiterPushOversizeMeter         = metrics.NewRegisteredMeter("eth/wit2/serve/waiter_push_oversize", nil)
 	wit2BroadcastUnknownHeaderDropMeter = metrics.NewRegisteredMeter("eth/wit2/serve/broadcast_unknown_header_drop", nil)

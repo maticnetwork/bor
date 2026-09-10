@@ -53,6 +53,7 @@ type peerFailureReason string
 
 const (
 	peerFailureInvalidChain      peerFailureReason = "invalid-chain"
+	peerFailureInvalidWitness    peerFailureReason = "invalid-witness"
 	peerFailurePrunedSidechain   peerFailureReason = "pruned-sidechain"
 	peerFailureBadPeer           peerFailureReason = "bad-peer"
 	peerFailureTimeout           peerFailureReason = "timeout"
@@ -118,6 +119,15 @@ func classifySyncFailure(err error) (peerFailureReason, bool) {
 		return peerFailureNoRemote, true
 	case errors.Is(err, ErrPeersUnavailable), errors.Is(err, errNoPeers):
 		return peerFailurePeersUnavailable, true
+	case errors.Is(err, errInvalidWitness):
+		// A witness that fails stateless validation says the bytes are
+		// unusable, not that this peer forged them: the witness may have come
+		// from another peer in the fetch queue, and a producer that generated
+		// it wrong makes every peer look equally guilty. Back the peer off
+		// rather than dropping it — that alone moves the next sync attempt to a
+		// different source, which is the recovery we want, without walking the
+		// whole peer set on a bad block.
+		return peerFailureInvalidWitness, true
 	case errors.Is(err, errInvalidChain):
 		return peerFailureInvalidChain, true
 	case errors.Is(err, errBadPeer):
@@ -244,7 +254,7 @@ func (p *peerConnection) responseDecision(reason peerFailureReason) peerResponse
 	case peerFailureWhitelistMismatch:
 		decision.action = peerResponseMismatch
 		decision.backoff = peerSoftBackoff
-	case peerFailureTimeout, peerFailureStalling, peerFailureUnsynced, peerFailureEmptyHeaderSet, peerFailureTooOld, peerFailureDisconnected:
+	case peerFailureTimeout, peerFailureStalling, peerFailureUnsynced, peerFailureEmptyHeaderSet, peerFailureTooOld, peerFailureDisconnected, peerFailureInvalidWitness:
 		decision.action = peerResponseBackoff
 		decision.backoff = peerSoftBackoff
 	default:

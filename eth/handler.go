@@ -370,10 +370,27 @@ func newHandler(config *handlerConfig) (*handler, error) {
 		}
 
 		if h.statelessSync.Load() {
+			// No local state to fall back on — the witness is the only way to
+			// execute these blocks. Recovery for a bad one is the fetcher's
+			// job: re-fetch from a different peer (see witness_retry.go).
 			return h.chain.InsertChainStateless(blocks, witnesses)
-		} else {
-			return h.chain.InsertChainWithWitnesses(blocks, config.witnessProtocol, witnesses)
 		}
+
+		n, err := h.chain.InsertChainWithWitnesses(blocks, config.witnessProtocol, witnesses)
+		if err == nil || witnesses == nil || !core.IsWitnessError(err) {
+			return n, err
+		}
+		// We hold the state; here the witness is only an execution accelerator,
+		// swapped in as the trie read backend. So a witness-attributable failure
+		// is recoverable without going back to the network at all — re-run the
+		// insert against our own trie, which is the authoritative answer anyway.
+		// If that fails too the block is genuinely bad, and its error (not the
+		// witness's) is what the caller should see, so no peer is blamed for it.
+		log.Warn("Witness-backed import failed, retrying with full execution",
+			"number", blocks[0].Number(), "hash", blocks[0].Hash(), "count", len(blocks), "err", err)
+		witnessFullExecFallbackMeter.Mark(1)
+
+		return h.chain.InsertChainWithWitnesses(blocks, config.witnessProtocol, nil)
 	}
 
 	h.blockFetcher = fetcher.NewBlockFetcher(false, nil, h.chain.GetBlockByHash, validator, h.BroadcastBlock, heighter, h.chain.CurrentHeader, nil, inserter, h.removePeer, h.jailPeer, h.enableBlockTracking, h.statelessSync.Load() || h.syncWithWitnesses, config.gasCeil, h.lookupSignedWitnessHash, h.cacheVerifiedWitnessForServing)

@@ -209,7 +209,7 @@ func TestBlockFetcherConcurrentMapAccess(t *testing.T) {
 			block := blocks[blockIdx]
 
 			select {
-			case fetcher.done <- block.Hash():
+			case fetcher.done <- &importOutcome{hash: block.Hash()}:
 			case <-time.After(time.Millisecond):
 				// Don't block if channel is full
 			}
@@ -640,7 +640,7 @@ func TestBlockFetcherMemoryLeaks(t *testing.T) {
 
 		// Trigger cleanup via done channel
 		select {
-		case fetcher.done <- hash:
+		case fetcher.done <- &importOutcome{hash: hash}:
 		case <-time.After(time.Millisecond):
 		}
 	}

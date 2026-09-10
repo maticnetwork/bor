@@ -26,6 +26,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/prque"
 	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/protocols/eth"
@@ -159,6 +160,19 @@ type blockOrHeaderInject struct {
 	header  *types.Header      // Used for light mode fetcher which only cares about header.
 	block   *types.Block       // Used for normal mode fetcher which imports full block.
 	witness *stateless.Witness // Used for witness mode fetcher which imports witness.
+
+	// witnessOrigin is the peer that supplied witness, which is frequently NOT
+	// origin: the block arrives from whoever broadcast it while the witness
+	// comes from whichever peer served or broadcast the bytes. Without it a
+	// witness that fails stateless validation could only be blamed on the peer
+	// that sent the block, which is the wrong peer.
+	witnessOrigin string
+
+	// fetchWitness is retained so a failed import can re-request the witness
+	// from a different source, and witnessRetries bounds how often it may.
+	// See witness_retry.go.
+	fetchWitness   witnessRequesterFn
+	witnessRetries int
 }
 
 // number returns the block number of the injected object.
@@ -214,7 +228,7 @@ type BlockFetcher struct {
 	headerFilter chan chan *headerFilterTask
 	bodyFilter   chan chan *bodyFilterTask
 
-	done chan common.Hash
+	done chan *importOutcome
 	quit chan struct{}
 
 	// Protect concurrent map access from goroutines
@@ -268,7 +282,7 @@ func NewBlockFetcher(light bool, getHeader HeaderRetrievalFn, getBlock blockRetr
 		enqueueCh:           make(chan *enqueueRequest, 10), // Add buffering
 		headerFilter:        make(chan chan *headerFilterTask),
 		bodyFilter:          make(chan chan *bodyFilterTask),
-		done:                make(chan common.Hash),
+		done:                make(chan *importOutcome),
 		quit:                make(chan struct{}),
 		announces:           make(map[string]int),
 		announced:           make(map[common.Hash][]*blockAnnounce),
@@ -324,14 +338,25 @@ func (f *BlockFetcher) Stop() {
 }
 
 // SetWitnessServerStriker wires the callback used to penalize a peer that serves
-// a non-empty witness whose bytes mismatch the BP-signed commitment (WIT2). It
-// is set post-construction (rather than threaded through NewBlockFetcher) to keep
-// the constructor signature stable. Must be called before Start; optional —
-// when unset, byte-mismatch servers are not struck.
+// a witness we can prove is bad: either non-empty bytes whose hash mismatches
+// the BP-signed commitment (WIT2), or bytes that fail stateless validation at
+// import time. It is set post-construction (rather than threaded through
+// NewBlockFetcher) to keep the constructor signature stable. Must be called
+// before Start; optional — when unset, such servers are not struck.
 func (f *BlockFetcher) SetWitnessServerStriker(fn func(id string)) {
 	if f.wm != nil {
 		f.wm.parentStrikeWitnessServer = fn
 	}
+}
+
+// ExcludedWitnessSources returns the peers whose witness for the given block
+// already failed stateless validation here, so a re-fetch can route around
+// them. Returns nil when there are none — the normal case.
+func (f *BlockFetcher) ExcludedWitnessSources(hash common.Hash) map[string]struct{} {
+	if f == nil || f.wm == nil {
+		return nil
+	}
+	return f.wm.excludedWitnessSources(hash)
 }
 
 // Notify announces the fetcher of the potential availability of a new block in
@@ -555,7 +580,7 @@ func (f *BlockFetcher) loop() {
 				f.importHeaders(op.origin, op.header)
 			} else {
 				// Block must have witness if required, handled by enqueue logic or WM
-				f.importBlocks(op.origin, op.block, op.witness)
+				f.importBlocks(op)
 			}
 		}
 
@@ -625,13 +650,25 @@ func (f *BlockFetcher) loop() {
 				log.Error("Received nil enqueue request")
 				continue
 			}
-			// Enqueue the fully assembled block (potentially with witness)
-			f.enqueue(req.op.origin, nil, req.op.block, req.op.witness)
+			// Enqueue the fully assembled block (potentially with witness).
+			// The op is passed through rather than flattened so the witness's
+			// source peer and remaining retry budget survive into the import.
+			f.enqueueOp(req.op)
 
-		case hash := <-f.done:
+		case outcome := <-f.done:
 			// A pending import finished, remove all traces of the notification
-			f.forgetHash(hash)  // This calls wm.forget
-			f.forgetBlock(hash) // This calls wm.forget
+			f.forgetHash(outcome.hash)  // This calls wm.forget
+			f.forgetBlock(outcome.hash) // This calls wm.forget
+
+			// Re-arm a witness fetch only after the forgets above have run:
+			// both wipe the witness manager's pending state for the hash, so
+			// re-arming from the import goroutine would race them and lose the
+			// retry. Doing it here makes the ordering structural.
+			if outcome.retry != nil {
+				f.wm.retryWithNewSource(outcome.retry)
+			} else {
+				f.wm.clearWitnessSourceExclusions(outcome.hash)
+			}
 
 		case <-fetchTimer.C:
 			// At least one block's timer ran out, check for needing retrieval
@@ -1070,20 +1107,35 @@ func (f *BlockFetcher) rescheduleComplete(complete *time.Timer) {
 // enqueue schedules a new header or block import operation, if the component
 // to be imported has not yet been seen.
 func (f *BlockFetcher) enqueue(peer string, header *types.Header, block *types.Block, witness *stateless.Witness) {
-	var (
-		hash   common.Hash
-		number uint64
-	)
-
-	// Determine hash and number from block first, then header
-	if block != nil {
-		hash, number = block.Hash(), block.NumberU64()
-	} else if header != nil {
-		hash, number = header.Hash(), header.Number.Uint64()
-	} else {
+	if block == nil && header == nil {
 		log.Error("Enqueue called with nil header and block", "peer", peer)
 		return
 	}
+	op := &blockOrHeaderInject{origin: peer}
+	if block != nil { // Prioritize block over header if both somehow provided
+		op.block = block
+		op.witness = witness // Attach witness only if block is present
+	} else {
+		op.header = header
+	}
+	f.enqueueOp(op)
+}
+
+// enqueueOp schedules an already-assembled import operation. Callers that have
+// nothing but a (peer, block, witness) triple should use enqueue; this variant
+// exists for the witness manager, whose op additionally carries the witness's
+// source peer and its remaining retry budget — state that a rebuilt op would
+// silently drop.
+func (f *BlockFetcher) enqueueOp(op *blockOrHeaderInject) {
+	if op == nil || (op.block == nil && op.header == nil) {
+		log.Error("enqueueOp called with nil header and block")
+		return
+	}
+	var (
+		peer   = op.origin
+		hash   = op.hash()
+		number = op.number()
+	)
 
 	f.mu.Lock()
 
@@ -1116,19 +1168,6 @@ func (f *BlockFetcher) enqueue(peer string, header *types.Header, block *types.B
 	}
 
 	// Schedule the block for future importing
-	op := &blockOrHeaderInject{origin: peer}
-	if header != nil {
-		op.header = header
-	} else if block != nil { // Prioritize block over header if both somehow provided
-		op.block = block
-		// Attach witness only if block is present
-		op.witness = witness
-	} else {
-		log.Error("Invalid state in enqueue: header and block are nil", "peer", peer, "hash", hash)
-		f.mu.Unlock()
-		return // Should not happen due to check above
-	}
-
 	f.queues[peer] = count
 	f.queued[hash] = op
 	f.queue.Push(op, -int64(number))
@@ -1153,7 +1192,7 @@ func (f *BlockFetcher) importHeaders(peer string, header *types.Header) {
 	log.Debug("Importing propagated header", "peer", peer, "number", header.Number, "hash", hash)
 
 	go func() {
-		defer func() { f.done <- hash }()
+		defer func() { f.done <- &importOutcome{hash: hash} }()
 		// If the parent's unknown, abort insertion
 		parent := f.getHeader(header.ParentHash)
 		if parent == nil {
@@ -1179,17 +1218,76 @@ func (f *BlockFetcher) importHeaders(peer string, header *types.Header) {
 	}()
 }
 
+// importOutcome reports the result of a finished import back to the main loop.
+// retry is non-nil when the import failed on the supplied witness and the block
+// deserves another attempt with a witness from a different peer; the loop acts
+// on it only after it has torn the finished import's state down, so the re-arm
+// cannot be undone by the teardown that follows it.
+type importOutcome struct {
+	hash  common.Hash
+	retry *blockOrHeaderInject
+}
+
+// handleWitnessImportFailure decides what a failed block import owes to the
+// witness it was handed. Everything but a witness-attributable failure is left
+// exactly as it was: a bad body, an unavailable parent state or a stopped chain
+// says nothing about whoever served the witness.
+//
+// For a witness-attributable failure it does two things the fetcher previously
+// did neither of. It blames the peer that served the bytes — a strike, matching
+// how the WIT2 byte-mismatch path treats the same offence, because an honest
+// peer relaying a witness a producer generated wrong looks identical to a
+// malicious one and must not be disconnected for a single failure. And it hands
+// back the op so the block can be re-fetched from a different peer, since the
+// alternative — the caller's historical behaviour — is to drop the block on the
+// floor, which leaves a stateless node parked at that height with nothing left
+// to try.
+//
+// Returns nil when no retry should be attempted.
+func (f *BlockFetcher) handleWitnessImportFailure(op *blockOrHeaderInject, err error) *blockOrHeaderInject {
+	if f.wm == nil || op.witness == nil || !core.IsWitnessError(err) {
+		return nil
+	}
+	witnessImportFailureMeter.Mark(1)
+
+	// Strike at most once per (peer, block): a peer is only ever asked again
+	// for a block it already got wrong if no alternative source exists, and
+	// jailing the sole witness source for a block would strand it outright.
+	if op.witnessOrigin != "" && f.wm.parentStrikeWitnessServer != nil && !f.wm.isWitnessSourceExcluded(op.hash(), op.witnessOrigin) {
+		f.wm.parentStrikeWitnessServer(op.witnessOrigin)
+	}
+
+	if op.fetchWitness == nil {
+		// No way to ask anyone else — the witness arrived on a path that never
+		// carried a requester (a bare Enqueue, or a light-mode op).
+		return nil
+	}
+	if op.witnessRetries >= maxWitnessSourceRetries {
+		witnessImportGaveUpMeter.Mark(1)
+		log.Warn("Giving up on block after repeated witness validation failures",
+			"number", op.number(), "hash", op.hash(), "attempts", op.witnessRetries+1, "err", err)
+		return nil
+	}
+	return op
+}
+
 // importBlocks spawns a new goroutine to run a block insertion into the chain. If the
 // block's number is at the same height as the current import phase, it updates
 // the phase states accordingly.
-func (f *BlockFetcher) importBlocks(peer string, block *types.Block, witness *stateless.Witness) {
-	hash := block.Hash()
+func (f *BlockFetcher) importBlocks(op *blockOrHeaderInject) {
+	var (
+		block   = op.block
+		witness = op.witness
+		peer    = op.origin
+		hash    = block.Hash()
+	)
 
 	// Run the import on a new thread
 	log.Debug("Importing propagated block", "peer", peer, "number", block.Number(), "hash", hash)
 
 	go func() {
-		defer func() { f.done <- hash }()
+		outcome := &importOutcome{hash: hash}
+		defer func() { f.done <- outcome }()
 
 		// If the parent's unknown, abort insertion
 		parent := f.getBlock(block.ParentHash())
@@ -1220,6 +1318,7 @@ func (f *BlockFetcher) importBlocks(peer string, block *types.Block, witness *st
 		// Create slices even for a single block/witness to match the expected signature.
 		if _, err := f.insertChain(types.Blocks{block}, []*stateless.Witness{witness}); err != nil {
 			log.Debug("Propagated block import failed", "peer", peer, "number", block.Number(), "hash", hash, "err", err)
+			outcome.retry = f.handleWitnessImportFailure(op, err)
 			return
 		}
 

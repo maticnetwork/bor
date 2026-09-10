@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/eth/downloader/whitelist"
@@ -72,6 +73,7 @@ func TestClassifySyncFailureReasons(t *testing.T) {
 		{name: "ghost-state text alone is pruned sidechain", err: errors.New(sidechainGhostStateMsg), reason: peerFailurePrunedSidechain, ok: true},
 		{name: "no ancestor backs off", err: errNoAncestorFound, reason: peerFailureUnsynced, ok: true},
 		{name: "invalid body handled at delivery is unclassified", err: errInvalidBody},
+		{name: "invalid witness backs the source off", err: fmt.Errorf("%w: %w", errInvalidWitness, core.ErrWitnessInvalid), reason: peerFailureInvalidWitness, ok: true},
 		{name: "unclassified generic", err: errors.New("some unrelated failure")},
 		{name: "nil"},
 	}
@@ -109,6 +111,7 @@ func TestPeerResponseDecisionActions(t *testing.T) {
 		{name: "backoff unsynced", reason: peerFailureUnsynced, action: peerResponseBackoff, backoff: peerSoftBackoff},
 		{name: "backoff empty header set", reason: peerFailureEmptyHeaderSet, action: peerResponseBackoff, backoff: peerSoftBackoff},
 		{name: "backoff disconnected", reason: peerFailureDisconnected, action: peerResponseBackoff, backoff: peerSoftBackoff},
+		{name: "backoff invalid witness", reason: peerFailureInvalidWitness, action: peerResponseBackoff, backoff: peerSoftBackoff},
 		{name: "no remote is no-op", reason: peerFailureNoRemote, action: peerResponseNone},
 		{name: "ignore peers unavailable", reason: peerFailurePeersUnavailable, action: peerResponseNone},
 		{name: "ignore unknown reason", reason: peerFailureReason("unclassified"), action: peerResponseNone},
@@ -492,6 +495,43 @@ func TestHandleSyncFailureTimeoutBacksOff(t *testing.T) {
 	}
 	if _, ok := d.peers.jailed[peer.id]; !ok {
 		t.Fatal("a soft backoff should persist across reconnect")
+	}
+}
+
+// TestHandleSyncFailureInvalidWitnessBacksOff covers the downloader's half of
+// the bad-witness gap. A stateless import that rejects a witness used to be
+// reported as a bare errInvalidBody, which classifySyncFailure deliberately
+// ignores because body-hash faults are answered at delivery time — so the
+// failure produced no backoff and no rotation, and the sync loop re-picked the
+// same best-TD peer and re-downloaded the same unusable witness. It must back
+// the peer off — which moves the next attempt to a different source — without
+// dropping it, since a witness the producer generated wrong makes every peer
+// look equally guilty.
+func TestHandleSyncFailureInvalidWitnessBacksOff(t *testing.T) {
+	t.Parallel()
+
+	dropped := make(chan string, 1)
+	d := &Downloader{peers: newPeerSet(), dropPeer: func(id string) { dropped <- id }}
+	peer := newPeerConnection("peer", eth.ETH69, nil, log.New())
+	if err := d.peers.Register(peer); err != nil {
+		t.Fatalf("failed to register peer: %v", err)
+	}
+
+	err := fmt.Errorf("%w: %w", errInvalidWitness, core.ErrWitnessInvalid)
+	if !d.handleSyncFailure(peer, peer.id, err) {
+		t.Fatal("a stateless import failure should be handled")
+	}
+	select {
+	case id := <-dropped:
+		t.Fatalf("a bad witness must not drop the peer: %q", id)
+	default:
+	}
+	if !peer.backedOff() {
+		t.Fatal("a bad witness should back the peer off so the next sync picks another source")
+	}
+
+	if reason, ok := classifySyncFailure(err); !ok || reason != peerFailureInvalidWitness {
+		t.Fatalf("classifySyncFailure(errInvalidWitness) = (%q, %v), want (%q, true)", reason, ok, peerFailureInvalidWitness)
 	}
 }
 

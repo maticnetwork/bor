@@ -97,6 +97,12 @@ type fetcherTester struct {
 	headers map[common.Hash]*types.Header // Headers belonging to the tester
 	blocks  map[common.Hash]*types.Block  // Blocks belonging to the tester
 	drops   map[string]bool               // Map of peers dropped by the fetcher
+	strikes map[string]int                // Count of witness-serving strikes per peer
+
+	// insertHook, when set, runs before the simulated chain insertion and can
+	// fail it. Used to model an import that rejects the witness it was handed.
+	// Runs under lock, so it must not call back into the tester.
+	insertHook func(types.Blocks, []*stateless.Witness) (int, error)
 
 	lock sync.RWMutex
 }
@@ -108,6 +114,7 @@ func newTester(light bool) *fetcherTester {
 		headers: map[common.Hash]*types.Header{genesis.Hash(): genesis.Header()},
 		blocks:  map[common.Hash]*types.Block{genesis.Hash(): genesis},
 		drops:   make(map[string]bool),
+		strikes: make(map[string]int),
 	}
 	tester.fetcher = NewBlockFetcher(light, tester.getHeader, tester.getBlock, tester.verifyHeader, tester.broadcastBlock, tester.chainHeight, nil, tester.insertHeaders, tester.insertChain, tester.dropPeer, nil, false, false, 0, nil, nil)
 	tester.fetcher.Start()
@@ -179,6 +186,12 @@ func (f *fetcherTester) insertChain(blocks types.Blocks, witnesses []*stateless.
 	f.lock.Lock()
 	defer f.lock.Unlock()
 
+	if f.insertHook != nil {
+		if n, err := f.insertHook(blocks, witnesses); err != nil {
+			return n, err
+		}
+	}
+
 	for i, block := range blocks {
 		// Make sure the parent in known
 		if _, ok := f.blocks[block.ParentHash()]; !ok {
@@ -194,6 +207,23 @@ func (f *fetcherTester) insertChain(blocks types.Blocks, witnesses []*stateless.
 	}
 
 	return 0, nil
+}
+
+// strikeWitnessServer is an emulator for the WIT2 strike ledger, accumulating
+// how many times each peer was blamed for serving an unusable witness.
+func (f *fetcherTester) strikeWitnessServer(peer string) {
+	f.lock.Lock()
+	defer f.lock.Unlock()
+
+	f.strikes[peer]++
+}
+
+// strikeCount reports how many strikes a peer has accumulated.
+func (f *fetcherTester) strikeCount(peer string) int {
+	f.lock.RLock()
+	defer f.lock.RUnlock()
+
+	return f.strikes[peer]
 }
 
 // dropPeer is an emulator for the peer removal, simply accumulating the various

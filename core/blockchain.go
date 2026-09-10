@@ -3274,7 +3274,7 @@ func (bc *BlockChain) insertChainStatelessParallel(chain types.Blocks, witnesses
 			}
 			if err := stateless.ValidateWitnessPreState(witnesses[i], headerReader, block.Header()); err != nil {
 				stopHeaders()
-				return int(processed.Load()), fmt.Errorf("post-import witness validation failed for block %d: %w", block.NumberU64(), err)
+				return int(processed.Load()), WitnessError(fmt.Errorf("post-import witness validation failed for block %d: %w", block.NumberU64(), err))
 			}
 		}
 
@@ -3437,7 +3437,7 @@ func (bc *BlockChain) insertChainStatelessSequential(chain types.Blocks, witness
 				headerReader = witnesses[i].HeaderReader()
 			}
 			if err := stateless.ValidateWitnessPreState(witnesses[i], headerReader, block.Header()); err != nil {
-				return int(processed.Load()), fmt.Errorf("post-import witness validation failed for block %d: %w", block.NumberU64(), err)
+				return int(processed.Load()), WitnessError(fmt.Errorf("post-import witness validation failed for block %d: %w", block.NumberU64(), err))
 			}
 		}
 	}
@@ -3761,7 +3761,7 @@ func (bc *BlockChain) insertChainWithWitnesses(chain types.Blocks, setHead bool,
 				log.Error("Witness validation failed during chain insertion", "blockNumber", block.Number(), "blockHash", block.Hash(), "err", err)
 				bc.reportBlock(block, &ProcessResult{}, err)
 				followupInterrupt.Store(true)
-				return nil, it.index, fmt.Errorf("witness validation failed: %w", err)
+				return nil, it.index, WitnessError(fmt.Errorf("witness validation failed: %w", err))
 			}
 
 			// 2. Set the witness to the statedb.
@@ -3817,6 +3817,12 @@ func (bc *BlockChain) insertChainWithWitnesses(chain types.Blocks, setHead bool,
 					attrs = append(attrs, pipelineImportLogAttrs(parent, pipeOpts)...)
 					log.Error("Pipelined import: flush failed after ProcessBlock error", attrs...)
 				}
+			}
+			// Execution ran against the supplied witness's memdb rather than
+			// the local trie, so this failure indicts the witness, not our
+			// state. Mark it so the caller can retry the block without one.
+			if witnessFed {
+				return nil, it.index, WitnessError(err)
 			}
 			return nil, it.index, err
 		}
@@ -6283,7 +6289,7 @@ func (bc *BlockChain) ProcessBlockWithWitnesses(block *types.Block, witness *sta
 		}
 		if err := stateless.ValidateWitnessPreState(witness, headerReader, block.Header()); err != nil {
 			log.Error("Witness validation failed during stateless processing", "blockNumber", block.Number(), "blockHash", block.Hash(), "err", err)
-			return nil, nil, fmt.Errorf("witness validation failed: %w", err)
+			return nil, nil, WitnessError(fmt.Errorf("witness validation failed: %w", err))
 		}
 	}
 
@@ -6302,17 +6308,17 @@ func (bc *BlockChain) ProcessBlockWithWitnesses(block *types.Block, witness *sta
 	// TODO: Return the error once we have a way to handle Span update
 	if err != nil {
 		log.Error("Stateless self-validation failed", "block", block.Number(), "hash", block.Hash(), "error", err)
-		return nil, nil, err
+		return nil, nil, WitnessError(err)
 	}
 	if crossStateRoot != block.Root() {
 		log.Error("Stateless self-validation root mismatch", "block", block.Number(), "hash", block.Hash(), "cross", crossStateRoot, "local", block.Root())
 		err = fmt.Errorf("%w: remote %x != local %x", ErrStatelessStateRootMismatch, block.Root(), crossStateRoot)
-		return nil, nil, err
+		return nil, nil, WitnessError(err)
 	}
 	if crossReceiptRoot != block.ReceiptHash() {
 		log.Error("Stateless self-validation receipt root mismatch", "block", block.Number(), "hash", block.Hash(), "cross", crossReceiptRoot, "local", block.ReceiptHash())
 		err = fmt.Errorf("stateless self-validation receipt root mismatch: remote %x != local %x", block.ReceiptHash(), crossReceiptRoot)
-		return nil, nil, err
+		return nil, nil, WitnessError(err)
 	}
 	return statedb, res, nil
 }

@@ -1082,6 +1082,7 @@ func testBlockHeaderAttackerDropping(t *testing.T, protocol uint) {
 			backoff: true,
 		},
 		{name: "invalid body", result: errInvalidBody},
+		{name: "invalid witness", result: errInvalidWitness, backoff: true},
 		{name: "invalid receipt", result: errInvalidReceipt},
 		{name: "no ancestor found", result: errNoAncestorFound, backoff: true},
 		{name: "content processing canceled", result: errCancelContentProcessing},

@@ -126,6 +126,15 @@ type witnessManager struct {
 	wit2Quarantined   map[common.Hash]struct{}
 	wit2StateExpiry   map[common.Hash]time.Time
 
+	// Per-block witness source exclusions. A witness that failed stateless
+	// validation at import time indicts whoever served it, so the peer is
+	// recorded here and skipped when the block's witness is re-fetched. See
+	// witness_retry.go. Guarded by its own mutex, which is never held at the
+	// same time as m.mu in either order.
+	witnessSourceMu       sync.Mutex
+	witnessSourceExcluded map[common.Hash]map[string]struct{}
+	witnessSourceExpiry   map[common.Hash]time.Time
+
 	// Witness verification state
 	gasCeil uint64 // Gas ceiling for calculating dynamic page threshold
 
@@ -186,6 +195,8 @@ func newWitnessManager(
 		wit2MismatchPeers:            make(map[common.Hash]map[string]struct{}),
 		wit2Quarantined:              make(map[common.Hash]struct{}),
 		wit2StateExpiry:              make(map[common.Hash]time.Time),
+		witnessSourceExcluded:        make(map[common.Hash]map[string]struct{}),
+		witnessSourceExpiry:          make(map[common.Hash]time.Time),
 		gasCeil:                      gasCeil,
 		injectNeedWitnessCh:          make(chan *injectBlockNeedWitnessMsg, 10),
 		injectWitnessCh:              make(chan *injectedWitnessMsg, 10),
@@ -264,6 +275,7 @@ func (m *witnessManager) loop() {
 			log.Debug("[wm] Cleanup ticker triggered")
 			m.cleanupUnavailableCache()
 			m.cleanupWit2QuarantineState()
+			m.cleanupWitnessSourceExclusions()
 
 		// A poke indicates the timer was rescheduled by another goroutine. We
 		// simply loop around so that the timer channel is re-evaluated with the
@@ -358,9 +370,11 @@ func (m *witnessManager) handleNeed(msg *injectBlockNeedWitnessMsg) {
 		cached := item.Value()
 		// Use the cached witness
 		op := &blockOrHeaderInject{
-			origin:  msg.origin,
-			block:   msg.block,
-			witness: cached.witness,
+			origin:        msg.origin,
+			block:         msg.block,
+			witness:       cached.witness,
+			witnessOrigin: cached.peer,
+			fetchWitness:  msg.fetchWitness,
 		}
 		m.witnessCache.Delete(hash)
 		m.mu.Unlock()
@@ -375,6 +389,9 @@ func (m *witnessManager) handleNeed(msg *injectBlockNeedWitnessMsg) {
 		op: &blockOrHeaderInject{
 			origin: msg.origin,
 			block:  msg.block,
+			// Retained so a witness that fails stateless validation at import
+			// time can be re-fetched from a different peer (witness_retry.go).
+			fetchWitness: msg.fetchWitness,
 		},
 		// Create minimal announce struct needed for fetching
 		announce: &blockAnnounce{
@@ -400,6 +417,15 @@ func (m *witnessManager) handleBroadcast(msg *injectedWitnessMsg) {
 	hash := msg.witness.Header().Hash()
 	log.Debug("[wm] Processing injected witness", "peer", msg.peer, "hash", hash, "number", msg.witness.Header().Number.Uint64())
 
+	// A peer whose witness for this block already failed stateless validation
+	// gets no second bite via broadcast: attaching its bytes would hand the
+	// in-flight retry the very witness it is trying to get away from, and
+	// caching them would do the same for a later announce.
+	if m.isWitnessSourceExcluded(hash, msg.peer) {
+		log.Debug("[wm] Ignoring broadcast witness from an excluded source", "hash", hash, "peer", msg.peer)
+		return
+	}
+
 	// We'll access maps under lock; then perform enqueue outside.
 	m.mu.Lock()
 	state, pending := m.pending[hash]
@@ -410,6 +436,7 @@ func (m *witnessManager) handleBroadcast(msg *injectedWitnessMsg) {
 		// Ensure witness isn't already set
 		if state.op.witness == nil {
 			state.op.witness = msg.witness
+			state.op.witnessOrigin = msg.peer
 			// Update block timestamps if needed
 			if state.op.block != nil && msg.time.After(state.op.block.ReceivedAt) {
 				state.op.block.ReceivedAt = msg.time
@@ -743,6 +770,7 @@ func (m *witnessManager) handleWitnessFetchSuccess(fetchPeer string, hash common
 
 	// Attach witness (under lock)
 	state.op.witness = witness
+	state.op.witnessOrigin = fetchPeer
 	m.mu.Unlock()
 
 	// Update timestamps on the block

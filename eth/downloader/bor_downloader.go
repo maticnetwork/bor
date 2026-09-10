@@ -68,18 +68,24 @@ var (
 )
 
 var (
-	errBusy                    = errors.New("busy")
-	errUnknownPeer             = errors.New("peer is unknown or unhealthy")
-	errBadPeer                 = errors.New("action from bad peer ignored")
-	errStallingPeer            = errors.New("peer is stalling")
-	errUnsyncedPeer            = errors.New("unsynced peer")
-	errNoPeers                 = errors.New("no peers to keep download active")
-	errTimeout                 = errors.New("timeout")
-	errEmptyHeaderSet          = errors.New("empty header set by peer")
-	ErrPeersUnavailable        = errors.New("no peers available or all tried for download")
-	errInvalidAncestor         = errors.New("retrieved ancestor is invalid")
-	errInvalidChain            = errors.New("retrieved hash chain is invalid")
-	errInvalidBody             = errors.New("retrieved block body is invalid")
+	errBusy             = errors.New("busy")
+	errUnknownPeer      = errors.New("peer is unknown or unhealthy")
+	errBadPeer          = errors.New("action from bad peer ignored")
+	errStallingPeer     = errors.New("peer is stalling")
+	errUnsyncedPeer     = errors.New("unsynced peer")
+	errNoPeers          = errors.New("no peers to keep download active")
+	errTimeout          = errors.New("timeout")
+	errEmptyHeaderSet   = errors.New("empty header set by peer")
+	ErrPeersUnavailable = errors.New("no peers available or all tried for download")
+	errInvalidAncestor  = errors.New("retrieved ancestor is invalid")
+	errInvalidChain     = errors.New("retrieved hash chain is invalid")
+	errInvalidBody      = errors.New("retrieved block body is invalid")
+	// errInvalidWitness is returned when a downloaded batch fails stateless
+	// import because the witness it came with does not reconstruct the blocks.
+	// Distinct from errInvalidBody, which reports body-hash validation at
+	// delivery time and is answered there: this one surfaces at the end of a
+	// sync round, and it is the sync loop's cue to move to a different source.
+	errInvalidWitness          = errors.New("retrieved witness is invalid")
 	errInvalidReceipt          = errors.New("retrieved receipt is invalid")
 	errCancelStateFetch        = errors.New("state data download canceled (requested)")
 	errCancelContentProcessing = errors.New("content processing canceled (requested)")
@@ -2393,7 +2399,10 @@ func (d *Downloader) importBlockResultsStateless(results []*fetchResult) error {
 	// Import the batch of blocks
 	if index, err := d.blockchain.InsertChainStateless(blocks, witnesses); err != nil {
 		log.Warn("Stateless block import failed", "index", index, "hash", blocks[index].Hash(), "err", err)
-		return errInvalidBody
+		// Wrap rather than replace: the cause is what makes the
+		// "Synchronisation failed" log useful, and errInvalidWitness is what
+		// tells the sync loop to back this peer off and pick another source.
+		return fmt.Errorf("%w: %w", errInvalidWitness, err)
 	}
 
 	return nil
