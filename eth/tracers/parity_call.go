@@ -146,7 +146,7 @@ func (api *API) traceCallState(ctx context.Context, blockNrOrHash rpc.BlockNumbe
 		return nil, nil, nil, err
 	}
 
-	statedb, release, err := api.backend.StateAtBlock(ctx, block, defaultTraceReexec, nil, true, false)
+	statedb, release, err := api.backend.StateAtBlock(ctx, block, nil, true, false)
 	if err != nil {
 		return nil, nil, nil, err
 	}

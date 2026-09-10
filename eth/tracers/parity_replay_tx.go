@@ -36,7 +36,7 @@ func (api *TraceAPI) ReplayTransaction(ctx context.Context, txHash common.Hash, 
 		return nil, err
 	}
 
-	tx, vmctx, statedb, release, err := api.backend.StateAtTransaction(ctx, block, int(index), defaultTraceReexec)
+	tx, vmctx, statedb, release, err := api.backend.StateAtTransaction(ctx, block, int(index))
 	if err != nil {
 		return nil, err
 	}

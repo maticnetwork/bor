@@ -53,7 +53,7 @@ func (api *TraceAPI) ReplayBlockTransactions(ctx context.Context, blockNrOrHash 
 // traceBlockParityByHash, but emits one ReplayResult per transaction (with
 // trace metadata stripped) instead of a flat list of block traces.
 func (api *API) replayBlockTransactions(ctx context.Context, block *types.Block, set traceTypeSet) ([]*ReplayResult, error) {
-	exec, release, err := api.setupParityBlockExec(ctx, block, defaultTraceReexec)
+	exec, release, err := api.setupParityBlockExec(ctx, block)
 	if err != nil {
 		return nil, err
 	}

@@ -107,12 +107,7 @@ func (api *API) traceBlockParityByHash(ctx context.Context, hash common.Hash, co
 		return nil, fmt.Errorf("failed to get block by hash: %w", err)
 	}
 
-	reexec := defaultTraceReexec
-	if config != nil && config.Reexec != nil {
-		reexec = *config.Reexec
-	}
-
-	exec, release, err := api.setupParityBlockExec(ctx, block, reexec)
+	exec, release, err := api.setupParityBlockExec(ctx, block)
 	if err != nil {
 		return nil, err
 	}

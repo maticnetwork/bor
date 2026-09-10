@@ -48,6 +48,10 @@ type Database interface {
 	// Reader returns a state reader associated with the specified state root.
 	Reader(root common.Hash) (Reader, error)
 
+	// Iteratee returns a state iteratee associated with the specified state root,
+	// through which the account iterator and storage iterator can be created.
+	Iteratee(root common.Hash) (Iteratee, error)
+
 	// OpenTrie opens the main account trie.
 	OpenTrie(root common.Hash) (Trie, error)
 
@@ -348,6 +352,11 @@ func (db *CachingDB) TrieDB() *triedb.Database {
 // Snapshot returns the underlying state snapshot.
 func (db *CachingDB) Snapshot() *snapshot.Tree {
 	return db.snap
+}
+
+// Iteratee returns a state iteratee associated with the specified state root.
+func (db *CachingDB) Iteratee(root common.Hash) (Iteratee, error) {
+	return newStateIteratee(!db.triedb.IsVerkle(), root, db.triedb, db.snap)
 }
 
 // mustCopyTrie returns a deep-copied trie.

@@ -292,15 +292,25 @@ func (beacon *Beacon) verifyHeader(chain consensus.ChainHeaderReader, header, pa
 		}
 	}
 
-	// EIP-7843 SLOTNUM: post-Amsterdam headers must carry a slotNumber, pre-Amsterdam
-	// must not. Amsterdam is dormant on Bor (AmsterdamBlock nil), so IsAmsterdam is
-	// false and headers must not carry a slotNumber.
+	// Verify the existence / non-existence of Amsterdam-specific header fields.
+	// EIP-7843 SLOTNUM and the EIP-7928 block access list hash both key off
+	// Amsterdam, which is dormant on Bor (AmsterdamBlock nil), so IsAmsterdam is
+	// false and headers must carry neither field.
 	amsterdam := chain.Config().IsAmsterdam(header.Number)
-	if amsterdam && header.SlotNumber == nil {
-		return errors.New("header is missing slotNumber")
-	}
-	if !amsterdam && header.SlotNumber != nil {
-		return fmt.Errorf("invalid slotNumber: have %d, expected nil", *header.SlotNumber)
+	if amsterdam {
+		if header.BlockAccessListHash == nil {
+			return errors.New("header is missing block access list hash")
+		}
+		if header.SlotNumber == nil {
+			return errors.New("header is missing slotNumber")
+		}
+	} else {
+		if header.BlockAccessListHash != nil {
+			return fmt.Errorf("invalid block access list hash: have %x, expected nil", *header.BlockAccessListHash)
+		}
+		if header.SlotNumber != nil {
+			return fmt.Errorf("invalid slotNumber: have %d, expected nil", *header.SlotNumber)
+		}
 	}
 	return nil
 }
