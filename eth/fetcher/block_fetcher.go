@@ -1275,12 +1275,8 @@ func (f *BlockFetcher) handleWitnessImportFailure(op *blockOrHeaderInject, err e
 // block's number is at the same height as the current import phase, it updates
 // the phase states accordingly.
 func (f *BlockFetcher) importBlocks(op *blockOrHeaderInject) {
-	var (
-		block   = op.block
-		witness = op.witness
-		peer    = op.origin
-		hash    = block.Hash()
-	)
+	block, witness, peer := op.block, op.witness, op.origin
+	hash := block.Hash()
 
 	// Run the import on a new thread
 	log.Debug("Importing propagated block", "peer", peer, "number", block.Number(), "hash", hash)
