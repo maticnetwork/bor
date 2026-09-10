@@ -27,6 +27,8 @@ func TestPDB_Exist_DestructedThenNonceBump(t *testing.T) {
 	pdb0.AddBalance(addr, uint256.NewInt(100), tracing.BalanceChangeUnspecified)
 	pdb0.SetDeferMVWrites(true)
 	pdb0.EnableReadTracking()
+	// Mirror the EVM handler: it clears the balance, SelfDestruct does not.
+	pdb0.SubBalance(addr, uint256.NewInt(100), tracing.BalanceDecreaseSelfdestruct)
 	pdb0.SelfDestruct(addr)
 	pdb0.FlushToMVStore()
 

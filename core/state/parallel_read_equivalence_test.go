@@ -22,7 +22,9 @@ type equivMutator interface {
 	AddBalance(common.Address, *uint256.Int, tracing.BalanceChangeReason) uint256.Int
 	SetCode(common.Address, []byte, tracing.CodeChangeReason) []byte
 	SetState(common.Address, common.Hash, common.Hash) common.Hash
-	SelfDestruct(common.Address) uint256.Int
+	GetBalance(common.Address) *uint256.Int
+	SubBalance(common.Address, *uint256.Int, tracing.BalanceChangeReason) uint256.Int
+	SelfDestruct(common.Address)
 }
 
 // TestParallelReadEquivalence is a meta-test over the read API: for every
@@ -86,6 +88,10 @@ func TestParallelReadEquivalence(t *testing.T) {
 		}},
 		{"destruct-after-fund", func(db equivMutator) {
 			db.AddBalance(addr, uint256.NewInt(99), tracing.BalanceChangeTransfer)
+			// Mirror the EVM handler: it clears the *whole* balance with an
+			// explicit SubBalance (SelfDestruct is balance-neutral), which for a
+			// base-prefunded account is more than this mutation just added.
+			db.SubBalance(addr, db.GetBalance(addr), tracing.BalanceDecreaseSelfdestruct)
 			db.SelfDestruct(addr)
 		}},
 	}

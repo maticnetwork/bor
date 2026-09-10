@@ -1324,44 +1324,33 @@ func (s *StateDB) SetStorage(addr common.Address, storage map[common.Hash]common
 }
 
 // SelfDestruct marks the given account as selfdestructed.
-// This clears the account balance.
 //
 // The account's state object is still available until the state is committed,
 // getStateObject will return a non-nil account after SelfDestruct.
-func (s *StateDB) SelfDestruct(addr common.Address) uint256.Int {
+//
+// Callers must clear the account's balance themselves (the EVM opcode handlers
+// do this with an explicit SubBalance). This is load-bearing for BlockSTM V1/V2
+// parity, not just tidiness: ParallelStateDB.Exist treats a non-zero balance on
+// an address destructed by an earlier tx as an implicit recreation, so leaving a
+// balance behind here makes V2 report the account as existing while serial —
+// which deletes the object outright at Finalise — reports it gone.
+func (s *StateDB) SelfDestruct(addr common.Address) {
 	stateObject := s.getStateObject(addr)
-	var prevBalance uint256.Int
 	if stateObject == nil {
-		return prevBalance
+		return
 	}
 	stateObject = s.mvRecordWritten(stateObject)
 
-	prevBalance = *(stateObject.Balance())
-	// Regardless of whether it is already destructed or not, we do have to
-	// journal the balance-change, if we set it to zero here.
-	if !stateObject.Balance().IsZero() {
-		stateObject.SetBalance(new(uint256.Int))
-	}
 	// If it is already marked as self-destructed, we do not need to add it
 	// for journalling a second time.
 	if !stateObject.selfDestructed {
 		s.journal.destruct(addr)
 		stateObject.markSelfdestructed()
 	}
+	// Only the destruct flag is written here. The balance is now cleared by the
+	// opcode handler's explicit SubBalance, which records its own BalancePath
+	// write and balance read into the MVHashMap.
 	MVWrite(s, blockstm.NewSubpathKey(addr, SuicidePath))
-	MVWrite(s, blockstm.NewSubpathKey(addr, BalancePath))
-	return prevBalance
-}
-
-func (s *StateDB) SelfDestruct6780(addr common.Address) (uint256.Int, bool) {
-	stateObject := s.getStateObject(addr)
-	if stateObject == nil {
-		return uint256.Int{}, false
-	}
-	if stateObject.newContract {
-		return s.SelfDestruct(addr), true
-	}
-	return *(stateObject.Balance()), false
 }
 
 // SetTransientState sets transient storage for a given account. It
@@ -1608,6 +1597,17 @@ func (s *StateDB) CreateContract(addr common.Address) {
 
 // Copy creates a deep, independent copy of the state.
 // Snapshots of the copied state cannot be applied to the copy.
+
+// IsNewContract reports whether the contract at the given address was deployed
+// during the current transaction.
+func (s *StateDB) IsNewContract(addr common.Address) bool {
+	obj := s.getStateObject(addr)
+	if obj == nil {
+		return false
+	}
+	return obj.newContract
+}
+
 func (s *StateDB) Copy() *StateDB {
 	// Copy all the basic fields, initialize the memory ones
 	state := &StateDB{

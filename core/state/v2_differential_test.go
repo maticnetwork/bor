@@ -22,7 +22,7 @@ import (
 
 // pdbOp is a side-effecting operation applicable to both *StateDB and
 // *ParallelStateDB. We take a typed dispatcher rather than vm.StateDB
-// because some ops (notably SelfDestruct6780 + CreateContract) differ in
+// because some ops (notably SelfDestructIfNew + CreateContract) differ in
 // serial-only test shortcuts.
 type pdbOp interface {
 	applyTo(sdb sdbIface)
@@ -39,8 +39,8 @@ type sdbIface interface {
 	SetNonce(common.Address, uint64, tracing.NonceChangeReason)
 	SetCode(common.Address, []byte, tracing.CodeChangeReason) []byte
 	SetState(common.Address, common.Hash, common.Hash) common.Hash
-	SelfDestruct(common.Address) uint256.Int
-	SelfDestruct6780(common.Address) (uint256.Int, bool)
+	SelfDestruct(common.Address)
+	IsNewContract(common.Address) bool
 	CreateAccount(common.Address)
 	CreateContract(common.Address)
 	AddRefund(uint64)
@@ -137,12 +137,18 @@ func (o opSelfDestruct) applyTo(s sdbIface) {
 }
 func (o opSelfDestruct) name() string { return "SelfDestruct" }
 
-type opSelfDestruct6780 struct{ addr common.Address }
+// opSelfDestructIfNew mirrors what core/vm's opSelfdestruct6780 now does at the
+// StateDB level: the same-tx-creation check is a separate IsNewContract query and
+// SelfDestruct only flips the destruct flag. It replaces the old
+// SelfDestruct6780 op, which combined both and also cleared the balance.
+type opSelfDestructIfNew struct{ addr common.Address }
 
-func (o opSelfDestruct6780) applyTo(s sdbIface) {
-	s.SelfDestruct6780(o.addr)
+func (o opSelfDestructIfNew) applyTo(s sdbIface) {
+	if s.IsNewContract(o.addr) {
+		s.SelfDestruct(o.addr)
+	}
 }
-func (o opSelfDestruct6780) name() string { return "SelfDestruct6780" }
+func (o opSelfDestructIfNew) name() string { return "SelfDestructIfNew" }
 
 type opCreateAccount struct{ addr common.Address }
 
@@ -574,10 +580,10 @@ func diffScenarios() []scenario {
 			ops:    []pdbOp{opSelfDestruct{alice}},
 			probes: []probe{{kind: "balance", addr: alice}, {kind: "exist", addr: alice}},
 		},
-		// Follow opSelfdestruct6780's EVM flow: SubBalance, AddBalance to beneficiary,
-		// then SelfDestruct6780. SelfDestruct6780 itself is a no-op (balance-wise)
-		// for existing contracts on both StateDB and ParallelStateDB — the EVM
-		// opcode handler does the SubBalance + AddBalance pair before invoking it.
+		// Follow opSelfdestruct6780's EVM flow: SubBalance, AddBalance to
+		// beneficiary, then the IsNewContract-gated SelfDestruct. SelfDestruct is
+		// balance-neutral on both StateDB and ParallelStateDB — the EVM opcode
+		// handler owns the SubBalance + AddBalance pair.
 		// (PDB used to drain balance on its own here, double-charging the
 		// SubBalance and zeroing the contract on the self-beneficiary case
 		// from spec-tests stCallCodes/...SuicideEnd; fixed.)
@@ -588,7 +594,7 @@ func diffScenarios() []scenario {
 				opAddBalance{alice, u(5)},
 				opSubBalance{alice, u(5)},
 				opAddBalance{bob, u(5)},
-				opSelfDestruct6780{alice},
+				opSelfDestructIfNew{alice},
 			},
 			probes: []probe{
 				{kind: "balance", addr: alice},
@@ -602,7 +608,7 @@ func diffScenarios() []scenario {
 			ops: []pdbOp{
 				opSubBalance{alice, u(5)},
 				opAddBalance{bob, u(5)},
-				opSelfDestruct6780{alice},
+				opSelfDestructIfNew{alice},
 			},
 			probes: []probe{
 				{kind: "balance", addr: alice},
