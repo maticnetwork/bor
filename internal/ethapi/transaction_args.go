@@ -162,6 +162,7 @@ func (args *TransactionArgs) setDefaults(ctx context.Context, b Backend, config 
 			AccessList:           args.AccessList,
 			BlobFeeCap:           args.BlobFeeCap,
 			BlobHashes:           args.BlobHashes,
+			AuthorizationList:    args.AuthorizationList,
 		}
 
 		latestBlockNr := rpc.BlockNumberOrHashWithNumber(rpc.LatestBlockNumber)

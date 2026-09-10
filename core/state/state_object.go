@@ -276,6 +276,33 @@ func (s *stateObject) GetCommittedState(key common.Hash) common.Hash {
 	//      have been handles via pendingStorage above.
 	//   2) we don't have new values, and can deliver empty response back
 	if _, destructed := s.db.stateObjectsDestruct[s.address]; destructed {
+		// Invoke the reader regardless and discard the returned value.
+		// The returned value may not be empty, as it could belong to a
+		// self-destructed contract.
+		//
+		// The read operation is still essential for correctly building
+		// the block-level access list.
+		//
+		// Gated on Amsterdam, which upstream does not do. The read walks the
+		// trie, so under a witness-building reader it pulls the destructed
+		// account's storage proof path into the witness. Ungated, a node on
+		// this version would require nodes that a producer on an older
+		// version never recorded, and fail the import. Only the block-level
+		// access list needs the read, and that does not exist before the fork.
+		//
+		// Only reachable for destructs seeded by ApplyFlatDiff, which are the
+		// parent block's, on the pipelined-SRC path: currentBlockDestructs
+		// intercepts this block's own destructs above and returns without any
+		// read. That path is the witness-producing one, and captureReadOnlyAccount
+		// skips destructed accounts, so the witness has never carried these nodes.
+		//
+		// TODO(rjl493456442) the reader interface can be extended with
+		// Touch, recording the read access without the actual disk load.
+		if s.db.amsterdam {
+			if _, err := s.db.reader.Storage(s.address, key); err != nil {
+				s.db.setError(err)
+			}
+		}
 		s.originStorage[key] = common.Hash{} // track the empty slot as origin value
 		return common.Hash{}
 	}

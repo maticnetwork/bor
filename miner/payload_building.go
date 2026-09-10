@@ -43,6 +43,7 @@ type BuildPayloadArgs struct {
 	Random       common.Hash           // The provided randomness value
 	Withdrawals  types.Withdrawals     // The provided withdrawals
 	BeaconRoot   *common.Hash          // The provided beaconRoot (Cancun)
+	SlotNum      *uint64               // The provided slotNumber
 	Version      engine.PayloadVersion // Versioning byte for payload id calculation.
 }
 
@@ -56,6 +57,9 @@ func (args *BuildPayloadArgs) Id() engine.PayloadID {
 	rlp.Encode(hasher, args.Withdrawals)
 	if args.BeaconRoot != nil {
 		hasher.Write(args.BeaconRoot[:])
+	}
+	if args.SlotNum != nil {
+		binary.Write(hasher, binary.BigEndian, args.SlotNum)
 	}
 	var out engine.PayloadID
 
@@ -222,6 +226,7 @@ func (w *worker) buildPayload(args *BuildPayloadArgs, witness bool) (*Payload, e
 		random:      args.Random,
 		withdrawals: args.Withdrawals,
 		beaconRoot:  args.BeaconRoot,
+		slotNum:     args.SlotNum,
 		noTxs:       true,
 	}
 	empty := w.generateWork(emptyParams, witness)
@@ -252,6 +257,7 @@ func (w *worker) buildPayload(args *BuildPayloadArgs, witness bool) (*Payload, e
 			random:      args.Random,
 			withdrawals: args.Withdrawals,
 			beaconRoot:  args.BeaconRoot,
+			slotNum:     args.SlotNum,
 			noTxs:       false,
 		}
 
@@ -265,7 +271,7 @@ func (w *worker) buildPayload(args *BuildPayloadArgs, witness bool) (*Payload, e
 				} else {
 					log.Info("Error while generating work", "id", payload.id, "err", r.err)
 				}
-				timer.Reset(w.config.Recommit)
+				timer.Reset(max(0, w.config.Recommit-time.Since(start)))
 			case <-payload.stop:
 				log.Info("Stopping work on payload", "id", payload.id, "reason", "delivery")
 				return

@@ -580,13 +580,7 @@ func WriteBodyRLP(db ethdb.KeyValueWriter, hash common.Hash, number uint64, rlp 
 // HasBody verifies the existence of a block body corresponding to the hash.
 func HasBody(db ethdb.Reader, hash common.Hash, number uint64) bool {
 	if isCanon(db, number, hash) {
-		// Block is in ancient store, but bodies can be pruned.
-		// Check if the block number is above the pruning tail.
-		tail, _ := db.Tail()
-		if number >= tail {
-			return true
-		}
-		return false
+		return true
 	}
 
 	if has, err := db.Has(blockBodyKey(number, hash)); !has || err != nil {
@@ -684,13 +678,7 @@ func DeleteTd(db ethdb.KeyValueWriter, hash common.Hash, number uint64) {
 // to a block.
 func HasReceipts(db ethdb.Reader, hash common.Hash, number uint64) bool {
 	if isCanon(db, number, hash) {
-		// Block is in ancient store, but receipts can be pruned.
-		// Check if the block number is above the pruning tail.
-		tail, _ := db.Tail()
-		if number >= tail {
-			return true
-		}
-		return false
+		return true
 	}
 
 	if has, err := db.Has(blockReceiptsKey(number, hash)); !has || err != nil {

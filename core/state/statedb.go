@@ -133,6 +133,14 @@ type StateDB struct {
 	// when accessing state of accounts.
 	dbErr error
 
+	// amsterdam reports whether the Amsterdam rules apply to the transaction
+	// being executed. Set by Prepare, which every message execution runs
+	// through, and consumed by the EIP-7928 block-access-list read tracking in
+	// stateObject.GetCommittedState. It defaults to false, so a path that
+	// reaches the state without preparing a transaction keeps pre-Amsterdam
+	// behaviour rather than recording accesses it cannot attribute.
+	amsterdam bool
+
 	// The refund counter, also used by state transitioning.
 	refund uint64
 
@@ -1613,6 +1621,7 @@ func (s *StateDB) Copy() *StateDB {
 		revertedKeys:          make(map[blockstm.Key]struct{}),
 		mutations:             make(map[common.Address]*mutation, len(s.mutations)),
 		dbErr:                 s.dbErr,
+		amsterdam:             s.amsterdam,
 		refund:                s.refund,
 		thash:                 s.thash,
 		txIndex:               s.txIndex,
@@ -2994,6 +3003,8 @@ func (s *StateDB) WasStorageSlotRead(addr common.Address, slot common.Hash) bool
 // - Add coinbase to access list (EIP-3651)
 // - Reset transient storage (EIP-1153)
 func (s *StateDB) Prepare(rules params.Rules, sender, coinbase common.Address, dst *common.Address, precompiles []common.Address, list types.AccessList) {
+	s.amsterdam = rules.IsAmsterdam
+
 	if rules.IsEIP2929 && rules.IsEIP4762 {
 		panic("eip2929 and eip4762 are both activated")
 	}

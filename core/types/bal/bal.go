@@ -25,13 +25,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 )
 
-// CodeChange contains the runtime bytecode deployed at an address and the
-// transaction index where the deployment took place.
-type CodeChange struct {
-	TxIndex uint16
-	Code    []byte `json:"code,omitempty"`
-}
-
 // ConstructionAccountAccess contains post-block account state for mutations as well as
 // all storage keys that were read during execution.  It is used when building block
 // access list during execution.
@@ -56,9 +49,9 @@ type ConstructionAccountAccess struct {
 	// by tx index.
 	NonceChanges map[uint16]uint64 `json:"nonceChanges,omitempty"`
 
-	// CodeChange is only set for contract accounts which were deployed in
-	// the block.
-	CodeChange *CodeChange `json:"codeChange,omitempty"`
+	// CodeChange contains the post-state contract code of an account keyed
+	// by tx index.
+	CodeChange map[uint16][]byte `json:"codeChange,omitempty"`
 }
 
 // NewConstructionAccountAccess initializes the account access object.
@@ -68,6 +61,7 @@ func NewConstructionAccountAccess() *ConstructionAccountAccess {
 		StorageReads:   make(map[common.Hash]struct{}),
 		BalanceChanges: make(map[uint16]*uint256.Int),
 		NonceChanges:   make(map[uint16]uint64),
+		CodeChange:     make(map[uint16][]byte),
 	}
 }
 
@@ -121,10 +115,8 @@ func (b *ConstructionBlockAccessList) CodeChange(address common.Address, txIndex
 	if _, ok := b.Accounts[address]; !ok {
 		b.Accounts[address] = NewConstructionAccountAccess()
 	}
-	b.Accounts[address].CodeChange = &CodeChange{
-		TxIndex: txIndex,
-		Code:    bytes.Clone(code),
-	}
+	// TODO(rjl493456442) is it essential to deep-copy the code?
+	b.Accounts[address].CodeChange[txIndex] = bytes.Clone(code)
 }
 
 // NonceChange records tx post-state nonce of any contract-like accounts whose
@@ -171,12 +163,11 @@ func (b *ConstructionBlockAccessList) Copy() *ConstructionBlockAccessList {
 		aaCopy.BalanceChanges = balances
 		aaCopy.NonceChanges = maps.Clone(aa.NonceChanges)
 
-		if aa.CodeChange != nil {
-			aaCopy.CodeChange = &CodeChange{
-				TxIndex: aa.CodeChange.TxIndex,
-				Code:    bytes.Clone(aa.CodeChange.Code),
-			}
+		codes := make(map[uint16][]byte, len(aa.CodeChange))
+		for index, code := range aa.CodeChange {
+			codes[index] = bytes.Clone(code)
 		}
+		aaCopy.CodeChange = codes
 		res.Accounts[addr] = &aaCopy
 	}
 	return &res

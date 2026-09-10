@@ -31,7 +31,7 @@ require (
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.0
 	github.com/donovanhide/eventsource v0.0.0-20210830082556-c59027999da0
 	github.com/dop251/goja v0.0.0-20230605162241-28ee0ee714f3
-	github.com/ethereum/c-kzg-4844/v2 v2.1.5
+	github.com/ethereum/c-kzg-4844/v2 v2.1.6
 	github.com/ethereum/go-bigmodexpfix v0.0.0-20250911101455-f9e208c548ab
 	github.com/fatih/color v1.17.0
 	github.com/ferranbt/fastssz v0.1.2
@@ -70,7 +70,6 @@ require (
 	github.com/mitchellh/cli v1.1.5
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/naoina/toml v0.1.2-0.20170918210437-9fafd6967416
-	github.com/olekukonko/tablewriter v0.0.5
 	github.com/pelletier/go-toml v1.9.5
 	github.com/peterh/liner v1.2.2
 	github.com/pion/stun/v3 v3.1.5

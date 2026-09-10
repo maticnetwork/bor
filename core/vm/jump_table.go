@@ -66,6 +66,7 @@ var (
 	lisovoInstructionSet           = newLisovoInstructionSet()
 	lisovoProInstructionSet        = newLisovoProInstructionSet()
 	chicagoInstructionSet          = newChicagoInstructionSet()
+	amsterdamInstructionSet        = newAmsterdamInstructionSet()
 )
 
 // JumpTable contains the EVM opcodes supported at a given fork.
@@ -105,6 +106,13 @@ func newLisovoProInstructionSet() JumpTable {
 func newChicagoInstructionSet() JumpTable {
 	instructionSet := newLisovoProInstructionSet()
 	enablePIP88(&instructionSet) // PIP-88: cold-storage repricing
+	return validate(instructionSet)
+}
+
+func newAmsterdamInstructionSet() JumpTable {
+	instructionSet := newOsakaInstructionSet()
+	enable7843(&instructionSet) // EIP-7843 (SLOTNUM opcode)
+	enable8024(&instructionSet) // EIP-8024 (Backward compatible SWAPN, DUPN, EXCHANGE)
 	return validate(instructionSet)
 }
 

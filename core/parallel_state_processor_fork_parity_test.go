@@ -73,6 +73,7 @@ var forkExpectations = map[string]forkExpect{
 	"IsVerkleGenesis":    {inV1: false, inV2: false},
 	"IsEIP4762":          {inV1: false, inV2: false},
 	"IsOsaka":            {inV1: false, inV2: false},
+	"IsAmsterdam":        {inV1: false, inV2: false}, // EIP-7843 SLOTNUM / EIP-8024 / BAL precompile-touch are EVM/consensus-gated, not state-processor-gated.
 
 	// State-processor-level forks that BOTH paths must gate.
 	"IsByzantium": {inV1: true, inV2: true}, // selects intermediate root vs receipt status

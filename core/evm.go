@@ -47,6 +47,7 @@ func NewEVMBlockContext(header *types.Header, chain ChainContext, author *common
 		baseFee     *big.Int
 		blobBaseFee *big.Int
 		random      *common.Hash
+		slotNum     uint64
 	)
 
 	// If we don't have an explicit author (i.e. not mining), extract from the header
@@ -92,6 +93,12 @@ func NewEVMBlockContext(header *types.Header, chain ChainContext, author *common
 		}
 	}
 
+	// SlotNumber (EIP-7843 SLOTNUM) is dormant on Bor — the header field is
+	// nil pre-Amsterdam, so slotNum stays 0.
+	if header.SlotNumber != nil {
+		slotNum = *header.SlotNumber
+	}
+
 	return vm.BlockContext{
 		CanTransfer: CanTransfer,
 		Transfer:    transferFn,
@@ -104,6 +111,7 @@ func NewEVMBlockContext(header *types.Header, chain ChainContext, author *common
 		BlobBaseFee: blobBaseFee,
 		GasLimit:    header.GasLimit,
 		Random:      random,
+		SlotNum:     slotNum,
 	}
 }
 

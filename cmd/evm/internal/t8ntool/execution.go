@@ -103,6 +103,7 @@ type stEnv struct {
 	ParentExcessBlobGas   *uint64                             `json:"parentExcessBlobGas,omitempty"`
 	ParentBlobGasUsed     *uint64                             `json:"parentBlobGasUsed,omitempty"`
 	ParentBeaconBlockRoot *common.Hash                        `json:"parentBeaconBlockRoot"`
+	SlotNumber            *uint64                             `json:"slotNumber"`
 }
 
 type stEnvMarshaling struct {
@@ -121,6 +122,7 @@ type stEnvMarshaling struct {
 	ExcessBlobGas       *math.HexOrDecimal64
 	ParentExcessBlobGas *math.HexOrDecimal64
 	ParentBlobGasUsed   *math.HexOrDecimal64
+	SlotNumber          *math.HexOrDecimal64
 }
 
 type rejectedTx struct {
@@ -201,6 +203,7 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig, 
 				ExcessBlobGas: pre.Env.ParentExcessBlobGas,
 				BlobGasUsed:   pre.Env.ParentBlobGasUsed,
 				BaseFee:       pre.Env.ParentBaseFee,
+				SlotNumber:    pre.Env.SlotNumber,
 			}
 			header := &types.Header{
 				Time:          pre.Env.Timestamp,
@@ -272,6 +275,9 @@ func (pre *Prestate) Apply(vmConfig vm.Config, chainConfig *params.ChainConfig, 
 
 			gaspool.SetGas(prevGas)
 			continue
+		}
+		if receipt.Logs == nil {
+			receipt.Logs = []*types.Log{}
 		}
 		includedTxs = append(includedTxs, tx)
 

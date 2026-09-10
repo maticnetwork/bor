@@ -856,11 +856,12 @@ type ChainConfig struct {
 
 	// Fork scheduling was switched from blocks to timestamps here
 	// Fork scheduling switched back to blockNumber in Bor
-	ShanghaiBlock *big.Int `json:"shanghaiBlock,omitempty"` // Shanghai switch Block (nil = no fork, 0 = already on shanghai)
-	CancunBlock   *big.Int `json:"cancunBlock,omitempty"`   // Cancun switch Block (nil = no fork, 0 = already on cancun)
-	PragueBlock   *big.Int `json:"pragueBlock,omitempty"`   // Prague switch Block (nil = no fork, 0 = already on prague)
-	VerkleBlock   *big.Int `json:"verkleBlock,omitempty"`   // Verkle switch Block (nil = no fork, 0 = already on verkle)
-	OsakaBlock    *big.Int `json:"osakaBlock,omitempty"`    // Osaka switch Block (nil = no fork, 0 = already on osaka)
+	ShanghaiBlock  *big.Int `json:"shanghaiBlock,omitempty"`  // Shanghai switch Block (nil = no fork, 0 = already on shanghai)
+	CancunBlock    *big.Int `json:"cancunBlock,omitempty"`    // Cancun switch Block (nil = no fork, 0 = already on cancun)
+	PragueBlock    *big.Int `json:"pragueBlock,omitempty"`    // Prague switch Block (nil = no fork, 0 = already on prague)
+	VerkleBlock    *big.Int `json:"verkleBlock,omitempty"`    // Verkle switch Block (nil = no fork, 0 = already on verkle)
+	OsakaBlock     *big.Int `json:"osakaBlock,omitempty"`     // Osaka switch Block (nil = no fork, 0 = already on osaka)
+	AmsterdamBlock *big.Int `json:"amsterdamBlock,omitempty"` // Amsterdam switch Block (nil = no fork, 0 = already on amsterdam)
 
 	// TerminalTotalDifficulty is the amount of total difficulty reached by
 	// the network that triggers the consensus upgrade.
@@ -1343,6 +1344,9 @@ func (c *ChainConfig) Description() string {
 	if c.OsakaBlock != nil {
 		banner += fmt.Sprintf(" - Osaka:                      #%-8v\n", *c.OsakaBlock)
 	}
+	if c.AmsterdamBlock != nil {
+		banner += fmt.Sprintf(" - Amsterdam:                  #%-8v\n", *c.AmsterdamBlock)
+	}
 	banner += fmt.Sprintf("\nAll fork specifications can be found at https://ethereum.github.io/execution-specs/src/ethereum/forks/\n")
 	return banner
 }
@@ -1487,6 +1491,11 @@ func (c *ChainConfig) IsOsaka(num *big.Int) bool {
 	return c.IsLondon(num) && isBlockForked(c.OsakaBlock, num)
 }
 
+// IsAmsterdam returns whether num is either equal to the Amsterdam fork block or greater.
+func (c *ChainConfig) IsAmsterdam(num *big.Int) bool {
+	return c.IsLondon(num) && isBlockForked(c.AmsterdamBlock, num)
+}
+
 // IsVerkleGenesis checks whether the verkle fork is activated at the genesis block.
 //
 // Verkle mode is considered enabled if the verkle fork time is configured,
@@ -1565,6 +1574,7 @@ func (c *ChainConfig) CheckConfigForkOrder() error {
 		{name: "cancunBlock", block: c.CancunBlock, optional: true},
 		{name: "pragueBlock", block: c.PragueBlock, optional: true},
 		{name: "osakaBlock", block: c.OsakaBlock, optional: true},
+		{name: "amsterdamBlock", block: c.AmsterdamBlock, optional: true},
 		{name: "verkleBlock", block: c.VerkleBlock, optional: true},
 	} {
 		if lastFork.name != "" {
@@ -1734,6 +1744,9 @@ func (c *ChainConfig) checkCompatible(newcfg *ChainConfig, headNumber *big.Int, 
 
 	if isForkBlockIncompatible(c.OsakaBlock, newcfg.OsakaBlock, headNumber) {
 		return newBlockCompatError("Osaka fork block", c.OsakaBlock, newcfg.OsakaBlock)
+	}
+	if isForkBlockIncompatible(c.AmsterdamBlock, newcfg.AmsterdamBlock, headNumber) {
+		return newBlockCompatError("Amsterdam fork block", c.AmsterdamBlock, newcfg.AmsterdamBlock)
 	}
 	return nil
 }
@@ -1916,6 +1929,7 @@ type Rules struct {
 	IsByzantium, IsConstantinople, IsPetersburg, IsIstanbul bool
 	IsBerlin, IsLondon                                      bool
 	IsMerge, IsShanghai, IsCancun, IsPrague, IsOsaka        bool
+	IsAmsterdam                                             bool
 	IsVerkle                                                bool
 	IsMadhugiri                                             bool
 	IsMadhugiriPro                                          bool
@@ -1953,6 +1967,7 @@ func (c *ChainConfig) Rules(num *big.Int, isMerge bool, _ uint64) Rules {
 		IsPrague:         c.IsPrague(num),
 		IsVerkle:         c.IsVerkle(num),
 		IsOsaka:          c.IsOsaka(num),
+		IsAmsterdam:      c.IsAmsterdam(num),
 		IsEIP4762:        c.IsVerkle(num),
 		IsMadhugiri:      c.Bor != nil && c.Bor.IsMadhugiri(num),
 		IsMadhugiriPro:   c.Bor != nil && c.Bor.IsMadhugiriPro(num),
