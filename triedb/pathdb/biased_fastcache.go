@@ -3,6 +3,8 @@ package pathdb
 import (
 	stdcontext "context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -45,6 +47,17 @@ type AddressBiasedCache struct {
 
 	// Rate limiting for preload operations (bytes per second, 0 = unlimited)
 	rateLimitBPS int64
+
+	// Directory used to persist/reload per-address caches across restarts.
+	// Empty string disables persistence (in-memory-only, matches legacy behavior).
+	journalDir string
+}
+
+// snapshotPath returns the on-disk path used to persist/reload the given
+// address's cache. journalDir is expected to already be an absolute,
+// resolved directory (see triedb/pathdb.Config.JournalDirectory).
+func snapshotPath(journalDir string, accountHash common.Hash) string {
+	return filepath.Join(journalDir, "addresscache", accountHash.Hex()+".cache")
 }
 
 // NewAddressBiasedCache creates a new address-biased cache with preloading.
@@ -54,18 +67,22 @@ type AddressBiasedCache struct {
 // of the cache for non-preloaded data. The rateLimitBPS limits preload I/O
 // in bytes per second (0 = unlimited).
 // Preloading happens asynchronously in the background.
-func NewAddressBiasedCache(db ethdb.Database, addressCacheSizes map[common.Address]int, commonCacheSize int, rateLimitBPS int64) (*AddressBiasedCache, error) {
+func NewAddressBiasedCache(db ethdb.Database, addressCacheSizes map[common.Address]int, commonCacheSize int, rateLimitBPS int64, journalDir string) (*AddressBiasedCache, error) {
 	ctx, cancel := stdcontext.WithCancel(stdcontext.Background())
 	cache := &AddressBiasedCache{
 		commonCache:  fastcache.New(commonCacheSize),
 		ctx:          ctx,
 		cancel:       cancel,
 		rateLimitBPS: rateLimitBPS,
+		journalDir:   journalDir,
 	}
 
 	// Initialize caches synchronously, but preload asynchronously
 	for addr, cacheSize := range addressCacheSizes {
-		cache.initAddressCache(addr, cacheSize)
+		warm := cache.initAddressCache(addr, cacheSize)
+		if warm {
+			continue
+		}
 
 		// Start async preloading
 		cache.wg.Add(1)
@@ -75,14 +92,44 @@ func NewAddressBiasedCache(db ethdb.Database, addressCacheSizes map[common.Addre
 	return cache, nil
 }
 
-// initAddressCache initializes the cache structures for an address synchronously
-func (c *AddressBiasedCache) initAddressCache(addr common.Address, cacheSize int) {
+// initAddressCache initializes the cache structure for an address synchronously.
+// If a persisted snapshot exists at the address's snapshot path and matches
+// the configured cache size, it is reloaded and the cache is considered warm
+// (the caller should skip preloadAddressAsync for this address). Otherwise a
+// fresh empty cache is created and the cache is considered cold. Staleness of
+// a reloaded cache is not a correctness concern: reader.Node already hash-
+// verifies every cache hit and evicts+refetches on mismatch, regardless of
+// why the cached blob is stale.
+func (c *AddressBiasedCache) initAddressCache(addr common.Address, cacheSize int) (warm bool) {
 	accountHash := crypto.Keccak256Hash(addr.Bytes())
-	addrCache := fastcache.New(cacheSize)
+
+	var addrCache *fastcache.Cache
+	if c.journalDir != "" {
+		addrCache = fastcache.LoadFromFileOrNew(snapshotPath(c.journalDir, accountHash), cacheSize)
+	} else {
+		addrCache = fastcache.New(cacheSize)
+	}
+
+	var stats fastcache.Stats
+	addrCache.UpdateStats(&stats)
+	// A reload is only "warm" if it reached the same 2/3-of-cacheSize fill
+	// target preloadAddressAsync itself targets (see the totalBytesLoaded
+	// check in preloadAddressAsync). Without this check, a snapshot
+	// persisted mid-preload (e.g. two restarts in quick succession) would
+	// be marked warm and permanently skip the top-up preload — leaving the
+	// cache stuck near-empty for addresses that are rarely touched by
+	// organic block-processing traffic, which is exactly the profile of
+	// the addresses this feature targets.
+	warm = stats.BytesSize >= uint64(cacheSize*2/3)
+	if warm {
+		log.Info("Reloaded address cache snapshot", "address", addr, "entries", stats.EntriesCount, "bytes", stats.BytesSize, "path", snapshotPath(c.journalDir, accountHash))
+	}
 
 	// Mark this address as preloaded
 	c.preloadedAddrs.Store(accountHash, struct{}{})
 	c.addressCaches.Store(accountHash, addrCache)
+
+	return warm
 }
 
 // preloadAddressAsync loads storage trie nodes for the given account hash using
@@ -425,11 +472,51 @@ func (c *AddressBiasedCache) Reset() {
 	})
 }
 
-// Close cancels all background preload operations and waits for them to finish.
-// This ensures graceful shutdown and prevents goroutines from blocking application termination.
-func (c *AddressBiasedCache) Close() {
+// Close cancels all background preload operations and waits for them to
+// finish. If persist is true and a journal directory is configured, it also
+// persists each address's cache to disk so a future restart can reload it
+// instead of preloading from scratch. commonCache is never persisted (see
+// design spec).
+//
+// persist must be true only for a genuine final database shutdown
+// (Database.Close()). diskLayer.terminate() also calls this method (with
+// persist=false) from Journal() and Disable(), which stop the background
+// preloader for unrelated reasons and are not the node restarting — passing
+// true there would mean a redundant, potentially multi-GB write on those
+// paths for no benefit.
+//
+// A save failure (disk full, permission error, etc.) is logged and does not
+// fail Close(): losing a snapshot only degrades the next startup to a cold
+// preload, identical to today's behavior, and must not block shutdown.
+func (c *AddressBiasedCache) Close(persist bool) {
 	if c.cancel != nil {
 		c.cancel()  // Signal all goroutines to stop
 		c.wg.Wait() // Wait for them to finish
 	}
+
+	if !persist || c.journalDir == "" {
+		return
+	}
+
+	dir := filepath.Join(c.journalDir, "addresscache")
+	if err := ensureDir(dir); err != nil {
+		log.Warn("Failed to create address cache snapshot directory", "dir", dir, "err", err)
+		return
+	}
+
+	c.addressCaches.Range(func(key, value any) bool {
+		accountHash := key.(common.Hash)
+		addrCache := value.(*fastcache.Cache)
+
+		path := snapshotPath(c.journalDir, accountHash)
+		if err := addrCache.SaveToFileConcurrent(path, 4); err != nil {
+			log.Warn("Failed to persist address cache", "account hash", accountHash.Hex(), "path", path, "err", err)
+		}
+		return true
+	})
+}
+
+// ensureDir creates dir (and any missing parents) if it doesn't already exist.
+func ensureDir(dir string) error {
+	return os.MkdirAll(dir, 0o755)
 }

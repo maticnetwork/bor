@@ -386,7 +386,7 @@ func (db *Database) Disable() error {
 	// Terminate the state generator if it's active and mark the disk layer
 	// as stale to prevent access to persistent state.
 	disk := db.tree.bottom()
-	if err := disk.terminate(); err != nil {
+	if err := disk.terminate(false); err != nil {
 		return err
 	}
 	disk.markStale()
@@ -562,7 +562,7 @@ func (db *Database) Close() error {
 	// be done before terminating the potential background snapshot
 	// generator.
 	dl := db.tree.bottom()
-	if err := dl.terminate(); err != nil {
+	if err := dl.terminate(true); err != nil {
 		return err
 	}
 	dl.resetCache() // release the memory held by clean cache
