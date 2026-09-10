@@ -109,6 +109,46 @@ func (m *witnessManager) clearWitnessSourceExclusions(hash common.Hash) {
 	delete(m.witnessSourceExpiry, hash)
 }
 
+// blameExcludedWitnessSources strikes every peer whose witness for hash failed
+// import, and then clears the block's exclusion set. Called only once the block
+// has actually imported from another peer's witness.
+//
+// That ordering is the whole point. A witness failing to execute proves the
+// bytes are unusable, never who made them unusable: the producer builds the
+// witness and honest peers relay it verbatim, so a producer that emits a bad
+// one makes every relay look equally guilty. Striking on failure alone would
+// therefore punish honest peers for a producer's fault across every block of
+// that producer's sprint — and with the ladder at wit2MisbehaviorStrikeLimit
+// strikes per wit2MisbehaviorWindow, a node with few witness-capable peers
+// would disconnect them exactly when witnesses are hardest to come by.
+//
+// A successful import from a different source is the one observation that
+// separates the cases: the block was importable all along, so the sources that
+// failed it really did serve bad bytes. Only then is blame provable, and the
+// per-block exclusion set makes it at most one strike per (peer, block) — the
+// same dedup the WIT2 byte-mismatch path settled on.
+func (m *witnessManager) blameExcludedWitnessSources(hash common.Hash) {
+	if m.parentStrikeWitnessServer == nil {
+		m.clearWitnessSourceExclusions(hash)
+		return
+	}
+
+	m.witnessSourceMu.Lock()
+	peers := m.witnessSourceExcluded[hash]
+	delete(m.witnessSourceExcluded, hash)
+	delete(m.witnessSourceExpiry, hash)
+	m.witnessSourceMu.Unlock()
+
+	// Struck outside the lock: the striker reaches into the peer set and may
+	// disconnect, which must not happen with our mutex held.
+	for peer := range peers {
+		witnessSourceBlamedMeter.Mark(1)
+		log.Warn("Blaming witness source: its witness failed where another peer's succeeded",
+			"peer", peer, "block", hash)
+		m.parentStrikeWitnessServer(peer)
+	}
+}
+
 // cleanupWitnessSourceExclusions removes exclusion sets whose TTL has lapsed.
 // Backstops clearWitnessSourceExclusions for blocks that never reach a terminal
 // import outcome. Called from the same ticker that expires witnessUnavailable.

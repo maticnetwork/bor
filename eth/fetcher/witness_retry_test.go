@@ -230,15 +230,74 @@ func TestWitnessImportFailureBoundsRetries(t *testing.T) {
 		t.Fatal("block imported despite every witness failing validation")
 	}
 
-	// Every source that served an unusable witness is blamed exactly once.
-	for _, peer := range sources[:wantSources] {
-		if got := tester.strikeCount(peer); got != 1 {
-			t.Fatalf("%s strikes = %d, want 1", peer, got)
+	// Nobody is blamed. Every source served a witness that failed, and no
+	// source served one that worked, so there is no evidence separating "this
+	// peer served bad bytes" from "the producer built a bad witness and every
+	// peer relayed it faithfully". Striking here would punish honest relays for
+	// a producer's fault — and with a whole sprint of such blocks, would cross
+	// the disconnect threshold on a node with few witness-capable peers.
+	for _, peer := range sources {
+		if got := tester.strikeCount(peer); got != 0 {
+			t.Fatalf("%s strikes = %d, want 0 (no peer is provably at fault)", peer, got)
 		}
 	}
+}
 
-	if got := tester.strikeCount(sources[wantSources]); got != 0 {
-		t.Fatalf("%s strikes = %d, want 0 (never asked)", sources[wantSources], got)
+// TestWitnessSourcesBlamedOnlyOnProvenRecovery isolates the blame rule from the
+// retry mechanics: identical failing witnesses, the only difference being
+// whether some peer eventually serves one that imports. A producer-side fault
+// (nobody can serve a good witness) must cost honest relays nothing, while a
+// peer-side fault (someone else's witness works) must be paid for.
+func TestWitnessSourcesBlamedOnlyOnProvenRecovery(t *testing.T) {
+	for _, tt := range []struct {
+		name        string
+		lastIsGood  bool
+		wantStrikes int
+	}{
+		{name: "producer at fault, every witness bad", lastIsGood: false, wantStrikes: 0},
+		{name: "peer at fault, a later witness works", lastIsGood: true, wantStrikes: 1},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			hashes, blocks := makeChain(1, 0, genesis)
+			target := blocks[hashes[0]]
+
+			bad := make(map[*stateless.Witness]bool)
+			tester := newWitnessRetryTester(t, bad)
+			defer tester.fetcher.Stop()
+
+			server := newWitnessSourceServer(tester.fetcher)
+
+			// One failing source, then a second whose witness is good or bad
+			// depending on the case under test.
+			for i, peer := range []string{"first-source", "second-source"} {
+				witness, err := stateless.NewWitness(target.Header(), nil)
+				if err != nil {
+					t.Fatalf("failed to build witness: %v", err)
+				}
+
+				if i == 0 || !tt.lastIsGood {
+					bad[witness] = true
+				}
+
+				server.add(peer, witness)
+			}
+
+			if err := tester.fetcher.InjectBlockWithWitnessRequirement("origin-peer", target, server.requester()); err != nil {
+				t.Fatalf("failed to inject block: %v", err)
+			}
+
+			waitFor(t, "both sources to be tried", func() bool { return len(server.served()) >= 2 })
+			time.Sleep(200 * time.Millisecond)
+
+			if got := tester.strikeCount("first-source"); got != tt.wantStrikes {
+				t.Fatalf("first-source strikes = %d, want %d", got, tt.wantStrikes)
+			}
+
+			// The peer that served a working witness is never blamed.
+			if got := tester.strikeCount("second-source"); got != 0 {
+				t.Fatalf("second-source strikes = %d, want 0", got)
+			}
+		})
 	}
 }
 

@@ -48,6 +48,13 @@ var (
 	witnessSourceRetryMeter  = metrics.NewRegisteredMeter("eth/fetcher/witness/import/retry", nil)
 	witnessImportGaveUpMeter = metrics.NewRegisteredMeter("eth/fetcher/witness/import/gaveup", nil)
 
+	// witnessSourceBlamedMeter tracks peers struck for serving a witness that
+	// failed where another peer's witness for the same block then succeeded.
+	// It should stay far below witnessImportFailureMeter: the gap between them
+	// is the share of bad witnesses nobody could have relayed correctly, which
+	// is the producer's doing rather than any peer's.
+	witnessSourceBlamedMeter = metrics.NewRegisteredMeter("eth/fetcher/witness/import/blamed", nil)
+
 	// Witness page count metrics
 	witnessPageCountBelowThresholdMeter = metrics.NewRegisteredMeter("eth/fetcher/witness/pagecount/below_threshold", nil)
 	witnessPageCountAboveThresholdMeter = metrics.NewRegisteredMeter("eth/fetcher/witness/pagecount/above_threshold", nil)

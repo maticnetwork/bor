@@ -664,9 +664,17 @@ func (f *BlockFetcher) loop() {
 			// both wipe the witness manager's pending state for the hash, so
 			// re-arming from the import goroutine would race them and lose the
 			// retry. Doing it here makes the ordering structural.
-			if outcome.retry != nil {
+			switch {
+			case outcome.retry != nil:
 				f.wm.retryWithNewSource(outcome.retry)
-			} else {
+			case outcome.imported:
+				// The block imported from some other peer's witness, which
+				// proves every source excluded along the way served bytes that
+				// were genuinely unusable rather than merely unlucky.
+				f.wm.blameExcludedWitnessSources(outcome.hash)
+			default:
+				// Nobody managed to import it. The witness is bad everywhere,
+				// which indicts the producer, not the peers that relayed it.
 				f.wm.clearWitnessSourceExclusions(outcome.hash)
 			}
 
@@ -1224,8 +1232,15 @@ func (f *BlockFetcher) importHeaders(peer string, header *types.Header) {
 // on it only after it has torn the finished import's state down, so the re-arm
 // cannot be undone by the teardown that follows it.
 type importOutcome struct {
-	hash  common.Hash
+	hash common.Hash
+	// retry, when set, asks the main loop to re-arm a witness fetch for this
+	// block from a source that has not already failed it.
 	retry *blockOrHeaderInject
+	// imported records whether the block actually made it into the chain. It is
+	// what converts an earlier source's failure into provable blame: only a
+	// block that imported from a *different* witness proves the sources that
+	// failed it were the ones at fault. See blameExcludedWitnessSources.
+	imported bool
 }
 
 // handleWitnessImportFailure decides what a failed block import owes to the
@@ -1233,15 +1248,20 @@ type importOutcome struct {
 // exactly as it was: a bad body, an unavailable parent state or a stopped chain
 // says nothing about whoever served the witness.
 //
-// For a witness-attributable failure it does two things the fetcher previously
-// did neither of. It blames the peer that served the bytes — a strike, matching
-// how the WIT2 byte-mismatch path treats the same offence, because an honest
-// peer relaying a witness a producer generated wrong looks identical to a
-// malicious one and must not be disconnected for a single failure. And it hands
-// back the op so the block can be re-fetched from a different peer, since the
-// alternative — the caller's historical behaviour — is to drop the block on the
-// floor, which leaves a stateless node parked at that height with nothing left
-// to try.
+// For a witness-attributable failure it hands back the op so the block can be
+// re-fetched from a different peer, since the alternative — the caller's
+// historical behaviour — is to drop the block on the floor, which leaves a
+// stateless node parked at that height with nothing left to try.
+//
+// It deliberately does NOT blame the peer that served the bytes. A failure here
+// says the witness is unusable; it does not say whose fault that is. The
+// producer generates the witness and every peer relays the same bytes, so when
+// a producer emits a bad one, blaming on failure alone would strike honest
+// relays across every block of that producer's sprint — enough to cross the
+// disconnect threshold on a node with few witness-capable peers, precisely when
+// witnesses are already scarce. Blame is therefore deferred to the only
+// evidence that actually separates the two cases: a *different* peer's witness
+// for the same block importing successfully. See blameExcludedWitnessSources.
 //
 // Returns nil when no retry should be attempted.
 func (f *BlockFetcher) handleWitnessImportFailure(op *blockOrHeaderInject, err error) *blockOrHeaderInject {
@@ -1249,13 +1269,6 @@ func (f *BlockFetcher) handleWitnessImportFailure(op *blockOrHeaderInject, err e
 		return nil
 	}
 	witnessImportFailureMeter.Mark(1)
-
-	// Strike at most once per (peer, block): a peer is only ever asked again
-	// for a block it already got wrong if no alternative source exists, and
-	// jailing the sole witness source for a block would strand it outright.
-	if op.witnessOrigin != "" && f.wm.parentStrikeWitnessServer != nil && !f.wm.isWitnessSourceExcluded(op.hash(), op.witnessOrigin) {
-		f.wm.parentStrikeWitnessServer(op.witnessOrigin)
-	}
 
 	if op.fetchWitness == nil {
 		// No way to ask anyone else — the witness arrived on a path that never
@@ -1317,6 +1330,10 @@ func (f *BlockFetcher) importBlocks(op *blockOrHeaderInject) {
 			outcome.retry = f.handleWitnessImportFailure(op, err)
 			return
 		}
+		// Recorded before any of the bookkeeping below so that a block which
+		// reached the chain always counts as imported, and the sources that
+		// failed it earlier can be blamed on the strength of that.
+		outcome.imported = true
 
 		if f.enableBlockTracking {
 			// Log the insertion event
