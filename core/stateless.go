@@ -97,7 +97,7 @@ func ExecuteStateless(config *params.ChainConfig, vmconfig vm.Config, block *typ
 		statelessIncompleteStateMeter.Mark(1)
 		log.Error("stateless execution hit incomplete state or code; rejecting block",
 			"block", block.Number(), "hash", block.Hash(), "err", dbErr, "procErr", err)
-		return common.Hash{}, common.Hash{}, db, res, fmt.Errorf("%w: %v", ErrStatelessIncompleteState, dbErr)
+		return common.Hash{}, common.Hash{}, db, res, fmt.Errorf("%w: %w", ErrStatelessIncompleteState, dbErr)
 	}
 	if err != nil {
 		return common.Hash{}, common.Hash{}, nil, nil, err

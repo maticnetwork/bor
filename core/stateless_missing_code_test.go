@@ -23,6 +23,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -112,6 +113,16 @@ func TestExecuteStatelessRejectsMissingCode(t *testing.T) {
 			t.Fatalf("removing read code %x produced %v, want ErrStatelessIncompleteState", h, err)
 		case !strings.Contains(err.Error(), strings.TrimPrefix(h.Hex(), "0x")):
 			t.Fatalf("error for missing code %x does not name the hash: %v", h, err)
+		}
+
+		// The missing code hash must be machine-recoverable (not just in the
+		// message) so the downloader self-heal can fetch exactly that blob.
+		var mce *state.MissingCodeError
+		if !errors.As(err, &mce) {
+			t.Fatalf("error for missing code %x is not a *state.MissingCodeError: %v", h, err)
+		}
+		if mce.Hash != h {
+			t.Fatalf("MissingCodeError.Hash = %x, want %x", mce.Hash, h)
 		}
 
 		if tested++; testing.Short() && tested >= 1 {

@@ -636,6 +636,25 @@ func (s *stateObject) Address() common.Address {
 	return s.address
 }
 
+// MissingCodeError is recorded via StateDB.setError when contract code for a
+// non-empty code hash cannot be found in the backing store during execution.
+// On the stateless path code lives on local disk (WIT2 witnesses carry no
+// code), so this identifies a fetchable gap: the blob is content-addressed by
+// Hash and can be re-fetched from a peer and re-persisted. It is deliberately
+// distinct from a missing state trie node, which signals an incomplete witness
+// (not absent code) and is not fetchable by code hash.
+type MissingCodeError struct {
+	Addr common.Address
+	Hash common.Hash
+}
+
+// Error keeps the historical "code is not found <hash>" wording (asserted by
+// witness-regen fixtures) so the message is unchanged; the type is what lets
+// callers recover the hash via errors.As.
+func (e *MissingCodeError) Error() string {
+	return fmt.Sprintf("code is not found %x", e.Hash)
+}
+
 // Code returns the contract code associated with this object, if any.
 func (s *stateObject) Code() []byte {
 	if len(s.code) != 0 {
@@ -652,7 +671,7 @@ func (s *stateObject) Code() []byte {
 	}
 	if len(code) == 0 {
 		log.Error("Code is not found", "address", s.address, "hash", fmt.Sprintf("%x", s.CodeHash()))
-		s.db.setError(fmt.Errorf("code is not found %x", s.CodeHash()))
+		s.db.setError(&MissingCodeError{Addr: s.address, Hash: common.BytesToHash(s.CodeHash())})
 	}
 	s.code = code
 
@@ -675,7 +694,7 @@ func (s *stateObject) CodeSize() int {
 		s.db.setError(fmt.Errorf("can't load code size %x: %v", s.CodeHash(), err))
 	}
 	if size == 0 {
-		s.db.setError(fmt.Errorf("code is not found %x", s.CodeHash()))
+		s.db.setError(&MissingCodeError{Addr: s.address, Hash: common.BytesToHash(s.CodeHash())})
 	}
 	return size
 }
