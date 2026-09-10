@@ -650,6 +650,7 @@ func InspectDatabase(db ethdb.Database, keyPrefix, keyStart []byte) error {
 		tds                stat
 		numHashPairings    stat
 		hashNumPairings    stat
+		blockAccessList    stat
 		legacyTries        stat
 		stateLookups       stat
 		accountTries       stat
@@ -721,6 +722,9 @@ func InspectDatabase(db ethdb.Database, keyPrefix, keyStart []byte) error {
 				numHashPairings.add(size)
 			case bytes.HasPrefix(key, headerNumberPrefix) && len(key) == (len(headerNumberPrefix)+common.HashLength):
 				hashNumPairings.add(size)
+			case bytes.HasPrefix(key, accessListPrefix) && len(key) == len(accessListPrefix)+8+common.HashLength:
+				blockAccessList.add(size)
+
 			case IsLegacyTrieNode(key, it.Value()):
 				legacyTries.add(size)
 			case bytes.HasPrefix(key, stateIDPrefix) && len(key) == len(stateIDPrefix)+common.HashLength:
@@ -862,6 +866,7 @@ func InspectDatabase(db ethdb.Database, keyPrefix, keyStart []byte) error {
 		{"Key-Value store", "Difficulties", tds.sizeString(), tds.countString()},
 		{"Key-Value store", "Block number->hash", numHashPairings.sizeString(), numHashPairings.countString()},
 		{"Key-Value store", "Block hash->number", hashNumPairings.sizeString(), hashNumPairings.countString()},
+		{"Key-Value store", "Block accessList", blockAccessList.sizeString(), blockAccessList.countString()},
 		{"Key-Value store", "Transaction index", txLookups.sizeString(), txLookups.countString()},
 		{"Key-Value store", "Log index filter-map rows", filterMapRows.sizeString(), filterMapRows.countString()},
 		{"Key-Value store", "Log index last-block-of-map", filterMapLastBlock.sizeString(), filterMapLastBlock.countString()},

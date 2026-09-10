@@ -195,15 +195,11 @@ func TestParityTraceConfig(t *testing.T) {
 		}
 	})
 
-	t.Run("caller reexec and timeout honoured, tracer forced", func(t *testing.T) {
+	t.Run("caller timeout honoured, tracer forced", func(t *testing.T) {
 		t.Parallel()
-		reexec := uint64(42)
 		timeout := "9s"
 		userTracer := "callTracer"
-		cfg := parityTraceConfig(&TraceConfig{Reexec: &reexec, Timeout: &timeout, Tracer: &userTracer})
-		if cfg.Reexec == nil || *cfg.Reexec != 42 {
-			t.Errorf("reexec = %v, want 42", cfg.Reexec)
-		}
+		cfg := parityTraceConfig(&TraceConfig{Timeout: &timeout, Tracer: &userTracer})
 		if cfg.Timeout == nil || *cfg.Timeout != "9s" {
 			t.Errorf("timeout = %v, want 9s", cfg.Timeout)
 		}

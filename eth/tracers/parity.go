@@ -174,7 +174,7 @@ type parityBlockExec struct {
 // system calls (beacon root, parent block hash) required before replaying the
 // block's transactions. The caller MUST invoke the returned release function; it
 // is non-nil only on success (error returns leave state unallocated).
-func (api *API) setupParityBlockExec(ctx context.Context, block *types.Block, reexec uint64) (*parityBlockExec, StateReleaseFunc, error) {
+func (api *API) setupParityBlockExec(ctx context.Context, block *types.Block) (*parityBlockExec, StateReleaseFunc, error) {
 	if block.NumberU64() == 0 {
 		return nil, nil, errors.New("genesis block is not traceable")
 	}
@@ -184,7 +184,7 @@ func (api *API) setupParityBlockExec(ctx context.Context, block *types.Block, re
 		return nil, nil, fmt.Errorf("failed to get parent block: %w", err)
 	}
 
-	statedb, release, err := api.backend.StateAtBlock(ctx, parent, reexec, nil, true, false)
+	statedb, release, err := api.backend.StateAtBlock(ctx, parent, nil, true, false)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get state at block %d: %w (archive node required for historical blocks)", parent.NumberU64(), err)
 	}
@@ -228,7 +228,7 @@ func (e *parityBlockExec) txInput(txIndex int, tx *types.Transaction, cumulative
 }
 
 // parityPhaseConfig builds the TraceConfig for one Parity output phase (trace,
-// stateDiff or vmTrace) forcing the given tracer. Only Reexec/Timeout are
+// stateDiff or vmTrace) forcing the given tracer. Only Timeout is
 // honoured from the caller's config, and an unset timeout falls back to the
 // Parity-specific (longer) default — every phase re-executes the transaction,
 // so each must get the full budget rather than defaultTraceTimeout (5s). This
@@ -239,7 +239,6 @@ func parityPhaseConfig(tracerName string, tracerCfg json.RawMessage, base *Trace
 		TracerConfig: tracerCfg,
 	}
 	if base != nil {
-		cfg.Reexec = base.Reexec
 		cfg.Timeout = base.Timeout
 		cfg.gasBailout = base.gasBailout
 	}
@@ -351,7 +350,7 @@ func (api *API) parityTxFrameCtx(in parityExecInput, wrapped parityCallResult, c
 // from txctx; when includeTxMeta is false they are cleared (trace_call /
 // trace_replay* semantics). The callTracer is always forced regardless of any
 // tracer set on the input config, since the Parity conversion requires a
-// structured call frame; only Reexec/Timeout are honoured from it.
+// structured call frame; only Timeout is honoured from it.
 func (api *API) parityTraceTx(ctx context.Context, in parityExecInput, includeTxMeta bool) ([]*ParityTrace, *hexutil.Bytes, uint64, error) {
 	res, gasUsed, err := api.traceTx(ctx, in.tx, in.msg, in.txctx, in.vmctx, in.statedb, parityTraceConfig(in.config), nil)
 	if err != nil {
@@ -411,17 +410,12 @@ func (api *API) canonicalTxTraceEnv(ctx context.Context, hash common.Hash, confi
 		return parityExecInput{}, nil, errors.New("genesis is not traceable")
 	}
 
-	reexec := defaultTraceReexec
-	if config != nil && config.Reexec != nil {
-		reexec = *config.Reexec
-	}
-
 	block, err := api.blockByNumberAndHash(ctx, rpc.BlockNumber(blockNumber), blockHash)
 	if err != nil {
 		return parityExecInput{}, nil, err
 	}
 
-	tx, vmctx, statedb, release, err := api.backend.StateAtTransaction(ctx, block, int(index), reexec)
+	tx, vmctx, statedb, release, err := api.backend.StateAtTransaction(ctx, block, int(index))
 	if err != nil {
 		return parityExecInput{}, nil, err
 	}

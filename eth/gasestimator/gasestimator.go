@@ -27,7 +27,6 @@ import (
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
-	"github.com/ethereum/go-ethereum/internal/ethapi/override"
 	"github.com/ethereum/go-ethereum/log"
 	"github.com/ethereum/go-ethereum/params"
 )
@@ -38,11 +37,12 @@ import (
 // these together, it would be excessively hard to test. Splitting the parts out
 // allows testing without needing a proper live chain.
 type Options struct {
-	Config         *params.ChainConfig      // Chain configuration for hard fork selection
-	Chain          core.ChainContext        // Chain context to access past block hashes
-	Header         *types.Header            // Header defining the block context to execute in
-	State          *state.StateDB           // Pre-state on top of which to estimate the gas
-	BlockOverrides *override.BlockOverrides // Block overrides to apply during the estimation
+	Config *params.ChainConfig // Chain configuration for hard fork selection
+	Chain  core.ChainContext   // Chain context to access past block hashes
+	Header *types.Header       // Header defining the block context to execute in
+	State  *state.StateDB      // Pre-state on top of which to estimate the gas
+
+	BlobBaseFee *big.Int // BlobBaseFee optionally overrides the blob base fee in the execution context.
 
 	ErrorRatio float64 // Allowed overestimation ratio for faster estimation termination
 }
@@ -64,14 +64,10 @@ func Estimate(ctx context.Context, call *core.Message, opts *Options, gasCap uin
 
 	// Cap the maximum gas allowance according to EIP-7825 if the estimation targets Osaka
 	if hi > params.MaxTxGas {
-		blockNumber := opts.Header.Number
-		if opts.BlockOverrides != nil {
-			if opts.BlockOverrides.Number != nil {
-				blockNumber = opts.BlockOverrides.Number.ToInt()
-			}
-		}
-		isOsaka := opts.Config.IsOsaka(blockNumber)
-		isMadhugiri := opts.Config.Bor != nil && opts.Config.Bor.IsMadhugiri(blockNumber)
+		// Block overrides are applied to the header by the caller (#34081), so the
+		// header is already the effective block context here.
+		isOsaka := opts.Config.IsOsaka(opts.Header.Number)
+		isMadhugiri := opts.Config.Bor != nil && opts.Config.Bor.IsMadhugiri(opts.Header.Number)
 		if isOsaka || isMadhugiri {
 			hi = params.MaxTxGas
 		}
@@ -240,10 +236,8 @@ func run(ctx context.Context, call *core.Message, opts *Options) (*core.Executio
 		evmContext = core.NewEVMBlockContext(opts.Header, opts.Chain, nil)
 		dirtyState = opts.State.Copy()
 	)
-	if opts.BlockOverrides != nil {
-		if err := opts.BlockOverrides.Apply(&evmContext); err != nil {
-			return nil, err
-		}
+	if opts.BlobBaseFee != nil {
+		evmContext.BlobBaseFee = new(big.Int).Set(opts.BlobBaseFee)
 	}
 	// Lower the basefee to 0 to avoid breaking EVM
 	// invariants (basefee < feecap).

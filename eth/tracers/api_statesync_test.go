@@ -469,10 +469,10 @@ func TestIntermediateRoots_WithStateSyncTx(t *testing.T) {
 	}
 }
 
-// TestIntermediateRoots_WithReexecOverride exercises the `config.Reexec` override branch
-// Passing a non-nil config with Reexec set must not change the result vs the default
+// TestIntermediateRoots_WithNonNilConfig exercises the non-nil-config branch
+// Passing a non-nil config must not change the result vs the default
 // (no config). Covers the trivial-but-untouched config-handling path.
-func TestIntermediateRoots_WithReexecOverride(t *testing.T) {
+func TestIntermediateRoots_WithNonNilConfig(t *testing.T) {
 	t.Parallel()
 
 	backend, api, stateSyncBlock := newStateSyncTestSetup(t, 3, 2)
@@ -481,8 +481,7 @@ func TestIntermediateRoots_WithReexecOverride(t *testing.T) {
 	block, _ := backend.BlockByNumber(context.Background(), rpc.BlockNumber(stateSyncBlock))
 	require.NotNil(t, block)
 
-	reexec := uint64(8)
-	withConfig, err := api.IntermediateRoots(context.Background(), block.Hash(), &TraceConfig{Reexec: &reexec})
+	withConfig, err := api.IntermediateRoots(context.Background(), block.Hash(), &TraceConfig{})
 	require.NoError(t, err)
 
 	withoutConfig, err := api.IntermediateRoots(context.Background(), block.Hash(), nil)
