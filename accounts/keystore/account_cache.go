@@ -73,6 +73,7 @@ type accountCache struct {
 	throttle *time.Timer
 	notify   chan struct{}
 	fileC    fileCache
+	scanMu   sync.Mutex
 }
 
 func newAccountCache(keydir string) (*accountCache, chan struct{}) {
@@ -131,6 +132,17 @@ func (ac *accountCache) delete(removed accounts.Account) {
 	} else {
 		ac.byAddr[removed.Address] = ba
 	}
+}
+
+func (ac *accountCache) deleteFile(removed accounts.Account) error {
+	ac.scanMu.Lock()
+	defer ac.scanMu.Unlock()
+
+	if err := os.Remove(removed.URL.Path); err != nil {
+		return err
+	}
+	ac.delete(removed)
+	return nil
 }
 
 // deleteByFile removes an account referenced by the given path.
@@ -253,6 +265,9 @@ func (ac *accountCache) close() {
 // scanAccounts checks if any changes have occurred on the filesystem, and
 // updates the account cache accordingly
 func (ac *accountCache) scanAccounts() error {
+	ac.scanMu.Lock()
+	defer ac.scanMu.Unlock()
+
 	// Scan the entire folder metadata for file changes
 	creates, deletes, updates, err := ac.fileC.scan(ac.keydir)
 	if err != nil {
