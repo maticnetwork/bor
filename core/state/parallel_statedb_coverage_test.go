@@ -269,6 +269,8 @@ func TestPDB_CrossTxSelfDestructVisibility(t *testing.T) {
 	pdbA.SetState(addr, slot, common.HexToHash("0xdeadbeef"))
 	pdbA.SetDeferMVWrites(true)
 	pdbA.EnableReadTracking()
+	// Mirror the EVM handler: it clears the balance, SelfDestruct does not.
+	pdbA.SubBalance(addr, uint256.NewInt(100), tracing.BalanceDecreaseSelfdestruct)
 	pdbA.SelfDestruct(addr)
 	pdbA.FlushToMVStore()
 
@@ -384,22 +386,26 @@ func TestPDB_CrossTxSelfDestructThenRecreate(t *testing.T) {
 	})
 }
 
-// TestPDB_SelfDestruct marks as destructed, returns prior balance, and zeros
-// it via SubBalance.
+// TestPDB_SelfDestruct marks the account as destructed without touching its
+// balance. The balance is cleared by the EVM opcode handler's explicit
+// SubBalance, not by SelfDestruct; the negative assertion below pins that split
+// so re-adding the zeroing here cannot slip through unnoticed.
 func TestPDB_SelfDestruct(t *testing.T) {
 	pdb, _, _ := newTestPDB(t, 0)
 	addr := common.HexToAddress("0xaabb")
 	pdb.AddBalance(addr, uint256.NewInt(42), tracing.BalanceChangeUnspecified)
 
-	prior := pdb.SelfDestruct(addr)
-	if prior.Uint64() != 42 {
-		t.Fatalf("SelfDestruct prior balance: got %d, want 42", prior.Uint64())
-	}
+	pdb.SelfDestruct(addr)
 	if !pdb.HasSelfDestructed(addr) {
 		t.Fatal("HasSelfDestructed: false after SelfDestruct")
 	}
+	if got := pdb.GetBalance(addr).Uint64(); got != 42 {
+		t.Fatalf("SelfDestruct must leave the balance alone: got %d, want 42", got)
+	}
+
+	pdb.SubBalance(addr, uint256.NewInt(42), tracing.BalanceDecreaseSelfdestruct)
 	if got := pdb.GetBalance(addr).Uint64(); got != 0 {
-		t.Fatalf("balance after SelfDestruct: got %d, want 0", got)
+		t.Fatalf("balance after the handler's SubBalance: got %d, want 0", got)
 	}
 }
 
@@ -437,43 +443,37 @@ func TestPDB_SelfDestruct_RecordsSuicidePathWrite(t *testing.T) {
 	}
 }
 
-// TestPDB_SelfDestruct6780_NewContract deletes and returns (bal, true) when
-// the contract was created in this tx.
-func TestPDB_SelfDestruct6780_NewContract(t *testing.T) {
+// TestPDB_IsNewContract_CreatedThisTx reports true for a contract created in
+// this tx. This is the signal the EVM handler uses to decide whether a
+// SELFDESTRUCT actually destructs, replacing SelfDestruct6780's second return.
+func TestPDB_IsNewContract_CreatedThisTx(t *testing.T) {
 	pdb, _, _ := newTestPDB(t, 0)
 	addr := common.HexToAddress("0xaabb")
 	pdb.CreateContract(addr)
 	pdb.AddBalance(addr, uint256.NewInt(5), tracing.BalanceChangeUnspecified)
 
-	bal, destroyed := pdb.SelfDestruct6780(addr)
-	if !destroyed {
-		t.Fatal("SelfDestruct6780 on new contract must return destroyed=true")
+	if !pdb.IsNewContract(addr) {
+		t.Fatal("IsNewContract: false for a contract created in this tx")
 	}
-	if bal.Uint64() != 5 {
-		t.Fatalf("bal: got %d, want 5", bal.Uint64())
-	}
+	pdb.SelfDestruct(addr)
 	if !pdb.HasSelfDestructed(addr) {
-		t.Fatal("HasSelfDestructed: false after SelfDestruct6780 on new contract")
+		t.Fatal("HasSelfDestructed: false after SelfDestruct on a new contract")
 	}
 }
 
-// TestPDB_SelfDestruct6780_ExistingContract returns (bal, false) and only
-// sends balance to beneficiary; does NOT mark destructed.
-func TestPDB_SelfDestruct6780_ExistingContract(t *testing.T) {
+// TestPDB_IsNewContract_PreExisting reports false for a contract that predates
+// this tx, so the EVM handler transfers the balance without destructing.
+func TestPDB_IsNewContract_PreExisting(t *testing.T) {
 	pdb, _, _ := newTestPDB(t, 0)
 	addr := common.HexToAddress("0xaabb")
 	pdb.AddBalance(addr, uint256.NewInt(5), tracing.BalanceChangeUnspecified)
 	// Note: no CreateContract — contract was not created this tx.
 
-	bal, destroyed := pdb.SelfDestruct6780(addr)
-	if destroyed {
-		t.Fatal("SelfDestruct6780 on existing contract must return destroyed=false")
-	}
-	if bal.Uint64() != 5 {
-		t.Fatalf("bal: got %d, want 5", bal.Uint64())
+	if pdb.IsNewContract(addr) {
+		t.Fatal("IsNewContract: true for a pre-existing contract")
 	}
 	if pdb.HasSelfDestructed(addr) {
-		t.Fatal("HasSelfDestructed: must NOT be true for existing contract")
+		t.Fatal("HasSelfDestructed: must not be set without a SelfDestruct call")
 	}
 }
 

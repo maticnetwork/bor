@@ -1106,8 +1106,10 @@ func (s *ParallelStateDB) SetTransientState(addr common.Address, key, value comm
 
 // ---------- Self-destruct ----------
 
-func (s *ParallelStateDB) SelfDestruct(addr common.Address) uint256.Int {
-	bal := *s.GetBalance(addr)
+// SelfDestruct marks the given account as selfdestructed. As with the serial
+// StateDB, the caller owns clearing the balance — see the parity note on
+// StateDB.SelfDestruct, which Exist below depends on.
+func (s *ParallelStateDB) SelfDestruct(addr common.Address) {
 	// Only journal a destruct entry when this call actually flips the flag
 	// — matches StateDB.SelfDestruct, where repeated calls within a tx skip
 	// the journal. Without this guard, reverting a second SelfDestruct
@@ -1126,28 +1128,18 @@ func (s *ParallelStateDB) SelfDestruct(addr common.Address) uint256.Int {
 		// exists.
 		s.recordWrite(blockstm.NewSubpathKey(addr, SuicidePath))
 	}
-	s.SubBalance(addr, &bal, tracing.BalanceDecreaseSelfdestruct)
-	return bal
 }
 
 func (s *ParallelStateDB) HasSelfDestructed(addr common.Address) bool {
 	return s.destructed[addr]
 }
 
-func (s *ParallelStateDB) SelfDestruct6780(addr common.Address) (uint256.Int, bool) {
-	if s.newContract[addr] {
-		return s.SelfDestruct(addr), true
-	}
-	// EIP-6780: SELFDESTRUCT on a non-same-tx-created contract MUST NOT
-	// touch balances here — the EVM opcode handler (opSelfdestruct6780)
-	// already performed SubBalance(addr) + AddBalance(beneficiary) before
-	// invoking us. Serial StateDB.SelfDestruct6780 is a pure read in this
-	// branch for the same reason. Mirroring that contract is the only way
-	// the self-beneficiary case (CALLCODE → callee SELFDESTRUCT(caller))
-	// preserves the contract's balance: SubBalance(addr) + AddBalance(addr)
-	// nets to zero, but a third SubBalance here drains the contract.
-	// Found via spec-tests stCallCodes/...SuicideEnd.
-	return *s.GetBalance(addr), false
+// IsNewContract reports whether the contract at the given address was deployed
+// during the current transaction. newContract is tx-local (cleared per tx), so
+// no MVHashMap read is recorded: EIP-6780's "created in this same transaction"
+// can only ever be satisfied by this tx's own writes.
+func (s *ParallelStateDB) IsNewContract(addr common.Address) bool {
+	return s.newContract[addr]
 }
 
 // ---------- Account creation ----------

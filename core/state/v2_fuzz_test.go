@@ -300,7 +300,7 @@ func probesFromOps(ops []pdbOp) []probe {
 				addSlot(o.addr, o.slot)
 			case opSelfDestruct:
 				addAddr(o.addr)
-			case opSelfDestruct6780:
+			case opSelfDestructIfNew:
 				addAddr(o.addr)
 			case opCreateAccount:
 				addAddr(o.addr)

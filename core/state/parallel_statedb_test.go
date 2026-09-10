@@ -1429,6 +1429,8 @@ func TestPDB_Exist_DestructedNoBaseReturnsFalse(t *testing.T) {
 	pdb, _, _ := newTestPDB(t, 0)
 	addr := common.HexToAddress("0xabcd")
 	pdb.AddBalance(addr, uint256.NewInt(1), tracing.BalanceChangeUnspecified)
+	// Mirror the EVM handler: it clears the balance, SelfDestruct does not.
+	pdb.SubBalance(addr, uint256.NewInt(1), tracing.BalanceDecreaseSelfdestruct)
 	pdb.SelfDestruct(addr)
 	if pdb.Exist(addr) {
 		t.Fatal("Exist on a destructed address with no base/created/balance presence must return false")
