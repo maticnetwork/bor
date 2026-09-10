@@ -218,7 +218,7 @@ func loadWitnessFromJSON(path string) (*stateless.Witness, error) {
 	contextHeader.Root = common.Hash{}
 	contextHeader.ReceiptHash = common.Hash{}
 
-	witness, err := stateless.NewWitness(&contextHeader, nil)
+	witness, err := stateless.NewWitness(&contextHeader, nil, false)
 	if err != nil {
 		return nil, fmt.Errorf("creating witness: %w", err)
 	}
@@ -1317,7 +1317,7 @@ func processV2Parallel(pb *preparedBlock, config *params.ChainConfig, engine con
 							results[taskIdx] = v2TxResult{txIdx: t.idx, pdb: pdb, tx: t.tx, err: fmt.Errorf("panic: %v", r)}
 						}
 					}()
-					_, err := ApplyMessage(evm, t.msg, new(GasPool).AddGas(pb.block.GasLimit()))
+					_, err := ApplyMessage(evm, t.msg, NewGasPool(pb.block.GasLimit()))
 					results[taskIdx] = v2TxResult{txIdx: t.idx, pdb: pdb, tx: t.tx, err: err}
 				}()
 			}
@@ -1527,7 +1527,7 @@ func TestV2ChainWaitDiagnostic(t *testing.T) {
 			tasks = append(tasks, V2Task{Index: j, Tx: tx, Msg: msg})
 		}
 
-		v2BaseDB.StartPrefetcher("diag", nil, nil)
+		v2BaseDB.StartPrefetcher("diag", nil)
 		result := ExecuteV2BlockSTM(context.Background(), tasks, readBase, store, bals, blockCtx, bd.block.Hash(),
 			vm.Config{}, config, bd.block.GasLimit(), 8, v2BaseDB, nil)
 		v2BaseDB.StopPrefetcher()
@@ -1701,7 +1701,7 @@ func BenchmarkV2AllBlocks(b *testing.B) {
 // safeBase.CollectCodeWitness).
 func processV2BlockSTMWithWitness(pb *preparedBlock, config *params.ChainConfig, engine consensus.Engine, numWorkers int) error {
 	db := pb.baseState.Copy()
-	w, err := stateless.NewWitness(pb.block.Header(), nil)
+	w, err := stateless.NewWitness(pb.block.Header(), nil, false)
 	if err != nil {
 		return err
 	}

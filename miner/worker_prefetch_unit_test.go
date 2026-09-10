@@ -493,7 +493,7 @@ func TestStreamIdleBatch_LocalBudgetEnforced(t *testing.T) {
 
 	// Cap headerGasLimit at 100k so loopGasLimit = min(totalGasPool, header) = 100k.
 	const headerGasLimit uint64 = 100_000
-	totalGasPool := new(core.GasPool).AddGas(10_000_000)
+	totalGasPool := core.NewGasPool(10_000_000)
 	localPrefetched := map[common.Hash]struct{}{}
 
 	// Buffer wide enough that the "channel full" early-return never triggers.

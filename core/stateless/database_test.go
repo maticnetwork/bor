@@ -226,7 +226,7 @@ func TestMakeHashDBWithDiskDB(t *testing.T) {
 		Root:       common.HexToHash("0x5678"),
 	}
 
-	witness, err := NewWitness(header, nil)
+	witness, err := NewWitness(header, nil, false)
 	if err != nil {
 		t.Fatalf("Failed to create witness: %v", err)
 	}
@@ -301,7 +301,7 @@ func TestCodePersistenceAcrossWitnesses(t *testing.T) {
 	diskdb := rawdb.NewMemoryDatabase()
 
 	// First witness import - add some codes
-	witness1, _ := NewWitness(&types.Header{Number: big.NewInt(100)}, nil)
+	witness1, _ := NewWitness(&types.Header{Number: big.NewInt(100)}, nil, false)
 	hashDB1 := witness1.MakeHashDB(diskdb)
 
 	code1 := []byte("contract1")
@@ -309,7 +309,7 @@ func TestCodePersistenceAcrossWitnesses(t *testing.T) {
 	rawdb.WriteCode(hashDB1, hash1, code1)
 
 	// Second witness import - verify code1 is still accessible
-	witness2, _ := NewWitness(&types.Header{Number: big.NewInt(101)}, nil)
+	witness2, _ := NewWitness(&types.Header{Number: big.NewInt(101)}, nil, false)
 	hashDB2 := witness2.MakeHashDB(diskdb)
 
 	// Verify code1 is accessible through new hashDB
@@ -325,7 +325,7 @@ func TestCodePersistenceAcrossWitnesses(t *testing.T) {
 	rawdb.WriteCode(hashDB2, hash2, code2)
 
 	// Third witness import - verify both codes are accessible
-	witness3, _ := NewWitness(&types.Header{Number: big.NewInt(102)}, nil)
+	witness3, _ := NewWitness(&types.Header{Number: big.NewInt(102)}, nil, false)
 	hashDB3 := witness3.MakeHashDB(diskdb)
 
 	for hash, expectedCode := range map[common.Hash][]byte{hash1: code1, hash2: code2} {

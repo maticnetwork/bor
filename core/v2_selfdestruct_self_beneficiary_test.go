@@ -107,7 +107,7 @@ func runSelfDestructSelfBeneficiary(t *testing.T, useV2 bool) {
 		evm := vm.NewEVM(blockCtx, statedb, &cfg, vm.Config{})
 		msg, _ := TransactionToMessage(tx, signer, blockCtx.BaseFee)
 		evm.SetTxContext(NewEVMTxContext(msg))
-		gp := new(GasPool).AddGas(blockCtx.GasLimit)
+		gp := NewGasPool(blockCtx.GasLimit)
 		if _, err := ApplyMessage(evm, msg, gp); err != nil {
 			t.Fatalf("ApplyMessage: %v", err)
 		}

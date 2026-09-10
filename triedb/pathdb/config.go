@@ -134,10 +134,11 @@ type Config struct {
 	PreloadRateLimit int64
 
 	// Testing configurations
-	SnapshotNoBuild   bool   // Flag Whether the state generation is disabled
-	NoAsyncFlush      bool   // Flag whether the background buffer flushing is disabled
-	NoAsyncGeneration bool   // Flag whether the background generation is disabled
-	MaxDiffLayers     uint64 // Maximum diff layers allowed in the layer tree
+	SnapshotNoBuild     bool   // Flag Whether the state generation is disabled
+	NoAsyncFlush        bool   // Flag whether the background buffer flushing is disabled
+	NoAsyncGeneration   bool   // Flag whether the background generation is disabled
+	NoHistoryIndexDelay bool   // Flag whether the history index delay is disabled
+	MaxDiffLayers       uint64 // Maximum diff layers allowed in the layer tree
 }
 
 // sanitize checks the provided user configurations and changes anything that's

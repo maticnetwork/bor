@@ -613,7 +613,7 @@ func (api *API) IntermediateRoots(ctx context.Context, hash common.Hash, config 
 			stateReceiverAddress := api.backend.ChainConfig().Bor.StateReceiverContract
 			_, err = statefull.ApplyStateSyncEvents(ctx, evm, tx, msg, common.HexToAddress(stateReceiverAddress))
 		} else {
-			_, err = core.ApplyMessage(evm, msg, new(core.GasPool).AddGas(msg.GasLimit))
+			_, err = core.ApplyMessage(evm, msg, nil)
 		}
 
 		if err != nil {
@@ -794,7 +794,7 @@ txloop:
 		// Generate the next state snapshot fast without tracing
 		msg, _ := core.TransactionToMessage(tx, signer, block.BaseFee())
 		statedb.SetTxContext(tx.Hash(), i)
-		res, err := core.ApplyMessage(evm, msg, new(core.GasPool).AddGas(msg.GasLimit))
+		res, err := core.ApplyMessage(evm, msg, nil)
 		if err != nil {
 			failed = err
 			break txloop
@@ -912,7 +912,7 @@ func (api *API) standardTraceBlockToFile(ctx context.Context, block *types.Block
 				stateReceiverAddress := chainConfig.Bor.StateReceiverContract
 				_, err = statefull.ApplyStateSyncEvents(ctx, evm, tx, msg, common.HexToAddress(stateReceiverAddress))
 			} else {
-				_, err = core.ApplyMessage(evm, msg, new(core.GasPool).AddGas(msg.GasLimit))
+				_, err = core.ApplyMessage(evm, msg, nil)
 			}
 			if err != nil {
 				return dumps, err
@@ -967,7 +967,7 @@ func (api *API) standardTraceBlockToFile(ctx context.Context, block *types.Block
 		if isStateSync {
 			vmResult, err = statefull.ApplyStateSyncEvents(ctx, evm, tx, msg, stateReceiverAddress)
 		} else {
-			vmResult, err = core.ApplyMessage(evm, msg, new(core.GasPool).AddGas(msg.GasLimit))
+			vmResult, err = core.ApplyMessage(evm, msg, nil)
 		}
 		if hooks.OnTxEnd != nil {
 			var receipt *types.Receipt
@@ -1407,7 +1407,6 @@ func (api *API) traceTx(ctx context.Context, tx *types.Transaction, message *cor
 		tracer  *Tracer
 		err     error
 		timeout = defaultTraceTimeout
-		usedGas uint64
 	)
 	if config == nil {
 		config = &TraceConfig{}
@@ -1522,12 +1521,14 @@ func (api *API) traceTx(ctx context.Context, tx *types.Transaction, message *cor
 	}
 
 	// Handle normal transactions
-	_, err = core.ApplyTransactionWithEVM(message, new(core.GasPool).AddGas(message.GasLimit), statedb, vmctx.BlockNumber, txctx.BlockHash, vmctx.Time, tx, &usedGas, evm)
+	gp := core.NewGasPool(message.GasLimit)
+
+	_, err = core.ApplyTransactionWithEVM(message, gp, statedb, vmctx.BlockNumber, txctx.BlockHash, vmctx.Time, tx, evm)
 	if err != nil {
 		return nil, 0, fmt.Errorf("tracing failed: %w", err)
 	}
 	result, err := tracer.GetResult()
-	return result, usedGas, err
+	return result, gp.Used(), err
 }
 
 // APIs return the collection of RPC services the tracer package offers.

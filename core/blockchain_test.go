@@ -5695,7 +5695,7 @@ func TestStatelessInsertChain(t *testing.T) {
 
 	witnessesParallel := make([]*stateless.Witness, len(blocksParallel))
 	for i, b := range blocksParallel {
-		w, err := stateless.NewWitness(b.Header(), chain)
+		w, err := stateless.NewWitness(b.Header(), chain, false)
 		if err != nil {
 			t.Fatalf("failed to build witness for block %d: %v", b.NumberU64(), err)
 		}
@@ -5727,7 +5727,7 @@ func TestStatelessInsertChain(t *testing.T) {
 	// Now import via InsertChainStateless and expect clean happy path in sequential
 	witnessesSequential := make([]*stateless.Witness, len(blocksSequential))
 	for i, b := range blocksSequential {
-		w, err := stateless.NewWitness(b.Header(), chain)
+		w, err := stateless.NewWitness(b.Header(), chain, false)
 		if err != nil {
 			t.Fatalf("failed to build witness for block %d: %v", b.NumberU64(), err)
 		}

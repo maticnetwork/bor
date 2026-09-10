@@ -181,7 +181,7 @@ func execPathResultWithConfig(
 
 	bctx := BlockContext{
 		CanTransfer: func(StateDB, common.Address, *uint256.Int) bool { return true },
-		Transfer:    func(StateDB, common.Address, common.Address, *uint256.Int) {},
+		Transfer:    func(StateDB, common.Address, common.Address, *uint256.Int, *params.Rules) {},
 		GetHash:     func(n uint64) common.Hash { return common.BigToHash(new(big.Int).SetUint64(n + 0x1000)) },
 		Coinbase:    coinbase,
 		BlockNumber: big.NewInt(11),
@@ -1537,7 +1537,7 @@ func makeEVM(code []byte, gas uint64, switchDispatch bool) (*EVM, common.Address
 
 	bctx := BlockContext{
 		CanTransfer: func(StateDB, common.Address, *uint256.Int) bool { return true },
-		Transfer:    func(StateDB, common.Address, common.Address, *uint256.Int) {},
+		Transfer:    func(StateDB, common.Address, common.Address, *uint256.Int, *params.Rules) {},
 		GetHash:     func(n uint64) common.Hash { return common.BigToHash(new(big.Int).SetUint64(n + 0x1000)) },
 		Coinbase:    coinbase,
 		BlockNumber: big.NewInt(11),

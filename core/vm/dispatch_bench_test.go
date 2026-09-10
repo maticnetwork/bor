@@ -59,7 +59,7 @@ func benchSnailtracer(b *testing.B, switchDispatch bool) {
 
 		bctx := BlockContext{
 			CanTransfer: func(StateDB, common.Address, *uint256.Int) bool { return true },
-			Transfer:    func(StateDB, common.Address, common.Address, *uint256.Int) {},
+			Transfer:    func(StateDB, common.Address, common.Address, *uint256.Int, *params.Rules) {},
 			GetHash:     func(uint64) common.Hash { return common.Hash{} },
 			BlockNumber: big.NewInt(1),
 			Time:        1,

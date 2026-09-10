@@ -1397,11 +1397,7 @@ func (pool *LegacyPool) Status(hash common.Hash) txpool.TxStatus {
 
 // Get returns a transaction if it is contained in the pool and nil otherwise.
 func (pool *LegacyPool) Get(hash common.Hash) *types.Transaction {
-	tx := pool.get(hash)
-	if tx == nil {
-		return nil
-	}
-	return tx
+	return pool.get(hash)
 }
 
 // get returns a transaction if it is contained in the pool and nil otherwise.
@@ -1857,7 +1853,7 @@ func (pool *LegacyPool) promoteExecutables(accounts []common.Address) []*types.T
 	// promote all promotable transactions
 	promoted := make([]*types.Transaction, 0, len(promotable))
 	for _, tx := range promotable {
-		from, _ := pool.signer.Sender(tx)
+		from, _ := types.Sender(pool.signer, tx) // already validated
 		if pool.promoteTx(from, tx.Hash(), tx) {
 			promoted = append(promoted, tx)
 		}

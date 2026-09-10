@@ -73,7 +73,7 @@ func TestUseAfterTerminate(t *testing.T) {
 
 func TestDetachedPrefetcherLifecycle(t *testing.T) {
 	db := filledStateDB()
-	db.StartPrefetcher("detach-lifecycle", nil, nil)
+	db.StartPrefetcher("detach-lifecycle", nil)
 	if db.prefetcher == nil {
 		t.Fatal("expected StartPrefetcher to install a prefetcher")
 	}
@@ -101,7 +101,7 @@ func TestDetachedPrefetcherLifecycle(t *testing.T) {
 
 func TestDetachedPrefetcherCollectsWarmSnapshot(t *testing.T) {
 	db := filledStateDB()
-	db.StartPrefetcher("detach-warm-snapshot", nil, nil)
+	db.StartPrefetcher("detach-warm-snapshot", nil)
 
 	// Resolve an account through the prefetcher before detaching it so the
 	// collection path has a real account-trie witness to hand to SRC.

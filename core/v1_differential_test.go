@@ -178,7 +178,7 @@ func runV1Serial(t *testing.T, sc v1Scenario, chainConfig *params.ChainConfig) c
 		}
 		evm := vm.NewEVM(blockCtx, sdb, chainConfig, vm.Config{})
 		evm.SetTxContext(NewEVMTxContext(msg))
-		result, err := ApplyMessage(evm, msg, new(GasPool).AddGas(blockCtx.GasLimit))
+		result, err := ApplyMessage(evm, msg, NewGasPool(blockCtx.GasLimit))
 		if err != nil {
 			t.Fatalf("tx %d apply: %v", i, err)
 		}

@@ -71,10 +71,9 @@ func TestWitnessCollectionWithoutPrefetcher(t *testing.T) {
 	statedb, err := New(types.EmptyRootHash, db)
 	require.NoError(t, err)
 
-	witness, err := stateless.NewWitness(&types.Header{Number: common.Big1}, nil)
+	witness, err := stateless.NewWitness(&types.Header{Number: common.Big1}, nil, true)
 	require.NoError(t, err)
 	statedb.SetWitness(witness)
-	statedb.witnessStats = stateless.NewWitnessStats()
 
 	nodes := map[string][]byte{"": {0x80}, "\x01": {0xc0}}
 	statedb.addWitnessNodes(nodes, common.HexToHash("0x01"))
@@ -95,7 +94,7 @@ func TestFinaliseFastPrefetchSkipsMissingDirtyObject(t *testing.T) {
 	db := NewDatabaseForTesting()
 	statedb, err := New(types.EmptyRootHash, db)
 	require.NoError(t, err)
-	statedb.StartPrefetcher("missing-dirty-object", nil, nil)
+	statedb.StartPrefetcher("missing-dirty-object", nil)
 	t.Cleanup(statedb.StopPrefetcher)
 
 	missing := common.HexToAddress("0xbeef")
@@ -115,7 +114,7 @@ func TestCommittedStoragePrefetchAndWitnessBranches(t *testing.T) {
 	t.Run("storage reads and writes use the committed prefetch root", func(t *testing.T) {
 		statedb, err := New(root, base.db)
 		require.NoError(t, err)
-		statedb.StartPrefetcher("committed-storage", nil, nil)
+		statedb.StartPrefetcher("committed-storage", nil)
 		t.Cleanup(statedb.StopPrefetcher)
 
 		require.NotEqual(t, common.Hash{}, statedb.GetState(addr, slot))
@@ -127,7 +126,7 @@ func TestCommittedStoragePrefetchAndWitnessBranches(t *testing.T) {
 	t.Run("witness rereads read-only storage without a prefetcher", func(t *testing.T) {
 		statedb, err := New(root, base.db)
 		require.NoError(t, err)
-		witness, err := stateless.NewWitness(&types.Header{Number: common.Big1}, nil)
+		witness, err := stateless.NewWitness(&types.Header{Number: common.Big1}, nil, false)
 		require.NoError(t, err)
 		statedb.SetWitness(witness)
 
@@ -139,7 +138,7 @@ func TestCommittedStoragePrefetchAndWitnessBranches(t *testing.T) {
 	t.Run("destructed read-only object is included in witness collection", func(t *testing.T) {
 		statedb, err := New(root, base.db)
 		require.NoError(t, err)
-		witness, err := stateless.NewWitness(&types.Header{Number: common.Big1}, nil)
+		witness, err := stateless.NewWitness(&types.Header{Number: common.Big1}, nil, false)
 		require.NoError(t, err)
 		statedb.SetWitness(witness)
 		require.NotEqual(t, common.Hash{}, statedb.GetState(addr, slot))
@@ -153,7 +152,7 @@ func TestPrefetchedObjectWitnessAndReadOnlyDestructSkip(t *testing.T) {
 	db := NewDatabaseForTesting()
 	statedb, err := New(types.EmptyRootHash, db)
 	require.NoError(t, err)
-	witness, err := stateless.NewWitness(&types.Header{Number: common.Big1}, nil)
+	witness, err := stateless.NewWitness(&types.Header{Number: common.Big1}, nil, false)
 	require.NoError(t, err)
 	statedb.SetWitness(witness)
 
@@ -218,7 +217,7 @@ func TestTerminatedPrefetcherErrorsAreSoft(t *testing.T) {
 
 	statedb, err := New(root, base.db)
 	require.NoError(t, err)
-	statedb.StartPrefetcher("terminated-prefetcher", nil, nil)
+	statedb.StartPrefetcher("terminated-prefetcher", nil)
 	statedb.prefetcher.terminate(false)
 
 	require.NotEqual(t, common.Hash{}, statedb.GetState(addr, slot))
@@ -230,7 +229,7 @@ func TestTerminatedPrefetcherErrorsAreSoft(t *testing.T) {
 func TestObjectOwnedTrieWitnessBranch(t *testing.T) {
 	statedb, err := New(types.EmptyRootHash, NewDatabaseForTesting())
 	require.NoError(t, err)
-	witness, err := stateless.NewWitness(&types.Header{Number: common.Big1}, nil)
+	witness, err := stateless.NewWitness(&types.Header{Number: common.Big1}, nil, false)
 	require.NoError(t, err)
 	statedb.SetWitness(witness)
 

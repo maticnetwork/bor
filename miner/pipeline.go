@@ -451,7 +451,7 @@ func (s *specSession) setupInitial() bool {
 		s.w.fallbackToSequential(s.req)
 		return false
 	}
-	specState.StartPrefetcher("miner-speculative", nil, nil)
+	specState.StartPrefetcher("miner-speculative", nil)
 	s.specState = specState
 
 	blockN1Header := s.w.chain.GetHeader(s.blockNHeader.ParentHash, s.blockNNumber-1)
@@ -815,7 +815,7 @@ func (s *specSession) openNextSpecEnv(finalSpecHeader *types.Header, flatDiff *s
 		s.w.sealBlockViaTaskCh(s.borEngine, finalSpecHeader, s.specState, s.specEnv.txs, s.specEnv.receipts, stateSyncData, s.rootN, flatDiff, false, s.curBuildStart)
 		return nil, nil, nil, false
 	}
-	specStateNext.StartPrefetcher("miner-speculative", nil, nil)
+	specStateNext.StartPrefetcher("miner-speculative", nil)
 
 	grandparent := s.resolveGrandparent()
 	if grandparent == nil {

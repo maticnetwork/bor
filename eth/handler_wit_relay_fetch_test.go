@@ -386,7 +386,7 @@ func (f *inconsistentTotalPagesPeer) RequestWitness(reqs []wit.WitnessPageReques
 func buildTestWitnessBytes(t *testing.T) ([]byte, common.Hash) {
 	t.Helper()
 	header := &types.Header{Number: big.NewInt(1)}
-	witness, err := stateless.NewWitness(header, nil)
+	witness, err := stateless.NewWitness(header, nil, false)
 	if err != nil {
 		t.Fatalf("stateless.NewWitness: %v", err)
 	}

@@ -29,6 +29,7 @@ import (
 	"github.com/ethereum/go-ethereum/core/tracing"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
+	"github.com/ethereum/go-ethereum/params"
 )
 
 // ChainContext supports retrieving headers and consensus parameters from the
@@ -118,9 +119,10 @@ func NewEVMBlockContext(header *types.Header, chain ChainContext, author *common
 // EthereumTransfer subtracts amount from sender and adds it to recipient,
 // matching upstream go-ethereum semantics — no Bor transfer-log emission.
 // Used by NewEVMBlockContext when ChainConfig.Bor is nil.
-func EthereumTransfer(db vm.StateDB, sender, recipient common.Address, amount *uint256.Int) {
+func EthereumTransfer(db vm.StateDB, sender, recipient common.Address, amount *uint256.Int, rules *params.Rules) {
 	db.SubBalance(sender, amount, tracing.BalanceChangeTransfer)
 	db.AddBalance(recipient, amount, tracing.BalanceChangeTransfer)
+	emitEthTransferLog(db, sender, recipient, amount, rules)
 }
 
 // NewEVMTxContext creates a new transaction context for a single transaction.
@@ -254,7 +256,7 @@ func CanTransfer(db vm.StateDB, addr common.Address, amount *uint256.Int) bool {
 }
 
 // Transfer subtracts amount from sender and adds amount to recipient using the given Db
-func Transfer(db vm.StateDB, sender, recipient common.Address, amount *uint256.Int) {
+func Transfer(db vm.StateDB, sender, recipient common.Address, amount *uint256.Int, rules *params.Rules) {
 	// In V2 BlockSTM, ParallelStateDB.RecordTransfer returns true and captures
 	// the transfer for log generation during settlement. The serial StateDB
 	// returns false, falling through to the original snapshot-based log path.
@@ -263,6 +265,8 @@ func Transfer(db vm.StateDB, sender, recipient common.Address, amount *uint256.I
 	if db.RecordTransfer(sender, recipient, amount) {
 		db.SubBalance(sender, amount, tracing.BalanceChangeTransfer)
 		db.AddBalance(recipient, amount, tracing.BalanceChangeTransfer)
+		emitEthTransferLog(db, sender, recipient, amount, rules)
+
 		return
 	}
 
@@ -272,9 +276,20 @@ func Transfer(db vm.StateDB, sender, recipient common.Address, amount *uint256.I
 
 	db.SubBalance(sender, amount, tracing.BalanceChangeTransfer)
 	db.AddBalance(recipient, amount, tracing.BalanceChangeTransfer)
+	emitEthTransferLog(db, sender, recipient, amount, rules)
 
 	output1 := db.GetBalance(sender)
 	output2 := db.GetBalance(recipient)
 
 	AddTransferLog(db, sender, recipient, amount.ToBig(), input1.ToBig(), input2.ToBig(), output1.ToBig(), output2.ToBig())
+}
+
+// emitEthTransferLog emits the EIP-7708 transfer log. Called at the same point
+// relative to the balance change on every transfer path so that V1 and V2
+// execution agree on log order. On the Bor path this lands alongside the 0x1010
+// LogTransfer, so once Amsterdam activates a value transfer produces both.
+func emitEthTransferLog(db vm.StateDB, sender, recipient common.Address, amount *uint256.Int, rules *params.Rules) {
+	if rules.IsAmsterdam && !amount.IsZero() && sender != recipient {
+		db.AddLog(types.EthTransferLog(sender, recipient, amount))
+	}
 }

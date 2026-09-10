@@ -208,8 +208,7 @@ func runIRTrial(t testing.TB, chain *BlockChain, txs []*types.Transaction, flag 
 	// --- Process phase: real ApplyTransactionWithEVM on the main statedb. ---
 	evmCtx := NewEVMBlockContext(header, chain, nil)
 	evm := vm.NewEVM(evmCtx, statedb, chain.Config(), cfg)
-	gp := new(GasPool).AddGas(header.GasLimit * uint64(len(txs)))
-	var usedGas uint64
+	gp := NewGasPool(header.GasLimit * uint64(len(txs)))
 	procFails := 0
 
 	processStart := time.Now()
@@ -221,7 +220,7 @@ func runIRTrial(t testing.TB, chain *BlockChain, txs []*types.Transaction, flag 
 			continue
 		}
 		if _, err := ApplyTransactionWithEVM(
-			msg, gp, statedb, header.Number, header.Hash(), header.Time, tx, &usedGas, evm,
+			msg, gp, statedb, header.Number, header.Hash(), header.Time, tx, evm,
 		); err != nil {
 			procFails++
 		}
@@ -560,8 +559,7 @@ func runIRPebbleTrial(
 	// --- Process phase ---
 	evmCtx := NewEVMBlockContext(header, chain, nil)
 	evm := vm.NewEVM(evmCtx, statedb, chain.Config(), cfg)
-	gp := new(GasPool).AddGas(header.GasLimit * uint64(len(txs)))
-	var usedGas uint64
+	gp := NewGasPool(header.GasLimit * uint64(len(txs)))
 
 	processStart := time.Now()
 	for i, tx := range txs {
@@ -571,7 +569,7 @@ func runIRPebbleTrial(
 			continue
 		}
 		_, _ = ApplyTransactionWithEVM(
-			msg, gp, statedb, header.Number, header.Hash(), header.Time, tx, &usedGas, evm,
+			msg, gp, statedb, header.Number, header.Hash(), header.Time, tx, evm,
 		)
 	}
 	processDur := time.Since(processStart)

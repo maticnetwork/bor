@@ -64,6 +64,10 @@ const estimateGasErrorRatio = 0.015
 // be requested in a single eth_getStorageValues call.
 const maxGetStorageSlots = 1024
 
+// maxGetProofKeys is the maximum number of storage keys that can be
+// requested in a single eth_getProof call.
+const maxGetProofKeys = 1024
+
 var errBlobTxNotSupported = errors.New("signing blob transactions not supported")
 var errSubClosed = errors.New("chain subscription closed")
 
@@ -455,6 +459,9 @@ func (n *proofList) Delete(key []byte) error {
 
 // GetProof returns the Merkle-proof for a given account and optionally some storage keys.
 func (api *BlockChainAPI) GetProof(ctx context.Context, address common.Address, storageKeys []string, blockNrOrHash rpc.BlockNumberOrHash) (*AccountResult, error) {
+	if len(storageKeys) > maxGetProofKeys {
+		return nil, &invalidParamsError{fmt.Sprintf("too many storage keys requested (max %d, got %d)", maxGetProofKeys, len(storageKeys))}
+	}
 	var (
 		keys         = make([]common.Hash, len(storageKeys))
 		keyLengths   = make([]int, len(storageKeys))
@@ -492,6 +499,9 @@ func (api *BlockChainAPI) GetProof(ctx context.Context, address common.Address, 
 		}
 		// Create the proofs for the storageKeys.
 		for i, key := range keys {
+			if err := ctx.Err(); err != nil {
+				return nil, err
+			}
 			// Output key encoding is a bit special: if the input was a 32-byte hash, it is
 			// returned as such. Otherwise, we apply the QUANTITY encoding mandated by the
 			// JSON-RPC spec for getProof. This behavior exists to preserve backwards
@@ -956,11 +966,9 @@ func doCall(ctx context.Context, b Backend, args TransactionArgs, state *state.S
 	if isBorInternalCall(ctx) && isBorSystemTx(b.ChainConfig().Bor, args.To) {
 		globalGasCap = 0
 	}
-	gp := new(core.GasPool)
+	gp := core.NewGasPool(globalGasCap)
 	if globalGasCap == 0 {
-		gp.AddGas(gomath.MaxUint64)
-	} else {
-		gp.AddGas(globalGasCap)
+		gp = core.NewGasPool(gomath.MaxUint64)
 	}
 	return applyMessage(ctx, b, args, state, header, timeout, globalGasCap, gp, &blockCtx, &vm.Config{NoBaseFee: true}, precompiles)
 }
@@ -1307,7 +1315,7 @@ func RPCMarshalHeader(head *types.Header) map[string]interface{} {
 		result["requestsHash"] = head.RequestsHash
 	}
 	if head.SlotNumber != nil {
-		result["slotNumber"] = head.SlotNumber
+		result["slotNumber"] = hexutil.Uint64(*head.SlotNumber)
 	}
 	return result
 }
@@ -1809,7 +1817,7 @@ func AccessList(ctx context.Context, b Backend, blockNrOrHash rpc.BlockNumberOrH
 		if msg.BlobGasFeeCap != nil && msg.BlobGasFeeCap.BitLen() == 0 {
 			evm.Context.BlobBaseFee = new(big.Int)
 		}
-		res, err := core.ApplyMessage(evm, msg, new(core.GasPool).AddGas(msg.GasLimit))
+		res, err := core.ApplyMessage(evm, msg, nil)
 		if err != nil {
 			return nil, 0, nil, fmt.Errorf("failed to apply transaction: %v err: %v", args.ToTransaction(types.LegacyTxType).Hash(), err)
 		}
@@ -2860,7 +2868,7 @@ func (api *DebugAPI) AccountAt(ctx context.Context, blockHash common.Hash, txInd
 		}
 
 		stateDb.SetTxContext(tx.Hash(), int(idx))
-		if _, err := core.ApplyMessage(evm, msg, new(core.GasPool).AddGas(tx.Gas())); err != nil {
+		if _, err := core.ApplyMessage(evm, msg, nil); err != nil {
 			return nil, fmt.Errorf("transaction %#x failed: %v", tx.Hash(), err)
 		}
 

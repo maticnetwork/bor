@@ -96,7 +96,7 @@ func runEIP4788Roundtrip(t *testing.T, useV2 bool) {
 		ProcessBeaconBlockRoot(beaconRoot, evm)
 		msg, _ := TransactionToMessage(tx, signer, blockCtx.BaseFee)
 		evm.SetTxContext(NewEVMTxContext(msg))
-		gp := new(GasPool).AddGas(blockCtx.GasLimit)
+		gp := NewGasPool(blockCtx.GasLimit)
 		if _, err := ApplyMessage(evm, msg, gp); err != nil {
 			t.Fatalf("ApplyMessage: %v", err)
 		}

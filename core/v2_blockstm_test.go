@@ -374,9 +374,8 @@ func TestV2_SelfDestructTransferLog_MispairsWithSerial(t *testing.T) {
 	serialDB, _ := state.New(root, state.NewDatabase(tdb, nil))
 	serialDB.SetTxContext(tx.Hash(), 0)
 	serialEVM := vm.NewEVM(blockCtx, serialDB, &cfg, vm.Config{})
-	usedGas := uint64(0)
-	serialReceipt, err := ApplyTransactionWithEVM(msg, new(GasPool).AddGas(blockCtx.GasLimit),
-		serialDB, blockCtx.BlockNumber, common.Hash{}, blockCtx.Time, tx, &usedGas, serialEVM)
+	serialReceipt, err := ApplyTransactionWithEVM(msg, NewGasPool(blockCtx.GasLimit),
+		serialDB, blockCtx.BlockNumber, common.Hash{}, blockCtx.Time, tx, serialEVM)
 	if err != nil {
 		t.Fatalf("serial ApplyTransactionWithEVM: %v", err)
 	}

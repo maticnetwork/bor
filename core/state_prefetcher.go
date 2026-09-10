@@ -249,7 +249,7 @@ func (p *StatePrefetcher) prefetchOneTx(
 	evm := vm.NewEVM(NewEVMBlockContext(header, p.chain, nil), stateCpy, p.config, cfg)
 	evm.SetInterrupt(interrupt)
 
-	result, err := ApplyMessage(evm, msg, new(GasPool).AddGas(header.GasLimit))
+	result, err := ApplyMessage(evm, msg, NewGasPool(header.GasLimit))
 	if err != nil {
 		fails.Add(1)
 		return 0, false

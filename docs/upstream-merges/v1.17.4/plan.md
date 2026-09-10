@@ -37,10 +37,10 @@ Status legend: `pending` / `in-progress` / `merged` / `skipped`.
 | 13 | v1.17.0   | 12/12 | `0cf3d3ba4` | 7       | delayed p2p decoding, header-verification hardening, **v1.17.0 release**                        | merged (`70994671a`) |
 | 14 | v1.17.1   | 1/2   | `9ecb6c4ae` | 20      | **syscall value-transfer disable (`core/vm`)**, BAL type changes, **Amsterdam precompile touch** | merged (`189030866`) |
 | 15 | v1.17.1   | 2/2   | `16783c167` | 20      | **eth/68 protocol drop**, **EIP-7843 SLOTNUM**, **8024 enabled in Amsterdam**, Go 1.26; release  | merged (`b6175113d`) |
-| 16 | v1.17.2   | 1/4   | `00540f946` | 20      | **EIP-7778 block gas accounting**, miner prefetcher, **amsterdam jump table**, default cache 4096 | pending |
-| 17 | v1.17.2   | 2/4   | `77e7e5ad1` | 20      | codedb refactor, **EIP-7954 max contract size**, trienode history alongside data                | pending |
-| 18 | v1.17.2   | 3/4   | `e23b0cbc2` | 20      | stateless codedb fix, **call-variant gas measurement rework (`core/vm`)**, bintrie parallel hash | pending |
-| 19 | v1.17.2   | 4/4   | `be4dc0c4b` | 17      | **EIP-7708**, simulateV1/getProofs limits, **v1.17.2 release**                                  | pending |
+| 16 | v1.17.2   | 1/4   | `00540f946` | 20      | **EIP-7778 block gas accounting**, miner prefetcher, **amsterdam jump table**, default cache 4096 | merged (`09c784851`) |
+| 17 | v1.17.2   | 2/4   | `77e7e5ad1` | 20      | codedb refactor, **EIP-7954 max contract size**, trienode history alongside data                | merged (`0a83ed542`) |
+| 18 | v1.17.2   | 3/4   | `e23b0cbc2` | 20      | stateless codedb fix, **call-variant gas measurement rework (`core/vm`)**, bintrie parallel hash | merged (`1abb57b8f`) |
+| 19 | v1.17.2   | 4/4   | `be4dc0c4b` | 17      | **EIP-7708**, simulateV1/getProofs limits, **v1.17.2 release**                                  | merged (`682b4c380`) |
 | 20 | v1.17.3   | 1/7   | `04e40995d` | 20      | **eth/70 partial receipts**, BAL storage layer + snap/2 BAL serving                             | pending |
 | 21 | v1.17.3   | 2/7   | `c453b99a5` | 20      | **gas becomes vector <regularGas, stateGas> (`core`)**, bintrie fixes                           | pending |
 | 22 | v1.17.3   | 3/7   | `5af5510b1` | 20      | EIP-7610 rework, CachingDB split (merkle/binary), freezer fsync fix                             | pending |
