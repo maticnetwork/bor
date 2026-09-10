@@ -42,7 +42,7 @@ func (w witnessSupportPeer) RequestHeadersByNumber(uint64, int, int, bool, chan 
 func (w witnessSupportPeer) RequestBodies([]common.Hash, chan *eth.Response) (*eth.Request, error) {
 	return nil, nil
 }
-func (w witnessSupportPeer) RequestReceipts([]common.Hash, chan *eth.Response) (*eth.Request, error) {
+func (w witnessSupportPeer) RequestReceipts([]common.Hash, []uint64, []uint64, chan *eth.Response) (*eth.Request, error) {
 	return nil, nil
 }
 func (w witnessSupportPeer) RequestWitnesses([]common.Hash, chan *eth.Response) (*eth.Request, error) {

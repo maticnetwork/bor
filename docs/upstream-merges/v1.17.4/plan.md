@@ -41,7 +41,7 @@ Status legend: `pending` / `in-progress` / `merged` / `skipped`.
 | 17 | v1.17.2   | 2/4   | `77e7e5ad1` | 20      | codedb refactor, **EIP-7954 max contract size**, trienode history alongside data                | merged (`0a83ed542`) |
 | 18 | v1.17.2   | 3/4   | `e23b0cbc2` | 20      | stateless codedb fix, **call-variant gas measurement rework (`core/vm`)**, bintrie parallel hash | merged (`1abb57b8f`) |
 | 19 | v1.17.2   | 4/4   | `be4dc0c4b` | 17      | **EIP-7708**, simulateV1/getProofs limits, **v1.17.2 release**                                  | merged (`682b4c380`) |
-| 20 | v1.17.3   | 1/7   | `04e40995d` | 20      | **eth/70 partial receipts**, BAL storage layer + snap/2 BAL serving                             | pending |
+| 20 | v1.17.3   | 1/7   | `04e40995d` | 20      | **eth/70 partial receipts**, BAL storage layer + snap/2 BAL serving                             | merged `d9a3a0bc9` (snap/2 deferred; **eth/70 adopted separately**, see below) |
 | 21 | v1.17.3   | 2/7   | `c453b99a5` | 20      | **gas becomes vector <regularGas, stateGas> (`core`)**, bintrie fixes                           | pending |
 | 22 | v1.17.3   | 3/7   | `5af5510b1` | 20      | EIP-7610 rework, CachingDB split (merkle/binary), freezer fsync fix                             | pending |
 | 23 | v1.17.3   | 4/7   | `33c1bd59f` | 20      | **gas budget (`core/vm`)**, **EIP-7976 calldata floor**, **FinalizeAndAssemble removed (consensus iface)** | pending |
@@ -55,6 +55,22 @@ Status legend: `pending` / `in-progress` / `merged` / `skipped`.
 | 31 | v1.17.4   | 5/7   | `e444c267a` | 20      | **clef removed**, repo-wide typo sweep (`all:`), blob sidecar fixes                             | pending |
 | 32 | v1.17.4   | 6/7   | `8c540cb08` | 20      | **snap/2 sync logic**, **EIP-8037 state-creation gas**, cgroup memlimit                         | pending |
 | 33 | v1.17.4   | 7/7   | `36a7dc72e` | 4       | reflect.Pointer sweep (`all:`), **v1.17.4 release**                                             | pending |
+
+## Out-of-band adoptions (not merge batches)
+
+Features deferred at a batch and picked up afterwards as their own branch and
+stacked PR, because they are hand-written ports rather than merges. Each is cut
+from the tip of the batch that deferred it, so the tree still matches the state
+upstream's commit expected.
+
+| Feature | Deferred at | Branch | Cut from |
+| ------- | ----------- | ------ | -------- |
+| `core/vm` catch-up | batches 4–19 | `ppatil-corevm-catchup` | `ppatil-upstream-v1.17.2` tip |
+| EIP-7975 / eth/70 partial receipts (#33153) | batch 20 | `ppatil-upstream-eth70` | `d9a3a0bc9` (batch 20 tip) |
+
+Milestone v1.17.3 is therefore split across two PRs, with the eth/70 PR stacked
+between them: batch 20 alone, then eth/70, then batches 21–26 plus the milestone
+chores.
 
 ## Bor-specific risk flags (advance warning, not a substitute for per-batch review)
 

@@ -64,7 +64,7 @@ type Peer interface {
 	RequestHeadersByNumber(uint64, int, int, bool, chan *eth.Response) (*eth.Request, error)
 
 	RequestBodies([]common.Hash, chan *eth.Response) (*eth.Request, error)
-	RequestReceipts([]common.Hash, chan *eth.Response) (*eth.Request, error)
+	RequestReceipts([]common.Hash, []uint64, []uint64, chan *eth.Response) (*eth.Request, error)
 	RequestWitnesses([]common.Hash, chan *eth.Response) (*eth.Request, error)
 
 	// SupportsWitness returns true if the peer supports the witness protocol

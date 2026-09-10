@@ -28,6 +28,7 @@ import (
 )
 
 // Tests that handshake failures are detected and reported correctly.
+func TestHandshake70(t *testing.T) { testHandshake(t, ETH70) }
 func TestHandshake69(t *testing.T) { testHandshake(t, ETH69) }
 func TestHandshake68(t *testing.T) { testHandshake(t, ETH68) }
 
@@ -52,7 +53,8 @@ func testHandshake(t *testing.T, protocol uint) {
 		switch protocol {
 		case ETH68:
 			return StatusPacket68{ver, network, td, head, genesis, fid}
-		case ETH69:
+		case ETH69, ETH70:
+			// eth/70 leaves the status message untouched.
 			return StatusPacket69{ver, network, td, genesis, fid, 1, 2, head}
 		default:
 			t.Fatalf("unsupported protocol version: %d", protocol)
@@ -97,7 +99,7 @@ func testHandshake(t *testing.T, protocol uint) {
 		defer app.Close()
 		defer net.Close()
 
-		peer := NewPeer(protocol, p2p.NewPeer(enode.ID{}, "peer", nil), net, nil)
+		peer := NewPeer(protocol, p2p.NewPeer(enode.ID{}, "peer", nil), net, nil, nil)
 		defer peer.Close()
 
 		// Send the junk test with one peer, check the handshake failure

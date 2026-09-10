@@ -32,6 +32,7 @@ import (
 const (
 	ETH68 = 68
 	ETH69 = 69
+	ETH70 = 70
 )
 
 // ProtocolName is the official short name of the `eth` protocol used during
@@ -40,11 +41,11 @@ const ProtocolName = "eth"
 
 // ProtocolVersions are the supported versions of the `eth` protocol (first
 // is primary).
-var ProtocolVersions = []uint{ETH69, ETH68}
+var ProtocolVersions = []uint{ETH70, ETH69, ETH68}
 
 // protocolLengths are the number of implemented message corresponding to
 // different protocol versions.
-var protocolLengths = map[uint]uint64{ETH68: 17, ETH69: 18}
+var protocolLengths = map[uint]uint64{ETH68: 17, ETH69: 18, ETH70: 18}
 
 // maxMessageSize is the maximum cap on the size of a protocol message.
 const maxMessageSize = 10 * 1024 * 1024
@@ -305,12 +306,37 @@ type ReceiptsPacket[L ReceiptsList] struct {
 	List      []L
 }
 
+// GetReceiptsPacket70 represents a block receipts query on eth/70. FirstBlockReceiptIndex
+// resumes a block whose receipts did not fit into a previous response.
+type GetReceiptsPacket70 struct {
+	RequestId              uint64
+	FirstBlockReceiptIndex uint64
+	GetReceiptsRequest
+}
+
+// ReceiptsPacket70 is the network packet for block receipts distribution on eth/70.
+// EIP-7975 leaves the receipt list encoding untouched, so the list items are the
+// eth/69 ones; only the packet envelope gains the truncation flag.
+type ReceiptsPacket70 struct {
+	RequestId           uint64
+	LastBlockIncomplete bool
+	List                []*ReceiptList69
+}
+
 // ReceiptsRLPResponse is used for receipts, when we already have it encoded
 type ReceiptsRLPResponse []rlp.RawValue
 
 // ReceiptsRLPPacket is ReceiptsRLPResponse with request ID wrapping.
 type ReceiptsRLPPacket struct {
 	RequestId uint64
+	ReceiptsRLPResponse
+}
+
+// ReceiptsRLPPacket70 is ReceiptsRLPResponse with request ID and truncation-flag
+// wrapping, matching the field order of ReceiptsPacket70 on the wire.
+type ReceiptsRLPPacket70 struct {
+	RequestId           uint64
+	LastBlockIncomplete bool
 	ReceiptsRLPResponse
 }
 

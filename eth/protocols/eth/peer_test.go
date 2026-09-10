@@ -46,7 +46,7 @@ func newTestPeer(name string, version uint, backend Backend) (*testPeer, <-chan 
 
 	rand.Read(id[:])
 
-	peer := NewPeer(version, p2p.NewPeer(id, name, nil), net, backend.TxPool())
+	peer := NewPeer(version, p2p.NewPeer(id, name, nil), net, backend.TxPool(), backend.Chain().Config())
 	errc := make(chan error, 1)
 
 	go func() {
@@ -141,7 +141,7 @@ func TestPeerForgetTransactions(t *testing.T) {
 	var id enode.ID
 	rand.Read(id[:])
 
-	peer := NewPeer(ETH68, p2p.NewPeer(id, "test", nil), app, nil)
+	peer := NewPeer(ETH68, p2p.NewPeer(id, "test", nil), app, nil, nil)
 	defer peer.Close()
 
 	// Add some transaction hashes to the known set

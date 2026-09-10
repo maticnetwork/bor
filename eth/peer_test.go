@@ -80,7 +80,7 @@ func TestRequestWitnesses_Controlling_Max_Concurrent_Calls(t *testing.T) {
 	witness.EncodeRLP(&witBuf)
 
 	mockWitPeer := NewMockWitnessPeer(ctrl)
-	p := &ethPeer{Peer: eth.NewPeer(1, p2p.NewPeer(enode.ID{0x01, 0x02}, "test-peer", []p2p.Cap{}), nil, nil), witPeer: &witPeer{Peer: mockWitPeer}}
+	p := &ethPeer{Peer: eth.NewPeer(1, p2p.NewPeer(enode.ID{0x01, 0x02}, "test-peer", []p2p.Cap{}), nil, nil, nil), witPeer: &witPeer{Peer: mockWitPeer}}
 	dlCh := make(chan *eth.Response)
 	concurrentCount := 0
 	maxConcurrentCount := 0
@@ -547,7 +547,7 @@ func TestSupportsWitness(t *testing.T) {
 
 		mockWitPeer := NewMockWitnessPeer(ctrl)
 		p := &ethPeer{
-			Peer:    eth.NewPeer(1, p2p.NewPeer(enode.ID{0x01}, "test", []p2p.Cap{}), nil, nil),
+			Peer:    eth.NewPeer(1, p2p.NewPeer(enode.ID{0x01}, "test", []p2p.Cap{}), nil, nil, nil),
 			witPeer: &witPeer{Peer: mockWitPeer},
 		}
 
@@ -556,7 +556,7 @@ func TestSupportsWitness(t *testing.T) {
 
 	t.Run("WithoutWitPeer", func(t *testing.T) {
 		p := &ethPeer{
-			Peer: eth.NewPeer(1, p2p.NewPeer(enode.ID{0x01}, "test", []p2p.Cap{}), nil, nil),
+			Peer: eth.NewPeer(1, p2p.NewPeer(enode.ID{0x01}, "test", []p2p.Cap{}), nil, nil, nil),
 		}
 
 		assert.False(t, p.SupportsWitness())
@@ -590,7 +590,7 @@ func TestReconstructWitness(t *testing.T) {
 		}
 
 		// Reconstruct
-		p := &ethPeer{Peer: eth.NewPeer(1, p2p.NewPeer(enode.ID{0x01}, "test", []p2p.Cap{}), nil, nil)}
+		p := &ethPeer{Peer: eth.NewPeer(1, p2p.NewPeer(enode.ID{0x01}, "test", []p2p.Cap{}), nil, nil, nil)}
 		reconstructed, err := p.reconstructWitness(pages)
 
 		assert.NoError(t, err)
@@ -625,7 +625,7 @@ func TestReconstructWitness(t *testing.T) {
 		pages[0], pages[2] = pages[2], pages[0]
 
 		// Reconstruct - should still work due to sorting
-		p := &ethPeer{Peer: eth.NewPeer(1, p2p.NewPeer(enode.ID{0x01}, "test", []p2p.Cap{}), nil, nil)}
+		p := &ethPeer{Peer: eth.NewPeer(1, p2p.NewPeer(enode.ID{0x01}, "test", []p2p.Cap{}), nil, nil, nil)}
 		reconstructed, err := p.reconstructWitness(pages)
 
 		assert.NoError(t, err)
@@ -1236,7 +1236,7 @@ func TestBuildWitnessRequests_ConcurrentFailedRequestsAccess(t *testing.T) {
 	mockWitPeer.EXPECT().ID().Return("test-peer").AnyTimes()
 
 	p := &ethPeer{
-		Peer:    eth.NewPeer(1, p2p.NewPeer(enode.ID{0x01}, "test-peer", []p2p.Cap{}), nil, nil),
+		Peer:    eth.NewPeer(1, p2p.NewPeer(enode.ID{0x01}, "test-peer", []p2p.Cap{}), nil, nil, nil),
 		witPeer: &witPeer{Peer: mockWitPeer},
 	}
 
@@ -1498,7 +1498,7 @@ func TestDoWitnessRequest_RaceCondition_WitTotalRequest(t *testing.T) {
 	mockWitPeer.EXPECT().ID().Return("test-peer").AnyTimes()
 
 	p := &ethPeer{
-		Peer:    eth.NewPeer(1, p2p.NewPeer(enode.ID{0x01}, "test-peer", []p2p.Cap{}), nil, nil),
+		Peer:    eth.NewPeer(1, p2p.NewPeer(enode.ID{0x01}, "test-peer", []p2p.Cap{}), nil, nil, nil),
 		witPeer: &witPeer{Peer: mockWitPeer},
 	}
 
@@ -1616,7 +1616,7 @@ func testPeer(t *testing.T) (*ethPeer, *MockWitnessPeer) {
 	mock := NewMockWitnessPeer(ctrl)
 	mock.EXPECT().Log().Return(log.New()).AnyTimes()
 	p := &ethPeer{
-		Peer:    eth.NewPeer(1, p2p.NewPeer(enode.ID{0x01, 0x02}, "test-peer", []p2p.Cap{}), nil, nil),
+		Peer:    eth.NewPeer(1, p2p.NewPeer(enode.ID{0x01, 0x02}, "test-peer", []p2p.Cap{}), nil, nil, nil),
 		witPeer: &witPeer{Peer: mock},
 	}
 	return p, mock

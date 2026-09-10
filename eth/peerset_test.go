@@ -236,7 +236,7 @@ func TestPeerSetForgetTransactions(t *testing.T) {
 		var id enode.ID
 		rand.Read(id[:])
 
-		peer := eth.NewPeer(eth.ETH68, p2p.NewPeer(id, "test", nil), net, nil)
+		peer := eth.NewPeer(eth.ETH68, p2p.NewPeer(id, "test", nil), net, nil, nil)
 
 		// Register the peer
 		if err := ps.registerPeer(peer, nil, nil); err != nil {
@@ -390,7 +390,7 @@ func registerPeerWithTD(t *testing.T, ps *peerSet, td int64) *eth.Peer {
 		t.Fatalf("failed to create peer id: %v", err)
 	}
 
-	peer := eth.NewPeer(eth.ETH68, p2p.NewPeer(id, "test", nil), net, nil)
+	peer := eth.NewPeer(eth.ETH68, p2p.NewPeer(id, "test", nil), net, nil, nil)
 	peer.SetHead(common.Hash{byte(td)}, big.NewInt(td))
 	t.Cleanup(peer.Close)
 

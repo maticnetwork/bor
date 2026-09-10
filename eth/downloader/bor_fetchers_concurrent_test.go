@@ -30,7 +30,7 @@ func (m *mockPeer) RequestHeadersByNumber(uint64, int, int, bool, chan *eth.Resp
 func (m *mockPeer) RequestBodies([]common.Hash, chan *eth.Response) (*eth.Request, error) {
 	return nil, nil
 }
-func (m *mockPeer) RequestReceipts([]common.Hash, chan *eth.Response) (*eth.Request, error) {
+func (m *mockPeer) RequestReceipts([]common.Hash, []uint64, []uint64, chan *eth.Response) (*eth.Request, error) {
 	m.receiptRequested.Store(true)
 	// Return a valid request so concurrentFetch can track it.
 	// peer field is nil so Close() is a no-op (test-safe per dispatcher.go).

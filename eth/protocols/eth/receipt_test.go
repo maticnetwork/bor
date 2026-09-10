@@ -157,7 +157,7 @@ func TestReceiptList69(t *testing.T) {
 		canonBody, _ := rlp.EncodeToBytes(blockBody)
 
 		// convert from storage encoding to network encoding
-		network, err := blockReceiptsToNetwork69(canonDB, canonBody, isStateSyncReceipt)
+		network, _, err := blockReceiptsToNetwork69(canonDB, canonBody, isStateSyncReceipt, receiptQueryParams{})
 		if err != nil {
 			t.Fatalf("test[%d]: blockReceiptsToNetwork69 error: %v", i, err)
 		}
@@ -225,7 +225,7 @@ func TestReceiptList69_WithStateSync(t *testing.T) {
 		canonBody, _ := rlp.EncodeToBytes(blockBody)
 
 		// convert from storage encoding to network encoding
-		network, err := blockReceiptsToNetwork69(canonDB, canonBody, isStateSyncReceipt)
+		network, _, err := blockReceiptsToNetwork69(canonDB, canonBody, isStateSyncReceipt, receiptQueryParams{})
 		if err != nil {
 			t.Fatalf("test[%d]: blockReceiptsToNetwork69 error: %v", i, err)
 		}
@@ -298,7 +298,7 @@ func TestReceiptList69_WithStateSync_e2e(t *testing.T) {
 		canonBody, _ := rlp.EncodeToBytes(blockBody)
 
 		// convert from storage encoding to network encoding
-		network, err := blockReceiptsToNetwork69(canonDB, canonBody, isStateSyncReceipt)
+		network, _, err := blockReceiptsToNetwork69(canonDB, canonBody, isStateSyncReceipt, receiptQueryParams{})
 		if err != nil {
 			t.Fatalf("test[%d]: blockReceiptsToNetwork69 error: %v", i, err)
 		}
@@ -456,7 +456,7 @@ func TestBlockReceiptsToNetwork69_EmptyReceipts(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			out, err := blockReceiptsToNetwork69(tc.input, body, noStateSync)
+			out, _, err := blockReceiptsToNetwork69(tc.input, body, noStateSync, receiptQueryParams{})
 			if err != nil {
 				t.Fatalf("expected fallback to canonical empty list, got err: %v", err)
 			}
@@ -472,7 +472,7 @@ func TestBlockReceiptsToNetwork69_EmptyReceipts(t *testing.T) {
 func TestBlockReceiptsToNetwork69_MalformedInput_ReturnsError(t *testing.T) {
 	body := emptyBodyRLP()
 	noStateSync := func(int) bool { return false }
-	_, err := blockReceiptsToNetwork69(rlp.RawValue{0x81, 0x02}, body, noStateSync)
+	_, _, err := blockReceiptsToNetwork69(rlp.RawValue{0x81, 0x02}, body, noStateSync, receiptQueryParams{})
 	if err == nil {
 		t.Fatalf("expected error for malformed (non-list) receipts blob, got nil")
 	}

@@ -485,6 +485,7 @@ func testGetBlockBodies(t *testing.T, protocol uint) {
 }
 
 // Tests that the transaction receipts can be retrieved based on hashes.
+func TestGetBlockReceipts70(t *testing.T) { testGetBlockReceipts(t, ETH70) }
 func TestGetBlockReceipts69(t *testing.T) { testGetBlockReceipts(t, ETH69) }
 func TestGetBlockReceipts68(t *testing.T) { testGetBlockReceipts(t, ETH68) }
 
@@ -537,6 +538,50 @@ func testGetBlockReceipts(t *testing.T, protocol uint) {
 	var hashes []common.Hash
 
 	switch protocol {
+	case ETH70:
+		var receipts []*ReceiptList69
+		for i := uint64(0); i <= backend.chain.CurrentBlock().Number.Uint64(); i++ {
+			block := backend.chain.GetBlockByNumber(i)
+			hashes = append(hashes, block.Hash())
+			trs := backend.chain.GetReceiptsByHash(block.Hash())
+			receipts = append(receipts, NewReceiptList69(trs))
+		}
+
+		// The whole request fits well inside the packet limit, so the response must
+		// arrive in one piece with the truncation flag clear.
+		p2p.Send(peer.app, GetReceiptsMsg, &GetReceiptsPacket70{
+			RequestId:              123,
+			FirstBlockReceiptIndex: 0,
+			GetReceiptsRequest:     hashes,
+		})
+		if err := p2p.ExpectMsg(peer.app, ReceiptsMsg, &ReceiptsPacket70{
+			RequestId:           123,
+			LastBlockIncomplete: false,
+			List:                receipts,
+		}); err != nil {
+			t.Errorf("receipts mismatch (ETH70): %v", err)
+		}
+
+		// Resuming a block part way through must drop exactly the receipts already
+		// delivered. Block 2 is the only one with more than a single receipt.
+		block := backend.chain.GetBlockByNumber(2)
+		trs := backend.chain.GetReceiptsByHash(block.Hash())
+		if len(trs) < 2 {
+			t.Fatalf("expected block 2 to hold several receipts, got %d", len(trs))
+		}
+		p2p.Send(peer.app, GetReceiptsMsg, &GetReceiptsPacket70{
+			RequestId:              124,
+			FirstBlockReceiptIndex: 1,
+			GetReceiptsRequest:     []common.Hash{block.Hash()},
+		})
+		if err := p2p.ExpectMsg(peer.app, ReceiptsMsg, &ReceiptsPacket70{
+			RequestId:           124,
+			LastBlockIncomplete: false,
+			List:                []*ReceiptList69{NewReceiptList69(trs[1:])},
+		}); err != nil {
+			t.Errorf("resumed receipts mismatch (ETH70): %v", err)
+		}
+
 	case ETH69:
 		var receipts []*ReceiptList69
 		for i := uint64(0); i <= backend.chain.CurrentBlock().Number.Uint64(); i++ {

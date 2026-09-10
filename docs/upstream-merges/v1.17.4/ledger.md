@@ -1171,3 +1171,155 @@ The 2598 is what makes the 0 meaningful — thousands of value transfers went th
 outside the `rules.IsAmsterdam` check on any of the three transfer paths (serial, V2 BlockSTM fast
 path, `EthereumTransfer`), would have produced a non-zero count. Report:
 `runs/pos-spawn-devnet/2026-07-27T08-07-02Z-claude-pos-v1172-sync/summary.md`.
+
+## v1.17.3 batch 1/7 (`04e40995d`, plan row 20) — merged `d9a3a0bc9` — MILESTONE-OPENING
+
+Branch `ppatil-upstream-v1.17.3`, cut from the `core/vm` catch-up tip `8b71184d4`
+rather than from `ppatil-upstream-v1.17.2` — batch 21 consumes the four
+`gas*Intrinsic` functions that catch-up introduced. Cut-point guard passed
+(`upstream-merge-v1.17.2-done` is an ancestor). 20 upstream commits, **30
+conflicts**, 58 files, +2926/−672.
+
+Two whole features deferred; they account for 18 of the 30 conflicts.
+
+### Consensus surface
+
+| File | PR | Class | Decision |
+| ---- | -- | ----- | -------- |
+| `consensus/beacon/consensus.go` | #34064 | 3 (hardfork surface) | **Combined.** Upstream added a `BlockAccessListHash` existence/non-existence check beside the existing EIP-7843 `SlotNumber` check. Kept Bor's **block-based** `IsAmsterdam(header.Number)` gate and took upstream's two-field body, so both fields activate together when Amsterdam is enabled. Dormant today: the else-branch asserts both are nil, which is what every Bor header carries. |
+
+### Whole-feature deferrals
+
+| Feature | PR | Why | Footprint reverted |
+| ------- | -- | --- | ------------------ |
+| eth/70 partial receipt lists | #33153 | Bor's `ExcludeStateSyncReceipt()` is a `ReceiptList` interface method feeding **receipt-root derivation**, fork-gated on Madhugiri; its heuristic only defines behaviour on a *complete* list, so `ReceiptList70` needs a design decision for partial responses. Bor also stays `[ETH69, ETH68]` vs upstream's `[ETH70, ETH69]`. | 31 files to HEAD, incl. auto-merged companions (`ethtest/{chain,conn}.go`, regenerated testdata, `rlp/rlpgen/testdata/pkgclash.*`); `rm` kept Bor's deletions of `downloader_test.go` and upstream's `fetchers_concurrent_receipts.go` (Bor's is `bor_fetchers_concurrent_receipts.go`, so the conflict surfaced as a rename). |
+| snap/2 + BAL serving | #34083 | Serves block access lists, which Bor cannot produce while Amsterdam is dormant. Upstream ships the dispatch commented out (`//case SNAP2:`). | `eth/protocols/snap/{handler,handler_fuzzing_test,protocol}.go`, `core/blockchain_reader.go` to HEAD; new `handlers.go`, `handler_test.go` removed. |
+
+### Remaining resolutions
+
+| File | PR | Class | Decision |
+| ---- | -- | ----- | -------- |
+| `version/version.go` | #34619 | 1 | Kept Bor's `Patch=0`/`unstable`; declined the v1.17.3 release bump (recurring auto-merge trap). |
+| `eth/gasestimator/gasestimator.go` | #34081 | 2 | Took upstream's restructure (overrides now applied to the header by the caller) and re-added Bor's **Madhugiri** gate. Bor's side read `opts.BlockOverrides`, a field the struct had already lost via auto-merge — it would not have compiled. |
+| `core/state/statedb.go` | #33102 | 1 | Import combine; kept `snapshot` (upstream dropped it) for Bor's BlockSTM-only `NewWithMVHashmap`. |
+| `core/types/block.go` | #34064 | 2 | Import combine — `core/types/bal` alongside Bor's `log`/`params`. |
+| `core/rawdb/schema.go` | #34064 | 2 | Combine — Bor's block-prune keys plus upstream's `accessListPrefix`. |
+| `core/state/database.go`, `database_history.go` | #33102 | 1 | Kept Bor's `Snapshot()` and Bor's removal of `Commit` (Bor uses `CommitWithUpdate`); **re-added upstream's `Iteratee()` implementations**, which the hunk-level take-ours dropped while the interface retained the method. Build caught it. |
+| `core/state/dump.go` | #33102 | 2 | Took upstream's `acctIt.Hash().Hex()`; Bor's `it.Key` was stale once the iterator refactor auto-merged around it. |
+| `core/rawdb/accessors_chain_test.go` | #34064 | 2 | Append collision, base empty — combined both sides. Ours' two closing braces were consumed by the conflict split; `gofmt` caught the imbalance. |
+| `eth/api_backend.go` | #33102 | 1 | Kept Bor's `Miner()`/`StartMining()`; took upstream's `StateAtBlock` without `reexec`. |
+| `eth/tracers/api.go` (6 hunks), `api_test.go` | #33102, #34093 | 1 | Dropped all `reexec` plumbing; kept Bor's `gasBailout` field and develop's `canonicalTxTraceEnv` refactor. |
+| `eth/protocols/eth/handler.go` | #33153, #34083 | 3 | Kept Bor's eth68/eth69 maps + dispatch. Also declines #34083's removal of `Time()` from `Decoder`, consistent with Bor's deferral of #33835 which introduced it. |
+| `tests/init.go` | #34671 | 3 | Kept Bor's deletion — upstream's Amsterdam statetest keys on `AmsterdamTime` with a BPO4 blob schedule, fields Bor lacks. Coverage gap. |
+| `core/blockchain_reader.go` | #34083 / #34633 | 3 | Split decision: dropped #34083's `GetAccessListRLP`, **re-applied #34633's** `StateIndexProgress` to `(uint64, uint64, error)`. The wholesale revert for the deferral had discarded both. |
+
+### Bor-only twin scan (§4.6, first run)
+
+**Checked; no mirroring required.** Batch 20 does not touch `core/vm` at all
+(a name-only diff of `be4dc0c4b..04e40995d` over `core/vm/` is empty), so the
+PIP-88 twins are untouched. The twins that *are* in range —
+`ReceiptList68`/`ReceiptList69` and `bor_fetchers_concurrent_receipts.go` — sit
+inside #33153's deferred footprint and intentionally stay at Bor HEAD.
+
+**Gap the step does not cover, found the hard way.** Bor-only *features* that
+depend on an upstream signature produce **no conflict** and surface only at build
+time. #33102 removed the `reexec` parameter from
+`StateAtBlock`/`StateAtTransaction`, breaking develop's Parity tracer across six
+Bor-only files (`eth/tracers/parity{,_block,_call,_replay_block,_replay_tx}.go`
+plus the `prunedTestBackend` helper in `api_test.go`). Adapted rather than
+reverted — outcome 2, keep Bor's logic and take upstream's signature. A test named
+`TestIntermediateRoots_WithReexecOverride` was renamed to
+`TestIntermediateRoots_WithNonNilConfig`, since the override it named no longer
+exists. **The twin scan should be widened to "Bor-only code depending on a
+changed upstream signature", not just near-verbatim clones.**
+
+### Verification
+
+Build, `go vet` (core/eth/tests/consensus/internal), `gofmt` all clean apart from
+the two documented `//nolint` copylocks. Tests green: `core/state`, `core/rawdb`,
+`core/types`, `core/types/bal`, `consensus/beacon`, all `eth/tracers/...`,
+`eth/protocols/{eth,snap,wit}`, `eth/downloader`, `core` (172.9 s), `eth` (47.9 s),
+`internal/ethapi`. Three defects were found by build/vet during verification and
+fixed rather than shipped: the missing `Iteratee` implementations, the over-broad
+`blockchain_reader.go` revert, and the Parity tracer's `reexec` dependence.
+
+## v1.17.3 out-of-band adoption — EIP-7975 / eth/70 (#33153, `965bd6b6a`)
+
+Branch `ppatil-upstream-eth70`, cut from batch 20's tip `d9a3a0bc9`. Not a merge
+batch: batch 20 reverted #33153's 31-file footprint wholesale, so this is a
+hand-written port of the feature onto Bor's diverged receipt code, taken before
+batch 21 so the tree still matches the state upstream's commit expected.
+21 files changed plus one new test file, +635/-159.
+
+### What the deferral note got wrong
+
+Two of the five planned adoption steps evaporated on contact with the code, and
+the risk the note flagged as the blocker turned out not to exist.
+
+- **No `ReceiptList70` is needed.** EIP-7975 changes the packet envelope, not the
+  receipt-list encoding, so eth/70 carries `ReceiptList69`. Upstream reuses its
+  single `ReceiptList` for both `ReceiptsPacket69` and `ReceiptsPacket70` for the
+  same reason.
+- **The "what does exclusion mean for a partial list?" decision does not arise.**
+  Bor never applies `ExcludeStateSyncReceipt()` in the p2p handler:
+  `handleReceipts` passes a deliberately nil `metadata` func because it has no
+  block number, and the Madhugiri-gated exclusion runs in the downloader queue
+  (`bor_fetchers_concurrent_receipts.go:99` → `EncodeReceiptsAndPrepareHasher`).
+  Upstream never sinks a partial list to the downloader, so the exclusion only
+  ever sees a reassembled complete list — unchanged from today.
+
+### Consensus surface
+
+| Area | Decision |
+| ---- | -------- |
+| State-sync receipt across a chunk boundary | The exclusion is positional (last element) and the serving side identifies the state-sync receipt by absolute index. `blockReceiptsToNetwork69`'s loop counter stays absolute when receipts are skipped, and the tx-type iterator is advanced in lockstep, so a truncated response cannot displace it. Covered by `TestPartialReceipts_StateSyncAcrossChunkBoundary`, which splits every fixture at every size limit and asserts the reassembled receipt root on **both** sides of the Madhugiri gate. |
+| Amsterdam gate on the response bound | Upstream keys the reduced minimum tx gas (4500 vs 21000) off `AmsterdamTime`. Bor has no Amsterdam timestamp, so this is rewired to block-based `IsAmsterdam(number)`, and `RequestReceipts` carries block **numbers** where upstream carries timestamps. `AmsterdamBlock` is nil, so the 21000 bound applies today; both sides pinned by `TestValidateLastBlockReceiptAmsterdamGate`. |
+| Receipt-count bound vs Bor's free state-sync tx | Upstream bounds a truncated response by `receipts <= gasUsed/minTxGas`. A Bor block carries one receipt more than its gas can account for, because the state-sync transaction burns none, so the bound gained a `+1` tolerance. Without it a peer serving a legitimate Bor block could be rejected. |
+
+### Resolutions
+
+| File | Decision |
+| ---- | -------- |
+| `eth/protocols/eth/receipt.go` | Added `Append` and `LogsSize` to `ReceiptList69`. Bor stores decoded `[]Receipt` where upstream keeps raw RLP, so both are simpler here than upstream's iterator-based versions. |
+| `eth/protocols/eth/receipt.go` | **Extended `blockReceiptsToNetwork69` with `receiptQueryParams` rather than cloning it** — see the twin scan below. Its zero value reproduces the previous whole-block behavior. One behavior change on the eth/69 path, taken deliberately and aligned with upstream: a receipt with no corresponding body transaction is now an error instead of being encoded as type 0. Reachable only from locally corrupt data, and the caller skips the block. |
+| `eth/protocols/eth/protocol.go` | `ETH70` const; `ProtocolVersions = [ETH70, ETH69, ETH68]` (Bor keeps eth/68, having declined #33511, against upstream's `[ETH70, ETH69]`); `protocolLengths[ETH70] = 18`; `GetReceiptsPacket70`, `ReceiptsPacket70`, `ReceiptsRLPPacket70`. Bor's existing `GetReceiptsPacket` is shared by eth/68 and eth/69 and is **not** renamed to `…69` as upstream did, since in Bor it serves two versions. |
+| `eth/protocols/eth/peer.go` | Ported `receiptRequest`, `receiptBuffer` + lock, `requestPartialReceipts`, `bufferReceipts`, `flushReceipts`, `validateLastBlockReceipt`, `ReplyReceiptsRLP70`. `NewPeer` gains a `*params.ChainConfig`. Two Bor-side additions to upstream: the buffer entry is dropped when `dispatchRequest` fails (upstream leaks it; its own TODO acknowledges the concern), and `bufferReceipts` rejects a response claiming more blocks than were requested before indexing `buffer.gasUsed`. |
+| `eth/protocols/eth/handlers.go` | **Extracted `gatherBlockReceipts`** from `ServiceGetReceiptsQuery69` — see the twin scan. Added `handleGetReceipts70`, `ServiceGetReceiptsQuery70`, `handleReceipts70`. The eth/70 size limit reuses Bor's existing `maxMessageSize` (10 MiB) instead of adding upstream's duplicate `maxPacketSize` const. |
+| `eth/protocols/eth/handler.go` | Added the `eth70` handler map, mirroring Bor's `eth69` map (which keeps `NewBlockHashesMsg`/`NewBlockMsg`, unlike upstream). Version dispatch converted from if/else to a switch. |
+| `eth/protocols/eth/dispatcher.go` | A continuation re-uses the original request ID, so `pending` is no longer overwritten; the receipt buffer is dropped on cancel. |
+| `eth/downloader/{peer.go, bor_fetchers_concurrent_receipts.go}` | `RequestReceipts` gains `gasUsed` and `numbers`. Upstream passes timestamps; Bor passes block numbers, to match its block-based fork gate. |
+| `EncodeReceiptsAndPrepareHasher` | **Unchanged.** eth/70 delivers `[]*ReceiptList69`, which its existing type switch already handles. |
+
+### Bor-only twin scan (§4.6)
+
+**Ran against my own diff, and it found something.** The first cut added
+`blockReceiptsToNetwork70` as a near-verbatim clone of `blockReceiptsToNetwork69`
+differing only by the bounds, and duplicated the ~70-line pre-Madhugiri
+state-sync merge into a second service function. That is exactly the drift
+pattern the step exists to catch, and creating two new twins in the change that
+documents twins as a hazard would have been perverse. Both were folded back:
+`blockReceiptsToNetwork69` now takes `receiptQueryParams` (matching upstream's
+single parameterised function), and the merge logic lives in one
+`gatherBlockReceipts` used by both service functions. This widens the eth/69
+serving-path diff and is deliberate scope.
+
+The known PIP-88 twins are untouched — this change does not enter `core/vm`.
+
+### Verification
+
+Build, `go vet ./...`, `gofmt` clean apart from the two documented `//nolint`
+copylocks; `go mod tidy` a no-op. Tests green: `eth/protocols/{eth,snap,wit}`,
+`eth/downloader`, `eth/downloader/whitelist`, `eth`, `eth/fetcher`, plus both
+fork meta-guards (`TestReinforceMultiClientPreCompilesTest`, `TestV2ForkParity`).
+New coverage in `eth/protocols/eth/receipt70_test.go` (chunked reassembly across
+every splitting size limit, state-sync across a chunk boundary, first-receipt
+overflow, `firstIndex` resumption, `Append`, `LogsSize`, both response bounds,
+the Amsterdam gate) and an `ETH70` case in `testGetBlockReceipts` covering the
+handler round trip and a resumed request.
+
+**Coverage gap, recorded rather than closed:** the truncation path only fires on
+blocks whose receipts exceed 10 MiB. No devnet produces those, so the split
+behavior is exercised by unit tests over synthetic size limits, not end to end.
+Upstream's `cmd/devp2p/internal/ethtest` eth/70 suite and its regenerated
+testdata were not ported (geth-chain-specific; Bor's ethtest is already a
+known-failing surface).

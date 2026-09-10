@@ -303,6 +303,17 @@ func handleGetReceipts69(backend Backend, msg Decoder, peer *Peer) error {
 	return peer.ReplyReceiptsRLP(query.RequestId, response)
 }
 
+func handleGetReceipts70(backend Backend, msg Decoder, peer *Peer) error {
+	// Decode the block receipts retrieval message
+	var query GetReceiptsPacket70
+	if err := msg.Decode(&query); err != nil {
+		return err
+	}
+	response, lastBlockIncomplete := ServiceGetReceiptsQuery70(backend.Chain(), query.GetReceiptsRequest, query.FirstBlockReceiptIndex)
+
+	return peer.ReplyReceiptsRLP70(query.RequestId, response, lastBlockIncomplete)
+}
+
 // ServiceGetReceiptsQuery68 assembles the response to a receipt query. It is
 // exposed to allow external packages to test protocol behavior.
 func ServiceGetReceiptsQuery68(chain *core.BlockChain, query GetReceiptsRequest) []rlp.RawValue {
@@ -344,6 +355,92 @@ func ServiceGetReceiptsQuery68(chain *core.BlockChain, query GetReceiptsRequest)
 	return receipts
 }
 
+// gatherBlockReceipts assembles the storage-encoded receipt list of a block, together
+// with a predicate reporting the position of the state-sync receipt within it.
+//
+// Before the Madhugiri hardfork the state-sync receipt is stored apart from the block
+// receipts and has to be merged in at the tail; from Madhugiri onwards it is already
+// among them and needs no special handling. The final return reports whether the block
+// can be served at all.
+func gatherBlockReceipts(chain *core.BlockChain, hash common.Hash, borCfg *params.BorConfig) (rlp.RawValue, func(index int) bool, bool) {
+	noStateSyncReceipt := func(index int) bool { return false }
+
+	number, ok := rawdb.ReadHeaderNumber(chain.DB(), hash)
+	if !ok {
+		return nil, nil, false
+	}
+
+	if borCfg != nil && borCfg.IsMadhugiri(big.NewInt(int64(number))) {
+		allReceipts := chain.GetReceiptsRLP(hash)
+		if len(allReceipts) == 0 {
+			if header := chain.GetHeaderByHash(hash); header == nil || header.ReceiptHash != types.EmptyRootHash {
+				return nil, nil, false
+			}
+			// If receipts are empty, replace the result with an rlp.EmptyList
+			// to encode in the final response.
+			allReceipts = rlp.EmptyList
+		}
+		return allReceipts, noStateSyncReceipt, true
+	}
+
+	// Before the Madhugiri hardfork, the state-sync receipt is fetched separately from the
+	// block receipts, decoded, merged into a single unit and re-encoded for the wire.
+	normalReceipts := chain.GetReceiptsRLP(hash)
+	var normalReceiptsDecoded []*types.ReceiptForStorage
+	if len(normalReceipts) != 0 {
+		if err := rlp.DecodeBytes(normalReceipts, &normalReceiptsDecoded); err != nil {
+			log.Error("Failed to decode normal receipts", "err", err)
+			return nil, nil, false
+		}
+	}
+
+	borReceipt := chain.GetBorReceiptRLPByHash(hash)
+	var borReceiptDecoded types.ReceiptForStorage
+	if len(borReceipt) != 0 {
+		if err := rlp.DecodeBytes(borReceipt, &borReceiptDecoded); err != nil {
+			log.Error("Failed to decode state-sync receipt", "err", err)
+			return nil, nil, false
+		}
+	}
+
+	// Check if receipts are absent due to non existence or something else
+	if len(normalReceipts) == 0 && len(borReceipt) == 0 {
+		// Don't append empty receipt data for this block if either the local header is nil
+		// or the receipt root of header denotes existence of receipt (i.e. is not empty hash)
+		if header := chain.GetHeaderByHash(hash); header == nil || header.ReceiptHash != types.EmptyRootHash {
+			return nil, nil, false
+		}
+	}
+
+	// Track existence of bor receipts for encoding
+	var isBorReceiptPresent bool
+
+	// We at least have some non-empty data for this block. Combine the receipts for encoding.
+	var blockReceipts []*types.ReceiptForStorage = make([]*types.ReceiptForStorage, 0)
+	if len(normalReceipts) != 0 {
+		blockReceipts = append(blockReceipts, normalReceiptsDecoded...)
+	}
+	if len(borReceipt) != 0 {
+		isBorReceiptPresent = true
+		blockReceipts = append(blockReceipts, &borReceiptDecoded)
+	}
+
+	// isStateSyncReceipt denotes whether a receipt belongs to state-sync transaction or not
+	isStateSyncReceipt := func(index int) bool {
+		// If bor receipt is present, it will always be at the end of list
+		if isBorReceiptPresent && index == len(blockReceipts)-1 {
+			return true
+		}
+		return false
+	}
+
+	encodedBlockReceipts, err := rlp.EncodeToBytes(blockReceipts)
+	if err != nil {
+		return nil, nil, false
+	}
+	return encodedBlockReceipts, isStateSyncReceipt, true
+}
+
 // ServiceGetReceiptsQuery69 assembles the response to a receipt query.
 // It does not send the bloom filters for the receipts
 func ServiceGetReceiptsQuery69(chain *core.BlockChain, query GetReceiptsRequest) []rlp.RawValue {
@@ -359,98 +456,8 @@ func ServiceGetReceiptsQuery69(chain *core.BlockChain, query GetReceiptsRequest)
 			break
 		}
 
-		number, ok := rawdb.ReadHeaderNumber(chain.DB(), hash)
+		blockReceipts, isStateSyncReceipt, ok := gatherBlockReceipts(chain, hash, borCfg)
 		if !ok {
-			continue
-		}
-
-		// If we're past the Madhugiri hardfork, state-sync receipts (if present) are stored
-		// with normal block receipts so no special handling needed.
-		if borCfg != nil && borCfg.IsMadhugiri(big.NewInt(int64(number))) {
-			allReceipts := chain.GetReceiptsRLP(hash)
-			if len(allReceipts) == 0 {
-				if header := chain.GetHeaderByHash(hash); header == nil || header.ReceiptHash != types.EmptyRootHash {
-					continue
-				}
-				// If receipts are empty, replace the result with an rlp.EmptyList
-				// to encode in the final response.
-				allReceipts = rlp.EmptyList
-			}
-			body := chain.GetBodyRLP(hash)
-			if body == nil {
-				continue
-			}
-			// Noop as no special handling is needed
-			isStateSyncReceipt := func(index int) bool {
-				return false
-			}
-			results, err := blockReceiptsToNetwork69(allReceipts, body, isStateSyncReceipt)
-			if err != nil {
-				log.Error("Error in block receipts conversion", "hash", hash, "err", err)
-				continue
-			}
-
-			receipts = append(receipts, results)
-			bytes += len(results)
-			continue
-		}
-
-		// Before Madhugiri hardfork, we need to fetch state-sync receipts separately along with fetching
-		// block receipts. Upon fetching, decode them, merge them into a single unit and re-encode
-		// the final list to be sent over p2p.
-		normalReceipts := chain.GetReceiptsRLP(hash)
-		var normalReceiptsDecoded []*types.ReceiptForStorage
-		if len(normalReceipts) != 0 {
-			if err := rlp.DecodeBytes(normalReceipts, &normalReceiptsDecoded); err != nil {
-				log.Error("Failed to decode normal receipts", "err", err)
-				continue
-			}
-		}
-
-		// Fetch state-sync transaction receipt (if any)
-		borReceipt := chain.GetBorReceiptRLPByHash(hash)
-		var borReceiptDecoded types.ReceiptForStorage
-		if len(borReceipt) != 0 {
-			if err := rlp.DecodeBytes(borReceipt, &borReceiptDecoded); err != nil {
-				log.Error("Failed to decode state-sync receipt", "err", err)
-				continue
-			}
-		}
-
-		// Check if receipts are absent due to non existence or something else
-		if len(normalReceipts) == 0 && len(borReceipt) == 0 {
-			// Don't append empty receipt data for this block if either the local header is nil
-			// or the receipt root of header denotes existence of receipt (i.e. is not empty hash)
-			if header := chain.GetHeaderByHash(hash); header == nil || header.ReceiptHash != types.EmptyRootHash {
-				continue
-			}
-		}
-
-		// Track existence of bor receipts for encoding
-		var isBorReceiptPresent bool
-
-		// We at least have some non-empty data for this block. Combine the receipts for encoding.
-		var blockReceipts []*types.ReceiptForStorage = make([]*types.ReceiptForStorage, 0)
-		if len(normalReceipts) != 0 {
-			blockReceipts = append(blockReceipts, normalReceiptsDecoded...)
-		}
-		if len(borReceipt) != 0 {
-			isBorReceiptPresent = true
-			blockReceipts = append(blockReceipts, &borReceiptDecoded)
-		}
-
-		// isStateSyncReceipt denotes whether a receipt belongs to state-sync transaction or not
-		isStateSyncReceipt := func(index int) bool {
-			// If bor receipt is present, it will always be at the end of list
-			if isBorReceiptPresent && index == len(blockReceipts)-1 {
-				return true
-			}
-			return false
-		}
-
-		// Encode the final list and convert to network format
-		encodedBlockReceipts, err := rlp.EncodeToBytes(blockReceipts)
-		if err != nil {
 			continue
 		}
 		body := chain.GetBodyRLP(hash)
@@ -458,7 +465,7 @@ func ServiceGetReceiptsQuery69(chain *core.BlockChain, query GetReceiptsRequest)
 			continue
 		}
 
-		results, err := blockReceiptsToNetwork69(encodedBlockReceipts, body, isStateSyncReceipt)
+		results, _, err := blockReceiptsToNetwork69(blockReceipts, body, isStateSyncReceipt, receiptQueryParams{})
 		if err != nil {
 			log.Error("Error in block receipts conversion", "hash", hash, "err", err)
 			continue
@@ -469,6 +476,56 @@ func ServiceGetReceiptsQuery69(chain *core.BlockChain, query GetReceiptsRequest)
 	}
 
 	return receipts
+}
+
+// ServiceGetReceiptsQuery70 assembles the response to an eth/70 receipt query. Receipts
+// of the first block positioned before firstBlockReceiptIndex are omitted, resuming a
+// block that a previous response had to truncate. The second return value reports that
+// the last block in the response is itself truncated.
+func ServiceGetReceiptsQuery70(chain *core.BlockChain, query GetReceiptsRequest, firstBlockReceiptIndex uint64) ([]rlp.RawValue, bool) {
+	var (
+		bytes    int
+		receipts []rlp.RawValue
+	)
+	borCfg := chain.Config().Bor
+	for i, hash := range query {
+		if bytes >= softResponseLimit || len(receipts) >= maxReceiptsServe {
+			break
+		}
+
+		blockReceipts, isStateSyncReceipt, ok := gatherBlockReceipts(chain, hash, borCfg)
+		if !ok {
+			continue
+		}
+		body := chain.GetBodyRLP(hash)
+		if body == nil {
+			continue
+		}
+
+		q := receiptQueryParams{sizeLimit: uint64(maxMessageSize - bytes)}
+		if i == 0 {
+			q.firstIndex = firstBlockReceiptIndex
+		}
+		results, incomplete, err := blockReceiptsToNetwork69(blockReceipts, body, isStateSyncReceipt, q)
+		if err != nil {
+			log.Error("Error in block receipts conversion", "hash", hash, "err", err)
+			continue
+		}
+		if results == nil {
+			// Not even the first receipt of this block fits in the remaining space. There
+			// is no progress to report, so the response ends here.
+			break
+		}
+
+		receipts = append(receipts, results)
+		bytes += len(results)
+
+		if incomplete {
+			return receipts, true
+		}
+	}
+
+	return receipts, false
 }
 
 func handleNewBlockhashes(backend Backend, msg Decoder, peer *Peer) error {
@@ -610,6 +667,47 @@ func handleReceipts[L ReceiptsList](backend Backend, msg Decoder, peer *Peer) er
 		id:   res.RequestId,
 		code: ReceiptsMsg,
 		Res:  &res.List,
+	}, metadata)
+}
+
+func handleReceipts70(backend Backend, msg Decoder, peer *Peer) error {
+	// A batch of receipts arrived to one of our previous requests
+	res := new(ReceiptsPacket70)
+	if err := msg.Decode(res); err != nil {
+		return err
+	}
+
+	// Assign temporary hashing buffer to each list item, the same buffer is shared
+	// between all receipt list instances.
+	buffers := new(receiptListBuffers)
+	for i := range res.List {
+		res.List[i].setBuffers(buffers)
+	}
+
+	if err := peer.bufferReceipts(res.RequestId, res.List, res.LastBlockIncomplete); err != nil {
+		return err
+	}
+	if res.LastBlockIncomplete {
+		// The response stops part way through a block, so ask the same peer to continue
+		// it. Nothing is handed to the downloader until the block is whole.
+		return peer.requestPartialReceipts(res.RequestId)
+	}
+	receiptLists := res.List
+	if complete := peer.flushReceipts(res.RequestId); complete != nil {
+		receiptLists = complete
+	}
+
+	// The metadata function is a no-op for the same reason as in handleReceipts: the
+	// block number that decides whether the state-sync receipt takes part in the receipt
+	// hash is only known to the receipt queue, which validates the reassembled list.
+	metadata := func() interface{} {
+		return nil
+	}
+
+	return peer.dispatchResponse(&Response{
+		id:   res.RequestId,
+		code: ReceiptsMsg,
+		Res:  &receiptLists,
 	}, metadata)
 }
 

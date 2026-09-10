@@ -107,7 +107,7 @@ func MakeProtocols(backend Backend, network uint64, disc enode.Iterator) []p2p.P
 			Version: version,
 			Length:  protocolLengths[version],
 			Run: func(p *p2p.Peer, rw p2p.MsgReadWriter) error {
-				peer := NewPeer(version, p, rw, backend.TxPool())
+				peer := NewPeer(version, p, rw, backend.TxPool(), backend.Chain().Config())
 				defer peer.Close()
 
 				return backend.RunPeer(peer, func(peer *Peer) error {
@@ -200,6 +200,22 @@ var eth69 = map[uint64]msgHandler{
 	BlockRangeUpdateMsg:           handleBlockRangeUpdate,
 }
 
+var eth70 = map[uint64]msgHandler{
+	NewBlockHashesMsg:             handleNewBlockhashes,
+	NewBlockMsg:                   handleNewBlock,
+	TransactionsMsg:               handleTransactions,
+	NewPooledTransactionHashesMsg: handleNewPooledTransactionHashes,
+	GetBlockHeadersMsg:            handleGetBlockHeaders,
+	BlockHeadersMsg:               handleBlockHeaders,
+	GetBlockBodiesMsg:             handleGetBlockBodies,
+	BlockBodiesMsg:                handleBlockBodies,
+	GetReceiptsMsg:                handleGetReceipts70,
+	ReceiptsMsg:                   handleReceipts70,
+	GetPooledTransactionsMsg:      handleGetPooledTransactions,
+	PooledTransactionsMsg:         handlePooledTransactions,
+	BlockRangeUpdateMsg:           handleBlockRangeUpdate,
+}
+
 // handleMessage is invoked whenever an inbound message is received from a remote
 // peer. The remote connection is torn down upon returning any error.
 func handleMessage(backend Backend, peer *Peer) error {
@@ -214,11 +230,14 @@ func handleMessage(backend Backend, peer *Peer) error {
 	defer msg.Discard()
 
 	var handlers map[uint64]msgHandler
-	if peer.version == ETH68 {
+	switch peer.version {
+	case ETH68:
 		handlers = eth68
-	} else if peer.version == ETH69 {
+	case ETH69:
 		handlers = eth69
-	} else {
+	case ETH70:
+		handlers = eth70
+	default:
 		return fmt.Errorf("unknown eth protocol version: %v", peer.version)
 	}
 

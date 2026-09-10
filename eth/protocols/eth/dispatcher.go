@@ -217,7 +217,11 @@ func (p *Peer) dispatcher() {
 			reqOp.fail <- err
 
 			if err == nil {
-				pending[req.id] = req
+				// An eth/70 continuation re-uses the ID of the request it resumes, so
+				// the original entry has to stay in place.
+				if _, ok := pending[req.id]; !ok {
+					pending[req.id] = req
+				}
 			}
 
 		case cancelOp := <-p.reqCancel:
@@ -231,6 +235,13 @@ func (p *Peer) dispatcher() {
 			// Stop tracking the request
 			delete(pending, cancelOp.id)
 			requestTracker.Fulfil(p.id, p.version, req.code, cancelOp.id)
+
+			// The request may not be a receipt one, but dropping the entry is harmless
+			// either way and leaving it behind would leak for the peer's lifetime.
+			p.receiptBufferLock.Lock()
+			delete(p.receiptBuffer, cancelOp.id)
+			p.receiptBufferLock.Unlock()
+
 			cancelOp.fail <- nil
 
 		case resOp := <-p.resDispatch:

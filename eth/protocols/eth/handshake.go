@@ -38,7 +38,10 @@ const (
 // network IDs, difficulties, head and genesis blocks.
 func (p *Peer) Handshake(networkID uint64, chain *core.BlockChain, rangeMsg BlockRangeUpdatePacket) error {
 	switch p.version {
-	case ETH69:
+	case ETH69, ETH70:
+		// EIP-7975 leaves the status message untouched, so eth/70 shares the eth/69
+		// handshake. Upstream needs no branch here at all; Bor only has one because it
+		// still carries eth/68's older status packet.
 		return p.handshake69(networkID, chain, rangeMsg)
 	case ETH68:
 		return p.handshake68(networkID, chain)

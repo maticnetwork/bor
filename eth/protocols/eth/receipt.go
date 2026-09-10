@@ -443,14 +443,43 @@ func (rl *ReceiptList69) ExcludeStateSyncReceipt() {
 	rl.items = excludeStateSyncReceipt(rl.items)
 }
 
+// Append appends all items from another receipt list to this list. It is used by
+// eth/70 to reassemble a block whose receipts were split across several packets.
+func (rl *ReceiptList69) Append(other *ReceiptList69) {
+	rl.items = append(rl.items, other.items...)
+}
+
+// LogsSize returns the total size of log data across all receipts of the list.
+func (rl *ReceiptList69) LogsSize() (uint64, error) {
+	var size uint64
+	for i := range rl.items {
+		logsContent, _, err := rlp.SplitList(rl.items[i].Logs)
+		if err != nil {
+			return 0, fmt.Errorf("invalid receipt logs: %v", err)
+		}
+		size += uint64(len(logsContent))
+	}
+	return size, nil
+}
+
 // blockReceiptsToNetwork69 takes a slice of rlp-encoded receipts, and transactions,
 // and applies the type-encoding on the receipts (for non-legacy receipts).
 // e.g. for non-legacy receipts: receipt-data -> {tx-type || receipt-data}. It also
 // handles state-sync transaction receipts and encodes them in the same format.
-func blockReceiptsToNetwork69(blockReceipts, blockBody rlp.RawValue, isStateSyncReceipt func(index int) bool) ([]byte, error) {
+//
+// q bounds the output for eth/70, which may answer with part of a block: receipts before
+// q.firstIndex are omitted and encoding stops before q.sizeLimit is exceeded, in which
+// case incomplete is set. Its zero value produces the whole block, as eth/68 and eth/69
+// always require.
+//
+// The loop index stays absolute even when receipts are skipped, so isStateSyncReceipt
+// keeps identifying the state-sync receipt by its position within the whole block rather
+// than within the chunk being encoded. The tx-type iterator is advanced in lockstep for
+// the same reason.
+func blockReceiptsToNetwork69(blockReceipts, blockBody rlp.RawValue, isStateSyncReceipt func(index int) bool, q receiptQueryParams) (output []byte, incomplete bool, err error) {
 	txTypesIter, err := txTypesInBody(blockBody)
 	if err != nil {
-		return nil, fmt.Errorf("invalid block body: %v", err)
+		return nil, false, fmt.Errorf("invalid block body: %v", err)
 	}
 	nextTxType, stopTxTypes := iter.Pull(txTypesIter)
 	defer stopTxTypes()
@@ -465,28 +494,54 @@ func blockReceiptsToNetwork69(blockReceipts, blockBody rlp.RawValue, isStateSync
 			it, err = rlp.NewListIterator(rlp.EmptyList)
 		}
 		if err != nil {
-			return nil, fmt.Errorf("invalid block receipts: %w", err)
+			return nil, false, fmt.Errorf("invalid block receipts: %w", err)
 		}
 	}
 	outer := enc.List()
 	for i := 0; it.Next(); i++ {
-		content, _, _ := rlp.SplitList(it.Value())
-		receiptList := enc.List()
-		if isStateSyncReceipt(i) {
-			// TxType is always 0 for state-sync transactions before Madhugiri hardfork.
-			// Post Madhugiri HF, they will be part of normal block receipts and body so no special
-			// handling needed.
-			enc.WriteUint64(uint64(0))
-		} else {
-			txType, _ := nextTxType()
-			enc.WriteUint64(uint64(txType))
+		// TxType is always 0 for state-sync transactions before Madhugiri hardfork.
+		// Post Madhugiri HF, they will be part of normal block receipts and body so no special
+		// handling needed.
+		var txType uint64
+		if !isStateSyncReceipt(i) {
+			t, ok := nextTxType()
+			if !ok {
+				return nil, false, fmt.Errorf("block has less txs than receipts (%d)", i)
+			}
+			txType = uint64(t)
 		}
+		if uint64(i) < q.firstIndex {
+			continue
+		}
+		content, _, _ := rlp.SplitList(it.Value())
+		// The txType is encoded as a single byte, which EIP-2718 guarantees by
+		// disallowing tx types above 0x7f.
+		size := rlp.ListSize(1 + uint64(len(content)))
+		if q.sizeLimit > 0 && uint64(enc.Size())+size > q.sizeLimit {
+			if uint64(i) == q.firstIndex {
+				// Not even the first requested receipt fits, so there is no progress
+				// to be made on this block.
+				return nil, false, nil
+			}
+			incomplete = true
+			break
+		}
+		receiptList := enc.List()
+		enc.WriteUint64(txType)
 		enc.Write(content)
 		enc.ListEnd(receiptList)
 	}
 	enc.ListEnd(outer)
 	enc.Flush()
-	return out.Bytes(), nil
+	return out.Bytes(), incomplete, nil
+}
+
+// receiptQueryParams bounds an eth/70 receipt response. Receipts positioned before
+// firstIndex are omitted, and encoding stops before the response would grow past
+// sizeLimit. A zero sizeLimit means unbounded.
+type receiptQueryParams struct {
+	firstIndex uint64
+	sizeLimit  uint64
 }
 
 // txTypesInBody parses the transactions list of an encoded block body, returning just the types.
