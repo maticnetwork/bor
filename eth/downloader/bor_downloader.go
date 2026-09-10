@@ -18,6 +18,7 @@
 package downloader
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math/big"
@@ -30,6 +31,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/checkpoint"
 	"github.com/ethereum/go-ethereum/consensus/bor/heimdall/milestone"
 	"github.com/ethereum/go-ethereum/core/rawdb"
+	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/state/snapshot"
 	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -2390,13 +2392,65 @@ func (d *Downloader) importBlockResultsStateless(results []*fetchResult) error {
 	if d.chainInsertHook != nil {
 		d.chainInsertHook(results)
 	}
-	// Import the batch of blocks
-	if index, err := d.blockchain.InsertChainStateless(blocks, witnesses); err != nil {
+	// Import the batch of blocks. A stateless node reads contract code from
+	// local disk (WIT2 witnesses carry no code); if a witness-verified block
+	// referenced a contract whose bytecode was momentarily absent, the import
+	// fails with a recoverable *state.MissingCodeError. Fetch exactly that
+	// content-addressed blob from a peer, persist it, and retry — bounded so a
+	// blob no peer can serve degrades to the existing safe failure rather than
+	// looping. A batch may reference more than one missing code, each surfacing
+	// on a successive attempt.
+	index, err := d.blockchain.InsertChainStateless(blocks, witnesses)
+	for attempts := 0; err != nil && attempts < maxStatelessCodeHeals; attempts++ {
+		if !d.recoverMissingStatelessCode(err) {
+			break
+		}
+		index, err = d.blockchain.InsertChainStateless(blocks, witnesses)
+	}
+	if err != nil {
 		log.Warn("Stateless block import failed", "index", index, "hash", blocks[index].Hash(), "err", err)
 		return errInvalidBody
 	}
 
 	return nil
+}
+
+// maxStatelessCodeHeals bounds how many missing contract codes a single
+// stateless batch import will fetch-and-retry before giving up, so a blob no
+// peer can serve cannot spin the import forever.
+const maxStatelessCodeHeals = 8
+
+// statelessCodeHealTimeout bounds a single self-heal bytecode fetch.
+const statelessCodeHealTimeout = 30 * time.Second
+
+// recoverMissingStatelessCode attempts to self-heal a stateless import failure
+// caused by a contract whose bytecode is absent from local disk. If err carries
+// a *state.MissingCodeError, it fetches that content-addressed blob from a snap
+// peer, verifies it (FetchByteCodes checks the hash), and persists it to the
+// chain db so a retry can read it. It reports whether a retry is now warranted.
+// Any non-code failure, a missing SnapSyncer, or an unservable blob returns
+// false, leaving the caller's existing (safe) failure path intact.
+func (d *Downloader) recoverMissingStatelessCode(err error) bool {
+	var mce *state.MissingCodeError
+	if !errors.As(err, &mce) || d.SnapSyncer == nil {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), statelessCodeHealTimeout)
+	defer cancel()
+
+	codes, ferr := d.SnapSyncer.FetchByteCodes(ctx, []common.Hash{mce.Hash})
+	if ferr != nil {
+		log.Warn("Stateless self-heal: bytecode fetch failed", "hash", mce.Hash, "err", ferr)
+		return false
+	}
+	code, ok := codes[mce.Hash]
+	if !ok {
+		log.Warn("Stateless self-heal: no peer served missing bytecode", "hash", mce.Hash)
+		return false
+	}
+	rawdb.WriteCode(d.stateDB, mce.Hash, code)
+	log.Info("Stateless self-heal: fetched and persisted missing contract code", "hash", mce.Hash, "size", len(code))
+	return true
 }
 
 // fetchWitnesses is a dedicated goroutine responsible for fetching block witnesses.
