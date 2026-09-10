@@ -57,6 +57,7 @@ func TestChainSyncerNextSyncOpStates(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	handler.enableSyncedFeatures()
 	op, wait := syncer.nextSyncOp()
 	if op == nil {
 		t.Fatal("expected sync operation")
@@ -66,6 +67,9 @@ func TestChainSyncerNextSyncOpStates(t *testing.T) {
 	}
 	if wait != 0 {
 		t.Fatalf("sync wait mismatch: have %v, want 0", wait)
+	}
+	if handler.rebroadcastOK.Load() {
+		t.Fatal("required sync must disable transaction rebroadcast")
 	}
 }
 
@@ -386,6 +390,16 @@ func TestChainSyncerOnSyncDone(t *testing.T) {
 	}
 	if cs.forced {
 		t.Fatal("onSyncDone should reset forced to false")
+	}
+}
+
+func TestEnableSyncedFeaturesEnablesRebroadcast(t *testing.T) {
+	handler, cleanup := newChainSyncerTestHandler(t)
+	defer cleanup()
+
+	handler.enableSyncedFeatures()
+	if !handler.rebroadcastOK.Load() {
+		t.Fatal("a completed sync must enable transaction rebroadcast")
 	}
 }
 

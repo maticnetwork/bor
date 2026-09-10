@@ -23,6 +23,7 @@ cover.out
 /build/_workspace/
 /build/cache/
 /build/bin/
+/build/rebroadcast-e2e/
 /geth*.zip
 
 # used by the build/ci.go archive + upload tool
