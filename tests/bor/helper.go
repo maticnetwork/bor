@@ -352,7 +352,7 @@ func (b *blockGen) addTxWithChain(bc *core.BlockChain, statedb *state.StateDB, t
 
 	context := core.NewEVMBlockContext(b.header, bc, nil)
 	evm := vm.NewEVM(context, statedb, bc.Config(), vm.Config{})
-	receipt, err := core.ApplyTransaction(evm, b.gasPool, statedb, b.header, tx, &b.header.GasUsed)
+	receipt, err := core.ApplyTransaction(evm, b.gasPool, statedb, b.header, tx)
 	if err != nil {
 		panic(err)
 	}
@@ -371,7 +371,7 @@ func (b *blockGen) setCoinbase(addr common.Address) {
 	}
 
 	b.header.Coinbase = addr
-	b.gasPool = new(core.GasPool).AddGas(b.header.GasLimit)
+	b.gasPool = core.NewGasPool(b.header.GasLimit)
 }
 
 func sign(t *testing.T, header *types.Header, signer []byte, c *params.BorConfig) {

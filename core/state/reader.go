@@ -184,7 +184,7 @@ func (r *flatReader) Account(addr common.Address) (*types.StateAccount, error) {
 	if v, ok := r.addrCache.Load(addr); ok {
 		addrHash = v.(common.Hash)
 	} else {
-		addrHash = crypto.Keccak256Hash(addr.Bytes())
+		addrHash = crypto.Keccak256Hash(addr[:])
 		r.addrCache.Store(addr, addrHash)
 	}
 	account, err := r.reader.Account(addrHash)
@@ -221,10 +221,10 @@ func (r *flatReader) Storage(addr common.Address, key common.Hash) (common.Hash,
 	if v, ok := r.addrCache.Load(addr); ok {
 		addrHash = v.(common.Hash)
 	} else {
-		addrHash = crypto.Keccak256Hash(addr.Bytes())
+		addrHash = crypto.Keccak256Hash(addr[:])
 		r.addrCache.Store(addr, addrHash)
 	}
-	slotHash := crypto.Keccak256Hash(key.Bytes())
+	slotHash := crypto.Keccak256Hash(key[:])
 	ret, err := r.reader.Storage(addrHash, slotHash)
 	if err != nil {
 		return common.Hash{}, err
@@ -416,13 +416,14 @@ func (r *trieReader) EnableConcurrentReads() {
 // every worker read accumulates in the same set of trie tracers. Walking
 // reader.subTries here picks up exactly the worker-only-read tries that
 // finalDB doesn't know about.
-func (r *trieReader) CollectStateWitness(addState func(map[string][]byte)) {
+func (r *trieReader) CollectStateWitness(addState func(map[string][]byte, common.Hash)) {
 	if r.mainTrie != nil {
-		addState(r.mainTrie.Witness())
+		addState(r.mainTrie.Witness(), common.Hash{})
 	}
-	r.subTries.Range(func(_, v any) bool {
+	r.subTries.Range(func(k, v any) bool {
 		if t, ok := v.(interface{ Witness() map[string][]byte }); ok {
-			addState(t.Witness())
+			addr, _ := k.(common.Address)
+			addState(t.Witness(), crypto.Keccak256Hash(addr[:]))
 		}
 		return true
 	})

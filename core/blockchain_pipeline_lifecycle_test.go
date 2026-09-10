@@ -179,7 +179,7 @@ func TestPipelinePersistFailureBranches(t *testing.T) {
 		t.Helper()
 		statedb, err := chain.StateAt(chain.CurrentBlock().Root)
 		require.NoError(t, err)
-		statedb.StartPrefetcher("pipeline-failure-test", nil, nil)
+		statedb.StartPrefetcher("pipeline-failure-test", nil)
 		return statedb
 	}
 

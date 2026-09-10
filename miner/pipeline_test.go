@@ -51,7 +51,7 @@ func TestShouldLateRefillSpeculativeBlock(t *testing.T) {
 			txs: make([]*types.Transaction, txs),
 		}
 		if withGasPool {
-			env.gasPool = new(core.GasPool).AddGas(remainingGas)
+			env.gasPool = core.NewGasPool(remainingGas)
 		}
 		return env
 	}

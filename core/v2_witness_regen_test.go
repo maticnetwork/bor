@@ -64,7 +64,7 @@ func witnessRegenRoundTrip(pb *preparedBlock, diskdb ethdb.Database, config *par
 	}
 
 	hc := &benchHeaderChain{config: config, chainDb: pb.memdb, headerCache: pb.headerCache, engine: engine}
-	w2, err := stateless.NewWitness(pb.block.Header(), hc)
+	w2, err := stateless.NewWitness(pb.block.Header(), hc, false)
 	if err != nil {
 		return fmt.Errorf("new witness: %w", err)
 	}
@@ -348,7 +348,7 @@ func witnessRegenPipelinedRoundTrip(pb *preparedBlock, diskdb ethdb.Database, co
 	}
 
 	hc := &benchHeaderChain{config: config, chainDb: pb.memdb, headerCache: pb.headerCache, engine: engine}
-	w2, err := stateless.NewWitness(pb.block.Header(), hc)
+	w2, err := stateless.NewWitness(pb.block.Header(), hc, false)
 	if err != nil {
 		return fmt.Errorf("new witness: %w", err)
 	}
@@ -540,7 +540,7 @@ func witnessRegenChainedPipelinedRoundTrip(prev, cur *testBlockData, diskdb ethd
 	// A witness-producing node records a witness on every block; attaching
 	// one to block N-1 keeps its CommitSnapshot on the production path (the
 	// read-surface handling differs between witness-on and witness-off).
-	w1, err := stateless.NewWitness(prev.block.Header(), hc)
+	w1, err := stateless.NewWitness(prev.block.Header(), hc, false)
 	if err != nil {
 		return fmt.Errorf("new witness for block N-1: %w", err)
 	}
@@ -591,7 +591,7 @@ func witnessRegenChainedPipelinedRoundTrip(prev, cur *testBlockData, diskdb ethd
 	}
 	execCur.SetFlatDiffRef(flatDiffPrev)
 
-	w2, err := stateless.NewWitness(cur.block.Header(), hc)
+	w2, err := stateless.NewWitness(cur.block.Header(), hc, false)
 	if err != nil {
 		return fmt.Errorf("new witness: %w", err)
 	}

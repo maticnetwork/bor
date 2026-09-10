@@ -331,7 +331,7 @@ func TestWitnessManagerConcurrentAccess(t *testing.T) {
 			block := blocks[blockIdx]
 			peer := "peer-broadcast-" + randomString(5)
 
-			witness, err := stateless.NewWitness(block.Header(), nil)
+			witness, err := stateless.NewWitness(block.Header(), nil, false)
 			if err != nil {
 				continue
 			}

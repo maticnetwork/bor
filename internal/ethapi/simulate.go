@@ -272,7 +272,13 @@ func (sim *simulator) execute(ctx context.Context, blocks []simBlock) ([]*simBlo
 			return nil, err
 		}
 		headers[bi] = result.Header()
-		results[bi] = &simBlockResult{fullTx: sim.fullTx, chainConfig: sim.chainConfig, Block: result, Calls: callResults, senders: senders}
+		results[bi] = &simBlockResult{
+			fullTx:      sim.fullTx,
+			chainConfig: sim.chainConfig,
+			Block:       result,
+			Calls:       callResults,
+			senders:     senders,
+		}
 		parent = result.Header()
 	}
 	return results, nil
@@ -306,16 +312,17 @@ func (sim *simulator) processBlock(ctx context.Context, block *simBlock, header,
 		blockContext.BlobBaseFee = block.BlockOverrides.BlobBaseFee.ToInt()
 	}
 	precompiles := sim.activePrecompiles(header)
+
 	// State overrides are applied prior to execution of a block
 	if err := block.StateOverrides.Apply(sim.state, precompiles); err != nil {
 		return nil, nil, nil, err
 	}
 	var (
-		gp                   = new(core.GasPool).AddGas(blockContext.GasLimit)
-		gasUsed, blobGasUsed uint64
-		txes                 = make([]*types.Transaction, len(block.Calls))
-		callResults          = make([]simCallResult, len(block.Calls))
-		receipts             = make([]*types.Receipt, len(block.Calls))
+		gp          = core.NewGasPool(blockContext.GasLimit)
+		blobGasUsed uint64
+		txes        = make([]*types.Transaction, len(block.Calls))
+		callResults = make([]simCallResult, len(block.Calls))
+		receipts    = make([]*types.Receipt, len(block.Calls))
 		// Block hash will be repaired after execution.
 		tracer   = newTracer(sim.traceTransfers, blockContext.BlockNumber.Uint64(), blockContext.Time, common.Hash{}, common.Hash{}, 0)
 		vmConfig = &vm.Config{
@@ -346,6 +353,7 @@ func (sim *simulator) processBlock(ctx context.Context, block *simBlock, header,
 	}
 	var allLogs []*types.Log
 	for i, call := range block.Calls {
+		// Terminate if the context is cancelled
 		if err := ctx.Err(); err != nil {
 			return nil, nil, nil, err
 		}
@@ -360,8 +368,9 @@ func (sim *simulator) processBlock(ctx context.Context, block *simBlock, header,
 		txes[i] = tx
 		senders[txHash] = call.from()
 		tracer.reset(txHash, uint(i))
-		sim.state.SetTxContext(txHash, i)
+
 		// EoA check is always skipped, even in validation mode.
+		sim.state.SetTxContext(txHash, i)
 		msg := call.ToMessage(header.BaseFee, !sim.validate)
 		result, err := applyMessageWithEVM(ctx, evm, msg, timeout, gp)
 		if err != nil {
@@ -375,8 +384,7 @@ func (sim *simulator) processBlock(ctx context.Context, block *simBlock, header,
 		} else {
 			root = sim.state.IntermediateRoot(sim.chainConfig.IsEIP158(blockContext.BlockNumber)).Bytes()
 		}
-		gasUsed += result.UsedGas
-		receipts[i] = core.MakeReceipt(evm, result, sim.state, blockContext.BlockNumber, common.Hash{}, blockContext.Time, tx, gasUsed, root)
+		receipts[i] = core.MakeReceipt(evm, result, sim.state, blockContext.BlockNumber, common.Hash{}, blockContext.Time, tx, gp.CumulativeUsed(), root)
 		blobGasUsed += receipts[i].BlobGasUsed
 
 		// Enforce the cross-block gas budget.
@@ -405,7 +413,8 @@ func (sim *simulator) processBlock(ctx context.Context, block *simBlock, header,
 		}
 		callResults[i] = callRes
 	}
-	header.GasUsed = gasUsed
+	// Assign total consumed gas to the header
+	header.GasUsed = gp.Used()
 	if sim.chainConfig.IsCancun(header.Number) {
 		header.BlobGasUsed = &blobGasUsed
 	}
@@ -591,6 +600,7 @@ func (sim *simulator) makeHeaders(blocks []simBlock) ([]*types.Header, error) {
 		if sim.chainConfig.IsShanghai(number) && sim.chainConfig.Bor == nil {
 			withdrawalsHash = &types.EmptyWithdrawalsHash
 		}
+
 		var parentBeaconRoot *common.Hash
 		if sim.chainConfig.IsCancun(number) {
 			parentBeaconRoot = &common.Hash{}
@@ -620,7 +630,11 @@ func (sim *simulator) makeHeaders(blocks []simBlock) ([]*types.Header, error) {
 }
 
 func (sim *simulator) newSimulatedChainContext(ctx context.Context, headers []*types.Header) *ChainContext {
-	return NewChainContext(ctx, &simBackend{base: sim.base, b: sim.b, headers: headers})
+	return NewChainContext(ctx, &simBackend{
+		base:    sim.base,
+		b:       sim.b,
+		headers: headers,
+	})
 }
 
 type simBackend struct {

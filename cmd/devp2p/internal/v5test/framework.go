@@ -235,12 +235,16 @@ func (tc *conn) read(c net.PacketConn) v5wire.Packet {
 		return &readError{err}
 	}
 
-	n, fromAddr, err := c.ReadFrom(buf)
+	n, _, err := c.ReadFrom(buf)
 	if err != nil {
 		return &readError{err}
 	}
 
-	_, _, p, err := tc.codec.Decode(buf[:n], fromAddr.String())
+	// Always use tc.remoteAddr for session lookup. The actual source address of
+	// the packet may differ from tc.remoteAddr when the remote node is reachable
+	// via multiple networks (e.g. Docker bridge vs. overlay), but the codec's
+	// session cache is keyed by the address used during Encode.
+	_, _, p, err := tc.codec.Decode(buf[:n], tc.remoteAddr.String())
 	if err != nil {
 		return &readError{err}
 	}

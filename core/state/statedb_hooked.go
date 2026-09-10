@@ -284,6 +284,10 @@ func (s *hookedStateDB) AddLog(log *types.Log) {
 	}
 }
 
+func (s *hookedStateDB) EmitLogsForBurnAccounts() {
+	s.inner.EmitLogsForBurnAccounts()
+}
+
 func (s *hookedStateDB) Finalise(deleteEmptyObjects bool) {
 	defer s.inner.Finalise(deleteEmptyObjects)
 	if s.hooks.OnBalanceChange == nil {

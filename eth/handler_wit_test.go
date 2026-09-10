@@ -593,7 +593,7 @@ func TestWitHandlerHandle(t *testing.T) {
 		header := &types.Header{
 			Number: big.NewInt(100),
 		}
-		witness, _ := stateless.NewWitness(header, nil)
+		witness, _ := stateless.NewWitness(header, nil, false)
 
 		packet := &wit.NewWitnessPacket{
 			Witness: witness,

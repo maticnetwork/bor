@@ -59,7 +59,7 @@ func TestBorWitnessAPI_Integration(t *testing.T) {
 	require.NotNil(t, testBlock)
 	testBlockHash := testBlock.Hash()
 
-	mockWitness, err := stateless.NewWitness(testBlock.Header(), backend.chain)
+	mockWitness, err := stateless.NewWitness(testBlock.Header(), backend.chain, false)
 	require.NoError(t, err)
 	require.NotNil(t, mockWitness)
 

@@ -64,7 +64,7 @@ var testContextHeader3 = &types.Header{
 
 func createWitness(context *types.Header, headers []*types.Header) *stateless.Witness {
 	// Create a new witness with the context and set the headers
-	w, _ := stateless.NewWitness(context, nil)
+	w, _ := stateless.NewWitness(context, nil, false)
 	w.Headers = headers
 	return w
 }

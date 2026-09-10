@@ -248,7 +248,7 @@ func TestWaiterPushGuards(t *testing.T) {
 
 	// Oversized witness: push is skipped, waiters stay on the pull path
 	// (entry is NOT consumed by the size guard).
-	witness, err := stateless.NewWitness(header, nil)
+	witness, err := stateless.NewWitness(header, nil, false)
 	require.NoError(t, err)
 	h.handler.pushWitnessToWaiters(hash, witness, witnessPushMaxSize+1)
 	require.True(t, h.handler.witnessWaiters.has(hash), "oversize guard must not consume waiters")

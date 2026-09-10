@@ -66,8 +66,7 @@ func runSerial(t testing.TB, tdb *triedb.Database, root common.Hash, txs []*type
 	if err != nil {
 		t.Fatal(err)
 	}
-	gp := new(GasPool).AddGas(blockCtx.GasLimit)
-	var usedGas uint64
+	gp := NewGasPool(blockCtx.GasLimit)
 	receipts := make(types.Receipts, 0, len(txs))
 	for i, tx := range txs {
 		sdb.SetTxContext(tx.Hash(), i)
@@ -76,7 +75,7 @@ func runSerial(t testing.TB, tdb *triedb.Database, root common.Hash, txs []*type
 		// bounded values against huge balances), so an apply error is a
 		// generator bug, not an accepted outcome. EVM-level failures
 		// (revert, OOG) still produce a status-failed receipt.
-		receipt, err := ApplyTransactionWithEVM(msgs[i], gp, sdb, blockCtx.BlockNumber, common.Hash{}, blockCtx.Time, tx, &usedGas, evm)
+		receipt, err := ApplyTransactionWithEVM(msgs[i], gp, sdb, blockCtx.BlockNumber, common.Hash{}, blockCtx.Time, tx, evm)
 		if err != nil {
 			t.Fatalf("serial apply tx %d: %v", i, err)
 		}
@@ -502,12 +501,11 @@ func TestMetamorphicHarnessSemantics(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		gp := new(GasPool).AddGas(blockCtx.GasLimit)
-		var usedGas uint64
+		gp := NewGasPool(blockCtx.GasLimit)
 		for i, tx := range txs {
 			sdb.SetTxContext(tx.Hash(), i)
 			evm := vm.NewEVM(blockCtx, sdb, fuzzChainConfig, vm.Config{})
-			if _, err := ApplyTransactionWithEVM(msgs[i], gp, sdb, blockCtx.BlockNumber, common.Hash{}, blockCtx.Time, tx, &usedGas, evm); err != nil {
+			if _, err := ApplyTransactionWithEVM(msgs[i], gp, sdb, blockCtx.BlockNumber, common.Hash{}, blockCtx.Time, tx, evm); err != nil {
 				t.Fatalf("tx %d: %v", i, err)
 			}
 		}

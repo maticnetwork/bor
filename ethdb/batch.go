@@ -39,6 +39,9 @@ type Batch interface {
 
 	// Replay replays the batch contents.
 	Replay(w KeyValueWriter) error
+
+	// Close closes the batch and releases all associated resources.
+	Close()
 }
 
 // Batcher wraps the NewBatch method of a backing data store.

@@ -153,9 +153,11 @@ const (
 	DefaultTargetGasPercentage     = 50 // Specifies target block gas as percentage of block gas limit for EIP-1559
 	TargetGasPercentagePostDandeli = 65 // Specifies target block gas as percentage of block gas limit for EIP-1559 after Dandeli hard fork
 
-	MaxCodeSize              = 24576           // Maximum bytecode to permit for a contract
-	MaxCodeSizePostAhmedabad = 32768           // Maximum bytecode to permit for a contract post Ahmedabad hard fork (bor / polygon pos) (32KB)
-	MaxInitCodeSize          = 2 * MaxCodeSize // Maximum initcode to permit in a creation transaction and create instructions
+	MaxCodeSize              = 24576                    // Maximum bytecode to permit for a contract
+	MaxCodeSizePostAhmedabad = 32768                    // Maximum bytecode to permit for a contract post Ahmedabad hard fork (bor / polygon pos) (32KB)
+	MaxInitCodeSize          = 2 * MaxCodeSize          // Maximum initcode to permit in a creation transaction and create instructions
+	MaxCodeSizeAmsterdam     = 32768                    // Maximum bytecode to permit for a contract post Amsterdam (EIP-7954)
+	MaxInitCodeSizeAmsterdam = 2 * MaxCodeSizeAmsterdam // Maximum initcode to permit in a creation transaction and create instructions post Amsterdam
 
 	// Precompiled contract gas prices
 
@@ -324,3 +326,10 @@ func BaseFeeChangeDenominator(borConfig *BorConfig, number *big.Int) uint64 {
 	}
 	return DefaultBaseFeeChangeDenominator
 }
+
+// System log events.
+var (
+	// EIP-7708 - System logs emitted for ETH transfer and burn
+	EthTransferLogEvent = common.HexToHash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef") // keccak256('Transfer(address,address,uint256)')
+	EthBurnLogEvent     = common.HexToHash("0xcc16f5dbb4873280815c1ee09dbd06736cffcc184412cf7a71a0fdb75d397ca5") // keccak256('Burn(address,uint256)')
+)

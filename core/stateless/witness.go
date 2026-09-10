@@ -107,12 +107,13 @@ type Witness struct {
 	Codes   map[string]struct{} // Set of bytecodes ran or accessed
 	State   map[string]struct{} // Set of MPT state trie nodes (account and storage together)
 
-	chain HeaderReader // Chain reader to convert block hash ops to header proofs
-	lock  sync.RWMutex // Lock to allow concurrent state insertions
+	chain HeaderReader  // Chain reader to convert block hash ops to header proofs
+	stats *WitnessStats // Optional statistics collector
+	lock  sync.RWMutex  // Lock to allow concurrent state insertions
 }
 
 // NewWitness creates an empty witness ready for population.
-func NewWitness(context *types.Header, chain HeaderReader) (*Witness, error) {
+func NewWitness(context *types.Header, chain HeaderReader, enableStats bool) (*Witness, error) {
 	// When building witnesses, retrieve the parent header, which will *always*
 	// be included to act as a trustless pre-root hash container
 	var headers []*types.Header
@@ -129,15 +130,17 @@ func NewWitness(context *types.Header, chain HeaderReader) (*Witness, error) {
 	// point of stateless execution (ProcessBlockWithWitnesses) where they are
 	// recomputed. Zeroing here would break the witness manager's hash matching
 	// (handleBroadcast uses witness.Header().Hash() to look up pending blocks).
-	ctx := types.CopyHeader(context)
-
-	return &Witness{
-		context: ctx,
+	w := &Witness{
+		context: types.CopyHeader(context),
 		Headers: headers,
 		Codes:   make(map[string]struct{}),
 		State:   make(map[string]struct{}),
 		chain:   chain,
-	}, nil
+	}
+	if enableStats {
+		w.stats = NewWitnessStats()
+	}
+	return w, nil
 }
 
 // AddBlockHash adds a "blockhash" to the witness with the designated offset from
@@ -169,8 +172,11 @@ func (w *Witness) AddCode(code []byte) {
 	w.Codes[string(code)] = struct{}{}
 }
 
-// AddState inserts a batch of MPT trie nodes into the witness.
-func (w *Witness) AddState(nodes map[string][]byte) {
+// AddState inserts a batch of MPT trie nodes into the witness. The owner
+// identifies which trie the nodes belong to: the zero hash for the account
+// trie, or the hashed address for a storage trie. This is used for optional
+// statistics collection.
+func (w *Witness) AddState(nodes map[string][]byte, owner common.Hash) {
 	if len(nodes) == 0 {
 		return
 	}
@@ -180,6 +186,17 @@ func (w *Witness) AddState(nodes map[string][]byte) {
 	for _, value := range nodes {
 		w.State[string(value)] = struct{}{}
 	}
+	if w.stats != nil {
+		w.stats.Add(nodes, owner)
+	}
+}
+
+// ReportMetrics reports the collected statistics to the global metrics registry.
+func (w *Witness) ReportMetrics(blockNumber uint64) {
+	if w.stats == nil {
+		return
+	}
+	w.stats.ReportMetrics(blockNumber)
 }
 
 func (w *Witness) AddKey() {
@@ -196,6 +213,9 @@ func (w *Witness) Copy() *Witness {
 		Codes:   maps.Clone(w.Codes),
 		State:   maps.Clone(w.State),
 		chain:   w.chain,
+	}
+	if w.stats != nil {
+		cpy.stats = w.stats.copy()
 	}
 	if w.context != nil {
 		cpy.context = types.CopyHeader(w.context)

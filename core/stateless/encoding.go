@@ -68,8 +68,8 @@ func (w *Witness) ToExtWitness() *ExtWitness {
 	return ext
 }
 
-// fromExtWitness converts the ExtWitness format into our internal representation.
-func (w *Witness) fromExtWitness(ext *ExtWitness) error {
+// FromExtWitness converts the ExtWitness format into our internal representation.
+func (w *Witness) FromExtWitness(ext *ExtWitness) error {
 	w.context = ext.Context
 	w.Headers = ext.Headers
 
@@ -144,5 +144,5 @@ func (w *Witness) DecodeRLP(s *rlp.Stream) error {
 	if err := rlp.DecodeBytes(raw, &ext); err != nil {
 		return err
 	}
-	return w.fromExtWitness(&ext)
+	return w.FromExtWitness(&ext)
 }

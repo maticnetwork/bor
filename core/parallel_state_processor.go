@@ -142,11 +142,11 @@ func (task *ExecutionTask) setupEVM(mvh *blockstm.MVHashMap, incarnation int) *v
 func (task *ExecutionTask) runMessage(evm *vm.EVM) error {
 	if !*task.shouldDelayFeeCal {
 		var err error
-		task.result, err = ApplyMessage(evm, &task.msg, new(GasPool).AddGas(task.gasLimit))
+		task.result, err = ApplyMessage(evm, &task.msg, NewGasPool(task.gasLimit))
 		return err
 	}
 	var err error
-	task.result, err = ApplyMessageNoFeeBurnOrTip(evm, task.msg, new(GasPool).AddGas(task.gasLimit))
+	task.result, err = ApplyMessageNoFeeBurnOrTip(evm, task.msg, NewGasPool(task.gasLimit))
 	if task.result == nil || err != nil {
 		return blockstm.ErrExecAbortError{Dependency: task.statedb.DepTxIndex(), OriginError: err}
 	}
@@ -683,7 +683,7 @@ func (e *v2Env) applyMessage(t *v2Task, evm *vm.EVM, pdb *state.ParallelStateDB)
 			pdb.Panicked = true
 		}
 	}()
-	result, execErr := ApplyMessageNoFeeLog(evm, t.msg, new(GasPool).AddGas(e.gasLimit))
+	result, execErr := ApplyMessageNoFeeLog(evm, t.msg, NewGasPool(e.gasLimit))
 	if result == nil {
 		// Consensus-level error (bad nonce, insufficient upfront gas, intrinsic
 		// gas underflow, blob fork-gating, etc.). Serial returns this as a
@@ -1120,7 +1120,7 @@ func (p *V2StateProcessor) Process(block *types.Block, statedb *state.StateDB, c
 	// execution — the produced witness would land empty.
 	prevWitness := finalDB.Witness()
 	finalDB.StopPrefetcher()
-	finalDB.StartPrefetcher("v2_settle", prevWitness, nil)
+	finalDB.StartPrefetcher("v2_settle", prevWitness)
 	finalDB.SkipTimers()
 	// Copy() deep-copies the witness; re-share so BLOCKHASH writes reach finalDB.
 	readBase := statedb.Copy()

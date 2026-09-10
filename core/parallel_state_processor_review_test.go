@@ -397,7 +397,7 @@ func TestV2StateProcessor_PanickedTxFailsBlock(t *testing.T) {
 	}}
 
 	finalDB := base.Copy()
-	finalDB.StartPrefetcher("test", nil, nil)
+	finalDB.StartPrefetcher("test", nil)
 	defer finalDB.StopPrefetcher()
 
 	result := ExecuteV2BlockSTM(context.Background(), tasks, base, store, bals, blockCtx, common.Hash{}, cfg, chainConfig,
@@ -475,7 +475,7 @@ func TestV2ApplyMessage_FirstIncarnationPanicLogsDebug(t *testing.T) {
 	}}
 
 	finalDB := base.Copy()
-	finalDB.StartPrefetcher("test", nil, nil)
+	finalDB.StartPrefetcher("test", nil)
 	defer finalDB.StopPrefetcher()
 
 	_ = ExecuteV2BlockSTM(context.Background(), tasks, base,
@@ -562,7 +562,7 @@ func TestV2StateProcessor_ProducesWitness(t *testing.T) {
 	bals := blockstm.NewMVBalanceStore()
 
 	finalDB := base
-	finalDB.StartPrefetcher("test", w, nil)
+	finalDB.StartPrefetcher("test", w)
 	defer finalDB.StopPrefetcher()
 
 	result := ExecuteV2BlockSTM(context.Background(), tasks, base, store, bals, blockCtx, common.Hash{}, vm.Config{}, chainConfig,
@@ -635,7 +635,7 @@ func TestExecuteV2BlockSTM_MidFlightCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	finalDB := base.Copy()
-	finalDB.StartPrefetcher("test", nil, nil)
+	finalDB.StartPrefetcher("test", nil)
 	defer finalDB.StopPrefetcher()
 	store := blockstm.NewMVStore()
 	bals := blockstm.NewMVBalanceStore()
@@ -716,7 +716,7 @@ func TestExecuteV2BlockSTM_HonoursCancellation(t *testing.T) {
 	cancel()
 
 	finalDB := base.Copy()
-	finalDB.StartPrefetcher("test", nil, nil)
+	finalDB.StartPrefetcher("test", nil)
 	defer finalDB.StopPrefetcher()
 
 	store := blockstm.NewMVStore()
@@ -815,7 +815,7 @@ func TestV2StateProcessor_ReceiptHasBlockHash(t *testing.T) {
 	bals := blockstm.NewMVBalanceStore()
 
 	finalDB := base.Copy()
-	finalDB.StartPrefetcher("test", nil, nil)
+	finalDB.StartPrefetcher("test", nil)
 	defer finalDB.StopPrefetcher()
 
 	result := ExecuteV2BlockSTM(context.Background(), tasks, base, store, bals, blockCtx, blockHash, vm.Config{}, chainConfig,
@@ -884,7 +884,7 @@ func TestV2StateProcessor_ApplyMessageErrorFailsBlock(t *testing.T) {
 	bals := blockstm.NewMVBalanceStore()
 
 	finalDB := base.Copy()
-	finalDB.StartPrefetcher("test", nil, nil)
+	finalDB.StartPrefetcher("test", nil)
 	defer finalDB.StopPrefetcher()
 
 	result := ExecuteV2BlockSTM(context.Background(), tasks, base, store, bals, blockCtx, common.Hash{}, vm.Config{}, chainConfig,

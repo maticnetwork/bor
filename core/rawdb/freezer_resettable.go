@@ -157,7 +157,7 @@ func (f *resettableFreezer) AncientOffSet() uint64 {
 
 // ItemAmountInAncient returns the actual length of current ancientDB.
 func (f *resettableFreezer) ItemAmountInAncient() (uint64, error) {
-	return f.freezer.frozen.Load() - f.freezer.offset.Load(), nil
+	return f.freezer.head.Load() - f.freezer.offset.Load(), nil
 }
 
 // Tail returns the number of first stored item in the freezer.

@@ -1020,7 +1020,7 @@ func (f *fetcherTester) makeWitnessFetcher(peer string, blocks map[common.Hash]*
 			// Get the witness for the single hash
 			if block, ok := blocks[hash]; ok {
 				// Create a witness for the block
-				witness, err := stateless.NewWitness(block.Header(), nil)
+				witness, err := stateless.NewWitness(block.Header(), nil, false)
 				if err != nil {
 					return
 				}
