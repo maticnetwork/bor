@@ -128,6 +128,13 @@ func (h *ethHandler) handleMilestone(ctx context.Context, eth *Ethereum, milesto
 
 	h.downloader.ProcessMilestone(num, hash)
 
+	// Publish the milestone block as finalized and safe. Re-resolve via the
+	// canonical number→hash mapping so a reorg between verification and this
+	// write can't promote a stale or non-canonical header.
+	if block := eth.blockchain.GetBlockByNumber(num); block != nil && block.Hash() == hash {
+		eth.blockchain.SetFinalized(block.Header())
+	}
+
 	return nil
 }
 
