@@ -66,7 +66,13 @@ func NewChainFreezer(datadir string, namespace string, readonly bool, offset uin
 //     state freezer (e.g. dev mode).
 //   - if non-empty directory is given, initializes the regular file-based
 //     state freezer.
-func newChainFreezer(datadir string, eraDir string, namespace string, readonly bool, offset uint64) (*chainFreezer, error) {
+//
+// db is the key-value store paired with this freezer. It is used solely to
+// drive the one-time reserved-tx freezer table migration (see
+// reserved_txs_freezer.go): recording the durable pad-target marker and, once
+// migrated, telling apart an ordinary crash-mid-freeze from a downgrade gap.
+// It may be nil (e.g. the in-memory dev freezer never needs it).
+func newChainFreezer(datadir string, eraDir string, namespace string, readonly bool, offset uint64, db ethdb.KeyValueStore) (*chainFreezer, error) {
 	if datadir == "" {
 		return &chainFreezer{
 			ancients: NewMemoryFreezer(readonly, chainFreezerTableConfigs),
@@ -74,7 +80,7 @@ func newChainFreezer(datadir string, eraDir string, namespace string, readonly b
 			trigger:  make(chan chan struct{}),
 		}, nil
 	}
-	freezer, err := NewFreezer(datadir, namespace, readonly, offset, freezerTableSize, chainFreezerTableConfigs)
+	freezer, err := newFreezer(datadir, namespace, readonly, offset, freezerTableSize, chainFreezerTableConfigs, newReservedTxsMigrationHook(db))
 	if err != nil {
 		return nil, err
 	}
@@ -384,6 +390,14 @@ func (f *chainFreezer) freezeRange(nfdb *nofreezedb, number, limit uint64) (hash
 			borBlockReceipt := ReadBorReceiptRLP(nfdb, hash, number)
 			if err := op.AppendRaw(freezerBorReceiptTable, number, borBlockReceipt); err != nil {
 				return fmt.Errorf("can't write bor-receipt to freezer: %v", err)
+			}
+
+			// reserved-tx indexes: empty is a valid, common value (most blocks
+			// have no reserved transactions), so every frozen block gets an
+			// entry here exactly as it does in the bor receipt table above.
+			reservedTxIndexes := ReadReservedTxIndexesRLP(nfdb, hash, number)
+			if err := op.AppendRaw(ChainFreezerReservedTxsTable, number, reservedTxIndexes); err != nil {
+				return fmt.Errorf("can't write reserved-tx indexes to freezer: %v", err)
 			}
 
 			if err := op.AppendRaw(ChainFreezerDifficultyTable, number, td); err != nil {

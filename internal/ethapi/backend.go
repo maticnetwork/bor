@@ -50,7 +50,7 @@ type Backend interface {
 	ProtocolVersion() uint
 
 	SuggestGasTipCap(ctx context.Context) (*big.Int, error)
-	FeeHistory(ctx context.Context, blockCount uint64, lastBlock rpc.BlockNumber, rewardPercentiles []float64) (*big.Int, [][]*big.Int, []*big.Int, []float64, []*big.Int, []float64, error)
+	FeeHistory(ctx context.Context, blockCount uint64, lastBlock rpc.BlockNumber, rewardPercentiles []float64) (*big.Int, [][]*big.Int, []*big.Int, []float64, []float64, []*big.Int, []float64, error)
 	BlobBaseFee(ctx context.Context) *big.Int
 	BaseFee(ctx context.Context) *big.Int
 	ChainDb() ethdb.Database

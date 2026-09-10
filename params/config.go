@@ -191,10 +191,19 @@ var (
 			BackupMultiplier: map[string]uint64{
 				"0": 2,
 			},
-			ValidatorContract:     "0x0000000000000000000000000000000000001000",
-			StateReceiverContract: "0x0000000000000000000000000000000000001001",
+			ValidatorContract:        "0x0000000000000000000000000000000000001000",
+			StateReceiverContract:    "0x0000000000000000000000000000000000001001",
+			ReservedRegistryContract: DefaultReservedRegistryContract,
 			BurntContract: map[string]string{
 				"0": "0x00000000000000000000000000000000000000000",
+			},
+			BlockAlloc: map[string]interface{}{
+				"0": map[string]interface{}{
+					DefaultReservedRegistryContract: map[string]interface{}{
+						"balance": "0x0",
+						"code":    ReservedBlockspaceRegistryCode,
+					},
+				},
 			},
 		},
 		ShanghaiBlock: big.NewInt(0),
@@ -231,10 +240,19 @@ var (
 			Coinbase: map[string]string{
 				"0": "0x000000000000000000000000000000000000ba5e",
 			},
-			ValidatorContract:     "0x0000000000000000000000000000000000001000",
-			StateReceiverContract: "0x0000000000000000000000000000000000001001",
+			ValidatorContract:        "0x0000000000000000000000000000000000001000",
+			StateReceiverContract:    "0x0000000000000000000000000000000000001001",
+			ReservedRegistryContract: DefaultReservedRegistryContract,
 			BurntContract: map[string]string{
 				"0": "0x00000000000000000000000000000000000000000",
+			},
+			BlockAlloc: map[string]interface{}{
+				"0": map[string]interface{}{
+					DefaultReservedRegistryContract: map[string]interface{}{
+						"balance": "0x0",
+						"code":    ReservedBlockspaceRegistryCode,
+					},
+				},
 			},
 		},
 	}
@@ -932,6 +950,7 @@ type BorConfig struct {
 	BackupMultiplier                map[string]uint64                `json:"backupMultiplier"`                // Backup multiplier to determine the wiggle time
 	ValidatorContract               string                           `json:"validatorContract"`               // Validator set contract
 	StateReceiverContract           string                           `json:"stateReceiverContract"`           // State receiver contract
+	ReservedRegistryContract        string                           `json:"reservedRegistryContract"`        // Reserved blockspace registry contract
 	OverrideStateSyncRecords        map[string]int                   `json:"overrideStateSyncRecords"`        // override state records count
 	OverrideStateSyncRecordsInRange []BlockRangeOverride             `json:"overrideStateSyncRecordsInRange"` // override state records count in a given block range
 	OverrideValidatorSetInRange     []BlockRangeOverrideValidatorSet `json:"overrideValidatorSetInRange"`     // override validator set in a given block range
@@ -971,6 +990,7 @@ type BorConfig struct {
 	ValenciaBlock              *big.Int          `json:"valenciaBlock"`              // Valencia switch block (nil = no fork, 0 = already on valencia)
 	AustinBlock                *big.Int          `json:"austinBlock"`                // Austin switch block (nil = no fork, 0 = already on austin)
 	HampiBlock                 *big.Int          `json:"hampiBlock"`                 // Hampi switch block (nil = no fork, 0 = already on hampi)
+	ReservedBlockspaceBlock    *big.Int          `json:"reservedBlockspaceBlock"`    // ReservedBlockspace switch block (nil = no fork, 0 = already on reservedBlockspace)
 }
 
 // String implements the stringer interface, returning the consensus engine details.
@@ -1061,6 +1081,10 @@ func (c *BorConfig) IsAustin(number *big.Int) bool {
 
 func (c *BorConfig) IsHampi(number *big.Int) bool {
 	return isBlockForked(c.HampiBlock, number)
+}
+
+func (c *BorConfig) IsReservedBlockspace(number *big.Int) bool {
+	return isBlockForked(c.ReservedBlockspaceBlock, number)
 }
 
 // GetTargetGasPercentage returns the target gas percentage for gas limit calculation.
@@ -1282,6 +1306,9 @@ func (c *ChainConfig) Description() string {
 		}
 		if c.Bor.HampiBlock != nil {
 			banner += fmt.Sprintf(" - Hampi:                     #%-8v\n", c.Bor.HampiBlock)
+		}
+		if c.Bor.ReservedBlockspaceBlock != nil {
+			banner += fmt.Sprintf(" - ReservedBlockspace:          #%-8v\n", c.Bor.ReservedBlockspaceBlock)
 		}
 		return banner
 	}
@@ -1628,6 +1655,41 @@ func (c *ChainConfig) CheckConfigForkOrder() error {
 			}
 		}
 	}
+
+	if err := c.checkReservedBlockspaceForkOrder(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkReservedBlockspaceForkOrder enforces the rollout preconditions for the
+// reserved-blockspace fork. The producer writes the reserved header fields —
+// ReservedGasUsed and ReservedCapacity — only in the post-Cancun BlockExtraData
+// format, while verifyHeader requires both of them on every post-fork block —
+// so activating reserved blockspace at or before Cancun would make block
+// production unverifiable at the boundary. The reserved set also has no
+// source without the registry contract configured.
+//
+// Reserved blockspace must also not activate before Giugliano: ReservedGasUsed
+// and ReservedCapacity are later rlp:"optional" fields of BlockExtraData than
+// Giugliano's GasTarget and BaseFeeChangeDenominator, so stamping them while
+// those are still nil forces them onto the wire as non-nil zero, corrupting
+// the base-fee params a peer decodes.
+func (c *ChainConfig) checkReservedBlockspaceForkOrder() error {
+	if c.Bor == nil || c.Bor.ReservedBlockspaceBlock == nil {
+		return nil
+	}
+	if c.CancunBlock == nil || c.CancunBlock.Cmp(c.Bor.ReservedBlockspaceBlock) > 0 {
+		return fmt.Errorf("unsupported fork ordering: reservedBlockspaceBlock %v must be at or after cancunBlock %v",
+			c.Bor.ReservedBlockspaceBlock, c.CancunBlock)
+	}
+	if c.Bor.GiuglianoBlock == nil || c.Bor.GiuglianoBlock.Cmp(c.Bor.ReservedBlockspaceBlock) > 0 {
+		return fmt.Errorf("unsupported fork ordering: reservedBlockspaceBlock %v must be at or after giuglianoBlock %v",
+			c.Bor.ReservedBlockspaceBlock, c.Bor.GiuglianoBlock)
+	}
+	if c.Bor.ReservedRegistryContract == "" {
+		return errors.New("invalid chain configuration: reservedBlockspaceBlock is scheduled but reservedRegistryContract is unset")
+	}
 	return nil
 }
 
@@ -1923,6 +1985,7 @@ type Rules struct {
 	IsLisovoPro                                             bool
 	IsChicago                                               bool
 	IsHampi                                                 bool
+	IsReservedBlockspace                                    bool
 }
 
 // Rules ensures c's ChainID is not nil.
@@ -1935,30 +1998,31 @@ func (c *ChainConfig) Rules(num *big.Int, isMerge bool, _ uint64) Rules {
 	isMerge = isMerge && c.IsLondon(num)
 	isVerkle := isMerge && c.IsVerkle(num)
 	return Rules{
-		ChainID:          new(big.Int).Set(chainID),
-		IsHomestead:      c.IsHomestead(num),
-		IsEIP150:         c.IsEIP150(num),
-		IsEIP155:         c.IsEIP155(num),
-		IsEIP158:         c.IsEIP158(num),
-		IsByzantium:      c.IsByzantium(num),
-		IsConstantinople: c.IsConstantinople(num),
-		IsPetersburg:     c.IsPetersburg(num),
-		IsIstanbul:       c.IsIstanbul(num),
-		IsBerlin:         c.IsBerlin(num),
-		IsEIP2929:        c.IsBerlin(num) && !isVerkle,
-		IsLondon:         c.IsLondon(num),
-		IsMerge:          isMerge,
-		IsShanghai:       c.IsShanghai(num),
-		IsCancun:         c.IsCancun(num),
-		IsPrague:         c.IsPrague(num),
-		IsVerkle:         c.IsVerkle(num),
-		IsOsaka:          c.IsOsaka(num),
-		IsEIP4762:        c.IsVerkle(num),
-		IsMadhugiri:      c.Bor != nil && c.Bor.IsMadhugiri(num),
-		IsMadhugiriPro:   c.Bor != nil && c.Bor.IsMadhugiriPro(num),
-		IsLisovo:         c.Bor != nil && c.Bor.IsLisovo(num),
-		IsLisovoPro:      c.Bor != nil && c.Bor.IsLisovoPro(num),
-		IsChicago:        c.Bor != nil && c.Bor.IsChicago(num),
-		IsHampi:          c.Bor != nil && c.Bor.IsHampi(num),
+		ChainID:              new(big.Int).Set(chainID),
+		IsHomestead:          c.IsHomestead(num),
+		IsEIP150:             c.IsEIP150(num),
+		IsEIP155:             c.IsEIP155(num),
+		IsEIP158:             c.IsEIP158(num),
+		IsByzantium:          c.IsByzantium(num),
+		IsConstantinople:     c.IsConstantinople(num),
+		IsPetersburg:         c.IsPetersburg(num),
+		IsIstanbul:           c.IsIstanbul(num),
+		IsBerlin:             c.IsBerlin(num),
+		IsEIP2929:            c.IsBerlin(num) && !isVerkle,
+		IsLondon:             c.IsLondon(num),
+		IsMerge:              isMerge,
+		IsShanghai:           c.IsShanghai(num),
+		IsCancun:             c.IsCancun(num),
+		IsPrague:             c.IsPrague(num),
+		IsVerkle:             c.IsVerkle(num),
+		IsOsaka:              c.IsOsaka(num),
+		IsEIP4762:            c.IsVerkle(num),
+		IsMadhugiri:          c.Bor != nil && c.Bor.IsMadhugiri(num),
+		IsMadhugiriPro:       c.Bor != nil && c.Bor.IsMadhugiriPro(num),
+		IsLisovo:             c.Bor != nil && c.Bor.IsLisovo(num),
+		IsLisovoPro:          c.Bor != nil && c.Bor.IsLisovoPro(num),
+		IsChicago:            c.Bor != nil && c.Bor.IsChicago(num),
+		IsHampi:              c.Bor != nil && c.Bor.IsHampi(num),
+		IsReservedBlockspace: c.Bor != nil && c.Bor.IsReservedBlockspace(num),
 	}
 }

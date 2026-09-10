@@ -184,7 +184,7 @@ type modifyBlockFunc func(block *types.Block, receipts []*types.Receipt) *types.
 // encodeBlockExtraDataForTest wraps types.EncodeBlockExtraData for callers in
 // this file that never populate the Giugliano gas-target fields.
 func encodeBlockExtraDataForTest(chainConfig *params.ChainConfig, number *big.Int, validatorBytes []byte) ([]byte, error) {
-	return types.EncodeBlockExtraData(chainConfig, number, validatorBytes, nil, nil)
+	return types.EncodeBlockExtraData(chainConfig, number, validatorBytes, nil, nil, nil, nil)
 }
 
 func buildHeader(t *testing.T, chain *core.BlockChain, parentBlock *types.Block, signer []byte, borConfig *params.BorConfig, currentValidators []*valset.Validator, modifyHeader []modifyHeaderFunc) *types.Header {

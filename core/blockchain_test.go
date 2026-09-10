@@ -186,11 +186,12 @@ func testBlockChainImport(chain types.Blocks, blockchain *BlockChain) error {
 		if err != nil {
 			return err
 		}
-		receipts, logs, usedGas, statedb, _, err := blockchain.ProcessBlock(block, blockchain.GetBlockByHash(block.ParentHash()).Header(), nil, nil, nil)
+		receipts, logs, usedGas, statedb, _, reservedTxIndexes, _, err := blockchain.ProcessBlock(block, blockchain.GetBlockByHash(block.ParentHash()).Header(), nil, nil, nil)
 		res := &ProcessResult{
-			Receipts: receipts,
-			Logs:     logs,
-			GasUsed:  usedGas,
+			Receipts:          receipts,
+			Logs:              logs,
+			GasUsed:           usedGas,
+			ReservedTxIndexes: reservedTxIndexes,
 		}
 		if err != nil {
 			blockchain.reportBlock(block, res, err)

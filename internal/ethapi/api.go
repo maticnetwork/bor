@@ -161,17 +161,18 @@ func (api *EthereumAPI) MaxPriorityFeePerGas(ctx context.Context) (*hexutil.Big,
 }
 
 type feeHistoryResult struct {
-	OldestBlock      *hexutil.Big     `json:"oldestBlock"`
-	Reward           [][]*hexutil.Big `json:"reward,omitempty"`
-	BaseFee          []*hexutil.Big   `json:"baseFeePerGas,omitempty"`
-	GasUsedRatio     []float64        `json:"gasUsedRatio"`
-	BlobBaseFee      []*hexutil.Big   `json:"baseFeePerBlobGas,omitempty"`
-	BlobGasUsedRatio []float64        `json:"blobGasUsedRatio,omitempty"`
+	OldestBlock        *hexutil.Big     `json:"oldestBlock"`
+	Reward             [][]*hexutil.Big `json:"reward,omitempty"`
+	BaseFee            []*hexutil.Big   `json:"baseFeePerGas,omitempty"`
+	GasUsedRatio       []float64        `json:"gasUsedRatio"`
+	NormalGasUsedRatio []float64        `json:"normalGasUsedRatio,omitempty"`
+	BlobBaseFee        []*hexutil.Big   `json:"baseFeePerBlobGas,omitempty"`
+	BlobGasUsedRatio   []float64        `json:"blobGasUsedRatio,omitempty"`
 }
 
 // FeeHistory returns the fee market history.
 func (api *EthereumAPI) FeeHistory(ctx context.Context, blockCount math.HexOrDecimal64, lastBlock rpc.BlockNumber, rewardPercentiles []float64) (*feeHistoryResult, error) {
-	oldest, reward, baseFee, gasUsed, blobBaseFee, blobGasUsed, err := api.b.FeeHistory(ctx, uint64(blockCount), lastBlock, rewardPercentiles)
+	oldest, reward, baseFee, gasUsed, normalGasUsed, blobBaseFee, blobGasUsed, err := api.b.FeeHistory(ctx, uint64(blockCount), lastBlock, rewardPercentiles)
 	if err != nil {
 		return nil, err
 	}
@@ -195,6 +196,9 @@ func (api *EthereumAPI) FeeHistory(ctx context.Context, blockCount math.HexOrDec
 		for i, v := range baseFee {
 			results.BaseFee[i] = (*hexutil.Big)(v)
 		}
+	}
+	if normalGasUsed != nil {
+		results.NormalGasUsedRatio = normalGasUsed
 	}
 	if blobBaseFee != nil {
 		results.BlobBaseFee = make([]*hexutil.Big, len(blobBaseFee))
@@ -912,10 +916,16 @@ func doCall(ctx context.Context, b Backend, args TransactionArgs, state *state.S
 		return nil, err
 	}
 
+	// Internal consensus reads of system contracts must be deterministic across
+	// nodes. The RPC gas cap and the wall-clock EVM timeout are both node-local
+	// and load-dependent, so a read that timed out on one node but not another
+	// would diverge state — bypass both for these calls.
+	internalSystemCall := isBorInternalCall(ctx) && isBorSystemTx(b.ChainConfig().Bor, args.To)
+
 	// Setup context so it may be cancelled the call has completed
 	// or, in case of unmetered gas, setup a context with a timeout.
 	var cancel context.CancelFunc
-	if timeout > 0 {
+	if timeout > 0 && !internalSystemCall {
 		ctx, cancel = context.WithTimeout(ctx, timeout)
 	} else {
 		ctx, cancel = context.WithCancel(ctx)
@@ -924,9 +934,7 @@ func doCall(ctx context.Context, b Backend, args TransactionArgs, state *state.S
 	// this makes sure resources are cleaned up.
 	defer cancel()
 
-	// Only bypass the RPC gas cap for system contract calls that originate from
-	// internal consensus code (marked via WithBorInternalCall ctx).
-	if isBorInternalCall(ctx) && isBorSystemTx(b.ChainConfig().Bor, args.To) {
+	if internalSystemCall {
 		globalGasCap = 0
 	}
 	gp := new(core.GasPool)
@@ -1294,8 +1302,13 @@ func RPCMarshalBlock(block *types.Block, inclTx bool, fullTx bool, config *param
 			return tx.Hash()
 		}
 		if fullTx {
+			// Read the block's reserved-tx index list once and reuse it as an
+			// O(1) membership set, instead of one DB read (and RLP decode) per
+			// transaction below.
+			reservedSet := reservedTxIndexSet(db, config, block.Hash(), block.NumberU64(), len(block.Transactions()))
 			formatTx = func(idx int, tx *types.Transaction) interface{} {
-				return newRPCTransactionFromBlockIndex(block, uint64(idx), config, db)
+				_, reserved := reservedSet[uint64(idx)]
+				return newRPCTransactionFromBlockIndex(block, uint64(idx), config, db, reserved)
 			}
 		}
 
@@ -1398,9 +1411,55 @@ type RPCTransaction struct {
 	YParity             *hexutil.Uint64              `json:"yParity,omitempty"`
 }
 
+// reservedBlockspaceActive reports whether the reserved-blockspace fork is
+// live at number, the fork-gate every reserved-tx side-table lookup below
+// applies before touching the DB: an unconditional read here would be pure
+// overhead on every block/tx fetched on a chain (or in a block range) where
+// the fork never activated.
+func reservedBlockspaceActive(config *params.ChainConfig, number uint64) bool {
+	return config.Bor != nil && config.Bor.IsReservedBlockspace(new(big.Int).SetUint64(number))
+}
+
+// reservedTxIndexSet reads a block's reserved-tx index side table once and
+// returns it as a membership set, bounded against txCount, so per-transaction
+// marshaling can do an O(1) lookup instead of repeating the DB read and RLP
+// decode for every transaction in the block. A nil db (some callers pass one
+// for tests/tools) disables the lookup rather than panicking.
+func reservedTxIndexSet(db ethdb.Reader, config *params.ChainConfig, hash common.Hash, number uint64, txCount int) map[uint64]struct{} {
+	if db == nil || !reservedBlockspaceActive(config, number) {
+		return nil
+	}
+	indexes := rawdb.ReadReservedTxIndexesBounded(db, hash, number, txCount)
+	if len(indexes) == 0 {
+		return nil
+	}
+	set := make(map[uint64]struct{}, len(indexes))
+	for _, idx := range indexes {
+		set[idx] = struct{}{}
+	}
+	return set
+}
+
+// reservedTxAtIndex reports whether the transaction at position idx in the
+// block (hash, number) is in the reserved-tx side table, for single-
+// transaction endpoints that need one lookup rather than a whole block's
+// membership set. The membership check itself (sortedness-dependent binary
+// search) is owned by rawdb.IsReservedTxIndex, not reimplemented here.
+func reservedTxAtIndex(db ethdb.Reader, config *params.ChainConfig, hash common.Hash, number, idx uint64) bool {
+	if db == nil || !reservedBlockspaceActive(config, number) {
+		return false
+	}
+	return rawdb.IsReservedTxIndex(db, hash, number, idx)
+}
+
 // newRPCTransaction returns a transaction that will serialize to the RPC
 // representation, with the given location metadata set (if available).
-func newRPCTransaction(tx *types.Transaction, blockHash common.Hash, blockNumber uint64, blockTime uint64, index uint64, baseFee *big.Int, config *params.ChainConfig) *RPCTransaction {
+// reserved marks tx as classified reserved (fee-free) by the
+// reserved-blockspace registry; when true and the tx is included, GasPrice is
+// reported as 0 regardless of type, since that is what the sender actually
+// paid (GasFeeCap/GasTipCap are left as submitted - they are tx fields, not
+// the paid price).
+func newRPCTransaction(tx *types.Transaction, blockHash common.Hash, blockNumber uint64, blockTime uint64, index uint64, baseFee *big.Int, config *params.ChainConfig, reserved bool) *RPCTransaction {
 	signer := types.MakeSigner(config, new(big.Int).SetUint64(blockNumber), blockTime)
 	from, _ := types.Sender(signer, tx)
 	v, r, s := tx.RawSignatureValues()
@@ -1495,6 +1554,10 @@ func newRPCTransaction(tx *types.Transaction, blockHash common.Hash, blockNumber
 		result.GasTipCap = (*hexutil.Big)(tx.GasTipCap())
 	}
 
+	if reserved && blockHash != (common.Hash{}) {
+		result.GasPrice = (*hexutil.Big)(new(big.Int))
+	}
+
 	return result
 }
 
@@ -1522,29 +1585,33 @@ func NewRPCPendingTransaction(tx *types.Transaction, current *types.Header, conf
 		blockNumber = current.Number.Uint64()
 		blockTime = current.Time
 	}
-	return newRPCTransaction(tx, common.Hash{}, blockNumber, blockTime, 0, baseFee, config)
+	return newRPCTransaction(tx, common.Hash{}, blockNumber, blockTime, 0, baseFee, config, false)
 }
 
-// newRPCTransactionFromBlockIndex returns a transaction that will serialize to the RPC representation.
-func newRPCTransactionFromBlockIndex(b *types.Block, index uint64, config *params.ChainConfig, db ethdb.Database) *RPCTransaction {
+// newRPCTransactionFromBlockIndex returns a transaction that will serialize to
+// the RPC representation. reserved is the caller-supplied reserved-tx
+// classification for index; it is ignored for the synthetic bor state-sync
+// transaction (append beyond realTxCount below), which is never reserved.
+func newRPCTransactionFromBlockIndex(b *types.Block, index uint64, config *params.ChainConfig, db ethdb.Database, reserved bool) *RPCTransaction {
 	txs := b.Transactions()
+	realTxCount := uint64(len(txs))
 
 	// State-sync transaction is part of block body post Madhugiri HF so skip fetching it separately.
 	if config.Bor != nil && config.Bor.IsMadhugiri(b.Number()) {
-		if index >= uint64(len(txs)) {
+		if index >= realTxCount {
 			return nil
 		}
-		return newRPCTransaction(txs[index], b.Hash(), b.NumberU64(), b.Time(), index, b.BaseFee(), config)
+		return newRPCTransaction(txs[index], b.Hash(), b.NumberU64(), b.Time(), index, b.BaseFee(), config, reserved)
 	}
 
-	if index >= uint64(len(txs)+1) {
+	if index >= realTxCount+1 {
 		return nil
 	}
 
 	var borReceipt *types.Receipt
 
 	// Read bor receipts if a state-sync transaction is requested
-	if index == uint64(len(txs)) {
+	if index == realTxCount {
 		borReceipt = rawdb.ReadBorReceipt(db, b.Hash(), b.NumberU64(), config)
 		if borReceipt != nil {
 			if borReceipt.TxHash != (common.Hash{}) {
@@ -1561,7 +1628,7 @@ func newRPCTransactionFromBlockIndex(b *types.Block, index uint64, config *param
 		return nil
 	}
 
-	rpcTx := newRPCTransaction(txs[index], b.Hash(), b.NumberU64(), b.Time(), index, b.BaseFee(), config)
+	rpcTx := newRPCTransaction(txs[index], b.Hash(), b.NumberU64(), b.Time(), index, b.BaseFee(), config, reserved && index < realTxCount)
 
 	// If the transaction is a bor transaction, we need to set the hash to the derived bor tx hash. BorTx is always the last index.
 	if borReceipt != nil && index == uint64(len(txs)-1) {
@@ -1858,7 +1925,8 @@ func (api *TransactionAPI) GetBlockTransactionCountByHash(ctx context.Context, b
 func (api *TransactionAPI) GetTransactionByBlockNumberAndIndex(ctx context.Context, blockNr rpc.BlockNumber, index hexutil.Uint) (*RPCTransaction, error) {
 	block, err := api.b.BlockByNumber(ctx, blockNr)
 	if block != nil {
-		return newRPCTransactionFromBlockIndex(block, uint64(index), api.b.ChainConfig(), api.b.ChainDb()), nil
+		reserved := reservedTxAtIndex(api.b.ChainDb(), api.b.ChainConfig(), block.Hash(), block.NumberU64(), uint64(index))
+		return newRPCTransactionFromBlockIndex(block, uint64(index), api.b.ChainConfig(), api.b.ChainDb(), reserved), nil
 	}
 
 	return nil, err
@@ -1868,7 +1936,8 @@ func (api *TransactionAPI) GetTransactionByBlockNumberAndIndex(ctx context.Conte
 func (api *TransactionAPI) GetTransactionByBlockHashAndIndex(ctx context.Context, blockHash common.Hash, index hexutil.Uint) (*RPCTransaction, error) {
 	block, err := api.b.BlockByHash(ctx, blockHash)
 	if block != nil {
-		return newRPCTransactionFromBlockIndex(block, uint64(index), api.b.ChainConfig(), api.b.ChainDb()), nil
+		reserved := reservedTxAtIndex(api.b.ChainDb(), api.b.ChainConfig(), block.Hash(), block.NumberU64(), uint64(index))
+		return newRPCTransactionFromBlockIndex(block, uint64(index), api.b.ChainConfig(), api.b.ChainDb(), reserved), nil
 	}
 
 	return nil, err
@@ -1931,7 +2000,9 @@ func (api *TransactionAPI) GetTransactionByHash(ctx context.Context, hash common
 			return nil, err
 		}
 
-		resultTx := newRPCTransaction(tx, blockHash, blockNumber, header.Time, index, header.BaseFee, api.b.ChainConfig())
+		// The bor state-sync (pseudo) transaction is never reserved.
+		reserved := !borTx && reservedTxAtIndex(api.b.ChainDb(), api.b.ChainConfig(), blockHash, blockNumber, index)
+		resultTx := newRPCTransaction(tx, blockHash, blockNumber, header.Time, index, header.BaseFee, api.b.ChainConfig(), reserved)
 
 		// Skip handling state-sync tx separately post Madhugiri HF
 		if api.b.ChainConfig().Bor != nil && api.b.ChainConfig().Bor.IsMadhugiri(header.Number) {

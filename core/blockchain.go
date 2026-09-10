@@ -38,6 +38,7 @@ import (
 	"github.com/ethereum/go-ethereum/common/mclock"
 	"github.com/ethereum/go-ethereum/common/prque"
 	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/consensus/bor/registryreader"
 	"github.com/ethereum/go-ethereum/consensus/misc/eip4844"
 	"github.com/ethereum/go-ethereum/core/history"
 	"github.com/ethereum/go-ethereum/core/rawdb"
@@ -157,6 +158,15 @@ var (
 	witnessCollectionTimer = metrics.NewRegisteredTimer("chain/witness/collection", nil) // time spent collecting trie nodes into the witness during IntermediateRoot
 	blockBatchWriteTimer   = metrics.NewRegisteredTimer("chain/batch/write", nil)        // time to flush the block batch to disk (blockBatch.Write) — spikes indicate DB compaction stalls
 	stateCommitTimer       = metrics.NewRegisteredTimer("chain/state/commit", nil)       // time for statedb.CommitWithUpdate — in pathdb mode, spikes indicate diff layer flushes
+
+	// Reserved-blockspace import-path metrics. Producer-side signals
+	// (worker/reserved/*, miner/sequencing.go) already cover the block-building
+	// decision point; these cover the corresponding import/verification side,
+	// so both a node's own sealed blocks (once re-verified) and every block it
+	// imports from a peer are observable through the same series.
+	chainReservedGasUsedGauge  = metrics.NewRegisteredGauge("chain/reserved/gasused", nil)
+	chainReservedCapacityGauge = metrics.NewRegisteredGauge("chain/reserved/capacity", nil)
+	chainReservedTxsMeter      = metrics.NewRegisteredMeter("chain/reserved/txs", nil)
 
 	// Pipelined import SRC metrics
 	pipelineImportBlocksCounter       = metrics.NewRegisteredCounter("chain/imports/pipelined/blocks", nil)
@@ -653,6 +663,11 @@ type BlockChain struct {
 	chain2HeadFeed      event.Feed                                // Reorg/NewHead/Fork data feed
 	chainSideFeed       event.Feed                                // Side chain data feed (removed from geth but needed in bor)
 	milestoneFetcher    func(ctx context.Context) (uint64, error) // Function to fetch the latest milestone end block from Heimdall.
+
+	// reservedRegistry is the read-only handle to the reserved blockspace
+	// registry used by block validation / filtering paths. Nil when the chain
+	// has no registry configured or runs under a non-bor consensus engine.
+	reservedRegistry registryreader.Reader
 
 	// Pipelined SRC: concurrent state root calculation.
 	// pendingSRC tracks the in-flight SRC goroutine for the most recent block.
@@ -1298,7 +1313,7 @@ func (bc *BlockChain) startPrefetchGoroutine(block *types.Block, throwaway *stat
 	}(time.Now())
 }
 
-func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header, witness *stateless.Witness, followupInterrupt *atomic.Bool, pipeOpts *PipelineImportOpts) (_ types.Receipts, _ []*types.Log, _ uint64, _ *state.StateDB, vtime time.Duration, blockEndErr error) {
+func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header, witness *stateless.Witness, followupInterrupt *atomic.Bool, pipeOpts *PipelineImportOpts) (_ types.Receipts, _ []*types.Log, _ uint64, _ *state.StateDB, vtime time.Duration, _ []uint64, _ map[uint64]registryreader.ClientUsage, blockEndErr error) {
 	// Process the block using processor and parallelProcessor at the same time, take the one which finishes first, cancel the other, and return the result
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -1313,7 +1328,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header, wit
 
 	throwaway, statedb, parallelStatedb, prefetch, process, parallel, err := bc.setupBlockReaders(parent, pipeOpts)
 	if err != nil {
-		return nil, nil, 0, nil, 0, err
+		return nil, nil, 0, nil, 0, nil, nil, err
 	}
 	defer reportReaderStats(prefetch, process, parallel)
 
@@ -1322,16 +1337,18 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header, wit
 	bc.startPrefetchGoroutine(block, throwaway, sharedCaches, followupInterrupt)
 
 	type Result struct {
-		receipts types.Receipts
-		logs     []*types.Log
-		usedGas  uint64
-		err      error
-		statedb  *state.StateDB
-		counter  *metrics.Counter
-		parallel bool
-		vtime    time.Duration
-		execFrom time.Time
-		execTo   time.Time
+		receipts            types.Receipts
+		logs                []*types.Log
+		usedGas             uint64
+		err                 error
+		statedb             *state.StateDB
+		counter             *metrics.Counter
+		parallel            bool
+		vtime               time.Duration
+		execFrom            time.Time
+		execTo              time.Time
+		reservedTxIndexes   []uint64
+		reservedClientUsage map[uint64]registryreader.ClientUsage
 	}
 
 	var resultChanLen int = 2
@@ -1374,16 +1391,18 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header, wit
 				res = &ProcessResult{}
 			}
 			resultChan <- Result{
-				receipts: res.Receipts,
-				logs:     res.Logs,
-				usedGas:  res.GasUsed,
-				err:      err,
-				statedb:  parallelStatedb,
-				counter:  blockExecutionParallelCounter,
-				parallel: true,
-				vtime:    localVtime,
-				execFrom: pstart,
-				execTo:   pend,
+				receipts:            res.Receipts,
+				logs:                res.Logs,
+				usedGas:             res.GasUsed,
+				err:                 err,
+				statedb:             parallelStatedb,
+				counter:             blockExecutionParallelCounter,
+				parallel:            true,
+				vtime:               localVtime,
+				execFrom:            pstart,
+				execTo:              pend,
+				reservedTxIndexes:   res.ReservedTxIndexes,
+				reservedClientUsage: res.ReservedClientUsage,
 			}
 		}()
 	}
@@ -1410,16 +1429,18 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header, wit
 				res = &ProcessResult{}
 			}
 			resultChan <- Result{
-				receipts: res.Receipts,
-				logs:     res.Logs,
-				usedGas:  res.GasUsed,
-				err:      err,
-				statedb:  statedb,
-				counter:  blockExecutionSerialCounter,
-				parallel: false,
-				vtime:    localVtime,
-				execFrom: pstart,
-				execTo:   pend,
+				receipts:            res.Receipts,
+				logs:                res.Logs,
+				usedGas:             res.GasUsed,
+				err:                 err,
+				statedb:             statedb,
+				counter:             blockExecutionSerialCounter,
+				parallel:            false,
+				vtime:               localVtime,
+				execFrom:            pstart,
+				execTo:              pend,
+				reservedTxIndexes:   res.ReservedTxIndexes,
+				reservedClientUsage: res.ReservedClientUsage,
 			}
 		}()
 	}
@@ -1493,7 +1514,7 @@ func (bc *BlockChain) ProcessBlock(block *types.Block, parent *types.Header, wit
 		second_result.statedb.StopPrefetcher()
 	}
 
-	return result.receipts, result.logs, result.usedGas, result.statedb, result.vtime, result.err
+	return result.receipts, result.logs, result.usedGas, result.statedb, result.vtime, result.reservedTxIndexes, result.reservedClientUsage, result.err
 }
 
 func (bc *BlockChain) setupSnapshot() {
@@ -2583,7 +2604,7 @@ func (bc *BlockChain) InsertReceiptChain(blockChain types.Blocks, receiptChain [
 		if first.NumberU64() == 1 {
 			if frozen, _ := bc.db.Ancients(); frozen == 0 {
 				td := bc.genesisBlock.Difficulty()
-				writeSize, err := rawdb.WriteAncientBlocks(bc.db, []*types.Block{bc.genesisBlock}, []rlp.RawValue{rlp.EmptyList}, []rlp.RawValue{rlp.EmptyList}, td)
+				writeSize, err := rawdb.WriteAncientBlocks(bc.db, []*types.Block{bc.genesisBlock}, []rlp.RawValue{rlp.EmptyList}, []rlp.RawValue{rlp.EmptyList}, []rlp.RawValue{rlp.EmptyList}, td)
 				if err != nil {
 					log.Error("Error writing genesis to ancients", "err", err)
 					return 0, err
@@ -2606,9 +2627,12 @@ func (bc *BlockChain) InsertReceiptChain(blockChain types.Blocks, receiptChain [
 			headers = append(headers, block.Header())
 		}
 
-		// Write all chain data to ancients.
+		// Write all chain data to ancients. These blocks arrive via receipt
+		// sync rather than local execution, so there is no reserved-tx
+		// classification to carry; the nil entries make writeAncientBlock
+		// record that explicitly.
 		td := bc.GetTd(first.Hash(), first.NumberU64())
-		writeSize, err := rawdb.WriteAncientBlocks(bc.db, blockChain, receiptChain, borReceipts, td)
+		writeSize, err := rawdb.WriteAncientBlocks(bc.db, blockChain, receiptChain, borReceipts, make([]rlp.RawValue, len(blockChain)), td)
 		if err != nil {
 			log.Error("Error importing chain data to ancients", "err", err)
 			return 0, err
@@ -2853,9 +2877,42 @@ func (bc *BlockChain) writeKnownBlock(block *types.Block) error {
 	return nil
 }
 
+// updateReservedChainMetrics records reserved-blockspace metrics for a block
+// that just became the canonical head: header-derived gasused/capacity, the
+// count of transactions classified reserved, and a per-client quota/quotaused
+// breakdown. It returns immediately pre-fork and when metrics are disabled,
+// so it costs nothing on chains that never activate reserved blockspace. It
+// takes the block rather than a header so the Block.Header copy is only made
+// past those gates.
+func updateReservedChainMetrics(config *params.ChainConfig, block *types.Block, reservedTxIndexes []uint64, clientUsage map[uint64]registryreader.ClientUsage) {
+	if !metrics.Enabled() || config.Bor == nil || !config.Bor.IsReservedBlockspace(block.Number()) {
+		return
+	}
+	gasUsed, capacity := block.Header().GetReservedFields(config)
+	var gasUsedVal, capacityVal uint64
+	if gasUsed != nil {
+		gasUsedVal = *gasUsed
+	}
+	if capacity != nil {
+		capacityVal = *capacity
+	}
+	chainReservedGasUsedGauge.Update(int64(gasUsedVal))
+	chainReservedCapacityGauge.Update(int64(capacityVal))
+	chainReservedTxsMeter.Mark(int64(len(reservedTxIndexes)))
+
+	// quotaused is declared gas (the quota's own admission basis, matching
+	// the producer-side worker/reserved accounting); gasused above is
+	// executed gas. Client ids come from the governance-controlled registry,
+	// so the dynamic gauge set this creates has the same bounded cardinality.
+	for id, usage := range clientUsage {
+		metrics.GetOrRegisterGauge(fmt.Sprintf("chain/reserved/client/%d/quotaused", id), nil).Update(int64(usage.Used))
+		metrics.GetOrRegisterGauge(fmt.Sprintf("chain/reserved/client/%d/quota", id), nil).Update(int64(usage.Quota))
+	}
+}
+
 // writeBlockWithState writes block, metadata and corresponding state data to the
 // database.
-func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.Receipt, logs []*types.Log, statedb *state.StateDB) ([]*types.Log, error) {
+func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.Receipt, logs []*types.Log, statedb *state.StateDB, reservedTxIndexes []uint64) ([]*types.Log, error) {
 	// Calculate the total difficulty of the block
 	ptd := bc.GetTd(block.ParentHash(), block.NumberU64()-1)
 	var externTd *big.Int
@@ -2874,6 +2931,16 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 	rawdb.WriteTd(blockBatch, block.Hash(), block.NumberU64(), externTd)
 	rawdb.WriteBlock(blockBatch, block)
 	rawdb.WriteReceipts(blockBatch, block.Hash(), block.NumberU64(), receipts)
+	// Reserved-tx indexes are non-consensus, derived data annotating the
+	// receipts written above; write them in the same batch, and only where
+	// receipts are actually being persisted, so the two can never be
+	// observed out of sync (see rawdb.WriteReservedTxIndexes). This guard is
+	// what lets the stateless writers, which pass nil receipts, also pass
+	// their real classification through mechanically: it is a no-op here
+	// regardless, rather than relying on every such caller to remember nil.
+	if len(receipts) > 0 {
+		rawdb.WriteReservedTxIndexes(blockBatch, block.Hash(), block.NumberU64(), reservedTxIndexes)
+	}
 
 	// Bor state-sync logs: system calls append state-sync logs into state, so
 	// state.Logs() may exceed the transaction-produced logs. Pre-Madhugiri we
@@ -3006,25 +3073,31 @@ func (bc *BlockChain) writeBlockWithState(block *types.Block, receipts []*types.
 
 // WriteBlockAndSetHead writes the given block and all associated state to the database,
 // and applies the block as the new chain head.
-func (bc *BlockChain) WriteBlockAndSetHead(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool) (status WriteStatus, err error) {
+func (bc *BlockChain) WriteBlockAndSetHead(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, reservedTxIndexes []uint64, reservedClientUsage map[uint64]registryreader.ClientUsage, emitHeadEvent bool) (status WriteStatus, err error) {
 	if !bc.chainmu.TryLock() {
 		return NonStatTy, errChainStopped
 	}
 	defer bc.chainmu.Unlock()
 
-	return bc.writeBlockAndSetHead(block, receipts, logs, state, emitHeadEvent, false)
+	return bc.writeBlockAndSetHead(block, receipts, logs, state, reservedTxIndexes, reservedClientUsage, emitHeadEvent, false)
 }
 
 // writeBlockAndSetHead is the internal implementation of WriteBlockAndSetHead.
 // This function expects the chain mutex to be held.
-func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, emitHeadEvent bool, stateless bool) (status WriteStatus, err error) {
-	stateSyncLogs, err := bc.writeBlockWithState(block, receipts, logs, state)
+func (bc *BlockChain) writeBlockAndSetHead(block *types.Block, receipts []*types.Receipt, logs []*types.Log, state *state.StateDB, reservedTxIndexes []uint64, reservedClientUsage map[uint64]registryreader.ClientUsage, emitHeadEvent bool, stateless bool) (status WriteStatus, err error) {
+	stateSyncLogs, err := bc.writeBlockWithState(block, receipts, logs, state, reservedTxIndexes)
 	if err != nil {
 		return NonStatTy, err
 	}
 	status, err = bc.resolvePostWriteStatus(block, stateless)
 	if err != nil {
 		return NonStatTy, err
+	}
+	if status == CanonStatTy {
+		// Reserved-region metrics describe the canonical chain, so they sit
+		// with the other canonical-only effects (emitPostWriteEvents) rather
+		// than in writeBlockWithState, which also runs for side-chain writes.
+		updateReservedChainMetrics(bc.chainConfig, block, reservedTxIndexes, reservedClientUsage)
 	}
 	bc.emitPostWriteEvents(block, receipts, logs, stateSyncLogs, status, emitHeadEvent)
 	return status, nil
@@ -3159,6 +3232,14 @@ func (bc *BlockChain) insertChainStatelessParallel(chain types.Blocks, witnesses
 		err        error
 		needsRetry bool
 		gasUsed    uint64
+		// reservedTxIndexes and reservedClientUsage carry the block's
+		// classification through to the writeBlockAndSetHead calls below.
+		// Those calls pass nil receipts on this path, so writeBlockWithState's
+		// own guard suppresses the side-table write for reservedTxIndexes;
+		// reservedClientUsage is unaffected by that guard and feeds the
+		// canonical-head reserved metrics normally.
+		reservedTxIndexes   []uint64
+		reservedClientUsage map[uint64]registryreader.ClientUsage
 	}
 	results := make([]execResult, len(chain))
 	defer func() {
@@ -3217,6 +3298,8 @@ func (bc *BlockChain) insertChainStatelessParallel(chain types.Blocks, witnesses
 				}
 				results[idx].sdb = sdb
 				results[idx].gasUsed = res.GasUsed
+				results[idx].reservedTxIndexes = res.ReservedTxIndexes
+				results[idx].reservedClientUsage = res.ReservedClientUsage
 			}
 		}()
 	}
@@ -3280,7 +3363,7 @@ func (bc *BlockChain) insertChainStatelessParallel(chain types.Blocks, witnesses
 
 		// Only commit blocks that don't need retry
 		if !results[i].needsRetry {
-			if _, werr := bc.writeBlockAndSetHead(block, nil, nil, results[i].sdb, true, true); werr != nil {
+			if _, werr := bc.writeBlockAndSetHead(block, nil, nil, results[i].sdb, results[i].reservedTxIndexes, results[i].reservedClientUsage, true, true); werr != nil {
 				stopHeaders()
 				return int(processed.Load()), werr
 			}
@@ -3308,9 +3391,11 @@ func (bc *BlockChain) insertChainStatelessParallel(chain types.Blocks, witnesses
 				sdb.SetWitness(witness)
 			}
 			results[i].gasUsed = res.GasUsed
+			results[i].reservedTxIndexes = res.ReservedTxIndexes
+			results[i].reservedClientUsage = res.ReservedClientUsage
 
 			// Commit the block after successful retry
-			if _, werr := bc.writeBlockAndSetHead(block, nil, nil, sdb, true, true); werr != nil {
+			if _, werr := bc.writeBlockAndSetHead(block, nil, nil, sdb, results[i].reservedTxIndexes, results[i].reservedClientUsage, true, true); werr != nil {
 				stopHeaders()
 				return int(processed.Load()), werr
 			}
@@ -3416,7 +3501,11 @@ func (bc *BlockChain) insertChainStatelessSequential(chain types.Blocks, witness
 			}
 		}
 
-		if _, werr := bc.writeBlockAndSetHead(block, nil, nil, statedb, true, true); werr != nil {
+		// receipts stay nil on this path; writeBlockWithState's own guard
+		// suppresses the reserved-tx side-table write to match. The usage map
+		// is unaffected by that guard and feeds the canonical-head reserved
+		// metrics normally.
+		if _, werr := bc.writeBlockAndSetHead(block, nil, nil, statedb, res.ReservedTxIndexes, res.ReservedClientUsage, true, true); werr != nil {
 			return int(processed.Load()), werr
 		}
 		processed.Add(1)
@@ -3779,7 +3868,7 @@ func (bc *BlockChain) insertChainWithWitnesses(chain types.Blocks, setHead bool,
 		}
 
 		cheapExecStart := time.Now()
-		receipts, logs, usedGas, statedb, vtime, err := bc.ProcessBlock(block, parent, witness, &followupInterrupt, pipeOpts)
+		receipts, logs, usedGas, statedb, vtime, reservedTxIndexes, reservedClientUsage, err := bc.ProcessBlock(block, parent, witness, &followupInterrupt, pipeOpts)
 		cheapExecElapsed := time.Since(cheapExecStart)
 		if pipelineActive {
 			pipelineImportCheapExecTimer.Update(cheapExecElapsed)
@@ -3823,7 +3912,7 @@ func (bc *BlockChain) insertChainWithWitnesses(chain types.Blocks, setHead bool,
 
 		// --- Pipelined import: extract FlatDiff, collect previous SRC, write metadata, spawn SRC ---
 		if pipelineActive {
-			adjustBack, err := bc.persistPipelinedImport(block, parent, statedb, receipts, logs, start, cheapExecElapsed, vtime, computeWitness)
+			adjustBack, err := bc.persistPipelinedImport(block, parent, statedb, receipts, logs, reservedTxIndexes, reservedClientUsage, start, cheapExecElapsed, vtime, computeWitness)
 			if err != nil {
 				followupInterrupt.Store(true)
 				// adjustBack attributes the failure to the previous block,
@@ -3911,9 +4000,9 @@ func (bc *BlockChain) insertChainWithWitnesses(chain types.Blocks, setHead bool,
 
 		if !setHead {
 			// Don't set the head, only insert the block
-			_, err = bc.writeBlockWithState(block, receipts, logs, statedb)
+			_, err = bc.writeBlockWithState(block, receipts, logs, statedb, reservedTxIndexes)
 		} else {
-			status, err = bc.writeBlockAndSetHead(block, receipts, logs, statedb, false, false)
+			status, err = bc.writeBlockAndSetHead(block, receipts, logs, statedb, reservedTxIndexes, reservedClientUsage, false, false)
 		}
 		writeElapsed := time.Since(wstart)
 		normalImportWriteTimer.Update(writeElapsed)
@@ -4088,7 +4177,7 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 		author := NewEVMBlockContext(block.Header(), bc.hc, nil).Coinbase
 
 		// Run the stateless self-cross-validation
-		crossStateRoot, crossReceiptRoot, _, _, err := ExecuteStateless(bc.chainConfig, bc.cfg.VmConfig, task, witness, &author, bc.engine, diskdb)
+		crossStateRoot, crossReceiptRoot, _, _, err := ExecuteStateless(bc.chainConfig, bc.cfg.VmConfig, task, witness, &author, bc.engine, diskdb, bc.reservedRegistry)
 		if err != nil {
 			return nil, fmt.Errorf("stateless self-validation failed: %v", err)
 		}
@@ -4128,9 +4217,9 @@ func (bc *BlockChain) processBlock(block *types.Block, statedb *state.StateDB, s
 	)
 	if !setHead {
 		// Don't set the head, only insert the block
-		_, err = bc.writeBlockWithState(block, res.Receipts, res.Logs, statedb)
+		_, err = bc.writeBlockWithState(block, res.Receipts, res.Logs, statedb, res.ReservedTxIndexes)
 	} else {
-		status, err = bc.writeBlockAndSetHead(block, res.Receipts, res.Logs, statedb, false, false)
+		status, err = bc.writeBlockAndSetHead(block, res.Receipts, res.Logs, statedb, res.ReservedTxIndexes, res.ReservedClientUsage, false, false)
 	}
 	if err != nil {
 		return nil, err
@@ -4394,7 +4483,10 @@ func (bc *BlockChain) collectReceiptsAndLogs(b *types.Block, removed bool) ([]*t
 		receipts = append(receipts, borReceipt)
 	}
 
-	if err := receipts.DeriveFields(bc.chainConfig, b.Hash(), b.NumberU64(), b.Time(), b.BaseFee(), blobGasPrice, b.Transactions()); err != nil {
+	// Reorg log-removal events surface only logs, not the reserved-aware
+	// effective price, so no side-table read here; see rawdb.ReadReceipts for
+	// the path that does.
+	if err := receipts.DeriveFields(bc.chainConfig, b.Hash(), b.NumberU64(), b.Time(), b.BaseFee(), blobGasPrice, b.Transactions(), nil); err != nil {
 		log.Error("Failed to derive block receipts fields", "hash", b.Hash(), "number", b.NumberU64(), "err", err)
 	}
 	var logs []*types.Log
@@ -4877,13 +4969,13 @@ func (bc *BlockChain) SubscribeChain2HeadEvent(ch chan<- Chain2HeadEvent) event.
 // when two CommitWithUpdate calls diverge from the same parent root.
 // WriteBlockAndSetHeadPipelined is the public variant that acquires the chain mutex.
 // Used by the miner pipeline (resultLoop) where the mutex is not already held.
-func (bc *BlockChain) WriteBlockAndSetHeadPipelined(block *types.Block, receipts []*types.Receipt, logs []*types.Log, statedb *state.StateDB, emitHeadEvent bool, witnessBytes []byte) (WriteStatus, error) {
+func (bc *BlockChain) WriteBlockAndSetHeadPipelined(block *types.Block, receipts []*types.Receipt, logs []*types.Log, statedb *state.StateDB, reservedTxIndexes []uint64, reservedClientUsage map[uint64]registryreader.ClientUsage, emitHeadEvent bool, witnessBytes []byte) (WriteStatus, error) {
 	if !bc.chainmu.TryLock() {
 		return NonStatTy, errChainStopped
 	}
 	defer bc.chainmu.Unlock()
 
-	return bc.writeBlockAndSetHeadPipelined(block, receipts, logs, statedb, emitHeadEvent, witnessBytes)
+	return bc.writeBlockAndSetHeadPipelined(block, receipts, logs, statedb, reservedTxIndexes, reservedClientUsage, emitHeadEvent, witnessBytes)
 }
 
 // writeBlockAndSetHeadPipelined is the internal implementation. It writes block
@@ -4891,21 +4983,25 @@ func (bc *BlockChain) WriteBlockAndSetHeadPipelined(block *types.Block, receipts
 // WITHOUT committing trie state. The state commit is handled by the SRC goroutine.
 // This function does NOT acquire the chain mutex — the caller must ensure
 // proper synchronization (e.g., called from insertChainWithWitnesses).
-func (bc *BlockChain) writeBlockAndSetHeadPipelined(block *types.Block, receipts []*types.Receipt, logs []*types.Log, statedb *state.StateDB, emitHeadEvent bool, witnessBytes []byte) (WriteStatus, error) {
-	status, stateSyncLogs, err := bc.writePipelinedBlockAndResolveStatus(block, receipts, logs, statedb, witnessBytes)
+func (bc *BlockChain) writeBlockAndSetHeadPipelined(block *types.Block, receipts []*types.Receipt, logs []*types.Log, statedb *state.StateDB, reservedTxIndexes []uint64, reservedClientUsage map[uint64]registryreader.ClientUsage, emitHeadEvent bool, witnessBytes []byte) (WriteStatus, error) {
+	status, stateSyncLogs, err := bc.writePipelinedBlockAndResolveStatus(block, receipts, logs, statedb, reservedTxIndexes, witnessBytes)
 	if err != nil {
 		return NonStatTy, err
+	}
+	if status == CanonStatTy {
+		// Same canonical-only reserved metrics hook as writeBlockAndSetHead.
+		updateReservedChainMetrics(bc.chainConfig, block, reservedTxIndexes, reservedClientUsage)
 	}
 	bc.emitPostWriteEvents(block, receipts, logs, stateSyncLogs, status, emitHeadEvent)
 	return status, nil
 }
 
-func (bc *BlockChain) writePipelinedBlockAndResolveStatus(block *types.Block, receipts []*types.Receipt, logs []*types.Log, statedb *state.StateDB, witnessBytes []byte) (WriteStatus, []*types.Log, error) {
+func (bc *BlockChain) writePipelinedBlockAndResolveStatus(block *types.Block, receipts []*types.Receipt, logs []*types.Log, statedb *state.StateDB, reservedTxIndexes []uint64, witnessBytes []byte) (WriteStatus, []*types.Log, error) {
 	ptd := bc.GetTd(block.ParentHash(), block.NumberU64()-1)
 	if ptd == nil {
 		return NonStatTy, nil, consensus.ErrUnknownAncestor
 	}
-	stateSyncLogs, err := bc.writePipelinedBlockBatch(block, receipts, logs, statedb, witnessBytes, new(big.Int).Add(block.Difficulty(), ptd))
+	stateSyncLogs, err := bc.writePipelinedBlockBatch(block, receipts, logs, statedb, reservedTxIndexes, witnessBytes, new(big.Int).Add(block.Difficulty(), ptd))
 	if err != nil {
 		return NonStatTy, nil, err
 	}
@@ -4923,11 +5019,16 @@ func (bc *BlockChain) writePipelinedBlockAndResolveStatus(block *types.Block, re
 // The SRC witness replaces the execution-side witness because FlatDiff
 // overlay accounts bypass the trie during speculative execution, so their
 // MPT proof nodes are only captured during SRC's CommitWithUpdate.
-func (bc *BlockChain) writePipelinedBlockBatch(block *types.Block, receipts []*types.Receipt, logs []*types.Log, statedb *state.StateDB, witnessBytes []byte, externTd *big.Int) ([]*types.Log, error) {
+func (bc *BlockChain) writePipelinedBlockBatch(block *types.Block, receipts []*types.Receipt, logs []*types.Log, statedb *state.StateDB, reservedTxIndexes []uint64, witnessBytes []byte, externTd *big.Int) ([]*types.Log, error) {
 	blockBatch := bc.db.NewBatch()
 	rawdb.WriteTd(blockBatch, block.Hash(), block.NumberU64(), externTd)
 	rawdb.WriteBlock(blockBatch, block)
 	rawdb.WriteReceipts(blockBatch, block.Hash(), block.NumberU64(), receipts)
+	// Same receipts-guarded reserved side-table write as writeBlockWithState:
+	// the two must never be observed out of sync.
+	if len(receipts) > 0 {
+		rawdb.WriteReservedTxIndexes(blockBatch, block.Hash(), block.NumberU64(), reservedTxIndexes)
+	}
 	stateSyncLogs := bc.writeBorStateSyncLogs(blockBatch, block, receipts, logs, statedb)
 	rawdb.WritePreimages(blockBatch, statedb.Preimages())
 	if len(witnessBytes) > 0 {
@@ -5707,7 +5808,7 @@ func (t pipelinedImportPersistTimings) accounted() time.Duration {
 // start auto-collection. adjustBack=true signals the caller to decrement
 // it.index when returning the error (because the failure belongs to the
 // previously pending block, not the current one).
-func (bc *BlockChain) persistPipelinedImport(block *types.Block, parent *types.Header, statedb *state.StateDB, receipts []*types.Receipt, logs []*types.Log, start time.Time, cheapExec, validation time.Duration, makeWitness bool) (adjustBack bool, err error) {
+func (bc *BlockChain) persistPipelinedImport(block *types.Block, parent *types.Header, statedb *state.StateDB, receipts []*types.Receipt, logs []*types.Log, reservedTxIndexes []uint64, reservedClientUsage map[uint64]registryreader.ClientUsage, start time.Time, cheapExec, validation time.Duration, makeWitness bool) (adjustBack bool, err error) {
 	persistStart := time.Now()
 	timings := pipelinedImportPersistTimings{}
 	defer func() {
@@ -5800,7 +5901,7 @@ func (bc *BlockChain) persistPipelinedImport(block *types.Block, parent *types.H
 	// starts, then let SRC overlap the synchronous head/event publication tail.
 	writeHeadStart := time.Now()
 	bc.markPendingImportHeadState(block)
-	status, stateSyncLogs, err := bc.writePipelinedBlockAndResolveStatus(block, receipts, logs, statedb, nil)
+	status, stateSyncLogs, err := bc.writePipelinedBlockAndResolveStatus(block, receipts, logs, statedb, reservedTxIndexes, nil)
 	writePrepareElapsed := time.Since(writeHeadStart)
 	if err != nil {
 		bc.clearPendingImportHeadState(block)
@@ -5827,6 +5928,10 @@ func (bc *BlockChain) persistPipelinedImport(block *types.Block, parent *types.H
 	pipelineImportSpawnSRCTimer.Update(timings.spawnSRC)
 
 	publishStart := time.Now()
+	if status == CanonStatTy {
+		// Same canonical-only reserved metrics hook as writeBlockAndSetHead.
+		updateReservedChainMetrics(bc.chainConfig, block, reservedTxIndexes, reservedClientUsage)
+	}
 	bc.emitPostWriteEvents(block, receipts, logs, stateSyncLogs, status, false)
 	timings.writeHead = writePrepareElapsed + time.Since(publishStart)
 	pipelineImportWriteHeadTimer.Update(timings.writeHead)
@@ -6297,7 +6402,7 @@ func (bc *BlockChain) ProcessBlockWithWitnesses(block *types.Block, witness *sta
 	// Bor: Calculate EvmBlockContext with Root and ReceiptHash to properly get the author
 	author := NewEVMBlockContext(block.Header(), bc.hc, nil).Coinbase
 
-	crossStateRoot, crossReceiptRoot, statedb, res, err := ExecuteStateless(bc.chainConfig, bc.cfg.VmConfig, task, witness, &author, bc.engine, bc.statedb.TrieDB().Disk())
+	crossStateRoot, crossReceiptRoot, statedb, res, err := ExecuteStateless(bc.chainConfig, bc.cfg.VmConfig, task, witness, &author, bc.engine, bc.statedb.TrieDB().Disk(), bc.reservedRegistry)
 	// Currently, we don't return the error, because we don't have a way to handle Span update statelessly
 	// TODO: Return the error once we have a way to handle Span update
 	if err != nil {

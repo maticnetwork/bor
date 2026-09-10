@@ -40,6 +40,45 @@ func TestSetupGenesis(t *testing.T) {
 	testSetupGenesis(t, rawdb.PathScheme)
 }
 
+func TestGenesisBlockZeroBlockAlloc(t *testing.T) {
+	db := rawdb.NewMemoryDatabase()
+	tdb := triedb.NewDatabase(db, newDbConfig(rawdb.HashScheme))
+	addr := common.HexToAddress(params.DefaultReservedRegistryContract)
+
+	genesis := &Genesis{
+		Config: &params.ChainConfig{
+			ChainID: big.NewInt(1337),
+			Bor: &params.BorConfig{
+				BlockAlloc: map[string]interface{}{
+					"0": map[string]interface{}{
+						addr.Hex(): map[string]interface{}{
+							"balance": "0x0",
+							"code":    "0x6000",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	block := genesis.MustCommit(db, tdb)
+	if block.Hash() != genesis.ToBlock().Hash() {
+		t.Fatalf("genesis hash mismatch after applying block zero alloc")
+	}
+
+	stored, err := ReadGenesis(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	account, ok := stored.Alloc[addr]
+	if !ok {
+		t.Fatalf("expected block zero alloc account %s in stored genesis", addr)
+	}
+	if !bytes.Equal(account.Code, common.FromHex("0x6000")) {
+		t.Fatalf("unexpected block zero alloc code: %x", account.Code)
+	}
+}
+
 func testSetupGenesis(t *testing.T, scheme string) {
 	var (
 		customghash = common.HexToHash("0x89c99d90b79719238d2645c7642f2c9295246e80775b38cfd162b696817fbd50")

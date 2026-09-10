@@ -160,7 +160,6 @@ func TestValidatorBytesBlockDecoding(t *testing.T) {
 	check("Transactions[1].Type", block.Transactions()[1].Type(), tx2.Type())
 
 	ourBlockEnc, err := rlp.EncodeToBytes(&block)
-
 	if err != nil {
 		t.Fatal("encode error: ", err)
 	}
@@ -785,6 +784,470 @@ func TestBlockExtraDataRLPBackwardCompatibility(t *testing.T) {
 	if decoded2.BaseFeeChangeDenominator == nil || *decoded2.BaseFeeChangeDenominator != bfcd {
 		t.Errorf("BaseFeeChangeDenominator mismatch: got %v, want %d", decoded2.BaseFeeChangeDenominator, bfcd)
 	}
+	if decoded2.ReservedGasUsed != nil {
+		t.Errorf("ReservedGasUsed should be nil when unset, got %d", *decoded2.ReservedGasUsed)
+	}
+	if decoded2.ReservedCapacity != nil {
+		t.Errorf("ReservedCapacity should be nil when unset, got %d", *decoded2.ReservedCapacity)
+	}
+}
+
+func TestBlockExtraDataReservedGasUsedRLPCompat(t *testing.T) {
+	t.Parallel()
+
+	gasTarget := uint64(15000000)
+	bfcd := uint64(64)
+
+	roundtrip := func(in *BlockExtraData) (BlockExtraData, blockExtraDataRawTxDeps) {
+		t.Helper()
+		encoded, err := rlp.EncodeToBytes(in)
+		if err != nil {
+			t.Fatalf("encode: %v", err)
+		}
+		var full BlockExtraData
+		if err := rlp.DecodeBytes(encoded, &full); err != nil {
+			t.Fatalf("decode full: %v", err)
+		}
+		var raw blockExtraDataRawTxDeps
+		if err := rlp.DecodeBytes(encoded, &raw); err != nil {
+			t.Fatalf("decode raw mirror: %v", err)
+		}
+		return full, raw
+	}
+
+	// Blocks produced before reserved blockspace: field absent, decodes nil.
+	full, raw := roundtrip(&BlockExtraData{
+		ValidatorBytes:           []byte{0x01},
+		TxDependency:             [][]uint64{{1}},
+		GasTarget:                &gasTarget,
+		BaseFeeChangeDenominator: &bfcd,
+	})
+	if full.ReservedGasUsed != nil || raw.ReservedGasUsed != nil {
+		t.Errorf("absent ReservedGasUsed must decode nil, got full=%v raw=%v", full.ReservedGasUsed, raw.ReservedGasUsed)
+	}
+
+	// Populated field survives the roundtrip in both structs.
+	reserved := uint64(12_345_678)
+	full, raw = roundtrip(&BlockExtraData{
+		ValidatorBytes:           []byte{0x01},
+		TxDependency:             [][]uint64{{1}},
+		GasTarget:                &gasTarget,
+		BaseFeeChangeDenominator: &bfcd,
+		ReservedGasUsed:          &reserved,
+	})
+	if full.ReservedGasUsed == nil || *full.ReservedGasUsed != reserved {
+		t.Errorf("ReservedGasUsed mismatch in full decode: got %v, want %d", full.ReservedGasUsed, reserved)
+	}
+	if raw.ReservedGasUsed == nil || *raw.ReservedGasUsed != reserved {
+		t.Errorf("ReservedGasUsed mismatch in raw-mirror decode: got %v, want %d", raw.ReservedGasUsed, reserved)
+	}
+
+	// An explicit zero must stay distinct from absent on the wire — this is
+	// why the field is a pointer (a plain uint64 zero would be omitted).
+	zero := uint64(0)
+	full, raw = roundtrip(&BlockExtraData{
+		ValidatorBytes:  []byte{0x01},
+		TxDependency:    [][]uint64{{1}},
+		ReservedGasUsed: &zero,
+	})
+	if full.ReservedGasUsed == nil || *full.ReservedGasUsed != 0 {
+		t.Errorf("explicit zero ReservedGasUsed must survive the wire, got %v", full.ReservedGasUsed)
+	}
+	if raw.ReservedGasUsed == nil || *raw.ReservedGasUsed != 0 {
+		t.Errorf("explicit zero ReservedGasUsed must survive the raw mirror, got %v", raw.ReservedGasUsed)
+	}
+	// Skipped middle optionals are encoded as their zero values, not elided.
+	if full.GasTarget == nil || *full.GasTarget != 0 || full.BaseFeeChangeDenominator == nil || *full.BaseFeeChangeDenominator != 0 {
+		t.Errorf("unset middle optionals should decode as zero when a later optional is set: gt=%v bfcd=%v", full.GasTarget, full.BaseFeeChangeDenominator)
+	}
+
+	// Wire-neutrality: while ReservedGasUsed is nil (every producer until the
+	// reserved-blockspace fork activates), the encoding must be the same
+	// 4-element list as before the field existed — adding the struct field
+	// alone must not change any header bytes.
+	countElems := func(bed *BlockExtraData) int {
+		t.Helper()
+		encoded, err := rlp.EncodeToBytes(bed)
+		if err != nil {
+			t.Fatalf("encode: %v", err)
+		}
+		content, _, err := rlp.SplitList(encoded)
+		if err != nil {
+			t.Fatalf("split list: %v", err)
+		}
+		n, err := rlp.CountValues(content)
+		if err != nil {
+			t.Fatalf("count values: %v", err)
+		}
+		return n
+	}
+	unwritten := &BlockExtraData{
+		ValidatorBytes:           []byte{0x01},
+		TxDependency:             [][]uint64{{1}},
+		GasTarget:                &gasTarget,
+		BaseFeeChangeDenominator: &bfcd,
+	}
+	if n := countElems(unwritten); n != 4 {
+		t.Errorf("nil ReservedGasUsed must encode as the pre-change 4-element list, got %d elements", n)
+	}
+	written := &BlockExtraData{
+		ValidatorBytes:           []byte{0x01},
+		TxDependency:             [][]uint64{{1}},
+		GasTarget:                &gasTarget,
+		BaseFeeChangeDenominator: &bfcd,
+		ReservedGasUsed:          &reserved,
+	}
+	if n := countElems(written); n != 5 {
+		t.Errorf("set ReservedGasUsed must encode as a 5-element list, got %d elements", n)
+	}
+}
+
+// TestBlockExtraDataReservedCapacityRLPCompat covers ReservedCapacity, the
+// sixth and last BlockExtraData field: absent-vs-explicit-zero distinction,
+// wire-neutrality while unset, and — the compatibility direction that matters
+// for a field added after ReservedGasUsed already shipped — a pre-existing
+// 5-field payload (older branch, no ReservedCapacity) still decodes cleanly
+// into the current 6-field struct with ReservedCapacity nil.
+func TestBlockExtraDataReservedCapacityRLPCompat(t *testing.T) {
+	t.Parallel()
+
+	gasTarget := uint64(15000000)
+	bfcd := uint64(64)
+	reservedGasUsed := uint64(1_000)
+
+	roundtrip := func(in *BlockExtraData) (BlockExtraData, blockExtraDataRawTxDeps) {
+		t.Helper()
+		encoded, err := rlp.EncodeToBytes(in)
+		if err != nil {
+			t.Fatalf("encode: %v", err)
+		}
+		var full BlockExtraData
+		if err := rlp.DecodeBytes(encoded, &full); err != nil {
+			t.Fatalf("decode full: %v", err)
+		}
+		var raw blockExtraDataRawTxDeps
+		if err := rlp.DecodeBytes(encoded, &raw); err != nil {
+			t.Fatalf("decode raw mirror: %v", err)
+		}
+		return full, raw
+	}
+
+	// Older 5-field payload (pre-ReservedCapacity): decodes with the field nil.
+	old5Field, err := rlp.EncodeToBytes(&struct {
+		ValidatorBytes           []byte
+		TxDependency             [][]uint64
+		GasTarget                *uint64 `rlp:"optional"`
+		BaseFeeChangeDenominator *uint64 `rlp:"optional"`
+		ReservedGasUsed          *uint64 `rlp:"optional"`
+	}{TxDependency: [][]uint64{{1}}, GasTarget: &gasTarget, BaseFeeChangeDenominator: &bfcd, ReservedGasUsed: &reservedGasUsed})
+	if err != nil {
+		t.Fatalf("encode 5-field payload: %v", err)
+	}
+	var decodedOld BlockExtraData
+	if err := rlp.DecodeBytes(old5Field, &decodedOld); err != nil {
+		t.Fatalf("decode 5-field payload into 6-field struct: %v", err)
+	}
+	if decodedOld.ReservedGasUsed == nil || *decodedOld.ReservedGasUsed != reservedGasUsed {
+		t.Errorf("ReservedGasUsed lost decoding an older 5-field payload: got %v", decodedOld.ReservedGasUsed)
+	}
+	if decodedOld.ReservedCapacity != nil {
+		t.Errorf("ReservedCapacity must be nil decoding an older 5-field payload, got %v", decodedOld.ReservedCapacity)
+	}
+
+	// Populated field survives the roundtrip in both structs.
+	capacity := uint64(20_000_000)
+	full, raw := roundtrip(&BlockExtraData{
+		ValidatorBytes:           []byte{0x01},
+		TxDependency:             [][]uint64{{1}},
+		GasTarget:                &gasTarget,
+		BaseFeeChangeDenominator: &bfcd,
+		ReservedGasUsed:          &reservedGasUsed,
+		ReservedCapacity:         &capacity,
+	})
+	if full.ReservedCapacity == nil || *full.ReservedCapacity != capacity {
+		t.Errorf("ReservedCapacity mismatch in full decode: got %v, want %d", full.ReservedCapacity, capacity)
+	}
+	if raw.ReservedCapacity == nil || *raw.ReservedCapacity != capacity {
+		t.Errorf("ReservedCapacity mismatch in raw-mirror decode: got %v, want %d", raw.ReservedCapacity, capacity)
+	}
+
+	// Explicit zero must survive distinctly from absent.
+	zero := uint64(0)
+	full, raw = roundtrip(&BlockExtraData{
+		ValidatorBytes:           []byte{0x01},
+		TxDependency:             [][]uint64{{1}},
+		GasTarget:                &gasTarget,
+		BaseFeeChangeDenominator: &bfcd,
+		ReservedGasUsed:          &reservedGasUsed,
+		ReservedCapacity:         &zero,
+	})
+	if full.ReservedCapacity == nil || *full.ReservedCapacity != 0 {
+		t.Errorf("explicit zero ReservedCapacity must survive the wire, got %v", full.ReservedCapacity)
+	}
+	if raw.ReservedCapacity == nil || *raw.ReservedCapacity != 0 {
+		t.Errorf("explicit zero ReservedCapacity must survive the raw mirror, got %v", raw.ReservedCapacity)
+	}
+
+	// Wire-neutrality: while ReservedCapacity is nil, the encoding is the same
+	// 5-element list as before this field existed.
+	countElems := func(bed *BlockExtraData) int {
+		t.Helper()
+		encoded, err := rlp.EncodeToBytes(bed)
+		if err != nil {
+			t.Fatalf("encode: %v", err)
+		}
+		content, _, err := rlp.SplitList(encoded)
+		if err != nil {
+			t.Fatalf("split list: %v", err)
+		}
+		n, err := rlp.CountValues(content)
+		if err != nil {
+			t.Fatalf("count values: %v", err)
+		}
+		return n
+	}
+	unwritten := &BlockExtraData{
+		ValidatorBytes:           []byte{0x01},
+		TxDependency:             [][]uint64{{1}},
+		GasTarget:                &gasTarget,
+		BaseFeeChangeDenominator: &bfcd,
+		ReservedGasUsed:          &reservedGasUsed,
+	}
+	if n := countElems(unwritten); n != 5 {
+		t.Errorf("nil ReservedCapacity must encode as a 5-element list, got %d elements", n)
+	}
+	written := &BlockExtraData{
+		ValidatorBytes:           []byte{0x01},
+		TxDependency:             [][]uint64{{1}},
+		GasTarget:                &gasTarget,
+		BaseFeeChangeDenominator: &bfcd,
+		ReservedGasUsed:          &reservedGasUsed,
+		ReservedCapacity:         &capacity,
+	}
+	if n := countElems(written); n != 6 {
+		t.Errorf("set ReservedCapacity must encode as a 6-element list, got %d elements", n)
+	}
+}
+
+// TestReservedHeaderGetters covers GetReservedGasUsed and GetReservedCapacity
+// together: both share the same decodeReservedAwareExtra plumbing (Cancun
+// gate, vanity/seal guard, decode error, pre-Valencia TxDependency), so one
+// table of header fixtures exercised against both getters pins the shared
+// behavior without duplicating it per field.
+func TestReservedHeaderGetters(t *testing.T) {
+	t.Parallel()
+
+	chainConfig := &params.ChainConfig{
+		ChainID:     big.NewInt(137),
+		CancunBlock: big.NewInt(100),
+	}
+
+	buildExtra := func(bed *BlockExtraData) []byte {
+		vanity := make([]byte, ExtraVanityLength)
+		seal := make([]byte, ExtraSealLength)
+		encoded, _ := rlp.EncodeToBytes(bed)
+		extra := append(vanity, encoded...)
+		extra = append(extra, seal...)
+		return extra
+	}
+	wrap := func(payload []byte) []byte {
+		extra := make([]byte, ExtraVanityLength, ExtraVanityLength+len(payload)+ExtraSealLength)
+		extra = append(extra, payload...)
+		return append(extra, make([]byte, ExtraSealLength)...)
+	}
+
+	reservedGasUsed := uint64(1_000_000)
+	capacity := uint64(5_000_000)
+
+	populated := &Header{
+		Number: big.NewInt(200),
+		Extra:  buildExtra(&BlockExtraData{ReservedGasUsed: &reservedGasUsed, ReservedCapacity: &capacity}),
+	}
+
+	// A decode error must return nil even when earlier fields were already
+	// populated: this payload carries all six real fields plus a seventh
+	// junk element, so decoding fails only after both reserved fields have
+	// been read into the target struct.
+	sevenFields, err := rlp.EncodeToBytes(&struct {
+		ValidatorBytes           []byte
+		TxDependency             [][]uint64
+		GasTarget                *uint64
+		BaseFeeChangeDenominator *uint64
+		ReservedGasUsed          *uint64
+		ReservedCapacity         *uint64
+		Junk                     uint64
+	}{TxDependency: [][]uint64{{1}}, ReservedGasUsed: &reservedGasUsed, ReservedCapacity: &capacity, Junk: 1})
+	if err != nil {
+		t.Fatalf("encode seven-field payload: %v", err)
+	}
+	decodeError := &Header{Number: big.NewInt(200), Extra: wrap(sevenFields)}
+
+	// Pre-Valencia, a malformed TxDependency invalidates the whole payload —
+	// neither field must be returned from it. chainConfig has no Bor config,
+	// so the pre-Valencia strictness applies.
+	badDeps, err := rlp.EncodeToBytes(&blockExtraDataRawTxDeps{
+		TxDependency:     rlp.RawValue{0x81, 0xff},
+		ReservedGasUsed:  &reservedGasUsed,
+		ReservedCapacity: &capacity,
+	})
+	if err != nil {
+		t.Fatalf("encode malformed-txdep payload: %v", err)
+	}
+
+	cases := []struct {
+		name    string
+		header  *Header
+		wantNil bool
+	}{
+		{"populated", populated, false},
+		{"pre-Cancun header returns nil", &Header{Number: big.NewInt(50), Extra: populated.Extra}, true},
+		{"field absent (pre-activation block) returns nil", &Header{Number: big.NewInt(200), Extra: buildExtra(&BlockExtraData{})}, true},
+		{"short extra data returns nil", &Header{Number: big.NewInt(200), Extra: []byte{0x01}}, true},
+		{"decode error returns nil", decodeError, true},
+		{"malformed pre-Valencia TxDependency returns nil", &Header{Number: big.NewInt(200), Extra: wrap(badDeps)}, true},
+	}
+
+	getters := []struct {
+		name string
+		get  func(*Header) *uint64
+		want uint64
+	}{
+		{"GetReservedGasUsed", func(h *Header) *uint64 { return h.GetReservedGasUsed(chainConfig) }, reservedGasUsed},
+		{"GetReservedCapacity", func(h *Header) *uint64 { return h.GetReservedCapacity(chainConfig) }, capacity},
+	}
+
+	for _, g := range getters {
+		t.Run(g.name, func(t *testing.T) {
+			for _, tc := range cases {
+				t.Run(tc.name, func(t *testing.T) {
+					got := g.get(tc.header)
+					if tc.wantNil {
+						if got != nil {
+							t.Errorf("got %v, want nil", got)
+						}
+						return
+					}
+					if got == nil || *got != g.want {
+						t.Errorf("got %v, want %d", got, g.want)
+					}
+				})
+			}
+		})
+	}
+}
+
+// TestGetReservedFields pins the combined getter's single-decode contract:
+// it must agree with GetReservedGasUsed and GetReservedCapacity called
+// separately, both when populated and when every gate nils the whole result.
+func TestGetReservedFields(t *testing.T) {
+	t.Parallel()
+
+	chainConfig := &params.ChainConfig{ChainID: big.NewInt(137), CancunBlock: big.NewInt(100)}
+	buildExtra := func(bed *BlockExtraData) []byte {
+		vanity := make([]byte, ExtraVanityLength)
+		seal := make([]byte, ExtraSealLength)
+		encoded, _ := rlp.EncodeToBytes(bed)
+		extra := append(vanity, encoded...)
+		return append(extra, seal...)
+	}
+
+	reservedGasUsed := uint64(2_500_000)
+	capacity := uint64(9_000_000)
+	populated := &Header{
+		Number: big.NewInt(200),
+		Extra:  buildExtra(&BlockExtraData{ReservedGasUsed: &reservedGasUsed, ReservedCapacity: &capacity}),
+	}
+
+	gotGasUsed, gotCapacity := populated.GetReservedFields(chainConfig)
+	if gotGasUsed == nil || *gotGasUsed != reservedGasUsed {
+		t.Errorf("gasUsed = %v, want %d", gotGasUsed, reservedGasUsed)
+	}
+	if gotCapacity == nil || *gotCapacity != capacity {
+		t.Errorf("capacity = %v, want %d", gotCapacity, capacity)
+	}
+	if want := populated.GetReservedGasUsed(chainConfig); gotGasUsed == nil || want == nil || *gotGasUsed != *want {
+		t.Errorf("GetReservedFields gasUsed disagrees with GetReservedGasUsed: %v vs %v", gotGasUsed, want)
+	}
+	if want := populated.GetReservedCapacity(chainConfig); gotCapacity == nil || want == nil || *gotCapacity != *want {
+		t.Errorf("GetReservedFields capacity disagrees with GetReservedCapacity: %v vs %v", gotCapacity, want)
+	}
+
+	preCancun := &Header{Number: big.NewInt(50), Extra: populated.Extra}
+	if gasUsed, cap := preCancun.GetReservedFields(chainConfig); gasUsed != nil || cap != nil {
+		t.Errorf("pre-Cancun: got (%v, %v), want (nil, nil)", gasUsed, cap)
+	}
+}
+
+func TestSetReservedFields(t *testing.T) {
+	t.Parallel()
+
+	chainConfig := &params.ChainConfig{
+		ChainID:     big.NewInt(137),
+		CancunBlock: big.NewInt(0),
+	}
+
+	gasTarget := uint64(30_000_000)
+	bfcd := uint64(64)
+	body, err := rlp.EncodeToBytes(&BlockExtraData{
+		ValidatorBytes:           []byte("validator-bytes"),
+		TxDependency:             [][]uint64{{0}, {0, 1}},
+		GasTarget:                &gasTarget,
+		BaseFeeChangeDenominator: &bfcd,
+	})
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	extra := make([]byte, ExtraVanityLength, ExtraVanityLength+len(body)+ExtraSealLength)
+	extra = append(extra, body...)
+	extra = append(extra, make([]byte, ExtraSealLength)...)
+	header := &Header{Number: big.NewInt(1), Extra: extra}
+
+	if err := header.SetReservedFields(chainConfig, 7_500_000, 20_000_000); err != nil {
+		t.Fatalf("SetReservedFields: %v", err)
+	}
+
+	if got := header.GetReservedGasUsed(chainConfig); got == nil || *got != 7_500_000 {
+		t.Errorf("ReservedGasUsed round-trip mismatch: got %v, want 7500000", got)
+	}
+	if got := header.GetReservedCapacity(chainConfig); got == nil || *got != 20_000_000 {
+		t.Errorf("ReservedCapacity round-trip mismatch: got %v, want 20000000", got)
+	}
+
+	// Every sibling field must survive the rewrite untouched.
+	decoded := header.DecodeBlockExtraData(chainConfig)
+	if decoded == nil {
+		t.Fatal("extra no longer decodes")
+	}
+	if !bytes.Equal(decoded.ValidatorBytes, []byte("validator-bytes")) {
+		t.Errorf("ValidatorBytes changed: %q", decoded.ValidatorBytes)
+	}
+	if !reflect.DeepEqual(decoded.TxDependency, [][]uint64{{0}, {0, 1}}) {
+		t.Errorf("TxDependency changed: %v", decoded.TxDependency)
+	}
+	if decoded.GasTarget == nil || *decoded.GasTarget != gasTarget || decoded.BaseFeeChangeDenominator == nil || *decoded.BaseFeeChangeDenominator != bfcd {
+		t.Errorf("Giugliano fields changed: gt=%v bfcd=%v", decoded.GasTarget, decoded.BaseFeeChangeDenominator)
+	}
+
+	// The write is idempotent-by-overwrite: setting again replaces both values
+	// in the same round-trip.
+	if err := header.SetReservedFields(chainConfig, 0, 0); err != nil {
+		t.Fatalf("second SetReservedFields: %v", err)
+	}
+	if got := header.GetReservedGasUsed(chainConfig); got == nil || *got != 0 {
+		t.Errorf("ReservedGasUsed overwrite mismatch: got %v, want explicit 0", got)
+	}
+	if got := header.GetReservedCapacity(chainConfig); got == nil || *got != 0 {
+		t.Errorf("ReservedCapacity overwrite mismatch: got %v, want explicit 0", got)
+	}
+
+	// Too-short extra is rejected without touching the header.
+	short := &Header{Number: big.NewInt(1), Extra: []byte{0x01}}
+	if err := short.SetReservedFields(chainConfig, 1, 1); err == nil {
+		t.Error("expected error for short extra data")
+	}
+	if !bytes.Equal(short.Extra, []byte{0x01}) {
+		t.Error("short extra must be left untouched on error")
+	}
 }
 
 func TestGetBaseFeeParams(t *testing.T) {
@@ -999,5 +1462,88 @@ func TestGetValidatorBytesShortExtra(t *testing.T) {
 	if !bytes.Equal(got, extra[ExtraVanityLength:ExtraVanityLength+40]) {
 		t.Errorf("happy path: validator bytes mismatch: got %x, want %x",
 			got, extra[ExtraVanityLength:ExtraVanityLength+40])
+	}
+}
+
+// TestReservedFieldsPostAustin pins the reserved-field accessors on the
+// post-Austin wire shape (no TxDependency), which is the format every network
+// activating reserved blockspace after Austin will carry. The pre-Austin
+// shape is covered by TestSetReservedFields above; together they hold the
+// accessors to both encodings across the Austin boundary.
+func TestReservedFieldsPostAustin(t *testing.T) {
+	t.Parallel()
+
+	austinAt := func(block int64) *params.ChainConfig {
+		return &params.ChainConfig{
+			ChainID:     big.NewInt(137),
+			CancunBlock: big.NewInt(0),
+			Bor:         &params.BorConfig{AustinBlock: big.NewInt(block)},
+		}
+	}
+	chainConfig := austinAt(0)
+
+	gasTarget := uint64(30_000_000)
+	bfcd := uint64(64)
+	body, err := EncodeBlockExtraData(chainConfig, big.NewInt(1), []byte("validator-bytes"), &gasTarget, &bfcd, nil, nil)
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	extra := make([]byte, ExtraVanityLength, ExtraVanityLength+len(body)+ExtraSealLength)
+	extra = append(extra, body...)
+	extra = append(extra, make([]byte, ExtraSealLength)...)
+	header := &Header{Number: big.NewInt(1), Extra: extra}
+
+	if got := header.GetReservedGasUsed(chainConfig); got != nil {
+		t.Errorf("field absent on the wire, want nil, got %v", got)
+	}
+
+	if err := header.SetReservedFields(chainConfig, 7_500_000, 20_000_000); err != nil {
+		t.Fatalf("SetReservedFields: %v", err)
+	}
+	if got := header.GetReservedGasUsed(chainConfig); got == nil || *got != 7_500_000 {
+		t.Errorf("ReservedGasUsed round-trip mismatch: got %v, want 7500000", got)
+	}
+	if got := header.GetReservedCapacity(chainConfig); got == nil || *got != 20_000_000 {
+		t.Errorf("ReservedCapacity round-trip mismatch: got %v, want 20000000", got)
+	}
+
+	// Sibling fields must survive the rewrite untouched.
+	var decoded BlockExtraDataPostAustin
+	if err := rlp.DecodeBytes(header.Extra[ExtraVanityLength:len(header.Extra)-ExtraSealLength], &decoded); err != nil {
+		t.Fatalf("extra no longer decodes: %v", err)
+	}
+	if !bytes.Equal(decoded.ValidatorBytes, []byte("validator-bytes")) {
+		t.Errorf("ValidatorBytes changed: %q", decoded.ValidatorBytes)
+	}
+	if decoded.GasTarget == nil || *decoded.GasTarget != gasTarget || decoded.BaseFeeChangeDenominator == nil || *decoded.BaseFeeChangeDenominator != bfcd {
+		t.Errorf("Giugliano fields changed: gt=%v bfcd=%v", decoded.GasTarget, decoded.BaseFeeChangeDenominator)
+	}
+
+	// A reserved value passed through EncodeBlockExtraData lands on the wire
+	// in both fork shapes.
+	reserved := uint64(21_000)
+	for _, tc := range []struct {
+		name   string
+		config *params.ChainConfig
+		number int64
+	}{
+		{"pre-austin shape", austinAt(5), 4},
+		{"at austin", austinAt(5), 5},
+		{"post-austin", austinAt(5), 6},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body, err := EncodeBlockExtraData(tc.config, big.NewInt(tc.number), nil, nil, nil, &reserved, &reserved)
+			if err != nil {
+				t.Fatalf("encode: %v", err)
+			}
+			extra := make([]byte, ExtraVanityLength, ExtraVanityLength+len(body)+ExtraSealLength)
+			extra = append(extra, body...)
+			extra = append(extra, make([]byte, ExtraSealLength)...)
+			h := &Header{Number: big.NewInt(tc.number), Extra: extra}
+			gasUsed, capacity := h.GetReservedFields(tc.config)
+			if gasUsed == nil || *gasUsed != reserved || capacity == nil || *capacity != reserved {
+				t.Fatalf("round-trip through EncodeBlockExtraData: gasUsed=%v capacity=%v, want both %d", gasUsed, capacity, reserved)
+			}
+		})
 	}
 }

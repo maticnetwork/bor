@@ -124,6 +124,8 @@ func (q *queue) add(tx *types.Transaction) (*common.Hash, error) {
 	if q.queued[from] == nil {
 		q.queued[from] = newList(false)
 	}
+	// Reserved replacement-by-arrival applies to the pending pool; the future
+	// queue keeps the standard fee-bump rule.
 	inserted, old := q.queued[from].Add(tx, q.config.PriceBump)
 	if !inserted {
 		// An older transaction was better, discard this
@@ -149,11 +151,15 @@ func (q *queue) add(tx *types.Transaction) (*common.Hash, error) {
 // for promotion any that are now executable. It also drops any transactions that are
 // deemed too old (nonce too low) or too costly (insufficient funds or over gas limit).
 //
+// isReserved reports whether addr is a reserved-blockspace sender for the
+// block being built, so the balance revalidation below prices such senders on
+// the value basis, matching the pending-side check in demoteUnexecutables.
+//
 // Returns three lists:
 // - all transactions that were removed from the queue and selected for promotion;
 // - all other transactions that were removed from the queue and dropped;
 // - the list of addresses removed.
-func (q *queue) promoteExecutables(accounts []common.Address, gasLimit uint64, currentState *state.StateDB, nonces *noncer) ([]*types.Transaction, []common.Hash, []common.Address) {
+func (q *queue) promoteExecutables(accounts []common.Address, gasLimit uint64, currentState *state.StateDB, nonces *noncer, isReserved func(common.Address) bool) ([]*types.Transaction, []common.Hash, []common.Address) {
 	// Track the promotable transactions to broadcast them at once
 	var (
 		promotable       []*types.Transaction
@@ -174,7 +180,7 @@ func (q *queue) promoteExecutables(accounts []common.Address, gasLimit uint64, c
 		log.Trace("Removing old queued transactions", "count", len(forwards))
 
 		// Drop all transactions that are too costly (low balance or out of gas)
-		drops, _ := list.Filter(currentState.GetBalance(addr), gasLimit)
+		drops, _ := list.Filter(currentState.GetBalance(addr), gasLimit, isReserved(addr))
 		for _, tx := range drops {
 			dropped = append(dropped, tx.Hash())
 		}
@@ -188,7 +194,7 @@ func (q *queue) promoteExecutables(accounts []common.Address, gasLimit uint64, c
 		queuedGauge.Dec(int64(len(readies)))
 
 		// Drop all transactions over the allowed limit
-		var caps = list.Cap(int(q.config.AccountQueue))
+		caps := list.Cap(int(q.config.AccountQueue))
 		for _, tx := range caps {
 			hash := tx.Hash()
 			dropped = append(dropped, hash)

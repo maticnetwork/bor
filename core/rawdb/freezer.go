@@ -85,6 +85,22 @@ type Freezer struct {
 // The 'tables' argument defines the data tables. If the value of a map
 // entry is true, snappy compression is disabled for the table.
 func NewFreezer(datadir string, namespace string, readonly bool, offset uint64, maxTableSize uint32, tables map[string]freezerTableConfig) (*Freezer, error) {
+	return newFreezer(datadir, namespace, readonly, offset, maxTableSize, tables, nil)
+}
+
+// freezerPreRepairFn runs after a freezer's tables have been opened (so each
+// table's on-disk item and tail counts are known) but before the freezer
+// reconciles table lengths via repair (read-write) or validate (read-only).
+// It exists so a table introduced after other tables already hold history
+// (the reserved-tx table; see reserved_txs_freezer.go) can reconcile itself
+// against that history first - repair's common-length truncation would
+// otherwise silently erase the pre-existing tables down to the new table's
+// (zero) length. Only invoked in read-write mode.
+type freezerPreRepairFn func(f *Freezer) error
+
+// newFreezer is NewFreezer plus an optional hook run just before repair's
+// common-length reconciliation. See freezerPreRepairFn.
+func newFreezer(datadir string, namespace string, readonly bool, offset uint64, maxTableSize uint32, tables map[string]freezerTableConfig, preRepair freezerPreRepairFn) (*Freezer, error) {
 	// Create the initial freezer object
 	var (
 		readMeter  = metrics.NewRegisteredMeter(namespace+"ancient/read", nil)
@@ -146,8 +162,13 @@ func NewFreezer(datadir string, namespace string, readonly bool, offset uint64, 
 		// validate also sets `freezer.frozen`.
 		err = freezer.validate()
 	} else {
-		// Truncate all tables to common length.
-		err = freezer.repair()
+		if preRepair != nil {
+			err = preRepair(freezer)
+		}
+		if err == nil {
+			// Truncate all tables to common length.
+			err = freezer.repair()
+		}
 	}
 	if err != nil {
 		for _, table := range freezer.tables {

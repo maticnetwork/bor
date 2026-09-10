@@ -22,12 +22,14 @@ import (
 )
 
 type GenesisContractsClient struct {
-	validatorSetABI       abi.ABI
-	stateReceiverABI      abi.ABI
-	ValidatorContract     string
-	StateReceiverContract string
-	chainConfig           *params.ChainConfig
-	ethAPI                api.Caller
+	validatorSetABI          abi.ABI
+	stateReceiverABI         abi.ABI
+	reservedRegistryABI      abi.ABI
+	ValidatorContract        string
+	StateReceiverContract    string
+	ReservedRegistryContract string
+	chainConfig              *params.ChainConfig
+	ethAPI                   api.Caller
 }
 
 func NewGenesisContractsClient(
@@ -37,12 +39,14 @@ func NewGenesisContractsClient(
 	ethAPI api.Caller,
 ) *GenesisContractsClient {
 	return &GenesisContractsClient{
-		validatorSetABI:       borabi.ValidatorSet(),
-		stateReceiverABI:      borabi.StateReceiver(),
-		ValidatorContract:     validatorContract,
-		StateReceiverContract: stateReceiverContract,
-		chainConfig:           chainConfig,
-		ethAPI:                ethAPI,
+		validatorSetABI:          borabi.ValidatorSet(),
+		stateReceiverABI:         borabi.StateReceiver(),
+		reservedRegistryABI:      borabi.ReservedBlockspaceRegistry(),
+		ValidatorContract:        validatorContract,
+		StateReceiverContract:    stateReceiverContract,
+		ReservedRegistryContract: chainConfig.Bor.ReservedRegistryContract,
+		chainConfig:              chainConfig,
+		ethAPI:                   ethAPI,
 	}
 }
 

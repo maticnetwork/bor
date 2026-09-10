@@ -3338,3 +3338,50 @@ func (s *StateDB) PropagateReadsTo(dst *StateDB) {
 		}
 	}
 }
+
+// ReadIsolated runs fn against a throwaway copy of s, so EVM-backed reads
+// (bor system calls, reserved-registry lookups) cannot leak state mutations
+// into s, while keeping their trie reads part of any witness s is producing:
+// the copy records into s's witness directly, IntermediateRoot pulls the
+// touched trie nodes into it, and the read addresses/slots are re-registered
+// on s so they enter its FlatDiff read surface (see PropagateReadsTo). A
+// stateless verifier replays these same reads from the witness, so a produced
+// witness must carry them even when nothing else in the block touches the
+// same state.
+//
+// Both branches reset the copy (the reads resolve fresh parent state, not this
+// block's in-flight caches) and re-register the reads on s, so read semantics
+// don't depend on whether a witness happens to be attached; only the witness
+// collection machinery does. The witness is detached while copying: Copy would
+// deep-clone it only for StartPrefetcher to immediately replace the clone with
+// the shared reference. Callers sit on the consensus path, serial with respect
+// to s. The "bor" namespace only names the throwaway prefetcher's metrics.
+func (s *StateDB) ReadIsolated(fn func(tmp *StateDB) error) error {
+	if s.witness == nil {
+		tmp := s.Copy()
+		tmp.ResetPrefetcher()
+		if err := fn(tmp); err != nil {
+			return err
+		}
+		tmp.PropagateReadsTo(s)
+		return nil
+	}
+	w := s.witness
+	s.witness = nil
+	tmp := s.Copy()
+	s.witness = w
+	// ResetPrefetcher first: the copy shares s's prefetcher, which is not ours
+	// to stop, and it also drops the inherited object caches so the reads below
+	// resolve freshly and IntermediateRoot collects only them.
+	tmp.ResetPrefetcher()
+	tmp.StartPrefetcher("bor", w, nil)
+	// IntermediateRoot consumes the prefetcher on the success path; this
+	// reclaims its goroutines when fn errors out before that.
+	defer tmp.StopPrefetcher()
+	if err := fn(tmp); err != nil {
+		return err
+	}
+	tmp.IntermediateRoot(false)
+	tmp.PropagateReadsTo(s)
+	return nil
+}

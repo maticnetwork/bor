@@ -56,6 +56,7 @@ func copyConfig(original *params.ChainConfig) *params.ChainConfig {
 			BackupMultiplier:                original.Bor.BackupMultiplier,
 			ValidatorContract:               original.Bor.ValidatorContract,
 			StateReceiverContract:           original.Bor.StateReceiverContract,
+			ReservedRegistryContract:        original.Bor.ReservedRegistryContract,
 			OverrideStateSyncRecords:        original.Bor.OverrideStateSyncRecords,
 			OverrideStateSyncRecordsInRange: original.Bor.OverrideStateSyncRecordsInRange,
 			BlockAlloc:                      original.Bor.BlockAlloc,

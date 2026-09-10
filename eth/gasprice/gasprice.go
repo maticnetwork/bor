@@ -285,7 +285,27 @@ func (oracle *Oracle) getBlockValues(ctx context.Context, blockNum uint64, limit
 
 		return
 	}
-	signer := types.MakeSigner(oracle.backend.ChainConfig(), block.Number(), block.Time())
+	chainConfig := oracle.backend.ChainConfig()
+	signer := types.MakeSigner(chainConfig, block.Number(), block.Time())
+
+	// Reserved (fee-free) transactions carry no fee-market signal: their
+	// effective gas price is zero regardless of the tip they declared, so
+	// sampling them would pull the suggestion toward a price nobody paid.
+	// The 25 gwei ignore price below already drops declared-zero-fee
+	// transactions; this excludes fallback-fee transactions that declared a
+	// real tip but executed fee-free. The fork gate mirrors
+	// validateReservedFields: reserved header fields are only
+	// consensus-checked once the fork is active, so pre-fork header content
+	// must not influence sampling. Post-fork, GetReservedGasUsed is a single
+	// RLP decode of the header and is 0 on every block that used no reserved
+	// gas, so this stays free wherever the reserved region is inactive or
+	// idle.
+	var reservedTxHashes map[common.Hash]struct{}
+	if chainConfig.Bor != nil && chainConfig.Bor.IsReservedBlockspace(block.Number()) {
+		if reservedGasUsed := block.Header().GetReservedGasUsed(chainConfig); reservedGasUsed != nil && *reservedGasUsed > 0 {
+			reservedTxHashes = oracle.reservedTxHashes(ctx, block)
+		}
+	}
 
 	// Sort the transaction by effective tip in ascending sort.
 	txs := block.Transactions()
@@ -302,6 +322,12 @@ func (oracle *Oracle) getBlockValues(ctx context.Context, blockNum uint64, limit
 
 	var prices []*big.Int
 	for _, tx := range sortedTxs {
+		if reservedTxHashes != nil {
+			if _, ok := reservedTxHashes[tx.Hash()]; ok {
+				continue
+			}
+		}
+
 		tip, _ := tx.EffectiveGasTip(baseFee)
 		if ignoreUnder != nil && tip.Cmp(ignoreUnder) == -1 {
 			continue
@@ -319,4 +345,40 @@ func (oracle *Oracle) getBlockValues(ctx context.Context, blockNum uint64, limit
 	case result <- results{prices, nil}:
 	case <-quit:
 	}
+}
+
+// reservedTxHashes returns the transaction hashes in block that were
+// classified reserved (fee-free) by the reserved-blockspace registry, keyed
+// by receipt.TxHash which DeriveFields populates. Receipts are the persisted
+// classification threaded in at read time (ReadReceipts / DeriveFields), so
+// EffectiveGasPrice == 0 is the exact classification for a canonical block.
+// A degraded receipt load (error, or a count that doesn't match the block's
+// transactions) returns nil rather than a partially-built set: the oracle is
+// advisory, and a wider sample beats a distorted one.
+func (oracle *Oracle) reservedTxHashes(ctx context.Context, block *types.Block) map[common.Hash]struct{} {
+	receipts, err := oracle.backend.GetReceipts(ctx, block.Hash())
+	if err != nil || len(receipts) != len(block.Transactions()) {
+		log.Debug("Gasprice oracle degraded to no reserved-tx exclusion", "block", block.NumberU64(), "err", err)
+		return nil
+	}
+
+	var reserved map[common.Hash]struct{}
+	for _, receipt := range receipts {
+		if isReservedReceipt(receipt) {
+			if reserved == nil {
+				reserved = make(map[common.Hash]struct{})
+			}
+			reserved[receipt.TxHash] = struct{}{}
+		}
+	}
+
+	return reserved
+}
+
+// isReservedReceipt reports whether a derived receipt marks its transaction
+// as included fee-free in the reserved region: read-time derivation sets
+// EffectiveGasPrice to exactly zero for reserved transactions. Pending
+// receipts are never derived, carry nil, and never match.
+func isReservedReceipt(r *types.Receipt) bool {
+	return r.EffectiveGasPrice != nil && r.EffectiveGasPrice.Sign() == 0
 }

@@ -379,6 +379,10 @@ type TxPoolConfig struct {
 	// GlobalQueueis the maximum number of non-executable transaction slots for all accounts
 	GlobalQueue uint64 `hcl:"globalqueue,optional" toml:"globalqueue,optional"`
 
+	// ReservedMaxOccupancyPercent bounds the percentage of GlobalSlots+GlobalQueue that
+	// reserved-blockspace senders may occupy in aggregate, combined across pending and queued
+	ReservedMaxOccupancyPercent uint64 `hcl:"reservedmaxoccupancypercent,optional" toml:"reservedmaxoccupancypercent,optional"`
+
 	// lifetime is the maximum amount of time non-executable transaction are queued
 	LifeTime    time.Duration `hcl:"-,optional" toml:"-"`
 	LifeTimeRaw string        `hcl:"lifetime,optional" toml:"lifetime,optional"`
@@ -906,21 +910,22 @@ func DefaultConfig() *Config {
 			WSAddress:   "",
 		},
 		TxPool: &TxPoolConfig{
-			Locals:               []string{},
-			NoLocals:             false,
-			Journal:              "transactions.rlp",
-			Rejournal:            1 * time.Hour,
-			PriceLimit:           params.BorDefaultTxPoolPriceLimit, // bor's default
-			PriceBump:            10,
-			AccountSlots:         16,
-			GlobalSlots:          131072,
-			AccountQueue:         64,
-			GlobalQueue:          131072,
-			LifeTime:             3 * time.Hour,
-			Rebroadcast:          true,
-			RebroadcastInterval:  30 * time.Second,
-			RebroadcastMaxAge:    10 * time.Minute,
-			RebroadcastBatchSize: 200,
+			Locals:                      []string{},
+			NoLocals:                    false,
+			Journal:                     "transactions.rlp",
+			Rejournal:                   1 * time.Hour,
+			PriceLimit:                  params.BorDefaultTxPoolPriceLimit, // bor's default
+			PriceBump:                   10,
+			AccountSlots:                16,
+			GlobalSlots:                 131072,
+			AccountQueue:                64,
+			GlobalQueue:                 131072,
+			ReservedMaxOccupancyPercent: 50,
+			LifeTime:                    3 * time.Hour,
+			Rebroadcast:                 true,
+			RebroadcastInterval:         30 * time.Second,
+			RebroadcastMaxAge:           10 * time.Minute,
+			RebroadcastBatchSize:        200,
 		},
 		Sealer: &SealerConfig{
 			Enabled:                  false,
@@ -1296,6 +1301,7 @@ func (c *Config) buildEth(stack *node.Node, accountManager *accounts.Manager) (*
 		n.TxPool.GlobalSlots = c.TxPool.GlobalSlots
 		n.TxPool.AccountQueue = c.TxPool.AccountQueue
 		n.TxPool.GlobalQueue = c.TxPool.GlobalQueue
+		n.TxPool.ReservedMaxOccupancyPercent = c.TxPool.ReservedMaxOccupancyPercent
 		n.TxPool.Lifetime = c.TxPool.LifeTime
 
 		// Load filtered addresses during config initialization

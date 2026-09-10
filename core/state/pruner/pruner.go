@@ -428,6 +428,11 @@ func (p *BlockPruner) backupOldDb(name string, cache, handles int, namespace str
 		block := rawdb.ReadBlock(chainDb, blockHash, blockNumber)
 		receipts := rawdb.ReadReceiptsRLP(chainDb, blockHash, blockNumber)
 		borReceipts := rawdb.ReadBorReceiptRLP(chainDb, blockHash, blockNumber)
+		// The block was already classified when it was first frozen; carry
+		// that classification into the backup instead of defaulting to
+		// "nothing reserved", or a pruned node would answer receipt RPCs
+		// differently than an unpruned one for the blocks it retains.
+		reservedTxIndexes := rawdb.ReadReservedTxIndexesRLP(chainDb, blockHash, blockNumber)
 
 		// Calculate the total difficulty of the block
 		td := rawdb.ReadTd(chainDb, blockHash, blockNumber)
@@ -436,7 +441,7 @@ func (p *BlockPruner) backupOldDb(name string, cache, handles int, namespace str
 		}
 
 		// Write into new ancient_back db.
-		if _, err := rawdb.WriteAncientBlocks(frdbBack, []*types.Block{block}, []rlp.RawValue{receipts}, []rlp.RawValue{borReceipts}, td); err != nil {
+		if _, err := rawdb.WriteAncientBlocks(frdbBack, []*types.Block{block}, []rlp.RawValue{receipts}, []rlp.RawValue{borReceipts}, []rlp.RawValue{reservedTxIndexes}, td); err != nil {
 			return fmt.Errorf("failed to write new ancient error: %v", err)
 		}
 

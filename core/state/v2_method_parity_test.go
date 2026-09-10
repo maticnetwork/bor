@@ -103,6 +103,10 @@ var pdbExemptMethods = map[string]pdbExemptCategory{
 	"StopPrefetcher":   catLifecycle,
 	"ResetPrefetcher":  catLifecycle,
 	"Copy":             catLifecycle,
+	// Isolated system-call reads (reserved-registry snapshot, span,
+	// state-sync id) run on the underlying StateDB around block execution,
+	// never on a per-tx worker.
+	"ReadIsolated": catLifecycle,
 
 	// Pipelined SRC import — FlatDiff capture/replay, read propagation,
 	// and detached prefetcher handoff are block-level StateDB operations.

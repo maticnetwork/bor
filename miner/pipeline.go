@@ -12,6 +12,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/consensus"
 	"github.com/ethereum/go-ethereum/consensus/bor"
+	"github.com/ethereum/go-ethereum/consensus/bor/registryreader"
 	"github.com/ethereum/go-ethereum/consensus/misc/eip1559"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/state"
@@ -80,6 +81,19 @@ func placeholderParentHash(blockNumber uint64) common.Hash {
 // config.
 func (w *worker) isPipelineEligible(_ uint64) bool {
 	// Re-enable reference:
+	//
+	// Reserved blockspace: the speculative fill path
+	// (fillSpeculativeTransactions) has no reserved sequencing, quota walk,
+	// or reserved-field header stamping. Before re-enabling on a chain with
+	// reservedBlockspaceBlock scheduled, integrate the reserved pass or gate
+	// eligibility on !IsReservedBlockspace(nextBlockNumber).
+	//
+	// Witness completeness: this path executes on a witness-less state and
+	// lets SRC build the shipped witness from the FlatDiff read surface
+	// alone. Isolated system-call reads (span, state-sync id, reserved
+	// registry) reach that surface via state.ReadIsolated's PropagateReadsTo;
+	// verify that invariant still holds before re-enabling, or stateless
+	// verifiers fail on those reads at every sprint boundary.
 	//
 	// if !w.config.EnablePipelinedSRC {
 	// 	return false
@@ -950,7 +964,14 @@ func (s *specSession) sealCurrentAndAdvance(finalSpecHeader *types.Header, state
 	if exit := s.waitForParentAnnounceTime(finalSpecHeader, next.fillDone); exit {
 		return nil, true, false
 	}
-	sealedBlock, dbWriteDone, err := s.w.inlineSealAndBroadcast(blockSpec, receiptsSpec, s.specState, witnessSpec, s.curBuildStart)
+	// Reserved data is re-derived from the final body with the same walk a
+	// verifier runs, mirroring commit(). The speculative fill has no reserved
+	// sequencing yet (see isPipelineEligible's re-enable reference), so these
+	// are empty until that integration lands; deriving them here keeps the
+	// write path correct either way.
+	reservedTxIndexes := core.ReservedTxIndexes(blockSpec.Transactions(), s.specEnv.signer, reservedTxsOf(s.specEnv))
+	_, reservedClientUsage := registryreader.ClassifyReserved(blockSpec.Transactions(), s.specEnv.signer, reservedSnapshotOf(s.specEnv))
+	sealedBlock, dbWriteDone, err := s.w.inlineSealAndBroadcast(blockSpec, receiptsSpec, s.specState, reservedTxIndexes, reservedClientUsage, witnessSpec, s.curBuildStart)
 	if err != nil {
 		log.Error("Pipelined SRC: inline seal failed", "block", s.nextBlockNumber, "err", err)
 		<-next.fillDone
@@ -1119,7 +1140,7 @@ func (w *worker) earlyAnnounceTime(header *types.Header) time.Time {
 // Uses emitHeadEvent=false to avoid a deadlock: mainLoop is blocked in
 // commitSpeculativeWork, so chainHeadFeed.Send would eventually block when
 // newWorkLoop's channel fills up.
-func (w *worker) inlineSealAndBroadcast(block *types.Block, receipts []*types.Receipt, statedb *state.StateDB, witnessBytes []byte, buildStart time.Time) (*types.Block, chan struct{}, error) {
+func (w *worker) inlineSealAndBroadcast(block *types.Block, receipts []*types.Receipt, statedb *state.StateDB, reservedTxIndexes []uint64, reservedClientUsage map[uint64]registryreader.ClientUsage, witnessBytes []byte, buildStart time.Time) (*types.Block, chan struct{}, error) {
 	sealedBlock, err := w.sealViaPrivateChannel(block)
 	if err != nil {
 		return nil, nil, err
@@ -1146,7 +1167,7 @@ func (w *worker) inlineSealAndBroadcast(block *types.Block, receipts []*types.Re
 	go func() {
 		defer close(writeDone)
 		writeStart := time.Now()
-		_, err := w.chain.WriteBlockAndSetHeadPipelined(sealedBlock, sealedReceipts, logs, statedb, false, witnessBytes)
+		_, err := w.chain.WriteBlockAndSetHeadPipelined(sealedBlock, sealedReceipts, logs, statedb, reservedTxIndexes, reservedClientUsage, false, witnessBytes)
 		writeBlockAndSetHeadTimer.UpdateSince(writeStart)
 		if err != nil {
 			log.Error("Pipelined SRC: async DB write failed", "block", sealedBlock.Number(), "err", err)

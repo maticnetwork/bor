@@ -28,6 +28,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/ethereum/go-ethereum/rlp"
 )
 
 func verifyIndexes(t *testing.T, db ethdb.Database, block *types.Block, exist bool) {
@@ -121,7 +122,7 @@ func TestTxIndexer(t *testing.T) {
 
 	for _, c := range cases {
 		db, _ := rawdb.Open(rawdb.NewMemoryDatabase(), rawdb.OpenOptions{})
-		rawdb.WriteAncientBlocks(db, append([]*types.Block{gspec.ToBlock()}, blocks...), types.EncodeBlockReceiptLists(append([]types.Receipts{{}}, receipts...)), types.EncodeBlockReceiptLists(append([]types.Receipts{{}}, borReceipts...)), big.NewInt(0))
+		rawdb.WriteAncientBlocks(db, append([]*types.Block{gspec.ToBlock()}, blocks...), types.EncodeBlockReceiptLists(append([]types.Receipts{{}}, receipts...)), types.EncodeBlockReceiptLists(append([]types.Receipts{{}}, borReceipts...)), make([]rlp.RawValue, len(blocks)+1), big.NewInt(0))
 
 		// Index the initial blocks from ancient store
 		indexer := &txIndexer{
@@ -245,7 +246,7 @@ func TestTxIndexerRepair(t *testing.T) {
 		db, _ := rawdb.Open(rawdb.NewMemoryDatabase(), rawdb.OpenOptions{})
 		encReceipts := types.EncodeBlockReceiptLists(append([]types.Receipts{{}}, receipts...))
 		encBorReceipts := types.EncodeBlockReceiptLists(append([]types.Receipts{{}}, borReceipts...))
-		rawdb.WriteAncientBlocks(db, append([]*types.Block{gspec.ToBlock()}, blocks...), encReceipts, encBorReceipts, big.NewInt(0))
+		rawdb.WriteAncientBlocks(db, append([]*types.Block{gspec.ToBlock()}, blocks...), encReceipts, encBorReceipts, make([]rlp.RawValue, len(blocks)+1), big.NewInt(0))
 
 		// Index the initial blocks from ancient store
 		indexer := &txIndexer{
@@ -440,7 +441,7 @@ func TestTxIndexerReport(t *testing.T) {
 		db, _ := rawdb.Open(rawdb.NewMemoryDatabase(), rawdb.OpenOptions{})
 		encReceipts := types.EncodeBlockReceiptLists(append([]types.Receipts{{}}, receipts...))
 		encBorReceipts := types.EncodeBlockReceiptLists(append([]types.Receipts{{}}, borReceipts...))
-		rawdb.WriteAncientBlocks(db, append([]*types.Block{gspec.ToBlock()}, blocks...), encReceipts, encBorReceipts, big.NewInt(0))
+		rawdb.WriteAncientBlocks(db, append([]*types.Block{gspec.ToBlock()}, blocks...), encReceipts, encBorReceipts, make([]rlp.RawValue, len(blocks)+1), big.NewInt(0))
 
 		// Index the initial blocks from ancient store
 		indexer := &txIndexer{

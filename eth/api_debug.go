@@ -513,7 +513,7 @@ func (api *DebugAPI) ExecutionWitness(bn rpc.BlockNumber) (*stateless.ExtWitness
 	}
 	parentBlock := bc.GetBlockByHash(block.ParentHash())
 
-	_, _, _, statedb, _, err := bc.ProcessBlock(parentBlock, block.Header(), nil, nil, nil)
+	_, _, _, statedb, _, _, _, err := bc.ProcessBlock(parentBlock, block.Header(), nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -534,7 +534,7 @@ func (api *DebugAPI) ExecutionWitnessByHash(hash common.Hash) (*stateless.ExtWit
 	}
 	parentBlock := bc.GetBlockByHash(block.ParentHash())
 
-	_, _, _, statedb, _, err := bc.ProcessBlock(parentBlock, block.Header(), nil, nil, nil)
+	_, _, _, statedb, _, _, _, err := bc.ProcessBlock(parentBlock, block.Header(), nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}

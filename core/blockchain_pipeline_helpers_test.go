@@ -394,14 +394,14 @@ func TestPipelinedBlockWritePaths(t *testing.T) {
 	statedb, err := chain.StateAt(chain.CurrentBlock().Root)
 	require.NoError(t, err)
 
-	status, err := chain.WriteBlockAndSetHeadPipelined(blocks[0], nil, nil, statedb, false, nil)
+	status, err := chain.WriteBlockAndSetHeadPipelined(blocks[0], nil, nil, statedb, nil, nil, false, nil)
 	require.NoError(t, err)
 	require.Equal(t, CanonStatTy, status)
 	require.Equal(t, blocks[0].Hash(), chain.CurrentBlock().Hash())
 
 	closedChain := &BlockChain{chainmu: syncx.NewClosableMutex()}
 	closedChain.chainmu.Close()
-	status, err = closedChain.WriteBlockAndSetHeadPipelined(nil, nil, nil, nil, false, nil)
+	status, err = closedChain.WriteBlockAndSetHeadPipelined(nil, nil, nil, nil, nil, nil, false, nil)
 	require.ErrorIs(t, err, errChainStopped)
 	require.Equal(t, NonStatTy, status)
 
@@ -410,11 +410,11 @@ func TestPipelinedBlockWritePaths(t *testing.T) {
 		Number:     big.NewInt(3),
 		Difficulty: common.Big1,
 	})
-	status, _, err = chain.writePipelinedBlockAndResolveStatus(unknown, nil, nil, statedb, nil)
+	status, _, err = chain.writePipelinedBlockAndResolveStatus(unknown, nil, nil, statedb, nil, nil)
 	require.ErrorIs(t, err, consensus.ErrUnknownAncestor)
 	require.Equal(t, NonStatTy, status)
 
-	status, err = chain.writeBlockAndSetHeadPipelined(unknown, nil, nil, statedb, false, nil)
+	status, err = chain.writeBlockAndSetHeadPipelined(unknown, nil, nil, statedb, nil, nil, false, nil)
 	require.ErrorIs(t, err, consensus.ErrUnknownAncestor)
 	require.Equal(t, NonStatTy, status)
 }
@@ -425,7 +425,7 @@ func TestPipelinedBlockBatchStoresWitness(t *testing.T) {
 	require.NoError(t, err)
 
 	witness := []byte{1, 2, 3, 4}
-	status, err := chain.WriteBlockAndSetHeadPipelined(blocks[0], nil, nil, statedb, false, witness)
+	status, err := chain.WriteBlockAndSetHeadPipelined(blocks[0], nil, nil, statedb, nil, nil, false, witness)
 	require.NoError(t, err)
 	require.Equal(t, CanonStatTy, status)
 	require.Equal(t, witness, chain.GetWitness(blocks[0].Hash()))

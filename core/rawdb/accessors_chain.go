@@ -787,7 +787,14 @@ func ReadReceipts(db ethdb.Reader, hash common.Hash, number uint64, time uint64,
 	if header != nil && header.ExcessBlobGas != nil {
 		blobGasPrice = nil
 	}
-	if err := receipts.DeriveFields(config, hash, number, time, baseFee, blobGasPrice, body.Transactions); err != nil {
+	// Fork-gate before touching the DB: this path feeds feeHistory, which
+	// walks up to 1024 blocks, so an unconditional read here is a hot-path
+	// cost that is pure overhead everywhere the fork is inactive.
+	var reservedTxIndexes []uint64
+	if config.Bor != nil && config.Bor.IsReservedBlockspace(new(big.Int).SetUint64(number)) {
+		reservedTxIndexes = ReadReservedTxIndexesBounded(db, hash, number, len(body.Transactions))
+	}
+	if err := receipts.DeriveFields(config, hash, number, time, baseFee, blobGasPrice, body.Transactions, reservedTxIndexes); err != nil {
 		log.Error("Failed to derive block receipts fields", "hash", hash, "number", number, "err", err)
 		return nil
 	}
@@ -892,8 +899,13 @@ func WriteBlock(db ethdb.KeyValueWriter, block *types.Block) {
 	WriteHeader(db, block.Header())
 }
 
-// WriteAncientBlocks writes entire block data into ancient store and returns the total written size.
-func WriteAncientBlocks(db ethdb.AncientWriter, blocks []*types.Block, receipts []rlp.RawValue, borReceipts []rlp.RawValue, td *big.Int) (int64, error) {
+// WriteAncientBlocks writes entire block data into ancient store and returns
+// the total written size. reservedTxIndexes carries each block's reserved-tx
+// classification RLP; a nil or empty entry means the caller genuinely has no
+// classification to record (e.g. snap-sync receipt import, genesis ancient
+// init), which writeAncientBlock encodes as an explicit empty list rather
+// than leaving the entry unset.
+func WriteAncientBlocks(db ethdb.AncientWriter, blocks []*types.Block, receipts []rlp.RawValue, borReceipts []rlp.RawValue, reservedTxIndexes []rlp.RawValue, td *big.Int) (int64, error) {
 	var tdSum = new(big.Int).Set(td)
 	return db.ModifyAncients(func(op ethdb.AncientWriteOp) error {
 		for i, block := range blocks {
@@ -902,7 +914,7 @@ func WriteAncientBlocks(db ethdb.AncientWriter, blocks []*types.Block, receipts 
 			if i > 0 {
 				tdSum.Add(tdSum, header.Difficulty)
 			}
-			if err := writeAncientBlock(op, block, header, receipts[i], borReceipts[i], tdSum); err != nil {
+			if err := writeAncientBlock(op, block, header, receipts[i], borReceipts[i], reservedTxIndexes[i], tdSum); err != nil {
 				return err
 			}
 		}
@@ -911,7 +923,7 @@ func WriteAncientBlocks(db ethdb.AncientWriter, blocks []*types.Block, receipts 
 	})
 }
 
-func writeAncientBlock(op ethdb.AncientWriteOp, block *types.Block, header *types.Header, receipt, borReceipt rlp.RawValue, td *big.Int) error {
+func writeAncientBlock(op ethdb.AncientWriteOp, block *types.Block, header *types.Header, receipt, borReceipt, reservedTxIndexes rlp.RawValue, td *big.Int) error {
 	num := block.NumberU64()
 	if err := op.AppendRaw(ChainFreezerHashTable, num, block.Hash().Bytes()); err != nil {
 		return fmt.Errorf("can't add block %d hash: %v", num, err)
@@ -931,6 +943,23 @@ func writeAncientBlock(op ethdb.AncientWriteOp, block *types.Block, header *type
 
 	if err := op.Append(freezerBorReceiptTable, num, borReceipt); err != nil {
 		return fmt.Errorf("can't append block %d bor receipts: %v", num, err)
+	}
+
+	// Most callers of this path write blocks straight into the freezer
+	// (snap-sync pivot import, genesis ancient init) without having executed
+	// them, so they have no classification to record and pass a nil entry
+	// here. An empty entry keeps the table aligned with the others and
+	// encodes "no classification available" directly in the data, which
+	// read-side derivation already treats the same as "nothing reserved".
+	// The offline block pruner is the one caller with a real entry to carry
+	// forward (read from the old freezer before it is discarded), which it
+	// passes through unchanged.
+	reserved := reservedTxIndexes
+	if len(reserved) == 0 {
+		reserved = rlp.EmptyList
+	}
+	if err := op.AppendRaw(ChainFreezerReservedTxsTable, num, reserved); err != nil {
+		return fmt.Errorf("can't append block %d reserved-tx indexes: %v", num, err)
 	}
 
 	if err := op.Append(ChainFreezerDifficultyTable, num, td); err != nil {
@@ -960,6 +989,9 @@ func DeleteBlockWithoutNumber(db ethdb.KeyValueWriter, hash common.Hash, number 
 
 	// delete bor receipt
 	DeleteBorReceipt(db, hash, number)
+
+	// delete reserved-tx indexes
+	DeleteReservedTxIndexes(db, hash, number)
 }
 
 const badBlockToKeep = 10

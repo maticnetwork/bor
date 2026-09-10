@@ -22,6 +22,7 @@ import (
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/consensus/bor/registryreader"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -30,11 +31,9 @@ import (
 	"github.com/ethereum/go-ethereum/params"
 )
 
-var (
-	// blobTxMinBlobGasPrice is the big.Int version of the configured protocol
-	// parameter to avoid constructing a new big integer for every transaction.
-	blobTxMinBlobGasPrice = big.NewInt(params.BlobTxMinBlobGasprice)
-)
+// blobTxMinBlobGasPrice is the big.Int version of the configured protocol
+// parameter to avoid constructing a new big integer for every transaction.
+var blobTxMinBlobGasPrice = big.NewInt(params.BlobTxMinBlobGasprice)
 
 // ValidationOptions define certain differences between transaction validation
 // across the different pools without having to duplicate those checks.
@@ -47,6 +46,11 @@ type ValidationOptions struct {
 	MaxSize      uint64   // Maximum size of a transaction that the caller can meaningfully handle
 	MaxBlobCount int      // Maximum number of blobs allowed per transaction
 	MinTip       *big.Int // Minimum gas tip needed to allow a transaction into the caller pool
+
+	// ReservedSnapshot is the caller pool's per-head reserved-set snapshot, used
+	// to waive fee floors for reserved senders. Nil for pools without a registry
+	// (blobpool, or no registry configured) — classification then returns false.
+	ReservedSnapshot *registryreader.Snapshot
 }
 
 // ValidationFunction is an method type which the pools use to perform the tx-validations which do not
@@ -143,8 +147,11 @@ func ValidateTransaction(tx *types.Transaction, head *types.Header, signer types
 			return fmt.Errorf("%w: gas %v, minimum needed %v", core.ErrFloorDataGas, tx.Gas(), floorDataGas)
 		}
 	}
-	// Ensure the gasprice is high enough to cover the requirement of the calling pool
-	if tx.GasTipCapIntCmp(opts.MinTip) < 0 {
+	// Ensure the gasprice is high enough to cover the requirement of the calling
+	// pool. Reserved-blockspace senders are exempt: they pay zero in-protocol fee,
+	// so enforcing the tip floor would reject their transactions at admission and
+	// they would never reach the miner.
+	if tx.GasTipCapIntCmp(opts.MinTip) < 0 && !isReservedSender(opts, head, signer, tx) {
 		return fmt.Errorf("%w: gas tip cap %v, minimum needed %v", ErrTxGasPriceTooLow, tx.GasTipCap(), opts.MinTip)
 	}
 	if tx.Type() == types.BlobTxType {
@@ -156,6 +163,28 @@ func ValidateTransaction(tx *types.Transaction, head *types.Header, signer types
 		}
 	}
 	return nil
+}
+
+// isReservedSender reports whether tx's recovered sender is a reserved-blockspace
+// client active at head. Reserved senders bypass the pool's fee floors so their
+// zero-fee transactions are admitted and kept. Classification is sender-based and
+// consensus-uniform (the reserved set comes from the chain config), matching the
+// EVM fee path in core/state_transition.go.
+func isReservedSender(opts *ValidationOptions, head *types.Header, signer types.Signer, tx *types.Transaction) bool {
+	cfg := opts.Config
+	if cfg == nil || cfg.Bor == nil || head == nil {
+		return false
+	}
+	// Classify for the block this tx targets (the one after head).
+	number := new(big.Int).Add(head.Number, big.NewInt(1))
+	if !cfg.Bor.IsReservedBlockspace(number) {
+		return false
+	}
+	from, err := types.Sender(signer, tx)
+	if err != nil {
+		return false
+	}
+	return opts.ReservedSnapshot.IsReserved(from)
 }
 
 // validateBlobTx implements the blob-transaction specific validations.
@@ -236,6 +265,14 @@ type ValidationOptionsWithState struct {
 	// ExistingCost is a mandatory callback to retrieve an already pooled
 	// transaction's cost with the given nonce to check for overdrafts.
 	ExistingCost func(addr common.Address, nonce uint64) *big.Int
+
+	// EffectiveCost prices a transaction for balance checks. Nil (either the
+	// field itself, or its return value for a given tx) means tx.Cost().
+	// Pools with a reserved-blockspace registry supply a reserved-aware
+	// implementation; ExistingExpenditure and ExistingCost must be priced on
+	// the same basis. Takes the already-recovered sender, matching the other
+	// callbacks below.
+	EffectiveCost func(addr common.Address, tx *types.Transaction) *big.Int
 }
 
 // ValidateTransactionWithState is a helper method to check whether a transaction
@@ -262,10 +299,14 @@ func ValidateTransactionWithState(tx *types.Transaction, signer types.Signer, op
 		}
 	}
 	// Ensure the transactor has enough funds to cover the transaction costs
-	var (
-		balance = opts.State.GetBalance(from).ToBig()
-		cost    = tx.Cost()
-	)
+	balance := opts.State.GetBalance(from).ToBig()
+	var cost *big.Int
+	if opts.EffectiveCost != nil {
+		cost = opts.EffectiveCost(from, tx)
+	}
+	if cost == nil {
+		cost = tx.Cost()
+	}
 	if balance.Cmp(cost) < 0 {
 		return fmt.Errorf("%w: balance %v, tx cost %v, overshot %v", core.ErrInsufficientFunds, balance, cost, new(big.Int).Sub(cost, balance))
 	}

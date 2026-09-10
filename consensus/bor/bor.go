@@ -32,6 +32,7 @@ import (
 	"github.com/ethereum/go-ethereum/consensus/bor/api"
 	"github.com/ethereum/go-ethereum/consensus/bor/clerk"
 	borSpan "github.com/ethereum/go-ethereum/consensus/bor/heimdall/span"
+	"github.com/ethereum/go-ethereum/consensus/bor/registryreader"
 	"github.com/ethereum/go-ethereum/consensus/bor/statefull"
 	"github.com/ethereum/go-ethereum/consensus/bor/valset"
 	"github.com/ethereum/go-ethereum/consensus/misc"
@@ -118,6 +119,15 @@ var (
 	// errMissingGiuglianoFields is returned if a post-Giugliano block is missing
 	// the gas target or base fee change denominator in its extra data.
 	errMissingGiuglianoFields = errors.New("missing gas target or base fee change denominator in extra data")
+
+	// errMissingReservedBlockspaceFields is returned if a post-ReservedBlockspace
+	// block is missing the reserved tx count or reserved gas used in its extra data.
+	errMissingReservedBlockspaceFields = errors.New("missing reserved tx count or reserved gas used in extra data")
+
+	// errReservedGasUsedExceedsBlock is returned if a header's reserved gas used
+	// is larger than the block's total gas used — an impossible value, since the
+	// reserved region is a subset of the block.
+	errReservedGasUsedExceedsBlock = errors.New("reserved gas used exceeds block gas used")
 
 	// errInvalidMixDigest is returned if a block's mix digest is non-zero.
 	errInvalidMixDigest = errors.New("non-zero mix digest")
@@ -415,6 +425,17 @@ func (c *Bor) GetSpanner() Spanner {
 	return c.spanner
 }
 
+// ReservedRegistry returns the read-only handle to the reserved blockspace
+// registry, or nil when the GenesisContractsClient does not implement the
+// reader (e.g. test mocks). Callers must tolerate a nil return.
+func (c *Bor) ReservedRegistry() registryreader.Reader {
+	if c == nil {
+		return nil
+	}
+	reader, _ := c.GenesisContractsClient.(registryreader.Reader)
+	return reader
+}
+
 func (c *Bor) SetSpanner(spanner Spanner) {
 	c.spanner = spanner
 }
@@ -526,6 +547,10 @@ func (c *Bor) verifyHeader(chain consensus.ChainHeaderReader, header *types.Head
 		if gasTarget == nil || bfcd == nil {
 			return errMissingGiuglianoFields
 		}
+	}
+
+	if err := c.verifyReservedFields(header); err != nil {
+		return err
 	}
 
 	// Ensure that the mix digest is zero as we don't have fork protection currently
@@ -1044,6 +1069,57 @@ func (c *Bor) giuglianoExtraFields(header *types.Header, parent *types.Header) (
 	return &gt, &bfcd
 }
 
+// reservedFieldsPlaceholder returns zero-valued reserved-gas and capacity
+// fields for post-ReservedBlockspace headers, so both are present (non-nil)
+// from Prepare on and the header passes the verifyReservedFields presence
+// check even when there are no reserved transactions or the registry carves
+// out no capacity yet. The miner overwrites both with the block's real values
+// at the end of block building (worker.writeReservedFields). Nil pre-fork,
+// keeping the fields off the wire.
+func (c *Bor) reservedFieldsPlaceholder(header *types.Header) (gasUsed, capacity *uint64) {
+	if !c.config.IsReservedBlockspace(header.Number) {
+		return nil, nil
+	}
+
+	var zeroGas, zeroCapacity uint64
+
+	return &zeroGas, &zeroCapacity
+}
+
+// verifyReservedFields checks that post-ReservedBlockspace headers carry the
+// reserved-region fields, plus a header-only bound on ReservedGasUsed. Value
+// correctness for both fields (the sum over the block's reserved transactions
+// for gas used, the registry snapshot's effective capacity for capacity) is a
+// body-level check that lands with the block-validation slice
+// (validateReservedFields).
+func (c *Bor) verifyReservedFields(header *types.Header) error {
+	if !c.config.IsReservedBlockspace(header.Number) {
+		return nil
+	}
+	reservedGasUsed := header.GetReservedGasUsed(c.chainConfig)
+	if reservedGasUsed == nil {
+		return errMissingReservedBlockspaceFields
+	}
+	if header.GetReservedCapacity(c.chainConfig) == nil {
+		return errMissingReservedBlockspaceFields
+	}
+	// The reserved region is a subset of the block, so its gas cannot exceed the
+	// block's gas used. Reject the impossible value rather than letting CalcBaseFee
+	// silently clamp it (the base fee consumes parent.ReservedGasUsed).
+	if *reservedGasUsed > header.GasUsed {
+		return errReservedGasUsedExceedsBlock
+	}
+	// No bound here ties ReservedCapacity to GasLimit: governance (setLimits,
+	// quota updates) has no tie to the block gas limit, which is itself
+	// operator-tunable per block, so a registry state whose effective
+	// capacity meets or exceeds GasLimit is a reachable, valid state.
+	// Rejecting it at the header would leave no valid next block and halt the
+	// chain; the exact value is enforced against the registry by
+	// validateReservedFields instead, and CalcBaseFee's reserved-aware target
+	// falls back deterministically when capacity >= GasLimit.
+	return nil
+}
+
 func (c *Bor) parentActualTime(parent *types.Header, parentHash common.Hash) time.Time {
 	parentBlockTime := time.Unix(int64(parent.Time), 0)
 	parentActualBlockTime := parentBlockTime
@@ -1126,7 +1202,9 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header, w
 
 			gasTarget, baseFeeChangeDenom := c.giuglianoExtraFields(header, parent)
 
-			blockExtraDataBytes, err := types.EncodeBlockExtraData(c.chainConfig, header.Number, tempValidatorBytes, gasTarget, baseFeeChangeDenom)
+			reservedGasUsed, reservedCapacity := c.reservedFieldsPlaceholder(header)
+
+			blockExtraDataBytes, err := types.EncodeBlockExtraData(c.chainConfig, header.Number, tempValidatorBytes, gasTarget, baseFeeChangeDenom, reservedGasUsed, reservedCapacity)
 			if err != nil {
 				log.Error("error while encoding block extra data", "err", err)
 				return fmt.Errorf("error while encoding block extra data: %v", err)
@@ -1141,7 +1219,9 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header, w
 	} else if c.chainConfig.IsCancun(header.Number) {
 		gasTarget, baseFeeChangeDenom := c.giuglianoExtraFields(header, parent)
 
-		blockExtraDataBytes, err := types.EncodeBlockExtraData(c.chainConfig, header.Number, nil, gasTarget, baseFeeChangeDenom)
+		reservedGasUsed, reservedCapacity := c.reservedFieldsPlaceholder(header)
+
+		blockExtraDataBytes, err := types.EncodeBlockExtraData(c.chainConfig, header.Number, nil, gasTarget, baseFeeChangeDenom, reservedGasUsed, reservedCapacity)
 		if err != nil {
 			log.Error("error while encoding block extra data", "err", err)
 			return fmt.Errorf("error while encoding block extra data: %v", err)
@@ -1850,29 +1930,49 @@ func (c *Bor) checkAndCommitSpan(
 	var ctx = context.Background()
 	headerNumber := header.Number.Uint64()
 
-	tempState := state.Inner().Copy()
-	tempState.ResetPrefetcher()
-	tempState.StartPrefetcher("bor", state.Witness(), nil)
-
-	span, err := c.spanner.GetCurrentSpan(ctx, header.ParentHash, tempState)
+	span, err := c.readCurrentSpan(ctx, state.Inner(), header.ParentHash)
 	if err != nil {
 		return err
 	}
-
-	tempState.IntermediateRoot(false)
-
-	// Propagate addresses accessed during GetCurrentSpan back to the original
-	// state so they appear in the FlatDiff ReadSet. Without this, the pipelined
-	// SRC goroutine's witness won't capture their trie proof nodes (the copy's
-	// reads aren't tracked on the original), causing stateless execution to fail
-	// with missing trie nodes for the validator contract.
-	tempState.PropagateReadsTo(state.Inner())
 
 	if c.needToCommitSpan(span, headerNumber) {
 		return c.FetchAndCommitSpan(ctx, span.Id+1, state, header, chain)
 	}
 
 	return nil
+}
+
+// readCurrentSpan reads the span contract isolated from the live block state,
+// while keeping the read's trie nodes in any witness being produced - a
+// stateless verifier repeats this read, so the witness must carry them (see
+// state.ReadIsolated).
+func (c *Bor) readCurrentSpan(ctx context.Context, stateDB *state.StateDB, parentHash common.Hash) (*borTypes.Span, error) {
+	var span *borTypes.Span
+	err := stateDB.ReadIsolated(func(tmp *state.StateDB) error {
+		var err error
+		span, err = c.spanner.GetCurrentSpan(ctx, parentHash, tmp)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return span, nil
+}
+
+// readLastStateID reads the state-receiver contract's last state-sync id
+// isolated from the live block state, with the same witness guarantees as
+// readCurrentSpan.
+func (c *Bor) readLastStateID(stateDB *state.StateDB, number uint64, hash common.Hash) (*big.Int, error) {
+	var id *big.Int
+	err := stateDB.ReadIsolated(func(tmp *state.StateDB) error {
+		var err error
+		id, err = c.GenesisContractsClient.LastStateId(tmp, number, hash)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return id, nil
 }
 
 func (c *Bor) needToCommitSpan(currentSpan *borTypes.Span, headerNumber uint64) bool {
@@ -2002,22 +2102,10 @@ func (c *Bor) CommitStates(
 
 	if c.config.IsIndore(header.Number) {
 		// Fetch the LastStateId from contract via current state instance
-		tempState := state.Inner().Copy()
-		tempState.ResetPrefetcher()
-		tempState.StartPrefetcher("bor", state.Witness(), nil)
-
-		lastStateIDBig, err = c.GenesisContractsClient.LastStateId(tempState, number-1, header.ParentHash)
+		lastStateIDBig, err = c.readLastStateID(state.Inner(), number-1, header.ParentHash)
 		if err != nil {
 			return nil, err
 		}
-
-		tempState.IntermediateRoot(false)
-
-		// Propagate addresses accessed during LastStateId back to the original
-		// state so they appear in the FlatDiff ReadSet. Without this, the
-		// pipelined SRC goroutine's witness won't capture their trie proof
-		// nodes, causing stateless execution to fail with missing trie nodes.
-		tempState.PropagateReadsTo(state.Inner())
 
 		stateSyncDelay := c.config.CalculateStateSyncDelay(number)
 		to = time.Unix(int64(header.Time-stateSyncDelay), 0)

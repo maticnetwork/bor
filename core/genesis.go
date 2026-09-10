@@ -480,11 +480,47 @@ func (g *Genesis) IsVerkle() bool {
 
 // ToBlock returns the genesis block according to genesis specification.
 func (g *Genesis) ToBlock() *types.Block {
-	root, err := hashAlloc(&g.Alloc, g.IsVerkle())
+	alloc, err := g.allocWithBlockZeroAlloc()
+	if err != nil {
+		panic(err)
+	}
+	root, err := hashAlloc(&alloc, g.IsVerkle())
 	if err != nil {
 		panic(err)
 	}
 	return g.toBlockWithRoot(root)
+}
+
+func (g *Genesis) allocWithBlockZeroAlloc() (types.GenesisAlloc, error) {
+	if g == nil || g.Config == nil || g.Config.Bor == nil || g.Config.Bor.BlockAlloc == nil {
+		return g.Alloc, nil
+	}
+
+	blockZeroAlloc, ok := g.Config.Bor.BlockAlloc["0"]
+	if !ok {
+		return g.Alloc, nil
+	}
+
+	merged := make(types.GenesisAlloc, len(g.Alloc))
+	for address, account := range g.Alloc {
+		merged[address] = account
+	}
+
+	blob, err := json.Marshal(blockZeroAlloc)
+	if err != nil {
+		return nil, err
+	}
+
+	var alloc types.GenesisAlloc
+	if err := json.Unmarshal(blob, &alloc); err != nil {
+		return nil, err
+	}
+
+	for address, account := range alloc {
+		merged[address] = account
+	}
+
+	return merged, nil
 }
 
 // toBlockWithRoot constructs the genesis block with the given genesis state root.
@@ -575,15 +611,19 @@ func (g *Genesis) Commit(db ethdb.Database, triedb *triedb.Database) (*types.Blo
 	if config.Clique != nil && len(g.ExtraData) < 32+crypto.SignatureLength {
 		return nil, errors.New("can't start clique chain without signers")
 	}
+	alloc, err := g.allocWithBlockZeroAlloc()
+	if err != nil {
+		return nil, err
+	}
 	// flush the data to disk and compute the state root
-	root, err := flushAlloc(&g.Alloc, triedb)
+	root, err := flushAlloc(&alloc, triedb)
 	if err != nil {
 		return nil, err
 	}
 	block := g.toBlockWithRoot(root)
 
 	// Marshal the genesis state specification and persist.
-	blob, err := json.Marshal(g.Alloc)
+	blob, err := json.Marshal(alloc)
 	if err != nil {
 		return nil, err
 	}

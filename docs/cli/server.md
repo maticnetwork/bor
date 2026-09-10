@@ -447,3 +447,5 @@ The ```bor server``` command runs the Bor client.
 - ```txpool.rebroadcast-max-age```: Maximum age for a transaction to be eligible for rebroadcast (default: 10m0s)
 
 - ```txpool.rejournal```: Time interval to regenerate the local transaction journal (default: 1h0m0s)
+
+- ```txpool.reservedmaxoccupancypercent```: Percentage of globalslots+globalqueue that reserved-blockspace senders may occupy in aggregate (default: 50)

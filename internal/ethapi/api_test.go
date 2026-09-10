@@ -84,7 +84,7 @@ func testTransactionMarshal(t *testing.T, tests []txData, config *params.ChainCo
 		}
 
 		// rpcTransaction
-		rpcTx := newRPCTransaction(tx, common.Hash{}, 0, 0, 0, nil, config)
+		rpcTx := newRPCTransaction(tx, common.Hash{}, 0, 0, 0, nil, config, false)
 		if data, err := json.Marshal(rpcTx); err != nil {
 			t.Fatalf("test %d: marshalling failed; %v", i, err)
 		} else if err = tx2.UnmarshalJSON(data); err != nil {
@@ -542,8 +542,8 @@ func (b testBackend) SyncProgress(ctx context.Context) ethereum.SyncProgress {
 func (b testBackend) SuggestGasTipCap(ctx context.Context) (*big.Int, error) {
 	return big.NewInt(0), nil
 }
-func (b testBackend) FeeHistory(ctx context.Context, blockCount uint64, lastBlock rpc.BlockNumber, rewardPercentiles []float64) (*big.Int, [][]*big.Int, []*big.Int, []float64, []*big.Int, []float64, error) {
-	return nil, nil, nil, nil, nil, nil, nil
+func (b testBackend) FeeHistory(ctx context.Context, blockCount uint64, lastBlock rpc.BlockNumber, rewardPercentiles []float64) (*big.Int, [][]*big.Int, []*big.Int, []float64, []float64, []*big.Int, []float64, error) {
+	return nil, nil, nil, nil, nil, nil, nil, nil
 }
 func (b testBackend) BlobBaseFee(ctx context.Context) *big.Int { return new(big.Int) }
 func (b testBackend) BaseFee(ctx context.Context) *big.Int     { return new(big.Int) }

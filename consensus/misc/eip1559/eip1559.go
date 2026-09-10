@@ -116,8 +116,26 @@ func CalcBaseFee(config *params.ChainConfig, parent *types.Header) *big.Int {
 
 	// Modified for bor to derive gas target by percentage instead of using elasticity multiplier post dandeli HF
 	parentGasTarget := calcParentGasTarget(config, parent)
+	parentGasUsed := parent.GasUsed
+
+	// Reserved blockspace prices the public fee market on the normal region only:
+	// hold reserved capacity out of the target and net the parent's reserved gas
+	// out of the used figure, so a reserved client paying zero fee can't move the
+	// public base fee with its own usage. Anchoring the target on capacity keeps
+	// the public market stable and isolated from reserved behaviour. The used-side
+	// netting stays inert until the producer populates parent.ReservedGasUsed;
+	// until then the public base fee is priced against reserved capacity alone,
+	// deterministically across nodes, so no change is needed here.
+	if config.Bor != nil && config.Bor.IsReservedBlockspace(parent.Number) {
+		// One decode of both reserved fields, shared by target and used-side
+		// netting, instead of each calling its own GetReservedX getter.
+		reservedGasUsed, reservedCapacity := parent.GetReservedFields(config)
+		parentGasTarget = reservedAwareGasTarget(config, parent, reservedCapacity)
+		parentGasUsed = publicGasUsed(parent, reservedGasUsed)
+	}
+
 	// If the parent gasUsed is the same as the target, the baseFee remains unchanged.
-	if parent.GasUsed == parentGasTarget {
+	if parentGasUsed == parentGasTarget {
 		return new(big.Int).Set(parent.BaseFee)
 	}
 
@@ -142,10 +160,10 @@ func CalcBaseFee(config *params.ChainConfig, parent *types.Header) *big.Int {
 		}
 	}
 
-	if parent.GasUsed > parentGasTarget {
+	if parentGasUsed > parentGasTarget {
 		// If the parent block used more gas than its target, the baseFee should increase.
 		// max(1, parentBaseFee * gasUsedDelta / parentGasTarget / baseFeeChangeDenominator)
-		num.SetUint64(parent.GasUsed - parentGasTarget)
+		num.SetUint64(parentGasUsed - parentGasTarget)
 		num.Mul(num, parent.BaseFee)
 		num.Div(num, denom.SetUint64(parentGasTarget))
 		num.Div(num, denom.SetUint64(baseFeeChangeDenominatorUint64))
@@ -162,7 +180,7 @@ func CalcBaseFee(config *params.ChainConfig, parent *types.Header) *big.Int {
 	} else {
 		// Otherwise if the parent block used less gas than its target, the baseFee should decrease.
 		// max(0, parentBaseFee * gasUsedDelta / parentGasTarget / baseFeeChangeDenominator)
-		num.SetUint64(parentGasTarget - parent.GasUsed)
+		num.SetUint64(parentGasTarget - parentGasUsed)
 		num.Mul(num, parent.BaseFee)
 		num.Div(num, denom.SetUint64(parentGasTarget))
 		num.Div(num, denom.SetUint64(baseFeeChangeDenominatorUint64))
@@ -185,12 +203,56 @@ func CalcBaseFee(config *params.ChainConfig, parent *types.Header) *big.Int {
 // Dandeli HF, a percentage value is used to calculate the gas target (validated with fallback to default).
 // Post-Lisovo, if EnableDynamicTargetGas is configured, the percentage adjusts dynamically based on parent base fee.
 func calcParentGasTarget(config *params.ChainConfig, parent *types.Header) uint64 {
+	return gasTargetForLimit(config, parent, parent.GasLimit)
+}
+
+// gasTargetForLimit applies the EIP-1559 gas-target curve to an arbitrary gas
+// limit. calcParentGasTarget passes the full parent.GasLimit; the reserved
+// path passes the public capacity (limit minus reserved quotas). The target
+// percentage is independent of the limit, so the same curve composes cleanly.
+func gasTargetForLimit(config *params.ChainConfig, parent *types.Header, gasLimit uint64) uint64 {
 	if config.Bor != nil && config.Bor.IsDandeli(parent.Number) {
 		// Use dynamic helper which falls back to static GetTargetGasPercentage when feature is disabled
 		targetPercentage := config.Bor.GetDynamicTargetGasPercentage(parent.BaseFee, parent.Number)
-		return parent.GasLimit * targetPercentage / 100
+		return gasLimit * targetPercentage / 100
 	}
-	return parent.GasLimit / config.ElasticityMultiplier()
+	return gasLimit / config.ElasticityMultiplier()
+}
+
+// reservedAwareGasTarget returns the EIP-1559 target for the public region:
+// the standard curve applied to capacity that excludes the reserved quotas
+// (the parent header's stamped ReservedCapacity — Σ over the registry
+// snapshot's effective client set at the parent block). Header.GasLimit is
+// left untouched — a formula-only input. capacity is the caller's single
+// decode of parent's reserved fields (see GetReservedFields), shared with
+// publicGasUsed so CalcBaseFee decodes the header's Extra once per call.
+//
+// The capacity is a header field, not a state read: CalcBaseFee stays a pure
+// (config, parent header) function callable from paths with no parent state
+// (RPC, txpool, historical headers), while the registry-derived value still
+// reaches it via the producer-stamped field, validated exactly against the
+// registry by core.validateReservedFields.
+func reservedAwareGasTarget(config *params.ChainConfig, parent *types.Header, capacity *uint64) uint64 {
+	if capacity == nil || *capacity >= parent.GasLimit {
+		// nil is defensive (validated post-fork headers always carry the
+		// field). capacity >= limit is a reachable registry state: governance
+		// (setLimits, quota updates) has no tie to the block gas limit, which
+		// is itself operator-tunable per block, so price against the full
+		// target rather than a zero or negative one.
+		return calcParentGasTarget(config, parent)
+	}
+	return gasTargetForLimit(config, parent, parent.GasLimit-*capacity)
+}
+
+// publicGasUsed nets the parent's reserved gas out of its total gas used, so
+// the base-fee controller tracks only normal-region demand. reservedGasUsed
+// is the caller's single decode of parent's reserved fields (see
+// reservedAwareGasTarget).
+func publicGasUsed(parent *types.Header, reservedGasUsed *uint64) uint64 {
+	if reservedGasUsed == nil || *reservedGasUsed > parent.GasUsed {
+		return parent.GasUsed
+	}
+	return parent.GasUsed - *reservedGasUsed
 }
 
 // CalcGasTarget exports calcParentGasTarget for use by consensus code (e.g. Prepare).

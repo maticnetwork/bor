@@ -304,19 +304,37 @@ type list struct {
 	strict bool       // Whether nonces are strictly continuous or not
 	txs    *SortedMap // Heap indexed sorted hash map of the transactions
 
-	costcap   *uint256.Int // Price of the highest costing transaction (reset only if exceeds balance)
-	gascap    uint64       // Gas limit of the highest spending transaction (reset only if exceeds block limit)
-	totalcost *uint256.Int // Total cost of all transactions in the list
+	costcap  *uint256.Int // Price of the highest costing transaction (reset only if exceeds balance)
+	valuecap *uint256.Int // Value of the highest valued transaction (reset only if exceeds balance)
+	gascap   uint64       // Gas limit of the highest spending transaction (reset only if exceeds block limit)
+
+	totalcost  *uint256.Int // Total cost (value + gas*feeCap, ...) of all transactions in the list
+	totalvalue *uint256.Int // Total value (tx.Value() alone) of all transactions in the list
+	totalslots int          // Total numSlots of all transactions in the list
+
+	// costcap/totalcost and valuecap/totalvalue are two independent bases kept
+	// in lockstep by every mutation below. Reserved-blockspace senders are
+	// priced on the value basis for pool balance checks (their execution
+	// waives the gas debit up to quota); everyone else is priced on the full-
+	// cost basis. Keeping both always in sync, rather than deriving one from
+	// the other on demand, lets Filter operate on whichever basis the caller
+	// selects without one basis's cap corrupting the other's (see Filter).
+	//
+	// totalslots follows the same lockstep convention so reservedSlots can
+	// read it directly instead of reconstructing it from Flatten() (a sort
+	// plus a full copy) on every call.
 }
 
 // newList creates a new transaction list for maintaining nonce-indexable fast,
 // gapped, sortable transaction lists.
 func newList(strict bool) *list {
 	return &list{
-		strict:    strict,
-		txs:       NewSortedMap(),
-		costcap:   new(uint256.Int),
-		totalcost: new(uint256.Int),
+		strict:     strict,
+		txs:        NewSortedMap(),
+		costcap:    new(uint256.Int),
+		valuecap:   new(uint256.Int),
+		totalcost:  new(uint256.Int),
+		totalvalue: new(uint256.Int),
 	}
 }
 
@@ -332,7 +350,11 @@ func (l *list) Contains(nonce uint64) bool {
 // If the new transaction is accepted into the list, the lists' cost and gas
 // thresholds are also potentially updated.
 func (l *list) Add(tx *types.Transaction, priceBump uint64) (bool, *types.Transaction) {
-	// If there's an older better transaction, abort
+	// If there's an older better transaction, abort. Reserved-blockspace
+	// senders get no special case: replacement is priced entirely through the
+	// fallback-fee fields — a zero-fee tx can never replace a
+	// zero-fee tx (the strict-increase check below rejects equal fees), while
+	// strictly positive fallback fees clear a zero-fee incumbent's threshold.
 	old := l.txs.Get(tx.Nonce())
 	if old != nil {
 		if old.GasFeeCapCmp(tx) >= 0 || old.GasTipCapCmp(tx) >= 0 {
@@ -355,26 +377,39 @@ func (l *list) Add(tx *types.Transaction, priceBump uint64) (bool, *types.Transa
 			return false, nil
 		}
 	}
-	// Add new tx cost to totalcost
+	// Add new tx cost and value to the running totals
 	cost, overflow := uint256.FromBig(tx.Cost())
 	if overflow {
 		return false, nil
 	}
-	total, overflow := new(uint256.Int).AddOverflow(l.totalcost, cost)
+	value, overflow := uint256.FromBig(tx.Value())
 	if overflow {
 		return false, nil
 	}
-	l.totalcost = total
+	totalCost, overflow := new(uint256.Int).AddOverflow(l.totalcost, cost)
+	if overflow {
+		return false, nil
+	}
+	totalValue, overflow := new(uint256.Int).AddOverflow(l.totalvalue, value)
+	if overflow {
+		return false, nil
+	}
+	l.totalcost = totalCost
+	l.totalvalue = totalValue
+	l.totalslots += numSlots(tx)
 
-	// Old is being replaced, subtract old cost
+	// Old is being replaced, subtract old cost, value and slots
 	if old != nil {
-		l.subTotalCost([]*types.Transaction{old})
+		l.subTotals([]*types.Transaction{old})
 	}
 
 	// Otherwise overwrite the old transaction with the current one
 	l.txs.Put(tx)
 	if l.costcap.Cmp(cost) < 0 {
 		l.costcap = cost
+	}
+	if l.valuecap.Cmp(value) < 0 {
+		l.valuecap = value
 	}
 	if gas := tx.Gas(); l.gascap < gas {
 		l.gascap = gas
@@ -387,7 +422,7 @@ func (l *list) Add(tx *types.Transaction, priceBump uint64) (bool, *types.Transa
 // maintenance.
 func (l *list) Forward(threshold uint64) types.Transactions {
 	txs := l.txs.Forward(threshold)
-	l.subTotalCost(txs)
+	l.subTotals(txs)
 
 	return txs
 }
@@ -397,21 +432,50 @@ func (l *list) Forward(threshold uint64) types.Transactions {
 // post-removal maintenance. Strict-mode invalidated transactions are also
 // returned.
 //
-// This method uses the cached costcap and gascap to quickly decide if there's even
-// a point in calculating all the costs or if the balance covers all. If the threshold
-// is lower than the costgas cap, the caps will be reset to a new high after removing
-// the newly invalidated transactions.
-func (l *list) Filter(costLimit *uint256.Int, gasLimit uint64) (types.Transactions, types.Transactions) {
+// valueBasis selects which basis costLimit is priced against: false (the
+// default) is today's full-cost basis — costLimit is a balance compared
+// against tx.Cost(), and only costcap is consulted/lowered. true is the
+// value basis for reserved-blockspace senders, whose execution waives the gas
+// debit up to quota — costLimit is compared against tx.Value() alone, and
+// only valuecap is consulted/lowered.
+//
+// The two caps must stay independent. A shared cap would let a value-basis
+// pass over a reserved sender lower it to the sender's balance while
+// removing nothing (the sender's txs already satisfy the value bound), and
+// once the sender is later priced on the full-cost basis again (e.g. after
+// deregistration) that pass would short-circuit on the value-lowered cap and
+// leave unpayable transactions stranded in the pool. Because each pass only
+// ever lowers the cap it actually enforced, costcap and valuecap each stay a
+// true upper bound for their own basis across any number of basis switches.
+//
+// This method uses the cached cost/value cap and gascap to quickly decide if
+// there's even a point in calculating all the costs or if the balance covers
+// all. If the threshold is lower than the relevant cap, that cap is reset to
+// the new high after removing the newly invalidated transactions.
+func (l *list) Filter(costLimit *uint256.Int, gasLimit uint64, valueBasis bool) (types.Transactions, types.Transactions) {
+	activeCap := l.costcap
+	if valueBasis {
+		activeCap = l.valuecap
+	}
 	// If all transactions are below the threshold, short circuit
-	if l.costcap.Cmp(costLimit) <= 0 && l.gascap <= gasLimit {
+	if activeCap.Cmp(costLimit) <= 0 && l.gascap <= gasLimit {
 		return nil, nil
 	}
-	l.costcap = new(uint256.Int).Set(costLimit) // Lower the caps to the thresholds
+	if valueBasis {
+		l.valuecap = new(uint256.Int).Set(costLimit)
+	} else {
+		l.costcap = new(uint256.Int).Set(costLimit)
+	}
 	l.gascap = gasLimit
 
-	// Filter out all the transactions above the account's funds
+	// Filter out all the transactions above the account's funds on the
+	// selected basis.
 	removed := l.txs.Filter(func(tx *types.Transaction) bool {
-		return tx.Gas() > gasLimit || tx.Cost().Cmp(costLimit.ToBig()) > 0
+		basisCost := tx.Cost()
+		if valueBasis {
+			basisCost = tx.Value()
+		}
+		return tx.Gas() > gasLimit || basisCost.Cmp(costLimit.ToBig()) > 0
 	})
 
 	if len(removed) == 0 {
@@ -428,9 +492,9 @@ func (l *list) Filter(costLimit *uint256.Int, gasLimit uint64) (types.Transactio
 		}
 		invalids = l.txs.filter(func(tx *types.Transaction) bool { return tx.Nonce() > lowest })
 	}
-	// Reset total cost
-	l.subTotalCost(removed)
-	l.subTotalCost(invalids)
+	// Reset total cost and value
+	l.subTotals(removed)
+	l.subTotals(invalids)
 	l.txs.reheap()
 	return removed, invalids
 }
@@ -477,7 +541,7 @@ func (l *list) FilterTxConditional(state *state.StateDB, header *types.Header) t
 // exceeding that limit.
 func (l *list) Cap(threshold int) types.Transactions {
 	txs := l.txs.Cap(threshold)
-	l.subTotalCost(txs)
+	l.subTotals(txs)
 
 	return txs
 }
@@ -492,11 +556,11 @@ func (l *list) Remove(tx *types.Transaction) (bool, types.Transactions) {
 		return false, nil
 	}
 
-	l.subTotalCost([]*types.Transaction{tx})
+	l.subTotals([]*types.Transaction{tx})
 	// In strict mode, filter out non-executable transactions
 	if l.strict {
 		txs := l.txs.Filter(func(tx *types.Transaction) bool { return tx.Nonce() > nonce })
-		l.subTotalCost(txs)
+		l.subTotals(txs)
 
 		return true, txs
 	}
@@ -513,7 +577,7 @@ func (l *list) Remove(tx *types.Transaction) (bool, types.Transactions) {
 // happen but better to be self correcting than failing!
 func (l *list) Ready(start uint64) types.Transactions {
 	txs := l.txs.Ready(start)
-	l.subTotalCost(txs)
+	l.subTotals(txs)
 
 	return txs
 }
@@ -545,13 +609,23 @@ func (l *list) Has(nonce uint64) bool {
 	return l != nil && l.txs.items[nonce] != nil
 }
 
-// subTotalCost subtracts the cost of the given transactions from the
-// total cost of all transactions.
-func (l *list) subTotalCost(txs []*types.Transaction) {
+// subTotals subtracts the cost, value and slot count of the given
+// transactions from the list's running totals. The three aggregates are
+// always maintained together so any of them is available at read time
+// regardless of which basis (if any) drove the removal.
+func (l *list) subTotals(txs []*types.Transaction) {
 	for _, tx := range txs {
 		_, underflow := l.totalcost.SubOverflow(l.totalcost, uint256.MustFromBig(tx.Cost()))
 		if underflow {
 			panic("totalcost underflow")
+		}
+		_, underflow = l.totalvalue.SubOverflow(l.totalvalue, uint256.MustFromBig(tx.Value()))
+		if underflow {
+			panic("totalvalue underflow")
+		}
+		l.totalslots -= numSlots(tx)
+		if l.totalslots < 0 {
+			panic("totalslots underflow")
 		}
 	}
 }
@@ -633,6 +707,11 @@ type pricedList struct {
 	all              *lookup    // Pointer to the map of all transactions
 	urgent, floating priceHeap  // Heaps of prices of all the stored **remote** transactions
 	reheapMu         sync.Mutex // Mutex asserts that only one routine is reheaping the list
+
+	// isReserved reports whether tx is from a reserved-blockspace sender. Such
+	// txs pay zero fee and would otherwise sit at the bottom of the price heap,
+	// so they are protected from eviction here. nil when no registry is wired.
+	isReserved func(tx *types.Transaction) bool
 }
 
 const (
@@ -749,6 +828,7 @@ func (l *pricedList) Discard(slots int) (types.Transactions, bool, uint64) {
 		slots = 0
 	}
 	drop := make(types.Transactions, 0, slots) // Remote underpriced transactions to drop
+	var protected types.Transactions           // reserved txs pulled off the heaps but never evicted
 
 	for slots > 0 {
 		if len(l.urgent.list)*floatingRatio > len(l.floating.list)*urgentRatio {
@@ -771,10 +851,20 @@ func (l *pricedList) Discard(slots int) (types.Transactions, bool, uint64) {
 				l.stales.Add(-1)
 				continue
 			}
+			// Reserved-blockspace senders are never evicted for being cheap: set
+			// the tx aside and restore it after the scan.
+			if l.isReserved != nil && l.isReserved(tx) {
+				protected = append(protected, tx)
+				continue
+			}
 			// Non stale transaction found, discard it
 			drop = append(drop, tx)
 			slots -= numSlots(tx)
 		}
+	}
+	// Restore any reserved transactions pulled off the heaps during the scan.
+	for _, tx := range protected {
+		heap.Push(&l.urgent, tx)
 	}
 	// If we still can't make enough room for the new transaction
 	if slots > 0 {

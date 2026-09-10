@@ -22,6 +22,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/lru"
 	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/consensus/bor/registryreader"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -42,7 +43,7 @@ import (
 //   - It cannot be placed outside of core, because it needs to construct a dud headerchain
 //
 // TODO(karalabe): Would be nice to resolve both issues above somehow and move it.
-func ExecuteStateless(config *params.ChainConfig, vmconfig vm.Config, block *types.Block, witness *stateless.Witness, author *common.Address, consensus consensus.Engine, diskdb ethdb.Database) (common.Hash, common.Hash, *state.StateDB, *ProcessResult, error) {
+func ExecuteStateless(config *params.ChainConfig, vmconfig vm.Config, block *types.Block, witness *stateless.Witness, author *common.Address, consensus consensus.Engine, diskdb ethdb.Database, reservedRegistry registryreader.Reader) (common.Hash, common.Hash, *state.StateDB, *ProcessResult, error) {
 	// Sanity check if the supplied block accidentally contains a set root or
 	// receipt hash. If so, be very loud, but still continue.
 	if block.Root() != (common.Hash{}) {
@@ -63,6 +64,11 @@ func ExecuteStateless(config *params.ChainConfig, vmconfig vm.Config, block *typ
 		chainDb:     memdb,
 		headerCache: lru.NewCache[common.Hash, *types.Header](256),
 		engine:      consensus,
+		// Wire the reserved-blockspace reader so ReservedSnapshotForBlock can
+		// classify reserved senders against the witness-backed state; the reader's
+		// methods take the statedb per call, so the same reader used by the live
+		// chain works here. Nil when reserved blockspace isn't configured.
+		reservedRegistry: reservedRegistry,
 	}
 	processor := NewStateProcessor(headerChain)
 	validator := NewBlockValidator(config, nil) // No chain, we only validate the state, not the block

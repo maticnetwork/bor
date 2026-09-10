@@ -317,6 +317,13 @@ func (c *Command) Flags(config *Config) *flagset.Flagset {
 		Default: c.cliConfig.TxPool.GlobalQueue,
 		Group:   "Transaction Pool",
 	})
+	f.Uint64Flag(&flagset.Uint64Flag{
+		Name:    "txpool.reservedmaxoccupancypercent",
+		Usage:   "Percentage of globalslots+globalqueue that reserved-blockspace senders may occupy in aggregate",
+		Value:   &c.cliConfig.TxPool.ReservedMaxOccupancyPercent,
+		Default: c.cliConfig.TxPool.ReservedMaxOccupancyPercent,
+		Group:   "Transaction Pool",
+	})
 	f.DurationFlag(&flagset.DurationFlag{
 		Name:    "txpool.lifetime",
 		Usage:   "Maximum amount of time non-executable transaction are queued",

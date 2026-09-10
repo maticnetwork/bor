@@ -290,6 +290,12 @@ type DeriveReceiptContext struct {
 	LogIndex     uint // Number of logs in the block until this receipt
 	Tx           *Transaction
 	TxIndex      uint
+	// Reserved marks the transaction as classified reserved (fee-free) by the
+	// reserved-blockspace registry. Reserved transactions execute without
+	// paying a fee regardless of the fee fields they carry (see
+	// core/state_transition.go buyGas), so their effective gas price is
+	// always zero rather than the fee-derived value below.
+	Reserved bool
 }
 
 // DeriveFields fills the receipt with computed fields based on consensus
@@ -299,7 +305,11 @@ func (r *Receipt) DeriveFields(signer Signer, context DeriveReceiptContext) {
 	r.Type = context.Tx.Type()
 	r.TxHash = context.Tx.Hash()
 	r.GasUsed = context.GasUsed
-	r.EffectiveGasPrice = context.Tx.inner.effectiveGasPrice(new(big.Int), context.BaseFee)
+	if context.Reserved {
+		r.EffectiveGasPrice = new(big.Int)
+	} else {
+		r.EffectiveGasPrice = context.Tx.inner.effectiveGasPrice(new(big.Int), context.BaseFee)
+	}
 
 	// EIP-4844 blob transaction fields
 	if context.Tx.Type() == BlobTxType {
@@ -403,9 +413,13 @@ func (rs Receipts) EncodeIndex(i int, w *bytes.Buffer) {
 	}
 }
 
-// DeriveFields fills the receipts with their computed fields based on consensus
-// data and contextual infos like containing block and transactions.
-func (rs Receipts) DeriveFields(config *params.ChainConfig, blockHash common.Hash, blockNumber uint64, blockTime uint64, baseFee *big.Int, blobGasPrice *big.Int, txs []*Transaction) error {
+// DeriveFields fills the receipts with their computed fields based on
+// consensus data and contextual infos like containing block and
+// transactions. reservedTxIndexes lists positions within txs classified
+// reserved (fee-free) by the reserved-blockspace registry, strictly
+// ascending; nil/empty means none (pre-fork, no registry, or nothing
+// reserved for this block).
+func (rs Receipts) DeriveFields(config *params.ChainConfig, blockHash common.Hash, blockNumber uint64, blockTime uint64, baseFee *big.Int, blobGasPrice *big.Int, txs []*Transaction, reservedTxIndexes []uint64) error {
 	signer := MakeSigner(config, new(big.Int).SetUint64(blockNumber), blockTime)
 
 	logIndex := uint(0)
@@ -414,10 +428,16 @@ func (rs Receipts) DeriveFields(config *params.ChainConfig, blockHash common.Has
 		return errors.New("transaction and receipt count mismatch")
 	}
 
+	reservedPos := 0
 	for i := 0; i < len(rs); i++ {
 		var cumulativeGasUsed uint64
 		if i > 0 {
 			cumulativeGasUsed = rs[i-1].CumulativeGasUsed
+		}
+		reserved := false
+		if reservedPos < len(reservedTxIndexes) && reservedTxIndexes[reservedPos] == uint64(i) {
+			reserved = true
+			reservedPos++
 		}
 		rs[i].DeriveFields(signer, DeriveReceiptContext{
 			BlockHash:    blockHash,
@@ -429,6 +449,7 @@ func (rs Receipts) DeriveFields(config *params.ChainConfig, blockHash common.Has
 			LogIndex:     logIndex,
 			Tx:           txs[i],
 			TxIndex:      uint(i),
+			Reserved:     reserved,
 		})
 		logIndex += uint(len(rs[i].Logs))
 	}

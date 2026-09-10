@@ -52,7 +52,9 @@ func main() {
 	}
 	vmConfig := vm.Config{}
 
-	crossStateRoot, crossReceiptRoot, _, _, err := core.ExecuteStateless(chainConfig, vmConfig, payload.Block, payload.Witness, nil, nil, nil)
+	// The standalone keeper has no registry reader wired; reserved-blockspace
+	// verification requires one and is not supported here.
+	crossStateRoot, crossReceiptRoot, _, _, err := core.ExecuteStateless(chainConfig, vmConfig, payload.Block, payload.Witness, nil, nil, nil, nil)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "stateless self-validation failed: %v\n", err)
 		os.Exit(10)

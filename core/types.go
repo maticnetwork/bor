@@ -21,6 +21,7 @@ import (
 	"sync/atomic"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/consensus/bor/registryreader"
 	"github.com/ethereum/go-ethereum/core/state"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/core/vm"
@@ -64,4 +65,28 @@ type ProcessResult struct {
 	Requests [][]byte
 	Logs     []*types.Log
 	GasUsed  uint64
+	// ReservedGasUsed is the actual gas used by transactions classified reserved
+	// (fee-free) during this block's execution. ValidateState checks it against
+	// the header's ReservedGasUsed post-fork, so a producer cannot stamp a value
+	// that disagrees with execution (which would skew the next block's base fee).
+	ReservedGasUsed uint64
+	// ReservedCapacity is the reserved-blockspace registry snapshot's effective
+	// capacity (Σ quotas of the client set effective for this block) used to
+	// classify this block's reserved region. ValidateState checks it against
+	// the header's ReservedCapacity post-fork, mirroring ReservedGasUsed.
+	ReservedCapacity uint64
+	// ReservedTxIndexes lists the positions within the block's transactions
+	// classified reserved (fee-free), strictly ascending. Persisted alongside
+	// receipts so reads can report the correct effective gas price for
+	// reserved transactions without re-deriving the classification.
+	ReservedTxIndexes []uint64
+	// ReservedClientUsage reports, per registry client id, the declared gas
+	// consumed by this block's reserved transactions against that client's
+	// quota. It is derived observability data assembled from the same
+	// classification walk as ReservedTxIndexes, not a consensus-checked
+	// value - ValidateState never compares it against the header, which
+	// carries no per-client breakdown. The Used basis is declared gas
+	// (tx.Gas()) - the same basis quota admission itself is charged against -
+	// not the executed gas ReservedGasUsed reports. Nil pre-fork.
+	ReservedClientUsage map[uint64]registryreader.ClientUsage
 }

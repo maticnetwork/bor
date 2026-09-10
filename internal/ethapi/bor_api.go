@@ -76,7 +76,10 @@ func isBorSystemTx(borCfg *params.BorConfig, to *common.Address) bool {
 
 	validatorContract := common.HexToAddress(borCfg.ValidatorContract)
 	stateReceiverContract := common.HexToAddress(borCfg.StateReceiverContract)
-	if to.Cmp(validatorContract) == 0 || to.Cmp(stateReceiverContract) == 0 {
+	reservedRegistryContract := common.HexToAddress(borCfg.ReservedRegistryContract)
+	if to.Cmp(validatorContract) == 0 ||
+		to.Cmp(stateReceiverContract) == 0 ||
+		(borCfg.ReservedRegistryContract != "" && to.Cmp(reservedRegistryContract) == 0) {
 		return true
 	}
 
@@ -114,7 +117,8 @@ func (api *BlockChainAPI) appendRPCMarshalBorTransaction(ctx context.Context, bl
 			formattedTxs := fields["transactions"].([]interface{})
 
 			if fullTx {
-				marshalledTx := newRPCTransaction(borTx, blockHash, blockNumber, block.Time(), txIndex, block.BaseFee(), api.b.ChainConfig())
+				// The bor state-sync (pseudo) transaction is never reserved.
+				marshalledTx := newRPCTransaction(borTx, blockHash, blockNumber, block.Time(), txIndex, block.BaseFee(), api.b.ChainConfig(), false)
 				// newRPCTransaction calculates hash based on RLP of the transaction data.
 				// In the case of bor block tx, we need simple derived tx hash (same as function argument) instead of RLP hash
 				marshalledTx.Hash = txHash
@@ -340,6 +344,8 @@ type RPCBlockExtraData struct {
 	GasTarget                *hexutil.Uint64 `json:"gasTarget"`
 	BaseFeeChangeDenominator *hexutil.Uint64 `json:"baseFeeChangeDenominator"`
 	TxDependency             [][]uint64      `json:"txDependency"`
+	ReservedGasUsed          *hexutil.Uint64 `json:"reservedGasUsed"`
+	ReservedCapacity         *hexutil.Uint64 `json:"reservedCapacity"`
 }
 
 // marshalBlockExtraData decodes the BlockExtraData from a header's Extra field
@@ -362,6 +368,16 @@ func marshalBlockExtraData(header *types.Header, chainConfig *params.ChainConfig
 		result.BaseFeeChangeDenominator = &d
 	}
 
+	if bed.ReservedGasUsed != nil {
+		rg := hexutil.Uint64(*bed.ReservedGasUsed)
+		result.ReservedGasUsed = &rg
+	}
+
+	if bed.ReservedCapacity != nil {
+		rc := hexutil.Uint64(*bed.ReservedCapacity)
+		result.ReservedCapacity = &rc
+	}
+
 	return result
 }
 
@@ -380,6 +396,8 @@ func appendBorExtraData(response map[string]interface{}, block *types.Block, bor
 type BlockGasParamsResult struct {
 	GasTarget                *hexutil.Uint64 `json:"gasTarget"`
 	BaseFeeChangeDenominator *hexutil.Uint64 `json:"baseFeeChangeDenominator"`
+	ReservedGasUsed          *hexutil.Uint64 `json:"reservedGasUsed"`
+	ReservedCapacity         *hexutil.Uint64 `json:"reservedCapacity"`
 }
 
 // GetBlockGasParams returns the EIP-1559 gas target and base fee change denominator
@@ -405,7 +423,9 @@ func (api *BorAPI) GetBlockGasParams(ctx context.Context, blockNrOrHash rpc.Bloc
 		return nil, fmt.Errorf("header not found")
 	}
 
-	gasTarget, bfcd := header.GetBaseFeeParams(api.b.ChainConfig())
+	chainConfig := api.b.ChainConfig()
+	gasTarget, bfcd := header.GetBaseFeeParams(chainConfig)
+	reservedGasUsed, reservedCapacity := header.GetReservedFields(chainConfig)
 
 	result := &BlockGasParamsResult{}
 	if gasTarget != nil {
@@ -415,6 +435,14 @@ func (api *BorAPI) GetBlockGasParams(ctx context.Context, blockNrOrHash rpc.Bloc
 	if bfcd != nil {
 		d := hexutil.Uint64(*bfcd)
 		result.BaseFeeChangeDenominator = &d
+	}
+	if reservedGasUsed != nil {
+		rg := hexutil.Uint64(*reservedGasUsed)
+		result.ReservedGasUsed = &rg
+	}
+	if reservedCapacity != nil {
+		rc := hexutil.Uint64(*reservedCapacity)
+		result.ReservedCapacity = &rc
 	}
 
 	return result, nil

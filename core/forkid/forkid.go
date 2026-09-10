@@ -339,6 +339,7 @@ func GatherForks(config *params.ChainConfig, genesisTime uint64) (heightForks []
 			config.Bor.ValenciaBlock,
 			config.Bor.AustinBlock,
 			config.Bor.HampiBlock,
+			config.Bor.ReservedBlockspaceBlock,
 		} {
 			if fork != nil {
 				heightForks = append(heightForks, fork.Uint64())

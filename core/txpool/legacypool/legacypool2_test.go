@@ -399,6 +399,47 @@ func TestLockOrdering_RemovedNoDeadlock(t *testing.T) {
 	}
 }
 
+// TestPricedListDiscard_ProtectsReserved verifies that Discard never evicts a
+// reserved-blockspace transaction, even though its zero fee puts it at the very
+// bottom of the price heap where eviction would otherwise take it first.
+func TestPricedListDiscard_ProtectsReserved(t *testing.T) {
+	t.Parallel()
+
+	makeList := func() (*pricedList, *types.Transaction) {
+		all := newLookup()
+		priced := newPricedList(all)
+		key, _ := crypto.GenerateKey()
+		reserved := pricedTransaction(0, 100000, big.NewInt(0), key) // zero tip → cheapest
+		all.Add(reserved)
+		for i := 1; i <= 5; i++ {
+			all.Add(pricedTransaction(uint64(i), 100000, big.NewInt(int64(i)), key))
+		}
+		priced.Reheap()
+		return priced, reserved
+	}
+	contains := func(txs types.Transactions, want *types.Transaction) bool {
+		for _, tx := range txs {
+			if tx.Hash() == want.Hash() {
+				return true
+			}
+		}
+		return false
+	}
+
+	// Baseline: without the predicate the zero-fee tx is the cheapest and evicted.
+	priced, reserved := makeList()
+	drop, ok, _ := priced.Discard(3)
+	require.True(t, ok)
+	require.True(t, contains(drop, reserved), "baseline: zero-fee tx should be discarded without protection")
+
+	// With the reserved predicate wired, the same tx is protected.
+	priced, reserved = makeList()
+	priced.isReserved = func(tx *types.Transaction) bool { return tx.Hash() == reserved.Hash() }
+	drop, ok, _ = priced.Discard(3)
+	require.True(t, ok, "Discard should still free the requested slots from non-reserved txs")
+	require.False(t, contains(drop, reserved), "reserved zero-fee tx must not be discarded")
+}
+
 // TestPricedListPut_ReheapAfterSnapshot verifies that Put is a no-op when a
 // Reheap occurred after the snapshot was captured. This is the deduplication
 // mechanism that prevents the same tx from appearing in the priced heap twice

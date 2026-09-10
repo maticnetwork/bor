@@ -56,32 +56,71 @@ func newTxWithMinerFee(tx *txpool.LazyTransaction, from common.Address, baseFee 
 	}, nil
 }
 
+// newReservedTxWithMinerFee wraps a reserved-region transaction. Unlike
+// newTxWithMinerFee it never rejects a below-base-fee (including zero-fee)
+// transaction — those are exactly the transactions the reserved region exists
+// to serve. A below-base-fee transaction's effective tip is clamped to zero so
+// the ascending reserved heap pops it before transactions carrying a fallback
+// tip that could instead compete in the normal region.
+func newReservedTxWithMinerFee(tx *txpool.LazyTransaction, from common.Address, baseFee *uint256.Int) (*txWithMinerFee, error) {
+	tip := new(uint256.Int).Set(tx.GasTipCap)
+	if baseFee != nil {
+		if tx.GasFeeCap.Cmp(baseFee) < 0 {
+			tip = uint256.NewInt(0)
+		} else {
+			tip = new(uint256.Int).Sub(tx.GasFeeCap, baseFee)
+			if tip.Gt(tx.GasTipCap) {
+				tip = new(uint256.Int).Set(tx.GasTipCap)
+			}
+		}
+	}
+	return &txWithMinerFee{tx: tx, from: from, fees: tip}, nil
+}
+
+// wrapTxWithMinerFee dispatches to the reserved or normal fee wrapper.
+func wrapTxWithMinerFee(tx *txpool.LazyTransaction, from common.Address, baseFee *uint256.Int, reserved bool) (*txWithMinerFee, error) {
+	if reserved {
+		return newReservedTxWithMinerFee(tx, from, baseFee)
+	}
+	return newTxWithMinerFee(tx, from, baseFee)
+}
+
 // txByPriceAndTime implements both the sort and the heap interface, making it useful
 // for all at once sorting as well as individually adding and removing elements.
-type txByPriceAndTime []*txWithMinerFee
+//
+// ascending flips the fee comparison: the normal market pops highest effective
+// tip first (ascending=false); the reserved region pops lowest first so
+// zero-/below-base-fee transactions are served before fallback-fee ones.
+type txByPriceAndTime struct {
+	items     []*txWithMinerFee
+	ascending bool
+}
 
-func (s txByPriceAndTime) Len() int { return len(s) }
+func (s txByPriceAndTime) Len() int { return len(s.items) }
 func (s txByPriceAndTime) Less(i, j int) bool {
 	// If the prices are equal, use the time the transaction was first seen for
 	// deterministic sorting
-	cmp := s[i].fees.Cmp(s[j].fees)
+	cmp := s.items[i].fees.Cmp(s.items[j].fees)
 	if cmp == 0 {
-		return s[i].tx.Time.Before(s[j].tx.Time)
+		return s.items[i].tx.Time.Before(s.items[j].tx.Time)
+	}
+	if s.ascending {
+		return cmp < 0
 	}
 	return cmp > 0
 }
-func (s txByPriceAndTime) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+func (s txByPriceAndTime) Swap(i, j int) { s.items[i], s.items[j] = s.items[j], s.items[i] }
 
 func (s *txByPriceAndTime) Push(x interface{}) {
-	*s = append(*s, x.(*txWithMinerFee))
+	s.items = append(s.items, x.(*txWithMinerFee))
 }
 
 func (s *txByPriceAndTime) Pop() interface{} {
-	old := *s
+	old := s.items
 	n := len(old)
 	x := old[n-1]
 	old[n-1] = nil
-	*s = old[0 : n-1]
+	s.items = old[0 : n-1]
 	return x
 }
 
@@ -89,10 +128,11 @@ func (s *txByPriceAndTime) Pop() interface{} {
 // transactions in a profit-maximizing sorted order, while supporting removing
 // entire batches of transactions for non-executable accounts.
 type transactionsByPriceAndNonce struct {
-	txs     map[common.Address][]*txpool.LazyTransaction // Per account nonce-sorted list of transactions
-	heads   txByPriceAndTime                             // Next transaction for each unique account (price heap)
-	signer  types.Signer                                 // Signer for the set of transactions
-	baseFee *uint256.Int                                 // Current base fee
+	txs      map[common.Address][]*txpool.LazyTransaction // Per account nonce-sorted list of transactions
+	heads    txByPriceAndTime                             // Next transaction for each unique account (price heap)
+	signer   types.Signer                                 // Signer for the set of transactions
+	baseFee  *uint256.Int                                 // Current base fee
+	reserved bool                                         // Reserved-region ordering: ascending tip, never drop below-base-fee txs
 }
 
 // newTransactionsByPriceAndNonce creates a transaction set that can retrieve
@@ -103,6 +143,19 @@ type transactionsByPriceAndNonce struct {
 //
 // The construction is halted if interrupt is set (during block building timeout).
 func newTransactionsByPriceAndNonce(signer types.Signer, txs map[common.Address][]*txpool.LazyTransaction, baseFee *big.Int, interrupt *atomic.Bool) *transactionsByPriceAndNonce {
+	return newTxByPriceAndNonce(signer, txs, baseFee, interrupt, false)
+}
+
+// newReservedTransactionsByNonce builds an ordering for the reserved region. It
+// never drops below-base-fee (including zero-fee) transactions and pops them
+// before transactions carrying a fallback tip (ascending effective tip), while
+// honouring per-account nonce order. Same interface as the normal ordering, so
+// commitTransactions consumes it unchanged.
+func newReservedTransactionsByNonce(signer types.Signer, txs map[common.Address][]*txpool.LazyTransaction, baseFee *big.Int, interrupt *atomic.Bool) *transactionsByPriceAndNonce {
+	return newTxByPriceAndNonce(signer, txs, baseFee, interrupt, true)
+}
+
+func newTxByPriceAndNonce(signer types.Signer, txs map[common.Address][]*txpool.LazyTransaction, baseFee *big.Int, interrupt *atomic.Bool, reserved bool) *transactionsByPriceAndNonce {
 	// Convert the basefee from header format to uint256 format
 	var baseFeeUint *uint256.Int
 	if baseFee != nil {
@@ -112,56 +165,68 @@ func newTransactionsByPriceAndNonce(signer types.Signer, txs map[common.Address]
 		interrupt = new(atomic.Bool)
 	}
 	// Initialize a price and received time based heap with the head transactions
-	heads := make(txByPriceAndTime, 0, len(txs))
+	heads := txByPriceAndTime{items: make([]*txWithMinerFee, 0, len(txs)), ascending: reserved}
 	for from, accTxs := range txs {
 		// Check for the flag to interrupt block building on timeout.
 		if interrupt.Load() {
 			// We could send partial set of sorted transactions but they'll anyways
 			// be rejected during commit transactions. Instead send an empty list.
-			return emptyTransactionsByPriceAndNonce(signer, baseFeeUint)
+			return emptyTransactionsByPriceAndNonce(signer, baseFeeUint, reserved)
 		}
-		wrapped, err := newTxWithMinerFee(accTxs[0], from, baseFeeUint)
+		wrapped, err := wrapTxWithMinerFee(accTxs[0], from, baseFeeUint, reserved)
 		if err != nil {
 			delete(txs, from)
 			continue
 		}
-		heads = append(heads, wrapped)
+		heads.items = append(heads.items, wrapped)
 		txs[from] = accTxs[1:]
 	}
 	heap.Init(&heads)
 
 	// Assemble and return the transaction set
 	return &transactionsByPriceAndNonce{
-		txs:     txs,
-		heads:   heads,
-		signer:  signer,
-		baseFee: baseFeeUint,
+		txs:      txs,
+		heads:    heads,
+		signer:   signer,
+		baseFee:  baseFeeUint,
+		reserved: reserved,
 	}
 }
 
-func emptyTransactionsByPriceAndNonce(signer types.Signer, baseFee *uint256.Int) *transactionsByPriceAndNonce {
+func emptyTransactionsByPriceAndNonce(signer types.Signer, baseFee *uint256.Int, reserved bool) *transactionsByPriceAndNonce {
 	return &transactionsByPriceAndNonce{
-		signer:  signer,
-		txs:     map[common.Address][]*txpool.LazyTransaction{},
-		heads:   make(txByPriceAndTime, 0),
-		baseFee: baseFee,
+		signer:   signer,
+		txs:      map[common.Address][]*txpool.LazyTransaction{},
+		heads:    txByPriceAndTime{items: make([]*txWithMinerFee, 0), ascending: reserved},
+		baseFee:  baseFee,
+		reserved: reserved,
 	}
 }
 
 // Peek returns the next transaction by price.
 func (t *transactionsByPriceAndNonce) Peek() (*txpool.LazyTransaction, *uint256.Int) {
-	if len(t.heads) == 0 {
+	if len(t.heads.items) == 0 {
 		return nil, nil
 	}
-	return t.heads[0].tx, t.heads[0].fees
+	return t.heads.items[0].tx, t.heads.items[0].fees
+}
+
+// PeekFrom returns the sender of the next transaction without resolving the
+// full transaction. The reserved selection scan uses it to group transactions
+// by sender as it pops them in ascending-fee order.
+func (t *transactionsByPriceAndNonce) PeekFrom() (common.Address, bool) {
+	if len(t.heads.items) == 0 {
+		return common.Address{}, false
+	}
+	return t.heads.items[0].from, true
 }
 
 // Shift replaces the current best head with the next one from the same account.
 func (t *transactionsByPriceAndNonce) Shift() {
-	acc := t.heads[0].from
+	acc := t.heads.items[0].from
 	if txs, ok := t.txs[acc]; ok && len(txs) > 0 {
-		if wrapped, err := newTxWithMinerFee(txs[0], acc, t.baseFee); err == nil {
-			t.heads[0], t.txs[acc] = wrapped, txs[1:]
+		if wrapped, err := wrapTxWithMinerFee(txs[0], acc, t.baseFee, t.reserved); err == nil {
+			t.heads.items[0], t.txs[acc] = wrapped, txs[1:]
 			heap.Fix(&t.heads, 0)
 			return
 		}
@@ -183,12 +248,12 @@ func (t *transactionsByPriceAndNonce) Pop() {
 // Empty returns if the price heap is empty. It can be used to check it simpler
 // than calling peek and checking for nil return.
 func (t *transactionsByPriceAndNonce) Empty() bool {
-	return len(t.heads) == 0
+	return len(t.heads.items) == 0
 }
 
 // Clear removes the entire content of the heap.
 func (t *transactionsByPriceAndNonce) Clear() {
-	t.heads, t.txs = nil, nil
+	t.heads.items, t.txs = nil, nil
 }
 
 // clone returns a shallow copy of the heap suitable for non-destructive scanning.
@@ -202,12 +267,13 @@ func (t *transactionsByPriceAndNonce) clone() *transactionsByPriceAndNonce {
 		copy(c, queue)
 		clonedTxs[addr] = c
 	}
-	clonedHeads := make(txByPriceAndTime, len(t.heads))
-	copy(clonedHeads, t.heads)
+	clonedItems := make([]*txWithMinerFee, len(t.heads.items))
+	copy(clonedItems, t.heads.items)
 	return &transactionsByPriceAndNonce{
-		txs:     clonedTxs,
-		heads:   clonedHeads,
-		signer:  t.signer,
-		baseFee: t.baseFee,
+		txs:      clonedTxs,
+		heads:    txByPriceAndTime{items: clonedItems, ascending: t.heads.ascending},
+		signer:   t.signer,
+		baseFee:  t.baseFee,
+		reserved: t.reserved,
 	}
 }

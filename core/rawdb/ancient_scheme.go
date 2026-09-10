@@ -38,6 +38,10 @@ const (
 
 	// ChainFreezerDifficultyTable indicates the name of the freezer total difficulty table.
 	ChainFreezerDifficultyTable = "diffs"
+
+	// ChainFreezerReservedTxsTable indicates the name of the freezer table
+	// holding the per-block reserved-tx index list (see core/rawdb/reserved_txs.go).
+	ChainFreezerReservedTxsTable = "matic-reserved-txs"
 )
 
 // chainFreezerTableConfigs configures the settings for tables in the chain freezer.
@@ -45,12 +49,13 @@ const (
 // tail truncation is disabled for the header and hash tables, as these are intended
 // to be retained long-term.
 var chainFreezerTableConfigs = map[string]freezerTableConfig{
-	ChainFreezerHeaderTable:     {noSnappy: false, prunable: false},
-	ChainFreezerHashTable:       {noSnappy: true, prunable: false},
-	ChainFreezerBodiesTable:     {noSnappy: false, prunable: true},
-	ChainFreezerReceiptTable:    {noSnappy: false, prunable: true},
-	ChainFreezerDifficultyTable: {noSnappy: true, prunable: true},
-	freezerBorReceiptTable:      {noSnappy: false, prunable: true},
+	ChainFreezerHeaderTable:      {noSnappy: false, prunable: false},
+	ChainFreezerHashTable:        {noSnappy: true, prunable: false},
+	ChainFreezerBodiesTable:      {noSnappy: false, prunable: true},
+	ChainFreezerReceiptTable:     {noSnappy: false, prunable: true},
+	ChainFreezerDifficultyTable:  {noSnappy: true, prunable: true},
+	freezerBorReceiptTable:       {noSnappy: false, prunable: true},
+	ChainFreezerReservedTxsTable: {noSnappy: false, prunable: true},
 }
 
 // freezerTableConfig contains the settings for a freezer table.

@@ -909,7 +909,7 @@ func (api *ConsensusAPI) executeStatelessPayload(params engine.ExecutableData, v
 	api.lastNewPayloadUpdate.Store(time.Now().Unix())
 
 	log.Trace("Executing block statelessly", "number", block.Number(), "hash", params.BlockHash)
-	stateRoot, receiptRoot, _, _, err := core.ExecuteStateless(api.eth.BlockChain().Config(), *api.eth.BlockChain().GetVMConfig(), block, witness, nil, api.eth.Engine(), nil)
+	stateRoot, receiptRoot, _, _, err := core.ExecuteStateless(api.eth.BlockChain().Config(), *api.eth.BlockChain().GetVMConfig(), block, witness, nil, api.eth.Engine(), nil, api.eth.BlockChain().ReservedRegistry())
 	if err != nil {
 		log.Warn("ExecuteStatelessPayload: execution failed", "err", err)
 		errorMsg := err.Error()

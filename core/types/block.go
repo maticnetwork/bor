@@ -141,6 +141,20 @@ type BlockExtraData struct {
 
 	// BaseFeeChangeDenominator is the EIP-1559 base fee change denominator used by the block producer (post-Giugliano)
 	BaseFeeChangeDenominator *uint64 `rlp:"optional"`
+
+	// ReservedGasUsed is the sum of actual gas used by the block's
+	// reserved-region transactions. A pointer so that an explicit zero
+	// (reserved blockspace active, no reserved gas used) stays distinct from
+	// the field being absent on the wire (pre-activation blocks).
+	ReservedGasUsed *uint64 `rlp:"optional"`
+
+	// ReservedCapacity is the sum of the per-block gas quotas of the reserved
+	// clients effective for this block (the registry snapshot's effective
+	// set, read at the parent state). Consensus input to the next block's
+	// base fee (see consensus/misc/eip1559.reservedAwareGasTarget). Must stay
+	// the last field: rlp:"optional" fields decode in order, and every
+	// earlier optional here is always written once this one is.
+	ReservedCapacity *uint64 `rlp:"optional"`
 }
 
 // BlockExtraDataPostAustin drops TxDependency, which sat before the optional
@@ -150,6 +164,19 @@ type BlockExtraDataPostAustin struct {
 	ValidatorBytes           []byte
 	GasTarget                *uint64 `rlp:"optional"`
 	BaseFeeChangeDenominator *uint64 `rlp:"optional"`
+
+	// ReservedGasUsed is the sum of actual gas used by the block's
+	// reserved-region transactions. A pointer so that an explicit zero
+	// (reserved blockspace active, no reserved gas used) stays distinct from
+	// the field being absent on the wire (pre-activation blocks).
+	ReservedGasUsed *uint64 `rlp:"optional"`
+
+	// ReservedCapacity is the reserved-blockspace registry snapshot's
+	// effective capacity used to classify this block's reserved region, and
+	// the next block's base-fee carve-out input. Same pointer semantics as
+	// ReservedGasUsed. Must stay the last field: rlp:"optional" only trims a
+	// trailing run.
+	ReservedCapacity *uint64 `rlp:"optional"`
 }
 
 // blockExtraDataRawTxDeps mirrors BlockExtraData but keeps TxDependency as an
@@ -163,17 +190,22 @@ type blockExtraDataRawTxDeps struct {
 	TxDependency             rlp.RawValue
 	GasTarget                *uint64 `rlp:"optional"`
 	BaseFeeChangeDenominator *uint64 `rlp:"optional"`
+	ReservedGasUsed          *uint64 `rlp:"optional"`
+	ReservedCapacity         *uint64 `rlp:"optional"`
 }
 
 // EncodeBlockExtraData picks the fork-appropriate wire shape for number and
-// RLP-encodes validatorBytes and the post-Giugliano base-fee params into it.
-// Callers elsewhere should use this rather than reimplementing the fork check.
-func EncodeBlockExtraData(chainConfig *params.ChainConfig, number *big.Int, validatorBytes []byte, gasTarget, baseFeeChangeDenom *uint64) ([]byte, error) {
+// RLP-encodes validatorBytes, the post-Giugliano base-fee params, and the
+// post-ReservedBlockspace reserved-gas field into it. Callers elsewhere
+// should use this rather than reimplementing the fork check.
+func EncodeBlockExtraData(chainConfig *params.ChainConfig, number *big.Int, validatorBytes []byte, gasTarget, baseFeeChangeDenom, reservedGasUsed, reservedCapacity *uint64) ([]byte, error) {
 	if chainConfig.Bor != nil && chainConfig.Bor.IsAustin(number) {
 		return rlp.EncodeToBytes(&BlockExtraDataPostAustin{
 			ValidatorBytes:           validatorBytes,
 			GasTarget:                gasTarget,
 			BaseFeeChangeDenominator: baseFeeChangeDenom,
+			ReservedGasUsed:          reservedGasUsed,
+			ReservedCapacity:         reservedCapacity,
 		})
 	}
 
@@ -181,6 +213,8 @@ func EncodeBlockExtraData(chainConfig *params.ChainConfig, number *big.Int, vali
 		ValidatorBytes:           validatorBytes,
 		GasTarget:                gasTarget,
 		BaseFeeChangeDenominator: baseFeeChangeDenom,
+		ReservedGasUsed:          reservedGasUsed,
+		ReservedCapacity:         reservedCapacity,
 	})
 }
 
@@ -583,6 +617,45 @@ func (h *Header) GetValidatorBytes(chainConfig *params.ChainConfig) []byte {
 	return validatorBytes
 }
 
+// decodeReservedAwareExtra decodes the reserved-blockspace fields from the
+// header's Extra, applying the gate every reserved accessor shares:
+// post-Cancun only (BlockExtraData is only RLP-encoded from Cancun on),
+// vanity/seal length, a fork-appropriate decode (post-Austin headers carry no
+// TxDependency), and pre-Valencia TxDependency validity on the legacy shape.
+// ok is false when any gate fails or the decode errors; callers then return
+// their own nil/zero result rather than a partially decoded one.
+func (h *Header) decodeReservedAwareExtra(chainConfig *params.ChainConfig) (reservedGasUsed, reservedCapacity *uint64, ok bool) {
+	if !chainConfig.IsCancun(h.Number) {
+		return nil, nil, false
+	}
+
+	if len(h.Extra) < ExtraVanityLength+ExtraSealLength {
+		return nil, nil, false
+	}
+
+	payload := h.Extra[ExtraVanityLength : len(h.Extra)-ExtraSealLength]
+
+	if chainConfig.Bor != nil && chainConfig.Bor.IsAustin(h.Number) {
+		var blockExtraData BlockExtraDataPostAustin
+		if err := rlp.DecodeBytes(payload, &blockExtraData); err != nil {
+			return nil, nil, false
+		}
+
+		return blockExtraData.ReservedGasUsed, blockExtraData.ReservedCapacity, true
+	}
+
+	var blockExtraData blockExtraDataRawTxDeps
+	if err := rlp.DecodeBytes(payload, &blockExtraData); err != nil {
+		return nil, nil, false
+	}
+
+	if !txDependencyValidPreValencia(chainConfig, h.Number, blockExtraData.TxDependency) {
+		return nil, nil, false
+	}
+
+	return blockExtraData.ReservedGasUsed, blockExtraData.ReservedCapacity, true
+}
+
 // GetBaseFeeParams extracts the EIP-1559 gas target and base fee change denominator
 // from the block header's extra field. If you need multiple fields from BlockExtraData,
 // prefer DecodeBlockExtraData to avoid redundant RLP decodes.
@@ -625,6 +698,102 @@ func (h *Header) GetValidatorBytesAndBaseFeeParams(chainConfig *params.ChainConf
 	return validatorBytes, gasTarget, baseFeeChangeDenom
 }
 
+// GetReservedGasUsed extracts the reserved-region gas used from the header's
+// Extra field. Returns nil for pre-Cancun blocks, on decode error, or when the
+// field is absent (blocks produced before reserved blockspace activated). If
+// you also need ReservedCapacity, prefer GetReservedFields to avoid a
+// redundant RLP decode.
+func (h *Header) GetReservedGasUsed(chainConfig *params.ChainConfig) *uint64 {
+	reservedGasUsed, _, ok := h.decodeReservedAwareExtra(chainConfig)
+	if !ok {
+		return nil
+	}
+	return reservedGasUsed
+}
+
+// GetReservedCapacity extracts the reserved-region capacity (the base fee's
+// carve-out for block N+1, per parent header N) from the header's Extra
+// field. Returns nil for pre-Cancun blocks, on decode error, or when the
+// field is absent (blocks produced before reserved blockspace activated). If
+// you also need ReservedGasUsed, prefer GetReservedFields to avoid a
+// redundant RLP decode.
+func (h *Header) GetReservedCapacity(chainConfig *params.ChainConfig) *uint64 {
+	_, reservedCapacity, ok := h.decodeReservedAwareExtra(chainConfig)
+	if !ok {
+		return nil
+	}
+	return reservedCapacity
+}
+
+// GetReservedFields decodes both reserved-blockspace header fields -
+// ReservedGasUsed and ReservedCapacity - in a single RLP pass, mirroring the
+// GetValidatorBytesAndBaseFeeParams precedent for combined accessors. Prefer
+// this over calling GetReservedGasUsed and GetReservedCapacity separately
+// when a caller needs both; each is nil/non-nil independently of the other,
+// following the same rules documented on the single-field getters.
+func (h *Header) GetReservedFields(chainConfig *params.ChainConfig) (gasUsed *uint64, capacity *uint64) {
+	reservedGasUsed, reservedCapacity, ok := h.decodeReservedAwareExtra(chainConfig)
+	if !ok {
+		return nil, nil
+	}
+	return reservedGasUsed, reservedCapacity
+}
+
+// SetReservedFields records the reserved-region gas used and capacity in the
+// header's BlockExtraData in a single decode/encode round-trip, re-encoding
+// Header.Extra in place using the fork-appropriate wire shape. Pre-Austin,
+// TxDependency is carried through as a raw value, so the rewrite doesn't
+// expand it. Both fields are consensus-visible and always written together:
+// callers gate the write on reserved blockspace being active, this only
+// performs the encoding.
+func (h *Header) SetReservedFields(chainConfig *params.ChainConfig, reservedGasUsed, reservedCapacity uint64) error {
+	if len(h.Extra) < ExtraVanityLength+ExtraSealLength {
+		return fmt.Errorf("header extra data too short to carry BlockExtraData: %d bytes", len(h.Extra))
+	}
+
+	vanity := h.Extra[:ExtraVanityLength]
+	seal := h.Extra[len(h.Extra)-ExtraSealLength:]
+	payload := h.Extra[ExtraVanityLength : len(h.Extra)-ExtraSealLength]
+
+	var encoded []byte
+
+	if chainConfig.Bor != nil && chainConfig.Bor.IsAustin(h.Number) {
+		var blockExtraData BlockExtraDataPostAustin
+		if err := rlp.DecodeBytes(payload, &blockExtraData); err != nil {
+			return fmt.Errorf("decode block extra data: %w", err)
+		}
+
+		blockExtraData.ReservedGasUsed = &reservedGasUsed
+		blockExtraData.ReservedCapacity = &reservedCapacity
+
+		var err error
+		if encoded, err = rlp.EncodeToBytes(&blockExtraData); err != nil {
+			return fmt.Errorf("encode block extra data: %w", err)
+		}
+	} else {
+		var blockExtraData blockExtraDataRawTxDeps
+		if err := rlp.DecodeBytes(payload, &blockExtraData); err != nil {
+			return fmt.Errorf("decode block extra data: %w", err)
+		}
+
+		blockExtraData.ReservedGasUsed = &reservedGasUsed
+		blockExtraData.ReservedCapacity = &reservedCapacity
+
+		var err error
+		if encoded, err = rlp.EncodeToBytes(&blockExtraData); err != nil {
+			return fmt.Errorf("encode block extra data: %w", err)
+		}
+	}
+
+	extra := make([]byte, 0, len(vanity)+len(encoded)+len(seal))
+	extra = append(extra, vanity...)
+	extra = append(extra, encoded...)
+	extra = append(extra, seal...)
+	h.Extra = extra
+
+	return nil
+}
+
 // txDependencyValidPreValencia only matters in the Cancun..pre-Austin
 // window; post-Austin headers have no TxDependency to validate.
 func txDependencyValidPreValencia(chainConfig *params.ChainConfig, number *big.Int, raw rlp.RawValue) bool {
@@ -649,15 +818,17 @@ func (h *Header) DecodeBlockExtraData(chainConfig *params.ChainConfig) *BlockExt
 	}
 
 	if chainConfig.Bor != nil && chainConfig.Bor.IsAustin(h.Number) {
-		validatorBytes, gasTarget, baseFeeChangeDenom, ok := h.decodeExtraFieldsFast(chainConfig)
-		if !ok {
+		var postAustin BlockExtraDataPostAustin
+		if err := rlp.DecodeBytes(h.Extra[ExtraVanityLength:len(h.Extra)-ExtraSealLength], &postAustin); err != nil {
 			return nil
 		}
 
 		return &BlockExtraData{
-			ValidatorBytes:           validatorBytes,
-			GasTarget:                gasTarget,
-			BaseFeeChangeDenominator: baseFeeChangeDenom,
+			ValidatorBytes:           postAustin.ValidatorBytes,
+			GasTarget:                postAustin.GasTarget,
+			BaseFeeChangeDenominator: postAustin.BaseFeeChangeDenominator,
+			ReservedGasUsed:          postAustin.ReservedGasUsed,
+			ReservedCapacity:         postAustin.ReservedCapacity,
 		}
 	}
 

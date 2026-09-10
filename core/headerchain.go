@@ -26,6 +26,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/lru"
 	"github.com/ethereum/go-ethereum/consensus"
+	"github.com/ethereum/go-ethereum/consensus/bor/registryreader"
 	"github.com/ethereum/go-ethereum/core/rawdb"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethdb"
@@ -72,7 +73,22 @@ type HeaderChain struct {
 	engine        consensus.Engine
 
 	stateSyncData []*types.StateSyncData // State sync data
+
+	// reservedRegistry mirrors the BlockChain's reserved-blockspace registry
+	// reader so block-execution paths that only hold a *HeaderChain context
+	// (the serial and V2 BlockSTM processors, the prefetcher) can resolve the same
+	// reserved set as the miner. Wired by BlockChain.SetReservedRegistry.
+	reservedRegistry registryreader.Reader
 }
+
+// ReservedRegistry returns the reserved-blockspace registry reader, or nil when
+// none is wired. Lets ReservedSnapshotForBlock classify on hc-based execution
+// paths, matching the miner.
+func (hc *HeaderChain) ReservedRegistry() registryreader.Reader { return hc.reservedRegistry }
+
+// SetReservedRegistry wires the reserved-blockspace registry reader. Propagated
+// from BlockChain.SetReservedRegistry so producer and verifier share one source.
+func (hc *HeaderChain) SetReservedRegistry(r registryreader.Reader) { hc.reservedRegistry = r }
 
 // NewHeaderChain creates a new HeaderChain structure. ProcInterrupt points
 // to the parent's interrupt semaphore.

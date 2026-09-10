@@ -332,7 +332,7 @@ func TestDeriveFields(t *testing.T) {
 	blobGasPrice := big.NewInt(920)
 	receipts := getTestReceipts()
 	derivedReceipts := clearComputedFieldsOnReceipts(receipts)
-	err := Receipts(derivedReceipts).DeriveFields(params.TestChainConfig, blockHash, blockNumber.Uint64(), blockTime, basefee, blobGasPrice, txs)
+	err := Receipts(derivedReceipts).DeriveFields(params.TestChainConfig, blockHash, blockNumber.Uint64(), blockTime, basefee, blobGasPrice, txs, nil)
 	if err != nil {
 		t.Fatalf("DeriveFields(...) = %v, want <nil>", err)
 	}
@@ -351,6 +351,56 @@ func TestDeriveFields(t *testing.T) {
 	d := diff.Diff(string(r1), string(r2))
 	if d != "" {
 		t.Fatal("receipts differ:", d)
+	}
+}
+
+// TestDeriveFieldsReserved covers the Reserved-classification override: a
+// transaction whose index is passed in reservedTxIndexes must report
+// EffectiveGasPrice 0 regardless of the fee it actually carries (zero-fee or
+// fallback-fee), for both legacy and dynamic-fee transaction types, while an
+// unlisted transaction keeps the ordinary fee-derived price.
+func TestDeriveFieldsReserved(t *testing.T) {
+	to := common.HexToAddress("0xaa")
+	baseFee := big.NewInt(100)
+
+	// legacy fallback-fee, dynamic-fee fallback-fee, dynamic-fee zero-fee.
+	reservedTxs := Transactions{
+		NewTx(&LegacyTx{To: &to, Nonce: 0, Gas: 21000, GasPrice: big.NewInt(500)}),
+		NewTx(&DynamicFeeTx{To: &to, Nonce: 1, Gas: 21000, GasTipCap: big.NewInt(50), GasFeeCap: big.NewInt(700)}),
+		NewTx(&DynamicFeeTx{To: &to, Nonce: 2, Gas: 21000, GasTipCap: big.NewInt(0), GasFeeCap: big.NewInt(0)}),
+	}
+	newReceipts := func() Receipts {
+		return Receipts{
+			{Type: LegacyTxType, CumulativeGasUsed: 21000},
+			{Type: DynamicFeeTxType, CumulativeGasUsed: 42000},
+			{Type: DynamicFeeTxType, CumulativeGasUsed: 63000},
+		}
+	}
+
+	cases := []struct {
+		name    string
+		indexes []uint64
+		want    []int64 // expected EffectiveGasPrice per tx, by position
+	}{
+		{"none reserved", nil, []int64{500, 150, 0}},
+		{"legacy fallback-fee reserved", []uint64{0}, []int64{0, 150, 0}},
+		{"dynamic fallback-fee reserved", []uint64{1}, []int64{500, 0, 0}},
+		{"dynamic zero-fee reserved", []uint64{2}, []int64{500, 150, 0}},
+		{"all reserved", []uint64{0, 1, 2}, []int64{0, 0, 0}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			receipts := newReceipts()
+			if err := receipts.DeriveFields(params.TestChainConfig, blockHash, blockNumber.Uint64(), blockTime, baseFee, nil, reservedTxs, tc.indexes); err != nil {
+				t.Fatalf("DeriveFields(...) = %v, want <nil>", err)
+			}
+			for i, want := range tc.want {
+				if got := receipts[i].EffectiveGasPrice; got.Cmp(big.NewInt(want)) != 0 {
+					t.Errorf("tx %d: EffectiveGasPrice = %v, want %v", i, got, want)
+				}
+			}
+		})
 	}
 }
 

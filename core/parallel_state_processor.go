@@ -29,6 +29,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	cmath "github.com/ethereum/go-ethereum/common/math"
+	"github.com/ethereum/go-ethereum/consensus/bor/registryreader"
 	"github.com/ethereum/go-ethereum/consensus/misc"
 	"github.com/ethereum/go-ethereum/core/blockstm"
 	"github.com/ethereum/go-ethereum/core/state"
@@ -419,6 +420,13 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 	shouldDelayFeeCal := true
 
 	blockContext := NewEVMBlockContext(header, p.bc, author)
+	// Same parent-state reserved snapshot the serial processor uses, so parallel
+	// and serial classify identically (consensus parity).
+	reservedSnapshot, err := ReservedSnapshotForBlock(p.bc, statedb, header)
+	if err != nil {
+		return nil, err
+	}
+	blockContext.ReservedSnapshot = reservedSnapshot
 	coinbase := blockContext.Coinbase
 
 	context := NewEVMBlockContext(header, p.bc.hc, author)
@@ -437,6 +445,11 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 
 	// Iterate over and process the individual transactions
 	txs := block.Transactions()
+	// Quota-aware reserved set, derived once from the ordered body and shared by
+	// every task's block context (map reference), so parallel classification
+	// matches serial and produce (consensus parity).
+	var clientUsage map[uint64]registryreader.ClientUsage
+	blockContext.ReservedTxs, clientUsage = registryreader.ClassifyReserved(txs, signer, blockContext.ReservedSnapshot)
 	for i, tx := range txs {
 		if tx.Type() == types.StateSyncTxType {
 			continue
@@ -531,11 +544,17 @@ func (p *ParallelStateProcessor) Process(block *types.Block, statedb *state.Stat
 		}
 	}
 
+	reservedGasUsed, reservedTxIndexes := sumReservedGasUsed(block.Transactions(), receipts, signer, blockContext.ReservedTxs)
+
 	return &ProcessResult{
-		Receipts: receipts,
-		Requests: requests,
-		Logs:     allLogs,
-		GasUsed:  *usedGas,
+		Receipts:            receipts,
+		Requests:            requests,
+		Logs:                allLogs,
+		GasUsed:             *usedGas,
+		ReservedGasUsed:     reservedGasUsed,
+		ReservedCapacity:    blockContext.ReservedSnapshot.EffectiveCapacity(),
+		ReservedTxIndexes:   reservedTxIndexes,
+		ReservedClientUsage: clientUsage,
 	}, nil
 }
 
@@ -1103,6 +1122,17 @@ func (p *V2StateProcessor) Process(block *types.Block, statedb *state.StateDB, c
 		misc.ApplyDAOHardFork(statedb)
 	}
 	blockCtx := NewEVMBlockContext(header, p.chain, author)
+	// Reserved snapshot from the parent state, matching the serial path so V2
+	// BlockSTM classification is identical (consensus parity). The quota-aware
+	// reserved set is derived once from the ordered body and shared by every
+	// task's block context (map reference).
+	reservedSnapshot, err := ReservedSnapshotForBlock(p.chain, statedb, header)
+	if err != nil {
+		return nil, err
+	}
+	blockCtx.ReservedSnapshot = reservedSnapshot
+	var clientUsage map[uint64]registryreader.ClientUsage
+	blockCtx.ReservedTxs, clientUsage = registryreader.ClassifyReserved(block.Transactions(), types.MakeSigner(config, header.Number, header.Time), blockCtx.ReservedSnapshot)
 	applyV2PreExecSystemCalls(block, statedb, config, cfg, blockCtx)
 
 	tasks, err := buildV2Tasks(block, config, header, interruptCtx)
@@ -1159,7 +1189,7 @@ func (p *V2StateProcessor) Process(block *types.Block, statedb *state.StateDB, c
 	}
 
 	return p.finalizeV2Block(block, statedb, header, config, tasks, result,
-		tProcess, tSetup, tCopy, tExec)
+		blockCtx.ReservedTxs, blockCtx.ReservedSnapshot.EffectiveCapacity(), clientUsage, tProcess, tSetup, tCopy, tExec)
 }
 
 // finalizeV2Block runs consensus-engine finalization, merges state-sync logs,
@@ -1168,6 +1198,8 @@ func (p *V2StateProcessor) Process(block *types.Block, statedb *state.StateDB, c
 func (p *V2StateProcessor) finalizeV2Block(block *types.Block, statedb *state.StateDB,
 	header *types.Header, config *params.ChainConfig,
 	tasks []V2Task, result *V2ExecutionResult,
+	reservedTxs map[registryreader.ReservedKey]struct{}, reservedCapacity uint64,
+	reservedClientUsage map[uint64]registryreader.ClientUsage,
 	tProcess, tSetup, tCopy, tExec time.Time,
 ) (*ProcessResult, error) {
 	receiptsCountBeforeFinalize := len(result.Receipts)
@@ -1226,11 +1258,17 @@ func (p *V2StateProcessor) finalizeV2Block(block *types.Block, statedb *state.St
 		}
 	}
 
+	reservedGasUsed, reservedTxIndexes := sumReservedGasUsed(block.Transactions(), receipts, types.MakeSigner(config, header.Number, header.Time), reservedTxs)
+
 	return &ProcessResult{
-		Receipts: receipts,
-		Requests: requests,
-		Logs:     allLogs,
-		GasUsed:  result.GasUsed,
+		Receipts:            receipts,
+		Requests:            requests,
+		Logs:                allLogs,
+		GasUsed:             result.GasUsed,
+		ReservedGasUsed:     reservedGasUsed,
+		ReservedCapacity:    reservedCapacity,
+		ReservedTxIndexes:   reservedTxIndexes,
+		ReservedClientUsage: reservedClientUsage,
 	}, nil
 }
 

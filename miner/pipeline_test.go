@@ -310,8 +310,7 @@ func TestPipelineTimingAndChainHelpers(t *testing.T) {
 	defer ctrl.Finish()
 	defer borEngine.(*bor.Bor).Close()
 
-	w, backend, cleanup := newTestWorker(t, DefaultTestConfig(), &chainConfig, borEngine, rawdb.NewMemoryDatabase(), false, 0)
-	cleanup()
+	backend := newTestWorkerBackend(t, &chainConfig, borEngine, rawdb.NewMemoryDatabase())
 
 	parent := backend.chain.CurrentHeader()
 	wrappedEngine := &pipelineSealEngine{
@@ -320,7 +319,15 @@ func TestPipelineTimingAndChainHelpers(t *testing.T) {
 			return nil
 		},
 	}
-	w.engine = wrappedEngine
+	// The helpers under test only read chain, engine, and exitCh. A bare
+	// worker has no background goroutines, so it can be built directly with
+	// the wrapped engine (swapping the engine on a live worker is a data race).
+	w := &worker{
+		chainConfig: &chainConfig,
+		engine:      wrappedEngine,
+		chain:       backend.chain,
+		exitCh:      make(chan struct{}),
+	}
 
 	t.Run("early announce uses parent time", func(t *testing.T) {
 		header := &types.Header{

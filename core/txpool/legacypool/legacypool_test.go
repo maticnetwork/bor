@@ -27,6 +27,7 @@ import (
 	"os"
 	"runtime"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -34,8 +35,6 @@ import (
 
 	crand2 "github.com/0xPolygon/crand"
 	"github.com/stretchr/testify/require"
-
-	"strings"
 
 	"github.com/holiman/uint256"
 
@@ -130,8 +129,7 @@ func transaction(nonce uint64, gaslimit uint64, key *ecdsa.PrivateKey) *types.Tr
 }
 
 func pricedTransaction(nonce uint64, gaslimit uint64, gasprice *big.Int, key *ecdsa.PrivateKey) *types.Transaction {
-	tx, _ := types.SignTx(types.NewTransaction(nonce, common.Address{0x01}, big.NewInt(100), gaslimit, gasprice, nil), types.HomesteadSigner{}, key)
-	return tx
+	return costValueTx(nonce, gaslimit, gasprice, big.NewInt(100), key)
 }
 
 // pricedDataTransaction generates a signed transaction with fixed-size data,
@@ -150,7 +148,7 @@ func pricedDataTransaction(nonce uint64, gaslimit uint64, gasprice *big.Int, key
 	var tx *types.Transaction
 
 	// 10 attempts is statistically sufficient since leading zeros in ECDSA signatures are rare and randomly distributed.
-	var retryTimes = 10
+	retryTimes := 10
 	for i := 0; i < retryTimes; i++ {
 		data := make([]byte, dataBytes)
 		crand.Read(data)

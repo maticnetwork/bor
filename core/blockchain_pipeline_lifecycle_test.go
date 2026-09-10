@@ -194,7 +194,7 @@ func TestPipelinePersistFailureBranches(t *testing.T) {
 		}
 
 		adjustBack, err := chain.persistPipelinedImport(
-			blocks[1], blocks[0].Header(), newState(t, chain), nil, nil, time.Now(), 0, 0, false,
+			blocks[1], blocks[0].Header(), newState(t, chain), nil, nil, nil, nil, time.Now(), 0, 0, false,
 		)
 		require.True(t, adjustBack)
 		require.EqualError(t, err, "collect failed")
@@ -208,7 +208,7 @@ func TestPipelinePersistFailureBranches(t *testing.T) {
 		}))
 
 		adjustBack, err := chain.persistPipelinedImport(
-			blocks[0], chain.CurrentHeader(), newState(t, chain), nil, nil, time.Now(), 0, 0, false,
+			blocks[0], chain.CurrentHeader(), newState(t, chain), nil, nil, nil, nil, time.Now(), 0, 0, false,
 		)
 		require.False(t, adjustBack)
 		require.ErrorIs(t, err, validateErr)
@@ -221,7 +221,7 @@ func TestPipelinePersistFailureBranches(t *testing.T) {
 		}))
 
 		adjustBack, err := chain.persistPipelinedImport(
-			blocks[0], chain.CurrentHeader(), newState(t, chain), nil, nil, time.Now(), 0, 0, false,
+			blocks[0], chain.CurrentHeader(), newState(t, chain), nil, nil, nil, nil, time.Now(), 0, 0, false,
 		)
 		require.False(t, adjustBack)
 		require.ErrorIs(t, err, whitelist.ErrMismatch)
@@ -234,7 +234,7 @@ func TestPipelinePersistFailureBranches(t *testing.T) {
 		}), nil, nil)
 
 		adjustBack, err := chain.persistPipelinedImport(
-			blocks[0], chain.CurrentHeader(), newState(t, chain), nil, nil, time.Now(), 0, 0, false,
+			blocks[0], chain.CurrentHeader(), newState(t, chain), nil, nil, nil, nil, time.Now(), 0, 0, false,
 		)
 		require.False(t, adjustBack)
 		require.ErrorContains(t, err, "missing td")

@@ -512,7 +512,7 @@ func TestAncientStorage(t *testing.T) {
 	}
 
 	// Write and verify the header in the database
-	WriteAncientBlocks(db, []*types.Block{block}, types.EncodeBlockReceiptLists([]types.Receipts{nil}), types.EncodeBlockReceiptLists([]types.Receipts{nil}), big.NewInt(100))
+	WriteAncientBlocks(db, []*types.Block{block}, types.EncodeBlockReceiptLists([]types.Receipts{nil}), types.EncodeBlockReceiptLists([]types.Receipts{nil}), []rlp.RawValue{nil}, big.NewInt(100))
 
 	if blob := ReadHeaderRLP(db, hash, number); len(blob) == 0 {
 		t.Fatalf("no header returned")
@@ -551,6 +551,67 @@ func TestAncientStorage(t *testing.T) {
 	if blob := ReadTdRLP(db, fakeHash, number); len(blob) != 0 {
 		t.Fatalf("invalid td returned")
 	}
+}
+
+// TestWriteAncientBlocks_ReservedTxIndexes covers the two ways
+// WriteAncientBlocks' reservedTxIndexes parameter is used in practice: the
+// offline block pruner supplies a real, previously classified entry read
+// from the freezer it is backing up, which must round-trip unchanged, while
+// every other caller (genesis ancient init, snap-sync receipt import) has no
+// classification and passes nil, which must resolve to an explicit empty
+// list rather than leaving the entry unset.
+func TestWriteAncientBlocks_ReservedTxIndexes(t *testing.T) {
+	newBlock := func(num int64, extra string) *types.Block {
+		return types.NewBlockWithHeader(&types.Header{
+			Number:      big.NewInt(num),
+			Extra:       []byte(extra),
+			UncleHash:   types.EmptyUncleHash,
+			TxHash:      types.EmptyTxsHash,
+			ReceiptHash: types.EmptyReceiptsHash,
+		})
+	}
+
+	t.Run("SuppliedEntrySurvives", func(t *testing.T) {
+		db, err := Open(NewMemoryDatabase(), OpenOptions{Ancient: t.TempDir()})
+		if err != nil {
+			t.Fatalf("failed to create database with ancient backend: %v", err)
+		}
+		defer db.Close()
+
+		block := newBlock(0, "reserved entry block")
+		supplied, err := rlp.EncodeToBytes([]uint64{1, 3})
+		if err != nil {
+			t.Fatalf("failed to encode reserved-tx indexes: %v", err)
+		}
+
+		if _, err := WriteAncientBlocks(db, []*types.Block{block}, types.EncodeBlockReceiptLists([]types.Receipts{nil}), types.EncodeBlockReceiptLists([]types.Receipts{nil}), []rlp.RawValue{supplied}, big.NewInt(100)); err != nil {
+			t.Fatalf("failed to write ancient block: %v", err)
+		}
+
+		got := ReadReservedTxIndexesRLP(db, block.Hash(), block.NumberU64())
+		if !bytes.Equal(got, supplied) {
+			t.Fatalf("reserved-tx indexes not preserved: have %x, want %x", got, supplied)
+		}
+	})
+
+	t.Run("NilEntryDefaultsToEmptyList", func(t *testing.T) {
+		db, err := Open(NewMemoryDatabase(), OpenOptions{Ancient: t.TempDir()})
+		if err != nil {
+			t.Fatalf("failed to create database with ancient backend: %v", err)
+		}
+		defer db.Close()
+
+		block := newBlock(0, "no classification block")
+
+		if _, err := WriteAncientBlocks(db, []*types.Block{block}, types.EncodeBlockReceiptLists([]types.Receipts{nil}), types.EncodeBlockReceiptLists([]types.Receipts{nil}), []rlp.RawValue{nil}, big.NewInt(100)); err != nil {
+			t.Fatalf("failed to write ancient block: %v", err)
+		}
+
+		got := ReadReservedTxIndexesRLP(db, block.Hash(), block.NumberU64())
+		if !bytes.Equal(got, rlp.EmptyList) {
+			t.Fatalf("nil entry did not default to an empty list: got %x", got)
+		}
+	})
 }
 
 // TestRecentReadsBypassFreezerLock verifies that lookups for recent (key-value
@@ -642,7 +703,7 @@ func TestReadCanonicalHashAncientFallback(t *testing.T) {
 		TxHash:      types.EmptyTxsHash,
 		ReceiptHash: types.EmptyReceiptsHash,
 	})
-	WriteAncientBlocks(db, []*types.Block{block}, types.EncodeBlockReceiptLists([]types.Receipts{nil}), types.EncodeBlockReceiptLists([]types.Receipts{nil}), big.NewInt(100))
+	WriteAncientBlocks(db, []*types.Block{block}, types.EncodeBlockReceiptLists([]types.Receipts{nil}), types.EncodeBlockReceiptLists([]types.Receipts{nil}), []rlp.RawValue{nil}, big.NewInt(100))
 
 	// The canonical hash lives only in the ancient store (never written to
 	// leveldb), so the fast path must miss and fall through to it.
@@ -776,7 +837,7 @@ func BenchmarkWriteAncientBlocks(b *testing.B) {
 
 		blocks := allBlocks[i : i+length]
 		receipts := batchReceipts[:length]
-		writeSize, err := WriteAncientBlocks(db, blocks, types.EncodeBlockReceiptLists(receipts), types.EncodeBlockReceiptLists(nil), td)
+		writeSize, err := WriteAncientBlocks(db, blocks, types.EncodeBlockReceiptLists(receipts), types.EncodeBlockReceiptLists(nil), make([]rlp.RawValue, len(blocks)), td)
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -1011,7 +1072,7 @@ func TestDeriveLogFields(t *testing.T) {
 	// Derive log metadata fields
 	number := big.NewInt(1)
 	hash := common.BytesToHash([]byte{0x03, 0x14})
-	types.Receipts(receipts).DeriveFields(params.TestChainConfig, hash, number.Uint64(), 12, big.NewInt(0), big.NewInt(0), txs)
+	types.Receipts(receipts).DeriveFields(params.TestChainConfig, hash, number.Uint64(), 12, big.NewInt(0), big.NewInt(0), txs, nil)
 
 	// Iterate over all the computed fields and check that they're correct
 	logIndex := uint(0)
@@ -1106,7 +1167,7 @@ func TestHeadersRLPStorage(t *testing.T) {
 	var borReceipts []types.Receipts = make([]types.Receipts, 100)
 
 	// Write first half to ancients
-	WriteAncientBlocks(db, chain[:50], types.EncodeBlockReceiptLists(receipts[:50]), types.EncodeBlockReceiptLists(borReceipts[:50]), big.NewInt(100))
+	WriteAncientBlocks(db, chain[:50], types.EncodeBlockReceiptLists(receipts[:50]), types.EncodeBlockReceiptLists(borReceipts[:50]), make([]rlp.RawValue, 50), big.NewInt(100))
 	// Write second half to db
 	for i := 50; i < 100; i++ {
 		WriteCanonicalHash(db, chain[i].Hash(), chain[i].NumberU64())
