@@ -466,6 +466,11 @@ type Syncer struct {
 	bytecodeReqs map[uint64]*bytecodeRequest // Bytecode requests currently running
 	storageReqs  map[uint64]*storageRequest  // Storage requests currently running
 
+	// Out-of-band targeted bytecode fetches issued outside the bulk sync loop
+	// (see FetchByteCodes / ondemand.go). Keyed by a reqid with the top bit set
+	// so it can never collide with loop reqids (uint64(rand.Int63())).
+	onDemandCodeReqs map[uint64]*onDemandCodeReq
+
 	accountSynced  uint64             // Number of accounts downloaded
 	accountBytes   common.StorageSize // Number of account trie bytes persisted to disk
 	bytecodeSynced uint64             // Number of bytecodes downloaded
@@ -532,6 +537,8 @@ func NewSyncer(db ethdb.KeyValueStore, scheme string) *Syncer {
 		accountReqs:  make(map[uint64]*accountRequest),
 		storageReqs:  make(map[uint64]*storageRequest),
 		bytecodeReqs: make(map[uint64]*bytecodeRequest),
+
+		onDemandCodeReqs: make(map[uint64]*onDemandCodeReq),
 
 		trienodeHealIdlers: make(map[string]struct{}),
 		bytecodeHealIdlers: make(map[string]struct{}),
@@ -2791,6 +2798,12 @@ func (s *Syncer) OnAccounts(peer SyncPeer, id uint64, hashes []common.Hash, acco
 // OnByteCodes is a callback method to invoke when a batch of contract
 // bytes codes are received from a remote peer.
 func (s *Syncer) OnByteCodes(peer SyncPeer, id uint64, bytecodes [][]byte) error {
+	// Targeted, out-of-band fetches (FetchByteCodes) use a top-bit reqid and are
+	// delivered to their waiting caller, not the bulk sync scheduler.
+	if id&onDemandReqidBit != 0 {
+		return s.onDemandByteCodes(id, bytecodes)
+	}
+
 	s.lock.RLock()
 	syncing := !s.snapped
 	s.lock.RUnlock()
