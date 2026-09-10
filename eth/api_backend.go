@@ -299,6 +299,10 @@ func (b *EthAPIBackend) StateAndHeaderByNumber(ctx context.Context, number rpc.B
 	return stateDb, header, nil
 }
 
+func (b *EthAPIBackend) WaitForStateCommit(ctx context.Context, root common.Hash) error {
+	return b.eth.BlockChain().WaitForPipelinedStateCommit(ctx, root)
+}
+
 func (b *EthAPIBackend) StateAndHeaderByNumberOrHash(ctx context.Context, blockNrOrHash rpc.BlockNumberOrHash) (*state.StateDB, *types.Header, error) {
 	if blockNr, ok := blockNrOrHash.Number(); ok {
 		return b.StateAndHeaderByNumber(ctx, blockNr)

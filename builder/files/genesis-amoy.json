@@ -31,6 +31,7 @@
       "giuglianoBlock": 35573500,
       "chicagoBlock": 38358000,
       "valenciaBlock": 40776000,
+      "austinBlock": 44120000,
       "skipValidatorByteCheck": [26160367, 26161087, 26171567, 26173743, 26175647],
       "stateSyncConfirmationDelay": {
         "0": 128

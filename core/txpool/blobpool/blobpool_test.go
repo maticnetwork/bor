@@ -197,6 +197,10 @@ func (bc *testBlockChain) StateAt(common.Hash) (*state.StateDB, error) {
 	return bc.statedb, nil
 }
 
+func (bc *testBlockChain) PostExecState(header *types.Header) (*state.StateDB, error) {
+	return bc.statedb, nil
+}
+
 // reserver is a utility struct to sanity check that accounts are
 // properly reserved by the blobpool (no duplicate reserves or unreserves).
 type reserver struct {

@@ -43,6 +43,7 @@ type layerTree struct {
 	// This map includes all the existing diff layers and the disk layer.
 	descendants map[common.Hash]map[common.Hash]struct{}
 	lookup      *lookup
+	nodeIndex   *nodeLookup
 	lock        sync.RWMutex
 }
 
@@ -74,6 +75,7 @@ func (tree *layerTree) init(head layer) {
 	}
 	tree.base = current.(*diskLayer) // panic if it's not a disk layer
 	tree.lookup = newLookup(head, tree.isDescendant)
+	tree.nodeIndex = newNodeLookup(head)
 }
 
 // get retrieves a layer belonging to the given state root.
@@ -168,6 +170,9 @@ func (tree *layerTree) add(root common.Hash, parentRoot common.Hash, block uint6
 
 	// Link the given layer into the state mutation history
 	tree.lookup.addLayer(l)
+
+	// Link the given layer's trie nodes into the node index
+	tree.nodeIndex.addLayer(l)
 	return nil
 }
 
@@ -202,6 +207,7 @@ func (tree *layerTree) cap(root common.Hash, layers int) error {
 		// with no descendants.
 		tree.descendants = make(map[common.Hash]map[common.Hash]struct{})
 		tree.lookup = newLookup(base, tree.isDescendant)
+		tree.nodeIndex = newNodeLookup(base)
 		return nil
 	}
 	// Dive until we run out of layers or reach the persistent database
@@ -276,6 +282,7 @@ func (tree *layerTree) cap(root common.Hash, layers int) error {
 			return
 		}
 		tree.lookup.removeLayer(diff)
+		tree.nodeIndex.removeLayer(diff)
 	}
 	var remove func(root common.Hash)
 	remove = func(root common.Hash) {
@@ -295,12 +302,41 @@ func (tree *layerTree) cap(root common.Hash, layers int) error {
 	return nil
 }
 
+// node looks up a trie node in the diff-layer node index. When found is
+// false, definitive reports whether the miss guarantees the node is absent
+// from every live diff layer, letting the caller read the disk layer
+// directly instead of walking the layer chain.
+func (tree *layerTree) node(owner common.Hash, path []byte, hash common.Hash) (blob []byte, found bool, definitive bool) {
+	tree.lock.RLock()
+	defer tree.lock.RUnlock()
+
+	return tree.nodeIndex.get(owner, path, hash)
+}
+
 // bottom returns the bottom-most disk layer in this tree.
 func (tree *layerTree) bottom() *diskLayer {
 	tree.lock.RLock()
 	defer tree.lock.RUnlock()
 
 	return tree.base
+}
+
+// bottomIfAncestorOf returns the current base disk layer only when reading the
+// given state from it is sound: either the state is the disk layer itself, or
+// the disk layer is an ancestor of it, so nothing newer than the requested
+// state can have been flattened in. It returns nil when the disk layer has
+// advanced past the requested state, or sits on a different branch after a
+// reorg — in both cases its flat contents belong to a state the caller did not
+// ask for, and unlike trie nodes there is no hash to catch the mismatch.
+func (tree *layerTree) bottomIfAncestorOf(state common.Hash) *diskLayer {
+	tree.lock.RLock()
+	defer tree.lock.RUnlock()
+
+	base := tree.base
+	if base.rootHash() == state || tree.isDescendant(state, base.rootHash()) {
+		return base
+	}
+	return nil
 }
 
 // lookupAccount returns the layer that is guaranteed to contain the account data

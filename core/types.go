@@ -35,6 +35,11 @@ type Validator interface {
 
 	// ValidateState validates the given statedb and optionally the process result.
 	ValidateState(block *types.Block, state *state.StateDB, res *ProcessResult, stateless bool) error
+
+	// ValidateStateCheap validates cheap post-state checks (gas, bloom, receipt root,
+	// requests) without computing the expensive IntermediateRoot. Used by the
+	// pipelined import path where IntermediateRoot is deferred to an SRC goroutine.
+	ValidateStateCheap(block *types.Block, state *state.StateDB, res *ProcessResult) error
 }
 
 // Prefetcher is an interface for pre-caching transaction signatures and state.

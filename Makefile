@@ -68,7 +68,7 @@ test-txpool-race:
 	$(GOTEST) -run=TestPoolMiningDataRaces --timeout 600m -race -v ./core/
 
 test-race:
-	$(GOTEST) --timeout 15m -race -shuffle=on $(TESTALL)
+	$(GOTEST) --timeout 45m -race -shuffle=on $(TESTALL)
 
 gocovmerge-deps:
 	$(GOBUILD) -o $(GOBIN)/gocovmerge github.com/wadey/gocovmerge

@@ -40,13 +40,13 @@ import (
 	"github.com/ethereum/go-ethereum/eth"
 	"github.com/ethereum/go-ethereum/eth/downloader"
 	"github.com/ethereum/go-ethereum/eth/ethconfig"
+	"github.com/ethereum/go-ethereum/eth/tracers"
 	"github.com/ethereum/go-ethereum/ethdb"
 	"github.com/ethereum/go-ethereum/miner"
 	"github.com/ethereum/go-ethereum/node"
 	"github.com/ethereum/go-ethereum/p2p"
 	"github.com/ethereum/go-ethereum/p2p/enode"
 	"github.com/ethereum/go-ethereum/params"
-	"github.com/ethereum/go-ethereum/rlp"
 	"github.com/ethereum/go-ethereum/tests/bor/mocks"
 	"github.com/ethereum/go-ethereum/trie"
 	"github.com/ethereum/go-ethereum/triedb"
@@ -181,6 +181,12 @@ func insertNewBlock(t *testing.T, chain *core.BlockChain, block *types.Block) {
 type modifyHeaderFunc func(header *types.Header)
 type modifyBlockFunc func(block *types.Block, receipts []*types.Receipt) *types.Block
 
+// encodeBlockExtraDataForTest wraps types.EncodeBlockExtraData for callers in
+// this file that never populate the Giugliano gas-target fields.
+func encodeBlockExtraDataForTest(chainConfig *params.ChainConfig, number *big.Int, validatorBytes []byte) ([]byte, error) {
+	return types.EncodeBlockExtraData(chainConfig, number, validatorBytes, nil, nil)
+}
+
 func buildHeader(t *testing.T, chain *core.BlockChain, parentBlock *types.Block, signer []byte, borConfig *params.BorConfig, currentValidators []*valset.Validator, modifyHeader []modifyHeaderFunc) *types.Header {
 	t.Helper()
 
@@ -230,11 +236,7 @@ func buildHeader(t *testing.T, chain *core.BlockChain, parentBlock *types.Block,
 				tempValidatorBytes = append(tempValidatorBytes, validator.HeaderBytes()...)
 			}
 
-			blockExtraData := &types.BlockExtraData{
-				ValidatorBytes: tempValidatorBytes,
-				TxDependency:   nil,
-			}
-			blockExtraDataBytes, err := rlp.EncodeToBytes(blockExtraData)
+			blockExtraDataBytes, err := encodeBlockExtraDataForTest(chain.Config(), header.Number, tempValidatorBytes)
 			if err != nil {
 				t.Fatalf("error while encoding block extra data: %v", err)
 			}
@@ -250,12 +252,7 @@ func buildHeader(t *testing.T, chain *core.BlockChain, parentBlock *types.Block,
 			copy(header.Extra[32:], validatorBytes)
 		}
 	} else if chain.Config().IsCancun(header.Number) {
-		blockExtraData := &types.BlockExtraData{
-			ValidatorBytes: nil,
-			TxDependency:   nil,
-		}
-
-		blockExtraDataBytes, err := rlp.EncodeToBytes(blockExtraData)
+		blockExtraDataBytes, err := encodeBlockExtraDataForTest(chain.Config(), header.Number, nil)
 		if err != nil {
 			t.Fatalf("error while encoding block extra data: %v", err)
 		}
@@ -759,4 +756,127 @@ func InitMinerWithOptions(genesis *core.Genesis, privKey *ecdsa.PrivateKey, with
 	err = stack.Start()
 
 	return stack, ethBackend, err
+}
+
+// InitImporterWithPipelinedSRC creates a non-mining node with pipelined import
+// SRC enabled. The node will import blocks from peers using the pipelined state
+// root computation path. A validator key is still needed for the keystore (used
+// for P2P identity / account manager) but the node does NOT start mining.
+func InitImporterWithPipelinedSRC(genesis *core.Genesis, privKey *ecdsa.PrivateKey, withoutHeimdall bool) (*node.Node, *eth.Ethereum, error) {
+	stack, err := newPipelineTestNode("InitImporter-")
+	if err != nil {
+		return nil, nil, err
+	}
+	ethBackend, err := eth.New(stack, &ethconfig.Config{
+		Genesis:         genesis,
+		NetworkId:       genesis.Config.ChainID.Uint64(),
+		SyncMode:        downloader.FullSync,
+		DatabaseCache:   256,
+		DatabaseHandles: 256,
+		TxPool:          legacypool.DefaultConfig,
+		GPO:             ethconfig.Defaults.GPO,
+		Miner: miner.Config{
+			Etherbase: crypto.PubkeyToAddress(privKey.PublicKey),
+			GasCeil:   genesis.GasLimit * 11 / 10,
+			GasPrice:  big.NewInt(1),
+			Recommit:  time.Second,
+		},
+		WithoutHeimdall:          withoutHeimdall,
+		EnablePipelinedImportSRC: true,
+		PipelinedImportSRCLogs:   true,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := importValidatorKey(stack, ethBackend, privKey); err != nil {
+		return nil, nil, err
+	}
+	// The debug/tracing namespace is registered by the CLI server layer in
+	// production, not by eth.New — register it here so RPC tests can exercise
+	// debug_* methods against the pipelined importer.
+	stack.RegisterAPIs(tracers.APIs(ethBackend.APIBackend))
+	return stack, ethBackend, stack.Start()
+}
+
+// newPipelineTestNode creates a headless node.Node in a fresh temp datadir
+// with P2P discovery disabled. Shared between the miner and importer test
+// setups since their node-level configuration is identical.
+func newPipelineTestNode(dirPrefix string) (*node.Node, error) {
+	datadir, err := os.MkdirTemp("", dirPrefix+uuid.New().String())
+	if err != nil {
+		return nil, err
+	}
+	return node.New(&node.Config{
+		Name:    "geth",
+		Version: params.Version,
+		DataDir: datadir,
+		P2P: p2p.Config{
+			ListenAddr:  "0.0.0.0:0",
+			NoDiscovery: true,
+			MaxPeers:    25,
+		},
+		UseLightweightKDF: true,
+	})
+}
+
+// importValidatorKey imports the validator's ECDSA key into the node's
+// keystore, unlocks the imported account, and registers the keystore with
+// the eth account manager so mining / signing paths can use it.
+func importValidatorKey(stack *node.Node, ethBackend *eth.Ethereum, privKey *ecdsa.PrivateKey) error {
+	kStore := keystore.NewKeyStore(stack.KeyStoreDir(), keystore.StandardScryptN, keystore.StandardScryptP)
+	if _, err := kStore.ImportECDSA(privKey, ""); err != nil {
+		return err
+	}
+	if err := kStore.Unlock(kStore.Accounts()[0], ""); err != nil {
+		return err
+	}
+	ethBackend.AccountManager().AddBackend(kStore)
+	return nil
+}
+
+// connectAndWaitForPeers statically peers the two nodes and blocks until the
+// connection is live on both servers. Two failure modes make a naive AddPeer
+// unreliable on slow hosts:
+//
+//   - Self() publishes its TCP port asynchronously after the listener starts,
+//     so an early AddPeer can capture a port-0 enode. The dial scheduler
+//     dedupes static nodes by ID (p2p/dial.go addStaticCh handling), so later
+//     re-adds never update the bad record — the dialer keeps dialing a dead
+//     address forever. Wait for both enodes to carry a real port before the
+//     first AddPeer.
+//
+//   - A transiently failed dial (e.g. a loaded CI runner) parks the target in
+//     the scheduler's history for dialHistoryExpiration (35s), so a 60s
+//     deadline covers barely one retry. Use a deadline long enough for
+//     several history windows.
+func connectAndWaitForPeers(t *testing.T, a, b *node.Node) {
+	t.Helper()
+	deadline := time.After(120 * time.Second)
+	for a.Server().Self().TCP() == 0 || b.Server().Self().TCP() == 0 {
+		select {
+		case <-deadline:
+			t.Fatalf("nodes failed to publish listener ports: a=%d b=%d",
+				a.Server().Self().TCP(), b.Server().Self().TCP())
+		default:
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+	// Dial from one side only: mutual AddPeer invites simultaneous-connect
+	// collisions where each server can drop the other's inbound connection
+	// as a duplicate of its own in-flight dial, and because failed dials
+	// enter the dialer's per-node history (checkDial: errRecentlyDialed,
+	// ~35s) aligned retries can keep colliding until the deadline. A single
+	// static dial can't collide, and the scheduler retries it on its own
+	// after each history expiry.
+	a.Server().AddPeer(b.Server().Self())
+	for a.Server().PeerCount() == 0 || b.Server().PeerCount() == 0 {
+		select {
+		case <-deadline:
+			t.Fatalf("nodes failed to peer within deadline: peers a=%d b=%d (a=%s b=%s)",
+				a.Server().PeerCount(), b.Server().PeerCount(),
+				a.Server().Self(), b.Server().Self())
+		default:
+			time.Sleep(250 * time.Millisecond)
+		}
+	}
 }

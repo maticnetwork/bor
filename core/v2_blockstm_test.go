@@ -236,25 +236,12 @@ func TestV2GasDeterminism(t *testing.T) {
 	config := params.BorMainnetChainConfig
 	engine := &benchConsensus{}
 
-	// Pick a block with enough txs
-	var bd testBlockData
-	for _, b := range blocks {
-		if len(b.block.Transactions()) > 50 {
-			bd = b
-			break
-		}
-	}
-	if bd.block == nil {
-		t.Skip("no block with >50 txs")
-	}
-
-	author := getAuthor(config, bd.witness.Header())
-	var expectedGas uint64
-	for run := 0; run < 5; run++ {
+	runBlock := func(bd testBlockData) (uint64, error) {
+		author := getAuthor(config, bd.witness.Header())
 		memdb := bd.witness.MakeHashDB(diskdb)
 		sdb, err := state.New(bd.witness.Root(), state.NewDatabase(triedb.NewDatabase(memdb, triedb.HashDefaults), nil))
 		if err != nil {
-			t.Fatal(err)
+			return 0, err
 		}
 		hc := &benchHeaderChain{config: config, chainDb: memdb,
 			headerCache: lru.NewCache[common.Hash, *types.Header](256), engine: engine}
@@ -263,12 +250,52 @@ func TestV2GasDeterminism(t *testing.T) {
 
 		res, err := NewV2StateProcessor(hc, bc, 16).Process(bd.block, sdb, vm.Config{}, &author, context.Background())
 		if err != nil {
+			return 0, err
+		}
+		return res.GasUsed, nil
+	}
+
+	// Pick a block with enough txs and a complete embedded witness fixture.
+	// V2 now surfaces base-read errors instead of continuing with zero-ish
+	// values, so incomplete fixtures are skipped rather than used for gas
+	// determinism assertions.
+	var bd testBlockData
+	var expectedGas uint64
+	candidates, incomplete := 0, 0
+	for _, b := range blocks {
+		if len(b.block.Transactions()) <= 50 {
+			continue
+		}
+		candidates++
+		gas, err := runBlock(b)
+		if err != nil {
+			if strings.Contains(err.Error(), "v2: base read: missing trie node") {
+				incomplete++
+				continue
+			}
+			t.Fatal(err)
+		}
+		bd = b
+		expectedGas = gas
+		break
+	}
+	if candidates == 0 {
+		t.Skip("no block with >50 txs")
+	}
+	if bd.block == nil {
+		// Every candidate hit a base read miss. Skipping here would let a
+		// regression that makes V2 report missing nodes on complete fixtures
+		// pass as a green CI run, so fail instead.
+		t.Fatalf("all %d candidate fixtures failed V2 base reads; expected at least one complete embedded witness", incomplete)
+	}
+
+	for run := 1; run < 5; run++ {
+		gas, err := runBlock(bd)
+		if err != nil {
 			t.Fatalf("run %d: %v", run, err)
 		}
-		if run == 0 {
-			expectedGas = res.GasUsed
-		} else if res.GasUsed != expectedGas {
-			t.Errorf("run %d: gas %d != expected %d (non-deterministic!)", run, res.GasUsed, expectedGas)
+		if gas != expectedGas {
+			t.Errorf("run %d: gas %d != expected %d (non-deterministic!)", run, gas, expectedGas)
 		}
 	}
 }

@@ -260,7 +260,7 @@ type BlockFetcher struct {
 }
 
 // NewBlockFetcher creates a block fetcher to retrieve blocks based on hash announcements.
-func NewBlockFetcher(light bool, getHeader HeaderRetrievalFn, getBlock blockRetrievalFn, verifyHeader headerVerifierFn, broadcastBlock blockBroadcasterFn, chainHeight chainHeightFn, currentHeader currentHeaderFn, insertHeaders headersInsertFn, insertChain chainInsertFn, dropPeer peerDropFn, jailPeer peerJailFn, enableBlockTracking bool, requireWitness bool, gasCeil uint64) *BlockFetcher {
+func NewBlockFetcher(light bool, getHeader HeaderRetrievalFn, getBlock blockRetrievalFn, verifyHeader headerVerifierFn, broadcastBlock blockBroadcasterFn, chainHeight chainHeightFn, currentHeader currentHeaderFn, insertHeaders headersInsertFn, insertChain chainInsertFn, dropPeer peerDropFn, jailPeer peerJailFn, enableBlockTracking bool, requireWitness bool, gasCeil uint64, signedWitnessHash signedWitnessHashFn, cacheWitnessForServing cacheWitnessForServingFn) *BlockFetcher {
 	f := &BlockFetcher{
 		light:               light,
 		notify:              make(chan *blockAnnounce),
@@ -302,6 +302,8 @@ func NewBlockFetcher(light bool, getHeader HeaderRetrievalFn, getBlock blockRetr
 		f.getHeader,
 		f.chainHeight,
 		f.currentHeader,
+		signedWitnessHash,
+		cacheWitnessForServing,
 		gasCeil,
 	)
 
@@ -319,6 +321,17 @@ func (f *BlockFetcher) Start() {
 // operations.
 func (f *BlockFetcher) Stop() {
 	close(f.quit)
+}
+
+// SetWitnessServerStriker wires the callback used to penalize a peer that serves
+// a non-empty witness whose bytes mismatch the BP-signed commitment (WIT2). It
+// is set post-construction (rather than threaded through NewBlockFetcher) to keep
+// the constructor signature stable. Must be called before Start; optional —
+// when unset, byte-mismatch servers are not struck.
+func (f *BlockFetcher) SetWitnessServerStriker(fn func(id string)) {
+	if f.wm != nil {
+		f.wm.parentStrikeWitnessServer = fn
+	}
 }
 
 // Notify announces the fetcher of the potential availability of a new block in

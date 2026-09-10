@@ -127,7 +127,7 @@ func TestV2SettleFn_SkipsPanickedPDB(t *testing.T) {
 
 	var execErrIdx int = -1
 	var execErr error
-	settleFn := newV2SettleFn(tasks, env, finalDB, blockCtx, common.Hash{}, cc, receipts, logs, totalUsedGas, panickedIdx, &execErrIdx, &execErr)
+	settleFn := newV2SettleFn(tasks, env, finalDB, blockCtx, common.Hash{}, cc, receipts, logs, totalUsedGas, panickedIdx, &execErrIdx, &execErr, new(error))
 
 	settleFn(0, pdb)
 
@@ -164,7 +164,7 @@ func TestV2SettleFn_NilStateIsNoOp(t *testing.T) {
 	tasks := []V2Task{{Index: 0, Tx: tx, Msg: msg}}
 	var execErrIdx int = -1
 	var execErr error
-	settleFn := newV2SettleFn(tasks, env, finalDB, blockCtx, common.Hash{}, cc, receipts, logs, totalUsedGas, panickedIdx, &execErrIdx, &execErr)
+	settleFn := newV2SettleFn(tasks, env, finalDB, blockCtx, common.Hash{}, cc, receipts, logs, totalUsedGas, panickedIdx, &execErrIdx, &execErr, new(error))
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -207,7 +207,7 @@ func TestV2SettleFn_RecordsFirstPanickedIdx(t *testing.T) {
 
 	var execErrIdx int = -1
 	var execErr error
-	settleFn := newV2SettleFn(tasks, env, finalDB, blockCtx, common.Hash{}, cc, receipts, logs, totalUsedGas, panickedIdx, &execErrIdx, &execErr)
+	settleFn := newV2SettleFn(tasks, env, finalDB, blockCtx, common.Hash{}, cc, receipts, logs, totalUsedGas, panickedIdx, &execErrIdx, &execErr, new(error))
 	settleFn(0, mkPanicked(0))
 	settleFn(1, mkPanicked(1))
 
@@ -248,7 +248,7 @@ func TestV2SettleFn_NormalPDBSettlesAfterSkip(t *testing.T) {
 
 	var execErrIdx int = -1
 	var execErr error
-	settleFn := newV2SettleFn(tasks, env, finalDB, blockCtx, common.Hash{}, cc, receipts, logs, totalUsedGas, panickedIdx, &execErrIdx, &execErr)
+	settleFn := newV2SettleFn(tasks, env, finalDB, blockCtx, common.Hash{}, cc, receipts, logs, totalUsedGas, panickedIdx, &execErrIdx, &execErr, new(error))
 	settleFn(0, pdb0)
 	settleFn(1, pdb1)
 
@@ -263,6 +263,77 @@ func TestV2SettleFn_NormalPDBSettlesAfterSkip(t *testing.T) {
 	}
 	if got := finalDB.GetBalance(addr); got.Uint64() != 7 {
 		t.Fatalf("finalDB.Balance(%x)=%s, want 7 — tx1 must still settle", addr, got)
+	}
+}
+
+// TestV2SettleFn_RecordsBaseReadErr verifies the settle-time base-read gate:
+// a settled incarnation carrying BaseReadErr must record the error for the
+// caller (first error wins), skip settlement so its zero-ish-read state never
+// reaches finalDB, and not disturb later healthy txs. The check lives in the
+// settle callback and NOT in a post-hoc scan of the executor's states array:
+// settlement recycles each pdb into the pool where a later tx's Reset reuses
+// it, so states[i] can alias a different (speculative, later-invalidated)
+// incarnation by the time a post-hoc scan runs — the scan both fabricates
+// errors that never settled and loses errors that did.
+func TestV2SettleFn_RecordsBaseReadErr(t *testing.T) {
+	coinbase := common.HexToAddress("0xCB")
+	env, finalDB, _, _, receipts, logs, totalUsedGas, panickedIdx, blockCtx, cc := newV2SettleTestEnv(t, coinbase)
+
+	tx0, msg0 := makeDummyTx(t, 0)
+	tx1, msg1 := makeDummyTx(t, 1)
+	tx2, msg2 := makeDummyTx(t, 2)
+	tasks := []V2Task{
+		{Index: 0, Tx: tx0, Msg: msg0},
+		{Index: 1, Tx: tx1, Msg: msg1},
+		{Index: 2, Tx: tx2, Msg: msg2},
+	}
+
+	firstErr := errors.New("missing trie node aa (first)")
+	pdb0 := state.NewParallelStateDB(0, env.safeBase, env.store, env.bals)
+	pdb0.SetDeferMVWrites(true)
+	pdb0.Coinbase = coinbase
+	addr := common.HexToAddress("0xdeadbeef")
+	pdb0.AddBalance(addr, uint256.NewInt(123), tracing.BalanceChangeUnspecified)
+	pdb0.UsedGas = 21000
+	pdb0.BaseReadErr = firstErr
+
+	pdb1 := state.NewParallelStateDB(1, env.safeBase, env.store, env.bals)
+	pdb1.SetDeferMVWrites(true)
+	pdb1.Coinbase = coinbase
+	pdb1.BaseReadErr = errors.New("missing trie node bb (second)")
+
+	healthy := common.HexToAddress("0xfeed")
+	pdb2 := state.NewParallelStateDB(2, env.safeBase, env.store, env.bals)
+	pdb2.SetDeferMVWrites(true)
+	pdb2.Coinbase = coinbase
+	pdb2.AddBalance(healthy, uint256.NewInt(7), tracing.BalanceChangeUnspecified)
+	pdb2.UsedGas = 21000
+
+	var execErrIdx int = -1
+	var execErr error
+	var readErr error
+	settleFn := newV2SettleFn(tasks, env, finalDB, blockCtx, common.Hash{}, cc, receipts, logs, totalUsedGas, panickedIdx, &execErrIdx, &execErr, &readErr)
+	settleFn(0, pdb0)
+	settleFn(1, pdb1)
+	settleFn(2, pdb2)
+
+	if readErr != firstErr {
+		t.Fatalf("readErr=%v, want the first error to win", readErr)
+	}
+	if got := finalDB.GetBalance(addr); !got.IsZero() {
+		t.Fatalf("finalDB.Balance(%x)=%s, want 0 — bad-read tx must not settle", addr, got)
+	}
+	if got := finalDB.GetBalance(healthy); got.Uint64() != 7 {
+		t.Fatalf("finalDB.Balance(%x)=%s, want 7 — healthy tx must still settle", healthy, got)
+	}
+	if len(*receipts) != 1 {
+		t.Fatalf("receipts=%d, want 1 (only the healthy tx settled)", len(*receipts))
+	}
+	if *totalUsedGas != 21000 {
+		t.Fatalf("totalUsedGas=%d, want 21000 (bad-read txs contribute nothing)", *totalUsedGas)
+	}
+	if *panickedIdx != -1 || execErrIdx != -1 {
+		t.Fatalf("base read error must not masquerade as panic/exec error: panickedIdx=%d execErrIdx=%d", *panickedIdx, execErrIdx)
 	}
 }
 

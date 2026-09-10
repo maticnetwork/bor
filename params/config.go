@@ -348,6 +348,7 @@ var (
 			GiuglianoBlock:    big.NewInt(35573500),
 			ChicagoBlock:      big.NewInt(38358000),
 			ValenciaBlock:     big.NewInt(40776000),
+			AustinBlock:       big.NewInt(44120000),
 			HampiBlock:        nil, // unscheduled
 
 			StateSyncConfirmationDelay: map[string]uint64{
@@ -439,6 +440,7 @@ var (
 			GiuglianoBlock:    big.NewInt(85268500),
 			ChicagoBlock:      big.NewInt(87218600),
 			ValenciaBlock:     big.NewInt(89531000),
+			AustinBlock:       big.NewInt(91949700),
 			HampiBlock:        nil, // unscheduled
 
 			StateSyncConfirmationDelay: map[string]uint64{
@@ -968,6 +970,7 @@ type BorConfig struct {
 	GiuglianoBlock             *big.Int          `json:"giuglianoBlock"`             // Giugliano switch block (nil = no fork, 0 = already on giugliano)
 	ChicagoBlock               *big.Int          `json:"chicagoBlock"`               // Chicago switch block (nil = no fork, 0 = already on chicago)
 	ValenciaBlock              *big.Int          `json:"valenciaBlock"`              // Valencia switch block (nil = no fork, 0 = already on valencia)
+	AustinBlock                *big.Int          `json:"austinBlock"`                // Austin switch block (nil = no fork, 0 = already on austin)
 	HampiBlock                 *big.Int          `json:"hampiBlock"`                 // Hampi switch block (nil = no fork, 0 = already on hampi)
 }
 
@@ -1050,6 +1053,11 @@ func (c *BorConfig) IsChicago(number *big.Int) bool {
 
 func (c *BorConfig) IsValencia(number *big.Int) bool {
 	return isBlockForked(c.ValenciaBlock, number)
+}
+
+// IsAustin reports whether state-sync gas accounting is active at number.
+func (c *BorConfig) IsAustin(number *big.Int) bool {
+	return isBlockForked(c.AustinBlock, number)
 }
 
 func (c *BorConfig) IsHampi(number *big.Int) bool {
@@ -1265,10 +1273,13 @@ func (c *ChainConfig) Description() string {
 			banner += fmt.Sprintf(" - Giugliano:                   #%-8v\n", c.Bor.GiuglianoBlock)
 		}
 		if c.Bor.ChicagoBlock != nil {
-			banner += fmt.Sprintf(" - Chicago:                   #%-8v\n", c.Bor.ChicagoBlock)
+			banner += fmt.Sprintf(" - Chicago:                     #%-8v\n", c.Bor.ChicagoBlock)
 		}
 		if c.Bor.ValenciaBlock != nil {
-			banner += fmt.Sprintf(" - Valencia:                  #%-8v\n", c.Bor.ValenciaBlock)
+			banner += fmt.Sprintf(" - Valencia:                    #%-8v\n", c.Bor.ValenciaBlock)
+		}
+		if c.Bor.AustinBlock != nil {
+			banner += fmt.Sprintf(" - Austin:                      #%-8v\n", c.Bor.AustinBlock)
 		}
 		if c.Bor.HampiBlock != nil {
 			banner += fmt.Sprintf(" - Hampi:                     #%-8v\n", c.Bor.HampiBlock)
@@ -1332,6 +1343,9 @@ func (c *ChainConfig) Description() string {
 	}
 	if c.OsakaBlock != nil {
 		banner += fmt.Sprintf(" - Osaka:                      #%-8v\n", *c.OsakaBlock)
+	}
+	if c.AmsterdamBlock != nil {
+		banner += fmt.Sprintf(" - Amsterdam:                  #%-8v\n", *c.AmsterdamBlock)
 	}
 	banner += fmt.Sprintf("\nAll fork specifications can be found at https://ethereum.github.io/execution-specs/src/ethereum/forks/\n")
 	return banner
@@ -1560,6 +1574,7 @@ func (c *ChainConfig) CheckConfigForkOrder() error {
 		{name: "cancunBlock", block: c.CancunBlock, optional: true},
 		{name: "pragueBlock", block: c.PragueBlock, optional: true},
 		{name: "osakaBlock", block: c.OsakaBlock, optional: true},
+		{name: "amsterdamBlock", block: c.AmsterdamBlock, optional: true},
 		{name: "verkleBlock", block: c.VerkleBlock, optional: true},
 	} {
 		if lastFork.name != "" {
@@ -1729,6 +1744,9 @@ func (c *ChainConfig) checkCompatible(newcfg *ChainConfig, headNumber *big.Int, 
 
 	if isForkBlockIncompatible(c.OsakaBlock, newcfg.OsakaBlock, headNumber) {
 		return newBlockCompatError("Osaka fork block", c.OsakaBlock, newcfg.OsakaBlock)
+	}
+	if isForkBlockIncompatible(c.AmsterdamBlock, newcfg.AmsterdamBlock, headNumber) {
+		return newBlockCompatError("Amsterdam fork block", c.AmsterdamBlock, newcfg.AmsterdamBlock)
 	}
 	return nil
 }

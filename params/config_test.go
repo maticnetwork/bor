@@ -211,6 +211,63 @@ func TestDescriptionValenciaBanner(t *testing.T) {
 	}
 }
 
+// Amsterdam is scheduled by block on Bor rather than by timestamp as upstream
+// does, so it has to be added to the fork-order and compatibility guards by
+// hand. Without these it can be scheduled out of order or moved under a synced
+// head with no error.
+func TestAmsterdamForkGuards(t *testing.T) {
+	t.Parallel()
+
+	t.Run("fork order", func(t *testing.T) {
+		t.Parallel()
+
+		ordered := &ChainConfig{
+			HomesteadBlock: big.NewInt(0), EIP150Block: big.NewInt(0), EIP155Block: big.NewInt(0),
+			EIP158Block: big.NewInt(0), ByzantiumBlock: big.NewInt(0), ConstantinopleBlock: big.NewInt(0),
+			PetersburgBlock: big.NewInt(0), IstanbulBlock: big.NewInt(0), MuirGlacierBlock: big.NewInt(0),
+			BerlinBlock: big.NewInt(0), LondonBlock: big.NewInt(0), ShanghaiBlock: big.NewInt(0),
+			OsakaBlock: big.NewInt(100), AmsterdamBlock: big.NewInt(200),
+		}
+		if err := ordered.CheckConfigForkOrder(); err != nil {
+			t.Errorf("amsterdam after osaka should be accepted, got %v", err)
+		}
+
+		outOfOrder := *ordered
+		outOfOrder.AmsterdamBlock = big.NewInt(50)
+		if err := outOfOrder.CheckConfigForkOrder(); err == nil {
+			t.Error("amsterdam scheduled before osaka should be rejected")
+		}
+	})
+
+	t.Run("compatibility", func(t *testing.T) {
+		t.Parallel()
+
+		stored := &ChainConfig{AmsterdamBlock: big.NewInt(10)}
+		moved := &ChainConfig{AmsterdamBlock: big.NewInt(20)}
+
+		if err := stored.CheckCompatible(moved, 5, 0); err != nil {
+			t.Errorf("rescheduling below head should be allowed, got %v", err)
+		}
+		if err := stored.CheckCompatible(moved, 15, 0); err == nil {
+			t.Error("rescheduling a fork the head has already passed should be rejected")
+		}
+	})
+
+	t.Run("banner", func(t *testing.T) {
+		t.Parallel()
+
+		scheduled := &ChainConfig{ChainID: big.NewInt(1), AmsterdamBlock: big.NewInt(100)}
+		if got := scheduled.Description(); !strings.Contains(got, "Amsterdam:") {
+			t.Errorf("expected Amsterdam banner when AmsterdamBlock is set, got:\n%s", got)
+		}
+
+		unset := &ChainConfig{ChainID: big.NewInt(1)}
+		if got := unset.Description(); strings.Contains(got, "Amsterdam:") {
+			t.Errorf("did not expect Amsterdam banner when AmsterdamBlock is nil, got:\n%s", got)
+		}
+	})
+}
+
 func TestIsValencia(t *testing.T) {
 	t.Parallel()
 
@@ -234,6 +291,34 @@ func TestIsValencia(t *testing.T) {
 			t.Parallel()
 			c := &BorConfig{ValenciaBlock: tt.fork}
 			assert.Equal(t, c.IsValencia(big.NewInt(tt.number)), tt.want)
+		})
+	}
+}
+
+// TestIsAustin covers nil, genesis, and scheduled activation boundaries.
+func TestIsAustin(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		fork   *big.Int
+		number int64
+		want   bool
+	}{
+		{"unset fork never active", nil, 0, false},
+		{"unset fork never active at height", nil, 1_000_000, false},
+		{"genesis activation at 0", big.NewInt(0), 0, true},
+		{"genesis activation above 0", big.NewInt(0), 1, true},
+		{"scheduled fork before activation", big.NewInt(100), 99, false},
+		{"scheduled fork at activation", big.NewInt(100), 100, true},
+		{"scheduled fork after activation", big.NewInt(100), 101, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			c := &BorConfig{AustinBlock: tt.fork}
+			assert.Equal(t, c.IsAustin(big.NewInt(tt.number)), tt.want)
 		})
 	}
 }

@@ -496,13 +496,14 @@ func TestGatherForksBor(t *testing.T) {
 			DelhiBlock:     big.NewInt(200),
 			IndoreBlock:    big.NewInt(300),
 			AhmedabadBlock: big.NewInt(400),
+			AustinBlock:    big.NewInt(500),
 		},
 	}
 
 	heightForks, _ := GatherForks(cfg, 0)
 
 	// The Bor forks must appear in the result
-	borForks := map[uint64]bool{100: false, 200: false, 300: false, 400: false}
+	borForks := map[uint64]bool{100: false, 200: false, 300: false, 400: false, 500: false}
 	for _, f := range heightForks {
 		if _, ok := borForks[f]; ok {
 			borForks[f] = true

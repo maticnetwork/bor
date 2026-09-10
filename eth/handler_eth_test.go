@@ -45,9 +45,10 @@ import (
 // testEthHandler is a mock event handler to listen for inbound network requests
 // on the `eth` protocol and convert them into a more easily testable form.
 type testEthHandler struct {
-	blockBroadcasts event.Feed
-	txAnnounces     event.Feed
-	txBroadcasts    event.Feed
+	blockBroadcasts    event.Feed
+	blockAnnouncements event.Feed
+	txAnnounces        event.Feed
+	txBroadcasts       event.Feed
 }
 
 func (h *testEthHandler) Chain() *core.BlockChain              { panic("no backing chain") }
@@ -62,6 +63,11 @@ func (h *testEthHandler) Handle(peer *eth.Peer, packet eth.Packet) error {
 		h.blockBroadcasts.Send(packet.Block)
 		return nil
 
+	case *eth.NewBlockHashesPacket:
+		hashes, _ := packet.Unpack()
+		h.blockAnnouncements.Send(hashes)
+		return nil
+
 	case *eth.NewPooledTransactionHashesPacket:
 		h.txAnnounces.Send(packet.Hashes)
 		return nil
@@ -70,8 +76,8 @@ func (h *testEthHandler) Handle(peer *eth.Peer, packet eth.Packet) error {
 		h.txBroadcasts.Send(([]*types.Transaction)(*packet))
 		return nil
 
-	case *eth.PooledTransactionsResponse:
-		h.txBroadcasts.Send(([]*types.Transaction)(*packet))
+	case *eth.PooledTransactionsPacket:
+		h.txBroadcasts.Send(([]*types.Transaction)(packet.PooledTransactionsResponse))
 		return nil
 
 	default:
@@ -701,6 +707,70 @@ func testBroadcastBlock(t *testing.T, peers, bcasts int) {
 			}
 
 			return
+		}
+	}
+}
+
+func TestMinedBroadcastAnnouncesWithCachedWitnessBeforeWrite(t *testing.T) {
+	t.Parallel()
+
+	source := newTestHandlerWithBlocks(1)
+	defer source.close()
+
+	sinks := make([]*testEthHandler, 2)
+	for i := range sinks {
+		sinks[i] = new(testEthHandler)
+	}
+
+	for i, sink := range sinks {
+		sourcePipe, sinkPipe := p2p.MsgPipe()
+		defer sourcePipe.Close()
+		defer sinkPipe.Close()
+
+		sourcePeer := eth.NewPeer(eth.ETH68, p2p.NewPeerPipe(enode.ID{byte(i)}, "", nil, sourcePipe), sourcePipe, nil)
+		sinkPeer := eth.NewPeer(eth.ETH68, p2p.NewPeerPipe(enode.ID{0}, "", nil, sinkPipe), sinkPipe, nil)
+		defer sourcePeer.Close()
+		defer sinkPeer.Close()
+
+		go source.handler.runEthPeer(sourcePeer, func(peer *eth.Peer) error {
+			return eth.Handle((*ethHandler)(source.handler), peer)
+		})
+		if err := sinkPeer.Handshake(1, source.chain, eth.BlockRangeUpdatePacket{}); err != nil {
+			t.Fatalf("failed to run protocol handshake: %v", err)
+		}
+		go eth.Handle(sink, sinkPeer)
+	}
+
+	announceCh := make(chan []common.Hash, len(sinks))
+	for i := range sinks {
+		sub := sinks[i].blockAnnouncements.Subscribe(announceCh)
+		defer sub.Unsubscribe()
+	}
+
+	parent := source.chain.CurrentBlock()
+	block := types.NewBlockWithHeader(&types.Header{
+		ParentHash: parent.Hash(),
+		Number:     new(big.Int).Add(parent.Number, common.Big1),
+		Time:       parent.Time + 1,
+		Difficulty: big.NewInt(1),
+		GasLimit:   parent.GasLimit,
+	})
+	require.False(t, source.chain.HasBlock(block.Hash(), block.NumberU64()))
+
+	source.chain.CacheWitness(block.Hash(), []byte{0x1})
+
+	time.Sleep(100 * time.Millisecond)
+	source.handler.eventMux.Post(core.NewMinedBlockEvent{Block: block})
+
+	timeout := time.After(2 * time.Second)
+	for {
+		select {
+		case hashes := <-announceCh:
+			if len(hashes) == 1 && hashes[0] == block.Hash() {
+				return
+			}
+		case <-timeout:
+			t.Fatalf("timed out waiting for block hash announcement for block %s", block.Hash())
 		}
 	}
 }

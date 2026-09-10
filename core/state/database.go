@@ -193,6 +193,19 @@ func NewDatabaseForTesting() *CachingDB {
 	return NewDatabase(triedb.NewDatabase(rawdb.NewMemoryDatabase(), nil), nil)
 }
 
+// TrieOnlyReader returns a state reader that uses only the trie (MPT), skipping
+// flat/snapshot readers. This ensures all account and storage reads walk the trie,
+// which is required for witness building — the witness captures trie nodes during
+// the walk. Without this, flat readers short-circuit the trie and proof paths are
+// never captured.
+func (db *CachingDB) TrieOnlyReader(stateRoot common.Hash) (Reader, error) {
+	tr, err := newTrieReader(stateRoot, db.triedb)
+	if err != nil {
+		return nil, err
+	}
+	return newReader(newCachingCodeReader(db.disk, db.codeCache, db.codeSizeCache), tr), nil
+}
+
 // Reader returns a state reader associated with the specified state root.
 func (db *CachingDB) Reader(stateRoot common.Hash) (Reader, error) {
 	var readers []StateReader

@@ -61,8 +61,8 @@ type chainSyncer struct {
 	peerEventCh chan struct{}
 	doneCh      chan error // non-nil when sync is running
 
-	peersUnavailableUntil   time.Time
-	peersUnavailableAtCount int
+	peersUnavailableUntil time.Time
+	observedPeerRevision  uint64
 }
 
 // chainSyncOp is a scheduled sync operation.
@@ -112,6 +112,7 @@ func (cs *chainSyncer) loop() {
 	retry := newResettableTimer()
 	defer retry.stop()
 
+	cs.observedPeerRevision = cs.handler.peers.currentRevision()
 	for {
 		if op, wait := cs.nextSyncOp(); op != nil {
 			retry.stop()
@@ -143,7 +144,6 @@ func (cs *chainSyncer) onSyncDone(err error) {
 
 	if errors.Is(err, downloader.ErrPeersUnavailable) || errors.Is(err, downloader.ErrPeerBackedOff) || errors.Is(err, whitelist.ErrNoRemote) {
 		cs.peersUnavailableUntil = time.Now().Add(forceSyncCycle)
-		cs.peersUnavailableAtCount = cs.handler.peers.len()
 	} else {
 		cs.peersUnavailableUntil = time.Time{}
 	}
@@ -159,9 +159,11 @@ func (cs *chainSyncer) onSyncDone(err error) {
 }
 
 func (cs *chainSyncer) onPeerEvent() {
-	if !cs.peersUnavailableUntil.IsZero() && cs.handler.peers.len() != cs.peersUnavailableAtCount {
+	revision := cs.handler.peers.currentRevision()
+	if !cs.peersUnavailableUntil.IsZero() && revision != cs.observedPeerRevision {
 		cs.peersUnavailableUntil = time.Time{}
 	}
+	cs.observedPeerRevision = revision
 }
 
 func (cs *chainSyncer) shutdown() {
@@ -307,7 +309,14 @@ func (cs *chainSyncer) modeAndLocalHead() (downloader.SyncMode, *big.Int) {
 	// We are in a full sync, but the associated head state is missing. To complete
 	// the head state, forcefully rerun the snap sync. Note it doesn't mean the
 	// persistent state is corrupted, just mismatch with the head block.
-	if !cs.handler.chain.HasState(head.Root) {
+	if !cs.handler.chain.HasCommittedState(head.Root) {
+		// Pipelined import may have already advanced the canonical head while
+		// the matching SRC commit is still in flight. Stay in full sync for
+		// that bounded handoff only; otherwise the snap recovery path below
+		// still handles genuinely missing head state.
+		if hasPendingPipelinedHeadState(cs.handler.chain, head) {
+			return downloader.FullSync, td
+		}
 		block := cs.handler.chain.CurrentSnapBlock()
 		td := cs.handler.chain.GetTd(block.Hash(), block.Number.Uint64())
 		log.Info("Reenabled snap sync as chain is stateless")

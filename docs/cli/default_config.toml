@@ -267,3 +267,8 @@ devfakeauthor = false
   enable-preconfs = false
   enable-private-tx = false
   bp-rpc-endpoints = []
+
+[pipeline]
+  enable-import-src = false
+  import-src-logs = false
+  warm-snapshot = true

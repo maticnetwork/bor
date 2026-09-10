@@ -109,7 +109,7 @@ func newTester(light bool) *fetcherTester {
 		blocks:  map[common.Hash]*types.Block{genesis.Hash(): genesis},
 		drops:   make(map[string]bool),
 	}
-	tester.fetcher = NewBlockFetcher(light, tester.getHeader, tester.getBlock, tester.verifyHeader, tester.broadcastBlock, tester.chainHeight, nil, tester.insertHeaders, tester.insertChain, tester.dropPeer, nil, false, false, 0)
+	tester.fetcher = NewBlockFetcher(light, tester.getHeader, tester.getBlock, tester.verifyHeader, tester.broadcastBlock, tester.chainHeight, nil, tester.insertHeaders, tester.insertChain, tester.dropPeer, nil, false, false, 0, nil, nil)
 	tester.fetcher.Start()
 
 	return tester

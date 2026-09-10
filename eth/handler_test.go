@@ -338,6 +338,20 @@ func setupJailPeerTest(t *testing.T, startP2PServer bool) *jailPeerTestSetup {
 	}
 }
 
+// wit2PeerIsJailed reports whether nodeID is currently in the p2p server's jail
+// set. The jail map lives on the unexported peerJail field; we read it via
+// reflection (reading, not calling methods, is permitted on unexported fields)
+// so discipline tests can assert that a struck wit2 peer was actually jailed.
+func wit2PeerIsJailed(t *testing.T, p2pServer *p2p.Server, nodeID enode.ID) bool {
+	t.Helper()
+	pj := reflect.ValueOf(p2pServer).Elem().FieldByName("peerJail")
+	if !pj.IsValid() || pj.IsNil() {
+		t.Fatalf("peerJail not initialized on p2p server")
+	}
+	jailed := pj.Elem().FieldByName("jailed")
+	return jailed.MapIndex(reflect.ValueOf(nodeID)).IsValid()
+}
+
 // verifyPeerJailInitialized checks if peerJail was initialized in the p2p server
 func verifyPeerJailInitialized(t *testing.T, p2pServer *p2p.Server) {
 	t.Helper()

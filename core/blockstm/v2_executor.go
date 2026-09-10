@@ -62,6 +62,8 @@ type V2SettleFn func(txIdx int, state V2TxState)
 // V2Env provides the execution environment for V2 BlockSTM.
 type V2Env interface {
 	BaseNonce(addr common.Address) uint64
+	// BaseCodeSize returns the size of addr's code at pre-block base state.
+	BaseCodeSize(addr common.Address) int
 	Execute(task V2Task, workerID int, incarnation int,
 		senderNonces map[common.Address]uint64,
 		coinbase common.Address,
@@ -200,21 +202,29 @@ func newV2ExecCtx(tasks []V2Task, env V2Env, coinbase common.Address,
 }
 
 // computeSenderNonces returns per-task per-sender pre-computed nonces for
-// same-sender chains (length >= 2). Tasks whose sender appears in any
-// tx's EIP-7702 auth list — whether earlier or later in the block — are
-// excluded from the pre-compute and fall through to PDB.GetNonce →
-// MVStore. We can't tell at scheduling time whether an auth-list entry
-// will be applied (apply-time check requires auth.nonce == account.nonce
-// and a valid signature on the current chainID), so any pre-bump we put
-// here would be wrong for failed auths and a SenderNonces hit
-// short-circuits PDB.GetNonce without recording a read — meaning
-// validation can never invalidate the stale value. The MVStore fallback
-// records reads, so validation re-executes the tx once an earlier
-// auth-bump (or its absence) lands in the store.
+// same-sender chains (length >= 2). The pre-compute is only sound when
+// nothing but the sender's own txs can move its nonce during the block,
+// because a SenderNonces hit short-circuits PDB.GetNonce without
+// recording a read — validation can never invalidate a stale value.
+// Two classes of sender are therefore excluded and fall through to the
+// MVStore-aware path, which records reads so validation re-executes the
+// tx once a mid-block nonce change (or its absence) lands in the store:
 //
-// Tasks with no chain and no auth-list interaction get nil — same as
-// the original optimisation, so PDB.GetNonce reads the base nonce
-// directly.
+//   - Senders appearing in any tx's EIP-7702 auth list — whether earlier
+//     or later in the block. The auth-list applier bumps authority nonces,
+//     and we can't tell at scheduling time whether an auth-list entry will
+//     be applied (apply-time check requires auth.nonce == account.nonce
+//     and a valid signature on the current chainID), so any pre-bump we
+//     put here would be wrong for failed auths.
+//
+//   - Senders carrying code at base state. Only a delegation designator
+//     is possible there for a valid sender (EIP-3607 bars other code), and
+//     a call into a delegated account runs the delegate code in the
+//     account's own frame — a CREATE inside it bumps the sender's nonce
+//     mid-block, invalidating any pre-computed chain positions after it.
+//
+// Tasks with no chain and no exclusion get nil — same as the original
+// optimisation, so PDB.GetNonce reads the base nonce directly.
 func computeSenderNonces(tasks []V2Task, env V2Env) []map[common.Address]uint64 {
 	// Any address that is an authority in any tx may have its nonce
 	// dynamically bumped by the auth-list applier. Don't pre-compute
@@ -233,12 +243,26 @@ func computeSenderNonces(tasks []V2Task, env V2Env) []map[common.Address]uint64 
 	chains := groupBySender(tasks, env)
 	out := make([]map[common.Address]uint64, len(tasks))
 	for sender, c := range chains {
-		if _, isAuth := authoritySet[sender]; isAuth {
-			continue
+		if precomputeSenderNonces(sender, c, authoritySet, env) {
+			assignSenderNonces(out, sender, c)
 		}
-		assignSenderNonces(out, sender, c)
 	}
 	return out
+}
+
+// precomputeSenderNonces reports whether sender's chain qualifies for the
+// pre-compute: length >= 2, not an EIP-7702 authority in this block, and no
+// code at base state. Chain length is checked first because it is free,
+// while the base-code lookup can hit disk and singleton senders (the common
+// case) should never pay for it.
+func precomputeSenderNonces(sender common.Address, c *senderChain, authoritySet map[common.Address]struct{}, env V2Env) bool {
+	if len(c.taskIdxs) < 2 {
+		return false
+	}
+	if _, isAuth := authoritySet[sender]; isAuth {
+		return false
+	}
+	return env.BaseCodeSize(sender) == 0
 }
 
 // senderChain is the per-sender precomputed nonce chain.

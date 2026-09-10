@@ -32,6 +32,10 @@ var (
 	witnessVerifyPeersInsuffMeter = metrics.NewRegisteredMeter("eth/fetcher/witness/verify/peers/insufficient", nil)
 	witnessVerifyNoConsensusMeter = metrics.NewRegisteredMeter("eth/fetcher/witness/verify/consensus/none", nil)
 
+	// witnessByteMismatchMeter tracks WIT2 byte-correctness drops: a serving
+	// peer delivered bytes whose keccak256 did not match the BP-signed hash.
+	witnessByteMismatchMeter = metrics.NewRegisteredMeter("eth/fetcher/witness/byte_mismatch", nil)
+
 	// Witness page count metrics
 	witnessPageCountBelowThresholdMeter = metrics.NewRegisteredMeter("eth/fetcher/witness/pagecount/below_threshold", nil)
 	witnessPageCountAboveThresholdMeter = metrics.NewRegisteredMeter("eth/fetcher/witness/pagecount/above_threshold", nil)

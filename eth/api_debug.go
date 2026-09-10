@@ -227,6 +227,13 @@ func (api *DebugAPI) StorageRangeAt(ctx context.Context, blockNrOrHash rpc.Block
 	}
 	defer release()
 
+	// storageRangeAt opens the storage trie directly at the block's root,
+	// which a pipelined import commits asynchronously — wait out the
+	// in-flight SRC when this block is the pending head.
+	if err := api.eth.blockchain.WaitForPipelinedStateCommit(ctx, block.Root()); err != nil {
+		return StorageRangeResult{}, err
+	}
+
 	return storageRangeAt(statedb, block.Root(), contractAddress, keyStart, maxResult)
 }
 
@@ -505,7 +512,7 @@ func (api *DebugAPI) ExecutionWitness(bn rpc.BlockNumber) (*stateless.ExtWitness
 	}
 	parentBlock := bc.GetBlockByHash(block.ParentHash())
 
-	_, _, _, statedb, _, err := bc.ProcessBlock(parentBlock, block.Header(), nil, nil)
+	_, _, _, statedb, _, err := bc.ProcessBlock(parentBlock, block.Header(), nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -525,7 +532,7 @@ func (api *DebugAPI) ExecutionWitnessByHash(hash common.Hash) (*stateless.ExtWit
 	}
 	parentBlock := bc.GetBlockByHash(block.ParentHash())
 
-	_, _, _, statedb, _, err := bc.ProcessBlock(parentBlock, block.Header(), nil, nil)
+	_, _, _, statedb, _, err := bc.ProcessBlock(parentBlock, block.Header(), nil, nil, nil)
 	if err != nil {
 		return nil, err
 	}

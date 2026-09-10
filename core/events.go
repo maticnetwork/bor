@@ -19,6 +19,7 @@ package core
 import (
 	"time"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/stateless"
 	"github.com/ethereum/go-ethereum/core/types"
 )
@@ -47,6 +48,14 @@ type ChainEvent struct {
 
 type ChainSideEvent struct {
 	Header *types.Header
+}
+
+// WitnessReadyEvent is posted when a pipelined import SRC goroutine finishes
+// and writes the witness to the database. The handler uses this to announce
+// witness availability to peers via the WIT protocol.
+type WitnessReadyEvent struct {
+	BlockHash   common.Hash
+	BlockNumber uint64
 }
 
 type ChainHeadEvent struct {

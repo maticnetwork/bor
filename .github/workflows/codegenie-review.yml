@@ -54,7 +54,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - uses: 0xPolygon/codegenie@v0.5.5
+      - uses: 0xPolygon/codegenie@a662388fde87e430abc873f793ec7bc01d70163c # v0.5.6
         with:
           model: "anthropic/claude-opus-5:high"
           llm-api-key: ${{ secrets.CLAUDE_API_KEY }}

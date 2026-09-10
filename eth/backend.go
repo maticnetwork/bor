@@ -74,7 +74,18 @@ import (
 	gethversion "github.com/ethereum/go-ethereum/version"
 )
 
-var MilestoneWhitelistedDelayTimer = metrics.NewRegisteredTimer("chain/milestone/whitelisteddelay", nil)
+var (
+	MilestoneWhitelistedDelayTimer = metrics.NewRegisteredTimer("chain/milestone/whitelisteddelay", nil)
+	pendingPipelinedMaskedCounter  = metrics.NewRegisteredCounter("chain/sync/pending_pipelined_masked_total", nil)
+)
+
+func hasPendingPipelinedHeadState(chain *core.BlockChain, head *types.Header) bool {
+	if !chain.HasRecentPipelinedHeadState(head.Hash(), head.Root) {
+		return false
+	}
+	pendingPipelinedMaskedCounter.Inc(1)
+	return true
+}
 
 const (
 	// This is the fairness knob for the discovery mixer. When looking for peers, we'll
@@ -307,24 +318,27 @@ func New(stack *node.Node, config *ethconfig.Config) (*Ethereum, error) {
 
 	var (
 		options = &core.BlockChainConfig{
-			TrieCleanLimit:          config.TrieCleanCache,
-			NoPrefetch:              config.NoPrefetch,
-			TrieDirtyLimit:          config.TrieDirtyCache,
-			ArchiveMode:             config.NoPruning,
-			TrieTimeLimit:           config.TrieTimeout,
-			SnapshotLimit:           config.SnapshotCache,
-			Preimages:               config.Preimages,
-			StateHistory:            config.StateHistory,
-			TrienodeHistory:         config.TrienodeHistory,
-			NodeFullValueCheckpoint: config.NodeFullValueCheckpoint,
-			StateScheme:             scheme,
-			TriesInMemory:           config.TriesInMemory,
-			ChainHistoryMode:        config.HistoryMode,
-			TxLookupLimit:           int64(min(config.TransactionHistory, math.MaxInt64)),
-			AddressCacheSizes:       config.AddressCacheSizes,
-			PreloadRateLimit:        config.PreloadRateLimit,
-			VmConfig:                vmCfg,
-			Stateless:               config.SyncMode == downloader.StatelessSync,
+			TrieCleanLimit:           config.TrieCleanCache,
+			NoPrefetch:               config.NoPrefetch,
+			TrieDirtyLimit:           config.TrieDirtyCache,
+			ArchiveMode:              config.NoPruning,
+			TrieTimeLimit:            config.TrieTimeout,
+			SnapshotLimit:            config.SnapshotCache,
+			Preimages:                config.Preimages,
+			StateHistory:             config.StateHistory,
+			TrienodeHistory:          config.TrienodeHistory,
+			NodeFullValueCheckpoint:  config.NodeFullValueCheckpoint,
+			StateScheme:              scheme,
+			TriesInMemory:            config.TriesInMemory,
+			ChainHistoryMode:         config.HistoryMode,
+			TxLookupLimit:            int64(min(config.TransactionHistory, math.MaxInt64)),
+			AddressCacheSizes:        config.AddressCacheSizes,
+			PreloadRateLimit:         config.PreloadRateLimit,
+			VmConfig:                 vmCfg,
+			EnablePipelinedImportSRC: config.EnablePipelinedImportSRC,
+			PipelinedImportSRCLogs:   config.PipelinedImportSRCLogs,
+			PipelinedSRCWarmSnapshot: config.PipelinedSRCWarmSnapshot,
+			Stateless:                config.SyncMode == downloader.StatelessSync,
 			// Enables file journaling for the trie database. The journal files will be stored
 			// within the data directory. The corresponding paths will be either:
 			// - DATADIR/triedb/merkle.journal
@@ -1130,7 +1144,13 @@ func (s *Ethereum) SyncMode() downloader.SyncMode {
 	// We are in a full sync, but the associated head state is missing. To complete
 	// the head state, forcefully rerun the snap sync. Note it doesn't mean the
 	// persistent state is corrupted, just mismatch with the head block.
-	if !s.blockchain.HasState(head.Root) && !s.handler.statelessSync.Load() {
+	if !s.blockchain.HasCommittedState(head.Root) && !s.handler.statelessSync.Load() {
+		// Pipelined import can briefly expose a head whose SRC commit is still
+		// in flight. Report full sync during that bounded handoff only; once it
+		// expires, this remains a real missing-state signal.
+		if hasPendingPipelinedHeadState(s.blockchain, head) {
+			return downloader.FullSync
+		}
 		log.Info("Reenabled snap sync as chain is stateless")
 		return downloader.SnapSync
 	}

@@ -589,6 +589,14 @@ func TestInvalidGetRangeLogsRequest(t *testing.T) {
 	if _, err := api.GetLogs(t.Context(), FilterCriteria{FromBlock: big.NewInt(2), ToBlock: big.NewInt(1)}); err != errInvalidBlockRange {
 		t.Errorf("Expected Logs for invalid range return error, but got: %v", err)
 	}
+
+	// GetBorBlockLogs has the same range guard (fromBlock > toBlock → error) and
+	// must reject it independently — the previous branch only covered GetLogs.
+	// This is reached before the backend.CurrentHeader() call, so the empty-DB
+	// fixture above is sufficient.
+	if _, err := api.GetBorBlockLogs(t.Context(), FilterCriteria{FromBlock: big.NewInt(2), ToBlock: big.NewInt(1)}); err != errInvalidBlockRange {
+		t.Errorf("Expected GetBorBlockLogs for invalid range to return errInvalidBlockRange, but got: %v", err)
+	}
 }
 
 // TestExceedLogQueryLimit tests getLogs with too many addresses or topics

@@ -47,7 +47,9 @@ func (s *ParallelStateDB) settleStorage(final *StateDB) {
 	for addr, slots := range s.localStorage {
 		origins := make(map[common.Hash]common.Hash, len(slots))
 		for key := range slots {
-			origins[key] = s.base.GetState(addr, key)
+			origin, berr := s.base.GetState(addr, key)
+			s.noteBaseReadErr(berr)
+			origins[key] = origin
 		}
 		final.SetStorageDirectWithOrigins(addr, slots, origins)
 	}

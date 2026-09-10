@@ -19,6 +19,7 @@ package core
 import (
 	"math/big"
 	"sync"
+	"sync/atomic"
 
 	"github.com/holiman/uint256"
 
@@ -186,6 +187,65 @@ func GetHashFn(ref *types.Header, chain ChainContext) func(n uint64) common.Hash
 		}
 
 		return common.Hash{}
+	}
+}
+
+// SpeculativeGetHashFn returns a GetHashFunc for use during pipelined SRC
+// speculative execution of block N+1, where block N's hash is not yet known
+// (SRC(N) is still computing root_N).
+//
+// It uses three-tier resolution:
+//   - Tier 1 (n == pendingBlockN): lazy-resolves by calling srcDone(), which
+//     blocks until SRC(N) completes and returns hash(block_N). Cached after
+//     first call.
+//   - Tier 2 (n == pendingBlockN-1): returns blockN1Header.Hash() directly.
+//     Block N-1 is fully committed and in the chain DB.
+//   - Tier 3 (n < pendingBlockN-1): delegates to GetHashFn anchored at
+//     block N-1. Its cache seeds from blockN1Header.ParentHash = hash(block_{N-2}),
+//     so index 0 gives BLOCKHASH(N-2), which is correct.
+//
+// srcDone is called at most once and must return hash(block_N) after SRC(N)
+// completes. It may block.
+func SpeculativeGetHashFn(blockN1Header *types.Header, chain ChainContext, pendingBlockN uint64, srcDone func() common.Hash, blockhashNAccessed *atomic.Bool) func(uint64) common.Hash {
+	blockN1Hash := blockN1Header.Hash()
+	olderFn := GetHashFn(blockN1Header, chain) // blocks N-2 and below
+	resolveN := newPendingBlockNResolver(srcDone, blockhashNAccessed)
+	return func(n uint64) common.Hash {
+		switch {
+		case n >= pendingBlockN+1:
+			return common.Hash{} // future block
+		case n == pendingBlockN:
+			return resolveN()
+		case n == pendingBlockN-1:
+			return blockN1Hash
+		default:
+			return olderFn(n)
+		}
+	}
+}
+
+// newPendingBlockNResolver returns a closure that lazily resolves pending
+// block N's hash via srcDone. On every invocation it flags blockhashNAccessed
+// so the caller knows the speculative block read BLOCKHASH(N) — the resolved
+// hash is pre-seal (no signature in Extra) and will differ from the final
+// on-chain hash, so the speculative execution must be aborted.
+func newPendingBlockNResolver(srcDone func() common.Hash, blockhashNAccessed *atomic.Bool) func() common.Hash {
+	var (
+		resolvedHash common.Hash
+		resolved     bool
+		mu           sync.Mutex
+	)
+	return func() common.Hash {
+		if blockhashNAccessed != nil {
+			blockhashNAccessed.Store(true)
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		if !resolved {
+			resolvedHash = srcDone()
+			resolved = true
+		}
+		return resolvedHash
 	}
 }
 

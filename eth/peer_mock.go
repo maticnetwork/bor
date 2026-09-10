@@ -50,6 +50,32 @@ func (mr *MockWitnessPeerMockRecorder) AddKnownWitness(hash interface{}) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddKnownWitness", reflect.TypeOf((*MockWitnessPeer)(nil).AddKnownWitness), hash)
 }
 
+// AddKnownAnnounce mocks base method.
+func (m *MockWitnessPeer) AddKnownAnnounce(hash common.Hash) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "AddKnownAnnounce", hash)
+}
+
+// AddKnownAnnounce indicates an expected call of AddKnownAnnounce.
+func (mr *MockWitnessPeerMockRecorder) AddKnownAnnounce(hash interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddKnownAnnounce", reflect.TypeOf((*MockWitnessPeer)(nil).AddKnownAnnounce), hash)
+}
+
+// KnownAnnounceContainsHash mocks base method.
+func (m *MockWitnessPeer) KnownAnnounceContainsHash(hash common.Hash) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "KnownAnnounceContainsHash", hash)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// KnownAnnounceContainsHash indicates an expected call of KnownAnnounceContainsHash.
+func (mr *MockWitnessPeerMockRecorder) KnownAnnounceContainsHash(hash interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "KnownAnnounceContainsHash", reflect.TypeOf((*MockWitnessPeer)(nil).KnownAnnounceContainsHash), hash)
+}
+
 // AsyncSendNewWitness mocks base method.
 func (m *MockWitnessPeer) AsyncSendNewWitness(witness *stateless.Witness) {
 	m.ctrl.T.Helper()
@@ -72,6 +98,18 @@ func (m *MockWitnessPeer) AsyncSendNewWitnessHash(hash common.Hash, number uint6
 func (mr *MockWitnessPeerMockRecorder) AsyncSendNewWitnessHash(hash, number interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AsyncSendNewWitnessHash", reflect.TypeOf((*MockWitnessPeer)(nil).AsyncSendNewWitnessHash), hash, number)
+}
+
+// AsyncSendSignedWitnessAnnouncement mocks base method.
+func (m *MockWitnessPeer) AsyncSendSignedWitnessAnnouncement(ann wit.SignedWitnessAnnouncement) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "AsyncSendSignedWitnessAnnouncement", ann)
+}
+
+// AsyncSendSignedWitnessAnnouncement indicates an expected call of AsyncSendSignedWitnessAnnouncement.
+func (mr *MockWitnessPeerMockRecorder) AsyncSendSignedWitnessAnnouncement(ann interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AsyncSendSignedWitnessAnnouncement", reflect.TypeOf((*MockWitnessPeer)(nil).AsyncSendSignedWitnessAnnouncement), ann)
 }
 
 // Close mocks base method.

@@ -219,3 +219,74 @@ func TestUnmarshalJSONNewFilterArgs(t *testing.T) {
 		t.Fatalf("expected 0 topics, got %d topics", len(test7.Topics[2]))
 	}
 }
+
+// TestResolveBlockNumForRangeCheck exercises each branch of the sentinel-to-height
+// resolver so that mutations on the sentinel handling and fall-through can be
+// detected by tests rather than only through full FilterAPI integration tests.
+func TestResolveBlockNumForRangeCheck(t *testing.T) {
+	t.Parallel()
+	const head uint64 = 200
+
+	tests := []struct {
+		name string
+		n    int64
+		want uint64
+	}{
+		{"concrete_zero", 0, 0},
+		{"concrete_positive", 42, 42},
+		{"concrete_at_head", 200, 200},
+		{"earliest_sentinel", rpc.EarliestBlockNumber.Int64(), 0},
+		{"latest_sentinel", rpc.LatestBlockNumber.Int64(), head},
+		{"pending_sentinel", rpc.PendingBlockNumber.Int64(), head},
+		{"safe_sentinel", rpc.SafeBlockNumber.Int64(), head},
+		{"finalized_sentinel", rpc.FinalizedBlockNumber.Int64(), head},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if got := resolveBlockNumForRangeCheck(tc.n, head); got != tc.want {
+				t.Errorf("resolveBlockNumForRangeCheck(%d, %d) = %d; want %d", tc.n, head, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestCheckBlockRangeLimit covers the range-limit DoS guard at the unit-function
+// level, including the boundary condition (span == limit) and the `- -> +`
+// operator mutation (a mutant that replaces subtraction with addition would
+// flag ranges whose sum exceeds the limit even though the span is small).
+func TestCheckBlockRangeLimit(t *testing.T) {
+	t.Parallel()
+	const head uint64 = 200
+
+	tests := []struct {
+		name    string
+		begin   int64
+		end     int64
+		limit   uint64
+		wantErr bool
+	}{
+		{"limit_zero_disabled", 0, 1000, 0, false},
+		{"span_below_limit", 0, 50, 100, false},
+		{"span_at_limit", 0, 100, 100, false},
+		{"span_above_limit", 0, 101, 100, true},
+		{"end_before_begin_no_false_positive", 50, 40, 100, false},
+		{"sum_exceeds_limit_but_span_small", 50, 55, 10, false},
+		{"earliest_to_head_exceeds_limit", rpc.EarliestBlockNumber.Int64(), rpc.LatestBlockNumber.Int64(), 100, true},
+		{"earliest_to_head_at_limit", rpc.EarliestBlockNumber.Int64(), rpc.LatestBlockNumber.Int64(), 200, false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := checkBlockRangeLimit(tc.begin, tc.end, head, tc.limit)
+			if tc.wantErr && err == nil {
+				t.Errorf("checkBlockRangeLimit(%d, %d, %d, %d) = nil; want error", tc.begin, tc.end, head, tc.limit)
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("checkBlockRangeLimit(%d, %d, %d, %d) = %v; want nil", tc.begin, tc.end, head, tc.limit, err)
+			}
+		})
+	}
+}

@@ -160,6 +160,15 @@ func ApplyBorMessage(vmenv *vm.EVM, msg Callmsg) (*core.ExecutionResult, error) 
 	}, nil
 }
 
+// PrepareStateSyncContext resets transaction-scoped state before each post-Austin record.
+func PrepareStateSyncContext(state vm.StateDB, chainConfig *params.ChainConfig, blockNumber *big.Int, blockTime uint64, coinbase, stateReceiver common.Address) {
+	if chainConfig.Bor == nil || !chainConfig.Bor.IsAustin(blockNumber) {
+		return
+	}
+	rules := chainConfig.Rules(blockNumber, false, blockTime)
+	state.Prepare(rules, params.BorSystemAddress, coinbase, &stateReceiver, vm.ActivePrecompiles(rules), nil)
+}
+
 // ApplyStateSyncEvents replays all state-sync events from a StateSyncTx against the EVM. This
 // method is generally used for tracing. It tries to mimic the exact things which happen when
 // a state-sync is processed in a live network (via CommitState).
@@ -187,6 +196,7 @@ func ApplyStateSyncEvents(ctx context.Context, vmenv *vm.EVM, tx *types.Transact
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
+		PrepareStateSyncContext(vmenv.StateDB, vmenv.ChainConfig(), vmenv.Context.BlockNumber, vmenv.Context.Time, vmenv.Context.Coinbase, stateReceiverContract)
 		gasUsed, err := commitStateSyncEvent(vmenv, event, stateReceiverABI, stateReceiverContract, syncTime)
 		if err != nil {
 			return nil, err
