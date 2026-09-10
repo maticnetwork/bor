@@ -930,6 +930,35 @@ func TestDecodeBlockExtraData(t *testing.T) {
 	}
 }
 
+func TestGetTimeNanoPostAustin(t *testing.T) {
+	t.Parallel()
+
+	chainConfig := &params.ChainConfig{
+		ChainID:     big.NewInt(137),
+		CancunBlock: big.NewInt(100),
+		Bor: &params.BorConfig{
+			AustinBlock: big.NewInt(100),
+			HampiBlock:  big.NewInt(200),
+		},
+	}
+	gasTarget := uint64(15_000_000)
+	bfcd := uint64(64)
+	timeNano := uint64(1_700_000_000_123_456_789)
+	encoded, err := EncodeBlockExtraData(chainConfig, big.NewInt(200), nil, &gasTarget, &bfcd, &timeNano)
+	if err != nil {
+		t.Fatalf("encode block extra data: %v", err)
+	}
+	header := &Header{
+		Number: big.NewInt(200),
+		Extra:  append(append(make([]byte, ExtraVanityLength), encoded...), make([]byte, ExtraSealLength)...),
+	}
+
+	got := header.GetTimeNano(chainConfig)
+	if got == nil || *got != timeNano {
+		t.Errorf("TimeNano mismatch: got %v, want %d", got, timeNano)
+	}
+}
+
 // TestGetValidatorBytesShortExtra is a regression test for the pre-Cancun
 // branch of (*Header).GetValidatorBytes panicking with
 // `runtime error: slice bounds out of range` when len(Extra) < ExtraVanityLength+ExtraSealLength.

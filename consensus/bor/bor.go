@@ -118,6 +118,7 @@ var (
 	// errMissingGiuglianoFields is returned if a post-Giugliano block is missing
 	// the gas target or base fee change denominator in its extra data.
 	errMissingGiuglianoFields = errors.New("missing gas target or base fee change denominator in extra data")
+	errMissingTimeNano        = errors.New("missing time nano in extra data")
 
 	// errInvalidMixDigest is returned if a block's mix digest is non-zero.
 	errInvalidMixDigest = errors.New("non-zero mix digest")
@@ -493,6 +494,9 @@ func (c *Bor) verifyHeader(chain consensus.ChainHeaderReader, header *types.Head
 			log.Error("Block announced too early", "number", number, "headerTime", header.Time, "now", now)
 			return consensus.ErrFutureBlock
 		}
+	}
+	if c.config.IsHampi(header.Number) && header.GetTimeNano(c.chainConfig) == nil {
+		return errMissingTimeNano
 	}
 
 	if err := validateHeaderExtraField(header.Extra); err != nil {
@@ -1107,6 +1111,44 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header, w
 		return consensus.ErrUnknownAncestor
 	}
 
+	var succession int
+	if currentSigner.signer != (common.Address{}) {
+		succession, err = snap.GetSignerSuccessionNumber(currentSigner.signer)
+		if err != nil {
+			succession = 0
+		}
+	}
+	if c.blockTime > 0 && uint64(c.blockTime.Seconds()) < c.config.CalculatePeriod(number) {
+		return fmt.Errorf("the floor of custom mining block time (%v) is less than the consensus block time: %v < %v", c.blockTime, c.blockTime.Seconds(), c.config.CalculatePeriod(number))
+	}
+	var delay time.Duration
+	if c.blockTime > 0 && c.config.IsRio(header.Number) {
+		actualNewBlockTime := c.parentActualTime(parent, header.ParentHash).Add(c.blockTime)
+		header.Time = uint64(actualNewBlockTime.Unix())
+		header.ActualTime = actualNewBlockTime
+		delay = time.Until(c.parentActualTime(parent, header.ParentHash))
+	} else {
+		header.Time = parent.Time + CalcProducerDelay(number, succession, c.config)
+		delay = time.Until(time.Unix(int64(parent.Time), 0))
+	}
+	now := time.Now()
+	blockTime := time.Duration(c.config.CalculatePeriod(number)) * time.Second
+	if c.blockTime > 0 && c.config.IsRio(header.Number) {
+		blockTime = c.blockTime
+	}
+	if !header.AbortRecovery && time.Until(header.GetActualTime()) < minBlockBuildTime {
+		header.Time = uint64(now.Add(blockTime).Unix())
+		belowMinBuildTimeCounter.Inc(1)
+		if c.blockTime > 0 && c.config.IsRio(header.Number) {
+			header.ActualTime = now.Add(blockTime)
+		}
+	}
+	var timeNano *uint64
+	if c.config.IsHampi(header.Number) {
+		value := uint64(header.GetActualTime().UnixNano())
+		timeNano = &value
+	}
+
 	// get validator set if number
 	if IsSprintStart(number+1, c.config.CalculateSprint(number)) && !c.config.IsRio(header.Number) {
 		newValidators, err := c.spanner.GetCurrentValidatorsByHash(context.Background(), header.ParentHash, number+1)
@@ -1126,7 +1168,7 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header, w
 
 			gasTarget, baseFeeChangeDenom := c.giuglianoExtraFields(header, parent)
 
-			blockExtraDataBytes, err := types.EncodeBlockExtraData(c.chainConfig, header.Number, tempValidatorBytes, gasTarget, baseFeeChangeDenom)
+			blockExtraDataBytes, err := types.EncodeBlockExtraData(c.chainConfig, header.Number, tempValidatorBytes, gasTarget, baseFeeChangeDenom, timeNano)
 			if err != nil {
 				log.Error("error while encoding block extra data", "err", err)
 				return fmt.Errorf("error while encoding block extra data: %v", err)
@@ -1141,7 +1183,7 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header, w
 	} else if c.chainConfig.IsCancun(header.Number) {
 		gasTarget, baseFeeChangeDenom := c.giuglianoExtraFields(header, parent)
 
-		blockExtraDataBytes, err := types.EncodeBlockExtraData(c.chainConfig, header.Number, nil, gasTarget, baseFeeChangeDenom)
+		blockExtraDataBytes, err := types.EncodeBlockExtraData(c.chainConfig, header.Number, nil, gasTarget, baseFeeChangeDenom, timeNano)
 		if err != nil {
 			log.Error("error while encoding block extra data", "err", err)
 			return fmt.Errorf("error while encoding block extra data: %v", err)
@@ -1155,58 +1197,6 @@ func (c *Bor) Prepare(chain consensus.ChainHeaderReader, header *types.Header, w
 
 	// Mix digest is reserved for now, set to empty
 	header.MixDigest = common.Hash{}
-
-	// Ensure the timestamp has the correct delay
-	var succession int
-	// if signer is not empty
-	if currentSigner.signer != (common.Address{}) {
-		succession, err = snap.GetSignerSuccessionNumber(currentSigner.signer)
-		if err != nil {
-			// If the signer is not in the active validator set, use succession 0
-			// so that the pending block header is still valid for RPC queries.
-			// Seal() will independently reject the block if unauthorized.
-			succession = 0
-		}
-	}
-
-	if c.blockTime > 0 && uint64(c.blockTime.Seconds()) < c.config.CalculatePeriod(number) {
-		return fmt.Errorf("the floor of custom mining block time (%v) is less than the consensus block time: %v < %v", c.blockTime, c.blockTime.Seconds(), c.config.CalculatePeriod(number))
-	}
-
-	var delay time.Duration
-
-	if c.blockTime > 0 && c.config.IsRio(header.Number) {
-		// Only enable custom block time for Rio and later
-
-		parentActualBlockTime := c.parentActualTime(parent, header.ParentHash)
-		actualNewBlockTime := parentActualBlockTime.Add(c.blockTime)
-		header.Time = uint64(actualNewBlockTime.Unix())
-		header.ActualTime = actualNewBlockTime
-		delay = time.Until(parentActualBlockTime)
-	} else {
-		header.Time = parent.Time + CalcProducerDelay(number, succession, c.config)
-		delay = time.Until(time.Unix(int64(parent.Time), 0))
-	}
-
-	now := time.Now()
-	blockTime := time.Duration(c.config.CalculatePeriod(number)) * time.Second
-	if c.blockTime > 0 && c.config.IsRio(header.Number) {
-		blockTime = c.blockTime
-	}
-	// Ensure minimum build time so the block has enough time to include transactions.
-	// The interrupt timer reserves 500ms for state root computation, so without
-	// sufficient remaining time the block would end up empty.
-	//
-	// Abort-recovery rebuilds are different: speculative execution has already
-	// spent most of the slot, so pushing them again would create an avoidable
-	// extra block-time gap. Those late rebuilds should keep their original slot.
-	if !header.AbortRecovery && time.Until(header.GetActualTime()) < minBlockBuildTime {
-		header.Time = uint64(now.Add(blockTime).Unix())
-		belowMinBuildTimeCounter.Inc(1)
-		if c.blockTime > 0 && c.config.IsRio(header.Number) {
-			header.ActualTime = now.Add(blockTime)
-		}
-	}
 
 	// Giugliano introduced early block announcements: primary producers wait
 	// until the parent slot boundary before building, then Seal can return

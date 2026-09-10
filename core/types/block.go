@@ -141,6 +141,8 @@ type BlockExtraData struct {
 
 	// BaseFeeChangeDenominator is the EIP-1559 base fee change denominator used by the block producer (post-Giugliano)
 	BaseFeeChangeDenominator *uint64 `rlp:"optional"`
+	// TimeNano is the nanosecond-precision Unix timestamp when the block was prepared (post-Chicago)
+	TimeNano *uint64 `rlp:"optional"`
 }
 
 // BlockExtraDataPostAustin drops TxDependency, which sat before the optional
@@ -150,6 +152,7 @@ type BlockExtraDataPostAustin struct {
 	ValidatorBytes           []byte
 	GasTarget                *uint64 `rlp:"optional"`
 	BaseFeeChangeDenominator *uint64 `rlp:"optional"`
+	TimeNano                 *uint64 `rlp:"optional"`
 }
 
 // blockExtraDataRawTxDeps mirrors BlockExtraData but keeps TxDependency as an
@@ -168,12 +171,13 @@ type blockExtraDataRawTxDeps struct {
 // EncodeBlockExtraData picks the fork-appropriate wire shape for number and
 // RLP-encodes validatorBytes and the post-Giugliano base-fee params into it.
 // Callers elsewhere should use this rather than reimplementing the fork check.
-func EncodeBlockExtraData(chainConfig *params.ChainConfig, number *big.Int, validatorBytes []byte, gasTarget, baseFeeChangeDenom *uint64) ([]byte, error) {
+func EncodeBlockExtraData(chainConfig *params.ChainConfig, number *big.Int, validatorBytes []byte, gasTarget, baseFeeChangeDenom, timeNano *uint64) ([]byte, error) {
 	if chainConfig.Bor != nil && chainConfig.Bor.IsAustin(number) {
 		return rlp.EncodeToBytes(&BlockExtraDataPostAustin{
 			ValidatorBytes:           validatorBytes,
 			GasTarget:                gasTarget,
 			BaseFeeChangeDenominator: baseFeeChangeDenom,
+			TimeNano:                 timeNano,
 		})
 	}
 
@@ -181,6 +185,7 @@ func EncodeBlockExtraData(chainConfig *params.ChainConfig, number *big.Int, vali
 		ValidatorBytes:           validatorBytes,
 		GasTarget:                gasTarget,
 		BaseFeeChangeDenominator: baseFeeChangeDenom,
+		TimeNano:                 timeNano,
 	})
 }
 
@@ -649,15 +654,16 @@ func (h *Header) DecodeBlockExtraData(chainConfig *params.ChainConfig) *BlockExt
 	}
 
 	if chainConfig.Bor != nil && chainConfig.Bor.IsAustin(h.Number) {
-		validatorBytes, gasTarget, baseFeeChangeDenom, ok := h.decodeExtraFieldsFast(chainConfig)
-		if !ok {
+		var blockExtraData BlockExtraDataPostAustin
+		if err := rlp.DecodeBytes(h.Extra[ExtraVanityLength:len(h.Extra)-ExtraSealLength], &blockExtraData); err != nil {
 			return nil
 		}
 
 		return &BlockExtraData{
-			ValidatorBytes:           validatorBytes,
-			GasTarget:                gasTarget,
-			BaseFeeChangeDenominator: baseFeeChangeDenom,
+			ValidatorBytes:           blockExtraData.ValidatorBytes,
+			GasTarget:                blockExtraData.GasTarget,
+			BaseFeeChangeDenominator: blockExtraData.BaseFeeChangeDenominator,
+			TimeNano:                 blockExtraData.TimeNano,
 		}
 	}
 
@@ -671,6 +677,16 @@ func (h *Header) DecodeBlockExtraData(chainConfig *params.ChainConfig) *BlockExt
 	}
 
 	return &blockExtraData
+}
+
+// GetTimeNano extracts the nanosecond-precision block timestamp from the
+// header's Extra field. Returns nil for pre-Cancun blocks or if TimeNano is not set.
+func (h *Header) GetTimeNano(chainConfig *params.ChainConfig) *uint64 {
+	blockExtraData := h.DecodeBlockExtraData(chainConfig)
+	if blockExtraData == nil {
+		return nil
+	}
+	return blockExtraData.TimeNano
 }
 
 func (b *Block) BaseFee() *big.Int {
