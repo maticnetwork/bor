@@ -195,6 +195,7 @@ func TestChainSyncerCooldownSurvivesBlockAnnounce(t *testing.T) {
 	if err := handler.downloader.RegisterPeer(peer.ID(), eth.ETH68, &ethPeer{Peer: peer}); err != nil {
 		t.Fatal(err)
 	}
+	syncer.onPeerEvent()
 
 	syncer.onSyncDone(downloader.ErrPeersUnavailable)
 	if syncer.peersUnavailableUntil.IsZero() {
@@ -210,9 +211,50 @@ func TestChainSyncerCooldownSurvivesBlockAnnounce(t *testing.T) {
 	if err := handler.downloader.RegisterPeer(peer2.ID(), eth.ETH68, &ethPeer{Peer: peer2}); err != nil {
 		t.Fatal(err)
 	}
+	if err := handler.peers.unregisterPeer(peer.ID()); err != nil {
+		t.Fatal(err)
+	}
+	if handler.peers.len() != 1 {
+		t.Fatalf("peer replacement should preserve peer count, have %d", handler.peers.len())
+	}
+	syncer.onSyncDone(downloader.ErrPeersUnavailable)
 	syncer.onPeerEvent()
 	if !syncer.peersUnavailableUntil.IsZero() {
-		t.Fatal("a genuine peer-set change must clear the cooldown")
+		t.Fatal("a peer replacement must clear the cooldown")
+	}
+}
+
+func TestChainSyncerLoopInitializesPeerRevision(t *testing.T) {
+	handler, cleanup := newChainSyncerTestHandler(t)
+	defer cleanup()
+	handler.maxPeers = defaultMinSyncPeers
+
+	peer := registerPeerWithTD(t, handler.peers, 1_000_000)
+	if err := handler.downloader.RegisterPeer(peer.ID(), eth.ETH68, &ethPeer{Peer: peer}); err != nil {
+		t.Fatal(err)
+	}
+
+	syncer := handler.chainSync
+	syncer.peersUnavailableUntil = time.Now().Add(time.Hour)
+	handler.wg.Add(1)
+	done := make(chan struct{})
+	go func() {
+		syncer.loop()
+		close(done)
+	}()
+
+	if !syncer.handlePeerEvent() {
+		t.Fatal("chain syncer stopped before processing the peer event")
+	}
+	close(handler.quitSync)
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("chain syncer did not stop")
+	}
+	if syncer.peersUnavailableUntil.IsZero() {
+		t.Fatal("an initial peer event with no peer-set change must not clear the cooldown")
 	}
 }
 

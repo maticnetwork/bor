@@ -334,7 +334,12 @@ func (h *handler) close(err error, inflightReq *requestOp) {
 	h.callWG.Wait()
 	h.cancelRoot()
 	h.cancelServerSubscriptions(err)
-	h.executionPool.Stop()
+
+	// The execution pool is deliberately not stopped here. On the server side
+	// it is shared across all handlers and owned by Server, which stops it in
+	// Server.Stop(); stopping it per-handler would kill the shared pool's
+	// metric goroutine on the first request (regression introduced in #1005).
+	// On the client side the per-connection pool is stopped by clientConn.close.
 }
 
 // addRequestOp registers a request operation.
