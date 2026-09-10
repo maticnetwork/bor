@@ -80,10 +80,25 @@ func (s *MVBalanceStore) WriteDelta(addr common.Address, txIdx int, add, sub *ui
 
 // ReadDelta returns accumulated (add, sub) from entries before txIdx.
 func (s *MVBalanceStore) ReadDelta(addr common.Address, txIdx int) (add, sub uint256.Int) {
+	return s.ReadDeltaAfter(addr, -1, txIdx)
+}
+
+// ReadDeltaAfter returns accumulated (add, sub) from entries whose TxIdx is
+// in (afterIdx, beforeIdx). Entries at or before afterIdx are skipped: a
+// prior tx destroyed the account at afterIdx, deleting it at that tx's
+// finalisation, so the base balance and every delta up to and including the
+// destroying tx are discarded (EIP-6780 same-tx create/destruct burns even
+// value received after the opcode). Only deltas from txs after the
+// destruction recreate a balance. afterIdx == -1 means no prior destruction,
+// so all entries before beforeIdx are summed.
+func (s *MVBalanceStore) ReadDeltaAfter(addr common.Address, afterIdx, beforeIdx int) (add, sub uint256.Int) {
 	sh := s.shard(addr)
 	sh.mu.RLock()
 	for _, e := range sh.data[addr] {
-		if e.TxIdx >= txIdx {
+		if e.TxIdx <= afterIdx {
+			continue
+		}
+		if e.TxIdx >= beforeIdx {
 			break
 		}
 		add.Add(&add, &e.Add)

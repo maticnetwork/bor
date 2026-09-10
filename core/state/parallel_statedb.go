@@ -43,9 +43,14 @@ type StoreReadDesc struct {
 // BalReadDesc tracks a balance delta read for validation.
 // Deduplicated per address, so typically only a handful per tx.
 type BalReadDesc struct {
-	Addr   common.Address
-	BalAdd uint256.Int
-	BalSub uint256.Int
+	Addr common.Address
+	// AfterIdx is the latest prior SELFDESTRUCT tx index observed for Addr
+	// (-1 if none). Deltas at or before it are excluded from BalAdd/BalSub,
+	// so validation must resolve the read across the same destruction
+	// boundary the execution read used.
+	AfterIdx int
+	BalAdd   uint256.Int
+	BalSub   uint256.Int
 }
 
 // ---------------------------------------------------------------------------
@@ -426,7 +431,7 @@ func (s *ParallelStateDB) recordStoreReadEx(key blockstm.Key, writerIdx, writerI
 	s.StoreReads = append(s.StoreReads, StoreReadDesc{Key: key, WriterIdx: writerIdx, WriterInc: writerInc, StoreVal: val, ExactWriter: exact})
 }
 
-func (s *ParallelStateDB) recordBalanceRead(addr common.Address, add, sub uint256.Int) {
+func (s *ParallelStateDB) recordBalanceRead(addr common.Address, afterIdx int, add, sub uint256.Int) {
 	if !s.trackReads {
 		return
 	}
@@ -434,7 +439,7 @@ func (s *ParallelStateDB) recordBalanceRead(addr common.Address, add, sub uint25
 		return
 	}
 	s.balAddrSet[addr] = true
-	s.BalReads = append(s.BalReads, BalReadDesc{Addr: addr, BalAdd: add, BalSub: sub})
+	s.BalReads = append(s.BalReads, BalReadDesc{Addr: addr, AfterIdx: afterIdx, BalAdd: add, BalSub: sub})
 }
 
 func (s *ParallelStateDB) recordWrite(key blockstm.Key) {
@@ -692,12 +697,22 @@ func (s *ParallelStateDB) Empty(addr common.Address) bool {
 // ---------- Balance (commutative) ----------
 
 func (s *ParallelStateDB) GetBalance(addr common.Address) *uint256.Int {
-	add, sub := s.priorBalanceDeltas(addr)
-	s.recordBalanceRead(addr, add, sub)
+	// Resolve the balance relative to any prior-tx SELFDESTRUCT, exactly as
+	// GetNonce resolves the nonce: an account destroyed at suicideIdx is
+	// deleted at that tx's finalisation, so its base balance and every delta
+	// up to and including the destroying tx are gone. Without this a same-tx
+	// create/destruct that receives value after the opcode leaks a phantom
+	// balance to later txs (the value must be burned per EIP-6780).
+	suicideIdx := s.priorDestructedAt(addr)
+	add, sub := s.priorBalanceDeltas(addr, suicideIdx)
+	s.recordBalanceRead(addr, suicideIdx, add, sub)
 
-	baseBal, berr := s.base.GetBalance(addr)
-	s.noteBaseReadErr(berr)
-	result := new(uint256.Int).Set(baseBal)
+	result := new(uint256.Int)
+	if suicideIdx < 0 {
+		baseBal, berr := s.base.GetBalance(addr)
+		s.noteBaseReadErr(berr)
+		result.Set(baseBal)
+	}
 	result.Add(result, &add)
 	result.Sub(result, &sub)
 	if a := s.localBalAdd[addr]; a != nil {
@@ -709,15 +724,17 @@ func (s *ParallelStateDB) GetBalance(addr common.Address) *uint256.Int {
 	return result
 }
 
-// priorBalanceDeltas returns the cumulative (add, sub) deltas for addr
-// from prior txs in the block, cached per-address within this tx.
-func (s *ParallelStateDB) priorBalanceDeltas(addr common.Address) (add, sub uint256.Int) {
+// priorBalanceDeltas returns the cumulative (add, sub) deltas for addr from
+// prior txs after afterIdx (the latest prior SELFDESTRUCT, or -1), cached
+// per-address within this tx. afterIdx is a pure function of addr within the
+// tx (destructedCache), so the per-address cache stays valid.
+func (s *ParallelStateDB) priorBalanceDeltas(addr common.Address, afterIdx int) (add, sub uint256.Int) {
 	if s.balCache != nil {
 		if c, ok := s.balCache[addr]; ok {
 			return c[0], c[1]
 		}
 	}
-	add, sub = s.bals.ReadDelta(addr, s.TxIndex)
+	add, sub = s.bals.ReadDeltaAfter(addr, afterIdx, s.TxIndex)
 	if s.balCache == nil {
 		s.balCache = make(map[common.Address]*[2]uint256.Int)
 	}
