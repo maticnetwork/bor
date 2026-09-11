@@ -19,7 +19,7 @@ var (
 	//Metrics for collecting the whitelisted milestone number
 	whitelistedCheckpointNumberMeter = metrics.NewRegisteredGauge("chain/checkpoint/latest", nil)
 
-	//Metrics for collecting the number of invalid chains received
+	//Metrics for collecting the number of valid chains received
 	CheckpointChainMeter = metrics.NewRegisteredMeter("chain/checkpoint/isvalidchain", nil)
 
 	//Metrics for collecting the number of valid peers received
@@ -39,20 +39,12 @@ func (w *checkpoint) IsValidChain(currentHeader *types.Header, chain []*types.He
 }
 
 func reportCheckpointMetrics(result bool, chain bool, peer bool) {
-	if chain {
-		if result {
-			CheckpointChainMeter.Mark(int64(1))
-		} else {
-			CheckpointChainMeter.Mark(int64(-1))
-		}
+	if chain && result {
+		CheckpointChainMeter.Mark(int64(1))
 	}
 
-	if peer {
-		if result {
-			CheckpointPeerMeter.Mark(int64(1))
-		} else {
-			CheckpointPeerMeter.Mark(int64(-1))
-		}
+	if peer && result {
+		CheckpointPeerMeter.Mark(int64(1))
 	}
 }
 

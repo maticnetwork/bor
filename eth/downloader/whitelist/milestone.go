@@ -79,8 +79,6 @@ func (m *milestone) IsValidChain(currentHeader *types.Header, chain []*types.Hea
 	defer func() {
 		if isValid {
 			MilestoneChainMeter.Mark(int64(1))
-		} else {
-			MilestoneChainMeter.Mark(int64(-1))
 		}
 	}()
 
@@ -138,8 +136,6 @@ func (m *milestone) IsValidPeer(fetchHeadersByNumber func(number uint64, amount 
 
 	if res {
 		MilestonePeerMeter.Mark(int64(1))
-	} else {
-		MilestonePeerMeter.Mark(int64(-1))
 	}
 
 	return res, err
