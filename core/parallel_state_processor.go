@@ -586,6 +586,11 @@ type v2Env struct {
 	jumpDests vm.JumpDestCache
 	safeBase  *state.SafeBase             // shared across all workers (with read cache)
 	recycleCh chan *state.ParallelStateDB // pool of reusable PDBs
+
+	// witnessFilter holds back witness trie nodes reached only by incarnations
+	// that were later discarded. Nil when no witness is being recorded, which
+	// disables the bookkeeping entirely.
+	witnessFilter *state.WitnessReadFilter
 }
 
 func (e *v2Env) BaseNonce(addr common.Address) uint64 {
@@ -643,6 +648,7 @@ func (e *v2Env) preparePDB(t *v2Task, incarnation int, senderNonces map[common.A
 	default:
 		pdb = state.NewParallelStateDB(t.index, e.safeBase, e.store, e.bals)
 	}
+	pdb.SetWitnessFilter(e.witnessFilter)
 	pdb.Incarnation = incarnation
 	pdb.SenderNonces = senderNonces
 	pdb.Coinbase = coinbase
@@ -780,6 +786,16 @@ func ExecuteV2BlockSTM(
 	// on the same reader. It walks cached keys into the witness while the
 	// workers execute, keeping the settle drain in CollectStateWitness off
 	// the block's critical path. No-op when no witness is being recorded.
+	// Built before the prewalker starts: it sweeps concurrently with the
+	// workers, and any key it resolves before the filter is in place is in the
+	// trie tracers permanently. Only witness collection consumes the filter,
+	// so nothing is allocated when no witness is being recorded.
+	var witnessFilter *state.WitnessReadFilter
+	if finalDB != nil && finalDB.Witness() != nil {
+		witnessFilter = state.NewWitnessReadFilter()
+		finalDB.SetWitnessReadFilter(witnessFilter)
+	}
+
 	if finalDB != nil {
 		stopPrewalk := finalDB.StartWitnessReadSetPrewalk()
 		defer stopPrewalk()
@@ -791,6 +807,7 @@ func ExecuteV2BlockSTM(
 	}
 
 	env := newV2Env(base, store, bals, blockCtx, vmConfig, chainConfig, gasLimit, numWorkers)
+	env.witnessFilter = witnessFilter
 
 	var receipts types.Receipts
 	var allLogs []*types.Log
@@ -820,7 +837,7 @@ func ExecuteV2BlockSTM(
 	// that actually settled.
 	if finalDB != nil {
 		if w := finalDB.Witness(); w != nil {
-			env.safeBase.CollectCodeWitness(w.AddCode)
+			env.safeBase.CollectCodeWitness(w.AddCode, witnessFilter)
 		}
 	}
 
@@ -1000,6 +1017,12 @@ func newV2SettleFn(tasks []V2Task, env *v2Env, finalDB *state.StateDB,
 			env.Recycle(st)
 			return
 		}
+		// This incarnation won, so the keys it read are part of the block's
+		// real access set and their trie paths belong in the witness. An
+		// incarnation that was invalidated never reaches here, so its reads
+		// stay held back and never contribute nodes.
+		pdb.CommitWitnessReads()
+
 		tx := tasks[txIdx].Tx
 		finalDB.SetTxContext(tx.Hash(), tasks[txIdx].Index)
 		pdb.SettleTo(finalDB)

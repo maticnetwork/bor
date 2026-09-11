@@ -235,8 +235,15 @@ func (s *SafeBase) Exist(addr common.Address) (bool, error) {
 // witness loop misses them. The codeCache is populated whenever a
 // worker resolves contract code; walking it here captures every blob
 // V2 needed to execute the block.
-func (s *SafeBase) CollectCodeWitness(addCode func([]byte)) {
-	s.codeCache.Range(func(_, v any) bool {
+func (s *SafeBase) CollectCodeWitness(addCode func([]byte), filter *WitnessReadFilter) {
+	s.codeCache.Range(func(k, v any) bool {
+		// A blob loaded only by an incarnation that was thrown away is held
+		// back for the same reason its account's trie nodes are: including it
+		// makes the witness depend on worker scheduling. A nil filter walks
+		// everything, which is the serial and non-BlockSTM behaviour.
+		if addr, ok := k.(common.Address); ok && !filter.AccountWalkable(addr) {
+			return true
+		}
 		if code, ok := v.([]byte); ok {
 			addCode(code)
 		}

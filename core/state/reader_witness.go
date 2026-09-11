@@ -43,13 +43,18 @@ type witnessWalkItem struct {
 // Resolution errors are ignored: the trie reader is the gatekeeper for
 // committed state, and a stateless consumer validates the resulting witness
 // anyway. Returns the number of keys walked in this sweep.
-func (r *readerWithCache) resolveCachedKeysIntoTrie(tr *trieReader, workers int) int {
+func (r *readerWithCache) resolveCachedKeysIntoTrie(tr *trieReader, workers int, force bool) int {
 	// Generation fast path: skip Ranging the maps when nothing new was
 	// cached since the last sweep — the prewalker ticks far more often than
 	// keys arrive. gen is captured before claiming, so an insert racing the
 	// sweep leaves insertGen ahead of sweptGen and re-arms the next sweep.
+	//
+	// force defeats it for the final drain. A key held back by the witness
+	// filter becomes walkable when its incarnation settles, which promotes it
+	// without inserting anything — so generation alone would leave committed
+	// reads unwalked and the witness short of nodes it genuinely needs.
 	gen := r.insertGen.Load()
-	if gen == r.sweptGen.Load() {
+	if !force && gen == r.sweptGen.Load() {
 		return 0
 	}
 	pending := r.claimUnwalkedItems()
@@ -66,15 +71,29 @@ func (r *readerWithCache) resolveCachedKeysIntoTrie(tr *trieReader, workers int)
 // finds nothing down to one Range pass with no goroutines spawned.
 func (r *readerWithCache) claimUnwalkedItems() []witnessWalkItem {
 	var pending []witnessWalkItem
+
+	// The filter is consulted before the claim, never after: claiming flips
+	// walked, and a walk resolves the key's nodes into the trie tracers
+	// permanently. A key held back here stays unclaimed and is reconsidered
+	// on the next sweep, once its incarnation has settled.
+	f := r.witnessFilter.Load()
+
 	r.accounts.Range(func(k, v any) bool {
+		addr := k.(common.Address)
+		if !f.AccountWalkable(addr) {
+			return true
+		}
 		if v.(*accountCacheEntry).walked.CompareAndSwap(false, true) {
-			pending = append(pending, witnessWalkItem{addr: k.(common.Address), account: true})
+			pending = append(pending, witnessWalkItem{addr: addr, account: true})
 		}
 		return true
 	})
 	r.storageCache.Range(func(k, v any) bool {
+		key := k.(storageKey)
+		if !f.SlotWalkable(key.addr, key.slot) {
+			return true
+		}
 		if v.(*storageCacheEntry).walked.CompareAndSwap(false, true) {
-			key := k.(storageKey)
 			pending = append(pending, witnessWalkItem{addr: key.addr, slot: key.slot})
 		}
 		return true

@@ -80,11 +80,15 @@ type TransferRecord struct {
 
 type ParallelStateDB struct {
 	TxIndex     int
-	Incarnation int                      // bumped on re-execution for validation
-	base        *SafeBase                // thread-safe pre-block state reads
-	rawBase     *StateDB                 // raw base for PointCache/Witness only
-	store       *blockstm.MVStore        // shared versioned values
-	bals        *blockstm.MVBalanceStore // shared balance deltas
+	Incarnation int       // bumped on re-execution for validation
+	base        *SafeBase // thread-safe pre-block state reads
+	// witnessFilter gates which of this task's reads may contribute trie
+	// nodes to the block witness. Shared across every task for the block;
+	// nil outside BlockSTM, which disables filtering entirely.
+	witnessFilter *WitnessReadFilter
+	rawBase       *StateDB                 // raw base for PointCache/Witness only
+	store         *blockstm.MVStore        // shared versioned values
+	bals          *blockstm.MVBalanceStore // shared balance deltas
 
 	// Per-tx local writes (for self-read and settlement)
 	localNonces  map[common.Address]uint64
@@ -424,6 +428,10 @@ func (s *ParallelStateDB) recordStoreReadEx(key blockstm.Key, writerIdx, writerI
 		return
 	}
 	s.StoreReads = append(s.StoreReads, StoreReadDesc{Key: key, WriterIdx: writerIdx, WriterInc: writerInc, StoreVal: val, ExactWriter: exact})
+	// Recorded as the read happens rather than at settle: the witness
+	// prewalker sweeps concurrently with execution, and a key it resolves
+	// before we know the read was speculative is in the tracers for good.
+	recordFilterKey(s.witnessFilter, key, false)
 }
 
 func (s *ParallelStateDB) recordBalanceRead(addr common.Address, add, sub uint256.Int) {
@@ -435,6 +443,7 @@ func (s *ParallelStateDB) recordBalanceRead(addr common.Address, add, sub uint25
 	}
 	s.balAddrSet[addr] = true
 	s.BalReads = append(s.BalReads, BalReadDesc{Addr: addr, BalAdd: add, BalSub: sub})
+	s.witnessFilter.RecordTaskAccount(addr)
 }
 
 func (s *ParallelStateDB) recordWrite(key blockstm.Key) {
@@ -1288,3 +1297,56 @@ func (s *ParallelStateDB) RecordTransfer(sender, recipient common.Address, amoun
 // settleBalanceOpsAndLogs, tryEmitTransferAt, emitTransferLog,
 // settleAccountSet, applyFeeData, GetLogs) live in
 // parallel_statedb_settle.go.
+
+// recordFilterKey routes a BlockSTM key to the account or slot side of the
+// witness filter. commit promotes the key instead of merely noting it.
+func recordFilterKey(f *WitnessReadFilter, key blockstm.Key, commit bool) {
+	if f == nil {
+		return
+	}
+	if key.IsState() {
+		if commit {
+			f.CommitSlot(key.GetAddress(), key.GetStateKey())
+		} else {
+			f.RecordTaskSlot(key.GetAddress(), key.GetStateKey())
+		}
+		return
+	}
+	// Address- and subpath-keyed reads (balance, nonce, code, existence,
+	// destruction markers) all resolve the account's own trie path.
+	if commit {
+		f.CommitAccount(key.GetAddress())
+	} else {
+		f.RecordTaskAccount(key.GetAddress())
+	}
+}
+
+// SetWitnessFilter attaches the block-wide witness read filter. Called once
+// per task pickup, since Reset does not carry it.
+func (s *ParallelStateDB) SetWitnessFilter(f *WitnessReadFilter) {
+	s.witnessFilter = f
+}
+
+// CommitWitnessReads promotes every read this incarnation made to committed,
+// releasing the corresponding trie paths to the witness walk. Called from the
+// settle callback, which only ever runs for the incarnation that won; an
+// incarnation that was invalidated never reaches it, so its reads stay held
+// back and its trie nodes never enter the witness.
+func (s *ParallelStateDB) CommitWitnessReads() {
+	if s.witnessFilter == nil {
+		return
+	}
+	for i := range s.StoreReads {
+		recordFilterKey(s.witnessFilter, s.StoreReads[i].Key, true)
+	}
+	for i := range s.BalReads {
+		s.witnessFilter.CommitAccount(s.BalReads[i].Addr)
+	}
+	// Writes resolve their own trie path during the post-state root
+	// computation, but the consumer also needs the pre-state node to apply
+	// them, and the settle path may reach a written key without ever having
+	// read it here. Promote them too rather than rely on that ordering.
+	for i := range s.WriteKeys {
+		recordFilterKey(s.witnessFilter, s.WriteKeys[i], true)
+	}
+}

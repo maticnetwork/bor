@@ -632,6 +632,16 @@ type readerWithCache struct {
 	// miss path pays it.
 	insertGen atomic.Uint64
 	sweptGen  atomic.Uint64
+
+	// witnessFilter, when set, holds back keys that only a discarded BlockSTM
+	// incarnation read. Nil for serial execution and every non-BlockSTM path,
+	// where the filter's nil methods walk everything.
+	witnessFilter atomic.Pointer[WitnessReadFilter]
+}
+
+// SetWitnessReadFilter attaches the block's witness read filter to this cache.
+func (r *readerWithCache) SetWitnessReadFilter(f *WitnessReadFilter) {
+	r.witnessFilter.Store(f)
 }
 
 // newReaderWithCache constructs the reader with local cache.

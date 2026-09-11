@@ -438,7 +438,7 @@ func (s *StateDB) StartWitnessReadSetPrewalk() (stop func()) {
 			case <-done:
 				return
 			case <-ticker.C:
-				witnessReadSetPrewalkKeys.Inc(int64(rwc.resolveCachedKeysIntoTrie(tr, witnessReadSetWalkWorkers)))
+				witnessReadSetPrewalkKeys.Inc(int64(rwc.resolveCachedKeysIntoTrie(tr, witnessReadSetWalkWorkers, false)))
 			}
 		}
 	}()
@@ -454,6 +454,16 @@ func (s *StateDB) StartWitnessReadSetPrewalk() (stop func()) {
 	return stop
 }
 
+// SetWitnessReadFilter attaches the block's BlockSTM witness read filter to
+// the shared reader cache behind this statedb, so the witness walk can hold
+// back keys that only a discarded incarnation ever read. No-op when the reader
+// chain carries no cache layer, which is every serial and snapshot-only path.
+func (s *StateDB) SetWitnessReadFilter(f *WitnessReadFilter) {
+	if rwc := findReaderWithCache(s.reader); rwc != nil {
+		rwc.SetWitnessReadFilter(f)
+	}
+}
+
 func collectStateWitnessFromReader(r any, addState func(map[string][]byte)) {
 	switch v := r.(type) {
 	case *reader:
@@ -464,7 +474,7 @@ func collectStateWitnessFromReader(r any, addState func(map[string][]byte)) {
 		// collecting so the witness covers every read, not just trie misses.
 		// With a prewalker running this is only the un-walked tail.
 		if tr := findTrieReader(v.Reader); tr != nil {
-			witnessReadSetSettleKeys.Inc(int64(v.resolveCachedKeysIntoTrie(tr, witnessReadSetWalkWorkers)))
+			witnessReadSetSettleKeys.Inc(int64(v.resolveCachedKeysIntoTrie(tr, witnessReadSetWalkWorkers, true)))
 		}
 		collectStateWitnessFromReader(v.Reader, addState)
 	case *readerWithCacheStats:
@@ -486,6 +496,10 @@ func findReaderWithCache(r any) *readerWithCache {
 		return v.readerWithCache
 	case *readerWithCache:
 		return v
+	case *reader:
+		// A statedb holds the outer *reader, so callers that start from one
+		// (SetWitnessReadFilter) reach the cache through this arm.
+		return findReaderWithCache(v.StateReader)
 	}
 	return nil
 }

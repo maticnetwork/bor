@@ -187,17 +187,17 @@ func TestResolveCachedKeysIntoTrieIdempotent(t *testing.T) {
 	if tr == nil {
 		t.Fatal("no trie reader in chain")
 	}
-	if walked := shared.resolveCachedKeysIntoTrie(tr, 4); walked == 0 {
+	if walked := shared.resolveCachedKeysIntoTrie(tr, 4, false); walked == 0 {
 		t.Fatal("first sweep walked nothing")
 	}
 	// Cache one more key: the next sweep must claim only it, not re-walk
 	// keys claimed by the first sweep.
 	sdb.GetBalance(common.BytesToAddress([]byte("second-account")))
-	if walked := shared.resolveCachedKeysIntoTrie(tr, 4); walked != 1 {
+	if walked := shared.resolveCachedKeysIntoTrie(tr, 4, false); walked != 1 {
 		t.Fatalf("second sweep walked %d keys, want 1", walked)
 	}
 	// Nothing new cached: the generation fast path skips the Range entirely.
-	if walked := shared.resolveCachedKeysIntoTrie(tr, 4); walked != 0 {
+	if walked := shared.resolveCachedKeysIntoTrie(tr, 4, false); walked != 0 {
 		t.Fatalf("third sweep re-walked %d keys, want 0", walked)
 	}
 }
