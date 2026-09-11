@@ -137,7 +137,7 @@ func storeReadMatches(rd *StoreReadDesc, curVal any, writer, inc int, found, isE
 // through MVBalanceStore, so coinbase reads go through the same delta
 // validation as any other address.
 func (s *ParallelStateDB) validateBalanceRead(rd *BalReadDesc) bool {
-	add, sub := s.bals.ReadDelta(rd.Addr, s.TxIndex)
+	add, sub := s.bals.ReadDeltaAfter(rd.Addr, rd.AfterIdx, s.TxIndex)
 	return add.Cmp(&rd.BalAdd) == 0 && sub.Cmp(&rd.BalSub) == 0
 }
 
@@ -224,7 +224,7 @@ func (s *ParallelStateDB) diagnoseStoreRead(rd *StoreReadDesc) (ValidationDiag, 
 // StateDB, not via MVBalanceStore), so the diagnostic must mirror that
 // or it under-reports balance vfails on coinbase reads.
 func (s *ParallelStateDB) diagnoseBalanceRead(rd *BalReadDesc) (ValidationDiag, bool) {
-	add, sub := s.bals.ReadDelta(rd.Addr, s.TxIndex)
+	add, sub := s.bals.ReadDeltaAfter(rd.Addr, rd.AfterIdx, s.TxIndex)
 	if add.Cmp(&rd.BalAdd) == 0 && sub.Cmp(&rd.BalSub) == 0 {
 		return ValidationDiag{}, false
 	}
