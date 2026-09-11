@@ -3109,6 +3109,417 @@ func testSideImportPrunedBlocks(t *testing.T, scheme string) {
 	}
 }
 
+// TestSideImportEmptyBlockGhostState is a regression test for
+// https://github.com/0xPolygon/bor/issues/2224. Two distinct empty
+// (zero-transaction) blocks at the same height legitimately share a state root,
+// because neither performs a state transition: both inherit their parent's root.
+// insertSideChain used to reject any sidechain block whose root matched the
+// canonical block at the same height as a "ghost-state attack", which fired a
+// false positive on such empty blocks and wedged sync after a validator restart.
+func TestSideImportEmptyBlockGhostState(t *testing.T) {
+	testSideImportEmptyBlockGhostState(t, rawdb.HashScheme)
+	testSideImportEmptyBlockGhostState(t, rawdb.PathScheme)
+}
+
+// noRewardEngine wraps the faker but skips the block reward, so empty blocks
+// make no state transition and share their parent's state root — matching how
+// bor's reward-less empty blocks behave (the condition that triggers #2224).
+type noRewardEngine struct{ *ethash.Ethash }
+
+func (e *noRewardEngine) Finalize(chain consensus.ChainHeaderReader, header *types.Header, state vm.StateDB, body *types.Body, receipts []*types.Receipt) ([]*types.Receipt, error) {
+	return receipts, nil
+}
+
+func (e *noRewardEngine) FinalizeAndAssemble(chain consensus.ChainHeaderReader, header *types.Header, state *state.StateDB, body *types.Body, receipts []*types.Receipt) (*types.Block, []*types.Receipt, time.Duration, error) {
+	header.Root = state.IntermediateRoot(chain.Config().IsEIP158(header.Number))
+	return types.NewBlock(header, &types.Body{Transactions: body.Transactions, Uncles: body.Uncles, Withdrawals: body.Withdrawals}, receipts, trie.NewStackTrie(nil)), receipts, 0, nil
+}
+
+// ghostStateTestKey funds the sender used to drive state transitions in the
+// ghost-state sidechain tests.
+var ghostStateTestKey, _ = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
+
+// setupPrunedGhostStateChain builds a canonical chain whose blocks all perform a
+// state transition (so old states get pruned), inserts it, and returns the chain
+// plus everything a sidechain test needs to fork at forkIdx. forkBlockEmpty
+// controls whether the canonical blocks at forkIdx and forkIdx+1 are left empty
+// (no state transition) or carry the same value-transfer tx as every other
+// block. Two consecutive empty blocks model the quiet network in #2224 and let a
+// test cover a divergence longer than one block. It asserts the fork parent's
+// state is pruned, so re-importing a sibling routes through insertSideChain via
+// ErrPrunedAncestor.
+func setupPrunedGhostStateChain(t *testing.T, scheme string, forkBlockEmpty bool) (chain *BlockChain, genDb ethdb.Database, blocks []*types.Block, forkParent *types.Block, forkIdx int, forkTxNonce uint64) {
+	t.Helper()
+
+	engine := &noRewardEngine{ethash.NewFaker()}
+	addr := crypto.PubkeyToAddress(ghostStateTestKey.PublicKey)
+	signer := types.LatestSigner(params.TestChainConfig)
+	genesis := &Genesis{
+		Config:  params.TestChainConfig,
+		Alloc:   types.GenesisAlloc{addr: {Balance: big.NewInt(1e18)}},
+		BaseFee: big.NewInt(params.InitialBaseFee),
+	}
+
+	states := state.TriesInMemory
+	if scheme == rawdb.PathScheme {
+		states = state.TriesInMemory + 1
+	}
+	total := 2 * state.TriesInMemory
+	// forkIdx indexes into blocks (blocks[i] is height i+1) and sits comfortably
+	// below the pruning boundary.
+	forkIdx = total - states - 5
+
+	nonce := uint64(0)
+	genDb, blocks, _ = GenerateChainWithGenesis(genesis, engine, total, func(i int, b *BlockGen) {
+		b.SetCoinbase(common.Address{1})
+		if i == forkIdx {
+			forkTxNonce = nonce
+		}
+		if forkBlockEmpty && (i == forkIdx || i == forkIdx+1) {
+			return // no state transition: root stays equal to parent's
+		}
+		tx, _ := types.SignTx(types.NewTransaction(nonce, common.Address{0xaa}, big.NewInt(1), params.TxGas, b.BaseFee(), nil), signer, ghostStateTestKey)
+		b.AddTx(tx)
+		nonce++
+	})
+
+	datadir := t.TempDir()
+	pdb, err := pebble.New(datadir, 0, 0, "", false)
+	if err != nil {
+		t.Fatalf("Failed to create persistent key-value database: %v", err)
+	}
+	db, err := rawdb.Open(pdb, rawdb.OpenOptions{Ancient: path.Join(datadir, "ancient")})
+	if err != nil {
+		t.Fatalf("Failed to create persistent freezer database: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	chain, err = NewBlockChain(db, genesis, engine, DefaultConfig().WithStateScheme(scheme))
+	if err != nil {
+		t.Fatalf("failed to create tester chain: %v", err)
+	}
+	t.Cleanup(chain.Stop)
+
+	if n, err := chain.InsertChain(blocks, false); err != nil {
+		t.Fatalf("block %d: failed to insert into chain: %v", n, err)
+	}
+
+	forkParent = blocks[forkIdx-1]
+	if chain.HasState(forkParent.Root()) {
+		t.Fatalf("test setup: fork parent (block %d) state not pruned", forkParent.NumberU64())
+	}
+	return chain, genDb, blocks, forkParent, forkIdx, forkTxNonce
+}
+
+func testSideImportEmptyBlockGhostState(t *testing.T, scheme string) {
+	chain, genDb, blocks, forkParent, forkIdx, _ := setupPrunedGhostStateChain(t, scheme, true)
+
+	// Two empty side blocks at the fork height and the one above it: a different
+	// coinbase gives different hashes, but each inherits its parent's state root,
+	// so both match the canonical block at the same height. A producer partitioned
+	// for a few seconds returns with a run like this, so only the first block is a
+	// sibling of its canonical counterpart and the second needs the first as an
+	// anchor.
+	sideBlocks, _ := GenerateChain(params.TestChainConfig, forkParent, chain.engine, genDb, 2, func(i int, b *BlockGen) {
+		b.SetCoinbase(common.Address{2})
+	})
+
+	for i, side := range sideBlocks {
+		canonical := blocks[forkIdx+i]
+		if side.Hash() == canonical.Hash() {
+			t.Fatalf("side block %d hash must differ from canonical", i)
+		}
+		if side.Root() != canonical.Root() {
+			t.Fatalf("test setup: side root %x must equal canonical root %x", side.Root(), canonical.Root())
+		}
+	}
+	if sideBlocks[0].Root() != forkParent.Root() {
+		t.Fatalf("test setup: empty side block must inherit parent root")
+	}
+	if sideBlocks[1].ParentHash() == blocks[forkIdx+1].ParentHash() {
+		t.Fatalf("test setup: second side block must not be a sibling of its canonical counterpart")
+	}
+
+	if _, err := chain.InsertChain(sideBlocks, false); err != nil {
+		t.Fatalf("empty side blocks falsely rejected: %v", err)
+	}
+}
+
+// TestSideImportGhostStateStillRejected is the security counterpart to
+// TestSideImportEmptyBlockGhostState: it proves the #2224 fix only narrowed the
+// false positive and did not open the real hole. A side block that DID perform a
+// state transition (its root differs from its parent's) but claims a state root
+// equal to the canonical block at that height is the genuine shadow-state attack
+// and must still be rejected.
+func TestSideImportGhostStateStillRejected(t *testing.T) {
+	testSideImportGhostStateStillRejected(t, rawdb.HashScheme)
+	testSideImportGhostStateStillRejected(t, rawdb.PathScheme)
+}
+
+func testSideImportGhostStateStillRejected(t *testing.T, scheme string) {
+	chain, genDb, blocks, forkParent, forkIdx, forkTxNonce := setupPrunedGhostStateChain(t, scheme, false)
+	signer := types.LatestSigner(params.TestChainConfig)
+
+	// Side block on the canonical fork parent, carrying the SAME tx as the
+	// canonical fork block (with a different coinbase). It reaches the canonical
+	// root via a real state transition, so its root differs from its parent's:
+	// side.Root() == canonical.Root() but side.Root() != forkParent.Root().
+	sideBlocks, _ := GenerateChain(params.TestChainConfig, forkParent, chain.engine, genDb, 1, func(i int, b *BlockGen) {
+		b.SetCoinbase(common.Address{2})
+		tx, _ := types.SignTx(types.NewTransaction(forkTxNonce, common.Address{0xaa}, big.NewInt(1), params.TxGas, b.BaseFee(), nil), signer, ghostStateTestKey)
+		b.AddTx(tx)
+	})
+	side := sideBlocks[0]
+	canonical := blocks[forkIdx]
+	if side.Root() != canonical.Root() {
+		t.Fatalf("test setup: side root %x must equal canonical root %x", side.Root(), canonical.Root())
+	}
+	if side.Root() == forkParent.Root() {
+		t.Fatalf("test setup: side block must change state (root must differ from parent)")
+	}
+
+	if _, err := chain.InsertChain(sideBlocks, false); err == nil || err.Error() != "sidechain ghost-state attack" {
+		t.Fatalf("expected ghost-state attack rejection, got: %v", err)
+	}
+}
+
+// TestSidechainGhostStateExemption covers isSidechainGhostState directly. The
+// exemption must fire for exactly one shape: an empty sibling of the canonical
+// block at a height where the canonical chain also changed no state. Every other
+// input must be treated as an attack.
+func TestSidechainGhostStateExemption(t *testing.T) {
+	testSidechainGhostStateExemption(t, rawdb.HashScheme)
+	testSidechainGhostStateExemption(t, rawdb.PathScheme)
+}
+
+func testSidechainGhostStateExemption(t *testing.T, scheme string) {
+	// forkBlockEmpty=true: the canonical block at forkIdx carries no body, so
+	// canonNoOp holds at that height. Every case below therefore isolates the
+	// sibling and body predicates, which is the point of this test.
+	chain, genDb, blocks, forkParent, forkIdx, forkTxNonce := setupPrunedGhostStateChain(t, scheme, true)
+	signer := types.LatestSigner(params.TestChainConfig)
+
+	canonical := blocks[forkIdx]
+	if canonical.Root() != forkParent.Root() {
+		t.Fatalf("test setup: canonical block at fork height must be a no-op")
+	}
+
+	// A genuine empty sibling: same parent as canonical, different coinbase, so a
+	// different hash but the same inherited state root. This is the #2224 shape.
+	siblings, _ := GenerateChain(params.TestChainConfig, forkParent, chain.engine, genDb, 1, func(i int, b *BlockGen) {
+		b.SetCoinbase(common.Address{2})
+	})
+	sibling := siblings[0]
+
+	if sibling.Hash() == canonical.Hash() {
+		t.Fatalf("test setup: sibling must differ from canonical")
+	}
+	if sibling.ParentHash() != canonical.ParentHash() {
+		t.Fatalf("test setup: sibling must share the canonical parent")
+	}
+	if chain.isSidechainGhostState(sibling, canonical, nil) {
+		t.Fatalf("empty sibling at a no-op canonical height must be exempted")
+	}
+
+	// Same empty sibling, but reparented off the canonical grandparent so it is no
+	// longer a sibling of canonical. Body emptiness alone must not earn the
+	// exemption, since the skipped ancestors are then a different set.
+	nonSibling := types.NewBlockWithHeader(&types.Header{
+		Number:     canonical.Number(),
+		ParentHash: forkParent.ParentHash(),
+		Root:       canonical.Root(),
+		Coinbase:   common.Address{3},
+	})
+	if !chain.isSidechainGhostState(nonSibling, canonical, nil) {
+		t.Fatalf("non-sibling parent must be treated as an attack")
+	}
+
+	// A divergence longer than one block. The child of the exempted sibling is not
+	// itself a sibling of canonical, because its parent is the sibling rather than
+	// the canonical fork parent. Without an anchor it is rejected and the node stays
+	// wedged, so an already-exempted parent must be accepted.
+	children, _ := GenerateChain(params.TestChainConfig, sibling, chain.engine, genDb, 1, func(i int, b *BlockGen) {
+		b.SetCoinbase(common.Address{7})
+	})
+	child := children[0]
+	canonicalNext := blocks[forkIdx+1]
+
+	if child.ParentHash() == canonicalNext.ParentHash() {
+		t.Fatalf("test setup: child must not be a sibling of the next canonical block")
+	}
+	if !chain.isSidechainGhostState(child, canonicalNext, nil) {
+		t.Fatalf("child of an unrecorded parent must be rejected")
+	}
+	anchored := map[common.Hash]struct{}{sibling.Hash(): {}}
+	if chain.isSidechainGhostState(child, canonicalNext, anchored) {
+		t.Fatalf("child of an exempted parent must be exempted")
+	}
+
+	// The anchor is not a free pass: a body-carrying child of an exempted parent
+	// must still be rejected.
+	txChildren, _ := GenerateChain(params.TestChainConfig, sibling, chain.engine, genDb, 1, func(i int, b *BlockGen) {
+		b.SetCoinbase(common.Address{8})
+		tx, _ := types.SignTx(types.NewTransaction(forkTxNonce, common.Address{0xaa}, big.NewInt(1), params.TxGas, b.BaseFee(), nil), signer, ghostStateTestKey)
+		b.AddTx(tx)
+	})
+	txChild := types.NewBlockWithHeader(&types.Header{
+		Number:     txChildren[0].Number(),
+		ParentHash: sibling.Hash(),
+		Root:       canonicalNext.Root(),
+		Coinbase:   common.Address{8},
+		GasUsed:    txChildren[0].GasUsed(),
+		TxHash:     txChildren[0].TxHash(),
+	}).WithBody(*txChildren[0].Body())
+	if !chain.isSidechainGhostState(txChild, canonicalNext, anchored) {
+		t.Fatalf("body-carrying child of an exempted parent must be rejected")
+	}
+
+	// A true sibling that carries a transaction, at this same no-op canonical
+	// height. canonNoOp and sibling both hold, so only body emptiness can deny
+	// the exemption. A block that moved state must never be exempted, because
+	// the exemption exists solely for candidates that provably moved none.
+	txSiblings, _ := GenerateChain(params.TestChainConfig, forkParent, chain.engine, genDb, 1, func(i int, b *BlockGen) {
+		b.SetCoinbase(common.Address{4})
+		tx, _ := types.SignTx(types.NewTransaction(forkTxNonce, common.Address{0xaa}, big.NewInt(1), params.TxGas, b.BaseFee(), nil), signer, ghostStateTestKey)
+		b.AddTx(tx)
+	})
+	txSibling := txSiblings[0]
+
+	if txSibling.ParentHash() != canonical.ParentHash() {
+		t.Fatalf("test setup: tx sibling must share the canonical parent")
+	}
+	if len(txSibling.Transactions()) == 0 || txSibling.GasUsed() == 0 {
+		t.Fatalf("test setup: tx sibling must carry a transaction and burn gas")
+	}
+	// Claim the canonical root in the header so the caller's precondition
+	// (canonical.Root() == block.Root()) holds and only the body differs.
+	forgedRoot := types.NewBlockWithHeader(&types.Header{
+		Number:     txSibling.Number(),
+		ParentHash: txSibling.ParentHash(),
+		Root:       canonical.Root(),
+		Coinbase:   txSibling.Coinbase(),
+		GasUsed:    txSibling.GasUsed(),
+		TxHash:     txSibling.TxHash(),
+	}).WithBody(*txSibling.Body())
+	if !chain.isSidechainGhostState(forgedRoot, canonical, nil) {
+		t.Fatalf("body-carrying sibling must be rejected even at a no-op canonical height")
+	}
+
+	// The emptiness conjuncts are checked one at a time below. Each case trips a
+	// single predicate and leaves the rest satisfied, so no one check can be
+	// dropped without a test failing.
+	//
+	// Only the transaction and gas cases describe a block that can reach the
+	// guard on bor. Bor.verifyHeader rejects uncles, withdrawals and a non-nil
+	// requests hash before ValidateBody runs. The uncle, withdrawal and request
+	// cases construct here only because these tests run noRewardEngine over
+	// ethash, not bor's rules. They cover the predicate as upstream-facing
+	// defense in depth, not a production shape.
+	sideBody := *txSibling.Body()
+	emptyHeader := func() *types.Header {
+		return &types.Header{
+			Number:     canonical.Number(),
+			ParentHash: canonical.ParentHash(),
+			Root:       canonical.Root(),
+			Coinbase:   common.Address{5},
+		}
+	}
+
+	// Transactions present, gas zero: only the transaction count denies it.
+	txOnly := emptyHeader()
+	txOnly.TxHash = txSibling.TxHash()
+	if !chain.isSidechainGhostState(types.NewBlockWithHeader(txOnly).WithBody(sideBody), canonical, nil) {
+		t.Fatalf("sibling carrying transactions must be rejected")
+	}
+
+	// Gas burned, no transactions: only the gas figure denies it. A header that
+	// reports work without a body cannot be a no-op.
+	gasOnly := emptyHeader()
+	gasOnly.GasUsed = params.TxGas
+	if !chain.isSidechainGhostState(types.NewBlockWithHeader(gasOnly), canonical, nil) {
+		t.Fatalf("sibling reporting gas use must be rejected")
+	}
+
+	// One uncle, nothing else: only the uncle count denies it. Unreachable on bor.
+	uncleOnly := emptyHeader()
+	uncleOnly.UncleHash = types.CalcUncleHash([]*types.Header{forkParent.Header()})
+	uncleBlock := types.NewBlockWithHeader(uncleOnly).WithBody(types.Body{Uncles: []*types.Header{forkParent.Header()}})
+	if !chain.isSidechainGhostState(uncleBlock, canonical, nil) {
+		t.Fatalf("sibling carrying uncles must be rejected")
+	}
+
+	// One withdrawal, nothing else: only the withdrawal count denies it.
+	// Unreachable on bor.
+	withdrawals := types.Withdrawals{{Index: 1, Validator: 2, Address: common.Address{6}, Amount: 3}}
+	wdHash := types.DeriveSha(withdrawals, trie.NewStackTrie(nil))
+	wdOnly := emptyHeader()
+	wdOnly.WithdrawalsHash = &wdHash
+	wdBlock := types.NewBlockWithHeader(wdOnly).WithBody(types.Body{Withdrawals: withdrawals})
+	if !chain.isSidechainGhostState(wdBlock, canonical, nil) {
+		t.Fatalf("sibling carrying withdrawals must be rejected")
+	}
+
+	// A non-empty requests hash, nothing else: only noRequests denies it.
+	// Unreachable on bor, where verifyHeader rejects any non-nil requests hash.
+	reqHash := common.Hash{0xaa}
+	reqOnly := emptyHeader()
+	reqOnly.RequestsHash = &reqHash
+	if !chain.isSidechainGhostState(types.NewBlockWithHeader(reqOnly), canonical, nil) {
+		t.Fatalf("sibling carrying requests must be rejected")
+	}
+
+	// The empty-set requests hash must not be read as a body. No bor block
+	// carries it, since verifyHeader requires nil. This case keeps the predicate
+	// correct upstream, where a post-Prague empty block sets it.
+	emptyReq := types.EmptyRequestsHash
+	postFork := emptyHeader()
+	postFork.RequestsHash = &emptyReq
+	if chain.isSidechainGhostState(types.NewBlockWithHeader(postFork), canonical, nil) {
+		t.Fatalf("empty-set requests hash must not deny the exemption")
+	}
+}
+
+// TestSidechainGhostStateAttackShapes covers the two remaining rejection paths:
+// a state-changing canonical height, and a missing canonical parent header.
+func TestSidechainGhostStateAttackShapes(t *testing.T) {
+	testSidechainGhostStateAttackShapes(t, rawdb.HashScheme)
+	testSidechainGhostStateAttackShapes(t, rawdb.PathScheme)
+}
+
+func testSidechainGhostStateAttackShapes(t *testing.T, scheme string) {
+	// forkBlockEmpty=false: the canonical block at forkIdx carries a tx, so
+	// canonNoOp is false at that height.
+	chain, _, blocks, forkParent, forkIdx, _ := setupPrunedGhostStateChain(t, scheme, false)
+
+	canonical := blocks[forkIdx]
+	if canonical.Root() == forkParent.Root() {
+		t.Fatalf("test setup: canonical block must change state at this height")
+	}
+
+	// An empty sibling at a state-changing canonical height. The candidate proves
+	// nothing about the ancestors the exemption would let it skip, because the
+	// canonical chain did move state here. canonNoOp denies it.
+	emptySibling := types.NewBlockWithHeader(&types.Header{
+		Number:     canonical.Number(),
+		ParentHash: canonical.ParentHash(),
+		Root:       canonical.Root(),
+		Coinbase:   common.Address{2},
+	})
+	if !chain.isSidechainGhostState(emptySibling, canonical, nil) {
+		t.Fatalf("empty sibling at a state-changing canonical height must be rejected")
+	}
+
+	// Genesis has no parent header, so canonNoOp cannot be established. The
+	// conservative fallback must report an attack rather than exempt.
+	genesis := chain.GetBlockByNumber(0)
+	if genesis == nil {
+		t.Fatalf("test setup: genesis block must be present")
+	}
+	if !chain.isSidechainGhostState(genesis, genesis, nil) {
+		t.Fatalf("missing canonical parent header must be treated as an attack")
+	}
+}
+
 // TestDeleteCreateRevert tests a weird state transition corner case that we hit
 // while changing the internals of statedb. The workflow is that a contract is
 // self destructed, then in a followup transaction (but same block) it's created

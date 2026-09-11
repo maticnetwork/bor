@@ -4176,6 +4176,9 @@ func (bc *BlockChain) insertSideChain(block *types.Block, it *insertIterator, ma
 		current   = bc.CurrentBlock()
 		headers   []*types.Header
 		externTd  *big.Int
+		// Hashes this loop proved to be legitimate no-ops, used to anchor their
+		// children when a divergence spans more than one block.
+		exempted = make(map[common.Hash]struct{})
 	)
 
 	// The first sidechain block error is already verified to be ErrPrunedAncestor.
@@ -4199,19 +4202,24 @@ func (bc *BlockChain) insertSideChain(block *types.Block, it *insertIterator, ma
 			}
 
 			if canonical != nil && canonical.Root() == block.Root() {
-				// This is most likely a shadow-state attack. When a fork is imported into the
-				// database, and it eventually reaches a block height which is not pruned, we
-				// just found that the state already exist! This means that the sidechain block
-				// refers to a state which already exists in our canon chain.
-				//
-				// If left unchecked, we would now proceed importing the blocks, without actually
-				// having verified the state of the previous blocks.
-				log.Warn("Sidechain ghost-state attack detected", "number", block.NumberU64(), "sideroot", block.Root(), "canonroot", canonical.Root())
+				if bc.isSidechainGhostState(block, canonical, exempted) {
+					// This is most likely a shadow-state attack. When a fork is imported into the
+					// database, and it eventually reaches a block height which is not pruned, we
+					// just found that the state already exist! This means that the sidechain block
+					// refers to a state which already exists in our canon chain.
+					//
+					// If left unchecked, we would now proceed importing the blocks, without actually
+					// having verified the state of the previous blocks.
+					log.Warn("Sidechain ghost-state attack detected", "number", block.NumberU64(), "sideroot", block.Root(), "canonroot", canonical.Root())
 
-				// If someone legitimately side-mines blocks, they would still be imported as usual. However,
-				// we cannot risk writing unverified blocks to disk when they obviously target the pruning
-				// mechanism.
-				return nil, it.index, errors.New("sidechain ghost-state attack")
+					// If someone legitimately side-mines blocks, they would still be imported as usual. However,
+					// we cannot risk writing unverified blocks to disk when they obviously target the pruning
+					// mechanism.
+					return nil, it.index, errors.New("sidechain ghost-state attack")
+				}
+				// Exempted. Record it so a child block can use it as an anchor when the
+				// divergence runs longer than one block.
+				exempted[block.Hash()] = struct{}{}
 			}
 		}
 		if externTd == nil {
@@ -4315,6 +4323,71 @@ func (bc *BlockChain) insertSideChain(block *types.Block, it *insertIterator, ma
 		return bc.insertChain(blocks, true, makeWitness)
 	}
 	return nil, 0, nil
+}
+
+// isSidechainGhostState decides whether a sidechain block whose state root
+// already matches the canonical block at the same height is a shadow-state
+// attack (true) or a legitimate empty sibling (false). It is only meaningful
+// when canonical.Root() == block.Root() already holds.
+//
+// The exemption covers exactly one shape: a sibling of the canonical block
+// (same parent) that carries no body and therefore cannot have changed state,
+// at a height where the canonical chain also changed no state. Two such blocks
+// differ only in seal, timestamp, or coinbase, so they legitimately share a
+// state root and there is no forged state to skip-verify.
+//
+// Every input is trusted or already validated. canonical comes from the
+// canonical chain, so its parent hash and root cannot be influenced by an
+// attacker. The body predicates read block's own body, and ValidateBody has
+// already verified TxHash, UncleHash, and WithdrawalsHash against that body
+// before insertSideChain sees the block. Deliberately absent is any inference
+// from the side block's parent header: insertSideChain persists sidechain
+// headers via writeBlockWithoutState without executing them, so a side parent
+// Root proves nothing.
+//
+// canonNoOp is required on top of body emptiness because an empty body does not
+// imply an empty state transition in Bor. Finalize commits spans and state-sync
+// events at sprint boundaries (consensus/bor/bor.go), which move the state root
+// with no transactions in the block. If the canonical parent header is
+// unavailable we cannot establish canonNoOp, so we keep the conservative
+// behavior and treat the match as an attack.
+//
+// A divergence can be longer than one block: a producer partitioned for a few
+// seconds returns with several blocks of its own. Only the first of those is a
+// sibling of the canonical block at its height, so exempted holds the hashes
+// this loop already proved to be no-ops and an exempted parent is accepted as
+// an anchor. That parent was itself proven empty with a root chaining back to
+// the canonical fork header, so it introduces no untrusted input.
+//
+// On Bor only the transaction count and GasUsed do real work here. Bor.verifyHeader
+// rejects a non-empty UncleHash, a non-nil WithdrawalsHash and a non-nil
+// RequestsHash, and those errors reach the insert iterator before ValidateBody
+// runs, so such a block never reports ErrPrunedAncestor and never reaches this
+// loop. The three remaining predicates are kept as defense in depth and for
+// parity with upstream go-ethereum, where the same false positive exists and
+// those bodies are reachable. The predicate then means "provably carries
+// nothing that can move state" on its own, rather than depending on three
+// engine-level rejections holding across future merges.
+func (bc *BlockChain) isSidechainGhostState(block *types.Block, canonical *types.Block, exempted map[common.Hash]struct{}) bool {
+	canonParent := bc.GetHeaderByNumber(canonical.NumberU64() - 1)
+	if canonParent == nil {
+		return true
+	}
+
+	canonNoOp := canonParent.Root == canonical.Root()
+	_, anchored := exempted[block.ParentHash()]
+	sibling := block.ParentHash() == canonical.ParentHash() || anchored
+	// Bor headers always carry a nil RequestsHash. The empty-set hash is accepted
+	// too so the predicate stays correct upstream, where a post-Prague empty block
+	// sets it rather than leaving it nil.
+	noRequests := block.RequestsHash() == nil || *block.RequestsHash() == types.EmptyRequestsHash
+	emptyBody := len(block.Transactions()) == 0 &&
+		block.GasUsed() == 0 &&
+		len(block.Uncles()) == 0 &&
+		len(block.Withdrawals()) == 0 &&
+		noRequests
+
+	return !(canonNoOp && sibling && emptyBody)
 }
 
 // recoverAncestors finds the closest ancestor with available state and re-execute
